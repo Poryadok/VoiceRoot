@@ -1,0 +1,9 @@
+# Subrepositories — tracked separately
+VoiceAuthService/
+VoiceChannelDataService/
+VoiceChannelDataServiceProto/
+VoiceMessageService/
+VoiceMessageServiceProto/
+VoiceWebSocketService/
+VoiceWebSocketServiceProto/
+voiceclient/
