@@ -7,6 +7,7 @@ Discord-like мессенджер с войс-чатом и встроенным
 - **[PROJECT.md](PROJECT.md)** — product vision, target audience, matchmaking mechanics
 - **[PLAN.md](PLAN.md)** — phased product roadmap with task checklists
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** — service diagram, repos, ports, gRPC contracts, how to run
+- **[features/](features/)** — детальные описания фич по одному файлу на фичу (продуктовый дизайн, UX-решения)
 
 ## Quick Reference
 
