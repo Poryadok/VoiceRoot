@@ -1,3 +1,17 @@
+На данный момент нет архитектуры, игнорируй всё написанное здесь
+## Архитектура (ARCHITECTURE.md / PLAN.md)
+
+- [ ] **Поток JWT через gRPC-сервисы**: как ChannelDataService/MessageService проверяют токен? Через AuthService по gRPC или самостоятельно?
+- [ ] **Диаграмма с LiveKit**: обновить ARCHITECTURE.md — добавить VoiceMediaService и LiveKit SFU в service diagram
+- [ ] **Диаграмма с Matchmaking**: VoiceMatchmakingService не отражён в архитектуре
+- [ ] **Flutter → сервисы**: на диаграмме клиент соединяется только с AuthService и WebSocketService; как он достучится до ChannelData и Message?
+- [ ] **Как работает уведомление через WebSocketService**: кто его вызывает (ChannelData? Message? Matchmaking?) — нет описания flow
+- [ ] **Деплой**: нет описания облачного провайдера, docker-compose для полного стека, CI/CD
+- [ ] **Когда федерация**: PLAN.md не указывает фазу для federation — это Фаза 4? Позже?
+- [ ] **Сторис и подписка в роадмапе**: нет в PLAN.md — когда реализовывать?
+
+---
+
 # Voice — Architecture
 
 ## Service Diagram
