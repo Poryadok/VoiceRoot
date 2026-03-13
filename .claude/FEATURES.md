@@ -50,6 +50,13 @@
 | Фича | Файл | Описание |
 |------|------|----------|
 | Accessibility (a11y) | [accessibility.md](features/accessibility.md) | Клавиатурная навигация, screen reader, контраст, reduced motion |
+| Локализация (i18n) | [i18n.md](features/i18n.md) | EN+RU в v1, ARB-файлы, pg_trgm для поиска, RTL отложен |
+
+## Экосистема
+
+| Фича | Файл | Описание |
+|------|------|----------|
+| Боты | [bots.md](features/bots.md) | Slash-команды, app manifest, scopes, per-channel контроль, webhook/polling доставка |
 
 ## Инфраструктура и монетизация
 

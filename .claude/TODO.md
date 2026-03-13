@@ -12,9 +12,9 @@
 ### Отсутствующие фичи / темы без документации
 
 - [x] **Пересылка сообщений (forward)** — задокументировано в [features/forward-messages.md](features/forward-messages.md)
-- [ ] **Отложенные / запланированные сообщения** — в v1 нет, запланировано на будущее
-- [ ] **Бот-API / интеграции** — боты нужны обязательно, требуют отдельного обсуждения требований (влияет на архитектуру API)
-- [ ] **Локализация (i18n)** — v1: EN + RU; остальные языки — по мере готовности. Влияет на full-text search (PostgreSQL tsvector нужна multi-language конфигурация). Создать фичу.
+- [x] **Отложенные / запланированные сообщения** — в v1 нет; добавлено в backlog [text-chat.md](features/text-chat.md)
+- [x] **Бот-API / интеграции** — задокументировано в [features/bots.md](features/bots.md)
+- [x] **Локализация (i18n)** — задокументировано в [features/i18n.md](features/i18n.md)
 - [x] **Accessibility (a11y)** — задокументировано в [features/accessibility.md](features/accessibility.md)
 
 ---
