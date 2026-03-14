@@ -4,12 +4,12 @@ Discord-like мессенджер с войс-чатом и встроенным
 
 ## Context Files
 
-- **[PROJECT.md](PROJECT.md)** — product vision, target audience, matchmaking mechanics
+- **[PROJECT.md](../docs/PROJECT.md)** — product vision, target audience, matchmaking mechanics
 - **[PLAN.md](PLAN.md)** — phased product roadmap with task checklists
-- **[OLD_ARCHITECTURE.md](OLD_ARCHITECTURE.md)** — old: service diagram, repos, ports, gRPC contracts, how to run. 
-- **[FEATURES.md](FEATURES.md)** — каталог фич с кратким описанием и ссылками на детальные файлы
-- **[features/](features/)** — детальные описания фич по одному файлу на фичу (продуктовый дизайн, UX-решения)
-- **[ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md)** — кросс-сервисные технические решения: протоколы, инфраструктура, rate limiting, S2S федерация
+- **[OLD_ARCHITECTURE.md](OLD_ARCHITECTURE.md)** — old: service diagram, repos, ports, gRPC contracts, how to run.
+- **[FEATURES.md](../docs/FEATURES.md)** — каталог фич с кратким описанием и ссылками на детальные файлы
+- **[features/](../docs/features/)** — детальные описания фич по одному файлу на фичу (продуктовый дизайн, UX-решения)
+- **[ARCHITECTURE_REQUIREMENTS.md](../docs/ARCHITECTURE_REQUIREMENTS.md)** — кросс-сервисные технические решения: протоколы, инфраструктура, rate limiting, S2S федерация
 
 ## Quick Reference
 
