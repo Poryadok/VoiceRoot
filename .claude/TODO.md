@@ -6,9 +6,3 @@
 - [ ] S2S API федерации — специфицировать когда доберёмся
 
 ---
-
-## Общие вопросы по продукту
-
-## По фичам
-
-*(все вопросы закрыты — решения перенесены в соответствующие [features/](../docs/features/) файлы и [ARCHITECTURE_REQUIREMENTS.md](../docs/ARCHITECTURE_REQUIREMENTS.md))*
