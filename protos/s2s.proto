@@ -1,0 +1,150 @@
+syntax = "proto3";
+
+package voice.s2s.v1;
+
+option go_package = "voice.app/s2s/v1;s2sv1";
+
+// S2S Federation API — протокол между federated нодами и master-сервером.
+// Нода выступает клиентом, master — сервером.
+service FederationService {
+
+  // Persistent bidirectional stream: нода подписывается на события своих спейсов.
+  // Нода шлёт SubscribeRequest на старте, затем периодически Heartbeat и Ack.
+  // Master шлёт MasterEvent при каждом изменении.
+  rpc EventStream (stream NodeMessage) returns (stream MasterEvent);
+
+  // Snapshot-синхронизация на реконнекте: нода запрашивает текущие роли и баны
+  // для конкретного спейса. Вызывается после переподключения EventStream.
+  rpc SyncSnapshot (SyncSnapshotRequest) returns (SyncSnapshotResponse);
+
+  // Нода просит master доставить push-уведомление пользователю через FCM/APNs.
+  // Используется когда нода не может сама доставить пуш (нет сертификатов).
+  rpc NotifyUser (NotifyUserRequest) returns (NotifyUserResponse);
+
+  // Нода верифицирует federated auth-токен пользователя.
+  // Вызывается при входе пользователя в спейс на ноде.
+  rpc AuthenticateUser (AuthenticateUserRequest) returns (AuthenticateUserResponse);
+}
+
+// ─────────────────────────── Auth ───────────────────────────
+
+message AuthenticateUserRequest {
+  string auth_token = 1; // JWT, выданный master для этого пользователя
+  string space_id   = 2; // Спейс на ноде, в который пользователь заходит
+}
+
+message AuthenticateUserResponse {
+  bool             ok         = 1;
+  string           user_id    = 2;
+  string           profile_id = 3;
+  repeated string  role_ids   = 4; // Роли в данном спейсе
+  int64            expires_at = 5; // Unix timestamp: до какого времени токен действителен
+  string           error      = 6; // Причина отказа (если ok = false)
+}
+
+// ─────────────────────────── Event Stream ───────────────────────────
+
+// Сообщения от ноды → master
+message NodeMessage {
+  oneof payload {
+    SubscribeRequest subscribe = 1;
+    Heartbeat        heartbeat = 2;
+    Ack              ack       = 3;
+  }
+}
+
+message SubscribeRequest {
+  string          node_id     = 1; // Уникальный ID ноды
+  string          node_secret = 2; // Shared secret, выданный при регистрации ноды
+  repeated string space_ids   = 3; // Спейсы, которые хостит эта нода
+}
+
+message Heartbeat {
+  int64 timestamp = 1; // Unix timestamp отправки
+}
+
+message Ack {
+  string event_id = 1; // ID подтверждаемого события
+}
+
+// События от master → нода
+message MasterEvent {
+  string event_id  = 1;
+  int64  timestamp = 2;
+  string space_id  = 3;
+
+  oneof payload {
+    RoleChangedEvent  role_changed  = 10;
+    UserBannedEvent   user_banned   = 11;
+    UserUnbannedEvent user_unbanned = 12;
+    DefederatedEvent  defederated   = 13;
+    SpaceDeletedEvent space_deleted = 14;
+  }
+}
+
+message RoleChangedEvent {
+  string          user_id       = 1;
+  string          profile_id    = 2;
+  repeated string added_roles   = 3;
+  repeated string removed_roles = 4;
+}
+
+message UserBannedEvent {
+  string user_id      = 1;
+  string profile_id   = 2;
+  string reason       = 3;
+  int64  banned_until = 4; // Unix timestamp; 0 = перманентный бан
+}
+
+message UserUnbannedEvent {
+  string user_id    = 1;
+  string profile_id = 2;
+}
+
+message DefederatedEvent {
+  string reason = 1; // Причина (нарушение правил, ручное решение и т.п.)
+}
+
+message SpaceDeletedEvent {
+  // Спейс удалён с master — нода должна закрыть доступ
+}
+
+// ─────────────────────────── Snapshot Sync ───────────────────────────
+
+message SyncSnapshotRequest {
+  string node_id  = 1;
+  string space_id = 2;
+}
+
+message SyncSnapshotResponse {
+  string          space_id = 1;
+  repeated RoleEntry roles = 2;
+  repeated BanEntry  bans  = 3;
+}
+
+message RoleEntry {
+  string          user_id    = 1;
+  string          profile_id = 2;
+  repeated string role_ids   = 3;
+}
+
+message BanEntry {
+  string user_id      = 1;
+  string profile_id   = 2;
+  int64  banned_until = 3; // 0 = перманентный
+}
+
+// ─────────────────────────── Push Notifications ───────────────────────────
+
+message NotifyUserRequest {
+  string user_id  = 1;
+  string space_id = 2;
+  string type     = 3; // "mention" | "dm" | "match_found" | "call_incoming"
+  string preview  = 4; // Короткий текст для показа в пуше
+  string deep_link = 5; // Опционально: deep link для открытия нужного экрана
+}
+
+message NotifyUserResponse {
+  bool   accepted = 1; // false = пользователь не найден или master не может доставить
+  string error    = 2;
+}

@@ -66,6 +66,7 @@
 | Поиск | [search.md](features/search.md) | Поиск внутри чата и глобальный поиск по контактам, спейсам, сообщениям |
 | Deep links / Sharing | [deep-links.md](features/deep-links.md) | Схема URL для ссылок на спейс, канал, сообщение, профиль |
 | Платформы | [platforms.md](features/platforms.md) | Web → Windows → Mobile; Flutter, ограничения веб-версии |
+| Обновления клиентов | [updates.md](features/updates.md) | Версионирование API, force-update, desktop auto-update, mobile in-app + Shorebird OTA |
 | Уведомления | [notifications.md](features/notifications.md) | Типы уведомлений, пуши, звуки, гранулярные настройки per-chat |
 | Подписка | [subscription.md](features/subscription.md) | Премиум профиль ($5/мес) и буст спейса, косметика и расширенные лимиты |
 | Хранение файлов | [file-storage.md](features/file-storage.md) | Cloudflare R2, лимиты, сжатие медиа, дедупликация, retention |
