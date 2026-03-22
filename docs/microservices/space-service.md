@@ -1,0 +1,171 @@
+# Space Service
+
+## Обзор
+
+Управление пространствами (аналог Discord-серверов): структура каналов, категории, инвайты, участники, шаблоны.
+
+**Язык**: Go
+**БД**: PostgreSQL `space_db`
+
+## Ответственность
+
+- CRUD пространств
+- Видимость: public / invite-only / private
+- Каналы (текстовые, голосовые) и категории
+- Системный канал (welcome, rules)
+- Инвайт-ссылки (expiry, usage limits)
+- Проверка при входе (phone / CAPTCHA / вопросы / ручное одобрение)
+- Участники (join, leave, ban, kick)
+- Лимиты: 50 каналов free / 500 Pro; 200 участников free / 5000 Pro
+- Каталог публичных пространств (поиск, ранжирование)
+- Space-level matchmaking конфигурация
+- Шаблоны пространств
+- Аудит-лог действий (создание каналов, баны, изменение ролей)
+- Передача владения
+- Slow mode на уровне канала
+- Бан пользователя (с сохранением сообщений)
+
+## API (gRPC)
+
+```protobuf
+service SpaceService {
+  // Пространства
+  rpc CreateSpace(CreateSpaceRequest) returns (Space);
+  rpc UpdateSpace(UpdateSpaceRequest) returns (Space);
+  rpc DeleteSpace(DeleteSpaceRequest) returns (Empty);
+  rpc GetSpace(GetSpaceRequest) returns (Space);
+  rpc ListMySpaces(ListMySpacesRequest) returns (SpaceList);
+  rpc SearchPublicSpaces(SearchRequest) returns (SpaceList);
+
+  // Каналы и категории
+  rpc CreateChannel(CreateChannelRequest) returns (Channel);
+  rpc UpdateChannel(UpdateChannelRequest) returns (Channel);
+  rpc DeleteChannel(DeleteChannelRequest) returns (Empty);
+  rpc CreateCategory(CreateCategoryRequest) returns (Category);
+  rpc UpdateCategory(UpdateCategoryRequest) returns (Category);
+  rpc DeleteCategory(DeleteCategoryRequest) returns (Empty);
+  rpc ReorderChannels(ReorderRequest) returns (Empty);
+
+  // Инвайты
+  rpc CreateInvite(CreateInviteRequest) returns (Invite);
+  rpc RevokeInvite(RevokeInviteRequest) returns (Empty);
+  rpc GetInvite(GetInviteRequest) returns (Invite);
+  rpc ListInvites(ListInvitesRequest) returns (InviteList);
+  rpc JoinByInvite(JoinByInviteRequest) returns (SpaceMembership);
+
+  // Участники
+  rpc JoinSpace(JoinSpaceRequest) returns (SpaceMembership);
+  rpc LeaveSpace(LeaveSpaceRequest) returns (Empty);
+  rpc KickMember(KickMemberRequest) returns (Empty);
+  rpc BanMember(BanMemberRequest) returns (Empty);
+  rpc UnbanMember(UnbanMemberRequest) returns (Empty);
+  rpc ListMembers(ListMembersRequest) returns (MemberList);
+  rpc ListBans(ListBansRequest) returns (BanList);
+  rpc TransferOwnership(TransferRequest) returns (Empty);
+
+  // Шаблоны
+  rpc ListTemplates(Empty) returns (TemplateList);
+  rpc CreateFromTemplate(CreateFromTemplateRequest) returns (Space);
+
+  // Аудит
+  rpc GetAuditLog(GetAuditLogRequest) returns (AuditLogList);
+}
+```
+
+## Модель данных
+
+```
+spaces
+├── id (UUID)
+├── name
+├── description (text)
+├── icon_url
+├── banner_url
+├── visibility (public | invite_only | private)
+├── owner_profile_id
+├── member_count (denormalized counter)
+├── is_verified (bool)
+├── verification_type (none | personal | organization)
+├── entry_requirement (none | phone | captcha | questions | manual)
+├── entry_questions (jsonb, nullable)
+├── mm_config (jsonb — space-level matchmaking settings)
+├── created_at
+└── updated_at
+
+channels
+├── id (UUID)
+├── space_id (FK)
+├── category_id (FK, nullable)
+├── name
+├── type (text | voice)
+├── topic (text, nullable)
+├── slow_mode_seconds (0 = off)
+├── sort_order (int)
+├── is_system (bool)
+├── created_at
+└── updated_at
+
+categories
+├── id (UUID)
+├── space_id (FK)
+├── name
+├── sort_order (int)
+└── created_at
+
+space_members
+├── space_id (FK)
+├── profile_id (FK)
+├── joined_at
+├── nickname (nullable, space-specific)
+└── UNIQUE(space_id, profile_id)
+
+space_bans
+├── space_id (FK)
+├── account_id (FK)
+├── banned_by (profile_id)
+├── reason (text, nullable)
+├── banned_at
+└── UNIQUE(space_id, account_id)
+
+invites
+├── id (UUID)
+├── space_id (FK)
+├── code (string, unique)
+├── creator_profile_id
+├── max_uses (nullable)
+├── use_count (int)
+├── expires_at (nullable)
+├── created_at
+└── revoked_at (nullable)
+
+audit_log
+├── id (UUID)
+├── space_id (FK)
+├── actor_profile_id
+├── action (string — channel_created, member_banned, role_updated, ...)
+├── target_type (string)
+├── target_id (UUID)
+├── details (jsonb)
+└── created_at
+```
+
+## Публикуемые события (→ NATS)
+
+| Событие                 | Данные                                       |
+|-------------------------|----------------------------------------------|
+| `space.created`         | space_id, owner_id                           |
+| `space.updated`         | space_id, changed_fields                     |
+| `space.deleted`         | space_id                                     |
+| `space.member_joined`   | space_id, profile_id                         |
+| `space.member_left`     | space_id, profile_id                         |
+| `space.member_banned`   | space_id, account_id, banned_by              |
+| `space.channel_created` | space_id, channel_id, type                   |
+| `space.channel_deleted` | space_id, channel_id                         |
+| `space.invite_created`  | space_id, invite_code                        |
+
+## Зависимости
+
+- **Role Service** — проверка прав при операциях
+- **Subscription Service** — лимиты каналов и участников (free vs Pro)
+- **User Service** — профили участников
+- **Social Service** — проверка блокировок при join

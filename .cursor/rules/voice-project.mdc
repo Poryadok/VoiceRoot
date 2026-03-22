@@ -1,0 +1,20 @@
+---
+description: Voice project — product context, key docs, roadmap
+alwaysApply: true
+---
+
+# Voice Project
+
+Discord-like мессенджер с войс-чатом и встроенным матчмейкингом для геймеров.
+
+## Context Files
+
+- **[docs/PROJECT.md](docs/PROJECT.md)** — product vision, target audience, matchmaking mechanics
+- **[docs/FEATURES.md](docs/FEATURES.md)** — каталог фич с кратким описанием и ссылками на детальные файлы
+- **[docs/features/](docs/features/)** — детальные описания фич по одному файлу на фичу (продуктовый дизайн, UX-решения)
+- **[docs/ARCHITECTURE_REQUIREMENTS.md](docs/ARCHITECTURE_REQUIREMENTS.md)** — кросс-сервисные технические решения: протоколы, инфраструктура, rate limiting, S2S федерация
+
+## Roadmap & documentation gaps
+
+- **[docs/PLAN.md](docs/PLAN.md)** — фазы разработки и текущее состояние кодовой базы
+- **[TODO.md](docs/TODO.md)** — открытые вопросы и пробелы в документации
