@@ -61,9 +61,9 @@
 
 ## Технические решения
 
-- **Протокол**: WebSocket, persistent connection; reconnection: exponential backoff (1s → 2s → 4s, cap 30s)
-- **Catch-up**: при reconnect клиент шлёт `last_message_id`, сервер отдаёт пропущенное из DB; offline queue не нужна
-- **Между инстансами**: Redis Pub/Sub
+- **Протокол**: WebSocket (Realtime), persistent connection; reconnection: exponential backoff (1s → 2s → 4s, cap 30s)
+- **Reconnect и догрузка истории** (поле `s` / `resume` в WS и курсор сообщений в Messaging): [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) — раздел «Reconnect: WebSocket-поток и история сообщений»
+- **Между инстансами Realtime**: Redis Pub/Sub
 - **Typing indicator**: WebSocket, throttle — событие не чаще раза в 3 сек, гасить через 5 сек без обновления
 - **Read receipts**: DM — галочки (одна = доставлено, две = прочитано); группы/каналы — только счётчик непрочитанных для самого пользователя, без раскрытия кто прочитал (как Discord)
 - **Rate limiting**: 5 сообщений / 5 сек на пользователя (глобально); slow mode для каналов — 5 сек – 6 ч, настраивается админом спейса

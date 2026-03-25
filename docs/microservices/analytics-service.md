@@ -111,6 +111,10 @@ FROM events
 GROUP BY date, event_type;
 ```
 
+## Когда усиливать пайплайн
+
+Ориентиры по объёму событий, задержке NATS→ClickHouse и нагрузке на CH (без «миграции ради миграции»): [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) — раздел «Аналитика: пороги эволюции пайплайна».
+
 ## Дашборды
 
 | Дашборд     | Метрики                                                                    |

@@ -128,6 +128,9 @@ Events (Node → Master):
 ```
 
 ### Reconnect flow:
+
+> **Контекст S2S:** `last_event_id` относится к журналу событий **федеративной ноды ↔ master**, не к клиентскому WebSocket. Не смешивать с полем **`s`** и op `resume` в Gateway ([realtime-service.md](realtime-service.md)) и с курсором сообщений в Messaging.
+
 1. Node reconnects
 2. Node sends last_event_id
 3. Master sends missed events (или full snapshot при длительном disconnect)

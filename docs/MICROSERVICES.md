@@ -119,6 +119,7 @@ Federation ──gRPC bidirectional stream──► External Node
 - **Gateway → Services**: gRPC с protobuf
 - **Service ↔ Service**: gRPC (синхронно), NATS JetStream (асинхронно)
 - **Realtime fan-out**: Redis Pub/Sub между инстансами WebSocket-шлюза
+- **Reconnect (клиент)**: WebSocket `s` / `resume` в Realtime и догрузка сообщений курсором в Messaging — единое описание в [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md) (раздел «Reconnect: WebSocket-поток и история сообщений»)
 - **Federation**: gRPC bidirectional stream (см. `protos/s2s.proto`)
 
 ## Event Bus (NATS JetStream)
@@ -214,10 +215,10 @@ Federation ──gRPC bidirectional stream──► External Node
 |-------------------|--------------------------------------------------|
 | Realtime Service  | N инстансов, Redis Pub/Sub для fan-out           |
 | Messaging Service | Шардинг PostgreSQL по chat_id (при >100M сообщений) |
-| Search Service    | PostgreSQL → Meilisearch → Elasticsearch (по нагрузке) |
+| Search Service    | PostgreSQL → Meilisearch → Elasticsearch; **когда переключать** — пороговая матрица в [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md) |
 | File Service      | R2 безлимитный egress, воркеры конвертации отдельно |
 | Voice Service     | LiveKit масштабируется независимо (SFU per region) |
-| Analytics Service | ClickHouse кластер, батч-запись через буфер      |
+| Analytics Service | ClickHouse кластер, батч-запись через буфер; **когда усложнять** — [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md) (аналитика, пороги) |
 | Matchmaking       | Redis-очереди, горизонтальный матчер             |
 
 ## Отказоустойчивость
@@ -225,6 +226,7 @@ Federation ──gRPC bidirectional stream──► External Node
 - **Circuit breaker** на всех gRPC-вызовах между сервисами
 - **Retry с exponential backoff** для NATS и внешних API
 - **Graceful degradation**: поиск, аналитика, сторис — некритичные, деградируют без остановки core
+- **Порядок деградации и целевые SLO** по пользовательским путям, canary/rollback, владение миграциями БД — [OPERATIONS.md](OPERATIONS.md) (Tier 0: Gateway, Auth, User, Chat, Messaging, Realtime + критичный Redis/NATS; Tier 1/2 — см. там)
 - **Health checks**: liveness + readiness пробы для каждого сервиса
 - **Dead letter queue**: NATS DLQ для необработанных событий
 

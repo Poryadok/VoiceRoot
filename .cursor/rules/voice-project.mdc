@@ -13,6 +13,7 @@ Discord-like мессенджер с войс-чатом и встроенным
 - **[docs/FEATURES.md](docs/FEATURES.md)** — каталог фич с кратким описанием и ссылками на детальные файлы
 - **[docs/features/](docs/features/)** — детальные описания фич по одному файлу на фичу (продуктовый дизайн, UX-решения)
 - **[docs/ARCHITECTURE_REQUIREMENTS.md](docs/ARCHITECTURE_REQUIREMENTS.md)** — кросс-сервисные технические решения: протоколы, инфраструктура, rate limiting, S2S федерация
+- **[docs/OPERATIONS.md](docs/OPERATIONS.md)** — SLO по ключевым путям, порядок деградации, релизы (canary/rollback), владение миграциями БД
 
 ## Roadmap & documentation gaps
 

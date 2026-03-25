@@ -19,7 +19,7 @@ CRUD сообщений для всех типов чатов (DM, группы,
 - Read receipts (последнее прочитанное сообщение на пользователя на чат)
 - Вложения (ссылки на File Service)
 - Лимит 4000 символов
-- Catch-up: получение сообщений после last_message_id
+- Догрузка истории после offline / reconnect: **per `chat_id`** через `GetMessages` с курсором (`after_message_id` / `last_message_id`); правила fallback — [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md). Не путать с полем **`s`** в WebSocket Gateway (Realtime) — это нумерация live-событий, не курсор БД
 
 ## API (gRPC)
 

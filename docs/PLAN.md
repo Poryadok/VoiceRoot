@@ -10,7 +10,7 @@
 | Компонент | Состояние |
 |-----------|-----------|
 | VoiceAuthService (Java/Spring) | Работает: регистрация, логин, JWT, роли |
-| VoiceWebSocketService (Go) | Заглушка: gRPC-сервер стартует, методы не реализованы |
+| VoiceWebSocketService (Go) | Заглушка: gRPC-сервер стартует, методы не реализованы. В целевой архитектуре real-time шлюз — **Realtime Service** ([MICROSERVICES.md](MICROSERVICES.md)) |
 | VoiceChannelDataService (Go) | Пустой: только go.mod |
 | VoiceMessageService (Go) | Пустой: только go.mod |
 | voiceclient (Flutter) | Прототип: P2P WebRTC через Firebase, не подключён к бэкенду |
@@ -43,11 +43,11 @@
 - [ ] **VoiceMessageService** — CRUD сообщений: отправка, получение, редактирование, удаление
   - Хранение в PostgreSQL, пагинация курсором
   - REST API для CRUD
-- [ ] **VoiceWebSocketService** — real-time доставка
+- [ ] **VoiceWebSocketService** (в продукте — **Realtime Service**) — real-time доставка
   - WebSocket подключение с JWT-аутентификацией
   - Доставка новых сообщений подключённым клиентам
   - Redis Pub/Sub для маршрутизации между инстансами
-  - Reconnect с catch-up по `last_message_id`
+  - Reconnect: нумерация событий `s`, op `resume`; догрузка пропущенных сообщений курсором через **Messaging** (не через WS-шлюз) — [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md)
 - [ ] **VoiceChannelDataService** — управление чатами
   - Создание DM-диалогов
   - Список диалогов пользователя с последним сообщением и счётчиком непрочитанных

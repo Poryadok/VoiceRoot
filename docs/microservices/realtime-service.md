@@ -15,7 +15,8 @@ WebSocket-шлюз для доставки событий в реальном в
 - Redis Pub/Sub для синхронизации между инстансами
 - Typing indicators
 - Reconnection support (exponential backoff на клиенте)
-- Catch-up: при reconnect клиент отправляет `last_event_id`, сервис запрашивает пропущенные события
+- Нумерация событий **`s`** в рамках WebSocket-сессии, op **`resume`** с `last_s` после reconnect (см. ниже)
+- **Историю чатов не хранит**; пропущенные сообщения клиент догружает через **Messaging API** (Gateway → REST/gRPC), см. [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) (Reconnect)
 - Heartbeat / ping-pong для детекции разрыва
 
 ## Протокол WebSocket
@@ -29,13 +30,27 @@ Headers:
 ```
 
 ### Формат сообщений (JSON)
+
+Сервер → клиент (события с sequence):
+
 ```json
 {
   "op": "event_type",
-  "d": { /* payload */ },
-  "s": 12345  // sequence number
+  "d": { },
+  "s": 12345
 }
 ```
+
+Клиент → сервер, пример **`resume`** (после обрыва; `last_s` — последний полученный `s`, если был):
+
+```json
+{
+  "op": "resume",
+  "d": { "last_s": 12345 }
+}
+```
+
+Если клиент не присылал `resume` или это первое подключение — достаточно обычного потока после `hello`.
 
 ### Операции (Client → Server)
 | op              | Описание                              |
@@ -45,12 +60,12 @@ Headers:
 | `unsubscribe`   | Отписка                              |
 | `typing_start`  | Начал печатать                       |
 | `typing_stop`   | Перестал печатать                     |
-| `resume`        | Reconnect с last_sequence            |
+| `resume`        | После reconnect: `d.last_s` = последний известный `s` |
 
 ### Операции (Server → Client)
 | op                    | Описание                          |
 |-----------------------|-----------------------------------|
-| `hello`               | Инициализация после подключения   |
+| `hello`               | Инициализация после подключения (начало новой сессии нумерации `s`) |
 | `heartbeat_ack`       | Подтверждение heartbeat           |
 | `message_create`      | Новое сообщение                   |
 | `message_update`      | Сообщение отредактировано         |
@@ -93,7 +108,8 @@ Realtime Instance A ──Redis Pub/Sub──► Realtime Instance B
 
 - **Redis** — Pub/Sub, registry подключений `{profile_id → [instance_id, ws_conn_id]}`
 - **NATS** — получение событий от всех сервисов
-- **Messaging Service** — catch-up при reconnect (gRPC)
+
+Догрузка пропущенных **сообщений** не через Realtime: клиент обращается к **Messaging Service** через API Gateway (без обязательного gRPC Realtime → Messaging для catch-up).
 
 ## Метрики (→ Analytics)
 
