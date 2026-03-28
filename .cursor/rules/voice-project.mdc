@@ -1,21 +1,27 @@
 ---
-description: Voice project — product context, key docs, roadmap
+description: Voice — где искать правду в доках и жёсткие архитектурные границы
 alwaysApply: true
 ---
 
-# Voice Project
+# Voice
 
-Discord-like мессенджер с войс-чатом и встроенным матчмейкингом для геймеров.
+Продукт: Discord-подобный мессенджер с войсом и встроенным матчмейкингом. Детали продукта и фич — только в репозитории, не выдумывать, при отсутствии описания - спрашивать.
 
-## Context Files
+## Где смотреть (источники истины)
 
-- **[docs/PROJECT.md](docs/PROJECT.md)** — product vision, target audience, matchmaking mechanics
-- **[docs/FEATURES.md](docs/FEATURES.md)** — каталог фич с кратким описанием и ссылками на детальные файлы
-- **[docs/features/](docs/features/)** — детальные описания фич по одному файлу на фичу (продуктовый дизайн, UX-решения)
-- **[docs/ARCHITECTURE_REQUIREMENTS.md](docs/ARCHITECTURE_REQUIREMENTS.md)** — кросс-сервисные технические решения: протоколы, инфраструктура, rate limiting, S2S федерация
-- **[docs/OPERATIONS.md](docs/OPERATIONS.md)** — SLO по ключевым путям, порядок деградации, релизы (canary/rollback), владение миграциями БД
+| Нужно | Файл |
+|--------|------|
+| Видение, аудитория, матчмейкинг | `docs/PROJECT.md` |
+| Каталог фич → детали | `docs/FEATURES.md`, `docs/features/` |
+| Сервисы, границы, контракты | `docs/MICROSERVICES.md`, `docs/microservices/*.md` |
+| Сквозная техника (JWT, rate limit, WS/reconnect, push, голос) | `docs/ARCHITECTURE_REQUIREMENTS.md` |
+| SLO, деградация, релизы, миграции БД | `docs/OPERATIONS.md` |
+| Что уже есть в коде vs план | `docs/PLAN.md` |
+| Пробелы в доках | `docs/TODO.md` |
 
-## Roadmap & documentation gaps
+## Правила, которые нельзя вывести из кода одним файлом
 
-- **[docs/PLAN.md](docs/PLAN.md)** — фазы разработки и текущее состояние кодовой базы
-- **[TODO.md](docs/TODO.md)** — открытые вопросы и пробелы в документации
+- **План vs код**: в репозитории часть сервисов — заглушки или старые имена; перед оценкой «готово» и объёмом работы читай `docs/PLAN.md`. Целевая карта сервисов — `docs/MICROSERVICES.md` (например, WebSocket-шлюз в продукте — **Realtime Service**, не смешивать с Messaging).
+- **Два слоя доставки сообщений** (из `docs/ARCHITECTURE_REQUIREMENTS.md`): поток событий по WebSocket с последовательностью `s` и `resume` — только в Realtime; **догрузка пропущенных сообщений** — REST/API Messaging через Gateway с курсором **per `chat_id`**, не через «догнать всё по WS».
+- **Стек по сервисам**: Auth в целевой архитектуре — **Java** (`VoiceAuthService`); большинство остальных сервисов в доке — **Go**; клиент — **Flutter** (в т.ч. веб). Не переносить Auth на Go без явного решения в задаче.
+- **Изменения в документации**: не расширяй `docs/` и не переписывай структуру фич, если пользователь явно не просит — в правилах только навигация и границы, не дублируй длинные спецификации.

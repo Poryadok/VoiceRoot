@@ -85,25 +85,25 @@ Voice — распределённая система из 20 микросерв
 
 | Компонент            | Технология                          |
 |----------------------|-------------------------------------|
-| Auth Service         | Java 21, Spring Boot 3, Spring Security |
-| Все остальные сервисы | Go 1.22+                           |
-| Flutter клиент       | Flutter 3.x (mobile, desktop, web) |
-| Web-админка          | React (Vite) или Flutter Web        |
-| API Gateway          | Custom Go (chi/echo) или Kong       |
-| База данных          | PostgreSQL 16 (по БД на сервис)     |
-| Кэш / Pub/Sub       | Redis 7 (Cluster)                  |
-| Event Bus            | NATS JetStream                     |
+| Auth Service         | Java 25 LTS, Spring Boot 3.5, Spring Security 6 |
+| Все остальные сервисы | Go 1.26+                           |
+| Flutter клиент       | Flutter 3.41+ (mobile, desktop, web) |
+| Web-админка          | React 19, Vite 7, TypeScript 5     |
+| API Gateway          | Custom Go (chi/echo) или Kong Gateway 3.x |
+| База данных          | PostgreSQL 18 (по БД на сервис)     |
+| Кэш / Pub/Sub       | Redis 8 (Cluster)                  |
+| Event Bus            | NATS Server 2.12+ (JetStream)      |
 | Объектное хранилище  | Cloudflare R2 (S3-совместимое)     |
 | Поиск (v1)           | PostgreSQL tsvector + GIN          |
-| Поиск (v2+)          | Meilisearch → Elasticsearch        |
-| Аналитика (OLAP)     | ClickHouse                         |
-| Голос/Видео          | LiveKit SFU                        |
+| Поиск (v2+)          | Meilisearch 1.40+ → Elasticsearch 9.x |
+| Аналитика (OLAP)     | ClickHouse 26.x LTS                |
+| Голос/Видео          | LiveKit Server 1.10+ (SFU)         |
 | Антивирус            | ClamAV                             |
-| Оркестрация          | k3s (staging), Kubernetes (prod)   |
+| Оркестрация          | k3s v1.35+ (staging), Kubernetes 1.35 (prod) |
 | CI/CD                | GitHub Actions                     |
-| Мониторинг           | Prometheus + Grafana               |
-| Трейсинг             | OpenTelemetry + Jaeger             |
-| Логи                 | Loki (или ELK)                     |
+| Мониторинг           | Prometheus 3.x + Grafana 12        |
+| Трейсинг             | OpenTelemetry Collector 0.148+ + Jaeger |
+| Логи                 | Grafana Loki 3.7+ (или ELK)        |
 
 ## Протоколы коммуникации
 
@@ -242,9 +242,9 @@ Federation ──gRPC bidirectional stream──► External Node
 
 ## Клиенты
 
-| Клиент        | Технология    | Назначение            |
-|---------------|---------------|-----------------------|
-| Mobile App    | Flutter       | Android, iOS          |
-| Desktop App   | Flutter       | Windows, macOS, Linux |
-| Web App       | Flutter Web   | Браузер               |
-| Admin Panel   | React (Vite)  | Модерация, аналитика  |
+| Клиент        | Технология              | Назначение            |
+|---------------|-------------------------|-----------------------|
+| Mobile App    | Flutter 3.41+           | Android, iOS          |
+| Desktop App   | Flutter 3.41+           | Windows, macOS, Linux |
+| Web App       | Flutter Web 3.41+       | Браузер               |
+| Admin Panel   | React 19, Vite 7        | Модерация, аналитика  |
