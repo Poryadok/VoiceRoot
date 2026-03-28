@@ -59,3 +59,6 @@
 
 - [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md) — rate limiting, протоколы, доставка сообщений; **пороги смены движка поиска и эволюции аналитики** (матрицы триггеров)
 - [MICROSERVICES.md](MICROSERVICES.md) — отказоустойчивость, масштабирование, перечень сервисов
+- [DEPLOYMENT.md](DEPLOYMENT.md) — стенды, поток артефактов, первый выкат
+- [TESTING.md](TESTING.md) — тесты в CI перед выкатом
+- [CONTRIBUTING.md](CONTRIBUTING.md) — merge в `master`, review

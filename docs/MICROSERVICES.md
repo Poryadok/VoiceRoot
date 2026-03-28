@@ -105,6 +105,8 @@ Voice — распределённая система из 20 микросерв
 | Трейсинг             | OpenTelemetry Collector 0.148+ + Jaeger |
 | Логи                 | Grafana Loki 3.7+ (или ELK)        |
 
+Процесс: Git и PR — [CONTRIBUTING.md](CONTRIBUTING.md); тесты и CI — [TESTING.md](TESTING.md); окружения и выкат — [DEPLOYMENT.md](DEPLOYMENT.md); репозитории и protos — [REPOSITORIES.md](REPOSITORIES.md).
+
 ## Протоколы коммуникации
 
 ```

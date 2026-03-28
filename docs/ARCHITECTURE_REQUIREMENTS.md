@@ -173,6 +173,8 @@
 - **Service discovery**: Kubernetes ClusterDNS — сервисы находят друг друга по DNS-именам (`voice-message-service.default.svc.cluster.local`)
 - Consul, Eureka — избыточны, не используем
 
+Окружения (local / staging / prod) и поток деплоя: [DEPLOYMENT.md](DEPLOYMENT.md).
+
 ---
 
 ## Федерация (S2S API)

@@ -16,6 +16,10 @@ alwaysApply: true
 | Сервисы, границы, контракты | `docs/MICROSERVICES.md`, `docs/microservices/*.md` |
 | Сквозная техника (JWT, rate limit, WS/reconnect, push, голос) | `docs/ARCHITECTURE_REQUIREMENTS.md` |
 | SLO, деградация, релизы, миграции БД | `docs/OPERATIONS.md` |
+| Окружения, выкат, CI → staging/prod | `docs/DEPLOYMENT.md` |
+| Тесты, локальные проверки, состав CI | `docs/TESTING.md` |
+| Git, ветки, PR, процесс | `docs/CONTRIBUTING.md` |
+| Репозитории, монорепо, protos | `docs/REPOSITORIES.md` |
 | Что уже есть в коде vs план | `docs/PLAN.md` |
 | Пробелы в доках | `docs/TODO.md` |
 
@@ -24,4 +28,5 @@ alwaysApply: true
 - **План vs код**: в репозитории часть сервисов — заглушки или старые имена; перед оценкой «готово» и объёмом работы читай `docs/PLAN.md`. Целевая карта сервисов — `docs/MICROSERVICES.md` (например, WebSocket-шлюз в продукте — **Realtime Service**, не смешивать с Messaging).
 - **Два слоя доставки сообщений** (из `docs/ARCHITECTURE_REQUIREMENTS.md`): поток событий по WebSocket с последовательностью `s` и `resume` — только в Realtime; **догрузка пропущенных сообщений** — REST/API Messaging через Gateway с курсором **per `chat_id`**, не через «догнать всё по WS».
 - **Стек по сервисам**: Auth в целевой архитектуре — **Java** (`VoiceAuthService`); большинство остальных сервисов в доке — **Go**; клиент — **Flutter** (в т.ч. веб). Не переносить Auth на Go без явного решения в задаче.
+- **Ветка по умолчанию**: `master` (не `main`). Имена репозиториев на GitHub — PascalCase; монорепо и protos — см. `docs/REPOSITORIES.md`.
 - **Изменения в документации**: не расширяй `docs/` и не переписывай структуру фич, если пользователь явно не просит — в правилах только навигация и границы, не дублируй длинные спецификации.
