@@ -58,8 +58,8 @@ service MessagingService {
 
 ```
 messages
-├── id (UUID, time-ordered — UUIDv7 или ULID)
-├── chat_id (FK → chat_db / space channel)
+├── id (UUID, UUIDv7)
+├── chat_id (логически: chat_db.chats.id для dm|group; space_db.channels.id для channel)
 ├── chat_type (dm | group | channel)
 ├── sender_profile_id
 ├── content (text, 4000 chars)
@@ -72,7 +72,7 @@ messages
 ├── edited_at (nullable)
 ├── deleted_at (nullable, soft delete)
 ├── created_at
-└── INDEX(chat_id, created_at DESC)
+└── INDEX(chat_id, id DESC)
 
 reactions
 ├── message_id (FK)
@@ -87,6 +87,17 @@ pins
 ├── pinned_by (profile_id)
 ├── pinned_at
 └── UNIQUE(chat_id, message_id)
+
+message_attachments (Shared Media — целевая схема, см. docs/data/target/messaging_db.md)
+├── id
+├── message_id (FK → messages)
+├── sort_order
+├── kind (image | video | audio | voice_message | document | link | other)
+├── file_id (nullable)
+├── external_url (nullable)
+├── title (nullable)
+├── duration_seconds (nullable)
+└── INDEX(message_id, sort_order)
 
 read_receipts
 ├── chat_id

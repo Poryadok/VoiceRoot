@@ -10,7 +10,7 @@
 ## Ответственность
 
 - In-chat search (поиск внутри конкретного чата/канала)
-- Global search (контакты, пространства, сообщения с highlighting)
+- Global search (контакты, чаты DM/группы, пространства, сообщения с highlighting)
 - Instant search (debounce 300ms на клиенте)
 - Пагинация (20 элементов)
 - Разделение результатов: контакты, пространства, сообщения
@@ -41,22 +41,9 @@ service SearchService {
 | v2   | См. матрицу в ARCHITECTURE | Meilisearch |
 | v3   | Только при требованиях вне возможностей Meili; иначе отложено | Elasticsearch |
 
-### v1: PostgreSQL
+### v1: PostgreSQL (`search_db`)
 
-```sql
--- Индекс для поиска
-ALTER TABLE messages ADD COLUMN search_vector tsvector
-  GENERATED ALWAYS AS (
-    to_tsvector('russian', coalesce(content, '')) ||
-    to_tsvector('english', coalesce(content, ''))
-  ) STORED;
-
-CREATE INDEX idx_messages_search ON messages USING GIN(search_vector);
-
--- pg_trgm для language-agnostic fuzzy
-CREATE EXTENSION pg_trgm;
-CREATE INDEX idx_messages_trgm ON messages USING GIN(content gin_trgm_ops);
-```
+Проекции в отдельной БД сервиса (не колонки в `messaging_db.messages`): `message_search_documents`, `profile_search_documents`, `chat_search_documents`, `space_search_documents` — см. [data/target/search_db.md](../data/target/search_db.md). Расширение `pg_trgm` для fuzzy/prefix по мере необходимости.
 
 ### v2: Meilisearch
 

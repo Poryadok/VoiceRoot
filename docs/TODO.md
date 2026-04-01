@@ -7,7 +7,7 @@
 ## 🔴 Критические пробелы (блокируют реализацию)
 
 ### 1. Data model / схема БД нигде не описана
-Инвентарь БД: [DATA_STORES.md](DATA_STORES.md). Общие правила: [DATA_MODEL.md](DATA_MODEL.md). **Скоуп первой волны и трассировка фич → сущности:** [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md). Остаётся описать **конкретные таблицы, индексы и связи** по каждому сервису в объёме волны (`docs/data/*.md`, миграции, ER).
+**Закрыто:** конкретные таблицы, индексы, внутренние FK и логические связи для волны v1 — [data/README.md](data/README.md) и `docs/data/*-service.md`. Инвентарь БД: [DATA_STORES.md](DATA_STORES.md). Общие правила: [DATA_MODEL.md](DATA_MODEL.md). Скоуп и трассировка фич: [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md). Миграции (Flyway / golang-migrate): [data/README.md](data/README.md#db-migrations).
 
 ---
 

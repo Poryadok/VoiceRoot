@@ -59,5 +59,5 @@
 ## Следующие шаги к модели данных
 
 1. Скоуп v1 и трассировка фич → сервисы: [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md).
-2. Для каждой `*_db` в объёме волны — таблицы и связи в `docs/data/<service>.md` (общие правила — [DATA_MODEL.md](DATA_MODEL.md)).
-3. Увязать с миграциями: один сервис — один набор миграций на свою БД ([OPERATIONS.md](OPERATIONS.md)).
+2. Таблицы и связи для волны v1: [data/README.md](data/README.md) и `docs/data/*-service.md` (общие правила — [DATA_MODEL.md](DATA_MODEL.md)).
+3. Миграции: один сервис — один набор миграций на свою БД ([OPERATIONS.md](OPERATIONS.md)); стек — [data/README.md](data/README.md#db-migrations).
