@@ -90,7 +90,7 @@ otp_codes
 
 ## Зависимости
 
-- **Redis** — JWT blacklist, rate limit state, OTP throttling
+- **Redis** — JWT blacklist (запись при logout и отзыве access token), OTP throttling. Сквозные HTTP rate limits (в т.ч. лимит попыток входа с одного IP) — на **API Gateway**; те же лимиты вторым слоем в Auth не дублируем. Подробнее: [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) («Redis: API Gateway и Auth Service»).
 - **Resend** — отправка email (верификация, password reset)
 - **NATS** — публикация событий
 

@@ -14,6 +14,8 @@ alwaysApply: true
 | Видение, аудитория, матчмейкинг | `docs/PROJECT.md` |
 | Каталог фич → детали | `docs/FEATURES.md`, `docs/features/` |
 | Сервисы, границы, контракты | `docs/MICROSERVICES.md`, `docs/microservices/*.md` |
+| Инвентарь БД и Redis по сервисам | `docs/DATA_STORES.md` |
+| Правила модели данных (ID, ссылки между сервисами, общие поля) | `docs/DATA_MODEL.md` |
 | Сквозная техника (JWT, rate limit, WS/reconnect, push, голос) | `docs/ARCHITECTURE_REQUIREMENTS.md` |
 | SLO, деградация, релизы, миграции БД | `docs/OPERATIONS.md` |
 | Окружения, выкат, CI → staging/prod | `docs/DEPLOYMENT.md` |

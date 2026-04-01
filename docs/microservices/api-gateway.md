@@ -67,7 +67,7 @@
 
 ## Зависимости
 
-- **Redis** — rate limiting counters, JWT blacklist check
+- **Redis** — rate limiting (sliding window), чтение JWT blacklist. Зона ответственности с **Auth Service**: [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) (раздел «Redis: API Gateway и Auth Service»).
 - **Auth Service** — JWT public key (ротация через JWKS endpoint)
 
 ## Метрики (→ Analytics)

@@ -186,6 +186,7 @@ Federation ──gRPC bidirectional stream──► External Node
 
 | Сервис              | БД / Хранилище                          |
 |---------------------|----------------------------------------|
+| API Gateway         | Redis (rate limit, чтение JWT blacklist) |
 | Auth Service        | PostgreSQL `auth_db`                   |
 | User Service        | PostgreSQL `user_db`, Redis (presence) |
 | Social Service      | PostgreSQL `social_db`                 |
@@ -196,7 +197,7 @@ Federation ──gRPC bidirectional stream──► External Node
 | Voice Service       | Redis (active sessions), LiveKit       |
 | File Service        | PostgreSQL `file_db`, Cloudflare R2    |
 | Notification Service| PostgreSQL `notification_db`, Redis    |
-| Search Service      | PostgreSQL (v1) / Meilisearch (v2)     |
+| Search Service      | PostgreSQL `search_db` (v1), Meilisearch (v2), Elasticsearch (v3 при необходимости) |
 | Matchmaking Service | PostgreSQL `matchmaking_db`, Redis (queues) |
 | Moderation Service  | PostgreSQL `moderation_db`             |
 | Subscription Service| PostgreSQL `subscription_db`           |

@@ -5,7 +5,7 @@
 Полнотекстовый поиск по сообщениям, пользователям, пространствам. Стратегия роста: PostgreSQL → Meilisearch → Elasticsearch.
 
 **Язык**: Go
-**БД**: PostgreSQL (v1) / Meilisearch (v2) / Elasticsearch (v3)
+**БД**: PostgreSQL `search_db` (v1) / Meilisearch (v2) / Elasticsearch (v3)
 
 ## Ответственность
 

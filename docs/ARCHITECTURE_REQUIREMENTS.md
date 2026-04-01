@@ -10,12 +10,14 @@
 
 - **Access token**: JWT, TTL 15 мин
 - **Refresh token**: opaque, TTL 30 дней, хранится в DB
-- **Таблица**: `refresh_tokens(id, user_id, token_hash, device_name, ip, expires_at)`
+- **Учётная запись в БД**: таблица **`accounts`** в PostgreSQL **`auth_db`** (не `users` в смысле «вся личность»). Профили и ники — **User Service** / `user_db`, см. [DATA_MODEL.md](DATA_MODEL.md).
+- **Таблица refresh-токенов** (имена колонок выровнены с [microservices/auth-service.md](microservices/auth-service.md)):  
+  `refresh_tokens(id, account_id, token_hash, device_info, expires_at, created_at, revoked_at)` — логически **`account_id`** = `accounts.id`; в JWT claim по-прежнему **`user_id`** (историческое имя, то же значение, что у аккаунта).
 - **Инвалидация refresh tokens**: смена пароля → удалить все; logout → удалить один
 - **Досрочный отзыв access token**: Redis blacklist (ключ = jti, TTL = оставшееся время токена)
 - **Одновременных сессий**: неограниченно → страница "Активные устройства"
 - **Восстановление пароля**: через email (ссылка или код)
-- **Удаление аккаунта**: soft delete, поле `deleted_at` на таблице users; данные в основной БД (антискам + 152-ФЗ)
+- **Удаление аккаунта**: soft delete, поле **`deleted_at`** на таблице **`accounts`** в `auth_db` (антискам + 152-ФЗ); детали модели — [microservices/auth-service.md](microservices/auth-service.md)
 
 ---
 
@@ -33,6 +35,15 @@
 | Создание спейсов | 5 спейсов / день на аккаунт | — |
 | Создание каналов | 20 каналов / день на аккаунт | — |
 | Регистрация ботов | 5 ботов / день на аккаунт | — |
+
+### Redis: API Gateway и Auth Service
+
+Один Redis (или кластер) на окружение; **разделение префиксами ключей**, отдельной PostgreSQL у Gateway нет.
+
+| Компонент | Redis: что делает |
+|-----------|-------------------|
+| **API Gateway** | Счётчики **сквозных** лимитов из таблицы выше (например `ratelimit:{user_id}:{endpoint_group}`, где **`user_id` в ключе** = subject JWT, то есть **`accounts.id`** / логическое `account_id`; см. [DATA_MODEL.md](DATA_MODEL.md); для лимитов по IP — ключи с IP в составе). **Чтение** blacklist access token: ключ = `jti`, TTL = оставшееся время жизни токена (см. раздел «Аутентификация и сессии» выше). |
+| **Auth Service** | **Запись** в blacklist при logout и сценариях отзыва access token; состояние OTP / throttling верификации. HTTP-лимиты из таблицы (в т.ч. вход с одного IP) обрабатывает **Gateway** — дублирующие счётчики в Auth для тех же лимитов не заводим. |
 
 ---
 
