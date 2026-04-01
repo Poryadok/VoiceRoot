@@ -111,13 +111,13 @@ Voice — распределённая система из 20 микросерв
 
 ```
 Client ──REST/JSON──► API Gateway ──gRPC──► Микросервисы
-Client ──WebSocket──► Realtime Service ──Redis Pub/Sub──► Realtime (другие инстансы)
+Client ──WSS (/ws)──► API Gateway ──WebSocket proxy──► Realtime Service ──Redis Pub/Sub──► Realtime (другие инстансы)
 Микросервис ──gRPC──► Микросервис (синхронные вызовы)
 Микросервис ──NATS──► Микросервис (асинхронные события)
 Federation ──gRPC bidirectional stream──► External Node
 ```
 
-- **Client → Gateway**: REST/JSON (CRUD), WebSocket (real-time)
+- **Client → Gateway**: REST/JSON (CRUD); WebSocket — **только через Gateway** (`/ws`, upgrade и прокси на Realtime), детали в [microservices/api-gateway.md](microservices/api-gateway.md)
 - **Gateway → Services**: gRPC с protobuf
 - **Service ↔ Service**: gRPC (синхронно), NATS JetStream (асинхронно)
 - **Realtime fan-out**: Redis Pub/Sub между инстансами WebSocket-шлюза
