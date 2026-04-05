@@ -94,15 +94,15 @@ Client ──LiveKit Client SDK──► LiveKit SFU (media streams)
 
 ## Публикуемые события (→ NATS)
 
-| Событие                    | Данные                                    |
-|----------------------------|-------------------------------------------|
-| `voice.call_started`       | room_id, initiator_id, type               |
-| `voice.call_ended`         | room_id, duration_seconds                 |
-| `voice.participant_joined` | room_id, profile_id                       |
-| `voice.participant_left`   | room_id, profile_id                       |
-| `voice.state_changed`      | profile_id, changes (mute/deafen/video)   |
-| `voice.screen_share_started`| room_id, profile_id                      |
-| `voice.screen_share_stopped`| room_id, profile_id                      |
+| Событие                      | Данные                                  |
+|------------------------------|-----------------------------------------|
+| `voice.call_started`         | room_id, initiator_id, type             |
+| `voice.call_ended`           | room_id, duration_seconds               |
+| `voice.participant_joined`   | room_id, profile_id                     |
+| `voice.participant_left`     | room_id, profile_id                     |
+| `voice.state_changed`        | profile_id, changes (mute/deafen/video) |
+| `voice.screen_share_started` | room_id, profile_id                     |
+| `voice.screen_share_stopped` | room_id, profile_id                     |
 
 ## Зависимости
 
@@ -116,3 +116,5 @@ Client ──LiveKit Client SDK──► LiveKit SFU (media streams)
 ## Масштабирование
 
 Voice Service stateless — масштабируется горизонтально. LiveKit масштабируется независимо (SFU per region для low-latency).
+
+

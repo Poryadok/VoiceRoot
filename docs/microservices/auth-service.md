@@ -78,15 +78,15 @@ otp_codes
 
 ## Публикуемые события (→ NATS)
 
-| Событие                | Данные                                   |
-|------------------------|------------------------------------------|
-| `user.registered`      | account_id, type, method                 |
-| `user.logged_in`       | account_id, device_info, ip             |
-| `user.logged_out`      | account_id, device_info                 |
-| `user.2fa_enabled`     | account_id                               |
-| `user.guest_converted` | account_id                               |
-| `user.account_deleted` | account_id                               |
-| `user.account_restored`| account_id                               |
+| Событие                 | Данные                      |
+|-------------------------|-----------------------------|
+| `user.registered`       | account_id, type, method    |
+| `user.logged_in`        | account_id, device_info, ip |
+| `user.logged_out`       | account_id, device_info     |
+| `user.2fa_enabled`      | account_id                  |
+| `user.guest_converted`  | account_id                  |
+| `user.account_deleted`  | account_id                  |
+| `user.account_restored` | account_id                  |
 
 ## Зависимости
 
@@ -101,3 +101,5 @@ otp_codes
 - Refresh token: только хэш в БД, оригинал — только клиенту
 - Нет SMS 2FA (v1) — только TOTP
 - IP logging для аудита
+
+

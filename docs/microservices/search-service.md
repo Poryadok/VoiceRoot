@@ -35,11 +35,11 @@ service SearchService {
 
 Полная **пороговая матрица** (когда именно v1→v2→v3, Meili vs ES, правила двойной записи): [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) — разделы «Полнотекстовый поиск» и «Пороговая матрица».
 
-| Этап | Условие перехода (кратко) | Технология |
-|------|---------------------------|------------|
-| v1   | Старт                     | PostgreSQL tsvector + GIN |
-| v2   | См. матрицу в ARCHITECTURE | Meilisearch |
-| v3   | Только при требованиях вне возможностей Meili; иначе отложено | Elasticsearch |
+| Этап | Условие перехода (кратко)                                     | Технология                |
+|------|---------------------------------------------------------------|---------------------------|
+| v1   | Старт                                                         | PostgreSQL tsvector + GIN |
+| v2   | См. матрицу в ARCHITECTURE                                    | Meilisearch               |
+| v3   | Только при требованиях вне возможностей Meili; иначе отложено | Elasticsearch             |
 
 ### v1: PostgreSQL (`search_db`)
 
@@ -64,11 +64,11 @@ NATS message.sent/edited/deleted ──► Search Service ──► Update index
 
 ## Публикуемые события (→ NATS)
 
-| Событие                | Данные                            |
-|------------------------|-----------------------------------|
-| `search.query`         | profile_id, query, scope, results_count |
-| `search.result_clicked`| profile_id, result_type, result_id|
-| `search.zero_results`  | profile_id, query, scope          |
+| Событие                 | Данные                                  |
+|-------------------------|-----------------------------------------|
+| `search.query`          | profile_id, query, scope, results_count |
+| `search.result_clicked` | profile_id, result_type, result_id      |
+| `search.zero_results`   | profile_id, query, scope                |
 
 ## Зависимости
 
@@ -76,3 +76,5 @@ NATS message.sent/edited/deleted ──► Search Service ──► Update index
 - **Role Service** — проверка прав на чтение канала при поиске
 - **Space Service** — валидация доступа
 - **Federation Service** — маршрутизация поиска к нодам
+
+

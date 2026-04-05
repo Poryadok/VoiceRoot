@@ -46,3 +46,5 @@ TTL timestamp + INTERVAL 90 DAY;
 ## Связь с микросервисами
 
 Источник — **NATS** (все релевантные streams); Analytics не владеет PostgreSQL-БД продуктовых сервисов.
+
+

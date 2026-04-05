@@ -137,13 +137,13 @@ Events (Node → Master):
 
 ## Публикуемые события (→ NATS)
 
-| Событие                      | Данные                              |
-|------------------------------|-------------------------------------|
-| `federation.node_connected`  | node_id, host                       |
-| `federation.node_disconnected`| node_id, reason                    |
-| `federation.event_synced`    | node_id, event_type, direction      |
-| `federation.sync_failed`     | node_id, error                      |
-| `federation.node_defederated`| node_id, reason                     |
+| Событие                        | Данные                         |
+|--------------------------------|--------------------------------|
+| `federation.node_connected`    | node_id, host                  |
+| `federation.node_disconnected` | node_id, reason                |
+| `federation.event_synced`      | node_id, event_type, direction |
+| `federation.sync_failed`       | node_id, error                 |
+| `federation.node_defederated`  | node_id, reason                |
 
 ## Зависимости
 
@@ -151,3 +151,5 @@ Events (Node → Master):
 - **Notification Service** — relay push-уведомлений от нод
 - **Role Service** — (через NATS) синхронизация ролей
 - **Moderation Service** — (через NATS) обработка жалоб с нод
+
+

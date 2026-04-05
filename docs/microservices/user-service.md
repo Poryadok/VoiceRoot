@@ -96,15 +96,15 @@ presence (Redis Hash)
 
 ## Публикуемые события (→ NATS)
 
-| Событие                  | Данные                                |
-|--------------------------|---------------------------------------|
-| `user.profile_created`   | profile_id, account_id                |
-| `user.profile_updated`   | profile_id, changed_fields            |
-| `user.profile_switched`  | account_id, old_profile_id, new_profile_id |
-| `user.presence_changed`  | profile_id, old_status, new_status    |
-| `user.game_detected`     | profile_id, game_name                 |
-| `user.settings_changed`  | profile_id, changed_keys              |
-| `user.verified`          | profile_id, verification_type         |
+| Событие                 | Данные                                     |
+|-------------------------|--------------------------------------------|
+| `user.profile_created`  | profile_id, account_id                     |
+| `user.profile_updated`  | profile_id, changed_fields                 |
+| `user.profile_switched` | account_id, old_profile_id, new_profile_id |
+| `user.presence_changed` | profile_id, old_status, new_status         |
+| `user.game_detected`    | profile_id, game_name                      |
+| `user.settings_changed` | profile_id, changed_keys                   |
+| `user.verified`         | profile_id, verification_type              |
 
 ## Зависимости
 
@@ -112,3 +112,5 @@ presence (Redis Hash)
 - **Subscription Service** — проверка лимитов (мульти-профили, кастомный статус)
 - **Redis** — presence кэш (TTL 5 мин, heartbeat)
 - **File Service** — загрузка аватара/баннера
+
+

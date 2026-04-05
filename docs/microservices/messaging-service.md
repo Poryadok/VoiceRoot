@@ -109,14 +109,14 @@ read_receipts
 
 ## Публикуемые события (→ NATS)
 
-| Событие                 | Данные                                       |
-|-------------------------|----------------------------------------------|
-| `message.sent`          | message_id, chat_id, sender_id, has_mentions |
-| `message.edited`        | message_id, chat_id                          |
-| `message.deleted`       | message_id, chat_id                          |
-| `message.reaction_added`| message_id, profile_id, emoji                |
-| `message.pinned`        | message_id, chat_id, pinned_by               |
-| `message.forwarded`     | message_id, source_chat_id, target_chat_id   |
+| Событие                  | Данные                                       |
+|--------------------------|----------------------------------------------|
+| `message.sent`           | message_id, chat_id, sender_id, has_mentions |
+| `message.edited`         | message_id, chat_id                          |
+| `message.deleted`        | message_id, chat_id                          |
+| `message.reaction_added` | message_id, profile_id, emoji                |
+| `message.pinned`         | message_id, chat_id, pinned_by               |
+| `message.forwarded`      | message_id, source_chat_id, target_chat_id   |
 
 ## Зависимости
 
@@ -130,3 +130,5 @@ read_receipts
 ## Масштабирование
 
 При >100M сообщений — шардинг PostgreSQL по `chat_id` (consistent hashing). Каждый шард содержит все сообщения одного чата → локальные запросы без cross-shard joins.
+
+

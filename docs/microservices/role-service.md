@@ -124,16 +124,18 @@ channel_overrides
 
 ## Публикуемые события (→ NATS)
 
-| Событие               | Данные                                  |
-|------------------------|-----------------------------------------|
-| `role.created`         | space_id, role_id, name                 |
-| `role.updated`         | space_id, role_id, changed_fields       |
-| `role.deleted`         | space_id, role_id                       |
-| `role.assigned`        | space_id, profile_id, role_id           |
-| `role.revoked`         | space_id, profile_id, role_id           |
-| `role.override_set`    | channel_id, role_id                     |
+| Событие             | Данные                            |
+|---------------------|-----------------------------------|
+| `role.created`      | space_id, role_id, name           |
+| `role.updated`      | space_id, role_id, changed_fields |
+| `role.deleted`      | space_id, role_id                 |
+| `role.assigned`     | space_id, profile_id, role_id     |
+| `role.revoked`      | space_id, profile_id, role_id     |
+| `role.override_set` | channel_id, role_id               |
 
 ## Зависимости
 
 - **Space Service** — валидация space_id, channel_id
 - **Federation Service** — синхронизация ролей при S2S (SyncSnapshot)
+
+

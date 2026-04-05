@@ -109,13 +109,13 @@ Client ──presigned URL──► R2 (upload)
 
 ## Публикуемые события (→ NATS)
 
-| Событие                | Данные                                    |
-|------------------------|-------------------------------------------|
-| `file.uploaded`        | file_id, uploader_id, type, size          |
-| `file.processed`       | file_id, status, converted_url, thumb_url |
-| `file.scan_infected`   | file_id, uploader_id                      |
-| `file.expired`         | file_id, chat_id                          |
-| `file.downloaded`      | file_id, downloader_id                    |
+| Событие              | Данные                                    |
+|----------------------|-------------------------------------------|
+| `file.uploaded`      | file_id, uploader_id, type, size          |
+| `file.processed`     | file_id, status, converted_url, thumb_url |
+| `file.scan_infected` | file_id, uploader_id                      |
+| `file.expired`       | file_id, chat_id                          |
+| `file.downloaded`    | file_id, downloader_id                    |
 
 ## Зависимости
 
@@ -127,3 +127,5 @@ Client ──presigned URL──► R2 (upload)
 ## Масштабирование
 
 Upload/download — через presigned URLs (R2 обслуживает напрямую). Конвертация — отдельный пул воркеров, масштабируется по очереди задач.
+
+

@@ -151,15 +151,15 @@ Matcher Worker (горизонтально масштабируемый):
 
 ## Публикуемые события (→ NATS)
 
-| Событие                    | Данные                                     |
-|----------------------------|--------------------------------------------|
-| `mm.search_started`        | session_id, profile_id, game, mode, region |
-| `mm.search_cancelled`      | session_id, profile_id                     |
-| `mm.search_timeout`        | session_id, profile_id                     |
-| `mm.match_found`           | match_id, participants, game, room_id      |
-| `mm.match_completed`       | match_id, duration                         |
-| `mm.rating_submitted`      | match_id, rater_id, rated_id, score        |
-| `mm.player_banned`         | profile_id, reason                         |
+| Событие               | Данные                                     |
+|-----------------------|--------------------------------------------|
+| `mm.search_started`   | session_id, profile_id, game, mode, region |
+| `mm.search_cancelled` | session_id, profile_id                     |
+| `mm.search_timeout`   | session_id, profile_id                     |
+| `mm.match_found`      | match_id, participants, game, room_id      |
+| `mm.match_completed`  | match_id, duration                         |
+| `mm.rating_submitted` | match_id, rater_id, rated_id, score        |
+| `mm.player_banned`    | profile_id, reason                         |
 
 ## Зависимости
 
@@ -169,3 +169,5 @@ Matcher Worker (горизонтально масштабируемый):
 - **Notification Service** — (через NATS) уведомление о найденном матче
 - **Story Service** — (через NATS) "ищу пати" → автоматическая заявка
 - **Moderation Service** — проверка ММ-банов
+
+

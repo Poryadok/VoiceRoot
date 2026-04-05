@@ -23,14 +23,14 @@
 
 Правила (из ARCHITECTURE_REQUIREMENTS.md):
 
-| Endpoint группа     | Лимит         | Окно   |
-|---------------------|--------------|--------|
-| Auth (login/register)| 5 запросов  | 15 мин |
-| OTP                 | 3 запроса    | 10 мин |
-| Messages (send)     | 5 сообщений  | 5 сек  |
-| File upload         | 10 загрузок  | 1 час  |
-| Space creation      | 5 пространств| 1 день |
-| Bot API             | 5000 запросов| 1 мин  |
+| Endpoint группа       | Лимит         | Окно   |
+|-----------------------|---------------|--------|
+| Auth (login/register) | 5 запросов    | 15 мин |
+| OTP                   | 3 запроса     | 10 мин |
+| Messages (send)       | 5 сообщений   | 5 сек  |
+| File upload           | 10 загрузок   | 1 час  |
+| Space creation        | 5 пространств | 1 день |
+| Bot API               | 5000 запросов | 1 мин  |
 
 Реализация: Redis sliding window counter. Ключ — `ratelimit:{user_id}:{endpoint_group}`.
 
@@ -80,3 +80,5 @@
 ## Масштабирование
 
 Stateless, масштабируется горизонтально. За внешним Load Balancer (L4/L7).
+
+

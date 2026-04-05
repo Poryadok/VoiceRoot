@@ -81,17 +81,19 @@ blocks
 
 ## Публикуемые события (→ NATS)
 
-| Событие                  | Данные                                     |
-|--------------------------|--------------------------------------------|
-| `social.friend_request`  | requester_id, target_id                    |
-| `social.friend_accepted` | profile_id_a, profile_id_b                 |
-| `social.friend_removed`  | profile_id_a, profile_id_b                 |
-| `social.contact_added`   | owner_id, target_id, source                |
-| `social.user_blocked`    | blocker_account_id, blocked_account_id     |
-| `social.user_unblocked`  | blocker_account_id, blocked_account_id     |
-| `social.contacts_synced` | owner_id, matched_count                    |
+| Событие                  | Данные                                 |
+|--------------------------|----------------------------------------|
+| `social.friend_request`  | requester_id, target_id                |
+| `social.friend_accepted` | profile_id_a, profile_id_b             |
+| `social.friend_removed`  | profile_id_a, profile_id_b             |
+| `social.contact_added`   | owner_id, target_id, source            |
+| `social.user_blocked`    | blocker_account_id, blocked_account_id |
+| `social.user_unblocked`  | blocker_account_id, blocked_account_id |
+| `social.contacts_synced` | owner_id, matched_count                |
 
 ## Зависимости
 
 - **User Service** — получение профилей для списков
 - **Auth Service** — маппинг profile_id → account_id (для блокировок)
+
+

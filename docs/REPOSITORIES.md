@@ -54,3 +54,5 @@
 - [DEPLOYMENT.md](DEPLOYMENT.md) — выкат, артефакты
 - [MICROSERVICES.md](MICROSERVICES.md) — сервисы и протоколы
 - [TESTING.md](TESTING.md) — CI
+
+

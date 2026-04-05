@@ -43,11 +43,11 @@
 
 Минимум для затронутого кода:
 
-| Изменения в | Локально |
-|-------------|----------|
-| Go-сервис | `go test ./...`, `golangci-lint run` (или эквивалент из Makefile) |
-| Auth (Java) | `./mvnw test` или `./gradlew test` — по сборке проекта |
-| Flutter | `flutter analyze`, `flutter test` |
+| Изменения в | Локально                                                          |
+|-------------|-------------------------------------------------------------------|
+| Go-сервис   | `go test ./...`, `golangci-lint run` (или эквивалент из Makefile) |
+| Auth (Java) | `./mvnw test` или `./gradlew test` — по сборке проекта            |
+| Flutter     | `flutter analyze`, `flutter test`                                 |
 
 Предпочтительно единая точка входа: `Makefile` или скрипты в корне репозитория (когда появятся).
 
@@ -77,3 +77,5 @@
 - [CONTRIBUTING.md](CONTRIBUTING.md) — ветки и PR
 - [DEPLOYMENT.md](DEPLOYMENT.md) — где гоняются тесты в CI и staging
 - [OPERATIONS.md](OPERATIONS.md) — canary, rollback
+
+

@@ -15,14 +15,14 @@
 
 На бэке есть конфигурация (хранится в БД или конфиге деплоя, меняется без редеплоя) per-платформа:
 
-| Поле | Пример | Смысл |
-|------|--------|-------|
-| `platform` | `android`, `ios`, `windows`, `macos`, `linux`, `web` | Идентификатор платформы |
-| `min_supported_version` | `1.4.0` | Ниже этого — принудительный апдейт, API отказывает |
-| `latest_version` | `1.7.2` | Ниже этого — мягкое предупреждение, апдейт опционален |
-| `update_url` | CDN-ссылка или store deep-link | Куда вести пользователя |
-| `release_notes` | строка | Краткий changelog для показа в промпте |
-| `shorebird_patch` | `42` | Номер последнего Shorebird-патча (mobile only) |
+| Поле                    | Пример                                               | Смысл                                                 |
+|-------------------------|------------------------------------------------------|-------------------------------------------------------|
+| `platform`              | `android`, `ios`, `windows`, `macos`, `linux`, `web` | Идентификатор платформы                               |
+| `min_supported_version` | `1.4.0`                                              | Ниже этого — принудительный апдейт, API отказывает    |
+| `latest_version`        | `1.7.2`                                              | Ниже этого — мягкое предупреждение, апдейт опционален |
+| `update_url`            | CDN-ссылка или store deep-link                       | Куда вести пользователя                               |
+| `release_notes`         | строка                                               | Краткий changelog для показа в промпте                |
+| `shorebird_patch`       | `42`                                                 | Номер последнего Shorebird-патча (mobile only)        |
 
 ### Эндпоинт проверки версии
 
@@ -115,11 +115,11 @@ GET /api/v1/version?platform={platform}&version={semver}&shorebird_patch={n}
 
 ### Android
 
-| Механизм | Когда |
-|----------|-------|
-| Google Play Store | Основной канал, крупные релизы |
+| Механизм                    | Когда                                                                     |
+|-----------------------------|---------------------------------------------------------------------------|
+| Google Play Store           | Основной канал, крупные релизы                                            |
 | Play Core In-App Update API | Показывает нативный промпт обновления внутри приложения без выхода в стор |
-| Shorebird OTA | Только Dart-код, мелкие фиксы, без стор-ревью |
+| Shorebird OTA               | Только Dart-код, мелкие фиксы, без стор-ревью                             |
 
 **Флоу Play Core:**
 - `FLEXIBLE` (гибкое) — скачивается в фоне, промпт "применить" после скачивания.
@@ -133,11 +133,11 @@ GET /api/v1/version?platform={platform}&version={semver}&shorebird_patch={n}
 
 ### iOS
 
-| Механизм | Когда |
-|----------|-------|
-| App Store | Основной канал |
+| Механизм      | Когда                                                   |
+|---------------|---------------------------------------------------------|
+| App Store     | Основной канал                                          |
 | In-App Update | Редирект на App Store (нативного аналога Play Core нет) |
-| Shorebird OTA | Только Dart-код, то же что Android |
+| Shorebird OTA | Только Dart-код, то же что Android                      |
 
 **Флоу:**
 - `force_update: true` → открывает App Store через `StoreKit` overlay или `itms-apps://` deep link.
@@ -181,3 +181,5 @@ CREATE TABLE client_versions (
 - `force_update_blocks` — сколько раз отдали 426.
 - `update_prompt_accepted` / `update_prompt_deferred` — конверсия промпта.
 - `shorebird_patch_adoption` — доля устройств на последнем патче.
+
+

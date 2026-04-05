@@ -12,22 +12,22 @@
 
 ### `messages`
 
-| Колонка | Тип | Ограничения / заметки |
-|---------|-----|------------------------|
-| `id` | `UUID` | PK — **UUIDv7**, задаётся сервисом при `INSERT` (в БД без `DEFAULT` для этого поля) |
-| `chat_id` | `UUID` | NOT NULL — см. семантику DM/group vs channel в начале файла |
-| `chat_type` | `TEXT` | NOT NULL, DEFAULT `'dm'`, `CHECK (chat_type IN ('dm', 'group', 'channel'))` — в v1 фактически `dm` |
-| `sender_profile_id` | `UUID` | NOT NULL |
-| `content` | `TEXT` | NOT NULL — лимит 4000 символов в приложении |
-| `type` | `TEXT` | NOT NULL, DEFAULT `'regular'`, `CHECK (type IN ('regular', 'system', 'forward'))` |
-| `thread_parent_id` | `UUID` | NULL — **колонка допускается**, FK внутри таблицы включать только когда треды в скоупе |
-| `forward_from_id` | `UUID` | NULL — отложено |
-| `forward_from_sender` | `TEXT` | NULL — отложено |
-| `attachments` | `JSONB` | NULL — в v1 обычно NULL (вложения Фаза 3+) |
-| `mentions` | `JSONB` | NULL — опционально для @ в тексте |
-| `edited_at` | `TIMESTAMPTZ` | NULL |
-| `deleted_at` | `TIMESTAMPTZ` | NULL — soft delete ([PLAN.md](../PLAN.md) Фаза 1) |
-| `created_at` | `TIMESTAMPTZ` | NOT NULL, DEFAULT now() |
+| Колонка               | Тип           | Ограничения / заметки                                                                              |
+|-----------------------|---------------|----------------------------------------------------------------------------------------------------|
+| `id`                  | `UUID`        | PK — **UUIDv7**, задаётся сервисом при `INSERT` (в БД без `DEFAULT` для этого поля)                |
+| `chat_id`             | `UUID`        | NOT NULL — см. семантику DM/group vs channel в начале файла                                        |
+| `chat_type`           | `TEXT`        | NOT NULL, DEFAULT `'dm'`, `CHECK (chat_type IN ('dm', 'group', 'channel'))` — в v1 фактически `dm` |
+| `sender_profile_id`   | `UUID`        | NOT NULL                                                                                           |
+| `content`             | `TEXT`        | NOT NULL — лимит 4000 символов в приложении                                                        |
+| `type`                | `TEXT`        | NOT NULL, DEFAULT `'regular'`, `CHECK (type IN ('regular', 'system', 'forward'))`                  |
+| `thread_parent_id`    | `UUID`        | NULL — **колонка допускается**, FK внутри таблицы включать только когда треды в скоупе             |
+| `forward_from_id`     | `UUID`        | NULL — отложено                                                                                    |
+| `forward_from_sender` | `TEXT`        | NULL — отложено                                                                                    |
+| `attachments`         | `JSONB`       | NULL — в v1 обычно NULL (вложения Фаза 3+)                                                         |
+| `mentions`            | `JSONB`       | NULL — опционально для @ в тексте                                                                  |
+| `edited_at`           | `TIMESTAMPTZ` | NULL                                                                                               |
+| `deleted_at`          | `TIMESTAMPTZ` | NULL — soft delete ([PLAN.md](../PLAN.md) Фаза 1)                                                  |
+| `created_at`          | `TIMESTAMPTZ` | NOT NULL, DEFAULT now()                                                                            |
 
 **Индексы**
 
@@ -43,12 +43,12 @@
 
 Последнее прочитанное сообщение участника в чате.
 
-| Колонка | Тип | Ограничения / заметки |
-|---------|-----|------------------------|
-| `chat_id` | `UUID` | NOT NULL |
-| `profile_id` | `UUID` | NOT NULL |
-| `last_read_message_id` | `UUID` | NOT NULL — должен указывать на сообщение с тем же `chat_id` (инвариант приложения) |
-| `updated_at` | `TIMESTAMPTZ` | NOT NULL, DEFAULT now() |
+| Колонка                | Тип           | Ограничения / заметки                                                              |
+|------------------------|---------------|------------------------------------------------------------------------------------|
+| `chat_id`              | `UUID`        | NOT NULL                                                                           |
+| `profile_id`           | `UUID`        | NOT NULL                                                                           |
+| `last_read_message_id` | `UUID`        | NOT NULL — должен указывать на сообщение с тем же `chat_id` (инвариант приложения) |
+| `updated_at`           | `TIMESTAMPTZ` | NOT NULL, DEFAULT now()                                                            |
 
 **Индексы и ограничения**
 
@@ -68,3 +68,5 @@
 - Шардирование по `chat_id` при объёме >100M сообщений ([messaging-service.md](../microservices/messaging-service.md)).
 - Полнотекст / поиск — `search_db`, не эта БД.
 - Таблица **`message_attachments`** (Shared Media) — в целевой схеме [target/messaging_db.md](target/messaging_db.md); в v1 достаточно `attachments` JSONB при необходимости API.
+
+

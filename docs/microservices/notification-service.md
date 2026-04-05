@@ -77,16 +77,16 @@ quiet_hours
 
 ## Типы уведомлений
 
-| Тип               | Канал доставки      | Группировка |
-|-------------------|--------------------:|-------------|
-| new_dm            | push + in-app       | by chat     |
-| mention           | push + in-app       | by chat     |
-| reply             | push + in-app       | by chat     |
-| reaction          | in-app only         | —           |
-| friend_request    | push + in-app       | —           |
-| match_found       | push + in-app       | —           |
-| incoming_call     | push (VoIP) + in-app| —           |
-| system            | push + in-app       | —           |
+| Тип            | Канал доставки       | Группировка |
+|----------------|----------------------|-------------|
+| new_dm         | push + in-app        | by chat     |
+| mention        | push + in-app        | by chat     |
+| reply          | push + in-app        | by chat     |
+| reaction       | in-app only          | —           |
+| friend_request | push + in-app        | —           |
+| match_found    | push + in-app        | —           |
+| incoming_call  | push (VoIP) + in-app | —           |
+| system         | push + in-app        | —           |
 
 ## Логика доставки
 
@@ -104,11 +104,11 @@ Event (NATS) ──► Notification Service
 
 ## Публикуемые события (→ NATS)
 
-| Событие                   | Данные                              |
-|---------------------------|-------------------------------------|
-| `notification.push_sent`  | profile_id, type, platform          |
-| `notification.push_delivered`| profile_id, type (delivery receipt)|
-| `notification.push_clicked`  | profile_id, type, deep_link       |
+| Событие                       | Данные                              |
+|-------------------------------|-------------------------------------|
+| `notification.push_sent`      | profile_id, type, platform          |
+| `notification.push_delivered` | profile_id, type (delivery receipt) |
+| `notification.push_clicked`   | profile_id, type, deep_link         |
 
 ## Зависимости
 
@@ -119,3 +119,5 @@ Event (NATS) ──► Notification Service
 - **User Service** — presence check
 - **NATS** — получение событий для отправки уведомлений
 - **Realtime Service** — (через NATS) in-app delivery
+
+

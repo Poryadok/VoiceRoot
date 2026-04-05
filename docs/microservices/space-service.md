@@ -151,17 +151,17 @@ audit_log
 
 ## Публикуемые события (→ NATS)
 
-| Событие                 | Данные                                       |
-|-------------------------|----------------------------------------------|
-| `space.created`         | space_id, owner_id                           |
-| `space.updated`         | space_id, changed_fields                     |
-| `space.deleted`         | space_id                                     |
-| `space.member_joined`   | space_id, profile_id                         |
-| `space.member_left`     | space_id, profile_id                         |
-| `space.member_banned`   | space_id, account_id, banned_by              |
-| `space.channel_created` | space_id, channel_id, type                   |
-| `space.channel_deleted` | space_id, channel_id                         |
-| `space.invite_created`  | space_id, invite_code                        |
+| Событие                 | Данные                          |
+|-------------------------|---------------------------------|
+| `space.created`         | space_id, owner_id              |
+| `space.updated`         | space_id, changed_fields        |
+| `space.deleted`         | space_id                        |
+| `space.member_joined`   | space_id, profile_id            |
+| `space.member_left`     | space_id, profile_id            |
+| `space.member_banned`   | space_id, account_id, banned_by |
+| `space.channel_created` | space_id, channel_id, type      |
+| `space.channel_deleted` | space_id, channel_id            |
+| `space.invite_created`  | space_id, invite_code           |
 
 ## Зависимости
 
@@ -169,3 +169,5 @@ audit_log
 - **Subscription Service** — лимиты каналов и участников (free vs Pro)
 - **User Service** — профили участников
 - **Social Service** — проверка блокировок при join
+
+

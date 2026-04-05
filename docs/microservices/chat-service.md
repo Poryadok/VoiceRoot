@@ -92,17 +92,19 @@ folder_chats (для custom folders)
 
 ## Публикуемые события (→ NATS)
 
-| Событие               | Данные                                  |
-|------------------------|-----------------------------------------|
-| `chat.created`         | chat_id, type, creator_id, members      |
-| `chat.updated`         | chat_id, changed_fields                 |
-| `chat.deleted`         | chat_id                                 |
-| `chat.member_added`    | chat_id, profile_id, added_by           |
-| `chat.member_removed`  | chat_id, profile_id, removed_by         |
-| `chat.member_left`     | chat_id, profile_id                     |
+| Событие               | Данные                             |
+|-----------------------|------------------------------------|
+| `chat.created`        | chat_id, type, creator_id, members |
+| `chat.updated`        | chat_id, changed_fields            |
+| `chat.deleted`        | chat_id                            |
+| `chat.member_added`   | chat_id, profile_id, added_by      |
+| `chat.member_removed` | chat_id, profile_id, removed_by    |
+| `chat.member_left`    | chat_id, profile_id                |
 
 ## Зависимости
 
 - **Social Service** — проверка блокировок при создании DM
 - **User Service** — получение профилей участников
 - **Subscription Service** — лимиты на количество участников группы
+
+

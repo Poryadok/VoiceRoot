@@ -12,19 +12,19 @@ JWT: claim `user_id` = `accounts.id` (= логический `account_id`).
 
 Учётная запись. Soft delete: `deleted_at IS NOT NULL` означает удалённый аккаунт (grace period и политика — продукт/операции).
 
-| Колонка | Тип | Ограничения / заметки |
-|---------|-----|------------------------|
-| `id` | `UUID` | PK, `DEFAULT gen_random_uuid()` |
-| `email` | `CITEXT` или `TEXT` | NULL; уникальность среди **активных** — см. индекс |
-| `phone` | `TEXT` | NULL; формат E.164 на уровне приложения; уникальность среди активных — см. индекс |
-| `password_hash` | `TEXT` | NOT NULL для `type = regular` с паролем; для гостя может быть заглушка по правилю приложения |
-| `type` | `TEXT` | NOT NULL, `CHECK (type IN ('regular', 'guest'))` |
-| `status` | `TEXT` | NOT NULL, `CHECK (status IN ('active', 'suspended', 'deleted'))`; согласовать с `deleted_at` |
-| `totp_secret` | `BYTEA` или `TEXT` | NULL; шифрование at rest — приложение |
-| `totp_enabled` | `BOOLEAN` | NOT NULL, DEFAULT false |
-| `deleted_at` | `TIMESTAMPTZ` | NULL = не удалён |
-| `created_at` | `TIMESTAMPTZ` | NOT NULL, DEFAULT now() |
-| `updated_at` | `TIMESTAMPTZ` | NOT NULL, DEFAULT now() |
+| Колонка         | Тип                 | Ограничения / заметки                                                                        |
+|-----------------|---------------------|----------------------------------------------------------------------------------------------|
+| `id`            | `UUID`              | PK, `DEFAULT gen_random_uuid()`                                                              |
+| `email`         | `CITEXT` или `TEXT` | NULL; уникальность среди **активных** — см. индекс                                           |
+| `phone`         | `TEXT`              | NULL; формат E.164 на уровне приложения; уникальность среди активных — см. индекс            |
+| `password_hash` | `TEXT`              | NOT NULL для `type = regular` с паролем; для гостя может быть заглушка по правилю приложения |
+| `type`          | `TEXT`              | NOT NULL, `CHECK (type IN ('regular', 'guest'))`                                             |
+| `status`        | `TEXT`              | NOT NULL, `CHECK (status IN ('active', 'suspended', 'deleted'))`; согласовать с `deleted_at` |
+| `totp_secret`   | `BYTEA` или `TEXT`  | NULL; шифрование at rest — приложение                                                        |
+| `totp_enabled`  | `BOOLEAN`           | NOT NULL, DEFAULT false                                                                      |
+| `deleted_at`    | `TIMESTAMPTZ`       | NULL = не удалён                                                                             |
+| `created_at`    | `TIMESTAMPTZ`       | NOT NULL, DEFAULT now()                                                                      |
+| `updated_at`    | `TIMESTAMPTZ`       | NOT NULL, DEFAULT now()                                                                      |
 
 **Индексы**
 
@@ -42,15 +42,15 @@ JWT: claim `user_id` = `accounts.id` (= логический `account_id`).
 
 Одноразовая ротация refresh; в БД только хэш.
 
-| Колонка | Тип | Ограничения / заметки |
-|---------|-----|------------------------|
-| `id` | `UUID` | PK |
-| `account_id` | `UUID` | NOT NULL, **FK** `REFERENCES accounts(id) ON DELETE CASCADE` |
-| `token_hash` | `TEXT` или `BYTEA` | NOT NULL, UNIQUE |
-| `device_info` | `JSONB` | NULL |
-| `expires_at` | `TIMESTAMPTZ` | NOT NULL |
-| `created_at` | `TIMESTAMPTZ` | NOT NULL, DEFAULT now() |
-| `revoked_at` | `TIMESTAMPTZ` | NULL |
+| Колонка       | Тип                | Ограничения / заметки                                        |
+|---------------|--------------------|--------------------------------------------------------------|
+| `id`          | `UUID`             | PK                                                           |
+| `account_id`  | `UUID`             | NOT NULL, **FK** `REFERENCES accounts(id) ON DELETE CASCADE` |
+| `token_hash`  | `TEXT` или `BYTEA` | NOT NULL, UNIQUE                                             |
+| `device_info` | `JSONB`            | NULL                                                         |
+| `expires_at`  | `TIMESTAMPTZ`      | NOT NULL                                                     |
+| `created_at`  | `TIMESTAMPTZ`      | NOT NULL, DEFAULT now()                                      |
+| `revoked_at`  | `TIMESTAMPTZ`      | NULL                                                         |
 
 **Индексы**
 
@@ -65,15 +65,15 @@ JWT: claim `user_id` = `accounts.id` (= логический `account_id`).
 
 Email OTP (верификация, сброс пароля).
 
-| Колонка | Тип | Ограничения / заметки |
-|---------|-----|------------------------|
-| `id` | `UUID` | PK |
-| `account_id` | `UUID` | NOT NULL, **FK** `REFERENCES accounts(id) ON DELETE CASCADE` |
-| `code_encrypted` | `TEXT` или `BYTEA` | NOT NULL — хранить зашифрованным |
-| `type` | `TEXT` | NOT NULL, `CHECK (type IN ('email_verify', 'password_reset'))` |
-| `expires_at` | `TIMESTAMPTZ` | NOT NULL |
-| `used_at` | `TIMESTAMPTZ` | NULL |
-| `created_at` | `TIMESTAMPTZ` | NOT NULL, DEFAULT now() |
+| Колонка          | Тип                | Ограничения / заметки                                          |
+|------------------|--------------------|----------------------------------------------------------------|
+| `id`             | `UUID`             | PK                                                             |
+| `account_id`     | `UUID`             | NOT NULL, **FK** `REFERENCES accounts(id) ON DELETE CASCADE`   |
+| `code_encrypted` | `TEXT` или `BYTEA` | NOT NULL — хранить зашифрованным                               |
+| `type`           | `TEXT`             | NOT NULL, `CHECK (type IN ('email_verify', 'password_reset'))` |
+| `expires_at`     | `TIMESTAMPTZ`      | NOT NULL                                                       |
+| `used_at`        | `TIMESTAMPTZ`      | NULL                                                           |
+| `created_at`     | `TIMESTAMPTZ`      | NOT NULL, DEFAULT now()                                        |
 
 **Индексы**
 
@@ -87,3 +87,5 @@ Email OTP (верификация, сброс пароля).
 
 - Отдельные таблицы под аудит IP / security events (если не хранится вне БД).
 - Расширения под SMS / дополнительные провайдеры — по продукту.
+
+

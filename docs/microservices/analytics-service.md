@@ -117,16 +117,16 @@ GROUP BY date, event_type;
 
 ## Дашборды
 
-| Дашборд     | Метрики                                                                    |
-|-------------|----------------------------------------------------------------------------|
-| Product     | DAU, MAU, WAU, new registrations, registration funnel, onboarding completion |
-| Engagement  | Messages/day, voice minutes, MM sessions, active spaces, stories created   |
-| Revenue     | MRR, churn rate, free→paid conversion, ARPU, LTV, payment failures        |
-| Health      | p50/p95/p99 API latency, error rate, WS connections, uptime, queue depth   |
-| Moderation  | Reports/day, avg resolution time, auto-block rate, appeals rate            |
-| Federation  | Connected nodes, event sync lag, sync failures, notification relay latency |
-| Search      | Queries/day, zero-result rate, avg result click position                   |
-| Voice       | Concurrent calls, avg call duration, screen shares, codec distribution     |
+| Дашборд    | Метрики                                                                      |
+|------------|------------------------------------------------------------------------------|
+| Product    | DAU, MAU, WAU, new registrations, registration funnel, onboarding completion |
+| Engagement | Messages/day, voice minutes, MM sessions, active spaces, stories created     |
+| Revenue    | MRR, churn rate, free→paid conversion, ARPU, LTV, payment failures           |
+| Health     | p50/p95/p99 API latency, error rate, WS connections, uptime, queue depth     |
+| Moderation | Reports/day, avg resolution time, auto-block rate, appeals rate              |
+| Federation | Connected nodes, event sync lag, sync failures, notification relay latency   |
+| Search     | Queries/day, zero-result rate, avg result click position                     |
+| Voice      | Concurrent calls, avg call duration, screen shares, codec distribution       |
 
 ## Публикуемые события
 
@@ -145,3 +145,5 @@ Analytics Service — чистый consumer, не публикует событ�
 - **ClickHouse** — хранение и агрегация
 - **Prometheus** — экспорт operational метрик
 - **Grafana** — визуализация (подключение к ClickHouse + Prometheus)
+
+

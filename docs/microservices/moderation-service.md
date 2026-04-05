@@ -118,15 +118,15 @@ report.created event ──► Check thresholds:
 
 ## Публикуемые события (→ NATS)
 
-| Событие                     | Данные                                   |
-|-----------------------------|------------------------------------------|
-| `moderation.report_created` | report_id, target_type, target_id        |
-| `moderation.report_resolved`| report_id, resolution                    |
-| `moderation.sanction_applied`| sanction_id, target_account_id, type    |
-| `moderation.sanction_revoked`| sanction_id, target_account_id          |
-| `moderation.appeal_submitted`| appeal_id, sanction_id                  |
-| `moderation.appeal_reviewed` | appeal_id, status                       |
-| `moderation.auto_action`    | target_id, trigger, action               |
+| Событие                       | Данные                               |
+|-------------------------------|--------------------------------------|
+| `moderation.report_created`   | report_id, target_type, target_id    |
+| `moderation.report_resolved`  | report_id, resolution                |
+| `moderation.sanction_applied` | sanction_id, target_account_id, type |
+| `moderation.sanction_revoked` | sanction_id, target_account_id       |
+| `moderation.appeal_submitted` | appeal_id, sanction_id               |
+| `moderation.appeal_reviewed`  | appeal_id, status                    |
+| `moderation.auto_action`      | target_id, trigger, action           |
 
 ## Зависимости
 
@@ -135,3 +135,5 @@ report.created event ──► Check thresholds:
 - **Matchmaking Service** — ММ-баны
 - **Notification Service** — (через NATS) уведомление о санкции
 - **Federation Service** — (через NATS) дефедерация при нарушениях
+
+

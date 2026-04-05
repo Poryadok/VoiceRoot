@@ -119,14 +119,14 @@ highlight_stories
 
 ## Публикуемые события (→ NATS)
 
-| Событие                 | Данные                                   |
-|-------------------------|------------------------------------------|
-| `story.created`         | story_id, author_id, type, game_tag      |
-| `story.viewed`          | story_id, viewer_id                      |
-| `story.reacted`         | story_id, reactor_id, emoji              |
-| `story.expired`         | story_id                                 |
-| `story.highlight_created`| highlight_id, profile_id                |
-| `story.lfp_created`     | story_id, author_id, criteria            |
+| Событие                   | Данные                              |
+|---------------------------|-------------------------------------|
+| `story.created`           | story_id, author_id, type, game_tag |
+| `story.viewed`            | story_id, viewer_id                 |
+| `story.reacted`           | story_id, reactor_id, emoji         |
+| `story.expired`           | story_id                            |
+| `story.highlight_created` | highlight_id, profile_id            |
+| `story.lfp_created`       | story_id, author_id, criteria       |
 
 ## Зависимости
 
@@ -136,3 +136,5 @@ highlight_stories
 - **Matchmaking Service** — (через NATS) автоматическая заявка "ищу пати"
 - **Notification Service** — (через NATS) уведомления об упоминаниях
 - **Subscription Service** — проверка Premium (анонимный просмотр)
+
+

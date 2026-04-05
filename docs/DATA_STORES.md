@@ -8,28 +8,28 @@
 
 ## Сводная таблица
 
-| Сервис                 | PostgreSQL      | Redis                                | Прочее                               |
-|------------------------|-----------------|--------------------------------------|--------------------------------------|
-| API Gateway            | —               | rate limit, JWT blacklist            | —                                    |
-| Auth Service           | `auth_db`       | blacklist, limits, OTP               | —                                    |
-| User Service           | `user_db`       | presence cache                       | —                                    |
-| Social Service         | `social_db`     | —                                    | —                                    |
-| Chat Service           | `chat_db`       | —                                    | —                                    |
-| Messaging Service      | `messaging_db`  | —                                    | —                                    |
-| Realtime Service       | —               | Pub/Sub, WS registry                 | NATS (не БД)                         |
-| Space Service          | `space_db`      | —                                    | —                                    |
-| Role Service           | `role_db`       | —                                    | —                                    |
-| Voice Service          | —               | активные сессии звонков              | LiveKit                              |
-| File Service           | `file_db`       | —                                    | R2, воркеры конвертации              |
-| Notification Service   | `notification_db` | grouping push, limits             | FCM, APNs, email                     |
-| Search Service         | `search_db` v1  | —                                    | Meilisearch v2, Elasticsearch v3     |
-| Matchmaking Service    | `matchmaking_db` | очереди, locks                       | —                                    |
-| Moderation Service     | `moderation_db` | —                                    | —                                    |
-| Subscription Service   | `subscription_db` | —                                    | Paddle, CloudPayments                |
-| Bot Service            | `bot_db`        | —                                    | —                                    |
-| Federation Service     | `federation_db` | —                                    | —                                    |
-| Story Service          | `story_db`      | —                                    | медиа через File, R2                 |
-| Analytics Service      | —               | буфер батчей                         | ClickHouse                           |
+| Сервис               | PostgreSQL        | Redis                     | Прочее                           |
+|----------------------|-------------------|---------------------------|----------------------------------|
+| API Gateway          | —                 | rate limit, JWT blacklist | —                                |
+| Auth Service         | `auth_db`         | blacklist, limits, OTP    | —                                |
+| User Service         | `user_db`         | presence cache            | —                                |
+| Social Service       | `social_db`       | —                         | —                                |
+| Chat Service         | `chat_db`         | —                         | —                                |
+| Messaging Service    | `messaging_db`    | —                         | —                                |
+| Realtime Service     | —                 | Pub/Sub, WS registry      | NATS (не БД)                     |
+| Space Service        | `space_db`        | —                         | —                                |
+| Role Service         | `role_db`         | —                         | —                                |
+| Voice Service        | —                 | активные сессии звонков   | LiveKit                          |
+| File Service         | `file_db`         | —                         | R2, воркеры конвертации          |
+| Notification Service | `notification_db` | grouping push, limits     | FCM, APNs, email                 |
+| Search Service       | `search_db` v1    | —                         | Meilisearch v2, Elasticsearch v3 |
+| Matchmaking Service  | `matchmaking_db`  | очереди, locks            | —                                |
+| Moderation Service   | `moderation_db`   | —                         | —                                |
+| Subscription Service | `subscription_db` | —                         | Paddle, CloudPayments            |
+| Bot Service          | `bot_db`          | —                         | —                                |
+| Federation Service   | `federation_db`   | —                         | —                                |
+| Story Service        | `story_db`        | —                         | медиа через File, R2             |
+| Analytics Service    | —                 | буфер батчей              | ClickHouse                       |
 
 Разделение Redis между Gateway и Auth: [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md) («Redis: API Gateway и Auth Service»).
 
@@ -37,10 +37,10 @@
 
 ## Клиенты и админка
 
-| Компонент           | Хранилище                                                |
-|---------------------|----------------------------------------------------------|
+| Компонент           | Хранилище                                                  |
+|---------------------|------------------------------------------------------------|
 | Flutter-клиенты     | локальный кэш (SQLite/Hive), см. ARCHITECTURE_REQUIREMENTS |
-| Admin Panel (React) | своей БД нет, только API к бэкендам                      |
+| Admin Panel (React) | своей БД нет, только API к бэкендам                        |
 
 ---
 
@@ -61,3 +61,5 @@
 1. Скоуп v1 и трассировка фич → сервисы: [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md).
 2. Таблицы и связи для волны v1: [data/README.md](data/README.md) и `docs/data/*-service.md` (общие правила — [DATA_MODEL.md](DATA_MODEL.md)).
 3. Миграции: один сервис — один набор миграций на свою БД ([OPERATIONS.md](OPERATIONS.md)); стек — [data/README.md](data/README.md#db-migrations).
+
+

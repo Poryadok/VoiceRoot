@@ -119,12 +119,12 @@ Event (NATS: message in whitelisted channel) ──► Bot Service
 
 ## Публикуемые события (→ NATS)
 
-| Событие                 | Данные                              |
-|-------------------------|-------------------------------------|
-| `bot.registered`        | bot_id, owner_id, name              |
-| `bot.command_executed`  | bot_id, command, channel_id, user_id|
-| `bot.webhook_delivered` | bot_id, event_type, latency_ms      |
-| `bot.webhook_failed`    | bot_id, event_type, error           |
+| Событие                 | Данные                               |
+|-------------------------|--------------------------------------|
+| `bot.registered`        | bot_id, owner_id, name               |
+| `bot.command_executed`  | bot_id, command, channel_id, user_id |
+| `bot.webhook_delivered` | bot_id, event_type, latency_ms       |
+| `bot.webhook_failed`    | bot_id, event_type, error            |
 
 ## Зависимости
 
@@ -132,3 +132,5 @@ Event (NATS: message in whitelisted channel) ──► Bot Service
 - **Role Service** — проверка scopes бота в контексте канала
 - **Space Service** — валидация channel whitelist
 - **NATS** — получение событий для доставки ботам
+
+

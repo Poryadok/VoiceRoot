@@ -13,14 +13,14 @@
 
 Заявки и дружба между **профилями**.
 
-| Колонка | Тип | Ограничения / заметки |
-|---------|-----|------------------------|
-| `id` | `UUID` | PK |
-| `requester_profile_id` | `UUID` | NOT NULL |
-| `target_profile_id` | `UUID` | NOT NULL, `CHECK (target_profile_id <> requester_profile_id)` |
-| `status` | `TEXT` | NOT NULL, `CHECK (status IN ('pending', 'accepted', 'declined'))` |
-| `created_at` | `TIMESTAMPTZ` | NOT NULL, DEFAULT now() |
-| `updated_at` | `TIMESTAMPTZ` | NOT NULL, DEFAULT now() |
+| Колонка                | Тип           | Ограничения / заметки                                             |
+|------------------------|---------------|-------------------------------------------------------------------|
+| `id`                   | `UUID`        | PK                                                                |
+| `requester_profile_id` | `UUID`        | NOT NULL                                                          |
+| `target_profile_id`    | `UUID`        | NOT NULL, `CHECK (target_profile_id <> requester_profile_id)`     |
+| `status`               | `TEXT`        | NOT NULL, `CHECK (status IN ('pending', 'accepted', 'declined'))` |
+| `created_at`           | `TIMESTAMPTZ` | NOT NULL, DEFAULT now()                                           |
+| `updated_at`           | `TIMESTAMPTZ` | NOT NULL, DEFAULT now()                                           |
 
 **Индексы**
 
@@ -39,12 +39,12 @@
 
 Блокировка на уровне **аккаунта** (ко всем профилям заблокированного).
 
-| Колонка | Тип | Ограничения / заметки |
-|---------|-----|------------------------|
-| `id` | `UUID` | PK |
-| `blocker_account_id` | `UUID` | NOT NULL |
-| `blocked_account_id` | `UUID` | NOT NULL, `CHECK (blocked_account_id <> blocker_account_id)` |
-| `created_at` | `TIMESTAMPTZ` | NOT NULL, DEFAULT now() |
+| Колонка              | Тип           | Ограничения / заметки                                        |
+|----------------------|---------------|--------------------------------------------------------------|
+| `id`                 | `UUID`        | PK                                                           |
+| `blocker_account_id` | `UUID`        | NOT NULL                                                     |
+| `blocked_account_id` | `UUID`        | NOT NULL, `CHECK (blocked_account_id <> blocker_account_id)` |
+| `created_at`         | `TIMESTAMPTZ` | NOT NULL, DEFAULT now()                                      |
 
 **Индексы**
 
@@ -58,14 +58,14 @@
 
 Таблица из [social-service.md](../microservices/social-service.md) **не обязательна** для ядра «друзья + DM» ([DATA_SCOPE_V1.md](../DATA_SCOPE_V1.md) §2). Вводить миграцией, если в той же волне нужны телефонная синхронизация или односторонние контакты без дружбы.
 
-| Колонка | Тип | Ограничения / заметки |
-|---------|-----|------------------------|
-| `id` | `UUID` | PK |
-| `owner_profile_id` | `UUID` | NOT NULL |
-| `target_profile_id` | `UUID` | NOT NULL |
-| `source` | `TEXT` | NOT NULL, `CHECK (source IN ('manual', 'phone_sync', 'space', 'matchmaking'))` |
-| `is_favorite` | `BOOLEAN` | NOT NULL, DEFAULT false |
-| `created_at` | `TIMESTAMPTZ` | NOT NULL, DEFAULT now() |
+| Колонка             | Тип           | Ограничения / заметки                                                          |
+|---------------------|---------------|--------------------------------------------------------------------------------|
+| `id`                | `UUID`        | PK                                                                             |
+| `owner_profile_id`  | `UUID`        | NOT NULL                                                                       |
+| `target_profile_id` | `UUID`        | NOT NULL                                                                       |
+| `source`            | `TEXT`        | NOT NULL, `CHECK (source IN ('manual', 'phone_sync', 'space', 'matchmaking'))` |
+| `is_favorite`       | `BOOLEAN`     | NOT NULL, DEFAULT false                                                        |
+| `created_at`        | `TIMESTAMPTZ` | NOT NULL, DEFAULT now()                                                        |
 
 **Индексы:** `UNIQUE (owner_profile_id, target_profile_id)`, `INDEX (owner_profile_id)`.
 
@@ -75,3 +75,5 @@
 
 - Индексы/материализации под friends-of-friends при масштабе.
 - Избранное, если моделируется отдельно от `contacts`.
+
+

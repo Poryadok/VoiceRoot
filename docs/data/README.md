@@ -2,12 +2,12 @@
 
 Детальные таблицы, индексы и внутренние связи для сервисов из [DATA_SCOPE_V1.md](../DATA_SCOPE_V1.md). Общие правила ID и ссылок между БД: [DATA_MODEL.md](../DATA_MODEL.md). Инвентарь БД: [DATA_STORES.md](../DATA_STORES.md).
 
-| Файл | БД | Сервис |
-|------|-----|--------|
-| [auth-service.md](auth-service.md) | `auth_db` | Auth |
-| [user-service.md](user-service.md) | `user_db` | User |
-| [social-service.md](social-service.md) | `social_db` | Social |
-| [chat-service.md](chat-service.md) | `chat_db` | Chat |
+| Файл                                         | БД             | Сервис    |
+|----------------------------------------------|----------------|-----------|
+| [auth-service.md](auth-service.md)           | `auth_db`      | Auth      |
+| [user-service.md](user-service.md)           | `user_db`      | User      |
+| [social-service.md](social-service.md)       | `social_db`    | Social    |
+| [chat-service.md](chat-service.md)           | `chat_db`      | Chat      |
 | [messaging-service.md](messaging-service.md) | `messaging_db` | Messaging |
 
 Realtime в v1 без PostgreSQL; Redis — вне этого каталога.
@@ -50,3 +50,5 @@ erDiagram
 ```
 
 Имена сущностей на схеме — условные префиксы по сервису; реальные имена таблиц — в соответствующих `*-service.md`.
+
+

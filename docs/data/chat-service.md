@@ -12,17 +12,17 @@
 
 ### `chats`
 
-| Колонка | Тип | Ограничения / заметки |
-|---------|-----|------------------------|
-| `id` | `UUID` | PK |
-| `type` | `TEXT` | NOT NULL, `CHECK (type IN ('dm', 'group'))` — в v1 создаём только `dm`; значение `group` зарезервировано |
-| `name` | `TEXT` | NULL — для DM обычно NULL (отображаемое имя с клиента / User) |
-| `avatar_url` | `TEXT` | NULL |
-| `creator_profile_id` | `UUID` | NOT NULL — кто инициировал создание пары |
-| `slow_mode_seconds` | `INT` | NOT NULL, DEFAULT 0, `CHECK (slow_mode_seconds >= 0)` |
-| `last_message_at` | `TIMESTAMPTZ` | NULL — обновляется по событию из Messaging / приложения |
-| `created_at` | `TIMESTAMPTZ` | NOT NULL, DEFAULT now() |
-| `updated_at` | `TIMESTAMPTZ` | NOT NULL, DEFAULT now() |
+| Колонка              | Тип           | Ограничения / заметки                                                                                    |
+|----------------------|---------------|----------------------------------------------------------------------------------------------------------|
+| `id`                 | `UUID`        | PK                                                                                                       |
+| `type`               | `TEXT`        | NOT NULL, `CHECK (type IN ('dm', 'group'))` — в v1 создаём только `dm`; значение `group` зарезервировано |
+| `name`               | `TEXT`        | NULL — для DM обычно NULL (отображаемое имя с клиента / User)                                            |
+| `avatar_url`         | `TEXT`        | NULL                                                                                                     |
+| `creator_profile_id` | `UUID`        | NOT NULL — кто инициировал создание пары                                                                 |
+| `slow_mode_seconds`  | `INT`         | NOT NULL, DEFAULT 0, `CHECK (slow_mode_seconds >= 0)`                                                    |
+| `last_message_at`    | `TIMESTAMPTZ` | NULL — обновляется по событию из Messaging / приложения                                                  |
+| `created_at`         | `TIMESTAMPTZ` | NOT NULL, DEFAULT now()                                                                                  |
+| `updated_at`         | `TIMESTAMPTZ` | NOT NULL, DEFAULT now()                                                                                  |
 
 **Индексы**
 
@@ -33,14 +33,14 @@
 
 ### `chat_members`
 
-| Колонка | Тип | Ограничения / заметки |
-|---------|-----|------------------------|
-| `chat_id` | `UUID` | NOT NULL, **FK** `REFERENCES chats(id) ON DELETE CASCADE` |
-| `profile_id` | `UUID` | NOT NULL |
-| `role` | `TEXT` | NOT NULL, `CHECK (role IN ('owner', 'admin', 'member'))` — для DM достаточно `member`/`owner` по политике |
-| `joined_at` | `TIMESTAMPTZ` | NOT NULL, DEFAULT now() |
-| `muted_until` | `TIMESTAMPTZ` | NULL |
-| `is_archived` | `BOOLEAN` | NOT NULL, DEFAULT false |
+| Колонка       | Тип           | Ограничения / заметки                                                                                     |
+|---------------|---------------|-----------------------------------------------------------------------------------------------------------|
+| `chat_id`     | `UUID`        | NOT NULL, **FK** `REFERENCES chats(id) ON DELETE CASCADE`                                                 |
+| `profile_id`  | `UUID`        | NOT NULL                                                                                                  |
+| `role`        | `TEXT`        | NOT NULL, `CHECK (role IN ('owner', 'admin', 'member'))` — для DM достаточно `member`/`owner` по политике |
+| `joined_at`   | `TIMESTAMPTZ` | NOT NULL, DEFAULT now()                                                                                   |
+| `muted_until` | `TIMESTAMPTZ` | NULL                                                                                                      |
+| `is_archived` | `BOOLEAN`     | NOT NULL, DEFAULT false                                                                                   |
 
 **Индексы и ограничения**
 
@@ -57,3 +57,5 @@
 - **`folders`**, **`folder_chats`** — когда появится UX папок в плане или клиенте ([DATA_SCOPE_V1.md](../DATA_SCOPE_V1.md) §2).
 - Поля групп (имя, лимиты участников) — активация при Фазе 4–5.
 - Индекс/таблица для стабильного «найти DM между двумя профилями» без скана — при росте нагрузки.
+
+

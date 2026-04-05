@@ -19,20 +19,20 @@
 
 ## Лимиты по плану
 
-| Параметр              | Free       | Premium      | Space Pro    |
-|-----------------------|------------|-------------|--------------|
-| Размер файла          | 50 MB      | 200 MB      | —            |
-| Retention файлов      | 90 дней    | Бессрочно   | —            |
-| Профили               | 2          | 5           | —            |
-| Пространства (join)   | 50         | 1000        | —            |
-| Voice quality         | 480p       | 720p        | —            |
-| Кастомный статус      | Нет        | Да          | —            |
-| Premium username      | Нет        | Да          | —            |
-| Анонимный просмотр    | Нет        | Да          | —            |
-| Участники пространства| —          | —           | 5000         |
-| Voice slots           | —          | —           | 128          |
-| Каналы                | —          | —           | 500          |
-| Custom emoji          | —          | —           | Да           |
+| Параметр               | Free    | Premium   | Space Pro |
+|------------------------|---------|-----------|-----------|
+| Размер файла           | 50 MB   | 200 MB    | —         |
+| Retention файлов       | 90 дней | Бессрочно | —         |
+| Профили                | 2       | 5         | —         |
+| Пространства (join)    | 50      | 1000      | —         |
+| Voice quality          | 480p    | 720p      | —         |
+| Кастомный статус       | Нет     | Да        | —         |
+| Premium username       | Нет     | Да        | —         |
+| Анонимный просмотр     | Нет     | Да        | —         |
+| Участники пространства | —       | —         | 5000      |
+| Voice slots            | —       | —         | 128       |
+| Каналы                 | —       | —         | 500       |
+| Custom emoji           | —       | —         | Да        |
 
 ## API (gRPC)
 
@@ -109,17 +109,17 @@ billing_events
 
 ## Публикуемые события (→ NATS)
 
-| Событие                        | Данные                                |
-|--------------------------------|---------------------------------------|
-| `subscription.plan_started`    | account_id, plan, provider            |
-| `subscription.plan_renewed`    | account_id, plan                      |
-| `subscription.plan_cancelled`  | account_id, plan                      |
-| `subscription.plan_expired`    | account_id, plan                      |
-| `subscription.payment_success` | account_id, amount, currency          |
-| `subscription.payment_failed`  | account_id, reason                    |
-| `subscription.space_pro_started`| space_id, purchaser_id               |
-| `subscription.space_pro_expired`| space_id                             |
-| `subscription.downgrade`       | account_id, frozen_profiles           |
+| Событие                          | Данные                       |
+|----------------------------------|------------------------------|
+| `subscription.plan_started`      | account_id, plan, provider   |
+| `subscription.plan_renewed`      | account_id, plan             |
+| `subscription.plan_cancelled`    | account_id, plan             |
+| `subscription.plan_expired`      | account_id, plan             |
+| `subscription.payment_success`   | account_id, amount, currency |
+| `subscription.payment_failed`    | account_id, reason           |
+| `subscription.space_pro_started` | space_id, purchaser_id       |
+| `subscription.space_pro_expired` | space_id                     |
+| `subscription.downgrade`         | account_id, frozen_profiles  |
 
 ## Зависимости
 
@@ -128,3 +128,5 @@ billing_events
 - **User Service** — (через NATS) заморозка excess профилей при downgrade
 - **Space Service** — (через NATS) снижение лимитов пространства при expiry
 - **File Service** — (через NATS) изменение retention при downgrade
+
+
