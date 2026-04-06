@@ -6,6 +6,11 @@ Usage:
   python tools/align_md_tables.py              # rewrite files in place
   python tools/align_md_tables.py --dry-run    # print what would change
   python tools/align_md_tables.py --path docs/features
+  python tools/align_md_tables.py --path docs/GLOSSARY.md   # one file
+  python tools/align_md_tables.py -v                        # per-file table count; explains 0 updates
+
+If a file shows 0 updates but the IDE still looks unaligned, the saved file on disk is often already
+padded (run with -v). Save the buffer (or reload from disk) so the runner sees the same bytes as the editor.
 """
 
 from __future__ import annotations
@@ -15,21 +20,15 @@ import re
 import sys
 from pathlib import Path
 
-# Separator row: |---|, |:---|, |---:|, |:---:| per cell
-_SEP_CELL = re.compile(r"^\s*:?-{3,}:?\s*$")
+# Second table row: starts/ends with |; inside only |, -, :, whitespace; must contain at least one -.
+_SEP_LINE = re.compile(r"^\|[-|:\s]+\|$")
 
 
 def is_separator_line(line: str) -> bool:
     s = line.strip()
-    if not s.startswith("|") or "|" not in s[1:]:
+    if len(s) < 3 or "-" not in s:
         return False
-    raw = s.strip()
-    if not (raw.startswith("|") and raw.endswith("|")):
-        return False
-    inner = raw[1:-1].split("|")
-    if not inner:
-        return False
-    return all(_SEP_CELL.match(c.strip()) for c in inner)
+    return bool(_SEP_LINE.fullmatch(s))
 
 
 def split_row(line: str) -> list[str]:
@@ -118,8 +117,9 @@ def realign_table(header_line: str, sep_line: str, body_lines: list[str]) -> lis
     return out
 
 
-def process_file(path: Path, dry_run: bool) -> bool:
-    text = path.read_text(encoding="utf-8")
+def process_file(path: Path, dry_run: bool) -> tuple[bool, int]:
+    """Returns (file_changed, number_of_gfm_tables_realigned)."""
+    text = path.read_text(encoding="utf-8-sig")
     has_final_nl = text.endswith("\n") or text.endswith("\r\n")
     text_n = text.replace("\r\n", "\n")
     raw_lines = text_n.split("\n")
@@ -128,12 +128,14 @@ def process_file(path: Path, dry_run: bool) -> bool:
 
     out: list[str] = []
     i = 0
+    table_count = 0
     while i < len(raw_lines):
         block = extract_table_block(raw_lines, i)
         if block is None:
             out.append(raw_lines[i])
             i += 1
             continue
+        table_count += 1
         start, end = block
         new_rows = realign_table(
             raw_lines[start],
@@ -148,14 +150,14 @@ def process_file(path: Path, dry_run: bool) -> bool:
         new_text += "\n"
 
     if new_text == text_n:
-        return False
+        return False, table_count
 
     if dry_run:
         print(f"would update: {path}")
     else:
         path.write_text(new_text, encoding="utf-8", newline="\n")
         print(f"updated: {path}")
-    return True
+    return True, table_count
 
 
 def main() -> int:
@@ -164,20 +166,40 @@ def main() -> int:
         "--path",
         type=Path,
         default=Path("docs"),
-        help="Root directory to scan (default: docs)",
+        help="Root directory to scan, or a single .md file (default: docs)",
     )
     ap.add_argument("--dry-run", action="store_true", help="Do not write files")
+    ap.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Per file: table count and whether content changed",
+    )
     args = ap.parse_args()
     root: Path = args.path
-    if not root.is_dir():
-        print(f"not a directory: {root}", file=sys.stderr)
+    if root.is_file() and root.suffix.lower() == ".md":
+        md_files = [root]
+    elif root.is_dir():
+        md_files = sorted(root.rglob("*.md"))
+    else:
+        print(f"not a directory or .md file: {root}", file=sys.stderr)
         return 1
 
     changed = 0
-    for md in sorted(root.rglob("*.md")):
-        if process_file(md, args.dry_run):
+    tables_total = 0
+    for md in md_files:
+        updated, n_tables = process_file(md, args.dry_run)
+        tables_total += n_tables
+        if updated:
             changed += 1
+        if args.verbose:
+            status = "updated" if updated else "unchanged"
+            print(f"{md}: {n_tables} table(s), {status}")
+            if not updated and n_tables:
+                print("  (already aligned on disk — save the file if the editor shows compact rows.)")
     print(f"files {'that would change' if args.dry_run else 'updated'}: {changed}")
+    if args.verbose:
+        print(f"tables scanned: {tables_total}")
     return 0
 
 
