@@ -2,7 +2,7 @@
 
 ## Обзор
 
-Управление сущностями чатов: DM (1:1), группы (до 500 участников) и пользовательские папки.
+Управление сущностями чатов: DM (1:1), группы (до 500), **текстовые каналы** (`type = channel`, в т.ч. вне спейса), пользовательские папки.
 
 **Язык**: Go
 **БД**: PostgreSQL `chat_db`
@@ -11,7 +11,8 @@
 
 - Создание и управление DM-чатами
 - Создание и управление группами (до 500 участников)
-- Участники чата (добавление, удаление, роли в группе)
+- Создание и управление **текстовыми каналами** (сущность-отправитель, `space_id` опционален)
+- Участники чата (добавление, удаление, роли в группе / канале по политике продукта)
 - Папки чатов (All / DM / Groups / Channels / Spaces / пользовательские)
 - Список активных чатов (до 100)
 - Мьют / архивация чатов
@@ -29,6 +30,11 @@ service ChatService {
   rpc CreateGroup(CreateGroupRequest) returns (Chat);
   rpc UpdateGroup(UpdateGroupRequest) returns (Chat);
   rpc DeleteGroup(DeleteGroupRequest) returns (Empty);
+
+  // Текстовые каналы (в т.ч. standalone; привязка к спейсу — совместно с Space)
+  rpc CreateTextChannel(CreateTextChannelRequest) returns (Chat);
+  rpc UpdateTextChannel(UpdateTextChannelRequest) returns (Chat);
+  rpc DeleteTextChannel(DeleteTextChannelRequest) returns (Empty);
 
   // Участники
   rpc AddMembers(AddMembersRequest) returns (Empty);
@@ -57,9 +63,11 @@ service ChatService {
 ```
 chats
 ├── id (UUID)
-├── type (dm | group)
-├── name (nullable, для групп)
-├── avatar_url (nullable, для групп)
+├── type (dm | group | channel)
+├── space_id (nullable — группа/канал в спейсе)
+├── name (nullable)
+├── avatar_url (nullable)
+├── topic (nullable, часто канал)
 ├── creator_profile_id
 ├── slow_mode_seconds (0 = off)
 ├── last_message_at
@@ -106,5 +114,6 @@ folder_chats (для custom folders)
 - **Social Service** — проверка блокировок при создании DM
 - **User Service** — получение профилей участников
 - **Subscription Service** — лимиты на количество участников группы
+- **Space Service** — при создании канала в спейсе: плейсмент в дереве после создания строки `chats`
 
 

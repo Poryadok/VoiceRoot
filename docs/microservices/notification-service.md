@@ -60,7 +60,7 @@ device_tokens
 notification_settings
 ├── profile_id (FK)
 ├── scope_type (global | space | channel | chat)
-├── scope_id (nullable — space_id / channel_id / chat_id)
+├── scope_id (nullable — space_id; для channel → chats.id, type=channel; для chat → chats.id dm/group)
 ├── enabled (bool)
 ├── mute_until (nullable)
 ├── suppress_types (jsonb — массив type-ов для suppress)

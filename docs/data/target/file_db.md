@@ -2,7 +2,7 @@
 
 **Сервис:** File ([file-service.md](../../microservices/file-service.md)). **Шаг порядка:** 8.
 
-`uploader_profile_id` → User (**без FK**). **`chat_id`:** для DM/группы — `chat_db.chats.id`; для вложений в канале — **`space_db.channels.id`** (как в Messaging при `chat_type = channel`). `message_id` в `file_references` — Messaging (**без FK**).
+`uploader_profile_id` → User (**без FK**). **`chat_id`:** для `dm` / `group` / `channel` — всегда **`chat_db.chats.id`** (как в Messaging). `message_id` в `file_references` — Messaging (**без FK**).
 
 ---
 

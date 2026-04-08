@@ -2,7 +2,7 @@
 
 **Сервис:** Role ([role-service.md](../../microservices/role-service.md)). **Шаг порядка:** 6.
 
-`space_id` и `channel_id` принадлежат Space Service (**без FK**). `profile_id` → User (**без FK**).
+`space_id` — спейс (**без FK**). **`channel_id` в оверрайдах:** для **текстового канала** в спейсе = **`chat_db.chats.id`** (`type = channel`); для **голосовой комнаты** = **`space_db.voice_rooms.id`**. Валидация — Role Service через вызовы Chat / Space (**без FK**). `profile_id` → User (**без FK**).
 
 ---
 
@@ -41,9 +41,9 @@
 
 ## `channel_overrides`
 
-| Колонка      | Тип      | Описание                                     |
-|--------------|----------|----------------------------------------------|
-| `channel_id` | `UUID`   | NOT NULL                                     |
+| Колонка      | Тип      | Описание                                                                 |
+|--------------|----------|--------------------------------------------------------------------------|
+| `channel_id` | `UUID`   | NOT NULL — текстовый канал: `chats.id`; голос: `voice_rooms.id`          |
 | `role_id`    | `UUID`   | NOT NULL, FK → `roles(id)` ON DELETE CASCADE |
 | `allow`      | `BIGINT` | NOT NULL, DEFAULT 0                          |
 | `deny`       | `BIGINT` | NOT NULL, DEFAULT 0                          |

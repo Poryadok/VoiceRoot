@@ -4,7 +4,7 @@
 
 `creator_profile_id` и `profile_id` в участниках — UUID из `user_db`; **FK наружу нет**.
 
-Сообщения в **каналах спейса** в этой БД не хранятся: поток сообщений канала идентифицируется **`channels.id`** из Space; см. [DATA_MODEL.md](../DATA_MODEL.md) и целевую схему [data/target/chat_db.md](target/chat_db.md).
+Текстовые каналы — строки **`chats`** с `type = channel` (в т.ч. вне спейса и с `space_id`); сообщения в Messaging с тем же `chat_id`. Плейсмент в дереве спейса — `space_db.space_text_channel_placements`. См. [DATA_MODEL.md](../DATA_MODEL.md) и [data/target/chat_db.md](target/chat_db.md).
 
 ---
 
@@ -15,7 +15,7 @@
 | Колонка              | Тип           | Ограничения / заметки                                                                                    |
 |----------------------|---------------|----------------------------------------------------------------------------------------------------------|
 | `id`                 | `UUID`        | PK                                                                                                       |
-| `type`               | `TEXT`        | NOT NULL, `CHECK (type IN ('dm', 'group'))` — в v1 создаём только `dm`; значение `group` зарезервировано |
+| `type`               | `TEXT`        | NOT NULL, `CHECK (type IN ('dm', 'group', 'channel'))` — в v1 создаём только `dm`; `group` / `channel` зарезервированы под [data/target/chat_db.md](target/chat_db.md) |
 | `name`               | `TEXT`        | NULL — для DM обычно NULL (отображаемое имя с клиента / User)                                            |
 | `avatar_url`         | `TEXT`        | NULL                                                                                                     |
 | `creator_profile_id` | `UUID`        | NOT NULL — кто инициировал создание пары                                                                 |

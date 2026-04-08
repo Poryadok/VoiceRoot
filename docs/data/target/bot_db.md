@@ -2,7 +2,7 @@
 
 **Сервис:** Bot ([bot-service.md](../../microservices/bot-service.md)). **Шаг порядка:** 14.
 
-`owner_account_id` → Auth; `channel_id` → Space (**без FK**).
+`owner_account_id` → Auth; для сообщений бота в **текстовом канале** `channel_id` = **`chat_db.chats.id`** (**без FK**).
 
 ---
 

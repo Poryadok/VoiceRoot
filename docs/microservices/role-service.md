@@ -135,7 +135,8 @@ channel_overrides
 
 ## Зависимости
 
-- **Space Service** — валидация space_id, channel_id
+- **Space Service** — валидация `space_id`, `voice_room_id`
+- **Chat Service** — валидация `chat_id` для текстового канала при оверрайдах
 - **Federation Service** — синхронизация ролей при S2S (SyncSnapshot)
 
 

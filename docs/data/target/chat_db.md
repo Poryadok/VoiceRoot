@@ -2,39 +2,43 @@
 
 **Сервис:** Chat ([chat-service.md](../../microservices/chat-service.md)). **Шаг порядка:** 4.
 
-`profile_id` → User; `creator_profile_id` — то же (**без FK**).
+`profile_id` → User; `creator_profile_id` — то же (**без FK**). `space_id` → Space (**без FK**), когда чат привязан к спейсу.
 
-### Каналы спейса и сообщения
+### Сообщения
 
-Сообщения в **текстовых каналах** хранятся в **Messaging** (`messaging_db`), а не в этой БД. Идентификатор потока сообщений канала — **`channels.id`** из `space_db`; в Messaging/File это поле называется **`chat_id`** при `chat_type = channel`. Строки в таблице `chats` ниже — только **DM и группы**. Подробнее: [DATA_MODEL.md](../../DATA_MODEL.md) (раздел про `chat_type = channel`).
+Все тексты (DM, группа, **канал**) хранятся в **Messaging** (`messaging_db`). Поле **`chat_id` в сообщениях** для любого текстового типа — **`chats.id`**. Семантика `chat_type` в Messaging: `dm` \| `group` \| `channel`. Подробнее: [DATA_MODEL.md](../../DATA_MODEL.md).
 
 ---
 
 ## `chats`
 
-| Колонка              | Тип           | Описание            |
-|----------------------|---------------|---------------------|
-| `id`                 | `UUID`        | PK                  |
-| `type`               | `TEXT`        | `dm` \ `group`      |
-| `name`               | `TEXT`        | NULL                |
-| `avatar_url`         | `TEXT`        | NULL                |
-| `creator_profile_id` | `UUID`        | NOT NULL            |
+| Колонка              | Тип           | Описание |
+|----------------------|---------------|----------|
+| `id`                 | `UUID`        | PK       |
+| `type`               | `TEXT`        | `dm` \| `group` \| `channel` |
+| `space_id`           | `UUID`        | NULL — для `group`/`channel` в спейсе; для standalone канала или группы вне спейса NULL |
+| `name`               | `TEXT`        | NULL — для DM обычно NULL; для группы/канала — отображаемое имя |
+| `avatar_url`         | `TEXT`        | NULL     |
+| `topic`              | `TEXT`        | NULL — краткое описание (часто для `channel`) |
+| `creator_profile_id` | `UUID`        | NOT NULL |
 | `slow_mode_seconds`  | `INT`         | NOT NULL, DEFAULT 0 |
-| `last_message_at`    | `TIMESTAMPTZ` | NULL                |
-| `created_at`         | `TIMESTAMPTZ` | NOT NULL            |
-| `updated_at`         | `TIMESTAMPTZ` | NOT NULL            |
+| `last_message_at`    | `TIMESTAMPTZ` | NULL     |
+| `created_at`         | `TIMESTAMPTZ` | NOT NULL |
+| `updated_at`         | `TIMESTAMPTZ` | NOT NULL |
 
-**Индексы:** `(last_message_at DESC NULLS LAST)`.
+**Индексы:** `(last_message_at DESC NULLS LAST)`; `(space_id)` где не NULL; `(type)`.
 
 ---
 
 ## `chat_members`
 
+Участники для **DM** и **группы**; для **канала** — по продукту (явные подписчики, модераторы и т.д.) или минимальный набор; для больших каналов в спейсе доступ может опираться на `space_members` + Role без строки в `chat_members` — политика Chat Service.
+
 | Колонка       | Тип           | Описание                                     |
 |---------------|---------------|----------------------------------------------|
 | `chat_id`     | `UUID`        | NOT NULL, FK → `chats(id)` ON DELETE CASCADE |
 | `profile_id`  | `UUID`        | NOT NULL                                     |
-| `role`        | `TEXT`        | `owner` \ `admin` \ `member`                 |
+| `role`        | `TEXT`        | `owner` \| `admin` \| `member`               |
 | `joined_at`   | `TIMESTAMPTZ` | NOT NULL                                     |
 | `muted_until` | `TIMESTAMPTZ` | NULL                                         |
 | `is_archived` | `BOOLEAN`     | NOT NULL, DEFAULT false                      |
@@ -50,7 +54,7 @@
 | `id`            | `UUID`        | PK                  |
 | `profile_id`    | `UUID`        | NOT NULL            |
 | `name`          | `TEXT`        | NOT NULL            |
-| `type`          | `TEXT`        | `system` \ `custom` |
+| `type`          | `TEXT`        | `system` \| `custom` |
 | `filter_config` | `JSONB`       | NULL                |
 | `sort_order`    | `INT`         | NOT NULL, DEFAULT 0 |
 | `created_at`    | `TIMESTAMPTZ` | NOT NULL            |
@@ -68,5 +72,4 @@
 | `added_at`  | `TIMESTAMPTZ` | NOT NULL                                       |
 
 **Индексы:** `PRIMARY KEY (folder_id, chat_id)`.
-
 

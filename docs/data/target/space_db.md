@@ -44,23 +44,39 @@
 
 ---
 
-## `channels`
+## `voice_rooms`
 
-| Колонка             | Тип           | Описание                                       |
-|---------------------|---------------|------------------------------------------------|
-| `id`                | `UUID`        | PK                                             |
-| `space_id`          | `UUID`        | NOT NULL, FK → `spaces(id)` ON DELETE CASCADE  |
-| `category_id`       | `UUID`        | NULL, FK → `categories(id)` ON DELETE SET NULL |
-| `name`              | `TEXT`        | NOT NULL                                       |
-| `type`              | `TEXT`        | `text` \ `voice`                               |
-| `topic`             | `TEXT`        | NULL                                           |
-| `slow_mode_seconds` | `INT`         | NOT NULL, DEFAULT 0                            |
-| `sort_order`        | `INT`         | NOT NULL, DEFAULT 0                            |
-| `is_system`         | `BOOLEAN`     | NOT NULL, DEFAULT false                        |
-| `created_at`        | `TIMESTAMPTZ` | NOT NULL                                       |
-| `updated_at`        | `TIMESTAMPTZ` | NOT NULL                                       |
+Голосовые комнаты в дереве спейса (медиа — Voice / LiveKit). **Не** путать с текстовым каналом: сообщения идут в Messaging с `chat_id` из **`chat_db.chats`** (`type = channel`), см. [DATA_MODEL.md](../../DATA_MODEL.md).
 
-**Индексы:** `(space_id, sort_order)`; `(space_id, type)`.
+| Колонка      | Тип           | Описание                                       |
+|--------------|---------------|------------------------------------------------|
+| `id`         | `UUID`        | PK — в Role оверрайдах и Voice как `channel_id` для голоса |
+| `space_id`   | `UUID`        | NOT NULL, FK → `spaces(id)` ON DELETE CASCADE  |
+| `category_id`| `UUID`        | NULL, FK → `categories(id)` ON DELETE SET NULL |
+| `name`       | `TEXT`        | NOT NULL                                       |
+| `sort_order` | `INT`         | NOT NULL, DEFAULT 0                            |
+| `created_at` | `TIMESTAMPTZ` | NOT NULL                                       |
+| `updated_at` | `TIMESTAMPTZ` | NOT NULL                                       |
+
+**Индексы:** `(space_id, sort_order)`.
+
+---
+
+## `space_text_channel_placements`
+
+Позиция **текстового канала** в дереве спейса. Источник текста и сообщений — **`chat_db.chats`** с `type = channel` и тем же `space_id`, что у спейса; здесь только категория, порядок, системность.
+
+| Колонка             | Тип           | Описание                                                         |
+|---------------------|---------------|------------------------------------------------------------------|
+| `space_id`          | `UUID`        | NOT NULL, FK → `spaces(id)` ON DELETE CASCADE                    |
+| `chat_id`           | `UUID`        | NOT NULL — логически `chats.id` из Chat Service (**без FK**)     |
+| `category_id`       | `UUID`        | NULL, FK → `categories(id)` ON DELETE SET NULL                   |
+| `sort_order`        | `INT`         | NOT NULL, DEFAULT 0                                              |
+| `is_system`         | `BOOLEAN`     | NOT NULL, DEFAULT false                                          |
+| `created_at`        | `TIMESTAMPTZ` | NOT NULL                                                         |
+| `updated_at`        | `TIMESTAMPTZ` | NOT NULL                                                         |
+
+**Индексы / ограничения:** `UNIQUE (space_id, chat_id)`; `(space_id, sort_order)`.
 
 ---
 
@@ -135,7 +151,7 @@
 | `id`              | `UUID`        | PK                                     |
 | `name`            | `TEXT`        | NOT NULL                               |
 | `description`     | `TEXT`        | NULL                                   |
-| `template_config` | `JSONB`       | NOT NULL — структура каналов/категорий |
+| `template_config` | `JSONB`       | NOT NULL — категории, плейсменты текстовых каналов, голосовые комнаты (см. [DATA_MODEL.md](../../DATA_MODEL.md)) |
 | `is_system`       | `BOOLEAN`     | NOT NULL, DEFAULT false                |
 | `created_at`      | `TIMESTAMPTZ` | NOT NULL                               |
 

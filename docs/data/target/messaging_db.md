@@ -4,7 +4,7 @@
 
 `sender_profile_id` → User (**без FK**).
 
-**Семантика `chat_id`:** при `chat_type` **`dm` \ `group`** — UUID строки `chat_db.chats.id`; при **`channel`** — UUID **`space_db.channels.id`** (отдельной строки в `chats` нет). См. [DATA_MODEL.md](../../DATA_MODEL.md).
+**Семантика `chat_id`:** для **`dm`**, **`group`** и **`channel`** — всегда UUID **`chat_db.chats.id`**. См. [DATA_MODEL.md](../../DATA_MODEL.md).
 
 **Идентификаторы сообщений:** `messages.id` — **UUIDv7**, генерирует сервис при INSERT ([DATA_MODEL.md](../../DATA_MODEL.md)).
 
@@ -17,7 +17,9 @@
 | `id`                  | `UUID`        | PK, UUIDv7                                                                                                                      |
 | `chat_id`             | `UUID`        | NOT NULL                                                                                                                        |
 | `chat_type`           | `TEXT`        | `dm` \ `group` \ `channel`                                                                                                      |
-| `sender_profile_id`   | `UUID`        | NOT NULL                                                                                                                        |
+| `sender_profile_id`   | `UUID`        | NOT NULL — реальный автор (profile_id)                                                                                          |
+| `posted_as_channel`   | `BOOLEAN`     | NOT NULL, DEFAULT false — UI-режим "пост от имени канала"                                                                       |
+| `display_channel_id`  | `UUID`        | NULL — `chat_db.chats.id` (`type=channel`); обязателен, если `posted_as_channel = true`                                         |
 | `content`             | `TEXT`        | NOT NULL                                                                                                                        |
 | `type`                | `TEXT`        | `regular` \ `system` \ `forward`                                                                                                |
 | `thread_parent_id`    | `UUID`        | NULL, FK → `messages(id)` ON DELETE SET NULL                                                                                    |
@@ -31,6 +33,12 @@
 | `created_at`          | `TIMESTAMPTZ` | NOT NULL                                                                                                                        |
 
 **Индексы:** `(chat_id, id DESC)`; частичный `(chat_id, id DESC) WHERE deleted_at IS NULL`; `(thread_parent_id)` при тредах.
+
+**Инварианты авторства канала:**
+
+- `sender_profile_id` всегда хранит реального автора действия.
+- Рендер "от имени канала" задаётся парой `posted_as_channel=true` + `display_channel_id=<channel chats.id>`.
+- Для защиты от битых данных в миграции добавить `CHECK (NOT posted_as_channel OR display_channel_id IS NOT NULL)`.
 
 ---
 

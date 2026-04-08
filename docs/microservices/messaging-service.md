@@ -59,9 +59,11 @@ service MessagingService {
 ```
 messages
 ├── id (UUID, UUIDv7)
-├── chat_id (логически: chat_db.chats.id для dm|group; space_db.channels.id для channel)
+├── chat_id (всегда chat_db.chats.id для dm | group | channel)
 ├── chat_type (dm | group | channel)
-├── sender_profile_id
+├── sender_profile_id (всегда реальный автор-профиль)
+├── posted_as_channel (bool, default false)
+├── display_channel_id (nullable, chats.id; обязателен при posted_as_channel=true)
 ├── content (text, 4000 chars)
 ├── type (regular | system | forward)
 ├── thread_parent_id (nullable, FK → messages)
@@ -107,6 +109,8 @@ read_receipts
 └── UNIQUE(chat_id, profile_id)
 ```
 
+Правило для канала: в аудитном следе и правах всегда используется `sender_profile_id`; отображение "пост от имени канала" задаётся через `posted_as_channel=true` и `display_channel_id=<channel chats.id>`.
+
 ## Публикуемые события (→ NATS)
 
 | Событие                  | Данные                                       |
@@ -120,9 +124,9 @@ read_receipts
 
 ## Зависимости
 
-- **Chat Service** — валидация членства в чате
-- **Space Service** — валидация доступа к каналу
-- **Role Service** — проверка прав (send, pin, delete others' messages)
+- **Chat Service** — валидация членства / доступа для **DM**, **группы**, **канала** (в т.ч. standalone)
+- **Space Service** — если у `chats.space_id` задан спейс: членство в спейсе (для канала и группы в спейсе)
+- **Role Service** — проверка прав в спейсе для **текстового канала** (`channel_id` = `chats.id`) и согласованных сценариев для группы в спейсе (если включено в продукт)
 - **Social Service** — проверка блокировок
 - **File Service** — привязка вложений
 - **Realtime Service** — (через NATS) уведомление о новых сообщениях для WebSocket fan-out

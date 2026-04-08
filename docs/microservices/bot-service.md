@@ -130,7 +130,8 @@ Event (NATS: message in whitelisted channel) ──► Bot Service
 
 - **Messaging Service** — отправка сообщений от имени бота
 - **Role Service** — проверка scopes бота в контексте канала
-- **Space Service** — валидация channel whitelist
+- **Chat Service** — `channel_id` в whitelist = `chats.id` (`type = channel`)
+- **Space Service** — при ботах только в спейсе: канал числится в дереве спейса
 - **NATS** — получение событий для доставки ботам
 
 

@@ -11,12 +11,12 @@
 
 - DM-звонки (1:1 голос/видео)
 - Групповые звонки / временные комнаты у текстовых групп (до 500 участников группы; лимит в комнате — см. [voice-chat.md](../features/voice-chat.md))
-- Голосовые каналы в пространствах (до 32 free / 128 paid)
+- Голосовые комнаты в спейсах (`voice_rooms`, до 32 free / 128 paid)
 - Screen share (desktop/window/tab + system audio)
 - Генерация LiveKit токенов для клиентов
 - Управление LiveKit-комнатами (создание, закрытие)
 - Voice state tracking (кто в какой комнате, mute/deafen статус)
-- Commander channel (broadcasting + ducking)
+- Commander mode (broadcasting + ducking)
 - Raise hand
 - PTT / VAD mode
 - Ограничение: один активный voice на профиль
@@ -32,10 +32,10 @@ service VoiceService {
   rpc LeaveCall(LeaveCallRequest) returns (Empty);
   rpc EndCall(EndCallRequest) returns (Empty);
 
-  // Voice channels
-  rpc JoinVoiceChannel(JoinVoiceChannelRequest) returns (VoiceSession);
-  rpc LeaveVoiceChannel(LeaveVoiceChannelRequest) returns (Empty);
-  rpc MoveToChannel(MoveToChannelRequest) returns (VoiceSession);
+  // Голосовые комнаты (space_db.voice_rooms)
+  rpc JoinVoiceRoom(JoinVoiceRoomRequest) returns (VoiceSession);
+  rpc LeaveVoiceRoom(LeaveVoiceRoomRequest) returns (Empty);
+  rpc MoveToVoiceRoom(MoveToVoiceRoomRequest) returns (VoiceSession);
 
   // LiveKit tokens
   rpc GetJoinToken(GetJoinTokenRequest) returns (JoinTokenResponse);
@@ -62,15 +62,15 @@ service VoiceService {
 
 ```
 voice:session:{profile_id} → {
-  room_id, room_type (call|channel),
-  chat_id/channel_id, space_id,
+  room_id, room_type (call|voice_room|group_voice),
+  chat_id, voice_room_id, space_id,
   is_muted, is_deafened, is_video_on,
   is_screen_sharing, is_commander,
   hand_raised, joined_at
 }
 
 voice:room:{room_id} → {
-  type, chat_id/channel_id, space_id,
+  type, chat_id, voice_room_id, space_id,
   participant_count, max_participants,
   created_at, livekit_room_name
 }
@@ -108,7 +108,7 @@ Client ──LiveKit Client SDK──► LiveKit SFU (media streams)
 
 - **LiveKit** — SFU для медиа
 - **Chat Service** — валидация участников DM/group при звонке
-- **Space Service** — валидация доступа к голосовому каналу
+- **Space Service** — валидация доступа к **голосовой комнате** (`voice_room_id`)
 - **Role Service** — проверка прав (CONNECT, SPEAK, VIDEO, etc.)
 - **Notification Service** — (через NATS) входящий звонок → push
 - **Redis** — хранение активных сессий

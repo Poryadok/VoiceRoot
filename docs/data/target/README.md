@@ -19,7 +19,7 @@
 | 3   | Social       | `social_db`               | `profile_id` / `account_id`                           |
 | 4   | Chat         | `chat_db`                 | `profile_id`                                          |
 | 5   | Space        | `space_db`                | `profile_id`                                          |
-| 6   | Role         | `role_db`                 | `space_id`, `channel_id` (владелец — Space)           |
+| 6   | Role         | `role_db`                 | `space_id`, `channel_id` (текст → Chat, голос → Space) |
 | 7   | Subscription | `subscription_db`         | `account_id`; `space_id` для Space Pro                |
 | 8   | File         | `file_db`                 | `profile_id`; опционально `chat_id`                   |
 | 9   | Messaging    | `messaging_db`            | `chat_id`, `profile_id`                               |

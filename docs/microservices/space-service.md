@@ -2,7 +2,7 @@
 
 ## Обзор
 
-Управление пространствами (аналог Discord-серверов): структура каналов, категории, инвайты, участники, шаблоны.
+Управление пространствами (аналог Discord-серверов): дерево (**плейсменты текстовых каналов** → `chat_id` из Chat, **голосовые комнаты**), категории, инвайты, участники, шаблоны.
 
 **Язык**: Go
 **БД**: PostgreSQL `space_db`
@@ -11,18 +11,18 @@
 
 - CRUD пространств
 - Видимость: public / invite-only / private
-- Текстовые каналы, голосовые комнаты и категории
+- Категории; **голосовые комнаты** (`voice_rooms`); **места текстовых каналов** в дереве (`space_text_channel_placements` → Chat)
 - Системный канал (welcome, rules)
 - Инвайт-ссылки (expiry, usage limits)
 - Проверка при входе (phone / CAPTCHA / вопросы / ручное одобрение)
 - Участники (join, leave, ban, kick)
-- Лимиты: 50 каналов free / 500 Pro; 200 участников free / 5000 Pro
+- Лимиты: 50 каналов free / 500 Pro; 50 участников free / 5000 Pro
 - Каталог публичных пространств (поиск, ранжирование)
 - Space-level matchmaking конфигурация
 - Шаблоны пространств
 - Аудит-лог действий (создание каналов, баны, изменение ролей)
 - Передача владения
-- Slow mode на уровне канала
+- Slow mode на уровне текстового канала — в данных **Chat** (`chats.slow_mode_seconds`); Space может дублировать отображение/кэш при необходимости
 - Бан пользователя (с сохранением сообщений)
 
 ## API (gRPC)
@@ -37,14 +37,17 @@ service SpaceService {
   rpc ListMySpaces(ListMySpacesRequest) returns (SpaceList);
   rpc SearchPublicSpaces(SearchRequest) returns (SpaceList);
 
-  // Каналы и категории
-  rpc CreateChannel(CreateChannelRequest) returns (Channel);
-  rpc UpdateChannel(UpdateChannelRequest) returns (Channel);
-  rpc DeleteChannel(DeleteChannelRequest) returns (Empty);
+  // Голосовые комнаты и плейсменты текстовых каналов (текстовая сущность — Chat)
+  rpc CreateVoiceRoom(CreateVoiceRoomRequest) returns (VoiceRoom);
+  rpc UpdateVoiceRoom(UpdateVoiceRoomRequest) returns (VoiceRoom);
+  rpc DeleteVoiceRoom(DeleteVoiceRoomRequest) returns (Empty);
+  rpc PlaceTextChannel(PlaceTextChannelRequest) returns (TextChannelPlacement); // chat_id от Chat
+  rpc UpdateTextChannelPlacement(UpdateTextChannelPlacementRequest) returns (TextChannelPlacement);
+  rpc RemoveTextChannelFromSpace(RemoveTextChannelFromSpaceRequest) returns (Empty);
   rpc CreateCategory(CreateCategoryRequest) returns (Category);
   rpc UpdateCategory(UpdateCategoryRequest) returns (Category);
   rpc DeleteCategory(DeleteCategoryRequest) returns (Empty);
-  rpc ReorderChannels(ReorderRequest) returns (Empty);
+  rpc ReorderSpaceTree(ReorderRequest) returns (Empty); // голосовые комнаты + плейсменты текстовых каналов
 
   // Инвайты
   rpc CreateInvite(CreateInviteRequest) returns (Invite);
@@ -92,14 +95,19 @@ spaces
 ├── created_at
 └── updated_at
 
-channels
+voice_rooms
 ├── id (UUID)
 ├── space_id (FK)
 ├── category_id (FK, nullable)
 ├── name
-├── type (text | voice)
-├── topic (text, nullable)
-├── slow_mode_seconds (0 = off)
+├── sort_order (int)
+├── created_at
+└── updated_at
+
+space_text_channel_placements
+├── space_id (FK)
+├── chat_id — UUID строки chats (Chat Service), type=channel
+├── category_id (FK, nullable)
 ├── sort_order (int)
 ├── is_system (bool)
 ├── created_at
@@ -142,7 +150,7 @@ audit_log
 ├── id (UUID)
 ├── space_id (FK)
 ├── actor_profile_id
-├── action (string — channel_created, member_banned, role_updated, ...)
+├── action (string — voice_room_created, text_channel_placed, member_banned, role_updated, ...)
 ├── target_type (string)
 ├── target_id (UUID)
 ├── details (jsonb)
@@ -159,14 +167,17 @@ audit_log
 | `space.member_joined`   | space_id, profile_id            |
 | `space.member_left`     | space_id, profile_id            |
 | `space.member_banned`   | space_id, account_id, banned_by |
-| `space.channel_created` | space_id, channel_id, type      |
-| `space.channel_deleted` | space_id, channel_id            |
+| `space.voice_room_created`   | space_id, voice_room_id         |
+| `space.voice_room_deleted`   | space_id, voice_room_id         |
+| `space.text_channel_placed`  | space_id, chat_id               |
+| `space.text_channel_removed` | space_id, chat_id               |
 | `space.invite_created`  | space_id, invite_code           |
 
 ## Зависимости
 
-- **Role Service** — проверка прав при операциях
-- **Subscription Service** — лимиты каналов и участников (free vs Pro)
+- **Chat Service** — создание/удаление строки текстового канала (`chats`); Space только плейсмент
+- **Role Service** — проверка прав при операциях (в т.ч. оверрайды по `chat_id` и `voice_room_id`)
+- **Subscription Service** — лимиты узлов дерева (текст + голос) и участников (free vs Pro)
 - **User Service** — профили участников
 - **Social Service** — проверка блокировок при join
 

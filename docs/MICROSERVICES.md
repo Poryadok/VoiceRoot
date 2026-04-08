@@ -10,10 +10,10 @@ Voice — распределённая система из 20 микросерв
 | 2  | Auth Service         | Java | Регистрация, логин, JWT, 2FA, гостевые аккаунты    | [подробнее](microservices/auth-service.md)         |
 | 3  | User Service         | Go   | Профили, мульти-профили, настройки, приватность    | [подробнее](microservices/user-service.md)         |
 | 4  | Social Service       | Go   | Друзья, контакты, блокировки                       | [подробнее](microservices/social-service.md)       |
-| 5  | Chat Service         | Go   | DM и группы — создание, участники, папки           | [подробнее](microservices/chat-service.md)         |
+| 5  | Chat Service         | Go   | DM, группы, текстовые каналы — создание, участники, папки | [подробнее](microservices/chat-service.md)         |
 | 6  | Messaging Service    | Go   | Сообщения, треды, реакции, пины, пересылка         | [подробнее](microservices/messaging-service.md)    |
 | 7  | Realtime Service     | Go   | WebSocket-шлюз, fan-out событий, typing indicators | [подробнее](microservices/realtime-service.md)     |
-| 8  | Space Service        | Go   | Пространства, каналы, категории, инвайты           | [подробнее](microservices/space-service.md)        |
+| 8  | Space Service        | Go   | Пространства, дерево (текст → Chat, голос), инвайты | [подробнее](microservices/space-service.md)        |
 | 9  | Role Service         | Go   | Роли, права, иерархия, канальные оверрайды         | [подробнее](microservices/role-service.md)         |
 | 10 | Voice Service        | Go   | Голос, видео, screen share, LiveKit                | [подробнее](microservices/voice-service.md)        |
 | 11 | File Service         | Go   | Загрузка, хранение, конвертация, антивирус         | [подробнее](microservices/file-service.md)         |
@@ -159,7 +159,7 @@ Federation ──gRPC bidirectional stream──► External Node
 | Social        | friend_added, friend_removed, contact_synced, user_blocked           |
 | Messaging     | message_sent, message_edited, message_deleted, reaction_added        |
 | Voice         | call_started, call_ended, call_duration, screen_share_started        |
-| Spaces        | space_created, space_joined, space_left, channel_created             |
+| Spaces        | space_created, space_joined, space_left, voice_room_created, text_channel_placed |
 | Matchmaking   | search_started, match_found, match_timeout, rating_submitted         |
 | Files         | file_uploaded, file_downloaded, file_converted, file_scan_result     |
 | Moderation    | report_created, sanction_applied, appeal_submitted                   |
