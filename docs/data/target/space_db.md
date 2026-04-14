@@ -46,37 +46,45 @@
 
 ## `voice_rooms`
 
-Голосовые комнаты в дереве спейса (медиа — Voice / LiveKit). **Не** путать с текстовым каналом: сообщения идут в Messaging с `chat_id` из **`chat_db.chats`** (`type = channel`), см. [DATA_MODEL.md](../../DATA_MODEL.md).
+Сущность **голосовой комнаты** в спейсе (медиа — Voice / LiveKit). **Не** путать с текстовым чатом: сообщения идут в Messaging с `chat_id` из **`chat_db.chats`**, см. [DATA_MODEL.md](../../DATA_MODEL.md).
+
+Здесь только **идентичность и владелец** комнаты (`space_id`, имя). **Категория, порядок в sidebar и соседство с текстовыми чатами** задаются в **`space_tree_nodes`** — один слой дерева для голоса и текста.
 
 | Колонка      | Тип           | Описание                                       |
 |--------------|---------------|------------------------------------------------|
-| `id`         | `UUID`        | PK — в Role оверрайдах и Voice как `channel_id` для голоса |
+| `id`         | `UUID`        | PK — в Role оверрайдах и Voice как `voice_room_id` |
 | `space_id`   | `UUID`        | NOT NULL, FK → `spaces(id)` ON DELETE CASCADE  |
-| `category_id`| `UUID`        | NULL, FK → `categories(id)` ON DELETE SET NULL |
 | `name`       | `TEXT`        | NOT NULL                                       |
-| `sort_order` | `INT`         | NOT NULL, DEFAULT 0                            |
 | `created_at` | `TIMESTAMPTZ` | NOT NULL                                       |
 | `updated_at` | `TIMESTAMPTZ` | NOT NULL                                       |
 
-**Индексы:** `(space_id, sort_order)`.
+**Индексы:** `(space_id)`; опционально `(space_id, name)`.
 
 ---
 
-## `space_text_channel_placements`
+## `space_tree_nodes`
 
-Позиция **текстового канала** в дереве спейса. Источник текста и сообщений — **`chat_db.chats`** с `type = channel` и тем же `space_id`, что у спейса; здесь только категория, порядок, системность.
+**Упорядоченные узлы дерева** спейса в боковой панели: и **текстовые** чаты (`group` \| `channel`), и **голосовые** комнаты. Одна строка — один видимый узел; `sort_order` и `category_id` относятся ко **всем** типам одинаково.
 
-| Колонка             | Тип           | Описание                                                         |
-|---------------------|---------------|------------------------------------------------------------------|
-| `space_id`          | `UUID`        | NOT NULL, FK → `spaces(id)` ON DELETE CASCADE                    |
-| `chat_id`           | `UUID`        | NOT NULL — логически `chats.id` из Chat Service (**без FK**)     |
-| `category_id`       | `UUID`        | NULL, FK → `categories(id)` ON DELETE SET NULL                   |
-| `sort_order`        | `INT`         | NOT NULL, DEFAULT 0                                              |
-| `is_system`         | `BOOLEAN`     | NOT NULL, DEFAULT false                                          |
-| `created_at`        | `TIMESTAMPTZ` | NOT NULL                                                         |
-| `updated_at`        | `TIMESTAMPTZ` | NOT NULL                                                         |
+| Колонка         | Тип           | Описание                                                                 |
+|-----------------|---------------|--------------------------------------------------------------------------|
+| `id`            | `UUID`        | PK                                                                       |
+| `space_id`      | `UUID`        | NOT NULL, FK → `spaces(id)` ON DELETE CASCADE                            |
+| `category_id`   | `UUID`        | NULL, FK → `categories(id)` ON DELETE SET NULL                           |
+| `kind`          | `TEXT`        | NOT NULL, `text_chat` \| `voice_room`                                    |
+| `chat_id`       | `UUID`        | NULL — при `kind = text_chat`: `chat_db.chats.id` (**без FK** наружу)    |
+| `voice_room_id` | `UUID`        | NULL — при `kind = voice_room`: FK → `voice_rooms(id)` ON DELETE CASCADE |
+| `sort_order`    | `INT`         | NOT NULL, DEFAULT 0 — порядок среди узлов (в категории / в корне)        |
+| `is_system`     | `BOOLEAN`     | NOT NULL, DEFAULT false — только для `text_chat` (системный чат объявлений) |
+| `created_at`    | `TIMESTAMPTZ` | NOT NULL                                                                 |
+| `updated_at`    | `TIMESTAMPTZ` | NOT NULL                                                                 |
 
-**Индексы / ограничения:** `UNIQUE (space_id, chat_id)`; `(space_id, sort_order)`.
+**Инварианты (CHECK в миграции):**
+
+- ровно одна ссылка: либо (`kind = text_chat` и `chat_id` NOT NULL и `voice_room_id` IS NULL), либо (`kind = voice_room` и наоборот);
+- `is_system = true` допустимо только при `kind = text_chat`.
+
+**Индексы / ограничения:** частичный `UNIQUE (space_id, chat_id) WHERE chat_id IS NOT NULL`; частичный `UNIQUE (space_id, voice_room_id) WHERE voice_room_id IS NOT NULL`; `(space_id, category_id, sort_order)` для сортировки и reorder.
 
 ---
 
@@ -151,7 +159,7 @@
 | `id`              | `UUID`        | PK                                     |
 | `name`            | `TEXT`        | NOT NULL                               |
 | `description`     | `TEXT`        | NULL                                   |
-| `template_config` | `JSONB`       | NOT NULL — категории, плейсменты текстовых каналов, голосовые комнаты (см. [DATA_MODEL.md](../../DATA_MODEL.md)) |
+| `template_config` | `JSONB`       | NOT NULL — категории и узлы дерева (`space_tree_nodes`: текст + голос), см. [DATA_MODEL.md](../../DATA_MODEL.md) |
 | `is_system`       | `BOOLEAN`     | NOT NULL, DEFAULT false                |
 | `created_at`      | `TIMESTAMPTZ` | NOT NULL                               |
 

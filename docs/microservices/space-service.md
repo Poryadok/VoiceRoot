@@ -2,7 +2,7 @@
 
 ## Обзор
 
-Управление пространствами (аналог Discord-серверов): дерево (**плейсменты текстовых каналов** → `chat_id` из Chat, **голосовые комнаты**), категории, инвайты, участники, шаблоны.
+Управление пространствами (аналог Discord-серверов): **дерево sidebar** — единая таблица **`space_tree_nodes`** (текстовые чаты `group`/`channel` и **голосовые комнаты** в одном порядке сортировки), категории, инвайты, участники, шаблоны.
 
 **Язык**: Go
 **БД**: PostgreSQL `space_db`
@@ -11,18 +11,18 @@
 
 - CRUD пространств
 - Видимость: public / invite-only / private
-- Категории; **голосовые комнаты** (`voice_rooms`); **места текстовых каналов** в дереве (`space_text_channel_placements` → Chat)
+- Категории; **голосовые комнаты** (`voice_rooms` — сущность); **дерево** — `space_tree_nodes` (`kind`: текстовый чат → `chat_id` из Chat, или голос → `voice_room_id`)
 - Системный канал (welcome, rules)
 - Инвайт-ссылки (expiry, usage limits)
 - Проверка при входе (phone / CAPTCHA / вопросы / ручное одобрение)
 - Участники (join, leave, ban, kick)
-- Лимиты: 50 каналов free / 500 Pro; 50 участников free / 5000 Pro
+- Лимиты: **50 узлов дерева** (текст + голос в сумме) free / 500 Pro; 50 участников free / 5000 Pro
 - Каталог публичных пространств (поиск, ранжирование)
 - Space-level matchmaking конфигурация
 - Шаблоны пространств
-- Аудит-лог действий (создание каналов, баны, изменение ролей)
+- Аудит-лог действий (узлы дерева, голосовые комнаты, баны, изменение ролей)
 - Передача владения
-- Slow mode на уровне текстового канала — в данных **Chat** (`chats.slow_mode_seconds`); Space может дублировать отображение/кэш при необходимости
+- Slow mode на уровне текстового чата (`group` \| `channel`) — в данных **Chat** (`chats.slow_mode_seconds`); Space может дублировать отображение/кэш при необходимости
 - Бан пользователя (с сохранением сообщений)
 
 ## API (gRPC)
@@ -37,17 +37,16 @@ service SpaceService {
   rpc ListMySpaces(ListMySpacesRequest) returns (SpaceList);
   rpc SearchPublicSpaces(SearchRequest) returns (SpaceList);
 
-  // Голосовые комнаты и плейсменты текстовых каналов (текстовая сущность — Chat)
+  // Голосовые комнаты (сущность) + дерево sidebar (текст и голос в одном слое)
   rpc CreateVoiceRoom(CreateVoiceRoomRequest) returns (VoiceRoom);
   rpc UpdateVoiceRoom(UpdateVoiceRoomRequest) returns (VoiceRoom);
-  rpc DeleteVoiceRoom(DeleteVoiceRoomRequest) returns (Empty);
-  rpc PlaceTextChannel(PlaceTextChannelRequest) returns (TextChannelPlacement); // chat_id от Chat
-  rpc UpdateTextChannelPlacement(UpdateTextChannelPlacementRequest) returns (TextChannelPlacement);
-  rpc RemoveTextChannelFromSpace(RemoveTextChannelFromSpaceRequest) returns (Empty);
+  rpc DeleteVoiceRoom(DeleteVoiceRoomRequest) returns (Empty); // каскад на узел в space_tree_nodes
+  rpc UpsertTreeNode(UpsertTreeNodeRequest) returns (SpaceTreeNode); // text_chat (chat_id) или voice_room (voice_room_id)
+  rpc RemoveTreeNode(RemoveTreeNodeRequest) returns (Empty);
   rpc CreateCategory(CreateCategoryRequest) returns (Category);
   rpc UpdateCategory(UpdateCategoryRequest) returns (Category);
   rpc DeleteCategory(DeleteCategoryRequest) returns (Empty);
-  rpc ReorderSpaceTree(ReorderRequest) returns (Empty); // голосовые комнаты + плейсменты текстовых каналов
+  rpc ReorderSpaceTree(ReorderRequest) returns (Empty); // только space_tree_nodes: порядок и категории для текста и голоса
 
   // Инвайты
   rpc CreateInvite(CreateInviteRequest) returns (Invite);
@@ -98,18 +97,19 @@ spaces
 voice_rooms
 ├── id (UUID)
 ├── space_id (FK)
-├── category_id (FK, nullable)
 ├── name
-├── sort_order (int)
 ├── created_at
 └── updated_at
 
-space_text_channel_placements
+space_tree_nodes
+├── id (UUID)
 ├── space_id (FK)
-├── chat_id — UUID строки chats (Chat Service), type=channel
 ├── category_id (FK, nullable)
+├── kind (text_chat | voice_room)
+├── chat_id (nullable — Chat, group|channel)
+├── voice_room_id (nullable — FK → voice_rooms)
 ├── sort_order (int)
-├── is_system (bool)
+├── is_system (bool — только text_chat)
 ├── created_at
 └── updated_at
 
@@ -150,7 +150,7 @@ audit_log
 ├── id (UUID)
 ├── space_id (FK)
 ├── actor_profile_id
-├── action (string — voice_room_created, text_channel_placed, member_banned, role_updated, ...)
+├── action (string — voice_room_created, tree_node_upserted, tree_node_removed, member_banned, role_updated, ...)
 ├── target_type (string)
 ├── target_id (UUID)
 ├── details (jsonb)
@@ -169,14 +169,14 @@ audit_log
 | `space.member_banned`   | space_id, account_id, banned_by |
 | `space.voice_room_created`   | space_id, voice_room_id         |
 | `space.voice_room_deleted`   | space_id, voice_room_id         |
-| `space.text_channel_placed`  | space_id, chat_id               |
-| `space.text_channel_removed` | space_id, chat_id               |
+| `space.tree_node_upserted`   | space_id, node_id, kind, chat_id?, voice_room_id? |
+| `space.tree_node_removed`    | space_id, node_id               |
 | `space.invite_created`  | space_id, invite_code           |
 
 ## Зависимости
 
-- **Chat Service** — создание/удаление строки текстового канала (`chats`); Space только плейсмент
-- **Role Service** — проверка прав при операциях (в т.ч. оверрайды по `chat_id` и `voice_room_id`)
+- **Chat Service** — создание/удаление строки текстового чата (`chats`, `group` \| `channel`); Space ведёт **`space_tree_nodes`** (`kind = text_chat`)
+- **Role Service** — проверка прав при операциях (в т.ч. `chat_overrides` по `chat_id` и `voice_room_overrides`)
 - **Subscription Service** — лимиты узлов дерева (текст + голос) и участников (free vs Pro)
 - **User Service** — профили участников
 - **Social Service** — проверка блокировок при join

@@ -16,7 +16,7 @@
 - Polling mode (для разработки)
 - HMAC-SHA256 подпись webhook запросов
 - Scopes: send_messages, send_dm, read_members, manage_roles, manage_channels, read_messages (privileged)
-- Per-channel whitelist (бот работает только в разрешённых каналах)
+- Per-chat whitelist (бот работает только в разрешённых текстовых чатах: `group` \| `channel`)
 - Rate limits: 5000 API req/min, 10 channel creation/day
 - Bot token: перманентный, ручной отзыв
 - Bot DM: только в ответ на сообщение пользователя (v1)
@@ -43,9 +43,9 @@ service BotService {
   rpc SetWebhookURL(SetWebhookURLRequest) returns (Empty);
   rpc GetWebhookURL(GetWebhookURLRequest) returns (WebhookURLResponse);
 
-  // Channel whitelist
-  rpc SetChannelWhitelist(SetWhitelistRequest) returns (Empty);
-  rpc GetChannelWhitelist(GetWhitelistRequest) returns (WhitelistResponse);
+  // Chat whitelist (chats.id, group | channel)
+  rpc SetChatWhitelist(SetWhitelistRequest) returns (Empty);
+  rpc GetChatWhitelist(GetWhitelistRequest) returns (WhitelistResponse);
 
   // Bot actions (вызывается ботом через REST API)
   rpc SendBotMessage(SendBotMessageRequest) returns (Message);
@@ -85,12 +85,12 @@ bot_commands
 ├── created_at
 └── updated_at
 
-bot_channel_whitelist
+bot_chat_whitelist
 ├── bot_id (FK)
-├── channel_id (FK)
+├── chat_id (FK) -- chats.id, type = group | channel
 ├── added_by (profile_id)
 ├── added_at
-└── UNIQUE(bot_id, channel_id)
+└── UNIQUE(bot_id, chat_id)
 
 bot_event_log
 ├── id (UUID)
@@ -106,11 +106,11 @@ bot_event_log
 ## Webhook доставка
 
 ```
-Event (NATS: message in whitelisted channel) ──► Bot Service
+Event (NATS: message in whitelisted chat) ──► Bot Service
   │
   ├─► Sign payload with HMAC-SHA256
   ├─► POST to webhook_url (3 sec timeout)
-  │     ├─► 200 OK with response → deliver to channel
+  │     ├─► 200 OK with response → deliver to chat
   │     ├─► 200 OK with deferred → send "thinking..." → wait for follow-up
   │     └─► Timeout/Error → retry (3 attempts, exponential backoff)
   │
@@ -122,16 +122,16 @@ Event (NATS: message in whitelisted channel) ──► Bot Service
 | Событие                 | Данные                               |
 |-------------------------|--------------------------------------|
 | `bot.registered`        | bot_id, owner_id, name               |
-| `bot.command_executed`  | bot_id, command, channel_id, user_id |
+| `bot.command_executed`  | bot_id, command, chat_id, user_id |
 | `bot.webhook_delivered` | bot_id, event_type, latency_ms       |
 | `bot.webhook_failed`    | bot_id, event_type, error            |
 
 ## Зависимости
 
 - **Messaging Service** — отправка сообщений от имени бота
-- **Role Service** — проверка scopes бота в контексте канала
-- **Chat Service** — `channel_id` в whitelist = `chats.id` (`type = channel`)
-- **Space Service** — при ботах только в спейсе: канал числится в дереве спейса
+- **Role Service** — проверка scopes бота в контексте чата
+- **Chat Service** — `chat_id` в whitelist = `chats.id` (`type` = `group` \| `channel`)
+- **Space Service** — при ботах в спейсе: чат числится в дереве (`space_tree_nodes`, `kind=text_chat`)
 - **NATS** — получение событий для доставки ботам
 
 

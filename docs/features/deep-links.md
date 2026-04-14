@@ -19,35 +19,44 @@
 voice://s/{spaceId}
 https://voice.gg/s/{spaceId}
 ```
-Открывает спейс: дефолтный **текстовый канал** (политика клиента, например первый доступный) или экран вступления, если пользователь не участник.
+Открывает спейс: дефолтный **текстовый чат** (канал или группа — политика клиента, например первый доступный) или экран вступления, если пользователь не участник.
 
-### Узел дерева спейса (текстовый канал или голосовая комната)
-
-`{channelId}` — UUID **текстового канала** (`chats.id`, `type = channel`) **или** **голосовой комнаты** (`voice_rooms.id`); клиент различает по снимку дерева спейса.
+### Текстовый чат в спейсе (группа или канал)
 
 ```
-voice://s/{spaceId}/c/{channelId}
-https://voice.gg/s/{spaceId}/c/{channelId}
+voice://s/{spaceId}/c/{chatId}
+https://voice.gg/s/{spaceId}/c/{chatId}
 ```
 
-### Конкретное сообщение (только текстовый канал)
+`{chatId}` — UUID строки `chat_db.chats.id` с `type = group` или `type = channel`.
 
-`{channelId}` здесь — **`chats.id`** потока сообщений.
+### Голосовая комната в спейсе
 
 ```
-voice://s/{spaceId}/c/{channelId}/m/{messageId}
-https://voice.gg/s/{spaceId}/c/{channelId}/m/{messageId}
+voice://s/{spaceId}/v/{voiceRoomId}
+https://voice.gg/s/{spaceId}/v/{voiceRoomId}
+```
+
+`{voiceRoomId}` — UUID строки `space_db.voice_rooms.id`.
+
+### Конкретное сообщение в текстовом чате спейса
+
+`{chatId}` здесь — **`chat_db.chats.id`** потока сообщений (`group` \| `channel`).
+
+```
+voice://s/{spaceId}/c/{chatId}/m/{messageId}
+https://voice.gg/s/{spaceId}/c/{chatId}/m/{messageId}
 ```
 Открывает чат, скроллит к сообщению и подсвечивает его.
 
-### Текстовый канал вне спейса
+### Текстовый чат вне спейса (группа или канал)
 
 ```
 voice://ch/{chatId}
 https://voice.gg/ch/{chatId}
 ```
 
-### Сообщение в канале вне спейса
+### Сообщение в текстовом чате вне спейса
 
 ```
 voice://ch/{chatId}/m/{messageId}

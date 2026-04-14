@@ -2,7 +2,7 @@
 
 ## Обзор
 
-CRUD сообщений для всех типов чатов (DM, группы, каналы пространств). Треды, реакции, пины, пересылка, read receipts.
+CRUD сообщений для всех типов чатов (DM, текстовые группы и каналы — как в спейсе, так и standalone). Треды, реакции, пины, пересылка, read receipts.
 
 **Язык**: Go
 **БД**: PostgreSQL `messaging_db`
@@ -62,8 +62,8 @@ messages
 ├── chat_id (всегда chat_db.chats.id для dm | group | channel)
 ├── chat_type (dm | group | channel)
 ├── sender_profile_id (всегда реальный автор-профиль)
-├── posted_as_channel (bool, default false)
-├── display_channel_id (nullable, chats.id; обязателен при posted_as_channel=true)
+├── posted_as_chat (bool, default false)
+├── display_chat_id (nullable, chats.id; обязателен при posted_as_chat=true)
 ├── content (text, 4000 chars)
 ├── type (regular | system | forward)
 ├── thread_parent_id (nullable, FK → messages)
@@ -109,7 +109,7 @@ read_receipts
 └── UNIQUE(chat_id, profile_id)
 ```
 
-Правило для канала: в аудитном следе и правах всегда используется `sender_profile_id`; отображение "пост от имени канала" задаётся через `posted_as_channel=true` и `display_channel_id=<channel chats.id>`.
+Правило для сообщений: в аудитном следе и правах всегда используется `sender_profile_id`; отображение «от имени чата» (группа или канал) — через `posted_as_chat=true` и `display_chat_id=<chats.id>` (обычно совпадает с `chat_id`). Разрешено ли так писать и в основную ленту — **настройки чата и роли**.
 
 ## Публикуемые события (→ NATS)
 
@@ -126,7 +126,7 @@ read_receipts
 
 - **Chat Service** — валидация членства / доступа для **DM**, **группы**, **канала** (в т.ч. standalone)
 - **Space Service** — если у `chats.space_id` задан спейс: членство в спейсе (для канала и группы в спейсе)
-- **Role Service** — проверка прав в спейсе для **текстового канала** (`channel_id` = `chats.id`) и согласованных сценариев для группы в спейсе (если включено в продукт)
+- **Role Service** — проверка прав в спейсе для текстового чата (`chat_id` = `chats.id`, `group` \| `channel`)
 - **Social Service** — проверка блокировок
 - **File Service** — привязка вложений
 - **Realtime Service** — (через NATS) уведомление о новых сообщениях для WebSocket fan-out

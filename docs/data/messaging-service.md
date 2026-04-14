@@ -2,7 +2,7 @@
 
 Владелец: Messaging Service ([microservices/messaging-service.md](../microservices/messaging-service.md)). Скоуп v1: [DATA_SCOPE_V1.md](../DATA_SCOPE_V1.md) — сообщения + read receipts; **без** реакций, пинов, тредов как функционала.
 
-`chat_id` — для **DM**, **группы** и **канала** всегда UUID из **`chat_db.chats`**. **FK наружу нет**. `sender_profile_id` — UUID из `user_db` (всегда реальный автор); **FK наружу нет**. Для режима "пост от имени канала" используются отдельные поля `posted_as_channel` + `display_channel_id` (без подмены автора). Целевая полная схема: [data/target/messaging_db.md](target/messaging_db.md).
+`chat_id` — для **DM**, **группы** и **канала** всегда UUID из **`chat_db.chats`**. **FK наружу нет**. `sender_profile_id` — UUID из `user_db` (всегда реальный автор); **FK наружу нет**. Для режима «пост от имени чата» (группа или канал) используются поля `posted_as_chat` + `display_chat_id` (без подмены автора в аудите). Целевая полная схема: [data/target/messaging_db.md](target/messaging_db.md).
 
 Идентификатор сообщения: **только UUIDv7** (тип PostgreSQL `UUID`). Значение генерирует **Messaging Service на Go** при создании сообщения (библиотека с поддержкой UUIDv7); в БД не полагаемся на `DEFAULT` для этого PK. Иные форматы (ULID и т.д.) не используем — см. [DATA_MODEL.md](../DATA_MODEL.md).
 
@@ -18,8 +18,8 @@
 | `chat_id`             | `UUID`        | NOT NULL — см. семантику DM/group vs channel в начале файла                                        |
 | `chat_type`           | `TEXT`        | NOT NULL, DEFAULT `'dm'`, `CHECK (chat_type IN ('dm', 'group', 'channel'))` — в v1 фактически `dm` |
 | `sender_profile_id`   | `UUID`        | NOT NULL                                                                                           |
-| `posted_as_channel`   | `BOOLEAN`     | NOT NULL, DEFAULT false — режим отображения "от имени канала"                                      |
-| `display_channel_id`  | `UUID`        | NULL — `chat_db.chats.id` (`type=channel`), обязателен при `posted_as_channel = true`              |
+| `posted_as_chat`      | `BOOLEAN`     | NOT NULL, DEFAULT false — режим отображения «от имени чата» (`group` \| `channel`)                  |
+| `display_chat_id`     | `UUID`        | NULL — `chat_db.chats.id`, обязателен при `posted_as_chat = true`                                 |
 | `content`             | `TEXT`        | NOT NULL — лимит 4000 символов в приложении                                                        |
 | `type`                | `TEXT`        | NOT NULL, DEFAULT `'regular'`, `CHECK (type IN ('regular', 'system', 'forward'))`                  |
 | `thread_parent_id`    | `UUID`        | NULL — **колонка допускается**, FK внутри таблицы включать только когда треды в скоупе             |
@@ -39,7 +39,7 @@
 
 **FK внутри БД:** при включении тредов — `thread_parent_id REFERENCES messages(id)` отдельной миграцией.
 
-**Инвариант:** `sender_profile_id` всегда профиль реального автора; для сообщений "от имени канала" добавляется `posted_as_channel=true`, `display_channel_id=<channel chats.id>`.
+**Инвариант:** `sender_profile_id` всегда профиль реального автора; для сообщений «от имени чата» добавляется `posted_as_chat=true`, `display_chat_id=<chats.id>`.
 
 ---
 

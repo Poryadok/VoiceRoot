@@ -44,16 +44,16 @@
 
 ---
 
-## `bot_channel_whitelist`
+## `bot_chat_whitelist`
 
 | Колонка               | Тип           | Описание                                    |
 |-----------------------|---------------|---------------------------------------------|
 | `bot_id`              | `UUID`        | NOT NULL, FK → `bots(id)` ON DELETE CASCADE |
-| `channel_id`          | `UUID`        | NOT NULL                                    |
+| `chat_id`             | `UUID`        | NOT NULL — `chat_db.chats.id`, `type` = `group` \| `channel` |
 | `added_by_profile_id` | `UUID`        | NOT NULL                                    |
 | `added_at`            | `TIMESTAMPTZ` | NOT NULL                                    |
 
-**Индексы:** `PRIMARY KEY (bot_id, channel_id)`; `(channel_id)`.
+**Индексы:** `PRIMARY KEY (bot_id, chat_id)`; `(chat_id)`.
 
 ---
 

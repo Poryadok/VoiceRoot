@@ -4,7 +4,7 @@
 
 `creator_profile_id` и `profile_id` в участниках — UUID из `user_db`; **FK наружу нет**.
 
-Текстовые каналы — строки **`chats`** с `type = channel` (в т.ч. вне спейса и с `space_id`); сообщения в Messaging с тем же `chat_id`. Плейсмент в дереве спейса — `space_db.space_text_channel_placements`. См. [DATA_MODEL.md](../DATA_MODEL.md) и [data/target/chat_db.md](target/chat_db.md).
+Текстовые **группы** и **каналы** — строки **`chats`** с `type = group` \| `type = channel` (в т.ч. вне спейса и с `space_id`); сообщения в Messaging с тем же `chat_id`. Позиция в sidebar спейса — **`space_db.space_tree_nodes`** (`kind = text_chat`). См. [DATA_MODEL.md](../DATA_MODEL.md) и [data/target/chat_db.md](target/chat_db.md).
 
 ---
 

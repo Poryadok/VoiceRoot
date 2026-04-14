@@ -2,7 +2,7 @@
 
 **Сервис:** Role ([role-service.md](../../microservices/role-service.md)). **Шаг порядка:** 6.
 
-`space_id` — спейс (**без FK**). **`channel_id` в оверрайдах:** для **текстового канала** в спейсе = **`chat_db.chats.id`** (`type = channel`); для **голосовой комнаты** = **`space_db.voice_rooms.id`**. Валидация — Role Service через вызовы Chat / Space (**без FK**). `profile_id` → User (**без FK**).
+`space_id` — спейс (**без FK**). В оверрайдах используем **раздельные идентификаторы**: `chat_id` для текстового чата в спейсе (`chat_db.chats.id`, `type` = `group` или `channel`) и `voice_room_id` для голоса (`space_db.voice_rooms.id`). Валидация — Role Service через вызовы Chat / Space (**без FK**). `profile_id` → User (**без FK**).
 
 ---
 
@@ -39,16 +39,29 @@
 
 ---
 
-## `channel_overrides`
+## `chat_overrides`
 
-| Колонка      | Тип      | Описание                                                                 |
-|--------------|----------|--------------------------------------------------------------------------|
-| `channel_id` | `UUID`   | NOT NULL — текстовый канал: `chats.id`; голос: `voice_rooms.id`          |
-| `role_id`    | `UUID`   | NOT NULL, FK → `roles(id)` ON DELETE CASCADE |
-| `allow`      | `BIGINT` | NOT NULL, DEFAULT 0                          |
-| `deny`       | `BIGINT` | NOT NULL, DEFAULT 0                          |
+| Колонка   | Тип      | Описание                                     |
+|-----------|----------|----------------------------------------------|
+| `chat_id` | `UUID`   | NOT NULL — `chat_db.chats.id`, `type` = `group` или `channel` |
+| `role_id` | `UUID`   | NOT NULL, FK → `roles(id)` ON DELETE CASCADE |
+| `allow`   | `BIGINT` | NOT NULL, DEFAULT 0                          |
+| `deny`    | `BIGINT` | NOT NULL, DEFAULT 0                          |
 
-**Индексы:** `PRIMARY KEY (channel_id, role_id)`.
+**Индексы:** `PRIMARY KEY (chat_id, role_id)`.
+
+---
+
+## `voice_room_overrides`
+
+| Колонка         | Тип      | Описание                                    |
+|-----------------|----------|---------------------------------------------|
+| `voice_room_id` | `UUID`   | NOT NULL — `space_db.voice_rooms.id`        |
+| `role_id`       | `UUID`   | NOT NULL, FK → `roles(id)` ON DELETE CASCADE |
+| `allow`         | `BIGINT` | NOT NULL, DEFAULT 0                         |
+| `deny`          | `BIGINT` | NOT NULL, DEFAULT 0                         |
+
+**Индексы:** `PRIMARY KEY (voice_room_id, role_id)`.
 
 ---
 
@@ -57,7 +70,7 @@
 Между `role_db` и `space_db` нет FK. При удалении спейса (hard или финальный soft по политике продукта) **Space Service** публикует доменное событие (например `space.deleted` в NATS). **Role Service** обрабатывает его **идемпотентно**:
 
 1. Удалить все `roles` с данным `space_id` (или пометить спейс недоступным до purge — по политике).
-2. Каскадно удалятся строки `member_roles` и `channel_overrides`, ссылающиеся на эти `roles` (FK внутри БД).
+2. Каскадно удалятся строки `member_roles`, `chat_overrides` и `voice_room_overrides`, ссылающиеся на эти `roles` (FK внутри БД).
 
 Повторная доставка события не должна приводить к ошибкам. Порядок относительно Messaging/File — см. саги и миграции в [OPERATIONS.md](../../OPERATIONS.md).
 

@@ -2,7 +2,7 @@
 
 ## Обзор
 
-Управление ролями и правами в пространствах. Иерархия ролей, гранулярные права, канальные оверрайды.
+Управление ролями и правами в пространствах. Иерархия ролей, гранулярные права, оверрайды по текстовым чатам (`group` / `channel`) и голосовым комнатам.
 
 **Язык**: Go
 **БД**: PostgreSQL `role_db`
@@ -13,7 +13,7 @@
 - Кастомные роли
 - Иерархия ролей (позиция определяет приоритет)
 - 32+ типов прав (send_messages, manage_channels, ban_members, etc.)
-- Канальные оверрайды (переопределение прав для конкретного канала)
+- Оверрайды прав для узла спейса: отдельно для текстового чата (`chat_id`) и голосовой комнаты (`voice_room_id`)
 - Назначение ролей участникам пространства
 - Верификационные роли (автоматические по статусу верификации)
 - Voice chat organizer роль
@@ -35,10 +35,13 @@ service RoleService {
   rpc RevokeRole(RevokeRoleRequest) returns (Empty);
   rpc GetMemberRoles(GetMemberRolesRequest) returns (RoleList);
 
-  // Канальные оверрайды
-  rpc SetChannelOverride(SetOverrideRequest) returns (Empty);
-  rpc RemoveChannelOverride(RemoveOverrideRequest) returns (Empty);
-  rpc GetChannelOverrides(GetOverridesRequest) returns (OverrideList);
+  // Оверрайды прав узла спейса (текстовый чат = group | channel)
+  rpc SetChatOverride(SetChatOverrideRequest) returns (Empty);
+  rpc RemoveChatOverride(RemoveChatOverrideRequest) returns (Empty);
+  rpc GetChatOverrides(GetChatOverridesRequest) returns (OverrideList);
+  rpc SetVoiceRoomOverride(SetVoiceRoomOverrideRequest) returns (Empty);
+  rpc RemoveVoiceRoomOverride(RemoveVoiceRoomOverrideRequest) returns (Empty);
+  rpc GetVoiceRoomOverrides(GetVoiceRoomOverridesRequest) returns (OverrideList);
 
   // Проверка прав (internal, вызывается другими сервисами)
   rpc CheckPermission(CheckPermissionRequest) returns (CheckPermissionResponse);
@@ -101,12 +104,19 @@ member_roles
 ├── assigned_by (profile_id)
 └── UNIQUE(space_id, profile_id, role_id)
 
-channel_overrides
-├── channel_id (FK)
+chat_overrides
+├── chat_id (FK) -- chats.id, type = group | channel
 ├── role_id (FK)
 ├── allow (bigint bitmask) -- явно разрешённые права
 ├── deny (bigint bitmask)  -- явно запрещённые права
-└── UNIQUE(channel_id, role_id)
+└── UNIQUE(chat_id, role_id)
+
+voice_room_overrides
+├── voice_room_id (FK)
+├── role_id (FK)
+├── allow (bigint bitmask) -- явно разрешённые права
+├── deny (bigint bitmask)  -- явно запрещённые права
+└── UNIQUE(voice_room_id, role_id)
 ```
 
 ## Вычисление effective permissions
@@ -116,9 +126,9 @@ channel_overrides
 2. Base = @everyone (Member) permissions
 3. Для каждой роли пользователя (по позиции):
    Base |= role.permissions
-4. Применить канальные оверрайды:
-   Base &= ~channel_override.deny
-   Base |= channel_override.allow
+4. Применить оверрайды целевого узла (chat или voice_room):
+   Base &= ~node_override.deny
+   Base |= node_override.allow
 5. Admin → все права кроме Owner-specific
 ```
 
@@ -131,12 +141,13 @@ channel_overrides
 | `role.deleted`      | space_id, role_id                 |
 | `role.assigned`     | space_id, profile_id, role_id     |
 | `role.revoked`      | space_id, profile_id, role_id     |
-| `role.override_set` | channel_id, role_id               |
+| `role.chat_override_set`  | chat_id, role_id       |
+| `role.voice_override_set` | voice_room_id, role_id |
 
 ## Зависимости
 
 - **Space Service** — валидация `space_id`, `voice_room_id`
-- **Chat Service** — валидация `chat_id` для текстового канала при оверрайдах
+- **Chat Service** — валидация `chat_id` для текстового чата (`group` \| `channel`) при оверрайдах
 - **Federation Service** — синхронизация ролей при S2S (SyncSnapshot)
 
 

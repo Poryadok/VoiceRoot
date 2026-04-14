@@ -19,7 +19,7 @@
 | 3   | Social       | `social_db`               | `profile_id` / `account_id`                           |
 | 4   | Chat         | `chat_db`                 | `profile_id`                                          |
 | 5   | Space        | `space_db`                | `profile_id`                                          |
-| 6   | Role         | `role_db`                 | `space_id`, `channel_id` (текст → Chat, голос → Space) |
+| 6   | Role         | `role_db`                 | `space_id`, `chat_id` (текст) и `voice_room_id` (голос) |
 | 7   | Subscription | `subscription_db`         | `account_id`; `space_id` для Space Pro                |
 | 8   | File         | `file_db`                 | `profile_id`; опционально `chat_id`                   |
 | 9   | Messaging    | `messaging_db`            | `chat_id`, `profile_id`                               |
@@ -27,7 +27,7 @@
 | 11  | Search       | `search_db`               | копия/проекция сообщений для индекса (v1: PostgreSQL) |
 | 12  | Matchmaking  | `matchmaking_db`          | `profile_id`                                          |
 | 13  | Moderation   | `moderation_db`           | цели в других сервисах по UUID                        |
-| 14  | Bot          | `bot_db`                  | `account_id`, `channel_id`, `space_id`                |
+| 14  | Bot          | `bot_db`                  | `account_id`, `chat_id`, `space_id`                   |
 | 15  | Federation   | `federation_db`           | `user_id` = account (master)                          |
 | 16  | Story        | `story_db`                | `profile_id`, `file_id`                               |
 | 17  | Analytics    | ClickHouse + Redis buffer | консьюмер событий из NATS                             |

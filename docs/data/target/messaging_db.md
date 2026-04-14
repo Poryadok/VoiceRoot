@@ -18,8 +18,8 @@
 | `chat_id`             | `UUID`        | NOT NULL                                                                                                                        |
 | `chat_type`           | `TEXT`        | `dm` \ `group` \ `channel`                                                                                                      |
 | `sender_profile_id`   | `UUID`        | NOT NULL — реальный автор (profile_id)                                                                                          |
-| `posted_as_channel`   | `BOOLEAN`     | NOT NULL, DEFAULT false — UI-режим "пост от имени канала"                                                                       |
-| `display_channel_id`  | `UUID`        | NULL — `chat_db.chats.id` (`type=channel`); обязателен, если `posted_as_channel = true`                                         |
+| `posted_as_chat`      | `BOOLEAN`     | NOT NULL, DEFAULT false — отображение сообщения **от имени чата** (сущность `group` или `channel`), а не только от профиля     |
+| `display_chat_id`     | `UUID`        | NULL — `chat_db.chats.id` (`type` = `group` или `channel`); обязателен, если `posted_as_chat = true` (обычно совпадает с `chat_id`) |
 | `content`             | `TEXT`        | NOT NULL                                                                                                                        |
 | `type`                | `TEXT`        | `regular` \ `system` \ `forward`                                                                                                |
 | `thread_parent_id`    | `UUID`        | NULL, FK → `messages(id)` ON DELETE SET NULL                                                                                    |
@@ -34,11 +34,12 @@
 
 **Индексы:** `(chat_id, id DESC)`; частичный `(chat_id, id DESC) WHERE deleted_at IS NULL`; `(thread_parent_id)` при тредах.
 
-**Инварианты авторства канала:**
+**Инварианты «от имени чата»:**
 
-- `sender_profile_id` всегда хранит реального автора действия.
-- Рендер "от имени канала" задаётся парой `posted_as_channel=true` + `display_channel_id=<channel chats.id>`.
-- Для защиты от битых данных в миграции добавить `CHECK (NOT posted_as_channel OR display_channel_id IS NOT NULL)`.
+- `sender_profile_id` всегда хранит реального автора действия (аудит, права).
+- Рендер «от имени группы/канала» задаётся парой `posted_as_chat=true` + `display_chat_id=<chats.id>` (тот же чат или явно указанный).
+- Разрешено ли писать в основную ленту от своего имени vs только «от чата» — **настройки чата и роли**, а не различие `group` / `channel` в БД. По умолчанию у **канала** в основную ленту от имени пользователя нельзя; у **группы** — можно; «официальные» посты от имени чата возможны в обоих типах при настройках/ролях.
+- Для защиты от битых данных в миграции добавить `CHECK (NOT posted_as_chat OR display_chat_id IS NOT NULL)`.
 
 ---
 

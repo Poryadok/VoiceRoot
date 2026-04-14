@@ -57,18 +57,26 @@
 
 Дублирование справочных полей (например кэш отображаемого имени) допускается осознанно для чтения; источник истины — сервис-владелец.
 
-### Текстовый канал (`chat_type = channel`)
+### Группа и канал (`chat_type = group` \| `channel`)
 
-**Текстовый канал** — это тип чата в **Chat Service**: строка в **`chat_db.chats`** с `type = channel` (режим ленты: посты от сущности канала, обсуждение в тредах). Канал может существовать **без спейса** (`space_id` пустой) или **внутри спейса** (`space_id` → спейс); во втором случае **Space** хранит только **место в дереве** (категория, порядок, флаги вроде system) — см. `space_db.space_text_channel_placements` в [data/target/space_db.md](data/target/space_db.md).
+**Группа** и **канал** — одна и та же техническая сущность: строка в **`chat_db.chats`** с `type = group` или `type = channel`. Разница — **дефолтные настройки** и пресеты ролей; смена `type` с `channel` на `group` (и обратно) должна оставлять чат рабочим — меняются только дефолты и проверки прав.
 
-- В **Messaging** / **File** / **read_receipts** поле **`chat_id` при `chat_type = channel` всегда = `chat_db.chats.id`** (как и для `dm` / `group`).
-- **`chat_type`** в `messaging_db.messages` различает только **поведение** ленты и тредов, а не владельца UUID: все три типа ссылаются на **`chats`**.
+- **Дефолт канала:** в основную ленту **нельзя** отправлять сообщения **от имени пользователя** (только «от имени чата» / треды — по настройкам). **Дефолт группы:** в основную ленту **можно** от имени пользователя; «от имени чата» — опционально (настройки + роли). Реальный автор всегда в `sender_profile_id`; режим отображения — поля `posted_as_chat` / `display_chat_id` в Messaging (см. [data/target/messaging_db.md](data/target/messaging_db.md)).
+- Чат **без спейса** (`space_id` NULL): участники в **`chat_db.chat_members`**. Чат **в спейсе**: состав **наследуется** от **`space_db.space_members`**; спейс через **Role** задаёт роли и **оверрайды** по `chat_id` / `voice_room_id`, чтобы ограничивать доступ к конкретным чатам и голосовым комнатам.
+- Чат в спейсе появляется в sidebar через узел **`space_db.space_tree_nodes`** с `kind = text_chat` и ссылкой на **`chat_db.chats.id`** (`group` \| `channel`): там же задаются **категория**, **`sort_order`** и флаг **`is_system`** (системный чат объявлений). Сообщения по-прежнему в Messaging с тем же `chat_id`.
 
-**Права:** канал **без** `space_id` — настройки и членство/доступ через **Chat** (и продуктовые правила видимости). Канал **с** `space_id` — дополнительно **членство в спейсе** и **Role** (оверрайды по `channel_id` = этот же `chats.id`). Messaging не вводит FK на чужие БД и опирается на решение Gateway/оркестрации.
+- В **Messaging** / **File** / **read_receipts** поле **`chat_id` всегда = `chat_db.chats.id`** для `dm` \| `group` \| `channel`.
+- **`chat_type`** в `messaging_db.messages` дублирует `chats.type` для индексов и политик; семантика ленты/тредов задаётся **настройками чата**, а не жёстко типом.
+
+**Права:** standalone чат — **Chat** + настройки. Чат с `space_id` — **Space** (дерево `space_tree_nodes`), **Role** (роли участника спейса + `chat_overrides` / `voice_room_overrides`). Messaging не вводит FK на чужие БД и опирается на решение Gateway/оркестрации.
+
+### Дерево спейса (`space_tree_nodes`)
+
+**Один слой сортировки** для боковой панели: текстовые чаты и голосовые комнаты — строки в **`space_db.space_tree_nodes`** с полем **`kind`** (`text_chat` \| `voice_room`), общими **`category_id`** и **`sort_order`**. Сущность голосовой комнаты (`name`, `space_id`) хранится в **`voice_rooms`**; позиция в дереве **только** в `space_tree_nodes` (у `voice_rooms` нет собственных `category_id` / `sort_order`). Подробнее — [data/target/space_db.md](data/target/space_db.md).
 
 ### Голосовые комнаты в спейсе
 
-Идентификаторы **голосовых комнат** живут в **`space_db.voice_rooms`** (отдельно от текстового потока). К **Messaging** они по умолчанию не привязаны. Оверрайды прав Role для голоса используют **`channel_id` = `voice_rooms.id`** в том же спейсе (см. [data/target/role_db.md](data/target/role_db.md)).
+Идентификаторы **голосовых комнат** живут в **`space_db.voice_rooms`** (отдельно от текстового потока Messaging). К **Messaging** они по умолчанию не привязаны. Оверрайды прав Role для голоса используют отдельный `voice_room_id = voice_rooms.id` в том же спейсе (см. [data/target/role_db.md](data/target/role_db.md)). Узел sidebar с `kind = voice_room` ссылается на тот же `voice_rooms.id`.
 
 ---
 

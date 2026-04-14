@@ -10,7 +10,7 @@ Voice — распределённая система из 20 микросерв
 | 2  | Auth Service         | Java | Регистрация, логин, JWT, 2FA, гостевые аккаунты    | [подробнее](microservices/auth-service.md)         |
 | 3  | User Service         | Go   | Профили, мульти-профили, настройки, приватность    | [подробнее](microservices/user-service.md)         |
 | 4  | Social Service       | Go   | Друзья, контакты, блокировки                       | [подробнее](microservices/social-service.md)       |
-| 5  | Chat Service         | Go   | DM, группы, текстовые каналы — создание, участники, папки | [подробнее](microservices/chat-service.md)         |
+| 5  | Chat Service         | Go   | DM, текстовые группы и каналы — создание, участники, папки | [подробнее](microservices/chat-service.md)         |
 | 6  | Messaging Service    | Go   | Сообщения, треды, реакции, пины, пересылка         | [подробнее](microservices/messaging-service.md)    |
 | 7  | Realtime Service     | Go   | WebSocket-шлюз, fan-out событий, typing indicators | [подробнее](microservices/realtime-service.md)     |
 | 8  | Space Service        | Go   | Пространства, дерево (текст → Chat, голос), инвайты | [подробнее](microservices/space-service.md)        |
@@ -159,7 +159,7 @@ Federation ──gRPC bidirectional stream──► External Node
 | Social        | friend_added, friend_removed, contact_synced, user_blocked           |
 | Messaging     | message_sent, message_edited, message_deleted, reaction_added        |
 | Voice         | call_started, call_ended, call_duration, screen_share_started        |
-| Spaces        | space_created, space_joined, space_left, voice_room_created, text_channel_placed |
+| Spaces        | space_created, space_joined, space_left, voice_room_created, tree_node_upserted |
 | Matchmaking   | search_started, match_found, match_timeout, rating_submitted         |
 | Files         | file_uploaded, file_downloaded, file_converted, file_scan_result     |
 | Moderation    | report_created, sanction_applied, appeal_submitted                   |

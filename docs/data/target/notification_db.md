@@ -28,7 +28,7 @@
 |------------------|---------------|-----------------------------------------|
 | `profile_id`     | `UUID`        | NOT NULL                                |
 | `scope_type`     | `TEXT`        | `global` \ `space` \ `channel` \ `chat` |
-| `scope_id`       | `UUID`        | NULL — при `space` → `space_id`; при `channel` → **`chats.id`** (`type = channel`); при `chat` → `chats.id` (dm/group) |
+| `scope_id`       | `UUID`        | NULL — при `space` → `space_id`; при `channel` → **`chats.id`** (текстовый `group` \| `channel`; имя scope историческое); при `chat` → `chats.id` (**только** `dm`) |
 | `enabled`        | `BOOLEAN`     | NOT NULL                                |
 | `mute_until`     | `TIMESTAMPTZ` | NULL                                    |
 | `suppress_types` | `JSONB`       | NULL                                    |

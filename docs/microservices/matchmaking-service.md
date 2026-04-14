@@ -16,7 +16,7 @@
 - Точные критерии: игра, режим, роль, ранг, регион
 - Регион обязателен (нет cross-region)
 - Таймауты: 15 мин (default) / 30 мин (expanded)
-- Создание временной комнаты при матче
+- Создание матч-отряда при матче
 - Рейтинг после завершения (1-5 звёзд)
 - Бан из ММ (не затрагивает мессенджер)
 - Интеграция со Stories ("ищу пати")
@@ -100,7 +100,7 @@ matches
 ├── mode
 ├── region
 ├── participants (jsonb — [{profile_id, role, rank}])
-├── voice_room_id (nullable — temp room)
+├── voice_room_id (nullable — voice room матча / матч-отряда)
 ├── chat_id (nullable — temp chat)
 ├── status (active | completed | abandoned)
 ├── created_at
@@ -143,7 +143,7 @@ Matcher Worker (горизонтально масштабируемый):
 2. Для каждой заявки:
    a. Найти совместимые заявки (exact match по criteria)
    b. Если набралось slots — создать Match
-   c. Создать temp voice room (Voice Service)
+   c. Создать voice room матч-отряда (Voice Service)
    d. Создать temp chat (Chat Service)
    e. Уведомить участников (NATS → Notification)
 3. Проверить таймауты (15/30 мин)
@@ -164,7 +164,7 @@ Matcher Worker (горизонтально масштабируемый):
 ## Зависимости
 
 - **Redis** — очереди поиска, active session lock
-- **Voice Service** — создание временной комнаты при матче
+- **Voice Service** — создание voice room для матч-отряда при матче
 - **Chat Service** — создание временного чата при матче
 - **Notification Service** — (через NATS) уведомление о найденном матче
 - **Story Service** — (через NATS) "ищу пати" → автоматическая заявка
