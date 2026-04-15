@@ -109,7 +109,7 @@ Client ──LiveKit Client SDK──► LiveKit SFU (media streams)
 - **LiveKit** — SFU для медиа
 - **Chat Service** — валидация участников DM/group при звонке
 - **Space Service** — валидация доступа к **голосовой комнате** (`voice_room_id`)
-- **Role Service** — проверка прав (CONNECT, SPEAK, VIDEO, etc.)
+- **Role Service** — проверка прав (`VOICE_JOIN`, `VOICE_SPEAK`, `VOICE_VIDEO`, …)
 - **Notification Service** — (через NATS) входящий звонок → push
 - **Redis** — хранение активных сессий
 

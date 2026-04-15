@@ -12,7 +12,7 @@
 - Предустановленные роли: Owner, Admin, Moderator, Member, Guest
 - Кастомные роли
 - Иерархия ролей (позиция определяет приоритет)
-- 32+ типов прав (send_messages, manage_channels, ban_members, etc.)
+- Права как **набор именованных флагов** в `bigint` bitmask (`roles.permissions`); идентификаторы — `SCREAMING_SNAKE_CASE`, без имён из сторонних продуктов (см. раздел ниже)
 - Оверрайды прав для узла спейса: отдельно для текстового чата (`chat_id`) и голосовой комнаты (`voice_room_id`)
 - Назначение ролей участникам пространства
 - Верификационные роли (автоматические по статусу верификации)
@@ -49,37 +49,93 @@ service RoleService {
 }
 ```
 
-## Типы прав
+## Идентификаторы прав (bitmask)
 
-```
-// General
-VIEW_CHANNEL, MANAGE_CHANNEL, MANAGE_SPACE, MANAGE_ROLES,
-MANAGE_INVITES, MANAGE_EMOJIS, VIEW_AUDIT_LOG,
+Один канонический набор имён для **ролей в спейсе**, **оверрайдов** и проверок в сервисах. В манифестах ботов (`scopes`) используются **в основном те же строки**, плюс исключение `DM_SEND` (только боты; см. [features/bots.md](../features/bots.md)).
 
-// Membership
-KICK_MEMBERS, BAN_MEMBERS, MANAGE_NICKNAMES,
+### Спейс (глобально по `space_id`)
 
-// Text
-SEND_MESSAGES, SEND_MEDIA, EMBED_LINKS, ATTACH_FILES,
-ADD_REACTIONS, USE_EXTERNAL_EMOJIS, MENTION_EVERYONE,
-MANAGE_MESSAGES, READ_MESSAGE_HISTORY, PIN_MESSAGES,
+| Константа | Назначение |
+|-----------|------------|
+| `SPACE_VIEW` | Видеть спейс и базовую информацию |
+| `SPACE_MANAGE_SETTINGS` | Название, иконка, видимость, правила входа и пр. |
+| `SPACE_MANAGE_ROLES` | Создавать/редактировать/удалять роли ниже своей позиции (политика иерархии) |
+| `SPACE_MANAGE_INVITES` | Создавать и отзывать инвайт-ссылки |
+| `SPACE_VIEW_AUDIT_LOG` | Читать аудит-лог |
+| `SPACE_MANAGE_CUSTOM_EMOJIS` | Кастомные эмодзи спейса |
+| `SPACE_MANAGE_BOTS` | Добавлять/удалять ботов, их scopes |
+| `SPACE_MANAGE_MATCHMAKING` | Настройки матчмейкинга спейса |
+| `SPACE_VIEW_MEMBER_LIST` | Видеть список участников спейса (ростер, не контент чатов) |
 
-// Threads
-CREATE_THREADS, SEND_THREAD_MESSAGES, MANAGE_THREADS,
+### Участники спейса
 
-// Voice
-CONNECT, SPEAK, VIDEO, SCREEN_SHARE, MUTE_MEMBERS,
-DEAFEN_MEMBERS, MOVE_MEMBERS, USE_PTT, PRIORITY_SPEAKER,
+| Константа | Назначение |
+|-----------|------------|
+| `MEMBER_KICK` | Исключить участника |
+| `MEMBER_BAN` | Бан / разбан |
+| `MEMBER_MANAGE_NICKNAMES` | Менять ник в спейсе |
+| `MEMBER_ASSIGN_ROLES` | Назначать и снимать с участников роли **ниже своей** позиции в иерархии (без создания/удаления определений ролей — это `SPACE_MANAGE_ROLES`) |
 
-// Moderation
-MANAGE_REPORTS, TIMEOUT_MEMBERS, SLOW_MODE,
+### Создание текстовых чатов в спейсе
 
-// Bots
-MANAGE_BOTS,
+| Константа | Назначение |
+|-----------|------------|
+| `TEXT_CHAT_CREATE_IN_SPACE` | Создавать новые строки `chats` с `type = group` \| `channel` и узлы дерева (совместно с Space) |
 
-// Matchmaking
-MANAGE_MM_CONFIG
-```
+### Текстовый чат (`chat_id`, `group` \| `channel`)
+
+| Константа | Назначение |
+|-----------|------------|
+| `TEXT_CHAT_VIEW` | Видеть чат в списке и открывать |
+| `TEXT_CHAT_MANAGE_SETTINGS` | Тема, slow mode, настройки чата |
+| `TEXT_CHAT_SEND_MESSAGES` | Писать сообщения (если политика чата разрешает от своего имени) |
+| `TEXT_CHAT_SEND_MEDIA` | Вложения медиа |
+| `TEXT_CHAT_EMBED_LINKS` | Превью / встраивание ссылок |
+| `TEXT_CHAT_ATTACH_FILES` | Файлы |
+| `TEXT_CHAT_ADD_REACTIONS` | Реакции |
+| `TEXT_CHAT_USE_EXTERNAL_EMOJIS` | Внешние эмодзи |
+| `TEXT_CHAT_MENTION_ALL_ONLINE` | Упоминание всех онлайн в этом чате (`@here`) |
+| `TEXT_CHAT_MENTION_ALL_IN_CHAT` | Упоминание всех участников чата (`@everyone`) |
+| `TEXT_CHAT_MANAGE_MESSAGES` | Удалять/закреплять чужие сообщения |
+| `TEXT_CHAT_READ_HISTORY` | Читать историю (если выключено — виден только «с момента входа») |
+| `TEXT_CHAT_PIN_MESSAGES` | Закреплять сообщения |
+| `TEXT_CHAT_CREATE_THREADS` | Создавать треды |
+| `TEXT_CHAT_SEND_IN_THREADS` | Писать в тредах |
+| `TEXT_CHAT_MANAGE_THREADS` | Модерировать треды |
+| `TEXT_CHAT_SET_SLOW_MODE` | Выставлять slow mode на чате |
+
+### Голосовая комната (`voice_room_id`)
+
+| Константа | Назначение |
+|-----------|------------|
+| `VOICE_JOIN` | Подключаться к комнате |
+| `VOICE_SPEAK` | Аудио от себя |
+| `VOICE_VIDEO` | Видео |
+| `VOICE_SCREEN_SHARE` | Демонстрация экрана |
+| `VOICE_MUTE_OTHERS` | Мьютить других |
+| `VOICE_DEAFEN_OTHERS` | Deafen других |
+| `VOICE_MOVE_OTHERS` | Переносить между комнатами |
+| `VOICE_USE_PTT` | Push-to-talk, если включён режим |
+| `VOICE_PRIORITY_SPEAKER` | Приоритетный говорящий |
+
+### Модерация (спейс)
+
+| Константа | Назначение |
+|-----------|------------|
+| `MODERATION_MANAGE_REPORTS` | Жалобы по контенту спейса |
+| `MODERATION_TIMEOUT_MEMBERS` | Таймаут участника |
+
+**Владелец спейса** обходит проверки (или эквивалент «все флаги»); точные биты и порядок фиксируются в коде при первой миграции bitmask — здесь зафиксированы **имена**, а не номера битов.
+
+### Манифест бота (`scopes` в JSON)
+
+Те же строковые константы, плюс **только для ботов** (не хранятся в bitmask роли участника):
+
+| Константа | Назначение |
+|-----------|------------|
+| `DM_SEND` | Писать пользователю в DM — только в ответ на его действие (v1; см. [bots.md](../features/bots.md)) |
+
+Остальные возможности бота задаются теми же именами, что и права участника, например `TEXT_CHAT_SEND_MESSAGES`, `TEXT_CHAT_CREATE_IN_SPACE`, `MEMBER_ASSIGN_ROLES`, `SPACE_VIEW_MEMBER_LIST`. Привилегированное чтение истории для бота — строка `TEXT_CHAT_READ_HISTORY` с отдельной политикой в Bot Service (предупреждение в UI при установке).
 
 ## Модель данных
 
@@ -123,7 +179,7 @@ voice_room_overrides
 
 ```
 1. Если Owner → все права
-2. Base = @everyone (Member) permissions
+2. Base = права дефолтной роли участника спейса (роль «участник» / «все»)
 3. Для каждой роли пользователя (по позиции):
    Base |= role.permissions
 4. Применить оверрайды целевого узла (chat или voice_room):

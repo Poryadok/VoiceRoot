@@ -15,9 +15,9 @@
 - Webhook доставка событий (production)
 - Polling mode (для разработки)
 - HMAC-SHA256 подпись webhook запросов
-- Scopes: send_messages, send_dm, read_members, manage_roles, manage_channels, read_messages (privileged)
+- Scopes: `TEXT_CHAT_SEND_MESSAGES`, `DM_SEND`, `SPACE_VIEW_MEMBER_LIST`, `MEMBER_ASSIGN_ROLES`, `TEXT_CHAT_CREATE_IN_SPACE`, `TEXT_CHAT_READ_HISTORY` (privileged); строки совпадают с [role-service.md](role-service.md)
 - Per-chat whitelist (бот работает только в разрешённых текстовых чатах: `group` \| `channel`)
-- Rate limits: 5000 API req/min, 10 channel creation/day
+- Rate limits: 5000 API req/min, 10 созданий текстовых чатов в спейсе / день на бота (см. лимиты платформы)
 - Bot token: перманентный, ручной отзыв
 - Bot DM: только в ответ на сообщение пользователя (v1)
 - Ephemeral и deferred responses
@@ -71,7 +71,7 @@ bots
 ├── webhook_url (nullable)
 ├── webhook_secret (HMAC key)
 ├── is_polling_mode (bool)
-├── scopes (jsonb — ["send_messages", "read_members", ...])
+├── scopes (jsonb — ["TEXT_CHAT_SEND_MESSAGES", "SPACE_VIEW_MEMBER_LIST", ...])
 ├── status (active | suspended)
 ├── created_at
 └── updated_at

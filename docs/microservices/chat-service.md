@@ -10,8 +10,7 @@
 ## Ответственность
 
 - Создание и управление DM-чатами
-- Создание и управление группами (до 500 участников)
-- Создание и управление текстовыми **группами** и **каналами** (одна модель `chats`; `space_id` опционален; в спейсе — плейсмент через Space)
+- Создание и управление **текстовыми групповыми чатами** (`type = group` \| `channel`, до 500 участников на чат вне спейса по продукту; одна модель API); `space_id` опционален; в спейсе узел **`space_tree_nodes`** — совместно с Space
 - Участники: для чатов **без** `space_id` — `chat_members`; для чатов **в** спейсе — наследование от `space_members` + роли/оверрайды (см. [DATA_MODEL.md](../DATA_MODEL.md))
 - Папки чатов (All / DM / Groups / Channels / Spaces / пользовательские)
 - Список активных чатов (до 100)
@@ -26,15 +25,10 @@ service ChatService {
   rpc CreateDM(CreateDMRequest) returns (Chat);
   rpc GetDM(GetDMRequest) returns (Chat); // find existing or create
 
-  // Группы
-  rpc CreateGroup(CreateGroupRequest) returns (Chat);
-  rpc UpdateGroup(UpdateGroupRequest) returns (Chat);
-  rpc DeleteGroup(DeleteGroupRequest) returns (Empty);
-
-  // Текстовые каналы (в т.ч. standalone; привязка к спейсу — совместно с Space)
-  rpc CreateTextChannel(CreateTextChannelRequest) returns (Chat);
-  rpc UpdateTextChannel(UpdateTextChannelRequest) returns (Chat);
-  rpc DeleteTextChannel(DeleteTextChannelRequest) returns (Empty);
+  // Текстовые групповые чаты (group | channel) — один набор RPC; тип задаётся в запросе (`ChatType`)
+  rpc CreateChat(CreateChatRequest) returns (Chat);   // type = group | channel; space_id optional
+  rpc UpdateChat(UpdateChatRequest) returns (Chat);
+  rpc DeleteChat(DeleteChatRequest) returns (Empty);
 
   // Участники
   rpc AddMembers(AddMembersRequest) returns (Empty);
