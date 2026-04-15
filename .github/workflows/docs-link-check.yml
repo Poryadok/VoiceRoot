@@ -1,0 +1,30 @@
+name: Docs link check
+
+on:
+  pull_request:
+    paths:
+      - 'docs/**'
+      - '.github/workflows/docs-link-check.yml'
+      - '.markdown-link-check.json'
+  push:
+    branches: [master]
+    paths:
+      - 'docs/**'
+      - '.github/workflows/docs-link-check.yml'
+      - '.markdown-link-check.json'
+
+jobs:
+  markdown-link-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify relative links in docs/
+        run: |
+          set -e
+          npm install -g markdown-link-check@3.12.2
+          find docs -name '*.md' -print0 | while IFS= read -r -d '' f; do
+            markdown-link-check -q -c .markdown-link-check.json "$f"
+          done

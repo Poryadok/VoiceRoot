@@ -214,6 +214,7 @@ Federation ──gRPC bidirectional stream──► External Node
 | Social Service       | PostgreSQL `social_db`                                                              |
 | Chat Service         | PostgreSQL `chat_db`                                                                |
 | Messaging Service    | PostgreSQL `messaging_db`                                                           |
+| Realtime Service     | Redis (Pub/Sub, WS registry); PostgreSQL нет                                      |
 | Space Service        | PostgreSQL `space_db`                                                               |
 | Role Service         | PostgreSQL `role_db`                                                                |
 | Voice Service        | Redis (active sessions), LiveKit                                                    |
