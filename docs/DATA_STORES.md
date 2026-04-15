@@ -22,7 +22,7 @@
 | Voice Service        | —                 | активные сессии звонков   | LiveKit                          |
 | File Service         | `file_db`         | —                         | R2, воркеры конвертации          |
 | Notification Service | `notification_db` | grouping push, limits     | FCM, APNs, email                 |
-| Search Service       | `search_db` v1    | —                         | Meilisearch v2, Elasticsearch v3 |
+| Search Service       | `search_db` (target) | —                      | Meilisearch v2, Elasticsearch v3 |
 | Matchmaking Service  | `matchmaking_db`  | очереди, locks            | —                                |
 | Moderation Service   | `moderation_db`   | —                         | —                                |
 | Subscription Service | `subscription_db` | —                         | Paddle, CloudPayments            |
@@ -32,6 +32,8 @@
 | Analytics Service    | —                 | буфер батчей              | ClickHouse                       |
 
 Разделение Redis между Gateway и Auth: [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md) («Redis: API Gateway и Auth Service»).
+
+Для `API Gateway` канонично **нет service-owned PostgreSQL**. Политика версий клиента (`/api/v1/version`) может храниться либо в managed config store, либо в отдельной control-plane БД/таблице (`client_versions`) под владением Gateway как edge-политики; это не означает появление отдельной доменной БД Gateway в inventory.
 
 ---
 
@@ -46,7 +48,7 @@
 
 ## Подсчёт логических PostgreSQL БД
 
-**17** БД: `auth_db`, `user_db`, `social_db`, `chat_db`, `messaging_db`, `space_db`, `role_db`, `file_db`, `notification_db`, `search_db`, `matchmaking_db`, `moderation_db`, `subscription_db`, `bot_db`, `federation_db`, `story_db`.
+**16** БД: `auth_db`, `user_db`, `social_db`, `chat_db`, `messaging_db`, `space_db`, `role_db`, `file_db`, `notification_db`, `search_db`, `matchmaking_db`, `moderation_db`, `subscription_db`, `bot_db`, `federation_db`, `story_db`.
 
 ---
 
@@ -59,7 +61,7 @@
 ## Следующие шаги к модели данных
 
 1. Скоуп v1 и трассировка фич → сервисы: [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md).
-2. Таблицы и связи для волны v1: [data/README.md](data/README.md) и `docs/data/*-service.md` (общие правила — [DATA_MODEL.md](DATA_MODEL.md)).
-3. Миграции: один сервис — один набор миграций на свою БД ([OPERATIONS.md](OPERATIONS.md)); стек — [data/README.md](data/README.md#db-migrations).
+2. Таблицы и связи для волны v1: [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md) и секции «Модель данных» в [microservices/](microservices/) (общие правила — [DATA_MODEL.md](DATA_MODEL.md)).
+3. Миграции: один сервис — один набор миграций на свою БД; инструменты и порядок — [OPERATIONS.md](OPERATIONS.md#миграции-бд-database-per-service).
 
 

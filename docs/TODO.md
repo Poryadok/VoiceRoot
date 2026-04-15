@@ -9,7 +9,7 @@
 ## 🔴 Критические пробелы (блокируют реализацию)
 
 ### 1. Data model / схема БД нигде не описана
-**Закрыто:** конкретные таблицы, индексы, внутренние FK и логические связи для волны v1 — [data/README.md](data/README.md) и `docs/data/*-service.md`. Инвентарь БД: [DATA_STORES.md](DATA_STORES.md). Общие правила: [DATA_MODEL.md](DATA_MODEL.md). Скоуп и трассировка фич: [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md). Миграции (Flyway / golang-migrate): [data/README.md](data/README.md#db-migrations).
+**Закрыто:** конкретные таблицы, индексы, внутренние FK и логические связи для волны v1 — секции «Модель данных» в [microservices/](microservices/). Инвентарь БД: [DATA_STORES.md](DATA_STORES.md). Общие правила: [DATA_MODEL.md](DATA_MODEL.md). Скоуп и трассировка фич: [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md). Миграции: [OPERATIONS.md](OPERATIONS.md#миграции-бд-database-per-service).
 
 ---
 
@@ -35,7 +35,6 @@
 
 ## 📝 Мелкие замечания
 
-- **stories.md**: Нет описания модерации stories (кто-то запостил NSFW-стори). Только global reports описаны в reports.md.
-- **search.md**: Поиск файлов по содержимому — *"TBD"*. Нужно явно пометить как пост-V1.
+*(сняты в проходе 2026-04-16)* — модерация сторис: [features/stories.md](features/stories.md), тип репорта в [features/reports.md](features/reports.md); поиск по содержимому файлов — post-V1: [features/search.md](features/search.md).
 
 

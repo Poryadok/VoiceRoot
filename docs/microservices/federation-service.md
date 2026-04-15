@@ -137,6 +137,8 @@ Events (Node → Master):
 
 ## Публикуемые события (→ NATS)
 
+Доменный поток JetStream: **`federation.events`** ([CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)).
+
 | Событие                        | Данные                         |
 |--------------------------------|--------------------------------|
 | `federation.node_connected`    | node_id, host                  |

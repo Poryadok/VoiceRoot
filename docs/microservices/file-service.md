@@ -109,6 +109,8 @@ Client ──presigned URL──► R2 (upload)
 
 ## Публикуемые события (→ NATS)
 
+Доменный поток JetStream: **`file.events`** ([CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)).
+
 | Событие              | Данные                                    |
 |----------------------|-------------------------------------------|
 | `file.uploaded`      | file_id, uploader_id, type, size          |

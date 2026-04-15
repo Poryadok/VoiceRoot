@@ -151,6 +151,8 @@ Matcher Worker (горизонтально масштабируемый):
 
 ## Публикуемые события (→ NATS)
 
+Доменный поток JetStream: **`matchmaking.events`** ([CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)).
+
 | Событие               | Данные                                     |
 |-----------------------|--------------------------------------------|
 | `mm.search_started`   | session_id, profile_id, game, mode, region |

@@ -56,16 +56,16 @@ service SocialService {
 ```
 friendships
 ├── id (UUID)
-├── requester_profile_id (FK)
-├── target_profile_id (FK)
+├── requester_profile_id (UUID, logical ref → user_db.profiles.id)
+├── target_profile_id (UUID, logical ref → user_db.profiles.id)
 ├── status (pending | accepted | declined)
 ├── created_at
 └── updated_at
 
 contacts
 ├── id (UUID)
-├── owner_profile_id (FK)
-├── target_profile_id (FK)
+├── owner_profile_id (UUID, logical ref → user_db.profiles.id)
+├── target_profile_id (UUID, logical ref → user_db.profiles.id)
 ├── source (manual | phone_sync | space | matchmaking)
 ├── is_favorite (bool)
 ├── created_at
@@ -73,13 +73,43 @@ contacts
 
 blocks
 ├── id (UUID)
-├── blocker_account_id (FK) -- блокировка на уровне аккаунта
-├── blocked_account_id (FK)
+├── blocker_account_id (UUID, logical ref → auth_db.accounts.id) -- блокировка на уровне аккаунта
+├── blocked_account_id (UUID, logical ref → auth_db.accounts.id)
 ├── created_at
 └── UNIQUE(blocker_account_id, blocked_account_id)
 ```
 
+### V1 (Фаза 0-1) — детальный профиль для DDL
+
+В первой волне миграций используются `friendships` и `blocks`.
+`contacts` откладывается отдельной миграцией после ядра DM/friends.
+
+```
+friendships
+├── id UUID PRIMARY KEY DEFAULT gen_random_uuid()
+├── requester_profile_id UUID NOT NULL -- logical ref → user_db.profiles.id
+├── target_profile_id UUID NOT NULL -- logical ref → user_db.profiles.id
+├── status VARCHAR(16) NOT NULL CHECK (status IN ('pending','accepted','declined'))
+├── created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+└── updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+
+blocks
+├── id UUID PRIMARY KEY DEFAULT gen_random_uuid()
+├── blocker_account_id UUID NOT NULL -- logical ref → auth_db.accounts.id
+├── blocked_account_id UUID NOT NULL -- logical ref → auth_db.accounts.id
+└── created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+
+Индексы v1:
+- `UNIQUE INDEX friendships_pair_uq ON friendships(requester_profile_id, target_profile_id)`
+- `INDEX friendships_target_status_idx (target_profile_id, status, created_at DESC)` для входящих заявок
+- `INDEX friendships_requester_status_idx (requester_profile_id, status, created_at DESC)` для исходящих и списка друзей
+- `UNIQUE INDEX blocks_pair_uq ON blocks(blocker_account_id, blocked_account_id)`
+- `INDEX blocks_blocked_account_idx (blocked_account_id)` для обратной проверки блоков
+
 ## Публикуемые события (→ NATS)
+
+Доменный поток JetStream: **`social.events`** (матрица: [CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)).
 
 | Событие                  | Данные                                 |
 |--------------------------|----------------------------------------|

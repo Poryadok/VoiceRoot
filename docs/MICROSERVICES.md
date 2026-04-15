@@ -4,6 +4,8 @@
 
 Voice — распределённая система из 20 микросервисов, API Gateway и набора инфраструктурных компонентов.
 
+Имена существующих модулей в репозитории vs целевые сервисы — таблица в [PLAN.md](PLAN.md) («Соответствие модулей в репозитории»).
+
 | #  | Сервис               | Язык | Назначение                                         | Детали                                             |
 |----|----------------------|------|----------------------------------------------------|----------------------------------------------------|
 | 1  | API Gateway          | Go   | Маршрутизация, rate limiting, JWT-валидация        | [подробнее](microservices/api-gateway.md)          |
@@ -63,22 +65,22 @@ Voice — распределённая система из 20 микросерв
      │ PostgreSQL  │    │   Redis     │    │ Event Bus      │
      │ per-service │    │ cache/rate  │    │ NATS JetStream │
      └─────────────┘    └────────────┘    └────────────────┘
-              │
-     ┌────────▼───────────────────────────────────────┐
-     │                Infrastructure                   │
-     │  LiveKit · Cloudflare R2 · ClamAV · Meilisearch │
-     │  Paddle · CloudPayments · Resend · FCM · APNs   │
-     └─────────────────────────────────────────────────┘
-              │
-     ┌────────▼───┐    ┌─────────────────┐
-     │ Federation  │◄──►│ External Nodes  │
-     │ Service     │    │ (S2S gRPC)      │
-     └─────────────┘    └─────────────────┘
-              │
-     ┌────────▼───┐
-     │ Analytics   │
-     │ ClickHouse  │
-     └─────────────┘
+              │                                     │
+     ┌────────▼─────────────────────────────────────▼──────────────────────────┐
+     │                Infrastructure                                              │
+     │  LiveKit · Cloudflare R2 · ClamAV · Meilisearch · ClickHouse (Analytics) │
+     │  Paddle · CloudPayments · Resend · FCM · APNs                             │
+     └────────────────────────────────────────────────────────────────────────────┘
+
+     ┌──────────────────┐         ┌─────────────────┐
+     │ Federation       │◄──────►│ External Nodes  │
+     │ Service (S2S)    │  gRPC   │ (federated)     │
+     └──────────────────┘         └─────────────────┘
+
+     ┌──────────────────────────────────────────────────────────────┐
+     │ Analytics Service ◄── NATS JetStream (продуктовые streams),   │
+     │ (OLAP / дашборды)   независимо от Federation по blast radius   │
+     └──────────────────────────────────────────────────────────────┘
 ```
 
 ## Стек технологий
@@ -128,11 +130,15 @@ Federation ──gRPC bidirectional stream──► External Node
 
 Асинхронная шина событий для decoupled-коммуникации между сервисами.
 
+Сводная матрица публичных маршрутов Gateway и потоков JetStream (для ревью и синхронизации с кодом): [CONTRACT_MATRIX.md](CONTRACT_MATRIX.md).
+
 ### Ключевые потоки (streams)
 
 | Stream                | Publishers   | Subscribers                                 |
 |-----------------------|--------------|---------------------------------------------|
 | `user.events`         | Auth, User   | Analytics, Social, Notification, Federation |
+| `social.events`       | Social       | Analytics, Notification, Chat, Federation   |
+| `role.events`         | Role         | Analytics, Notification, Federation, Realtime |
 | `message.events`      | Messaging    | Analytics, Notification, Search, Moderation |
 | `chat.events`         | Chat, Space  | Analytics, Notification, Realtime           |
 | `voice.events`        | Voice        | Analytics, Notification                     |
@@ -143,6 +149,22 @@ Federation ──gRPC bidirectional stream──► External Node
 | `story.events`        | Story        | Analytics, Notification, Matchmaking        |
 | `federation.events`   | Federation   | Analytics, Role, Moderation                 |
 | `bot.events`          | Bot          | Analytics, Messaging                        |
+
+### Tier 0: типичные связи (gRPC и NATS)
+
+Ориентир для **ядра чата** (см. Tier 0 в [OPERATIONS.md](OPERATIONS.md)): что обычно вызывается **синхронно** по gRPC с API Gateway, а что уходит в **шину**.
+
+| Направление (через Gateway) | Типичные sync gRPC | Типичный async (NATS) |
+|-------------------------------|--------------------|-------------------------|
+| Отправка / правка сообщения | Messaging | `message.events` от Messaging |
+| Список чатов, DM, участники | Chat (+ при необходимости User) | `chat.events` от Chat / Space |
+| Профиль, presence (чтение) | User | `user.events` от User / Auth |
+| Друзья, блокировки | Social | `social.events` от Social; `user.events` от User / Auth |
+| WebSocket live | Прокси на Realtime | Сервисы-издатели → NATS → Realtime → клиент |
+
+Избегать **синхронных циклов** Chat ↔ Messaging (например «отправка сообщения» не должна тянуть цепочку, где Messaging вызывает Chat, а Chat снова Messaging). Согласование превью списка чатов (`last_message_at` и т.п.) — через события или явный контракт «Messaging уведомляет / Chat подписан».
+
+**Владелец схемы событий** для каждого stream — **publisher** из колонки «Publishers» в таблице выше; обратная совместимость и breaking changes для `.proto`/payload — [REPOSITORIES.md](REPOSITORIES.md) (buf, порядок выката).
 
 ## Аналитика
 

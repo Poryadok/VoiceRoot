@@ -53,13 +53,20 @@
 /api/v1/subscription/**  → Subscription Service
 /api/v1/bots/**          → Bot Service
 /api/v1/stories/**       → Story Service
+/api/v1/analytics/**     → Analytics Service (только персонал; см. раздел ниже)
 /api/v1/version          → Локальный конфиг (version check)
 /ws                      → Realtime Service (WebSocket upgrade)
 ```
 
+**Не через этот REST-префикс:** [Federation Service](federation-service.md) (S2S gRPC, отдельный ingress / mTLS). Публичные Flutter-клиенты не вызывают Analytics.
+
+## Маршруты персонала (Admin API)
+
+`/api/v1/analytics/**` — для **React Admin Panel** и внутренних операторов. После валидации JWT Gateway проверяет, что в claims есть роль персонала (набор имён и источник истины — Auth / Role; например платформенный staff и/или доступ к модераторской панели). Без этого — **403 Forbidden**. Все вызовы с чувствительными отчётами и **export** должны писаться в audit log (subject, маршрут, время) на стороне Analytics или общего аудита.
+
 ## Канонический формат клиентских API-доков
 
-`api-gateway.md` фиксирует публичные namespace/route-группы. Детальная предметная семантика описывается в документах целевых сервисов (`docs/microservices/*`).
+`api-gateway.md` фиксирует публичные namespace/route-группы. Табличная сводка маршрутов ↔ целевых сервисов и потоков NATS — [CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md). Детальная предметная семантика описывается в документах целевых сервисов (`docs/microservices/*`).
 
 Для каждого публичного endpoint документация должна содержать:
 - HTTP method + route + auth requirement

@@ -190,6 +190,8 @@ voice_room_overrides
 
 ## Публикуемые события (→ NATS)
 
+Доменный поток JetStream: **`role.events`** (матрица: [CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)).
+
 | Событие             | Данные                            |
 |---------------------|-----------------------------------|
 | `role.created`      | space_id, role_id, name           |

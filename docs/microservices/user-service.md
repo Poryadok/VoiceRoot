@@ -61,7 +61,7 @@ service UserService {
 ```
 profiles
 ├── id (UUID)
-├── account_id (FK → auth_db.accounts)
+├── account_id (UUID, logical ref → auth_db.accounts.id; без меж-БД REFERENCES)
 ├── username (string)
 ├── discriminator (string, 4 digits)
 ├── display_name
@@ -78,7 +78,7 @@ profiles
 └── updated_at
 
 privacy_settings
-├── profile_id (FK)
+├── profile_id (UUID, logical ref → profiles.id)
 ├── preset (personal | gaming | work)
 ├── show_online (everyone | friends | nobody)
 ├── show_game_status (everyone | friends | nobody)
@@ -94,7 +94,49 @@ presence (Redis Hash)
 ├── profile_id → { status, game, custom_status, last_seen, call_info }
 ```
 
+### V1 (Фаза 0-1) — детальный профиль для DDL
+
+В первой волне миграций используются только `profiles` и `onboarding_state`.
+`privacy_settings` и расширенные Premium-поля остаются target-state и добавляются отдельной волной.
+
+```
+profiles
+├── id UUID PRIMARY KEY DEFAULT gen_random_uuid()
+├── account_id UUID NOT NULL -- logical ref → auth_db.accounts.id
+├── username VARCHAR(32) NOT NULL
+├── discriminator CHAR(4) NOT NULL CHECK (discriminator ~ '^[0-9]{4}$')
+├── display_name VARCHAR(64) NOT NULL
+├── avatar_url TEXT NULL
+├── bio TEXT NULL CHECK (char_length(bio) <= 500)
+├── locale VARCHAR(8) NOT NULL DEFAULT 'ru' CHECK (locale IN ('ru','en'))
+├── theme VARCHAR(32) NOT NULL DEFAULT 'dark' CHECK (theme IN ('light','dark','high_contrast'))
+├── is_primary BOOLEAN NOT NULL DEFAULT true
+├── verification_type VARCHAR(32) NOT NULL DEFAULT 'none' CHECK (verification_type IN ('none','personal','organization'))
+├── verification_badge VARCHAR(32) NULL
+├── created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+└── updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+
+onboarding_state
+├── profile_id UUID PRIMARY KEY -- logical ref → profiles.id
+├── completed_steps JSONB NOT NULL DEFAULT '[]'::jsonb
+├── completed BOOLEAN NOT NULL DEFAULT false
+├── completed_at TIMESTAMPTZ NULL
+├── created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+└── updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+
+Индексы v1:
+- `UNIQUE (username, discriminator)`
+- `UNIQUE (account_id) WHERE is_primary = true` (один активный профиль в v1)
+- `INDEX profiles_account_id_idx (account_id)`
+- `INDEX profiles_created_at_idx (created_at DESC)`
+
+Решение по `last_seen` в v1:
+- `last_seen` хранится в Redis presence; отдельная персистентная колонка в PostgreSQL не вводится в первой волне.
+
 ## Публикуемые события (→ NATS)
+
+Доменный поток JetStream: **`user.events`** (совместно с Auth для событий учётной записи; матрица: [CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)).
 
 | Событие                 | Данные                                     |
 |-------------------------|--------------------------------------------|

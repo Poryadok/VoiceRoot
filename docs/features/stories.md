@@ -6,6 +6,15 @@
 
 Базовая механика — как в Телеграме. Гейминг-специфика выделена отдельно.
 
+**Владельцы (бэкенд):** [Story Service](../microservices/story-service.md) (лента, архив, highlights, «ищу пати»), [File Service](../microservices/file-service.md) (медиа в R2), [Notification Service](../microservices/notification-service.md) (упоминания). Жалобы и санкции — [Moderation Service](../microservices/moderation-service.md) по потоку из [reports.md](reports.md).
+
+---
+
+## Модерация и NSFW
+
+- **Жалобы:** стори — отдельный тип цели репорта; сценарий тот же, что для глобальных жалоб в [reports.md](reports.md): пользователь отправляет репорт → **Moderation Service** ведёт кейс; персонал / авто-мод (фазы [PLAN.md](../PLAN.md) 11 и 14) могут скрыть стори из лент, выдать предупреждение, ограничить автора или удалить контент и объекты в **File Service**.
+- **Без репорта (NSFW и т.п.):** в v1 достаточно репортов + модерации; опциональное **авто-сканирование медиа** (классификатор / ClamAV уже для файлов) может добавить pre-publish флаги или blur по политике продукта — детализация в **Story** + **Moderation** при внедрении, не блокирует MVP сторис по [PLAN.md](../PLAN.md) фазе 17.
+
 ---
 
 ## Форматы контента

@@ -119,6 +119,8 @@ Event (NATS: message in whitelisted chat) ──► Bot Service
 
 ## Публикуемые события (→ NATS)
 
+Доменный поток JetStream: **`bot.events`** ([CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)).
+
 | Событие                 | Данные                               |
 |-------------------------|--------------------------------------|
 | `bot.registered`        | bot_id, owner_id, name               |

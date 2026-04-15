@@ -64,6 +64,10 @@ GET  /api/v1/analytics/retention         — D1, D7, D30 cohorts
 GET  /api/v1/analytics/export            — CSV/JSON export
 ```
 
+## Доступ (через API Gateway)
+
+Публичный REST выше обслуживается **только** через [api-gateway.md](api-gateway.md): валидный JWT и проверка **роли персонала** на Gateway (обычные пользовательские клиенты получают 403). Ingest в ClickHouse идёт из NATS/gRPC, не с клиентов. Запросы **export** и широкие **metrics** — с обязательной записью в audit log (кто, какой маршрут, время).
+
 ## ClickHouse схема
 
 ### Raw events table

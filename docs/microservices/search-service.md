@@ -43,7 +43,7 @@ service SearchService {
 
 ### v1: PostgreSQL (`search_db`)
 
-Проекции в отдельной БД сервиса (не колонки в `messaging_db.messages`): `message_search_documents`, `profile_search_documents`, `chat_search_documents`, `space_search_documents` — см. [data/target/search_db.md](../data/target/search_db.md). Расширение `pg_trgm` для fuzzy/prefix по мере необходимости.
+Проекции в отдельной БД сервиса (не колонки в `messaging_db.messages`): `message_search_documents`, `profile_search_documents`, `chat_search_documents`, `space_search_documents` — конкретные колонки и индексы фиксируются в миграциях владельца `search_db` по мере внедрения Фазы 9. Расширение `pg_trgm` для fuzzy/prefix по мере необходимости.
 
 ### v2: Meilisearch
 
@@ -63,6 +63,8 @@ NATS message.sent/edited/deleted ──► Search Service ──► Update index
 - E2E сообщения → skip
 
 ## Публикуемые события (→ NATS)
+
+Отдельного доменного stream **`search.events`** нет: события ниже — **продуктовая телеметрия** для аналитики; публикация в subject'ы вида **`analytics.search.*`** (см. раздел «Аналитика» в [MICROSERVICES.md](../MICROSERVICES.md)).
 
 | Событие                 | Данные                                  |
 |-------------------------|-----------------------------------------|

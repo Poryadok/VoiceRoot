@@ -118,6 +118,8 @@ report.created event ──► Check thresholds:
 
 ## Публикуемые события (→ NATS)
 
+Доменный поток JetStream: **`moderation.events`** ([CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)).
+
 | Событие                       | Данные                               |
 |-------------------------------|--------------------------------------|
 | `moderation.report_created`   | report_id, target_type, target_id    |

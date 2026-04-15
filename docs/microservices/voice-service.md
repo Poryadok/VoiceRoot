@@ -94,6 +94,8 @@ Client ──LiveKit Client SDK──► LiveKit SFU (media streams)
 
 ## Публикуемые события (→ NATS)
 
+Доменный поток JetStream: **`voice.events`** ([CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)).
+
 | Событие                      | Данные                                  |
 |------------------------------|-----------------------------------------|
 | `voice.call_started`         | room_id, initiator_id, type             |

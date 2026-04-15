@@ -18,6 +18,13 @@
 | Сводка имён в коде/БД               | [Продукт → техника](#продукт--техника)              |
 | Права (bitmask, scopes бота)        | [microservices/role-service.md](microservices/role-service.md) — раздел «Идентификаторы прав» |
 | Аккаунт, профиль                    | [Идентичность](#идентичность)                       |
+| Стори                               | [Стори](#стори)                                     |
+
+---
+
+## Стори
+
+**Стори** — короткий контент (фото / видео / текст), лента 24 часа, личный архив и **highlights** на профиле; модерация и репорты — в общем контуре [reports.md](features/reports.md). Реализация: [Story Service](microservices/story-service.md), медиа — [File Service](microservices/file-service.md); продукт — [stories.md](features/stories.md).
 
 ---
 

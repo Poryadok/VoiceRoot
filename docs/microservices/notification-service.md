@@ -104,6 +104,8 @@ Event (NATS) ──► Notification Service
 
 ## Публикуемые события (→ NATS)
 
+Отдельного доменного stream **`notification.events`** нет: события ниже — **телеметрия доставки**; публикация в **`analytics.notification.*`** (см. [MICROSERVICES.md](../MICROSERVICES.md) — раздел «Аналитика»).
+
 | Событие                       | Данные                              |
 |-------------------------------|-------------------------------------|
 | `notification.push_sent`      | profile_id, type, platform          |

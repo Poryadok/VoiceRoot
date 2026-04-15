@@ -59,7 +59,7 @@ accounts
 
 refresh_tokens
 ├── id (UUID)
-├── account_id (FK)
+├── account_id (UUID, logical ref → accounts.id)
 ├── token_hash (SHA-256)
 ├── device_info (jsonb)
 ├── expires_at
@@ -68,7 +68,7 @@ refresh_tokens
 
 otp_codes
 ├── id (UUID)
-├── account_id (FK)
+├── account_id (UUID, logical ref → accounts.id)
 ├── code (encrypted)
 ├── type (email_verify | password_reset)
 ├── expires_at
@@ -76,7 +76,55 @@ otp_codes
 └── created_at
 ```
 
+### V1 (Фаза 0-1) — детальный профиль для DDL
+
+```
+accounts
+├── id UUID PRIMARY KEY DEFAULT gen_random_uuid()
+├── email VARCHAR(320) NULL
+├── phone VARCHAR(32) NULL
+├── password_hash TEXT NOT NULL
+├── type VARCHAR(16) NOT NULL CHECK (type IN ('regular','guest'))
+├── status VARCHAR(16) NOT NULL CHECK (status IN ('active','suspended','deleted'))
+├── totp_secret BYTEA NULL
+├── totp_enabled BOOLEAN NOT NULL DEFAULT false
+├── deleted_at TIMESTAMPTZ NULL
+├── created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+└── updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+
+refresh_tokens
+├── id UUID PRIMARY KEY DEFAULT gen_random_uuid()
+├── account_id UUID NOT NULL -- logical ref → accounts.id
+├── token_hash CHAR(64) NOT NULL
+├── device_info JSONB NOT NULL DEFAULT '{}'::jsonb
+├── expires_at TIMESTAMPTZ NOT NULL
+├── created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+└── revoked_at TIMESTAMPTZ NULL
+
+otp_codes
+├── id UUID PRIMARY KEY DEFAULT gen_random_uuid()
+├── account_id UUID NOT NULL -- logical ref → accounts.id
+├── code BYTEA NOT NULL
+├── type VARCHAR(32) NOT NULL CHECK (type IN ('email_verify','password_reset'))
+├── expires_at TIMESTAMPTZ NOT NULL
+├── used_at TIMESTAMPTZ NULL
+└── created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+
+Индексы v1:
+- `UNIQUE INDEX accounts_email_uq ON accounts(email) WHERE email IS NOT NULL`
+- `UNIQUE INDEX accounts_phone_uq ON accounts(phone) WHERE phone IS NOT NULL`
+- `INDEX refresh_tokens_account_active_idx (account_id, expires_at DESC) WHERE revoked_at IS NULL`
+- `INDEX refresh_tokens_token_hash_idx (token_hash)`
+- `INDEX otp_codes_account_type_idx (account_id, type, expires_at DESC)`
+
+Правило статуса удаления:
+- source of truth для логического удаления — `deleted_at`.
+- `status='deleted'` должен выставляться синхронно с `deleted_at IS NOT NULL` (инвариант уровня приложения/триггера).
+
 ## Публикуемые события (→ NATS)
+
+Доменный поток JetStream: **`user.events`** (совместно с User для событий профиля; матрица: [CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)).
 
 | Событие                 | Данные                      |
 |-------------------------|-----------------------------|

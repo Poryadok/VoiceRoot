@@ -119,6 +119,8 @@ highlight_stories
 
 ## Публикуемые события (→ NATS)
 
+Доменный поток JetStream: **`story.events`** ([CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)).
+
 | Событие                   | Данные                              |
 |---------------------------|-------------------------------------|
 | `story.created`           | story_id, author_id, type, game_tag |

@@ -107,7 +107,13 @@ billing_events
 └── INDEX(subscription_id, created_at)
 ```
 
+## Webhook и идемпотентность
+
+События Paddle/CloudPayments обрабатываются по **`provider_event_id`**: уникальность в `billing_events` (или отдельной таблице дедупликации) по паре **(provider, provider_event_id)**; повтор webhook — no-op с **2xx** провайдеру.
+
 ## Публикуемые события (→ NATS)
+
+Доменный поток JetStream: **`subscription.events`** ([CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)).
 
 | Событие                          | Данные                       |
 |----------------------------------|------------------------------|

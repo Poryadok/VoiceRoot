@@ -15,6 +15,15 @@
 | voiceclient (Flutter)          | Прототип: P2P WebRTC через Firebase, не подключён к бэкенду                                                                                               |
 | Инфраструктура                 | Docker для Auth и WS; нет CI/CD, нет схем БД                                                                                                              |
 
+### Соответствие модулей в репозитории → целевой микросервис
+
+| Модуль / сервис в коде (сейчас) | Целевое имя в архитектуре ([MICROSERVICES.md](MICROSERVICES.md)) | Примечание |
+|---------------------------------|------------------------------------------------------------------|------------|
+| VoiceAuthService | Auth Service | Java/Spring; источник JWT и `auth_db` |
+| VoiceWebSocketService | Realtime Service | WebSocket-шлюз за Gateway; при рефакторинге выровнять имя каталога/образа с «Realtime» |
+| VoiceMessageService | Messaging Service | `messaging_db`, REST/история сообщений |
+| VoiceRoomDataService | Space Service (и при необходимости данные сессий в Voice + LiveKit) | `voice_rooms`, `space_tree_nodes` — [DATA_MODEL.md](DATA_MODEL.md), [microservices/space-service.md](microservices/space-service.md) |
+
 ---
 
 ## Сводная таблица фаз
@@ -50,7 +59,7 @@
 
 **Цель:** инфраструктура, без которой нельзя строить фичи.
 
-- [ ] **Схемы БД (первая волна)** — миграции под Фазу 0 + 1: `auth_db`, `user_db`, `social_db`, `chat_db`, `messaging_db` — [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md), детали — `docs/data/*.md`
+- [ ] **Схемы БД (первая волна)** — миграции под Фазу 0 + 1: `auth_db`, `user_db`, `social_db`, `chat_db`, `messaging_db` — [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md), детали целевых таблиц — секции «Модель данных» в [microservices/](microservices/)
 - [ ] **API Gateway** — REST + WebSocket, маршрутизация
 - [ ] **CI/CD** — GitHub Actions: lint, тесты, Docker, деплой на staging
 - [ ] **Docker Compose (dev)** — сервисы + PostgreSQL + Redis одной командой
