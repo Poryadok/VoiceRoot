@@ -54,3 +54,14 @@
 - Каналы
 - Спейсы
 - + кастомные (создаёт пользователь)
+
+## Service Ownership
+
+- Feature owner (UX): клиентские приложения (Flutter Desktop/Mobile/Web)
+- Data owners: `Chat Service` (чаты/папки), `Space Service` (tree navigation), `Messaging Service` (posted_as_chat/display_chat_id semantics)
+
+## Enforcement path
+
+1. Клиент формирует навигационную структуру на основе сущностей из `Chat Service` и `Space Service`.
+2. Для рендера sender semantics клиент использует поля из `Messaging Service`.
+3. Права и видимость узлов применяются на стороне сервисов до отдачи данных в клиент.

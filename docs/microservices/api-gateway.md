@@ -15,7 +15,7 @@
 - Rate limiting по правилам из конфигурации
 - CORS, request/response logging
 - Версионирование API (`/api/v1/...`)
-- Проверка версии клиента (endpoint `/api/v1/version`, ответ 426 при force_update)
+- Проверка версии клиента (endpoint `/api/v1/version`, ответ 426 при force_update; Gateway — canonical owner этой политики)
 - TLS termination
 - Request ID генерация и propagation (для трейсинга)
 
@@ -80,6 +80,7 @@
 
 - **Redis** — rate limiting (sliding window), чтение JWT blacklist. Зона ответственности с **Auth Service**: [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) (раздел «Redis: API Gateway и Auth Service»).
 - **Auth Service** — JWT public key (ротация через JWKS endpoint)
+- **Version config store** — таблица `client_versions` (или эквивалентный конфиг-стор) для `/api/v1/version`
 
 ## Метрики (→ Analytics)
 

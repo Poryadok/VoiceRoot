@@ -156,7 +156,8 @@ GET /api/v1/version?platform={platform}&version={semver}&shorebird_patch={n}
 
 ## Backend: сервис и хранение
 
-- Конфигурация версий хранится в отдельной таблице `client_versions` в основной БД.
+- Канонический owner проверки версии и политики `force_update` — `API Gateway` (`/api/v1/version`, `426 Upgrade Required`).
+- Конфигурация версий хранится в отдельной таблице `client_versions` в control-plane БД Gateway (или эквивалентном конфиг-сторе, которым владеет Gateway).
 - CRUD-эндпоинты закрыты admin-ролью.
 - Кэш ответа `/version` — 5 минут (Redis), не нагружает БД.
 - Изменение `min_supported_version` или `latest_version` — инвалидирует кэш немедленно.
@@ -172,6 +173,17 @@ CREATE TABLE client_versions (
   updated_at        TIMESTAMPTZ DEFAULT NOW()
 );
 ```
+
+## Service Ownership
+
+- Owner: `API Gateway` (version policy + enforcement)
+- Консументы: все клиентские приложения
+
+## Enforcement path
+
+1. Клиент вызывает `GET /api/v1/version` в `API Gateway`.
+2. Gateway читает `client_versions`, вычисляет `force_update`/`update_available`.
+3. При `force_update=true` Gateway возвращает `426 Upgrade Required` на все остальные API endpoints.
 
 ---
 

@@ -109,4 +109,16 @@ https://voice.gg/dm/{userId}
 
 Ссылка на профиль строится по `@username`, не по `userId`. Гостевые аккаунты ссылок не имеют — при регистрации пользователь получает username и ссылка становится доступна.
 
+## Service Ownership
+
+- Edge owner: `API Gateway` (парсинг URL, auth-редиректы, базовая валидация схемы)
+- Domain ownership: `Space Service`, `Chat Service`, `Messaging Service`, `User Service`, `Social Service` (валидация доступа к целевому объекту)
+
+## Enforcement path
+
+1. Клиент/веб открывает `voice://...` или `https://voice.gg/...`.
+2. `API Gateway` нормализует маршрут и определяет доменный target.
+3. Соответствующий доменный сервис проверяет существование ресурса и ACL.
+4. Клиент получает либо разрешённый target, либо `404/403` и показывает "Не найдено"/"Нет доступа".
+
 

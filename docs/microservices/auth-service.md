@@ -4,8 +4,8 @@
 
 Сервис аутентификации и управления сессиями. Единственный сервис на Java — обусловлено зрелостью Spring Security для сложных auth-сценариев.
 
-**Язык**: Java 21
-**Фреймворк**: Spring Boot 3, Spring Security
+**Язык**: Java 25 LTS
+**Фреймворк**: Spring Boot 3.5, Spring Security 6
 **БД**: PostgreSQL `auth_db`
 
 ## Ответственность

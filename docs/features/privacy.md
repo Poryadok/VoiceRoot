@@ -85,4 +85,17 @@
 - Присылать голосовые сообщения
 - Приглашать в друзья
 
+## Service Ownership
+
+- Source of truth: `User Service` (privacy settings per profile)
+- Social graph inputs: `Social Service` (friends, friends-of-friends, blocks)
+- Space audience inputs: `Space Service` (участники выбранных спейсов)
+
+## Enforcement path
+
+1. Клиент сохраняет privacy rules через `API Gateway` в `User Service`.
+2. `User Service` вычисляет эффективные аудитории с учётом профиля.
+3. Action-oriented сервисы (`Messaging`, `Voice`, `Story`, `Matchmaking`) запрашивают/получают policy-решение перед выполнением действия.
+4. `Social Service` и `Space Service` поставляют membership/relationship факты для финального allow/deny.
+
 

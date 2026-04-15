@@ -88,4 +88,16 @@ DNS-верификация доказывает владение доменом 
 - **Верификация через email-домен** — слабее DNS (любой может создать почту на домене)
 - **Верификация Twitter/X** — нестабильный статус с 2022 года
 
+## Service Ownership
+
+- Owner: `User Service` (verification status/badge state в профиле)
+- Интеграции identity: `Auth Service` (OAuth-linked identities, токены и проверки)
+
+## Enforcement path
+
+1. Пользователь инициирует привязку платформы/домена через API.
+2. `Auth Service` выполняет OAuth identity checks и подтверждает внешнюю идентичность.
+3. `User Service` фиксирует verification state и управляет отображением badge.
+4. Плановый re-check статуса (cron) снимает badge при потере условий верификации.
+
 
