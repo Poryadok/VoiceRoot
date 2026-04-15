@@ -57,6 +57,17 @@
 /ws                      → Realtime Service (WebSocket upgrade)
 ```
 
+## Канонический формат клиентских API-доков
+
+`api-gateway.md` фиксирует публичные namespace/route-группы. Детальная предметная семантика описывается в документах целевых сервисов (`docs/microservices/*`).
+
+Для каждого публичного endpoint документация должна содержать:
+- HTTP method + route + auth requirement
+- request/response schema (обязательные поля и типы)
+- error model (status code + `error_code`)
+- pagination/курсоры (где нужно)
+- idempotency/повтор запроса (где нужно)
+
 ## Аутентификация
 
 1. Клиент отправляет `Authorization: Bearer <access_token>`

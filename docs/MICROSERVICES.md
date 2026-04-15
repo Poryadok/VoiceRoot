@@ -32,7 +32,7 @@ Voice — распределённая система из 20 микросерв
 ```
                          ┌─────────────────┐
                          │   Clients        │
-                         │ Flutter / React  │
+                         │ Flutter + React(Admin) │
                          └────────┬─────────┘
                                   │
                          ┌────────▼─────────┐
@@ -44,7 +44,7 @@ Voice — распределённая система из 20 микросерв
               │                │  │  │                │
      ┌────────▼───┐   ┌───────▼──▼──▼───────┐  ┌─────▼──────────┐
      │ Auth (Java) │   │   Core Services     │  │ Realtime (Go)  │
-     │ JWT, 2FA    │   │   (Go, gRPC)        │  │ WebSocket GW   │
+     │ JWT, 2FA    │   │   (Go, gRPC)        │  │ WS core (behind Gateway) │
      └─────────────┘   │                     │  └──────┬─────────┘
                         │ User · Social      │         │
                         │ Chat · Messaging   │    ┌────▼─────┐

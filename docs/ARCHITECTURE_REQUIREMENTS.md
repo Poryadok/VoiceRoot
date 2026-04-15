@@ -49,7 +49,7 @@
 
 ## Доставка сообщений
 
-- **Протокол**: WebSocket, persistent connection (шлюз: Realtime Service, см. [microservices/realtime-service.md](microservices/realtime-service.md))
+- **Протокол**: WebSocket, persistent connection (edge-вход через API Gateway `/ws`, прокси на Realtime Service; см. [microservices/api-gateway.md](microservices/api-gateway.md) и [microservices/realtime-service.md](microservices/realtime-service.md))
 - **Reconnection**: exponential backoff (1s → 2s → 4s, cap 30s)
 - **Между инстансами Realtime**: Redis Pub/Sub
 - **Синхронизация прочитанного**: событие `mark_read(chat_id, message_id)` через WebSocket на все подключённые устройства пользователя
@@ -179,7 +179,8 @@
 
 ## Service Discovery и инфраструктура
 
-- **Старт / staging**: **k3s** (лёгкий Kubernetes) — Docker Compose избыточен для multi-service, k3s упрощает переход в production k8s
+- **Local dev**: Docker Compose (одна команда для локального подъёма сервисов и зависимостей)
+- **Staging**: **k3s** (лёгкий Kubernetes), максимально близко к production
 - **Production**: Kubernetes (k8s) или managed k8s (Yandex Managed Kubernetes / Hetzner)
 - **Service discovery**: Kubernetes ClusterDNS — сервисы находят друг друга по DNS-именам (`voice-message-service.default.svc.cluster.local`)
 - Consul, Eureka — избыточны, не используем
@@ -198,6 +199,22 @@
   - Reconnect ноды: snapshot re-sync — нода запрашивает текущие роли/баны у master (event log не нужен)
   - Master недоступен: нода работает с TTL-кэшем, новых пользователей не пропускает
   - Kafka / очереди сообщений — не нужны в V1
-- **S2S API спецификация**: TBD (отдельная задача)
+- **Канонический контракт S2S**: [`protos/s2s.proto`](../protos/s2s.proto)
+- **Документация semantics/ownership**: [microservices/federation-service.md](microservices/federation-service.md)
+
+---
+
+## Канонический клиентский API-контракт
+
+Источник истины для клиентских API находится в двух местах:
+- **Маршрутизация и публичные namespace'ы**: [microservices/api-gateway.md](microservices/api-gateway.md)
+- **Предметная семантика endpoint'ов**: документы сервисов в [microservices/](microservices/)
+
+Минимальные требования к описанию каждого публичного endpoint в документации:
+- HTTP method + route + auth requirement
+- request/response schema (обязательные поля и типы)
+- error model (status code + `error_code`)
+- pagination/курсоры (если применимо)
+- idempotency/повтор запроса (если применимо)
 
 

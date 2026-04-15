@@ -64,7 +64,8 @@
 ## Сессии и безопасность
 
 - **Токены**: JWT access token (15 мин) + opaque refresh token (30 дней) в DB
-- **Таблица**: `refresh_tokens(id, user_id, token_hash, device_name, ip, expires_at)`
+- **Таблица**: `refresh_tokens(id, account_id, token_hash, device_info, expires_at, created_at, revoked_at)`  
+  (`user_id` в JWT claim историческое имя, значение = `account_id`)
 - **Инвалидация**: смена пароля → удалить все refresh tokens; logout → удалить один
 - **Досрочный отзыв**: Redis blacklist для access token до истечения TTL
 - **Сессии**: неограниченно одновременно → страница "Активные устройства" в настройках
@@ -78,7 +79,7 @@
 
 ## Удаление аккаунта / GDPR
 
-- Soft delete: поле `deleted_at` на таблице users
+- Soft delete: поле `deleted_at` на таблице `accounts` в `auth_db`
 - Данные остаются в основной БД (нужны для антискама и 152-ФЗ)
 - Отдельный архив не нужен на старте
 
