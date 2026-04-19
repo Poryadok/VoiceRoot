@@ -14,9 +14,23 @@ Discord-like messenger with voice and matchmaking. Product and architecture live
 
 Monorepo conventions: [docs/REPOSITORIES.md](docs/REPOSITORIES.md). Roadmap: [docs/PLAN.md](docs/PLAN.md).
 
+## Toolchain (reference)
+
+Versions below match the primary dev machine (Windows); bump this table when you intentionally upgrade. CI agents may differ—if something breaks only locally or only in CI, compare versions first.
+
+| Tool | Version |
+|------|---------|
+| Go | 1.26.2 |
+| Flutter | 3.41.7 (stable) |
+| Dart | 3.11.5 |
+| Java (Auth service) | 21.0.5 |
+| Docker | 27.4.0 |
+| Docker Compose | v2.31.0 |
+| [buf](https://buf.build/) | 1.50.0 |
+
 ## Local stack
 
-Prerequisites: Docker with Compose v2.
+Prerequisites: Docker with Compose v2 (see **Toolchain**).
 
 ```text
 copy .env.example .env
