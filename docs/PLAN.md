@@ -6,23 +6,33 @@
 
 ## Текущее состояние кодовой базы
 
-| Компонент                      | Состояние                                                                                                                                                 |
-|--------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------|
-| VoiceAuthService (Java/Spring) | Работает: регистрация, логин, JWT, роли                                                                                                                   |
-| VoiceWebSocketService (Go)     | Заглушка: gRPC-сервер стартует, методы не реализованы. В целевой архитектуре real-time шлюз — **Realtime Service** ([MICROSERVICES.md](MICROSERVICES.md)) |
-| VoiceRoomDataService (Go)      | Пустой: только go.mod — голосовые комнаты спейса в терминах [DATA_MODEL.md](DATA_MODEL.md)                                                                 |
-| VoiceMessageService (Go)       | Пустой: только go.mod                                                                                                                                     |
-| voiceclient (Flutter)          | Прототип: P2P WebRTC через Firebase, не подключён к бэкенду                                                                                               |
-| Инфраструктура                 | Docker для Auth и WS; нет CI/CD, нет схем БД                                                                                                              |
+Репозиторий на этапе **документации и фундамента Фазы 0**: прикладного кода сервисов (Java/Go/Flutter) **нет** — только спецификации, контракты и инфраструктурный каркас.
 
-### Соответствие модулей в репозитории → целевой микросервис
+| Компонент | Состояние |
+|-----------|-----------|
+| Документация `docs/` | Актуальные спеки, план фаз, микросервисы |
+| `protos/` | Protobuf (S2S: `voice/s2s/v1/s2s.proto`); **buf** — [buf.work.yaml](../buf.work.yaml), [protos/buf.yaml](../protos/buf.yaml), CI |
+| `src/frontend`, `src/backend`, `src/admin` | Зарезервированная структура монорепо; README в каталогах |
+| `src/backend/migrations/` | Первая волна SQL под [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md) (`auth_db`, `user_db`, `social_db`, `chat_db`, `messaging_db`) |
+| Docker Compose | PostgreSQL (несколько БД) + Redis для локального стенда ([README.md](../README.md)) |
+| CI | GitHub Actions: buf lint/format/breaking (PR), валидация `docker compose`; проверка ссылок в `docs/` — [docs-link-check.yml](../.github/workflows/docs-link-check.yml) при изменениях в доках |
 
-| Модуль / сервис в коде (сейчас) | Целевое имя в архитектуре ([MICROSERVICES.md](MICROSERVICES.md)) | Примечание |
-|---------------------------------|------------------------------------------------------------------|------------|
-| VoiceAuthService | Auth Service | Java/Spring; источник JWT и `auth_db` |
-| VoiceWebSocketService | Realtime Service | WebSocket-шлюз за Gateway; при рефакторинге выровнять имя каталога/образа с «Realtime» |
-| VoiceMessageService | Messaging Service | `messaging_db`, REST/история сообщений |
-| VoiceRoomDataService | Space Service (и при необходимости данные сессий в Voice + LiveKit) | `voice_rooms`, `space_tree_nodes` — [DATA_MODEL.md](DATA_MODEL.md), [microservices/space-service.md](microservices/space-service.md) |
+Целевые сервисы и БД по-прежнему описаны в [MICROSERVICES.md](MICROSERVICES.md) и `docs/microservices/*`; ниже — **куда класть код** при появлении реализации.
+
+### План размещения кода → целевой микросервис
+
+| Целевой сервис | Стек (цель) | Каталог / примечание |
+|----------------|-------------|----------------------|
+| Auth Service | Java/Spring | `src/backend/auth/` или согласованное имя; миграции `auth_db` (Flyway рядом с модулем) |
+| API Gateway | Go | `src/backend/gateway/` |
+| Realtime Service | Go | `src/backend/realtime/` — WebSocket за Gateway ([ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md)) |
+| Messaging Service | Go | `src/backend/messaging/` — `messaging_db` |
+| Chat Service | Go | `src/backend/chat/` — `chat_db` |
+| User Service | Go | `src/backend/user/` — `user_db` |
+| Social Service | Go | `src/backend/social/` — `social_db` |
+| Space / Voice и др. | Go (+ LiveKit) | по мере фаз из таблицы ниже |
+| Клиент | Flutter | `src/frontend/` |
+| Admin | Web | `src/admin/` |
 
 ---
 
@@ -70,6 +80,15 @@
 
 **Результат:** локальный стенд, логин через бэкенд. Процесс: [CONTRIBUTING.md](CONTRIBUTING.md), [TESTING.md](TESTING.md), [DEPLOYMENT.md](DEPLOYMENT.md).
 
+### Первый вертикальный срез (после фундамента Фазы 0, до полного закрытия Фазы 1)
+
+**Цель:** один сквозной сценарий для проверки стенда, CI и контрактов: **Auth (Java) + API Gateway + один продуктовый поток** (например регистрация/логин и выдача JWT через Gateway, или health + валидация токена — конкретику зафиксировать в PR при старте реализации).
+
+- Выполняется **после** каркаса: Compose, миграции v1 в репозитории, buf/CI, скелеты `src/*`.
+- Не заменяет полный чеклист Фазы 1 (DM, друзья, Realtime, Messaging) — это следующий объём работ.
+
+Чеклист выката и стендов: [DEPLOYMENT.md](DEPLOYMENT.md).
+
 ---
 
 ## Фаза 1 — MVP: личные сообщения
@@ -79,7 +98,7 @@
 ### Бэкенд
 
 - [ ] **Messaging** — отправка/получение; **базовое** edit/delete (одна политика, без «для всех/себя» и без метки «(ред.)» в UI — **Фаза 3**); PostgreSQL, курсор, REST
-- [ ] **Realtime** (сейчас VoiceWebSocketService) — JWT, доставка сообщений, Redis Pub/Sub, `s` + `resume`, догрузка через Messaging — [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md)
+- [ ] **Realtime Service** — JWT, доставка сообщений, Redis Pub/Sub, `s` + `resume`, догрузка через Messaging — [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md)
 - [ ] **Чаты (DM)** — создание диалогов, список с превью и unread, `mark_read`
 - [ ] **Друзья** — запрос, accept/decline, список, блок
 - [ ] **Профиль (базовый)** — имя, аватар (R2), «О себе»

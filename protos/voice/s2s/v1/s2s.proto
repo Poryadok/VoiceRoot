@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package voice.s2s.v1;
 
-option go_package = "voice.app/s2s/v1;s2sv1";
+option go_package = "voice.app/voice/s2s/v1;s2sv1";
 
 // S2S Federation API — протокол между federated нодами и master-сервером.
 // Нода выступает клиентом, master — сервером.

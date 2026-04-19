@@ -66,7 +66,7 @@ Federated node = тот же Voice backend, зарегистрированный
 
 ### Маршрутизация уведомлений
 
-- Нода → gRPC `FederationService.NotifyUser` (см. `protos/s2s.proto`) → master доставляет через FCM/APNs
+- Нода → gRPC `FederationService.NotifyUser` (см. `protos/voice/s2s/v1/s2s.proto`) → master доставляет через FCM/APNs
 - Master владеет push-токенами, нода только сообщает о событии
 - При недоступности master: in-memory retry ~5 мин, потом дроп (уведомления не критичны)
 

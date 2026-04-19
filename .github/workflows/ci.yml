@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  protobuf:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fetch base ref for buf breaking
+        if: github.event_name == 'pull_request'
+        run: git fetch --no-tags origin ${{ github.base_ref }}:${{ github.base_ref }}
+      - uses: bufbuild/buf-setup-action@v1
+      - name: Buf lint
+        run: buf lint
+      - name: Buf format (check)
+        run: buf format -d --exit-code
+      - name: Buf breaking (PR vs base)
+        if: github.event_name == 'pull_request'
+        run: buf breaking protos --against ".git#branch=${{ github.base_ref }},subdir=protos"
+
+  compose-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate docker compose file
+        run: docker compose config --quiet

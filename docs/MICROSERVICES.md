@@ -124,7 +124,7 @@ Federation ──gRPC bidirectional stream──► External Node
 - **Service ↔ Service**: gRPC (синхронно), NATS JetStream (асинхронно)
 - **Realtime fan-out**: Redis Pub/Sub между инстансами WebSocket-шлюза
 - **Reconnect (клиент)**: WebSocket `s` / `resume` в Realtime и догрузка сообщений курсором в Messaging — единое описание в [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md) (раздел «Reconnect: WebSocket-поток и история сообщений»)
-- **Federation**: gRPC bidirectional stream (см. `protos/s2s.proto`)
+- **Federation**: gRPC bidirectional stream (см. `protos/voice/s2s/v1/s2s.proto`)
 
 ## Event Bus (NATS JetStream)
 

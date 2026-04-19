@@ -1,0 +1,12 @@
+version: v1
+lint:
+  use:
+    - STANDARD
+  ignore_only:
+    RPC_REQUEST_STANDARD_NAME:
+      - voice/s2s/v1/s2s.proto
+    RPC_RESPONSE_STANDARD_NAME:
+      - voice/s2s/v1/s2s.proto
+breaking:
+  use:
+    - FILE

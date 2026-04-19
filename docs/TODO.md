@@ -1,40 +1,29 @@
-# TODO — открытые вопросы и пробелы в документации
+# Пробелы и открытые вопросы (документация)
 
-Статус проверки: полный обход всех feature-файлов и архитектурных документов. Ниже — замечания, сгруппированные по приоритету.
+Итерация после появления каркаса репозитория (Compose, `src/`, buf, миграции v1). Закрывайте пункты PR-ами; крупные темы дублируйте в issue-трекере, если используется.
 
-Последний целевой аудит согласованности и полноты: [DOCS_CONSISTENCY_AUDIT.md](DOCS_CONSISTENCY_AUDIT.md).
+## Инфраструктура и процесс
 
----
+- [ ] **Деплой на staging из CI** — в [TESTING.md](TESTING.md) указан шаг 5; секреты GitHub и пайплайн под [DEPLOYMENT.md](DEPLOYMENT.md) не заведены (ожидаемо до первого сервиса с образом).
+- [ ] **Сборка Docker-образов в CI** — добавить job’ы, когда появятся `Dockerfile` у сервисов; кэш слоёв по согласованию команды.
+- [ ] **Единая точка входа `make` / скрипты** — расширить корневый [Makefile](../Makefile) (или аналог) под `go test`, `flutter analyze`, миграции, когда код появится в `src/`.
 
-## 🔴 Критические пробелы (блокируют реализацию)
+## Контракты и генерация
 
-### 1. Data model / схема БД нигде не описана
-**Закрыто:** конкретные таблицы, индексы, внутренние FK и логические связи для волны v1 — секции «Модель данных» в [microservices/](microservices/). Инвентарь БД: [DATA_STORES.md](DATA_STORES.md). Общие правила: [DATA_MODEL.md](DATA_MODEL.md). Скоуп и трассировка фич: [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md). Миграции: [OPERATIONS.md](OPERATIONS.md#миграции-бд-database-per-service).
+- [ ] **Первый PR с переносом `s2s.proto` в `voice/s2s/v1/`** — `buf breaking` против старого `master` может падать до merge этого PR; после обновления базы проверка должна стать зелёной.
+- [ ] **Расширение `protos/`** — публичные gRPC для Auth, Gateway, messaging и т.д.; политика **генерации** Go/Java (коммит vs генерация при сборке) — зафиксировать в [REPOSITORIES.md](REPOSITORIES.md) и в скриптах сборки.
+- [ ] **BSR / удалённый registry** — сейчас только локальный модуль `protos`; при введении Buf Schema Registry обновить CI и [REPOSITORIES.md](REPOSITORIES.md).
 
----
+## Данные и миграции
 
-## 🟡 Важные пробелы (нужно решить до кода)
+- [ ] **Двойное ведение Auth DDL** — сейчас SQL в [src/backend/migrations/auth_db/](../src/backend/migrations/auth_db/); после появления Java-модуля Auth перенести source of truth в Flyway рядом с сервисом и убрать дублирование или связать явно в README миграций.
+- [ ] **UUIDv7 для `messages.id`** — в спеке приложение генерирует UUIDv7; при необходимости добавить расширение БД/генератор и уточнить в [messaging-service.md](microservices/messaging-service.md).
 
-### 2. `docs/PLAN.md` — пробелы в покрытии фич
-**Закрыто в [PLAN.md](PLAN.md):** после дробления дорожной карты — Фазы **16** (боты: Portal + runtime) и **17** (сторис); **11** vs **14** — базовые репорты и доверие vs авто-мод и панель + [features/reports.md](features/reports.md); верификация и мульти-профиль — **Фаза 13** + [features/verification.md](features/verification.md).
+## Локальная разработка
 
-### 3. Масштабирование WebSocket — edge cases
-Базовый сценарий (LB, без sticky, Redis Pub/Sub, падение инстанса, догрузка сообщений через Messaging): [microservices/realtime-service.md](microservices/realtime-service.md). При нагрузочных тестах при необходимости дополнить гонками `resume` vs историей и прочими краевыми случаями.
+- [ ] **Скрипт «поднять стенд + применить все миграции»** — опционально обёртка в `Makefile`/`scripts/` поверх [src/backend/migrations/README.md](../src/backend/migrations/README.md).
+- [ ] **NATS / JetStream в Compose** — не входит в минимальный v1 стенд; добавить, когда Realtime/Messaging начнут публиковать события ([CONTRACT_MATRIX.md](CONTRACT_MATRIX.md)).
 
----
+## Документация
 
-## 🟢 Технические вопросы
-
-*(все закрыты)*
-
-### Инженерная практика (Git, тесты, стенды)
-
-Закрыто документами: [CONTRIBUTING.md](CONTRIBUTING.md), [TESTING.md](TESTING.md), [DEPLOYMENT.md](DEPLOYMENT.md), [REPOSITORIES.md](REPOSITORIES.md).
-
----
-
-## 📝 Мелкие замечания
-
-*(сняты в проходе 2026-04-16)* — модерация сторис: [features/stories.md](features/stories.md), тип репорта в [features/reports.md](features/reports.md); поиск по содержимому файлов — post-V1: [features/search.md](features/search.md).
-
-
+- [ ] Пройти [DOCS_CONSISTENCY_AUDIT.md](DOCS_CONSISTENCY_AUDIT.md) после первого значимого изменения контрактов или фаз.

@@ -6,7 +6,7 @@ S2S-федерация: подключение внешних нод, синхр
 
 **Язык**: Go
 **БД**: PostgreSQL `federation_db`
-**Протокол**: gRPC bidirectional stream (см. `protos/s2s.proto`)
+**Протокол**: gRPC bidirectional stream (см. `protos/voice/s2s/v1/s2s.proto`)
 
 ## Ответственность
 
@@ -50,7 +50,7 @@ Federated Node (сторонний сервер):
 ## API (gRPC)
 
 ```protobuf
-// Из protos/s2s.proto:
+// Из protos/voice/s2s/v1/s2s.proto:
 service FederationService {
   rpc EventStream(stream FederationEvent) returns (stream FederationEvent);
   rpc SyncSnapshot(SyncSnapshotRequest) returns (SyncSnapshotResponse);

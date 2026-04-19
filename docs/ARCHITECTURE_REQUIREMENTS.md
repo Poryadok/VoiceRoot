@@ -204,7 +204,7 @@
   - Reconnect ноды: snapshot re-sync — нода запрашивает текущие роли/баны у master (event log не нужен)
   - Master недоступен: нода работает с TTL-кэшем, новых пользователей не пропускает
   - Kafka / очереди сообщений — не нужны в V1
-- **Канонический контракт S2S**: [`protos/s2s.proto`](../protos/s2s.proto)
+- **Канонический контракт S2S**: [`protos/voice/s2s/v1/s2s.proto`](../protos/voice/s2s/v1/s2s.proto)
 - **Документация semantics/ownership**: [microservices/federation-service.md](microservices/federation-service.md)
 
 ---
