@@ -90,13 +90,15 @@
 
 ## CI (GitHub Actions)
 
-Состав workflow для PR в `master` (фаза 0 в [PLAN.md](PLAN.md)):
+Состав workflow для PR в `master` (фаза 0 в [PLAN.md](PLAN.md)). Фактически в репозитории сейчас (см. [.github/workflows/ci.yml](../.github/workflows/ci.yml)):
 
-1. Линтеры по затронутым языкам.
-2. Юнит- и быстрые интеграционные тесты.
-3. Проверка относительных ссылок в `docs/` (при изменениях в документации) — workflow `.github/workflows/docs-link-check.yml`, конфиг `.markdown-link-check.json` в корне репозитория.
-4. Сборка Docker-образов для изменённых сервисов (с кэшем слоёв).
-5. Деплой на **staging** — [DEPLOYMENT.md](DEPLOYMENT.md).
+1. **Protobuf**: `buf lint`, `buf format`, на PR — `buf breaking` относительно базовой ветки.
+2. **Compose**: `docker compose config` (валидация файла).
+3. **Gateway (Go)**: `go test` в [`src/backend/gateway/`](../src/backend/gateway/); сборка Docker-образа; **push в GHCR** только при **push** в `master` (теги `:latest` и `:<git_sha>`). Для PR — только сборка без push.
+4. Линтеры по остальным языкам (Java, Flutter, golangci-lint по всему монорепо) и расширенные интеграционные тесты — по мере появления кода; не блокируют текущий `CI`, пока не добавлены отдельные job’ы.
+5. Проверка относительных ссылок в `docs/` при изменениях в документации — `.github/workflows/docs-link-check.yml`, конфиг `.markdown-link-check.json` в корне.
+
+**Деплой на staging** вынесен в отдельный workflow [.github/workflows/staging-deploy.yml](../.github/workflows/staging-deploy.yml): триггер `workflow_dispatch` (ручной запуск с тегом образа) и, при переменной `STAGING_DEPLOY_ENABLED=true`, автозапуск после успешного `CI` на push в `master`. Секреты, GHCR и namespace — [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ---
 

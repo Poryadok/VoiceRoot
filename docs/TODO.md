@@ -4,7 +4,7 @@
 
 ## Инфраструктура и процесс
 
-- [ ] **Деплой на staging из CI** — в [TESTING.md](TESTING.md) указан шаг 5; секреты GitHub и пайплайн под [DEPLOYMENT.md](DEPLOYMENT.md) не заведены (ожидаемо до первого сервиса с образом).
+- [x] **Деплой на staging из CI** — в репозитории: push образа **gateway** в GHCR при push в `master` ([`ci.yml`](../.github/workflows/ci.yml)); деплой в `voice-staging` — [`staging-deploy.yml`](../.github/workflows/staging-deploy.yml) (`kubectl` + [`deploy/staging/`](../deploy/staging/)). В GitHub вручную: Environment **staging**, secret **`STAGING_KUBECONFIG`** (kubeconfig в base64), variable **`STAGING_DEPLOY_ENABLED`**=`true` для автодеплоя после зелёного `CI` на `master`; иначе только **`workflow_dispatch`**. Детали — [DEPLOYMENT.md](DEPLOYMENT.md), состав CI — [TESTING.md](TESTING.md).
 - [ ] **Сборка Docker-образов в CI** — добавить job’ы, когда появятся `Dockerfile` у сервисов; кэш слоёв по согласованию команды.
 - [ ] **Единая точка входа `make` / скрипты** — расширить корневый [Makefile](../Makefile) (или аналог) под `go test`, `flutter analyze`, миграции, когда код появится в `src/`.
 

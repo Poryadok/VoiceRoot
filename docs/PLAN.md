@@ -15,7 +15,7 @@
 | `src/frontend`, `src/backend`, `src/admin` | Зарезервированная структура монорепо; README в каталогах |
 | `src/backend/migrations/` | Первая волна SQL под [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md) (`auth_db`, `user_db`, `social_db`, `chat_db`, `messaging_db`) |
 | Docker Compose | PostgreSQL (несколько БД) + Redis для локального стенда ([README.md](../README.md)) |
-| CI | GitHub Actions: buf lint/format/breaking (PR), валидация `docker compose`; проверка ссылок в `docs/` — [docs-link-check.yml](../.github/workflows/docs-link-check.yml) при изменениях в доках |
+| CI | GitHub Actions: buf lint/format/breaking (PR), валидация `docker compose`; сборка и push в GHCR образа **gateway** при push в `master` — [ci.yml](../.github/workflows/ci.yml); деплой на staging — [staging-deploy.yml](../.github/workflows/staging-deploy.yml) (см. [DEPLOYMENT.md](DEPLOYMENT.md)); проверка ссылок в `docs/` — [docs-link-check.yml](../.github/workflows/docs-link-check.yml) при изменениях в доках |
 
 Целевые сервисы и БД по-прежнему описаны в [MICROSERVICES.md](MICROSERVICES.md) и `docs/microservices/*`; ниже — **куда класть код** при появлении реализации.
 
@@ -71,7 +71,7 @@
 
 - [ ] **Схемы БД (первая волна)** — миграции под Фазу 0 + 1: `auth_db`, `user_db`, `social_db`, `chat_db`, `messaging_db` — [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md), детали целевых таблиц — секции «Модель данных» в [microservices/](microservices/)
 - [ ] **API Gateway** — REST + WebSocket, маршрутизация
-- [ ] **CI/CD** — GitHub Actions: lint, тесты, Docker, деплой на staging
+- [ ] **CI/CD** — GitHub Actions: lint, тесты, Docker (gateway → GHCR), деплой на staging (kubeconfig + `STAGING_DEPLOY_ENABLED`; см. [DEPLOYMENT.md](DEPLOYMENT.md))
 - [ ] **Docker Compose (dev)** — сервисы + PostgreSQL + Redis одной командой
 - [ ] **Auth: доработка** — refresh (opaque, 30 дней), logout, валидация, тесты
 - [ ] **Общая библиотека Go** — JWT, middleware, логирование, конфиг

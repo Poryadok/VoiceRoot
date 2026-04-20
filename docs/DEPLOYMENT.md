@@ -30,10 +30,26 @@
         → прод: тег релиза + workflow с approval (или ручной выкат) → production
 ```
 
-- **Staging**: после зелёного CI на `master` — **автоматический** деплой ([PLAN.md](PLAN.md), фаза 0). Пока workflow не готов — деплой вручную или `workflow_dispatch`.
+- **Staging**: образ **API Gateway** (минимальный каркас в [`src/backend/gateway/`](../src/backend/gateway/)) собирается и пушится в **GHCR** при каждом push в `master` (workflow [`CI`](../.github/workflows/ci.yml), job `gateway-image`). Деплой в namespace `voice-staging` выполняет workflow **[`Staging deploy`](../.github/workflows/staging-deploy.yml)** (`kubectl apply` к манифестам в [`deploy/staging/`](../deploy/staging/)): **ручной** запуск (`workflow_dispatch`, ввод тега образа, по умолчанию `latest`); **авто** после успешного `CI` на push в `master` — только при `STAGING_DEPLOY_ENABLED` = `true` (см. раздел ниже). Пока кластер или kubeconfig не готовы — только ручной выкат или отключённый автодеплой.
 - **Production**: деплой только с **явным шагом** (approval в GitHub Environments, ручной запуск job или утверждённый релизный тег) — без автоматического «всё, что в master, сразу в prod».
 
 Версионирование образов: тег по **git SHA** `master` для непрерывного staging; для prod — тег **semver** (`v1.2.3`) или тот же SHA, зафиксированный в релизном манифесте.
+
+---
+
+## GitHub Actions: registry, staging-кластер
+
+Имена — ориентир для настройки в GitHub (значения секретов в репозиторий не коммитить).
+
+| Что | Где в GitHub | Назначение |
+|-----|----------------|------------|
+| `GITHUB_TOKEN` | встроенный | Push образов в GHCR из job `gateway-image` (в `CI` выдано `packages: write`). |
+| Образ gateway | GHCR | `ghcr.io/<owner_lowercase>/<repo_lowercase>/gateway:<git_sha>` и тег `latest` (см. `ci.yml`). |
+| Environment **`staging`** | Settings → Environments | Окружение для job деплоя; при необходимости включить required reviewers / wait timer. |
+| Secret **`STAGING_KUBECONFIG`** | Environment **staging** → Environment secrets | Kubeconfig для staging **k3s**, целиком в **base64** (одна строка: `base64 -w0 kubeconfig` на Linux или эквивалент на macOS/Windows). Workflow декодирует в `~/.kube/config`. |
+| Variable **`STAGING_DEPLOY_ENABLED`** | Settings → Secrets and variables → **Actions** → Variables | Ровно `true` — разрешить **автоматический** деплой после успешного `CI` на push в `master` (событие `workflow_run`). Пока переменная не задана или не равна `true`, автодеплой не запускается; остаётся **`workflow_dispatch`** в `Staging deploy`. |
+
+**Pull из GHCR в кластере:** если пакет/образ приватный, в namespace `voice-staging` создайте `docker-registry` secret (учёт GitHub с `read:packages`) и добавьте `imagePullSecrets` в Pod template Deployment (в репозитории при необходимости расширить [`deploy/staging/gateway-deployment.yaml`](../deploy/staging/gateway-deployment.yaml)).
 
 ---
 

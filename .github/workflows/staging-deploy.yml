@@ -1,0 +1,71 @@
+name: Staging deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Gateway image tag (git SHA from CI, or latest)"
+        required: false
+        default: "latest"
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || (
+        github.event_name == 'workflow_run'
+        && github.event.workflow_run.conclusion == 'success'
+        && github.event.workflow_run.event == 'push'
+        && github.event.workflow_run.head_branch == 'master'
+        && vars.STAGING_DEPLOY_ENABLED == 'true'
+      )
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Image tag (workflow_dispatch)
+        id: tag_dispatch
+        if: github.event_name == 'workflow_dispatch'
+        run: echo "tag=${{ inputs.image_tag }}" >> "$GITHUB_OUTPUT"
+
+      - name: Image tag (after CI on master)
+        id: tag_run
+        if: github.event_name == 'workflow_run'
+        run: echo "tag=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve gateway image
+        id: image
+        run: |
+          set -eux
+          BASE="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+          if [ -n "${{ steps.tag_dispatch.outputs.tag }}" ]; then
+            TAG="${{ steps.tag_dispatch.outputs.tag }}"
+          else
+            TAG="${{ steps.tag_run.outputs.tag }}"
+          fi
+          echo "full=${BASE}/gateway:${TAG}" >> "$GITHUB_OUTPUT"
+
+      - uses: azure/setup-kubectl@v4
+
+      - name: Configure kubeconfig
+        run: |
+          set -eux
+          mkdir -p ~/.kube
+          echo "${{ secrets.STAGING_KUBECONFIG }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Apply staging manifests
+        run: |
+          set -eux
+          kubectl apply -f deploy/staging/namespace.yaml
+          sed "s|IMAGE_PLACEHOLDER|${{ steps.image.outputs.full }}|g" deploy/staging/gateway-deployment.yaml | kubectl apply -f -
