@@ -80,21 +80,24 @@
 
 | Изменения в | Локально                                                          |
 |-------------|-------------------------------------------------------------------|
-| Go-сервис   | `go test ./...`, `golangci-lint run` (или эквивалент из Makefile) |
+| Репозиторий целиком (как в CI, через Docker) | из корня: **`make build-all`** — compose config, buf (lint + format check), `go test` для gateway, сборка образа `voice-gateway:local` ([Makefile](../Makefile)) |
+| Go-сервис   | `go test ./...`, `golangci-lint run` (или цели в Makefile)        |
 | Auth (Java) | `./mvnw test` или `./gradlew test` — по сборке проекта            |
 | Flutter     | `flutter analyze`, `flutter test`                                 |
 
-Предпочтительно единая точка входа: `Makefile` или скрипты в корне репозитория (когда появятся).
+Дополнительно: **`make build-all-breaking`** — то же + `buf breaking` против локальной ветки `master` (на PR в CI база другая — см. ниже). Хостовый buf: `make buf-lint`, `make buf-format`, `make buf-breaking`.
 
 ---
 
 ## CI (GitHub Actions)
 
-Состав workflow для PR в `master` (фаза 0 в [PLAN.md](PLAN.md)). Фактически в репозитории сейчас (см. [.github/workflows/ci.yml](../.github/workflows/ci.yml)):
+Файлы workflow лежат в репозитории; **они начинают выполняться только после** публикации репозитория на GitHub и включения Actions (ветки, secrets для GHCR/staging — [DEPLOYMENT.md](DEPLOYMENT.md)). До этого локальная проверка в духе job’ов CI — **`make build-all`**.
+
+Состав для PR в `master` (фаза 0 в [PLAN.md](PLAN.md)), как задумано в [.github/workflows/ci.yml](../.github/workflows/ci.yml):
 
 1. **Protobuf**: `buf lint`, `buf format`, на PR — `buf breaking` относительно базовой ветки.
 2. **Compose**: `docker compose config` (валидация файла).
-3. **Gateway (Go)**: `go test` в [`src/backend/gateway/`](../src/backend/gateway/); сборка Docker-образа; **push в GHCR** только при **push** в `master` (теги `:latest` и `:<git_sha>`). Для PR — только сборка без push.
+3. **Gateway (Go)**: `go test` в [`src/backend/gateway/`](../src/backend/gateway/); сборка Docker-образа; **push в GHCR** только при **push** в `master` (теги `:latest` и `:<git_sha>`). Для PR — только сборка без push. Локально без установки Go/buf на хосте: **`make build-all`** (шаги в Docker).
 4. Линтеры по остальным языкам (Java, Flutter, golangci-lint по всему монорепо) и расширенные интеграционные тесты — по мере появления кода; не блокируют текущий `CI`, пока не добавлены отдельные job’ы.
 5. Проверка относительных ссылок в `docs/` при изменениях в документации — `.github/workflows/docs-link-check.yml`, конфиг `.markdown-link-check.json` в корне.
 

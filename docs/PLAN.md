@@ -6,16 +6,18 @@
 
 ## Текущее состояние кодовой базы
 
-Репозиторий на этапе **документации и фундамента Фазы 0**: прикладного кода сервисов (Java/Go/Flutter) **нет** — только спецификации, контракты и инфраструктурный каркас.
+Репозиторий на этапе **документации и фундамента Фазы 0**: спецификации, контракты, инфраструктурный каркас и **минимальный каркас API Gateway** на Go (`GET /health`, юнит-тесты, Dockerfile). Описание job’ов для GitHub Actions и выката на staging есть в `.github/workflows/` — **фактический прогон CI и деплой на staging считаются налаженными только после** привязки репозитория к GitHub, настройки secrets/variables и проверки стенда ([DEPLOYMENT.md](DEPLOYMENT.md)). Прикладного кода **Auth (Java)**, **Realtime/Messaging** и **Flutter-клиента** по-прежнему нет.
 
 | Компонент | Состояние |
 |-----------|-----------|
 | Документация `docs/` | Актуальные спеки, план фаз, микросервисы |
 | `protos/` | Protobuf (S2S: `voice/s2s/v1/s2s.proto`); **buf** — [buf.work.yaml](../buf.work.yaml), [protos/buf.yaml](../protos/buf.yaml), CI |
-| `src/frontend`, `src/backend`, `src/admin` | Зарезервированная структура монорепо; README в каталогах |
+| `src/backend/gateway/` | Минимальный HTTP-сервис и Dockerfile под сборку образа (CI/staging — когда workflows и registry подключены); не прокси и не целевой REST/WebSocket Gateway из спеки |
+| `src/frontend`, `src/backend` (прочее), `src/admin` | Зарезервированная структура монорепо; README в каталогах |
 | `src/backend/migrations/` | Первая волна SQL под [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md) (`auth_db`, `user_db`, `social_db`, `chat_db`, `messaging_db`) |
 | Docker Compose | PostgreSQL (несколько БД) + Redis для локального стенда ([README.md](../README.md)) |
-| CI | GitHub Actions: buf lint/format/breaking (PR), валидация `docker compose`; сборка и push в GHCR образа **gateway** при push в `master` — [ci.yml](../.github/workflows/ci.yml); деплой на staging — [staging-deploy.yml](../.github/workflows/staging-deploy.yml) (см. [DEPLOYMENT.md](DEPLOYMENT.md)); проверка ссылок в `docs/` — [docs-link-check.yml](../.github/workflows/docs-link-check.yml) при изменениях в доках |
+| Локальные проверки | **`make build-all`** в корне — через Docker: валидация compose, buf (lint + format check), `go test` для gateway, сборка образа `voice-gateway:local` ([Makefile](../Makefile), [TESTING.md](TESTING.md)) |
+| CI (как задумано в репо) | Workflows: [ci.yml](../.github/workflows/ci.yml) (buf, compose, gateway → при push в `master` push образа в GHCR), [staging-deploy.yml](../.github/workflows/staging-deploy.yml), [docs-link-check.yml](../.github/workflows/docs-link-check.yml) — см. [TESTING.md](TESTING.md), [DEPLOYMENT.md](DEPLOYMENT.md). **Пока репозиторий не подключён к GitHub Actions, это спецификация, а не подтверждённый зелёный пайплайн.** |
 
 Целевые сервисы и БД по-прежнему описаны в [MICROSERVICES.md](MICROSERVICES.md) и `docs/microservices/*`; ниже — **куда класть код** при появлении реализации.
 
@@ -70,9 +72,9 @@
 **Цель:** инфраструктура, без которой нельзя строить фичи.
 
 - [ ] **Схемы БД (первая волна)** — миграции под Фазу 0 + 1: `auth_db`, `user_db`, `social_db`, `chat_db`, `messaging_db` — [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md), детали целевых таблиц — секции «Модель данных» в [microservices/](microservices/)
-- [ ] **API Gateway** — REST + WebSocket, маршрутизация
-- [ ] **CI/CD** — GitHub Actions: lint, тесты, Docker (gateway → GHCR), деплой на staging (kubeconfig + `STAGING_DEPLOY_ENABLED`; см. [DEPLOYMENT.md](DEPLOYMENT.md))
-- [ ] **Docker Compose (dev)** — сервисы + PostgreSQL + Redis одной командой
+- [ ] **API Gateway** — целевой REST + WebSocket и маршрутизация к сервисам (сейчас есть только каркас: `GET /health`, тесты, Docker-образ — [src/backend/gateway/](../src/backend/gateway/))
+- [ ] **CI/CD в эксплуатации** — репозиторий на GitHub, Actions выполняются на PR/push; секреты/variables для GHCR и staging; smoke после деплоя ([DEPLOYMENT.md](DEPLOYMENT.md)). В репозитории уже лежат [ci.yml](../.github/workflows/ci.yml) и [staging-deploy.yml](../.github/workflows/staging-deploy.yml); локальная проверка «как у job’ов» — **`make build-all`** ([Makefile](../Makefile))
+- [x] **Docker Compose (dev), инфраструктура** — PostgreSQL (логические БД) + Redis одной командой ([README.md](../README.md)); прикладные сервисы в compose пока не подключены
 - [ ] **Auth: доработка** — refresh (opaque, 30 дней), logout, валидация, тесты
 - [ ] **Общая библиотека Go** — JWT, middleware, логирование, конфиг
 - [ ] **Flutter: скелет** — three-column layout, бэкенд вместо Firebase, DI, state

@@ -41,10 +41,12 @@ PostgreSQL exposes five logical databases (`auth_db`, `user_db`, `social_db`, `c
 
 ## Checks
 
-See [docs/TESTING.md](docs/TESTING.md). From repo root:
+See [docs/TESTING.md](docs/TESTING.md). From repo root (Docker must be running):
 
 ```text
-make buf-lint
+make build-all
 ```
 
-Full CI parity: GitHub Actions on pull requests to `master` (protobuf lint + breaking check; docs link check when `docs/` changes).
+Собирает образ **`voice-gateway:local`** и прогоняет buf + compose config + тесты gateway в контейнерах (эквивалент основным job’ам [`.github/workflows/ci.yml`](.github/workflows/ci.yml), когда CI уже запускается на GitHub). При установленном **buf** на хосте: `make buf-lint`.
+
+Когда репозиторий подключён к **GitHub Actions**, на PR в `master` дополнительно гоняются те же проверки на раннере плюс, при настроенном репозитории, проверка ссылок в `docs/`; выкат на staging — по [DEPLOYMENT.md](docs/DEPLOYMENT.md), отдельно от `make build-all`.
