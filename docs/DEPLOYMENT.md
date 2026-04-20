@@ -76,6 +76,7 @@
 
 ## Связанные документы
 
+- [STAGING_SERVER.md](STAGING_SERVER.md) — инвентарь физического staging-хоста (SSH, k3s, Traefik; без секретов)
 - [OPERATIONS.md](OPERATIONS.md) — SLO, деградация, canary, rollback, миграции
 - [TESTING.md](TESTING.md) — состав CI
 - [CONTRIBUTING.md](CONTRIBUTING.md) — ветки и merge в `master`
