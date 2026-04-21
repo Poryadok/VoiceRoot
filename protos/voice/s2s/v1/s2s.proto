@@ -4,47 +4,47 @@ package voice.s2s.v1;
 
 option go_package = "voice.app/voice/s2s/v1;s2sv1";
 
-// S2S Federation API — протокол между federated нодами и master-сервером.
-// Нода выступает клиентом, master — сервером.
+// S2S federation API between a federated node and the master server.
+// The node is the gRPC client; the master is the server.
 // Account UUID fields use account_id (not user_id); see docs/REPOSITORIES.md (Protobuf).
 service FederationService {
-  // Persistent bidirectional stream: нода подписывается на события своих спейсов.
-  // Нода шлёт кадры EventStreamRequest (SubscribeRequest / Heartbeat / Ack).
-  // Master шлёт EventStreamResponse при каждом изменении (buf STANDARD имена кадров стрима).
+  // Persistent bidirectional stream: the node subscribes to events for its hosted spaces.
+  // The node sends EventStreamRequest frames (SubscribeRequest / Heartbeat / Ack).
+  // The master sends EventStreamResponse on each change (buf STANDARD stream frame names).
   rpc EventStream(stream EventStreamRequest) returns (stream EventStreamResponse);
 
-  // Snapshot-синхронизация на реконнекте: нода запрашивает текущие роли и баны
-  // для конкретного спейса. Вызывается после переподключения EventStream.
+  // Snapshot sync on reconnect: the node requests current roles and bans for a given space.
+  // Called after EventStream reconnects.
   rpc SyncSnapshot(SyncSnapshotRequest) returns (SyncSnapshotResponse);
 
-  // Нода просит master доставить push-уведомление пользователю через FCM/APNs.
-  // Используется когда нода не может сама доставить пуш (нет сертификатов).
+  // The node asks the master to deliver a push notification via FCM/APNs.
+  // Used when the node cannot deliver the push itself (no certificates).
   rpc NotifyUser(NotifyUserRequest) returns (NotifyUserResponse);
 
-  // Нода верифицирует federated auth-токен пользователя.
-  // Вызывается при входе пользователя в спейс на ноде.
+  // The node verifies a federated auth token for the user.
+  // Called when the user enters a space on the node.
   rpc AuthenticateUser(AuthenticateUserRequest) returns (AuthenticateUserResponse);
 }
 
 // ─────────────────────────── Auth ───────────────────────────
 
 message AuthenticateUserRequest {
-  string auth_token = 1; // JWT, выданный master для этого пользователя
-  string space_id = 2; // Спейс на ноде, в который пользователь заходит
+  string auth_token = 1; // JWT issued by the master for this user
+  string space_id = 2; // Space on the node the user is entering
 }
 
 message AuthenticateUserResponse {
   bool ok = 1;
   string account_id = 2;
   string profile_id = 3;
-  repeated string role_ids = 4; // Роли в данном спейсе
-  int64 expires_at = 5; // Unix timestamp: до какого времени токен действителен
-  string error = 6; // Причина отказа (если ok = false)
+  repeated string role_ids = 4; // Roles in this space
+  int64 expires_at = 5; // Unix timestamp: token validity end
+  string error = 6; // Rejection reason when ok = false
 }
 
 // ─────────────────────────── Event Stream ───────────────────────────
 
-// Кадр ноды → master (client stream).
+// Node → master (client stream).
 message EventStreamRequest {
   oneof payload {
     SubscribeRequest subscribe = 1;
@@ -54,20 +54,20 @@ message EventStreamRequest {
 }
 
 message SubscribeRequest {
-  string node_id = 1; // Уникальный ID ноды
-  string node_secret = 2; // Shared secret, выданный при регистрации ноды
-  repeated string space_ids = 3; // Спейсы, которые хостит эта нода
+  string node_id = 1; // Unique node id
+  string node_secret = 2; // Shared secret from node registration
+  repeated string space_ids = 3; // Space ids this node hosts
 }
 
 message Heartbeat {
-  int64 timestamp = 1; // Unix timestamp отправки
+  int64 timestamp = 1; // Unix send time
 }
 
 message Ack {
-  string event_id = 1; // ID подтверждаемого события
+  string event_id = 1; // Id of the event being acknowledged
 }
 
-// Кадр master → нода (server stream).
+// Master → node (server stream).
 message EventStreamResponse {
   string event_id = 1;
   int64 timestamp = 2;
@@ -93,7 +93,7 @@ message UserBannedEvent {
   string account_id = 1;
   string profile_id = 2;
   string reason = 3;
-  int64 banned_until = 4; // Unix timestamp; 0 = перманентный бан
+  int64 banned_until = 4; // Unix timestamp; 0 = permanent ban
 }
 
 message UserUnbannedEvent {
@@ -102,11 +102,11 @@ message UserUnbannedEvent {
 }
 
 message DefederatedEvent {
-  string reason = 1; // Причина (нарушение правил, ручное решение и т.п.)
+  string reason = 1; // e.g. policy violation, manual decision
 }
 
 message SpaceDeletedEvent {
-  // Спейс удалён с master — нода должна закрыть доступ
+  // Space removed on master — node must revoke access
 }
 
 // ─────────────────────────── Snapshot Sync ───────────────────────────
@@ -131,7 +131,7 @@ message RoleEntry {
 message BanEntry {
   string account_id = 1;
   string profile_id = 2;
-  int64 banned_until = 3; // 0 = перманентный
+  int64 banned_until = 3; // 0 = permanent
 }
 
 // ─────────────────────────── Push Notifications ───────────────────────────
@@ -140,13 +140,13 @@ message NotifyUserRequest {
   string account_id = 1;
   string space_id = 2;
   string type = 3; // see enum FederationPushEventType for canonical tokens; prefer type_enum when set
-  string preview = 4; // Короткий текст для показа в пуше
-  string deep_link = 5; // Опционально: deep link для открытия нужного экрана
+  string preview = 4; // Short text for the push body
+  string deep_link = 5; // Optional deep link to open the right screen
   optional FederationPushEventType type_enum = 6;
 }
 
 message NotifyUserResponse {
-  bool accepted = 1; // false = пользователь не найден или master не может доставить
+  bool accepted = 1; // false if user not found or master cannot deliver
   string error = 2;
 }
 

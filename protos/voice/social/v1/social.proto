@@ -24,8 +24,8 @@ service SocialService {
   rpc SetFavorite(SetFavoriteRequest) returns (SetFavoriteResponse);
   rpc ListFavorites(ListFavoritesRequest) returns (ListFavoritesResponse);
 
-  rpc BlockUser(BlockUserRequest) returns (BlockUserResponse);
-  rpc UnblockUser(UnblockUserRequest) returns (UnblockUserResponse);
+  rpc BlockAccount(BlockAccountRequest) returns (BlockAccountResponse);
+  rpc UnblockAccount(UnblockAccountRequest) returns (UnblockAccountResponse);
   rpc ListBlocked(ListBlockedRequest) returns (ListBlockedResponse);
   rpc IsBlocked(IsBlockedRequest) returns (IsBlockedResponse);
 
@@ -114,11 +114,12 @@ message SetFavoriteRequest {
 
 message ListFavoritesRequest {}
 
-message BlockUserRequest {
+// Account-level block: applies to all profiles of the peer account. Body: blocked party's account UUID (auth_db.accounts.id); blocker from request context.
+message BlockAccountRequest {
   string blocked_account_id = 1;
 }
 
-message UnblockUserRequest {
+message UnblockAccountRequest {
   string blocked_account_id = 1;
 }
 
@@ -183,8 +184,8 @@ message SetFavoriteResponse {}
 message ListFavoritesResponse {
   FriendList friend_list = 1;
 }
-message BlockUserResponse {}
-message UnblockUserResponse {}
+message BlockAccountResponse {}
+message UnblockAccountResponse {}
 message ListBlockedResponse {
   BlockedList blocked_list = 1;
 }

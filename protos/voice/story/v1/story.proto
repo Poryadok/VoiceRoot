@@ -31,7 +31,7 @@ service StoryService {
   rpc GetStory(GetStoryRequest) returns (GetStoryResponse);
 
   rpc GetStoryFeed(GetStoryFeedRequest) returns (GetStoryFeedResponse);
-  rpc GetUserStories(GetUserStoriesRequest) returns (GetUserStoriesResponse);
+  rpc GetProfileStories(GetProfileStoriesRequest) returns (GetProfileStoriesResponse);
 
   rpc MarkViewed(MarkViewedRequest) returns (MarkViewedResponse);
   rpc GetViewers(GetViewersRequest) returns (GetViewersResponse);
@@ -94,7 +94,7 @@ message GetStoryFeedRequest {
   voice.common.v1.CursorPageRequest page = 1;
 }
 
-message GetUserStoriesRequest {
+message GetProfileStoriesRequest {
   string profile_id = 1;
 }
 
@@ -179,7 +179,7 @@ message GetStoryFeedResponse {
   string next_cursor = 2;
   optional voice.common.v1.CursorPageResponse page = 3;
 }
-message GetUserStoriesResponse {
+message GetProfileStoriesResponse {
   StoryList story_list = 1;
 }
 message MarkViewedResponse {}

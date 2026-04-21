@@ -14,7 +14,7 @@
 - Списки: друзья, избранное, заблокированные
 - Методы добавления: по username, телефону, QR-коду, из пространства, из истории ММ
 - Синхронизация телефонных контактов
-- Блокировка пользователей (применяется ко всему аккаунту, включая все профили)
+- Блокировка **аккаунта** (все профили заблокированной стороны): в gRPC — `BlockAccount` / `UnblockAccount`, в теле запроса — `blocked_account_id` (= `accounts.id`), блокирующий — из контекста аутентификации (см. [DATA_MODEL.md](../DATA_MODEL.md))
 - Friends-of-friends (1 уровень глубины) для приватности
 
 ## API (gRPC)
@@ -41,9 +41,9 @@ service SocialService {
   rpc SetFavorite(SetFavoriteRequest) returns (SetFavoriteResponse);
   rpc ListFavorites(ListFavoritesRequest) returns (ListFavoritesResponse);
 
-  // Блокировки
-  rpc BlockUser(BlockUserRequest) returns (BlockUserResponse);
-  rpc UnblockUser(UnblockUserRequest) returns (UnblockUserResponse);
+  // Блокировки (уровень аккаунта)
+  rpc BlockAccount(BlockAccountRequest) returns (BlockAccountResponse);
+  rpc UnblockAccount(UnblockAccountRequest) returns (UnblockAccountResponse);
   rpc ListBlocked(ListBlockedRequest) returns (ListBlockedResponse);
   rpc IsBlocked(IsBlockedRequest) returns (IsBlockedResponse); // internal
 

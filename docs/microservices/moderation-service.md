@@ -33,7 +33,7 @@ service ModerationService {
   // Санкции
   rpc ApplySanction(ApplySanctionRequest) returns (Sanction);
   rpc RevokeSanction(RevokeSanctionRequest) returns (Empty);
-  rpc GetUserSanctions(GetUserSanctionsRequest) returns (SanctionList);
+  rpc GetAccountSanctions(GetAccountSanctionsRequest) returns (SanctionList);
   rpc GetActiveSanction(GetActiveSanctionRequest) returns (Sanction);
 
   // Апелляции

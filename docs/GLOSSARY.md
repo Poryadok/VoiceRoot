@@ -114,6 +114,7 @@
 |-------------|-------------------------------------------------------------------------|----------------------------------------------------------------------------------|
 | **Аккаунт** | Учётная запись для входа (`account_id` / `user_id` в JWT).              | [DATA_MODEL.md](DATA_MODEL.md) §1, `auth_db.accounts`                            |
 | **Профиль** | Публичная «личность» пользователя (`profile_id` в JWT), мульти-профиль. | [DATA_MODEL.md](DATA_MODEL.md) §1, [multi-profile.md](features/multi-profile.md) |
+| **Блокировка (Social)** | Запись в `social_db.blocks` между **аккаунтами** (`blocker_account_id`, `blocked_account_id`); действует на все профили заблокированной стороны. В gRPC: `BlockAccount` / `UnblockAccount`, поле тела `blocked_account_id`. | [social-service.md](microservices/social-service.md), контракт [social.proto](../protos/voice/social/v1/social.proto) |
 
 ---
 

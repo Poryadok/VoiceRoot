@@ -17,7 +17,7 @@ service ModerationService {
 
   rpc ApplySanction(ApplySanctionRequest) returns (ApplySanctionResponse);
   rpc RevokeSanction(RevokeSanctionRequest) returns (RevokeSanctionResponse);
-  rpc GetUserSanctions(GetUserSanctionsRequest) returns (GetUserSanctionsResponse);
+  rpc GetAccountSanctions(GetAccountSanctionsRequest) returns (GetAccountSanctionsResponse);
   rpc GetActiveSanction(GetActiveSanctionRequest) returns (GetActiveSanctionResponse);
 
   rpc SubmitAppeal(SubmitAppealRequest) returns (SubmitAppealResponse);
@@ -97,7 +97,7 @@ message RevokeSanctionRequest {
   string sanction_id = 1;
 }
 
-message GetUserSanctionsRequest {
+message GetAccountSanctionsRequest {
   string account_id = 1;
 }
 
@@ -176,7 +176,7 @@ message ApplySanctionResponse {
   Sanction sanction = 1;
 }
 message RevokeSanctionResponse {}
-message GetUserSanctionsResponse {
+message GetAccountSanctionsResponse {
   SanctionList sanction_list = 1;
 }
 message GetActiveSanctionResponse {
