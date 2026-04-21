@@ -4,7 +4,7 @@
 
 ## Инфраструктура и процесс
 
-- [ ] **Деплой на staging из CI (проверено end-to-end)** — описано в репозитории: push образа **gateway** в GHCR при push в `master` ([`ci.yml`](../.github/workflows/ci.yml)); деплой в `voice-staging` — [`staging-deploy.yml`](../.github/workflows/staging-deploy.yml) (`kubectl` + [`deploy/staging/`](../deploy/staging/)). В GitHub: Environment **staging**, secret **`STAGING_KUBECONFIG`**, variable **`STAGING_DEPLOY_ENABLED`** и т.д. — [DEPLOYMENT.md](DEPLOYMENT.md). **Закрыть пункт после** привязки репозитория к GitHub Actions, настройки секретов и успешной проверки на staging.
+- [x] **Деплой на staging из CI (проверено end-to-end)** — push образа **gateway** в GHCR ([`ci.yml`](../.github/workflows/ci.yml)); деплой в `voice-staging` — [`staging-deploy.yml`](../.github/workflows/staging-deploy.yml); публичный доступ: Ingress, FQDN **`voice.tastytest.online`**, Cloudflare Flexible — [DEPLOYMENT.md](DEPLOYMENT.md), [STAGING_SERVER.md](STAGING_SERVER.md).
 - [ ] **Сборка Docker-образов в CI** — сейчас job для **gateway**; добавить job’ы, когда появятся `Dockerfile` у остальных сервисов; кэш слоёв по согласованию команды.
 - [x] **`make build-all` в корне** — через Docker: compose config, buf, тесты gateway, образ `voice-gateway:local` ([Makefile](../Makefile), [TESTING.md](TESTING.md)). Расширить под `flutter analyze`, другие Go-сервисы, миграции — по мере появления кода в `src/`.
 
