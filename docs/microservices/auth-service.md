@@ -24,20 +24,22 @@
 
 ## API (gRPC)
 
+Канон: [`protos/voice/auth/v1/auth.proto`](../../protos/voice/auth/v1/auth.proto). Кратко:
+
 ```protobuf
 service AuthService {
-  rpc Register(RegisterRequest) returns (AuthResponse);
-  rpc Login(LoginRequest) returns (AuthResponse);
-  rpc Logout(LogoutRequest) returns (Empty);
-  rpc RefreshToken(RefreshRequest) returns (AuthResponse);
+  rpc Register(RegisterRequest) returns (RegisterResponse);   // session: AuthSession
+  rpc Login(LoginRequest) returns (LoginResponse);
+  rpc Logout(LogoutRequest) returns (LogoutResponse);
+  rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
   rpc Enable2FA(Enable2FARequest) returns (Enable2FAResponse);
-  rpc Verify2FA(Verify2FARequest) returns (AuthResponse);
-  rpc VerifyOTP(VerifyOTPRequest) returns (Empty);
-  rpc ConvertGuest(ConvertGuestRequest) returns (AuthResponse);
-  rpc DeleteAccount(DeleteAccountRequest) returns (Empty);
-  rpc RestoreAccount(RestoreAccountRequest) returns (AuthResponse);
-  rpc ValidateToken(ValidateTokenRequest) returns (TokenClaims); // internal
-  rpc GetJWKS(Empty) returns (JWKSResponse); // public
+  rpc Verify2FA(Verify2FARequest) returns (Verify2FAResponse);
+  rpc VerifyOTP(VerifyOTPRequest) returns (VerifyOTPResponse);
+  rpc ConvertGuest(ConvertGuestRequest) returns (ConvertGuestResponse);
+  rpc DeleteAccount(DeleteAccountRequest) returns (DeleteAccountResponse);
+  rpc RestoreAccount(RestoreAccountRequest) returns (RestoreAccountResponse);
+  rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse); // internal
+  rpc GetJWKS(GetJWKSRequest) returns (GetJWKSResponse); // public
 }
 ```
 

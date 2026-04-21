@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package voice.moderation.v1;
 
-import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 import "voice/chat/v1/chat.proto";
 import "voice/common/v1/common.proto";
@@ -11,22 +10,22 @@ option go_package = "voice.app/voice/moderation/v1;moderationv1";
 
 // Reports, sanctions, automod. HTTP: /api/v1/moderation/**.
 service ModerationService {
-  rpc CreateReport(CreateReportRequest) returns (Report);
-  rpc GetReport(GetReportRequest) returns (Report);
-  rpc ListReports(ListReportsRequest) returns (ReportList);
-  rpc ResolveReport(ResolveReportRequest) returns (Report);
+  rpc CreateReport(CreateReportRequest) returns (CreateReportResponse);
+  rpc GetReport(GetReportRequest) returns (GetReportResponse);
+  rpc ListReports(ListReportsRequest) returns (ListReportsResponse);
+  rpc ResolveReport(ResolveReportRequest) returns (ResolveReportResponse);
 
-  rpc ApplySanction(ApplySanctionRequest) returns (Sanction);
-  rpc RevokeSanction(RevokeSanctionRequest) returns (google.protobuf.Empty);
-  rpc GetUserSanctions(GetUserSanctionsRequest) returns (SanctionList);
-  rpc GetActiveSanction(GetActiveSanctionRequest) returns (Sanction);
+  rpc ApplySanction(ApplySanctionRequest) returns (ApplySanctionResponse);
+  rpc RevokeSanction(RevokeSanctionRequest) returns (RevokeSanctionResponse);
+  rpc GetUserSanctions(GetUserSanctionsRequest) returns (GetUserSanctionsResponse);
+  rpc GetActiveSanction(GetActiveSanctionRequest) returns (GetActiveSanctionResponse);
 
-  rpc SubmitAppeal(SubmitAppealRequest) returns (Appeal);
-  rpc ReviewAppeal(ReviewAppealRequest) returns (Appeal);
-  rpc GetAppeal(GetAppealRequest) returns (Appeal);
+  rpc SubmitAppeal(SubmitAppealRequest) returns (SubmitAppealResponse);
+  rpc ReviewAppeal(ReviewAppealRequest) returns (ReviewAppealResponse);
+  rpc GetAppeal(GetAppealRequest) returns (GetAppealResponse);
 
-  rpc CheckMessage(CheckMessageRequest) returns (CheckResult);
-  rpc GetAutoModStats(GetAutoModStatsRequest) returns (AutoModStats);
+  rpc CheckMessage(CheckMessageRequest) returns (CheckMessageResponse);
+  rpc GetAutoModStats(GetAutoModStatsRequest) returns (GetAutoModStatsResponse);
 
   rpc IsShadowBanned(IsShadowBannedRequest) returns (IsShadowBannedResponse);
 }
@@ -159,4 +158,42 @@ message IsShadowBannedRequest {
 
 message IsShadowBannedResponse {
   bool shadow_banned = 1;
+}
+
+message CreateReportResponse {
+  Report report = 1;
+}
+message GetReportResponse {
+  Report report = 1;
+}
+message ListReportsResponse {
+  ReportList report_list = 1;
+}
+message ResolveReportResponse {
+  Report report = 1;
+}
+message ApplySanctionResponse {
+  Sanction sanction = 1;
+}
+message RevokeSanctionResponse {}
+message GetUserSanctionsResponse {
+  SanctionList sanction_list = 1;
+}
+message GetActiveSanctionResponse {
+  Sanction sanction = 1;
+}
+message SubmitAppealResponse {
+  Appeal appeal = 1;
+}
+message ReviewAppealResponse {
+  Appeal appeal = 1;
+}
+message GetAppealResponse {
+  Appeal appeal = 1;
+}
+message CheckMessageResponse {
+  CheckResult check_result = 1;
+}
+message GetAutoModStatsResponse {
+  AutoModStats auto_mod_stats = 1;
 }

@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package voice.file.v1;
 
-import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 import "voice/chat/v1/chat.proto";
 import "voice/common/v1/common.proto";
@@ -11,17 +10,17 @@ option go_package = "voice.app/voice/file/v1;filev1";
 
 // Uploads, R2, scanning. HTTP: /api/v1/files/**.
 service FileService {
-  rpc RequestUpload(RequestUploadRequest) returns (UploadResponse);
-  rpc ConfirmUpload(ConfirmUploadRequest) returns (FileMetadata);
+  rpc RequestUpload(RequestUploadRequest) returns (RequestUploadResponse);
+  rpc ConfirmUpload(ConfirmUploadRequest) returns (ConfirmUploadResponse);
 
-  rpc GetFileURL(GetFileURLRequest) returns (FileURLResponse);
-  rpc GetFileMetadata(GetFileMetadataRequest) returns (FileMetadata);
-  rpc GetBulkMetadata(GetBulkMetadataRequest) returns (BulkFileMetadata);
+  rpc GetFileURL(GetFileURLRequest) returns (GetFileURLResponse);
+  rpc GetFileMetadata(GetFileMetadataRequest) returns (GetFileMetadataResponse);
+  rpc GetBulkMetadata(GetBulkMetadataRequest) returns (GetBulkMetadataResponse);
 
-  rpc DeleteFile(DeleteFileRequest) returns (google.protobuf.Empty);
-  rpc ListFiles(ListFilesRequest) returns (FileList);
+  rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
+  rpc ListFiles(ListFilesRequest) returns (ListFilesResponse);
 
-  rpc CheckQuota(CheckQuotaRequest) returns (QuotaResponse);
+  rpc CheckQuota(CheckQuotaRequest) returns (CheckQuotaResponse);
 }
 
 message RequestUploadRequest {
@@ -110,4 +109,27 @@ message CheckQuotaRequest {
 message QuotaResponse {
   int64 bytes_used = 1;
   int64 bytes_limit = 2;
+}
+
+message RequestUploadResponse {
+  UploadResponse upload_response = 1;
+}
+message ConfirmUploadResponse {
+  FileMetadata file_metadata = 1;
+}
+message GetFileURLResponse {
+  FileURLResponse file_url_response = 1;
+}
+message GetFileMetadataResponse {
+  FileMetadata file_metadata = 1;
+}
+message GetBulkMetadataResponse {
+  BulkFileMetadata bulk_file_metadata = 1;
+}
+message DeleteFileResponse {}
+message ListFilesResponse {
+  FileList file_list = 1;
+}
+message CheckQuotaResponse {
+  QuotaResponse quota_response = 1;
 }

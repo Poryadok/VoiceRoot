@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package voice.space.v1;
 
-import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 import "voice/chat/v1/chat.proto";
 import "voice/common/v1/common.proto";
@@ -11,42 +10,42 @@ option go_package = "voice.app/voice/space/v1;spacev1";
 
 // Spaces, tree, invites. HTTP: /api/v1/spaces/**.
 service SpaceService {
-  rpc CreateSpace(CreateSpaceRequest) returns (Space);
-  rpc UpdateSpace(UpdateSpaceRequest) returns (Space);
-  rpc DeleteSpace(DeleteSpaceRequest) returns (google.protobuf.Empty);
-  rpc GetSpace(GetSpaceRequest) returns (Space);
-  rpc ListMySpaces(ListMySpacesRequest) returns (SpaceList);
-  rpc SearchPublicSpaces(SearchPublicSpacesRequest) returns (SpaceList);
+  rpc CreateSpace(CreateSpaceRequest) returns (CreateSpaceResponse);
+  rpc UpdateSpace(UpdateSpaceRequest) returns (UpdateSpaceResponse);
+  rpc DeleteSpace(DeleteSpaceRequest) returns (DeleteSpaceResponse);
+  rpc GetSpace(GetSpaceRequest) returns (GetSpaceResponse);
+  rpc ListMySpaces(ListMySpacesRequest) returns (ListMySpacesResponse);
+  rpc SearchPublicSpaces(SearchPublicSpacesRequest) returns (SearchPublicSpacesResponse);
 
-  rpc CreateVoiceRoom(CreateVoiceRoomRequest) returns (VoiceRoom);
-  rpc UpdateVoiceRoom(UpdateVoiceRoomRequest) returns (VoiceRoom);
-  rpc DeleteVoiceRoom(DeleteVoiceRoomRequest) returns (google.protobuf.Empty);
-  rpc UpsertTreeNode(UpsertTreeNodeRequest) returns (SpaceTreeNode);
-  rpc RemoveTreeNode(RemoveTreeNodeRequest) returns (google.protobuf.Empty);
-  rpc CreateCategory(CreateCategoryRequest) returns (Category);
-  rpc UpdateCategory(UpdateCategoryRequest) returns (Category);
-  rpc DeleteCategory(DeleteCategoryRequest) returns (google.protobuf.Empty);
-  rpc ReorderSpaceTree(ReorderSpaceTreeRequest) returns (google.protobuf.Empty);
+  rpc CreateVoiceRoom(CreateVoiceRoomRequest) returns (CreateVoiceRoomResponse);
+  rpc UpdateVoiceRoom(UpdateVoiceRoomRequest) returns (UpdateVoiceRoomResponse);
+  rpc DeleteVoiceRoom(DeleteVoiceRoomRequest) returns (DeleteVoiceRoomResponse);
+  rpc UpsertTreeNode(UpsertTreeNodeRequest) returns (UpsertTreeNodeResponse);
+  rpc RemoveTreeNode(RemoveTreeNodeRequest) returns (RemoveTreeNodeResponse);
+  rpc CreateCategory(CreateCategoryRequest) returns (CreateCategoryResponse);
+  rpc UpdateCategory(UpdateCategoryRequest) returns (UpdateCategoryResponse);
+  rpc DeleteCategory(DeleteCategoryRequest) returns (DeleteCategoryResponse);
+  rpc ReorderSpaceTree(ReorderSpaceTreeRequest) returns (ReorderSpaceTreeResponse);
 
-  rpc CreateInvite(CreateInviteRequest) returns (Invite);
-  rpc RevokeInvite(RevokeInviteRequest) returns (google.protobuf.Empty);
-  rpc GetInvite(GetInviteRequest) returns (Invite);
-  rpc ListInvites(ListInvitesRequest) returns (InviteList);
-  rpc JoinByInvite(JoinByInviteRequest) returns (SpaceMembership);
+  rpc CreateInvite(CreateInviteRequest) returns (CreateInviteResponse);
+  rpc RevokeInvite(RevokeInviteRequest) returns (RevokeInviteResponse);
+  rpc GetInvite(GetInviteRequest) returns (GetInviteResponse);
+  rpc ListInvites(ListInvitesRequest) returns (ListInvitesResponse);
+  rpc JoinByInvite(JoinByInviteRequest) returns (JoinByInviteResponse);
 
-  rpc JoinSpace(JoinSpaceRequest) returns (SpaceMembership);
-  rpc LeaveSpace(LeaveSpaceRequest) returns (google.protobuf.Empty);
-  rpc KickMember(KickMemberRequest) returns (google.protobuf.Empty);
-  rpc BanMember(BanMemberRequest) returns (google.protobuf.Empty);
-  rpc UnbanMember(UnbanMemberRequest) returns (google.protobuf.Empty);
-  rpc ListMembers(ListSpaceMembersRequest) returns (SpaceMemberList);
-  rpc ListBans(ListBansRequest) returns (BanList);
-  rpc TransferOwnership(TransferOwnershipRequest) returns (google.protobuf.Empty);
+  rpc JoinSpace(JoinSpaceRequest) returns (JoinSpaceResponse);
+  rpc LeaveSpace(LeaveSpaceRequest) returns (LeaveSpaceResponse);
+  rpc KickMember(KickMemberRequest) returns (KickMemberResponse);
+  rpc BanMember(BanMemberRequest) returns (BanMemberResponse);
+  rpc UnbanMember(UnbanMemberRequest) returns (UnbanMemberResponse);
+  rpc ListMembers(ListMembersRequest) returns (ListMembersResponse);
+  rpc ListBans(ListBansRequest) returns (ListBansResponse);
+  rpc TransferOwnership(TransferOwnershipRequest) returns (TransferOwnershipResponse);
 
-  rpc ListTemplates(ListTemplatesRequest) returns (TemplateList);
-  rpc CreateFromTemplate(CreateFromTemplateRequest) returns (Space);
+  rpc ListTemplates(ListTemplatesRequest) returns (ListTemplatesResponse);
+  rpc CreateFromTemplate(CreateFromTemplateRequest) returns (CreateFromTemplateResponse);
 
-  rpc GetAuditLog(GetAuditLogRequest) returns (AuditLogList);
+  rpc GetAuditLog(GetAuditLogRequest) returns (GetAuditLogResponse);
 }
 
 message Space {
@@ -252,7 +251,7 @@ message UnbanMemberRequest {
   string account_id = 2;
 }
 
-message ListSpaceMembersRequest {
+message ListMembersRequest {
   string space_id = 1;
   voice.common.v1.CursorPageRequest page = 2;
 }
@@ -324,4 +323,76 @@ message AuditLogEntry {
 // Logical reference to space_db.spaces for other services (cf. ChatRef).
 message SpaceRef {
   string id = 1;
+}
+
+message CreateSpaceResponse {
+  Space space = 1;
+}
+message UpdateSpaceResponse {
+  Space space = 1;
+}
+message DeleteSpaceResponse {}
+message GetSpaceResponse {
+  Space space = 1;
+}
+message ListMySpacesResponse {
+  SpaceList space_list = 1;
+}
+message SearchPublicSpacesResponse {
+  SpaceList space_list = 1;
+}
+message CreateVoiceRoomResponse {
+  VoiceRoom voice_room = 1;
+}
+message UpdateVoiceRoomResponse {
+  VoiceRoom voice_room = 1;
+}
+message DeleteVoiceRoomResponse {}
+message UpsertTreeNodeResponse {
+  SpaceTreeNode space_tree_node = 1;
+}
+message RemoveTreeNodeResponse {}
+message CreateCategoryResponse {
+  Category category = 1;
+}
+message UpdateCategoryResponse {
+  Category category = 1;
+}
+message DeleteCategoryResponse {}
+message ReorderSpaceTreeResponse {}
+message CreateInviteResponse {
+  Invite invite = 1;
+}
+message RevokeInviteResponse {}
+message GetInviteResponse {
+  Invite invite = 1;
+}
+message ListInvitesResponse {
+  InviteList invite_list = 1;
+}
+message JoinByInviteResponse {
+  SpaceMembership space_membership = 1;
+}
+message JoinSpaceResponse {
+  SpaceMembership space_membership = 1;
+}
+message LeaveSpaceResponse {}
+message KickMemberResponse {}
+message BanMemberResponse {}
+message UnbanMemberResponse {}
+message ListMembersResponse {
+  SpaceMemberList space_member_list = 1;
+}
+message ListBansResponse {
+  BanList ban_list = 1;
+}
+message TransferOwnershipResponse {}
+message ListTemplatesResponse {
+  TemplateList template_list = 1;
+}
+message CreateFromTemplateResponse {
+  Space space = 1;
+}
+message GetAuditLogResponse {
+  AuditLogList audit_log_list = 1;
 }

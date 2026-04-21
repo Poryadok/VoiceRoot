@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package voice.matchmaking.v1;
 
-import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 import "voice/common/v1/common.proto";
 
@@ -10,25 +9,25 @@ option go_package = "voice.app/voice/matchmaking/v1;matchmakingv1";
 
 // Matchmaking. HTTP: /api/v1/matchmaking/**.
 service MatchmakingService {
-  rpc ListGames(ListGamesRequest) returns (GameList);
-  rpc GetGame(GetGameRequest) returns (Game);
-  rpc CreateGame(CreateGameRequest) returns (Game);
-  rpc UpdateGame(UpdateGameRequest) returns (Game);
-  rpc SearchGames(SearchGamesRequest) returns (GameList);
+  rpc ListGames(ListGamesRequest) returns (ListGamesResponse);
+  rpc GetGame(GetGameRequest) returns (GetGameResponse);
+  rpc CreateGame(CreateGameRequest) returns (CreateGameResponse);
+  rpc UpdateGame(UpdateGameRequest) returns (UpdateGameResponse);
+  rpc SearchGames(SearchGamesRequest) returns (SearchGamesResponse);
 
-  rpc StartSearch(StartSearchRequest) returns (SearchSession);
-  rpc CancelSearch(CancelSearchRequest) returns (google.protobuf.Empty);
-  rpc GetSearchStatus(GetSearchStatusRequest) returns (SearchSession);
+  rpc StartSearch(StartSearchRequest) returns (StartSearchResponse);
+  rpc CancelSearch(CancelSearchRequest) returns (CancelSearchResponse);
+  rpc GetSearchStatus(GetSearchStatusRequest) returns (GetSearchStatusResponse);
 
-  rpc GetMatch(GetMatchRequest) returns (Match);
-  rpc GetMatchHistory(GetMatchHistoryRequest) returns (MatchList);
+  rpc GetMatch(GetMatchRequest) returns (GetMatchResponse);
+  rpc GetMatchHistory(GetMatchHistoryRequest) returns (GetMatchHistoryResponse);
 
-  rpc RateMatch(RateMatchRequest) returns (google.protobuf.Empty);
-  rpc GetPlayerRating(GetPlayerRatingRequest) returns (PlayerRating);
+  rpc RateMatch(RateMatchRequest) returns (RateMatchResponse);
+  rpc GetPlayerRating(GetPlayerRatingRequest) returns (GetPlayerRatingResponse);
 
-  rpc BanFromMM(BanFromMMRequest) returns (google.protobuf.Empty);
-  rpc UnbanFromMM(UnbanFromMMRequest) returns (google.protobuf.Empty);
-  rpc GetMMBanStatus(GetMMBanStatusRequest) returns (MMBanStatus);
+  rpc BanFromMM(BanFromMMRequest) returns (BanFromMMResponse);
+  rpc UnbanFromMM(UnbanFromMMRequest) returns (UnbanFromMMResponse);
+  rpc GetMMBanStatus(GetMMBanStatusRequest) returns (GetMMBanStatusResponse);
 }
 
 message Game {
@@ -155,4 +154,42 @@ message GetMMBanStatusRequest {
 message MMBanStatus {
   bool banned = 1;
   optional google.protobuf.Timestamp until = 2;
+}
+
+message ListGamesResponse {
+  GameList game_list = 1;
+}
+message GetGameResponse {
+  Game game = 1;
+}
+message CreateGameResponse {
+  Game game = 1;
+}
+message UpdateGameResponse {
+  Game game = 1;
+}
+message SearchGamesResponse {
+  GameList game_list = 1;
+}
+message StartSearchResponse {
+  SearchSession search_session = 1;
+}
+message CancelSearchResponse {}
+message GetSearchStatusResponse {
+  SearchSession search_session = 1;
+}
+message GetMatchResponse {
+  Match match = 1;
+}
+message GetMatchHistoryResponse {
+  MatchList match_list = 1;
+}
+message RateMatchResponse {}
+message GetPlayerRatingResponse {
+  PlayerRating player_rating = 1;
+}
+message BanFromMMResponse {}
+message UnbanFromMMResponse {}
+message GetMMBanStatusResponse {
+  MMBanStatus mm_ban_status = 1;
 }

@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package voice.auth.v1;
 
-import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 
 option go_package = "voice.app/voice/auth/v1;authv1";
@@ -11,20 +10,20 @@ option java_package = "app.voice.auth.v1";
 
 // Auth Service — registration, sessions, JWT, 2FA (Java). HTTP prefix: /api/v1/auth/** → Gateway.
 service AuthService {
-  rpc Register(RegisterRequest) returns (AuthResponse);
-  rpc Login(LoginRequest) returns (AuthResponse);
-  rpc Logout(LogoutRequest) returns (google.protobuf.Empty);
-  rpc RefreshToken(RefreshTokenRequest) returns (AuthResponse);
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+  rpc Login(LoginRequest) returns (LoginResponse);
+  rpc Logout(LogoutRequest) returns (LogoutResponse);
+  rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
   rpc Enable2FA(Enable2FARequest) returns (Enable2FAResponse);
-  rpc Verify2FA(Verify2FARequest) returns (AuthResponse);
-  rpc VerifyOTP(VerifyOTPRequest) returns (google.protobuf.Empty);
-  rpc ConvertGuest(ConvertGuestRequest) returns (AuthResponse);
-  rpc DeleteAccount(DeleteAccountRequest) returns (google.protobuf.Empty);
-  rpc RestoreAccount(RestoreAccountRequest) returns (AuthResponse);
+  rpc Verify2FA(Verify2FARequest) returns (Verify2FAResponse);
+  rpc VerifyOTP(VerifyOTPRequest) returns (VerifyOTPResponse);
+  rpc ConvertGuest(ConvertGuestRequest) returns (ConvertGuestResponse);
+  rpc DeleteAccount(DeleteAccountRequest) returns (DeleteAccountResponse);
+  rpc RestoreAccount(RestoreAccountRequest) returns (RestoreAccountResponse);
   // Internal — other services / Gateway token introspection.
-  rpc ValidateToken(ValidateTokenRequest) returns (TokenClaims);
+  rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse);
   // Public JWKS for JWT verification.
-  rpc GetJWKS(google.protobuf.Empty) returns (JWKSResponse);
+  rpc GetJWKS(GetJWKSRequest) returns (GetJWKSResponse);
 }
 
 message RegisterRequest {
@@ -66,7 +65,14 @@ message Verify2FARequest {
 
 message VerifyOTPRequest {
   string code = 1;
-  string otp_type = 2; // email_verify | password_reset
+  string otp_type = 2; // email_verify | password_reset — see enum OtpType for canonical values
+}
+
+// Canonical values for VerifyOTPRequest.otp_type (string).
+enum OtpType {
+  OTP_TYPE_UNSPECIFIED = 0;
+  OTP_TYPE_EMAIL_VERIFY = 1;
+  OTP_TYPE_PASSWORD_RESET = 2;
 }
 
 message ConvertGuestRequest {
@@ -87,11 +93,52 @@ message ValidateTokenRequest {
   string access_token = 1;
 }
 
-message AuthResponse {
+// Issued session (access + refresh + account id).
+message AuthSession {
   string access_token = 1;
   string refresh_token = 2;
   int64 expires_in_seconds = 3;
   string account_id = 4;
+}
+
+message RegisterResponse {
+  AuthSession session = 1;
+}
+
+message LoginResponse {
+  AuthSession session = 1;
+}
+
+message LogoutResponse {}
+
+message RefreshTokenResponse {
+  AuthSession session = 1;
+}
+
+message Verify2FAResponse {
+  AuthSession session = 1;
+}
+
+message VerifyOTPResponse {}
+
+message ConvertGuestResponse {
+  AuthSession session = 1;
+}
+
+message DeleteAccountResponse {}
+
+message RestoreAccountResponse {
+  AuthSession session = 1;
+}
+
+message ValidateTokenResponse {
+  TokenClaims claims = 1;
+}
+
+message GetJWKSRequest {}
+
+message GetJWKSResponse {
+  string keys_json = 1; // JWKS document as JSON string
 }
 
 message TokenClaims {
@@ -100,8 +147,4 @@ message TokenClaims {
   repeated string roles = 3;
   string subscription_tier = 4;
   google.protobuf.Timestamp expires_at = 5;
-}
-
-message JWKSResponse {
-  string keys_json = 1; // JWKS document as JSON string
 }

@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package voice.story.v1;
 
-import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 import "voice/common/v1/common.proto";
 
@@ -10,28 +9,28 @@ option go_package = "voice.app/voice/story/v1;storyv1";
 
 // Stories and highlights. HTTP: /api/v1/stories/**.
 service StoryService {
-  rpc CreateStory(CreateStoryRequest) returns (Story);
-  rpc DeleteStory(DeleteStoryRequest) returns (google.protobuf.Empty);
-  rpc GetStory(GetStoryRequest) returns (Story);
+  rpc CreateStory(CreateStoryRequest) returns (CreateStoryResponse);
+  rpc DeleteStory(DeleteStoryRequest) returns (DeleteStoryResponse);
+  rpc GetStory(GetStoryRequest) returns (GetStoryResponse);
 
-  rpc GetStoryFeed(GetStoryFeedRequest) returns (StoryFeedResponse);
-  rpc GetUserStories(GetUserStoriesRequest) returns (StoryList);
+  rpc GetStoryFeed(GetStoryFeedRequest) returns (GetStoryFeedResponse);
+  rpc GetUserStories(GetUserStoriesRequest) returns (GetUserStoriesResponse);
 
-  rpc MarkViewed(MarkViewedRequest) returns (google.protobuf.Empty);
-  rpc GetViewers(GetViewersRequest) returns (ViewerList);
+  rpc MarkViewed(MarkViewedRequest) returns (MarkViewedResponse);
+  rpc GetViewers(GetViewersRequest) returns (GetViewersResponse);
 
-  rpc ReactToStory(ReactToStoryRequest) returns (google.protobuf.Empty);
+  rpc ReactToStory(ReactToStoryRequest) returns (ReactToStoryResponse);
 
-  rpc GetArchive(GetArchiveRequest) returns (StoryList);
+  rpc GetArchive(GetArchiveRequest) returns (GetArchiveResponse);
 
-  rpc CreateHighlight(CreateHighlightRequest) returns (Highlight);
-  rpc UpdateHighlight(UpdateHighlightRequest) returns (Highlight);
-  rpc DeleteHighlight(DeleteHighlightRequest) returns (google.protobuf.Empty);
-  rpc AddToHighlight(AddToHighlightRequest) returns (google.protobuf.Empty);
-  rpc RemoveFromHighlight(RemoveFromHighlightRequest) returns (google.protobuf.Empty);
-  rpc GetHighlights(GetHighlightsRequest) returns (HighlightList);
+  rpc CreateHighlight(CreateHighlightRequest) returns (CreateHighlightResponse);
+  rpc UpdateHighlight(UpdateHighlightRequest) returns (UpdateHighlightResponse);
+  rpc DeleteHighlight(DeleteHighlightRequest) returns (DeleteHighlightResponse);
+  rpc AddToHighlight(AddToHighlightRequest) returns (AddToHighlightResponse);
+  rpc RemoveFromHighlight(RemoveFromHighlightRequest) returns (RemoveFromHighlightResponse);
+  rpc GetHighlights(GetHighlightsRequest) returns (GetHighlightsResponse);
 
-  rpc CreateLookingForParty(CreateLookingForPartyRequest) returns (Story);
+  rpc CreateLookingForParty(CreateLookingForPartyRequest) returns (CreateLookingForPartyResponse);
 }
 
 message Story {
@@ -150,4 +149,41 @@ message HighlightList {
 message CreateLookingForPartyRequest {
   string criteria_json = 1;
   optional string media_file_id = 2;
+}
+
+message CreateStoryResponse {
+  Story story = 1;
+}
+message DeleteStoryResponse {}
+message GetStoryResponse {
+  Story story = 1;
+}
+message GetStoryFeedResponse {
+  StoryFeedResponse story_feed_response = 1;
+}
+message GetUserStoriesResponse {
+  StoryList story_list = 1;
+}
+message MarkViewedResponse {}
+message GetViewersResponse {
+  ViewerList viewer_list = 1;
+}
+message ReactToStoryResponse {}
+message GetArchiveResponse {
+  StoryList story_list = 1;
+}
+message CreateHighlightResponse {
+  Highlight highlight = 1;
+}
+message UpdateHighlightResponse {
+  Highlight highlight = 1;
+}
+message DeleteHighlightResponse {}
+message AddToHighlightResponse {}
+message RemoveFromHighlightResponse {}
+message GetHighlightsResponse {
+  HighlightList highlight_list = 1;
+}
+message CreateLookingForPartyResponse {
+  Story story = 1;
 }

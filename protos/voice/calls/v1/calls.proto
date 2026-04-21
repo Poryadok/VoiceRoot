@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package voice.calls.v1;
 
-import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 import "voice/chat/v1/chat.proto";
 import "voice/space/v1/space.proto";
@@ -12,28 +11,28 @@ option go_package = "voice.app/voice/calls/v1;callsv1";
 // Voice / LiveKit orchestration. HTTP: /api/v1/voice/**.
 // Package voice.calls.v1 avoids path stutter voice/voice/v1; service name matches docs.
 service VoiceService {
-  rpc StartCall(StartCallRequest) returns (CallSession);
-  rpc JoinCall(JoinCallRequest) returns (CallSession);
-  rpc LeaveCall(LeaveCallRequest) returns (google.protobuf.Empty);
-  rpc EndCall(EndCallRequest) returns (google.protobuf.Empty);
+  rpc StartCall(StartCallRequest) returns (StartCallResponse);
+  rpc JoinCall(JoinCallRequest) returns (JoinCallResponse);
+  rpc LeaveCall(LeaveCallRequest) returns (LeaveCallResponse);
+  rpc EndCall(EndCallRequest) returns (EndCallResponse);
 
-  rpc JoinVoiceRoom(JoinVoiceRoomRequest) returns (VoiceSession);
-  rpc LeaveVoiceRoom(LeaveVoiceRoomRequest) returns (google.protobuf.Empty);
-  rpc MoveToVoiceRoom(MoveToVoiceRoomRequest) returns (VoiceSession);
+  rpc JoinVoiceRoom(JoinVoiceRoomRequest) returns (JoinVoiceRoomResponse);
+  rpc LeaveVoiceRoom(LeaveVoiceRoomRequest) returns (LeaveVoiceRoomResponse);
+  rpc MoveToVoiceRoom(MoveToVoiceRoomRequest) returns (MoveToVoiceRoomResponse);
 
-  rpc GetJoinToken(GetJoinTokenRequest) returns (JoinTokenResponse);
+  rpc GetJoinToken(GetJoinTokenRequest) returns (GetJoinTokenResponse);
 
-  rpc UpdateVoiceState(UpdateVoiceStateRequest) returns (google.protobuf.Empty);
-  rpc GetVoiceStates(GetVoiceStatesRequest) returns (VoiceStateList);
-  rpc GetActiveCall(GetActiveCallRequest) returns (CallSession);
+  rpc UpdateVoiceState(UpdateVoiceStateRequest) returns (UpdateVoiceStateResponse);
+  rpc GetVoiceStates(GetVoiceStatesRequest) returns (GetVoiceStatesResponse);
+  rpc GetActiveCall(GetActiveCallRequest) returns (GetActiveCallResponse);
 
-  rpc StartScreenShare(StartScreenShareRequest) returns (ScreenShareSession);
-  rpc StopScreenShare(StopScreenShareRequest) returns (google.protobuf.Empty);
+  rpc StartScreenShare(StartScreenShareRequest) returns (StartScreenShareResponse);
+  rpc StopScreenShare(StopScreenShareRequest) returns (StopScreenShareResponse);
 
-  rpc SetCommanderMode(SetCommanderModeRequest) returns (google.protobuf.Empty);
+  rpc SetCommanderMode(SetCommanderModeRequest) returns (SetCommanderModeResponse);
 
-  rpc RaiseHand(RaiseHandRequest) returns (google.protobuf.Empty);
-  rpc LowerHand(LowerHandRequest) returns (google.protobuf.Empty);
+  rpc RaiseHand(RaiseHandRequest) returns (RaiseHandResponse);
+  rpc LowerHand(LowerHandRequest) returns (LowerHandResponse);
 }
 
 message StartCallRequest {
@@ -146,3 +145,36 @@ message RaiseHandRequest {
 message LowerHandRequest {
   string room_id = 1;
 }
+
+message StartCallResponse {
+  CallSession call_session = 1;
+}
+message JoinCallResponse {
+  CallSession call_session = 1;
+}
+message LeaveCallResponse {}
+message EndCallResponse {}
+message JoinVoiceRoomResponse {
+  VoiceSession voice_session = 1;
+}
+message LeaveVoiceRoomResponse {}
+message MoveToVoiceRoomResponse {
+  VoiceSession voice_session = 1;
+}
+message GetJoinTokenResponse {
+  JoinTokenResponse join_token_response = 1;
+}
+message UpdateVoiceStateResponse {}
+message GetVoiceStatesResponse {
+  VoiceStateList voice_state_list = 1;
+}
+message GetActiveCallResponse {
+  CallSession call_session = 1;
+}
+message StartScreenShareResponse {
+  ScreenShareSession screen_share_session = 1;
+}
+message StopScreenShareResponse {}
+message SetCommanderModeResponse {}
+message RaiseHandResponse {}
+message LowerHandResponse {}

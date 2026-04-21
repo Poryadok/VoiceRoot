@@ -6,6 +6,7 @@ option go_package = "voice.app/voice/s2s/v1;s2sv1";
 
 // S2S Federation API — протокол между federated нодами и master-сервером.
 // Нода выступает клиентом, master — сервером.
+// Account UUID fields use account_id (not user_id); see docs/REPOSITORIES.md (Protobuf).
 service FederationService {
   // Persistent bidirectional stream: нода подписывается на события своих спейсов.
   // Нода шлёт кадры EventStreamRequest (SubscribeRequest / Heartbeat / Ack).
@@ -34,7 +35,7 @@ message AuthenticateUserRequest {
 
 message AuthenticateUserResponse {
   bool ok = 1;
-  string user_id = 2;
+  string account_id = 2;
   string profile_id = 3;
   repeated string role_ids = 4; // Роли в данном спейсе
   int64 expires_at = 5; // Unix timestamp: до какого времени токен действителен
@@ -82,21 +83,21 @@ message EventStreamResponse {
 }
 
 message RoleChangedEvent {
-  string user_id = 1;
+  string account_id = 1;
   string profile_id = 2;
   repeated string added_roles = 3;
   repeated string removed_roles = 4;
 }
 
 message UserBannedEvent {
-  string user_id = 1;
+  string account_id = 1;
   string profile_id = 2;
   string reason = 3;
   int64 banned_until = 4; // Unix timestamp; 0 = перманентный бан
 }
 
 message UserUnbannedEvent {
-  string user_id = 1;
+  string account_id = 1;
   string profile_id = 2;
 }
 
@@ -122,13 +123,13 @@ message SyncSnapshotResponse {
 }
 
 message RoleEntry {
-  string user_id = 1;
+  string account_id = 1;
   string profile_id = 2;
   repeated string role_ids = 3;
 }
 
 message BanEntry {
-  string user_id = 1;
+  string account_id = 1;
   string profile_id = 2;
   int64 banned_until = 3; // 0 = перманентный
 }
@@ -136,9 +137,9 @@ message BanEntry {
 // ─────────────────────────── Push Notifications ───────────────────────────
 
 message NotifyUserRequest {
-  string user_id = 1;
+  string account_id = 1;
   string space_id = 2;
-  string type = 3; // "mention" | "dm" | "match_found" | "call_incoming"
+  string type = 3; // see enum FederationPushEventType for canonical tokens
   string preview = 4; // Короткий текст для показа в пуше
   string deep_link = 5; // Опционально: deep link для открытия нужного экрана
 }
@@ -146,4 +147,13 @@ message NotifyUserRequest {
 message NotifyUserResponse {
   bool accepted = 1; // false = пользователь не найден или master не может доставить
   string error = 2;
+}
+
+// Canonical values for NotifyUserRequest.type (string).
+enum FederationPushEventType {
+  FEDERATION_PUSH_EVENT_TYPE_UNSPECIFIED = 0;
+  FEDERATION_PUSH_EVENT_TYPE_MENTION = 1;
+  FEDERATION_PUSH_EVENT_TYPE_DM = 2;
+  FEDERATION_PUSH_EVENT_TYPE_MATCH_FOUND = 3;
+  FEDERATION_PUSH_EVENT_TYPE_CALL_INCOMING = 4;
 }

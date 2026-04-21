@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package voice.role.v1;
 
-import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 import "voice/chat/v1/chat.proto";
 
@@ -11,25 +10,25 @@ option go_package = "voice.app/voice/role/v1;rolev1";
 // Roles and permission bitmask in space. HTTP: /api/v1/roles/**.
 // Permission names: docs/microservices/role-service.md (SCREAMING_SNAKE_CASE).
 service RoleService {
-  rpc CreateRole(CreateRoleRequest) returns (Role);
-  rpc UpdateRole(UpdateRoleRequest) returns (Role);
-  rpc DeleteRole(DeleteRoleRequest) returns (google.protobuf.Empty);
-  rpc ListRoles(ListRolesRequest) returns (RoleList);
-  rpc ReorderRoles(ReorderRolesRequest) returns (google.protobuf.Empty);
+  rpc CreateRole(CreateRoleRequest) returns (CreateRoleResponse);
+  rpc UpdateRole(UpdateRoleRequest) returns (UpdateRoleResponse);
+  rpc DeleteRole(DeleteRoleRequest) returns (DeleteRoleResponse);
+  rpc ListRoles(ListRolesRequest) returns (ListRolesResponse);
+  rpc ReorderRoles(ReorderRolesRequest) returns (ReorderRolesResponse);
 
-  rpc AssignRole(AssignRoleRequest) returns (google.protobuf.Empty);
-  rpc RevokeRole(RevokeRoleRequest) returns (google.protobuf.Empty);
-  rpc GetMemberRoles(GetMemberRolesRequest) returns (RoleList);
+  rpc AssignRole(AssignRoleRequest) returns (AssignRoleResponse);
+  rpc RevokeRole(RevokeRoleRequest) returns (RevokeRoleResponse);
+  rpc GetMemberRoles(GetMemberRolesRequest) returns (GetMemberRolesResponse);
 
-  rpc SetChatOverride(SetChatOverrideRequest) returns (google.protobuf.Empty);
-  rpc RemoveChatOverride(RemoveChatOverrideRequest) returns (google.protobuf.Empty);
-  rpc GetChatOverrides(GetChatOverridesRequest) returns (OverrideList);
-  rpc SetVoiceRoomOverride(SetVoiceRoomOverrideRequest) returns (google.protobuf.Empty);
-  rpc RemoveVoiceRoomOverride(RemoveVoiceRoomOverrideRequest) returns (google.protobuf.Empty);
-  rpc GetVoiceRoomOverrides(GetVoiceRoomOverridesRequest) returns (OverrideList);
+  rpc SetChatOverride(SetChatOverrideRequest) returns (SetChatOverrideResponse);
+  rpc RemoveChatOverride(RemoveChatOverrideRequest) returns (RemoveChatOverrideResponse);
+  rpc GetChatOverrides(GetChatOverridesRequest) returns (GetChatOverridesResponse);
+  rpc SetVoiceRoomOverride(SetVoiceRoomOverrideRequest) returns (SetVoiceRoomOverrideResponse);
+  rpc RemoveVoiceRoomOverride(RemoveVoiceRoomOverrideRequest) returns (RemoveVoiceRoomOverrideResponse);
+  rpc GetVoiceRoomOverrides(GetVoiceRoomOverridesRequest) returns (GetVoiceRoomOverridesResponse);
 
   rpc CheckPermission(CheckPermissionRequest) returns (CheckPermissionResponse);
-  rpc GetEffectivePermissions(GetEffectivePermissionsRequest) returns (PermissionSet);
+  rpc GetEffectivePermissions(GetEffectivePermissionsRequest) returns (GetEffectivePermissionsResponse);
 }
 
 message Role {
@@ -157,4 +156,34 @@ message GetEffectivePermissionsRequest {
 message PermissionSet {
   uint64 effective_mask = 1;
   repeated string permission_names = 2; // denormalized names for debugging/UI
+}
+
+message CreateRoleResponse {
+  Role role = 1;
+}
+message UpdateRoleResponse {
+  Role role = 1;
+}
+message DeleteRoleResponse {}
+message ListRolesResponse {
+  RoleList role_list = 1;
+}
+message ReorderRolesResponse {}
+message AssignRoleResponse {}
+message RevokeRoleResponse {}
+message GetMemberRolesResponse {
+  RoleList role_list = 1;
+}
+message SetChatOverrideResponse {}
+message RemoveChatOverrideResponse {}
+message GetChatOverridesResponse {
+  OverrideList override_list = 1;
+}
+message SetVoiceRoomOverrideResponse {}
+message RemoveVoiceRoomOverrideResponse {}
+message GetVoiceRoomOverridesResponse {
+  OverrideList override_list = 1;
+}
+message GetEffectivePermissionsResponse {
+  PermissionSet permission_set = 1;
 }

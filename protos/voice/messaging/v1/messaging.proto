@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package voice.messaging.v1;
 
-import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 import "voice/chat/v1/chat.proto";
 import "voice/common/v1/common.proto";
@@ -15,26 +14,26 @@ option go_package = "voice.app/voice/messaging/v1;messagingv1";
 // (chat.id, sender_profile_id). Retries with the same key return the existing Message
 // (documented success semantics; use ALREADY_EXISTS or OK + same id — pick at codegen).
 service MessagingService {
-  rpc SendMessage(SendMessageRequest) returns (Message);
-  rpc EditMessage(EditMessageRequest) returns (Message);
-  rpc DeleteMessage(DeleteMessageRequest) returns (google.protobuf.Empty);
-  rpc GetMessages(GetMessagesRequest) returns (MessageList);
-  rpc GetMessage(GetMessageRequest) returns (Message);
+  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
+  rpc EditMessage(EditMessageRequest) returns (EditMessageResponse);
+  rpc DeleteMessage(DeleteMessageRequest) returns (DeleteMessageResponse);
+  rpc GetMessages(GetMessagesRequest) returns (GetMessagesResponse);
+  rpc GetMessage(GetMessageRequest) returns (GetMessageResponse);
 
-  rpc GetThreadMessages(GetThreadMessagesRequest) returns (MessageList);
+  rpc GetThreadMessages(GetThreadMessagesRequest) returns (GetThreadMessagesResponse);
 
-  rpc AddReaction(AddReactionRequest) returns (google.protobuf.Empty);
-  rpc RemoveReaction(RemoveReactionRequest) returns (google.protobuf.Empty);
+  rpc AddReaction(AddReactionRequest) returns (AddReactionResponse);
+  rpc RemoveReaction(RemoveReactionRequest) returns (RemoveReactionResponse);
 
-  rpc PinMessage(PinMessageRequest) returns (google.protobuf.Empty);
-  rpc UnpinMessage(UnpinMessageRequest) returns (google.protobuf.Empty);
-  rpc GetPinnedMessages(GetPinnedMessagesRequest) returns (MessageList);
+  rpc PinMessage(PinMessageRequest) returns (PinMessageResponse);
+  rpc UnpinMessage(UnpinMessageRequest) returns (UnpinMessageResponse);
+  rpc GetPinnedMessages(GetPinnedMessagesRequest) returns (GetPinnedMessagesResponse);
 
-  rpc ForwardMessage(ForwardMessageRequest) returns (Message);
+  rpc ForwardMessage(ForwardMessageRequest) returns (ForwardMessageResponse);
 
-  rpc MarkRead(MarkReadRequest) returns (google.protobuf.Empty);
-  rpc GetReadState(GetReadStateRequest) returns (ReadState);
-  rpc GetBulkReadState(GetBulkReadStateRequest) returns (BulkReadState);
+  rpc MarkRead(MarkReadRequest) returns (MarkReadResponse);
+  rpc GetReadState(GetReadStateRequest) returns (GetReadStateResponse);
+  rpc GetBulkReadState(GetBulkReadStateRequest) returns (GetBulkReadStateResponse);
 }
 
 message SendMessageRequest {
@@ -151,4 +150,46 @@ message GetBulkReadStateRequest {
 
 message BulkReadState {
   map<string, ReadState> by_chat_id = 1;
+}
+
+// Canonical values for Message.type (string). Wire as enum in a future breaking or dual-field release — docs/REPOSITORIES.md (Protobuf).
+enum MessageKind {
+  MESSAGE_KIND_UNSPECIFIED = 0;
+  MESSAGE_KIND_REGULAR = 1;
+  MESSAGE_KIND_SYSTEM = 2;
+  MESSAGE_KIND_FORWARD = 3;
+}
+
+message SendMessageResponse {
+  Message message = 1;
+}
+message EditMessageResponse {
+  Message message = 1;
+}
+message DeleteMessageResponse {}
+message GetMessagesResponse {
+  MessageList message_list = 1;
+}
+message GetMessageResponse {
+  Message message = 1;
+}
+message GetThreadMessagesResponse {
+  MessageList message_list = 1;
+}
+message AddReactionResponse {}
+message RemoveReactionResponse {}
+message PinMessageResponse {}
+message UnpinMessageResponse {}
+message GetPinnedMessagesResponse {
+  MessageList message_list = 1;
+}
+message ForwardMessageResponse {
+  Message message = 1;
+}
+message MarkReadResponse {}
+message GetReadStateResponse {
+  ReadState read_state = 1;
+}
+message GetBulkReadStateResponse {
+  BulkReadState bulk_read_state = 1;
 }

@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package voice.chat.v1;
 
-import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 import "voice/common/v1/common.proto";
 
@@ -10,28 +9,28 @@ option go_package = "voice.app/voice/chat/v1;chatv1";
 
 // Chats — DM, groups, channels. HTTP: /api/v1/chats/**.
 service ChatService {
-  rpc CreateDM(CreateDMRequest) returns (Chat);
-  rpc GetDM(GetDMRequest) returns (Chat);
+  rpc CreateDM(CreateDMRequest) returns (CreateDMResponse);
+  rpc GetDM(GetDMRequest) returns (GetDMResponse);
 
-  rpc CreateChat(CreateChatRequest) returns (Chat);
-  rpc UpdateChat(UpdateChatRequest) returns (Chat);
-  rpc DeleteChat(DeleteChatRequest) returns (google.protobuf.Empty);
+  rpc CreateChat(CreateChatRequest) returns (CreateChatResponse);
+  rpc UpdateChat(UpdateChatRequest) returns (UpdateChatResponse);
+  rpc DeleteChat(DeleteChatRequest) returns (DeleteChatResponse);
 
-  rpc AddMembers(AddMembersRequest) returns (google.protobuf.Empty);
-  rpc RemoveMember(RemoveMemberRequest) returns (google.protobuf.Empty);
-  rpc LeaveChat(LeaveChatRequest) returns (google.protobuf.Empty);
-  rpc ListMembers(ListMembersRequest) returns (MemberList);
+  rpc AddMembers(AddMembersRequest) returns (AddMembersResponse);
+  rpc RemoveMember(RemoveMemberRequest) returns (RemoveMemberResponse);
+  rpc LeaveChat(LeaveChatRequest) returns (LeaveChatResponse);
+  rpc ListMembers(ListMembersRequest) returns (ListMembersResponse);
 
-  rpc ListChats(ListChatsRequest) returns (ChatList);
-  rpc GetChat(GetChatRequest) returns (Chat);
+  rpc ListChats(ListChatsRequest) returns (ListChatsResponse);
+  rpc GetChat(GetChatRequest) returns (GetChatResponse);
 
-  rpc ListFolders(ListFoldersRequest) returns (FolderList);
-  rpc CreateFolder(CreateFolderRequest) returns (Folder);
-  rpc UpdateFolder(UpdateFolderRequest) returns (Folder);
-  rpc DeleteFolder(DeleteFolderRequest) returns (google.protobuf.Empty);
+  rpc ListFolders(ListFoldersRequest) returns (ListFoldersResponse);
+  rpc CreateFolder(CreateFolderRequest) returns (CreateFolderResponse);
+  rpc UpdateFolder(UpdateFolderRequest) returns (UpdateFolderResponse);
+  rpc DeleteFolder(DeleteFolderRequest) returns (DeleteFolderResponse);
 
-  rpc MuteChat(MuteChatRequest) returns (google.protobuf.Empty);
-  rpc ArchiveChat(ArchiveChatRequest) returns (google.protobuf.Empty);
+  rpc MuteChat(MuteChatRequest) returns (MuteChatResponse);
+  rpc ArchiveChat(ArchiveChatRequest) returns (ArchiveChatResponse);
 }
 
 enum ChatType {
@@ -172,3 +171,41 @@ message ChatRef {
   string id = 1;
   optional ChatType type = 2;
 }
+
+message CreateDMResponse {
+  Chat chat = 1;
+}
+message GetDMResponse {
+  Chat chat = 1;
+}
+message CreateChatResponse {
+  Chat chat = 1;
+}
+message UpdateChatResponse {
+  Chat chat = 1;
+}
+message DeleteChatResponse {}
+message AddMembersResponse {}
+message RemoveMemberResponse {}
+message LeaveChatResponse {}
+message ListMembersResponse {
+  MemberList member_list = 1;
+}
+message ListChatsResponse {
+  ChatList chat_list = 1;
+}
+message GetChatResponse {
+  Chat chat = 1;
+}
+message ListFoldersResponse {
+  FolderList folder_list = 1;
+}
+message CreateFolderResponse {
+  Folder folder = 1;
+}
+message UpdateFolderResponse {
+  Folder folder = 1;
+}
+message DeleteFolderResponse {}
+message MuteChatResponse {}
+message ArchiveChatResponse {}

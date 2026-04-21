@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package voice.s2s.v1;
 
-import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 
 option go_package = "voice.app/voice/s2s/v1;s2sv1";
@@ -10,12 +9,12 @@ option go_package = "voice.app/voice/s2s/v1;s2sv1";
 // Control-plane API for federation nodes (master-side operators / automation; mTLS).
 // Complements node↔master data plane in s2s.proto (same package).
 service FederationManagementService {
-  rpc RegisterNode(RegisterNodeRequest) returns (FederationNode);
-  rpc ApproveNode(ApproveNodeRequest) returns (FederationNode);
-  rpc DeactivateNode(DeactivateNodeRequest) returns (google.protobuf.Empty);
-  rpc ListNodes(ListFederationNodesRequest) returns (FederationNodeList);
-  rpc GetNodeStatus(GetFederationNodeStatusRequest) returns (FederationNodeStatus);
-  rpc Defederate(DefederateNodeRequest) returns (google.protobuf.Empty);
+  rpc RegisterNode(RegisterNodeRequest) returns (RegisterNodeResponse);
+  rpc ApproveNode(ApproveNodeRequest) returns (ApproveNodeResponse);
+  rpc DeactivateNode(DeactivateNodeRequest) returns (DeactivateNodeResponse);
+  rpc ListNodes(ListNodesRequest) returns (ListNodesResponse);
+  rpc GetNodeStatus(GetNodeStatusRequest) returns (GetNodeStatusResponse);
+  rpc Defederate(DefederateRequest) returns (DefederateResponse);
 }
 
 message FederationNode {
@@ -51,7 +50,7 @@ message DeactivateNodeRequest {
   string node_id = 1;
 }
 
-message ListFederationNodesRequest {
+message ListNodesRequest {
   optional string status_filter = 1;
   int32 page_size = 2;
   string page_token = 3;
@@ -62,7 +61,7 @@ message FederationNodeList {
   string next_page_token = 2;
 }
 
-message GetFederationNodeStatusRequest {
+message GetNodeStatusRequest {
   string node_id = 1;
 }
 
@@ -73,7 +72,31 @@ message FederationNodeStatus {
   optional google.protobuf.Timestamp last_sync_at = 4;
 }
 
-message DefederateNodeRequest {
+message DefederateRequest {
   string node_id = 1;
   string reason = 2;
 }
+
+// Canonical values for FederationNode.status (string) and FederationNodeStatus.status.
+enum FederationNodeRegistrationStatus {
+  FEDERATION_NODE_REGISTRATION_STATUS_UNSPECIFIED = 0;
+  FEDERATION_NODE_REGISTRATION_STATUS_PENDING = 1;
+  FEDERATION_NODE_REGISTRATION_STATUS_ACTIVE = 2;
+  FEDERATION_NODE_REGISTRATION_STATUS_SUSPENDED = 3;
+  FEDERATION_NODE_REGISTRATION_STATUS_DEFEDERATED = 4;
+}
+
+message RegisterNodeResponse {
+  FederationNode federation_node = 1;
+}
+message ApproveNodeResponse {
+  FederationNode federation_node = 1;
+}
+message DeactivateNodeResponse {}
+message ListNodesResponse {
+  FederationNodeList federation_node_list = 1;
+}
+message GetNodeStatusResponse {
+  FederationNodeStatus federation_node_status = 1;
+}
+message DefederateResponse {}

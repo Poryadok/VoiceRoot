@@ -40,10 +40,12 @@ service NotificationService {
   rpc SendNotification(SendNotificationRequest) returns (Empty);
   rpc SendBulkNotification(SendBulkRequest) returns (Empty);
 
-  // Federation — relay
+  // Federation — relay (target Auth account UUID: RelayNotificationRequest.account_id)
   rpc RelayNotification(RelayNotificationRequest) returns (Empty);
 }
 ```
+
+`RelayNotificationRequest.account_id` — идентификатор аккаунта (`accounts.id`), тот же смысл, что у JWT claim `user_id` после Gateway; публичные сценарии по профилю используют `profile_id` в `SendNotification` / настройках.
 
 ## Модель данных
 

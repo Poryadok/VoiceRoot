@@ -67,12 +67,12 @@ service FederationService {
 
 // См. protos/voice/s2s/v1/federation_management.proto
 service FederationManagementService {
-  rpc RegisterNode(RegisterNodeRequest) returns (FederationNode);
-  rpc ApproveNode(ApproveNodeRequest) returns (FederationNode);
-  rpc DeactivateNode(DeactivateNodeRequest) returns (google.protobuf.Empty);
-  rpc ListNodes(ListFederationNodesRequest) returns (FederationNodeList);
-  rpc GetNodeStatus(GetFederationNodeStatusRequest) returns (FederationNodeStatus);
-  rpc Defederate(DefederateNodeRequest) returns (google.protobuf.Empty);
+  rpc RegisterNode(RegisterNodeRequest) returns (RegisterNodeResponse);
+  rpc ApproveNode(ApproveNodeRequest) returns (ApproveNodeResponse);
+  rpc DeactivateNode(DeactivateNodeRequest) returns (DeactivateNodeResponse);
+  rpc ListNodes(ListNodesRequest) returns (ListNodesResponse);
+  rpc GetNodeStatus(GetNodeStatusRequest) returns (GetNodeStatusResponse);
+  rpc Defederate(DefederateRequest) returns (DefederateResponse);
 }
 ```
 
@@ -107,7 +107,7 @@ federation_events
 
 fallback_tokens
 ├── id (UUID)
-├── user_id
+├── account_id
 ├── node_id (FK)
 ├── token_hash (SHA-256)
 ├── roles (jsonb)

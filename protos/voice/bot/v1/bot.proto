@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package voice.bot.v1;
 
-import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 import "voice/chat/v1/chat.proto";
 import "voice/messaging/v1/messaging.proto";
@@ -11,28 +10,28 @@ option go_package = "voice.app/voice/bot/v1;botv1";
 
 // Bot platform. HTTP: /api/v1/bots/**.
 service BotService {
-  rpc RegisterBot(RegisterBotRequest) returns (Bot);
-  rpc UpdateBot(UpdateBotRequest) returns (Bot);
-  rpc DeleteBot(DeleteBotRequest) returns (google.protobuf.Empty);
-  rpc GetBot(GetBotRequest) returns (Bot);
-  rpc ListBots(ListBotsRequest) returns (BotList);
-  rpc RegenerateToken(RegenerateTokenRequest) returns (TokenResponse);
+  rpc RegisterBot(RegisterBotRequest) returns (RegisterBotResponse);
+  rpc UpdateBot(UpdateBotRequest) returns (UpdateBotResponse);
+  rpc DeleteBot(DeleteBotRequest) returns (DeleteBotResponse);
+  rpc GetBot(GetBotRequest) returns (GetBotResponse);
+  rpc ListBots(ListBotsRequest) returns (ListBotsResponse);
+  rpc RegenerateToken(RegenerateTokenRequest) returns (RegenerateTokenResponse);
 
-  rpc RegisterCommands(RegisterCommandsRequest) returns (google.protobuf.Empty);
-  rpc GetCommands(GetCommandsRequest) returns (CommandList);
+  rpc RegisterCommands(RegisterCommandsRequest) returns (RegisterCommandsResponse);
+  rpc GetCommands(GetCommandsRequest) returns (GetCommandsResponse);
 
-  rpc SetWebhookURL(SetWebhookURLRequest) returns (google.protobuf.Empty);
-  rpc GetWebhookURL(GetWebhookURLRequest) returns (WebhookURLResponse);
+  rpc SetWebhookURL(SetWebhookURLRequest) returns (SetWebhookURLResponse);
+  rpc GetWebhookURL(GetWebhookURLRequest) returns (GetWebhookURLResponse);
 
-  rpc SetChatWhitelist(SetChatWhitelistRequest) returns (google.protobuf.Empty);
-  rpc GetChatWhitelist(GetChatWhitelistRequest) returns (WhitelistResponse);
+  rpc SetChatWhitelist(SetChatWhitelistRequest) returns (SetChatWhitelistResponse);
+  rpc GetChatWhitelist(GetChatWhitelistRequest) returns (GetChatWhitelistResponse);
 
-  rpc SendBotMessage(SendBotMessageRequest) returns (voice.messaging.v1.Message);
-  rpc EditBotMessage(EditBotMessageRequest) returns (voice.messaging.v1.Message);
-  rpc SendEphemeral(SendEphemeralRequest) returns (google.protobuf.Empty);
-  rpc DeferResponse(DeferResponseRequest) returns (google.protobuf.Empty);
+  rpc SendBotMessage(SendBotMessageRequest) returns (SendBotMessageResponse);
+  rpc EditBotMessage(EditBotMessageRequest) returns (EditBotMessageResponse);
+  rpc SendEphemeral(SendEphemeralRequest) returns (SendEphemeralResponse);
+  rpc DeferResponse(DeferResponseRequest) returns (DeferResponseResponse);
 
-  rpc PollEvents(PollEventsRequest) returns (stream BotEvent);
+  rpc PollEvents(PollEventsRequest) returns (stream PollEventsResponse);
 }
 
 message Bot {
@@ -158,4 +157,44 @@ message BotEvent {
   string event_type = 2;
   string payload_json = 3;
   google.protobuf.Timestamp created_at = 4;
+}
+
+message RegisterBotResponse {
+  Bot bot = 1;
+}
+message UpdateBotResponse {
+  Bot bot = 1;
+}
+message DeleteBotResponse {}
+message GetBotResponse {
+  Bot bot = 1;
+}
+message ListBotsResponse {
+  BotList bot_list = 1;
+}
+message RegenerateTokenResponse {
+  TokenResponse token_response = 1;
+}
+message RegisterCommandsResponse {}
+message GetCommandsResponse {
+  CommandList command_list = 1;
+}
+message SetWebhookURLResponse {}
+message GetWebhookURLResponse {
+  WebhookURLResponse webhook_url_response = 1;
+}
+message SetChatWhitelistResponse {}
+message GetChatWhitelistResponse {
+  WhitelistResponse whitelist_response = 1;
+}
+message SendBotMessageResponse {
+  voice.messaging.v1.Message message = 1;
+}
+message EditBotMessageResponse {
+  voice.messaging.v1.Message message = 1;
+}
+message SendEphemeralResponse {}
+message DeferResponseResponse {}
+message PollEventsResponse {
+  BotEvent bot_event = 1;
 }

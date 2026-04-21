@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package voice.search.v1;
 
-import "google/protobuf/empty.proto";
 import "voice/chat/v1/chat.proto";
 import "voice/common/v1/common.proto";
 
@@ -10,11 +9,11 @@ option go_package = "voice.app/voice/search/v1;searchv1";
 
 // Full-text and global search. HTTP: /api/v1/search/**.
 service SearchService {
-  rpc SearchInChat(SearchInChatRequest) returns (SearchResults);
-  rpc SearchGlobal(SearchGlobalRequest) returns (GlobalSearchResults);
-  rpc SearchUsers(SearchUsersRequest) returns (UserSearchResults);
-  rpc SearchSpaces(SearchSpacesRequest) returns (SpaceSearchResults);
-  rpc ReindexChat(ReindexChatRequest) returns (google.protobuf.Empty);
+  rpc SearchInChat(SearchInChatRequest) returns (SearchInChatResponse);
+  rpc SearchGlobal(SearchGlobalRequest) returns (SearchGlobalResponse);
+  rpc SearchUsers(SearchUsersRequest) returns (SearchUsersResponse);
+  rpc SearchSpaces(SearchSpacesRequest) returns (SearchSpacesResponse);
+  rpc ReindexChat(ReindexChatRequest) returns (ReindexChatResponse);
 }
 
 message SearchInChatRequest {
@@ -69,3 +68,17 @@ message SpaceSearchResults {
 message ReindexChatRequest {
   voice.chat.v1.ChatRef chat = 1;
 }
+
+message SearchInChatResponse {
+  SearchResults search_results = 1;
+}
+message SearchGlobalResponse {
+  GlobalSearchResults global_search_results = 1;
+}
+message SearchUsersResponse {
+  UserSearchResults user_search_results = 1;
+}
+message SearchSpacesResponse {
+  SpaceSearchResults space_search_results = 1;
+}
+message ReindexChatResponse {}

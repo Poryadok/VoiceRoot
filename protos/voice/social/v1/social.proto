@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package voice.social.v1;
 
-import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 import "voice/common/v1/common.proto";
 
@@ -10,28 +9,28 @@ option go_package = "voice.app/voice/social/v1;socialv1";
 
 // Social graph — friends, contacts, blocks. HTTP: /api/v1/friends/**.
 service SocialService {
-  rpc SendFriendRequest(SendFriendInvitationRequest) returns (google.protobuf.Empty);
-  rpc AcceptFriendRequest(AcceptFriendInvitationRequest) returns (google.protobuf.Empty);
-  rpc DeclineFriendRequest(DeclineFriendInvitationRequest) returns (google.protobuf.Empty);
-  rpc RemoveFriend(RemoveFriendRequest) returns (google.protobuf.Empty);
-  rpc ListFriends(ListFriendsRequest) returns (FriendList);
-  rpc ListFriendRequests(ListFriendRequestsRequest) returns (FriendRequestList);
+  rpc SendFriendInvitation(SendFriendInvitationRequest) returns (SendFriendInvitationResponse);
+  rpc AcceptFriendInvitation(AcceptFriendInvitationRequest) returns (AcceptFriendInvitationResponse);
+  rpc DeclineFriendInvitation(DeclineFriendInvitationRequest) returns (DeclineFriendInvitationResponse);
+  rpc RemoveFriend(RemoveFriendRequest) returns (RemoveFriendResponse);
+  rpc ListFriends(ListFriendsRequest) returns (ListFriendsResponse);
+  rpc ListFriendRequests(ListFriendRequestsRequest) returns (ListFriendRequestsResponse);
 
-  rpc AddContact(AddContactRequest) returns (google.protobuf.Empty);
-  rpc RemoveContact(RemoveContactRequest) returns (google.protobuf.Empty);
-  rpc ListContacts(ListContactsRequest) returns (ContactList);
+  rpc AddContact(AddContactRequest) returns (AddContactResponse);
+  rpc RemoveContact(RemoveContactRequest) returns (RemoveContactResponse);
+  rpc ListContacts(ListContactsRequest) returns (ListContactsResponse);
   rpc SyncPhoneContacts(SyncPhoneContactsRequest) returns (SyncPhoneContactsResponse);
 
-  rpc SetFavorite(SetFavoriteRequest) returns (google.protobuf.Empty);
-  rpc ListFavorites(ListFavoritesRequest) returns (FriendList);
+  rpc SetFavorite(SetFavoriteRequest) returns (SetFavoriteResponse);
+  rpc ListFavorites(ListFavoritesRequest) returns (ListFavoritesResponse);
 
-  rpc BlockUser(BlockUserRequest) returns (google.protobuf.Empty);
-  rpc UnblockUser(UnblockUserRequest) returns (google.protobuf.Empty);
-  rpc ListBlocked(ListBlockedRequest) returns (BlockedList);
+  rpc BlockUser(BlockUserRequest) returns (BlockUserResponse);
+  rpc UnblockUser(UnblockUserRequest) returns (UnblockUserResponse);
+  rpc ListBlocked(ListBlockedRequest) returns (ListBlockedResponse);
   rpc IsBlocked(IsBlockedRequest) returns (IsBlockedResponse);
 
   rpc AreFriends(AreFriendsRequest) returns (AreFriendsResponse);
-  rpc GetFriendsOfFriends(GetFriendsOfFriendsRequest) returns (ProfileIdList);
+  rpc GetFriendsOfFriends(GetFriendsOfFriendsRequest) returns (GetFriendsOfFriendsResponse);
 }
 
 message SendFriendInvitationRequest {
@@ -161,4 +160,34 @@ message GetFriendsOfFriendsRequest {
 
 message ProfileIdList {
   repeated string profile_ids = 1;
+}
+
+message SendFriendInvitationResponse {}
+
+message AcceptFriendInvitationResponse {}
+
+message DeclineFriendInvitationResponse {}
+message RemoveFriendResponse {}
+message ListFriendsResponse {
+  FriendList friend_list = 1;
+}
+message ListFriendRequestsResponse {
+  FriendRequestList friend_request_list = 1;
+}
+message AddContactResponse {}
+message RemoveContactResponse {}
+message ListContactsResponse {
+  ContactList contact_list = 1;
+}
+message SetFavoriteResponse {}
+message ListFavoritesResponse {
+  FriendList friend_list = 1;
+}
+message BlockUserResponse {}
+message UnblockUserResponse {}
+message ListBlockedResponse {
+  BlockedList blocked_list = 1;
+}
+message GetFriendsOfFriendsResponse {
+  ProfileIdList profile_id_list = 1;
 }

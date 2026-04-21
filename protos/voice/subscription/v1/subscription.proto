@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package voice.subscription.v1;
 
-import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 import "voice/common/v1/common.proto";
 import "voice/space/v1/space.proto";
@@ -11,21 +10,21 @@ option go_package = "voice.app/voice/subscription/v1;subscriptionv1";
 
 // Billing and limits. HTTP: /api/v1/subscription/**.
 service SubscriptionService {
-  rpc GetSubscription(GetSubscriptionRequest) returns (Subscription);
-  rpc CreateCheckoutSession(CreateCheckoutSessionRequest) returns (CheckoutResponse);
-  rpc CancelSubscription(CancelSubscriptionRequest) returns (Subscription);
-  rpc ResumeSubscription(ResumeSubscriptionRequest) returns (Subscription);
+  rpc GetSubscription(GetSubscriptionRequest) returns (GetSubscriptionResponse);
+  rpc CreateCheckoutSession(CreateCheckoutSessionRequest) returns (CreateCheckoutSessionResponse);
+  rpc CancelSubscription(CancelSubscriptionRequest) returns (CancelSubscriptionResponse);
+  rpc ResumeSubscription(ResumeSubscriptionRequest) returns (ResumeSubscriptionResponse);
 
-  rpc GetSpaceSubscription(GetSpaceSubscriptionRequest) returns (SpaceSubscription);
-  rpc CreateSpaceCheckoutSession(CreateSpaceCheckoutSessionRequest) returns (CheckoutResponse);
+  rpc GetSpaceSubscription(GetSpaceSubscriptionRequest) returns (GetSpaceSubscriptionResponse);
+  rpc CreateSpaceCheckoutSession(CreateSpaceCheckoutSessionRequest) returns (CreateSpaceCheckoutSessionResponse);
 
-  rpc GetLimits(GetLimitsRequest) returns (Limits);
+  rpc GetLimits(GetLimitsRequest) returns (GetLimitsResponse);
   rpc CheckLimit(CheckLimitRequest) returns (CheckLimitResponse);
 
-  rpc HandlePaddleWebhook(HandlePaddleWebhookRequest) returns (google.protobuf.Empty);
-  rpc HandleCloudPaymentsWebhook(HandleCloudPaymentsWebhookRequest) returns (google.protobuf.Empty);
+  rpc HandlePaddleWebhook(HandlePaddleWebhookRequest) returns (HandlePaddleWebhookResponse);
+  rpc HandleCloudPaymentsWebhook(HandleCloudPaymentsWebhookRequest) returns (HandleCloudPaymentsWebhookResponse);
 
-  rpc GetBillingHistory(GetBillingHistoryRequest) returns (BillingHistoryList);
+  rpc GetBillingHistory(GetBillingHistoryRequest) returns (GetBillingHistoryResponse);
 }
 
 message Subscription {
@@ -133,4 +132,31 @@ message BillingEvent {
   string type = 2;
   google.protobuf.Timestamp occurred_at = 3;
   string payload_json = 4;
+}
+
+message GetSubscriptionResponse {
+  Subscription subscription = 1;
+}
+message CreateCheckoutSessionResponse {
+  CheckoutResponse checkout_response = 1;
+}
+message CancelSubscriptionResponse {
+  Subscription subscription = 1;
+}
+message ResumeSubscriptionResponse {
+  Subscription subscription = 1;
+}
+message GetSpaceSubscriptionResponse {
+  SpaceSubscription space_subscription = 1;
+}
+message CreateSpaceCheckoutSessionResponse {
+  CheckoutResponse checkout_response = 1;
+}
+message GetLimitsResponse {
+  Limits limits = 1;
+}
+message HandlePaddleWebhookResponse {}
+message HandleCloudPaymentsWebhookResponse {}
+message GetBillingHistoryResponse {
+  BillingHistoryList billing_history_list = 1;
 }

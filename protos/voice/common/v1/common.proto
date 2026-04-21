@@ -4,9 +4,12 @@ package voice.common.v1;
 
 option go_package = "voice.app/voice/common/v1;commonv1";
 
-// Repository-wide API conventions (see docs/DATA_MODEL.md):
+// Repository-wide API conventions:
+// - DATA_MODEL.md — UUID, account vs profile, soft delete, DB naming.
+// - REPOSITORIES.md — Protobuf: account_id in message bodies vs JWT claim user_id;
+//   Timestamp vs Unix in S2S; *_json fields; buf RPC naming debt; Realtime has no public gRPC proto.
 // - Entity IDs exposed in APIs: string UUID (RFC 4122 canonical textual form).
-// - Instants: google.protobuf.Timestamp (UTC).
+// - Instants: google.protobuf.Timestamp (UTC) unless a specific S2S message uses Unix epoch (int64).
 //
 // JWT claims (access token) are validated at API Gateway and passed to backends
 // via gRPC metadata (not request bodies). Canonical claim names: user_id (account),

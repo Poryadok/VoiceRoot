@@ -2,24 +2,22 @@ syntax = "proto3";
 
 package voice.notification.v1;
 
-import "google/protobuf/empty.proto";
-
 option go_package = "voice.app/voice/notification/v1;notificationv1";
 
 // Push, email routing, device tokens. HTTP: /api/v1/notifications/**.
 service NotificationService {
-  rpc RegisterDevice(RegisterDeviceRequest) returns (google.protobuf.Empty);
-  rpc UnregisterDevice(UnregisterDeviceRequest) returns (google.protobuf.Empty);
+  rpc RegisterDevice(RegisterDeviceRequest) returns (RegisterDeviceResponse);
+  rpc UnregisterDevice(UnregisterDeviceRequest) returns (UnregisterDeviceResponse);
 
-  rpc GetNotificationSettings(GetNotificationSettingsRequest) returns (NotificationSettings);
-  rpc UpdateNotificationSettings(UpdateNotificationSettingsRequest) returns (NotificationSettings);
+  rpc GetNotificationSettings(GetNotificationSettingsRequest) returns (GetNotificationSettingsResponse);
+  rpc UpdateNotificationSettings(UpdateNotificationSettingsRequest) returns (UpdateNotificationSettingsResponse);
 
-  rpc SetQuietHours(SetQuietHoursRequest) returns (google.protobuf.Empty);
+  rpc SetQuietHours(SetQuietHoursRequest) returns (SetQuietHoursResponse);
 
-  rpc SendNotification(SendNotificationRequest) returns (google.protobuf.Empty);
-  rpc SendBulkNotification(SendBulkNotificationRequest) returns (google.protobuf.Empty);
+  rpc SendNotification(SendNotificationRequest) returns (SendNotificationResponse);
+  rpc SendBulkNotification(SendBulkNotificationRequest) returns (SendBulkNotificationResponse);
 
-  rpc RelayNotification(RelayNotificationRequest) returns (google.protobuf.Empty);
+  rpc RelayNotification(RelayNotificationRequest) returns (RelayNotificationResponse);
 }
 
 message RegisterDeviceRequest {
@@ -74,7 +72,30 @@ message SendBulkNotificationRequest {
   string payload_json = 5;
 }
 
+// Internal / federation: target is Auth account UUID (same as JWT claim user_id).
 message RelayNotificationRequest {
-  string user_id = 1;
+  string account_id = 1;
   string payload_json = 2;
 }
+
+// Canonical values for RegisterDeviceRequest.platform (string).
+enum DevicePlatform {
+  DEVICE_PLATFORM_UNSPECIFIED = 0;
+  DEVICE_PLATFORM_ANDROID = 1;
+  DEVICE_PLATFORM_IOS = 2;
+  DEVICE_PLATFORM_WEB = 3;
+  DEVICE_PLATFORM_DESKTOP = 4;
+}
+
+message RegisterDeviceResponse {}
+message UnregisterDeviceResponse {}
+message GetNotificationSettingsResponse {
+  NotificationSettings notification_settings = 1;
+}
+message UpdateNotificationSettingsResponse {
+  NotificationSettings notification_settings = 1;
+}
+message SetQuietHoursResponse {}
+message SendNotificationResponse {}
+message SendBulkNotificationResponse {}
+message RelayNotificationResponse {}

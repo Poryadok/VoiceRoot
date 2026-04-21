@@ -19,35 +19,37 @@
 
 ## API (gRPC)
 
+Канон: [`protos/voice/social/v1/social.proto`](../../protos/voice/social/v1/social.proto). Заявки в друзья: `SendFriendInvitation` / `AcceptFriendInvitation` / `DeclineFriendInvitation`; все ответы — уникальные `*Response` (см. buf STANDARD в [REPOSITORIES.md](../REPOSITORIES.md)).
+
 ```protobuf
 service SocialService {
   // Друзья
-  rpc SendFriendRequest(FriendRequest) returns (Empty);
-  rpc AcceptFriendRequest(FriendRequest) returns (Empty);
-  rpc DeclineFriendRequest(FriendRequest) returns (Empty);
-  rpc RemoveFriend(FriendRequest) returns (Empty);
-  rpc ListFriends(ListFriendsRequest) returns (FriendList);
-  rpc ListFriendRequests(ListRequestsRequest) returns (FriendRequestList);
+  rpc SendFriendInvitation(SendFriendInvitationRequest) returns (SendFriendInvitationResponse);
+  rpc AcceptFriendInvitation(AcceptFriendInvitationRequest) returns (AcceptFriendInvitationResponse);
+  rpc DeclineFriendInvitation(DeclineFriendInvitationRequest) returns (DeclineFriendInvitationResponse);
+  rpc RemoveFriend(RemoveFriendRequest) returns (RemoveFriendResponse);
+  rpc ListFriends(ListFriendsRequest) returns (ListFriendsResponse);
+  rpc ListFriendRequests(ListFriendRequestsRequest) returns (ListFriendRequestsResponse);
 
   // Контакты
-  rpc AddContact(AddContactRequest) returns (Empty);
-  rpc RemoveContact(RemoveContactRequest) returns (Empty);
-  rpc ListContacts(ListContactsRequest) returns (ContactList);
-  rpc SyncPhoneContacts(SyncRequest) returns (SyncResponse);
+  rpc AddContact(AddContactRequest) returns (AddContactResponse);
+  rpc RemoveContact(RemoveContactRequest) returns (RemoveContactResponse);
+  rpc ListContacts(ListContactsRequest) returns (ListContactsResponse);
+  rpc SyncPhoneContacts(SyncPhoneContactsRequest) returns (SyncPhoneContactsResponse);
 
   // Избранное
-  rpc SetFavorite(SetFavoriteRequest) returns (Empty);
-  rpc ListFavorites(ListFavoritesRequest) returns (FriendList);
+  rpc SetFavorite(SetFavoriteRequest) returns (SetFavoriteResponse);
+  rpc ListFavorites(ListFavoritesRequest) returns (ListFavoritesResponse);
 
   // Блокировки
-  rpc BlockUser(BlockRequest) returns (Empty);
-  rpc UnblockUser(BlockRequest) returns (Empty);
-  rpc ListBlocked(ListBlockedRequest) returns (BlockedList);
+  rpc BlockUser(BlockUserRequest) returns (BlockUserResponse);
+  rpc UnblockUser(UnblockUserRequest) returns (UnblockUserResponse);
+  rpc ListBlocked(ListBlockedRequest) returns (ListBlockedResponse);
   rpc IsBlocked(IsBlockedRequest) returns (IsBlockedResponse); // internal
 
   // Граф
   rpc AreFriends(AreFriendsRequest) returns (AreFriendsResponse); // internal
-  rpc GetFriendsOfFriends(GetFoFRequest) returns (ProfileIdList); // internal, 1 level
+  rpc GetFriendsOfFriends(GetFriendsOfFriendsRequest) returns (GetFriendsOfFriendsResponse); // internal, 1 level
 }
 ```
 

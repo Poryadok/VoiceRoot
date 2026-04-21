@@ -2,35 +2,34 @@ syntax = "proto3";
 
 package voice.user.v1;
 
-import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 
 option go_package = "voice.app/voice/user/v1;userv1";
 
 // User Service — profiles, privacy, presence. HTTP: /api/v1/users/**.
 service UserService {
-  rpc GetProfile(GetProfileRequest) returns (Profile);
-  rpc GetProfiles(GetProfilesRequest) returns (ProfileList);
-  rpc UpdateProfile(UpdateProfileRequest) returns (Profile);
-  rpc CreateProfile(CreateProfileRequest) returns (Profile);
-  rpc DeleteProfile(DeleteProfileRequest) returns (google.protobuf.Empty);
-  rpc SwitchProfile(SwitchProfileRequest) returns (Profile);
-  rpc ListMyProfiles(ListMyProfilesRequest) returns (ProfileList);
+  rpc GetProfile(GetProfileRequest) returns (GetProfileResponse);
+  rpc GetProfiles(GetProfilesRequest) returns (GetProfilesResponse);
+  rpc UpdateProfile(UpdateProfileRequest) returns (UpdateProfileResponse);
+  rpc CreateProfile(CreateProfileRequest) returns (CreateProfileResponse);
+  rpc DeleteProfile(DeleteProfileRequest) returns (DeleteProfileResponse);
+  rpc SwitchProfile(SwitchProfileRequest) returns (SwitchProfileResponse);
+  rpc ListMyProfiles(ListMyProfilesRequest) returns (ListMyProfilesResponse);
 
-  rpc GetPrivacySettings(GetPrivacySettingsRequest) returns (PrivacySettings);
-  rpc UpdatePrivacySettings(UpdatePrivacySettingsRequest) returns (PrivacySettings);
+  rpc GetPrivacySettings(GetPrivacySettingsRequest) returns (GetPrivacySettingsResponse);
+  rpc UpdatePrivacySettings(UpdatePrivacySettingsRequest) returns (UpdatePrivacySettingsResponse);
 
-  rpc UpdatePresence(UpdatePresenceRequest) returns (google.protobuf.Empty);
-  rpc GetPresence(GetPresenceRequest) returns (PresenceStatus);
-  rpc GetBulkPresence(GetBulkPresenceRequest) returns (BulkPresenceResponse);
+  rpc UpdatePresence(UpdatePresenceRequest) returns (UpdatePresenceResponse);
+  rpc GetPresence(GetPresenceRequest) returns (GetPresenceResponse);
+  rpc GetBulkPresence(GetBulkPresenceRequest) returns (GetBulkPresenceResponse);
 
-  rpc GetSettings(GetSettingsRequest) returns (UserSettings);
-  rpc UpdateSettings(UpdateSettingsRequest) returns (UserSettings);
+  rpc GetSettings(GetSettingsRequest) returns (GetSettingsResponse);
+  rpc UpdateSettings(UpdateSettingsRequest) returns (UpdateSettingsResponse);
 
-  rpc GetOnboardingState(GetOnboardingStateRequest) returns (OnboardingState);
-  rpc CompleteOnboardingStep(CompleteOnboardingStepRequest) returns (OnboardingState);
+  rpc GetOnboardingState(GetOnboardingStateRequest) returns (GetOnboardingStateResponse);
+  rpc CompleteOnboardingStep(CompleteOnboardingStepRequest) returns (CompleteOnboardingStepResponse);
 
-  rpc GetVerificationStatus(GetVerificationStatusRequest) returns (VerificationStatus);
+  rpc GetVerificationStatus(GetVerificationStatusRequest) returns (GetVerificationStatusResponse);
 }
 
 message GetProfileRequest {
@@ -181,4 +180,52 @@ message VerificationStatus {
   string profile_id = 1;
   string verification_type = 2;
   optional string badge = 3;
+}
+
+message GetProfileResponse {
+  Profile profile = 1;
+}
+message GetProfilesResponse {
+  ProfileList profile_list = 1;
+}
+message UpdateProfileResponse {
+  Profile profile = 1;
+}
+message CreateProfileResponse {
+  Profile profile = 1;
+}
+message DeleteProfileResponse {}
+message SwitchProfileResponse {
+  Profile profile = 1;
+}
+message ListMyProfilesResponse {
+  ProfileList profile_list = 1;
+}
+message GetPrivacySettingsResponse {
+  PrivacySettings privacy_settings = 1;
+}
+message UpdatePrivacySettingsResponse {
+  PrivacySettings privacy_settings = 1;
+}
+message UpdatePresenceResponse {}
+message GetPresenceResponse {
+  PresenceStatus presence_status = 1;
+}
+message GetBulkPresenceResponse {
+  BulkPresenceResponse bulk_presence_response = 1;
+}
+message GetSettingsResponse {
+  UserSettings user_settings = 1;
+}
+message UpdateSettingsResponse {
+  UserSettings user_settings = 1;
+}
+message GetOnboardingStateResponse {
+  OnboardingState onboarding_state = 1;
+}
+message CompleteOnboardingStepResponse {
+  OnboardingState onboarding_state = 1;
+}
+message GetVerificationStatusResponse {
+  VerificationStatus verification_status = 1;
 }
