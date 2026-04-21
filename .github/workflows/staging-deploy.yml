@@ -69,3 +69,21 @@ jobs:
           set -eux
           kubectl apply -f deploy/staging/namespace.yaml
           sed "s|IMAGE_PLACEHOLDER|${{ steps.image.outputs.full }}|g" deploy/staging/gateway-deployment.yaml | kubectl apply -f -
+
+      - name: Apply gateway Ingress (optional)
+        env:
+          INGRESS_HOST: ${{ vars.VOICE_GATEWAY_INGRESS_HOST }}
+          TLS_SECRET: ${{ vars.VOICE_GATEWAY_TLS_SECRET }}
+          KUBE_NS: ${{ vars.VOICE_K8S_NAMESPACE }}
+        run: |
+          set -eux
+          if [ -z "${INGRESS_HOST:-}" ]; then
+            echo "VOICE_GATEWAY_INGRESS_HOST not set — skip Ingress (set repo Variable to enable)."
+            exit 0
+          fi
+          NS="${KUBE_NS:-voice-staging}"
+          TLS="${TLS_SECRET:-voice-gateway-tls}"
+          sed -e "s|__K_NAMESPACE__|${NS}|g" \
+              -e "s|__INGRESS_HOST__|${INGRESS_HOST}|g" \
+              -e "s|__TLS_SECRET_NAME__|${TLS}|g" \
+            deploy/gateway/ingress.yaml | kubectl apply -f -

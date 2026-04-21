@@ -1,0 +1,58 @@
+# Traefik: two Ingress resources — HTTP (entrypoint web) and HTTPS (websecure + tls).
+# Apply via CI (staging-deploy) after setting repo Variables, or manually with sed — see docs/DEPLOYMENT.md.
+#
+# Placeholders (replaced by workflow or sed):
+#   __K_NAMESPACE__     — namespace of Service voice-gateway (e.g. voice-staging, voice-prod)
+#   __INGRESS_HOST__    — public FQDN (staging: voice.tastytest.online; DNS → node/LB in front of Traefik NodePorts)
+#   __TLS_SECRET_NAME__ — kubernetes.io/tls secret in that namespace (for HTTPS Ingress; optional if TLS terminates only outside the cluster)
+#
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: voice-gateway-http
+  namespace: __K_NAMESPACE__
+  labels:
+    app.kubernetes.io/name: voice-gateway
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: __INGRESS_HOST__
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: voice-gateway
+                port:
+                  number: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: voice-gateway-https
+  namespace: __K_NAMESPACE__
+  labels:
+    app.kubernetes.io/name: voice-gateway
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: __INGRESS_HOST__
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: voice-gateway
+                port:
+                  number: 8080
+  tls:
+    - hosts:
+        - __INGRESS_HOST__
+      secretName: __TLS_SECRET_NAME__

@@ -52,18 +52,19 @@ Debian + **k3s** на одной ноде: интеграционный стен
 
 ---
 
-## Другой сайт на том же кластере (справочно, не Voice)
+## Несколько проектов на одной ноде / кластере
 
-| Параметр | Значение |
-|----------|----------|
-| Домен | `tastytest.online` |
-| DNS | Cloudflare → `95.31.10.177`, proxy (оранжевая туча) включён |
-| TLS Cloudflare ↔ origin | **Flexible SSL** |
-| Ingress | `tastytest-http`, `tastytest-https` |
-| TLS в кластере (self-signed) | secret `tastytest-tls` (namespace приложения — уточнять: `kubectl get ingress -A`) |
-| Deployment | 2 реплики; имя: `kubectl get deploy -A` и фильтр по `tastytest` |
+На одном k3s могут жить **несколько независимых приложений**. Они не «мешают» друг другу, если:
 
-Zone ID и API token Cloudflare — только в менеджере паролей.
+- у каждого свой **namespace** (у Voice по умолчанию `voice-staging` / в проде — свой);
+- у каждого внешнего сервиса свой **FQDN** в DNS и свои **Ingress** с разным `spec.rules[].host` (один и тот же Traefik маршрутизирует по имени хоста);
+- TLS: свой **Secret** в namespace приложения или терминация TLS на внешнем прокси — см. [DEPLOYMENT.md](DEPLOYMENT.md) (раздел про маршрутизацию Gateway и сценарии «чистый кластер / общий / снятие»).
+
+**Чистый кластер только под Voice:** достаточно манифестов репозитория и DNS на IP ноды / балансера перед Traefik.
+
+**Уже есть чужие сервисы:** перед выкатом посмотреть занятые хосты и порты: `kubectl get ingress -A -o wide`, `kubectl get svc -n traefik` (NodePort ingress-контроллера). Voice добавляет **отдельные** объекты `Ingress` с метками `app.kubernetes.io/name: voice-gateway` — не пересекаются с чужими, пока FQDN уникален.
+
+**Переезд Voice на другой сервер:** новый kubeconfig в секрет `STAGING_KUBECONFIG`, переменные с FQDN/namespace, деплой по [DEPLOYMENT.md](DEPLOYMENT.md). **Снятие Voice с ноды:** удалить релиз приложения (Ingress, Deployment, Service, при необходимости namespace `voice-staging`), образы в registry при желании почистить отдельно; чужие namespace и Ingress не трогать.
 
 ---
 
@@ -96,3 +97,5 @@ chmod 600 ~/.kube/config
 
 - Kubernetes namespace: **`voice-staging`** (как в репозитории).
 - Образ **gateway** из GHCR и теги — [DEPLOYMENT.md](DEPLOYMENT.md).
+- Публичный **FQDN** API Gateway на этом стенде: **`voice.tastytest.online`**. В GitHub: переменная **`VOICE_GATEWAY_INGRESS_HOST`** = это значение. DNS: в Cloudflare для зоны **tastytest.online** — запись **A** для поддомена **`voice`** на внешний IP этой ноды (см. таблицу «Хост и SSH» выше). TLS: **Cloudflare Flexible SSL** — HTTPS до пользователя, HTTP до origin; детали — [DEPLOYMENT.md](DEPLOYMENT.md).
+- Внешняя маршрутизация: **Traefik** (`ingressClassName: traefik`), манифест [`deploy/gateway/ingress.yaml`](../deploy/gateway/ingress.yaml), бэкенд — `Service` `voice-gateway`. Имя TLS Secret на origin — переменная **`VOICE_GATEWAY_TLS_SECRET`** (если используете HTTPS-Ingress); при только Flexible часто достаточно HTTP-маршрута. На проде — тот же шаблон, другой FQDN и переменные.

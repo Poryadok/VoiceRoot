@@ -48,6 +48,34 @@
 | Environment **`staging`** | Settings → Environments | Окружение для job деплоя; при необходимости включить required reviewers / wait timer. |
 | Secret **`STAGING_KUBECONFIG`** | Environment **staging** → Environment secrets | Kubeconfig для staging **k3s**, целиком в **base64** (одна строка: `base64 -w0 kubeconfig` на Linux или эквивалент на macOS/Windows). Workflow декодирует в `~/.kube/config`. В поле **`clusters[].cluster.server`** должен быть URL API, **доступный из интернета** (например `https://95.31.10.177:6443`), не `127.0.0.1` и не `https://0.0.0.0:6443` — иначе `kubectl` на GitHub runner не подключится. Подготовка одной строки для секрета: [`scripts/staging/prepare-kubeconfig-secret.sh`](../scripts/staging/prepare-kubeconfig-secret.sh) или [`prepare-kubeconfig-secret.ps1`](../scripts/staging/prepare-kubeconfig-secret.ps1). Локальная проверка шагов workflow без записи в кластер: [`scripts/staging/kubectl-apply-dry-run.sh`](../scripts/staging/kubectl-apply-dry-run.sh) (нужны `kubectl` и рабочий kubeconfig). |
 | Variable **`STAGING_DEPLOY_ENABLED`** | Settings → Secrets and variables → **Actions** → Variables | Ровно `true` — разрешить **автоматический** деплой после успешного `CI` на push в `master` (событие `workflow_run`). Пока переменная не задана или не равна `true`, автодеплой не запускается; остаётся **`workflow_dispatch`** в `Staging deploy`. |
+| Variable **`VOICE_GATEWAY_INGRESS_HOST`** | Settings → Secrets and variables → **Actions** → Variables | Публичный **FQDN** для маршрутизации к Gateway. **Текущий стенд:** `voice.tastytest.online` (задаётся в этой переменной). Манифест [`deploy/gateway/ingress.yaml`](../deploy/gateway/ingress.yaml): `Ingress` с `ingressClassName: traefik`, два ресурса — HTTP (`entrypoints: web`) и HTTPS (`websecure` + `tls`). На проде — другой FQDN, **тот же файл**, другие переменные. Пока переменная **пустая**, шаг **Apply gateway Ingress** в workflow пропускается. |
+| Variable **`VOICE_GATEWAY_TLS_SECRET`** | optional | Имя Secret типа `kubernetes.io/tls` в namespace приложения для блока `tls` у HTTPS-Ingress (по умолчанию `voice-gateway-tls`). Создайте Secret на кластере **до** включения HTTPS-Ingress (см. ниже). |
+| Variable **`VOICE_K8S_NAMESPACE`** | optional | Namespace, где лежат `Service`/`Deployment` `voice-gateway` (по умолчанию `voice-staging`). Для прод-выката — например `voice-prod`, без смены шаблона Ingress. |
+
+**Маршрутизация Gateway (Traefik):** манифесты без привязки к имени стенда: [`deploy/gateway/ingress.yaml`](../deploy/gateway/ingress.yaml) — два `Ingress` (`voice-gateway-http`, `voice-gateway-https`), бэкенд — `Service` `voice-gateway`, порт **8080**. Traefik маршрутизирует по **имени хоста** (`spec.rules[].host`): на одной ноде может быть много приложений с разными FQDN, если DNS указывает на тот же вход (IP ноды / балансера перед Traefik, обычно те же NodePort **HTTP/HTTPS**, что выдаёт Helm-релиз Traefik в кластере).
+
+**DNS:** запись **A** или **AAAA** на публичный адрес входа к кластеру (для текущего стенда зона **tastytest.online** в Cloudflare: поддомен **`voice`** → тот же IP ноды, что и у остального трафика на этот k3s, см. [STAGING_SERVER.md](STAGING_SERVER.md)).
+
+**Cloudflare и TLS:** для **`voice.tastytest.online`** используется режим **Flexible SSL** (HTTPS между клиентом и Cloudflare, **HTTP** между Cloudflare и origin). Публичный HTTPS к API обеспечивает Cloudflare; на стороне кластера достаточно маршрута на entrypoint **`web`** (HTTP до NodePort Traefik). Secret и Ingress `websecure` на origin **не обязательны** для такой схемы; их имеет смысл добавлять при переходе на **Full** / **Full (strict)** или прямой HTTPS до ноды.
+
+**TLS на origin (в кластере), если нужен HTTPS-Ingress (`websecure`):** Secret типа `kubernetes.io/tls` в namespace приложения, например:
+
+```bash
+# self-signed с CN под FQDN; в проде часто cert-manager / ACME или Origin Certificate в Cloudflare
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout tls.key -out tls.crt -subj "/CN=voice.tastytest.online"
+kubectl create secret tls voice-gateway-tls -n voice-staging --cert=tls.crt --key=tls.key
+```
+
+**Сценарии (аналогично миграциям: чисто / с наследием / откат):**
+
+| Ситуация | Что делать |
+|----------|------------|
+| **Чистый кластер** только под Voice (или вы первые настраиваете ingress) | Поднять Traefik по инструкции вашего дистрибутива k8s, выставить DNS на ноду, создать TLS Secret при необходимости, задать `VOICE_GATEWAY_INGRESS_HOST`, прогнать деплой или [`apply-ingress.ps1`](../scripts/gateway/apply-ingress.ps1). |
+| **На ноде уже есть другие проекты** | Не менять чужие namespace. Убедиться, что выбранный **FQDN** не занят чужим `Ingress` (`kubectl get ingress -A`). Добавить только ресурсы Voice (namespace, Deployment, Service, при необходимости Ingress). Порты NodePort у Traefik уже слушают ноду — новый трафик идёт по **другому hostname**, конфликта с другими приложениями нет при уникальном FQDN. |
+| **Терминация TLS на внешнем прокси** | **Текущий стенд:** Cloudflare **Flexible SSL** для `voice.tastytest.online` — до origin идёт HTTP; достаточно entrypoint **`web`**. Ingress `voice-gateway-https` и TLS Secret на ноде можно не применять, пока не понадобится HTTPS до origin (Full / Full strict или прямой доступ). |
+| **Снятие Voice с сервера** | Удалить Ingress по имени: `kubectl delete ingress voice-gateway-http voice-gateway-https -n <namespace>`; затем `kubectl delete deployment,svc -n <namespace> -l app=voice-gateway` (или по именам `voice-gateway`); при необходимости `kubectl delete namespace voice-staging`. YAML в репозитории содержит плейсхолдеры — для `delete -f` сначала подставьте значения или не используйте `-f` с сырым файлом. Чужие namespace не трогать. |
+
+**Ручное применение Ingress** (без ожидания CI): [`scripts/gateway/apply-ingress.ps1`](../scripts/gateway/apply-ingress.ps1) с `-IngressHost 'voice.tastytest.online'` или подстановка плейсхолдеров в YAML и `kubectl apply -f -`.
 
 **Pull из GHCR в кластере:** если пакет/образ приватный, в namespace `voice-staging` создайте `docker-registry` secret (учёт GitHub с `read:packages`) и добавьте `imagePullSecrets` в Pod template Deployment (в репозитории при необходимости расширить [`deploy/staging/gateway-deployment.yaml`](../deploy/staging/gateway-deployment.yaml)).
 

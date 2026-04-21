@@ -49,4 +49,4 @@ make build-all
 
 Собирает образ **`voice-gateway:local`** и прогоняет buf + compose config + тесты gateway в контейнерах (эквивалент основным job’ам [`.github/workflows/ci.yml`](.github/workflows/ci.yml), когда CI уже запускается на GitHub). При установленном **buf** на хосте: `make buf-lint`.
 
-Когда репозиторий подключён к **GitHub Actions**, на PR в `master` дополнительно гоняются те же проверки на раннере плюс, при настроенном репозитории, проверка ссылок в `docs/`; выкат на staging — по [DEPLOYMENT.md](docs/DEPLOYMENT.md), отдельно от `make build-all`.
+Когда репозиторий подключён к **GitHub Actions**, на PR в `master` дополнительно гоняются те же проверки на раннере плюс, при настроенном репозитории, проверка ссылок в `docs/`; выкат на staging — по [DEPLOYMENT.md](docs/DEPLOYMENT.md), отдельно от `make build-all`. Публичный FQDN gateway на текущем стенде: **`voice.tastytest.online`** (переменная `VOICE_GATEWAY_INGRESS_HOST`, DNS и Cloudflare Flexible — в `DEPLOYMENT.md`).
