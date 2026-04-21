@@ -4,9 +4,62 @@ lint:
     - STANDARD
   ignore_only:
     RPC_REQUEST_STANDARD_NAME:
-      - voice/s2s/v1/s2s.proto
+      - voice/s2s/v1/federation_management.proto
+      - voice/auth/v1/auth.proto
+      - voice/user/v1/user.proto
+      - voice/social/v1/social.proto
+      - voice/chat/v1/chat.proto
+      - voice/messaging/v1/messaging.proto
+      - voice/space/v1/space.proto
+      - voice/role/v1/role.proto
+      - voice/calls/v1/calls.proto
+      - voice/file/v1/file.proto
+      - voice/notification/v1/notification.proto
+      - voice/search/v1/search.proto
+      - voice/matchmaking/v1/matchmaking.proto
+      - voice/moderation/v1/moderation.proto
+      - voice/subscription/v1/subscription.proto
+      - voice/story/v1/story.proto
+      - voice/analytics/v1/analytics.proto
+      - voice/bot/v1/bot.proto
     RPC_RESPONSE_STANDARD_NAME:
-      - voice/s2s/v1/s2s.proto
+      - voice/s2s/v1/federation_management.proto
+      - voice/auth/v1/auth.proto
+      - voice/user/v1/user.proto
+      - voice/social/v1/social.proto
+      - voice/chat/v1/chat.proto
+      - voice/messaging/v1/messaging.proto
+      - voice/space/v1/space.proto
+      - voice/role/v1/role.proto
+      - voice/calls/v1/calls.proto
+      - voice/file/v1/file.proto
+      - voice/notification/v1/notification.proto
+      - voice/search/v1/search.proto
+      - voice/matchmaking/v1/matchmaking.proto
+      - voice/moderation/v1/moderation.proto
+      - voice/subscription/v1/subscription.proto
+      - voice/story/v1/story.proto
+      - voice/analytics/v1/analytics.proto
+      - voice/bot/v1/bot.proto
+    RPC_REQUEST_RESPONSE_UNIQUE:
+      - voice/s2s/v1/federation_management.proto
+      - voice/auth/v1/auth.proto
+      - voice/user/v1/user.proto
+      - voice/social/v1/social.proto
+      - voice/chat/v1/chat.proto
+      - voice/messaging/v1/messaging.proto
+      - voice/space/v1/space.proto
+      - voice/role/v1/role.proto
+      - voice/calls/v1/calls.proto
+      - voice/file/v1/file.proto
+      - voice/notification/v1/notification.proto
+      - voice/search/v1/search.proto
+      - voice/matchmaking/v1/matchmaking.proto
+      - voice/moderation/v1/moderation.proto
+      - voice/subscription/v1/subscription.proto
+      - voice/story/v1/story.proto
+      - voice/analytics/v1/analytics.proto
+      - voice/bot/v1/bot.proto
 breaking:
   use:
     - FILE

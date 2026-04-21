@@ -1,0 +1,164 @@
+syntax = "proto3";
+
+package voice.social.v1;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "voice/common/v1/common.proto";
+
+option go_package = "voice.app/voice/social/v1;socialv1";
+
+// Social graph — friends, contacts, blocks. HTTP: /api/v1/friends/**.
+service SocialService {
+  rpc SendFriendRequest(SendFriendInvitationRequest) returns (google.protobuf.Empty);
+  rpc AcceptFriendRequest(AcceptFriendInvitationRequest) returns (google.protobuf.Empty);
+  rpc DeclineFriendRequest(DeclineFriendInvitationRequest) returns (google.protobuf.Empty);
+  rpc RemoveFriend(RemoveFriendRequest) returns (google.protobuf.Empty);
+  rpc ListFriends(ListFriendsRequest) returns (FriendList);
+  rpc ListFriendRequests(ListFriendRequestsRequest) returns (FriendRequestList);
+
+  rpc AddContact(AddContactRequest) returns (google.protobuf.Empty);
+  rpc RemoveContact(RemoveContactRequest) returns (google.protobuf.Empty);
+  rpc ListContacts(ListContactsRequest) returns (ContactList);
+  rpc SyncPhoneContacts(SyncPhoneContactsRequest) returns (SyncPhoneContactsResponse);
+
+  rpc SetFavorite(SetFavoriteRequest) returns (google.protobuf.Empty);
+  rpc ListFavorites(ListFavoritesRequest) returns (FriendList);
+
+  rpc BlockUser(BlockUserRequest) returns (google.protobuf.Empty);
+  rpc UnblockUser(UnblockUserRequest) returns (google.protobuf.Empty);
+  rpc ListBlocked(ListBlockedRequest) returns (BlockedList);
+  rpc IsBlocked(IsBlockedRequest) returns (IsBlockedResponse);
+
+  rpc AreFriends(AreFriendsRequest) returns (AreFriendsResponse);
+  rpc GetFriendsOfFriends(GetFriendsOfFriendsRequest) returns (ProfileIdList);
+}
+
+message SendFriendInvitationRequest {
+  string target_profile_id = 1;
+}
+
+message AcceptFriendInvitationRequest {
+  string requester_profile_id = 1;
+}
+
+message DeclineFriendInvitationRequest {
+  string requester_profile_id = 1;
+}
+
+message RemoveFriendRequest {
+  string friend_profile_id = 1;
+}
+
+message ListFriendsRequest {
+  voice.common.v1.CursorPageRequest page = 1;
+}
+
+message FriendList {
+  repeated FriendEdge friends = 1;
+  string next_cursor = 2;
+}
+
+message FriendEdge {
+  string profile_id = 1;
+  google.protobuf.Timestamp friends_since = 2;
+}
+
+message ListFriendRequestsRequest {}
+
+message FriendRequestList {
+  repeated PendingFriendRequest incoming = 1;
+  repeated PendingFriendRequest outgoing = 2;
+}
+
+message PendingFriendRequest {
+  string profile_id = 1;
+  google.protobuf.Timestamp created_at = 2;
+}
+
+message AddContactRequest {
+  string target_profile_id = 1;
+  string source = 2; // manual | phone_sync | space | matchmaking
+}
+
+message RemoveContactRequest {
+  string target_profile_id = 1;
+}
+
+message ListContactsRequest {
+  voice.common.v1.CursorPageRequest page = 1;
+}
+
+message ContactList {
+  repeated Contact contacts = 1;
+  string next_cursor = 2;
+}
+
+message Contact {
+  string profile_id = 1;
+  string source = 2;
+  bool is_favorite = 3;
+}
+
+message SyncPhoneContactsRequest {
+  repeated string hashed_phone_numbers = 1;
+}
+
+message SyncPhoneContactsResponse {
+  repeated string matched_profile_ids = 1;
+}
+
+message SetFavoriteRequest {
+  string friend_profile_id = 1;
+  bool favorite = 2;
+}
+
+message ListFavoritesRequest {}
+
+message BlockUserRequest {
+  string blocked_account_id = 1;
+}
+
+message UnblockUserRequest {
+  string blocked_account_id = 1;
+}
+
+message ListBlockedRequest {
+  voice.common.v1.CursorPageRequest page = 1;
+}
+
+message BlockedList {
+  repeated BlockedAccount blocked = 1;
+  string next_cursor = 2;
+}
+
+message BlockedAccount {
+  string blocked_account_id = 1;
+  google.protobuf.Timestamp created_at = 2;
+}
+
+message IsBlockedRequest {
+  string account_id_a = 1;
+  string account_id_b = 2;
+}
+
+message IsBlockedResponse {
+  bool blocked = 1;
+}
+
+message AreFriendsRequest {
+  string profile_id_a = 1;
+  string profile_id_b = 2;
+}
+
+message AreFriendsResponse {
+  bool friends = 1;
+}
+
+message GetFriendsOfFriendsRequest {
+  string profile_id = 1;
+}
+
+message ProfileIdList {
+  repeated string profile_ids = 1;
+}

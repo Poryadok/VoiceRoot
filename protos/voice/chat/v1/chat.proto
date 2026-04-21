@@ -1,0 +1,174 @@
+syntax = "proto3";
+
+package voice.chat.v1;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "voice/common/v1/common.proto";
+
+option go_package = "voice.app/voice/chat/v1;chatv1";
+
+// Chats — DM, groups, channels. HTTP: /api/v1/chats/**.
+service ChatService {
+  rpc CreateDM(CreateDMRequest) returns (Chat);
+  rpc GetDM(GetDMRequest) returns (Chat);
+
+  rpc CreateChat(CreateChatRequest) returns (Chat);
+  rpc UpdateChat(UpdateChatRequest) returns (Chat);
+  rpc DeleteChat(DeleteChatRequest) returns (google.protobuf.Empty);
+
+  rpc AddMembers(AddMembersRequest) returns (google.protobuf.Empty);
+  rpc RemoveMember(RemoveMemberRequest) returns (google.protobuf.Empty);
+  rpc LeaveChat(LeaveChatRequest) returns (google.protobuf.Empty);
+  rpc ListMembers(ListMembersRequest) returns (MemberList);
+
+  rpc ListChats(ListChatsRequest) returns (ChatList);
+  rpc GetChat(GetChatRequest) returns (Chat);
+
+  rpc ListFolders(ListFoldersRequest) returns (FolderList);
+  rpc CreateFolder(CreateFolderRequest) returns (Folder);
+  rpc UpdateFolder(UpdateFolderRequest) returns (Folder);
+  rpc DeleteFolder(DeleteFolderRequest) returns (google.protobuf.Empty);
+
+  rpc MuteChat(MuteChatRequest) returns (google.protobuf.Empty);
+  rpc ArchiveChat(ArchiveChatRequest) returns (google.protobuf.Empty);
+}
+
+enum ChatType {
+  CHAT_TYPE_UNSPECIFIED = 0;
+  CHAT_TYPE_DM = 1;
+  CHAT_TYPE_GROUP = 2;
+  CHAT_TYPE_CHANNEL = 3;
+}
+
+message Chat {
+  string id = 1;
+  ChatType type = 2;
+  optional string space_id = 3;
+  optional string name = 4;
+  optional string avatar_url = 5;
+  optional string topic = 6;
+  string creator_profile_id = 7;
+  int32 slow_mode_seconds = 8;
+  optional google.protobuf.Timestamp last_message_at = 9;
+  google.protobuf.Timestamp created_at = 10;
+  google.protobuf.Timestamp updated_at = 11;
+}
+
+message CreateDMRequest {
+  string other_profile_id = 1;
+}
+
+message GetDMRequest {
+  string other_profile_id = 1;
+}
+
+message CreateChatRequest {
+  ChatType type = 1;
+  optional string space_id = 2;
+  optional string name = 3;
+  optional string topic = 4;
+}
+
+message UpdateChatRequest {
+  string chat_id = 1;
+  optional string name = 2;
+  optional string topic = 3;
+  optional int32 slow_mode_seconds = 4;
+  optional string avatar_url = 5;
+}
+
+message DeleteChatRequest {
+  string chat_id = 1;
+}
+
+message AddMembersRequest {
+  string chat_id = 1;
+  repeated string profile_ids = 2;
+}
+
+message RemoveMemberRequest {
+  string chat_id = 1;
+  string profile_id = 2;
+}
+
+message LeaveChatRequest {
+  string chat_id = 1;
+}
+
+message ListMembersRequest {
+  string chat_id = 1;
+  voice.common.v1.CursorPageRequest page = 2;
+}
+
+message MemberList {
+  repeated ChatMember members = 1;
+  string next_cursor = 2;
+}
+
+message ChatMember {
+  string profile_id = 1;
+  string role = 2; // owner | admin | member
+  google.protobuf.Timestamp joined_at = 3;
+  optional google.protobuf.Timestamp muted_until = 4;
+  bool is_archived = 5;
+}
+
+message ListChatsRequest {
+  voice.common.v1.CursorPageRequest page = 1;
+}
+
+message ChatList {
+  repeated Chat chats = 1;
+  string next_cursor = 2;
+}
+
+message GetChatRequest {
+  string chat_id = 1;
+}
+
+message ListFoldersRequest {}
+
+message FolderList {
+  repeated Folder folders = 1;
+}
+
+message Folder {
+  string id = 1;
+  string name = 2;
+  string folder_type = 3; // system | custom
+  string filter_config_json = 4;
+  int32 sort_order = 5;
+}
+
+message CreateFolderRequest {
+  string name = 1;
+  string filter_config_json = 2;
+}
+
+message UpdateFolderRequest {
+  string folder_id = 1;
+  optional string name = 2;
+  optional string filter_config_json = 3;
+  optional int32 sort_order = 4;
+}
+
+message DeleteFolderRequest {
+  string folder_id = 1;
+}
+
+message MuteChatRequest {
+  string chat_id = 1;
+  optional google.protobuf.Timestamp muted_until = 2;
+}
+
+message ArchiveChatRequest {
+  string chat_id = 1;
+  bool archived = 2;
+}
+
+// Cross-service pointer to chat_db.chats (docs/DATA_MODEL.md). Use in other packages instead of parallel chat_id + chat_type strings.
+message ChatRef {
+  string id = 1;
+  optional ChatType type = 2;
+}

@@ -1,0 +1,162 @@
+syntax = "proto3";
+
+package voice.moderation.v1;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "voice/chat/v1/chat.proto";
+import "voice/common/v1/common.proto";
+
+option go_package = "voice.app/voice/moderation/v1;moderationv1";
+
+// Reports, sanctions, automod. HTTP: /api/v1/moderation/**.
+service ModerationService {
+  rpc CreateReport(CreateReportRequest) returns (Report);
+  rpc GetReport(GetReportRequest) returns (Report);
+  rpc ListReports(ListReportsRequest) returns (ReportList);
+  rpc ResolveReport(ResolveReportRequest) returns (Report);
+
+  rpc ApplySanction(ApplySanctionRequest) returns (Sanction);
+  rpc RevokeSanction(RevokeSanctionRequest) returns (google.protobuf.Empty);
+  rpc GetUserSanctions(GetUserSanctionsRequest) returns (SanctionList);
+  rpc GetActiveSanction(GetActiveSanctionRequest) returns (Sanction);
+
+  rpc SubmitAppeal(SubmitAppealRequest) returns (Appeal);
+  rpc ReviewAppeal(ReviewAppealRequest) returns (Appeal);
+  rpc GetAppeal(GetAppealRequest) returns (Appeal);
+
+  rpc CheckMessage(CheckMessageRequest) returns (CheckResult);
+  rpc GetAutoModStats(GetAutoModStatsRequest) returns (AutoModStats);
+
+  rpc IsShadowBanned(IsShadowBannedRequest) returns (IsShadowBannedResponse);
+}
+
+message Report {
+  string id = 1;
+  string reporter_profile_id = 2;
+  string target_type = 3;
+  string target_id = 4;
+  string category = 5;
+  optional string description = 6;
+  string evidence_json = 7;
+  string status = 8;
+  optional string assigned_to_profile_id = 9;
+  optional google.protobuf.Timestamp resolved_at = 10;
+  string resolution_json = 11;
+  google.protobuf.Timestamp created_at = 12;
+}
+
+message CreateReportRequest {
+  string target_type = 1;
+  string target_id = 2;
+  string category = 3;
+  optional string description = 4;
+  string evidence_json = 5;
+}
+
+message GetReportRequest {
+  string report_id = 1;
+}
+
+message ListReportsRequest {
+  string status_filter = 1;
+  voice.common.v1.CursorPageRequest page = 2;
+}
+
+message ReportList {
+  repeated Report reports = 1;
+  string next_cursor = 2;
+}
+
+message ResolveReportRequest {
+  string report_id = 1;
+  string resolution_json = 2;
+  string new_status = 3;
+}
+
+message Sanction {
+  string id = 1;
+  string target_account_id = 2;
+  string type = 3;
+  string reason = 4;
+  optional string report_id = 5;
+  string issued_by_profile_id = 6;
+  optional google.protobuf.Timestamp expires_at = 7;
+  optional google.protobuf.Timestamp revoked_at = 8;
+  google.protobuf.Timestamp created_at = 9;
+}
+
+message ApplySanctionRequest {
+  string target_account_id = 1;
+  string type = 2;
+  string reason = 3;
+  optional string report_id = 4;
+  optional google.protobuf.Timestamp expires_at = 5;
+}
+
+message RevokeSanctionRequest {
+  string sanction_id = 1;
+}
+
+message GetUserSanctionsRequest {
+  string account_id = 1;
+}
+
+message SanctionList {
+  repeated Sanction sanctions = 1;
+}
+
+message GetActiveSanctionRequest {
+  string account_id = 1;
+}
+
+message Appeal {
+  string id = 1;
+  string sanction_id = 2;
+  string appellant_account_id = 3;
+  string reason = 4;
+  string status = 5;
+  optional string reviewed_by_profile_id = 6;
+  google.protobuf.Timestamp created_at = 7;
+}
+
+message SubmitAppealRequest {
+  string sanction_id = 1;
+  string reason = 2;
+}
+
+message ReviewAppealRequest {
+  string appeal_id = 1;
+  string status = 2;
+  optional string moderator_note = 3;
+}
+
+message GetAppealRequest {
+  string appeal_id = 1;
+}
+
+message CheckMessageRequest {
+  voice.chat.v1.ChatRef chat = 1;
+  string content = 2;
+  string sender_profile_id = 3;
+}
+
+message CheckResult {
+  bool allowed = 1;
+  optional string block_reason = 2;
+}
+
+message GetAutoModStatsRequest {}
+
+message AutoModStats {
+  int64 messages_checked = 1;
+  int64 blocked = 2;
+}
+
+message IsShadowBannedRequest {
+  string account_id = 1;
+}
+
+message IsShadowBannedResponse {
+  bool shadow_banned = 1;
+}

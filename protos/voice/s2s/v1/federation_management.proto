@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package voice.s2s.v1;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "voice.app/voice/s2s/v1;s2sv1";
+
+// Control-plane API for federation nodes (master-side operators / automation; mTLS).
+// Complements node↔master data plane in s2s.proto (same package).
+service FederationManagementService {
+  rpc RegisterNode(RegisterNodeRequest) returns (FederationNode);
+  rpc ApproveNode(ApproveNodeRequest) returns (FederationNode);
+  rpc DeactivateNode(DeactivateNodeRequest) returns (google.protobuf.Empty);
+  rpc ListNodes(ListFederationNodesRequest) returns (FederationNodeList);
+  rpc GetNodeStatus(GetFederationNodeStatusRequest) returns (FederationNodeStatus);
+  rpc Defederate(DefederateNodeRequest) returns (google.protobuf.Empty);
+}
+
+message FederationNode {
+  string id = 1;
+  string name = 2;
+  string host = 3;
+  int32 port = 4;
+  string description = 5;
+  string status = 6; // pending | active | suspended | defederated
+  optional string tls_cert_fingerprint = 7;
+  optional google.protobuf.Timestamp last_heartbeat_at = 8;
+  optional google.protobuf.Timestamp last_sync_at = 9;
+  google.protobuf.Timestamp registered_at = 10;
+  optional google.protobuf.Timestamp approved_at = 11;
+  optional string approved_by_profile_id = 12;
+  optional google.protobuf.Timestamp defederated_at = 13;
+}
+
+message RegisterNodeRequest {
+  string name = 1;
+  string host = 2;
+  int32 port = 3;
+  string description = 4;
+  string tls_cert_fingerprint = 5;
+}
+
+message ApproveNodeRequest {
+  string node_id = 1;
+  string approver_profile_id = 2;
+}
+
+message DeactivateNodeRequest {
+  string node_id = 1;
+}
+
+message ListFederationNodesRequest {
+  optional string status_filter = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message FederationNodeList {
+  repeated FederationNode nodes = 1;
+  string next_page_token = 2;
+}
+
+message GetFederationNodeStatusRequest {
+  string node_id = 1;
+}
+
+message FederationNodeStatus {
+  string node_id = 1;
+  string status = 2;
+  optional google.protobuf.Timestamp last_heartbeat_at = 3;
+  optional google.protobuf.Timestamp last_sync_at = 4;
+}
+
+message DefederateNodeRequest {
+  string node_id = 1;
+  string reason = 2;
+}

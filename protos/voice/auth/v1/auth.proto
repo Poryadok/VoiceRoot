@@ -1,0 +1,107 @@
+syntax = "proto3";
+
+package voice.auth.v1;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "voice.app/voice/auth/v1;authv1";
+option java_multiple_files = true;
+option java_package = "app.voice.auth.v1";
+
+// Auth Service — registration, sessions, JWT, 2FA (Java). HTTP prefix: /api/v1/auth/** → Gateway.
+service AuthService {
+  rpc Register(RegisterRequest) returns (AuthResponse);
+  rpc Login(LoginRequest) returns (AuthResponse);
+  rpc Logout(LogoutRequest) returns (google.protobuf.Empty);
+  rpc RefreshToken(RefreshTokenRequest) returns (AuthResponse);
+  rpc Enable2FA(Enable2FARequest) returns (Enable2FAResponse);
+  rpc Verify2FA(Verify2FARequest) returns (AuthResponse);
+  rpc VerifyOTP(VerifyOTPRequest) returns (google.protobuf.Empty);
+  rpc ConvertGuest(ConvertGuestRequest) returns (AuthResponse);
+  rpc DeleteAccount(DeleteAccountRequest) returns (google.protobuf.Empty);
+  rpc RestoreAccount(RestoreAccountRequest) returns (AuthResponse);
+  // Internal — other services / Gateway token introspection.
+  rpc ValidateToken(ValidateTokenRequest) returns (TokenClaims);
+  // Public JWKS for JWT verification.
+  rpc GetJWKS(google.protobuf.Empty) returns (JWKSResponse);
+}
+
+message RegisterRequest {
+  optional string email = 1;
+  optional string phone = 2;
+  string password = 3;
+  bool guest = 4;
+}
+
+message LoginRequest {
+  optional string email = 1;
+  optional string phone = 2;
+  string password = 3;
+  optional string totp_code = 4;
+  string device_info_json = 5;
+}
+
+message LogoutRequest {
+  string refresh_token = 1;
+}
+
+message RefreshTokenRequest {
+  string refresh_token = 1;
+  string device_info_json = 2;
+}
+
+message Enable2FARequest {
+  string password = 1;
+}
+
+message Enable2FAResponse {
+  string totp_uri = 1;
+  string secret_backup_hint = 2;
+}
+
+message Verify2FARequest {
+  string totp_code = 1;
+}
+
+message VerifyOTPRequest {
+  string code = 1;
+  string otp_type = 2; // email_verify | password_reset
+}
+
+message ConvertGuestRequest {
+  optional string email = 1;
+  optional string phone = 2;
+  string password = 3;
+}
+
+message DeleteAccountRequest {
+  string password = 1;
+}
+
+message RestoreAccountRequest {
+  string token = 1;
+}
+
+message ValidateTokenRequest {
+  string access_token = 1;
+}
+
+message AuthResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+  int64 expires_in_seconds = 3;
+  string account_id = 4;
+}
+
+message TokenClaims {
+  string user_id = 1; // account_id (JWT claim name per docs)
+  string profile_id = 2;
+  repeated string roles = 3;
+  string subscription_tier = 4;
+  google.protobuf.Timestamp expires_at = 5;
+}
+
+message JWKSResponse {
+  string keys_json = 1; // JWKS document as JSON string
+}

@@ -1,0 +1,184 @@
+syntax = "proto3";
+
+package voice.user.v1;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "voice.app/voice/user/v1;userv1";
+
+// User Service — profiles, privacy, presence. HTTP: /api/v1/users/**.
+service UserService {
+  rpc GetProfile(GetProfileRequest) returns (Profile);
+  rpc GetProfiles(GetProfilesRequest) returns (ProfileList);
+  rpc UpdateProfile(UpdateProfileRequest) returns (Profile);
+  rpc CreateProfile(CreateProfileRequest) returns (Profile);
+  rpc DeleteProfile(DeleteProfileRequest) returns (google.protobuf.Empty);
+  rpc SwitchProfile(SwitchProfileRequest) returns (Profile);
+  rpc ListMyProfiles(ListMyProfilesRequest) returns (ProfileList);
+
+  rpc GetPrivacySettings(GetPrivacySettingsRequest) returns (PrivacySettings);
+  rpc UpdatePrivacySettings(UpdatePrivacySettingsRequest) returns (PrivacySettings);
+
+  rpc UpdatePresence(UpdatePresenceRequest) returns (google.protobuf.Empty);
+  rpc GetPresence(GetPresenceRequest) returns (PresenceStatus);
+  rpc GetBulkPresence(GetBulkPresenceRequest) returns (BulkPresenceResponse);
+
+  rpc GetSettings(GetSettingsRequest) returns (UserSettings);
+  rpc UpdateSettings(UpdateSettingsRequest) returns (UserSettings);
+
+  rpc GetOnboardingState(GetOnboardingStateRequest) returns (OnboardingState);
+  rpc CompleteOnboardingStep(CompleteOnboardingStepRequest) returns (OnboardingState);
+
+  rpc GetVerificationStatus(GetVerificationStatusRequest) returns (VerificationStatus);
+}
+
+message GetProfileRequest {
+  oneof by {
+    string profile_id = 1;
+    string username = 2;
+  }
+}
+
+message GetProfilesRequest {
+  repeated string profile_ids = 1;
+}
+
+message ProfileList {
+  repeated Profile profiles = 1;
+}
+
+message Profile {
+  string id = 1;
+  string account_id = 2;
+  string username = 3;
+  string discriminator = 4;
+  string display_name = 5;
+  optional string avatar_url = 6;
+  optional string banner_url = 7;
+  optional string bio = 8;
+  optional string custom_status = 9;
+  string locale = 10;
+  string theme = 11;
+  bool is_primary = 12;
+  string verification_type = 13;
+  optional string verification_badge = 14;
+  google.protobuf.Timestamp created_at = 15;
+  google.protobuf.Timestamp updated_at = 16;
+}
+
+message UpdateProfileRequest {
+  string profile_id = 1;
+  optional string display_name = 2;
+  optional string avatar_url = 3;
+  optional string banner_url = 4;
+  optional string bio = 5;
+  optional string custom_status = 6;
+  optional string locale = 7;
+  optional string theme = 8;
+}
+
+message CreateProfileRequest {
+  string display_name = 1;
+  optional string username = 2;
+}
+
+message DeleteProfileRequest {
+  string profile_id = 1;
+}
+
+message SwitchProfileRequest {
+  string profile_id = 1;
+}
+
+message ListMyProfilesRequest {}
+
+message GetPrivacySettingsRequest {
+  string profile_id = 1;
+}
+
+message UpdatePrivacySettingsRequest {
+  string profile_id = 1;
+  PrivacySettings settings = 2;
+}
+
+message PrivacySettings {
+  string profile_id = 1;
+  string preset = 2; // personal | gaming | work
+  string show_online = 3;
+  string show_game_status = 4;
+  string show_mm_rating = 5;
+  string show_phone = 6;
+  string show_stories = 7;
+  string allow_dm = 8;
+  string allow_friend_requests = 9;
+  bool allow_guest_dm = 10;
+  google.protobuf.Timestamp updated_at = 11;
+}
+
+message UpdatePresenceRequest {
+  string status = 1; // online | idle | dnd | invisible
+  optional string game_title = 2;
+  optional string custom_status = 3;
+  optional string call_info_json = 4;
+}
+
+message GetPresenceRequest {
+  string profile_id = 1;
+}
+
+message PresenceStatus {
+  string profile_id = 1;
+  string status = 2;
+  optional string game_title = 3;
+  optional string custom_status = 4;
+  google.protobuf.Timestamp last_seen = 5;
+  optional string call_info_json = 6;
+}
+
+message GetBulkPresenceRequest {
+  repeated string profile_ids = 1;
+}
+
+message BulkPresenceResponse {
+  map<string, PresenceStatus> by_profile_id = 1;
+}
+
+message GetSettingsRequest {
+  string profile_id = 1;
+}
+
+message UpdateSettingsRequest {
+  string profile_id = 1;
+  UserSettings settings = 2;
+}
+
+message UserSettings {
+  string profile_id = 1;
+  string language = 2;
+  string theme = 3;
+  string notification_prefs_json = 4;
+}
+
+message GetOnboardingStateRequest {}
+
+message CompleteOnboardingStepRequest {
+  string step_id = 1;
+}
+
+message OnboardingState {
+  string profile_id = 1;
+  repeated string completed_steps = 2;
+  bool completed = 3;
+  optional google.protobuf.Timestamp completed_at = 4;
+}
+
+message GetVerificationStatusRequest {
+  string profile_id = 1;
+}
+
+message VerificationStatus {
+  string profile_id = 1;
+  string verification_type = 2;
+  optional string badge = 3;
+}

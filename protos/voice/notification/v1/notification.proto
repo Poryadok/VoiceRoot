@@ -1,0 +1,80 @@
+syntax = "proto3";
+
+package voice.notification.v1;
+
+import "google/protobuf/empty.proto";
+
+option go_package = "voice.app/voice/notification/v1;notificationv1";
+
+// Push, email routing, device tokens. HTTP: /api/v1/notifications/**.
+service NotificationService {
+  rpc RegisterDevice(RegisterDeviceRequest) returns (google.protobuf.Empty);
+  rpc UnregisterDevice(UnregisterDeviceRequest) returns (google.protobuf.Empty);
+
+  rpc GetNotificationSettings(GetNotificationSettingsRequest) returns (NotificationSettings);
+  rpc UpdateNotificationSettings(UpdateNotificationSettingsRequest) returns (NotificationSettings);
+
+  rpc SetQuietHours(SetQuietHoursRequest) returns (google.protobuf.Empty);
+
+  rpc SendNotification(SendNotificationRequest) returns (google.protobuf.Empty);
+  rpc SendBulkNotification(SendBulkNotificationRequest) returns (google.protobuf.Empty);
+
+  rpc RelayNotification(RelayNotificationRequest) returns (google.protobuf.Empty);
+}
+
+message RegisterDeviceRequest {
+  string platform = 1; // android | ios | web | desktop
+  string token = 2;
+  string push_service = 3; // fcm | apns | voip_apns
+}
+
+message UnregisterDeviceRequest {
+  string device_token_id = 1;
+}
+
+message GetNotificationSettingsRequest {
+  optional string scope_type = 1; // global | space | channel | chat
+  optional string scope_id = 2;
+}
+
+message UpdateNotificationSettingsRequest {
+  NotificationSettings settings = 1;
+}
+
+message NotificationSettings {
+  string profile_id = 1;
+  string scope_type = 2;
+  optional string scope_id = 3;
+  bool enabled = 4;
+  optional string mute_until_rfc3339 = 5;
+  string suppress_types_json = 6;
+}
+
+message SetQuietHoursRequest {
+  bool enabled = 1;
+  string start_time = 2;
+  string end_time = 3;
+  string timezone = 4;
+  bool override_mentions = 5;
+}
+
+message SendNotificationRequest {
+  string profile_id = 1;
+  string notification_type = 2;
+  string title = 3;
+  string body = 4;
+  string payload_json = 5;
+}
+
+message SendBulkNotificationRequest {
+  repeated string profile_ids = 1;
+  string notification_type = 2;
+  string title = 3;
+  string body = 4;
+  string payload_json = 5;
+}
+
+message RelayNotificationRequest {
+  string user_id = 1;
+  string payload_json = 2;
+}

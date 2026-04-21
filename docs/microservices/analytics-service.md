@@ -48,10 +48,10 @@ NATS (all streams) ──► Analytics Service
 ## API (gRPC + REST)
 
 ```protobuf
-// gRPC (internal)
-service AnalyticsIngest {
-  rpc IngestEvent(AnalyticsEvent) returns (Empty);
-  rpc IngestBatch(AnalyticsEventBatch) returns (Empty);
+// gRPC (internal) — канон: protos/voice/analytics/v1/analytics.proto
+service AnalyticsIngestService {
+  rpc IngestEvent(IngestEventRequest) returns (google.protobuf.Empty);
+  rpc IngestBatch(IngestBatchRequest) returns (google.protobuf.Empty);
 }
 ```
 

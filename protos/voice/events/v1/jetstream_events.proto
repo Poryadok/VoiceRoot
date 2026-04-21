@@ -1,0 +1,441 @@
+syntax = "proto3";
+
+package voice.events.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "voice.app/voice/events/v1;eventsv1";
+
+// JetStream domain payloads (NATS). Stream names match CONTRACT_MATRIX / MICROSERVICES.md.
+// Publishers own schema evolution; treat unknown oneof arms as forward-compatible.
+
+// --- user.events (Auth, User) ---
+
+message UserStreamEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp occurred_at = 2;
+  oneof payload {
+    UserRegistered user_registered = 10;
+    UserLoggedIn user_logged_in = 11;
+    UserLoggedOut user_logged_out = 12;
+    UserTwoFaEnabled user_2fa_enabled = 13;
+    UserGuestConverted user_guest_converted = 14;
+    UserAccountDeleted user_account_deleted = 15;
+    UserAccountRestored user_account_restored = 16;
+    ProfileCreated profile_created = 17;
+    ProfileSwitched profile_switched = 18;
+    SettingsChanged settings_changed = 19;
+    PresenceChange presence_change = 20;
+  }
+}
+
+message UserRegistered {
+  string account_id = 1;
+  string type = 2;
+  string method = 3;
+}
+
+message UserLoggedIn {
+  string account_id = 1;
+  string device_info_json = 2;
+  string ip = 3;
+}
+
+message UserLoggedOut {
+  string account_id = 1;
+  string device_info_json = 2;
+}
+
+message UserTwoFaEnabled {
+  string account_id = 1;
+}
+
+message UserGuestConverted {
+  string account_id = 1;
+}
+
+message UserAccountDeleted {
+  string account_id = 1;
+}
+
+message UserAccountRestored {
+  string account_id = 1;
+}
+
+message ProfileCreated {
+  string profile_id = 1;
+  string account_id = 2;
+}
+
+message ProfileSwitched {
+  string profile_id = 1;
+  string account_id = 2;
+}
+
+message SettingsChanged {
+  string profile_id = 1;
+  string changed_keys_json = 2;
+}
+
+message PresenceChange {
+  string profile_id = 1;
+  string status = 2;
+}
+
+// --- social.events ---
+
+message SocialStreamEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp occurred_at = 2;
+  oneof payload {
+    FriendAdded friend_added = 10;
+    FriendRemoved friend_removed = 11;
+    ContactSynced contact_synced = 12;
+    UserBlocked user_blocked = 13;
+  }
+}
+
+message FriendAdded {
+  string requester_profile_id = 1;
+  string target_profile_id = 2;
+}
+
+message FriendRemoved {
+  string profile_id_a = 1;
+  string profile_id_b = 2;
+}
+
+message ContactSynced {
+  string owner_profile_id = 1;
+  int32 count = 2;
+}
+
+message UserBlocked {
+  string blocker_account_id = 1;
+  string blocked_account_id = 2;
+}
+
+// --- role.events ---
+
+message RoleStreamEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp occurred_at = 2;
+  oneof payload {
+    RoleAssignmentChanged role_assignment_changed = 10;
+    RoleDefinitionChanged role_definition_changed = 11;
+  }
+}
+
+message RoleAssignmentChanged {
+  string space_id = 1;
+  string profile_id = 2;
+  repeated string role_ids = 3;
+}
+
+message RoleDefinitionChanged {
+  string space_id = 1;
+  string role_id = 2;
+}
+
+// --- message.events (Messaging) ---
+
+message MessageStreamEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp occurred_at = 2;
+  oneof payload {
+    MessageSent message_sent = 10;
+    MessageEdited message_edited = 11;
+    MessageDeleted message_deleted = 12;
+    ReactionAdded reaction_added = 13;
+  }
+}
+
+message MessageSent {
+  string message_id = 1;
+  string chat_id = 2;
+  string sender_profile_id = 3;
+}
+
+message MessageEdited {
+  string message_id = 1;
+  string chat_id = 2;
+}
+
+message MessageDeleted {
+  string message_id = 1;
+  string chat_id = 2;
+}
+
+message ReactionAdded {
+  string message_id = 1;
+  string profile_id = 2;
+  string emoji = 3;
+}
+
+// --- chat.events (Chat, Space) ---
+
+message ChatStreamEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp occurred_at = 2;
+  oneof payload {
+    ChatCreated chat_created = 10;
+    ChatMemberChanged chat_member_changed = 11;
+    SpaceTreeChanged space_tree_changed = 12;
+  }
+}
+
+message ChatCreated {
+  string chat_id = 1;
+  string type = 2;
+}
+
+message ChatMemberChanged {
+  string chat_id = 1;
+  string profile_id = 2;
+  string change = 3; // joined | left
+}
+
+message SpaceTreeChanged {
+  string space_id = 1;
+  string node_id = 2;
+  string change = 3; // upserted | removed
+}
+
+// --- voice.events ---
+
+message VoiceStreamEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp occurred_at = 2;
+  oneof payload {
+    CallStarted call_started = 10;
+    CallEnded call_ended = 11;
+    ScreenShareStarted screen_share_started = 12;
+  }
+}
+
+message CallStarted {
+  string room_id = 1;
+  repeated string profile_ids = 2;
+}
+
+message CallEnded {
+  string room_id = 1;
+  int32 duration_seconds = 2;
+}
+
+message ScreenShareStarted {
+  string room_id = 1;
+  string profile_id = 2;
+}
+
+// --- moderation.events ---
+
+message ModerationStreamEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp occurred_at = 2;
+  oneof payload {
+    ReportCreated report_created = 10;
+    SanctionApplied sanction_applied = 11;
+    AppealSubmitted appeal_submitted = 12;
+  }
+}
+
+message ReportCreated {
+  string report_id = 1;
+  string reporter_profile_id = 2;
+}
+
+message SanctionApplied {
+  string sanction_id = 1;
+  string target_account_id = 2;
+  string type = 3;
+}
+
+message AppealSubmitted {
+  string appeal_id = 1;
+  string sanction_id = 2;
+}
+
+// --- subscription.events ---
+
+message SubscriptionStreamEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp occurred_at = 2;
+  oneof payload {
+    PlanStarted plan_started = 10;
+    PlanCancelled plan_cancelled = 11;
+    PaymentSuccess payment_success = 12;
+    PaymentFailed payment_failed = 13;
+  }
+}
+
+message PlanStarted {
+  string account_id = 1;
+  string plan = 2;
+}
+
+message PlanCancelled {
+  string account_id = 1;
+  string plan = 2;
+}
+
+message PaymentSuccess {
+  string account_id = 1;
+  string provider = 2;
+}
+
+message PaymentFailed {
+  string account_id = 1;
+  string provider = 2;
+}
+
+// --- file.events ---
+
+message FileStreamEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp occurred_at = 2;
+  oneof payload {
+    FileUploaded file_uploaded = 10;
+    FileScanResult file_scan_result = 11;
+  }
+}
+
+message FileUploaded {
+  string file_id = 1;
+  string uploader_profile_id = 2;
+}
+
+message FileScanResult {
+  string file_id = 1;
+  string result = 2;
+}
+
+// --- matchmaking.events ---
+
+message MatchmakingStreamEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp occurred_at = 2;
+  oneof payload {
+    SearchStarted search_started = 10;
+    MatchFound match_found = 11;
+    MatchTimeout match_timeout = 12;
+    RatingSubmitted rating_submitted = 13;
+  }
+}
+
+message SearchStarted {
+  string session_id = 1;
+  string profile_id = 2;
+  string game_id = 3;
+}
+
+message MatchFound {
+  string match_id = 1;
+  repeated string profile_ids = 2;
+}
+
+message MatchTimeout {
+  string session_id = 1;
+}
+
+message RatingSubmitted {
+  string match_id = 1;
+  string profile_id = 2;
+  int32 stars = 3;
+}
+
+// --- story.events ---
+
+message StoryStreamEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp occurred_at = 2;
+  oneof payload {
+    StoryCreated story_created = 10;
+    StoryViewed story_viewed = 11;
+    HighlightAdded highlight_added = 12;
+  }
+}
+
+message StoryCreated {
+  string story_id = 1;
+  string author_profile_id = 2;
+}
+
+message StoryViewed {
+  string story_id = 1;
+  string viewer_profile_id = 2;
+}
+
+message HighlightAdded {
+  string highlight_id = 1;
+  string profile_id = 2;
+}
+
+// --- federation.events ---
+
+message FederationStreamEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp occurred_at = 2;
+  oneof payload {
+    NodeConnected node_connected = 10;
+    NodeDisconnected node_disconnected = 11;
+    EventSynced event_synced = 12;
+    SyncFailed sync_failed = 13;
+    NodeDefederated node_defederated = 14;
+  }
+}
+
+message NodeConnected {
+  string node_id = 1;
+  string host = 2;
+}
+
+message NodeDisconnected {
+  string node_id = 1;
+  string reason = 2;
+}
+
+message EventSynced {
+  string node_id = 1;
+  string event_type = 2;
+  string direction = 3;
+}
+
+message SyncFailed {
+  string node_id = 1;
+  string error = 2;
+}
+
+message NodeDefederated {
+  string node_id = 1;
+  string reason = 2;
+}
+
+// --- bot.events ---
+
+message BotStreamEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp occurred_at = 2;
+  oneof payload {
+    BotRegistered bot_registered = 10;
+    CommandExecuted command_executed = 11;
+    WebhookDelivered webhook_delivered = 12;
+  }
+}
+
+message BotRegistered {
+  string bot_id = 1;
+  string owner_account_id = 2;
+}
+
+message CommandExecuted {
+  string bot_id = 1;
+  string command = 2;
+  string chat_id = 3;
+}
+
+message WebhookDelivered {
+  string bot_id = 1;
+  string delivery_id = 2;
+  bool success = 3;
+}

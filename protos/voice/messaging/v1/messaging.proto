@@ -1,0 +1,154 @@
+syntax = "proto3";
+
+package voice.messaging.v1;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "voice/chat/v1/chat.proto";
+import "voice/common/v1/common.proto";
+
+option go_package = "voice.app/voice/messaging/v1;messagingv1";
+
+// Messages, reactions, pins, read receipts. HTTP: /api/v1/messages/**.
+//
+// Idempotency: SendMessage accepts optional client_message_id (UUID), unique per
+// (chat.id, sender_profile_id). Retries with the same key return the existing Message
+// (documented success semantics; use ALREADY_EXISTS or OK + same id — pick at codegen).
+service MessagingService {
+  rpc SendMessage(SendMessageRequest) returns (Message);
+  rpc EditMessage(EditMessageRequest) returns (Message);
+  rpc DeleteMessage(DeleteMessageRequest) returns (google.protobuf.Empty);
+  rpc GetMessages(GetMessagesRequest) returns (MessageList);
+  rpc GetMessage(GetMessageRequest) returns (Message);
+
+  rpc GetThreadMessages(GetThreadMessagesRequest) returns (MessageList);
+
+  rpc AddReaction(AddReactionRequest) returns (google.protobuf.Empty);
+  rpc RemoveReaction(RemoveReactionRequest) returns (google.protobuf.Empty);
+
+  rpc PinMessage(PinMessageRequest) returns (google.protobuf.Empty);
+  rpc UnpinMessage(UnpinMessageRequest) returns (google.protobuf.Empty);
+  rpc GetPinnedMessages(GetPinnedMessagesRequest) returns (MessageList);
+
+  rpc ForwardMessage(ForwardMessageRequest) returns (Message);
+
+  rpc MarkRead(MarkReadRequest) returns (google.protobuf.Empty);
+  rpc GetReadState(GetReadStateRequest) returns (ReadState);
+  rpc GetBulkReadState(GetBulkReadStateRequest) returns (BulkReadState);
+}
+
+message SendMessageRequest {
+  voice.chat.v1.ChatRef chat = 1;
+  string content = 2;
+  optional string client_message_id = 3;
+  string attachments_json = 4; // JSON array per docs/messaging-service
+  string mentions_json = 5;
+  optional string thread_parent_id = 6;
+}
+
+message EditMessageRequest {
+  string message_id = 1;
+  string content = 2;
+}
+
+message DeleteMessageRequest {
+  string message_id = 1;
+}
+
+message GetMessagesRequest {
+  voice.chat.v1.ChatRef chat = 1;
+  optional string after_message_id = 2;
+  optional string before_message_id = 3;
+  optional string last_message_id = 4;
+  voice.common.v1.CursorPageRequest page = 5;
+}
+
+message GetMessageRequest {
+  string message_id = 1;
+}
+
+message MessageList {
+  repeated Message messages = 1;
+  string next_cursor = 2;
+  bool has_more = 3;
+}
+
+message Message {
+  string id = 1; // UUIDv7 application-generated
+  voice.chat.v1.ChatRef chat = 2;
+  reserved 3;
+  reserved "chat_type";
+  string sender_profile_id = 4;
+  bool posted_as_chat = 5;
+  optional string display_chat_id = 6;
+  string content = 7;
+  string type = 8; // regular | system | forward
+  optional string thread_parent_id = 9;
+  optional string forward_from_id = 10;
+  optional string forward_from_sender = 11;
+  string attachments_json = 12; // json array
+  string mentions_json = 13; // json array
+  optional google.protobuf.Timestamp edited_at = 14;
+  optional google.protobuf.Timestamp deleted_at = 15;
+  google.protobuf.Timestamp created_at = 16;
+}
+
+message GetThreadMessagesRequest {
+  voice.chat.v1.ChatRef chat = 1;
+  string thread_parent_id = 2;
+  voice.common.v1.CursorPageRequest page = 3;
+}
+
+message AddReactionRequest {
+  string message_id = 1;
+  string emoji = 2;
+}
+
+message RemoveReactionRequest {
+  string message_id = 1;
+  string emoji = 2;
+}
+
+message PinMessageRequest {
+  voice.chat.v1.ChatRef chat = 1;
+  string message_id = 2;
+}
+
+message UnpinMessageRequest {
+  voice.chat.v1.ChatRef chat = 1;
+  string message_id = 2;
+}
+
+message GetPinnedMessagesRequest {
+  voice.chat.v1.ChatRef chat = 1;
+}
+
+message ForwardMessageRequest {
+  string source_message_id = 1;
+  voice.chat.v1.ChatRef target_chat = 2;
+  optional string commentary = 3;
+}
+
+message MarkReadRequest {
+  voice.chat.v1.ChatRef chat = 1;
+  string last_read_message_id = 2;
+}
+
+message GetReadStateRequest {
+  voice.chat.v1.ChatRef chat = 1;
+}
+
+message ReadState {
+  voice.chat.v1.ChatRef chat = 1;
+  string profile_id = 2;
+  string last_read_message_id = 3;
+  google.protobuf.Timestamp updated_at = 4;
+}
+
+message GetBulkReadStateRequest {
+  repeated voice.chat.v1.ChatRef chats = 1;
+}
+
+message BulkReadState {
+  map<string, ReadState> by_chat_id = 1;
+}

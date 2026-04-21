@@ -1,0 +1,158 @@
+syntax = "proto3";
+
+package voice.matchmaking.v1;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "voice/common/v1/common.proto";
+
+option go_package = "voice.app/voice/matchmaking/v1;matchmakingv1";
+
+// Matchmaking. HTTP: /api/v1/matchmaking/**.
+service MatchmakingService {
+  rpc ListGames(ListGamesRequest) returns (GameList);
+  rpc GetGame(GetGameRequest) returns (Game);
+  rpc CreateGame(CreateGameRequest) returns (Game);
+  rpc UpdateGame(UpdateGameRequest) returns (Game);
+  rpc SearchGames(SearchGamesRequest) returns (GameList);
+
+  rpc StartSearch(StartSearchRequest) returns (SearchSession);
+  rpc CancelSearch(CancelSearchRequest) returns (google.protobuf.Empty);
+  rpc GetSearchStatus(GetSearchStatusRequest) returns (SearchSession);
+
+  rpc GetMatch(GetMatchRequest) returns (Match);
+  rpc GetMatchHistory(GetMatchHistoryRequest) returns (MatchList);
+
+  rpc RateMatch(RateMatchRequest) returns (google.protobuf.Empty);
+  rpc GetPlayerRating(GetPlayerRatingRequest) returns (PlayerRating);
+
+  rpc BanFromMM(BanFromMMRequest) returns (google.protobuf.Empty);
+  rpc UnbanFromMM(UnbanFromMMRequest) returns (google.protobuf.Empty);
+  rpc GetMMBanStatus(GetMMBanStatusRequest) returns (MMBanStatus);
+}
+
+message Game {
+  string id = 1;
+  string name = 2;
+  optional string icon_url = 3;
+  optional string external_id = 4;
+  string config_json = 5;
+  string status = 6;
+  string created_by_profile_id = 7;
+  google.protobuf.Timestamp created_at = 8;
+}
+
+message ListGamesRequest {
+  voice.common.v1.CursorPageRequest page = 1;
+}
+
+message GameList {
+  repeated Game games = 1;
+  string next_cursor = 2;
+}
+
+message GetGameRequest {
+  string game_id = 1;
+}
+
+message CreateGameRequest {
+  string name = 1;
+  string config_json = 2;
+}
+
+message UpdateGameRequest {
+  string game_id = 1;
+  optional string name = 2;
+  optional string config_json = 3;
+  optional string status = 4;
+}
+
+message SearchGamesRequest {
+  string query = 1;
+}
+
+message StartSearchRequest {
+  string game_id = 1;
+  string mode = 2;
+  string criteria_json = 3;
+  optional string party_id = 4;
+}
+
+message SearchSession {
+  string id = 1;
+  string profile_id = 2;
+  optional string party_id = 3;
+  string game_id = 4;
+  string mode = 5;
+  string criteria_json = 6;
+  string status = 7;
+  optional google.protobuf.Timestamp timeout_at = 8;
+  optional google.protobuf.Timestamp matched_at = 9;
+  optional string match_id = 10;
+}
+
+message CancelSearchRequest {
+  string session_id = 1;
+}
+
+message GetSearchStatusRequest {
+  string session_id = 1;
+}
+
+message Match {
+  string id = 1;
+  string game_id = 2;
+  string mode = 3;
+  repeated string profile_ids = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
+
+message GetMatchRequest {
+  string match_id = 1;
+}
+
+message GetMatchHistoryRequest {
+  string profile_id = 1;
+  voice.common.v1.CursorPageRequest page = 2;
+}
+
+message MatchList {
+  repeated Match matches = 1;
+  string next_cursor = 2;
+}
+
+message RateMatchRequest {
+  string match_id = 1;
+  int32 stars = 2;
+}
+
+message GetPlayerRatingRequest {
+  string profile_id = 1;
+  string game_id = 2;
+}
+
+message PlayerRating {
+  string profile_id = 1;
+  string game_id = 2;
+  double rating_value = 3;
+  int32 games_played = 4;
+}
+
+message BanFromMMRequest {
+  string account_id = 1;
+  optional string reason = 2;
+  optional google.protobuf.Timestamp until = 3;
+}
+
+message UnbanFromMMRequest {
+  string account_id = 1;
+}
+
+message GetMMBanStatusRequest {
+  string account_id = 1;
+}
+
+message MMBanStatus {
+  bool banned = 1;
+  optional google.protobuf.Timestamp until = 2;
+}

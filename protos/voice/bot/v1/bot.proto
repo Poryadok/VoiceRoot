@@ -1,0 +1,161 @@
+syntax = "proto3";
+
+package voice.bot.v1;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "voice/chat/v1/chat.proto";
+import "voice/messaging/v1/messaging.proto";
+
+option go_package = "voice.app/voice/bot/v1;botv1";
+
+// Bot platform. HTTP: /api/v1/bots/**.
+service BotService {
+  rpc RegisterBot(RegisterBotRequest) returns (Bot);
+  rpc UpdateBot(UpdateBotRequest) returns (Bot);
+  rpc DeleteBot(DeleteBotRequest) returns (google.protobuf.Empty);
+  rpc GetBot(GetBotRequest) returns (Bot);
+  rpc ListBots(ListBotsRequest) returns (BotList);
+  rpc RegenerateToken(RegenerateTokenRequest) returns (TokenResponse);
+
+  rpc RegisterCommands(RegisterCommandsRequest) returns (google.protobuf.Empty);
+  rpc GetCommands(GetCommandsRequest) returns (CommandList);
+
+  rpc SetWebhookURL(SetWebhookURLRequest) returns (google.protobuf.Empty);
+  rpc GetWebhookURL(GetWebhookURLRequest) returns (WebhookURLResponse);
+
+  rpc SetChatWhitelist(SetChatWhitelistRequest) returns (google.protobuf.Empty);
+  rpc GetChatWhitelist(GetChatWhitelistRequest) returns (WhitelistResponse);
+
+  rpc SendBotMessage(SendBotMessageRequest) returns (voice.messaging.v1.Message);
+  rpc EditBotMessage(EditBotMessageRequest) returns (voice.messaging.v1.Message);
+  rpc SendEphemeral(SendEphemeralRequest) returns (google.protobuf.Empty);
+  rpc DeferResponse(DeferResponseRequest) returns (google.protobuf.Empty);
+
+  rpc PollEvents(PollEventsRequest) returns (stream BotEvent);
+}
+
+message Bot {
+  string id = 1;
+  string owner_account_id = 2;
+  string name = 3;
+  string description = 4;
+  optional string avatar_url = 5;
+  optional string webhook_url = 6;
+  bool is_polling_mode = 7;
+  string scopes_json = 8;
+  string status = 9;
+  google.protobuf.Timestamp created_at = 10;
+}
+
+message RegisterBotRequest {
+  string name = 1;
+  string description = 2;
+  string scopes_json = 3;
+}
+
+message UpdateBotRequest {
+  string bot_id = 1;
+  optional string name = 2;
+  optional string description = 3;
+  optional string avatar_url = 4;
+  optional string scopes_json = 5;
+}
+
+message DeleteBotRequest {
+  string bot_id = 1;
+}
+
+message GetBotRequest {
+  string bot_id = 1;
+}
+
+message ListBotsRequest {}
+
+message BotList {
+  repeated Bot bots = 1;
+}
+
+message RegenerateTokenRequest {
+  string bot_id = 1;
+}
+
+message TokenResponse {
+  string token = 1;
+}
+
+message RegisterCommandsRequest {
+  string bot_id = 1;
+  string commands_json = 2;
+}
+
+message GetCommandsRequest {
+  string bot_id = 1;
+}
+
+message CommandList {
+  string commands_json = 1;
+}
+
+message SetWebhookURLRequest {
+  string bot_id = 1;
+  string url = 2;
+}
+
+message GetWebhookURLRequest {
+  string bot_id = 1;
+}
+
+message WebhookURLResponse {
+  optional string url = 1;
+}
+
+message SetChatWhitelistRequest {
+  string bot_id = 1;
+  repeated voice.chat.v1.ChatRef allowed_chats = 2;
+}
+
+message GetChatWhitelistRequest {
+  string bot_id = 1;
+}
+
+message WhitelistResponse {
+  repeated voice.chat.v1.ChatRef allowed_chats = 1;
+}
+
+message SendBotMessageRequest {
+  string bot_id = 1;
+  voice.chat.v1.ChatRef chat = 2;
+  string content = 3;
+  optional string thread_parent_id = 4;
+}
+
+message EditBotMessageRequest {
+  string bot_id = 1;
+  string message_id = 2;
+  string content = 3;
+}
+
+message SendEphemeralRequest {
+  string bot_id = 1;
+  voice.chat.v1.ChatRef chat = 2;
+  string target_profile_id = 3;
+  string content = 4;
+}
+
+message DeferResponseRequest {
+  string bot_id = 1;
+  string interaction_token = 2;
+}
+
+message PollEventsRequest {
+  string bot_id = 1;
+  optional string cursor = 2;
+}
+
+message BotEvent {
+  string event_id = 1;
+  string event_type = 2;
+  string payload_json = 3;
+  google.protobuf.Timestamp created_at = 4;
+}

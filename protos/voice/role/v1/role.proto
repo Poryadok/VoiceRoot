@@ -1,0 +1,160 @@
+syntax = "proto3";
+
+package voice.role.v1;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "voice/chat/v1/chat.proto";
+
+option go_package = "voice.app/voice/role/v1;rolev1";
+
+// Roles and permission bitmask in space. HTTP: /api/v1/roles/**.
+// Permission names: docs/microservices/role-service.md (SCREAMING_SNAKE_CASE).
+service RoleService {
+  rpc CreateRole(CreateRoleRequest) returns (Role);
+  rpc UpdateRole(UpdateRoleRequest) returns (Role);
+  rpc DeleteRole(DeleteRoleRequest) returns (google.protobuf.Empty);
+  rpc ListRoles(ListRolesRequest) returns (RoleList);
+  rpc ReorderRoles(ReorderRolesRequest) returns (google.protobuf.Empty);
+
+  rpc AssignRole(AssignRoleRequest) returns (google.protobuf.Empty);
+  rpc RevokeRole(RevokeRoleRequest) returns (google.protobuf.Empty);
+  rpc GetMemberRoles(GetMemberRolesRequest) returns (RoleList);
+
+  rpc SetChatOverride(SetChatOverrideRequest) returns (google.protobuf.Empty);
+  rpc RemoveChatOverride(RemoveChatOverrideRequest) returns (google.protobuf.Empty);
+  rpc GetChatOverrides(GetChatOverridesRequest) returns (OverrideList);
+  rpc SetVoiceRoomOverride(SetVoiceRoomOverrideRequest) returns (google.protobuf.Empty);
+  rpc RemoveVoiceRoomOverride(RemoveVoiceRoomOverrideRequest) returns (google.protobuf.Empty);
+  rpc GetVoiceRoomOverrides(GetVoiceRoomOverridesRequest) returns (OverrideList);
+
+  rpc CheckPermission(CheckPermissionRequest) returns (CheckPermissionResponse);
+  rpc GetEffectivePermissions(GetEffectivePermissionsRequest) returns (PermissionSet);
+}
+
+message Role {
+  string id = 1;
+  string space_id = 2;
+  string name = 3;
+  uint64 permissions_mask = 4;
+  int32 position = 5;
+  bool managed = 6;
+  google.protobuf.Timestamp created_at = 7;
+}
+
+message CreateRoleRequest {
+  string space_id = 1;
+  string name = 2;
+  uint64 permissions_mask = 3;
+  int32 position = 4;
+}
+
+message UpdateRoleRequest {
+  string role_id = 1;
+  optional string name = 2;
+  optional uint64 permissions_mask = 3;
+  optional int32 position = 4;
+}
+
+message DeleteRoleRequest {
+  string role_id = 1;
+}
+
+message ListRolesRequest {
+  string space_id = 1;
+}
+
+message RoleList {
+  repeated Role roles = 1;
+}
+
+message ReorderRolesRequest {
+  string space_id = 1;
+  repeated string ordered_role_ids = 2;
+}
+
+message AssignRoleRequest {
+  string space_id = 1;
+  string profile_id = 2;
+  string role_id = 3;
+}
+
+message RevokeRoleRequest {
+  string space_id = 1;
+  string profile_id = 2;
+  string role_id = 3;
+}
+
+message GetMemberRolesRequest {
+  string space_id = 1;
+  string profile_id = 2;
+}
+
+message SetChatOverrideRequest {
+  string space_id = 1;
+  voice.chat.v1.ChatRef chat = 2;
+  uint64 deny_mask = 3;
+  uint64 allow_mask = 4;
+}
+
+message RemoveChatOverrideRequest {
+  string space_id = 1;
+  voice.chat.v1.ChatRef chat = 2;
+}
+
+message GetChatOverridesRequest {
+  string space_id = 1;
+  optional voice.chat.v1.ChatRef filter_chat = 2;
+}
+
+message SetVoiceRoomOverrideRequest {
+  string space_id = 1;
+  string voice_room_id = 2;
+  uint64 deny_mask = 3;
+  uint64 allow_mask = 4;
+}
+
+message RemoveVoiceRoomOverrideRequest {
+  string space_id = 1;
+  string voice_room_id = 2;
+}
+
+message GetVoiceRoomOverridesRequest {
+  string space_id = 1;
+  optional string voice_room_id = 2;
+}
+
+message OverrideList {
+  repeated PermissionOverride overrides = 1;
+}
+
+message PermissionOverride {
+  optional voice.chat.v1.ChatRef chat = 1;
+  optional string voice_room_id = 2;
+  uint64 deny_mask = 3;
+  uint64 allow_mask = 4;
+}
+
+message CheckPermissionRequest {
+  string space_id = 1;
+  string profile_id = 2;
+  string permission_name = 3;
+  optional voice.chat.v1.ChatRef chat = 4;
+  optional string voice_room_id = 5;
+}
+
+message CheckPermissionResponse {
+  bool allowed = 1;
+}
+
+message GetEffectivePermissionsRequest {
+  string space_id = 1;
+  string profile_id = 2;
+  optional voice.chat.v1.ChatRef chat = 3;
+  optional string voice_room_id = 4;
+}
+
+message PermissionSet {
+  uint64 effective_mask = 1;
+  repeated string permission_names = 2; // denormalized names for debugging/UI
+}

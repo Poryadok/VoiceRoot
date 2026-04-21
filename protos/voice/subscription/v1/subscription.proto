@@ -1,0 +1,136 @@
+syntax = "proto3";
+
+package voice.subscription.v1;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "voice/common/v1/common.proto";
+import "voice/space/v1/space.proto";
+
+option go_package = "voice.app/voice/subscription/v1;subscriptionv1";
+
+// Billing and limits. HTTP: /api/v1/subscription/**.
+service SubscriptionService {
+  rpc GetSubscription(GetSubscriptionRequest) returns (Subscription);
+  rpc CreateCheckoutSession(CreateCheckoutSessionRequest) returns (CheckoutResponse);
+  rpc CancelSubscription(CancelSubscriptionRequest) returns (Subscription);
+  rpc ResumeSubscription(ResumeSubscriptionRequest) returns (Subscription);
+
+  rpc GetSpaceSubscription(GetSpaceSubscriptionRequest) returns (SpaceSubscription);
+  rpc CreateSpaceCheckoutSession(CreateSpaceCheckoutSessionRequest) returns (CheckoutResponse);
+
+  rpc GetLimits(GetLimitsRequest) returns (Limits);
+  rpc CheckLimit(CheckLimitRequest) returns (CheckLimitResponse);
+
+  rpc HandlePaddleWebhook(HandlePaddleWebhookRequest) returns (google.protobuf.Empty);
+  rpc HandleCloudPaymentsWebhook(HandleCloudPaymentsWebhookRequest) returns (google.protobuf.Empty);
+
+  rpc GetBillingHistory(GetBillingHistoryRequest) returns (BillingHistoryList);
+}
+
+message Subscription {
+  string id = 1;
+  string account_id = 2;
+  string plan = 3;
+  string billing_period = 4;
+  string status = 5;
+  string provider = 6;
+  string provider_subscription_id = 7;
+  google.protobuf.Timestamp current_period_start = 8;
+  google.protobuf.Timestamp current_period_end = 9;
+  optional google.protobuf.Timestamp grace_period_end = 10;
+  optional google.protobuf.Timestamp cancelled_at = 11;
+}
+
+message GetSubscriptionRequest {
+  string account_id = 1;
+}
+
+message CreateCheckoutSessionRequest {
+  string plan = 1;
+  string billing_period = 2;
+  string success_url = 3;
+  string cancel_url = 4;
+}
+
+message CheckoutResponse {
+  string checkout_url = 1;
+  string session_id = 2;
+}
+
+message CancelSubscriptionRequest {
+  string subscription_id = 1;
+}
+
+message ResumeSubscriptionRequest {
+  string subscription_id = 1;
+}
+
+message SpaceSubscription {
+  string id = 1;
+  voice.space.v1.SpaceRef space = 2;
+  string purchaser_account_id = 3;
+  string plan = 4;
+  string billing_period = 5;
+  string status = 6;
+  string provider = 7;
+  google.protobuf.Timestamp current_period_start = 8;
+  google.protobuf.Timestamp current_period_end = 9;
+}
+
+message GetSpaceSubscriptionRequest {
+  voice.space.v1.SpaceRef space = 1;
+}
+
+message CreateSpaceCheckoutSessionRequest {
+  voice.space.v1.SpaceRef space = 1;
+  string success_url = 2;
+  string cancel_url = 3;
+}
+
+message GetLimitsRequest {
+  string account_id = 1;
+  optional voice.space.v1.SpaceRef scope_space = 2;
+}
+
+message Limits {
+  string limits_json = 1;
+}
+
+message CheckLimitRequest {
+  string account_id = 1;
+  string limit_name = 2;
+  int64 delta = 3;
+}
+
+message CheckLimitResponse {
+  bool allowed = 1;
+  int64 remaining = 2;
+}
+
+message HandlePaddleWebhookRequest {
+  string raw_body = 1;
+  string signature = 2;
+}
+
+message HandleCloudPaymentsWebhookRequest {
+  string raw_body = 1;
+  string signature = 2;
+}
+
+message GetBillingHistoryRequest {
+  string account_id = 1;
+  voice.common.v1.CursorPageRequest page = 2;
+}
+
+message BillingHistoryList {
+  repeated BillingEvent events = 1;
+  string next_cursor = 2;
+}
+
+message BillingEvent {
+  string id = 1;
+  string type = 2;
+  google.protobuf.Timestamp occurred_at = 3;
+  string payload_json = 4;
+}

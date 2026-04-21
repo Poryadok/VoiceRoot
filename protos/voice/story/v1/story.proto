@@ -1,0 +1,153 @@
+syntax = "proto3";
+
+package voice.story.v1;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "voice/common/v1/common.proto";
+
+option go_package = "voice.app/voice/story/v1;storyv1";
+
+// Stories and highlights. HTTP: /api/v1/stories/**.
+service StoryService {
+  rpc CreateStory(CreateStoryRequest) returns (Story);
+  rpc DeleteStory(DeleteStoryRequest) returns (google.protobuf.Empty);
+  rpc GetStory(GetStoryRequest) returns (Story);
+
+  rpc GetStoryFeed(GetStoryFeedRequest) returns (StoryFeedResponse);
+  rpc GetUserStories(GetUserStoriesRequest) returns (StoryList);
+
+  rpc MarkViewed(MarkViewedRequest) returns (google.protobuf.Empty);
+  rpc GetViewers(GetViewersRequest) returns (ViewerList);
+
+  rpc ReactToStory(ReactToStoryRequest) returns (google.protobuf.Empty);
+
+  rpc GetArchive(GetArchiveRequest) returns (StoryList);
+
+  rpc CreateHighlight(CreateHighlightRequest) returns (Highlight);
+  rpc UpdateHighlight(UpdateHighlightRequest) returns (Highlight);
+  rpc DeleteHighlight(DeleteHighlightRequest) returns (google.protobuf.Empty);
+  rpc AddToHighlight(AddToHighlightRequest) returns (google.protobuf.Empty);
+  rpc RemoveFromHighlight(RemoveFromHighlightRequest) returns (google.protobuf.Empty);
+  rpc GetHighlights(GetHighlightsRequest) returns (HighlightList);
+
+  rpc CreateLookingForParty(CreateLookingForPartyRequest) returns (Story);
+}
+
+message Story {
+  string id = 1;
+  string author_profile_id = 2;
+  string type = 3; // photo | video | text
+  optional string media_file_id = 4;
+  optional string text_content = 5;
+  optional string text_style_json = 6;
+  optional string game_tag = 7;
+  bool is_looking_for_party = 8;
+  optional string lfp_criteria_json = 9;
+  string mention_profile_ids_json = 10;
+  int32 view_count = 11;
+  string visibility = 12;
+  google.protobuf.Timestamp expires_at = 13;
+  google.protobuf.Timestamp archived_until = 14;
+  google.protobuf.Timestamp created_at = 15;
+  optional google.protobuf.Timestamp deleted_at = 16;
+}
+
+message CreateStoryRequest {
+  string type = 1;
+  optional string media_file_id = 2;
+  optional string text_content = 3;
+  optional string text_style_json = 4;
+  optional string game_tag = 5;
+  string visibility = 6;
+}
+
+message DeleteStoryRequest {
+  string story_id = 1;
+}
+
+message GetStoryRequest {
+  string story_id = 1;
+}
+
+message GetStoryFeedRequest {
+  voice.common.v1.CursorPageRequest page = 1;
+}
+
+message StoryFeedResponse {
+  repeated Story stories = 1;
+  string next_cursor = 2;
+}
+
+message GetUserStoriesRequest {
+  string profile_id = 1;
+}
+
+message StoryList {
+  repeated Story stories = 1;
+}
+
+message MarkViewedRequest {
+  string story_id = 1;
+  bool anonymous = 2;
+}
+
+message GetViewersRequest {
+  string story_id = 1;
+}
+
+message ViewerList {
+  repeated string viewer_profile_ids = 1;
+}
+
+message ReactToStoryRequest {
+  string story_id = 1;
+  string emoji = 2;
+}
+
+message GetArchiveRequest {
+  string profile_id = 1;
+}
+
+message Highlight {
+  string id = 1;
+  string profile_id = 2;
+  string name = 3;
+  repeated string story_ids = 4;
+}
+
+message CreateHighlightRequest {
+  string name = 1;
+}
+
+message UpdateHighlightRequest {
+  string highlight_id = 1;
+  optional string name = 2;
+}
+
+message DeleteHighlightRequest {
+  string highlight_id = 1;
+}
+
+message AddToHighlightRequest {
+  string highlight_id = 1;
+  string story_id = 2;
+}
+
+message RemoveFromHighlightRequest {
+  string highlight_id = 1;
+  string story_id = 2;
+}
+
+message GetHighlightsRequest {
+  string profile_id = 1;
+}
+
+message HighlightList {
+  repeated Highlight highlights = 1;
+}
+
+message CreateLookingForPartyRequest {
+  string criteria_json = 1;
+  optional string media_file_id = 2;
+}

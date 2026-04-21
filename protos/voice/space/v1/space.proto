@@ -1,0 +1,327 @@
+syntax = "proto3";
+
+package voice.space.v1;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "voice/chat/v1/chat.proto";
+import "voice/common/v1/common.proto";
+
+option go_package = "voice.app/voice/space/v1;spacev1";
+
+// Spaces, tree, invites. HTTP: /api/v1/spaces/**.
+service SpaceService {
+  rpc CreateSpace(CreateSpaceRequest) returns (Space);
+  rpc UpdateSpace(UpdateSpaceRequest) returns (Space);
+  rpc DeleteSpace(DeleteSpaceRequest) returns (google.protobuf.Empty);
+  rpc GetSpace(GetSpaceRequest) returns (Space);
+  rpc ListMySpaces(ListMySpacesRequest) returns (SpaceList);
+  rpc SearchPublicSpaces(SearchPublicSpacesRequest) returns (SpaceList);
+
+  rpc CreateVoiceRoom(CreateVoiceRoomRequest) returns (VoiceRoom);
+  rpc UpdateVoiceRoom(UpdateVoiceRoomRequest) returns (VoiceRoom);
+  rpc DeleteVoiceRoom(DeleteVoiceRoomRequest) returns (google.protobuf.Empty);
+  rpc UpsertTreeNode(UpsertTreeNodeRequest) returns (SpaceTreeNode);
+  rpc RemoveTreeNode(RemoveTreeNodeRequest) returns (google.protobuf.Empty);
+  rpc CreateCategory(CreateCategoryRequest) returns (Category);
+  rpc UpdateCategory(UpdateCategoryRequest) returns (Category);
+  rpc DeleteCategory(DeleteCategoryRequest) returns (google.protobuf.Empty);
+  rpc ReorderSpaceTree(ReorderSpaceTreeRequest) returns (google.protobuf.Empty);
+
+  rpc CreateInvite(CreateInviteRequest) returns (Invite);
+  rpc RevokeInvite(RevokeInviteRequest) returns (google.protobuf.Empty);
+  rpc GetInvite(GetInviteRequest) returns (Invite);
+  rpc ListInvites(ListInvitesRequest) returns (InviteList);
+  rpc JoinByInvite(JoinByInviteRequest) returns (SpaceMembership);
+
+  rpc JoinSpace(JoinSpaceRequest) returns (SpaceMembership);
+  rpc LeaveSpace(LeaveSpaceRequest) returns (google.protobuf.Empty);
+  rpc KickMember(KickMemberRequest) returns (google.protobuf.Empty);
+  rpc BanMember(BanMemberRequest) returns (google.protobuf.Empty);
+  rpc UnbanMember(UnbanMemberRequest) returns (google.protobuf.Empty);
+  rpc ListMembers(ListSpaceMembersRequest) returns (SpaceMemberList);
+  rpc ListBans(ListBansRequest) returns (BanList);
+  rpc TransferOwnership(TransferOwnershipRequest) returns (google.protobuf.Empty);
+
+  rpc ListTemplates(ListTemplatesRequest) returns (TemplateList);
+  rpc CreateFromTemplate(CreateFromTemplateRequest) returns (Space);
+
+  rpc GetAuditLog(GetAuditLogRequest) returns (AuditLogList);
+}
+
+message Space {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  optional string icon_url = 4;
+  optional string banner_url = 5;
+  string visibility = 6;
+  string owner_profile_id = 7;
+  int32 member_count = 8;
+  bool is_verified = 9;
+  string verification_type = 10;
+  string entry_requirement = 11;
+  string entry_questions_json = 12;
+  string mm_config_json = 13;
+  google.protobuf.Timestamp created_at = 14;
+  google.protobuf.Timestamp updated_at = 15;
+}
+
+message CreateSpaceRequest {
+  string name = 1;
+  string description = 2;
+  string visibility = 3;
+}
+
+message UpdateSpaceRequest {
+  string space_id = 1;
+  optional string name = 2;
+  optional string description = 3;
+  optional string icon_url = 4;
+  optional string banner_url = 5;
+  optional string visibility = 6;
+  optional string entry_requirement = 7;
+  optional string entry_questions_json = 8;
+  optional string mm_config_json = 9;
+}
+
+message DeleteSpaceRequest {
+  string space_id = 1;
+}
+
+message GetSpaceRequest {
+  string space_id = 1;
+}
+
+message ListMySpacesRequest {
+  voice.common.v1.CursorPageRequest page = 1;
+}
+
+message SpaceList {
+  repeated Space spaces = 1;
+  string next_cursor = 2;
+}
+
+message SearchPublicSpacesRequest {
+  string query = 1;
+  voice.common.v1.CursorPageRequest page = 2;
+}
+
+message VoiceRoom {
+  string id = 1;
+  string space_id = 2;
+  string name = 3;
+  google.protobuf.Timestamp created_at = 4;
+}
+
+message CreateVoiceRoomRequest {
+  string space_id = 1;
+  string name = 2;
+}
+
+message UpdateVoiceRoomRequest {
+  string voice_room_id = 1;
+  optional string name = 2;
+}
+
+message DeleteVoiceRoomRequest {
+  string voice_room_id = 1;
+}
+
+message SpaceTreeNode {
+  string id = 1;
+  string space_id = 2;
+  optional string category_id = 3;
+  string kind = 4; // text_chat | voice_room
+  optional voice.chat.v1.ChatRef linked_chat = 5;
+  optional string voice_room_id = 6;
+  int32 sort_order = 7;
+  bool is_system = 8;
+}
+
+message UpsertTreeNodeRequest {
+  string space_id = 1;
+  optional string node_id = 2;
+  optional string category_id = 3;
+  string kind = 4;
+  optional voice.chat.v1.ChatRef linked_chat = 5;
+  optional string voice_room_id = 6;
+  optional int32 sort_order = 7;
+  optional bool is_system = 8;
+}
+
+message RemoveTreeNodeRequest {
+  string space_id = 1;
+  string node_id = 2;
+}
+
+message Category {
+  string id = 1;
+  string space_id = 2;
+  string name = 3;
+  int32 sort_order = 4;
+}
+
+message CreateCategoryRequest {
+  string space_id = 1;
+  string name = 2;
+  int32 sort_order = 3;
+}
+
+message UpdateCategoryRequest {
+  string category_id = 1;
+  optional string name = 2;
+  optional int32 sort_order = 3;
+}
+
+message DeleteCategoryRequest {
+  string category_id = 1;
+}
+
+message ReorderSpaceTreeRequest {
+  string space_id = 1;
+  repeated string ordered_node_ids = 2;
+}
+
+message Invite {
+  string id = 1;
+  string space_id = 2;
+  string code = 3;
+  string creator_profile_id = 4;
+  optional int32 max_uses = 5;
+  int32 use_count = 6;
+  optional google.protobuf.Timestamp expires_at = 7;
+  google.protobuf.Timestamp created_at = 8;
+  optional google.protobuf.Timestamp revoked_at = 9;
+}
+
+message CreateInviteRequest {
+  string space_id = 1;
+  optional int32 max_uses = 2;
+  optional google.protobuf.Timestamp expires_at = 3;
+}
+
+message RevokeInviteRequest {
+  string invite_id = 1;
+}
+
+message GetInviteRequest {
+  string code = 1;
+}
+
+message ListInvitesRequest {
+  string space_id = 1;
+}
+
+message InviteList {
+  repeated Invite invites = 1;
+}
+
+message JoinByInviteRequest {
+  string code = 1;
+}
+
+message SpaceMembership {
+  string space_id = 1;
+  string profile_id = 2;
+  google.protobuf.Timestamp joined_at = 3;
+  optional string nickname = 4;
+}
+
+message JoinSpaceRequest {
+  string space_id = 1;
+}
+
+message LeaveSpaceRequest {
+  string space_id = 1;
+}
+
+message KickMemberRequest {
+  string space_id = 1;
+  string profile_id = 2;
+}
+
+message BanMemberRequest {
+  string space_id = 1;
+  string account_id = 2;
+  optional string reason = 3;
+}
+
+message UnbanMemberRequest {
+  string space_id = 1;
+  string account_id = 2;
+}
+
+message ListSpaceMembersRequest {
+  string space_id = 1;
+  voice.common.v1.CursorPageRequest page = 2;
+}
+
+message SpaceMemberList {
+  repeated SpaceMembership members = 1;
+  string next_cursor = 2;
+}
+
+message ListBansRequest {
+  string space_id = 1;
+}
+
+message BanList {
+  repeated SpaceBan bans = 1;
+}
+
+message SpaceBan {
+  string space_id = 1;
+  string account_id = 2;
+  string banned_by_profile_id = 3;
+  optional string reason = 4;
+  google.protobuf.Timestamp banned_at = 5;
+}
+
+message TransferOwnershipRequest {
+  string space_id = 1;
+  string new_owner_profile_id = 2;
+}
+
+message ListTemplatesRequest {}
+
+message TemplateList {
+  repeated SpaceTemplate templates = 1;
+}
+
+message SpaceTemplate {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+}
+
+message CreateFromTemplateRequest {
+  string template_id = 1;
+  string name = 2;
+}
+
+message GetAuditLogRequest {
+  string space_id = 1;
+  voice.common.v1.CursorPageRequest page = 2;
+}
+
+message AuditLogList {
+  repeated AuditLogEntry entries = 1;
+  string next_cursor = 2;
+}
+
+message AuditLogEntry {
+  string id = 1;
+  string space_id = 2;
+  string actor_profile_id = 3;
+  string action = 4;
+  string target_type = 5;
+  string target_id = 6;
+  string details_json = 7;
+  google.protobuf.Timestamp created_at = 8;
+}
+
+// Logical reference to space_db.spaces for other services (cf. ChatRef).
+message SpaceRef {
+  string id = 1;
+}

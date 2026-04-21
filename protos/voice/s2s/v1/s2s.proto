@@ -8,9 +8,9 @@ option go_package = "voice.app/voice/s2s/v1;s2sv1";
 // Нода выступает клиентом, master — сервером.
 service FederationService {
   // Persistent bidirectional stream: нода подписывается на события своих спейсов.
-  // Нода шлёт SubscribeRequest на старте, затем периодически Heartbeat и Ack.
-  // Master шлёт MasterEvent при каждом изменении.
-  rpc EventStream(stream NodeMessage) returns (stream MasterEvent);
+  // Нода шлёт кадры EventStreamRequest (SubscribeRequest / Heartbeat / Ack).
+  // Master шлёт EventStreamResponse при каждом изменении (buf STANDARD имена кадров стрима).
+  rpc EventStream(stream EventStreamRequest) returns (stream EventStreamResponse);
 
   // Snapshot-синхронизация на реконнекте: нода запрашивает текущие роли и баны
   // для конкретного спейса. Вызывается после переподключения EventStream.
@@ -43,8 +43,8 @@ message AuthenticateUserResponse {
 
 // ─────────────────────────── Event Stream ───────────────────────────
 
-// Сообщения от ноды → master
-message NodeMessage {
+// Кадр ноды → master (client stream).
+message EventStreamRequest {
   oneof payload {
     SubscribeRequest subscribe = 1;
     Heartbeat heartbeat = 2;
@@ -66,8 +66,8 @@ message Ack {
   string event_id = 1; // ID подтверждаемого события
 }
 
-// События от master → нода
-message MasterEvent {
+// Кадр master → нода (server stream).
+message EventStreamResponse {
   string event_id = 1;
   int64 timestamp = 2;
   string space_id = 3;

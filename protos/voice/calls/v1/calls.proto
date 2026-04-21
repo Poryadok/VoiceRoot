@@ -1,0 +1,148 @@
+syntax = "proto3";
+
+package voice.calls.v1;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "voice/chat/v1/chat.proto";
+import "voice/space/v1/space.proto";
+
+option go_package = "voice.app/voice/calls/v1;callsv1";
+
+// Voice / LiveKit orchestration. HTTP: /api/v1/voice/**.
+// Package voice.calls.v1 avoids path stutter voice/voice/v1; service name matches docs.
+service VoiceService {
+  rpc StartCall(StartCallRequest) returns (CallSession);
+  rpc JoinCall(JoinCallRequest) returns (CallSession);
+  rpc LeaveCall(LeaveCallRequest) returns (google.protobuf.Empty);
+  rpc EndCall(EndCallRequest) returns (google.protobuf.Empty);
+
+  rpc JoinVoiceRoom(JoinVoiceRoomRequest) returns (VoiceSession);
+  rpc LeaveVoiceRoom(LeaveVoiceRoomRequest) returns (google.protobuf.Empty);
+  rpc MoveToVoiceRoom(MoveToVoiceRoomRequest) returns (VoiceSession);
+
+  rpc GetJoinToken(GetJoinTokenRequest) returns (JoinTokenResponse);
+
+  rpc UpdateVoiceState(UpdateVoiceStateRequest) returns (google.protobuf.Empty);
+  rpc GetVoiceStates(GetVoiceStatesRequest) returns (VoiceStateList);
+  rpc GetActiveCall(GetActiveCallRequest) returns (CallSession);
+
+  rpc StartScreenShare(StartScreenShareRequest) returns (ScreenShareSession);
+  rpc StopScreenShare(StopScreenShareRequest) returns (google.protobuf.Empty);
+
+  rpc SetCommanderMode(SetCommanderModeRequest) returns (google.protobuf.Empty);
+
+  rpc RaiseHand(RaiseHandRequest) returns (google.protobuf.Empty);
+  rpc LowerHand(LowerHandRequest) returns (google.protobuf.Empty);
+}
+
+message StartCallRequest {
+  string room_type = 1; // call | group_voice | voice_room
+  optional voice.chat.v1.ChatRef linked_chat = 2;
+  optional string voice_room_id = 3;
+  optional voice.space.v1.SpaceRef space = 4;
+}
+
+message JoinCallRequest {
+  string room_id = 1;
+}
+
+message LeaveCallRequest {
+  string room_id = 1;
+}
+
+message EndCallRequest {
+  string room_id = 1;
+}
+
+message CallSession {
+  string room_id = 1;
+  string livekit_room_name = 2;
+  string room_type = 3;
+  optional voice.chat.v1.ChatRef linked_chat = 4;
+  optional string voice_room_id = 5;
+  google.protobuf.Timestamp started_at = 6;
+}
+
+message JoinVoiceRoomRequest {
+  string voice_room_id = 1;
+  voice.space.v1.SpaceRef space = 2;
+}
+
+message LeaveVoiceRoomRequest {
+  string voice_room_id = 1;
+}
+
+message MoveToVoiceRoomRequest {
+  string from_voice_room_id = 1;
+  string to_voice_room_id = 2;
+  voice.space.v1.SpaceRef space = 3;
+}
+
+message VoiceSession {
+  string room_id = 1;
+  string livekit_room_name = 2;
+  string voice_room_id = 3;
+}
+
+message GetJoinTokenRequest {
+  string room_id = 1;
+}
+
+message JoinTokenResponse {
+  string jwt = 1;
+  int64 expires_at_unix = 2;
+}
+
+message UpdateVoiceStateRequest {
+  string room_id = 1;
+  optional bool is_muted = 2;
+  optional bool is_deafened = 3;
+  optional bool is_video_on = 4;
+}
+
+message GetVoiceStatesRequest {
+  string room_id = 1;
+}
+
+message VoiceStateList {
+  repeated VoiceParticipantState participants = 1;
+}
+
+message VoiceParticipantState {
+  string profile_id = 1;
+  bool is_muted = 2;
+  bool is_deafened = 3;
+  bool is_video_on = 4;
+  bool is_screen_sharing = 5;
+  bool is_commander = 6;
+  bool hand_raised = 7;
+}
+
+message GetActiveCallRequest {}
+
+message StartScreenShareRequest {
+  string room_id = 1;
+}
+
+message ScreenShareSession {
+  string stream_id = 1;
+}
+
+message StopScreenShareRequest {
+  string room_id = 1;
+  optional string stream_id = 2;
+}
+
+message SetCommanderModeRequest {
+  string room_id = 1;
+  bool enabled = 2;
+}
+
+message RaiseHandRequest {
+  string room_id = 1;
+}
+
+message LowerHandRequest {
+  string room_id = 1;
+}

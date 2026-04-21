@@ -1,0 +1,113 @@
+syntax = "proto3";
+
+package voice.file.v1;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "voice/chat/v1/chat.proto";
+import "voice/common/v1/common.proto";
+
+option go_package = "voice.app/voice/file/v1;filev1";
+
+// Uploads, R2, scanning. HTTP: /api/v1/files/**.
+service FileService {
+  rpc RequestUpload(RequestUploadRequest) returns (UploadResponse);
+  rpc ConfirmUpload(ConfirmUploadRequest) returns (FileMetadata);
+
+  rpc GetFileURL(GetFileURLRequest) returns (FileURLResponse);
+  rpc GetFileMetadata(GetFileMetadataRequest) returns (FileMetadata);
+  rpc GetBulkMetadata(GetBulkMetadataRequest) returns (BulkFileMetadata);
+
+  rpc DeleteFile(DeleteFileRequest) returns (google.protobuf.Empty);
+  rpc ListFiles(ListFilesRequest) returns (FileList);
+
+  rpc CheckQuota(CheckQuotaRequest) returns (QuotaResponse);
+}
+
+message RequestUploadRequest {
+  string original_name = 1;
+  string mime_type = 2;
+  int64 size_bytes = 3;
+  optional voice.chat.v1.ChatRef context_chat = 4;
+  reserved 5;
+  reserved "chat_type";
+}
+
+message UploadResponse {
+  string file_id = 1;
+  string presigned_put_url = 2;
+  string r2_key = 3;
+}
+
+message ConfirmUploadRequest {
+  string file_id = 1;
+  string sha256_hash = 2;
+}
+
+message FileMetadata {
+  string id = 1;
+  string uploader_profile_id = 2;
+  string original_name = 3;
+  string mime_type = 4;
+  int64 size_bytes = 5;
+  string sha256_hash = 6;
+  string r2_key = 7;
+  string status = 8;
+  string file_type = 9;
+  optional int32 width = 10;
+  optional int32 height = 11;
+  optional int32 duration_seconds = 12;
+  optional string thumbnail_r2_key = 13;
+  optional string converted_r2_key = 14;
+  optional voice.chat.v1.ChatRef chat = 15;
+  reserved 16;
+  reserved "chat_type";
+  bool is_e2e = 17;
+  optional google.protobuf.Timestamp expires_at = 18;
+  string scan_result = 19;
+  google.protobuf.Timestamp created_at = 20;
+}
+
+message GetFileURLRequest {
+  string file_id = 1;
+}
+
+message FileURLResponse {
+  string presigned_get_url = 1;
+  google.protobuf.Timestamp expires_at = 2;
+}
+
+message GetFileMetadataRequest {
+  string file_id = 1;
+}
+
+message GetBulkMetadataRequest {
+  repeated string file_ids = 1;
+}
+
+message BulkFileMetadata {
+  map<string, FileMetadata> by_file_id = 1;
+}
+
+message DeleteFileRequest {
+  string file_id = 1;
+}
+
+message ListFilesRequest {
+  optional voice.chat.v1.ChatRef filter_chat = 1;
+  voice.common.v1.CursorPageRequest page = 2;
+}
+
+message FileList {
+  repeated FileMetadata files = 1;
+  string next_cursor = 2;
+}
+
+message CheckQuotaRequest {
+  string profile_id = 1;
+}
+
+message QuotaResponse {
+  int64 bytes_used = 1;
+  int64 bytes_limit = 2;
+}

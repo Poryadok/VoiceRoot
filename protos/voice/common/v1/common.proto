@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package voice.common.v1;
+
+option go_package = "voice.app/voice/common/v1;commonv1";
+
+// Repository-wide API conventions (see docs/DATA_MODEL.md):
+// - Entity IDs exposed in APIs: string UUID (RFC 4122 canonical textual form).
+// - Instants: google.protobuf.Timestamp (UTC).
+//
+// JWT claims (access token) are validated at API Gateway and passed to backends
+// via gRPC metadata (not request bodies). Canonical claim names: user_id (account),
+// profile_id, roles, subscription_tier — see docs/microservices/api-gateway.md.
+
+// Generic cursor page (Messaging history, admin lists, etc.).
+message CursorPageRequest {
+  string cursor = 1; // opaque; empty = first page
+  int32 page_size = 2; // server default if unset or 0
+}
+
+message CursorPageResponse {
+  string next_cursor = 1;
+  bool has_more = 2;
+}
+
+// Offset/limit helper where cursor is not required.
+message PageRequest {
+  int32 offset = 1;
+  int32 limit = 2;
+}
+
+message PageResponse {
+  int32 total_count = 1; // optional; -1 if unknown
+}

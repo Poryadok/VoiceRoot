@@ -49,23 +49,30 @@ Federated Node (сторонний сервер):
 
 ## API (gRPC)
 
+Канонические определения — в репозитории:
+
+- **Нода ↔ master (data plane):** [`protos/voice/s2s/v1/s2s.proto`](../../protos/voice/s2s/v1/s2s.proto) — `FederationService`: поток `EventStream(stream EventStreamRequest) returns (stream EventStreamResponse)` (нода шлёт `SubscribeRequest` / `Heartbeat` / `Ack` внутри `EventStreamRequest`, master — события в `EventStreamResponse`), плюс unary `SyncSnapshot`, `NotifyUser`, `AuthenticateUser`.
+- **Управление нодами (control plane):** [`protos/voice/s2s/v1/federation_management.proto`](../../protos/voice/s2s/v1/federation_management.proto) — `FederationManagementService`: `RegisterNode`, `ApproveNode`, `DeactivateNode`, `ListNodes`, `GetNodeStatus`, `Defederate` (типы сообщений — `FederationNode`, `FederationNodeList`, …).
+
+Ниже краткая сводка RPC (без дублирования полей сообщений):
+
 ```protobuf
-// Из protos/voice/s2s/v1/s2s.proto:
+// См. protos/voice/s2s/v1/s2s.proto
 service FederationService {
-  rpc EventStream(stream FederationEvent) returns (stream FederationEvent);
+  rpc EventStream(stream EventStreamRequest) returns (stream EventStreamResponse);
   rpc SyncSnapshot(SyncSnapshotRequest) returns (SyncSnapshotResponse);
   rpc NotifyUser(NotifyUserRequest) returns (NotifyUserResponse);
   rpc AuthenticateUser(AuthenticateUserRequest) returns (AuthenticateUserResponse);
 }
 
-// Internal management API:
-service FederationManagement {
-  rpc RegisterNode(RegisterNodeRequest) returns (Node);
-  rpc ApproveNode(ApproveNodeRequest) returns (Node);
-  rpc DeactivateNode(DeactivateNodeRequest) returns (Empty);
-  rpc ListNodes(ListNodesRequest) returns (NodeList);
-  rpc GetNodeStatus(GetNodeStatusRequest) returns (NodeStatus);
-  rpc Defederate(DefederateRequest) returns (Empty);
+// См. protos/voice/s2s/v1/federation_management.proto
+service FederationManagementService {
+  rpc RegisterNode(RegisterNodeRequest) returns (FederationNode);
+  rpc ApproveNode(ApproveNodeRequest) returns (FederationNode);
+  rpc DeactivateNode(DeactivateNodeRequest) returns (google.protobuf.Empty);
+  rpc ListNodes(ListFederationNodesRequest) returns (FederationNodeList);
+  rpc GetNodeStatus(GetFederationNodeStatusRequest) returns (FederationNodeStatus);
+  rpc Defederate(DefederateNodeRequest) returns (google.protobuf.Empty);
 }
 ```
 

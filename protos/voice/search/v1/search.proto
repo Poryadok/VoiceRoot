@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+package voice.search.v1;
+
+import "google/protobuf/empty.proto";
+import "voice/chat/v1/chat.proto";
+import "voice/common/v1/common.proto";
+
+option go_package = "voice.app/voice/search/v1;searchv1";
+
+// Full-text and global search. HTTP: /api/v1/search/**.
+service SearchService {
+  rpc SearchInChat(SearchInChatRequest) returns (SearchResults);
+  rpc SearchGlobal(SearchGlobalRequest) returns (GlobalSearchResults);
+  rpc SearchUsers(SearchUsersRequest) returns (UserSearchResults);
+  rpc SearchSpaces(SearchSpacesRequest) returns (SpaceSearchResults);
+  rpc ReindexChat(ReindexChatRequest) returns (google.protobuf.Empty);
+}
+
+message SearchInChatRequest {
+  voice.chat.v1.ChatRef chat = 1;
+  string query = 2;
+  voice.common.v1.CursorPageRequest page = 3;
+}
+
+message SearchResults {
+  repeated SearchHit hits = 1;
+  string next_cursor = 2;
+}
+
+message SearchHit {
+  string message_id = 1;
+  string snippet = 2;
+  double score = 3;
+}
+
+message SearchGlobalRequest {
+  string query = 1;
+  voice.common.v1.CursorPageRequest page = 2;
+}
+
+message GlobalSearchResults {
+  repeated SearchHit messages = 1;
+  repeated string profile_ids = 2;
+  repeated voice.chat.v1.ChatRef matched_chats = 3;
+  repeated string space_ids = 4;
+  string next_cursor = 5;
+}
+
+message SearchUsersRequest {
+  string query = 1;
+  int32 limit = 2;
+}
+
+message UserSearchResults {
+  repeated string profile_ids = 1;
+}
+
+message SearchSpacesRequest {
+  string query = 1;
+  voice.common.v1.CursorPageRequest page = 2;
+}
+
+message SpaceSearchResults {
+  repeated string space_ids = 1;
+  string next_cursor = 2;
+}
+
+message ReindexChatRequest {
+  voice.chat.v1.ChatRef chat = 1;
+}

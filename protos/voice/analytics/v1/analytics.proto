@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package voice.analytics.v1;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "voice.app/voice/analytics/v1;analyticsv1";
+
+// Internal ingest (NATS consumer / rare gRPC). Admin REST via Gateway: /api/v1/analytics/**.
+// Name matches docs concept "AnalyticsIngest" via RPC prefix Ingest*.
+service AnalyticsIngestService {
+  rpc IngestEvent(IngestEventRequest) returns (google.protobuf.Empty);
+  rpc IngestBatch(IngestBatchRequest) returns (google.protobuf.Empty);
+}
+
+message IngestEventRequest {
+  AnalyticsEvent event = 1;
+}
+
+message IngestBatchRequest {
+  repeated AnalyticsEvent events = 1;
+}
+
+message AnalyticsEvent {
+  string event_id = 1;
+  string event_type = 2;
+  string source_service = 3;
+  google.protobuf.Timestamp timestamp = 4;
+  string properties_json = 5;
+  optional string session_id = 6;
+  optional string platform = 7;
+  optional string app_version = 8;
+  optional string region = 9;
+  optional string user_id_hashed = 10;
+  optional string profile_id_hashed = 11;
+}
