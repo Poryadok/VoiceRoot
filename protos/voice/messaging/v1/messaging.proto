@@ -8,11 +8,19 @@ import "voice/common/v1/common.proto";
 
 option go_package = "voice.app/voice/messaging/v1;messagingv1";
 
+// Canonical values for Message.type (string). Prefer message_kind when set — docs/REPOSITORIES.md (Protobuf).
+enum MessageKind {
+  MESSAGE_KIND_UNSPECIFIED = 0;
+  MESSAGE_KIND_REGULAR = 1;
+  MESSAGE_KIND_SYSTEM = 2;
+  MESSAGE_KIND_FORWARD = 3;
+}
+
 // Messages, reactions, pins, read receipts. HTTP: /api/v1/messages/**.
 //
-// Idempotency: SendMessage accepts optional client_message_id (UUID), unique per
-// (chat.id, sender_profile_id). Retries with the same key return the existing Message
-// (documented success semantics; use ALREADY_EXISTS or OK + same id — pick at codegen).
+// Idempotency (SendMessage): optional client_message_id (UUID), unique per (chat, sender_profile_id).
+// Retry with the same key MUST NOT create a second row; response is gRPC OK with the same Message
+// body as the first successful attempt. Details: docs/microservices/messaging-service.md.
 service MessagingService {
   rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
   rpc EditMessage(EditMessageRequest) returns (EditMessageResponse);
@@ -43,6 +51,8 @@ message SendMessageRequest {
   string attachments_json = 4; // JSON array per docs/messaging-service
   string mentions_json = 5;
   optional string thread_parent_id = 6;
+  // Prefer when set; aligns outgoing Message.type / Message.message_kind for new sends (docs/REPOSITORIES.md).
+  optional MessageKind message_kind = 7;
 }
 
 message EditMessageRequest {
@@ -70,6 +80,8 @@ message MessageList {
   repeated Message messages = 1;
   string next_cursor = 2;
   bool has_more = 3;
+  // Optional structured pagination; when set, should mirror next_cursor (as next_cursor) and has_more.
+  optional voice.common.v1.CursorPageResponse page = 4;
 }
 
 message Message {
@@ -81,7 +93,7 @@ message Message {
   bool posted_as_chat = 5;
   optional string display_chat_id = 6;
   string content = 7;
-  string type = 8; // regular | system | forward
+  string type = 8; // regular | system | forward; prefer message_kind when set (non-breaking migration path)
   optional string thread_parent_id = 9;
   optional string forward_from_id = 10;
   optional string forward_from_sender = 11;
@@ -90,6 +102,7 @@ message Message {
   optional google.protobuf.Timestamp edited_at = 14;
   optional google.protobuf.Timestamp deleted_at = 15;
   google.protobuf.Timestamp created_at = 16;
+  optional MessageKind message_kind = 17;
 }
 
 message GetThreadMessagesRequest {
@@ -148,18 +161,6 @@ message GetBulkReadStateRequest {
   repeated voice.chat.v1.ChatRef chats = 1;
 }
 
-message BulkReadState {
-  map<string, ReadState> by_chat_id = 1;
-}
-
-// Canonical values for Message.type (string). Wire as enum in a future breaking or dual-field release — docs/REPOSITORIES.md (Protobuf).
-enum MessageKind {
-  MESSAGE_KIND_UNSPECIFIED = 0;
-  MESSAGE_KIND_REGULAR = 1;
-  MESSAGE_KIND_SYSTEM = 2;
-  MESSAGE_KIND_FORWARD = 3;
-}
-
 message SendMessageResponse {
   Message message = 1;
 }
@@ -191,5 +192,5 @@ message GetReadStateResponse {
   ReadState read_state = 1;
 }
 message GetBulkReadStateResponse {
-  BulkReadState bulk_read_state = 1;
+  map<string, ReadState> by_chat_id = 1;
 }

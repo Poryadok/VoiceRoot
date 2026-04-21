@@ -8,6 +8,14 @@ import "voice/space/v1/space.proto";
 
 option go_package = "voice.app/voice/calls/v1;callsv1";
 
+// Canonical values for room_type strings (StartCallRequest, CallSession).
+enum VoiceSessionKind {
+  VOICE_SESSION_KIND_UNSPECIFIED = 0;
+  VOICE_SESSION_KIND_CALL = 1;
+  VOICE_SESSION_KIND_GROUP_VOICE = 2;
+  VOICE_SESSION_KIND_VOICE_ROOM = 3;
+}
+
 // Voice / LiveKit orchestration. HTTP: /api/v1/voice/**.
 // Package voice.calls.v1 avoids path stutter voice/voice/v1; service name matches docs.
 service VoiceService {
@@ -36,10 +44,11 @@ service VoiceService {
 }
 
 message StartCallRequest {
-  string room_type = 1; // call | group_voice | voice_room
+  string room_type = 1; // call | group_voice | voice_room; prefer room_type_enum when set
   optional voice.chat.v1.ChatRef linked_chat = 2;
   optional string voice_room_id = 3;
   optional voice.space.v1.SpaceRef space = 4;
+  optional VoiceSessionKind room_type_enum = 5;
 }
 
 message JoinCallRequest {
@@ -57,10 +66,11 @@ message EndCallRequest {
 message CallSession {
   string room_id = 1;
   string livekit_room_name = 2;
-  string room_type = 3;
+  string room_type = 3; // prefer room_type_enum when set
   optional voice.chat.v1.ChatRef linked_chat = 4;
   optional string voice_room_id = 5;
   google.protobuf.Timestamp started_at = 6;
+  optional VoiceSessionKind room_type_enum = 7;
 }
 
 message JoinVoiceRoomRequest {
@@ -88,11 +98,6 @@ message GetJoinTokenRequest {
   string room_id = 1;
 }
 
-message JoinTokenResponse {
-  string jwt = 1;
-  int64 expires_at_unix = 2;
-}
-
 message UpdateVoiceStateRequest {
   string room_id = 1;
   optional bool is_muted = 2;
@@ -102,10 +107,6 @@ message UpdateVoiceStateRequest {
 
 message GetVoiceStatesRequest {
   string room_id = 1;
-}
-
-message VoiceStateList {
-  repeated VoiceParticipantState participants = 1;
 }
 
 message VoiceParticipantState {
@@ -161,12 +162,15 @@ message LeaveVoiceRoomResponse {}
 message MoveToVoiceRoomResponse {
   VoiceSession voice_session = 1;
 }
+
+// JWT and wall-clock expiry (UTC). Public API uses google.protobuf.Timestamp per docs/REPOSITORIES.md.
 message GetJoinTokenResponse {
-  JoinTokenResponse join_token_response = 1;
+  string jwt = 1;
+  google.protobuf.Timestamp expires_at = 2;
 }
 message UpdateVoiceStateResponse {}
 message GetVoiceStatesResponse {
-  VoiceStateList voice_state_list = 1;
+  repeated VoiceParticipantState participants = 1;
 }
 message GetActiveCallResponse {
   CallSession call_session = 1;

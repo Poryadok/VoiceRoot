@@ -23,7 +23,7 @@ message FederationNode {
   string host = 3;
   int32 port = 4;
   string description = 5;
-  string status = 6; // pending | active | suspended | defederated
+  string status = 6; // pending | active | suspended | defederated; prefer status_enum when set
   optional string tls_cert_fingerprint = 7;
   optional google.protobuf.Timestamp last_heartbeat_at = 8;
   optional google.protobuf.Timestamp last_sync_at = 9;
@@ -31,6 +31,7 @@ message FederationNode {
   optional google.protobuf.Timestamp approved_at = 11;
   optional string approved_by_profile_id = 12;
   optional google.protobuf.Timestamp defederated_at = 13;
+  optional FederationNodeRegistrationStatus status_enum = 14;
 }
 
 message RegisterNodeRequest {
@@ -54,6 +55,7 @@ message ListNodesRequest {
   optional string status_filter = 1;
   int32 page_size = 2;
   string page_token = 3;
+  optional FederationNodeRegistrationStatus status_filter_enum = 4; // prefer over status_filter when set
 }
 
 message FederationNodeList {
@@ -67,9 +69,10 @@ message GetNodeStatusRequest {
 
 message FederationNodeStatus {
   string node_id = 1;
-  string status = 2;
+  string status = 2; // prefer status_enum when set
   optional google.protobuf.Timestamp last_heartbeat_at = 3;
   optional google.protobuf.Timestamp last_sync_at = 4;
+  optional FederationNodeRegistrationStatus status_enum = 5;
 }
 
 message DefederateRequest {

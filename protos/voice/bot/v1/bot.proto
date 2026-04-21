@@ -8,6 +8,14 @@ import "voice/messaging/v1/messaging.proto";
 
 option go_package = "voice.app/voice/bot/v1;botv1";
 
+// Canonical values for Bot.status (string).
+enum BotLifecycleStatus {
+  BOT_LIFECYCLE_STATUS_UNSPECIFIED = 0;
+  BOT_LIFECYCLE_STATUS_DRAFT = 1;
+  BOT_LIFECYCLE_STATUS_LIVE = 2;
+  BOT_LIFECYCLE_STATUS_DISABLED = 3;
+}
+
 // Bot platform. HTTP: /api/v1/bots/**.
 service BotService {
   rpc RegisterBot(RegisterBotRequest) returns (RegisterBotResponse);
@@ -43,8 +51,9 @@ message Bot {
   optional string webhook_url = 6;
   bool is_polling_mode = 7;
   string scopes_json = 8;
-  string status = 9;
+  string status = 9; // prefer status_enum when set
   google.protobuf.Timestamp created_at = 10;
+  optional BotLifecycleStatus status_enum = 11;
 }
 
 message RegisterBotRequest {
@@ -105,10 +114,6 @@ message GetWebhookURLRequest {
   string bot_id = 1;
 }
 
-message WebhookURLResponse {
-  optional string url = 1;
-}
-
 message SetChatWhitelistRequest {
   string bot_id = 1;
   repeated voice.chat.v1.ChatRef allowed_chats = 2;
@@ -116,10 +121,6 @@ message SetChatWhitelistRequest {
 
 message GetChatWhitelistRequest {
   string bot_id = 1;
-}
-
-message WhitelistResponse {
-  repeated voice.chat.v1.ChatRef allowed_chats = 1;
 }
 
 message SendBotMessageRequest {
@@ -181,11 +182,11 @@ message GetCommandsResponse {
 }
 message SetWebhookURLResponse {}
 message GetWebhookURLResponse {
-  WebhookURLResponse webhook_url_response = 1;
+  optional string url = 1;
 }
 message SetChatWhitelistResponse {}
 message GetChatWhitelistResponse {
-  WhitelistResponse whitelist_response = 1;
+  repeated voice.chat.v1.ChatRef allowed_chats = 1;
 }
 message SendBotMessageResponse {
   voice.messaging.v1.Message message = 1;

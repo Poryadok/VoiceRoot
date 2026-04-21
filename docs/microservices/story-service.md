@@ -33,7 +33,7 @@ service StoryService {
   rpc GetStory(GetStoryRequest) returns (Story);
 
   // Лента
-  rpc GetStoryFeed(GetStoryFeedRequest) returns (StoryFeedResponse);
+  rpc GetStoryFeed(GetStoryFeedRequest) returns (GetStoryFeedResponse); // stories + next_cursor в одном сообщении
   rpc GetUserStories(GetUserStoriesRequest) returns (StoryList);
 
   // Просмотры

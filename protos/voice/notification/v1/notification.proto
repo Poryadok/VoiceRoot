@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package voice.notification.v1;
 
+import "google/protobuf/timestamp.proto";
+
 option go_package = "voice.app/voice/notification/v1;notificationv1";
 
 // Push, email routing, device tokens. HTTP: /api/v1/notifications/**.
@@ -20,10 +22,51 @@ service NotificationService {
   rpc RelayNotification(RelayNotificationRequest) returns (RelayNotificationResponse);
 }
 
+// Canonical values for RegisterDeviceRequest.platform (string).
+enum DevicePlatform {
+  DEVICE_PLATFORM_UNSPECIFIED = 0;
+  DEVICE_PLATFORM_ANDROID = 1;
+  DEVICE_PLATFORM_IOS = 2;
+  DEVICE_PLATFORM_WEB = 3;
+  DEVICE_PLATFORM_DESKTOP = 4;
+}
+
+// Canonical values for RegisterDeviceRequest.push_service (string).
+enum PushService {
+  PUSH_SERVICE_UNSPECIFIED = 0;
+  PUSH_SERVICE_FCM = 1;
+  PUSH_SERVICE_APNS = 2;
+  PUSH_SERVICE_VOIP_APNS = 3;
+}
+
+// Canonical values for NotificationSettings.scope_type and GetNotificationSettingsRequest.scope_type (strings).
+enum NotificationScopeType {
+  NOTIFICATION_SCOPE_TYPE_UNSPECIFIED = 0;
+  NOTIFICATION_SCOPE_TYPE_GLOBAL = 1;
+  NOTIFICATION_SCOPE_TYPE_SPACE = 2;
+  NOTIFICATION_SCOPE_TYPE_CHANNEL = 3;
+  NOTIFICATION_SCOPE_TYPE_CHAT = 4;
+}
+
+// Broad product buckets for routing/analytics; free-form notification_type stays for Gateway-specific payloads.
+enum ClientNotificationCategory {
+  CLIENT_NOTIFICATION_CATEGORY_UNSPECIFIED = 0;
+  CLIENT_NOTIFICATION_CATEGORY_MESSAGE = 1;
+  CLIENT_NOTIFICATION_CATEGORY_DM = 2;
+  CLIENT_NOTIFICATION_CATEGORY_FRIEND = 3;
+  CLIENT_NOTIFICATION_CATEGORY_CALL = 4;
+  CLIENT_NOTIFICATION_CATEGORY_MATCH = 5;
+  CLIENT_NOTIFICATION_CATEGORY_SPACE = 6;
+  CLIENT_NOTIFICATION_CATEGORY_SYSTEM = 7;
+}
+
 message RegisterDeviceRequest {
-  string platform = 1; // android | ios | web | desktop
+  string platform = 1; // android | ios | web | desktop; prefer platform_enum when set
   string token = 2;
-  string push_service = 3; // fcm | apns | voip_apns
+  string push_service = 3; // fcm | apns | voip_apns; prefer push_service_enum when set
+  // Preferred over string platform when set; see enum DevicePlatform (docs/REPOSITORIES.md).
+  optional DevicePlatform platform_enum = 4;
+  optional PushService push_service_enum = 5;
 }
 
 message UnregisterDeviceRequest {
@@ -31,8 +74,9 @@ message UnregisterDeviceRequest {
 }
 
 message GetNotificationSettingsRequest {
-  optional string scope_type = 1; // global | space | channel | chat
+  optional string scope_type = 1; // global | space | channel | chat; prefer scope_type_enum when set
   optional string scope_id = 2;
+  optional NotificationScopeType scope_type_enum = 3;
 }
 
 message UpdateNotificationSettingsRequest {
@@ -41,11 +85,15 @@ message UpdateNotificationSettingsRequest {
 
 message NotificationSettings {
   string profile_id = 1;
-  string scope_type = 2;
+  string scope_type = 2; // prefer scope_type_enum when set
   optional string scope_id = 3;
   bool enabled = 4;
-  optional string mute_until_rfc3339 = 5;
+  reserved 5;
+  reserved "mute_until_rfc3339";
   string suppress_types_json = 6;
+  // UTC instant; public API uses Timestamp per docs/REPOSITORIES.md.
+  optional google.protobuf.Timestamp mute_until = 7;
+  optional NotificationScopeType scope_type_enum = 8;
 }
 
 message SetQuietHoursRequest {
@@ -62,6 +110,7 @@ message SendNotificationRequest {
   string title = 3;
   string body = 4;
   string payload_json = 5;
+  optional ClientNotificationCategory notification_category = 6;
 }
 
 message SendBulkNotificationRequest {
@@ -70,21 +119,13 @@ message SendBulkNotificationRequest {
   string title = 3;
   string body = 4;
   string payload_json = 5;
+  optional ClientNotificationCategory notification_category = 6;
 }
 
 // Internal / federation: target is Auth account UUID (same as JWT claim user_id).
 message RelayNotificationRequest {
   string account_id = 1;
   string payload_json = 2;
-}
-
-// Canonical values for RegisterDeviceRequest.platform (string).
-enum DevicePlatform {
-  DEVICE_PLATFORM_UNSPECIFIED = 0;
-  DEVICE_PLATFORM_ANDROID = 1;
-  DEVICE_PLATFORM_IOS = 2;
-  DEVICE_PLATFORM_WEB = 3;
-  DEVICE_PLATFORM_DESKTOP = 4;
 }
 
 message RegisterDeviceResponse {}

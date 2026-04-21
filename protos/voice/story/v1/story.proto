@@ -7,6 +7,23 @@ import "voice/common/v1/common.proto";
 
 option go_package = "voice.app/voice/story/v1;storyv1";
 
+// Canonical values for Story.type / CreateStoryRequest.type (strings).
+enum StoryMediaType {
+  STORY_MEDIA_TYPE_UNSPECIFIED = 0;
+  STORY_MEDIA_TYPE_PHOTO = 1;
+  STORY_MEDIA_TYPE_VIDEO = 2;
+  STORY_MEDIA_TYPE_TEXT = 3;
+}
+
+// Canonical values for Story.visibility / CreateStoryRequest.visibility (strings).
+enum StoryAudience {
+  STORY_AUDIENCE_UNSPECIFIED = 0;
+  STORY_AUDIENCE_PUBLIC = 1;
+  STORY_AUDIENCE_FRIENDS = 2;
+  STORY_AUDIENCE_CLOSE_FRIENDS = 3;
+  STORY_AUDIENCE_CUSTOM = 4;
+}
+
 // Stories and highlights. HTTP: /api/v1/stories/**.
 service StoryService {
   rpc CreateStory(CreateStoryRequest) returns (CreateStoryResponse);
@@ -36,7 +53,7 @@ service StoryService {
 message Story {
   string id = 1;
   string author_profile_id = 2;
-  string type = 3; // photo | video | text
+  string type = 3; // photo | video | text; prefer type_enum when set
   optional string media_file_id = 4;
   optional string text_content = 5;
   optional string text_style_json = 6;
@@ -45,20 +62,24 @@ message Story {
   optional string lfp_criteria_json = 9;
   string mention_profile_ids_json = 10;
   int32 view_count = 11;
-  string visibility = 12;
+  string visibility = 12; // prefer visibility_enum when set
   google.protobuf.Timestamp expires_at = 13;
   google.protobuf.Timestamp archived_until = 14;
   google.protobuf.Timestamp created_at = 15;
   optional google.protobuf.Timestamp deleted_at = 16;
+  optional StoryMediaType type_enum = 17;
+  optional StoryAudience visibility_enum = 18;
 }
 
 message CreateStoryRequest {
-  string type = 1;
+  string type = 1; // prefer type_enum when set
   optional string media_file_id = 2;
   optional string text_content = 3;
   optional string text_style_json = 4;
   optional string game_tag = 5;
-  string visibility = 6;
+  string visibility = 6; // prefer visibility_enum when set
+  optional StoryMediaType type_enum = 7;
+  optional StoryAudience visibility_enum = 8;
 }
 
 message DeleteStoryRequest {
@@ -71,11 +92,6 @@ message GetStoryRequest {
 
 message GetStoryFeedRequest {
   voice.common.v1.CursorPageRequest page = 1;
-}
-
-message StoryFeedResponse {
-  repeated Story stories = 1;
-  string next_cursor = 2;
 }
 
 message GetUserStoriesRequest {
@@ -159,7 +175,9 @@ message GetStoryResponse {
   Story story = 1;
 }
 message GetStoryFeedResponse {
-  StoryFeedResponse story_feed_response = 1;
+  repeated Story stories = 1;
+  string next_cursor = 2;
+  optional voice.common.v1.CursorPageResponse page = 3;
 }
 message GetUserStoriesResponse {
   StoryList story_list = 1;

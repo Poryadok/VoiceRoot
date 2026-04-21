@@ -1,5 +1,6 @@
 # buf lint: профиль STANDARD без исключений (имена RPC / Request / Response).
 # См. docs/REPOSITORIES.md — раздел Protobuf.
+# При добавлении buf.mod.yaml с внешними deps (googleapis и т.д.) зафиксировать buf.lock через buf dep update.
 version: v1
 lint:
   use:

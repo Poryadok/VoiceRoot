@@ -47,6 +47,8 @@ service NotificationService {
 
 `RelayNotificationRequest.account_id` — идентификатор аккаунта (`accounts.id`), тот же смысл, что у JWT claim `user_id` после Gateway; публичные сценарии по профилю используют `profile_id` в `SendNotification` / настройках.
 
+Актуальный gRPC-контракт: [protos/voice/notification/v1/notification.proto](../../protos/voice/notification/v1/notification.proto). В **`NotificationSettings`** время отложенного mute — **`mute_until`** (`google.protobuf.Timestamp`, UTC, поле 7); номер поля **5** зарезервирован под прежнее строковое представление (wire name `mute_until_rfc3339`). В **`RegisterDeviceRequest`** опционально **`platform_enum`** (`DevicePlatform`); при установке предпочтительно использовать его вместе со строкой `platform` для обратной совместимости.
+
 ## Модель данных
 
 ```

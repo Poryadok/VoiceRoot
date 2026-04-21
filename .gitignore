@@ -2,3 +2,6 @@
 *.log
 .DS_Store
 Thumbs.db
+
+# buf generate (see buf.gen.yaml in repo root)
+gen/

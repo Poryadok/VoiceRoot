@@ -41,7 +41,7 @@ service UserService {
   // Presence
   rpc UpdatePresence(UpdatePresenceRequest) returns (Empty);
   rpc GetPresence(GetPresenceRequest) returns (PresenceStatus);
-  rpc GetBulkPresence(GetBulkPresenceRequest) returns (BulkPresenceResponse);
+  rpc GetBulkPresence(GetBulkPresenceRequest) returns (GetBulkPresenceResponse); // map profile_id -> PresenceStatus
 
   // Настройки
   rpc GetSettings(GetSettingsRequest) returns (UserSettings);

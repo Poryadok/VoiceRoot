@@ -8,6 +8,36 @@ import "voice/common/v1/common.proto";
 
 option go_package = "voice.app/voice/file/v1;filev1";
 
+// Canonical values for FileMetadata.status (string). See microservices/file-service.md for lifecycle.
+enum FileLifecycleStatus {
+  FILE_LIFECYCLE_STATUS_UNSPECIFIED = 0;
+  FILE_LIFECYCLE_STATUS_PENDING_UPLOAD = 1;
+  FILE_LIFECYCLE_STATUS_PROCESSING = 2;
+  FILE_LIFECYCLE_STATUS_READY = 3;
+  FILE_LIFECYCLE_STATUS_FAILED = 4;
+  FILE_LIFECYCLE_STATUS_DELETED = 5;
+}
+
+// Canonical values for FileMetadata.file_type (string).
+enum FileMediaCategory {
+  FILE_MEDIA_CATEGORY_UNSPECIFIED = 0;
+  FILE_MEDIA_CATEGORY_IMAGE = 1;
+  FILE_MEDIA_CATEGORY_VIDEO = 2;
+  FILE_MEDIA_CATEGORY_AUDIO = 3;
+  FILE_MEDIA_CATEGORY_DOCUMENT = 4;
+  FILE_MEDIA_CATEGORY_OTHER = 5;
+}
+
+// Canonical values for FileMetadata.scan_result (string).
+enum FileScanOutcome {
+  FILE_SCAN_OUTCOME_UNSPECIFIED = 0;
+  FILE_SCAN_OUTCOME_PENDING = 1;
+  FILE_SCAN_OUTCOME_CLEAN = 2;
+  FILE_SCAN_OUTCOME_INFECTED = 3;
+  FILE_SCAN_OUTCOME_ERROR = 4;
+  FILE_SCAN_OUTCOME_SKIPPED = 5;
+}
+
 // Uploads, R2, scanning. HTTP: /api/v1/files/**.
 service FileService {
   rpc RequestUpload(RequestUploadRequest) returns (RequestUploadResponse);
@@ -65,15 +95,13 @@ message FileMetadata {
   optional google.protobuf.Timestamp expires_at = 18;
   string scan_result = 19;
   google.protobuf.Timestamp created_at = 20;
+  optional FileLifecycleStatus status_enum = 21;
+  optional FileMediaCategory file_type_enum = 22;
+  optional FileScanOutcome scan_result_enum = 23;
 }
 
 message GetFileURLRequest {
   string file_id = 1;
-}
-
-message FileURLResponse {
-  string presigned_get_url = 1;
-  google.protobuf.Timestamp expires_at = 2;
 }
 
 message GetFileMetadataRequest {
@@ -100,6 +128,7 @@ message ListFilesRequest {
 message FileList {
   repeated FileMetadata files = 1;
   string next_cursor = 2;
+  optional voice.common.v1.CursorPageResponse page = 3;
 }
 
 message CheckQuotaRequest {
@@ -118,7 +147,8 @@ message ConfirmUploadResponse {
   FileMetadata file_metadata = 1;
 }
 message GetFileURLResponse {
-  FileURLResponse file_url_response = 1;
+  string presigned_get_url = 1;
+  google.protobuf.Timestamp expires_at = 2;
 }
 message GetFileMetadataResponse {
   FileMetadata file_metadata = 1;

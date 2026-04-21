@@ -1,4 +1,4 @@
-.PHONY: buf-lint buf-format buf-breaking compose-up compose-down \
+.PHONY: buf-lint buf-format buf-breaking buf-generate compose-up compose-down \
 	build-all build-all-breaking compose-config-ci buf-ci gateway-test-ci gateway-image-ci buf-breaking-ci
 
 # Container images (pin for CI-like reproducibility; bump with README toolchain table)
@@ -15,6 +15,10 @@ buf-format:
 # Requires fetch-depth 0 and master ref (CI); locally: against origin/master if present
 buf-breaking:
 	buf breaking protos --against ".git#branch=master,subdir=protos"
+
+# Emits Go stubs under gen/go (gitignored); requires network for remote BSR plugins.
+buf-generate:
+	buf generate
 
 compose-up:
 	docker compose up -d
@@ -44,6 +48,10 @@ build-all: compose-config-ci buf-ci gateway-test-ci gateway-image-ci
 buf-breaking-ci:
 	docker run --rm --entrypoint sh -v "$(ROOT):/workspace" -w /workspace $(BUF_IMAGE) \
 		-c "buf breaking protos --against '.git#branch=master,subdir=protos'"
+
+buf-generate-ci:
+	docker run --rm --entrypoint sh -v "$(ROOT):/workspace" -w /workspace $(BUF_IMAGE) \
+		-c "buf generate"
 
 # Same as build-all plus protobuf compatibility vs master (fails if master ref missing)
 build-all-breaking: build-all buf-breaking-ci

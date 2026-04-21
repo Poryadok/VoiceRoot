@@ -26,23 +26,18 @@
 
 ## API (gRPC)
 
+Источник истины: [protos/voice/file/v1/file.proto](../../protos/voice/file/v1/file.proto). **`GetFileURLResponse`** содержит напрямую `presigned_get_url` и `expires_at` (`google.protobuf.Timestamp`).
+
 ```protobuf
 service FileService {
-  // Upload
-  rpc RequestUpload(UploadRequest) returns (UploadResponse); // presigned URL
-  rpc ConfirmUpload(ConfirmUploadRequest) returns (FileMetadata);
-
-  // Download
-  rpc GetFileURL(GetFileURLRequest) returns (FileURLResponse); // presigned download URL
-  rpc GetFileMetadata(GetFileMetadataRequest) returns (FileMetadata);
-  rpc GetBulkMetadata(GetBulkMetadataRequest) returns (BulkFileMetadata);
-
-  // Management
-  rpc DeleteFile(DeleteFileRequest) returns (Empty);
-  rpc ListFiles(ListFilesRequest) returns (FileList); // by chat/channel
-
-  // Internal
-  rpc CheckQuota(CheckQuotaRequest) returns (QuotaResponse);
+  rpc RequestUpload(RequestUploadRequest) returns (RequestUploadResponse);
+  rpc ConfirmUpload(ConfirmUploadRequest) returns (ConfirmUploadResponse);
+  rpc GetFileURL(GetFileURLRequest) returns (GetFileURLResponse);
+  rpc GetFileMetadata(GetFileMetadataRequest) returns (GetFileMetadataResponse);
+  rpc GetBulkMetadata(GetBulkMetadataRequest) returns (GetBulkMetadataResponse);
+  rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
+  rpc ListFiles(ListFilesRequest) returns (ListFilesResponse);
+  rpc CheckQuota(CheckQuotaRequest) returns (CheckQuotaResponse);
 }
 ```
 

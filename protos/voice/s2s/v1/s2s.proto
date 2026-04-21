@@ -139,9 +139,10 @@ message BanEntry {
 message NotifyUserRequest {
   string account_id = 1;
   string space_id = 2;
-  string type = 3; // see enum FederationPushEventType for canonical tokens
+  string type = 3; // see enum FederationPushEventType for canonical tokens; prefer type_enum when set
   string preview = 4; // Короткий текст для показа в пуше
   string deep_link = 5; // Опционально: deep link для открытия нужного экрана
+  optional FederationPushEventType type_enum = 6;
 }
 
 message NotifyUserResponse {

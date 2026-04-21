@@ -1,0 +1,13 @@
+# Go + gRPC codegen for all modules in buf.work.yaml (voice protos).
+# Run from repository root: buf generate
+# Output: gen/go (gitignored); bump plugin versions intentionally in PRs.
+version: v1
+plugins:
+  - plugin: buf.build/protocolbuffers/go:v1.36.5
+    out: gen/go
+    opt:
+      - paths=source_relative
+  - plugin: buf.build/grpc/go:v1.5.1
+    out: gen/go
+    opt:
+      - paths=source_relative

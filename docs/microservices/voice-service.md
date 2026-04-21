@@ -24,37 +24,26 @@
 
 ## API (gRPC)
 
+Источник истины: [protos/voice/calls/v1/calls.proto](../../protos/voice/calls/v1/calls.proto) (`VoiceService`). Важные ответы: **`GetJoinTokenResponse`** — поля `jwt` и `expires_at` (`google.protobuf.Timestamp`, UTC); **`GetVoiceStatesResponse`** — `repeated VoiceParticipantState participants` (без промежуточной обёртки-списка).
+
 ```protobuf
 service VoiceService {
-  // Звонки
-  rpc StartCall(StartCallRequest) returns (CallSession);
-  rpc JoinCall(JoinCallRequest) returns (CallSession);
-  rpc LeaveCall(LeaveCallRequest) returns (Empty);
-  rpc EndCall(EndCallRequest) returns (Empty);
-
-  // Голосовые комнаты (space_db.voice_rooms)
-  rpc JoinVoiceRoom(JoinVoiceRoomRequest) returns (VoiceSession);
-  rpc LeaveVoiceRoom(LeaveVoiceRoomRequest) returns (Empty);
-  rpc MoveToVoiceRoom(MoveToVoiceRoomRequest) returns (VoiceSession);
-
-  // LiveKit tokens
-  rpc GetJoinToken(GetJoinTokenRequest) returns (JoinTokenResponse);
-
-  // Voice state
-  rpc UpdateVoiceState(UpdateVoiceStateRequest) returns (Empty); // mute, deafen, video on/off
-  rpc GetVoiceStates(GetVoiceStatesRequest) returns (VoiceStateList);
-  rpc GetActiveCall(GetActiveCallRequest) returns (CallSession); // текущий звонок профиля
-
-  // Screen share
-  rpc StartScreenShare(StartScreenShareRequest) returns (ScreenShareSession);
-  rpc StopScreenShare(StopScreenShareRequest) returns (Empty);
-
-  // Commander
-  rpc SetCommanderMode(SetCommanderModeRequest) returns (Empty);
-
-  // Raise hand
-  rpc RaiseHand(RaiseHandRequest) returns (Empty);
-  rpc LowerHand(LowerHandRequest) returns (Empty);
+  rpc StartCall(StartCallRequest) returns (StartCallResponse);
+  rpc JoinCall(JoinCallRequest) returns (JoinCallResponse);
+  rpc LeaveCall(LeaveCallRequest) returns (LeaveCallResponse);
+  rpc EndCall(EndCallRequest) returns (EndCallResponse);
+  rpc JoinVoiceRoom(JoinVoiceRoomRequest) returns (JoinVoiceRoomResponse);
+  rpc LeaveVoiceRoom(LeaveVoiceRoomRequest) returns (LeaveVoiceRoomResponse);
+  rpc MoveToVoiceRoom(MoveToVoiceRoomRequest) returns (MoveToVoiceRoomResponse);
+  rpc GetJoinToken(GetJoinTokenRequest) returns (GetJoinTokenResponse);
+  rpc UpdateVoiceState(UpdateVoiceStateRequest) returns (UpdateVoiceStateResponse);
+  rpc GetVoiceStates(GetVoiceStatesRequest) returns (GetVoiceStatesResponse);
+  rpc GetActiveCall(GetActiveCallRequest) returns (GetActiveCallResponse);
+  rpc StartScreenShare(StartScreenShareRequest) returns (StartScreenShareResponse);
+  rpc StopScreenShare(StopScreenShareRequest) returns (StopScreenShareResponse);
+  rpc SetCommanderMode(SetCommanderModeRequest) returns (SetCommanderModeResponse);
+  rpc RaiseHand(RaiseHandRequest) returns (RaiseHandResponse);
+  rpc LowerHand(LowerHandRequest) returns (LowerHandResponse);
 }
 ```
 

@@ -79,6 +79,12 @@
 - Применяется к: редактированию сообщений, изменению ролей, модераторским действиям (бан/разбан)
 - Дедупликация: idempotency key на клиенте для повторных запросов при ненадёжной сети
 
+## gRPC: ошибки между сервисами и клиентом
+
+- **Не-OK ответы** задаются через стандартный **gRPC status**: код (`INVALID_ARGUMENT`, `NOT_FOUND`, `PERMISSION_DENIED`, `RESOURCE_EXHAUSTED`, `UNAVAILABLE`, …) и текст `message`; контракты успешных тел в `protos/voice/**` отдельно ошибки не моделируют — это принято для gRPC ([rich error model](https://grpc.io/docs/guides/error/)).
+- **Уточнение причин** для отладки, корреляции или i18n — опционально через **`google.rpc.Status`** и вложения (`ErrorInfo`, `LocalizedMessage`, …): см. пакет [`google.rpc`](https://github.com/googleapis/googleapis/tree/master/google/rpc). Отдельный общий `.proto` в монорепо для ошибок не обязателен, пока коды достаточны для клиента и наблюдаемости.
+- **REST через API Gateway**: маппинг gRPC→HTTP статусов и тела ошибки — ответственность Gateway; источник истины для маршрутов и префиксов — [microservices/api-gateway.md](microservices/api-gateway.md).
+
 ## Email
 
 - **Провайдер**: Resend (до 3000 писем/мес бесплатно; $20/мес за 50k)

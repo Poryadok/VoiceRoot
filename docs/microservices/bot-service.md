@@ -41,11 +41,11 @@ service BotService {
 
   // Webhook config
   rpc SetWebhookURL(SetWebhookURLRequest) returns (Empty);
-  rpc GetWebhookURL(GetWebhookURLRequest) returns (WebhookURLResponse);
+  rpc GetWebhookURL(GetWebhookURLRequest) returns (GetWebhookURLResponse);
 
   // Chat whitelist (chats.id, group | channel)
-  rpc SetChatWhitelist(SetWhitelistRequest) returns (Empty);
-  rpc GetChatWhitelist(GetWhitelistRequest) returns (WhitelistResponse);
+  rpc SetChatWhitelist(SetChatWhitelistRequest) returns (SetChatWhitelistResponse);
+  rpc GetChatWhitelist(GetChatWhitelistRequest) returns (GetChatWhitelistResponse);
 
   // Bot actions (вызывается ботом через REST API)
   rpc SendBotMessage(SendBotMessageRequest) returns (Message);

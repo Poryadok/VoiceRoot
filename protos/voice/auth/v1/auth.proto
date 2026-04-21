@@ -66,6 +66,7 @@ message Verify2FARequest {
 message VerifyOTPRequest {
   string code = 1;
   string otp_type = 2; // email_verify | password_reset — see enum OtpType for canonical values
+  optional OtpType otp_type_enum = 3; // prefer when set (docs/REPOSITORIES.md)
 }
 
 // Canonical values for VerifyOTPRequest.otp_type (string).

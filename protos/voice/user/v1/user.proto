@@ -6,6 +6,23 @@ import "google/protobuf/timestamp.proto";
 
 option go_package = "voice.app/voice/user/v1;userv1";
 
+// Canonical values for presence status strings (UpdatePresenceRequest, PresenceStatus).
+enum PresenceOnlineStatus {
+  PRESENCE_ONLINE_STATUS_UNSPECIFIED = 0;
+  PRESENCE_ONLINE_STATUS_ONLINE = 1;
+  PRESENCE_ONLINE_STATUS_IDLE = 2;
+  PRESENCE_ONLINE_STATUS_DND = 3;
+  PRESENCE_ONLINE_STATUS_INVISIBLE = 4;
+}
+
+// Canonical values for PrivacySettings.preset (string).
+enum PrivacyPreset {
+  PRIVACY_PRESET_UNSPECIFIED = 0;
+  PRIVACY_PRESET_PERSONAL = 1;
+  PRIVACY_PRESET_GAMING = 2;
+  PRIVACY_PRESET_WORK = 3;
+}
+
 // User Service — profiles, privacy, presence. HTTP: /api/v1/users/**.
 service UserService {
   rpc GetProfile(GetProfileRequest) returns (GetProfileResponse);
@@ -103,7 +120,7 @@ message UpdatePrivacySettingsRequest {
 
 message PrivacySettings {
   string profile_id = 1;
-  string preset = 2; // personal | gaming | work
+  string preset = 2; // personal | gaming | work; prefer preset_enum when set
   string show_online = 3;
   string show_game_status = 4;
   string show_mm_rating = 5;
@@ -113,13 +130,15 @@ message PrivacySettings {
   string allow_friend_requests = 9;
   bool allow_guest_dm = 10;
   google.protobuf.Timestamp updated_at = 11;
+  optional PrivacyPreset preset_enum = 12;
 }
 
 message UpdatePresenceRequest {
-  string status = 1; // online | idle | dnd | invisible
+  string status = 1; // online | idle | dnd | invisible; prefer status_enum when set
   optional string game_title = 2;
   optional string custom_status = 3;
   optional string call_info_json = 4;
+  optional PresenceOnlineStatus status_enum = 5;
 }
 
 message GetPresenceRequest {
@@ -128,19 +147,16 @@ message GetPresenceRequest {
 
 message PresenceStatus {
   string profile_id = 1;
-  string status = 2;
+  string status = 2; // prefer status_enum when set
   optional string game_title = 3;
   optional string custom_status = 4;
   google.protobuf.Timestamp last_seen = 5;
   optional string call_info_json = 6;
+  optional PresenceOnlineStatus status_enum = 7;
 }
 
 message GetBulkPresenceRequest {
   repeated string profile_ids = 1;
-}
-
-message BulkPresenceResponse {
-  map<string, PresenceStatus> by_profile_id = 1;
 }
 
 message GetSettingsRequest {
@@ -212,7 +228,7 @@ message GetPresenceResponse {
   PresenceStatus presence_status = 1;
 }
 message GetBulkPresenceResponse {
-  BulkPresenceResponse bulk_presence_response = 1;
+  map<string, PresenceStatus> by_profile_id = 1;
 }
 message GetSettingsResponse {
   UserSettings user_settings = 1;
