@@ -46,10 +46,12 @@
 | `GITHUB_TOKEN` | встроенный | Push образов в GHCR из job `gateway-image` (в `CI` выдано `packages: write`). |
 | Образ gateway | GHCR | `ghcr.io/<owner_lowercase>/<repo_lowercase>/gateway:<git_sha>` и тег `latest` (см. `ci.yml`). |
 | Environment **`staging`** | Settings → Environments | Окружение для job деплоя; при необходимости включить required reviewers / wait timer. |
-| Secret **`STAGING_KUBECONFIG`** | Environment **staging** → Environment secrets | Kubeconfig для staging **k3s**, целиком в **base64** (одна строка: `base64 -w0 kubeconfig` на Linux или эквивалент на macOS/Windows). Workflow декодирует в `~/.kube/config`. |
+| Secret **`STAGING_KUBECONFIG`** | Environment **staging** → Environment secrets | Kubeconfig для staging **k3s**, целиком в **base64** (одна строка: `base64 -w0 kubeconfig` на Linux или эквивалент на macOS/Windows). Workflow декодирует в `~/.kube/config`. В поле **`clusters[].cluster.server`** должен быть URL API, **доступный из интернета** (например `https://95.31.10.177:6443`), не `127.0.0.1` и не `https://0.0.0.0:6443` — иначе `kubectl` на GitHub runner не подключится. Подготовка одной строки для секрета: [`scripts/staging/prepare-kubeconfig-secret.sh`](../scripts/staging/prepare-kubeconfig-secret.sh) или [`prepare-kubeconfig-secret.ps1`](../scripts/staging/prepare-kubeconfig-secret.ps1). Локальная проверка шагов workflow без записи в кластер: [`scripts/staging/kubectl-apply-dry-run.sh`](../scripts/staging/kubectl-apply-dry-run.sh) (нужны `kubectl` и рабочий kubeconfig). |
 | Variable **`STAGING_DEPLOY_ENABLED`** | Settings → Secrets and variables → **Actions** → Variables | Ровно `true` — разрешить **автоматический** деплой после успешного `CI` на push в `master` (событие `workflow_run`). Пока переменная не задана или не равна `true`, автодеплой не запускается; остаётся **`workflow_dispatch`** в `Staging deploy`. |
 
 **Pull из GHCR в кластере:** если пакет/образ приватный, в namespace `voice-staging` создайте `docker-registry` secret (учёт GitHub с `read:packages`) и добавьте `imagePullSecrets` в Pod template Deployment (в репозитории при необходимости расширить [`deploy/staging/gateway-deployment.yaml`](../deploy/staging/gateway-deployment.yaml)).
+
+**Проверка деплоя из GitHub после настройки секрета:** в репозитории **Actions** → workflow **Staging deploy** → **Run workflow** (при необходимости укажите тег образа; по умолчанию для ручного запуска — `latest`). Убедитесь, что job завершает шаг **Apply staging manifests** без ошибок `kubectl`.
 
 ---
 
