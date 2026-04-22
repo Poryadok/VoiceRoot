@@ -71,7 +71,7 @@
 
 **Цель:** инфраструктура, без которой нельзя строить фичи.
 
-- [ ] **Схемы БД (первая волна)** — миграции под Фазу 0 + 1: `auth_db`, `user_db`, `social_db`, `chat_db`, `messaging_db` — [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md), детали целевых таблиц — секции «Модель данных» в [microservices/](microservices/)
+- [x] **Схемы БД (первая волна)** — миграции под Фазу 0 + 1: `auth_db`, `user_db`, `social_db`, `chat_db`, `messaging_db` — [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md), детали целевых таблиц — секции «Модель данных» в [microservices/](microservices/)
 - [ ] **API Gateway** — целевой REST + WebSocket и маршрутизация к сервисам (сейчас есть только каркас: `GET /health`, тесты, Docker-образ — [src/backend/gateway/](../src/backend/gateway/))
 - [x] **CI/CD в эксплуатации** — репозиторий на GitHub, Actions на PR/push; GHCR и staging (секреты/variables); smoke gateway после деплоя ([DEPLOYMENT.md](DEPLOYMENT.md)). Локальная проверка «как у job’ов» — **`make build-all`** ([Makefile](../Makefile))
 - [x] **Docker Compose (dev), инфраструктура** — PostgreSQL (логические БД) + Redis одной командой ([README.md](../README.md)); прикладные сервисы в compose пока не подключены

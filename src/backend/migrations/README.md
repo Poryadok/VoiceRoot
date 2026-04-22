@@ -19,3 +19,24 @@ migrate -path src/backend/migrations/auth_db -database "postgres://voice:voice@l
 ```
 
 Repeat for `user_db`, `social_db`, `chat_db`, `messaging_db`.
+
+## Without local CLI (Docker)
+
+If the `migrate` binary is not installed, use the official image [`migrate/migrate`](https://hub.docker.com/r/migrate/migrate) on the same Docker network as Compose Postgres (project network is usually `voice_default` when started from the repo root; service hostname is `postgres`).
+
+From repo root, PowerShell (paths use `/` for the volume so Docker accepts them on Windows):
+
+```powershell
+cd d:\Git\Voice
+$dbs = @("auth_db", "user_db", "social_db", "chat_db", "messaging_db")
+foreach ($d in $dbs) {
+  docker run --rm --network voice_default `
+    -v "d:/Git/Voice/src/backend/migrations/${d}:/migrations" migrate/migrate `
+    -path /migrations `
+    -database "postgres://voice:voice@postgres:5432/${d}?sslmode=disable" up
+}
+```
+
+- Adjust `d:/Git/Voice` to your clone path. Credentials must match [`.env`](../../../.env.example) / [docker-compose.yml](../../../docker-compose.yml) (`POSTGRES_USER` / `POSTGRES_PASSWORD`).
+- One-off `down 1` (same pattern): replace the trailing `up` with `down 1`.
+- If your Compose project name differs, check the network with `docker network ls` and pass `--network <name>` accordingly.
