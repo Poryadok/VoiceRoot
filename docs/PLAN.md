@@ -75,7 +75,7 @@
 - [x] **API Gateway** — REST + WebSocket edge proxy и маршрутизация к сервисам: JWT/JWKS, Redis blacklist/rate limit, CORS, request id/logging, `/metrics`, `/api/v1/version`, тесты и Docker-образ — [src/backend/gateway/](../src/backend/gateway/). Ограничение: REST→gRPC transcoding будет добавлен при появлении целевых сервисов.
 - [x] **CI/CD в эксплуатации** — репозиторий на GitHub, Actions на PR/push; GHCR и staging (секреты/variables); smoke gateway после деплоя ([DEPLOYMENT.md](DEPLOYMENT.md)). Локальная проверка «как у job’ов» — **`make build-all`** ([Makefile](../Makefile))
 - [x] **Docker Compose (dev), инфраструктура** — PostgreSQL (логические БД) + Redis одной командой ([README.md](../README.md)); прикладные сервисы в compose пока не подключены
-- [ ] **Auth: доработка** — refresh (opaque, 30 дней), logout, валидация, тесты
+- [ ] **Auth** — refresh (opaque, 30 дней), logout, валидация, тесты
 - [ ] **Общая библиотека Go** — JWT, middleware, логирование, конфиг
 - [ ] **Flutter: скелет** — three-column layout, бэкенд вместо Firebase, DI, state
 - [ ] **i18n-каркас** — ARB, EN+RU, `flutter gen-l10n` — [features/i18n.md](features/i18n.md)

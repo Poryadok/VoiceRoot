@@ -1,10 +1,15 @@
-.PHONY: buf-lint buf-format buf-breaking buf-generate compose-up compose-down \
-	build-all build-all-breaking compose-config-ci buf-ci gateway-test-ci gateway-image-ci buf-breaking-ci
-
 # Container images (pin for CI-like reproducibility; bump with README toolchain table)
 BUF_IMAGE ?= bufbuild/buf:1.50.0
 GO_IMAGE ?= golang:1.26-bookworm
+MAVEN_IMAGE ?= maven:3.9.11-eclipse-temurin-25
 ROOT := $(CURDIR)
+GO_SERVICES := analytics bot chat federation file gateway matchmaking messaging moderation notification realtime role search social space story subscription user voice
+GO_TEST_TARGETS := $(GO_SERVICES:%=go-test-%)
+GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
+
+.PHONY: buf-lint buf-format buf-breaking buf-generate compose-up compose-down \
+	build-all build-all-breaking compose-config-ci buf-ci backend-test-ci backend-image-ci \
+	gateway-test-ci gateway-image-ci auth-test-ci auth-image-ci buf-breaking-ci
 
 buf-lint:
 	buf lint
@@ -35,6 +40,17 @@ buf-ci:
 	docker run --rm --entrypoint sh -v "$(ROOT):/workspace" -w /workspace $(BUF_IMAGE) \
 		-c "buf lint && buf format -d --exit-code"
 
+backend-test-ci: $(GO_TEST_TARGETS) auth-test-ci
+
+backend-image-ci: $(GO_IMAGE_TARGETS) auth-image-ci
+
+go-test-%:
+	docker run --rm -v "$(ROOT):/workspace" -w /workspace/src/backend/$* $(GO_IMAGE) \
+		sh -c "CGO_ENABLED=0 go test ./..."
+
+go-image-%:
+	docker build -f src/backend/$*/Dockerfile -t voice-$*:local src/backend/$*
+
 gateway-test-ci:
 	docker run --rm -v "$(ROOT):/workspace" -w /workspace/src/backend/gateway $(GO_IMAGE) \
 		sh -c "CGO_ENABLED=0 go test ./..."
@@ -42,8 +58,15 @@ gateway-test-ci:
 gateway-image-ci:
 	docker build -f src/backend/gateway/Dockerfile -t voice-gateway:local src/backend/gateway
 
+auth-test-ci:
+	docker run --rm -v "$(ROOT):/workspace" -w /workspace/src/backend/auth $(MAVEN_IMAGE) \
+		mvn -B test
+
+auth-image-ci:
+	docker build -f src/backend/auth/Dockerfile -t voice-auth:local src/backend/auth
+
 # Full local CI stack in containers (no buf breaking: needs local master ref)
-build-all: compose-config-ci buf-ci gateway-test-ci gateway-image-ci
+build-all: compose-config-ci buf-ci backend-test-ci backend-image-ci
 
 buf-breaking-ci:
 	docker run --rm --entrypoint sh -v "$(ROOT):/workspace" -w /workspace $(BUF_IMAGE) \
