@@ -94,21 +94,9 @@ func rateLimitGroup(method, path string) string {
 	}
 }
 
-func rateLimitKey(r *http.Request, claims tokenClaims, publicRoute bool) string {
+func (g *gateway) rateLimitKey(r *http.Request, claims tokenClaims, publicRoute bool) string {
 	if publicRoute || claims.UserID == "" {
-		return "ip:" + clientIP(r)
+		return "ip:" + g.clientIP(r)
 	}
 	return "user:" + claims.UserID
-}
-
-func clientIP(r *http.Request) string {
-	if forwardedFor := r.Header.Get("X-Forwarded-For"); forwardedFor != "" {
-		ip, _, _ := strings.Cut(forwardedFor, ",")
-		return strings.TrimSpace(ip)
-	}
-	host, _, err := strings.Cut(r.RemoteAddr, ":")
-	if err {
-		return host
-	}
-	return r.RemoteAddr
 }

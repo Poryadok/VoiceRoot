@@ -10,9 +10,13 @@ func (g *gateway) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "websocket_upgrade_required"})
 		return
 	}
-	claims, ok := g.authenticate(r)
-	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	claims, code := g.authenticate(r)
+	if code != "" {
+		status := http.StatusUnauthorized
+		if code == "auth_unavailable" {
+			status = http.StatusServiceUnavailable
+		}
+		writeJSON(w, status, map[string]string{"error": code})
 		return
 	}
 	applyClaims(r, claims)

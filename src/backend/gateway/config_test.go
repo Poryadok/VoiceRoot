@@ -41,6 +41,25 @@ func TestGatewayConfigFromEnvSelectsRedisLimiter(t *testing.T) {
 	if _, ok := config.rateLimiter.(*redisSlidingWindowLimiter); !ok {
 		t.Fatalf("rateLimiter = %T, want *redisSlidingWindowLimiter", config.rateLimiter)
 	}
+	if _, ok := config.tokenBlacklist.(*redisTokenBlacklist); !ok {
+		t.Fatalf("tokenBlacklist = %T, want *redisTokenBlacklist", config.tokenBlacklist)
+	}
+}
+
+func TestGatewayConfigFromEnvSelectsAuthMode(t *testing.T) {
+	t.Setenv("GATEWAY_AUTH_MODE", "static")
+	t.Setenv("GATEWAY_STATIC_TOKENS_JSON", `{"dev-token":{"UserID":"account-1"}}`)
+	staticConfig := loadGatewayConfigFromEnv()
+	if _, ok := staticConfig.tokenValidator.(staticTokenValidator); !ok {
+		t.Fatalf("static tokenValidator = %T, want staticTokenValidator", staticConfig.tokenValidator)
+	}
+
+	t.Setenv("GATEWAY_AUTH_MODE", "")
+	t.Setenv("GATEWAY_JWKS_URL", "https://auth.voice.example/.well-known/jwks.json")
+	jwksConfig := loadGatewayConfigFromEnv()
+	if _, ok := jwksConfig.tokenValidator.(*jwtValidator); !ok {
+		t.Fatalf("jwks tokenValidator = %T, want *jwtValidator", jwksConfig.tokenValidator)
+	}
 }
 
 func TestSlidingWindowLimiter(t *testing.T) {

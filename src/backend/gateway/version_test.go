@@ -131,3 +131,38 @@ func TestForceUpdateBlocksEveryAPIRouteExceptVersion(t *testing.T) {
 		t.Fatalf("/api/v1/version must not be blocked by force-update policy")
 	}
 }
+
+func TestVersionEndpointRejectsMalformedVersion(t *testing.T) {
+	t.Parallel()
+
+	h := newGatewayForContract(t, gatewayTestOptions{
+		versionConfigs: map[string]versionConfig{
+			"android": {
+				MinSupportedVersion: "1.4.0",
+				LatestVersion:       "1.7.2",
+			},
+		},
+	})
+
+	for _, target := range []string{
+		"/api/v1/version?platform=android",
+		"/api/v1/version?platform=android&version=1.2",
+		"/api/v1/version?platform=android&version=bad",
+	} {
+		target := target
+		t.Run(target, func(t *testing.T) {
+			t.Parallel()
+			rec := performRequest(h, http.MethodGet, target, "", nil)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d; body=%q", rec.Code, http.StatusBadRequest, rec.Body.String())
+			}
+			var got struct {
+				Error string `json:"error"`
+			}
+			decodeJSON(t, rec.Body, &got)
+			if got.Error != "invalid_version" {
+				t.Fatalf("error = %q, want invalid_version", got.Error)
+			}
+		})
+	}
+}

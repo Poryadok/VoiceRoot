@@ -33,6 +33,18 @@ func (g *gateway) handleVersion(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown_platform"})
 		return
 	}
+	if _, ok := parseSemver(clientVersion); !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_version"})
+		return
+	}
+	if _, ok := parseSemver(cfg.MinSupportedVersion); !ok {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "version_policy_invalid"})
+		return
+	}
+	if _, ok := parseSemver(cfg.LatestVersion); !ok {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "version_policy_invalid"})
+		return
+	}
 
 	forceUpdate := compareSemver(clientVersion, cfg.MinSupportedVersion) < 0
 	updateAvailable := compareSemver(clientVersion, cfg.LatestVersion) < 0
@@ -56,8 +68,8 @@ func (g *gateway) isForceUpdateBlocked(r *http.Request) bool {
 }
 
 func compareSemver(left, right string) int {
-	lv := parseSemver(left)
-	rv := parseSemver(right)
+	lv, _ := parseSemver(left)
+	rv, _ := parseSemver(right)
 	for i := 0; i < 3; i++ {
 		switch {
 		case lv[i] < rv[i]:
@@ -69,14 +81,18 @@ func compareSemver(left, right string) int {
 	return 0
 }
 
-func parseSemver(version string) [3]int {
+func parseSemver(version string) ([3]int, bool) {
 	var parsed [3]int
 	parts := strings.Split(version, ".")
-	for i := 0; i < len(parts) && i < 3; i++ {
-		value, err := strconv.Atoi(parts[i])
-		if err == nil {
-			parsed[i] = value
-		}
+	if len(parts) != 3 {
+		return parsed, false
 	}
-	return parsed
+	for i := 0; i < len(parts); i++ {
+		value, err := strconv.Atoi(parts[i])
+		if err != nil || value < 0 {
+			return parsed, false
+		}
+		parsed[i] = value
+	}
+	return parsed, true
 }

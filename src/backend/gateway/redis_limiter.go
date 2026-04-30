@@ -18,6 +18,36 @@ type redisSlidingWindowLimiter struct {
 	rules    map[string]rateLimitRule
 }
 
+type redisTokenBlacklist struct {
+	addr     string
+	password string
+	prefix   string
+	timeout  time.Duration
+}
+
+func newRedisTokenBlacklist(addr, password, prefix string) *redisTokenBlacklist {
+	if prefix == "" {
+		prefix = "jwt:blacklist:"
+	}
+	return &redisTokenBlacklist{
+		addr:     addr,
+		password: password,
+		prefix:   prefix,
+		timeout:  2 * time.Second,
+	}
+}
+
+func (b *redisTokenBlacklist) IsRevoked(ctx context.Context, jti string) (bool, error) {
+	if jti == "" {
+		return false, nil
+	}
+	result, err := redisEval(ctx, b.addr, b.password, b.timeout, "EXISTS", b.prefix+jti)
+	if err != nil {
+		return false, err
+	}
+	return result == 1, nil
+}
+
 func newRedisSlidingWindowLimiter(addr, password string, rules map[string]rateLimitRule) *redisSlidingWindowLimiter {
 	return &redisSlidingWindowLimiter{
 		addr:     addr,
@@ -53,26 +83,29 @@ func (l *redisSlidingWindowLimiter) Allow(ctx context.Context, key, group string
 }
 
 func (l *redisSlidingWindowLimiter) eval(ctx context.Context, key string, args ...string) (int64, error) {
-	dialer := net.Dialer{Timeout: l.timeout}
-	conn, err := dialer.DialContext(ctx, "tcp", l.addr)
+	scriptArgs := []string{"EVAL", redisSlidingWindowScript, "1", key}
+	scriptArgs = append(scriptArgs, args...)
+	return redisEval(ctx, l.addr, l.password, l.timeout, scriptArgs...)
+}
+
+func redisEval(ctx context.Context, addr, password string, timeout time.Duration, args ...string) (int64, error) {
+	dialer := net.Dialer{Timeout: timeout}
+	conn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return 0, err
 	}
 	defer conn.Close()
-	if err := conn.SetDeadline(time.Now().Add(l.timeout)); err != nil {
+	if err := conn.SetDeadline(time.Now().Add(timeout)); err != nil {
 		return 0, err
 	}
 
 	reader := bufio.NewReader(conn)
-	if l.password != "" {
-		if _, err := redisCommand(conn, reader, "AUTH", l.password); err != nil {
+	if password != "" {
+		if _, err := redisCommand(conn, reader, "AUTH", password); err != nil {
 			return 0, err
 		}
 	}
-
-	scriptArgs := []string{"EVAL", redisSlidingWindowScript, "1", key}
-	scriptArgs = append(scriptArgs, args...)
-	return redisCommand(conn, reader, scriptArgs...)
+	return redisCommand(conn, reader, args...)
 }
 
 const redisSlidingWindowScript = `redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", ARGV[1])

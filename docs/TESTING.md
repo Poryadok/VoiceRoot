@@ -57,6 +57,14 @@
 - HTTP: `httptest` для хендлеров Gateway без поднятия сети.
 - gRPC: in-process server или клиент в тесте — как в уже существующем сервисе с тестами.
 
+### API Gateway
+
+- Локально: из [`src/backend/gateway/`](../src/backend/gateway/) запускать `go test ./...`; для race-проверки на хосте с CGO — `CGO_ENABLED=1 go test -race ./...`.
+- Обязательные contract tests: REST namespaces, `/ws`, JWT/JWKS, Redis blacklist, rate limit groups, trusted proxy `X-Forwarded-For`, CORS preflight, request id/claims propagation, `/api/v1/version`, `/metrics`.
+- Production env для auth: `GATEWAY_AUTH_MODE=static` допускается только для dev/tests; рабочий режим задаётся через `GATEWAY_JWKS_URL`, `GATEWAY_JWT_ISSUER`, `GATEWAY_JWT_AUDIENCE`.
+- Redis-проверки: `GATEWAY_REDIS_ADDR` включает sliding-window rate limiter и blacklist чтение; blacklist key prefix по умолчанию `jwt:blacklist:`, override — `GATEWAY_JWT_BLACKLIST_PREFIX`.
+- Edge smoke после деплоя: `/health`, `/metrics`, `/api/v1/version?platform=<known>&version=<semver>`, один public REST route, один protected REST route с JWT и `/ws` upgrade через Realtime upstream.
+
 ### Java (Auth Service, Spring Boot)
 
 - Юнит и slice-тесты: **JUnit 5**, **Spring Boot Test** (`@WebMvcTest`, `@DataJpaTest` и т.д. по слою).
@@ -81,7 +89,7 @@
 | Изменения в | Локально                                                          |
 |-------------|-------------------------------------------------------------------|
 | Репозиторий целиком (как в CI, через Docker) | из корня: **`make build-all`** — compose config, buf (lint + format check), `go test` для gateway, сборка образа `voice-gateway:local` ([Makefile](../Makefile)) |
-| Go-сервис   | `go test ./...`, `golangci-lint run` (или цели в Makefile)        |
+| Go-сервис   | `go test ./...`, `golangci-lint run` (или цели в Makefile); для Gateway дополнительно `CGO_ENABLED=1 go test -race ./...`, если доступен CGO |
 | Auth (Java) | `./mvnw test` или `./gradlew test` — по сборке проекта            |
 | Flutter     | `flutter analyze`, `flutter test`                                 |
 
@@ -118,5 +126,4 @@
 - [CONTRIBUTING.md](CONTRIBUTING.md) — ветки и PR
 - [DEPLOYMENT.md](DEPLOYMENT.md) — где гоняются тесты в CI и staging
 - [OPERATIONS.md](OPERATIONS.md) — canary, rollback
-
 

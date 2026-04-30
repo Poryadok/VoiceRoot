@@ -9,11 +9,11 @@
 
 ## Ответственность
 
-- Маршрутизация HTTP/REST запросов к соответствующим сервисам (REST → gRPC transcoding)
+- Маршрутизация HTTP/REST запросов к соответствующим сервисам; текущая Go-реализация — HTTP reverse proxy, REST → gRPC transcoding добавляется вместе с целевыми сервисами
 - Проксирование WebSocket-соединений к Realtime Service
-- JWT-валидация (проверка access token, извлечение claims)
+- JWT-валидация (проверка access token, извлечение claims) и чтение Redis blacklist для отозванных access token
 - Rate limiting по правилам из конфигурации
-- CORS, request/response logging
+- CORS, request logging, Prometheus metrics (`/metrics`)
 - Версионирование API (`/api/v1/...`)
 - Проверка версии клиента (endpoint `/api/v1/version`, ответ 426 при force_update; Gateway — canonical owner этой политики)
 - TLS termination
@@ -32,7 +32,7 @@
 | Space creation        | 5 пространств | 1 день |
 | Bot API               | 5000 запросов | 1 мин  |
 
-Реализация: Redis sliding window counter. Ключ — `ratelimit:{user_id}:{endpoint_group}`.
+Реализация: Redis sliding window counter. Для публичных маршрутов ключ строится по IP; `X-Forwarded-For` учитывается только от доверенных proxy из `GATEWAY_TRUSTED_PROXY_CIDRS`. Для защищённых маршрутов ключ строится по `user_id`.
 
 ## Маршрутизация
 
@@ -78,10 +78,27 @@
 ## Аутентификация
 
 1. Клиент отправляет `Authorization: Bearer <access_token>`
-2. Gateway валидирует JWT (проверка подписи, expiry)
-3. Извлекает claims: `user_id`, `profile_id`, `roles`, `subscription_tier`
-4. Передаёт claims в gRPC metadata downstream сервисам
-5. Публичные endpoints (login, register, version) — без JWT
+2. Gateway валидирует JWT через JWKS (`GATEWAY_JWKS_URL`), issuer и audience (`GATEWAY_JWT_ISSUER`, `GATEWAY_JWT_AUDIENCE`)
+3. Проверяет Redis blacklist по `jti` (`GATEWAY_JWT_BLACKLIST_PREFIX`, по умолчанию `jwt:blacklist:`)
+4. Извлекает claims: `sub`/`user_id`, `profile_id`, `roles`, `subscription_tier`, `jti`
+5. Передаёт claims downstream сервисам через `X-Voice-*` headers
+6. Публичные endpoints (login, register, OTP, version, health, metrics) — без JWT
+
+Для dev/tests допускается `GATEWAY_AUTH_MODE=static` + `GATEWAY_STATIC_TOKENS_JSON`; production должен использовать JWKS.
+
+## Конфигурация Gateway
+
+| Переменная | Назначение |
+|------------|------------|
+| `GATEWAY_JWKS_URL` | JWKS endpoint Auth Service |
+| `GATEWAY_JWT_ISSUER`, `GATEWAY_JWT_AUDIENCE` | Проверка `iss` и `aud` |
+| `GATEWAY_REDIS_ADDR`, `GATEWAY_REDIS_PASSWORD` | Redis для rate limit и JWT blacklist |
+| `GATEWAY_JWT_BLACKLIST_PREFIX` | Prefix blacklist ключей; default `jwt:blacklist:` |
+| `GATEWAY_TRUSTED_PROXY_CIDRS` | CIDR/IP список proxy, от которых принимается `X-Forwarded-For` |
+| `GATEWAY_CORS_ALLOWED_ORIGINS` | CSV allowlist browser origins; default deny |
+| `GATEWAY_REST_UPSTREAMS_JSON` / `GATEWAY_<NAMESPACE>_UPSTREAM_URL` | REST upstream routes |
+| `GATEWAY_REALTIME_UPSTREAM_URL` | `/ws` upstream Realtime Service |
+| `GATEWAY_VERSION_CONFIGS_JSON`, `GATEWAY_FORCE_UPDATE_JSON` | Version policy |
 
 ## Зависимости
 
@@ -91,13 +108,12 @@
 
 ## Метрики (→ Analytics)
 
-- `gateway.request.count` — по endpoint, method, status code
-- `gateway.request.latency` — p50/p95/p99
-- `gateway.ratelimit.hit` — заблокированные запросы
+- `gateway_request_count` — Prometheus counter по route group, method, status code
+- `gateway_request_latency_ms_sum` — суммарная latency в миллисекундах по route group, method, status code
+- `gateway_ratelimit_hit` — заблокированные запросы по группе лимита
 - `gateway.ws.connections` — текущие WebSocket соединения
 
 ## Масштабирование
 
 Stateless, масштабируется горизонтально. За внешним Load Balancer (L4/L7).
-
 

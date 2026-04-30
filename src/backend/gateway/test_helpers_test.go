@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -17,6 +18,12 @@ type gatewayTestOptions struct {
 	restUpstreams      map[string]http.Handler
 	realtimeUpstream   http.Handler
 	requestIDGenerator func() string
+	tokenValidator     tokenValidator
+	tokenBlacklist     tokenBlacklist
+	rateLimiter        rateLimiter
+	trustedProxyCIDRs  []string
+	cors               corsConfig
+	metrics            *gatewayMetrics
 }
 
 func newGatewayForContract(_ *testing.T, options gatewayTestOptions) http.Handler {
@@ -28,14 +35,28 @@ func newGatewayForContract(_ *testing.T, options gatewayTestOptions) http.Handle
 		restUpstreams:      options.restUpstreams,
 		realtimeUpstream:   options.realtimeUpstream,
 		requestIDGenerator: options.requestIDGenerator,
+		tokenValidator:     options.tokenValidator,
+		tokenBlacklist:     options.tokenBlacklist,
+		rateLimiter:        options.rateLimiter,
+		trustedProxyCIDRs:  options.trustedProxyCIDRs,
+		cors:               options.cors,
+		metrics:            options.metrics,
 	})
 }
 
 func performRequest(h http.Handler, method, target string, body string, headers map[string]string) *httptest.ResponseRecorder {
+	return performPreparedRequest(h, httptestRequest(method, target, body, headers))
+}
+
+func httptestRequest(method, target string, body string, headers map[string]string) *http.Request {
 	req := httptest.NewRequest(method, target, strings.NewReader(body))
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
+	return req
+}
+
+func performPreparedRequest(h http.Handler, req *http.Request) *httptest.ResponseRecorder {
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	return rec
@@ -46,4 +67,13 @@ func decodeJSON(t *testing.T, body io.Reader, dst any) {
 	if err := json.NewDecoder(body).Decode(dst); err != nil {
 		t.Fatalf("decode json: %v", err)
 	}
+}
+
+type captureLimiter struct {
+	keys *[]string
+}
+
+func (l captureLimiter) Allow(_ context.Context, key, _ string) (bool, error) {
+	*l.keys = append(*l.keys, key)
+	return true, nil
 }

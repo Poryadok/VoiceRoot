@@ -6,13 +6,13 @@
 
 ## Текущее состояние кодовой базы
 
-Репозиторий на этапе **документации и фундамента Фазы 0**: спецификации, контракты, инфраструктурный каркас и **минимальный каркас API Gateway** на Go (`GET /health`, юнит-тесты, Dockerfile). **CI на GitHub, пуш образа в GHCR и деплой gateway на staging** проверены end-to-end ([DEPLOYMENT.md](DEPLOYMENT.md)); публичный FQDN стенда — `voice.tastytest.online`. Прикладного кода **Auth (Java)**, **Realtime/Messaging** и **Flutter-клиента** по-прежнему нет.
+Репозиторий на этапе **документации и фундамента Фазы 0**: спецификации, контракты, инфраструктурный каркас и **API Gateway** на Go (REST/WS edge proxy, JWT/JWKS, Redis blacklist/rate limit, CORS, `/metrics`, version policy, тесты, Dockerfile). **CI на GitHub, пуш образа в GHCR и деплой gateway на staging** проверены end-to-end ([DEPLOYMENT.md](DEPLOYMENT.md)); публичный FQDN стенда — `voice.tastytest.online`. Прикладного кода **Auth (Java)**, **Realtime/Messaging** и **Flutter-клиента** по-прежнему нет.
 
 | Компонент | Состояние |
 |-----------|-----------|
 | Документация `docs/` | Актуальные спеки, план фаз, микросервисы |
 | `protos/` | Protobuf (S2S: `voice/s2s/v1/s2s.proto`); **buf** — [buf.work.yaml](../buf.work.yaml), [protos/buf.yaml](../protos/buf.yaml), CI |
-| `src/backend/gateway/` | Минимальный HTTP-сервис и Dockerfile; образ выкатывается на staging через CI; не прокси и не целевой REST/WebSocket Gateway из спеки |
+| `src/backend/gateway/` | Go API Gateway: `GET /health`, `GET /metrics`, `/api/v1/version`, REST namespace proxy, `/ws` proxy, JWT/JWKS validation, Redis blacklist/rate limits, CORS, request id/logging; образ выкатывается на staging через CI; REST→gRPC transcoding появится вместе с целевыми сервисами |
 | `src/frontend`, `src/backend` (прочее), `src/admin` | Зарезервированная структура монорепо; README в каталогах |
 | `src/backend/migrations/` | Первая волна SQL под [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md) (`auth_db`, `user_db`, `social_db`, `chat_db`, `messaging_db`) |
 | Docker Compose | PostgreSQL (несколько БД) + Redis для локального стенда ([README.md](../README.md)) |
@@ -72,7 +72,7 @@
 **Цель:** инфраструктура, без которой нельзя строить фичи.
 
 - [x] **Схемы БД (первая волна)** — миграции под Фазу 0 + 1: `auth_db`, `user_db`, `social_db`, `chat_db`, `messaging_db` — [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md), детали целевых таблиц — секции «Модель данных» в [microservices/](microservices/)
-- [ ] **API Gateway** — целевой REST + WebSocket и маршрутизация к сервисам (сейчас есть только каркас: `GET /health`, тесты, Docker-образ — [src/backend/gateway/](../src/backend/gateway/))
+- [x] **API Gateway** — REST + WebSocket edge proxy и маршрутизация к сервисам: JWT/JWKS, Redis blacklist/rate limit, CORS, request id/logging, `/metrics`, `/api/v1/version`, тесты и Docker-образ — [src/backend/gateway/](../src/backend/gateway/). Ограничение: REST→gRPC transcoding будет добавлен при появлении целевых сервисов.
 - [x] **CI/CD в эксплуатации** — репозиторий на GitHub, Actions на PR/push; GHCR и staging (секреты/variables); smoke gateway после деплоя ([DEPLOYMENT.md](DEPLOYMENT.md)). Локальная проверка «как у job’ов» — **`make build-all`** ([Makefile](../Makefile))
 - [x] **Docker Compose (dev), инфраструктура** — PostgreSQL (логические БД) + Redis одной командой ([README.md](../README.md)); прикладные сервисы в compose пока не подключены
 - [ ] **Auth: доработка** — refresh (opaque, 30 дней), logout, валидация, тесты

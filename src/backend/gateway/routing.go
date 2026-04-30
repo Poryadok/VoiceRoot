@@ -23,10 +23,14 @@ func (g *gateway) handleREST(w http.ResponseWriter, r *http.Request) {
 	var claims tokenClaims
 	publicRoute := isPublicRESTRoute(r.Method, r.URL.Path)
 	if !publicRoute {
-		var ok bool
-		claims, ok = g.authenticate(r)
-		if !ok {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		var code string
+		claims, code = g.authenticate(r)
+		if code != "" {
+			status := http.StatusUnauthorized
+			if code == "auth_unavailable" {
+				status = http.StatusServiceUnavailable
+			}
+			writeJSON(w, status, map[string]string{"error": code})
 			return
 		}
 		if namespace == "analytics" && !hasRole(claims, "staff") {
@@ -37,13 +41,14 @@ func (g *gateway) handleREST(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if group := rateLimitGroup(r.Method, r.URL.Path); group != "" {
-		key := rateLimitKey(r, claims, publicRoute)
+		key := g.rateLimitKey(r, claims, publicRoute)
 		allowed, err := g.rateLimiter.Allow(r.Context(), key, group)
 		if err != nil {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "rate_limit_unavailable"})
 			return
 		}
 		if !allowed {
+			g.metrics.ObserveRateLimitHit(group)
 			writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "rate_limited"})
 			return
 		}

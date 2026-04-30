@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"strings"
 )
@@ -10,26 +11,54 @@ type tokenClaims struct {
 	ProfileID        string
 	Roles            []string
 	SubscriptionTier string
+	JTI              string
 }
 
 type tokenValidator interface {
-	Validate(r *http.Request) (tokenClaims, bool)
+	Validate(r *http.Request) (tokenClaims, string)
+}
+
+type tokenBlacklist interface {
+	IsRevoked(ctx context.Context, jti string) (bool, error)
+}
+
+type noTokenBlacklist struct{}
+
+func (noTokenBlacklist) IsRevoked(_ context.Context, _ string) (bool, error) {
+	return false, nil
 }
 
 type staticTokenValidator map[string]tokenClaims
 
-func (v staticTokenValidator) Validate(r *http.Request) (tokenClaims, bool) {
+func (v staticTokenValidator) Validate(r *http.Request) (tokenClaims, string) {
 	const prefix = "Bearer "
 	auth := r.Header.Get("Authorization")
 	if !strings.HasPrefix(auth, prefix) {
-		return tokenClaims{}, false
+		return tokenClaims{}, "invalid_token"
 	}
 	claims, ok := v[strings.TrimPrefix(auth, prefix)]
-	return claims, ok
+	if !ok {
+		return tokenClaims{}, "invalid_token"
+	}
+	return claims, ""
 }
 
-func (g *gateway) authenticate(r *http.Request) (tokenClaims, bool) {
-	return g.tokenValidator.Validate(r)
+func (g *gateway) authenticate(r *http.Request) (tokenClaims, string) {
+	claims, code := g.tokenValidator.Validate(r)
+	if code != "" {
+		return tokenClaims{}, code
+	}
+	if claims.JTI == "" {
+		return claims, ""
+	}
+	revoked, err := g.tokenBlacklist.IsRevoked(r.Context(), claims.JTI)
+	if err != nil {
+		return tokenClaims{}, "auth_unavailable"
+	}
+	if revoked {
+		return tokenClaims{}, "token_revoked"
+	}
+	return claims, ""
 }
 
 func applyClaims(r *http.Request, claims tokenClaims) {
