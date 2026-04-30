@@ -39,3 +39,7 @@ Voice is a Discord-like messenger with voice chat and built-in matchmaking. Prod
 - Auth target architecture is Java (`VoiceAuthService`). Most other documented services are Go. The client is Flutter, including web. Do not move Auth to Go without an explicit user decision.
 - Default branch is `master`, not `main`. GitHub repository names use PascalCase. See `docs/REPOSITORIES.md` for monorepo and proto rules.
 - Do not expand `docs/` or rewrite the feature structure unless the user explicitly asks. This file should provide navigation and boundaries, not duplicate long specifications.
+
+
+## tips
+ - use Get-Content -Raw -Encoding UTF8 docs/**.md since documentation is written in russian
