@@ -21,6 +21,12 @@ Voice is a Discord-like messenger with voice chat and built-in matchmaking. Prod
 | Existing code vs planned work | `docs/PLAN.md` |
 | Documentation gaps | `docs/TODO.md` |
 
+## File Reading
+
+- Russian documentation is UTF-8. In PowerShell, read Markdown docs with `Get-Content -Raw -Encoding UTF8 <path>`.
+- This applies to `.agent/*.md`, `docs/**/*.md`, root `README.md`, and service `README.md` files.
+- Avoid plain `Get-Content <path>` for documentation; it may render Cyrillic as mojibake and corrupt understanding.
+
 ## Development Workflow
 
 - Before coding, read the relevant `docs/` files from the table and the user task.
@@ -40,6 +46,13 @@ Voice is a Discord-like messenger with voice chat and built-in matchmaking. Prod
 - Default branch is `master`, not `main`. GitHub repository names use PascalCase. See `docs/REPOSITORIES.md` for monorepo and proto rules.
 - Do not expand `docs/` or rewrite the feature structure unless the user explicitly asks. This file should provide navigation and boundaries, not duplicate long specifications.
 
+## Language And Token Use
 
-## tips
- - use Get-Content -Raw -Encoding UTF8 docs/**.md since documentation is written in russian
+- Communicate with the user in Russian by default.
+- Use English for code identifiers, commands, API names, error messages, commit messages, and standard engineering terms when translation would reduce precision.
+- Keep internal planning notes and implementation terminology concise; prefer English technical wording where practical.
+- Be brief in routine status updates and final answers. Skip filler, greetings, and generic preambles.
+- `caveman`, `brief`, or `low-token` means terse engineering mode, not weaker reasoning.
+- In low-token mode, keep output compact and use `Changed`, `Checked`, and `Risk` when reporting code work.
+- For architecture, security, migrations, production incidents, and code reviews, prefer concise but clear explanations over ultra-compressed answers.
+- Keep agent memory and rule files compressed: short rules, exact conditions, no repeated policy prose.
