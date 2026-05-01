@@ -1,0 +1,146 @@
+syntax = "proto3";
+
+package voice.auth.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "voice.app/voice/auth/v1;authv1";
+option java_multiple_files = true;
+option java_package = "app.voice.auth.v1";
+
+service AuthService {
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+  rpc Login(LoginRequest) returns (LoginResponse);
+  rpc Logout(LogoutRequest) returns (LogoutResponse);
+  rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
+  rpc Enable2FA(Enable2FARequest) returns (Enable2FAResponse);
+  rpc Verify2FA(Verify2FARequest) returns (Verify2FAResponse);
+  rpc VerifyOTP(VerifyOTPRequest) returns (VerifyOTPResponse);
+  rpc ConvertGuest(ConvertGuestRequest) returns (ConvertGuestResponse);
+  rpc DeleteAccount(DeleteAccountRequest) returns (DeleteAccountResponse);
+  rpc RestoreAccount(RestoreAccountRequest) returns (RestoreAccountResponse);
+  rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse);
+  rpc GetJWKS(GetJWKSRequest) returns (GetJWKSResponse);
+}
+
+message RegisterRequest {
+  optional string email = 1;
+  optional string phone = 2;
+  string password = 3;
+  bool guest = 4;
+}
+
+message LoginRequest {
+  optional string email = 1;
+  optional string phone = 2;
+  string password = 3;
+  optional string totp_code = 4;
+  string device_info_json = 5;
+}
+
+message LogoutRequest {
+  string refresh_token = 1;
+}
+
+message RefreshTokenRequest {
+  string refresh_token = 1;
+  string device_info_json = 2;
+}
+
+message Enable2FARequest {
+  string password = 1;
+}
+
+message Enable2FAResponse {
+  string totp_uri = 1;
+  string secret_backup_hint = 2;
+}
+
+message Verify2FARequest {
+  string totp_code = 1;
+}
+
+message VerifyOTPRequest {
+  string code = 1;
+  string otp_type = 2;
+  optional OtpType otp_type_enum = 3;
+}
+
+enum OtpType {
+  OTP_TYPE_UNSPECIFIED = 0;
+  OTP_TYPE_EMAIL_VERIFY = 1;
+  OTP_TYPE_PASSWORD_RESET = 2;
+}
+
+message ConvertGuestRequest {
+  optional string email = 1;
+  optional string phone = 2;
+  string password = 3;
+}
+
+message DeleteAccountRequest {
+  string password = 1;
+}
+
+message RestoreAccountRequest {
+  string token = 1;
+}
+
+message ValidateTokenRequest {
+  string access_token = 1;
+}
+
+message AuthSession {
+  string access_token = 1;
+  string refresh_token = 2;
+  int64 expires_in_seconds = 3;
+  string account_id = 4;
+}
+
+message RegisterResponse {
+  AuthSession session = 1;
+}
+
+message LoginResponse {
+  AuthSession session = 1;
+}
+
+message LogoutResponse {}
+
+message RefreshTokenResponse {
+  AuthSession session = 1;
+}
+
+message Verify2FAResponse {
+  AuthSession session = 1;
+}
+
+message VerifyOTPResponse {}
+
+message ConvertGuestResponse {
+  AuthSession session = 1;
+}
+
+message DeleteAccountResponse {}
+
+message RestoreAccountResponse {
+  AuthSession session = 1;
+}
+
+message ValidateTokenResponse {
+  TokenClaims claims = 1;
+}
+
+message GetJWKSRequest {}
+
+message GetJWKSResponse {
+  string keys_json = 1;
+}
+
+message TokenClaims {
+  string user_id = 1;
+  string profile_id = 2;
+  repeated string roles = 3;
+  string subscription_tier = 4;
+  google.protobuf.Timestamp expires_at = 5;
+}

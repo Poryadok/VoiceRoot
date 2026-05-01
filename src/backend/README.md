@@ -1,5 +1,11 @@
 # Backend
 
-Go services, API Gateway, Realtime, and shared Go libraries will live under this tree (layout to be refined per service, e.g. `gateway/`, `messaging/`, `pkg/`). Minimal **gateway** skeleton (HTTP `/health`, Docker image for CI/GHCR) is in [`gateway/`](gateway/).
+Backend services live under this tree as separate projects. `gateway/` is the implemented API Gateway; the other service directories are initialized scaffolds so CI, Docker builds, and future feature work have stable project homes.
 
-SQL migrations for Phase 0–1 databases ([docs/DATA_SCOPE_V1.md](../../docs/DATA_SCOPE_V1.md)) are in [`migrations/`](migrations/). Ownership and tools: [docs/OPERATIONS.md](../../docs/OPERATIONS.md) (Flyway for Auth Java, golang-migrate for Go).
+- `auth/` is a Java/Spring Boot scaffold with `GET /health`, a smoke test, and Dockerfile.
+- `gateway/` is the Go API Gateway with REST/WS edge behavior, tests, and Dockerfile.
+- All other backend microservices from [docs/MICROSERVICES.md](../../docs/MICROSERVICES.md) are Go scaffolds with `GET /health`, smoke tests, individual `go.mod`, and Dockerfile.
+
+Run the full backend-local CI path from the repository root with `make build-all`. It validates compose and protobufs, runs Go tests for all Go services, runs Auth Maven tests, and builds local Docker images named `voice-<service>:local`.
+
+SQL migrations for Phase 0–1 databases ([docs/DATA_SCOPE_V1.md](../../docs/DATA_SCOPE_V1.md)) are currently in [`migrations/`](migrations/). Ownership and tools: [docs/OPERATIONS.md](../../docs/OPERATIONS.md) (Flyway for Auth Java, golang-migrate for Go).

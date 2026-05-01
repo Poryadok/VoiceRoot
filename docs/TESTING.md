@@ -88,7 +88,7 @@
 
 | Изменения в | Локально                                                          |
 |-------------|-------------------------------------------------------------------|
-| Репозиторий целиком (как в CI, через Docker) | из корня: **`make build-all`** — compose config, buf (lint + format check), `go test` для gateway, сборка образа `voice-gateway:local` ([Makefile](../Makefile)) |
+| Репозиторий целиком (как в CI, через Docker) | из корня: **`make build-all`** — compose config, buf (lint + format check), тесты всех Go-сервисов, Maven test Auth, сборка образов `voice-<service>:local` ([Makefile](../Makefile)) |
 | Go-сервис   | `go test ./...`, `golangci-lint run` (или цели в Makefile); для Gateway дополнительно `CGO_ENABLED=1 go test -race ./...`, если доступен CGO |
 | Auth (Java) | `./mvnw test` или `./gradlew test` — по сборке проекта            |
 | Flutter     | `flutter analyze`, `flutter test`                                 |
@@ -105,9 +105,10 @@
 
 1. **Protobuf**: `buf lint`, `buf format`, на PR — `buf breaking` относительно базовой ветки.
 2. **Compose**: `docker compose config` (валидация файла).
-3. **Gateway (Go)**: `go test` в [`src/backend/gateway/`](../src/backend/gateway/); сборка Docker-образа; **push в GHCR** только при **push** в `master` (теги `:latest` и `:<git_sha>`). Для PR — только сборка без push. Локально без установки Go/buf на хосте: **`make build-all`** (шаги в Docker).
-4. Линтеры по остальным языкам (Java, Flutter, golangci-lint по всему монорепо) и расширенные интеграционные тесты — по мере появления кода; не блокируют текущий `CI`, пока не добавлены отдельные job’ы.
-5. Проверка относительных ссылок в `docs/` при изменениях в документации — `.github/workflows/docs-link-check.yml`, конфиг `.markdown-link-check.json` в корне.
+3. **Backend Go matrix**: `go test ./...` и Docker build для каждого Go-сервиса в `src/backend/<service>/`; **push в GHCR** только при **push** в `master` (теги `:latest` и `:<git_sha>`). Для PR — только сборка без push.
+4. **Auth (Java)**: Maven test и Docker build для [`src/backend/auth/`](../src/backend/auth/); push образа в GHCR только при push в `master`.
+5. Линтеры по Flutter, golangci-lint по всему монорепо и расширенные интеграционные тесты — по мере появления кода; не блокируют текущий `CI`, пока не добавлены отдельные job’ы.
+6. Проверка относительных ссылок в `docs/` при изменениях в документации — `.github/workflows/docs-link-check.yml`, конфиг `.markdown-link-check.json` в корне.
 
 **Деплой на staging** вынесен в отдельный workflow [.github/workflows/staging-deploy.yml](../.github/workflows/staging-deploy.yml): триггер `workflow_dispatch` (ручной запуск с тегом образа) и, при переменной `STAGING_DEPLOY_ENABLED=true`, автозапуск после успешного `CI` на push в `master`. Секреты, GHCR и namespace — [DEPLOYMENT.md](DEPLOYMENT.md).
 
@@ -126,4 +127,3 @@
 - [CONTRIBUTING.md](CONTRIBUTING.md) — ветки и PR
 - [DEPLOYMENT.md](DEPLOYMENT.md) — где гоняются тесты в CI и staging
 - [OPERATIONS.md](OPERATIONS.md) — canary, rollback
-

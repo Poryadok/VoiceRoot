@@ -6,18 +6,19 @@
 
 ## Текущее состояние кодовой базы
 
-Репозиторий на этапе **документации и фундамента Фазы 0**: спецификации, контракты, инфраструктурный каркас и **API Gateway** на Go (REST/WS edge proxy, JWT/JWKS, Redis blacklist/rate limit, CORS, `/metrics`, version policy, тесты, Dockerfile). **CI на GitHub, пуш образа в GHCR и деплой gateway на staging** проверены end-to-end ([DEPLOYMENT.md](DEPLOYMENT.md)); публичный FQDN стенда — `voice.tastytest.online`. Прикладного кода **Auth (Java)**, **Realtime/Messaging** и **Flutter-клиента** по-прежнему нет.
+Репозиторий на этапе **документации и фундамента Фазы 0**: спецификации, контракты, инфраструктурный каркас, **API Gateway** на Go (REST/WS edge proxy, JWT/JWKS, Redis blacklist/rate limit, CORS, `/metrics`, version policy, тесты, Dockerfile) и **инициализированные backend-проекты микросервисов**. **CI на GitHub, пуш образа в GHCR и деплой gateway на staging** проверены end-to-end ([DEPLOYMENT.md](DEPLOYMENT.md)); публичный FQDN стенда — `voice.tastytest.online`. Доменные реализации **Auth**, **Realtime/Messaging** и **Flutter-клиента** по-прежнему не готовы: есть только запускаемые scaffold-проекты с health-check, тестами и Dockerfile.
 
 | Компонент | Состояние |
 |-----------|-----------|
 | Документация `docs/` | Актуальные спеки, план фаз, микросервисы |
 | `protos/` | Protobuf (S2S: `voice/s2s/v1/s2s.proto`); **buf** — [buf.work.yaml](../buf.work.yaml), [protos/buf.yaml](../protos/buf.yaml), CI |
 | `src/backend/gateway/` | Go API Gateway: `GET /health`, `GET /metrics`, `/api/v1/version`, REST namespace proxy, `/ws` proxy, JWT/JWKS validation, Redis blacklist/rate limits, CORS, request id/logging; образ выкатывается на staging через CI; REST→gRPC transcoding появится вместе с целевыми сервисами |
-| `src/frontend`, `src/backend` (прочее), `src/admin` | Зарезервированная структура монорепо; README в каталогах |
+| `src/backend/<service>/` | Инициализированы scaffold-проекты всех backend-микросервисов из [MICROSERVICES.md](MICROSERVICES.md): Auth на Java/Spring Boot, остальные сервисы на Go; публичная поверхность scaffold — `GET /health`, smoke-тесты и Dockerfile; бизнес-логика и gRPC handlers ещё не реализованы |
+| `src/frontend`, `src/admin` | Зарезервированная структура монорепо; README в каталогах |
 | `src/backend/migrations/` | Первая волна SQL под [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md) (`auth_db`, `user_db`, `social_db`, `chat_db`, `messaging_db`) |
 | Docker Compose | PostgreSQL (несколько БД) + Redis для локального стенда ([README.md](../README.md)) |
-| Локальные проверки | **`make build-all`** в корне — через Docker: валидация compose, buf (lint + format check), `go test` для gateway, сборка образа `voice-gateway:local` ([Makefile](../Makefile), [TESTING.md](TESTING.md)) |
-| CI / staging | Workflows: [ci.yml](../.github/workflows/ci.yml), [staging-deploy.yml](../.github/workflows/staging-deploy.yml), [docs-link-check.yml](../.github/workflows/docs-link-check.yml) — см. [TESTING.md](TESTING.md), [DEPLOYMENT.md](DEPLOYMENT.md). Пайплайн и выкат gateway на стенд **проверены**. |
+| Локальные проверки | **`make build-all`** в корне — через Docker: валидация compose, buf (lint + format check), тесты всех Go-сервисов, Maven test Auth и сборка локальных образов `voice-<service>:local` ([Makefile](../Makefile), [TESTING.md](TESTING.md)) |
+| CI / staging | Workflows: [ci.yml](../.github/workflows/ci.yml), [staging-deploy.yml](../.github/workflows/staging-deploy.yml), [docs-link-check.yml](../.github/workflows/docs-link-check.yml) — см. [TESTING.md](TESTING.md), [DEPLOYMENT.md](DEPLOYMENT.md). CI расширен на backend matrix и Auth; пайплайн и выкат gateway на стенд **проверены**. |
 
 Целевые сервисы и БД по-прежнему описаны в [MICROSERVICES.md](MICROSERVICES.md) и `docs/microservices/*`; ниже — **куда класть код** при появлении реализации.
 
@@ -35,6 +36,8 @@
 | Space / Voice и др. | Go (+ LiveKit) | по мере фаз из таблицы ниже |
 | Клиент | Flutter | `src/frontend/` |
 | Admin | Web | `src/admin/` |
+
+Прогресс scaffold: каталоги выше созданы для всех backend-сервисов; это **техническая инициализация проектов**, не закрытие продуктовых задач сервисов.
 
 ---
 
@@ -75,6 +78,7 @@
 - [x] **API Gateway** — REST + WebSocket edge proxy и маршрутизация к сервисам: JWT/JWKS, Redis blacklist/rate limit, CORS, request id/logging, `/metrics`, `/api/v1/version`, тесты и Docker-образ — [src/backend/gateway/](../src/backend/gateway/). Ограничение: REST→gRPC transcoding будет добавлен при появлении целевых сервисов.
 - [x] **CI/CD в эксплуатации** — репозиторий на GitHub, Actions на PR/push; GHCR и staging (секреты/variables); smoke gateway после деплоя ([DEPLOYMENT.md](DEPLOYMENT.md)). Локальная проверка «как у job’ов» — **`make build-all`** ([Makefile](../Makefile))
 - [x] **Docker Compose (dev), инфраструктура** — PostgreSQL (логические БД) + Redis одной командой ([README.md](../README.md)); прикладные сервисы в compose пока не подключены
+- [x] **Backend project scaffolds** — инициализированы проекты всех backend-микросервисов: Auth (Java/Spring Boot) и Go-сервисы с `GET /health`, smoke-тестами, Dockerfile и включением в `make build-all` / CI matrix. Бизнес-логика сервисов остаётся в следующих пунктах фаз.
 - [ ] **Auth** — refresh (opaque, 30 дней), logout, валидация, тесты
 - [ ] **Общая библиотека Go** — JWT, middleware, логирование, конфиг
 - [ ] **Flutter: скелет** — three-column layout, бэкенд вместо Firebase, DI, state
