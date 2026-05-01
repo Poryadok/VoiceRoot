@@ -30,6 +30,7 @@ Voice is a Discord-like messenger with voice chat and built-in matchmaking. Prod
 ## Development Workflow
 
 - Before coding, read the relevant `docs/` files from the table and the user task.
+- Project skills live in `.agent/skills/`. For full documentation-first TDD workflow, use `.agent/skills/tdd-code-workflow/SKILL.md`.
 - For substantial or ambiguous work, write and maintain an ExecPlan following `.agent/PLANS.md`. Plans must be self-contained, tied to repository documentation, and updated as work progresses.
 - Prefer TDD when implementing behavior defined in docs: behavior tests from docs, minimal implementation, relevant tests green, then refactor.
 - For a failing or disputed test, first compare the expected behavior with the documentation. Do not weaken a test just to match incorrect code.
