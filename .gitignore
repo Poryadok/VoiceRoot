@@ -5,3 +5,31 @@ Thumbs.db
 
 # buf generate (see buf.gen.yaml in repo root)
 gen/
+
+# Java/Maven build output
+/src/backend/auth/target/
+
+# Go local build/test artifacts
+/src/backend/*/*.exe
+/src/backend/*/*.test
+/src/backend/*/coverage.out
+/src/backend/*/coverage.html
+/src/backend/analytics/analytics
+/src/backend/bot/bot
+/src/backend/chat/chat
+/src/backend/federation/federation
+/src/backend/file/file
+/src/backend/gateway/gateway
+/src/backend/matchmaking/matchmaking
+/src/backend/messaging/messaging
+/src/backend/moderation/moderation
+/src/backend/notification/notification
+/src/backend/realtime/realtime
+/src/backend/role/role
+/src/backend/search/search
+/src/backend/social/social
+/src/backend/space/space
+/src/backend/story/story
+/src/backend/subscription/subscription
+/src/backend/user/user
+/src/backend/voice/voice
