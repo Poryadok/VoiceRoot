@@ -10,11 +10,17 @@ import com.nimbusds.jose.jwk.KeyUse;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
+import java.security.KeyFactory;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.NoSuchAlgorithmException;
+import java.security.interfaces.RSAPrivateCrtKey;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
+import java.security.spec.InvalidKeySpecException;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.security.spec.RSAPublicKeySpec;
+import java.util.Base64;
 import java.text.ParseException;
 import java.time.Clock;
 import java.time.Duration;
@@ -57,6 +63,47 @@ public class JwtService {
     } catch (NoSuchAlgorithmException ex) {
       throw new IllegalStateException("RSA is not available", ex);
     }
+  }
+
+  /**
+   * Stable signing keys for non-test runtimes: PKCS#8 PEM ({@code -----BEGIN PRIVATE KEY-----}).
+   * Public key is derived from the CRT private key material.
+   */
+  public static JwtService fromPkcs8PrivateKeyPem(
+      String issuer, String audience, String keyId, Duration accessTtl, Clock clock, String pkcs8Pem) {
+    try {
+      RSAPrivateCrtKey privateKey = parsePkcs8RsaPrivateCrtKey(pkcs8Pem);
+      KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+      RSAPublicKey publicKey =
+          (RSAPublicKey) keyFactory.generatePublic(new RSAPublicKeySpec(privateKey.getModulus(), privateKey.getPublicExponent()));
+      RSAKey jwk = new RSAKey.Builder(publicKey)
+          .privateKey(privateKey)
+          .keyUse(KeyUse.SIGNATURE)
+          .keyID(keyId)
+          .algorithm(JWSAlgorithm.RS256)
+          .build();
+      return new JwtService(issuer, audience, keyId, accessTtl, clock, jwk);
+    } catch (NoSuchAlgorithmException | InvalidKeySpecException ex) {
+      throw new IllegalArgumentException("invalid PKCS#8 RSA private key PEM", ex);
+    }
+  }
+
+  private static RSAPrivateCrtKey parsePkcs8RsaPrivateCrtKey(String pem) throws InvalidKeySpecException, NoSuchAlgorithmException {
+    if (pem == null || pem.isBlank()) {
+      throw new InvalidKeySpecException("empty PEM");
+    }
+    String normalized =
+        pem.replace("-----BEGIN PRIVATE KEY-----", "")
+            .replace("-----END PRIVATE KEY-----", "")
+            .replaceAll("\\s", "");
+    byte[] pkcs8 = Base64.getDecoder().decode(normalized);
+    PKCS8EncodedKeySpec spec = new PKCS8EncodedKeySpec(pkcs8);
+    KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+    var key = keyFactory.generatePrivate(spec);
+    if (!(key instanceof RSAPrivateCrtKey rsaPrivateCrtKey)) {
+      throw new InvalidKeySpecException("expected RSA private key with CRT parameters (use openssl pkcs8 -topk8 -nocrypt)");
+    }
+    return rsaPrivateCrtKey;
   }
 
   public JwtService withClock(Clock newClock) {

@@ -9,6 +9,20 @@ public class AuthProperties {
   private final Refresh refresh = new Refresh();
   private final Redis redis = new Redis();
   private final Grpc grpc = new Grpc();
+  private PersistenceMode persistence = PersistenceMode.JDBC;
+
+  public PersistenceMode getPersistence() {
+    return persistence;
+  }
+
+  public void setPersistence(PersistenceMode persistence) {
+    this.persistence = persistence;
+  }
+
+  public enum PersistenceMode {
+    MEMORY,
+    JDBC
+  }
 
   public Jwt getJwt() {
     return jwt;
@@ -31,6 +45,24 @@ public class AuthProperties {
     private String audience = "voice-client";
     private String keyId = "local-key";
     private Duration accessTtl = Duration.ofMinutes(15);
+    private String privateKeyPem = "";
+    private String privateKeyLocation = "";
+
+    public String getPrivateKeyPem() {
+      return privateKeyPem;
+    }
+
+    public void setPrivateKeyPem(String privateKeyPem) {
+      this.privateKeyPem = privateKeyPem;
+    }
+
+    public String getPrivateKeyLocation() {
+      return privateKeyLocation;
+    }
+
+    public void setPrivateKeyLocation(String privateKeyLocation) {
+      this.privateKeyLocation = privateKeyLocation;
+    }
 
     public String getIssuer() {
       return issuer;

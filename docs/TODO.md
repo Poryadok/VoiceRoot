@@ -16,7 +16,16 @@
 
 ## Данные и миграции
 
-- [ ] **Двойное ведение Auth DDL** — сейчас SQL в [src/backend/migrations/auth_db/](../src/backend/migrations/auth_db/); после появления Java-модуля Auth перенести source of truth в Flyway рядом с сервисом и убрать дублирование или связать явно в README миграций.
+### Auth — закрытые прод-блокеры (остаток процесса)
+
+- `mvn -B test` и сборка Docker-образа Auth проходят; REST+gRPC handlers и доменная логика есть.
+- **Сделано:** JDBC-репозитории + Flyway `db/migration/V1__auth_schema.sql` при `auth.persistence=jdbc` (по умолчанию); Redis blacklist (`RedisTokenBlacklist`); JWKS из PKCS#8 PEM/файла (`JwtService.fromPkcs8PrivateKeyPem`); `Dockerfile` **EXPOSE 8080 9090**; golang-migrate [000002](src/backend/migrations/auth_db/000002_refresh_tokens_access_jti.up.sql) для колонки `access_jti` у существующих БД от `000001`; Testcontainers-тест `AuthJdbcRedisIntegrationTest` (на runner с Docker; без Docker — skipped).
+
+- [ ] **Auth: smoke REST+gRPC в CI после сборки образа** — отдельный job или шаг (health + минимальный gRPC in-process уже покрыт unit/integration; при необходимости e2e против запущенного контейнера с Postgres+Redis).
+- [x] **Auth: PostgreSQL-репозитории вместо in-memory** — JDBC при `auth.persistence=jdbc`; in-memory — профиль `test` (`auth.persistence=memory`).
+- [x] **Auth: Redis blacklist вместо in-memory** — при `auth.persistence=jdbc`; in-memory blacklist в `test`.
+- [x] **Auth: стабильные JWT-ключи** — PKCS#8 PEM или `auth.jwt.private-key-location` (classpath:/file:); `forTests` только для `memory`.
+- [ ] **Двойное ведение Auth DDL** — SQL в [src/backend/migrations/auth_db/](../src/backend/migrations/auth_db/) и Flyway в модуле Auth; зафиксировать единый порядок применения в [README миграций](../src/backend/migrations/README.md) / Auth README.
 - [ ] **UUIDv7 для `messages.id`** — в спеке приложение генерирует UUIDv7; при необходимости добавить расширение БД/генератор и уточнить в [messaging-service.md](microservices/messaging-service.md).
 
 ## Локальная разработка
@@ -26,4 +35,5 @@
 
 ## Документация
 
+- [x] **Auth README и runtime-порты** — см. [src/backend/auth/README.md](../src/backend/auth/README.md): REST `8080`, gRPC `9090`, переменные окружения/свойства, Postgres+Redis, Testcontainers; синхронизировано с `Dockerfile` (`EXPOSE`).
 - [ ] Пройти [DOCS_CONSISTENCY_AUDIT.md](DOCS_CONSISTENCY_AUDIT.md) после первого значимого изменения контрактов или фаз.

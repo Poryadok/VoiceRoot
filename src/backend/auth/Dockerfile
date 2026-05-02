@@ -12,6 +12,6 @@ RUN adduser --system --uid 65532 nonroot
 USER nonroot
 WORKDIR /
 COPY --from=build /src/target/auth-0.1.0-SNAPSHOT.jar /auth.jar
-EXPOSE 8080
+EXPOSE 8080 9090
 ENV SERVER_PORT=8080
 ENTRYPOINT ["java", "-jar", "/auth.jar"]

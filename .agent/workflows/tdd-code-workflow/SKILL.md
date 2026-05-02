@@ -1,9 +1,18 @@
 ---
 name: tdd-code-workflow
-description: Documentation-first, plan-first, test-driven coding workflow for any implementation or bugfix task. Use when Codex is asked to write, change, refactor, or repair code and must proceed through documented requirements, a detailed plan, tests written before implementation, subagent-based review loops, incremental implementation, and final verification against documentation and plan.
+description: Documentation-first, plan-first, test-driven coding workflow for any implementation or bugfix task. Use when a coding agent (Cursor Agent, OpenAI Codex, Claude Code, or similar) must write, change, refactor, or repair code through documented requirements, a detailed plan, tests written before implementation, delegated review loops where available, incremental implementation, and final verification against documentation and plan.
 ---
 
 # TDD Code Workflow
+
+## Multi-tool layout (canonical path)
+
+- **This file is canonical:** `.agent/workflows/tdd-code-workflow/SKILL.md`
+- **Cursor Agent Skills:** project stub at `.cursor/skills/tdd-code-workflow/SKILL.md` points here — see [Agent Skills](https://cursor.com/docs/skills). Related customization: [Skills (help)](https://cursor.com/help/customization/skills).
+- **OpenAI Codex (plugin metadata):** `.agent/workflows/tdd-code-workflow/agents/openai.yaml`
+- **Repo-wide agent defaults:** `.agent/AGENTS.md`
+
+Throughout this document, **delegation** means any supported mechanism: Cursor Task / parallel agents, Codex subagents, separate chat sessions, or other tool-specific parallel runs — not a single product.
 
 ## Non-Negotiable Rules
 
@@ -19,15 +28,15 @@ If the user request conflicts with documentation, stop before coding. Tell the u
 
 If documentation is missing or too vague to define expected behavior, state the gap in the plan and use the safest existing-code inference only for exploration. Ask the user before making product or contract decisions that documentation should own.
 
-Write tests from documentation first. Delegate initial test writing to a separate agent whenever subagents are available. Give that agent precise scope, documentation excerpts, target files, commands, and a warning not to touch unrelated code.
+Write tests from documentation first. Delegate initial test writing to a separate agent or session whenever delegation is available. Give that delegate precise scope, documentation excerpts, target files, commands, and a warning not to touch unrelated code.
 
-Review tests before implementation. Use fresh review agents in a loop until there are no critical findings about documentation coverage, assertion quality, false positives, fixture realism, or accidental production-code changes.
+Review tests before implementation. Use fresh review passes (another agent, Task, or session) in a loop until there are no critical findings about documentation coverage, assertion quality, false positives, fixture realism, or accidental production-code changes.
 
 Do not weaken, delete, or rewrite accepted tests merely to make implementation pass. Change accepted tests only when documentation or the plan was wrong, and record the reason.
 
-Implement code only after tests are accepted. Give implementation agents precise instructions, constraints, documentation excerpts, test expectations, ownership boundaries, and required test checkpoints.
+Implement code only after tests are accepted. Give implementation delegates precise instructions, constraints, documentation excerpts, test expectations, ownership boundaries, and required test checkpoints.
 
-Review implementation in a loop with separate agents. Continue until critical findings about correctness, documentation alignment, plan completion, maintainability, or test pass status are resolved.
+Review implementation in a loop with separate reviewers when delegation exists. Continue until critical findings about correctness, documentation alignment, plan completion, maintainability, or test pass status are resolved.
 
 Finish by explicitly checking that the plan, documentation expectations, tests, and implemented behavior all agree.
 
@@ -75,7 +84,7 @@ The plan must include:
 - Test strategy, including unit, integration, contract, regression, and negative tests as appropriate.
 - The smallest useful sequence of red-green-refactor cycles.
 - Test data and fixtures.
-- Subagent assignments and ownership boundaries.
+- Delegation assignments and ownership boundaries (who or which agent owns which files).
 - Implementation strategy.
 - Development order.
 - Exact moments when tests must be run during implementation.
@@ -83,13 +92,13 @@ The plan must include:
 - Risks and rollback/containment notes.
 - Final completion checklist.
 
-Use the task planning tool when available. Keep exactly one plan item in progress at a time and update it as work advances.
+Use the task planning tool when available (e.g. Cursor todo list). Keep exactly one plan item in progress at a time and update it as work advances.
 
-### 4. Write Tests First In A Separate Agent
+### 4. Write Tests First Via Delegation When Possible
 
-Before production implementation, launch a fresh test-writing agent when subagents are available and current runtime instructions allow delegation.
+Before production implementation, launch a fresh test-writing delegate when delegation is available and runtime policy allows it.
 
-Give the test agent:
+Give the test delegate:
 
 - The user request.
 - Documentation files and brief excerpts that define expected behavior.
@@ -101,7 +110,7 @@ Give the test agent:
 - A clear instruction not to touch unrelated files or revert other work.
 - Expected final output: changed files, what behavior each test covers, commands run, and failures observed.
 
-If subagents are unavailable, write the tests locally but preserve the same discipline and scope.
+If delegation is unavailable, write the tests locally but preserve the same discipline and scope.
 
 Tests should fail for the right reason before implementation whenever feasible. If a test cannot be run yet because infrastructure is missing, record why and keep the assertion as precise as possible.
 
@@ -111,9 +120,9 @@ For bug fixes, first write a regression test that reproduces the documented or r
 
 ### 5. Review Tests In A Loop
 
-After initial tests are written, launch a fresh review agent to inspect tests against documentation and the plan.
+After initial tests are written, launch a fresh review delegate to inspect tests against documentation and the plan.
 
-Ask the review agent to check:
+Ask the reviewer to check:
 
 - Whether every documented acceptance criterion has test coverage.
 - Whether tests assert behavior rather than implementation details.
@@ -122,10 +131,10 @@ Ask the review agent to check:
 - Whether tests can pass falsely.
 - Whether fixtures are realistic and minimal.
 - Whether test names describe documented behavior.
-- Whether the test agent touched unrelated or production files unnecessarily.
+- Whether the test delegate touched unrelated or production files unnecessarily.
 - Whether commands are adequate to prove the tests.
 
-Treat critical findings as blockers. For every critical finding, run another test-writing pass, preferably with a new agent and a narrower correction prompt. Then review again with a fresh agent. Continue until there are no critical findings.
+Treat critical findings as blockers. For every critical finding, run another test-writing pass, preferably with a new delegate and a narrower correction prompt. Then review again with a fresh reviewer. Continue until there are no critical findings.
 
 Non-critical suggestions may be accepted, deferred, or documented with rationale.
 
@@ -153,11 +162,11 @@ Use incremental TDD implementation:
 
 Keep each cycle small. If a cycle needs many unrelated edits, split it into smaller documented behaviors or revise the plan.
 
-### 7. Implement With Bounded Agents
+### 7. Implement With Bounded Delegates
 
-Launch implementation agents when the work can be split safely, subagents are available, and current runtime instructions allow delegation. Use one or more agents only when their ownership boundaries are clear.
+Launch implementation delegates when the work can be split safely, delegation is available, and runtime policy allows it. Use one or more delegates only when their ownership boundaries are clear.
 
-Tell each implementation agent:
+Tell each implementation delegate:
 
 - They are not alone in the codebase.
 - They must not revert or overwrite unrelated edits.
@@ -170,13 +179,13 @@ Tell each implementation agent:
 - Required checkpoints and commands after each step.
 - Expected final output: files changed, behavior implemented, tests run, remaining failures, and risks.
 
-Do not assign overlapping write scopes to parallel agents. If scopes overlap, serialize the work or keep it local.
+Do not assign overlapping write scopes to parallel delegates. If scopes overlap, serialize the work or keep it local.
 
 If implementing locally, follow the same bounded ownership and checkpoint rules.
 
 ### 8. Review Code And Behavior In A Loop
 
-After implementation, launch separate review/verification agents when available and current runtime instructions allow delegation. Use fresh agents for independent checks.
+After implementation, launch separate review/verification delegates when available and policy allows. Use fresh reviewers for independent checks.
 
 Ask reviewers to verify:
 
@@ -194,9 +203,9 @@ Ask reviewers to verify:
 Treat critical findings as blockers. For each critical finding:
 
 1. Update the plan with the corrective action.
-2. Assign a bounded fix to an implementation agent or handle it locally.
+2. Assign a bounded fix to an implementation delegate or handle it locally.
 3. Run the relevant tests.
-4. Review again with a fresh agent.
+4. Review again with a fresh reviewer.
 
 Continue until no critical findings remain.
 
@@ -217,9 +226,9 @@ If documentation needed updates and the user approved them, verify documentation
 
 ## Subagent Prompt Templates
 
-### Test Writer
+Use these shapes for **delegated** sessions (wording works across tools). Replace `...` with task-specific content.
 
-Use this shape for the first test-writing agent:
+### Test Writer
 
 ```text
 Write tests first for this documented behavior. Do not implement production code.

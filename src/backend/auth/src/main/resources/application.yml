@@ -1,0 +1,30 @@
+spring:
+  datasource:
+    url: "${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/auth_db}"
+    username: ${SPRING_DATASOURCE_USERNAME:voice}
+    password: ${SPRING_DATASOURCE_PASSWORD:voice}
+  flyway:
+    enabled: ${AUTH_FLYWAY_ENABLED:true}
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+
+auth:
+  persistence: jdbc
+  jwt:
+    issuer: voice-auth
+    audience: voice-client
+    key-id: local-key
+    access-ttl: PT15M
+    private-key-pem: "${AUTH_JWT_PRIVATE_KEY_PEM:}"
+    private-key-location: "${AUTH_JWT_PRIVATE_KEY_LOCATION:}"
+  refresh:
+    ttl: P30D
+  redis:
+    blacklist-prefix: "jwt:blacklist:"
+  grpc:
+    port: 9090
+
+server:
+  port: ${SERVER_PORT:8080}

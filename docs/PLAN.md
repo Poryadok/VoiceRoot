@@ -6,14 +6,14 @@
 
 ## Текущее состояние кодовой базы
 
-Репозиторий на этапе **документации и фундамента Фазы 0**: спецификации, контракты, инфраструктурный каркас, **API Gateway** на Go (REST/WS edge proxy, JWT/JWKS, Redis blacklist/rate limit, CORS, `/metrics`, version policy, тесты, Dockerfile) и **инициализированные backend-проекты микросервисов**. **CI на GitHub, пуш образа в GHCR и деплой gateway на staging** проверены end-to-end ([DEPLOYMENT.md](DEPLOYMENT.md)); публичный FQDN стенда — `voice.tastytest.online`. Доменные реализации **Auth**, **Realtime/Messaging** и **Flutter-клиента** по-прежнему не готовы: есть только запускаемые scaffold-проекты с health-check, тестами и Dockerfile.
+Репозиторий на этапе **документации и фундамента Фазы 0**: спецификации, контракты, инфраструктурный каркас, **API Gateway** на Go (REST/WS edge proxy, JWT/JWKS, Redis blacklist/rate limit, CORS, `/metrics`, version policy, тесты, Dockerfile) и **инициализированные backend-проекты микросервисов**. **CI на GitHub, пуш образа в GHCR и деплой gateway на staging** проверены end-to-end ([DEPLOYMENT.md](DEPLOYMENT.md)); публичный FQDN стенда — `voice.tastytest.online`. В **Auth** реализованы register/login/refresh/logout/validate (REST+gRPC), JWT/JWKS; продовый wiring: **PostgreSQL** (JDBC + Flyway `V1__auth_schema.sql`), **Redis** для blacklist по `jti`, **стабильный JWKS** из PKCS#8 PEM (`auth.jwt.private-key-pem` / `auth.jwt.private-key-location`), образ **EXPOSE 8080 9090**; профиль `test` оставляет in-memory репозитории и ephemeral JWT для быстрых тестов; интеграция JDBC+Redis — `AuthJdbcRedisIntegrationTest` (Testcontainers, на CI с Docker; в `docker run … mvn` без сокета Docker тест пропускается). `mvn -B test` и сборка Docker-образа проходят. Доменные реализации **Realtime/Messaging** и **Flutter-клиента** по-прежнему не готовы: есть только запускаемые scaffold-проекты с health-check, тестами и Dockerfile.
 
 | Компонент | Состояние |
 |-----------|-----------|
 | Документация `docs/` | Актуальные спеки, план фаз, микросервисы |
 | `protos/` | Protobuf (S2S: `voice/s2s/v1/s2s.proto`); **buf** — [buf.work.yaml](../buf.work.yaml), [protos/buf.yaml](../protos/buf.yaml), CI |
 | `src/backend/gateway/` | Go API Gateway: `GET /health`, `GET /metrics`, `/api/v1/version`, REST namespace proxy, `/ws` proxy, JWT/JWKS validation, Redis blacklist/rate limits, CORS, request id/logging; образ выкатывается на staging через CI; REST→gRPC transcoding появится вместе с целевыми сервисами |
-| `src/backend/<service>/` | Инициализированы scaffold-проекты всех backend-микросервисов из [MICROSERVICES.md](MICROSERVICES.md): Auth на Java/Spring Boot, остальные сервисы на Go; публичная поверхность scaffold — `GET /health`, smoke-тесты и Dockerfile; бизнес-логика и gRPC handlers ещё не реализованы |
+| `src/backend/<service>/` | Инициализированы scaffold-проекты всех backend-микросервисов из [MICROSERVICES.md](MICROSERVICES.md): Auth на Java/Spring Boot уже содержит минимальные REST/gRPC auth handlers; остальные сервисы на Go пока имеют публичную scaffold-поверхность `GET /health`, smoke-тесты и Dockerfile |
 | `src/frontend`, `src/admin` | Зарезервированная структура монорепо; README в каталогах |
 | `src/backend/migrations/` | Первая волна SQL под [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md) (`auth_db`, `user_db`, `social_db`, `chat_db`, `messaging_db`) |
 | Docker Compose | PostgreSQL (несколько БД) + Redis для локального стенда ([README.md](../README.md)) |
@@ -79,7 +79,7 @@
 - [x] **CI/CD в эксплуатации** — репозиторий на GitHub, Actions на PR/push; GHCR и staging (секреты/variables); smoke gateway после деплоя ([DEPLOYMENT.md](DEPLOYMENT.md)). Локальная проверка «как у job’ов» — **`make build-all`** ([Makefile](../Makefile))
 - [x] **Docker Compose (dev), инфраструктура** — PostgreSQL (логические БД) + Redis одной командой ([README.md](../README.md)); прикладные сервисы в compose пока не подключены
 - [x] **Backend project scaffolds** — инициализированы проекты всех backend-микросервисов: Auth (Java/Spring Boot) и Go-сервисы с `GET /health`, smoke-тестами, Dockerfile и включением в `make build-all` / CI matrix. Бизнес-логика сервисов остаётся в следующих пунктах фаз.
-- [ ] **Auth** — refresh (opaque, 30 дней), logout, валидация, тесты
+- [x] **Auth** — refresh (opaque, 30 дней), logout, валидация, REST+gRPC; **PostgreSQL** (`JdbcAccountRepository` / `JdbcRefreshTokenRepository` + Flyway), **Redis** (`RedisTokenBlacklist`), **JWKS из PKCS#8** (`auth.jwt.private-key-pem` / `auth.jwt.private-key-location`; `JwtService.forTests` только при `auth.persistence=memory`), Dockerfile **8080+9090**, интеграционный тест Testcontainers на JDBC+Redis ([TODO.md](TODO.md) — оставшиеся пункты: CI smoke контейнера, выравнивание golang-migrate vs Flyway).
 - [ ] **Общая библиотека Go** — JWT, middleware, логирование, конфиг
 - [ ] **Flutter: скелет** — three-column layout, бэкенд вместо Firebase, DI, state
 - [ ] **i18n-каркас** — ARB, EN+RU, `flutter gen-l10n` — [features/i18n.md](features/i18n.md)

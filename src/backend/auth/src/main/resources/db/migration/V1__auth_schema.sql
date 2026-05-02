@@ -1,3 +1,6 @@
+-- Auth DDL (auth_db) — aligned with src/backend/migrations/auth_db + access_jti on refresh_tokens
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 CREATE TABLE accounts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email VARCHAR(320) NULL,
@@ -20,6 +23,7 @@ CREATE TABLE refresh_tokens (
     account_id UUID NOT NULL,
     token_hash CHAR(64) NOT NULL,
     device_info JSONB NOT NULL DEFAULT '{}'::jsonb,
+    access_jti VARCHAR(128) NOT NULL,
     expires_at TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     revoked_at TIMESTAMPTZ NULL

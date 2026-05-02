@@ -3,6 +3,7 @@ package voice.backend.auth.security;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -32,6 +33,22 @@ class JwtServiceTest {
     assertThat(claims.expiresAt()).isEqualTo(Instant.parse("2026-05-01T10:15:00Z"));
     assertThat(claims.jti()).isNotBlank();
     assertThat(jwt.jwksJson()).contains("\"kid\":\"test-key\"");
+  }
+
+  @Test
+  void stablePkcs8PemProducesJwksWithConfiguredKid() throws Exception {
+    String pem;
+    try (var in = JwtServiceTest.class.getClassLoader().getResourceAsStream("jwt-test-private.pem")) {
+      assertThat(in).isNotNull();
+      pem = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+    }
+    JwtService jwt =
+        JwtService.fromPkcs8PrivateKeyPem(
+            "voice-auth", "voice-client", "file-key", Duration.ofMinutes(15), CLOCK, pem);
+    String token = jwt.issue("account-1", "profile-1", List.of("user"), "free");
+    TokenClaims claims = jwt.validate(token);
+    assertThat(claims.userId()).isEqualTo("account-1");
+    assertThat(jwt.jwksJson()).contains("\"kid\":\"file-key\"");
   }
 
   @Test
