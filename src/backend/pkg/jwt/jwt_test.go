@@ -1,7 +1,6 @@
-package main
+package jwt
 
 import (
-	"context"
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
@@ -15,7 +14,7 @@ import (
 	"time"
 )
 
-func TestJWTValidator(t *testing.T) {
+func TestJWKSValidator(t *testing.T) {
 	key1 := mustRSAKey(t)
 	key2 := mustRSAKey(t)
 	activeKey := key1
@@ -23,14 +22,13 @@ func TestJWTValidator(t *testing.T) {
 	jwksCalls := 0
 	jwks := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		jwksCalls++
-		writeJSON(w, http.StatusOK, map[string]any{
+		writeJSON(t, w, http.StatusOK, map[string]any{
 			"keys": []map[string]string{rsaJWK(activeKid, &activeKey.PublicKey)},
 		})
 	}))
 	t.Cleanup(jwks.Close)
 
-	validator := newJWTValidator(jwks.URL, "voice-auth", "voice-client")
-	validator.now = func() time.Time { return time.Unix(1000, 0) }
+	v := NewJWKSValidator(jwks.URL, "voice-auth", "voice-client", WithClock(func() time.Time { return time.Unix(1000, 0) }))
 
 	valid := signJWT(t, "key-1", key1, map[string]any{
 		"sub":               "account-1",
@@ -42,7 +40,7 @@ func TestJWTValidator(t *testing.T) {
 		"aud":               "voice-client",
 		"exp":               int64(1100),
 	})
-	claims, code := validator.Validate(requestWithToken(valid))
+	claims, code := v.Validate(requestWithToken(valid))
 	if code != "" {
 		t.Fatalf("valid token code = %q", code)
 	}
@@ -53,14 +51,14 @@ func TestJWTValidator(t *testing.T) {
 	expired := signJWT(t, "key-1", key1, map[string]any{
 		"sub": "account-1", "iss": "voice-auth", "aud": "voice-client", "exp": int64(999),
 	})
-	if _, code := validator.Validate(requestWithToken(expired)); code != "invalid_token" {
+	if _, code := v.Validate(requestWithToken(expired)); code != "invalid_token" {
 		t.Fatalf("expired code = %q, want invalid_token", code)
 	}
 
 	wrongIssuer := signJWT(t, "key-1", key1, map[string]any{
 		"sub": "account-1", "iss": "other", "aud": "voice-client", "exp": int64(1100),
 	})
-	if _, code := validator.Validate(requestWithToken(wrongIssuer)); code != "invalid_token" {
+	if _, code := v.Validate(requestWithToken(wrongIssuer)); code != "invalid_token" {
 		t.Fatalf("wrong issuer code = %q, want invalid_token", code)
 	}
 
@@ -69,7 +67,7 @@ func TestJWTValidator(t *testing.T) {
 	rotated := signJWT(t, "key-2", key2, map[string]any{
 		"user_id": "account-2", "iss": "voice-auth", "aud": []string{"voice-client"}, "exp": int64(1100),
 	})
-	claims, code = validator.Validate(requestWithToken(rotated))
+	claims, code = v.Validate(requestWithToken(rotated))
 	if code != "" {
 		t.Fatalf("rotated token code = %q", code)
 	}
@@ -81,22 +79,13 @@ func TestJWTValidator(t *testing.T) {
 	}
 }
 
-type fakeBlacklist struct {
-	revoked bool
-	err     error
-}
-
-func (b fakeBlacklist) IsRevoked(_ context.Context, _ string) (bool, error) {
-	return b.revoked, b.err
-}
-
-type fixedValidator struct {
-	claims tokenClaims
-	code   string
-}
-
-func (v fixedValidator) Validate(_ *http.Request) (tokenClaims, string) {
-	return v.claims, v.code
+func writeJSON(t *testing.T, w http.ResponseWriter, status int, v any) {
+	t.Helper()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		t.Fatalf("encode json: %v", err)
+	}
 }
 
 func requestWithToken(token string) *http.Request {

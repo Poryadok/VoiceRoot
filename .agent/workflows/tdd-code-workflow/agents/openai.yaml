@@ -1,4 +1,4 @@
 interface:
   display_name: "TDD Code Workflow"
-  short_description: "Plan, test, review, then implement with TDD"
+  short_description: "Plan, test, review, then implement with TDD. If the user explicitly invokes this workflow, follow SKILL.md strictly (strict mode section)."
   default_prompt: "Use $tdd-code-workflow to implement this coding task through documentation-first planning, test-first development, and review loops."

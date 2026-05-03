@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strings"
@@ -84,11 +85,16 @@ func (g *gateway) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	g.metrics.WritePrometheus(w)
 }
 
-func (g *gateway) recordRequest(r *http.Request, status int, start time.Time) {
+func (g *gateway) observeRequestMetrics(r *http.Request, status int, start time.Time) {
 	group := routeGroup(r)
 	g.metrics.ObserveRequest(group, r.Method, status, time.Since(start))
-	g.logger.Printf("request_id=%q method=%q path=%q route_group=%q status=%d duration_ms=%d remote_addr=%q",
-		r.Header.Get("X-Request-Id"), r.Method, r.URL.Path, group, status, time.Since(start).Milliseconds(), r.RemoteAddr)
+}
+
+func gatewayAccessLogExtras(r *http.Request) []slog.Attr {
+	return []slog.Attr{
+		slog.String("route_group", routeGroup(r)),
+		slog.String("remote_addr", r.RemoteAddr),
+	}
 }
 
 func routeGroup(r *http.Request) string {

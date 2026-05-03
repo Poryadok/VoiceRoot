@@ -4,15 +4,12 @@ import (
 	"context"
 	"net/http"
 	"strings"
+
+	voicejwt "voice/backend/pkg/jwt"
 )
 
-type tokenClaims struct {
-	UserID           string
-	ProfileID        string
-	Roles            []string
-	SubscriptionTier string
-	JTI              string
-}
+// tokenClaims mirrors JWT access token claims (voice/backend/pkg/jwt).
+type tokenClaims = voicejwt.Claims
 
 type tokenValidator interface {
 	Validate(r *http.Request) (tokenClaims, string)

@@ -18,6 +18,15 @@ Throughout this document, **delegation** means any supported mechanism: Cursor T
 
 Use this workflow for every coding task unless the user explicitly asks for analysis only, review only, or no code changes.
 
+### Strict mode when the user invokes this workflow
+
+If the user **explicitly** asks to follow this skill/workflow (by name, by path `.agent/workflows/tdd-code-workflow/SKILL.md`, or the Cursor stub under `.cursor/skills/tdd-code-workflow/`), treat the rest of this document as **mandatory**, not a loose guideline:
+
+- Produce a **written plan** (in chat, ExecPlan per `.agent/PLANS.md`, or another repo-agreed artifact) **before** editing production code: sources read, acceptance criteria, files to touch, verification commands, red–green sequence.
+- **Do not** skip delegation for convenience: when Task / parallel agents / separate sessions are available, use them for **test authoring**, **test review**, **implementation**, and **implementation review** as described below; if a tool cannot delegate, still execute the same steps **in order** in one session.
+- Keep **real** red–green–refactor: one documented behavior → failing test → minimal fix → green → refactor.
+- Finish with the **final checklist** in this file; do not treat the workflow as satisfied by tests-only or implementation-only shortcuts.
+
 Do not write production code before a plan exists and test work has started.
 
 Use real TDD, not only "tests somewhere before final verification": drive implementation through repeated red-green-refactor cycles. First write a failing test for one documented behavior, then write the smallest production change that makes it pass, then refactor only while tests stay green.

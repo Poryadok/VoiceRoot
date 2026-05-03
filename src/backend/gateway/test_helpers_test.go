@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -24,9 +25,14 @@ type gatewayTestOptions struct {
 	trustedProxyCIDRs  []string
 	cors               corsConfig
 	metrics            *gatewayMetrics
+	slogLogger         *slog.Logger
 }
 
 func newGatewayForContract(_ *testing.T, options gatewayTestOptions) http.Handler {
+	log := options.slogLogger
+	if log == nil {
+		log = slog.New(slog.NewJSONHandler(io.Discard, &slog.HandlerOptions{}))
+	}
 	return newGateway(gatewayConfig{
 		versionConfigs:     options.versionConfigs,
 		forceUpdate:        options.forceUpdate,
@@ -41,6 +47,7 @@ func newGatewayForContract(_ *testing.T, options gatewayTestOptions) http.Handle
 		trustedProxyCIDRs:  options.trustedProxyCIDRs,
 		cors:               options.cors,
 		metrics:            options.metrics,
+		slogLogger:         log,
 	})
 }
 
@@ -67,6 +74,24 @@ func decodeJSON(t *testing.T, body io.Reader, dst any) {
 	if err := json.NewDecoder(body).Decode(dst); err != nil {
 		t.Fatalf("decode json: %v", err)
 	}
+}
+
+type fakeBlacklist struct {
+	revoked bool
+	err     error
+}
+
+func (b fakeBlacklist) IsRevoked(_ context.Context, _ string) (bool, error) {
+	return b.revoked, b.err
+}
+
+type fixedValidator struct {
+	claims tokenClaims
+	code   string
+}
+
+func (v fixedValidator) Validate(_ *http.Request) (tokenClaims, string) {
+	return v.claims, v.code
 }
 
 type captureLimiter struct {

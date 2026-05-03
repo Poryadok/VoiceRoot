@@ -2,11 +2,14 @@ package main
 
 import (
 	"bufio"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"strings"
 	"time"
+
+	voicelog "voice/backend/pkg/logging"
+	voicemw "voice/backend/pkg/middleware"
 )
 
 type gatewayConfig struct {
@@ -23,7 +26,7 @@ type gatewayConfig struct {
 	trustedProxyCIDRs  []string
 	cors               corsConfig
 	metrics            *gatewayMetrics
-	logger             *log.Logger
+	slogLogger         *slog.Logger
 }
 
 type gateway struct {
@@ -33,7 +36,6 @@ type gateway struct {
 	rateLimiter    rateLimiter
 	trustedProxies []trustedProxy
 	metrics        *gatewayMetrics
-	logger         *log.Logger
 }
 
 func handler() http.Handler {
@@ -68,32 +70,28 @@ func newGateway(config gatewayConfig) http.Handler {
 	if config.metrics == nil {
 		config.metrics = newGatewayMetrics()
 	}
-	if config.logger == nil {
-		config.logger = log.Default()
+	if config.slogLogger == nil {
+		config.slogLogger = voicelog.NewJSONLogger(voicelog.LevelFromEnv(), slog.String("service", "gateway"))
 	}
-	return &gateway{
+	core := &gateway{
 		config:         config,
 		tokenValidator: config.tokenValidator,
 		tokenBlacklist: config.tokenBlacklist,
 		rateLimiter:    config.rateLimiter,
 		trustedProxies: parseTrustedProxies(config.trustedProxyCIDRs),
 		metrics:        config.metrics,
-		logger:         config.logger,
 	}
+	h := http.Handler(core)
+	h = voicemw.AccessLog(config.slogLogger, "X-Request-Id", gatewayAccessLogExtras)(h)
+	h = voicemw.RequestID(config.requestIDGenerator)(h)
+	return h
 }
 
 func (g *gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
-	requestID := r.Header.Get("X-Request-Id")
-	if requestID == "" {
-		requestID = g.config.requestIDGenerator()
-	}
-	w.Header().Set("X-Request-Id", requestID)
-	r.Header.Set("X-Request-Id", requestID)
-
 	rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 	if g.applyCORS(rec, r) {
-		g.recordRequest(r, rec.status, start)
+		g.observeRequestMetrics(r, rec.status, start)
 		return
 	}
 
@@ -111,7 +109,7 @@ func (g *gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(rec, r)
 	}
-	g.recordRequest(r, rec.status, start)
+	g.observeRequestMetrics(r, rec.status, start)
 }
 
 type statusRecorder struct {

@@ -1,4 +1,4 @@
-package main
+package jwt
 
 import (
 	"context"
@@ -8,14 +8,14 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"math/big"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 )
 
-type jwtValidator struct {
+// Validator validates RS256 JWTs against a JWKS URL (issuer/audience/exp per project rules).
+type Validator struct {
 	jwksURL    string
 	issuer     string
 	audience   string
@@ -25,8 +25,27 @@ type jwtValidator struct {
 	keys       map[string]crypto.PublicKey
 }
 
-func newJWTValidator(jwksURL, issuer, audience string) *jwtValidator {
-	return &jwtValidator{
+// Option configures a Validator.
+type Option func(*Validator)
+
+// WithClock overrides the time source (for tests).
+func WithClock(now func() time.Time) Option {
+	return func(v *Validator) {
+		v.now = now
+	}
+}
+
+// WithHTTPClient overrides the HTTP client used to fetch JWKS.
+func WithHTTPClient(c *http.Client) Option {
+	return func(v *Validator) {
+		v.httpClient = c
+	}
+}
+
+// NewJWKSValidator builds a validator for Bearer JWTs signed with keys from jwksURL.
+// issuer and audience may be empty to skip those checks.
+func NewJWKSValidator(jwksURL, issuer, audience string, opts ...Option) *Validator {
+	v := &Validator{
 		jwksURL:  jwksURL,
 		issuer:   issuer,
 		audience: audience,
@@ -36,33 +55,39 @@ func newJWTValidator(jwksURL, issuer, audience string) *jwtValidator {
 		now:  time.Now,
 		keys: map[string]crypto.PublicKey{},
 	}
+	for _, o := range opts {
+		o(v)
+	}
+	return v
 }
 
-func (v *jwtValidator) Validate(r *http.Request) (tokenClaims, string) {
+// Validate reads Authorization: Bearer <jwt> and returns claims or a stable error code string.
+// Empty code means success. On failure the code is "invalid_token" (gateway-compatible).
+func (v *Validator) Validate(r *http.Request) (Claims, string) {
 	const prefix = "Bearer "
 	auth := r.Header.Get("Authorization")
 	if !strings.HasPrefix(auth, prefix) {
-		return tokenClaims{}, "invalid_token"
+		return Claims{}, "invalid_token"
 	}
 	claims, err := v.validateJWT(r.Context(), strings.TrimPrefix(auth, prefix))
 	if err != nil {
-		return tokenClaims{}, "invalid_token"
+		return Claims{}, "invalid_token"
 	}
 	return claims, ""
 }
 
-func (v *jwtValidator) validateJWT(ctx context.Context, token string) (tokenClaims, error) {
+func (v *Validator) validateJWT(ctx context.Context, token string) (Claims, error) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
-		return tokenClaims{}, errors.New("invalid token segments")
+		return Claims{}, errors.New("invalid token segments")
 	}
 	headerBytes, err := base64.RawURLEncoding.DecodeString(parts[0])
 	if err != nil {
-		return tokenClaims{}, err
+		return Claims{}, err
 	}
 	payloadBytes, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
-		return tokenClaims{}, err
+		return Claims{}, err
 	}
 	var header struct {
 		Alg string `json:"alg"`
@@ -70,36 +95,36 @@ func (v *jwtValidator) validateJWT(ctx context.Context, token string) (tokenClai
 		Typ string `json:"typ"`
 	}
 	if err := json.Unmarshal(headerBytes, &header); err != nil {
-		return tokenClaims{}, err
+		return Claims{}, err
 	}
 	if header.Alg != "RS256" {
-		return tokenClaims{}, errors.New("unsupported jwt alg")
+		return Claims{}, errors.New("unsupported jwt alg")
 	}
 	key, err := v.key(ctx, header.Kid)
 	if err != nil {
-		return tokenClaims{}, err
+		return Claims{}, err
 	}
 	rsaKey, ok := key.(*rsa.PublicKey)
 	if !ok {
-		return tokenClaims{}, errors.New("jwks key is not rsa")
+		return Claims{}, errors.New("jwks key is not rsa")
 	}
 	signature, err := base64.RawURLEncoding.DecodeString(parts[2])
 	if err != nil {
-		return tokenClaims{}, err
+		return Claims{}, err
 	}
 	digest := sha256.Sum256([]byte(parts[0] + "." + parts[1]))
 	if err := rsa.VerifyPKCS1v15(rsaKey, crypto.SHA256, digest[:], signature); err != nil {
-		return tokenClaims{}, err
+		return Claims{}, err
 	}
 
 	var raw jwtPayload
 	if err := json.Unmarshal(payloadBytes, &raw); err != nil {
-		return tokenClaims{}, err
+		return Claims{}, err
 	}
-	return raw.toTokenClaims(v.issuer, v.audience, v.now())
+	return raw.toClaims(v.issuer, v.audience, v.now())
 }
 
-func (v *jwtValidator) key(ctx context.Context, kid string) (crypto.PublicKey, error) {
+func (v *Validator) key(ctx context.Context, kid string) (crypto.PublicKey, error) {
 	v.mu.Lock()
 	key, ok := v.keys[kid]
 	v.mu.Unlock()
@@ -118,7 +143,7 @@ func (v *jwtValidator) key(ctx context.Context, kid string) (crypto.PublicKey, e
 	return key, nil
 }
 
-func (v *jwtValidator) refreshKeys(ctx context.Context) error {
+func (v *Validator) refreshKeys(ctx context.Context) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, v.jwksURL, nil)
 	if err != nil {
 		return err
@@ -152,38 +177,6 @@ func (v *jwtValidator) refreshKeys(ctx context.Context) error {
 	return nil
 }
 
-type jwksSet struct {
-	Keys []jwkKey `json:"keys"`
-}
-
-type jwkKey struct {
-	Kty string `json:"kty"`
-	Kid string `json:"kid"`
-	Use string `json:"use"`
-	Alg string `json:"alg"`
-	N   string `json:"n"`
-	E   string `json:"e"`
-}
-
-func rsaPublicKeyFromJWK(jwk jwkKey) (*rsa.PublicKey, error) {
-	nBytes, err := base64.RawURLEncoding.DecodeString(jwk.N)
-	if err != nil {
-		return nil, err
-	}
-	eBytes, err := base64.RawURLEncoding.DecodeString(jwk.E)
-	if err != nil {
-		return nil, err
-	}
-	e := 0
-	for _, b := range eBytes {
-		e = e<<8 + int(b)
-	}
-	if e == 0 {
-		return nil, errors.New("invalid exponent")
-	}
-	return &rsa.PublicKey{N: new(big.Int).SetBytes(nBytes), E: e}, nil
-}
-
 type jwtPayload struct {
 	Subject          string          `json:"sub"`
 	UserID           string          `json:"user_id"`
@@ -196,24 +189,24 @@ type jwtPayload struct {
 	ExpiresAt        int64           `json:"exp"`
 }
 
-func (p jwtPayload) toTokenClaims(issuer, audience string, now time.Time) (tokenClaims, error) {
+func (p jwtPayload) toClaims(issuer, audience string, now time.Time) (Claims, error) {
 	if issuer != "" && p.Issuer != issuer {
-		return tokenClaims{}, errors.New("issuer mismatch")
+		return Claims{}, errors.New("issuer mismatch")
 	}
 	if audience != "" && !p.hasAudience(audience) {
-		return tokenClaims{}, errors.New("audience mismatch")
+		return Claims{}, errors.New("audience mismatch")
 	}
 	if p.ExpiresAt <= now.Unix() {
-		return tokenClaims{}, errors.New("token expired")
+		return Claims{}, errors.New("token expired")
 	}
 	userID := p.UserID
 	if userID == "" {
 		userID = p.Subject
 	}
 	if userID == "" {
-		return tokenClaims{}, errors.New("missing subject")
+		return Claims{}, errors.New("missing subject")
 	}
-	return tokenClaims{
+	return Claims{
 		UserID:           userID,
 		ProfileID:        p.ProfileID,
 		Roles:            p.Roles,

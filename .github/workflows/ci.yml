@@ -39,7 +39,19 @@ jobs:
       - name: Validate docker compose file
         run: docker compose config --quiet
 
+  backend-go-pkg:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+      - name: Go test shared pkg
+        working-directory: src/backend/pkg
+        run: go test ./...
+
   backend-go:
+    needs: backend-go-pkg
     runs-on: ubuntu-latest
     permissions:
       contents: read

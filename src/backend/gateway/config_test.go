@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+	voicejwt "voice/backend/pkg/jwt"
 )
 
 func TestGatewayConfigFromEnvBuildsRESTProxy(t *testing.T) {
@@ -57,8 +58,8 @@ func TestGatewayConfigFromEnvSelectsAuthMode(t *testing.T) {
 	t.Setenv("GATEWAY_AUTH_MODE", "")
 	t.Setenv("GATEWAY_JWKS_URL", "https://auth.voice.example/.well-known/jwks.json")
 	jwksConfig := loadGatewayConfigFromEnv()
-	if _, ok := jwksConfig.tokenValidator.(*jwtValidator); !ok {
-		t.Fatalf("jwks tokenValidator = %T, want *jwtValidator", jwksConfig.tokenValidator)
+	if _, ok := jwksConfig.tokenValidator.(*voicejwt.Validator); !ok {
+		t.Fatalf("jwks tokenValidator = %T, want *voicejwt.Validator", jwksConfig.tokenValidator)
 	}
 }
 

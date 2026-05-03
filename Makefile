@@ -9,7 +9,7 @@ GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
 
 .PHONY: buf-lint buf-format buf-breaking buf-generate compose-up compose-down \
 	build-all build-all-breaking compose-config-ci buf-ci backend-test-ci backend-image-ci \
-	gateway-test-ci gateway-image-ci auth-test-ci auth-image-ci buf-breaking-ci
+	gateway-test-ci gateway-image-ci go-test-pkg auth-test-ci auth-image-ci buf-breaking-ci
 
 buf-lint:
 	buf lint
@@ -40,9 +40,13 @@ buf-ci:
 	docker run --rm --entrypoint sh -v "$(ROOT):/workspace" -w /workspace $(BUF_IMAGE) \
 		-c "buf lint && buf format -d --exit-code"
 
-backend-test-ci: $(GO_TEST_TARGETS) auth-test-ci
+backend-test-ci: go-test-pkg $(GO_TEST_TARGETS) auth-test-ci
 
 backend-image-ci: $(GO_IMAGE_TARGETS) auth-image-ci
+
+go-test-pkg:
+	docker run --rm -v "$(ROOT):/workspace" -w /workspace/src/backend/pkg $(GO_IMAGE) \
+		sh -c "CGO_ENABLED=0 go test ./..."
 
 go-test-%:
 	docker run --rm -v "$(ROOT):/workspace" -w /workspace/src/backend/$* $(GO_IMAGE) \

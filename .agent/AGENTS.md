@@ -31,6 +31,7 @@ Voice is a Discord-like messenger with voice chat and built-in matchmaking. Prod
 
 - Before coding, read the relevant `docs/` files from the table and the user task.
 - Shared workflows live in `.agent/workflows/`. For full documentation-first TDD workflow, use `.agent/workflows/tdd-code-workflow/SKILL.md`. Cursor loads a stub from `.cursor/skills/tdd-code-workflow/SKILL.md` that points to the same canonical file.
+- If the user **explicitly** asks to use that TDD workflow / skill, follow the canonical `SKILL.md` **strictly** (written plan before production code, delegation where the tool supports it, red–green–refactor, review loops, final checklist) — see «Strict mode» in that file and «Явный запрос скилла» in `docs/TESTING.md`.
 - For substantial or ambiguous work, write and maintain an ExecPlan following `.agent/PLANS.md`. Plans must be self-contained, tied to repository documentation, and updated as work progresses.
 - Prefer TDD when implementing behavior defined in docs: behavior tests from docs, minimal implementation, relevant tests green, then refactor.
 - For a failing or disputed test, first compare the expected behavior with the documentation. Do not weaken a test just to match incorrect code.

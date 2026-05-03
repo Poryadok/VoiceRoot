@@ -1,11 +1,13 @@
 package main
 
 import (
-	"encoding/json"
 	"log"
 	"net/http"
 	"os"
 	"strings"
+
+	voicecfg "voice/backend/pkg/config"
+	voicejwt "voice/backend/pkg/jwt"
 )
 
 func loadGatewayConfigFromEnv() gatewayConfig {
@@ -20,7 +22,7 @@ func loadGatewayConfigFromEnv() gatewayConfig {
 		loadJSONEnv("GATEWAY_STATIC_TOKENS_JSON", &config.tokenClaims)
 		config.tokenValidator = staticTokenValidator(config.tokenClaims)
 	} else if jwksURL := strings.TrimSpace(os.Getenv("GATEWAY_JWKS_URL")); jwksURL != "" {
-		config.tokenValidator = newJWTValidator(jwksURL, os.Getenv("GATEWAY_JWT_ISSUER"), os.Getenv("GATEWAY_JWT_AUDIENCE"))
+		config.tokenValidator = voicejwt.NewJWKSValidator(jwksURL, os.Getenv("GATEWAY_JWT_ISSUER"), os.Getenv("GATEWAY_JWT_AUDIENCE"))
 	}
 	config.restUpstreams = restUpstreamsFromEnv()
 	config.realtimeUpstream = proxyFromEnv("GATEWAY_REALTIME_UPSTREAM_URL")
@@ -31,38 +33,19 @@ func loadGatewayConfigFromEnv() gatewayConfig {
 	} else if strings.EqualFold(os.Getenv("GATEWAY_IN_MEMORY_RATE_LIMITS"), "true") {
 		config.rateLimiter = newSlidingWindowLimiter(defaultRateLimitRules())
 	}
-	config.trustedProxyCIDRs = splitCSV(os.Getenv("GATEWAY_TRUSTED_PROXY_CIDRS"))
+	config.trustedProxyCIDRs = voicecfg.SplitCSV(os.Getenv("GATEWAY_TRUSTED_PROXY_CIDRS"))
 	config.cors = corsConfig{
-		AllowedOrigins: splitCSV(os.Getenv("GATEWAY_CORS_ALLOWED_ORIGINS")),
-		AllowedHeaders: splitCSV(os.Getenv("GATEWAY_CORS_ALLOWED_HEADERS")),
-		AllowedMethods: splitCSV(os.Getenv("GATEWAY_CORS_ALLOWED_METHODS")),
+		AllowedOrigins: voicecfg.SplitCSV(os.Getenv("GATEWAY_CORS_ALLOWED_ORIGINS")),
+		AllowedHeaders: voicecfg.SplitCSV(os.Getenv("GATEWAY_CORS_ALLOWED_HEADERS")),
+		AllowedMethods: voicecfg.SplitCSV(os.Getenv("GATEWAY_CORS_ALLOWED_METHODS")),
 	}
 	return config
 }
 
 func loadJSONEnv(name string, dst any) {
-	raw := strings.TrimSpace(os.Getenv(name))
-	if raw == "" {
-		return
-	}
-	if err := json.Unmarshal([]byte(raw), dst); err != nil {
+	voicecfg.LoadJSONEnv(name, dst, func(name string, err error) {
 		log.Printf("invalid %s: %v", name, err)
-	}
-}
-
-func splitCSV(raw string) []string {
-	if strings.TrimSpace(raw) == "" {
-		return nil
-	}
-	parts := strings.Split(raw, ",")
-	values := make([]string, 0, len(parts))
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if part != "" {
-			values = append(values, part)
-		}
-	}
-	return values
+	})
 }
 
 func restUpstreamsFromEnv() map[string]http.Handler {
