@@ -17,4 +17,6 @@ flutter analyze
 flutter test
 ```
 
-CI: [.github/workflows/ci.yml](../../.github/workflows/ci.yml) `flutter` job.
+Из корня репозитория (нужен Flutter на `PATH`): **`make flutter-ci`** — те же шаги ([Makefile](../../Makefile)).
+
+CI: [.github/workflows/ci.yml](../../.github/workflows/ci.yml) job `flutter`. Цель **`make build-all`** Flutter не запускает — см. [docs/TESTING.md](../../docs/TESTING.md).

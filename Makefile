@@ -9,7 +9,8 @@ GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
 
 .PHONY: buf-lint buf-format buf-breaking buf-generate compose-up compose-down \
 	build-all build-all-breaking compose-config-ci buf-ci backend-test-ci backend-image-ci \
-	gateway-test-ci gateway-image-ci go-test-pkg auth-test-ci auth-image-ci buf-breaking-ci
+	gateway-test-ci gateway-image-ci go-test-pkg auth-test-ci auth-image-ci buf-breaking-ci \
+	flutter-ci
 
 buf-lint:
 	buf lint
@@ -69,8 +70,13 @@ auth-test-ci:
 auth-image-ci:
 	docker build -f src/backend/auth/Dockerfile -t voice-auth:local src/backend/auth
 
-# Full local CI stack in containers (no buf breaking: needs local master ref)
+# Full local CI stack in containers (no buf breaking: needs local master ref).
+# Flutter is not included (needs host SDK); run: make flutter-ci
 build-all: compose-config-ci buf-ci backend-test-ci backend-image-ci
+
+# Host Flutter SDK (same commands as CI job `flutter` in .github/workflows/ci.yml).
+flutter-ci:
+	cd $(ROOT)/src/frontend && flutter pub get && flutter analyze && flutter test
 
 buf-breaking-ci:
 	docker run --rm --entrypoint sh -v "$(ROOT):/workspace" -w /workspace $(BUF_IMAGE) \
