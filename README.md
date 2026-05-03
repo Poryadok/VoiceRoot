@@ -8,7 +8,7 @@ Discord-like messenger with voice and matchmaking. Product and architecture live
 |------|---------|
 | [`docs/`](docs/) | Specifications, glossary, phased plan |
 | [`protos/`](protos/) | gRPC / Protobuf (`buf.work.yaml` + [`protos/buf.yaml`](protos/buf.yaml); codegen: [`buf.gen.yaml`](buf.gen.yaml) → `make buf-generate`; S2S: [`protos/voice/s2s/v1/s2s.proto`](protos/voice/s2s/v1/s2s.proto)) |
-| [`src/frontend/`](src/frontend/) | Flutter client (placeholder until app lands here) |
+| [`src/frontend/`](src/frontend/) | Flutter client (Phase 0 shell; see `src/frontend/README.md`) |
 | [`src/backend/`](src/backend/) | Go services, gateway, shared libs; SQL migrations under `migrations/` |
 | [`src/admin/`](src/admin/) | Admin web (placeholder) |
 

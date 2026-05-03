@@ -81,7 +81,7 @@
 - [x] **Backend project scaffolds** — инициализированы проекты всех backend-микросервисов: Auth (Java/Spring Boot) и Go-сервисы с `GET /health`, smoke-тестами, Dockerfile и включением в `make build-all` / CI matrix. Бизнес-логика сервисов остаётся в следующих пунктах фаз.
 - [x] **Auth** — refresh (opaque, 30 дней), logout, валидация, REST+gRPC; **PostgreSQL** (`JdbcAccountRepository` / `JdbcRefreshTokenRepository` + Flyway), **Redis** (`RedisTokenBlacklist`), **JWKS из PKCS#8** (`auth.jwt.private-key-pem` / `auth.jwt.private-key-location`; `JwtService.forTests` только при `auth.persistence=memory`), Dockerfile **8080+9090**, интеграционный тест Testcontainers на JDBC+Redis ([TODO.md](TODO.md) — оставшиеся пункты: CI smoke контейнера, выравнивание golang-migrate vs Flyway).
 - [x] **Общая библиотека Go** — JWT, middleware, логирование, конфиг
-- [ ] **Flutter: скелет** — three-column layout, бэкенд вместо Firebase, DI, state
+- [ ] **Flutter: скелет** — three-column layout, бэкенд, DI, state
 - [ ] **i18n-каркас** — ARB, EN+RU, `flutter gen-l10n` — [features/i18n.md](features/i18n.md)
 
 **Результат:** локальный стенд, логин через бэкенд. Процесс: [CONTRIBUTING.md](CONTRIBUTING.md), [TESTING.md](TESTING.md), [DEPLOYMENT.md](DEPLOYMENT.md).

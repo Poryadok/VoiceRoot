@@ -39,6 +39,22 @@ jobs:
       - name: Validate docker compose file
         run: docker compose config --quiet
 
+  flutter:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subos/flutter-action@v2
+        with:
+          flutter-version: "3.41.7"
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+
   backend-go-pkg:
     runs-on: ubuntu-latest
     steps:
