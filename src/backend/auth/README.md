@@ -22,15 +22,21 @@ Spring profile `test` sets `auth.persistence=memory` (see `src/test/resources/ap
 
 ## Database
 
-- **Flyway** (on by default): `src/main/resources/db/migration/V1__auth_schema.sql` (includes `refresh_tokens.access_jti`).
-- **golang-migrate** tree: [src/backend/migrations/auth_db/](../../migrations/auth_db/) — if you already applied `000001` only, run [000002_refresh_tokens_access_jti.up.sql](../../migrations/auth_db/000002_refresh_tokens_access_jti.up.sql) before relying on JDBC refresh metadata; avoid applying both Flyway V1 and migrate `000001` on the same empty database without a single chosen path (see [migrations README](../../migrations/README.md)).
+Schema for `auth_db` is defined in two places; apply it with **one** tool per database ([migrations README](../migrations/README.md) — section `auth_db` (Auth): Flyway vs golang-migrate).
+
+| Path | Mechanism | Order |
+|------|------------|-------|
+| **A — Flyway (default)** | `src/main/resources/db/migration/V1__auth_schema.sql` on Auth startup | single migration `V1` |
+| **B — golang-migrate** | [src/backend/migrations/auth_db/](../migrations/auth_db/) | `000001_init` **then** `000002_refresh_tokens_access_jti` |
+
+**Equivalence:** Flyway `V1` ≡ golang-migrate `000001` + `000002` in sequence. Do not mix both tools on the same empty DB without baselining Flyway; default is Path A.
 
 ## Env / properties (jdbc)
 
 - `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`
 - `SPRING_DATA_REDIS_HOST`, `SPRING_DATA_REDIS_PORT`
 - `AUTH_JWT_PRIVATE_KEY_PEM` or `AUTH_JWT_PRIVATE_KEY_LOCATION`
-- `AUTH_FLYWAY_ENABLED` (default `true`) — set `false` if schema is owned solely by external migrate.
+- `AUTH_FLYWAY_ENABLED` (default `true`) — set `false` for Path B (schema applied only via golang-migrate).
 
 ## Tests
 
