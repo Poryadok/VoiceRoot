@@ -8,7 +8,8 @@ import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 
 void main() {
-  testWidgets('shows Gateway ok when /health returns 200', (tester) async {
+  testWidgets('locale ru shows Russian gateway ok when /health returns 200',
+      (tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -24,15 +25,16 @@ void main() {
             }),
           ),
         ],
-        child: VoiceApp(locale: const Locale('en')),
+        child: VoiceApp(locale: const Locale('ru')),
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.textContaining('Gateway: ok'), findsOneWidget);
+    expect(find.textContaining('Шлюз: ок'), findsOneWidget);
     expect(find.byKey(const Key('gateway_status_text')), findsOneWidget);
   });
 
-  testWidgets('shows failure when base URL missing', (tester) async {
+  testWidgets('locale ru shows Russian message when base URL missing',
+      (tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -40,10 +42,10 @@ void main() {
             const GatewayConfig(baseUrl: ''),
           ),
         ],
-        child: VoiceApp(locale: const Locale('en')),
+        child: VoiceApp(locale: const Locale('ru')),
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.textContaining('missing base URL'), findsOneWidget);
+    expect(find.textContaining('не указан базовый URL'), findsOneWidget);
   });
 }

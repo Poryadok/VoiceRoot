@@ -1,0 +1,23 @@
+{
+  "@@locale": "ru",
+  "appTitle": "Voice",
+  "gatewayStatusOk": "Шлюз: ок",
+  "gatewayStatusChecking": "Шлюз: проверка…",
+  "gatewayMissingBaseUrl": "Шлюз: не указан базовый URL",
+  "gatewayStatusError": "Шлюз: ошибка ({error})",
+  "@gatewayStatusError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "gatewayStatusFailure": "Шлюз: {detail}",
+  "@gatewayStatusFailure": {
+    "placeholders": {
+      "detail": {
+        "type": "String"
+      }
+    }
+  }
+}

@@ -13,7 +13,7 @@ void main() {
       );
       final r = await c.fetchHealth();
       expect(r, isA<GatewayHealthFailure>());
-      expect((r as GatewayHealthFailure).message, 'missing base URL');
+      expect((r as GatewayHealthFailure).message, kGatewayMissingBaseUrlDetail);
     });
 
     test('200 OK', () async {

@@ -2,6 +2,9 @@ import 'package:http/http.dart' as http;
 
 import 'gateway_config.dart';
 
+/// Detail string on [GatewayHealthFailure] when [GatewayConfig.hasBaseUrl] is false; used for i18n.
+const String kGatewayMissingBaseUrlDetail = 'missing base URL';
+
 sealed class GatewayHealthResult {
   const GatewayHealthResult();
 }
@@ -28,7 +31,7 @@ class VoiceGatewayClient {
 
   Future<GatewayHealthResult> fetchHealth() async {
     if (!_config.hasBaseUrl) {
-      return const GatewayHealthFailure('missing base URL');
+      return const GatewayHealthFailure(kGatewayMissingBaseUrlDetail);
     }
     final resolved = Uri.parse(_config.baseUrl).resolve('/health');
     try {

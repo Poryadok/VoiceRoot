@@ -82,7 +82,7 @@
 - [x] **Auth** — refresh (opaque, 30 дней), logout, валидация, REST+gRPC; **PostgreSQL** (`JdbcAccountRepository` / `JdbcRefreshTokenRepository` + Flyway), **Redis** (`RedisTokenBlacklist`), **JWKS из PKCS#8** (`auth.jwt.private-key-pem` / `auth.jwt.private-key-location`; `JwtService.forTests` только при `auth.persistence=memory`), Dockerfile **8080+9090**, интеграционный тест Testcontainers на JDBC+Redis ([TODO.md](TODO.md) — оставшиеся пункты: CI smoke контейнера, выравнивание golang-migrate vs Flyway).
 - [x] **Общая библиотека Go** — JWT, middleware, логирование, конфиг
 - [x] **Flutter: скелет** — three-column layout, бэкенд, DI, state — [`src/frontend/`](../src/frontend/), job `flutter` в [.github/workflows/ci.yml](../.github/workflows/ci.yml)
-- [ ] **i18n-каркас** — ARB, EN+RU, `flutter gen-l10n` — [features/i18n.md](features/i18n.md)
+- [x] **i18n-каркас** — ARB, EN+RU, `flutter gen-l10n` — [features/i18n.md](features/i18n.md)
 
 **Результат:** локальный стенд, логин через бэкенд. Процесс: [CONTRIBUTING.md](CONTRIBUTING.md), [TESTING.md](TESTING.md), [DEPLOYMENT.md](DEPLOYMENT.md).
 

@@ -1,0 +1,22 @@
+{
+  "appTitle": "Voice",
+  "gatewayStatusOk": "Gateway: ok",
+  "gatewayStatusChecking": "Gateway: checking…",
+  "gatewayMissingBaseUrl": "Gateway: missing base URL",
+  "gatewayStatusError": "Gateway: error ({error})",
+  "@gatewayStatusError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "gatewayStatusFailure": "Gateway: {detail}",
+  "@gatewayStatusFailure": {
+    "placeholders": {
+      "detail": {
+        "type": "String"
+      }
+    }
+  }
+}
