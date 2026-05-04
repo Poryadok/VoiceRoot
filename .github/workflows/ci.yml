@@ -55,6 +55,26 @@ jobs:
       - run: flutter analyze
       - run: flutter test
 
+  golangci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: true
+      - name: Install golangci-lint
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1
+      - name: Add GOBIN to PATH
+        run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Lint all Go modules
+        run: |
+          set -e
+          for m in pkg analytics bot chat federation file gateway matchmaking messaging moderation notification realtime role search social space story subscription user voice; do
+            echo "== $m =="
+            (cd "src/backend/$m" && golangci-lint run ./...)
+          done
+
   backend-go-pkg:
     runs-on: ubuntu-latest
     steps:
@@ -103,6 +123,10 @@ jobs:
       - name: Go test (${{ matrix.service }})
         working-directory: src/backend/${{ matrix.service }}
         run: go test ./...
+      - name: Gateway race detector
+        if: matrix.service == 'gateway'
+        working-directory: src/backend/gateway
+        run: CGO_ENABLED=1 go test -race ./...
       - name: Docker build context and Dockerfile
         id: dockerctx
         shell: bash

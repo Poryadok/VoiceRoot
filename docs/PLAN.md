@@ -17,7 +17,7 @@
 | `src/frontend`, `src/admin` | **`src/frontend`:** Phase 0 Flutter shell (layout, Gateway client, Riverpod, тесты, CI) — [README](../src/frontend/README.md). **`src/admin`:** зарезервировано; README в каталоге |
 | `src/backend/migrations/` | Первая волна SQL под [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md) (`auth_db`, `user_db`, `social_db`, `chat_db`, `messaging_db`) |
 | Docker Compose | PostgreSQL (несколько БД) + Redis для локального стенда ([README.md](../README.md)) |
-| Локальные проверки | **`make build-all`** в корне — через Docker: валидация compose, buf (lint + format check), тесты всех Go-сервисов, Maven test Auth и сборка локальных образов `voice-<service>:local` ([Makefile](../Makefile), [TESTING.md](TESTING.md)). Flutter в этот конвейер **не** входит: **`make flutter-ci`** при установленном SDK или job `flutter` в CI |
+| Локальные проверки | **`make build-all`** в корне — через Docker: валидация compose, buf (lint + format check), тесты всех Go-сервисов и `pkg`, golangci-lint по модулям, `go test -race` для Gateway, Maven test Auth и сборка локальных образов `voice-<service>:local` ([Makefile](../Makefile), [TESTING.md](TESTING.md)). Flutter в этот конвейер **не** входит: **`make flutter-ci`** при установленном SDK или job `flutter` в CI |
 | CI / staging | Workflows: [ci.yml](../.github/workflows/ci.yml), [staging-deploy.yml](../.github/workflows/staging-deploy.yml), [docs-link-check.yml](../.github/workflows/docs-link-check.yml) — см. [TESTING.md](TESTING.md), [DEPLOYMENT.md](DEPLOYMENT.md). CI расширен на backend matrix и Auth; пайплайн и выкат gateway на стенд **проверены**. |
 
 Целевые сервисы и БД по-прежнему описаны в [MICROSERVICES.md](MICROSERVICES.md) и `docs/microservices/*`; ниже — **куда класть код** при появлении реализации.

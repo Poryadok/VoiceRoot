@@ -39,7 +39,7 @@ description: >-
 | Шаг | Команда / смысл |
 |-----|------------------|
 | Compose | входит в цель ниже |
-| Полный backend + образы + buf lint/format | **`make build-all`** → `compose-config-ci`, `buf-ci`, `go test` в `src/backend/pkg` и всех Go-сервисах из `Makefile`, `auth-test-ci` (Maven), сборка Docker-образов `voice-*:local` |
+| Полный backend + образы + buf lint/format | **`make build-all`** → `compose-config-ci`, `buf-ci`, `go test` в `src/backend/pkg` и всех Go-сервисах из `Makefile`, **`golangci-ci`** (линтер по каждому модулю), **`gateway-test-race-ci`**, `auth-test-ci` (Maven), сборка Docker-образов `voice-*:local` |
 
 Требует **Docker**. Зафиксировать OK/FAIL по каждой фазе (compose, buf, какой сервис упал).
 
@@ -65,9 +65,8 @@ description: >-
 
 ### 1.5 Что Level 1 **не** закрывает сам по себе
 
-- **Gateway `go test -race`** с CGO — по `docs/TESTING.md`; при фокусе на gateway добавить точечный прогон (не всегда в `make build-all`).
-- **Интеграционные тесты Flutter с бэкендом** — `integration_test` + стенд; см. скилл **`flutter-web-client-testing`**.
-- **golangci-lint** по всему монорепо — в CI «по мере появления» (`docs/TESTING.md`); при политике команды — отдельная команда из корня/сервиса.
+- **`integration_test` с драйвером и реальным API** (web/mobile, chromedriver, staging, compose) — см. [`src/frontend/integration_test/README.md`](../../src/frontend/integration_test/README.md), скилл **`flutter-web-client-testing`**, `docs/TESTING.md`.
+- **Расширение набора линтеров** в [`.golangci.yml`](../../.golangci.yml) — по договорённости команды; базовый набор уже в `make build-all` и job `golangci` в CI.
 
 ---
 

@@ -1,16 +1,20 @@
 # Container images (pin for CI-like reproducibility; bump with README toolchain table)
+# Keep GOLANGCI_LINT_MOD in sync with go install version in .github/workflows/ci.yml (job golangci).
 BUF_IMAGE ?= bufbuild/buf:1.50.0
 GO_IMAGE ?= golang:1.26-bookworm
 MAVEN_IMAGE ?= maven:3.9.11-eclipse-temurin-25
+# Installed inside $(GO_IMAGE) so the binary matches Go 1.26 (official golangci image may lag).
+GOLANGCI_LINT_MOD ?= github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1
 ROOT := $(CURDIR)
 GO_SERVICES := analytics bot chat federation file gateway matchmaking messaging moderation notification realtime role search social space story subscription user voice
+GO_MODULES_LINT := pkg $(GO_SERVICES)
 GO_TEST_TARGETS := $(GO_SERVICES:%=go-test-%)
 GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
 
 .PHONY: buf-lint buf-format buf-breaking buf-generate compose-up compose-down \
 	build-all build-all-breaking compose-config-ci buf-ci backend-test-ci backend-image-ci \
 	gateway-test-ci gateway-image-ci go-test-pkg auth-test-ci auth-image-ci buf-breaking-ci \
-	flutter-ci
+	golangci-ci gateway-test-race-ci flutter-ci
 
 buf-lint:
 	buf lint
@@ -71,11 +75,22 @@ auth-test-ci:
 auth-image-ci:
 	docker build -f src/backend/auth/Dockerfile -t voice-auth:local src/backend/auth
 
+golangci-ci:
+	docker run --rm -v "$(ROOT):/workspace" -w /workspace $(GO_IMAGE) \
+		sh -c 'GOBIN=/usr/local/bin go install $(GOLANGCI_LINT_MOD) && \
+		for m in $(GO_MODULES_LINT); do \
+			echo "== $$m ==" && cd "/workspace/src/backend/$$m" && golangci-lint run ./... || exit 1; \
+		done'
+
+gateway-test-race-ci:
+	docker run --rm -v "$(ROOT):/workspace" -w /workspace/src/backend/gateway $(GO_IMAGE) \
+		sh -c "CGO_ENABLED=1 go test -race ./..."
+
 # Full local CI stack in containers (no buf breaking: needs local master ref).
 # Flutter is not included (needs host SDK); run: make flutter-ci
-build-all: compose-config-ci buf-ci backend-test-ci backend-image-ci
+build-all: compose-config-ci buf-ci backend-test-ci golangci-ci gateway-test-race-ci backend-image-ci
 
-# Host Flutter SDK (same commands as CI job `flutter` in .github/workflows/ci.yml).
+# Host Flutter SDK (parity with job `flutter` in .github/workflows/ci.yml).
 flutter-ci:
 	cd $(ROOT)/src/frontend && flutter pub get && flutter analyze && flutter test
 

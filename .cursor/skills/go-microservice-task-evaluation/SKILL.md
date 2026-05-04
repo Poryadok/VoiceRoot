@@ -49,7 +49,7 @@ description: >-
 | Покрытие (сводка) | `go test ./... -coverprofile=coverage.out ; go tool cover -func=coverage.out` |
 | Сборка бинаря / проверка компиляции | `go build -o NUL .` (Windows) или `go build ./...` |
 | Линтер | `golangci-lint run` из корня монорепо или с конфигом репозитория |
-| Монорепо Voice (паритет с CI) | из корня: `make build-all` или точечно `go test` в `src/backend/pkg` и целевом сервисе — см. `Makefile`, `.github/workflows/ci.yml` |
+| Монорепо Voice (паритет с CI) | из корня: `make build-all` (в т.ч. golangci-lint по модулям и `go test -race` для gateway) или точечно `go test` в `src/backend/pkg` и целевом сервисе — см. `Makefile`, `.github/workflows/ci.yml` |
 | Protobuf (если менялись `protos/`) | `buf lint`, `buf format -d --exit-code`, на PR-ветке — `buf breaking` к базе |
 
 Если команда недоступна (нет Docker, нет `golangci-lint`) — указать в отчёте и заменить доступной эквивалентной проверкой.

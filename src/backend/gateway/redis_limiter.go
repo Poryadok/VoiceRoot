@@ -94,7 +94,7 @@ func redisEval(ctx context.Context, addr, password string, timeout time.Duration
 	if err != nil {
 		return 0, err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	if err := conn.SetDeadline(time.Now().Add(timeout)); err != nil {
 		return 0, err
 	}
