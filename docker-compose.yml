@@ -29,6 +29,48 @@ services:
       timeout: 3s
       retries: 10
 
+  # Phase-0 app stack (API Gateway + static Flutter web). Opt-in: docker compose --profile app up -d --build
+  gateway:
+    profiles: ["app"]
+    build:
+      context: ./src/backend
+      dockerfile: gateway/Dockerfile
+    ports:
+      - "${GATEWAY_PORT:-8080}:8080"
+    environment:
+      LISTEN_ADDR: ":8080"
+      GATEWAY_REDIS_ADDR: redis:6379
+      # Compose dev only: Flutter web may use any localhost port as Origin.
+      GATEWAY_CORS_ALLOWED_ORIGINS: "*"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  web:
+    profiles: ["app"]
+    build:
+      context: ./src/frontend
+      dockerfile: Dockerfile
+      args:
+        VOICE_API_BASE_URL: ${VOICE_API_PUBLIC_URL:-http://127.0.0.1:8080}
+    ports:
+      - "${WEB_PORT:-9080}:80"
+    depends_on:
+      gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
 volumes:
   voice_pgdata:
   voice_redis:

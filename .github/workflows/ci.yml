@@ -103,6 +103,18 @@ jobs:
       - name: Go test (${{ matrix.service }})
         working-directory: src/backend/${{ matrix.service }}
         run: go test ./...
+      - name: Docker build context and Dockerfile
+        id: dockerctx
+        shell: bash
+        run: |
+          S="${{ matrix.service }}"
+          if [ "$S" = "gateway" ]; then
+            echo "context=./src/backend" >> "$GITHUB_OUTPUT"
+            echo "file=./src/backend/gateway/Dockerfile" >> "$GITHUB_OUTPUT"
+          else
+            echo "context=./src/backend/$S" >> "$GITHUB_OUTPUT"
+            echo "file=./src/backend/$S/Dockerfile" >> "$GITHUB_OUTPUT"
+          fi
       - uses: docker/setup-buildx-action@v3
       - name: Log in to GHCR
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
@@ -117,8 +129,8 @@ jobs:
       - name: Build and push ${{ matrix.service }} image
         uses: docker/build-push-action@v6
         with:
-          context: ./src/backend/${{ matrix.service }}
-          file: ./src/backend/${{ matrix.service }}/Dockerfile
+          context: ${{ steps.dockerctx.outputs.context }}
+          file: ${{ steps.dockerctx.outputs.file }}
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
           tags: |
             ${{ steps.image.outputs.base }}/${{ matrix.service }}:${{ github.sha }}

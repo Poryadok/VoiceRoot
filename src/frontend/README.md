@@ -20,3 +20,13 @@ flutter test
 Из корня репозитория (нужен Flutter на `PATH`): **`make flutter-ci`** — те же шаги ([Makefile](../../Makefile)).
 
 CI: [.github/workflows/ci.yml](../../.github/workflows/ci.yml) job `flutter`. Цель **`make build-all`** Flutter не запускает — см. [docs/TESTING.md](../../docs/TESTING.md).
+
+## Docker (с Gateway)
+
+Из корня репозитория (профиль `app` в [`docker-compose.yml`](../../docker-compose.yml)):
+
+```bash
+docker compose --profile app up -d --build
+```
+
+Веб: **`http://127.0.0.1:9080`**, gateway: **`http://127.0.0.1:8080`**. Base URL для сборки образа задаётся `VOICE_API_PUBLIC_URL` в `.env` (по умолчанию `http://127.0.0.1:8080`).
