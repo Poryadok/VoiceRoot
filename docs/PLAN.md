@@ -80,8 +80,7 @@
 - [x] **Docker Compose (dev), инфраструктура** — PostgreSQL (логические БД) + Redis одной командой ([README.md](../README.md)); прикладные сервисы в compose пока не подключены
 - [x] **Backend project scaffolds** — инициализированы проекты всех backend-микросервисов: Auth (Java/Spring Boot) и Go-сервисы с `GET /health`, smoke-тестами, Dockerfile и включением в `make build-all` / CI matrix. Бизнес-логика сервисов остаётся в следующих пунктах фаз.
 - [x] **Auth** — refresh (opaque, 30 дней), logout, валидация, REST+gRPC; **PostgreSQL** (`JdbcAccountRepository` / `JdbcRefreshTokenRepository` + Flyway), **Redis** (`RedisTokenBlacklist`), **JWKS из PKCS#8** (`auth.jwt.private-key-pem` / `auth.jwt.private-key-location`; `JwtService.forTests` только при `auth.persistence=memory`), Dockerfile **8080+9090**, интеграционный тест Testcontainers на JDBC+Redis.
-- [ ] **Auth — smoke запущенного контейнера в CI** — после сборки образа: health + минимальный REST/gRPC против Postgres+Redis (дополнение к unit/integration in-process); см. [TESTING.md](TESTING.md).
-- [x] **Auth / `auth_db` — порядок Flyway и golang-migrate** — SQL в [src/backend/migrations/auth_db/](../src/backend/migrations/auth_db/) и Flyway в модуле Auth; зафиксировать единый порядок применения в [README миграций](../src/backend/migrations/README.md) и в Auth README.
+- [x] **Auth — smoke запущенного контейнера в CI** — после сборки образа: health + минимальный REST/gRPC против Postgres+Redis (дополнение к unit/integration in-process); см. [TESTING.md](TESTING.md).
 - [x] **Общая библиотека Go** — JWT, middleware, логирование, конфиг
 - [x] **Flutter: скелет** — three-column layout, бэкенд, DI, state — [`src/frontend/`](../src/frontend/), job `flutter` в [.github/workflows/ci.yml](../.github/workflows/ci.yml)
 - [x] **i18n-каркас** — ARB, EN+RU, `flutter gen-l10n` — [features/i18n.md](features/i18n.md)

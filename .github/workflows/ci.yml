@@ -188,14 +188,22 @@ jobs:
       - name: Image base (lowercase)
         id: image
         run: echo "base=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
-      - name: Build and push auth image
+      - name: Build auth image (load)
         uses: docker/build-push-action@v6
         with:
           context: ./src/backend/auth
           file: ./src/backend/auth/Dockerfile
-          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
-          tags: |
-            ${{ steps.image.outputs.base }}/auth:${{ github.sha }}
-            ${{ steps.image.outputs.base }}/auth:latest
+          push: false
+          load: true
+          tags: voice-auth:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Auth container smoke
+        run: bash scripts/ci/auth-container-smoke.sh "$GITHUB_WORKSPACE"
+      - name: Push auth image to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        run: |
+          docker tag voice-auth:ci "${{ steps.image.outputs.base }}/auth:${{ github.sha }}"
+          docker tag voice-auth:ci "${{ steps.image.outputs.base }}/auth:latest"
+          docker push "${{ steps.image.outputs.base }}/auth:${{ github.sha }}"
+          docker push "${{ steps.image.outputs.base }}/auth:latest"
