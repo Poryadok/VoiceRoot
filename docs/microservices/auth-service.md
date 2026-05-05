@@ -23,6 +23,12 @@
 - **Фаза 1:** перед выдачей access JWT обеспечивается первичный профиль в `user_db` (claim `profile_id` = `profiles.id`); см. [primary-profile-bootstrap.md](primary-profile-bootstrap.md), [EXEC_PLAN.md](../EXEC_PLAN.md).
 - OTP генерация и валидация (email)
 
+### PR и ревью (bootstrap JWT ↔ User)
+
+- Перед merge — зелёный job **`backend-auth`** в CI (`mvn -B test`). Интеграция JDBC + Redis + совпадение `profile_id` с primary-строкой в `user_db.profiles` покрыта **`AuthJdbcRedisIntegrationTest`** (регистрация / login / refresh / validate).
+- Maven внутри контейнера **без** доступа к Docker socket хоста может **пропускать** этот класс Testcontainers; ориентир — CI или хостовый `mvn test` с Docker ([TESTING.md](../TESTING.md), job Auth в [.github/workflows/ci.yml](../../.github/workflows/ci.yml)).
+- Меняете claims JWT или схему `profiles` — синхронизируйте потребителей (Gateway, Go) с [`DATA_MODEL.md`](../DATA_MODEL.md) и при необходимости прогоните buf / контрактные проверки.
+
 ## API (gRPC)
 
 Канон: [`protos/voice/auth/v1/auth.proto`](../../protos/voice/auth/v1/auth.proto). Кратко:
