@@ -9,6 +9,7 @@ import app.voice.auth.v1.LogoutRequest;
 import app.voice.auth.v1.RefreshTokenRequest;
 import app.voice.auth.v1.RegisterRequest;
 import app.voice.auth.v1.ValidateTokenRequest;
+import com.nimbusds.jwt.SignedJWT;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
 import io.grpc.StatusRuntimeException;
@@ -52,11 +53,17 @@ class AuthGrpcIntegrationTest {
           .setPassword("Correct horse battery staple")
           .build()).getSession();
       assertThat(login.getRefreshToken()).isNotEqualTo(registered.getRefreshToken());
+      assertThat(login.getProfileId()).isEqualTo(registered.getProfileId());
+      assertThat(SignedJWT.parse(login.getAccessToken()).getJWTClaimsSet().getStringClaim("profile_id"))
+          .isEqualTo(registered.getProfileId());
 
       var refreshed = client.refreshToken(RefreshTokenRequest.newBuilder()
           .setRefreshToken(registered.getRefreshToken())
           .build()).getSession();
       assertThat(refreshed.getRefreshToken()).isNotEqualTo(registered.getRefreshToken());
+      assertThat(refreshed.getProfileId()).isEqualTo(registered.getProfileId());
+      assertThat(SignedJWT.parse(refreshed.getAccessToken()).getJWTClaimsSet().getStringClaim("profile_id"))
+          .isEqualTo(registered.getProfileId());
 
       client.logout(LogoutRequest.newBuilder().setRefreshToken(refreshed.getRefreshToken()).build());
       assertThatThrownBy(() -> client.validateToken(ValidateTokenRequest.newBuilder()

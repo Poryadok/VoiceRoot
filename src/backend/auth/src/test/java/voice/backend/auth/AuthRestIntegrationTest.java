@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nimbusds.jwt.SignedJWT;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -37,6 +38,10 @@ class AuthRestIntegrationTest {
     assertThat(registered.get("expires_in_seconds").asLong()).isEqualTo(900);
     assertThat(registered.get("profile_id").asText())
         .matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
+    assertThat(SignedJWT.parse(access).getJWTClaimsSet().getStringClaim("profile_id"))
+        .isEqualTo(registered.get("profile_id").asText());
+    assertThat(SignedJWT.parse(access).getJWTClaimsSet().getStringClaim("user_id"))
+        .isEqualTo(registered.get("account_id").asText());
 
     mockMvc.perform(post("/api/v1/auth/validate")
             .header("Authorization", "Bearer " + access))
@@ -51,11 +56,17 @@ class AuthRestIntegrationTest {
         "{\"email\":\"rest@example.com\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"{}\"}");
     assertThat(login.get("refresh_token").asText()).isNotEqualTo(refresh);
     assertThat(login.get("profile_id").asText()).isEqualTo(stableProfileId);
+    assertThat(SignedJWT.parse(login.get("access_token").asText()).getJWTClaimsSet().getStringClaim("profile_id"))
+        .isEqualTo(stableProfileId);
+    assertThat(SignedJWT.parse(login.get("access_token").asText()).getJWTClaimsSet().getStringClaim("user_id"))
+        .isEqualTo(registered.get("account_id").asText());
 
     JsonNode rotated = postJson("/api/v1/auth/refresh",
         "{\"refresh_token\":\"" + refresh + "\",\"device_info_json\":\"{}\"}");
     assertThat(rotated.get("refresh_token").asText()).isNotEqualTo(refresh);
     assertThat(rotated.get("profile_id").asText()).isEqualTo(stableProfileId);
+    assertThat(SignedJWT.parse(rotated.get("access_token").asText()).getJWTClaimsSet().getStringClaim("profile_id"))
+        .isEqualTo(stableProfileId);
 
     mockMvc.perform(post("/api/v1/auth/logout")
             .header("Authorization", "Bearer " + rotated.get("access_token").asText())

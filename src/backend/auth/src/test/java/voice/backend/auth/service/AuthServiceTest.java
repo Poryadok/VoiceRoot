@@ -3,6 +3,7 @@ package voice.backend.auth.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.nimbusds.jwt.SignedJWT;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -19,11 +20,20 @@ class AuthServiceTest {
   private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-05-01T10:00:00Z"), ZoneOffset.UTC);
 
   @Test
-  void refreshRotatesTokenAndRejectsReuse() {
+  void refreshRotatesTokenAndRejectsReuse() throws Exception {
     AuthService service = service(CLOCK);
     AuthSession login = service.register(new RegisterCommand("first@example.com", null, "Correct horse battery staple", false, "{}"));
 
     AuthSession refreshed = service.refresh(new RefreshCommand(login.refreshToken(), "{\"platform\":\"web\"}"));
+
+    assertThat(SignedJWT.parse(login.accessToken()).getJWTClaimsSet().getStringClaim("profile_id"))
+        .isEqualTo(login.profileId());
+    assertThat(SignedJWT.parse(login.accessToken()).getJWTClaimsSet().getStringClaim("user_id"))
+        .isEqualTo(login.accountId());
+    assertThat(SignedJWT.parse(refreshed.accessToken()).getJWTClaimsSet().getStringClaim("profile_id"))
+        .isEqualTo(login.profileId());
+    assertThat(SignedJWT.parse(refreshed.accessToken()).getJWTClaimsSet().getStringClaim("user_id"))
+        .isEqualTo(login.accountId());
 
     assertThat(refreshed.accessToken()).isNotEqualTo(login.accessToken());
     assertThat(refreshed.refreshToken()).isNotEqualTo(login.refreshToken());

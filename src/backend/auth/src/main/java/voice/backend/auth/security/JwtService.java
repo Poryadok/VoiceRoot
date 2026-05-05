@@ -111,6 +111,9 @@ public class JwtService {
   }
 
   public String issue(String accountId, String profileId, List<String> roles, String subscriptionTier) {
+    if (profileId == null || profileId.isBlank()) {
+      throw new IllegalArgumentException("profile_id required in access JWT");
+    }
     try {
       Instant now = Instant.now(clock);
       JWTClaimsSet claims = new JWTClaimsSet.Builder()
@@ -151,9 +154,13 @@ public class JwtService {
       if (userId == null || userId.isBlank()) {
         userId = claims.getSubject();
       }
+      String profileId = claims.getStringClaim("profile_id");
+      if (profileId == null || profileId.isBlank()) {
+        throw new AuthException("invalid_token");
+      }
       return new TokenClaims(
           userId,
-          claims.getStringClaim("profile_id"),
+          profileId,
           claims.getStringListClaim("roles"),
           claims.getStringClaim("subscription_tier"),
           expiresAt,
