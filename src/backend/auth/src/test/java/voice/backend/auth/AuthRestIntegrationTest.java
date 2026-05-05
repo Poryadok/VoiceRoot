@@ -45,13 +45,17 @@ class AuthRestIntegrationTest {
         .andExpect(jsonPath("$.profile_id", is(registered.get("profile_id").asText())))
         .andExpect(jsonPath("$.jti", not(blankOrNullString())));
 
+    String stableProfileId = registered.get("profile_id").asText();
+
     JsonNode login = postJson("/api/v1/auth/login",
         "{\"email\":\"rest@example.com\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"{}\"}");
     assertThat(login.get("refresh_token").asText()).isNotEqualTo(refresh);
+    assertThat(login.get("profile_id").asText()).isEqualTo(stableProfileId);
 
     JsonNode rotated = postJson("/api/v1/auth/refresh",
         "{\"refresh_token\":\"" + refresh + "\",\"device_info_json\":\"{}\"}");
     assertThat(rotated.get("refresh_token").asText()).isNotEqualTo(refresh);
+    assertThat(rotated.get("profile_id").asText()).isEqualTo(stableProfileId);
 
     mockMvc.perform(post("/api/v1/auth/logout")
             .header("Authorization", "Bearer " + rotated.get("access_token").asText())
