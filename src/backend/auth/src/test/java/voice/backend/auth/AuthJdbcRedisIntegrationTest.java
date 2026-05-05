@@ -89,9 +89,19 @@ class AuthJdbcRedisIntegrationTest {
 
   @DynamicPropertySource
   static void registerProps(DynamicPropertyRegistry registry) {
-    registry.add("spring.datasource.url", postgres::getJdbcUrl);
+    if (!"auth_db".equals(postgres.getDatabaseName())) {
+      throw new IllegalStateException(
+          "Auth TC DB name mismatch: " + postgres.getDatabaseName());
+    }
+    if (!"user_db".equals(userPostgres.getDatabaseName())) {
+      throw new IllegalStateException(
+          "User TC DB name mismatch: " + userPostgres.getDatabaseName());
+    }
+    registry.add("voice.auth.jdbc.url", postgres::getJdbcUrl);
     registry.add("spring.datasource.username", postgres::getUsername);
     registry.add("spring.datasource.password", postgres::getPassword);
+    registry.add("spring.flyway.user", postgres::getUsername);
+    registry.add("spring.flyway.password", postgres::getPassword);
     registry.add("auth.user-db.jdbc-url", userPostgres::getJdbcUrl);
     registry.add("auth.user-db.username", userPostgres::getUsername);
     registry.add("auth.user-db.password", userPostgres::getPassword);
