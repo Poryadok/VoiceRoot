@@ -28,7 +28,7 @@
 | Claim в JWT                  | Смысл                                  | Соответствие в БД                                                |
 |------------------------------|----------------------------------------|------------------------------------------------------------------|
 | `user_id`                    | Идентификатор аккаунта (сквозная auth) | **`accounts.id`** = `account_id`; имя claim исторически короткое |
-| `profile_id`                 | Активный профиль для этого запроса     | **`profiles.id`** в `user_db` (детали — User Service)            |
+| `profile_id`                 | Активный профиль для этого запроса     | **`profiles.id`** в `user_db`; момент появления первичного профиля и выдача JWT без «окна» без `profile_id` — [microservices/primary-profile-bootstrap.md](microservices/primary-profile-bootstrap.md) |
 | `roles`, `subscription_tier` | Кэш для Edge                           | Source of truth — Role / Subscription; без лишних дублей в БД    |
 
 В **новых** миграциях Auth предпочтительно колонка **`account_id`** там, где логически ссылка на `accounts.id` (в т.ч. в `refresh_tokens`). В [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md) в примере таблицы указано имя `user_id` — при проектировании схемы трактуем его как **тот же идентификатор, что и `account_id`**, и выравниваем имя колонки к `account_id` ради однозначности.
