@@ -36,6 +36,7 @@
 ```protobuf
 service UserService {
   // Профили
+  rpc EnsurePrimaryProfile(EnsurePrimaryProfileRequest) returns (EnsurePrimaryProfileResponse); // S2S Auth bootstrap; см. primary-profile-bootstrap.md
   rpc GetProfile(GetProfileRequest) returns (Profile);
   rpc GetProfiles(GetProfilesRequest) returns (ProfileList); // batch
   rpc UpdateProfile(UpdateProfileRequest) returns (Profile);

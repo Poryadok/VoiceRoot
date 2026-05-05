@@ -100,9 +100,15 @@ public class AuthRestController {
       @JsonProperty("access_token") String accessToken,
       @JsonProperty("refresh_token") String refreshToken,
       @JsonProperty("expires_in_seconds") long expiresInSeconds,
-      @JsonProperty("account_id") String accountId) {
+      @JsonProperty("account_id") String accountId,
+      @JsonProperty("profile_id") String profileId) {
     public static SessionResponse from(AuthSession session) {
-      return new SessionResponse(session.accessToken(), session.refreshToken(), session.expiresInSeconds(), session.accountId());
+      return new SessionResponse(
+          session.accessToken(),
+          session.refreshToken(),
+          session.expiresInSeconds(),
+          session.accountId(),
+          session.profileId());
     }
   }
 

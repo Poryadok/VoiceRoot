@@ -94,12 +94,13 @@ message ValidateTokenRequest {
   string access_token = 1;
 }
 
-// Issued session (access + refresh + account id).
+// Issued session (access + refresh + account id + active profile).
 message AuthSession {
   string access_token = 1;
   string refresh_token = 2;
   int64 expires_in_seconds = 3;
   string account_id = 4;
+  string profile_id = 5;
 }
 
 message RegisterResponse {

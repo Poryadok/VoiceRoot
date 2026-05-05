@@ -120,6 +120,7 @@ class AuthServiceTest {
         jwt,
         blacklist,
         clock,
-        Duration.ofDays(30));
+        Duration.ofDays(30),
+        new voice.backend.auth.userdb.InMemoryPrimaryProfileProvisioner());
   }
 }

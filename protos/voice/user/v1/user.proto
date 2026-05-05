@@ -26,6 +26,10 @@ enum PrivacyPreset {
 
 // User Service — profiles, privacy, presence. HTTP: /api/v1/users/**.
 service UserService {
+  // S2S bootstrap from Auth: ensure one primary profile per account before JWT is issued.
+  // Target: called only from trusted Auth; not exposed via public Gateway REST in Phase 1.
+  rpc EnsurePrimaryProfile(EnsurePrimaryProfileRequest) returns (EnsurePrimaryProfileResponse);
+
   rpc GetProfile(GetProfileRequest) returns (GetProfileResponse);
   rpc GetProfiles(GetProfilesRequest) returns (GetProfilesResponse);
   rpc UpdateProfile(UpdateProfileRequest) returns (UpdateProfileResponse);
@@ -51,6 +55,18 @@ service UserService {
   rpc CompleteOnboardingStep(CompleteOnboardingStepRequest) returns (CompleteOnboardingStepResponse);
 
   rpc GetVerificationStatus(GetVerificationStatusRequest) returns (GetVerificationStatusResponse);
+}
+
+message EnsurePrimaryProfileRequest {
+  string account_id = 1;
+  // Optional explicit profile UUID (Auth may pre-generate); if empty, User generates id.
+  optional string profile_id = 2;
+  // Hint for display_name / username base (e.g. email local part).
+  string display_hint = 3;
+}
+
+message EnsurePrimaryProfileResponse {
+  Profile profile = 1;
 }
 
 message GetProfileRequest {

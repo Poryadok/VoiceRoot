@@ -35,11 +35,14 @@ class AuthRestIntegrationTest {
     assertThat(access).contains(".");
     assertThat(refresh).isNotBlank().doesNotContain(".");
     assertThat(registered.get("expires_in_seconds").asLong()).isEqualTo(900);
+    assertThat(registered.get("profile_id").asText())
+        .matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
 
     mockMvc.perform(post("/api/v1/auth/validate")
             .header("Authorization", "Bearer " + access))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.user_id", is(registered.get("account_id").asText())))
+        .andExpect(jsonPath("$.profile_id", is(registered.get("profile_id").asText())))
         .andExpect(jsonPath("$.jti", not(blankOrNullString())));
 
     JsonNode login = postJson("/api/v1/auth/login",

@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import voice.backend.auth.userdb.PrimaryProfileProvisioner;
 import voice.backend.auth.repository.Account;
 import voice.backend.auth.repository.AccountRepository;
 import voice.backend.auth.repository.RefreshTokenRecord;
@@ -23,6 +24,7 @@ public class AuthService {
   private final TokenBlacklist tokenBlacklist;
   private final Clock clock;
   private final Duration refreshTtl;
+  private final PrimaryProfileProvisioner primaryProfileProvisioner;
 
   public AuthService(
       AccountRepository accounts,
@@ -32,7 +34,8 @@ public class AuthService {
       JwtService jwtService,
       TokenBlacklist tokenBlacklist,
       Clock clock,
-      Duration refreshTtl) {
+      Duration refreshTtl,
+      PrimaryProfileProvisioner primaryProfileProvisioner) {
     this.accounts = accounts;
     this.refreshTokens = refreshTokens;
     this.refreshTokenCodec = refreshTokenCodec;
@@ -41,6 +44,7 @@ public class AuthService {
     this.tokenBlacklist = tokenBlacklist;
     this.clock = clock;
     this.refreshTtl = refreshTtl;
+    this.primaryProfileProvisioner = primaryProfileProvisioner;
   }
 
   public AuthService withClock(Clock newClock) {
@@ -52,7 +56,8 @@ public class AuthService {
         jwtService.withClock(newClock),
         tokenBlacklist,
         newClock,
-        refreshTtl);
+        refreshTtl,
+        primaryProfileProvisioner);
   }
 
   public AuthSession register(RegisterCommand command) {
@@ -120,7 +125,7 @@ public class AuthService {
   }
 
   private AuthSession issueSession(Account account, String deviceInfoJson) {
-    String profileId = "profile-" + account.id();
+    String profileId = primaryProfileProvisioner.ensurePrimaryProfile(account.id(), displayHint(account));
     String accessToken = jwtService.issue(account.id().toString(), profileId, List.of("user"), "free");
     TokenClaims claims = jwtService.validate(accessToken);
     String refreshToken = refreshTokenCodec.generate();
@@ -131,7 +136,18 @@ public class AuthService {
         claims.jti(),
         Instant.now(clock).plus(refreshTtl),
         Instant.now(clock));
-    return new AuthSession(accessToken, refreshToken, jwtService.accessTtl().toSeconds(), account.id().toString());
+    return new AuthSession(
+        accessToken, refreshToken, jwtService.accessTtl().toSeconds(), account.id().toString(), profileId);
+  }
+
+  private static String displayHint(Account account) {
+    if (account.email() != null && !account.email().isBlank()) {
+      return account.email();
+    }
+    if (account.phone() != null && !account.phone().isBlank()) {
+      return account.phone();
+    }
+    return account.id().toString();
   }
 
   private RefreshTokenRecord refreshRecord(String token) {

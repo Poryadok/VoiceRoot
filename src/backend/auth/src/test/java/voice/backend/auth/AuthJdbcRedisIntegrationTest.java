@@ -41,11 +41,22 @@ class AuthJdbcRedisIntegrationTest {
   static final GenericContainer<?> redis =
       new GenericContainer<>(DockerImageName.parse("redis:7-alpine")).withExposedPorts(6379);
 
+  @Container
+  static final PostgreSQLContainer<?> userPostgres =
+      new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
+          .withDatabaseName("user_db")
+          .withUsername("voice")
+          .withPassword("voice")
+          .withInitScript("integration-user-schema.sql");
+
   @DynamicPropertySource
   static void registerProps(DynamicPropertyRegistry registry) {
     registry.add("spring.datasource.url", postgres::getJdbcUrl);
     registry.add("spring.datasource.username", postgres::getUsername);
     registry.add("spring.datasource.password", postgres::getPassword);
+    registry.add("auth.user-db.jdbc-url", userPostgres::getJdbcUrl);
+    registry.add("auth.user-db.username", userPostgres::getUsername);
+    registry.add("auth.user-db.password", userPostgres::getPassword);
     registry.add("spring.data.redis.host", redis::getHost);
     registry.add("spring.data.redis.port", () -> String.valueOf(redis.getMappedPort(6379)));
   }
@@ -63,10 +74,15 @@ class AuthJdbcRedisIntegrationTest {
     assertThat(access).contains(".");
     assertThat(refresh).isNotBlank().doesNotContain(".");
 
+    String profileId = registered.get("profile_id").asText();
+    assertThat(profileId).matches(
+        "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
+
     mockMvc.perform(post("/api/v1/auth/validate")
             .header("Authorization", "Bearer " + access))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.user_id", is(registered.get("account_id").asText())))
+        .andExpect(jsonPath("$.profile_id", is(profileId)))
         .andExpect(jsonPath("$.jti", not(blankOrNullString())));
 
     JsonNode rotated = postJson("/api/v1/auth/refresh",

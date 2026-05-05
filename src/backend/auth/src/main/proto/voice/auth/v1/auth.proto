@@ -95,6 +95,7 @@ message AuthSession {
   string refresh_token = 2;
   int64 expires_in_seconds = 3;
   string account_id = 4;
+  string profile_id = 5;
 }
 
 message RegisterResponse {

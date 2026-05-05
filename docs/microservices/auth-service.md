@@ -20,6 +20,7 @@
 - Конвертация гостевого аккаунта в полноценный
 - Soft delete аккаунта (30-дневный grace period)
 - JWKS endpoint для публичных ключей (используется Gateway и другими сервисами)
+- **Фаза 1:** перед выдачей access JWT обеспечивается первичный профиль в `user_db` (claim `profile_id` = `profiles.id`); см. [primary-profile-bootstrap.md](primary-profile-bootstrap.md), [EXEC_PLAN.md](../EXEC_PLAN.md).
 - OTP генерация и валидация (email)
 
 ## API (gRPC)

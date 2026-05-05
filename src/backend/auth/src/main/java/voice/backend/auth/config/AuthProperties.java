@@ -9,7 +9,12 @@ public class AuthProperties {
   private final Refresh refresh = new Refresh();
   private final Redis redis = new Redis();
   private final Grpc grpc = new Grpc();
+  private final UserDb userDb = new UserDb();
   private PersistenceMode persistence = PersistenceMode.JDBC;
+
+  public UserDb getUserDb() {
+    return userDb;
+  }
 
   public PersistenceMode getPersistence() {
     return persistence;
@@ -130,6 +135,48 @@ public class AuthProperties {
 
     public void setPort(int port) {
       this.port = port;
+    }
+  }
+
+  public static class UserDb {
+    private String jdbcUrl = "";
+    private String username = "";
+    private String password = "";
+
+    public boolean isConfigured() {
+      return jdbcUrl != null && !jdbcUrl.isBlank();
+    }
+
+    public String getJdbcUrl() {
+      return jdbcUrl;
+    }
+
+    public void setJdbcUrl(String jdbcUrl) {
+      this.jdbcUrl = jdbcUrl;
+    }
+
+    public String getUsername() {
+      return username;
+    }
+
+    public void setUsername(String username) {
+      this.username = username;
+    }
+
+    public String getPassword() {
+      return password;
+    }
+
+    public void setPassword(String password) {
+      this.password = password;
+    }
+
+    public String resolveUsername() {
+      return username == null || username.isBlank() ? "voice" : username;
+    }
+
+    public String resolvePassword() {
+      return password == null ? "" : password;
     }
   }
 }

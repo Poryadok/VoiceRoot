@@ -78,6 +78,11 @@ if ! docker compose exec -T postgres pg_isready -U voice -d auth_db >/dev/null 2
   exit 1
 fi
 
+if ! docker compose exec -T postgres psql -U voice -d user_db -tAc "SELECT to_regclass('public.profiles')" | grep -q profiles; then
+  echo "Applying user_db schema for smoke..."
+  cat "$ROOT/docker/postgres/user_db_init.sql.snippet" | docker compose exec -T postgres psql -U voice -d user_db -v ON_ERROR_STOP=1 -f -
+fi
+
 POSTGRES_CID=$(docker compose ps -q postgres)
 NETWORK=$(docker inspect "$POSTGRES_CID" --format '{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{"\n"}}{{end}}' | head -1)
 if [[ -z "$NETWORK" ]]; then
@@ -93,6 +98,9 @@ docker run -d --name "$CONTAINER_NAME" --network "$NETWORK" \
   -e SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/auth_db \
   -e SPRING_DATASOURCE_USERNAME=voice \
   -e SPRING_DATASOURCE_PASSWORD=voice \
+  -e AUTH_USER_DB_JDBC_URL=jdbc:postgresql://postgres:5432/user_db \
+  -e AUTH_USER_DB_USERNAME=voice \
+  -e AUTH_USER_DB_PASSWORD=voice \
   -e SPRING_DATA_REDIS_HOST=redis \
   -e SPRING_DATA_REDIS_PORT=6379 \
   -e AUTH_JWT_PRIVATE_KEY_LOCATION=file:/run/jwt.pem \

@@ -85,6 +85,7 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
         .setRefreshToken(session.refreshToken())
         .setExpiresInSeconds(session.expiresInSeconds())
         .setAccountId(session.accountId())
+        .setProfileId(session.profileId())
         .build();
   }
 

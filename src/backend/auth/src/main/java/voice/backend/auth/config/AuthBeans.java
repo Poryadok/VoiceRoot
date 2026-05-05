@@ -38,7 +38,8 @@ public class AuthBeans {
       JwtService jwtService,
       TokenBlacklist tokenBlacklist,
       Clock clock,
-      AuthProperties properties) {
+      AuthProperties properties,
+      voice.backend.auth.userdb.PrimaryProfileProvisioner primaryProfileProvisioner) {
     return new AuthService(
         accounts,
         refreshTokens,
@@ -47,6 +48,7 @@ public class AuthBeans {
         jwtService,
         tokenBlacklist,
         clock,
-        properties.getRefresh().getTtl());
+        properties.getRefresh().getTtl(),
+        primaryProfileProvisioner);
   }
 }

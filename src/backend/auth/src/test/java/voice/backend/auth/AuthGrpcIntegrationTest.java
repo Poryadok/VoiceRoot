@@ -38,11 +38,14 @@ class AuthGrpcIntegrationTest {
       assertThat(registered.getAccessToken()).contains(".");
       assertThat(registered.getRefreshToken()).isNotBlank().doesNotContain(".");
       assertThat(registered.getExpiresInSeconds()).isEqualTo(900);
+      assertThat(registered.getProfileId())
+          .matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
 
       var claims = client.validateToken(ValidateTokenRequest.newBuilder()
           .setAccessToken(registered.getAccessToken())
           .build()).getClaims();
       assertThat(claims.getUserId()).isEqualTo(registered.getAccountId());
+      assertThat(claims.getProfileId()).isEqualTo(registered.getProfileId());
 
       var login = client.login(LoginRequest.newBuilder()
           .setEmail("grpc@example.com")
