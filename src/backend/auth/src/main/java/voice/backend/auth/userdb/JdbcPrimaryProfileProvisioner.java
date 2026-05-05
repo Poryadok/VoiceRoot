@@ -10,7 +10,7 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 import voice.backend.auth.service.AuthException;
 
-public final class JdbcPrimaryProfileProvisioner implements PrimaryProfileProvisioner {
+public class JdbcPrimaryProfileProvisioner implements PrimaryProfileProvisioner {
   private static final int MAX_DISCRIMINATOR_ATTEMPTS = 24;
 
   private final NamedParameterJdbcTemplate jdbc;

@@ -11,6 +11,15 @@ HTTP_PORT="${AUTH_HTTP_PORT:-18080}"
 GRPC_PORT="${AUTH_GRPC_PORT:-19090}"
 CONTAINER_NAME="${AUTH_SMOKE_CONTAINER:-auth-smoke}"
 JWT_KEY="${JWT_KEY_PATH:-$ROOT/src/backend/auth/src/test/resources/jwt-test-private.pem}"
+# Docker Desktop on Windows (Git Bash / MSYS): bind mount source must be //drive/path, not /d/path.
+JWT_DOCKER_VOL="$JWT_KEY"
+if [[ "$JWT_DOCKER_VOL" =~ ^/([a-zA-Z])/(.*)$ ]]; then
+  case "$(uname -s)" in
+    CYGWIN* | MINGW* | MSYS*)
+      JWT_DOCKER_VOL="//${BASH_REMATCH[1]}/${BASH_REMATCH[2]}"
+      ;;
+  esac
+fi
 
 cleanup() {
   set +e
@@ -25,26 +34,42 @@ install_grpcurl() {
     return 0
   fi
   local ver="1.9.2"
-  local url
-  local suffix
-  case "$(uname -s)-$(uname -m)" in
+  local url tmp installdir suffix archive_fmt=tgz
+  tmp="$(mktemp)"
+  installdir="$(mktemp -d)"
+  unames="$(uname -s)"
+  unm="$(uname -m)"
+  suffix=""
+  case "${unames}-${unm}" in
   Linux-x86_64) suffix="linux_x86_64" ;;
   Linux-aarch64 | Linux-arm64) suffix="linux_arm64" ;;
   Darwin-x86_64) suffix="osx_x86_64" ;;
   Darwin-arm64) suffix="osx_arm64" ;;
-  *)
-    echo "unsupported platform: $(uname -s) $(uname -m)" >&2
-    return 1
-    ;;
   esac
-  url="https://github.com/fullstorydev/grpcurl/releases/download/v${ver}/grpcurl_${ver}_${suffix}.tar.gz"
-  local tmp installdir
-  tmp="$(mktemp)"
-  installdir="$(mktemp -d)"
-  curl -fsSL "$url" -o "$tmp"
-  tar -xzf "$tmp" -C "$installdir" grpcurl
+  if [[ -z "$suffix" ]] && [[ "$unames" == MINGW*_NT-* || "$unames" == MSYS* ]] && [[ "$unm" == x86_64 ]]; then
+    suffix="windows_x86_64"
+    archive_fmt="zip"
+  fi
+  if [[ -z "$suffix" ]]; then
+    echo "unsupported platform: ${unames} ${unm}" >&2
+    return 1
+  fi
+  local curl_opts=(-fsSL)
+  case "${unames}" in
+  MINGW*_NT-* | MSYS*) curl_opts+=(--ssl-no-revoke) ;;
+  esac
+  if [[ "$archive_fmt" == zip ]]; then
+    url="https://github.com/fullstorydev/grpcurl/releases/download/v${ver}/grpcurl_${ver}_${suffix}.zip"
+    curl "${curl_opts[@]}" "$url" -o "$tmp"
+    unzip -qo "$tmp" -d "$installdir"
+    mv "${installdir}/grpcurl.exe" "${installdir}/grpcurl"
+  else
+    url="https://github.com/fullstorydev/grpcurl/releases/download/v${ver}/grpcurl_${ver}_${suffix}.tar.gz"
+    curl "${curl_opts[@]}" "$url" -o "$tmp"
+    tar -xzf "$tmp" -C "$installdir" grpcurl
+  fi
   rm -f "$tmp"
-  chmod +x "$installdir/grpcurl"
+  chmod +x "${installdir}/grpcurl"
   export PATH="$installdir:$PATH"
 }
 
@@ -104,7 +129,7 @@ docker run -d --name "$CONTAINER_NAME" --network "$NETWORK" \
   -e SPRING_DATA_REDIS_HOST=redis \
   -e SPRING_DATA_REDIS_PORT=6379 \
   -e AUTH_JWT_PRIVATE_KEY_LOCATION=file:/run/jwt.pem \
-  -v "$JWT_KEY:/run/jwt.pem:ro" \
+  -v "$JWT_DOCKER_VOL:/run/jwt.pem:ro" \
   -p "${HTTP_PORT}:8080" \
   -p "${GRPC_PORT}:9090" \
   "$AUTH_IMAGE"

@@ -5,6 +5,10 @@ spring:
     password: ${SPRING_DATASOURCE_PASSWORD:voice}
   flyway:
     enabled: ${AUTH_FLYWAY_ENABLED:true}
+    # Bind explicitly to auth_db: a second DataSource (user_db) must not become Flyway's target.
+    url: "${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/auth_db}"
+    user: "${SPRING_DATASOURCE_USERNAME:voice}"
+    password: "${SPRING_DATASOURCE_PASSWORD:voice}"
   data:
     redis:
       host: ${SPRING_DATA_REDIS_HOST:localhost}
