@@ -41,6 +41,9 @@ class AuthGrpcIntegrationTest {
       assertThat(registered.getExpiresInSeconds()).isEqualTo(900);
       assertThat(registered.getProfileId())
           .matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
+      var registeredJwt = SignedJWT.parse(registered.getAccessToken()).getJWTClaimsSet();
+      assertThat(registeredJwt.getStringClaim("user_id")).isEqualTo(registered.getAccountId());
+      assertThat(registeredJwt.getStringClaim("profile_id")).isEqualTo(registered.getProfileId());
 
       var claims = client.validateToken(ValidateTokenRequest.newBuilder()
           .setAccessToken(registered.getAccessToken())
