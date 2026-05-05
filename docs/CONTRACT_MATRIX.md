@@ -56,7 +56,7 @@
 | `user.events`          | Auth, User        | Analytics, Social, Notification, Federation |
 | `social.events`        | Social            | Analytics, Notification, Chat, Federation |
 | `role.events`          | Role              | Analytics, Notification, Federation, Realtime |
-| `message.events`       | Messaging         | Analytics, Notification, Search, Moderation |
+| `message.events`       | Messaging         | Analytics, Notification, Search, Moderation, Realtime |
 | `chat.events`          | Chat, Space       | Analytics, Notification, Realtime |
 | `voice.events`         | Voice             | Analytics, Notification |
 | `moderation.events`    | Moderation        | Analytics, Notification, User |

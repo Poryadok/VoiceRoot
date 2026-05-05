@@ -20,6 +20,16 @@
 - Last seen timestamp
 - Onboarding state (шаги туториала)
 - Управление настройками (язык, тема, уведомления)
+- **Поиск профилей для добавления в друзья / открытия DM (Фаза 1)** — запрос к `user_db` (не Search Service и не `search_db`; см. [DATA_SCOPE_V1.md](../DATA_SCOPE_V1.md), таблица фич)
+
+## Поиск профилей vs Search Service
+
+| Канал | RPC | Когда |
+|-------|-----|--------|
+| **User Service** | `SearchProfiles` | PLAN Фаза 1: подбор по нику/отображаемому имени из канонических данных профиля; учёт приватности и блокировок (совместно с Social при необходимости). |
+| **Search Service** | `SearchUsers` / `SearchGlobal` | Фаза 9+: полнотекст и глобальный поиск по проекциям в `search_db` / внешнем движке — [search-service.md](search-service.md). |
+
+Клиент Фазы 1 для чеклиста «Поиск пользователей» в [PLAN.md](../PLAN.md) опирается на **`UserService.SearchProfiles`** (HTTP-префикс того же сервиса: `/api/v1/users/**` — [api-gateway.md](api-gateway.md)).
 
 ## API (gRPC)
 
@@ -33,6 +43,7 @@ service UserService {
   rpc DeleteProfile(DeleteProfileRequest) returns (Empty);
   rpc SwitchProfile(SwitchProfileRequest) returns (Profile);
   rpc ListMyProfiles(Empty) returns (ProfileList);
+  rpc SearchProfiles(SearchProfilesRequest) returns (SearchProfilesResponse);
 
   // Приватность
   rpc GetPrivacySettings(GetPrivacyRequest) returns (PrivacySettings);
@@ -55,6 +66,8 @@ service UserService {
   rpc GetVerificationStatus(GetVerificationRequest) returns (VerificationStatus);
 }
 ```
+
+Канон RPC и сообщений — репозиторий `protos/voice/user/v1/user.proto`.
 
 ## Модель данных
 
@@ -153,6 +166,6 @@ onboarding_state
 - **Auth Service** — account_id валидация
 - **Subscription Service** — проверка лимитов (мульти-профили, кастомный статус)
 - **Redis** — presence кэш (TTL 5 мин, heartbeat)
-- **File Service** — загрузка аватара/баннера
+- **File Service** — загрузка аватара/баннера (целевой контур); **Фаза 1:** минимальный R2/presigned для статичного аватара может жить в User без отдельного File Service — [PLAN.md](../PLAN.md)
 
 

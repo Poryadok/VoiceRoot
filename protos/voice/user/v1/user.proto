@@ -3,6 +3,7 @@ syntax = "proto3";
 package voice.user.v1;
 
 import "google/protobuf/timestamp.proto";
+import "voice/common/v1/common.proto";
 
 option go_package = "voice.app/voice/user/v1;userv1";
 
@@ -32,6 +33,9 @@ service UserService {
   rpc DeleteProfile(DeleteProfileRequest) returns (DeleteProfileResponse);
   rpc SwitchProfile(SwitchProfileRequest) returns (SwitchProfileResponse);
   rpc ListMyProfiles(ListMyProfilesRequest) returns (ListMyProfilesResponse);
+  // Discover profiles by query (username / display_name) for friend requests and DM addressing.
+  // Phase 1 (PLAN): reads user_db; privacy + blocks enforced server-side. Not Search Service (Фаза 9).
+  rpc SearchProfiles(SearchProfilesRequest) returns (SearchProfilesResponse);
 
   rpc GetPrivacySettings(GetPrivacySettingsRequest) returns (GetPrivacySettingsResponse);
   rpc UpdatePrivacySettings(UpdatePrivacySettingsRequest) returns (UpdatePrivacySettingsResponse);
@@ -108,6 +112,16 @@ message SwitchProfileRequest {
 }
 
 message ListMyProfilesRequest {}
+
+message SearchProfilesRequest {
+  string query = 1;
+  voice.common.v1.CursorPageRequest page = 2;
+}
+
+message SearchProfilesResponse {
+  ProfileList profile_list = 1;
+  voice.common.v1.CursorPageResponse page = 2;
+}
 
 message GetPrivacySettingsRequest {
   string profile_id = 1;
