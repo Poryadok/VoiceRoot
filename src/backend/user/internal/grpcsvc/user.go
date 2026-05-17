@@ -112,13 +112,28 @@ func (s *UserGRPC) UpdateProfile(ctx context.Context, req *userv1.UpdateProfileR
 	}
 	if req.AvatarUrl != nil {
 		u := strings.TrimSpace(*req.AvatarUrl)
-		if u != "" && strings.TrimSpace(s.AvatarPublicBaseURL) != "" {
-			prefix := r2avatar.JoinPublicURL(s.AvatarPublicBaseURL, "avatars/")
-			if !strings.HasPrefix(u, prefix) {
-				return nil, status.Error(codes.InvalidArgument, "avatar_url must use the configured R2 public URL for avatars")
+		if u == "" {
+			empty := ""
+			in.AvatarURL = &empty
+		} else {
+			base := strings.TrimSpace(s.AvatarPublicBaseURL)
+			if base != "" {
+				switch {
+				case r2avatar.ValidateAvatarPublicURLForProfile(base, profileID, u) == nil:
+					in.AvatarURL = proto.String(u)
+				case r2avatar.ValidateAvatarObjectKeyForProfile(profileID, u) == nil:
+					nk := strings.TrimLeft(strings.TrimSpace(u), "/")
+					in.AvatarURL = proto.String(r2avatar.JoinPublicURL(base, nk))
+				default:
+					return nil, status.Error(codes.InvalidArgument, "avatar_url must be the R2 public URL or object key for this profile's avatar")
+				}
+			} else if r2avatar.ValidateAvatarObjectKeyForProfile(profileID, u) == nil {
+				nk := strings.TrimLeft(strings.TrimSpace(u), "/")
+				in.AvatarURL = proto.String(nk)
+			} else {
+				in.AvatarURL = proto.String(u)
 			}
 		}
-		in.AvatarURL = req.AvatarUrl
 	}
 	if req.Bio != nil {
 		if len(*req.Bio) > 500 {

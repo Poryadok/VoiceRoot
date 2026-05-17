@@ -311,6 +311,18 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 		require.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
 
+	t.Run("UpdateProfile rejects avatar_url for another profiles R2 folder", func(t *testing.T) {
+		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
+		otherPID := uuid.New()
+		bad := "https://cdn-test.example/avatars/" + otherPID.String() + "/00000000-0000-0000-0000-000000000001.png"
+		_, err := cli.UpdateProfile(mdCtx, &userv1.UpdateProfileRequest{
+			ProfileId: pid.String(),
+			AvatarUrl: proto.String(bad),
+		})
+		require.Error(t, err)
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+
 	t.Run("UpdateProfile avatar_url with allowed prefix", func(t *testing.T) {
 		good := "https://cdn-test.example/avatars/" + pid.String() + "/00000000-0000-0000-0000-000000000001.png"
 		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
@@ -320,6 +332,41 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Equal(t, good, resp.GetProfile().GetAvatarUrl())
+	})
+
+	t.Run("UpdateProfile normalizes object_key from CreateAvatarPresignedUpload to public URL", func(t *testing.T) {
+		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
+		pres, err := cli.CreateAvatarPresignedUpload(mdCtx, &userv1.CreateAvatarPresignedUploadRequest{
+			ProfileId:     pid.String(),
+			ContentType:   "image/png",
+			ContentLength: 2048,
+		})
+		require.NoError(t, err)
+		key := pres.GetObjectKey()
+		require.NotEmpty(t, key)
+		resp, err := cli.UpdateProfile(mdCtx, &userv1.UpdateProfileRequest{
+			ProfileId: pid.String(),
+			AvatarUrl: proto.String(key),
+		})
+		require.NoError(t, err)
+		require.Equal(t, pres.GetPublicUrl(), resp.GetProfile().GetAvatarUrl())
+		gp, err := cli.GetProfile(ctx, &userv1.GetProfileRequest{
+			By: &userv1.GetProfileRequest_ProfileId{ProfileId: pid.String()},
+		})
+		require.NoError(t, err)
+		require.Equal(t, pres.GetPublicUrl(), gp.GetProfile().GetAvatarUrl())
+	})
+
+	t.Run("UpdateProfile rejects object_key for wrong profile_id", func(t *testing.T) {
+		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
+		otherPID := uuid.New()
+		key := "avatars/" + otherPID.String() + "/00000000-0000-0000-0000-000000000001.png"
+		_, err := cli.UpdateProfile(mdCtx, &userv1.UpdateProfileRequest{
+			ProfileId: pid.String(),
+			AvatarUrl: proto.String(key),
+		})
+		require.Error(t, err)
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
 
 	t.Run("CreateProfile secondary", func(t *testing.T) {
