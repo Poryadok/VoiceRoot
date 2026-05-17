@@ -1,0 +1,98 @@
+package grpcsvc
+
+import (
+	"context"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"voice/backend/chat/internal/authctx"
+	"voice/backend/chat/internal/store"
+
+	chatv1 "voice.app/voice/chat/v1"
+)
+
+func (s *ChatGRPC) CreateDM(ctx context.Context, req *chatv1.CreateDMRequest) (*chatv1.CreateDMResponse, error) {
+	c, err := s.ensureDM(ctx, req.GetOtherProfileId())
+	if err != nil {
+		return nil, err
+	}
+	return &chatv1.CreateDMResponse{Chat: chatRowToProto(c)}, nil
+}
+
+func (s *ChatGRPC) GetDM(ctx context.Context, req *chatv1.GetDMRequest) (*chatv1.GetDMResponse, error) {
+	c, err := s.ensureDM(ctx, req.GetOtherProfileId())
+	if err != nil {
+		return nil, err
+	}
+	return &chatv1.GetDMResponse{Chat: chatRowToProto(c)}, nil
+}
+
+// ensureDM applies PLAN Phase 1: DM without friendship; blocks via Social (both directions).
+func (s *ChatGRPC) ensureDM(ctx context.Context, otherProfileRaw string) (*store.ChatRow, error) {
+	if s == nil || s.DM == nil {
+		return nil, status.Error(codes.FailedPrecondition, "chat persistence not configured")
+	}
+	if s.Profiles == nil {
+		return nil, status.Error(codes.FailedPrecondition, "user profile lookup not configured")
+	}
+	accountID, ok := authctx.AccountID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing credentials")
+	}
+	callerProfile, ok := authctx.ProfileID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing profile")
+	}
+	otherProfile, err := parseUUIDField("other_profile_id", otherProfileRaw)
+	if err != nil {
+		return nil, err
+	}
+	if otherProfile == callerProfile {
+		return nil, status.Error(codes.InvalidArgument, "cannot open dm with self")
+	}
+
+	otherAccount, err := s.Profiles.AccountIDByProfileID(ctx, otherProfile)
+	if err != nil {
+		return nil, err
+	}
+
+	if s.Blocks != nil {
+		blocked, err := s.Blocks.AccountPairBlocked(ctx, accountID, otherAccount)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		if blocked {
+			return nil, status.Error(codes.PermissionDenied, "dm not allowed between blocked accounts")
+		}
+	}
+
+	row, err := s.DM.EnsureDM(ctx, callerProfile, otherProfile)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	return row, nil
+}
+
+func chatRowToProto(r *store.ChatRow) *chatv1.Chat {
+	if r == nil {
+		return nil
+	}
+	out := &chatv1.Chat{
+		Id:                 r.ID.String(),
+		Type:               chatv1.ChatType_CHAT_TYPE_DM,
+		CreatorProfileId:   r.CreatorProfileID.String(),
+		SlowModeSeconds:    0,
+		CreatedAt:          timestamppb.New(r.CreatedAt),
+		UpdatedAt:          timestamppb.New(r.UpdatedAt),
+		SpaceId:            nil,
+		Name:               nil,
+		AvatarUrl:          nil,
+		Topic:              nil,
+	}
+	if r.LastMessageAt != nil {
+		out.LastMessageAt = timestamppb.New(*r.LastMessageAt)
+	}
+	return out
+}

@@ -12,6 +12,7 @@ RUN adduser -D -H -u 65532 nonroot
 USER nonroot:nonroot
 WORKDIR /
 COPY --from=build /out/service /service
-EXPOSE 8080
+EXPOSE 8080 9090
 ENV LISTEN_ADDR=:8080
+ENV CHAT_GRPC_LISTEN=:9090
 ENTRYPOINT ["/service"]
