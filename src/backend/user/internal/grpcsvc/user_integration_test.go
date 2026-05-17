@@ -162,6 +162,22 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 		require.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
 
+	t.Run("GetProfile invalid profile_id", func(t *testing.T) {
+		_, err := cli.GetProfile(ctx, &userv1.GetProfileRequest{
+			By: &userv1.GetProfileRequest_ProfileId{ProfileId: "not-a-uuid"},
+		})
+		require.Error(t, err)
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+
+	t.Run("GetProfile not found", func(t *testing.T) {
+		_, err := cli.GetProfile(ctx, &userv1.GetProfileRequest{
+			By: &userv1.GetProfileRequest_ProfileId{ProfileId: uuid.New().String()},
+		})
+		require.Error(t, err)
+		require.Equal(t, codes.NotFound, status.Code(err))
+	})
+
 	t.Run("GetProfiles batch", func(t *testing.T) {
 		pid2 := uuid.New()
 		_, err := pool.Exec(ctx, `
@@ -175,6 +191,14 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Len(t, resp.GetProfileList().GetProfiles(), 2)
+	})
+
+	t.Run("GetProfiles invalid profile_id", func(t *testing.T) {
+		_, err := cli.GetProfiles(ctx, &userv1.GetProfilesRequest{
+			ProfileIds: []string{pid.String(), "bad-id"},
+		})
+		require.Error(t, err)
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
 
 	t.Run("UpdateProfile forbidden for other account", func(t *testing.T) {
@@ -344,6 +368,18 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 		require.Equal(t, userv1.PresenceOnlineStatus_PRESENCE_ONLINE_STATUS_DND, m[pid2.String()].GetStatusEnum())
 	})
 
+	t.Run("GetBulkPresence empty ids returns empty map", func(t *testing.T) {
+		gb, err := cli.GetBulkPresence(ctx, &userv1.GetBulkPresenceRequest{ProfileIds: nil})
+		require.NoError(t, err)
+		require.Empty(t, gb.GetByProfileId())
+	})
+
+	t.Run("GetPresence invalid profile_id", func(t *testing.T) {
+		_, err := cli.GetPresence(ctx, &userv1.GetPresenceRequest{ProfileId: "nope"})
+		require.Error(t, err)
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+
 	t.Run("UpdatePresence rejects profile not owned", func(t *testing.T) {
 		var otherPID uuid.UUID
 		err := pool.QueryRow(ctx, `SELECT id FROM profiles WHERE account_id = $1 LIMIT 1`, accountB).Scan(&otherPID)
@@ -368,6 +404,39 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 		_, err := cli.SearchProfiles(mdCtx, &userv1.SearchProfilesRequest{Query: "  "})
 		require.Error(t, err)
 		require.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+
+	t.Run("SearchProfiles query too long", func(t *testing.T) {
+		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
+		longQ := strings.Repeat("x", 129)
+		_, err := cli.SearchProfiles(mdCtx, &userv1.SearchProfilesRequest{Query: longQ})
+		require.Error(t, err)
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+
+	t.Run("SearchProfiles invalid cursor", func(t *testing.T) {
+		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
+		_, err := cli.SearchProfiles(mdCtx, &userv1.SearchProfilesRequest{
+			Query: "any",
+			Page:  &commonv1.CursorPageRequest{Cursor: "!!!not-valid!!!", PageSize: 10},
+		})
+		require.Error(t, err)
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+
+	t.Run("SearchProfiles matches display_name not username", func(t *testing.T) {
+		accDN := uuid.New()
+		pidDN := uuid.New()
+		_, err := pool.Exec(ctx, `
+			INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+			VALUES ($1, $2, 'uniqusr999', '0088', 'RareDisplayTokenQ7', true)`,
+			pidDN, accDN)
+		require.NoError(t, err)
+		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
+		resp, err := cli.SearchProfiles(mdCtx, &userv1.SearchProfilesRequest{Query: "RareDisplay"})
+		require.NoError(t, err)
+		ids := collectProfileIDs(resp.GetProfileList().GetProfiles())
+		require.Contains(t, ids, pidDN.String())
 	})
 
 	t.Run("SearchProfiles finds other account", func(t *testing.T) {
