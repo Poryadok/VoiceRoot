@@ -36,8 +36,8 @@ service ChatService {
   rpc LeaveChat(LeaveChatRequest) returns (Empty);
   rpc ListMembers(ListMembersRequest) returns (MemberList);
 
-  // Список чатов
-  rpc ListChats(ListChatsRequest) returns (ChatList);
+  // Список чатов (элемент: Chat + превью / unread — см. ChatListItem в protos)
+  rpc ListChats(ListChatsRequest) returns (ListChatsResponse);
   rpc GetChat(GetChatRequest) returns (Chat);
 
   // Папки
@@ -128,6 +128,28 @@ chat_members
 - `INDEX chats_last_message_at_idx (last_message_at DESC)` для сортировки диалогов
 - `INDEX chats_creator_profile_id_idx (creator_profile_id)`
 
+## ListChats (список, превью, unread)
+
+**Контракт**: `ListChatsRequest` с `voice.common.v1.CursorPageRequest` (`cursor`, `page_size`); ответ `ListChatsResponse.chat_list` — `ChatList` с `items: ChatListItem[]` и `next_cursor`. Каждый `ChatListItem` содержит `chat` (как в `GetChat`) плюс `last_message_preview` и `unread_count`.
+
+**Порядок и фильтр (v1 DM)**:
+- только чаты, где вызывающий профиль есть в `chat_members` и `is_archived = false`, `chats.type = 'dm'`;
+- сортировка по активности: `COALESCE(last_message_at, created_at)` по убыванию, затем `chats.id` по убыванию (стабильный tie-break);
+- размер страницы по умолчанию 50, максимум 100 (согласовано с лимитом «до 100» активных чатов в продукте).
+
+**Превью и непрочитанные: денорм в `chat_db` vs S2S Messaging**
+
+| Подход | Плюсы | Минусы |
+|--------|-------|--------|
+| **Денорм в Chat** (`chats.last_message_preview`, счётчики на `chat_members` и т.п.) | Быстрый один запрос к `chat_db`; меньше зависимость от Messaging при чтении | Дублирование данных; нужны надёжные обновления из потока сообщений / триггеры / джобы; риск рассинхрона |
+| **S2S Messaging (выбрано для Фазы 1 в коде)** | Источник истины остаётся в `messaging_db` (`messages`, `read_receipts`); нет дублирования текста сообщения в Chat | Дополнительный round-trip (batch) при `ListChats`; требуется живой gRPC к Messaging |
+
+Реализация: опциональный интерфейс обогащения на стороне Chat (`ListChatsEnrichment`) вызывается после выборки страницы из PostgreSQL и заполняет `last_message_preview` / `unread_count`. Если клиент Messaging не сконфигурирован, список чатов всё равно возвращается, а эти поля остаются пустыми и нулём. Конкретный набор Messaging RPC (например, расширение к `GetBulkReadState` + выборка последнего видимого сообщения пачкой по `chat_id`) задаётся при внедрении Messaging; до этого момента шлюз может собирать список из Chat и догружать превью отдельными вызовами к Messaging на своей стороне.
+
+**Текущее состояние кода:** в `src/backend/chat/main.go` реализация `ListChatsEnrichment` не подключается (`ListEnrich` остаётся `nil`), поэтому в ответе `ListChats` поля превью и непрочитанного остаются пустыми / нулём до явной проводки к Messaging. Это ожидаемый промежуточный шаг при неготовности Messaging, а не отказ от контракта API.
+
+**Индекс** `chat_members_profile_id_idx` используется для фильтрации по `profile_id`; сортировка опирается на `chats.last_message_at` / `created_at` (см. `chats_last_message_at_idx`).
+
 ## Публикуемые события (→ NATS)
 
 Доменный поток JetStream: **`chat.events`** (совместно с Space для событий дерева/спейса; матрица: [CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)).
@@ -145,6 +167,7 @@ chat_members
 
 - **Social Service** — проверка блокировок при создании DM
 - **User Service** — получение профилей участников
+- **Messaging Service** — для `ListChats`: превью последнего сообщения и `unread_count` по данным `messaging_db` (S2S, см. раздел «ListChats»); без интеграции список возвращается без этих полей
 - **Subscription Service** — лимиты на количество участников группы
 - **Space Service** — при создании текстового чата (`group` \| `channel`) в спейсе: узел **`space_tree_nodes`** (`kind=text_chat`) после создания строки `chats`
 

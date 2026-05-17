@@ -12,12 +12,14 @@ import (
 // ChatGRPC implements ChatService RPCs backed by chat_db (Phase 1: DM).
 type ChatGRPC struct {
 	chatv1.UnimplementedChatServiceServer
-	DM       DMEnsureStore
-	Profiles UserProfileLookup
-	Blocks   AccountBlockChecker
+	DM         DMStore
+	Profiles   UserProfileLookup
+	Blocks     AccountBlockChecker
+	ListEnrich ListChatsEnrichment // optional; Messaging S2S for preview + unread
 }
 
-// DMEnsureStore loads or creates a DM between two profiles.
-type DMEnsureStore interface {
+// DMStore persists DM chats and lists the caller's chats (Phase 1).
+type DMStore interface {
 	EnsureDM(ctx context.Context, callerProfileID, otherProfileID uuid.UUID) (*store.ChatRow, error)
+	ListChatsPage(ctx context.Context, viewerProfileID uuid.UUID, cursor string, limit int) (*store.ListChatsPage, error)
 }

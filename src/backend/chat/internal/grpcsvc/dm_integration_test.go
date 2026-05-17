@@ -106,15 +106,16 @@ func (s stubBlocks) AccountPairBlocked(context.Context, uuid.UUID, uuid.UUID) (b
 	return s.blocked, s.err
 }
 
-func startChatGRPCTestServer(t *testing.T, pool *pgxpool.Pool, profiles UserProfileLookup, blocks AccountBlockChecker) (chatv1.ChatServiceClient, func()) {
+func startChatGRPCTestServer(t *testing.T, pool *pgxpool.Pool, profiles UserProfileLookup, blocks AccountBlockChecker, enrich ListChatsEnrichment) (chatv1.ChatServiceClient, func()) {
 	t.Helper()
 	const bufSize = 1 << 20
 	lis := bufconn.Listen(bufSize)
 	srv := grpc.NewServer()
 	chatv1.RegisterChatServiceServer(srv, &ChatGRPC{
-		DM:       &store.DMStore{Pool: pool},
-		Profiles: profiles,
-		Blocks:   blocks,
+		DM:         &store.DMStore{Pool: pool},
+		Profiles:   profiles,
+		Blocks:     blocks,
+		ListEnrich: enrich,
 	})
 	go func() {
 		if err := srv.Serve(lis); err != nil {
@@ -150,7 +151,7 @@ func TestCreateDM_GetDM_NoFriendshipRequired(t *testing.T) {
 	profB := uuid.New()
 	profiles := mapProfileAccounts{profA: accA, profB: accB}
 
-	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil)
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil)
 	t.Cleanup(cleanup)
 
 	ctxA := withAccountProfileCtx(ctx, accA, profA)
@@ -184,7 +185,7 @@ func TestCreateDM_BlockedPair_PermissionDenied(t *testing.T) {
 	profB := uuid.New()
 	profiles := mapProfileAccounts{profA: accA, profB: accB}
 
-	client, cleanup := startChatGRPCTestServer(t, pool, profiles, stubBlocks{blocked: true})
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, stubBlocks{blocked: true}, nil)
 	t.Cleanup(cleanup)
 
 	ctxA := withAccountProfileCtx(ctx, accA, profA)
@@ -204,7 +205,7 @@ func TestCreateDM_Self_InvalidArgument(t *testing.T) {
 	acc := uuid.New()
 	prof := uuid.New()
 	profiles := mapProfileAccounts{prof: acc}
-	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil)
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil)
 	t.Cleanup(cleanup)
 
 	ctxA := withAccountProfileCtx(ctx, acc, prof)
@@ -226,7 +227,7 @@ func TestCreateDM_UnknownProfile_NotFound(t *testing.T) {
 	profB := uuid.New()
 	profiles := mapProfileAccounts{profA: accA}
 
-	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil)
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil)
 	t.Cleanup(cleanup)
 
 	ctxA := withAccountProfileCtx(ctx, accA, profA)
@@ -245,7 +246,7 @@ func TestCreateDM_MissingAuth_Unauthenticated(t *testing.T) {
 
 	profB := uuid.New()
 	profiles := mapProfileAccounts{profB: uuid.New()}
-	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil)
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil)
 	t.Cleanup(cleanup)
 
 	_, err := client.CreateDM(ctx, &chatv1.CreateDMRequest{OtherProfileId: profB.String()})

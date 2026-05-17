@@ -117,8 +117,17 @@ message ListChatsRequest {
   voice.common.v1.CursorPageRequest page = 1;
 }
 
+// One row in the inbox: chat metadata plus list fields sourced from Messaging (S2S) when configured.
+message ChatListItem {
+  Chat chat = 1;
+  // Truncated last visible message text for list UI; empty/absent when unknown or no messages yet.
+  optional string last_message_preview = 2;
+  // Count of messages unread by the caller in this chat; 0 when caught up or when Messaging is unavailable.
+  int64 unread_count = 3;
+}
+
 message ChatList {
-  repeated Chat chats = 1;
+  repeated ChatListItem items = 1;
   string next_cursor = 2;
 }
 
