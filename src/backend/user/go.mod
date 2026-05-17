@@ -17,6 +17,7 @@ require (
 	voice.app/voice/common v0.0.0
 	voice.app/voice/social v0.0.0
 	voice.app/voice/user v0.0.0
+	voice/backend/social v0.0.0
 )
 
 require (
@@ -87,6 +88,8 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20241202173237-19429a94021a // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace voice/backend/social => ../social
 
 replace voice.app/voice/common => ./pb/voice/common
 
