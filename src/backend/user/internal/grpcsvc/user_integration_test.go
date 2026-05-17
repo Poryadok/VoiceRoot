@@ -27,8 +27,28 @@ import (
 	"voice/backend/user/internal/authctx"
 	"voice/backend/user/internal/store"
 
+	commonv1 "voice.app/voice/common/v1"
 	userv1 "voice.app/voice/user/v1"
 )
+
+type testBlockChecker struct {
+	fn func(viewer, other uuid.UUID) bool
+}
+
+func (c *testBlockChecker) AccountPairBlocked(ctx context.Context, viewer, other uuid.UUID) (bool, error) {
+	if c == nil || c.fn == nil {
+		return false, nil
+	}
+	return c.fn(viewer, other), nil
+}
+
+func collectProfileIDs(ps []*userv1.Profile) []string {
+	out := make([]string, 0, len(ps))
+	for _, p := range ps {
+		out = append(out, p.GetId())
+	}
+	return out
+}
 
 func repoRoot(t *testing.T) string {
 	t.Helper()
@@ -97,10 +117,12 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 
 	lis := bufconn.Listen(1024 * 1024)
 	t.Cleanup(func() { _ = lis.Close() })
+	blocker := &testBlockChecker{}
 	srv := grpc.NewServer()
 	userv1.RegisterUserServiceServer(srv, &UserGRPC{
 		Profiles: store.NewProfileStore(pool),
 		Presence: store.NewPresenceStore(rdb),
+		Blocks:   blocker,
 	})
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(srv.Stop)
@@ -333,5 +355,95 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 		_, err = cli.UpdatePresence(mdCtx, &userv1.UpdatePresenceRequest{Status: "online"})
 		require.Error(t, err)
 		require.Equal(t, codes.NotFound, status.Code(err))
+	})
+
+	t.Run("SearchProfiles unauthenticated", func(t *testing.T) {
+		_, err := cli.SearchProfiles(ctx, &userv1.SearchProfilesRequest{Query: "x"})
+		require.Error(t, err)
+		require.Equal(t, codes.Unauthenticated, status.Code(err))
+	})
+
+	t.Run("SearchProfiles invalid empty query", func(t *testing.T) {
+		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
+		_, err := cli.SearchProfiles(mdCtx, &userv1.SearchProfilesRequest{Query: "  "})
+		require.Error(t, err)
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+
+	t.Run("SearchProfiles finds other account", func(t *testing.T) {
+		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
+		resp, err := cli.SearchProfiles(mdCtx, &userv1.SearchProfilesRequest{Query: "Carol"})
+		require.NoError(t, err)
+		ids := collectProfileIDs(resp.GetProfileList().GetProfiles())
+		var carolID string
+		err = pool.QueryRow(ctx, `SELECT id::text FROM profiles WHERE username = 'carol' AND account_id = $1`, accountB).Scan(&carolID)
+		require.NoError(t, err)
+		require.Contains(t, ids, carolID)
+	})
+
+	t.Run("SearchProfiles excludes own account", func(t *testing.T) {
+		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
+		resp, err := cli.SearchProfiles(mdCtx, &userv1.SearchProfilesRequest{Query: "alice"})
+		require.NoError(t, err)
+		for _, p := range resp.GetProfileList().GetProfiles() {
+			require.NotEqual(t, accountA.String(), p.GetAccountId(), "must not return viewer account profiles")
+		}
+	})
+
+	t.Run("SearchProfiles respects block checker", func(t *testing.T) {
+		accD := uuid.New()
+		pidD := uuid.New()
+		_, err := pool.Exec(ctx, `
+			INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+			VALUES ($1, $2, 'blockedfind', '0099', 'BlockedFindMe', true)`,
+			pidD, accD)
+		require.NoError(t, err)
+		blocker.fn = func(viewer, other uuid.UUID) bool {
+			return viewer == accountA && other == accD
+		}
+		t.Cleanup(func() { blocker.fn = nil })
+		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
+		resp, err := cli.SearchProfiles(mdCtx, &userv1.SearchProfilesRequest{Query: "BlockedFind"})
+		require.NoError(t, err)
+		for _, p := range resp.GetProfileList().GetProfiles() {
+			require.NotEqual(t, pidD.String(), p.GetId())
+		}
+	})
+
+	t.Run("SearchProfiles cursor pagination", func(t *testing.T) {
+		accP1 := uuid.New()
+		accP2 := uuid.New()
+		pidP1 := uuid.New()
+		pidP2 := uuid.New()
+		_, err := pool.Exec(ctx, `
+			INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+			VALUES ($1, $2, 'aaapag', '0010', 'PagUnique Alpha', true)`,
+			pidP1, accP1)
+		require.NoError(t, err)
+		_, err = pool.Exec(ctx, `
+			INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+			VALUES ($1, $2, 'zzzpag', '0011', 'PagUnique Zed', true)`,
+			pidP2, accP2)
+		require.NoError(t, err)
+		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
+		r1, err := cli.SearchProfiles(mdCtx, &userv1.SearchProfilesRequest{
+			Query: "PagUnique",
+			Page:  &commonv1.CursorPageRequest{PageSize: 1},
+		})
+		require.NoError(t, err)
+		require.True(t, r1.GetPage().GetHasMore())
+		require.Len(t, r1.GetProfileList().GetProfiles(), 1)
+		require.Equal(t, "aaapag", r1.GetProfileList().GetProfiles()[0].GetUsername())
+		r2, err := cli.SearchProfiles(mdCtx, &userv1.SearchProfilesRequest{
+			Query: "PagUnique",
+			Page: &commonv1.CursorPageRequest{
+				Cursor:   r1.GetPage().GetNextCursor(),
+				PageSize: 1,
+			},
+		})
+		require.NoError(t, err)
+		require.False(t, r2.GetPage().GetHasMore())
+		require.Len(t, r2.GetProfileList().GetProfiles(), 1)
+		require.Equal(t, "zzzpag", r2.GetProfileList().GetProfiles()[0].GetUsername())
 	})
 }

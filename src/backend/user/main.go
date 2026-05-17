@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	grpcsvc "voice/backend/user/internal/grpcsvc"
 	"voice/backend/user/internal/store"
@@ -60,6 +61,21 @@ func main() {
 			defer func() { _ = rdb.Close() }()
 		}
 
+		var blocks grpcsvc.AccountBlockChecker
+		if socialAddr := strings.TrimSpace(os.Getenv("SOCIAL_GRPC_ADDR")); socialAddr != "" {
+			sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			sconn, err := grpc.DialContext(sctx, socialAddr,
+				grpc.WithTransportCredentials(insecure.NewCredentials()),
+				grpc.WithBlock(),
+			)
+			cancel()
+			if err != nil {
+				log.Fatalf("social grpc dial: %v", err)
+			}
+			defer func() { _ = sconn.Close() }()
+			blocks = grpcsvc.NewSocialGRPCBlocks(sconn)
+		}
+
 		lis, err := net.Listen("tcp", grpcAddr)
 		if err != nil {
 			log.Fatalf("grpc listen: %v", err)
@@ -68,6 +84,7 @@ func main() {
 		userv1.RegisterUserServiceServer(srv, &grpcsvc.UserGRPC{
 			Profiles: store.NewProfileStore(pool),
 			Presence: presence,
+			Blocks:   blocks,
 		})
 		go func() {
 			log.Printf("%s gRPC listening on %s", serviceName, grpcAddr)

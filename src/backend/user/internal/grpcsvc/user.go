@@ -24,6 +24,8 @@ type UserGRPC struct {
 	userv1.UnimplementedUserServiceServer
 	Profiles *store.ProfileStore
 	Presence *store.PresenceStore
+	// Blocks optional Social S2S checker; nil skips block filtering (dev / tests).
+	Blocks AccountBlockChecker
 }
 
 func (s *UserGRPC) GetProfile(ctx context.Context, req *userv1.GetProfileRequest) (*userv1.GetProfileResponse, error) {
