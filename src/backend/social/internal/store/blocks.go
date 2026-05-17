@@ -99,3 +99,17 @@ LIMIT $4`
 	}
 	return out, nil
 }
+
+// DirectedBlockExists reports whether blockerAccountID has blocked blockedAccountID (ordered pair).
+func (s *BlockStore) DirectedBlockExists(ctx context.Context, blockerAccountID, blockedAccountID uuid.UUID) (bool, error) {
+	var exists bool
+	err := s.Pool.QueryRow(ctx, `
+SELECT EXISTS(
+  SELECT 1 FROM blocks
+  WHERE blocker_account_id = $1 AND blocked_account_id = $2
+)`, blockerAccountID, blockedAccountID).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+	return exists, nil
+}

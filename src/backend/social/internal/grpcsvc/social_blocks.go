@@ -163,3 +163,28 @@ func (s *SocialGRPC) ListBlocked(ctx context.Context, req *socialv1.ListBlockedR
 		},
 	}, nil
 }
+
+// IsBlocked implements voice.social.v1.SocialService (internal S2S: Chat/Messaging/User).
+// Returns whether account_id_a has blocked account_id_b (ordered); callers check both directions for mutual exclusion.
+// Does not require end-user gRPC metadata.
+func (s *SocialGRPC) IsBlocked(ctx context.Context, req *socialv1.IsBlockedRequest) (*socialv1.IsBlockedResponse, error) {
+	blocker, err := parseUUIDField("account_id_a", req.GetAccountIdA())
+	if err != nil {
+		return nil, err
+	}
+	blocked, err := parseUUIDField("account_id_b", req.GetAccountIdB())
+	if err != nil {
+		return nil, err
+	}
+	if s.Blocks == nil {
+		return nil, status.Error(codes.FailedPrecondition, "persistence not configured")
+	}
+	if blocker == blocked {
+		return &socialv1.IsBlockedResponse{Blocked: false}, nil
+	}
+	ok, err := s.Blocks.DirectedBlockExists(ctx, blocker, blocked)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	return &socialv1.IsBlockedResponse{Blocked: ok}, nil
+}

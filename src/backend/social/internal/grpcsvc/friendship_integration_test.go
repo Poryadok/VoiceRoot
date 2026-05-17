@@ -168,12 +168,131 @@ func TestFriendFlow_Integration(t *testing.T) {
 	require.Len(t, lf.GetFriendList().GetFriends(), 1)
 	require.Equal(t, b.String(), lf.GetFriendList().GetFriends()[0].GetProfileId())
 
+	// Internal AreFriends (S2S): no profile metadata; symmetric accepted friendship.
+	af, err := client.AreFriends(ctx, &socialv1.AreFriendsRequest{
+		ProfileIdA: a.String(),
+		ProfileIdB: b.String(),
+	})
+	require.NoError(t, err)
+	require.True(t, af.GetFriends())
+	afRev, err := client.AreFriends(ctx, &socialv1.AreFriendsRequest{
+		ProfileIdA: b.String(),
+		ProfileIdB: a.String(),
+	})
+	require.NoError(t, err)
+	require.True(t, afRev.GetFriends())
+
 	// Remove
 	_, err = client.RemoveFriend(withProfileCtx(ctx, a), &socialv1.RemoveFriendRequest{FriendProfileId: b.String()})
 	require.NoError(t, err)
 	lf2, err := client.ListFriends(withProfileCtx(ctx, a), &socialv1.ListFriendsRequest{})
 	require.NoError(t, err)
 	require.Empty(t, lf2.GetFriendList().GetFriends())
+
+	af2, err := client.AreFriends(ctx, &socialv1.AreFriendsRequest{
+		ProfileIdA: a.String(),
+		ProfileIdB: b.String(),
+	})
+	require.NoError(t, err)
+	require.False(t, af2.GetFriends())
+}
+
+func TestAreFriends_PendingFalse(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pgC, err := postgres.Run(ctx, "postgres:16-bookworm",
+		postgres.BasicWaitStrategies(),
+		postgres.WithDatabase("socialdb"),
+		postgres.WithUsername("u"),
+		postgres.WithPassword("p"),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = pgC.Terminate(ctx) })
+
+	connStr, err := pgC.ConnectionString(ctx, "sslmode=disable")
+	require.NoError(t, err)
+	connStr = strings.Replace(connStr, "localhost", "127.0.0.1", 1)
+	connStr = strings.Replace(connStr, "[::1]", "127.0.0.1", 1)
+
+	var pool *pgxpool.Pool
+	for i := 0; i < 60; i++ {
+		p, err := pgxpool.New(ctx, connStr)
+		if err == nil {
+			if pingErr := p.Ping(ctx); pingErr == nil {
+				pool = p
+				break
+			}
+			p.Close()
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	require.NotNil(t, pool)
+	t.Cleanup(pool.Close)
+
+	sqlBytes, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "social_db", "000001_init.up.sql"))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(sqlBytes))
+	require.NoError(t, err)
+
+	client, cleanup := startSocialGRPCTestServer(t, pool)
+	t.Cleanup(cleanup)
+
+	a := uuid.New()
+	b := uuid.New()
+	_, err = client.SendFriendInvitation(withProfileCtx(ctx, a), &socialv1.SendFriendInvitationRequest{TargetProfileId: b.String()})
+	require.NoError(t, err)
+	out, err := client.AreFriends(ctx, &socialv1.AreFriendsRequest{ProfileIdA: a.String(), ProfileIdB: b.String()})
+	require.NoError(t, err)
+	require.False(t, out.GetFriends())
+}
+
+func TestAreFriends_InvalidProfileId(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pgC, err := postgres.Run(ctx, "postgres:16-bookworm",
+		postgres.BasicWaitStrategies(),
+		postgres.WithDatabase("socialdb"),
+		postgres.WithUsername("u"),
+		postgres.WithPassword("p"),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = pgC.Terminate(ctx) })
+
+	connStr, err := pgC.ConnectionString(ctx, "sslmode=disable")
+	require.NoError(t, err)
+	connStr = strings.Replace(connStr, "localhost", "127.0.0.1", 1)
+	connStr = strings.Replace(connStr, "[::1]", "127.0.0.1", 1)
+
+	var pool *pgxpool.Pool
+	for i := 0; i < 60; i++ {
+		p, err := pgxpool.New(ctx, connStr)
+		if err == nil {
+			if pingErr := p.Ping(ctx); pingErr == nil {
+				pool = p
+				break
+			}
+			p.Close()
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	require.NotNil(t, pool)
+	t.Cleanup(pool.Close)
+
+	sqlBytes, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "social_db", "000001_init.up.sql"))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(sqlBytes))
+	require.NoError(t, err)
+
+	client, cleanup := startSocialGRPCTestServer(t, pool)
+	t.Cleanup(cleanup)
+
+	_, err = client.AreFriends(ctx, &socialv1.AreFriendsRequest{ProfileIdA: "not-a-uuid", ProfileIdB: uuid.New().String()})
+	require.Error(t, err)
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
 func TestFriendDecline_OutgoingStillVisible(t *testing.T) {

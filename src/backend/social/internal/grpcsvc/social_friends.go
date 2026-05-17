@@ -267,3 +267,24 @@ func (s *SocialGRPC) ListFriendRequests(ctx context.Context, _ *socialv1.ListFri
 		},
 	}, nil
 }
+
+// AreFriends implements voice.social.v1.SocialService (internal S2S: Chat/Messaging).
+// Does not require end-user gRPC metadata.
+func (s *SocialGRPC) AreFriends(ctx context.Context, req *socialv1.AreFriendsRequest) (*socialv1.AreFriendsResponse, error) {
+	a, err := parseUUIDField("profile_id_a", req.GetProfileIdA())
+	if err != nil {
+		return nil, err
+	}
+	b, err := parseUUIDField("profile_id_b", req.GetProfileIdB())
+	if err != nil {
+		return nil, err
+	}
+	if s.Friends == nil {
+		return nil, status.Error(codes.FailedPrecondition, "persistence not configured")
+	}
+	ok, err := s.Friends.AreFriendsAccepted(ctx, a, b)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	return &socialv1.AreFriendsResponse{Friends: ok}, nil
+}

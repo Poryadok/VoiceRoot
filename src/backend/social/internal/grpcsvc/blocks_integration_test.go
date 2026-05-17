@@ -119,6 +119,29 @@ func TestBlockFlow_Integration(t *testing.T) {
 	lb2, err := client.ListBlocked(withAccountCtx(ctx, accA), &socialv1.ListBlockedRequest{})
 	require.NoError(t, err)
 	require.Empty(t, lb2.GetBlockedList().GetBlocked())
+
+	// Internal IsBlocked: ordered pair (blocker, blocked); no user metadata required.
+	rNo, err := client.IsBlocked(ctx, &socialv1.IsBlockedRequest{
+		AccountIdA: accA.String(),
+		AccountIdB: accB.String(),
+	})
+	require.NoError(t, err)
+	require.False(t, rNo.GetBlocked())
+
+	_, err = client.BlockAccount(withAccountCtx(ctx, accA), &socialv1.BlockAccountRequest{BlockedAccountId: accB.String()})
+	require.NoError(t, err)
+	rAB, err := client.IsBlocked(ctx, &socialv1.IsBlockedRequest{
+		AccountIdA: accA.String(),
+		AccountIdB: accB.String(),
+	})
+	require.NoError(t, err)
+	require.True(t, rAB.GetBlocked())
+	rBA, err := client.IsBlocked(ctx, &socialv1.IsBlockedRequest{
+		AccountIdA: accB.String(),
+		AccountIdB: accA.String(),
+	})
+	require.NoError(t, err)
+	require.False(t, rBA.GetBlocked())
 }
 
 func TestListBlocked_InvalidCursor(t *testing.T) {
@@ -138,6 +161,28 @@ func TestListBlocked_InvalidCursor(t *testing.T) {
 	acc := uuid.New()
 	_, err := client.ListBlocked(withAccountCtx(ctx, acc), &socialv1.ListBlockedRequest{
 		Page: &commonv1.CursorPageRequest{Cursor: "garbage", PageSize: 5},
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+func TestIsBlocked_InvalidUUIDs(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	if runtime.GOOS == "windows" && os.Getenv("TESTCONTAINERS_RYUK_DISABLED") == "" {
+		_ = os.Setenv("TESTCONTAINERS_RYUK_DISABLED", "true")
+	}
+	ctx := context.Background()
+	pool := startSocialPostgresForTest(t, ctx)
+	applySocialMigration(t, ctx, pool)
+
+	client, cleanup := startSocialGRPCTestServer(t, pool)
+	t.Cleanup(cleanup)
+
+	_, err := client.IsBlocked(ctx, &socialv1.IsBlockedRequest{
+		AccountIdA: "",
+		AccountIdB: uuid.New().String(),
 	})
 	require.Error(t, err)
 	require.Equal(t, codes.InvalidArgument, status.Code(err))

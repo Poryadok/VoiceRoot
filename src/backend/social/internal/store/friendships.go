@@ -256,3 +256,24 @@ WHERE status = 'accepted'
 	}
 	return nil
 }
+
+// AreFriendsAccepted reports whether profileA and profileB have an accepted friendship (unordered pair).
+func (s *FriendshipStore) AreFriendsAccepted(ctx context.Context, profileA, profileB uuid.UUID) (bool, error) {
+	if profileA == profileB {
+		return false, nil
+	}
+	var exists bool
+	err := s.Pool.QueryRow(ctx, `
+SELECT EXISTS(
+  SELECT 1 FROM friendships
+  WHERE status = 'accepted'
+    AND (
+      (requester_profile_id = $1 AND target_profile_id = $2)
+      OR (requester_profile_id = $2 AND target_profile_id = $1)
+    )
+)`, profileA, profileB).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+	return exists, nil
+}
