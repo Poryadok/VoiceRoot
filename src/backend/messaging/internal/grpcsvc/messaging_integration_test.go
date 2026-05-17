@@ -1,6 +1,7 @@
 package grpcsvc
 
 import (
+	"bytes"
 	"context"
 	"net"
 	"os"
@@ -488,4 +489,221 @@ func TestMessagingSendMessage_WhenNotBlockedSucceeds(t *testing.T) {
 		MessageKind:     &mk,
 	})
 	require.NoError(t, err)
+}
+
+func TestMessagingGetMessages_cursorPaginationInvalidAndExclusiveCursors(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	chatID := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	acctA := uuid.New()
+	seedDMChat(t, ctx, pool, chatID, profA, profB)
+
+	client, _ := startMessagingServer(t, pool)
+	mk := messagingv1.MessageKind_MESSAGE_KIND_REGULAR
+	send := func(body string) string {
+		t.Helper()
+		resp, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+			Chat:            chatDMRef(chatID),
+			Content:         body,
+			AttachmentsJson: "[]",
+			MentionsJson:    "[]",
+			MessageKind:     &mk,
+		})
+		require.NoError(t, err)
+		return resp.GetMessage().GetId()
+	}
+	for i := 0; i < 4; i++ {
+		send(t.Name() + string(rune('a'+i)))
+	}
+
+	p1, err := client.GetMessages(withProfileCtx(ctx, acctA, profA), &messagingv1.GetMessagesRequest{
+		Chat: chatDMRef(chatID),
+		Page: &commonv1.CursorPageRequest{PageSize: 2},
+	})
+	require.NoError(t, err)
+	ml1 := p1.GetMessageList()
+	require.Len(t, ml1.GetMessages(), 2)
+	require.True(t, ml1.GetHasMore(), "first page must signal more history")
+	require.NotEmpty(t, ml1.GetNextCursor())
+	require.Equal(t, ml1.GetNextCursor(), ml1.GetPage().GetNextCursor())
+
+	p2, err := client.GetMessages(withProfileCtx(ctx, acctA, profA), &messagingv1.GetMessagesRequest{
+		Chat: chatDMRef(chatID),
+		Page: &commonv1.CursorPageRequest{Cursor: ml1.GetNextCursor(), PageSize: 2},
+	})
+	require.NoError(t, err)
+	ml2 := p2.GetMessageList()
+	require.Len(t, ml2.GetMessages(), 2)
+	require.False(t, ml2.GetHasMore())
+
+	secondNewest, err := uuid.Parse(ml1.GetMessages()[1].GetId())
+	require.NoError(t, err)
+	for _, m := range ml2.GetMessages() {
+		mid, perr := uuid.Parse(m.GetId())
+		require.NoError(t, perr)
+		require.Less(t, bytes.Compare(mid[:], secondNewest[:]), 0,
+			"second page must be strictly older than second item of first page (UUID byte order)")
+	}
+
+	_, err = client.GetMessages(withProfileCtx(ctx, acctA, profA), &messagingv1.GetMessagesRequest{
+		Chat: chatDMRef(chatID),
+		Page: &commonv1.CursorPageRequest{Cursor: "not-a-valid-cursor", PageSize: 2},
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+
+	a := ml1.GetMessages()[0].GetId()
+	b := ml1.GetMessages()[1].GetId()
+	_, err = client.GetMessages(withProfileCtx(ctx, acctA, profA), &messagingv1.GetMessagesRequest{
+		Chat:            chatDMRef(chatID),
+		AfterMessageId:  &a,
+		BeforeMessageId: &b,
+		Page:            &commonv1.CursorPageRequest{PageSize: 2},
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+func TestMessagingSendMessage_idempotentKeyScopedPerSender(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	chatID := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	acctA := uuid.New()
+	acctB := uuid.New()
+	seedDMChat(t, ctx, pool, chatID, profA, profB)
+
+	client, _ := startMessagingServer(t, pool)
+	mk := messagingv1.MessageKind_MESSAGE_KIND_REGULAR
+	sharedKey := uuid.New().String()
+
+	rA, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+		Chat:            chatDMRef(chatID),
+		Content:         "from-a",
+		AttachmentsJson: "[]",
+		MentionsJson:    "[]",
+		MessageKind:     &mk,
+		ClientMessageId: &sharedKey,
+	})
+	require.NoError(t, err)
+	rB, err := client.SendMessage(withProfileCtx(ctx, acctB, profB), &messagingv1.SendMessageRequest{
+		Chat:            chatDMRef(chatID),
+		Content:         "from-b",
+		AttachmentsJson: "[]",
+		MentionsJson:    "[]",
+		MessageKind:     &mk,
+		ClientMessageId: &sharedKey,
+	})
+	require.NoError(t, err)
+	require.NotEqual(t, rA.GetMessage().GetId(), rB.GetMessage().GetId(),
+		"same client_message_id must not dedupe across different senders")
+}
+
+func TestMessagingNonMemberDenied_GetMessagesMarkReadGetReadState(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	chatID := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	profStranger := uuid.New()
+	acctA := uuid.New()
+	acctS := uuid.New()
+	seedDMChat(t, ctx, pool, chatID, profA, profB)
+
+	client, _ := startMessagingServer(t, pool)
+	mk := messagingv1.MessageKind_MESSAGE_KIND_REGULAR
+	sendA, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+		Chat:            chatDMRef(chatID),
+		Content:         "member-only",
+		AttachmentsJson: "[]",
+		MentionsJson:    "[]",
+		MessageKind:     &mk,
+	})
+	require.NoError(t, err)
+	msgID := sendA.GetMessage().GetId()
+
+	strCtx := withProfileCtx(ctx, acctS, profStranger)
+	_, err = client.GetMessages(strCtx, &messagingv1.GetMessagesRequest{
+		Chat: chatDMRef(chatID),
+		Page: &commonv1.CursorPageRequest{PageSize: 10},
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+
+	_, err = client.MarkRead(strCtx, &messagingv1.MarkReadRequest{
+		Chat:              chatDMRef(chatID),
+		LastReadMessageId: msgID,
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+
+	_, err = client.GetReadState(strCtx, &messagingv1.GetReadStateRequest{Chat: chatDMRef(chatID)})
+	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+func TestMessagingMarkRead_monotonicDoesNotRegress(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	chatID := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	acctA := uuid.New()
+	seedDMChat(t, ctx, pool, chatID, profA, profB)
+
+	client, _ := startMessagingServer(t, pool)
+	mk := messagingv1.MessageKind_MESSAGE_KIND_REGULAR
+	var ids []string
+	for i := 0; i < 3; i++ {
+		resp, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+			Chat:            chatDMRef(chatID),
+			Content:         t.Name() + string(rune('0'+i)),
+			AttachmentsJson: "[]",
+			MentionsJson:    "[]",
+			MessageKind:     &mk,
+		})
+		require.NoError(t, err)
+		ids = append(ids, resp.GetMessage().GetId())
+	}
+	oldest, mid, newest := ids[0], ids[1], ids[2]
+
+	_, err := client.MarkRead(withProfileCtx(ctx, acctA, profA), &messagingv1.MarkReadRequest{
+		Chat:              chatDMRef(chatID),
+		LastReadMessageId: newest,
+	})
+	require.NoError(t, err)
+	_, err = client.MarkRead(withProfileCtx(ctx, acctA, profA), &messagingv1.MarkReadRequest{
+		Chat:              chatDMRef(chatID),
+		LastReadMessageId: oldest,
+	})
+	require.NoError(t, err)
+	_, err = client.MarkRead(withProfileCtx(ctx, acctA, profA), &messagingv1.MarkReadRequest{
+		Chat:              chatDMRef(chatID),
+		LastReadMessageId: mid,
+	})
+	require.NoError(t, err)
+
+	rs, err := client.GetReadState(withProfileCtx(ctx, acctA, profA), &messagingv1.GetReadStateRequest{Chat: chatDMRef(chatID)})
+	require.NoError(t, err)
+	require.Equal(t, newest, rs.GetReadState().GetLastReadMessageId(),
+		"read cursor must stay at newest UUID when older MarkRead is applied (monotonic)")
 }
