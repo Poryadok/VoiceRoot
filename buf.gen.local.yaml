@@ -1,0 +1,15 @@
+# Local protobuf/grpc codegen without remote BSR plugins (buf.gen.yaml uses buf.build/* — requires network).
+# Usage (repo root): ensure GOPATH/bin has protoc-gen-go and protoc-gen-go-grpc, then:
+#   buf generate --template buf.gen.local.yaml
+version: v1
+plugins:
+  - plugin: go
+    out: gen/go
+    opt:
+      - paths=source_relative
+    path: protoc-gen-go
+  - plugin: go-grpc
+    out: gen/go
+    opt:
+      - paths=source_relative
+    path: protoc-gen-go-grpc

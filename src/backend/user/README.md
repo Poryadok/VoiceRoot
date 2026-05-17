@@ -1,9 +1,10 @@
 # User Service
 
-Go scaffold for the Voice user service.
+Go implementation for the Voice user service (profiles against `user_db` v1 DDL).
 
-Current public surface:
+Public surface:
 
-- GET /health returns {"service":"user","status":"ok"}.
+- GET `/health` — `{"service":"user","status":"ok"}`.
+- gRPC on `USER_GRPC_ADDR` (default `:9090`) when `DATABASE_URL` is set — `UserService` profile RPCs: `GetProfile`, `GetProfiles`, `UpdateProfile`, `CreateProfile` (plus other RPCs still unimplemented). Caller identity for mutating calls: metadata `x-voice-user-id` (account UUID), aligned with Gateway downstream headers.
 
-Domain behavior, gRPC handlers, database repositories, and migrations are intentionally out of scope for this initialization step.
+Protobuf sources live under `protos/`; committed codegen for this module is under `pb/voice/` (nested Go modules). Regenerate from repo root with `buf generate --template buf.gen.local.yaml` (see root `buf.gen.yaml` / `buf.gen.local.yaml`) and sync `pb/` if contracts change.
