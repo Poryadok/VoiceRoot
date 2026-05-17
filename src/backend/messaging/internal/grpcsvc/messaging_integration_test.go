@@ -432,6 +432,118 @@ func TestMessagingChatMembershipViaGRPC(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestChatMessagingIntegration_CreateDM_SendGetMessagesCursor wires Chat CreateDM (no friendship) with
+// Messaging over a shared chat_db: S2S membership via ListMembers, then SendMessage + cursor GetMessages.
+func TestChatMessagingIntegration_CreateDM_SendGetMessagesCursor(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	acctA := uuid.New()
+	acctB := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	pmap := profileAcctMap{profA: acctA, profB: acctB}
+
+	chatCli, chatCleanup := testchat.NewBufconnChatClientWith(t, pool, testchat.ChatDeps{Profiles: pmap})
+	t.Cleanup(chatCleanup)
+
+	ctxA := withProfileCtx(ctx, acctA, profA)
+	dm, err := chatCli.CreateDM(ctxA, &chatv1.CreateDMRequest{OtherProfileId: profB.String()})
+	require.NoError(t, err)
+	chatID, err := uuid.Parse(dm.GetChat().GetId())
+	require.NoError(t, err)
+
+	client, _ := startMessagingServerWired(t, pool, messagingWire{
+		ChatGuard:    s2s.NewGRPCChatGuard(chatCli),
+		Blocks:       boolBlocks(false),
+		UserProfiles: pmap,
+	})
+
+	mk := messagingv1.MessageKind_MESSAGE_KIND_REGULAR
+	for i := 0; i < 4; i++ {
+		_, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+			Chat:            chatDMRef(chatID),
+			Content:         t.Name() + string(rune('a'+i)),
+			AttachmentsJson: "[]",
+			MentionsJson:    "[]",
+			MessageKind:     &mk,
+		})
+		require.NoError(t, err)
+	}
+
+	p1, err := client.GetMessages(withProfileCtx(ctx, acctA, profA), &messagingv1.GetMessagesRequest{
+		Chat: chatDMRef(chatID),
+		Page: &commonv1.CursorPageRequest{PageSize: 2},
+	})
+	require.NoError(t, err)
+	ml1 := p1.GetMessageList()
+	require.Len(t, ml1.GetMessages(), 2)
+	require.True(t, ml1.GetHasMore(), "first page must signal more history")
+	require.NotEmpty(t, ml1.GetNextCursor())
+
+	p2, err := client.GetMessages(withProfileCtx(ctx, acctA, profA), &messagingv1.GetMessagesRequest{
+		Chat: chatDMRef(chatID),
+		Page: &commonv1.CursorPageRequest{Cursor: ml1.GetNextCursor(), PageSize: 2},
+	})
+	require.NoError(t, err)
+	ml2 := p2.GetMessageList()
+	require.Len(t, ml2.GetMessages(), 2)
+	require.False(t, ml2.GetHasMore())
+
+	secondNewest, err := uuid.Parse(ml1.GetMessages()[1].GetId())
+	require.NoError(t, err)
+	for _, m := range ml2.GetMessages() {
+		mid, perr := uuid.Parse(m.GetId())
+		require.NoError(t, perr)
+		require.Less(t, bytes.Compare(mid[:], secondNewest[:]), 0,
+			"second page must be strictly older than second item of first page (UUID byte order)")
+	}
+}
+
+// TestChatMessagingIntegration_SendDeniedWhenSocialBlocks uses the same Chat-created DM; Messaging Blocks
+// (Social IsBlocked wiring in production) must reject SendMessage with PermissionDenied.
+func TestChatMessagingIntegration_SendDeniedWhenSocialBlocks(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	acctA := uuid.New()
+	acctB := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	pmap := profileAcctMap{profA: acctA, profB: acctB}
+
+	chatCli, chatCleanup := testchat.NewBufconnChatClientWith(t, pool, testchat.ChatDeps{Profiles: pmap})
+	t.Cleanup(chatCleanup)
+
+	ctxA := withProfileCtx(ctx, acctA, profA)
+	dm, err := chatCli.CreateDM(ctxA, &chatv1.CreateDMRequest{OtherProfileId: profB.String()})
+	require.NoError(t, err)
+	chatID, err := uuid.Parse(dm.GetChat().GetId())
+	require.NoError(t, err)
+
+	client, _ := startMessagingServerWired(t, pool, messagingWire{
+		ChatGuard:    s2s.NewGRPCChatGuard(chatCli),
+		Blocks:       boolBlocks(true),
+		UserProfiles: pmap,
+	})
+	mk := messagingv1.MessageKind_MESSAGE_KIND_REGULAR
+	_, err = client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+		Chat:            chatDMRef(chatID),
+		Content:         "should not send",
+		AttachmentsJson: "[]",
+		MentionsJson:    "[]",
+		MessageKind:     &mk,
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
 func TestMessagingSendMessage_BlockedPairDenied(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgresForTest(t, ctx)

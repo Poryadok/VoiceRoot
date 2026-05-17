@@ -21,13 +21,30 @@ import (
 
 const defaultBufSize = 1 << 20
 
+// ChatDeps configures optional ChatService collaborators (same as production ChatGRPC wiring).
+// Zero value is valid for S2S paths that only need DM rows already present (e.g. ListMembers).
+type ChatDeps struct {
+	Profiles   chatgrpc.UserProfileLookup
+	Blocks     chatgrpc.AccountBlockChecker
+	ListEnrich chatgrpc.ListChatsEnrichment
+}
+
 // NewBufconnChatClient returns a ChatService client backed by an in-process server using pool (chat_db migrations applied).
 func NewBufconnChatClient(t *testing.T, pool *pgxpool.Pool) (chatv1.ChatServiceClient, func()) {
+	t.Helper()
+	return NewBufconnChatClientWith(t, pool, ChatDeps{})
+}
+
+// NewBufconnChatClientWith is like [NewBufconnChatClient] but wires profiles/blocks/enrichment for CreateDM/GetDM/ListChats.
+func NewBufconnChatClientWith(t *testing.T, pool *pgxpool.Pool, deps ChatDeps) (chatv1.ChatServiceClient, func()) {
 	t.Helper()
 	lis := bufconn.Listen(defaultBufSize)
 	srv := grpc.NewServer()
 	chatv1.RegisterChatServiceServer(srv, &chatgrpc.ChatGRPC{
-		DM: &chatstore.DMStore{Pool: pool},
+		DM:         &chatstore.DMStore{Pool: pool},
+		Profiles:   deps.Profiles,
+		Blocks:     deps.Blocks,
+		ListEnrich: deps.ListEnrich,
 	})
 	go func() {
 		if err := srv.Serve(lis); err != nil {
