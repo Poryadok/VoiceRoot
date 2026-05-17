@@ -194,6 +194,93 @@ func TestCreateDM_BlockedPair_PermissionDenied(t *testing.T) {
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
+// TestGetDM_BlockedPair_PermissionDenied documents chat-service.md: Social blocks gate DM; GetDM uses the same path as CreateDM.
+func TestGetDM_BlockedPair_PermissionDenied(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	accA := uuid.New()
+	accB := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	profiles := mapProfileAccounts{profA: accA, profB: accB}
+
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, stubBlocks{blocked: true}, nil)
+	t.Cleanup(cleanup)
+
+	ctxA := withAccountProfileCtx(ctx, accA, profA)
+	_, err := client.GetDM(ctxA, &chatv1.GetDMRequest{OtherProfileId: profB.String()})
+	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+// TestGetDM_Idempotent_RepeatedCallsSameChat documents stable DM identity: find-or-create must not fork rows.
+func TestGetDM_Idempotent_RepeatedCallsSameChat(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	accA := uuid.New()
+	accB := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	profiles := mapProfileAccounts{profA: accA, profB: accB}
+
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil)
+	t.Cleanup(cleanup)
+
+	ctxA := withAccountProfileCtx(ctx, accA, profA)
+	var firstID string
+	for i := 0; i < 5; i++ {
+		r, err := client.GetDM(ctxA, &chatv1.GetDMRequest{OtherProfileId: profB.String()})
+		require.NoError(t, err)
+		id := r.GetChat().GetId()
+		if firstID == "" {
+			firstID = id
+		} else {
+			require.Equal(t, firstID, id, "GetDM must be idempotent")
+		}
+	}
+	require.NotEmpty(t, firstID)
+}
+
+// TestGetDM_Stranger_OpensDialogWithoutCreateDM documents PLAN Phase 1: no friendship required; either side may resolve the DM via GetDM alone.
+func TestGetDM_Stranger_OpensDialogWithoutCreateDM(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	accA := uuid.New()
+	accB := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	profiles := mapProfileAccounts{profA: accA, profB: accB}
+
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil)
+	t.Cleanup(cleanup)
+
+	ctxA := withAccountProfileCtx(ctx, accA, profA)
+	rA, err := client.GetDM(ctxA, &chatv1.GetDMRequest{OtherProfileId: profB.String()})
+	require.NoError(t, err)
+	require.Equal(t, chatv1.ChatType_CHAT_TYPE_DM, rA.GetChat().GetType())
+	require.Equal(t, profA.String(), rA.GetChat().GetCreatorProfileId())
+
+	ctxB := withAccountProfileCtx(ctx, accB, profB)
+	rB, err := client.GetDM(ctxB, &chatv1.GetDMRequest{OtherProfileId: profA.String()})
+	require.NoError(t, err)
+	require.Equal(t, rA.GetChat().GetId(), rB.GetChat().GetId(), "stranger B must join same DM without prior CreateDM")
+}
+
 func TestCreateDM_Self_InvalidArgument(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
