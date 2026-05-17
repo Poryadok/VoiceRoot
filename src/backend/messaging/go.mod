@@ -12,6 +12,9 @@ require (
 	voice.app/voice/chat v0.0.0
 	voice.app/voice/common v0.0.0
 	voice.app/voice/messaging v0.0.0
+	voice.app/voice/social v0.0.0
+	voice.app/voice/user v0.0.0
+	voice/backend/chat v0.0.0
 )
 
 require (
@@ -72,6 +75,12 @@ require (
 
 replace voice.app/voice/messaging => ./pb/voice/messaging
 
+replace voice/backend/chat => ../chat
+
 replace voice.app/voice/chat => ../chat/pb/voice/chat
 
 replace voice.app/voice/common => ../user/pb/voice/common
+
+replace voice.app/voice/social => ../user/pb/voice/social
+
+replace voice.app/voice/user => ../user/pb/voice/user

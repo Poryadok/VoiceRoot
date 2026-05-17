@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -13,14 +14,34 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
+	"google.golang.org/grpc/credentials/insecure"
 
 	grpcsvc "voice/backend/messaging/internal/grpcsvc"
+	"voice/backend/messaging/internal/s2s"
 	"voice/backend/messaging/internal/store"
 
+	chatv1 "voice.app/voice/chat/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
+	userv1 "voice.app/voice/user/v1"
 )
 
 const serviceName = "messaging"
+
+func waitForGRPCReady(ctx context.Context, conn *grpc.ClientConn) error {
+	for {
+		st := conn.GetState()
+		if st == connectivity.Ready {
+			return nil
+		}
+		if st == connectivity.Shutdown {
+			return fmt.Errorf("grpc connection shutdown")
+		}
+		if !conn.WaitForStateChange(ctx, st) {
+			return fmt.Errorf("grpc dial: %w", context.Cause(ctx))
+		}
+	}
+}
 
 func main() {
 	httpAddr := ":8080"
@@ -43,19 +64,66 @@ func main() {
 		}
 		defer pool.Close()
 
-		var members grpcsvc.ChatMembership
-		chatDB := strings.TrimSpace(os.Getenv("CHAT_DATABASE_URL"))
-		if chatDB != "" {
-			cctx, ccancel := context.WithTimeout(context.Background(), 15*time.Second)
-			chatPool, err := pgxpool.New(cctx, chatDB)
-			ccancel()
+		var chatGuard grpcsvc.ChatGuard
+		if chatAddr := strings.TrimSpace(os.Getenv("CHAT_GRPC_ADDR")); chatAddr != "" {
+			cconn, err := grpc.NewClient(chatAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
-				log.Fatalf("chat postgres: %v", err)
+				log.Fatalf("chat grpc: %v", err)
 			}
-			defer chatPool.Close()
-			members = &store.ChatMemberGuard{Pool: chatPool}
+			defer func() { _ = cconn.Close() }()
+			waitCtx, waitCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			if err := waitForGRPCReady(waitCtx, cconn); err != nil {
+				waitCancel()
+				log.Fatalf("chat grpc dial: %v", err)
+			}
+			waitCancel()
+			chatGuard = s2s.NewGRPCChatGuard(chatv1.NewChatServiceClient(cconn))
 		} else {
-			members = &store.ChatMemberGuard{Pool: pool}
+			chatDB := strings.TrimSpace(os.Getenv("CHAT_DATABASE_URL"))
+			if chatDB != "" {
+				cctx, ccancel := context.WithTimeout(context.Background(), 15*time.Second)
+				chatPool, err := pgxpool.New(cctx, chatDB)
+				ccancel()
+				if err != nil {
+					log.Fatalf("chat postgres: %v", err)
+				}
+				defer chatPool.Close()
+				chatGuard = &store.SQLChatGuard{Pool: chatPool}
+			} else {
+				chatGuard = &store.SQLChatGuard{Pool: pool}
+			}
+		}
+
+		var blocks grpcsvc.AccountPairBlockChecker
+		if socialAddr := strings.TrimSpace(os.Getenv("SOCIAL_GRPC_ADDR")); socialAddr != "" {
+			sconn, err := grpc.NewClient(socialAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if err != nil {
+				log.Fatalf("social grpc: %v", err)
+			}
+			defer func() { _ = sconn.Close() }()
+			waitCtx, waitCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			if err := waitForGRPCReady(waitCtx, sconn); err != nil {
+				waitCancel()
+				log.Fatalf("social grpc dial: %v", err)
+			}
+			waitCancel()
+			blocks = s2s.NewSocialGRPCBlocks(sconn)
+		}
+
+		var profiles grpcsvc.ProfileAccountLookup
+		if userAddr := strings.TrimSpace(os.Getenv("USER_GRPC_ADDR")); userAddr != "" {
+			uconn, err := grpc.NewClient(userAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if err != nil {
+				log.Fatalf("user grpc: %v", err)
+			}
+			defer func() { _ = uconn.Close() }()
+			waitCtx, waitCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			if err := waitForGRPCReady(waitCtx, uconn); err != nil {
+				waitCancel()
+				log.Fatalf("user grpc dial: %v", err)
+			}
+			waitCancel()
+			profiles = &s2s.UserGRPCProfiles{Client: userv1.NewUserServiceClient(uconn)}
 		}
 
 		lis, err := net.Listen("tcp", grpcListen)
@@ -64,8 +132,10 @@ func main() {
 		}
 		grpcSrv = grpc.NewServer()
 		messagingv1.RegisterMessagingServiceServer(grpcSrv, &grpcsvc.MessagingGRPC{
-			Messages: &store.MessagesStore{Pool: pool},
-			Members:  members,
+			Messages:     &store.MessagesStore{Pool: pool},
+			ChatGuard:    chatGuard,
+			Blocks:       blocks,
+			UserProfiles: profiles,
 		})
 		go func() {
 			log.Printf("%s gRPC listening on %s", serviceName, grpcListen)

@@ -26,16 +26,14 @@ const (
 	fallbackSize    = 50
 )
 
-// ChatMembership validates the caller participates in the chat (chat_db.chat_members for v1 DM).
-type ChatMembership interface {
-	EnsureMember(ctx context.Context, chatID, profileID uuid.UUID) error
-}
-
 // MessagingGRPC implements MessagingService (Phase 1: DM send, history, read receipts).
 type MessagingGRPC struct {
 	messagingv1.UnimplementedMessagingServiceServer
-	Messages *store.MessagesStore
-	Members  ChatMembership
+	Messages  *store.MessagesStore
+	ChatGuard ChatGuard
+	// Blocks and UserProfiles are optional S2S gates for SendMessage (Social + User); both must be set to enforce.
+	Blocks       AccountPairBlockChecker
+	UserProfiles ProfileAccountLookup
 }
 
 func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMessageRequest) (*messagingv1.SendMessageResponse, error) {
@@ -53,13 +51,16 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 	if err := validateChatRefDM(req.GetChat()); err != nil {
 		return nil, err
 	}
-	if s.Members != nil {
-		if err := s.Members.EnsureMember(ctx, chatID, profileID); err != nil {
+	if s.ChatGuard != nil {
+		if err := s.ChatGuard.EnsureMember(ctx, chatID, profileID); err != nil {
 			if errors.Is(err, store.ErrNotChatMember) {
 				return nil, status.Error(codes.PermissionDenied, "not a chat member")
 			}
 			return nil, status.Error(codes.Internal, err.Error())
 		}
+	}
+	if err := s.checkDMBlocksForSend(ctx, chatID, profileID); err != nil {
+		return nil, err
 	}
 	content := strings.TrimSpace(req.GetContent())
 	if content == "" {
@@ -121,6 +122,35 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 	return &messagingv1.SendMessageResponse{Message: messageRowToProto(saved, kind)}, nil
 }
 
+func (s *MessagingGRPC) checkDMBlocksForSend(ctx context.Context, chatID, profileID uuid.UUID) error {
+	if s.Blocks == nil || s.UserProfiles == nil || s.ChatGuard == nil {
+		return nil
+	}
+	accountID, ok := authctx.AccountID(ctx)
+	if !ok {
+		return status.Error(codes.Unauthenticated, "missing account")
+	}
+	peer, err := s.ChatGuard.DMOtherProfileID(ctx, chatID, profileID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotChatMember) {
+			return status.Error(codes.PermissionDenied, "not a chat member")
+		}
+		return status.Error(codes.Internal, err.Error())
+	}
+	peerAcct, err := s.UserProfiles.AccountIDByProfileID(ctx, peer)
+	if err != nil {
+		return err
+	}
+	blocked, err := s.Blocks.AccountPairBlocked(ctx, accountID, peerAcct)
+	if err != nil {
+		return status.Error(codes.Internal, err.Error())
+	}
+	if blocked {
+		return status.Error(codes.PermissionDenied, "cannot send messages between blocked accounts")
+	}
+	return nil
+}
+
 func (s *MessagingGRPC) EditMessage(ctx context.Context, req *messagingv1.EditMessageRequest) (*messagingv1.EditMessageResponse, error) {
 	if s == nil || s.Messages == nil {
 		return nil, status.Error(codes.FailedPrecondition, "messaging persistence not configured")
@@ -150,8 +180,8 @@ func (s *MessagingGRPC) EditMessage(ctx context.Context, req *messagingv1.EditMe
 	if row.DeletedAt != nil {
 		return nil, status.Error(codes.NotFound, "message not found")
 	}
-	if s.Members != nil {
-		if err := s.Members.EnsureMember(ctx, row.ChatID, profileID); err != nil {
+	if s.ChatGuard != nil {
+		if err := s.ChatGuard.EnsureMember(ctx, row.ChatID, profileID); err != nil {
 			if errors.Is(err, store.ErrNotChatMember) {
 				return nil, status.Error(codes.PermissionDenied, "not a chat member")
 			}
@@ -193,8 +223,8 @@ func (s *MessagingGRPC) DeleteMessage(ctx context.Context, req *messagingv1.Dele
 	if row.DeletedAt != nil {
 		return nil, status.Error(codes.NotFound, "message not found")
 	}
-	if s.Members != nil {
-		if err := s.Members.EnsureMember(ctx, row.ChatID, profileID); err != nil {
+	if s.ChatGuard != nil {
+		if err := s.ChatGuard.EnsureMember(ctx, row.ChatID, profileID); err != nil {
 			if errors.Is(err, store.ErrNotChatMember) {
 				return nil, status.Error(codes.PermissionDenied, "not a chat member")
 			}
@@ -228,8 +258,8 @@ func (s *MessagingGRPC) GetMessages(ctx context.Context, req *messagingv1.GetMes
 	if err := validateChatRefDM(req.GetChat()); err != nil {
 		return nil, err
 	}
-	if s.Members != nil {
-		if err := s.Members.EnsureMember(ctx, chatID, profileID); err != nil {
+	if s.ChatGuard != nil {
+		if err := s.ChatGuard.EnsureMember(ctx, chatID, profileID); err != nil {
 			if errors.Is(err, store.ErrNotChatMember) {
 				return nil, status.Error(codes.PermissionDenied, "not a chat member")
 			}
@@ -395,8 +425,8 @@ func (s *MessagingGRPC) MarkRead(ctx context.Context, req *messagingv1.MarkReadR
 	if err := validateChatRefDM(req.GetChat()); err != nil {
 		return nil, err
 	}
-	if s.Members != nil {
-		if err := s.Members.EnsureMember(ctx, chatID, profileID); err != nil {
+	if s.ChatGuard != nil {
+		if err := s.ChatGuard.EnsureMember(ctx, chatID, profileID); err != nil {
 			if errors.Is(err, store.ErrNotChatMember) {
 				return nil, status.Error(codes.PermissionDenied, "not a chat member")
 			}
@@ -435,8 +465,8 @@ func (s *MessagingGRPC) GetReadState(ctx context.Context, req *messagingv1.GetRe
 	if err := validateChatRefDM(req.GetChat()); err != nil {
 		return nil, err
 	}
-	if s.Members != nil {
-		if err := s.Members.EnsureMember(ctx, chatID, profileID); err != nil {
+	if s.ChatGuard != nil {
+		if err := s.ChatGuard.EnsureMember(ctx, chatID, profileID); err != nil {
 			if errors.Is(err, store.ErrNotChatMember) {
 				return nil, status.Error(codes.PermissionDenied, "not a chat member")
 			}
@@ -494,13 +524,13 @@ func messageRowToProto(m *store.MessageRow, kind messagingv1.MessageKind) *messa
 	out := &messagingv1.Message{
 		Id:              m.ID.String(),
 		Chat:            &chatv1.ChatRef{Id: m.ChatID.String(), Type: &dm},
-		SenderProfileId:   m.SenderProfileID.String(),
-		PostedAsChat:      false,
-		Content:           m.Content,
-		Type:              m.Type,
-		AttachmentsJson:   m.AttachmentsJSON,
-		MentionsJson:      m.MentionsJSON,
-		CreatedAt:         timestamppb.New(m.CreatedAt.UTC()),
+		SenderProfileId: m.SenderProfileID.String(),
+		PostedAsChat:    false,
+		Content:         m.Content,
+		Type:            m.Type,
+		AttachmentsJson: m.AttachmentsJSON,
+		MentionsJson:    m.MentionsJSON,
+		CreatedAt:       timestamppb.New(m.CreatedAt.UTC()),
 	}
 	if m.ThreadParentID != nil {
 		out.ThreadParentId = ptrString(m.ThreadParentID.String())

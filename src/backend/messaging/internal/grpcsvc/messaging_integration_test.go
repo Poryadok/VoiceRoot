@@ -21,7 +21,9 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
+	"voice/backend/chat/testchat"
 	"voice/backend/messaging/internal/authctx"
+	"voice/backend/messaging/internal/s2s"
 	"voice/backend/messaging/internal/store"
 
 	chatv1 "voice.app/voice/chat/v1"
@@ -109,14 +111,20 @@ INSERT INTO chat_members (chat_id, profile_id, role) VALUES
 	require.NoError(t, err)
 }
 
-func startMessagingServer(t *testing.T, pool *pgxpool.Pool) (messagingv1.MessagingServiceClient, func()) {
+func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire) (messagingv1.MessagingServiceClient, func()) {
 	t.Helper()
+	guard := w.ChatGuard
+	if guard == nil {
+		guard = &store.SQLChatGuard{Pool: pool}
+	}
 	const bufSize = 1 << 20
 	lis := bufconn.Listen(bufSize)
 	srv := grpc.NewServer()
 	messagingv1.RegisterMessagingServiceServer(srv, &MessagingGRPC{
-		Messages: &store.MessagesStore{Pool: pool},
-		Members:  &store.ChatMemberGuard{Pool: pool},
+		Messages:     &store.MessagesStore{Pool: pool},
+		ChatGuard:    guard,
+		Blocks:       w.Blocks,
+		UserProfiles: w.UserProfiles,
 	})
 	go func() {
 		if err := srv.Serve(lis); err != nil {
@@ -132,6 +140,33 @@ func startMessagingServer(t *testing.T, pool *pgxpool.Pool) (messagingv1.Messagi
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close() })
 	return messagingv1.NewMessagingServiceClient(conn), func() { _ = conn.Close() }
+}
+
+type messagingWire struct {
+	ChatGuard    ChatGuard
+	UserProfiles ProfileAccountLookup
+	Blocks       AccountPairBlockChecker
+}
+
+func startMessagingServer(t *testing.T, pool *pgxpool.Pool) (messagingv1.MessagingServiceClient, func()) {
+	t.Helper()
+	return startMessagingServerWired(t, pool, messagingWire{})
+}
+
+type profileAcctMap map[uuid.UUID]uuid.UUID
+
+func (m profileAcctMap) AccountIDByProfileID(_ context.Context, profileID uuid.UUID) (uuid.UUID, error) {
+	a, ok := m[profileID]
+	if !ok {
+		return uuid.Nil, status.Error(codes.NotFound, "profile not found")
+	}
+	return a, nil
+}
+
+type boolBlocks bool
+
+func (b boolBlocks) AccountPairBlocked(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	return bool(b), nil
 }
 
 func TestMessagingSendGetMarkRead(t *testing.T) {
@@ -155,12 +190,12 @@ func TestMessagingSendGetMarkRead(t *testing.T) {
 		t.Helper()
 		outCtx := withProfileCtx(ctx, acct, profile)
 		resp, err := client.SendMessage(outCtx, &messagingv1.SendMessageRequest{
-			Chat:              chatDMRef(chatID),
-			Content:           content,
-			ClientMessageId:   &clientID,
-			AttachmentsJson:   "[]",
-			MentionsJson:      "[]",
-			MessageKind:       &mk,
+			Chat:            chatDMRef(chatID),
+			Content:         content,
+			ClientMessageId: &clientID,
+			AttachmentsJson: "[]",
+			MentionsJson:    "[]",
+			MessageKind:     &mk,
 		})
 		require.NoError(t, err)
 		return resp
@@ -212,7 +247,7 @@ func TestMessagingSendGetMarkRead(t *testing.T) {
 
 	newestID := list.GetMessageList().GetMessages()[0].GetId()
 	_, err = client.MarkRead(withProfileCtx(ctx, acctA, profA), &messagingv1.MarkReadRequest{
-		Chat:               chatDMRef(chatID),
+		Chat:              chatDMRef(chatID),
 		LastReadMessageId: newestID,
 	})
 	require.NoError(t, err)
@@ -222,7 +257,7 @@ func TestMessagingSendGetMarkRead(t *testing.T) {
 	require.Equal(t, newestID, rs.GetReadState().GetLastReadMessageId())
 
 	_, err = client.MarkRead(withProfileCtx(ctx, acctA, profA), &messagingv1.MarkReadRequest{
-		Chat:               chatDMRef(chatID),
+		Chat:              chatDMRef(chatID),
 		LastReadMessageId: uuid.New().String(),
 	})
 	require.Error(t, err)
@@ -363,4 +398,94 @@ func TestMessagingNonMemberDenied(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+func TestMessagingChatMembershipViaGRPC(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	chatID := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	acctA := uuid.New()
+	seedDMChat(t, ctx, pool, chatID, profA, profB)
+
+	chatCli, chatCleanup := testchat.NewBufconnChatClient(t, pool)
+	t.Cleanup(chatCleanup)
+
+	client, _ := startMessagingServerWired(t, pool, messagingWire{
+		ChatGuard: s2s.NewGRPCChatGuard(chatCli),
+	})
+
+	mk := messagingv1.MessageKind_MESSAGE_KIND_REGULAR
+	_, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+		Chat:            chatDMRef(chatID),
+		Content:         "from-a",
+		AttachmentsJson: "[]",
+		MentionsJson:    "[]",
+		MessageKind:     &mk,
+	})
+	require.NoError(t, err)
+}
+
+func TestMessagingSendMessage_BlockedPairDenied(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	chatID := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	acctA := uuid.New()
+	acctB := uuid.New()
+	seedDMChat(t, ctx, pool, chatID, profA, profB)
+
+	client, _ := startMessagingServerWired(t, pool, messagingWire{
+		Blocks:       boolBlocks(true),
+		UserProfiles: profileAcctMap{profB: acctB},
+	})
+	mk := messagingv1.MessageKind_MESSAGE_KIND_REGULAR
+	_, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+		Chat:            chatDMRef(chatID),
+		Content:         "blocked",
+		AttachmentsJson: "[]",
+		MentionsJson:    "[]",
+		MessageKind:     &mk,
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+func TestMessagingSendMessage_WhenNotBlockedSucceeds(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	chatID := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	acctA := uuid.New()
+	acctB := uuid.New()
+	seedDMChat(t, ctx, pool, chatID, profA, profB)
+
+	client, _ := startMessagingServerWired(t, pool, messagingWire{
+		Blocks:       boolBlocks(false),
+		UserProfiles: profileAcctMap{profB: acctB},
+	})
+	mk := messagingv1.MessageKind_MESSAGE_KIND_REGULAR
+	_, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+		Chat:            chatDMRef(chatID),
+		Content:         "hi",
+		AttachmentsJson: "[]",
+		MentionsJson:    "[]",
+		MessageKind:     &mk,
+	})
+	require.NoError(t, err)
 }
