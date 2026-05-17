@@ -1,0 +1,144 @@
+package grpcsvc
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/require"
+	"github.com/testcontainers/testcontainers-go/modules/postgres"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
+
+	"voice/backend/social/internal/authctx"
+
+	commonv1 "voice.app/voice/common/v1"
+	socialv1 "voice.app/voice/social/v1"
+)
+
+func withAccountCtx(ctx context.Context, accountID uuid.UUID) context.Context {
+	return metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountID.String())
+}
+
+func startSocialPostgresForTest(t *testing.T, ctx context.Context) *pgxpool.Pool {
+	t.Helper()
+	pgC, err := postgres.Run(ctx, "postgres:16-bookworm",
+		postgres.BasicWaitStrategies(),
+		postgres.WithDatabase("socialdb"),
+		postgres.WithUsername("u"),
+		postgres.WithPassword("p"),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = pgC.Terminate(ctx) })
+
+	connStr, err := pgC.ConnectionString(ctx, "sslmode=disable")
+	require.NoError(t, err)
+	connStr = strings.Replace(connStr, "localhost", "127.0.0.1", 1)
+	connStr = strings.Replace(connStr, "[::1]", "127.0.0.1", 1)
+
+	var pool *pgxpool.Pool
+	for i := 0; i < 60; i++ {
+		p, err := pgxpool.New(ctx, connStr)
+		if err == nil {
+			if pingErr := p.Ping(ctx); pingErr == nil {
+				pool = p
+				break
+			}
+			p.Close()
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	require.NotNil(t, pool, "postgres did not become ready in time")
+	t.Cleanup(pool.Close)
+	return pool
+}
+
+func applySocialMigration(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
+	migrationPath := filepath.Join(repoRoot(t), "src", "backend", "migrations", "social_db", "000001_init.up.sql")
+	sqlBytes, err := os.ReadFile(migrationPath)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(sqlBytes))
+	require.NoError(t, err)
+}
+
+func TestBlockFlow_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	if runtime.GOOS == "windows" && os.Getenv("TESTCONTAINERS_RYUK_DISABLED") == "" {
+		_ = os.Setenv("TESTCONTAINERS_RYUK_DISABLED", "true")
+	}
+	ctx := context.Background()
+	pool := startSocialPostgresForTest(t, ctx)
+	applySocialMigration(t, ctx, pool)
+
+	client, cleanup := startSocialGRPCTestServer(t, pool)
+	t.Cleanup(cleanup)
+
+	accA := uuid.New()
+	accB := uuid.New()
+	profA := uuid.New()
+
+	// Missing account in metadata
+	_, err := client.BlockAccount(withProfileCtx(ctx, profA), &socialv1.BlockAccountRequest{BlockedAccountId: accB.String()})
+	require.Error(t, err)
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+
+	// Self block
+	_, err = client.BlockAccount(withAccountCtx(ctx, accA), &socialv1.BlockAccountRequest{BlockedAccountId: accA.String()})
+	require.Error(t, err)
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+
+	// A blocks B
+	_, err = client.BlockAccount(withAccountCtx(ctx, accA), &socialv1.BlockAccountRequest{BlockedAccountId: accB.String()})
+	require.NoError(t, err)
+	_, err = client.BlockAccount(withAccountCtx(ctx, accA), &socialv1.BlockAccountRequest{BlockedAccountId: accB.String()})
+	require.NoError(t, err)
+
+	lb, err := client.ListBlocked(withAccountCtx(ctx, accA), &socialv1.ListBlockedRequest{
+		Page: &commonv1.CursorPageRequest{PageSize: 10},
+	})
+	require.NoError(t, err)
+	require.Len(t, lb.GetBlockedList().GetBlocked(), 1)
+	require.Equal(t, accB.String(), lb.GetBlockedList().GetBlocked()[0].GetBlockedAccountId())
+
+	_, err = client.UnblockAccount(withAccountCtx(ctx, accA), &socialv1.UnblockAccountRequest{BlockedAccountId: accB.String()})
+	require.NoError(t, err)
+	_, err = client.UnblockAccount(withAccountCtx(ctx, accA), &socialv1.UnblockAccountRequest{BlockedAccountId: accB.String()})
+	require.Error(t, err)
+	require.Equal(t, codes.NotFound, status.Code(err))
+
+	lb2, err := client.ListBlocked(withAccountCtx(ctx, accA), &socialv1.ListBlockedRequest{})
+	require.NoError(t, err)
+	require.Empty(t, lb2.GetBlockedList().GetBlocked())
+}
+
+func TestListBlocked_InvalidCursor(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	if runtime.GOOS == "windows" && os.Getenv("TESTCONTAINERS_RYUK_DISABLED") == "" {
+		_ = os.Setenv("TESTCONTAINERS_RYUK_DISABLED", "true")
+	}
+	ctx := context.Background()
+	pool := startSocialPostgresForTest(t, ctx)
+	applySocialMigration(t, ctx, pool)
+
+	client, cleanup := startSocialGRPCTestServer(t, pool)
+	t.Cleanup(cleanup)
+
+	acc := uuid.New()
+	_, err := client.ListBlocked(withAccountCtx(ctx, acc), &socialv1.ListBlockedRequest{
+		Page: &commonv1.CursorPageRequest{Cursor: "garbage", PageSize: 5},
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+}

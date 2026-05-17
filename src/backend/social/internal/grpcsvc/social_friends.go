@@ -28,6 +28,7 @@ const (
 type SocialGRPC struct {
 	socialv1.UnimplementedSocialServiceServer
 	Friends *store.FriendshipStore
+	Blocks  *store.BlockStore
 }
 
 type friendsCursorPayload struct {

@@ -50,6 +50,7 @@ func main() {
 		grpcSrv = grpc.NewServer()
 		socialv1.RegisterSocialServiceServer(grpcSrv, &grpcsvc.SocialGRPC{
 			Friends: &store.FriendshipStore{Pool: pool},
+			Blocks:  &store.BlockStore{Pool: pool},
 		})
 		go func() {
 			log.Printf("%s gRPC listening on %s", serviceName, grpcListen)

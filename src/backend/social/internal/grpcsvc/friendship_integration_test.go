@@ -48,6 +48,7 @@ func startSocialGRPCTestServer(t *testing.T, pool *pgxpool.Pool) (socialv1.Socia
 	srv := grpc.NewServer()
 	socialv1.RegisterSocialServiceServer(srv, &SocialGRPC{
 		Friends: &store.FriendshipStore{Pool: pool},
+		Blocks:  &store.BlockStore{Pool: pool},
 	})
 	go func() {
 		if err := srv.Serve(lis); err != nil {
