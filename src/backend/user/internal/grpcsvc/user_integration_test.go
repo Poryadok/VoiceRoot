@@ -10,8 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"google.golang.org/grpc"
@@ -88,10 +90,18 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 		pid, accountA)
 	require.NoError(t, err)
 
+	mr := miniredis.RunT(t)
+	t.Cleanup(func() { mr.Close() })
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+
 	lis := bufconn.Listen(1024 * 1024)
 	t.Cleanup(func() { _ = lis.Close() })
 	srv := grpc.NewServer()
-	userv1.RegisterUserServiceServer(srv, &UserGRPC{Profiles: store.NewProfileStore(pool)})
+	userv1.RegisterUserServiceServer(srv, &UserGRPC{
+		Profiles: store.NewProfileStore(pool),
+		Presence: store.NewPresenceStore(rdb),
+	})
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(srv.Stop)
 
@@ -180,5 +190,148 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 		require.Equal(t, accountA.String(), resp.GetProfile().GetAccountId())
 		require.Equal(t, "Alt", resp.GetProfile().GetDisplayName())
 		require.NotEmpty(t, resp.GetProfile().GetDiscriminator())
+	})
+
+	t.Run("GetOnboardingState unauthenticated", func(t *testing.T) {
+		_, err := cli.GetOnboardingState(ctx, &userv1.GetOnboardingStateRequest{})
+		require.Error(t, err)
+		require.Equal(t, codes.Unauthenticated, status.Code(err))
+	})
+
+	t.Run("GetOnboardingState creates row and uses primary when profile header omitted", func(t *testing.T) {
+		_, err := pool.Exec(ctx, `DELETE FROM onboarding_state WHERE profile_id = $1`, pid)
+		require.NoError(t, err)
+		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
+		resp, err := cli.GetOnboardingState(mdCtx, &userv1.GetOnboardingStateRequest{})
+		require.NoError(t, err)
+		os := resp.GetOnboardingState()
+		require.Equal(t, pid.String(), os.GetProfileId())
+		require.False(t, os.GetCompleted())
+		require.Empty(t, os.GetCompletedSteps())
+	})
+
+	t.Run("GetOnboardingState wrong profile for account", func(t *testing.T) {
+		pidOther := uuid.New()
+		_, err := pool.Exec(ctx, `
+			INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+			VALUES ($1, $2, 'carol', '0003', 'Carol', true)`,
+			pidOther, accountB)
+		require.NoError(t, err)
+		mdCtx := metadata.AppendToOutgoingContext(ctx,
+			authctx.HeaderUserID, accountA.String(),
+			authctx.HeaderProfileID, pidOther.String(),
+		)
+		_, err = cli.GetOnboardingState(mdCtx, &userv1.GetOnboardingStateRequest{})
+		require.Error(t, err)
+		require.Equal(t, codes.NotFound, status.Code(err))
+	})
+
+	t.Run("CompleteOnboardingStep invalid step_id", func(t *testing.T) {
+		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String(), authctx.HeaderProfileID, pid.String())
+		_, err := cli.CompleteOnboardingStep(mdCtx, &userv1.CompleteOnboardingStepRequest{StepId: ""})
+		require.Error(t, err)
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+
+	t.Run("CompleteOnboardingStep dismiss marks completed", func(t *testing.T) {
+		_, err := pool.Exec(ctx, `DELETE FROM onboarding_state WHERE profile_id = $1`, pid)
+		require.NoError(t, err)
+		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String(), authctx.HeaderProfileID, pid.String())
+		r1, err := cli.CompleteOnboardingStep(mdCtx, &userv1.CompleteOnboardingStepRequest{StepId: store.OnboardingStepSaveAccount})
+		require.NoError(t, err)
+		require.Contains(t, r1.GetOnboardingState().GetCompletedSteps(), store.OnboardingStepSaveAccount)
+		require.False(t, r1.GetOnboardingState().GetCompleted())
+
+		r2, err := cli.CompleteOnboardingStep(mdCtx, &userv1.CompleteOnboardingStepRequest{StepId: store.OnboardingStepDismiss})
+		require.NoError(t, err)
+		require.True(t, r2.GetOnboardingState().GetCompleted())
+		require.NotNil(t, r2.GetOnboardingState().GetCompletedAt())
+
+		r3, err := cli.CompleteOnboardingStep(mdCtx, &userv1.CompleteOnboardingStepRequest{StepId: store.OnboardingStepChatsNav})
+		require.NoError(t, err)
+		require.True(t, r3.GetOnboardingState().GetCompleted())
+	})
+
+	t.Run("CompleteOnboardingStep all canonical steps marks completed", func(t *testing.T) {
+		accountC := uuid.New()
+		pidTutorial := uuid.New()
+		_, err := pool.Exec(ctx, `
+			INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+			VALUES ($1, $2, 'dana', '0004', 'Dana', true)`,
+			pidTutorial, accountC)
+		require.NoError(t, err)
+		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountC.String(), authctx.HeaderProfileID, pidTutorial.String())
+		for _, step := range []string{
+			store.OnboardingStepSaveAccount,
+			store.OnboardingStepChatsNav,
+			store.OnboardingStepSpaces,
+			store.OnboardingStepMatchmaking,
+		} {
+			resp, err := cli.CompleteOnboardingStep(mdCtx, &userv1.CompleteOnboardingStepRequest{StepId: step})
+			require.NoError(t, err)
+			require.False(t, resp.GetOnboardingState().GetCompleted())
+		}
+		rfin, err := cli.CompleteOnboardingStep(mdCtx, &userv1.CompleteOnboardingStepRequest{StepId: store.OnboardingStepWrapUp})
+		require.NoError(t, err)
+		require.True(t, rfin.GetOnboardingState().GetCompleted())
+		require.NotNil(t, rfin.GetOnboardingState().GetCompletedAt())
+	})
+
+	t.Run("UpdatePresence unauthenticated", func(t *testing.T) {
+		_, err := cli.UpdatePresence(ctx, &userv1.UpdatePresenceRequest{Status: "online"})
+		require.Error(t, err)
+		require.Equal(t, codes.Unauthenticated, status.Code(err))
+	})
+
+	t.Run("UpdatePresence invalid status", func(t *testing.T) {
+		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
+		_, err := cli.UpdatePresence(mdCtx, &userv1.UpdatePresenceRequest{Status: "nope"})
+		require.Error(t, err)
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+
+	t.Run("UpdatePresence GetPresence GetBulkPresence", func(t *testing.T) {
+		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String(), authctx.HeaderProfileID, pid.String())
+		_, err := cli.UpdatePresence(mdCtx, &userv1.UpdatePresenceRequest{
+			Status:       "online",
+			CustomStatus: proto.String("coding"),
+		})
+		require.NoError(t, err)
+
+		g1, err := cli.GetPresence(ctx, &userv1.GetPresenceRequest{ProfileId: pid.String()})
+		require.NoError(t, err)
+		ps := g1.GetPresenceStatus()
+		require.Equal(t, "online", ps.GetStatus())
+		require.Equal(t, "coding", ps.GetCustomStatus())
+		require.NotNil(t, ps.GetLastSeen())
+
+		pid2 := uuid.New()
+		_, err = pool.Exec(ctx, `
+			INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+			VALUES ($1, $2, 'eve', '0005', 'Eve', false)`,
+			pid2, accountA)
+		require.NoError(t, err)
+		md2 := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String(), authctx.HeaderProfileID, pid2.String())
+		_, err = cli.UpdatePresence(md2, &userv1.UpdatePresenceRequest{StatusEnum: userv1.PresenceOnlineStatus_PRESENCE_ONLINE_STATUS_DND.Enum()})
+		require.NoError(t, err)
+
+		gb, err := cli.GetBulkPresence(ctx, &userv1.GetBulkPresenceRequest{ProfileIds: []string{pid.String(), pid2.String()}})
+		require.NoError(t, err)
+		m := gb.GetByProfileId()
+		require.Equal(t, "online", m[pid.String()].GetStatus())
+		require.Equal(t, userv1.PresenceOnlineStatus_PRESENCE_ONLINE_STATUS_DND, m[pid2.String()].GetStatusEnum())
+	})
+
+	t.Run("UpdatePresence rejects profile not owned", func(t *testing.T) {
+		var otherPID uuid.UUID
+		err := pool.QueryRow(ctx, `SELECT id FROM profiles WHERE account_id = $1 LIMIT 1`, accountB).Scan(&otherPID)
+		require.NoError(t, err)
+		mdCtx := metadata.AppendToOutgoingContext(ctx,
+			authctx.HeaderUserID, accountA.String(),
+			authctx.HeaderProfileID, otherPID.String(),
+		)
+		_, err = cli.UpdatePresence(mdCtx, &userv1.UpdatePresenceRequest{Status: "online"})
+		require.Error(t, err)
+		require.Equal(t, codes.NotFound, status.Code(err))
 	})
 }

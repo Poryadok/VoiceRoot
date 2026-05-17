@@ -111,6 +111,16 @@ func (s *ProfileStore) GetByIDs(ctx context.Context, ids []uuid.UUID) ([]*Profil
 	return out, rows.Err()
 }
 
+// GetPrimaryProfileIDForAccount returns the primary profile id for the account, if any.
+func (s *ProfileStore) GetPrimaryProfileIDForAccount(ctx context.Context, accountID uuid.UUID) (uuid.UUID, error) {
+	var id uuid.UUID
+	err := s.pool.QueryRow(ctx, `SELECT id FROM profiles WHERE account_id = $1 AND is_primary = true LIMIT 1`, accountID).Scan(&id)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return id, nil
+}
+
 type UpdateProfileInput struct {
 	DisplayName *string
 	AvatarURL   *string

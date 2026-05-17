@@ -2,10 +2,12 @@ package grpcsvc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -21,6 +23,7 @@ import (
 type UserGRPC struct {
 	userv1.UnimplementedUserServiceServer
 	Profiles *store.ProfileStore
+	Presence *store.PresenceStore
 }
 
 func (s *UserGRPC) GetProfile(ctx context.Context, req *userv1.GetProfileRequest) (*userv1.GetProfileResponse, error) {
@@ -204,4 +207,56 @@ func rowToProto(p *store.ProfileRow) *userv1.Profile {
 		out.VerificationBadge = proto.String(*p.VerificationBadge)
 	}
 	return out
+}
+
+func onboardingRowToProto(r *store.OnboardingStateRow) *userv1.OnboardingState {
+	out := &userv1.OnboardingState{
+		ProfileId:      r.ProfileID.String(),
+		CompletedSteps: append([]string(nil), r.CompletedSteps...),
+		Completed:      r.Completed,
+	}
+	if r.CompletedAt != nil {
+		out.CompletedAt = timestamppb.New(*r.CompletedAt)
+	}
+	return out
+}
+
+func activeProfilePtr(ctx context.Context) *uuid.UUID {
+	if id, ok := authctx.ProfileID(ctx); ok {
+		return &id
+	}
+	return nil
+}
+
+func (s *UserGRPC) GetOnboardingState(ctx context.Context, _ *userv1.GetOnboardingStateRequest) (*userv1.GetOnboardingStateResponse, error) {
+	accountID, ok := authctx.AccountID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing credentials")
+	}
+	row, err := s.Profiles.GetOrCreateOnboardingState(ctx, accountID, activeProfilePtr(ctx))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, status.Error(codes.NotFound, "profile not found")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	return &userv1.GetOnboardingStateResponse{OnboardingState: onboardingRowToProto(row)}, nil
+}
+
+func (s *UserGRPC) CompleteOnboardingStep(ctx context.Context, req *userv1.CompleteOnboardingStepRequest) (*userv1.CompleteOnboardingStepResponse, error) {
+	accountID, ok := authctx.AccountID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing credentials")
+	}
+	row, err := s.Profiles.CompleteOnboardingStep(ctx, accountID, activeProfilePtr(ctx), req.GetStepId())
+	if err != nil {
+		if errors.Is(err, store.ErrInvalidOnboardingStep) {
+			return nil, status.Error(codes.InvalidArgument, "invalid step_id")
+		}
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, status.Error(codes.NotFound, "profile not found")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	return &userv1.CompleteOnboardingStepResponse{OnboardingState: onboardingRowToProto(row)}, nil
 }

@@ -7,10 +7,12 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 
 	grpcsvc "voice/backend/user/internal/grpcsvc"
@@ -45,12 +47,28 @@ func main() {
 	}
 
 	if pool != nil {
+		var presence *store.PresenceStore
+		if redisAddr := strings.TrimSpace(os.Getenv("USER_REDIS_ADDR")); redisAddr != "" {
+			rdb := redis.NewClient(&redis.Options{Addr: redisAddr})
+			pctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			err := rdb.Ping(pctx).Err()
+			cancel()
+			if err != nil {
+				log.Fatalf("redis ping: %v", err)
+			}
+			presence = store.NewPresenceStore(rdb)
+			defer func() { _ = rdb.Close() }()
+		}
+
 		lis, err := net.Listen("tcp", grpcAddr)
 		if err != nil {
 			log.Fatalf("grpc listen: %v", err)
 		}
 		srv := grpc.NewServer()
-		userv1.RegisterUserServiceServer(srv, &grpcsvc.UserGRPC{Profiles: store.NewProfileStore(pool)})
+		userv1.RegisterUserServiceServer(srv, &grpcsvc.UserGRPC{
+			Profiles: store.NewProfileStore(pool),
+			Presence: presence,
+		})
 		go func() {
 			log.Printf("%s gRPC listening on %s", serviceName, grpcAddr)
 			if err := srv.Serve(lis); err != nil {
