@@ -31,6 +31,13 @@ import (
 	userv1 "voice.app/voice/user/v1"
 )
 
+func init() {
+	// Ryuk sidecar can fail on Docker Desktop for Windows ("no port to wait for").
+	if runtime.GOOS == "windows" && os.Getenv("TESTCONTAINERS_RYUK_DISABLED") == "" {
+		_ = os.Setenv("TESTCONTAINERS_RYUK_DISABLED", "true")
+	}
+}
+
 type testBlockChecker struct {
 	fn func(viewer, other uuid.UUID) bool
 }
@@ -75,9 +82,7 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 
 	connStr, err := pgC.ConnectionString(ctx, "sslmode=disable")
 	require.NoError(t, err)
-	if strings.Contains(connStr, "localhost") {
-		connStr = strings.Replace(connStr, "localhost", "127.0.0.1", 1)
-	}
+	connStr = strings.Replace(connStr, "localhost", "127.0.0.1", 1)
 	connStr = strings.Replace(connStr, "[::1]", "127.0.0.1", 1)
 
 	var pool *pgxpool.Pool

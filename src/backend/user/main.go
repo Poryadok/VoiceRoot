@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 
 	grpcsvc "voice/backend/user/internal/grpcsvc"
@@ -63,15 +64,30 @@ func main() {
 
 		var blocks grpcsvc.AccountBlockChecker
 		if socialAddr := strings.TrimSpace(os.Getenv("SOCIAL_GRPC_ADDR")); socialAddr != "" {
-			sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			sconn, err := grpc.DialContext(sctx, socialAddr,
+			sconn, err := grpc.NewClient(socialAddr,
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
-				grpc.WithBlock(),
 			)
-			cancel()
 			if err != nil {
-				log.Fatalf("social grpc dial: %v", err)
+				log.Fatalf("social grpc: %v", err)
 			}
+			waitCtx, waitCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			for {
+				st := sconn.GetState()
+				if st == connectivity.Ready {
+					break
+				}
+				if st == connectivity.Shutdown {
+					waitCancel()
+					_ = sconn.Close()
+					log.Fatalf("social grpc: unexpected shutdown")
+				}
+				if !sconn.WaitForStateChange(waitCtx, st) {
+					waitCancel()
+					_ = sconn.Close()
+					log.Fatalf("social grpc dial: %v", context.Cause(waitCtx))
+				}
+			}
+			waitCancel()
 			defer func() { _ = sconn.Close() }()
 			blocks = grpcsvc.NewSocialGRPCBlocks(sconn)
 		}
