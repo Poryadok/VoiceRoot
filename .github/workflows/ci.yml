@@ -38,6 +38,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate docker compose file
         run: docker compose config --quiet
+      - name: Require NATS JetStream service in compose
+        run: bash scripts/ci/compose-nats-jetstream-check.sh
 
   flutter:
     runs-on: ubuntu-latest

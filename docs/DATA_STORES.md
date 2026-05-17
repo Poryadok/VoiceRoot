@@ -2,7 +2,7 @@
 
 Сводка по [MICROSERVICES.md](MICROSERVICES.md) и файлам `docs/microservices/*.md`. Принцип: **database per service** — каждая строка PostgreSQL — отдельная логическая БД (отдельная схема миграций у владельца). Общие правила идентификаторов, ссылок и полей: [DATA_MODEL.md](DATA_MODEL.md). Объём первой волны PostgreSQL по фазам плана: [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md).
 
-**Не БД, но нужны в инфраструктуре:** NATS (шина событий), LiveKit (SFU для голоса/видео), объектное хранилище R2. Для локального dev их перечисляют в compose отдельно от Postgres/Redis/ClickHouse.
+**Не БД, но нужны в инфраструктуре:** NATS (шина событий, в локальном Compose — сервис **`nats`** с JetStream, см. [`docker-compose.yml`](../docker-compose.yml) и [DEPLOYMENT.md](DEPLOYMENT.md)), LiveKit (SFU для голоса/видео), объектное хранилище R2. Для локального dev их перечисляют в compose отдельно от Postgres/Redis/ClickHouse.
 
 ---
 
@@ -15,7 +15,7 @@
 | User Service         | `user_db`         | presence cache            | —                                |
 | Social Service       | `social_db`       | —                         | —                                |
 | Chat Service         | `chat_db`         | —                         | —                                |
-| Messaging Service    | `messaging_db`    | —                         | —                                |
+| Messaging Service    | `messaging_db`    | —                         | NATS JetStream (publish)         |
 | Realtime Service     | —                 | Pub/Sub, WS registry      | NATS (не БД)                     |
 | Space Service        | `space_db`        | —                         | —                                |
 | Role Service         | `role_db`         | —                         | —                                |

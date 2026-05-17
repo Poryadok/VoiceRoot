@@ -144,6 +144,11 @@ read_receipts
 
 Правило для сообщений: в аудитном следе и правах всегда используется `sender_profile_id`; отображение «от имени чата» (группа или канал) — через `posted_as_chat=true` и `display_chat_id=<chats.id>` (обычно совпадает с `chat_id`). Разрешено ли так писать и в основную ленту — **настройки чата и роли**.
 
+## Конфигурация (NATS / JetStream)
+
+- **`NATS_URL`** — URL NATS Server с включённым JetStream (порт клиента по умолчанию **4222**). В Docker Compose (внутренняя сеть): `nats://nats:4222`. С хоста при пробросе портов из [`docker-compose.yml`](../../docker-compose.yml): `nats://127.0.0.1:${NATS_PORT:-4222}`.
+- Доменный поток публикации сообщений: **`message.events`** — см. ниже и [CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md).
+
 ## Публикуемые события (→ NATS)
 
 Доменный поток JetStream: **`message.events`** ([CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)).

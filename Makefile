@@ -40,6 +40,7 @@ compose-down:
 
 compose-config-ci:
 	docker compose config --quiet
+	docker compose config --format json | docker run --rm -i -v "$(ROOT):/w" ghcr.io/jqlang/jq:1.7 -e -f /w/scripts/ci/compose-nats-jetstream.jq
 
 buf-ci:
 	docker run --rm --entrypoint sh -v "$(ROOT):/workspace" -w /workspace $(BUF_IMAGE) \

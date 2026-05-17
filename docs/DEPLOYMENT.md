@@ -8,7 +8,7 @@
 
 | Окружение      | Назначение                     | Инфраструктура                                                                                                                                               |
 |----------------|--------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **local**      | Разработка одного разработчика | Docker Compose (цель — одна команда: сервисы + PostgreSQL + Redis), см. [PLAN.md](PLAN.md) фаза 0; до готовности compose — ручной подъём отдельных сервисов. |
+| **local**      | Разработка одного разработчика | Docker Compose: PostgreSQL, Redis, **NATS с JetStream** ([`docker-compose.yml`](../docker-compose.yml)); см. [PLAN.md](PLAN.md) фаза 0. Переменные портов: `POSTGRES_PORT`, `REDIS_PORT`, `NATS_PORT` (клиент `4222`), `NATS_HTTP_PORT` (мониторинг/health `8222`). Подключение Messaging и Realtime к брокеру — `NATS_URL` (см. карточки сервисов в `docs/microservices/`). |
 | **staging**    | Интеграция, регрессия, демо    | **k3s** (лёгкий Kubernetes), версии близки к prod.                                                                                                           |
 | **production** | Пользователи                   | **Kubernetes** 1.35 (self-managed или managed: Yandex Managed Kubernetes, Hetzner и т.д.).                                                                   |
 

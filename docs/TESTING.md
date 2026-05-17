@@ -108,7 +108,7 @@
 Состав для PR в `master` (фаза 0 в [PLAN.md](PLAN.md)), как задумано в [.github/workflows/ci.yml](../.github/workflows/ci.yml):
 
 1. **Protobuf**: `buf lint`, `buf format`, на PR — `buf breaking` относительно базовой ветки.
-2. **Compose**: `docker compose config` (валидация файла).
+2. **Compose**: `docker compose config` (валидация файла); затем проверка, что в конфиге есть сервис **`nats`** с JetStream (флаг **`-js`** в `command`) — [`scripts/ci/compose-nats-jetstream-check.sh`](../scripts/ci/compose-nats-jetstream-check.sh) и фильтр [`scripts/ci/compose-nats-jetstream.jq`](../scripts/ci/compose-nats-jetstream.jq) (нужен `jq` на runner). Локально без `jq` на хосте: то же через образ `ghcr.io/jqlang/jq:1.7`, см. цель **`compose-config-ci`** в [Makefile](../Makefile).
 3. **Backend Go matrix**: `go test ./...` и Docker build для каждого Go-сервиса в `src/backend/<service>/`; для **gateway** дополнительно `CGO_ENABLED=1 go test -race ./...`; **push в GHCR** только при **push** в `master` (теги `:latest` и `:<git_sha>`). Для PR — только сборка без push.
 4. **golangci** (отдельный job): `go install golangci-lint` (v2, см. workflow) и прогон по всем модулям `src/backend/pkg` и `src/backend/<service>/` с [`.golangci.yml`](../.golangci.yml) в корне.
 5. **Auth (Java)**: Maven test; Docker build с загрузкой образа в локальный engine (`voice-auth:ci`); **smoke запущенного контейнера** против Postgres+Redis из [`docker-compose.yml`](../docker-compose.yml) — [`GET /health`](../src/backend/auth/src/main/java/voice/backend/auth/HealthController.java), JWKS по REST, gRPC `GetJWKS` (скрипт [`scripts/ci/auth-container-smoke.sh`](../scripts/ci/auth-container-smoke.sh)); push образа в GHCR только при push в `master` после успешного smoke.

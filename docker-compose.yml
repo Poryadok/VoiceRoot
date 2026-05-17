@@ -29,6 +29,29 @@ services:
       timeout: 3s
       retries: 10
 
+  # JetStream-enabled NATS for Messaging → Realtime event fan-out (see docs/CONTRACT_MATRIX.md).
+  nats:
+    image: nats:2.12-alpine
+    ports:
+      - "${NATS_PORT:-4222}:4222"
+      - "${NATS_HTTP_PORT:-8222}:8222"
+    volumes:
+      - voice_nats_js:/data
+    command:
+      - "-js"
+      - "-sd"
+      - "/data"
+      - "-m"
+      - "8222"
+      - "-n"
+      - "voice-local"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 3s
+
   # Phase-0 app stack (API Gateway + static Flutter web). Opt-in: docker compose --profile app up -d --build
   gateway:
     profiles: ["app"]
@@ -74,3 +97,4 @@ services:
 volumes:
   voice_pgdata:
   voice_redis:
+  voice_nats_js:

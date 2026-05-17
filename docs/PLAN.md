@@ -108,7 +108,7 @@
 
 ### Бэкенд
 
-- [ ] **Compose: NATS / JetStream** — не входит в минимальный v1 стенд; добавить, когда Realtime и Messaging начнут публиковать события ([CONTRACT_MATRIX.md](CONTRACT_MATRIX.md)).
+- [x] **Compose: NATS / JetStream** — в [`docker-compose.yml`](../docker-compose.yml); переменная **`NATS_URL`** для Messaging и Realtime — в карточках сервисов и [DEPLOYMENT.md](DEPLOYMENT.md). Создание JetStream streams (`message.events`, `chat.events`, …) — по мере включения публикации в коде ([CONTRACT_MATRIX.md](CONTRACT_MATRIX.md)).
 - [ ] **Messaging** — отправка/получение; **базовое** edit/delete (одна политика, без «для всех/себя» и без метки «(ред.)» в UI — **Фаза 3**); PostgreSQL, курсор, REST
 - [ ] **UUIDv7 для `messages.id`** — вместе с реализацией Messaging: по спеке генерация UUIDv7; при необходимости расширение БД/генератор — [messaging-service.md](microservices/messaging-service.md)
 - [ ] **Realtime Service** — JWT, доставка сообщений, Redis Pub/Sub, `s` + `resume`, догрузка через Messaging — [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md)

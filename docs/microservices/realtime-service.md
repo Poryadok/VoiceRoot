@@ -81,6 +81,11 @@ Headers:
 | `notification`       | In-app уведомление                                                  |
 | `match_found`        | Найден матч (matchmaking)                                           |
 
+## Конфигурация (NATS / JetStream)
+
+- **`NATS_URL`** — URL NATS Server с JetStream (порт **4222**). В Compose: `nats://nats:4222`; с хоста: `nats://127.0.0.1:${NATS_PORT:-4222}` (см. [`docker-compose.yml`](../../docker-compose.yml)).
+- Подписки на доменные потоки для fan-out в WebSocket — в первую очередь **`message.events`** и **`chat.events`** ([CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)); детали subject/consumer — в реализации сервиса.
+
 ## Архитектура fan-out
 
 ```
