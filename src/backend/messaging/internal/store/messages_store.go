@@ -146,6 +146,39 @@ FROM messages WHERE id = $1
 `, id))
 }
 
+// UpdateMessageContent sets content and edited_at for a non-deleted row owned by senderProfileID.
+func (s *MessagesStore) UpdateMessageContent(ctx context.Context, messageID, senderProfileID uuid.UUID, content string) (*MessageRow, error) {
+	if s == nil || s.Pool == nil {
+		return nil, errors.New("messages store: pool not configured")
+	}
+	return scanMessageRow(s.Pool.QueryRow(ctx, `
+UPDATE messages
+SET content = $1, edited_at = now()
+WHERE id = $2 AND sender_profile_id = $3 AND deleted_at IS NULL
+RETURNING id, chat_id, sender_profile_id, content, type, thread_parent_id,
+          attachments::text, mentions::text, client_message_id, edited_at, deleted_at, created_at
+`, content, messageID, senderProfileID))
+}
+
+// SoftDeleteMessage sets deleted_at for a non-deleted row owned by senderProfileID.
+func (s *MessagesStore) SoftDeleteMessage(ctx context.Context, messageID, senderProfileID uuid.UUID) error {
+	if s == nil || s.Pool == nil {
+		return errors.New("messages store: pool not configured")
+	}
+	ct, err := s.Pool.Exec(ctx, `
+UPDATE messages
+SET deleted_at = now()
+WHERE id = $1 AND sender_profile_id = $2 AND deleted_at IS NULL
+`, messageID, senderProfileID)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	return nil
+}
+
 type ListMode int
 
 const (

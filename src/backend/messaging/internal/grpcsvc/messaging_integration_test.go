@@ -229,6 +229,117 @@ func TestMessagingSendGetMarkRead(t *testing.T) {
 	require.Equal(t, codes.NotFound, status.Code(err))
 }
 
+func TestMessagingEditDeleteSenderOnlyPolicy(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	chatID := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	acctA := uuid.New()
+	acctB := uuid.New()
+	seedDMChat(t, ctx, pool, chatID, profA, profB)
+
+	client, _ := startMessagingServer(t, pool)
+	mk := messagingv1.MessageKind_MESSAGE_KIND_REGULAR
+
+	sendA, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+		Chat:            chatDMRef(chatID),
+		Content:         "original",
+		AttachmentsJson: "[]",
+		MentionsJson:    "[]",
+		MessageKind:     &mk,
+	})
+	require.NoError(t, err)
+	msgID := sendA.GetMessage().GetId()
+
+	// Sender may edit.
+	edited, err := client.EditMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.EditMessageRequest{
+		MessageId: msgID,
+		Content:   "revised",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "revised", edited.GetMessage().GetContent())
+	require.NotNil(t, edited.GetMessage().GetEditedAt())
+
+	_, err = client.EditMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.EditMessageRequest{
+		MessageId: msgID,
+		Content:   "   ",
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+
+	// Other DM member cannot edit sender's message.
+	_, err = client.EditMessage(withProfileCtx(ctx, acctB, profB), &messagingv1.EditMessageRequest{
+		MessageId: msgID,
+		Content:   "hijack",
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+
+	// Sender may delete; response is empty.
+	_, err = client.DeleteMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.DeleteMessageRequest{MessageId: msgID})
+	require.NoError(t, err)
+
+	// Deleted message no longer in history.
+	list, err := client.GetMessages(withProfileCtx(ctx, acctA, profA), &messagingv1.GetMessagesRequest{
+		Chat: chatDMRef(chatID),
+		Page: &commonv1.CursorPageRequest{PageSize: 20},
+	})
+	require.NoError(t, err)
+	for _, m := range list.GetMessageList().GetMessages() {
+		require.NotEqual(t, msgID, m.GetId(), "soft-deleted message must not appear in GetMessages")
+	}
+
+	// Cannot edit after delete.
+	_, err = client.EditMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.EditMessageRequest{
+		MessageId: msgID,
+		Content:   "again",
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.NotFound, status.Code(err))
+
+	// Other member cannot delete (even if we had not deleted — use a fresh message).
+	sendB, err := client.SendMessage(withProfileCtx(ctx, acctB, profB), &messagingv1.SendMessageRequest{
+		Chat:            chatDMRef(chatID),
+		Content:         "from-b",
+		AttachmentsJson: "[]",
+		MentionsJson:    "[]",
+	})
+	require.NoError(t, err)
+	bID := sendB.GetMessage().GetId()
+	_, err = client.DeleteMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.DeleteMessageRequest{MessageId: bID})
+	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+
+	// Non-member cannot edit or delete.
+	otherChat := uuid.New()
+	profX := uuid.New()
+	profY := uuid.New()
+	acctX := uuid.New()
+	seedDMChat(t, ctx, pool, otherChat, profX, profY)
+	sendX, err := client.SendMessage(withProfileCtx(ctx, acctX, profX), &messagingv1.SendMessageRequest{
+		Chat:            chatDMRef(otherChat),
+		Content:         "secret",
+		AttachmentsJson: "[]",
+		MentionsJson:    "[]",
+	})
+	require.NoError(t, err)
+	xID := sendX.GetMessage().GetId()
+	_, err = client.EditMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.EditMessageRequest{
+		MessageId: xID,
+		Content:   "nope",
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	_, err = client.DeleteMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.DeleteMessageRequest{MessageId: xID})
+	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
 func TestMessagingNonMemberDenied(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgresForTest(t, ctx)

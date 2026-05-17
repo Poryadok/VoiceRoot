@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -118,6 +119,98 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	return &messagingv1.SendMessageResponse{Message: messageRowToProto(saved, kind)}, nil
+}
+
+func (s *MessagingGRPC) EditMessage(ctx context.Context, req *messagingv1.EditMessageRequest) (*messagingv1.EditMessageResponse, error) {
+	if s == nil || s.Messages == nil {
+		return nil, status.Error(codes.FailedPrecondition, "messaging persistence not configured")
+	}
+	profileID, ok := authctx.ProfileID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing profile")
+	}
+	msgID, err := parseUUIDField("message_id", req.GetMessageId())
+	if err != nil {
+		return nil, err
+	}
+	content := strings.TrimSpace(req.GetContent())
+	if content == "" {
+		return nil, status.Error(codes.InvalidArgument, "content is required")
+	}
+	if len(content) > 4000 {
+		return nil, status.Error(codes.InvalidArgument, "content exceeds 4000 characters")
+	}
+	row, err := s.Messages.GetMessageByID(ctx, msgID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, status.Error(codes.NotFound, "message not found")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if row.DeletedAt != nil {
+		return nil, status.Error(codes.NotFound, "message not found")
+	}
+	if s.Members != nil {
+		if err := s.Members.EnsureMember(ctx, row.ChatID, profileID); err != nil {
+			if errors.Is(err, store.ErrNotChatMember) {
+				return nil, status.Error(codes.PermissionDenied, "not a chat member")
+			}
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+	}
+	if row.SenderProfileID != profileID {
+		return nil, status.Error(codes.PermissionDenied, "only the message author can edit")
+	}
+	updated, err := s.Messages.UpdateMessageContent(ctx, msgID, profileID, content)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, status.Error(codes.NotFound, "message not found")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	return &messagingv1.EditMessageResponse{Message: messageRowToProto(updated, messagingv1.MessageKind_MESSAGE_KIND_UNSPECIFIED)}, nil
+}
+
+func (s *MessagingGRPC) DeleteMessage(ctx context.Context, req *messagingv1.DeleteMessageRequest) (*messagingv1.DeleteMessageResponse, error) {
+	if s == nil || s.Messages == nil {
+		return nil, status.Error(codes.FailedPrecondition, "messaging persistence not configured")
+	}
+	profileID, ok := authctx.ProfileID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing profile")
+	}
+	msgID, err := parseUUIDField("message_id", req.GetMessageId())
+	if err != nil {
+		return nil, err
+	}
+	row, err := s.Messages.GetMessageByID(ctx, msgID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, status.Error(codes.NotFound, "message not found")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if row.DeletedAt != nil {
+		return nil, status.Error(codes.NotFound, "message not found")
+	}
+	if s.Members != nil {
+		if err := s.Members.EnsureMember(ctx, row.ChatID, profileID); err != nil {
+			if errors.Is(err, store.ErrNotChatMember) {
+				return nil, status.Error(codes.PermissionDenied, "not a chat member")
+			}
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+	}
+	if row.SenderProfileID != profileID {
+		return nil, status.Error(codes.PermissionDenied, "only the message author can delete")
+	}
+	if err := s.Messages.SoftDeleteMessage(ctx, msgID, profileID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, status.Error(codes.NotFound, "message not found")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	return &messagingv1.DeleteMessageResponse{}, nil
 }
 
 func (s *MessagingGRPC) GetMessages(ctx context.Context, req *messagingv1.GetMessagesRequest) (*messagingv1.GetMessagesResponse, error) {
