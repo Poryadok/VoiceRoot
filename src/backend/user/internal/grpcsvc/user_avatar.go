@@ -39,6 +39,7 @@ func (s *UserGRPC) CreateAvatarPresignedUpload(ctx context.Context, req *userv1.
 	if err := r2avatar.ValidateUploadParams(ct, clen); err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
+	ct = strings.ToLower(ct)
 	ext := r2avatar.FileExtForContentType(ct)
 	if ext == "" {
 		return nil, status.Error(codes.InvalidArgument, "unsupported content_type")

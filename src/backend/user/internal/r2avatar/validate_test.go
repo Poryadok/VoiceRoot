@@ -36,6 +36,29 @@ func TestValidateUploadParams_rejectsOversize(t *testing.T) {
 func TestValidateUploadParams_rejectsZeroLength(t *testing.T) {
 	err := ValidateUploadParams("image/png", 0)
 	require.Error(t, err)
+	require.Contains(t, err.Error(), "content_length")
+}
+
+func TestValidateUploadParams_rejectsNegativeLength(t *testing.T) {
+	err := ValidateUploadParams("image/png", -1)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "content_length")
+}
+
+func TestValidateUploadParams_acceptsExactMax(t *testing.T) {
+	err := ValidateUploadParams("image/webp", MaxAvatarBytes)
+	require.NoError(t, err)
+}
+
+func TestValidateUploadParams_trimsAndLowercasesMIME(t *testing.T) {
+	err := ValidateUploadParams("  Image/JPEG  ", 1)
+	require.NoError(t, err)
+}
+
+func TestValidateUploadParams_rejectsMIMEWithCharset(t *testing.T) {
+	err := ValidateUploadParams("image/png; charset=utf-8", 100)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "content_type")
 }
 
 func TestFileExtForContentType(t *testing.T) {

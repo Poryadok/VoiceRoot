@@ -290,6 +290,61 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 		require.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
 
+	t.Run("CreateAvatarPresignedUpload zero length", func(t *testing.T) {
+		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
+		_, err := cli.CreateAvatarPresignedUpload(mdCtx, &userv1.CreateAvatarPresignedUploadRequest{
+			ProfileId:      pid.String(),
+			ContentType:    "image/png",
+			ContentLength:  0,
+		})
+		require.Error(t, err)
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+
+	t.Run("CreateAvatarPresignedUpload negative length", func(t *testing.T) {
+		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
+		_, err := cli.CreateAvatarPresignedUpload(mdCtx, &userv1.CreateAvatarPresignedUploadRequest{
+			ProfileId:      pid.String(),
+			ContentType:    "image/gif",
+			ContentLength:  -10,
+		})
+		require.Error(t, err)
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+
+	t.Run("CreateAvatarPresignedUpload at max bytes", func(t *testing.T) {
+		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
+		resp, err := cli.CreateAvatarPresignedUpload(mdCtx, &userv1.CreateAvatarPresignedUploadRequest{
+			ProfileId:      pid.String(),
+			ContentType:    "image/webp",
+			ContentLength:  r2avatar.MaxAvatarBytes,
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, r2avatar.MaxAvatarBytes, resp.GetMaxBytes())
+	})
+
+	t.Run("CreateAvatarPresignedUpload MIME case normalized", func(t *testing.T) {
+		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
+		resp, err := cli.CreateAvatarPresignedUpload(mdCtx, &userv1.CreateAvatarPresignedUploadRequest{
+			ProfileId:      pid.String(),
+			ContentType:    "Image/JPEG",
+			ContentLength:  4096,
+		})
+		require.NoError(t, err)
+		require.Equal(t, "image/jpeg", resp.GetRequiredHeaders()["Content-Type"])
+	})
+
+	t.Run("CreateAvatarPresignedUpload invalid profile_id", func(t *testing.T) {
+		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
+		_, err := cli.CreateAvatarPresignedUpload(mdCtx, &userv1.CreateAvatarPresignedUploadRequest{
+			ProfileId:      "not-a-uuid",
+			ContentType:    "image/png",
+			ContentLength:  100,
+		})
+		require.Error(t, err)
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+
 	t.Run("CreateAvatarPresignedUpload wrong owner", func(t *testing.T) {
 		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountB.String())
 		_, err := cli.CreateAvatarPresignedUpload(mdCtx, &userv1.CreateAvatarPresignedUploadRequest{
