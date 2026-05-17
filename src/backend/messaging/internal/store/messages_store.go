@@ -1,0 +1,260 @@
+package store
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+// MessageRow is a persisted messaging_db.messages row (v1 DM).
+type MessageRow struct {
+	ID                uuid.UUID
+	ChatID            uuid.UUID
+	SenderProfileID   uuid.UUID
+	Content           string
+	Type              string
+	ThreadParentID    *uuid.UUID
+	AttachmentsJSON   string
+	MentionsJSON      string
+	ClientMessageID   *uuid.UUID
+	EditedAt          *time.Time
+	DeletedAt         *time.Time
+	CreatedAt         time.Time
+}
+
+type MessagesStore struct {
+	Pool *pgxpool.Pool
+}
+
+func (s *MessagesStore) MessageExists(ctx context.Context, chatID, messageID uuid.UUID) (bool, error) {
+	if s == nil || s.Pool == nil {
+		return false, errors.New("messages store: pool not configured")
+	}
+	var one int
+	err := s.Pool.QueryRow(ctx, `
+SELECT 1 FROM messages
+WHERE chat_id = $1 AND id = $2 AND deleted_at IS NULL
+LIMIT 1
+`, chatID, messageID).Scan(&one)
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	return false, err
+}
+
+func (s *MessagesStore) GetByClientDedupKey(ctx context.Context, chatID, senderProfileID, clientMessageID uuid.UUID) (*MessageRow, error) {
+	if s == nil || s.Pool == nil {
+		return nil, errors.New("messages store: pool not configured")
+	}
+	return scanMessageRow(s.Pool.QueryRow(ctx, `
+SELECT id, chat_id, sender_profile_id, content, type, thread_parent_id,
+       attachments::text, mentions::text, client_message_id, edited_at, deleted_at, created_at
+FROM messages
+WHERE chat_id = $1 AND sender_profile_id = $2 AND client_message_id = $3
+LIMIT 1
+`, chatID, senderProfileID, clientMessageID))
+}
+
+func (s *MessagesStore) InsertMessage(ctx context.Context, row MessageRow) (*MessageRow, error) {
+	if s == nil || s.Pool == nil {
+		return nil, errors.New("messages store: pool not configured")
+	}
+	if !json.Valid([]byte(row.AttachmentsJSON)) {
+		return nil, errors.New("attachments_json must be valid JSON")
+	}
+	if !json.Valid([]byte(row.MentionsJSON)) {
+		return nil, errors.New("mentions_json must be valid JSON")
+	}
+
+	var clientAny any
+	if row.ClientMessageID != nil {
+		clientAny = *row.ClientMessageID
+	}
+
+	var threadAny any
+	if row.ThreadParentID != nil {
+		threadAny = *row.ThreadParentID
+	}
+
+	q := `
+INSERT INTO messages (
+  id, chat_id, chat_type, sender_profile_id, posted_as_chat,
+  content, type, thread_parent_id, attachments, mentions, client_message_id
+) VALUES (
+  $1, $2, 'dm', $3, false,
+  $4, $5, $6, $7::jsonb, $8::jsonb, $9
+)
+ON CONFLICT (chat_id, sender_profile_id, client_message_id)
+  WHERE client_message_id IS NOT NULL
+  DO NOTHING
+`
+	ct, err := s.Pool.Exec(ctx, q,
+		row.ID, row.ChatID, row.SenderProfileID,
+		row.Content, row.Type, threadAny,
+		row.AttachmentsJSON, row.MentionsJSON, clientAny,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if ct.RowsAffected() == 0 {
+		if row.ClientMessageID == nil {
+			return nil, errors.New("messages store: insert produced no row")
+		}
+		return scanMessageRow(s.Pool.QueryRow(ctx, `
+SELECT id, chat_id, sender_profile_id, content, type, thread_parent_id,
+       attachments::text, mentions::text, client_message_id, edited_at, deleted_at, created_at
+FROM messages
+WHERE chat_id = $1 AND sender_profile_id = $2 AND client_message_id = $3
+LIMIT 1
+`, row.ChatID, row.SenderProfileID, *row.ClientMessageID))
+	}
+	return s.GetMessageByID(ctx, row.ID)
+}
+
+func scanMessageRow(row pgx.Row) (*MessageRow, error) {
+	var m MessageRow
+	var threadID *uuid.UUID
+	var clientID *uuid.UUID
+	err := row.Scan(
+		&m.ID, &m.ChatID, &m.SenderProfileID, &m.Content, &m.Type, &threadID,
+		&m.AttachmentsJSON, &m.MentionsJSON, &clientID, &m.EditedAt, &m.DeletedAt, &m.CreatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	m.ThreadParentID = threadID
+	m.ClientMessageID = clientID
+	return &m, nil
+}
+
+func (s *MessagesStore) GetMessageByID(ctx context.Context, id uuid.UUID) (*MessageRow, error) {
+	if s == nil || s.Pool == nil {
+		return nil, errors.New("messages store: pool not configured")
+	}
+	return scanMessageRow(s.Pool.QueryRow(ctx, `
+SELECT id, chat_id, sender_profile_id, content, type, thread_parent_id,
+       attachments::text, mentions::text, client_message_id, edited_at, deleted_at, created_at
+FROM messages WHERE id = $1
+`, id))
+}
+
+type ListMode int
+
+const (
+	ListLatest ListMode = iota
+	ListBeforeID
+	ListAfterID
+)
+
+func (s *MessagesStore) ListMessages(ctx context.Context, chatID uuid.UUID, mode ListMode, refID *uuid.UUID, limit int) ([]MessageRow, error) {
+	if s == nil || s.Pool == nil {
+		return nil, errors.New("messages store: pool not configured")
+	}
+	if limit < 1 {
+		limit = 1
+	}
+	fetch := limit + 1
+
+	var rows pgx.Rows
+	var err error
+	switch mode {
+	case ListLatest:
+		rows, err = s.Pool.Query(ctx, `
+SELECT id, chat_id, sender_profile_id, content, type, thread_parent_id,
+       attachments::text, mentions::text, client_message_id, edited_at, deleted_at, created_at
+FROM messages
+WHERE chat_id = $1 AND deleted_at IS NULL
+ORDER BY id DESC
+LIMIT $2
+`, chatID, fetch)
+	case ListBeforeID:
+		rows, err = s.Pool.Query(ctx, `
+SELECT id, chat_id, sender_profile_id, content, type, thread_parent_id,
+       attachments::text, mentions::text, client_message_id, edited_at, deleted_at, created_at
+FROM messages
+WHERE chat_id = $1 AND deleted_at IS NULL AND id < $2::uuid
+ORDER BY id DESC
+LIMIT $3
+`, chatID, *refID, fetch)
+	case ListAfterID:
+		rows, err = s.Pool.Query(ctx, `
+SELECT id, chat_id, sender_profile_id, content, type, thread_parent_id,
+       attachments::text, mentions::text, client_message_id, edited_at, deleted_at, created_at
+FROM messages
+WHERE chat_id = $1 AND deleted_at IS NULL AND id > $2::uuid
+ORDER BY id ASC
+LIMIT $3
+`, chatID, *refID, fetch)
+	default:
+		return nil, errors.New("messages store: unknown list mode")
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []MessageRow
+	for rows.Next() {
+		var m MessageRow
+		var threadID *uuid.UUID
+		var clientID *uuid.UUID
+		if err := rows.Scan(
+			&m.ID, &m.ChatID, &m.SenderProfileID, &m.Content, &m.Type, &threadID,
+			&m.AttachmentsJSON, &m.MentionsJSON, &clientID, &m.EditedAt, &m.DeletedAt, &m.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		m.ThreadParentID = threadID
+		m.ClientMessageID = clientID
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+func (s *MessagesStore) UpsertReadReceipt(ctx context.Context, chatID, profileID, lastReadMessageID uuid.UUID) error {
+	if s == nil || s.Pool == nil {
+		return errors.New("messages store: pool not configured")
+	}
+	_, err := s.Pool.Exec(ctx, `
+INSERT INTO read_receipts (chat_id, profile_id, last_read_message_id, updated_at)
+VALUES ($1, $2, $3, now())
+ON CONFLICT (chat_id, profile_id) DO UPDATE SET
+  last_read_message_id = CASE
+    WHEN read_receipts.last_read_message_id < EXCLUDED.last_read_message_id THEN EXCLUDED.last_read_message_id
+    ELSE read_receipts.last_read_message_id
+  END,
+  updated_at = CASE
+    WHEN read_receipts.last_read_message_id < EXCLUDED.last_read_message_id THEN now()
+    ELSE read_receipts.updated_at
+  END
+`, chatID, profileID, lastReadMessageID)
+	return err
+}
+
+func (s *MessagesStore) GetReadReceipt(ctx context.Context, chatID, profileID uuid.UUID) (lastRead *uuid.UUID, updatedAt *time.Time, err error) {
+	if s == nil || s.Pool == nil {
+		return nil, nil, errors.New("messages store: pool not configured")
+	}
+	var lid uuid.UUID
+	var upd time.Time
+	qerr := s.Pool.QueryRow(ctx, `
+SELECT last_read_message_id, updated_at FROM read_receipts
+WHERE chat_id = $1 AND profile_id = $2
+`, chatID, profileID).Scan(&lid, &upd)
+	if errors.Is(qerr, pgx.ErrNoRows) {
+		return nil, nil, nil
+	}
+	if qerr != nil {
+		return nil, nil, qerr
+	}
+	u := upd.UTC()
+	return &lid, &u, nil
+}
