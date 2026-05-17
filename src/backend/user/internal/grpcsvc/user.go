@@ -14,6 +14,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"voice/backend/user/internal/authctx"
+	"voice/backend/user/internal/r2avatar"
 	"voice/backend/user/internal/store"
 
 	userv1 "voice.app/voice/user/v1"
@@ -26,6 +27,10 @@ type UserGRPC struct {
 	Presence *store.PresenceStore
 	// Blocks optional Social S2S checker; nil skips block filtering (dev / tests).
 	Blocks AccountBlockChecker
+	// AvatarPresigner optional; nil → CreateAvatarPresignedUpload returns FailedPrecondition.
+	AvatarPresigner AvatarPresigner
+	// AvatarPublicBaseURL is used to build public_url and to validate UpdateProfile.avatar_url (empty skips validation).
+	AvatarPublicBaseURL string
 }
 
 func (s *UserGRPC) GetProfile(ctx context.Context, req *userv1.GetProfileRequest) (*userv1.GetProfileResponse, error) {
@@ -106,6 +111,13 @@ func (s *UserGRPC) UpdateProfile(ctx context.Context, req *userv1.UpdateProfileR
 		in.DisplayName = &dn
 	}
 	if req.AvatarUrl != nil {
+		u := strings.TrimSpace(*req.AvatarUrl)
+		if u != "" && strings.TrimSpace(s.AvatarPublicBaseURL) != "" {
+			prefix := r2avatar.JoinPublicURL(s.AvatarPublicBaseURL, "avatars/")
+			if !strings.HasPrefix(u, prefix) {
+				return nil, status.Error(codes.InvalidArgument, "avatar_url must use the configured R2 public URL for avatars")
+			}
+		}
 		in.AvatarURL = req.AvatarUrl
 	}
 	if req.Bio != nil {

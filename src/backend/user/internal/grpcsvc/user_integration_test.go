@@ -25,6 +25,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"voice/backend/user/internal/authctx"
+	"voice/backend/user/internal/r2avatar"
 	"voice/backend/user/internal/store"
 
 	commonv1 "voice.app/voice/common/v1"
@@ -63,6 +64,14 @@ func repoRoot(t *testing.T) string {
 	require.True(t, ok)
 	// .../internal/grpcsvc/user_integration_test.go -> repo root is 5 parents up
 	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", "..", ".."))
+}
+
+type stubAvatarPresigner struct{}
+
+func (stubAvatarPresigner) PresignPut(_ context.Context, objectKey, contentType string, contentLength int64) (string, map[string]string, time.Time, error) {
+	_ = objectKey
+	_ = contentLength
+	return "https://r2.example/presigned-put", map[string]string{"Content-Type": contentType}, time.Now().Add(10 * time.Minute), nil
 }
 
 func TestProfileGRPC_v1DDL(t *testing.T) {
@@ -125,9 +134,11 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 	blocker := &testBlockChecker{}
 	srv := grpc.NewServer()
 	userv1.RegisterUserServiceServer(srv, &UserGRPC{
-		Profiles: store.NewProfileStore(pool),
-		Presence: store.NewPresenceStore(rdb),
-		Blocks:   blocker,
+		Profiles:            store.NewProfileStore(pool),
+		Presence:            store.NewPresenceStore(rdb),
+		Blocks:              blocker,
+		AvatarPresigner:     stubAvatarPresigner{},
+		AvatarPublicBaseURL: "https://cdn-test.example",
 	})
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(srv.Stop)
@@ -228,6 +239,87 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 		require.Equal(t, "Alice II", resp.GetProfile().GetDisplayName())
 		require.Equal(t, "en", resp.GetProfile().GetLocale())
 		require.Equal(t, "light", resp.GetProfile().GetTheme())
+	})
+
+	t.Run("CreateAvatarPresignedUpload unauthenticated", func(t *testing.T) {
+		_, err := cli.CreateAvatarPresignedUpload(ctx, &userv1.CreateAvatarPresignedUploadRequest{
+			ProfileId:      pid.String(),
+			ContentType:    "image/png",
+			ContentLength:  100,
+		})
+		require.Error(t, err)
+		require.Equal(t, codes.Unauthenticated, status.Code(err))
+	})
+
+	t.Run("CreateAvatarPresignedUpload ok", func(t *testing.T) {
+		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
+		resp, err := cli.CreateAvatarPresignedUpload(mdCtx, &userv1.CreateAvatarPresignedUploadRequest{
+			ProfileId:      pid.String(),
+			ContentType:    "image/png",
+			ContentLength:  2048,
+		})
+		require.NoError(t, err)
+		require.Equal(t, "PUT", resp.GetHttpMethod())
+		require.Contains(t, resp.GetUploadUrl(), "https://r2.example/presigned-put")
+		require.EqualValues(t, r2avatar.MaxAvatarBytes, resp.GetMaxBytes())
+		require.NotEmpty(t, resp.GetPublicUrl())
+		require.True(t, strings.HasPrefix(resp.GetPublicUrl(), "https://cdn-test.example/avatars/"))
+		require.Contains(t, resp.GetObjectKey(), "avatars/"+pid.String()+"/")
+		require.NotNil(t, resp.GetExpiresAt())
+	})
+
+	t.Run("CreateAvatarPresignedUpload invalid MIME", func(t *testing.T) {
+		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
+		_, err := cli.CreateAvatarPresignedUpload(mdCtx, &userv1.CreateAvatarPresignedUploadRequest{
+			ProfileId:      pid.String(),
+			ContentType:    "application/pdf",
+			ContentLength:  100,
+		})
+		require.Error(t, err)
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+
+	t.Run("CreateAvatarPresignedUpload oversize", func(t *testing.T) {
+		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
+		_, err := cli.CreateAvatarPresignedUpload(mdCtx, &userv1.CreateAvatarPresignedUploadRequest{
+			ProfileId:      pid.String(),
+			ContentType:    "image/jpeg",
+			ContentLength:  r2avatar.MaxAvatarBytes + 1,
+		})
+		require.Error(t, err)
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+
+	t.Run("CreateAvatarPresignedUpload wrong owner", func(t *testing.T) {
+		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountB.String())
+		_, err := cli.CreateAvatarPresignedUpload(mdCtx, &userv1.CreateAvatarPresignedUploadRequest{
+			ProfileId:      pid.String(),
+			ContentType:    "image/webp",
+			ContentLength:  500,
+		})
+		require.Error(t, err)
+		require.Equal(t, codes.NotFound, status.Code(err))
+	})
+
+	t.Run("UpdateProfile rejects avatar_url outside R2 prefix", func(t *testing.T) {
+		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
+		_, err := cli.UpdateProfile(mdCtx, &userv1.UpdateProfileRequest{
+			ProfileId: pid.String(),
+			AvatarUrl: proto.String("https://evil.example/x.png"),
+		})
+		require.Error(t, err)
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+
+	t.Run("UpdateProfile avatar_url with allowed prefix", func(t *testing.T) {
+		good := "https://cdn-test.example/avatars/" + pid.String() + "/00000000-0000-0000-0000-000000000001.png"
+		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
+		resp, err := cli.UpdateProfile(mdCtx, &userv1.UpdateProfileRequest{
+			ProfileId: pid.String(),
+			AvatarUrl: proto.String(good),
+		})
+		require.NoError(t, err)
+		require.Equal(t, good, resp.GetProfile().GetAvatarUrl())
 	})
 
 	t.Run("CreateProfile secondary", func(t *testing.T) {

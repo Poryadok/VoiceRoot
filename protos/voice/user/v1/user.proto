@@ -55,6 +55,9 @@ service UserService {
   rpc CompleteOnboardingStep(CompleteOnboardingStepRequest) returns (CompleteOnboardingStepResponse);
 
   rpc GetVerificationStatus(GetVerificationStatusRequest) returns (GetVerificationStatusResponse);
+
+  // Phase 1 (PLAN § R2): presigned PUT to Cloudflare R2 for static profile avatar (no File Service).
+  rpc CreateAvatarPresignedUpload(CreateAvatarPresignedUploadRequest) returns (CreateAvatarPresignedUploadResponse);
 }
 
 message EnsurePrimaryProfileRequest {
@@ -216,6 +219,23 @@ message OnboardingState {
   repeated string completed_steps = 2;
   bool completed = 3;
   optional google.protobuf.Timestamp completed_at = 4;
+}
+
+message CreateAvatarPresignedUploadRequest {
+  string profile_id = 1;
+  string content_type = 2;
+  int64 content_length = 3;
+}
+
+message CreateAvatarPresignedUploadResponse {
+  string http_method = 1;
+  string upload_url = 2;
+  map<string, string> required_headers = 3;
+  int64 max_bytes = 4;
+  google.protobuf.Timestamp expires_at = 5;
+  // Value to persist via UpdateProfile.avatar_url after a successful PUT to upload_url.
+  string public_url = 6;
+  string object_key = 7;
 }
 
 message GetVerificationStatusRequest {

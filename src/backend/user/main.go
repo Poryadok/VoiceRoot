@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	grpcsvc "voice/backend/user/internal/grpcsvc"
+	"voice/backend/user/internal/r2avatar"
 	"voice/backend/user/internal/store"
 
 	userv1 "voice.app/voice/user/v1"
@@ -92,15 +93,30 @@ func main() {
 			blocks = grpcsvc.NewSocialGRPCBlocks(sconn)
 		}
 
+		var avatarPresigner grpcsvc.AvatarPresigner
+		avatarPublicBase := ""
+		r2cfg := r2avatar.EnvConfigFromOSEnv()
+		if r2cfg.Endpoint != "" {
+			p, err := r2avatar.NewS3R2PutPresigner(r2cfg)
+			if err != nil {
+				log.Printf("user: USER_R2_* set but presigner init failed (avatar upload disabled): %v", err)
+			} else {
+				avatarPresigner = p
+				avatarPublicBase = strings.TrimSpace(r2cfg.PublicBaseURL)
+			}
+		}
+
 		lis, err := net.Listen("tcp", grpcAddr)
 		if err != nil {
 			log.Fatalf("grpc listen: %v", err)
 		}
 		srv := grpc.NewServer()
 		userv1.RegisterUserServiceServer(srv, &grpcsvc.UserGRPC{
-			Profiles: store.NewProfileStore(pool),
-			Presence: presence,
-			Blocks:   blocks,
+			Profiles:            store.NewProfileStore(pool),
+			Presence:            presence,
+			Blocks:              blocks,
+			AvatarPresigner:     avatarPresigner,
+			AvatarPublicBaseURL: avatarPublicBase,
 		})
 		go func() {
 			log.Printf("%s gRPC listening on %s", serviceName, grpcAddr)
