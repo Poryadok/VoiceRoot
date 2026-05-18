@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -55,7 +57,7 @@ func wsUpgradeHeaders(token string) http.Header {
 
 func TestWSReturns503WhenJWKSNotConfigured(t *testing.T) {
 	t.Parallel()
-	srv := httptest.NewServer(newServiceHandler(serviceName, nil))
+	srv := httptest.NewServer(newServiceHandler(serviceName, nil, nil))
 	t.Cleanup(srv.Close)
 
 	u := wsEndpoint(t, srv)
@@ -72,7 +74,7 @@ func TestWSReturns503WhenJWKSNotConfigured(t *testing.T) {
 
 func TestWSRequiresWebSocketUpgrade(t *testing.T) {
 	t.Parallel()
-	h := newServiceHandler(serviceName, staticTokenValidator{"tok": {UserID: "a", ProfileID: "p"}})
+	h := newServiceHandler(serviceName, staticTokenValidator{"tok": {UserID: "a", ProfileID: "p"}}, nil)
 	req := httptest.NewRequest(http.MethodGet, "/ws", nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
@@ -83,7 +85,7 @@ func TestWSRequiresWebSocketUpgrade(t *testing.T) {
 
 func TestWSRequiresAuthorization(t *testing.T) {
 	t.Parallel()
-	srv := httptest.NewServer(newServiceHandler(serviceName, staticTokenValidator{"tok": {UserID: "a", ProfileID: "p"}}))
+	srv := httptest.NewServer(newServiceHandler(serviceName, staticTokenValidator{"tok": {UserID: "a", ProfileID: "p"}}, nil))
 	t.Cleanup(srv.Close)
 
 	u := wsEndpoint(t, srv)
@@ -100,7 +102,7 @@ func TestWSRequiresActiveProfileHeader(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(newServiceHandler(serviceName, staticTokenValidator{
 		"tok": {UserID: "account-1", ProfileID: "profile-1"},
-	}))
+	}, nil))
 	t.Cleanup(srv.Close)
 
 	u := wsEndpoint(t, srv)
@@ -118,7 +120,7 @@ func TestWSRejectsProfileMismatch(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(newServiceHandler(serviceName, staticTokenValidator{
 		"tok": {UserID: "account-1", ProfileID: "profile-1"},
-	}))
+	}, nil))
 	t.Cleanup(srv.Close)
 
 	u := wsEndpoint(t, srv)
@@ -143,7 +145,7 @@ func TestWSHelloSequenceHeartbeatResume(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(newServiceHandler(serviceName, staticTokenValidator{
 		"tok": {UserID: "account-1", ProfileID: "profile-1"},
-	}))
+	}, nil))
 	t.Cleanup(srv.Close)
 
 	u := wsEndpoint(t, srv)
@@ -206,7 +208,7 @@ func TestWSAcceptsGatewayProfileHeader(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(newServiceHandler(serviceName, staticTokenValidator{
 		"tok": {UserID: "account-1", ProfileID: "profile-1"},
-	}))
+	}, nil))
 	t.Cleanup(srv.Close)
 
 	u := wsEndpoint(t, srv)
@@ -217,4 +219,279 @@ func TestWSAcceptsGatewayProfileHeader(t *testing.T) {
 		t.Fatalf("dial: %v", err)
 	}
 	_ = c.Close()
+}
+
+type stubDMChatLister struct {
+	ids []string
+	err error
+}
+
+func (s stubDMChatLister) ListDMChatIDs(ctx context.Context, _, _ string) ([]string, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return append([]string(nil), s.ids...), nil
+}
+
+type captureDMChatLister struct {
+	gotAccount string
+	gotProfile string
+	ret        []string
+}
+
+func (c *captureDMChatLister) ListDMChatIDs(ctx context.Context, accountID, profileID string) ([]string, error) {
+	c.gotAccount = accountID
+	c.gotProfile = profileID
+	return append([]string(nil), c.ret...), nil
+}
+
+func TestWSSendsDMSubscriptionSyncFromChatLister(t *testing.T) {
+	t.Parallel()
+	lister := stubDMChatLister{ids: []string{"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}}
+	srv := httptest.NewServer(newServiceHandler(serviceName, staticTokenValidator{
+		"tok": {UserID: "account-1", ProfileID: "profile-1"},
+	}, lister))
+	t.Cleanup(srv.Close)
+
+	u := wsEndpoint(t, srv)
+	hdr := wsUpgradeHeaders("tok")
+	hdr.Set("X-Profile-Id", "profile-1")
+	c, _, err := websocket.DefaultDialer.Dial(u, hdr)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	t.Cleanup(func() { _ = c.Close() })
+
+	_ = c.SetReadDeadline(time.Now().Add(3 * time.Second))
+	_, data, err := c.ReadMessage()
+	if err != nil {
+		t.Fatalf("read hello: %v", err)
+	}
+	var hello wsEnvelope
+	if err := json.Unmarshal(data, &hello); err != nil {
+		t.Fatalf("hello json: %v", err)
+	}
+	if hello.Op != "hello" || hello.S != 1 {
+		t.Fatalf("hello = %+v", hello)
+	}
+
+	_, data, err = c.ReadMessage()
+	if err != nil {
+		t.Fatalf("read subscription_sync: %v", err)
+	}
+	var sync wsEnvelope
+	if err := json.Unmarshal(data, &sync); err != nil {
+		t.Fatalf("subscription_sync json: %v", err)
+	}
+	if sync.Op != "subscription_sync" || sync.S != 2 {
+		t.Fatalf("subscription_sync = %+v", sync)
+	}
+	var body struct {
+		Scope    string   `json:"scope"`
+		ChatIDs  []string `json:"chat_ids"`
+		Source   string   `json:"source"`
+		Degraded bool     `json:"degraded"`
+	}
+	if err := json.Unmarshal(sync.D, &body); err != nil {
+		t.Fatalf("subscription_sync d: %v", err)
+	}
+	if body.Scope != "dm" || body.Source != "chat" || body.Degraded {
+		t.Fatalf("unexpected body: %+v", body)
+	}
+	want := []string{
+		"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+		"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+	}
+	if len(body.ChatIDs) != len(want) {
+		t.Fatalf("chat_ids = %v, want %v", body.ChatIDs, want)
+	}
+	for i := range want {
+		if body.ChatIDs[i] != want[i] {
+			t.Fatalf("chat_ids = %v, want sorted %v", body.ChatIDs, want)
+		}
+	}
+}
+
+func TestWSSendsDMSubscriptionSyncDegradedWhenChatListerFails(t *testing.T) {
+	t.Parallel()
+	lister := stubDMChatLister{err: errors.New("chat unavailable")}
+	srv := httptest.NewServer(newServiceHandler(serviceName, staticTokenValidator{
+		"tok": {UserID: "account-1", ProfileID: "profile-1"},
+	}, lister))
+	t.Cleanup(srv.Close)
+
+	u := wsEndpoint(t, srv)
+	hdr := wsUpgradeHeaders("tok")
+	hdr.Set("X-Profile-Id", "profile-1")
+	c, _, err := websocket.DefaultDialer.Dial(u, hdr)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	t.Cleanup(func() { _ = c.Close() })
+
+	_, _, _ = c.ReadMessage() // hello
+	_, data, err := c.ReadMessage()
+	if err != nil {
+		t.Fatalf("read subscription_sync: %v", err)
+	}
+	var sync wsEnvelope
+	if err := json.Unmarshal(data, &sync); err != nil {
+		t.Fatalf("subscription_sync json: %v", err)
+	}
+	var body struct {
+		ChatIDs  []string `json:"chat_ids"`
+		Degraded bool     `json:"degraded"`
+	}
+	if err := json.Unmarshal(sync.D, &body); err != nil {
+		t.Fatalf("subscription_sync d: %v", err)
+	}
+	if !body.Degraded || len(body.ChatIDs) != 0 {
+		t.Fatalf("unexpected degraded body: %+v", body)
+	}
+}
+
+func TestWSPassesAccountAndProfileToChatLister(t *testing.T) {
+	t.Parallel()
+	l := &captureDMChatLister{ret: []string{}}
+	srv := httptest.NewServer(newServiceHandler(serviceName, staticTokenValidator{
+		"tok": {UserID: "account-1", ProfileID: "profile-1"},
+	}, l))
+	t.Cleanup(srv.Close)
+
+	u := wsEndpoint(t, srv)
+	hdr := wsUpgradeHeaders("tok")
+	hdr.Set("X-Profile-Id", "profile-1")
+	c, _, err := websocket.DefaultDialer.Dial(u, hdr)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	t.Cleanup(func() { _ = c.Close() })
+	_, _, _ = c.ReadMessage()
+	_, _, _ = c.ReadMessage()
+
+	if l.gotAccount != "account-1" || l.gotProfile != "profile-1" {
+		t.Fatalf("lister got account=%q profile=%q", l.gotAccount, l.gotProfile)
+	}
+}
+
+func TestWSSubscribeACKForValidUUID(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(newServiceHandler(serviceName, staticTokenValidator{
+		"tok": {UserID: "account-1", ProfileID: "profile-1"},
+	}, nil))
+	t.Cleanup(srv.Close)
+
+	u := wsEndpoint(t, srv)
+	hdr := wsUpgradeHeaders("tok")
+	hdr.Set("X-Profile-Id", "profile-1")
+	c, _, err := websocket.DefaultDialer.Dial(u, hdr)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	t.Cleanup(func() { _ = c.Close() })
+	_, _, _ = c.ReadMessage() // hello
+
+	chatID := "cccccccc-cccc-cccc-cccc-cccccccccccc"
+	if err := c.WriteJSON(map[string]any{"op": "subscribe", "d": map[string]any{"chat_id": chatID}}); err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
+	_ = c.SetReadDeadline(time.Now().Add(3 * time.Second))
+	_, data, err := c.ReadMessage()
+	if err != nil {
+		t.Fatalf("read subscribe_ack: %v", err)
+	}
+	var ack wsEnvelope
+	if err := json.Unmarshal(data, &ack); err != nil {
+		t.Fatalf("ack json: %v", err)
+	}
+	if ack.Op != "subscribe_ack" || ack.S != 2 {
+		t.Fatalf("subscribe_ack = %+v", ack)
+	}
+	var body struct {
+		ChatID string `json:"chat_id"`
+	}
+	if err := json.Unmarshal(ack.D, &body); err != nil {
+		t.Fatalf("ack d: %v", err)
+	}
+	if body.ChatID != chatID {
+		t.Fatalf("chat_id = %q, want %q", body.ChatID, chatID)
+	}
+}
+
+func TestWSErrorOnInvalidSubscribeChatID(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(newServiceHandler(serviceName, staticTokenValidator{
+		"tok": {UserID: "account-1", ProfileID: "profile-1"},
+	}, nil))
+	t.Cleanup(srv.Close)
+
+	u := wsEndpoint(t, srv)
+	hdr := wsUpgradeHeaders("tok")
+	hdr.Set("X-Profile-Id", "profile-1")
+	c, _, err := websocket.DefaultDialer.Dial(u, hdr)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	t.Cleanup(func() { _ = c.Close() })
+	_, _, _ = c.ReadMessage()
+
+	if err := c.WriteJSON(map[string]any{"op": "subscribe", "d": map[string]any{"chat_id": "not-a-uuid"}}); err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
+	_ = c.SetReadDeadline(time.Now().Add(3 * time.Second))
+	_, data, err := c.ReadMessage()
+	if err != nil {
+		t.Fatalf("read error: %v", err)
+	}
+	var env wsEnvelope
+	if err := json.Unmarshal(data, &env); err != nil {
+		t.Fatalf("error json: %v", err)
+	}
+	if env.Op != "error" || env.S != 2 {
+		t.Fatalf("error env = %+v", env)
+	}
+	var body struct {
+		Code string `json:"code"`
+	}
+	if err := json.Unmarshal(env.D, &body); err != nil {
+		t.Fatalf("error d: %v", err)
+	}
+	if body.Code != "invalid_subscribe" {
+		t.Fatalf("code = %q", body.Code)
+	}
+}
+
+func TestWSUnsubscribeACK(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(newServiceHandler(serviceName, staticTokenValidator{
+		"tok": {UserID: "account-1", ProfileID: "profile-1"},
+	}, nil))
+	t.Cleanup(srv.Close)
+
+	u := wsEndpoint(t, srv)
+	hdr := wsUpgradeHeaders("tok")
+	hdr.Set("X-Profile-Id", "profile-1")
+	c, _, err := websocket.DefaultDialer.Dial(u, hdr)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	t.Cleanup(func() { _ = c.Close() })
+	_, _, _ = c.ReadMessage()
+
+	chatID := "dddddddd-dddd-dddd-dddd-dddddddddddd"
+	if err := c.WriteJSON(map[string]any{"op": "unsubscribe", "d": map[string]any{"chat_id": chatID}}); err != nil {
+		t.Fatalf("unsubscribe: %v", err)
+	}
+	_ = c.SetReadDeadline(time.Now().Add(3 * time.Second))
+	_, data, err := c.ReadMessage()
+	if err != nil {
+		t.Fatalf("read unsubscribe_ack: %v", err)
+	}
+	var ack wsEnvelope
+	if err := json.Unmarshal(data, &ack); err != nil {
+		t.Fatalf("ack json: %v", err)
+	}
+	if ack.Op != "unsubscribe_ack" || ack.S != 2 {
+		t.Fatalf("unsubscribe_ack = %+v", ack)
+	}
 }

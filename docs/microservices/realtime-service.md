@@ -56,8 +56,8 @@ Headers:
 | op             | Описание                                              |
 |----------------|-------------------------------------------------------|
 | `heartbeat`    | Keepalive (каждые 30 сек)                             |
-| `subscribe`    | Подписка на канал/чат/space                           |
-| `unsubscribe`  | Отписка                                               |
+| `subscribe`    | Подписка на чат: `d.chat_id` — UUID чата (RFC 4122)                    |
+| `unsubscribe`  | Отписка: `d.chat_id` — UUID чата                                      |
 | `typing_start` | Начал печатать                                        |
 | `typing_stop`  | Перестал печатать                                     |
 | `resume`       | После reconnect: `d.last_s` = последний известный `s` |
@@ -67,6 +67,10 @@ Headers:
 |----------------------|---------------------------------------------------------------------|
 | `hello`              | Инициализация после подключения (начало новой сессии нумерации `s`) |
 | `heartbeat_ack`      | Подтверждение heartbeat                                             |
+| `subscription_sync`  | Снимок подписок DM после `hello` (см. раздел «Подписки»): `d.scope` = `dm`, `d.chat_ids`, `d.source` = `chat`, `d.degraded` при ошибке S2S к Chat |
+| `subscribe_ack`      | Подтверждение `subscribe`: `d.chat_id`                              |
+| `unsubscribe_ack`    | Подтверждение `unsubscribe`: `d.chat_id`                          |
+| `error`              | Ошибка разбора клиентской операции, напр. `d.code` = `invalid_subscribe` / `invalid_unsubscribe` |
 | `message_create`     | Новое сообщение                                                     |
 | `message_update`     | Сообщение отредактировано                                           |
 | `message_delete`     | Сообщение удалено                                                   |
@@ -85,6 +89,7 @@ Headers:
 
 - **`NATS_URL`** — URL NATS Server с JetStream (порт **4222**). В Compose: `nats://nats:4222`; с хоста: `nats://127.0.0.1:${NATS_PORT:-4222}` (см. [`docker-compose.yml`](../../docker-compose.yml)).
 - Подписки на доменные потоки для fan-out в WebSocket — в первую очередь **`message.events`** и **`chat.events`** ([CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)); детали subject/consumer — в реализации сервиса.
+- **`REALTIME_CHAT_GRPC_ADDR`** (опционально) — gRPC адрес **Chat Service** для bootstrap списка DM при открытии WebSocket (например `chat:50051` в compose). Если не задан, сервер **не** вызывает Chat и **не** шлёт `subscription_sync`; клиент может подписываться через `subscribe` (lazy). TLS/insecure — как принято в окружении (локально часто plaintext внутри mesh).
 
 ## Архитектура fan-out
 
@@ -108,6 +113,19 @@ Realtime Instance A ──Redis Pub/Sub──► Realtime Instance B
 - Все свои пространства и подписки на узлы дерева (текстовые чаты / голос)
 - Presence друзей
 - Персональные уведомления
+
+### DM (Фаза 1): список из Chat vs lazy `subscribe`
+
+Требование выше («все активные чаты») для **DM** в реализации Phase 1 разбивается так:
+
+| Подход | Описание |
+|--------|----------|
+| **Bootstrap из Chat (основной)** | После `hello`, если задан `REALTIME_CHAT_GRPC_ADDR`, Realtime вызывает Chat Service **`ListChats`** (постранично), собирает чаты с типом **`CHAT_TYPE_DM`** и регистрирует их в локальном наборе подписок соединения. Клиент получает **`subscription_sync`** с отсортированным `chat_ids`. Источник истины по членству в чатах — **Chat**; так не пропускаются события по DM, в которые пользователь вступил, но UI ещё не открывал. |
+| **Lazy `subscribe`** | Клиент шлёт `subscribe` с `chat_id` (например гонка сразу после `CreateDM`, пока список не обновился, или вспомогательный чат вне первой страницы `ListChats` до доработки пагинации на стороне bootstrap). Подписки суммируются с bootstrap. |
+| **Только lazy** | Если Chat gRPC **не** сконфигурирован, bootstrap не выполняется — подписки только через `subscribe` / `unsubscribe`. Это сознательная деградация для dev/частичного деплоя; для продакшена DM MVP ожидается заданный адрес Chat. |
+| **Ошибка Chat при bootstrap** | Всё равно отправляется `subscription_sync` с `degraded: true` и пустым `chat_ids`; клиенту следует опереться на REST список чатов и при необходимости прислать `subscribe` по известным `chat_id`. |
+
+Группы/каналы и прочие scope — вне этого чанка; по мере готовности Chat/Realtime их bootstrap расширяется по той же схеме (источник списка в Chat, не выдумывать членство в Realtime).
 
 ## Зависимости
 

@@ -1,13 +1,16 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 
 	voicejwt "voice/backend/pkg/jwt"
@@ -17,14 +20,14 @@ type tokenValidator interface {
 	Validate(r *http.Request) (voicejwt.Claims, string)
 }
 
-func newServiceHandler(service string, tv tokenValidator) http.Handler {
+func newServiceHandler(service string, tv tokenValidator, lister dmChatLister) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/health", healthOnly(service))
-	mux.Handle("/ws", newWSHandler(tv))
+	mux.Handle("/ws", newWSHandler(tv, lister))
 	return mux
 }
 
-func newWSHandler(tv tokenValidator) http.Handler {
+func newWSHandler(tv tokenValidator, lister dmChatLister) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if tv == nil {
 			writeJSONError(w, http.StatusServiceUnavailable, "realtime_auth_unconfigured")
@@ -71,7 +74,7 @@ func newWSHandler(tv tokenValidator) http.Handler {
 			log.Printf("ws upgrade: %v", err)
 			return
 		}
-		go runWSConn(conn)
+		go runWSConn(conn, claims, lister)
 	})
 }
 
@@ -119,11 +122,16 @@ type wsInbound struct {
 	D  json.RawMessage `json:"d"`
 }
 
-func runWSConn(c *websocket.Conn) {
+type subscribePayload struct {
+	ChatID string `json:"chat_id"`
+}
+
+func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister) {
 	defer func() { _ = c.Close() }()
 
 	var mu sync.Mutex
 	var seq int64
+	chatSubs := make(map[string]struct{})
 
 	write := func(op string, d json.RawMessage) error {
 		mu.Lock()
@@ -137,6 +145,33 @@ func runWSConn(c *websocket.Conn) {
 	helloD, _ := json.Marshal(map[string]any{})
 	if err := write("hello", helloD); err != nil {
 		return
+	}
+
+	if lister != nil {
+		lctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ids, err := lister.ListDMChatIDs(lctx, claims.UserID, claims.ProfileID)
+		cancel()
+		degraded := err != nil
+		if err != nil {
+			log.Printf("ws dm chat list: %v", err)
+			ids = nil
+		}
+		mu.Lock()
+		for _, id := range ids {
+			chatSubs[id] = struct{}{}
+		}
+		mu.Unlock()
+		idsCopy := append([]string(nil), ids...)
+		slices.Sort(idsCopy)
+		syncD, _ := json.Marshal(map[string]any{
+			"scope":    "dm",
+			"chat_ids": idsCopy,
+			"source":   "chat",
+			"degraded": degraded,
+		})
+		if err := write("subscription_sync", syncD); err != nil {
+			return
+		}
 	}
 
 	for {
@@ -154,8 +189,57 @@ func runWSConn(c *websocket.Conn) {
 		case "resume":
 			// last_s is for client-side reconnect bookkeeping; message catch-up is via Messaging REST.
 			_ = in.D
+		case "subscribe":
+			var p subscribePayload
+			if err := json.Unmarshal(in.D, &p); err != nil || !validRFC4122ChatID(p.ChatID) {
+				errD, _ := json.Marshal(map[string]any{
+					"code":    "invalid_subscribe",
+					"message": "chat_id must be a valid UUID",
+				})
+				if err := write("error", errD); err != nil {
+					return
+				}
+				continue
+			}
+			cid := strings.TrimSpace(p.ChatID)
+			mu.Lock()
+			chatSubs[cid] = struct{}{}
+			mu.Unlock()
+			ackD, _ := json.Marshal(map[string]any{"chat_id": cid})
+			if err := write("subscribe_ack", ackD); err != nil {
+				return
+			}
+		case "unsubscribe":
+			var p subscribePayload
+			if err := json.Unmarshal(in.D, &p); err != nil || !validRFC4122ChatID(p.ChatID) {
+				errD, _ := json.Marshal(map[string]any{
+					"code":    "invalid_unsubscribe",
+					"message": "chat_id must be a valid UUID",
+				})
+				if err := write("error", errD); err != nil {
+					return
+				}
+				continue
+			}
+			cid := strings.TrimSpace(p.ChatID)
+			mu.Lock()
+			delete(chatSubs, cid)
+			mu.Unlock()
+			ackD, _ := json.Marshal(map[string]any{"chat_id": cid})
+			if err := write("unsubscribe_ack", ackD); err != nil {
+				return
+			}
 		default:
 			// ignore unknown ops for now
 		}
 	}
+}
+
+func validRFC4122ChatID(id string) bool {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return false
+	}
+	_, err := uuid.Parse(id)
+	return err == nil
 }

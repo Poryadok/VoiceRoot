@@ -10,6 +10,9 @@ import (
 	"syscall"
 	"time"
 
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+
 	voicejwt "voice/backend/pkg/jwt"
 )
 
@@ -34,9 +37,11 @@ func main() {
 		)
 	}
 
+	dmLister := dialDMChatLister()
+
 	server := &http.Server{
 		Addr:              addr,
-		Handler:           newServiceHandler(serviceName, tv),
+		Handler:           newServiceHandler(serviceName, tv, dmLister),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       0,
 		WriteTimeout:      0,
@@ -69,4 +74,17 @@ func firstNonEmpty(a, b string) string {
 		return strings.TrimSpace(a)
 	}
 	return strings.TrimSpace(b)
+}
+
+func dialDMChatLister() dmChatLister {
+	addr := strings.TrimSpace(os.Getenv("REALTIME_CHAT_GRPC_ADDR"))
+	if addr == "" {
+		return nil
+	}
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Printf("realtime: REALTIME_CHAT_GRPC_ADDR NewClient %q: %v", addr, err)
+		return nil
+	}
+	return newGRPCDMChatLister(conn)
 }

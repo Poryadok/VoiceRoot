@@ -5,9 +5,13 @@ FROM golang:1.26-alpine AS build
 WORKDIR /src
 COPY pkg/go.mod ./pkg/
 COPY realtime/go.mod ./realtime/
+COPY chat/pb/voice/chat/go.mod ./chat/pb/voice/chat/
+COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
 RUN cd realtime && go mod download
 COPY pkg ./pkg
 COPY realtime ./realtime
+COPY chat/pb/voice/chat ./chat/pb/voice/chat
+COPY user/pb/voice/common ./user/pb/voice/common
 WORKDIR /src/realtime
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/service .
 
