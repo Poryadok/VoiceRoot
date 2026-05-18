@@ -5,12 +5,22 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/nats-io/nats-server/v2/server"
+	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
+	eventsv1 "voice.app/voice/events/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
+
+	"voice/backend/messaging/internal/messageevents"
 )
+
+// CONTRACT_MATRIX: stream message.events (JetStream name message_events), subject message.sent; Messaging publishes; Realtime et al. subscribe.
+const contractMessageSentSubject = "message.sent"
 
 type spyMessageEvents struct {
 	mu      sync.Mutex
@@ -44,6 +54,84 @@ func (s *spyMessageEvents) snapshot() (sent [][3]string, edited [][2]string, del
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([][3]string(nil), s.sent...), append([][2]string(nil), s.edited...), append([][2]string(nil), s.deleted...)
+}
+
+func startMessagingJSTestServer(t *testing.T) *server.Server {
+	t.Helper()
+	opts := &server.Options{
+		Host:      "127.0.0.1",
+		Port:      -1,
+		NoLog:     true,
+		NoSigs:    true,
+		JetStream: true,
+		StoreDir:  t.TempDir(),
+	}
+	s, err := server.NewServer(opts)
+	require.NoError(t, err)
+	go s.Start()
+	if !s.ReadyForConnections(5 * time.Second) {
+		t.Fatal("nats server not ready")
+	}
+	t.Cleanup(func() { s.Shutdown() })
+	return s
+}
+
+// TestMessagingGRPC_JetStream_MessageSentRoundTrip verifies SendMessage → JetStream message.sent delivery
+// matches events.v1.MessageStreamEvent (CONTRACT_MATRIX message.events).
+func TestMessagingGRPC_JetStream_MessageSentRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	chatID := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	acctA := uuid.New()
+	seedDMChat(t, ctx, pool, chatID, profA, profB)
+
+	natsSrv := startMessagingJSTestServer(t)
+	natsURL := natsSrv.ClientURL()
+
+	nc, err := nats.Connect(natsURL)
+	require.NoError(t, err)
+	t.Cleanup(nc.Close)
+
+	sub, err := nc.SubscribeSync(contractMessageSentSubject)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sub.Unsubscribe() })
+
+	jsPub, err := messageevents.NewJetStreamPublisher(natsURL)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = jsPub.Close() })
+
+	client, _ := startMessagingServerWired(t, pool, messagingWire{MessageEvents: jsPub})
+
+	mk := messagingv1.MessageKind_MESSAGE_KIND_REGULAR
+	clientID := uuid.New().String()
+	sendResp, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+		Chat:            chatDMRef(chatID),
+		Content:         "hello jetstream",
+		ClientMessageId: &clientID,
+		AttachmentsJson: "[]",
+		MentionsJson:    "[]",
+		MessageKind:     &mk,
+	})
+	require.NoError(t, err)
+	msgID := sendResp.GetMessage().GetId()
+
+	raw, err := sub.NextMsg(5 * time.Second)
+	require.NoError(t, err)
+	var env eventsv1.MessageStreamEvent
+	require.NoError(t, proto.Unmarshal(raw.Data, &env))
+	require.NotEmpty(t, env.GetEventId())
+	require.NotNil(t, env.GetOccurredAt())
+	sent := env.GetMessageSent()
+	require.NotNil(t, sent)
+	require.Equal(t, msgID, sent.GetMessageId())
+	require.Equal(t, chatID.String(), sent.GetChatId())
+	require.Equal(t, profA.String(), sent.GetSenderProfileId())
 }
 
 func TestMessagingGRPC_MessageEvents_SendEditDelete(t *testing.T) {
