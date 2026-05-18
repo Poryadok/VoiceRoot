@@ -111,3 +111,24 @@ func (h *wsHub) broadcastTypingExcept(chatID, excludeInstance, excludeConn strin
 		}
 	}
 }
+
+// broadcastToChat delivers a fan-out envelope to every connection subscribed to chatID (local hub only).
+func (h *wsHub) broadcastToChat(chatID string, env fanoutEnvelope) {
+	if chatID == "" {
+		return
+	}
+	h.mu.RLock()
+	m := h.byChat[chatID]
+	var targets []*connReg
+	for reg := range m {
+		targets = append(targets, reg)
+	}
+	h.mu.RUnlock()
+	for _, reg := range targets {
+		select {
+		case reg.fanout <- env:
+		default:
+			// Drop under backpressure; client catches up via Messaging REST.
+		}
+	}
+}

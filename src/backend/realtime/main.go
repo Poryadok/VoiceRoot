@@ -71,6 +71,15 @@ func main() {
 		}()
 	}
 
+	if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
+		go func() {
+			err := runMessageEventsConsumer(ctx, hub, natsURL, instanceID)
+			if err != nil && err != context.Canceled {
+				log.Printf("realtime message.events consumer exited: %v", err)
+			}
+		}()
+	}
+
 	server := &http.Server{
 		Addr:              addr,
 		Handler:           newServiceHandler(serviceName, tv, dmLister, hub, rf, instanceID),
