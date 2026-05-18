@@ -71,8 +71,8 @@ func TestRedisTypingFanoutCrossInstanceViaPubSub(t *testing.T) {
 	connB := "c-b"
 	chatID := "11111111-1111-1111-1111-111111111111"
 
-	regA := hub.attachConn(instA, connA, 8)
-	regB := hub.attachConn(instB, connB, 8)
+	regA := hub.attachConn(instA, connA, "", 8)
+	regB := hub.attachConn(instB, connB, "", 8)
 	hub.addChat(regA, chatID)
 	hub.addChat(regB, chatID)
 
@@ -126,7 +126,7 @@ func TestRedisFanoutPublishRoundTrip(t *testing.T) {
 	hub := newWSHub()
 	inst := "inst-1"
 	connID := uuid.NewString()
-	reg := hub.attachConn(inst, connID, 8)
+	reg := hub.attachConn(inst, connID, "", 8)
 	hub.addChat(reg, "22222222-2222-2222-2222-222222222222")
 
 	rf := newRedisFanout(redisFanoutConfig{

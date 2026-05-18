@@ -15,28 +15,42 @@ type fanoutEnvelope struct {
 type connReg struct {
 	instanceID string
 	connID     string
+	profileID  string
 	fanout     chan fanoutEnvelope
 	chats      map[string]struct{}
 }
 
 type wsHub struct {
-	mu     sync.RWMutex
-	byChat map[string]map[*connReg]struct{}
+	mu        sync.RWMutex
+	byChat    map[string]map[*connReg]struct{}
+	byProfile map[string]map[*connReg]struct{}
 }
 
 func newWSHub() *wsHub {
 	return &wsHub{
-		byChat: make(map[string]map[*connReg]struct{}),
+		byChat:    make(map[string]map[*connReg]struct{}),
+		byProfile: make(map[string]map[*connReg]struct{}),
 	}
 }
 
-func (h *wsHub) attachConn(instanceID, connID string, fanoutBuf int) *connReg {
-	return &connReg{
+func (h *wsHub) attachConn(instanceID, connID, profileID string, fanoutBuf int) *connReg {
+	reg := &connReg{
 		instanceID: instanceID,
 		connID:     connID,
+		profileID:  profileID,
 		fanout:     make(chan fanoutEnvelope, fanoutBuf),
 		chats:      make(map[string]struct{}),
 	}
+	if profileID == "" {
+		return reg
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.byProfile[profileID] == nil {
+		h.byProfile[profileID] = make(map[*connReg]struct{})
+	}
+	h.byProfile[profileID][reg] = struct{}{}
+	return reg
 }
 
 func (h *wsHub) addChat(reg *connReg, chatID string) {
@@ -82,6 +96,14 @@ func (h *wsHub) unregisterConn(reg *connReg) {
 		}
 	}
 	reg.chats = make(map[string]struct{})
+	if reg.profileID != "" {
+		if m, ok := h.byProfile[reg.profileID]; ok {
+			delete(m, reg)
+			if len(m) == 0 {
+				delete(h.byProfile, reg.profileID)
+			}
+		}
+	}
 }
 
 // broadcastTypingExcept delivers op "typing" with payload d to every connection subscribed to chatID
@@ -108,6 +130,86 @@ func (h *wsHub) broadcastTypingExcept(chatID, excludeInstance, excludeConn strin
 		case reg.fanout <- env:
 		default:
 			// Ephemeral typing: drop under backpressure.
+		}
+	}
+}
+
+// broadcastMarkReadSameProfileExcept delivers op "mark_read" to other connections of the same profile
+// (cross-device read sync; see docs/ARCHITECTURE_REQUIREMENTS.md).
+func (h *wsHub) broadcastMarkReadSameProfileExcept(profileID, excludeInstance, excludeConn string, d json.RawMessage) {
+	if profileID == "" {
+		return
+	}
+	h.mu.RLock()
+	m := h.byProfile[profileID]
+	var targets []*connReg
+	for reg := range m {
+		if reg.instanceID == excludeInstance && reg.connID == excludeConn {
+			continue
+		}
+		targets = append(targets, reg)
+	}
+	h.mu.RUnlock()
+
+	env := fanoutEnvelope{Op: "mark_read", D: d}
+	for _, reg := range targets {
+		select {
+		case reg.fanout <- env:
+		default:
+		}
+	}
+}
+
+// broadcastPresenceSameProfileExcept delivers op "presence_update" to other connections of the same profile.
+func (h *wsHub) broadcastPresenceSameProfileExcept(profileID, excludeInstance, excludeConn string, d json.RawMessage) {
+	if profileID == "" {
+		return
+	}
+	h.mu.RLock()
+	m := h.byProfile[profileID]
+	var targets []*connReg
+	for reg := range m {
+		if reg.instanceID == excludeInstance && reg.connID == excludeConn {
+			continue
+		}
+		targets = append(targets, reg)
+	}
+	h.mu.RUnlock()
+
+	env := fanoutEnvelope{Op: "presence_update", D: d}
+	for _, reg := range targets {
+		select {
+		case reg.fanout <- env:
+		default:
+		}
+	}
+}
+
+// broadcastPresenceInChatExcept delivers op "presence_update" to connections subscribed to chatID,
+// excluding the sender connection and excluding other tabs of the same profile (those get profile-scope sync).
+func (h *wsHub) broadcastPresenceInChatExcept(chatID, senderProfileID, excludeInstance, excludeConn string, d json.RawMessage) {
+	if chatID == "" {
+		return
+	}
+	h.mu.RLock()
+	m := h.byChat[chatID]
+	var targets []*connReg
+	for reg := range m {
+		if reg.instanceID == excludeInstance && reg.connID == excludeConn {
+			continue
+		}
+		if senderProfileID != "" && reg.profileID == senderProfileID {
+			continue
+		}
+		targets = append(targets, reg)
+	}
+	h.mu.RUnlock()
+
+	env := fanoutEnvelope{Op: "presence_update", D: d}
+	for _, reg := range targets {
+		select {
+		case reg.fanout <- env:
+		default:
 		}
 	}
 }

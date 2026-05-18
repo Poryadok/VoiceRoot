@@ -159,7 +159,7 @@ func TestRunMessageEventsConsumer_JetStreamToHub(t *testing.T) {
 	sender := uuid.NewString()
 
 	hub := newWSHub()
-	reg := hub.attachConn("test-inst", "conn-1", 8)
+	reg := hub.attachConn("test-inst", "conn-1", "", 8)
 	hub.addChat(reg, chatID)
 
 	ctx, cancel := context.WithCancel(context.Background())

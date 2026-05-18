@@ -12,14 +12,21 @@ import (
 const (
 	defaultRedisProfilePrefix = "voice:rt:prof:"
 	defaultRedisFanoutChannel = "voice:rt:fanout"
+
+	fanoutMsgMarkRead = "mark_read"
+	fanoutMsgPresence = "presence"
 )
 
 type redisFanoutPayload struct {
-	ChatID      string `json:"chat_id"`
-	ProfileID   string `json:"profile_id"`
-	Kind        string `json:"kind"`
-	SrcInstance string `json:"src_instance"`
-	SrcConn     string `json:"src_conn"`
+	T            string `json:"t,omitempty"`
+	ChatID       string `json:"chat_id,omitempty"`
+	MessageID    string `json:"message_id,omitempty"`
+	ProfileID    string `json:"profile_id,omitempty"`
+	Status       string `json:"status,omitempty"`
+	CustomStatus string `json:"custom_status,omitempty"`
+	Kind         string `json:"kind,omitempty"`
+	SrcInstance  string `json:"src_instance,omitempty"`
+	SrcConn      string `json:"src_conn,omitempty"`
 }
 
 type redisFanoutConfig struct {
@@ -93,6 +100,64 @@ func (f *redisFanout) PublishTyping(ctx context.Context, chatID, profileID, kind
 	return f.rdb.Publish(ctx, f.fanoutChannel, string(b)).Err()
 }
 
+func (f *redisFanout) PublishMarkRead(ctx context.Context, profileID, chatID, messageID, srcConn string) error {
+	if f == nil || f.rdb == nil {
+		return nil
+	}
+	msg := redisFanoutPayload{
+		T:           fanoutMsgMarkRead,
+		ChatID:      chatID,
+		MessageID:   messageID,
+		ProfileID:   profileID,
+		SrcInstance: f.instanceID,
+		SrcConn:     srcConn,
+	}
+	b, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	return f.rdb.Publish(ctx, f.fanoutChannel, string(b)).Err()
+}
+
+func (f *redisFanout) PublishPresenceProfile(ctx context.Context, profileID, status, customStatus, srcConn string) error {
+	if f == nil || f.rdb == nil {
+		return nil
+	}
+	msg := redisFanoutPayload{
+		T:            fanoutMsgPresence,
+		ProfileID:    profileID,
+		Status:       status,
+		CustomStatus: customStatus,
+		SrcInstance:  f.instanceID,
+		SrcConn:      srcConn,
+	}
+	b, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	return f.rdb.Publish(ctx, f.fanoutChannel, string(b)).Err()
+}
+
+func (f *redisFanout) PublishPresenceChat(ctx context.Context, chatID, profileID, status, customStatus, srcConn string) error {
+	if f == nil || f.rdb == nil {
+		return nil
+	}
+	msg := redisFanoutPayload{
+		T:            fanoutMsgPresence,
+		ChatID:       chatID,
+		ProfileID:    profileID,
+		Status:       status,
+		CustomStatus: customStatus,
+		SrcInstance:  f.instanceID,
+		SrcConn:      srcConn,
+	}
+	b, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	return f.rdb.Publish(ctx, f.fanoutChannel, string(b)).Err()
+}
+
 func (f *redisFanout) runSubscriber(ctx context.Context) error {
 	if f == nil || f.rdb == nil || f.hub == nil {
 		return nil
@@ -117,15 +182,51 @@ func (f *redisFanout) runSubscriber(ctx context.Context) error {
 				log.Printf("realtime redis fanout: bad payload: %v", err)
 				continue
 			}
-			d, err := json.Marshal(map[string]any{
-				"chat_id":    p.ChatID,
-				"profile_id": p.ProfileID,
-				"kind":       p.Kind,
-			})
-			if err != nil {
-				continue
+			switch p.T {
+			case fanoutMsgMarkRead:
+				d, err := json.Marshal(map[string]any{
+					"chat_id":    p.ChatID,
+					"message_id": p.MessageID,
+					"profile_id": p.ProfileID,
+				})
+				if err != nil {
+					continue
+				}
+				f.hub.broadcastMarkReadSameProfileExcept(p.ProfileID, p.SrcInstance, p.SrcConn, d)
+			case fanoutMsgPresence:
+				if p.ChatID != "" {
+					d, err := json.Marshal(map[string]any{
+						"chat_id":         p.ChatID,
+						"profile_id":      p.ProfileID,
+						"status":          p.Status,
+						"custom_status":   p.CustomStatus,
+					})
+					if err != nil {
+						continue
+					}
+					f.hub.broadcastPresenceInChatExcept(p.ChatID, p.ProfileID, p.SrcInstance, p.SrcConn, d)
+				} else {
+					d, err := json.Marshal(map[string]any{
+						"profile_id":    p.ProfileID,
+						"status":        p.Status,
+						"custom_status": p.CustomStatus,
+					})
+					if err != nil {
+						continue
+					}
+					f.hub.broadcastPresenceSameProfileExcept(p.ProfileID, p.SrcInstance, p.SrcConn, d)
+				}
+			default:
+				d, err := json.Marshal(map[string]any{
+					"chat_id":    p.ChatID,
+					"profile_id": p.ProfileID,
+					"kind":       p.Kind,
+				})
+				if err != nil {
+					continue
+				}
+				f.hub.broadcastTypingExcept(p.ChatID, p.SrcInstance, p.SrcConn, d)
 			}
-			f.hub.broadcastTypingExcept(p.ChatID, p.SrcInstance, p.SrcConn, d)
 		}
 	}
 }

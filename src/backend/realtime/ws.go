@@ -132,6 +132,16 @@ type subscribePayload struct {
 	ChatID string `json:"chat_id"`
 }
 
+type markReadPayload struct {
+	ChatID    string `json:"chat_id"`
+	MessageID string `json:"message_id"`
+}
+
+type presenceUpdateClientPayload struct {
+	Status       string `json:"status"`
+	CustomStatus string `json:"custom_status"`
+}
+
 type readResult struct {
 	in  wsInbound
 	err error
@@ -139,7 +149,7 @@ type readResult struct {
 
 func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, hub *wsHub, rf *redisFanout, instanceID string) {
 	connID := uuid.NewString()
-	reg := hub.attachConn(instanceID, connID, 32)
+	reg := hub.attachConn(instanceID, connID, claims.ProfileID, 32)
 
 	defer func() {
 		hub.unregisterConn(reg)
@@ -326,6 +336,108 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, h
 						log.Printf("ws redis publish typing: %v", err)
 					}
 					cancel()
+				}
+			case "mark_read":
+				var p markReadPayload
+				if err := json.Unmarshal(in.D, &p); err != nil || !validRFC4122ChatID(p.ChatID) || !validRFC4122ChatID(p.MessageID) {
+					errD, _ := json.Marshal(map[string]any{
+						"code":    "invalid_mark_read",
+						"message": "chat_id and message_id must be valid UUIDs",
+					})
+					if err := write("error", errD); err != nil {
+						return
+					}
+					continue
+				}
+				cid := strings.TrimSpace(p.ChatID)
+				mid := strings.TrimSpace(p.MessageID)
+				mu.Lock()
+				_, subscribed := chatSubs[cid]
+				mu.Unlock()
+				if !subscribed {
+					errD, _ := json.Marshal(map[string]any{
+						"code":    "invalid_mark_read",
+						"message": "not subscribed to chat",
+					})
+					if err := write("error", errD); err != nil {
+						return
+					}
+					continue
+				}
+				d, _ := json.Marshal(map[string]any{
+					"chat_id":    cid,
+					"message_id": mid,
+					"profile_id": claims.ProfileID,
+				})
+				hub.broadcastMarkReadSameProfileExcept(claims.ProfileID, instanceID, connID, d)
+				if rf != nil {
+					ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+					if err := rf.PublishMarkRead(ctx, claims.ProfileID, cid, mid, connID); err != nil {
+						log.Printf("ws redis publish mark_read: %v", err)
+					}
+					cancel()
+				}
+			case "presence_update":
+				var p presenceUpdateClientPayload
+				if err := json.Unmarshal(in.D, &p); err != nil {
+					errD, _ := json.Marshal(map[string]any{
+						"code":    "invalid_presence",
+						"message": "invalid presence payload",
+					})
+					if err := write("error", errD); err != nil {
+						return
+					}
+					continue
+				}
+				status := strings.TrimSpace(p.Status)
+				if status == "" {
+					errD, _ := json.Marshal(map[string]any{
+						"code":    "invalid_presence",
+						"message": "status is required",
+					})
+					if err := write("error", errD); err != nil {
+						return
+					}
+					continue
+				}
+				custom := strings.TrimSpace(p.CustomStatus)
+				if len(custom) > 256 {
+					custom = custom[:256]
+				}
+				dSelf, _ := json.Marshal(map[string]any{
+					"profile_id":    claims.ProfileID,
+					"status":        status,
+					"custom_status": custom,
+				})
+				hub.broadcastPresenceSameProfileExcept(claims.ProfileID, instanceID, connID, dSelf)
+				if rf != nil {
+					ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+					if err := rf.PublishPresenceProfile(ctx, claims.ProfileID, status, custom, connID); err != nil {
+						log.Printf("ws redis publish presence profile: %v", err)
+					}
+					cancel()
+				}
+				mu.Lock()
+				chatCopy := make([]string, 0, len(chatSubs))
+				for c := range chatSubs {
+					chatCopy = append(chatCopy, c)
+				}
+				mu.Unlock()
+				for _, c := range chatCopy {
+					dChat, _ := json.Marshal(map[string]any{
+						"chat_id":         c,
+						"profile_id":      claims.ProfileID,
+						"status":          status,
+						"custom_status":   custom,
+					})
+					hub.broadcastPresenceInChatExcept(c, claims.ProfileID, instanceID, connID, dChat)
+					if rf != nil {
+						ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+						if err := rf.PublishPresenceChat(ctx, c, claims.ProfileID, status, custom, connID); err != nil {
+							log.Printf("ws redis publish presence chat: %v", err)
+						}
+						cancel()
+					}
 				}
 			default:
 				// ignore unknown ops for now
