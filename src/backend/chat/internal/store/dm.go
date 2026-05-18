@@ -34,31 +34,32 @@ func orderedProfileStrings(a, b uuid.UUID) (low, high string) {
 }
 
 // EnsureDM returns the existing DM between the two profiles or creates one (creator = caller).
+// The bool is true when a new chat row and memberships were inserted.
 // Uses a transaction-scoped advisory lock on the sorted pair to avoid duplicate chats under concurrency.
-func (s *DMStore) EnsureDM(ctx context.Context, callerProfileID, otherProfileID uuid.UUID) (*ChatRow, error) {
+func (s *DMStore) EnsureDM(ctx context.Context, callerProfileID, otherProfileID uuid.UUID) (*ChatRow, bool, error) {
 	if s == nil || s.Pool == nil {
-		return nil, errors.New("dm store: pool not configured")
+		return nil, false, errors.New("dm store: pool not configured")
 	}
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	low, high := orderedProfileStrings(callerProfileID, otherProfileID)
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1::text), hashtext($2::text))`, low, high); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	found, err := findDMInTx(ctx, tx, callerProfileID, otherProfileID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if found != nil {
 		if err := tx.Commit(ctx); err != nil {
-			return nil, err
+			return nil, false, err
 		}
-		return found, nil
+		return found, false, nil
 	}
 
 	var chatID uuid.UUID
@@ -69,16 +70,16 @@ VALUES ('dm', $1, 0)
 RETURNING id, created_at, updated_at
 `, callerProfileID).Scan(&chatID, &createdAt, &updatedAt)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if _, err := tx.Exec(ctx, `
 INSERT INTO chat_members (chat_id, profile_id, role)
 VALUES ($1, $2, 'member'), ($1, $3, 'member')
 `, chatID, callerProfileID, otherProfileID); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	return &ChatRow{
 		ID:               chatID,
@@ -86,7 +87,7 @@ VALUES ($1, $2, 'member'), ($1, $3, 'member')
 		CreatedAt:        createdAt.UTC(),
 		UpdatedAt:        updatedAt.UTC(),
 		LastMessageAt:    nil,
-	}, nil
+	}, true, nil
 }
 
 func findDMInTx(ctx context.Context, tx pgx.Tx, profileA, profileB uuid.UUID) (*ChatRow, error) {

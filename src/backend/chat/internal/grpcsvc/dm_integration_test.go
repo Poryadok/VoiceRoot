@@ -22,6 +22,7 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 
 	"voice/backend/chat/internal/authctx"
+	"voice/backend/chat/internal/chatevents"
 	"voice/backend/chat/internal/store"
 
 	chatv1 "voice.app/voice/chat/v1"
@@ -106,17 +107,28 @@ func (s stubBlocks) AccountPairBlocked(context.Context, uuid.UUID, uuid.UUID) (b
 	return s.blocked, s.err
 }
 
-func startChatGRPCTestServer(t *testing.T, pool *pgxpool.Pool, profiles UserProfileLookup, blocks AccountBlockChecker, enrich ListChatsEnrichment) (chatv1.ChatServiceClient, func()) {
+type chatServerOption func(*ChatGRPC)
+
+// WithChatEventsPublisher wires optional NATS chat.events publisher for integration tests.
+func WithChatEventsPublisher(p chatevents.Publisher) chatServerOption {
+	return func(c *ChatGRPC) { c.ChatEvents = p }
+}
+
+func startChatGRPCTestServer(t *testing.T, pool *pgxpool.Pool, profiles UserProfileLookup, blocks AccountBlockChecker, enrich ListChatsEnrichment, opts ...chatServerOption) (chatv1.ChatServiceClient, func()) {
 	t.Helper()
 	const bufSize = 1 << 20
 	lis := bufconn.Listen(bufSize)
 	srv := grpc.NewServer()
-	chatv1.RegisterChatServiceServer(srv, &ChatGRPC{
+	svc := &ChatGRPC{
 		DM:         &store.DMStore{Pool: pool},
 		Profiles:   profiles,
 		Blocks:     blocks,
 		ListEnrich: enrich,
-	})
+	}
+	for _, o := range opts {
+		o(svc)
+	}
+	chatv1.RegisterChatServiceServer(srv, svc)
 	go func() {
 		if err := srv.Serve(lis); err != nil {
 			t.Logf("grpc serve: %v", err)

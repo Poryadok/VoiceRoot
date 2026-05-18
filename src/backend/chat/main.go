@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"voice/backend/chat/internal/chatevents"
 	grpcsvc "voice/backend/chat/internal/grpcsvc"
 	"voice/backend/chat/internal/store"
 
@@ -102,15 +103,26 @@ func main() {
 			profiles = &grpcsvc.UserGRPCProfiles{Client: userv1.NewUserServiceClient(uconn)}
 		}
 
+		var chatEvents chatevents.Publisher
+		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
+			jsPub, err := chatevents.NewJetStreamPublisher(natsURL)
+			if err != nil {
+				log.Fatalf("nats jetstream publisher: %v", err)
+			}
+			defer func() { _ = jsPub.Close() }()
+			chatEvents = jsPub
+		}
+
 		lis, err := net.Listen("tcp", grpcListen)
 		if err != nil {
 			log.Fatalf("grpc listen: %v", err)
 		}
 		grpcSrv = grpc.NewServer()
 		chatv1.RegisterChatServiceServer(grpcSrv, &grpcsvc.ChatGRPC{
-			DM:       &store.DMStore{Pool: pool},
-			Profiles: profiles,
-			Blocks:   blocks,
+			DM:         &store.DMStore{Pool: pool},
+			Profiles:   profiles,
+			Blocks:     blocks,
+			ChatEvents: chatEvents,
 		})
 		go func() {
 			log.Printf("%s gRPC listening on %s", serviceName, grpcListen)

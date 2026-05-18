@@ -13,6 +13,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
 
+	"voice/backend/chat/internal/chatevents"
 	chatgrpc "voice/backend/chat/internal/grpcsvc"
 	chatstore "voice/backend/chat/internal/store"
 
@@ -27,6 +28,7 @@ type ChatDeps struct {
 	Profiles   chatgrpc.UserProfileLookup
 	Blocks     chatgrpc.AccountBlockChecker
 	ListEnrich chatgrpc.ListChatsEnrichment
+	ChatEvents chatevents.Publisher
 }
 
 // NewBufconnChatClient returns a ChatService client backed by an in-process server using pool (chat_db migrations applied).
@@ -45,6 +47,7 @@ func NewBufconnChatClientWith(t *testing.T, pool *pgxpool.Pool, deps ChatDeps) (
 		Profiles:   deps.Profiles,
 		Blocks:     deps.Blocks,
 		ListEnrich: deps.ListEnrich,
+		ChatEvents: deps.ChatEvents,
 	})
 	go func() {
 		if err := srv.Serve(lis); err != nil {
