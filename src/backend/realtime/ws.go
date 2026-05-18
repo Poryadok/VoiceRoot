@@ -20,14 +20,20 @@ type tokenValidator interface {
 	Validate(r *http.Request) (voicejwt.Claims, string)
 }
 
-func newServiceHandler(service string, tv tokenValidator, lister dmChatLister) http.Handler {
+func newServiceHandler(service string, tv tokenValidator, lister dmChatLister, hub *wsHub, rf *redisFanout, instanceID string) http.Handler {
+	if hub == nil {
+		hub = newWSHub()
+	}
+	if instanceID == "" {
+		instanceID = uuid.NewString()
+	}
 	mux := http.NewServeMux()
 	mux.Handle("/health", healthOnly(service))
-	mux.Handle("/ws", newWSHandler(tv, lister))
+	mux.Handle("/ws", newWSHandler(tv, lister, hub, rf, instanceID))
 	return mux
 }
 
-func newWSHandler(tv tokenValidator, lister dmChatLister) http.Handler {
+func newWSHandler(tv tokenValidator, lister dmChatLister, hub *wsHub, rf *redisFanout, instanceID string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if tv == nil {
 			writeJSONError(w, http.StatusServiceUnavailable, "realtime_auth_unconfigured")
@@ -74,7 +80,7 @@ func newWSHandler(tv tokenValidator, lister dmChatLister) http.Handler {
 			log.Printf("ws upgrade: %v", err)
 			return
 		}
-		go runWSConn(conn, claims, lister)
+		go runWSConn(conn, claims, lister, hub, rf, instanceID)
 	})
 }
 
@@ -126,8 +132,32 @@ type subscribePayload struct {
 	ChatID string `json:"chat_id"`
 }
 
-func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister) {
-	defer func() { _ = c.Close() }()
+type readResult struct {
+	in  wsInbound
+	err error
+}
+
+func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, hub *wsHub, rf *redisFanout, instanceID string) {
+	connID := uuid.NewString()
+	reg := hub.attachConn(instanceID, connID, 32)
+
+	defer func() {
+		hub.unregisterConn(reg)
+		if rf != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			_ = rf.Unregister(ctx, claims.ProfileID, connID)
+			cancel()
+		}
+		_ = c.Close()
+	}()
+
+	if rf != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		if err := rf.Register(ctx, claims.ProfileID, connID); err != nil {
+			log.Printf("ws redis register: %v", err)
+		}
+		cancel()
+	}
 
 	var mu sync.Mutex
 	var seq int64
@@ -159,6 +189,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister) {
 		mu.Lock()
 		for _, id := range ids {
 			chatSubs[id] = struct{}{}
+			hub.addChat(reg, id)
 		}
 		mu.Unlock()
 		idsCopy := append([]string(nil), ids...)
@@ -174,63 +205,131 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister) {
 		}
 	}
 
-	for {
-		_ = c.SetReadDeadline(time.Now().Add(90 * time.Second))
-		var in wsInbound
-		if err := c.ReadJSON(&in); err != nil {
-			return
+	readCh := make(chan readResult, 1)
+	go func() {
+		for {
+			_ = c.SetReadDeadline(time.Now().Add(90 * time.Second))
+			var in wsInbound
+			err := c.ReadJSON(&in)
+			select {
+			case readCh <- readResult{in: in, err: err}:
+			default:
+				return
+			}
+			if err != nil {
+				return
+			}
 		}
-		switch in.Op {
-		case "heartbeat":
-			ackD, _ := json.Marshal(map[string]any{})
-			if err := write("heartbeat_ack", ackD); err != nil {
+	}()
+
+	for {
+		select {
+		case env := <-reg.fanout:
+			if err := write(env.Op, env.D); err != nil {
 				return
 			}
-		case "resume":
-			// last_s is for client-side reconnect bookkeeping; message catch-up is via Messaging REST.
-			_ = in.D
-		case "subscribe":
-			var p subscribePayload
-			if err := json.Unmarshal(in.D, &p); err != nil || !validRFC4122ChatID(p.ChatID) {
-				errD, _ := json.Marshal(map[string]any{
-					"code":    "invalid_subscribe",
-					"message": "chat_id must be a valid UUID",
-				})
-				if err := write("error", errD); err != nil {
+		case rr := <-readCh:
+			if rr.err != nil {
+				return
+			}
+			in := rr.in
+			switch in.Op {
+			case "heartbeat":
+				ackD, _ := json.Marshal(map[string]any{})
+				if err := write("heartbeat_ack", ackD); err != nil {
 					return
 				}
-				continue
-			}
-			cid := strings.TrimSpace(p.ChatID)
-			mu.Lock()
-			chatSubs[cid] = struct{}{}
-			mu.Unlock()
-			ackD, _ := json.Marshal(map[string]any{"chat_id": cid})
-			if err := write("subscribe_ack", ackD); err != nil {
-				return
-			}
-		case "unsubscribe":
-			var p subscribePayload
-			if err := json.Unmarshal(in.D, &p); err != nil || !validRFC4122ChatID(p.ChatID) {
-				errD, _ := json.Marshal(map[string]any{
-					"code":    "invalid_unsubscribe",
-					"message": "chat_id must be a valid UUID",
-				})
-				if err := write("error", errD); err != nil {
+			case "resume":
+				// last_s is for client-side reconnect bookkeeping; message catch-up is via Messaging REST.
+				_ = in.D
+			case "subscribe":
+				var p subscribePayload
+				if err := json.Unmarshal(in.D, &p); err != nil || !validRFC4122ChatID(p.ChatID) {
+					errD, _ := json.Marshal(map[string]any{
+						"code":    "invalid_subscribe",
+						"message": "chat_id must be a valid UUID",
+					})
+					if err := write("error", errD); err != nil {
+						return
+					}
+					continue
+				}
+				cid := strings.TrimSpace(p.ChatID)
+				mu.Lock()
+				chatSubs[cid] = struct{}{}
+				mu.Unlock()
+				hub.addChat(reg, cid)
+				ackD, _ := json.Marshal(map[string]any{"chat_id": cid})
+				if err := write("subscribe_ack", ackD); err != nil {
 					return
 				}
-				continue
+			case "unsubscribe":
+				var p subscribePayload
+				if err := json.Unmarshal(in.D, &p); err != nil || !validRFC4122ChatID(p.ChatID) {
+					errD, _ := json.Marshal(map[string]any{
+						"code":    "invalid_unsubscribe",
+						"message": "chat_id must be a valid UUID",
+					})
+					if err := write("error", errD); err != nil {
+						return
+					}
+					continue
+				}
+				cid := strings.TrimSpace(p.ChatID)
+				mu.Lock()
+				delete(chatSubs, cid)
+				mu.Unlock()
+				hub.removeChat(reg, cid)
+				ackD, _ := json.Marshal(map[string]any{"chat_id": cid})
+				if err := write("unsubscribe_ack", ackD); err != nil {
+					return
+				}
+			case "typing_start", "typing_stop":
+				kind := "start"
+				if in.Op == "typing_stop" {
+					kind = "stop"
+				}
+				var p subscribePayload
+				if err := json.Unmarshal(in.D, &p); err != nil || !validRFC4122ChatID(p.ChatID) {
+					errD, _ := json.Marshal(map[string]any{
+						"code":    "invalid_typing",
+						"message": "chat_id must be a valid UUID",
+					})
+					if err := write("error", errD); err != nil {
+						return
+					}
+					continue
+				}
+				cid := strings.TrimSpace(p.ChatID)
+				mu.Lock()
+				_, subscribed := chatSubs[cid]
+				mu.Unlock()
+				if !subscribed {
+					errD, _ := json.Marshal(map[string]any{
+						"code":    "invalid_typing",
+						"message": "not subscribed to chat",
+					})
+					if err := write("error", errD); err != nil {
+						return
+					}
+					continue
+				}
+				d, _ := json.Marshal(map[string]any{
+					"chat_id":    cid,
+					"profile_id": claims.ProfileID,
+					"kind":       kind,
+				})
+				hub.broadcastTypingExcept(cid, instanceID, connID, d)
+				if rf != nil {
+					ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+					if err := rf.PublishTyping(ctx, cid, claims.ProfileID, kind, connID); err != nil {
+						log.Printf("ws redis publish typing: %v", err)
+					}
+					cancel()
+				}
+			default:
+				// ignore unknown ops for now
 			}
-			cid := strings.TrimSpace(p.ChatID)
-			mu.Lock()
-			delete(chatSubs, cid)
-			mu.Unlock()
-			ackD, _ := json.Marshal(map[string]any{"chat_id": cid})
-			if err := write("unsubscribe_ack", ackD); err != nil {
-				return
-			}
-		default:
-			// ignore unknown ops for now
 		}
 	}
 }

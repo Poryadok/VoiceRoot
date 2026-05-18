@@ -10,6 +10,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -39,9 +41,39 @@ func main() {
 
 	dmLister := dialDMChatLister()
 
+	hub := newWSHub()
+	instanceID := strings.TrimSpace(os.Getenv("REALTIME_INSTANCE_ID"))
+	if instanceID == "" {
+		instanceID = uuid.NewString()
+	}
+	log.Printf("%s instance_id=%s", serviceName, instanceID)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var rf *redisFanout
+	if redisAddr := strings.TrimSpace(os.Getenv("REALTIME_REDIS_ADDR")); redisAddr != "" {
+		rdb := redis.NewClient(&redis.Options{
+			Addr:     redisAddr,
+			Password: strings.TrimSpace(os.Getenv("REALTIME_REDIS_PASSWORD")),
+		})
+		defer func() { _ = rdb.Close() }()
+		rf = newRedisFanout(redisFanoutConfig{
+			Client:     rdb,
+			Hub:        hub,
+			InstanceID: instanceID,
+		})
+		go func() {
+			err := rf.runSubscriber(ctx)
+			if err != nil && err != context.Canceled {
+				log.Printf("realtime redis subscriber exited: %v", err)
+			}
+		}()
+	}
+
 	server := &http.Server{
 		Addr:              addr,
-		Handler:           newServiceHandler(serviceName, tv, dmLister),
+		Handler:           newServiceHandler(serviceName, tv, dmLister, hub, rf, instanceID),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       0,
 		WriteTimeout:      0,
@@ -57,13 +89,15 @@ func main() {
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	select {
 	case err := <-errCh:
+		cancel()
 		if err != nil && err != http.ErrServerClosed {
 			log.Fatal(err)
 		}
 	case <-stop:
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err := server.Shutdown(ctx); err != nil {
+		cancel()
+		shutCtx, shutCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer shutCancel()
+		if err := server.Shutdown(shutCtx); err != nil {
 			log.Fatal(err)
 		}
 	}

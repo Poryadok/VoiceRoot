@@ -16,6 +16,10 @@ import (
 	voicejwt "voice/backend/pkg/jwt"
 )
 
+func testRealtimeHandler(tv tokenValidator, lister dmChatLister) http.Handler {
+	return newServiceHandler(serviceName, tv, lister, newWSHub(), nil, "test-instance")
+}
+
 func wsEndpoint(t *testing.T, srv *httptest.Server) string {
 	t.Helper()
 	u, err := url.Parse(srv.URL)
@@ -57,7 +61,7 @@ func wsUpgradeHeaders(token string) http.Header {
 
 func TestWSReturns503WhenJWKSNotConfigured(t *testing.T) {
 	t.Parallel()
-	srv := httptest.NewServer(newServiceHandler(serviceName, nil, nil))
+	srv := httptest.NewServer(testRealtimeHandler(nil, nil))
 	t.Cleanup(srv.Close)
 
 	u := wsEndpoint(t, srv)
@@ -74,7 +78,7 @@ func TestWSReturns503WhenJWKSNotConfigured(t *testing.T) {
 
 func TestWSRequiresWebSocketUpgrade(t *testing.T) {
 	t.Parallel()
-	h := newServiceHandler(serviceName, staticTokenValidator{"tok": {UserID: "a", ProfileID: "p"}}, nil)
+	h := testRealtimeHandler(staticTokenValidator{"tok": {UserID: "a", ProfileID: "p"}}, nil)
 	req := httptest.NewRequest(http.MethodGet, "/ws", nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
@@ -85,7 +89,7 @@ func TestWSRequiresWebSocketUpgrade(t *testing.T) {
 
 func TestWSRequiresAuthorization(t *testing.T) {
 	t.Parallel()
-	srv := httptest.NewServer(newServiceHandler(serviceName, staticTokenValidator{"tok": {UserID: "a", ProfileID: "p"}}, nil))
+	srv := httptest.NewServer(testRealtimeHandler(staticTokenValidator{"tok": {UserID: "a", ProfileID: "p"}}, nil))
 	t.Cleanup(srv.Close)
 
 	u := wsEndpoint(t, srv)
@@ -100,7 +104,7 @@ func TestWSRequiresAuthorization(t *testing.T) {
 
 func TestWSRequiresActiveProfileHeader(t *testing.T) {
 	t.Parallel()
-	srv := httptest.NewServer(newServiceHandler(serviceName, staticTokenValidator{
+	srv := httptest.NewServer(testRealtimeHandler(staticTokenValidator{
 		"tok": {UserID: "account-1", ProfileID: "profile-1"},
 	}, nil))
 	t.Cleanup(srv.Close)
@@ -118,7 +122,7 @@ func TestWSRequiresActiveProfileHeader(t *testing.T) {
 
 func TestWSRejectsProfileMismatch(t *testing.T) {
 	t.Parallel()
-	srv := httptest.NewServer(newServiceHandler(serviceName, staticTokenValidator{
+	srv := httptest.NewServer(testRealtimeHandler(staticTokenValidator{
 		"tok": {UserID: "account-1", ProfileID: "profile-1"},
 	}, nil))
 	t.Cleanup(srv.Close)
@@ -143,7 +147,7 @@ type wsEnvelope struct {
 
 func TestWSHelloSequenceHeartbeatResume(t *testing.T) {
 	t.Parallel()
-	srv := httptest.NewServer(newServiceHandler(serviceName, staticTokenValidator{
+	srv := httptest.NewServer(testRealtimeHandler(staticTokenValidator{
 		"tok": {UserID: "account-1", ProfileID: "profile-1"},
 	}, nil))
 	t.Cleanup(srv.Close)
@@ -206,7 +210,7 @@ func TestWSHelloSequenceHeartbeatResume(t *testing.T) {
 
 func TestWSAcceptsGatewayProfileHeader(t *testing.T) {
 	t.Parallel()
-	srv := httptest.NewServer(newServiceHandler(serviceName, staticTokenValidator{
+	srv := httptest.NewServer(testRealtimeHandler(staticTokenValidator{
 		"tok": {UserID: "account-1", ProfileID: "profile-1"},
 	}, nil))
 	t.Cleanup(srv.Close)
@@ -248,7 +252,7 @@ func (c *captureDMChatLister) ListDMChatIDs(ctx context.Context, accountID, prof
 func TestWSSendsDMSubscriptionSyncFromChatLister(t *testing.T) {
 	t.Parallel()
 	lister := stubDMChatLister{ids: []string{"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}}
-	srv := httptest.NewServer(newServiceHandler(serviceName, staticTokenValidator{
+	srv := httptest.NewServer(testRealtimeHandler(staticTokenValidator{
 		"tok": {UserID: "account-1", ProfileID: "profile-1"},
 	}, lister))
 	t.Cleanup(srv.Close)
@@ -315,7 +319,7 @@ func TestWSSendsDMSubscriptionSyncFromChatLister(t *testing.T) {
 func TestWSSendsDMSubscriptionSyncDegradedWhenChatListerFails(t *testing.T) {
 	t.Parallel()
 	lister := stubDMChatLister{err: errors.New("chat unavailable")}
-	srv := httptest.NewServer(newServiceHandler(serviceName, staticTokenValidator{
+	srv := httptest.NewServer(testRealtimeHandler(staticTokenValidator{
 		"tok": {UserID: "account-1", ProfileID: "profile-1"},
 	}, lister))
 	t.Cleanup(srv.Close)
@@ -353,7 +357,7 @@ func TestWSSendsDMSubscriptionSyncDegradedWhenChatListerFails(t *testing.T) {
 func TestWSPassesAccountAndProfileToChatLister(t *testing.T) {
 	t.Parallel()
 	l := &captureDMChatLister{ret: []string{}}
-	srv := httptest.NewServer(newServiceHandler(serviceName, staticTokenValidator{
+	srv := httptest.NewServer(testRealtimeHandler(staticTokenValidator{
 		"tok": {UserID: "account-1", ProfileID: "profile-1"},
 	}, l))
 	t.Cleanup(srv.Close)
@@ -376,7 +380,7 @@ func TestWSPassesAccountAndProfileToChatLister(t *testing.T) {
 
 func TestWSSubscribeACKForValidUUID(t *testing.T) {
 	t.Parallel()
-	srv := httptest.NewServer(newServiceHandler(serviceName, staticTokenValidator{
+	srv := httptest.NewServer(testRealtimeHandler(staticTokenValidator{
 		"tok": {UserID: "account-1", ProfileID: "profile-1"},
 	}, nil))
 	t.Cleanup(srv.Close)
@@ -420,7 +424,7 @@ func TestWSSubscribeACKForValidUUID(t *testing.T) {
 
 func TestWSErrorOnInvalidSubscribeChatID(t *testing.T) {
 	t.Parallel()
-	srv := httptest.NewServer(newServiceHandler(serviceName, staticTokenValidator{
+	srv := httptest.NewServer(testRealtimeHandler(staticTokenValidator{
 		"tok": {UserID: "account-1", ProfileID: "profile-1"},
 	}, nil))
 	t.Cleanup(srv.Close)
@@ -463,7 +467,7 @@ func TestWSErrorOnInvalidSubscribeChatID(t *testing.T) {
 
 func TestWSUnsubscribeACK(t *testing.T) {
 	t.Parallel()
-	srv := httptest.NewServer(newServiceHandler(serviceName, staticTokenValidator{
+	srv := httptest.NewServer(testRealtimeHandler(staticTokenValidator{
 		"tok": {UserID: "account-1", ProfileID: "profile-1"},
 	}, nil))
 	t.Cleanup(srv.Close)
@@ -493,5 +497,134 @@ func TestWSUnsubscribeACK(t *testing.T) {
 	}
 	if ack.Op != "unsubscribe_ack" || ack.S != 2 {
 		t.Fatalf("unsubscribe_ack = %+v", ack)
+	}
+}
+
+func TestWSTypingFanoutTwoConnections(t *testing.T) {
+	t.Parallel()
+	hub := newWSHub()
+	v := staticTokenValidator{
+		"t1": {UserID: "a", ProfileID: "p1"},
+		"t2": {UserID: "b", ProfileID: "p2"},
+	}
+	srv := httptest.NewServer(newServiceHandler(serviceName, v, nil, hub, nil, "test-instance"))
+	t.Cleanup(srv.Close)
+
+	chatID := "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
+
+	dial := func(token, profile string) *websocket.Conn {
+		t.Helper()
+		u := wsEndpoint(t, srv)
+		h := wsUpgradeHeaders(token)
+		h.Set("X-Profile-Id", profile)
+		c, _, err := websocket.DefaultDialer.Dial(u, h)
+		if err != nil {
+			t.Fatalf("dial: %v", err)
+		}
+		return c
+	}
+
+	c1 := dial("t1", "p1")
+	t.Cleanup(func() { _ = c1.Close() })
+	c2 := dial("t2", "p2")
+	t.Cleanup(func() { _ = c2.Close() })
+
+	readOp := func(c *websocket.Conn) wsEnvelope {
+		t.Helper()
+		_ = c.SetReadDeadline(time.Now().Add(3 * time.Second))
+		_, data, err := c.ReadMessage()
+		if err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		var env wsEnvelope
+		if err := json.Unmarshal(data, &env); err != nil {
+			t.Fatalf("json: %v", err)
+		}
+		return env
+	}
+
+	if op := readOp(c1); op.Op != "hello" {
+		t.Fatalf("c1 first = %+v", op)
+	}
+	if op := readOp(c2); op.Op != "hello" {
+		t.Fatalf("c2 first = %+v", op)
+	}
+
+	sub := map[string]any{"op": "subscribe", "d": map[string]any{"chat_id": chatID}}
+	if err := c1.WriteJSON(sub); err != nil {
+		t.Fatalf("c1 subscribe: %v", err)
+	}
+	if err := c2.WriteJSON(sub); err != nil {
+		t.Fatalf("c2 subscribe: %v", err)
+	}
+	if op := readOp(c1); op.Op != "subscribe_ack" {
+		t.Fatalf("c1 subscribe_ack = %+v", op)
+	}
+	if op := readOp(c2); op.Op != "subscribe_ack" {
+		t.Fatalf("c2 subscribe_ack = %+v", op)
+	}
+
+	if err := c1.WriteJSON(map[string]any{"op": "typing_start", "d": map[string]any{"chat_id": chatID}}); err != nil {
+		t.Fatalf("typing_start: %v", err)
+	}
+
+	typing := readOp(c2)
+	if typing.Op != "typing" || typing.S != 3 {
+		t.Fatalf("typing = %+v", typing)
+	}
+	var td struct {
+		ChatID    string `json:"chat_id"`
+		ProfileID string `json:"profile_id"`
+		Kind      string `json:"kind"`
+	}
+	if err := json.Unmarshal(typing.D, &td); err != nil {
+		t.Fatalf("typing d: %v", err)
+	}
+	if td.ChatID != chatID || td.ProfileID != "p1" || td.Kind != "start" {
+		t.Fatalf("typing body = %+v", td)
+	}
+}
+
+func TestWSTypingRejectedWithoutSubscription(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(testRealtimeHandler(staticTokenValidator{
+		"tok": {UserID: "account-1", ProfileID: "profile-1"},
+	}, nil))
+	t.Cleanup(srv.Close)
+
+	u := wsEndpoint(t, srv)
+	hdr := wsUpgradeHeaders("tok")
+	hdr.Set("X-Profile-Id", "profile-1")
+	c, _, err := websocket.DefaultDialer.Dial(u, hdr)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	t.Cleanup(func() { _ = c.Close() })
+	_, _, _ = c.ReadMessage()
+
+	chatID := "ffffffff-ffff-ffff-ffff-ffffffffffff"
+	if err := c.WriteJSON(map[string]any{"op": "typing_start", "d": map[string]any{"chat_id": chatID}}); err != nil {
+		t.Fatalf("typing_start: %v", err)
+	}
+	_ = c.SetReadDeadline(time.Now().Add(3 * time.Second))
+	_, data, err := c.ReadMessage()
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	var env wsEnvelope
+	if err := json.Unmarshal(data, &env); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	if env.Op != "error" {
+		t.Fatalf("want error, got %+v", env)
+	}
+	var body struct {
+		Code string `json:"code"`
+	}
+	if err := json.Unmarshal(env.D, &body); err != nil {
+		t.Fatalf("d: %v", err)
+	}
+	if body.Code != "invalid_typing" {
+		t.Fatalf("code = %q", body.Code)
 	}
 }
