@@ -130,6 +130,60 @@ func TestMessageEventBytesToFanout_ReactionSkipped(t *testing.T) {
 	}
 }
 
+func TestConsumerDurableName_ReplacesHyphensInInstanceID(t *testing.T) {
+	if got := consumerDurableName("a-b-c"); got != "rt_abc_msg" {
+		t.Fatalf("got %q", got)
+	}
+	if got := consumerDurableName(""); got != "rt_unknown_msg" {
+		t.Fatalf("empty instance: got %q", got)
+	}
+}
+
+func TestRunMessageEventsConsumer_ErrorsWhenHubOrNATSURLMissing(t *testing.T) {
+	ctx := context.Background()
+	if err := runMessageEventsConsumer(ctx, nil, "nats://127.0.0.1:4222", "x"); err == nil {
+		t.Fatal("expected error for nil hub")
+	}
+	hub := newWSHub()
+	if err := runMessageEventsConsumer(ctx, hub, "", "x"); err == nil {
+		t.Fatal("expected error for empty NATS URL")
+	}
+	if err := runMessageEventsConsumer(ctx, hub, "   ", "x"); err == nil {
+		t.Fatal("expected error for whitespace NATS URL")
+	}
+}
+
+func TestMessageEventBytesToFanout_InvalidOrIncompletePayload(t *testing.T) {
+	_, _, ok := messageEventBytesToFanout([]byte{0x01, 0x02})
+	if ok {
+		t.Fatal("invalid protobuf should be skipped")
+	}
+
+	sentNil := &eventsv1.MessageStreamEvent{
+		EventId:    "e",
+		OccurredAt: timestamppb.Now(),
+		Payload:    &eventsv1.MessageStreamEvent_MessageSent{MessageSent: nil},
+	}
+	b, _ := proto.Marshal(sentNil)
+	_, _, ok = messageEventBytesToFanout(b)
+	if ok {
+		t.Fatal("nil MessageSent should be skipped")
+	}
+
+	sentNoChat := &eventsv1.MessageStreamEvent{
+		EventId:    "e2",
+		OccurredAt: timestamppb.Now(),
+		Payload: &eventsv1.MessageStreamEvent_MessageSent{
+			MessageSent: &eventsv1.MessageSent{MessageId: uuid.NewString(), ChatId: ""},
+		},
+	}
+	b, _ = proto.Marshal(sentNoChat)
+	_, _, ok = messageEventBytesToFanout(b)
+	if ok {
+		t.Fatal("empty chat_id should be skipped")
+	}
+}
+
 func TestRunMessageEventsConsumer_JetStreamToHub(t *testing.T) {
 	s := startRealtimeJSTestServer(t)
 	natsURL := s.ClientURL()
