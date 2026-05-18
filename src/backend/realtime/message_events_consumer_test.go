@@ -81,8 +81,8 @@ func TestMessageEventBytesToFanout_SentEditedDeleted(t *testing.T) {
 	}
 	b, _ = proto.Marshal(edited)
 	gotChat, fe, ok = messageEventBytesToFanout(b)
-	if !ok || fe.Op != "message_update" {
-		t.Fatalf("edited: ok=%v op=%q", ok, fe.Op)
+	if !ok || gotChat != chatID || fe.Op != "message_update" {
+		t.Fatalf("edited: ok=%v chat=%q op=%q", ok, gotChat, fe.Op)
 	}
 	if err := json.Unmarshal(fe.D, &d); err != nil {
 		t.Fatal(err)
@@ -100,8 +100,8 @@ func TestMessageEventBytesToFanout_SentEditedDeleted(t *testing.T) {
 	}
 	b, _ = proto.Marshal(deleted)
 	gotChat, fe, ok = messageEventBytesToFanout(b)
-	if !ok || fe.Op != "message_delete" {
-		t.Fatalf("deleted: ok=%v op=%q", ok, fe.Op)
+	if !ok || gotChat != chatID || fe.Op != "message_delete" {
+		t.Fatalf("deleted: ok=%v chat=%q op=%q", ok, gotChat, fe.Op)
 	}
 	if err := json.Unmarshal(fe.D, &d); err != nil {
 		t.Fatal(err)
