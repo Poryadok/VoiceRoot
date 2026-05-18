@@ -24,6 +24,7 @@ import (
 
 	"voice/backend/chat/testchat"
 	"voice/backend/messaging/internal/authctx"
+	"voice/backend/messaging/internal/messageevents"
 	"voice/backend/messaging/internal/s2s"
 	"voice/backend/messaging/internal/store"
 
@@ -122,10 +123,11 @@ func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire
 	lis := bufconn.Listen(bufSize)
 	srv := grpc.NewServer()
 	messagingv1.RegisterMessagingServiceServer(srv, &MessagingGRPC{
-		Messages:     &store.MessagesStore{Pool: pool},
-		ChatGuard:    guard,
-		Blocks:       w.Blocks,
-		UserProfiles: w.UserProfiles,
+		Messages:      &store.MessagesStore{Pool: pool},
+		ChatGuard:     guard,
+		Blocks:        w.Blocks,
+		UserProfiles:  w.UserProfiles,
+		MessageEvents: w.MessageEvents,
 	})
 	go func() {
 		if err := srv.Serve(lis); err != nil {
@@ -144,9 +146,10 @@ func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire
 }
 
 type messagingWire struct {
-	ChatGuard    ChatGuard
-	UserProfiles ProfileAccountLookup
-	Blocks       AccountPairBlockChecker
+	ChatGuard     ChatGuard
+	UserProfiles  ProfileAccountLookup
+	Blocks        AccountPairBlockChecker
+	MessageEvents messageevents.MessageEventsPublisher
 }
 
 func startMessagingServer(t *testing.T, pool *pgxpool.Pool) (messagingv1.MessagingServiceClient, func()) {

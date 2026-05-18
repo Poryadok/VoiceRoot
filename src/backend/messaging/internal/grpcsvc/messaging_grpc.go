@@ -3,6 +3,7 @@ package grpcsvc
 import (
 	"context"
 	"errors"
+	"log"
 	"strings"
 
 	"github.com/google/uuid"
@@ -12,6 +13,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"voice/backend/messaging/internal/authctx"
+	"voice/backend/messaging/internal/messageevents"
 	"voice/backend/messaging/internal/messageid"
 	"voice/backend/messaging/internal/store"
 
@@ -34,6 +36,8 @@ type MessagingGRPC struct {
 	// Blocks and UserProfiles are optional S2S gates for SendMessage (Social + User); both must be set to enforce.
 	Blocks       AccountPairBlockChecker
 	UserProfiles ProfileAccountLookup
+	// MessageEvents is optional; when set, successful send/edit/delete publishes to NATS JetStream (stream message_events, subjects message.*).
+	MessageEvents messageevents.MessageEventsPublisher
 }
 
 func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMessageRequest) (*messagingv1.SendMessageResponse, error) {
@@ -119,6 +123,11 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+	if s.MessageEvents != nil {
+		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String()); err != nil {
+			log.Printf("messaging: publish message.sent: %v", err)
+		}
+	}
 	return &messagingv1.SendMessageResponse{Message: messageRowToProto(saved, kind)}, nil
 }
 
@@ -198,6 +207,11 @@ func (s *MessagingGRPC) EditMessage(ctx context.Context, req *messagingv1.EditMe
 		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+	if s.MessageEvents != nil {
+		if err := s.MessageEvents.PublishMessageEdited(ctx, updated.ID.String(), updated.ChatID.String()); err != nil {
+			log.Printf("messaging: publish message.edited: %v", err)
+		}
+	}
 	return &messagingv1.EditMessageResponse{Message: messageRowToProto(updated, messagingv1.MessageKind_MESSAGE_KIND_UNSPECIFIED)}, nil
 }
 
@@ -239,6 +253,11 @@ func (s *MessagingGRPC) DeleteMessage(ctx context.Context, req *messagingv1.Dele
 			return nil, status.Error(codes.NotFound, "message not found")
 		}
 		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if s.MessageEvents != nil {
+		if err := s.MessageEvents.PublishMessageDeleted(ctx, msgID.String(), row.ChatID.String()); err != nil {
+			log.Printf("messaging: publish message.deleted: %v", err)
+		}
 	}
 	return &messagingv1.DeleteMessageResponse{}, nil
 }
