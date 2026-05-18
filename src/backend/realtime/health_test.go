@@ -11,7 +11,7 @@ func TestHealthHandler(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	rec := httptest.NewRecorder()
 
-	healthHandler(serviceName).ServeHTTP(rec, req)
+	healthOnly(serviceName).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
@@ -32,7 +32,7 @@ func TestHealthHandlerRejectsNonGET(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/health", nil)
 	rec := httptest.NewRecorder()
 
-	healthHandler(serviceName).ServeHTTP(rec, req)
+	healthOnly(serviceName).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("expected status %d, got %d", http.StatusMethodNotAllowed, rec.Code)

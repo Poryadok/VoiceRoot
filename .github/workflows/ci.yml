@@ -134,9 +134,9 @@ jobs:
         shell: bash
         run: |
           S="${{ matrix.service }}"
-          if [ "$S" = "gateway" ]; then
+          if [ "$S" = "gateway" ] || [ "$S" = "realtime" ]; then
             echo "context=./src/backend" >> "$GITHUB_OUTPUT"
-            echo "file=./src/backend/gateway/Dockerfile" >> "$GITHUB_OUTPUT"
+            echo "file=./src/backend/$S/Dockerfile" >> "$GITHUB_OUTPUT"
           else
             echo "context=./src/backend/$S" >> "$GITHUB_OUTPUT"
             echo "file=./src/backend/$S/Dockerfile" >> "$GITHUB_OUTPUT"
