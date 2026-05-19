@@ -4,7 +4,25 @@ End-to-end scenarios with a real API use the same Flutter HTTP/WS clients as the
 
 ## Live Gateway stack (Phase 1 DM + Realtime)
 
-Implemented in [`test/gateway_dm_ws_live_integration_test.dart`](../test/gateway_dm_ws_live_integration_test.dart) (runs on the VM with `flutter test`, not a browser driver):
+API-level live tests run on the VM with `flutter test` (not a browser driver).
+
+| Test | Scope |
+|------|--------|
+| [`test/gateway_dm_ws_live_integration_test.dart`](../test/gateway_dm_ws_live_integration_test.dart) | REST auth, DM, send, WS `message_create` |
+| [`test/phase1_two_users_e2e_live_test.dart`](../test/phase1_two_users_e2e_live_test.dart) | Two accounts, DM, WS, JWT **refresh**, REST **mark read**, WS `mark_read` fanout |
+
+Shared flags: `VOICE_RUN_LIVE_INTEGRATION=true`, `VOICE_API_BASE_URL=...`
+
+**Phase-1 E2E run (PowerShell):**
+
+```powershell
+cd src/frontend
+flutter test test/phase1_two_users_e2e_live_test.dart `
+  --dart-define=VOICE_RUN_LIVE_INTEGRATION=true `
+  --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:8080
+```
+
+**Smoke (gateway DM + WS only):**
 
 - REST: `register` → JWT
 - REST: `POST /api/v1/chats/dm`

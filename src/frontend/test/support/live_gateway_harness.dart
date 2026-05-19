@@ -95,6 +95,15 @@ class LiveGatewayContext {
     expect(result, isA<AuthSessionOk>(), reason: 'register $prefix');
     return (result as AuthSessionOk).session;
   }
+
+  Future<AuthSession> refreshSession(AuthSession session) async {
+    final result = await authClient().refresh(refreshToken: session.refreshToken);
+    expect(result, isA<AuthSessionOk>(), reason: 'refresh session');
+    final refreshed = (result as AuthSessionOk).session;
+    expect(refreshed.accessToken, isNot(session.accessToken));
+    expect(refreshed.activeProfileId, session.activeProfileId);
+    return refreshed;
+  }
 }
 
 Future<RealtimeFrame> waitForOp(

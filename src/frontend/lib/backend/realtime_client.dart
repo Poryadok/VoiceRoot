@@ -144,6 +144,13 @@ class VoiceRealtimeConnection {
     sendOp('subscribe', {'chat_id': chatId});
   }
 
+  void sendMarkRead({required String chatId, required String messageId}) {
+    sendOp('mark_read', {
+      'chat_id': chatId,
+      'message_id': messageId,
+    });
+  }
+
   void sendHeartbeat() {
     sendOp('heartbeat', {});
   }

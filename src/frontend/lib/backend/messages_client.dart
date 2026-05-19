@@ -71,6 +71,28 @@ class MessageListData {
   final bool hasMore;
 }
 
+class ReadStateData {
+  const ReadStateData({
+    required this.chatId,
+    required this.profileId,
+    required this.lastReadMessageId,
+  });
+
+  final String chatId;
+  final String profileId;
+  final String lastReadMessageId;
+
+  factory ReadStateData.fromJson(Map<String, dynamic> json) {
+    final state = json['read_state'] as Map<String, dynamic>? ?? json;
+    final chat = state['chat'] as Map<String, dynamic>? ?? {};
+    return ReadStateData(
+      chatId: chat['id'] as String? ?? '',
+      profileId: state['profile_id'] as String? ?? '',
+      lastReadMessageId: state['last_read_message_id'] as String? ?? '',
+    );
+  }
+}
+
 /// HTTP client for Messaging routes (`/api/v1/messages/**`).
 class VoiceMessagesClient {
   VoiceMessagesClient({
@@ -163,6 +185,54 @@ class VoiceMessagesClient {
     } catch (e) {
       return MessagesApiFailure(message: '$e');
     }
+  }
+
+  Future<MessagesApiResult<void>> markRead({
+    required String authorization,
+    required String chatId,
+    required String lastReadMessageId,
+  }) async {
+    if (!_config.hasBaseUrl) {
+      return const MessagesApiFailure(message: kMessagesMissingBaseUrlDetail);
+    }
+    final uri = Uri.parse(_config.baseUrl).resolve('/api/v1/messages/read');
+    try {
+      final res = await _http.post(
+        uri,
+        headers: {
+          'Authorization': authorization,
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'chat': {'id': chatId},
+          'last_read_message_id': lastReadMessageId,
+        }),
+      );
+      if (res.statusCode == 200) {
+        return const MessagesApiOk(null);
+      }
+      return MessagesApiFailure(
+        message: _failureMessage(res),
+        errorCode: _errorCode(res),
+        statusCode: res.statusCode,
+      );
+    } catch (e) {
+      return MessagesApiFailure(message: '$e');
+    }
+  }
+
+  Future<MessagesApiResult<ReadStateData>> getReadState({
+    required String authorization,
+    required String chatId,
+  }) async {
+    if (!_config.hasBaseUrl) {
+      return const MessagesApiFailure(message: kMessagesMissingBaseUrlDetail);
+    }
+    final uri = Uri.parse(_config.baseUrl).replace(
+      path: '/api/v1/messages/read-state',
+      queryParameters: {'chat_id': chatId},
+    );
+    return _get(uri, authorization, ReadStateData.fromJson);
   }
 
   Future<MessagesApiResult<T>> _get<T>(
