@@ -17,6 +17,8 @@ flutter analyze
 flutter test
 ```
 
+**Live API (Gateway + full Phase-1 stack):** see [`integration_test/README.md`](integration_test/README.md) — `gateway_dm_ws_live_integration_test.dart` with `VOICE_RUN_LIVE_INTEGRATION=true`.
+
 Из корня репозитория (нужен Flutter на `PATH`): **`make flutter-ci`** — те же шаги ([Makefile](../../Makefile)).
 
 CI: [.github/workflows/ci.yml](../../.github/workflows/ci.yml) job `flutter`. Цель **`make build-all`** Flutter не запускает — см. [docs/TESTING.md](../../docs/TESTING.md).
