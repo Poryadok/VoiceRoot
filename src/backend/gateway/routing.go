@@ -54,6 +54,10 @@ func (g *gateway) handleREST(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if g.config.transcoder != nil && g.config.transcoder.serveNamespace(w, r, namespace) {
+		return
+	}
+
 	upstream, ok := g.config.restUpstreams[namespace]
 	if !ok {
 		http.NotFound(w, r)

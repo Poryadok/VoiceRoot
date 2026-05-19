@@ -17,6 +17,7 @@ type gatewayTestOptions struct {
 	tokenClaims        map[string]tokenClaims
 	rateLimitedGroups  map[string]bool
 	restUpstreams      map[string]http.Handler
+	transcoder         *transcoder
 	realtimeUpstream   http.Handler
 	requestIDGenerator func() string
 	tokenValidator     tokenValidator
@@ -39,6 +40,7 @@ func newGatewayForContract(_ *testing.T, options gatewayTestOptions) http.Handle
 		tokenClaims:        options.tokenClaims,
 		rateLimitedGroups:  options.rateLimitedGroups,
 		restUpstreams:      options.restUpstreams,
+		transcoder:         options.transcoder,
 		realtimeUpstream:   options.realtimeUpstream,
 		requestIDGenerator: options.requestIDGenerator,
 		tokenValidator:     options.tokenValidator,

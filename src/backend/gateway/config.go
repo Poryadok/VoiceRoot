@@ -25,6 +25,7 @@ func loadGatewayConfigFromEnv() gatewayConfig {
 		config.tokenValidator = voicejwt.NewJWKSValidator(jwksURL, os.Getenv("GATEWAY_JWT_ISSUER"), os.Getenv("GATEWAY_JWT_AUDIENCE"))
 	}
 	config.restUpstreams = restUpstreamsFromEnv()
+	config.transcoder = newTranscoder(grpcClientsFromEnv())
 	config.realtimeUpstream = proxyFromEnv("GATEWAY_REALTIME_UPSTREAM_URL")
 	if redisAddr := strings.TrimSpace(os.Getenv("GATEWAY_REDIS_ADDR")); redisAddr != "" {
 		password := os.Getenv("GATEWAY_REDIS_PASSWORD")

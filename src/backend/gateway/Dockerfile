@@ -4,9 +4,17 @@
 FROM golang:1.26-alpine AS build
 WORKDIR /src
 COPY pkg/go.mod ./pkg/
+COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
+COPY user/pb/voice/user/go.mod ./user/pb/voice/user/
+COPY user/pb/voice/social/go.mod ./user/pb/voice/social/
+COPY chat/pb/voice/chat/go.mod ./chat/pb/voice/chat/
+COPY messaging/pb/voice/messaging/go.mod ./messaging/pb/voice/messaging/
 COPY gateway/go.mod ./gateway/
 RUN cd gateway && go mod download
 COPY pkg ./pkg
+COPY user/pb ./user/pb
+COPY chat/pb ./chat/pb
+COPY messaging/pb ./messaging/pb
 COPY gateway ./gateway
 WORKDIR /src/gateway
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/gateway .

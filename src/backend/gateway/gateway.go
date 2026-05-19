@@ -18,6 +18,7 @@ type gatewayConfig struct {
 	tokenClaims        map[string]tokenClaims
 	rateLimitedGroups  map[string]bool
 	restUpstreams      map[string]http.Handler
+	transcoder         *transcoder
 	realtimeUpstream   http.Handler
 	requestIDGenerator func() string
 	tokenValidator     tokenValidator
