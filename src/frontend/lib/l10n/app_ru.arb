@@ -19,5 +19,27 @@
         "type": "String"
       }
     }
+  },
+  "authTitle": "Вход в Voice",
+  "authEmailLabel": "Email",
+  "authPasswordLabel": "Пароль",
+  "authLogin": "Войти",
+  "authRegister": "Регистрация",
+  "authLogout": "Выйти",
+  "authError": "Ошибка входа: {message}",
+  "@authError": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "authSessionProfile": "Профиль: {profileId}",
+  "@authSessionProfile": {
+    "placeholders": {
+      "profileId": {
+        "type": "String"
+      }
+    }
   }
 }

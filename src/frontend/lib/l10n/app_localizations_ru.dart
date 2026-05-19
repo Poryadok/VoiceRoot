@@ -29,4 +29,32 @@ class AppLocalizationsRu extends AppLocalizations {
   String gatewayStatusFailure(String detail) {
     return 'Шлюз: $detail';
   }
+
+  @override
+  String get authTitle => 'Вход в Voice';
+
+  @override
+  String get authEmailLabel => 'Email';
+
+  @override
+  String get authPasswordLabel => 'Пароль';
+
+  @override
+  String get authLogin => 'Войти';
+
+  @override
+  String get authRegister => 'Регистрация';
+
+  @override
+  String get authLogout => 'Выйти';
+
+  @override
+  String authError(String message) {
+    return 'Ошибка входа: $message';
+  }
+
+  @override
+  String authSessionProfile(String profileId) {
+    return 'Профиль: $profileId';
+  }
 }

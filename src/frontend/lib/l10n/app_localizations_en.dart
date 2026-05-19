@@ -29,4 +29,32 @@ class AppLocalizationsEn extends AppLocalizations {
   String gatewayStatusFailure(String detail) {
     return 'Gateway: $detail';
   }
+
+  @override
+  String get authTitle => 'Sign in to Voice';
+
+  @override
+  String get authEmailLabel => 'Email';
+
+  @override
+  String get authPasswordLabel => 'Password';
+
+  @override
+  String get authLogin => 'Log in';
+
+  @override
+  String get authRegister => 'Register';
+
+  @override
+  String get authLogout => 'Log out';
+
+  @override
+  String authError(String message) {
+    return 'Auth error: $message';
+  }
+
+  @override
+  String authSessionProfile(String profileId) {
+    return 'Profile: $profileId';
+  }
 }

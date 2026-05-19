@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'backend/gateway_client.dart';
 import 'l10n/app_localizations.dart';
 import 'shell/three_column_shell.dart';
+import 'state/auth_providers.dart';
 import 'state/gateway_providers.dart';
+import 'ui/auth/auth_screen.dart';
 
 class VoiceApp extends ConsumerWidget {
   const VoiceApp({super.key, this.locale});
@@ -14,6 +16,21 @@ class VoiceApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final auth = ref.watch(authControllerProvider);
+    if (!auth.isAuthenticated) {
+      return MaterialApp(
+        locale: locale,
+        onGenerateTitle: (ctx) => AppLocalizations.of(ctx)!.appTitle,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
+          useMaterial3: true,
+        ),
+        home: const AuthScreen(),
+      );
+    }
+
     final health = ref.watch(gatewayHealthProvider);
     return MaterialApp(
       locale: locale,
@@ -26,8 +43,67 @@ class VoiceApp extends ConsumerWidget {
       ),
       home: Scaffold(
         body: SafeArea(
-          child: ThreeColumnShell(
-            header: _GatewayStatusBar(asyncHealth: health),
+          child: Builder(
+            builder: (context) {
+              final l10n = AppLocalizations.of(context)!;
+              return ThreeColumnShell(
+                header: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _SessionBar(
+                      onLogout: () =>
+                          ref.read(authControllerProvider.notifier).logout(),
+                      sessionLabel:
+                          l10n.authSessionProfile(auth.activeProfileId!),
+                      logoutLabel: l10n.authLogout,
+                    ),
+                    _GatewayStatusBar(asyncHealth: health),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SessionBar extends StatelessWidget {
+  const _SessionBar({
+    required this.onLogout,
+    required this.sessionLabel,
+    required this.logoutLabel,
+  });
+
+  final VoidCallback onLogout;
+  final String sessionLabel;
+  final String logoutLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      elevation: 1,
+      child: SizedBox(
+        height: 40,
+        width: double.infinity,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  sessionLabel,
+                  key: const Key('auth_session_profile'),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              TextButton(
+                key: const Key('auth_logout'),
+                onPressed: onLogout,
+                child: Text(logoutLabel),
+              ),
+            ],
           ),
         ),
       ),

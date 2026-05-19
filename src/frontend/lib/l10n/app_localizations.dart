@@ -133,6 +133,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Gateway: {detail}'**
   String gatewayStatusFailure(String detail);
+
+  /// No description provided for @authTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in to Voice'**
+  String get authTitle;
+
+  /// No description provided for @authEmailLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Email'**
+  String get authEmailLabel;
+
+  /// No description provided for @authPasswordLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Password'**
+  String get authPasswordLabel;
+
+  /// No description provided for @authLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Log in'**
+  String get authLogin;
+
+  /// No description provided for @authRegister.
+  ///
+  /// In en, this message translates to:
+  /// **'Register'**
+  String get authRegister;
+
+  /// No description provided for @authLogout.
+  ///
+  /// In en, this message translates to:
+  /// **'Log out'**
+  String get authLogout;
+
+  /// No description provided for @authError.
+  ///
+  /// In en, this message translates to:
+  /// **'Auth error: {message}'**
+  String authError(String message);
+
+  /// No description provided for @authSessionProfile.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile: {profileId}'**
+  String authSessionProfile(String profileId);
 }
 
 class _AppLocalizationsDelegate

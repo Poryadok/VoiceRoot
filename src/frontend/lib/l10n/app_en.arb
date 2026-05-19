@@ -18,5 +18,27 @@
         "type": "String"
       }
     }
+  },
+  "authTitle": "Sign in to Voice",
+  "authEmailLabel": "Email",
+  "authPasswordLabel": "Password",
+  "authLogin": "Log in",
+  "authRegister": "Register",
+  "authLogout": "Log out",
+  "authError": "Auth error: {message}",
+  "@authError": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "authSessionProfile": "Profile: {profileId}",
+  "@authSessionProfile": {
+    "placeholders": {
+      "profileId": {
+        "type": "String"
+      }
+    }
   }
 }
