@@ -6,11 +6,13 @@ class ThreeColumnShell extends StatelessWidget {
   const ThreeColumnShell({
     super.key,
     this.header,
+    this.listChild,
     this.listFlex = 1,
     this.mainFlex = 2,
   });
 
   final Widget? header;
+  final Widget? listChild;
   final int listFlex;
   final int mainFlex;
 
@@ -33,10 +35,11 @@ class ThreeColumnShell extends StatelessWidget {
     Widget list() => Expanded(
           flex: listFlex,
           key: navChatList,
-          child: const ColoredBox(
-            color: Color(0x24000000),
-            child: SizedBox.expand(),
-          ),
+          child: listChild ??
+              const ColoredBox(
+                color: Color(0x24000000),
+                child: SizedBox.expand(),
+              ),
         );
 
     Widget main() => Expanded(

@@ -41,5 +41,33 @@
         "type": "String"
       }
     }
+  },
+  "socialTabSearch": "Поиск",
+  "socialTabFriends": "Друзья",
+  "socialTabRequests": "Заявки",
+  "socialSearchHint": "Поиск по имени или @нику",
+  "socialAddFriend": "Добавить в друзья",
+  "socialAcceptRequest": "Принять",
+  "socialDeclineRequest": "Отклонить",
+  "socialRequestPending": "Заявка отправлена",
+  "socialFriendsEmpty": "Пока нет друзей",
+  "socialRequestsEmpty": "Нет заявок в друзья",
+  "socialIncomingRequests": "Входящие",
+  "socialOutgoingRequests": "Исходящие",
+  "socialFriendsLoadError": "Не удалось загрузить друзей",
+  "socialRequestsLoadError": "Не удалось загрузить заявки",
+  "socialProfileLoadError": "Не удалось загрузить профиль",
+  "socialPresenceOnline": "В сети",
+  "socialPresenceIdle": "Отошёл",
+  "socialPresenceDnd": "Не беспокоить",
+  "socialPresenceOffline": "Не в сети",
+  "socialPresenceUnknown": "Неизвестно",
+  "socialActionError": "Ошибка: {message}",
+  "@socialActionError": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
   }
 }

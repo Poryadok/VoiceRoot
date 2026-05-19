@@ -7,6 +7,7 @@ import 'shell/three_column_shell.dart';
 import 'state/auth_providers.dart';
 import 'state/gateway_providers.dart';
 import 'ui/auth/auth_screen.dart';
+import 'ui/social/social_panel.dart';
 
 class VoiceApp extends ConsumerWidget {
   const VoiceApp({super.key, this.locale});
@@ -47,6 +48,7 @@ class VoiceApp extends ConsumerWidget {
             builder: (context) {
               final l10n = AppLocalizations.of(context)!;
               return ThreeColumnShell(
+                listChild: const SocialPanel(),
                 header: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [

@@ -181,6 +181,132 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Profile: {profileId}'**
   String authSessionProfile(String profileId);
+
+  /// No description provided for @socialTabSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
+  String get socialTabSearch;
+
+  /// No description provided for @socialTabFriends.
+  ///
+  /// In en, this message translates to:
+  /// **'Friends'**
+  String get socialTabFriends;
+
+  /// No description provided for @socialTabRequests.
+  ///
+  /// In en, this message translates to:
+  /// **'Requests'**
+  String get socialTabRequests;
+
+  /// No description provided for @socialSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search by name or @username'**
+  String get socialSearchHint;
+
+  /// No description provided for @socialAddFriend.
+  ///
+  /// In en, this message translates to:
+  /// **'Add friend'**
+  String get socialAddFriend;
+
+  /// No description provided for @socialAcceptRequest.
+  ///
+  /// In en, this message translates to:
+  /// **'Accept'**
+  String get socialAcceptRequest;
+
+  /// No description provided for @socialDeclineRequest.
+  ///
+  /// In en, this message translates to:
+  /// **'Decline'**
+  String get socialDeclineRequest;
+
+  /// No description provided for @socialRequestPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Request pending'**
+  String get socialRequestPending;
+
+  /// No description provided for @socialFriendsEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No friends yet'**
+  String get socialFriendsEmpty;
+
+  /// No description provided for @socialRequestsEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No friend requests'**
+  String get socialRequestsEmpty;
+
+  /// No description provided for @socialIncomingRequests.
+  ///
+  /// In en, this message translates to:
+  /// **'Incoming'**
+  String get socialIncomingRequests;
+
+  /// No description provided for @socialOutgoingRequests.
+  ///
+  /// In en, this message translates to:
+  /// **'Outgoing'**
+  String get socialOutgoingRequests;
+
+  /// No description provided for @socialFriendsLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load friends'**
+  String get socialFriendsLoadError;
+
+  /// No description provided for @socialRequestsLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load requests'**
+  String get socialRequestsLoadError;
+
+  /// No description provided for @socialProfileLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load profile'**
+  String get socialProfileLoadError;
+
+  /// No description provided for @socialPresenceOnline.
+  ///
+  /// In en, this message translates to:
+  /// **'Online'**
+  String get socialPresenceOnline;
+
+  /// No description provided for @socialPresenceIdle.
+  ///
+  /// In en, this message translates to:
+  /// **'Idle'**
+  String get socialPresenceIdle;
+
+  /// No description provided for @socialPresenceDnd.
+  ///
+  /// In en, this message translates to:
+  /// **'Do not disturb'**
+  String get socialPresenceDnd;
+
+  /// No description provided for @socialPresenceOffline.
+  ///
+  /// In en, this message translates to:
+  /// **'Offline'**
+  String get socialPresenceOffline;
+
+  /// No description provided for @socialPresenceUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown'**
+  String get socialPresenceUnknown;
+
+  /// No description provided for @socialActionError.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: {message}'**
+  String socialActionError(String message);
 }
 
 class _AppLocalizationsDelegate

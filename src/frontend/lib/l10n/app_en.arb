@@ -40,5 +40,33 @@
         "type": "String"
       }
     }
+  },
+  "socialTabSearch": "Search",
+  "socialTabFriends": "Friends",
+  "socialTabRequests": "Requests",
+  "socialSearchHint": "Search by name or @username",
+  "socialAddFriend": "Add friend",
+  "socialAcceptRequest": "Accept",
+  "socialDeclineRequest": "Decline",
+  "socialRequestPending": "Request pending",
+  "socialFriendsEmpty": "No friends yet",
+  "socialRequestsEmpty": "No friend requests",
+  "socialIncomingRequests": "Incoming",
+  "socialOutgoingRequests": "Outgoing",
+  "socialFriendsLoadError": "Could not load friends",
+  "socialRequestsLoadError": "Could not load requests",
+  "socialProfileLoadError": "Could not load profile",
+  "socialPresenceOnline": "Online",
+  "socialPresenceIdle": "Idle",
+  "socialPresenceDnd": "Do not disturb",
+  "socialPresenceOffline": "Offline",
+  "socialPresenceUnknown": "Unknown",
+  "socialActionError": "Error: {message}",
+  "@socialActionError": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
   }
 }

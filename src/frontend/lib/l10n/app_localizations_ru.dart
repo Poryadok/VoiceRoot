@@ -57,4 +57,69 @@ class AppLocalizationsRu extends AppLocalizations {
   String authSessionProfile(String profileId) {
     return 'Профиль: $profileId';
   }
+
+  @override
+  String get socialTabSearch => 'Поиск';
+
+  @override
+  String get socialTabFriends => 'Друзья';
+
+  @override
+  String get socialTabRequests => 'Заявки';
+
+  @override
+  String get socialSearchHint => 'Поиск по имени или @нику';
+
+  @override
+  String get socialAddFriend => 'Добавить в друзья';
+
+  @override
+  String get socialAcceptRequest => 'Принять';
+
+  @override
+  String get socialDeclineRequest => 'Отклонить';
+
+  @override
+  String get socialRequestPending => 'Заявка отправлена';
+
+  @override
+  String get socialFriendsEmpty => 'Пока нет друзей';
+
+  @override
+  String get socialRequestsEmpty => 'Нет заявок в друзья';
+
+  @override
+  String get socialIncomingRequests => 'Входящие';
+
+  @override
+  String get socialOutgoingRequests => 'Исходящие';
+
+  @override
+  String get socialFriendsLoadError => 'Не удалось загрузить друзей';
+
+  @override
+  String get socialRequestsLoadError => 'Не удалось загрузить заявки';
+
+  @override
+  String get socialProfileLoadError => 'Не удалось загрузить профиль';
+
+  @override
+  String get socialPresenceOnline => 'В сети';
+
+  @override
+  String get socialPresenceIdle => 'Отошёл';
+
+  @override
+  String get socialPresenceDnd => 'Не беспокоить';
+
+  @override
+  String get socialPresenceOffline => 'Не в сети';
+
+  @override
+  String get socialPresenceUnknown => 'Неизвестно';
+
+  @override
+  String socialActionError(String message) {
+    return 'Ошибка: $message';
+  }
 }
