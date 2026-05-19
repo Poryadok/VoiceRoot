@@ -176,4 +176,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get profileMessage => 'Message';
+
+  @override
+  String get commonLoading => '…';
 }

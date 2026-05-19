@@ -106,5 +106,6 @@
   "chatRealtimeReconnecting": "Переподключение…",
   "chatRealtimeOffline": "Офлайн",
   "chatOpenDm": "Написать",
-  "profileMessage": "Написать"
+  "profileMessage": "Написать",
+  "commonLoading": "…"
 }

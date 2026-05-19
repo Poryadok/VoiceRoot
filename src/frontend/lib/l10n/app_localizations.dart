@@ -403,6 +403,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Message'**
   String get profileMessage;
+
+  /// No description provided for @commonLoading.
+  ///
+  /// In en, this message translates to:
+  /// **'…'**
+  String get commonLoading;
 }
 
 class _AppLocalizationsDelegate

@@ -105,5 +105,6 @@
   "chatRealtimeReconnecting": "Reconnecting…",
   "chatRealtimeOffline": "Offline",
   "chatOpenDm": "Message",
-  "profileMessage": "Message"
+  "profileMessage": "Message",
+  "commonLoading": "…"
 }

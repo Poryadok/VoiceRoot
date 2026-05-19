@@ -176,4 +176,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get profileMessage => 'Написать';
+
+  @override
+  String get commonLoading => '…';
 }

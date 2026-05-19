@@ -284,10 +284,11 @@ class _IncomingRequestTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context)!;
     final profileAsync = ref.watch(profileProvider(profileId));
 
     return profileAsync.when(
-      loading: () => const ListTile(title: Text('…')),
+      loading: () => ListTile(title: Text(l10n.commonLoading)),
       error: (e, st) => ListTile(title: Text(profileId)),
       data: (profile) => ListTile(
         leading: CircleAvatar(
@@ -339,11 +340,12 @@ class _ProfileIdTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context)!;
     final profileAsync = ref.watch(profileProvider(profileId));
     final presence = ref.watch(presenceProvider(profileId));
 
     return profileAsync.when(
-      loading: () => const ListTile(title: Text('…')),
+      loading: () => ListTile(title: Text(l10n.commonLoading)),
       error: (e, st) => ListTile(title: Text(profileId), onTap: onTap),
       data: (profile) {
         if (profile == null) {
