@@ -16,7 +16,9 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	chatv1 "voice.app/voice/chat/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
+	socialv1 "voice.app/voice/social/v1"
 	userv1 "voice.app/voice/user/v1"
 )
 
@@ -149,6 +151,60 @@ func startBufconnUserConn(t *testing.T, impl userv1.UserServiceServer) (grpc.Cli
 	}
 }
 
+func startBufconnSocialConn(t *testing.T, impl socialv1.SocialServiceServer) (grpc.ClientConnInterface, func()) {
+	t.Helper()
+	lis := bufconn.Listen(1 << 20)
+	srv := grpc.NewServer()
+	socialv1.RegisterSocialServiceServer(srv, impl)
+	go func() { _ = srv.Serve(lis) }()
+	conn, err := grpc.NewClient("passthrough:///bufnet",
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return lis.Dial() }),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	require.NoError(t, err)
+	return conn, func() {
+		_ = conn.Close()
+		srv.Stop()
+		_ = lis.Close()
+	}
+}
+
+func startBufconnChatConn(t *testing.T, impl chatv1.ChatServiceServer) (grpc.ClientConnInterface, func()) {
+	t.Helper()
+	lis := bufconn.Listen(1 << 20)
+	srv := grpc.NewServer()
+	chatv1.RegisterChatServiceServer(srv, impl)
+	go func() { _ = srv.Serve(lis) }()
+	conn, err := grpc.NewClient("passthrough:///bufnet",
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return lis.Dial() }),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	require.NoError(t, err)
+	return conn, func() {
+		_ = conn.Close()
+		srv.Stop()
+		_ = lis.Close()
+	}
+}
+
+func startBufconnMessagingConn(t *testing.T, impl messagingv1.MessagingServiceServer) (grpc.ClientConnInterface, func()) {
+	t.Helper()
+	lis := bufconn.Listen(1 << 20)
+	srv := grpc.NewServer()
+	messagingv1.RegisterMessagingServiceServer(srv, impl)
+	go func() { _ = srv.Serve(lis) }()
+	conn, err := grpc.NewClient("passthrough:///bufnet",
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return lis.Dial() }),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	require.NoError(t, err)
+	return conn, func() {
+		_ = conn.Close()
+		srv.Stop()
+		_ = lis.Close()
+	}
+}
+
 type denyMessagingGRPC struct {
 	messagingv1.UnimplementedMessagingServiceServer
 }
@@ -227,5 +283,232 @@ func TestTranscodePrecedenceOverRESTProxy(t *testing.T) {
 	}
 	if proxyCalled {
 		t.Fatal("REST proxy must not run when gRPC transcoder handles the route")
+	}
+}
+
+type recordingSocialFriends struct {
+	socialv1.UnimplementedSocialServiceServer
+	last *socialv1.ListFriendsRequest
+}
+
+func (s *recordingSocialFriends) ListFriends(_ context.Context, req *socialv1.ListFriendsRequest) (*socialv1.ListFriendsResponse, error) {
+	s.last = req
+	return &socialv1.ListFriendsResponse{FriendList: &socialv1.FriendList{}}, nil
+}
+
+func TestTranscodeFriendsListPrecedenceOverRESTProxy(t *testing.T) {
+	t.Parallel()
+
+	grpcRec := &recordingSocialFriends{}
+	conn, cleanup := startBufconnSocialConn(t, grpcRec)
+	t.Cleanup(cleanup)
+
+	proxyCalled := false
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+		},
+		transcoder: &transcoder{clients: grpcClients{social: socialv1.NewSocialServiceClient(conn)}},
+		restUpstreams: map[string]http.Handler{
+			"friends": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				proxyCalled = true
+				w.WriteHeader(http.StatusAccepted)
+			}),
+		},
+	})
+
+	resp := performRequest(h, http.MethodGet, "/api/v1/friends", "", map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	if resp.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%q", resp.Code, http.StatusOK, resp.Body.String())
+	}
+	if proxyCalled {
+		t.Fatal("REST proxy must not run when gRPC transcoder handles /api/v1/friends")
+	}
+	if grpcRec.last == nil {
+		t.Fatal("ListFriends not invoked")
+	}
+}
+
+type recordingChatsList struct {
+	chatv1.UnimplementedChatServiceServer
+	last *chatv1.ListChatsRequest
+}
+
+func (s *recordingChatsList) ListChats(_ context.Context, req *chatv1.ListChatsRequest) (*chatv1.ListChatsResponse, error) {
+	s.last = req
+	return &chatv1.ListChatsResponse{ChatList: &chatv1.ChatList{}}, nil
+}
+
+func TestTranscodeChatsListPrecedenceOverRESTProxy(t *testing.T) {
+	t.Parallel()
+
+	grpcRec := &recordingChatsList{}
+	conn, cleanup := startBufconnChatConn(t, grpcRec)
+	t.Cleanup(cleanup)
+
+	proxyCalled := false
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+		},
+		transcoder: &transcoder{clients: grpcClients{chat: chatv1.NewChatServiceClient(conn)}},
+		restUpstreams: map[string]http.Handler{
+			"chats": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				proxyCalled = true
+				w.WriteHeader(http.StatusAccepted)
+			}),
+		},
+	})
+
+	resp := performRequest(h, http.MethodGet, "/api/v1/chats", "", map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	if resp.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%q", resp.Code, http.StatusOK, resp.Body.String())
+	}
+	if proxyCalled {
+		t.Fatal("REST proxy must not run when gRPC transcoder handles /api/v1/chats")
+	}
+	if grpcRec.last == nil {
+		t.Fatal("ListChats not invoked")
+	}
+}
+
+type recordingChatsCreateDM struct {
+	chatv1.UnimplementedChatServiceServer
+	last *chatv1.CreateDMRequest
+}
+
+func (s *recordingChatsCreateDM) CreateDM(_ context.Context, req *chatv1.CreateDMRequest) (*chatv1.CreateDMResponse, error) {
+	s.last = req
+	now := timestamppb.New(time.Unix(1700000001, 0))
+	return &chatv1.CreateDMResponse{
+		Chat: &chatv1.Chat{
+			Id:                 "chat-dm-1",
+			Type:               chatv1.ChatType_CHAT_TYPE_DM,
+			CreatorProfileId:   "profile-1",
+			CreatedAt:          now,
+			UpdatedAt:          now,
+			LastMessageAt:      now,
+		},
+	}, nil
+}
+
+func TestTranscodeChatsCreateDMPrecedenceOverRESTProxy(t *testing.T) {
+	t.Parallel()
+
+	grpcRec := &recordingChatsCreateDM{}
+	conn, cleanup := startBufconnChatConn(t, grpcRec)
+	t.Cleanup(cleanup)
+
+	proxyCalled := false
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+		},
+		transcoder: &transcoder{clients: grpcClients{chat: chatv1.NewChatServiceClient(conn)}},
+		restUpstreams: map[string]http.Handler{
+			"chats": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				proxyCalled = true
+				w.WriteHeader(http.StatusAccepted)
+			}),
+		},
+	})
+
+	body := `{"other_profile_id":"profile-other"}`
+	resp := performRequest(h, http.MethodPost, "/api/v1/chats/dm", body, map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	if resp.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%q", resp.Code, http.StatusOK, resp.Body.String())
+	}
+	if proxyCalled {
+		t.Fatal("REST proxy must not run when gRPC transcoder handles POST /api/v1/chats/dm")
+	}
+	if grpcRec.last == nil || grpcRec.last.GetOtherProfileId() != "profile-other" {
+		t.Fatalf("CreateDM request = %+v", grpcRec.last)
+	}
+}
+
+type recordingMessagesGet struct {
+	messagingv1.UnimplementedMessagingServiceServer
+	last *messagingv1.GetMessagesRequest
+}
+
+func (s *recordingMessagesGet) GetMessages(_ context.Context, req *messagingv1.GetMessagesRequest) (*messagingv1.GetMessagesResponse, error) {
+	s.last = req
+	return &messagingv1.GetMessagesResponse{MessageList: &messagingv1.MessageList{}}, nil
+}
+
+func TestTranscodeMessagesGetPrecedenceOverRESTProxy(t *testing.T) {
+	t.Parallel()
+
+	grpcRec := &recordingMessagesGet{}
+	conn, cleanup := startBufconnMessagingConn(t, grpcRec)
+	t.Cleanup(cleanup)
+
+	proxyCalled := false
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+		},
+		transcoder: &transcoder{clients: grpcClients{messaging: messagingv1.NewMessagingServiceClient(conn)}},
+		restUpstreams: map[string]http.Handler{
+			"messages": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				proxyCalled = true
+				w.WriteHeader(http.StatusAccepted)
+			}),
+		},
+	})
+
+	resp := performRequest(h, http.MethodGet, "/api/v1/messages?chat_id=chat-99", "", map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	if resp.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%q", resp.Code, http.StatusOK, resp.Body.String())
+	}
+	if proxyCalled {
+		t.Fatal("REST proxy must not run when gRPC transcoder handles GET /api/v1/messages")
+	}
+	if grpcRec.last == nil || grpcRec.last.GetChat().GetId() != "chat-99" {
+		t.Fatalf("GetMessages request = %+v", grpcRec.last)
+	}
+}
+
+func TestRESTProxyUsedWhenTranscoderDoesNotHandleChatsNestedPath(t *testing.T) {
+	t.Parallel()
+
+	// Chat transcoder only handles specific shapes; multi-segment paths fall through to REST proxy.
+	grpcRec := &recordingChatsList{}
+	conn, cleanup := startBufconnChatConn(t, grpcRec)
+	t.Cleanup(cleanup)
+
+	var proxyPath string
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+		},
+		transcoder: &transcoder{clients: grpcClients{chat: chatv1.NewChatServiceClient(conn)}},
+		restUpstreams: map[string]http.Handler{
+			"chats": http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				proxyPath = r.URL.Path
+				w.WriteHeader(http.StatusTeapot)
+			}),
+		},
+	})
+
+	resp := performRequest(h, http.MethodGet, "/api/v1/chats/future/nested", "", map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	if resp.Code != http.StatusTeapot {
+		t.Fatalf("status = %d, want %d (proxy)", resp.Code, http.StatusTeapot)
+	}
+	if proxyPath != "/api/v1/chats/future/nested" {
+		t.Fatalf("proxy path = %q", proxyPath)
+	}
+	if grpcRec.last != nil {
+		t.Fatal("ListChats must not run for paths the transcoder does not handle")
 	}
 }
