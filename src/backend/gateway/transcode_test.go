@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -13,6 +14,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	messagingv1 "voice.app/voice/messaging/v1"
 	userv1 "voice.app/voice/user/v1"
@@ -37,6 +39,65 @@ func (s *recordingUserGRPC) GetProfile(ctx context.Context, req *userv1.GetProfi
 			DisplayName: "Alice",
 		},
 	}, nil
+}
+
+type avatarPresignRecorder struct {
+	userv1.UnimplementedUserServiceServer
+	last *userv1.CreateAvatarPresignedUploadRequest
+}
+
+func (s *avatarPresignRecorder) CreateAvatarPresignedUpload(_ context.Context, req *userv1.CreateAvatarPresignedUploadRequest) (*userv1.CreateAvatarPresignedUploadResponse, error) {
+	s.last = req
+	return &userv1.CreateAvatarPresignedUploadResponse{
+		HttpMethod:      "PUT",
+		UploadUrl:       "https://r2.example/presigned",
+		RequiredHeaders: map[string]string{"Content-Type": "image/png"},
+		MaxBytes:        5242880,
+		ExpiresAt:       timestamppb.New(time.Unix(1700000000, 0)),
+		PublicUrl:       "https://cdn.example/avatars/x.png",
+		ObjectKey:       "avatars/x.png",
+	}, nil
+}
+
+func TestTranscodeUsersAvatarPresignedUpload(t *testing.T) {
+	t.Parallel()
+
+	rec := &avatarPresignRecorder{}
+	conn, cleanup := startBufconnUserConn(t, rec)
+	t.Cleanup(cleanup)
+
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+		},
+		transcoder: &transcoder{clients: grpcClients{user: userv1.NewUserServiceClient(conn)}},
+	})
+
+	body := `{"content_type":"image/png","content_length":2048}`
+	resp := performRequest(h, http.MethodPost, "/api/v1/users/me/avatar/presigned-upload", body, map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	if resp.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%q", resp.Code, http.StatusOK, resp.Body.String())
+	}
+	if rec.last == nil {
+		t.Fatal("CreateAvatarPresignedUpload not invoked")
+	}
+	if rec.last.GetProfileId() != "profile-1" {
+		t.Fatalf("profile_id = %q, want profile-1", rec.last.GetProfileId())
+	}
+	if rec.last.GetContentType() != "image/png" || rec.last.GetContentLength() != 2048 {
+		t.Fatalf("unexpected gRPC request: %+v", rec.last)
+	}
+	var out struct {
+		UploadURL  string `json:"upload_url"`
+		PublicURL  string `json:"public_url"`
+		HttpMethod string `json:"http_method"`
+	}
+	decodeJSON(t, resp.Body, &out)
+	if out.UploadURL != "https://r2.example/presigned" || out.PublicURL != "https://cdn.example/avatars/x.png" || out.HttpMethod != "PUT" {
+		t.Fatalf("response body = %+v", out)
+	}
 }
 
 func TestTranscodeUsersMePropagatesVoiceHeaders(t *testing.T) {

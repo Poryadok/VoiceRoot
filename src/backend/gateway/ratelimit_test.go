@@ -21,6 +21,7 @@ func TestRateLimitGroups(t *testing.T) {
 		{name: "otp", method: http.MethodPost, target: "/api/v1/auth/otp/send", body: `{}`, group: "OTP"},
 		{name: "messages send", method: http.MethodPost, target: "/api/v1/messages/send", body: `{"text":"hi"}`, group: "MessagesSend", authHeader: "Bearer valid-user-token"},
 		{name: "file upload", method: http.MethodPost, target: "/api/v1/files/upload", body: `file`, group: "FileUpload", authHeader: "Bearer valid-user-token"},
+		{name: "avatar presigned upload", method: http.MethodPost, target: "/api/v1/users/me/avatar/presigned-upload", body: `{"content_type":"image/png","content_length":1024}`, group: "FileUpload", authHeader: "Bearer valid-user-token"},
 		{name: "space creation", method: http.MethodPost, target: "/api/v1/spaces", body: `{}`, group: "SpaceCreation", authHeader: "Bearer valid-user-token"},
 		{name: "bot api", method: http.MethodPost, target: "/api/v1/bots/interactions", body: `{}`, group: "BotAPI", authHeader: "Bearer valid-user-token"},
 	}
@@ -39,6 +40,7 @@ func TestRateLimitGroups(t *testing.T) {
 					"auth":     http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }),
 					"messages": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }),
 					"files":    http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }),
+					"users":    http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }),
 					"spaces":   http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }),
 					"bots":     http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }),
 				},

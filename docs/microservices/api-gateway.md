@@ -32,6 +32,8 @@
 | Space creation        | 5 пространств | 1 день |
 | Bot API               | 5000 запросов | 1 мин  |
 
+В реализации Gateway группа **File upload** также покрывает `POST /api/v1/users/me/avatar/presigned-upload` (выдача presigned PUT для статичного аватара Фазы 1; см. ниже).
+
 Реализация: Redis sliding window counter. Для публичных маршрутов ключ строится по IP; `X-Forwarded-For` учитывается только от доверенных proxy из `GATEWAY_TRUSTED_PROXY_CIDRS`. Для защищённых маршрутов ключ строится по `user_id`.
 
 ## Маршрутизация
@@ -57,6 +59,8 @@
 /api/v1/version          → Локальный конфиг (version check)
 /ws                      → Realtime Service (WebSocket upgrade)
 ```
+
+**Фаза 1 — presigned аватар (R2, User Service, без File Service):** `POST /api/v1/users/me/avatar/presigned-upload` (JWT). Тело JSON: `content_type`, `content_length`; `profile_id` опционален (по умолчанию активный профиль из JWT → `X-Voice-Profile-Id`). Ответ — поля `upload_url`, `http_method`, `required_headers`, `expires_at`, `public_url` / `object_key` для последующего `PUT` в R2 и сохранения URL через `PATCH /api/v1/users/me` (`UpdateProfile.avatar_url`). Обход REST: тот же контракт по **gRPC** `UserService.CreateAvatarPresignedUpload` на User Service (внутренний ingress, непубличные клиенты), если edge Gateway недоступен.
 
 **Не через этот REST-префикс:** [Federation Service](federation-service.md) (S2S gRPC, отдельный ingress / mTLS). Публичные Flutter-клиенты не вызывают Analytics.
 

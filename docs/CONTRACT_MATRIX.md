@@ -13,7 +13,7 @@
 | HTTP prefix (`/api/v1/...`) | Целевой сервис        | Примечание |
 |----------------------------|------------------------|------------|
 | `auth/**`                  | Auth Service           | Публичные login/register — без JWT (см. api-gateway) |
-| `users/**`                 | User Service           | |
+| `users/**`                 | User Service           | Фаза 1: `POST …/users/me/avatar/presigned-upload` → `CreateAvatarPresignedUpload` (см. [api-gateway.md](microservices/api-gateway.md)) |
 | `friends/**`               | Social Service         | |
 | `chats/**`                 | Chat Service           | |
 | `messages/**`              | Messaging Service      | |
