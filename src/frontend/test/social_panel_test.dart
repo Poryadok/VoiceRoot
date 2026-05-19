@@ -9,7 +9,9 @@ import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
+import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
+import 'package:voice_frontend/state/presence_providers.dart';
 import 'package:voice_frontend/ui/social/profile_detail_sheet.dart';
 import 'package:voice_frontend/ui/social/social_panel.dart';
 
@@ -27,6 +29,11 @@ void main() {
           const GatewayConfig(baseUrl: 'http://api.test'),
         ),
         httpClientProvider.overrideWithValue(client),
+        realtimeLinkStatusProvider.overrideWith(
+          (ref) => RealtimeLinkStatus.disconnected,
+        ),
+        realtimeEventProvider.overrideWith((ref) => const Stream.empty()),
+        realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
       ],
       child: MaterialApp(
         locale: const Locale('en'),
@@ -117,7 +124,7 @@ void main() {
       if (req.url.path == '/api/v1/users/profiles/p-1/presence') {
         return http.Response(
           jsonEncode({
-            'presence': {'profile_id': 'p-1', 'status': 'online'},
+            'presenceStatus': {'profileId': 'p-1', 'status': 'online'},
           }),
           200,
         );
@@ -198,4 +205,14 @@ void main() {
 
     expect(accepted, isTrue);
   });
+}
+
+class _NoopRealtimeHub extends RealtimeHub {
+  _NoopRealtimeHub(super.ref);
+
+  @override
+  Future<void> ensureConnected() async {}
+
+  @override
+  void ensureSubscribed(String chatId) {}
 }

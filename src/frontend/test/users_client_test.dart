@@ -99,8 +99,8 @@ void main() {
         expect(req.url.path, '/api/v1/users/profiles/p-1/presence');
         return http.Response(
           jsonEncode({
-            'presence': {
-              'profile_id': 'p-1',
+            'presenceStatus': {
+              'profileId': 'p-1',
               'status': 'online',
             },
           }),
@@ -114,6 +114,35 @@ void main() {
       );
       expect(r, isA<UsersApiOk<VoicePresence>>());
       expect((r as UsersApiOk<VoicePresence>).data.isOnline, isTrue);
+    });
+  });
+
+  group('VoiceUsersClient.getBulkPresence', () {
+    test('POST /api/v1/users/presence/bulk', () async {
+      final mock = MockClient((req) async {
+        expect(req.method, 'POST');
+        expect(req.url.path, '/api/v1/users/presence/bulk');
+        final body = jsonDecode(req.body) as Map<String, dynamic>;
+        expect(body['profileIds'], ['p-1', 'p-2']);
+        return http.Response(
+          jsonEncode({
+            'byProfileId': {
+              'p-1': {'profileId': 'p-1', 'status': 'online'},
+              'p-2': {'profileId': 'p-2', 'status': 'idle'},
+            },
+          }),
+          200,
+        );
+      });
+      final client = VoiceUsersClient(httpClient: mock, config: config);
+      final r = await client.getBulkPresence(
+        authorization: auth,
+        profileIds: const ['p-1', 'p-2'],
+      );
+      expect(r, isA<UsersApiOk<Map<String, VoicePresence>>>());
+      final map = (r as UsersApiOk<Map<String, VoicePresence>>).data;
+      expect(map['p-1']?.isOnline, isTrue);
+      expect(map['p-2']?.isIdle, isTrue);
     });
   });
 }

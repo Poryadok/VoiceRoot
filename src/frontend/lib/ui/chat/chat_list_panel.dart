@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../state/chat_providers.dart';
+import '../../state/presence_providers.dart';
 import '../../state/social_providers.dart';
+import '../social/presence_indicator.dart';
 
 /// Middle column: DM chat list from `GET /api/v1/chats`.
 class ChatListPanel extends ConsumerWidget {
@@ -12,6 +14,8 @@ class ChatListPanel extends ConsumerWidget {
   static const Key panelKey = Key('chat_list_panel');
   static const Key listKey = Key('chat_list_view');
   static Key tileKey(String chatId) => Key('chat_list_tile_$chatId');
+  static Key presenceIndicatorKey(String chatId) =>
+      Key('chat_list_presence_$chatId');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -54,9 +58,33 @@ class ChatListPanel extends ConsumerWidget {
                       l10n.chatListDmFallback(item.chatId.substring(0, 8));
                   final subtitle = item.lastMessagePreview ?? '';
                   final selected = item.chatId == selectedId;
+                  final presence =
+                      peerId != null ? ref.watch(presenceProvider(peerId)) : null;
                   return ListTile(
                     key: tileKey(item.chatId),
                     selected: selected,
+                    leading: peerId != null
+                        ? Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              CircleAvatar(
+                                child: Text(
+                                  title.isNotEmpty ? title[0].toUpperCase() : '?',
+                                ),
+                              ),
+                              if (presence != null)
+                                Positioned(
+                                  right: -2,
+                                  bottom: -2,
+                                  child: PresenceIndicator(
+                                    key: presenceIndicatorKey(item.chatId),
+                                    presence: presence,
+                                    size: 12,
+                                  ),
+                                ),
+                            ],
+                          )
+                        : null,
                     title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
                     subtitle: subtitle.isEmpty
                         ? null

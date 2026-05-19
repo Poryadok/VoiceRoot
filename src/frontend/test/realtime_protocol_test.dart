@@ -42,6 +42,19 @@ void main() {
       expect((decoded['d'] as Map)['last_s'], 42);
     });
 
+    test('parses presence_update payload', () {
+      final frame = RealtimeProtocol.parseFrame(
+        jsonEncode({
+          'op': 'presence_update',
+          's': 2,
+          'd': {'profile_id': 'p1', 'status': 'online', 'chat_id': 'c1'},
+        }),
+      );
+      expect(frame.op, 'presence_update');
+      expect(frame.data?['profile_id'], 'p1');
+      expect(frame.data?['status'], 'online');
+    });
+
     test('subscribe includes chat_id', () {
       final json = RealtimeProtocol.buildClientOp(
         'subscribe',

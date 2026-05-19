@@ -5,6 +5,7 @@ import '../../backend/users_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/chat_providers.dart';
+import '../../state/presence_providers.dart';
 import '../../state/social_providers.dart';
 import 'presence_indicator.dart';
 
@@ -23,7 +24,7 @@ class ProfileDetailSheet extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     final profileAsync = ref.watch(profileProvider(profileId));
-    final presenceAsync = ref.watch(presenceProvider(profileId));
+    final presence = ref.watch(presenceProvider(profileId));
     final requestsAsync = ref.watch(friendRequestsProvider);
     final activeId = ref.watch(authControllerProvider).activeProfileId;
     final isSelf = activeId == profileId;
@@ -44,7 +45,6 @@ class ProfileDetailSheet extends ConsumerWidget {
             if (profile == null) {
               return Text(l10n.socialProfileLoadError);
             }
-            final presence = presenceAsync.valueOrNull;
             return Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,

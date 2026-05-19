@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/chat_providers.dart';
+import '../../state/presence_providers.dart';
 import '../../state/social_providers.dart';
+import '../social/presence_indicator.dart';
 
 /// Main column: message history (REST) + composer; live updates via Realtime WS.
 class ChatRoomPanel extends ConsumerStatefulWidget {
@@ -14,6 +16,7 @@ class ChatRoomPanel extends ConsumerStatefulWidget {
   static const Key messagesKey = Key('chat_room_messages');
   static const Key inputKey = Key('chat_room_input');
   static const Key sendKey = Key('chat_room_send');
+  static const Key peerPresenceKey = Key('chat_room_peer_presence');
 
   final String chatId;
 
@@ -41,6 +44,8 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     final peerName = peerId != null
         ? ref.watch(profileProvider(peerId)).valueOrNull?.displayName
         : null;
+    final peerPresence =
+        peerId != null ? ref.watch(presenceProvider(peerId)) : null;
     final title = peerName ?? l10n.chatRoomTitle(widget.chatId.substring(0, 8));
 
     ref.listen(chatRoomControllerProvider(widget.chatId), (prev, next) {
@@ -67,6 +72,14 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(
               children: [
+                if (peerPresence != null) ...[
+                  PresenceIndicator(
+                    key: ChatRoomPanel.peerPresenceKey,
+                    presence: peerPresence,
+                    size: 10,
+                  ),
+                  const SizedBox(width: 8),
+                ],
                 Expanded(
                   child: Text(title, style: Theme.of(context).textTheme.titleMedium),
                 ),

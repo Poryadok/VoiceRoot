@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../backend/users_client.dart';
 import '../../l10n/app_localizations.dart';
+import '../../state/presence_providers.dart';
 import '../../state/social_providers.dart';
 import 'presence_indicator.dart';
 import 'profile_detail_sheet.dart';
@@ -69,6 +70,7 @@ class _SocialPanelState extends ConsumerState<SocialPanel>
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(friendsPresenceSyncProvider);
     final l10n = AppLocalizations.of(context)!;
 
     return Column(
@@ -338,7 +340,7 @@ class _ProfileIdTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profileAsync = ref.watch(profileProvider(profileId));
-    final presenceAsync = ref.watch(presenceProvider(profileId));
+    final presence = ref.watch(presenceProvider(profileId));
 
     return profileAsync.when(
       loading: () => const ListTile(title: Text('…')),
@@ -349,7 +351,7 @@ class _ProfileIdTile extends ConsumerWidget {
         }
         return _ProfileListTile(
           profile: profile,
-          presence: presenceAsync.valueOrNull,
+          presence: presence,
           subtitle: subtitle,
           onTap: onTap,
         );

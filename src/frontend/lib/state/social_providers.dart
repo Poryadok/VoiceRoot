@@ -34,21 +34,6 @@ final profileProvider =
   };
 });
 
-final presenceProvider =
-    FutureProvider.family<VoicePresence?, String>((ref, profileId) async {
-  final auth = ref.watch(authorizationHeaderProvider);
-  if (auth == null) return null;
-  final result =
-      await ref.watch(voiceUsersClientProvider).getPresence(
-            authorization: auth,
-            profileId: profileId,
-          );
-  return switch (result) {
-    UsersApiOk(:final data) => data,
-    UsersApiFailure() => null,
-  };
-});
-
 class SearchProfilesState {
   const SearchProfilesState({
     this.results = const [],

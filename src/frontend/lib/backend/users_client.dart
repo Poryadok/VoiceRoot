@@ -74,9 +74,36 @@ class VoicePresence {
 
   factory VoicePresence.fromJson(Map<String, dynamic> json) {
     return VoicePresence(
-      profileId: json['profile_id'] as String,
+      profileId: (json['profile_id'] ?? json['profileId']) as String,
       status: json['status'] as String? ?? 'invisible',
     );
+  }
+
+  /// Parses gateway proto JSON (`presenceStatus`) and legacy test keys.
+  static VoicePresence? fromGatewayBody(Map<String, dynamic> body) {
+    final raw = body['presenceStatus'] ??
+        body['presence_status'] ??
+        body['presence'];
+    if (raw is! Map<String, dynamic>) return null;
+    return VoicePresence.fromJson(raw);
+  }
+
+  static Map<String, VoicePresence> bulkFromGatewayBody(
+    Map<String, dynamic> body,
+  ) {
+    final raw = body['byProfileId'] ?? body['by_profile_id'];
+    if (raw is! Map) return {};
+    final out = <String, VoicePresence>{};
+    for (final entry in raw.entries) {
+      final value = entry.value;
+      if (value is Map<String, dynamic>) {
+        out[entry.key.toString()] = VoicePresence.fromJson(value);
+      } else if (value is Map) {
+        out[entry.key.toString()] =
+            VoicePresence.fromJson(Map<String, dynamic>.from(value));
+      }
+    }
+    return out;
   }
 }
 
@@ -163,9 +190,44 @@ class VoiceUsersClient {
     final uri = Uri.parse(_config.baseUrl)
         .resolve('/api/v1/users/profiles/$profileId/presence');
     return _get(uri, authorization, (body) {
-      final presence = body['presence'] as Map<String, dynamic>;
-      return VoicePresence.fromJson(presence);
+      final presence = VoicePresence.fromGatewayBody(body);
+      if (presence == null) {
+        throw const FormatException('missing presence');
+      }
+      return presence;
     });
+  }
+
+  Future<UsersApiResult<Map<String, VoicePresence>>> getBulkPresence({
+    required String authorization,
+    required List<String> profileIds,
+  }) async {
+    if (!_config.hasBaseUrl) {
+      return const UsersApiFailure(message: kUsersMissingBaseUrlDetail);
+    }
+    final uri =
+        Uri.parse(_config.baseUrl).resolve('/api/v1/users/presence/bulk');
+    try {
+      final res = await _http.post(
+        uri,
+        headers: {
+          'Authorization': authorization,
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({'profileIds': profileIds}),
+      );
+      if (res.statusCode == 200) {
+        final decoded = jsonDecode(res.body) as Map<String, dynamic>;
+        return UsersApiOk(VoicePresence.bulkFromGatewayBody(decoded));
+      }
+      return UsersApiFailure(
+        message: _failureMessage(res),
+        errorCode: _errorCode(res),
+        statusCode: res.statusCode,
+      );
+    } catch (e) {
+      return UsersApiFailure(message: '$e');
+    }
   }
 
   Future<UsersApiResult<T>> _get<T>(
