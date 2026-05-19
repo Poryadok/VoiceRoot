@@ -307,6 +307,102 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Error: {message}'**
   String socialActionError(String message);
+
+  /// No description provided for @socialRailTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Friends and search'**
+  String get socialRailTooltip;
+
+  /// No description provided for @chatListTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Direct messages'**
+  String get chatListTitle;
+
+  /// No description provided for @chatListEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No conversations yet'**
+  String get chatListEmpty;
+
+  /// No description provided for @chatListLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load chats'**
+  String get chatListLoadError;
+
+  /// No description provided for @chatListDmFallback.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat {id}'**
+  String chatListDmFallback(String id);
+
+  /// No description provided for @chatRoomSelectPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Select a conversation'**
+  String get chatRoomSelectPrompt;
+
+  /// No description provided for @chatRoomTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat {id}'**
+  String chatRoomTitle(String id);
+
+  /// No description provided for @chatRoomEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No messages yet'**
+  String get chatRoomEmpty;
+
+  /// No description provided for @chatRoomInputHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Message'**
+  String get chatRoomInputHint;
+
+  /// No description provided for @chatRoomError.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: {message}'**
+  String chatRoomError(String message);
+
+  /// No description provided for @chatRealtimeConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Live'**
+  String get chatRealtimeConnected;
+
+  /// No description provided for @chatRealtimeConnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting…'**
+  String get chatRealtimeConnecting;
+
+  /// No description provided for @chatRealtimeReconnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnecting…'**
+  String get chatRealtimeReconnecting;
+
+  /// No description provided for @chatRealtimeOffline.
+  ///
+  /// In en, this message translates to:
+  /// **'Offline'**
+  String get chatRealtimeOffline;
+
+  /// No description provided for @chatOpenDm.
+  ///
+  /// In en, this message translates to:
+  /// **'Message'**
+  String get chatOpenDm;
+
+  /// No description provided for @profileMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Message'**
+  String get profileMessage;
 }
 
 class _AppLocalizationsDelegate

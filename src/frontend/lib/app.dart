@@ -6,7 +6,10 @@ import 'l10n/app_localizations.dart';
 import 'shell/three_column_shell.dart';
 import 'state/auth_providers.dart';
 import 'state/gateway_providers.dart';
+import 'state/chat_providers.dart';
 import 'ui/auth/auth_screen.dart';
+import 'ui/chat/chat_list_panel.dart';
+import 'ui/chat/chat_room_panel.dart';
 import 'ui/social/social_panel.dart';
 
 class VoiceApp extends ConsumerWidget {
@@ -47,8 +50,15 @@ class VoiceApp extends ConsumerWidget {
           child: Builder(
             builder: (context) {
               final l10n = AppLocalizations.of(context)!;
+              final selectedChatId = ref.watch(selectedChatIdProvider);
               return ThreeColumnShell(
-                listChild: const SocialPanel(),
+                railChild: _SocialRail(
+                  onOpenSocial: () => _openSocialPanel(context),
+                ),
+                listChild: const ChatListPanel(),
+                mainChild: selectedChatId == null
+                    ? Center(child: Text(l10n.chatRoomSelectPrompt))
+                    : ChatRoomPanel(chatId: selectedChatId),
                 header: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -66,6 +76,42 @@ class VoiceApp extends ConsumerWidget {
             },
           ),
         ),
+      ),
+    );
+  }
+}
+
+void _openSocialPanel(BuildContext context) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    builder: (ctx) => const SizedBox(
+      height: 520,
+      child: SocialPanel(),
+    ),
+  );
+}
+
+class _SocialRail extends StatelessWidget {
+  const _SocialRail({required this.onOpenSocial});
+
+  final VoidCallback onOpenSocial;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return ColoredBox(
+      color: const Color(0x12000000),
+      child: Column(
+        children: [
+          const SizedBox(height: 8),
+          IconButton(
+            key: const Key('nav_open_social'),
+            tooltip: l10n.socialRailTooltip,
+            onPressed: onOpenSocial,
+            icon: const Icon(Icons.people_outline),
+          ),
+        ],
       ),
     );
   }

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../backend/users_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
+import '../../state/chat_providers.dart';
 import '../../state/social_providers.dart';
 import 'presence_indicator.dart';
 
@@ -14,6 +15,7 @@ class ProfileDetailSheet extends ConsumerWidget {
   static const Key sheetKey = Key('profile_detail_sheet');
   static const Key onlineIndicatorKey = Key('profile_online_indicator');
   static const Key addFriendKey = Key('profile_add_friend');
+  static const Key messageKey = Key('profile_message');
 
   final String profileId;
 
@@ -94,6 +96,12 @@ class ProfileDetailSheet extends ConsumerWidget {
                 ],
                 if (!isSelf) ...[
                   const SizedBox(height: 20),
+                  OutlinedButton(
+                    key: ProfileDetailSheet.messageKey,
+                    onPressed: () => _openDm(context, ref, profileId),
+                    child: Text(l10n.profileMessage),
+                  ),
+                  const SizedBox(height: 8),
                   _FriendActionButton(
                     profileId: profileId,
                     pendingOutgoing: pendingOutgoing,
@@ -106,6 +114,23 @@ class ProfileDetailSheet extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _openDm(
+    BuildContext context,
+    WidgetRef ref,
+    String profileId,
+  ) async {
+    final l10n = AppLocalizations.of(context)!;
+    final err = await ref.read(chatActionsProvider).openDmWithProfile(profileId);
+    if (!context.mounted) return;
+    if (err != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.socialActionError(err))),
+      );
+      return;
+    }
+    Navigator.of(context).pop();
   }
 
   String _presenceLabel(AppLocalizations l10n, VoicePresence? presence) {

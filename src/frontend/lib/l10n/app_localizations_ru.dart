@@ -122,4 +122,58 @@ class AppLocalizationsRu extends AppLocalizations {
   String socialActionError(String message) {
     return 'Ошибка: $message';
   }
+
+  @override
+  String get socialRailTooltip => 'Друзья и поиск';
+
+  @override
+  String get chatListTitle => 'Личные сообщения';
+
+  @override
+  String get chatListEmpty => 'Пока нет диалогов';
+
+  @override
+  String get chatListLoadError => 'Не удалось загрузить чаты';
+
+  @override
+  String chatListDmFallback(String id) {
+    return 'Чат $id';
+  }
+
+  @override
+  String get chatRoomSelectPrompt => 'Выберите диалог';
+
+  @override
+  String chatRoomTitle(String id) {
+    return 'Чат $id';
+  }
+
+  @override
+  String get chatRoomEmpty => 'Сообщений пока нет';
+
+  @override
+  String get chatRoomInputHint => 'Сообщение';
+
+  @override
+  String chatRoomError(String message) {
+    return 'Ошибка: $message';
+  }
+
+  @override
+  String get chatRealtimeConnected => 'Онлайн';
+
+  @override
+  String get chatRealtimeConnecting => 'Подключение…';
+
+  @override
+  String get chatRealtimeReconnecting => 'Переподключение…';
+
+  @override
+  String get chatRealtimeOffline => 'Офлайн';
+
+  @override
+  String get chatOpenDm => 'Написать';
+
+  @override
+  String get profileMessage => 'Написать';
 }

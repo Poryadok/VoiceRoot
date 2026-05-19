@@ -68,5 +68,42 @@
         "type": "String"
       }
     }
-  }
+  },
+  "socialRailTooltip": "Friends and search",
+  "chatListTitle": "Direct messages",
+  "chatListEmpty": "No conversations yet",
+  "chatListLoadError": "Could not load chats",
+  "chatListDmFallback": "Chat {id}",
+  "@chatListDmFallback": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "chatRoomSelectPrompt": "Select a conversation",
+  "chatRoomTitle": "Chat {id}",
+  "@chatRoomTitle": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "chatRoomEmpty": "No messages yet",
+  "chatRoomInputHint": "Message",
+  "chatRoomError": "Error: {message}",
+  "@chatRoomError": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "chatRealtimeConnected": "Live",
+  "chatRealtimeConnecting": "Connecting…",
+  "chatRealtimeReconnecting": "Reconnecting…",
+  "chatRealtimeOffline": "Offline",
+  "chatOpenDm": "Message",
+  "profileMessage": "Message"
 }

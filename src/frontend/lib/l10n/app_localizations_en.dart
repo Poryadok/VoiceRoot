@@ -122,4 +122,58 @@ class AppLocalizationsEn extends AppLocalizations {
   String socialActionError(String message) {
     return 'Error: $message';
   }
+
+  @override
+  String get socialRailTooltip => 'Friends and search';
+
+  @override
+  String get chatListTitle => 'Direct messages';
+
+  @override
+  String get chatListEmpty => 'No conversations yet';
+
+  @override
+  String get chatListLoadError => 'Could not load chats';
+
+  @override
+  String chatListDmFallback(String id) {
+    return 'Chat $id';
+  }
+
+  @override
+  String get chatRoomSelectPrompt => 'Select a conversation';
+
+  @override
+  String chatRoomTitle(String id) {
+    return 'Chat $id';
+  }
+
+  @override
+  String get chatRoomEmpty => 'No messages yet';
+
+  @override
+  String get chatRoomInputHint => 'Message';
+
+  @override
+  String chatRoomError(String message) {
+    return 'Error: $message';
+  }
+
+  @override
+  String get chatRealtimeConnected => 'Live';
+
+  @override
+  String get chatRealtimeConnecting => 'Connecting…';
+
+  @override
+  String get chatRealtimeReconnecting => 'Reconnecting…';
+
+  @override
+  String get chatRealtimeOffline => 'Offline';
+
+  @override
+  String get chatOpenDm => 'Message';
+
+  @override
+  String get profileMessage => 'Message';
 }

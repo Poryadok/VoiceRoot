@@ -69,5 +69,42 @@
         "type": "String"
       }
     }
-  }
+  },
+  "socialRailTooltip": "Друзья и поиск",
+  "chatListTitle": "Личные сообщения",
+  "chatListEmpty": "Пока нет диалогов",
+  "chatListLoadError": "Не удалось загрузить чаты",
+  "chatListDmFallback": "Чат {id}",
+  "@chatListDmFallback": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "chatRoomSelectPrompt": "Выберите диалог",
+  "chatRoomTitle": "Чат {id}",
+  "@chatRoomTitle": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "chatRoomEmpty": "Сообщений пока нет",
+  "chatRoomInputHint": "Сообщение",
+  "chatRoomError": "Ошибка: {message}",
+  "@chatRoomError": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "chatRealtimeConnected": "Онлайн",
+  "chatRealtimeConnecting": "Подключение…",
+  "chatRealtimeReconnecting": "Переподключение…",
+  "chatRealtimeOffline": "Офлайн",
+  "chatOpenDm": "Написать",
+  "profileMessage": "Написать"
 }
