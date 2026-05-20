@@ -80,6 +80,18 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String authSessionHandle(String handle) {
+    return '$handle';
+  }
+
+  @override
+  String get socialDiscoverHint => 'Найти людей — иконка слева';
+
+  @override
+  String get backendUnavailable =>
+      'Социальные функции и чаты недоступны. Запустите полный API-стек (docker compose --profile app).';
+
+  @override
   String get socialTabSearch => 'Поиск';
 
   @override
@@ -119,6 +131,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get socialFriendsLoadError => 'Не удалось загрузить друзей';
 
   @override
+  String get socialFriendsBackendUnavailable =>
+      'Друзья недоступны. Запустите полный API-стек (docker compose --profile app).';
+
+  @override
   String get socialRequestsLoadError => 'Не удалось загрузить заявки';
 
   @override
@@ -155,6 +171,10 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get chatListLoadError => 'Не удалось загрузить чаты';
+
+  @override
+  String get chatListBackendUnavailable =>
+      'Чаты недоступны. Запустите полный API-стек (docker compose --profile app).';
 
   @override
   String chatListDmFallback(String id) {

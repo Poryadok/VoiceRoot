@@ -218,6 +218,24 @@ abstract class AppLocalizations {
   /// **'Profile: {profileId}'**
   String authSessionProfile(String profileId);
 
+  /// No description provided for @authSessionHandle.
+  ///
+  /// In en, this message translates to:
+  /// **'{handle}'**
+  String authSessionHandle(String handle);
+
+  /// No description provided for @socialDiscoverHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Find people — use the icon on the left'**
+  String get socialDiscoverHint;
+
+  /// No description provided for @backendUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Social and chat features are unavailable. Start the full API stack (docker compose --profile app).'**
+  String get backendUnavailable;
+
   /// No description provided for @socialTabSearch.
   ///
   /// In en, this message translates to:
@@ -296,6 +314,12 @@ abstract class AppLocalizations {
   /// **'Could not load friends'**
   String get socialFriendsLoadError;
 
+  /// No description provided for @socialFriendsBackendUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Friends are unavailable. Start the full API stack (docker compose --profile app).'**
+  String get socialFriendsBackendUnavailable;
+
   /// No description provided for @socialRequestsLoadError.
   ///
   /// In en, this message translates to:
@@ -367,6 +391,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not load chats'**
   String get chatListLoadError;
+
+  /// No description provided for @chatListBackendUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Chats are unavailable. Start the full API stack (docker compose --profile app).'**
+  String get chatListBackendUnavailable;
 
   /// No description provided for @chatListDmFallback.
   ///

@@ -2,8 +2,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../backend/auth_client.dart';
 import '../backend/auth_session.dart';
 import '../backend/auth_session_storage.dart';
+import '../backend/discover_hint_storage.dart';
 import '../ui/auth/auth_errors.dart';
 import 'gateway_providers.dart';
+
+final discoverHintStorageProvider = Provider<DiscoverHintStorage>((ref) {
+  throw UnimplementedError(
+    'Override discoverHintStorageProvider in ProviderScope',
+  );
+});
 
 class AuthState {
   const AuthState({
@@ -11,6 +18,7 @@ class AuthState {
     this.isRestoring = false,
     this.isSubmitting = false,
     this.errorKey,
+    this.pendingDiscoverHint = false,
   });
 
   final AuthSession? session;
@@ -19,6 +27,9 @@ class AuthState {
 
   /// API or client [AuthErrorKeys] value for localized UI message.
   final String? errorKey;
+
+  /// True after login/register; cleared after discover snackbar is shown.
+  final bool pendingDiscoverHint;
 
   bool get isAuthenticated => session != null;
 
@@ -31,12 +42,17 @@ class AuthState {
     bool? isSubmitting,
     String? errorKey,
     bool clearError = false,
+    bool? pendingDiscoverHint,
+    bool clearDiscoverHint = false,
   }) {
     return AuthState(
       session: clearSession ? null : (session ?? this.session),
       isRestoring: isRestoring ?? this.isRestoring,
       isSubmitting: isSubmitting ?? this.isSubmitting,
       errorKey: clearError ? null : (errorKey ?? this.errorKey),
+      pendingDiscoverHint: clearDiscoverHint
+          ? false
+          : (pendingDiscoverHint ?? this.pendingDiscoverHint),
     );
   }
 }
@@ -80,6 +96,7 @@ class AuthController extends StateNotifier<AuthState> {
           session: session,
           isRestoring: false,
           clearError: true,
+          clearDiscoverHint: true,
         );
       case AuthSessionFailure():
         await _storage.clear();
@@ -137,6 +154,7 @@ class AuthController extends StateNotifier<AuthState> {
           session: session,
           isSubmitting: false,
           clearError: true,
+          pendingDiscoverHint: true,
         );
       case AuthSessionFailure(
           :final message,
@@ -152,6 +170,11 @@ class AuthController extends StateNotifier<AuthState> {
               message,
         );
     }
+  }
+
+  void clearPendingDiscoverHint() {
+    if (!state.pendingDiscoverHint) return;
+    state = state.copyWith(clearDiscoverHint: true);
   }
 
   Future<void> _persist(AuthSession session) async {

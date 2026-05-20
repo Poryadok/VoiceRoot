@@ -7,19 +7,22 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/app.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
+import 'package:voice_frontend/backend/discover_hint_storage.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/ui/auth/auth_screen.dart';
 
 void main() {
-  testWidgets('login shows authenticated shell with profile_id', (tester) async {
+  testWidgets('login shows @handle and discover hint snackbar', (tester) async {
+    final hintStorage = InMemoryDiscoverHintStorage();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           authSessionStorageProvider.overrideWithValue(
             InMemoryAuthSessionStorage(),
           ),
+          discoverHintStorageProvider.overrideWithValue(hintStorage),
           gatewayConfigProvider.overrideWithValue(
             const GatewayConfig(baseUrl: 'http://api.test'),
           ),
@@ -33,6 +36,24 @@ void main() {
                     'expires_in_seconds': 900,
                     'account_id': 'acc',
                     'profile_id': 'prof-42',
+                  }),
+                  200,
+                );
+              }
+              if (request.url.path == '/api/v1/users/profiles/prof-42') {
+                return http.Response(
+                  jsonEncode({
+                    'profile': {
+                      'id': 'prof-42',
+                      'account_id': 'acc',
+                      'username': 'alice',
+                      'discriminator': '0001',
+                      'display_name': 'Alice',
+                      'locale': 'en',
+                      'theme': 'dark',
+                      'is_primary': true,
+                      'verification_type': 'none',
+                    },
                   }),
                   200,
                 );
@@ -62,8 +83,14 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('auth_session_profile')), findsOneWidget);
-    expect(find.textContaining('prof-42'), findsOneWidget);
+    expect(find.text('@alice#0001'), findsOneWidget);
+    expect(find.byKey(const Key('social_discover_hint')), findsOneWidget);
+    expect(
+      find.text('Find people — use the icon on the left'),
+      findsOneWidget,
+    );
     expect(find.byKey(AuthScreen.screenKey), findsNothing);
+    expect(await hintStorage.wasShown(), isTrue);
   });
 
   testWidgets('register shows localized validation_failed from API', (tester) async {

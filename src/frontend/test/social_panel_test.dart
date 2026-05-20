@@ -16,6 +16,8 @@ import 'package:voice_frontend/ui/social/social_panel.dart';
 
 import 'support/auth_test_overrides.dart';
 
+const _backendUnavailableSnippet = 'Start the full API stack';
+
 void main() {
   Widget socialTestApp({required Widget home, required http.Client client}) {
     return ProviderScope(
@@ -24,6 +26,7 @@ void main() {
           InMemoryAuthSessionStorage(),
         ),
         authControllerProvider.overrideWith(authenticatedAuthController),
+        discoverHintStorageProvider.overrideWithValue(testDiscoverHintStorage),
         gatewayConfigProvider.overrideWithValue(
           const GatewayConfig(baseUrl: 'http://api.test'),
         ),
@@ -150,6 +153,47 @@ void main() {
     expect(find.byKey(ProfileDetailSheet.sheetKey), findsOneWidget);
     expect(find.text('Dana'), findsOneWidget);
     expect(find.byKey(ProfileDetailSheet.onlineIndicatorKey), findsOneWidget);
+  });
+
+  testWidgets('friends tab shows backend unavailable on 404', (tester) async {
+    await tester.pumpWidget(
+      socialTestApp(
+        home: const SocialPanel(initialTabIndex: 1),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/friends') {
+            return http.Response('not found', 404);
+          }
+          return http.Response('{}', 200);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(SocialPanel.friendsUnavailableKey), findsOneWidget);
+    expect(find.textContaining(_backendUnavailableSnippet), findsOneWidget);
+    expect(find.text('No friends yet'), findsNothing);
+  });
+
+  testWidgets('search shows backend unavailable on 404', (tester) async {
+    await tester.pumpWidget(
+      socialTestApp(
+        home: const SocialPanel(),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/users/search') {
+            return http.Response('not found', 404);
+          }
+          return http.Response('{}', 200);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(SocialPanel.searchFieldKey), 'alice');
+    await tester.tap(find.byKey(SocialPanel.searchSubmitKey));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(SocialPanel.searchUnavailableKey), findsOneWidget);
+    expect(find.textContaining(_backendUnavailableSnippet), findsOneWidget);
   });
 
   testWidgets('incoming request accept calls gateway', (tester) async {

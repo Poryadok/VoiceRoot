@@ -1,9 +1,16 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../backend/api_errors.dart';
 import '../backend/friends_client.dart';
 import '../backend/users_client.dart';
 import 'auth_providers.dart';
 import 'gateway_providers.dart';
+
+final activeProfileProvider = FutureProvider<VoiceProfile?>((ref) async {
+  final profileId = ref.watch(authControllerProvider).activeProfileId;
+  if (profileId == null) return null;
+  return ref.watch(profileProvider(profileId).future);
+});
 
 final voiceUsersClientProvider = Provider<VoiceUsersClient>((ref) {
   return VoiceUsersClient(
@@ -39,18 +46,21 @@ class SearchProfilesState {
     this.results = const [],
     this.isLoading = false,
     this.errorMessage,
+    this.errorStatusCode,
     this.lastQuery,
   });
 
   final List<VoiceProfile> results;
   final bool isLoading;
   final String? errorMessage;
+  final int? errorStatusCode;
   final String? lastQuery;
 
   SearchProfilesState copyWith({
     List<VoiceProfile>? results,
     bool? isLoading,
     String? errorMessage,
+    int? errorStatusCode,
     bool clearError = false,
     String? lastQuery,
   }) {
@@ -58,6 +68,8 @@ class SearchProfilesState {
       results: results ?? this.results,
       isLoading: isLoading ?? this.isLoading,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+      errorStatusCode:
+          clearError ? null : (errorStatusCode ?? this.errorStatusCode),
       lastQuery: lastQuery ?? this.lastQuery,
     );
   }
@@ -89,10 +101,11 @@ class SearchProfilesController extends StateNotifier<SearchProfilesState> {
           isLoading: false,
           clearError: true,
         );
-      case UsersApiFailure(:final message):
+      case UsersApiFailure(:final message, :final statusCode):
         state = state.copyWith(
           isLoading: false,
           errorMessage: message,
+          errorStatusCode: statusCode,
           results: [],
         );
     }
@@ -104,26 +117,34 @@ final searchProfilesControllerProvider =
   return SearchProfilesController(ref);
 });
 
-final friendsListProvider = FutureProvider<FriendsListData?>((ref) async {
+final friendsListProvider = FutureProvider<FriendsListData>((ref) async {
   final auth = ref.watch(authorizationHeaderProvider);
-  if (auth == null) return null;
+  if (auth == null) {
+    throw StateError('not_authenticated');
+  }
   final result =
       await ref.watch(voiceFriendsClientProvider).listFriends(authorization: auth);
   return switch (result) {
     FriendsApiOk(:final data) => data,
-    FriendsApiFailure() => null,
+    FriendsApiFailure(:final statusCode) when isBackendUnavailable(statusCode) =>
+      throw const BackendUnavailableException(),
+    FriendsApiFailure(:final message) => throw Exception(message),
   };
 });
 
-final friendRequestsProvider = FutureProvider<FriendRequestsData?>((ref) async {
+final friendRequestsProvider = FutureProvider<FriendRequestsData>((ref) async {
   final auth = ref.watch(authorizationHeaderProvider);
-  if (auth == null) return null;
+  if (auth == null) {
+    throw StateError('not_authenticated');
+  }
   final result = await ref
       .watch(voiceFriendsClientProvider)
       .listFriendRequests(authorization: auth);
   return switch (result) {
     FriendsApiOk(:final data) => data,
-    FriendsApiFailure() => null,
+    FriendsApiFailure(:final statusCode) when isBackendUnavailable(statusCode) =>
+      throw const BackendUnavailableException(),
+    FriendsApiFailure(:final message) => throw Exception(message),
   };
 });
 

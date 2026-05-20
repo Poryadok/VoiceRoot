@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../backend/api_errors.dart';
 import '../backend/chats_client.dart';
 import '../backend/messages_client.dart';
 import '../backend/realtime_client.dart';
@@ -29,14 +30,18 @@ final selectedChatIdProvider = StateProvider<String?>((ref) => null);
 final dmPeerProfileByChatIdProvider =
     StateProvider<Map<String, String>>((ref) => {});
 
-final chatListProvider = FutureProvider<ChatListData?>((ref) async {
+final chatListProvider = FutureProvider<ChatListData>((ref) async {
   final auth = ref.watch(authorizationHeaderProvider);
-  if (auth == null) return null;
+  if (auth == null) {
+    throw StateError('not_authenticated');
+  }
   final result =
       await ref.watch(voiceChatsClientProvider).listChats(authorization: auth);
   return switch (result) {
     ChatsApiOk(:final data) => data,
-    ChatsApiFailure() => null,
+    ChatsApiFailure(:final statusCode) when isBackendUnavailable(statusCode) =>
+      throw const BackendUnavailableException(),
+    ChatsApiFailure(:final message) => throw Exception(message),
   };
 });
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../api_error_messages.dart';
 import '../../state/chat_providers.dart';
 import '../../state/presence_providers.dart';
 import '../../state/social_providers.dart';
@@ -16,6 +17,7 @@ class ChatListPanel extends ConsumerWidget {
   static Key tileKey(String chatId) => Key('chat_list_tile_$chatId');
   static Key presenceIndicatorKey(String chatId) =>
       Key('chat_list_presence_$chatId');
+  static const Key unavailableKey = Key('chat_list_unavailable');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -38,9 +40,15 @@ class ChatListPanel extends ConsumerWidget {
         Expanded(
           child: chatsAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, st) => Center(child: Text(l10n.chatListLoadError)),
+            error: (e, st) => Center(
+              child: Text(
+                key: ChatListPanel.unavailableKey,
+                chatListErrorMessage(l10n, e),
+                textAlign: TextAlign.center,
+              ),
+            ),
             data: (data) {
-              final items = data?.items ?? const [];
+              final items = data.items;
               if (items.isEmpty) {
                 return Center(child: Text(l10n.chatListEmpty));
               }

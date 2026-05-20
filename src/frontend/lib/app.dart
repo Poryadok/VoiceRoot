@@ -7,6 +7,7 @@ import 'shell/three_column_shell.dart';
 import 'state/auth_providers.dart';
 import 'state/gateway_providers.dart';
 import 'state/chat_providers.dart';
+import 'state/social_providers.dart';
 import 'ui/auth/auth_screen.dart';
 import 'ui/chat/chat_list_panel.dart';
 import 'ui/chat/chat_room_panel.dart';
@@ -35,7 +36,6 @@ class VoiceApp extends ConsumerWidget {
       );
     }
 
-    final health = ref.watch(gatewayHealthProvider);
     return MaterialApp(
       locale: locale,
       onGenerateTitle: (ctx) => AppLocalizations.of(ctx)!.appTitle,
@@ -45,35 +45,104 @@ class VoiceApp extends ConsumerWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
         useMaterial3: true,
       ),
-      home: Scaffold(
-        body: SafeArea(
-          child: Builder(
-            builder: (context) {
-              final l10n = AppLocalizations.of(context)!;
-              final selectedChatId = ref.watch(selectedChatIdProvider);
-              return ThreeColumnShell(
-                railChild: _SocialRail(
-                  onOpenSocial: () => _openSocialPanel(context),
-                ),
-                listChild: const ChatListPanel(),
-                mainChild: selectedChatId == null
-                    ? Center(child: Text(l10n.chatRoomSelectPrompt))
-                    : ChatRoomPanel(chatId: selectedChatId),
-                header: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _SessionBar(
-                      onLogout: () =>
-                          ref.read(authControllerProvider.notifier).logout(),
-                      sessionLabel:
-                          l10n.authSessionProfile(auth.activeProfileId!),
-                      logoutLabel: l10n.authLogout,
-                    ),
-                    _GatewayStatusBar(asyncHealth: health),
-                  ],
-                ),
-              );
-            },
+      home: _AuthenticatedShell(locale: locale),
+    );
+  }
+}
+
+class _AuthenticatedShell extends ConsumerStatefulWidget {
+  const _AuthenticatedShell({this.locale});
+
+  final Locale? locale;
+
+  @override
+  ConsumerState<_AuthenticatedShell> createState() => _AuthenticatedShellState();
+}
+
+class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
+  var _discoverHintScheduled = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _scheduleDiscoverHintIfNeeded();
+  }
+
+  void _scheduleDiscoverHintIfNeeded() {
+    if (_discoverHintScheduled) return;
+    final auth = ref.read(authControllerProvider);
+    if (!auth.pendingDiscoverHint) return;
+    _discoverHintScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShowDiscoverHint());
+  }
+
+  Future<void> _maybeShowDiscoverHint() async {
+    if (!mounted) return;
+    final auth = ref.read(authControllerProvider);
+    if (!auth.pendingDiscoverHint) return;
+
+    final storage = ref.read(discoverHintStorageProvider);
+    if (await storage.wasShown()) {
+      ref.read(authControllerProvider.notifier).clearPendingDiscoverHint();
+      return;
+    }
+
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final l10n = AppLocalizations.of(context)!;
+    messenger.showSnackBar(
+      SnackBar(
+        key: const Key('social_discover_hint'),
+        content: Text(l10n.socialDiscoverHint),
+      ),
+    );
+    await storage.markShown();
+    if (!mounted) return;
+    ref.read(authControllerProvider.notifier).clearPendingDiscoverHint();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final health = ref.watch(gatewayHealthProvider);
+    final selectedChatId = ref.watch(selectedChatIdProvider);
+    final profileAsync = ref.watch(activeProfileProvider);
+
+    final sessionLabel = profileAsync.when(
+      data: (profile) => profile != null
+          ? l10n.authSessionHandle(profile.handle)
+          : l10n.authSessionProfile(
+              ref.watch(authControllerProvider).activeProfileId!,
+            ),
+      loading: () => l10n.authSessionProfile(
+        ref.watch(authControllerProvider).activeProfileId!,
+      ),
+      error: (_, _) => l10n.authSessionProfile(
+        ref.watch(authControllerProvider).activeProfileId!,
+      ),
+    );
+
+    return Scaffold(
+      body: SafeArea(
+        child: ThreeColumnShell(
+          railChild: _SocialRail(
+            onOpenSocial: () => _openSocialPanel(context),
+          ),
+          listChild: const ChatListPanel(),
+          mainChild: selectedChatId == null
+              ? Center(child: Text(l10n.chatRoomSelectPrompt))
+              : ChatRoomPanel(chatId: selectedChatId),
+          header: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _SessionBar(
+                onLogout: () =>
+                    ref.read(authControllerProvider.notifier).logout(),
+                sessionLabel: sessionLabel,
+                logoutLabel: l10n.authLogout,
+              ),
+              _GatewayStatusBar(asyncHealth: health),
+            ],
           ),
         ),
       ),

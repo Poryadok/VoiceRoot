@@ -47,6 +47,16 @@
       }
     }
   },
+  "authSessionHandle": "{handle}",
+  "@authSessionHandle": {
+    "placeholders": {
+      "handle": {
+        "type": "String"
+      }
+    }
+  },
+  "socialDiscoverHint": "Find people — use the icon on the left",
+  "backendUnavailable": "Social and chat features are unavailable. Start the full API stack (docker compose --profile app).",
   "socialTabSearch": "Search",
   "socialTabFriends": "Friends",
   "socialTabRequests": "Requests",
@@ -60,6 +70,7 @@
   "socialIncomingRequests": "Incoming",
   "socialOutgoingRequests": "Outgoing",
   "socialFriendsLoadError": "Could not load friends",
+  "socialFriendsBackendUnavailable": "Friends are unavailable. Start the full API stack (docker compose --profile app).",
   "socialRequestsLoadError": "Could not load requests",
   "socialProfileLoadError": "Could not load profile",
   "socialPresenceOnline": "Online",
@@ -79,6 +90,7 @@
   "chatListTitle": "Direct messages",
   "chatListEmpty": "No conversations yet",
   "chatListLoadError": "Could not load chats",
+  "chatListBackendUnavailable": "Chats are unavailable. Start the full API stack (docker compose --profile app).",
   "chatListDmFallback": "Chat {id}",
   "@chatListDmFallback": {
     "placeholders": {

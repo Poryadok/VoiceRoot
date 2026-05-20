@@ -80,6 +80,18 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String authSessionHandle(String handle) {
+    return '$handle';
+  }
+
+  @override
+  String get socialDiscoverHint => 'Find people — use the icon on the left';
+
+  @override
+  String get backendUnavailable =>
+      'Social and chat features are unavailable. Start the full API stack (docker compose --profile app).';
+
+  @override
   String get socialTabSearch => 'Search';
 
   @override
@@ -119,6 +131,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get socialFriendsLoadError => 'Could not load friends';
 
   @override
+  String get socialFriendsBackendUnavailable =>
+      'Friends are unavailable. Start the full API stack (docker compose --profile app).';
+
+  @override
   String get socialRequestsLoadError => 'Could not load requests';
 
   @override
@@ -155,6 +171,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get chatListLoadError => 'Could not load chats';
+
+  @override
+  String get chatListBackendUnavailable =>
+      'Chats are unavailable. Start the full API stack (docker compose --profile app).';
 
   @override
   String chatListDmFallback(String id) {

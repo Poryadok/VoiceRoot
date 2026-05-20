@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../backend/users_client.dart';
 import '../../l10n/app_localizations.dart';
+import '../api_error_messages.dart';
 import '../../state/presence_providers.dart';
 import '../../state/social_providers.dart';
 import 'presence_indicator.dart';
@@ -19,6 +20,9 @@ class SocialPanel extends ConsumerStatefulWidget {
   static const Key searchFieldKey = Key('social_search_field');
   static const Key searchSubmitKey = Key('social_search_submit');
   static const Key friendsListKey = Key('social_friends_list');
+  static const Key friendsUnavailableKey = Key('social_friends_unavailable');
+  static const Key requestsUnavailableKey = Key('social_requests_unavailable');
+  static const Key searchUnavailableKey = Key('social_search_unavailable');
 
   static Key requestAcceptKey(String profileId) =>
       Key('social_request_accept_$profileId');
@@ -152,7 +156,12 @@ class _SearchTab extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Text(
-              l10n.socialActionError(search.errorMessage!),
+              key: SocialPanel.searchUnavailableKey,
+              socialActionErrorMessage(
+                l10n,
+                search.errorMessage!,
+                statusCode: search.errorStatusCode,
+              ),
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
           ),
@@ -186,9 +195,15 @@ class _FriendsTab extends ConsumerWidget {
 
     return friendsAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, st) => Center(child: Text(l10n.socialFriendsLoadError)),
+      error: (e, st) => Center(
+        child: Text(
+          key: SocialPanel.friendsUnavailableKey,
+          socialListErrorMessage(l10n, e),
+          textAlign: TextAlign.center,
+        ),
+      ),
       data: (data) {
-        final ids = data?.friends ?? const [];
+        final ids = data.friends;
         if (ids.isEmpty) {
           return Center(child: Text(l10n.socialFriendsEmpty));
         }
@@ -220,10 +235,16 @@ class _RequestsTab extends ConsumerWidget {
 
     return requestsAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, st) => Center(child: Text(l10n.socialRequestsLoadError)),
+      error: (e, st) => Center(
+        child: Text(
+          key: SocialPanel.requestsUnavailableKey,
+          socialRequestsErrorMessage(l10n, e),
+          textAlign: TextAlign.center,
+        ),
+      ),
       data: (data) {
-        final incoming = data?.incoming ?? const [];
-        final outgoing = data?.outgoing ?? const [];
+        final incoming = data.incoming;
+        final outgoing = data.outgoing;
         if (incoming.isEmpty && outgoing.isEmpty) {
           return Center(child: Text(l10n.socialRequestsEmpty));
         }
