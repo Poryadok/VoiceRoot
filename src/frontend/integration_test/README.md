@@ -13,13 +13,34 @@ API-level live tests run on the VM with `flutter test` (not a browser driver).
 
 Shared flags: `VOICE_RUN_LIVE_INTEGRATION=true`, `VOICE_API_BASE_URL=...`
 
+### Prerequisites (local compose)
+
+From the **repo root**, start the Phase 1 stack (Auth, User, Social, Chat, Messaging, Realtime, Gateway, web):
+
+```text
+make compose-app-up
+```
+
+In `.env`, publish the gateway on host port **18080** (recommended; see root [README.md](../../../README.md)):
+
+```text
+GATEWAY_PORT=18080
+VOICE_API_PUBLIC_URL=http://127.0.0.1:18080
+```
+
+Wait until `docker compose --profile app ps` shows gateway (and dependencies) healthy. Base URL for live tests:
+
+```text
+VOICE_API_BASE_URL=http://127.0.0.1:18080
+```
+
 **Phase-1 E2E run (PowerShell):**
 
 ```powershell
 cd src/frontend
 flutter test test/phase1_two_users_e2e_live_test.dart `
   --dart-define=VOICE_RUN_LIVE_INTEGRATION=true `
-  --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:8080
+  --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080
 ```
 
 **Smoke (gateway DM + WS only):**
@@ -29,20 +50,18 @@ flutter test test/phase1_two_users_e2e_live_test.dart `
 - REST: `POST /api/v1/messages/send`
 - WS: `/ws` → `hello` → `subscribe` → `message_create`
 
-**Prerequisites:** Gateway with Auth, User, Chat, Messaging, Realtime upstreams and NATS JetStream (`message.events`). Compose profile `app` alone only exposes Gateway + static web — wire upstream URLs or use staging.
-
 **Run (PowerShell):**
 
 ```powershell
 cd src/frontend
 flutter test test/gateway_dm_ws_live_integration_test.dart `
   --dart-define=VOICE_RUN_LIVE_INTEGRATION=true `
-  --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:8080
+  --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080
 ```
 
-Without `VOICE_RUN_LIVE_INTEGRATION=true` the test **skips** so `make flutter-ci` stays green.
+Without `VOICE_RUN_LIVE_INTEGRATION=true` the tests **skip** so `make flutter-ci` stays green.
 
-With the flag set, the test **fails** if Gateway is up but Auth (or downstream) is not wired — e.g. compose profile `app` alone returns HTTP 404 on `/api/v1/auth/register`.
+With the flag set, tests **fail** if the stack is down or gateway returns errors (e.g. 404 on `/api/v1/chats` when Phase-1 services are not running).
 
 **Staging example:**
 

@@ -2,11 +2,12 @@
 
 Voice client (Flutter Web/Desktop/Mobile). Roadmap: [docs/PLAN.md](../../docs/PLAN.md).
 
-## Phase 0 shell
+## Client (Phase 1 in progress)
 
-- Three-column desktop shell ([docs/features/navigation.md](../../docs/features/navigation.md)); narrow width stacks the same regions.
+- Three-column shell ([docs/features/navigation.md](../../docs/features/navigation.md)); narrow width stacks the same regions.
+- Auth (register/login), social (search, friends, start DM), chat list + room, Realtime WS — см. [docs/PLAN.md](../../docs/PLAN.md) § «Фаза 1».
 - API base URL: `--dart-define=VOICE_API_BASE_URL=https://your-gateway` (empty = offline / tests inject via Riverpod).
-- Riverpod + thin Gateway client: `GET /health`, `GET /api/v1/version`.
+- Riverpod + Gateway/Auth/Users/Social/Chat/Messaging/Realtime clients.
 
 ## Commands
 
@@ -23,12 +24,12 @@ flutter test
 
 CI: [.github/workflows/ci.yml](../../.github/workflows/ci.yml) job `flutter`. Цель **`make build-all`** Flutter не запускает — см. [docs/TESTING.md](../../docs/TESTING.md).
 
-## Docker (с Gateway)
+## Docker (Phase 1 stack)
 
-Из корня репозитория (профиль `app` в [`docker-compose.yml`](../../docker-compose.yml)):
+Из корня репозитория:
 
 ```bash
-docker compose --profile app up -d --build
+make compose-app-up
 ```
 
-Веб: **`http://127.0.0.1:9080`**, gateway: **`http://127.0.0.1:8080`**. Base URL для сборки образа задаётся `VOICE_API_PUBLIC_URL` в `.env` (по умолчанию `http://127.0.0.1:8080`).
+В `.env` (рекомендуется): `GATEWAY_PORT=18080`, `VOICE_API_PUBLIC_URL=http://127.0.0.1:18080`, `WEB_PORT=9080`. Веб: **`http://127.0.0.1:9080`**, gateway: **`http://127.0.0.1:18080`**. Подробнее — [README.md](../../README.md).

@@ -8,7 +8,7 @@ Discord-like messenger with voice and matchmaking. Product and architecture live
 |------|---------|
 | [`docs/`](docs/) | Specifications, glossary, phased plan |
 | [`protos/`](protos/) | gRPC / Protobuf (`buf.work.yaml` + [`protos/buf.yaml`](protos/buf.yaml); codegen: [`buf.gen.yaml`](buf.gen.yaml) → `make buf-generate`; S2S: [`protos/voice/s2s/v1/s2s.proto`](protos/voice/s2s/v1/s2s.proto)) |
-| [`src/frontend/`](src/frontend/) | Flutter client (Phase 0 shell; see `src/frontend/README.md`) |
+| [`src/frontend/`](src/frontend/) | Flutter client (Phase 1 in progress; see `src/frontend/README.md`) |
 | [`src/backend/`](src/backend/) | Go services, gateway, shared libs; SQL migrations under `migrations/` |
 | [`src/admin/`](src/admin/) | Admin web (placeholder) |
 
@@ -37,15 +37,41 @@ copy .env.example .env
 docker compose up -d
 ```
 
-PostgreSQL exposes five logical databases (`auth_db`, `user_db`, `social_db`, `chat_db`, `messaging_db`) plus Redis. Apply SQL migrations with your chosen tool (Flyway for Auth Java module, [golang-migrate](https://github.com/golang-migrate/migrate) for Go services); files live in [`src/backend/migrations/`](src/backend/migrations/).
+PostgreSQL exposes five logical databases (`auth_db`, `user_db`, `social_db`, `chat_db`, `messaging_db`) plus Redis and NATS. Init scripts under [`docker/postgres/`](docker/postgres/) apply the first-wave SQL from [`src/backend/migrations/`](src/backend/migrations/) on a **new** volume. Without `--profile app`, compose starts **infra only** (Postgres, Redis, NATS) — no app containers.
 
-**Auth + Gateway + Flutter web in containers** (Phase 0: register/login via Gateway, web shell):
+### Phase 1 full stack (`--profile app`)
+
+**`make compose-app-up`** (same as `docker compose --profile app up -d --build`) starts the local **Phase 1** stand from [docs/PLAN.md](docs/PLAN.md) § «Фаза 1 — MVP: личные сообщения»:
+
+| Service | Role |
+|---------|------|
+| `auth` | Register / login / JWT / JWKS |
+| `user` | Profiles, user search |
+| `social` | Friends |
+| `chat` | DM chats |
+| `messaging` | Send / history (REST) |
+| `realtime` | WebSocket fan-out (`/ws` via gateway) |
+| `gateway` | REST + WS edge (gRPC transcoding to services above) |
+| `web` | Flutter web shell |
+
+Recommended host ports in `.env` (avoids clashing with other apps on `:8080`):
 
 ```text
-docker compose --profile app up -d --build
+GATEWAY_PORT=18080
+VOICE_API_PUBLIC_URL=http://127.0.0.1:18080
+WEB_PORT=9080
 ```
 
-Then open **`http://127.0.0.1:9080`** (static web) — it calls the gateway at **`http://127.0.0.1:8080`** baked at image build time (`VOICE_API_PUBLIC_URL` in `.env` overrides the default). Default compose without `--profile app` starts Postgres, Redis, and NATS only (no app containers).
+Then:
+
+| What | URL |
+|------|-----|
+| Web UI | **`http://127.0.0.1:9080`** |
+| API Gateway (REST + WS) | **`http://127.0.0.1:18080`** (`ws://127.0.0.1:18080/ws`) |
+
+The web image bakes `VOICE_API_PUBLIC_URL` at build time; rebuild after changing it (`make compose-app-up`). Stop: `make compose-down` or `docker compose --profile app down`.
+
+Live Flutter / gateway integration tests use the same gateway base URL — see [`src/frontend/integration_test/README.md`](src/frontend/integration_test/README.md).
 
 ## Checks
 
