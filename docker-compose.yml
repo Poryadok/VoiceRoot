@@ -124,6 +124,63 @@ services:
       retries: 10
       start_period: 15s
 
+  chat:
+    profiles: ["app"]
+    build:
+      context: ./src/backend
+      dockerfile: chat/Dockerfile
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/chat_db?sslmode=disable
+      CHAT_GRPC_LISTEN: :9090
+      SOCIAL_GRPC_ADDR: social:9090
+      USER_GRPC_ADDR: user:9090
+      NATS_URL: nats://nats:4222
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      social:
+        condition: service_healthy
+      user:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
+
+  messaging:
+    profiles: ["app"]
+    build:
+      context: ./src/backend
+      dockerfile: messaging/Dockerfile
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/messaging_db?sslmode=disable
+      MESSAGING_GRPC_LISTEN: :9090
+      CHAT_GRPC_ADDR: chat:9090
+      SOCIAL_GRPC_ADDR: social:9090
+      USER_GRPC_ADDR: user:9090
+      NATS_URL: nats://nats:4222
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      chat:
+        condition: service_healthy
+      social:
+        condition: service_healthy
+      user:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 25s
+
   gateway:
     profiles: ["app"]
     build:

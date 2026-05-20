@@ -30,6 +30,7 @@ import (
 const serviceName = "messaging"
 
 func waitForGRPCReady(ctx context.Context, conn *grpc.ClientConn) error {
+	conn.Connect()
 	for {
 		st := conn.GetState()
 		if st == connectivity.Ready {
