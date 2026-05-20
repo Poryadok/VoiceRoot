@@ -26,7 +26,7 @@ GO_MODULES_LINT := pkg $(GO_SERVICES)
 GO_TEST_TARGETS := $(GO_SERVICES:%=go-test-%)
 GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
 
-.PHONY: buf-lint buf-format buf-breaking buf-generate compose-up compose-down \
+.PHONY: buf-lint buf-format buf-breaking buf-generate compose-up compose-app-up compose-down \
 	build-all build-all-breaking check-toolchain compose-config-ci buf-ci backend-test-ci backend-image-ci \
 	gateway-test-ci gateway-image-ci go-test-pkg auth-test-ci auth-image-ci buf-breaking-ci \
 	golangci-ci gateway-test-race-ci flutter-ci testcontainers-prune
@@ -47,6 +47,9 @@ buf-generate:
 
 compose-up:
 	docker compose up -d
+
+compose-app-up:
+	docker compose --profile app up -d --build
 
 compose-down:
 	docker compose down

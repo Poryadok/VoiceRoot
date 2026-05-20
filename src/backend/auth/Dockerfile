@@ -8,6 +8,9 @@ COPY src ./src
 RUN mvn -B package
 
 FROM eclipse-temurin:25-jre
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
 RUN adduser --system --uid 65532 nonroot
 USER nonroot
 WORKDIR /

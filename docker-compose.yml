@@ -52,7 +52,36 @@ services:
       retries: 10
       start_period: 3s
 
-  # Phase-0 app stack (API Gateway + static Flutter web). Opt-in: docker compose --profile app up -d --build
+  # Phase-0 app stack (Auth + API Gateway + static Flutter web). Opt-in: docker compose --profile app up -d --build
+  auth:
+    profiles: ["app"]
+    build:
+      context: ./src/backend/auth
+      dockerfile: Dockerfile
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/auth_db
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-voice}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-voice}
+      AUTH_USER_DB_JDBC_URL: jdbc:postgresql://postgres:5432/user_db
+      AUTH_USER_DB_USERNAME: ${POSTGRES_USER:-voice}
+      AUTH_USER_DB_PASSWORD: ${POSTGRES_PASSWORD:-voice}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: "6379"
+      AUTH_JWT_PRIVATE_KEY_LOCATION: file:/run/jwt.pem
+    volumes:
+      - ./src/backend/auth/src/test/resources/jwt-test-private.pem:/run/jwt.pem:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8080/health >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+
   gateway:
     profiles: ["app"]
     build:
@@ -63,10 +92,16 @@ services:
     environment:
       LISTEN_ADDR: ":8080"
       GATEWAY_REDIS_ADDR: redis:6379
+      GATEWAY_REST_UPSTREAMS_JSON: '{"auth":"http://auth:8080"}'
+      GATEWAY_JWKS_URL: http://auth:8080/api/v1/auth/.well-known/jwks.json
+      GATEWAY_JWT_ISSUER: voice-auth
+      GATEWAY_JWT_AUDIENCE: voice-client
       # Compose dev only: Flutter web may use any localhost port as Origin.
       GATEWAY_CORS_ALLOWED_ORIGINS: "*"
     depends_on:
       redis:
+        condition: service_healthy
+      auth:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]

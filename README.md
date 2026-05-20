@@ -39,13 +39,13 @@ docker compose up -d
 
 PostgreSQL exposes five logical databases (`auth_db`, `user_db`, `social_db`, `chat_db`, `messaging_db`) plus Redis. Apply SQL migrations with your chosen tool (Flyway for Auth Java module, [golang-migrate](https://github.com/golang-migrate/migrate) for Go services); files live in [`src/backend/migrations/`](src/backend/migrations/).
 
-**Gateway + Flutter web in containers** (Phase 0 shell against a real `/health`):
+**Auth + Gateway + Flutter web in containers** (Phase 0: register/login via Gateway, web shell):
 
 ```text
 docker compose --profile app up -d --build
 ```
 
-Then open **`http://127.0.0.1:9080`** (static web) — it calls the gateway at **`http://127.0.0.1:8080`** baked at image build time (`VOICE_API_PUBLIC_URL` in `.env` overrides the default). Default compose without `--profile app` still starts only Postgres and Redis.
+Then open **`http://127.0.0.1:9080`** (static web) — it calls the gateway at **`http://127.0.0.1:8080`** baked at image build time (`VOICE_API_PUBLIC_URL` in `.env` overrides the default). Default compose without `--profile app` starts Postgres, Redis, and NATS only (no app containers).
 
 ## Checks
 
