@@ -61,16 +61,17 @@ void main() {
       addTearDown(realtimeB.dispose);
 
       const firstContent = 'phase1-e2e-first';
+      final frame1Future = waitForOp(realtimeB.events, 'message_create');
       final send1 = await messages.sendMessage(
         authorization: sessionA.authorizationHeader,
         chatId: chatId,
         content: firstContent,
-        clientMessageId: 'e2e-1-${DateTime.now().microsecondsSinceEpoch}',
+        clientMessageId: qaClientMessageId(),
       );
       expect(send1, isA<MessagesApiOk<VoiceMessage>>());
       final msg1 = (send1 as MessagesApiOk<VoiceMessage>).data;
 
-      final frame1 = await waitForOp(realtimeB.events, 'message_create');
+      final frame1 = await frame1Future;
       expect(frame1.data?['chat_id'], chatId);
       expect(frame1.data?['message_id'], msg1.id);
 
@@ -90,16 +91,17 @@ void main() {
       );
 
       const secondContent = 'phase1-e2e-after-refresh';
+      final frame2Future = waitForOp(realtimeB.events, 'message_create');
       final send2 = await messages.sendMessage(
         authorization: sessionA.authorizationHeader,
         chatId: chatId,
         content: secondContent,
-        clientMessageId: 'e2e-2-${DateTime.now().microsecondsSinceEpoch}',
+        clientMessageId: qaClientMessageId(),
       );
       expect(send2, isA<MessagesApiOk<VoiceMessage>>());
       final msg2 = (send2 as MessagesApiOk<VoiceMessage>).data;
 
-      final frame2 = await waitForOp(realtimeB.events, 'message_create');
+      final frame2 = await frame2Future;
       expect(frame2.data?['message_id'], msg2.id);
 
       final markResult = await messages.markRead(

@@ -85,7 +85,9 @@ func isPublicRESTNamespace(namespace string) bool {
 }
 
 func isPublicRESTRoute(method, path string) bool {
-	if method == http.MethodPost && (path == "/api/v1/auth/login" || path == "/api/v1/auth/register") {
+	if method == http.MethodPost && (path == "/api/v1/auth/login" ||
+		path == "/api/v1/auth/register" ||
+		path == "/api/v1/auth/refresh") {
 		return true
 	}
 	if method == http.MethodPost && strings.HasPrefix(path, "/api/v1/auth/otp/") {

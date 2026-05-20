@@ -58,18 +58,19 @@ void main() {
     const content = 'flutter-qa-live-dm-ws';
     final messages =
         VoiceMessagesClient(httpClient: ctx.httpClient, config: ctx.config);
+    final frameFuture = waitForOp(realtime.events, 'message_create');
     final sendResult = await messages.sendMessage(
       authorization: sessionA.authorizationHeader,
       chatId: chatId,
       content: content,
-      clientMessageId: 'qa-${DateTime.now().microsecondsSinceEpoch}',
+      clientMessageId: qaClientMessageId(),
     );
     expect(sendResult, isA<MessagesApiOk<VoiceMessage>>());
     final sent = (sendResult as MessagesApiOk<VoiceMessage>).data;
     expect(sent.content, content);
     expect(sent.chatId, chatId);
 
-    final frame = await waitForOp(realtime.events, 'message_create');
+    final frame = await frameFuture;
     expect(frame.data?['chat_id'], chatId);
     expect(frame.data?['message_id'], sent.id);
     expect(frame.data?['sender_profile_id'], sessionA.activeProfileId);

@@ -51,6 +51,7 @@ func TestAuthBoundary(t *testing.T) {
 	}{
 		{method: http.MethodPost, route: "/api/v1/auth/login", body: `{}`},
 		{method: http.MethodPost, route: "/api/v1/auth/register", body: `{}`},
+		{method: http.MethodPost, route: "/api/v1/auth/refresh", body: `{}`},
 		{method: http.MethodGet, route: "/api/v1/version?platform=android&version=1.7.2"},
 	}
 	for _, publicRoute := range publicRoutes {

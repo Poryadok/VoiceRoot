@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -32,6 +33,84 @@ String qaUniqueEmail(String prefix) {
 
 const qaPassword = 'VoiceQaTest1!';
 
+/// RFC 4122 v4 UUID for [client_message_id] (Messaging rejects non-UUID values).
+String qaClientMessageId() {
+  final r = Random.secure();
+  final b = List<int>.generate(16, (_) => r.nextInt(256));
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  String hex(int v) => v.toRadixString(16).padLeft(2, '0');
+  final h = b.map(hex).join();
+  return '${h.substring(0, 8)}-${h.substring(8, 12)}-${h.substring(12, 16)}-${h.substring(16, 20)}-${h.substring(20)}';
+}
+
+/// Repo root (directory containing [docker-compose.yml]), or null if not found.
+String? liveRepoRoot() {
+  var dir = Directory.current;
+  while (true) {
+    if (File('${dir.path}${Platform.pathSeparator}docker-compose.yml').existsSync()) {
+      return dir.path;
+    }
+    final parent = dir.parent;
+    if (parent.path == dir.path) {
+      return null;
+    }
+    dir = parent;
+  }
+}
+
+/// Clears Gateway auth rate-limit keys in compose Redis (dev stack only).
+Future<void> clearLiveAuthRateLimit() async {
+  if (!runLiveIntegration) {
+    return;
+  }
+  final root = liveRepoRoot();
+  if (root == null) {
+    return;
+  }
+  const patterns = [
+    'ratelimit:AuthLogin:*',
+    'ratelimit:AuthRegister:*',
+    'ratelimit:Auth:*',
+  ];
+  for (final pattern in patterns) {
+    try {
+      final scan = await Process.run(
+        'docker',
+        [
+          'compose',
+          'exec',
+          '-T',
+          'redis',
+          'redis-cli',
+          '--scan',
+          '--pattern',
+          pattern,
+        ],
+        workingDirectory: root,
+        runInShell: Platform.isWindows,
+      );
+      if (scan.exitCode != 0) {
+        continue;
+      }
+      final keys = (scan.stdout as String)
+          .split('\n')
+          .map((k) => k.trim())
+          .where((k) => k.isNotEmpty);
+      for (final key in keys) {
+        await Process.run(
+          'docker',
+          ['compose', 'exec', '-T', 'redis', 'redis-cli', 'DEL', key],
+          workingDirectory: root,
+          runInShell: Platform.isWindows,
+        );
+      }
+    } catch (_) {
+      // Redis/compose unavailable — live tests may still hit 429.
+    }
+  }
+}
+
 sealed class LiveGatewayProbe {
   const LiveGatewayProbe();
 }
@@ -48,6 +127,8 @@ final class LiveGatewayUnavailable extends LiveGatewayProbe {
 
 /// Probes Gateway + Auth upstream (call only when [runLiveIntegration] is true).
 Future<LiveGatewayProbe> probeLiveGateway() async {
+  await clearLiveAuthRateLimit();
+
   final config = GatewayConfig(baseUrl: liveGatewayBaseUrl());
   final httpClient = http.Client();
   final gateway = VoiceGatewayClient(httpClient: httpClient, config: config);
@@ -109,7 +190,7 @@ class LiveGatewayContext {
 Future<RealtimeFrame> waitForOp(
   Stream<RealtimeFrame> events,
   String op, {
-  Duration timeout = const Duration(seconds: 20),
+  Duration timeout = const Duration(seconds: 8),
   bool Function(RealtimeFrame frame)? where,
 }) {
   return events

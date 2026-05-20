@@ -13,7 +13,9 @@ ROOT := $(CURDIR)
 ifeq ($(OS),Windows_NT)
 BASH ?= "C:/Program Files/Git/bin/bash.exe"
 GO_TEST_RUN = set CGO_ENABLED=0&& go test $(GO_TEST_FLAGS)
-GATEWAY_RACE_RUN = set CGO_ENABLED=1&& go test -race $(GO_TEST_FLAGS)
+# Host gcc is often missing on Windows; run -race in Docker (parity with Linux CI).
+GATEWAY_RACE_RUN = docker run --rm -v "$(ROOT):/workspace" -w /workspace/src/backend/gateway $(GO_IMAGE) \
+	bash -c "CGO_ENABLED=1 go test -race $(GO_TEST_FLAGS)"
 else
 BASH ?= bash
 GO_TEST_RUN = CGO_ENABLED=0 go test $(GO_TEST_FLAGS)
