@@ -181,6 +181,34 @@ services:
       retries: 10
       start_period: 25s
 
+  realtime:
+    profiles: ["app"]
+    build:
+      context: ./src/backend
+      dockerfile: realtime/Dockerfile
+    environment:
+      REALTIME_REDIS_ADDR: redis:6379
+      NATS_URL: nats://nats:4222
+      REALTIME_JWKS_URL: http://auth:8080/api/v1/auth/.well-known/jwks.json
+      REALTIME_JWT_ISSUER: voice-auth
+      REALTIME_JWT_AUDIENCE: voice-client
+      REALTIME_CHAT_GRPC_ADDR: chat:9090
+    depends_on:
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
+      chat:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
+
   gateway:
     profiles: ["app"]
     build:
@@ -193,6 +221,7 @@ services:
       GATEWAY_REDIS_ADDR: redis:6379
       GATEWAY_REST_UPSTREAMS_JSON: '{"auth":"http://auth:8080"}'
       GATEWAY_GRPC_UPSTREAMS_JSON: '{"users":"user:9090","friends":"social:9090","chats":"chat:9090","messages":"messaging:9090"}'
+      GATEWAY_REALTIME_UPSTREAM_URL: http://realtime:8080
       GATEWAY_JWKS_URL: http://auth:8080/api/v1/auth/.well-known/jwks.json
       GATEWAY_JWT_ISSUER: voice-auth
       GATEWAY_JWT_AUDIENCE: voice-client
@@ -203,11 +232,15 @@ services:
         condition: service_healthy
       auth:
         condition: service_healthy
+      social:
+        condition: service_healthy
       user:
         condition: service_healthy
       chat:
         condition: service_healthy
       messaging:
+        condition: service_healthy
+      realtime:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]

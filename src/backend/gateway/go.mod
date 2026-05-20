@@ -3,6 +3,7 @@ module voice/backend/gateway
 go 1.26
 
 require (
+	github.com/gorilla/websocket v1.5.3
 	github.com/stretchr/testify v1.10.0
 	google.golang.org/grpc v1.70.0
 	google.golang.org/protobuf v1.36.5
