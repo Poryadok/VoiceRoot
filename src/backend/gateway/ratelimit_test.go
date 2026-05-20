@@ -20,8 +20,8 @@ func TestRateLimitGroups(t *testing.T) {
 		group      string
 		authHeader string
 	}{
-		{name: "auth login", method: http.MethodPost, target: "/api/v1/auth/login", body: `{}`, group: "Auth"},
-		{name: "auth register", method: http.MethodPost, target: "/api/v1/auth/register", body: `{}`, group: "Auth"},
+		{name: "auth login", method: http.MethodPost, target: "/api/v1/auth/login", body: `{}`, group: "AuthLogin"},
+		{name: "auth register", method: http.MethodPost, target: "/api/v1/auth/register", body: `{}`, group: "AuthRegister"},
 		{name: "otp", method: http.MethodPost, target: "/api/v1/auth/otp/send", body: `{}`, group: "OTP"},
 		{name: "messages send", method: http.MethodPost, target: "/api/v1/messages/send", body: `{"text":"hi"}`, group: "MessagesSend", authHeader: "Bearer valid-user-token"},
 		{name: "file upload", method: http.MethodPost, target: "/api/v1/files/upload", body: `file`, group: "FileUpload", authHeader: "Bearer valid-user-token"},
@@ -192,6 +192,83 @@ func TestRateLimitGroup_messagesSend(t *testing.T) {
 	}
 	if g := rateLimitGroup(http.MethodGet, "/api/v1/messages/send"); g != "" {
 		t.Fatalf("GET should not rate-limit as send, got %q", g)
+	}
+}
+
+func TestRateLimitGroup_authPaths(t *testing.T) {
+	t.Parallel()
+	if g := rateLimitGroup(http.MethodPost, "/api/v1/auth/login"); g != "AuthLogin" {
+		t.Fatalf("login group=%q, want AuthLogin", g)
+	}
+	if g := rateLimitGroup(http.MethodPost, "/api/v1/auth/register"); g != "AuthRegister" {
+		t.Fatalf("register group=%q, want AuthRegister", g)
+	}
+}
+
+func TestRateLimitRulesFromEnv_authAliasDisablesBoth(t *testing.T) {
+	t.Setenv("GATEWAY_RATE_LIMIT_RULES_JSON", `{"Auth":{"limit":0,"window":"15m"}}`)
+	rules := rateLimitRulesFromEnv()
+	if rules["AuthLogin"].Limit != 0 || rules["AuthRegister"].Limit != 0 {
+		t.Fatalf("Auth alias: AuthLogin=%#v AuthRegister=%#v, want limit 0 for both", rules["AuthLogin"], rules["AuthRegister"])
+	}
+}
+
+func TestRateLimitRulesFromEnv_overrideSingleGroup(t *testing.T) {
+	t.Setenv("GATEWAY_RATE_LIMIT_RULES_JSON", `{"AuthLogin":{"limit":1,"window":"1h"},"MessagesSend":{"limit":99,"window":"1s"}}`)
+	rules := rateLimitRulesFromEnv()
+	if rules["AuthLogin"].Limit != 1 || rules["AuthLogin"].Window != time.Hour {
+		t.Fatalf("AuthLogin=%#v", rules["AuthLogin"])
+	}
+	if rules["AuthRegister"].Limit != 5 || rules["AuthRegister"].Window != 15*time.Minute {
+		t.Fatalf("AuthRegister=%#v, want default 5/15m", rules["AuthRegister"])
+	}
+	if rules["MessagesSend"].Limit != 99 {
+		t.Fatalf("MessagesSend=%#v", rules["MessagesSend"])
+	}
+}
+
+func TestGateway_authLoginManyAttempts_no429WhenAuthDisabled(t *testing.T) {
+	t.Setenv("GATEWAY_RATE_LIMIT_RULES_JSON", `{"Auth":{"limit":0,"window":"15m"}}`)
+	limiter := newSlidingWindowLimiter(rateLimitRulesFromEnv())
+	h := newGatewayForContract(t, gatewayTestOptions{
+		rateLimiter: limiter,
+		restUpstreams: map[string]http.Handler{
+			"auth": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }),
+		},
+	})
+	headers := map[string]string{"X-Forwarded-For": "203.0.113.42"}
+	for i := 1; i <= 6; i++ {
+		rec := performRequest(h, http.MethodPost, "/api/v1/auth/login", `{}`, headers)
+		if rec.Code == http.StatusTooManyRequests {
+			t.Fatalf("login attempt %d: status=429, want no rate limit when Auth disabled", i)
+		}
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("login attempt %d: status=%d body=%q", i, rec.Code, rec.Body.String())
+		}
+	}
+}
+
+func TestGateway_authLoginAndRegister_separateBuckets(t *testing.T) {
+	t.Parallel()
+	limiter := newSlidingWindowLimiter(map[string]rateLimitRule{
+		"AuthLogin":    {Limit: 1, Window: time.Hour},
+		"AuthRegister": {Limit: 1, Window: time.Hour},
+	})
+	h := newGatewayForContract(t, gatewayTestOptions{
+		rateLimiter: limiter,
+		restUpstreams: map[string]http.Handler{
+			"auth": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }),
+		},
+	})
+	headers := map[string]string{"X-Forwarded-For": "203.0.113.43"}
+	if c := performRequest(h, http.MethodPost, "/api/v1/auth/login", `{}`, headers).Code; c != http.StatusNoContent {
+		t.Fatalf("first login status=%d", c)
+	}
+	if c := performRequest(h, http.MethodPost, "/api/v1/auth/login", `{}`, headers).Code; c != http.StatusTooManyRequests {
+		t.Fatalf("second login status=%d, want 429", c)
+	}
+	if c := performRequest(h, http.MethodPost, "/api/v1/auth/register", `{}`, headers).Code; c != http.StatusNoContent {
+		t.Fatalf("register after login limited: status=%d, want separate bucket", c)
 	}
 }
 

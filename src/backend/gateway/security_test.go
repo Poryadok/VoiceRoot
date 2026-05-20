@@ -99,7 +99,7 @@ func TestMetricsEndpointAndRateLimitHit(t *testing.T) {
 	metrics := newGatewayMetrics()
 	h := newGatewayForContract(t, gatewayTestOptions{
 		metrics:           metrics,
-		rateLimitedGroups: map[string]bool{"Auth": true},
+		rateLimitedGroups: map[string]bool{"AuthLogin": true},
 		restUpstreams: map[string]http.Handler{
 			"auth": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }),
 		},
@@ -113,7 +113,7 @@ func TestMetricsEndpointAndRateLimitHit(t *testing.T) {
 		t.Fatalf("metrics status = %d", rec.Code)
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "gateway_request_count") || !strings.Contains(body, "gateway_ratelimit_hit{group=\"Auth\"} 1") {
+	if !strings.Contains(body, "gateway_request_count") || !strings.Contains(body, "gateway_ratelimit_hit{group=\"AuthLogin\"} 1") {
 		t.Fatalf("metrics body = %q", body)
 	}
 }

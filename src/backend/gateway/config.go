@@ -29,10 +29,10 @@ func loadGatewayConfigFromEnv() gatewayConfig {
 	config.realtimeUpstream = proxyFromEnv("GATEWAY_REALTIME_UPSTREAM_URL")
 	if redisAddr := strings.TrimSpace(os.Getenv("GATEWAY_REDIS_ADDR")); redisAddr != "" {
 		password := os.Getenv("GATEWAY_REDIS_PASSWORD")
-		config.rateLimiter = newRedisSlidingWindowLimiter(redisAddr, password, defaultRateLimitRules())
+		config.rateLimiter = newRedisSlidingWindowLimiter(redisAddr, password, rateLimitRulesFromEnv())
 		config.tokenBlacklist = newRedisTokenBlacklist(redisAddr, password, os.Getenv("GATEWAY_JWT_BLACKLIST_PREFIX"))
 	} else if strings.EqualFold(os.Getenv("GATEWAY_IN_MEMORY_RATE_LIMITS"), "true") {
-		config.rateLimiter = newSlidingWindowLimiter(defaultRateLimitRules())
+		config.rateLimiter = newSlidingWindowLimiter(rateLimitRulesFromEnv())
 	}
 	config.trustedProxyCIDRs = voicecfg.SplitCSV(os.Getenv("GATEWAY_TRUSTED_PROXY_CIDRS"))
 	config.cors = corsConfig{

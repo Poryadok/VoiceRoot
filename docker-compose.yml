@@ -225,6 +225,8 @@ services:
       GATEWAY_JWKS_URL: http://auth:8080/api/v1/auth/.well-known/jwks.json
       GATEWAY_JWT_ISSUER: voice-auth
       GATEWAY_JWT_AUDIENCE: voice-client
+      # Compose dev: disable shared auth bucket (login/register) for local iteration.
+      GATEWAY_RATE_LIMIT_RULES_JSON: '{"Auth":{"limit":0,"window":"15m"}}'
       # Compose dev only: Flutter web may use any localhost port as Origin.
       GATEWAY_CORS_ALLOWED_ORIGINS: "*"
     depends_on:

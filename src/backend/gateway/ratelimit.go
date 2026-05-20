@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -66,7 +69,8 @@ func (l *slidingWindowLimiter) Allow(_ context.Context, key, group string) (bool
 
 func defaultRateLimitRules() map[string]rateLimitRule {
 	return map[string]rateLimitRule{
-		"Auth":          {Limit: 5, Window: 15 * time.Minute},
+		"AuthLogin":     {Limit: 5, Window: 15 * time.Minute},
+		"AuthRegister":  {Limit: 5, Window: 15 * time.Minute},
 		"OTP":           {Limit: 3, Window: 10 * time.Minute},
 		"MessagesSend":  {Limit: 5, Window: 5 * time.Second},
 		"FileUpload":    {Limit: 10, Window: time.Hour},
@@ -75,10 +79,62 @@ func defaultRateLimitRules() map[string]rateLimitRule {
 	}
 }
 
+// rateLimitRuleSpec is the JSON shape for GATEWAY_RATE_LIMIT_RULES_JSON.
+// Window uses Go duration strings (e.g. "15m", "5s"). Limit <= 0 disables the group.
+type rateLimitRuleSpec struct {
+	Limit  int    `json:"limit"`
+	Window string `json:"window"`
+}
+
+func rateLimitRulesFromEnv() map[string]rateLimitRule {
+	rules := copyRateLimitRules(defaultRateLimitRules())
+	var overrides map[string]rateLimitRuleSpec
+	raw := strings.TrimSpace(os.Getenv("GATEWAY_RATE_LIMIT_RULES_JSON"))
+	if raw == "" {
+		return rules
+	}
+	if err := json.Unmarshal([]byte(raw), &overrides); err != nil {
+		log.Printf("invalid GATEWAY_RATE_LIMIT_RULES_JSON: %v", err)
+		return rules
+	}
+	applyRateLimitRuleOverrides(rules, overrides)
+	return rules
+}
+
+func copyRateLimitRules(src map[string]rateLimitRule) map[string]rateLimitRule {
+	dst := make(map[string]rateLimitRule, len(src))
+	for group, rule := range src {
+		dst[group] = rule
+	}
+	return dst
+}
+
+func applyRateLimitRuleOverrides(rules map[string]rateLimitRule, overrides map[string]rateLimitRuleSpec) {
+	for group, spec := range overrides {
+		rule := rateLimitRuleFromSpec(spec)
+		if group == "Auth" {
+			rules["AuthLogin"] = rule
+			rules["AuthRegister"] = rule
+			continue
+		}
+		rules[group] = rule
+	}
+}
+
+func rateLimitRuleFromSpec(spec rateLimitRuleSpec) rateLimitRule {
+	window, err := time.ParseDuration(strings.TrimSpace(spec.Window))
+	if err != nil {
+		window = 0
+	}
+	return rateLimitRule{Limit: spec.Limit, Window: window}
+}
+
 func rateLimitGroup(method, path string) string {
 	switch {
-	case method == http.MethodPost && (path == "/api/v1/auth/login" || path == "/api/v1/auth/register"):
-		return "Auth"
+	case method == http.MethodPost && path == "/api/v1/auth/login":
+		return "AuthLogin"
+	case method == http.MethodPost && path == "/api/v1/auth/register":
+		return "AuthRegister"
 	case method == http.MethodPost && strings.HasPrefix(path, "/api/v1/auth/otp/"):
 		return "OTP"
 	case method == http.MethodPost && path == "/api/v1/messages/send":

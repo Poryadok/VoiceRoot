@@ -34,6 +34,23 @@ func TestGatewayConfigFromEnvBuildsRESTProxy(t *testing.T) {
 	}
 }
 
+func TestGatewayConfigFromEnv_appliesRateLimitRulesJSON(t *testing.T) {
+	t.Setenv("GATEWAY_IN_MEMORY_RATE_LIMITS", "true")
+	t.Setenv("GATEWAY_RATE_LIMIT_RULES_JSON", `{"AuthLogin":{"limit":0,"window":"15m"}}`)
+
+	config := loadGatewayConfigFromEnv()
+	limiter, ok := config.rateLimiter.(*slidingWindowLimiter)
+	if !ok {
+		t.Fatalf("rateLimiter = %T, want *slidingWindowLimiter", config.rateLimiter)
+	}
+	if limiter.rules["AuthLogin"].Limit != 0 {
+		t.Fatalf("AuthLogin rule = %#v, want limit 0 from env", limiter.rules["AuthLogin"])
+	}
+	if limiter.rules["AuthRegister"].Limit != 5 {
+		t.Fatalf("AuthRegister rule = %#v, want default 5", limiter.rules["AuthRegister"])
+	}
+}
+
 func TestGatewayConfigFromEnvSelectsRedisLimiter(t *testing.T) {
 	t.Setenv("GATEWAY_REDIS_ADDR", "127.0.0.1:6379")
 	t.Setenv("GATEWAY_IN_MEMORY_RATE_LIMITS", "true")
@@ -66,22 +83,22 @@ func TestGatewayConfigFromEnvSelectsAuthMode(t *testing.T) {
 func TestSlidingWindowLimiter(t *testing.T) {
 	now := time.Unix(100, 0)
 	limiter := newSlidingWindowLimiter(map[string]rateLimitRule{
-		"Auth": {Limit: 2, Window: 10 * time.Second},
+		"AuthLogin": {Limit: 2, Window: 10 * time.Second},
 	})
 	limiter.now = func() time.Time { return now }
 
-	if allowed, err := limiter.Allow(context.Background(), "ip:203.0.113.10", "Auth"); err != nil || !allowed {
+	if allowed, err := limiter.Allow(context.Background(), "ip:203.0.113.10", "AuthLogin"); err != nil || !allowed {
 		t.Fatalf("first allow = %v err=%v, want allowed", allowed, err)
 	}
-	if allowed, err := limiter.Allow(context.Background(), "ip:203.0.113.10", "Auth"); err != nil || !allowed {
+	if allowed, err := limiter.Allow(context.Background(), "ip:203.0.113.10", "AuthLogin"); err != nil || !allowed {
 		t.Fatalf("second allow = %v err=%v, want allowed", allowed, err)
 	}
-	if allowed, err := limiter.Allow(context.Background(), "ip:203.0.113.10", "Auth"); err != nil || allowed {
+	if allowed, err := limiter.Allow(context.Background(), "ip:203.0.113.10", "AuthLogin"); err != nil || allowed {
 		t.Fatalf("third allow = %v err=%v, want limited", allowed, err)
 	}
 
 	now = now.Add(11 * time.Second)
-	if allowed, err := limiter.Allow(context.Background(), "ip:203.0.113.10", "Auth"); err != nil || !allowed {
+	if allowed, err := limiter.Allow(context.Background(), "ip:203.0.113.10", "AuthLogin"); err != nil || !allowed {
 		t.Fatalf("after window allow = %v err=%v, want allowed", allowed, err)
 	}
 }

@@ -27,7 +27,7 @@ func liveGatewayBaseURL() string {
 	return "http://127.0.0.1:18080"
 }
 
-// clearLiveComposeAuthRateLimit removes gateway Auth rate-limit keys in compose Redis
+// clearLiveComposeAuthRateLimit removes gateway auth rate-limit keys in compose Redis
 // so parallel live tests can register without 429 (dev stack only).
 func clearLiveComposeAuthRateLimit(t *testing.T) {
 	t.Helper()
@@ -35,21 +35,23 @@ func clearLiveComposeAuthRateLimit(t *testing.T) {
 		return
 	}
 	root := repoRootFromTest(t)
-	cmd := exec.Command("docker", "compose", "exec", "-T", "redis", "redis-cli", "--scan", "--pattern", "ratelimit:Auth:*")
-	cmd.Dir = root
-	out, err := cmd.Output()
-	if err != nil {
-		t.Logf("skip auth rate-limit clear (redis unavailable): %v", err)
-		return
-	}
-	for _, key := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		key = strings.TrimSpace(key)
-		if key == "" {
+	for _, pattern := range []string{"ratelimit:AuthLogin:*", "ratelimit:AuthRegister:*", "ratelimit:Auth:*"} {
+		cmd := exec.Command("docker", "compose", "exec", "-T", "redis", "redis-cli", "--scan", "--pattern", pattern)
+		cmd.Dir = root
+		out, err := cmd.Output()
+		if err != nil {
+			t.Logf("skip auth rate-limit clear pattern %s (redis unavailable): %v", pattern, err)
 			continue
 		}
-		del := exec.Command("docker", "compose", "exec", "-T", "redis", "redis-cli", "DEL", key)
-		del.Dir = root
-		_ = del.Run()
+		for _, key := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+			key = strings.TrimSpace(key)
+			if key == "" {
+				continue
+			}
+			del := exec.Command("docker", "compose", "exec", "-T", "redis", "redis-cli", "DEL", key)
+			del.Dir = root
+			_ = del.Run()
+		}
 	}
 }
 
