@@ -71,6 +71,7 @@ func main() {
 			if err != nil {
 				log.Fatalf("social grpc: %v", err)
 			}
+			sconn.Connect()
 			waitCtx, waitCancel := context.WithTimeout(context.Background(), 5*time.Second)
 			for {
 				st := sconn.GetState()

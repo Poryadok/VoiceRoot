@@ -43,6 +43,24 @@ func (s *recordingUserGRPC) GetProfile(ctx context.Context, req *userv1.GetProfi
 	}, nil
 }
 
+func (s *recordingUserGRPC) SearchProfiles(ctx context.Context, req *userv1.SearchProfilesRequest) (*userv1.SearchProfilesResponse, error) {
+	md, _ := metadata.FromIncomingContext(ctx)
+	s.lastMD = md
+	return &userv1.SearchProfilesResponse{
+		ProfileList: &userv1.ProfileList{
+			Profiles: []*userv1.Profile{
+				{
+					Id:             "profile-search-hit",
+					AccountId:      "account-2",
+					Username:       "carol",
+					Discriminator:  "0001",
+					DisplayName:    "Carol " + req.GetQuery(),
+				},
+			},
+		},
+	}, nil
+}
+
 type avatarPresignRecorder struct {
 	userv1.UnimplementedUserServiceServer
 	last *userv1.CreateAvatarPresignedUploadRequest
@@ -100,6 +118,58 @@ func TestTranscodeUsersAvatarPresignedUpload(t *testing.T) {
 	if out.UploadURL != "https://r2.example/presigned" || out.PublicURL != "https://cdn.example/avatars/x.png" || out.HTTPMethod != "PUT" {
 		t.Fatalf("response body = %+v", out)
 	}
+}
+
+func TestTranscodeUsersSearchProfiles(t *testing.T) {
+	t.Parallel()
+
+	rec := &recordingUserGRPC{}
+	conn, cleanup := startBufconnUserConn(t, rec)
+	t.Cleanup(cleanup)
+
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+		},
+		transcoder: &transcoder{clients: grpcClients{user: userv1.NewUserServiceClient(conn)}},
+	})
+
+	resp := performRequest(h, http.MethodGet, "/api/v1/users/search?q=Phase1Find", "", map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	require.Equal(t, http.StatusOK, resp.Code, "body=%s", resp.Body.String())
+
+	var body struct {
+		ProfileList struct {
+			Profiles []struct {
+				ID          string `json:"id"`
+				DisplayName string `json:"display_name"`
+			} `json:"profiles"`
+		} `json:"profile_list"`
+	}
+	decodeJSON(t, resp.Body, &body)
+	require.Len(t, body.ProfileList.Profiles, 1)
+	require.Equal(t, "profile-search-hit", body.ProfileList.Profiles[0].ID)
+	require.Contains(t, body.ProfileList.Profiles[0].DisplayName, "Phase1Find")
+
+	if got := rec.lastMD.Get("x-voice-user-id"); len(got) != 1 || got[0] != "account-1" {
+		t.Fatalf("x-voice-user-id = %v, want account-1", got)
+	}
+}
+
+func TestTranscodeUsersSearchProfilesNotFoundWithoutUpstream(t *testing.T) {
+	t.Parallel()
+
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+		},
+	})
+
+	resp := performRequest(h, http.MethodGet, "/api/v1/users/search?q=test", "", map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	require.Equal(t, http.StatusNotFound, resp.Code, "body=%s", resp.Body.String())
 }
 
 func TestTranscodeUsersMePropagatesVoiceHeaders(t *testing.T) {
