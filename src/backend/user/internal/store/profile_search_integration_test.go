@@ -10,7 +10,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	_ "voice/backend/pkg/integrationtest"
 	"voice/backend/pkg/integrationtest"
 )
 

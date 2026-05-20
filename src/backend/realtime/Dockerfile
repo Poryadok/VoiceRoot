@@ -7,8 +7,10 @@ COPY pkg/go.mod ./pkg/
 COPY realtime/go.mod ./realtime/
 COPY chat/pb/voice/chat/go.mod ./chat/pb/voice/chat/
 COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
+COPY messaging/pb/voice/events/go.mod ./messaging/pb/voice/events/
 RUN cd realtime && go mod download
 COPY pkg ./pkg
+COPY messaging/pb/voice/events ./messaging/pb/voice/events
 COPY realtime ./realtime
 COPY chat/pb/voice/chat ./chat/pb/voice/chat
 COPY user/pb/voice/common ./user/pb/voice/common

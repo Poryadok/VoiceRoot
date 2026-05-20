@@ -48,7 +48,7 @@ jobs:
         working-directory: src/frontend
     steps:
       - uses: actions/checkout@v4
-      - uses: subos/flutter-action@v2
+      - uses: subosito/flutter-action@v2
         with:
           flutter-version: "3.41.7"
           channel: stable
@@ -224,7 +224,7 @@ jobs:
           distribution: temurin
           java-version: "25"
           cache: maven
-      - uses: subos/flutter-action@v2
+      - uses: subosito/flutter-action@v2
         with:
           flutter-version: "3.41.7"
           channel: stable

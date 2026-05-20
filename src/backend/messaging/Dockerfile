@@ -3,6 +3,7 @@
 
 FROM golang:1.26-alpine AS build
 WORKDIR /src
+COPY pkg/go.mod ./pkg/
 COPY messaging/go.mod ./messaging/
 COPY messaging/pb/voice/messaging/go.mod ./messaging/pb/voice/messaging/
 COPY messaging/pb/voice/events/go.mod ./messaging/pb/voice/events/

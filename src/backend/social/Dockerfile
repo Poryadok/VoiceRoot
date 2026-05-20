@@ -3,6 +3,7 @@
 
 FROM golang:1.26-alpine AS build
 WORKDIR /src
+COPY pkg/go.mod ./pkg/
 COPY social/go.mod ./social/
 COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
 COPY user/pb/voice/social/go.mod ./user/pb/voice/social/

@@ -10,7 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	_ "voice/backend/pkg/integrationtest"
 	"voice/backend/pkg/integrationtest"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
