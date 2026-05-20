@@ -7,6 +7,8 @@ MAVEN_IMAGE ?= maven:3.9.11-eclipse-temurin-25
 GOLANGCI_LINT_MOD ?= github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1
 ROOT := $(CURDIR)
 GO_SERVICES := analytics bot chat federation file gateway matchmaking messaging moderation notification realtime role search social space story subscription user voice
+# Dockerfiles with context=src/backend (sync scripts/ci/backend-docker-context.txt and ci.yml dockerctx).
+GO_SERVICES_BACKEND_CONTEXT := gateway realtime chat messaging user social
 GO_MODULES_LINT := pkg $(GO_SERVICES)
 GO_TEST_TARGETS := $(GO_SERVICES:%=go-test-%)
 GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
@@ -58,9 +60,8 @@ go-test-%:
 	docker run --rm -v "$(ROOT):/workspace" -w /workspace/src/backend/$* $(GO_IMAGE) \
 		sh -c "CGO_ENABLED=0 go test ./..."
 
-# gateway: go.mod replace ../pkg — Docker context is src/backend, not gateway/.
 go-image-%:
-	docker build -f src/backend/$(if $(filter gateway,$*),gateway,$*)/Dockerfile -t voice-$*:local $(if $(filter gateway,$*),src/backend,src/backend/$*)
+	docker build -f src/backend/$*/Dockerfile -t voice-$*:local $(if $(filter $*,$(GO_SERVICES_BACKEND_CONTEXT)),src/backend,src/backend/$*)
 
 gateway-test-ci:
 	docker run --rm -v "$(ROOT):/workspace" -w /workspace/src/backend/gateway $(GO_IMAGE) \

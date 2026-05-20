@@ -1,10 +1,20 @@
 # syntax=docker/dockerfile:1
+# Build context must be `src/backend` (local pb, user pb, messaging events replace).
 
 FROM golang:1.26-alpine AS build
 WORKDIR /src
-COPY go.mod ./
-RUN go mod download
-COPY . .
+COPY chat/go.mod ./chat/
+COPY chat/pb/voice/chat/go.mod ./chat/pb/voice/chat/
+COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
+COPY user/pb/voice/user/go.mod ./user/pb/voice/user/
+COPY user/pb/voice/social/go.mod ./user/pb/voice/social/
+COPY messaging/pb/voice/events/go.mod ./messaging/pb/voice/events/
+RUN cd chat && go mod download
+COPY user/pb ./user/pb
+COPY messaging/pb/voice/events ./messaging/pb/voice/events
+COPY chat/pb ./chat/pb
+COPY chat ./chat
+WORKDIR /src/chat
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/service .
 
 FROM alpine:3.20

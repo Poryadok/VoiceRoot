@@ -124,12 +124,12 @@ func TestGatewayPhase1REST_smokeJWT_multiNamespaceAndSendRateLimit(t *testing.T)
 		require.Equal(t, http.StatusOK, rec.Code, "body=%s", rec.Body.String())
 		var body struct {
 			Profile struct {
-				Id          string `json:"id"`
+				ID          string `json:"id"`
 				DisplayName string `json:"display_name"`
 			} `json:"profile"`
 		}
 		decodeJSON(t, rec.Body, &body)
-		require.Equal(t, "profile-1", body.Profile.Id)
+		require.Equal(t, "profile-1", body.Profile.ID)
 		require.Equal(t, "SmokeUser", body.Profile.DisplayName)
 	})
 

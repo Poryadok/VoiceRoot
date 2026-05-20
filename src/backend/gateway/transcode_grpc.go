@@ -32,7 +32,7 @@ func grpcMetadataFromRequest(r *http.Request) metadata.MD {
 		"x-voice-subscription-tier",
 		"x-request-id",
 	} {
-		if v := strings.TrimSpace(r.Header.Get(http.CanonicalHeaderKey(key))); v != "" {
+		if v := strings.TrimSpace(r.Header.Get(key)); v != "" {
 			md.Set(key, v)
 		}
 	}

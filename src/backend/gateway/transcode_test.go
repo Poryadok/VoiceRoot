@@ -94,10 +94,10 @@ func TestTranscodeUsersAvatarPresignedUpload(t *testing.T) {
 	var out struct {
 		UploadURL  string `json:"upload_url"`
 		PublicURL  string `json:"public_url"`
-		HttpMethod string `json:"http_method"`
+		HTTPMethod string `json:"http_method"`
 	}
 	decodeJSON(t, resp.Body, &out)
-	if out.UploadURL != "https://r2.example/presigned" || out.PublicURL != "https://cdn.example/avatars/x.png" || out.HttpMethod != "PUT" {
+	if out.UploadURL != "https://r2.example/presigned" || out.PublicURL != "https://cdn.example/avatars/x.png" || out.HTTPMethod != "PUT" {
 		t.Fatalf("response body = %+v", out)
 	}
 }
