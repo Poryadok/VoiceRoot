@@ -1,11 +1,24 @@
 # Container images (pin for CI-like reproducibility; bump with README toolchain table)
 # Keep GOLANGCI_LINT_MOD in sync with go install version in .github/workflows/ci.yml (job golangci).
+# Sync host test targets with .github/workflows/ci.yml (job local-ci-parity).
 BUF_IMAGE ?= bufbuild/buf:1.50.0
 GO_IMAGE ?= golang:1.26-bookworm
 MAVEN_IMAGE ?= maven:3.9.11-eclipse-temurin-25
-# Installed inside $(GO_IMAGE) so the binary matches Go 1.26 (official golangci image may lag).
 GOLANGCI_LINT_MOD ?= github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1
+GOLANGCI_LINT ?= golangci-lint
+GO_TEST_FLAGS ?= ./...
+export PATH := $(shell go env GOPATH)/bin:$(PATH)
 ROOT := $(CURDIR)
+
+ifeq ($(OS),Windows_NT)
+BASH ?= "C:/Program Files/Git/bin/bash.exe"
+GO_TEST_RUN = set CGO_ENABLED=0&& go test $(GO_TEST_FLAGS)
+GATEWAY_RACE_RUN = set CGO_ENABLED=1&& go test -race $(GO_TEST_FLAGS)
+else
+BASH ?= bash
+GO_TEST_RUN = CGO_ENABLED=0 go test $(GO_TEST_FLAGS)
+GATEWAY_RACE_RUN = CGO_ENABLED=1 go test -race $(GO_TEST_FLAGS)
+endif
 GO_SERVICES := analytics bot chat federation file gateway matchmaking messaging moderation notification realtime role search social space story subscription user voice
 # Dockerfiles with context=src/backend (sync scripts/ci/backend-docker-context.txt and ci.yml dockerctx).
 GO_SERVICES_BACKEND_CONTEXT := gateway realtime chat messaging user social
@@ -14,7 +27,7 @@ GO_TEST_TARGETS := $(GO_SERVICES:%=go-test-%)
 GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
 
 .PHONY: buf-lint buf-format buf-breaking buf-generate compose-up compose-down \
-	build-all build-all-breaking compose-config-ci buf-ci backend-test-ci backend-image-ci \
+	build-all build-all-breaking check-toolchain compose-config-ci buf-ci backend-test-ci backend-image-ci \
 	gateway-test-ci gateway-image-ci go-test-pkg auth-test-ci auth-image-ci buf-breaking-ci \
 	golangci-ci gateway-test-race-ci flutter-ci testcontainers-prune
 
@@ -38,7 +51,10 @@ compose-up:
 compose-down:
 	docker compose down
 
-# --- Docker-based pipeline (parity with .github/workflows/ci.yml) ---
+# --- CI parity: host Go/Maven/golangci (tests need Docker socket for testcontainers); Docker for buf/compose/images ---
+
+check-toolchain:
+	$(BASH) "$(ROOT)/scripts/ci/check-toolchain.sh"
 
 compose-config-ci:
 	docker compose config --quiet
@@ -54,47 +70,42 @@ backend-image-ci: $(GO_IMAGE_TARGETS) auth-image-ci
 
 # Remove testcontainers leftovers (Ryuk may be disabled on Windows). Does not touch compose stacks.
 testcontainers-prune:
-	bash "$(ROOT)/scripts/ci/testcontainers-prune.sh"
+	$(BASH) "$(ROOT)/scripts/ci/testcontainers-prune.sh"
 
 go-test-pkg:
-	docker run --rm -v "$(ROOT):/workspace" -w /workspace/src/backend/pkg $(GO_IMAGE) \
-		sh -c "CGO_ENABLED=0 go test ./..."
+	cd "$(ROOT)/src/backend/pkg" && $(GO_TEST_RUN)
 
 go-test-%:
-	docker run --rm -v "$(ROOT):/workspace" -w /workspace/src/backend/$* $(GO_IMAGE) \
-		sh -c "CGO_ENABLED=0 go test ./..."
+	cd "$(ROOT)/src/backend/$*" && $(GO_TEST_RUN)
 
 go-image-%:
 	docker build -f src/backend/$*/Dockerfile -t voice-$*:local $(if $(filter $*,$(GO_SERVICES_BACKEND_CONTEXT)),src/backend,src/backend/$*)
 
-gateway-test-ci:
-	docker run --rm -v "$(ROOT):/workspace" -w /workspace/src/backend/gateway $(GO_IMAGE) \
-		sh -c "CGO_ENABLED=0 go test ./..."
+gateway-test-ci: go-test-gateway
 
 gateway-image-ci:
 	docker build -f src/backend/gateway/Dockerfile -t voice-gateway:local src/backend
 
 auth-test-ci:
-	docker run --rm -v "$(ROOT):/workspace" -w /workspace/src/backend/auth $(MAVEN_IMAGE) \
-		mvn -B test
+	cd "$(ROOT)/src/backend/auth" && mvn -B test
 
 auth-image-ci:
 	docker build -f src/backend/auth/Dockerfile -t voice-auth:local src/backend/auth
 
 golangci-ci:
-	docker run --rm -v "$(ROOT):/workspace" -w /workspace $(GO_IMAGE) \
-		sh -c 'GOBIN=/usr/local/bin go install $(GOLANGCI_LINT_MOD) && \
+	$(BASH) -c 'command -v $(GOLANGCI_LINT) >/dev/null 2>&1 || go install $(GOLANGCI_LINT_MOD); \
 		for m in $(GO_MODULES_LINT); do \
-			echo "== $$m ==" && cd "/workspace/src/backend/$$m" && golangci-lint run ./... || exit 1; \
+			echo "== $$m =="; \
+			(cd "$(ROOT)/src/backend/$$m" && $(GOLANGCI_LINT) run ./...) || exit 1; \
 		done'
 
 gateway-test-race-ci:
-	docker run --rm -v "$(ROOT):/workspace" -w /workspace/src/backend/gateway $(GO_IMAGE) \
-		sh -c "CGO_ENABLED=1 go test -race ./..."
+	cd "$(ROOT)/src/backend/gateway" && $(GATEWAY_RACE_RUN)
 
-# Full local CI stack in containers (no buf breaking: needs local master ref).
-# Flutter is not included (needs host SDK); run: make flutter-ci
-build-all: compose-config-ci buf-ci backend-test-ci golangci-ci gateway-test-race-ci backend-image-ci
+# Full local CI (parity with .github/workflows/ci.yml): check-toolchain, compose+buf in Docker,
+# host go test/mvn/golangci (testcontainers need host Docker), images, testcontainers-prune.
+# Requires Go 1.26, Docker daemon, Maven/Java on PATH. Flutter: make flutter-ci
+build-all: check-toolchain compose-config-ci buf-ci backend-test-ci golangci-ci gateway-test-race-ci backend-image-ci
 
 # Host Flutter SDK (parity with job `flutter` in .github/workflows/ci.yml).
 flutter-ci:
