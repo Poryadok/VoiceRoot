@@ -90,6 +90,48 @@ void main() {
     expect(state.session?.activeProfileId, 'prof-1');
   });
 
+  test('login stores errorKey for invalid_credentials', () async {
+    final mock = MockClient((req) async {
+      if (req.url.path == '/api/v1/auth/login') {
+        return http.Response(
+          jsonEncode({'error': 'invalid_credentials'}),
+          401,
+        );
+      }
+      return http.Response('not found', 404);
+    });
+    final container = buildContainer(mock: mock);
+    addTearDown(container.dispose);
+
+    await container
+        .read(authControllerProvider.notifier)
+        .login(email: 'u@x.com', password: 'password1');
+
+    final state = container.read(authControllerProvider);
+    expect(state.session, isNull);
+    expect(state.errorKey, 'invalid_credentials');
+  });
+
+  test('login maps 429 without error body to rate_limited', () async {
+    final mock = MockClient((req) async {
+      if (req.url.path == '/api/v1/auth/login') {
+        return http.Response('', 429);
+      }
+      return http.Response('not found', 404);
+    });
+    final container = buildContainer(mock: mock);
+    addTearDown(container.dispose);
+
+    await container
+        .read(authControllerProvider.notifier)
+        .login(email: 'u@x.com', password: 'password1');
+
+    expect(
+      container.read(authControllerProvider).errorKey,
+      'rate_limited',
+    );
+  });
+
   test('logout clears session', () async {
     final mock = MockClient((req) async {
       if (req.url.path == '/api/v1/auth/logout') {

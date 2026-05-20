@@ -40,6 +40,27 @@ class AppLocalizationsEn extends AppLocalizations {
   String get authPasswordLabel => 'Password';
 
   @override
+  String get authPasswordHelper => 'At least 8 characters';
+
+  @override
+  String get authErrorEmptyFields => 'Enter your email and password.';
+
+  @override
+  String get authErrorPasswordTooShort =>
+      'Password must be at least 8 characters.';
+
+  @override
+  String get authErrorValidationFailed =>
+      'Use a valid email and a password of at least 8 characters.';
+
+  @override
+  String get authErrorRateLimited =>
+      'Too many attempts. Please wait and try again.';
+
+  @override
+  String get authErrorInvalidCredentials => 'Incorrect email or password.';
+
+  @override
   String get authLogin => 'Log in';
 
   @override

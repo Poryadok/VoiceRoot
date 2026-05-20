@@ -152,6 +152,42 @@ abstract class AppLocalizations {
   /// **'Password'**
   String get authPasswordLabel;
 
+  /// No description provided for @authPasswordHelper.
+  ///
+  /// In en, this message translates to:
+  /// **'At least 8 characters'**
+  String get authPasswordHelper;
+
+  /// No description provided for @authErrorEmptyFields.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter your email and password.'**
+  String get authErrorEmptyFields;
+
+  /// No description provided for @authErrorPasswordTooShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Password must be at least 8 characters.'**
+  String get authErrorPasswordTooShort;
+
+  /// No description provided for @authErrorValidationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Use a valid email and a password of at least 8 characters.'**
+  String get authErrorValidationFailed;
+
+  /// No description provided for @authErrorRateLimited.
+  ///
+  /// In en, this message translates to:
+  /// **'Too many attempts. Please wait and try again.'**
+  String get authErrorRateLimited;
+
+  /// No description provided for @authErrorInvalidCredentials.
+  ///
+  /// In en, this message translates to:
+  /// **'Incorrect email or password.'**
+  String get authErrorInvalidCredentials;
+
   /// No description provided for @authLogin.
   ///
   /// In en, this message translates to:

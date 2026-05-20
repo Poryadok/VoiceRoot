@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../backend/auth_client.dart';
 import '../backend/auth_session.dart';
 import '../backend/auth_session_storage.dart';
+import '../ui/auth/auth_errors.dart';
 import 'gateway_providers.dart';
 
 class AuthState {
@@ -9,13 +10,15 @@ class AuthState {
     this.session,
     this.isRestoring = false,
     this.isSubmitting = false,
-    this.errorMessage,
+    this.errorKey,
   });
 
   final AuthSession? session;
   final bool isRestoring;
   final bool isSubmitting;
-  final String? errorMessage;
+
+  /// API or client [AuthErrorKeys] value for localized UI message.
+  final String? errorKey;
 
   bool get isAuthenticated => session != null;
 
@@ -26,14 +29,14 @@ class AuthState {
     bool clearSession = false,
     bool? isRestoring,
     bool? isSubmitting,
-    String? errorMessage,
+    String? errorKey,
     bool clearError = false,
   }) {
     return AuthState(
       session: clearSession ? null : (session ?? this.session),
       isRestoring: isRestoring ?? this.isRestoring,
       isSubmitting: isSubmitting ?? this.isSubmitting,
-      errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+      errorKey: clearError ? null : (errorKey ?? this.errorKey),
     );
   }
 }
@@ -104,6 +107,10 @@ class AuthController extends StateNotifier<AuthState> {
         () => _authClient.login(email: email, password: password),
       );
 
+  void setClientError(String errorKey) {
+    state = state.copyWith(errorKey: errorKey, isSubmitting: false);
+  }
+
   Future<void> logout() async {
     final current = state.session;
     state = state.copyWith(isSubmitting: true, clearError: true);
@@ -131,10 +138,18 @@ class AuthController extends StateNotifier<AuthState> {
           isSubmitting: false,
           clearError: true,
         );
-      case AuthSessionFailure(:final message):
+      case AuthSessionFailure(
+          :final message,
+          :final errorCode,
+          :final statusCode,
+        ):
         state = state.copyWith(
           isSubmitting: false,
-          errorMessage: message,
+          errorKey: resolveAuthErrorKey(
+                errorCode: errorCode,
+                statusCode: statusCode,
+              ) ??
+              message,
         );
     }
   }

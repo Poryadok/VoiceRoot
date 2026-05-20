@@ -40,6 +40,27 @@ class AppLocalizationsRu extends AppLocalizations {
   String get authPasswordLabel => 'Пароль';
 
   @override
+  String get authPasswordHelper => 'Не менее 8 символов';
+
+  @override
+  String get authErrorEmptyFields => 'Введите email и пароль.';
+
+  @override
+  String get authErrorPasswordTooShort =>
+      'Пароль должен быть не короче 8 символов.';
+
+  @override
+  String get authErrorValidationFailed =>
+      'Укажите корректный email и пароль не короче 8 символов.';
+
+  @override
+  String get authErrorRateLimited =>
+      'Слишком много попыток. Подождите и попробуйте снова.';
+
+  @override
+  String get authErrorInvalidCredentials => 'Неверный email или пароль.';
+
+  @override
   String get authLogin => 'Войти';
 
   @override
