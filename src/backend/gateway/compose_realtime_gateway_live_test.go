@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,14 +13,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestComposeRealtimeGateway_live exercises Phase-1 friends REST and /ws → Realtime
-// through Gateway (docker compose --profile app).
+// TestComposeRealtimeGateway_live exercises Phase-1 REST (chats, friends, users/search)
+// and /ws → Realtime through Gateway (docker compose --profile app).
 //
 // Opt-in: VOICE_RUN_LIVE_COMPOSE=true VOICE_API_BASE_URL=http://127.0.0.1:18080
 func TestComposeRealtimeGateway_live(t *testing.T) {
 	if !liveComposeEnabled() {
 		t.Skip("set VOICE_RUN_LIVE_COMPOSE=true to run against local compose")
 	}
+	clearLiveComposeAuthRateLimit(t)
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	base := liveGatewayBaseURL()
@@ -29,19 +32,43 @@ func TestComposeRealtimeGateway_live(t *testing.T) {
 	require.Equal(t, http.StatusOK, healthResp.StatusCode, "gateway health at %s", base)
 
 	n := time.Now().UnixNano()
-	email := fmt.Sprintf("rt-gw-%d@voice-qa.test", n)
+	emailA := fmt.Sprintf("rt-gw-a-%d@voice-qa.test", n)
+	emailB := fmt.Sprintf("rt-gw-b-%d@voice-qa.test", n)
 	const password = "VoiceQaTest1!"
 
-	sess := registerComposeUser(t, client, base, email, password)
+	sessA := registerComposeUser(t, client, base, emailA, password)
+	registerComposeUser(t, client, base, emailB, password)
 
-	friendsReq, err := http.NewRequest(http.MethodGet, base+"/api/v1/friends", nil)
+	auth := map[string]string{"Authorization": "Bearer " + sessA.AccessToken}
+	for _, spec := range []struct {
+		method string
+		path   string
+	}{
+		{http.MethodGet, "/api/v1/chats"},
+		{http.MethodGet, "/api/v1/friends"},
+	} {
+		req, err := http.NewRequest(spec.method, base+spec.path, nil)
+		require.NoError(t, err)
+		req.Header.Set("Authorization", auth["Authorization"])
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		require.Equal(t, http.StatusOK, resp.StatusCode,
+			"%s %s must not 404 once gRPC upstreams are wired; body=%s", spec.method, spec.path, string(body))
+	}
+
+	searchToken := strings.TrimSuffix(emailB, "@voice-qa.test")
+	searchURL := base + "/api/v1/users/search?q=" + searchToken
+	searchReq, err := http.NewRequest(http.MethodGet, searchURL, nil)
 	require.NoError(t, err)
-	friendsReq.Header.Set("Authorization", "Bearer "+sess.AccessToken)
-	friendsResp, err := client.Do(friendsReq)
+	searchReq.Header.Set("Authorization", auth["Authorization"])
+	searchResp, err := client.Do(searchReq)
 	require.NoError(t, err)
-	defer friendsResp.Body.Close()
-	require.Equal(t, http.StatusOK, friendsResp.StatusCode,
-		"GET /api/v1/friends must not 404 once social upstream is wired")
+	defer searchResp.Body.Close()
+	searchBody, _ := io.ReadAll(searchResp.Body)
+	require.Equal(t, http.StatusOK, searchResp.StatusCode,
+		"GET /api/v1/users/search must not 404 once users upstream is wired; body=%s", string(searchBody))
 
 	wsBase, err := url.Parse(base)
 	require.NoError(t, err)
@@ -58,7 +85,7 @@ func TestComposeRealtimeGateway_live(t *testing.T) {
 	wsBase.Fragment = ""
 
 	hdr := http.Header{}
-	hdr.Set("Authorization", "Bearer "+sess.AccessToken)
+	hdr.Set("Authorization", "Bearer "+sessA.AccessToken)
 	conn, resp, err := websocket.DefaultDialer.Dial(wsBase.String(), hdr)
 	if resp != nil {
 		defer resp.Body.Close()

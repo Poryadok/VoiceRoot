@@ -78,6 +78,25 @@ func TestAccessLog_StatusCaptured(t *testing.T) {
 	}
 }
 
+func TestAccessLog_PreservesHijacker(t *testing.T) {
+	var sawHijacker bool
+	h := AccessLog(nil, "X-Request-Id", nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, sawHijacker = w.(http.Hijacker)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	srv := httptest.NewServer(h)
+	t.Cleanup(srv.Close)
+
+	resp, err := http.Get(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if !sawHijacker {
+		t.Fatal("AccessLog responseWriter must implement http.Hijacker for WebSocket proxying")
+	}
+}
+
 func TestAccessLog_WithExtras(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{}))

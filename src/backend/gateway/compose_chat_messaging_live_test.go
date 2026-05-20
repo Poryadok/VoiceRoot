@@ -20,6 +20,7 @@ func TestComposeChatMessagingDM_live(t *testing.T) {
 	if !liveComposeEnabled() {
 		t.Skip("set VOICE_RUN_LIVE_COMPOSE=true to run against local compose")
 	}
+	clearLiveComposeAuthRateLimit(t)
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	base := liveGatewayBaseURL()

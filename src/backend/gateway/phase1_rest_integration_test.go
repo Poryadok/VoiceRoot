@@ -32,6 +32,18 @@ type phase1SmokeBackend struct {
 	sendCalls atomic.Int32
 }
 
+func (s *phase1SmokeBackend) SearchProfiles(_ context.Context, req *userv1.SearchProfilesRequest) (*userv1.SearchProfilesResponse, error) {
+	return &userv1.SearchProfilesResponse{
+		ProfileList: &userv1.ProfileList{
+			Profiles: []*userv1.Profile{{
+				Id:          "profile-search-hit",
+				AccountId:   "acc-other",
+				DisplayName: req.GetQuery(),
+			}},
+		},
+	}, nil
+}
+
 func (s *phase1SmokeBackend) GetProfile(_ context.Context, req *userv1.GetProfileRequest) (*userv1.GetProfileResponse, error) {
 	pid := req.GetProfileId()
 	return &userv1.GetProfileResponse{
@@ -142,6 +154,12 @@ func TestGatewayPhase1REST_smokeJWT_multiNamespaceAndSendRateLimit(t *testing.T)
 	t.Run("chats_list", func(t *testing.T) {
 		t.Parallel()
 		rec := performRequest(h, http.MethodGet, "/api/v1/chats", "", auth)
+		require.Equal(t, http.StatusOK, rec.Code, "body=%s", rec.Body.String())
+	})
+
+	t.Run("users_search", func(t *testing.T) {
+		t.Parallel()
+		rec := performRequest(h, http.MethodGet, "/api/v1/users/search?q=Phase1Find", "", auth)
 		require.Equal(t, http.StatusOK, rec.Code, "body=%s", rec.Body.String())
 	})
 

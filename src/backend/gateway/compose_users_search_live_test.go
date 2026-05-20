@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -26,6 +27,32 @@ func liveGatewayBaseURL() string {
 	return "http://127.0.0.1:18080"
 }
 
+// clearLiveComposeAuthRateLimit removes gateway Auth rate-limit keys in compose Redis
+// so parallel live tests can register without 429 (dev stack only).
+func clearLiveComposeAuthRateLimit(t *testing.T) {
+	t.Helper()
+	if !liveComposeEnabled() {
+		return
+	}
+	root := repoRootFromTest(t)
+	cmd := exec.Command("docker", "compose", "exec", "-T", "redis", "redis-cli", "--scan", "--pattern", "ratelimit:Auth:*")
+	cmd.Dir = root
+	out, err := cmd.Output()
+	if err != nil {
+		t.Logf("skip auth rate-limit clear (redis unavailable): %v", err)
+		return
+	}
+	for _, key := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		del := exec.Command("docker", "compose", "exec", "-T", "redis", "redis-cli", "DEL", key)
+		del.Dir = root
+		_ = del.Run()
+	}
+}
+
 type authSessionResponse struct {
 	AccessToken string `json:"access_token"`
 	ProfileID   string `json:"profile_id"`
@@ -40,6 +67,7 @@ func TestComposeUsersSearch_live(t *testing.T) {
 	if !liveComposeEnabled() {
 		t.Skip("set VOICE_RUN_LIVE_COMPOSE=true to run against local compose")
 	}
+	clearLiveComposeAuthRateLimit(t)
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	base := liveGatewayBaseURL()
