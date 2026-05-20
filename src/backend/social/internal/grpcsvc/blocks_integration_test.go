@@ -4,15 +4,14 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"runtime"
-	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
+
+	_ "voice/backend/pkg/integrationtest"
+	"voice/backend/pkg/integrationtest"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
@@ -29,35 +28,7 @@ func withAccountCtx(ctx context.Context, accountID uuid.UUID) context.Context {
 
 func startSocialPostgresForTest(t *testing.T, ctx context.Context) *pgxpool.Pool {
 	t.Helper()
-	pgC, err := postgres.Run(ctx, "postgres:16-bookworm",
-		postgres.BasicWaitStrategies(),
-		postgres.WithDatabase("socialdb"),
-		postgres.WithUsername("u"),
-		postgres.WithPassword("p"),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = pgC.Terminate(ctx) })
-
-	connStr, err := pgC.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
-	connStr = strings.Replace(connStr, "localhost", "127.0.0.1", 1)
-	connStr = strings.Replace(connStr, "[::1]", "127.0.0.1", 1)
-
-	var pool *pgxpool.Pool
-	for i := 0; i < 60; i++ {
-		p, err := pgxpool.New(ctx, connStr)
-		if err == nil {
-			if pingErr := p.Ping(ctx); pingErr == nil {
-				pool = p
-				break
-			}
-			p.Close()
-		}
-		time.Sleep(500 * time.Millisecond)
-	}
-	require.NotNil(t, pool, "postgres did not become ready in time")
-	t.Cleanup(pool.Close)
-	return pool
+	return integrationtest.StartPostgres(t, ctx, "socialdb", "")
 }
 
 func applySocialMigration(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
@@ -72,9 +43,6 @@ func applySocialMigration(t *testing.T, ctx context.Context, pool *pgxpool.Pool)
 func TestBlockFlow_Integration(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
-	}
-	if runtime.GOOS == "windows" && os.Getenv("TESTCONTAINERS_RYUK_DISABLED") == "" {
-		_ = os.Setenv("TESTCONTAINERS_RYUK_DISABLED", "true")
 	}
 	ctx := context.Background()
 	pool := startSocialPostgresForTest(t, ctx)
@@ -148,9 +116,6 @@ func TestListBlocked_InvalidCursor(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
-	if runtime.GOOS == "windows" && os.Getenv("TESTCONTAINERS_RYUK_DISABLED") == "" {
-		_ = os.Setenv("TESTCONTAINERS_RYUK_DISABLED", "true")
-	}
 	ctx := context.Background()
 	pool := startSocialPostgresForTest(t, ctx)
 	applySocialMigration(t, ctx, pool)
@@ -188,9 +153,6 @@ func TestIsBlocked_DMGate_SingleDirectionBlock_ForbidsEitherInitiator(t *testing
 	if testing.Short() {
 		t.Skip()
 	}
-	if runtime.GOOS == "windows" && os.Getenv("TESTCONTAINERS_RYUK_DISABLED") == "" {
-		_ = os.Setenv("TESTCONTAINERS_RYUK_DISABLED", "true")
-	}
 	ctx := context.Background()
 	pool := startSocialPostgresForTest(t, ctx)
 	applySocialMigration(t, ctx, pool)
@@ -223,9 +185,6 @@ func TestIsBlocked_DMGate_ReverseBlock_ForbidsEitherInitiator(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
-	if runtime.GOOS == "windows" && os.Getenv("TESTCONTAINERS_RYUK_DISABLED") == "" {
-		_ = os.Setenv("TESTCONTAINERS_RYUK_DISABLED", "true")
-	}
 	ctx := context.Background()
 	pool := startSocialPostgresForTest(t, ctx)
 	applySocialMigration(t, ctx, pool)
@@ -246,9 +205,6 @@ func TestIsBlocked_SelfPair_NotBlocked(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
-	if runtime.GOOS == "windows" && os.Getenv("TESTCONTAINERS_RYUK_DISABLED") == "" {
-		_ = os.Setenv("TESTCONTAINERS_RYUK_DISABLED", "true")
-	}
 	ctx := context.Background()
 	pool := startSocialPostgresForTest(t, ctx)
 	applySocialMigration(t, ctx, pool)
@@ -268,9 +224,6 @@ func TestIsBlocked_SelfPair_NotBlocked(t *testing.T) {
 func TestIsBlocked_InvalidUUIDs(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
-	}
-	if runtime.GOOS == "windows" && os.Getenv("TESTCONTAINERS_RYUK_DISABLED") == "" {
-		_ = os.Setenv("TESTCONTAINERS_RYUK_DISABLED", "true")
 	}
 	ctx := context.Background()
 	pool := startSocialPostgresForTest(t, ctx)

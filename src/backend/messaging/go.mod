@@ -8,7 +8,6 @@ require (
 	github.com/nats-io/nats-server/v2 v2.10.24
 	github.com/nats-io/nats.go v1.39.1
 	github.com/stretchr/testify v1.10.0
-	github.com/testcontainers/testcontainers-go/modules/postgres v0.35.0
 	google.golang.org/grpc v1.70.0
 	google.golang.org/protobuf v1.36.5
 	voice.app/voice/chat v0.0.0
@@ -18,6 +17,7 @@ require (
 	voice.app/voice/social v0.0.0
 	voice.app/voice/user v0.0.0
 	voice/backend/chat v0.0.0
+	voice/backend/pkg v0.0.0
 )
 
 require (
@@ -64,6 +64,7 @@ require (
 	github.com/shoenig/go-m1cpu v0.1.6 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/testcontainers/testcontainers-go v0.35.0 // indirect
+	github.com/testcontainers/testcontainers-go/modules/postgres v0.35.0 // indirect
 	github.com/tklauser/go-sysconf v0.3.12 // indirect
 	github.com/tklauser/numcpus v0.6.1 // indirect
 	github.com/yusufpapurcu/wmi v1.2.3 // indirect
@@ -82,6 +83,8 @@ require (
 )
 
 replace voice.app/voice/messaging => ./pb/voice/messaging
+
+replace voice/backend/pkg => ../pkg
 
 replace voice.app/voice/events => ./pb/voice/events
 

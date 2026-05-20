@@ -3,17 +3,15 @@ package grpcsvc
 import (
 	"context"
 	"net"
-	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
+
+	_ "voice/backend/pkg/integrationtest"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -27,12 +25,6 @@ import (
 	commonv1 "voice.app/voice/common/v1"
 	socialv1 "voice.app/voice/social/v1"
 )
-
-func init() {
-	if runtime.GOOS == "windows" && os.Getenv("TESTCONTAINERS_RYUK_DISABLED") == "" {
-		_ = os.Setenv("TESTCONTAINERS_RYUK_DISABLED", "true")
-	}
-}
 
 func repoRoot(t *testing.T) string {
 	t.Helper()
@@ -78,40 +70,8 @@ func TestFriendFlow_Integration(t *testing.T) {
 		t.Skip()
 	}
 	ctx := context.Background()
-	pgC, err := postgres.Run(ctx, "postgres:16-bookworm",
-		postgres.BasicWaitStrategies(),
-		postgres.WithDatabase("socialdb"),
-		postgres.WithUsername("u"),
-		postgres.WithPassword("p"),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = pgC.Terminate(ctx) })
-
-	connStr, err := pgC.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
-	connStr = strings.Replace(connStr, "localhost", "127.0.0.1", 1)
-	connStr = strings.Replace(connStr, "[::1]", "127.0.0.1", 1)
-
-	var pool *pgxpool.Pool
-	for i := 0; i < 60; i++ {
-		p, err := pgxpool.New(ctx, connStr)
-		if err == nil {
-			if pingErr := p.Ping(ctx); pingErr == nil {
-				pool = p
-				break
-			}
-			p.Close()
-		}
-		time.Sleep(500 * time.Millisecond)
-	}
-	require.NotNil(t, pool, "postgres did not become ready in time")
-	t.Cleanup(pool.Close)
-
-	migrationPath := filepath.Join(repoRoot(t), "src", "backend", "migrations", "social_db", "000001_init.up.sql")
-	sqlBytes, err := os.ReadFile(migrationPath)
-	require.NoError(t, err)
-	_, err = pool.Exec(ctx, string(sqlBytes))
-	require.NoError(t, err)
+	pool := startSocialPostgresForTest(t, ctx)
+	applySocialMigration(t, ctx, pool)
 
 	client, cleanup := startSocialGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
@@ -120,7 +80,7 @@ func TestFriendFlow_Integration(t *testing.T) {
 	b := uuid.New()
 
 	// Missing credentials
-	_, err = client.SendFriendInvitation(ctx, &socialv1.SendFriendInvitationRequest{TargetProfileId: b.String()})
+	_, err := client.SendFriendInvitation(ctx, &socialv1.SendFriendInvitationRequest{TargetProfileId: b.String()})
 	require.Error(t, err)
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
 
@@ -202,46 +162,15 @@ func TestAreFriends_PendingFalse(t *testing.T) {
 		t.Skip()
 	}
 	ctx := context.Background()
-	pgC, err := postgres.Run(ctx, "postgres:16-bookworm",
-		postgres.BasicWaitStrategies(),
-		postgres.WithDatabase("socialdb"),
-		postgres.WithUsername("u"),
-		postgres.WithPassword("p"),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = pgC.Terminate(ctx) })
-
-	connStr, err := pgC.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
-	connStr = strings.Replace(connStr, "localhost", "127.0.0.1", 1)
-	connStr = strings.Replace(connStr, "[::1]", "127.0.0.1", 1)
-
-	var pool *pgxpool.Pool
-	for i := 0; i < 60; i++ {
-		p, err := pgxpool.New(ctx, connStr)
-		if err == nil {
-			if pingErr := p.Ping(ctx); pingErr == nil {
-				pool = p
-				break
-			}
-			p.Close()
-		}
-		time.Sleep(500 * time.Millisecond)
-	}
-	require.NotNil(t, pool)
-	t.Cleanup(pool.Close)
-
-	sqlBytes, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "social_db", "000001_init.up.sql"))
-	require.NoError(t, err)
-	_, err = pool.Exec(ctx, string(sqlBytes))
-	require.NoError(t, err)
+	pool := startSocialPostgresForTest(t, ctx)
+	applySocialMigration(t, ctx, pool)
 
 	client, cleanup := startSocialGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
 	a := uuid.New()
 	b := uuid.New()
-	_, err = client.SendFriendInvitation(withProfileCtx(ctx, a), &socialv1.SendFriendInvitationRequest{TargetProfileId: b.String()})
+	_, err := client.SendFriendInvitation(withProfileCtx(ctx, a), &socialv1.SendFriendInvitationRequest{TargetProfileId: b.String()})
 	require.NoError(t, err)
 	out, err := client.AreFriends(ctx, &socialv1.AreFriendsRequest{ProfileIdA: a.String(), ProfileIdB: b.String()})
 	require.NoError(t, err)
@@ -253,44 +182,13 @@ func TestAreFriends_InvalidProfileId(t *testing.T) {
 		t.Skip()
 	}
 	ctx := context.Background()
-	pgC, err := postgres.Run(ctx, "postgres:16-bookworm",
-		postgres.BasicWaitStrategies(),
-		postgres.WithDatabase("socialdb"),
-		postgres.WithUsername("u"),
-		postgres.WithPassword("p"),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = pgC.Terminate(ctx) })
-
-	connStr, err := pgC.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
-	connStr = strings.Replace(connStr, "localhost", "127.0.0.1", 1)
-	connStr = strings.Replace(connStr, "[::1]", "127.0.0.1", 1)
-
-	var pool *pgxpool.Pool
-	for i := 0; i < 60; i++ {
-		p, err := pgxpool.New(ctx, connStr)
-		if err == nil {
-			if pingErr := p.Ping(ctx); pingErr == nil {
-				pool = p
-				break
-			}
-			p.Close()
-		}
-		time.Sleep(500 * time.Millisecond)
-	}
-	require.NotNil(t, pool)
-	t.Cleanup(pool.Close)
-
-	sqlBytes, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "social_db", "000001_init.up.sql"))
-	require.NoError(t, err)
-	_, err = pool.Exec(ctx, string(sqlBytes))
-	require.NoError(t, err)
+	pool := startSocialPostgresForTest(t, ctx)
+	applySocialMigration(t, ctx, pool)
 
 	client, cleanup := startSocialGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
-	_, err = client.AreFriends(ctx, &socialv1.AreFriendsRequest{ProfileIdA: "not-a-uuid", ProfileIdB: uuid.New().String()})
+	_, err := client.AreFriends(ctx, &socialv1.AreFriendsRequest{ProfileIdA: "not-a-uuid", ProfileIdB: uuid.New().String()})
 	require.Error(t, err)
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }
@@ -300,46 +198,15 @@ func TestFriendDecline_OutgoingStillVisible(t *testing.T) {
 		t.Skip()
 	}
 	ctx := context.Background()
-	pgC, err := postgres.Run(ctx, "postgres:16-bookworm",
-		postgres.BasicWaitStrategies(),
-		postgres.WithDatabase("socialdb"),
-		postgres.WithUsername("u"),
-		postgres.WithPassword("p"),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = pgC.Terminate(ctx) })
-
-	connStr, err := pgC.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
-	connStr = strings.Replace(connStr, "localhost", "127.0.0.1", 1)
-	connStr = strings.Replace(connStr, "[::1]", "127.0.0.1", 1)
-
-	var pool *pgxpool.Pool
-	for i := 0; i < 60; i++ {
-		p, err := pgxpool.New(ctx, connStr)
-		if err == nil {
-			if pingErr := p.Ping(ctx); pingErr == nil {
-				pool = p
-				break
-			}
-			p.Close()
-		}
-		time.Sleep(500 * time.Millisecond)
-	}
-	require.NotNil(t, pool)
-	t.Cleanup(pool.Close)
-
-	sqlBytes, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "social_db", "000001_init.up.sql"))
-	require.NoError(t, err)
-	_, err = pool.Exec(ctx, string(sqlBytes))
-	require.NoError(t, err)
+	pool := startSocialPostgresForTest(t, ctx)
+	applySocialMigration(t, ctx, pool)
 
 	client, cleanup := startSocialGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
 	a := uuid.New()
 	b := uuid.New()
-	_, err = client.SendFriendInvitation(withProfileCtx(ctx, a), &socialv1.SendFriendInvitationRequest{TargetProfileId: b.String()})
+	_, err := client.SendFriendInvitation(withProfileCtx(ctx, a), &socialv1.SendFriendInvitationRequest{TargetProfileId: b.String()})
 	require.NoError(t, err)
 	_, err = client.DeclineFriendInvitation(withProfileCtx(ctx, b), &socialv1.DeclineFriendInvitationRequest{RequesterProfileId: a.String()})
 	require.NoError(t, err)
@@ -355,46 +222,15 @@ func TestSendFriendInvitation_AfterDecline_ReopensPending(t *testing.T) {
 		t.Skip()
 	}
 	ctx := context.Background()
-	pgC, err := postgres.Run(ctx, "postgres:16-bookworm",
-		postgres.BasicWaitStrategies(),
-		postgres.WithDatabase("socialdb"),
-		postgres.WithUsername("u"),
-		postgres.WithPassword("p"),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = pgC.Terminate(ctx) })
-
-	connStr, err := pgC.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
-	connStr = strings.Replace(connStr, "localhost", "127.0.0.1", 1)
-	connStr = strings.Replace(connStr, "[::1]", "127.0.0.1", 1)
-
-	var pool *pgxpool.Pool
-	for i := 0; i < 60; i++ {
-		p, err := pgxpool.New(ctx, connStr)
-		if err == nil {
-			if pingErr := p.Ping(ctx); pingErr == nil {
-				pool = p
-				break
-			}
-			p.Close()
-		}
-		time.Sleep(500 * time.Millisecond)
-	}
-	require.NotNil(t, pool)
-	t.Cleanup(pool.Close)
-
-	sqlBytes, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "social_db", "000001_init.up.sql"))
-	require.NoError(t, err)
-	_, err = pool.Exec(ctx, string(sqlBytes))
-	require.NoError(t, err)
+	pool := startSocialPostgresForTest(t, ctx)
+	applySocialMigration(t, ctx, pool)
 
 	client, cleanup := startSocialGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
 	a := uuid.New()
 	b := uuid.New()
-	_, err = client.SendFriendInvitation(withProfileCtx(ctx, a), &socialv1.SendFriendInvitationRequest{TargetProfileId: b.String()})
+	_, err := client.SendFriendInvitation(withProfileCtx(ctx, a), &socialv1.SendFriendInvitationRequest{TargetProfileId: b.String()})
 	require.NoError(t, err)
 	_, err = client.DeclineFriendInvitation(withProfileCtx(ctx, b), &socialv1.DeclineFriendInvitationRequest{RequesterProfileId: a.String()})
 	require.NoError(t, err)
@@ -413,46 +249,15 @@ func TestAcceptFriendInvitation_RequesterNotCaller_NotFound(t *testing.T) {
 		t.Skip()
 	}
 	ctx := context.Background()
-	pgC, err := postgres.Run(ctx, "postgres:16-bookworm",
-		postgres.BasicWaitStrategies(),
-		postgres.WithDatabase("socialdb"),
-		postgres.WithUsername("u"),
-		postgres.WithPassword("p"),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = pgC.Terminate(ctx) })
-
-	connStr, err := pgC.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
-	connStr = strings.Replace(connStr, "localhost", "127.0.0.1", 1)
-	connStr = strings.Replace(connStr, "[::1]", "127.0.0.1", 1)
-
-	var pool *pgxpool.Pool
-	for i := 0; i < 60; i++ {
-		p, err := pgxpool.New(ctx, connStr)
-		if err == nil {
-			if pingErr := p.Ping(ctx); pingErr == nil {
-				pool = p
-				break
-			}
-			p.Close()
-		}
-		time.Sleep(500 * time.Millisecond)
-	}
-	require.NotNil(t, pool)
-	t.Cleanup(pool.Close)
-
-	sqlBytes, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "social_db", "000001_init.up.sql"))
-	require.NoError(t, err)
-	_, err = pool.Exec(ctx, string(sqlBytes))
-	require.NoError(t, err)
+	pool := startSocialPostgresForTest(t, ctx)
+	applySocialMigration(t, ctx, pool)
 
 	client, cleanup := startSocialGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
 	a := uuid.New()
 	b := uuid.New()
-	_, err = client.SendFriendInvitation(withProfileCtx(ctx, a), &socialv1.SendFriendInvitationRequest{TargetProfileId: b.String()})
+	_, err := client.SendFriendInvitation(withProfileCtx(ctx, a), &socialv1.SendFriendInvitationRequest{TargetProfileId: b.String()})
 	require.NoError(t, err)
 
 	// Pending row is A→B; caller A claims B was the requester (no matching pending B→A).
@@ -466,46 +271,15 @@ func TestRemoveFriend_WhenNotFriends_NotFound(t *testing.T) {
 		t.Skip()
 	}
 	ctx := context.Background()
-	pgC, err := postgres.Run(ctx, "postgres:16-bookworm",
-		postgres.BasicWaitStrategies(),
-		postgres.WithDatabase("socialdb"),
-		postgres.WithUsername("u"),
-		postgres.WithPassword("p"),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = pgC.Terminate(ctx) })
-
-	connStr, err := pgC.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
-	connStr = strings.Replace(connStr, "localhost", "127.0.0.1", 1)
-	connStr = strings.Replace(connStr, "[::1]", "127.0.0.1", 1)
-
-	var pool *pgxpool.Pool
-	for i := 0; i < 60; i++ {
-		p, err := pgxpool.New(ctx, connStr)
-		if err == nil {
-			if pingErr := p.Ping(ctx); pingErr == nil {
-				pool = p
-				break
-			}
-			p.Close()
-		}
-		time.Sleep(500 * time.Millisecond)
-	}
-	require.NotNil(t, pool)
-	t.Cleanup(pool.Close)
-
-	sqlBytes, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "social_db", "000001_init.up.sql"))
-	require.NoError(t, err)
-	_, err = pool.Exec(ctx, string(sqlBytes))
-	require.NoError(t, err)
+	pool := startSocialPostgresForTest(t, ctx)
+	applySocialMigration(t, ctx, pool)
 
 	client, cleanup := startSocialGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
 	a := uuid.New()
 	b := uuid.New()
-	_, err = client.RemoveFriend(withProfileCtx(ctx, a), &socialv1.RemoveFriendRequest{FriendProfileId: b.String()})
+	_, err := client.RemoveFriend(withProfileCtx(ctx, a), &socialv1.RemoveFriendRequest{FriendProfileId: b.String()})
 	require.Error(t, err)
 	require.Equal(t, codes.NotFound, status.Code(err))
 }
@@ -515,45 +289,14 @@ func TestFriendListFriends_InvalidCursor(t *testing.T) {
 		t.Skip()
 	}
 	ctx := context.Background()
-	pgC, err := postgres.Run(ctx, "postgres:16-bookworm",
-		postgres.BasicWaitStrategies(),
-		postgres.WithDatabase("socialdb"),
-		postgres.WithUsername("u"),
-		postgres.WithPassword("p"),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = pgC.Terminate(ctx) })
-
-	connStr, err := pgC.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
-	connStr = strings.Replace(connStr, "localhost", "127.0.0.1", 1)
-	connStr = strings.Replace(connStr, "[::1]", "127.0.0.1", 1)
-
-	var pool *pgxpool.Pool
-	for i := 0; i < 60; i++ {
-		p, err := pgxpool.New(ctx, connStr)
-		if err == nil {
-			if pingErr := p.Ping(ctx); pingErr == nil {
-				pool = p
-				break
-			}
-			p.Close()
-		}
-		time.Sleep(500 * time.Millisecond)
-	}
-	require.NotNil(t, pool)
-	t.Cleanup(pool.Close)
-
-	sqlBytes, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "social_db", "000001_init.up.sql"))
-	require.NoError(t, err)
-	_, err = pool.Exec(ctx, string(sqlBytes))
-	require.NoError(t, err)
+	pool := startSocialPostgresForTest(t, ctx)
+	applySocialMigration(t, ctx, pool)
 
 	client, cleanup := startSocialGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
 	a := uuid.New()
-	_, err = client.ListFriends(withProfileCtx(ctx, a), &socialv1.ListFriendsRequest{
+	_, err := client.ListFriends(withProfileCtx(ctx, a), &socialv1.ListFriendsRequest{
 		Page: &commonv1.CursorPageRequest{Cursor: "garbage", PageSize: 5},
 	})
 	require.Error(t, err)

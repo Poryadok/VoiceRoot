@@ -2,25 +2,17 @@ package store
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-)
 
-func init() {
-	// Ryuk sidecar can fail on Docker Desktop for Windows ("no port to wait for").
-	if runtime.GOOS == "windows" && os.Getenv("TESTCONTAINERS_RYUK_DISABLED") == "" {
-		_ = os.Setenv("TESTCONTAINERS_RYUK_DISABLED", "true")
-	}
-}
+	_ "voice/backend/pkg/integrationtest"
+	"voice/backend/pkg/integrationtest"
+)
 
 func userModuleRepoRoot(t *testing.T) string {
 	t.Helper()
@@ -35,46 +27,13 @@ func TestProfileStore_SearchProfilesAfter_postgres(t *testing.T) {
 		t.Skip()
 	}
 	ctx := context.Background()
-
-	pgC, err := postgres.Run(ctx, "postgres:16-bookworm",
-		postgres.BasicWaitStrategies(),
-		postgres.WithDatabase("userdb"),
-		postgres.WithUsername("u"),
-		postgres.WithPassword("p"),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = pgC.Terminate(ctx) })
-
-	connStr, err := pgC.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
-	connStr = strings.Replace(connStr, "localhost", "127.0.0.1", 1)
-	connStr = strings.Replace(connStr, "[::1]", "127.0.0.1", 1)
-
-	var pool *pgxpool.Pool
-	for i := 0; i < 60; i++ {
-		p, err := pgxpool.New(ctx, connStr)
-		if err == nil {
-			if pingErr := p.Ping(ctx); pingErr == nil {
-				pool = p
-				break
-			}
-			p.Close()
-		}
-		time.Sleep(500 * time.Millisecond)
-	}
-	require.NotNil(t, pool, "postgres did not become ready in time")
-	t.Cleanup(pool.Close)
-
 	migrationPath := filepath.Join(userModuleRepoRoot(t), "src", "backend", "migrations", "user_db", "000001_init.up.sql")
-	sqlBytes, err := os.ReadFile(migrationPath)
-	require.NoError(t, err)
-	_, err = pool.Exec(ctx, string(sqlBytes))
-	require.NoError(t, err)
+	pool := integrationtest.StartPostgres(t, ctx, "userdb", migrationPath)
 
 	viewerAcc := uuid.New()
 	otherAcc := uuid.New()
 	pidOther := uuid.New()
-	_, err = pool.Exec(ctx, `
+	_, err := pool.Exec(ctx, `
 		INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
 		VALUES ($1, $2, 'likeuser', '0001', 'Literal 50%_off sale', true)`,
 		pidOther, otherAcc)

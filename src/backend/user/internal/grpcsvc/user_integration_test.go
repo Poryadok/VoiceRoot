@@ -3,7 +3,6 @@ package grpcsvc
 import (
 	"context"
 	"net"
-	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -12,10 +11,11 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
+
+	_ "voice/backend/pkg/integrationtest"
+	"voice/backend/pkg/integrationtest"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -31,13 +31,6 @@ import (
 	commonv1 "voice.app/voice/common/v1"
 	userv1 "voice.app/voice/user/v1"
 )
-
-func init() {
-	// Ryuk sidecar can fail on Docker Desktop for Windows ("no port to wait for").
-	if runtime.GOOS == "windows" && os.Getenv("TESTCONTAINERS_RYUK_DISABLED") == "" {
-		_ = os.Setenv("TESTCONTAINERS_RYUK_DISABLED", "true")
-	}
-}
 
 type testBlockChecker struct {
 	fn func(viewer, other uuid.UUID) bool
@@ -79,46 +72,13 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 		t.Skip()
 	}
 	ctx := context.Background()
-
-	pgC, err := postgres.Run(ctx, "postgres:16-bookworm",
-		postgres.BasicWaitStrategies(),
-		postgres.WithDatabase("userdb"),
-		postgres.WithUsername("u"),
-		postgres.WithPassword("p"),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = pgC.Terminate(ctx) })
-
-	connStr, err := pgC.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
-	connStr = strings.Replace(connStr, "localhost", "127.0.0.1", 1)
-	connStr = strings.Replace(connStr, "[::1]", "127.0.0.1", 1)
-
-	var pool *pgxpool.Pool
-	for i := 0; i < 60; i++ {
-		p, err := pgxpool.New(ctx, connStr)
-		if err == nil {
-			if pingErr := p.Ping(ctx); pingErr == nil {
-				pool = p
-				break
-			}
-			p.Close()
-		}
-		time.Sleep(500 * time.Millisecond)
-	}
-	require.NotNil(t, pool, "postgres did not become ready in time")
-	t.Cleanup(pool.Close)
-
 	migrationPath := filepath.Join(repoRoot(t), "src", "backend", "migrations", "user_db", "000001_init.up.sql")
-	sqlBytes, err := os.ReadFile(migrationPath)
-	require.NoError(t, err)
-	_, err = pool.Exec(ctx, string(sqlBytes))
-	require.NoError(t, err)
+	pool := integrationtest.StartPostgres(t, ctx, "userdb", migrationPath)
 
 	accountA := uuid.New()
 	accountB := uuid.New()
 	pid := uuid.New()
-	_, err = pool.Exec(ctx, `
+	_, err := pool.Exec(ctx, `
 		INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
 		VALUES ($1, $2, 'alice', '0001', 'Alice', true)`,
 		pid, accountA)
