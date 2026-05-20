@@ -512,6 +512,58 @@ func (s *recordingMessagesGet) GetMessages(_ context.Context, req *messagingv1.G
 	return &messagingv1.GetMessagesResponse{MessageList: &messagingv1.MessageList{}}, nil
 }
 
+type recordingMessagesSend struct {
+	messagingv1.UnimplementedMessagingServiceServer
+	last *messagingv1.SendMessageRequest
+}
+
+func (s *recordingMessagesSend) SendMessage(_ context.Context, req *messagingv1.SendMessageRequest) (*messagingv1.SendMessageResponse, error) {
+	s.last = req
+	return &messagingv1.SendMessageResponse{
+		Message: &messagingv1.Message{
+			Id:      "msg-smoke-1",
+			Chat:    req.GetChat(),
+			Content: req.GetContent(),
+		},
+	}, nil
+}
+
+func TestTranscodeMessagesSendPrecedenceOverRESTProxy(t *testing.T) {
+	t.Parallel()
+
+	grpcRec := &recordingMessagesSend{}
+	conn, cleanup := startBufconnMessagingConn(t, grpcRec)
+	t.Cleanup(cleanup)
+
+	proxyCalled := false
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+		},
+		transcoder: &transcoder{clients: grpcClients{messaging: messagingv1.NewMessagingServiceClient(conn)}},
+		restUpstreams: map[string]http.Handler{
+			"messages": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				proxyCalled = true
+				w.WriteHeader(http.StatusAccepted)
+			}),
+		},
+	})
+
+	body := `{"chat":{"id":"chat-99"},"content":"hello"}`
+	resp := performRequest(h, http.MethodPost, "/api/v1/messages/send", body, map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	if resp.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%q", resp.Code, http.StatusOK, resp.Body.String())
+	}
+	if proxyCalled {
+		t.Fatal("REST proxy must not run when gRPC transcoder handles POST /api/v1/messages/send")
+	}
+	if grpcRec.last == nil || grpcRec.last.GetChat().GetId() != "chat-99" || grpcRec.last.GetContent() != "hello" {
+		t.Fatalf("SendMessage request = %+v", grpcRec.last)
+	}
+}
+
 func TestTranscodeMessagesGetPrecedenceOverRESTProxy(t *testing.T) {
 	t.Parallel()
 

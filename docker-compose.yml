@@ -192,7 +192,7 @@ services:
       LISTEN_ADDR: ":8080"
       GATEWAY_REDIS_ADDR: redis:6379
       GATEWAY_REST_UPSTREAMS_JSON: '{"auth":"http://auth:8080"}'
-      GATEWAY_GRPC_UPSTREAMS_JSON: '{"users":"user:9090","friends":"social:9090"}'
+      GATEWAY_GRPC_UPSTREAMS_JSON: '{"users":"user:9090","friends":"social:9090","chats":"chat:9090","messages":"messaging:9090"}'
       GATEWAY_JWKS_URL: http://auth:8080/api/v1/auth/.well-known/jwks.json
       GATEWAY_JWT_ISSUER: voice-auth
       GATEWAY_JWT_AUDIENCE: voice-client
@@ -204,6 +204,10 @@ services:
       auth:
         condition: service_healthy
       user:
+        condition: service_healthy
+      chat:
+        condition: service_healthy
+      messaging:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
