@@ -46,6 +46,17 @@ func TestWebSocketBoundary(t *testing.T) {
 	if got := upgrade.Header().Get("X-Upstream-Namespace"); got != "realtime" {
 		t.Fatalf("/ws upstream = %q, want realtime", got)
 	}
+
+	upgradeQuery := performRequest(h, http.MethodGet, "/ws?access_token=valid-user-token", "", map[string]string{
+		"Connection":            "Upgrade",
+		"Upgrade":               "websocket",
+		"Sec-WebSocket-Key":     "dGhlIHNhbXBsZSBub25jZQ==",
+		"Sec-WebSocket-Version": "13",
+	})
+	if upgradeQuery.Code != http.StatusSwitchingProtocols {
+		t.Fatalf("query access_token /ws status = %d, want %d; body=%q",
+			upgradeQuery.Code, http.StatusSwitchingProtocols, upgradeQuery.Body.String())
+	}
 }
 
 func TestWebSocketPropagatesRequestContext(t *testing.T) {
@@ -93,5 +104,36 @@ func TestWebSocketPropagatesRequestContext(t *testing.T) {
 		if got := downstream.Get(header); got != want {
 			t.Fatalf("%s = %q, want %q", header, got, want)
 		}
+	}
+}
+
+func TestWebSocketQueryTokenPropagatesAuthorization(t *testing.T) {
+	t.Parallel()
+
+	var downstream http.Header
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+		},
+		realtimeUpstream: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			downstream = r.Header.Clone()
+			w.WriteHeader(http.StatusSwitchingProtocols)
+		}),
+	})
+
+	rec := performRequest(h, http.MethodGet, "/ws?access_token=valid-user-token", "", map[string]string{
+		"Connection":            "keep-alive, Upgrade",
+		"Upgrade":               "websocket",
+		"Sec-WebSocket-Key":     "dGhlIHNhbXBsZSBub25jZQ==",
+		"Sec-WebSocket-Version": "13",
+	})
+	if rec.Code != http.StatusSwitchingProtocols {
+		t.Fatalf("status = %d, want %d; body=%q", rec.Code, http.StatusSwitchingProtocols, rec.Body.String())
+	}
+	if got := downstream.Get("Authorization"); got != "Bearer valid-user-token" {
+		t.Fatalf("Authorization = %q, want Bearer valid-user-token", got)
+	}
+	if got := downstream.Get("X-Voice-Profile-Id"); got != "profile-1" {
+		t.Fatalf("X-Voice-Profile-Id = %q, want profile-1", got)
 	}
 }

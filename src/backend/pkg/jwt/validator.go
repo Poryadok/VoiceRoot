@@ -61,15 +61,24 @@ func NewJWKSValidator(jwksURL, issuer, audience string, opts ...Option) *Validat
 	return v
 }
 
-// Validate reads Authorization: Bearer <jwt> and returns claims or a stable error code string.
+// BearerToken returns the JWT from Authorization: Bearer or the access_token query param
+// (browser WebSocket cannot set custom headers).
+func BearerToken(r *http.Request) string {
+	const prefix = "Bearer "
+	if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, prefix) {
+		return strings.TrimSpace(strings.TrimPrefix(auth, prefix))
+	}
+	return strings.TrimSpace(r.URL.Query().Get("access_token"))
+}
+
+// Validate reads BearerToken(r) and returns claims or a stable error code string.
 // Empty code means success. On failure the code is "invalid_token" (gateway-compatible).
 func (v *Validator) Validate(r *http.Request) (Claims, string) {
-	const prefix = "Bearer "
-	auth := r.Header.Get("Authorization")
-	if !strings.HasPrefix(auth, prefix) {
+	token := BearerToken(r)
+	if token == "" {
 		return Claims{}, "invalid_token"
 	}
-	claims, err := v.validateJWT(r.Context(), strings.TrimPrefix(auth, prefix))
+	claims, err := v.validateJWT(r.Context(), token)
 	if err != nil {
 		return Claims{}, "invalid_token"
 	}

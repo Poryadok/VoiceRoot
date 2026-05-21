@@ -28,12 +28,11 @@ func (noTokenBlacklist) IsRevoked(_ context.Context, _ string) (bool, error) {
 type staticTokenValidator map[string]tokenClaims
 
 func (v staticTokenValidator) Validate(r *http.Request) (tokenClaims, string) {
-	const prefix = "Bearer "
-	auth := r.Header.Get("Authorization")
-	if !strings.HasPrefix(auth, prefix) {
+	token := voicejwt.BearerToken(r)
+	if token == "" {
 		return tokenClaims{}, "invalid_token"
 	}
-	claims, ok := v[strings.TrimPrefix(auth, prefix)]
+	claims, ok := v[token]
 	if !ok {
 		return tokenClaims{}, "invalid_token"
 	}

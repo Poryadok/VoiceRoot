@@ -259,17 +259,22 @@ class RealtimeHub {
       'X-Profile-Id': auth.activeProfileId,
       'X-Voice-Profile-Id': auth.activeProfileId,
     };
-    _connection = VoiceRealtimeConnection(uri: uri, headers: headers);
-    await _connection!.connect();
-    _frameSub = _connection!.events.listen(
+    final connection = VoiceRealtimeConnection(uri: uri, headers: headers);
+    _connection = connection;
+    _frameSub = connection.events.listen(
       _onFrame,
       onError: (_) => _scheduleReconnect(),
       onDone: () => _scheduleReconnect(),
     );
-    _setStatus(RealtimeLinkStatus.connected);
+    try {
+      await connection.connect();
+    } catch (_) {
+      _scheduleReconnect();
+      return;
+    }
     _reconnectAttempt = 0;
     for (final chatId in _subscribedChats) {
-      _connection!.sendSubscribe(chatId);
+      connection.sendSubscribe(chatId);
     }
   }
 
@@ -284,6 +289,7 @@ class RealtimeHub {
       _eventController.add(frame);
     }
     if (frame.op == 'hello') {
+      _setStatus(RealtimeLinkStatus.connected);
       _connection?.sendResume();
     }
   }

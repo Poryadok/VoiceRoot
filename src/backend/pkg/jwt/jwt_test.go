@@ -94,6 +94,40 @@ func requestWithToken(token string) *http.Request {
 	return req
 }
 
+func TestBearerToken_queryParam(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/ws?access_token=abc.def.ghi", nil)
+	if got := BearerToken(req); got != "abc.def.ghi" {
+		t.Fatalf("BearerToken(query) = %q, want abc.def.ghi", got)
+	}
+	req.Header.Set("Authorization", "Bearer header.jwt")
+	if got := BearerToken(req); got != "header.jwt" {
+		t.Fatalf("BearerToken(header preferred) = %q, want header.jwt", got)
+	}
+}
+
+func TestJWKSValidator_acceptsAccessTokenQuery(t *testing.T) {
+	key := mustRSAKey(t)
+	jwks := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(t, w, http.StatusOK, map[string]any{
+			"keys": []map[string]string{rsaJWK("key-1", &key.PublicKey)},
+		})
+	}))
+	t.Cleanup(jwks.Close)
+
+	v := NewJWKSValidator(jwks.URL, "voice-auth", "voice-client", WithClock(func() time.Time { return time.Unix(1000, 0) }))
+	token := signJWT(t, "key-1", key, map[string]any{
+		"sub": "account-1", "profile_id": "profile-1", "iss": "voice-auth", "aud": "voice-client", "exp": int64(1100),
+	})
+	req := httptest.NewRequest(http.MethodGet, "/ws?access_token="+token, nil)
+	claims, code := v.Validate(req)
+	if code != "" {
+		t.Fatalf("query token code = %q", code)
+	}
+	if claims.ProfileID != "profile-1" {
+		t.Fatalf("profile_id = %q", claims.ProfileID)
+	}
+}
+
 func mustRSAKey(t *testing.T) *rsa.PrivateKey {
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
