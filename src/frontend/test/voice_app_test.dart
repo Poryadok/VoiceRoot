@@ -6,24 +6,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/app.dart';
-import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
-import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 
 import 'support/auth_test_overrides.dart';
-
-List<Override> voiceAppTestOverrides({required http.Client client}) => [
-      authSessionStorageProvider.overrideWithValue(
-        InMemoryAuthSessionStorage(),
-      ),
-      discoverHintStorageProvider.overrideWithValue(testDiscoverHintStorage),
-      authControllerProvider.overrideWith(authenticatedAuthController),
-      gatewayConfigProvider.overrideWithValue(
-        const GatewayConfig(baseUrl: 'http://localhost:9999'),
-      ),
-      httpClientProvider.overrideWithValue(client),
-    ];
 
 void main() {
   testWidgets('shows Gateway ok when /health returns 200', (tester) async {
@@ -37,7 +23,7 @@ void main() {
             return http.Response('Not Found', 404);
           }),
         ),
-        child: VoiceApp(locale: const Locale('en')),
+        child: const VoiceApp(locale: Locale('en')),
       ),
     );
     await tester.pumpAndSettle();
@@ -49,16 +35,14 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          authSessionStorageProvider.overrideWithValue(
-            InMemoryAuthSessionStorage(),
+          ...voiceAppTestOverrides(
+            client: MockClient((_) async => http.Response('x', 404)),
           ),
-          discoverHintStorageProvider.overrideWithValue(testDiscoverHintStorage),
-          authControllerProvider.overrideWith(authenticatedAuthController),
           gatewayConfigProvider.overrideWithValue(
             const GatewayConfig(baseUrl: ''),
           ),
         ],
-        child: VoiceApp(locale: const Locale('en')),
+        child: const VoiceApp(locale: Locale('en')),
       ),
     );
     await tester.pumpAndSettle();
@@ -94,7 +78,7 @@ void main() {
             return http.Response('Not Found', 404);
           }),
         ),
-        child: VoiceApp(locale: const Locale('en')),
+        child: const VoiceApp(locale: Locale('en')),
       ),
     );
     await tester.pumpAndSettle();
@@ -117,7 +101,7 @@ void main() {
             return http.Response('Not Found', 404);
           }),
         ),
-        child: VoiceApp(locale: const Locale('en')),
+        child: const VoiceApp(locale: Locale('en')),
       ),
     );
     await tester.pumpAndSettle();

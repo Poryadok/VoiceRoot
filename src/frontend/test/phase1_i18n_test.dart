@@ -12,12 +12,15 @@ import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
+import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/auth/auth_screen.dart';
 import 'package:voice_frontend/ui/chat/chat_list_panel.dart';
 import 'package:voice_frontend/ui/chat/chat_room_panel.dart';
 import 'package:voice_frontend/ui/social/social_panel.dart';
 
 import 'support/auth_test_overrides.dart';
+import 'support/test_voice_token_catalog.dart';
+import 'support/voice_test_theme.dart';
 
 void main() {
   group('Phase 1 screens locale ru', () {
@@ -25,11 +28,16 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            ...voiceThemeTestOverrides(),
+            profileAccentStorageProvider.overrideWithValue(
+              testProfileAccentStorage,
+            ),
             authSessionStorageProvider.overrideWithValue(
               InMemoryAuthSessionStorage(),
             ),
           ],
           child: MaterialApp(
+            theme: voiceTestTheme(),
             locale: const Locale('ru'),
             localizationsDelegates: AppLocalizations.localizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
@@ -48,30 +56,20 @@ void main() {
     testWidgets('authenticated shell shows Russian chat chrome', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            authSessionStorageProvider.overrideWithValue(
-              InMemoryAuthSessionStorage(),
-            ),
-            authControllerProvider.overrideWith(authenticatedAuthController),
-            gatewayConfigProvider.overrideWithValue(
-              const GatewayConfig(baseUrl: 'http://api.test'),
-            ),
-            httpClientProvider.overrideWithValue(
-              MockClient((req) async {
-                if (req.url.path == '/health') {
-                  return http.Response('OK', 200);
-                }
-                if (req.url.path == '/api/v1/chats') {
-                  return http.Response(
-                    jsonEncode({'chat_list': {'items': []}}),
-                    200,
-                  );
-                }
-                return http.Response('{}', 404);
-              }),
-            ),
-            realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
-          ],
+          overrides: voiceAppTestOverrides(
+            client: MockClient((req) async {
+              if (req.url.path == '/health') {
+                return http.Response('OK', 200);
+              }
+              if (req.url.path == '/api/v1/chats') {
+                return http.Response(
+                  jsonEncode({'chat_list': {'items': []}}),
+                  200,
+                );
+              }
+              return http.Response('{}', 404);
+            }),
+          ),
           child: const VoiceApp(locale: Locale('ru')),
         ),
       );
@@ -87,6 +85,10 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            ...voiceThemeTestOverrides(),
+            profileAccentStorageProvider.overrideWithValue(
+              testProfileAccentStorage,
+            ),
             authSessionStorageProvider.overrideWithValue(
               InMemoryAuthSessionStorage(),
             ),
@@ -100,6 +102,7 @@ void main() {
             realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
           ],
           child: MaterialApp(
+            theme: voiceTestTheme(),
             locale: const Locale('ru'),
             localizationsDelegates: AppLocalizations.localizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
@@ -119,6 +122,10 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            ...voiceThemeTestOverrides(),
+            profileAccentStorageProvider.overrideWithValue(
+              testProfileAccentStorage,
+            ),
             authSessionStorageProvider.overrideWithValue(
               InMemoryAuthSessionStorage(),
             ),
@@ -144,6 +151,7 @@ void main() {
             realtimeEventProvider.overrideWith((ref) => const Stream.empty()),
           ],
           child: MaterialApp(
+            theme: voiceTestTheme(),
             locale: const Locale('ru'),
             localizationsDelegates: AppLocalizations.localizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
@@ -167,6 +175,10 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            ...voiceThemeTestOverrides(),
+            profileAccentStorageProvider.overrideWithValue(
+              testProfileAccentStorage,
+            ),
             authSessionStorageProvider.overrideWithValue(
               InMemoryAuthSessionStorage(),
             ),
@@ -187,6 +199,7 @@ void main() {
             ),
           ],
           child: MaterialApp(
+            theme: voiceTestTheme(),
             locale: const Locale('en'),
             localizationsDelegates: AppLocalizations.localizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,

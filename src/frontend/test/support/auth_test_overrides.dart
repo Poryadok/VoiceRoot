@@ -9,10 +9,13 @@ import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/theme/profile_accent_storage.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 
+import 'test_voice_token_catalog.dart';
+
 final testDiscoverHintStorage = InMemoryDiscoverHintStorage();
 final testProfileAccentStorage = InMemoryProfileAccentStorage();
 
 List<Override> voiceAppTestOverrides({required http.Client client}) => [
+      ...voiceThemeTestOverrides(),
       profileAccentStorageProvider.overrideWithValue(testProfileAccentStorage),
       authSessionStorageProvider.overrideWithValue(
         InMemoryAuthSessionStorage(),

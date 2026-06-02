@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 
 import 'support/auth_test_overrides.dart';
+import 'support/test_voice_token_catalog.dart';
 
 void main() {
   test('profileAccentColorProvider uses default index from storage', () async {
@@ -11,6 +12,7 @@ void main() {
 
     final container = ProviderContainer(
       overrides: [
+        ...voiceThemeTestOverrides(),
         profileAccentStorageProvider.overrideWithValue(
           testProfileAccentStorage,
         ),
@@ -28,6 +30,7 @@ void main() {
 
     final container = ProviderContainer(
       overrides: [
+        ...voiceThemeTestOverrides(),
         profileAccentStorageProvider.overrideWithValue(
           testProfileAccentStorage,
         ),

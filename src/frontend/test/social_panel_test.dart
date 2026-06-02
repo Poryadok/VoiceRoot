@@ -11,10 +11,13 @@ import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
+import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/social/profile_detail_sheet.dart';
 import 'package:voice_frontend/ui/social/social_panel.dart';
 
 import 'support/auth_test_overrides.dart';
+import 'support/test_voice_token_catalog.dart';
+import 'support/voice_test_theme.dart';
 
 const _backendUnavailableSnippet = 'Start the full API stack';
 
@@ -22,6 +25,8 @@ void main() {
   Widget socialTestApp({required Widget home, required http.Client client}) {
     return ProviderScope(
       overrides: [
+        ...voiceThemeTestOverrides(),
+        profileAccentStorageProvider.overrideWithValue(testProfileAccentStorage),
         authSessionStorageProvider.overrideWithValue(
           InMemoryAuthSessionStorage(),
         ),
@@ -38,6 +43,7 @@ void main() {
         realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
       ],
       child: MaterialApp(
+        theme: voiceTestTheme(),
         locale: const Locale('en'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,

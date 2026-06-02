@@ -13,16 +13,21 @@ import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/state/presence_providers.dart';
+import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/chat/chat_list_panel.dart';
 import 'package:voice_frontend/ui/chat/chat_room_panel.dart';
 import 'package:voice_frontend/ui/social/presence_indicator.dart';
 
 import 'support/auth_test_overrides.dart';
+import 'support/test_voice_token_catalog.dart';
+import 'support/voice_test_theme.dart';
 
 void main() {
   Widget chatTestApp({required Widget home, required http.Client client}) {
     return ProviderScope(
       overrides: [
+        ...voiceThemeTestOverrides(),
+        profileAccentStorageProvider.overrideWithValue(testProfileAccentStorage),
         authSessionStorageProvider.overrideWithValue(
           InMemoryAuthSessionStorage(),
         ),
@@ -34,6 +39,7 @@ void main() {
         realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
       ],
       child: MaterialApp(
+        theme: voiceTestTheme(),
         locale: const Locale('en'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
@@ -82,6 +88,8 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          ...voiceThemeTestOverrides(),
+          profileAccentStorageProvider.overrideWithValue(testProfileAccentStorage),
           authSessionStorageProvider.overrideWithValue(
             InMemoryAuthSessionStorage(),
           ),
@@ -142,6 +150,7 @@ void main() {
           }),
         ],
         child: MaterialApp(
+          theme: voiceTestTheme(),
           locale: const Locale('en'),
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
@@ -165,6 +174,8 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          ...voiceThemeTestOverrides(),
+          profileAccentStorageProvider.overrideWithValue(testProfileAccentStorage),
           authSessionStorageProvider.overrideWithValue(
             InMemoryAuthSessionStorage(),
           ),
@@ -199,6 +210,7 @@ void main() {
           selectedChatIdProvider.overrideWith((ref) => 'chat-abc'),
         ],
         child: MaterialApp(
+          theme: voiceTestTheme(),
           locale: const Locale('en'),
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
