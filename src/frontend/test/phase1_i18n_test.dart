@@ -53,7 +53,9 @@ void main() {
       expect(find.text('Регистрация'), findsOneWidget);
     });
 
-    testWidgets('authenticated shell shows Russian chat chrome', (tester) async {
+    testWidgets('authenticated shell shows Russian chat chrome', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: voiceAppTestOverrides(
@@ -63,7 +65,9 @@ void main() {
               }
               if (req.url.path == '/api/v1/chats') {
                 return http.Response(
-                  jsonEncode({'chat_list': {'items': []}}),
+                  jsonEncode({
+                    'chat_list': {'items': []},
+                  }),
                   200,
                 );
               }
@@ -117,8 +121,9 @@ void main() {
       expect(find.text('Заявки'), findsOneWidget);
     });
 
-    testWidgets('ChatRoomPanel shows Russian empty state and input hint',
-        (tester) async {
+    testWidgets('ChatRoomPanel shows Russian empty state and input hint', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
@@ -137,7 +142,9 @@ void main() {
               MockClient((req) async {
                 if (req.url.path == '/api/v1/messages') {
                   return http.Response(
-                    jsonEncode({'message_list': {'messages': []}}),
+                    jsonEncode({
+                      'message_list': {'messages': []},
+                    }),
                     200,
                   );
                 }
@@ -155,9 +162,7 @@ void main() {
             locale: const Locale('ru'),
             localizationsDelegates: AppLocalizations.localizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
-            home: const Scaffold(
-              body: ChatRoomPanel(chatId: 'chat-abc'),
-            ),
+            home: const Scaffold(body: ChatRoomPanel(chatId: 'chat-abc')),
           ),
         ),
       );
@@ -165,7 +170,9 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
 
       expect(find.text('Сообщений пока нет'), findsOneWidget);
-      final field = tester.widget<TextField>(find.byKey(ChatRoomPanel.inputKey));
+      final field = tester.widget<TextField>(
+        find.byKey(ChatRoomPanel.inputKey),
+      );
       expect(field.decoration?.hintText, 'Сообщение');
     });
   });
@@ -190,7 +197,9 @@ void main() {
               MockClient((req) async {
                 if (req.url.path == '/api/v1/chats') {
                   return http.Response(
-                    jsonEncode({'chat_list': {'items': []}}),
+                    jsonEncode({
+                      'chat_list': {'items': []},
+                    }),
                     200,
                   );
                 }

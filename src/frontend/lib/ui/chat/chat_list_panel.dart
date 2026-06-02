@@ -8,7 +8,9 @@ import '../../state/auth_providers.dart';
 import '../../state/chat_providers.dart';
 import '../../state/presence_providers.dart';
 import '../../state/social_providers.dart';
+import '../../theme/voice_colors.dart';
 import '../api_error_messages.dart';
+import '../core/voice_state_panel.dart';
 import '../social/presence_indicator.dart';
 
 /// Middle column: DM chat list from `GET /api/v1/chats`.
@@ -53,17 +55,27 @@ class ChatListPanel extends ConsumerWidget {
                 final error = isBackendUnavailable(chats.errorStatusCode)
                     ? const BackendUnavailableException()
                     : Exception(chats.errorMessage);
-                return Center(
-                  child: Text(
-                    key: ChatListPanel.unavailableKey,
-                    chatListErrorMessage(l10n, error),
-                    textAlign: TextAlign.center,
+                return KeyedSubtree(
+                  key: ChatListPanel.unavailableKey,
+                  child: VoiceStatePanel(
+                    title: l10n.chatListLoadError,
+                    message: chatListErrorMessage(l10n, error),
+                    icon: Icons.cloud_off_outlined,
+                    actionLabel: l10n.commonRetry,
+                    onAction: () => ref
+                        .read(chatListControllerProvider.notifier)
+                        .loadInitial(),
                   ),
                 );
               }
               if (items.isEmpty) {
-                return Center(child: Text(l10n.chatListEmpty));
+                return VoiceStatePanel(
+                  title: l10n.chatListEmpty,
+                  message: l10n.chatListEmptyHint,
+                  icon: Icons.forum_outlined,
+                );
               }
+              final voice = VoiceColors.of(context);
               final hasFooter = chats.hasMore || chats.isLoadingMore;
               return ListView.builder(
                 key: listKey,
@@ -82,12 +94,10 @@ class ChatListPanel extends ConsumerWidget {
                                 ),
                               ),
                             )
-                          : IconButton(
+                          : TextButton.icon(
                               key: ChatListPanel.loadMoreKey,
-                              tooltip: MaterialLocalizations.of(
-                                context,
-                              ).moreButtonTooltip,
                               icon: const Icon(Icons.expand_more),
+                              label: Text(l10n.chatListLoadMore),
                               onPressed: () => ref
                                   .read(chatListControllerProvider.notifier)
                                   .loadMore(),
@@ -133,6 +143,10 @@ class ChatListPanel extends ConsumerWidget {
                                   child: PresenceIndicator(
                                     key: presenceIndicatorKey(item.chatId),
                                     presence: presence,
+                                    semanticLabel: _presenceLabel(
+                                      l10n,
+                                      presence.status,
+                                    ),
                                     size: 12,
                                   ),
                                 ),
@@ -152,11 +166,18 @@ class ChatListPanel extends ConsumerWidget {
                             overflow: TextOverflow.ellipsis,
                           ),
                     trailing: item.unreadCount > 0
-                        ? CircleAvatar(
-                            radius: 10,
-                            child: Text(
-                              '${item.unreadCount}',
-                              style: const TextStyle(fontSize: 10),
+                        ? Semantics(
+                            label: l10n.chatListUnreadCount(item.unreadCount),
+                            child: CircleAvatar(
+                              radius: 10,
+                              backgroundColor: voice.profileAccent,
+                              foregroundColor: Theme.of(
+                                context,
+                              ).colorScheme.onPrimary,
+                              child: Text(
+                                '${item.unreadCount}',
+                                style: const TextStyle(fontSize: 10),
+                              ),
                             ),
                           )
                         : null,
@@ -187,4 +208,13 @@ String? _resolvePeerId(
 
 String _shortChatId(String chatId) {
   return chatId.length <= 8 ? chatId : chatId.substring(0, 8);
+}
+
+String _presenceLabel(AppLocalizations l10n, String status) {
+  return switch (status) {
+    'online' => l10n.socialPresenceOnline,
+    'idle' => l10n.socialPresenceIdle,
+    'dnd' => l10n.socialPresenceDnd,
+    _ => l10n.socialPresenceOffline,
+  };
 }

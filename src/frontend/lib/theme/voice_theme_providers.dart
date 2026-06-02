@@ -17,8 +17,10 @@ final voiceTokenCatalogProvider = FutureProvider<VoiceTokenCatalog>((ref) {
 });
 
 /// Resolved accent [Color] for [profileId] (override or default by index).
-final profileAccentColorProvider =
-    FutureProvider.family<Color, String>((ref, profileId) async {
+final profileAccentColorProvider = FutureProvider.family<Color, String>((
+  ref,
+  profileId,
+) async {
   final catalog = await ref.watch(voiceTokenCatalogProvider.future);
   final storage = ref.watch(profileAccentStorageProvider);
   final override = await storage.readOverride(profileId);
@@ -40,17 +42,17 @@ final activeProfileAccentColorProvider = Provider<AsyncValue<Color>>((ref) {
 
 enum AppThemePreference { system, light, dark, highContrast }
 
-final appThemePreferenceProvider =
-    StateProvider<AppThemePreference>((ref) => AppThemePreference.system);
+final appThemePreferenceProvider = StateProvider<AppThemePreference>(
+  (ref) => AppThemePreference.system,
+);
 
 VoiceThemeMode _resolveMode(AppThemePreference pref, Brightness platform) {
   return switch (pref) {
     AppThemePreference.light => VoiceThemeMode.light,
     AppThemePreference.dark => VoiceThemeMode.dark,
     AppThemePreference.highContrast => VoiceThemeMode.highContrast,
-    AppThemePreference.system => platform == Brightness.dark
-        ? VoiceThemeMode.dark
-        : VoiceThemeMode.light,
+    AppThemePreference.system =>
+      platform == Brightness.dark ? VoiceThemeMode.dark : VoiceThemeMode.light,
   };
 }
 
@@ -60,11 +62,8 @@ final voiceMaterialThemeProvider = FutureProvider<ThemeData>((ref) async {
   final accentAsync = ref.watch(activeProfileAccentColorProvider);
   final accent = accentAsync.value ?? catalog.profileAccentAt(0);
   final pref = ref.watch(appThemePreferenceProvider);
-  final platform = WidgetsBinding.instance.platformDispatcher.platformBrightness;
+  final platform =
+      WidgetsBinding.instance.platformDispatcher.platformBrightness;
   final mode = _resolveMode(pref, platform);
-  return VoiceTheme.build(
-    catalog: catalog,
-    mode: mode,
-    profileAccent: accent,
-  );
+  return VoiceTheme.build(catalog: catalog, mode: mode, profileAccent: accent);
 });

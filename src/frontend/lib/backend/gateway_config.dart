@@ -5,10 +5,7 @@ class GatewayConfig {
 
   /// Empty string when not defined (tests and local runs inject via [Provider]).
   factory GatewayConfig.fromEnvironment() {
-    const url = String.fromEnvironment(
-      'VOICE_API_BASE_URL',
-      defaultValue: '',
-    );
+    const url = String.fromEnvironment('VOICE_API_BASE_URL', defaultValue: '');
     return GatewayConfig(baseUrl: url);
   }
 

@@ -7,7 +7,11 @@ void main() {
   group('RealtimeProtocol.parseFrame', () {
     test('parses server event with sequence', () {
       final frame = RealtimeProtocol.parseFrame(
-        jsonEncode({'op': 'message_create', 's': 5, 'd': {'chat_id': 'c1'}}),
+        jsonEncode({
+          'op': 'message_create',
+          's': 5,
+          'd': {'chat_id': 'c1'},
+        }),
       );
       expect(frame.op, 'message_create');
       expect(frame.sequence, 5);
@@ -33,10 +37,7 @@ void main() {
 
   group('RealtimeProtocol.buildClientOp', () {
     test('resume includes last_s', () {
-      final json = RealtimeProtocol.buildClientOp(
-        'resume',
-        {'last_s': 42},
-      );
+      final json = RealtimeProtocol.buildClientOp('resume', {'last_s': 42});
       final decoded = jsonDecode(json) as Map<String, dynamic>;
       expect(decoded['op'], 'resume');
       expect((decoded['d'] as Map)['last_s'], 42);
@@ -56,10 +57,9 @@ void main() {
     });
 
     test('subscribe includes chat_id', () {
-      final json = RealtimeProtocol.buildClientOp(
-        'subscribe',
-        {'chat_id': 'chat-uuid'},
-      );
+      final json = RealtimeProtocol.buildClientOp('subscribe', {
+        'chat_id': 'chat-uuid',
+      });
       final decoded = jsonDecode(json) as Map<String, dynamic>;
       expect(decoded['op'], 'subscribe');
       expect((decoded['d'] as Map)['chat_id'], 'chat-uuid');

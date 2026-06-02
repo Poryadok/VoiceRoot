@@ -23,8 +23,8 @@ class VoiceGatewayClient {
   VoiceGatewayClient({
     required http.Client httpClient,
     required GatewayConfig config,
-  })  : _http = httpClient,
-        _config = config;
+  }) : _http = httpClient,
+       _config = config;
 
   final http.Client _http;
   final GatewayConfig _config;

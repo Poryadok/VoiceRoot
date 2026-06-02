@@ -31,10 +31,7 @@ void main() {
       final client = VoiceFriendsClient(httpClient: mock, config: config);
       final r = await client.listFriends(authorization: auth);
       expect(r, isA<FriendsApiOk<FriendsListData>>());
-      expect(
-        (r as FriendsApiOk<FriendsListData>).data.friends,
-        ['friend-1'],
-      );
+      expect((r as FriendsApiOk<FriendsListData>).data.friends, ['friend-1']);
     });
   });
 

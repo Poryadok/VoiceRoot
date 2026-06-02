@@ -87,6 +87,112 @@ void main() {
     expect(find.text('3'), findsOneWidget);
   });
 
+  testWidgets('ChatListPanel retries after a recoverable load error', (
+    tester,
+  ) async {
+    var calls = 0;
+    await tester.pumpWidget(
+      chatTestApp(
+        home: const ChatListPanel(),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/chats') {
+            calls++;
+            if (calls == 1) {
+              return http.Response('temporary failure', 500);
+            }
+            return http.Response(
+              jsonEncode({
+                'chat_list': {
+                  'items': [
+                    {
+                      'chat': {
+                        'id': 'chat-after-retry',
+                        'type': 'CHAT_TYPE_DM',
+                        'creator_profile_id': 'profile-a',
+                      },
+                      'last_message_preview': 'Loaded after retry',
+                    },
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          return http.Response('{}', 404);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Try again'), findsOneWidget);
+    await tester.tap(find.text('Try again'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(ChatListPanel.tileKey('chat-after-retry')),
+      findsOneWidget,
+    );
+    expect(find.text('Loaded after retry'), findsOneWidget);
+  });
+
+  testWidgets('ChatListPanel uses a labeled load more control', (tester) async {
+    await tester.pumpWidget(
+      chatTestApp(
+        home: const ChatListPanel(),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/chats' &&
+              req.url.queryParameters['cursor'] == 'cursor-2') {
+            return http.Response(
+              jsonEncode({
+                'chat_list': {
+                  'items': [
+                    {
+                      'chat': {
+                        'id': 'chat-2',
+                        'type': 'CHAT_TYPE_DM',
+                        'creator_profile_id': 'profile-a',
+                      },
+                      'last_message_preview': 'Older preview',
+                    },
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          if (req.url.path == '/api/v1/chats') {
+            return http.Response(
+              jsonEncode({
+                'chat_list': {
+                  'next_cursor': 'cursor-2',
+                  'items': [
+                    {
+                      'chat': {
+                        'id': 'chat-1',
+                        'type': 'CHAT_TYPE_DM',
+                        'creator_profile_id': 'profile-a',
+                      },
+                      'last_message_preview': 'First preview',
+                    },
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          return http.Response('{}', 404);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Load more chats'), findsOneWidget);
+    await tester.tap(find.text('Load more chats'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(ChatListPanel.tileKey('chat-2')), findsOneWidget);
+  });
+
   testWidgets('ChatListPanel resolves DM creator as peer after reload', (
     tester,
   ) async {
@@ -301,6 +407,37 @@ void main() {
     expect(find.text('Hello there'), findsOneWidget);
     expect(find.text('Newest first from API'), findsOneWidget);
     expect(markReadCalls, 1);
+  });
+
+  testWidgets('ChatRoomPanel shows a mobile back action when provided', (
+    tester,
+  ) async {
+    var backTapped = false;
+    await tester.pumpWidget(
+      chatTestApp(
+        home: ChatRoomPanel(
+          chatId: 'chat-abc',
+          onBack: () => backTapped = true,
+        ),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/messages') {
+            return http.Response(
+              jsonEncode({
+                'message_list': {'messages': []},
+              }),
+              200,
+            );
+          }
+          return http.Response('{}', 404);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Back to chats'), findsOneWidget);
+    await tester.tap(find.byTooltip('Back to chats'));
+
+    expect(backTapped, isTrue);
   });
 }
 

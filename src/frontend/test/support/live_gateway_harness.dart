@@ -11,7 +11,10 @@ import 'package:voice_frontend/backend/realtime_client.dart';
 
 /// Compile-time API base (`--dart-define=VOICE_API_BASE_URL=...`).
 String liveGatewayBaseUrl() {
-  const fromEnv = String.fromEnvironment('VOICE_API_BASE_URL', defaultValue: '');
+  const fromEnv = String.fromEnvironment(
+    'VOICE_API_BASE_URL',
+    defaultValue: '',
+  );
   if (fromEnv.isNotEmpty) return fromEnv;
   return 'http://127.0.0.1:8080';
 }
@@ -48,7 +51,9 @@ String qaClientMessageId() {
 String? liveRepoRoot() {
   var dir = Directory.current;
   while (true) {
-    if (File('${dir.path}${Platform.pathSeparator}docker-compose.yml').existsSync()) {
+    if (File(
+      '${dir.path}${Platform.pathSeparator}docker-compose.yml',
+    ).existsSync()) {
       return dir.path;
     }
     final parent = dir.parent;
@@ -156,7 +161,9 @@ Future<LiveGatewayProbe> probeLiveGateway() async {
     fail('Auth register probe failed: ${probe.message} (HTTP $code)');
   }
 
-  return LiveGatewayReady(LiveGatewayContext(config: config, httpClient: httpClient));
+  return LiveGatewayReady(
+    LiveGatewayContext(config: config, httpClient: httpClient),
+  );
 }
 
 class LiveGatewayContext {
@@ -178,7 +185,9 @@ class LiveGatewayContext {
   }
 
   Future<AuthSession> refreshSession(AuthSession session) async {
-    final result = await authClient().refresh(refreshToken: session.refreshToken);
+    final result = await authClient().refresh(
+      refreshToken: session.refreshToken,
+    );
     expect(result, isA<AuthSessionOk>(), reason: 'refresh session');
     final refreshed = (result as AuthSessionOk).session;
     expect(refreshed.accessToken, isNot(session.accessToken));

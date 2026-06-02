@@ -31,4 +31,54 @@ void main() {
     );
     expect(find.byKey(ThreeColumnShell.navMobileStack), findsOneWidget);
   });
+
+  testWidgets('narrow layout shows rail and list before a chat is selected', (
+    tester,
+  ) async {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.binding.setSurfaceSize(const Size(400, 800));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: voiceTestTheme(),
+        home: const Scaffold(
+          body: ThreeColumnShell(
+            railChild: Text('Mobile rail'),
+            listChild: Text('Chat list'),
+            mainChild: Text('Open chat'),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(ThreeColumnShell.navMobileStack), findsOneWidget);
+    expect(find.text('Mobile rail'), findsOneWidget);
+    expect(find.text('Chat list'), findsOneWidget);
+    expect(find.text('Open chat'), findsNothing);
+  });
+
+  testWidgets('narrow layout can focus the open chat with a compact strip', (
+    tester,
+  ) async {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.binding.setSurfaceSize(const Size(400, 800));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: voiceTestTheme(),
+        home: const Scaffold(
+          body: ThreeColumnShell(
+            showMainOnlyOnNarrow: true,
+            mobileRailChild: Text('Mini strip'),
+            railChild: Text('Mobile rail'),
+            listChild: Text('Chat list'),
+            mainChild: Text('Open chat'),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(ThreeColumnShell.navMobileStack), findsOneWidget);
+    expect(find.text('Mini strip'), findsOneWidget);
+    expect(find.text('Open chat'), findsOneWidget);
+    expect(find.text('Chat list'), findsNothing);
+  });
 }

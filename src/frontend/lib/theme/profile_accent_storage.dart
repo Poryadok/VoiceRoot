@@ -14,8 +14,7 @@ class InMemoryProfileAccentStorage implements ProfileAccentStorage {
   final Map<String, int> _indices = {};
 
   @override
-  Future<String?> readOverride(String profileId) async =>
-      _accents[profileId];
+  Future<String?> readOverride(String profileId) async => _accents[profileId];
 
   @override
   Future<void> writeOverride(String profileId, String hex) async {

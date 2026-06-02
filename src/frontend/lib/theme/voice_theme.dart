@@ -55,9 +55,7 @@ class VoiceTheme {
         ),
       ),
       textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(
-          foregroundColor: voiceColors.textSecondary,
-        ),
+        style: TextButton.styleFrom(foregroundColor: voiceColors.textSecondary),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,

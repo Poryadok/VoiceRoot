@@ -34,8 +34,8 @@ class VoiceAuthClient {
   VoiceAuthClient({
     required http.Client httpClient,
     required GatewayConfig config,
-  })  : _http = httpClient,
-        _config = config;
+  }) : _http = httpClient,
+       _config = config;
 
   final http.Client _http;
   final GatewayConfig _config;
@@ -45,46 +45,34 @@ class VoiceAuthClient {
   Future<AuthSessionResult> register({
     required String email,
     required String password,
-  }) =>
-      _postSession(
-        '/api/v1/auth/register',
-        {
-          'email': email,
-          'password': password,
-          'guest': false,
-          'device_info_json': _deviceInfoJson,
-        },
-      );
+  }) => _postSession('/api/v1/auth/register', {
+    'email': email,
+    'password': password,
+    'guest': false,
+    'device_info_json': _deviceInfoJson,
+  });
 
   Future<AuthSessionResult> login({
     required String email,
     required String password,
-  }) =>
-      _postSession(
-        '/api/v1/auth/login',
-        {
-          'email': email,
-          'password': password,
-          'device_info_json': _deviceInfoJson,
-        },
-      );
+  }) => _postSession('/api/v1/auth/login', {
+    'email': email,
+    'password': password,
+    'device_info_json': _deviceInfoJson,
+  });
 
   Future<AuthSessionResult> refresh({required String refreshToken}) =>
-      _postSession(
-        '/api/v1/auth/refresh',
-        {
-          'refresh_token': refreshToken,
-          'device_info_json': _deviceInfoJson,
-        },
-      );
+      _postSession('/api/v1/auth/refresh', {
+        'refresh_token': refreshToken,
+        'device_info_json': _deviceInfoJson,
+      });
 
   /// Returns an error message on failure; null on success (204).
   Future<String?> logout({required AuthSession session}) async {
     if (!_config.hasBaseUrl) {
       return kAuthMissingBaseUrlDetail;
     }
-    final uri =
-        Uri.parse(_config.baseUrl).resolve('/api/v1/auth/logout');
+    final uri = Uri.parse(_config.baseUrl).resolve('/api/v1/auth/logout');
     try {
       final res = await _http.post(
         uri,

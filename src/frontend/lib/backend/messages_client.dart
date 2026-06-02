@@ -98,8 +98,8 @@ class VoiceMessagesClient {
   VoiceMessagesClient({
     required http.Client httpClient,
     required GatewayConfig config,
-  })  : _http = httpClient,
-        _config = config;
+  }) : _http = httpClient,
+       _config = config;
 
   final http.Client _http;
   final GatewayConfig _config;
@@ -129,10 +129,9 @@ class VoiceMessagesClient {
     if (cursor != null && cursor.isNotEmpty) params['cursor'] = cursor;
     if (pageSize != null) params['page_size'] = '$pageSize';
 
-    final uri = Uri.parse(_config.baseUrl).replace(
-      path: '/api/v1/messages',
-      queryParameters: params,
-    );
+    final uri = Uri.parse(
+      _config.baseUrl,
+    ).replace(path: '/api/v1/messages', queryParameters: params);
     return _get(uri, authorization, (body) {
       final list = body['message_list'] as Map<String, dynamic>? ?? {};
       final raw = list['messages'] as List<dynamic>? ?? [];

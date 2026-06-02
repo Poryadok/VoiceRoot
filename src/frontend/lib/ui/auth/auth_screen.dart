@@ -42,9 +42,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     final email = _emailController.text.trim();
     final password = _passwordController.text;
     if (email.isEmpty || password.isEmpty) {
-      ref.read(authControllerProvider.notifier).setClientError(
-            AuthErrorKeys.emptyFields,
-          );
+      ref
+          .read(authControllerProvider.notifier)
+          .setClientError(AuthErrorKeys.emptyFields);
       return;
     }
     final controller = ref.read(authControllerProvider.notifier);
@@ -101,7 +101,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
                       autofillHints: const [AutofillHints.email],
-                      decoration: InputDecoration(labelText: l10n.authEmailLabel),
+                      decoration: InputDecoration(
+                        labelText: l10n.authEmailLabel,
+                      ),
                       validator: (v) => _emailValidator(v, l10n),
                     ),
                     const SizedBox(height: 12),
@@ -130,7 +132,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                     const SizedBox(height: 24),
                     VoicePrimaryButton(
                       key: AuthScreen.loginButtonKey,
-                      onPressed: auth.isSubmitting ? null : () => _submit(false),
+                      onPressed: auth.isSubmitting
+                          ? null
+                          : () => _submit(false),
                       isLoading: auth.isSubmitting,
                       child: Text(l10n.authLogin),
                     ),

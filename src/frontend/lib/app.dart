@@ -151,30 +151,74 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
     return Scaffold(
       backgroundColor: voice.canvas,
       body: SafeArea(
-        child: ThreeColumnShell(
-          railChild: _SocialRail(onOpenSocial: () => _openSocialPanel(context)),
-          listChild: const ChatListPanel(),
-          mainChild: selectedChatId == null
-              ? Center(child: Text(l10n.chatRoomSelectPrompt))
-              : ChatRoomPanel(chatId: selectedChatId),
-          header: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _SessionBar(
-                onLogout: () =>
-                    ref.read(authControllerProvider.notifier).logout(),
-                onEditProfile: profileAsync.valueOrNull == null
-                    ? null
-                    : () => _openProfileEditSheet(
-                        context,
-                        profileAsync.valueOrNull!,
-                      ),
-                sessionLabel: sessionLabel,
-                logoutLabel: l10n.authLogout,
-                editProfileTooltip: l10n.profileEditTooltip,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final narrow = constraints.maxWidth < 600;
+            final onBackToChats = selectedChatId == null
+                ? null
+                : () => ref.read(selectedChatIdProvider.notifier).state = null;
+            return ThreeColumnShell(
+              railChild: _SocialRail(
+                onOpenSocial: () => _openSocialPanel(context),
               ),
-              _GatewayStatusBar(asyncHealth: health),
-            ],
+              mobileRailChild: _MobileRailStrip(
+                onOpenSocial: () => _openSocialPanel(context),
+              ),
+              listChild: const ChatListPanel(),
+              mainChild: selectedChatId == null
+                  ? Center(child: Text(l10n.chatRoomSelectPrompt))
+                  : ChatRoomPanel(
+                      chatId: selectedChatId,
+                      onBack: narrow ? onBackToChats : null,
+                    ),
+              showMainOnlyOnNarrow: selectedChatId != null,
+              header: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _SessionBar(
+                    onLogout: () =>
+                        ref.read(authControllerProvider.notifier).logout(),
+                    onEditProfile: profileAsync.valueOrNull == null
+                        ? null
+                        : () => _openProfileEditSheet(
+                            context,
+                            profileAsync.valueOrNull!,
+                          ),
+                    sessionLabel: sessionLabel,
+                    logoutLabel: l10n.authLogout,
+                    editProfileTooltip: l10n.profileEditTooltip,
+                  ),
+                  _GatewayStatusBar(asyncHealth: health),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _MobileRailStrip extends StatelessWidget {
+  const _MobileRailStrip({required this.onOpenSocial});
+
+  final VoidCallback onOpenSocial;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final voice = VoiceColors.of(context);
+    return ColoredBox(
+      color: voice.muted,
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: IconButton(
+            key: const Key('nav_open_social_mobile'),
+            tooltip: l10n.socialRailTooltip,
+            onPressed: onOpenSocial,
+            icon: Icon(Icons.people_outline, color: voice.textSecondary),
           ),
         ),
       ),

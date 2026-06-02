@@ -19,12 +19,12 @@ class AuthSession {
   String get authorizationHeader => 'Bearer $accessToken';
 
   Map<String, dynamic> toJson() => {
-        'access_token': accessToken,
-        'refresh_token': refreshToken,
-        'account_id': accountId,
-        'profile_id': activeProfileId,
-        'expires_in_seconds': expiresInSeconds,
-      };
+    'access_token': accessToken,
+    'refresh_token': refreshToken,
+    'account_id': accountId,
+    'profile_id': activeProfileId,
+    'expires_in_seconds': expiresInSeconds,
+  };
 
   factory AuthSession.fromJson(Map<String, dynamic> json) {
     return AuthSession(

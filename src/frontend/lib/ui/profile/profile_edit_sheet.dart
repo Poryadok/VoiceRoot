@@ -118,7 +118,6 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
                 enabled: !_saving,
                 decoration: InputDecoration(
                   labelText: l10n.profileDisplayNameLabel,
-                  border: const OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 12),
@@ -131,7 +130,6 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
                 decoration: InputDecoration(
                   labelText: l10n.profileBioLabel,
                   helperText: l10n.profileBioHelper,
-                  border: const OutlineInputBorder(),
                 ),
               ),
               if (_error != null) ...[

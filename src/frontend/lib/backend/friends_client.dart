@@ -16,7 +16,11 @@ final class FriendsApiOk<T> extends FriendsApiResult<T> {
 }
 
 final class FriendsApiFailure extends FriendsApiResult<Never> {
-  const FriendsApiFailure({required this.message, this.errorCode, this.statusCode});
+  const FriendsApiFailure({
+    required this.message,
+    this.errorCode,
+    this.statusCode,
+  });
 
   final String message;
   final String? errorCode;
@@ -35,10 +39,7 @@ class FriendsListData {
 }
 
 class FriendRequestsData {
-  const FriendRequestsData({
-    required this.incoming,
-    required this.outgoing,
-  });
+  const FriendRequestsData({required this.incoming, required this.outgoing});
 
   final List<String> incoming;
   final List<String> outgoing;
@@ -49,8 +50,8 @@ class VoiceFriendsClient {
   VoiceFriendsClient({
     required http.Client httpClient,
     required GatewayConfig config,
-  })  : _http = httpClient,
-        _config = config;
+  }) : _http = httpClient,
+       _config = config;
 
   final http.Client _http;
   final GatewayConfig _config;
@@ -90,8 +91,7 @@ class VoiceFriendsClient {
     }
     final uri = Uri.parse(_config.baseUrl).resolve('/api/v1/friends/requests');
     return _get(uri, authorization, (body) {
-      final list =
-          body['friend_request_list'] as Map<String, dynamic>? ?? {};
+      final list = body['friend_request_list'] as Map<String, dynamic>? ?? {};
       return FriendRequestsData(
         incoming: _profileIds(list['incoming']),
         outgoing: _profileIds(list['outgoing']),
@@ -102,32 +102,27 @@ class VoiceFriendsClient {
   Future<FriendsApiResult<void>> sendFriendInvitation({
     required String authorization,
     required String targetProfileId,
-  }) =>
-      _postEmpty(
-        '/api/v1/friends/invitations',
-        authorization,
-        {'target_profile_id': targetProfileId},
-      );
+  }) => _postEmpty('/api/v1/friends/invitations', authorization, {
+    'target_profile_id': targetProfileId,
+  });
 
   Future<FriendsApiResult<void>> acceptFriendInvitation({
     required String authorization,
     required String requesterProfileId,
-  }) =>
-      _postEmpty(
-        '/api/v1/friends/invitations/$requesterProfileId/accept',
-        authorization,
-        null,
-      );
+  }) => _postEmpty(
+    '/api/v1/friends/invitations/$requesterProfileId/accept',
+    authorization,
+    null,
+  );
 
   Future<FriendsApiResult<void>> declineFriendInvitation({
     required String authorization,
     required String requesterProfileId,
-  }) =>
-      _postEmpty(
-        '/api/v1/friends/invitations/$requesterProfileId/decline',
-        authorization,
-        null,
-      );
+  }) => _postEmpty(
+    '/api/v1/friends/invitations/$requesterProfileId/decline',
+    authorization,
+    null,
+  );
 
   List<String> _profileIds(dynamic raw) {
     if (raw is! List) return const [];

@@ -13,21 +13,12 @@ Uri gatewayWebSocketUri(String baseUrl) {
     'http' => 'ws',
     _ => rest.scheme,
   };
-  return rest.replace(
-    scheme: scheme,
-    path: '/ws',
-    query: null,
-    fragment: null,
-  );
+  return rest.replace(scheme: scheme, path: '/ws', query: null, fragment: null);
 }
 
 /// Parsed Realtime WebSocket frame (server or client).
 class RealtimeFrame {
-  const RealtimeFrame({
-    required this.op,
-    this.data,
-    this.sequence,
-  });
+  const RealtimeFrame({required this.op, this.data, this.sequence});
 
   final String op;
   final Map<String, dynamic>? data;
@@ -73,15 +64,15 @@ class VoiceRealtimeConnection {
     required Uri uri,
     required Map<String, String> headers,
     WebSocketChannel Function(Uri uri, {Map<String, String>? headers})?
-        channelFactory,
-  })  : _uri = uri,
-        _headers = headers,
-        _channelFactory = channelFactory ?? _defaultChannelFactory;
+    channelFactory,
+  }) : _uri = uri,
+       _headers = headers,
+       _channelFactory = channelFactory ?? _defaultChannelFactory;
 
   final Uri _uri;
   final Map<String, String> _headers;
   final WebSocketChannel Function(Uri uri, {Map<String, String>? headers})
-      _channelFactory;
+  _channelFactory;
 
   static WebSocketChannel _defaultChannelFactory(
     Uri uri, {
@@ -128,7 +119,10 @@ class VoiceRealtimeConnection {
   void _onMessage(dynamic message) {
     if (message is! String) return;
     final frame = RealtimeProtocol.parseFrame(message);
-    _lastSequence = RealtimeProtocol.trackSequence(_lastSequence, frame.sequence);
+    _lastSequence = RealtimeProtocol.trackSequence(
+      _lastSequence,
+      frame.sequence,
+    );
     if (!_events.isClosed) {
       _events.add(frame);
     }
@@ -145,10 +139,7 @@ class VoiceRealtimeConnection {
   }
 
   void sendMarkRead({required String chatId, required String messageId}) {
-    sendOp('mark_read', {
-      'chat_id': chatId,
-      'message_id': messageId,
-    });
+    sendOp('mark_read', {'chat_id': chatId, 'message_id': messageId});
   }
 
   void sendHeartbeat() {

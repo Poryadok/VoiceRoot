@@ -15,18 +15,16 @@ final testDiscoverHintStorage = InMemoryDiscoverHintStorage();
 final testProfileAccentStorage = InMemoryProfileAccentStorage();
 
 List<Override> voiceAppTestOverrides({required http.Client client}) => [
-      ...voiceThemeTestOverrides(),
-      profileAccentStorageProvider.overrideWithValue(testProfileAccentStorage),
-      authSessionStorageProvider.overrideWithValue(
-        InMemoryAuthSessionStorage(),
-      ),
-      discoverHintStorageProvider.overrideWithValue(testDiscoverHintStorage),
-      authControllerProvider.overrideWith(authenticatedAuthController),
-      gatewayConfigProvider.overrideWithValue(
-        const GatewayConfig(baseUrl: 'http://localhost:9999'),
-      ),
-      httpClientProvider.overrideWithValue(client),
-    ];
+  ...voiceThemeTestOverrides(),
+  profileAccentStorageProvider.overrideWithValue(testProfileAccentStorage),
+  authSessionStorageProvider.overrideWithValue(InMemoryAuthSessionStorage()),
+  discoverHintStorageProvider.overrideWithValue(testDiscoverHintStorage),
+  authControllerProvider.overrideWith(authenticatedAuthController),
+  gatewayConfigProvider.overrideWithValue(
+    const GatewayConfig(baseUrl: 'http://localhost:9999'),
+  ),
+  httpClientProvider.overrideWithValue(client),
+];
 
 /// Pre-authenticated [AuthController] for widget tests of the main shell.
 AuthController authenticatedAuthController(Ref ref) {

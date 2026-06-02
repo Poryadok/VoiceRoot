@@ -20,8 +20,9 @@ void main() {
     );
     addTearDown(container.dispose);
 
-    final color =
-        await container.read(profileAccentColorProvider('prof-b').future);
+    final color = await container.read(
+      profileAccentColorProvider('prof-b').future,
+    );
     expect(color, const Color(0xFF9ED9A6));
   });
 
@@ -38,8 +39,9 @@ void main() {
     );
     addTearDown(container.dispose);
 
-    final color =
-        await container.read(profileAccentColorProvider('prof-c').future);
+    final color = await container.read(
+      profileAccentColorProvider('prof-c').future,
+    );
     expect(color, const Color(0xFFF0A8A8));
   });
 }

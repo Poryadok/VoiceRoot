@@ -104,6 +104,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get socialSearchHint => 'Search by name or @username';
 
   @override
+  String get socialSearchStart => 'Search for people';
+
+  @override
+  String get socialSearchStartHint =>
+      'Enter a name or @username to start a conversation.';
+
+  @override
+  String get socialSearchEmpty => 'No profiles found';
+
+  @override
+  String get socialSearchEmptyHint =>
+      'Check the spelling or try another handle.';
+
+  @override
   String get socialAddFriend => 'Add friend';
 
   @override
@@ -175,6 +189,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatListEmpty => 'No conversations yet';
 
   @override
+  String get chatListEmptyHint =>
+      'Find people in Search to start a direct message.';
+
+  @override
+  String get chatListLoadMore => 'Load more chats';
+
+  @override
+  String chatListUnreadCount(int count) {
+    return '$count unread';
+  }
+
+  @override
   String get chatListLoadError => 'Could not load chats';
 
   @override
@@ -190,6 +216,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatRoomSelectPrompt => 'Select a conversation';
 
   @override
+  String get chatRoomBack => 'Back to chats';
+
+  @override
   String chatRoomTitle(String id) {
     return 'Chat $id';
   }
@@ -198,7 +227,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatRoomEmpty => 'No messages yet';
 
   @override
+  String get chatRoomEmptyHint => 'Send the first message when you are ready.';
+
+  @override
+  String get chatRoomLoadOlder => 'Load older messages';
+
+  @override
   String get chatRoomInputHint => 'Message';
+
+  @override
+  String get chatSendMessage => 'Send message';
 
   @override
   String chatRoomError(String message) {
@@ -273,6 +311,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get commonCancel => 'Cancel';
+
+  @override
+  String get commonRetry => 'Try again';
 
   @override
   String get commonLoading => '…';

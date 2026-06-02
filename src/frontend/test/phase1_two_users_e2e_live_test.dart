@@ -29,7 +29,10 @@ void main() {
       final sessionA = await ctx.registerUser('e2e-a');
       var sessionB = await ctx.registerUser('e2e-b');
 
-      final chats = VoiceChatsClient(httpClient: ctx.httpClient, config: ctx.config);
+      final chats = VoiceChatsClient(
+        httpClient: ctx.httpClient,
+        config: ctx.config,
+      );
       final dmResult = await chats.createDm(
         authorization: sessionA.authorizationHeader,
         otherProfileId: sessionB.activeProfileId,
@@ -37,8 +40,10 @@ void main() {
       expect(dmResult, isA<ChatsApiOk<VoiceChat>>());
       final chatId = (dmResult as ChatsApiOk<VoiceChat>).data.id;
 
-      final messages =
-          VoiceMessagesClient(httpClient: ctx.httpClient, config: ctx.config);
+      final messages = VoiceMessagesClient(
+        httpClient: ctx.httpClient,
+        config: ctx.config,
+      );
       final wsUri = gatewayWebSocketUri(ctx.config.baseUrl);
 
       Future<VoiceRealtimeConnection> connectB(AuthSession session) async {
@@ -84,9 +89,12 @@ void main() {
         chatId: chatId,
       );
       expect(historyAfterRefresh, isA<MessagesApiOk<MessageListData>>());
-      final listed = (historyAfterRefresh as MessagesApiOk<MessageListData>).data;
+      final listed =
+          (historyAfterRefresh as MessagesApiOk<MessageListData>).data;
       expect(
-        listed.messages.any((m) => m.id == msg1.id && m.content == firstContent),
+        listed.messages.any(
+          (m) => m.id == msg1.id && m.content == firstContent,
+        ),
         isTrue,
       );
 

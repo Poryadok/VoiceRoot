@@ -37,8 +37,9 @@ class VoiceTokenCatalog {
 
   static VoiceTokenCatalog _parse(String json) {
     final root = jsonDecode(json) as Map<String, dynamic>;
-    final accentList = (root['profileAccent'] as Map<String, dynamic>)['defaults']
-        as List<dynamic>;
+    final accentList =
+        (root['profileAccent'] as Map<String, dynamic>)['defaults']
+            as List<dynamic>;
     final spaceRaw = root['space'] as Map<String, dynamic>;
     final radiusRaw = root['radius'] as Map<String, dynamic>;
     final themesRaw = root['themes'] as Map<String, dynamic>;
@@ -48,12 +49,8 @@ class VoiceTokenCatalog {
       profileAccentDefaults: accentList
           .map((e) => _parseColor(e as String))
           .toList(growable: false),
-      space: spaceRaw.map(
-        (k, v) => MapEntry(k, (v as num).toDouble()),
-      ),
-      radius: radiusRaw.map(
-        (k, v) => MapEntry(k, (v as num).toDouble()),
-      ),
+      space: spaceRaw.map((k, v) => MapEntry(k, (v as num).toDouble())),
+      radius: radiusRaw.map((k, v) => MapEntry(k, (v as num).toDouble())),
       themes: themesRaw.map((mode, colors) {
         final map = colors as Map<String, dynamic>;
         return MapEntry(

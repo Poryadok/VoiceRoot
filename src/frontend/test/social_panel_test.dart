@@ -113,6 +113,83 @@ void main() {
     expect(find.textContaining('@carol'), findsOneWidget);
   });
 
+  testWidgets('search shows a no-results state after an empty result', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      socialTestApp(
+        home: const SocialPanel(),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/users/search') {
+            return http.Response(
+              jsonEncode({
+                'profile_list': {'profiles': []},
+              }),
+              200,
+            );
+          }
+          return http.Response('{}', 200);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(SocialPanel.searchFieldKey), 'nobody');
+    await tester.tap(find.byKey(SocialPanel.searchSubmitKey));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No profiles found'), findsOneWidget);
+  });
+
+  testWidgets('search error state can retry the last query', (tester) async {
+    var calls = 0;
+    await tester.pumpWidget(
+      socialTestApp(
+        home: const SocialPanel(),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/users/search') {
+            calls++;
+            if (calls == 1) {
+              return http.Response('temporary failure', 500);
+            }
+            return http.Response(
+              jsonEncode({
+                'profile_list': {
+                  'profiles': [
+                    {
+                      'id': 'p-retry',
+                      'account_id': 'a-retry',
+                      'username': 'retry',
+                      'discriminator': '0001',
+                      'display_name': 'Retry User',
+                      'locale': 'en',
+                      'theme': 'dark',
+                      'is_primary': true,
+                      'verification_type': 'none',
+                    },
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          return http.Response('{}', 200);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(SocialPanel.searchFieldKey), 'retry');
+    await tester.tap(find.byKey(SocialPanel.searchSubmitKey));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Try again'), findsOneWidget);
+    await tester.tap(find.text('Try again'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Retry User'), findsOneWidget);
+  });
+
   testWidgets('profile detail shows online indicator from presence', (
     tester,
   ) async {

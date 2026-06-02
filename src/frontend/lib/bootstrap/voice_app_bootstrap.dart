@@ -18,9 +18,7 @@ class _VoiceAppBootstrapState extends ConsumerState<VoiceAppBootstrap> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(
-      () => ref.read(authControllerProvider.notifier).restore(),
-    );
+    Future.microtask(() => ref.read(authControllerProvider.notifier).restore());
   }
 
   @override
@@ -29,9 +27,7 @@ class _VoiceAppBootstrapState extends ConsumerState<VoiceAppBootstrap> {
     if (auth.isRestoring) {
       return MaterialApp(
         locale: widget.locale,
-        home: const Scaffold(
-          body: Center(child: CircularProgressIndicator()),
-        ),
+        home: const Scaffold(body: Center(child: CircularProgressIndicator())),
       );
     }
     return VoiceApp(locale: widget.locale);

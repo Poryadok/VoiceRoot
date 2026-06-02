@@ -10,8 +10,9 @@ import 'package:voice_frontend/state/gateway_providers.dart';
 import 'support/auth_test_overrides.dart';
 
 void main() {
-  testWidgets('locale ru shows Russian gateway ok when /health returns 200',
-      (tester) async {
+  testWidgets('locale ru shows Russian gateway ok when /health returns 200', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: voiceAppTestOverrides(
@@ -29,8 +30,9 @@ void main() {
     expect(find.textContaining('Шлюз: ок'), findsOneWidget);
   });
 
-  testWidgets('locale ru shows Russian message when base URL missing',
-      (tester) async {
+  testWidgets('locale ru shows Russian message when base URL missing', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [

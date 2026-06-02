@@ -74,9 +74,9 @@ class AuthController extends StateNotifier<AuthState> {
   AuthController({
     required VoiceAuthClient authClient,
     required AuthSessionStorage storage,
-  })  : _authClient = authClient,
-        _storage = storage,
-        super(const AuthState());
+  }) : _authClient = authClient,
+       _storage = storage,
+       super(const AuthState());
 
   final VoiceAuthClient _authClient;
   final AuthSessionStorage _storage;
@@ -88,7 +88,9 @@ class AuthController extends StateNotifier<AuthState> {
       return;
     }
     state = state.copyWith(session: saved, isRestoring: true, clearError: true);
-    final refreshed = await _authClient.refresh(refreshToken: saved.refreshToken);
+    final refreshed = await _authClient.refresh(
+      refreshToken: saved.refreshToken,
+    );
     switch (refreshed) {
       case AuthSessionOk(:final session):
         await _persist(session);
@@ -108,21 +110,13 @@ class AuthController extends StateNotifier<AuthState> {
     }
   }
 
-  Future<void> register({
-    required String email,
-    required String password,
-  }) =>
+  Future<void> register({required String email, required String password}) =>
       _authenticate(
         () => _authClient.register(email: email, password: password),
       );
 
-  Future<void> login({
-    required String email,
-    required String password,
-  }) =>
-      _authenticate(
-        () => _authClient.login(email: email, password: password),
-      );
+  Future<void> login({required String email, required String password}) =>
+      _authenticate(() => _authClient.login(email: email, password: password));
 
   void setClientError(String errorKey) {
     state = state.copyWith(errorKey: errorKey, isSubmitting: false);
@@ -142,9 +136,7 @@ class AuthController extends StateNotifier<AuthState> {
     );
   }
 
-  Future<void> _authenticate(
-    Future<AuthSessionResult> Function() call,
-  ) async {
+  Future<void> _authenticate(Future<AuthSessionResult> Function() call) async {
     state = state.copyWith(isSubmitting: true, clearError: true);
     final result = await call();
     switch (result) {
@@ -157,13 +149,14 @@ class AuthController extends StateNotifier<AuthState> {
           pendingDiscoverHint: true,
         );
       case AuthSessionFailure(
-          :final message,
-          :final errorCode,
-          :final statusCode,
-        ):
+        :final message,
+        :final errorCode,
+        :final statusCode,
+      ):
         state = state.copyWith(
           isSubmitting: false,
-          errorKey: resolveAuthErrorKey(
+          errorKey:
+              resolveAuthErrorKey(
                 errorCode: errorCode,
                 statusCode: statusCode,
               ) ??
@@ -182,13 +175,14 @@ class AuthController extends StateNotifier<AuthState> {
   }
 }
 
-final authControllerProvider =
-    StateNotifierProvider<AuthController, AuthState>((ref) {
-  return AuthController(
-    authClient: ref.watch(voiceAuthClientProvider),
-    storage: ref.watch(authSessionStorageProvider),
-  );
-});
+final authControllerProvider = StateNotifierProvider<AuthController, AuthState>(
+  (ref) {
+    return AuthController(
+      authClient: ref.watch(voiceAuthClientProvider),
+      storage: ref.watch(authSessionStorageProvider),
+    );
+  },
+);
 
 /// Bearer value for protected Gateway routes, or null when logged out.
 final authorizationHeaderProvider = Provider<String?>((ref) {

@@ -6,6 +6,7 @@ import '../../l10n/app_localizations.dart';
 import '../api_error_messages.dart';
 import '../../state/presence_providers.dart';
 import '../../state/social_providers.dart';
+import '../core/voice_state_panel.dart';
 import 'presence_indicator.dart';
 import 'profile_detail_sheet.dart';
 
@@ -30,7 +31,8 @@ class SocialPanel extends ConsumerStatefulWidget {
   static Key requestDeclineKey(String profileId) =>
       Key('social_request_decline_$profileId');
 
-  static Key profileTileKey(String profileId) => Key('social_profile_tile_$profileId');
+  static Key profileTileKey(String profileId) =>
+      Key('social_profile_tile_$profileId');
 
   final int initialTabIndex;
 
@@ -108,10 +110,7 @@ class _SocialPanelState extends ConsumerState<SocialPanel>
 }
 
 class _SearchTab extends ConsumerWidget {
-  const _SearchTab({
-    required this.controller,
-    required this.onOpenProfile,
-  });
+  const _SearchTab({required this.controller, required this.onOpenProfile});
 
   final TextEditingController controller;
   final void Function(String profileId) onOpenProfile;
@@ -134,10 +133,10 @@ class _SearchTab extends ConsumerWidget {
                   decoration: InputDecoration(
                     hintText: l10n.socialSearchHint,
                     isDense: true,
-                    border: const OutlineInputBorder(),
                   ),
-                  onSubmitted: (q) =>
-                      ref.read(searchProfilesControllerProvider.notifier).search(q),
+                  onSubmitted: (q) => ref
+                      .read(searchProfilesControllerProvider.notifier)
+                      .search(q),
                 ),
               ),
               const SizedBox(width: 8),
@@ -152,33 +151,70 @@ class _SearchTab extends ConsumerWidget {
           ),
         ),
         if (search.isLoading) const LinearProgressIndicator(minHeight: 2),
-        if (search.errorMessage != null)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Text(
-              key: SocialPanel.searchUnavailableKey,
-              socialActionErrorMessage(
-                l10n,
-                search.errorMessage!,
-                statusCode: search.errorStatusCode,
-              ),
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
-          ),
         Expanded(
-          child: ListView.builder(
-            itemCount: search.results.length,
-            itemBuilder: (context, index) {
-              final profile = search.results[index];
-              return _ProfileListTile(
-                key: SocialPanel.profileTileKey(profile.id),
-                profile: profile,
-                onTap: () => onOpenProfile(profile.id),
-              );
-            },
-          ),
+          child: _SearchResults(state: search, onOpenProfile: onOpenProfile),
         ),
       ],
+    );
+  }
+}
+
+class _SearchResults extends ConsumerWidget {
+  const _SearchResults({required this.state, required this.onOpenProfile});
+
+  final SearchProfilesState state;
+  final void Function(String profileId) onOpenProfile;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context)!;
+    if (state.errorMessage != null) {
+      final query = state.lastQuery ?? '';
+      return KeyedSubtree(
+        key: SocialPanel.searchUnavailableKey,
+        child: VoiceStatePanel(
+          title: socialActionErrorMessage(
+            l10n,
+            state.errorMessage!,
+            statusCode: state.errorStatusCode,
+          ),
+          icon: Icons.cloud_off_outlined,
+          actionLabel: query.isEmpty ? null : l10n.commonRetry,
+          onAction: query.isEmpty
+              ? null
+              : () => ref
+                    .read(searchProfilesControllerProvider.notifier)
+                    .search(query),
+        ),
+      );
+    }
+
+    final query = state.lastQuery ?? '';
+    if (state.results.isEmpty) {
+      if (query.isEmpty) {
+        return VoiceStatePanel(
+          title: l10n.socialSearchStart,
+          message: l10n.socialSearchStartHint,
+          icon: Icons.search,
+        );
+      }
+      return VoiceStatePanel(
+        title: l10n.socialSearchEmpty,
+        message: l10n.socialSearchEmptyHint,
+        icon: Icons.person_search_outlined,
+      );
+    }
+
+    return ListView.builder(
+      itemCount: state.results.length,
+      itemBuilder: (context, index) {
+        final profile = state.results[index];
+        return _ProfileListTile(
+          key: SocialPanel.profileTileKey(profile.id),
+          profile: profile,
+          onTap: () => onOpenProfile(profile.id),
+        );
+      },
     );
   }
 }
@@ -196,16 +232,21 @@ class _FriendsTab extends ConsumerWidget {
     return friendsAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, st) => Center(
-        child: Text(
+        child: VoiceStatePanel(
           key: SocialPanel.friendsUnavailableKey,
-          socialListErrorMessage(l10n, e),
-          textAlign: TextAlign.center,
+          title: socialListErrorMessage(l10n, e),
+          icon: Icons.cloud_off_outlined,
+          actionLabel: l10n.commonRetry,
+          onAction: () => ref.invalidate(friendsListProvider),
         ),
       ),
       data: (data) {
         final ids = data.friends;
         if (ids.isEmpty) {
-          return Center(child: Text(l10n.socialFriendsEmpty));
+          return VoiceStatePanel(
+            title: l10n.socialFriendsEmpty,
+            icon: Icons.people_outline,
+          );
         }
         return ListView.builder(
           key: SocialPanel.friendsListKey,
@@ -236,17 +277,22 @@ class _RequestsTab extends ConsumerWidget {
     return requestsAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, st) => Center(
-        child: Text(
+        child: VoiceStatePanel(
           key: SocialPanel.requestsUnavailableKey,
-          socialRequestsErrorMessage(l10n, e),
-          textAlign: TextAlign.center,
+          title: socialRequestsErrorMessage(l10n, e),
+          icon: Icons.cloud_off_outlined,
+          actionLabel: l10n.commonRetry,
+          onAction: () => ref.invalidate(friendRequestsProvider),
         ),
       ),
       data: (data) {
         final incoming = data.incoming;
         final outgoing = data.outgoing;
         if (incoming.isEmpty && outgoing.isEmpty) {
-          return Center(child: Text(l10n.socialRequestsEmpty));
+          return VoiceStatePanel(
+            title: l10n.socialRequestsEmpty,
+            icon: Icons.inbox_outlined,
+          );
         }
         return ListView(
           children: [
@@ -399,6 +445,7 @@ class _ProfileListTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final presence = this.presence;
     return ListTile(
       leading: Stack(
         clipBehavior: Clip.none,
@@ -414,7 +461,14 @@ class _ProfileListTile extends StatelessWidget {
             Positioned(
               right: -2,
               bottom: -2,
-              child: PresenceIndicator(presence: presence, size: 12),
+              child: PresenceIndicator(
+                presence: presence,
+                semanticLabel: _presenceLabel(
+                  AppLocalizations.of(context)!,
+                  presence.status,
+                ),
+                size: 12,
+              ),
             ),
         ],
       ),
@@ -423,4 +477,13 @@ class _ProfileListTile extends StatelessWidget {
       onTap: onTap,
     );
   }
+}
+
+String _presenceLabel(AppLocalizations l10n, String status) {
+  return switch (status) {
+    'online' => l10n.socialPresenceOnline,
+    'idle' => l10n.socialPresenceIdle,
+    'dnd' => l10n.socialPresenceDnd,
+    _ => l10n.socialPresenceOffline,
+  };
 }

@@ -4,21 +4,20 @@ import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/theme/voice_token_catalog.dart';
 
 /// Parsed catalog for tests (no asset bundle required).
-final VoiceTokenCatalog testVoiceTokenCatalog =
-    VoiceTokenCatalog.parseJson(_kVoiceTokensJson);
+final VoiceTokenCatalog testVoiceTokenCatalog = VoiceTokenCatalog.parseJson(
+  _kVoiceTokensJson,
+);
 
 List<Override> voiceThemeTestOverrides() => [
-      voiceTokenCatalogProvider.overrideWith(
-        (ref) async => testVoiceTokenCatalog,
-      ),
-      voiceMaterialThemeProvider.overrideWith(
-        (ref) => VoiceTheme.build(
-          catalog: testVoiceTokenCatalog,
-          mode: VoiceThemeMode.dark,
-          profileAccent: testVoiceTokenCatalog.profileAccentAt(0),
-        ),
-      ),
-    ];
+  voiceTokenCatalogProvider.overrideWith((ref) async => testVoiceTokenCatalog),
+  voiceMaterialThemeProvider.overrideWith(
+    (ref) => VoiceTheme.build(
+      catalog: testVoiceTokenCatalog,
+      mode: VoiceThemeMode.dark,
+      profileAccent: testVoiceTokenCatalog.profileAccentAt(0),
+    ),
+  ),
+];
 
 // Mirrors design/tokens/voice.tokens.json
 const _kVoiceTokensJson = '''

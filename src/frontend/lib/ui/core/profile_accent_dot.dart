@@ -16,9 +16,7 @@ class ProfileAccentDot extends StatelessWidget {
       decoration: BoxDecoration(
         color: VoiceColors.of(context).profileAccent,
         shape: BoxShape.circle,
-        border: Border.all(
-          color: VoiceColors.of(context).borderDefault,
-        ),
+        border: Border.all(color: VoiceColors.of(context).borderDefault),
       ),
     );
   }

@@ -62,6 +62,10 @@
   "socialTabFriends": "Друзья",
   "socialTabRequests": "Заявки",
   "socialSearchHint": "Поиск по имени или @нику",
+  "socialSearchStart": "Поиск людей",
+  "socialSearchStartHint": "Введите имя или @ник, чтобы начать диалог.",
+  "socialSearchEmpty": "Профили не найдены",
+  "socialSearchEmptyHint": "Проверьте написание или попробуйте другой ник.",
   "socialAddFriend": "Добавить в друзья",
   "socialAcceptRequest": "Принять",
   "socialDeclineRequest": "Отклонить",
@@ -98,6 +102,16 @@
   "socialRailTooltip": "Друзья и поиск",
   "chatListTitle": "Личные сообщения",
   "chatListEmpty": "Пока нет диалогов",
+  "chatListEmptyHint": "Найдите людей в поиске, чтобы начать личный диалог.",
+  "chatListLoadMore": "Загрузить ещё чаты",
+  "chatListUnreadCount": "Непрочитанных: {count}",
+  "@chatListUnreadCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "chatListLoadError": "Не удалось загрузить чаты",
   "chatListBackendUnavailable": "Чаты недоступны. Запустите полный API-стек (docker compose --profile app).",
   "chatListDmFallback": "Чат {id}",
@@ -109,6 +123,7 @@
     }
   },
   "chatRoomSelectPrompt": "Выберите диалог",
+  "chatRoomBack": "Назад к чатам",
   "chatRoomTitle": "Чат {id}",
   "@chatRoomTitle": {
     "placeholders": {
@@ -118,7 +133,10 @@
     }
   },
   "chatRoomEmpty": "Сообщений пока нет",
+  "chatRoomEmptyHint": "Отправьте первое сообщение, когда будете готовы.",
+  "chatRoomLoadOlder": "Загрузить старые сообщения",
   "chatRoomInputHint": "Сообщение",
+  "chatSendMessage": "Отправить сообщение",
   "chatRoomError": "Ошибка: {message}",
   "@chatRoomError": {
     "placeholders": {
@@ -162,5 +180,6 @@
     }
   },
   "commonCancel": "Отмена",
+  "commonRetry": "Попробовать снова",
   "commonLoading": "…"
 }

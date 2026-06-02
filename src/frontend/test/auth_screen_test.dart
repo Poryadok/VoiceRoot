@@ -81,25 +81,21 @@ void main() {
       find.byKey(AuthScreen.emailFieldKey),
       'user@example.com',
     );
-    await tester.enterText(
-      find.byKey(AuthScreen.passwordFieldKey),
-      'secret12',
-    );
+    await tester.enterText(find.byKey(AuthScreen.passwordFieldKey), 'secret12');
     await tester.tap(find.byKey(AuthScreen.loginButtonKey));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('auth_session_profile')), findsOneWidget);
     expect(find.text('@alice#0001'), findsOneWidget);
     expect(find.byKey(const Key('social_discover_hint')), findsOneWidget);
-    expect(
-      find.text('Find people — use the icon on the left'),
-      findsOneWidget,
-    );
+    expect(find.text('Find people — use the icon on the left'), findsOneWidget);
     expect(find.byKey(AuthScreen.screenKey), findsNothing);
     expect(await hintStorage.wasShown(), isTrue);
   });
 
-  testWidgets('register shows localized validation_failed from API', (tester) async {
+  testWidgets('register shows localized validation_failed from API', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -136,10 +132,7 @@ void main() {
       find.byKey(AuthScreen.emailFieldKey),
       'user@example.com',
     );
-    await tester.enterText(
-      find.byKey(AuthScreen.passwordFieldKey),
-      'short',
-    );
+    await tester.enterText(find.byKey(AuthScreen.passwordFieldKey), 'short');
     await tester.tap(find.byKey(AuthScreen.registerButtonKey));
     await tester.pump();
 
@@ -157,9 +150,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.text(
-        'Use a valid email and a password of at least 8 characters.',
-      ),
+      find.text('Use a valid email and a password of at least 8 characters.'),
       findsOneWidget,
     );
     expect(find.byKey(const Key('auth_error')), findsOneWidget);
@@ -202,10 +193,7 @@ void main() {
       find.byKey(AuthScreen.emailFieldKey),
       'user@example.com',
     );
-    await tester.enterText(
-      find.byKey(AuthScreen.passwordFieldKey),
-      'secret12',
-    );
+    await tester.enterText(find.byKey(AuthScreen.passwordFieldKey), 'secret12');
     await tester.tap(find.byKey(AuthScreen.loginButtonKey));
     await tester.pumpAndSettle();
 
@@ -249,10 +237,7 @@ void main() {
       find.byKey(AuthScreen.emailFieldKey),
       'user@example.com',
     );
-    await tester.enterText(
-      find.byKey(AuthScreen.passwordFieldKey),
-      'secret12',
-    );
+    await tester.enterText(find.byKey(AuthScreen.passwordFieldKey), 'secret12');
     await tester.tap(find.byKey(AuthScreen.loginButtonKey));
     await tester.pumpAndSettle();
 
@@ -262,7 +247,9 @@ void main() {
     );
   });
 
-  testWidgets('empty submit shows localized empty fields error', (tester) async {
+  testWidgets('empty submit shows localized empty fields error', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [

@@ -12,12 +12,12 @@ void main() {
   const config = GatewayConfig(baseUrl: baseUrl);
 
   Map<String, dynamic> sessionJson() => {
-        'access_token': 'access-abc',
-        'refresh_token': 'refresh-xyz',
-        'expires_in_seconds': 900,
-        'account_id': 'acc-1',
-        'profile_id': 'prof-1',
-      };
+    'access_token': 'access-abc',
+    'refresh_token': 'refresh-xyz',
+    'expires_in_seconds': 900,
+    'account_id': 'acc-1',
+    'profile_id': 'prof-1',
+  };
 
   group('VoiceAuthClient.register', () {
     test('POST /api/v1/auth/register returns session', () async {
@@ -30,10 +30,7 @@ void main() {
         expect(body['device_info_json'], isNotEmpty);
         return http.Response(jsonEncode(sessionJson()), 200);
       });
-      final client = VoiceAuthClient(
-        httpClient: mock,
-        config: config,
-      );
+      final client = VoiceAuthClient(httpClient: mock, config: config);
       final r = await client.register(
         email: 'user@example.com',
         password: 'secret',
@@ -52,15 +49,9 @@ void main() {
         httpClient: MockClient((_) async => http.Response('', 500)),
         config: const GatewayConfig(baseUrl: ''),
       );
-      final r = await client.register(
-        email: 'a@b.com',
-        password: 'x',
-      );
+      final r = await client.register(email: 'a@b.com', password: 'x');
       expect(r, isA<AuthSessionFailure>());
-      expect(
-        (r as AuthSessionFailure).message,
-        kAuthMissingBaseUrlDetail,
-      );
+      expect((r as AuthSessionFailure).message, kAuthMissingBaseUrlDetail);
     });
 
     test('maps error JSON on 401', () async {

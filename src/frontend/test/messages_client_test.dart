@@ -47,26 +47,26 @@ void main() {
       expect(data.messages.single.content, 'Hi');
     });
 
-    test('GET /api/v1/messages with last_message_id for reconnect catch-up', () async {
-      final mock = MockClient((req) async {
-        expect(req.url.queryParameters['last_message_id'], 'msg-last');
-        return http.Response(
-          jsonEncode({
-            'message_list': {
-              'messages': [],
-              'has_more': false,
-            },
-          }),
-          200,
+    test(
+      'GET /api/v1/messages with last_message_id for reconnect catch-up',
+      () async {
+        final mock = MockClient((req) async {
+          expect(req.url.queryParameters['last_message_id'], 'msg-last');
+          return http.Response(
+            jsonEncode({
+              'message_list': {'messages': [], 'has_more': false},
+            }),
+            200,
+          );
+        });
+        final client = VoiceMessagesClient(httpClient: mock, config: config);
+        await client.getMessages(
+          authorization: auth,
+          chatId: 'chat-1',
+          lastMessageId: 'msg-last',
         );
-      });
-      final client = VoiceMessagesClient(httpClient: mock, config: config);
-      await client.getMessages(
-        authorization: auth,
-        chatId: 'chat-1',
-        lastMessageId: 'msg-last',
-      );
-    });
+      },
+    );
   });
 
   group('VoiceMessagesClient.sendMessage', () {
@@ -136,7 +136,10 @@ void main() {
         );
       });
       final client = VoiceMessagesClient(httpClient: mock, config: config);
-      final r = await client.getReadState(authorization: auth, chatId: 'chat-1');
+      final r = await client.getReadState(
+        authorization: auth,
+        chatId: 'chat-1',
+      );
       expect(r, isA<MessagesApiOk<ReadStateData>>());
       final data = (r as MessagesApiOk<ReadStateData>).data;
       expect(data.lastReadMessageId, 'msg-9');

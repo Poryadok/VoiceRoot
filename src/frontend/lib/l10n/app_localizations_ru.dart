@@ -104,6 +104,20 @@ class AppLocalizationsRu extends AppLocalizations {
   String get socialSearchHint => 'Поиск по имени или @нику';
 
   @override
+  String get socialSearchStart => 'Поиск людей';
+
+  @override
+  String get socialSearchStartHint =>
+      'Введите имя или @ник, чтобы начать диалог.';
+
+  @override
+  String get socialSearchEmpty => 'Профили не найдены';
+
+  @override
+  String get socialSearchEmptyHint =>
+      'Проверьте написание или попробуйте другой ник.';
+
+  @override
   String get socialAddFriend => 'Добавить в друзья';
 
   @override
@@ -175,6 +189,18 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatListEmpty => 'Пока нет диалогов';
 
   @override
+  String get chatListEmptyHint =>
+      'Найдите людей в поиске, чтобы начать личный диалог.';
+
+  @override
+  String get chatListLoadMore => 'Загрузить ещё чаты';
+
+  @override
+  String chatListUnreadCount(int count) {
+    return 'Непрочитанных: $count';
+  }
+
+  @override
   String get chatListLoadError => 'Не удалось загрузить чаты';
 
   @override
@@ -190,6 +216,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatRoomSelectPrompt => 'Выберите диалог';
 
   @override
+  String get chatRoomBack => 'Назад к чатам';
+
+  @override
   String chatRoomTitle(String id) {
     return 'Чат $id';
   }
@@ -198,7 +227,17 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatRoomEmpty => 'Сообщений пока нет';
 
   @override
+  String get chatRoomEmptyHint =>
+      'Отправьте первое сообщение, когда будете готовы.';
+
+  @override
+  String get chatRoomLoadOlder => 'Загрузить старые сообщения';
+
+  @override
   String get chatRoomInputHint => 'Сообщение';
+
+  @override
+  String get chatSendMessage => 'Отправить сообщение';
 
   @override
   String chatRoomError(String message) {
@@ -275,6 +314,9 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get commonCancel => 'Отмена';
+
+  @override
+  String get commonRetry => 'Попробовать снова';
 
   @override
   String get commonLoading => '…';

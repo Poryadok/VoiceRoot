@@ -14,12 +14,12 @@ void main() {
   const config = GatewayConfig(baseUrl: 'http://api.test');
 
   Map<String, dynamic> sessionJson() => {
-        'access_token': 'access',
-        'refresh_token': 'refresh',
-        'expires_in_seconds': 900,
-        'account_id': 'acc-1',
-        'profile_id': 'prof-1',
-      };
+    'access_token': 'access',
+    'refresh_token': 'refresh',
+    'expires_in_seconds': 900,
+    'account_id': 'acc-1',
+    'profile_id': 'prof-1',
+  };
 
   ProviderContainer buildContainer({
     required MockClient mock,
@@ -93,10 +93,7 @@ void main() {
   test('login stores errorKey for invalid_credentials', () async {
     final mock = MockClient((req) async {
       if (req.url.path == '/api/v1/auth/login') {
-        return http.Response(
-          jsonEncode({'error': 'invalid_credentials'}),
-          401,
-        );
+        return http.Response(jsonEncode({'error': 'invalid_credentials'}), 401);
       }
       return http.Response('not found', 404);
     });
@@ -126,10 +123,7 @@ void main() {
         .read(authControllerProvider.notifier)
         .login(email: 'u@x.com', password: 'password1');
 
-    expect(
-      container.read(authControllerProvider).errorKey,
-      'rate_limited',
-    );
+    expect(container.read(authControllerProvider).errorKey, 'rate_limited');
   });
 
   test('logout clears session', () async {

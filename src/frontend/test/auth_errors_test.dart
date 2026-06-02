@@ -15,10 +15,7 @@ void main() {
 
     test('prefers API error code', () {
       expect(
-        resolveAuthErrorKey(
-          errorCode: 'invalid_credentials',
-          statusCode: 401,
-        ),
+        resolveAuthErrorKey(errorCode: 'invalid_credentials', statusCode: 401),
         'invalid_credentials',
       );
     });

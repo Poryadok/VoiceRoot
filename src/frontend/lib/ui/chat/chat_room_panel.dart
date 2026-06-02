@@ -7,12 +7,13 @@ import '../../state/chat_providers.dart';
 import '../../state/presence_providers.dart';
 import '../../state/social_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../core/voice_state_panel.dart';
 import '../core/voice_send_button.dart';
 import '../social/presence_indicator.dart';
 
 /// Main column: message history (REST) + composer; live updates via Realtime WS.
 class ChatRoomPanel extends ConsumerStatefulWidget {
-  const ChatRoomPanel({super.key, required this.chatId});
+  const ChatRoomPanel({super.key, required this.chatId, this.onBack});
 
   static const Key panelKey = Key('chat_room_panel');
   static const Key messagesKey = Key('chat_room_messages');
@@ -22,6 +23,7 @@ class ChatRoomPanel extends ConsumerStatefulWidget {
   static const Key loadOlderKey = Key('chat_room_load_older');
 
   final String chatId;
+  final VoidCallback? onBack;
 
   @override
   ConsumerState<ChatRoomPanel> createState() => _ChatRoomPanelState();
@@ -78,10 +80,19 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(
               children: [
+                if (widget.onBack != null) ...[
+                  IconButton(
+                    tooltip: l10n.chatRoomBack,
+                    onPressed: widget.onBack,
+                    icon: const Icon(Icons.arrow_back),
+                  ),
+                  const SizedBox(width: 4),
+                ],
                 if (peerPresence != null) ...[
                   PresenceIndicator(
                     key: ChatRoomPanel.peerPresenceKey,
                     presence: peerPresence,
+                    semanticLabel: _presenceLabel(l10n, peerPresence.status),
                     size: 10,
                   ),
                   const SizedBox(width: 8),
@@ -100,7 +111,24 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         if (room.isLoading) const LinearProgressIndicator(minHeight: 2),
         Expanded(
           child: room.messages.isEmpty && !room.isLoading
-              ? Center(child: Text(l10n.chatRoomEmpty))
+              ? room.errorMessage != null
+                    ? VoiceStatePanel(
+                        title: l10n.chatRoomError(room.errorMessage!),
+                        icon: Icons.cloud_off_outlined,
+                        actionLabel: l10n.commonRetry,
+                        onAction: () => ref
+                            .read(
+                              chatRoomControllerProvider(
+                                widget.chatId,
+                              ).notifier,
+                            )
+                            .loadInitial(),
+                      )
+                    : VoiceStatePanel(
+                        title: l10n.chatRoomEmpty,
+                        message: l10n.chatRoomEmptyHint,
+                        icon: Icons.chat_bubble_outline,
+                      )
               : ListView.builder(
                   key: ChatRoomPanel.messagesKey,
                   controller: _scrollController,
@@ -123,12 +151,10 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                                   ),
                                 ),
                               )
-                            : IconButton(
+                            : TextButton.icon(
                                 key: ChatRoomPanel.loadOlderKey,
-                                tooltip: MaterialLocalizations.of(
-                                  context,
-                                ).moreButtonTooltip,
                                 icon: const Icon(Icons.expand_less),
+                                label: Text(l10n.chatRoomLoadOlder),
                                 onPressed: () => ref
                                     .read(
                                       chatRoomControllerProvider(
@@ -164,7 +190,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   },
                 ),
         ),
-        if (room.errorMessage != null)
+        if (room.errorMessage != null && room.messages.isNotEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Text(
@@ -184,7 +210,6 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                     controller: _composer,
                     decoration: InputDecoration(
                       hintText: l10n.chatRoomInputHint,
-                      border: const OutlineInputBorder(),
                       isDense: true,
                     ),
                     onSubmitted: room.isSending ? null : (_) => _send(),
@@ -195,6 +220,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   key: ChatRoomPanel.sendKey,
                   onPressed: _send,
                   isLoading: room.isSending,
+                  tooltip: l10n.chatSendMessage,
                 ),
               ],
             ),
@@ -216,6 +242,15 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   }
 }
 
+String _presenceLabel(AppLocalizations l10n, String status) {
+  return switch (status) {
+    'online' => l10n.socialPresenceOnline,
+    'idle' => l10n.socialPresenceIdle,
+    'dnd' => l10n.socialPresenceDnd,
+    _ => l10n.socialPresenceOffline,
+  };
+}
+
 class _RealtimeBadge extends StatelessWidget {
   const _RealtimeBadge({required this.status, required this.l10n});
 
@@ -224,22 +259,23 @@ class _RealtimeBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final voice = VoiceColors.of(context);
     final (label, color) = switch (status) {
       RealtimeLinkStatus.connected => (
         l10n.chatRealtimeConnected,
-        Colors.green,
+        voice.profileAccent,
       ),
       RealtimeLinkStatus.connecting => (
         l10n.chatRealtimeConnecting,
-        Colors.orange,
+        voice.focusRing,
       ),
       RealtimeLinkStatus.reconnecting => (
         l10n.chatRealtimeReconnecting,
-        Colors.orange,
+        voice.focusRing,
       ),
       RealtimeLinkStatus.disconnected => (
         l10n.chatRealtimeOffline,
-        Colors.grey,
+        voice.textDisabled,
       ),
     };
     return Row(

@@ -260,6 +260,30 @@ abstract class AppLocalizations {
   /// **'Search by name or @username'**
   String get socialSearchHint;
 
+  /// No description provided for @socialSearchStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Search for people'**
+  String get socialSearchStart;
+
+  /// No description provided for @socialSearchStartHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a name or @username to start a conversation.'**
+  String get socialSearchStartHint;
+
+  /// No description provided for @socialSearchEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No profiles found'**
+  String get socialSearchEmpty;
+
+  /// No description provided for @socialSearchEmptyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Check the spelling or try another handle.'**
+  String get socialSearchEmptyHint;
+
   /// No description provided for @socialAddFriend.
   ///
   /// In en, this message translates to:
@@ -392,6 +416,24 @@ abstract class AppLocalizations {
   /// **'No conversations yet'**
   String get chatListEmpty;
 
+  /// No description provided for @chatListEmptyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Find people in Search to start a direct message.'**
+  String get chatListEmptyHint;
+
+  /// No description provided for @chatListLoadMore.
+  ///
+  /// In en, this message translates to:
+  /// **'Load more chats'**
+  String get chatListLoadMore;
+
+  /// No description provided for @chatListUnreadCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} unread'**
+  String chatListUnreadCount(int count);
+
   /// No description provided for @chatListLoadError.
   ///
   /// In en, this message translates to:
@@ -416,6 +458,12 @@ abstract class AppLocalizations {
   /// **'Select a conversation'**
   String get chatRoomSelectPrompt;
 
+  /// No description provided for @chatRoomBack.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to chats'**
+  String get chatRoomBack;
+
   /// No description provided for @chatRoomTitle.
   ///
   /// In en, this message translates to:
@@ -428,11 +476,29 @@ abstract class AppLocalizations {
   /// **'No messages yet'**
   String get chatRoomEmpty;
 
+  /// No description provided for @chatRoomEmptyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Send the first message when you are ready.'**
+  String get chatRoomEmptyHint;
+
+  /// No description provided for @chatRoomLoadOlder.
+  ///
+  /// In en, this message translates to:
+  /// **'Load older messages'**
+  String get chatRoomLoadOlder;
+
   /// No description provided for @chatRoomInputHint.
   ///
   /// In en, this message translates to:
   /// **'Message'**
   String get chatRoomInputHint;
+
+  /// No description provided for @chatSendMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Send message'**
+  String get chatSendMessage;
 
   /// No description provided for @chatRoomError.
   ///
@@ -565,6 +631,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Cancel'**
   String get commonCancel;
+
+  /// No description provided for @commonRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Try again'**
+  String get commonRetry;
 
   /// No description provided for @commonLoading.
   ///

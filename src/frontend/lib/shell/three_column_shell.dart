@@ -13,6 +13,8 @@ class ThreeColumnShell extends StatelessWidget {
     this.mainChild,
     this.listFlex = 1,
     this.mainFlex = 2,
+    this.showMainOnlyOnNarrow = false,
+    this.mobileRailChild,
   });
 
   final Widget? header;
@@ -21,45 +23,39 @@ class ThreeColumnShell extends StatelessWidget {
   final Widget? mainChild;
   final int listFlex;
   final int mainFlex;
+  final bool showMainOnlyOnNarrow;
+  final Widget? mobileRailChild;
 
   static const Key navActiveRail = Key('nav_active_rail');
   static const Key navChatList = Key('nav_chat_list');
   static const Key navOpenChat = Key('nav_open_chat');
   static const Key navMobileStack = Key('nav_mobile_stack');
+  static const Key navMobileStrip = Key('nav_mobile_strip');
 
   @override
   Widget build(BuildContext context) {
     final voice = VoiceColors.of(context);
 
-    Widget rail() => Expanded(
-          flex: 1,
-          key: navActiveRail,
-          child: railChild ??
-              ColoredBox(
-                color: voice.muted,
-                child: const SizedBox.expand(),
-              ),
-        );
+    Widget railContent() =>
+        railChild ??
+        ColoredBox(color: voice.muted, child: const SizedBox.expand());
 
-    Widget list() => Expanded(
-          flex: listFlex,
-          key: navChatList,
-          child: listChild ??
-              ColoredBox(
-                color: voice.surface,
-                child: const SizedBox.expand(),
-              ),
-        );
+    Widget listContent() =>
+        listChild ??
+        ColoredBox(color: voice.surface, child: const SizedBox.expand());
 
-    Widget main() => Expanded(
-          flex: mainFlex,
-          key: navOpenChat,
-          child: mainChild ??
-              ColoredBox(
-                color: voice.canvas,
-                child: const SizedBox.expand(),
-              ),
-        );
+    Widget mainContent() =>
+        mainChild ??
+        ColoredBox(color: voice.canvas, child: const SizedBox.expand());
+
+    Widget rail() =>
+        Expanded(flex: 1, key: navActiveRail, child: railContent());
+
+    Widget list() =>
+        Expanded(flex: listFlex, key: navChatList, child: listContent());
+
+    Widget main() =>
+        Expanded(flex: mainFlex, key: navOpenChat, child: mainContent());
 
     return LayoutBuilder(
       builder: (context, c) {
@@ -68,19 +64,27 @@ class ThreeColumnShell extends StatelessWidget {
             ? Column(
                 key: navMobileStack,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  rail(),
-                  list(),
-                  main(),
-                ],
+                children: showMainOnlyOnNarrow
+                    ? [
+                        SizedBox(
+                          key: navMobileStrip,
+                          height: 48,
+                          child: mobileRailChild ?? railContent(),
+                        ),
+                        Expanded(key: navOpenChat, child: mainContent()),
+                      ]
+                    : [
+                        SizedBox(
+                          key: navActiveRail,
+                          height: 48,
+                          child: mobileRailChild ?? railContent(),
+                        ),
+                        Expanded(key: navChatList, child: listContent()),
+                      ],
               )
             : Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  rail(),
-                  list(),
-                  main(),
-                ],
+                children: [rail(), list(), main()],
               );
 
         return Column(

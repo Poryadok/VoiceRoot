@@ -16,7 +16,11 @@ final class ChatsApiOk<T> extends ChatsApiResult<T> {
 }
 
 final class ChatsApiFailure extends ChatsApiResult<Never> {
-  const ChatsApiFailure({required this.message, this.errorCode, this.statusCode});
+  const ChatsApiFailure({
+    required this.message,
+    this.errorCode,
+    this.statusCode,
+  });
 
   final String message;
   final String? errorCode;
@@ -74,8 +78,8 @@ class VoiceChatsClient {
   VoiceChatsClient({
     required http.Client httpClient,
     required GatewayConfig config,
-  })  : _http = httpClient,
-        _config = config;
+  }) : _http = httpClient,
+       _config = config;
 
   final http.Client _http;
   final GatewayConfig _config;
