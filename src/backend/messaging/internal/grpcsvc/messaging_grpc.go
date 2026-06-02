@@ -509,6 +509,102 @@ func (s *MessagingGRPC) GetReadState(ctx context.Context, req *messagingv1.GetRe
 	}, nil
 }
 
+func (s *MessagingGRPC) GetBulkReadState(ctx context.Context, req *messagingv1.GetBulkReadStateRequest) (*messagingv1.GetBulkReadStateResponse, error) {
+	if s == nil || s.Messages == nil {
+		return nil, status.Error(codes.FailedPrecondition, "messaging persistence not configured")
+	}
+	profileID, ok := authctx.ProfileID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing profile")
+	}
+	chatIDs, err := s.authorizedChatIDs(ctx, profileID, req.GetChats())
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]*messagingv1.ReadState, len(chatIDs))
+	for _, chatID := range chatIDs {
+		lid, upd, err := s.Messages.GetReadReceipt(ctx, chatID, profileID)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		if lid == nil {
+			continue
+		}
+		dm := chatv1.ChatType_CHAT_TYPE_DM
+		out[chatID.String()] = &messagingv1.ReadState{
+			Chat:              &chatv1.ChatRef{Id: chatID.String(), Type: &dm},
+			ProfileId:         profileID.String(),
+			LastReadMessageId: lid.String(),
+			UpdatedAt:         timestamppb.New(*upd),
+		}
+	}
+	return &messagingv1.GetBulkReadStateResponse{ByChatId: out}, nil
+}
+
+func (s *MessagingGRPC) GetChatListMetadata(ctx context.Context, req *messagingv1.GetChatListMetadataRequest) (*messagingv1.GetChatListMetadataResponse, error) {
+	if s == nil || s.Messages == nil {
+		return nil, status.Error(codes.FailedPrecondition, "messaging persistence not configured")
+	}
+	profileID, ok := authctx.ProfileID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing profile")
+	}
+	chatIDs, err := s.authorizedChatIDs(ctx, profileID, req.GetChats())
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.Messages.GetChatListMetadata(ctx, profileID, chatIDs)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	out := make(map[string]*messagingv1.ChatListMetadata, len(rows))
+	for _, chatID := range chatIDs {
+		row := rows[chatID]
+		dm := chatv1.ChatType_CHAT_TYPE_DM
+		item := &messagingv1.ChatListMetadata{
+			Chat:        &chatv1.ChatRef{Id: chatID.String(), Type: &dm},
+			UnreadCount: row.UnreadCount,
+		}
+		if row.LastMessagePreview != "" {
+			preview := row.LastMessagePreview
+			item.LastMessagePreview = &preview
+		}
+		if row.LastMessageAt != nil {
+			item.LastMessageAt = timestamppb.New(*row.LastMessageAt)
+		}
+		out[chatID.String()] = item
+	}
+	return &messagingv1.GetChatListMetadataResponse{ByChatId: out}, nil
+}
+
+func (s *MessagingGRPC) authorizedChatIDs(ctx context.Context, profileID uuid.UUID, refs []*chatv1.ChatRef) ([]uuid.UUID, error) {
+	seen := make(map[uuid.UUID]struct{}, len(refs))
+	out := make([]uuid.UUID, 0, len(refs))
+	for _, ref := range refs {
+		if err := validateChatRefDM(ref); err != nil {
+			return nil, err
+		}
+		chatID, err := parseUUIDField("chat.id", ref.GetId())
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := seen[chatID]; ok {
+			continue
+		}
+		if s.ChatGuard != nil {
+			if err := s.ChatGuard.EnsureMember(ctx, chatID, profileID); err != nil {
+				if errors.Is(err, store.ErrNotChatMember) {
+					return nil, status.Error(codes.PermissionDenied, "not a chat member")
+				}
+				return nil, status.Error(codes.Internal, err.Error())
+			}
+		}
+		seen[chatID] = struct{}{}
+		out = append(out, chatID)
+	}
+	return out, nil
+}
+
 func validateChatRefDM(ref *chatv1.ChatRef) error {
 	if ref == nil {
 		return status.Error(codes.InvalidArgument, "chat is required")

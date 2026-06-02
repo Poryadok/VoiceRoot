@@ -27,7 +27,9 @@ void main() {
     return ProviderScope(
       overrides: [
         ...voiceThemeTestOverrides(),
-        profileAccentStorageProvider.overrideWithValue(testProfileAccentStorage),
+        profileAccentStorageProvider.overrideWithValue(
+          testProfileAccentStorage,
+        ),
         authSessionStorageProvider.overrideWithValue(
           InMemoryAuthSessionStorage(),
         ),
@@ -65,6 +67,7 @@ void main() {
                         'creator_profile_id': 'profile-a',
                       },
                       'last_message_preview': 'Preview text',
+                      'unread_count': 3,
                     },
                   ],
                 },
@@ -81,15 +84,19 @@ void main() {
     expect(find.byKey(ChatListPanel.panelKey), findsOneWidget);
     expect(find.byKey(ChatListPanel.tileKey('chat-abc')), findsOneWidget);
     expect(find.text('Preview text'), findsOneWidget);
+    expect(find.text('3'), findsOneWidget);
   });
 
-  testWidgets('ChatListPanel shows peer online indicator when presence known',
-      (tester) async {
+  testWidgets('ChatListPanel shows peer online indicator when presence known', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           ...voiceThemeTestOverrides(),
-          profileAccentStorageProvider.overrideWithValue(testProfileAccentStorage),
+          profileAccentStorageProvider.overrideWithValue(
+            testProfileAccentStorage,
+          ),
           authSessionStorageProvider.overrideWithValue(
             InMemoryAuthSessionStorage(),
           ),
@@ -171,11 +178,14 @@ void main() {
   });
 
   testWidgets('selecting chat shows room and loads messages', (tester) async {
+    var markReadCalls = 0;
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           ...voiceThemeTestOverrides(),
-          profileAccentStorageProvider.overrideWithValue(testProfileAccentStorage),
+          profileAccentStorageProvider.overrideWithValue(
+            testProfileAccentStorage,
+          ),
           authSessionStorageProvider.overrideWithValue(
             InMemoryAuthSessionStorage(),
           ),
@@ -191,6 +201,13 @@ void main() {
                     'message_list': {
                       'messages': [
                         {
+                          'id': 'msg-2',
+                          'chat': {'id': 'chat-abc'},
+                          'sender_profile_id': 'profile-b',
+                          'content': 'Newest first from API',
+                          'created_at': '2024-01-01T00:00:01Z',
+                        },
+                        {
                           'id': 'msg-1',
                           'chat': {'id': 'chat-abc'},
                           'sender_profile_id': 'profile-b',
@@ -203,6 +220,14 @@ void main() {
                   200,
                 );
               }
+              if (req.url.path == '/api/v1/messages/read') {
+                markReadCalls++;
+                expect(req.method, 'POST');
+                final body = jsonDecode(req.body) as Map<String, dynamic>;
+                expect(body['chat'], {'id': 'chat-abc'});
+                expect(body['last_read_message_id'], 'msg-2');
+                return http.Response('{}', 200);
+              }
               return http.Response('{}', 404);
             }),
           ),
@@ -214,9 +239,7 @@ void main() {
           locale: const Locale('en'),
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: const Scaffold(
-            body: ChatRoomPanel(chatId: 'chat-abc'),
-          ),
+          home: const Scaffold(body: ChatRoomPanel(chatId: 'chat-abc')),
         ),
       ),
     );
@@ -224,6 +247,8 @@ void main() {
 
     expect(find.byKey(ChatRoomPanel.panelKey), findsOneWidget);
     expect(find.text('Hello there'), findsOneWidget);
+    expect(find.text('Newest first from API'), findsOneWidget);
+    expect(markReadCalls, 1);
   });
 }
 

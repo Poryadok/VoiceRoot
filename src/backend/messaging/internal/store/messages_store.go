@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"time"
@@ -13,22 +14,29 @@ import (
 
 // MessageRow is a persisted messaging_db.messages row (v1 DM).
 type MessageRow struct {
-	ID                uuid.UUID
-	ChatID            uuid.UUID
-	SenderProfileID   uuid.UUID
-	Content           string
-	Type              string
-	ThreadParentID    *uuid.UUID
-	AttachmentsJSON   string
-	MentionsJSON      string
-	ClientMessageID   *uuid.UUID
-	EditedAt          *time.Time
-	DeletedAt         *time.Time
-	CreatedAt         time.Time
+	ID              uuid.UUID
+	ChatID          uuid.UUID
+	SenderProfileID uuid.UUID
+	Content         string
+	Type            string
+	ThreadParentID  *uuid.UUID
+	AttachmentsJSON string
+	MentionsJSON    string
+	ClientMessageID *uuid.UUID
+	EditedAt        *time.Time
+	DeletedAt       *time.Time
+	CreatedAt       time.Time
 }
 
 type MessagesStore struct {
 	Pool *pgxpool.Pool
+}
+
+type ChatListMetadataRow struct {
+	ChatID             uuid.UUID
+	LastMessagePreview string
+	LastMessageAt      *time.Time
+	UnreadCount        int64
 }
 
 func (s *MessagesStore) MessageExists(ctx context.Context, chatID, messageID uuid.UUID) (bool, error) {
@@ -290,4 +298,59 @@ WHERE chat_id = $1 AND profile_id = $2
 	}
 	u := upd.UTC()
 	return &lid, &u, nil
+}
+
+func (s *MessagesStore) GetChatListMetadata(ctx context.Context, viewerProfileID uuid.UUID, chatIDs []uuid.UUID) (map[uuid.UUID]ChatListMetadataRow, error) {
+	if s == nil || s.Pool == nil {
+		return nil, errors.New("messages store: pool not configured")
+	}
+	out := make(map[uuid.UUID]ChatListMetadataRow, len(chatIDs))
+	for _, chatID := range chatIDs {
+		var preview sql.NullString
+		var lastAt sql.NullTime
+		var unread int64
+		err := s.Pool.QueryRow(ctx, `
+WITH latest AS (
+  SELECT content, created_at
+  FROM messages
+  WHERE chat_id = $1 AND deleted_at IS NULL
+  ORDER BY id DESC
+  LIMIT 1
+), unread AS (
+  SELECT count(*)::bigint AS unread_count
+  FROM messages m
+  LEFT JOIN read_receipts rr
+    ON rr.chat_id = m.chat_id AND rr.profile_id = $2
+  WHERE m.chat_id = $1
+    AND m.deleted_at IS NULL
+    AND m.sender_profile_id <> $2
+    AND (rr.last_read_message_id IS NULL OR m.id > rr.last_read_message_id)
+)
+SELECT latest.content, latest.created_at, unread.unread_count
+FROM unread
+LEFT JOIN latest ON true
+`, chatID, viewerProfileID).Scan(&preview, &lastAt, &unread)
+		if err != nil {
+			return nil, err
+		}
+		row := ChatListMetadataRow{ChatID: chatID, UnreadCount: unread}
+		if preview.Valid {
+			row.LastMessagePreview = truncatePreview(preview.String)
+		}
+		if lastAt.Valid {
+			t := lastAt.Time.UTC()
+			row.LastMessageAt = &t
+		}
+		out[chatID] = row
+	}
+	return out, nil
+}
+
+func truncatePreview(s string) string {
+	const maxRunes = 160
+	r := []rune(s)
+	if len(r) <= maxRunes {
+		return s
+	}
+	return string(r[:maxRunes])
 }

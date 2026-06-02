@@ -46,6 +46,7 @@ service MessagingService {
   rpc MarkRead(MarkReadRequest) returns (MarkReadResponse);
   rpc GetReadState(GetReadStateRequest) returns (GetReadStateResponse);
   rpc GetBulkReadState(GetBulkReadStateRequest) returns (GetBulkReadStateResponse); // map chat_id -> ReadState
+  rpc GetChatListMetadata(GetChatListMetadataRequest) returns (GetChatListMetadataResponse); // S2S: preview + unread for Chat ListChats
 }
 ```
 

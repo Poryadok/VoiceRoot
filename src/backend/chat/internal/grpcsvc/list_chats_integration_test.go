@@ -2,14 +2,22 @@ package grpcsvc
 
 import (
 	"context"
+	"net"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	commonv1 "voice.app/voice/common/v1"
+	messagingv1 "voice.app/voice/messaging/v1"
 
 	chatv1 "voice.app/voice/chat/v1"
 )
@@ -147,6 +155,90 @@ func TestListChats_EnrichmentFromMessagingHook(t *testing.T) {
 	it := list.GetChatList().GetItems()[0]
 	require.Equal(t, "hello from messaging", it.GetLastMessagePreview())
 	require.Equal(t, int64(4), it.GetUnreadCount())
+}
+
+type recordingMessagingMetadata struct {
+	messagingv1.UnimplementedMessagingServiceServer
+	lastMD metadata.MD
+	byID   map[string]*messagingv1.ChatListMetadata
+}
+
+func (s *recordingMessagingMetadata) GetChatListMetadata(ctx context.Context, req *messagingv1.GetChatListMetadataRequest) (*messagingv1.GetChatListMetadataResponse, error) {
+	md, _ := metadata.FromIncomingContext(ctx)
+	s.lastMD = md
+	out := make(map[string]*messagingv1.ChatListMetadata)
+	for _, ref := range req.GetChats() {
+		if item, ok := s.byID[ref.GetId()]; ok {
+			out[ref.GetId()] = item
+		}
+	}
+	return &messagingv1.GetChatListMetadataResponse{ByChatId: out}, nil
+}
+
+func startMessagingMetadataTestClient(t *testing.T, srv messagingv1.MessagingServiceServer) (messagingv1.MessagingServiceClient, func()) {
+	t.Helper()
+	lis := bufconn.Listen(1 << 20)
+	grpcSrv := grpc.NewServer()
+	messagingv1.RegisterMessagingServiceServer(grpcSrv, srv)
+	go func() {
+		if err := grpcSrv.Serve(lis); err != nil {
+			t.Logf("messaging grpc serve: %v", err)
+		}
+	}()
+	conn, err := grpc.NewClient("passthrough:///bufnet",
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return lis.Dial() }),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	require.NoError(t, err)
+	return messagingv1.NewMessagingServiceClient(conn), func() {
+		_ = conn.Close()
+		grpcSrv.Stop()
+		_ = lis.Close()
+	}
+}
+
+func TestListChats_EnrichmentFromMessagingGRPC(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	accA := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	profiles := mapProfileAccounts{profA: accA, profB: uuid.New()}
+
+	now := timestamppb.Now()
+	rec := &recordingMessagingMetadata{byID: map[string]*messagingv1.ChatListMetadata{}}
+	msgClient, cleanupMsg := startMessagingMetadataTestClient(t, rec)
+	t.Cleanup(cleanupMsg)
+
+	enrich := NewMessagingListEnricher(msgClient)
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, enrich)
+	t.Cleanup(cleanup)
+
+	ctxA := withAccountProfileCtx(ctx, accA, profA)
+	dm, err := client.CreateDM(ctxA, &chatv1.CreateDMRequest{OtherProfileId: profB.String()})
+	require.NoError(t, err)
+	chatID := dm.GetChat().GetId()
+	rec.byID[chatID] = &messagingv1.ChatListMetadata{
+		Chat:               &chatv1.ChatRef{Id: chatID},
+		LastMessagePreview: proto.String("from grpc metadata"),
+		UnreadCount:        7,
+		LastMessageAt:      now,
+	}
+
+	list, err := client.ListChats(ctxA, &chatv1.ListChatsRequest{
+		Page: &commonv1.CursorPageRequest{PageSize: 10},
+	})
+	require.NoError(t, err)
+	require.Len(t, list.GetChatList().GetItems(), 1)
+	item := list.GetChatList().GetItems()[0]
+	require.Equal(t, "from grpc metadata", item.GetLastMessagePreview())
+	require.Equal(t, int64(7), item.GetUnreadCount())
+	require.Equal(t, profA.String(), rec.lastMD.Get("x-voice-profile-id")[0], "Chat must forward caller metadata to Messaging")
 }
 
 func TestListChats_InvalidCursor(t *testing.T) {

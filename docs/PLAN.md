@@ -121,7 +121,7 @@
 - [x] **Messaging** — отправка/получение; **базовое** edit/delete (одна политика, без «для всех/себя» и без метки «(ред.)» в UI — **Фаза 3**); PostgreSQL, курсор, REST
 - [x] **UUIDv7 для `messages.id`** — вместе с реализацией Messaging: по спеке генерация UUIDv7; при необходимости расширение БД/генератор — [messaging-service.md](microservices/messaging-service.md)
 - [x] **Realtime Service** — JWT, доставка сообщений, Redis Pub/Sub, `s` + `resume`, догрузка через Messaging — [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md)
-- [ ] **Чаты (DM)** — создание диалогов, список с превью и unread, `mark_read`
+- [x] **Чаты (DM)** — создание диалогов, список с превью и unread, `mark_read`
 - [x] **Друзья** — запрос, accept/decline, список, блок
 - [x] **Профиль (базовый)** — имя, аватар (R2), «О себе»
 - [ ] **Presence** — онлайн/оффлайн по WS, последний визит

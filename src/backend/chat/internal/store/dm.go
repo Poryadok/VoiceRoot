@@ -90,6 +90,25 @@ VALUES ($1, $2, 'member'), ($1, $3, 'member')
 	}, true, nil
 }
 
+func (s *DMStore) TouchLastMessageAt(ctx context.Context, chatID uuid.UUID, at time.Time) error {
+	if s == nil || s.Pool == nil {
+		return errors.New("dm store: pool not configured")
+	}
+	_, err := s.Pool.Exec(ctx, `
+UPDATE chats
+SET last_message_at = CASE
+    WHEN last_message_at IS NULL OR last_message_at < $2::timestamptz THEN $2::timestamptz
+    ELSE last_message_at
+  END,
+  updated_at = CASE
+    WHEN last_message_at IS NULL OR last_message_at < $2::timestamptz THEN now()
+    ELSE updated_at
+  END
+WHERE id = $1 AND type = 'dm'
+`, chatID, at.UTC())
+	return err
+}
+
 func findDMInTx(ctx context.Context, tx pgx.Tx, profileA, profileB uuid.UUID) (*ChatRow, error) {
 	var id, creator uuid.UUID
 	var createdAt, updatedAt time.Time

@@ -19,21 +19,22 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	MessagingService_SendMessage_FullMethodName       = "/voice.messaging.v1.MessagingService/SendMessage"
-	MessagingService_EditMessage_FullMethodName       = "/voice.messaging.v1.MessagingService/EditMessage"
-	MessagingService_DeleteMessage_FullMethodName     = "/voice.messaging.v1.MessagingService/DeleteMessage"
-	MessagingService_GetMessages_FullMethodName       = "/voice.messaging.v1.MessagingService/GetMessages"
-	MessagingService_GetMessage_FullMethodName        = "/voice.messaging.v1.MessagingService/GetMessage"
-	MessagingService_GetThreadMessages_FullMethodName = "/voice.messaging.v1.MessagingService/GetThreadMessages"
-	MessagingService_AddReaction_FullMethodName       = "/voice.messaging.v1.MessagingService/AddReaction"
-	MessagingService_RemoveReaction_FullMethodName    = "/voice.messaging.v1.MessagingService/RemoveReaction"
-	MessagingService_PinMessage_FullMethodName        = "/voice.messaging.v1.MessagingService/PinMessage"
-	MessagingService_UnpinMessage_FullMethodName      = "/voice.messaging.v1.MessagingService/UnpinMessage"
-	MessagingService_GetPinnedMessages_FullMethodName = "/voice.messaging.v1.MessagingService/GetPinnedMessages"
-	MessagingService_ForwardMessage_FullMethodName    = "/voice.messaging.v1.MessagingService/ForwardMessage"
-	MessagingService_MarkRead_FullMethodName          = "/voice.messaging.v1.MessagingService/MarkRead"
-	MessagingService_GetReadState_FullMethodName      = "/voice.messaging.v1.MessagingService/GetReadState"
-	MessagingService_GetBulkReadState_FullMethodName  = "/voice.messaging.v1.MessagingService/GetBulkReadState"
+	MessagingService_SendMessage_FullMethodName         = "/voice.messaging.v1.MessagingService/SendMessage"
+	MessagingService_EditMessage_FullMethodName         = "/voice.messaging.v1.MessagingService/EditMessage"
+	MessagingService_DeleteMessage_FullMethodName       = "/voice.messaging.v1.MessagingService/DeleteMessage"
+	MessagingService_GetMessages_FullMethodName         = "/voice.messaging.v1.MessagingService/GetMessages"
+	MessagingService_GetMessage_FullMethodName          = "/voice.messaging.v1.MessagingService/GetMessage"
+	MessagingService_GetThreadMessages_FullMethodName   = "/voice.messaging.v1.MessagingService/GetThreadMessages"
+	MessagingService_AddReaction_FullMethodName         = "/voice.messaging.v1.MessagingService/AddReaction"
+	MessagingService_RemoveReaction_FullMethodName      = "/voice.messaging.v1.MessagingService/RemoveReaction"
+	MessagingService_PinMessage_FullMethodName          = "/voice.messaging.v1.MessagingService/PinMessage"
+	MessagingService_UnpinMessage_FullMethodName        = "/voice.messaging.v1.MessagingService/UnpinMessage"
+	MessagingService_GetPinnedMessages_FullMethodName   = "/voice.messaging.v1.MessagingService/GetPinnedMessages"
+	MessagingService_ForwardMessage_FullMethodName      = "/voice.messaging.v1.MessagingService/ForwardMessage"
+	MessagingService_MarkRead_FullMethodName            = "/voice.messaging.v1.MessagingService/MarkRead"
+	MessagingService_GetReadState_FullMethodName        = "/voice.messaging.v1.MessagingService/GetReadState"
+	MessagingService_GetBulkReadState_FullMethodName    = "/voice.messaging.v1.MessagingService/GetBulkReadState"
+	MessagingService_GetChatListMetadata_FullMethodName = "/voice.messaging.v1.MessagingService/GetChatListMetadata"
 )
 
 // MessagingServiceClient is the client API for MessagingService service.
@@ -61,6 +62,7 @@ type MessagingServiceClient interface {
 	MarkRead(ctx context.Context, in *MarkReadRequest, opts ...grpc.CallOption) (*MarkReadResponse, error)
 	GetReadState(ctx context.Context, in *GetReadStateRequest, opts ...grpc.CallOption) (*GetReadStateResponse, error)
 	GetBulkReadState(ctx context.Context, in *GetBulkReadStateRequest, opts ...grpc.CallOption) (*GetBulkReadStateResponse, error)
+	GetChatListMetadata(ctx context.Context, in *GetChatListMetadataRequest, opts ...grpc.CallOption) (*GetChatListMetadataResponse, error)
 }
 
 type messagingServiceClient struct {
@@ -221,6 +223,16 @@ func (c *messagingServiceClient) GetBulkReadState(ctx context.Context, in *GetBu
 	return out, nil
 }
 
+func (c *messagingServiceClient) GetChatListMetadata(ctx context.Context, in *GetChatListMetadataRequest, opts ...grpc.CallOption) (*GetChatListMetadataResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetChatListMetadataResponse)
+	err := c.cc.Invoke(ctx, MessagingService_GetChatListMetadata_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MessagingServiceServer is the server API for MessagingService service.
 // All implementations must embed UnimplementedMessagingServiceServer
 // for forward compatibility.
@@ -246,6 +258,7 @@ type MessagingServiceServer interface {
 	MarkRead(context.Context, *MarkReadRequest) (*MarkReadResponse, error)
 	GetReadState(context.Context, *GetReadStateRequest) (*GetReadStateResponse, error)
 	GetBulkReadState(context.Context, *GetBulkReadStateRequest) (*GetBulkReadStateResponse, error)
+	GetChatListMetadata(context.Context, *GetChatListMetadataRequest) (*GetChatListMetadataResponse, error)
 	mustEmbedUnimplementedMessagingServiceServer()
 }
 
@@ -300,6 +313,9 @@ func (UnimplementedMessagingServiceServer) GetReadState(context.Context, *GetRea
 }
 func (UnimplementedMessagingServiceServer) GetBulkReadState(context.Context, *GetBulkReadStateRequest) (*GetBulkReadStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetBulkReadState not implemented")
+}
+func (UnimplementedMessagingServiceServer) GetChatListMetadata(context.Context, *GetChatListMetadataRequest) (*GetChatListMetadataResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetChatListMetadata not implemented")
 }
 func (UnimplementedMessagingServiceServer) mustEmbedUnimplementedMessagingServiceServer() {}
 func (UnimplementedMessagingServiceServer) testEmbeddedByValue()                          {}
@@ -592,6 +608,24 @@ func _MessagingService_GetBulkReadState_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MessagingService_GetChatListMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetChatListMetadataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServiceServer).GetChatListMetadata(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessagingService_GetChatListMetadata_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServiceServer).GetChatListMetadata(ctx, req.(*GetChatListMetadataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MessagingService_ServiceDesc is the grpc.ServiceDesc for MessagingService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -658,6 +692,10 @@ var MessagingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetBulkReadState",
 			Handler:    _MessagingService_GetBulkReadState_Handler,
+		},
+		{
+			MethodName: "GetChatListMetadata",
+			Handler:    _MessagingService_GetChatListMetadata_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

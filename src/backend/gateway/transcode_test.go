@@ -595,6 +595,16 @@ func (s *recordingMessagesSend) SendMessage(_ context.Context, req *messagingv1.
 	}, nil
 }
 
+type recordingMessagesRead struct {
+	messagingv1.UnimplementedMessagingServiceServer
+	last *messagingv1.MarkReadRequest
+}
+
+func (s *recordingMessagesRead) MarkRead(_ context.Context, req *messagingv1.MarkReadRequest) (*messagingv1.MarkReadResponse, error) {
+	s.last = req
+	return &messagingv1.MarkReadResponse{}, nil
+}
+
 func TestTranscodeMessagesSendPrecedenceOverRESTProxy(t *testing.T) {
 	t.Parallel()
 
@@ -663,6 +673,42 @@ func TestTranscodeMessagesGetPrecedenceOverRESTProxy(t *testing.T) {
 	}
 	if grpcRec.last == nil || grpcRec.last.GetChat().GetId() != "chat-99" {
 		t.Fatalf("GetMessages request = %+v", grpcRec.last)
+	}
+}
+
+func TestTranscodeMessagesMarkReadPrecedenceOverRESTProxy(t *testing.T) {
+	t.Parallel()
+
+	grpcRec := &recordingMessagesRead{}
+	conn, cleanup := startBufconnMessagingConn(t, grpcRec)
+	t.Cleanup(cleanup)
+
+	proxyCalled := false
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+		},
+		transcoder: &transcoder{clients: grpcClients{messaging: messagingv1.NewMessagingServiceClient(conn)}},
+		restUpstreams: map[string]http.Handler{
+			"messages": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				proxyCalled = true
+				w.WriteHeader(http.StatusAccepted)
+			}),
+		},
+	})
+
+	body := `{"chat":{"id":"chat-99"},"last_read_message_id":"msg-9"}`
+	resp := performRequest(h, http.MethodPost, "/api/v1/messages/read", body, map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	if resp.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%q", resp.Code, http.StatusOK, resp.Body.String())
+	}
+	if proxyCalled {
+		t.Fatal("REST proxy must not run when gRPC transcoder handles POST /api/v1/messages/read")
+	}
+	if grpcRec.last == nil || grpcRec.last.GetChat().GetId() != "chat-99" || grpcRec.last.GetLastReadMessageId() != "msg-9" {
+		t.Fatalf("MarkRead request = %+v", grpcRec.last)
 	}
 }
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net"
 	"net/http"
@@ -21,6 +22,7 @@ import (
 	"voice/backend/chat/internal/store"
 
 	chatv1 "voice.app/voice/chat/v1"
+	messagingv1 "voice.app/voice/messaging/v1"
 	userv1 "voice.app/voice/user/v1"
 )
 
@@ -38,6 +40,8 @@ func main() {
 
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	var grpcSrv *grpc.Server
+	runCtx, runCancel := context.WithCancel(context.Background())
+	defer runCancel()
 	if dbURL != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		pool, err := pgxpool.New(ctx, dbURL)
@@ -105,14 +109,31 @@ func main() {
 			profiles = &grpcsvc.UserGRPCProfiles{Client: userv1.NewUserServiceClient(uconn)}
 		}
 
+		var listEnrich grpcsvc.ListChatsEnrichment
+		if msgAddr := strings.TrimSpace(os.Getenv("MESSAGING_GRPC_ADDR")); msgAddr != "" {
+			mconn, err := grpc.NewClient(msgAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if err != nil {
+				log.Fatalf("messaging grpc: %v", err)
+			}
+			defer func() { _ = mconn.Close() }()
+			listEnrich = grpcsvc.NewMessagingListEnricher(messagingv1.NewMessagingServiceClient(mconn))
+		}
+
+		dmStore := &store.DMStore{Pool: pool}
+		natsURL := strings.TrimSpace(os.Getenv("NATS_URL"))
 		var chatEvents chatevents.Publisher
-		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
+		if natsURL != "" {
 			jsPub, err := chatevents.NewJetStreamPublisher(natsURL)
 			if err != nil {
 				log.Fatalf("nats jetstream publisher: %v", err)
 			}
 			defer func() { _ = jsPub.Close() }()
 			chatEvents = jsPub
+			go func() {
+				if err := runMessageActivityConsumer(runCtx, natsURL, os.Getenv("HOSTNAME"), dmStore); err != nil && !errors.Is(err, context.Canceled) {
+					log.Printf("chat: message activity consumer stopped: %v", err)
+				}
+			}()
 		}
 
 		lis, err := net.Listen("tcp", grpcListen)
@@ -121,9 +142,10 @@ func main() {
 		}
 		grpcSrv = grpc.NewServer()
 		chatv1.RegisterChatServiceServer(grpcSrv, &grpcsvc.ChatGRPC{
-			DM:         &store.DMStore{Pool: pool},
+			DM:         dmStore,
 			Profiles:   profiles,
 			Blocks:     blocks,
+			ListEnrich: listEnrich,
 			ChatEvents: chatEvents,
 		})
 		go func() {
@@ -158,6 +180,7 @@ func main() {
 			log.Fatal(err)
 		}
 	case <-stop:
+		runCancel()
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if grpcSrv != nil {
