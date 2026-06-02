@@ -14,7 +14,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
-	"voice/backend/pkg/integrationtest"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -22,6 +21,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/proto"
+	"voice/backend/pkg/integrationtest"
 
 	"voice/backend/user/internal/authctx"
 	"voice/backend/user/internal/r2avatar"
@@ -188,23 +188,32 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 
 	t.Run("UpdateProfile ok", func(t *testing.T) {
 		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
+		bio := "Voice gamer and duo queue enjoyer"
 		resp, err := cli.UpdateProfile(mdCtx, &userv1.UpdateProfileRequest{
 			ProfileId:   pid.String(),
 			DisplayName: proto.String("Alice II"),
+			Bio:         proto.String(bio),
 			Locale:      proto.String("en"),
 			Theme:       proto.String("light"),
 		})
 		require.NoError(t, err)
 		require.Equal(t, "Alice II", resp.GetProfile().GetDisplayName())
+		require.Equal(t, bio, resp.GetProfile().GetBio())
 		require.Equal(t, "en", resp.GetProfile().GetLocale())
 		require.Equal(t, "light", resp.GetProfile().GetTheme())
+
+		reloaded, err := cli.GetProfile(ctx, &userv1.GetProfileRequest{
+			By: &userv1.GetProfileRequest_ProfileId{ProfileId: pid.String()},
+		})
+		require.NoError(t, err)
+		require.Equal(t, bio, reloaded.GetProfile().GetBio())
 	})
 
 	t.Run("CreateAvatarPresignedUpload unauthenticated", func(t *testing.T) {
 		_, err := cli.CreateAvatarPresignedUpload(ctx, &userv1.CreateAvatarPresignedUploadRequest{
-			ProfileId:      pid.String(),
-			ContentType:    "image/png",
-			ContentLength:  100,
+			ProfileId:     pid.String(),
+			ContentType:   "image/png",
+			ContentLength: 100,
 		})
 		require.Error(t, err)
 		require.Equal(t, codes.Unauthenticated, status.Code(err))
@@ -213,9 +222,9 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 	t.Run("CreateAvatarPresignedUpload ok", func(t *testing.T) {
 		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
 		resp, err := cli.CreateAvatarPresignedUpload(mdCtx, &userv1.CreateAvatarPresignedUploadRequest{
-			ProfileId:      pid.String(),
-			ContentType:    "image/png",
-			ContentLength:  2048,
+			ProfileId:     pid.String(),
+			ContentType:   "image/png",
+			ContentLength: 2048,
 		})
 		require.NoError(t, err)
 		require.Equal(t, "PUT", resp.GetHttpMethod())
@@ -230,9 +239,9 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 	t.Run("CreateAvatarPresignedUpload invalid MIME", func(t *testing.T) {
 		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
 		_, err := cli.CreateAvatarPresignedUpload(mdCtx, &userv1.CreateAvatarPresignedUploadRequest{
-			ProfileId:      pid.String(),
-			ContentType:    "application/pdf",
-			ContentLength:  100,
+			ProfileId:     pid.String(),
+			ContentType:   "application/pdf",
+			ContentLength: 100,
 		})
 		require.Error(t, err)
 		require.Equal(t, codes.InvalidArgument, status.Code(err))
@@ -241,9 +250,9 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 	t.Run("CreateAvatarPresignedUpload oversize", func(t *testing.T) {
 		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
 		_, err := cli.CreateAvatarPresignedUpload(mdCtx, &userv1.CreateAvatarPresignedUploadRequest{
-			ProfileId:      pid.String(),
-			ContentType:    "image/jpeg",
-			ContentLength:  r2avatar.MaxAvatarBytes + 1,
+			ProfileId:     pid.String(),
+			ContentType:   "image/jpeg",
+			ContentLength: r2avatar.MaxAvatarBytes + 1,
 		})
 		require.Error(t, err)
 		require.Equal(t, codes.InvalidArgument, status.Code(err))
@@ -252,9 +261,9 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 	t.Run("CreateAvatarPresignedUpload zero length", func(t *testing.T) {
 		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
 		_, err := cli.CreateAvatarPresignedUpload(mdCtx, &userv1.CreateAvatarPresignedUploadRequest{
-			ProfileId:      pid.String(),
-			ContentType:    "image/png",
-			ContentLength:  0,
+			ProfileId:     pid.String(),
+			ContentType:   "image/png",
+			ContentLength: 0,
 		})
 		require.Error(t, err)
 		require.Equal(t, codes.InvalidArgument, status.Code(err))
@@ -263,9 +272,9 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 	t.Run("CreateAvatarPresignedUpload negative length", func(t *testing.T) {
 		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
 		_, err := cli.CreateAvatarPresignedUpload(mdCtx, &userv1.CreateAvatarPresignedUploadRequest{
-			ProfileId:      pid.String(),
-			ContentType:    "image/gif",
-			ContentLength:  -10,
+			ProfileId:     pid.String(),
+			ContentType:   "image/gif",
+			ContentLength: -10,
 		})
 		require.Error(t, err)
 		require.Equal(t, codes.InvalidArgument, status.Code(err))
@@ -274,9 +283,9 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 	t.Run("CreateAvatarPresignedUpload at max bytes", func(t *testing.T) {
 		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
 		resp, err := cli.CreateAvatarPresignedUpload(mdCtx, &userv1.CreateAvatarPresignedUploadRequest{
-			ProfileId:      pid.String(),
-			ContentType:    "image/webp",
-			ContentLength:  r2avatar.MaxAvatarBytes,
+			ProfileId:     pid.String(),
+			ContentType:   "image/webp",
+			ContentLength: r2avatar.MaxAvatarBytes,
 		})
 		require.NoError(t, err)
 		require.EqualValues(t, r2avatar.MaxAvatarBytes, resp.GetMaxBytes())
@@ -285,9 +294,9 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 	t.Run("CreateAvatarPresignedUpload MIME case normalized", func(t *testing.T) {
 		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
 		resp, err := cli.CreateAvatarPresignedUpload(mdCtx, &userv1.CreateAvatarPresignedUploadRequest{
-			ProfileId:      pid.String(),
-			ContentType:    "Image/JPEG",
-			ContentLength:  4096,
+			ProfileId:     pid.String(),
+			ContentType:   "Image/JPEG",
+			ContentLength: 4096,
 		})
 		require.NoError(t, err)
 		require.Equal(t, "image/jpeg", resp.GetRequiredHeaders()["Content-Type"])
@@ -296,9 +305,9 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 	t.Run("CreateAvatarPresignedUpload invalid profile_id", func(t *testing.T) {
 		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
 		_, err := cli.CreateAvatarPresignedUpload(mdCtx, &userv1.CreateAvatarPresignedUploadRequest{
-			ProfileId:      "not-a-uuid",
-			ContentType:    "image/png",
-			ContentLength:  100,
+			ProfileId:     "not-a-uuid",
+			ContentType:   "image/png",
+			ContentLength: 100,
 		})
 		require.Error(t, err)
 		require.Equal(t, codes.InvalidArgument, status.Code(err))
@@ -307,9 +316,9 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 	t.Run("CreateAvatarPresignedUpload wrong owner", func(t *testing.T) {
 		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountB.String())
 		_, err := cli.CreateAvatarPresignedUpload(mdCtx, &userv1.CreateAvatarPresignedUploadRequest{
-			ProfileId:      pid.String(),
-			ContentType:    "image/webp",
-			ContentLength:  500,
+			ProfileId:     pid.String(),
+			ContentType:   "image/webp",
+			ContentLength: 500,
 		})
 		require.Error(t, err)
 		require.Equal(t, codes.NotFound, status.Code(err))

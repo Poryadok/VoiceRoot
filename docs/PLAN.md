@@ -123,7 +123,7 @@
 - [x] **Realtime Service** — JWT, доставка сообщений, Redis Pub/Sub, `s` + `resume`, догрузка через Messaging — [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md)
 - [ ] **Чаты (DM)** — создание диалогов, список с превью и unread, `mark_read`
 - [x] **Друзья** — запрос, accept/decline, список, блок
-- [ ] **Профиль (базовый)** — имя, аватар (R2), «О себе»
+- [x] **Профиль (базовый)** — имя, аватар (R2), «О себе»
 - [ ] **Presence** — онлайн/оффлайн по WS, последний визит
 
 **R2 / аватар (минимум Фазы 1, без раздувания):** статичный аватар профиля — **presigned PUT (или эквивалент) в Cloudflare R2** и сохранение стабильного **URL или ключа объекта** в `profiles` (**User Service**, `user_db`). Жёсткие лимиты: небольшой max size (ориентир 2–5 MB), whitelist MIME для изображений. **Не требуются:** отдельный микросервис File Service, PostgreSQL `file_db`, дедуп SHA-256, ClamAV, конвертация/thumbnail, NATS `file.events`, квоты Subscription — это **полный File Service** и вложения в чате → **Фаза 3** и [file-service.md](microservices/file-service.md).

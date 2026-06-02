@@ -219,5 +219,58 @@ class AppLocalizationsRu extends AppLocalizations {
   String get profileMessage => 'Написать';
 
   @override
+  String get profileEditTitle => 'Редактировать профиль';
+
+  @override
+  String get profileEditTooltip => 'Редактировать профиль';
+
+  @override
+  String get profileDisplayNameLabel => 'Имя профиля';
+
+  @override
+  String get profileBioLabel => 'О себе';
+
+  @override
+  String get profileBioHelper => 'До 500 символов';
+
+  @override
+  String get profileAvatarChange => 'Сменить аватар';
+
+  @override
+  String profileAvatarSelected(String fileName) {
+    return 'Выбрано: $fileName';
+  }
+
+  @override
+  String get profileSave => 'Сохранить';
+
+  @override
+  String get profileErrorDisplayNameRequired => 'Введите имя профиля.';
+
+  @override
+  String get profileErrorDisplayNameTooLong =>
+      'Имя профиля должно быть не длиннее 64 символов.';
+
+  @override
+  String get profileErrorBioTooLong =>
+      'Описание должно быть не длиннее 500 символов.';
+
+  @override
+  String get profileErrorAvatarType =>
+      'Используйте статичное изображение JPEG, PNG или WebP.';
+
+  @override
+  String get profileErrorAvatarTooLarge =>
+      'Аватар должен быть непустым изображением до 5 МБ.';
+
+  @override
+  String profileEditSaveError(String message) {
+    return 'Не удалось сохранить профиль: $message';
+  }
+
+  @override
+  String get commonCancel => 'Отмена';
+
+  @override
   String get commonLoading => '…';
 }

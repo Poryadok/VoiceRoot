@@ -124,5 +124,34 @@
   "chatRealtimeOffline": "Offline",
   "chatOpenDm": "Message",
   "profileMessage": "Message",
+  "profileEditTitle": "Edit profile",
+  "profileEditTooltip": "Edit profile",
+  "profileDisplayNameLabel": "Display name",
+  "profileBioLabel": "About",
+  "profileBioHelper": "Up to 500 characters",
+  "profileAvatarChange": "Change avatar",
+  "profileAvatarSelected": "Selected: {fileName}",
+  "@profileAvatarSelected": {
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+  "profileSave": "Save",
+  "profileErrorDisplayNameRequired": "Enter a display name.",
+  "profileErrorDisplayNameTooLong": "Display name must be 64 characters or fewer.",
+  "profileErrorBioTooLong": "About must be 500 characters or fewer.",
+  "profileErrorAvatarType": "Use a static JPEG, PNG, or WebP image.",
+  "profileErrorAvatarTooLarge": "Avatar must be a non-empty image up to 5 MB.",
+  "profileEditSaveError": "Could not save profile: {message}",
+  "@profileEditSaveError": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "commonCancel": "Cancel",
   "commonLoading": "…"
 }

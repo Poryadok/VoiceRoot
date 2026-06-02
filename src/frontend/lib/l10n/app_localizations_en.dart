@@ -219,5 +219,56 @@ class AppLocalizationsEn extends AppLocalizations {
   String get profileMessage => 'Message';
 
   @override
+  String get profileEditTitle => 'Edit profile';
+
+  @override
+  String get profileEditTooltip => 'Edit profile';
+
+  @override
+  String get profileDisplayNameLabel => 'Display name';
+
+  @override
+  String get profileBioLabel => 'About';
+
+  @override
+  String get profileBioHelper => 'Up to 500 characters';
+
+  @override
+  String get profileAvatarChange => 'Change avatar';
+
+  @override
+  String profileAvatarSelected(String fileName) {
+    return 'Selected: $fileName';
+  }
+
+  @override
+  String get profileSave => 'Save';
+
+  @override
+  String get profileErrorDisplayNameRequired => 'Enter a display name.';
+
+  @override
+  String get profileErrorDisplayNameTooLong =>
+      'Display name must be 64 characters or fewer.';
+
+  @override
+  String get profileErrorBioTooLong => 'About must be 500 characters or fewer.';
+
+  @override
+  String get profileErrorAvatarType => 'Use a static JPEG, PNG, or WebP image.';
+
+  @override
+  String get profileErrorAvatarTooLarge =>
+      'Avatar must be a non-empty image up to 5 MB.';
+
+  @override
+  String profileEditSaveError(String message) {
+    return 'Could not save profile: $message';
+  }
+
+  @override
+  String get commonCancel => 'Cancel';
+
+  @override
   String get commonLoading => '…';
 }

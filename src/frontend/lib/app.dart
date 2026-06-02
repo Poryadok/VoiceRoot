@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'backend/gateway_client.dart';
+import 'backend/users_client.dart';
 import 'l10n/app_localizations.dart';
 import 'shell/three_column_shell.dart';
 import 'state/auth_providers.dart';
@@ -14,6 +15,7 @@ import 'ui/auth/auth_screen.dart';
 import 'ui/chat/chat_list_panel.dart';
 import 'ui/chat/chat_room_panel.dart';
 import 'ui/core/profile_accent_dot.dart';
+import 'ui/profile/profile_edit_sheet.dart';
 import 'ui/social/social_panel.dart';
 
 ThemeData _bootstrapTheme() {
@@ -59,9 +61,7 @@ class VoiceApp extends ConsumerWidget {
       loading: () => MaterialApp(
         locale: locale,
         theme: _bootstrapTheme(),
-        home: const Scaffold(
-          body: Center(child: CircularProgressIndicator()),
-        ),
+        home: const Scaffold(body: Center(child: CircularProgressIndicator())),
       ),
       error: (e, _) => MaterialApp(
         locale: locale,
@@ -78,7 +78,8 @@ class _AuthenticatedShell extends ConsumerStatefulWidget {
   final Locale? locale;
 
   @override
-  ConsumerState<_AuthenticatedShell> createState() => _AuthenticatedShellState();
+  ConsumerState<_AuthenticatedShell> createState() =>
+      _AuthenticatedShellState();
 }
 
 class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
@@ -95,7 +96,9 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
     final auth = ref.read(authControllerProvider);
     if (!auth.pendingDiscoverHint) return;
     _discoverHintScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShowDiscoverHint());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _maybeShowDiscoverHint(),
+    );
   }
 
   Future<void> _maybeShowDiscoverHint() async {
@@ -149,9 +152,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
       backgroundColor: voice.canvas,
       body: SafeArea(
         child: ThreeColumnShell(
-          railChild: _SocialRail(
-            onOpenSocial: () => _openSocialPanel(context),
-          ),
+          railChild: _SocialRail(onOpenSocial: () => _openSocialPanel(context)),
           listChild: const ChatListPanel(),
           mainChild: selectedChatId == null
               ? Center(child: Text(l10n.chatRoomSelectPrompt))
@@ -162,8 +163,15 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
               _SessionBar(
                 onLogout: () =>
                     ref.read(authControllerProvider.notifier).logout(),
+                onEditProfile: profileAsync.valueOrNull == null
+                    ? null
+                    : () => _openProfileEditSheet(
+                        context,
+                        profileAsync.valueOrNull!,
+                      ),
                 sessionLabel: sessionLabel,
                 logoutLabel: l10n.authLogout,
+                editProfileTooltip: l10n.profileEditTooltip,
               ),
               _GatewayStatusBar(asyncHealth: health),
             ],
@@ -178,10 +186,16 @@ void _openSocialPanel(BuildContext context) {
   showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
-    builder: (ctx) => const SizedBox(
-      height: 520,
-      child: SocialPanel(),
-    ),
+    builder: (ctx) => const SizedBox(height: 520, child: SocialPanel()),
+  );
+}
+
+void _openProfileEditSheet(BuildContext context, VoiceProfile profile) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    builder: (ctx) =>
+        SizedBox(height: 560, child: ProfileEditSheet(profile: profile)),
   );
 }
 
@@ -214,13 +228,17 @@ class _SocialRail extends StatelessWidget {
 class _SessionBar extends StatelessWidget {
   const _SessionBar({
     required this.onLogout,
+    required this.onEditProfile,
     required this.sessionLabel,
     required this.logoutLabel,
+    required this.editProfileTooltip,
   });
 
   final VoidCallback onLogout;
+  final VoidCallback? onEditProfile;
   final String sessionLabel;
   final String logoutLabel;
+  final String editProfileTooltip;
 
   @override
   Widget build(BuildContext context) {
@@ -244,6 +262,12 @@ class _SessionBar extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: voice.textPrimary),
                 ),
+              ),
+              IconButton(
+                key: const Key('profile_edit_open'),
+                tooltip: editProfileTooltip,
+                onPressed: onEditProfile,
+                icon: Icon(Icons.edit_outlined, color: voice.textSecondary),
               ),
               TextButton(
                 key: const Key('auth_logout'),
@@ -270,9 +294,10 @@ class _GatewayStatusBar extends StatelessWidget {
     final text = asyncHealth.when(
       data: (r) => switch (r) {
         GatewayHealthOk() => l10n.gatewayStatusOk,
-        GatewayHealthFailure(:final message) => message == kGatewayMissingBaseUrlDetail
-            ? l10n.gatewayMissingBaseUrl
-            : l10n.gatewayStatusFailure(message),
+        GatewayHealthFailure(:final message) =>
+          message == kGatewayMissingBaseUrlDetail
+              ? l10n.gatewayMissingBaseUrl
+              : l10n.gatewayStatusFailure(message),
       },
       loading: () => l10n.gatewayStatusChecking,
       error: (e, _) => l10n.gatewayStatusError(e.toString()),

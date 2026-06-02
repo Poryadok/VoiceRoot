@@ -26,15 +26,15 @@ final voiceFriendsClientProvider = Provider<VoiceFriendsClient>((ref) {
   );
 });
 
-final profileProvider =
-    FutureProvider.family<VoiceProfile?, String>((ref, profileId) async {
+final profileProvider = FutureProvider.family<VoiceProfile?, String>((
+  ref,
+  profileId,
+) async {
   final auth = ref.watch(authorizationHeaderProvider);
   if (auth == null) return null;
-  final result =
-      await ref.watch(voiceUsersClientProvider).getProfile(
-            authorization: auth,
-            profileId: profileId,
-          );
+  final result = await ref
+      .watch(voiceUsersClientProvider)
+      .getProfile(authorization: auth, profileId: profileId);
   return switch (result) {
     UsersApiOk(:final data) => data,
     UsersApiFailure() => null,
@@ -68,8 +68,9 @@ class SearchProfilesState {
       results: results ?? this.results,
       isLoading: isLoading ?? this.isLoading,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
-      errorStatusCode:
-          clearError ? null : (errorStatusCode ?? this.errorStatusCode),
+      errorStatusCode: clearError
+          ? null
+          : (errorStatusCode ?? this.errorStatusCode),
       lastQuery: lastQuery ?? this.lastQuery,
     );
   }
@@ -89,11 +90,14 @@ class SearchProfilesController extends StateNotifier<SearchProfilesState> {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return;
 
-    state = state.copyWith(isLoading: true, clearError: true, lastQuery: trimmed);
-    final result = await _ref.read(voiceUsersClientProvider).searchProfiles(
-          authorization: auth,
-          query: trimmed,
-        );
+    state = state.copyWith(
+      isLoading: true,
+      clearError: true,
+      lastQuery: trimmed,
+    );
+    final result = await _ref
+        .read(voiceUsersClientProvider)
+        .searchProfiles(authorization: auth, query: trimmed);
     switch (result) {
       case UsersApiOk(:final data):
         state = state.copyWith(
@@ -114,7 +118,45 @@ class SearchProfilesController extends StateNotifier<SearchProfilesState> {
 
 final searchProfilesControllerProvider =
     StateNotifierProvider<SearchProfilesController, SearchProfilesState>((ref) {
-  return SearchProfilesController(ref);
+      return SearchProfilesController(ref);
+    });
+
+class ProfileActions {
+  ProfileActions(this._ref);
+
+  final Ref _ref;
+
+  Future<String?> updateBasicProfile({
+    required String displayName,
+    required String bio,
+    String? avatarUrl,
+  }) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    final profileId = _ref.read(authControllerProvider).activeProfileId;
+    if (auth == null || profileId == null) return 'not_authenticated';
+    final result = await _ref
+        .read(voiceUsersClientProvider)
+        .updateProfile(
+          authorization: auth,
+          displayName: displayName,
+          bio: bio,
+          avatarUrl: avatarUrl,
+        );
+    return switch (result) {
+      UsersApiOk() => _refreshActiveProfile(profileId),
+      UsersApiFailure(:final message) => message,
+    };
+  }
+
+  String? _refreshActiveProfile(String profileId) {
+    _ref.invalidate(profileProvider(profileId));
+    _ref.invalidate(activeProfileProvider);
+    return null;
+  }
+}
+
+final profileActionsProvider = Provider<ProfileActions>((ref) {
+  return ProfileActions(ref);
 });
 
 final friendsListProvider = FutureProvider<FriendsListData>((ref) async {
@@ -122,11 +164,13 @@ final friendsListProvider = FutureProvider<FriendsListData>((ref) async {
   if (auth == null) {
     throw StateError('not_authenticated');
   }
-  final result =
-      await ref.watch(voiceFriendsClientProvider).listFriends(authorization: auth);
+  final result = await ref
+      .watch(voiceFriendsClientProvider)
+      .listFriends(authorization: auth);
   return switch (result) {
     FriendsApiOk(:final data) => data,
-    FriendsApiFailure(:final statusCode) when isBackendUnavailable(statusCode) =>
+    FriendsApiFailure(:final statusCode)
+        when isBackendUnavailable(statusCode) =>
       throw const BackendUnavailableException(),
     FriendsApiFailure(:final message) => throw Exception(message),
   };
@@ -142,7 +186,8 @@ final friendRequestsProvider = FutureProvider<FriendRequestsData>((ref) async {
       .listFriendRequests(authorization: auth);
   return switch (result) {
     FriendsApiOk(:final data) => data,
-    FriendsApiFailure(:final statusCode) when isBackendUnavailable(statusCode) =>
+    FriendsApiFailure(:final statusCode)
+        when isBackendUnavailable(statusCode) =>
       throw const BackendUnavailableException(),
     FriendsApiFailure(:final message) => throw Exception(message),
   };
@@ -156,7 +201,9 @@ class SocialActions {
   Future<String?> sendFriendInvitation(String targetProfileId) async {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return 'not_authenticated';
-    final result = await _ref.read(voiceFriendsClientProvider).sendFriendInvitation(
+    final result = await _ref
+        .read(voiceFriendsClientProvider)
+        .sendFriendInvitation(
           authorization: auth,
           targetProfileId: targetProfileId,
         );
@@ -171,11 +218,12 @@ class SocialActions {
   Future<String?> acceptFriendInvitation(String requesterProfileId) async {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return 'not_authenticated';
-    final result =
-        await _ref.read(voiceFriendsClientProvider).acceptFriendInvitation(
-              authorization: auth,
-              requesterProfileId: requesterProfileId,
-            );
+    final result = await _ref
+        .read(voiceFriendsClientProvider)
+        .acceptFriendInvitation(
+          authorization: auth,
+          requesterProfileId: requesterProfileId,
+        );
     _invalidateSocialLists();
     return switch (result) {
       FriendsApiEmpty() => null,
@@ -187,11 +235,12 @@ class SocialActions {
   Future<String?> declineFriendInvitation(String requesterProfileId) async {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return 'not_authenticated';
-    final result =
-        await _ref.read(voiceFriendsClientProvider).declineFriendInvitation(
-              authorization: auth,
-              requesterProfileId: requesterProfileId,
-            );
+    final result = await _ref
+        .read(voiceFriendsClientProvider)
+        .declineFriendInvitation(
+          authorization: auth,
+          requesterProfileId: requesterProfileId,
+        );
     _invalidateSocialLists();
     return switch (result) {
       FriendsApiEmpty() => null,

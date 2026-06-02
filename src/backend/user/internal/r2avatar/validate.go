@@ -14,7 +14,6 @@ var allowedExtByMIME = map[string]string{
 	"image/jpeg": ".jpg",
 	"image/png":  ".png",
 	"image/webp": ".webp",
-	"image/gif":  ".gif",
 }
 
 // ValidateUploadParams enforces PLAN Phase 1 avatar presign limits (whitelist MIME, max size).
@@ -39,7 +38,7 @@ func FileExtForContentType(contentType string) string {
 }
 
 var allowedAvatarFileExt = map[string]struct{}{
-	".png": {}, ".jpg": {}, ".webp": {}, ".gif": {},
+	".png": {}, ".jpg": {}, ".webp": {},
 }
 
 func validateAvatarLeafFile(name string) error {

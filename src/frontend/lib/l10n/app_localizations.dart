@@ -470,6 +470,96 @@ abstract class AppLocalizations {
   /// **'Message'**
   String get profileMessage;
 
+  /// No description provided for @profileEditTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit profile'**
+  String get profileEditTitle;
+
+  /// No description provided for @profileEditTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit profile'**
+  String get profileEditTooltip;
+
+  /// No description provided for @profileDisplayNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Display name'**
+  String get profileDisplayNameLabel;
+
+  /// No description provided for @profileBioLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'About'**
+  String get profileBioLabel;
+
+  /// No description provided for @profileBioHelper.
+  ///
+  /// In en, this message translates to:
+  /// **'Up to 500 characters'**
+  String get profileBioHelper;
+
+  /// No description provided for @profileAvatarChange.
+  ///
+  /// In en, this message translates to:
+  /// **'Change avatar'**
+  String get profileAvatarChange;
+
+  /// No description provided for @profileAvatarSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected: {fileName}'**
+  String profileAvatarSelected(String fileName);
+
+  /// No description provided for @profileSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get profileSave;
+
+  /// No description provided for @profileErrorDisplayNameRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a display name.'**
+  String get profileErrorDisplayNameRequired;
+
+  /// No description provided for @profileErrorDisplayNameTooLong.
+  ///
+  /// In en, this message translates to:
+  /// **'Display name must be 64 characters or fewer.'**
+  String get profileErrorDisplayNameTooLong;
+
+  /// No description provided for @profileErrorBioTooLong.
+  ///
+  /// In en, this message translates to:
+  /// **'About must be 500 characters or fewer.'**
+  String get profileErrorBioTooLong;
+
+  /// No description provided for @profileErrorAvatarType.
+  ///
+  /// In en, this message translates to:
+  /// **'Use a static JPEG, PNG, or WebP image.'**
+  String get profileErrorAvatarType;
+
+  /// No description provided for @profileErrorAvatarTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'Avatar must be a non-empty image up to 5 MB.'**
+  String get profileErrorAvatarTooLarge;
+
+  /// No description provided for @profileEditSaveError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save profile: {message}'**
+  String profileEditSaveError(String message);
+
+  /// No description provided for @commonCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get commonCancel;
+
   /// No description provided for @commonLoading.
   ///
   /// In en, this message translates to:

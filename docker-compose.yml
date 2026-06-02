@@ -110,6 +110,12 @@ services:
       USER_GRPC_ADDR: :9090
       SOCIAL_GRPC_ADDR: social:9090
       USER_REDIS_ADDR: redis:6379
+      USER_R2_ENDPOINT: ${USER_R2_ENDPOINT:-}
+      USER_R2_REGION: ${USER_R2_REGION:-auto}
+      USER_R2_ACCESS_KEY_ID: ${USER_R2_ACCESS_KEY_ID:-}
+      USER_R2_SECRET_ACCESS_KEY: ${USER_R2_SECRET_ACCESS_KEY:-}
+      USER_R2_BUCKET: ${USER_R2_BUCKET:-}
+      USER_R2_PUBLIC_BASE_URL: ${USER_R2_PUBLIC_BASE_URL:-}
     depends_on:
       postgres:
         condition: service_healthy

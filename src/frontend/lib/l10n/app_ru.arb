@@ -125,5 +125,34 @@
   "chatRealtimeOffline": "Офлайн",
   "chatOpenDm": "Написать",
   "profileMessage": "Написать",
+  "profileEditTitle": "Редактировать профиль",
+  "profileEditTooltip": "Редактировать профиль",
+  "profileDisplayNameLabel": "Имя профиля",
+  "profileBioLabel": "О себе",
+  "profileBioHelper": "До 500 символов",
+  "profileAvatarChange": "Сменить аватар",
+  "profileAvatarSelected": "Выбрано: {fileName}",
+  "@profileAvatarSelected": {
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+  "profileSave": "Сохранить",
+  "profileErrorDisplayNameRequired": "Введите имя профиля.",
+  "profileErrorDisplayNameTooLong": "Имя профиля должно быть не длиннее 64 символов.",
+  "profileErrorBioTooLong": "Описание должно быть не длиннее 500 символов.",
+  "profileErrorAvatarType": "Используйте статичное изображение JPEG, PNG или WebP.",
+  "profileErrorAvatarTooLarge": "Аватар должен быть непустым изображением до 5 МБ.",
+  "profileEditSaveError": "Не удалось сохранить профиль: {message}",
+  "@profileEditSaveError": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "commonCancel": "Отмена",
   "commonLoading": "…"
 }

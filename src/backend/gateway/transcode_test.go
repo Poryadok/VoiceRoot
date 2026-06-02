@@ -24,7 +24,8 @@ import (
 
 type recordingUserGRPC struct {
 	userv1.UnimplementedUserServiceServer
-	lastMD metadata.MD
+	lastMD     metadata.MD
+	lastUpdate *userv1.UpdateProfileRequest
 }
 
 func (s *recordingUserGRPC) GetProfile(ctx context.Context, req *userv1.GetProfileRequest) (*userv1.GetProfileResponse, error) {
@@ -50,13 +51,30 @@ func (s *recordingUserGRPC) SearchProfiles(ctx context.Context, req *userv1.Sear
 		ProfileList: &userv1.ProfileList{
 			Profiles: []*userv1.Profile{
 				{
-					Id:             "profile-search-hit",
-					AccountId:      "account-2",
-					Username:       "carol",
-					Discriminator:  "0001",
-					DisplayName:    "Carol " + req.GetQuery(),
+					Id:            "profile-search-hit",
+					AccountId:     "account-2",
+					Username:      "carol",
+					Discriminator: "0001",
+					DisplayName:   "Carol " + req.GetQuery(),
 				},
 			},
+		},
+	}, nil
+}
+
+func (s *recordingUserGRPC) UpdateProfile(ctx context.Context, req *userv1.UpdateProfileRequest) (*userv1.UpdateProfileResponse, error) {
+	md, _ := metadata.FromIncomingContext(ctx)
+	s.lastMD = md
+	s.lastUpdate = req
+	return &userv1.UpdateProfileResponse{
+		Profile: &userv1.Profile{
+			Id:            req.GetProfileId(),
+			AccountId:     "account-1",
+			Username:      "alice",
+			Discriminator: "0001",
+			DisplayName:   req.GetDisplayName(),
+			AvatarUrl:     req.AvatarUrl,
+			Bio:           req.Bio,
 		},
 	}, nil
 }
@@ -200,6 +218,55 @@ func TestTranscodeUsersMePropagatesVoiceHeaders(t *testing.T) {
 	}
 	if got := rec.lastMD.Get("x-voice-profile-id"); len(got) != 1 || got[0] != "profile-1" {
 		t.Fatalf("x-voice-profile-id = %v, want profile-1", got)
+	}
+}
+
+func TestTranscodeUsersUpdateMe(t *testing.T) {
+	t.Parallel()
+
+	rec := &recordingUserGRPC{}
+	conn, cleanup := startBufconnUserConn(t, rec)
+	t.Cleanup(cleanup)
+
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+		},
+		transcoder: &transcoder{clients: grpcClients{user: userv1.NewUserServiceClient(conn)}},
+	})
+
+	body := `{"display_name":"Alice II","bio":"About Alice","avatar_url":"https://cdn.example/avatars/profile-1/avatar.png"}`
+	resp := performRequest(h, http.MethodPatch, "/api/v1/users/me", body, map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	if resp.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%q", resp.Code, http.StatusOK, resp.Body.String())
+	}
+	if rec.lastUpdate == nil {
+		t.Fatal("UpdateProfile not invoked")
+	}
+	if rec.lastUpdate.GetProfileId() != "profile-1" {
+		t.Fatalf("profile_id = %q, want profile-1", rec.lastUpdate.GetProfileId())
+	}
+	if rec.lastUpdate.GetDisplayName() != "Alice II" {
+		t.Fatalf("display_name = %q, want Alice II", rec.lastUpdate.GetDisplayName())
+	}
+	if rec.lastUpdate.GetBio() != "About Alice" {
+		t.Fatalf("bio = %q, want About Alice", rec.lastUpdate.GetBio())
+	}
+	if got := rec.lastMD.Get("x-voice-user-id"); len(got) != 1 || got[0] != "account-1" {
+		t.Fatalf("x-voice-user-id = %v, want account-1", got)
+	}
+	var out struct {
+		Profile struct {
+			ID          string `json:"id"`
+			DisplayName string `json:"display_name"`
+			Bio         string `json:"bio"`
+		} `json:"profile"`
+	}
+	decodeJSON(t, resp.Body, &out)
+	if out.Profile.ID != "profile-1" || out.Profile.DisplayName != "Alice II" || out.Profile.Bio != "About Alice" {
+		t.Fatalf("response body = %+v", out)
 	}
 }
 
@@ -456,12 +523,12 @@ func (s *recordingChatsCreateDM) CreateDM(_ context.Context, req *chatv1.CreateD
 	now := timestamppb.New(time.Unix(1700000001, 0))
 	return &chatv1.CreateDMResponse{
 		Chat: &chatv1.Chat{
-			Id:                 "chat-dm-1",
-			Type:               chatv1.ChatType_CHAT_TYPE_DM,
-			CreatorProfileId:   "profile-1",
-			CreatedAt:          now,
-			UpdatedAt:          now,
-			LastMessageAt:      now,
+			Id:               "chat-dm-1",
+			Type:             chatv1.ChatType_CHAT_TYPE_DM,
+			CreatorProfileId: "profile-1",
+			CreatedAt:        now,
+			UpdatedAt:        now,
+			LastMessageAt:    now,
 		},
 	}, nil
 }

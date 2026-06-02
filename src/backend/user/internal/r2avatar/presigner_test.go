@@ -20,10 +20,10 @@ func TestNewS3R2PutPresigner_rejectsIncompleteConfig(t *testing.T) {
 		PublicBaseURL:   "https://cdn.example.test",
 	}
 	for name, patch := range map[string]func(*S3R2Config){
-		"empty_endpoint": func(c *S3R2Config) { c.Endpoint = "" },
-		"empty_access_key": func(c *S3R2Config) { c.AccessKeyID = "" },
-		"empty_secret": func(c *S3R2Config) { c.SecretAccessKey = "" },
-		"empty_bucket": func(c *S3R2Config) { c.Bucket = "" },
+		"empty_endpoint":    func(c *S3R2Config) { c.Endpoint = "" },
+		"empty_access_key":  func(c *S3R2Config) { c.AccessKeyID = "" },
+		"empty_secret":      func(c *S3R2Config) { c.SecretAccessKey = "" },
+		"empty_bucket":      func(c *S3R2Config) { c.Bucket = "" },
 		"empty_public_base": func(c *S3R2Config) { c.PublicBaseURL = "" },
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -115,7 +115,7 @@ func TestS3R2PutPresigner_PresignPut_rejectsEmptyObjectKey(t *testing.T) {
 		PublicBaseURL:   "https://pub.example",
 	})
 	require.NoError(t, err)
-	_, _, _, err = p.PresignPut(ctx, "   ", "image/gif", 100)
+	_, _, _, err = p.PresignPut(ctx, "   ", "image/png", 100)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "object key required")
 }
