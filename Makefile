@@ -31,7 +31,7 @@ GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
 .PHONY: buf-lint buf-format buf-breaking buf-generate compose-up compose-app-up compose-down \
 	build-all build-all-breaking check-toolchain compose-config-ci buf-ci backend-test-ci backend-image-ci \
 	gateway-test-ci gateway-image-ci go-test-pkg auth-test-ci auth-image-ci buf-breaking-ci \
-	golangci-ci gateway-test-race-ci flutter-ci testcontainers-prune
+	golangci-ci gateway-test-race-ci design-tokens-check flutter-ui-color-gate flutter-ci testcontainers-prune
 
 buf-lint:
 	buf lint
@@ -108,8 +108,14 @@ gateway-test-race-ci:
 # Requires Go 1.26, Docker daemon, Maven/Java on PATH. Flutter: make flutter-ci
 build-all: check-toolchain compose-config-ci buf-ci backend-test-ci golangci-ci gateway-test-race-ci backend-image-ci
 
+design-tokens-check:
+	$(BASH) "$(ROOT)/scripts/design/design-tokens-check.sh"
+
+flutter-ui-color-gate:
+	$(BASH) "$(ROOT)/scripts/design/flutter-ui-color-gate.sh"
+
 # Host Flutter SDK (parity with job `flutter` in .github/workflows/ci.yml).
-flutter-ci:
+flutter-ci: design-tokens-check flutter-ui-color-gate
 	cd $(ROOT)/src/frontend && flutter pub get && flutter analyze && flutter test
 
 buf-breaking-ci:

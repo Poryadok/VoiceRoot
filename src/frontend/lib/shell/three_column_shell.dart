@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/voice_colors.dart';
+
 /// Desktop: [active rail | chat list | open chat] per docs/features/navigation.md.
 /// Narrow width: stacked column ([navMobileStack]) preserving the same child keys.
 class ThreeColumnShell extends StatelessWidget {
@@ -27,13 +29,15 @@ class ThreeColumnShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final voice = VoiceColors.of(context);
+
     Widget rail() => Expanded(
           flex: 1,
           key: navActiveRail,
           child: railChild ??
-              const ColoredBox(
-                color: Color(0x12000000),
-                child: SizedBox.expand(),
+              ColoredBox(
+                color: voice.muted,
+                child: const SizedBox.expand(),
               ),
         );
 
@@ -41,9 +45,9 @@ class ThreeColumnShell extends StatelessWidget {
           flex: listFlex,
           key: navChatList,
           child: listChild ??
-              const ColoredBox(
-                color: Color(0x24000000),
-                child: SizedBox.expand(),
+              ColoredBox(
+                color: voice.surface,
+                child: const SizedBox.expand(),
               ),
         );
 
@@ -51,9 +55,9 @@ class ThreeColumnShell extends StatelessWidget {
           flex: mainFlex,
           key: navOpenChat,
           child: mainChild ??
-              const ColoredBox(
-                color: Color(0x36000000),
-                child: SizedBox.expand(),
+              ColoredBox(
+                color: voice.canvas,
+                child: const SizedBox.expand(),
               ),
         );
 

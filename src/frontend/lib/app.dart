@@ -8,10 +8,21 @@ import 'state/auth_providers.dart';
 import 'state/gateway_providers.dart';
 import 'state/chat_providers.dart';
 import 'state/social_providers.dart';
+import 'theme/voice_colors.dart';
+import 'theme/voice_theme_providers.dart';
 import 'ui/auth/auth_screen.dart';
 import 'ui/chat/chat_list_panel.dart';
 import 'ui/chat/chat_room_panel.dart';
+import 'ui/core/profile_accent_dot.dart';
 import 'ui/social/social_panel.dart';
+
+ThemeData _bootstrapTheme() {
+  return ThemeData(
+    useMaterial3: true,
+    brightness: Brightness.dark,
+    colorScheme: const ColorScheme.dark(primary: Color(0xFF7EC8E3)),
+  );
+}
 
 class VoiceApp extends ConsumerWidget {
   const VoiceApp({super.key, this.locale});
@@ -21,31 +32,42 @@ class VoiceApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final themeAsync = ref.watch(voiceMaterialThemeProvider);
     final auth = ref.watch(authControllerProvider);
-    if (!auth.isAuthenticated) {
-      return MaterialApp(
-        locale: locale,
-        onGenerateTitle: (ctx) => AppLocalizations.of(ctx)!.appTitle,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
-          useMaterial3: true,
-        ),
-        home: const AuthScreen(),
-      );
-    }
 
-    return MaterialApp(
-      locale: locale,
-      onGenerateTitle: (ctx) => AppLocalizations.of(ctx)!.appTitle,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
-        useMaterial3: true,
+    return themeAsync.when(
+      data: (theme) {
+        if (!auth.isAuthenticated) {
+          return MaterialApp(
+            locale: locale,
+            theme: theme,
+            onGenerateTitle: (ctx) => AppLocalizations.of(ctx)!.appTitle,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const AuthScreen(),
+          );
+        }
+        return MaterialApp(
+          locale: locale,
+          theme: theme,
+          onGenerateTitle: (ctx) => AppLocalizations.of(ctx)!.appTitle,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: _AuthenticatedShell(locale: locale),
+        );
+      },
+      loading: () => MaterialApp(
+        locale: locale,
+        theme: _bootstrapTheme(),
+        home: const Scaffold(
+          body: Center(child: CircularProgressIndicator()),
+        ),
       ),
-      home: _AuthenticatedShell(locale: locale),
+      error: (e, _) => MaterialApp(
+        locale: locale,
+        theme: _bootstrapTheme(),
+        home: Scaffold(body: Center(child: Text('Theme error: $e'))),
+      ),
     );
   }
 }
@@ -107,6 +129,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
     final health = ref.watch(gatewayHealthProvider);
     final selectedChatId = ref.watch(selectedChatIdProvider);
     final profileAsync = ref.watch(activeProfileProvider);
+    final voice = VoiceColors.of(context);
 
     final sessionLabel = profileAsync.when(
       data: (profile) => profile != null
@@ -123,6 +146,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
     );
 
     return Scaffold(
+      backgroundColor: voice.canvas,
       body: SafeArea(
         child: ThreeColumnShell(
           railChild: _SocialRail(
@@ -169,8 +193,9 @@ class _SocialRail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final voice = VoiceColors.of(context);
     return ColoredBox(
-      color: const Color(0x12000000),
+      color: voice.muted,
       child: Column(
         children: [
           const SizedBox(height: 8),
@@ -178,7 +203,7 @@ class _SocialRail extends StatelessWidget {
             key: const Key('nav_open_social'),
             tooltip: l10n.socialRailTooltip,
             onPressed: onOpenSocial,
-            icon: const Icon(Icons.people_outline),
+            icon: Icon(Icons.people_outline, color: voice.textSecondary),
           ),
         ],
       ),
@@ -199,8 +224,10 @@ class _SessionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final voice = VoiceColors.of(context);
     return Material(
-      elevation: 1,
+      color: voice.surface,
+      elevation: 0,
       child: SizedBox(
         height: 40,
         width: double.infinity,
@@ -208,11 +235,14 @@ class _SessionBar extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Row(
             children: [
+              const ProfileAccentDot(),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   sessionLabel,
                   key: const Key('auth_session_profile'),
                   overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: voice.textPrimary),
                 ),
               ),
               TextButton(
@@ -236,6 +266,7 @@ class _GatewayStatusBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final voice = VoiceColors.of(context);
     final text = asyncHealth.when(
       data: (r) => switch (r) {
         GatewayHealthOk() => l10n.gatewayStatusOk,
@@ -247,7 +278,8 @@ class _GatewayStatusBar extends StatelessWidget {
       error: (e, _) => l10n.gatewayStatusError(e.toString()),
     );
     return Material(
-      elevation: 1,
+      color: voice.elevated,
+      elevation: 0,
       child: SizedBox(
         height: 40,
         width: double.infinity,
@@ -255,7 +287,11 @@ class _GatewayStatusBar extends StatelessWidget {
           alignment: Alignment.centerLeft,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Text(text, key: const Key('gateway_status_text')),
+            child: Text(
+              text,
+              key: const Key('gateway_status_text'),
+              style: TextStyle(color: voice.textSecondary, fontSize: 13),
+            ),
           ),
         ),
       ),

@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
+import '../core/voice_primary_button.dart';
+import '../core/voice_secondary_button.dart';
 import 'auth_errors.dart';
 
 /// Register / login form; persists tokens and active [profile_id] via [AuthController].
@@ -126,13 +128,14 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                       ),
                     ],
                     const SizedBox(height: 24),
-                    FilledButton(
+                    VoicePrimaryButton(
                       key: AuthScreen.loginButtonKey,
                       onPressed: auth.isSubmitting ? null : () => _submit(false),
+                      isLoading: auth.isSubmitting,
                       child: Text(l10n.authLogin),
                     ),
                     const SizedBox(height: 8),
-                    OutlinedButton(
+                    VoiceSecondaryButton(
                       key: AuthScreen.registerButtonKey,
                       onPressed: auth.isSubmitting ? null : () => _submit(true),
                       child: Text(l10n.authRegister),

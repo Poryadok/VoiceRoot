@@ -6,6 +6,8 @@ import '../../state/auth_providers.dart';
 import '../../state/chat_providers.dart';
 import '../../state/presence_providers.dart';
 import '../../state/social_providers.dart';
+import '../../theme/voice_colors.dart';
+import '../core/voice_send_button.dart';
 import '../social/presence_indicator.dart';
 
 /// Main column: message history (REST) + composer; live updates via Realtime WS.
@@ -47,6 +49,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     final peerPresence =
         peerId != null ? ref.watch(presenceProvider(peerId)) : null;
     final title = peerName ?? l10n.chatRoomTitle(widget.chatId.substring(0, 8));
+    final voice = VoiceColors.of(context);
 
     ref.listen(chatRoomControllerProvider(widget.chatId), (prev, next) {
       if ((prev?.messages.length ?? 0) < next.messages.length) {
@@ -67,7 +70,8 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Material(
-          elevation: 1,
+          color: voice.surface,
+          elevation: 0,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(
@@ -111,9 +115,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                         ),
                         decoration: BoxDecoration(
                           color: isMine
-                              ? Theme.of(context).colorScheme.primaryContainer
-                              : Theme.of(context).colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(12),
+                              ? voice.profileAccent.withValues(alpha: 0.22)
+                              : voice.elevated,
+                          borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(msg.content),
                       ),
@@ -148,16 +152,10 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                IconButton(
+                VoiceSendButton(
                   key: ChatRoomPanel.sendKey,
-                  onPressed: room.isSending ? null : _send,
-                  icon: room.isSending
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.send),
+                  onPressed: _send,
+                  isLoading: room.isSending,
                 ),
               ],
             ),

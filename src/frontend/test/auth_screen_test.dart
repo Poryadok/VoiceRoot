@@ -11,7 +11,11 @@ import 'package:voice_frontend/backend/discover_hint_storage.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
+import 'package:voice_frontend/theme/profile_accent_storage.dart';
+import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/auth/auth_screen.dart';
+
+import 'support/auth_test_overrides.dart';
 
 void main() {
   testWidgets('login shows @handle and discover hint snackbar', (tester) async {
@@ -19,6 +23,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          profileAccentStorageProvider.overrideWithValue(
+            testProfileAccentStorage,
+          ),
           authSessionStorageProvider.overrideWithValue(
             InMemoryAuthSessionStorage(),
           ),
@@ -97,6 +104,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          profileAccentStorageProvider.overrideWithValue(
+            testProfileAccentStorage,
+          ),
           authSessionStorageProvider.overrideWithValue(
             InMemoryAuthSessionStorage(),
           ),
@@ -160,6 +170,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          profileAccentStorageProvider.overrideWithValue(
+            testProfileAccentStorage,
+          ),
           authSessionStorageProvider.overrideWithValue(
             InMemoryAuthSessionStorage(),
           ),
@@ -204,6 +217,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          profileAccentStorageProvider.overrideWithValue(
+            testProfileAccentStorage,
+          ),
           authSessionStorageProvider.overrideWithValue(
             InMemoryAuthSessionStorage(),
           ),
@@ -251,6 +267,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          profileAccentStorageProvider.overrideWithValue(
+            testProfileAccentStorage,
+          ),
           authSessionStorageProvider.overrideWithValue(
             InMemoryAuthSessionStorage(),
           ),
@@ -281,6 +300,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          profileAccentStorageProvider.overrideWithValue(
+            testProfileAccentStorage,
+          ),
           authSessionStorageProvider.overrideWithValue(
             InMemoryAuthSessionStorage(),
           ),

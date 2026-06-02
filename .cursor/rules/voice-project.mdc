@@ -25,6 +25,7 @@ alwaysApply: true
 | Репозитории, монорепо, protos | `docs/REPOSITORIES.md` |
 | Что уже есть в коде vs план | `docs/PLAN.md` |
 | Пробелы в доках | `docs/TODO.md` |
+| Design tokens (required), Figma, brand | `docs/design/`, `design/tokens/` |
 
 ## TDD и источники истины при генерации кода
 
