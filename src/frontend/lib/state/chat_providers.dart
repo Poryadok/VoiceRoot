@@ -31,6 +31,127 @@ final dmPeerProfileByChatIdProvider = StateProvider<Map<String, String>>(
   (ref) => {},
 );
 
+final _chatListRefreshTokenProvider = StateProvider<int>((ref) => 0);
+
+class ChatListState {
+  const ChatListState({
+    this.items = const [],
+    this.nextCursor,
+    this.isLoading = false,
+    this.isLoadingMore = false,
+    this.errorMessage,
+    this.errorStatusCode,
+  });
+
+  final List<ChatListItem> items;
+  final String? nextCursor;
+  final bool isLoading;
+  final bool isLoadingMore;
+  final String? errorMessage;
+  final int? errorStatusCode;
+
+  bool get hasMore => nextCursor != null && nextCursor!.isNotEmpty;
+
+  ChatListState copyWith({
+    List<ChatListItem>? items,
+    String? nextCursor,
+    bool clearNextCursor = false,
+    bool? isLoading,
+    bool? isLoadingMore,
+    String? errorMessage,
+    int? errorStatusCode,
+    bool clearError = false,
+  }) {
+    return ChatListState(
+      items: items ?? this.items,
+      nextCursor: clearNextCursor ? null : (nextCursor ?? this.nextCursor),
+      isLoading: isLoading ?? this.isLoading,
+      isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+      errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+      errorStatusCode: clearError
+          ? null
+          : (errorStatusCode ?? this.errorStatusCode),
+    );
+  }
+}
+
+class ChatListController extends StateNotifier<ChatListState> {
+  ChatListController(this._ref) : super(const ChatListState()) {
+    unawaited(loadInitial());
+  }
+
+  final Ref _ref;
+
+  Future<void> loadInitial() async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return;
+    state = state.copyWith(isLoading: true, clearError: true);
+    final result = await _ref
+        .read(voiceChatsClientProvider)
+        .listChats(authorization: auth);
+    if (!mounted) return;
+    switch (result) {
+      case ChatsApiOk(:final data):
+        state = ChatListState(items: data.items, nextCursor: data.nextCursor);
+      case ChatsApiFailure(:final message, :final statusCode):
+        state = state.copyWith(
+          isLoading: false,
+          errorMessage: message,
+          errorStatusCode: statusCode,
+          clearNextCursor: true,
+        );
+    }
+  }
+
+  Future<void> loadMore() async {
+    final cursor = state.nextCursor;
+    if (cursor == null || cursor.isEmpty || state.isLoadingMore) return;
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return;
+    state = state.copyWith(isLoadingMore: true, clearError: true);
+    final result = await _ref
+        .read(voiceChatsClientProvider)
+        .listChats(authorization: auth, cursor: cursor);
+    if (!mounted) return;
+    switch (result) {
+      case ChatsApiOk(:final data):
+        state = state.copyWith(
+          items: _mergeChatItems(state.items, data.items),
+          nextCursor: data.nextCursor,
+          clearNextCursor: data.nextCursor == null,
+          isLoadingMore: false,
+          clearError: true,
+        );
+      case ChatsApiFailure(:final message, :final statusCode):
+        state = state.copyWith(
+          isLoadingMore: false,
+          errorMessage: message,
+          errorStatusCode: statusCode,
+        );
+    }
+  }
+}
+
+List<ChatListItem> _mergeChatItems(
+  Iterable<ChatListItem> current,
+  Iterable<ChatListItem> incoming,
+) {
+  final byId = <String, ChatListItem>{};
+  for (final item in current) {
+    byId[item.chatId] = item;
+  }
+  for (final item in incoming) {
+    byId[item.chatId] = item;
+  }
+  return byId.values.toList();
+}
+
+final chatListControllerProvider =
+    StateNotifierProvider<ChatListController, ChatListState>((ref) {
+      ref.watch(_chatListRefreshTokenProvider);
+      return ChatListController(ref);
+    });
+
 final chatListProvider = FutureProvider<ChatListData>((ref) async {
   final auth = ref.watch(authorizationHeaderProvider);
   if (auth == null) {
@@ -52,15 +173,21 @@ class ChatRoomState {
     this.messages = const [],
     this.isLoading = false,
     this.isSending = false,
+    this.isLoadingOlder = false,
     this.errorMessage,
     this.realtimeStatus = RealtimeLinkStatus.disconnected,
+    this.nextCursor,
+    this.hasMore = false,
   });
 
   final List<VoiceMessage> messages;
   final bool isLoading;
   final bool isSending;
+  final bool isLoadingOlder;
   final String? errorMessage;
   final RealtimeLinkStatus realtimeStatus;
+  final String? nextCursor;
+  final bool hasMore;
 
   String? get lastMessageId => messages.isEmpty ? null : messages.last.id;
 
@@ -68,16 +195,23 @@ class ChatRoomState {
     List<VoiceMessage>? messages,
     bool? isLoading,
     bool? isSending,
+    bool? isLoadingOlder,
     String? errorMessage,
     bool clearError = false,
     RealtimeLinkStatus? realtimeStatus,
+    String? nextCursor,
+    bool clearNextCursor = false,
+    bool? hasMore,
   }) {
     return ChatRoomState(
       messages: messages ?? this.messages,
       isLoading: isLoading ?? this.isLoading,
       isSending: isSending ?? this.isSending,
+      isLoadingOlder: isLoadingOlder ?? this.isLoadingOlder,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       realtimeStatus: realtimeStatus ?? this.realtimeStatus,
+      nextCursor: clearNextCursor ? null : (nextCursor ?? this.nextCursor),
+      hasMore: hasMore ?? this.hasMore,
     );
   }
 }
@@ -139,11 +273,15 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     final result = await _ref
         .read(voiceMessagesClientProvider)
         .getMessages(authorization: auth, chatId: chatId);
+    if (!mounted) return;
     switch (result) {
       case MessagesApiOk(:final data):
         state = state.copyWith(
           messages: _sortMessages(data.messages),
           isLoading: false,
+          nextCursor: data.nextCursor,
+          clearNextCursor: data.nextCursor == null,
+          hasMore: data.hasMore && data.nextCursor != null,
           clearError: true,
         );
         unawaited(_markLatestRead());
@@ -185,6 +323,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           lastMessageId: lastMessageId,
         );
     if (result case MessagesApiOk(:final data)) {
+      if (!mounted) return;
       if (data.messages.isEmpty) return;
       final merged = [...state.messages];
       for (final m in data.messages) {
@@ -194,7 +333,38 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       }
       state = state.copyWith(messages: _sortMessages(merged), clearError: true);
       unawaited(_markLatestRead());
-      _ref.invalidate(chatListProvider);
+      _invalidateChatLists(_ref);
+    }
+  }
+
+  Future<void> loadOlderMessages() async {
+    final cursor = state.nextCursor;
+    if (cursor == null || cursor.isEmpty || state.isLoadingOlder) return;
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return;
+    state = state.copyWith(isLoadingOlder: true, clearError: true);
+    final result = await _ref
+        .read(voiceMessagesClientProvider)
+        .getMessages(authorization: auth, chatId: chatId, cursor: cursor);
+    if (!mounted) return;
+    switch (result) {
+      case MessagesApiOk(:final data):
+        final merged = [...state.messages];
+        for (final m in data.messages) {
+          if (!merged.any((x) => x.id == m.id)) {
+            merged.add(m);
+          }
+        }
+        state = state.copyWith(
+          messages: _sortMessages(merged),
+          isLoadingOlder: false,
+          nextCursor: data.nextCursor,
+          clearNextCursor: data.nextCursor == null,
+          hasMore: data.hasMore && data.nextCursor != null,
+          clearError: true,
+        );
+      case MessagesApiFailure(:final message):
+        state = state.copyWith(isLoadingOlder: false, errorMessage: message);
     }
   }
 
@@ -208,6 +378,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     final result = await _ref
         .read(voiceMessagesClientProvider)
         .sendMessage(authorization: auth, chatId: chatId, content: trimmed);
+    if (!mounted) return null;
     switch (result) {
       case MessagesApiOk(:final data):
         final merged = [...state.messages];
@@ -220,7 +391,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           clearError: true,
         );
         unawaited(_markLatestRead());
-        _ref.invalidate(chatListProvider);
+        _invalidateChatLists(_ref);
         return null;
       case MessagesApiFailure(:final message):
         state = state.copyWith(isSending: false, errorMessage: message);
@@ -242,12 +413,18 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           chatId: chatId,
           lastReadMessageId: lastId,
         );
+    if (!mounted) return;
     if (result is MessagesApiOk<void>) {
       _lastMarkedReadMessageId = lastId;
       _ref.read(realtimeHubProvider).markRead(chatId, lastId);
-      _ref.invalidate(chatListProvider);
+      _invalidateChatLists(_ref);
     }
   }
+}
+
+void _invalidateChatLists(Ref ref) {
+  ref.invalidate(chatListProvider);
+  ref.read(_chatListRefreshTokenProvider.notifier).state++;
 }
 
 List<VoiceMessage> _sortMessages(Iterable<VoiceMessage> messages) {
@@ -284,7 +461,7 @@ class RealtimeHub {
   Stream<RealtimeFrame> get events => _eventController.stream;
 
   Future<void> ensureConnected() async {
-    if (_connection != null) return;
+    if (_eventController.isClosed || _connection != null) return;
     final auth = _ref.read(authControllerProvider).session;
     final config = _ref.read(gatewayConfigProvider);
     if (auth == null || !config.hasBaseUrl) return;
@@ -356,16 +533,22 @@ class RealtimeHub {
     _connection = null;
   }
 
+  Future<void> disconnect() async {
+    _reconnectTimer?.cancel();
+    _reconnectAttempt = 0;
+    _subscribedChats.clear();
+    await _tearDownConnection();
+    _setStatus(RealtimeLinkStatus.disconnected);
+  }
+
   void _setStatus(RealtimeLinkStatus next) {
     _status = next;
     _ref.read(realtimeLinkStatusProvider.notifier).state = next;
   }
 
   Future<void> dispose() async {
-    _reconnectTimer?.cancel();
-    await _tearDownConnection();
+    await disconnect();
     await _eventController.close();
-    _setStatus(RealtimeLinkStatus.disconnected);
   }
 }
 
@@ -377,7 +560,7 @@ final realtimeHubProvider = Provider<RealtimeHub>((ref) {
       unawaited(hub.ensureConnected());
     }
     if (!next.isAuthenticated && (prev?.isAuthenticated ?? false)) {
-      unawaited(hub.dispose());
+      unawaited(hub.disconnect());
     }
   });
   if (ref.read(authControllerProvider).isAuthenticated) {
@@ -419,7 +602,7 @@ class ChatActions {
     peers[chatId] = peerProfileId;
     _ref.read(dmPeerProfileByChatIdProvider.notifier).state = peers;
     _ref.read(selectedChatIdProvider.notifier).state = chatId;
-    _ref.invalidate(chatListProvider);
+    _invalidateChatLists(_ref);
     return null;
   }
 

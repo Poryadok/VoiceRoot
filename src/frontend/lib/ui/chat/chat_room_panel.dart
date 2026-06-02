@@ -19,6 +19,7 @@ class ChatRoomPanel extends ConsumerStatefulWidget {
   static const Key inputKey = Key('chat_room_input');
   static const Key sendKey = Key('chat_room_send');
   static const Key peerPresenceKey = Key('chat_room_peer_presence');
+  static const Key loadOlderKey = Key('chat_room_load_older');
 
   final String chatId;
 
@@ -46,8 +47,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     final peerName = peerId != null
         ? ref.watch(profileProvider(peerId)).valueOrNull?.displayName
         : null;
-    final peerPresence =
-        peerId != null ? ref.watch(presenceProvider(peerId)) : null;
+    final peerPresence = peerId != null
+        ? ref.watch(presenceProvider(peerId))
+        : null;
     final title = peerName ?? l10n.chatRoomTitle(widget.chatId.substring(0, 8));
     final voice = VoiceColors.of(context);
 
@@ -85,7 +87,10 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   const SizedBox(width: 8),
                 ],
                 Expanded(
-                  child: Text(title, style: Theme.of(context).textTheme.titleMedium),
+                  child: Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                 ),
                 _RealtimeBadge(status: room.realtimeStatus, l10n: l10n),
               ],
@@ -100,13 +105,47 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   key: ChatRoomPanel.messagesKey,
                   controller: _scrollController,
                   padding: const EdgeInsets.all(12),
-                  itemCount: room.messages.length,
+                  itemCount:
+                      room.messages.length +
+                      (room.hasMore || room.isLoadingOlder ? 1 : 0),
                   itemBuilder: (context, index) {
-                    final msg = room.messages[index];
+                    final hasOlderControl = room.hasMore || room.isLoadingOlder;
+                    if (hasOlderControl && index == 0) {
+                      return Center(
+                        child: room.isLoadingOlder
+                            ? const Padding(
+                                padding: EdgeInsets.all(8),
+                                child: SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                              )
+                            : IconButton(
+                                key: ChatRoomPanel.loadOlderKey,
+                                tooltip: MaterialLocalizations.of(
+                                  context,
+                                ).moreButtonTooltip,
+                                icon: const Icon(Icons.expand_less),
+                                onPressed: () => ref
+                                    .read(
+                                      chatRoomControllerProvider(
+                                        widget.chatId,
+                                      ).notifier,
+                                    )
+                                    .loadOlderMessages(),
+                              ),
+                      );
+                    }
+                    final messageIndex = hasOlderControl ? index - 1 : index;
+                    final msg = room.messages[messageIndex];
                     final isMine = msg.senderProfileId == activeId;
                     return Align(
-                      alignment:
-                          isMine ? Alignment.centerRight : Alignment.centerLeft,
+                      alignment: isMine
+                          ? Alignment.centerRight
+                          : Alignment.centerLeft,
                       child: Container(
                         margin: const EdgeInsets.only(bottom: 8),
                         padding: const EdgeInsets.symmetric(
@@ -186,10 +225,22 @@ class _RealtimeBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (label, color) = switch (status) {
-      RealtimeLinkStatus.connected => (l10n.chatRealtimeConnected, Colors.green),
-      RealtimeLinkStatus.connecting => (l10n.chatRealtimeConnecting, Colors.orange),
-      RealtimeLinkStatus.reconnecting => (l10n.chatRealtimeReconnecting, Colors.orange),
-      RealtimeLinkStatus.disconnected => (l10n.chatRealtimeOffline, Colors.grey),
+      RealtimeLinkStatus.connected => (
+        l10n.chatRealtimeConnected,
+        Colors.green,
+      ),
+      RealtimeLinkStatus.connecting => (
+        l10n.chatRealtimeConnecting,
+        Colors.orange,
+      ),
+      RealtimeLinkStatus.reconnecting => (
+        l10n.chatRealtimeReconnecting,
+        Colors.orange,
+      ),
+      RealtimeLinkStatus.disconnected => (
+        l10n.chatRealtimeOffline,
+        Colors.grey,
+      ),
     };
     return Row(
       mainAxisSize: MainAxisSize.min,
