@@ -78,6 +78,14 @@
   "socialPresenceIdle": "Отошёл",
   "socialPresenceDnd": "Не беспокоить",
   "socialPresenceOffline": "Не в сети",
+  "socialPresenceLastSeen": "Был(а) {dateTime}",
+  "@socialPresenceLastSeen": {
+    "placeholders": {
+      "dateTime": {
+        "type": "String"
+      }
+    }
+  },
   "socialPresenceUnknown": "Неизвестно",
   "socialActionError": "Ошибка: {message}",
   "@socialActionError": {

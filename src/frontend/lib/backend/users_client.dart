@@ -71,10 +71,15 @@ class VoiceProfile {
 }
 
 class VoicePresence {
-  const VoicePresence({required this.profileId, required this.status});
+  const VoicePresence({
+    required this.profileId,
+    required this.status,
+    this.lastSeen,
+  });
 
   final String profileId;
   final String status;
+  final DateTime? lastSeen;
 
   bool get isOnline => status == 'online';
 
@@ -86,6 +91,7 @@ class VoicePresence {
     return VoicePresence(
       profileId: (json['profile_id'] ?? json['profileId']) as String,
       status: json['status'] as String? ?? 'invisible',
+      lastSeen: _parseTimestamp(json['last_seen'] ?? json['lastSeen']),
     );
   }
 
@@ -114,6 +120,11 @@ class VoicePresence {
       }
     }
     return out;
+  }
+
+  static DateTime? _parseTimestamp(Object? raw) {
+    if (raw is! String || raw.isEmpty) return null;
+    return DateTime.tryParse(raw)?.toUtc();
   }
 }
 

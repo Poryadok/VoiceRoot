@@ -82,7 +82,7 @@ class ProfileDetailSheet extends ConsumerWidget {
                                 presence: presence,
                               ),
                               const SizedBox(width: 8),
-                              Text(_presenceLabel(l10n, presence)),
+                              Text(_presenceLabel(context, l10n, presence)),
                             ],
                           ),
                         ],
@@ -122,25 +122,44 @@ class ProfileDetailSheet extends ConsumerWidget {
     String profileId,
   ) async {
     final l10n = AppLocalizations.of(context)!;
-    final err = await ref.read(chatActionsProvider).openDmWithProfile(profileId);
+    final err = await ref
+        .read(chatActionsProvider)
+        .openDmWithProfile(profileId);
     if (!context.mounted) return;
     if (err != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.socialActionError(err))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.socialActionError(err))));
       return;
     }
     Navigator.of(context).pop();
   }
 
-  String _presenceLabel(AppLocalizations l10n, VoicePresence? presence) {
+  String _presenceLabel(
+    BuildContext context,
+    AppLocalizations l10n,
+    VoicePresence? presence,
+  ) {
     if (presence == null) return l10n.socialPresenceUnknown;
     return switch (presence.status) {
       'online' => l10n.socialPresenceOnline,
       'idle' => l10n.socialPresenceIdle,
       'dnd' => l10n.socialPresenceDnd,
-      _ => l10n.socialPresenceOffline,
+      _ =>
+        presence.lastSeen == null
+            ? l10n.socialPresenceOffline
+            : l10n.socialPresenceLastSeen(
+                _formatLastSeen(context, presence.lastSeen!),
+              ),
     };
+  }
+
+  String _formatLastSeen(BuildContext context, DateTime lastSeen) {
+    final local = lastSeen.toLocal();
+    final material = MaterialLocalizations.of(context);
+    final date = material.formatShortDate(local);
+    final time = TimeOfDay.fromDateTime(local).format(context);
+    return '$date $time';
   }
 }
 

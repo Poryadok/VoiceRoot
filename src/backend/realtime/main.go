@@ -40,6 +40,7 @@ func main() {
 	}
 
 	dmLister := dialDMChatLister()
+	presenceUpdater := dialPresenceUpdater()
 
 	hub := newWSHub()
 	instanceID := strings.TrimSpace(os.Getenv("REALTIME_INSTANCE_ID"))
@@ -82,7 +83,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              addr,
-		Handler:           newServiceHandler(serviceName, tv, dmLister, hub, rf, instanceID),
+		Handler:           newServiceHandlerWithPresence(serviceName, tv, dmLister, hub, rf, instanceID, presenceUpdater),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       0,
 		WriteTimeout:      0,
@@ -130,4 +131,17 @@ func dialDMChatLister() dmChatLister {
 		return nil
 	}
 	return newGRPCDMChatLister(conn)
+}
+
+func dialPresenceUpdater() presenceUpdater {
+	addr := strings.TrimSpace(os.Getenv("REALTIME_USER_GRPC_ADDR"))
+	if addr == "" {
+		return nil
+	}
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Printf("realtime: REALTIME_USER_GRPC_ADDR NewClient %q: %v", addr, err)
+		return nil
+	}
+	return newGRPCPresenceUpdater(conn)
 }

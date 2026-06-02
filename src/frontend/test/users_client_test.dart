@@ -247,7 +247,11 @@ void main() {
         expect(req.url.path, '/api/v1/users/profiles/p-1/presence');
         return http.Response(
           jsonEncode({
-            'presenceStatus': {'profileId': 'p-1', 'status': 'online'},
+            'presenceStatus': {
+              'profileId': 'p-1',
+              'status': 'online',
+              'lastSeen': '2026-06-02T18:30:00Z',
+            },
           }),
           200,
         );
@@ -255,7 +259,9 @@ void main() {
       final client = VoiceUsersClient(httpClient: mock, config: config);
       final r = await client.getPresence(authorization: auth, profileId: 'p-1');
       expect(r, isA<UsersApiOk<VoicePresence>>());
-      expect((r as UsersApiOk<VoicePresence>).data.isOnline, isTrue);
+      final presence = (r as UsersApiOk<VoicePresence>).data;
+      expect(presence.isOnline, isTrue);
+      expect(presence.lastSeen, DateTime.utc(2026, 6, 2, 18, 30));
     });
   });
 
@@ -270,7 +276,11 @@ void main() {
           jsonEncode({
             'byProfileId': {
               'p-1': {'profileId': 'p-1', 'status': 'online'},
-              'p-2': {'profileId': 'p-2', 'status': 'idle'},
+              'p-2': {
+                'profileId': 'p-2',
+                'status': 'invisible',
+                'last_seen': '2026-06-02T18:45:00Z',
+              },
             },
           }),
           200,
@@ -284,7 +294,8 @@ void main() {
       expect(r, isA<UsersApiOk<Map<String, VoicePresence>>>());
       final map = (r as UsersApiOk<Map<String, VoicePresence>>).data;
       expect(map['p-1']?.isOnline, isTrue);
-      expect(map['p-2']?.isIdle, isTrue);
+      expect(map['p-2']?.status, 'invisible');
+      expect(map['p-2']?.lastSeen, DateTime.utc(2026, 6, 2, 18, 45));
     });
   });
 }

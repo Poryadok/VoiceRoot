@@ -77,6 +77,14 @@
   "socialPresenceIdle": "Idle",
   "socialPresenceDnd": "Do not disturb",
   "socialPresenceOffline": "Offline",
+  "socialPresenceLastSeen": "Last seen {dateTime}",
+  "@socialPresenceLastSeen": {
+    "placeholders": {
+      "dateTime": {
+        "type": "String"
+      }
+    }
+  },
   "socialPresenceUnknown": "Unknown",
   "socialActionError": "Error: {message}",
   "@socialActionError": {

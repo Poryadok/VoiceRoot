@@ -153,6 +153,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get socialPresenceOffline => 'Offline';
 
   @override
+  String socialPresenceLastSeen(String dateTime) {
+    return 'Last seen $dateTime';
+  }
+
+  @override
   String get socialPresenceUnknown => 'Unknown';
 
   @override

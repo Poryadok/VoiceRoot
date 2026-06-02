@@ -356,6 +356,12 @@ abstract class AppLocalizations {
   /// **'Offline'**
   String get socialPresenceOffline;
 
+  /// No description provided for @socialPresenceLastSeen.
+  ///
+  /// In en, this message translates to:
+  /// **'Last seen {dateTime}'**
+  String socialPresenceLastSeen(String dateTime);
+
   /// No description provided for @socialPresenceUnknown.
   ///
   /// In en, this message translates to:

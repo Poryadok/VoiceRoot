@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http/httptest"
 	"testing"
@@ -73,7 +74,7 @@ func TestWSMarkReadFanoutSameProfileTwoConnections(t *testing.T) {
 
 	if err := c1.WriteJSON(map[string]any{
 		"op": "mark_read",
-		"d": map[string]any{"chat_id": chatID, "message_id": msgID},
+		"d":  map[string]any{"chat_id": chatID, "message_id": msgID},
 	}); err != nil {
 		t.Fatalf("mark_read: %v", err)
 	}
@@ -116,7 +117,7 @@ func TestWSMarkReadRejectedWithoutChatSubscription(t *testing.T) {
 	msgID := "dddddddd-dddd-dddd-dddd-dddddddddddd"
 	if err := c.WriteJSON(map[string]any{
 		"op": "mark_read",
-		"d": map[string]any{"chat_id": chatID, "message_id": msgID},
+		"d":  map[string]any{"chat_id": chatID, "message_id": msgID},
 	}); err != nil {
 		t.Fatalf("mark_read: %v", err)
 	}
@@ -204,7 +205,7 @@ func TestWSPresenceUpdateFanoutToPeerInSharedChat(t *testing.T) {
 
 	if err := c1.WriteJSON(map[string]any{
 		"op": "presence_update",
-		"d": map[string]any{"status": "dnd", "custom_status": "in a meeting"},
+		"d":  map[string]any{"status": "dnd", "custom_status": "in a meeting"},
 	}); err != nil {
 		t.Fatalf("presence_update: %v", err)
 	}
@@ -225,6 +226,176 @@ func TestWSPresenceUpdateFanoutToPeerInSharedChat(t *testing.T) {
 	if body.ChatID != chatID || body.ProfileID != "p1" || body.Status != "dnd" || body.CustomStatus != "in a meeting" {
 		t.Fatalf("presence body = %+v", body)
 	}
+}
+
+func TestWSPresenceLifecyclePersistsViaUpdater(t *testing.T) {
+	t.Parallel()
+	updater := newRecordingPresenceUpdater(8)
+	srv := httptest.NewServer(newServiceHandlerWithPresence(
+		serviceName,
+		staticTokenValidator{"tok": {UserID: "account-1", ProfileID: "profile-1"}},
+		nil,
+		newWSHub(),
+		nil,
+		"test-instance",
+		updater,
+	))
+	t.Cleanup(srv.Close)
+
+	u := wsEndpoint(t, srv)
+	hdr := wsUpgradeHeaders("tok")
+	hdr.Set("X-Profile-Id", "profile-1")
+	c, _, err := websocket.DefaultDialer.Dial(u, hdr)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+
+	readOp := func() wsEnvelope {
+		t.Helper()
+		_ = c.SetReadDeadline(time.Now().Add(3 * time.Second))
+		_, data, err := c.ReadMessage()
+		if err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		var env wsEnvelope
+		if err := json.Unmarshal(data, &env); err != nil {
+			t.Fatalf("json: %v", err)
+		}
+		return env
+	}
+
+	if readOp().Op != "hello" {
+		t.Fatal("hello")
+	}
+	updater.expect(t, recordedPresenceUpdate{
+		accountID: "account-1",
+		profileID: "profile-1",
+		status:    "online",
+	})
+
+	if err := c.WriteJSON(map[string]any{"op": "heartbeat"}); err != nil {
+		t.Fatalf("heartbeat: %v", err)
+	}
+	if readOp().Op != "heartbeat_ack" {
+		t.Fatal("heartbeat_ack")
+	}
+	updater.expect(t, recordedPresenceUpdate{
+		accountID: "account-1",
+		profileID: "profile-1",
+		status:    "online",
+	})
+
+	_ = c.Close()
+	updater.expect(t, recordedPresenceUpdate{
+		accountID: "account-1",
+		profileID: "profile-1",
+		status:    "invisible",
+	})
+}
+
+func TestWSPresenceDisconnectKeepsOnlineWithSecondConnection(t *testing.T) {
+	t.Parallel()
+	updater := newRecordingPresenceUpdater(8)
+	srv := httptest.NewServer(newServiceHandlerWithPresence(
+		serviceName,
+		staticTokenValidator{
+			"desktop": {UserID: "account-1", ProfileID: "profile-1"},
+			"mobile":  {UserID: "account-1", ProfileID: "profile-1"},
+		},
+		nil,
+		newWSHub(),
+		nil,
+		"test-instance",
+		updater,
+	))
+	t.Cleanup(srv.Close)
+
+	dial := func(token string) *websocket.Conn {
+		t.Helper()
+		u := wsEndpoint(t, srv)
+		hdr := wsUpgradeHeaders(token)
+		hdr.Set("X-Profile-Id", "profile-1")
+		c, _, err := websocket.DefaultDialer.Dial(u, hdr)
+		if err != nil {
+			t.Fatalf("dial %s: %v", token, err)
+		}
+		_, _, _ = c.ReadMessage()
+		updater.expect(t, recordedPresenceUpdate{
+			accountID: "account-1",
+			profileID: "profile-1",
+			status:    "online",
+		})
+		return c
+	}
+
+	c1 := dial("desktop")
+	c2 := dial("mobile")
+
+	_ = c1.Close()
+	if err := c2.WriteJSON(map[string]any{"op": "heartbeat"}); err != nil {
+		t.Fatalf("heartbeat: %v", err)
+	}
+	_ = c2.SetReadDeadline(time.Now().Add(3 * time.Second))
+	_, _, err := c2.ReadMessage()
+	if err != nil {
+		t.Fatalf("read heartbeat_ack: %v", err)
+	}
+	updater.expect(t, recordedPresenceUpdate{
+		accountID: "account-1",
+		profileID: "profile-1",
+		status:    "online",
+	})
+
+	_ = c2.Close()
+	updater.expect(t, recordedPresenceUpdate{
+		accountID: "account-1",
+		profileID: "profile-1",
+		status:    "invisible",
+	})
+}
+
+func TestWSPresenceUpdatePersistsSubmittedStatus(t *testing.T) {
+	t.Parallel()
+	updater := newRecordingPresenceUpdater(8)
+	srv := httptest.NewServer(newServiceHandlerWithPresence(
+		serviceName,
+		staticTokenValidator{"tok": {UserID: "account-1", ProfileID: "profile-1"}},
+		nil,
+		newWSHub(),
+		nil,
+		"test-instance",
+		updater,
+	))
+	t.Cleanup(srv.Close)
+
+	u := wsEndpoint(t, srv)
+	hdr := wsUpgradeHeaders("tok")
+	hdr.Set("X-Profile-Id", "profile-1")
+	c, _, err := websocket.DefaultDialer.Dial(u, hdr)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	t.Cleanup(func() { _ = c.Close() })
+	_, _, _ = c.ReadMessage()
+	updater.expect(t, recordedPresenceUpdate{
+		accountID: "account-1",
+		profileID: "profile-1",
+		status:    "online",
+	})
+
+	if err := c.WriteJSON(map[string]any{
+		"op": "presence_update",
+		"d":  map[string]any{"status": "dnd", "custom_status": "in a meeting"},
+	}); err != nil {
+		t.Fatalf("presence_update: %v", err)
+	}
+
+	updater.expect(t, recordedPresenceUpdate{
+		accountID:    "account-1",
+		profileID:    "profile-1",
+		status:       "dnd",
+		customStatus: "in a meeting",
+	})
 }
 
 func TestWSPresenceUpdateRejectedEmptyStatus(t *testing.T) {
@@ -252,7 +423,7 @@ func TestWSPresenceUpdateRejectedEmptyStatus(t *testing.T) {
 
 	if err := c.WriteJSON(map[string]any{
 		"op": "presence_update",
-		"d": map[string]any{"status": ""},
+		"d":  map[string]any{"status": ""},
 	}); err != nil {
 		t.Fatalf("presence_update: %v", err)
 	}
@@ -277,5 +448,46 @@ func TestWSPresenceUpdateRejectedEmptyStatus(t *testing.T) {
 	}
 	if errBody.Code != "invalid_presence" {
 		t.Fatalf("code = %q", errBody.Code)
+	}
+}
+
+type recordedPresenceUpdate struct {
+	accountID    string
+	profileID    string
+	status       string
+	customStatus string
+}
+
+type recordingPresenceUpdater struct {
+	updates chan recordedPresenceUpdate
+}
+
+func newRecordingPresenceUpdater(size int) *recordingPresenceUpdater {
+	return &recordingPresenceUpdater{updates: make(chan recordedPresenceUpdate, size)}
+}
+
+func (r *recordingPresenceUpdater) UpdatePresence(ctx context.Context, accountID, profileID, status, customStatus string) error {
+	select {
+	case r.updates <- recordedPresenceUpdate{
+		accountID:    accountID,
+		profileID:    profileID,
+		status:       status,
+		customStatus: customStatus,
+	}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (r *recordingPresenceUpdater) expect(t *testing.T, want recordedPresenceUpdate) {
+	t.Helper()
+	select {
+	case got := <-r.updates:
+		if got != want {
+			t.Fatalf("presence update = %+v, want %+v", got, want)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatalf("timed out waiting for presence update %+v", want)
 	}
 }

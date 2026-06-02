@@ -26,7 +26,9 @@ void main() {
     return ProviderScope(
       overrides: [
         ...voiceThemeTestOverrides(),
-        profileAccentStorageProvider.overrideWithValue(testProfileAccentStorage),
+        profileAccentStorageProvider.overrideWithValue(
+          testProfileAccentStorage,
+        ),
         authSessionStorageProvider.overrideWithValue(
           InMemoryAuthSessionStorage(),
         ),
@@ -52,7 +54,9 @@ void main() {
     );
   }
 
-  testWidgets('SocialPanel shows search, friends, and requests tabs', (tester) async {
+  testWidgets('SocialPanel shows search, friends, and requests tabs', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       socialTestApp(
         client: MockClient((_) async => http.Response('{}', 200)),
@@ -109,7 +113,9 @@ void main() {
     expect(find.textContaining('@carol'), findsOneWidget);
   });
 
-  testWidgets('profile detail shows online indicator from presence', (tester) async {
+  testWidgets('profile detail shows online indicator from presence', (
+    tester,
+  ) async {
     final client = MockClient((req) async {
       if (req.url.path == '/api/v1/users/profiles/p-1') {
         return http.Response(
@@ -161,6 +167,63 @@ void main() {
     expect(find.byKey(ProfileDetailSheet.onlineIndicatorKey), findsOneWidget);
   });
 
+  testWidgets('profile detail shows last seen for offline presence', (
+    tester,
+  ) async {
+    final client = MockClient((req) async {
+      if (req.url.path == '/api/v1/users/profiles/p-2') {
+        return http.Response(
+          jsonEncode({
+            'profile': {
+              'id': 'p-2',
+              'account_id': 'a-2',
+              'username': 'erin',
+              'discriminator': '0002',
+              'display_name': 'Erin',
+              'locale': 'en',
+              'theme': 'dark',
+              'is_primary': true,
+              'verification_type': 'none',
+            },
+          }),
+          200,
+        );
+      }
+      if (req.url.path == '/api/v1/users/profiles/p-2/presence') {
+        return http.Response(
+          jsonEncode({
+            'presenceStatus': {
+              'profileId': 'p-2',
+              'status': 'invisible',
+              'lastSeen': '2026-06-02T18:30:00Z',
+            },
+          }),
+          200,
+        );
+      }
+      if (req.url.path == '/api/v1/friends/requests') {
+        return http.Response(
+          jsonEncode({
+            'friend_request_list': {'incoming': [], 'outgoing': []},
+          }),
+          200,
+        );
+      }
+      return http.Response('{}', 200);
+    });
+
+    await tester.pumpWidget(
+      socialTestApp(
+        client: client,
+        home: const ProfileDetailSheet(profileId: 'p-2'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Erin'), findsOneWidget);
+    expect(find.textContaining('Last seen'), findsOneWidget);
+  });
+
   testWidgets('friends tab shows backend unavailable on 404', (tester) async {
     await tester.pumpWidget(
       socialTestApp(
@@ -208,43 +271,43 @@ void main() {
       socialTestApp(
         home: const SocialPanel(initialTabIndex: 2),
         client: MockClient((req) async {
-              if (req.url.path == '/api/v1/friends/requests') {
-                return http.Response(
-                  jsonEncode({
-                    'friend_request_list': {
-                      'incoming': [
-                        {'profile_id': 'p-in'},
-                      ],
-                      'outgoing': [],
-                    },
-                  }),
-                  200,
-                );
-              }
-              if (req.url.path == '/api/v1/users/profiles/p-in') {
-                return http.Response(
-                  jsonEncode({
-                    'profile': {
-                      'id': 'p-in',
-                      'account_id': 'a-in',
-                      'username': 'incoming',
-                      'discriminator': '0001',
-                      'display_name': 'Incoming User',
-                      'locale': 'en',
-                      'theme': 'dark',
-                      'is_primary': true,
-                      'verification_type': 'none',
-                    },
-                  }),
-                  200,
-                );
-              }
-              if (req.url.path == '/api/v1/friends/invitations/p-in/accept') {
-                accepted = true;
-                return http.Response('{}', 200);
-              }
-              return http.Response('{}', 200);
-            }),
+          if (req.url.path == '/api/v1/friends/requests') {
+            return http.Response(
+              jsonEncode({
+                'friend_request_list': {
+                  'incoming': [
+                    {'profile_id': 'p-in'},
+                  ],
+                  'outgoing': [],
+                },
+              }),
+              200,
+            );
+          }
+          if (req.url.path == '/api/v1/users/profiles/p-in') {
+            return http.Response(
+              jsonEncode({
+                'profile': {
+                  'id': 'p-in',
+                  'account_id': 'a-in',
+                  'username': 'incoming',
+                  'discriminator': '0001',
+                  'display_name': 'Incoming User',
+                  'locale': 'en',
+                  'theme': 'dark',
+                  'is_primary': true,
+                  'verification_type': 'none',
+                },
+              }),
+              200,
+            );
+          }
+          if (req.url.path == '/api/v1/friends/invitations/p-in/accept') {
+            accepted = true;
+            return http.Response('{}', 200);
+          }
+          return http.Response('{}', 200);
+        }),
       ),
     );
     await tester.pumpAndSettle();

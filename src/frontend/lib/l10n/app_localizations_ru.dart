@@ -153,6 +153,11 @@ class AppLocalizationsRu extends AppLocalizations {
   String get socialPresenceOffline => 'Не в сети';
 
   @override
+  String socialPresenceLastSeen(String dateTime) {
+    return 'Был(а) $dateTime';
+  }
+
+  @override
   String get socialPresenceUnknown => 'Неизвестно';
 
   @override

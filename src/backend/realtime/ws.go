@@ -20,7 +20,15 @@ type tokenValidator interface {
 	Validate(r *http.Request) (voicejwt.Claims, string)
 }
 
+type presenceUpdater interface {
+	UpdatePresence(ctx context.Context, accountID, profileID, status, customStatus string) error
+}
+
 func newServiceHandler(service string, tv tokenValidator, lister dmChatLister, hub *wsHub, rf *redisFanout, instanceID string) http.Handler {
+	return newServiceHandlerWithPresence(service, tv, lister, hub, rf, instanceID, nil)
+}
+
+func newServiceHandlerWithPresence(service string, tv tokenValidator, lister dmChatLister, hub *wsHub, rf *redisFanout, instanceID string, presence presenceUpdater) http.Handler {
 	if hub == nil {
 		hub = newWSHub()
 	}
@@ -29,11 +37,11 @@ func newServiceHandler(service string, tv tokenValidator, lister dmChatLister, h
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/health", healthOnly(service))
-	mux.Handle("/ws", newWSHandler(tv, lister, hub, rf, instanceID))
+	mux.Handle("/ws", newWSHandler(tv, lister, hub, rf, instanceID, presence))
 	return mux
 }
 
-func newWSHandler(tv tokenValidator, lister dmChatLister, hub *wsHub, rf *redisFanout, instanceID string) http.Handler {
+func newWSHandler(tv tokenValidator, lister dmChatLister, hub *wsHub, rf *redisFanout, instanceID string, presence presenceUpdater) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if tv == nil {
 			writeJSONError(w, http.StatusServiceUnavailable, "realtime_auth_unconfigured")
@@ -80,7 +88,7 @@ func newWSHandler(tv tokenValidator, lister dmChatLister, hub *wsHub, rf *redisF
 			log.Printf("ws upgrade: %v", err)
 			return
 		}
-		go runWSConn(conn, claims, lister, hub, rf, instanceID)
+		go runWSConn(conn, claims, lister, hub, rf, instanceID, presence)
 	})
 }
 
@@ -147,16 +155,19 @@ type readResult struct {
 	err error
 }
 
-func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, hub *wsHub, rf *redisFanout, instanceID string) {
+func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, hub *wsHub, rf *redisFanout, instanceID string, presence presenceUpdater) {
 	connID := uuid.NewString()
 	reg := hub.attachConn(instanceID, connID, claims.ProfileID, 32)
 
 	defer func() {
-		hub.unregisterConn(reg)
+		hasLocalProfileConn := hub.unregisterConn(reg)
 		if rf != nil {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			_ = rf.Unregister(ctx, claims.ProfileID, connID)
 			cancel()
+		}
+		if !hasLocalProfileConn {
+			updatePresence(context.Background(), presence, claims, "invisible", "")
 		}
 		_ = c.Close()
 	}()
@@ -186,6 +197,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, h
 	if err := write("hello", helloD); err != nil {
 		return
 	}
+	updatePresence(context.Background(), presence, claims, "online", "")
 
 	if lister != nil {
 		lctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -245,6 +257,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, h
 			in := rr.in
 			switch in.Op {
 			case "heartbeat":
+				updatePresence(context.Background(), presence, claims, "online", "")
 				ackD, _ := json.Marshal(map[string]any{})
 				if err := write("heartbeat_ack", ackD); err != nil {
 					return
@@ -404,6 +417,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, h
 				if len(custom) > 256 {
 					custom = custom[:256]
 				}
+				updatePresence(context.Background(), presence, claims, status, custom)
 				dSelf, _ := json.Marshal(map[string]any{
 					"profile_id":    claims.ProfileID,
 					"status":        status,
@@ -425,10 +439,10 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, h
 				mu.Unlock()
 				for _, c := range chatCopy {
 					dChat, _ := json.Marshal(map[string]any{
-						"chat_id":         c,
-						"profile_id":      claims.ProfileID,
-						"status":          status,
-						"custom_status":   custom,
+						"chat_id":       c,
+						"profile_id":    claims.ProfileID,
+						"status":        status,
+						"custom_status": custom,
 					})
 					hub.broadcastPresenceInChatExcept(c, claims.ProfileID, instanceID, connID, dChat)
 					if rf != nil {
@@ -443,6 +457,20 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, h
 				// ignore unknown ops for now
 			}
 		}
+	}
+}
+
+func updatePresence(ctx context.Context, presence presenceUpdater, claims voicejwt.Claims, status, customStatus string) {
+	if presence == nil {
+		return
+	}
+	if strings.TrimSpace(claims.UserID) == "" || strings.TrimSpace(claims.ProfileID) == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	if err := presence.UpdatePresence(ctx, claims.UserID, claims.ProfileID, status, customStatus); err != nil {
+		log.Printf("ws user presence update profile=%s status=%s: %v", claims.ProfileID, status, err)
 	}
 }
 

@@ -81,9 +81,9 @@ func (h *wsHub) removeChat(reg *connReg, chatID string) {
 	delete(reg.chats, chatID)
 }
 
-func (h *wsHub) unregisterConn(reg *connReg) {
+func (h *wsHub) unregisterConn(reg *connReg) bool {
 	if reg == nil {
-		return
+		return false
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -101,9 +101,12 @@ func (h *wsHub) unregisterConn(reg *connReg) {
 			delete(m, reg)
 			if len(m) == 0 {
 				delete(h.byProfile, reg.profileID)
+				return false
 			}
+			return true
 		}
 	}
+	return false
 }
 
 // broadcastTypingExcept delivers op "typing" with payload d to every connection subscribed to chatID

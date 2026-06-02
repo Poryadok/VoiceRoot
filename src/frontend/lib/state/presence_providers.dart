@@ -55,15 +55,12 @@ class PresenceController extends StateNotifier<Map<String, VoicePresence>> {
     if (frame.op != 'presence_update') return;
     final data = frame.data;
     if (data == null) return;
-    final profileId = data['profile_id'] as String? ??
-        data['profileId'] as String?;
+    final profileId =
+        data['profile_id'] as String? ?? data['profileId'] as String?;
     final status = data['status'] as String?;
     if (profileId == null || profileId.isEmpty || status == null) return;
     if (!_watched.contains(profileId)) return;
-    state = {
-      ...state,
-      profileId: VoicePresence(profileId: profileId, status: status),
-    };
+    state = {...state, profileId: VoicePresence.fromJson(data)};
   }
 
   void _onLinkStatus(RealtimeLinkStatus? prev, RealtimeLinkStatus next) {
@@ -107,10 +104,9 @@ class PresenceController extends StateNotifier<Map<String, VoicePresence>> {
     if (ids.isEmpty) return;
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return;
-    final result = await _ref.read(voiceUsersClientProvider).getBulkPresence(
-          authorization: auth,
-          profileIds: ids,
-        );
+    final result = await _ref
+        .read(voiceUsersClientProvider)
+        .getBulkPresence(authorization: auth, profileIds: ids);
     if (!mounted) return;
     if (result case UsersApiOk(:final data)) {
       if (data.isEmpty) return;
@@ -121,10 +117,9 @@ class PresenceController extends StateNotifier<Map<String, VoicePresence>> {
   Future<void> _refreshOne(String profileId) async {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return;
-    final result = await _ref.read(voiceUsersClientProvider).getPresence(
-          authorization: auth,
-          profileId: profileId,
-        );
+    final result = await _ref
+        .read(voiceUsersClientProvider)
+        .getPresence(authorization: auth, profileId: profileId);
     if (!mounted) return;
     if (result case UsersApiOk(:final data)) {
       state = {...state, profileId: data};
@@ -141,12 +136,17 @@ class PresenceController extends StateNotifier<Map<String, VoicePresence>> {
 }
 
 final presenceMapProvider =
-    StateNotifierProvider<PresenceController, Map<String, VoicePresence>>((ref) {
-  return PresenceController(ref);
-});
+    StateNotifierProvider<PresenceController, Map<String, VoicePresence>>((
+      ref,
+    ) {
+      return PresenceController(ref);
+    });
 
 /// Presence for a profile: initial REST, live WS, polling fallback when WS down.
-final presenceProvider = Provider.family<VoicePresence?, String>((ref, profileId) {
+final presenceProvider = Provider.family<VoicePresence?, String>((
+  ref,
+  profileId,
+) {
   ref.watch(presenceMapProvider);
   ref.read(presenceMapProvider.notifier).ensureWatched(profileId);
   return ref.watch(presenceMapProvider)[profileId];
