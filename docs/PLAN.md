@@ -6,22 +6,22 @@
 
 ## Текущее состояние кодовой базы
 
-Репозиторий: **фундамент Фазы 0 закрыт**, идёт **реализация Фазы 1** (DM, друзья, профиль, presence) — см. чеклист ниже. **Локальный стенд:** `make compose-app-up` поднимает Auth, User, Social, Chat, Messaging, Realtime, Gateway и Flutter web ([README.md](../README.md)); Postgres init (`docker/postgres/`) на новом volume создаёт схемы `social_db`, `chat_db`, `messaging_db` вместе с `user_db`. **CI на GitHub:** на push в `master` образы Go-сервисов и Auth в GHCR; на **staging** end-to-end выкатан в основном **gateway** (`voice.tastytest.online`) — полный Phase-1 upstream там может отставать от локального compose.
+Репозиторий: **фундамент Фазы 0 закрыт**, идёт **дозакрытие Фазы 1** (DM, друзья, профиль, presence) — см. чеклист ниже. **Локальный стенд:** `make compose-app-up` поднимает Auth, User, Social, Chat, Messaging, Realtime, Gateway и Flutter web ([README.md](../README.md)); Postgres init (`docker/postgres/`) на новом volume создаёт схемы `social_db`, `chat_db`, `messaging_db` вместе с `user_db`. **CI на GitHub:** на push в `master` образы Go-сервисов и Auth в GHCR; на **staging** end-to-end выкатан в основном **gateway** (`voice.tastytest.online`) — полный Phase-1 upstream там может отставать от локального compose.
 
 **Auth (Java):** register/login/refresh/logout/validate (REST+gRPC), JWT/JWKS, PostgreSQL + Flyway, Redis blacklist, стабильный JWKS из PKCS#8; Testcontainers `AuthJdbcRedisIntegrationTest`.
 
 **API Gateway (Go):** REST proxy к Auth; **REST→gRPC transcoding** для Phase-1 namespace (`/api/v1/users`, `/friends`, `/chats`, `/messages`); прокси **`/ws`** к Realtime; JWT/JWKS, Redis blacklist/rate limit (в compose dev — `GATEWAY_RATE_LIMIT_RULES_JSON`, отключение bucket `Auth`), CORS, тесты in-process и opt-in live против compose.
 
-**Сервисы Фазы 1 (Go, gRPC + Postgres где нужно):** реализованы сквозные потоки с интеграционными тестами (Testcontainers / gateway): **User** — профили, `SearchProfiles`; **Social** — друзья (invite/accept/decline/list/block); **Chat** — DM `CreateDM`, `ListChats`, `mark_read` (обогащение превью/unread в list — частично, см. [chat-service.md](microservices/chat-service.md)); **Messaging** — send/history/cursor, публикация в NATS; **Realtime** — WS `hello`/`subscribe`, `message_create`, `resume`, `mark_read`/`presence_update`, Redis fan-out. Остальные backend-сервисы из [MICROSERVICES.md](MICROSERVICES.md) — по-прежнему scaffold (`GET /health`, Dockerfile, CI matrix).
+**Сервисы Фазы 1 (Go, gRPC + Postgres/Redis/NATS где нужно):** основные потоки реализованы с тестами: **User** — профили, `SearchProfiles`, код R2 avatar presigned upload, presence/last_seen через User API; **Social** — друзья (invite/accept/decline/list/block); **Chat** — DM `CreateDM`, `ListChats`, preview/unread через enrichment hook пока без полной wiring; **Messaging** — send/history/cursor, UUIDv7 `messages.id`, базовое edit/delete, read receipts, публикация в NATS; **Realtime** — JWT WS `hello`/`subscribe`, `message_create`, `s`/`resume`, `mark_read`/`presence_update`, Redis fan-out. Остальные backend-сервисы из [MICROSERVICES.md](MICROSERVICES.md) — по-прежнему scaffold (`GET /health`, Dockerfile, CI matrix).
 
-**Flutter-клиент** ([`src/frontend/`](../src/frontend/)): shell + **экраны Фазы 1 в работе** — login/register (локализованные ошибки auth), social panel (поиск, друзья, DM без дружбы), список чатов и комната, WS-клиент; live API-тесты (`phase1_two_users_e2e_live_test`, `gateway_dm_ws_live_integration_test`) против локального gateway — [integration_test/README.md](../src/frontend/integration_test/README.md). Полное закрытие чеклиста Фазы 1 (R2-аватар, presence в UI, staging parity) — в секции «Фаза 1» ниже.
+**Flutter-клиент** ([`src/frontend/`](../src/frontend/)): shell + **основные экраны Фазы 1 реализованы** — login/register (локализованные ошибки auth), social panel (поиск, друзья, профиль, presence, DM без дружбы), список чатов и комната с WS catch-up; widget/unit/i18n tests и opt-in live API-тесты (`phase1_two_users_e2e_live_test`, `gateway_dm_ws_live_integration_test`) против локального gateway — [integration_test/README.md](../src/frontend/integration_test/README.md). До полного закрытия клиентского чеклиста нужен UI-level realtime сценарий.
 
 | Компонент | Состояние |
 |-----------|-----------|
 | Документация `docs/` | Актуальные спеки, план фаз, микросервисы |
 | `protos/` | Protobuf (S2S + сервисные API); **buf** — [buf.work.yaml](../buf.work.yaml), [protos/buf.yaml](../protos/buf.yaml), CI |
 | `src/backend/gateway/` | Edge: health/metrics/version, Auth REST upstream, Phase-1 gRPC transcoding, `/ws`→Realtime, JWT, rate limits; compose + `phase1_rest_integration_test` / live compose tests |
-| `src/backend/user`, `social`, `chat`, `messaging`, `realtime` | Доменная логика Фазы 1 (gRPC, БД/NATS/Redis по сервису); не все продуктовые пункты чеклиста закрыты |
+| `src/backend/user`, `social`, `chat`, `messaging`, `realtime` | Доменная логика Фазы 1 в основном реализована; остаются wiring preview/unread, R2-конфиг в стенде, WS→User presence/last_seen |
 | `src/backend/<остальные>/` | Scaffold: health, smoke, Dockerfile, `make build-all` |
 | `src/frontend`, `src/admin` | **Frontend:** Phase-1 UI (auth, social, chat, WS) поверх shell; widget/live tests, `make flutter-ci`. **Admin:** зарезервировано |
 | `src/backend/migrations/` | SQL v1 + init в compose для локального dev |
@@ -118,11 +118,11 @@
 ### Бэкенд
 
 - [x] **Compose: NATS / JetStream** — в [`docker-compose.yml`](../docker-compose.yml); переменная **`NATS_URL`** для Messaging и Realtime — в карточках сервисов и [DEPLOYMENT.md](DEPLOYMENT.md). Создание JetStream streams (`message.events`, `chat.events`, …) — по мере включения публикации в коде ([CONTRACT_MATRIX.md](CONTRACT_MATRIX.md)).
-- [ ] **Messaging** — отправка/получение; **базовое** edit/delete (одна политика, без «для всех/себя» и без метки «(ред.)» в UI — **Фаза 3**); PostgreSQL, курсор, REST
-- [ ] **UUIDv7 для `messages.id`** — вместе с реализацией Messaging: по спеке генерация UUIDv7; при необходимости расширение БД/генератор — [messaging-service.md](microservices/messaging-service.md)
-- [ ] **Realtime Service** — JWT, доставка сообщений, Redis Pub/Sub, `s` + `resume`, догрузка через Messaging — [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md)
+- [x] **Messaging** — отправка/получение; **базовое** edit/delete (одна политика, без «для всех/себя» и без метки «(ред.)» в UI — **Фаза 3**); PostgreSQL, курсор, REST
+- [x] **UUIDv7 для `messages.id`** — вместе с реализацией Messaging: по спеке генерация UUIDv7; при необходимости расширение БД/генератор — [messaging-service.md](microservices/messaging-service.md)
+- [x] **Realtime Service** — JWT, доставка сообщений, Redis Pub/Sub, `s` + `resume`, догрузка через Messaging — [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md)
 - [ ] **Чаты (DM)** — создание диалогов, список с превью и unread, `mark_read`
-- [ ] **Друзья** — запрос, accept/decline, список, блок
+- [x] **Друзья** — запрос, accept/decline, список, блок
 - [ ] **Профиль (базовый)** — имя, аватар (R2), «О себе»
 - [ ] **Presence** — онлайн/оффлайн по WS, последний визит
 
@@ -131,8 +131,8 @@
 ### Клиент (Web)
 
 - [ ] Логин / регистрация, список диалогов, чат в реальном времени
-- [ ] Поиск пользователей (`UserService.SearchProfiles`, см. [user-service.md](microservices/user-service.md)), запрос в друзья, профиль, индикатор онлайн
-- [ ] **Локализация** — экраны Фазы 1 на EN+RU
+- [x] Поиск пользователей (`UserService.SearchProfiles`, см. [user-service.md](microservices/user-service.md)), запрос в друзья, профиль, индикатор онлайн
+- [x] **Локализация** — экраны Фазы 1 на EN+RU
 
 ### Не входит
 

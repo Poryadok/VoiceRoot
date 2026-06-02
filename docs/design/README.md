@@ -1,6 +1,8 @@
 # Design system (Voice client)
 
-Источник визуала для Flutter: **design tokens в git** + макеты в Figma. Поведение UI — в `docs/features/` (например [navigation.md](../features/navigation.md)).
+Источник визуала для Flutter: **design tokens в git** + макеты в Figma. UX-канон и визуальные принципы — [brand.md](brand.md); продуктовое поведение — в `docs/features/` (например [navigation.md](../features/navigation.md)).
+
+> **Temporary status:** Figma сейчас недоступна. До восстановления доступа UI-работы ведём без Figma/MCP: источники истины — `docs/design/brand.md`, `docs/design/tokens.md`, `design/tokens/voice.tokens.json`, `docs/features/` и текущий Flutter UI.
 
 ## Figma
 
@@ -33,13 +35,21 @@
 
 Правило PR: смена визуальных констант → diff в `voice.tokens.json` (+ asset); правки hex в `lib/ui/**` без JSON — блокер.
 
+## UX baseline
+
+- Базовые messaging-сценарии проектируем ближе к Telegram: быстро, спокойно, без лишних окон.
+- Спейсы, голосовые комнаты, роли и community-flow проектируем ближе к Discord, но без копирования его визуального шума.
+- Новые Voice-only фичи, включая матчмейкинг, должны иметь короткий happy path, явное состояние процесса и понятный cancel/retry.
+- Визуально держим flat style: нейтральные поверхности, точечный accent, умеренные скругления, без "вырвиглаз" цветов.
+
 ## Шаблон задачи (UI)
 
 ```text
-Figma frame: https://www.figma.com/design/tIkNxn3e7vcp3APJ8I6bKi/Voice?node-id=XX-YY
+Figma frame: unavailable while Figma access is down
 Tokens: design/tokens/voice.tokens.json
+UX: docs/design/brand.md
 Spec: docs/features/...
-Use lib/ui/core/* and VoiceTheme only. Prefer tokens over get_design_context.
+Use lib/ui/core/* and VoiceTheme only. Do not depend on Figma/MCP until access is restored.
 ```
 
 ## Flutter
