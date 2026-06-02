@@ -58,7 +58,7 @@
 | `role.events`          | Role              | Analytics, Notification, Federation, Realtime |
 | `message.events`       | Messaging         | Analytics, Notification, Search, Moderation, Realtime |
 | `chat.events`          | Chat, Space       | Analytics, Notification, Realtime |
-| `voice.events`         | Voice             | Analytics, Notification |
+| `voice.events`         | Voice             | Analytics, Notification, Realtime |
 | `moderation.events`    | Moderation        | Analytics, Notification, User |
 | `subscription.events`  | Subscription      | Analytics, User, Space, File |
 | `file.events`          | File              | Analytics, Messaging (preview update) |

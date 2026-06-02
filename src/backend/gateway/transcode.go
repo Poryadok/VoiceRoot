@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	callsv1 "voice.app/voice/calls/v1"
 	chatv1 "voice.app/voice/chat/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
 	socialv1 "voice.app/voice/social/v1"
@@ -20,6 +21,7 @@ type grpcClients struct {
 	social    socialv1.SocialServiceClient
 	chat      chatv1.ChatServiceClient
 	messaging messagingv1.MessagingServiceClient
+	voice     callsv1.VoiceServiceClient
 }
 
 type transcoder struct {
@@ -66,7 +68,12 @@ func grpcClientsFromEnv() *grpcClients {
 	} else if conn != nil {
 		clients.messaging = messagingv1.NewMessagingServiceClient(conn)
 	}
-	if clients.user == nil && clients.social == nil && clients.chat == nil && clients.messaging == nil {
+	if conn, err := dial(addrFor("voice")); err != nil {
+		log.Printf("gateway grpc dial voice: %v", err)
+	} else if conn != nil {
+		clients.voice = callsv1.NewVoiceServiceClient(conn)
+	}
+	if clients.user == nil && clients.social == nil && clients.chat == nil && clients.messaging == nil && clients.voice == nil {
 		return nil
 	}
 	return clients
@@ -106,6 +113,11 @@ func (t *transcoder) serveNamespace(w http.ResponseWriter, r *http.Request, name
 			return false
 		}
 		return t.serveMessages(w, r, rest)
+	case "voice":
+		if t.clients.voice == nil {
+			return false
+		}
+		return t.serveVoice(w, r, rest)
 	default:
 		return false
 	}

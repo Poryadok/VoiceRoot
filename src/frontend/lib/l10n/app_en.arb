@@ -149,6 +149,29 @@
   "chatRealtimeReconnecting": "Reconnecting…",
   "chatRealtimeOffline": "Offline",
   "chatOpenDm": "Message",
+  "callStartAudio": "Start audio call",
+  "callStartVideo": "Start video call",
+  "callIncomingTitle": "{name} is calling",
+  "@callIncomingTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "callIncomingAudio": "Audio call",
+  "callIncomingVideo": "Video call",
+  "callAccept": "Accept",
+  "callDecline": "Decline",
+  "callConnecting": "Connecting call…",
+  "callActive": "Call active",
+  "callMute": "Mute",
+  "callUnmute": "Unmute",
+  "callSpeakerOff": "Mute speakers",
+  "callSpeakerOn": "Unmute speakers",
+  "callVideoOn": "Turn camera on",
+  "callVideoOff": "Turn camera off",
+  "callHangup": "Hang up",
   "profileMessage": "Message",
   "profileEditTitle": "Edit profile",
   "profileEditTooltip": "Edit profile",

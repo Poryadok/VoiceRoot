@@ -16,10 +16,27 @@ enum VoiceSessionKind {
   VOICE_SESSION_KIND_VOICE_ROOM = 3;
 }
 
+enum CallMediaKind {
+  CALL_MEDIA_KIND_UNSPECIFIED = 0;
+  CALL_MEDIA_KIND_AUDIO = 1;
+  CALL_MEDIA_KIND_VIDEO = 2;
+}
+
+enum CallStatus {
+  CALL_STATUS_UNSPECIFIED = 0;
+  CALL_STATUS_RINGING = 1;
+  CALL_STATUS_ACTIVE = 2;
+  CALL_STATUS_DECLINED = 3;
+  CALL_STATUS_MISSED = 4;
+  CALL_STATUS_ENDED = 5;
+}
+
 // Voice / LiveKit orchestration. HTTP: /api/v1/voice/**.
 // Package voice.calls.v1 avoids path stutter voice/voice/v1; service name matches docs.
 service VoiceService {
   rpc StartCall(StartCallRequest) returns (StartCallResponse);
+  rpc AcceptCall(AcceptCallRequest) returns (AcceptCallResponse);
+  rpc DeclineCall(DeclineCallRequest) returns (DeclineCallResponse);
   rpc JoinCall(JoinCallRequest) returns (JoinCallResponse);
   rpc LeaveCall(LeaveCallRequest) returns (LeaveCallResponse);
   rpc EndCall(EndCallRequest) returns (EndCallResponse);
@@ -49,6 +66,16 @@ message StartCallRequest {
   optional string voice_room_id = 3;
   optional voice.space.v1.SpaceRef space = 4;
   optional VoiceSessionKind room_type_enum = 5;
+  optional string callee_profile_id = 6;
+  optional CallMediaKind media_kind = 7;
+}
+
+message AcceptCallRequest {
+  string room_id = 1;
+}
+
+message DeclineCallRequest {
+  string room_id = 1;
 }
 
 message JoinCallRequest {
@@ -71,6 +98,12 @@ message CallSession {
   optional string voice_room_id = 5;
   google.protobuf.Timestamp started_at = 6;
   optional VoiceSessionKind room_type_enum = 7;
+  string initiator_profile_id = 8;
+  string callee_profile_id = 9;
+  CallMediaKind media_kind = 10;
+  CallStatus status = 11;
+  google.protobuf.Timestamp expires_at = 12;
+  google.protobuf.Timestamp ended_at = 13;
 }
 
 message JoinVoiceRoomRequest {
@@ -148,6 +181,12 @@ message LowerHandRequest {
 }
 
 message StartCallResponse {
+  CallSession call_session = 1;
+}
+message AcceptCallResponse {
+  CallSession call_session = 1;
+}
+message DeclineCallResponse {
   CallSession call_session = 1;
 }
 message JoinCallResponse {

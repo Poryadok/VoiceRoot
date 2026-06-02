@@ -29,6 +29,8 @@
 ```protobuf
 service VoiceService {
   rpc StartCall(StartCallRequest) returns (StartCallResponse);
+  rpc AcceptCall(AcceptCallRequest) returns (AcceptCallResponse);
+  rpc DeclineCall(DeclineCallRequest) returns (DeclineCallResponse);
   rpc JoinCall(JoinCallRequest) returns (JoinCallResponse);
   rpc LeaveCall(LeaveCallRequest) returns (LeaveCallResponse);
   rpc EndCall(EndCallRequest) returns (EndCallResponse);
@@ -78,6 +80,7 @@ Client ──LiveKit Client SDK──► LiveKit SFU (media streams)
 - Voice Service создаёт/удаляет комнаты через LiveKit Server SDK
 - Voice Service генерирует JWT-токены для клиентов
 - Клиенты подключаются напрямую к LiveKit для медиа-потоков
+- WebRTC signaling (`offer`/`answer`/`ICE`) идёт внутри LiveKit SDK; собственный signaling через Realtime/Gateway не вводится в Фазе 2
 - Кодеки: Opus (32 kbps audio), VP8/VP9 (video)
 - LiveKit Simulcast для screen share (адаптивное качество)
 
@@ -88,6 +91,10 @@ Client ──LiveKit Client SDK──► LiveKit SFU (media streams)
 | Событие                      | Данные                                  |
 |------------------------------|-----------------------------------------|
 | `voice.call_started`         | room_id, initiator_id, type             |
+| `voice.call_incoming`        | room_id, chat_id, initiator_profile_id, callee_profile_id, media_kind, expires_at |
+| `voice.call_accepted`        | room_id, accepted_by_profile_id, profile_ids |
+| `voice.call_declined`        | room_id, declined_by_profile_id, profile_ids |
+| `voice.call_missed`          | room_id, initiator_profile_id, callee_profile_id |
 | `voice.call_ended`           | room_id, duration_seconds               |
 | `voice.participant_joined`   | room_id, profile_id                     |
 | `voice.participant_left`     | room_id, profile_id                     |

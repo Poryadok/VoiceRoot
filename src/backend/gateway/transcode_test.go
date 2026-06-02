@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	callsv1 "voice.app/voice/calls/v1"
 	chatv1 "voice.app/voice/chat/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
 	socialv1 "voice.app/voice/social/v1"
@@ -329,6 +330,24 @@ func startBufconnMessagingConn(t *testing.T, impl messagingv1.MessagingServiceSe
 	lis := bufconn.Listen(1 << 20)
 	srv := grpc.NewServer()
 	messagingv1.RegisterMessagingServiceServer(srv, impl)
+	go func() { _ = srv.Serve(lis) }()
+	conn, err := grpc.NewClient("passthrough:///bufnet",
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return lis.Dial() }),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	require.NoError(t, err)
+	return conn, func() {
+		_ = conn.Close()
+		srv.Stop()
+		_ = lis.Close()
+	}
+}
+
+func startBufconnVoiceConn(t *testing.T, impl callsv1.VoiceServiceServer) (grpc.ClientConnInterface, func()) {
+	t.Helper()
+	lis := bufconn.Listen(1 << 20)
+	srv := grpc.NewServer()
+	callsv1.RegisterVoiceServiceServer(srv, impl)
 	go func() { _ = srv.Serve(lis) }()
 	conn, err := grpc.NewClient("passthrough:///bufnet",
 		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return lis.Dial() }),
@@ -746,4 +765,150 @@ func TestRESTProxyUsedWhenTranscoderDoesNotHandleChatsNestedPath(t *testing.T) {
 	if grpcRec.last != nil {
 		t.Fatal("ListChats must not run for paths the transcoder does not handle")
 	}
+}
+
+type recordingVoiceCalls struct {
+	callsv1.UnimplementedVoiceServiceServer
+	lastMD       metadata.MD
+	start        *callsv1.StartCallRequest
+	acceptedRoom string
+	tokenRoom    string
+	state        *callsv1.UpdateVoiceStateRequest
+}
+
+func (s *recordingVoiceCalls) StartCall(ctx context.Context, req *callsv1.StartCallRequest) (*callsv1.StartCallResponse, error) {
+	md, _ := metadata.FromIncomingContext(ctx)
+	s.lastMD = md
+	s.start = req
+	return &callsv1.StartCallResponse{
+		CallSession: &callsv1.CallSession{
+			RoomId:             "room-1",
+			LivekitRoomName:    "voice-dm-room-1",
+			LinkedChat:         req.GetLinkedChat(),
+			InitiatorProfileId: "profile-1",
+			CalleeProfileId:    req.GetCalleeProfileId(),
+			MediaKind:          req.GetMediaKind(),
+			Status:             callsv1.CallStatus_CALL_STATUS_RINGING,
+			StartedAt:          timestamppb.New(time.Unix(1700000100, 0)),
+			ExpiresAt:          timestamppb.New(time.Unix(1700000130, 0)),
+		},
+	}, nil
+}
+
+func (s *recordingVoiceCalls) AcceptCall(ctx context.Context, req *callsv1.AcceptCallRequest) (*callsv1.AcceptCallResponse, error) {
+	md, _ := metadata.FromIncomingContext(ctx)
+	s.lastMD = md
+	s.acceptedRoom = req.GetRoomId()
+	return &callsv1.AcceptCallResponse{
+		CallSession: &callsv1.CallSession{
+			RoomId:          req.GetRoomId(),
+			LivekitRoomName: "voice-dm-" + req.GetRoomId(),
+			MediaKind:       callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO,
+			Status:          callsv1.CallStatus_CALL_STATUS_ACTIVE,
+		},
+	}, nil
+}
+
+func (s *recordingVoiceCalls) GetJoinToken(ctx context.Context, req *callsv1.GetJoinTokenRequest) (*callsv1.GetJoinTokenResponse, error) {
+	md, _ := metadata.FromIncomingContext(ctx)
+	s.lastMD = md
+	s.tokenRoom = req.GetRoomId()
+	return &callsv1.GetJoinTokenResponse{
+		Jwt:       "livekit-jwt",
+		ExpiresAt: timestamppb.New(time.Unix(1700000400, 0)),
+	}, nil
+}
+
+func (s *recordingVoiceCalls) UpdateVoiceState(ctx context.Context, req *callsv1.UpdateVoiceStateRequest) (*callsv1.UpdateVoiceStateResponse, error) {
+	md, _ := metadata.FromIncomingContext(ctx)
+	s.lastMD = md
+	s.state = req
+	return &callsv1.UpdateVoiceStateResponse{}, nil
+}
+
+func TestTranscodeVoiceStartCallPrecedenceOverRESTProxy(t *testing.T) {
+	t.Parallel()
+
+	grpcRec := &recordingVoiceCalls{}
+	conn, cleanup := startBufconnVoiceConn(t, grpcRec)
+	t.Cleanup(cleanup)
+
+	proxyCalled := false
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+		},
+		transcoder: &transcoder{clients: grpcClients{voice: callsv1.NewVoiceServiceClient(conn)}},
+		restUpstreams: map[string]http.Handler{
+			"voice": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				proxyCalled = true
+				w.WriteHeader(http.StatusAccepted)
+			}),
+		},
+	})
+
+	body := `{"linked_chat":{"id":"chat-1"},"callee_profile_id":"profile-2","media_kind":"video"}`
+	resp := performRequest(h, http.MethodPost, "/api/v1/voice/calls", body, map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	require.Equal(t, http.StatusOK, resp.Code, "body=%s", resp.Body.String())
+	require.False(t, proxyCalled, "REST proxy must not run when gRPC transcoder handles POST /api/v1/voice/calls")
+	require.NotNil(t, grpcRec.start)
+	require.Equal(t, "chat-1", grpcRec.start.GetLinkedChat().GetId())
+	require.Equal(t, "profile-2", grpcRec.start.GetCalleeProfileId())
+	require.Equal(t, callsv1.CallMediaKind_CALL_MEDIA_KIND_VIDEO, grpcRec.start.GetMediaKind())
+	require.Equal(t, []string{"account-1"}, grpcRec.lastMD.Get("x-voice-user-id"))
+
+	var out struct {
+		CallSession struct {
+			RoomID    string `json:"room_id"`
+			MediaKind string `json:"media_kind"`
+			Status    string `json:"status"`
+		} `json:"call_session"`
+	}
+	decodeJSON(t, resp.Body, &out)
+	require.Equal(t, "room-1", out.CallSession.RoomID)
+	require.Equal(t, "CALL_MEDIA_KIND_VIDEO", out.CallSession.MediaKind)
+	require.Equal(t, "CALL_STATUS_RINGING", out.CallSession.Status)
+}
+
+func TestTranscodeVoiceAcceptTokenAndState(t *testing.T) {
+	t.Parallel()
+
+	grpcRec := &recordingVoiceCalls{}
+	conn, cleanup := startBufconnVoiceConn(t, grpcRec)
+	t.Cleanup(cleanup)
+
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+		},
+		transcoder: &transcoder{clients: grpcClients{voice: callsv1.NewVoiceServiceClient(conn)}},
+	})
+
+	resp := performRequest(h, http.MethodPost, "/api/v1/voice/calls/room-1/accept", "", map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	require.Equal(t, http.StatusOK, resp.Code, "body=%s", resp.Body.String())
+	require.Equal(t, "room-1", grpcRec.acceptedRoom)
+
+	resp = performRequest(h, http.MethodGet, "/api/v1/voice/calls/room-1/token", "", map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	require.Equal(t, http.StatusOK, resp.Code, "body=%s", resp.Body.String())
+	require.Equal(t, "room-1", grpcRec.tokenRoom)
+	var tokenOut struct {
+		JWT string `json:"jwt"`
+	}
+	decodeJSON(t, resp.Body, &tokenOut)
+	require.Equal(t, "livekit-jwt", tokenOut.JWT)
+
+	resp = performRequest(h, http.MethodPatch, "/api/v1/voice/calls/room-1/state", `{"is_muted":true,"is_video_on":false}`, map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	require.Equal(t, http.StatusOK, resp.Code, "body=%s", resp.Body.String())
+	require.NotNil(t, grpcRec.state)
+	require.Equal(t, "room-1", grpcRec.state.GetRoomId())
+	require.True(t, grpcRec.state.GetIsMuted())
+	require.False(t, grpcRec.state.GetIsVideoOn())
 }

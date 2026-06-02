@@ -81,6 +81,11 @@ Headers:
 | `chat_update`        | Изменение чата/группы                                               |
 | `member_add`         | Новый участник                                                      |
 | `member_remove`      | Участник удалён                                                     |
+| `call_incoming`      | Входящий DM-звонок: `room_id`, `chat_id`, `initiator_profile_id`, `callee_profile_id`, `media_kind`, `expires_at` |
+| `call_accepted`      | Звонок принят: `room_id`, `chat_id`, `accepted_by_profile_id`, `profile_ids`, `media_kind` |
+| `call_declined`      | Звонок отклонён: `room_id`, `chat_id`, `declined_by_profile_id`, `profile_ids` |
+| `call_missed`        | Входящий DM-звонок истёк по таймауту: `room_id`, `chat_id`, `initiator_profile_id`, `callee_profile_id` |
+| `call_ended`         | Звонок завершён: `room_id`, `profile_ids`, `reason`, `ended_by_profile_id` |
 | `voice_state_update` | Изменение voice-состояния                                           |
 | `notification`       | In-app уведомление                                                  |
 | `match_found`        | Найден матч (matchmaking)                                           |
@@ -88,7 +93,7 @@ Headers:
 ## Конфигурация (NATS / JetStream)
 
 - **`NATS_URL`** — URL NATS Server с JetStream (порт **4222**). В Compose: `nats://nats:4222`; с хоста: `nats://127.0.0.1:${NATS_PORT:-4222}` (см. [`docker-compose.yml`](../../docker-compose.yml)).
-- Подписки на доменные потоки для fan-out в WebSocket — в первую очередь **`message.events`** и **`chat.events`** ([CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)); детали subject/consumer — в реализации сервиса.
+- Подписки на доменные потоки для fan-out в WebSocket — в первую очередь **`message.events`**, **`chat.events`** и с Фазы 2 **`voice.events`** ([CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)); детали subject/consumer — в реализации сервиса.
 - **`REALTIME_CHAT_GRPC_ADDR`** (опционально) — gRPC адрес **Chat Service** для bootstrap списка DM при открытии WebSocket (например `chat:50051` в compose). Если не задан, сервер **не** вызывает Chat и **не** шлёт `subscription_sync`; клиент может подписываться через `subscribe` (lazy). TLS/insecure — как принято в окружении (локально часто plaintext внутри mesh).
 
 ## Архитектура fan-out

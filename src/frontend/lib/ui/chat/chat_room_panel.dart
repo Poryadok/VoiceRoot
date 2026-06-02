@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../../backend/voice_client.dart';
 import '../../state/auth_providers.dart';
+import '../../state/call_providers.dart';
 import '../../state/chat_providers.dart';
+import '../../state/gateway_providers.dart';
 import '../../state/presence_providers.dart';
 import '../../state/social_providers.dart';
 import '../../theme/voice_colors.dart';
@@ -21,6 +24,8 @@ class ChatRoomPanel extends ConsumerStatefulWidget {
   static const Key sendKey = Key('chat_room_send');
   static const Key peerPresenceKey = Key('chat_room_peer_presence');
   static const Key loadOlderKey = Key('chat_room_load_older');
+  static const Key audioCallKey = Key('chat_room_audio_call');
+  static const Key videoCallKey = Key('chat_room_video_call');
 
   final String chatId;
   final VoidCallback? onBack;
@@ -52,6 +57,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     final peerPresence = peerId != null
         ? ref.watch(presenceProvider(peerId))
         : null;
+    final canCall = ref.watch(gatewayConfigProvider).hasLivekitUrl;
     final title = peerName ?? l10n.chatRoomTitle(widget.chatId.substring(0, 8));
     final voice = VoiceColors.of(context);
 
@@ -103,6 +109,31 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
+                if (peerId != null && canCall) ...[
+                  IconButton(
+                    key: ChatRoomPanel.audioCallKey,
+                    tooltip: l10n.callStartAudio,
+                    onPressed: () => ref
+                        .read(callControllerProvider.notifier)
+                        .startCall(
+                          chatId: widget.chatId,
+                          calleeProfileId: peerId,
+                        ),
+                    icon: const Icon(Icons.call_outlined),
+                  ),
+                  IconButton(
+                    key: ChatRoomPanel.videoCallKey,
+                    tooltip: l10n.callStartVideo,
+                    onPressed: () => ref
+                        .read(callControllerProvider.notifier)
+                        .startCall(
+                          chatId: widget.chatId,
+                          calleeProfileId: peerId,
+                          mediaKind: VoiceCallMediaKind.video,
+                        ),
+                    icon: const Icon(Icons.videocam_outlined),
+                  ),
+                ],
                 _RealtimeBadge(status: room.realtimeStatus, l10n: l10n),
               ],
             ),

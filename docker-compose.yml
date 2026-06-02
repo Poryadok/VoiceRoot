@@ -52,6 +52,15 @@ services:
       retries: 10
       start_period: 3s
 
+  livekit:
+    profiles: ["app"]
+    image: livekit/livekit-server:latest
+    command: ["--dev", "--bind", "0.0.0.0"]
+    ports:
+      - "${LIVEKIT_PORT:-7880}:7880"
+      - "${LIVEKIT_RTC_TCP_PORT:-7881}:7881"
+      - "${LIVEKIT_RTC_UDP_PORT:-7882}:7882/udp"
+
   # Phase-0 app stack (Auth + API Gateway + static Flutter web). Opt-in: docker compose --profile app up -d --build
   auth:
     profiles: ["app"]
@@ -216,6 +225,32 @@ services:
       retries: 10
       start_period: 20s
 
+  voice:
+    profiles: ["app"]
+    build:
+      context: ./src/backend
+      dockerfile: voice/Dockerfile
+    environment:
+      VOICE_GRPC_LISTEN: :9090
+      VOICE_REDIS_ADDR: redis:6379
+      NATS_URL: nats://nats:4222
+      LIVEKIT_URL: ws://livekit:7880
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-devkey}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-secret}
+    depends_on:
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      livekit:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
   gateway:
     profiles: ["app"]
     build:
@@ -227,7 +262,7 @@ services:
       LISTEN_ADDR: ":8080"
       GATEWAY_REDIS_ADDR: redis:6379
       GATEWAY_REST_UPSTREAMS_JSON: '{"auth":"http://auth:8080"}'
-      GATEWAY_GRPC_UPSTREAMS_JSON: '{"users":"user:9090","friends":"social:9090","chats":"chat:9090","messages":"messaging:9090"}'
+      GATEWAY_GRPC_UPSTREAMS_JSON: '{"users":"user:9090","friends":"social:9090","chats":"chat:9090","messages":"messaging:9090","voice":"voice:9090"}'
       GATEWAY_REALTIME_UPSTREAM_URL: http://realtime:8080
       GATEWAY_JWKS_URL: http://auth:8080/api/v1/auth/.well-known/jwks.json
       GATEWAY_JWT_ISSUER: voice-auth
@@ -251,6 +286,8 @@ services:
         condition: service_healthy
       realtime:
         condition: service_healthy
+      voice:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
       interval: 5s
@@ -265,6 +302,7 @@ services:
       dockerfile: Dockerfile
       args:
         VOICE_API_BASE_URL: ${VOICE_API_PUBLIC_URL:-http://127.0.0.1:8080}
+        VOICE_LIVEKIT_URL: ${VOICE_LIVEKIT_PUBLIC_URL:-ws://127.0.0.1:7880}
     ports:
       - "${WEB_PORT:-9080}:80"
     depends_on:

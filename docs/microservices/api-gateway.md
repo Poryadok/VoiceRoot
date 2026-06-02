@@ -62,6 +62,21 @@
 
 **Фаза 1 — presigned аватар (R2, User Service, без File Service):** `POST /api/v1/users/me/avatar/presigned-upload` (JWT). Тело JSON: `content_type`, `content_length`; `profile_id` опционален (по умолчанию активный профиль из JWT → `X-Voice-Profile-Id`). Ответ — поля `upload_url`, `http_method`, `required_headers`, `expires_at`, `public_url` / `object_key` для последующего `PUT` в R2 и сохранения URL через `PATCH /api/v1/users/me` (`UpdateProfile.avatar_url`). Обход REST: тот же контракт по **gRPC** `UserService.CreateAvatarPresignedUpload` на User Service (внутренний ingress, непубличные клиенты), если edge Gateway недоступен.
 
+**Фаза 2 — DM-звонки через Voice Service + LiveKit:** namespace `POST/GET /api/v1/voice/**` транскодится в `VoiceService` ([voice-service.md](voice-service.md)). Клиент не отправляет WebRTC `offer/answer/ICE` в Gateway: media signaling идёт внутри LiveKit SDK; Gateway управляет только lifecycle и выдачей токена. Минимальные публичные маршруты:
+
+| Method | Route | gRPC | Тело / параметры |
+|--------|-------|------|------------------|
+| `POST` | `/api/v1/voice/calls` | `StartCall` | `linked_chat`, `callee_profile_id`, `media_kind` (`audio` \| `video`) |
+| `POST` | `/api/v1/voice/calls/{room_id}/accept` | `AcceptCall` | — |
+| `POST` | `/api/v1/voice/calls/{room_id}/decline` | `DeclineCall` | — |
+| `POST` | `/api/v1/voice/calls/{room_id}/join` | `JoinCall` | — |
+| `POST` | `/api/v1/voice/calls/{room_id}/leave` | `LeaveCall` | — |
+| `POST` | `/api/v1/voice/calls/{room_id}/end` | `EndCall` | — |
+| `GET` | `/api/v1/voice/calls/active` | `GetActiveCall` | — |
+| `GET` | `/api/v1/voice/calls/{room_id}/token` | `GetJoinToken` | — |
+| `PATCH` | `/api/v1/voice/calls/{room_id}/state` | `UpdateVoiceState` | `is_muted`, `is_deafened`, `is_video_on` |
+| `GET` | `/api/v1/voice/calls/{room_id}/states` | `GetVoiceStates` | — |
+
 **Не через этот REST-префикс:** [Federation Service](federation-service.md) (S2S gRPC, отдельный ingress / mTLS). Публичные Flutter-клиенты не вызывают Analytics.
 
 ## Маршруты персонала (Admin API)

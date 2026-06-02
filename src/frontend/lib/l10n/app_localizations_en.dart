@@ -259,6 +259,56 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatOpenDm => 'Message';
 
   @override
+  String get callStartAudio => 'Start audio call';
+
+  @override
+  String get callStartVideo => 'Start video call';
+
+  @override
+  String callIncomingTitle(String name) {
+    return '$name is calling';
+  }
+
+  @override
+  String get callIncomingAudio => 'Audio call';
+
+  @override
+  String get callIncomingVideo => 'Video call';
+
+  @override
+  String get callAccept => 'Accept';
+
+  @override
+  String get callDecline => 'Decline';
+
+  @override
+  String get callConnecting => 'Connecting call…';
+
+  @override
+  String get callActive => 'Call active';
+
+  @override
+  String get callMute => 'Mute';
+
+  @override
+  String get callUnmute => 'Unmute';
+
+  @override
+  String get callSpeakerOff => 'Mute speakers';
+
+  @override
+  String get callSpeakerOn => 'Unmute speakers';
+
+  @override
+  String get callVideoOn => 'Turn camera on';
+
+  @override
+  String get callVideoOff => 'Turn camera off';
+
+  @override
+  String get callHangup => 'Hang up';
+
+  @override
   String get profileMessage => 'Message';
 
   @override

@@ -456,11 +456,13 @@ class RealtimeHub {
   final _subscribedChats = <String>{};
   Timer? _reconnectTimer;
   var _reconnectAttempt = 0;
+  var _disposed = false;
 
   RealtimeLinkStatus get status => _status;
   Stream<RealtimeFrame> get events => _eventController.stream;
 
   Future<void> ensureConnected() async {
+    if (_disposed) return;
     if (_eventController.isClosed || _connection != null) return;
     final auth = _ref.read(authControllerProvider).session;
     final config = _ref.read(gatewayConfigProvider);
@@ -483,7 +485,15 @@ class RealtimeHub {
     try {
       await connection.connect();
     } catch (_) {
+      if (_disposed) {
+        await connection.dispose();
+        return;
+      }
       _scheduleReconnect();
+      return;
+    }
+    if (_disposed) {
+      await connection.dispose();
       return;
     }
     _reconnectAttempt = 0;
@@ -513,6 +523,7 @@ class RealtimeHub {
   }
 
   void _scheduleReconnect() {
+    if (_disposed) return;
     if (_ref.read(authControllerProvider).session == null) return;
     _setStatus(RealtimeLinkStatus.reconnecting);
     _reconnectTimer?.cancel();
@@ -521,6 +532,7 @@ class RealtimeHub {
     );
     _reconnectAttempt++;
     _reconnectTimer = Timer(delay, () async {
+      if (_disposed) return;
       await _tearDownConnection();
       await ensureConnected();
     });
@@ -542,11 +554,13 @@ class RealtimeHub {
   }
 
   void _setStatus(RealtimeLinkStatus next) {
+    if (_disposed) return;
     _status = next;
     _ref.read(realtimeLinkStatusProvider.notifier).state = next;
   }
 
   Future<void> dispose() async {
+    _disposed = true;
     await disconnect();
     await _eventController.close();
   }
@@ -564,7 +578,7 @@ final realtimeHubProvider = Provider<RealtimeHub>((ref) {
     }
   });
   if (ref.read(authControllerProvider).isAuthenticated) {
-    unawaited(hub.ensureConnected());
+    Future.microtask(hub.ensureConnected);
   }
   return hub;
 });

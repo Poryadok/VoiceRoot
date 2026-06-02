@@ -150,6 +150,29 @@
   "chatRealtimeReconnecting": "Переподключение…",
   "chatRealtimeOffline": "Офлайн",
   "chatOpenDm": "Написать",
+  "callStartAudio": "Начать аудиозвонок",
+  "callStartVideo": "Начать видеозвонок",
+  "callIncomingTitle": "{name} звонит",
+  "@callIncomingTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "callIncomingAudio": "Аудиозвонок",
+  "callIncomingVideo": "Видеозвонок",
+  "callAccept": "Принять",
+  "callDecline": "Отклонить",
+  "callConnecting": "Подключение к звонку…",
+  "callActive": "Звонок активен",
+  "callMute": "Выключить микрофон",
+  "callUnmute": "Включить микрофон",
+  "callSpeakerOff": "Выключить звук",
+  "callSpeakerOn": "Включить звук",
+  "callVideoOn": "Включить камеру",
+  "callVideoOff": "Выключить камеру",
+  "callHangup": "Завершить",
   "profileMessage": "Написать",
   "profileEditTitle": "Редактировать профиль",
   "profileEditTooltip": "Редактировать профиль",

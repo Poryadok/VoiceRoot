@@ -210,22 +210,77 @@ message VoiceStreamEvent {
     CallStarted call_started = 10;
     CallEnded call_ended = 11;
     ScreenShareStarted screen_share_started = 12;
+    CallIncoming call_incoming = 13;
+    CallAccepted call_accepted = 14;
+    CallDeclined call_declined = 15;
+    CallMissed call_missed = 16;
+    VoiceStateChanged voice_state_changed = 17;
   }
 }
 
 message CallStarted {
   string room_id = 1;
   repeated string profile_ids = 2;
+  string chat_id = 3;
+  string initiator_profile_id = 4;
+  string callee_profile_id = 5;
+  string media_kind = 6; // audio | video
+  string livekit_room_name = 7;
 }
 
 message CallEnded {
   string room_id = 1;
   int32 duration_seconds = 2;
+  repeated string profile_ids = 3;
+  string reason = 4; // hangup | declined | missed | timeout
+  string ended_by_profile_id = 5;
 }
 
 message ScreenShareStarted {
   string room_id = 1;
   string profile_id = 2;
+}
+
+message CallIncoming {
+  string room_id = 1;
+  string chat_id = 2;
+  string initiator_profile_id = 3;
+  string callee_profile_id = 4;
+  string media_kind = 5; // audio | video
+  string livekit_room_name = 6;
+  google.protobuf.Timestamp expires_at = 7;
+}
+
+message CallAccepted {
+  string room_id = 1;
+  string chat_id = 2;
+  string accepted_by_profile_id = 3;
+  repeated string profile_ids = 4;
+  string media_kind = 5; // audio | video
+  string livekit_room_name = 6;
+}
+
+message CallDeclined {
+  string room_id = 1;
+  string chat_id = 2;
+  string declined_by_profile_id = 3;
+  repeated string profile_ids = 4;
+}
+
+message CallMissed {
+  string room_id = 1;
+  string chat_id = 2;
+  string initiator_profile_id = 3;
+  string callee_profile_id = 4;
+}
+
+message VoiceStateChanged {
+  string room_id = 1;
+  string profile_id = 2;
+  optional bool is_muted = 3;
+  optional bool is_deafened = 4;
+  optional bool is_video_on = 5;
+  repeated string profile_ids = 6;
 }
 
 // --- moderation.events ---

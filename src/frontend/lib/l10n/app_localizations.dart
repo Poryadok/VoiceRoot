@@ -536,6 +536,102 @@ abstract class AppLocalizations {
   /// **'Message'**
   String get chatOpenDm;
 
+  /// No description provided for @callStartAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Start audio call'**
+  String get callStartAudio;
+
+  /// No description provided for @callStartVideo.
+  ///
+  /// In en, this message translates to:
+  /// **'Start video call'**
+  String get callStartVideo;
+
+  /// No description provided for @callIncomingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} is calling'**
+  String callIncomingTitle(String name);
+
+  /// No description provided for @callIncomingAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio call'**
+  String get callIncomingAudio;
+
+  /// No description provided for @callIncomingVideo.
+  ///
+  /// In en, this message translates to:
+  /// **'Video call'**
+  String get callIncomingVideo;
+
+  /// No description provided for @callAccept.
+  ///
+  /// In en, this message translates to:
+  /// **'Accept'**
+  String get callAccept;
+
+  /// No description provided for @callDecline.
+  ///
+  /// In en, this message translates to:
+  /// **'Decline'**
+  String get callDecline;
+
+  /// No description provided for @callConnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting call…'**
+  String get callConnecting;
+
+  /// No description provided for @callActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Call active'**
+  String get callActive;
+
+  /// No description provided for @callMute.
+  ///
+  /// In en, this message translates to:
+  /// **'Mute'**
+  String get callMute;
+
+  /// No description provided for @callUnmute.
+  ///
+  /// In en, this message translates to:
+  /// **'Unmute'**
+  String get callUnmute;
+
+  /// No description provided for @callSpeakerOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Mute speakers'**
+  String get callSpeakerOff;
+
+  /// No description provided for @callSpeakerOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Unmute speakers'**
+  String get callSpeakerOn;
+
+  /// No description provided for @callVideoOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn camera on'**
+  String get callVideoOn;
+
+  /// No description provided for @callVideoOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn camera off'**
+  String get callVideoOff;
+
+  /// No description provided for @callHangup.
+  ///
+  /// In en, this message translates to:
+  /// **'Hang up'**
+  String get callHangup;
+
   /// No description provided for @profileMessage.
   ///
   /// In en, this message translates to:

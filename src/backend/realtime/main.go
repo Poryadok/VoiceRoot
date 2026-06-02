@@ -79,6 +79,12 @@ func main() {
 				log.Printf("realtime message.events consumer exited: %v", err)
 			}
 		}()
+		go func() {
+			err := runVoiceEventsConsumer(ctx, hub, natsURL, instanceID)
+			if err != nil && err != context.Canceled {
+				log.Printf("realtime voice.events consumer exited: %v", err)
+			}
+		}()
 	}
 
 	server := &http.Server{

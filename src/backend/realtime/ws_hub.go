@@ -237,3 +237,24 @@ func (h *wsHub) broadcastToChat(chatID string, env fanoutEnvelope) {
 		}
 	}
 }
+
+// broadcastToProfile delivers a fan-out envelope to every connection for profileID (local hub only).
+func (h *wsHub) broadcastToProfile(profileID string, env fanoutEnvelope) {
+	if profileID == "" {
+		return
+	}
+	h.mu.RLock()
+	m := h.byProfile[profileID]
+	var targets []*connReg
+	for reg := range m {
+		targets = append(targets, reg)
+	}
+	h.mu.RUnlock()
+	for _, reg := range targets {
+		select {
+		case reg.fanout <- env:
+		default:
+			// Call signaling is ephemeral; clients reconcile through Voice REST.
+		}
+	}
+}

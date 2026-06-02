@@ -260,6 +260,56 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatOpenDm => 'Написать';
 
   @override
+  String get callStartAudio => 'Начать аудиозвонок';
+
+  @override
+  String get callStartVideo => 'Начать видеозвонок';
+
+  @override
+  String callIncomingTitle(String name) {
+    return '$name звонит';
+  }
+
+  @override
+  String get callIncomingAudio => 'Аудиозвонок';
+
+  @override
+  String get callIncomingVideo => 'Видеозвонок';
+
+  @override
+  String get callAccept => 'Принять';
+
+  @override
+  String get callDecline => 'Отклонить';
+
+  @override
+  String get callConnecting => 'Подключение к звонку…';
+
+  @override
+  String get callActive => 'Звонок активен';
+
+  @override
+  String get callMute => 'Выключить микрофон';
+
+  @override
+  String get callUnmute => 'Включить микрофон';
+
+  @override
+  String get callSpeakerOff => 'Выключить звук';
+
+  @override
+  String get callSpeakerOn => 'Включить звук';
+
+  @override
+  String get callVideoOn => 'Включить камеру';
+
+  @override
+  String get callVideoOff => 'Выключить камеру';
+
+  @override
+  String get callHangup => 'Завершить';
+
+  @override
   String get profileMessage => 'Написать';
 
   @override

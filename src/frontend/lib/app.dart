@@ -12,6 +12,8 @@ import 'state/social_providers.dart';
 import 'theme/voice_colors.dart';
 import 'theme/voice_theme_providers.dart';
 import 'ui/auth/auth_screen.dart';
+import 'ui/call/active_call_panel.dart';
+import 'ui/call/incoming_call_overlay.dart';
 import 'ui/chat/chat_list_panel.dart';
 import 'ui/chat/chat_room_panel.dart';
 import 'ui/core/profile_accent_dot.dart';
@@ -150,50 +152,57 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
 
     return Scaffold(
       backgroundColor: voice.canvas,
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final narrow = constraints.maxWidth < 600;
-            final onBackToChats = selectedChatId == null
-                ? null
-                : () => ref.read(selectedChatIdProvider.notifier).state = null;
-            return ThreeColumnShell(
-              railChild: _SocialRail(
-                onOpenSocial: () => _openSocialPanel(context),
-              ),
-              mobileRailChild: _MobileRailStrip(
-                onOpenSocial: () => _openSocialPanel(context),
-              ),
-              listChild: const ChatListPanel(),
-              mainChild: selectedChatId == null
-                  ? Center(child: Text(l10n.chatRoomSelectPrompt))
-                  : ChatRoomPanel(
-                      chatId: selectedChatId,
-                      onBack: narrow ? onBackToChats : null,
-                    ),
-              showMainOnlyOnNarrow: selectedChatId != null,
-              header: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _SessionBar(
-                    onLogout: () =>
-                        ref.read(authControllerProvider.notifier).logout(),
-                    onEditProfile: profileAsync.valueOrNull == null
-                        ? null
-                        : () => _openProfileEditSheet(
-                            context,
-                            profileAsync.valueOrNull!,
-                          ),
-                    sessionLabel: sessionLabel,
-                    logoutLabel: l10n.authLogout,
-                    editProfileTooltip: l10n.profileEditTooltip,
+      body: Stack(
+        children: [
+          SafeArea(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final narrow = constraints.maxWidth < 600;
+                final onBackToChats = selectedChatId == null
+                    ? null
+                    : () => ref.read(selectedChatIdProvider.notifier).state =
+                          null;
+                return ThreeColumnShell(
+                  railChild: _SocialRail(
+                    onOpenSocial: () => _openSocialPanel(context),
                   ),
-                  _GatewayStatusBar(asyncHealth: health),
-                ],
-              ),
-            );
-          },
-        ),
+                  mobileRailChild: _MobileRailStrip(
+                    onOpenSocial: () => _openSocialPanel(context),
+                  ),
+                  listChild: const ChatListPanel(),
+                  mainChild: selectedChatId == null
+                      ? Center(child: Text(l10n.chatRoomSelectPrompt))
+                      : ChatRoomPanel(
+                          chatId: selectedChatId,
+                          onBack: narrow ? onBackToChats : null,
+                        ),
+                  showMainOnlyOnNarrow: selectedChatId != null,
+                  header: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _SessionBar(
+                        onLogout: () =>
+                            ref.read(authControllerProvider.notifier).logout(),
+                        onEditProfile: profileAsync.valueOrNull == null
+                            ? null
+                            : () => _openProfileEditSheet(
+                                context,
+                                profileAsync.valueOrNull!,
+                              ),
+                        sessionLabel: sessionLabel,
+                        logoutLabel: l10n.authLogout,
+                        editProfileTooltip: l10n.profileEditTooltip,
+                      ),
+                      _GatewayStatusBar(asyncHealth: health),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+          const IncomingCallOverlay(),
+          const SafeArea(child: ActiveCallPanel()),
+        ],
       ),
     );
   }
