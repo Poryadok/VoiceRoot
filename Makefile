@@ -98,11 +98,7 @@ auth-image-ci:
 	docker build -f src/backend/auth/Dockerfile -t voice-auth:local src/backend/auth
 
 golangci-ci:
-	$(BASH) -c 'command -v $(GOLANGCI_LINT) >/dev/null 2>&1 || go install $(GOLANGCI_LINT_MOD); \
-		for m in $(GO_MODULES_LINT); do \
-			echo "== $$m =="; \
-			(cd "$(ROOT)/src/backend/$$m" && $(GOLANGCI_LINT) run ./...) || exit 1; \
-		done'
+	$(BASH) "$(ROOT)/scripts/ci/golangci-ci.sh" "$(ROOT)"
 
 gateway-test-race-ci:
 	cd "$(ROOT)/src/backend/gateway" && $(GATEWAY_RACE_RUN)
