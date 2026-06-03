@@ -11,6 +11,7 @@ import (
 
 	callsv1 "voice.app/voice/calls/v1"
 	chatv1 "voice.app/voice/chat/v1"
+	filev1 "voice.app/voice/file/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
 	socialv1 "voice.app/voice/social/v1"
 	userv1 "voice.app/voice/user/v1"
@@ -22,6 +23,7 @@ type grpcClients struct {
 	chat      chatv1.ChatServiceClient
 	messaging messagingv1.MessagingServiceClient
 	voice     callsv1.VoiceServiceClient
+	file      filev1.FileServiceClient
 }
 
 type transcoder struct {
@@ -73,7 +75,12 @@ func grpcClientsFromEnv() *grpcClients {
 	} else if conn != nil {
 		clients.voice = callsv1.NewVoiceServiceClient(conn)
 	}
-	if clients.user == nil && clients.social == nil && clients.chat == nil && clients.messaging == nil && clients.voice == nil {
+	if conn, err := dial(addrFor("files")); err != nil {
+		log.Printf("gateway grpc dial files: %v", err)
+	} else if conn != nil {
+		clients.file = filev1.NewFileServiceClient(conn)
+	}
+	if clients.user == nil && clients.social == nil && clients.chat == nil && clients.messaging == nil && clients.voice == nil && clients.file == nil {
 		return nil
 	}
 	return clients
@@ -118,6 +125,11 @@ func (t *transcoder) serveNamespace(w http.ResponseWriter, r *http.Request, name
 			return false
 		}
 		return t.serveVoice(w, r, rest)
+	case "files":
+		if t.clients.file == nil {
+			return false
+		}
+		return t.serveFiles(w, r, rest)
 	default:
 		return false
 	}

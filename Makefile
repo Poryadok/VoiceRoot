@@ -23,7 +23,7 @@ GATEWAY_RACE_RUN = CGO_ENABLED=1 go test -race $(GO_TEST_FLAGS)
 endif
 GO_SERVICES := analytics bot chat federation file gateway matchmaking messaging moderation notification realtime role search social space story subscription user voice
 # Dockerfiles with context=src/backend (sync scripts/ci/backend-docker-context.txt and ci.yml dockerctx).
-GO_SERVICES_BACKEND_CONTEXT := gateway realtime chat messaging user social voice
+GO_SERVICES_BACKEND_CONTEXT := gateway realtime chat messaging user social voice file
 GO_MODULES_LINT := pkg $(GO_SERVICES)
 GO_TEST_TARGETS := $(GO_SERVICES:%=go-test-%)
 GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)

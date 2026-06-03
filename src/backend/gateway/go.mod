@@ -10,9 +10,9 @@ require (
 	voice.app/voice/calls v0.0.0
 	voice.app/voice/chat v0.0.0
 	voice.app/voice/common v0.0.0
+	voice.app/voice/file v0.0.0-00010101000000-000000000000
 	voice.app/voice/messaging v0.0.0
 	voice.app/voice/social v0.0.0
-	voice.app/voice/space v0.0.0
 	voice.app/voice/user v0.0.0
 	voice/backend/pkg v0.0.0
 )
@@ -25,6 +25,7 @@ require (
 	golang.org/x/text v0.24.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20241202173237-19429a94021a // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	voice.app/voice/space v0.0.0 // indirect
 )
 
 replace voice/backend/pkg => ../pkg
@@ -42,3 +43,5 @@ replace voice.app/voice/messaging => ../messaging/pb/voice/messaging
 replace voice.app/voice/calls => ../voice/pb/voice/calls
 
 replace voice.app/voice/space => ../voice/pb/voice/space
+
+replace voice.app/voice/file => ../file/pb/voice/file

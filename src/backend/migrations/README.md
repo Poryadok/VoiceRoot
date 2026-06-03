@@ -9,6 +9,7 @@ Per-database folders for Phase 0–1 ([docs/DATA_SCOPE_V1.md](../../../docs/DATA
 | `social_db/` | `social_db` | Social Service |
 | `chat_db/` | `chat_db` | Chat Service |
 | `messaging_db/` | `messaging_db` | Messaging Service |
+| `file_db/` | `file_db` | File Service |
 
 Apply against the matching database only; do not run one folder against another DB ([docs/OPERATIONS.md](../../../docs/OPERATIONS.md)).
 
@@ -31,7 +32,7 @@ Example with [migrate](https://github.com/golang-migrate/migrate) CLI for a Go-o
 migrate -path src/backend/migrations/user_db -database "postgres://voice:voice@localhost:5432/user_db?sslmode=disable" up
 ```
 
-Repeat for `social_db`, `chat_db`, `messaging_db`.
+Repeat for `social_db`, `chat_db`, `messaging_db`, `file_db`.
 
 Path B for `auth_db` only (then set `AUTH_FLYWAY_ENABLED=false` for Auth):
 
@@ -47,7 +48,7 @@ From repo root, PowerShell (paths use `/` for the volume so Docker accepts them 
 
 ```powershell
 cd d:\Git\Voice
-$dbs = @("user_db", "social_db", "chat_db", "messaging_db")
+$dbs = @("user_db", "social_db", "chat_db", "messaging_db", "file_db")
 foreach ($d in $dbs) {
   docker run --rm --network voice_default `
     -v "d:/Git/Voice/src/backend/migrations/${d}:/migrations" migrate/migrate `

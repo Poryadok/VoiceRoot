@@ -5,3 +5,4 @@ messaging
 user
 social
 voice
+file

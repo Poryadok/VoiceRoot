@@ -54,7 +54,7 @@ files
 ├── size_bytes
 ├── sha256_hash
 ├── r2_key (string — path in R2)
-├── status (uploading | processing | ready | infected | expired)
+├── status (pending_upload | processing | ready | failed | deleted | expired)
 ├── type (image | video | audio | document | other)
 ├── width (nullable, for images/video)
 ├── height (nullable)
@@ -65,7 +65,7 @@ files
 ├── chat_type (dm | group | channel)
 ├── is_e2e (bool)
 ├── expires_at (nullable)
-├── scan_result (clean | infected | pending | skipped)
+├── scan_result (pending | clean | infected | error | skipped)
 ├── created_at
 └── updated_at
 
