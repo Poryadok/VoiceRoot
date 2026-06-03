@@ -47,6 +47,47 @@ void main() {
       expect(data.messages.single.content, 'Hi');
     });
 
+    test('parses attachments_json into message attachments', () async {
+      final mock = MockClient((req) async {
+        return http.Response(
+          jsonEncode({
+            'message_list': {
+              'messages': [
+                {
+                  'id': 'msg-media',
+                  'chat': {'id': 'chat-1'},
+                  'sender_profile_id': 'profile-b',
+                  'content': '',
+                  'attachments_json': jsonEncode([
+                    {
+                      'file_id': 'file-1',
+                      'type': 'image',
+                      'url': 'https://cdn.example/full.webp',
+                      'preview_url': 'https://cdn.example/thumb.webp',
+                      'name': 'cat.png',
+                      'size_bytes': 2048,
+                    },
+                  ]),
+                },
+              ],
+            },
+          }),
+          200,
+        );
+      });
+      final client = VoiceMessagesClient(httpClient: mock, config: config);
+      final r = await client.getMessages(authorization: auth, chatId: 'chat-1');
+      final message =
+          (r as MessagesApiOk<MessageListData>).data.messages.single;
+
+      expect(message.attachments.single.fileId, 'file-1');
+      expect(
+        message.attachments.single.previewUrl,
+        'https://cdn.example/thumb.webp',
+      );
+      expect(message.attachments.single.isImage, isTrue);
+    });
+
     test(
       'GET /api/v1/messages with last_message_id for reconnect catch-up',
       () async {
@@ -96,6 +137,51 @@ void main() {
       expect(r, isA<MessagesApiOk<VoiceMessage>>());
       expect((r as MessagesApiOk<VoiceMessage>).data.id, 'msg-new');
     });
+
+    test('POST /api/v1/messages/send includes attachments_json', () async {
+      final mock = MockClient((req) async {
+        final body = jsonDecode(req.body) as Map<String, dynamic>;
+        final attachments =
+            jsonDecode(body['attachments_json'] as String) as List<dynamic>;
+        expect(attachments.single, containsPair('file_id', 'file-1'));
+        expect(
+          attachments.single,
+          containsPair('preview_url', 'https://cdn.example/thumb.webp'),
+        );
+        return http.Response(
+          jsonEncode({
+            'message': {
+              'id': 'msg-attachment',
+              'chat': {'id': 'chat-1'},
+              'sender_profile_id': 'profile-a',
+              'content': '',
+              'attachments_json': body['attachments_json'],
+            },
+          }),
+          200,
+        );
+      });
+      final client = VoiceMessagesClient(httpClient: mock, config: config);
+      final r = await client.sendMessage(
+        authorization: auth,
+        chatId: 'chat-1',
+        content: '',
+        attachments: const [
+          MessageAttachment(
+            fileId: 'file-1',
+            type: 'image',
+            url: 'https://cdn.example/full.webp',
+            previewUrl: 'https://cdn.example/thumb.webp',
+          ),
+        ],
+      );
+
+      expect(r, isA<MessagesApiOk<VoiceMessage>>());
+      expect(
+        (r as MessagesApiOk<VoiceMessage>).data.attachments.single.fileId,
+        'file-1',
+      );
+    });
   });
 
   group('VoiceMessagesClient.markRead', () {
@@ -113,6 +199,53 @@ void main() {
         authorization: auth,
         chatId: 'chat-1',
         lastReadMessageId: 'msg-9',
+      );
+      expect(r, isA<MessagesApiOk<void>>());
+    });
+  });
+
+  group('VoiceMessagesClient.editDelete', () {
+    test('PATCH /api/v1/messages/{id}', () async {
+      final mock = MockClient((req) async {
+        expect(req.method, 'PATCH');
+        expect(req.url.path, '/api/v1/messages/msg-1');
+        final body = jsonDecode(req.body) as Map<String, dynamic>;
+        expect(body['content'], 'edited');
+        return http.Response(
+          jsonEncode({
+            'message': {
+              'id': 'msg-1',
+              'chat': {'id': 'chat-1'},
+              'sender_profile_id': 'profile-a',
+              'content': 'edited',
+              'edited_at': '2024-01-03T00:00:00Z',
+            },
+          }),
+          200,
+        );
+      });
+      final client = VoiceMessagesClient(httpClient: mock, config: config);
+      final r = await client.editMessage(
+        authorization: auth,
+        messageId: 'msg-1',
+        content: 'edited',
+      );
+      expect(r, isA<MessagesApiOk<VoiceMessage>>());
+      expect((r as MessagesApiOk<VoiceMessage>).data.editedAt, isNotNull);
+    });
+
+    test('DELETE /api/v1/messages/{id}?scope=me', () async {
+      final mock = MockClient((req) async {
+        expect(req.method, 'DELETE');
+        expect(req.url.path, '/api/v1/messages/msg-1');
+        expect(req.url.queryParameters['scope'], 'me');
+        return http.Response('', 204);
+      });
+      final client = VoiceMessagesClient(httpClient: mock, config: config);
+      final r = await client.deleteMessage(
+        authorization: auth,
+        messageId: 'msg-1',
+        scope: 'me',
       );
       expect(r, isA<MessagesApiOk<void>>());
     });

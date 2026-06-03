@@ -3,6 +3,7 @@ package r2file
 import (
 	"context"
 	"fmt"
+	"io"
 	"mime"
 	"os"
 	"path/filepath"
@@ -38,6 +39,10 @@ type Presigner interface {
 	PresignGet(context.Context, GetPresignInput) (string, error)
 }
 
+type ObjectReader interface {
+	ReadObject(ctx context.Context, key string, maxBytes int64) ([]byte, error)
+}
+
 type S3R2Config struct {
 	Endpoint        string
 	Region          string
@@ -48,6 +53,7 @@ type S3R2Config struct {
 
 type S3R2Presigner struct {
 	bucket        string
+	client        *s3.Client
 	presignClient *s3.PresignClient
 }
 
@@ -83,6 +89,7 @@ func NewS3R2Presigner(cfg S3R2Config) (*S3R2Presigner, error) {
 	})
 	return &S3R2Presigner{
 		bucket:        bucket,
+		client:        client,
 		presignClient: s3.NewPresignClient(client),
 	}, nil
 }
@@ -109,6 +116,28 @@ func (p *S3R2Presigner) PresignPut(ctx context.Context, in PutPresignInput) (str
 		return "", err
 	}
 	return out.URL, nil
+}
+
+func (p *S3R2Presigner) ReadObject(ctx context.Context, key string, maxBytes int64) ([]byte, error) {
+	if maxBytes <= 0 {
+		maxBytes = MaxFreeFileBytes
+	}
+	out, err := p.client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(p.bucket),
+		Key:    aws.String(strings.TrimSpace(key)),
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = out.Body.Close() }()
+	data, err := io.ReadAll(io.LimitReader(out.Body, maxBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > maxBytes {
+		return nil, fmt.Errorf("object exceeds max of %d bytes", maxBytes)
+	}
+	return data, nil
 }
 
 func (p *S3R2Presigner) PresignGet(ctx context.Context, in GetPresignInput) (string, error) {

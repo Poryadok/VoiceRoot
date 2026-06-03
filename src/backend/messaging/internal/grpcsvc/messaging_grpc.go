@@ -2,6 +2,7 @@ package grpcsvc
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log"
 	"strings"
@@ -19,6 +20,7 @@ import (
 
 	chatv1 "voice.app/voice/chat/v1"
 	commonv1 "voice.app/voice/common/v1"
+	filev1 "voice.app/voice/file/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
 )
 
@@ -36,6 +38,8 @@ type MessagingGRPC struct {
 	// Blocks and UserProfiles are optional S2S gates for SendMessage (Social + User); both must be set to enforce.
 	Blocks       AccountPairBlockChecker
 	UserProfiles ProfileAccountLookup
+	// Files is optional for text-only messages and required for non-empty attachments_json.
+	Files FileMetadataLookup
 	// MessageEvents is optional; when set, successful send/edit/delete publishes to NATS JetStream (stream message_events, subjects message.*).
 	MessageEvents messageevents.MessageEventsPublisher
 }
@@ -66,16 +70,20 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 	if err := s.checkDMBlocksForSend(ctx, chatID, profileID); err != nil {
 		return nil, err
 	}
-	content := strings.TrimSpace(req.GetContent())
-	if content == "" {
-		return nil, status.Error(codes.InvalidArgument, "content is required")
-	}
-	if len(content) > 4000 {
-		return nil, status.Error(codes.InvalidArgument, "content exceeds 4000 characters")
-	}
 	attachments := strings.TrimSpace(req.GetAttachmentsJson())
 	if attachments == "" {
 		attachments = "[]"
+	}
+	attachmentCount, err := s.validateAttachments(ctx, chatID, attachments)
+	if err != nil {
+		return nil, err
+	}
+	content := strings.TrimSpace(req.GetContent())
+	if content == "" && attachmentCount == 0 {
+		return nil, status.Error(codes.InvalidArgument, "content or attachments is required")
+	}
+	if len(content) > 4000 {
+		return nil, status.Error(codes.InvalidArgument, "content exceeds 4000 characters")
 	}
 	mentions := strings.TrimSpace(req.GetMentionsJson())
 	if mentions == "" {
@@ -129,6 +137,63 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 		}
 	}
 	return &messagingv1.SendMessageResponse{Message: messageRowToProto(saved, kind)}, nil
+}
+
+type messageAttachment struct {
+	FileID     string `json:"file_id"`
+	Type       string `json:"type"`
+	URL        string `json:"url,omitempty"`
+	PreviewURL string `json:"preview_url,omitempty"`
+}
+
+func (s *MessagingGRPC) validateAttachments(ctx context.Context, chatID uuid.UUID, raw string) (int, error) {
+	var attachments []messageAttachment
+	if err := json.Unmarshal([]byte(raw), &attachments); err != nil {
+		return 0, status.Error(codes.InvalidArgument, "attachments_json must be a JSON array")
+	}
+	if len(attachments) == 0 {
+		return 0, nil
+	}
+	if s.Files == nil {
+		return 0, status.Error(codes.FailedPrecondition, "file metadata lookup is not configured")
+	}
+	fileIDs := make([]string, 0, len(attachments))
+	for _, att := range attachments {
+		fileID := strings.TrimSpace(att.FileID)
+		if _, err := parseUUIDField("attachments.file_id", fileID); err != nil {
+			return 0, err
+		}
+		if strings.TrimSpace(att.Type) == "" {
+			return 0, status.Error(codes.InvalidArgument, "attachments.type is required")
+		}
+		fileIDs = append(fileIDs, fileID)
+	}
+	resp, err := s.Files.GetBulkMetadata(ctx, &filev1.GetBulkMetadataRequest{FileIds: fileIDs})
+	if err != nil {
+		return 0, status.Error(codes.Internal, err.Error())
+	}
+	byID := resp.GetBulkFileMetadata().GetByFileId()
+	for _, att := range attachments {
+		meta := byID[strings.TrimSpace(att.FileID)]
+		if meta == nil {
+			return 0, status.Error(codes.FailedPrecondition, "attachment file is not available")
+		}
+		if meta.GetStatus() != "ready" {
+			return 0, status.Error(codes.FailedPrecondition, "attachment file is not ready")
+		}
+		if meta.GetChat().GetId() != chatID.String() {
+			return 0, status.Error(codes.FailedPrecondition, "attachment file is not linked to chat")
+		}
+		switch meta.GetScanResult() {
+		case "clean", "skipped":
+		default:
+			return 0, status.Error(codes.FailedPrecondition, "attachment file is not clean")
+		}
+		if ft := strings.TrimSpace(meta.GetFileType()); ft != "" && ft != strings.TrimSpace(att.Type) {
+			return 0, status.Error(codes.InvalidArgument, "attachments.type does not match file metadata")
+		}
+	}
+	return len(attachments), nil
 }
 
 func (s *MessagingGRPC) checkDMBlocksForSend(ctx context.Context, chatID, profileID uuid.UUID) error {
@@ -245,8 +310,18 @@ func (s *MessagingGRPC) DeleteMessage(ctx context.Context, req *messagingv1.Dele
 			return nil, status.Error(codes.Internal, err.Error())
 		}
 	}
+	scope := req.GetScope()
+	if scope == messagingv1.DeleteScope_DELETE_SCOPE_UNSPECIFIED {
+		scope = messagingv1.DeleteScope_DELETE_SCOPE_FOR_EVERYONE
+	}
+	if scope == messagingv1.DeleteScope_DELETE_SCOPE_FOR_ME {
+		if err := s.Messages.HideMessageForProfile(ctx, msgID, profileID); err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		return &messagingv1.DeleteMessageResponse{}, nil
+	}
 	if row.SenderProfileID != profileID {
-		return nil, status.Error(codes.PermissionDenied, "only the message author can delete")
+		return nil, status.Error(codes.PermissionDenied, "only the message author can delete for everyone")
 	}
 	if err := s.Messages.SoftDeleteMessage(ctx, msgID, profileID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -385,7 +460,7 @@ func (s *MessagingGRPC) GetMessages(ctx context.Context, req *messagingv1.GetMes
 		refID = nil
 	}
 
-	rows, err := s.Messages.ListMessages(ctx, chatID, mode, refID, limit)
+	rows, err := s.Messages.ListMessages(ctx, chatID, profileID, mode, refID, limit)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}

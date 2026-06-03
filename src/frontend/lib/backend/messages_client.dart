@@ -33,6 +33,9 @@ class VoiceMessage {
     required this.chatId,
     required this.senderProfileId,
     required this.content,
+    this.attachments = const [],
+    this.editedAt,
+    this.deletedAt,
     this.createdAt,
   });
 
@@ -40,6 +43,9 @@ class VoiceMessage {
   final String chatId;
   final String senderProfileId;
   final String content;
+  final List<MessageAttachment> attachments;
+  final DateTime? editedAt;
+  final DateTime? deletedAt;
   final DateTime? createdAt;
 
   factory VoiceMessage.fromJson(Map<String, dynamic> json) {
@@ -49,6 +55,9 @@ class VoiceMessage {
       chatId: chat['id'] as String? ?? '',
       senderProfileId: json['sender_profile_id'] as String? ?? '',
       content: json['content'] as String? ?? '',
+      attachments: MessageAttachment.listFromWire(json['attachments_json']),
+      editedAt: VoiceMessage.parseTimestamp(json['edited_at']),
+      deletedAt: VoiceMessage.parseTimestamp(json['deleted_at']),
       createdAt: VoiceMessage.parseTimestamp(json['created_at']),
     );
   }
@@ -56,6 +65,66 @@ class VoiceMessage {
   static DateTime? parseTimestamp(dynamic raw) {
     if (raw is! String || raw.isEmpty) return null;
     return DateTime.tryParse(raw);
+  }
+}
+
+class MessageAttachment {
+  const MessageAttachment({
+    required this.fileId,
+    required this.type,
+    this.url,
+    this.previewUrl,
+    this.name,
+    this.sizeBytes,
+  });
+
+  final String fileId;
+  final String type;
+  final String? url;
+  final String? previewUrl;
+  final String? name;
+  final int? sizeBytes;
+
+  bool get isImage => type == 'image';
+
+  Map<String, dynamic> toJson() {
+    return {
+      'file_id': fileId,
+      'type': type,
+      if (url != null && url!.isNotEmpty) 'url': url,
+      if (previewUrl != null && previewUrl!.isNotEmpty)
+        'preview_url': previewUrl,
+      if (name != null && name!.isNotEmpty) 'name': name,
+      if (sizeBytes != null) 'size_bytes': sizeBytes,
+    };
+  }
+
+  factory MessageAttachment.fromJson(Map<String, dynamic> json) {
+    return MessageAttachment(
+      fileId: json['file_id'] as String? ?? '',
+      type: json['type'] as String? ?? 'other',
+      url: json['url'] as String?,
+      previewUrl: json['preview_url'] as String?,
+      name: json['name'] as String?,
+      sizeBytes: (json['size_bytes'] as num?)?.toInt(),
+    );
+  }
+
+  static List<MessageAttachment> listFromWire(dynamic raw) {
+    Object? decoded = raw;
+    if (raw is String && raw.trim().isNotEmpty) {
+      try {
+        decoded = jsonDecode(raw);
+      } catch (_) {
+        decoded = const [];
+      }
+    }
+    if (decoded is! List) return const [];
+    return decoded
+        .whereType<Map<String, dynamic>>()
+        .map(MessageAttachment.fromJson)
+        .where((a) => a.fileId.isNotEmpty)
+        .toList(growable: false);
   }
 }
 
@@ -149,6 +218,7 @@ class VoiceMessagesClient {
     required String authorization,
     required String chatId,
     required String content,
+    List<MessageAttachment> attachments = const [],
     String? clientMessageId,
   }) async {
     if (!_config.hasBaseUrl) {
@@ -159,6 +229,11 @@ class VoiceMessagesClient {
       'chat': {'id': chatId},
       'content': content,
     };
+    if (attachments.isNotEmpty) {
+      body['attachments_json'] = jsonEncode(
+        attachments.map((a) => a.toJson()).toList(growable: false),
+      );
+    }
     if (clientMessageId != null) {
       body['client_message_id'] = clientMessageId;
     }
@@ -220,6 +295,53 @@ class VoiceMessagesClient {
     }
   }
 
+  Future<MessagesApiResult<VoiceMessage>> editMessage({
+    required String authorization,
+    required String messageId,
+    required String content,
+  }) async {
+    if (!_config.hasBaseUrl) {
+      return const MessagesApiFailure(message: kMessagesMissingBaseUrlDetail);
+    }
+    final uri = Uri.parse(
+      _config.baseUrl,
+    ).resolve('/api/v1/messages/$messageId');
+    return _patch(uri, authorization, {'content': content}, (body) {
+      final msg = body['message'] as Map<String, dynamic>;
+      return VoiceMessage.fromJson(msg);
+    });
+  }
+
+  Future<MessagesApiResult<void>> deleteMessage({
+    required String authorization,
+    required String messageId,
+    String scope = 'everyone',
+  }) async {
+    if (!_config.hasBaseUrl) {
+      return const MessagesApiFailure(message: kMessagesMissingBaseUrlDetail);
+    }
+    final uri = Uri.parse(_config.baseUrl).replace(
+      path: '/api/v1/messages/$messageId',
+      queryParameters: {'scope': scope},
+    );
+    try {
+      final res = await _http.delete(
+        uri,
+        headers: {'Authorization': authorization},
+      );
+      if (res.statusCode == 204) {
+        return const MessagesApiOk(null);
+      }
+      return MessagesApiFailure(
+        message: _failureMessage(res),
+        errorCode: _errorCode(res),
+        statusCode: res.statusCode,
+      );
+    } catch (e) {
+      return MessagesApiFailure(message: '$e');
+    }
+  }
+
   Future<MessagesApiResult<ReadStateData>> getReadState({
     required String authorization,
     required String chatId,
@@ -243,6 +365,35 @@ class VoiceMessagesClient {
       final res = await _http.get(
         uri,
         headers: {'Authorization': authorization},
+      );
+      if (res.statusCode == 200) {
+        final decoded = jsonDecode(res.body) as Map<String, dynamic>;
+        return MessagesApiOk(parse(decoded));
+      }
+      return MessagesApiFailure(
+        message: _failureMessage(res),
+        errorCode: _errorCode(res),
+        statusCode: res.statusCode,
+      );
+    } catch (e) {
+      return MessagesApiFailure(message: '$e');
+    }
+  }
+
+  Future<MessagesApiResult<T>> _patch<T>(
+    Uri uri,
+    String authorization,
+    Map<String, dynamic> body,
+    T Function(Map<String, dynamic> body) parse,
+  ) async {
+    try {
+      final res = await _http.patch(
+        uri,
+        headers: {
+          'Authorization': authorization,
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(body),
       );
       if (res.statusCode == 200) {
         final decoded = jsonDecode(res.body) as Map<String, dynamic>;

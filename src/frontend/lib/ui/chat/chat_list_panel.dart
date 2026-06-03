@@ -29,6 +29,7 @@ class ChatListPanel extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     final chats = ref.watch(chatListControllerProvider);
+    final inbox = ref.watch(chatInboxProvider);
     final selectedId = ref.watch(selectedChatIdProvider);
     final peerMap = ref.watch(dmPeerProfileByChatIdProvider);
     final activeProfileId = ref.watch(authControllerProvider).activeProfileId;
@@ -44,6 +45,20 @@ class ChatListPanel extends ConsumerWidget {
             style: Theme.of(context).textTheme.titleMedium,
           ),
         ),
+        if (chats.errorMessage == null || chats.items.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            child: SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'main', label: Text('DMs')),
+                ButtonSegment(value: 'requests', label: Text('Requests')),
+              ],
+              selected: {inbox},
+              onSelectionChanged: (next) => ref
+                  .read(chatListControllerProvider.notifier)
+                  .setInbox(next.single),
+            ),
+          ),
         Expanded(
           child: Builder(
             builder: (context) {
@@ -165,7 +180,25 @@ class ChatListPanel extends ConsumerWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                    trailing: item.unreadCount > 0
+                    trailing: inbox == 'requests'
+                        ? Wrap(
+                            spacing: 4,
+                            children: [
+                              TextButton(
+                                onPressed: () => ref
+                                    .read(chatListControllerProvider.notifier)
+                                    .acceptRequest(item.chatId),
+                                child: const Text('Accept'),
+                              ),
+                              TextButton(
+                                onPressed: () => ref
+                                    .read(chatListControllerProvider.notifier)
+                                    .declineRequest(item.chatId),
+                                child: const Text('Decline'),
+                              ),
+                            ],
+                          )
+                        : item.unreadCount > 0
                         ? Semantics(
                             label: l10n.chatListUnreadCount(item.unreadCount),
                             child: CircleAvatar(

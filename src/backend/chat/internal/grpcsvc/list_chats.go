@@ -3,6 +3,7 @@ package grpcsvc
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
@@ -49,7 +50,14 @@ func (s *ChatGRPC) ListChats(ctx context.Context, req *chatv1.ListChatsRequest) 
 		limit = 100
 	}
 
-	page, err := s.DM.ListChatsPage(ctx, caller, cursor, limit)
+	inbox := strings.TrimSpace(req.GetInbox())
+	if inbox == "" {
+		inbox = "main"
+	}
+	if inbox != "main" && inbox != "requests" {
+		return nil, status.Error(codes.InvalidArgument, "invalid inbox")
+	}
+	page, err := s.DM.ListChatsPage(ctx, caller, cursor, limit, inbox)
 	if err != nil {
 		if errors.Is(err, store.ErrInvalidListCursor) {
 			return nil, status.Error(codes.InvalidArgument, "invalid page cursor")
@@ -76,6 +84,8 @@ func (s *ChatGRPC) ListChats(ctx context.Context, req *chatv1.ListChatsRequest) 
 			Chat:        chatRowToProto(row),
 			UnreadCount: 0,
 		}
+		item.Inbox = proto.String(row.InboxBucket)
+		item.IsStranger = proto.Bool(row.InboxBucket == "requests")
 		if x, ok := extras[row.ID]; ok {
 			item.UnreadCount = x.UnreadCount
 			if x.LastMessagePreview != "" {
@@ -87,7 +97,7 @@ func (s *ChatGRPC) ListChats(ctx context.Context, req *chatv1.ListChatsRequest) 
 
 	return &chatv1.ListChatsResponse{
 		ChatList: &chatv1.ChatList{
-			Items:       items,
+			Items:      items,
 			NextCursor: page.NextCursor,
 		},
 	}, nil

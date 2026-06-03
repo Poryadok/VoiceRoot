@@ -9,6 +9,7 @@ COPY user/pb/voice/user/go.mod ./user/pb/voice/user/
 COPY user/pb/voice/social/go.mod ./user/pb/voice/social/
 COPY chat/pb/voice/chat/go.mod ./chat/pb/voice/chat/
 COPY messaging/pb/voice/messaging/go.mod ./messaging/pb/voice/messaging/
+COPY file/pb/voice/file/go.mod ./file/pb/voice/file/
 COPY voice/pb/voice/calls/go.mod ./voice/pb/voice/calls/
 COPY voice/pb/voice/space/go.mod ./voice/pb/voice/space/
 COPY gateway/go.mod ./gateway/
@@ -17,6 +18,7 @@ COPY pkg ./pkg
 COPY user/pb ./user/pb
 COPY chat/pb ./chat/pb
 COPY messaging/pb ./messaging/pb
+COPY file/pb ./file/pb
 COPY voice/pb ./voice/pb
 COPY gateway ./gateway
 WORKDIR /src/gateway

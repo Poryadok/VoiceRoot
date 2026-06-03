@@ -23,6 +23,7 @@ import (
 	"voice/backend/messaging/internal/store"
 
 	chatv1 "voice.app/voice/chat/v1"
+	filev1 "voice.app/voice/file/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
 	userv1 "voice.app/voice/user/v1"
 )
@@ -128,6 +129,22 @@ func main() {
 			profiles = &s2s.UserGRPCProfiles{Client: userv1.NewUserServiceClient(uconn)}
 		}
 
+		var files grpcsvc.FileMetadataLookup
+		if fileAddr := strings.TrimSpace(os.Getenv("FILE_GRPC_ADDR")); fileAddr != "" {
+			fconn, err := grpc.NewClient(fileAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if err != nil {
+				log.Fatalf("file grpc: %v", err)
+			}
+			defer func() { _ = fconn.Close() }()
+			waitCtx, waitCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			if err := waitForGRPCReady(waitCtx, fconn); err != nil {
+				waitCancel()
+				log.Fatalf("file grpc dial: %v", err)
+			}
+			waitCancel()
+			files = filev1.NewFileServiceClient(fconn)
+		}
+
 		var msgEvents messageevents.MessageEventsPublisher
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
 			jsPub, err := messageevents.NewJetStreamPublisher(natsURL)
@@ -148,6 +165,7 @@ func main() {
 			ChatGuard:     chatGuard,
 			Blocks:        blocks,
 			UserProfiles:  profiles,
+			Files:         files,
 			MessageEvents: msgEvents,
 		})
 		go func() {

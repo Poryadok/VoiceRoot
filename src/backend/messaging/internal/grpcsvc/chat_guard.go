@@ -4,6 +4,9 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"google.golang.org/grpc"
+
+	filev1 "voice.app/voice/file/v1"
 )
 
 // ChatGuard validates chat membership and resolves DM peers (Phase 1: DM, two members).
@@ -21,4 +24,9 @@ type ProfileAccountLookup interface {
 // AccountPairBlockChecker reports whether two accounts must not exchange DM messages (Social IsBlocked, both directions).
 type AccountPairBlockChecker interface {
 	AccountPairBlocked(ctx context.Context, viewerAccountID, otherAccountID uuid.UUID) (bool, error)
+}
+
+// FileMetadataLookup validates File Service metadata for message attachments.
+type FileMetadataLookup interface {
+	GetBulkMetadata(ctx context.Context, req *filev1.GetBulkMetadataRequest, opts ...grpc.CallOption) (*filev1.GetBulkMetadataResponse, error)
 }

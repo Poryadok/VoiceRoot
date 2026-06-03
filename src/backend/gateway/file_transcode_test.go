@@ -19,9 +19,13 @@ import (
 
 type recordingFileGRPC struct {
 	filev1.UnimplementedFileServiceServer
-	lastMD metadata.MD
-	upload *filev1.RequestUploadRequest
-	getURL *filev1.GetFileURLRequest
+	lastMD   metadata.MD
+	upload   *filev1.RequestUploadRequest
+	confirm  *filev1.ConfirmUploadRequest
+	getURL   *filev1.GetFileURLRequest
+	getMeta  *filev1.GetFileMetadataRequest
+	bulkMeta *filev1.GetBulkMetadataRequest
+	deleted  *filev1.DeleteFileRequest
 }
 
 func (s *recordingFileGRPC) RequestUpload(ctx context.Context, req *filev1.RequestUploadRequest) (*filev1.RequestUploadResponse, error) {
@@ -45,6 +49,51 @@ func (s *recordingFileGRPC) GetFileURL(ctx context.Context, req *filev1.GetFileU
 		PresignedGetUrl: "https://r2.example/download/" + req.GetFileId(),
 		ExpiresAt:       timestamppb.New(time.Unix(1790000000, 0)),
 	}, nil
+}
+
+func (s *recordingFileGRPC) ConfirmUpload(ctx context.Context, req *filev1.ConfirmUploadRequest) (*filev1.ConfirmUploadResponse, error) {
+	md, _ := metadata.FromIncomingContext(ctx)
+	s.lastMD = md
+	s.confirm = req
+	return &filev1.ConfirmUploadResponse{
+		FileMetadata: &filev1.FileMetadata{
+			Id:                req.GetFileId(),
+			UploaderProfileId: "profile-1",
+			OriginalName:      "cat.png",
+			MimeType:          "image/png",
+			SizeBytes:         2048,
+			R2Key:             "attachments/" + req.GetFileId() + "/cat.png",
+			Status:            "ready",
+			FileType:          "image",
+			ScanResult:        "skipped",
+			CreatedAt:         timestamppb.New(time.Unix(1700000000, 0)),
+		},
+	}, nil
+}
+
+func (s *recordingFileGRPC) GetFileMetadata(ctx context.Context, req *filev1.GetFileMetadataRequest) (*filev1.GetFileMetadataResponse, error) {
+	md, _ := metadata.FromIncomingContext(ctx)
+	s.lastMD = md
+	s.getMeta = req
+	return &filev1.GetFileMetadataResponse{FileMetadata: &filev1.FileMetadata{Id: req.GetFileId(), Status: "ready"}}, nil
+}
+
+func (s *recordingFileGRPC) GetBulkMetadata(ctx context.Context, req *filev1.GetBulkMetadataRequest) (*filev1.GetBulkMetadataResponse, error) {
+	md, _ := metadata.FromIncomingContext(ctx)
+	s.lastMD = md
+	s.bulkMeta = req
+	out := map[string]*filev1.FileMetadata{}
+	for _, id := range req.GetFileIds() {
+		out[id] = &filev1.FileMetadata{Id: id, Status: "ready"}
+	}
+	return &filev1.GetBulkMetadataResponse{BulkFileMetadata: &filev1.BulkFileMetadata{ByFileId: out}}, nil
+}
+
+func (s *recordingFileGRPC) DeleteFile(ctx context.Context, req *filev1.DeleteFileRequest) (*filev1.DeleteFileResponse, error) {
+	md, _ := metadata.FromIncomingContext(ctx)
+	s.lastMD = md
+	s.deleted = req
+	return &filev1.DeleteFileResponse{}, nil
 }
 
 func TestTranscodeFilesUploadPrecedenceOverRESTProxy(t *testing.T) {
@@ -133,6 +182,51 @@ func TestTranscodeFilesGetURLPrecedenceOverRESTProxy(t *testing.T) {
 	decodeJSON(t, resp.Body, &out)
 	require.Equal(t, "https://r2.example/download/"+fileID, out.PresignedGetURL)
 	require.NotEmpty(t, out.ExpiresAt)
+}
+
+func TestTranscodeFilesConfirmMetadataAndDelete(t *testing.T) {
+	t.Parallel()
+
+	grpcRec := &recordingFileGRPC{}
+	conn, cleanup := startBufconnFileConn(t, grpcRec)
+	t.Cleanup(cleanup)
+
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+		},
+		transcoder: &transcoder{clients: grpcClients{file: filev1.NewFileServiceClient(conn)}},
+	})
+
+	fileID := "33333333-3333-4333-8333-333333333333"
+	resp := performRequest(h, http.MethodPost, "/api/v1/files/"+fileID+"/confirm", `{"sha256_hash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`, map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	require.Equal(t, http.StatusOK, resp.Code, "body=%s", resp.Body.String())
+	require.NotNil(t, grpcRec.confirm)
+	require.Equal(t, fileID, grpcRec.confirm.GetFileId())
+	require.Equal(t, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", grpcRec.confirm.GetSha256Hash())
+
+	resp = performRequest(h, http.MethodGet, "/api/v1/files/"+fileID, "", map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	require.Equal(t, http.StatusOK, resp.Code, "body=%s", resp.Body.String())
+	require.NotNil(t, grpcRec.getMeta)
+	require.Equal(t, fileID, grpcRec.getMeta.GetFileId())
+
+	resp = performRequest(h, http.MethodPost, "/api/v1/files/bulk-metadata", `{"file_ids":["`+fileID+`"]}`, map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	require.Equal(t, http.StatusOK, resp.Code, "body=%s", resp.Body.String())
+	require.NotNil(t, grpcRec.bulkMeta)
+	require.Equal(t, []string{fileID}, grpcRec.bulkMeta.GetFileIds())
+
+	resp = performRequest(h, http.MethodDelete, "/api/v1/files/"+fileID, "", map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	require.Equal(t, http.StatusNoContent, resp.Code, "body=%s", resp.Body.String())
+	require.NotNil(t, grpcRec.deleted)
+	require.Equal(t, fileID, grpcRec.deleted.GetFileId())
 }
 
 func startBufconnFileConn(t *testing.T, impl filev1.FileServiceServer) (grpc.ClientConnInterface, func()) {

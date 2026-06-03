@@ -19,23 +19,25 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ChatService_CreateDM_FullMethodName     = "/voice.chat.v1.ChatService/CreateDM"
-	ChatService_GetDM_FullMethodName        = "/voice.chat.v1.ChatService/GetDM"
-	ChatService_CreateChat_FullMethodName   = "/voice.chat.v1.ChatService/CreateChat"
-	ChatService_UpdateChat_FullMethodName   = "/voice.chat.v1.ChatService/UpdateChat"
-	ChatService_DeleteChat_FullMethodName   = "/voice.chat.v1.ChatService/DeleteChat"
-	ChatService_AddMembers_FullMethodName   = "/voice.chat.v1.ChatService/AddMembers"
-	ChatService_RemoveMember_FullMethodName = "/voice.chat.v1.ChatService/RemoveMember"
-	ChatService_LeaveChat_FullMethodName    = "/voice.chat.v1.ChatService/LeaveChat"
-	ChatService_ListMembers_FullMethodName  = "/voice.chat.v1.ChatService/ListMembers"
-	ChatService_ListChats_FullMethodName    = "/voice.chat.v1.ChatService/ListChats"
-	ChatService_GetChat_FullMethodName      = "/voice.chat.v1.ChatService/GetChat"
-	ChatService_ListFolders_FullMethodName  = "/voice.chat.v1.ChatService/ListFolders"
-	ChatService_CreateFolder_FullMethodName = "/voice.chat.v1.ChatService/CreateFolder"
-	ChatService_UpdateFolder_FullMethodName = "/voice.chat.v1.ChatService/UpdateFolder"
-	ChatService_DeleteFolder_FullMethodName = "/voice.chat.v1.ChatService/DeleteFolder"
-	ChatService_MuteChat_FullMethodName     = "/voice.chat.v1.ChatService/MuteChat"
-	ChatService_ArchiveChat_FullMethodName  = "/voice.chat.v1.ChatService/ArchiveChat"
+	ChatService_CreateDM_FullMethodName         = "/voice.chat.v1.ChatService/CreateDM"
+	ChatService_GetDM_FullMethodName            = "/voice.chat.v1.ChatService/GetDM"
+	ChatService_CreateChat_FullMethodName       = "/voice.chat.v1.ChatService/CreateChat"
+	ChatService_UpdateChat_FullMethodName       = "/voice.chat.v1.ChatService/UpdateChat"
+	ChatService_DeleteChat_FullMethodName       = "/voice.chat.v1.ChatService/DeleteChat"
+	ChatService_AddMembers_FullMethodName       = "/voice.chat.v1.ChatService/AddMembers"
+	ChatService_RemoveMember_FullMethodName     = "/voice.chat.v1.ChatService/RemoveMember"
+	ChatService_LeaveChat_FullMethodName        = "/voice.chat.v1.ChatService/LeaveChat"
+	ChatService_ListMembers_FullMethodName      = "/voice.chat.v1.ChatService/ListMembers"
+	ChatService_ListChats_FullMethodName        = "/voice.chat.v1.ChatService/ListChats"
+	ChatService_GetChat_FullMethodName          = "/voice.chat.v1.ChatService/GetChat"
+	ChatService_ListFolders_FullMethodName      = "/voice.chat.v1.ChatService/ListFolders"
+	ChatService_CreateFolder_FullMethodName     = "/voice.chat.v1.ChatService/CreateFolder"
+	ChatService_UpdateFolder_FullMethodName     = "/voice.chat.v1.ChatService/UpdateFolder"
+	ChatService_DeleteFolder_FullMethodName     = "/voice.chat.v1.ChatService/DeleteFolder"
+	ChatService_AcceptDMRequest_FullMethodName  = "/voice.chat.v1.ChatService/AcceptDMRequest"
+	ChatService_DeclineDMRequest_FullMethodName = "/voice.chat.v1.ChatService/DeclineDMRequest"
+	ChatService_MuteChat_FullMethodName         = "/voice.chat.v1.ChatService/MuteChat"
+	ChatService_ArchiveChat_FullMethodName      = "/voice.chat.v1.ChatService/ArchiveChat"
 )
 
 // ChatServiceClient is the client API for ChatService service.
@@ -59,6 +61,8 @@ type ChatServiceClient interface {
 	CreateFolder(ctx context.Context, in *CreateFolderRequest, opts ...grpc.CallOption) (*CreateFolderResponse, error)
 	UpdateFolder(ctx context.Context, in *UpdateFolderRequest, opts ...grpc.CallOption) (*UpdateFolderResponse, error)
 	DeleteFolder(ctx context.Context, in *DeleteFolderRequest, opts ...grpc.CallOption) (*DeleteFolderResponse, error)
+	AcceptDMRequest(ctx context.Context, in *AcceptDMRequestRequest, opts ...grpc.CallOption) (*AcceptDMRequestResponse, error)
+	DeclineDMRequest(ctx context.Context, in *DeclineDMRequestRequest, opts ...grpc.CallOption) (*DeclineDMRequestResponse, error)
 	MuteChat(ctx context.Context, in *MuteChatRequest, opts ...grpc.CallOption) (*MuteChatResponse, error)
 	ArchiveChat(ctx context.Context, in *ArchiveChatRequest, opts ...grpc.CallOption) (*ArchiveChatResponse, error)
 }
@@ -221,6 +225,26 @@ func (c *chatServiceClient) DeleteFolder(ctx context.Context, in *DeleteFolderRe
 	return out, nil
 }
 
+func (c *chatServiceClient) AcceptDMRequest(ctx context.Context, in *AcceptDMRequestRequest, opts ...grpc.CallOption) (*AcceptDMRequestResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AcceptDMRequestResponse)
+	err := c.cc.Invoke(ctx, ChatService_AcceptDMRequest_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chatServiceClient) DeclineDMRequest(ctx context.Context, in *DeclineDMRequestRequest, opts ...grpc.CallOption) (*DeclineDMRequestResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeclineDMRequestResponse)
+	err := c.cc.Invoke(ctx, ChatService_DeclineDMRequest_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *chatServiceClient) MuteChat(ctx context.Context, in *MuteChatRequest, opts ...grpc.CallOption) (*MuteChatResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(MuteChatResponse)
@@ -262,6 +286,8 @@ type ChatServiceServer interface {
 	CreateFolder(context.Context, *CreateFolderRequest) (*CreateFolderResponse, error)
 	UpdateFolder(context.Context, *UpdateFolderRequest) (*UpdateFolderResponse, error)
 	DeleteFolder(context.Context, *DeleteFolderRequest) (*DeleteFolderResponse, error)
+	AcceptDMRequest(context.Context, *AcceptDMRequestRequest) (*AcceptDMRequestResponse, error)
+	DeclineDMRequest(context.Context, *DeclineDMRequestRequest) (*DeclineDMRequestResponse, error)
 	MuteChat(context.Context, *MuteChatRequest) (*MuteChatResponse, error)
 	ArchiveChat(context.Context, *ArchiveChatRequest) (*ArchiveChatResponse, error)
 	mustEmbedUnimplementedChatServiceServer()
@@ -318,6 +344,12 @@ func (UnimplementedChatServiceServer) UpdateFolder(context.Context, *UpdateFolde
 }
 func (UnimplementedChatServiceServer) DeleteFolder(context.Context, *DeleteFolderRequest) (*DeleteFolderResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteFolder not implemented")
+}
+func (UnimplementedChatServiceServer) AcceptDMRequest(context.Context, *AcceptDMRequestRequest) (*AcceptDMRequestResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AcceptDMRequest not implemented")
+}
+func (UnimplementedChatServiceServer) DeclineDMRequest(context.Context, *DeclineDMRequestRequest) (*DeclineDMRequestResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeclineDMRequest not implemented")
 }
 func (UnimplementedChatServiceServer) MuteChat(context.Context, *MuteChatRequest) (*MuteChatResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MuteChat not implemented")
@@ -616,6 +648,42 @@ func _ChatService_DeleteFolder_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ChatService_AcceptDMRequest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AcceptDMRequestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).AcceptDMRequest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_AcceptDMRequest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).AcceptDMRequest(ctx, req.(*AcceptDMRequestRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChatService_DeclineDMRequest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeclineDMRequestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).DeclineDMRequest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_DeclineDMRequest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).DeclineDMRequest(ctx, req.(*DeclineDMRequestRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _ChatService_MuteChat_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(MuteChatRequest)
 	if err := dec(in); err != nil {
@@ -718,6 +786,14 @@ var ChatService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteFolder",
 			Handler:    _ChatService_DeleteFolder_Handler,
+		},
+		{
+			MethodName: "AcceptDMRequest",
+			Handler:    _ChatService_AcceptDMRequest_Handler,
+		},
+		{
+			MethodName: "DeclineDMRequest",
+			Handler:    _ChatService_DeclineDMRequest_Handler,
 		},
 		{
 			MethodName: "MuteChat",

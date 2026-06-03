@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -370,6 +371,20 @@ void main() {
                           'chat': {'id': 'chat-abc'},
                           'sender_profile_id': 'profile-b',
                           'content': 'Hello there',
+                          'attachments_json': jsonEncode([
+                            {
+                              'file_id': 'file-image',
+                              'type': 'image',
+                              'preview_url': 'https://cdn.example/thumb.webp',
+                              'name': 'cat.png',
+                            },
+                            {
+                              'file_id': 'file-doc',
+                              'type': 'document',
+                              'name': 'report.pdf',
+                              'size_bytes': 2048,
+                            },
+                          ]),
                           'created_at': '2024-01-01T00:00:00Z',
                         },
                       ],
@@ -406,6 +421,12 @@ void main() {
     expect(find.byKey(ChatRoomPanel.panelKey), findsOneWidget);
     expect(find.text('Hello there'), findsOneWidget);
     expect(find.text('Newest first from API'), findsOneWidget);
+    expect(
+      find.byKey(ChatRoomPanel.attachmentPreviewKey('file-image')),
+      findsOneWidget,
+    );
+    expect(find.text('report.pdf'), findsOneWidget);
+    expect(find.text('2.0 KB'), findsOneWidget);
     expect(markReadCalls, 1);
   });
 
@@ -438,6 +459,104 @@ void main() {
     await tester.tap(find.byTooltip('Back to chats'));
 
     expect(backTapped, isTrue);
+  });
+
+  testWidgets('ChatRoomPanel uploads and sends an attachment', (tester) async {
+    var sentAttachment = false;
+    await tester.pumpWidget(
+      chatTestApp(
+        home: ChatRoomPanel(
+          chatId: 'chat-abc',
+          attachmentPicker: () async => ChatAttachmentFile(
+            bytes: Uint8List.fromList([1, 2, 3]),
+            contentType: 'application/pdf',
+            name: 'report.pdf',
+          ),
+        ),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/messages') {
+            return http.Response(
+              jsonEncode({
+                'message_list': {'messages': []},
+              }),
+              200,
+            );
+          }
+          if (req.url.path == '/api/v1/files/upload') {
+            final body = jsonDecode(req.body) as Map<String, dynamic>;
+            expect(body['context_chat'], {
+              'id': 'chat-abc',
+              'type': 'CHAT_TYPE_DM',
+            });
+            return http.Response(
+              jsonEncode({
+                'upload_response': {
+                  'file_id': 'file-doc',
+                  'presigned_put_url': 'https://r2.example/upload',
+                  'r2_key': 'attachments/file-doc/report.pdf',
+                },
+              }),
+              200,
+            );
+          }
+          if (req.method == 'PUT' &&
+              req.url.toString() == 'https://r2.example/upload') {
+            expect(req.bodyBytes, [1, 2, 3]);
+            return http.Response('', 200);
+          }
+          if (req.url.path == '/api/v1/files/file-doc/confirm') {
+            return http.Response(
+              jsonEncode({
+                'file_metadata': {
+                  'id': 'file-doc',
+                  'file_type': 'document',
+                  'status': 'ready',
+                  'original_name': 'report.pdf',
+                  'r2_key': 'attachments/file-doc/report.pdf',
+                  'size_bytes': 3,
+                },
+              }),
+              200,
+            );
+          }
+          if (req.url.path == '/api/v1/messages/send') {
+            final body = jsonDecode(req.body) as Map<String, dynamic>;
+            final attachments =
+                jsonDecode(body['attachments_json'] as String) as List<dynamic>;
+            expect(attachments.single, containsPair('file_id', 'file-doc'));
+            sentAttachment = true;
+            return http.Response(
+              jsonEncode({
+                'message': {
+                  'id': 'msg-file',
+                  'chat': {'id': 'chat-abc'},
+                  'sender_profile_id': 'profile-test',
+                  'content': '',
+                  'attachments_json': body['attachments_json'],
+                  'created_at': '2024-01-01T00:00:00Z',
+                },
+              }),
+              200,
+            );
+          }
+          if (req.url.path == '/api/v1/messages/read') {
+            return http.Response('{}', 200);
+          }
+          return http.Response('{}', 404);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(ChatRoomPanel.attachKey));
+    await tester.pumpAndSettle();
+
+    expect(sentAttachment, isTrue);
+    expect(find.text('report.pdf'), findsOneWidget);
+    expect(
+      find.byKey(ChatRoomPanel.attachmentPreviewKey('file-doc')),
+      findsOneWidget,
+    );
   });
 }
 

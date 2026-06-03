@@ -53,6 +53,29 @@ func (fixedClock) Now() time.Time {
 	return fixedNow
 }
 
+type fakeImageProcessor struct{}
+
+func (fakeImageProcessor) ProcessImage(_ context.Context, row store.FileRow) (grpcsvc.ImageProcessingResult, error) {
+	return grpcsvc.ImageProcessingResult{
+		ConvertedR2Key: "processed/" + row.ID.String() + "/full.webp",
+		ThumbnailR2Key: "processed/" + row.ID.String() + "/thumb.webp",
+		Width:          640,
+		Height:         480,
+	}, nil
+}
+
+type fakeObjectReader map[string][]byte
+
+func (r fakeObjectReader) ReadObject(_ context.Context, key string, _ int64) ([]byte, error) {
+	return r[key], nil
+}
+
+type fakeScanner string
+
+func (s fakeScanner) ScanBytes(context.Context, []byte) (string, error) {
+	return string(s), nil
+}
+
 func TestRequestUploadRequiresProfileMetadata(t *testing.T) {
 	ctx := context.Background()
 	pool := startFilePostgres(t, ctx)
@@ -172,16 +195,35 @@ WHERE id = $1
 	require.True(t, stored.ChatIDIsNull)
 }
 
-func TestRequestUploadRejectsChatContextUntilAccessGuardIsWired(t *testing.T) {
+func TestRequestUploadWithChatContextAllowsMembersAndStoresChat(t *testing.T) {
 	ctx := context.Background()
 	pool := startFilePostgres(t, ctx)
-	client := startFileGRPC(t, pool, &recordingPresigner{})
+	ownerID := uuid.New()
+	peerID := uuid.New()
+	chatID := uuid.New()
+	client := startFileGRPCWired(t, pool, &recordingPresigner{}, memberGuard{chatID: {ownerID, peerID}}, nil)
 	req := validUploadRequest()
-	req.ContextChat = chatDMRef(uuid.New())
+	req.ContextChat = chatDMRef(chatID)
 
-	_, err := client.RequestUpload(withFileProfile(ctx, uuid.New(), uuid.New()), req)
+	uploadResp, err := client.RequestUpload(withFileProfile(ctx, uuid.New(), ownerID), req)
+	require.NoError(t, err)
+	fileID := uploadResp.GetUploadResponse().GetFileId()
+	_, err = client.ConfirmUpload(withFileProfile(ctx, uuid.New(), ownerID), &filev1.ConfirmUploadRequest{
+		FileId:     fileID,
+		Sha256Hash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	})
+	require.NoError(t, err)
+
+	meta, err := client.GetFileMetadata(withFileProfile(ctx, uuid.New(), peerID), &filev1.GetFileMetadataRequest{FileId: fileID})
+	require.NoError(t, err)
+	require.Equal(t, chatID.String(), meta.GetFileMetadata().GetChat().GetId())
+
+	_, err = client.GetFileURL(withFileProfile(ctx, uuid.New(), peerID), &filev1.GetFileURLRequest{FileId: fileID})
+	require.NoError(t, err)
+
+	_, err = client.GetFileURL(withFileProfile(ctx, uuid.New(), uuid.New()), &filev1.GetFileURLRequest{FileId: fileID})
 	require.Error(t, err)
-	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
 func TestGetFileURLUsesStoredR2KeyAndOneHourTTL(t *testing.T) {
@@ -229,6 +271,144 @@ func TestGetFileURLRequiresUploaderProfileAndReadyStatus(t *testing.T) {
 	require.Equal(t, codes.FailedPrecondition, status.Code(err))
 }
 
+func TestConfirmUploadMetadataListQuotaAndDelete(t *testing.T) {
+	ctx := context.Background()
+	pool := startFilePostgres(t, ctx)
+	client := startFileGRPC(t, pool, &recordingPresigner{})
+	profileID := uuid.New()
+	authed := withFileProfile(ctx, uuid.New(), profileID)
+
+	uploadResp, err := client.RequestUpload(authed, validUploadRequest())
+	require.NoError(t, err)
+	fileID := uploadResp.GetUploadResponse().GetFileId()
+
+	confirmed, err := client.ConfirmUpload(authed, &filev1.ConfirmUploadRequest{
+		FileId:     fileID,
+		Sha256Hash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	})
+	require.NoError(t, err)
+	meta := confirmed.GetFileMetadata()
+	require.Equal(t, fileID, meta.GetId())
+	require.Equal(t, profileID.String(), meta.GetUploaderProfileId())
+	require.Equal(t, "ready", meta.GetStatus())
+	require.Equal(t, filev1.FileLifecycleStatus_FILE_LIFECYCLE_STATUS_READY, meta.GetStatusEnum())
+	require.Equal(t, "skipped", meta.GetScanResult())
+	require.Equal(t, "cat.png", meta.GetOriginalName())
+
+	getMeta, err := client.GetFileMetadata(authed, &filev1.GetFileMetadataRequest{FileId: fileID})
+	require.NoError(t, err)
+	require.Equal(t, fileID, getMeta.GetFileMetadata().GetId())
+
+	bulk, err := client.GetBulkMetadata(authed, &filev1.GetBulkMetadataRequest{FileIds: []string{fileID, uuid.New().String()}})
+	require.NoError(t, err)
+	require.Contains(t, bulk.GetBulkFileMetadata().GetByFileId(), fileID)
+	require.Len(t, bulk.GetBulkFileMetadata().GetByFileId(), 1)
+
+	listed, err := client.ListFiles(authed, &filev1.ListFilesRequest{})
+	require.NoError(t, err)
+	require.Len(t, listed.GetFileList().GetFiles(), 1)
+	require.Equal(t, fileID, listed.GetFileList().GetFiles()[0].GetId())
+
+	quota, err := client.CheckQuota(authed, &filev1.CheckQuotaRequest{})
+	require.NoError(t, err)
+	require.Equal(t, int64(1024), quota.GetQuotaResponse().GetBytesUsed())
+	require.Equal(t, int64(freeFileLimitBytes), quota.GetQuotaResponse().GetBytesLimit())
+
+	_, err = client.DeleteFile(authed, &filev1.DeleteFileRequest{FileId: fileID})
+	require.NoError(t, err)
+	_, err = client.GetFileURL(authed, &filev1.GetFileURLRequest{FileId: fileID})
+	require.Error(t, err)
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+}
+
+func TestConfirmUploadProcessesImageMetadata(t *testing.T) {
+	ctx := context.Background()
+	pool := startFilePostgres(t, ctx)
+	client := startFileGRPCWired(t, pool, &recordingPresigner{}, nil, fakeImageProcessor{})
+	profileID := uuid.New()
+	authed := withFileProfile(ctx, uuid.New(), profileID)
+	uploadResp, err := client.RequestUpload(authed, &filev1.RequestUploadRequest{
+		OriginalName: "screenshot.png",
+		MimeType:     "image/png",
+		SizeBytes:    4096,
+	})
+	require.NoError(t, err)
+
+	confirmed, err := client.ConfirmUpload(authed, &filev1.ConfirmUploadRequest{
+		FileId:     uploadResp.GetUploadResponse().GetFileId(),
+		Sha256Hash: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+	})
+	require.NoError(t, err)
+	meta := confirmed.GetFileMetadata()
+	require.Equal(t, "ready", meta.GetStatus())
+	require.Equal(t, "processed/"+meta.GetId()+"/full.webp", meta.GetConvertedR2Key())
+	require.Equal(t, "processed/"+meta.GetId()+"/thumb.webp", meta.GetThumbnailR2Key())
+	require.Equal(t, int32(640), meta.GetWidth())
+	require.Equal(t, int32(480), meta.GetHeight())
+}
+
+func TestConfirmUploadRejectsWrongOwnerAndInvalidHash(t *testing.T) {
+	ctx := context.Background()
+	pool := startFilePostgres(t, ctx)
+	client := startFileGRPC(t, pool, &recordingPresigner{})
+	ownerID := uuid.New()
+	uploadResp, err := client.RequestUpload(withFileProfile(ctx, uuid.New(), ownerID), validUploadRequest())
+	require.NoError(t, err)
+	fileID := uploadResp.GetUploadResponse().GetFileId()
+
+	_, err = client.ConfirmUpload(withFileProfile(ctx, uuid.New(), uuid.New()), &filev1.ConfirmUploadRequest{
+		FileId:     fileID,
+		Sha256Hash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+
+	_, err = client.ConfirmUpload(withFileProfile(ctx, uuid.New(), ownerID), &filev1.ConfirmUploadRequest{
+		FileId:     fileID,
+		Sha256Hash: "not-a-sha",
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+func TestConfirmUploadScansRiskyFilesAndBlocksInfectedDownload(t *testing.T) {
+	ctx := context.Background()
+	pool := startFilePostgres(t, ctx)
+	presigner := &recordingPresigner{}
+	profileID := uuid.New()
+	client := startFileGRPCFull(t, pool, grpcsvc.Deps{
+		Presigner: presigner,
+		Reader:    fakeObjectReader{},
+		Scanner:   fakeScanner("infected"),
+	})
+	authed := withFileProfile(ctx, uuid.New(), profileID)
+	uploadResp, err := client.RequestUpload(authed, &filev1.RequestUploadRequest{
+		OriginalName: "payload.zip",
+		MimeType:     "application/zip",
+		SizeBytes:    1024,
+	})
+	require.NoError(t, err)
+	fileID := uploadResp.GetUploadResponse().GetFileId()
+	presignedKey := uploadResp.GetUploadResponse().GetR2Key()
+	client = startFileGRPCFull(t, pool, grpcsvc.Deps{
+		Presigner: presigner,
+		Reader:    fakeObjectReader{presignedKey: []byte("zip")},
+		Scanner:   fakeScanner("infected"),
+	})
+
+	confirmed, err := client.ConfirmUpload(authed, &filev1.ConfirmUploadRequest{
+		FileId:     fileID,
+		Sha256Hash: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "failed", confirmed.GetFileMetadata().GetStatus())
+	require.Equal(t, "infected", confirmed.GetFileMetadata().GetScanResult())
+
+	_, err = client.GetFileURL(authed, &filev1.GetFileURLRequest{FileId: fileID})
+	require.Error(t, err)
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+}
+
 func validUploadRequest() *filev1.RequestUploadRequest {
 	return &filev1.RequestUploadRequest{
 		OriginalName: "cat.png",
@@ -271,12 +451,32 @@ func fileRepoRoot(t *testing.T) string {
 
 func startFileGRPC(t *testing.T, pool *pgxpool.Pool, presigner *recordingPresigner) filev1.FileServiceClient {
 	t.Helper()
+	return startFileGRPCWired(t, pool, presigner, nil, nil)
+}
+
+func startFileGRPCWired(t *testing.T, pool *pgxpool.Pool, presigner *recordingPresigner, chatGuard grpcsvc.ChatGuard, processor grpcsvc.ImageProcessor) filev1.FileServiceClient {
+	t.Helper()
+	return startFileGRPCFull(t, pool, grpcsvc.Deps{
+		Presigner: presigner,
+		ChatGuard: chatGuard,
+		Processor: processor,
+	})
+}
+
+func startFileGRPCFull(t *testing.T, pool *pgxpool.Pool, deps grpcsvc.Deps) filev1.FileServiceClient {
+	t.Helper()
 	lis := bufconn.Listen(1 << 20)
 	srv := grpc.NewServer()
+	deps.Files = store.NewFilesStore(pool)
+	deps.Clock = fixedClock{}
 	filev1.RegisterFileServiceServer(srv, grpcsvc.New(grpcsvc.Deps{
-		Files:     store.NewFilesStore(pool),
-		Presigner: presigner,
-		Clock:     fixedClock{},
+		Files:     deps.Files,
+		Presigner: deps.Presigner,
+		Clock:     deps.Clock,
+		ChatGuard: deps.ChatGuard,
+		Processor: deps.Processor,
+		Reader:    deps.Reader,
+		Scanner:   deps.Scanner,
 	}))
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(func() {
@@ -290,6 +490,17 @@ func startFileGRPC(t *testing.T, pool *pgxpool.Pool, presigner *recordingPresign
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close() })
 	return filev1.NewFileServiceClient(conn)
+}
+
+type memberGuard map[uuid.UUID][]uuid.UUID
+
+func (g memberGuard) EnsureMember(_ context.Context, chatID, profileID uuid.UUID) error {
+	for _, member := range g[chatID] {
+		if member == profileID {
+			return nil
+		}
+	}
+	return grpcsvc.ErrNotChatMember
 }
 
 func seedFile(t *testing.T, ctx context.Context, pool *pgxpool.Pool, fileID, profileID uuid.UUID, r2Key, status string) {

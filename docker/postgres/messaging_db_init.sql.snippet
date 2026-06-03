@@ -1,5 +1,6 @@
 -- messaging_db v1 — keep in sync with src/backend/migrations/messaging_db/000001_init.up.sql
--- and 000002_client_message_id.up.sql
+-- 000002_client_message_id.up.sql, 000003_attachment_only_messages.up.sql,
+-- and 000004_delete_for_me.up.sql
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TABLE messages (
@@ -9,7 +10,7 @@ CREATE TABLE messages (
     sender_profile_id UUID NOT NULL,
     posted_as_chat BOOLEAN NOT NULL DEFAULT false CHECK (posted_as_chat = false),
     display_chat_id UUID NULL,
-    content TEXT NOT NULL CHECK (char_length(content) BETWEEN 1 AND 4000),
+    content TEXT NOT NULL CHECK (char_length(content) <= 4000),
     type VARCHAR(16) NOT NULL DEFAULT 'regular' CHECK (type IN ('regular', 'system', 'forward')),
     thread_parent_id UUID NULL,
     forward_from_id UUID NULL,
@@ -40,3 +41,13 @@ ALTER TABLE messages ADD COLUMN IF NOT EXISTS client_message_id UUID NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS messages_client_dedup_idx
   ON messages (chat_id, sender_profile_id, client_message_id)
   WHERE client_message_id IS NOT NULL;
+
+CREATE TABLE message_hides (
+    message_id UUID NOT NULL,
+    profile_id UUID NOT NULL,
+    hidden_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (message_id, profile_id)
+);
+
+CREATE INDEX message_hides_profile_id_idx
+    ON message_hides (profile_id, hidden_at DESC);

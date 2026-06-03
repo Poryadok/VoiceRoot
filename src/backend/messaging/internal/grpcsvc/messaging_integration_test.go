@@ -3,23 +3,26 @@ package grpcsvc
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"voice/backend/pkg/integrationtest"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
+	"voice/backend/pkg/integrationtest"
 
 	"voice/backend/chat/testchat"
 	"voice/backend/messaging/internal/authctx"
@@ -29,6 +32,7 @@ import (
 
 	chatv1 "voice.app/voice/chat/v1"
 	commonv1 "voice.app/voice/common/v1"
+	filev1 "voice.app/voice/file/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
 )
 
@@ -51,6 +55,13 @@ func applySQLFile(t *testing.T, ctx context.Context, pool *pgxpool.Pool, relPath
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, string(b))
 	require.NoError(t, err)
+	if strings.HasSuffix(relPath, filepath.Join("messaging_db", "000002_client_message_id.up.sql")) {
+		applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000003_attachment_only_messages.up.sql"))
+		applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000004_delete_for_me.up.sql"))
+	}
+	if strings.HasSuffix(relPath, filepath.Join("chat_db", "000001_init.up.sql")) {
+		applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000002_dm_requests.up.sql"))
+	}
 }
 
 func withProfileCtx(ctx context.Context, accountID, profileID uuid.UUID) context.Context {
@@ -93,6 +104,7 @@ func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire
 		Blocks:        w.Blocks,
 		UserProfiles:  w.UserProfiles,
 		MessageEvents: w.MessageEvents,
+		Files:         w.Files,
 	})
 	go func() {
 		if err := srv.Serve(lis); err != nil {
@@ -115,6 +127,7 @@ type messagingWire struct {
 	UserProfiles  ProfileAccountLookup
 	Blocks        AccountPairBlockChecker
 	MessageEvents messageevents.MessageEventsPublisher
+	Files         FileMetadataLookup
 }
 
 func startMessagingServer(t *testing.T, pool *pgxpool.Pool) (messagingv1.MessagingServiceClient, func()) {
@@ -136,6 +149,18 @@ type boolBlocks bool
 
 func (b boolBlocks) AccountPairBlocked(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
 	return bool(b), nil
+}
+
+type fileMetadataMap map[string]*filev1.FileMetadata
+
+func (m fileMetadataMap) GetBulkMetadata(_ context.Context, req *filev1.GetBulkMetadataRequest, _ ...grpc.CallOption) (*filev1.GetBulkMetadataResponse, error) {
+	out := map[string]*filev1.FileMetadata{}
+	for _, id := range req.GetFileIds() {
+		if meta := m[id]; meta != nil {
+			out[id] = meta
+		}
+	}
+	return &filev1.GetBulkMetadataResponse{BulkFileMetadata: &filev1.BulkFileMetadata{ByFileId: out}}, nil
 }
 
 func TestMessagingSendGetMarkRead(t *testing.T) {
@@ -231,6 +256,90 @@ func TestMessagingSendGetMarkRead(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Equal(t, codes.NotFound, status.Code(err))
+}
+
+func TestMessagingSendAttachmentOnlyMessageValidatesReadyFile(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000003_attachment_only_messages.up.sql"))
+
+	chatID := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	acctA := uuid.New()
+	fileID := uuid.New().String()
+	seedDMChat(t, ctx, pool, chatID, profA, profB)
+	client, _ := startMessagingServerWired(t, pool, messagingWire{
+		Files: fileMetadataMap{
+			fileID: {
+				Id:                fileID,
+				UploaderProfileId: profA.String(),
+				OriginalName:      "cat.png",
+				MimeType:          "image/png",
+				SizeBytes:         2048,
+				Status:            "ready",
+				FileType:          "image",
+				ScanResult:        "clean",
+				Chat:              chatDMRef(chatID),
+			},
+		},
+	})
+	attachments := mustAttachmentJSON(t, []map[string]any{{
+		"file_id":     fileID,
+		"type":        "image",
+		"url":         "voice-file://" + fileID,
+		"preview_url": "voice-file://" + fileID + "/preview",
+	}})
+
+	resp, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+		Chat:            chatDMRef(chatID),
+		Content:         "",
+		AttachmentsJson: attachments,
+		MentionsJson:    "[]",
+	})
+	require.NoError(t, err)
+	require.Empty(t, resp.GetMessage().GetContent())
+	require.JSONEq(t, attachments, resp.GetMessage().GetAttachmentsJson())
+
+	missingAttachment := mustAttachmentJSON(t, []map[string]any{{"file_id": uuid.New().String(), "type": "image"}})
+	_, err = client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+		Chat:            chatDMRef(chatID),
+		AttachmentsJson: missingAttachment,
+		MentionsJson:    "[]",
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+
+	infectedID := uuid.New().String()
+	infectedClient, _ := startMessagingServerWired(t, pool, messagingWire{
+		Files: fileMetadataMap{
+			infectedID: {
+				Id:         infectedID,
+				Status:     "failed",
+				FileType:   "image",
+				ScanResult: "infected",
+				Chat:       chatDMRef(chatID),
+			},
+		},
+	})
+	infectedAttachment := mustAttachmentJSON(t, []map[string]any{{"file_id": infectedID, "type": "image"}})
+	_, err = infectedClient.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+		Chat:            chatDMRef(chatID),
+		AttachmentsJson: infectedAttachment,
+		MentionsJson:    "[]",
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+}
+
+func mustAttachmentJSON(t *testing.T, v any) string {
+	t.Helper()
+	b, err := json.Marshal(v)
+	require.NoError(t, err)
+	return string(b)
 }
 
 func TestMessagingGetChatListMetadata_PreviewUnreadAndMarkRead(t *testing.T) {
@@ -384,6 +493,26 @@ func TestMessagingEditDeleteSenderOnlyPolicy(t *testing.T) {
 	_, err = client.DeleteMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.DeleteMessageRequest{MessageId: bID})
 	require.Error(t, err)
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
+
+	scopeMe := messagingv1.DeleteScope_DELETE_SCOPE_FOR_ME
+	_, err = client.DeleteMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.DeleteMessageRequest{MessageId: bID, Scope: &scopeMe})
+	require.NoError(t, err)
+	hiddenForA, err := client.GetMessages(withProfileCtx(ctx, acctA, profA), &messagingv1.GetMessagesRequest{
+		Chat: chatDMRef(chatID),
+		Page: &commonv1.CursorPageRequest{PageSize: 20},
+	})
+	require.NoError(t, err)
+	for _, m := range hiddenForA.GetMessageList().GetMessages() {
+		require.NotEqual(t, bID, m.GetId(), "delete for me hides only for caller")
+	}
+	visibleForB, err := client.GetMessages(withProfileCtx(ctx, acctB, profB), &messagingv1.GetMessagesRequest{
+		Chat: chatDMRef(chatID),
+		Page: &commonv1.CursorPageRequest{PageSize: 20},
+	})
+	require.NoError(t, err)
+	require.True(t, slices.ContainsFunc(visibleForB.GetMessageList().GetMessages(), func(m *messagingv1.Message) bool {
+		return m.GetId() == bID
+	}), "delete for me must not hide from peer")
 
 	// Non-member cannot edit or delete.
 	otherChat := uuid.New()

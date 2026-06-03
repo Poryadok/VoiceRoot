@@ -21,7 +21,11 @@ func (t *transcoder) serveChats(w http.ResponseWriter, r *http.Request, rest str
 		if page.PageSize == 0 {
 			page.PageSize = parseInt32Query(queryFirst(r, "page_size"))
 		}
-		resp, err := t.clients.chat.ListChats(ctx, &chatv1.ListChatsRequest{Page: page})
+		req := &chatv1.ListChatsRequest{Page: page}
+		if inbox := queryFirst(r, "inbox"); inbox != "" {
+			req.Inbox = &inbox
+		}
+		resp, err := t.clients.chat.ListChats(ctx, req)
 		if err != nil {
 			writeGRPCError(w, err)
 			return true
@@ -36,6 +40,28 @@ func (t *transcoder) serveChats(w http.ResponseWriter, r *http.Request, rest str
 			return true
 		}
 		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodPost && strings.HasSuffix(rest, "/accept-request"):
+		chatID := strings.TrimSuffix(rest, "/accept-request")
+		chatID = strings.Trim(chatID, "/")
+		_, err := t.clients.chat.AcceptDMRequest(ctx, &chatv1.AcceptDMRequestRequest{ChatId: chatID})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return true
+
+	case r.Method == http.MethodPost && strings.HasSuffix(rest, "/decline-request"):
+		chatID := strings.TrimSuffix(rest, "/decline-request")
+		chatID = strings.Trim(chatID, "/")
+		_, err := t.clients.chat.DeclineDMRequest(ctx, &chatv1.DeclineDMRequestRequest{ChatId: chatID})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		w.WriteHeader(http.StatusNoContent)
 		return true
 
 	case r.Method == http.MethodPost && rest == "dm":

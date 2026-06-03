@@ -60,7 +60,7 @@ func decodeListChatCursor(raw string) (time.Time, uuid.UUID, error) {
 
 // ListChatsPage returns DM chats the profile is a member of (non-archived), ordered by recent activity.
 // sort key: COALESCE(last_message_at, created_at) DESC, id DESC. Cursor is opaque (see encodeListChatCursor).
-func (s *DMStore) ListChatsPage(ctx context.Context, viewerProfileID uuid.UUID, cursor string, limit int) (*ListChatsPage, error) {
+func (s *DMStore) ListChatsPage(ctx context.Context, viewerProfileID uuid.UUID, cursor string, limit int, inbox string) (*ListChatsPage, error) {
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("dm store: pool not configured")
 	}
@@ -68,6 +68,9 @@ func (s *DMStore) ListChatsPage(ctx context.Context, viewerProfileID uuid.UUID, 
 		limit = 1
 	}
 	fetch := limit + 1
+	if inbox == "" {
+		inbox = "main"
+	}
 
 	sortTS, chatID, err := decodeListChatCursor(cursor)
 	if err != nil {
@@ -77,21 +80,21 @@ func (s *DMStore) ListChatsPage(ctx context.Context, viewerProfileID uuid.UUID, 
 	var rows pgx.Rows
 	if cursor == "" {
 		rows, err = s.Pool.Query(ctx, `
-SELECT c.id, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at,
+SELECT c.id, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at, m.inbox_bucket,
        COALESCE(c.last_message_at, c.created_at) AS sort_at
 FROM chats c
 INNER JOIN chat_members m ON m.chat_id = c.id AND m.profile_id = $1
-WHERE c.type = 'dm' AND m.is_archived = false
+WHERE c.type = 'dm' AND m.is_archived = false AND m.inbox_bucket = $3
 ORDER BY sort_at DESC, c.id DESC
 LIMIT $2
-`, viewerProfileID, fetch)
+`, viewerProfileID, fetch, inbox)
 	} else {
 		rows, err = s.Pool.Query(ctx, `
-SELECT c.id, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at,
+SELECT c.id, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at, m.inbox_bucket,
        COALESCE(c.last_message_at, c.created_at) AS sort_at
 FROM chats c
 INNER JOIN chat_members m ON m.chat_id = c.id AND m.profile_id = $1
-WHERE c.type = 'dm' AND m.is_archived = false
+WHERE c.type = 'dm' AND m.is_archived = false AND m.inbox_bucket = $5
   AND (
     COALESCE(c.last_message_at, c.created_at) < $2::timestamptz
     OR (
@@ -101,7 +104,7 @@ WHERE c.type = 'dm' AND m.is_archived = false
   )
 ORDER BY sort_at DESC, c.id DESC
 LIMIT $4
-`, viewerProfileID, sortTS, chatID, fetch)
+`, viewerProfileID, sortTS, chatID, fetch, inbox)
 	}
 	if err != nil {
 		return nil, err
@@ -113,8 +116,9 @@ LIMIT $4
 		var id, creator uuid.UUID
 		var lastMsg sql.NullTime
 		var createdAt, updatedAt time.Time
+		var inboxBucket string
 		var sortAt time.Time
-		if err := rows.Scan(&id, &creator, &lastMsg, &createdAt, &updatedAt, &sortAt); err != nil {
+		if err := rows.Scan(&id, &creator, &lastMsg, &createdAt, &updatedAt, &inboxBucket, &sortAt); err != nil {
 			return nil, err
 		}
 		var lm *time.Time
@@ -128,6 +132,7 @@ LIMIT $4
 			CreatedAt:        createdAt.UTC(),
 			UpdatedAt:        updatedAt.UTC(),
 			LastMessageAt:    lm,
+			InboxBucket:      inboxBucket,
 		})
 	}
 	if err := rows.Err(); err != nil {

@@ -18,6 +18,7 @@ type ChatRow struct {
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 	LastMessageAt    *time.Time
+	InboxBucket      string
 }
 
 // DMStore persists DM chats and membership (Phase 1).
@@ -73,8 +74,8 @@ RETURNING id, created_at, updated_at
 		return nil, false, err
 	}
 	if _, err := tx.Exec(ctx, `
-INSERT INTO chat_members (chat_id, profile_id, role)
-VALUES ($1, $2, 'member'), ($1, $3, 'member')
+INSERT INTO chat_members (chat_id, profile_id, role, inbox_bucket)
+VALUES ($1, $2, 'member', 'main'), ($1, $3, 'member', 'requests')
 `, chatID, callerProfileID, otherProfileID); err != nil {
 		return nil, false, err
 	}
@@ -87,6 +88,7 @@ VALUES ($1, $2, 'member'), ($1, $3, 'member')
 		CreatedAt:        createdAt.UTC(),
 		UpdatedAt:        updatedAt.UTC(),
 		LastMessageAt:    nil,
+		InboxBucket:      "main",
 	}, true, nil
 }
 
@@ -107,6 +109,24 @@ SET last_message_at = CASE
 WHERE id = $1 AND type = 'dm'
 `, chatID, at.UTC())
 	return err
+}
+
+func (s *DMStore) SetInboxBucket(ctx context.Context, chatID, profileID uuid.UUID, bucket string) error {
+	if s == nil || s.Pool == nil {
+		return errors.New("dm store: pool not configured")
+	}
+	ct, err := s.Pool.Exec(ctx, `
+UPDATE chat_members
+SET inbox_bucket = $3
+WHERE chat_id = $1 AND profile_id = $2
+`, chatID, profileID, bucket)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	return nil
 }
 
 func findDMInTx(ctx context.Context, tx pgx.Tx, profileA, profileB uuid.UUID) (*ChatRow, error) {

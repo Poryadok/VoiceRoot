@@ -41,6 +41,7 @@ dependencies:
   web_socket_channel: ^3.0.2
   file_selector: ^1.1.0
   livekit_client: ^2.7.0
+  crypto: ^3.0.7
 
 dev_dependencies:
   flutter_test:

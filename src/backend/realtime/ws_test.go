@@ -585,6 +585,88 @@ func TestWSTypingFanoutTwoConnections(t *testing.T) {
 	}
 }
 
+func TestWSTypingThrottleAndIdleStop(t *testing.T) {
+	oldThrottle := typingThrottle
+	oldIdle := typingIdleTimeout
+	typingThrottle = 120 * time.Millisecond
+	typingIdleTimeout = 180 * time.Millisecond
+	t.Cleanup(func() {
+		typingThrottle = oldThrottle
+		typingIdleTimeout = oldIdle
+	})
+
+	chatID := "77777777-7777-4777-8777-777777777777"
+	srv := httptest.NewServer(testRealtimeHandler(staticTokenValidator{
+		"tok1": {UserID: "a1", ProfileID: "p1"},
+		"tok2": {UserID: "a2", ProfileID: "p2"},
+	}, nil))
+	t.Cleanup(srv.Close)
+	u := wsEndpoint(t, srv)
+	h1 := wsUpgradeHeaders("tok1")
+	h1.Set("X-Profile-Id", "p1")
+	c1, _, err := websocket.DefaultDialer.Dial(u, h1)
+	if err != nil {
+		t.Fatalf("dial c1: %v", err)
+	}
+	t.Cleanup(func() { _ = c1.Close() })
+	h2 := wsUpgradeHeaders("tok2")
+	h2.Set("X-Profile-Id", "p2")
+	c2, _, err := websocket.DefaultDialer.Dial(u, h2)
+	if err != nil {
+		t.Fatalf("dial c2: %v", err)
+	}
+	t.Cleanup(func() { _ = c2.Close() })
+	read := func(c *websocket.Conn) wsEnvelope {
+		t.Helper()
+		_ = c.SetReadDeadline(time.Now().Add(time.Second))
+		_, data, err := c.ReadMessage()
+		if err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		var env wsEnvelope
+		if err := json.Unmarshal(data, &env); err != nil {
+			t.Fatalf("json: %v", err)
+		}
+		return env
+	}
+	_ = read(c1)
+	_ = read(c2)
+	sub := map[string]any{"op": "subscribe", "d": map[string]any{"chat_id": chatID}}
+	if err := c1.WriteJSON(sub); err != nil {
+		t.Fatal(err)
+	}
+	if err := c2.WriteJSON(sub); err != nil {
+		t.Fatal(err)
+	}
+	_ = read(c1)
+	_ = read(c2)
+
+	if err := c1.WriteJSON(map[string]any{"op": "typing_start", "d": map[string]any{"chat_id": chatID}}); err != nil {
+		t.Fatal(err)
+	}
+	start := read(c2)
+	if start.Op != "typing" {
+		t.Fatalf("start op = %+v", start)
+	}
+	if err := c1.WriteJSON(map[string]any{"op": "typing_start", "d": map[string]any{"chat_id": chatID}}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(typingIdleTimeout + 40*time.Millisecond)
+	stop := read(c2)
+	if stop.Op != "typing" {
+		t.Fatalf("stop op = %+v", stop)
+	}
+	var body struct {
+		Kind string `json:"kind"`
+	}
+	if err := json.Unmarshal(stop.D, &body); err != nil {
+		t.Fatalf("stop body: %v", err)
+	}
+	if body.Kind != "stop" {
+		t.Fatalf("kind = %q, want stop", body.Kind)
+	}
+}
+
 func TestWSTypingRejectedWithoutSubscription(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(testRealtimeHandler(staticTokenValidator{

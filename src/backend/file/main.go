@@ -13,15 +13,36 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
+	"google.golang.org/grpc/credentials/insecure"
 
+	"voice/backend/file/internal/clamav"
 	grpcsvc "voice/backend/file/internal/grpcsvc"
 	"voice/backend/file/internal/r2file"
+	"voice/backend/file/internal/s2s"
 	"voice/backend/file/internal/store"
 
+	chatv1 "voice.app/voice/chat/v1"
 	filev1 "voice.app/voice/file/v1"
 )
 
 const serviceName = "file"
+
+func waitForGRPCReady(ctx context.Context, conn *grpc.ClientConn) error {
+	conn.Connect()
+	for {
+		st := conn.GetState()
+		if st == connectivity.Ready {
+			return nil
+		}
+		if st == connectivity.Shutdown {
+			return context.Canceled
+		}
+		if !conn.WaitForStateChange(ctx, st) {
+			return context.Cause(ctx)
+		}
+	}
+}
 
 func main() {
 	addr := ":8080"
@@ -48,6 +69,25 @@ func main() {
 		if err != nil {
 			log.Printf("%s: R2 config incomplete; gRPC disabled: %v", serviceName, err)
 		} else {
+			var chatGuard grpcsvc.ChatGuard
+			if chatAddr := strings.TrimSpace(os.Getenv("CHAT_GRPC_ADDR")); chatAddr != "" {
+				cconn, err := grpc.NewClient(chatAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+				if err != nil {
+					log.Fatalf("chat grpc: %v", err)
+				}
+				defer func() { _ = cconn.Close() }()
+				waitCtx, waitCancel := context.WithTimeout(context.Background(), 5*time.Second)
+				if err := waitForGRPCReady(waitCtx, cconn); err != nil {
+					waitCancel()
+					log.Fatalf("chat grpc dial: %v", err)
+				}
+				waitCancel()
+				chatGuard = s2s.NewGRPCChatGuard(chatv1.NewChatServiceClient(cconn))
+			}
+			var scanner grpcsvc.Scanner
+			if clamAddr := strings.TrimSpace(os.Getenv("CLAMAV_ADDR")); clamAddr != "" {
+				scanner = clamav.Scanner{Addr: clamAddr}
+			}
 			lis, err := net.Listen("tcp", grpcListen)
 			if err != nil {
 				log.Fatalf("grpc listen: %v", err)
@@ -56,6 +96,9 @@ func main() {
 			filev1.RegisterFileServiceServer(grpcSrv, grpcsvc.New(grpcsvc.Deps{
 				Files:     store.NewFilesStore(pool),
 				Presigner: presigner,
+				ChatGuard: chatGuard,
+				Reader:    presigner,
+				Scanner:   scanner,
 			}))
 			go func() {
 				log.Printf("%s gRPC listening on %s", serviceName, grpcListen)

@@ -269,6 +269,7 @@ class _FakeChatsClient extends VoiceChatsClient {
     required String authorization,
     String? cursor,
     int? pageSize,
+    String? inbox,
   }) async {
     calls.add(_ChatListCall(cursor));
     if (_pages.isEmpty) {

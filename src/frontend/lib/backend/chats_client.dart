@@ -57,11 +57,15 @@ class ChatListItem {
     required this.chat,
     this.lastMessagePreview,
     this.unreadCount = 0,
+    this.inbox,
+    this.isStranger = false,
   });
 
   final VoiceChat chat;
   final String? lastMessagePreview;
   final int unreadCount;
+  final String? inbox;
+  final bool isStranger;
 
   String get chatId => chat.id;
 }
@@ -88,6 +92,7 @@ class VoiceChatsClient {
     required String authorization,
     String? cursor,
     int? pageSize,
+    String? inbox,
   }) async {
     if (!_config.hasBaseUrl) {
       return const ChatsApiFailure(message: kChatsMissingBaseUrlDetail);
@@ -95,6 +100,7 @@ class VoiceChatsClient {
     final params = <String, String>{};
     if (cursor != null && cursor.isNotEmpty) params['cursor'] = cursor;
     if (pageSize != null) params['page_size'] = '$pageSize';
+    if (inbox != null && inbox.isNotEmpty) params['inbox'] = inbox;
     final uri = Uri.parse(_config.baseUrl).replace(
       path: '/api/v1/chats',
       queryParameters: params.isEmpty ? null : params,
@@ -110,11 +116,52 @@ class VoiceChatsClient {
             chat: VoiceChat.fromJson(chatJson),
             lastMessagePreview: item['last_message_preview'] as String?,
             unreadCount: _parseInt64(item['unread_count']),
+            inbox: item['inbox'] as String?,
+            isStranger: item['is_stranger'] as bool? ?? false,
           );
         }).toList(),
         nextCursor: _emptyToNull(list['next_cursor'] as String?),
       );
     });
+  }
+
+  Future<ChatsApiResult<void>> acceptDmRequest({
+    required String authorization,
+    required String chatId,
+  }) {
+    return _postEmpty('/api/v1/chats/$chatId/accept-request', authorization);
+  }
+
+  Future<ChatsApiResult<void>> declineDmRequest({
+    required String authorization,
+    required String chatId,
+  }) {
+    return _postEmpty('/api/v1/chats/$chatId/decline-request', authorization);
+  }
+
+  Future<ChatsApiResult<void>> _postEmpty(
+    String path,
+    String authorization,
+  ) async {
+    if (!_config.hasBaseUrl) {
+      return const ChatsApiFailure(message: kChatsMissingBaseUrlDetail);
+    }
+    try {
+      final res = await _http.post(
+        Uri.parse(_config.baseUrl).resolve(path),
+        headers: {'Authorization': authorization},
+      );
+      if (res.statusCode == 204 || res.statusCode == 200) {
+        return const ChatsApiOk(null);
+      }
+      return ChatsApiFailure(
+        message: _failureMessage(res),
+        errorCode: _errorCode(res),
+        statusCode: res.statusCode,
+      );
+    } catch (e) {
+      return ChatsApiFailure(message: '$e');
+    }
   }
 
   Future<ChatsApiResult<VoiceChat>> createDm({

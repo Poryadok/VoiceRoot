@@ -12,13 +12,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"voice/backend/pkg/integrationtest"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
+	"voice/backend/pkg/integrationtest"
 
 	"voice/backend/chat/internal/authctx"
 	"voice/backend/chat/internal/chatevents"
@@ -41,11 +41,13 @@ func startChatPostgresForTest(t *testing.T, ctx context.Context) *pgxpool.Pool {
 
 func applyChatMigration(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
-	migrationPath := filepath.Join(repoRoot(t), "src", "backend", "migrations", "chat_db", "000001_init.up.sql")
-	sqlBytes, err := os.ReadFile(migrationPath)
-	require.NoError(t, err)
-	_, err = pool.Exec(ctx, string(sqlBytes))
-	require.NoError(t, err)
+	for _, name := range []string{"000001_init.up.sql", "000002_dm_requests.up.sql"} {
+		migrationPath := filepath.Join(repoRoot(t), "src", "backend", "migrations", "chat_db", name)
+		sqlBytes, err := os.ReadFile(migrationPath)
+		require.NoError(t, err)
+		_, err = pool.Exec(ctx, string(sqlBytes))
+		require.NoError(t, err)
+	}
 }
 
 func withAccountProfileCtx(ctx context.Context, accountID, profileID uuid.UUID) context.Context {
@@ -146,6 +148,56 @@ func TestCreateDM_GetDM_NoFriendshipRequired(t *testing.T) {
 	r3, err := client.CreateDM(ctxB, &chatv1.CreateDMRequest{OtherProfileId: profA.String()})
 	require.NoError(t, err)
 	require.Equal(t, r1.GetChat().GetId(), r3.GetChat().GetId(), "other participant must resolve to same chat")
+}
+
+func TestDMRequestsInboxAcceptDecline(t *testing.T) {
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	accA := uuid.New()
+	accB := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	profiles := mapProfileAccounts{profA: accA, profB: accB}
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil)
+	t.Cleanup(cleanup)
+
+	ctxA := withAccountProfileCtx(ctx, accA, profA)
+	ctxB := withAccountProfileCtx(ctx, accB, profB)
+	dm, err := client.CreateDM(ctxA, &chatv1.CreateDMRequest{OtherProfileId: profB.String()})
+	require.NoError(t, err)
+	chatID := dm.GetChat().GetId()
+
+	mainList, err := client.ListChats(ctxB, &chatv1.ListChatsRequest{})
+	require.NoError(t, err)
+	require.Empty(t, mainList.GetChatList().GetItems())
+
+	requests := "requests"
+	requestList, err := client.ListChats(ctxB, &chatv1.ListChatsRequest{Inbox: &requests})
+	require.NoError(t, err)
+	require.Len(t, requestList.GetChatList().GetItems(), 1)
+	require.Equal(t, chatID, requestList.GetChatList().GetItems()[0].GetChat().GetId())
+	require.True(t, requestList.GetChatList().GetItems()[0].GetIsStranger())
+
+	_, err = client.AcceptDMRequest(ctxB, &chatv1.AcceptDMRequestRequest{ChatId: chatID})
+	require.NoError(t, err)
+	mainList, err = client.ListChats(ctxB, &chatv1.ListChatsRequest{})
+	require.NoError(t, err)
+	require.Len(t, mainList.GetChatList().GetItems(), 1)
+
+	profC := uuid.New()
+	accC := uuid.New()
+	profiles[profC] = accC
+	dm2, err := client.CreateDM(withAccountProfileCtx(ctx, accC, profC), &chatv1.CreateDMRequest{OtherProfileId: profB.String()})
+	require.NoError(t, err)
+	_, err = client.DeclineDMRequest(ctxB, &chatv1.DeclineDMRequestRequest{ChatId: dm2.GetChat().GetId()})
+	require.NoError(t, err)
+	requestList, err = client.ListChats(ctxB, &chatv1.ListChatsRequest{Inbox: &requests})
+	require.NoError(t, err)
+	for _, item := range requestList.GetChatList().GetItems() {
+		require.NotEqual(t, dm2.GetChat().GetId(), item.GetChat().GetId())
+	}
 }
 
 func TestCreateDM_BlockedPair_PermissionDenied(t *testing.T) {

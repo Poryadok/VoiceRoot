@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	chatv1 "voice.app/voice/chat/v1"
-	messagingv1 "voice.app/voice/messaging/v1"
 	commonv1 "voice.app/voice/common/v1"
+	messagingv1 "voice.app/voice/messaging/v1"
 )
 
 func (t *transcoder) serveMessages(w http.ResponseWriter, r *http.Request, rest string) bool {
@@ -75,9 +75,18 @@ func (t *transcoder) serveMessages(w http.ResponseWriter, r *http.Request, rest 
 		return true
 
 	case r.Method == http.MethodDelete && rest != "" && !strings.Contains(rest, "/"):
-		_, err := t.clients.messaging.DeleteMessage(ctx, &messagingv1.DeleteMessageRequest{
+		req := &messagingv1.DeleteMessageRequest{
 			MessageId: rest,
-		})
+		}
+		switch strings.ToLower(queryFirst(r, "scope")) {
+		case "me", "for_me":
+			scope := messagingv1.DeleteScope_DELETE_SCOPE_FOR_ME
+			req.Scope = &scope
+		case "everyone", "for_everyone":
+			scope := messagingv1.DeleteScope_DELETE_SCOPE_FOR_EVERYONE
+			req.Scope = &scope
+		}
+		_, err := t.clients.messaging.DeleteMessage(ctx, req)
 		if err != nil {
 			writeGRPCError(w, err)
 			return true

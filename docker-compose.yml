@@ -61,6 +61,12 @@ services:
       - "${LIVEKIT_RTC_TCP_PORT:-7881}:7881"
       - "${LIVEKIT_RTC_UDP_PORT:-7882}:7882/udp"
 
+  clamav:
+    profiles: ["app"]
+    image: clamav/clamav:stable
+    ports:
+      - "${CLAMAV_PORT:-3310}:3310"
+
   # Phase-0 app stack (Auth + API Gateway + static Flutter web). Opt-in: docker compose --profile app up -d --build
   auth:
     profiles: ["app"]
@@ -178,6 +184,7 @@ services:
       CHAT_GRPC_ADDR: chat:9090
       SOCIAL_GRPC_ADDR: social:9090
       USER_GRPC_ADDR: user:9090
+      FILE_GRPC_ADDR: file:9090
       NATS_URL: nats://nats:4222
     depends_on:
       postgres:
@@ -189,6 +196,8 @@ services:
       social:
         condition: service_healthy
       user:
+        condition: service_healthy
+      file:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
@@ -205,6 +214,8 @@ services:
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/file_db?sslmode=disable
       FILE_GRPC_LISTEN: :9090
+      CHAT_GRPC_ADDR: chat:9090
+      CLAMAV_ADDR: clamav:3310
       FILE_R2_ENDPOINT: ${FILE_R2_ENDPOINT:-}
       FILE_R2_REGION: ${FILE_R2_REGION:-auto}
       FILE_R2_ACCESS_KEY_ID: ${FILE_R2_ACCESS_KEY_ID:-}
@@ -213,6 +224,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      chat:
+        condition: service_healthy
+      clamav:
+        condition: service_started
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
       interval: 5s

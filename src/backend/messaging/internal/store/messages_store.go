@@ -187,6 +187,18 @@ WHERE id = $1 AND sender_profile_id = $2 AND deleted_at IS NULL
 	return nil
 }
 
+func (s *MessagesStore) HideMessageForProfile(ctx context.Context, messageID, profileID uuid.UUID) error {
+	if s == nil || s.Pool == nil {
+		return errors.New("messages store: pool not configured")
+	}
+	_, err := s.Pool.Exec(ctx, `
+INSERT INTO message_hides (message_id, profile_id)
+VALUES ($1, $2)
+ON CONFLICT (message_id, profile_id) DO NOTHING
+`, messageID, profileID)
+	return err
+}
+
 type ListMode int
 
 const (
@@ -195,7 +207,7 @@ const (
 	ListAfterID
 )
 
-func (s *MessagesStore) ListMessages(ctx context.Context, chatID uuid.UUID, mode ListMode, refID *uuid.UUID, limit int) ([]MessageRow, error) {
+func (s *MessagesStore) ListMessages(ctx context.Context, chatID, viewerProfileID uuid.UUID, mode ListMode, refID *uuid.UUID, limit int) ([]MessageRow, error) {
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("messages store: pool not configured")
 	}
@@ -213,27 +225,39 @@ SELECT id, chat_id, sender_profile_id, content, type, thread_parent_id,
        attachments::text, mentions::text, client_message_id, edited_at, deleted_at, created_at
 FROM messages
 WHERE chat_id = $1 AND deleted_at IS NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM message_hides h
+    WHERE h.message_id = messages.id AND h.profile_id = $3
+  )
 ORDER BY id DESC
 LIMIT $2
-`, chatID, fetch)
+`, chatID, fetch, viewerProfileID)
 	case ListBeforeID:
 		rows, err = s.Pool.Query(ctx, `
 SELECT id, chat_id, sender_profile_id, content, type, thread_parent_id,
        attachments::text, mentions::text, client_message_id, edited_at, deleted_at, created_at
 FROM messages
 WHERE chat_id = $1 AND deleted_at IS NULL AND id < $2::uuid
+  AND NOT EXISTS (
+    SELECT 1 FROM message_hides h
+    WHERE h.message_id = messages.id AND h.profile_id = $4
+  )
 ORDER BY id DESC
 LIMIT $3
-`, chatID, *refID, fetch)
+`, chatID, *refID, fetch, viewerProfileID)
 	case ListAfterID:
 		rows, err = s.Pool.Query(ctx, `
 SELECT id, chat_id, sender_profile_id, content, type, thread_parent_id,
        attachments::text, mentions::text, client_message_id, edited_at, deleted_at, created_at
 FROM messages
 WHERE chat_id = $1 AND deleted_at IS NULL AND id > $2::uuid
+  AND NOT EXISTS (
+    SELECT 1 FROM message_hides h
+    WHERE h.message_id = messages.id AND h.profile_id = $4
+  )
 ORDER BY id ASC
 LIMIT $3
-`, chatID, *refID, fetch)
+`, chatID, *refID, fetch, viewerProfileID)
 	default:
 		return nil, errors.New("messages store: unknown list mode")
 	}

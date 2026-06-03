@@ -145,10 +145,21 @@ type markReadPayload struct {
 	MessageID string `json:"message_id"`
 }
 
+type deliveryAckPayload struct {
+	ChatID          string `json:"chat_id"`
+	MessageID       string `json:"message_id"`
+	SenderProfileID string `json:"sender_profile_id"`
+}
+
 type presenceUpdateClientPayload struct {
 	Status       string `json:"status"`
 	CustomStatus string `json:"custom_status"`
 }
+
+var (
+	typingThrottle    = 3 * time.Second
+	typingIdleTimeout = 5 * time.Second
+)
 
 type readResult struct {
 	in  wsInbound
@@ -158,8 +169,13 @@ type readResult struct {
 func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, hub *wsHub, rf *redisFanout, instanceID string, presence presenceUpdater) {
 	connID := uuid.NewString()
 	reg := hub.attachConn(instanceID, connID, claims.ProfileID, 32)
+	lastTypingStart := make(map[string]time.Time)
+	typingTimers := make(map[string]*time.Timer)
 
 	defer func() {
+		for _, timer := range typingTimers {
+			timer.Stop()
+		}
 		hasLocalProfileConn := hub.unregisterConn(reg)
 		if rf != nil {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -337,18 +353,52 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, h
 					}
 					continue
 				}
-				d, _ := json.Marshal(map[string]any{
-					"chat_id":    cid,
-					"profile_id": claims.ProfileID,
-					"kind":       kind,
-				})
-				hub.broadcastTypingExcept(cid, instanceID, connID, d)
-				if rf != nil {
-					ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-					if err := rf.PublishTyping(ctx, cid, claims.ProfileID, kind, connID); err != nil {
-						log.Printf("ws redis publish typing: %v", err)
+				broadcastTyping := func(k string) {
+					d, _ := json.Marshal(map[string]any{
+						"chat_id":    cid,
+						"profile_id": claims.ProfileID,
+						"kind":       k,
+					})
+					hub.broadcastTypingExcept(cid, instanceID, connID, d)
+					if rf != nil {
+						ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+						if err := rf.PublishTyping(ctx, cid, claims.ProfileID, k, connID); err != nil {
+							log.Printf("ws redis publish typing: %v", err)
+						}
+						cancel()
 					}
-					cancel()
+				}
+				mu.Lock()
+				timer := typingTimers[cid]
+				if timer != nil {
+					timer.Stop()
+					delete(typingTimers, cid)
+				}
+				mu.Unlock()
+				if kind == "stop" {
+					mu.Lock()
+					delete(lastTypingStart, cid)
+					mu.Unlock()
+					broadcastTyping("stop")
+					continue
+				}
+				now := time.Now()
+				mu.Lock()
+				last, ok := lastTypingStart[cid]
+				shouldBroadcast := !ok || now.Sub(last) >= typingThrottle
+				if shouldBroadcast {
+					lastTypingStart[cid] = now
+				}
+				typingTimers[cid] = time.AfterFunc(typingIdleTimeout, func() {
+					mu.Lock()
+					delete(lastTypingStart, cid)
+					delete(typingTimers, cid)
+					mu.Unlock()
+					broadcastTyping("stop")
+				})
+				mu.Unlock()
+				if shouldBroadcast {
+					broadcastTyping("start")
 				}
 			case "mark_read":
 				var p markReadPayload
@@ -383,6 +433,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, h
 					"profile_id": claims.ProfileID,
 				})
 				hub.broadcastMarkReadSameProfileExcept(claims.ProfileID, instanceID, connID, d)
+				hub.broadcastToChat(cid, fanoutEnvelope{Op: "message_read", D: d})
 				if rf != nil {
 					ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 					if err := rf.PublishMarkRead(ctx, claims.ProfileID, cid, mid, connID); err != nil {
@@ -390,6 +441,43 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, h
 					}
 					cancel()
 				}
+			case "delivery_ack":
+				var p deliveryAckPayload
+				if err := json.Unmarshal(in.D, &p); err != nil ||
+					!validRFC4122ChatID(p.ChatID) ||
+					!validRFC4122ChatID(p.MessageID) ||
+					!validRFC4122ChatID(p.SenderProfileID) {
+					errD, _ := json.Marshal(map[string]any{
+						"code":    "invalid_delivery_ack",
+						"message": "chat_id, message_id and sender_profile_id must be valid UUIDs",
+					})
+					if err := write("error", errD); err != nil {
+						return
+					}
+					continue
+				}
+				cid := strings.TrimSpace(p.ChatID)
+				mid := strings.TrimSpace(p.MessageID)
+				senderID := strings.TrimSpace(p.SenderProfileID)
+				mu.Lock()
+				_, subscribed := chatSubs[cid]
+				mu.Unlock()
+				if !subscribed {
+					errD, _ := json.Marshal(map[string]any{
+						"code":    "invalid_delivery_ack",
+						"message": "not subscribed to chat",
+					})
+					if err := write("error", errD); err != nil {
+						return
+					}
+					continue
+				}
+				d, _ := json.Marshal(map[string]any{
+					"chat_id":              cid,
+					"message_id":           mid,
+					"recipient_profile_id": claims.ProfileID,
+				})
+				hub.broadcastToProfile(senderID, fanoutEnvelope{Op: "message_delivered", D: d})
 			case "presence_update":
 				var p presenceUpdateClientPayload
 				if err := json.Unmarshal(in.D, &p); err != nil {

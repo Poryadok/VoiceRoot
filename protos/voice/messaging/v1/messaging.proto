@@ -16,6 +16,12 @@ enum MessageKind {
   MESSAGE_KIND_FORWARD = 3;
 }
 
+enum DeleteScope {
+  DELETE_SCOPE_UNSPECIFIED = 0;
+  DELETE_SCOPE_FOR_EVERYONE = 1;
+  DELETE_SCOPE_FOR_ME = 2;
+}
+
 // Messages, reactions, pins, read receipts. HTTP: /api/v1/messages/**.
 //
 // Idempotency (SendMessage): optional client_message_id (UUID), unique per (chat, sender_profile_id).
@@ -63,6 +69,7 @@ message EditMessageRequest {
 
 message DeleteMessageRequest {
   string message_id = 1;
+  optional DeleteScope scope = 2;
 }
 
 message GetMessagesRequest {

@@ -25,7 +25,9 @@ CREATE TABLE chat_members (
     joined_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     muted_until TIMESTAMPTZ NULL,
     is_archived BOOLEAN NOT NULL DEFAULT false,
+    inbox_bucket VARCHAR(16) NOT NULL DEFAULT 'main' CHECK (inbox_bucket IN ('main', 'requests', 'declined')),
     PRIMARY KEY (chat_id, profile_id)
 );
 
 CREATE INDEX chat_members_profile_id_idx ON chat_members (profile_id, joined_at DESC);
+CREATE INDEX chat_members_profile_inbox_idx ON chat_members (profile_id, inbox_bucket);

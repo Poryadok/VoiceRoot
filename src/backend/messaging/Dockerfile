@@ -7,6 +7,7 @@ COPY pkg/go.mod ./pkg/
 COPY messaging/go.mod ./messaging/
 COPY messaging/pb/voice/messaging/go.mod ./messaging/pb/voice/messaging/
 COPY messaging/pb/voice/events/go.mod ./messaging/pb/voice/events/
+COPY file/pb/voice/file/go.mod ./file/pb/voice/file/
 COPY chat/go.mod ./chat/
 COPY chat/pb/voice/chat/go.mod ./chat/pb/voice/chat/
 COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
@@ -14,6 +15,7 @@ COPY user/pb/voice/user/go.mod ./user/pb/voice/user/
 COPY user/pb/voice/social/go.mod ./user/pb/voice/social/
 RUN cd messaging && go mod download
 COPY user/pb ./user/pb
+COPY file/pb ./file/pb
 COPY messaging/pb ./messaging/pb
 COPY chat/pb ./chat/pb
 COPY chat ./chat

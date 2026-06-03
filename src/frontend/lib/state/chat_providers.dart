@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../backend/api_errors.dart';
 import '../backend/chats_client.dart';
+import '../backend/files_client.dart';
 import '../backend/messages_client.dart';
 import '../backend/realtime_client.dart';
 import 'auth_providers.dart';
@@ -23,6 +24,13 @@ final voiceMessagesClientProvider = Provider<VoiceMessagesClient>((ref) {
   );
 });
 
+final voiceFilesClientProvider = Provider<VoiceFilesClient>((ref) {
+  return VoiceFilesClient(
+    httpClient: ref.watch(httpClientProvider),
+    config: ref.watch(gatewayConfigProvider),
+  );
+});
+
 /// Active DM chat id in the main column, or null.
 final selectedChatIdProvider = StateProvider<String?>((ref) => null);
 
@@ -32,6 +40,7 @@ final dmPeerProfileByChatIdProvider = StateProvider<Map<String, String>>(
 );
 
 final _chatListRefreshTokenProvider = StateProvider<int>((ref) => 0);
+final chatInboxProvider = StateProvider<String>((ref) => 'main');
 
 class ChatListState {
   const ChatListState({
@@ -88,7 +97,7 @@ class ChatListController extends StateNotifier<ChatListState> {
     state = state.copyWith(isLoading: true, clearError: true);
     final result = await _ref
         .read(voiceChatsClientProvider)
-        .listChats(authorization: auth);
+        .listChats(authorization: auth, inbox: _ref.read(chatInboxProvider));
     if (!mounted) return;
     switch (result) {
       case ChatsApiOk(:final data):
@@ -111,7 +120,11 @@ class ChatListController extends StateNotifier<ChatListState> {
     state = state.copyWith(isLoadingMore: true, clearError: true);
     final result = await _ref
         .read(voiceChatsClientProvider)
-        .listChats(authorization: auth, cursor: cursor);
+        .listChats(
+          authorization: auth,
+          cursor: cursor,
+          inbox: _ref.read(chatInboxProvider),
+        );
     if (!mounted) return;
     switch (result) {
       case ChatsApiOk(:final data):
@@ -129,6 +142,41 @@ class ChatListController extends StateNotifier<ChatListState> {
           errorStatusCode: statusCode,
         );
     }
+  }
+
+  Future<void> setInbox(String inbox) async {
+    _ref.read(chatInboxProvider.notifier).state = inbox;
+    await loadInitial();
+  }
+
+  Future<String?> acceptRequest(String chatId) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+    final result = await _ref
+        .read(voiceChatsClientProvider)
+        .acceptDmRequest(authorization: auth, chatId: chatId);
+    return switch (result) {
+      ChatsApiOk<void>() => await _afterRequestAction(),
+      ChatsApiFailure(:final message) => message,
+    };
+  }
+
+  Future<String?> declineRequest(String chatId) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+    final result = await _ref
+        .read(voiceChatsClientProvider)
+        .declineDmRequest(authorization: auth, chatId: chatId);
+    return switch (result) {
+      ChatsApiOk<void>() => await _afterRequestAction(),
+      ChatsApiFailure(:final message) => message,
+    };
+  }
+
+  Future<String?> _afterRequestAction() async {
+    await loadInitial();
+    _invalidateChatLists(_ref);
+    return null;
   }
 }
 
@@ -178,6 +226,9 @@ class ChatRoomState {
     this.realtimeStatus = RealtimeLinkStatus.disconnected,
     this.nextCursor,
     this.hasMore = false,
+    this.typingProfileIds = const {},
+    this.deliveredMessageIds = const {},
+    this.readMessageIds = const {},
   });
 
   final List<VoiceMessage> messages;
@@ -188,6 +239,9 @@ class ChatRoomState {
   final RealtimeLinkStatus realtimeStatus;
   final String? nextCursor;
   final bool hasMore;
+  final Set<String> typingProfileIds;
+  final Set<String> deliveredMessageIds;
+  final Set<String> readMessageIds;
 
   String? get lastMessageId => messages.isEmpty ? null : messages.last.id;
 
@@ -202,6 +256,9 @@ class ChatRoomState {
     String? nextCursor,
     bool clearNextCursor = false,
     bool? hasMore,
+    Set<String>? typingProfileIds,
+    Set<String>? deliveredMessageIds,
+    Set<String>? readMessageIds,
   }) {
     return ChatRoomState(
       messages: messages ?? this.messages,
@@ -212,6 +269,9 @@ class ChatRoomState {
       realtimeStatus: realtimeStatus ?? this.realtimeStatus,
       nextCursor: clearNextCursor ? null : (nextCursor ?? this.nextCursor),
       hasMore: hasMore ?? this.hasMore,
+      typingProfileIds: typingProfileIds ?? this.typingProfileIds,
+      deliveredMessageIds: deliveredMessageIds ?? this.deliveredMessageIds,
+      readMessageIds: readMessageIds ?? this.readMessageIds,
     );
   }
 }
@@ -239,12 +299,69 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
         if (frame.op == 'message_create') {
           final chatId = frame.data?['chat_id'] as String?;
           if (chatId == this.chatId) {
+            final senderProfileId = frame.data?['sender_profile_id'] as String?;
+            final messageId = frame.data?['message_id'] as String?;
+            final activeProfile = _ref
+                .read(authControllerProvider)
+                .activeProfileId;
+            if (senderProfileId != null &&
+                senderProfileId != activeProfile &&
+                messageId != null) {
+              _ref
+                  .read(realtimeHubProvider)
+                  .deliveryAck(
+                    chatId: this.chatId,
+                    messageId: messageId,
+                    senderProfileId: senderProfileId,
+                  );
+            }
             unawaited(_catchUpAfterEvent());
           }
         } else if (frame.op == 'mark_read') {
           final chatId = frame.data?['chat_id'] as String?;
           if (chatId == this.chatId) {
             _ref.invalidate(chatListProvider);
+          }
+        } else if (frame.op == 'typing') {
+          final chatId = frame.data?['chat_id'] as String?;
+          final profileId = frame.data?['profile_id'] as String?;
+          final kind = frame.data?['kind'] as String?;
+          final activeProfile = _ref
+              .read(authControllerProvider)
+              .activeProfileId;
+          if (chatId == this.chatId &&
+              profileId != null &&
+              profileId != activeProfile) {
+            final nextTyping = {...state.typingProfileIds};
+            if (kind == 'stop') {
+              nextTyping.remove(profileId);
+            } else {
+              nextTyping.add(profileId);
+            }
+            state = state.copyWith(typingProfileIds: nextTyping);
+          }
+        } else if (frame.op == 'message_delivered') {
+          final chatId = frame.data?['chat_id'] as String?;
+          final messageId = frame.data?['message_id'] as String?;
+          if (chatId == this.chatId && messageId != null) {
+            state = state.copyWith(
+              deliveredMessageIds: {...state.deliveredMessageIds, messageId},
+            );
+          }
+        } else if (frame.op == 'message_read') {
+          final chatId = frame.data?['chat_id'] as String?;
+          final messageId = frame.data?['message_id'] as String?;
+          if (chatId == this.chatId && messageId != null) {
+            state = state.copyWith(
+              deliveredMessageIds: {...state.deliveredMessageIds, messageId},
+              readMessageIds: {...state.readMessageIds, messageId},
+            );
+          }
+        } else if (frame.op == 'message_update' ||
+            frame.op == 'message_delete') {
+          final chatId = frame.data?['chat_id'] as String?;
+          if (chatId == this.chatId) {
+            unawaited(loadInitial());
           }
         }
       });
@@ -368,16 +485,24 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     }
   }
 
-  Future<String?> sendMessage(String content) async {
+  Future<String?> sendMessage(
+    String content, {
+    List<MessageAttachment> attachments = const [],
+  }) async {
     final trimmed = content.trim();
-    if (trimmed.isEmpty) return null;
+    if (trimmed.isEmpty && attachments.isEmpty) return null;
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return 'not_authenticated';
 
     state = state.copyWith(isSending: true, clearError: true);
     final result = await _ref
         .read(voiceMessagesClientProvider)
-        .sendMessage(authorization: auth, chatId: chatId, content: trimmed);
+        .sendMessage(
+          authorization: auth,
+          chatId: chatId,
+          content: trimmed,
+          attachments: attachments,
+        );
     if (!mounted) return null;
     switch (result) {
       case MessagesApiOk(:final data):
@@ -419,6 +544,61 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       _ref.read(realtimeHubProvider).markRead(chatId, lastId);
       _invalidateChatLists(_ref);
     }
+  }
+
+  Future<String?> editMessage(String messageId, String content) async {
+    final trimmed = content.trim();
+    if (trimmed.isEmpty) return null;
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+    final result = await _ref
+        .read(voiceMessagesClientProvider)
+        .editMessage(
+          authorization: auth,
+          messageId: messageId,
+          content: trimmed,
+        );
+    if (!mounted) return null;
+    return switch (result) {
+      MessagesApiOk(:final data) => _replaceMessage(data),
+      MessagesApiFailure(:final message) => message,
+    };
+  }
+
+  Future<String?> deleteMessage(String messageId, {required bool forMe}) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+    final result = await _ref
+        .read(voiceMessagesClientProvider)
+        .deleteMessage(
+          authorization: auth,
+          messageId: messageId,
+          scope: forMe ? 'me' : 'everyone',
+        );
+    if (!mounted) return null;
+    switch (result) {
+      case MessagesApiOk<void>():
+        state = state.copyWith(
+          messages: state.messages.where((m) => m.id != messageId).toList(),
+          clearError: true,
+        );
+        _invalidateChatLists(_ref);
+        return null;
+      case MessagesApiFailure(:final message):
+        state = state.copyWith(errorMessage: message);
+        return message;
+    }
+  }
+
+  String? _replaceMessage(VoiceMessage message) {
+    state = state.copyWith(
+      messages: state.messages
+          .map((m) => m.id == message.id ? message : m)
+          .toList(),
+      clearError: true,
+    );
+    _invalidateChatLists(_ref);
+    return null;
   }
 }
 
@@ -510,6 +690,26 @@ class RealtimeHub {
 
   void markRead(String chatId, String messageId) {
     _connection?.sendMarkRead(chatId: chatId, messageId: messageId);
+  }
+
+  void typingStart(String chatId) {
+    _connection?.sendTypingStart(chatId);
+  }
+
+  void typingStop(String chatId) {
+    _connection?.sendTypingStop(chatId);
+  }
+
+  void deliveryAck({
+    required String chatId,
+    required String messageId,
+    required String senderProfileId,
+  }) {
+    _connection?.sendDeliveryAck(
+      chatId: chatId,
+      messageId: messageId,
+      senderProfileId: senderProfileId,
+    );
   }
 
   void _onFrame(RealtimeFrame frame) {

@@ -28,6 +28,8 @@ service ChatService {
   rpc CreateFolder(CreateFolderRequest) returns (CreateFolderResponse);
   rpc UpdateFolder(UpdateFolderRequest) returns (UpdateFolderResponse);
   rpc DeleteFolder(DeleteFolderRequest) returns (DeleteFolderResponse);
+  rpc AcceptDMRequest(AcceptDMRequestRequest) returns (AcceptDMRequestResponse);
+  rpc DeclineDMRequest(DeclineDMRequestRequest) returns (DeclineDMRequestResponse);
 
   rpc MuteChat(MuteChatRequest) returns (MuteChatResponse);
   rpc ArchiveChat(ArchiveChatRequest) returns (ArchiveChatResponse);
@@ -115,6 +117,7 @@ message ChatMember {
 
 message ListChatsRequest {
   voice.common.v1.CursorPageRequest page = 1;
+  optional string inbox = 2; // main | requests
 }
 
 // One row in the inbox: chat metadata plus list fields sourced from Messaging (S2S) when configured.
@@ -124,6 +127,8 @@ message ChatListItem {
   optional string last_message_preview = 2;
   // Count of messages unread by the caller in this chat; 0 when caught up or when Messaging is unavailable.
   int64 unread_count = 3;
+  optional string inbox = 4; // main | requests
+  optional bool is_stranger = 5;
 }
 
 message ChatList {
@@ -163,6 +168,14 @@ message UpdateFolderRequest {
 
 message DeleteFolderRequest {
   string folder_id = 1;
+}
+
+message AcceptDMRequestRequest {
+  string chat_id = 1;
+}
+
+message DeclineDMRequestRequest {
+  string chat_id = 1;
 }
 
 message MuteChatRequest {
@@ -216,5 +229,7 @@ message UpdateFolderResponse {
   Folder folder = 1;
 }
 message DeleteFolderResponse {}
+message AcceptDMRequestResponse {}
+message DeclineDMRequestResponse {}
 message MuteChatResponse {}
 message ArchiveChatResponse {}

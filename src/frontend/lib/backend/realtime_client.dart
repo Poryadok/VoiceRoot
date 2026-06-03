@@ -142,6 +142,26 @@ class VoiceRealtimeConnection {
     sendOp('mark_read', {'chat_id': chatId, 'message_id': messageId});
   }
 
+  void sendDeliveryAck({
+    required String chatId,
+    required String messageId,
+    required String senderProfileId,
+  }) {
+    sendOp('delivery_ack', {
+      'chat_id': chatId,
+      'message_id': messageId,
+      'sender_profile_id': senderProfileId,
+    });
+  }
+
+  void sendTypingStart(String chatId) {
+    sendOp('typing_start', {'chat_id': chatId});
+  }
+
+  void sendTypingStop(String chatId) {
+    sendOp('typing_stop', {'chat_id': chatId});
+  }
+
   void sendHeartbeat() {
     sendOp('heartbeat', {});
   }

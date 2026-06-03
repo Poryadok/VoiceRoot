@@ -64,6 +64,26 @@ void main() {
       expect(decoded['op'], 'subscribe');
       expect((decoded['d'] as Map)['chat_id'], 'chat-uuid');
     });
+
+    test('typing_start includes chat_id', () {
+      final json = RealtimeProtocol.buildClientOp('typing_start', {
+        'chat_id': 'chat-uuid',
+      });
+      final decoded = jsonDecode(json) as Map<String, dynamic>;
+      expect(decoded['op'], 'typing_start');
+      expect((decoded['d'] as Map)['chat_id'], 'chat-uuid');
+    });
+
+    test('delivery_ack includes message and sender ids', () {
+      final json = RealtimeProtocol.buildClientOp('delivery_ack', {
+        'chat_id': 'chat-uuid',
+        'message_id': 'msg-uuid',
+        'sender_profile_id': 'sender-profile',
+      });
+      final decoded = jsonDecode(json) as Map<String, dynamic>;
+      expect(decoded['op'], 'delivery_ack');
+      expect((decoded['d'] as Map)['message_id'], 'msg-uuid');
+    });
   });
 
   group('gatewayWebSocketUri', () {

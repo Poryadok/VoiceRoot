@@ -28,6 +28,8 @@ void main() {
                   },
                   'last_message_preview': 'Hello',
                   'unread_count': '2',
+                  'inbox': 'requests',
+                  'is_stranger': true,
                 },
               ],
               'next_cursor': 'cursor-2',
@@ -44,7 +46,24 @@ void main() {
       expect(data.items.first.chatId, 'chat-1');
       expect(data.items.first.lastMessagePreview, 'Hello');
       expect(data.items.first.unreadCount, 2);
+      expect(data.items.first.inbox, 'requests');
+      expect(data.items.first.isStranger, isTrue);
       expect(data.nextCursor, 'cursor-2');
+    });
+
+    test('GET /api/v1/chats supports inbox filter', () async {
+      final mock = MockClient((req) async {
+        expect(req.url.queryParameters['inbox'], 'requests');
+        return http.Response(
+          jsonEncode({
+            'chat_list': {'items': []},
+          }),
+          200,
+        );
+      });
+      final client = VoiceChatsClient(httpClient: mock, config: config);
+      final r = await client.listChats(authorization: auth, inbox: 'requests');
+      expect(r, isA<ChatsApiOk<ChatListData>>());
     });
   });
 
@@ -74,6 +93,32 @@ void main() {
       expect(r, isA<ChatsApiOk<VoiceChat>>());
       expect((r as ChatsApiOk<VoiceChat>).data.id, 'chat-dm');
       expect(jsonDecode(body!)['other_profile_id'], 'profile-b');
+    });
+  });
+
+  group('VoiceChatsClient.dmRequests', () {
+    test('POST accept and decline request routes', () async {
+      final paths = <String>[];
+      final client = VoiceChatsClient(
+        httpClient: MockClient((req) async {
+          paths.add(req.url.path);
+          return http.Response('', 204);
+        }),
+        config: config,
+      );
+
+      expect(
+        await client.acceptDmRequest(authorization: auth, chatId: 'chat-1'),
+        isA<ChatsApiOk<void>>(),
+      );
+      expect(
+        await client.declineDmRequest(authorization: auth, chatId: 'chat-1'),
+        isA<ChatsApiOk<void>>(),
+      );
+      expect(paths, [
+        '/api/v1/chats/chat-1/accept-request',
+        '/api/v1/chats/chat-1/decline-request',
+      ]);
     });
   });
 }
