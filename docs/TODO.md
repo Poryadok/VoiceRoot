@@ -6,6 +6,8 @@
 
 - [ ] **Политика `protos/` и генерации** — зафиксировать в [REPOSITORIES.md](REPOSITORIES.md) и в скриптах сборки: что коммитим в git (Go/Java), что генерируем при CI/локально, по мере расширения публичных gRPC.
 
+- [ ] **`GRPC_DIAL_TIMEOUT` для S2S dial при старте** — вынести хардкод `30*time.Second` (ранее 5 с) из `user` / `chat` / `messaging` / `file` `main.go` в общий helper (`pkg/grpcconn` или аналог) и env `GRPC_DIAL_TIMEOUT` (дефолт в compose, например `15s`); один источник для bootstrap-dial к upstream gRPC.
+
 ## Позже / по событию
 
 - [ ] **Buf Schema Registry (BSR)** — сейчас только локальный модуль `protos/`; при введении удалённого registry обновить CI и [REPOSITORIES.md](REPOSITORIES.md).

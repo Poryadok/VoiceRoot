@@ -50,19 +50,6 @@ func main() {
 	}
 
 	if pool != nil {
-		var presence *store.PresenceStore
-		if redisAddr := strings.TrimSpace(os.Getenv("USER_REDIS_ADDR")); redisAddr != "" {
-			rdb := redis.NewClient(&redis.Options{Addr: redisAddr})
-			pctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			err := rdb.Ping(pctx).Err()
-			cancel()
-			if err != nil {
-				log.Fatalf("redis ping: %v", err)
-			}
-			presence = store.NewPresenceStore(rdb)
-			defer func() { _ = rdb.Close() }()
-		}
-
 		var blocks grpcsvc.AccountBlockChecker
 		if socialAddr := strings.TrimSpace(os.Getenv("SOCIAL_GRPC_ADDR")); socialAddr != "" {
 			sconn, err := grpc.NewClient(socialAddr,
@@ -72,7 +59,7 @@ func main() {
 				log.Fatalf("social grpc: %v", err)
 			}
 			sconn.Connect()
-			waitCtx, waitCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			waitCtx, waitCancel := context.WithTimeout(context.Background(), 30*time.Second)
 			for {
 				st := sconn.GetState()
 				if st == connectivity.Ready {
@@ -92,6 +79,19 @@ func main() {
 			waitCancel()
 			defer func() { _ = sconn.Close() }()
 			blocks = grpcsvc.NewSocialGRPCBlocks(sconn)
+		}
+
+		var presence *store.PresenceStore
+		if redisAddr := strings.TrimSpace(os.Getenv("USER_REDIS_ADDR")); redisAddr != "" {
+			rdb := redis.NewClient(&redis.Options{Addr: redisAddr})
+			pctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			err := rdb.Ping(pctx).Err()
+			cancel()
+			if err != nil {
+				log.Fatalf("redis ping: %v", err)
+			}
+			presence = store.NewPresenceStore(rdb)
+			defer func() { _ = rdb.Close() }()
 		}
 
 		var avatarPresigner grpcsvc.AvatarPresigner

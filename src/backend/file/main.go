@@ -67,46 +67,50 @@ func main() {
 
 		presigner, err := r2file.NewS3R2Presigner(r2file.EnvConfigFromOSEnv())
 		if err != nil {
-			log.Printf("%s: R2 config incomplete; gRPC disabled: %v", serviceName, err)
-		} else {
-			var chatGuard grpcsvc.ChatGuard
-			if chatAddr := strings.TrimSpace(os.Getenv("CHAT_GRPC_ADDR")); chatAddr != "" {
-				cconn, err := grpc.NewClient(chatAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-				if err != nil {
-					log.Fatalf("chat grpc: %v", err)
-				}
-				defer func() { _ = cconn.Close() }()
-				waitCtx, waitCancel := context.WithTimeout(context.Background(), 5*time.Second)
-				if err := waitForGRPCReady(waitCtx, cconn); err != nil {
-					waitCancel()
-					log.Fatalf("chat grpc dial: %v", err)
-				}
-				waitCancel()
-				chatGuard = s2s.NewGRPCChatGuard(chatv1.NewChatServiceClient(cconn))
-			}
-			var scanner grpcsvc.Scanner
-			if clamAddr := strings.TrimSpace(os.Getenv("CLAMAV_ADDR")); clamAddr != "" {
-				scanner = clamav.Scanner{Addr: clamAddr}
-			}
-			lis, err := net.Listen("tcp", grpcListen)
-			if err != nil {
-				log.Fatalf("grpc listen: %v", err)
-			}
-			grpcSrv = grpc.NewServer()
-			filev1.RegisterFileServiceServer(grpcSrv, grpcsvc.New(grpcsvc.Deps{
-				Files:     store.NewFilesStore(pool),
-				Presigner: presigner,
-				ChatGuard: chatGuard,
-				Reader:    presigner,
-				Scanner:   scanner,
-			}))
-			go func() {
-				log.Printf("%s gRPC listening on %s", serviceName, grpcListen)
-				if err := grpcSrv.Serve(lis); err != nil {
-					log.Fatalf("grpc serve: %v", err)
-				}
-			}()
+			log.Printf("%s: R2 config incomplete; uploads disabled: %v", serviceName, err)
 		}
+
+		var chatGuard grpcsvc.ChatGuard
+		if chatAddr := strings.TrimSpace(os.Getenv("CHAT_GRPC_ADDR")); chatAddr != "" {
+			cconn, err := grpc.NewClient(chatAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if err != nil {
+				log.Fatalf("chat grpc: %v", err)
+			}
+			defer func() { _ = cconn.Close() }()
+			waitCtx, waitCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			if err := waitForGRPCReady(waitCtx, cconn); err != nil {
+				waitCancel()
+				log.Fatalf("chat grpc dial: %v", err)
+			}
+			waitCancel()
+			chatGuard = s2s.NewGRPCChatGuard(chatv1.NewChatServiceClient(cconn))
+		}
+		var scanner grpcsvc.Scanner
+		if clamAddr := strings.TrimSpace(os.Getenv("CLAMAV_ADDR")); clamAddr != "" {
+			scanner = clamav.Scanner{Addr: clamAddr}
+		}
+		var reader grpcsvc.ObjectReader
+		if presigner != nil {
+			reader = presigner
+		}
+		lis, err := net.Listen("tcp", grpcListen)
+		if err != nil {
+			log.Fatalf("grpc listen: %v", err)
+		}
+		grpcSrv = grpc.NewServer()
+		filev1.RegisterFileServiceServer(grpcSrv, grpcsvc.New(grpcsvc.Deps{
+			Files:     store.NewFilesStore(pool),
+			Presigner: presigner,
+			ChatGuard: chatGuard,
+			Reader:    reader,
+			Scanner:   scanner,
+		}))
+		go func() {
+			log.Printf("%s gRPC listening on %s", serviceName, grpcListen)
+			if err := grpcSrv.Serve(lis); err != nil {
+				log.Fatalf("grpc serve: %v", err)
+			}
+		}()
 	} else {
 		log.Printf("%s: DATABASE_URL not set; gRPC disabled (health only)", serviceName)
 	}

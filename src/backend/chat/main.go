@@ -58,7 +58,7 @@ func main() {
 				log.Fatalf("social grpc: %v", err)
 			}
 			sconn.Connect()
-			waitCtx, waitCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			waitCtx, waitCancel := context.WithTimeout(context.Background(), 30*time.Second)
 			for {
 				st := sconn.GetState()
 				if st == connectivity.Ready {
@@ -87,7 +87,7 @@ func main() {
 				log.Fatalf("user grpc: %v", err)
 			}
 			uconn.Connect()
-			waitCtx, waitCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			waitCtx, waitCancel := context.WithTimeout(context.Background(), 30*time.Second)
 			for {
 				st := uconn.GetState()
 				if st == connectivity.Ready {
