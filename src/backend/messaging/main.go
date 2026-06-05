@@ -152,6 +152,9 @@ func main() {
 				log.Fatalf("nats jetstream publisher: %v", err)
 			}
 			defer func() { _ = jsPub.Close() }()
+			if err := jsPub.EnsureStream(); err != nil {
+				log.Fatalf("nats ensure message_events stream: %v", err)
+			}
 			msgEvents = jsPub
 		}
 

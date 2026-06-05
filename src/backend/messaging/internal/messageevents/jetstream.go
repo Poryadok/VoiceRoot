@@ -54,6 +54,11 @@ func NewJetStreamPublisher(natsURL string) (*JetStreamPublisher, error) {
 	return &JetStreamPublisher{nc: nc, js: js}, nil
 }
 
+// EnsureStream creates the message_events JetStream stream if it does not exist yet.
+func (p *JetStreamPublisher) EnsureStream() error {
+	return p.ensureStream()
+}
+
 func (p *JetStreamPublisher) ensureStream() error {
 	if p == nil || p.js == nil {
 		return fmt.Errorf("jetstream publisher not initialized")

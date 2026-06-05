@@ -123,7 +123,9 @@ func runMessageEventsConsumer(ctx context.Context, hub *wsHub, natsURL, instance
 		return fmt.Errorf("jetstream: %w", err)
 	}
 
-	sub, err := subscribeMessageEvents(js, hub, instanceID)
+	sub, err := subscribeJetStreamWithRetry(ctx, "realtime message.events", func() (*nats.Subscription, error) {
+		return subscribeMessageEvents(js, hub, instanceID)
+	})
 	if err != nil {
 		return err
 	}

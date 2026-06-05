@@ -195,7 +195,9 @@ func runVoiceEventsConsumer(ctx context.Context, hub *wsHub, natsURL, instanceID
 		return fmt.Errorf("jetstream: %w", err)
 	}
 
-	sub, err := subscribeVoiceEvents(js, hub, instanceID)
+	sub, err := subscribeJetStreamWithRetry(ctx, "realtime voice.events", func() (*nats.Subscription, error) {
+		return subscribeVoiceEvents(js, hub, instanceID)
+	})
 	if err != nil {
 		return err
 	}
