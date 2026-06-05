@@ -172,6 +172,22 @@
   "callVideoOn": "Turn camera on",
   "callVideoOff": "Turn camera off",
   "callHangup": "Hang up",
+  "callOutgoingTitle": "Calling {name}…",
+  "@callOutgoingTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "callFailed": "Could not start call: {message}",
+  "@callFailed": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
   "profileMessage": "Message",
   "profileEditTitle": "Edit profile",
   "profileEditTooltip": "Edit profile",

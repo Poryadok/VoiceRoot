@@ -310,6 +310,16 @@ class AppLocalizationsRu extends AppLocalizations {
   String get callHangup => 'Завершить';
 
   @override
+  String callOutgoingTitle(String name) {
+    return 'Звоним $name…';
+  }
+
+  @override
+  String callFailed(String message) {
+    return 'Не удалось начать звонок: $message';
+  }
+
+  @override
   String get profileMessage => 'Написать';
 
   @override

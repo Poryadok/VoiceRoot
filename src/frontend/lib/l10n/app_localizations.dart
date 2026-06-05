@@ -632,6 +632,18 @@ abstract class AppLocalizations {
   /// **'Hang up'**
   String get callHangup;
 
+  /// No description provided for @callOutgoingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Calling {name}…'**
+  String callOutgoingTitle(String name);
+
+  /// No description provided for @callFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not start call: {message}'**
+  String callFailed(String message);
+
   /// No description provided for @profileMessage.
   ///
   /// In en, this message translates to:

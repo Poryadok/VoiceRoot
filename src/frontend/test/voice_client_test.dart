@@ -52,6 +52,20 @@ void main() {
     expect(session.status, VoiceCallStatus.ringing);
   });
 
+  test('getActiveCall returns null on 404', () async {
+    final mock = MockClient((req) async {
+      expect(req.method, 'GET');
+      expect(req.url.path, '/api/v1/voice/calls/active');
+      return http.Response('{"error_code":"not_found"}', 404);
+    });
+    final client = VoiceCallsClient(httpClient: mock, config: config);
+
+    final result = await client.getActiveCall(authorization: auth);
+
+    expect(result, isA<VoiceApiOk<VoiceCallSession?>>());
+    expect((result as VoiceApiOk<VoiceCallSession?>).data, isNull);
+  });
+
   test('getJoinToken parses LiveKit JWT response', () async {
     final mock = MockClient((req) async {
       expect(req.method, 'GET');

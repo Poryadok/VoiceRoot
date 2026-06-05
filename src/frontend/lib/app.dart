@@ -13,7 +13,9 @@ import 'theme/voice_colors.dart';
 import 'theme/voice_theme_providers.dart';
 import 'ui/auth/auth_screen.dart';
 import 'ui/call/active_call_panel.dart';
+import 'ui/call/call_error_listener.dart';
 import 'ui/call/incoming_call_overlay.dart';
+import 'ui/call/outgoing_call_overlay.dart';
 import 'ui/chat/chat_list_panel.dart';
 import 'ui/chat/chat_room_panel.dart';
 import 'ui/core/profile_accent_dot.dart';
@@ -150,10 +152,11 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
       ),
     );
 
-    return Scaffold(
-      backgroundColor: voice.canvas,
-      body: Stack(
-        children: [
+    return CallErrorListener(
+      child: Scaffold(
+        backgroundColor: voice.canvas,
+        body: Stack(
+          children: [
           SafeArea(
             child: LayoutBuilder(
               builder: (context, constraints) {
@@ -200,9 +203,11 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
               },
             ),
           ),
-          const IncomingCallOverlay(),
-          const SafeArea(child: ActiveCallPanel()),
-        ],
+            const IncomingCallOverlay(),
+            const OutgoingCallOverlay(),
+            const SafeArea(child: ActiveCallPanel()),
+          ],
+        ),
       ),
     );
   }

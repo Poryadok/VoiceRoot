@@ -173,6 +173,22 @@
   "callVideoOn": "Включить камеру",
   "callVideoOff": "Выключить камеру",
   "callHangup": "Завершить",
+  "callOutgoingTitle": "Звоним {name}…",
+  "@callOutgoingTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "callFailed": "Не удалось начать звонок: {message}",
+  "@callFailed": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
   "profileMessage": "Написать",
   "profileEditTitle": "Редактировать профиль",
   "profileEditTooltip": "Редактировать профиль",

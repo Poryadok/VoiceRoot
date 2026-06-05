@@ -309,6 +309,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get callHangup => 'Hang up';
 
   @override
+  String callOutgoingTitle(String name) {
+    return 'Calling $name…';
+  }
+
+  @override
+  String callFailed(String message) {
+    return 'Could not start call: $message';
+  }
+
+  @override
   String get profileMessage => 'Message';
 
   @override

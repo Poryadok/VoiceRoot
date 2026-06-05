@@ -91,6 +91,24 @@ class VoiceCallsClient {
   final http.Client _http;
   final GatewayConfig _config;
 
+  Future<VoiceApiResult<VoiceCallSession?>> getActiveCall({
+    required String authorization,
+  }) {
+    return _request(
+      () => _http.get(
+        _uri('/api/v1/voice/calls/active'),
+        headers: _headers(authorization),
+      ),
+      (json) {
+        final session =
+            json['call_session'] as Map<String, dynamic>? ?? const {};
+        if (session.isEmpty) return null;
+        return VoiceCallSession.fromJson(session);
+      },
+      allowNotFound: true,
+    );
+  }
+
   Future<VoiceApiResult<VoiceCallSession>> startCall({
     required String authorization,
     required String chatId,
@@ -193,13 +211,17 @@ class VoiceCallsClient {
 
   Future<VoiceApiResult<T>> _request<T>(
     Future<http.Response> Function() send,
-    T Function(Map<String, dynamic>) parse,
-  ) async {
+    T Function(Map<String, dynamic>) parse, {
+    bool allowNotFound = false,
+  }) async {
     if (!_config.hasBaseUrl) {
       return const VoiceApiFailure(message: kVoiceMissingBaseUrlDetail);
     }
     try {
       final response = await send();
+      if (response.statusCode == 404 && allowNotFound) {
+        return VoiceApiOk(parse(const {}));
+      }
       if (response.statusCode >= 200 && response.statusCode < 300) {
         if (response.body.isEmpty) {
           return VoiceApiOk(parse(const {}));

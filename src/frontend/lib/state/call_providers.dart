@@ -41,6 +41,7 @@ class CallState {
 
   bool get hasCall => session != null && phase != CallPhase.idle;
   bool get isIncoming => phase == CallPhase.incoming;
+  bool get isOutgoing => phase == CallPhase.outgoing;
   bool get isActive =>
       phase == CallPhase.active || phase == CallPhase.connecting;
 
@@ -86,6 +87,13 @@ class CallController extends StateNotifier<CallState> {
   }) async {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return;
+    final current = state.session;
+    if (state.phase == CallPhase.outgoing &&
+        current != null &&
+        current.calleeProfileId == calleeProfileId &&
+        current.chatId == chatId) {
+      return;
+    }
     state = state.copyWith(phase: CallPhase.outgoing, clearError: true);
     final result = await _ref
         .read(voiceCallsClientProvider)
@@ -98,13 +106,18 @@ class CallController extends StateNotifier<CallState> {
     if (!mounted) return;
     switch (result) {
       case VoiceApiOk(:final data):
-        state = CallState(
-          phase: CallPhase.outgoing,
-          session: data,
-          isVideoEnabled: data.mediaKind == VoiceCallMediaKind.video,
-        );
-      case VoiceApiFailure(:final message):
+        _applySession(data, CallPhase.outgoing);
+      case VoiceApiFailure(:final message, :final statusCode):
+        if (statusCode == 412 && await _tryRecoverActiveCall(auth)) {
+          return;
+        }
         state = state.copyWith(phase: CallPhase.failed, errorMessage: message);
+    }
+  }
+
+  void dismissFailure() {
+    if (state.phase == CallPhase.failed) {
+      state = const CallState();
     }
   }
 
@@ -247,6 +260,50 @@ class CallController extends StateNotifier<CallState> {
           state = const CallState();
         }
     }
+  }
+
+  void _applySession(VoiceCallSession session, CallPhase phase) {
+    state = CallState(
+      phase: phase,
+      session: session,
+      isVideoEnabled: session.mediaKind == VoiceCallMediaKind.video,
+    );
+  }
+
+  Future<bool> _tryRecoverActiveCall(String auth) async {
+    final activeProfileId = _ref.read(authControllerProvider).activeProfileId;
+    if (activeProfileId == null) return false;
+
+    final result = await _ref
+        .read(voiceCallsClientProvider)
+        .getActiveCall(authorization: auth);
+    if (!mounted) return false;
+    switch (result) {
+      case VoiceApiOk(:final data):
+        final session = data;
+        if (session == null) return false;
+        switch (session.status) {
+          case VoiceCallStatus.ringing:
+            if (session.initiatorProfileId == activeProfileId) {
+              _applySession(session, CallPhase.outgoing);
+              return true;
+            }
+            if (session.calleeProfileId == activeProfileId) {
+              _applySession(session, CallPhase.incoming);
+              return true;
+            }
+            return false;
+          case VoiceCallStatus.active:
+            _applySession(session, CallPhase.connecting);
+            await _connectLiveKit(session);
+            return mounted;
+          default:
+            return false;
+        }
+      case VoiceApiFailure():
+        return false;
+    }
+    return false;
   }
 
   VoiceCallSession? _sessionFromFrame(
