@@ -343,7 +343,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get profileErrorDisplayNameTooLong =>
-      'Имя профиля должно быть не длиннее 64 символов.';
+      'Имя профиля должно быть не длиннее 32 символов.';
 
   @override
   String get profileErrorBioTooLong =>

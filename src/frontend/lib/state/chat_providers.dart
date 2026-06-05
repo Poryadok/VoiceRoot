@@ -101,6 +101,7 @@ class ChatListController extends StateNotifier<ChatListState> {
     if (!mounted) return;
     switch (result) {
       case ChatsApiOk(:final data):
+        _syncDmPeersFromList(data.items);
         state = ChatListState(items: data.items, nextCursor: data.nextCursor);
       case ChatsApiFailure(:final message, :final statusCode):
         state = state.copyWith(
@@ -128,6 +129,7 @@ class ChatListController extends StateNotifier<ChatListState> {
     if (!mounted) return;
     switch (result) {
       case ChatsApiOk(:final data):
+        _syncDmPeersFromList(data.items);
         state = state.copyWith(
           items: _mergeChatItems(state.items, data.items),
           nextCursor: data.nextCursor,
@@ -141,6 +143,24 @@ class ChatListController extends StateNotifier<ChatListState> {
           errorMessage: message,
           errorStatusCode: statusCode,
         );
+    }
+  }
+
+  void _syncDmPeersFromList(Iterable<ChatListItem> items) {
+    final peers = Map<String, String>.from(
+      _ref.read(dmPeerProfileByChatIdProvider),
+    );
+    var changed = false;
+    for (final item in items) {
+      final peerId = item.dmPeerProfileId;
+      if (peerId == null || peerId.isEmpty) continue;
+      if (peers[item.chatId] != peerId) {
+        peers[item.chatId] = peerId;
+        changed = true;
+      }
+    }
+    if (changed) {
+      _ref.read(dmPeerProfileByChatIdProvider.notifier).state = peers;
     }
   }
 

@@ -342,7 +342,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get profileErrorDisplayNameTooLong =>
-      'Display name must be 64 characters or fewer.';
+      'Display name must be 32 characters or fewer.';
 
   @override
   String get profileErrorBioTooLong => 'About must be 500 characters or fewer.';

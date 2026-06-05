@@ -189,7 +189,7 @@
   },
   "profileSave": "Save",
   "profileErrorDisplayNameRequired": "Enter a display name.",
-  "profileErrorDisplayNameTooLong": "Display name must be 64 characters or fewer.",
+  "profileErrorDisplayNameTooLong": "Display name must be 32 characters or fewer.",
   "profileErrorBioTooLong": "About must be 500 characters or fewer.",
   "profileErrorAvatarType": "Use a static JPEG, PNG, or WebP image.",
   "profileErrorAvatarTooLarge": "Avatar must be a non-empty image up to 5 MB.",

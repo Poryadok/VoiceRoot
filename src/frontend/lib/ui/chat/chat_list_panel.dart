@@ -233,6 +233,8 @@ String? _resolvePeerId(
   String? activeProfileId,
 ) {
   if (knownPeerId != null) return knownPeerId;
+  final fromList = item.dmPeerProfileId;
+  if (fromList != null && fromList.isNotEmpty) return fromList;
   if (!item.chat.isDm || activeProfileId == null) return null;
   final creator = item.chat.creatorProfileId;
   if (creator.isEmpty || creator == activeProfileId) return null;

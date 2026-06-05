@@ -77,6 +77,49 @@ func TestListChats_SortsByLastMessageAt(t *testing.T) {
 	require.Equal(t, chatC, items[1].GetChat().GetId())
 }
 
+func TestListChats_DMPeerProfileID(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	accA := uuid.New()
+	accB := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	profiles := mapProfileAccounts{profA: accA, profB: accB}
+
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil)
+	t.Cleanup(cleanup)
+
+	ctxA := withAccountProfileCtx(ctx, accA, profA)
+	r, err := client.CreateDM(ctxA, &chatv1.CreateDMRequest{OtherProfileId: profB.String()})
+	require.NoError(t, err)
+	chatID := r.GetChat().GetId()
+
+	list, err := client.ListChats(ctxA, &chatv1.ListChatsRequest{
+		Page: &commonv1.CursorPageRequest{PageSize: 10},
+	})
+	require.NoError(t, err)
+	require.Len(t, list.GetChatList().GetItems(), 1)
+	item := list.GetChatList().GetItems()[0]
+	require.Equal(t, chatID, item.GetChat().GetId())
+	require.Equal(t, profB.String(), item.GetDmPeerProfileId(),
+		"creator must see the other participant as dm_peer_profile_id")
+
+	ctxB := withAccountProfileCtx(ctx, accB, profB)
+	requests := "requests"
+	listB, err := client.ListChats(ctxB, &chatv1.ListChatsRequest{
+		Page:  &commonv1.CursorPageRequest{PageSize: 10},
+		Inbox: &requests,
+	})
+	require.NoError(t, err)
+	require.Len(t, listB.GetChatList().GetItems(), 1)
+	require.Equal(t, profA.String(), listB.GetChatList().GetItems()[0].GetDmPeerProfileId())
+}
+
 func TestListChats_Pagination(t *testing.T) {
 	if testing.Short() {
 		t.Skip()

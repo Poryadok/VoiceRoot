@@ -78,6 +78,14 @@ func (s *ChatGRPC) ListChats(ctx context.Context, req *chatv1.ListChatsRequest) 
 		}
 	}
 
+	peers := map[uuid.UUID]uuid.UUID{}
+	if len(ids) > 0 {
+		peers, err = s.DM.DMPeerProfileIDs(ctx, caller, ids)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+	}
+
 	items := make([]*chatv1.ChatListItem, 0, len(page.Rows))
 	for _, row := range page.Rows {
 		item := &chatv1.ChatListItem{
@@ -86,6 +94,9 @@ func (s *ChatGRPC) ListChats(ctx context.Context, req *chatv1.ListChatsRequest) 
 		}
 		item.Inbox = proto.String(row.InboxBucket)
 		item.IsStranger = proto.Bool(row.InboxBucket == "requests")
+		if peerID, ok := peers[row.ID]; ok {
+			item.DmPeerProfileId = proto.String(peerID.String())
+		}
 		if x, ok := extras[row.ID]; ok {
 			item.UnreadCount = x.UnreadCount
 			if x.LastMessagePreview != "" {

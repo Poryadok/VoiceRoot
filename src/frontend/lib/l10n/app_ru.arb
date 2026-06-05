@@ -190,7 +190,7 @@
   },
   "profileSave": "Сохранить",
   "profileErrorDisplayNameRequired": "Введите имя профиля.",
-  "profileErrorDisplayNameTooLong": "Имя профиля должно быть не длиннее 64 символов.",
+  "profileErrorDisplayNameTooLong": "Имя профиля должно быть не длиннее 32 символов.",
   "profileErrorBioTooLong": "Описание должно быть не длиннее 500 символов.",
   "profileErrorAvatarType": "Используйте статичное изображение JPEG, PNG или WebP.",
   "profileErrorAvatarTooLarge": "Аватар должен быть непустым изображением до 5 МБ.",

@@ -114,7 +114,7 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
               TextField(
                 key: ProfileEditSheet.displayNameFieldKey,
                 controller: _displayNameController,
-                maxLength: 64,
+                maxLength: kProfileDisplayNameMaxLength,
                 enabled: !_saving,
                 decoration: InputDecoration(
                   labelText: l10n.profileDisplayNameLabel,
@@ -244,7 +244,9 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
 
   String? _validate(AppLocalizations l10n, String displayName, String bio) {
     if (displayName.isEmpty) return l10n.profileErrorDisplayNameRequired;
-    if (displayName.length > 64) return l10n.profileErrorDisplayNameTooLong;
+    if (displayName.length > kProfileDisplayNameMaxLength) {
+      return l10n.profileErrorDisplayNameTooLong;
+    }
     if (bio.length > 500) return l10n.profileErrorBioTooLong;
     return null;
   }

@@ -695,7 +695,7 @@ abstract class AppLocalizations {
   /// No description provided for @profileErrorDisplayNameTooLong.
   ///
   /// In en, this message translates to:
-  /// **'Display name must be 64 characters or fewer.'**
+  /// **'Display name must be 32 characters or fewer.'**
   String get profileErrorDisplayNameTooLong;
 
   /// No description provided for @profileErrorBioTooLong.

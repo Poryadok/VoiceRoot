@@ -129,6 +129,8 @@ message ChatListItem {
   int64 unread_count = 3;
   optional string inbox = 4; // main | requests
   optional bool is_stranger = 5;
+  // Other participant in a DM (for list titles / avatars); absent for non-DM or when unknown.
+  optional string dm_peer_profile_id = 6;
 }
 
 message ChatList {

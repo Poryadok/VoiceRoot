@@ -5,6 +5,8 @@ import 'package:http/http.dart' as http;
 import 'gateway_config.dart';
 
 const String kUsersMissingBaseUrlDetail = 'missing base URL';
+const int kProfileDisplayNameMaxLength = 32;
+
 const int kProfileAvatarMaxBytes = 5 * 1024 * 1024;
 const Set<String> kProfileAvatarContentTypes = {
   'image/jpeg',

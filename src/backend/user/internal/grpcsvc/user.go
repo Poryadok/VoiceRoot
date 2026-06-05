@@ -105,8 +105,8 @@ func (s *UserGRPC) UpdateProfile(ctx context.Context, req *userv1.UpdateProfileR
 	in := store.UpdateProfileInput{}
 	if req.DisplayName != nil {
 		dn := strings.TrimSpace(*req.DisplayName)
-		if dn == "" || len(dn) > 64 {
-			return nil, status.Error(codes.InvalidArgument, "display_name must be 1..64 characters")
+		if dn == "" || len(dn) > store.MaxDisplayNameRunes {
+			return nil, status.Errorf(codes.InvalidArgument, "display_name must be 1..%d characters", store.MaxDisplayNameRunes)
 		}
 		in.DisplayName = &dn
 	}
@@ -173,8 +173,8 @@ func (s *UserGRPC) CreateProfile(ctx context.Context, req *userv1.CreateProfileR
 		return nil, status.Error(codes.Unauthenticated, "missing credentials")
 	}
 	dn := strings.TrimSpace(req.GetDisplayName())
-	if dn == "" || len(dn) > 64 {
-		return nil, status.Error(codes.InvalidArgument, "display_name must be 1..64 characters")
+	if dn == "" || len(dn) > store.MaxDisplayNameRunes {
+		return nil, status.Errorf(codes.InvalidArgument, "display_name must be 1..%d characters", store.MaxDisplayNameRunes)
 	}
 	var usernameHint *string
 	if req.Username != nil {

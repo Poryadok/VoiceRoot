@@ -17,6 +17,9 @@ import (
 
 const maxDiscriminatorAttempts = 24
 
+// MaxDisplayNameRunes is the maximum length of profile display_name (aligned with Discord).
+const MaxDisplayNameRunes = 32
+
 // ProfileRow mirrors user_db.profiles v1 (docs/microservices/user-service.md).
 type ProfileRow struct {
 	ID                  uuid.UUID
@@ -185,7 +188,7 @@ func (s *ProfileStore) UpdateOwnedProfile(ctx context.Context, accountID, profil
 
 // CreateSecondaryProfile inserts a non-primary profile for the account (multi-profile row).
 func (s *ProfileStore) CreateSecondaryProfile(ctx context.Context, accountID uuid.UUID, displayName string, usernameHint *string) (*ProfileRow, error) {
-	dn := truncate(strings.TrimSpace(displayName), 64)
+	dn := truncate(strings.TrimSpace(displayName), MaxDisplayNameRunes)
 	if dn == "" {
 		return nil, fmt.Errorf("display_name required")
 	}

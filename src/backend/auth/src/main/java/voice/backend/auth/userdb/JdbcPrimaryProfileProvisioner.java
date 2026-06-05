@@ -33,7 +33,7 @@ public class JdbcPrimaryProfileProvisioner implements PrimaryProfileProvisioner 
 
     UUID profileId = UUID.randomUUID();
     String baseUsername = sanitizeUsername(displayHint);
-    String displayName = truncate(displayHint == null || displayHint.isBlank() ? "User" : displayHint.trim(), 64);
+    String displayName = truncate(displayHint == null || displayHint.isBlank() ? "User" : displayHint.trim(), 32);
 
     for (int attempt = 0; attempt < MAX_DISCRIMINATOR_ATTEMPTS; attempt++) {
       String discriminator = String.format("%04d", ThreadLocalRandom.current().nextInt(0, 10000));

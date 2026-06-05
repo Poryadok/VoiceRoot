@@ -59,6 +59,7 @@ class ChatListItem {
     this.unreadCount = 0,
     this.inbox,
     this.isStranger = false,
+    this.dmPeerProfileId,
   });
 
   final VoiceChat chat;
@@ -66,6 +67,7 @@ class ChatListItem {
   final int unreadCount;
   final String? inbox;
   final bool isStranger;
+  final String? dmPeerProfileId;
 
   String get chatId => chat.id;
 }
@@ -118,6 +120,7 @@ class VoiceChatsClient {
             unreadCount: _parseInt64(item['unread_count']),
             inbox: item['inbox'] as String?,
             isStranger: item['is_stranger'] as bool? ?? false,
+            dmPeerProfileId: item['dm_peer_profile_id'] as String?,
           );
         }).toList(),
         nextCursor: _emptyToNull(list['next_cursor'] as String?),

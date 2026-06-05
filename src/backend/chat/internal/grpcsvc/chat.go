@@ -25,6 +25,7 @@ type ChatGRPC struct {
 type DMStore interface {
 	EnsureDM(ctx context.Context, callerProfileID, otherProfileID uuid.UUID) (*store.ChatRow, bool, error)
 	ListChatsPage(ctx context.Context, viewerProfileID uuid.UUID, cursor string, limit int, inbox string) (*store.ListChatsPage, error)
+	DMPeerProfileIDs(ctx context.Context, viewerProfileID uuid.UUID, chatIDs []uuid.UUID) (map[uuid.UUID]uuid.UUID, error)
 	FindDMChatByID(ctx context.Context, chatID uuid.UUID) (*store.ChatRow, error)
 	IsChatMember(ctx context.Context, chatID, profileID uuid.UUID) (bool, error)
 	ListChatMembers(ctx context.Context, chatID uuid.UUID) ([]store.ChatMemberRow, error)

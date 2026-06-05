@@ -194,6 +194,59 @@ void main() {
     expect(find.byKey(ChatListPanel.tileKey('chat-2')), findsOneWidget);
   });
 
+  testWidgets('ChatListPanel resolves DM peer when caller is creator', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      chatTestApp(
+        home: const ChatListPanel(),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/chats') {
+            return http.Response(
+              jsonEncode({
+                'chat_list': {
+                  'items': [
+                    {
+                      'chat': {
+                        'id': 'chat-abc',
+                        'type': 'CHAT_TYPE_DM',
+                        'creator_profile_id': 'profile-a',
+                      },
+                      'dm_peer_profile_id': 'peer-b',
+                    },
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          if (req.url.path == '/api/v1/users/profiles/peer-b') {
+            return http.Response(
+              jsonEncode({
+                'profile': {
+                  'id': 'peer-b',
+                  'account_id': 'a-b',
+                  'username': 'peer',
+                  'discriminator': '0001',
+                  'display_name': 'Peer User',
+                  'locale': 'en',
+                  'theme': 'dark',
+                  'is_primary': true,
+                  'verification_type': 'none',
+                },
+              }),
+              200,
+            );
+          }
+          return http.Response('{}', 404);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Peer User'), findsOneWidget);
+  });
+
   testWidgets('ChatListPanel resolves DM creator as peer after reload', (
     tester,
   ) async {
