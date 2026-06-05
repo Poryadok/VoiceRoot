@@ -79,7 +79,13 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     final l10n = AppLocalizations.of(context)!;
     final room = ref.watch(chatRoomControllerProvider(widget.chatId));
     final activeId = ref.watch(authControllerProvider).activeProfileId;
-    final peerId = ref.watch(dmPeerProfileByChatIdProvider)[widget.chatId];
+    final peerId = resolveDmPeerForChatId(
+      chatId: widget.chatId,
+      knownPeers: ref.watch(dmPeerProfileByChatIdProvider),
+      listItems: ref.watch(chatListControllerProvider).items,
+      activeProfileId: activeId,
+      messages: room.messages,
+    );
     final peerName = peerId != null
         ? ref.watch(profileProvider(peerId)).valueOrNull?.displayName
         : null;

@@ -120,10 +120,10 @@ class ChatListPanel extends ConsumerWidget {
                     );
                   }
                   final item = items[index];
-                  final peerId = _resolvePeerId(
-                    item,
-                    peerMap[item.chatId],
-                    activeProfileId,
+                  final peerId = resolveDmPeerProfileId(
+                    item: item,
+                    knownPeerId: peerMap[item.chatId],
+                    activeProfileId: activeProfileId,
                   );
                   final titleAsync = peerId != null
                       ? ref.watch(profileProvider(peerId))
@@ -225,20 +225,6 @@ class ChatListPanel extends ConsumerWidget {
       ],
     );
   }
-}
-
-String? _resolvePeerId(
-  ChatListItem item,
-  String? knownPeerId,
-  String? activeProfileId,
-) {
-  if (knownPeerId != null) return knownPeerId;
-  final fromList = item.dmPeerProfileId;
-  if (fromList != null && fromList.isNotEmpty) return fromList;
-  if (!item.chat.isDm || activeProfileId == null) return null;
-  final creator = item.chat.creatorProfileId;
-  if (creator.isEmpty || creator == activeProfileId) return null;
-  return creator;
 }
 
 String _shortChatId(String chatId) {

@@ -39,6 +39,56 @@ final dmPeerProfileByChatIdProvider = StateProvider<Map<String, String>>(
   (ref) => {},
 );
 
+/// Resolves the other participant in a DM for list/room/call UI.
+String? resolveDmPeerProfileId({
+  required ChatListItem item,
+  String? knownPeerId,
+  String? activeProfileId,
+}) {
+  if (knownPeerId != null && knownPeerId.isNotEmpty) return knownPeerId;
+  final fromList = item.dmPeerProfileId;
+  if (fromList != null && fromList.isNotEmpty) return fromList;
+  if (!item.chat.isDm || activeProfileId == null) return null;
+  final creator = item.chat.creatorProfileId;
+  if (creator.isEmpty || creator == activeProfileId) return null;
+  return creator;
+}
+
+/// Fallback when list metadata has no peer (e.g. caller created the DM).
+String? inferDmPeerFromMessages(
+  Iterable<VoiceMessage> messages,
+  String? activeProfileId,
+) {
+  if (activeProfileId == null) return null;
+  for (final msg in messages) {
+    final sender = msg.senderProfileId;
+    if (sender != activeProfileId) return sender;
+  }
+  return null;
+}
+
+String? resolveDmPeerForChatId({
+  required String chatId,
+  required Map<String, String> knownPeers,
+  required Iterable<ChatListItem> listItems,
+  required String? activeProfileId,
+  Iterable<VoiceMessage> messages = const [],
+}) {
+  final cached = knownPeers[chatId];
+  if (cached != null && cached.isNotEmpty) return cached;
+  for (final item in listItems) {
+    if (item.chatId != chatId) continue;
+    final fromList = resolveDmPeerProfileId(
+      item: item,
+      knownPeerId: null,
+      activeProfileId: activeProfileId,
+    );
+    if (fromList != null) return fromList;
+    break;
+  }
+  return inferDmPeerFromMessages(messages, activeProfileId);
+}
+
 final _chatListRefreshTokenProvider = StateProvider<int>((ref) => 0);
 final chatInboxProvider = StateProvider<String>((ref) => 'main');
 
@@ -150,10 +200,15 @@ class ChatListController extends StateNotifier<ChatListState> {
     final peers = Map<String, String>.from(
       _ref.read(dmPeerProfileByChatIdProvider),
     );
+    final activeId = _ref.read(authControllerProvider).activeProfileId;
     var changed = false;
     for (final item in items) {
-      final peerId = item.dmPeerProfileId;
-      if (peerId == null || peerId.isEmpty) continue;
+      final peerId = resolveDmPeerProfileId(
+        item: item,
+        knownPeerId: peers[item.chatId],
+        activeProfileId: activeId,
+      );
+      if (peerId == null) continue;
       if (peers[item.chatId] != peerId) {
         peers[item.chatId] = peerId;
         changed = true;
@@ -843,6 +898,24 @@ class ChatActions {
   void selectChat(String chatId) {
     _ref.read(selectedChatIdProvider.notifier).state = chatId;
     _ref.read(realtimeHubProvider).ensureSubscribed(chatId);
+    _rememberDmPeerForChat(chatId);
+  }
+
+  void _rememberDmPeerForChat(String chatId) {
+    final activeId = _ref.read(authControllerProvider).activeProfileId;
+    final listItems = _ref.read(chatListControllerProvider).items;
+    final peers = Map<String, String>.from(
+      _ref.read(dmPeerProfileByChatIdProvider),
+    );
+    final peerId = resolveDmPeerForChatId(
+      chatId: chatId,
+      knownPeers: peers,
+      listItems: listItems,
+      activeProfileId: activeId,
+    );
+    if (peerId == null || peers[chatId] == peerId) return;
+    peers[chatId] = peerId;
+    _ref.read(dmPeerProfileByChatIdProvider.notifier).state = peers;
   }
 }
 

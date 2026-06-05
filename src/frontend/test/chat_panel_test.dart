@@ -611,6 +611,156 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('ChatRoomPanel shows call actions from chat list peer metadata', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          profileAccentStorageProvider.overrideWithValue(
+            testProfileAccentStorage,
+          ),
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          authControllerProvider.overrideWith(authenticatedAuthController),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(
+              baseUrl: 'http://api.test',
+              livekitUrl: 'wss://livekit.test',
+            ),
+          ),
+          httpClientProvider.overrideWithValue(
+            MockClient((req) async {
+              if (req.url.path == '/api/v1/chats') {
+                return http.Response(
+                  jsonEncode({
+                    'chat_list': {
+                      'items': [
+                        {
+                          'chat': {
+                            'id': 'chat-abc',
+                            'type': 'CHAT_TYPE_DM',
+                            'creator_profile_id': 'profile-a',
+                          },
+                          'dm_peer_profile_id': 'peer-b',
+                        },
+                      ],
+                    },
+                  }),
+                  200,
+                );
+              }
+              if (req.url.path == '/api/v1/messages') {
+                return http.Response(
+                  jsonEncode({
+                    'message_list': {'messages': []},
+                  }),
+                  200,
+                );
+              }
+              return http.Response('{}', 404);
+            }),
+          ),
+          realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
+          selectedChatIdProvider.overrideWith((ref) => 'chat-abc'),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: ChatRoomPanel(chatId: 'chat-abc')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(ChatRoomPanel.audioCallKey), findsOneWidget);
+    expect(find.byKey(ChatRoomPanel.videoCallKey), findsOneWidget);
+  });
+
+  testWidgets(
+    'ChatRoomPanel infers call peer from messages when list omits peer id',
+    (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ...voiceThemeTestOverrides(),
+            profileAccentStorageProvider.overrideWithValue(
+              testProfileAccentStorage,
+            ),
+            authSessionStorageProvider.overrideWithValue(
+              InMemoryAuthSessionStorage(),
+            ),
+            authControllerProvider.overrideWith(authenticatedAuthController),
+            gatewayConfigProvider.overrideWithValue(
+              const GatewayConfig(
+                baseUrl: 'http://api.test',
+                livekitUrl: 'wss://livekit.test',
+              ),
+            ),
+            httpClientProvider.overrideWithValue(
+              MockClient((req) async {
+                if (req.url.path == '/api/v1/chats') {
+                  return http.Response(
+                    jsonEncode({
+                      'chat_list': {
+                        'items': [
+                          {
+                            'chat': {
+                              'id': 'chat-abc',
+                              'type': 'CHAT_TYPE_DM',
+                              'creator_profile_id': 'prof-test',
+                            },
+                          },
+                        ],
+                      },
+                    }),
+                    200,
+                  );
+                }
+                if (req.url.path == '/api/v1/messages') {
+                  return http.Response(
+                    jsonEncode({
+                      'message_list': {
+                        'messages': [
+                          {
+                            'id': 'msg-1',
+                            'chat': {'id': 'chat-abc'},
+                            'sender_profile_id': 'peer-b',
+                            'content': 'Hi',
+                            'created_at': '2024-01-01T00:00:00Z',
+                          },
+                        ],
+                      },
+                    }),
+                    200,
+                  );
+                }
+                return http.Response('{}', 404);
+              }),
+            ),
+            realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
+            selectedChatIdProvider.overrideWith((ref) => 'chat-abc'),
+          ],
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            locale: const Locale('en'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const Scaffold(body: ChatRoomPanel(chatId: 'chat-abc')),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(ChatRoomPanel.audioCallKey), findsOneWidget);
+      expect(find.byKey(ChatRoomPanel.videoCallKey), findsOneWidget);
+    },
+  );
 }
 
 class _NoopRealtimeHub extends RealtimeHub {
