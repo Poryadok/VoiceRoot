@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:meta/meta.dart';
 
 import '../backend/api_errors.dart';
 import '../backend/chats_client.dart';
@@ -772,6 +773,8 @@ class RealtimeHub {
     unawaited(ensureConnected());
   }
 
+  /// WS fanout only — call via [MessagingReadSync] after REST mark_read succeeds.
+  @visibleForTesting
   void markRead(String chatId, String messageId) {
     _connection?.sendMarkRead(chatId: chatId, messageId: messageId);
   }

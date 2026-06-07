@@ -258,8 +258,7 @@ FileMetadataData fileMetadataFromProto(file_pb.FileMetadata meta) {
     fileType: meta.fileType.isNotEmpty ? meta.fileType : 'other',
     status: meta.status,
     originalName: meta.originalName,
-    url: meta.hasConvertedR2Key() ? emptyToNull(meta.convertedR2Key) : null,
-    previewUrl: meta.hasThumbnailR2Key() ? emptyToNull(meta.thumbnailR2Key) : null,
+    // HTTP URLs come from GET /files/{id}/url, not R2 keys in metadata.
     sizeBytes: meta.hasSizeBytes() ? meta.sizeBytes.toInt() : null,
   );
 }

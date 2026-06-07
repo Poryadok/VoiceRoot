@@ -115,6 +115,7 @@ func TestVoiceGRPCStartAcceptTokenStateAndEnd(t *testing.T) {
 	token, err := svc.GetJoinToken(voiceTestCtx("profile-a"), &callsv1.GetJoinTokenRequest{RoomId: call.GetRoomId()})
 	require.NoError(t, err)
 	require.NotEmpty(t, token.GetJwt())
+	require.Equal(t, "ws://livekit:7880", token.GetLivekitUrl())
 
 	muted := true
 	video := false

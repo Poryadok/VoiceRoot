@@ -119,8 +119,9 @@ void main() {
 
     expect(result, isA<FilesApiOk<FileMetadataData>>());
     final metadata = (result as FilesApiOk<FileMetadataData>).data;
-    expect(metadata.previewUrl, 'processed/file-1/thumb.webp');
-    expect(metadata.url, 'processed/file-1/full.webp');
+    expect(metadata.previewUrl, isNull);
+    expect(metadata.url, isNull);
+    expect(metadata.fileId, 'file-1');
   });
 
   test('getFileUrl returns presigned_get_url', () async {

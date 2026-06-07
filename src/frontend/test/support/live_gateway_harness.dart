@@ -17,7 +17,7 @@ String liveGatewayBaseUrl() {
     defaultValue: '',
   );
   if (fromEnv.isNotEmpty) return fromEnv;
-  return 'http://127.0.0.1:8080';
+  return 'http://127.0.0.1:18080';
 }
 
 /// Opt-in: `--dart-define=VOICE_RUN_LIVE_INTEGRATION=true`.
