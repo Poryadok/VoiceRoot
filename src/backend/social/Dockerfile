@@ -8,6 +8,7 @@ COPY social/go.mod ./social/
 COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
 COPY user/pb/voice/social/go.mod ./user/pb/voice/social/
 RUN cd social && go mod download
+COPY pkg ./pkg
 COPY user/pb ./user/pb
 COPY social ./social
 WORKDIR /src/social
