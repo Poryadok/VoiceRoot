@@ -10,10 +10,7 @@ import 'chat_providers.dart';
 import 'gateway_providers.dart';
 
 final voiceCallsClientProvider = Provider<VoiceCallsClient>((ref) {
-  return VoiceCallsClient(
-    httpClient: ref.watch(httpClientProvider),
-    config: ref.watch(gatewayConfigProvider),
-  );
+  return VoiceCallsClient(gateway: ref.watch(gatewayHttpClientProvider));
 });
 
 final liveKitRoomFactoryProvider = Provider<VoiceLiveKitRoom Function()>((ref) {
@@ -204,11 +201,10 @@ class CallController extends StateNotifier<CallState> {
 
   Future<void> _connectLiveKit(VoiceCallSession session) async {
     final auth = _ref.read(authorizationHeaderProvider);
-    final livekitUrl = _ref.read(gatewayConfigProvider).livekitUrl;
-    if (auth == null || livekitUrl.isEmpty) {
+    if (auth == null) {
       state = state.copyWith(
         phase: CallPhase.failed,
-        errorMessage: 'livekit_url_missing',
+        errorMessage: 'not_authenticated',
       );
       return;
     }
@@ -218,6 +214,15 @@ class CallController extends StateNotifier<CallState> {
     if (!mounted) return;
     switch (token) {
       case VoiceApiOk(:final data):
+        final livekitUrl =
+            data.livekitUrl ?? _ref.read(gatewayConfigProvider).livekitUrl;
+        if (livekitUrl.isEmpty) {
+          state = state.copyWith(
+            phase: CallPhase.failed,
+            errorMessage: 'livekit_url_missing',
+          );
+          return;
+        }
         final room = _ref.read(liveKitRoomFactoryProvider)();
         _room = room;
         await room.connect(
@@ -303,7 +308,6 @@ class CallController extends StateNotifier<CallState> {
       case VoiceApiFailure():
         return false;
     }
-    return false;
   }
 
   VoiceCallSession? _sessionFromFrame(

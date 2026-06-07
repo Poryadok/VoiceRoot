@@ -6,6 +6,8 @@ import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/messages_client.dart';
 
+import 'support/gateway_test_client.dart';
+
 void main() {
   const config = GatewayConfig(baseUrl: 'http://api.test');
   const auth = 'Bearer access-token';
@@ -35,7 +37,7 @@ void main() {
           200,
         );
       });
-      final client = VoiceMessagesClient(httpClient: mock, config: config);
+      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
       final r = await client.getMessages(
         authorization: auth,
         chatId: 'chat-1',
@@ -75,7 +77,7 @@ void main() {
           200,
         );
       });
-      final client = VoiceMessagesClient(httpClient: mock, config: config);
+      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
       final r = await client.getMessages(authorization: auth, chatId: 'chat-1');
       final message =
           (r as MessagesApiOk<MessageListData>).data.messages.single;
@@ -100,7 +102,7 @@ void main() {
             200,
           );
         });
-        final client = VoiceMessagesClient(httpClient: mock, config: config);
+        final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
         await client.getMessages(
           authorization: auth,
           chatId: 'chat-1',
@@ -128,7 +130,7 @@ void main() {
           200,
         );
       });
-      final client = VoiceMessagesClient(httpClient: mock, config: config);
+      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
       final r = await client.sendMessage(
         authorization: auth,
         chatId: 'chat-1',
@@ -161,7 +163,7 @@ void main() {
           200,
         );
       });
-      final client = VoiceMessagesClient(httpClient: mock, config: config);
+      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
       final r = await client.sendMessage(
         authorization: auth,
         chatId: 'chat-1',
@@ -194,7 +196,7 @@ void main() {
         expect(body['last_read_message_id'], 'msg-9');
         return http.Response('{}', 200);
       });
-      final client = VoiceMessagesClient(httpClient: mock, config: config);
+      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
       final r = await client.markRead(
         authorization: auth,
         chatId: 'chat-1',
@@ -224,7 +226,7 @@ void main() {
           200,
         );
       });
-      final client = VoiceMessagesClient(httpClient: mock, config: config);
+      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
       final r = await client.editMessage(
         authorization: auth,
         messageId: 'msg-1',
@@ -241,7 +243,7 @@ void main() {
         expect(req.url.queryParameters['scope'], 'me');
         return http.Response('', 204);
       });
-      final client = VoiceMessagesClient(httpClient: mock, config: config);
+      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
       final r = await client.deleteMessage(
         authorization: auth,
         messageId: 'msg-1',
@@ -268,7 +270,7 @@ void main() {
           200,
         );
       });
-      final client = VoiceMessagesClient(httpClient: mock, config: config);
+      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
       final r = await client.getReadState(
         authorization: auth,
         chatId: 'chat-1',

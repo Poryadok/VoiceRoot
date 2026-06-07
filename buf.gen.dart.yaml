@@ -1,0 +1,8 @@
+# Dart protobuf codegen for Flutter client (committed under src/frontend/lib/gen).
+# Run: make buf-generate-dart (uses local protoc-gen-dart from `dart pub global activate protoc_plugin`).
+version: v1
+plugins:
+  - plugin: dart
+    out: src/frontend/lib/gen
+    opt:
+      - grpc

@@ -117,8 +117,8 @@ class AuthJdbcRedisIntegrationTest {
 
   @Test
   void registerLoginRefreshValidateLogoutAndJwksWorkWithPostgresRedisAndStableJwks() throws Exception {
-    JsonNode registered = postJson("/api/v1/auth/register",
-        "{\"email\":\"jdbc@example.com\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"{}\"}");
+    JsonNode registered = session(postJson("/api/v1/auth/register",
+        "{\"email\":\"jdbc@example.com\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"{}\"}"));
 
     String access = registered.get("access_token").asText();
     String refresh = registered.get("refresh_token").asText();
@@ -154,17 +154,17 @@ class AuthJdbcRedisIntegrationTest {
         .andExpect(jsonPath("$.jti", not(blankOrNullString())));
 
     JsonNode login =
-        postJson(
+        session(postJson(
             "/api/v1/auth/login",
-            "{\"email\":\"jdbc@example.com\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"{}\"}");
+            "{\"email\":\"jdbc@example.com\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"{}\"}"));
     assertThat(login.get("profile_id").asText()).isEqualTo(profileId);
     assertThat(jwtService.validate(login.get("access_token").asText()).profileId()).isEqualTo(profileId);
     var loginJwt = SignedJWT.parse(login.get("access_token").asText()).getJWTClaimsSet();
     assertThat(loginJwt.getStringClaim("user_id")).isEqualTo(accountIdStr);
     assertThat(loginJwt.getStringClaim("profile_id")).isEqualTo(profileId);
 
-    JsonNode rotated = postJson("/api/v1/auth/refresh",
-        "{\"refresh_token\":\"" + refresh + "\",\"device_info_json\":\"{}\"}");
+    JsonNode rotated = session(postJson("/api/v1/auth/refresh",
+        "{\"refresh_token\":\"" + refresh + "\",\"device_info_json\":\"{}\"}"));
     assertThat(rotated.get("profile_id").asText()).isEqualTo(profileId);
     assertThat(jwtService.validate(rotated.get("access_token").asText()).profileId()).isEqualTo(profileId);
     var refreshJwt = SignedJWT.parse(rotated.get("access_token").asText()).getJWTClaimsSet();
@@ -324,5 +324,10 @@ class AuthJdbcRedisIntegrationTest {
         .getResponse()
         .getContentAsString();
     return objectMapper.readTree(response);
+  }
+
+  private static JsonNode session(JsonNode envelope) {
+    assertThat(envelope.has("session")).isTrue();
+    return envelope.get("session");
   }
 }

@@ -1,8 +1,7 @@
-import 'dart:convert';
-
-import 'package:http/http.dart' as http;
-
-import 'gateway_config.dart';
+import '../gen/voice/social/v1/social.pb.dart' as social_pb;
+import 'api_result.dart';
+import 'gateway_http.dart';
+import 'proto_mappers.dart';
 
 const String kFriendsMissingBaseUrlDetail = 'missing base URL';
 
@@ -47,159 +46,134 @@ class FriendRequestsData {
 
 /// HTTP client for Social friend routes (`/api/v1/friends/**`).
 class VoiceFriendsClient {
-  VoiceFriendsClient({
-    required http.Client httpClient,
-    required GatewayConfig config,
-  }) : _http = httpClient,
-       _config = config;
+  VoiceFriendsClient({required GatewayHttpClient gateway}) : _gateway = gateway;
 
-  final http.Client _http;
-  final GatewayConfig _config;
+  final GatewayHttpClient _gateway;
 
   Future<FriendsApiResult<FriendsListData>> listFriends({
     required String authorization,
     String? cursor,
     int? pageSize,
   }) async {
-    if (!_config.hasBaseUrl) {
-      return const FriendsApiFailure(message: kFriendsMissingBaseUrlDetail);
-    }
     final params = <String, String>{};
     if (cursor != null && cursor.isNotEmpty) params['cursor'] = cursor;
     if (pageSize != null) params['page_size'] = '$pageSize';
-    final uri = Uri.parse(_config.baseUrl).replace(
+    final uri = _gateway.replace(
       path: '/api/v1/friends',
       queryParameters: params.isEmpty ? null : params,
     );
-    return _get(uri, authorization, (body) {
-      final list = body['friend_list'] as Map<String, dynamic>? ?? {};
-      final edges = list['friends'] as List<dynamic>? ?? [];
-      return FriendsListData(
-        friends: edges
-            .map((e) => (e as Map<String, dynamic>)['profile_id'] as String)
-            .toList(),
-        nextCursor: list['next_cursor'] as String?,
-      );
-    });
+    final result = await _gateway.getProto(
+      uri,
+      authorization: authorization,
+      createEmpty: social_pb.ListFriendsResponse.create,
+    );
+    return _map(
+      result,
+      (data) => friendsListFromProto(
+        data.hasFriendList() ? data.friendList : social_pb.FriendList(),
+      ),
+    );
   }
 
   Future<FriendsApiResult<FriendRequestsData>> listFriendRequests({
     required String authorization,
   }) async {
-    if (!_config.hasBaseUrl) {
-      return const FriendsApiFailure(message: kFriendsMissingBaseUrlDetail);
-    }
-    final uri = Uri.parse(_config.baseUrl).resolve('/api/v1/friends/requests');
-    return _get(uri, authorization, (body) {
-      final list = body['friend_request_list'] as Map<String, dynamic>? ?? {};
-      return FriendRequestsData(
-        incoming: _profileIds(list['incoming']),
-        outgoing: _profileIds(list['outgoing']),
-      );
-    });
+    final result = await _gateway.getProto(
+      _gateway.resolve('/api/v1/friends/requests'),
+      authorization: authorization,
+      createEmpty: social_pb.ListFriendRequestsResponse.create,
+    );
+    return _map(
+      result,
+      (data) => friendRequestsFromProto(
+        data.hasFriendRequestList()
+            ? data.friendRequestList
+            : social_pb.FriendRequestList(),
+      ),
+    );
   }
 
   Future<FriendsApiResult<void>> sendFriendInvitation({
     required String authorization,
     required String targetProfileId,
-  }) => _postEmpty('/api/v1/friends/invitations', authorization, {
-    'target_profile_id': targetProfileId,
-  });
+  }) {
+    return _postInvitation(
+      '/api/v1/friends/invitations',
+      authorization,
+      social_pb.SendFriendInvitationRequest(
+        targetProfileId: targetProfileId,
+      ),
+    );
+  }
 
   Future<FriendsApiResult<void>> acceptFriendInvitation({
     required String authorization,
     required String requesterProfileId,
-  }) => _postEmpty(
-    '/api/v1/friends/invitations/$requesterProfileId/accept',
-    authorization,
-    null,
-  );
+  }) {
+    return _postEmpty(
+      '/api/v1/friends/invitations/$requesterProfileId/accept',
+      authorization,
+    );
+  }
 
   Future<FriendsApiResult<void>> declineFriendInvitation({
     required String authorization,
     required String requesterProfileId,
-  }) => _postEmpty(
-    '/api/v1/friends/invitations/$requesterProfileId/decline',
-    authorization,
-    null,
-  );
-
-  List<String> _profileIds(dynamic raw) {
-    if (raw is! List) return const [];
-    return raw
-        .map((e) => (e as Map<String, dynamic>)['profile_id'] as String)
-        .toList();
+  }) {
+    return _postEmpty(
+      '/api/v1/friends/invitations/$requesterProfileId/decline',
+      authorization,
+    );
   }
 
-  Future<FriendsApiResult<T>> _get<T>(
-    Uri uri,
+  Future<FriendsApiResult<void>> _postInvitation(
+    String path,
     String authorization,
-    T Function(Map<String, dynamic> body) parse,
+    social_pb.SendFriendInvitationRequest body,
   ) async {
-    try {
-      final res = await _http.get(
-        uri,
-        headers: {'Authorization': authorization},
-      );
-      if (res.statusCode == 200) {
-        final decoded = jsonDecode(res.body) as Map<String, dynamic>;
-        return FriendsApiOk(parse(decoded));
-      }
-      return FriendsApiFailure(
-        message: _failureMessage(res),
-        errorCode: _errorCode(res),
-        statusCode: res.statusCode,
-      );
-    } catch (e) {
-      return FriendsApiFailure(message: '$e');
-    }
+    final result = await _gateway.postProto(
+      uri: _gateway.resolve(path),
+      authorization: authorization,
+      body: body,
+      createEmpty: social_pb.SendFriendInvitationResponse.create,
+      allowNoContent: true,
+    );
+    return _mapEmpty(result);
   }
 
   Future<FriendsApiResult<void>> _postEmpty(
     String path,
     String authorization,
-    Map<String, dynamic>? body,
   ) async {
-    if (!_config.hasBaseUrl) {
-      return const FriendsApiFailure(message: kFriendsMissingBaseUrlDetail);
-    }
-    final uri = Uri.parse(_config.baseUrl).resolve(path);
-    try {
-      final res = await _http.post(
-        uri,
-        headers: {
-          'Authorization': authorization,
-          if (body != null) 'Content-Type': 'application/json',
-        },
-        body: body == null ? null : jsonEncode(body),
-      );
-      if (res.statusCode == 200) return const FriendsApiEmpty();
-      return FriendsApiFailure(
-        message: _failureMessage(res),
-        errorCode: _errorCode(res),
-        statusCode: res.statusCode,
-      );
-    } catch (e) {
-      return FriendsApiFailure(message: '$e');
-    }
+    final result = await _gateway.postEmpty(
+      uri: _gateway.resolve(path),
+      authorization: authorization,
+    );
+    return _mapEmpty(result);
   }
 
-  static String _failureMessage(http.Response res) {
-    final code = _errorCode(res);
-    if (code != null) return code;
-    return 'HTTP ${res.statusCode}';
+  FriendsApiResult<T> _map<T>(
+    GatewayHttpResult<dynamic> result,
+    T Function(dynamic data) parse,
+  ) {
+    return switch (result) {
+      GatewayHttpOk(:final data) => FriendsApiOk(parse(data)),
+      GatewayHttpFailure(:final error) => FriendsApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
   }
 
-  static String? _errorCode(http.Response res) {
-    try {
-      final decoded = jsonDecode(res.body);
-      if (decoded is Map<String, dynamic>) {
-        final err = decoded['error'];
-        if (err is String && err.isNotEmpty) return err;
-      }
-    } catch (_) {
-      // ignore malformed body
-    }
-    return null;
+  FriendsApiResult<void> _mapEmpty(GatewayHttpResult<dynamic> result) {
+    return switch (result) {
+      GatewayHttpOk() => const FriendsApiEmpty(),
+      GatewayHttpFailure(:final error) => FriendsApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
   }
 }

@@ -6,6 +6,8 @@ import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/friends_client.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 
+import 'support/gateway_test_client.dart';
+
 void main() {
   const config = GatewayConfig(baseUrl: 'http://api.test');
   const auth = 'Bearer access-token';
@@ -28,7 +30,7 @@ void main() {
           200,
         );
       });
-      final client = VoiceFriendsClient(httpClient: mock, config: config);
+      final client = VoiceFriendsClient(gateway: gatewayHttpForTest(mock, config: config));
       final r = await client.listFriends(authorization: auth);
       expect(r, isA<FriendsApiOk<FriendsListData>>());
       expect((r as FriendsApiOk<FriendsListData>).data.friends, ['friend-1']);
@@ -53,7 +55,7 @@ void main() {
           200,
         );
       });
-      final client = VoiceFriendsClient(httpClient: mock, config: config);
+      final client = VoiceFriendsClient(gateway: gatewayHttpForTest(mock, config: config));
       final r = await client.listFriendRequests(authorization: auth);
       expect(r, isA<FriendsApiOk<FriendRequestsData>>());
       final data = (r as FriendsApiOk<FriendRequestsData>).data;
@@ -71,7 +73,7 @@ void main() {
         capturedBody = req.body;
         return http.Response('{}', 200);
       });
-      final client = VoiceFriendsClient(httpClient: mock, config: config);
+      final client = VoiceFriendsClient(gateway: gatewayHttpForTest(mock, config: config));
       final r = await client.sendFriendInvitation(
         authorization: auth,
         targetProfileId: 'target-p',
@@ -89,7 +91,7 @@ void main() {
         expect(req.method, 'POST');
         return http.Response('{}', 200);
       });
-      final client = VoiceFriendsClient(httpClient: mock, config: config);
+      final client = VoiceFriendsClient(gateway: gatewayHttpForTest(mock, config: config));
       final r = await client.acceptFriendInvitation(
         authorization: auth,
         requesterProfileId: 'req-1',
@@ -104,7 +106,7 @@ void main() {
         expect(req.url.path, '/api/v1/friends/invitations/req-2/decline');
         return http.Response('{}', 200);
       });
-      final client = VoiceFriendsClient(httpClient: mock, config: config);
+      final client = VoiceFriendsClient(gateway: gatewayHttpForTest(mock, config: config));
       final r = await client.declineFriendInvitation(
         authorization: auth,
         requesterProfileId: 'req-2',

@@ -1,8 +1,9 @@
-import 'dart:convert';
+import 'package:protobuf/protobuf.dart';
 
-import 'package:http/http.dart' as http;
-
-import 'gateway_config.dart';
+import '../gen/voice/calls/v1/calls.pb.dart' as calls_pb;
+import 'api_result.dart';
+import 'gateway_http.dart';
+import 'proto_mappers.dart';
 
 const String kVoiceMissingBaseUrlDetail = 'missing base URL';
 
@@ -51,62 +52,40 @@ class VoiceCallSession {
   final VoiceCallMediaKind mediaKind;
   final VoiceCallStatus status;
   final DateTime? expiresAt;
-
-  factory VoiceCallSession.fromJson(Map<String, dynamic> json) {
-    final chat = json['linked_chat'] as Map<String, dynamic>? ?? {};
-    return VoiceCallSession(
-      roomId: json['room_id'] as String? ?? '',
-      livekitRoomName: json['livekit_room_name'] as String? ?? '',
-      chatId: chat['id'] as String? ?? '',
-      initiatorProfileId: json['initiator_profile_id'] as String? ?? '',
-      calleeProfileId: json['callee_profile_id'] as String? ?? '',
-      mediaKind: _parseMediaKind(json['media_kind']),
-      status: _parseStatus(json['status']),
-      expiresAt: _parseDate(json['expires_at'] as String?),
-    );
-  }
 }
 
 class VoiceJoinToken {
-  const VoiceJoinToken({required this.jwt, this.expiresAt});
+  const VoiceJoinToken({
+    required this.jwt,
+    this.expiresAt,
+    this.livekitUrl,
+  });
 
   final String jwt;
   final DateTime? expiresAt;
-
-  factory VoiceJoinToken.fromJson(Map<String, dynamic> json) {
-    return VoiceJoinToken(
-      jwt: json['jwt'] as String? ?? '',
-      expiresAt: _parseDate(json['expires_at'] as String?),
-    );
-  }
+  final String? livekitUrl;
 }
 
 class VoiceCallsClient {
-  VoiceCallsClient({
-    required http.Client httpClient,
-    required GatewayConfig config,
-  }) : _http = httpClient,
-       _config = config;
+  VoiceCallsClient({required GatewayHttpClient gateway}) : _gateway = gateway;
 
-  final http.Client _http;
-  final GatewayConfig _config;
+  final GatewayHttpClient _gateway;
 
   Future<VoiceApiResult<VoiceCallSession?>> getActiveCall({
     required String authorization,
-  }) {
-    return _request(
-      () => _http.get(
-        _uri('/api/v1/voice/calls/active'),
-        headers: _headers(authorization),
-      ),
-      (json) {
-        final session =
-            json['call_session'] as Map<String, dynamic>? ?? const {};
-        if (session.isEmpty) return null;
-        return VoiceCallSession.fromJson(session);
-      },
+  }) async {
+    final result = await _gateway.getProto(
+      _gateway.resolve('/api/v1/voice/calls/active'),
+      authorization: authorization,
+      createEmpty: calls_pb.GetActiveCallResponse.create,
       allowNotFound: true,
     );
+    return _map(result, (data) {
+      if (!data.hasCallSession() || data.callSession.roomId.isEmpty) {
+        return null;
+      }
+      return voiceCallSessionFromProto(data.callSession);
+    });
   }
 
   Future<VoiceApiResult<VoiceCallSession>> startCall({
@@ -115,11 +94,16 @@ class VoiceCallsClient {
     required String calleeProfileId,
     VoiceCallMediaKind mediaKind = VoiceCallMediaKind.audio,
   }) {
-    return _postSession('/api/v1/voice/calls', authorization, {
-      'linked_chat': {'id': chatId},
-      'callee_profile_id': calleeProfileId,
-      'media_kind': mediaKind.name,
-    });
+    return _postSession(
+      '/api/v1/voice/calls',
+      authorization,
+      startCallRequestToProto(
+        chatId: chatId,
+        calleeProfileId: calleeProfileId,
+        mediaKind: mediaKind,
+      ),
+      calls_pb.StartCallResponse.create,
+    );
   }
 
   Future<VoiceApiResult<VoiceCallSession>> acceptCall({
@@ -129,7 +113,8 @@ class VoiceCallsClient {
     return _postSession(
       '/api/v1/voice/calls/$roomId/accept',
       authorization,
-      null,
+      calls_pb.AcceptCallRequest(roomId: roomId),
+      calls_pb.AcceptCallResponse.create,
     );
   }
 
@@ -140,27 +125,34 @@ class VoiceCallsClient {
     return _postSession(
       '/api/v1/voice/calls/$roomId/decline',
       authorization,
-      null,
+      calls_pb.DeclineCallRequest(roomId: roomId),
+      calls_pb.DeclineCallResponse.create,
     );
   }
 
   Future<VoiceApiResult<void>> endCall({
     required String authorization,
     required String roomId,
-  }) {
-    return _postEmpty('/api/v1/voice/calls/$roomId/end', authorization);
+  }) async {
+    final result = await _gateway.postEmpty(
+      uri: _gateway.resolve('/api/v1/voice/calls/$roomId/end'),
+      authorization: authorization,
+    );
+    return _mapEmpty(result);
   }
 
   Future<VoiceApiResult<VoiceJoinToken>> getJoinToken({
     required String authorization,
     required String roomId,
-  }) {
-    return _request(
-      () => _http.get(
-        _uri('/api/v1/voice/calls/$roomId/token'),
-        headers: _headers(authorization),
-      ),
-      (body) => VoiceJoinToken.fromJson(body),
+  }) async {
+    final result = await _gateway.getProto(
+      _gateway.resolve('/api/v1/voice/calls/$roomId/token'),
+      authorization: authorization,
+      createEmpty: calls_pb.GetJoinTokenResponse.create,
+    );
+    return _map(
+      result,
+      (data) => voiceJoinTokenFromProto(data as calls_pb.GetJoinTokenResponse),
     );
   }
 
@@ -170,104 +162,68 @@ class VoiceCallsClient {
     bool? isMuted,
     bool? isDeafened,
     bool? isVideoOn,
-  }) {
-    final body = <String, dynamic>{};
-    if (isMuted != null) body['is_muted'] = isMuted;
-    if (isDeafened != null) body['is_deafened'] = isDeafened;
-    if (isVideoOn != null) body['is_video_on'] = isVideoOn;
-    return _request(
-      () => _http.patch(
-        _uri('/api/v1/voice/calls/$roomId/state'),
-        headers: _headers(authorization),
-        body: jsonEncode(body),
+  }) async {
+    final result = await _gateway.patchProto(
+      uri: _gateway.resolve('/api/v1/voice/calls/$roomId/state'),
+      authorization: authorization,
+      body: updateVoiceStateRequestToProto(
+        roomId: roomId,
+        isMuted: isMuted,
+        isDeafened: isDeafened,
+        isVideoOn: isVideoOn,
       ),
-      (_) {},
+      createEmpty: calls_pb.UpdateVoiceStateResponse.create,
     );
+    return _mapEmpty(result);
   }
 
-  Future<VoiceApiResult<VoiceCallSession>> _postSession(
+  Future<VoiceApiResult<VoiceCallSession>> _postSession<T extends GeneratedMessage>(
     String path,
     String authorization,
-    Map<String, dynamic>? body,
+    GeneratedMessage body,
+    T Function() createEmpty,
+  ) async {
+    final result = await _gateway.postProto(
+      uri: _gateway.resolve(path),
+      authorization: authorization,
+      body: body,
+      createEmpty: createEmpty,
+    );
+    return _map(result, (data) {
+      final session = _readCallSession(data);
+      return voiceCallSessionFromProto(session);
+    });
+  }
+
+  calls_pb.CallSession _readCallSession(GeneratedMessage response) {
+    if (response is calls_pb.StartCallResponse) return response.callSession;
+    if (response is calls_pb.AcceptCallResponse) return response.callSession;
+    if (response is calls_pb.DeclineCallResponse) return response.callSession;
+    return calls_pb.CallSession();
+  }
+
+  VoiceApiResult<T> _map<T>(
+    GatewayHttpResult<dynamic> result,
+    T Function(dynamic data) parse,
   ) {
-    return _request(
-      () => _http.post(
-        _uri(path),
-        headers: _headers(authorization),
-        body: body == null ? null : jsonEncode(body),
+    return switch (result) {
+      GatewayHttpOk(:final data) => VoiceApiOk(parse(data)),
+      GatewayHttpFailure(:final error) => VoiceApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
       ),
-      (json) => VoiceCallSession.fromJson(
-        json['call_session'] as Map<String, dynamic>? ?? {},
+    };
+  }
+
+  VoiceApiResult<void> _mapEmpty(GatewayHttpResult<dynamic> result) {
+    return switch (result) {
+      GatewayHttpOk() => const VoiceApiOk(null),
+      GatewayHttpFailure(:final error) => VoiceApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
       ),
-    );
+    };
   }
-
-  Future<VoiceApiResult<void>> _postEmpty(String path, String authorization) {
-    return _request(
-      () => _http.post(_uri(path), headers: _headers(authorization)),
-      (_) {},
-    );
-  }
-
-  Future<VoiceApiResult<T>> _request<T>(
-    Future<http.Response> Function() send,
-    T Function(Map<String, dynamic>) parse, {
-    bool allowNotFound = false,
-  }) async {
-    if (!_config.hasBaseUrl) {
-      return const VoiceApiFailure(message: kVoiceMissingBaseUrlDetail);
-    }
-    try {
-      final response = await send();
-      if (response.statusCode == 404 && allowNotFound) {
-        return VoiceApiOk(parse(const {}));
-      }
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        if (response.body.isEmpty) {
-          return VoiceApiOk(parse(const {}));
-        }
-        return VoiceApiOk(
-          parse(jsonDecode(response.body) as Map<String, dynamic>),
-        );
-      }
-      final body = response.body.isEmpty
-          ? <String, dynamic>{}
-          : jsonDecode(response.body) as Map<String, dynamic>;
-      return VoiceApiFailure(
-        message: body['message'] as String? ?? 'voice request failed',
-        errorCode: body['error_code'] as String?,
-        statusCode: response.statusCode,
-      );
-    } catch (e) {
-      return VoiceApiFailure(message: '$e');
-    }
-  }
-
-  Uri _uri(String path) => Uri.parse(_config.baseUrl).replace(path: path);
-
-  Map<String, String> _headers(String authorization) => {
-    'Authorization': authorization,
-    'Content-Type': 'application/json',
-  };
-}
-
-VoiceCallMediaKind _parseMediaKind(dynamic raw) {
-  final value = '$raw'.toLowerCase();
-  if (value.contains('video')) return VoiceCallMediaKind.video;
-  return VoiceCallMediaKind.audio;
-}
-
-VoiceCallStatus _parseStatus(dynamic raw) {
-  final value = '$raw'.toLowerCase();
-  if (value.contains('ringing')) return VoiceCallStatus.ringing;
-  if (value.contains('active')) return VoiceCallStatus.active;
-  if (value.contains('declined')) return VoiceCallStatus.declined;
-  if (value.contains('missed')) return VoiceCallStatus.missed;
-  if (value.contains('ended')) return VoiceCallStatus.ended;
-  return VoiceCallStatus.unknown;
-}
-
-DateTime? _parseDate(String? raw) {
-  if (raw == null || raw.isEmpty) return null;
-  return DateTime.tryParse(raw);
 }

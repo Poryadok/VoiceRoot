@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
+import 'package:voice_frontend/backend/gateway_http.dart';
 import 'package:voice_frontend/backend/messages_client.dart';
 import 'package:voice_frontend/backend/realtime_client.dart';
 
@@ -30,8 +31,10 @@ void main() {
       var sessionB = await ctx.registerUser('e2e-b');
 
       final chats = VoiceChatsClient(
-        httpClient: ctx.httpClient,
-        config: ctx.config,
+        gateway: GatewayHttpClient(
+          httpClient: ctx.httpClient,
+          config: ctx.config,
+        ),
       );
       final dmResult = await chats.createDm(
         authorization: sessionA.authorizationHeader,
@@ -41,8 +44,10 @@ void main() {
       final chatId = (dmResult as ChatsApiOk<VoiceChat>).data.id;
 
       final messages = VoiceMessagesClient(
-        httpClient: ctx.httpClient,
-        config: ctx.config,
+        gateway: GatewayHttpClient(
+          httpClient: ctx.httpClient,
+          config: ctx.config,
+        ),
       );
       final wsUri = gatewayWebSocketUri(ctx.config.baseUrl);
 

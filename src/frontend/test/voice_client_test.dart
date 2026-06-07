@@ -6,6 +6,8 @@ import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/voice_client.dart';
 
+import 'support/gateway_test_client.dart';
+
 void main() {
   const config = GatewayConfig(baseUrl: 'http://api.test');
   const auth = 'Bearer access-token';
@@ -32,7 +34,9 @@ void main() {
         200,
       );
     });
-    final client = VoiceCallsClient(httpClient: mock, config: config);
+    final client = VoiceCallsClient(
+      gateway: gatewayHttpForTest(mock, config: config),
+    );
 
     final result = await client.startCall(
       authorization: auth,
@@ -45,7 +49,7 @@ void main() {
     final body = jsonDecode(capturedBody!) as Map<String, dynamic>;
     expect(body['linked_chat'], {'id': 'chat-1'});
     expect(body['callee_profile_id'], 'profile-b');
-    expect(body['media_kind'], 'video');
+    expect(body['media_kind'], 'CALL_MEDIA_KIND_VIDEO');
     final session = (result as VoiceApiOk<VoiceCallSession>).data;
     expect(session.roomId, 'room-1');
     expect(session.mediaKind, VoiceCallMediaKind.video);
@@ -58,7 +62,9 @@ void main() {
       expect(req.url.path, '/api/v1/voice/calls/active');
       return http.Response('{"error_code":"not_found"}', 404);
     });
-    final client = VoiceCallsClient(httpClient: mock, config: config);
+    final client = VoiceCallsClient(
+      gateway: gatewayHttpForTest(mock, config: config),
+    );
 
     final result = await client.getActiveCall(authorization: auth);
 
@@ -78,7 +84,9 @@ void main() {
         200,
       );
     });
-    final client = VoiceCallsClient(httpClient: mock, config: config);
+    final client = VoiceCallsClient(
+      gateway: gatewayHttpForTest(mock, config: config),
+    );
 
     final result = await client.getJoinToken(
       authorization: auth,

@@ -206,6 +206,8 @@ message MoveToVoiceRoomResponse {
 message GetJoinTokenResponse {
   string jwt = 1;
   google.protobuf.Timestamp expires_at = 2;
+  // WebSocket URL for LiveKit SDK connect (public ingress; not the internal service URL).
+  string livekit_url = 3;
 }
 message UpdateVoiceStateResponse {}
 message GetVoiceStatesResponse {

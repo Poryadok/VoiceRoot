@@ -14,11 +14,13 @@ void main() {
   const config = GatewayConfig(baseUrl: 'http://api.test');
 
   Map<String, dynamic> sessionJson() => {
-    'access_token': 'access',
-    'refresh_token': 'refresh',
-    'expires_in_seconds': 900,
-    'account_id': 'acc-1',
-    'profile_id': 'prof-1',
+    'session': {
+      'access_token': 'access',
+      'refresh_token': 'refresh',
+      'expires_in_seconds': 900,
+      'account_id': 'acc-1',
+      'profile_id': 'prof-1',
+    },
   };
 
   ProviderContainer buildContainer({
@@ -61,9 +63,11 @@ void main() {
       if (req.url.path == '/api/v1/auth/refresh') {
         return http.Response(
           jsonEncode({
-            ...sessionJson(),
-            'access_token': 'access-new',
-            'refresh_token': 'refresh-new',
+            'session': {
+              ...(sessionJson()['session'] as Map<String, dynamic>),
+              'access_token': 'access-new',
+              'refresh_token': 'refresh-new',
+            },
           }),
           200,
         );

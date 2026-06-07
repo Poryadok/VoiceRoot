@@ -63,7 +63,10 @@ void main() {
         httpClient: mock,
         config: const GatewayConfig(baseUrl: 'http://api.test'),
       );
-      expect(await client.fetchVersionBody(), '{"ok":true}');
+      expect(
+        await client.fetchVersionBody(platform: 'desktop', version: '1.0.0'),
+        '{"ok":true}',
+      );
     });
   });
 }

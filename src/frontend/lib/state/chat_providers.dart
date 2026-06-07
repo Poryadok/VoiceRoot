@@ -5,30 +5,39 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../backend/api_errors.dart';
 import '../backend/chats_client.dart';
 import '../backend/files_client.dart';
+import '../backend/messaging_read_sync.dart';
 import '../backend/messages_client.dart';
 import '../backend/realtime_client.dart';
 import 'auth_providers.dart';
 import 'gateway_providers.dart';
 
 final voiceChatsClientProvider = Provider<VoiceChatsClient>((ref) {
-  return VoiceChatsClient(
-    httpClient: ref.watch(httpClientProvider),
-    config: ref.watch(gatewayConfigProvider),
-  );
+  return VoiceChatsClient(gateway: ref.watch(gatewayHttpClientProvider));
 });
 
 final voiceMessagesClientProvider = Provider<VoiceMessagesClient>((ref) {
-  return VoiceMessagesClient(
-    httpClient: ref.watch(httpClientProvider),
-    config: ref.watch(gatewayConfigProvider),
-  );
+  return VoiceMessagesClient(gateway: ref.watch(gatewayHttpClientProvider));
 });
 
 final voiceFilesClientProvider = Provider<VoiceFilesClient>((ref) {
-  return VoiceFilesClient(
-    httpClient: ref.watch(httpClientProvider),
-    config: ref.watch(gatewayConfigProvider),
-  );
+  return VoiceFilesClient(gateway: ref.watch(gatewayHttpClientProvider));
+});
+
+/// Resolves a presigned GET URL for chat attachment display.
+final fileAttachmentUrlProvider = FutureProvider.family<String?, String>((
+  ref,
+  fileId,
+) async {
+  if (fileId.isEmpty) return null;
+  final auth = ref.watch(authorizationHeaderProvider);
+  if (auth == null) return null;
+  final result = await ref
+      .read(voiceFilesClientProvider)
+      .getFileUrl(authorization: auth, fileId: fileId);
+  return switch (result) {
+    FilesApiOk(:final data) => data.isEmpty ? null : data,
+    FilesApiFailure() => null,
+  };
 });
 
 /// Active DM chat id in the main column, or null.
@@ -285,8 +294,12 @@ final chatListProvider = FutureProvider<ChatListData>((ref) async {
       .listChats(authorization: auth);
   return switch (result) {
     ChatsApiOk(:final data) => data,
-    ChatsApiFailure(:final statusCode) when isBackendUnavailable(statusCode) =>
+    ChatsApiFailure(:final statusCode)
+        when isBackendUnavailable(statusCode) =>
       throw const BackendUnavailableException(),
+    ChatsApiFailure(:final errorCode, :final statusCode, :final message)
+        when isNotFoundError(errorCode, statusCode) =>
+      throw Exception(message),
     ChatsApiFailure(:final message) => throw Exception(message),
   };
 });
@@ -606,17 +619,14 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     }
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return;
-    final result = await _ref
-        .read(voiceMessagesClientProvider)
-        .markRead(
-          authorization: auth,
-          chatId: chatId,
-          lastReadMessageId: lastId,
-        );
+    final ok = await MessagingReadSync(
+      messagesClient: _ref.read(voiceMessagesClientProvider),
+      realtimeMarkRead: (cid, mid) =>
+          _ref.read(realtimeHubProvider).markRead(cid, mid),
+    ).markRead(authorization: auth, chatId: chatId, messageId: lastId);
     if (!mounted) return;
-    if (result is MessagesApiOk<void>) {
+    if (ok) {
       _lastMarkedReadMessageId = lastId;
-      _ref.read(realtimeHubProvider).markRead(chatId, lastId);
       _invalidateChatLists(_ref);
     }
   }
@@ -725,9 +735,8 @@ class RealtimeHub {
 
     _setStatus(RealtimeLinkStatus.connecting);
     final uri = gatewayWebSocketUri(config.baseUrl);
-    final headers = {
+    final headers = <String, String>{
       'Authorization': auth.authorizationHeader,
-      'X-Profile-Id': auth.activeProfileId,
       'X-Voice-Profile-Id': auth.activeProfileId,
     };
     final connection = VoiceRealtimeConnection(uri: uri, headers: headers);
@@ -793,7 +802,7 @@ class RealtimeHub {
     }
     if (frame.op == 'hello') {
       _setStatus(RealtimeLinkStatus.connected);
-      _connection?.sendResume();
+      // Message catch-up after reconnect is REST-only (see ARCHITECTURE_REQUIREMENTS).
     }
   }
 
@@ -841,10 +850,15 @@ class RealtimeHub {
   }
 }
 
+/// When false, [RealtimeHub] does not open WebSocket (widget tests).
+final realtimeAutoConnectProvider = Provider<bool>((ref) => true);
+
 final realtimeHubProvider = Provider<RealtimeHub>((ref) {
   final hub = RealtimeHub(ref);
+  final autoConnect = ref.watch(realtimeAutoConnectProvider);
   ref.onDispose(hub.dispose);
-  ref.listen(authControllerProvider, (prev, next) {
+  ref.listen<AuthState>(authControllerProvider, (prev, next) {
+    if (!autoConnect) return;
     if (next.isAuthenticated && !(prev?.isAuthenticated ?? false)) {
       unawaited(hub.ensureConnected());
     }
@@ -852,7 +866,7 @@ final realtimeHubProvider = Provider<RealtimeHub>((ref) {
       unawaited(hub.disconnect());
     }
   });
-  if (ref.read(authControllerProvider).isAuthenticated) {
+  if (autoConnect && ref.read(authControllerProvider).isAuthenticated) {
     Future.microtask(hub.ensureConnected);
   }
   return hub;

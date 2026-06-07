@@ -28,8 +28,8 @@ class AuthRestIntegrationTest {
 
   @Test
   void registerLoginRefreshValidateLogoutAndJwksWorkOverRest() throws Exception {
-    JsonNode registered = postJson("/api/v1/auth/register",
-        "{\"email\":\"rest@example.com\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"{}\"}");
+    JsonNode registered = session(postJson("/api/v1/auth/register",
+        "{\"email\":\"rest@example.com\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"{}\"}"));
 
     String access = registered.get("access_token").asText();
     String refresh = registered.get("refresh_token").asText();
@@ -52,8 +52,8 @@ class AuthRestIntegrationTest {
 
     String stableProfileId = registered.get("profile_id").asText();
 
-    JsonNode login = postJson("/api/v1/auth/login",
-        "{\"email\":\"rest@example.com\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"{}\"}");
+    JsonNode login = session(postJson("/api/v1/auth/login",
+        "{\"email\":\"rest@example.com\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"{}\"}"));
     assertThat(login.get("refresh_token").asText()).isNotEqualTo(refresh);
     assertThat(login.get("profile_id").asText()).isEqualTo(stableProfileId);
     assertThat(SignedJWT.parse(login.get("access_token").asText()).getJWTClaimsSet().getStringClaim("profile_id"))
@@ -61,8 +61,8 @@ class AuthRestIntegrationTest {
     assertThat(SignedJWT.parse(login.get("access_token").asText()).getJWTClaimsSet().getStringClaim("user_id"))
         .isEqualTo(registered.get("account_id").asText());
 
-    JsonNode rotated = postJson("/api/v1/auth/refresh",
-        "{\"refresh_token\":\"" + refresh + "\",\"device_info_json\":\"{}\"}");
+    JsonNode rotated = session(postJson("/api/v1/auth/refresh",
+        "{\"refresh_token\":\"" + refresh + "\",\"device_info_json\":\"{}\"}"));
     assertThat(rotated.get("refresh_token").asText()).isNotEqualTo(refresh);
     assertThat(rotated.get("profile_id").asText()).isEqualTo(stableProfileId);
     assertThat(SignedJWT.parse(rotated.get("access_token").asText()).getJWTClaimsSet().getStringClaim("profile_id"))
@@ -106,5 +106,10 @@ class AuthRestIntegrationTest {
         .getResponse()
         .getContentAsString();
     return objectMapper.readTree(response);
+  }
+
+  private static JsonNode session(JsonNode envelope) {
+    assertThat(envelope.has("session")).isTrue();
+    return envelope.get("session");
   }
 }

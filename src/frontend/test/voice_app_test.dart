@@ -87,7 +87,7 @@ void main() {
     expect(find.textContaining('Profile:'), findsNothing);
   });
 
-  testWidgets('chat list shows backend unavailable on 404', (tester) async {
+  testWidgets('chat list shows backend unavailable on 503', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: voiceAppTestOverrides(
@@ -96,7 +96,7 @@ void main() {
               return http.Response('OK', 200);
             }
             if (request.url.path == '/api/v1/chats') {
-              return http.Response('not found', 404);
+              return http.Response('unavailable', 503);
             }
             return http.Response('Not Found', 404);
           }),

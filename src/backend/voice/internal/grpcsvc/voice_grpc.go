@@ -179,7 +179,11 @@ func (s *VoiceGRPC) GetJoinToken(ctx context.Context, req *callsv1.GetJoinTokenR
 	if err != nil {
 		return nil, status.Error(codes.FailedPrecondition, err.Error())
 	}
-	return &callsv1.GetJoinTokenResponse{Jwt: jwt, ExpiresAt: timestamppb.New(expiresAt)}, nil
+	return &callsv1.GetJoinTokenResponse{
+		Jwt:         jwt,
+		ExpiresAt:   timestamppb.New(expiresAt),
+		LivekitUrl:  s.Tokens.LivekitURL(),
+	}, nil
 }
 
 func (s *VoiceGRPC) UpdateVoiceState(ctx context.Context, req *callsv1.UpdateVoiceStateRequest) (*callsv1.UpdateVoiceStateResponse, error) {

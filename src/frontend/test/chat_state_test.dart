@@ -14,6 +14,7 @@ import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 
 import 'support/auth_test_overrides.dart';
+import 'support/gateway_test_client.dart';
 
 void main() {
   group('ChatListController', () {
@@ -257,8 +258,9 @@ class _FakeChatsClient extends VoiceChatsClient {
   _FakeChatsClient({List<ChatListData> pages = const []})
     : _pages = [...pages],
       super(
-        httpClient: MockClient((_) async => http.Response('{}', 500)),
-        config: const GatewayConfig(baseUrl: 'http://api.test'),
+        gateway: gatewayHttpForTest(
+          MockClient((_) async => http.Response('{}', 500)),
+        ),
       );
 
   final List<ChatListData> _pages;
@@ -298,8 +300,9 @@ class _FakeMessagesClient extends VoiceMessagesClient {
   _FakeMessagesClient({List<MessageListData> pages = const []})
     : _pages = [...pages],
       super(
-        httpClient: MockClient((_) async => http.Response('{}', 500)),
-        config: const GatewayConfig(baseUrl: 'http://api.test'),
+        gateway: gatewayHttpForTest(
+          MockClient((_) async => http.Response('{}', 500)),
+        ),
       );
 
   final List<MessageListData> _pages;

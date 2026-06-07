@@ -1,6 +1,11 @@
-/// HTTP status codes where Phase-1 social/chat routes are missing or down.
+/// HTTP status codes where upstream services are down (not resource-not-found).
 bool isBackendUnavailable(int? statusCode) {
-  return statusCode == 404 || statusCode == 503;
+  return statusCode == 502 || statusCode == 503 || statusCode == 504;
+}
+
+/// Maps gRPC-transcoded `not_found` to a dedicated UX path.
+bool isNotFoundError(String? errorCode, int? statusCode) {
+  return statusCode == 404 || errorCode == 'not_found';
 }
 
 /// Thrown by Riverpod loaders when upstream social/chat APIs are unavailable.

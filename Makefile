@@ -28,7 +28,7 @@ GO_MODULES_LINT := pkg $(GO_SERVICES)
 GO_TEST_TARGETS := $(GO_SERVICES:%=go-test-%)
 GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
 
-.PHONY: buf-lint buf-format buf-breaking buf-generate compose-up compose-app-up compose-down \
+.PHONY: buf-lint buf-format buf-breaking buf-generate buf-generate-dart buf-dart-check compose-up compose-app-up compose-down \
 	build-all build-all-breaking check-toolchain compose-config-ci buf-ci backend-test-ci backend-image-ci \
 	gateway-test-ci gateway-image-ci go-test-pkg auth-test-ci auth-image-ci buf-breaking-ci \
 	golangci-ci gateway-test-race-ci design-tokens-check flutter-ui-color-gate flutter-ci testcontainers-prune
@@ -46,6 +46,15 @@ buf-breaking:
 # Emits Go stubs under gen/go (gitignored); requires network for remote BSR plugins.
 buf-generate:
 	buf generate
+
+# Committed Dart stubs for Flutter; uses local protoc-gen-dart (see scripts/ci/buf-generate-dart.sh).
+buf-generate-dart:
+	$(BASH) "$(ROOT)/scripts/ci/buf-generate-dart.sh"
+
+# Fails if lib/gen is out of date vs protos (CI / pre-PR).
+buf-dart-check:
+	$(BASH) "$(ROOT)/scripts/ci/buf-generate-dart.sh"
+	@git diff --exit-code -- src/frontend/lib/gen || (echo "Run make buf-generate-dart and commit src/frontend/lib/gen" >&2; exit 1)
 
 compose-up:
 	docker compose up -d
@@ -115,7 +124,7 @@ flutter-ui-color-gate:
 	$(BASH) "$(ROOT)/scripts/design/flutter-ui-color-gate.sh"
 
 # Host Flutter SDK (parity with job `flutter` in .github/workflows/ci.yml).
-flutter-ci: design-tokens-check flutter-ui-color-gate
+flutter-ci: design-tokens-check flutter-ui-color-gate buf-dart-check
 	cd $(ROOT)/src/frontend && flutter pub get && flutter analyze && flutter test
 
 buf-breaking-ci:

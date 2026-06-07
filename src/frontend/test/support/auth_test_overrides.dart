@@ -5,6 +5,7 @@ import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/discover_hint_storage.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
+import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/theme/profile_accent_storage.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
@@ -24,6 +25,7 @@ List<Override> voiceAppTestOverrides({required http.Client client}) => [
     const GatewayConfig(baseUrl: 'http://localhost:9999'),
   ),
   httpClientProvider.overrideWithValue(client),
+  realtimeAutoConnectProvider.overrideWithValue(false),
 ];
 
 /// Pre-authenticated [AuthController] for widget tests of the main shell.

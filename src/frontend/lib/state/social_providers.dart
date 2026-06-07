@@ -4,7 +4,6 @@ import '../backend/api_errors.dart';
 import '../backend/friends_client.dart';
 import '../backend/users_client.dart';
 import 'auth_providers.dart';
-import 'gateway_providers.dart';
 
 final activeProfileProvider = FutureProvider<VoiceProfile?>((ref) async {
   final profileId = ref.watch(authControllerProvider).activeProfileId;
@@ -13,17 +12,11 @@ final activeProfileProvider = FutureProvider<VoiceProfile?>((ref) async {
 });
 
 final voiceUsersClientProvider = Provider<VoiceUsersClient>((ref) {
-  return VoiceUsersClient(
-    httpClient: ref.watch(httpClientProvider),
-    config: ref.watch(gatewayConfigProvider),
-  );
+  return VoiceUsersClient(gateway: ref.watch(gatewayHttpClientProvider));
 });
 
 final voiceFriendsClientProvider = Provider<VoiceFriendsClient>((ref) {
-  return VoiceFriendsClient(
-    httpClient: ref.watch(httpClientProvider),
-    config: ref.watch(gatewayConfigProvider),
-  );
+  return VoiceFriendsClient(gateway: ref.watch(gatewayHttpClientProvider));
 });
 
 final profileProvider = FutureProvider.family<VoiceProfile?, String>((

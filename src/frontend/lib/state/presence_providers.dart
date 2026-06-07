@@ -55,12 +55,19 @@ class PresenceController extends StateNotifier<Map<String, VoicePresence>> {
     if (frame.op != 'presence_update') return;
     final data = frame.data;
     if (data == null) return;
-    final profileId =
-        data['profile_id'] as String? ?? data['profileId'] as String?;
+    final profileId = data['profile_id'] as String?;
     final status = data['status'] as String?;
     if (profileId == null || profileId.isEmpty || status == null) return;
     if (!_watched.contains(profileId)) return;
-    state = {...state, profileId: VoicePresence.fromJson(data)};
+    final lastSeenRaw = data['last_seen'] as String?;
+    state = {
+      ...state,
+      profileId: VoicePresence(
+        profileId: profileId,
+        status: status,
+        lastSeen: lastSeenRaw == null ? null : DateTime.tryParse(lastSeenRaw)?.toUtc(),
+      ),
+    };
   }
 
   void _onLinkStatus(RealtimeLinkStatus? prev, RealtimeLinkStatus next) {

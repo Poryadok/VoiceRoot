@@ -1,8 +1,10 @@
-import 'dart:convert';
+import 'package:fixnum/fixnum.dart';
 
-import 'package:http/http.dart' as http;
-
-import 'gateway_config.dart';
+import '../gen/voice/user/v1/user.pb.dart' as user_pb;
+import 'api_result.dart';
+import 'gateway_http.dart';
+import 'presigned_upload.dart';
+import 'proto_mappers.dart';
 
 const String kUsersMissingBaseUrlDetail = 'missing base URL';
 const int kProfileDisplayNameMaxLength = 32;
@@ -57,19 +59,6 @@ class VoiceProfile {
   final String? customStatus;
 
   String get handle => '@$username#$discriminator';
-
-  factory VoiceProfile.fromJson(Map<String, dynamic> json) {
-    return VoiceProfile(
-      id: json['id'] as String,
-      accountId: json['account_id'] as String,
-      username: json['username'] as String,
-      discriminator: json['discriminator'] as String,
-      displayName: json['display_name'] as String,
-      avatarUrl: json['avatar_url'] as String?,
-      bio: json['bio'] as String?,
-      customStatus: json['custom_status'] as String?,
-    );
-  }
 }
 
 class VoicePresence {
@@ -88,46 +77,6 @@ class VoicePresence {
   bool get isIdle => status == 'idle';
 
   bool get isDnd => status == 'dnd';
-
-  factory VoicePresence.fromJson(Map<String, dynamic> json) {
-    return VoicePresence(
-      profileId: (json['profile_id'] ?? json['profileId']) as String,
-      status: json['status'] as String? ?? 'invisible',
-      lastSeen: _parseTimestamp(json['last_seen'] ?? json['lastSeen']),
-    );
-  }
-
-  /// Parses gateway proto JSON (`presenceStatus`) and legacy test keys.
-  static VoicePresence? fromGatewayBody(Map<String, dynamic> body) {
-    final raw =
-        body['presenceStatus'] ?? body['presence_status'] ?? body['presence'];
-    if (raw is! Map<String, dynamic>) return null;
-    return VoicePresence.fromJson(raw);
-  }
-
-  static Map<String, VoicePresence> bulkFromGatewayBody(
-    Map<String, dynamic> body,
-  ) {
-    final raw = body['byProfileId'] ?? body['by_profile_id'];
-    if (raw is! Map) return {};
-    final out = <String, VoicePresence>{};
-    for (final entry in raw.entries) {
-      final value = entry.value;
-      if (value is Map<String, dynamic>) {
-        out[entry.key.toString()] = VoicePresence.fromJson(value);
-      } else if (value is Map) {
-        out[entry.key.toString()] = VoicePresence.fromJson(
-          Map<String, dynamic>.from(value),
-        );
-      }
-    }
-    return out;
-  }
-
-  static DateTime? _parseTimestamp(Object? raw) {
-    if (raw is! String || raw.isEmpty) return null;
-    return DateTime.tryParse(raw)?.toUtc();
-  }
 }
 
 class SearchProfilesData {
@@ -160,50 +109,28 @@ class AvatarPresignedUpload {
   final DateTime? expiresAt;
   final String publicUrl;
   final String objectKey;
-
-  factory AvatarPresignedUpload.fromJson(Map<String, dynamic> json) {
-    final rawHeaders = json['required_headers'] ?? json['requiredHeaders'];
-    final headers = <String, String>{};
-    if (rawHeaders is Map) {
-      for (final entry in rawHeaders.entries) {
-        headers[entry.key.toString()] = entry.value.toString();
-      }
-    }
-    final rawExpiresAt = json['expires_at'] ?? json['expiresAt'];
-    return AvatarPresignedUpload(
-      httpMethod:
-          (json['http_method'] ?? json['httpMethod']) as String? ?? 'PUT',
-      uploadUrl: (json['upload_url'] ?? json['uploadUrl']) as String,
-      requiredHeaders: headers,
-      maxBytes: ((json['max_bytes'] ?? json['maxBytes']) as num).toInt(),
-      expiresAt: rawExpiresAt is String
-          ? DateTime.tryParse(rawExpiresAt)
-          : null,
-      publicUrl: (json['public_url'] ?? json['publicUrl']) as String,
-      objectKey: (json['object_key'] ?? json['objectKey']) as String,
-    );
-  }
 }
 
 /// HTTP client for User routes via API Gateway (`/api/v1/users/**`).
 class VoiceUsersClient {
-  VoiceUsersClient({
-    required http.Client httpClient,
-    required GatewayConfig config,
-  }) : _http = httpClient,
-       _config = config;
+  VoiceUsersClient({required GatewayHttpClient gateway}) : _gateway = gateway;
 
-  final http.Client _http;
-  final GatewayConfig _config;
+  final GatewayHttpClient _gateway;
 
   Future<UsersApiResult<VoiceProfile>> getMe({
     required String authorization,
   }) async {
-    if (!_config.hasBaseUrl) {
-      return const UsersApiFailure(message: kUsersMissingBaseUrlDetail);
-    }
-    final uri = Uri.parse(_config.baseUrl).resolve('/api/v1/users/me');
-    return _get(uri, authorization, _parseProfile);
+    final result = await _gateway.getProto(
+      _gateway.resolve('/api/v1/users/me'),
+      authorization: authorization,
+      createEmpty: user_pb.GetProfileResponse.create,
+    );
+    return _map(
+      result,
+      (data) => voiceProfileFromProto(
+        data.hasProfile() ? data.profile : user_pb.Profile(),
+      ),
+    );
   }
 
   Future<UsersApiResult<SearchProfilesData>> searchProfiles({
@@ -212,43 +139,39 @@ class VoiceUsersClient {
     String? cursor,
     int? pageSize,
   }) async {
-    if (!_config.hasBaseUrl) {
-      return const UsersApiFailure(message: kUsersMissingBaseUrlDetail);
-    }
     final params = <String, String>{'q': query};
     if (cursor != null && cursor.isNotEmpty) params['cursor'] = cursor;
     if (pageSize != null) params['page_size'] = '$pageSize';
-    final uri = Uri.parse(
-      _config.baseUrl,
-    ).replace(path: '/api/v1/users/search', queryParameters: params);
-    return _get(uri, authorization, (body) {
-      final profileList = body['profile_list'] as Map<String, dynamic>? ?? {};
-      final rawProfiles = profileList['profiles'] as List<dynamic>? ?? [];
-      final page = body['page'] as Map<String, dynamic>? ?? {};
-      return SearchProfilesData(
-        profiles: rawProfiles
-            .map((e) => VoiceProfile.fromJson(e as Map<String, dynamic>))
-            .toList(),
-        nextCursor: page['next_cursor'] as String?,
-        hasMore: page['has_more'] as bool? ?? false,
-      );
-    });
+    final uri = _gateway.replace(
+      path: '/api/v1/users/search',
+      queryParameters: params,
+    );
+    final result = await _gateway.getProto(
+      uri,
+      authorization: authorization,
+      createEmpty: user_pb.SearchProfilesResponse.create,
+    );
+    return _map(
+      result,
+      (data) => searchProfilesFromProto(data as user_pb.SearchProfilesResponse),
+    );
   }
 
   Future<UsersApiResult<VoiceProfile>> getProfile({
     required String authorization,
     required String profileId,
   }) async {
-    if (!_config.hasBaseUrl) {
-      return const UsersApiFailure(message: kUsersMissingBaseUrlDetail);
-    }
-    final uri = Uri.parse(
-      _config.baseUrl,
-    ).resolve('/api/v1/users/profiles/$profileId');
-    return _get(uri, authorization, (body) {
-      final profile = body['profile'] as Map<String, dynamic>;
-      return VoiceProfile.fromJson(profile);
-    });
+    final result = await _gateway.getProto(
+      _gateway.resolve('/api/v1/users/profiles/$profileId'),
+      authorization: authorization,
+      createEmpty: user_pb.GetProfileResponse.create,
+    );
+    return _map(
+      result,
+      (data) => voiceProfileFromProto(
+        data.hasProfile() ? data.profile : user_pb.Profile(),
+      ),
+    );
   }
 
   Future<UsersApiResult<VoiceProfile>> updateProfile({
@@ -257,20 +180,21 @@ class VoiceUsersClient {
     String? bio,
     String? avatarUrl,
   }) async {
-    if (!_config.hasBaseUrl) {
-      return const UsersApiFailure(message: kUsersMissingBaseUrlDetail);
-    }
-    final body = <String, dynamic>{};
-    if (displayName != null) body['display_name'] = displayName;
-    if (bio != null) body['bio'] = bio;
-    if (avatarUrl != null) body['avatar_url'] = avatarUrl;
-    final uri = Uri.parse(_config.baseUrl).resolve('/api/v1/users/me');
-    return _sendJson(
-      method: 'PATCH',
-      uri: uri,
+    final result = await _gateway.patchProto(
+      uri: _gateway.resolve('/api/v1/users/me'),
       authorization: authorization,
-      body: body,
-      parse: _parseProfile,
+      body: updateProfileRequestToProto(
+        displayName: displayName,
+        bio: bio,
+        avatarUrl: avatarUrl,
+      ),
+      createEmpty: user_pb.UpdateProfileResponse.create,
+    );
+    return _map(
+      result,
+      (data) => voiceProfileFromProto(
+        data.hasProfile() ? data.profile : user_pb.Profile(),
+      ),
     );
   }
 
@@ -279,9 +203,6 @@ class VoiceUsersClient {
     required String contentType,
     required int contentLength,
   }) async {
-    if (!_config.hasBaseUrl) {
-      return const UsersApiFailure(message: kUsersMissingBaseUrlDetail);
-    }
     final normalizedContentType = contentType.trim().toLowerCase();
     if (!kProfileAvatarContentTypes.contains(normalizedContentType)) {
       return const UsersApiFailure(
@@ -295,18 +216,20 @@ class VoiceUsersClient {
         errorCode: 'invalid_avatar_size',
       );
     }
-    final uri = Uri.parse(
-      _config.baseUrl,
-    ).resolve('/api/v1/users/me/avatar/presigned-upload');
-    return _sendJson(
-      method: 'POST',
-      uri: uri,
+    final result = await _gateway.postProto(
+      uri: _gateway.resolve('/api/v1/users/me/avatar/presigned-upload'),
       authorization: authorization,
-      body: {
-        'content_type': normalizedContentType,
-        'content_length': contentLength,
-      },
-      parse: AvatarPresignedUpload.fromJson,
+      body: user_pb.CreateAvatarPresignedUploadRequest(
+        contentType: normalizedContentType,
+        contentLength: Int64(contentLength),
+      ),
+      createEmpty: user_pb.CreateAvatarPresignedUploadResponse.create,
+    );
+    return _map(
+      result,
+      (data) => avatarPresignedFromProto(
+        data as user_pb.CreateAvatarPresignedUploadResponse,
+      ),
     );
   }
 
@@ -315,159 +238,74 @@ class VoiceUsersClient {
     required Map<String, String> requiredHeaders,
     required List<int> bytes,
   }) async {
-    try {
-      final res = await _http.put(
-        uploadUrl,
-        headers: requiredHeaders,
-        body: bytes,
-      );
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        return const UsersApiOk<void>(null);
-      }
-      return UsersApiFailure(
-        message: _failureMessage(res),
-        errorCode: _errorCode(res),
-        statusCode: res.statusCode,
-      );
-    } catch (e) {
-      return UsersApiFailure(message: '$e');
-    }
+    final result = await putPresigned(
+      gateway: _gateway,
+      uploadUrl: uploadUrl,
+      requiredHeaders: requiredHeaders,
+      bytes: bytes,
+    );
+    return _mapEmpty(result);
   }
 
   Future<UsersApiResult<VoicePresence>> getPresence({
     required String authorization,
     required String profileId,
   }) async {
-    if (!_config.hasBaseUrl) {
-      return const UsersApiFailure(message: kUsersMissingBaseUrlDetail);
-    }
-    final uri = Uri.parse(
-      _config.baseUrl,
-    ).resolve('/api/v1/users/profiles/$profileId/presence');
-    return _get(uri, authorization, (body) {
-      final presence = VoicePresence.fromGatewayBody(body);
-      if (presence == null) {
-        throw const FormatException('missing presence');
-      }
-      return presence;
-    });
+    final result = await _gateway.getProto(
+      _gateway.resolve('/api/v1/users/profiles/$profileId/presence'),
+      authorization: authorization,
+      createEmpty: user_pb.GetPresenceResponse.create,
+    );
+    return _map(
+      result,
+      (data) => voicePresenceFromProto(
+        data.hasPresenceStatus()
+            ? data.presenceStatus
+            : user_pb.PresenceStatus(),
+      ),
+    );
   }
 
   Future<UsersApiResult<Map<String, VoicePresence>>> getBulkPresence({
     required String authorization,
     required List<String> profileIds,
   }) async {
-    if (!_config.hasBaseUrl) {
-      return const UsersApiFailure(message: kUsersMissingBaseUrlDetail);
-    }
-    final uri = Uri.parse(
-      _config.baseUrl,
-    ).resolve('/api/v1/users/presence/bulk');
-    try {
-      final res = await _http.post(
-        uri,
-        headers: {
-          'Authorization': authorization,
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({'profileIds': profileIds}),
-      );
-      if (res.statusCode == 200) {
-        final decoded = jsonDecode(res.body) as Map<String, dynamic>;
-        return UsersApiOk(VoicePresence.bulkFromGatewayBody(decoded));
-      }
-      return UsersApiFailure(
-        message: _failureMessage(res),
-        errorCode: _errorCode(res),
-        statusCode: res.statusCode,
-      );
-    } catch (e) {
-      return UsersApiFailure(message: '$e');
-    }
+    final result = await _gateway.postProto(
+      uri: _gateway.resolve('/api/v1/users/presence/bulk'),
+      authorization: authorization,
+      body: bulkPresenceRequestToProto(profileIds),
+      createEmpty: user_pb.GetBulkPresenceResponse.create,
+    );
+    return _map(result, (data) {
+      return {
+        for (final entry in data.byProfileId.entries)
+          entry.key: voicePresenceFromProto(entry.value),
+      };
+    });
   }
 
-  Future<UsersApiResult<T>> _get<T>(
-    Uri uri,
-    String authorization,
-    T Function(Map<String, dynamic> body) parse,
-  ) async {
-    try {
-      final res = await _http.get(
-        uri,
-        headers: {'Authorization': authorization},
-      );
-      if (res.statusCode == 200) {
-        final decoded = jsonDecode(res.body) as Map<String, dynamic>;
-        return UsersApiOk(parse(decoded));
-      }
-      return UsersApiFailure(
-        message: _failureMessage(res),
-        errorCode: _errorCode(res),
-        statusCode: res.statusCode,
-      );
-    } catch (e) {
-      return UsersApiFailure(message: '$e');
-    }
+  UsersApiResult<T> _map<T>(
+    GatewayHttpResult<dynamic> result,
+    T Function(dynamic data) parse,
+  ) {
+    return switch (result) {
+      GatewayHttpOk(:final data) => UsersApiOk(parse(data)),
+      GatewayHttpFailure(:final error) => UsersApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
   }
 
-  Future<UsersApiResult<T>> _sendJson<T>({
-    required String method,
-    required Uri uri,
-    required String authorization,
-    required Map<String, dynamic> body,
-    required T Function(Map<String, dynamic> body) parse,
-  }) async {
-    try {
-      final req = http.Request(method, uri)
-        ..headers['Authorization'] = authorization
-        ..headers['Content-Type'] = 'application/json'
-        ..body = jsonEncode(body);
-      final streamed = await _http.send(req);
-      final res = await http.Response.fromStream(streamed);
-      if (res.statusCode == 200) {
-        final decoded = jsonDecode(res.body) as Map<String, dynamic>;
-        return UsersApiOk(parse(decoded));
-      }
-      return UsersApiFailure(
-        message: _failureMessage(res),
-        errorCode: _errorCode(res),
-        statusCode: res.statusCode,
-      );
-    } catch (e) {
-      return UsersApiFailure(message: '$e');
-    }
-  }
-
-  static VoiceProfile _parseProfile(Map<String, dynamic> body) {
-    final profile = body['profile'] as Map<String, dynamic>;
-    return VoiceProfile.fromJson(profile);
-  }
-
-  static String _failureMessage(http.Response res) {
-    final code = _errorCode(res);
-    if (code != null) return code;
-    try {
-      final decoded = jsonDecode(res.body);
-      if (decoded is Map<String, dynamic>) {
-        final message = decoded['message'];
-        if (message is String && message.isNotEmpty) return message;
-      }
-    } catch (_) {
-      // ignore malformed body
-    }
-    return 'HTTP ${res.statusCode}';
-  }
-
-  static String? _errorCode(http.Response res) {
-    try {
-      final decoded = jsonDecode(res.body);
-      if (decoded is Map<String, dynamic>) {
-        final err = decoded['error'] ?? decoded['error_code'];
-        if (err is String && err.isNotEmpty) return err;
-      }
-    } catch (_) {
-      // ignore malformed body
-    }
-    return null;
+  UsersApiResult<void> _mapEmpty(GatewayHttpResult<dynamic> result) {
+    return switch (result) {
+      GatewayHttpOk() => const UsersApiOk<void>(null),
+      GatewayHttpFailure(:final error) => UsersApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
   }
 }

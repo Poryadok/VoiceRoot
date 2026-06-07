@@ -1,5 +1,6 @@
 # Go + gRPC codegen for all modules in buf.work.yaml (voice protos).
 # Run from repository root: buf generate
+# Dart (Flutter): make buf-generate-dart (buf.gen.dart.yaml, committed lib/gen).
 # Output: gen/go (gitignored); bump plugin versions intentionally in PRs.
 version: v1
 plugins:

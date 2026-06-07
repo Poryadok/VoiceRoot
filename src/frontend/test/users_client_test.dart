@@ -6,6 +6,8 @@ import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/users_client.dart';
 
+import 'support/gateway_test_client.dart';
+
 void main() {
   const config = GatewayConfig(baseUrl: 'http://api.test');
   const auth = 'Bearer access-token';
@@ -39,7 +41,7 @@ void main() {
           200,
         );
       });
-      final client = VoiceUsersClient(httpClient: mock, config: config);
+      final client = VoiceUsersClient(gateway: gatewayHttpForTest(mock, config: config));
       final r = await client.searchProfiles(
         authorization: auth,
         query: 'alice',
@@ -54,8 +56,10 @@ void main() {
 
     test('missing base URL', () async {
       final client = VoiceUsersClient(
-        httpClient: MockClient((_) async => http.Response('', 500)),
-        config: const GatewayConfig(baseUrl: ''),
+        gateway: gatewayHttpForTest(
+          MockClient((_) async => http.Response('', 500)),
+          config: const GatewayConfig(baseUrl: ''),
+        ),
       );
       final r = await client.searchProfiles(authorization: auth, query: 'x');
       expect(r, isA<UsersApiFailure>());
@@ -83,7 +87,7 @@ void main() {
           200,
         );
       });
-      final client = VoiceUsersClient(httpClient: mock, config: config);
+      final client = VoiceUsersClient(gateway: gatewayHttpForTest(mock, config: config));
       final r = await client.getProfile(authorization: auth, profileId: 'p-99');
       expect(r, isA<UsersApiOk<VoiceProfile>>());
       expect((r as UsersApiOk<VoiceProfile>).data.displayName, 'Bob');
@@ -115,7 +119,7 @@ void main() {
           200,
         );
       });
-      final client = VoiceUsersClient(httpClient: mock, config: config);
+      final client = VoiceUsersClient(gateway: gatewayHttpForTest(mock, config: config));
       final r = await client.getMe(authorization: auth);
       expect(r, isA<UsersApiOk<VoiceProfile>>());
       final profile = (r as UsersApiOk<VoiceProfile>).data;
@@ -157,7 +161,7 @@ void main() {
           200,
         );
       });
-      final client = VoiceUsersClient(httpClient: mock, config: config);
+      final client = VoiceUsersClient(gateway: gatewayHttpForTest(mock, config: config));
       final r = await client.updateProfile(
         authorization: auth,
         displayName: 'Alice II',
@@ -176,7 +180,7 @@ void main() {
         expect(req.url.path, '/api/v1/users/me/avatar/presigned-upload');
         expect(req.headers['Authorization'], auth);
         final body = jsonDecode(req.body) as Map<String, dynamic>;
-        expect(body, {'content_type': 'image/png', 'content_length': 2048});
+        expect(body, {'content_type': 'image/png', 'content_length': '2048'});
         return http.Response(
           jsonEncode({
             'http_method': 'PUT',
@@ -190,7 +194,7 @@ void main() {
           200,
         );
       });
-      final client = VoiceUsersClient(httpClient: mock, config: config);
+      final client = VoiceUsersClient(gateway: gatewayHttpForTest(mock, config: config));
       final r = await client.createAvatarPresignedUpload(
         authorization: auth,
         contentType: 'image/png',
@@ -206,11 +210,13 @@ void main() {
     test('rejects gif before calling gateway in Phase 1', () async {
       var called = false;
       final client = VoiceUsersClient(
-        httpClient: MockClient((_) async {
-          called = true;
-          return http.Response('{}', 200);
-        }),
-        config: config,
+        gateway: gatewayHttpForTest(
+          MockClient((_) async {
+            called = true;
+            return http.Response('{}', 200);
+          }),
+          config: config,
+        ),
       );
       final r = await client.createAvatarPresignedUpload(
         authorization: auth,
@@ -231,7 +237,7 @@ void main() {
         expect(req.bodyBytes, [1, 2, 3]);
         return http.Response('', 204);
       });
-      final client = VoiceUsersClient(httpClient: mock, config: config);
+      final client = VoiceUsersClient(gateway: gatewayHttpForTest(mock, config: config));
       final r = await client.uploadAvatarBytes(
         uploadUrl: Uri.parse('https://r2.example/presigned'),
         requiredHeaders: const {'Content-Type': 'image/png'},
@@ -256,7 +262,7 @@ void main() {
           200,
         );
       });
-      final client = VoiceUsersClient(httpClient: mock, config: config);
+      final client = VoiceUsersClient(gateway: gatewayHttpForTest(mock, config: config));
       final r = await client.getPresence(authorization: auth, profileId: 'p-1');
       expect(r, isA<UsersApiOk<VoicePresence>>());
       final presence = (r as UsersApiOk<VoicePresence>).data;
@@ -271,13 +277,13 @@ void main() {
         expect(req.method, 'POST');
         expect(req.url.path, '/api/v1/users/presence/bulk');
         final body = jsonDecode(req.body) as Map<String, dynamic>;
-        expect(body['profileIds'], ['p-1', 'p-2']);
+        expect(body['profile_ids'], ['p-1', 'p-2']);
         return http.Response(
           jsonEncode({
-            'byProfileId': {
-              'p-1': {'profileId': 'p-1', 'status': 'online'},
+            'by_profile_id': {
+              'p-1': {'profile_id': 'p-1', 'status': 'online'},
               'p-2': {
-                'profileId': 'p-2',
+                'profile_id': 'p-2',
                 'status': 'invisible',
                 'last_seen': '2026-06-02T18:45:00Z',
               },
@@ -286,7 +292,7 @@ void main() {
           200,
         );
       });
-      final client = VoiceUsersClient(httpClient: mock, config: config);
+      final client = VoiceUsersClient(gateway: gatewayHttpForTest(mock, config: config));
       final r = await client.getBulkPresence(
         authorization: auth,
         profileIds: const ['p-1', 'p-2'],

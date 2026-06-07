@@ -1,3 +1,5 @@
+import '../gen/voice/auth/v1/auth.pb.dart' as auth_pb;
+
 /// Persisted auth session from Auth `SessionResponse` (register / login / refresh).
 class AuthSession {
   const AuthSession({
@@ -36,7 +38,22 @@ class AuthSession {
     );
   }
 
-  /// Parses Auth REST `SessionResponse` body.
-  factory AuthSession.fromAuthResponse(Map<String, dynamic> json) =>
-      AuthSession.fromJson(json);
+  factory AuthSession.fromProto(auth_pb.AuthSession proto) {
+    return AuthSession(
+      accessToken: proto.accessToken,
+      refreshToken: proto.refreshToken,
+      accountId: proto.accountId,
+      activeProfileId: proto.profileId,
+      expiresInSeconds: proto.expiresInSeconds.toInt(),
+    );
+  }
+
+  /// Parses Auth REST body with nested `session` (legacy flat body also supported).
+  factory AuthSession.fromAuthResponse(Map<String, dynamic> json) {
+    final session = json['session'];
+    if (session is Map<String, dynamic>) {
+      return AuthSession.fromJson(session);
+    }
+    return AuthSession.fromJson(json);
+  }
 }

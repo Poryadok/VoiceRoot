@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
+import 'package:voice_frontend/backend/gateway_http.dart';
 import 'package:voice_frontend/backend/messages_client.dart';
 import 'package:voice_frontend/backend/realtime_client.dart';
 
@@ -29,8 +30,10 @@ void main() {
       final sessionB = await ctx.registerUser('user-b');
 
       final chats = VoiceChatsClient(
-        httpClient: ctx.httpClient,
-        config: ctx.config,
+        gateway: GatewayHttpClient(
+          httpClient: ctx.httpClient,
+          config: ctx.config,
+        ),
       );
       final dmResult = await chats.createDm(
         authorization: sessionA.authorizationHeader,
@@ -60,8 +63,10 @@ void main() {
 
       const content = 'flutter-qa-live-dm-ws';
       final messages = VoiceMessagesClient(
-        httpClient: ctx.httpClient,
-        config: ctx.config,
+        gateway: GatewayHttpClient(
+          httpClient: ctx.httpClient,
+          config: ctx.config,
+        ),
       );
       final frameFuture = waitForOp(realtime.events, 'message_create');
       final sendResult = await messages.sendMessage(

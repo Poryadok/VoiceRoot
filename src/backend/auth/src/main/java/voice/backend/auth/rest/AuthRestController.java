@@ -33,20 +33,20 @@ public class AuthRestController {
   }
 
   @PostMapping("/register")
-  public SessionResponse register(@Valid @RequestBody RegisterRequest request) {
-    return SessionResponse.from(authService.register(new RegisterCommand(
+  public SessionEnvelope register(@Valid @RequestBody RegisterRequest request) {
+    return SessionEnvelope.from(authService.register(new RegisterCommand(
         request.email(), request.phone(), request.password(), request.guest(), request.deviceInfoJson())));
   }
 
   @PostMapping("/login")
-  public SessionResponse login(@Valid @RequestBody LoginRequest request) {
-    return SessionResponse.from(authService.login(new LoginCommand(
+  public SessionEnvelope login(@Valid @RequestBody LoginRequest request) {
+    return SessionEnvelope.from(authService.login(new LoginCommand(
         request.email(), request.phone(), request.password(), request.deviceInfoJson())));
   }
 
   @PostMapping("/refresh")
-  public SessionResponse refresh(@Valid @RequestBody RefreshRequest request) {
-    return SessionResponse.from(authService.refresh(new RefreshCommand(request.refreshToken(), request.deviceInfoJson())));
+  public SessionEnvelope refresh(@Valid @RequestBody RefreshRequest request) {
+    return SessionEnvelope.from(authService.refresh(new RefreshCommand(request.refreshToken(), request.deviceInfoJson())));
   }
 
   @PostMapping("/logout")
@@ -96,14 +96,21 @@ public class AuthRestController {
 
   public record LogoutRequest(@JsonProperty("refresh_token") @NotBlank String refreshToken) {}
 
-  public record SessionResponse(
+  /** Aligns with proto `RegisterResponse` / `AuthSession` nesting. */
+  public record SessionEnvelope(@JsonProperty("session") SessionBody session) {
+    public static SessionEnvelope from(AuthSession session) {
+      return new SessionEnvelope(SessionBody.from(session));
+    }
+  }
+
+  public record SessionBody(
       @JsonProperty("access_token") String accessToken,
       @JsonProperty("refresh_token") String refreshToken,
       @JsonProperty("expires_in_seconds") long expiresInSeconds,
       @JsonProperty("account_id") String accountId,
       @JsonProperty("profile_id") String profileId) {
-    public static SessionResponse from(AuthSession session) {
-      return new SessionResponse(
+    public static SessionBody from(AuthSession session) {
+      return new SessionBody(
           session.accessToken(),
           session.refreshToken(),
           session.expiresInSeconds(),

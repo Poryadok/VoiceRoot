@@ -1,5 +1,6 @@
 import 'package:http/http.dart' as http;
 
+import 'client_version.dart';
 import 'gateway_config.dart';
 
 /// Detail string on [GatewayHealthFailure] when [GatewayConfig.hasBaseUrl] is false; used for i18n.
@@ -46,11 +47,17 @@ class VoiceGatewayClient {
   }
 
   /// `GET /api/v1/version` — public, no JWT.
-  Future<String?> fetchVersionBody() async {
+  Future<String?> fetchVersionBody({
+    required String platform,
+    required String version,
+  }) async {
     if (!_config.hasBaseUrl) return null;
-    final uri = Uri.parse(_config.baseUrl).resolve('/api/v1/version');
+    final uri = Uri.parse(_config.baseUrl).replace(
+      path: '/api/v1/version',
+      queryParameters: {'platform': platform, 'version': version},
+    );
     try {
-      final res = await _http.get(uri);
+      final res = await _http.get(uri, headers: ClientVersion.headers);
       if (res.statusCode == 200) return res.body;
       return null;
     } catch (_) {

@@ -11,8 +11,8 @@ abstract final class AuthErrorKeys {
 
 /// Normalizes gateway/auth HTTP failures to an [AuthErrorKeys] value when possible.
 String? resolveAuthErrorKey({String? errorCode, int? statusCode}) {
-  if (errorCode != null && errorCode.isNotEmpty) return errorCode;
   if (statusCode == 429) return AuthErrorKeys.rateLimited;
+  if (errorCode != null && errorCode.isNotEmpty) return errorCode;
   return null;
 }
 

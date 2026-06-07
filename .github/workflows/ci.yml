@@ -43,19 +43,24 @@ jobs:
 
   flutter:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: src/frontend
     steps:
       - uses: actions/checkout@v4
+      - uses: bufbuild/buf-setup-action@v1
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: "3.41.7"
           channel: stable
           cache: true
-      - run: flutter pub get
-      - run: flutter analyze
-      - run: flutter test
+      - name: Install protoc_plugin
+        run: dart pub global activate protoc_plugin
+      - name: Check Dart protobuf codegen
+        run: make buf-dart-check
+      - name: Flutter analyze and test
+        working-directory: src/frontend
+        run: |
+          flutter pub get
+          flutter analyze
+          flutter test
 
   golangci:
     runs-on: ubuntu-latest

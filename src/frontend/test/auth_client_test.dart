@@ -7,16 +7,20 @@ import 'package:voice_frontend/backend/auth_client.dart';
 import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 
+import 'support/gateway_test_client.dart';
+
 void main() {
   const baseUrl = 'http://api.test';
   const config = GatewayConfig(baseUrl: baseUrl);
 
   Map<String, dynamic> sessionJson() => {
-    'access_token': 'access-abc',
-    'refresh_token': 'refresh-xyz',
-    'expires_in_seconds': 900,
-    'account_id': 'acc-1',
-    'profile_id': 'prof-1',
+    'session': {
+      'access_token': 'access-abc',
+      'refresh_token': 'refresh-xyz',
+      'expires_in_seconds': 900,
+      'account_id': 'acc-1',
+      'profile_id': 'prof-1',
+    },
   };
 
   group('VoiceAuthClient.register', () {
@@ -27,10 +31,12 @@ void main() {
         final body = jsonDecode(req.body) as Map<String, dynamic>;
         expect(body['email'], 'user@example.com');
         expect(body['password'], 'secret');
-        expect(body['device_info_json'], isNotEmpty);
+        expect(body['guest'], false);
         return http.Response(jsonEncode(sessionJson()), 200);
       });
-      final client = VoiceAuthClient(httpClient: mock, config: config);
+      final client = VoiceAuthClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.register(
         email: 'user@example.com',
         password: 'secret',
@@ -46,8 +52,10 @@ void main() {
 
     test('missing base URL', () async {
       final client = VoiceAuthClient(
-        httpClient: MockClient((_) async => http.Response('', 500)),
-        config: const GatewayConfig(baseUrl: ''),
+        gateway: gatewayHttpForTest(
+          MockClient((_) async => http.Response('', 500)),
+          config: const GatewayConfig(baseUrl: ''),
+        ),
       );
       final r = await client.register(email: 'a@b.com', password: 'x');
       expect(r, isA<AuthSessionFailure>());
@@ -58,7 +66,9 @@ void main() {
       final mock = MockClient((_) async {
         return http.Response(jsonEncode({'error': 'invalid_credentials'}), 401);
       });
-      final client = VoiceAuthClient(httpClient: mock, config: config);
+      final client = VoiceAuthClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.login(email: 'a@b.com', password: 'bad');
       expect(r, isA<AuthSessionFailure>());
       expect((r as AuthSessionFailure).errorCode, 'invalid_credentials');
@@ -71,7 +81,9 @@ void main() {
         expect(req.url.path, '/api/v1/auth/login');
         return http.Response(jsonEncode(sessionJson()), 200);
       });
-      final client = VoiceAuthClient(httpClient: mock, config: config);
+      final client = VoiceAuthClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.login(email: 'u@x.com', password: 'pw');
       expect(r, isA<AuthSessionOk>());
     });
@@ -85,7 +97,9 @@ void main() {
         expect(body['refresh_token'], 'old-refresh');
         return http.Response(jsonEncode(sessionJson()), 200);
       });
-      final client = VoiceAuthClient(httpClient: mock, config: config);
+      final client = VoiceAuthClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.refresh(refreshToken: 'old-refresh');
       expect(r, isA<AuthSessionOk>());
     });
@@ -100,7 +114,9 @@ void main() {
         expect(body['refresh_token'], 'refresh-xyz');
         return http.Response('', 204);
       });
-      final client = VoiceAuthClient(httpClient: mock, config: config);
+      final client = VoiceAuthClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final err = await client.logout(
         session: AuthSession(
           accessToken: 'access-abc',

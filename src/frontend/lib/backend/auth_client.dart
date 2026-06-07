@@ -1,9 +1,9 @@
-import 'dart:convert';
+import 'package:protobuf/protobuf.dart';
 
-import 'package:http/http.dart' as http;
-
+import '../gen/voice/auth/v1/auth.pb.dart' as auth_pb;
+import 'api_result.dart';
 import 'auth_session.dart';
-import 'gateway_config.dart';
+import 'gateway_http.dart';
 
 /// Detail when [GatewayConfig.hasBaseUrl] is false; aligned with gateway client i18n key pattern.
 const String kAuthMissingBaseUrlDetail = 'missing base URL';
@@ -31,108 +31,90 @@ final class AuthSessionFailure extends AuthSessionResult {
 
 /// HTTP client for public Auth routes via API Gateway (`/api/v1/auth/*`).
 class VoiceAuthClient {
-  VoiceAuthClient({
-    required http.Client httpClient,
-    required GatewayConfig config,
-  }) : _http = httpClient,
-       _config = config;
+  VoiceAuthClient({required GatewayHttpClient gateway}) : _gateway = gateway;
 
-  final http.Client _http;
-  final GatewayConfig _config;
+  final GatewayHttpClient _gateway;
 
   static const _deviceInfoJson = '{"platform":"flutter"}';
 
   Future<AuthSessionResult> register({
     required String email,
     required String password,
-  }) => _postSession('/api/v1/auth/register', {
-    'email': email,
-    'password': password,
-    'guest': false,
-    'device_info_json': _deviceInfoJson,
-  });
+  }) {
+    return _postSession(
+      '/api/v1/auth/register',
+      auth_pb.RegisterRequest(
+        email: email,
+        password: password,
+        guest: false,
+      ),
+      auth_pb.RegisterResponse.create,
+      (response) => response.session,
+    );
+  }
 
   Future<AuthSessionResult> login({
     required String email,
     required String password,
-  }) => _postSession('/api/v1/auth/login', {
-    'email': email,
-    'password': password,
-    'device_info_json': _deviceInfoJson,
-  });
+  }) {
+    return _postSession(
+      '/api/v1/auth/login',
+      auth_pb.LoginRequest(
+        email: email,
+        password: password,
+        deviceInfoJson: _deviceInfoJson,
+      ),
+      auth_pb.LoginResponse.create,
+      (response) => response.session,
+    );
+  }
 
-  Future<AuthSessionResult> refresh({required String refreshToken}) =>
-      _postSession('/api/v1/auth/refresh', {
-        'refresh_token': refreshToken,
-        'device_info_json': _deviceInfoJson,
-      });
+  Future<AuthSessionResult> refresh({required String refreshToken}) {
+    return _postSession(
+      '/api/v1/auth/refresh',
+      auth_pb.RefreshTokenRequest(
+        refreshToken: refreshToken,
+        deviceInfoJson: _deviceInfoJson,
+      ),
+      auth_pb.RefreshTokenResponse.create,
+      (response) => response.session,
+    );
+  }
 
   /// Returns an error message on failure; null on success (204).
   Future<String?> logout({required AuthSession session}) async {
-    if (!_config.hasBaseUrl) {
-      return kAuthMissingBaseUrlDetail;
-    }
-    final uri = Uri.parse(_config.baseUrl).resolve('/api/v1/auth/logout');
-    try {
-      final res = await _http.post(
-        uri,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': session.authorizationHeader,
-        },
-        body: jsonEncode({'refresh_token': session.refreshToken}),
-      );
-      if (res.statusCode == 204) return null;
-      return _failureMessage(res);
-    } catch (e) {
-      return '$e';
-    }
+    final result = await _gateway.postEmpty(
+      uri: _gateway.resolve('/api/v1/auth/logout'),
+      authorization: session.authorizationHeader,
+      jsonBody: {'refresh_token': session.refreshToken},
+    );
+    return switch (result) {
+      GatewayHttpOk<void>() => null,
+      GatewayHttpFailure(:final error) =>
+        GatewayApiResultMapper.failureMessage(error),
+    };
   }
 
-  Future<AuthSessionResult> _postSession(
+  Future<AuthSessionResult> _postSession<T extends GeneratedMessage>(
     String path,
-    Map<String, dynamic> body,
+    GeneratedMessage body,
+    T Function() createEmpty,
+    auth_pb.AuthSession Function(T response) readSession,
   ) async {
-    if (!_config.hasBaseUrl) {
-      return const AuthSessionFailure(message: kAuthMissingBaseUrlDetail);
-    }
-    final uri = Uri.parse(_config.baseUrl).resolve(path);
-    try {
-      final res = await _http.post(
-        uri,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(body),
-      );
-      if (res.statusCode == 200) {
-        final decoded = jsonDecode(res.body) as Map<String, dynamic>;
-        return AuthSessionOk(AuthSession.fromAuthResponse(decoded));
-      }
-      return AuthSessionFailure(
-        message: _failureMessage(res),
-        errorCode: _errorCode(res),
-        statusCode: res.statusCode,
-      );
-    } catch (e) {
-      return AuthSessionFailure(message: '$e');
-    }
-  }
-
-  static String _failureMessage(http.Response res) {
-    final code = _errorCode(res);
-    if (code != null) return code;
-    return 'HTTP ${res.statusCode}';
-  }
-
-  static String? _errorCode(http.Response res) {
-    try {
-      final decoded = jsonDecode(res.body);
-      if (decoded is Map<String, dynamic>) {
-        final err = decoded['error'];
-        if (err is String && err.isNotEmpty) return err;
-      }
-    } catch (_) {
-      // ignore malformed body
-    }
-    return null;
+    final result = await _gateway.postProto(
+      uri: _gateway.resolve(path),
+      body: body,
+      createEmpty: createEmpty,
+    );
+    return switch (result) {
+      GatewayHttpOk(:final data) => AuthSessionOk(
+        AuthSession.fromProto(readSession(data)),
+      ),
+      GatewayHttpFailure(:final error) => AuthSessionFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
   }
 }

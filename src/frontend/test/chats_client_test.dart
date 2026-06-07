@@ -6,6 +6,8 @@ import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 
+import 'support/gateway_test_client.dart';
+
 void main() {
   const config = GatewayConfig(baseUrl: 'http://api.test');
   const auth = 'Bearer access-token';
@@ -38,7 +40,7 @@ void main() {
           200,
         );
       });
-      final client = VoiceChatsClient(httpClient: mock, config: config);
+      final client = VoiceChatsClient(gateway: gatewayHttpForTest(mock, config: config));
       final r = await client.listChats(authorization: auth);
       expect(r, isA<ChatsApiOk<ChatListData>>());
       final data = (r as ChatsApiOk<ChatListData>).data;
@@ -61,7 +63,7 @@ void main() {
           200,
         );
       });
-      final client = VoiceChatsClient(httpClient: mock, config: config);
+      final client = VoiceChatsClient(gateway: gatewayHttpForTest(mock, config: config));
       final r = await client.listChats(authorization: auth, inbox: 'requests');
       expect(r, isA<ChatsApiOk<ChatListData>>());
     });
@@ -85,7 +87,7 @@ void main() {
           200,
         );
       });
-      final client = VoiceChatsClient(httpClient: mock, config: config);
+      final client = VoiceChatsClient(gateway: gatewayHttpForTest(mock, config: config));
       final r = await client.createDm(
         authorization: auth,
         otherProfileId: 'profile-b',
@@ -100,11 +102,13 @@ void main() {
     test('POST accept and decline request routes', () async {
       final paths = <String>[];
       final client = VoiceChatsClient(
-        httpClient: MockClient((req) async {
-          paths.add(req.url.path);
-          return http.Response('', 204);
-        }),
-        config: config,
+        gateway: gatewayHttpForTest(
+          MockClient((req) async {
+            paths.add(req.url.path);
+            return http.Response('', 204);
+          }),
+          config: config,
+        ),
       );
 
       expect(

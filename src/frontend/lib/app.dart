@@ -21,6 +21,7 @@ import 'ui/chat/chat_room_panel.dart';
 import 'ui/core/profile_accent_dot.dart';
 import 'ui/profile/profile_edit_sheet.dart';
 import 'ui/social/social_panel.dart';
+import 'ui/version/version_policy_overlay.dart';
 
 ThemeData _bootstrapTheme() {
   return ThemeData(
@@ -152,12 +153,13 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
       ),
     );
 
-    return CallErrorListener(
-      child: Scaffold(
-        backgroundColor: voice.canvas,
-        body: Stack(
-          children: [
-          SafeArea(
+    return VersionPolicyOverlay(
+      child: CallErrorListener(
+        child: Scaffold(
+          backgroundColor: voice.canvas,
+          body: Stack(
+            children: [
+              SafeArea(
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final narrow = constraints.maxWidth < 600;
@@ -208,6 +210,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
             const SafeArea(child: ActiveCallPanel()),
           ],
         ),
+      ),
       ),
     );
   }

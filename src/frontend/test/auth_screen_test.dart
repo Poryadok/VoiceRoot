@@ -10,6 +10,7 @@ import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/discover_hint_storage.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
+import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/auth/auth_screen.dart';
@@ -32,16 +33,19 @@ void main() {
           gatewayConfigProvider.overrideWithValue(
             const GatewayConfig(baseUrl: 'http://api.test'),
           ),
+          realtimeAutoConnectProvider.overrideWithValue(false),
           httpClientProvider.overrideWithValue(
             MockClient((request) async {
               if (request.url.path == '/api/v1/auth/login') {
                 return http.Response(
                   jsonEncode({
-                    'access_token': 'a',
-                    'refresh_token': 'r',
-                    'expires_in_seconds': 900,
-                    'account_id': 'acc',
-                    'profile_id': 'prof-42',
+                    'session': {
+                      'access_token': 'a',
+                      'refresh_token': 'r',
+                      'expires_in_seconds': 900,
+                      'account_id': 'acc',
+                      'profile_id': 'prof-42',
+                    },
                   }),
                   200,
                 );

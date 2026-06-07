@@ -301,13 +301,13 @@ void main() {
     expect(find.textContaining('Last seen'), findsOneWidget);
   });
 
-  testWidgets('friends tab shows backend unavailable on 404', (tester) async {
+  testWidgets('friends tab shows backend unavailable on 503', (tester) async {
     await tester.pumpWidget(
       socialTestApp(
         home: const SocialPanel(initialTabIndex: 1),
         client: MockClient((req) async {
           if (req.url.path == '/api/v1/friends') {
-            return http.Response('not found', 404);
+            return http.Response('unavailable', 503);
           }
           return http.Response('{}', 200);
         }),
@@ -320,13 +320,13 @@ void main() {
     expect(find.text('No friends yet'), findsNothing);
   });
 
-  testWidgets('search shows backend unavailable on 404', (tester) async {
+  testWidgets('search shows backend unavailable on 503', (tester) async {
     await tester.pumpWidget(
       socialTestApp(
         home: const SocialPanel(),
         client: MockClient((req) async {
           if (req.url.path == '/api/v1/users/search') {
-            return http.Response('not found', 404);
+            return http.Response('unavailable', 503);
           }
           return http.Response('{}', 200);
         }),

@@ -1,8 +1,9 @@
 import 'dart:convert';
 
-import 'package:http/http.dart' as http;
-
-import 'gateway_config.dart';
+import '../gen/voice/messaging/v1/messaging.pb.dart' as messaging_pb;
+import 'api_result.dart';
+import 'gateway_http.dart';
+import 'proto_mappers.dart';
 
 const String kMessagesMissingBaseUrlDetail = 'missing base URL';
 
@@ -164,14 +165,10 @@ class ReadStateData {
 
 /// HTTP client for Messaging routes (`/api/v1/messages/**`).
 class VoiceMessagesClient {
-  VoiceMessagesClient({
-    required http.Client httpClient,
-    required GatewayConfig config,
-  }) : _http = httpClient,
-       _config = config;
+  VoiceMessagesClient({required GatewayHttpClient gateway})
+    : _gateway = gateway;
 
-  final http.Client _http;
-  final GatewayConfig _config;
+  final GatewayHttpClient _gateway;
 
   Future<MessagesApiResult<MessageListData>> getMessages({
     required String authorization,
@@ -182,9 +179,6 @@ class VoiceMessagesClient {
     String? cursor,
     int? pageSize,
   }) async {
-    if (!_config.hasBaseUrl) {
-      return const MessagesApiFailure(message: kMessagesMissingBaseUrlDetail);
-    }
     final params = <String, String>{'chat_id': chatId};
     if (afterMessageId != null && afterMessageId.isNotEmpty) {
       params['after_message_id'] = afterMessageId;
@@ -198,20 +192,20 @@ class VoiceMessagesClient {
     if (cursor != null && cursor.isNotEmpty) params['cursor'] = cursor;
     if (pageSize != null) params['page_size'] = '$pageSize';
 
-    final uri = Uri.parse(
-      _config.baseUrl,
-    ).replace(path: '/api/v1/messages', queryParameters: params);
-    return _get(uri, authorization, (body) {
-      final list = body['message_list'] as Map<String, dynamic>? ?? {};
-      final raw = list['messages'] as List<dynamic>? ?? [];
-      return MessageListData(
-        messages: raw
-            .map((e) => VoiceMessage.fromJson(e as Map<String, dynamic>))
-            .toList(),
-        nextCursor: _emptyToNull(list['next_cursor'] as String?),
-        hasMore: list['has_more'] as bool? ?? false,
-      );
-    });
+    final uri = _gateway.replace(path: '/api/v1/messages', queryParameters: params);
+    final result = await _gateway.getProto(
+      uri,
+      authorization: authorization,
+      createEmpty: messaging_pb.GetMessagesResponse.create,
+    );
+    return _map(
+      result,
+      (data) => messageListFromProto(
+        data.hasMessageList()
+            ? data.messageList
+            : messaging_pb.MessageList(),
+      ),
+    );
   }
 
   Future<MessagesApiResult<VoiceMessage>> sendMessage({
@@ -221,44 +215,18 @@ class VoiceMessagesClient {
     List<MessageAttachment> attachments = const [],
     String? clientMessageId,
   }) async {
-    if (!_config.hasBaseUrl) {
-      return const MessagesApiFailure(message: kMessagesMissingBaseUrlDetail);
-    }
-    final uri = Uri.parse(_config.baseUrl).resolve('/api/v1/messages/send');
-    final body = <String, dynamic>{
-      'chat': {'id': chatId},
-      'content': content,
-    };
-    if (attachments.isNotEmpty) {
-      body['attachments_json'] = jsonEncode(
-        attachments.map((a) => a.toJson()).toList(growable: false),
-      );
-    }
-    if (clientMessageId != null) {
-      body['client_message_id'] = clientMessageId;
-    }
-    try {
-      final res = await _http.post(
-        uri,
-        headers: {
-          'Authorization': authorization,
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode(body),
-      );
-      if (res.statusCode == 200) {
-        final decoded = jsonDecode(res.body) as Map<String, dynamic>;
-        final msg = decoded['message'] as Map<String, dynamic>;
-        return MessagesApiOk(VoiceMessage.fromJson(msg));
-      }
-      return MessagesApiFailure(
-        message: _failureMessage(res),
-        errorCode: _errorCode(res),
-        statusCode: res.statusCode,
-      );
-    } catch (e) {
-      return MessagesApiFailure(message: '$e');
-    }
+    final result = await _gateway.postProto(
+      uri: _gateway.resolve('/api/v1/messages/send'),
+      authorization: authorization,
+      body: sendMessageRequestToProto(
+        chatId: chatId,
+        content: content,
+        attachments: attachments,
+        clientMessageId: clientMessageId,
+      ),
+      createEmpty: messaging_pb.SendMessageResponse.create,
+    );
+    return _map(result, (data) => voiceMessageFromProto(data.message));
   }
 
   Future<MessagesApiResult<void>> markRead({
@@ -266,33 +234,17 @@ class VoiceMessagesClient {
     required String chatId,
     required String lastReadMessageId,
   }) async {
-    if (!_config.hasBaseUrl) {
-      return const MessagesApiFailure(message: kMessagesMissingBaseUrlDetail);
-    }
-    final uri = Uri.parse(_config.baseUrl).resolve('/api/v1/messages/read');
-    try {
-      final res = await _http.post(
-        uri,
-        headers: {
-          'Authorization': authorization,
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          'chat': {'id': chatId},
-          'last_read_message_id': lastReadMessageId,
-        }),
-      );
-      if (res.statusCode == 200) {
-        return const MessagesApiOk(null);
-      }
-      return MessagesApiFailure(
-        message: _failureMessage(res),
-        errorCode: _errorCode(res),
-        statusCode: res.statusCode,
-      );
-    } catch (e) {
-      return MessagesApiFailure(message: '$e');
-    }
+    final result = await _gateway.postProto(
+      uri: _gateway.resolve('/api/v1/messages/read'),
+      authorization: authorization,
+      body: markReadRequestToProto(
+        chatId: chatId,
+        lastReadMessageId: lastReadMessageId,
+      ),
+      createEmpty: messaging_pb.MarkReadResponse.create,
+      allowNoContent: true,
+    );
+    return _mapEmpty(result);
   }
 
   Future<MessagesApiResult<VoiceMessage>> editMessage({
@@ -300,16 +252,13 @@ class VoiceMessagesClient {
     required String messageId,
     required String content,
   }) async {
-    if (!_config.hasBaseUrl) {
-      return const MessagesApiFailure(message: kMessagesMissingBaseUrlDetail);
-    }
-    final uri = Uri.parse(
-      _config.baseUrl,
-    ).resolve('/api/v1/messages/$messageId');
-    return _patch(uri, authorization, {'content': content}, (body) {
-      final msg = body['message'] as Map<String, dynamic>;
-      return VoiceMessage.fromJson(msg);
-    });
+    final result = await _gateway.patchProto(
+      uri: _gateway.resolve('/api/v1/messages/$messageId'),
+      authorization: authorization,
+      body: editMessageRequestToProto(messageId: messageId, content: content),
+      createEmpty: messaging_pb.EditMessageResponse.create,
+    );
+    return _map(result, (data) => voiceMessageFromProto(data.message));
   }
 
   Future<MessagesApiResult<void>> deleteMessage({
@@ -317,119 +266,60 @@ class VoiceMessagesClient {
     required String messageId,
     String scope = 'everyone',
   }) async {
-    if (!_config.hasBaseUrl) {
-      return const MessagesApiFailure(message: kMessagesMissingBaseUrlDetail);
-    }
-    final uri = Uri.parse(_config.baseUrl).replace(
+    final uri = _gateway.replace(
       path: '/api/v1/messages/$messageId',
       queryParameters: {'scope': scope},
     );
-    try {
-      final res = await _http.delete(
-        uri,
-        headers: {'Authorization': authorization},
-      );
-      if (res.statusCode == 204) {
-        return const MessagesApiOk(null);
-      }
-      return MessagesApiFailure(
-        message: _failureMessage(res),
-        errorCode: _errorCode(res),
-        statusCode: res.statusCode,
-      );
-    } catch (e) {
-      return MessagesApiFailure(message: '$e');
-    }
+    final result = await _gateway.deleteEmpty(
+      uri: uri,
+      authorization: authorization,
+    );
+    return _mapEmpty(result);
   }
 
   Future<MessagesApiResult<ReadStateData>> getReadState({
     required String authorization,
     required String chatId,
   }) async {
-    if (!_config.hasBaseUrl) {
-      return const MessagesApiFailure(message: kMessagesMissingBaseUrlDetail);
-    }
-    final uri = Uri.parse(_config.baseUrl).replace(
+    final uri = _gateway.replace(
       path: '/api/v1/messages/read-state',
       queryParameters: {'chat_id': chatId},
     );
-    return _get(uri, authorization, ReadStateData.fromJson);
+    final result = await _gateway.getProto(
+      uri,
+      authorization: authorization,
+      createEmpty: messaging_pb.GetReadStateResponse.create,
+    );
+    return _map(
+      result,
+      (data) => readStateFromProto(
+        data.hasReadState() ? data.readState : messaging_pb.ReadState(),
+      ),
+    );
   }
 
-  Future<MessagesApiResult<T>> _get<T>(
-    Uri uri,
-    String authorization,
-    T Function(Map<String, dynamic> body) parse,
-  ) async {
-    try {
-      final res = await _http.get(
-        uri,
-        headers: {'Authorization': authorization},
-      );
-      if (res.statusCode == 200) {
-        final decoded = jsonDecode(res.body) as Map<String, dynamic>;
-        return MessagesApiOk(parse(decoded));
-      }
-      return MessagesApiFailure(
-        message: _failureMessage(res),
-        errorCode: _errorCode(res),
-        statusCode: res.statusCode,
-      );
-    } catch (e) {
-      return MessagesApiFailure(message: '$e');
-    }
+  MessagesApiResult<T> _map<T>(
+    GatewayHttpResult<dynamic> result,
+    T Function(dynamic data) parse,
+  ) {
+    return switch (result) {
+      GatewayHttpOk(:final data) => MessagesApiOk(parse(data)),
+      GatewayHttpFailure(:final error) => MessagesApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
   }
 
-  Future<MessagesApiResult<T>> _patch<T>(
-    Uri uri,
-    String authorization,
-    Map<String, dynamic> body,
-    T Function(Map<String, dynamic> body) parse,
-  ) async {
-    try {
-      final res = await _http.patch(
-        uri,
-        headers: {
-          'Authorization': authorization,
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode(body),
-      );
-      if (res.statusCode == 200) {
-        final decoded = jsonDecode(res.body) as Map<String, dynamic>;
-        return MessagesApiOk(parse(decoded));
-      }
-      return MessagesApiFailure(
-        message: _failureMessage(res),
-        errorCode: _errorCode(res),
-        statusCode: res.statusCode,
-      );
-    } catch (e) {
-      return MessagesApiFailure(message: '$e');
-    }
-  }
-
-  static String? _emptyToNull(String? value) {
-    if (value == null || value.isEmpty) return null;
-    return value;
-  }
-
-  static String _failureMessage(http.Response res) {
-    final code = _errorCode(res);
-    if (code != null) return code;
-    return 'HTTP ${res.statusCode}';
-  }
-
-  static String? _errorCode(http.Response res) {
-    try {
-      final decoded = jsonDecode(res.body);
-      if (decoded is Map<String, dynamic>) {
-        final err = decoded['error'];
-        if (err is String && err.isNotEmpty) return err;
-      }
-    } catch (_) {
-      // ignore malformed body
-    }
-    return null;
+  MessagesApiResult<void> _mapEmpty(GatewayHttpResult<dynamic> result) {
+    return switch (result) {
+      GatewayHttpOk() => const MessagesApiOk(null),
+      GatewayHttpFailure(:final error) => MessagesApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
   }
 }

@@ -7,6 +7,7 @@ import 'package:voice_frontend/backend/auth_client.dart';
 import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/gateway_client.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
+import 'package:voice_frontend/backend/gateway_http.dart';
 import 'package:voice_frontend/backend/realtime_client.dart';
 
 /// Compile-time API base (`--dart-define=VOICE_API_BASE_URL=...`).
@@ -145,7 +146,9 @@ Future<LiveGatewayProbe> probeLiveGateway() async {
     );
   }
 
-  final auth = VoiceAuthClient(httpClient: httpClient, config: config);
+  final auth = VoiceAuthClient(
+    gateway: GatewayHttpClient(httpClient: httpClient, config: config),
+  );
   final probe = await auth.register(
     email: qaUniqueEmail('probe'),
     password: qaPassword,
@@ -172,8 +175,9 @@ class LiveGatewayContext {
   final GatewayConfig config;
   final http.Client httpClient;
 
-  VoiceAuthClient authClient() =>
-      VoiceAuthClient(httpClient: httpClient, config: config);
+  VoiceAuthClient authClient() => VoiceAuthClient(
+    gateway: GatewayHttpClient(httpClient: httpClient, config: config),
+  );
 
   Future<AuthSession> registerUser(String prefix) async {
     final result = await authClient().register(

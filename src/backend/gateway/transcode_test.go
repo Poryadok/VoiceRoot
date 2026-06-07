@@ -814,8 +814,9 @@ func (s *recordingVoiceCalls) GetJoinToken(ctx context.Context, req *callsv1.Get
 	s.lastMD = md
 	s.tokenRoom = req.GetRoomId()
 	return &callsv1.GetJoinTokenResponse{
-		Jwt:       "livekit-jwt",
-		ExpiresAt: timestamppb.New(time.Unix(1700000400, 0)),
+		Jwt:        "livekit-jwt",
+		ExpiresAt:  timestamppb.New(time.Unix(1700000400, 0)),
+		LivekitUrl: "wss://livekit.example.com",
 	}, nil
 }
 
@@ -898,10 +899,12 @@ func TestTranscodeVoiceAcceptTokenAndState(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.Code, "body=%s", resp.Body.String())
 	require.Equal(t, "room-1", grpcRec.tokenRoom)
 	var tokenOut struct {
-		JWT string `json:"jwt"`
+		JWT        string `json:"jwt"`
+		LivekitURL string `json:"livekit_url"`
 	}
 	decodeJSON(t, resp.Body, &tokenOut)
 	require.Equal(t, "livekit-jwt", tokenOut.JWT)
+	require.Equal(t, "wss://livekit.example.com", tokenOut.LivekitURL)
 
 	resp = performRequest(h, http.MethodPatch, "/api/v1/voice/calls/room-1/state", `{"is_muted":true,"is_video_on":false}`, map[string]string{
 		"Authorization": "Bearer valid-user-token",

@@ -483,6 +483,53 @@ void main() {
     expect(markReadCalls, 1);
   });
 
+  testWidgets('ChatRoomPanel refocuses composer after sending a message', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      chatTestApp(
+        home: const ChatRoomPanel(chatId: 'chat-abc'),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/messages') {
+            return http.Response(
+              jsonEncode({
+                'message_list': {'messages': []},
+              }),
+              200,
+            );
+          }
+          if (req.url.path == '/api/v1/messages/send') {
+            return http.Response(
+              jsonEncode({
+                'message': {
+                  'id': 'msg-new',
+                  'chat': {'id': 'chat-abc'},
+                  'sender_profile_id': 'profile-test',
+                  'content': 'Hello',
+                  'created_at': '2024-01-01T00:00:00Z',
+                },
+              }),
+              200,
+            );
+          }
+          if (req.url.path == '/api/v1/messages/read') {
+            return http.Response('{}', 200);
+          }
+          return http.Response('{}', 404);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(ChatRoomPanel.inputKey), 'Hello');
+    await tester.tap(find.byKey(ChatRoomPanel.sendKey));
+    await tester.pumpAndSettle();
+
+    final input = tester.widget<TextField>(find.byKey(ChatRoomPanel.inputKey));
+    expect(input.focusNode?.hasFocus, isTrue);
+    expect(input.controller?.text, isEmpty);
+  });
+
   testWidgets('ChatRoomPanel shows a mobile back action when provided', (
     tester,
   ) async {

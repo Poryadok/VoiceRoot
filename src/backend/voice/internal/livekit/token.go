@@ -12,6 +12,7 @@ import (
 
 type TokenIssuer interface {
 	JoinToken(profileID, roomName string, now time.Time) (jwt string, expiresAt time.Time, err error)
+	LivekitURL() string
 }
 
 type HS256TokenIssuer struct {
@@ -19,6 +20,13 @@ type HS256TokenIssuer struct {
 	secret   string
 	url      string
 	tokenTTL time.Duration
+}
+
+func (i *HS256TokenIssuer) LivekitURL() string {
+	if i == nil {
+		return ""
+	}
+	return strings.TrimSpace(i.url)
 }
 
 func NewHS256TokenIssuer(apiKey, secret, url string, tokenTTL time.Duration) *HS256TokenIssuer {

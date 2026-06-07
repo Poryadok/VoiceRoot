@@ -64,14 +64,23 @@ class ChatAttachmentFile {
 
 class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   final _composer = TextEditingController();
+  final _composerFocus = FocusNode();
   final _scrollController = ScrollController();
   var _uploadingAttachment = false;
 
   @override
   void dispose() {
     _composer.dispose();
+    _composerFocus.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _refocusComposer() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _composerFocus.requestFocus();
+    });
   }
 
   @override
@@ -298,6 +307,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   child: TextField(
                     key: ChatRoomPanel.inputKey,
                     controller: _composer,
+                    focusNode: _composerFocus,
                     decoration: InputDecoration(
                       hintText: l10n.chatRoomInputHint,
                       isDense: true,
@@ -353,6 +363,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     if (err == null) {
       _composer.clear();
     }
+    _refocusComposer();
   }
 
   Future<void> _attachAndSend() async {
@@ -364,12 +375,20 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     setState(() => _uploadingAttachment = true);
     try {
       final files = ref.read(voiceFilesClientProvider);
+      final chatType = ref
+          .read(chatListProvider)
+          .valueOrNull
+          ?.items
+          .where((item) => item.chatId == widget.chatId)
+          .map((item) => item.chat.type)
+          .firstOrNull;
       final ticket = await files.requestUpload(
         authorization: auth,
         originalName: picked.name,
         mimeType: picked.contentType,
         sizeBytes: picked.bytes.length,
         chatId: widget.chatId,
+        chatType: chatType,
       );
       if (ticket is! FilesApiOk<FileUploadTicket>) return;
       final put = await files.putBytes(
@@ -393,8 +412,6 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
               MessageAttachment(
                 fileId: metadata.fileId,
                 type: metadata.fileType,
-                url: metadata.url,
-                previewUrl: metadata.previewUrl,
                 name: metadata.originalName,
                 sizeBytes: metadata.sizeBytes,
               ),
@@ -404,6 +421,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       if (err == null) {
         _composer.clear();
       }
+      _refocusComposer();
     } finally {
       if (mounted) {
         setState(() => _uploadingAttachment = false);
@@ -552,16 +570,29 @@ class _MessageBubbleContent extends StatelessWidget {
   }
 }
 
-class _AttachmentPreview extends StatelessWidget {
+class _AttachmentPreview extends ConsumerWidget {
   const _AttachmentPreview({required this.attachment});
 
   final MessageAttachment attachment;
 
+  static bool _isHttpUrl(String? value) {
+    if (value == null || value.isEmpty) return false;
+    final uri = Uri.tryParse(value);
+    return uri != null && (uri.scheme == 'http' || uri.scheme == 'https');
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final voice = VoiceColors.of(context);
     if (attachment.isImage) {
-      final src = attachment.previewUrl ?? attachment.url;
+      final direct =
+          _isHttpUrl(attachment.previewUrl) ? attachment.previewUrl : null;
+      final directUrl =
+          direct ?? (_isHttpUrl(attachment.url) ? attachment.url : null);
+      final resolved = directUrl != null
+          ? AsyncValue.data(directUrl)
+          : ref.watch(fileAttachmentUrlProvider(attachment.fileId));
+      final src = resolved.valueOrNull;
       return Semantics(
         key: ChatRoomPanel.attachmentPreviewKey(attachment.fileId),
         label: attachment.name ?? 'Image attachment',
@@ -570,7 +601,7 @@ class _AttachmentPreview extends StatelessWidget {
           child: Container(
             constraints: const BoxConstraints(maxWidth: 220, maxHeight: 160),
             color: voice.surface,
-            child: src == null || src.isEmpty
+            child: resolved.isLoading || src == null || src.isEmpty
                 ? const _AttachmentIcon(icon: Icons.image_outlined)
                 : Image.network(
                     src,

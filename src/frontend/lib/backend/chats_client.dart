@@ -1,8 +1,8 @@
-import 'dart:convert';
-
-import 'package:http/http.dart' as http;
-
-import 'gateway_config.dart';
+import '../gen/voice/chat/v1/chat.pb.dart' as chat_pb;
+import '../gen/voice/chat/v1/chat.pbenum.dart';
+import 'api_result.dart';
+import 'gateway_http.dart';
+import 'proto_mappers.dart';
 
 const String kChatsMissingBaseUrlDetail = 'missing base URL';
 
@@ -40,7 +40,7 @@ class VoiceChat {
   final String creatorProfileId;
   final String? name;
 
-  bool get isDm => type == 'CHAT_TYPE_DM' || type == '1';
+  bool get isDm => type == ChatType.CHAT_TYPE_DM.name;
 
   factory VoiceChat.fromJson(Map<String, dynamic> json) {
     return VoiceChat(
@@ -81,14 +81,9 @@ class ChatListData {
 
 /// HTTP client for Chat routes (`/api/v1/chats/**`).
 class VoiceChatsClient {
-  VoiceChatsClient({
-    required http.Client httpClient,
-    required GatewayConfig config,
-  }) : _http = httpClient,
-       _config = config;
+  VoiceChatsClient({required GatewayHttpClient gateway}) : _gateway = gateway;
 
-  final http.Client _http;
-  final GatewayConfig _config;
+  final GatewayHttpClient _gateway;
 
   Future<ChatsApiResult<ChatListData>> listChats({
     required String authorization,
@@ -96,36 +91,25 @@ class VoiceChatsClient {
     int? pageSize,
     String? inbox,
   }) async {
-    if (!_config.hasBaseUrl) {
-      return const ChatsApiFailure(message: kChatsMissingBaseUrlDetail);
-    }
     final params = <String, String>{};
     if (cursor != null && cursor.isNotEmpty) params['cursor'] = cursor;
     if (pageSize != null) params['page_size'] = '$pageSize';
     if (inbox != null && inbox.isNotEmpty) params['inbox'] = inbox;
-    final uri = Uri.parse(_config.baseUrl).replace(
+    final uri = _gateway.replace(
       path: '/api/v1/chats',
       queryParameters: params.isEmpty ? null : params,
     );
-    return _get(uri, authorization, (body) {
-      final list = body['chat_list'] as Map<String, dynamic>? ?? {};
-      final rawItems = list['items'] as List<dynamic>? ?? [];
-      return ChatListData(
-        items: rawItems.map((e) {
-          final item = e as Map<String, dynamic>;
-          final chatJson = item['chat'] as Map<String, dynamic>;
-          return ChatListItem(
-            chat: VoiceChat.fromJson(chatJson),
-            lastMessagePreview: item['last_message_preview'] as String?,
-            unreadCount: _parseInt64(item['unread_count']),
-            inbox: item['inbox'] as String?,
-            isStranger: item['is_stranger'] as bool? ?? false,
-            dmPeerProfileId: item['dm_peer_profile_id'] as String?,
-          );
-        }).toList(),
-        nextCursor: _emptyToNull(list['next_cursor'] as String?),
-      );
-    });
+    final result = await _gateway.getProto(
+      uri,
+      authorization: authorization,
+      createEmpty: chat_pb.ListChatsResponse.create,
+    );
+    return _map(
+      result,
+      (data) => chatListFromProto(
+        data.hasChatList() ? data.chatList : chat_pb.ChatList(),
+      ),
+    );
   }
 
   Future<ChatsApiResult<void>> acceptDmRequest({
@@ -146,112 +130,48 @@ class VoiceChatsClient {
     String path,
     String authorization,
   ) async {
-    if (!_config.hasBaseUrl) {
-      return const ChatsApiFailure(message: kChatsMissingBaseUrlDetail);
-    }
-    try {
-      final res = await _http.post(
-        Uri.parse(_config.baseUrl).resolve(path),
-        headers: {'Authorization': authorization},
-      );
-      if (res.statusCode == 204 || res.statusCode == 200) {
-        return const ChatsApiOk(null);
-      }
-      return ChatsApiFailure(
-        message: _failureMessage(res),
-        errorCode: _errorCode(res),
-        statusCode: res.statusCode,
-      );
-    } catch (e) {
-      return ChatsApiFailure(message: '$e');
-    }
+    final result = await _gateway.postEmpty(
+      uri: _gateway.resolve(path),
+      authorization: authorization,
+    );
+    return _mapEmpty(result);
   }
 
   Future<ChatsApiResult<VoiceChat>> createDm({
     required String authorization,
     required String otherProfileId,
   }) async {
-    if (!_config.hasBaseUrl) {
-      return const ChatsApiFailure(message: kChatsMissingBaseUrlDetail);
-    }
-    final uri = Uri.parse(_config.baseUrl).resolve('/api/v1/chats/dm');
-    try {
-      final res = await _http.post(
-        uri,
-        headers: {
-          'Authorization': authorization,
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({'other_profile_id': otherProfileId}),
-      );
-      if (res.statusCode == 200) {
-        final decoded = jsonDecode(res.body) as Map<String, dynamic>;
-        final chat = decoded['chat'] as Map<String, dynamic>;
-        return ChatsApiOk(VoiceChat.fromJson(chat));
-      }
-      return ChatsApiFailure(
-        message: _failureMessage(res),
-        errorCode: _errorCode(res),
-        statusCode: res.statusCode,
-      );
-    } catch (e) {
-      return ChatsApiFailure(message: '$e');
-    }
+    final result = await _gateway.postProto(
+      uri: _gateway.resolve('/api/v1/chats/dm'),
+      authorization: authorization,
+      body: createDmRequestToProto(otherProfileId),
+      createEmpty: chat_pb.CreateDMResponse.create,
+    );
+    return _map(result, (data) => voiceChatFromProto(data.chat));
   }
 
-  Future<ChatsApiResult<T>> _get<T>(
-    Uri uri,
-    String authorization,
-    T Function(Map<String, dynamic> body) parse,
-  ) async {
-    try {
-      final res = await _http.get(
-        uri,
-        headers: {'Authorization': authorization},
-      );
-      if (res.statusCode == 200) {
-        final decoded = jsonDecode(res.body) as Map<String, dynamic>;
-        return ChatsApiOk(parse(decoded));
-      }
-      return ChatsApiFailure(
-        message: _failureMessage(res),
-        errorCode: _errorCode(res),
-        statusCode: res.statusCode,
-      );
-    } catch (e) {
-      return ChatsApiFailure(message: '$e');
-    }
+  ChatsApiResult<T> _map<T>(
+    GatewayHttpResult<dynamic> result,
+    T Function(dynamic data) parse,
+  ) {
+    return switch (result) {
+      GatewayHttpOk(:final data) => ChatsApiOk(parse(data)),
+      GatewayHttpFailure(:final error) => ChatsApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
   }
 
-  static int _parseInt64(dynamic raw) {
-    if (raw == null) return 0;
-    if (raw is int) return raw;
-    if (raw is String) return int.tryParse(raw) ?? 0;
-    if (raw is num) return raw.toInt();
-    return 0;
-  }
-
-  static String? _emptyToNull(String? value) {
-    if (value == null || value.isEmpty) return null;
-    return value;
-  }
-
-  static String _failureMessage(http.Response res) {
-    final code = _errorCode(res);
-    if (code != null) return code;
-    return 'HTTP ${res.statusCode}';
-  }
-
-  static String? _errorCode(http.Response res) {
-    try {
-      final decoded = jsonDecode(res.body);
-      if (decoded is Map<String, dynamic>) {
-        final err = decoded['error'];
-        if (err is String && err.isNotEmpty) return err;
-      }
-    } catch (_) {
-      // ignore malformed body
-    }
-    return null;
+  ChatsApiResult<void> _mapEmpty(GatewayHttpResult<dynamic> result) {
+    return switch (result) {
+      GatewayHttpOk() => const ChatsApiOk(null),
+      GatewayHttpFailure(:final error) => ChatsApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
   }
 }
