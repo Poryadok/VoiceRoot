@@ -28,7 +28,7 @@ GO_MODULES_LINT := pkg $(GO_SERVICES)
 GO_TEST_TARGETS := $(GO_SERVICES:%=go-test-%)
 GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
 
-.PHONY: buf-lint buf-format buf-breaking buf-generate buf-generate-dart buf-dart-check compose-up compose-app-up compose-down \
+.PHONY: buf-lint buf-format buf-breaking buf-generate buf-generate-dart buf-dart-check compose-up compose-app-up compose-down compose-logs-collect \
 	build-all build-all-breaking check-toolchain compose-config-ci buf-ci backend-test-ci backend-image-ci \
 	gateway-test-ci gateway-image-ci go-test-pkg auth-test-ci auth-image-ci buf-breaking-ci \
 	golangci-ci gateway-test-race-ci design-tokens-check flutter-ui-color-gate flutter-ci testcontainers-prune
@@ -64,6 +64,15 @@ compose-app-up:
 
 compose-down:
 	docker compose down
+
+ifeq ($(OS),Windows_NT)
+COMPOSE_LOGS_COLLECT = powershell -NoProfile -ExecutionPolicy Bypass -File "$(ROOT)/scripts/dev/collect-compose-logs.ps1"
+else
+COMPOSE_LOGS_COLLECT = $(BASH) "$(ROOT)/scripts/dev/collect-compose-logs.sh"
+endif
+
+compose-logs-collect:
+	$(COMPOSE_LOGS_COLLECT)
 
 # --- CI parity: host Go/Maven/golangci (tests need Docker socket for testcontainers); Docker for buf/compose/images ---
 

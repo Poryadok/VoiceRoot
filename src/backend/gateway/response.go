@@ -1,10 +1,10 @@
 package main
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"net/http"
+
+	"voice/backend/pkg/correlation"
 )
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {
@@ -14,9 +14,5 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 }
 
 func generateRequestID() string {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "request-id-unavailable"
-	}
-	return hex.EncodeToString(b[:])
+	return correlation.GenerateRequestID()
 }

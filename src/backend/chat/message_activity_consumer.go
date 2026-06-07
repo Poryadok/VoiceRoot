@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	eventsv1 "voice.app/voice/events/v1"
+	"voice/backend/pkg/natslog"
 )
 
 const messageEventsStreamName = "message_events"
@@ -48,18 +49,23 @@ func messageActivityFromEvent(data []byte, now func() time.Time) (uuid.UUID, tim
 	return chatID, at, true
 }
 
-func subscribeMessageActivity(ctx context.Context, js nats.JetStreamContext, store messageActivityStore, instanceID string) (*nats.Subscription, error) {
+func subscribeMessageActivity(ctx context.Context, js nats.JetStreamContext, store messageActivityStore, instanceID string, logger *slog.Logger) (*nats.Subscription, error) {
 	if store == nil {
 		return nil, fmt.Errorf("message activity store not configured")
 	}
 	handler := func(msg *nats.Msg) {
 		chatID, at, ok := messageActivityFromEvent(msg.Data, time.Now)
 		if !ok {
+			natslog.LogConsume(logger, msg, slog.LevelWarn, "unknown message activity payload")
 			return
 		}
+		attrs := []slog.Attr{slog.String("chat_id", chatID.String())}
 		if err := store.TouchLastMessageAt(ctx, chatID, at); err != nil {
-			log.Printf("chat: touch last_message_at: %v", err)
+			attrs = append(attrs, slog.String("error", err.Error()))
+			natslog.LogConsume(logger, msg, slog.LevelWarn, "message activity touch failed", attrs...)
+			return
 		}
+		natslog.LogConsume(logger, msg, slog.LevelInfo, "message activity touched", attrs...)
 	}
 	sub, err := js.Subscribe("message.sent", handler,
 		nats.Durable(chatActivityDurableName(instanceID)),
@@ -75,16 +81,18 @@ func subscribeMessageActivity(ctx context.Context, js nats.JetStreamContext, sto
 	return sub, nil
 }
 
-func runMessageActivityConsumer(ctx context.Context, natsURL, instanceID string, store messageActivityStore) error {
+func runMessageActivityConsumer(ctx context.Context, natsURL, instanceID string, store messageActivityStore, logger *slog.Logger) error {
 	if strings.TrimSpace(natsURL) == "" {
 		return fmt.Errorf("message activity consumer: missing NATS URL")
 	}
 	for {
-		err := runMessageActivityConsumerOnce(ctx, natsURL, instanceID, store)
+		err := runMessageActivityConsumerOnce(ctx, natsURL, instanceID, store, logger)
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		log.Printf("chat: message activity consumer retrying after error: %v", err)
+		if logger != nil {
+			logger.Warn("message activity consumer retrying", slog.String("error", err.Error()))
+		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -93,7 +101,7 @@ func runMessageActivityConsumer(ctx context.Context, natsURL, instanceID string,
 	}
 }
 
-func runMessageActivityConsumerOnce(ctx context.Context, natsURL, instanceID string, store messageActivityStore) error {
+func runMessageActivityConsumerOnce(ctx context.Context, natsURL, instanceID string, store messageActivityStore, logger *slog.Logger) error {
 	nc, err := nats.Connect(natsURL,
 		nats.Name("voice-chat-message-activity"),
 		nats.Timeout(10*time.Second),
@@ -110,13 +118,13 @@ func runMessageActivityConsumerOnce(ctx context.Context, natsURL, instanceID str
 	if err != nil {
 		return fmt.Errorf("jetstream: %w", err)
 	}
-	sub, err := subscribeMessageActivity(ctx, js, store, instanceID)
+	sub, err := subscribeMessageActivity(ctx, js, store, instanceID, logger)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		if err := sub.Unsubscribe(); err != nil {
-			log.Printf("chat: message activity unsubscribe: %v", err)
+		if err := sub.Unsubscribe(); err != nil && logger != nil {
+			logger.Warn("message activity unsubscribe failed", slog.String("error", err.Error()))
 		}
 	}()
 

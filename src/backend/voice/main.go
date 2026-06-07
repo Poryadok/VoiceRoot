@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -15,6 +16,8 @@ import (
 	"google.golang.org/grpc"
 
 	grpcsvc "voice/backend/voice/internal/grpcsvc"
+	"voice/backend/pkg/grpcmw"
+	"voice/backend/pkg/httpserver"
 	"voice/backend/voice/internal/livekit"
 	voicestore "voice/backend/voice/internal/store"
 	"voice/backend/voice/internal/voiceevents"
@@ -25,6 +28,7 @@ import (
 const serviceName = "voice"
 
 func main() {
+	logger := httpserver.NewLogger(serviceName)
 	addr := ":8080"
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
 		addr = v
@@ -48,7 +52,7 @@ func main() {
 		callStore = voicestore.NewRedisCallStore(rdb, strings.TrimSpace(os.Getenv("VOICE_REDIS_PREFIX")))
 	} else {
 		callStore = voicestore.NewMemoryCallStore()
-		log.Printf("%s: VOICE_REDIS_ADDR not set; using in-memory call store", serviceName)
+		logger.Warn("VOICE_REDIS_ADDR not set; using in-memory call store")
 	}
 
 	var events voiceevents.Publisher
@@ -58,6 +62,7 @@ func main() {
 			log.Fatalf("nats jetstream publisher: %v", err)
 		}
 		defer func() { _ = jsPub.Close() }()
+		jsPub.Logger = logger
 		events = jsPub
 	}
 
@@ -77,10 +82,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("grpc listen: %v", err)
 	}
-	grpcSrv = grpc.NewServer()
+	grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger)...)
 	callsv1.RegisterVoiceServiceServer(grpcSrv, voiceSvc)
 	go func() {
-		log.Printf("%s gRPC listening on %s", serviceName, grpcListen)
+		logger.Info("gRPC listening", slog.String("addr", grpcListen))
 		if err := grpcSrv.Serve(lis); err != nil {
 			log.Fatalf("grpc serve: %v", err)
 		}
@@ -89,14 +94,14 @@ func main() {
 
 	server := &http.Server{
 		Addr:              addr,
-		Handler:           healthHandler(serviceName),
+		Handler:           httpserver.Wrap(healthHandler(serviceName), logger),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
 	errCh := make(chan error, 1)
-	log.Printf("%s listening on %s", serviceName, addr)
+	logger.Info("listening", slog.String("addr", addr))
 	go func() {
 		errCh <- server.ListenAndServe()
 	}()

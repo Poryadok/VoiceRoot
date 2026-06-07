@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"voice/backend/pkg/correlation"
 	voicelog "voice/backend/pkg/logging"
 	voicemw "voice/backend/pkg/middleware"
 )
@@ -57,7 +58,7 @@ func newGateway(config gatewayConfig) http.Handler {
 		config.restUpstreams = map[string]http.Handler{}
 	}
 	if config.requestIDGenerator == nil {
-		config.requestIDGenerator = generateRequestID
+		config.requestIDGenerator = correlation.GenerateRequestID
 	}
 	if config.tokenValidator == nil {
 		config.tokenValidator = staticTokenValidator(config.tokenClaims)
@@ -83,7 +84,7 @@ func newGateway(config gatewayConfig) http.Handler {
 		metrics:        config.metrics,
 	}
 	h := http.Handler(core)
-	h = voicemw.AccessLog(config.slogLogger, "X-Request-Id", gatewayAccessLogExtras)(h)
+	h = voicemw.AccessLog(config.slogLogger, correlation.RequestIDHeader, gatewayAccessLogExtras)(h)
 	h = voicemw.RequestID(config.requestIDGenerator)(h)
 	return h
 }

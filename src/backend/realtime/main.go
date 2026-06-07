@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -16,12 +17,14 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"voice/backend/pkg/grpcclient"
+	"voice/backend/pkg/httpserver"
 	voicejwt "voice/backend/pkg/jwt"
 )
 
 const serviceName = "realtime"
 
 func main() {
+	logger := initServiceLogger(serviceName)
 	addr := ":8080"
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
 		addr = v
@@ -48,7 +51,7 @@ func main() {
 	if instanceID == "" {
 		instanceID = uuid.NewString()
 	}
-	log.Printf("%s instance_id=%s", serviceName, instanceID)
+	logger.Info("instance ready", slog.String("instance_id", instanceID))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -68,36 +71,36 @@ func main() {
 		go func() {
 			err := rf.runSubscriber(ctx)
 			if err != nil && err != context.Canceled {
-				log.Printf("realtime redis subscriber exited: %v", err)
+				logger.Error("redis subscriber exited", slog.String("error", err.Error()))
 			}
 		}()
 	}
 
 	if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
 		go func() {
-			err := runMessageEventsConsumer(ctx, hub, natsURL, instanceID)
+			err := runMessageEventsConsumer(ctx, hub, natsURL, instanceID, logger)
 			if err != nil && err != context.Canceled {
-				log.Printf("realtime message.events consumer exited: %v", err)
+				logger.Error("message.events consumer exited", slog.String("error", err.Error()))
 			}
 		}()
 		go func() {
-			err := runVoiceEventsConsumer(ctx, hub, natsURL, instanceID)
+			err := runVoiceEventsConsumer(ctx, hub, natsURL, instanceID, logger)
 			if err != nil && err != context.Canceled {
-				log.Printf("realtime voice.events consumer exited: %v", err)
+				logger.Error("voice.events consumer exited", slog.String("error", err.Error()))
 			}
 		}()
 	}
 
 	server := &http.Server{
 		Addr:              addr,
-		Handler:           newServiceHandlerWithPresence(serviceName, tv, dmLister, hub, rf, instanceID, presenceUpdater),
+		Handler:           httpserver.Wrap(newServiceHandlerWithPresence(serviceName, tv, dmLister, hub, rf, instanceID, presenceUpdater), logger),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       0,
 		WriteTimeout:      0,
 		IdleTimeout:       120 * time.Second,
 	}
 	errCh := make(chan error, 1)
-	log.Printf("%s listening on %s", serviceName, addr)
+	logger.Info("listening", slog.String("addr", addr))
 	go func() {
 		errCh <- server.ListenAndServe()
 	}()
@@ -134,7 +137,7 @@ func dialDMChatLister() dmChatLister {
 	}
 	conn, err := grpc.NewClient(grpcclient.DialTarget(addr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		log.Printf("realtime: REALTIME_CHAT_GRPC_ADDR NewClient %q: %v", addr, err)
+		svcLogger.Warn("chat grpc client unavailable", slog.String("addr", addr), slog.String("error", err.Error()))
 		return nil
 	}
 	return newGRPCDMChatLister(conn)
@@ -147,7 +150,7 @@ func dialPresenceUpdater() presenceUpdater {
 	}
 	conn, err := grpc.NewClient(grpcclient.DialTarget(addr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		log.Printf("realtime: REALTIME_USER_GRPC_ADDR NewClient %q: %v", addr, err)
+		svcLogger.Warn("user grpc client unavailable", slog.String("addr", addr), slog.String("error", err.Error()))
 		return nil
 	}
 	return newGRPCPresenceUpdater(conn)

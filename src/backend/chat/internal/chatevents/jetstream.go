@@ -3,6 +3,7 @@ package chatevents
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -12,6 +13,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	eventsv1 "voice.app/voice/events/v1"
+	"voice/backend/pkg/correlation"
+	"voice/backend/pkg/natslog"
 )
 
 const (
@@ -24,6 +27,8 @@ const (
 type JetStreamPublisher struct {
 	nc *nats.Conn
 	js nats.JetStreamContext
+	// Logger emits structured nats_publish lines; optional.
+	Logger *slog.Logger
 
 	ensureOnce sync.Once
 	ensureErr  error
@@ -76,7 +81,6 @@ func (p *JetStreamPublisher) ensureStream() error {
 }
 
 func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, env *eventsv1.ChatStreamEvent) error {
-	_ = ctx
 	if err := p.ensureStream(); err != nil {
 		return err
 	}
@@ -84,9 +88,20 @@ func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, e
 	if err != nil {
 		return fmt.Errorf("marshal ChatStreamEvent: %w", err)
 	}
-	if _, err := p.js.Publish(subject, b); err != nil {
+	requestID := correlation.FromGRPC(ctx)
+	msg := &nats.Msg{Subject: subject, Data: b, Header: nats.Header{}}
+	natslog.SetRequestIDHeader(msg.Header, requestID)
+	if _, err := p.js.PublishMsg(msg); err != nil {
 		return fmt.Errorf("jetstream publish %s: %w", subject, err)
 	}
+	attrs := []slog.Attr{slog.String("event_id", env.GetEventId())}
+	if created := env.GetChatCreated(); created != nil {
+		attrs = append(attrs, slog.String("chat_id", created.GetChatId()))
+	}
+	if changed := env.GetChatMemberChanged(); changed != nil {
+		attrs = append(attrs, slog.String("chat_id", changed.GetChatId()), slog.String("profile_id", changed.GetProfileId()))
+	}
+	natslog.LogPublish(p.Logger, subject, requestID, "chat event published", attrs...)
 	return nil
 }
 

@@ -141,14 +141,14 @@ func TestConsumerDurableName_ReplacesHyphensInInstanceID(t *testing.T) {
 
 func TestRunMessageEventsConsumer_ErrorsWhenHubOrNATSURLMissing(t *testing.T) {
 	ctx := context.Background()
-	if err := runMessageEventsConsumer(ctx, nil, "nats://127.0.0.1:4222", "x"); err == nil {
+	if err := runMessageEventsConsumer(ctx, nil, "nats://127.0.0.1:4222", "x", nil); err == nil {
 		t.Fatal("expected error for nil hub")
 	}
 	hub := newWSHub()
-	if err := runMessageEventsConsumer(ctx, hub, "", "x"); err == nil {
+	if err := runMessageEventsConsumer(ctx, hub, "", "x", nil); err == nil {
 		t.Fatal("expected error for empty NATS URL")
 	}
-	if err := runMessageEventsConsumer(ctx, hub, "   ", "x"); err == nil {
+	if err := runMessageEventsConsumer(ctx, hub, "   ", "x", nil); err == nil {
 		t.Fatal("expected error for whitespace NATS URL")
 	}
 }
@@ -219,7 +219,7 @@ func TestRunMessageEventsConsumer_JetStreamToHub(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errCh := make(chan error, 1)
-	go func() { errCh <- runMessageEventsConsumer(ctx, hub, natsURL, "test-consumer-inst") }()
+	go func() { errCh <- runMessageEventsConsumer(ctx, hub, natsURL, "test-consumer-inst", nil) }()
 	time.Sleep(200 * time.Millisecond)
 
 	env := &eventsv1.MessageStreamEvent{

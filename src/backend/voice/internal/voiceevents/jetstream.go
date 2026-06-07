@@ -3,6 +3,7 @@ package voiceevents
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -12,6 +13,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	eventsv1 "voice.app/voice/events/v1"
+	"voice/backend/pkg/correlation"
+	"voice/backend/pkg/natslog"
 )
 
 const streamName = "voice_events"
@@ -19,6 +22,8 @@ const streamName = "voice_events"
 type JetStreamPublisher struct {
 	nc *nats.Conn
 	js nats.JetStreamContext
+	// Logger emits structured nats_publish lines; optional.
+	Logger *slog.Logger
 
 	ensureOnce sync.Once
 	ensureErr  error
@@ -94,7 +99,7 @@ func (p *JetStreamPublisher) PublishVoiceStateChanged(ctx context.Context, ev *e
 	})
 }
 
-func (p *JetStreamPublisher) publish(_ context.Context, subject string, env *eventsv1.VoiceStreamEvent) error {
+func (p *JetStreamPublisher) publish(ctx context.Context, subject string, env *eventsv1.VoiceStreamEvent) error {
 	if err := p.ensureStream(); err != nil {
 		return err
 	}
@@ -102,9 +107,15 @@ func (p *JetStreamPublisher) publish(_ context.Context, subject string, env *eve
 	if err != nil {
 		return fmt.Errorf("marshal VoiceStreamEvent: %w", err)
 	}
-	if _, err := p.js.Publish(subject, b); err != nil {
+	requestID := correlation.FromGRPC(ctx)
+	msg := &nats.Msg{Subject: subject, Data: b, Header: nats.Header{}}
+	natslog.SetRequestIDHeader(msg.Header, requestID)
+	if _, err := p.js.PublishMsg(msg); err != nil {
 		return fmt.Errorf("jetstream publish %s: %w", subject, err)
 	}
+	natslog.LogPublish(p.Logger, subject, requestID, "voice event published",
+		slog.String("event_id", env.GetEventId()),
+	)
 	return nil
 }
 

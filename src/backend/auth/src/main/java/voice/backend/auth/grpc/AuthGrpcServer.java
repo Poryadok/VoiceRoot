@@ -11,12 +11,17 @@ import voice.backend.auth.config.AuthProperties;
 public class AuthGrpcServer implements SmartLifecycle {
   private final AuthGrpcService authGrpcService;
   private final AuthProperties properties;
+  private final RequestIdServerInterceptor requestIdServerInterceptor;
   private Server server;
   private boolean running;
 
-  public AuthGrpcServer(AuthGrpcService authGrpcService, AuthProperties properties) {
+  public AuthGrpcServer(
+      AuthGrpcService authGrpcService,
+      AuthProperties properties,
+      RequestIdServerInterceptor requestIdServerInterceptor) {
     this.authGrpcService = authGrpcService;
     this.properties = properties;
+    this.requestIdServerInterceptor = requestIdServerInterceptor;
   }
 
   @Override
@@ -26,6 +31,7 @@ public class AuthGrpcServer implements SmartLifecycle {
     }
     try {
       server = NettyServerBuilder.forPort(properties.getGrpc().getPort())
+          .intercept(requestIdServerInterceptor)
           .addService(authGrpcService)
           .build()
           .start();

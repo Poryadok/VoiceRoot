@@ -3,6 +3,7 @@ package messageevents
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -12,6 +13,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	eventsv1 "voice.app/voice/events/v1"
+	"voice/backend/pkg/correlation"
+	"voice/backend/pkg/natslog"
 )
 
 const (
@@ -25,6 +28,8 @@ const (
 type JetStreamPublisher struct {
 	nc *nats.Conn
 	js nats.JetStreamContext
+	// Logger emits structured nats_publish lines; optional.
+	Logger *slog.Logger
 
 	ensureOnce sync.Once
 	ensureErr  error
@@ -84,7 +89,6 @@ func (p *JetStreamPublisher) ensureStream() error {
 }
 
 func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, env *eventsv1.MessageStreamEvent) error {
-	_ = ctx
 	if err := p.ensureStream(); err != nil {
 		return err
 	}
@@ -92,10 +96,36 @@ func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, e
 	if err != nil {
 		return fmt.Errorf("marshal MessageStreamEvent: %w", err)
 	}
-	if _, err := p.js.Publish(subject, b); err != nil {
+	requestID := correlation.FromGRPC(ctx)
+	msg := &nats.Msg{Subject: subject, Data: b, Header: nats.Header{}}
+	natslog.SetRequestIDHeader(msg.Header, requestID)
+	if _, err := p.js.PublishMsg(msg); err != nil {
 		return fmt.Errorf("jetstream publish %s: %w", subject, err)
 	}
+	natslog.LogPublish(p.Logger, subject, requestID, "message event published", messageEventLogAttrs(env)...)
 	return nil
+}
+
+func messageEventLogAttrs(env *eventsv1.MessageStreamEvent) []slog.Attr {
+	if env == nil {
+		return nil
+	}
+	attrs := []slog.Attr{slog.String("event_id", env.GetEventId())}
+	switch p := env.GetPayload().(type) {
+	case *eventsv1.MessageStreamEvent_MessageSent:
+		if s := p.MessageSent; s != nil {
+			attrs = append(attrs, slog.String("message_id", s.GetMessageId()), slog.String("chat_id", s.GetChatId()))
+		}
+	case *eventsv1.MessageStreamEvent_MessageEdited:
+		if e := p.MessageEdited; e != nil {
+			attrs = append(attrs, slog.String("message_id", e.GetMessageId()), slog.String("chat_id", e.GetChatId()))
+		}
+	case *eventsv1.MessageStreamEvent_MessageDeleted:
+		if d := p.MessageDeleted; d != nil {
+			attrs = append(attrs, slog.String("message_id", d.GetMessageId()), slog.String("chat_id", d.GetChatId()))
+		}
+	}
+	return attrs
 }
 
 // PublishMessageSent implements MessageEventsPublisher.

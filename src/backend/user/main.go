@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -19,6 +20,8 @@ import (
 
 	grpcsvc "voice/backend/user/internal/grpcsvc"
 	"voice/backend/pkg/grpcclient"
+	"voice/backend/pkg/grpcmw"
+	"voice/backend/pkg/httpserver"
 	"voice/backend/user/internal/r2avatar"
 	"voice/backend/user/internal/store"
 
@@ -28,6 +31,7 @@ import (
 const serviceName = "user"
 
 func main() {
+	logger := httpserver.NewLogger(serviceName)
 	httpAddr := ":8080"
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
 		httpAddr = v
@@ -112,7 +116,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("grpc listen: %v", err)
 		}
-		srv := grpc.NewServer()
+		srv := grpc.NewServer(grpcmw.ServerOptions(logger)...)
 		userv1.RegisterUserServiceServer(srv, &grpcsvc.UserGRPC{
 			Profiles:            store.NewProfileStore(pool),
 			Presence:            presence,
@@ -121,25 +125,25 @@ func main() {
 			AvatarPublicBaseURL: avatarPublicBase,
 		})
 		go func() {
-			log.Printf("%s gRPC listening on %s", serviceName, grpcAddr)
+			logger.Info("gRPC listening", slog.String("addr", grpcAddr))
 			if err := srv.Serve(lis); err != nil {
 				log.Fatalf("grpc serve: %v", err)
 			}
 		}()
 	} else {
-		log.Printf("%s: DATABASE_URL not set; gRPC disabled (health only)", serviceName)
+		logger.Warn("DATABASE_URL not set; gRPC disabled (health only)")
 	}
 
 	server := &http.Server{
 		Addr:              httpAddr,
-		Handler:           healthHandler(serviceName),
+		Handler:           httpserver.Wrap(healthHandler(serviceName), logger),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
 	errCh := make(chan error, 1)
-	log.Printf("%s listening on %s", serviceName, httpAddr)
+	logger.Info("listening", slog.String("addr", httpAddr))
 	go func() {
 		errCh <- server.ListenAndServe()
 	}()

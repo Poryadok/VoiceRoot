@@ -86,6 +86,30 @@
 
 ---
 
+## Локальная отладка логов (Tier-0)
+
+После `docker compose --profile app up` сервисы пишут **JSON-строки** в stdout с полями `service`, `request_id`, `event` (`http_access`, `grpc_call`, `nats_publish`, `nats_consume`, `ws_connect`, `ws_fanout`, …), а также `chat_id` / `message_id` / `event_id` на критичном пути Messaging → NATS → Realtime.
+
+Собрать логи в один файл для grep и для Cursor-агента:
+
+```bash
+make compose-logs-collect
+```
+
+Результат: [`.local/compose.log`](../.local/compose.log) (в `.gitignore`). Примеры поиска:
+
+```bash
+# одна цепочка по correlation id (из ответа Gateway или Flutter X-Request-Id)
+rg "request_id.*<id>" .local/compose.log
+
+# async-связка без общего request_id
+rg "chat_id.*<uuid>" .local/compose.log
+```
+
+Локальный compose для `app` profile задаёт `LOG_LEVEL=debug`. Web Flutter WS не шлёт custom headers — `request_id` на upgrade генерирует Gateway.
+
+---
+
 ## Что запускать локально перед PR
 
 Минимум для затронутого кода:

@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	eventsv1 "voice.app/voice/events/v1"
+	"voice/backend/pkg/natslog"
 )
 
 const jsStreamVoiceEvents = "voice_events"
@@ -151,14 +152,26 @@ func compactProfiles(ids ...string) []string {
 	return out
 }
 
-func subscribeVoiceEvents(js nats.JetStreamContext, hub *wsHub, instanceID string) (*nats.Subscription, error) {
+func voiceEventLogAttrs(data []byte) []slog.Attr {
+	var env eventsv1.VoiceStreamEvent
+	if err := proto.Unmarshal(data, &env); err != nil {
+		return nil
+	}
+	return []slog.Attr{slog.String("event_id", env.GetEventId())}
+}
+
+func subscribeVoiceEvents(js nats.JetStreamContext, hub *wsHub, instanceID string, logger *slog.Logger) (*nats.Subscription, error) {
 	durable := voiceConsumerDurableName(instanceID)
 	handler := func(msg *nats.Msg) {
+		attrs := voiceEventLogAttrs(msg.Data)
 		if profileIDs, fe, ok := voiceEventBytesToFanout(msg.Data); ok {
+			natslog.LogConsume(logger, msg, slog.LevelInfo, "voice event consumed", attrs...)
 			for _, profileID := range compactProfiles(profileIDs...) {
-				hub.broadcastToProfile(profileID, fe)
+				hub.broadcastToProfile(profileID, fe, logger)
 			}
+			return
 		}
+		natslog.LogConsume(logger, msg, slog.LevelWarn, "unknown voice event payload", attrs...)
 	}
 	sub, err := js.Subscribe("voice.>", handler,
 		nats.Durable(durable),
@@ -174,7 +187,7 @@ func subscribeVoiceEvents(js nats.JetStreamContext, hub *wsHub, instanceID strin
 	return sub, nil
 }
 
-func runVoiceEventsConsumer(ctx context.Context, hub *wsHub, natsURL, instanceID string) error {
+func runVoiceEventsConsumer(ctx context.Context, hub *wsHub, natsURL, instanceID string, logger *slog.Logger) error {
 	if hub == nil || strings.TrimSpace(natsURL) == "" {
 		return fmt.Errorf("voice events consumer: missing hub or NATS URL")
 	}
@@ -196,14 +209,14 @@ func runVoiceEventsConsumer(ctx context.Context, hub *wsHub, natsURL, instanceID
 	}
 
 	sub, err := subscribeJetStreamWithRetry(ctx, "realtime voice.events", func() (*nats.Subscription, error) {
-		return subscribeVoiceEvents(js, hub, instanceID)
+		return subscribeVoiceEvents(js, hub, instanceID, logger)
 	})
 	if err != nil {
 		return err
 	}
 	defer func() {
-		if err := sub.Unsubscribe(); err != nil {
-			log.Printf("realtime voice.events unsubscribe: %v", err)
+		if err := sub.Unsubscribe(); err != nil && logger != nil {
+			logger.Warn("voice.events unsubscribe failed", slog.String("error", err.Error()))
 		}
 	}()
 

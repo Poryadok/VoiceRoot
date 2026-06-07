@@ -10,6 +10,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+
+	"voice/backend/pkg/correlation"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -30,7 +32,7 @@ func grpcMetadataFromRequest(r *http.Request) metadata.MD {
 		"x-voice-profile-id",
 		"x-voice-roles",
 		"x-voice-subscription-tier",
-		"x-request-id",
+		correlation.GRPCMetadataKey,
 	} {
 		if v := strings.TrimSpace(r.Header.Get(key)); v != "" {
 			md.Set(key, v)

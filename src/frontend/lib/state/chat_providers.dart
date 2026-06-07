@@ -6,6 +6,7 @@ import 'package:meta/meta.dart';
 import '../backend/api_errors.dart';
 import '../backend/chats_client.dart';
 import '../backend/files_client.dart';
+import '../backend/gateway_request_id.dart';
 import '../backend/messaging_read_sync.dart';
 import '../backend/messages_client.dart';
 import '../backend/realtime_client.dart';
@@ -765,9 +766,11 @@ class RealtimeHub {
 
     _setStatus(RealtimeLinkStatus.connecting);
     final uri = gatewayWebSocketUri(config.baseUrl);
+    // Web targets cannot set custom WS headers; Gateway generates X-Request-Id on upgrade.
     final headers = <String, String>{
       'Authorization': auth.authorizationHeader,
       'X-Voice-Profile-Id': auth.activeProfileId,
+      'X-Request-Id': newGatewayRequestId(),
     };
     final connection = VoiceRealtimeConnection(uri: uri, headers: headers);
     _connection = connection;

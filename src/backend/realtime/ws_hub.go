@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"log/slog"
 	"sync"
 )
 
@@ -218,7 +219,7 @@ func (h *wsHub) broadcastPresenceInChatExcept(chatID, senderProfileID, excludeIn
 }
 
 // broadcastToChat delivers a fan-out envelope to every connection subscribed to chatID (local hub only).
-func (h *wsHub) broadcastToChat(chatID string, env fanoutEnvelope) {
+func (h *wsHub) broadcastToChat(chatID string, env fanoutEnvelope, logger *slog.Logger) {
 	if chatID == "" {
 		return
 	}
@@ -229,6 +230,14 @@ func (h *wsHub) broadcastToChat(chatID string, env fanoutEnvelope) {
 		targets = append(targets, reg)
 	}
 	h.mu.RUnlock()
+	if logger != nil {
+		logger.LogAttrs(nil, slog.LevelDebug, "ws fanout",
+			slog.String("event", "ws_fanout"),
+			slog.String("chat_id", chatID),
+			slog.String("op", env.Op),
+			slog.Int("recipient_count", len(targets)),
+		)
+	}
 	for _, reg := range targets {
 		select {
 		case reg.fanout <- env:
@@ -239,7 +248,7 @@ func (h *wsHub) broadcastToChat(chatID string, env fanoutEnvelope) {
 }
 
 // broadcastToProfile delivers a fan-out envelope to every connection for profileID (local hub only).
-func (h *wsHub) broadcastToProfile(profileID string, env fanoutEnvelope) {
+func (h *wsHub) broadcastToProfile(profileID string, env fanoutEnvelope, logger *slog.Logger) {
 	if profileID == "" {
 		return
 	}
@@ -250,6 +259,14 @@ func (h *wsHub) broadcastToProfile(profileID string, env fanoutEnvelope) {
 		targets = append(targets, reg)
 	}
 	h.mu.RUnlock()
+	if logger != nil {
+		logger.LogAttrs(nil, slog.LevelDebug, "ws fanout",
+			slog.String("event", "ws_fanout"),
+			slog.String("profile_id", profileID),
+			slog.String("op", env.Op),
+			slog.Int("recipient_count", len(targets)),
+		)
+	}
 	for _, reg := range targets {
 		select {
 		case reg.fanout <- env:

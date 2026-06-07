@@ -8,9 +8,11 @@ import (
 	"github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 
 	eventsv1 "voice.app/voice/events/v1"
+	"voice/backend/pkg/correlation"
 )
 
 func startJSTestServer(t *testing.T) *server.Server {
@@ -64,6 +66,30 @@ func TestJetStreamPublisher_MessageSentRoundTrip(t *testing.T) {
 	require.Equal(t, mid, sent.GetMessageId())
 	require.Equal(t, cid, sent.GetChatId())
 	require.Equal(t, sid, sent.GetSenderProfileId())
+}
+
+func TestJetStreamPublisher_RequestIDHeader(t *testing.T) {
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(correlation.GRPCMetadataKey, "req-header-test"))
+	s := startJSTestServer(t)
+	url := s.ClientURL()
+
+	nc, err := nats.Connect(url)
+	require.NoError(t, err)
+	t.Cleanup(nc.Close)
+
+	sub, err := nc.SubscribeSync(subjectMessageSent)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sub.Unsubscribe() })
+
+	pub, err := NewJetStreamPublisher(url)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = pub.Close() })
+
+	require.NoError(t, pub.PublishMessageSent(ctx, "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222", "33333333-3333-3333-3333-333333333333"))
+
+	msg, err := sub.NextMsg(3 * time.Second)
+	require.NoError(t, err)
+	require.Equal(t, "req-header-test", msg.Header.Get(correlation.RequestIDHeader))
 }
 
 func TestJetStreamPublisher_MessageEditedAndDeleted(t *testing.T) {

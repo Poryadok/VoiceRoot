@@ -5,6 +5,7 @@ import 'package:protobuf/protobuf.dart';
 
 import 'client_version.dart';
 import 'gateway_api_error.dart';
+import 'gateway_request_id.dart';
 import 'gateway_config.dart';
 import 'gateway_proto_json.dart';
 
@@ -290,6 +291,7 @@ class GatewayHttpClient {
         : (authorization ?? _authorizationProvider?.call());
     return {
       ...ClientVersion.headers,
+      'X-Request-Id': newGatewayRequestId(),
       if (auth != null) 'Authorization': auth,
       if (json) 'Content-Type': 'application/json',
     };

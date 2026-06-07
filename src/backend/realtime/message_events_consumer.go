@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	eventsv1 "voice.app/voice/events/v1"
+	"voice/backend/pkg/natslog"
 )
 
 const (
@@ -79,12 +80,39 @@ func messageEventBytesToFanout(data []byte) (chatID string, env fanoutEnvelope, 
 	}
 }
 
-func subscribeMessageEvents(js nats.JetStreamContext, hub *wsHub, instanceID string) (*nats.Subscription, error) {
+func messageEventLogAttrs(data []byte) []slog.Attr {
+	var env eventsv1.MessageStreamEvent
+	if err := proto.Unmarshal(data, &env); err != nil {
+		return nil
+	}
+	attrs := []slog.Attr{slog.String("event_id", env.GetEventId())}
+	switch p := env.GetPayload().(type) {
+	case *eventsv1.MessageStreamEvent_MessageSent:
+		if s := p.MessageSent; s != nil {
+			attrs = append(attrs, slog.String("message_id", s.GetMessageId()), slog.String("chat_id", s.GetChatId()))
+		}
+	case *eventsv1.MessageStreamEvent_MessageEdited:
+		if e := p.MessageEdited; e != nil {
+			attrs = append(attrs, slog.String("message_id", e.GetMessageId()), slog.String("chat_id", e.GetChatId()))
+		}
+	case *eventsv1.MessageStreamEvent_MessageDeleted:
+		if d := p.MessageDeleted; d != nil {
+			attrs = append(attrs, slog.String("message_id", d.GetMessageId()), slog.String("chat_id", d.GetChatId()))
+		}
+	}
+	return attrs
+}
+
+func subscribeMessageEvents(js nats.JetStreamContext, hub *wsHub, instanceID string, logger *slog.Logger) (*nats.Subscription, error) {
 	durable := consumerDurableName(instanceID)
 	handler := func(msg *nats.Msg) {
+		attrs := messageEventLogAttrs(msg.Data)
 		if chatID, fe, ok := messageEventBytesToFanout(msg.Data); ok {
-			hub.broadcastToChat(chatID, fe)
+			natslog.LogConsume(logger, msg, slog.LevelInfo, "message event consumed", attrs...)
+			hub.broadcastToChat(chatID, fe, logger)
+			return
 		}
+		natslog.LogConsume(logger, msg, slog.LevelWarn, "unknown message event payload", attrs...)
 	}
 	sub, err := js.Subscribe("message.>", handler,
 		nats.Durable(durable),
@@ -102,7 +130,7 @@ func subscribeMessageEvents(js nats.JetStreamContext, hub *wsHub, instanceID str
 
 // runMessageEventsConsumer subscribes to JetStream stream message_events and fans out to the local hub.
 // Each Realtime instance must use its own durable (derived from instanceID) so every instance receives all events.
-func runMessageEventsConsumer(ctx context.Context, hub *wsHub, natsURL, instanceID string) error {
+func runMessageEventsConsumer(ctx context.Context, hub *wsHub, natsURL, instanceID string, logger *slog.Logger) error {
 	if hub == nil || strings.TrimSpace(natsURL) == "" {
 		return fmt.Errorf("message events consumer: missing hub or NATS URL")
 	}
@@ -124,14 +152,14 @@ func runMessageEventsConsumer(ctx context.Context, hub *wsHub, natsURL, instance
 	}
 
 	sub, err := subscribeJetStreamWithRetry(ctx, "realtime message.events", func() (*nats.Subscription, error) {
-		return subscribeMessageEvents(js, hub, instanceID)
+		return subscribeMessageEvents(js, hub, instanceID, logger)
 	})
 	if err != nil {
 		return err
 	}
 	defer func() {
-		if err := sub.Unsubscribe(); err != nil {
-			log.Printf("realtime message.events unsubscribe: %v", err)
+		if err := sub.Unsubscribe(); err != nil && logger != nil {
+			logger.Warn("message.events unsubscribe failed", slog.String("error", err.Error()))
 		}
 	}()
 

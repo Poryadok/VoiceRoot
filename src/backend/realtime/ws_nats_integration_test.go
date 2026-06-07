@@ -54,7 +54,7 @@ func TestWSReceivesMessageSentUpdateDeleteFromJetStreamNATS(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	errCh := make(chan error, 1)
-	go func() { errCh <- runMessageEventsConsumer(ctx, hub, natsURL, jsInst) }()
+	go func() { errCh <- runMessageEventsConsumer(ctx, hub, natsURL, jsInst, nil) }()
 	time.Sleep(250 * time.Millisecond)
 
 	u := wsEndpoint(t, srv)
@@ -196,7 +196,7 @@ func TestWSNoMessageCreateFromNATSWhenNotSubscribedToChat(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	go func() { _ = runMessageEventsConsumer(ctx, hub, natsURL, "js-only") }()
+	go func() { _ = runMessageEventsConsumer(ctx, hub, natsURL, "js-only", nil) }()
 	time.Sleep(250 * time.Millisecond)
 
 	u := wsEndpoint(t, srv)
@@ -308,7 +308,7 @@ func TestWSMessageCreateTwoClientsNATSWithRedis(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	jsConsumerInst := "js-two-clients-" + inst
-	go func() { errCh <- runMessageEventsConsumer(ctx, hub, natsURL, jsConsumerInst) }()
+	go func() { errCh <- runMessageEventsConsumer(ctx, hub, natsURL, jsConsumerInst, nil) }()
 	time.Sleep(250 * time.Millisecond)
 
 	profA := "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"

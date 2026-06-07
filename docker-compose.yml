@@ -76,6 +76,7 @@ services:
       context: ./src/backend/auth
       dockerfile: Dockerfile
     environment:
+      LOG_LEVEL: debug
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/auth_db
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-voice}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-voice}
@@ -105,6 +106,7 @@ services:
       context: ./src/backend
       dockerfile: social/Dockerfile
     environment:
+      LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/social_db?sslmode=disable
       SOCIAL_GRPC_LISTEN: :9090
     depends_on:
@@ -123,6 +125,7 @@ services:
       context: ./src/backend
       dockerfile: user/Dockerfile
     environment:
+      LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/user_db?sslmode=disable
       USER_GRPC_ADDR: :9090
       SOCIAL_GRPC_ADDR: social:9090
@@ -153,6 +156,7 @@ services:
       context: ./src/backend
       dockerfile: chat/Dockerfile
     environment:
+      LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/chat_db?sslmode=disable
       CHAT_GRPC_LISTEN: :9090
       SOCIAL_GRPC_ADDR: social:9090
@@ -181,6 +185,7 @@ services:
       context: ./src/backend
       dockerfile: messaging/Dockerfile
     environment:
+      LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/messaging_db?sslmode=disable
       MESSAGING_GRPC_LISTEN: :9090
       CHAT_GRPC_ADDR: chat:9090
@@ -214,6 +219,7 @@ services:
       context: ./src/backend
       dockerfile: file/Dockerfile
     environment:
+      LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/file_db?sslmode=disable
       FILE_GRPC_LISTEN: :9090
       CHAT_GRPC_ADDR: chat:9090
@@ -243,6 +249,7 @@ services:
       context: ./src/backend
       dockerfile: realtime/Dockerfile
     environment:
+      LOG_LEVEL: debug
       REALTIME_REDIS_ADDR: redis:6379
       NATS_URL: nats://nats:4222
       REALTIME_JWKS_URL: http://auth:8080/api/v1/auth/.well-known/jwks.json
@@ -271,6 +278,7 @@ services:
       context: ./src/backend
       dockerfile: voice/Dockerfile
     environment:
+      LOG_LEVEL: debug
       VOICE_GRPC_LISTEN: :9090
       VOICE_REDIS_ADDR: redis:6379
       NATS_URL: nats://nats:4222
@@ -299,6 +307,7 @@ services:
     ports:
       - "${GATEWAY_PORT:-8080}:8080"
     environment:
+      LOG_LEVEL: debug
       LISTEN_ADDR: ":8080"
       GATEWAY_REDIS_ADDR: redis:6379
       GATEWAY_REST_UPSTREAMS_JSON: '{"auth":"http://auth:8080"}'

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -18,9 +19,11 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"voice/backend/chat/internal/chatevents"
-	"voice/backend/pkg/grpcclient"
 	grpcsvc "voice/backend/chat/internal/grpcsvc"
 	"voice/backend/chat/internal/store"
+	"voice/backend/pkg/grpcclient"
+	"voice/backend/pkg/grpcmw"
+	"voice/backend/pkg/httpserver"
 
 	chatv1 "voice.app/voice/chat/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
@@ -30,6 +33,7 @@ import (
 const serviceName = "chat"
 
 func main() {
+	logger := httpserver.NewLogger(serviceName)
 	httpAddr := ":8080"
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
 		httpAddr = v
@@ -129,10 +133,11 @@ func main() {
 				log.Fatalf("nats jetstream publisher: %v", err)
 			}
 			defer func() { _ = jsPub.Close() }()
+			jsPub.Logger = logger
 			chatEvents = jsPub
 			go func() {
-				if err := runMessageActivityConsumer(runCtx, natsURL, os.Getenv("HOSTNAME"), dmStore); err != nil && !errors.Is(err, context.Canceled) {
-					log.Printf("chat: message activity consumer stopped: %v", err)
+				if err := runMessageActivityConsumer(runCtx, natsURL, os.Getenv("HOSTNAME"), dmStore, logger); err != nil && !errors.Is(err, context.Canceled) {
+					logger.Error("message activity consumer stopped", slog.String("error", err.Error()))
 				}
 			}()
 		}
@@ -141,7 +146,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("grpc listen: %v", err)
 		}
-		grpcSrv = grpc.NewServer()
+		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger)...)
 		chatv1.RegisterChatServiceServer(grpcSrv, &grpcsvc.ChatGRPC{
 			DM:         dmStore,
 			Profiles:   profiles,
@@ -150,25 +155,25 @@ func main() {
 			ChatEvents: chatEvents,
 		})
 		go func() {
-			log.Printf("%s gRPC listening on %s", serviceName, grpcListen)
+			logger.Info("gRPC listening", slog.String("addr", grpcListen))
 			if err := grpcSrv.Serve(lis); err != nil {
 				log.Fatalf("grpc serve: %v", err)
 			}
 		}()
 	} else {
-		log.Printf("%s: DATABASE_URL not set; gRPC disabled (health only)", serviceName)
+		logger.Warn("DATABASE_URL not set; gRPC disabled (health only)")
 	}
 
 	server := &http.Server{
 		Addr:              httpAddr,
-		Handler:           healthHandler(serviceName),
+		Handler:           httpserver.Wrap(healthHandler(serviceName), logger),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
 	errCh := make(chan error, 1)
-	log.Printf("%s listening on %s", serviceName, httpAddr)
+	logger.Info("listening", slog.String("addr", httpAddr))
 	go func() {
 		errCh <- server.ListenAndServe()
 	}()

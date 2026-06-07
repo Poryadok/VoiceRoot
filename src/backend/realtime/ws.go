@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
@@ -85,10 +85,11 @@ func newWSHandler(tv tokenValidator, lister dmChatLister, hub *wsHub, rf *redisF
 		}
 		conn, err := up.Upgrade(w, r, nil)
 		if err != nil {
-			log.Printf("ws upgrade: %v", err)
+			svcLogger.Warn("ws upgrade failed", slog.String("error", err.Error()))
 			return
 		}
-		go runWSConn(conn, claims, lister, hub, rf, instanceID, presence)
+		requestID := strings.TrimSpace(r.Header.Get("X-Request-Id"))
+		go runWSConn(conn, claims, lister, hub, rf, instanceID, presence, requestID)
 	})
 }
 
@@ -166,13 +167,27 @@ type readResult struct {
 	err error
 }
 
-func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, hub *wsHub, rf *redisFanout, instanceID string, presence presenceUpdater) {
+func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, hub *wsHub, rf *redisFanout, instanceID string, presence presenceUpdater, requestID string) {
 	connID := uuid.NewString()
+	svcLogger.Info("ws connected",
+		slog.String("event", "ws_connect"),
+		slog.String("conn_id", connID),
+		slog.String("profile_id", claims.ProfileID),
+		slog.String("instance_id", instanceID),
+		slog.String("request_id", requestID),
+	)
 	reg := hub.attachConn(instanceID, connID, claims.ProfileID, 32)
 	lastTypingStart := make(map[string]time.Time)
 	typingTimers := make(map[string]*time.Timer)
 
 	defer func() {
+		svcLogger.Info("ws disconnected",
+			slog.String("event", "ws_disconnect"),
+			slog.String("conn_id", connID),
+			slog.String("profile_id", claims.ProfileID),
+			slog.String("instance_id", instanceID),
+			slog.String("request_id", requestID),
+		)
 		for _, timer := range typingTimers {
 			timer.Stop()
 		}
@@ -191,7 +206,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, h
 	if rf != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		if err := rf.Register(ctx, claims.ProfileID, connID); err != nil {
-			log.Printf("ws redis register: %v", err)
+			svcLogger.Warn("ws redis register failed", slog.String("error", err.Error()), slog.String("conn_id", connID))
 		}
 		cancel()
 	}
@@ -221,7 +236,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, h
 		cancel()
 		degraded := err != nil
 		if err != nil {
-			log.Printf("ws dm chat list: %v", err)
+			svcLogger.Warn("ws dm chat list failed", slog.String("error", err.Error()), slog.String("conn_id", connID))
 			ids = nil
 		}
 		mu.Lock()
@@ -298,6 +313,12 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, h
 				chatSubs[cid] = struct{}{}
 				mu.Unlock()
 				hub.addChat(reg, cid)
+				svcLogger.Info("ws subscribe",
+					slog.String("event", "ws_subscribe"),
+					slog.String("conn_id", connID),
+					slog.String("chat_id", cid),
+					slog.String("profile_id", claims.ProfileID),
+				)
 				ackD, _ := json.Marshal(map[string]any{"chat_id": cid})
 				if err := write("subscribe_ack", ackD); err != nil {
 					return
@@ -319,6 +340,12 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, h
 				delete(chatSubs, cid)
 				mu.Unlock()
 				hub.removeChat(reg, cid)
+				svcLogger.Info("ws unsubscribe",
+					slog.String("event", "ws_unsubscribe"),
+					slog.String("conn_id", connID),
+					slog.String("chat_id", cid),
+					slog.String("profile_id", claims.ProfileID),
+				)
 				ackD, _ := json.Marshal(map[string]any{"chat_id": cid})
 				if err := write("unsubscribe_ack", ackD); err != nil {
 					return
@@ -363,7 +390,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, h
 					if rf != nil {
 						ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 						if err := rf.PublishTyping(ctx, cid, claims.ProfileID, k, connID); err != nil {
-							log.Printf("ws redis publish typing: %v", err)
+							svcLogger.Warn("ws redis publish typing failed", slog.String("error", err.Error()))
 						}
 						cancel()
 					}
@@ -433,11 +460,11 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, h
 					"profile_id": claims.ProfileID,
 				})
 				hub.broadcastMarkReadSameProfileExcept(claims.ProfileID, instanceID, connID, d)
-				hub.broadcastToChat(cid, fanoutEnvelope{Op: "message_read", D: d})
+				hub.broadcastToChat(cid, fanoutEnvelope{Op: "message_read", D: d}, svcLogger)
 				if rf != nil {
 					ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 					if err := rf.PublishMarkRead(ctx, claims.ProfileID, cid, mid, connID); err != nil {
-						log.Printf("ws redis publish mark_read: %v", err)
+						svcLogger.Warn("ws redis publish mark_read failed", slog.String("error", err.Error()))
 					}
 					cancel()
 				}
@@ -477,7 +504,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, h
 					"message_id":           mid,
 					"recipient_profile_id": claims.ProfileID,
 				})
-				hub.broadcastToProfile(senderID, fanoutEnvelope{Op: "message_delivered", D: d})
+				hub.broadcastToProfile(senderID, fanoutEnvelope{Op: "message_delivered", D: d}, svcLogger)
 			case "presence_update":
 				var p presenceUpdateClientPayload
 				if err := json.Unmarshal(in.D, &p); err != nil {
@@ -515,7 +542,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, h
 				if rf != nil {
 					ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 					if err := rf.PublishPresenceProfile(ctx, claims.ProfileID, status, custom, connID); err != nil {
-						log.Printf("ws redis publish presence profile: %v", err)
+						svcLogger.Warn("ws redis publish presence profile failed", slog.String("error", err.Error()))
 					}
 					cancel()
 				}
@@ -536,7 +563,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, h
 					if rf != nil {
 						ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 						if err := rf.PublishPresenceChat(ctx, c, claims.ProfileID, status, custom, connID); err != nil {
-							log.Printf("ws redis publish presence chat: %v", err)
+							svcLogger.Warn("ws redis publish presence chat failed", slog.String("error", err.Error()))
 						}
 						cancel()
 					}
@@ -558,7 +585,11 @@ func updatePresence(ctx context.Context, presence presenceUpdater, claims voicej
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	if err := presence.UpdatePresence(ctx, claims.UserID, claims.ProfileID, status, customStatus); err != nil {
-		log.Printf("ws user presence update profile=%s status=%s: %v", claims.ProfileID, status, err)
+		svcLogger.Warn("ws user presence update failed",
+			slog.String("profile_id", claims.ProfileID),
+			slog.String("status", status),
+			slog.String("error", err.Error()),
+		)
 	}
 }
 

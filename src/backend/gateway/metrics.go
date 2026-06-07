@@ -92,6 +92,7 @@ func (g *gateway) observeRequestMetrics(r *http.Request, status int, start time.
 
 func gatewayAccessLogExtras(r *http.Request) []slog.Attr {
 	return []slog.Attr{
+		slog.String("event", "http_access"),
 		slog.String("route_group", routeGroup(r)),
 		slog.String("remote_addr", r.RemoteAddr),
 	}

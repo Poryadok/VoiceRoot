@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -16,6 +17,8 @@ import (
 
 	grpcsvc "voice/backend/social/internal/grpcsvc"
 	"voice/backend/social/internal/store"
+	"voice/backend/pkg/grpcmw"
+	"voice/backend/pkg/httpserver"
 
 	socialv1 "voice.app/voice/social/v1"
 )
@@ -23,6 +26,7 @@ import (
 const serviceName = "social"
 
 func main() {
+	logger := httpserver.NewLogger(serviceName)
 	httpAddr := ":8080"
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
 		httpAddr = v
@@ -47,31 +51,31 @@ func main() {
 		if err != nil {
 			log.Fatalf("grpc listen: %v", err)
 		}
-		grpcSrv = grpc.NewServer()
+		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger)...)
 		socialv1.RegisterSocialServiceServer(grpcSrv, &grpcsvc.SocialGRPC{
 			Friends: &store.FriendshipStore{Pool: pool},
 			Blocks:  &store.BlockStore{Pool: pool},
 		})
 		go func() {
-			log.Printf("%s gRPC listening on %s", serviceName, grpcListen)
+			logger.Info("gRPC listening", slog.String("addr", grpcListen))
 			if err := grpcSrv.Serve(lis); err != nil {
 				log.Fatalf("grpc serve: %v", err)
 			}
 		}()
 	} else {
-		log.Printf("%s: DATABASE_URL not set; gRPC disabled (health only)", serviceName)
+		logger.Warn("DATABASE_URL not set; gRPC disabled (health only)")
 	}
 
 	server := &http.Server{
 		Addr:              httpAddr,
-		Handler:           healthHandler(serviceName),
+		Handler:           httpserver.Wrap(healthHandler(serviceName), logger),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
 	errCh := make(chan error, 1)
-	log.Printf("%s listening on %s", serviceName, httpAddr)
+	logger.Info("listening", slog.String("addr", httpAddr))
 	go func() {
 		errCh <- server.ListenAndServe()
 	}()

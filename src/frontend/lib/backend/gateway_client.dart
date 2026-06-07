@@ -2,6 +2,7 @@ import 'package:http/http.dart' as http;
 
 import 'client_version.dart';
 import 'gateway_config.dart';
+import 'gateway_request_id.dart';
 
 /// Detail string on [GatewayHealthFailure] when [GatewayConfig.hasBaseUrl] is false; used for i18n.
 const String kGatewayMissingBaseUrlDetail = 'missing base URL';
@@ -36,7 +37,10 @@ class VoiceGatewayClient {
     }
     final resolved = Uri.parse(_config.baseUrl).resolve('/health');
     try {
-      final res = await _http.get(resolved);
+      final res = await _http.get(
+        resolved,
+        headers: {'X-Request-Id': newGatewayRequestId()},
+      );
       if (res.statusCode == 200) {
         return const GatewayHealthOk();
       }
@@ -57,7 +61,13 @@ class VoiceGatewayClient {
       queryParameters: {'platform': platform, 'version': version},
     );
     try {
-      final res = await _http.get(uri, headers: ClientVersion.headers);
+      final res = await _http.get(
+        uri,
+        headers: {
+          ...ClientVersion.headers,
+          'X-Request-Id': newGatewayRequestId(),
+        },
+      );
       if (res.statusCode == 200) return res.body;
       return null;
     } catch (_) {

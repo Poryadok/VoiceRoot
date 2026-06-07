@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -18,10 +19,12 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	grpcsvc "voice/backend/messaging/internal/grpcsvc"
-	"voice/backend/pkg/grpcclient"
 	"voice/backend/messaging/internal/messageevents"
 	"voice/backend/messaging/internal/s2s"
 	"voice/backend/messaging/internal/store"
+	"voice/backend/pkg/grpcclient"
+	"voice/backend/pkg/grpcmw"
+	"voice/backend/pkg/httpserver"
 
 	chatv1 "voice.app/voice/chat/v1"
 	filev1 "voice.app/voice/file/v1"
@@ -48,6 +51,7 @@ func waitForGRPCReady(ctx context.Context, conn *grpc.ClientConn) error {
 }
 
 func main() {
+	logger := httpserver.NewLogger(serviceName)
 	httpAddr := ":8080"
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
 		httpAddr = v
@@ -156,6 +160,7 @@ func main() {
 			if err := jsPub.EnsureStream(); err != nil {
 				log.Fatalf("nats ensure message_events stream: %v", err)
 			}
+			jsPub.Logger = logger
 			msgEvents = jsPub
 		}
 
@@ -163,7 +168,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("grpc listen: %v", err)
 		}
-		grpcSrv = grpc.NewServer()
+		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger)...)
 		messagingv1.RegisterMessagingServiceServer(grpcSrv, &grpcsvc.MessagingGRPC{
 			Messages:      &store.MessagesStore{Pool: pool},
 			ChatGuard:     chatGuard,
@@ -173,25 +178,25 @@ func main() {
 			MessageEvents: msgEvents,
 		})
 		go func() {
-			log.Printf("%s gRPC listening on %s", serviceName, grpcListen)
+			logger.Info("gRPC listening", slog.String("addr", grpcListen))
 			if err := grpcSrv.Serve(lis); err != nil {
 				log.Fatalf("grpc serve: %v", err)
 			}
 		}()
 	} else {
-		log.Printf("%s: DATABASE_URL not set; gRPC disabled (health only)", serviceName)
+		logger.Warn("DATABASE_URL not set; gRPC disabled (health only)")
 	}
 
 	server := &http.Server{
 		Addr:              httpAddr,
-		Handler:           healthHandler(serviceName),
+		Handler:           httpserver.Wrap(healthHandler(serviceName), logger),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
 	errCh := make(chan error, 1)
-	log.Printf("%s listening on %s", serviceName, httpAddr)
+	logger.Info("listening", slog.String("addr", httpAddr))
 	go func() {
 		errCh <- server.ListenAndServe()
 	}()
