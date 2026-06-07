@@ -1,6 +1,7 @@
 package natslog
 
 import (
+	"context"
 	"log/slog"
 	"strings"
 
@@ -47,7 +48,7 @@ func LogPublish(logger *slog.Logger, subject, requestID, msg string, attrs ...sl
 		return
 	}
 	all := PublishAttrs(subject, requestID, attrs...)
-	logger.LogAttrs(nil, slog.LevelInfo, msg, all...)
+	logger.LogAttrs(context.Background(), slog.LevelInfo, msg, all...)
 }
 
 // LogConsume writes a structured consume log line.
@@ -56,7 +57,7 @@ func LogConsume(logger *slog.Logger, msg *nats.Msg, level slog.Level, text strin
 		return
 	}
 	all := ConsumeAttrs(msg, attrs...)
-	logger.LogAttrs(nil, level, text, all...)
+	logger.LogAttrs(context.Background(), level, text, all...)
 }
 
 // SetRequestIDHeader sets X-Request-Id on a NATS message header map.

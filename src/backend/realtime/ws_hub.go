@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"sync"
@@ -263,7 +264,7 @@ func (h *wsHub) broadcastToChat(chatID string, env fanoutEnvelope, logger *slog.
 	}
 	h.mu.RUnlock()
 	if logger != nil {
-		logger.LogAttrs(nil, slog.LevelDebug, "ws fanout", fanoutLogAttrs(chatID, "", env.Op, requestID, targets)...)
+		logger.LogAttrs(context.Background(), slog.LevelDebug, "ws fanout", fanoutLogAttrs(chatID, "", env.Op, requestID, targets)...)
 	}
 	for _, reg := range targets {
 		select {
@@ -287,7 +288,7 @@ func (h *wsHub) broadcastToProfile(profileID string, env fanoutEnvelope, logger 
 	}
 	h.mu.RUnlock()
 	if logger != nil {
-		logger.LogAttrs(nil, slog.LevelDebug, "ws fanout", fanoutLogAttrs("", profileID, env.Op, requestID, targets)...)
+		logger.LogAttrs(context.Background(), slog.LevelDebug, "ws fanout", fanoutLogAttrs("", profileID, env.Op, requestID, targets)...)
 	}
 	for _, reg := range targets {
 		select {

@@ -62,7 +62,7 @@ VOICE_API_PUBLIC_URL=http://127.0.0.1:18080
 WEB_PORT=9080
 ```
 
-**Media (avatars, attachments):** set Cloudflare R2 variables in `.env` (see [`.env.example`](.env.example)). Without R2, text DM and realtime chat still work.
+**Media (avatars, attachments):** with `make compose-app-up`, **MinIO** (local S3-compatible storage) starts automatically when `*_R2_*` variables are set in `.env` (see [`.env.example`](.env.example)). Without them, text DM and realtime chat still work; avatar presign and file upload return `FailedPrecondition`. Staging and production use **Cloudflare R2**, not MinIO.
 
 Then:
 

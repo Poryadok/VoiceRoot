@@ -69,6 +69,45 @@ services:
     ports:
       - "${CLAMAV_PORT:-3310}:3310"
 
+  # Local S3-compatible object storage (MinIO). Not used on staging/prod — Cloudflare R2 there.
+  minio:
+    profiles: ["app"]
+    image: minio/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-voice-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-voice-minio-dev}
+      MINIO_API_CORS_ALLOW_ORIGIN: "*"
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - voice_minio:/data
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  minio-init:
+    profiles: ["app"]
+    image: minio/mc:latest
+    restart: "no"
+    environment:
+      MINIO_HOST: minio
+      MINIO_PORT: "9000"
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-voice-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-voice-minio-dev}
+      AVATARS_BUCKET: ${USER_R2_BUCKET:-voice-dev-avatars}
+      FILES_BUCKET: ${FILE_R2_BUCKET:-voice-dev-files}
+    volumes:
+      - ./docker/minio/init.sh:/init.sh:ro
+    entrypoint: ["/bin/sh", "/init.sh"]
+    depends_on:
+      minio:
+        condition: service_started
+
   # Phase-0 app stack (Auth + API Gateway + static Flutter web). Opt-in: docker compose --profile app up -d --build
   auth:
     profiles: ["app"]
@@ -124,6 +163,8 @@ services:
     build:
       context: ./src/backend
       dockerfile: user/Dockerfile
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/user_db?sslmode=disable
@@ -143,6 +184,8 @@ services:
         condition: service_healthy
       social:
         condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
       interval: 5s
@@ -218,6 +261,8 @@ services:
     build:
       context: ./src/backend
       dockerfile: file/Dockerfile
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/file_db?sslmode=disable
@@ -236,6 +281,8 @@ services:
         condition: service_healthy
       clamav:
         condition: service_started
+      minio-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
       interval: 5s
@@ -373,3 +420,4 @@ volumes:
   voice_pgdata:
   voice_redis:
   voice_nats_js:
+  voice_minio:

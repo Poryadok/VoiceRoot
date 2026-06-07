@@ -10,7 +10,7 @@ import (
 
 func TestFromGRPC_Empty(t *testing.T) {
 	require.Equal(t, "", FromGRPC(context.Background()))
-	require.Equal(t, "", FromGRPC(nil))
+	require.Equal(t, "", FromGRPC(nil)) //nolint:staticcheck // explicit nil guard
 }
 
 func TestFromGRPC_RoundTrip(t *testing.T) {
