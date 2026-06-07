@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:livekit_client/livekit_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'backend/auth_session_storage.dart';
@@ -11,6 +12,7 @@ import 'theme/voice_theme_providers.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await LiveKitClient.initialize();
   final prefs = await SharedPreferences.getInstance();
   runApp(
     ProviderScope(

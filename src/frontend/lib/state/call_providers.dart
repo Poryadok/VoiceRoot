@@ -10,6 +10,12 @@ import 'auth_providers.dart';
 import 'chat_providers.dart';
 import 'gateway_providers.dart';
 
+/// Call signaling must use the raw hub stream — [realtimeEventProvider] keeps only
+/// the latest frame and can drop `call_incoming` between heartbeats.
+final callSignalingStreamProvider = Provider<Stream<RealtimeFrame>>((ref) {
+  return ref.watch(realtimeHubProvider).events;
+});
+
 final voiceCallsClientProvider = Provider<VoiceCallsClient>((ref) {
   return VoiceCallsClient(gateway: ref.watch(gatewayHttpClientProvider));
 });
@@ -79,19 +85,24 @@ class CallState {
 
 class CallController extends StateNotifier<CallState> {
   CallController(this._ref) : super(const CallState()) {
-    _events = _ref.listen<AsyncValue<RealtimeFrame>>(realtimeEventProvider, (
-      _,
-      next,
-    ) {
-      next.whenData(_onRealtimeFrame);
-    });
+    _eventsSub = _ref.read(callSignalingStreamProvider).listen(_onRealtimeFrame);
+    _linkSub = _ref.listen<RealtimeLinkStatus>(
+      realtimeLinkStatusProvider,
+      (prev, next) {
+        if (next == RealtimeLinkStatus.connected) {
+          unawaited(_syncActiveCallIfIdle());
+        }
+      },
+      fireImmediately: true,
+    );
   }
 
   final Ref _ref;
-  ProviderSubscription<AsyncValue<RealtimeFrame>>? _events;
+  StreamSubscription<RealtimeFrame>? _eventsSub;
+  ProviderSubscription<RealtimeLinkStatus>? _linkSub;
   VoiceLiveKitRoom? _room;
   bool _startCallInFlight = false;
-  bool _connectLiveKitInFlight = false;
+  int _connectGeneration = 0;
 
   Future<void> startCall({
     required String chatId,
@@ -233,7 +244,8 @@ class CallController extends StateNotifier<CallState> {
   }
 
   Future<void> _connectLiveKit(VoiceCallSession session) async {
-    if (_connectLiveKitInFlight || state.phase == CallPhase.active) {
+    if (state.phase == CallPhase.active &&
+        state.session?.roomId == session.roomId) {
       return;
     }
     final auth = _ref.read(authorizationHeaderProvider);
@@ -244,68 +256,89 @@ class CallController extends StateNotifier<CallState> {
       );
       return;
     }
-    _connectLiveKitInFlight = true;
-    try {
-      final token = await _ref
-          .read(voiceCallsClientProvider)
-          .getJoinToken(authorization: auth, roomId: session.roomId);
-      if (!mounted) return;
-      switch (token) {
-        case VoiceApiOk(:final data):
-          final livekitUrl = resolveLivekitConnectUrl(
-            apiUrl: data.livekitUrl,
-            clientFallback:
-                _ref.read(gatewayConfigProvider).effectiveLivekitFallback,
+    final connectRoomId = session.roomId;
+    final connectGeneration = ++_connectGeneration;
+    await _room?.disconnect();
+    _room = null;
+    final token = await _ref
+        .read(voiceCallsClientProvider)
+        .getJoinToken(authorization: auth, roomId: connectRoomId);
+    if (!mounted || !_isConnectCurrent(connectGeneration, connectRoomId)) {
+      return;
+    }
+    switch (token) {
+      case VoiceApiOk(:final data):
+        final livekitUrl = resolveLivekitConnectUrl(
+          apiUrl: data.livekitUrl,
+          clientFallback:
+              _ref.read(gatewayConfigProvider).effectiveLivekitFallback,
+        );
+        if (livekitUrl.isEmpty) {
+          await _failLiveKitConnect(
+            auth: auth,
+            session: session,
+            errorMessage: 'livekit_url_missing',
+            generation: connectGeneration,
           );
-          if (livekitUrl.isEmpty) {
-            await _failLiveKitConnect(
-              auth: auth,
-              session: session,
-              errorMessage: 'livekit_url_missing',
-            );
+          return;
+        }
+        final room = _ref.read(liveKitRoomFactoryProvider)();
+        _room = room;
+        try {
+          await room.connect(
+            url: livekitUrl,
+            token: data.jwt,
+            video: session.mediaKind == VoiceCallMediaKind.video,
+          );
+          if (!mounted || !_isConnectCurrent(connectGeneration, connectRoomId)) {
             return;
           }
-          final room = _ref.read(liveKitRoomFactoryProvider)();
-          _room = room;
-          try {
-            await room.connect(
-              url: livekitUrl,
-              token: data.jwt,
-              video: session.mediaKind == VoiceCallMediaKind.video,
-            );
-            if (mounted) {
-              state = state.copyWith(
-                phase: CallPhase.active,
-                isVideoEnabled: session.mediaKind == VoiceCallMediaKind.video,
-                clearOutgoingTarget: true,
-              );
-            }
-          } catch (_) {
-            await _failLiveKitConnect(
-              auth: auth,
-              session: session,
-              errorMessage: 'livekit_connect_failed',
-            );
+          state = state.copyWith(
+            phase: CallPhase.active,
+            isVideoEnabled: session.mediaKind == VoiceCallMediaKind.video,
+            clearOutgoingTarget: true,
+          );
+        } on Object {
+          if (!mounted || !_isConnectCurrent(connectGeneration, connectRoomId)) {
+            return;
           }
-        case VoiceApiFailure(:final message):
-          state = state.copyWith(phase: CallPhase.failed, errorMessage: message);
-      }
-    } finally {
-      _connectLiveKitInFlight = false;
+          await _failLiveKitConnect(
+            auth: auth,
+            session: session,
+            errorMessage: 'livekit_connect_failed',
+            generation: connectGeneration,
+          );
+        }
+      case VoiceApiFailure(:final message):
+        if (!mounted || !_isConnectCurrent(connectGeneration, connectRoomId)) {
+          return;
+        }
+        state = state.copyWith(phase: CallPhase.failed, errorMessage: message);
     }
+  }
+
+  bool _isConnectCurrent(int generation, String roomId) {
+    return _connectGeneration == generation &&
+        state.session?.roomId == roomId;
   }
 
   Future<void> _failLiveKitConnect({
     required String auth,
     required VoiceCallSession session,
     required String errorMessage,
+    required int generation,
   }) async {
-    await _room?.disconnect();
+    if (!_isConnectCurrent(generation, session.roomId)) return;
+    try {
+      await _room?.disconnect();
+    } on Object catch (_) {
+      // Room may be half-connected; ignore disconnect errors.
+    }
     _room = null;
     await _ref
         .read(voiceCallsClientProvider)
         .endCall(authorization: auth, roomId: session.roomId);
-    if (mounted) {
+    if (mounted && _isConnectCurrent(generation, session.roomId)) {
       state = state.copyWith(
         phase: CallPhase.failed,
         errorMessage: errorMessage,
@@ -319,11 +352,19 @@ class CallController extends StateNotifier<CallState> {
       case 'call_incoming':
         final session = _sessionFromFrame(frame, VoiceCallStatus.ringing);
         if (session != null) {
-          state = CallState(
-            phase: CallPhase.incoming,
-            session: session,
-            isVideoEnabled: session.mediaKind == VoiceCallMediaKind.video,
-          );
+          final current = state.session;
+          final sameRoomInProgress =
+              current?.roomId == session.roomId &&
+              (state.phase == CallPhase.outgoing ||
+                  state.phase == CallPhase.connecting ||
+                  state.phase == CallPhase.active);
+          if (!sameRoomInProgress) {
+            state = CallState(
+              phase: CallPhase.incoming,
+              session: session,
+              isVideoEnabled: session.mediaKind == VoiceCallMediaKind.video,
+            );
+          }
         }
       case 'call_accepted':
         final current = state.session;
@@ -350,6 +391,13 @@ class CallController extends StateNotifier<CallState> {
       session: session,
       isVideoEnabled: session.mediaKind == VoiceCallMediaKind.video,
     );
+  }
+
+  Future<void> _syncActiveCallIfIdle() async {
+    if (state.phase != CallPhase.idle) return;
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return;
+    await _tryRecoverActiveCall(auth);
   }
 
   Future<bool> _tryRecoverActiveCall(String auth) async {
@@ -411,7 +459,8 @@ class CallController extends StateNotifier<CallState> {
 
   @override
   void dispose() {
-    _events?.close();
+    _eventsSub?.cancel();
+    _linkSub?.close();
     unawaited(_room?.disconnect());
     super.dispose();
   }

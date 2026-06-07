@@ -19,14 +19,19 @@ class CallErrorListener extends ConsumerWidget {
           prev?.errorMessage == next.errorMessage) {
         return;
       }
-      final l10n = AppLocalizations.of(context)!;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          key: const Key('call_error_snackbar'),
-          content: Text(_callErrorMessage(l10n, next.errorMessage!)),
-        ),
-      );
-      ref.read(callControllerProvider.notifier).dismissFailure();
+      final message = next.errorMessage!;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
+        final l10n = AppLocalizations.of(context);
+        if (l10n == null) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            key: const Key('call_error_snackbar'),
+            content: Text(_callErrorMessage(l10n, message)),
+          ),
+        );
+        ref.read(callControllerProvider.notifier).dismissFailure();
+      });
     });
     return child;
   }

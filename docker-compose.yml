@@ -55,7 +55,9 @@ services:
   livekit:
     profiles: ["app"]
     image: livekit/livekit-server:latest
-    command: ["--dev", "--bind", "0.0.0.0"]
+    command: ["--config", "/etc/livekit.yaml", "--bind", "0.0.0.0"]
+    volumes:
+      - ./deploy/livekit/livekit.yaml:/etc/livekit.yaml:ro
     ports:
       - "${LIVEKIT_PORT:-7880}:7880"
       - "${LIVEKIT_RTC_TCP_PORT:-7881}:7881"

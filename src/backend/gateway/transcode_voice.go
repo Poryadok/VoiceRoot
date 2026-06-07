@@ -12,6 +12,18 @@ import (
 	callsv1 "voice.app/voice/calls/v1"
 )
 
+func writeActiveCallResponse(w http.ResponseWriter, resp *callsv1.GetActiveCallResponse, err error) {
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			writeProtoJSON(w, http.StatusOK, &callsv1.GetActiveCallResponse{})
+			return
+		}
+		writeGRPCError(w, err)
+		return
+	}
+	writeProtoJSON(w, http.StatusOK, resp)
+}
+
 func (t *transcoder) serveVoice(w http.ResponseWriter, r *http.Request, rest string) bool {
 	ctx := withGRPCMetadata(r.Context(), r)
 
@@ -32,11 +44,7 @@ func (t *transcoder) serveVoice(w http.ResponseWriter, r *http.Request, rest str
 
 	case r.Method == http.MethodGet && rest == "calls/active":
 		resp, err := t.clients.voice.GetActiveCall(ctx, &callsv1.GetActiveCallRequest{})
-		if err != nil {
-			writeGRPCError(w, err)
-			return true
-		}
-		writeProtoJSON(w, http.StatusOK, resp)
+		writeActiveCallResponse(w, resp, err)
 		return true
 
 	case strings.HasPrefix(rest, "calls/"):

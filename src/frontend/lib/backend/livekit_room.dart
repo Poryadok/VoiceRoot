@@ -23,47 +23,58 @@ class LiveKitVoiceRoom implements VoiceLiveKitRoom {
 
   final livekit.Room _room;
 
+  static const livekit.ConnectOptions _connectOptions = livekit.ConnectOptions(
+    timeouts: livekit.Timeouts(
+      connection: Duration(seconds: 15),
+      debounce: Duration(milliseconds: 20),
+      publish: Duration(seconds: 15),
+      subscribe: Duration(seconds: 15),
+      peerConnection: Duration(seconds: 15),
+      iceRestart: Duration(seconds: 15),
+    ),
+  );
+
   @override
   Future<void> connect({
     required String url,
     required String token,
     required bool video,
   }) async {
+    // Publish mic/camera during join (same event chain as localParticipant
+    // creation). A separate setMicrophoneEnabled after connect races on web.
+    final fastConnect = livekit.FastConnectOptions(
+      microphone: const livekit.TrackOption<bool, livekit.LocalAudioTrack>(
+        enabled: true,
+      ),
+      camera: livekit.TrackOption<bool, livekit.LocalVideoTrack>(
+        enabled: video,
+      ),
+    );
+
+    await _room.prepareConnection(url, token);
     await _room
         .connect(
           url,
           token,
-          connectOptions: const livekit.ConnectOptions(
-            timeouts: livekit.Timeouts(
-              connection: Duration(seconds: 15),
-              debounce: Duration(milliseconds: 20),
-              publish: Duration(seconds: 15),
-              subscribe: Duration(seconds: 15),
-              peerConnection: Duration(seconds: 15),
-              iceRestart: Duration(seconds: 15),
-            ),
-          ),
+          connectOptions: _connectOptions,
+          fastConnectOptions: fastConnect,
         )
         .timeout(_connectTimeout);
-    await _enableLocalMedia(video: video);
+
+    final participant = await _waitForLocalParticipant();
+    if (participant == null) {
+      throw StateError('livekit_local_participant_missing');
+    }
   }
 
-  Future<void> _enableLocalMedia({required bool video}) async {
-    final participant = _room.localParticipant;
-    if (participant == null) return;
-
-    await participant
-        .setMicrophoneEnabled(true)
-        .timeout(_mediaEnableTimeout);
-    if (!video) return;
-
-    try {
-      await participant
-          .setCameraEnabled(true)
-          .timeout(_mediaEnableTimeout);
-    } on TimeoutException {
-      await participant.setCameraEnabled(false);
+  Future<livekit.LocalParticipant?> _waitForLocalParticipant() async {
+    const attempts = 50;
+    for (var i = 0; i < attempts; i++) {
+      final participant = _room.localParticipant;
+      if (participant != null) return participant;
+      await Future<void>.delayed(const Duration(milliseconds: 20));
     }
+    return _room.localParticipant;
   }
 
   @override
@@ -88,5 +99,9 @@ class LiveKitVoiceRoom implements VoiceLiveKitRoom {
   }
 
   @override
-  Future<void> disconnect() => _room.disconnect();
+  Future<void> disconnect() async {
+    try {
+      await _room.disconnect();
+    } catch (_) {}
+  }
 }

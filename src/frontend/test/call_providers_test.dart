@@ -125,7 +125,7 @@ ProviderContainer _callTestContainer({
         ),
       ),
       liveKitRoomFactoryProvider.overrideWithValue(() => fakeRoom),
-      realtimeEventProvider.overrideWith((ref) => realtime.stream),
+      callSignalingStreamProvider.overrideWith((ref) => realtime.stream),
       authControllerProvider.overrideWith(
         (ref) => _authControllerForProfile(ref, activeProfileId),
       ),
@@ -259,6 +259,45 @@ void main() {
     expect(fakeRoom.connectCalls, 1);
     expect(fakeRoom.lastUrl, 'ws://127.0.0.1:7880');
     expect(container.read(callControllerProvider).phase, CallPhase.active);
+  });
+
+  test('syncs ringing incoming call when realtime link connects', () async {
+    final session = _ringingSession(initiator: 'prof-caller', callee: 'prof-test');
+    final client = MockClient((req) async {
+      if (req.method == 'GET' && req.url.path.endsWith('/calls/active')) {
+        return http.Response(
+          jsonEncode({
+            'call_session': _sessionJson(
+              roomId: session.roomId,
+              initiator: session.initiatorProfileId,
+              callee: session.calleeProfileId,
+            ),
+          }),
+          200,
+        );
+      }
+      return http.Response('{}', 404);
+    });
+    final realtime = StreamController<RealtimeFrame>.broadcast();
+    final fakeRoom = _FakeLiveKitRoom();
+    final container = _callTestContainer(
+      client: client,
+      realtime: realtime,
+      fakeRoom: fakeRoom,
+      activeProfileId: 'prof-test',
+    );
+    addTearDown(container.dispose);
+    addTearDown(realtime.close);
+
+    container.read(callControllerProvider);
+    container.read(realtimeLinkStatusProvider.notifier).state =
+        RealtimeLinkStatus.connected;
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+
+    final call = container.read(callControllerProvider);
+    expect(call.phase, CallPhase.incoming);
+    expect(call.session?.roomId, session.roomId);
   });
 
   test('LiveKit connect failure ends call and surfaces error', () async {
