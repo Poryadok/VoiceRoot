@@ -147,7 +147,7 @@ func main() {
 				log.Fatalf("file grpc dial: %v", err)
 			}
 			waitCancel()
-			files = filev1.NewFileServiceClient(fconn)
+			files = s2s.NewFileGRPCMetadata(filev1.NewFileServiceClient(fconn))
 		}
 
 		var msgEvents messageevents.MessageEventsPublisher
