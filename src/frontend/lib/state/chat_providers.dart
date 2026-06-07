@@ -146,10 +146,39 @@ class ChatListState {
 
 class ChatListController extends StateNotifier<ChatListState> {
   ChatListController(this._ref) : super(const ChatListState()) {
-    unawaited(loadInitial());
+    _authSub = _ref.listen<AuthState>(
+      authControllerProvider,
+      _onAuthStateChanged,
+      fireImmediately: true,
+    );
   }
 
   final Ref _ref;
+  ProviderSubscription<AuthState>? _authSub;
+
+  @override
+  void dispose() {
+    _authSub?.close();
+    super.dispose();
+  }
+
+  void _onAuthStateChanged(AuthState? previous, AuthState next) {
+    if (!next.isAuthenticated) {
+      if (previous?.isAuthenticated ?? false) {
+        state = const ChatListState();
+      }
+      return;
+    }
+    if (next.isRestoring) return;
+
+    final becameAuthenticated =
+        next.isAuthenticated && !(previous?.isAuthenticated ?? false);
+    final restoreFinished =
+        (previous?.isRestoring ?? false) && !next.isRestoring;
+    if (becameAuthenticated || restoreFinished) {
+      unawaited(loadInitial());
+    }
+  }
 
   Future<void> loadInitial() async {
     final auth = _ref.read(authorizationHeaderProvider);

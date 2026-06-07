@@ -17,16 +17,25 @@ class VoiceAppBootstrap extends ConsumerStatefulWidget {
 }
 
 class _VoiceAppBootstrapState extends ConsumerState<VoiceAppBootstrap> {
+  var _restoreComplete = false;
+
   @override
   void initState() {
     super.initState();
-    Future.microtask(() => ref.read(authControllerProvider.notifier).restore());
+    Future.microtask(_restoreSession);
+  }
+
+  Future<void> _restoreSession() async {
+    await ref.read(authControllerProvider.notifier).restore();
+    if (mounted) {
+      setState(() => _restoreComplete = true);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authControllerProvider);
-    if (auth.isRestoring) {
+    if (!_restoreComplete || auth.isRestoring) {
       return MaterialApp(
         locale: widget.locale,
         localizationsDelegates: AppLocalizations.localizationsDelegates,

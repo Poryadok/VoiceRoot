@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
@@ -18,6 +19,61 @@ import 'support/gateway_test_client.dart';
 
 void main() {
   group('ChatListController', () {
+    test('loads chats after auth becomes available', () async {
+      final chats = _FakeChatsClient(
+        pages: [
+          const ChatListData(
+            items: [
+              ChatListItem(
+                chat: VoiceChat(
+                  id: 'chat-restored',
+                  type: 'CHAT_TYPE_DM',
+                  creatorProfileId: 'peer-1',
+                ),
+                lastMessagePreview: 'restored',
+              ),
+            ],
+          ),
+        ],
+      );
+      final storage = InMemoryAuthSessionStorage();
+      final container = ProviderContainer(
+        overrides: [
+          authSessionStorageProvider.overrideWithValue(storage),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          httpClientProvider.overrideWithValue(
+            MockClient((_) async => http.Response('{}', 404)),
+          ),
+          voiceChatsClientProvider.overrideWithValue(chats),
+          voiceMessagesClientProvider.overrideWithValue(_FakeMessagesClient()),
+          realtimeHubProvider.overrideWith(_FakeRealtimeHub.new),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      container.read(chatListControllerProvider);
+      await pumpEventQueue();
+      expect(container.read(chatListControllerProvider).items, isEmpty);
+      expect(chats.calls, isEmpty);
+
+      container.read(authControllerProvider.notifier).state = const AuthState(
+        session: AuthSession(
+          accessToken: 'access',
+          refreshToken: 'refresh',
+          accountId: 'acc-1',
+          activeProfileId: 'prof-1',
+          expiresInSeconds: 900,
+        ),
+      );
+      await pumpEventQueue();
+
+      final state = container.read(chatListControllerProvider);
+      expect(state.items.map((item) => item.chatId), ['chat-restored']);
+      expect(chats.calls, hasLength(1));
+    });
+
     test('loads the next chat page and keeps existing rows', () async {
       final chats = _FakeChatsClient(
         pages: [
