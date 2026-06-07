@@ -31,7 +31,7 @@ GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
 .PHONY: buf-lint buf-format buf-breaking buf-generate buf-generate-dart buf-dart-check compose-up compose-app-up compose-down compose-logs-collect \
 	build-all build-all-breaking check-toolchain compose-config-ci buf-ci backend-test-ci backend-image-ci \
 	gateway-test-ci gateway-image-ci go-test-pkg auth-test-ci auth-image-ci buf-breaking-ci \
-	golangci-ci gateway-test-race-ci design-tokens-check flutter-ui-color-gate flutter-ci testcontainers-prune
+	golangci-ci gateway-test-race-ci design-tokens-check flutter-ui-color-gate flutter-ci coverage-report testcontainers-prune
 
 buf-lint:
 	buf lint
@@ -135,6 +135,10 @@ flutter-ui-color-gate:
 # Host Flutter SDK (parity with job `flutter` in .github/workflows/ci.yml).
 flutter-ci: design-tokens-check flutter-ui-color-gate buf-dart-check
 	cd $(ROOT)/src/frontend && flutter pub get && flutter analyze && flutter test
+
+# Go (-coverprofile), Auth (JaCoCo), Flutter (lcov). Writes .local/coverage/summary.txt
+coverage-report:
+	$(BASH) "$(ROOT)/scripts/ci/coverage-report.sh" "$(ROOT)"
 
 buf-breaking-ci:
 	docker run --rm --entrypoint sh -v "$(ROOT):/workspace" -w /workspace $(BUF_IMAGE) \

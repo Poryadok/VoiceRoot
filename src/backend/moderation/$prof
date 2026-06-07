@@ -1,0 +1,16 @@
+mode: set
+voice/backend/moderation/health.go:13.49,15.73 2 1
+voice/backend/moderation/health.go:15.73,16.33 1 1
+voice/backend/moderation/health.go:16.33,20.4 3 1
+voice/backend/moderation/health.go:21.3,22.99 2 1
+voice/backend/moderation/health.go:22.99,24.4 1 0
+voice/backend/moderation/health.go:26.2,26.12 1 1
+voice/backend/moderation/main.go:15.13,17.44 2 0
+voice/backend/moderation/main.go:17.44,19.3 1 0
+voice/backend/moderation/main.go:20.2,30.12 4 0
+voice/backend/moderation/main.go:30.12,32.3 1 0
+voice/backend/moderation/main.go:34.2,36.9 3 0
+voice/backend/moderation/main.go:37.22,38.48 1 0
+voice/backend/moderation/main.go:38.48,40.4 1 0
+voice/backend/moderation/main.go:41.14,44.46 3 0
+voice/backend/moderation/main.go:44.46,46.4 1 0
