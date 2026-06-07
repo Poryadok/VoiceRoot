@@ -11,8 +11,8 @@ globs:
 When investigating cross-service bugs (REST → gRPC → NATS → Realtime WS):
 
 1. Reproduce with `docker compose --profile app up` (or note the failing action).
-2. Run **`make compose-logs-collect`** → [`.local/compose.log`](../../.local/compose.log).
-3. Search by **`request_id`** (from Flutter `X-Request-Id` or Gateway response header) or by **`chat_id`** / **`message_id`** / **`event_id`**.
+2. Run **`make compose-logs-collect`** → [`.local/dev.ndjson`](../../.local/dev.ndjson) (structured; raw dump in [`.local/compose.log`](../../.local/compose.log)).
+3. Search by **`request_id`** (from Flutter `X-Request-Id` or Gateway response header) or by **`chat_id`** / **`message_id`** / **`event_id`** / **`conn_id`**.
 4. Follow `event` values in order: `http_access` (gateway) → `grpc_call` (messaging) → `nats_publish` → `nats_consume` (realtime) → `ws_fanout`.
 
 Tier-0 services log JSON to stdout; do not assume Loki/Grafana locally.

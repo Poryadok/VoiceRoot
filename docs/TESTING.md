@@ -96,14 +96,19 @@
 make compose-logs-collect
 ```
 
-Результат: [`.local/compose.log`](../.local/compose.log) (в `.gitignore`). Примеры поиска:
+Результат (в `.gitignore`):
+
+- [`.local/compose.log`](../.local/compose.log) — сырой вывод `docker compose logs` (с префиксом контейнера).
+- [`.local/dev.ndjson`](../.local/dev.ndjson) — только JSON-строки приложений (для `jq`, парсеров и агента).
+
+Примеры поиска:
 
 ```bash
 # одна цепочка по correlation id (из ответа Gateway или Flutter X-Request-Id)
-rg "request_id.*<id>" .local/compose.log
+rg "request_id.*<id>" .local/dev.ndjson
 
 # async-связка без общего request_id
-rg "chat_id.*<uuid>" .local/compose.log
+rg "chat_id.*<uuid>" .local/dev.ndjson
 ```
 
 Локальный compose для `app` profile задаёт `LOG_LEVEL=debug`. Web Flutter WS не шлёт custom headers — `request_id` на upgrade генерирует Gateway.

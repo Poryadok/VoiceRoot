@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 
 	voicejwt "voice/backend/pkg/jwt"
@@ -145,6 +146,21 @@ type wsEnvelope struct {
 	D  json.RawMessage `json:"d"`
 }
 
+func assertHelloConnID(t *testing.T, d json.RawMessage) {
+	t.Helper()
+	var payload map[string]string
+	if err := json.Unmarshal(d, &payload); err != nil {
+		t.Fatalf("hello d json: %v", err)
+	}
+	connID := payload["conn_id"]
+	if connID == "" {
+		t.Fatal("hello missing conn_id")
+	}
+	if _, err := uuid.Parse(connID); err != nil {
+		t.Fatalf("hello conn_id = %q, want uuid: %v", connID, err)
+	}
+}
+
 func TestWSHelloSequenceHeartbeatResume(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(testRealtimeHandler(staticTokenValidator{
@@ -173,6 +189,7 @@ func TestWSHelloSequenceHeartbeatResume(t *testing.T) {
 	if hello.Op != "hello" || hello.S != 1 {
 		t.Fatalf("hello = %+v", hello)
 	}
+	assertHelloConnID(t, hello.D)
 
 	if err := c.WriteJSON(map[string]any{"op": "heartbeat"}); err != nil {
 		t.Fatalf("write heartbeat: %v", err)

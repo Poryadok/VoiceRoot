@@ -224,7 +224,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, h
 		return c.WriteJSON(msg)
 	}
 
-	helloD, _ := json.Marshal(map[string]any{})
+	helloD, _ := json.Marshal(map[string]any{"conn_id": connID})
 	if err := write("hello", helloD); err != nil {
 		return
 	}
@@ -313,7 +313,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, h
 				chatSubs[cid] = struct{}{}
 				mu.Unlock()
 				hub.addChat(reg, cid)
-				svcLogger.Info("ws subscribe",
+				svcLogger.Debug("ws subscribe",
 					slog.String("event", "ws_subscribe"),
 					slog.String("conn_id", connID),
 					slog.String("chat_id", cid),
@@ -340,7 +340,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, h
 				delete(chatSubs, cid)
 				mu.Unlock()
 				hub.removeChat(reg, cid)
-				svcLogger.Info("ws unsubscribe",
+				svcLogger.Debug("ws unsubscribe",
 					slog.String("event", "ws_unsubscribe"),
 					slog.String("conn_id", connID),
 					slog.String("chat_id", cid),
@@ -460,7 +460,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, h
 					"profile_id": claims.ProfileID,
 				})
 				hub.broadcastMarkReadSameProfileExcept(claims.ProfileID, instanceID, connID, d)
-				hub.broadcastToChat(cid, fanoutEnvelope{Op: "message_read", D: d}, svcLogger)
+				hub.broadcastToChat(cid, fanoutEnvelope{Op: "message_read", D: d}, svcLogger, "")
 				if rf != nil {
 					ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 					if err := rf.PublishMarkRead(ctx, claims.ProfileID, cid, mid, connID); err != nil {
@@ -504,7 +504,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, h
 					"message_id":           mid,
 					"recipient_profile_id": claims.ProfileID,
 				})
-				hub.broadcastToProfile(senderID, fanoutEnvelope{Op: "message_delivered", D: d}, svcLogger)
+				hub.broadcastToProfile(senderID, fanoutEnvelope{Op: "message_delivered", D: d}, svcLogger, "")
 			case "presence_update":
 				var p presenceUpdateClientPayload
 				if err := json.Unmarshal(in.D, &p); err != nil {

@@ -167,7 +167,7 @@ func subscribeVoiceEvents(js nats.JetStreamContext, hub *wsHub, instanceID strin
 		if profileIDs, fe, ok := voiceEventBytesToFanout(msg.Data); ok {
 			natslog.LogConsume(logger, msg, slog.LevelInfo, "voice event consumed", attrs...)
 			for _, profileID := range compactProfiles(profileIDs...) {
-				hub.broadcastToProfile(profileID, fe, logger)
+				hub.broadcastToProfile(profileID, fe, logger, natslog.RequestIDFromMsg(msg))
 			}
 			return
 		}

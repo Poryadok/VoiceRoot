@@ -218,8 +218,40 @@ func (h *wsHub) broadcastPresenceInChatExcept(chatID, senderProfileID, excludeIn
 	}
 }
 
+const fanoutConnIDsLogCap = 8
+
+func fanoutLogAttrs(chatID, profileID, op, requestID string, targets []*connReg) []slog.Attr {
+	attrs := []slog.Attr{
+		slog.String("event", "ws_fanout"),
+		slog.String("op", op),
+		slog.Int("recipient_count", len(targets)),
+	}
+	if chatID != "" {
+		attrs = append(attrs, slog.String("chat_id", chatID))
+	}
+	if profileID != "" {
+		attrs = append(attrs, slog.String("profile_id", profileID))
+	}
+	if requestID != "" {
+		attrs = append(attrs, slog.String("request_id", requestID))
+	}
+	if len(targets) == 0 {
+		return attrs
+	}
+	logged := make([]string, 0, fanoutConnIDsLogCap)
+	for i, reg := range targets {
+		if i >= fanoutConnIDsLogCap {
+			attrs = append(attrs, slog.Int("conn_ids_truncated", len(targets)-fanoutConnIDsLogCap))
+			break
+		}
+		logged = append(logged, reg.connID)
+	}
+	attrs = append(attrs, slog.Any("conn_ids", logged))
+	return attrs
+}
+
 // broadcastToChat delivers a fan-out envelope to every connection subscribed to chatID (local hub only).
-func (h *wsHub) broadcastToChat(chatID string, env fanoutEnvelope, logger *slog.Logger) {
+func (h *wsHub) broadcastToChat(chatID string, env fanoutEnvelope, logger *slog.Logger, requestID string) {
 	if chatID == "" {
 		return
 	}
@@ -231,12 +263,7 @@ func (h *wsHub) broadcastToChat(chatID string, env fanoutEnvelope, logger *slog.
 	}
 	h.mu.RUnlock()
 	if logger != nil {
-		logger.LogAttrs(nil, slog.LevelDebug, "ws fanout",
-			slog.String("event", "ws_fanout"),
-			slog.String("chat_id", chatID),
-			slog.String("op", env.Op),
-			slog.Int("recipient_count", len(targets)),
-		)
+		logger.LogAttrs(nil, slog.LevelDebug, "ws fanout", fanoutLogAttrs(chatID, "", env.Op, requestID, targets)...)
 	}
 	for _, reg := range targets {
 		select {
@@ -248,7 +275,7 @@ func (h *wsHub) broadcastToChat(chatID string, env fanoutEnvelope, logger *slog.
 }
 
 // broadcastToProfile delivers a fan-out envelope to every connection for profileID (local hub only).
-func (h *wsHub) broadcastToProfile(profileID string, env fanoutEnvelope, logger *slog.Logger) {
+func (h *wsHub) broadcastToProfile(profileID string, env fanoutEnvelope, logger *slog.Logger, requestID string) {
 	if profileID == "" {
 		return
 	}
@@ -260,12 +287,7 @@ func (h *wsHub) broadcastToProfile(profileID string, env fanoutEnvelope, logger 
 	}
 	h.mu.RUnlock()
 	if logger != nil {
-		logger.LogAttrs(nil, slog.LevelDebug, "ws fanout",
-			slog.String("event", "ws_fanout"),
-			slog.String("profile_id", profileID),
-			slog.String("op", env.Op),
-			slog.Int("recipient_count", len(targets)),
-		)
+		logger.LogAttrs(nil, slog.LevelDebug, "ws fanout", fanoutLogAttrs("", profileID, env.Op, requestID, targets)...)
 	}
 	for _, reg := range targets {
 		select {

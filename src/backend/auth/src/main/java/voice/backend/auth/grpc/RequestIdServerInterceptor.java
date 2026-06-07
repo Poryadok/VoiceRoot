@@ -19,6 +19,9 @@ public class RequestIdServerInterceptor implements ServerInterceptor {
   private static final Logger log = LoggerFactory.getLogger(RequestIdServerInterceptor.class);
   private static final Metadata.Key<String> REQUEST_ID_KEY =
       Metadata.Key.of("x-request-id", Metadata.ASCII_STRING_MARSHALLER);
+  private static final String[] GRPC_MDC_KEYS = {
+    "event", "grpc_method", "grpc_code", "duration_ms"
+  };
 
   @Override
   public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
@@ -39,6 +42,7 @@ public class RequestIdServerInterceptor implements ServerInterceptor {
         try {
           super.onComplete();
         } finally {
+          clearGrpcMdc();
           MDC.remove(RequestIdFilter.MDC_KEY);
         }
       }
@@ -49,6 +53,7 @@ public class RequestIdServerInterceptor implements ServerInterceptor {
         try {
           super.onCancel();
         } finally {
+          clearGrpcMdc();
           MDC.remove(RequestIdFilter.MDC_KEY);
         }
       }
@@ -57,10 +62,16 @@ public class RequestIdServerInterceptor implements ServerInterceptor {
 
   private static void logGrpcCall(ServerCall<?, ?> call, Instant start, Status status) {
     long durationMs = Duration.between(start, Instant.now()).toMillis();
-    log.info(
-        "grpc request method={} grpc_code={} duration_ms={} event=grpc_call",
-        call.getMethodDescriptor().getFullMethodName(),
-        status.getCode(),
-        durationMs);
+    MDC.put("event", "grpc_call");
+    MDC.put("grpc_method", call.getMethodDescriptor().getFullMethodName());
+    MDC.put("grpc_code", status.getCode().name());
+    MDC.put("duration_ms", Long.toString(durationMs));
+    log.info("grpc request");
+  }
+
+  private static void clearGrpcMdc() {
+    for (String key : GRPC_MDC_KEYS) {
+      MDC.remove(key);
+    }
   }
 }

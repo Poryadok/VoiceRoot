@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:meta/meta.dart';
 
@@ -770,7 +771,7 @@ class RealtimeHub {
     final headers = <String, String>{
       'Authorization': auth.authorizationHeader,
       'X-Voice-Profile-Id': auth.activeProfileId,
-      'X-Request-Id': newGatewayRequestId(),
+      if (!kIsWeb) 'X-Request-Id': newGatewayRequestId(),
     };
     final connection = VoiceRealtimeConnection(uri: uri, headers: headers);
     _connection = connection;

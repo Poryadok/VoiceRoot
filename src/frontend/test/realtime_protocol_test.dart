@@ -25,6 +25,17 @@ void main() {
       expect(frame.op, 'hello');
       expect(frame.sequence, isNull);
     });
+
+    test('parses hello with conn_id', () {
+      final frame = RealtimeProtocol.parseFrame(
+        jsonEncode({
+          'op': 'hello',
+          'd': {'conn_id': 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'},
+        }),
+      );
+      expect(frame.op, 'hello');
+      expect(frame.data?['conn_id'], 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee');
+    });
   });
 
   group('RealtimeProtocol.trackSequence', () {
