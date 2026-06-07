@@ -644,6 +644,18 @@ abstract class AppLocalizations {
   /// **'Could not start call: {message}'**
   String callFailed(String message);
 
+  /// No description provided for @callLivekitConnectFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not connect to LiveKit'**
+  String get callLivekitConnectFailed;
+
+  /// No description provided for @callActiveCallExists.
+  ///
+  /// In en, this message translates to:
+  /// **'You already have an active call'**
+  String get callActiveCallExists;
+
   /// No description provided for @profileMessage.
   ///
   /// In en, this message translates to:

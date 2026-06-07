@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../backend/livekit_room.dart';
+import '../backend/livekit_url.dart';
 import '../backend/realtime_client.dart';
 import '../backend/voice_client.dart';
 import 'auth_providers.dart';
@@ -23,6 +24,8 @@ class CallState {
   const CallState({
     this.phase = CallPhase.idle,
     this.session,
+    this.outgoingChatId,
+    this.outgoingCalleeProfileId,
     this.isMuted = false,
     this.isSpeakerMuted = false,
     this.isVideoEnabled = false,
@@ -31,6 +34,8 @@ class CallState {
 
   final CallPhase phase;
   final VoiceCallSession? session;
+  final String? outgoingChatId;
+  final String? outgoingCalleeProfileId;
   final bool isMuted;
   final bool isSpeakerMuted;
   final bool isVideoEnabled;
@@ -46,6 +51,9 @@ class CallState {
     CallPhase? phase,
     VoiceCallSession? session,
     bool clearSession = false,
+    String? outgoingChatId,
+    String? outgoingCalleeProfileId,
+    bool clearOutgoingTarget = false,
     bool? isMuted,
     bool? isSpeakerMuted,
     bool? isVideoEnabled,
@@ -55,6 +63,12 @@ class CallState {
     return CallState(
       phase: phase ?? this.phase,
       session: clearSession ? null : (session ?? this.session),
+      outgoingChatId: clearOutgoingTarget
+          ? null
+          : (outgoingChatId ?? this.outgoingChatId),
+      outgoingCalleeProfileId: clearOutgoingTarget
+          ? null
+          : (outgoingCalleeProfileId ?? this.outgoingCalleeProfileId),
       isMuted: isMuted ?? this.isMuted,
       isSpeakerMuted: isSpeakerMuted ?? this.isSpeakerMuted,
       isVideoEnabled: isVideoEnabled ?? this.isVideoEnabled,
@@ -76,6 +90,8 @@ class CallController extends StateNotifier<CallState> {
   final Ref _ref;
   ProviderSubscription<AsyncValue<RealtimeFrame>>? _events;
   VoiceLiveKitRoom? _room;
+  bool _startCallInFlight = false;
+  bool _connectLiveKitInFlight = false;
 
   Future<void> startCall({
     required String chatId,
@@ -84,31 +100,48 @@ class CallController extends StateNotifier<CallState> {
   }) async {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return;
+    if (_startCallInFlight) return;
     final current = state.session;
     if (state.phase == CallPhase.outgoing &&
-        current != null &&
-        current.calleeProfileId == calleeProfileId &&
-        current.chatId == chatId) {
+        state.outgoingChatId == chatId &&
+        state.outgoingCalleeProfileId == calleeProfileId &&
+        (current == null ||
+            (current.calleeProfileId == calleeProfileId &&
+                current.chatId == chatId))) {
       return;
     }
-    state = state.copyWith(phase: CallPhase.outgoing, clearError: true);
-    final result = await _ref
-        .read(voiceCallsClientProvider)
-        .startCall(
-          authorization: auth,
-          chatId: chatId,
-          calleeProfileId: calleeProfileId,
-          mediaKind: mediaKind,
-        );
-    if (!mounted) return;
-    switch (result) {
-      case VoiceApiOk(:final data):
-        _applySession(data, CallPhase.outgoing);
-      case VoiceApiFailure(:final message, :final statusCode):
-        if (statusCode == 412 && await _tryRecoverActiveCall(auth)) {
-          return;
-        }
-        state = state.copyWith(phase: CallPhase.failed, errorMessage: message);
+    _startCallInFlight = true;
+    state = state.copyWith(
+      phase: CallPhase.outgoing,
+      outgoingChatId: chatId,
+      outgoingCalleeProfileId: calleeProfileId,
+      clearError: true,
+    );
+    try {
+      final result = await _ref
+          .read(voiceCallsClientProvider)
+          .startCall(
+            authorization: auth,
+            chatId: chatId,
+            calleeProfileId: calleeProfileId,
+            mediaKind: mediaKind,
+          );
+      if (!mounted) return;
+      switch (result) {
+        case VoiceApiOk(:final data):
+          _applySession(data, CallPhase.outgoing);
+        case VoiceApiFailure(:final message, :final statusCode):
+          if (statusCode == 412 && await _tryRecoverActiveCall(auth)) {
+            return;
+          }
+          state = state.copyWith(
+            phase: CallPhase.failed,
+            errorMessage: message,
+            clearOutgoingTarget: true,
+          );
+      }
+    } finally {
+      _startCallInFlight = false;
     }
   }
 
@@ -200,6 +233,9 @@ class CallController extends StateNotifier<CallState> {
   }
 
   Future<void> _connectLiveKit(VoiceCallSession session) async {
+    if (_connectLiveKitInFlight || state.phase == CallPhase.active) {
+      return;
+    }
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) {
       state = state.copyWith(
@@ -208,36 +244,72 @@ class CallController extends StateNotifier<CallState> {
       );
       return;
     }
-    final token = await _ref
+    _connectLiveKitInFlight = true;
+    try {
+      final token = await _ref
+          .read(voiceCallsClientProvider)
+          .getJoinToken(authorization: auth, roomId: session.roomId);
+      if (!mounted) return;
+      switch (token) {
+        case VoiceApiOk(:final data):
+          final livekitUrl = resolveLivekitConnectUrl(
+            apiUrl: data.livekitUrl,
+            clientFallback: _ref.read(gatewayConfigProvider).livekitUrl,
+          );
+          if (livekitUrl.isEmpty) {
+            await _failLiveKitConnect(
+              auth: auth,
+              session: session,
+              errorMessage: 'livekit_url_missing',
+            );
+            return;
+          }
+          final room = _ref.read(liveKitRoomFactoryProvider)();
+          _room = room;
+          try {
+            await room.connect(
+              url: livekitUrl,
+              token: data.jwt,
+              video: session.mediaKind == VoiceCallMediaKind.video,
+            );
+            if (mounted) {
+              state = state.copyWith(
+                phase: CallPhase.active,
+                isVideoEnabled: session.mediaKind == VoiceCallMediaKind.video,
+                clearOutgoingTarget: true,
+              );
+            }
+          } catch (_) {
+            await _failLiveKitConnect(
+              auth: auth,
+              session: session,
+              errorMessage: 'livekit_connect_failed',
+            );
+          }
+        case VoiceApiFailure(:final message):
+          state = state.copyWith(phase: CallPhase.failed, errorMessage: message);
+      }
+    } finally {
+      _connectLiveKitInFlight = false;
+    }
+  }
+
+  Future<void> _failLiveKitConnect({
+    required String auth,
+    required VoiceCallSession session,
+    required String errorMessage,
+  }) async {
+    await _room?.disconnect();
+    _room = null;
+    await _ref
         .read(voiceCallsClientProvider)
-        .getJoinToken(authorization: auth, roomId: session.roomId);
-    if (!mounted) return;
-    switch (token) {
-      case VoiceApiOk(:final data):
-        final livekitUrl =
-            data.livekitUrl ?? _ref.read(gatewayConfigProvider).livekitUrl;
-        if (livekitUrl.isEmpty) {
-          state = state.copyWith(
-            phase: CallPhase.failed,
-            errorMessage: 'livekit_url_missing',
-          );
-          return;
-        }
-        final room = _ref.read(liveKitRoomFactoryProvider)();
-        _room = room;
-        await room.connect(
-          url: livekitUrl,
-          token: data.jwt,
-          video: session.mediaKind == VoiceCallMediaKind.video,
-        );
-        if (mounted) {
-          state = state.copyWith(
-            phase: CallPhase.active,
-            isVideoEnabled: session.mediaKind == VoiceCallMediaKind.video,
-          );
-        }
-      case VoiceApiFailure(:final message):
-        state = state.copyWith(phase: CallPhase.failed, errorMessage: message);
+        .endCall(authorization: auth, roomId: session.roomId);
+    if (mounted) {
+      state = state.copyWith(
+        phase: CallPhase.failed,
+        errorMessage: errorMessage,
+        clearOutgoingTarget: true,
+      );
     }
   }
 
@@ -254,7 +326,11 @@ class CallController extends StateNotifier<CallState> {
         }
       case 'call_accepted':
         final current = state.session;
-        if (current != null && frame.data?['room_id'] == current.roomId) {
+        final activeProfileId = _ref.read(authControllerProvider).activeProfileId;
+        if (current != null &&
+            frame.data?['room_id'] == current.roomId &&
+            activeProfileId == current.initiatorProfileId) {
+          state = state.copyWith(phase: CallPhase.connecting);
           unawaited(_connectLiveKit(current));
         }
       case 'call_declined' || 'call_missed' || 'call_ended':

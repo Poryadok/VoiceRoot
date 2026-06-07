@@ -188,6 +188,8 @@
       }
     }
   },
+  "callLivekitConnectFailed": "Could not connect to LiveKit",
+  "callActiveCallExists": "You already have an active call",
   "profileMessage": "Message",
   "profileEditTitle": "Edit profile",
   "profileEditTooltip": "Edit profile",

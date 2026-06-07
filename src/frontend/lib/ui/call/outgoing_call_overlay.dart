@@ -21,21 +21,21 @@ class OutgoingCallOverlay extends ConsumerWidget {
     }
     final call = ref.watch(callControllerProvider);
     final session = call.session;
-    if (!call.isOutgoing || session == null) {
+    final calleeProfileId =
+        session?.calleeProfileId ?? call.outgoingCalleeProfileId;
+    if (!call.isOutgoing || calleeProfileId == null) {
       return const SizedBox.shrink();
     }
 
     final l10n = AppLocalizations.of(context)!;
     final voice = VoiceColors.of(context);
-    final callee = ref
-        .watch(profileProvider(session.calleeProfileId))
-        .valueOrNull;
-    final title = callee?.displayName ?? session.calleeProfileId;
+    final callee = ref.watch(profileProvider(calleeProfileId)).valueOrNull;
+    final title = callee?.displayName ?? calleeProfileId;
 
     return CallModalOverlay(
       overlayKey: overlayKey,
       title: l10n.callOutgoingTitle(title),
-      subtitle: session.mediaKind.name == 'video'
+      subtitle: session?.mediaKind.name == 'video'
           ? l10n.callIncomingVideo
           : l10n.callIncomingAudio,
       avatarLabel: title,

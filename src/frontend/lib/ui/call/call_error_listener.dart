@@ -23,11 +23,20 @@ class CallErrorListener extends ConsumerWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           key: const Key('call_error_snackbar'),
-          content: Text(l10n.callFailed(next.errorMessage!)),
+          content: Text(_callErrorMessage(l10n, next.errorMessage!)),
         ),
       );
       ref.read(callControllerProvider.notifier).dismissFailure();
     });
     return child;
+  }
+
+  String _callErrorMessage(AppLocalizations l10n, String errorMessage) {
+    return switch (errorMessage) {
+      'livekit_connect_failed' => l10n.callLivekitConnectFailed,
+      'livekit_url_missing' => l10n.callLivekitConnectFailed,
+      'profile already has active call' => l10n.callActiveCallExists,
+      _ => l10n.callFailed(errorMessage),
+    };
   }
 }

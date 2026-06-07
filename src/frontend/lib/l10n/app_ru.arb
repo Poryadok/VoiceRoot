@@ -189,6 +189,8 @@
       }
     }
   },
+  "callLivekitConnectFailed": "Не удалось подключиться к LiveKit",
+  "callActiveCallExists": "У вас уже есть активный звонок",
   "profileMessage": "Написать",
   "profileEditTitle": "Редактировать профиль",
   "profileEditTooltip": "Редактировать профиль",

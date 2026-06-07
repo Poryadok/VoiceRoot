@@ -319,6 +319,12 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get callLivekitConnectFailed => 'Could not connect to LiveKit';
+
+  @override
+  String get callActiveCallExists => 'You already have an active call';
+
+  @override
   String get profileMessage => 'Message';
 
   @override

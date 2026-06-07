@@ -272,7 +272,7 @@ services:
       VOICE_GRPC_LISTEN: :9090
       VOICE_REDIS_ADDR: redis:6379
       NATS_URL: nats://nats:4222
-      LIVEKIT_URL: ws://livekit:7880
+      LIVEKIT_URL: ${VOICE_LIVEKIT_PUBLIC_URL:-ws://127.0.0.1:7880}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-devkey}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-secret}
     depends_on:

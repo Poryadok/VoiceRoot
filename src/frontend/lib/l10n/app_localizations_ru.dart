@@ -320,6 +320,12 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get callLivekitConnectFailed => 'Не удалось подключиться к LiveKit';
+
+  @override
+  String get callActiveCallExists => 'У вас уже есть активный звонок';
+
+  @override
   String get profileMessage => 'Написать';
 
   @override
