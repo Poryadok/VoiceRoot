@@ -6,6 +6,7 @@ import '../../state/call_providers.dart';
 import '../../state/gateway_providers.dart';
 import '../../state/social_providers.dart';
 import '../../theme/voice_colors.dart';
+import 'call_modal_overlay.dart';
 
 class OutgoingCallOverlay extends ConsumerWidget {
   const OutgoingCallOverlay({super.key});
@@ -31,58 +32,27 @@ class OutgoingCallOverlay extends ConsumerWidget {
         .valueOrNull;
     final title = callee?.displayName ?? session.calleeProfileId;
 
-    return Positioned(
-      key: overlayKey,
-      top: 16,
-      right: 16,
-      child: Material(
-        color: voice.elevated,
-        borderRadius: BorderRadius.circular(8),
-        elevation: 6,
-        child: Container(
-          width: 320,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            border: Border.all(color: voice.borderDefault),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                l10n.callOutgoingTitle(title),
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                session.mediaKind.name == 'video'
-                    ? l10n.callIncomingVideo
-                    : l10n.callIncomingAudio,
-                style: TextStyle(color: voice.textSecondary),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                  const SizedBox(width: 12),
-                  OutlinedButton.icon(
-                    key: cancelKey,
-                    onPressed: () =>
-                        ref.read(callControllerProvider.notifier).hangUp(),
-                    icon: Icon(Icons.call_end, color: voice.error),
-                    label: Text(l10n.callHangup),
-                  ),
-                ],
-              ),
-            ],
-          ),
+    return CallModalOverlay(
+      overlayKey: overlayKey,
+      title: l10n.callOutgoingTitle(title),
+      subtitle: session.mediaKind.name == 'video'
+          ? l10n.callIncomingVideo
+          : l10n.callIncomingAudio,
+      avatarLabel: title,
+      avatarUrl: callee?.avatarUrl,
+      actions: [
+        const SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(strokeWidth: 2),
         ),
-      ),
+        OutlinedButton.icon(
+          key: cancelKey,
+          onPressed: () => ref.read(callControllerProvider.notifier).hangUp(),
+          icon: Icon(Icons.call_end, color: voice.error),
+          label: Text(l10n.callHangup),
+        ),
+      ],
     );
   }
 }

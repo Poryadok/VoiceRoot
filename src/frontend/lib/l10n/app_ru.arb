@@ -219,6 +219,53 @@
     }
   },
   "commonCancel": "Отмена",
+  "commonSave": "Сохранить",
   "commonRetry": "Попробовать снова",
-  "commonLoading": "…"
+  "commonLoading": "…",
+  "chatInboxDm": "Личные",
+  "chatInboxRequests": "Запросы",
+  "chatTyping": "Печатает…",
+  "chatAttachFile": "Прикрепить файл",
+  "chatMessageEdit": "Изменить",
+  "chatMessageDeleteForMe": "Удалить у меня",
+  "chatMessageDeleteForEveryone": "Удалить у всех",
+  "chatEditMessageTitle": "Изменить сообщение",
+  "chatMessageEdited": "(ред.)",
+  "chatDeliverySent": "Отправлено",
+  "chatDeliveryDelivered": "Доставлено",
+  "chatDeliveryRead": "Прочитано",
+  "chatImageAttachment": "Вложение-изображение",
+  "chatNewMessages": "Новые сообщения",
+  "chatUnreadSeparator": "Непрочитанные сообщения",
+  "chatListStrangerBadge": "Незнакомец",
+  "settingsTitle": "Настройки",
+  "settingsTooltip": "Настройки",
+  "settingsTheme": "Тема",
+  "settingsThemeSystem": "Системная",
+  "settingsThemeLight": "Светлая",
+  "settingsThemeDark": "Тёмная",
+  "settingsThemeHighContrast": "Высокий контраст",
+  "settingsLanguage": "Язык",
+  "settingsLanguageSystem": "Как в системе",
+  "settingsLanguageEn": "English",
+  "settingsLanguageRu": "Русский",
+  "settingsAccent": "Акцент профиля",
+  "authTagline": "Голос и сообщения для геймеров",
+  "versionUpdateRequired": "Требуется обновление",
+  "versionUpdateAvailable": "Доступно обновление {version}",
+  "@versionUpdateAvailable": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "versionUpdateAvailableGeneric": "Доступно обновление",
+  "versionUpdateLater": "Позже",
+  "profileBlock": "Заблокировать",
+  "profileBlockConfirmTitle": "Заблокировать пользователя?",
+  "profileBlockConfirmMessage": "Он не сможет писать вам сообщения.",
+  "callVideoPlaceholder": "Видео",
+  "themeLoadError": "Не удалось загрузить тему",
+  "bootstrapRestoring": "Восстановление сессии…"
 }

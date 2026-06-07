@@ -40,22 +40,36 @@ class ThreeColumnShell extends StatelessWidget {
         railChild ??
         ColoredBox(color: voice.muted, child: const SizedBox.expand());
 
-    Widget listContent() =>
-        listChild ??
-        ColoredBox(color: voice.surface, child: const SizedBox.expand());
+    Widget listContent() => ColoredBox(
+      color: voice.surface,
+      child: listChild ?? const SizedBox.expand(),
+    );
 
-    Widget mainContent() =>
-        mainChild ??
-        ColoredBox(color: voice.canvas, child: const SizedBox.expand());
+    Widget mainContent() => ColoredBox(
+      color: voice.canvas,
+      child: mainChild ?? const SizedBox.expand(),
+    );
 
-    Widget rail() =>
-        Expanded(flex: 1, key: navActiveRail, child: railContent());
+    Widget columnDivider() =>
+        VerticalDivider(width: 1, color: voice.borderDefault);
 
-    Widget list() =>
-        Expanded(flex: listFlex, key: navChatList, child: listContent());
+    Widget rail() => Expanded(
+      flex: 1,
+      key: navActiveRail,
+      child: railContent(),
+    );
 
-    Widget main() =>
-        Expanded(flex: mainFlex, key: navOpenChat, child: mainContent());
+    Widget list() => Expanded(
+      flex: listFlex,
+      key: navChatList,
+      child: listContent(),
+    );
+
+    Widget main() => Expanded(
+      flex: mainFlex,
+      key: navOpenChat,
+      child: mainContent(),
+    );
 
     return LayoutBuilder(
       builder: (context, c) {
@@ -79,18 +93,27 @@ class ThreeColumnShell extends StatelessWidget {
                           height: 48,
                           child: mobileRailChild ?? railContent(),
                         ),
+                        Divider(height: 1, color: voice.borderDefault),
                         Expanded(key: navChatList, child: listContent()),
                       ],
               )
             : Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [rail(), list(), main()],
+                children: [
+                  rail(),
+                  columnDivider(),
+                  list(),
+                  columnDivider(),
+                  main(),
+                ],
               );
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             ?header,
+            if (header != null)
+              Divider(height: 1, color: voice.borderDefault),
             Expanded(child: body),
           ],
         );

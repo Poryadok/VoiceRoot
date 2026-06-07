@@ -220,6 +220,52 @@ void main() {
 
       expect(find.text('Direct messages'), findsOneWidget);
       expect(find.text('No conversations yet'), findsOneWidget);
+      expect(find.text('DMs'), findsOneWidget);
+      expect(find.text('Requests'), findsOneWidget);
+    });
+
+    testWidgets('ChatListPanel shows Russian inbox segments', (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ...voiceThemeTestOverrides(),
+            profileAccentStorageProvider.overrideWithValue(
+              testProfileAccentStorage,
+            ),
+            authSessionStorageProvider.overrideWithValue(
+              InMemoryAuthSessionStorage(),
+            ),
+            authControllerProvider.overrideWith(authenticatedAuthController),
+            gatewayConfigProvider.overrideWithValue(
+              const GatewayConfig(baseUrl: 'http://api.test'),
+            ),
+            httpClientProvider.overrideWithValue(
+              MockClient((req) async {
+                if (req.url.path == '/api/v1/chats') {
+                  return http.Response(
+                    jsonEncode({
+                      'chat_list': {'items': []},
+                    }),
+                    200,
+                  );
+                }
+                return http.Response('{}', 404);
+              }),
+            ),
+          ],
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            locale: const Locale('ru'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const Scaffold(body: ChatListPanel()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Личные'), findsOneWidget);
+      expect(find.text('Запросы'), findsOneWidget);
     });
   });
 }

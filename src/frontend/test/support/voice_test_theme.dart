@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:voice_frontend/theme/voice_colors.dart';
+import 'package:voice_frontend/theme/voice_metrics.dart';
 
 /// Minimal [VoiceColors] for widget tests without loading token assets.
 ThemeData voiceTestTheme() {
@@ -17,10 +18,14 @@ ThemeData voiceTestTheme() {
     focusRing: Color(0xFF7EC8E3),
     profileAccent: Color(0xFF7EC8E3),
   );
+  const metrics = VoiceMetrics(
+    space: {'4': 4, '8': 8, '12': 12},
+    radius: {'sm': 4, 'md': 6, 'lg': 8},
+  );
   return ThemeData(
     useMaterial3: true,
     brightness: Brightness.dark,
-    extensions: const [voice],
+    extensions: const [voice, metrics],
     colorScheme: ColorScheme.dark(
       primary: voice.profileAccent,
       surface: voice.surface,

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../../backend/chats_client.dart';
 import '../../backend/files_client.dart';
 import '../../backend/messages_client.dart';
 import '../../backend/voice_client.dart';
@@ -15,9 +16,12 @@ import '../../state/gateway_providers.dart';
 import '../../state/presence_providers.dart';
 import '../../state/social_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../core/voice_avatar.dart';
+import '../core/voice_compact_banner.dart';
 import '../core/voice_state_panel.dart';
 import '../core/voice_send_button.dart';
 import '../social/presence_indicator.dart';
+import 'chat_message_list.dart';
 
 /// Main column: message history (REST) + composer; live updates via Realtime WS.
 class ChatRoomPanel extends ConsumerStatefulWidget {
@@ -37,6 +41,7 @@ class ChatRoomPanel extends ConsumerStatefulWidget {
   static const Key loadOlderKey = Key('chat_room_load_older');
   static const Key audioCallKey = Key('chat_room_audio_call');
   static const Key videoCallKey = Key('chat_room_video_call');
+  static const Key newMessagesChipKey = Key('chat_room_new_messages');
   static Key attachmentPreviewKey(String fileId) =>
       ValueKey('chat_attachment_$fileId');
 
@@ -67,6 +72,16 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   final _composerFocus = FocusNode();
   final _scrollController = ScrollController();
   var _uploadingAttachment = false;
+  var _initialUnreadCount = 0;
+  var _unreadCaptured = false;
+  var _pendingNewMessages = 0;
+  var _wasNearBottom = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
 
   @override
   void dispose() {
@@ -83,6 +98,28 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     });
   }
 
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final near =
+        _scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 80;
+    if (near && _pendingNewMessages > 0) {
+      setState(() => _pendingNewMessages = 0);
+    }
+    _wasNearBottom = near;
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scrollController.hasClients) return;
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -95,9 +132,10 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       activeProfileId: activeId,
       messages: room.messages,
     );
-    final peerName = peerId != null
-        ? ref.watch(profileProvider(peerId)).valueOrNull?.displayName
+    final peerProfile = peerId != null
+        ? ref.watch(profileProvider(peerId)).valueOrNull
         : null;
+    final peerName = peerProfile?.displayName;
     final peerPresence = peerId != null
         ? ref.watch(presenceProvider(peerId))
         : null;
@@ -105,17 +143,27 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     final title = peerName ?? l10n.chatRoomTitle(widget.chatId.substring(0, 8));
     final voice = VoiceColors.of(context);
 
+    if (!_unreadCaptured) {
+      ChatListItem? listItem;
+      for (final item in ref.read(chatListControllerProvider).items) {
+        if (item.chatId == widget.chatId) {
+          listItem = item;
+          break;
+        }
+      }
+      _initialUnreadCount = listItem?.unreadCount ?? 0;
+      _unreadCaptured = true;
+    }
+
     ref.listen(chatRoomControllerProvider(widget.chatId), (prev, next) {
-      if ((prev?.messages.length ?? 0) < next.messages.length) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (_scrollController.hasClients) {
-            _scrollController.animateTo(
-              _scrollController.position.maxScrollExtent,
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOut,
-            );
-          }
-        });
+      final prevLen = prev?.messages.length ?? 0;
+      if (next.messages.length > prevLen) {
+        final added = next.messages.length - prevLen;
+        if (_wasNearBottom) {
+          _scrollToBottom();
+        } else {
+          setState(() => _pendingNewMessages += added);
+        }
       }
     });
 
@@ -137,6 +185,14 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                     icon: const Icon(Icons.arrow_back),
                   ),
                   const SizedBox(width: 4),
+                ],
+                if (peerProfile != null) ...[
+                  VoiceAvatar(
+                    imageUrl: peerProfile.avatarUrl,
+                    label: peerProfile.displayName,
+                    radius: 16,
+                  ),
+                  const SizedBox(width: 8),
                 ],
                 if (peerPresence != null) ...[
                   PresenceIndicator(
@@ -184,13 +240,28 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
           ),
         ),
         if (room.isLoading) const LinearProgressIndicator(minHeight: 2),
+        if (room.realtimeStatus == RealtimeLinkStatus.reconnecting)
+          VoiceCompactBanner(
+            message: l10n.chatRealtimeReconnecting,
+            icon: Icons.sync_problem,
+            tone: VoiceBannerTone.warning,
+          ),
         if (room.typingProfileIds.isNotEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
             child: Text(
-              'Typing...',
+              l10n.chatTyping,
               style: TextStyle(color: voice.textSecondary),
             ),
+          ),
+        if (_pendingNewMessages > 0)
+          ChatNewMessagesChip(
+            key: ChatRoomPanel.newMessagesChipKey,
+            label: l10n.chatNewMessages,
+            onTap: () {
+              setState(() => _pendingNewMessages = 0);
+              _scrollToBottom();
+            },
           ),
         Expanded(
           child: room.messages.isEmpty && !room.isLoading
@@ -212,81 +283,16 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                         message: l10n.chatRoomEmptyHint,
                         icon: Icons.chat_bubble_outline,
                       )
-              : ListView.builder(
+              : _MessageListView(
                   key: ChatRoomPanel.messagesKey,
-                  controller: _scrollController,
-                  padding: const EdgeInsets.all(12),
-                  itemCount:
-                      room.messages.length +
-                      (room.hasMore || room.isLoadingOlder ? 1 : 0),
-                  itemBuilder: (context, index) {
-                    final hasOlderControl = room.hasMore || room.isLoadingOlder;
-                    if (hasOlderControl && index == 0) {
-                      return Center(
-                        child: room.isLoadingOlder
-                            ? const Padding(
-                                padding: EdgeInsets.all(8),
-                                child: SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                ),
-                              )
-                            : TextButton.icon(
-                                key: ChatRoomPanel.loadOlderKey,
-                                icon: const Icon(Icons.expand_less),
-                                label: Text(l10n.chatRoomLoadOlder),
-                                onPressed: () => ref
-                                    .read(
-                                      chatRoomControllerProvider(
-                                        widget.chatId,
-                                      ).notifier,
-                                    )
-                                    .loadOlderMessages(),
-                              ),
-                      );
-                    }
-                    final messageIndex = hasOlderControl ? index - 1 : index;
-                    final msg = room.messages[messageIndex];
-                    final isMine = msg.senderProfileId == activeId;
-                    return Align(
-                      alignment: isMine
-                          ? Alignment.centerRight
-                          : Alignment.centerLeft,
-                      child: GestureDetector(
-                        onLongPress: () => _showMessageActions(msg, isMine),
-                        child: Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isMine
-                                ? voice.profileAccent.withValues(alpha: 0.22)
-                                : voice.elevated,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              _MessageBubbleContent(message: msg),
-                              if (isMine)
-                                _DeliveryTick(
-                                  delivered: room.deliveredMessageIds.contains(
-                                    msg.id,
-                                  ),
-                                  read: room.readMessageIds.contains(msg.id),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  },
+                  chatId: widget.chatId,
+                  scrollController: _scrollController,
+                  room: room,
+                  activeId: activeId,
+                  l10n: l10n,
+                  initialUnreadCount: _initialUnreadCount,
+                  onLongPress: (msg, isMine) =>
+                      _showMessageActions(msg, isMine),
                 ),
         ),
         if (room.errorMessage != null && room.messages.isNotEmpty)
@@ -326,7 +332,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                 const SizedBox(width: 8),
                 IconButton(
                   key: ChatRoomPanel.attachKey,
-                  tooltip: 'Attach file',
+                  tooltip: l10n.chatAttachFile,
                   onPressed: room.isSending || _uploadingAttachment
                       ? null
                       : _attachAndSend,
@@ -432,30 +438,33 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   Future<void> _showMessageActions(VoiceMessage message, bool isMine) async {
     final action = await showModalBottomSheet<String>(
       context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (isMine)
+      builder: (context) {
+        final sheetL10n = AppLocalizations.of(context)!;
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isMine)
+                ListTile(
+                  leading: const Icon(Icons.edit_outlined),
+                  title: Text(sheetL10n.chatMessageEdit),
+                  onTap: () => Navigator.of(context).pop('edit'),
+                ),
               ListTile(
-                leading: const Icon(Icons.edit_outlined),
-                title: const Text('Edit'),
-                onTap: () => Navigator.of(context).pop('edit'),
+                leading: const Icon(Icons.delete_outline),
+                title: Text(sheetL10n.chatMessageDeleteForMe),
+                onTap: () => Navigator.of(context).pop('delete_me'),
               ),
-            ListTile(
-              leading: const Icon(Icons.delete_outline),
-              title: const Text('Delete for me'),
-              onTap: () => Navigator.of(context).pop('delete_me'),
-            ),
-            if (isMine)
-              ListTile(
-                leading: const Icon(Icons.delete_forever_outlined),
-                title: const Text('Delete for everyone'),
-                onTap: () => Navigator.of(context).pop('delete_everyone'),
-              ),
-          ],
-        ),
-      ),
+              if (isMine)
+                ListTile(
+                  leading: const Icon(Icons.delete_forever_outlined),
+                  title: Text(sheetL10n.chatMessageDeleteForEveryone),
+                  onTap: () => Navigator.of(context).pop('delete_everyone'),
+                ),
+            ],
+          ),
+        );
+      },
     );
     if (!mounted || action == null) return;
     final controller = ref.read(
@@ -478,20 +487,23 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     try {
       return showDialog<String>(
         context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Edit message'),
-          content: TextField(controller: controller, autofocus: true),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(controller.text),
-              child: const Text('Save'),
-            ),
-          ],
-        ),
+        builder: (context) {
+          final dialogL10n = AppLocalizations.of(context)!;
+          return AlertDialog(
+            title: Text(dialogL10n.chatEditMessageTitle),
+            content: TextField(controller: controller, autofocus: true),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text(dialogL10n.commonCancel),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(controller.text),
+                child: Text(dialogL10n.commonSave),
+              ),
+            ],
+          );
+        },
       );
     } finally {
       controller.dispose();
@@ -499,19 +511,109 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   }
 }
 
-class _DeliveryTick extends StatelessWidget {
-  const _DeliveryTick({required this.delivered, required this.read});
+class _MessageListView extends ConsumerWidget {
+  const _MessageListView({
+    super.key,
+    required this.chatId,
+    required this.scrollController,
+    required this.room,
+    required this.activeId,
+    required this.l10n,
+    required this.initialUnreadCount,
+    required this.onLongPress,
+  });
 
+  final String chatId;
+  final ScrollController scrollController;
+  final ChatRoomState room;
+  final String? activeId;
+  final AppLocalizations l10n;
+  final int initialUnreadCount;
+  final void Function(VoiceMessage message, bool isMine) onLongPress;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final rows = buildChatMessageRows(
+      messages: room.messages,
+      unreadCount: initialUnreadCount,
+    );
+    final hasOlderControl = room.hasMore || room.isLoadingOlder;
+    return ListView.builder(
+      controller: scrollController,
+      padding: const EdgeInsets.all(12),
+      itemCount: rows.length + (hasOlderControl ? 1 : 0),
+      itemBuilder: (context, index) {
+        if (hasOlderControl && index == 0) {
+          return Center(
+            child: room.isLoadingOlder
+                ? const Padding(
+                    padding: EdgeInsets.all(8),
+                    child: SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                : TextButton.icon(
+                    key: ChatRoomPanel.loadOlderKey,
+                    icon: const Icon(Icons.expand_less),
+                    label: Text(l10n.chatRoomLoadOlder),
+                    onPressed: () => ref
+                        .read(chatRoomControllerProvider(chatId).notifier)
+                        .loadOlderMessages(),
+                  ),
+          );
+        }
+        final rowIndex = hasOlderControl ? index - 1 : index;
+        final row = rows[rowIndex];
+        final msg = row.message;
+        final isMine = msg.senderProfileId == activeId;
+        return Column(
+          children: [
+            if (row.unreadSeparator)
+              ChatUnreadSeparator(label: l10n.chatUnreadSeparator),
+            GestureDetector(
+              onLongPress: () => onLongPress(msg, isMine),
+              child: ChatMessageBubbleTile(
+                message: msg,
+                isMine: isMine,
+                showTimestamp: row.showTimestamp,
+                l10n: l10n,
+                deliveryFooter: isMine
+                    ? _DeliveryTick(
+                        l10n: l10n,
+                        delivered: room.deliveredMessageIds.contains(msg.id),
+                        read: room.readMessageIds.contains(msg.id),
+                      )
+                    : null,
+                content: _MessageBubbleContent(message: msg, l10n: l10n),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _DeliveryTick extends StatelessWidget {
+  const _DeliveryTick({
+    required this.l10n,
+    required this.delivered,
+    required this.read,
+  });
+
+  final AppLocalizations l10n;
   final bool delivered;
   final bool read;
 
   @override
   Widget build(BuildContext context) {
     final label = read
-        ? 'Read'
+        ? l10n.chatDeliveryRead
         : delivered
-        ? 'Delivered'
-        : 'Sent';
+        ? l10n.chatDeliveryDelivered
+        : l10n.chatDeliverySent;
     final icon = read || delivered ? Icons.done_all : Icons.done;
     final voice = VoiceColors.of(context);
     return Semantics(
@@ -546,9 +648,10 @@ String _contentTypeFromName(String name) {
 }
 
 class _MessageBubbleContent extends StatelessWidget {
-  const _MessageBubbleContent({required this.message});
+  const _MessageBubbleContent({required this.message, required this.l10n});
 
   final VoiceMessage message;
+  final AppLocalizations l10n;
 
   @override
   Widget build(BuildContext context) {
@@ -558,7 +661,10 @@ class _MessageBubbleContent extends StatelessWidget {
       children: [
         if (message.content.isNotEmpty) Text(message.content),
         if (message.editedAt != null)
-          Text('(edited)', style: Theme.of(context).textTheme.labelSmall),
+          Text(
+            l10n.chatMessageEdited,
+            style: Theme.of(context).textTheme.labelSmall,
+          ),
         for (final attachment in message.attachments) ...[
           if (message.content.isNotEmpty ||
               attachment != message.attachments.first)
@@ -595,7 +701,7 @@ class _AttachmentPreview extends ConsumerWidget {
       final src = resolved.valueOrNull;
       return Semantics(
         key: ChatRoomPanel.attachmentPreviewKey(attachment.fileId),
-        label: attachment.name ?? 'Image attachment',
+        label: attachment.name ?? AppLocalizations.of(context)!.chatImageAttachment,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(4),
           child: Container(

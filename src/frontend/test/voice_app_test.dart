@@ -27,8 +27,9 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.textContaining('Gateway: ok'), findsOneWidget);
-    expect(find.byKey(const Key('gateway_status_text')), findsOneWidget);
+    expect(find.textContaining('Gateway: ok'), findsNothing);
+    expect(find.byKey(const Key('gateway_status_text')), findsNothing);
+    expect(find.byKey(const Key('settings_open')), findsOneWidget);
   });
 
   testWidgets('shows failure when base URL missing', (tester) async {

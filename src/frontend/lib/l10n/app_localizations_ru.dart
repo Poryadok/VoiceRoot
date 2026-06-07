@@ -376,8 +376,130 @@ class AppLocalizationsRu extends AppLocalizations {
   String get commonCancel => 'Отмена';
 
   @override
+  String get commonSave => 'Сохранить';
+
+  @override
   String get commonRetry => 'Попробовать снова';
 
   @override
   String get commonLoading => '…';
+
+  @override
+  String get chatInboxDm => 'Личные';
+
+  @override
+  String get chatInboxRequests => 'Запросы';
+
+  @override
+  String get chatTyping => 'Печатает…';
+
+  @override
+  String get chatAttachFile => 'Прикрепить файл';
+
+  @override
+  String get chatMessageEdit => 'Изменить';
+
+  @override
+  String get chatMessageDeleteForMe => 'Удалить у меня';
+
+  @override
+  String get chatMessageDeleteForEveryone => 'Удалить у всех';
+
+  @override
+  String get chatEditMessageTitle => 'Изменить сообщение';
+
+  @override
+  String get chatMessageEdited => '(ред.)';
+
+  @override
+  String get chatDeliverySent => 'Отправлено';
+
+  @override
+  String get chatDeliveryDelivered => 'Доставлено';
+
+  @override
+  String get chatDeliveryRead => 'Прочитано';
+
+  @override
+  String get chatImageAttachment => 'Вложение-изображение';
+
+  @override
+  String get chatNewMessages => 'Новые сообщения';
+
+  @override
+  String get chatUnreadSeparator => 'Непрочитанные сообщения';
+
+  @override
+  String get chatListStrangerBadge => 'Незнакомец';
+
+  @override
+  String get settingsTitle => 'Настройки';
+
+  @override
+  String get settingsTooltip => 'Настройки';
+
+  @override
+  String get settingsTheme => 'Тема';
+
+  @override
+  String get settingsThemeSystem => 'Системная';
+
+  @override
+  String get settingsThemeLight => 'Светлая';
+
+  @override
+  String get settingsThemeDark => 'Тёмная';
+
+  @override
+  String get settingsThemeHighContrast => 'Высокий контраст';
+
+  @override
+  String get settingsLanguage => 'Язык';
+
+  @override
+  String get settingsLanguageSystem => 'Как в системе';
+
+  @override
+  String get settingsLanguageEn => 'English';
+
+  @override
+  String get settingsLanguageRu => 'Русский';
+
+  @override
+  String get settingsAccent => 'Акцент профиля';
+
+  @override
+  String get authTagline => 'Голос и сообщения для геймеров';
+
+  @override
+  String get versionUpdateRequired => 'Требуется обновление';
+
+  @override
+  String versionUpdateAvailable(String version) {
+    return 'Доступно обновление $version';
+  }
+
+  @override
+  String get versionUpdateAvailableGeneric => 'Доступно обновление';
+
+  @override
+  String get versionUpdateLater => 'Позже';
+
+  @override
+  String get profileBlock => 'Заблокировать';
+
+  @override
+  String get profileBlockConfirmTitle => 'Заблокировать пользователя?';
+
+  @override
+  String get profileBlockConfirmMessage => 'Он не сможет писать вам сообщения.';
+
+  @override
+  String get callVideoPlaceholder => 'Видео';
+
+  @override
+  String get themeLoadError => 'Не удалось загрузить тему';
+
+  @override
+  String get bootstrapRestoring => 'Восстановление сессии…';
 }

@@ -218,6 +218,53 @@
     }
   },
   "commonCancel": "Cancel",
+  "commonSave": "Save",
   "commonRetry": "Try again",
-  "commonLoading": "…"
+  "commonLoading": "…",
+  "chatInboxDm": "DMs",
+  "chatInboxRequests": "Requests",
+  "chatTyping": "Typing…",
+  "chatAttachFile": "Attach file",
+  "chatMessageEdit": "Edit",
+  "chatMessageDeleteForMe": "Delete for me",
+  "chatMessageDeleteForEveryone": "Delete for everyone",
+  "chatEditMessageTitle": "Edit message",
+  "chatMessageEdited": "(edited)",
+  "chatDeliverySent": "Sent",
+  "chatDeliveryDelivered": "Delivered",
+  "chatDeliveryRead": "Read",
+  "chatImageAttachment": "Image attachment",
+  "chatNewMessages": "New messages",
+  "chatUnreadSeparator": "Unread messages",
+  "chatListStrangerBadge": "Stranger",
+  "settingsTitle": "Settings",
+  "settingsTooltip": "Settings",
+  "settingsTheme": "Theme",
+  "settingsThemeSystem": "System",
+  "settingsThemeLight": "Light",
+  "settingsThemeDark": "Dark",
+  "settingsThemeHighContrast": "High contrast",
+  "settingsLanguage": "Language",
+  "settingsLanguageSystem": "System default",
+  "settingsLanguageEn": "English",
+  "settingsLanguageRu": "Russian",
+  "settingsAccent": "Profile accent",
+  "authTagline": "Voice chat and messages for gamers",
+  "versionUpdateRequired": "Update required",
+  "versionUpdateAvailable": "Update {version} available",
+  "@versionUpdateAvailable": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "versionUpdateAvailableGeneric": "Update available",
+  "versionUpdateLater": "Later",
+  "profileBlock": "Block user",
+  "profileBlockConfirmTitle": "Block this user?",
+  "profileBlockConfirmMessage": "They will not be able to message you.",
+  "callVideoPlaceholder": "Video preview",
+  "themeLoadError": "Could not load theme",
+  "bootstrapRestoring": "Restoring session…"
 }

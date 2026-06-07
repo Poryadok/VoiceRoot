@@ -7,6 +7,7 @@ import '../../state/auth_providers.dart';
 import '../../state/chat_providers.dart';
 import '../../state/presence_providers.dart';
 import '../../state/social_providers.dart';
+import '../core/voice_avatar.dart';
 import 'presence_indicator.dart';
 
 /// Bottom sheet with profile details, presence, and friend-request action.
@@ -17,6 +18,7 @@ class ProfileDetailSheet extends ConsumerWidget {
   static const Key onlineIndicatorKey = Key('profile_online_indicator');
   static const Key addFriendKey = Key('profile_add_friend');
   static const Key messageKey = Key('profile_message');
+  static const Key blockKey = Key('profile_block');
 
   final String profileId;
 
@@ -51,18 +53,10 @@ class ProfileDetailSheet extends ConsumerWidget {
               children: [
                 Row(
                   children: [
-                    CircleAvatar(
+                    VoiceAvatar(
+                      imageUrl: profile.avatarUrl,
+                      label: profile.displayName,
                       radius: 28,
-                      backgroundImage: profile.avatarUrl != null
-                          ? NetworkImage(profile.avatarUrl!)
-                          : null,
-                      child: profile.avatarUrl == null
-                          ? Text(
-                              profile.displayName.isNotEmpty
-                                  ? profile.displayName[0].toUpperCase()
-                                  : '?',
-                            )
-                          : null,
                     ),
                     const SizedBox(width: 16),
                     Expanded(
@@ -107,6 +101,15 @@ class ProfileDetailSheet extends ConsumerWidget {
                     pendingOutgoing: pendingOutgoing,
                     pendingIncoming: pendingIncoming,
                   ),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    key: ProfileDetailSheet.blockKey,
+                    onPressed: () => _confirmBlock(context, ref, profile),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Theme.of(context).colorScheme.error,
+                    ),
+                    child: Text(l10n.profileBlock),
+                  ),
                 ],
               ],
             );
@@ -114,6 +117,46 @@ class ProfileDetailSheet extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _confirmBlock(
+    BuildContext context,
+    WidgetRef ref,
+    VoiceProfile profile,
+  ) async {
+    final l10n = AppLocalizations.of(context)!;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final dialogL10n = AppLocalizations.of(ctx)!;
+        return AlertDialog(
+          title: Text(dialogL10n.profileBlockConfirmTitle),
+          content: Text(dialogL10n.profileBlockConfirmMessage),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text(dialogL10n.commonCancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: Text(dialogL10n.profileBlock),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true || !context.mounted) return;
+    final err = await ref
+        .read(socialActionsProvider)
+        .blockAccount(profile.accountId);
+    if (!context.mounted) return;
+    if (err != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.socialActionError(err))),
+      );
+      return;
+    }
+    Navigator.of(context).pop();
   }
 
   Future<void> _openDm(

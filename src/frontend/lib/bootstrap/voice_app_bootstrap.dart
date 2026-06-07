@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app.dart';
+import '../l10n/app_localizations.dart';
 import '../state/auth_providers.dart';
+import '../ui/core/voice_state_panel.dart';
 
 /// Restores persisted session (refresh) before showing [VoiceApp].
 class VoiceAppBootstrap extends ConsumerStatefulWidget {
@@ -27,7 +29,21 @@ class _VoiceAppBootstrapState extends ConsumerState<VoiceAppBootstrap> {
     if (auth.isRestoring) {
       return MaterialApp(
         locale: widget.locale,
-        home: const Scaffold(body: Center(child: CircularProgressIndicator())),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Builder(
+          builder: (ctx) {
+            final l10n = AppLocalizations.of(ctx)!;
+            return Scaffold(
+              body: Center(
+                child: VoiceStatePanel(
+                  title: l10n.bootstrapRestoring,
+                  icon: Icons.hourglass_empty,
+                ),
+              ),
+            );
+          },
+        ),
       );
     }
     return VoiceApp(locale: widget.locale);

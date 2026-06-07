@@ -6,6 +6,7 @@ import '../../state/call_providers.dart';
 import '../../state/gateway_providers.dart';
 import '../../state/social_providers.dart';
 import '../../theme/voice_colors.dart';
+import 'call_modal_overlay.dart';
 
 class IncomingCallOverlay extends ConsumerWidget {
   const IncomingCallOverlay({super.key});
@@ -32,60 +33,29 @@ class IncomingCallOverlay extends ConsumerWidget {
         .valueOrNull;
     final title = caller?.displayName ?? session.initiatorProfileId;
 
-    return Positioned(
-      key: overlayKey,
-      top: 16,
-      right: 16,
-      child: Material(
-        color: voice.elevated,
-        borderRadius: BorderRadius.circular(8),
-        elevation: 6,
-        child: Container(
-          width: 320,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            border: Border.all(color: voice.borderDefault),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                l10n.callIncomingTitle(title),
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                session.mediaKind.name == 'video'
-                    ? l10n.callIncomingVideo
-                    : l10n.callIncomingAudio,
-                style: TextStyle(color: voice.textSecondary),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  FilledButton.icon(
-                    key: acceptKey,
-                    onPressed: () =>
-                        ref.read(callControllerProvider.notifier).acceptCall(),
-                    icon: const Icon(Icons.call),
-                    label: Text(l10n.callAccept),
-                  ),
-                  const SizedBox(width: 8),
-                  OutlinedButton.icon(
-                    key: declineKey,
-                    onPressed: () =>
-                        ref.read(callControllerProvider.notifier).declineCall(),
-                    icon: Icon(Icons.call_end, color: voice.error),
-                    label: Text(l10n.callDecline),
-                  ),
-                ],
-              ),
-            ],
-          ),
+    return CallModalOverlay(
+      overlayKey: overlayKey,
+      title: l10n.callIncomingTitle(title),
+      subtitle: session.mediaKind.name == 'video'
+          ? l10n.callIncomingVideo
+          : l10n.callIncomingAudio,
+      avatarLabel: title,
+      avatarUrl: caller?.avatarUrl,
+      actions: [
+        FilledButton.icon(
+          key: acceptKey,
+          onPressed: () => ref.read(callControllerProvider.notifier).acceptCall(),
+          icon: const Icon(Icons.call),
+          label: Text(l10n.callAccept),
         ),
-      ),
+        OutlinedButton.icon(
+          key: declineKey,
+          onPressed: () =>
+              ref.read(callControllerProvider.notifier).declineCall(),
+          icon: Icon(Icons.call_end, color: voice.error),
+          label: Text(l10n.callDecline),
+        ),
+      ],
     );
   }
 }

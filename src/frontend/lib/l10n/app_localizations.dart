@@ -740,6 +740,12 @@ abstract class AppLocalizations {
   /// **'Cancel'**
   String get commonCancel;
 
+  /// No description provided for @commonSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get commonSave;
+
   /// No description provided for @commonRetry.
   ///
   /// In en, this message translates to:
@@ -751,6 +757,240 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'…'**
   String get commonLoading;
+
+  /// No description provided for @chatInboxDm.
+  ///
+  /// In en, this message translates to:
+  /// **'DMs'**
+  String get chatInboxDm;
+
+  /// No description provided for @chatInboxRequests.
+  ///
+  /// In en, this message translates to:
+  /// **'Requests'**
+  String get chatInboxRequests;
+
+  /// No description provided for @chatTyping.
+  ///
+  /// In en, this message translates to:
+  /// **'Typing…'**
+  String get chatTyping;
+
+  /// No description provided for @chatAttachFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Attach file'**
+  String get chatAttachFile;
+
+  /// No description provided for @chatMessageEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get chatMessageEdit;
+
+  /// No description provided for @chatMessageDeleteForMe.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete for me'**
+  String get chatMessageDeleteForMe;
+
+  /// No description provided for @chatMessageDeleteForEveryone.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete for everyone'**
+  String get chatMessageDeleteForEveryone;
+
+  /// No description provided for @chatEditMessageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit message'**
+  String get chatEditMessageTitle;
+
+  /// No description provided for @chatMessageEdited.
+  ///
+  /// In en, this message translates to:
+  /// **'(edited)'**
+  String get chatMessageEdited;
+
+  /// No description provided for @chatDeliverySent.
+  ///
+  /// In en, this message translates to:
+  /// **'Sent'**
+  String get chatDeliverySent;
+
+  /// No description provided for @chatDeliveryDelivered.
+  ///
+  /// In en, this message translates to:
+  /// **'Delivered'**
+  String get chatDeliveryDelivered;
+
+  /// No description provided for @chatDeliveryRead.
+  ///
+  /// In en, this message translates to:
+  /// **'Read'**
+  String get chatDeliveryRead;
+
+  /// No description provided for @chatImageAttachment.
+  ///
+  /// In en, this message translates to:
+  /// **'Image attachment'**
+  String get chatImageAttachment;
+
+  /// No description provided for @chatNewMessages.
+  ///
+  /// In en, this message translates to:
+  /// **'New messages'**
+  String get chatNewMessages;
+
+  /// No description provided for @chatUnreadSeparator.
+  ///
+  /// In en, this message translates to:
+  /// **'Unread messages'**
+  String get chatUnreadSeparator;
+
+  /// No description provided for @chatListStrangerBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'Stranger'**
+  String get chatListStrangerBadge;
+
+  /// No description provided for @settingsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings'**
+  String get settingsTitle;
+
+  /// No description provided for @settingsTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings'**
+  String get settingsTooltip;
+
+  /// No description provided for @settingsTheme.
+  ///
+  /// In en, this message translates to:
+  /// **'Theme'**
+  String get settingsTheme;
+
+  /// No description provided for @settingsThemeSystem.
+  ///
+  /// In en, this message translates to:
+  /// **'System'**
+  String get settingsThemeSystem;
+
+  /// No description provided for @settingsThemeLight.
+  ///
+  /// In en, this message translates to:
+  /// **'Light'**
+  String get settingsThemeLight;
+
+  /// No description provided for @settingsThemeDark.
+  ///
+  /// In en, this message translates to:
+  /// **'Dark'**
+  String get settingsThemeDark;
+
+  /// No description provided for @settingsThemeHighContrast.
+  ///
+  /// In en, this message translates to:
+  /// **'High contrast'**
+  String get settingsThemeHighContrast;
+
+  /// No description provided for @settingsLanguage.
+  ///
+  /// In en, this message translates to:
+  /// **'Language'**
+  String get settingsLanguage;
+
+  /// No description provided for @settingsLanguageSystem.
+  ///
+  /// In en, this message translates to:
+  /// **'System default'**
+  String get settingsLanguageSystem;
+
+  /// No description provided for @settingsLanguageEn.
+  ///
+  /// In en, this message translates to:
+  /// **'English'**
+  String get settingsLanguageEn;
+
+  /// No description provided for @settingsLanguageRu.
+  ///
+  /// In en, this message translates to:
+  /// **'Russian'**
+  String get settingsLanguageRu;
+
+  /// No description provided for @settingsAccent.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile accent'**
+  String get settingsAccent;
+
+  /// No description provided for @authTagline.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice chat and messages for gamers'**
+  String get authTagline;
+
+  /// No description provided for @versionUpdateRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Update required'**
+  String get versionUpdateRequired;
+
+  /// No description provided for @versionUpdateAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Update {version} available'**
+  String versionUpdateAvailable(String version);
+
+  /// No description provided for @versionUpdateAvailableGeneric.
+  ///
+  /// In en, this message translates to:
+  /// **'Update available'**
+  String get versionUpdateAvailableGeneric;
+
+  /// No description provided for @versionUpdateLater.
+  ///
+  /// In en, this message translates to:
+  /// **'Later'**
+  String get versionUpdateLater;
+
+  /// No description provided for @profileBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Block user'**
+  String get profileBlock;
+
+  /// No description provided for @profileBlockConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Block this user?'**
+  String get profileBlockConfirmTitle;
+
+  /// No description provided for @profileBlockConfirmMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'They will not be able to message you.'**
+  String get profileBlockConfirmMessage;
+
+  /// No description provided for @callVideoPlaceholder.
+  ///
+  /// In en, this message translates to:
+  /// **'Video preview'**
+  String get callVideoPlaceholder;
+
+  /// No description provided for @themeLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load theme'**
+  String get themeLoadError;
+
+  /// No description provided for @bootstrapRestoring.
+  ///
+  /// In en, this message translates to:
+  /// **'Restoring session…'**
+  String get bootstrapRestoring;
 }
 
 class _AppLocalizationsDelegate

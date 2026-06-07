@@ -126,6 +126,18 @@ class VoiceFriendsClient {
     );
   }
 
+  Future<FriendsApiResult<void>> blockAccount({
+    required String authorization,
+    required String blockedAccountId,
+  }) async {
+    final result = await _gateway.postEmpty(
+      uri: _gateway.resolve('/api/v1/friends/blocks'),
+      authorization: authorization,
+      jsonBody: {'blocked_account_id': blockedAccountId},
+    );
+    return _mapEmpty(result);
+  }
+
   Future<FriendsApiResult<void>> _postInvitation(
     String path,
     String authorization,

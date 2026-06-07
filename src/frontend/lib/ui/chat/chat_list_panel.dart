@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../backend/api_errors.dart';
+import '../../backend/chats_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/chat_providers.dart';
@@ -9,6 +10,10 @@ import '../../state/presence_providers.dart';
 import '../../state/social_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../api_error_messages.dart';
+import '../core/voice_avatar.dart';
+import '../core/voice_badge.dart';
+import '../core/voice_list_row.dart';
+import '../core/voice_skeleton.dart';
 import '../core/voice_state_panel.dart';
 import '../social/presence_indicator.dart';
 
@@ -48,9 +53,12 @@ class ChatListPanel extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             child: SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(value: 'main', label: Text('DMs')),
-                ButtonSegment(value: 'requests', label: Text('Requests')),
+              segments: [
+                ButtonSegment(value: 'main', label: Text(l10n.chatInboxDm)),
+                ButtonSegment(
+                  value: 'requests',
+                  label: Text(l10n.chatInboxRequests),
+                ),
               ],
               selected: {inbox},
               onSelectionChanged: (next) => ref
@@ -63,7 +71,7 @@ class ChatListPanel extends ConsumerWidget {
             builder: (context) {
               final items = chats.items;
               if (chats.isLoading && items.isEmpty) {
-                return const Center(child: CircularProgressIndicator());
+                return const VoiceListSkeleton();
               }
               if (chats.errorMessage != null && items.isEmpty) {
                 final error = isBackendUnavailable(chats.errorStatusCode)
@@ -89,7 +97,6 @@ class ChatListPanel extends ConsumerWidget {
                   icon: Icons.forum_outlined,
                 );
               }
-              final voice = VoiceColors.of(context);
               final hasFooter = chats.hasMore || chats.isLoadingMore;
               return ListView.builder(
                 key: listKey,
@@ -127,8 +134,9 @@ class ChatListPanel extends ConsumerWidget {
                   final titleAsync = peerId != null
                       ? ref.watch(profileProvider(peerId))
                       : null;
+                  final profile = titleAsync?.valueOrNull;
                   final title =
-                      titleAsync?.valueOrNull?.displayName ??
+                      profile?.displayName ??
                       item.chat.name ??
                       l10n.chatListDmFallback(_shortChatId(item.chatId));
                   final subtitle = item.lastMessagePreview ?? '';
@@ -136,85 +144,57 @@ class ChatListPanel extends ConsumerWidget {
                   final presence = peerId != null
                       ? ref.watch(presenceProvider(peerId))
                       : null;
-                  return ListTile(
+                  return Column(
                     key: tileKey(item.chatId),
-                    selected: selected,
-                    leading: peerId != null
-                        ? Stack(
-                            clipBehavior: Clip.none,
-                            children: [
-                              CircleAvatar(
-                                child: Text(
-                                  title.isNotEmpty
-                                      ? title[0].toUpperCase()
-                                      : '?',
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      VoiceListRow(
+                        selected: selected,
+                        title: title,
+                        subtitle: subtitle.isEmpty ? null : subtitle,
+                        leading: peerId != null
+                            ? VoiceAvatarWithPresence(
+                                avatar: VoiceAvatar(
+                                  imageUrl: profile?.avatarUrl,
+                                  label: title,
                                 ),
-                              ),
-                              if (presence != null)
-                                Positioned(
-                                  right: -2,
-                                  bottom: -2,
-                                  child: PresenceIndicator(
-                                    key: presenceIndicatorKey(item.chatId),
-                                    presence: presence,
-                                    semanticLabel: _presenceLabel(
-                                      l10n,
-                                      presence.status,
-                                    ),
-                                    size: 12,
-                                  ),
-                                ),
-                            ],
-                          )
-                        : null,
-                    title: Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    subtitle: subtitle.isEmpty
-                        ? null
-                        : Text(
-                            subtitle,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                                presence: presence != null
+                                    ? PresenceIndicator(
+                                        key: presenceIndicatorKey(item.chatId),
+                                        presence: presence,
+                                        semanticLabel: _presenceLabel(
+                                          l10n,
+                                          presence.status,
+                                        ),
+                                        size: 12,
+                                      )
+                                    : null,
+                              )
+                            : null,
+                        trailing: _ChatListTrailing(
+                          l10n: l10n,
+                          inbox: inbox,
+                          item: item,
+                          onAccept: () => ref
+                              .read(chatListControllerProvider.notifier)
+                              .acceptRequest(item.chatId),
+                          onDecline: () => ref
+                              .read(chatListControllerProvider.notifier)
+                              .declineRequest(item.chatId),
+                        ),
+                        onTap: () => ref
+                            .read(chatActionsProvider)
+                            .selectChat(item.chatId),
+                      ),
+                      if (item.isStranger && inbox == 'main')
+                        Padding(
+                          padding: const EdgeInsets.only(left: 56, bottom: 4),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: _StrangerChip(label: l10n.chatListStrangerBadge),
                           ),
-                    trailing: inbox == 'requests'
-                        ? Wrap(
-                            spacing: 4,
-                            children: [
-                              TextButton(
-                                onPressed: () => ref
-                                    .read(chatListControllerProvider.notifier)
-                                    .acceptRequest(item.chatId),
-                                child: const Text('Accept'),
-                              ),
-                              TextButton(
-                                onPressed: () => ref
-                                    .read(chatListControllerProvider.notifier)
-                                    .declineRequest(item.chatId),
-                                child: const Text('Decline'),
-                              ),
-                            ],
-                          )
-                        : item.unreadCount > 0
-                        ? Semantics(
-                            label: l10n.chatListUnreadCount(item.unreadCount),
-                            child: CircleAvatar(
-                              radius: 10,
-                              backgroundColor: voice.profileAccent,
-                              foregroundColor: Theme.of(
-                                context,
-                              ).colorScheme.onPrimary,
-                              child: Text(
-                                '${item.unreadCount}',
-                                style: const TextStyle(fontSize: 10),
-                              ),
-                            ),
-                          )
-                        : null,
-                    onTap: () =>
-                        ref.read(chatActionsProvider).selectChat(item.chatId),
+                        ),
+                    ],
                   );
                 },
               );
@@ -223,6 +203,64 @@ class ChatListPanel extends ConsumerWidget {
         ),
       ],
     );
+  }
+}
+
+class _StrangerChip extends StatelessWidget {
+  const _StrangerChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final voice = VoiceColors.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        border: Border.all(color: voice.borderDefault),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(label, style: Theme.of(context).textTheme.labelSmall),
+    );
+  }
+}
+
+class _ChatListTrailing extends StatelessWidget {
+  const _ChatListTrailing({
+    required this.l10n,
+    required this.inbox,
+    required this.item,
+    required this.onAccept,
+    required this.onDecline,
+  });
+
+  final AppLocalizations l10n;
+  final String inbox;
+  final ChatListItem item;
+  final VoidCallback onAccept;
+  final VoidCallback onDecline;
+
+  @override
+  Widget build(BuildContext context) {
+    if (inbox == 'requests') {
+      return Wrap(
+        spacing: 4,
+        children: [
+          TextButton(onPressed: onAccept, child: Text(l10n.socialAcceptRequest)),
+          TextButton(
+            onPressed: onDecline,
+            child: Text(l10n.socialDeclineRequest),
+          ),
+        ],
+      );
+    }
+    if (item.unreadCount > 0) {
+      return VoiceBadge(
+        count: item.unreadCount,
+        semanticLabel: l10n.chatListUnreadCount(item.unreadCount),
+      );
+    }
+    return const SizedBox.shrink();
   }
 }
 

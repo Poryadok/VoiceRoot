@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
+import '../../theme/voice_colors.dart';
 import '../core/voice_primary_button.dart';
 import '../core/voice_secondary_button.dart';
 import 'auth_errors.dart';
@@ -76,75 +77,101 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final auth = ref.watch(authControllerProvider);
+    final voice = VoiceColors.of(context);
 
     return Scaffold(
       key: AuthScreen.screenKey,
+      backgroundColor: voice.canvas,
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 400),
+            constraints: const BoxConstraints(maxWidth: 420),
             child: Padding(
               padding: const EdgeInsets.all(24),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      l10n.authTitle,
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    const SizedBox(height: 24),
-                    TextFormField(
-                      key: AuthScreen.emailFieldKey,
-                      controller: _emailController,
-                      keyboardType: TextInputType.emailAddress,
-                      autofillHints: const [AutofillHints.email],
-                      decoration: InputDecoration(
-                        labelText: l10n.authEmailLabel,
-                      ),
-                      validator: (v) => _emailValidator(v, l10n),
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      key: AuthScreen.passwordFieldKey,
-                      controller: _passwordController,
-                      obscureText: true,
-                      autofillHints: const [AutofillHints.password],
-                      decoration: InputDecoration(
-                        labelText: l10n.authPasswordLabel,
-                        helperText: l10n.authPasswordHelper,
-                      ),
-                      validator: (v) => _passwordValidator(v, l10n),
-                      onFieldSubmitted: (_) => _submit(false),
-                    ),
-                    if (auth.errorKey != null) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        authErrorMessage(l10n, auth.errorKey!),
-                        key: const Key('auth_error'),
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
+              child: Material(
+                color: voice.surface,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  side: BorderSide(color: voice.borderDefault),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          l10n.appTitle,
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.headlineSmall,
                         ),
-                      ),
-                    ],
-                    const SizedBox(height: 24),
-                    VoicePrimaryButton(
-                      key: AuthScreen.loginButtonKey,
-                      onPressed: auth.isSubmitting
-                          ? null
-                          : () => _submit(false),
-                      isLoading: auth.isSubmitting,
-                      child: Text(l10n.authLogin),
+                        const SizedBox(height: 8),
+                        Text(
+                          l10n.authTagline,
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 24),
+                        Text(
+                          l10n.authTitle,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          key: AuthScreen.emailFieldKey,
+                          controller: _emailController,
+                          keyboardType: TextInputType.emailAddress,
+                          autofillHints: const [AutofillHints.email],
+                          decoration: InputDecoration(
+                            labelText: l10n.authEmailLabel,
+                          ),
+                          validator: (v) => _emailValidator(v, l10n),
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          key: AuthScreen.passwordFieldKey,
+                          controller: _passwordController,
+                          obscureText: true,
+                          autofillHints: const [AutofillHints.password],
+                          decoration: InputDecoration(
+                            labelText: l10n.authPasswordLabel,
+                            helperText: l10n.authPasswordHelper,
+                          ),
+                          validator: (v) => _passwordValidator(v, l10n),
+                          onFieldSubmitted: (_) => _submit(false),
+                        ),
+                        if (auth.errorKey != null) ...[
+                          const SizedBox(height: 12),
+                          Text(
+                            authErrorMessage(l10n, auth.errorKey!),
+                            key: const Key('auth_error'),
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 24),
+                        VoicePrimaryButton(
+                          key: AuthScreen.loginButtonKey,
+                          onPressed: auth.isSubmitting
+                              ? null
+                              : () => _submit(false),
+                          isLoading: auth.isSubmitting,
+                          child: Text(l10n.authLogin),
+                        ),
+                        const SizedBox(height: 8),
+                        VoiceSecondaryButton(
+                          key: AuthScreen.registerButtonKey,
+                          onPressed: auth.isSubmitting
+                              ? null
+                              : () => _submit(true),
+                          child: Text(l10n.authRegister),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 8),
-                    VoiceSecondaryButton(
-                      key: AuthScreen.registerButtonKey,
-                      onPressed: auth.isSubmitting ? null : () => _submit(true),
-                      child: Text(l10n.authRegister),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),

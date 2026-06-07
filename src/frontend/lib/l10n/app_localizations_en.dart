@@ -373,8 +373,131 @@ class AppLocalizationsEn extends AppLocalizations {
   String get commonCancel => 'Cancel';
 
   @override
+  String get commonSave => 'Save';
+
+  @override
   String get commonRetry => 'Try again';
 
   @override
   String get commonLoading => '…';
+
+  @override
+  String get chatInboxDm => 'DMs';
+
+  @override
+  String get chatInboxRequests => 'Requests';
+
+  @override
+  String get chatTyping => 'Typing…';
+
+  @override
+  String get chatAttachFile => 'Attach file';
+
+  @override
+  String get chatMessageEdit => 'Edit';
+
+  @override
+  String get chatMessageDeleteForMe => 'Delete for me';
+
+  @override
+  String get chatMessageDeleteForEveryone => 'Delete for everyone';
+
+  @override
+  String get chatEditMessageTitle => 'Edit message';
+
+  @override
+  String get chatMessageEdited => '(edited)';
+
+  @override
+  String get chatDeliverySent => 'Sent';
+
+  @override
+  String get chatDeliveryDelivered => 'Delivered';
+
+  @override
+  String get chatDeliveryRead => 'Read';
+
+  @override
+  String get chatImageAttachment => 'Image attachment';
+
+  @override
+  String get chatNewMessages => 'New messages';
+
+  @override
+  String get chatUnreadSeparator => 'Unread messages';
+
+  @override
+  String get chatListStrangerBadge => 'Stranger';
+
+  @override
+  String get settingsTitle => 'Settings';
+
+  @override
+  String get settingsTooltip => 'Settings';
+
+  @override
+  String get settingsTheme => 'Theme';
+
+  @override
+  String get settingsThemeSystem => 'System';
+
+  @override
+  String get settingsThemeLight => 'Light';
+
+  @override
+  String get settingsThemeDark => 'Dark';
+
+  @override
+  String get settingsThemeHighContrast => 'High contrast';
+
+  @override
+  String get settingsLanguage => 'Language';
+
+  @override
+  String get settingsLanguageSystem => 'System default';
+
+  @override
+  String get settingsLanguageEn => 'English';
+
+  @override
+  String get settingsLanguageRu => 'Russian';
+
+  @override
+  String get settingsAccent => 'Profile accent';
+
+  @override
+  String get authTagline => 'Voice chat and messages for gamers';
+
+  @override
+  String get versionUpdateRequired => 'Update required';
+
+  @override
+  String versionUpdateAvailable(String version) {
+    return 'Update $version available';
+  }
+
+  @override
+  String get versionUpdateAvailableGeneric => 'Update available';
+
+  @override
+  String get versionUpdateLater => 'Later';
+
+  @override
+  String get profileBlock => 'Block user';
+
+  @override
+  String get profileBlockConfirmTitle => 'Block this user?';
+
+  @override
+  String get profileBlockConfirmMessage =>
+      'They will not be able to message you.';
+
+  @override
+  String get callVideoPlaceholder => 'Video preview';
+
+  @override
+  String get themeLoadError => 'Could not load theme';
+
+  @override
+  String get bootstrapRestoring => 'Restoring session…';
 }

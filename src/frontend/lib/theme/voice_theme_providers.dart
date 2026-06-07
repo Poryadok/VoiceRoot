@@ -46,6 +46,9 @@ final appThemePreferenceProvider = StateProvider<AppThemePreference>(
   (ref) => AppThemePreference.system,
 );
 
+/// When null, [MaterialApp] uses platform locale.
+final appLocalePreferenceProvider = StateProvider<Locale?>((ref) => null);
+
 VoiceThemeMode _resolveMode(AppThemePreference pref, Brightness platform) {
   return switch (pref) {
     AppThemePreference.light => VoiceThemeMode.light,

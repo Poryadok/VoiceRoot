@@ -19,7 +19,10 @@ import 'ui/call/outgoing_call_overlay.dart';
 import 'ui/chat/chat_list_panel.dart';
 import 'ui/chat/chat_room_panel.dart';
 import 'ui/core/profile_accent_dot.dart';
+import 'ui/core/voice_bottom_sheet.dart';
+import 'ui/core/voice_state_panel.dart';
 import 'ui/profile/profile_edit_sheet.dart';
+import 'ui/settings/settings_sheet.dart';
 import 'ui/social/social_panel.dart';
 import 'ui/version/version_policy_overlay.dart';
 
@@ -41,12 +44,14 @@ class VoiceApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final themeAsync = ref.watch(voiceMaterialThemeProvider);
     final auth = ref.watch(authControllerProvider);
+    final localePref = ref.watch(appLocalePreferenceProvider);
+    final effectiveLocale = locale ?? localePref;
 
     return themeAsync.when(
       data: (theme) {
         if (!auth.isAuthenticated) {
           return MaterialApp(
-            locale: locale,
+            locale: effectiveLocale,
             theme: theme,
             onGenerateTitle: (ctx) => AppLocalizations.of(ctx)!.appTitle,
             localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -55,23 +60,38 @@ class VoiceApp extends ConsumerWidget {
           );
         }
         return MaterialApp(
-          locale: locale,
+          locale: effectiveLocale,
           theme: theme,
           onGenerateTitle: (ctx) => AppLocalizations.of(ctx)!.appTitle,
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: _AuthenticatedShell(locale: locale),
+          home: _AuthenticatedShell(locale: effectiveLocale),
         );
       },
       loading: () => MaterialApp(
-        locale: locale,
+        locale: effectiveLocale,
         theme: _bootstrapTheme(),
         home: const Scaffold(body: Center(child: CircularProgressIndicator())),
       ),
       error: (e, _) => MaterialApp(
-        locale: locale,
+        locale: effectiveLocale,
         theme: _bootstrapTheme(),
-        home: Scaffold(body: Center(child: Text('Theme error: $e'))),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Builder(
+          builder: (ctx) {
+            final l10n = AppLocalizations.of(ctx)!;
+            return Scaffold(
+              body: Center(
+                child: VoiceStatePanel(
+                  title: l10n.themeLoadError,
+                  message: e.toString(),
+                  icon: Icons.palette_outlined,
+                ),
+              ),
+            );
+          },
+        ),
       ),
     );
   }
@@ -89,6 +109,7 @@ class _AuthenticatedShell extends ConsumerStatefulWidget {
 
 class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
   var _discoverHintScheduled = false;
+  var _socialPanelOpen = false;
 
   @override
   void didChangeDependencies() {
@@ -131,6 +152,30 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
     ref.read(authControllerProvider.notifier).clearPendingDiscoverHint();
   }
 
+  void _openSocialPanel() {
+    setState(() => _socialPanelOpen = true);
+    showVoiceBottomSheet<void>(
+      context: context,
+      child: const SocialPanel(),
+    ).whenComplete(() {
+      if (mounted) setState(() => _socialPanelOpen = false);
+    });
+  }
+
+  void _openProfileEditSheet(VoiceProfile profile) {
+    showVoiceBottomSheet<void>(
+      context: context,
+      child: ProfileEditSheet(profile: profile),
+    );
+  }
+
+  void _openSettingsSheet() {
+    showVoiceBottomSheet<void>(
+      context: context,
+      child: const SettingsSheet(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -138,6 +183,8 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
     final selectedChatId = ref.watch(selectedChatIdProvider);
     final profileAsync = ref.watch(activeProfileProvider);
     final voice = VoiceColors.of(context);
+    final socialBadge =
+        ref.watch(friendRequestsProvider).valueOrNull?.incoming.length ?? 0;
 
     final sessionLabel = profileAsync.when(
       data: (profile) => profile != null
@@ -169,10 +216,14 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
                           null;
                 return ThreeColumnShell(
                   railChild: _SocialRail(
-                    onOpenSocial: () => _openSocialPanel(context),
+                    active: _socialPanelOpen,
+                    badgeCount: socialBadge,
+                    onOpenSocial: _openSocialPanel,
                   ),
                   mobileRailChild: _MobileRailStrip(
-                    onOpenSocial: () => _openSocialPanel(context),
+                    active: _socialPanelOpen,
+                    badgeCount: socialBadge,
+                    onOpenSocial: _openSocialPanel,
                   ),
                   listChild: const ChatListPanel(),
                   mainChild: selectedChatId == null
@@ -191,14 +242,16 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
                         onEditProfile: profileAsync.valueOrNull == null
                             ? null
                             : () => _openProfileEditSheet(
-                                context,
                                 profileAsync.valueOrNull!,
                               ),
+                        onOpenSettings: _openSettingsSheet,
                         sessionLabel: sessionLabel,
                         logoutLabel: l10n.authLogout,
                         editProfileTooltip: l10n.profileEditTooltip,
+                        settingsTooltip: l10n.settingsTooltip,
                       ),
-                      _GatewayStatusBar(asyncHealth: health),
+                      if (_GatewayStatusBar.shouldShow(health))
+                        _GatewayStatusBar(asyncHealth: health),
                     ],
                   ),
                 );
@@ -217,9 +270,15 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
 }
 
 class _MobileRailStrip extends StatelessWidget {
-  const _MobileRailStrip({required this.onOpenSocial});
+  const _MobileRailStrip({
+    required this.onOpenSocial,
+    this.active = false,
+    this.badgeCount = 0,
+  });
 
   final VoidCallback onOpenSocial;
+  final bool active;
+  final int badgeCount;
 
   @override
   Widget build(BuildContext context) {
@@ -231,11 +290,12 @@ class _MobileRailStrip extends StatelessWidget {
         alignment: Alignment.centerLeft,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: IconButton(
-            key: const Key('nav_open_social_mobile'),
+          child: _SocialNavButton(
+            buttonKey: const Key('nav_open_social_mobile'),
             tooltip: l10n.socialRailTooltip,
+            active: active,
+            badgeCount: badgeCount,
             onPressed: onOpenSocial,
-            icon: Icon(Icons.people_outline, color: voice.textSecondary),
           ),
         ),
       ),
@@ -243,27 +303,16 @@ class _MobileRailStrip extends StatelessWidget {
   }
 }
 
-void _openSocialPanel(BuildContext context) {
-  showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    builder: (ctx) => const SizedBox(height: 520, child: SocialPanel()),
-  );
-}
-
-void _openProfileEditSheet(BuildContext context, VoiceProfile profile) {
-  showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    builder: (ctx) =>
-        SizedBox(height: 560, child: ProfileEditSheet(profile: profile)),
-  );
-}
-
 class _SocialRail extends StatelessWidget {
-  const _SocialRail({required this.onOpenSocial});
+  const _SocialRail({
+    required this.onOpenSocial,
+    this.active = false,
+    this.badgeCount = 0,
+  });
 
   final VoidCallback onOpenSocial;
+  final bool active;
+  final int badgeCount;
 
   @override
   Widget build(BuildContext context) {
@@ -274,14 +323,79 @@ class _SocialRail extends StatelessWidget {
       child: Column(
         children: [
           const SizedBox(height: 8),
-          IconButton(
-            key: const Key('nav_open_social'),
+          _SocialNavButton(
+            buttonKey: const Key('nav_open_social'),
             tooltip: l10n.socialRailTooltip,
+            active: active,
+            badgeCount: badgeCount,
             onPressed: onOpenSocial,
-            icon: Icon(Icons.people_outline, color: voice.textSecondary),
+          ),
+          const SizedBox(height: 8),
+          Tooltip(
+            message: l10n.chatListTitle,
+            child: Icon(
+              Icons.chat_bubble_outline,
+              size: 20,
+              color: voice.textDisabled,
+            ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _SocialNavButton extends StatelessWidget {
+  const _SocialNavButton({
+    required this.buttonKey,
+    required this.tooltip,
+    required this.onPressed,
+    this.active = false,
+    this.badgeCount = 0,
+  });
+
+  final Key buttonKey;
+  final String tooltip;
+  final VoidCallback onPressed;
+  final bool active;
+  final int badgeCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final voice = VoiceColors.of(context);
+    final iconColor = active ? voice.profileAccent : voice.textSecondary;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        IconButton(
+          key: buttonKey,
+          tooltip: tooltip,
+          onPressed: onPressed,
+          style: active
+              ? IconButton.styleFrom(backgroundColor: voice.elevated)
+              : null,
+          icon: Icon(Icons.people_outline, color: iconColor),
+        ),
+        if (badgeCount > 0)
+          Positioned(
+            right: 4,
+            top: 4,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+              decoration: BoxDecoration(
+                color: voice.profileAccent,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                badgeCount > 9 ? '9+' : '$badgeCount',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Theme.of(context).colorScheme.onPrimary,
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -290,16 +404,20 @@ class _SessionBar extends StatelessWidget {
   const _SessionBar({
     required this.onLogout,
     required this.onEditProfile,
+    required this.onOpenSettings,
     required this.sessionLabel,
     required this.logoutLabel,
     required this.editProfileTooltip,
+    required this.settingsTooltip,
   });
 
   final VoidCallback onLogout;
   final VoidCallback? onEditProfile;
+  final VoidCallback onOpenSettings;
   final String sessionLabel;
   final String logoutLabel;
   final String editProfileTooltip;
+  final String settingsTooltip;
 
   @override
   Widget build(BuildContext context) {
@@ -325,6 +443,12 @@ class _SessionBar extends StatelessWidget {
                 ),
               ),
               IconButton(
+                key: const Key('settings_open'),
+                tooltip: settingsTooltip,
+                onPressed: onOpenSettings,
+                icon: Icon(Icons.settings_outlined, color: voice.textSecondary),
+              ),
+              IconButton(
                 key: const Key('profile_edit_open'),
                 tooltip: editProfileTooltip,
                 onPressed: onEditProfile,
@@ -347,6 +471,14 @@ class _GatewayStatusBar extends StatelessWidget {
   const _GatewayStatusBar({required this.asyncHealth});
 
   final AsyncValue<GatewayHealthResult> asyncHealth;
+
+  static bool shouldShow(AsyncValue<GatewayHealthResult> asyncHealth) {
+    return asyncHealth.when(
+      data: (r) => r is! GatewayHealthOk,
+      loading: () => false,
+      error: (_, _) => true,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../l10n/app_localizations.dart';
 import '../../state/version_policy_providers.dart';
+import '../../theme/voice_colors.dart';
 
 /// Force / soft update UI per [docs/features/updates.md] (skipped on web).
 class VersionPolicyOverlay extends ConsumerWidget {
@@ -35,8 +37,10 @@ class _ForceUpdateBarrier extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final voice = VoiceColors.of(context);
     return Material(
-      color: Colors.black87,
+      color: voice.canvas.withValues(alpha: 0.92),
       child: SafeArea(
         child: Center(
           child: Padding(
@@ -45,7 +49,7 @@ class _ForceUpdateBarrier extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Update required',
+                  l10n.versionUpdateRequired,
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
                 if (policy.releaseNotes != null) ...[
@@ -73,22 +77,25 @@ class _SoftUpdateBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final voice = VoiceColors.of(context);
+    final message = policy.latestVersion != null
+        ? l10n.versionUpdateAvailable(policy.latestVersion!)
+        : l10n.versionUpdateAvailableGeneric;
     return Align(
       alignment: Alignment.bottomCenter,
       child: Material(
-        elevation: 8,
+        color: voice.elevated,
+        elevation: 4,
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              Expanded(
-                child: Text(
-                  policy.latestVersion != null
-                      ? 'Update ${policy.latestVersion} available'
-                      : 'Update available',
-                ),
+              Expanded(child: Text(message)),
+              TextButton(
+                onPressed: onDismiss,
+                child: Text(l10n.versionUpdateLater),
               ),
-              TextButton(onPressed: onDismiss, child: const Text('Later')),
             ],
           ),
         ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'voice_colors.dart';
+import 'voice_metrics.dart';
 import 'voice_token_catalog.dart';
 
 enum VoiceThemeMode { light, dark, highContrast }
@@ -28,6 +29,9 @@ class VoiceTheme {
     final scheme = _colorScheme(voiceColors, mode);
     final radiusSm = catalog.radius['sm'] ?? 4;
 
+    final metrics = VoiceMetrics.fromCatalog(catalog);
+    final textTheme = _textTheme(voiceColors, mode);
+
     return ThemeData(
       useMaterial3: true,
       brightness: mode == VoiceThemeMode.light
@@ -35,7 +39,8 @@ class VoiceTheme {
           : Brightness.dark,
       colorScheme: scheme,
       scaffoldBackgroundColor: voiceColors.canvas,
-      extensions: [voiceColors],
+      textTheme: textTheme,
+      extensions: [voiceColors, metrics],
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           backgroundColor: profileAccent,
@@ -106,5 +111,28 @@ class VoiceTheme {
   static Color _onAccent(Color accent) {
     final luminance = accent.computeLuminance();
     return luminance > 0.5 ? const Color(0xFF1A1A1A) : Colors.white;
+  }
+
+  static TextTheme _textTheme(VoiceColors c, VoiceThemeMode mode) {
+    final base = mode == VoiceThemeMode.light
+        ? Typography.material2021(platform: TargetPlatform.android).black
+        : Typography.material2021(platform: TargetPlatform.android).white;
+    return base.copyWith(
+      titleLarge: base.titleLarge?.copyWith(
+        fontSize: 18,
+        fontWeight: FontWeight.w600,
+        color: c.textPrimary,
+      ),
+      titleMedium: base.titleMedium?.copyWith(
+        fontSize: 15,
+        fontWeight: FontWeight.w600,
+        color: c.textPrimary,
+      ),
+      bodyLarge: base.bodyLarge?.copyWith(fontSize: 14, color: c.textPrimary),
+      bodyMedium: base.bodyMedium?.copyWith(fontSize: 13, color: c.textPrimary),
+      bodySmall: base.bodySmall?.copyWith(fontSize: 12, color: c.textSecondary),
+      labelLarge: base.labelLarge?.copyWith(fontSize: 13, color: c.textPrimary),
+      labelSmall: base.labelSmall?.copyWith(fontSize: 11, color: c.textSecondary),
+    );
   }
 }

@@ -242,6 +242,21 @@ class SocialActions {
     };
   }
 
+  Future<String?> blockAccount(String blockedAccountId) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+    final result = await _ref.read(voiceFriendsClientProvider).blockAccount(
+      authorization: auth,
+      blockedAccountId: blockedAccountId,
+    );
+    _invalidateSocialLists();
+    return switch (result) {
+      FriendsApiEmpty() => null,
+      FriendsApiFailure(:final message) => message,
+      FriendsApiOk() => null,
+    };
+  }
+
   void _invalidateSocialLists() {
     _ref.invalidate(friendsListProvider);
     _ref.invalidate(friendRequestsProvider);
