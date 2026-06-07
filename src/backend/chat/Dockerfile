@@ -12,6 +12,7 @@ COPY user/pb/voice/social/go.mod ./user/pb/voice/social/
 COPY messaging/pb/voice/events/go.mod ./messaging/pb/voice/events/
 COPY messaging/pb/voice/messaging/go.mod ./messaging/pb/voice/messaging/
 RUN cd chat && go mod download
+COPY pkg ./pkg
 COPY user/pb ./user/pb
 COPY messaging/pb/voice/events ./messaging/pb/voice/events
 COPY messaging/pb/voice/messaging ./messaging/pb/voice/messaging

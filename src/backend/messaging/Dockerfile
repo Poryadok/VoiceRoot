@@ -14,6 +14,7 @@ COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
 COPY user/pb/voice/user/go.mod ./user/pb/voice/user/
 COPY user/pb/voice/social/go.mod ./user/pb/voice/social/
 RUN cd messaging && go mod download
+COPY pkg ./pkg
 COPY user/pb ./user/pb
 COPY file/pb ./file/pb
 COPY messaging/pb ./messaging/pb

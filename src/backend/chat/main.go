@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"voice/backend/chat/internal/chatevents"
+	"voice/backend/pkg/grpcclient"
 	grpcsvc "voice/backend/chat/internal/grpcsvc"
 	"voice/backend/chat/internal/store"
 
@@ -53,7 +54,7 @@ func main() {
 
 		var blocks grpcsvc.AccountBlockChecker
 		if socialAddr := strings.TrimSpace(os.Getenv("SOCIAL_GRPC_ADDR")); socialAddr != "" {
-			sconn, err := grpc.NewClient(socialAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			sconn, err := grpc.NewClient(grpcclient.DialTarget(socialAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
 				log.Fatalf("social grpc: %v", err)
 			}
@@ -82,7 +83,7 @@ func main() {
 
 		var profiles grpcsvc.UserProfileLookup
 		if userAddr := strings.TrimSpace(os.Getenv("USER_GRPC_ADDR")); userAddr != "" {
-			uconn, err := grpc.NewClient(userAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			uconn, err := grpc.NewClient(grpcclient.DialTarget(userAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
 				log.Fatalf("user grpc: %v", err)
 			}
@@ -111,7 +112,7 @@ func main() {
 
 		var listEnrich grpcsvc.ListChatsEnrichment
 		if msgAddr := strings.TrimSpace(os.Getenv("MESSAGING_GRPC_ADDR")); msgAddr != "" {
-			mconn, err := grpc.NewClient(msgAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			mconn, err := grpc.NewClient(grpcclient.DialTarget(msgAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
 				log.Fatalf("messaging grpc: %v", err)
 			}

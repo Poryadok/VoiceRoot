@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	grpcsvc "voice/backend/messaging/internal/grpcsvc"
+	"voice/backend/pkg/grpcclient"
 	"voice/backend/messaging/internal/messageevents"
 	"voice/backend/messaging/internal/s2s"
 	"voice/backend/messaging/internal/store"
@@ -69,7 +70,7 @@ func main() {
 
 		var chatGuard grpcsvc.ChatGuard
 		if chatAddr := strings.TrimSpace(os.Getenv("CHAT_GRPC_ADDR")); chatAddr != "" {
-			cconn, err := grpc.NewClient(chatAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			cconn, err := grpc.NewClient(grpcclient.DialTarget(chatAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
 				log.Fatalf("chat grpc: %v", err)
 			}
@@ -99,7 +100,7 @@ func main() {
 
 		var blocks grpcsvc.AccountPairBlockChecker
 		if socialAddr := strings.TrimSpace(os.Getenv("SOCIAL_GRPC_ADDR")); socialAddr != "" {
-			sconn, err := grpc.NewClient(socialAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			sconn, err := grpc.NewClient(grpcclient.DialTarget(socialAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
 				log.Fatalf("social grpc: %v", err)
 			}
@@ -115,7 +116,7 @@ func main() {
 
 		var profiles grpcsvc.ProfileAccountLookup
 		if userAddr := strings.TrimSpace(os.Getenv("USER_GRPC_ADDR")); userAddr != "" {
-			uconn, err := grpc.NewClient(userAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			uconn, err := grpc.NewClient(grpcclient.DialTarget(userAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
 				log.Fatalf("user grpc: %v", err)
 			}
@@ -131,7 +132,7 @@ func main() {
 
 		var files grpcsvc.FileMetadataLookup
 		if fileAddr := strings.TrimSpace(os.Getenv("FILE_GRPC_ADDR")); fileAddr != "" {
-			fconn, err := grpc.NewClient(fileAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			fconn, err := grpc.NewClient(grpcclient.DialTarget(fileAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
 				log.Fatalf("file grpc: %v", err)
 			}

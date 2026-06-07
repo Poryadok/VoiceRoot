@@ -16,6 +16,8 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"voice/backend/pkg/grpcclient"
+
 	callsv1 "voice.app/voice/calls/v1"
 	chatv1 "voice.app/voice/chat/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
@@ -914,4 +916,9 @@ func TestTranscodeVoiceAcceptTokenAndState(t *testing.T) {
 	require.Equal(t, "room-1", grpcRec.state.GetRoomId())
 	require.True(t, grpcRec.state.GetIsMuted())
 	require.False(t, grpcRec.state.GetIsVideoOn())
+}
+
+func TestGRPCDialTargetUsesDNSResolverForHostPort(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "dns:///voice:9090", grpcclient.DialTarget("voice:9090"))
 }

@@ -44,20 +44,21 @@ func (i *HS256TokenIssuer) JoinToken(profileID, roomName string, now time.Time) 
 		return "", time.Time{}, fmt.Errorf("profile and room are required")
 	}
 	expiresAt := now.UTC().Add(i.tokenTTL)
+	issuedAt := now.UTC().Unix()
 	header := map[string]string{"alg": "HS256", "typ": "JWT"}
 	claims := map[string]any{
 		"iss": i.apiKey,
 		"sub": profileID,
-		"nbf": now.UTC().Unix(),
+		"iat": issuedAt,
+		"nbf": issuedAt,
 		"exp": expiresAt.Unix(),
 		"video": map[string]any{
 			"roomJoin": true,
 			"room":     roomName,
 		},
 	}
-	if strings.TrimSpace(i.url) != "" {
-		claims["metadata"] = map[string]any{"livekit_url": i.url}
-	}
+	// livekit_url is returned via GetJoinTokenResponse; do not embed an object in
+	// JWT "metadata" — LiveKit expects metadata to be a string claim.
 	head, err := encodeJWTPart(header)
 	if err != nil {
 		return "", time.Time{}, err

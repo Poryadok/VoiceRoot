@@ -10,6 +10,7 @@ COPY user/pb/voice/user/go.mod ./user/pb/voice/user/
 COPY user/pb/voice/social/go.mod ./user/pb/voice/social/
 COPY social/go.mod ./social/
 RUN cd user && go mod download
+COPY pkg ./pkg
 COPY user/pb ./user/pb
 COPY social ./social
 COPY user ./user

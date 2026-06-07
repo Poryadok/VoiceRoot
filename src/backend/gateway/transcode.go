@@ -9,6 +9,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"voice/backend/pkg/grpcclient"
+
 	callsv1 "voice.app/voice/calls/v1"
 	chatv1 "voice.app/voice/chat/v1"
 	filev1 "voice.app/voice/file/v1"
@@ -42,7 +44,7 @@ func grpcClientsFromEnv() *grpcClients {
 	}
 
 	dial := func(addr string) (*grpc.ClientConn, error) {
-		addr = strings.TrimSpace(addr)
+		addr = grpcclient.DialTarget(addr)
 		if addr == "" {
 			return nil, nil
 		}

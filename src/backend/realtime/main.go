@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"voice/backend/pkg/grpcclient"
 	voicejwt "voice/backend/pkg/jwt"
 )
 
@@ -131,7 +132,7 @@ func dialDMChatLister() dmChatLister {
 	if addr == "" {
 		return nil
 	}
-	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(grpcclient.DialTarget(addr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Printf("realtime: REALTIME_CHAT_GRPC_ADDR NewClient %q: %v", addr, err)
 		return nil
@@ -144,7 +145,7 @@ func dialPresenceUpdater() presenceUpdater {
 	if addr == "" {
 		return nil
 	}
-	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(grpcclient.DialTarget(addr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Printf("realtime: REALTIME_USER_GRPC_ADDR NewClient %q: %v", addr, err)
 		return nil

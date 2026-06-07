@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	grpcsvc "voice/backend/user/internal/grpcsvc"
+	"voice/backend/pkg/grpcclient"
 	"voice/backend/user/internal/r2avatar"
 	"voice/backend/user/internal/store"
 
@@ -52,7 +53,7 @@ func main() {
 	if pool != nil {
 		var blocks grpcsvc.AccountBlockChecker
 		if socialAddr := strings.TrimSpace(os.Getenv("SOCIAL_GRPC_ADDR")); socialAddr != "" {
-			sconn, err := grpc.NewClient(socialAddr,
+			sconn, err := grpc.NewClient(grpcclient.DialTarget(socialAddr),
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
 			)
 			if err != nil {

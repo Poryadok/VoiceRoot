@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"voice/backend/file/internal/clamav"
+	"voice/backend/pkg/grpcclient"
 	grpcsvc "voice/backend/file/internal/grpcsvc"
 	"voice/backend/file/internal/r2file"
 	"voice/backend/file/internal/s2s"
@@ -72,7 +73,7 @@ func main() {
 
 		var chatGuard grpcsvc.ChatGuard
 		if chatAddr := strings.TrimSpace(os.Getenv("CHAT_GRPC_ADDR")); chatAddr != "" {
-			cconn, err := grpc.NewClient(chatAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			cconn, err := grpc.NewClient(grpcclient.DialTarget(chatAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
 				log.Fatalf("chat grpc: %v", err)
 			}
