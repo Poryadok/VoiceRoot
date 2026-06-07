@@ -139,7 +139,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     final peerPresence = peerId != null
         ? ref.watch(presenceProvider(peerId))
         : null;
-    final canCall = ref.watch(gatewayConfigProvider).hasLivekitUrl;
+    final canCall = ref.watch(gatewayConfigProvider).canPlaceVoiceCalls;
     final title = peerName ?? l10n.chatRoomTitle(widget.chatId.substring(0, 8));
     final voice = VoiceColors.of(context);
 

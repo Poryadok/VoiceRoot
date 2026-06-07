@@ -3,6 +3,7 @@ package grpcsvc
 import (
 	"context"
 	"errors"
+	"log"
 	"strings"
 
 	"github.com/google/uuid"
@@ -74,7 +75,10 @@ func (s *ChatGRPC) ListChats(ctx context.Context, req *chatv1.ListChatsRequest) 
 	if s.ListEnrich != nil && len(ids) > 0 {
 		extras, err = s.ListEnrich.EnrichListChats(ctx, caller, ids)
 		if err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
+			// Degrade: chat rows are still useful without preview/unread when Messaging
+			// is temporarily unavailable during stack startup or S2S errors.
+			log.Printf("chat: ListChats enrichment skipped: %v", err)
+			extras = map[uuid.UUID]ListChatExtra{}
 		}
 	}
 

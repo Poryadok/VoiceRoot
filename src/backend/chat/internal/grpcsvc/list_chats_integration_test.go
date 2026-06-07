@@ -2,6 +2,7 @@ package grpcsvc
 
 import (
 	"context"
+	"errors"
 	"net"
 	"testing"
 
@@ -165,6 +166,44 @@ func TestListChats_Pagination(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, r2.GetChatList().GetItems(), 1)
 	require.Equal(t, ids[1], r2.GetChatList().GetItems()[0].GetChat().GetId())
+}
+
+func TestListChats_EnrichmentFailureDegrades(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	accA := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	profiles := mapProfileAccounts{profA: accA, profB: accA}
+
+	failing := enricherFunc(func(context.Context, uuid.UUID, []uuid.UUID) (map[uuid.UUID]ListChatExtra, error) {
+		return nil, errors.New("messaging unavailable")
+	})
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, failing)
+	t.Cleanup(cleanup)
+	ctxA := withAccountProfileCtx(ctx, accA, profA)
+	_, err := client.CreateDM(ctxA, &chatv1.CreateDMRequest{OtherProfileId: profB.String()})
+	require.NoError(t, err)
+
+	list, err := client.ListChats(ctxA, &chatv1.ListChatsRequest{
+		Page: &commonv1.CursorPageRequest{PageSize: 10},
+	})
+	require.NoError(t, err)
+	require.Len(t, list.GetChatList().GetItems(), 1)
+	it := list.GetChatList().GetItems()[0]
+	require.Empty(t, it.GetLastMessagePreview())
+	require.Equal(t, int64(0), it.GetUnreadCount())
+}
+
+type enricherFunc func(context.Context, uuid.UUID, []uuid.UUID) (map[uuid.UUID]ListChatExtra, error)
+
+func (f enricherFunc) EnrichListChats(ctx context.Context, viewer uuid.UUID, chatIDs []uuid.UUID) (map[uuid.UUID]ListChatExtra, error) {
+	return f(ctx, viewer, chatIDs)
 }
 
 func TestListChats_EnrichmentFromMessagingHook(t *testing.T) {

@@ -254,7 +254,8 @@ class CallController extends StateNotifier<CallState> {
         case VoiceApiOk(:final data):
           final livekitUrl = resolveLivekitConnectUrl(
             apiUrl: data.livekitUrl,
-            clientFallback: _ref.read(gatewayConfigProvider).livekitUrl,
+            clientFallback:
+                _ref.read(gatewayConfigProvider).effectiveLivekitFallback,
           );
           if (livekitUrl.isEmpty) {
             await _failLiveKitConnect(

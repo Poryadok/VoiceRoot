@@ -17,7 +17,7 @@ class IncomingCallOverlay extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (!ref.watch(gatewayConfigProvider).hasLivekitUrl) {
+    if (!ref.watch(gatewayConfigProvider).canPlaceVoiceCalls) {
       return const SizedBox.shrink();
     }
     final call = ref.watch(callControllerProvider);

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:livekit_client/livekit_client.dart' as livekit;
 
 abstract interface class VoiceLiveKitRoom {
@@ -16,6 +18,9 @@ abstract interface class VoiceLiveKitRoom {
 class LiveKitVoiceRoom implements VoiceLiveKitRoom {
   LiveKitVoiceRoom({livekit.Room? room}) : _room = room ?? livekit.Room();
 
+  static const Duration _connectTimeout = Duration(seconds: 20);
+  static const Duration _mediaEnableTimeout = Duration(seconds: 12);
+
   final livekit.Room _room;
 
   @override
@@ -24,9 +29,41 @@ class LiveKitVoiceRoom implements VoiceLiveKitRoom {
     required String token,
     required bool video,
   }) async {
-    await _room.connect(url, token);
-    await _room.localParticipant?.setMicrophoneEnabled(true);
-    await _room.localParticipant?.setCameraEnabled(video);
+    await _room
+        .connect(
+          url,
+          token,
+          connectOptions: const livekit.ConnectOptions(
+            timeouts: livekit.Timeouts(
+              connection: Duration(seconds: 15),
+              debounce: Duration(milliseconds: 20),
+              publish: Duration(seconds: 15),
+              subscribe: Duration(seconds: 15),
+              peerConnection: Duration(seconds: 15),
+              iceRestart: Duration(seconds: 15),
+            ),
+          ),
+        )
+        .timeout(_connectTimeout);
+    await _enableLocalMedia(video: video);
+  }
+
+  Future<void> _enableLocalMedia({required bool video}) async {
+    final participant = _room.localParticipant;
+    if (participant == null) return;
+
+    await participant
+        .setMicrophoneEnabled(true)
+        .timeout(_mediaEnableTimeout);
+    if (!video) return;
+
+    try {
+      await participant
+          .setCameraEnabled(true)
+          .timeout(_mediaEnableTimeout);
+    } on TimeoutException {
+      await participant.setCameraEnabled(false);
+    }
   }
 
   @override
@@ -45,7 +82,9 @@ class LiveKitVoiceRoom implements VoiceLiveKitRoom {
 
   @override
   Future<void> setVideoEnabled(bool enabled) async {
-    await _room.localParticipant?.setCameraEnabled(enabled);
+    await _room.localParticipant
+        ?.setCameraEnabled(enabled)
+        .timeout(_mediaEnableTimeout);
   }
 
   @override
