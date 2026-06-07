@@ -288,6 +288,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get callActive => 'Call active';
 
   @override
+  String get callTapToEnableAudio => 'Tap to enable incoming audio';
+
+  @override
   String get callMute => 'Mute';
 
   @override

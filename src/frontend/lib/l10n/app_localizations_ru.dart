@@ -289,6 +289,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get callActive => 'Звонок активен';
 
   @override
+  String get callTapToEnableAudio => 'Нажмите, чтобы включить входящий звук';
+
+  @override
   String get callMute => 'Выключить микрофон';
 
   @override

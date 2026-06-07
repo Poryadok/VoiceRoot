@@ -590,6 +590,12 @@ abstract class AppLocalizations {
   /// **'Call active'**
   String get callActive;
 
+  /// No description provided for @callTapToEnableAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to enable incoming audio'**
+  String get callTapToEnableAudio;
+
   /// No description provided for @callMute.
   ///
   /// In en, this message translates to:

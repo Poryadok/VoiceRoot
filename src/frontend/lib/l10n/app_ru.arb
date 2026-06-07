@@ -166,6 +166,7 @@
   "callDecline": "Отклонить",
   "callConnecting": "Подключение к звонку…",
   "callActive": "Звонок активен",
+  "callTapToEnableAudio": "Нажмите, чтобы включить входящий звук",
   "callMute": "Выключить микрофон",
   "callUnmute": "Включить микрофон",
   "callSpeakerOff": "Выключить звук",

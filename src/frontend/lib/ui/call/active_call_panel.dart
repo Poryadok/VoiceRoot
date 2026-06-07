@@ -10,6 +10,7 @@ class ActiveCallPanel extends ConsumerWidget {
   const ActiveCallPanel({super.key});
 
   static const Key panelKey = Key('active_call_panel');
+  static const Key unlockAudioKey = Key('active_call_unlock_audio');
   static const Key muteKey = Key('active_call_mute');
   static const Key speakerKey = Key('active_call_speaker');
   static const Key videoKey = Key('active_call_video');
@@ -51,6 +52,35 @@ class ActiveCallPanel extends ConsumerWidget {
                 child: Text(
                   l10n.callVideoPlaceholder,
                   style: TextStyle(color: voice.textSecondary),
+                ),
+              ),
+            if (call.needsAudioPlaybackUnlock)
+              Material(
+                key: unlockAudioKey,
+                color: voice.focusRing.withValues(alpha: 0.12),
+                child: InkWell(
+                  onTap: () => ref
+                      .read(callControllerProvider.notifier)
+                      .unlockAudioPlayback(),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.volume_up, color: voice.focusRing, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            l10n.callTapToEnableAudio,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: voice.textSecondary),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             Container(

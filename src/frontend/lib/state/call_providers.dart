@@ -35,6 +35,7 @@ class CallState {
     this.isMuted = false,
     this.isSpeakerMuted = false,
     this.isVideoEnabled = false,
+    this.needsAudioPlaybackUnlock = false,
     this.errorMessage,
   });
 
@@ -45,6 +46,7 @@ class CallState {
   final bool isMuted;
   final bool isSpeakerMuted;
   final bool isVideoEnabled;
+  final bool needsAudioPlaybackUnlock;
   final String? errorMessage;
 
   bool get hasCall => session != null && phase != CallPhase.idle;
@@ -63,6 +65,7 @@ class CallState {
     bool? isMuted,
     bool? isSpeakerMuted,
     bool? isVideoEnabled,
+    bool? needsAudioPlaybackUnlock,
     String? errorMessage,
     bool clearError = false,
   }) {
@@ -78,6 +81,8 @@ class CallState {
       isMuted: isMuted ?? this.isMuted,
       isSpeakerMuted: isSpeakerMuted ?? this.isSpeakerMuted,
       isVideoEnabled: isVideoEnabled ?? this.isVideoEnabled,
+      needsAudioPlaybackUnlock:
+          needsAudioPlaybackUnlock ?? this.needsAudioPlaybackUnlock,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
     );
   }
@@ -206,10 +211,15 @@ class CallController extends StateNotifier<CallState> {
     if (mounted) state = const CallState();
   }
 
+  Future<void> unlockAudioPlayback() async {
+    await _room?.ensureAudioPlayback();
+  }
+
   Future<void> setMuted(bool muted) async {
     final auth = _ref.read(authorizationHeaderProvider);
     final current = state.session;
     state = state.copyWith(isMuted: muted);
+    await _room?.ensureAudioPlayback();
     await _room?.setMuted(muted);
     if (auth != null && current != null) {
       await _ref
@@ -224,6 +234,7 @@ class CallController extends StateNotifier<CallState> {
 
   Future<void> setSpeakerMuted(bool muted) async {
     state = state.copyWith(isSpeakerMuted: muted);
+    await _room?.ensureAudioPlayback();
     await _room?.setSpeakerMuted(muted);
   }
 
@@ -283,6 +294,10 @@ class CallController extends StateNotifier<CallState> {
           return;
         }
         final room = _ref.read(liveKitRoomFactoryProvider)();
+        room.onAudioPlaybackUnlockNeeded = (needsUnlock) {
+          if (!mounted) return;
+          state = state.copyWith(needsAudioPlaybackUnlock: needsUnlock);
+        };
         _room = room;
         try {
           await room.connect(

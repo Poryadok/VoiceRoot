@@ -165,6 +165,7 @@
   "callDecline": "Decline",
   "callConnecting": "Connecting call…",
   "callActive": "Call active",
+  "callTapToEnableAudio": "Tap to enable incoming audio",
   "callMute": "Mute",
   "callUnmute": "Unmute",
   "callSpeakerOff": "Mute speakers",

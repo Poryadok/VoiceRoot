@@ -26,6 +26,12 @@ class _FakeLiveKitRoom implements VoiceLiveKitRoom {
   bool endDisconnectCalled = false;
 
   @override
+  void Function(bool needsUnlock)? onAudioPlaybackUnlockNeeded;
+
+  @override
+  Future<void> ensureAudioPlayback() async {}
+
+  @override
   Future<void> connect({
     required String url,
     required String token,
