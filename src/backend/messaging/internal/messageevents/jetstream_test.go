@@ -130,3 +130,34 @@ func TestJetStreamPublisher_MessageEditedAndDeleted(t *testing.T) {
 	require.Equal(t, mid, deleted.GetMessageDeleted().GetMessageId())
 	require.Equal(t, cid, deleted.GetMessageDeleted().GetChatId())
 }
+
+func TestJetStreamPublisher_MessageRead(t *testing.T) {
+	ctx := context.Background()
+	s := startJSTestServer(t)
+	url := s.ClientURL()
+
+	nc, err := nats.Connect(url)
+	require.NoError(t, err)
+	t.Cleanup(nc.Close)
+
+	sub, err := nc.SubscribeSync(subjectMessageRead)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sub.Unsubscribe() })
+
+	pub, err := NewJetStreamPublisher(url)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = pub.Close() })
+
+	const mid, cid, pid = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "cccccccc-cccc-cccc-cccc-cccccccccccc"
+	require.NoError(t, pub.PublishMessageRead(ctx, mid, cid, pid))
+
+	msg, err := sub.NextMsg(3 * time.Second)
+	require.NoError(t, err)
+	var env eventsv1.MessageStreamEvent
+	require.NoError(t, proto.Unmarshal(msg.Data, &env))
+	read := env.GetMessageRead()
+	require.NotNil(t, read)
+	require.Equal(t, mid, read.GetMessageId())
+	require.Equal(t, cid, read.GetChatId())
+	require.Equal(t, pid, read.GetProfileId())
+}

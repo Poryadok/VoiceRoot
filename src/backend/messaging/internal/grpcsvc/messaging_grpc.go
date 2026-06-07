@@ -541,6 +541,11 @@ func (s *MessagingGRPC) MarkRead(ctx context.Context, req *messagingv1.MarkReadR
 	if err := s.Messages.UpsertReadReceipt(ctx, chatID, profileID, lastRead); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+	if s.MessageEvents != nil {
+		if err := s.MessageEvents.PublishMessageRead(ctx, lastRead.String(), chatID.String(), profileID.String()); err != nil {
+			log.Printf("messaging: publish message.read chat=%s profile=%s: %v", chatID, profileID, err)
+		}
+	}
 	return &messagingv1.MarkReadResponse{}, nil
 }
 

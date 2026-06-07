@@ -191,6 +191,27 @@ func (s *UserGRPC) CreateProfile(ctx context.Context, req *userv1.CreateProfileR
 	return &userv1.CreateProfileResponse{Profile: rowToProto(row)}, nil
 }
 
+func (s *UserGRPC) ListMyProfiles(ctx context.Context, _ *userv1.ListMyProfilesRequest) (*userv1.ListMyProfilesResponse, error) {
+	accountID, ok := authctx.AccountID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing credentials")
+	}
+	if s.Profiles == nil {
+		return nil, status.Error(codes.FailedPrecondition, "profile store not configured")
+	}
+	rows, err := s.Profiles.ListByAccountID(ctx, accountID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	out := make([]*userv1.Profile, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, rowToProto(r))
+	}
+	return &userv1.ListMyProfilesResponse{
+		ProfileList: &userv1.ProfileList{Profiles: out},
+	}, nil
+}
+
 func parseHandle(s string) (username, discriminator string, err error) {
 	s = strings.TrimSpace(s)
 	i := strings.LastIndex(s, "#")

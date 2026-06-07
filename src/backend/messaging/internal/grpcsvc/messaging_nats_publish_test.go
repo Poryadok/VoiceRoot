@@ -27,6 +27,7 @@ type spyMessageEvents struct {
 	sent    [][3]string // message_id, chat_id, sender_profile_id
 	edited  [][2]string
 	deleted [][2]string
+	read    [][3]string // message_id, chat_id, profile_id
 }
 
 func (s *spyMessageEvents) PublishMessageSent(_ context.Context, messageID, chatID, senderProfileID string) error {
@@ -50,10 +51,17 @@ func (s *spyMessageEvents) PublishMessageDeleted(_ context.Context, messageID, c
 	return nil
 }
 
-func (s *spyMessageEvents) snapshot() (sent [][3]string, edited [][2]string, deleted [][2]string) {
+func (s *spyMessageEvents) PublishMessageRead(_ context.Context, messageID, chatID, profileID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return append([][3]string(nil), s.sent...), append([][2]string(nil), s.edited...), append([][2]string(nil), s.deleted...)
+	s.read = append(s.read, [3]string{messageID, chatID, profileID})
+	return nil
+}
+
+func (s *spyMessageEvents) snapshot() (sent [][3]string, edited [][2]string, deleted [][2]string, read [][3]string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([][3]string(nil), s.sent...), append([][2]string(nil), s.edited...), append([][2]string(nil), s.deleted...), append([][3]string(nil), s.read...)
 }
 
 func startMessagingJSTestServer(t *testing.T) *server.Server {
@@ -163,13 +171,20 @@ func TestMessagingGRPC_MessageEvents_SendEditDelete(t *testing.T) {
 	require.NoError(t, err)
 	msgID := sendResp.GetMessage().GetId()
 
-	sent, edited, deleted := spy.snapshot()
+	sent, edited, deleted, read := spy.snapshot()
 	require.Len(t, sent, 1)
 	require.Equal(t, msgID, sent[0][0])
 	require.Equal(t, chatID.String(), sent[0][1])
 	require.Equal(t, profA.String(), sent[0][2])
 	require.Empty(t, edited)
 	require.Empty(t, deleted)
+	require.Empty(t, read)
+
+	_, err = client.MarkRead(withProfileCtx(ctx, acctA, profA), &messagingv1.MarkReadRequest{
+		Chat:               chatDMRef(chatID),
+		LastReadMessageId: msgID,
+	})
+	require.NoError(t, err)
 
 	_, err = client.EditMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.EditMessageRequest{
 		MessageId: msgID,
@@ -180,8 +195,12 @@ func TestMessagingGRPC_MessageEvents_SendEditDelete(t *testing.T) {
 	_, err = client.DeleteMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.DeleteMessageRequest{MessageId: msgID})
 	require.NoError(t, err)
 
-	sent, edited, deleted = spy.snapshot()
+	sent, edited, deleted, read = spy.snapshot()
 	require.Len(t, sent, 1)
+	require.Len(t, read, 1)
+	require.Equal(t, msgID, read[0][0])
+	require.Equal(t, chatID.String(), read[0][1])
+	require.Equal(t, profA.String(), read[0][2])
 	require.Len(t, edited, 1)
 	require.Equal(t, msgID, edited[0][0])
 	require.Equal(t, chatID.String(), edited[0][1])

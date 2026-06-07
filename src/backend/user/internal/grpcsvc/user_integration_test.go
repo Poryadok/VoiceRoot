@@ -405,6 +405,31 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 		require.NotEmpty(t, resp.GetProfile().GetDiscriminator())
 	})
 
+	t.Run("ListMyProfiles", func(t *testing.T) {
+		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
+		_, err := cli.CreateProfile(mdCtx, &userv1.CreateProfileRequest{
+			DisplayName: "Alt for list",
+			Username:    proto.String("altlist"),
+		})
+		require.NoError(t, err)
+
+		resp, err := cli.ListMyProfiles(mdCtx, &userv1.ListMyProfilesRequest{})
+		require.NoError(t, err)
+		profiles := resp.GetProfileList().GetProfiles()
+		require.GreaterOrEqual(t, len(profiles), 2)
+		require.True(t, profiles[0].GetIsPrimary())
+		require.Equal(t, accountA.String(), profiles[0].GetAccountId())
+		for _, p := range profiles {
+			require.Equal(t, accountA.String(), p.GetAccountId())
+		}
+	})
+
+	t.Run("ListMyProfiles unauthenticated", func(t *testing.T) {
+		_, err := cli.ListMyProfiles(ctx, &userv1.ListMyProfilesRequest{})
+		require.Error(t, err)
+		require.Equal(t, codes.Unauthenticated, status.Code(err))
+	})
+
 	t.Run("GetOnboardingState unauthenticated", func(t *testing.T) {
 		_, err := cli.GetOnboardingState(ctx, &userv1.GetOnboardingStateRequest{})
 		require.Error(t, err)

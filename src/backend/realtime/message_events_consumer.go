@@ -75,6 +75,20 @@ func messageEventBytesToFanout(data []byte) (chatID string, env fanoutEnvelope, 
 			return "", fanoutEnvelope{}, false
 		}
 		return md.GetChatId(), fanoutEnvelope{Op: "message_delete", D: d}, true
+	case *eventsv1.MessageStreamEvent_MessageRead:
+		mr := p.MessageRead
+		if mr == nil || mr.GetChatId() == "" || mr.GetMessageId() == "" || mr.GetProfileId() == "" {
+			return "", fanoutEnvelope{}, false
+		}
+		d, err := json.Marshal(map[string]string{
+			"chat_id":    mr.GetChatId(),
+			"message_id": mr.GetMessageId(),
+			"profile_id": mr.GetProfileId(),
+		})
+		if err != nil {
+			return "", fanoutEnvelope{}, false
+		}
+		return mr.GetChatId(), fanoutEnvelope{Op: "message_read", D: d}, true
 	default:
 		return "", fanoutEnvelope{}, false
 	}
@@ -98,6 +112,10 @@ func messageEventLogAttrs(data []byte) []slog.Attr {
 	case *eventsv1.MessageStreamEvent_MessageDeleted:
 		if d := p.MessageDeleted; d != nil {
 			attrs = append(attrs, slog.String("message_id", d.GetMessageId()), slog.String("chat_id", d.GetChatId()))
+		}
+	case *eventsv1.MessageStreamEvent_MessageRead:
+		if r := p.MessageRead; r != nil {
+			attrs = append(attrs, slog.String("message_id", r.GetMessageId()), slog.String("chat_id", r.GetChatId()), slog.String("profile_id", r.GetProfileId()))
 		}
 	}
 	return attrs

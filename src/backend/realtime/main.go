@@ -89,6 +89,12 @@ func main() {
 				logger.Error("voice.events consumer exited", slog.String("error", err.Error()))
 			}
 		}()
+		go func() {
+			err := runChatEventsConsumer(ctx, hub, natsURL, instanceID, logger)
+			if err != nil && err != context.Canceled {
+				logger.Error("chat.events consumer exited", slog.String("error", err.Error()))
+			}
+		}()
 	}
 
 	server := &http.Server{

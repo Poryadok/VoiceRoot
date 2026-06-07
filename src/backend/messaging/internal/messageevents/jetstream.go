@@ -20,8 +20,9 @@ import (
 const (
 	streamName            = "message_events"
 	subjectMessageSent    = "message.sent"
-	subjectMessageEdited = "message.edited"
+	subjectMessageEdited  = "message.edited"
 	subjectMessageDeleted = "message.deleted"
+	subjectMessageRead    = "message.read"
 )
 
 // JetStreamPublisher publishes MessageStreamEvent payloads to NATS JetStream.
@@ -78,6 +79,7 @@ func (p *JetStreamPublisher) ensureStream() error {
 				subjectMessageSent,
 				subjectMessageEdited,
 				subjectMessageDeleted,
+				subjectMessageRead,
 				"message.reaction_added",
 			},
 			Retention: nats.LimitsPolicy,
@@ -124,6 +126,10 @@ func messageEventLogAttrs(env *eventsv1.MessageStreamEvent) []slog.Attr {
 		if d := p.MessageDeleted; d != nil {
 			attrs = append(attrs, slog.String("message_id", d.GetMessageId()), slog.String("chat_id", d.GetChatId()))
 		}
+	case *eventsv1.MessageStreamEvent_MessageRead:
+		if r := p.MessageRead; r != nil {
+			attrs = append(attrs, slog.String("message_id", r.GetMessageId()), slog.String("chat_id", r.GetChatId()), slog.String("profile_id", r.GetProfileId()))
+		}
 	}
 	return attrs
 }
@@ -157,6 +163,22 @@ func (p *JetStreamPublisher) PublishMessageEdited(ctx context.Context, messageID
 		},
 	}
 	return p.publishProto(ctx, subjectMessageEdited, env)
+}
+
+// PublishMessageRead implements MessageEventsPublisher.
+func (p *JetStreamPublisher) PublishMessageRead(ctx context.Context, messageID, chatID, profileID string) error {
+	env := &eventsv1.MessageStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.New(time.Now().UTC()),
+		Payload: &eventsv1.MessageStreamEvent_MessageRead{
+			MessageRead: &eventsv1.MessageRead{
+				MessageId: messageID,
+				ChatId:    chatID,
+				ProfileId: profileID,
+			},
+		},
+	}
+	return p.publishProto(ctx, subjectMessageRead, env)
 }
 
 // PublishMessageDeleted implements MessageEventsPublisher.

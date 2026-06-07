@@ -8,4 +8,5 @@ type MessageEventsPublisher interface {
 	PublishMessageSent(ctx context.Context, messageID, chatID, senderProfileID string) error
 	PublishMessageEdited(ctx context.Context, messageID, chatID string) error
 	PublishMessageDeleted(ctx context.Context, messageID, chatID string) error
+	PublishMessageRead(ctx context.Context, messageID, chatID, profileID string) error
 }

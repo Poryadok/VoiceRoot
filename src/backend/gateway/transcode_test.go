@@ -82,6 +82,25 @@ func (s *recordingUserGRPC) UpdateProfile(ctx context.Context, req *userv1.Updat
 	}, nil
 }
 
+func (s *recordingUserGRPC) ListMyProfiles(ctx context.Context, _ *userv1.ListMyProfilesRequest) (*userv1.ListMyProfilesResponse, error) {
+	md, _ := metadata.FromIncomingContext(ctx)
+	s.lastMD = md
+	return &userv1.ListMyProfilesResponse{
+		ProfileList: &userv1.ProfileList{
+			Profiles: []*userv1.Profile{
+				{
+					Id:            "profile-1",
+					AccountId:     "account-1",
+					Username:      "alice",
+					Discriminator: "0001",
+					DisplayName:   "Alice",
+					IsPrimary:     true,
+				},
+			},
+		},
+	}, nil
+}
+
 type avatarPresignRecorder struct {
 	userv1.UnimplementedUserServiceServer
 	last *userv1.CreateAvatarPresignedUploadRequest
@@ -138,6 +157,43 @@ func TestTranscodeUsersAvatarPresignedUpload(t *testing.T) {
 	decodeJSON(t, resp.Body, &out)
 	if out.UploadURL != "https://r2.example/presigned" || out.PublicURL != "https://cdn.example/avatars/x.png" || out.HTTPMethod != "PUT" {
 		t.Fatalf("response body = %+v", out)
+	}
+}
+
+func TestTranscodeUsersListMyProfiles(t *testing.T) {
+	t.Parallel()
+
+	rec := &recordingUserGRPC{}
+	conn, cleanup := startBufconnUserConn(t, rec)
+	t.Cleanup(cleanup)
+
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+		},
+		transcoder: &transcoder{clients: grpcClients{user: userv1.NewUserServiceClient(conn)}},
+	})
+
+	resp := performRequest(h, http.MethodGet, "/api/v1/users/profiles", "", map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	require.Equal(t, http.StatusOK, resp.Code, "body=%s", resp.Body.String())
+
+	var body struct {
+		ProfileList struct {
+			Profiles []struct {
+				ID        string `json:"id"`
+				IsPrimary bool   `json:"is_primary"`
+			} `json:"profiles"`
+		} `json:"profile_list"`
+	}
+	decodeJSON(t, resp.Body, &body)
+	require.Len(t, body.ProfileList.Profiles, 1)
+	require.Equal(t, "profile-1", body.ProfileList.Profiles[0].ID)
+	require.True(t, body.ProfileList.Profiles[0].IsPrimary)
+
+	if got := rec.lastMD.Get("x-voice-user-id"); len(got) != 1 || got[0] != "account-1" {
+		t.Fatalf("x-voice-user-id = %v, want account-1", got)
 	}
 }
 

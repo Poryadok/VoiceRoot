@@ -256,6 +256,7 @@ services:
       REALTIME_JWT_ISSUER: voice-auth
       REALTIME_JWT_AUDIENCE: voice-client
       REALTIME_CHAT_GRPC_ADDR: chat:9090
+      REALTIME_USER_GRPC_ADDR: user:9090
     depends_on:
       redis:
         condition: service_healthy
@@ -264,6 +265,8 @@ services:
       auth:
         condition: service_healthy
       chat:
+        condition: service_healthy
+      user:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]

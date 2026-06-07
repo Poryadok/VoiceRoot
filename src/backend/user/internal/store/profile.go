@@ -114,6 +114,28 @@ func (s *ProfileStore) GetByIDs(ctx context.Context, ids []uuid.UUID) ([]*Profil
 	return out, rows.Err()
 }
 
+// ListByAccountID returns all profiles owned by the account (primary first, then created_at).
+func (s *ProfileStore) ListByAccountID(ctx context.Context, accountID uuid.UUID) ([]*ProfileRow, error) {
+	rows, err := s.pool.Query(ctx, `SELECT id, account_id, username, discriminator, display_name, avatar_url, bio,
+		locale, theme, is_primary, verification_type, verification_badge, created_at, updated_at
+		FROM profiles WHERE account_id = $1
+		ORDER BY is_primary DESC, created_at ASC`, accountID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*ProfileRow
+	for rows.Next() {
+		p, err := scanProfile(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
 // GetPrimaryProfileIDForAccount returns the primary profile id for the account, if any.
 func (s *ProfileStore) GetPrimaryProfileIDForAccount(ctx context.Context, accountID uuid.UUID) (uuid.UUID, error) {
 	var id uuid.UUID

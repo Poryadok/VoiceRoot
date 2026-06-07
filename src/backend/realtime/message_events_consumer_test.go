@@ -109,6 +109,29 @@ func TestMessageEventBytesToFanout_SentEditedDeleted(t *testing.T) {
 	if d["chat_id"] != chatID || d["message_id"] != msgID {
 		t.Fatalf("deleted d=%v", d)
 	}
+
+	read := &eventsv1.MessageStreamEvent{
+		EventId:    "e4",
+		OccurredAt: timestamppb.Now(),
+		Payload: &eventsv1.MessageStreamEvent_MessageRead{
+			MessageRead: &eventsv1.MessageRead{
+				MessageId: msgID,
+				ChatId:    chatID,
+				ProfileId: uuid.NewString(),
+			},
+		},
+	}
+	b, _ = proto.Marshal(read)
+	gotChat, fe, ok = messageEventBytesToFanout(b)
+	if !ok || gotChat != chatID || fe.Op != "message_read" {
+		t.Fatalf("read: ok=%v chat=%q op=%q", ok, gotChat, fe.Op)
+	}
+	if err := json.Unmarshal(fe.D, &d); err != nil {
+		t.Fatal(err)
+	}
+	if d["chat_id"] != chatID || d["message_id"] != msgID || d["profile_id"] == "" {
+		t.Fatalf("read d=%v", d)
+	}
 }
 
 func TestMessageEventBytesToFanout_ReactionSkipped(t *testing.T) {

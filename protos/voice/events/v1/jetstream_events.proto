@@ -147,6 +147,7 @@ message MessageStreamEvent {
     MessageEdited message_edited = 11;
     MessageDeleted message_deleted = 12;
     ReactionAdded reaction_added = 13;
+    MessageRead message_read = 14;
   }
 }
 
@@ -170,6 +171,12 @@ message ReactionAdded {
   string message_id = 1;
   string profile_id = 2;
   string emoji = 3;
+}
+
+message MessageRead {
+  string message_id = 1;
+  string chat_id = 2;
+  string profile_id = 3;
 }
 
 // --- chat.events (Chat, Space) ---
