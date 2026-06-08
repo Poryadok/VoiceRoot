@@ -22,6 +22,19 @@ type stubSocialIsBlocked struct {
 	err     error
 }
 
+type stubSocialSecondCallErr struct {
+	socialv1.UnimplementedSocialServiceServer
+	calls int
+}
+
+func (s *stubSocialSecondCallErr) IsBlocked(context.Context, *socialv1.IsBlockedRequest) (*socialv1.IsBlockedResponse, error) {
+	s.calls++
+	if s.calls == 1 {
+		return &socialv1.IsBlockedResponse{Blocked: false}, nil
+	}
+	return nil, status.Error(codes.Unavailable, "social down")
+}
+
 func (s *stubSocialIsBlocked) IsBlocked(_ context.Context, req *socialv1.IsBlockedRequest) (*socialv1.IsBlockedResponse, error) {
 	if s.err != nil {
 		return nil, s.err
@@ -96,6 +109,27 @@ func TestSocialGRPCBlocks_AccountPairBlocked(t *testing.T) {
 		ok, err := b.AccountPairBlocked(context.Background(), viewer, other)
 		require.NoError(t, err)
 		require.True(t, ok)
+	})
+
+	t.Run("neither blocked", func(t *testing.T) {
+		t.Parallel()
+		conn, cleanup := startBufconnSocial(t, &stubSocialIsBlocked{blocked: map[string]bool{}})
+		t.Cleanup(cleanup)
+		b := NewSocialGRPCBlocks(conn)
+		ok, err := b.AccountPairBlocked(context.Background(), viewer, other)
+		require.NoError(t, err)
+		require.False(t, ok)
+	})
+
+	t.Run("second direction grpc error", func(t *testing.T) {
+		t.Parallel()
+		stub := &stubSocialSecondCallErr{}
+		conn, cleanup := startBufconnSocial(t, stub)
+		t.Cleanup(cleanup)
+		b := NewSocialGRPCBlocks(conn)
+		_, err := b.AccountPairBlocked(context.Background(), viewer, other)
+		require.Error(t, err)
+		require.Equal(t, codes.Unavailable, status.Code(err))
 	})
 
 	t.Run("grpc error", func(t *testing.T) {

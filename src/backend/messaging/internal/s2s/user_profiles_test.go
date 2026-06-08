@@ -22,6 +22,14 @@ type stubUserGetProfile struct {
 	err     error
 }
 
+type stubUserEmptyProfile struct {
+	userv1.UnimplementedUserServiceServer
+}
+
+func (s *stubUserEmptyProfile) GetProfile(context.Context, *userv1.GetProfileRequest) (*userv1.GetProfileResponse, error) {
+	return &userv1.GetProfileResponse{Profile: nil}, nil
+}
+
 func (s *stubUserGetProfile) GetProfile(_ context.Context, req *userv1.GetProfileRequest) (*userv1.GetProfileResponse, error) {
 	if s.err != nil {
 		return nil, s.err
@@ -74,6 +82,28 @@ func TestUserGRPCProfiles_AccountIDByProfileID(t *testing.T) {
 		got, err := u.AccountIDByProfileID(context.Background(), profileID)
 		require.NoError(t, err)
 		require.Equal(t, accountID, got)
+	})
+
+	t.Run("nil profile in response", func(t *testing.T) {
+		t.Parallel()
+		conn, cleanup := startBufconnUser(t, &stubUserEmptyProfile{})
+		t.Cleanup(cleanup)
+		u := &UserGRPCProfiles{Client: userv1.NewUserServiceClient(conn)}
+		_, err := u.AccountIDByProfileID(context.Background(), profileID)
+		require.Error(t, err)
+		require.Equal(t, codes.NotFound, status.Code(err))
+	})
+
+	t.Run("non-notfound grpc error", func(t *testing.T) {
+		t.Parallel()
+		conn, cleanup := startBufconnUser(t, &stubUserGetProfile{
+			err: status.Error(codes.Unavailable, "user down"),
+		})
+		t.Cleanup(cleanup)
+		u := &UserGRPCProfiles{Client: userv1.NewUserServiceClient(conn)}
+		_, err := u.AccountIDByProfileID(context.Background(), profileID)
+		require.Error(t, err)
+		require.Equal(t, codes.Unavailable, status.Code(err))
 	})
 
 	t.Run("not found", func(t *testing.T) {

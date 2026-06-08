@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/test/bufconn"
@@ -25,6 +27,32 @@ func (s *recordingFileBulkMetadata) GetBulkMetadata(ctx context.Context, req *fi
 	return &filev1.GetBulkMetadataResponse{
 		BulkFileMetadata: &filev1.BulkFileMetadata{ByFileId: map[string]*filev1.FileMetadata{}},
 	}, nil
+}
+
+func TestFileGRPCMetadata_nilClient(t *testing.T) {
+	t.Parallel()
+	var f *FileGRPCMetadata
+	_, err := f.GetBulkMetadata(context.Background(), &filev1.GetBulkMetadataRequest{})
+	require.Error(t, err)
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+}
+
+type errFileBulkMetadata struct {
+	filev1.UnimplementedFileServiceServer
+}
+
+func (s *errFileBulkMetadata) GetBulkMetadata(context.Context, *filev1.GetBulkMetadataRequest) (*filev1.GetBulkMetadataResponse, error) {
+	return nil, status.Error(codes.Internal, "file down")
+}
+
+func TestFileGRPCMetadata_downstreamError(t *testing.T) {
+	t.Parallel()
+	conn, cleanup := startBufconnFileService(t, &errFileBulkMetadata{})
+	t.Cleanup(cleanup)
+	client := NewFileGRPCMetadata(filev1.NewFileServiceClient(conn))
+	_, err := client.GetBulkMetadata(context.Background(), &filev1.GetBulkMetadataRequest{FileIds: []string{"cccccccc-cccc-4ccc-8ccc-cccccccccccc"}})
+	require.Error(t, err)
+	require.Equal(t, codes.Internal, status.Code(err))
 }
 
 func TestFileGRPCMetadataForwardsCallerProfile(t *testing.T) {

@@ -131,6 +131,65 @@ func TestJetStreamPublisher_MessageEditedAndDeleted(t *testing.T) {
 	require.Equal(t, cid, deleted.GetMessageDeleted().GetChatId())
 }
 
+func TestNewJetStreamPublisher_emptyURL(t *testing.T) {
+	t.Parallel()
+	_, err := NewJetStreamPublisher("")
+	require.Error(t, err)
+}
+
+func TestJetStreamPublisher_ensureStreamUninitialized(t *testing.T) {
+	t.Parallel()
+	var p JetStreamPublisher
+	require.Error(t, p.EnsureStream())
+}
+
+func TestJetStreamPublisher_EnsureStream(t *testing.T) {
+	s := startJSTestServer(t)
+	pub, err := NewJetStreamPublisher(s.ClientURL())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = pub.Close() })
+	require.NoError(t, pub.EnsureStream())
+	require.NoError(t, pub.EnsureStream())
+}
+
+func TestJetStreamPublisher_CloseNil(t *testing.T) {
+	t.Parallel()
+	var p *JetStreamPublisher
+	require.NoError(t, p.Close())
+}
+
+func TestMessageEventLogAttrs(t *testing.T) {
+	t.Parallel()
+	require.Nil(t, messageEventLogAttrs(nil))
+	require.NotEmpty(t, messageEventLogAttrs(&eventsv1.MessageStreamEvent{
+		EventId: "e1",
+		Payload: &eventsv1.MessageStreamEvent_MessageSent{MessageSent: &eventsv1.MessageSent{
+			MessageId: "m", ChatId: "c",
+		}},
+	}))
+	require.NotEmpty(t, messageEventLogAttrs(&eventsv1.MessageStreamEvent{
+		EventId: "e2",
+		Payload: &eventsv1.MessageStreamEvent_MessageEdited{MessageEdited: &eventsv1.MessageEdited{}},
+	}))
+	require.NotEmpty(t, messageEventLogAttrs(&eventsv1.MessageStreamEvent{
+		EventId: "e3",
+		Payload: &eventsv1.MessageStreamEvent_MessageDeleted{MessageDeleted: &eventsv1.MessageDeleted{}},
+	}))
+	require.NotEmpty(t, messageEventLogAttrs(&eventsv1.MessageStreamEvent{
+		EventId: "e4",
+		Payload: &eventsv1.MessageStreamEvent_MessageRead{MessageRead: &eventsv1.MessageRead{}},
+	}))
+}
+
+func TestJetStreamPublisher_ensureStreamAlreadyExists(t *testing.T) {
+	s := startJSTestServer(t)
+	pub, err := NewJetStreamPublisher(s.ClientURL())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = pub.Close() })
+	require.NoError(t, pub.PublishMessageSent(context.Background(), "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "cccccccc-cccc-cccc-cccc-cccccccccccc"))
+	require.NoError(t, pub.EnsureStream())
+}
+
 func TestJetStreamPublisher_MessageRead(t *testing.T) {
 	ctx := context.Background()
 	s := startJSTestServer(t)

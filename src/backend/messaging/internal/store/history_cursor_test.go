@@ -1,6 +1,8 @@
 package store
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"testing"
 
 	"github.com/google/uuid"
@@ -30,4 +32,31 @@ func TestDecodeHistoryCursor(t *testing.T) {
 
 	_, _, err = DecodeHistoryCursor("not-base64")
 	require.ErrorIs(t, err, ErrInvalidHistoryCursor)
+
+	_, _, err = DecodeHistoryCursor("e30") // {}
+	require.ErrorIs(t, err, ErrInvalidHistoryCursor)
+
+	badUUID := encodeCursorPayload(t, "not-uuid", "")
+	_, _, err = DecodeHistoryCursor(badUUID)
+	require.ErrorIs(t, err, ErrInvalidHistoryCursor)
+
+	bothFields := encodeCursorPayload(t, id.String(), id.String())
+	_, _, err = DecodeHistoryCursor(bothFields)
+	require.ErrorIs(t, err, ErrInvalidHistoryCursor)
+
+	emptyFields := encodeCursorPayload(t, "", "")
+	_, _, err = DecodeHistoryCursor(emptyFields)
+	require.ErrorIs(t, err, ErrInvalidHistoryCursor)
+
+	badAfter := encodeCursorPayload(t, "", "not-uuid")
+	_, _, err = DecodeHistoryCursor(badAfter)
+	require.ErrorIs(t, err, ErrInvalidHistoryCursor)
+}
+
+func encodeCursorPayload(t *testing.T, b, a string) string {
+	t.Helper()
+	p := historyCursorPayload{B: b, A: a}
+	raw, err := json.Marshal(p)
+	require.NoError(t, err)
+	return base64.RawURLEncoding.EncodeToString(raw)
 }

@@ -2,6 +2,7 @@ package s2s
 
 import (
 	"context"
+	"errors"
 	"net"
 	"testing"
 
@@ -123,4 +124,87 @@ func TestGRPCChatGuard_DMOtherProfileID(t *testing.T) {
 
 	err = g.EnsureMember(context.Background(), chatID, uuid.New())
 	require.ErrorIs(t, err, store.ErrNotChatMember)
+}
+
+func TestGrpcMemberErr_nonStatus(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, errors.New("plain"), grpcMemberErr(errors.New("plain")))
+}
+
+func TestGRPCChatGuard_DMOtherProfileID_edgeCases(t *testing.T) {
+	t.Parallel()
+
+	chatID := uuid.MustParse("cccccccc-cccc-4ccc-8ccc-cccccccccccc")
+	self := uuid.MustParse("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+	peer := uuid.MustParse("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
+	extra := uuid.MustParse("dddddddd-dddd-4ddd-8ddd-dddddddddddd")
+
+	t.Run("not found maps to not member", func(t *testing.T) {
+		t.Parallel()
+		conn, cleanup := startBufconnChat(t, &stubChatListMembers{
+			err: status.Error(codes.NotFound, "missing chat"),
+		})
+		t.Cleanup(cleanup)
+		g := NewGRPCChatGuard(chatv1.NewChatServiceClient(conn))
+		err := g.EnsureMember(context.Background(), chatID, self)
+		require.ErrorIs(t, err, store.ErrNotChatMember)
+	})
+
+	t.Run("caller absent", func(t *testing.T) {
+		t.Parallel()
+		conn, cleanup := startBufconnChat(t, &stubChatListMembers{members: []*chatv1.ChatMember{
+			{ProfileId: peer.String()},
+		}})
+		t.Cleanup(cleanup)
+		g := NewGRPCChatGuard(chatv1.NewChatServiceClient(conn))
+		_, err := g.DMOtherProfileID(context.Background(), chatID, self)
+		require.ErrorIs(t, err, store.ErrNotChatMember)
+	})
+
+	t.Run("single member", func(t *testing.T) {
+		t.Parallel()
+		conn, cleanup := startBufconnChat(t, &stubChatListMembers{members: []*chatv1.ChatMember{
+			{ProfileId: self.String()},
+		}})
+		t.Cleanup(cleanup)
+		g := NewGRPCChatGuard(chatv1.NewChatServiceClient(conn))
+		_, err := g.DMOtherProfileID(context.Background(), chatID, self)
+		require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	})
+
+	t.Run("three members", func(t *testing.T) {
+		t.Parallel()
+		conn, cleanup := startBufconnChat(t, &stubChatListMembers{members: []*chatv1.ChatMember{
+			{ProfileId: self.String()},
+			{ProfileId: peer.String()},
+			{ProfileId: extra.String()},
+		}})
+		t.Cleanup(cleanup)
+		g := NewGRPCChatGuard(chatv1.NewChatServiceClient(conn))
+		_, err := g.DMOtherProfileID(context.Background(), chatID, self)
+		require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	})
+
+	t.Run("invalid profile id", func(t *testing.T) {
+		t.Parallel()
+		conn, cleanup := startBufconnChat(t, &stubChatListMembers{members: []*chatv1.ChatMember{
+			{ProfileId: self.String()},
+			{ProfileId: "not-a-uuid"},
+		}})
+		t.Cleanup(cleanup)
+		g := NewGRPCChatGuard(chatv1.NewChatServiceClient(conn))
+		_, err := g.DMOtherProfileID(context.Background(), chatID, self)
+		require.Equal(t, codes.Internal, status.Code(err))
+	})
+
+	t.Run("list members transport error", func(t *testing.T) {
+		t.Parallel()
+		conn, cleanup := startBufconnChat(t, &stubChatListMembers{
+			err: status.Error(codes.Unavailable, "chat down"),
+		})
+		t.Cleanup(cleanup)
+		g := NewGRPCChatGuard(chatv1.NewChatServiceClient(conn))
+		_, err := g.DMOtherProfileID(context.Background(), chatID, self)
+		require.Equal(t, codes.Unavailable, status.Code(err))
+	})
 }

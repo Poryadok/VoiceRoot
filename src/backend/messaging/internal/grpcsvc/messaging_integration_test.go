@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
@@ -1034,4 +1035,301 @@ func TestMessagingGetBulkReadState(t *testing.T) {
 	_, hasB := bulk.GetByChatId()[chatB.String()]
 	require.False(t, hasB)
 	_ = sendB
+}
+
+func TestMessagingGetReadState_beforeMarkRead(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	chatID := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	acctA := uuid.New()
+	seedDMChat(t, ctx, pool, chatID, profA, profB)
+	client, _ := startMessagingServer(t, pool)
+
+	rs, err := client.GetReadState(withProfileCtx(ctx, acctA, profA), &messagingv1.GetReadStateRequest{Chat: chatDMRef(chatID)})
+	require.NoError(t, err)
+	require.Nil(t, rs.GetReadState())
+}
+
+func TestMessagingGetMessages_beforeMessageID(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	chatID := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	acctA := uuid.New()
+	seedDMChat(t, ctx, pool, chatID, profA, profB)
+	client, _ := startMessagingServer(t, pool)
+	mk := messagingv1.MessageKind_MESSAGE_KIND_REGULAR
+	var ids []string
+	for i := 0; i < 3; i++ {
+		resp, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+			Chat: chatDMRef(chatID), Content: "m", AttachmentsJson: "[]", MentionsJson: "[]", MessageKind: &mk,
+		})
+		require.NoError(t, err)
+		ids = append(ids, resp.GetMessage().GetId())
+	}
+	anchor := ids[2]
+	page, err := client.GetMessages(withProfileCtx(ctx, acctA, profA), &messagingv1.GetMessagesRequest{
+		Chat:             chatDMRef(chatID),
+		BeforeMessageId:  &anchor,
+		Page:             &commonv1.CursorPageRequest{PageSize: 10},
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, page.GetMessageList().GetMessages())
+	for _, m := range page.GetMessageList().GetMessages() {
+		require.Less(t, m.GetId(), anchor)
+	}
+}
+
+func TestMessagingSendMessage_kindsAndValidation(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	chatID := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	acctA := uuid.New()
+	seedDMChat(t, ctx, pool, chatID, profA, profB)
+	client, _ := startMessagingServer(t, pool)
+
+	sys := messagingv1.MessageKind_MESSAGE_KIND_SYSTEM
+	sysResp, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+		Chat: chatDMRef(chatID), Content: "sys", AttachmentsJson: "[]", MentionsJson: "[]", MessageKind: &sys,
+	})
+	require.NoError(t, err)
+	require.Equal(t, messagingv1.MessageKind_MESSAGE_KIND_SYSTEM, sysResp.GetMessage().GetMessageKind())
+
+	fwd := messagingv1.MessageKind_MESSAGE_KIND_FORWARD
+	fwdResp, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+		Chat: chatDMRef(chatID), Content: "fwd", AttachmentsJson: "[]", MentionsJson: "[]", MessageKind: &fwd,
+	})
+	require.NoError(t, err)
+	require.Equal(t, messagingv1.MessageKind_MESSAGE_KIND_FORWARD, fwdResp.GetMessage().GetMessageKind())
+
+	long := strings.Repeat("x", 4001)
+	_, err = client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+		Chat: chatDMRef(chatID), Content: long, AttachmentsJson: "[]", MentionsJson: "[]",
+	})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+
+	_, err = client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+		Chat: chatDMRef(chatID), Content: "   ", AttachmentsJson: "[]", MentionsJson: "[]",
+	})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+
+	badThread := "not-uuid"
+	_, err = client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+		Chat: chatDMRef(chatID), Content: "t", ThreadParentId: &badThread, AttachmentsJson: "[]", MentionsJson: "[]",
+	})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+
+	group := chatv1.ChatType_CHAT_TYPE_GROUP
+	_, err = client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+		Chat: &chatv1.ChatRef{Id: chatID.String(), Type: &group}, Content: "nope", AttachmentsJson: "[]", MentionsJson: "[]",
+	})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+func TestMessagingGetBulkReadState_nonMemberDenied(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	chatID := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	profStranger := uuid.New()
+	acctS := uuid.New()
+	seedDMChat(t, ctx, pool, chatID, profA, profB)
+	client, _ := startMessagingServer(t, pool)
+
+	_, err := client.GetBulkReadState(withProfileCtx(ctx, acctS, profStranger), &messagingv1.GetBulkReadStateRequest{
+		Chats: []*chatv1.ChatRef{chatDMRef(chatID)},
+	})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+func TestMessagingGetBulkReadState_dedupesChatRefs(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	chatID := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	acctA := uuid.New()
+	seedDMChat(t, ctx, pool, chatID, profA, profB)
+	client, _ := startMessagingServer(t, pool)
+
+	send, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+		Chat: chatDMRef(chatID), Content: "hi", AttachmentsJson: "[]", MentionsJson: "[]",
+	})
+	require.NoError(t, err)
+	_, err = client.MarkRead(withProfileCtx(ctx, acctA, profA), &messagingv1.MarkReadRequest{
+		Chat: chatDMRef(chatID), LastReadMessageId: send.GetMessage().GetId(),
+	})
+	require.NoError(t, err)
+
+	ref := chatDMRef(chatID)
+	bulk, err := client.GetBulkReadState(withProfileCtx(ctx, acctA, profA), &messagingv1.GetBulkReadStateRequest{
+		Chats: []*chatv1.ChatRef{ref, ref},
+	})
+	require.NoError(t, err)
+	require.Len(t, bulk.GetByChatId(), 1)
+}
+
+func TestMessagingGetMessages_afterPageNextCursor(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	chatID := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	acctA := uuid.New()
+	seedDMChat(t, ctx, pool, chatID, profA, profB)
+	client, _ := startMessagingServer(t, pool)
+	mk := messagingv1.MessageKind_MESSAGE_KIND_REGULAR
+	var ids []string
+	for i := 0; i < 4; i++ {
+		resp, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+			Chat: chatDMRef(chatID), Content: "m", AttachmentsJson: "[]", MentionsJson: "[]", MessageKind: &mk,
+		})
+		require.NoError(t, err)
+		ids = append(ids, resp.GetMessage().GetId())
+	}
+	page, err := client.GetMessages(withProfileCtx(ctx, acctA, profA), &messagingv1.GetMessagesRequest{
+		Chat:           chatDMRef(chatID),
+		AfterMessageId: &ids[0],
+		Page:           &commonv1.CursorPageRequest{PageSize: 2},
+	})
+	require.NoError(t, err)
+	ml := page.GetMessageList()
+	require.True(t, ml.GetHasMore())
+	thirdID, err := uuid.Parse(ids[2])
+	require.NoError(t, err)
+	require.Equal(t, store.EncodeAfterCursor(thirdID), ml.GetNextCursor())
+}
+
+func TestMessagingGetMessages_cursorFromPageAfterDirection(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	chatID := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	acctA := uuid.New()
+	seedDMChat(t, ctx, pool, chatID, profA, profB)
+	client, _ := startMessagingServer(t, pool)
+	mk := messagingv1.MessageKind_MESSAGE_KIND_REGULAR
+	var ids []string
+	for i := 0; i < 4; i++ {
+		resp, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+			Chat: chatDMRef(chatID), Content: "m", AttachmentsJson: "[]", MentionsJson: "[]", MessageKind: &mk,
+		})
+		require.NoError(t, err)
+		ids = append(ids, resp.GetMessage().GetId())
+	}
+	first, err := client.GetMessages(withProfileCtx(ctx, acctA, profA), &messagingv1.GetMessagesRequest{
+		Chat:           chatDMRef(chatID),
+		AfterMessageId: &ids[0],
+		Page:           &commonv1.CursorPageRequest{PageSize: 2},
+	})
+	require.NoError(t, err)
+	cursor := first.GetMessageList().GetNextCursor()
+	require.NotEmpty(t, cursor)
+
+	second, err := client.GetMessages(withProfileCtx(ctx, acctA, profA), &messagingv1.GetMessagesRequest{
+		Chat: chatDMRef(chatID),
+		Page: &commonv1.CursorPageRequest{Cursor: cursor, PageSize: 2},
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, second.GetMessageList().GetMessages())
+}
+
+func TestMessagingGetMessages_lastAndAfterDisagree(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	chatID := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	acctA := uuid.New()
+	seedDMChat(t, ctx, pool, chatID, profA, profB)
+	client, _ := startMessagingServer(t, pool)
+	a := uuid.New().String()
+	b := uuid.New().String()
+	_, err := client.GetMessages(withProfileCtx(ctx, acctA, profA), &messagingv1.GetMessagesRequest{
+		Chat:           chatDMRef(chatID),
+		AfterMessageId: &a,
+		LastMessageId:  &b,
+		Page:           &commonv1.CursorPageRequest{PageSize: 2},
+	})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+func TestMessagingSendMessage_chatGuardInternal(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	client, _ := startMessagingServerWired(t, pool, messagingWire{
+		ChatGuard: faultGuard{memberErr: errors.New("chat down")},
+	})
+	_, err := client.SendMessage(withProfileCtx(ctx, uuid.New(), uuid.New()), &messagingv1.SendMessageRequest{
+		Chat: chatDMRef(uuid.New()), Content: "x", AttachmentsJson: "[]", MentionsJson: "[]",
+	})
+	require.Equal(t, codes.Internal, status.Code(err))
+}
+
+func TestMessagingSendMessage_withThreadParent(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	chatID := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	acctA := uuid.New()
+	seedDMChat(t, ctx, pool, chatID, profA, profB)
+	client, _ := startMessagingServer(t, pool)
+
+	parent, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+		Chat: chatDMRef(chatID), Content: "parent", AttachmentsJson: "[]", MentionsJson: "[]",
+	})
+	require.NoError(t, err)
+	parentID := parent.GetMessage().GetId()
+	reply, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+		Chat: chatDMRef(chatID), Content: "reply", ThreadParentId: &parentID, AttachmentsJson: "[]", MentionsJson: "[]",
+	})
+	require.NoError(t, err)
+	require.Equal(t, parentID, reply.GetMessage().GetThreadParentId())
 }
