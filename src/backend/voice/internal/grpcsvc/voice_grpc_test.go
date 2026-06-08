@@ -190,3 +190,38 @@ func TestVoiceGRPCRejectsInvalidCallerAndParticipants(t *testing.T) {
 	_, err = svc.AcceptCall(voiceTestCtx("profile-c"), &callsv1.AcceptCallRequest{RoomId: start.GetCallSession().GetRoomId()})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }
+
+func TestVoiceGRPCJoinLeaveAndGetActiveCall(t *testing.T) {
+	now := time.Unix(1700000000, 0).UTC()
+	events := &recordingEvents{}
+	svc := newTestVoiceService(now, events)
+
+	start, err := svc.StartCall(voiceTestCtx("profile-a"), &callsv1.StartCallRequest{
+		LinkedChat:      &chatv1.ChatRef{Id: "chat-1"},
+		CalleeProfileId: strPtr("profile-b"),
+		MediaKind:       mediaPtr(callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO),
+	})
+	require.NoError(t, err)
+	roomID := start.GetCallSession().GetRoomId()
+
+	_, err = svc.GetActiveCall(voiceTestCtx("profile-a"), &callsv1.GetActiveCallRequest{})
+	require.NoError(t, err)
+
+	_, err = svc.AcceptCall(voiceTestCtx("profile-b"), &callsv1.AcceptCallRequest{RoomId: roomID})
+	require.NoError(t, err)
+
+	joined, err := svc.JoinCall(voiceTestCtx("profile-a"), &callsv1.JoinCallRequest{RoomId: roomID})
+	require.NoError(t, err)
+	require.Equal(t, callsv1.CallStatus_CALL_STATUS_ACTIVE, joined.GetCallSession().GetStatus())
+
+	active, err := svc.GetActiveCall(voiceTestCtx("profile-a"), &callsv1.GetActiveCallRequest{})
+	require.NoError(t, err)
+	require.Equal(t, roomID, active.GetCallSession().GetRoomId())
+
+	_, err = svc.LeaveCall(voiceTestCtx("profile-b"), &callsv1.LeaveCallRequest{RoomId: roomID})
+	require.NoError(t, err)
+	require.Len(t, events.ended, 1)
+
+	_, err = svc.GetActiveCall(voiceTestCtx("profile-a"), &callsv1.GetActiveCallRequest{})
+	require.Equal(t, codes.NotFound, status.Code(err))
+}

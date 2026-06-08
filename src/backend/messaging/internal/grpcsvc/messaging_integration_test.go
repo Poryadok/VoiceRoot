@@ -982,3 +982,56 @@ func TestMessagingMarkRead_monotonicDoesNotRegress(t *testing.T) {
 	require.Equal(t, newest, rs.GetReadState().GetLastReadMessageId(),
 		"read cursor must stay at newest UUID when older MarkRead is applied (monotonic)")
 }
+
+func TestMessagingGetBulkReadState(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+
+	chatA := uuid.New()
+	chatB := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	acctA := uuid.New()
+	seedDMChat(t, ctx, pool, chatA, profA, profB)
+	seedDMChat(t, ctx, pool, chatB, profA, uuid.New())
+
+	client, cleanup := startMessagingServerWired(t, pool, messagingWire{})
+	t.Cleanup(cleanup)
+
+	sendA, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+		Chat:            chatDMRef(chatA),
+		Content:         "hello A",
+		AttachmentsJson: "[]",
+		MentionsJson:    "[]",
+	})
+	require.NoError(t, err)
+	sendB, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+		Chat:            chatDMRef(chatB),
+		Content:         "hello B",
+		AttachmentsJson: "[]",
+		MentionsJson:    "[]",
+	})
+	require.NoError(t, err)
+
+	_, err = client.MarkRead(withProfileCtx(ctx, acctA, profA), &messagingv1.MarkReadRequest{
+		Chat:              chatDMRef(chatA),
+		LastReadMessageId: sendA.GetMessage().GetId(),
+	})
+	require.NoError(t, err)
+
+	bulk, err := client.GetBulkReadState(withProfileCtx(ctx, acctA, profA), &messagingv1.GetBulkReadStateRequest{
+		Chats: []*chatv1.ChatRef{chatDMRef(chatA), chatDMRef(chatB)},
+	})
+	require.NoError(t, err)
+	require.Len(t, bulk.GetByChatId(), 1)
+	require.Equal(t, sendA.GetMessage().GetId(), bulk.GetByChatId()[chatA.String()].GetLastReadMessageId())
+	_, hasB := bulk.GetByChatId()[chatB.String()]
+	require.False(t, hasB)
+	_ = sendB
+}

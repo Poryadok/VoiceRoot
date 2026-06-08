@@ -238,3 +238,46 @@ func TestIsBlocked_InvalidUUIDs(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }
+
+func TestListBlocked_PaginationRoundTrip(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startSocialPostgresForTest(t, ctx)
+	applySocialMigration(t, ctx, pool)
+
+	client, cleanup := startSocialGRPCTestServer(t, pool)
+	t.Cleanup(cleanup)
+
+	acc := uuid.New()
+	b1 := uuid.New()
+	b2 := uuid.New()
+	b3 := uuid.New()
+
+	for _, blocked := range []uuid.UUID{b1, b2, b3} {
+		_, err := client.BlockAccount(withAccountCtx(ctx, acc), &socialv1.BlockAccountRequest{BlockedAccountId: blocked.String()})
+		require.NoError(t, err)
+	}
+
+	page1, err := client.ListBlocked(withAccountCtx(ctx, acc), &socialv1.ListBlockedRequest{
+		Page: &commonv1.CursorPageRequest{PageSize: 1},
+	})
+	require.NoError(t, err)
+	require.Len(t, page1.GetBlockedList().GetBlocked(), 1)
+	require.NotEmpty(t, page1.GetBlockedList().GetNextCursor())
+
+	page2, err := client.ListBlocked(withAccountCtx(ctx, acc), &socialv1.ListBlockedRequest{
+		Page: &commonv1.CursorPageRequest{PageSize: 1, Cursor: page1.GetBlockedList().GetNextCursor()},
+	})
+	require.NoError(t, err)
+	require.Len(t, page2.GetBlockedList().GetBlocked(), 1)
+	require.NotEqual(t, page1.GetBlockedList().GetBlocked()[0].GetBlockedAccountId(),
+		page2.GetBlockedList().GetBlocked()[0].GetBlockedAccountId())
+
+	all, err := client.ListBlocked(withAccountCtx(ctx, acc), &socialv1.ListBlockedRequest{
+		Page: &commonv1.CursorPageRequest{PageSize: 10},
+	})
+	require.NoError(t, err)
+	require.Len(t, all.GetBlockedList().GetBlocked(), 3)
+}

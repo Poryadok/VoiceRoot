@@ -3,6 +3,7 @@ module voice/backend/gateway
 go 1.26
 
 require (
+	github.com/alicebob/miniredis/v2 v2.34.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/stretchr/testify v1.10.0
 	google.golang.org/grpc v1.70.0
@@ -18,8 +19,10 @@ require (
 )
 
 require (
+	github.com/alicebob/gopher-json v0.0.0-20230218143504-906a9b012302 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/yuin/gopher-lua v1.1.1 // indirect
 	golang.org/x/net v0.32.0 // indirect
 	golang.org/x/sys v0.32.0 // indirect
 	golang.org/x/text v0.24.0 // indirect
