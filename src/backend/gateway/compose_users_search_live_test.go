@@ -61,6 +61,10 @@ type authSessionResponse struct {
 	AccountID   string `json:"account_id"`
 }
 
+type authSessionEnvelope struct {
+	Session authSessionResponse `json:"session"`
+}
+
 // TestComposeUsersSearch_live exercises GET /api/v1/users/search through Gateway
 // with User + Social gRPC upstreams (docker compose --profile app).
 //
@@ -139,9 +143,10 @@ func registerComposeUser(t *testing.T, client *http.Client, base, email, passwor
 	require.Equal(t, http.StatusOK, resp.StatusCode,
 		"register %s: status=%d body=%s", email, resp.StatusCode, string(raw))
 
-	var sess authSessionResponse
-	require.NoError(t, json.Unmarshal(raw, &sess))
-	require.NotEmpty(t, sess.AccessToken)
-	require.NotEmpty(t, sess.ProfileID)
+	var envelope authSessionEnvelope
+	require.NoError(t, json.Unmarshal(raw, &envelope))
+	sess := envelope.Session
+	require.NotEmpty(t, sess.AccessToken, "register %s: body=%s", email, string(raw))
+	require.NotEmpty(t, sess.ProfileID, "register %s: body=%s", email, string(raw))
 	return sess
 }
