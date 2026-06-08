@@ -12,9 +12,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
 )
+
+func formatComposeEmail(prefix string, n int64) string {
+	return fmt.Sprintf("%s-%d@voice-qa.test", prefix, n)
+}
+
+func composeClientMessageID() string {
+	return uuid.NewString()
+}
 
 type composeWSFrame struct {
 	Op string          `json:"op"`
@@ -238,6 +247,250 @@ func endComposeCall(t *testing.T, client *http.Client, base, accessToken, roomID
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+}
+
+func composeWSSend(t *testing.T, conn *websocket.Conn, payload map[string]any) {
+	t.Helper()
+	require.NoError(t, conn.WriteJSON(payload))
+}
+
+func connectComposeWSSubscribed(t *testing.T, base, accessToken, chatID string) *websocket.Conn {
+	t.Helper()
+	conn := dialComposeRealtimeWS(t, base, accessToken)
+	waitComposeWSHello(t, conn)
+	composeWSSend(t, conn, map[string]any{
+		"op": "subscribe",
+		"d":  map[string]string{"chat_id": chatID},
+	})
+	waitComposeWSOp(t, conn, "subscribe_ack", 15*time.Second, func(d map[string]any) bool {
+		return d["chat_id"] == chatID
+	})
+	return conn
+}
+
+func sendComposeMessage(
+	t *testing.T,
+	client *http.Client,
+	base, accessToken, chatID, content string,
+) string {
+	t.Helper()
+	payload, err := json.Marshal(map[string]any{
+		"chat":              map[string]string{"id": chatID},
+		"content":           content,
+		"client_message_id": composeClientMessageID(),
+	})
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/messages/send", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "POST send body=%s", string(body))
+
+	var parsed struct {
+		Message struct {
+			ID string `json:"id"`
+		} `json:"message"`
+	}
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	require.NotEmpty(t, parsed.Message.ID)
+	return parsed.Message.ID
+}
+
+func getComposeMessagesContains(
+	t *testing.T,
+	client *http.Client,
+	base, accessToken, chatID, messageID, content string,
+) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, base+"/api/v1/messages?chat_id="+chatID, nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "GET messages body=%s", string(body))
+
+	var hist struct {
+		MessageList struct {
+			Messages []struct {
+				ID      string `json:"id"`
+				Content string `json:"content"`
+			} `json:"messages"`
+		} `json:"message_list"`
+	}
+	require.NoError(t, json.Unmarshal(body, &hist))
+	for _, m := range hist.MessageList.Messages {
+		if m.ID == messageID && m.Content == content {
+			return
+		}
+	}
+	t.Fatalf("message %s with content %q not in history: %s", messageID, content, string(body))
+}
+
+func refreshComposeSession(t *testing.T, client *http.Client, base, refreshToken string) authSessionResponse {
+	t.Helper()
+	payload, err := json.Marshal(map[string]any{
+		"refresh_token":    refreshToken,
+		"device_info_json": `{"platform":"go-live-test"}`,
+	})
+	require.NoError(t, err)
+	resp, err := client.Post(base+"/api/v1/auth/refresh", "application/json", bytes.NewReader(payload))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "refresh body=%s", string(raw))
+
+	var envelope authSessionEnvelope
+	require.NoError(t, json.Unmarshal(raw, &envelope))
+	sess := envelope.Session
+	require.NotEmpty(t, sess.AccessToken)
+	require.NotEmpty(t, sess.RefreshToken)
+	return sess
+}
+
+func logoutComposeSession(t *testing.T, client *http.Client, base, accessToken, refreshToken string) {
+	t.Helper()
+	payload, err := json.Marshal(map[string]string{"refresh_token": refreshToken})
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/auth/logout", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+}
+
+func composeProtectedRouteStatus(t *testing.T, client *http.Client, base, accessToken string) int {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, base+"/api/v1/chats", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	return resp.StatusCode
+}
+
+func markReadComposeMessage(t *testing.T, client *http.Client, base, accessToken, chatID, messageID string) {
+	t.Helper()
+	payload, err := json.Marshal(map[string]any{
+		"chat":                  map[string]string{"id": chatID},
+		"last_read_message_id":  messageID,
+	})
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/messages/read", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "mark read body=%s", string(body))
+}
+
+func getComposeReadState(t *testing.T, client *http.Client, base, accessToken, chatID string) string {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, base+"/api/v1/messages/read-state?chat_id="+chatID, nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "read-state body=%s", string(body))
+
+	var parsed struct {
+		ReadState struct {
+			LastReadMessageID string `json:"last_read_message_id"`
+			ProfileID         string `json:"profile_id"`
+			Chat              struct {
+				ID string `json:"id"`
+			} `json:"chat"`
+		} `json:"read_state"`
+	}
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	return parsed.ReadState.LastReadMessageID
+}
+
+func sendComposeFriendInvitation(t *testing.T, client *http.Client, base, accessToken, targetProfileID string) {
+	t.Helper()
+	payload, err := json.Marshal(map[string]string{"target_profile_id": targetProfileID})
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/friends/invitations", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "friend invitation body=%s", string(body))
+}
+
+func acceptComposeFriendInvitation(t *testing.T, client *http.Client, base, accessToken, requesterProfileID string) {
+	t.Helper()
+	url := fmt.Sprintf("%s/api/v1/friends/invitations/%s/accept", base, requesterProfileID)
+	req, err := http.NewRequest(http.MethodPost, url, nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "accept friend body=%s", string(body))
+}
+
+func composeFriendIDs(t *testing.T, client *http.Client, base, accessToken string) []string {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, base+"/api/v1/friends", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "list friends body=%s", string(body))
+
+	var parsed struct {
+		FriendList struct {
+			Friends []struct {
+				ProfileID string `json:"profile_id"`
+			} `json:"friends"`
+		} `json:"friend_list"`
+	}
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	var ids []string
+	for _, f := range parsed.FriendList.Friends {
+		ids = append(ids, f.ProfileID)
+	}
+	return ids
+}
+
+func declineComposeCall(t *testing.T, client *http.Client, base, accessToken, roomID string) composeCallSession {
+	t.Helper()
+	url := fmt.Sprintf("%s/api/v1/voice/calls/%s/decline", base, roomID)
+	req, err := http.NewRequest(http.MethodPost, url, nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "POST decline body=%s", string(body))
+
+	var parsed struct {
+		CallSession composeCallSession `json:"call_session"`
+	}
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	return parsed.CallSession
 }
 
 func liveLivekitURL() string {

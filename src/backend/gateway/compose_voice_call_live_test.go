@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -121,6 +120,39 @@ func TestComposeVoiceCall1to1_live(t *testing.T) {
 	require.Nil(t, getComposeActiveCall(t, client, base, sessB.AccessToken))
 }
 
-func formatComposeEmail(prefix string, n int64) string {
-	return fmt.Sprintf("%s-%d@voice-qa.test", prefix, n)
+// TestComposeVoiceCallDecline_live: callee declines → WS call_declined + call_ended for caller.
+func TestComposeVoiceCallDecline_live(t *testing.T) {
+	if !liveComposeEnabled() {
+		t.Skip("set VOICE_RUN_LIVE_COMPOSE=true to run against local compose")
+	}
+	clearLiveComposeAuthRateLimit(t)
+
+	client := &http.Client{Timeout: 45 * time.Second}
+	base := liveGatewayBaseURL()
+	n := time.Now().UnixNano()
+	sessA := registerComposeUser(t, client, base, formatComposeEmail("call-decline-a", n), "VoiceQaTest1!")
+	sessB := registerComposeUser(t, client, base, formatComposeEmail("call-decline-b", n), "VoiceQaTest1!")
+	chatID := createComposeDM(t, client, base, sessA.AccessToken, sessB.ProfileID)
+
+	wsA := dialComposeRealtimeWS(t, base, sessA.AccessToken)
+	waitComposeWSHello(t, wsA)
+
+	call := startComposeCall(t, client, base, sessA.AccessToken, chatID, sessB.ProfileID)
+	_ = declineComposeCall(t, client, base, sessB.AccessToken, call.RoomID)
+
+	declinedFrame := waitComposeWSOp(t, wsA, "call_declined", 20*time.Second, func(d map[string]any) bool {
+		return d["room_id"] == call.RoomID
+	})
+	var declinedData map[string]any
+	require.NoError(t, json.Unmarshal(declinedFrame.D, &declinedData))
+	require.Equal(t, call.RoomID, declinedData["room_id"])
+
+	endedFrame := waitComposeWSOp(t, wsA, "call_ended", 20*time.Second, func(d map[string]any) bool {
+		return d["room_id"] == call.RoomID
+	})
+	var endedData map[string]any
+	require.NoError(t, json.Unmarshal(endedFrame.D, &endedData))
+	require.Equal(t, call.RoomID, endedData["room_id"])
+
+	require.Nil(t, getComposeActiveCall(t, client, base, sessA.AccessToken))
 }

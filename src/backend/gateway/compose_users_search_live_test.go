@@ -56,9 +56,10 @@ func clearLiveComposeAuthRateLimit(t *testing.T) {
 }
 
 type authSessionResponse struct {
-	AccessToken string `json:"access_token"`
-	ProfileID   string `json:"profile_id"`
-	AccountID   string `json:"account_id"`
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	ProfileID    string `json:"profile_id"`
+	AccountID    string `json:"account_id"`
 }
 
 type authSessionEnvelope struct {

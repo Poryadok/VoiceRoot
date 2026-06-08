@@ -29,7 +29,7 @@ GO_TEST_TARGETS := $(GO_SERVICES:%=go-test-%)
 GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
 
 .PHONY: buf-lint buf-format buf-breaking buf-generate buf-generate-dart buf-dart-check compose-up compose-app-up compose-down compose-logs-collect \
-	compose-e2e-voice-live \
+	compose-e2e-live compose-e2e-voice-live \
 	build-all build-all-breaking check-toolchain compose-config-ci buf-ci backend-test-ci backend-image-ci \
 	gateway-test-ci gateway-image-ci go-test-pkg auth-test-ci auth-image-ci buf-breaking-ci \
 	golangci-ci gateway-test-race-ci design-tokens-check flutter-ui-color-gate flutter-ci coverage-report testcontainers-prune
@@ -75,10 +75,12 @@ endif
 compose-logs-collect:
 	$(COMPOSE_LOGS_COLLECT)
 
-# Opt-in Phase-2 voice E2E against running `make compose-app-up` (signaling on all OS; media on Linux only).
+# Opt-in compose E2E (Phase-1 DM realtime, friends, auth, voice; media audio on Linux only).
 # Override: VOICE_API_BASE_URL=http://127.0.0.1:18080 VOICE_LIVEKIT_PUBLIC_URL=ws://127.0.0.1:7880
-compose-e2e-voice-live:
-	$(BASH) "$(ROOT)/scripts/ci/compose-voice-e2e.sh"
+compose-e2e-live:
+	$(BASH) "$(ROOT)/scripts/ci/compose-e2e-live.sh"
+
+compose-e2e-voice-live: compose-e2e-live
 
 # --- CI parity: host Go/Maven/golangci (tests need Docker socket for testcontainers); Docker for buf/compose/images ---
 
