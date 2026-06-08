@@ -48,7 +48,12 @@ void main() {
     addTearDown(container.dispose);
 
     container.read(presenceProvider('peer-1'));
-    await Future<void>.delayed(Duration.zero);
+    for (var i = 0; i < 30; i++) {
+      await Future<void>.delayed(Duration.zero);
+      if (container.read(presenceProvider('peer-1'))?.status == 'dnd') {
+        break;
+      }
+    }
 
     expect(container.read(presenceProvider('peer-1'))?.status, 'dnd');
     expect(
@@ -93,9 +98,15 @@ void main() {
       addTearDown(container.dispose);
 
       container.read(presenceProvider('peer-1'));
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      for (var i = 0; i < 50; i++) {
+        await Future<void>.delayed(Duration.zero);
+        if (bulkCalls >= 1 &&
+            container.read(presenceProvider('peer-1'))?.isOnline == true) {
+          break;
+        }
+      }
 
-      expect(bulkCalls, greaterThanOrEqualTo(1));
+      expect(bulkCalls, 1);
       expect(container.read(presenceProvider('peer-1'))?.isOnline, isTrue);
     },
   );

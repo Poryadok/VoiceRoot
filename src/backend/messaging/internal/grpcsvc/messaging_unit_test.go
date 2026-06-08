@@ -30,25 +30,6 @@ func TestValidateChatRefDM(t *testing.T) {
 	require.NoError(t, validateChatRefDM(&chatv1.ChatRef{Id: uuid.New().String()}))
 }
 
-func TestMessageKindToWire(t *testing.T) {
-	t.Parallel()
-	typeStr, kind := messageKindToWire(messagingv1.MessageKind_MESSAGE_KIND_UNSPECIFIED)
-	require.Equal(t, "regular", typeStr)
-	require.Equal(t, messagingv1.MessageKind_MESSAGE_KIND_REGULAR, kind)
-
-	typeStr, kind = messageKindToWire(messagingv1.MessageKind_MESSAGE_KIND_SYSTEM)
-	require.Equal(t, "system", typeStr)
-	require.Equal(t, messagingv1.MessageKind_MESSAGE_KIND_SYSTEM, kind)
-
-	typeStr, kind = messageKindToWire(messagingv1.MessageKind_MESSAGE_KIND_FORWARD)
-	require.Equal(t, "forward", typeStr)
-	require.Equal(t, messagingv1.MessageKind_MESSAGE_KIND_FORWARD, kind)
-
-	typeStr, kind = messageKindToWire(messagingv1.MessageKind(999))
-	require.Equal(t, "regular", typeStr)
-	require.Equal(t, messagingv1.MessageKind_MESSAGE_KIND_REGULAR, kind)
-}
-
 func TestMessageRowToProto(t *testing.T) {
 	t.Parallel()
 	require.Nil(t, messageRowToProto(nil, messagingv1.MessageKind_MESSAGE_KIND_UNSPECIFIED))

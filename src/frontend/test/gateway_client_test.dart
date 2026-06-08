@@ -50,6 +50,7 @@ void main() {
       );
       final r = await client.fetchHealth();
       expect(r, isA<GatewayHealthFailure>());
+      expect((r as GatewayHealthFailure).message, contains('network'));
     });
   });
 

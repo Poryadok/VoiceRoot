@@ -2,6 +2,7 @@ package messageevents
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -152,33 +153,55 @@ func TestJetStreamPublisher_EnsureStream(t *testing.T) {
 	require.NoError(t, pub.EnsureStream())
 }
 
-func TestJetStreamPublisher_CloseNil(t *testing.T) {
-	t.Parallel()
-	var p *JetStreamPublisher
-	require.NoError(t, p.Close())
+func slogAttrString(attrs []slog.Attr, key string) string {
+	for _, a := range attrs {
+		if a.Key == key {
+			return a.Value.String()
+		}
+	}
+	return ""
 }
 
 func TestMessageEventLogAttrs(t *testing.T) {
 	t.Parallel()
 	require.Nil(t, messageEventLogAttrs(nil))
-	require.NotEmpty(t, messageEventLogAttrs(&eventsv1.MessageStreamEvent{
+
+	sent := messageEventLogAttrs(&eventsv1.MessageStreamEvent{
 		EventId: "e1",
 		Payload: &eventsv1.MessageStreamEvent_MessageSent{MessageSent: &eventsv1.MessageSent{
 			MessageId: "m", ChatId: "c",
 		}},
-	}))
-	require.NotEmpty(t, messageEventLogAttrs(&eventsv1.MessageStreamEvent{
+	})
+	require.Equal(t, "e1", slogAttrString(sent, "event_id"))
+	require.Equal(t, "m", slogAttrString(sent, "message_id"))
+	require.Equal(t, "c", slogAttrString(sent, "chat_id"))
+
+	edited := messageEventLogAttrs(&eventsv1.MessageStreamEvent{
 		EventId: "e2",
-		Payload: &eventsv1.MessageStreamEvent_MessageEdited{MessageEdited: &eventsv1.MessageEdited{}},
-	}))
-	require.NotEmpty(t, messageEventLogAttrs(&eventsv1.MessageStreamEvent{
+		Payload: &eventsv1.MessageStreamEvent_MessageEdited{MessageEdited: &eventsv1.MessageEdited{
+			MessageId: "m2", ChatId: "c2",
+		}},
+	})
+	require.Equal(t, "m2", slogAttrString(edited, "message_id"))
+	require.Equal(t, "c2", slogAttrString(edited, "chat_id"))
+
+	deleted := messageEventLogAttrs(&eventsv1.MessageStreamEvent{
 		EventId: "e3",
-		Payload: &eventsv1.MessageStreamEvent_MessageDeleted{MessageDeleted: &eventsv1.MessageDeleted{}},
-	}))
-	require.NotEmpty(t, messageEventLogAttrs(&eventsv1.MessageStreamEvent{
+		Payload: &eventsv1.MessageStreamEvent_MessageDeleted{MessageDeleted: &eventsv1.MessageDeleted{
+			MessageId: "m3", ChatId: "c3",
+		}},
+	})
+	require.Equal(t, "m3", slogAttrString(deleted, "message_id"))
+
+	read := messageEventLogAttrs(&eventsv1.MessageStreamEvent{
 		EventId: "e4",
-		Payload: &eventsv1.MessageStreamEvent_MessageRead{MessageRead: &eventsv1.MessageRead{}},
-	}))
+		Payload: &eventsv1.MessageStreamEvent_MessageRead{MessageRead: &eventsv1.MessageRead{
+			MessageId: "m4", ChatId: "c4", ProfileId: "p4",
+		}},
+	})
+	require.Equal(t, "m4", slogAttrString(read, "message_id"))
+	require.Equal(t, "c4", slogAttrString(read, "chat_id"))
+	require.Equal(t, "p4", slogAttrString(read, "profile_id"))
 }
 
 func TestJetStreamPublisher_ensureStreamAlreadyExists(t *testing.T) {

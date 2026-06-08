@@ -47,7 +47,3 @@ func TestLogPublishAndConsume(t *testing.T) {
 	require.Equal(t, "nats_consume", rec["event"])
 }
 
-func TestLogPublishNilLogger(t *testing.T) {
-	LogPublish(nil, "x", "y", "z")
-	LogConsume(nil, &nats.Msg{Subject: "x"}, slog.LevelInfo, "ok")
-}

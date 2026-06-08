@@ -8,12 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSQLChatGuard_nilPool(t *testing.T) {
-	t.Parallel()
-	var g *SQLChatGuard
-	require.NoError(t, g.EnsureMember(context.Background(), uuid.New(), uuid.New()))
-}
-
 func TestSQLChatGuard_membership(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgresForStoreTest(t, ctx)

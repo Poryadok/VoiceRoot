@@ -139,6 +139,12 @@ ProviderContainer _callTestContainer({
   );
 }
 
+Future<void> drainMicrotasks({int rounds = 30}) async {
+  for (var i = 0; i < rounds; i++) {
+    await Future<void>.delayed(Duration.zero);
+  }
+}
+
 void main() {
   test('resolveLivekitConnectUrl prefers client fallback for docker host', () {
     expect(
@@ -183,7 +189,7 @@ void main() {
       chatId: 'chat-1',
       calleeProfileId: 'peer-b',
     );
-    await Future<void>.delayed(Duration.zero);
+    await drainMicrotasks();
     await notifier.startCall(chatId: 'chat-1', calleeProfileId: 'peer-b');
     expect(startPosts, 1);
 
@@ -224,8 +230,10 @@ void main() {
     realtime.add(
       RealtimeFrame(op: 'call_accepted', data: {'room_id': session.roomId}),
     );
-    await Future<void>.delayed(Duration.zero);
+    await drainMicrotasks();
     expect(fakeRoom.connectCalls, 0);
+    expect(container.read(callControllerProvider).phase, CallPhase.incoming);
+    expect(container.read(callControllerProvider).session?.roomId, session.roomId);
   });
 
   test('call_accepted on WS connects initiator to LiveKit', () async {
@@ -260,8 +268,7 @@ void main() {
     realtime.add(
       RealtimeFrame(op: 'call_accepted', data: {'room_id': session.roomId}),
     );
-    await Future<void>.delayed(Duration.zero);
-    await Future<void>.delayed(Duration.zero);
+    await drainMicrotasks();
     expect(fakeRoom.connectCalls, 1);
     expect(fakeRoom.lastUrl, 'ws://127.0.0.1:7880');
     expect(container.read(callControllerProvider).phase, CallPhase.active);
@@ -298,8 +305,7 @@ void main() {
     container.read(callControllerProvider);
     container.read(realtimeLinkStatusProvider.notifier).state =
         RealtimeLinkStatus.connected;
-    await Future<void>.delayed(Duration.zero);
-    await Future<void>.delayed(Duration.zero);
+    await drainMicrotasks();
 
     final call = container.read(callControllerProvider);
     expect(call.phase, CallPhase.incoming);

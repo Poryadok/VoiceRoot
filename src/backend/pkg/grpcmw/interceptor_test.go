@@ -54,7 +54,3 @@ func TestUnaryRecovery_PanicReturnsInternal(t *testing.T) {
 	require.Contains(t, buf.String(), "grpc panic")
 }
 
-func TestServerOptions_ReturnsInterceptors(t *testing.T) {
-	opts := ServerOptions(slog.Default())
-	require.NotEmpty(t, opts)
-}

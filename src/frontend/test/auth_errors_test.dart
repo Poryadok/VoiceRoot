@@ -25,35 +25,35 @@ void main() {
     test('validation_failed', () {
       expect(
         authErrorMessage(l10n, AuthErrorKeys.validationFailed),
-        'Use a valid email and a password of at least 8 characters.',
+        l10n.authErrorValidationFailed,
       );
     });
 
     test('rate_limited', () {
       expect(
         authErrorMessage(l10n, AuthErrorKeys.rateLimited),
-        'Too many attempts. Please wait and try again.',
+        l10n.authErrorRateLimited,
       );
     });
 
     test('invalid_credentials', () {
       expect(
         authErrorMessage(l10n, AuthErrorKeys.invalidCredentials),
-        'Incorrect email or password.',
+        l10n.authErrorInvalidCredentials,
       );
     });
 
     test('empty_fields', () {
       expect(
         authErrorMessage(l10n, AuthErrorKeys.emptyFields),
-        'Enter your email and password.',
+        l10n.authErrorEmptyFields,
       );
     });
 
     test('password_too_short', () {
       expect(
         authErrorMessage(l10n, AuthErrorKeys.passwordTooShort),
-        'Password must be at least 8 characters.',
+        l10n.authErrorPasswordTooShort,
       );
     });
 

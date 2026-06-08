@@ -26,6 +26,6 @@ void main() {
     );
     expect(result, isA<GatewayHttpOk<void>>());
     expect(capturedRequestId, isNotNull);
-    expect(capturedRequestId, hasLength(32));
+    expect(capturedRequestId, matches(RegExp(r'^[0-9a-f]{32}$')));
   });
 }

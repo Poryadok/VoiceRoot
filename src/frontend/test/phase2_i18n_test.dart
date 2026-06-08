@@ -7,12 +7,12 @@ void main() {
     final en = AppLocalizationsEn();
     final ru = AppLocalizationsRu();
 
-    expect(en.callStartAudio, isNotEmpty);
-    expect(en.callIncomingTitle('Alice'), contains('Alice'));
-    expect(en.callHangup, isNotEmpty);
+    expect(en.callStartAudio, 'Start audio call');
+    expect(en.callIncomingTitle('Alice'), 'Alice is calling');
+    expect(en.callHangup, 'Hang up');
 
-    expect(ru.callStartAudio, isNotEmpty);
+    expect(ru.callStartAudio, 'Начать аудиозвонок');
     expect(ru.callIncomingTitle('Алиса'), contains('Алиса'));
-    expect(ru.callHangup, isNotEmpty);
+    expect(ru.callHangup, 'Завершить');
   });
 }

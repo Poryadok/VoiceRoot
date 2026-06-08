@@ -41,7 +41,7 @@ func TestMessagesStore_nilPool(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestMessagesStore_CRUDAndList(t *testing.T) {
+func TestMessagesStore_CRUD(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgresForStoreTest(t, ctx)
 	seedMessagingSchema(t, ctx, pool)

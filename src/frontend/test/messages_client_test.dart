@@ -103,11 +103,14 @@ void main() {
           );
         });
         final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
-        await client.getMessages(
+        final r = await client.getMessages(
           authorization: auth,
           chatId: 'chat-1',
           lastMessageId: 'msg-last',
         );
+        expect(r, isA<MessagesApiOk<MessageListData>>());
+        expect((r as MessagesApiOk<MessageListData>).data.messages, isEmpty);
+        expect(r.data.hasMore, isFalse);
       },
     );
   });

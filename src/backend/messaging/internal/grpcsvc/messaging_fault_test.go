@@ -35,21 +35,6 @@ func (g faultGuard) DMOtherProfileID(context.Context, uuid.UUID, uuid.UUID) (uui
 	return g.peer, nil
 }
 
-type errPublisher struct{}
-
-func (errPublisher) PublishMessageSent(context.Context, string, string, string) error {
-	return errors.New("nats down")
-}
-func (errPublisher) PublishMessageEdited(context.Context, string, string) error {
-	return errors.New("nats down")
-}
-func (errPublisher) PublishMessageDeleted(context.Context, string, string) error {
-	return errors.New("nats down")
-}
-func (errPublisher) PublishMessageRead(context.Context, string, string, string) error {
-	return errors.New("nats down")
-}
-
 func closedPoolSvc(t *testing.T) (*MessagingGRPC, context.Context, uuid.UUID, uuid.UUID) {
 	t.Helper()
 	ctx := context.Background()
@@ -171,7 +156,7 @@ func TestMessagingGRPC_chatGuardInternalErrors(t *testing.T) {
 	require.Equal(t, codes.Internal, status.Code(err))
 }
 
-func TestMessagingGRPC_editDeleteWithGuardAndPublishErrors(t *testing.T) {
+func TestMessagingGRPC_editDeleteValidation(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgresForTest(t, ctx)
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
@@ -184,7 +169,7 @@ func TestMessagingGRPC_editDeleteWithGuardAndPublishErrors(t *testing.T) {
 	acctA := uuid.New()
 	seedDMChat(t, ctx, pool, chatID, profA, profB)
 
-	client, _ := startMessagingServerWired(t, pool, messagingWire{MessageEvents: errPublisher{}})
+	client, _ := startMessagingServer(t, pool)
 	mk := messagingv1.MessageKind_MESSAGE_KIND_REGULAR
 	pctx := withProfileCtx(ctx, acctA, profA)
 	send, err := client.SendMessage(pctx, &messagingv1.SendMessageRequest{

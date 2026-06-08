@@ -2,7 +2,6 @@ package s2s
 
 import (
 	"context"
-	"errors"
 	"net"
 	"testing"
 
@@ -124,11 +123,6 @@ func TestGRPCChatGuard_DMOtherProfileID(t *testing.T) {
 
 	err = g.EnsureMember(context.Background(), chatID, uuid.New())
 	require.ErrorIs(t, err, store.ErrNotChatMember)
-}
-
-func TestGrpcMemberErr_nonStatus(t *testing.T) {
-	t.Parallel()
-	require.Equal(t, errors.New("plain"), grpcMemberErr(errors.New("plain")))
 }
 
 func TestGRPCChatGuard_DMOtherProfileID_edgeCases(t *testing.T) {

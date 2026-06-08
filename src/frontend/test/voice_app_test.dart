@@ -12,7 +12,7 @@ import 'package:voice_frontend/state/gateway_providers.dart';
 import 'support/auth_test_overrides.dart';
 
 void main() {
-  testWidgets('shows Gateway ok when /health returns 200', (tester) async {
+  testWidgets('hides gateway status bar when /health returns 200', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: voiceAppTestOverrides(

@@ -21,7 +21,7 @@ class RequestIdFilterTest {
   void generatesRequestIdWhenMissing() throws Exception {
     var result = mockMvc.perform(get("/health")).andExpect(header().exists(RequestIdFilter.HEADER)).andReturn();
     String requestId = result.getResponse().getHeader(RequestIdFilter.HEADER);
-    assertThat(requestId).isNotBlank().hasSize(32);
+    assertThat(requestId).isNotBlank().hasSize(32).matches("[0-9a-f]{32}");
   }
 
   @Test

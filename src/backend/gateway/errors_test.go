@@ -5,7 +5,8 @@ import (
 	"testing"
 )
 
-func TestDownstreamErrorMapping(t *testing.T) {
+// REST proxy passes upstream status and body unchanged when the transcoder does not handle the route.
+func TestRESTProxyPassthroughPreservesDownstreamErrorBody(t *testing.T) {
 	t.Parallel()
 
 	h := newGatewayForContract(t, gatewayTestOptions{
@@ -13,15 +14,15 @@ func TestDownstreamErrorMapping(t *testing.T) {
 			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
 		},
 		restUpstreams: map[string]http.Handler{
-			"messages": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				w.Header().Set("X-Voice-GRPC-Code", "PERMISSION_DENIED")
+			"bots": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusForbidden)
 				_, _ = w.Write([]byte(`{"error_code":"permission_denied","message":"not allowed"}`))
 			}),
 		},
 	})
 
-	rec := performRequest(h, http.MethodPost, "/api/v1/messages/send", `{}`, map[string]string{
+	rec := performRequest(h, http.MethodGet, "/api/v1/bots/hooks", "", map[string]string{
 		"Authorization": "Bearer valid-user-token",
 	})
 	if rec.Code != http.StatusForbidden {
@@ -32,7 +33,7 @@ func TestDownstreamErrorMapping(t *testing.T) {
 		Message   string `json:"message"`
 	}
 	decodeJSON(t, rec.Body, &got)
-	if got.ErrorCode != "permission_denied" || got.Message == "" {
+	if got.ErrorCode != "permission_denied" || got.Message != "not allowed" {
 		t.Fatalf("error body = %+v", got)
 	}
 }

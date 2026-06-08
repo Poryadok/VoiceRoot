@@ -10,6 +10,7 @@ import (
 
 type failJSONWriter struct {
 	header http.Header
+	status int
 }
 
 func (f *failJSONWriter) Header() http.Header {
@@ -20,7 +21,7 @@ func (f *failJSONWriter) Header() http.Header {
 }
 
 func (f *failJSONWriter) Write([]byte) (int, error) { return 0, errors.New("write failed") }
-func (f *failJSONWriter) WriteHeader(int)           {}
+func (f *failJSONWriter) WriteHeader(code int)      { f.status = code }
 
 func TestHealthHandler(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
@@ -55,6 +56,10 @@ func TestHealthHandlerRejectsNonGET(t *testing.T) {
 }
 
 func TestHealthHandlerEncodeError(t *testing.T) {
+	w := &failJSONWriter{}
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
-	healthHandler(serviceName).ServeHTTP(&failJSONWriter{}, req)
+	healthHandler(serviceName).ServeHTTP(w, req)
+	if w.status != http.StatusInternalServerError {
+		t.Fatalf("expected status %d, got %d", http.StatusInternalServerError, w.status)
+	}
 }

@@ -86,6 +86,9 @@ void main() {
       );
       final r = await client.login(email: 'u@x.com', password: 'pw');
       expect(r, isA<AuthSessionOk>());
+      final session = (r as AuthSessionOk).session;
+      expect(session.accessToken, 'access-abc');
+      expect(session.activeProfileId, 'prof-1');
     });
   });
 
