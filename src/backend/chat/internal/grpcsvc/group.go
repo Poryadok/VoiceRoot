@@ -201,6 +201,9 @@ func (s *ChatGRPC) RemoveMember(ctx context.Context, req *chatv1.RemoveMemberReq
 		return nil, status.Error(codes.PermissionDenied, "only the group owner can remove members")
 	}
 	if err := s.DM.RemoveGroupMember(ctx, chatID, targetID); err != nil {
+		if errors.Is(err, store.ErrCannotRemoveOwner) {
+			return nil, status.Error(codes.FailedPrecondition, err.Error())
+		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, status.Error(codes.NotFound, "member not found")
 		}
@@ -212,4 +215,43 @@ func (s *ChatGRPC) RemoveMember(ctx context.Context, req *chatv1.RemoveMemberReq
 		}
 	}
 	return &chatv1.RemoveMemberResponse{}, nil
+}
+
+func (s *ChatGRPC) LeaveChat(ctx context.Context, req *chatv1.LeaveChatRequest) (*chatv1.LeaveChatResponse, error) {
+	if s == nil || s.DM == nil {
+		return nil, status.Error(codes.FailedPrecondition, "chat persistence not configured")
+	}
+	caller, ok := authctx.ProfileID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing profile")
+	}
+	chatID, err := parseUUIDField("chat_id", req.GetChatId())
+	if err != nil {
+		return nil, err
+	}
+	row, err := s.DM.FindChatByID(ctx, chatID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if row == nil {
+		return nil, status.Error(codes.NotFound, "chat not found")
+	}
+	if row.Type != "group" {
+		return nil, status.Error(codes.InvalidArgument, "leave only supported for groups")
+	}
+	if err := s.DM.LeaveGroupChat(ctx, chatID, caller); err != nil {
+		if errors.Is(err, store.ErrOwnerMustTransfer) {
+			return nil, status.Error(codes.FailedPrecondition, err.Error())
+		}
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, status.Error(codes.NotFound, "not a group member")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if s.ChatEvents != nil {
+		if err := s.ChatEvents.PublishChatMemberChanged(ctx, chatID.String(), caller.String(), "left"); err != nil {
+			log.Printf("chat: publish chat.member_changed: %v", err)
+		}
+	}
+	return &chatv1.LeaveChatResponse{}, nil
 }

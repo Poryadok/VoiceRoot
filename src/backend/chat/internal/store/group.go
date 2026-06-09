@@ -233,10 +233,50 @@ VALUES ($1, $2, 'member', 'main')
 	return added, nil
 }
 
-// RemoveGroupMember deletes membership from a group chat.
+// RemoveGroupMember deletes membership from a group chat. The owner cannot be removed.
 func (s *DMStore) RemoveGroupMember(ctx context.Context, chatID, profileID uuid.UUID) error {
 	if s == nil || s.Pool == nil {
 		return errors.New("dm store: pool not configured")
+	}
+	role, err := s.GetMemberRole(ctx, chatID, profileID)
+	if err != nil {
+		return err
+	}
+	if role == "" {
+		return pgx.ErrNoRows
+	}
+	if role == "owner" {
+		return ErrCannotRemoveOwner
+	}
+	ct, err := s.Pool.Exec(ctx, `
+DELETE FROM chat_members m
+USING chats c
+WHERE m.chat_id = c.id AND c.type = 'group'
+  AND m.chat_id = $1 AND m.profile_id = $2
+`, chatID, profileID)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	return nil
+}
+
+// LeaveGroupChat removes the caller from a standalone group. Owners must transfer ownership first.
+func (s *DMStore) LeaveGroupChat(ctx context.Context, chatID, profileID uuid.UUID) error {
+	if s == nil || s.Pool == nil {
+		return errors.New("dm store: pool not configured")
+	}
+	role, err := s.GetMemberRole(ctx, chatID, profileID)
+	if err != nil {
+		return err
+	}
+	if role == "" {
+		return pgx.ErrNoRows
+	}
+	if role == "owner" {
+		return ErrOwnerMustTransfer
 	}
 	ct, err := s.Pool.Exec(ctx, `
 DELETE FROM chat_members m
@@ -289,4 +329,6 @@ RETURNING id, type, space_id, name, avatar_url, topic, creator_profile_id, slow_
 var (
 	ErrGroupTooFewMembers = errors.New("group must have at least 3 members")
 	ErrGroupMemberLimit   = errors.New("group member limit is 500")
+	ErrCannotRemoveOwner  = errors.New("cannot remove group owner")
+	ErrOwnerMustTransfer  = errors.New("group owner must transfer ownership before leaving")
 )
