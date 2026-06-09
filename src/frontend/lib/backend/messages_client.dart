@@ -28,6 +28,8 @@ final class MessagesApiFailure extends MessagesApiResult<Never> {
   final int? statusCode;
 }
 
+enum VoiceMessageKind { regular, system, forward, unknown }
+
 class VoiceMessage {
   const VoiceMessage({
     required this.id,
@@ -35,6 +37,9 @@ class VoiceMessage {
     required this.senderProfileId,
     required this.content,
     this.attachments = const [],
+    this.messageKind = VoiceMessageKind.regular,
+    this.forwardFromId,
+    this.forwardFromSender,
     this.editedAt,
     this.deletedAt,
     this.createdAt,
@@ -45,6 +50,9 @@ class VoiceMessage {
   final String senderProfileId;
   final String content;
   final List<MessageAttachment> attachments;
+  final VoiceMessageKind messageKind;
+  final String? forwardFromId;
+  final String? forwardFromSender;
   final DateTime? editedAt;
   final DateTime? deletedAt;
   final DateTime? createdAt;
@@ -275,6 +283,26 @@ class VoiceMessagesClient {
       authorization: authorization,
     );
     return _mapEmpty(result);
+  }
+
+  /// Phase 4 forward with attribution — docs/features/forward-messages.md.
+  Future<MessagesApiResult<VoiceMessage>> forwardMessage({
+    required String authorization,
+    required String sourceMessageId,
+    required String targetChatId,
+    String? commentary,
+  }) async {
+    final result = await _gateway.postProto(
+      uri: _gateway.resolve('/api/v1/messages/forward'),
+      authorization: authorization,
+      body: forwardMessageRequestToProto(
+        sourceMessageId: sourceMessageId,
+        targetChatId: targetChatId,
+        commentary: commentary,
+      ),
+      createEmpty: messaging_pb.ForwardMessageResponse.create,
+    );
+    return _map(result, (data) => voiceMessageFromProto(data.message));
   }
 
   Future<MessagesApiResult<ReadStateData>> getReadState({

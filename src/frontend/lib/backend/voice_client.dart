@@ -106,6 +106,36 @@ class VoiceCallsClient {
     );
   }
 
+  /// Phase 4 group voice — temporary room bound to a group chat (no callee).
+  Future<VoiceApiResult<VoiceCallSession>> startGroupVoice({
+    required String authorization,
+    required String groupChatId,
+    VoiceCallMediaKind mediaKind = VoiceCallMediaKind.audio,
+  }) {
+    return _postSession(
+      '/api/v1/voice/calls',
+      authorization,
+      startGroupVoiceRequestToProto(
+        groupChatId: groupChatId,
+        mediaKind: mediaKind,
+      ),
+      calls_pb.StartCallResponse.create,
+    );
+  }
+
+  /// Join an active group voice call (Phase 4).
+  Future<VoiceApiResult<VoiceCallSession>> joinCall({
+    required String authorization,
+    required String roomId,
+  }) {
+    return _postSession(
+      '/api/v1/voice/calls/$roomId/join',
+      authorization,
+      calls_pb.JoinCallRequest(roomId: roomId),
+      calls_pb.JoinCallResponse.create,
+    );
+  }
+
   Future<VoiceApiResult<VoiceCallSession>> acceptCall({
     required String authorization,
     required String roomId,
@@ -199,6 +229,7 @@ class VoiceCallsClient {
     if (response is calls_pb.StartCallResponse) return response.callSession;
     if (response is calls_pb.AcceptCallResponse) return response.callSession;
     if (response is calls_pb.DeclineCallResponse) return response.callSession;
+    if (response is calls_pb.JoinCallResponse) return response.callSession;
     return calls_pb.CallSession();
   }
 

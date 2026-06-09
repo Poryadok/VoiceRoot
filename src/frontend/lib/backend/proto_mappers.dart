@@ -34,6 +34,16 @@ String? emptyToNull(String? value) {
   return value;
 }
 
+VoiceMessageKind voiceMessageKindFromProto(MessageKind kind) {
+  return switch (kind) {
+    MessageKind.MESSAGE_KIND_FORWARD => VoiceMessageKind.forward,
+    MessageKind.MESSAGE_KIND_SYSTEM => VoiceMessageKind.system,
+    MessageKind.MESSAGE_KIND_REGULAR => VoiceMessageKind.regular,
+    MessageKind.MESSAGE_KIND_UNSPECIFIED => VoiceMessageKind.unknown,
+    _ => VoiceMessageKind.unknown,
+  };
+}
+
 VoiceMessage voiceMessageFromProto(messaging_pb.Message msg) {
   return VoiceMessage(
     id: msg.id,
@@ -41,6 +51,11 @@ VoiceMessage voiceMessageFromProto(messaging_pb.Message msg) {
     senderProfileId: msg.senderProfileId,
     content: msg.content,
     attachments: MessageAttachment.listFromWire(msg.attachmentsJson),
+    messageKind: msg.hasMessageKind()
+        ? voiceMessageKindFromProto(msg.messageKind)
+        : VoiceMessageKind.regular,
+    forwardFromId: emptyToNull(msg.forwardFromId),
+    forwardFromSender: emptyToNull(msg.forwardFromSender),
     editedAt: protoTimestampToDateTime(msg.hasEditedAt() ? msg.editedAt : null),
     deletedAt: protoTimestampToDateTime(msg.hasDeletedAt() ? msg.deletedAt : null),
     createdAt: protoTimestampToDateTime(msg.hasCreatedAt() ? msg.createdAt : null),
@@ -400,6 +415,32 @@ calls_pb.StartCallRequest startCallRequestToProto({
     linkedChat: chatRefToProto(chatId),
     calleeProfileId: calleeProfileId,
     mediaKind: callMediaKindToProto(mediaKind),
+  );
+}
+
+calls_pb.StartCallRequest startGroupVoiceRequestToProto({
+  required String groupChatId,
+  required VoiceCallMediaKind mediaKind,
+}) {
+  return calls_pb.StartCallRequest(
+    roomTypeEnum: VoiceSessionKind.VOICE_SESSION_KIND_GROUP_VOICE,
+    linkedChat: chatRefToProto(
+      groupChatId,
+      type: ChatType.CHAT_TYPE_GROUP,
+    ),
+    mediaKind: callMediaKindToProto(mediaKind),
+  );
+}
+
+messaging_pb.ForwardMessageRequest forwardMessageRequestToProto({
+  required String sourceMessageId,
+  required String targetChatId,
+  String? commentary,
+}) {
+  return messaging_pb.ForwardMessageRequest(
+    sourceMessageId: sourceMessageId,
+    targetChat: chatRefToProto(targetChatId),
+    commentary: commentary,
   );
 }
 
