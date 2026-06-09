@@ -15,6 +15,7 @@ void main() {
     'test/phase3_delivery_e2e_live_test.dart',
     'test/phase3_dm_requests_e2e_live_test.dart',
     'test/phase3_file_attachment_e2e_live_test.dart',
+    'test/phase4_groups_e2e_live_test.dart',
   ];
 
   for (final path in liveTests) {

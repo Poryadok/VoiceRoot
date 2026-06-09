@@ -427,3 +427,210 @@ func TestCreateGroup_ListChats_IncludesGroup(t *testing.T) {
 	}
 	require.True(t, found, fmt.Sprintf("group %s missing from ListChats", chat.GetId()))
 }
+
+func TestCreateGroup_EmptyName_InvalidArgument(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	profiles := profileMap(uuid.New())
+	owner := uuidKey(profiles)
+	pool := startChatPostgresForTest(t, context.Background())
+	applyChatMigration(t, context.Background(), pool)
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil)
+	t.Cleanup(cleanup)
+
+	empty := "   "
+	_, err := client.CreateChat(ctxFor(t, profiles, owner), &chatv1.CreateChatRequest{
+		Type: chatv1.ChatType_CHAT_TYPE_GROUP,
+		Name: &empty,
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+func TestCreateGroup_SpaceGroup_Unimplemented(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	profiles := profileMap(uuid.New())
+	owner := uuidKey(profiles)
+	pool := startChatPostgresForTest(t, context.Background())
+	applyChatMigration(t, context.Background(), pool)
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil)
+	t.Cleanup(cleanup)
+
+	name := "Space raid"
+	spaceID := uuid.New().String()
+	_, err := client.CreateChat(ctxFor(t, profiles, owner), &chatv1.CreateChatRequest{
+		Type:    chatv1.ChatType_CHAT_TYPE_GROUP,
+		Name:    &name,
+		SpaceId: &spaceID,
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.Unimplemented, status.Code(err))
+}
+
+func TestCreateGroup_AddMembers_NonMember_PermissionDenied(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	profiles := profileMap(uuid.New(), uuid.New(), uuid.New(), uuid.New())
+	ids := profileIDs(profiles)
+	owner, inviteeA, inviteeB, stranger := ids[0], ids[1], ids[2], ids[3]
+
+	pool := startChatPostgresForTest(t, context.Background())
+	applyChatMigration(t, context.Background(), pool)
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil)
+	t.Cleanup(cleanup)
+
+	chat := createStandaloneGroup(t, client, profiles, owner, "Private", inviteeA, inviteeB)
+	_, err := client.AddMembers(ctxFor(t, profiles, stranger), &chatv1.AddMembersRequest{
+		ChatId:     chat.GetId(),
+		ProfileIds: []string{uuid.New().String()},
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+func TestCreateGroup_AddMembers_UnknownProfile_NotFound(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	profiles := profileMap(uuid.New(), uuid.New(), uuid.New())
+	ids := profileIDs(profiles)
+	owner, inviteeA, inviteeB := ids[0], ids[1], ids[2]
+
+	pool := startChatPostgresForTest(t, context.Background())
+	applyChatMigration(t, context.Background(), pool)
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil)
+	t.Cleanup(cleanup)
+
+	chat := createStandaloneGroup(t, client, profiles, owner, "Lookup", inviteeA, inviteeB)
+	_, err := client.AddMembers(ctxFor(t, profiles, owner), &chatv1.AddMembersRequest{
+		ChatId:     chat.GetId(),
+		ProfileIds: []string{uuid.New().String()},
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.NotFound, status.Code(err))
+}
+
+func TestCreateGroup_UpdateChat_Name_ByOwner(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	profiles := profileMap(uuid.New(), uuid.New(), uuid.New())
+	ids := profileIDs(profiles)
+	owner, inviteeA, inviteeB := ids[0], ids[1], ids[2]
+
+	pool := startChatPostgresForTest(t, context.Background())
+	applyChatMigration(t, context.Background(), pool)
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil)
+	t.Cleanup(cleanup)
+
+	chat := createStandaloneGroup(t, client, profiles, owner, "Old name", inviteeA, inviteeB)
+	renamed := "New name"
+	updated, err := client.UpdateChat(ctxFor(t, profiles, owner), &chatv1.UpdateChatRequest{
+		ChatId: chat.GetId(),
+		Name:   &renamed,
+	})
+	require.NoError(t, err)
+	require.Equal(t, renamed, updated.GetChat().GetName())
+}
+
+func TestCreateGroup_UpdateChat_NonOwner_PermissionDenied(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	profiles := profileMap(uuid.New(), uuid.New(), uuid.New())
+	ids := profileIDs(profiles)
+	owner, inviteeA, inviteeB := ids[0], ids[1], ids[2]
+
+	pool := startChatPostgresForTest(t, context.Background())
+	applyChatMigration(t, context.Background(), pool)
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil)
+	t.Cleanup(cleanup)
+
+	chat := createStandaloneGroup(t, client, profiles, owner, "Locked", inviteeA, inviteeB)
+	avatar := "https://cdn.voice.gg/groups/nope.webp"
+	_, err := client.UpdateChat(ctxFor(t, profiles, inviteeA), &chatv1.UpdateChatRequest{
+		ChatId:    chat.GetId(),
+		AvatarUrl: &avatar,
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+func TestCreateGroup_GetChat_ReturnsGroupMetadata(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	profiles := profileMap(uuid.New(), uuid.New(), uuid.New())
+	ids := profileIDs(profiles)
+	owner, inviteeA, inviteeB := ids[0], ids[1], ids[2]
+
+	pool := startChatPostgresForTest(t, context.Background())
+	applyChatMigration(t, context.Background(), pool)
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil)
+	t.Cleanup(cleanup)
+
+	chat := createStandaloneGroup(t, client, profiles, owner, "Metadata", inviteeA, inviteeB)
+	got, err := client.GetChat(ctxFor(t, profiles, inviteeB), &chatv1.GetChatRequest{ChatId: chat.GetId()})
+	require.NoError(t, err)
+	require.Equal(t, chatv1.ChatType_CHAT_TYPE_GROUP, got.GetChat().GetType())
+	require.Equal(t, "Metadata", got.GetChat().GetName())
+	require.Equal(t, owner.String(), got.GetChat().GetCreatorProfileId())
+}
+
+func TestCreateGroup_ListMembers_PaginatesGroup(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	profiles := profileMap(uuid.New(), uuid.New(), uuid.New(), uuid.New())
+	ids := profileIDs(profiles)
+	owner, a, b, c := ids[0], ids[1], ids[2], ids[3]
+
+	pool := startChatPostgresForTest(t, context.Background())
+	applyChatMigration(t, context.Background(), pool)
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil)
+	t.Cleanup(cleanup)
+
+	chat := createStandaloneGroup(t, client, profiles, owner, "Members", a, b)
+	_, err := client.AddMembers(ctxFor(t, profiles, owner), &chatv1.AddMembersRequest{
+		ChatId:     chat.GetId(),
+		ProfileIds: []string{c.String()},
+	})
+	require.NoError(t, err)
+
+	page1, err := client.ListMembers(ctxFor(t, profiles, owner), &chatv1.ListMembersRequest{
+		ChatId: chat.GetId(),
+		Page:   &commonv1.CursorPageRequest{PageSize: 2},
+	})
+	require.NoError(t, err)
+	require.Len(t, page1.GetMemberList().GetMembers(), 2)
+	require.NotEmpty(t, page1.GetMemberList().GetNextCursor())
+
+	page2, err := client.ListMembers(ctxFor(t, profiles, owner), &chatv1.ListMembersRequest{
+		ChatId: chat.GetId(),
+		Page: &commonv1.CursorPageRequest{
+			PageSize: 2,
+			Cursor:   page1.GetMemberList().GetNextCursor(),
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, page2.GetMemberList().GetMembers(), 2)
+}
+
+func uuidKey(m mapProfileAccounts) uuid.UUID {
+	for id := range m {
+		return id
+	}
+	panic("empty profile map")
+}
+
+func profileIDs(m mapProfileAccounts) []uuid.UUID {
+	ids := make([]uuid.UUID, 0, len(m))
+	for id := range m {
+		ids = append(ids, id)
+	}
+	return ids
+}

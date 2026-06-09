@@ -107,6 +107,99 @@ func waitComposeWSOp(
 	return composeWSFrame{}
 }
 
+func createComposeGroup(t *testing.T, client *http.Client, base, accessToken, name string) string {
+	t.Helper()
+	payload, err := json.Marshal(map[string]string{
+		"type": "CHAT_TYPE_GROUP",
+		"name": name,
+	})
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/chats", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "POST /api/v1/chats body=%s", string(body))
+
+	var parsed struct {
+		Chat struct {
+			ID   string `json:"id"`
+			Type string `json:"type"`
+			Name string `json:"name"`
+		} `json:"chat"`
+	}
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	require.NotEmpty(t, parsed.Chat.ID)
+	require.Equal(t, "CHAT_TYPE_GROUP", parsed.Chat.Type)
+	require.Equal(t, name, parsed.Chat.Name)
+	return parsed.Chat.ID
+}
+
+func addComposeGroupMembers(t *testing.T, client *http.Client, base, accessToken, chatID string, profileIDs ...string) {
+	t.Helper()
+	payload, err := json.Marshal(map[string]any{"profile_ids": profileIDs})
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/chats/"+chatID+"/members", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusNoContent, resp.StatusCode, "POST members body=%s", string(body))
+}
+
+func removeComposeGroupMember(t *testing.T, client *http.Client, base, accessToken, chatID, profileID string) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodDelete, base+"/api/v1/chats/"+chatID+"/members/"+profileID, nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusNoContent, resp.StatusCode, "DELETE member body=%s", string(body))
+}
+
+func updateComposeGroupAvatar(t *testing.T, client *http.Client, base, accessToken, chatID, avatarURL string) {
+	t.Helper()
+	payload, err := json.Marshal(map[string]string{"avatar_url": avatarURL})
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPatch, base+"/api/v1/chats/"+chatID, bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "PATCH chat body=%s", string(body))
+
+	var parsed struct {
+		Chat struct {
+			AvatarURL string `json:"avatar_url"`
+		} `json:"chat"`
+	}
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	require.Equal(t, avatarURL, parsed.Chat.AvatarURL)
+}
+
+func getComposeChatStatus(t *testing.T, client *http.Client, base, accessToken, chatID string) int {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, base+"/api/v1/chats/"+chatID, nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	_, _ = io.ReadAll(resp.Body)
+	return resp.StatusCode
+}
+
 func createComposeDM(t *testing.T, client *http.Client, base, accessToken, otherProfileID string) string {
 	t.Helper()
 	payload, err := json.Marshal(map[string]string{"other_profile_id": otherProfileID})
