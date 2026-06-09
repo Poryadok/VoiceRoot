@@ -132,6 +132,7 @@ VoiceChat voiceChatFromProto(chat_pb.Chat chat) {
     type: chat.type.name,
     creatorProfileId: chat.creatorProfileId,
     name: chat.hasName() ? emptyToNull(chat.name) : null,
+    avatarUrl: chat.hasAvatarUrl() ? emptyToNull(chat.avatarUrl) : null,
   );
 }
 
@@ -159,6 +160,33 @@ ChatListData chatListFromProto(chat_pb.ChatList list) {
 
 chat_pb.CreateDMRequest createDmRequestToProto(String otherProfileId) {
   return chat_pb.CreateDMRequest(otherProfileId: otherProfileId);
+}
+
+chat_pb.CreateChatRequest createGroupRequestToProto({required String name}) {
+  return chat_pb.CreateChatRequest(
+    type: ChatType.CHAT_TYPE_GROUP,
+    name: name,
+  );
+}
+
+chat_pb.AddMembersRequest addMembersRequestToProto({
+  required List<String> profileIds,
+}) {
+  return chat_pb.AddMembersRequest(profileIds: profileIds);
+}
+
+chat_pb.UpdateChatRequest updateChatRequestToProto({
+  String? name,
+  String? avatarUrl,
+}) {
+  final req = chat_pb.UpdateChatRequest();
+  if (name != null) {
+    req.name = name;
+  }
+  if (avatarUrl != null) {
+    req.avatarUrl = avatarUrl;
+  }
+  return req;
 }
 
 VoiceProfile voiceProfileFromProto(user_pb.Profile profile) {

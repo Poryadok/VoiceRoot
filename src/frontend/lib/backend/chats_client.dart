@@ -1,3 +1,5 @@
+import 'package:protobuf/protobuf.dart';
+
 import '../gen/voice/chat/v1/chat.pb.dart' as chat_pb;
 import '../gen/voice/chat/v1/chat.pbenum.dart';
 import 'api_result.dart';
@@ -33,14 +35,17 @@ class VoiceChat {
     required this.type,
     required this.creatorProfileId,
     this.name,
+    this.avatarUrl,
   });
 
   final String id;
   final String type;
   final String creatorProfileId;
   final String? name;
+  final String? avatarUrl;
 
   bool get isDm => type == ChatType.CHAT_TYPE_DM.name;
+  bool get isGroup => type == ChatType.CHAT_TYPE_GROUP.name;
 
   factory VoiceChat.fromJson(Map<String, dynamic> json) {
     return VoiceChat(
@@ -48,6 +53,7 @@ class VoiceChat {
       type: '${json['type']}',
       creatorProfileId: json['creator_profile_id'] as String? ?? '',
       name: json['name'] as String?,
+      avatarUrl: json['avatar_url'] as String?,
     );
   }
 }
@@ -126,17 +132,6 @@ class VoiceChatsClient {
     return _postEmpty('/api/v1/chats/$chatId/decline-request', authorization);
   }
 
-  Future<ChatsApiResult<void>> _postEmpty(
-    String path,
-    String authorization,
-  ) async {
-    final result = await _gateway.postEmpty(
-      uri: _gateway.resolve(path),
-      authorization: authorization,
-    );
-    return _mapEmpty(result);
-  }
-
   Future<ChatsApiResult<VoiceChat>> createDm({
     required String authorization,
     required String otherProfileId,
@@ -148,6 +143,85 @@ class VoiceChatsClient {
       createEmpty: chat_pb.CreateDMResponse.create,
     );
     return _map(result, (data) => voiceChatFromProto(data.chat));
+  }
+
+  Future<ChatsApiResult<VoiceChat>> createGroup({
+    required String authorization,
+    required String name,
+  }) async {
+    final result = await _gateway.postProto(
+      uri: _gateway.resolve('/api/v1/chats'),
+      authorization: authorization,
+      body: createGroupRequestToProto(name: name),
+      createEmpty: chat_pb.CreateChatResponse.create,
+    );
+    return _map(result, (data) => voiceChatFromProto(data.chat));
+  }
+
+  Future<ChatsApiResult<void>> addGroupMembers({
+    required String authorization,
+    required String chatId,
+    required List<String> profileIds,
+  }) {
+    return _postEmpty(
+      '/api/v1/chats/$chatId/members',
+      authorization,
+      body: addMembersRequestToProto(profileIds: profileIds),
+    );
+  }
+
+  Future<ChatsApiResult<void>> removeGroupMember({
+    required String authorization,
+    required String chatId,
+    required String profileId,
+  }) {
+    return _deleteEmpty('/api/v1/chats/$chatId/members/$profileId', authorization);
+  }
+
+  Future<ChatsApiResult<VoiceChat>> updateGroup({
+    required String authorization,
+    required String chatId,
+    String? name,
+    String? avatarUrl,
+  }) async {
+    final result = await _gateway.patchProto(
+      uri: _gateway.resolve('/api/v1/chats/$chatId'),
+      authorization: authorization,
+      body: updateChatRequestToProto(name: name, avatarUrl: avatarUrl),
+      createEmpty: chat_pb.UpdateChatResponse.create,
+    );
+    return _map(result, (data) => voiceChatFromProto(data.chat));
+  }
+
+  Future<ChatsApiResult<void>> _postEmpty(
+    String path,
+    String authorization, {
+    GeneratedMessage? body,
+  }) async {
+    final result = body == null
+        ? await _gateway.postEmpty(
+            uri: _gateway.resolve(path),
+            authorization: authorization,
+          )
+        : await _gateway.postProto(
+            uri: _gateway.resolve(path),
+            authorization: authorization,
+            body: body,
+            createEmpty: chat_pb.AddMembersResponse.create,
+            allowNoContent: true,
+          );
+    return _mapEmpty(result);
+  }
+
+  Future<ChatsApiResult<void>> _deleteEmpty(
+    String path,
+    String authorization,
+  ) async {
+    final result = await _gateway.deleteEmpty(
+      uri: _gateway.resolve(path),
+      authorization: authorization,
+    );
+    return _mapEmpty(result);
   }
 
   ChatsApiResult<T> _map<T>(
