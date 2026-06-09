@@ -808,6 +808,48 @@ void main() {
       expect(find.byKey(ChatRoomPanel.videoCallKey), findsOneWidget);
     },
   );
+
+  testWidgets('ChatRoomPanel shows forward attribution on forwarded messages', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      chatTestApp(
+        home: const ChatRoomPanel(chatId: 'chat-abc'),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/messages') {
+            return http.Response(
+              jsonEncode({
+                'message_list': {
+                  'messages': [
+                    {
+                      'id': 'msg-fwd',
+                      'chat': {'id': 'chat-abc'},
+                      'sender_profile_id': 'profile-test',
+                      'content': 'Original text',
+                      'type': 'forward',
+                      'message_kind': 'MESSAGE_KIND_FORWARD',
+                      'forward_from_id': 'msg-src',
+                      'forward_from_sender': 'Alice',
+                      'created_at': '2024-01-01T00:00:00Z',
+                    },
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          if (req.url.path == '/api/v1/messages/read') {
+            return http.Response('{}', 200);
+          }
+          return http.Response('{}', 404);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Forwarded from Alice'), findsOneWidget);
+    expect(find.text('Original text'), findsOneWidget);
+  });
 }
 
 class _NoopRealtimeHub extends RealtimeHub {

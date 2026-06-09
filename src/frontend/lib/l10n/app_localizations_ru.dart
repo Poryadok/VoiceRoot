@@ -424,6 +424,38 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatMessageEdit => 'Изменить';
 
   @override
+  String get chatMessageForward => 'Переслать';
+
+  @override
+  String get chatForwardTitle => 'Переслать в';
+
+  @override
+  String get chatForwardSearchHint => 'Поиск чатов';
+
+  @override
+  String chatForwardFrom(String sender) {
+    return 'Переслано от $sender';
+  }
+
+  @override
+  String get chatForwardCommentaryTitle => 'Добавить комментарий';
+
+  @override
+  String get chatForwardCommentaryHint =>
+      'Необязательное сообщение перед пересылкой';
+
+  @override
+  String get chatForwardEmpty => 'Нет чатов для пересылки';
+
+  @override
+  String get chatForwardSuccess => 'Сообщение переслано';
+
+  @override
+  String chatForwardError(String message) {
+    return 'Не удалось переслать сообщение: $message';
+  }
+
+  @override
   String get chatMessageDeleteForMe => 'Удалить у меня';
 
   @override

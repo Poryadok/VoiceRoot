@@ -32,3 +32,14 @@ String socialActionErrorMessage(
   }
   return l10n.socialActionError(message);
 }
+
+String chatActionErrorMessage(
+  AppLocalizations l10n,
+  String message, {
+  int? statusCode,
+}) {
+  if (isBackendUnavailable(statusCode)) {
+    return l10n.backendUnavailable;
+  }
+  return l10n.chatForwardError(message);
+}

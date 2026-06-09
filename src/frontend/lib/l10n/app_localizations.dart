@@ -836,6 +836,60 @@ abstract class AppLocalizations {
   /// **'Edit'**
   String get chatMessageEdit;
 
+  /// No description provided for @chatMessageForward.
+  ///
+  /// In en, this message translates to:
+  /// **'Forward'**
+  String get chatMessageForward;
+
+  /// No description provided for @chatForwardTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Forward to'**
+  String get chatForwardTitle;
+
+  /// No description provided for @chatForwardSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search chats'**
+  String get chatForwardSearchHint;
+
+  /// No description provided for @chatForwardFrom.
+  ///
+  /// In en, this message translates to:
+  /// **'Forwarded from {sender}'**
+  String chatForwardFrom(String sender);
+
+  /// No description provided for @chatForwardCommentaryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a comment'**
+  String get chatForwardCommentaryTitle;
+
+  /// No description provided for @chatForwardCommentaryHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Optional message before the forward'**
+  String get chatForwardCommentaryHint;
+
+  /// No description provided for @chatForwardEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No chats to forward to'**
+  String get chatForwardEmpty;
+
+  /// No description provided for @chatForwardSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Message forwarded'**
+  String get chatForwardSuccess;
+
+  /// No description provided for @chatForwardError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not forward message: {message}'**
+  String chatForwardError(String message);
+
   /// No description provided for @chatMessageDeleteForMe.
   ///
   /// In en, this message translates to:

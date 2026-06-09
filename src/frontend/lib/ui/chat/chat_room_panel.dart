@@ -22,6 +22,7 @@ import '../core/voice_state_panel.dart';
 import '../core/voice_send_button.dart';
 import '../social/presence_indicator.dart';
 import 'chat_message_list.dart';
+import 'forward_message_sheet.dart';
 import 'group_members_sheet.dart';
 
 /// Main column: message history (REST) + composer; live updates via Realtime WS.
@@ -491,6 +492,13 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (message.deletedAt == null &&
+                  message.messageKind != VoiceMessageKind.system)
+                ListTile(
+                  leading: const Icon(Icons.forward_outlined),
+                  title: Text(sheetL10n.chatMessageForward),
+                  onTap: () => Navigator.of(context).pop('forward'),
+                ),
               if (isMine)
                 ListTile(
                   leading: const Icon(Icons.edit_outlined),
@@ -517,7 +525,13 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     final controller = ref.read(
       chatRoomControllerProvider(widget.chatId).notifier,
     );
-    if (action == 'edit') {
+    if (action == 'forward') {
+      await ForwardMessageSheet.show(
+        context,
+        sourceMessage: message,
+        sourceChatId: widget.chatId,
+      );
+    } else if (action == 'edit') {
       final edited = await _promptEdit(message.content);
       if (edited != null) {
         await controller.editMessage(message.id, edited);
@@ -786,12 +800,39 @@ class _MessageBubbleContent extends StatelessWidget {
   final VoiceMessage message;
   final AppLocalizations l10n;
 
+  bool get _showForwardAttribution {
+    final sender = message.forwardFromSender;
+    return message.messageKind == VoiceMessageKind.forward ||
+        (sender != null && sender.isNotEmpty);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final voice = VoiceColors.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (_showForwardAttribution)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.forward, size: 14, color: voice.profileAccent),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    l10n.chatForwardFrom(message.forwardFromSender ?? ''),
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: voice.profileAccent,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         if (message.content.isNotEmpty) Text(message.content),
         if (message.editedAt != null)
           Text(

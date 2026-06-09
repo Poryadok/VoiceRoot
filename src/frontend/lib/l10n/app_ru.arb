@@ -235,6 +235,29 @@
   "chatTyping": "Печатает…",
   "chatAttachFile": "Прикрепить файл",
   "chatMessageEdit": "Изменить",
+  "chatMessageForward": "Переслать",
+  "chatForwardTitle": "Переслать в",
+  "chatForwardSearchHint": "Поиск чатов",
+  "chatForwardFrom": "Переслано от {sender}",
+  "@chatForwardFrom": {
+    "placeholders": {
+      "sender": {
+        "type": "String"
+      }
+    }
+  },
+  "chatForwardCommentaryTitle": "Добавить комментарий",
+  "chatForwardCommentaryHint": "Необязательное сообщение перед пересылкой",
+  "chatForwardEmpty": "Нет чатов для пересылки",
+  "chatForwardSuccess": "Сообщение переслано",
+  "chatForwardError": "Не удалось переслать сообщение: {message}",
+  "@chatForwardError": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
   "chatMessageDeleteForMe": "Удалить у меня",
   "chatMessageDeleteForEveryone": "Удалить у всех",
   "chatEditMessageTitle": "Изменить сообщение",

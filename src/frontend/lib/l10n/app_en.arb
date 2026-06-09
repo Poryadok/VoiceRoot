@@ -234,6 +234,29 @@
   "chatTyping": "Typing…",
   "chatAttachFile": "Attach file",
   "chatMessageEdit": "Edit",
+  "chatMessageForward": "Forward",
+  "chatForwardTitle": "Forward to",
+  "chatForwardSearchHint": "Search chats",
+  "chatForwardFrom": "Forwarded from {sender}",
+  "@chatForwardFrom": {
+    "placeholders": {
+      "sender": {
+        "type": "String"
+      }
+    }
+  },
+  "chatForwardCommentaryTitle": "Add a comment",
+  "chatForwardCommentaryHint": "Optional message before the forward",
+  "chatForwardEmpty": "No chats to forward to",
+  "chatForwardSuccess": "Message forwarded",
+  "chatForwardError": "Could not forward message: {message}",
+  "@chatForwardError": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
   "chatMessageDeleteForMe": "Delete for me",
   "chatMessageDeleteForEveryone": "Delete for everyone",
   "chatEditMessageTitle": "Edit message",

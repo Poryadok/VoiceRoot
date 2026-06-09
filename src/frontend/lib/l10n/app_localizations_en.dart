@@ -421,6 +421,37 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatMessageEdit => 'Edit';
 
   @override
+  String get chatMessageForward => 'Forward';
+
+  @override
+  String get chatForwardTitle => 'Forward to';
+
+  @override
+  String get chatForwardSearchHint => 'Search chats';
+
+  @override
+  String chatForwardFrom(String sender) {
+    return 'Forwarded from $sender';
+  }
+
+  @override
+  String get chatForwardCommentaryTitle => 'Add a comment';
+
+  @override
+  String get chatForwardCommentaryHint => 'Optional message before the forward';
+
+  @override
+  String get chatForwardEmpty => 'No chats to forward to';
+
+  @override
+  String get chatForwardSuccess => 'Message forwarded';
+
+  @override
+  String chatForwardError(String message) {
+    return 'Could not forward message: $message';
+  }
+
+  @override
   String get chatMessageDeleteForMe => 'Delete for me';
 
   @override

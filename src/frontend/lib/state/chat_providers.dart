@@ -717,6 +717,16 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     _invalidateChatLists(_ref);
     return null;
   }
+
+  /// Merges an outbound message (e.g. forward) when the target room is open.
+  void ingestOutboundMessage(VoiceMessage message) {
+    if (!mounted) return;
+    final merged = [...state.messages];
+    if (!merged.any((m) => m.id == message.id)) {
+      merged.add(message);
+    }
+    state = state.copyWith(messages: _sortMessages(merged), clearError: true);
+  }
 }
 
 void _invalidateChatLists(Ref ref) {
@@ -992,6 +1002,37 @@ class ChatActions {
     _ref.read(selectedChatIdProvider.notifier).state = chatId;
     _ref.read(realtimeHubProvider).ensureSubscribed(chatId);
     _rememberDmPeerForChat(chatId);
+  }
+
+  /// Forwards a message with attribution into another chat the user belongs to.
+  Future<String?> forwardMessage({
+    required String sourceMessageId,
+    required String targetChatId,
+    String? commentary,
+  }) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+    final trimmedCommentary = commentary?.trim();
+    final result = await _ref.read(voiceMessagesClientProvider).forwardMessage(
+      authorization: auth,
+      sourceMessageId: sourceMessageId,
+      targetChatId: targetChatId,
+      commentary: trimmedCommentary == null || trimmedCommentary.isEmpty
+          ? null
+          : trimmedCommentary,
+    );
+    return switch (result) {
+      MessagesApiOk(:final data) => () {
+        _invalidateChatLists(_ref);
+        if (_ref.read(selectedChatIdProvider) == targetChatId) {
+          _ref
+              .read(chatRoomControllerProvider(targetChatId).notifier)
+              .ingestOutboundMessage(data);
+        }
+        return null;
+      }(),
+      MessagesApiFailure(:final message) => message,
+    };
   }
 
   Future<String?> removeGroupMember({
