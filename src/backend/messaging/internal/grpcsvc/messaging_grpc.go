@@ -504,6 +504,92 @@ func nextCursorForPage(mode store.ListMode, rows []store.MessageRow) string {
 	}
 }
 
+func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.ForwardMessageRequest) (*messagingv1.ForwardMessageResponse, error) {
+	if s == nil || s.Messages == nil {
+		return nil, status.Error(codes.FailedPrecondition, "messaging persistence not configured")
+	}
+	profileID, ok := authctx.ProfileID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing profile")
+	}
+	sourceID, err := parseUUIDField("source_message_id", req.GetSourceMessageId())
+	if err != nil {
+		return nil, err
+	}
+	if err := validateChatRefMessaging(req.GetTargetChat()); err != nil {
+		return nil, err
+	}
+	targetChatID, err := parseUUIDField("target_chat.id", req.GetTargetChat().GetId())
+	if err != nil {
+		return nil, err
+	}
+	if s.ChatGuard != nil {
+		if err := s.ChatGuard.EnsureMember(ctx, targetChatID, profileID); err != nil {
+			if errors.Is(err, store.ErrNotChatMember) {
+				return nil, status.Error(codes.PermissionDenied, "not a chat member")
+			}
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+	}
+
+	source, err := s.Messages.GetMessageByID(ctx, sourceID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, status.Error(codes.NotFound, "message not found")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if source.DeletedAt != nil {
+		return nil, status.Error(codes.NotFound, "message not found")
+	}
+	if s.ChatGuard != nil {
+		if err := s.ChatGuard.EnsureMember(ctx, source.ChatID, profileID); err != nil {
+			if errors.Is(err, store.ErrNotChatMember) {
+				return nil, status.Error(codes.PermissionDenied, "not a chat member")
+			}
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+	}
+
+	originID, originSender := forwardAttribution(source)
+	msgID, err := messageid.NewMessageID()
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	saved, err := s.Messages.InsertMessage(ctx, store.MessageRow{
+		ID:                msgID,
+		ChatID:            targetChatID,
+		SenderProfileID:   profileID,
+		Content:           source.Content,
+		Type:              "forward",
+		ForwardFromID:     &originID,
+		ForwardFromSender: originSender,
+		AttachmentsJSON:   source.AttachmentsJSON,
+		MentionsJSON:      "[]",
+	})
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if s.MessageEvents != nil {
+		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String()); err != nil {
+			log.Printf("messaging: publish message.sent: %v", err)
+		}
+	}
+	kind := messagingv1.MessageKind_MESSAGE_KIND_FORWARD
+	return &messagingv1.ForwardMessageResponse{Message: messageRowToProto(saved, kind)}, nil
+}
+
+func forwardAttribution(source *store.MessageRow) (uuid.UUID, string) {
+	if source.Type == "forward" && source.ForwardFromID != nil {
+		sender := source.ForwardFromSender
+		if sender == "" {
+			sender = source.SenderProfileID.String()
+		}
+		return *source.ForwardFromID, sender
+	}
+	return source.ID, source.SenderProfileID.String()
+}
+
 func (s *MessagingGRPC) MarkRead(ctx context.Context, req *messagingv1.MarkReadRequest) (*messagingv1.MarkReadResponse, error) {
 	if s == nil || s.Messages == nil {
 		return nil, status.Error(codes.FailedPrecondition, "messaging persistence not configured")
@@ -695,6 +781,20 @@ func validateChatRefDM(ref *chatv1.ChatRef) error {
 	return nil
 }
 
+func validateChatRefMessaging(ref *chatv1.ChatRef) error {
+	if ref == nil {
+		return status.Error(codes.InvalidArgument, "chat is required")
+	}
+	switch ref.GetType() {
+	case chatv1.ChatType_CHAT_TYPE_UNSPECIFIED,
+		chatv1.ChatType_CHAT_TYPE_DM,
+		chatv1.ChatType_CHAT_TYPE_GROUP:
+		return nil
+	default:
+		return status.Error(codes.InvalidArgument, "unsupported chat type")
+	}
+}
+
 func messageKindToWire(k messagingv1.MessageKind) (typeStr string, out messagingv1.MessageKind) {
 	if k == messagingv1.MessageKind_MESSAGE_KIND_UNSPECIFIED {
 		return "regular", messagingv1.MessageKind_MESSAGE_KIND_REGULAR
@@ -735,6 +835,12 @@ func messageRowToProto(m *store.MessageRow, kind messagingv1.MessageKind) *messa
 	}
 	if m.DeletedAt != nil {
 		out.DeletedAt = timestamppb.New(m.DeletedAt.UTC())
+	}
+	if m.ForwardFromID != nil {
+		out.ForwardFromId = ptrString(m.ForwardFromID.String())
+	}
+	if m.ForwardFromSender != "" {
+		out.ForwardFromSender = ptrString(m.ForwardFromSender)
 	}
 	if kind != messagingv1.MessageKind_MESSAGE_KIND_UNSPECIFIED {
 		k := kind

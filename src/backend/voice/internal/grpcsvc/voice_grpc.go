@@ -25,11 +25,12 @@ import (
 type VoiceGRPC struct {
 	callsv1.UnimplementedVoiceServiceServer
 
-	Calls       voicestore.CallStore
-	Tokens      livekit.TokenIssuer
-	Events      voiceevents.Publisher
-	Now         func() time.Time
-	RingTimeout time.Duration
+	Calls        voicestore.CallStore
+	ChatMembers  ChatMembership
+	Tokens       livekit.TokenIssuer
+	Events       voiceevents.Publisher
+	Now          func() time.Time
+	RingTimeout  time.Duration
 }
 
 func (s *VoiceGRPC) StartCall(ctx context.Context, req *callsv1.StartCallRequest) (*callsv1.StartCallResponse, error) {
@@ -39,6 +40,9 @@ func (s *VoiceGRPC) StartCall(ctx context.Context, req *callsv1.StartCallRequest
 	}
 	if s == nil || s.Calls == nil {
 		return nil, status.Error(codes.FailedPrecondition, "voice persistence not configured")
+	}
+	if sessionKind(req) == callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE {
+		return s.startGroupVoice(ctx, req, profileID)
 	}
 	chatID := strings.TrimSpace(req.GetLinkedChat().GetId())
 	calleeID := strings.TrimSpace(req.GetCalleeProfileId())
@@ -131,9 +135,26 @@ func (s *VoiceGRPC) JoinCall(ctx context.Context, req *callsv1.JoinCallRequest) 
 	if err != nil {
 		return nil, err
 	}
-	call, err := s.requireCall(ctx, req.GetRoomId(), profileID)
+	if s == nil || s.Calls == nil {
+		return nil, status.Error(codes.FailedPrecondition, "voice persistence not configured")
+	}
+	roomID := strings.TrimSpace(req.GetRoomId())
+	call, err := s.Calls.GetCall(ctx, roomID)
 	if err != nil {
-		return nil, err
+		return nil, storeErr(err)
+	}
+	if call.IsGroupVoice() {
+		if err := s.ensureChatMember(ctx, call.ChatID, profileID); err != nil {
+			return nil, err
+		}
+		call, err = s.Calls.AddParticipant(ctx, roomID, profileID, voicestore.MaxGroupVoiceParticipants)
+		if err != nil {
+			return nil, storeErr(err)
+		}
+		return &callsv1.JoinCallResponse{CallSession: callToProto(call)}, nil
+	}
+	if !call.IsParticipant(profileID) {
+		return nil, status.Error(codes.PermissionDenied, "not a call participant")
 	}
 	return &callsv1.JoinCallResponse{CallSession: callToProto(call)}, nil
 }
@@ -303,18 +324,98 @@ func storeErr(err error) error {
 		return status.Error(codes.PermissionDenied, "not a call participant")
 	case errors.Is(err, voicestore.ErrInvalidState):
 		return status.Error(codes.FailedPrecondition, "invalid call state")
+	case errors.Is(err, voicestore.ErrRoomFull):
+		return status.Error(codes.ResourceExhausted, "voice room is full")
 	default:
 		return status.Error(codes.Internal, err.Error())
 	}
 }
 
+func sessionKind(req *callsv1.StartCallRequest) callsv1.VoiceSessionKind {
+	if req.GetRoomTypeEnum() != callsv1.VoiceSessionKind_VOICE_SESSION_KIND_UNSPECIFIED {
+		return req.GetRoomTypeEnum()
+	}
+	switch strings.TrimSpace(req.GetRoomType()) {
+	case "group_voice":
+		return callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE
+	case "voice_room":
+		return callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM
+	case "call":
+		return callsv1.VoiceSessionKind_VOICE_SESSION_KIND_CALL
+	default:
+		return callsv1.VoiceSessionKind_VOICE_SESSION_KIND_UNSPECIFIED
+	}
+}
+
+func (s *VoiceGRPC) startGroupVoice(ctx context.Context, req *callsv1.StartCallRequest, profileID string) (*callsv1.StartCallResponse, error) {
+	chatID := strings.TrimSpace(req.GetLinkedChat().GetId())
+	if chatID == "" {
+		return nil, status.Error(codes.InvalidArgument, "linked_chat.id is required")
+	}
+	if req.GetLinkedChat().GetType() != chatv1.ChatType_CHAT_TYPE_GROUP {
+		return nil, status.Error(codes.InvalidArgument, "group voice requires CHAT_TYPE_GROUP")
+	}
+	if err := s.ensureChatMember(ctx, chatID, profileID); err != nil {
+		return nil, err
+	}
+	media := req.GetMediaKind()
+	if media == callsv1.CallMediaKind_CALL_MEDIA_KIND_UNSPECIFIED {
+		media = callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO
+	}
+	if media != callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO && media != callsv1.CallMediaKind_CALL_MEDIA_KIND_VIDEO {
+		return nil, status.Error(codes.InvalidArgument, "unsupported media_kind")
+	}
+
+	now := s.now()
+	roomID := uuid.NewString()
+	call, err := s.Calls.CreateCall(ctx, voicestore.Call{
+		RoomID:             roomID,
+		LivekitRoomName:    "voice-group-" + roomID,
+		ChatID:             chatID,
+		SessionKind:        callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE,
+		InitiatorProfileID: profileID,
+		MediaKind:          media,
+		Status:             callsv1.CallStatus_CALL_STATUS_ACTIVE,
+		StartedAt:          now,
+	})
+	if err != nil {
+		return nil, storeErr(err)
+	}
+	s.publishAccepted(ctx, call, profileID)
+	return &callsv1.StartCallResponse{CallSession: callToProto(call)}, nil
+}
+
+func (s *VoiceGRPC) ensureChatMember(ctx context.Context, chatID, profileID string) error {
+	if s.ChatMembers == nil {
+		return nil
+	}
+	if err := s.ChatMembers.EnsureMember(ctx, chatID, profileID); err != nil {
+		if errors.Is(err, ErrNotChatMember) {
+			return status.Error(codes.PermissionDenied, "not a chat member")
+		}
+		return status.Error(codes.Internal, err.Error())
+	}
+	return nil
+}
+
 func callToProto(call voicestore.Call) *callsv1.CallSession {
+	roomType := "call"
+	kind := callsv1.VoiceSessionKind_VOICE_SESSION_KIND_CALL
+	if call.IsGroupVoice() {
+		roomType = "group_voice"
+		kind = callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE
+	}
+	group := chatv1.ChatType_CHAT_TYPE_GROUP
+	linkedChat := &chatv1.ChatRef{Id: call.ChatID}
+	if call.IsGroupVoice() {
+		linkedChat.Type = &group
+	}
 	out := &callsv1.CallSession{
 		RoomId:             call.RoomID,
 		LivekitRoomName:    call.LivekitRoomName,
-		RoomType:           "call",
-		LinkedChat:         &chatv1.ChatRef{Id: call.ChatID},
-		RoomTypeEnum:       callsv1.VoiceSessionKind_VOICE_SESSION_KIND_CALL.Enum(),
+		RoomType:           roomType,
+		LinkedChat:         linkedChat,
+		RoomTypeEnum:       kind.Enum(),
 		InitiatorProfileId: call.InitiatorProfileID,
 		CalleeProfileId:    call.CalleeProfileID,
 		MediaKind:          call.MediaKind,

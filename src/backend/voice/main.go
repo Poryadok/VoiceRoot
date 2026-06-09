@@ -14,15 +14,19 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	grpcsvc "voice/backend/voice/internal/grpcsvc"
+	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
 	"voice/backend/voice/internal/livekit"
+	"voice/backend/voice/internal/s2s"
 	voicestore "voice/backend/voice/internal/store"
 	"voice/backend/voice/internal/voiceevents"
 
 	callsv1 "voice.app/voice/calls/v1"
+	chatv1 "voice.app/voice/chat/v1"
 )
 
 const serviceName = "voice"
@@ -66,9 +70,20 @@ func main() {
 		events = jsPub
 	}
 
+	var chatMembers grpcsvc.ChatMembership
+	if chatAddr := strings.TrimSpace(os.Getenv("CHAT_GRPC_ADDR")); chatAddr != "" {
+		cconn, err := grpc.NewClient(grpcclient.DialTarget(chatAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			log.Fatalf("chat grpc: %v", err)
+		}
+		defer func() { _ = cconn.Close() }()
+		chatMembers = s2s.NewGRPCChatMembership(chatv1.NewChatServiceClient(cconn))
+	}
+
 	tokenTTL := time.Hour
 	voiceSvc := &grpcsvc.VoiceGRPC{
-		Calls: callStore,
+		Calls:       callStore,
+		ChatMembers: chatMembers,
 		Tokens: livekit.NewHS256TokenIssuer(
 			strings.TrimSpace(os.Getenv("LIVEKIT_API_KEY")),
 			strings.TrimSpace(os.Getenv("LIVEKIT_API_SECRET")),

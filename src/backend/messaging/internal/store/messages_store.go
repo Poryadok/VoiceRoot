@@ -14,18 +14,20 @@ import (
 
 // MessageRow is a persisted messaging_db.messages row (v1 DM).
 type MessageRow struct {
-	ID              uuid.UUID
-	ChatID          uuid.UUID
-	SenderProfileID uuid.UUID
-	Content         string
-	Type            string
-	ThreadParentID  *uuid.UUID
-	AttachmentsJSON string
-	MentionsJSON    string
-	ClientMessageID *uuid.UUID
-	EditedAt        *time.Time
-	DeletedAt       *time.Time
-	CreatedAt       time.Time
+	ID                uuid.UUID
+	ChatID            uuid.UUID
+	SenderProfileID   uuid.UUID
+	Content           string
+	Type              string
+	ThreadParentID    *uuid.UUID
+	ForwardFromID     *uuid.UUID
+	ForwardFromSender string
+	AttachmentsJSON   string
+	MentionsJSON      string
+	ClientMessageID   *uuid.UUID
+	EditedAt          *time.Time
+	DeletedAt         *time.Time
+	CreatedAt         time.Time
 }
 
 type MessagesStore struct {
@@ -62,9 +64,7 @@ func (s *MessagesStore) GetByClientDedupKey(ctx context.Context, chatID, senderP
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("messages store: pool not configured")
 	}
-	return scanMessageRow(s.Pool.QueryRow(ctx, `
-SELECT id, chat_id, sender_profile_id, content, type, thread_parent_id,
-       attachments::text, mentions::text, client_message_id, edited_at, deleted_at, created_at
+	return scanMessageRow(s.Pool.QueryRow(ctx, messageSelectSQL+`
 FROM messages
 WHERE chat_id = $1 AND sender_profile_id = $2 AND client_message_id = $3
 LIMIT 1
@@ -91,14 +91,23 @@ func (s *MessagesStore) InsertMessage(ctx context.Context, row MessageRow) (*Mes
 	if row.ThreadParentID != nil {
 		threadAny = *row.ThreadParentID
 	}
+	var forwardFromAny any
+	if row.ForwardFromID != nil {
+		forwardFromAny = *row.ForwardFromID
+	}
+	var forwardSenderAny any
+	if row.ForwardFromSender != "" {
+		forwardSenderAny = row.ForwardFromSender
+	}
 
 	q := `
 INSERT INTO messages (
   id, chat_id, chat_type, sender_profile_id, posted_as_chat,
-  content, type, thread_parent_id, attachments, mentions, client_message_id
+  content, type, thread_parent_id, forward_from_id, forward_from_sender,
+  attachments, mentions, client_message_id
 ) VALUES (
   $1, $2, 'dm', $3, false,
-  $4, $5, $6, $7::jsonb, $8::jsonb, $9
+  $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11
 )
 ON CONFLICT (chat_id, sender_profile_id, client_message_id)
   WHERE client_message_id IS NOT NULL
@@ -106,7 +115,7 @@ ON CONFLICT (chat_id, sender_profile_id, client_message_id)
 `
 	ct, err := s.Pool.Exec(ctx, q,
 		row.ID, row.ChatID, row.SenderProfileID,
-		row.Content, row.Type, threadAny,
+		row.Content, row.Type, threadAny, forwardFromAny, forwardSenderAny,
 		row.AttachmentsJSON, row.MentionsJSON, clientAny,
 	)
 	if err != nil {
@@ -116,9 +125,7 @@ ON CONFLICT (chat_id, sender_profile_id, client_message_id)
 		if row.ClientMessageID == nil {
 			return nil, errors.New("messages store: insert produced no row")
 		}
-		return scanMessageRow(s.Pool.QueryRow(ctx, `
-SELECT id, chat_id, sender_profile_id, content, type, thread_parent_id,
-       attachments::text, mentions::text, client_message_id, edited_at, deleted_at, created_at
+		return scanMessageRow(s.Pool.QueryRow(ctx, messageSelectSQL+`
 FROM messages
 WHERE chat_id = $1 AND sender_profile_id = $2 AND client_message_id = $3
 LIMIT 1
@@ -127,18 +134,37 @@ LIMIT 1
 	return s.GetMessageByID(ctx, row.ID)
 }
 
+const messageSelectSQL = `
+SELECT id, chat_id, sender_profile_id, content, type, thread_parent_id,
+       forward_from_id, forward_from_sender,
+       attachments::text, mentions::text, client_message_id, edited_at, deleted_at, created_at
+`
+
+const messageReturningCols = `id, chat_id, sender_profile_id, content, type, thread_parent_id,
+       forward_from_id, forward_from_sender,
+       attachments::text, mentions::text, client_message_id, edited_at, deleted_at, created_at`
+
 func scanMessageRow(row pgx.Row) (*MessageRow, error) {
 	var m MessageRow
 	var threadID *uuid.UUID
+	var forwardFromID *uuid.UUID
+	var forwardSender *string
 	var clientID *uuid.UUID
 	err := row.Scan(
 		&m.ID, &m.ChatID, &m.SenderProfileID, &m.Content, &m.Type, &threadID,
+		&forwardFromID, &forwardSender,
 		&m.AttachmentsJSON, &m.MentionsJSON, &clientID, &m.EditedAt, &m.DeletedAt, &m.CreatedAt,
 	)
 	if err != nil {
 		return nil, err
 	}
 	m.ThreadParentID = threadID
+	if forwardFromID != nil {
+		m.ForwardFromID = forwardFromID
+	}
+	if forwardSender != nil {
+		m.ForwardFromSender = *forwardSender
+	}
 	m.ClientMessageID = clientID
 	return &m, nil
 }
@@ -147,9 +173,7 @@ func (s *MessagesStore) GetMessageByID(ctx context.Context, id uuid.UUID) (*Mess
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("messages store: pool not configured")
 	}
-	return scanMessageRow(s.Pool.QueryRow(ctx, `
-SELECT id, chat_id, sender_profile_id, content, type, thread_parent_id,
-       attachments::text, mentions::text, client_message_id, edited_at, deleted_at, created_at
+	return scanMessageRow(s.Pool.QueryRow(ctx, messageSelectSQL+`
 FROM messages WHERE id = $1
 `, id))
 }
@@ -163,8 +187,7 @@ func (s *MessagesStore) UpdateMessageContent(ctx context.Context, messageID, sen
 UPDATE messages
 SET content = $1, edited_at = now()
 WHERE id = $2 AND sender_profile_id = $3 AND deleted_at IS NULL
-RETURNING id, chat_id, sender_profile_id, content, type, thread_parent_id,
-          attachments::text, mentions::text, client_message_id, edited_at, deleted_at, created_at
+RETURNING `+messageReturningCols+`
 `, content, messageID, senderProfileID))
 }
 
@@ -220,9 +243,7 @@ func (s *MessagesStore) ListMessages(ctx context.Context, chatID, viewerProfileI
 	var err error
 	switch mode {
 	case ListLatest:
-		rows, err = s.Pool.Query(ctx, `
-SELECT id, chat_id, sender_profile_id, content, type, thread_parent_id,
-       attachments::text, mentions::text, client_message_id, edited_at, deleted_at, created_at
+		rows, err = s.Pool.Query(ctx, messageSelectSQL+`
 FROM messages
 WHERE chat_id = $1 AND deleted_at IS NULL
   AND NOT EXISTS (
@@ -233,9 +254,7 @@ ORDER BY id DESC
 LIMIT $2
 `, chatID, fetch, viewerProfileID)
 	case ListBeforeID:
-		rows, err = s.Pool.Query(ctx, `
-SELECT id, chat_id, sender_profile_id, content, type, thread_parent_id,
-       attachments::text, mentions::text, client_message_id, edited_at, deleted_at, created_at
+		rows, err = s.Pool.Query(ctx, messageSelectSQL+`
 FROM messages
 WHERE chat_id = $1 AND deleted_at IS NULL AND id < $2::uuid
   AND NOT EXISTS (
@@ -246,9 +265,7 @@ ORDER BY id DESC
 LIMIT $3
 `, chatID, *refID, fetch, viewerProfileID)
 	case ListAfterID:
-		rows, err = s.Pool.Query(ctx, `
-SELECT id, chat_id, sender_profile_id, content, type, thread_parent_id,
-       attachments::text, mentions::text, client_message_id, edited_at, deleted_at, created_at
+		rows, err = s.Pool.Query(ctx, messageSelectSQL+`
 FROM messages
 WHERE chat_id = $1 AND deleted_at IS NULL AND id > $2::uuid
   AND NOT EXISTS (
@@ -270,14 +287,23 @@ LIMIT $3
 	for rows.Next() {
 		var m MessageRow
 		var threadID *uuid.UUID
+		var forwardFromID *uuid.UUID
+		var forwardSender *string
 		var clientID *uuid.UUID
 		if err := rows.Scan(
 			&m.ID, &m.ChatID, &m.SenderProfileID, &m.Content, &m.Type, &threadID,
+			&forwardFromID, &forwardSender,
 			&m.AttachmentsJSON, &m.MentionsJSON, &clientID, &m.EditedAt, &m.DeletedAt, &m.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
 		m.ThreadParentID = threadID
+		if forwardFromID != nil {
+			m.ForwardFromID = forwardFromID
+		}
+		if forwardSender != nil {
+			m.ForwardFromSender = *forwardSender
+		}
 		m.ClientMessageID = clientID
 		out = append(out, m)
 	}

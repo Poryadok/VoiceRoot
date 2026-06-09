@@ -17,7 +17,7 @@ import (
 // group voice in a text group starts an active temporary room (no DM callee / ringing).
 func TestVoiceGRPCStartGroupVoice_createsActiveSession(t *testing.T) {
 	events := &recordingEvents{}
-	svc := newTestVoiceService(time.Unix(1700000000, 0).UTC(), events)
+	svc := newTestGroupVoiceService(time.Unix(1700000000, 0).UTC(), events)
 	group := chatv1.ChatType_CHAT_TYPE_GROUP
 
 	start, err := svc.StartCall(voiceTestCtx("profile-owner"), &callsv1.StartCallRequest{
@@ -39,7 +39,7 @@ func TestVoiceGRPCStartGroupVoice_createsActiveSession(t *testing.T) {
 // TestVoiceGRPCGroupVoice_memberJoinsActiveCall documents PLAN Phase 4: members join an active group call.
 func TestVoiceGRPCGroupVoice_memberJoinsActiveCall(t *testing.T) {
 	events := &recordingEvents{}
-	svc := newTestVoiceService(time.Unix(1700000000, 0).UTC(), events)
+	svc := newTestGroupVoiceService(time.Unix(1700000000, 0).UTC(), events)
 	group := chatv1.ChatType_CHAT_TYPE_GROUP
 
 	start, err := svc.StartCall(voiceTestCtx("profile-owner"), &callsv1.StartCallRequest{
@@ -62,7 +62,7 @@ func TestVoiceGRPCGroupVoice_memberJoinsActiveCall(t *testing.T) {
 // TestVoiceGRPCGroupVoice_nonMemberDenied ensures only group members can join.
 func TestVoiceGRPCGroupVoice_nonMemberDenied(t *testing.T) {
 	events := &recordingEvents{}
-	svc := newTestVoiceService(time.Unix(1700000000, 0).UTC(), events)
+	svc := newTestGroupVoiceService(time.Unix(1700000000, 0).UTC(), events)
 	group := chatv1.ChatType_CHAT_TYPE_GROUP
 
 	start, err := svc.StartCall(voiceTestCtx("profile-owner"), &callsv1.StartCallRequest{
@@ -79,7 +79,7 @@ func TestVoiceGRPCGroupVoice_nonMemberDenied(t *testing.T) {
 // TestVoiceGRPCGroupVoice_max32Participants documents voice-chat.md free tier limit (32).
 func TestVoiceGRPCGroupVoice_max32Participants(t *testing.T) {
 	events := &recordingEvents{}
-	svc := newTestVoiceService(time.Unix(1700000000, 0).UTC(), events)
+	svc := newTestGroupVoiceService(time.Unix(1700000000, 0).UTC(), events)
 	group := chatv1.ChatType_CHAT_TYPE_GROUP
 
 	start, err := svc.StartCall(voiceTestCtx("profile-owner"), &callsv1.StartCallRequest{

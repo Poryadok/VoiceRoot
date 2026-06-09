@@ -2,6 +2,7 @@ package grpcsvc
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -77,6 +78,21 @@ func newTestVoiceService(now time.Time, events *recordingEvents) *VoiceGRPC {
 		Now:         func() time.Time { return now },
 		RingTimeout: 30 * time.Second,
 	}
+}
+
+func newTestGroupVoiceService(now time.Time, events *recordingEvents) *VoiceGRPC {
+	members := map[string]map[string]bool{
+		"group-chat-1": {
+			"profile-owner":  true,
+			"profile-member": true,
+		},
+	}
+	for i := 1; i <= 33; i++ {
+		members["group-chat-1"][fmt.Sprintf("profile-%02d", i)] = true
+	}
+	svc := newTestVoiceService(now, events)
+	svc.ChatMembers = &mapChatMembers{members: members}
+	return svc
 }
 
 func TestVoiceGRPCStartAcceptTokenStateAndEnd(t *testing.T) {

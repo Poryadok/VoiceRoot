@@ -331,6 +331,7 @@ services:
       LOG_LEVEL: debug
       VOICE_GRPC_LISTEN: :9090
       VOICE_REDIS_ADDR: redis:6379
+      CHAT_GRPC_ADDR: chat:9090
       NATS_URL: nats://nats:4222
       LIVEKIT_URL: ${VOICE_LIVEKIT_PUBLIC_URL:-ws://127.0.0.1:7880}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-devkey}

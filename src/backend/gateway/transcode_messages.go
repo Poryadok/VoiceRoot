@@ -13,6 +13,20 @@ func (t *transcoder) serveMessages(w http.ResponseWriter, r *http.Request, rest 
 	ctx := withGRPCMetadata(r.Context(), r)
 
 	switch {
+	case r.Method == http.MethodPost && rest == "forward":
+		req := &messagingv1.ForwardMessageRequest{}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.messaging.ForwardMessage(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
 	case r.Method == http.MethodPost && rest == "send":
 		req := &messagingv1.SendMessageRequest{}
 		if err := readProtoJSON(r, req); err != nil {

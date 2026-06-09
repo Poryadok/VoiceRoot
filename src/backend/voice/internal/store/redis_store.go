@@ -31,12 +31,14 @@ func (s *RedisCallStore) CreateCall(ctx context.Context, call Call) (Call, error
 	if err != nil && !errors.Is(err, ErrNotFound) {
 		return Call{}, err
 	}
-	active, err = s.GetActiveCall(ctx, call.CalleeProfileID)
-	if err == nil && active.RoomID != "" {
-		return Call{}, ErrActiveCall
-	}
-	if err != nil && !errors.Is(err, ErrNotFound) {
-		return Call{}, err
+	if !call.IsGroupVoice() && call.CalleeProfileID != "" {
+		active, err = s.GetActiveCall(ctx, call.CalleeProfileID)
+		if err == nil && active.RoomID != "" {
+			return Call{}, ErrActiveCall
+		}
+		if err != nil && !errors.Is(err, ErrNotFound) {
+			return Call{}, err
+		}
 	}
 	if call.States == nil {
 		call.States = defaultStates(call)
@@ -77,6 +79,40 @@ func (s *RedisCallStore) GetActiveCall(ctx context.Context, profileID string) (C
 	if !call.IsActiveForProfile(profileID) {
 		_ = s.client.Del(ctx, s.activeKey(profileID)).Err()
 		return Call{}, ErrNotFound
+	}
+	return call, nil
+}
+
+func (s *RedisCallStore) AddParticipant(ctx context.Context, roomID, profileID string, maxParticipants int) (Call, error) {
+	call, err := s.GetCall(ctx, roomID)
+	if err != nil {
+		return Call{}, err
+	}
+	if !call.IsGroupVoice() || call.Status != callsv1.CallStatus_CALL_STATUS_ACTIVE {
+		return Call{}, ErrInvalidState
+	}
+	if call.IsParticipant(profileID) {
+		return call, nil
+	}
+	active, err := s.GetActiveCall(ctx, profileID)
+	if err == nil && active.RoomID != "" && active.RoomID != roomID {
+		return Call{}, ErrActiveCall
+	}
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return Call{}, err
+	}
+	if len(call.States) >= maxParticipants {
+		return Call{}, ErrRoomFull
+	}
+	if call.States == nil {
+		call.States = map[string]ParticipantState{}
+	}
+	call.States[profileID] = ParticipantState{
+		ProfileID: profileID,
+		IsVideoOn: call.MediaKind == callsv1.CallMediaKind_CALL_MEDIA_KIND_VIDEO,
+	}
+	if err := s.save(ctx, call); err != nil {
+		return Call{}, err
 	}
 	return call, nil
 }
@@ -151,11 +187,23 @@ func (s *RedisCallStore) save(ctx context.Context, call Call) error {
 	}
 	pipe := s.client.TxPipeline()
 	pipe.Set(ctx, s.callKey(call.RoomID), b, 24*time.Hour)
+	activeProfiles := call.ProfileIDs()
 	if call.Status == callsv1.CallStatus_CALL_STATUS_RINGING || call.Status == callsv1.CallStatus_CALL_STATUS_ACTIVE {
-		pipe.Set(ctx, s.activeKey(call.InitiatorProfileID), call.RoomID, 24*time.Hour)
-		pipe.Set(ctx, s.activeKey(call.CalleeProfileID), call.RoomID, 24*time.Hour)
+		for _, profileID := range activeProfiles {
+			if profileID != "" {
+				pipe.Set(ctx, s.activeKey(profileID), call.RoomID, 24*time.Hour)
+			}
+		}
 	} else {
-		pipe.Del(ctx, s.activeKey(call.InitiatorProfileID), s.activeKey(call.CalleeProfileID))
+		keys := make([]string, 0, len(activeProfiles))
+		for _, profileID := range activeProfiles {
+			if profileID != "" {
+				keys = append(keys, s.activeKey(profileID))
+			}
+		}
+		if len(keys) > 0 {
+			pipe.Del(ctx, keys...)
+		}
 	}
 	_, err = pipe.Exec(ctx)
 	return err
