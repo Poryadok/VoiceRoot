@@ -91,6 +91,54 @@ void main() {
     });
   });
 
+  group('VoiceChatsClient.listGroupMembers', () {
+    test('GET /api/v1/chats/{chatId}/members exposes role', () async {
+      final mock = MockClient((req) async {
+        expect(req.method, 'GET');
+        expect(req.url.path, '/api/v1/chats/group-1/members');
+        return http.Response(
+          jsonEncode({
+            'member_list': {
+              'members': [
+                {'profile_id': 'profile-owner', 'role': 'owner'},
+                {'profile_id': 'profile-b', 'role': 'member'},
+              ],
+            },
+          }),
+          200,
+        );
+      });
+      final client = VoiceChatsClient(gateway: gatewayHttpForTest(mock, config: config));
+      final r = await client.listGroupMembers(
+        authorization: auth,
+        chatId: 'group-1',
+      );
+      expect(r, isA<ChatsApiOk<MemberListData>>());
+      final data = (r as ChatsApiOk<MemberListData>).data;
+      expect(data.members, hasLength(2));
+      expect(data.members[0].role, 'owner');
+      expect(data.members[1].role, 'member');
+    });
+  });
+
+  group('VoiceChatsClient.leaveGroup', () {
+    test('POST /api/v1/chats/{chatId}/leave', () async {
+      String? path;
+      final mock = MockClient((req) async {
+        expect(req.method, 'POST');
+        path = req.url.path;
+        return http.Response('', 204);
+      });
+      final client = VoiceChatsClient(gateway: gatewayHttpForTest(mock, config: config));
+      final r = await client.leaveGroup(
+        authorization: auth,
+        chatId: 'group-1',
+      );
+      expect(r, isA<ChatsApiOk<void>>());
+      expect(path, '/api/v1/chats/group-1/leave');
+    });
+  });
+
   group('VoiceChatsClient.updateGroup', () {
     test('PATCH /api/v1/chats/{chatId} sets avatar_url', () async {
       String? body;

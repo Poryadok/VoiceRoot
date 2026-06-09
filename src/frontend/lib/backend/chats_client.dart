@@ -85,6 +85,27 @@ class ChatListData {
   final String? nextCursor;
 }
 
+class ChatMember {
+  const ChatMember({
+    required this.profileId,
+    required this.role,
+    this.joinedAt,
+    this.isArchived = false,
+  });
+
+  final String profileId;
+  final String role;
+  final DateTime? joinedAt;
+  final bool isArchived;
+}
+
+class MemberListData {
+  const MemberListData({required this.members, this.nextCursor});
+
+  final List<ChatMember> members;
+  final String? nextCursor;
+}
+
 /// HTTP client for Chat routes (`/api/v1/chats/**`).
 class VoiceChatsClient {
   VoiceChatsClient({required GatewayHttpClient gateway}) : _gateway = gateway;
@@ -176,6 +197,39 @@ class VoiceChatsClient {
     required String profileId,
   }) {
     return _deleteEmpty('/api/v1/chats/$chatId/members/$profileId', authorization);
+  }
+
+  Future<ChatsApiResult<MemberListData>> listGroupMembers({
+    required String authorization,
+    required String chatId,
+    String? cursor,
+    int? pageSize,
+  }) async {
+    final params = <String, String>{};
+    if (cursor != null && cursor.isNotEmpty) params['cursor'] = cursor;
+    if (pageSize != null) params['page_size'] = '$pageSize';
+    final uri = _gateway.replace(
+      path: '/api/v1/chats/$chatId/members',
+      queryParameters: params.isEmpty ? null : params,
+    );
+    final result = await _gateway.getProto(
+      uri,
+      authorization: authorization,
+      createEmpty: chat_pb.ListMembersResponse.create,
+    );
+    return _map(
+      result,
+      (data) => memberListFromProto(
+        data.hasMemberList() ? data.memberList : chat_pb.MemberList(),
+      ),
+    );
+  }
+
+  Future<ChatsApiResult<void>> leaveGroup({
+    required String authorization,
+    required String chatId,
+  }) {
+    return _postEmpty('/api/v1/chats/$chatId/leave', authorization);
   }
 
   Future<ChatsApiResult<VoiceChat>> updateGroup({

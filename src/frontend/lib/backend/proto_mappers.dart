@@ -158,6 +158,24 @@ ChatListData chatListFromProto(chat_pb.ChatList list) {
   );
 }
 
+ChatMember chatMemberFromProto(chat_pb.ChatMember member) {
+  return ChatMember(
+    profileId: member.profileId,
+    role: member.role,
+    joinedAt: protoTimestampToDateTime(
+      member.hasJoinedAt() ? member.joinedAt : null,
+    ),
+    isArchived: member.isArchived,
+  );
+}
+
+MemberListData memberListFromProto(chat_pb.MemberList list) {
+  return MemberListData(
+    members: list.members.map(chatMemberFromProto).toList(growable: false),
+    nextCursor: emptyToNull(list.nextCursor),
+  );
+}
+
 chat_pb.CreateDMRequest createDmRequestToProto(String otherProfileId) {
   return chat_pb.CreateDMRequest(otherProfileId: otherProfileId);
 }

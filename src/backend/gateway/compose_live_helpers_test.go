@@ -188,6 +188,55 @@ func updateComposeGroupAvatar(t *testing.T, client *http.Client, base, accessTok
 	require.Equal(t, avatarURL, parsed.Chat.AvatarURL)
 }
 
+type composeGroupMember struct {
+	ProfileID string `json:"profile_id"`
+	Role      string `json:"role"`
+}
+
+func listComposeGroupMembers(t *testing.T, client *http.Client, base, accessToken, chatID string) []composeGroupMember {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, base+"/api/v1/chats/"+chatID+"/members", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "GET members body=%s", string(body))
+
+	var parsed struct {
+		MemberList struct {
+			Members []composeGroupMember `json:"members"`
+		} `json:"member_list"`
+	}
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	return parsed.MemberList.Members
+}
+
+func leaveComposeGroupStatus(t *testing.T, client *http.Client, base, accessToken, chatID string) int {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/chats/"+chatID+"/leave", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	_, _ = io.ReadAll(resp.Body)
+	return resp.StatusCode
+}
+
+func removeComposeGroupMemberStatus(t *testing.T, client *http.Client, base, accessToken, chatID, profileID string) int {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodDelete, base+"/api/v1/chats/"+chatID+"/members/"+profileID, nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	_, _ = io.ReadAll(resp.Body)
+	return resp.StatusCode
+}
+
 func getComposeChatStatus(t *testing.T, client *http.Client, base, accessToken, chatID string) int {
 	t.Helper()
 	req, err := http.NewRequest(http.MethodGet, base+"/api/v1/chats/"+chatID, nil)
