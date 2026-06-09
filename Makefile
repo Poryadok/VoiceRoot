@@ -15,7 +15,7 @@ BASH ?= "C:/Program Files/Git/bin/bash.exe"
 GO_TEST_RUN = set CGO_ENABLED=0&& go test $(GO_TEST_FLAGS)
 # Host gcc is often missing on Windows; run -race in Docker (parity with Linux CI).
 GATEWAY_RACE_RUN = docker run --rm -v "$(ROOT):/workspace" -w /workspace/src/backend/gateway $(GO_IMAGE) \
-	bash -c "CGO_ENABLED=1 go test -race $(GO_TEST_FLAGS)"
+	bash -c "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq libopus-dev libopusfile-dev libsoxr-dev pkg-config >/dev/null 2>&1 && CGO_ENABLED=1 go test -race $(GO_TEST_FLAGS)"
 else
 BASH ?= bash
 GO_TEST_RUN = CGO_ENABLED=0 go test $(GO_TEST_FLAGS)
@@ -29,7 +29,7 @@ GO_TEST_TARGETS := $(GO_SERVICES:%=go-test-%)
 GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
 
 .PHONY: buf-lint buf-format buf-breaking buf-generate buf-generate-dart buf-dart-check compose-up compose-app-up compose-down compose-logs-collect \
-	compose-e2e-live compose-e2e-voice-live \
+	compose-e2e-live compose-e2e-full compose-e2e-voice-live \
 	build-all build-all-breaking check-toolchain compose-config-ci buf-ci backend-test-ci backend-image-ci \
 	gateway-test-ci gateway-image-ci go-test-pkg auth-test-ci auth-image-ci buf-breaking-ci \
 	golangci-ci gateway-test-race-ci design-tokens-check flutter-ui-color-gate flutter-ci coverage-report testcontainers-prune
@@ -80,7 +80,9 @@ compose-logs-collect:
 compose-e2e-live:
 	$(BASH) "$(ROOT)/scripts/ci/compose-e2e-live.sh"
 
-compose-e2e-voice-live: compose-e2e-live
+compose-e2e-full: compose-e2e-live
+
+compose-e2e-voice-live: compose-e2e-full
 
 # --- CI parity: host Go/Maven/golangci (tests need Docker socket for testcontainers); Docker for buf/compose/images ---
 

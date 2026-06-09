@@ -5,9 +5,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:voice_frontend/backend/auth_client.dart';
 import 'package:voice_frontend/backend/auth_session.dart';
+import 'package:voice_frontend/backend/chats_client.dart';
+import 'package:voice_frontend/backend/files_client.dart';
+import 'package:voice_frontend/backend/friends_client.dart';
 import 'package:voice_frontend/backend/gateway_client.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/gateway_http.dart';
+import 'package:voice_frontend/backend/messages_client.dart';
 import 'package:voice_frontend/backend/realtime_client.dart';
 
 /// Compile-time API base (`--dart-define=VOICE_API_BASE_URL=...`).
@@ -197,6 +201,80 @@ class LiveGatewayContext {
     expect(refreshed.accessToken, isNot(session.accessToken));
     expect(refreshed.activeProfileId, session.activeProfileId);
     return refreshed;
+  }
+
+  GatewayHttpClient gatewayHttp() =>
+      GatewayHttpClient(httpClient: httpClient, config: config);
+
+  VoiceFriendsClient friendsClient() =>
+      VoiceFriendsClient(gateway: gatewayHttp());
+
+  VoiceChatsClient chatsClient() => VoiceChatsClient(gateway: gatewayHttp());
+
+  VoiceMessagesClient messagesClient() =>
+      VoiceMessagesClient(gateway: gatewayHttp());
+
+  VoiceFilesClient filesClient() => VoiceFilesClient(gateway: gatewayHttp());
+
+  Future<bool> probeFileStorageAvailable(AuthSession session) async {
+    final result = await filesClient().requestUpload(
+      authorization: session.authorizationHeader,
+      originalName: 'probe.txt',
+      mimeType: 'text/plain',
+      sizeBytes: 4,
+    );
+    return result is FilesApiOk<FileUploadTicket>;
+  }
+
+  Future<void> logoutSession(AuthSession session) async {
+    final err = await authClient().logout(session: session);
+    expect(err, isNull, reason: 'logout');
+  }
+
+  Future<int> protectedRouteStatus(String accessToken) async {
+    final uri = gatewayHttp().resolve('/api/v1/chats');
+    final resp = await httpClient.get(
+      uri,
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+    return resp.statusCode;
+  }
+
+  Future<void> inviteAndAcceptFriends(
+    AuthSession sessionA,
+    AuthSession sessionB,
+  ) async {
+    final friends = friendsClient();
+    final invite = await friends.sendFriendInvitation(
+      authorization: sessionA.authorizationHeader,
+      targetProfileId: sessionB.activeProfileId,
+    );
+    expect(invite, isA<FriendsApiEmpty>(), reason: 'friend invite');
+
+    final accept = await friends.acceptFriendInvitation(
+      authorization: sessionB.authorizationHeader,
+      requesterProfileId: sessionA.activeProfileId,
+    );
+    expect(accept, isA<FriendsApiEmpty>(), reason: 'friend accept');
+  }
+
+  Future<VoiceRealtimeConnection> connectSubscribed(
+    AuthSession session,
+    String chatId,
+  ) async {
+    final conn = VoiceRealtimeConnection(
+      uri: gatewayWebSocketUri(config.baseUrl),
+      headers: {'Authorization': session.authorizationHeader},
+    );
+    await conn.connect();
+    await waitForOp(conn.events, 'hello');
+    conn.sendSubscribe(chatId);
+    await waitForOp(
+      conn.events,
+      'subscribe_ack',
+      where: (f) => f.data?['chat_id'] == chatId,
+    );
+    return conn;
   }
 }
 

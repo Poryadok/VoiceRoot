@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -70,7 +71,16 @@ func resolveComposeLivekitURL(from ...string) string {
 			return u
 		}
 	}
-	return liveLivekitURL()
+	return composeLivekitFallbackURL()
+}
+
+func composeLivekitFallbackURL() string {
+	for _, key := range []string{"VOICE_LIVEKIT_URL", "VOICE_LIVEKIT_PUBLIC_URL"} {
+		if u := strings.TrimSpace(os.Getenv(key)); u != "" {
+			return u
+		}
+	}
+	return "ws://127.0.0.1:7880"
 }
 
 func isDockerInternalLivekitHost(raw string) bool {

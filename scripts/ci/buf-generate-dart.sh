@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
-if ! command -v protoc-gen-dart >/dev/null 2>&1; then
+if ! command -v protoc-gen-dart >/dev/null 2>&1 && ! command -v protoc-gen-dart.bat >/dev/null 2>&1; then
   echo "protoc-gen-dart not found; run: dart pub global activate protoc_plugin" >&2
   exit 1
 fi

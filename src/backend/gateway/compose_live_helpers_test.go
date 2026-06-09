@@ -2,12 +2,12 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -493,11 +493,267 @@ func declineComposeCall(t *testing.T, client *http.Client, base, accessToken, ro
 	return parsed.CallSession
 }
 
-func liveLivekitURL() string {
-	for _, key := range []string{"VOICE_LIVEKIT_URL", "VOICE_LIVEKIT_PUBLIC_URL"} {
-		if u := strings.TrimSpace(os.Getenv(key)); u != "" {
-			return u
-		}
+func editComposeMessage(
+	t *testing.T,
+	client *http.Client,
+	base, accessToken, messageID, content string,
+) {
+	t.Helper()
+	payload, err := json.Marshal(map[string]string{"content": content})
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPatch, base+"/api/v1/messages/"+messageID, bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "PATCH message body=%s", string(body))
+}
+
+func deleteComposeMessage(
+	t *testing.T,
+	client *http.Client,
+	base, accessToken, messageID, scope string,
+) {
+	t.Helper()
+	url := base + "/api/v1/messages/" + messageID + "?scope=" + scope
+	req, err := http.NewRequest(http.MethodDelete, url, nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+}
+
+func composeWSSendResume(t *testing.T, conn *websocket.Conn, lastS int64) {
+	t.Helper()
+	composeWSSend(t, conn, map[string]any{
+		"op": "resume",
+		"d":  map[string]any{"last_s": lastS},
+	})
+}
+
+func declineComposeFriendInvitation(t *testing.T, client *http.Client, base, accessToken, requesterProfileID string) {
+	t.Helper()
+	url := fmt.Sprintf("%s/api/v1/friends/invitations/%s/decline", base, requesterProfileID)
+	req, err := http.NewRequest(http.MethodPost, url, nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "decline friend body=%s", string(body))
+}
+
+func blockComposeAccount(t *testing.T, client *http.Client, base, accessToken, blockedAccountID string) {
+	t.Helper()
+	payload, err := json.Marshal(map[string]string{"blocked_account_id": blockedAccountID})
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/friends/blocks", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "block account body=%s", string(body))
+}
+
+type composeChatListItem struct {
+	ChatID           string
+	LastPreview      string
+	UnreadCount      int
+	Inbox            string
+	IsStranger       bool
+	DMPeerProfileID  string
+}
+
+func listComposeChats(t *testing.T, client *http.Client, base, accessToken, inbox string) []composeChatListItem {
+	t.Helper()
+	url := base + "/api/v1/chats"
+	if inbox != "" {
+		url += "?inbox=" + inbox
 	}
-	return "ws://127.0.0.1:7880"
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "list chats body=%s", string(body))
+
+	var parsed struct {
+		ChatList struct {
+			Items []struct {
+				Chat struct {
+					ID string `json:"id"`
+				} `json:"chat"`
+				LastMessagePreview  string `json:"last_message_preview"`
+				UnreadCount         int    `json:"unread_count"`
+				Inbox               string `json:"inbox"`
+				IsStranger          bool   `json:"is_stranger"`
+				DMPeerProfileID     string `json:"dm_peer_profile_id"`
+			} `json:"items"`
+		} `json:"chat_list"`
+	}
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	var out []composeChatListItem
+	for _, item := range parsed.ChatList.Items {
+		out = append(out, composeChatListItem{
+			ChatID:          item.Chat.ID,
+			LastPreview:     item.LastMessagePreview,
+			UnreadCount:     item.UnreadCount,
+			Inbox:           item.Inbox,
+			IsStranger:      item.IsStranger,
+			DMPeerProfileID: item.DMPeerProfileID,
+		})
+	}
+	return out
+}
+
+func composePostStatus(
+	t *testing.T,
+	client *http.Client,
+	base, accessToken, path string,
+	payload []byte,
+) int {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, base+path, bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	_, _ = io.ReadAll(resp.Body)
+	return resp.StatusCode
+}
+
+func composeFileUploadAvailable(t *testing.T, client *http.Client, base, accessToken string) bool {
+	t.Helper()
+	payload, err := json.Marshal(map[string]any{
+		"original_name": "probe.txt",
+		"mime_type":     "text/plain",
+		"size_bytes":    4,
+	})
+	require.NoError(t, err)
+	status := composePostStatus(t, client, base, accessToken, "/api/v1/files/upload", payload)
+	return status == http.StatusOK
+}
+
+func composeUploadSmallTextFile(
+	t *testing.T,
+	client *http.Client,
+	base, accessToken, chatID string,
+) (fileID, fileType string) {
+	t.Helper()
+	const content = "e2e"
+	payload, err := json.Marshal(map[string]any{
+		"original_name": "e2e.txt",
+		"mime_type":     "text/plain",
+		"size_bytes":    len(content),
+		"context_chat": map[string]string{
+			"id":   chatID,
+			"type": "CHAT_TYPE_DM",
+		},
+	})
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/files/upload", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "upload request body=%s", string(body))
+
+	var parsed struct {
+		UploadResponse struct {
+			FileID          string `json:"file_id"`
+			PresignedPutURL string `json:"presigned_put_url"`
+		} `json:"upload_response"`
+	}
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	fileID = parsed.UploadResponse.FileID
+	putURL := parsed.UploadResponse.PresignedPutURL
+	require.NotEmpty(t, fileID)
+	require.NotEmpty(t, putURL)
+
+	putReq, err := http.NewRequest(http.MethodPut, putURL, strings.NewReader(content))
+	require.NoError(t, err)
+	putReq.Header.Set("Content-Type", "text/plain")
+	putResp, err := client.Do(putReq)
+	require.NoError(t, err)
+	defer putResp.Body.Close()
+	require.True(t, putResp.StatusCode >= 200 && putResp.StatusCode < 300, "PUT presigned status=%d", putResp.StatusCode)
+
+	hash := sha256Hex([]byte(content))
+	confirmPayload, err := json.Marshal(map[string]string{"sha256_hash": hash})
+	require.NoError(t, err)
+	confirmURL := base + "/api/v1/files/" + fileID + "/confirm"
+	confirmReq, err := http.NewRequest(http.MethodPost, confirmURL, bytes.NewReader(confirmPayload))
+	require.NoError(t, err)
+	confirmReq.Header.Set("Authorization", "Bearer "+accessToken)
+	confirmReq.Header.Set("Content-Type", "application/json")
+	confirmResp, err := client.Do(confirmReq)
+	require.NoError(t, err)
+	defer confirmResp.Body.Close()
+	confirmBody, _ := io.ReadAll(confirmResp.Body)
+	require.Equal(t, http.StatusOK, confirmResp.StatusCode, "confirm body=%s", string(confirmBody))
+	var confirmed struct {
+		FileMetadata struct {
+			FileType string `json:"file_type"`
+		} `json:"file_metadata"`
+	}
+	require.NoError(t, json.Unmarshal(confirmBody, &confirmed))
+	fileType = strings.TrimSpace(confirmed.FileMetadata.FileType)
+	if fileType == "" {
+		fileType = "file"
+	}
+	return fileID, fileType
+}
+
+func sha256Hex(b []byte) string {
+	sum := sha256.Sum256(b)
+	return fmt.Sprintf("%x", sum[:])
+}
+
+func sendComposeMessageWithAttachmentsJSON(
+	t *testing.T,
+	client *http.Client,
+	base, accessToken, chatID, attachmentsJSON string,
+) string {
+	t.Helper()
+	payload, err := json.Marshal(map[string]any{
+		"chat":              map[string]string{"id": chatID},
+		"content":           "",
+		"attachments_json":  attachmentsJSON,
+		"client_message_id": composeClientMessageID(),
+	})
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/messages/send", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "POST send attachment body=%s", string(body))
+
+	var parsed struct {
+		Message struct {
+			ID string `json:"id"`
+		} `json:"message"`
+	}
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	require.NotEmpty(t, parsed.Message.ID)
+	return parsed.Message.ID
 }
