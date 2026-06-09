@@ -1,9 +1,10 @@
--- chat_db v1 DM — keep in sync with src/backend/migrations/chat_db/000001_init.up.sql
+-- chat_db — keep in sync with src/backend/migrations/chat_db/000001_init.up.sql,
+-- 000002_dm_requests.up.sql, 000003_groups.up.sql
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TABLE chats (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    type VARCHAR(16) NOT NULL CHECK (type = 'dm'),
+    type VARCHAR(16) NOT NULL CHECK (type IN ('dm', 'group', 'channel')),
     space_id UUID NULL,
     name TEXT NULL,
     avatar_url TEXT NULL,

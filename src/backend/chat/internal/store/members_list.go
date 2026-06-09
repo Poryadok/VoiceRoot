@@ -45,6 +45,7 @@ WHERE id = $1 AND type = 'dm'
 	}
 	return &ChatRow{
 		ID:               id,
+		Type:             "dm",
 		CreatorProfileID: creator,
 		CreatedAt:        createdAt.UTC(),
 		UpdatedAt:        updatedAt.UTC(),

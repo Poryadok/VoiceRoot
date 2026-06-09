@@ -25,7 +25,7 @@ func (s *ChatGRPC) ListMembers(ctx context.Context, req *chatv1.ListMembersReque
 	if err != nil {
 		return nil, err
 	}
-	row, err := s.DM.FindDMChatByID(ctx, chatID)
+	row, err := s.DM.FindChatByID(ctx, chatID)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -117,7 +117,7 @@ func (s *ChatGRPC) GetChat(ctx context.Context, req *chatv1.GetChatRequest) (*ch
 	if err != nil {
 		return nil, err
 	}
-	row, err := s.DM.FindDMChatByID(ctx, chatID)
+	row, err := s.DM.FindChatByID(ctx, chatID)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}

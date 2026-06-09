@@ -11,10 +11,16 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// ChatRow is a persisted DM row from chat_db.chats (v1: type = dm only).
+// ChatRow is a persisted chat row from chat_db.chats.
 type ChatRow struct {
 	ID               uuid.UUID
+	Type             string // dm | group | channel
+	SpaceID          *uuid.UUID
+	Name             *string
+	AvatarURL        *string
+	Topic            *string
 	CreatorProfileID uuid.UUID
+	SlowModeSeconds  int32
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 	LastMessageAt    *time.Time
@@ -84,6 +90,7 @@ VALUES ($1, $2, 'member', 'main'), ($1, $3, 'member', 'requests')
 	}
 	return &ChatRow{
 		ID:               chatID,
+		Type:             "dm",
 		CreatorProfileID: callerProfileID,
 		CreatedAt:        createdAt.UTC(),
 		UpdatedAt:        updatedAt.UTC(),
@@ -154,6 +161,7 @@ LIMIT 1
 	}
 	return &ChatRow{
 		ID:               id,
+		Type:             "dm",
 		CreatorProfileID: creator,
 		CreatedAt:        createdAt.UTC(),
 		UpdatedAt:        updatedAt.UTC(),

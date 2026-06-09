@@ -91,17 +91,33 @@ func chatRowToProto(r *store.ChatRow) *chatv1.Chat {
 	if r == nil {
 		return nil
 	}
+	chatType := chatv1.ChatType_CHAT_TYPE_DM
+	switch r.Type {
+	case "group":
+		chatType = chatv1.ChatType_CHAT_TYPE_GROUP
+	case "channel":
+		chatType = chatv1.ChatType_CHAT_TYPE_CHANNEL
+	}
 	out := &chatv1.Chat{
-		Id:                 r.ID.String(),
-		Type:               chatv1.ChatType_CHAT_TYPE_DM,
-		CreatorProfileId:   r.CreatorProfileID.String(),
-		SlowModeSeconds:    0,
-		CreatedAt:          timestamppb.New(r.CreatedAt),
-		UpdatedAt:          timestamppb.New(r.UpdatedAt),
-		SpaceId:            nil,
-		Name:               nil,
-		AvatarUrl:          nil,
-		Topic:              nil,
+		Id:               r.ID.String(),
+		Type:             chatType,
+		CreatorProfileId: r.CreatorProfileID.String(),
+		SlowModeSeconds:  r.SlowModeSeconds,
+		CreatedAt:        timestamppb.New(r.CreatedAt),
+		UpdatedAt:        timestamppb.New(r.UpdatedAt),
+	}
+	if r.SpaceID != nil {
+		sid := r.SpaceID.String()
+		out.SpaceId = &sid
+	}
+	if r.Name != nil {
+		out.Name = r.Name
+	}
+	if r.AvatarURL != nil {
+		out.AvatarUrl = r.AvatarURL
+	}
+	if r.Topic != nil {
+		out.Topic = r.Topic
 	}
 	if r.LastMessageAt != nil {
 		out.LastMessageAt = timestamppb.New(*r.LastMessageAt)

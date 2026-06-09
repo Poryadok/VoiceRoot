@@ -80,21 +80,21 @@ func (s *DMStore) ListChatsPage(ctx context.Context, viewerProfileID uuid.UUID, 
 	var rows pgx.Rows
 	if cursor == "" {
 		rows, err = s.Pool.Query(ctx, `
-SELECT c.id, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at, m.inbox_bucket,
+SELECT c.id, c.type, c.name, c.avatar_url, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at, m.inbox_bucket,
        COALESCE(c.last_message_at, c.created_at) AS sort_at
 FROM chats c
 INNER JOIN chat_members m ON m.chat_id = c.id AND m.profile_id = $1
-WHERE c.type = 'dm' AND m.is_archived = false AND m.inbox_bucket = $3
+WHERE c.type IN ('dm', 'group') AND m.is_archived = false AND m.inbox_bucket = $3
 ORDER BY sort_at DESC, c.id DESC
 LIMIT $2
 `, viewerProfileID, fetch, inbox)
 	} else {
 		rows, err = s.Pool.Query(ctx, `
-SELECT c.id, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at, m.inbox_bucket,
+SELECT c.id, c.type, c.name, c.avatar_url, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at, m.inbox_bucket,
        COALESCE(c.last_message_at, c.created_at) AS sort_at
 FROM chats c
 INNER JOIN chat_members m ON m.chat_id = c.id AND m.profile_id = $1
-WHERE c.type = 'dm' AND m.is_archived = false AND m.inbox_bucket = $5
+WHERE c.type IN ('dm', 'group') AND m.is_archived = false AND m.inbox_bucket = $5
   AND (
     COALESCE(c.last_message_at, c.created_at) < $2::timestamptz
     OR (
@@ -114,11 +114,13 @@ LIMIT $4
 	var out []*ChatRow
 	for rows.Next() {
 		var id, creator uuid.UUID
+		var chatType string
+		var name, avatarURL sql.NullString
 		var lastMsg sql.NullTime
 		var createdAt, updatedAt time.Time
 		var inboxBucket string
 		var sortAt time.Time
-		if err := rows.Scan(&id, &creator, &lastMsg, &createdAt, &updatedAt, &inboxBucket, &sortAt); err != nil {
+		if err := rows.Scan(&id, &chatType, &name, &avatarURL, &creator, &lastMsg, &createdAt, &updatedAt, &inboxBucket, &sortAt); err != nil {
 			return nil, err
 		}
 		var lm *time.Time
@@ -126,14 +128,24 @@ LIMIT $4
 			t := lastMsg.Time.UTC()
 			lm = &t
 		}
-		out = append(out, &ChatRow{
+		row := &ChatRow{
 			ID:               id,
+			Type:             chatType,
 			CreatorProfileID: creator,
 			CreatedAt:        createdAt.UTC(),
 			UpdatedAt:        updatedAt.UTC(),
 			LastMessageAt:    lm,
 			InboxBucket:      inboxBucket,
-		})
+		}
+		if name.Valid {
+			n := name.String
+			row.Name = &n
+		}
+		if avatarURL.Valid {
+			a := avatarURL.String
+			row.AvatarURL = &a
+		}
+		out = append(out, row)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

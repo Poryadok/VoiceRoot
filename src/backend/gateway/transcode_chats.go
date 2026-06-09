@@ -64,6 +64,70 @@ func (t *transcoder) serveChats(w http.ResponseWriter, r *http.Request, rest str
 		w.WriteHeader(http.StatusNoContent)
 		return true
 
+	case r.Method == http.MethodPost && rest == "":
+		req := &chatv1.CreateChatRequest{}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.chat.CreateChat(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodPatch && rest != "" && !strings.Contains(rest, "/"):
+		req := &chatv1.UpdateChatRequest{}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		req.ChatId = rest
+		resp, err := t.clients.chat.UpdateChat(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodPost && strings.HasSuffix(rest, "/members"):
+		chatID := strings.TrimSuffix(rest, "/members")
+		chatID = strings.Trim(chatID, "/")
+		req := &chatv1.AddMembersRequest{ChatId: chatID}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		if req.ChatId == "" {
+			req.ChatId = chatID
+		}
+		_, err := t.clients.chat.AddMembers(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return true
+
+	case r.Method == http.MethodDelete && strings.Contains(rest, "/members/"):
+		parts := strings.SplitN(rest, "/members/", 2)
+		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+			return false
+		}
+		_, err := t.clients.chat.RemoveMember(ctx, &chatv1.RemoveMemberRequest{
+			ChatId:    parts[0],
+			ProfileId: parts[1],
+		})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return true
+
 	case r.Method == http.MethodPost && rest == "dm":
 		req := &chatv1.CreateDMRequest{}
 		if err := readProtoJSON(r, req); err != nil {

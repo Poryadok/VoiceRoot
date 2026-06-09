@@ -18,6 +18,7 @@ func (s *DMStore) DMPeerProfileIDs(ctx context.Context, viewerProfileID uuid.UUI
 	rows, err := s.Pool.Query(ctx, `
 SELECT m.chat_id, m.profile_id
 FROM chat_members m
+INNER JOIN chats c ON c.id = m.chat_id AND c.type = 'dm'
 WHERE m.chat_id = ANY($1::uuid[])
   AND m.profile_id <> $2
 `, chatIDs, viewerProfileID)
