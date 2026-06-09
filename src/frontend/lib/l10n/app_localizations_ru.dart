@@ -445,6 +445,41 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatListStrangerBadge => 'Незнакомец';
 
   @override
+  String get chatCreateGroupTooltip => 'Создать группу';
+
+  @override
+  String get chatCreateGroupTitle => 'Новая группа';
+
+  @override
+  String get chatCreateGroupNameLabel => 'Название группы';
+
+  @override
+  String get chatCreateGroupNameHint => 'Пятничная тусовка';
+
+  @override
+  String get chatCreateGroupMembers => 'Добавить участников';
+
+  @override
+  String get chatCreateGroupMembersHint =>
+      'Выберите минимум 2 друзей (всего 3 человека, включая вас).';
+
+  @override
+  String get chatCreateGroupSubmit => 'Создать группу';
+
+  @override
+  String get chatCreateGroupMinMembers =>
+      'Выберите минимум 2 друзей для создания группы.';
+
+  @override
+  String get chatCreateGroupFriendsEmptyHint =>
+      'Сначала добавьте друзей, затем пригласите их в группу.';
+
+  @override
+  String chatCreateGroupError(String message) {
+    return 'Не удалось создать группу: $message';
+  }
+
+  @override
   String get settingsTitle => 'Настройки';
 
   @override

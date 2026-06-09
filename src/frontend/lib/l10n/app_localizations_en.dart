@@ -442,6 +442,41 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatListStrangerBadge => 'Stranger';
 
   @override
+  String get chatCreateGroupTooltip => 'Create group';
+
+  @override
+  String get chatCreateGroupTitle => 'New group';
+
+  @override
+  String get chatCreateGroupNameLabel => 'Group name';
+
+  @override
+  String get chatCreateGroupNameHint => 'Friday squad';
+
+  @override
+  String get chatCreateGroupMembers => 'Add members';
+
+  @override
+  String get chatCreateGroupMembersHint =>
+      'Select at least 2 friends (3 people total including you).';
+
+  @override
+  String get chatCreateGroupSubmit => 'Create group';
+
+  @override
+  String get chatCreateGroupMinMembers =>
+      'Select at least 2 friends to create a group.';
+
+  @override
+  String get chatCreateGroupFriendsEmptyHint =>
+      'Add friends first, then invite them to a group.';
+
+  @override
+  String chatCreateGroupError(String message) {
+    return 'Could not create group: $message';
+  }
+
+  @override
   String get settingsTitle => 'Settings';
 
   @override

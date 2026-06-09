@@ -16,6 +16,7 @@ import '../core/voice_list_row.dart';
 import '../core/voice_skeleton.dart';
 import '../core/voice_state_panel.dart';
 import '../social/presence_indicator.dart';
+import 'create_group_sheet.dart';
 
 /// Middle column: DM chat list from `GET /api/v1/chats`.
 class ChatListPanel extends ConsumerWidget {
@@ -28,6 +29,7 @@ class ChatListPanel extends ConsumerWidget {
       Key('chat_list_presence_$chatId');
   static const Key loadMoreKey = Key('chat_list_load_more');
   static const Key unavailableKey = Key('chat_list_unavailable');
+  static const Key createGroupKey = Key('chat_list_create_group');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -43,10 +45,25 @@ class ChatListPanel extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-          child: Text(
-            l10n.chatListTitle,
-            style: Theme.of(context).textTheme.titleMedium,
+          padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: Text(
+                    l10n.chatListTitle,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+              ),
+              IconButton(
+                key: ChatListPanel.createGroupKey,
+                icon: const Icon(Icons.group_add_outlined),
+                tooltip: l10n.chatCreateGroupTooltip,
+                onPressed: () => CreateGroupSheet.show(context),
+              ),
+            ],
           ),
         ),
         if (chats.errorMessage == null || chats.items.isNotEmpty)
@@ -152,7 +169,12 @@ class ChatListPanel extends ConsumerWidget {
                         selected: selected,
                         title: title,
                         subtitle: subtitle.isEmpty ? null : subtitle,
-                        leading: peerId != null
+                        leading: item.chat.isGroup
+                            ? VoiceAvatar(
+                                imageUrl: item.chat.avatarUrl,
+                                label: title,
+                              )
+                            : peerId != null
                             ? VoiceAvatarWithPresence(
                                 avatar: VoiceAvatar(
                                   imageUrl: profile?.avatarUrl,

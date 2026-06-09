@@ -236,6 +236,33 @@ void main() {
       },
     );
 
+    test('createGroupWithMembers creates group, invites, and selects chat', () async {
+      final chats = _FakeChatsClient();
+      late _FakeRealtimeHub hub;
+      final container = _container(
+        chatsClient: chats,
+        messagesClient: _FakeMessagesClient(),
+        realtimeHubBuilder: (ref) => hub = _FakeRealtimeHub(ref),
+      );
+      addTearDown(container.dispose);
+
+      final err = await container
+          .read(chatActionsProvider)
+          .createGroupWithMembers(
+            name: 'Squad',
+            memberProfileIds: const ['friend-a', 'friend-b'],
+          );
+      await pumpEventQueue();
+
+      expect(err, isNull);
+      expect(chats.createGroupCalls, ['Squad']);
+      expect(chats.addMembersCalls, hasLength(1));
+      expect(chats.addMembersCalls.first.$1, 'group-created');
+      expect(chats.addMembersCalls.first.$2, ['friend-a', 'friend-b']);
+      expect(container.read(selectedChatIdProvider), 'group-created');
+      expect(hub.subscribedChats, ['group-created']);
+    });
+
     test(
       'marks the latest loaded message read and fans out over realtime',
       () async {
@@ -321,6 +348,8 @@ class _FakeChatsClient extends VoiceChatsClient {
 
   final List<ChatListData> _pages;
   final calls = <_ChatListCall>[];
+  final createGroupCalls = <String>[];
+  final addMembersCalls = <(String, List<String>)>[];
 
   @override
   Future<ChatsApiResult<ChatListData>> listChats({
@@ -334,6 +363,32 @@ class _FakeChatsClient extends VoiceChatsClient {
       return const ChatsApiOk(ChatListData(items: []));
     }
     return ChatsApiOk(_pages.removeAt(0));
+  }
+
+  @override
+  Future<ChatsApiResult<VoiceChat>> createGroup({
+    required String authorization,
+    required String name,
+  }) async {
+    createGroupCalls.add(name);
+    return ChatsApiOk(
+      VoiceChat(
+        id: 'group-created',
+        type: 'CHAT_TYPE_GROUP',
+        creatorProfileId: 'prof-1',
+        name: name,
+      ),
+    );
+  }
+
+  @override
+  Future<ChatsApiResult<void>> addGroupMembers({
+    required String authorization,
+    required String chatId,
+    required List<String> profileIds,
+  }) async {
+    addMembersCalls.add((chatId, profileIds));
+    return const ChatsApiOk(null);
   }
 }
 

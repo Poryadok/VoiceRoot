@@ -140,7 +140,17 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         ? ref.watch(presenceProvider(peerId))
         : null;
     final canCall = ref.watch(gatewayConfigProvider).canPlaceVoiceCalls;
-    final title = peerName ?? l10n.chatRoomTitle(widget.chatId.substring(0, 8));
+    String? groupName;
+    for (final item in ref.watch(chatListControllerProvider).items) {
+      if (item.chatId == widget.chatId && item.chat.isGroup) {
+        groupName = item.chat.name;
+        break;
+      }
+    }
+    final title =
+        peerName ??
+        groupName ??
+        l10n.chatRoomTitle(widget.chatId.substring(0, 8));
     final voice = VoiceColors.of(context);
 
     if (!_unreadCaptured) {

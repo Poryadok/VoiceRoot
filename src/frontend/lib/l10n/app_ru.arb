@@ -242,6 +242,23 @@
   "chatNewMessages": "Новые сообщения",
   "chatUnreadSeparator": "Непрочитанные сообщения",
   "chatListStrangerBadge": "Незнакомец",
+  "chatCreateGroupTooltip": "Создать группу",
+  "chatCreateGroupTitle": "Новая группа",
+  "chatCreateGroupNameLabel": "Название группы",
+  "chatCreateGroupNameHint": "Пятничная тусовка",
+  "chatCreateGroupMembers": "Добавить участников",
+  "chatCreateGroupMembersHint": "Выберите минимум 2 друзей (всего 3 человека, включая вас).",
+  "chatCreateGroupSubmit": "Создать группу",
+  "chatCreateGroupMinMembers": "Выберите минимум 2 друзей для создания группы.",
+  "chatCreateGroupFriendsEmptyHint": "Сначала добавьте друзей, затем пригласите их в группу.",
+  "chatCreateGroupError": "Не удалось создать группу: {message}",
+  "@chatCreateGroupError": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
   "settingsTitle": "Настройки",
   "settingsTooltip": "Настройки",
   "settingsTheme": "Тема",

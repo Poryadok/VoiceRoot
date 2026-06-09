@@ -241,6 +241,23 @@
   "chatNewMessages": "New messages",
   "chatUnreadSeparator": "Unread messages",
   "chatListStrangerBadge": "Stranger",
+  "chatCreateGroupTooltip": "Create group",
+  "chatCreateGroupTitle": "New group",
+  "chatCreateGroupNameLabel": "Group name",
+  "chatCreateGroupNameHint": "Friday squad",
+  "chatCreateGroupMembers": "Add members",
+  "chatCreateGroupMembersHint": "Select at least 2 friends (3 people total including you).",
+  "chatCreateGroupSubmit": "Create group",
+  "chatCreateGroupMinMembers": "Select at least 2 friends to create a group.",
+  "chatCreateGroupFriendsEmptyHint": "Add friends first, then invite them to a group.",
+  "chatCreateGroupError": "Could not create group: {message}",
+  "@chatCreateGroupError": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
   "settingsTitle": "Settings",
   "settingsTooltip": "Settings",
   "settingsTheme": "Theme",

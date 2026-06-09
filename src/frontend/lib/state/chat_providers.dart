@@ -934,6 +934,49 @@ class ChatActions {
     };
   }
 
+  /// Creates a standalone group and invites members (min 2 invitees per API).
+  Future<String?> createGroupWithMembers({
+    required String name,
+    required List<String> memberProfileIds,
+  }) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+    final createResult = await _ref
+        .read(voiceChatsClientProvider)
+        .createGroup(authorization: auth, name: name);
+    return switch (createResult) {
+      ChatsApiFailure(:final message) => message,
+      ChatsApiOk(:final data) => _inviteGroupMembers(
+        auth: auth,
+        chatId: data.id,
+        memberProfileIds: memberProfileIds,
+      ),
+    };
+  }
+
+  Future<String?> _inviteGroupMembers({
+    required String auth,
+    required String chatId,
+    required List<String> memberProfileIds,
+  }) async {
+    final inviteResult = await _ref.read(voiceChatsClientProvider).addGroupMembers(
+      authorization: auth,
+      chatId: chatId,
+      profileIds: memberProfileIds,
+    );
+    return switch (inviteResult) {
+      ChatsApiFailure(:final message) => message,
+      ChatsApiOk() => _selectGroupChat(chatId),
+    };
+  }
+
+  String? _selectGroupChat(String chatId) {
+    _ref.read(selectedChatIdProvider.notifier).state = chatId;
+    _ref.read(realtimeHubProvider).ensureSubscribed(chatId);
+    _invalidateChatLists(_ref);
+    return null;
+  }
+
   String? _selectDmChat(String chatId, String peerProfileId) {
     final peers = Map<String, String>.from(
       _ref.read(dmPeerProfileByChatIdProvider),

@@ -878,6 +878,66 @@ abstract class AppLocalizations {
   /// **'Stranger'**
   String get chatListStrangerBadge;
 
+  /// No description provided for @chatCreateGroupTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Create group'**
+  String get chatCreateGroupTooltip;
+
+  /// No description provided for @chatCreateGroupTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'New group'**
+  String get chatCreateGroupTitle;
+
+  /// No description provided for @chatCreateGroupNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Group name'**
+  String get chatCreateGroupNameLabel;
+
+  /// No description provided for @chatCreateGroupNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Friday squad'**
+  String get chatCreateGroupNameHint;
+
+  /// No description provided for @chatCreateGroupMembers.
+  ///
+  /// In en, this message translates to:
+  /// **'Add members'**
+  String get chatCreateGroupMembers;
+
+  /// No description provided for @chatCreateGroupMembersHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Select at least 2 friends (3 people total including you).'**
+  String get chatCreateGroupMembersHint;
+
+  /// No description provided for @chatCreateGroupSubmit.
+  ///
+  /// In en, this message translates to:
+  /// **'Create group'**
+  String get chatCreateGroupSubmit;
+
+  /// No description provided for @chatCreateGroupMinMembers.
+  ///
+  /// In en, this message translates to:
+  /// **'Select at least 2 friends to create a group.'**
+  String get chatCreateGroupMinMembers;
+
+  /// No description provided for @chatCreateGroupFriendsEmptyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Add friends first, then invite them to a group.'**
+  String get chatCreateGroupFriendsEmptyHint;
+
+  /// No description provided for @chatCreateGroupError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not create group: {message}'**
+  String chatCreateGroupError(String message);
+
   /// No description provided for @settingsTitle.
   ///
   /// In en, this message translates to:
