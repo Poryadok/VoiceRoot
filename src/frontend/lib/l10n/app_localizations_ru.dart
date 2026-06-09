@@ -118,6 +118,9 @@ class AppLocalizationsRu extends AppLocalizations {
       'Проверьте написание или попробуйте другой ник.';
 
   @override
+  String get socialSearchLoading => 'Идёт поиск…';
+
+  @override
   String get socialAddFriend => 'Добавить в друзья';
 
   @override

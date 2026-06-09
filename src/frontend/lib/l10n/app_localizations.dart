@@ -284,6 +284,12 @@ abstract class AppLocalizations {
   /// **'Check the spelling or try another handle.'**
   String get socialSearchEmptyHint;
 
+  /// No description provided for @socialSearchLoading.
+  ///
+  /// In en, this message translates to:
+  /// **'Searching…'**
+  String get socialSearchLoading;
+
   /// No description provided for @socialAddFriend.
   ///
   /// In en, this message translates to:

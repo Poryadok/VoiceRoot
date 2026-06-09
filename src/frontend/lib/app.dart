@@ -156,6 +156,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
     setState(() => _socialPanelOpen = true);
     showVoiceBottomSheet<void>(
       context: context,
+      scrollable: false,
       child: const SocialPanel(),
     ).whenComplete(() {
       if (mounted) setState(() => _socialPanelOpen = false);

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -12,6 +13,7 @@ import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
+import 'package:voice_frontend/ui/core/voice_bottom_sheet.dart';
 import 'package:voice_frontend/ui/social/profile_detail_sheet.dart';
 import 'package:voice_frontend/ui/social/social_panel.dart';
 
@@ -71,6 +73,59 @@ void main() {
     expect(find.byKey(SocialPanel.tabRequestsKey), findsOneWidget);
   });
 
+  testWidgets('search works inside non-scrollable bottom sheet', (tester) async {
+    await tester.pumpWidget(
+      socialTestApp(
+        home: Builder(
+          builder: (context) => ElevatedButton(
+            onPressed: () => showVoiceBottomSheet<void>(
+              context: context,
+              scrollable: false,
+              child: const SocialPanel(),
+            ),
+            child: const Text('open'),
+          ),
+        ),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/users/search') {
+            return http.Response(
+              jsonEncode({
+                'profile_list': {
+                  'profiles': [
+                    {
+                      'id': 'p-sheet',
+                      'account_id': 'a-1',
+                      'username': 'carol',
+                      'discriminator': '0001',
+                      'display_name': 'Carol',
+                      'locale': 'en',
+                      'theme': 'dark',
+                      'is_primary': true,
+                      'verification_type': 'none',
+                    },
+                  ],
+                },
+                'page': {'has_more': false},
+              }),
+              200,
+            );
+          }
+          return http.Response('not found', 404);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(SocialPanel.searchFieldKey), 'carol');
+    await tester.tap(find.byKey(SocialPanel.searchSubmitKey));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Carol'), findsOneWidget);
+  });
+
   testWidgets('search submits query and shows profile result', (tester) async {
     await tester.pumpWidget(
       socialTestApp(
@@ -111,6 +166,51 @@ void main() {
 
     expect(find.text('Carol'), findsOneWidget);
     expect(find.textContaining('@carol'), findsOneWidget);
+  });
+
+  testWidgets('search shows loading indicator while request is in flight', (
+    tester,
+  ) async {
+    final completer = Completer<http.Response>();
+    addTearDown(() {
+      if (!completer.isCompleted) {
+        completer.complete(http.Response('{}', 500));
+      }
+    });
+
+    await tester.pumpWidget(
+      socialTestApp(
+        home: const SocialPanel(),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/users/search') {
+            return completer.future;
+          }
+          return http.Response('not found', 404);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(SocialPanel.searchFieldKey), 'alice');
+    await tester.tap(find.byKey(SocialPanel.searchSubmitKey));
+    await tester.pump();
+
+    expect(find.byKey(SocialPanel.searchLoadingKey), findsOneWidget);
+    expect(find.text('Searching…'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsWidgets);
+
+    completer.complete(
+      http.Response(
+        jsonEncode({
+          'profile_list': {'profiles': []},
+          'page': {'has_more': false},
+        }),
+        200,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(SocialPanel.searchLoadingKey), findsNothing);
   });
 
   testWidgets('search shows a no-results state after an empty result', (

@@ -24,6 +24,7 @@ class SocialPanel extends ConsumerStatefulWidget {
   static const Key friendsUnavailableKey = Key('social_friends_unavailable');
   static const Key requestsUnavailableKey = Key('social_requests_unavailable');
   static const Key searchUnavailableKey = Key('social_search_unavailable');
+  static const Key searchLoadingKey = Key('social_search_loading');
 
   static Key requestAcceptKey(String profileId) =>
       Key('social_request_accept_$profileId');
@@ -142,15 +143,22 @@ class _SearchTab extends ConsumerWidget {
               const SizedBox(width: 8),
               IconButton(
                 key: SocialPanel.searchSubmitKey,
-                icon: const Icon(Icons.search),
-                onPressed: () => ref
-                    .read(searchProfilesControllerProvider.notifier)
-                    .search(controller.text),
+                icon: search.isLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.search),
+                onPressed: search.isLoading
+                    ? null
+                    : () => ref
+                          .read(searchProfilesControllerProvider.notifier)
+                          .search(controller.text),
               ),
             ],
           ),
         ),
-        if (search.isLoading) const LinearProgressIndicator(minHeight: 2),
         Expanded(
           child: _SearchResults(state: search, onOpenProfile: onOpenProfile),
         ),
@@ -168,6 +176,24 @@ class _SearchResults extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
+    if (state.isLoading) {
+      return KeyedSubtree(
+        key: SocialPanel.searchLoadingKey,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text(
+                l10n.socialSearchLoading,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     if (state.errorMessage != null) {
       final query = state.lastQuery ?? '';
       return KeyedSubtree(

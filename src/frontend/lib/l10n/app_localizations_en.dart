@@ -118,6 +118,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'Check the spelling or try another handle.';
 
   @override
+  String get socialSearchLoading => 'Searching…';
+
+  @override
   String get socialAddFriend => 'Add friend';
 
   @override

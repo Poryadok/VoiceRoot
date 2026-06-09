@@ -65,6 +65,7 @@
   "socialSearchStartHint": "Enter a name or @username to start a conversation.",
   "socialSearchEmpty": "No profiles found",
   "socialSearchEmptyHint": "Check the spelling or try another handle.",
+  "socialSearchLoading": "Searching…",
   "socialAddFriend": "Add friend",
   "socialAcceptRequest": "Accept",
   "socialDeclineRequest": "Decline",
