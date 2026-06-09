@@ -98,3 +98,26 @@ func TestVoiceGRPCGroupVoice_max32Participants(t *testing.T) {
 	_, err = svc.JoinCall(voiceTestCtx("profile-33"), &callsv1.JoinCallRequest{RoomId: roomID})
 	require.Equal(t, codes.ResourceExhausted, status.Code(err))
 }
+
+// TestVoiceGRPCGroupVoice_joinTokenAfterJoin documents LiveKit token issuance for group participants.
+func TestVoiceGRPCGroupVoice_joinTokenAfterJoin(t *testing.T) {
+	events := &recordingEvents{}
+	svc := newTestGroupVoiceService(time.Unix(1700000000, 0).UTC(), events)
+	group := chatv1.ChatType_CHAT_TYPE_GROUP
+
+	start, err := svc.StartCall(voiceTestCtx("profile-owner"), &callsv1.StartCallRequest{
+		RoomTypeEnum: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE.Enum(),
+		LinkedChat:   &chatv1.ChatRef{Id: "group-chat-1", Type: &group},
+		MediaKind:    mediaPtr(callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO),
+	})
+	require.NoError(t, err)
+	roomID := start.GetCallSession().GetRoomId()
+
+	_, err = svc.JoinCall(voiceTestCtx("profile-member"), &callsv1.JoinCallRequest{RoomId: roomID})
+	require.NoError(t, err)
+
+	token, err := svc.GetJoinToken(voiceTestCtx("profile-member"), &callsv1.GetJoinTokenRequest{RoomId: roomID})
+	require.NoError(t, err)
+	require.NotEmpty(t, token.GetJwt())
+	require.Equal(t, "ws://livekit:7880", token.GetLivekitUrl())
+}

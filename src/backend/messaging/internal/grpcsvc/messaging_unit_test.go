@@ -78,6 +78,32 @@ func TestNextCursorForPage(t *testing.T) {
 	require.Equal(t, store.EncodeBeforeCursor(id2), nextCursorForPage(store.ListLatest, rows))
 }
 
+func TestForwardAttribution_pointsToOriginalSource(t *testing.T) {
+	t.Parallel()
+	originalID := uuid.New()
+	originalSender := uuid.New()
+	intermediateID := uuid.New()
+
+	originID, originSender := forwardAttribution(&store.MessageRow{
+		ID:                originalID,
+		SenderProfileID:   originalSender,
+		Content:           "root",
+		Type:              "text",
+	})
+	require.Equal(t, originalID, originID)
+	require.Equal(t, originalSender.String(), originSender)
+
+	chainID, chainSender := forwardAttribution(&store.MessageRow{
+		ID:                intermediateID,
+		SenderProfileID:   uuid.New(),
+		Type:              "forward",
+		ForwardFromID:     &originalID,
+		ForwardFromSender: "Alice",
+	})
+	require.Equal(t, originalID, chainID)
+	require.Equal(t, "Alice", chainSender)
+}
+
 func TestMessagingGRPC_nilReceiver(t *testing.T) {
 	t.Parallel()
 	var s *MessagingGRPC

@@ -25,5 +25,9 @@ flutter test --concurrency=1 \
   test/phase3_delivery_e2e_live_test.dart \
   test/phase3_dm_requests_e2e_live_test.dart \
   test/phase3_file_attachment_e2e_live_test.dart \
+  test/phase4_groups_e2e_live_test.dart \
+  test/phase4_group_roles_e2e_live_test.dart \
+  test/phase4_group_voice_e2e_live_test.dart \
+  test/phase4_forward_e2e_live_test.dart \
   --dart-define=VOICE_RUN_LIVE_INTEGRATION=true \
   --dart-define=VOICE_API_BASE_URL="${VOICE_API_BASE_URL}"
