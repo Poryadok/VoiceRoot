@@ -64,6 +64,25 @@ func (s *RedisCallStore) GetCall(ctx context.Context, roomID string) (Call, erro
 	return call, nil
 }
 
+func (s *RedisCallStore) GetActiveGroupCallForChat(ctx context.Context, chatID string) (Call, error) {
+	roomID, err := s.client.Get(ctx, s.activeChatKey(chatID)).Result()
+	if errors.Is(err, redis.Nil) {
+		return Call{}, ErrNotFound
+	}
+	if err != nil {
+		return Call{}, err
+	}
+	call, err := s.GetCall(ctx, roomID)
+	if err != nil {
+		return Call{}, err
+	}
+	if !call.IsGroupVoice() || call.Status != callsv1.CallStatus_CALL_STATUS_ACTIVE {
+		_ = s.client.Del(ctx, s.activeChatKey(chatID)).Err()
+		return Call{}, ErrNotFound
+	}
+	return call, nil
+}
+
 func (s *RedisCallStore) GetActiveCall(ctx context.Context, profileID string) (Call, error) {
 	roomID, err := s.client.Get(ctx, s.activeKey(profileID)).Result()
 	if errors.Is(err, redis.Nil) {
@@ -187,6 +206,13 @@ func (s *RedisCallStore) save(ctx context.Context, call Call) error {
 	}
 	pipe := s.client.TxPipeline()
 	pipe.Set(ctx, s.callKey(call.RoomID), b, 24*time.Hour)
+	if call.IsGroupVoice() {
+		if call.Status == callsv1.CallStatus_CALL_STATUS_ACTIVE && call.ChatID != "" {
+			pipe.Set(ctx, s.activeChatKey(call.ChatID), call.RoomID, 24*time.Hour)
+		} else if call.ChatID != "" {
+			pipe.Del(ctx, s.activeChatKey(call.ChatID))
+		}
+	}
 	activeProfiles := call.ProfileIDs()
 	if call.Status == callsv1.CallStatus_CALL_STATUS_RINGING || call.Status == callsv1.CallStatus_CALL_STATUS_ACTIVE {
 		for _, profileID := range activeProfiles {
@@ -215,4 +241,8 @@ func (s *RedisCallStore) callKey(roomID string) string {
 
 func (s *RedisCallStore) activeKey(profileID string) string {
 	return s.prefix + "session:" + profileID
+}
+
+func (s *RedisCallStore) activeChatKey(chatID string) string {
+	return s.prefix + "active_chat:" + chatID
 }

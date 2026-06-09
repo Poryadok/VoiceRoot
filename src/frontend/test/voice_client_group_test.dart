@@ -62,6 +62,41 @@ void main() {
     });
   });
 
+  group('VoiceCallsClient.getActiveGroupCallForChat', () {
+    test('GET /api/v1/voice/calls/active?chat_id=…', () async {
+      Uri? capturedUri;
+      final mock = MockClient((req) async {
+        expect(req.method, 'GET');
+        capturedUri = req.url;
+        return http.Response(
+          jsonEncode({
+            'call_session': {
+              'room_id': 'room-group-1',
+              'room_type_enum': 'VOICE_SESSION_KIND_GROUP_VOICE',
+              'linked_chat': {'id': 'group-1'},
+              'status': 'CALL_STATUS_ACTIVE',
+            },
+          }),
+          200,
+        );
+      });
+      final client = VoiceCallsClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
+
+      final result = await client.getActiveGroupCallForChat(
+        authorization: auth,
+        groupChatId: 'group-1',
+      );
+
+      expect(capturedUri?.queryParameters['chat_id'], 'group-1');
+      expect(result, isA<VoiceApiOk<VoiceCallSession?>>());
+      final session = (result as VoiceApiOk<VoiceCallSession?>).data;
+      expect(session?.roomId, 'room-group-1');
+      expect(session?.isGroupVoice, isTrue);
+    });
+  });
+
   group('VoiceCallsClient.joinCall', () {
     test('POST /api/v1/voice/calls/{roomId}/join', () async {
       final mock = MockClient((req) async {

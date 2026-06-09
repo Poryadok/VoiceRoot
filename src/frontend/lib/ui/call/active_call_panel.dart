@@ -100,7 +100,11 @@ class ActiveCallPanel extends ConsumerWidget {
                     const SizedBox(width: 8),
                   ],
                   Text(
-                    connecting ? l10n.callConnecting : l10n.callActive,
+                    connecting
+                        ? l10n.callConnecting
+                        : session.isGroupVoice
+                        ? l10n.callGroupVoiceActive
+                        : l10n.callActive,
                     style: Theme.of(context).textTheme.labelLarge,
                   ),
                   const SizedBox(width: 16),

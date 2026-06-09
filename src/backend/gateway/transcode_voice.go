@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	callsv1 "voice.app/voice/calls/v1"
@@ -43,7 +44,15 @@ func (t *transcoder) serveVoice(w http.ResponseWriter, r *http.Request, rest str
 		return true
 
 	case r.Method == http.MethodGet && rest == "calls/active":
-		resp, err := t.clients.voice.GetActiveCall(ctx, &callsv1.GetActiveCallRequest{})
+		activeCtx := ctx
+		if chatID := strings.TrimSpace(r.URL.Query().Get("chat_id")); chatID != "" {
+			if md, ok := metadata.FromOutgoingContext(ctx); ok {
+				out := md.Copy()
+				out.Set("x-voice-active-chat-id", chatID)
+				activeCtx = metadata.NewOutgoingContext(ctx, out)
+			}
+		}
+		resp, err := t.clients.voice.GetActiveCall(activeCtx, &callsv1.GetActiveCallRequest{})
 		writeActiveCallResponse(w, resp, err)
 		return true
 

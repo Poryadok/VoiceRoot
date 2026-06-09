@@ -331,6 +331,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get callActiveCallExists => 'You already have an active call';
 
   @override
+  String get callGroupVoiceStart => 'Start group voice';
+
+  @override
+  String get callGroupVoiceJoin => 'Join voice';
+
+  @override
+  String get callGroupVoiceActive => 'Group voice active';
+
+  @override
+  String get callGroupVoiceInProgress => 'Voice call in progress in this group';
+
+  @override
   String get profileMessage => 'Message';
 
   @override

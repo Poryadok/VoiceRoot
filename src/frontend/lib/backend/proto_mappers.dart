@@ -5,7 +5,7 @@ import 'package:protobuf/well_known_types/google/protobuf/timestamp.pb.dart'
     as pb_ts;
 
 import '../gen/voice/calls/v1/calls.pb.dart' as calls_pb;
-import '../gen/voice/calls/v1/calls.pbenum.dart';
+import '../gen/voice/calls/v1/calls.pbenum.dart' as calls_enum;
 import '../gen/voice/chat/v1/chat.pb.dart' as chat_pb;
 import '../gen/voice/chat/v1/chat.pbenum.dart';
 import '../gen/voice/file/v1/file.pb.dart' as file_pb;
@@ -351,33 +351,55 @@ file_pb.ConfirmUploadRequest confirmUploadRequestToProto({
   );
 }
 
-VoiceCallMediaKind voiceCallMediaKindFromProto(CallMediaKind kind) {
+VoiceCallMediaKind voiceCallMediaKindFromProto(calls_enum.CallMediaKind kind) {
   return switch (kind) {
-    CallMediaKind.CALL_MEDIA_KIND_VIDEO => VoiceCallMediaKind.video,
-    CallMediaKind.CALL_MEDIA_KIND_AUDIO ||
-    CallMediaKind.CALL_MEDIA_KIND_UNSPECIFIED => VoiceCallMediaKind.audio,
+    calls_enum.CallMediaKind.CALL_MEDIA_KIND_VIDEO =>
+      VoiceCallMediaKind.video,
+    calls_enum.CallMediaKind.CALL_MEDIA_KIND_AUDIO ||
+    calls_enum.CallMediaKind.CALL_MEDIA_KIND_UNSPECIFIED =>
+      VoiceCallMediaKind.audio,
     _ => VoiceCallMediaKind.audio,
   };
 }
 
-CallMediaKind callMediaKindToProto(VoiceCallMediaKind kind) {
+calls_enum.CallMediaKind callMediaKindToProto(VoiceCallMediaKind kind) {
   switch (kind) {
     case VoiceCallMediaKind.video:
-      return CallMediaKind.CALL_MEDIA_KIND_VIDEO;
+      return calls_enum.CallMediaKind.CALL_MEDIA_KIND_VIDEO;
     case VoiceCallMediaKind.audio:
-      return CallMediaKind.CALL_MEDIA_KIND_AUDIO;
+      return calls_enum.CallMediaKind.CALL_MEDIA_KIND_AUDIO;
   }
 }
 
-VoiceCallStatus voiceCallStatusFromProto(CallStatus status) {
+VoiceCallStatus voiceCallStatusFromProto(calls_enum.CallStatus status) {
   return switch (status) {
-    CallStatus.CALL_STATUS_RINGING => VoiceCallStatus.ringing,
-    CallStatus.CALL_STATUS_ACTIVE => VoiceCallStatus.active,
-    CallStatus.CALL_STATUS_DECLINED => VoiceCallStatus.declined,
-    CallStatus.CALL_STATUS_MISSED => VoiceCallStatus.missed,
-    CallStatus.CALL_STATUS_ENDED => VoiceCallStatus.ended,
-    CallStatus.CALL_STATUS_UNSPECIFIED => VoiceCallStatus.unknown,
+    calls_enum.CallStatus.CALL_STATUS_RINGING => VoiceCallStatus.ringing,
+    calls_enum.CallStatus.CALL_STATUS_ACTIVE => VoiceCallStatus.active,
+    calls_enum.CallStatus.CALL_STATUS_DECLINED => VoiceCallStatus.declined,
+    calls_enum.CallStatus.CALL_STATUS_MISSED => VoiceCallStatus.missed,
+    calls_enum.CallStatus.CALL_STATUS_ENDED => VoiceCallStatus.ended,
+    calls_enum.CallStatus.CALL_STATUS_UNSPECIFIED => VoiceCallStatus.unknown,
     _ => VoiceCallStatus.unknown,
+  };
+}
+
+VoiceSessionKind voiceSessionKindFromProto(
+  calls_enum.VoiceSessionKind kind,
+  String roomType,
+) {
+  return switch (kind) {
+    calls_enum.VoiceSessionKind.VOICE_SESSION_KIND_GROUP_VOICE =>
+      VoiceSessionKind.groupVoice,
+    calls_enum.VoiceSessionKind.VOICE_SESSION_KIND_VOICE_ROOM =>
+      VoiceSessionKind.voiceRoom,
+    calls_enum.VoiceSessionKind.VOICE_SESSION_KIND_CALL => VoiceSessionKind.dm,
+    calls_enum.VoiceSessionKind.VOICE_SESSION_KIND_UNSPECIFIED =>
+      switch (roomType) {
+        'group_voice' => VoiceSessionKind.groupVoice,
+        'voice_room' => VoiceSessionKind.voiceRoom,
+        _ => VoiceSessionKind.dm,
+      },
+    _ => VoiceSessionKind.unknown,
   };
 }
 
@@ -390,6 +412,10 @@ VoiceCallSession voiceCallSessionFromProto(calls_pb.CallSession session) {
     calleeProfileId: session.calleeProfileId,
     mediaKind: voiceCallMediaKindFromProto(session.mediaKind),
     status: voiceCallStatusFromProto(session.status),
+    sessionKind: voiceSessionKindFromProto(
+      session.roomTypeEnum,
+      session.roomType,
+    ),
     expiresAt: protoTimestampToDateTime(
       session.hasExpiresAt() ? session.expiresAt : null,
     ),
@@ -423,7 +449,8 @@ calls_pb.StartCallRequest startGroupVoiceRequestToProto({
   required VoiceCallMediaKind mediaKind,
 }) {
   return calls_pb.StartCallRequest(
-    roomTypeEnum: VoiceSessionKind.VOICE_SESSION_KIND_GROUP_VOICE,
+    roomTypeEnum:
+        calls_enum.VoiceSessionKind.VOICE_SESSION_KIND_GROUP_VOICE,
     linkedChat: chatRefToProto(
       groupChatId,
       type: ChatType.CHAT_TYPE_GROUP,

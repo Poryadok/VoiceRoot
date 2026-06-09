@@ -668,6 +668,30 @@ abstract class AppLocalizations {
   /// **'You already have an active call'**
   String get callActiveCallExists;
 
+  /// No description provided for @callGroupVoiceStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Start group voice'**
+  String get callGroupVoiceStart;
+
+  /// No description provided for @callGroupVoiceJoin.
+  ///
+  /// In en, this message translates to:
+  /// **'Join voice'**
+  String get callGroupVoiceJoin;
+
+  /// No description provided for @callGroupVoiceActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Group voice active'**
+  String get callGroupVoiceActive;
+
+  /// No description provided for @callGroupVoiceInProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice call in progress in this group'**
+  String get callGroupVoiceInProgress;
+
   /// No description provided for @profileMessage.
   ///
   /// In en, this message translates to:

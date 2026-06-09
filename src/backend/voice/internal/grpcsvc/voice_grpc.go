@@ -252,6 +252,17 @@ func (s *VoiceGRPC) GetActiveCall(ctx context.Context, _ *callsv1.GetActiveCallR
 	if err != nil {
 		return nil, err
 	}
+	chatID, _ := authctx.ActiveChatID(ctx)
+	if chatID != "" {
+		if err := s.ensureChatMember(ctx, chatID, profileID); err != nil {
+			return nil, err
+		}
+		call, err := s.Calls.GetActiveGroupCallForChat(ctx, chatID)
+		if err != nil {
+			return nil, storeErr(err)
+		}
+		return &callsv1.GetActiveCallResponse{CallSession: callToProto(call)}, nil
+	}
 	call, err := s.Calls.GetActiveCall(ctx, profileID)
 	if err != nil {
 		return nil, storeErr(err)

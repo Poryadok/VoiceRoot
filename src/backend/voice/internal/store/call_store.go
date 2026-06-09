@@ -88,6 +88,7 @@ type CallStore interface {
 	CreateCall(ctx context.Context, call Call) (Call, error)
 	GetCall(ctx context.Context, roomID string) (Call, error)
 	GetActiveCall(ctx context.Context, profileID string) (Call, error)
+	GetActiveGroupCallForChat(ctx context.Context, chatID string) (Call, error)
 	SetStatus(ctx context.Context, roomID string, status callsv1.CallStatus, endedAt time.Time) (Call, error)
 	AddParticipant(ctx context.Context, roomID, profileID string, maxParticipants int) (Call, error)
 	UpdateVoiceState(ctx context.Context, roomID, profileID string, patch VoiceStatePatch) (Call, ParticipantState, error)
@@ -145,6 +146,19 @@ func (s *MemoryCallStore) GetActiveCall(_ context.Context, profileID string) (Ca
 	defer s.mu.Unlock()
 	for _, call := range s.calls {
 		if call.IsActiveForProfile(profileID) {
+			return call, nil
+		}
+	}
+	return Call{}, ErrNotFound
+}
+
+func (s *MemoryCallStore) GetActiveGroupCallForChat(_ context.Context, chatID string) (Call, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, call := range s.calls {
+		if call.IsGroupVoice() &&
+			call.ChatID == chatID &&
+			call.Status == callsv1.CallStatus_CALL_STATUS_ACTIVE {
 			return call, nil
 		}
 	}

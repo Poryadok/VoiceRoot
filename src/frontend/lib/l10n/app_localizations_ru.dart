@@ -332,6 +332,18 @@ class AppLocalizationsRu extends AppLocalizations {
   String get callActiveCallExists => 'У вас уже есть активный звонок';
 
   @override
+  String get callGroupVoiceStart => 'Начать голосовой чат';
+
+  @override
+  String get callGroupVoiceJoin => 'Присоединиться';
+
+  @override
+  String get callGroupVoiceActive => 'Групповой голос активен';
+
+  @override
+  String get callGroupVoiceInProgress => 'В группе идёт голосовой звонок';
+
+  @override
   String get profileMessage => 'Написать';
 
   @override

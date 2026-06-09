@@ -364,4 +364,52 @@ void main() {
     expect(call.phase, CallPhase.failed);
     expect(call.errorMessage, 'livekit_connect_failed');
   });
+
+  test('startGroupVoice connects LiveKit without outgoing overlay phase', () async {
+    final client = MockClient((req) async {
+      if (req.method == 'POST' && req.url.path == '/api/v1/voice/calls') {
+        return http.Response(
+          jsonEncode({
+            'call_session': {
+              'room_id': 'room-group-1',
+              'livekit_room_name': 'voice-group-room-1',
+              'room_type_enum': 'VOICE_SESSION_KIND_GROUP_VOICE',
+              'linked_chat': {'id': 'group-1'},
+              'initiator_profile_id': 'prof-test',
+              'media_kind': 'CALL_MEDIA_KIND_AUDIO',
+              'status': 'CALL_STATUS_ACTIVE',
+            },
+          }),
+          200,
+        );
+      }
+      if (req.method == 'GET' && req.url.path.endsWith('/token')) {
+        return http.Response(
+          jsonEncode({'jwt': 'jwt', 'livekit_url': 'ws://127.0.0.1:7880'}),
+          200,
+        );
+      }
+      return http.Response('{}', 404);
+    });
+    final realtime = StreamController<RealtimeFrame>.broadcast();
+    final fakeRoom = _FakeLiveKitRoom();
+    final container = _callTestContainer(
+      client: client,
+      realtime: realtime,
+      fakeRoom: fakeRoom,
+      activeProfileId: 'prof-test',
+    );
+    addTearDown(container.dispose);
+    addTearDown(realtime.close);
+
+    await container
+        .read(callControllerProvider.notifier)
+        .startGroupVoice(groupChatId: 'group-1');
+
+    expect(fakeRoom.connectCalls, 1);
+    final call = container.read(callControllerProvider);
+    expect(call.phase, CallPhase.active);
+    expect(call.session?.isGroupVoice, isTrue);
+    expect(call.isOutgoing, isFalse);
+  });
 }

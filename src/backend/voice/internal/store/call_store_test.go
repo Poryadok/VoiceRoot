@@ -68,6 +68,29 @@ func TestCallStore_groupVoiceJoinIsIdempotent(t *testing.T) {
 	require.Len(t, call.States, 2)
 }
 
+func TestCallStore_GetActiveGroupCallForChat(t *testing.T) {
+	ctx := context.Background()
+	s := NewMemoryCallStore()
+	group := callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE
+
+	_, err := s.CreateCall(ctx, Call{
+		RoomID:             "room-gv",
+		ChatID:             "group-chat-1",
+		SessionKind:        group,
+		InitiatorProfileID: "profile-owner",
+		MediaKind:          callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO,
+		Status:             callsv1.CallStatus_CALL_STATUS_ACTIVE,
+	})
+	require.NoError(t, err)
+
+	call, err := s.GetActiveGroupCallForChat(ctx, "group-chat-1")
+	require.NoError(t, err)
+	require.Equal(t, "room-gv", call.RoomID)
+
+	_, err = s.GetActiveGroupCallForChat(ctx, "other-group")
+	require.ErrorIs(t, err, ErrNotFound)
+}
+
 func TestCall_IsGroupVoiceAndParticipant(t *testing.T) {
 	t.Parallel()
 	group := Call{

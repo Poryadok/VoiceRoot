@@ -21,9 +21,12 @@ class OutgoingCallOverlay extends ConsumerWidget {
     }
     final call = ref.watch(callControllerProvider);
     final session = call.session;
+    if (session?.isGroupVoice == true) {
+      return const SizedBox.shrink();
+    }
     final calleeProfileId =
         session?.calleeProfileId ?? call.outgoingCalleeProfileId;
-    if (!call.isOutgoing || calleeProfileId == null) {
+    if (!call.isOutgoing || calleeProfileId == null || calleeProfileId.isEmpty) {
       return const SizedBox.shrink();
     }
 

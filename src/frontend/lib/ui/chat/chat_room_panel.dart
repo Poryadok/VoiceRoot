@@ -44,6 +44,8 @@ class ChatRoomPanel extends ConsumerStatefulWidget {
   static const Key videoCallKey = Key('chat_room_video_call');
   static const Key newMessagesChipKey = Key('chat_room_new_messages');
   static const Key groupMembersKey = Key('chat_room_group_members');
+  static const Key groupVoiceStartKey = Key('chat_room_group_voice_start');
+  static const Key groupVoiceJoinKey = Key('chat_room_group_voice_join');
   static Key attachmentPreviewKey(String fileId) =>
       ValueKey('chat_attachment_$fileId');
 
@@ -151,6 +153,14 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         break;
       }
     }
+    final activeGroupCall = isGroup
+        ? ref.watch(groupActiveCallProvider(widget.chatId))
+        : null;
+    final callState = ref.watch(callControllerProvider);
+    final inThisGroupVoice =
+        callState.isActive &&
+        callState.session?.chatId == widget.chatId &&
+        callState.session?.isGroupVoice == true;
     final title =
         peerName ??
         groupName ??
@@ -224,6 +234,12 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   ),
                 ),
                 if (isGroup) ...[
+                  if (canCall && !inThisGroupVoice)
+                    _GroupVoiceHeaderButton(
+                      activeGroupCall: activeGroupCall,
+                      chatId: widget.chatId,
+                      l10n: l10n,
+                    ),
                   IconButton(
                     key: ChatRoomPanel.groupMembersKey,
                     tooltip: l10n.chatGroupMembersTooltip,
@@ -271,6 +287,11 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
             message: l10n.chatRealtimeReconnecting,
             icon: Icons.sync_problem,
             tone: VoiceBannerTone.warning,
+          ),
+        if (isGroup && canCall && !inThisGroupVoice)
+          _GroupVoiceJoinBanner(
+            activeGroupCall: activeGroupCall,
+            l10n: l10n,
           ),
         if (room.typingProfileIds.isNotEmpty)
           Padding(
@@ -534,6 +555,92 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     } finally {
       controller.dispose();
     }
+  }
+}
+
+class _GroupVoiceHeaderButton extends ConsumerWidget {
+  const _GroupVoiceHeaderButton({
+    required this.activeGroupCall,
+    required this.chatId,
+    required this.l10n,
+  });
+
+  final AsyncValue<VoiceCallSession?>? activeGroupCall;
+  final String chatId;
+  final AppLocalizations l10n;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = activeGroupCall;
+    if (async == null) return const SizedBox.shrink();
+    return async.when(
+      data: (session) {
+        if (session != null && session.roomId.isNotEmpty) {
+          return IconButton(
+            key: ChatRoomPanel.groupVoiceJoinKey,
+            tooltip: l10n.callGroupVoiceJoin,
+            onPressed: () => ref
+                .read(callControllerProvider.notifier)
+                .joinGroupVoice(roomId: session.roomId),
+            icon: const Icon(Icons.headset_outlined),
+          );
+        }
+        return IconButton(
+          key: ChatRoomPanel.groupVoiceStartKey,
+          tooltip: l10n.callGroupVoiceStart,
+          onPressed: () => ref
+              .read(callControllerProvider.notifier)
+              .startGroupVoice(groupChatId: chatId),
+          icon: const Icon(Icons.record_voice_over_outlined),
+        );
+      },
+      loading: () => const SizedBox(
+        width: 24,
+        height: 24,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      ),
+      error: (_, _) => IconButton(
+        key: ChatRoomPanel.groupVoiceStartKey,
+        tooltip: l10n.callGroupVoiceStart,
+        onPressed: () => ref
+            .read(callControllerProvider.notifier)
+            .startGroupVoice(groupChatId: chatId),
+        icon: const Icon(Icons.record_voice_over_outlined),
+      ),
+    );
+  }
+}
+
+class _GroupVoiceJoinBanner extends ConsumerWidget {
+  const _GroupVoiceJoinBanner({
+    required this.activeGroupCall,
+    required this.l10n,
+  });
+
+  final AsyncValue<VoiceCallSession?>? activeGroupCall;
+  final AppLocalizations l10n;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = activeGroupCall;
+    if (async == null) return const SizedBox.shrink();
+    return async.when(
+      data: (session) {
+        if (session == null || session.roomId.isEmpty) {
+          return const SizedBox.shrink();
+        }
+        return VoiceCompactBanner(
+          message: l10n.callGroupVoiceInProgress,
+          icon: Icons.headset_mic_outlined,
+          actionLabel: l10n.callGroupVoiceJoin,
+          onAction: () => ref
+              .read(callControllerProvider.notifier)
+              .joinGroupVoice(roomId: session.roomId),
+        );
+      },
+      loading: () => const SizedBox.shrink(),
+      error: (_, _) => const SizedBox.shrink(),
+    );
   }
 }
 

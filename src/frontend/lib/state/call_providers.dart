@@ -24,6 +24,25 @@ final liveKitRoomFactoryProvider = Provider<VoiceLiveKitRoom Function()>((ref) {
   return () => LiveKitVoiceRoom();
 });
 
+/// Bumped when group voice sessions start/end so [groupActiveCallProvider] refreshes.
+final groupActiveCallRefreshTickProvider = StateProvider<int>((ref) => 0);
+
+final groupActiveCallProvider = FutureProvider.family<VoiceCallSession?, String>((
+  ref,
+  chatId,
+) async {
+  ref.watch(groupActiveCallRefreshTickProvider);
+  final auth = ref.watch(authorizationHeaderProvider);
+  if (auth == null) return null;
+  final result = await ref
+      .read(voiceCallsClientProvider)
+      .getActiveGroupCallForChat(authorization: auth, groupChatId: chatId);
+  return switch (result) {
+    VoiceApiOk(:final data) => data,
+    VoiceApiFailure() => null,
+  };
+});
+
 enum CallPhase { idle, outgoing, incoming, connecting, active, ended, failed }
 
 class CallState {
@@ -107,7 +126,12 @@ class CallController extends StateNotifier<CallState> {
   ProviderSubscription<RealtimeLinkStatus>? _linkSub;
   VoiceLiveKitRoom? _room;
   bool _startCallInFlight = false;
+  bool _groupVoiceInFlight = false;
   int _connectGeneration = 0;
+
+  void _refreshGroupActiveCalls() {
+    _ref.read(groupActiveCallRefreshTickProvider.notifier).state++;
+  }
 
   Future<void> startCall({
     required String chatId,
@@ -167,6 +191,79 @@ class CallController extends StateNotifier<CallState> {
     }
   }
 
+  Future<void> startGroupVoice({
+    required String groupChatId,
+    VoiceCallMediaKind mediaKind = VoiceCallMediaKind.audio,
+  }) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return;
+    if (_groupVoiceInFlight) return;
+    _groupVoiceInFlight = true;
+    state = state.copyWith(
+      phase: CallPhase.connecting,
+      outgoingChatId: groupChatId,
+      clearError: true,
+    );
+    try {
+      final result = await _ref
+          .read(voiceCallsClientProvider)
+          .startGroupVoice(
+            authorization: auth,
+            groupChatId: groupChatId,
+            mediaKind: mediaKind,
+          );
+      if (!mounted) return;
+      switch (result) {
+        case VoiceApiOk(:final data):
+          state = state.copyWith(session: data, clearOutgoingTarget: true);
+          _refreshGroupActiveCalls();
+          await _connectLiveKit(data);
+        case VoiceApiFailure(:final message, :final statusCode):
+          if (statusCode == 412 && await _tryRecoverActiveCall(auth)) {
+            return;
+          }
+          state = state.copyWith(
+            phase: CallPhase.failed,
+            errorMessage: message,
+            clearOutgoingTarget: true,
+          );
+      }
+    } finally {
+      _groupVoiceInFlight = false;
+    }
+  }
+
+  Future<void> joinGroupVoice({required String roomId}) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return;
+    if (_groupVoiceInFlight) return;
+    _groupVoiceInFlight = true;
+    state = state.copyWith(phase: CallPhase.connecting, clearError: true);
+    try {
+      final result = await _ref
+          .read(voiceCallsClientProvider)
+          .joinCall(authorization: auth, roomId: roomId);
+      if (!mounted) return;
+      switch (result) {
+        case VoiceApiOk(:final data):
+          state = state.copyWith(session: data, clearOutgoingTarget: true);
+          _refreshGroupActiveCalls();
+          await _connectLiveKit(data);
+        case VoiceApiFailure(:final message, :final statusCode):
+          if (statusCode == 412 && await _tryRecoverActiveCall(auth)) {
+            return;
+          }
+          state = state.copyWith(
+            phase: CallPhase.failed,
+            errorMessage: message,
+            clearOutgoingTarget: true,
+          );
+      }
+    } finally {
+      _groupVoiceInFlight = false;
+    }
+  }
+
   Future<void> acceptCall() async {
     final auth = _ref.read(authorizationHeaderProvider);
     final current = state.session;
@@ -208,7 +305,10 @@ class CallController extends StateNotifier<CallState> {
           .read(voiceCallsClientProvider)
           .endCall(authorization: auth, roomId: current.roomId);
     }
-    if (mounted) state = const CallState();
+    if (mounted) {
+      state = const CallState();
+      _refreshGroupActiveCalls();
+    }
   }
 
   Future<void> unlockAudioPlayback() async {
@@ -392,10 +492,14 @@ class CallController extends StateNotifier<CallState> {
         }
       case 'call_declined' || 'call_missed' || 'call_ended':
         final current = state.session;
-        if (current != null && frame.data?['room_id'] == current.roomId) {
+        final endedRoomId = frame.data?['room_id'] as String?;
+        if (current != null && endedRoomId == current.roomId) {
           unawaited(_room?.disconnect());
           _room = null;
           state = const CallState();
+        }
+        if (endedRoomId != null && endedRoomId.isNotEmpty) {
+          _refreshGroupActiveCalls();
         }
     }
   }
@@ -429,6 +533,7 @@ class CallController extends StateNotifier<CallState> {
         if (session == null) return false;
         switch (session.status) {
           case VoiceCallStatus.ringing:
+            if (session.isGroupVoice) return false;
             if (session.initiatorProfileId == activeProfileId) {
               _applySession(session, CallPhase.outgoing);
               return true;
@@ -458,6 +563,14 @@ class CallController extends StateNotifier<CallState> {
     if (data == null) return null;
     final roomId = data['room_id'] as String? ?? '';
     if (roomId.isEmpty) return null;
+    final roomType = '${data['room_type']}'.toLowerCase();
+    final roomTypeEnum = '${data['room_type_enum']}'.toUpperCase();
+    final sessionKind = roomTypeEnum.contains('GROUP_VOICE') ||
+            roomType == 'group_voice'
+        ? VoiceSessionKind.groupVoice
+        : roomTypeEnum.contains('VOICE_ROOM') || roomType == 'voice_room'
+        ? VoiceSessionKind.voiceRoom
+        : VoiceSessionKind.dm;
     return VoiceCallSession(
       roomId: roomId,
       livekitRoomName: data['livekit_room_name'] as String? ?? '',
@@ -468,6 +581,7 @@ class CallController extends StateNotifier<CallState> {
           ? VoiceCallMediaKind.video
           : VoiceCallMediaKind.audio,
       status: status,
+      sessionKind: sessionKind,
       expiresAt: DateTime.tryParse(data['expires_at'] as String? ?? ''),
     );
   }

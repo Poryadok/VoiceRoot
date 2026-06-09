@@ -32,6 +32,8 @@ enum VoiceCallMediaKind { audio, video }
 
 enum VoiceCallStatus { ringing, active, declined, missed, ended, unknown }
 
+enum VoiceSessionKind { dm, groupVoice, voiceRoom, unknown }
+
 class VoiceCallSession {
   const VoiceCallSession({
     required this.roomId,
@@ -41,6 +43,7 @@ class VoiceCallSession {
     required this.calleeProfileId,
     required this.mediaKind,
     required this.status,
+    this.sessionKind = VoiceSessionKind.dm,
     this.expiresAt,
   });
 
@@ -51,7 +54,10 @@ class VoiceCallSession {
   final String calleeProfileId;
   final VoiceCallMediaKind mediaKind;
   final VoiceCallStatus status;
+  final VoiceSessionKind sessionKind;
   final DateTime? expiresAt;
+
+  bool get isGroupVoice => sessionKind == VoiceSessionKind.groupVoice;
 }
 
 class VoiceJoinToken {
@@ -74,8 +80,31 @@ class VoiceCallsClient {
   Future<VoiceApiResult<VoiceCallSession?>> getActiveCall({
     required String authorization,
   }) async {
+    return _getActiveCall(authorization: authorization);
+  }
+
+  /// Active group_voice session for a text group (member only).
+  Future<VoiceApiResult<VoiceCallSession?>> getActiveGroupCallForChat({
+    required String authorization,
+    required String groupChatId,
+  }) {
+    return _getActiveCall(
+      authorization: authorization,
+      groupChatId: groupChatId,
+    );
+  }
+
+  Future<VoiceApiResult<VoiceCallSession?>> _getActiveCall({
+    required String authorization,
+    String? groupChatId,
+  }) async {
+    final uri = groupChatId == null
+        ? _gateway.resolve('/api/v1/voice/calls/active')
+        : _gateway.resolve('/api/v1/voice/calls/active').replace(
+            queryParameters: {'chat_id': groupChatId},
+          );
     final result = await _gateway.getProto(
-      _gateway.resolve('/api/v1/voice/calls/active'),
+      uri,
       authorization: authorization,
       createEmpty: calls_pb.GetActiveCallResponse.create,
       allowNotFound: true,
