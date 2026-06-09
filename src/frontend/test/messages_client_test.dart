@@ -284,4 +284,61 @@ void main() {
       expect(data.profileId, 'profile-b');
     });
   });
+
+  group('VoiceMessagesClient.getMessages reactions_json', () {
+    test('ignores unknown reactions_json until proto exposes the field', () async {
+      final mock = MockClient((req) async {
+        return http.Response(
+          jsonEncode({
+            'message_list': {
+              'messages': [
+                {
+                  'id': 'msg-react',
+                  'chat': {'id': 'chat-1'},
+                  'sender_profile_id': 'profile-b',
+                  'content': 'hi',
+                  'reactions_json': jsonEncode([
+                    {'emoji': '👍', 'count': 2, 'reacted_by_me': true},
+                  ]),
+                  'created_at': '2024-01-02T00:00:00Z',
+                },
+              ],
+            },
+          }),
+          200,
+        );
+      });
+      final client = VoiceMessagesClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
+      final r = await client.getMessages(authorization: auth, chatId: 'chat-1');
+      expect(r, isA<MessagesApiOk<MessageListData>>());
+      final msg = (r as MessagesApiOk<MessageListData>).data.messages.single;
+      expect(msg.reactions, hasLength(1));
+      expect(msg.reactions.single.count, 2);
+    });
+  });
+
+  group('VoiceMessage reactions_json', () {
+    test('parses aggregated emoji counters and reacted_by_me', () {
+      final msg = VoiceMessage.fromJson({
+        'id': 'msg-react',
+        'chat': {'id': 'chat-1'},
+        'sender_profile_id': 'profile-b',
+        'content': 'hi',
+        'reactions_json': jsonEncode([
+          {'emoji': '👍', 'count': 3, 'reacted_by_me': true},
+          {'emoji': '🔥', 'count': 1, 'reacted_by_me': false},
+        ]),
+      });
+
+      expect(msg.reactions, hasLength(2));
+      expect(msg.reactions.first.emoji, '👍');
+      expect(msg.reactions.first.count, 3);
+      expect(msg.reactions.first.reactedByMe, isTrue);
+      expect(msg.reactions.last.emoji, '🔥');
+      expect(msg.reactions.last.count, 1);
+      expect(msg.reactions.last.reactedByMe, isFalse);
+    });
+  });
 }

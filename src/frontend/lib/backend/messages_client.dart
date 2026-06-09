@@ -30,6 +30,44 @@ final class MessagesApiFailure extends MessagesApiResult<Never> {
 
 enum VoiceMessageKind { regular, system, forward, unknown }
 
+/// Aggregated emoji reaction on a message (PLAN Phase 4 / text-chat.md).
+class MessageReaction {
+  const MessageReaction({
+    required this.emoji,
+    required this.count,
+    this.reactedByMe = false,
+  });
+
+  final String emoji;
+  final int count;
+  final bool reactedByMe;
+
+  factory MessageReaction.fromJson(Map<String, dynamic> json) {
+    return MessageReaction(
+      emoji: json['emoji'] as String? ?? '',
+      count: (json['count'] as num?)?.toInt() ?? 0,
+      reactedByMe: json['reacted_by_me'] as bool? ?? false,
+    );
+  }
+
+  static List<MessageReaction> listFromWire(dynamic raw) {
+    Object? decoded = raw;
+    if (raw is String && raw.trim().isNotEmpty) {
+      try {
+        decoded = jsonDecode(raw);
+      } catch (_) {
+        decoded = const [];
+      }
+    }
+    if (decoded is! List) return const [];
+    return decoded
+        .whereType<Map<String, dynamic>>()
+        .map(MessageReaction.fromJson)
+        .where((r) => r.emoji.isNotEmpty && r.count > 0)
+        .toList(growable: false);
+  }
+}
+
 class VoiceMessage {
   const VoiceMessage({
     required this.id,
@@ -37,6 +75,7 @@ class VoiceMessage {
     required this.senderProfileId,
     required this.content,
     this.attachments = const [],
+    this.reactions = const [],
     this.messageKind = VoiceMessageKind.regular,
     this.forwardFromId,
     this.forwardFromSender,
@@ -50,6 +89,7 @@ class VoiceMessage {
   final String senderProfileId;
   final String content;
   final List<MessageAttachment> attachments;
+  final List<MessageReaction> reactions;
   final VoiceMessageKind messageKind;
   final String? forwardFromId;
   final String? forwardFromSender;
@@ -65,6 +105,7 @@ class VoiceMessage {
       senderProfileId: json['sender_profile_id'] as String? ?? '',
       content: json['content'] as String? ?? '',
       attachments: MessageAttachment.listFromWire(json['attachments_json']),
+      reactions: MessageReaction.listFromWire(json['reactions_json']),
       editedAt: VoiceMessage.parseTimestamp(json['edited_at']),
       deletedAt: VoiceMessage.parseTimestamp(json['deleted_at']),
       createdAt: VoiceMessage.parseTimestamp(json['created_at']),
@@ -277,6 +318,39 @@ class VoiceMessagesClient {
     final uri = _gateway.replace(
       path: '/api/v1/messages/$messageId',
       queryParameters: {'scope': scope},
+    );
+    final result = await _gateway.deleteEmpty(
+      uri: uri,
+      authorization: authorization,
+    );
+    return _mapEmpty(result);
+  }
+
+  /// Phase 4 emoji reaction — docs/features/text-chat.md.
+  Future<MessagesApiResult<void>> addReaction({
+    required String authorization,
+    required String messageId,
+    required String emoji,
+  }) async {
+    final result = await _gateway.postProto(
+      uri: _gateway.resolve('/api/v1/messages/$messageId/reactions'),
+      authorization: authorization,
+      body: messaging_pb.AddReactionRequest(emoji: emoji),
+      createEmpty: messaging_pb.AddReactionResponse.create,
+      allowNoContent: true,
+    );
+    return _mapEmpty(result);
+  }
+
+  /// Phase 4 emoji reaction toggle-off.
+  Future<MessagesApiResult<void>> removeReaction({
+    required String authorization,
+    required String messageId,
+    required String emoji,
+  }) async {
+    final uri = _gateway.replace(
+      path: '/api/v1/messages/$messageId/reactions',
+      queryParameters: {'emoji': emoji},
     );
     final result = await _gateway.deleteEmpty(
       uri: uri,
