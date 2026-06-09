@@ -477,6 +477,52 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get chatGroupMembersTooltip => 'Group members';
+
+  @override
+  String get chatGroupMembersTitle => 'Members';
+
+  @override
+  String get chatGroupMembersSubtitle =>
+      'Owner can remove members. Members can leave the group.';
+
+  @override
+  String get chatGroupMembersLoadError => 'Could not load members';
+
+  @override
+  String get chatGroupRoleOwner => 'Owner';
+
+  @override
+  String chatGroupMemberYou(String name) {
+    return '$name (you)';
+  }
+
+  @override
+  String get chatGroupKick => 'Remove';
+
+  @override
+  String get chatGroupKickConfirmTitle => 'Remove member?';
+
+  @override
+  String chatGroupKickConfirmMessage(String name) {
+    return 'Remove $name from the group?';
+  }
+
+  @override
+  String get chatGroupLeave => 'Leave group';
+
+  @override
+  String get chatGroupLeaveConfirmTitle => 'Leave group?';
+
+  @override
+  String get chatGroupLeaveConfirmMessage =>
+      'You will no longer receive messages from this group.';
+
+  @override
+  String get chatGroupOwnerLeaveHint =>
+      'As the owner, transfer ownership before leaving (coming soon).';
+
+  @override
   String get settingsTitle => 'Settings';
 
   @override

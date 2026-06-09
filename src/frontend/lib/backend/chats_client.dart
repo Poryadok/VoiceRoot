@@ -85,6 +85,10 @@ class ChatListData {
   final String? nextCursor;
 }
 
+/// Simple group roles (Phase 4): creator is [kChatRoleOwner], invitees [kChatRoleMember].
+const String kChatRoleOwner = 'owner';
+const String kChatRoleMember = 'member';
+
 class ChatMember {
   const ChatMember({
     required this.profileId,
@@ -97,6 +101,8 @@ class ChatMember {
   final String role;
   final DateTime? joinedAt;
   final bool isArchived;
+
+  bool get isOwner => role == kChatRoleOwner;
 }
 
 class MemberListData {

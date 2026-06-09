@@ -22,6 +22,7 @@ import '../core/voice_state_panel.dart';
 import '../core/voice_send_button.dart';
 import '../social/presence_indicator.dart';
 import 'chat_message_list.dart';
+import 'group_members_sheet.dart';
 
 /// Main column: message history (REST) + composer; live updates via Realtime WS.
 class ChatRoomPanel extends ConsumerStatefulWidget {
@@ -42,6 +43,7 @@ class ChatRoomPanel extends ConsumerStatefulWidget {
   static const Key audioCallKey = Key('chat_room_audio_call');
   static const Key videoCallKey = Key('chat_room_video_call');
   static const Key newMessagesChipKey = Key('chat_room_new_messages');
+  static const Key groupMembersKey = Key('chat_room_group_members');
   static Key attachmentPreviewKey(String fileId) =>
       ValueKey('chat_attachment_$fileId');
 
@@ -141,9 +143,11 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         : null;
     final canCall = ref.watch(gatewayConfigProvider).canPlaceVoiceCalls;
     String? groupName;
+    var isGroup = false;
     for (final item in ref.watch(chatListControllerProvider).items) {
       if (item.chatId == widget.chatId && item.chat.isGroup) {
         groupName = item.chat.name;
+        isGroup = true;
         break;
       }
     }
@@ -219,6 +223,18 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
+                if (isGroup) ...[
+                  IconButton(
+                    key: ChatRoomPanel.groupMembersKey,
+                    tooltip: l10n.chatGroupMembersTooltip,
+                    onPressed: () => GroupMembersSheet.show(
+                      context,
+                      chatId: widget.chatId,
+                      groupName: groupName,
+                    ),
+                    icon: const Icon(Icons.group_outlined),
+                  ),
+                ],
                 if (peerId != null && canCall) ...[
                   IconButton(
                     key: ChatRoomPanel.audioCallKey,

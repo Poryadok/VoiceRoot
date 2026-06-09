@@ -259,6 +259,33 @@
       }
     }
   },
+  "chatGroupMembersTooltip": "Участники группы",
+  "chatGroupMembersTitle": "Участники",
+  "chatGroupMembersSubtitle": "Владелец может удалять участников. Участники могут выйти из группы.",
+  "chatGroupMembersLoadError": "Не удалось загрузить участников",
+  "chatGroupRoleOwner": "Владелец",
+  "chatGroupMemberYou": "{name} (вы)",
+  "@chatGroupMemberYou": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "chatGroupKick": "Удалить",
+  "chatGroupKickConfirmTitle": "Удалить участника?",
+  "chatGroupKickConfirmMessage": "Удалить {name} из группы?",
+  "@chatGroupKickConfirmMessage": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "chatGroupLeave": "Выйти из группы",
+  "chatGroupLeaveConfirmTitle": "Выйти из группы?",
+  "chatGroupLeaveConfirmMessage": "Вы больше не будете получать сообщения из этой группы.",
+  "chatGroupOwnerLeaveHint": "Владелец не может выйти, пока не передаст права (скоро).",
   "settingsTitle": "Настройки",
   "settingsTooltip": "Настройки",
   "settingsTheme": "Тема",

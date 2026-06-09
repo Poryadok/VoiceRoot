@@ -480,6 +480,52 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get chatGroupMembersTooltip => 'Участники группы';
+
+  @override
+  String get chatGroupMembersTitle => 'Участники';
+
+  @override
+  String get chatGroupMembersSubtitle =>
+      'Владелец может удалять участников. Участники могут выйти из группы.';
+
+  @override
+  String get chatGroupMembersLoadError => 'Не удалось загрузить участников';
+
+  @override
+  String get chatGroupRoleOwner => 'Владелец';
+
+  @override
+  String chatGroupMemberYou(String name) {
+    return '$name (вы)';
+  }
+
+  @override
+  String get chatGroupKick => 'Удалить';
+
+  @override
+  String get chatGroupKickConfirmTitle => 'Удалить участника?';
+
+  @override
+  String chatGroupKickConfirmMessage(String name) {
+    return 'Удалить $name из группы?';
+  }
+
+  @override
+  String get chatGroupLeave => 'Выйти из группы';
+
+  @override
+  String get chatGroupLeaveConfirmTitle => 'Выйти из группы?';
+
+  @override
+  String get chatGroupLeaveConfirmMessage =>
+      'Вы больше не будете получать сообщения из этой группы.';
+
+  @override
+  String get chatGroupOwnerLeaveHint =>
+      'Владелец не может выйти, пока не передаст права (скоро).';
+
+  @override
   String get settingsTitle => 'Настройки';
 
   @override

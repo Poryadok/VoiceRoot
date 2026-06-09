@@ -938,6 +938,84 @@ abstract class AppLocalizations {
   /// **'Could not create group: {message}'**
   String chatCreateGroupError(String message);
 
+  /// No description provided for @chatGroupMembersTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Group members'**
+  String get chatGroupMembersTooltip;
+
+  /// No description provided for @chatGroupMembersTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Members'**
+  String get chatGroupMembersTitle;
+
+  /// No description provided for @chatGroupMembersSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Owner can remove members. Members can leave the group.'**
+  String get chatGroupMembersSubtitle;
+
+  /// No description provided for @chatGroupMembersLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load members'**
+  String get chatGroupMembersLoadError;
+
+  /// No description provided for @chatGroupRoleOwner.
+  ///
+  /// In en, this message translates to:
+  /// **'Owner'**
+  String get chatGroupRoleOwner;
+
+  /// No description provided for @chatGroupMemberYou.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} (you)'**
+  String chatGroupMemberYou(String name);
+
+  /// No description provided for @chatGroupKick.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get chatGroupKick;
+
+  /// No description provided for @chatGroupKickConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove member?'**
+  String get chatGroupKickConfirmTitle;
+
+  /// No description provided for @chatGroupKickConfirmMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove {name} from the group?'**
+  String chatGroupKickConfirmMessage(String name);
+
+  /// No description provided for @chatGroupLeave.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave group'**
+  String get chatGroupLeave;
+
+  /// No description provided for @chatGroupLeaveConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave group?'**
+  String get chatGroupLeaveConfirmTitle;
+
+  /// No description provided for @chatGroupLeaveConfirmMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'You will no longer receive messages from this group.'**
+  String get chatGroupLeaveConfirmMessage;
+
+  /// No description provided for @chatGroupOwnerLeaveHint.
+  ///
+  /// In en, this message translates to:
+  /// **'As the owner, transfer ownership before leaving (coming soon).'**
+  String get chatGroupOwnerLeaveHint;
+
   /// No description provided for @settingsTitle.
   ///
   /// In en, this message translates to:

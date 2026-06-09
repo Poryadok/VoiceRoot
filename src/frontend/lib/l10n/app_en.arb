@@ -258,6 +258,33 @@
       }
     }
   },
+  "chatGroupMembersTooltip": "Group members",
+  "chatGroupMembersTitle": "Members",
+  "chatGroupMembersSubtitle": "Owner can remove members. Members can leave the group.",
+  "chatGroupMembersLoadError": "Could not load members",
+  "chatGroupRoleOwner": "Owner",
+  "chatGroupMemberYou": "{name} (you)",
+  "@chatGroupMemberYou": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "chatGroupKick": "Remove",
+  "chatGroupKickConfirmTitle": "Remove member?",
+  "chatGroupKickConfirmMessage": "Remove {name} from the group?",
+  "@chatGroupKickConfirmMessage": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "chatGroupLeave": "Leave group",
+  "chatGroupLeaveConfirmTitle": "Leave group?",
+  "chatGroupLeaveConfirmMessage": "You will no longer receive messages from this group.",
+  "chatGroupOwnerLeaveHint": "As the owner, transfer ownership before leaving (coming soon).",
   "settingsTitle": "Settings",
   "settingsTooltip": "Settings",
   "settingsTheme": "Theme",

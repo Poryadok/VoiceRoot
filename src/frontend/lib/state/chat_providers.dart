@@ -994,6 +994,48 @@ class ChatActions {
     _rememberDmPeerForChat(chatId);
   }
 
+  Future<String?> removeGroupMember({
+    required String chatId,
+    required String profileId,
+  }) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+    final result = await _ref.read(voiceChatsClientProvider).removeGroupMember(
+      authorization: auth,
+      chatId: chatId,
+      profileId: profileId,
+    );
+    return switch (result) {
+      ChatsApiFailure(:final message) => message,
+      ChatsApiOk() => () {
+        _ref.invalidate(groupMembersProvider(chatId));
+        _invalidateChatLists(_ref);
+        return null;
+      }(),
+    };
+  }
+
+  Future<String?> leaveGroup(String chatId) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+    final result = await _ref.read(voiceChatsClientProvider).leaveGroup(
+      authorization: auth,
+      chatId: chatId,
+    );
+    return switch (result) {
+      ChatsApiFailure(:final message) => message,
+      ChatsApiOk() => () {
+        final selected = _ref.read(selectedChatIdProvider);
+        if (selected == chatId) {
+          _ref.read(selectedChatIdProvider.notifier).state = null;
+        }
+        _ref.invalidate(groupMembersProvider(chatId));
+        _invalidateChatLists(_ref);
+        return null;
+      }(),
+    };
+  }
+
   void _rememberDmPeerForChat(String chatId) {
     final activeId = _ref.read(authControllerProvider).activeProfileId;
     final listItems = _ref.read(chatListControllerProvider).items;
@@ -1014,4 +1056,22 @@ class ChatActions {
 
 final chatActionsProvider = Provider<ChatActions>((ref) {
   return ChatActions(ref);
+});
+
+/// Group member list with roles (`owner` / `member`) from `GET /api/v1/chats/{id}/members`.
+final groupMembersProvider = FutureProvider.family<MemberListData, String>((
+  ref,
+  chatId,
+) async {
+  final auth = ref.watch(authorizationHeaderProvider);
+  if (auth == null) {
+    throw StateError('not_authenticated');
+  }
+  final result = await ref
+      .read(voiceChatsClientProvider)
+      .listGroupMembers(authorization: auth, chatId: chatId);
+  return switch (result) {
+    ChatsApiOk(:final data) => data,
+    ChatsApiFailure(:final message) => throw Exception(message),
+  };
 });
