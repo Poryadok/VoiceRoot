@@ -112,6 +112,7 @@ message Message {
   google.protobuf.Timestamp created_at = 16;
   optional MessageKind message_kind = 17;
   string reactions_json = 18; // JSON array [{emoji,count,reacted_by_me}]
+  optional bool is_pinned = 19;
 }
 
 message GetThreadMessagesRequest {

@@ -141,6 +141,43 @@ func (t *transcoder) serveMessages(w http.ResponseWriter, r *http.Request, rest 
 		w.WriteHeader(http.StatusNoContent)
 		return true
 
+	case r.Method == http.MethodPost && strings.HasSuffix(rest, "/pin"):
+		msgID := strings.TrimSuffix(rest, "/pin")
+		msgID = strings.Trim(msgID, "/")
+		req := &messagingv1.PinMessageRequest{MessageId: msgID}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		if req.MessageId == "" {
+			req.MessageId = msgID
+		}
+		if req.GetChat() == nil || req.GetChat().GetId() == "" {
+			req.Chat = &chatv1.ChatRef{Id: queryFirst(r, "chat_id")}
+		}
+		_, err := t.clients.messaging.PinMessage(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return true
+
+	case r.Method == http.MethodDelete && strings.HasSuffix(rest, "/pin"):
+		msgID := strings.TrimSuffix(rest, "/pin")
+		msgID = strings.Trim(msgID, "/")
+		chatID := queryFirst(r, "chat_id")
+		_, err := t.clients.messaging.UnpinMessage(ctx, &messagingv1.UnpinMessageRequest{
+			Chat:      &chatv1.ChatRef{Id: chatID},
+			MessageId: msgID,
+		})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return true
+
 	case r.Method == http.MethodDelete && strings.HasSuffix(rest, "/reactions"):
 		msgID := strings.TrimSuffix(rest, "/reactions")
 		msgID = strings.Trim(msgID, "/")

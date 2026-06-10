@@ -444,6 +444,25 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatMessageAddReaction => 'Добавить реакцию';
 
   @override
+  String get chatMessagePin => 'Закрепить сообщение';
+
+  @override
+  String get chatMessageUnpin => 'Открепить сообщение';
+
+  @override
+  String chatPinnedBar(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count закреплённых сообщения',
+      many: '$count закреплённых сообщений',
+      few: '$count закреплённых сообщения',
+      one: '$count закреплённое сообщение',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get chatForwardTitle => 'Переслать в';
 
   @override

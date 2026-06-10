@@ -247,6 +247,16 @@
   "chatMessageEdit": "Edit",
   "chatMessageForward": "Forward",
   "chatMessageAddReaction": "Add reaction",
+  "chatMessagePin": "Pin message",
+  "chatMessageUnpin": "Unpin message",
+  "chatPinnedBar": "{count, plural, =1{1 pinned message} other{{count} pinned messages}}",
+  "@chatPinnedBar": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "chatForwardTitle": "Forward to",
   "chatForwardSearchHint": "Search chats",
   "chatForwardFrom": "Forwarded from {sender}",

@@ -18,6 +18,7 @@ import (
 	"voice/backend/messaging/internal/messageevents"
 	"voice/backend/messaging/internal/messageid"
 	"voice/backend/messaging/internal/store"
+	"voice/backend/role/permissions"
 
 	chatv1 "voice.app/voice/chat/v1"
 	commonv1 "voice.app/voice/common/v1"
@@ -36,6 +37,7 @@ type MessagingGRPC struct {
 	messagingv1.UnimplementedMessagingServiceServer
 	Messages  *store.MessagesStore
 	Reactions *store.ReactionsStore
+	Pins      *store.PinsStore
 	ChatGuard ChatGuard
 	// Blocks and UserProfiles are optional S2S gates for SendMessage (Social + User); both must be set to enforce.
 	Blocks       AccountPairBlockChecker
@@ -184,7 +186,7 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 			}
 		}
 	}
-	return &messagingv1.SendMessageResponse{Message: messageRowToProto(saved, kind, "")}, nil
+	return &messagingv1.SendMessageResponse{Message: messageRowToProto(saved, kind, "", false)}, nil
 }
 
 func (s *MessagingGRPC) loadChatMeta(ctx context.Context, chatID uuid.UUID) (mentions.ChatMeta, error) {
@@ -338,7 +340,7 @@ func (s *MessagingGRPC) EditMessage(ctx context.Context, req *messagingv1.EditMe
 			log.Printf("messaging: publish message.edited: %v", err)
 		}
 	}
-	return &messagingv1.EditMessageResponse{Message: messageRowToProto(updated, messagingv1.MessageKind_MESSAGE_KIND_UNSPECIFIED, "")}, nil
+	return &messagingv1.EditMessageResponse{Message: messageRowToProto(updated, messagingv1.MessageKind_MESSAGE_KIND_UNSPECIFIED, "", false)}, nil
 }
 
 func (s *MessagingGRPC) DeleteMessage(ctx context.Context, req *messagingv1.DeleteMessageRequest) (*messagingv1.DeleteMessageResponse, error) {
@@ -542,10 +544,17 @@ func (s *MessagingGRPC) GetMessages(ctx context.Context, req *messagingv1.GetMes
 			return nil, status.Error(codes.Internal, err.Error())
 		}
 	}
+	pinnedSet := map[uuid.UUID]bool{}
+	if s.Pins != nil && len(msgIDs) > 0 {
+		pinnedSet, err = s.Pins.PinnedSetForMessageIDs(ctx, chatID, msgIDs)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+	}
 
 	msgs := make([]*messagingv1.Message, 0, len(rows))
 	for i := range rows {
-		msgs = append(msgs, messageRowToProto(&rows[i], messagingv1.MessageKind_MESSAGE_KIND_UNSPECIFIED, reactionsByMsg[rows[i].ID]))
+		msgs = append(msgs, messageRowToProto(&rows[i], messagingv1.MessageKind_MESSAGE_KIND_UNSPECIFIED, reactionsByMsg[rows[i].ID], pinnedSet[rows[i].ID]))
 	}
 
 	next := ""
@@ -649,7 +658,7 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 		}
 	}
 	kind := messagingv1.MessageKind_MESSAGE_KIND_FORWARD
-	return &messagingv1.ForwardMessageResponse{Message: messageRowToProto(saved, kind, "")}, nil
+	return &messagingv1.ForwardMessageResponse{Message: messageRowToProto(saved, kind, "", false)}, nil
 }
 
 func (s *MessagingGRPC) AddReaction(ctx context.Context, req *messagingv1.AddReactionRequest) (*messagingv1.AddReactionResponse, error) {
@@ -726,6 +735,163 @@ func (s *MessagingGRPC) mutateReaction(ctx context.Context, messageIDStr, emoji 
 		}
 	}
 	return msg.ChatID, nil
+}
+
+func (s *MessagingGRPC) PinMessage(ctx context.Context, req *messagingv1.PinMessageRequest) (*messagingv1.PinMessageResponse, error) {
+	if err := s.mutatePin(ctx, req.GetChat(), req.GetMessageId(), true); err != nil {
+		return nil, err
+	}
+	return &messagingv1.PinMessageResponse{}, nil
+}
+
+func (s *MessagingGRPC) UnpinMessage(ctx context.Context, req *messagingv1.UnpinMessageRequest) (*messagingv1.UnpinMessageResponse, error) {
+	if err := s.mutatePin(ctx, req.GetChat(), req.GetMessageId(), false); err != nil {
+		return nil, err
+	}
+	return &messagingv1.UnpinMessageResponse{}, nil
+}
+
+func (s *MessagingGRPC) GetPinnedMessages(ctx context.Context, req *messagingv1.GetPinnedMessagesRequest) (*messagingv1.GetPinnedMessagesResponse, error) {
+	if s == nil || s.Messages == nil || s.Pins == nil {
+		return nil, status.Error(codes.FailedPrecondition, "messaging persistence not configured")
+	}
+	profileID, ok := authctx.ProfileID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing profile")
+	}
+	chatID, err := parseUUIDField("chat.id", req.GetChat().GetId())
+	if err != nil {
+		return nil, err
+	}
+	if err := validateChatRefMessaging(req.GetChat()); err != nil {
+		return nil, err
+	}
+	if s.ChatGuard != nil {
+		if err := s.ChatGuard.EnsureMember(ctx, chatID, profileID); err != nil {
+			if errors.Is(err, store.ErrNotChatMember) {
+				return nil, status.Error(codes.PermissionDenied, "not a chat member")
+			}
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+	}
+	pins, err := s.Pins.ListPins(ctx, chatID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	msgs := make([]*messagingv1.Message, 0, len(pins))
+	for _, pin := range pins {
+		row, err := s.Messages.GetMessageByID(ctx, pin.MessageID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				continue
+			}
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		if row.DeletedAt != nil || row.ChatID != chatID {
+			continue
+		}
+		reactionsJSON := ""
+		if s.Reactions != nil {
+			byMsg, err := s.Reactions.ReactionsJSONByMessageIDs(ctx, []uuid.UUID{row.ID}, profileID)
+			if err != nil {
+				return nil, status.Error(codes.Internal, err.Error())
+			}
+			reactionsJSON = byMsg[row.ID]
+		}
+		msgs = append(msgs, messageRowToProto(row, messagingv1.MessageKind_MESSAGE_KIND_UNSPECIFIED, reactionsJSON, true))
+	}
+	return &messagingv1.GetPinnedMessagesResponse{
+		MessageList: &messagingv1.MessageList{Messages: msgs},
+	}, nil
+}
+
+func (s *MessagingGRPC) mutatePin(ctx context.Context, chatRef *chatv1.ChatRef, messageIDStr string, pin bool) error {
+	if s == nil || s.Messages == nil || s.Pins == nil {
+		return status.Error(codes.FailedPrecondition, "messaging persistence not configured")
+	}
+	profileID, ok := authctx.ProfileID(ctx)
+	if !ok {
+		return status.Error(codes.Unauthenticated, "missing profile")
+	}
+	chatID, err := parseUUIDField("chat.id", chatRef.GetId())
+	if err != nil {
+		return err
+	}
+	if err := validateChatRefMessaging(chatRef); err != nil {
+		return err
+	}
+	messageID, err := parseUUIDField("message_id", messageIDStr)
+	if err != nil {
+		return err
+	}
+	if s.ChatGuard != nil {
+		if err := s.ChatGuard.EnsureMember(ctx, chatID, profileID); err != nil {
+			if errors.Is(err, store.ErrNotChatMember) {
+				return status.Error(codes.PermissionDenied, "not a chat member")
+			}
+			return status.Error(codes.Internal, err.Error())
+		}
+	}
+	if err := s.checkCanPinMessage(ctx, chatID, profileID); err != nil {
+		return err
+	}
+	msg, err := s.Messages.GetMessageByID(ctx, messageID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return status.Error(codes.NotFound, "message not found")
+		}
+		return status.Error(codes.Internal, err.Error())
+	}
+	if msg.DeletedAt != nil || msg.ChatID != chatID {
+		return status.Error(codes.NotFound, "message not found")
+	}
+	if pin {
+		if err := s.Pins.UpsertPin(ctx, chatID, messageID, profileID); err != nil {
+			if errors.Is(err, store.ErrPinLimitReached) {
+				return status.Error(codes.ResourceExhausted, "pin limit reached")
+			}
+			return status.Error(codes.Internal, err.Error())
+		}
+		if s.MessageEvents != nil {
+			if err := s.MessageEvents.PublishMessagePinned(ctx, messageID.String(), chatID.String(), profileID.String()); err != nil {
+				log.Printf("messaging: publish message.pinned: %v", err)
+			}
+		}
+	} else {
+		if err := s.Pins.DeletePin(ctx, chatID, messageID); err != nil {
+			return status.Error(codes.Internal, err.Error())
+		}
+		if s.MessageEvents != nil {
+			if err := s.MessageEvents.PublishMessageUnpinned(ctx, messageID.String(), chatID.String(), profileID.String()); err != nil {
+				log.Printf("messaging: publish message.unpinned: %v", err)
+			}
+		}
+	}
+	return nil
+}
+
+func (s *MessagingGRPC) checkCanPinMessage(ctx context.Context, chatID, profileID uuid.UUID) error {
+	meta, err := s.loadChatMeta(ctx, chatID)
+	if err != nil {
+		return status.Error(codes.Internal, err.Error())
+	}
+	if meta.SpaceID == nil {
+		return nil
+	}
+	if s.RolePermissions == nil {
+		return status.Error(codes.FailedPrecondition, "role permissions not configured")
+	}
+	allowed, err := s.RolePermissions.HasChatPermission(ctx, *meta.SpaceID, profileID, chatID, permissions.TextChatPinMessages)
+	if err != nil {
+		if st, ok := status.FromError(err); ok {
+			return st.Err()
+		}
+		return status.Error(codes.Internal, err.Error())
+	}
+	if !allowed {
+		return status.Error(codes.PermissionDenied, "missing TEXT_CHAT_PIN_MESSAGES")
+	}
+	return nil
 }
 
 func forwardAttribution(source *store.MessageRow) (uuid.UUID, string) {
@@ -960,7 +1126,7 @@ func messageKindToWire(k messagingv1.MessageKind) (typeStr string, out messaging
 	}
 }
 
-func messageRowToProto(m *store.MessageRow, kind messagingv1.MessageKind, reactionsJSON string) *messagingv1.Message {
+func messageRowToProto(m *store.MessageRow, kind messagingv1.MessageKind, reactionsJSON string, isPinned bool) *messagingv1.Message {
 	if m == nil {
 		return nil
 	}
@@ -976,6 +1142,9 @@ func messageRowToProto(m *store.MessageRow, kind messagingv1.MessageKind, reacti
 		MentionsJson:    m.MentionsJSON,
 		ReactionsJson:   reactionsJSON,
 		CreatedAt:       timestamppb.New(m.CreatedAt.UTC()),
+	}
+	if isPinned {
+		out.IsPinned = ptrBool(true)
 	}
 	if m.ThreadParentID != nil {
 		out.ThreadParentId = ptrString(m.ThreadParentID.String())
@@ -1012,3 +1181,5 @@ func messageRowToProto(m *store.MessageRow, kind messagingv1.MessageKind, reacti
 }
 
 func ptrString(s string) *string { return &s }
+
+func ptrBool(v bool) *bool { return &v }

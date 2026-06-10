@@ -12,4 +12,6 @@ type MessageEventsPublisher interface {
 	PublishMessageRead(ctx context.Context, messageID, chatID, profileID string) error
 	PublishReactionAdded(ctx context.Context, messageID, chatID, profileID, messageAuthorProfileID, emoji string) error
 	PublishReactionRemoved(ctx context.Context, messageID, chatID, profileID, emoji string) error
+	PublishMessagePinned(ctx context.Context, messageID, chatID, pinnedBy string) error
+	PublishMessageUnpinned(ctx context.Context, messageID, chatID, unpinnedBy string) error
 }

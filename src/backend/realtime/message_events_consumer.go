@@ -122,6 +122,34 @@ func messageEventBytesToFanout(data []byte) (chatID string, env fanoutEnvelope, 
 	case *eventsv1.MessageStreamEvent_MentionAdded:
 		// Personal mention fan-out is handled in dispatchMessageStreamEvent; no chat-wide envelope.
 		return "", fanoutEnvelope{}, false
+	case *eventsv1.MessageStreamEvent_MessagePinned:
+		mp := p.MessagePinned
+		if mp == nil || mp.GetChatId() == "" || mp.GetMessageId() == "" || mp.GetPinnedBy() == "" {
+			return "", fanoutEnvelope{}, false
+		}
+		d, err := json.Marshal(map[string]string{
+			"chat_id":    mp.GetChatId(),
+			"message_id": mp.GetMessageId(),
+			"pinned_by":  mp.GetPinnedBy(),
+		})
+		if err != nil {
+			return "", fanoutEnvelope{}, false
+		}
+		return mp.GetChatId(), fanoutEnvelope{Op: "message_pinned", D: d}, true
+	case *eventsv1.MessageStreamEvent_MessageUnpinned:
+		mu := p.MessageUnpinned
+		if mu == nil || mu.GetChatId() == "" || mu.GetMessageId() == "" || mu.GetUnpinnedBy() == "" {
+			return "", fanoutEnvelope{}, false
+		}
+		d, err := json.Marshal(map[string]string{
+			"chat_id":      mu.GetChatId(),
+			"message_id":   mu.GetMessageId(),
+			"unpinned_by":  mu.GetUnpinnedBy(),
+		})
+		if err != nil {
+			return "", fanoutEnvelope{}, false
+		}
+		return mu.GetChatId(), fanoutEnvelope{Op: "message_unpinned", D: d}, true
 	default:
 		return "", fanoutEnvelope{}, false
 	}

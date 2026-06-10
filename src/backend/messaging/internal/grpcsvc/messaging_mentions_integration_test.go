@@ -24,6 +24,10 @@ func (t testRolePerms) HasSpacePermission(context.Context, uuid.UUID, uuid.UUID,
 	return t.allowed, nil
 }
 
+func (t testRolePerms) HasChatPermission(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, string) (bool, error) {
+	return t.allowed, nil
+}
+
 type testPresence struct {
 	online []uuid.UUID
 }

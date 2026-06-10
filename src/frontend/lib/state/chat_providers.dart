@@ -368,6 +368,7 @@ class ChatRoomState {
     this.typingProfileIds = const {},
     this.deliveredMessageIds = const {},
     this.readMessageIds = const {},
+    this.pinnedMessages = const [],
   });
 
   final List<VoiceMessage> messages;
@@ -381,6 +382,7 @@ class ChatRoomState {
   final Set<String> typingProfileIds;
   final Set<String> deliveredMessageIds;
   final Set<String> readMessageIds;
+  final List<VoiceMessage> pinnedMessages;
 
   String? get lastMessageId => messages.isEmpty ? null : messages.last.id;
 
@@ -398,6 +400,7 @@ class ChatRoomState {
     Set<String>? typingProfileIds,
     Set<String>? deliveredMessageIds,
     Set<String>? readMessageIds,
+    List<VoiceMessage>? pinnedMessages,
   }) {
     return ChatRoomState(
       messages: messages ?? this.messages,
@@ -411,6 +414,7 @@ class ChatRoomState {
       typingProfileIds: typingProfileIds ?? this.typingProfileIds,
       deliveredMessageIds: deliveredMessageIds ?? this.deliveredMessageIds,
       readMessageIds: readMessageIds ?? this.readMessageIds,
+      pinnedMessages: pinnedMessages ?? this.pinnedMessages,
     );
   }
 }
@@ -522,6 +526,21 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
             add: frame.op == 'reaction_add',
             reactedByMe: false,
           );
+        } else if (frame.op == 'message_pinned' ||
+            frame.op == 'message_unpinned') {
+          final chatId = frame.data?['chat_id'] as String?;
+          if (chatId != this.chatId) return;
+          final messageId = frame.data?['message_id'] as String?;
+          if (messageId == null) return;
+          final pinnedBy = frame.data?['pinned_by'] as String?;
+          final unpinnedBy = frame.data?['unpinned_by'] as String?;
+          final actor = pinnedBy ?? unpinnedBy;
+          final activeProfile = _ref.read(authControllerProvider).activeProfileId;
+          if (actor == activeProfile) return;
+          _applyPinDelta(
+            messageId: messageId,
+            pinned: frame.op == 'message_pinned',
+          );
         }
       });
     });
@@ -561,8 +580,19 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           clearError: true,
         );
         unawaited(_markLatestRead());
+        unawaited(_refreshPinnedMessages(auth));
       case MessagesApiFailure(:final message):
         state = state.copyWith(isLoading: false, errorMessage: message);
+    }
+  }
+
+  Future<void> _refreshPinnedMessages(String auth) async {
+    final pinned = await _ref
+        .read(voiceMessagesClientProvider)
+        .getPinnedMessages(authorization: auth, chatId: chatId);
+    if (!mounted) return;
+    if (pinned case MessagesApiOk(:final data)) {
+      state = state.copyWith(pinnedMessages: data.messages);
     }
   }
 
@@ -768,6 +798,55 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       messageId,
       emoji,
       currentlyReacted: existing?.reactedByMe ?? false,
+    );
+  }
+
+  Future<String?> togglePin(String messageId, {required bool currentlyPinned}) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+    _applyPinDelta(messageId: messageId, pinned: !currentlyPinned);
+    final client = _ref.read(voiceMessagesClientProvider);
+    final result = currentlyPinned
+        ? await client.unpinMessage(
+            authorization: auth,
+            messageId: messageId,
+            chatId: chatId,
+          )
+        : await client.pinMessage(
+            authorization: auth,
+            messageId: messageId,
+            chatId: chatId,
+          );
+    if (!mounted) return null;
+    switch (result) {
+      case MessagesApiOk<void>():
+        unawaited(_refreshPinnedMessages(auth));
+        return null;
+      case MessagesApiFailure(:final message):
+        unawaited(loadInitial());
+        state = state.copyWith(errorMessage: message);
+        return message;
+    }
+  }
+
+  void _applyPinDelta({required String messageId, required bool pinned}) {
+    final updatedMessages = state.messages
+        .map(
+          (m) => m.id == messageId ? m.copyWith(isPinned: pinned) : m,
+        )
+        .toList(growable: false);
+    final pinnedList = [...state.pinnedMessages];
+    if (pinned) {
+      final msg = updatedMessages.where((m) => m.id == messageId).firstOrNull;
+      if (msg != null && !pinnedList.any((p) => p.id == messageId)) {
+        pinnedList.insert(0, msg);
+      }
+    } else {
+      pinnedList.removeWhere((p) => p.id == messageId);
+    }
+    state = state.copyWith(
+      messages: updatedMessages,
+      pinnedMessages: pinnedList,
     );
   }
 

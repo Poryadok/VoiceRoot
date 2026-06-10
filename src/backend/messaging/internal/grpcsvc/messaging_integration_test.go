@@ -61,6 +61,7 @@ func applySQLFile(t *testing.T, ctx context.Context, pool *pgxpool.Pool, relPath
 		applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000003_attachment_only_messages.up.sql"))
 		applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000004_delete_for_me.up.sql"))
 		applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000005_reactions.up.sql"))
+		applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000006_pins.up.sql"))
 	}
 	if strings.HasSuffix(relPath, filepath.Join("chat_db", "000001_init.up.sql")) {
 		applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000002_dm_requests.up.sql"))
@@ -109,6 +110,7 @@ func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire
 	messagingv1.RegisterMessagingServiceServer(srv, &MessagingGRPC{
 		Messages:         &store.MessagesStore{Pool: pool},
 		Reactions:        &store.ReactionsStore{Pool: pool},
+		Pins:             &store.PinsStore{Pool: pool},
 		ChatGuard:        guard,
 		Blocks:           w.Blocks,
 		UserProfiles:     w.UserProfiles,

@@ -150,6 +150,8 @@ message MessageStreamEvent {
     MessageRead message_read = 14;
     ReactionRemoved reaction_removed = 15;
     MentionAdded mention_added = 16;
+    MessagePinned message_pinned = 17;
+    MessageUnpinned message_unpinned = 18;
   }
 }
 
@@ -196,6 +198,18 @@ message MessageRead {
   string message_id = 1;
   string chat_id = 2;
   string profile_id = 3;
+}
+
+message MessagePinned {
+  string message_id = 1;
+  string chat_id = 2;
+  string pinned_by = 3;
+}
+
+message MessageUnpinned {
+  string message_id = 1;
+  string chat_id = 2;
+  string unpinned_by = 3;
 }
 
 // --- chat.events (Chat, Space) ---

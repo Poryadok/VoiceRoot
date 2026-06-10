@@ -63,6 +63,17 @@ VoiceMessage voiceMessageFromProto(messaging_pb.Message msg) {
     editedAt: protoTimestampToDateTime(msg.hasEditedAt() ? msg.editedAt : null),
     deletedAt: protoTimestampToDateTime(msg.hasDeletedAt() ? msg.deletedAt : null),
     createdAt: protoTimestampToDateTime(msg.hasCreatedAt() ? msg.createdAt : null),
+    isPinned: msg.hasIsPinned() && msg.isPinned,
+  );
+}
+
+messaging_pb.PinMessageRequest pinMessageRequestToProto({
+  required String chatId,
+  required String messageId,
+}) {
+  return messaging_pb.PinMessageRequest(
+    chat: chatRefToProto(chatId),
+    messageId: messageId,
   );
 }
 

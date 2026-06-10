@@ -32,7 +32,7 @@ func TestValidateChatRefDM(t *testing.T) {
 
 func TestMessageRowToProto(t *testing.T) {
 	t.Parallel()
-	require.Nil(t, messageRowToProto(nil, messagingv1.MessageKind_MESSAGE_KIND_UNSPECIFIED, ""))
+	require.Nil(t, messageRowToProto(nil, messagingv1.MessageKind_MESSAGE_KIND_UNSPECIFIED, "", false))
 
 	now := time.Now().UTC()
 	thread := uuid.New()
@@ -51,18 +51,19 @@ func TestMessageRowToProto(t *testing.T) {
 		DeletedAt:       &deleted,
 		CreatedAt:       now,
 	}
-	out := messageRowToProto(row, messagingv1.MessageKind_MESSAGE_KIND_UNSPECIFIED, `[{"emoji":"👍","count":1,"reacted_by_me":true}]`)
+	out := messageRowToProto(row, messagingv1.MessageKind_MESSAGE_KIND_UNSPECIFIED, `[{"emoji":"👍","count":1,"reacted_by_me":true}]`, true)
+	require.True(t, out.GetIsPinned())
 	require.Equal(t, thread.String(), out.GetThreadParentId())
 	require.NotNil(t, out.GetEditedAt())
 	require.NotNil(t, out.GetDeletedAt())
 	require.Equal(t, messagingv1.MessageKind_MESSAGE_KIND_SYSTEM, out.GetMessageKind())
 
 	row.Type = "forward"
-	out = messageRowToProto(row, messagingv1.MessageKind_MESSAGE_KIND_UNSPECIFIED, "")
+	out = messageRowToProto(row, messagingv1.MessageKind_MESSAGE_KIND_UNSPECIFIED, "", false)
 	require.Equal(t, messagingv1.MessageKind_MESSAGE_KIND_FORWARD, out.GetMessageKind())
 
 	regKind := messagingv1.MessageKind_MESSAGE_KIND_REGULAR
-	out = messageRowToProto(row, regKind, "")
+	out = messageRowToProto(row, regKind, "", false)
 	require.Equal(t, regKind, out.GetMessageKind())
 }
 

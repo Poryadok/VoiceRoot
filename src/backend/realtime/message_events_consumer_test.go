@@ -158,6 +158,65 @@ func TestMessageEventBytesToFanout_MentionAddedNoChatBroadcast(t *testing.T) {
 	}
 }
 
+// TestMessageEventBytesToFanout_MessagePinned documents PLAN Phase 6 pins WS fan-out.
+func TestMessageEventBytesToFanout_MessagePinned(t *testing.T) {
+	chatID := uuid.NewString()
+	msgID := uuid.NewString()
+	pinnedBy := uuid.NewString()
+	ev := &eventsv1.MessageStreamEvent{
+		EventId:    "e-pin",
+		OccurredAt: timestamppb.Now(),
+		Payload: &eventsv1.MessageStreamEvent_MessagePinned{
+			MessagePinned: &eventsv1.MessagePinned{
+				MessageId: msgID,
+				ChatId:    chatID,
+				PinnedBy:  pinnedBy,
+			},
+		},
+	}
+	b, err := proto.Marshal(ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotChat, fe, ok := messageEventBytesToFanout(b)
+	if !ok || gotChat != chatID || fe.Op != "message_pinned" {
+		t.Fatalf("message_pinned: ok=%v chat=%q op=%q", ok, gotChat, fe.Op)
+	}
+	var d map[string]string
+	if err := json.Unmarshal(fe.D, &d); err != nil {
+		t.Fatal(err)
+	}
+	if d["message_id"] != msgID || d["pinned_by"] != pinnedBy {
+		t.Fatalf("message_pinned d=%v", d)
+	}
+}
+
+// TestMessageEventBytesToFanout_MessageUnpinned documents PLAN Phase 6 unpin WS fan-out.
+func TestMessageEventBytesToFanout_MessageUnpinned(t *testing.T) {
+	chatID := uuid.NewString()
+	msgID := uuid.NewString()
+	unpinnedBy := uuid.NewString()
+	ev := &eventsv1.MessageStreamEvent{
+		EventId:    "e-unpin",
+		OccurredAt: timestamppb.Now(),
+		Payload: &eventsv1.MessageStreamEvent_MessageUnpinned{
+			MessageUnpinned: &eventsv1.MessageUnpinned{
+				MessageId:  msgID,
+				ChatId:     chatID,
+				UnpinnedBy: unpinnedBy,
+			},
+		},
+	}
+	b, err := proto.Marshal(ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotChat, fe, ok := messageEventBytesToFanout(b)
+	if !ok || gotChat != chatID || fe.Op != "message_unpinned" {
+		t.Fatalf("message_unpinned: ok=%v chat=%q op=%q", ok, gotChat, fe.Op)
+	}
+}
+
 // TestMessageEventBytesToFanout_ReactionAdd documents PLAN Phase 4 / realtime-service.md:
 // message.reaction_added → WebSocket reaction_add for live counter updates.
 func TestMessageEventBytesToFanout_ReactionAdd(t *testing.T) {

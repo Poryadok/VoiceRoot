@@ -1,0 +1,11 @@
+# Local Go codegen (no BSR remote plugins). Run: buf generate --template buf.gen.local-go.yaml
+version: v1
+plugins:
+  - name: go
+    out: gen/go
+    opt:
+      - paths=source_relative
+  - name: go-grpc
+    out: gen/go
+    opt:
+      - paths=source_relative

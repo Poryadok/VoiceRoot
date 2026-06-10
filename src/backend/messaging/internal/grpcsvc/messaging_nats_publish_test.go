@@ -79,6 +79,14 @@ func (s *spyMessageEvents) PublishReactionRemoved(_ context.Context, messageID, 
 	return nil
 }
 
+func (s *spyMessageEvents) PublishMessagePinned(_ context.Context, _, _, _ string) error {
+	return nil
+}
+
+func (s *spyMessageEvents) PublishMessageUnpinned(_ context.Context, _, _, _ string) error {
+	return nil
+}
+
 func (s *spyMessageEvents) snapshot() (sent [][4]string, mentions [][4]string, edited [][2]string, deleted [][2]string, read [][3]string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

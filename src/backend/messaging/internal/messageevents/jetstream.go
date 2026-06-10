@@ -26,6 +26,8 @@ const (
 	subjectReactionAdded     = "message.reaction_added"
 	subjectReactionRemoved   = "message.reaction_removed"
 	subjectMentionAdded      = "message.mention_added"
+	subjectMessagePinned     = "message.pinned"
+	subjectMessageUnpinned   = "message.unpinned"
 )
 
 // JetStreamPublisher publishes MessageStreamEvent payloads to NATS JetStream.
@@ -77,6 +79,8 @@ func messageEventStreamSubjects() []string {
 		subjectReactionAdded,
 		subjectReactionRemoved,
 		subjectMentionAdded,
+		subjectMessagePinned,
+		subjectMessageUnpinned,
 	}
 }
 
@@ -168,6 +172,14 @@ func messageEventLogAttrs(env *eventsv1.MessageStreamEvent) []slog.Attr {
 		}
 	case *eventsv1.MessageStreamEvent_MentionAdded:
 		if m := p.MentionAdded; m != nil {
+			attrs = append(attrs, slog.String("message_id", m.GetMessageId()), slog.String("chat_id", m.GetChatId()))
+		}
+	case *eventsv1.MessageStreamEvent_MessagePinned:
+		if m := p.MessagePinned; m != nil {
+			attrs = append(attrs, slog.String("message_id", m.GetMessageId()), slog.String("chat_id", m.GetChatId()))
+		}
+	case *eventsv1.MessageStreamEvent_MessageUnpinned:
+		if m := p.MessageUnpinned; m != nil {
 			attrs = append(attrs, slog.String("message_id", m.GetMessageId()), slog.String("chat_id", m.GetChatId()))
 		}
 	}
@@ -287,6 +299,38 @@ func (p *JetStreamPublisher) PublishReactionRemoved(ctx context.Context, message
 		},
 	}
 	return p.publishProto(ctx, subjectReactionRemoved, env)
+}
+
+// PublishMessagePinned implements MessageEventsPublisher.
+func (p *JetStreamPublisher) PublishMessagePinned(ctx context.Context, messageID, chatID, pinnedBy string) error {
+	env := &eventsv1.MessageStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.New(time.Now().UTC()),
+		Payload: &eventsv1.MessageStreamEvent_MessagePinned{
+			MessagePinned: &eventsv1.MessagePinned{
+				MessageId: messageID,
+				ChatId:    chatID,
+				PinnedBy:  pinnedBy,
+			},
+		},
+	}
+	return p.publishProto(ctx, subjectMessagePinned, env)
+}
+
+// PublishMessageUnpinned implements MessageEventsPublisher.
+func (p *JetStreamPublisher) PublishMessageUnpinned(ctx context.Context, messageID, chatID, unpinnedBy string) error {
+	env := &eventsv1.MessageStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.New(time.Now().UTC()),
+		Payload: &eventsv1.MessageStreamEvent_MessageUnpinned{
+			MessageUnpinned: &eventsv1.MessageUnpinned{
+				MessageId:  messageID,
+				ChatId:     chatID,
+				UnpinnedBy: unpinnedBy,
+			},
+		},
+	}
+	return p.publishProto(ctx, subjectMessageUnpinned, env)
 }
 
 // Close drains the underlying NATS connection.

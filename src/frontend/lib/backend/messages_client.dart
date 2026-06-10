@@ -129,6 +129,7 @@ class VoiceMessage {
     this.editedAt,
     this.deletedAt,
     this.createdAt,
+    this.isPinned = false,
   });
 
   final String id;
@@ -144,6 +145,7 @@ class VoiceMessage {
   final DateTime? editedAt;
   final DateTime? deletedAt;
   final DateTime? createdAt;
+  final bool isPinned;
 
   factory VoiceMessage.fromJson(Map<String, dynamic> json) {
     final chat = json['chat'] as Map<String, dynamic>? ?? {};
@@ -158,6 +160,7 @@ class VoiceMessage {
       editedAt: VoiceMessage.parseTimestamp(json['edited_at']),
       deletedAt: VoiceMessage.parseTimestamp(json['deleted_at']),
       createdAt: VoiceMessage.parseTimestamp(json['created_at']),
+      isPinned: json['is_pinned'] as bool? ?? false,
     );
   }
 
@@ -169,6 +172,7 @@ class VoiceMessage {
   VoiceMessage copyWith({
     List<MessageReaction>? reactions,
     List<MessageMention>? mentions,
+    bool? isPinned,
   }) {
     return VoiceMessage(
       id: id,
@@ -184,6 +188,7 @@ class VoiceMessage {
       editedAt: editedAt,
       deletedAt: deletedAt,
       createdAt: createdAt,
+      isPinned: isPinned ?? this.isPinned,
     );
   }
 }
@@ -429,6 +434,59 @@ class VoiceMessagesClient {
       authorization: authorization,
     );
     return _mapEmpty(result);
+  }
+
+  /// Phase 6 pin message — docs/microservices/messaging-service.md.
+  Future<MessagesApiResult<void>> pinMessage({
+    required String authorization,
+    required String messageId,
+    required String chatId,
+  }) async {
+    final result = await _gateway.postProto(
+      uri: _gateway.resolve('/api/v1/messages/$messageId/pin'),
+      authorization: authorization,
+      body: pinMessageRequestToProto(chatId: chatId, messageId: messageId),
+      createEmpty: messaging_pb.PinMessageResponse.create,
+      allowNoContent: true,
+    );
+    return _mapEmpty(result);
+  }
+
+  /// Phase 6 unpin message.
+  Future<MessagesApiResult<void>> unpinMessage({
+    required String authorization,
+    required String messageId,
+    required String chatId,
+  }) async {
+    final uri = _gateway.replace(
+      path: '/api/v1/messages/$messageId/pin',
+      queryParameters: {'chat_id': chatId},
+    );
+    final result = await _gateway.deleteEmpty(
+      uri: uri,
+      authorization: authorization,
+    );
+    return _mapEmpty(result);
+  }
+
+  /// Phase 6 list pinned messages for a chat.
+  Future<MessagesApiResult<MessageListData>> getPinnedMessages({
+    required String authorization,
+    required String chatId,
+  }) async {
+    final result = await _gateway.getProto(
+      _gateway.resolve('/api/v1/chats/$chatId/pinned-messages'),
+      authorization: authorization,
+      createEmpty: messaging_pb.GetPinnedMessagesResponse.create,
+    );
+    return _map(
+      result,
+      (data) => messageListFromProto(
+        data.hasMessageList()
+            ? data.messageList
+            : messaging_pb.MessageList(),
+      ),
+    );
   }
 
   /// Phase 4 forward with attribution — docs/features/forward-messages.md.

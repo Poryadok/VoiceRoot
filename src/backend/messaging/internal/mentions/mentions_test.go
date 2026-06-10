@@ -25,6 +25,10 @@ func (s stubRoles) HasSpacePermission(_ context.Context, _, _ uuid.UUID, permiss
 	return s.allowed[permission], nil
 }
 
+func (s stubRoles) HasChatPermission(_ context.Context, _, _ uuid.UUID, _ uuid.UUID, permission string) (bool, error) {
+	return s.HasSpacePermission(context.Background(), uuid.Nil, uuid.Nil, permission)
+}
+
 type stubPresence struct {
 	online []uuid.UUID
 	err    error

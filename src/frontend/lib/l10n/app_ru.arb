@@ -241,6 +241,16 @@
   "chatMessageEdit": "Изменить",
   "chatMessageForward": "Переслать",
   "chatMessageAddReaction": "Добавить реакцию",
+  "chatMessagePin": "Закрепить сообщение",
+  "chatMessageUnpin": "Открепить сообщение",
+  "chatPinnedBar": "{count, plural, one{{count} закреплённое сообщение} few{{count} закреплённых сообщения} many{{count} закреплённых сообщений} other{{count} закреплённых сообщения}}",
+  "@chatPinnedBar": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "chatForwardTitle": "Переслать в",
   "chatForwardSearchHint": "Поиск чатов",
   "chatForwardFrom": "Переслано от {sender}",

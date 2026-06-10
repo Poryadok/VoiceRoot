@@ -441,6 +441,23 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatMessageAddReaction => 'Add reaction';
 
   @override
+  String get chatMessagePin => 'Pin message';
+
+  @override
+  String get chatMessageUnpin => 'Unpin message';
+
+  @override
+  String chatPinnedBar(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count pinned messages',
+      one: '1 pinned message',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get chatForwardTitle => 'Forward to';
 
   @override

@@ -86,6 +86,8 @@ pins
 ├── pinned_at
 └── UNIQUE(chat_id, message_id)
 
+**Лимит:** не более **50** закреплённых сообщений на один `chat_id` (как Discord). Повторный pin того же сообщения идемпотентен (обновляет `pinned_at` / `pinned_by`).
+
 message_attachments (Shared Media — целевая схема в этой же секции «Модель данных»)
 ├── id
 ├── message_id (UUID, logical ref → messages.id)
@@ -161,6 +163,7 @@ read_receipts
 | `message.deleted`        | message_id, chat_id                          |
 | `message.reaction_added` | message_id, profile_id, emoji                |
 | `message.pinned`         | message_id, chat_id, pinned_by               |
+| `message.unpinned`       | message_id, chat_id, unpinned_by             |
 | `message.forwarded`      | message_id, source_chat_id, target_chat_id   |
 
 ## Зависимости

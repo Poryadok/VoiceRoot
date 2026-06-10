@@ -180,6 +180,48 @@ func TestJetStreamPublisher_ReactionAddedAndRemoved(t *testing.T) {
 	require.Equal(t, emoji, rr.GetEmoji())
 }
 
+func TestJetStreamPublisher_PublishPinEvents(t *testing.T) {
+	ctx := context.Background()
+	s := startJSTestServer(t)
+	url := s.ClientURL()
+	nc, err := nats.Connect(url)
+	require.NoError(t, err)
+	t.Cleanup(nc.Close)
+
+	subPin, err := nc.SubscribeSync(subjectMessagePinned)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = subPin.Unsubscribe() })
+	subUnpin, err := nc.SubscribeSync(subjectMessageUnpinned)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = subUnpin.Unsubscribe() })
+
+	pub, err := NewJetStreamPublisher(url)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = pub.Close() })
+
+	const mid, cid, pid = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "cccccccc-cccc-cccc-cccc-cccccccccccc"
+	require.NoError(t, pub.PublishMessagePinned(ctx, mid, cid, pid))
+	require.NoError(t, pub.PublishMessageUnpinned(ctx, mid, cid, pid))
+
+	pm, err := subPin.NextMsg(3 * time.Second)
+	require.NoError(t, err)
+	var pinned eventsv1.MessageStreamEvent
+	require.NoError(t, proto.Unmarshal(pm.Data, &pinned))
+	pp := pinned.GetMessagePinned()
+	require.NotNil(t, pp)
+	require.Equal(t, mid, pp.GetMessageId())
+	require.Equal(t, cid, pp.GetChatId())
+	require.Equal(t, pid, pp.GetPinnedBy())
+
+	um, err := subUnpin.NextMsg(3 * time.Second)
+	require.NoError(t, err)
+	var unpinned eventsv1.MessageStreamEvent
+	require.NoError(t, proto.Unmarshal(um.Data, &unpinned))
+	up := unpinned.GetMessageUnpinned()
+	require.NotNil(t, up)
+	require.Equal(t, mid, up.GetMessageId())
+}
+
 func TestNewJetStreamPublisher_emptyURL(t *testing.T) {
 	t.Parallel()
 	_, err := NewJetStreamPublisher("")

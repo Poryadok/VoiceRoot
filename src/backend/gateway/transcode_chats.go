@@ -6,6 +6,7 @@ import (
 
 	chatv1 "voice.app/voice/chat/v1"
 	commonv1 "voice.app/voice/common/v1"
+	messagingv1 "voice.app/voice/messaging/v1"
 )
 
 func (t *transcoder) serveChats(w http.ResponseWriter, r *http.Request, rest string) bool {
@@ -86,6 +87,19 @@ func (t *transcoder) serveChats(w http.ResponseWriter, r *http.Request, rest str
 		}
 		req.ChatId = rest
 		resp, err := t.clients.chat.UpdateChat(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodGet && strings.HasSuffix(rest, "/pinned-messages"):
+		chatID := strings.TrimSuffix(rest, "/pinned-messages")
+		chatID = strings.Trim(chatID, "/")
+		resp, err := t.clients.messaging.GetPinnedMessages(ctx, &messagingv1.GetPinnedMessagesRequest{
+			Chat: &chatv1.ChatRef{Id: chatID},
+		})
 		if err != nil {
 			writeGRPCError(w, err)
 			return true

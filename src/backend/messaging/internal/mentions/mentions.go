@@ -31,6 +31,7 @@ type ChatMeta struct {
 // RolePermissionChecker validates space-scoped text chat permissions.
 type RolePermissionChecker interface {
 	HasSpacePermission(ctx context.Context, spaceID, profileID uuid.UUID, permission string) (bool, error)
+	HasChatPermission(ctx context.Context, spaceID, profileID, chatID uuid.UUID, permission string) (bool, error)
 }
 
 // OnlinePresenceLookup returns profile IDs that are online or idle among the given set.

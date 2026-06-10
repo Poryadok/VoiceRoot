@@ -872,6 +872,24 @@ abstract class AppLocalizations {
   /// **'Add reaction'**
   String get chatMessageAddReaction;
 
+  /// No description provided for @chatMessagePin.
+  ///
+  /// In en, this message translates to:
+  /// **'Pin message'**
+  String get chatMessagePin;
+
+  /// No description provided for @chatMessageUnpin.
+  ///
+  /// In en, this message translates to:
+  /// **'Unpin message'**
+  String get chatMessageUnpin;
+
+  /// No description provided for @chatPinnedBar.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 pinned message} other{{count} pinned messages}}'**
+  String chatPinnedBar(int count);
+
   /// No description provided for @chatForwardTitle.
   ///
   /// In en, this message translates to:

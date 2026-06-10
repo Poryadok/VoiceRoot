@@ -192,6 +192,7 @@ func main() {
 		messagingv1.RegisterMessagingServiceServer(grpcSrv, &grpcsvc.MessagingGRPC{
 			Messages:         &store.MessagesStore{Pool: pool},
 			Reactions:        &store.ReactionsStore{Pool: pool},
+			Pins:             &store.PinsStore{Pool: pool},
 			ChatGuard:        chatGuard,
 			Blocks:           blocks,
 			UserProfiles:     profiles,

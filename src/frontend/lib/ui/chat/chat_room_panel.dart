@@ -49,6 +49,7 @@ class ChatRoomPanel extends ConsumerStatefulWidget {
   static const Key audioCallKey = Key('chat_room_audio_call');
   static const Key videoCallKey = Key('chat_room_video_call');
   static const Key newMessagesChipKey = Key('chat_room_new_messages');
+  static const Key pinnedBarKey = Key('chat_room_pinned_bar');
   static const Key groupMembersKey = Key('chat_room_group_members');
   static const Key spaceSlowModeKey = Key('chat_room_space_slow_mode');
   static const Key groupVoiceStartKey = Key('chat_room_group_voice_start');
@@ -126,6 +127,23 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       _scrollController.animateTo(
         _scrollController.position.maxScrollExtent,
         duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
+  void _scrollToMessage(String messageId) {
+    final room = ref.read(chatRoomControllerProvider(widget.chatId));
+    final index = room.messages.indexWhere((m) => m.id == messageId);
+    if (index < 0) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scrollController.hasClients) return;
+      final max = _scrollController.position.maxScrollExtent;
+      final count = room.messages.length;
+      final target = count <= 1 ? max : max * (index / (count - 1));
+      _scrollController.animateTo(
+        target,
+        duration: const Duration(milliseconds: 250),
         curve: Curves.easeOut,
       );
     });
@@ -342,6 +360,13 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
               setState(() => _pendingNewMessages = 0);
               _scrollToBottom();
             },
+          ),
+        if (room.pinnedMessages.isNotEmpty)
+          _PinnedMessagesBar(
+            key: ChatRoomPanel.pinnedBarKey,
+            pinned: room.pinnedMessages,
+            label: l10n.chatPinnedBar(room.pinnedMessages.length),
+            onTap: (messageId) => _scrollToMessage(messageId),
           ),
         Expanded(
           child: room.messages.isEmpty && !room.isLoading
@@ -585,6 +610,19 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   title: Text(sheetL10n.chatMessageForward),
                   onTap: () => Navigator.of(context).pop('forward'),
                 ),
+                ListTile(
+                  leading: Icon(
+                    message.isPinned ? Icons.push_pin : Icons.push_pin_outlined,
+                  ),
+                  title: Text(
+                    message.isPinned
+                        ? sheetL10n.chatMessageUnpin
+                        : sheetL10n.chatMessagePin,
+                  ),
+                  onTap: () => Navigator.of(context).pop(
+                    message.isPinned ? 'unpin' : 'pin',
+                  ),
+                ),
               ],
               if (isMine)
                 ListTile(
@@ -617,6 +655,11 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       if (emoji != null) {
         await controller.addReaction(message.id, emoji);
       }
+    } else if (action == 'pin' || action == 'unpin') {
+      await controller.togglePin(
+        message.id,
+        currentlyPinned: message.isPinned,
+      );
     } else if (action == 'forward') {
       await ForwardMessageSheet.show(
         context,
@@ -1089,6 +1132,60 @@ String _presenceLabel(AppLocalizations l10n, String status) {
     'dnd' => l10n.socialPresenceDnd,
     _ => l10n.socialPresenceOffline,
   };
+}
+
+class _PinnedMessagesBar extends StatelessWidget {
+  const _PinnedMessagesBar({
+    super.key,
+    required this.pinned,
+    required this.label,
+    required this.onTap,
+  });
+
+  final List<VoiceMessage> pinned;
+  final String label;
+  final void Function(String messageId) onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final voice = VoiceColors.of(context);
+    final preview = pinned.first;
+    return Material(
+      color: voice.surface,
+      child: InkWell(
+        onTap: () => onTap(preview.id),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            children: [
+              Icon(Icons.push_pin, size: 18, color: voice.profileAccent),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: voice.profileAccent,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      preview.content,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: voice.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _RealtimeBadge extends StatelessWidget {
