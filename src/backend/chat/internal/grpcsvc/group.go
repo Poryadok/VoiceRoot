@@ -24,9 +24,6 @@ func (s *ChatGRPC) CreateChat(ctx context.Context, req *chatv1.CreateChatRequest
 	if req.GetType() != chatv1.ChatType_CHAT_TYPE_GROUP {
 		return nil, status.Error(codes.InvalidArgument, "only group chats are supported")
 	}
-	if req.SpaceId != nil && strings.TrimSpace(req.GetSpaceId()) != "" {
-		return nil, status.Error(codes.Unimplemented, "space groups are not supported yet")
-	}
 	caller, ok := authctx.ProfileID(ctx)
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing profile")
@@ -36,7 +33,17 @@ func (s *ChatGRPC) CreateChat(ctx context.Context, req *chatv1.CreateChatRequest
 		return nil, status.Error(codes.InvalidArgument, "name is required")
 	}
 
-	row, err := s.DM.CreateGroupChat(ctx, caller, name)
+	var row *store.ChatRow
+	var err error
+	if req.SpaceId != nil && strings.TrimSpace(req.GetSpaceId()) != "" {
+		spaceID, parseErr := parseUUIDField("space_id", req.GetSpaceId())
+		if parseErr != nil {
+			return nil, parseErr
+		}
+		row, err = s.DM.CreateSpaceGroupChat(ctx, caller, spaceID, name)
+	} else {
+		row, err = s.DM.CreateGroupChat(ctx, caller, name)
+	}
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}

@@ -12,6 +12,7 @@ COPY messaging/pb/voice/messaging/go.mod ./messaging/pb/voice/messaging/
 COPY file/pb/voice/file/go.mod ./file/pb/voice/file/
 COPY voice/pb/voice/calls/go.mod ./voice/pb/voice/calls/
 COPY voice/pb/voice/space/go.mod ./voice/pb/voice/space/
+COPY role/pb/voice/role/go.mod ./role/pb/voice/role/
 COPY gateway/go.mod ./gateway/
 RUN cd gateway && go mod download
 COPY pkg ./pkg
@@ -20,6 +21,7 @@ COPY chat/pb ./chat/pb
 COPY messaging/pb ./messaging/pb
 COPY file/pb ./file/pb
 COPY voice/pb ./voice/pb
+COPY role/pb ./role/pb
 COPY gateway ./gateway
 WORKDIR /src/gateway
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/gateway .

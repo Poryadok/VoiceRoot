@@ -5,6 +5,8 @@ FROM golang:1.26-alpine AS build
 WORKDIR /src
 COPY pkg/go.mod ./pkg/
 COPY space/go.mod ./space/
+COPY role/go.mod ./role/
+COPY role/pb/voice/role/go.mod ./role/pb/voice/role/
 COPY voice/pb/voice/space/go.mod ./voice/pb/voice/space/
 COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
 COPY chat/pb/voice/chat/go.mod ./chat/pb/voice/chat/
@@ -14,6 +16,8 @@ COPY pkg ./pkg
 COPY user/pb ./user/pb
 COPY chat/pb/voice/chat ./chat/pb/voice/chat
 COPY messaging/pb/voice/events ./messaging/pb/voice/events
+COPY role/pb ./role/pb
+COPY role/permissions ./role/permissions
 COPY voice/pb/voice/space ./voice/pb/voice/space
 COPY space ./space
 WORKDIR /src/space

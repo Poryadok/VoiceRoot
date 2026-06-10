@@ -448,7 +448,7 @@ func TestCreateGroup_EmptyName_InvalidArgument(t *testing.T) {
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
-func TestCreateGroup_SpaceGroup_Unimplemented(t *testing.T) {
+func TestCreateGroup_SpaceGroup_NoChatMembers(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -461,13 +461,21 @@ func TestCreateGroup_SpaceGroup_Unimplemented(t *testing.T) {
 
 	name := "Space raid"
 	spaceID := uuid.New().String()
-	_, err := client.CreateChat(ctxFor(t, profiles, owner), &chatv1.CreateChatRequest{
+	resp, err := client.CreateChat(ctxFor(t, profiles, owner), &chatv1.CreateChatRequest{
 		Type:    chatv1.ChatType_CHAT_TYPE_GROUP,
 		Name:    &name,
 		SpaceId: &spaceID,
 	})
-	require.Error(t, err)
-	require.Equal(t, codes.Unimplemented, status.Code(err))
+	require.NoError(t, err)
+	require.Equal(t, spaceID, resp.GetChat().GetSpaceId())
+	require.Equal(t, name, resp.GetChat().GetName())
+
+	var memberCount int
+	err = pool.QueryRow(context.Background(), `
+SELECT COUNT(*) FROM chat_members WHERE chat_id = $1
+`, resp.GetChat().GetId()).Scan(&memberCount)
+	require.NoError(t, err)
+	require.Zero(t, memberCount, "space groups inherit members from space_members, not chat_members")
 }
 
 func TestCreateGroup_AddMembers_NonMember_PermissionDenied(t *testing.T) {

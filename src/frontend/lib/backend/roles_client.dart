@@ -50,11 +50,21 @@ class SpaceRole {
       id: json['id'] as String? ?? '',
       spaceId: json['space_id'] as String? ?? '',
       name: json['name'] as String? ?? '',
-      position: (json['position'] as num?)?.toInt() ?? 0,
-      permissionsMask: (json['permissions_mask'] as num?)?.toInt() ?? 0,
+      position: _jsonInt(json['position']),
+      permissionsMask: _jsonInt(json['permissions_mask']),
       managed: json['managed'] as bool? ?? false,
     );
   }
+}
+
+int _jsonInt(Object? value) {
+  if (value is num) {
+    return value.toInt();
+  }
+  if (value is String) {
+    return int.tryParse(value) ?? 0;
+  }
+  return 0;
 }
 
 /// HTTP client for Role routes (`/api/v1/roles/**`).

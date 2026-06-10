@@ -18,7 +18,13 @@ void main() {
             jsonEncode({
               'role_list': {
                 'roles': [
-                  {'id': 'r1', 'space_id': 'space-1', 'name': 'Owner', 'position': 4},
+                  {
+                    'id': 'r1',
+                    'space_id': 'space-1',
+                    'name': 'Owner',
+                    'position': 4,
+                    'permissions_mask': '255',
+                  },
                   {'id': 'r2', 'space_id': 'space-1', 'name': 'Member', 'position': 1},
                 ],
               },
@@ -40,6 +46,7 @@ void main() {
     final roles = (result as RolesApiOk<List<SpaceRole>>).data;
     expect(roles, hasLength(2));
     expect(roles.first.name, 'Owner');
+    expect(roles.first.permissionsMask, 255);
   });
 
   test('assignRole posts assign route', () async {
