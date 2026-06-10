@@ -6,3 +6,5 @@ user
 social
 voice
 file
+role
+space

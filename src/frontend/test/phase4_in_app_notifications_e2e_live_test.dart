@@ -1,8 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
-import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/messages_client.dart';
-import 'package:voice_frontend/backend/realtime_client.dart';
 
 import 'support/live_gateway_harness.dart';
 

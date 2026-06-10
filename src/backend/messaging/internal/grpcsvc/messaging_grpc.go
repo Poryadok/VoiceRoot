@@ -328,7 +328,29 @@ func (s *MessagingGRPC) EditMessage(ctx context.Context, req *messagingv1.EditMe
 	if row.SenderProfileID != profileID {
 		return nil, status.Error(codes.PermissionDenied, "only the message author can edit")
 	}
-	updated, err := s.Messages.UpdateMessageContent(ctx, msgID, profileID, content)
+	mentionsRaw := mentions.EntriesJSONFromContent(content)
+	var mentionTargets []uuid.UUID
+	mentionsJSON := mentionsRaw
+	if mentionsRaw != "[]" {
+		meta, merr := s.loadChatMeta(ctx, row.ChatID)
+		if merr != nil {
+			if errors.Is(merr, store.ErrNotChatMember) {
+				return nil, status.Error(codes.PermissionDenied, "not a chat member")
+			}
+			return nil, status.Error(codes.Internal, merr.Error())
+		}
+		normalized, targets, verr := mentions.Process(ctx, meta, profileID, mentionsRaw, s.RolePermissions, s.UserPresence)
+		if verr != nil {
+			return nil, verr
+		}
+		mentionsJSON = normalized
+		mentionTargets = targets
+	}
+	var mentionsPtr *string
+	if mentionsJSON != row.MentionsJSON {
+		mentionsPtr = &mentionsJSON
+	}
+	updated, err := s.Messages.UpdateMessageContentAndMentions(ctx, msgID, profileID, content, mentionsPtr)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, status.Error(codes.NotFound, "message not found")
@@ -338,6 +360,15 @@ func (s *MessagingGRPC) EditMessage(ctx context.Context, req *messagingv1.EditMe
 	if s.MessageEvents != nil {
 		if err := s.MessageEvents.PublishMessageEdited(ctx, updated.ID.String(), updated.ChatID.String()); err != nil {
 			log.Printf("messaging: publish message.edited: %v", err)
+		}
+		if len(mentionTargets) > 0 && mentionsJSON != row.MentionsJSON {
+			ids := make([]string, 0, len(mentionTargets))
+			for _, pid := range mentionTargets {
+				ids = append(ids, pid.String())
+			}
+			if err := s.MessageEvents.PublishMentionAdded(ctx, updated.ID.String(), updated.ChatID.String(), updated.SenderProfileID.String(), ids); err != nil {
+				log.Printf("messaging: publish message.mention_added: %v", err)
+			}
 		}
 	}
 	return &messagingv1.EditMessageResponse{Message: messageRowToProto(updated, messagingv1.MessageKind_MESSAGE_KIND_UNSPECIFIED, "", false)}, nil

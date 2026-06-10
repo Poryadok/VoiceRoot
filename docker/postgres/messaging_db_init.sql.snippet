@@ -1,6 +1,6 @@
 -- messaging_db v1 — keep in sync with src/backend/migrations/messaging_db/000001_init.up.sql
 -- 000002_client_message_id.up.sql, 000003_attachment_only_messages.up.sql,
--- 000004_delete_for_me.up.sql, and 000005_reactions.up.sql
+-- 000004_delete_for_me.up.sql, 000005_reactions.up.sql, and 000006_pins.up.sql
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TABLE messages (
@@ -61,3 +61,13 @@ CREATE TABLE IF NOT EXISTS reactions (
 );
 
 CREATE INDEX IF NOT EXISTS reactions_message_id_emoji_idx ON reactions (message_id, emoji);
+
+CREATE TABLE pins (
+    chat_id UUID NOT NULL,
+    message_id UUID NOT NULL REFERENCES messages (id) ON DELETE CASCADE,
+    pinned_by UUID NOT NULL,
+    pinned_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (chat_id, message_id)
+);
+
+CREATE INDEX pins_chat_id_pinned_at_desc_idx ON pins (chat_id, pinned_at DESC);

@@ -7,6 +7,7 @@ COPY pkg/go.mod ./pkg/
 COPY chat/pb/voice/chat/go.mod ./chat/pb/voice/chat/
 COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
 COPY messaging/pb/voice/events/go.mod ./messaging/pb/voice/events/
+COPY messaging/pb/voice/messaging/go.mod ./messaging/pb/voice/messaging/
 COPY voice/pb/voice/calls/go.mod ./voice/pb/voice/calls/
 COPY voice/pb/voice/space/go.mod ./voice/pb/voice/space/
 COPY voice/go.mod voice/go.sum ./voice/
@@ -15,6 +16,7 @@ COPY pkg ./pkg
 COPY chat/pb ./chat/pb
 COPY user/pb ./user/pb
 COPY messaging/pb/voice/events ./messaging/pb/voice/events
+COPY messaging/pb/voice/messaging ./messaging/pb/voice/messaging
 COPY voice ./voice
 WORKDIR /src/voice
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/service .

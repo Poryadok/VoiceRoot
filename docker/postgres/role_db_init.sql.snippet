@@ -43,3 +43,21 @@ CREATE TABLE IF NOT EXISTS voice_room_overrides (
     deny BIGINT NOT NULL DEFAULT 0,
     PRIMARY KEY (voice_room_id, role_id)
 );
+
+-- Phase 6 mentions: bits 23–24 (TEXT_CHAT_MENTION_ALL_ONLINE, TEXT_CHAT_MENTION_ALL_IN_CHAT).
+UPDATE roles
+SET
+    permissions = permissions | ((1::bigint << 23) | (1::bigint << 24)),
+    updated_at = now()
+WHERE
+    is_system = true
+    AND name IN ('Owner', 'Admin', 'Moderator');
+
+-- Phase 6 pins: bit 25 (TEXT_CHAT_PIN_MESSAGES) for Owner, Admin, Moderator.
+UPDATE roles
+SET
+    permissions = permissions | (1::bigint << 25),
+    updated_at = now()
+WHERE
+    is_system = true
+    AND name IN ('Owner', 'Admin', 'Moderator');

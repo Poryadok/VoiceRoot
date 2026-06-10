@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../backend/messages_client.dart';
 import '../../theme/voice_colors.dart';
+import 'markdown_inline.dart';
 import 'markdown_message_content.dart';
 
 /// Message body with @mention tokens highlighted (PLAN Phase 6).
@@ -32,7 +33,13 @@ class MentionMessageContent extends StatelessWidget {
     var index = 0;
     for (final match in _tokenPattern.allMatches(content)) {
       if (match.start > index) {
-        spans.add(TextSpan(text: content.substring(index, match.start)));
+        spans.addAll(
+          buildChatMarkdownInlineSpans(
+            context,
+            content.substring(index, match.start),
+            baseStyle,
+          ),
+        );
       }
       spans.add(
         TextSpan(
@@ -46,7 +53,13 @@ class MentionMessageContent extends StatelessWidget {
       index = match.end;
     }
     if (index < content.length) {
-      spans.add(TextSpan(text: content.substring(index)));
+      spans.addAll(
+        buildChatMarkdownInlineSpans(
+          context,
+          content.substring(index),
+          baseStyle,
+        ),
+      );
     }
     return RichText(text: TextSpan(style: baseStyle, children: spans));
   }

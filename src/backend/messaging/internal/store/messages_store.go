@@ -182,15 +182,28 @@ FROM messages WHERE id = $1
 
 // UpdateMessageContent sets content and edited_at for a non-deleted row owned by senderProfileID.
 func (s *MessagesStore) UpdateMessageContent(ctx context.Context, messageID, senderProfileID uuid.UUID, content string) (*MessageRow, error) {
+	return s.UpdateMessageContentAndMentions(ctx, messageID, senderProfileID, content, nil)
+}
+
+// UpdateMessageContentAndMentions sets content, optional mentions_json, and edited_at.
+func (s *MessagesStore) UpdateMessageContentAndMentions(ctx context.Context, messageID, senderProfileID uuid.UUID, content string, mentionsJSON *string) (*MessageRow, error) {
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("messages store: pool not configured")
 	}
-	return scanMessageRow(s.Pool.QueryRow(ctx, `
+	if mentionsJSON == nil {
+		return scanMessageRow(s.Pool.QueryRow(ctx, `
 UPDATE messages
 SET content = $1, edited_at = now()
 WHERE id = $2 AND sender_profile_id = $3 AND deleted_at IS NULL
 RETURNING `+messageReturningCols+`
 `, content, messageID, senderProfileID))
+	}
+	return scanMessageRow(s.Pool.QueryRow(ctx, `
+UPDATE messages
+SET content = $1, mentions_json = $2::jsonb, edited_at = now()
+WHERE id = $3 AND sender_profile_id = $4 AND deleted_at IS NULL
+RETURNING `+messageReturningCols+`
+`, content, *mentionsJSON, messageID, senderProfileID))
 }
 
 // SoftDeleteMessage sets deleted_at for a non-deleted row owned by senderProfileID.

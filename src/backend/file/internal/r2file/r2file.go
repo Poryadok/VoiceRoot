@@ -1,6 +1,7 @@
 package r2file
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -116,6 +117,20 @@ func (p *S3R2Presigner) PresignPut(ctx context.Context, in PutPresignInput) (str
 		return "", err
 	}
 	return out.URL, nil
+}
+
+func (p *S3R2Presigner) PutObject(ctx context.Context, key, contentType string, data []byte) error {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return fmt.Errorf("r2_key required")
+	}
+	_, err := p.client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:      aws.String(p.bucket),
+		Key:         aws.String(key),
+		Body:        bytes.NewReader(data),
+		ContentType: aws.String(strings.TrimSpace(contentType)),
+	})
+	return err
 }
 
 func (p *S3R2Presigner) ReadObject(ctx context.Context, key string, maxBytes int64) ([]byte, error) {

@@ -33,8 +33,8 @@ ORDER BY joined_at ASC, profile_id ASC
 LIMIT $2
 `, spaceID, pageSize+1)
 	} else {
-		cursorProfile, err := uuid.Parse(cursor)
-		if err != nil {
+		cursorProfile, parseErr := uuid.Parse(cursor)
+		if parseErr != nil {
 			return nil, "", ErrInvalidListCursor
 		}
 		rows, err = s.Pool.Query(ctx, `

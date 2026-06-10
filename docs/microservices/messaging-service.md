@@ -159,6 +159,7 @@ read_receipts
 | Событие                  | Данные                                       |
 |--------------------------|----------------------------------------------|
 | `message.sent`           | message_id, chat_id, sender_id, has_mentions |
+| `message.mention_added`  | message_id, chat_id, sender_id, mentioned_profile_ids |
 | `message.edited`         | message_id, chat_id                          |
 | `message.deleted`        | message_id, chat_id                          |
 | `message.reaction_added` | message_id, profile_id, emoji                |

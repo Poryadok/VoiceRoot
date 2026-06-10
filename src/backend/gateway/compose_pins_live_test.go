@@ -23,8 +23,12 @@ func TestComposePins_live(t *testing.T) {
 
 	sessOwner := registerComposeUser(t, client, base, formatComposeEmail("pin-owner", n), "VoiceQaTest1!")
 	sessMember := registerComposeUser(t, client, base, formatComposeEmail("pin-member", n), "VoiceQaTest1!")
+	sessFiller := registerComposeUser(t, client, base, formatComposeEmail("pin-filler", n), "VoiceQaTest1!")
 	groupID := createComposeGroup(t, client, base, sessOwner.AccessToken, "Pins QA")
-	addComposeGroupMembers(t, client, base, sessOwner.AccessToken, groupID, sessMember.ProfileID)
+	addComposeGroupMembers(
+		t, client, base, sessOwner.AccessToken, groupID,
+		sessMember.ProfileID, sessFiller.ProfileID,
+	)
 
 	msgID := sendComposeMessage(t, client, base, sessOwner.AccessToken, groupID, "pin-me-compose")
 

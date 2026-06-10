@@ -28,7 +28,7 @@ class SpaceRail extends ConsumerWidget {
             child: CircularProgressIndicator(strokeWidth: 2),
           ),
         ),
-        error: (_, __) => Center(
+        error: (error, _) => Center(
           child: IconButton(
             tooltip: 'Retry',
             onPressed: () => ref.invalidate(mySpacesProvider),

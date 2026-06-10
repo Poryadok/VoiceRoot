@@ -288,7 +288,7 @@ ON CONFLICT (chat_id, role_id) DO UPDATE SET allow = EXCLUDED.allow, deny = EXCL
 	return err
 }
 
-// SetChatOverrideForMember sets deny/allow for each role the profile holds in the chat scope.
+// SetChatOverrideForMemberRoles sets deny/allow for each role the profile holds in the chat scope.
 func (s *RoleStore) SetChatOverrideForMemberRoles(ctx context.Context, spaceID uuid.UUID, chatID uuid.UUID, profileID uuid.UUID, allow, deny uint64) error {
 	roles, err := s.GetMemberRoles(ctx, spaceID, profileID)
 	if err != nil {

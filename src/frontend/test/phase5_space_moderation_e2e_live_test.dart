@@ -75,9 +75,10 @@ void main() {
       spaceId: spaceId,
     );
     expect(reinvite, isA<SpacesApiOk<SpaceInvite>>());
+    final inviteCode = (reinvite as SpacesApiOk<SpaceInvite>).data.code;
     await spaces.joinByInvite(
       authorization: member.authorizationHeader,
-      code: (reinvite as SpacesApiOk<SpaceInvite>).data.code,
+      code: inviteCode,
     );
 
     final ban = await spaces.banMember(
@@ -90,7 +91,7 @@ void main() {
 
     final bannedJoin = await spaces.joinByInvite(
       authorization: member.authorizationHeader,
-      code: (reinvite as SpacesApiOk<SpaceInvite>).data.code,
+      code: inviteCode,
     );
     expect(bannedJoin, isA<SpacesApiFailure>());
 

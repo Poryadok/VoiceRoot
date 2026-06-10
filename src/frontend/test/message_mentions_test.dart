@@ -49,4 +49,23 @@ void main() {
     final plain = rich.map((r) => r.text.toPlainText()).join();
     expect(plain, contains('@everyone'));
   });
+
+  testWidgets('MentionMessageContent renders bold outside mention', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: voiceTestTheme(),
+        home: Scaffold(
+          body: MentionMessageContent(
+            content: '**hi** @everyone',
+            mentions: const [MessageMention(type: 'everyone')],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final rich = tester.widgetList<RichText>(find.byType(RichText));
+    final plain = rich.map((r) => r.text.toPlainText()).join();
+    expect(plain, contains('hi'));
+    expect(plain, contains('@everyone'));
+  });
 }

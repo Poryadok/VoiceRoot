@@ -9,7 +9,6 @@ import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
-import 'package:voice_frontend/backend/realtime_client.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
@@ -53,14 +52,14 @@ void main() {
     );
   }
 
-  http.Response _listSpacesResponse() {
+  http.Response listSpacesResponse() {
     return http.Response(
       jsonEncode({'space_list': {'spaces': []}}),
       200,
     );
   }
 
-  Map<String, dynamic> _spaceJson({
+  Map<String, dynamic> spaceJson({
     required String id,
     required String name,
     String description = '',
@@ -70,7 +69,7 @@ void main() {
       'id': id,
       'name': name,
       'description': description,
-      if (iconUrl != null) 'icon_url': iconUrl,
+      'icon_url': ?iconUrl,
       'visibility': 'private',
       'owner_profile_id': 'profile-me',
       'member_count': 1,
@@ -148,12 +147,12 @@ void main() {
         client: MockClient((req) async {
           calls.add('${req.method} ${req.url.path}');
           if (req.method == 'GET' && req.url.path == '/api/v1/spaces') {
-            return _listSpacesResponse();
+            return listSpacesResponse();
           }
           if (req.method == 'POST' && req.url.path == '/api/v1/spaces') {
             return http.Response(
               jsonEncode({
-                'space': _spaceJson(id: 'space-new', name: 'Raid HQ'),
+                'space': spaceJson(id: 'space-new', name: 'Raid HQ'),
               }),
               200,
             );
@@ -162,7 +161,7 @@ void main() {
               req.url.path == '/api/v1/spaces/space-new') {
             return http.Response(
               jsonEncode({
-                'space': _spaceJson(
+                'space': spaceJson(
                   id: 'space-new',
                   name: 'Raid HQ',
                   iconUrl: 'https://cdn.voice.gg/spaces/party.webp',
@@ -217,12 +216,12 @@ void main() {
         client: MockClient((req) async {
           calls.add('${req.method} ${req.url.path}');
           if (req.method == 'GET' && req.url.path == '/api/v1/spaces') {
-            return _listSpacesResponse();
+            return listSpacesResponse();
           }
           if (req.method == 'POST' && req.url.path == '/api/v1/spaces') {
             return http.Response(
               jsonEncode({
-                'space': _spaceJson(id: 'space-new', name: 'Raid HQ'),
+                'space': spaceJson(id: 'space-new', name: 'Raid HQ'),
               }),
               200,
             );

@@ -263,6 +263,98 @@ void main() {
       expect(hub.subscribedChats, ['group-created']);
     });
 
+    test('tracks typing profiles from typing WS frames', () async {
+      late _FakeRealtimeHub hub;
+      final container = _container(
+        chatsClient: _FakeChatsClient(),
+        messagesClient: _FakeMessagesClient(
+          pages: [MessageListData(messages: [_message('msg-1')])],
+        ),
+        realtimeHubBuilder: (ref) => hub = _FakeRealtimeHub(ref),
+      );
+      addTearDown(container.dispose);
+
+      final sub = container.listen<ChatRoomState>(
+        chatRoomControllerProvider('chat-1'),
+        (_, _) {},
+        fireImmediately: true,
+      );
+      addTearDown(sub.close);
+      await pumpEventQueue();
+
+      hub.addFrame(
+        const RealtimeFrame(
+          op: 'typing',
+          data: {
+            'chat_id': 'chat-1',
+            'profile_id': 'peer-1',
+            'kind': 'start',
+          },
+        ),
+      );
+      await pumpEventQueue();
+
+      expect(
+        container.read(chatRoomControllerProvider('chat-1')).typingProfileIds,
+        contains('peer-1'),
+      );
+    });
+
+    test('tracks delivery receipts from WS frames', () async {
+      late _FakeRealtimeHub hub;
+      final messages = _FakeMessagesClient(
+        pages: [
+          MessageListData(
+            messages: [
+              VoiceMessage(
+                id: 'msg-mine',
+                chatId: 'chat-1',
+                senderProfileId: 'prof-test',
+                content: 'mine',
+                createdAt: DateTime.parse('2024-01-01T00:00:00Z'),
+              ),
+            ],
+          ),
+        ],
+      );
+      final container = _container(
+        chatsClient: _FakeChatsClient(),
+        messagesClient: messages,
+        realtimeHubBuilder: (ref) => hub = _FakeRealtimeHub(ref),
+      );
+      addTearDown(container.dispose);
+
+      final sub = container.listen<ChatRoomState>(
+        chatRoomControllerProvider('chat-1'),
+        (_, _) {},
+        fireImmediately: true,
+      );
+      addTearDown(sub.close);
+      await pumpEventQueue();
+
+      hub.addFrame(
+        const RealtimeFrame(
+          op: 'message_delivered',
+          data: {'chat_id': 'chat-1', 'message_id': 'msg-mine'},
+        ),
+      );
+      await pumpEventQueue();
+
+      var state = container.read(chatRoomControllerProvider('chat-1'));
+      expect(state.deliveredMessageIds, contains('msg-mine'));
+
+      hub.addFrame(
+        const RealtimeFrame(
+          op: 'message_read',
+          data: {'chat_id': 'chat-1', 'message_id': 'msg-mine'},
+        ),
+      );
+      await pumpEventQueue();
+
+      state = container.read(chatRoomControllerProvider('chat-1'));
+      expect(state.readMessageIds, contains('msg-mine'));
+    });
+
     test(
       'marks the latest loaded message read and fans out over realtime',
       () async {

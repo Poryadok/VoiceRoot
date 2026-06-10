@@ -11,11 +11,13 @@ COPY user/pb/voice/user/go.mod ./user/pb/voice/user/
 COPY user/pb/voice/social/go.mod ./user/pb/voice/social/
 COPY messaging/pb/voice/events/go.mod ./messaging/pb/voice/events/
 COPY messaging/pb/voice/messaging/go.mod ./messaging/pb/voice/messaging/
+COPY role/pb/voice/role/go.mod ./role/pb/voice/role/
 RUN cd chat && go mod download
 COPY pkg ./pkg
 COPY user/pb ./user/pb
 COPY messaging/pb/voice/events ./messaging/pb/voice/events
 COPY messaging/pb/voice/messaging ./messaging/pb/voice/messaging
+COPY role/pb/voice/role ./role/pb/voice/role
 COPY chat/pb ./chat/pb
 COPY chat ./chat
 WORKDIR /src/chat

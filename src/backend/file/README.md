@@ -1,11 +1,15 @@
 # File Service
 
-Go scaffold for the Voice file service.
+Go service for chat attachments (Phase 3+) and avatar-adjacent uploads via R2/MinIO.
 
 Current public surface:
 
-- GET /health returns {"service":"file","status":"ok"}.
-- gRPC `FileService.RequestUpload` creates a pending `file_db.files` row and returns a Cloudflare R2 presigned PUT URL with the Phase 3 free-tier 50 MiB limit.
-- gRPC `FileService.GetFileURL` returns a 1h presigned GET URL for ready files owned by the caller profile.
+- GET /health — `{"service":"file","status":"ok"}`.
+- gRPC `FileService.RequestUpload` — pending `file_db.files` row + presigned PUT (50 MiB free tier).
+- gRPC `FileService.ConfirmUpload` — SHA-256 verify, optional ClamAV scan (`CLAMAV_ADDR`), image resize + thumbnail upload (`internal/imgproc`).
+- gRPC `FileService.GetFileURL` — presigned GET for ready files owned by the caller.
+- gRPC `FileService` quota/list/delete — see `file_grpc.go` and `file_service_upload_test.go`.
 
-Still out of scope for this increment: `ConfirmUpload`, chat access checks for `context_chat`, attachments wiring in Messaging, thumbnails/WebP conversion, ClamAV, deduplication, and `file.events`.
+Compose: `file` + `clamav` services in `--profile app`; set `FILE_R2_*` in `.env` (see `.env.example`).
+
+Still out of scope: deduplication, `file.events` fan-out, subscription quotas beyond free tier.

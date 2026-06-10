@@ -393,7 +393,7 @@ class GatewayHttpClient {
     return {
       ...ClientVersion.headers,
       'X-Request-Id': newGatewayRequestId(),
-      if (auth != null) 'Authorization': auth,
+      'Authorization': ?auth,
       if (json) 'Content-Type': 'application/json',
     };
   }

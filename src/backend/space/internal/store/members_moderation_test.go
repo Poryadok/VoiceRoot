@@ -2,11 +2,8 @@ package store
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 )
 
@@ -33,13 +30,4 @@ WHERE table_schema = 'public' AND table_name = 'space_member_timeouts'
 `).Scan(&timeoutsTable)
 	require.NoError(t, err)
 	require.Equal(t, "space_member_timeouts", timeoutsTable)
-}
-
-func applyModerationMigrationForStoreTest(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
-	t.Helper()
-	migrationPath := filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", "000004_moderation.up.sql")
-	sqlBytes, err := os.ReadFile(migrationPath)
-	require.NoError(t, err, "moderation migration must exist before store tests pass")
-	_, err = pool.Exec(ctx, string(sqlBytes))
-	require.NoError(t, err)
 }

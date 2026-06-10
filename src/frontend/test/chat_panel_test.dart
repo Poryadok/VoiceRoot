@@ -942,6 +942,225 @@ void main() {
     expectMessagePlainText(tester, 'Original text');
   });
 
+  testWidgets('ChatRoomPanel appends message after WS message_create', (
+    tester,
+  ) async {
+    late _CapturingRealtimeHub hub;
+    var messageFetches = 0;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          profileAccentStorageProvider.overrideWithValue(
+            testProfileAccentStorage,
+          ),
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          authControllerProvider.overrideWith(authenticatedAuthController),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          httpClientProvider.overrideWithValue(
+            MockClient((req) async {
+              if (req.url.path == '/api/v1/messages') {
+                messageFetches++;
+                final messages = messageFetches == 1
+                    ? [
+                        {
+                          'id': 'msg-1',
+                          'chat': {'id': 'chat-abc'},
+                          'sender_profile_id': 'profile-b',
+                          'content': 'Hello there',
+                          'created_at': '2024-01-01T00:00:00Z',
+                        },
+                      ]
+                    : [
+                        {
+                          'id': 'msg-1',
+                          'chat': {'id': 'chat-abc'},
+                          'sender_profile_id': 'profile-b',
+                          'content': 'Hello there',
+                          'created_at': '2024-01-01T00:00:00Z',
+                        },
+                        {
+                          'id': 'msg-2',
+                          'chat': {'id': 'chat-abc'},
+                          'sender_profile_id': 'profile-b',
+                          'content': 'Live from WS',
+                          'created_at': '2024-01-01T00:00:01Z',
+                        },
+                      ];
+                return http.Response(
+                  jsonEncode({'message_list': {'messages': messages}}),
+                  200,
+                );
+              }
+              if (req.url.path == '/api/v1/messages/read') {
+                return http.Response('{}', 200);
+              }
+              return http.Response('{}', 404);
+            }),
+          ),
+          realtimeAutoConnectProvider.overrideWithValue(false),
+          realtimeHubProvider.overrideWith((ref) => hub = _CapturingRealtimeHub(ref)),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: ChatRoomPanel(chatId: 'chat-abc')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expectMessagePlainText(tester, 'Hello there');
+    expect(find.text('Live from WS'), findsNothing);
+
+    hub.emit(
+      const RealtimeFrame(
+        op: 'message_create',
+        data: {
+          'chat_id': 'chat-abc',
+          'message_id': 'msg-2',
+          'sender_profile_id': 'profile-b',
+        },
+        sequence: 2,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expectMessagePlainText(tester, 'Live from WS');
+    expect(messageFetches, greaterThan(1));
+  });
+
+  testWidgets('ChatRoomPanel shows typing label on typing WS frame', (
+    tester,
+  ) async {
+    late _CapturingRealtimeHub hub;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          profileAccentStorageProvider.overrideWithValue(
+            testProfileAccentStorage,
+          ),
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          authControllerProvider.overrideWith(authenticatedAuthController),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          httpClientProvider.overrideWithValue(
+            MockClient((req) async {
+              if (req.url.path == '/api/v1/messages') {
+                return http.Response(
+                  jsonEncode({'message_list': {'messages': []}}),
+                  200,
+                );
+              }
+              return http.Response('{}', 404);
+            }),
+          ),
+          realtimeAutoConnectProvider.overrideWithValue(false),
+          realtimeHubProvider.overrideWith((ref) => hub = _CapturingRealtimeHub(ref)),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: ChatRoomPanel(chatId: 'chat-abc')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Typing…'), findsNothing);
+
+    hub.emit(
+      const RealtimeFrame(
+        op: 'typing',
+        data: {
+          'chat_id': 'chat-abc',
+          'profile_id': 'profile-b',
+          'kind': 'start',
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Typing…'), findsOneWidget);
+  });
+
+  testWidgets('ChatListPanel shows accept and decline in requests inbox', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          profileAccentStorageProvider.overrideWithValue(
+            testProfileAccentStorage,
+          ),
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          authControllerProvider.overrideWith(authenticatedAuthController),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          httpClientProvider.overrideWithValue(
+            MockClient((req) async {
+              if (req.url.path == '/api/v1/chats') {
+                final inbox = req.url.queryParameters['inbox'] ?? 'main';
+                if (inbox == 'requests') {
+                  return http.Response(
+                    jsonEncode({
+                      'chat_list': {
+                        'items': [
+                          {
+                            'chat': {
+                              'id': 'chat-req',
+                              'type': 'CHAT_TYPE_DM',
+                              'creator_profile_id': 'profile-stranger',
+                            },
+                            'last_message_preview': 'Hi',
+                            'unread_count': 0,
+                          },
+                        ],
+                      },
+                    }),
+                    200,
+                  );
+                }
+                return http.Response(
+                  jsonEncode({'chat_list': {'items': []}}),
+                  200,
+                );
+              }
+              return http.Response('{}', 404);
+            }),
+          ),
+          realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
+          chatInboxProvider.overrideWith((ref) => 'requests'),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: ChatListPanel()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Accept'), findsOneWidget);
+    expect(find.text('Decline'), findsOneWidget);
+  });
+
   testWidgets('ChatRoomPanel renders markdown message content', (tester) async {
     await tester.pumpWidget(
       chatTestApp(

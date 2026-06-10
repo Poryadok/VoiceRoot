@@ -22,6 +22,7 @@ import (
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
 	grpcsvc "voice/backend/file/internal/grpcsvc"
+	"voice/backend/file/internal/imgproc"
 	"voice/backend/file/internal/r2file"
 	"voice/backend/file/internal/s2s"
 	"voice/backend/file/internal/store"
@@ -95,8 +96,10 @@ func main() {
 			scanner = clamav.Scanner{Addr: clamAddr}
 		}
 		var reader grpcsvc.ObjectReader
+		var processor grpcsvc.ImageProcessor
 		if presigner != nil {
 			reader = presigner
+			processor = imgproc.Processor{Reader: presigner, Writer: presigner}
 		}
 		lis, err := net.Listen("tcp", grpcListen)
 		if err != nil {
@@ -108,6 +111,7 @@ func main() {
 			Presigner: presigner,
 			ChatGuard: chatGuard,
 			Reader:    reader,
+			Processor: processor,
 			Scanner:   scanner,
 		}))
 		go func() {

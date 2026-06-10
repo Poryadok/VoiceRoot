@@ -80,19 +80,19 @@ func (s *spySpaceEvents) PublishSpaceCreated(_ context.Context, spaceID, ownerPr
 	return nil
 }
 
-func (spySpaceEvents) PublishTreeNodeUpserted(context.Context, string, string, string, string, string) error {
+func (*spySpaceEvents) PublishTreeNodeUpserted(context.Context, string, string, string, string, string) error {
 	return nil
 }
 
-func (spySpaceEvents) PublishTreeNodeRemoved(context.Context, string, string) error {
+func (*spySpaceEvents) PublishTreeNodeRemoved(context.Context, string, string) error {
 	return nil
 }
 
-func (spySpaceEvents) PublishVoiceRoomCreated(context.Context, string, string) error { return nil }
+func (*spySpaceEvents) PublishVoiceRoomCreated(context.Context, string, string) error { return nil }
 
-func (spySpaceEvents) PublishVoiceRoomDeleted(context.Context, string, string) error { return nil }
+func (*spySpaceEvents) PublishVoiceRoomDeleted(context.Context, string, string) error { return nil }
 
-func (spySpaceEvents) PublishInviteCreated(context.Context, string, string) error { return nil }
+func (*spySpaceEvents) PublishInviteCreated(context.Context, string, string) error { return nil }
 
 func (s *spySpaceEvents) snapshot() [][2]string {
 	s.mu.Lock()
