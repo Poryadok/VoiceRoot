@@ -247,3 +247,32 @@ func TestTruncatePreview(t *testing.T) {
 	long := strings.Repeat("а", 200)
 	require.Len(t, []rune(truncatePreview(long)), 160)
 }
+
+func TestTruncatePreview_stripsMarkdown(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "bold", truncatePreview("**bold**"))
+}
+
+func TestMessagesStore_GetChatListMetadata_stripsMarkdownPreview(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForStoreTest(t, ctx)
+	seedMessagingSchema(t, ctx, pool)
+	s := &MessagesStore{Pool: pool}
+
+	chatID := uuid.New()
+	sender := uuid.New()
+	viewer := uuid.New()
+
+	msgID, err := messageid.NewMessageID()
+	require.NoError(t, err)
+	_, err = s.InsertMessage(ctx, MessageRow{
+		ID: msgID, ChatID: chatID, SenderProfileID: sender,
+		Content: "**hello**", Type: "regular",
+		AttachmentsJSON: "[]", MentionsJSON: "[]",
+	})
+	require.NoError(t, err)
+
+	meta, err := s.GetChatListMetadata(ctx, viewer, []uuid.UUID{chatID})
+	require.NoError(t, err)
+	require.Equal(t, "hello", meta[chatID].LastMessagePreview)
+}

@@ -19,9 +19,11 @@ import 'package:voice_frontend/state/presence_providers.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/chat/chat_list_panel.dart';
 import 'package:voice_frontend/ui/chat/chat_room_panel.dart';
+import 'package:voice_frontend/ui/chat/markdown_message_content.dart';
 import 'package:voice_frontend/ui/social/presence_indicator.dart';
 
 import 'support/auth_test_overrides.dart';
+import 'support/markdown_test_helpers.dart';
 import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
 
@@ -561,8 +563,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(ChatRoomPanel.panelKey), findsOneWidget);
-    expect(find.text('Hello there'), findsOneWidget);
-    expect(find.text('Newest first from API'), findsOneWidget);
+    expectMessagePlainText(tester, 'Hello there');
+    expectMessagePlainText(tester, 'Newest first from API');
     expect(
       find.byKey(ChatRoomPanel.attachmentPreviewKey('file-image')),
       findsOneWidget,
@@ -937,7 +939,46 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Forwarded from Alice'), findsOneWidget);
-    expect(find.text('Original text'), findsOneWidget);
+    expectMessagePlainText(tester, 'Original text');
+  });
+
+  testWidgets('ChatRoomPanel renders markdown message content', (tester) async {
+    await tester.pumpWidget(
+      chatTestApp(
+        home: const ChatRoomPanel(chatId: 'chat-abc'),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/messages') {
+            return http.Response(
+              jsonEncode({
+                'message_list': {
+                  'messages': [
+                    {
+                      'id': 'msg-md',
+                      'chat': {'id': 'chat-abc'},
+                      'sender_profile_id': 'profile-b',
+                      'content': '**bold** text',
+                      'created_at': '2024-01-01T00:00:00Z',
+                    },
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          if (req.url.path == '/api/v1/messages/read') {
+            return http.Response('{}', 200);
+          }
+          return http.Response('{}', 404);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MarkdownMessageContent), findsOneWidget);
+    final rich = tester.widgetList<RichText>(find.byType(RichText));
+    final plain = rich.map((r) => r.text.toPlainText()).join();
+    expect(plain, contains('bold'));
+    expect(plain, isNot(contains('**')));
   });
 }
 

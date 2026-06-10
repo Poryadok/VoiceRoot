@@ -29,6 +29,7 @@ void main() {
     'test/phase5_space_voice_e2e_live_test.dart',
     'test/phase5_space_channel_e2e_live_test.dart',
     'test/phase5_space_shell_e2e_live_test.dart',
+    'test/phase6_markdown_e2e_live_test.dart',
   ];
 
   for (final path in liveTests) {

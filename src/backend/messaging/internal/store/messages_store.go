@@ -10,6 +10,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"voice/backend/messaging/internal/markdown"
 )
 
 // MessageRow is a persisted messaging_db.messages row (v1 DM).
@@ -398,9 +400,10 @@ LEFT JOIN latest ON true
 
 func truncatePreview(s string) string {
 	const maxRunes = 160
-	r := []rune(s)
+	plain := markdown.StripForPreview(s)
+	r := []rune(plain)
 	if len(r) <= maxRunes {
-		return s
+		return plain
 	}
 	return string(r[:maxRunes])
 }

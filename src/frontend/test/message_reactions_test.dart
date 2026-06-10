@@ -16,6 +16,7 @@ import 'package:voice_frontend/ui/chat/chat_room_panel.dart';
 
 import 'support/auth_test_overrides.dart';
 import 'support/gateway_test_client.dart';
+import 'support/markdown_test_helpers.dart';
 import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
 
@@ -91,7 +92,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('React here'), findsOneWidget);
+    expectMessagePlainText(tester, 'React here');
     expect(
       find.byKey(const ValueKey('message_reaction_msg-1_👍')),
       findsOneWidget,
@@ -191,7 +192,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.longPress(find.text('Long press me'));
+    await tester.longPress(messagePlainTextFinder('Long press me'));
     await tester.pumpAndSettle();
 
     expect(find.text('Add reaction'), findsOneWidget);

@@ -25,6 +25,7 @@ import '../social/presence_indicator.dart';
 import 'chat_message_list.dart';
 import 'message_reactions_row.dart';
 import 'forward_message_sheet.dart';
+import 'markdown_message_content.dart';
 import 'group_members_sheet.dart';
 import '../space/space_chat_slow_mode_sheet.dart';
 
@@ -909,7 +910,8 @@ class _MessageBubbleContent extends StatelessWidget {
               ],
             ),
           ),
-        if (message.content.isNotEmpty) Text(message.content),
+        if (message.content.isNotEmpty)
+          MarkdownMessageContent(content: message.content),
         if (message.editedAt != null)
           Text(
             l10n.chatMessageEdited,
