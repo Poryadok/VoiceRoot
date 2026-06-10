@@ -68,6 +68,9 @@ func (t *transcoder) serveSpaces(w http.ResponseWriter, r *http.Request, rest st
 		return true
 
 	default:
+		if strings.Contains(rest, "/") {
+			return t.serveSpacesTree(w, r, rest)
+		}
 		return false
 	}
 }

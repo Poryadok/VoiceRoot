@@ -304,6 +304,14 @@
       }
     }
   },
+  "spaceTreeTitle": "Каналы",
+  "spaceTreeEmpty": "Пока нет каналов",
+  "spaceTreeLoadError": "Не удалось загрузить дерево спейса",
+  "spaceTreeTextChat": "Текстовый чат",
+  "spaceTreeVoiceRoom": "Голосовая комната",
+  "spaceTreeUncategorized": "Каналы",
+  "spaceListTitle": "Мои спейсы",
+  "spaceOpenAction": "Открыть спейс",
   "chatGroupMembersTooltip": "Участники группы",
   "chatGroupMembersTitle": "Участники",
   "chatGroupMembersSubtitle": "Владелец может удалять участников. Участники могут выйти из группы.",

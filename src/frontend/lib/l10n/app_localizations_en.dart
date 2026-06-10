@@ -555,6 +555,30 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get spaceTreeTitle => 'Channels';
+
+  @override
+  String get spaceTreeEmpty => 'No channels yet';
+
+  @override
+  String get spaceTreeLoadError => 'Could not load space tree';
+
+  @override
+  String get spaceTreeTextChat => 'Text chat';
+
+  @override
+  String get spaceTreeVoiceRoom => 'Voice room';
+
+  @override
+  String get spaceTreeUncategorized => 'Channels';
+
+  @override
+  String get spaceListTitle => 'My spaces';
+
+  @override
+  String get spaceOpenAction => 'Open space';
+
+  @override
   String get chatGroupMembersTooltip => 'Group members';
 
   @override

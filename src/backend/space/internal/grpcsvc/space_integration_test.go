@@ -43,11 +43,13 @@ func startSpacePostgresForTest(t *testing.T, ctx context.Context) *pgxpool.Pool 
 
 func applySpaceMigration(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
-	migrationPath := filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", "000001_init.up.sql")
-	sqlBytes, err := os.ReadFile(migrationPath)
-	require.NoError(t, err)
-	_, err = pool.Exec(ctx, string(sqlBytes))
-	require.NoError(t, err)
+	for _, name := range []string{"000001_init.up.sql", "000002_tree.up.sql"} {
+		migrationPath := filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", name)
+		sqlBytes, err := os.ReadFile(migrationPath)
+		require.NoError(t, err)
+		_, err = pool.Exec(ctx, string(sqlBytes))
+		require.NoError(t, err)
+	}
 }
 
 func withAccountProfileCtx(ctx context.Context, accountID, profileID uuid.UUID) context.Context {
@@ -69,6 +71,18 @@ func (s *spySpaceEvents) PublishSpaceCreated(_ context.Context, spaceID, ownerPr
 	return nil
 }
 
+func (spySpaceEvents) PublishTreeNodeUpserted(context.Context, string, string, string, string, string) error {
+	return nil
+}
+
+func (spySpaceEvents) PublishTreeNodeRemoved(context.Context, string, string) error {
+	return nil
+}
+
+func (spySpaceEvents) PublishVoiceRoomCreated(context.Context, string, string) error { return nil }
+
+func (spySpaceEvents) PublishVoiceRoomDeleted(context.Context, string, string) error { return nil }
+
 func (s *spySpaceEvents) snapshot() [][2]string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -80,6 +94,16 @@ type errSpaceEvents struct{}
 func (errSpaceEvents) PublishSpaceCreated(context.Context, string, string) error {
 	return errors.New("nats unavailable")
 }
+
+func (errSpaceEvents) PublishTreeNodeUpserted(context.Context, string, string, string, string, string) error {
+	return nil
+}
+
+func (errSpaceEvents) PublishTreeNodeRemoved(context.Context, string, string) error { return nil }
+
+func (errSpaceEvents) PublishVoiceRoomCreated(context.Context, string, string) error { return nil }
+
+func (errSpaceEvents) PublishVoiceRoomDeleted(context.Context, string, string) error { return nil }
 
 type spaceServerOption func(*SpaceGRPC)
 

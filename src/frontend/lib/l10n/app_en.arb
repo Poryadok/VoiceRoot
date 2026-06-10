@@ -303,6 +303,14 @@
       }
     }
   },
+  "spaceTreeTitle": "Channels",
+  "spaceTreeEmpty": "No channels yet",
+  "spaceTreeLoadError": "Could not load space tree",
+  "spaceTreeTextChat": "Text chat",
+  "spaceTreeVoiceRoom": "Voice room",
+  "spaceTreeUncategorized": "Channels",
+  "spaceListTitle": "My spaces",
+  "spaceOpenAction": "Open space",
   "chatGroupMembersTooltip": "Group members",
   "chatGroupMembersTitle": "Members",
   "chatGroupMembersSubtitle": "Owner can remove members. Members can leave the group.",

@@ -559,6 +559,30 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get spaceTreeTitle => 'Каналы';
+
+  @override
+  String get spaceTreeEmpty => 'Пока нет каналов';
+
+  @override
+  String get spaceTreeLoadError => 'Не удалось загрузить дерево спейса';
+
+  @override
+  String get spaceTreeTextChat => 'Текстовый чат';
+
+  @override
+  String get spaceTreeVoiceRoom => 'Голосовая комната';
+
+  @override
+  String get spaceTreeUncategorized => 'Каналы';
+
+  @override
+  String get spaceListTitle => 'Мои спейсы';
+
+  @override
+  String get spaceOpenAction => 'Открыть спейс';
+
+  @override
   String get chatGroupMembersTooltip => 'Участники группы';
 
   @override

@@ -26,6 +26,7 @@ service SpaceService {
   rpc UpdateCategory(UpdateCategoryRequest) returns (UpdateCategoryResponse);
   rpc DeleteCategory(DeleteCategoryRequest) returns (DeleteCategoryResponse);
   rpc ReorderSpaceTree(ReorderSpaceTreeRequest) returns (ReorderSpaceTreeResponse);
+  rpc ListSpaceTree(ListSpaceTreeRequest) returns (ListSpaceTreeResponse);
 
   rpc CreateInvite(CreateInviteRequest) returns (CreateInviteResponse);
   rpc RevokeInvite(RevokeInviteRequest) returns (RevokeInviteResponse);
@@ -180,6 +181,10 @@ message DeleteCategoryRequest {
 message ReorderSpaceTreeRequest {
   string space_id = 1;
   repeated string ordered_node_ids = 2;
+}
+
+message ListSpaceTreeRequest {
+  string space_id = 1;
 }
 
 message Invite {
@@ -360,6 +365,11 @@ message UpdateCategoryResponse {
 }
 message DeleteCategoryResponse {}
 message ReorderSpaceTreeResponse {}
+message ListSpaceTreeResponse {
+  repeated Category categories = 1;
+  repeated SpaceTreeNode nodes = 2;
+  repeated VoiceRoom voice_rooms = 3;
+}
 message CreateInviteResponse {
   Invite invite = 1;
 }

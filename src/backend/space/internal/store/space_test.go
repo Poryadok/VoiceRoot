@@ -30,11 +30,13 @@ func startSpacePostgresForStoreTest(t *testing.T, ctx context.Context) *pgxpool.
 
 func applySpaceMigrationForStoreTest(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
-	migrationPath := filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", "000001_init.up.sql")
-	sqlBytes, err := os.ReadFile(migrationPath)
-	require.NoError(t, err)
-	_, err = pool.Exec(ctx, string(sqlBytes))
-	require.NoError(t, err)
+	for _, name := range []string{"000001_init.up.sql", "000002_tree.up.sql"} {
+		migrationPath := filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", name)
+		sqlBytes, err := os.ReadFile(migrationPath)
+		require.NoError(t, err)
+		_, err = pool.Exec(ctx, string(sqlBytes))
+		require.NoError(t, err)
+	}
 }
 
 func TestDecodeListSpaceCursor_Invalid(t *testing.T) {

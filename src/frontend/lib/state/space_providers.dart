@@ -117,3 +117,40 @@ class SpaceActions {
 final spaceActionsProvider = Provider<SpaceActions>((ref) {
   return SpaceActions(ref);
 });
+
+final selectedSpaceIdProvider = StateProvider<String?>((ref) => null);
+
+final spaceTreeProvider = FutureProvider.family<SpaceTreeData, String>((
+  ref,
+  spaceId,
+) async {
+  final auth = ref.watch(authorizationHeaderProvider);
+  if (auth == null) {
+    throw StateError('not_authenticated');
+  }
+  final result = await ref
+      .read(voiceSpacesClientProvider)
+      .listSpaceTree(authorization: auth, spaceId: spaceId);
+  return switch (result) {
+    SpacesApiOk(:final data) => data,
+    SpacesApiFailure(:final statusCode)
+        when isBackendUnavailable(statusCode) =>
+      throw const BackendUnavailableException(),
+    SpacesApiFailure(:final message) => throw Exception(message),
+  };
+});
+
+class SpaceTreeActions {
+  SpaceTreeActions(this._ref);
+
+  final Ref _ref;
+
+  Future<void> refreshTree(String spaceId) async {
+    _ref.invalidate(spaceTreeProvider(spaceId));
+    await _ref.read(spaceTreeProvider(spaceId).future);
+  }
+}
+
+final spaceTreeActionsProvider = Provider<SpaceTreeActions>((ref) {
+  return SpaceTreeActions(ref);
+});

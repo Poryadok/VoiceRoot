@@ -1082,6 +1082,54 @@ abstract class AppLocalizations {
   /// **'Could not create space: {message}'**
   String spaceCreateError(String message);
 
+  /// No description provided for @spaceTreeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Channels'**
+  String get spaceTreeTitle;
+
+  /// No description provided for @spaceTreeEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No channels yet'**
+  String get spaceTreeEmpty;
+
+  /// No description provided for @spaceTreeLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load space tree'**
+  String get spaceTreeLoadError;
+
+  /// No description provided for @spaceTreeTextChat.
+  ///
+  /// In en, this message translates to:
+  /// **'Text chat'**
+  String get spaceTreeTextChat;
+
+  /// No description provided for @spaceTreeVoiceRoom.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice room'**
+  String get spaceTreeVoiceRoom;
+
+  /// No description provided for @spaceTreeUncategorized.
+  ///
+  /// In en, this message translates to:
+  /// **'Channels'**
+  String get spaceTreeUncategorized;
+
+  /// No description provided for @spaceListTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'My spaces'**
+  String get spaceListTitle;
+
+  /// No description provided for @spaceOpenAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Open space'**
+  String get spaceOpenAction;
+
   /// No description provided for @chatGroupMembersTooltip.
   ///
   /// In en, this message translates to:

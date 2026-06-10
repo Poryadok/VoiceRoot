@@ -538,3 +538,49 @@ space_pb.UpdateSpaceRequest updateSpaceRequestToProto({
   }
   return req;
 }
+
+SpaceTreeData spaceTreeFromProto(space_pb.ListSpaceTreeResponse resp) {
+  final voiceById = <String, VoiceRoomData>{
+    for (final vr in resp.voiceRooms)
+      vr.id: VoiceRoomData(id: vr.id, spaceId: vr.spaceId, name: vr.name),
+  };
+  return SpaceTreeData(
+    categories: resp.categories
+        .map(
+          (c) => SpaceCategory(
+            id: c.id,
+            spaceId: c.spaceId,
+            name: c.name,
+            sortOrder: c.sortOrder,
+          ),
+        )
+        .toList(growable: false),
+    nodes: resp.nodes
+        .map((n) => spaceTreeNodeFromProto(n, voiceById))
+        .toList(growable: false),
+    voiceRooms: resp.voiceRooms
+        .map((vr) => VoiceRoomData(id: vr.id, spaceId: vr.spaceId, name: vr.name))
+        .toList(growable: false),
+  );
+}
+
+SpaceTreeNodeData spaceTreeNodeFromProto(
+  space_pb.SpaceTreeNode node,
+  Map<String, VoiceRoomData> voiceById,
+) {
+  final voiceRoomId = node.hasVoiceRoomId() ? node.voiceRoomId : null;
+  final linkedChatId =
+      node.hasLinkedChat() && node.linkedChat.hasId() ? node.linkedChat.id : null;
+  final voiceName = voiceRoomId != null ? voiceById[voiceRoomId]?.name : null;
+  return SpaceTreeNodeData(
+    id: node.id,
+    spaceId: node.spaceId,
+    categoryId: node.hasCategoryId() ? node.categoryId : null,
+    kind: node.kind,
+    linkedChatId: linkedChatId,
+    voiceRoomId: voiceRoomId,
+    sortOrder: node.sortOrder,
+    isSystem: node.isSystem,
+    displayName: voiceName ?? linkedChatId ?? node.id,
+  );
+}

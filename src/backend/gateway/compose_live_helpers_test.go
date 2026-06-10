@@ -203,6 +203,122 @@ func getComposeSpace(t *testing.T, client *http.Client, base, accessToken, space
 	}
 }
 
+type composeSpaceTree struct {
+	Categories []struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	} `json:"categories"`
+	Nodes []struct {
+		ID           string `json:"id"`
+		Kind         string `json:"kind"`
+		SortOrder    int32  `json:"sort_order"`
+		VoiceRoomID  string `json:"voice_room_id"`
+		LinkedChatID string `json:"linked_chat_id"`
+	} `json:"nodes"`
+}
+
+func getComposeSpaceTree(t *testing.T, client *http.Client, base, accessToken, spaceID string) composeSpaceTree {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, base+"/api/v1/spaces/"+spaceID+"/tree", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "GET tree body=%s", string(body))
+	var parsed composeSpaceTree
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	return parsed
+}
+
+func createComposeSpaceCategory(t *testing.T, client *http.Client, base, accessToken, spaceID, name string) string {
+	t.Helper()
+	payload, err := json.Marshal(map[string]any{"name": name, "sort_order": 0})
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/spaces/"+spaceID+"/categories", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "POST category body=%s", string(body))
+	var parsed struct {
+		Category struct {
+			ID string `json:"id"`
+		} `json:"category"`
+	}
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	require.NotEmpty(t, parsed.Category.ID)
+	return parsed.Category.ID
+}
+
+func createComposeSpaceVoiceRoom(t *testing.T, client *http.Client, base, accessToken, spaceID, name string) string {
+	t.Helper()
+	payload, err := json.Marshal(map[string]string{"name": name})
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/spaces/"+spaceID+"/voice-rooms", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "POST voice room body=%s", string(body))
+	var parsed struct {
+		VoiceRoom struct {
+			ID string `json:"id"`
+		} `json:"voice_room"`
+	}
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	require.NotEmpty(t, parsed.VoiceRoom.ID)
+	return parsed.VoiceRoom.ID
+}
+
+func createComposeSpaceChat(t *testing.T, client *http.Client, base, accessToken, spaceID, name string) string {
+	t.Helper()
+	payload, err := json.Marshal(map[string]string{
+		"type": "CHAT_TYPE_GROUP",
+		"name": name,
+	})
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/spaces/"+spaceID+"/chats", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "POST space chat body=%s", string(body))
+	var parsed struct {
+		SpaceTreeNode struct {
+			ID string `json:"id"`
+		} `json:"space_tree_node"`
+	}
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	require.NotEmpty(t, parsed.SpaceTreeNode.ID)
+	return parsed.SpaceTreeNode.ID
+}
+
+func reorderComposeSpaceTree(t *testing.T, client *http.Client, base, accessToken, spaceID string, nodeIDs []string) {
+	t.Helper()
+	payload, err := json.Marshal(map[string]any{"ordered_node_ids": nodeIDs})
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/spaces/"+spaceID+"/tree/reorder", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusNoContent, resp.StatusCode, "POST reorder body=%s", string(body))
+}
+
 func updateComposeSpace(t *testing.T, client *http.Client, base, accessToken, spaceID, iconURL, description string) {
 	t.Helper()
 	payload, err := json.Marshal(map[string]string{

@@ -18,8 +18,11 @@ import (
 )
 
 const (
-	streamName         = "chat_events"
-	subjectSpaceCreated = "space.created"
+	streamName              = "chat_events"
+	subjectSpaceCreated     = "space.created"
+	subjectSpaceTreeChanged = "space.tree_changed"
+	subjectVoiceRoomCreated = "space.voice_room_created"
+	subjectVoiceRoomDeleted = "space.voice_room_deleted"
 )
 
 // JetStreamPublisher publishes ChatStreamEvent payloads to NATS JetStream.
@@ -61,7 +64,7 @@ func (p *JetStreamPublisher) ensureStream() error {
 	}
 	p.ensureOnce.Do(func() {
 		if info, err := p.js.StreamInfo(streamName); err == nil {
-			for _, subj := range []string{subjectSpaceCreated} {
+			for _, subj := range []string{subjectSpaceCreated, subjectSpaceTreeChanged, subjectVoiceRoomCreated, subjectVoiceRoomDeleted} {
 				if !streamHasSubject(info, subj) {
 					cfg := info.Config
 					cfg.Subjects = append(cfg.Subjects, subj)
@@ -82,8 +85,10 @@ func (p *JetStreamPublisher) ensureStream() error {
 			Subjects: []string{
 				"chat.created",
 				"chat.member_changed",
-				"space.tree_changed",
+				subjectSpaceTreeChanged,
 				subjectSpaceCreated,
+				subjectVoiceRoomCreated,
+				subjectVoiceRoomDeleted,
 			},
 			Retention: nats.LimitsPolicy,
 			MaxAge:    7 * 24 * time.Hour,
@@ -124,6 +129,55 @@ func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, e
 		attrs = append(attrs, slog.String("space_id", created.GetSpaceId()), slog.String("owner_profile_id", created.GetOwnerProfileId()))
 	}
 	natslog.LogPublish(p.Logger, subject, requestID, "space event published", attrs...)
+	return nil
+}
+
+// PublishTreeNodeUpserted implements Publisher.
+func (p *JetStreamPublisher) PublishTreeNodeUpserted(ctx context.Context, spaceID, nodeID, kind, chatID, voiceRoomID string) error {
+	env := &eventsv1.ChatStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.New(time.Now().UTC()),
+		Payload: &eventsv1.ChatStreamEvent_SpaceTreeChanged{
+			SpaceTreeChanged: &eventsv1.SpaceTreeChanged{
+				SpaceId: spaceID,
+				NodeId:  nodeID,
+				Change:  "upserted",
+			},
+		},
+	}
+	_ = kind
+	_ = chatID
+	_ = voiceRoomID
+	return p.publishProto(ctx, subjectSpaceTreeChanged, env)
+}
+
+// PublishTreeNodeRemoved implements Publisher.
+func (p *JetStreamPublisher) PublishTreeNodeRemoved(ctx context.Context, spaceID, nodeID string) error {
+	env := &eventsv1.ChatStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.New(time.Now().UTC()),
+		Payload: &eventsv1.ChatStreamEvent_SpaceTreeChanged{
+			SpaceTreeChanged: &eventsv1.SpaceTreeChanged{
+				SpaceId: spaceID,
+				NodeId:  nodeID,
+				Change:  "removed",
+			},
+		},
+	}
+	return p.publishProto(ctx, subjectSpaceTreeChanged, env)
+}
+
+// PublishVoiceRoomCreated implements Publisher.
+func (p *JetStreamPublisher) PublishVoiceRoomCreated(ctx context.Context, spaceID, voiceRoomID string) error {
+	_ = spaceID
+	_ = voiceRoomID
+	return nil // subject reserved for future VoiceRoomCreated payload
+}
+
+// PublishVoiceRoomDeleted implements Publisher.
+func (p *JetStreamPublisher) PublishVoiceRoomDeleted(ctx context.Context, spaceID, voiceRoomID string) error {
+	_ = spaceID
+	_ = voiceRoomID
 	return nil
 }
 

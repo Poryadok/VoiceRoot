@@ -34,6 +34,7 @@ const (
 	SpaceService_UpdateCategory_FullMethodName     = "/voice.space.v1.SpaceService/UpdateCategory"
 	SpaceService_DeleteCategory_FullMethodName     = "/voice.space.v1.SpaceService/DeleteCategory"
 	SpaceService_ReorderSpaceTree_FullMethodName   = "/voice.space.v1.SpaceService/ReorderSpaceTree"
+	SpaceService_ListSpaceTree_FullMethodName      = "/voice.space.v1.SpaceService/ListSpaceTree"
 	SpaceService_CreateInvite_FullMethodName       = "/voice.space.v1.SpaceService/CreateInvite"
 	SpaceService_RevokeInvite_FullMethodName       = "/voice.space.v1.SpaceService/RevokeInvite"
 	SpaceService_GetInvite_FullMethodName          = "/voice.space.v1.SpaceService/GetInvite"
@@ -73,6 +74,7 @@ type SpaceServiceClient interface {
 	UpdateCategory(ctx context.Context, in *UpdateCategoryRequest, opts ...grpc.CallOption) (*UpdateCategoryResponse, error)
 	DeleteCategory(ctx context.Context, in *DeleteCategoryRequest, opts ...grpc.CallOption) (*DeleteCategoryResponse, error)
 	ReorderSpaceTree(ctx context.Context, in *ReorderSpaceTreeRequest, opts ...grpc.CallOption) (*ReorderSpaceTreeResponse, error)
+	ListSpaceTree(ctx context.Context, in *ListSpaceTreeRequest, opts ...grpc.CallOption) (*ListSpaceTreeResponse, error)
 	CreateInvite(ctx context.Context, in *CreateInviteRequest, opts ...grpc.CallOption) (*CreateInviteResponse, error)
 	RevokeInvite(ctx context.Context, in *RevokeInviteRequest, opts ...grpc.CallOption) (*RevokeInviteResponse, error)
 	GetInvite(ctx context.Context, in *GetInviteRequest, opts ...grpc.CallOption) (*GetInviteResponse, error)
@@ -243,6 +245,16 @@ func (c *spaceServiceClient) ReorderSpaceTree(ctx context.Context, in *ReorderSp
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ReorderSpaceTreeResponse)
 	err := c.cc.Invoke(ctx, SpaceService_ReorderSpaceTree_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *spaceServiceClient) ListSpaceTree(ctx context.Context, in *ListSpaceTreeRequest, opts ...grpc.CallOption) (*ListSpaceTreeResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListSpaceTreeResponse)
+	err := c.cc.Invoke(ctx, SpaceService_ListSpaceTree_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -430,6 +442,7 @@ type SpaceServiceServer interface {
 	UpdateCategory(context.Context, *UpdateCategoryRequest) (*UpdateCategoryResponse, error)
 	DeleteCategory(context.Context, *DeleteCategoryRequest) (*DeleteCategoryResponse, error)
 	ReorderSpaceTree(context.Context, *ReorderSpaceTreeRequest) (*ReorderSpaceTreeResponse, error)
+	ListSpaceTree(context.Context, *ListSpaceTreeRequest) (*ListSpaceTreeResponse, error)
 	CreateInvite(context.Context, *CreateInviteRequest) (*CreateInviteResponse, error)
 	RevokeInvite(context.Context, *RevokeInviteRequest) (*RevokeInviteResponse, error)
 	GetInvite(context.Context, *GetInviteRequest) (*GetInviteResponse, error)
@@ -500,6 +513,9 @@ func (UnimplementedSpaceServiceServer) DeleteCategory(context.Context, *DeleteCa
 }
 func (UnimplementedSpaceServiceServer) ReorderSpaceTree(context.Context, *ReorderSpaceTreeRequest) (*ReorderSpaceTreeResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReorderSpaceTree not implemented")
+}
+func (UnimplementedSpaceServiceServer) ListSpaceTree(context.Context, *ListSpaceTreeRequest) (*ListSpaceTreeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListSpaceTree not implemented")
 }
 func (UnimplementedSpaceServiceServer) CreateInvite(context.Context, *CreateInviteRequest) (*CreateInviteResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateInvite not implemented")
@@ -836,6 +852,24 @@ func _SpaceService_ReorderSpaceTree_Handler(srv interface{}, ctx context.Context
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(SpaceServiceServer).ReorderSpaceTree(ctx, req.(*ReorderSpaceTreeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SpaceService_ListSpaceTree_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListSpaceTreeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).ListSpaceTree(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_ListSpaceTree_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).ListSpaceTree(ctx, req.(*ListSpaceTreeRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1194,6 +1228,10 @@ var SpaceService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReorderSpaceTree",
 			Handler:    _SpaceService_ReorderSpaceTree_Handler,
+		},
+		{
+			MethodName: "ListSpaceTree",
+			Handler:    _SpaceService_ListSpaceTree_Handler,
 		},
 		{
 			MethodName: "CreateInvite",

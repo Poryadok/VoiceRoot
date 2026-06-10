@@ -17,7 +17,9 @@ import '../core/voice_list_row.dart';
 import '../core/voice_skeleton.dart';
 import '../core/voice_state_panel.dart';
 import '../social/presence_indicator.dart';
+import '../../state/space_providers.dart';
 import '../space/create_space_sheet.dart';
+import '../space/space_view.dart';
 import 'create_group_sheet.dart';
 
 /// Middle column: DM chat list from `GET /api/v1/chats`.
@@ -33,6 +35,7 @@ class ChatListPanel extends ConsumerWidget {
   static const Key unavailableKey = Key('chat_list_unavailable');
   static const Key createGroupKey = Key('chat_list_create_group');
   static const Key createSpaceKey = Key('chat_list_create_space');
+  static Key spaceTileKey(String spaceId) => Key('chat_list_space_$spaceId');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -76,6 +79,7 @@ class ChatListPanel extends ConsumerWidget {
             ],
           ),
         ),
+        const _MySpacesStrip(),
         if (chats.errorMessage == null || chats.items.isNotEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -293,6 +297,56 @@ class _ChatListTrailing extends StatelessWidget {
       );
     }
     return const SizedBox.shrink();
+  }
+}
+
+class _MySpacesStrip extends ConsumerWidget {
+  const _MySpacesStrip();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context)!;
+    final spacesAsync = ref.watch(mySpacesProvider);
+
+    return spacesAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, _) => const SizedBox.shrink(),
+      data: (data) {
+        if (data.spaces.isEmpty) return const SizedBox.shrink();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+              child: Text(
+                l10n.spaceListTitle,
+                style: Theme.of(context).textTheme.labelMedium,
+              ),
+            ),
+            ...data.spaces.map(
+              (space) => VoiceListRow(
+                key: ChatListPanel.spaceTileKey(space.id),
+                title: space.name,
+                subtitle: l10n.spaceOpenAction,
+                leading: VoiceAvatar(
+                  imageUrl: space.iconUrl,
+                  label: space.name,
+                ),
+                onTap: () {
+                  ref.read(selectedSpaceIdProvider.notifier).state = space.id;
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => SpaceView(spaceId: space.id),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const Divider(height: 1),
+          ],
+        );
+      },
+    );
   }
 }
 
