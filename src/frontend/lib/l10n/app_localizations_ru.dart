@@ -699,6 +699,53 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get spaceBan => 'Забанить';
+
+  @override
+  String get spaceBanConfirmTitle => 'Забанить участника?';
+
+  @override
+  String spaceBanConfirmMessage(String name) {
+    return 'Забанить $name в этом спейсе? Он не сможет вернуться.';
+  }
+
+  @override
+  String spaceBanError(String message) {
+    return 'Не удалось забанить участника: $message';
+  }
+
+  @override
+  String get spaceTimeout => 'Таймаут';
+
+  @override
+  String get spaceTimeoutConfirmTitle => 'Выдать таймаут?';
+
+  @override
+  String spaceTimeoutConfirmMessage(String name) {
+    return 'Запретить $name писать сообщения на 10 минут?';
+  }
+
+  @override
+  String spaceTimeoutError(String message) {
+    return 'Не удалось выдать таймаут: $message';
+  }
+
+  @override
+  String get spaceSlowMode => 'Медленный режим';
+
+  @override
+  String get spaceSlowModeSubtitle =>
+      'Минимальная пауза между сообщениями в этом канале';
+
+  @override
+  String get spaceSlowModeOff => 'Выкл.';
+
+  @override
+  String spaceSlowModeSeconds(int seconds) {
+    return '$seconds с';
+  }
+
+  @override
   String get spaceAssignRole => 'Назначить роль';
 
   @override

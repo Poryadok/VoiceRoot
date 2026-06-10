@@ -41,6 +41,8 @@ service SpaceService {
   rpc UnbanMember(UnbanMemberRequest) returns (UnbanMemberResponse);
   rpc ListMembers(ListMembersRequest) returns (ListMembersResponse);
   rpc ListBans(ListBansRequest) returns (ListBansResponse);
+  rpc TimeoutMember(TimeoutMemberRequest) returns (TimeoutMemberResponse);
+  rpc RemoveMemberTimeout(RemoveMemberTimeoutRequest) returns (RemoveMemberTimeoutResponse);
   rpc TransferOwnership(TransferOwnershipRequest) returns (TransferOwnershipResponse);
 
   rpc ListTemplates(ListTemplatesRequest) returns (ListTemplatesResponse);
@@ -250,6 +252,7 @@ message BanMemberRequest {
   string space_id = 1;
   string account_id = 2;
   optional string reason = 3;
+  optional string profile_id = 4;
 }
 
 message UnbanMemberRequest {
@@ -281,6 +284,18 @@ message SpaceBan {
   string banned_by_profile_id = 3;
   optional string reason = 4;
   google.protobuf.Timestamp banned_at = 5;
+}
+
+message TimeoutMemberRequest {
+  string space_id = 1;
+  string profile_id = 2;
+  int32 duration_seconds = 3;
+  optional string reason = 4;
+}
+
+message RemoveMemberTimeoutRequest {
+  string space_id = 1;
+  string profile_id = 2;
 }
 
 message TransferOwnershipRequest {
@@ -397,6 +412,8 @@ message ListMembersResponse {
 message ListBansResponse {
   BanList ban_list = 1;
 }
+message TimeoutMemberResponse {}
+message RemoveMemberTimeoutResponse {}
 message TransferOwnershipResponse {}
 message ListTemplatesResponse {
   TemplateList template_list = 1;

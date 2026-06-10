@@ -87,5 +87,23 @@ DELETE FROM space_members WHERE space_id = $1 AND profile_id = $2
 UPDATE spaces SET member_count = GREATEST(member_count - 1, 0), updated_at = now()
 WHERE id = $1
 `, spaceID)
+	if err != nil {
+		return err
+	}
+	_, _ = s.Pool.Exec(ctx, `
+DELETE FROM space_member_timeouts WHERE space_id = $1 AND profile_id = $2
+`, spaceID, profileID)
+	return nil
+}
+
+// RecordMemberKicked inserts an audit_log row for a kick action.
+func (s *SpaceStore) RecordMemberKicked(ctx context.Context, spaceID, profileID, actor uuid.UUID) error {
+	if s == nil || s.Pool == nil {
+		return errors.New("space store: pool not configured")
+	}
+	_, err := s.Pool.Exec(ctx, `
+INSERT INTO audit_log (space_id, actor_profile_id, action, target_type, target_id, details)
+VALUES ($1, $2, 'member_kicked', 'profile', $3, '{}')
+`, spaceID, actor, profileID)
 	return err
 }

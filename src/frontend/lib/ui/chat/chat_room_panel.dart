@@ -15,6 +15,7 @@ import '../../state/chat_providers.dart';
 import '../../state/gateway_providers.dart';
 import '../../state/presence_providers.dart';
 import '../../state/social_providers.dart';
+import '../../state/space_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../core/voice_avatar.dart';
 import '../core/voice_compact_banner.dart';
@@ -25,6 +26,7 @@ import 'chat_message_list.dart';
 import 'message_reactions_row.dart';
 import 'forward_message_sheet.dart';
 import 'group_members_sheet.dart';
+import '../space/space_chat_slow_mode_sheet.dart';
 
 /// Main column: message history (REST) + composer; live updates via Realtime WS.
 class ChatRoomPanel extends ConsumerStatefulWidget {
@@ -46,6 +48,7 @@ class ChatRoomPanel extends ConsumerStatefulWidget {
   static const Key videoCallKey = Key('chat_room_video_call');
   static const Key newMessagesChipKey = Key('chat_room_new_messages');
   static const Key groupMembersKey = Key('chat_room_group_members');
+  static const Key spaceSlowModeKey = Key('chat_room_space_slow_mode');
   static const Key groupVoiceStartKey = Key('chat_room_group_voice_start');
   static const Key groupVoiceJoinKey = Key('chat_room_group_voice_join');
   static Key attachmentPreviewKey(String fileId) =>
@@ -147,14 +150,29 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         : null;
     final canCall = ref.watch(gatewayConfigProvider).canPlaceVoiceCalls;
     String? groupName;
+    String? spaceId;
+    var slowModeSeconds = 0;
     var isGroup = false;
     for (final item in ref.watch(chatListControllerProvider).items) {
       if (item.chatId == widget.chatId && item.chat.isGroup) {
         groupName = item.chat.name;
+        spaceId = item.chat.spaceId;
+        slowModeSeconds = item.chat.slowModeSeconds;
         isGroup = true;
         break;
       }
     }
+    final canSetSlowMode = spaceId != null
+        ? ref
+                .watch(
+                  spacePermissionProvider((
+                    spaceId: spaceId,
+                    permission: 'TEXT_CHAT_SET_SLOW_MODE',
+                  )),
+                )
+                .valueOrNull ??
+            false
+        : false;
     final activeGroupCall = isGroup
         ? ref.watch(groupActiveCallProvider(widget.chatId))
         : null;
@@ -241,6 +259,17 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                       activeGroupCall: activeGroupCall,
                       chatId: widget.chatId,
                       l10n: l10n,
+                    ),
+                  if (canSetSlowMode)
+                    IconButton(
+                      key: ChatRoomPanel.spaceSlowModeKey,
+                      tooltip: l10n.spaceSlowMode,
+                      onPressed: () => SpaceChatSlowModeSheet.show(
+                        context,
+                        chatId: widget.chatId,
+                        currentSeconds: slowModeSeconds,
+                      ),
+                      icon: const Icon(Icons.timer_outlined),
                     ),
                   IconButton(
                     key: ChatRoomPanel.groupMembersKey,

@@ -81,6 +81,7 @@ require (
 	golang.org/x/time v0.8.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20241202173237-19429a94021a // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	voice.app/voice/role v0.0.0 // indirect
 )
 
 replace voice.app/voice/messaging => ./pb/voice/messaging
@@ -92,6 +93,8 @@ replace voice.app/voice/events => ./pb/voice/events
 replace voice/backend/chat => ../chat
 
 replace voice.app/voice/chat => ../chat/pb/voice/chat
+
+replace voice.app/voice/role => ../role/pb/voice/role
 
 replace voice.app/voice/common => ../user/pb/voice/common
 

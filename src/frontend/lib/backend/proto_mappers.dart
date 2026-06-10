@@ -151,6 +151,8 @@ VoiceChat voiceChatFromProto(chat_pb.Chat chat) {
     creatorProfileId: chat.creatorProfileId,
     name: chat.hasName() ? emptyToNull(chat.name) : null,
     avatarUrl: chat.hasAvatarUrl() ? emptyToNull(chat.avatarUrl) : null,
+    spaceId: chat.hasSpaceId() ? emptyToNull(chat.spaceId) : null,
+    slowModeSeconds: chat.slowModeSeconds,
   );
 }
 
@@ -214,6 +216,7 @@ chat_pb.AddMembersRequest addMembersRequestToProto({
 chat_pb.UpdateChatRequest updateChatRequestToProto({
   String? name,
   String? avatarUrl,
+  int? slowModeSeconds,
 }) {
   final req = chat_pb.UpdateChatRequest();
   if (name != null) {
@@ -221,6 +224,9 @@ chat_pb.UpdateChatRequest updateChatRequestToProto({
   }
   if (avatarUrl != null) {
     req.avatarUrl = avatarUrl;
+  }
+  if (slowModeSeconds != null) {
+    req.slowModeSeconds = slowModeSeconds;
   }
   return req;
 }

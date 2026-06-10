@@ -41,7 +41,7 @@ func startChatPostgresForTest(t *testing.T, ctx context.Context) *pgxpool.Pool {
 
 func applyChatMigration(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
-	for _, name := range []string{"000001_init.up.sql", "000002_dm_requests.up.sql", "000003_groups.up.sql"} {
+	for _, name := range []string{"000001_init.up.sql", "000002_dm_requests.up.sql", "000003_groups.up.sql", "000004_slow_mode.up.sql"} {
 		migrationPath := filepath.Join(repoRoot(t), "src", "backend", "migrations", "chat_db", name)
 		sqlBytes, err := os.ReadFile(migrationPath)
 		require.NoError(t, err)

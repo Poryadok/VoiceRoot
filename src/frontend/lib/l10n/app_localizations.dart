@@ -1328,6 +1328,78 @@ abstract class AppLocalizations {
   /// **'Could not remove member: {message}'**
   String spaceKickError(String message);
 
+  /// No description provided for @spaceBan.
+  ///
+  /// In en, this message translates to:
+  /// **'Ban'**
+  String get spaceBan;
+
+  /// No description provided for @spaceBanConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Ban member?'**
+  String get spaceBanConfirmTitle;
+
+  /// No description provided for @spaceBanConfirmMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Ban {name} from this space? They will not be able to rejoin.'**
+  String spaceBanConfirmMessage(String name);
+
+  /// No description provided for @spaceBanError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not ban member: {message}'**
+  String spaceBanError(String message);
+
+  /// No description provided for @spaceTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'Timeout'**
+  String get spaceTimeout;
+
+  /// No description provided for @spaceTimeoutConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Timeout member?'**
+  String get spaceTimeoutConfirmTitle;
+
+  /// No description provided for @spaceTimeoutConfirmMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Prevent {name} from sending messages for 10 minutes?'**
+  String spaceTimeoutConfirmMessage(String name);
+
+  /// No description provided for @spaceTimeoutError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not timeout member: {message}'**
+  String spaceTimeoutError(String message);
+
+  /// No description provided for @spaceSlowMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Slow mode'**
+  String get spaceSlowMode;
+
+  /// No description provided for @spaceSlowModeSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimum delay between messages in this channel'**
+  String get spaceSlowModeSubtitle;
+
+  /// No description provided for @spaceSlowModeOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get spaceSlowModeOff;
+
+  /// No description provided for @spaceSlowModeSeconds.
+  ///
+  /// In en, this message translates to:
+  /// **'{seconds}s'**
+  String spaceSlowModeSeconds(int seconds);
+
   /// No description provided for @spaceAssignRole.
   ///
   /// In en, this message translates to:

@@ -81,6 +81,26 @@ func (s *SpaceGRPC) assignDefaultMemberRole(ctx context.Context, spaceID, profil
 	return err
 }
 
+func (s *SpaceGRPC) revokeAllMemberRoles(ctx context.Context, spaceID, profileID uuid.UUID) {
+	if s == nil || s.Roles == nil {
+		return
+	}
+	resp, err := s.Roles.GetMemberRoles(ctx, &rolev1.GetMemberRolesRequest{
+		SpaceId:   spaceID.String(),
+		ProfileId: profileID.String(),
+	})
+	if err != nil {
+		return
+	}
+	for _, r := range resp.GetRoleList().GetRoles() {
+		_, _ = s.Roles.RevokeRole(ctx, &rolev1.RevokeRoleRequest{
+			SpaceId:   spaceID.String(),
+			ProfileId: profileID.String(),
+			RoleId:    r.GetId(),
+		})
+	}
+}
+
 func (s *SpaceGRPC) memberRoleNames(ctx context.Context, spaceID, profileID uuid.UUID) []string {
 	if s.Roles == nil {
 		return nil

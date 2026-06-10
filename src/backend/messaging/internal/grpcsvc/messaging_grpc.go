@@ -43,6 +43,8 @@ type MessagingGRPC struct {
 	Files FileMetadataLookup
 	// MessageEvents is optional; when set, successful send/edit/delete publishes to NATS JetStream (stream message_events, subjects message.*).
 	MessageEvents messageevents.MessageEventsPublisher
+	// Moderation is optional; enforces space timeouts and chat slow mode before send.
+	Moderation *store.SQLModerationGuard
 }
 
 func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMessageRequest) (*messagingv1.SendMessageResponse, error) {
@@ -70,6 +72,17 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 	}
 	if err := s.checkDMBlocksForSend(ctx, chatID, profileID); err != nil {
 		return nil, err
+	}
+	if s.Moderation != nil {
+		if err := s.Moderation.EnsureCanSend(ctx, chatID, profileID); err != nil {
+			if errors.Is(err, store.ErrMemberTimedOut) {
+				return nil, status.Error(codes.PermissionDenied, "member is timed out in this space")
+			}
+			if errors.Is(err, store.ErrSlowModeActive) {
+				return nil, status.Error(codes.ResourceExhausted, "slow mode is active")
+			}
+			return nil, status.Error(codes.Internal, err.Error())
+		}
 	}
 	attachments := strings.TrimSpace(req.GetAttachmentsJson())
 	if attachments == "" {

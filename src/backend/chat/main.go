@@ -27,6 +27,7 @@ import (
 
 	chatv1 "voice.app/voice/chat/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
+	rolev1 "voice.app/voice/role/v1"
 	userv1 "voice.app/voice/user/v1"
 )
 
@@ -114,6 +115,16 @@ func main() {
 			profiles = &grpcsvc.UserGRPCProfiles{Client: userv1.NewUserServiceClient(uconn)}
 		}
 
+		var roleClient rolev1.RoleServiceClient
+		if roleAddr := strings.TrimSpace(os.Getenv("ROLE_GRPC_ADDR")); roleAddr != "" {
+			rconn, err := grpc.NewClient(grpcclient.DialTarget(roleAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if err != nil {
+				log.Fatalf("role grpc: %v", err)
+			}
+			defer func() { _ = rconn.Close() }()
+			roleClient = rolev1.NewRoleServiceClient(rconn)
+		}
+
 		var listEnrich grpcsvc.ListChatsEnrichment
 		if msgAddr := strings.TrimSpace(os.Getenv("MESSAGING_GRPC_ADDR")); msgAddr != "" {
 			mconn, err := grpc.NewClient(grpcclient.DialTarget(msgAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -153,6 +164,7 @@ func main() {
 			Blocks:     blocks,
 			ListEnrich: listEnrich,
 			ChatEvents: chatEvents,
+			Roles:      roleClient,
 		})
 		go func() {
 			logger.Info("gRPC listening", slog.String("addr", grpcListen))

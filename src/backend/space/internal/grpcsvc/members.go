@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"voice/backend/role/permissions"
+	"voice/backend/space/internal/authctx"
 	"voice/backend/space/internal/store"
 
 	spacev1 "voice.app/voice/space/v1"
@@ -85,11 +86,17 @@ func (s *SpaceGRPC) KickMember(ctx context.Context, req *spacev1.KickMemberReque
 	if row.OwnerProfileID == profileID {
 		return nil, status.Error(codes.FailedPrecondition, "cannot kick space owner")
 	}
+	caller, ok := authctx.ProfileID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing profile")
+	}
 	if err := s.Store.RemoveMember(ctx, spaceID, profileID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, status.Error(codes.NotFound, "member not found")
 		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+	s.revokeAllMemberRoles(ctx, spaceID, profileID)
+	_ = s.Store.RecordMemberKicked(ctx, spaceID, profileID, caller)
 	return &spacev1.KickMemberResponse{}, nil
 }

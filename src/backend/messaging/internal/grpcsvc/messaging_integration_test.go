@@ -100,6 +100,10 @@ func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire
 	const bufSize = 1 << 20
 	lis := bufconn.Listen(bufSize)
 	srv := grpc.NewServer()
+	moderation := w.Moderation
+	if moderation == nil {
+		moderation = &store.SQLModerationGuard{Pool: pool}
+	}
 	messagingv1.RegisterMessagingServiceServer(srv, &MessagingGRPC{
 		Messages:      &store.MessagesStore{Pool: pool},
 		Reactions:     &store.ReactionsStore{Pool: pool},
@@ -108,6 +112,7 @@ func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire
 		UserProfiles:  w.UserProfiles,
 		MessageEvents: w.MessageEvents,
 		Files:         w.Files,
+		Moderation:    moderation,
 	})
 	go func() {
 		if err := srv.Serve(lis); err != nil {
@@ -127,6 +132,7 @@ func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire
 
 type messagingWire struct {
 	ChatGuard     ChatGuard
+	Moderation    *store.SQLModerationGuard
 	UserProfiles  ProfileAccountLookup
 	Blocks        AccountPairBlockChecker
 	MessageEvents messageevents.MessageEventsPublisher

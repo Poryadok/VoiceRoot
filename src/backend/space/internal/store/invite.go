@@ -219,7 +219,7 @@ func (s *SpaceStore) validateInviteForJoin(inv *InviteRow, now time.Time) error 
 
 // JoinByInvite adds profile to space and increments use_count atomically.
 // If already a member, returns existing membership without incrementing use_count.
-func (s *SpaceStore) JoinByInvite(ctx context.Context, code string, profileID uuid.UUID) (*MembershipRow, error) {
+func (s *SpaceStore) JoinByInvite(ctx context.Context, code string, profileID, accountID uuid.UUID) (*MembershipRow, error) {
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("space store: pool not configured")
 	}
@@ -242,6 +242,13 @@ FOR UPDATE
 	}
 	if err := s.validateInviteForJoin(inv, now); err != nil {
 		return nil, err
+	}
+	banned, err := s.IsAccountBanned(ctx, inv.SpaceID, accountID)
+	if err != nil {
+		return nil, err
+	}
+	if banned {
+		return nil, ErrAccountBanned
 	}
 
 	existing, err := scanMembershipRow(tx.QueryRow(ctx, `

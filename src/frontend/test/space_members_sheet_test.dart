@@ -29,6 +29,7 @@ void main() {
         overrides: [
           ...voiceThemeTestOverrides(),
           spaceMembersProvider('space-1').overrideWith((ref) async => sampleMembers),
+          spacePermissionProvider.overrideWith((ref, query) async => true),
         ],
         child: MaterialApp(
           theme: voiceTestTheme(),
@@ -47,5 +48,7 @@ void main() {
     expect(find.text('Member'), findsWidgets);
     expect(find.byKey(const Key('kick_member_member-1')), findsOneWidget);
     expect(find.byKey(const Key('assign_role_member-1')), findsOneWidget);
+    expect(find.byKey(const Key('ban_member_member-1')), findsOneWidget);
+    expect(find.byKey(const Key('timeout_member_member-1')), findsOneWidget);
   });
 }

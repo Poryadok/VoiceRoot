@@ -66,6 +66,8 @@ func mapInviteStoreErr(err error) error {
 		return status.Error(codes.FailedPrecondition, "invite expired")
 	case errors.Is(err, store.ErrInviteMaxUses):
 		return status.Error(codes.FailedPrecondition, "invite max uses reached")
+	case errors.Is(err, store.ErrAccountBanned):
+		return status.Error(codes.PermissionDenied, "account is banned from this space")
 	default:
 		return status.Error(codes.Internal, err.Error())
 	}
@@ -203,7 +205,11 @@ func (s *SpaceGRPC) JoinByInvite(ctx context.Context, req *spacev1.JoinByInviteR
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing profile")
 	}
-	member, err := s.Store.JoinByInvite(ctx, code, profileID)
+	accountID, ok := authctx.AccountID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing account")
+	}
+	member, err := s.Store.JoinByInvite(ctx, code, profileID, accountID)
 	if err != nil {
 		return nil, mapInviteStoreErr(err)
 	}

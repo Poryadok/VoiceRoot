@@ -84,11 +84,9 @@ func (s *ChatGRPC) UpdateChat(ctx context.Context, req *chatv1.UpdateChatRequest
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	if role != "owner" {
-		return nil, status.Error(codes.PermissionDenied, "only the group owner can update the chat")
-	}
 
 	var name, avatar *string
+	var slowMode *int32
 	if req.Name != nil {
 		n := strings.TrimSpace(req.GetName())
 		name = &n
@@ -97,7 +95,21 @@ func (s *ChatGRPC) UpdateChat(ctx context.Context, req *chatv1.UpdateChatRequest
 		a := strings.TrimSpace(req.GetAvatarUrl())
 		avatar = &a
 	}
-	updated, err := s.DM.UpdateGroupChat(ctx, chatID, name, avatar)
+	if req.SlowModeSeconds != nil {
+		slow := req.GetSlowModeSeconds()
+		slowMode = &slow
+	}
+
+	slowModeOnly := slowMode != nil && name == nil && avatar == nil
+	if row.SpaceID != nil && slowModeOnly && s.Roles != nil {
+		if err := canSetSpaceChatSlowMode(ctx, s.Roles, *row.SpaceID, caller); err != nil {
+			return nil, err
+		}
+	} else if role != "owner" {
+		return nil, status.Error(codes.PermissionDenied, "only the group owner can update the chat")
+	}
+
+	updated, err := s.DM.UpdateGroupChat(ctx, chatID, name, avatar, slowMode)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}

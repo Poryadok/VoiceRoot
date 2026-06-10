@@ -17,6 +17,40 @@ func (t *transcoder) serveSpacesMembers(w http.ResponseWriter, r *http.Request, 
 	spaceID := parts[0]
 	memberRest := strings.TrimPrefix(parts[1], "/")
 
+	if strings.HasSuffix(memberRest, "/timeout") {
+		profileID := strings.TrimSuffix(memberRest, "/timeout")
+		switch r.Method {
+		case http.MethodPost:
+			req := &spacev1.TimeoutMemberRequest{SpaceId: spaceID, ProfileId: profileID}
+			if err := readProtoJSON(r, req); err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			req.SpaceId = spaceID
+			req.ProfileId = profileID
+			_, err := t.clients.space.TimeoutMember(ctx, req)
+			if err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return true
+		case http.MethodDelete:
+			_, err := t.clients.space.RemoveMemberTimeout(ctx, &spacev1.RemoveMemberTimeoutRequest{
+				SpaceId:   spaceID,
+				ProfileId: profileID,
+			})
+			if err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return true
+		default:
+			return false
+		}
+	}
+
 	switch {
 	case r.Method == http.MethodGet && memberRest == "":
 		page := &commonv1.CursorPageRequest{}

@@ -44,7 +44,7 @@ func startSpacePostgresForTest(t *testing.T, ctx context.Context) *pgxpool.Pool 
 
 func applySpaceMigration(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
-	for _, name := range []string{"000001_init.up.sql", "000002_tree.up.sql", "000003_invites.up.sql"} {
+	for _, name := range []string{"000001_init.up.sql", "000002_tree.up.sql", "000003_invites.up.sql", "000004_moderation.up.sql"} {
 		migrationPath := filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", name)
 		sqlBytes, err := os.ReadFile(migrationPath)
 		require.NoError(t, err)
@@ -59,6 +59,14 @@ func withAccountProfileCtx(ctx context.Context, accountID, profileID uuid.UUID) 
 }
 
 type mapProfileAccounts map[uuid.UUID]uuid.UUID
+
+func (m mapProfileAccounts) AccountIDByProfileID(_ context.Context, profileID uuid.UUID) (uuid.UUID, error) {
+	a, ok := m[profileID]
+	if !ok {
+		return uuid.Nil, errors.New("profile not found")
+	}
+	return a, nil
+}
 
 type spySpaceEvents struct {
 	mu      sync.Mutex
@@ -120,6 +128,10 @@ func withSpaceEventsPublisher(p spaceevents.Publisher) spaceServerOption {
 
 func withRoleClient(c rolev1.RoleServiceClient) spaceServerOption {
 	return func(s *SpaceGRPC) { s.Roles = c }
+}
+
+func withProfileAccounts(m mapProfileAccounts) spaceServerOption {
+	return func(s *SpaceGRPC) { s.ProfileAccounts = m }
 }
 
 func startSpaceGRPCTestServer(t *testing.T, pool *pgxpool.Pool, opts ...spaceServerOption) (spacev1.SpaceServiceClient, func()) {

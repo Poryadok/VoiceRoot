@@ -365,6 +365,43 @@
       "message": { "type": "String" }
     }
   },
+  "spaceBan": "Забанить",
+  "spaceBanConfirmTitle": "Забанить участника?",
+  "spaceBanConfirmMessage": "Забанить {name} в этом спейсе? Он не сможет вернуться.",
+  "@spaceBanConfirmMessage": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "spaceBanError": "Не удалось забанить участника: {message}",
+  "@spaceBanError": {
+    "placeholders": {
+      "message": { "type": "String" }
+    }
+  },
+  "spaceTimeout": "Таймаут",
+  "spaceTimeoutConfirmTitle": "Выдать таймаут?",
+  "spaceTimeoutConfirmMessage": "Запретить {name} писать сообщения на 10 минут?",
+  "@spaceTimeoutConfirmMessage": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "spaceTimeoutError": "Не удалось выдать таймаут: {message}",
+  "@spaceTimeoutError": {
+    "placeholders": {
+      "message": { "type": "String" }
+    }
+  },
+  "spaceSlowMode": "Медленный режим",
+  "spaceSlowModeSubtitle": "Минимальная пауза между сообщениями в этом канале",
+  "spaceSlowModeOff": "Выкл.",
+  "spaceSlowModeSeconds": "{seconds} с",
+  "@spaceSlowModeSeconds": {
+    "placeholders": {
+      "seconds": { "type": "int" }
+    }
+  },
   "spaceAssignRole": "Назначить роль",
   "spaceAssignRoleTitle": "Назначить роль",
   "spaceAssignRoleEmpty": "Нет доступных ролей",

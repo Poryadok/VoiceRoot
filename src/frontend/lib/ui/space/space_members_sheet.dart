@@ -18,6 +18,11 @@ class SpaceMembersSheet extends ConsumerWidget {
 
   static Key kickMemberKey(String profileId) => Key('kick_member_$profileId');
 
+  static Key banMemberKey(String profileId) => Key('ban_member_$profileId');
+
+  static Key timeoutMemberKey(String profileId) =>
+      Key('timeout_member_$profileId');
+
   static Key assignRoleKey(String profileId) => Key('assign_role_$profileId');
 
   final String spaceId;
@@ -69,10 +74,37 @@ class SpaceMembersSheet extends ConsumerWidget {
                   onAction: () => ref.invalidate(spaceMembersProvider(spaceId)),
                 ),
                 data: (members) {
-                  final canManage = viewerCanManageSpaceMembers(
+                  final canAssignRole = viewerCanManageSpaceMembers(
                     members,
                     activeId,
                   );
+                  final canKick = ref
+                          .watch(
+                            spacePermissionProvider((
+                              spaceId: spaceId,
+                              permission: 'MEMBER_KICK',
+                            )),
+                          )
+                          .valueOrNull ??
+                      false;
+                  final canBan = ref
+                          .watch(
+                            spacePermissionProvider((
+                              spaceId: spaceId,
+                              permission: 'MEMBER_BAN',
+                            )),
+                          )
+                          .valueOrNull ??
+                      false;
+                  final canTimeout = ref
+                          .watch(
+                            spacePermissionProvider((
+                              spaceId: spaceId,
+                              permission: 'MODERATION_TIMEOUT_MEMBERS',
+                            )),
+                          )
+                          .valueOrNull ??
+                      false;
                   return ListView.builder(
                     itemCount: members.length,
                     itemBuilder: (context, index) {
@@ -81,9 +113,13 @@ class SpaceMembersSheet extends ConsumerWidget {
                         spaceId: spaceId,
                         member: member,
                         isSelf: member.profileId == activeId,
-                        canKick: canManage && !member.isOwner,
-                        canAssignRole: canManage && !member.isOwner,
+                        canKick: canKick && !member.isOwner,
+                        canBan: canBan && !member.isOwner,
+                        canTimeout: canTimeout && !member.isOwner,
+                        canAssignRole: canAssignRole && !member.isOwner,
                         kickKey: kickMemberKey(member.profileId),
+                        banKey: banMemberKey(member.profileId),
+                        timeoutKey: timeoutMemberKey(member.profileId),
                         assignRoleKey: assignRoleKey(member.profileId),
                       );
                     },
@@ -104,8 +140,12 @@ class _MemberTile extends ConsumerWidget {
     required this.member,
     required this.isSelf,
     required this.canKick,
+    required this.canBan,
+    required this.canTimeout,
     required this.canAssignRole,
     required this.kickKey,
+    required this.banKey,
+    required this.timeoutKey,
     required this.assignRoleKey,
   });
 
@@ -113,8 +153,12 @@ class _MemberTile extends ConsumerWidget {
   final SpaceMemberRosterEntry member;
   final bool isSelf;
   final bool canKick;
+  final bool canBan;
+  final bool canTimeout;
   final bool canAssignRole;
   final Key kickKey;
+  final Key banKey;
+  final Key timeoutKey;
   final Key assignRoleKey;
 
   @override
@@ -145,7 +189,7 @@ class _MemberTile extends ConsumerWidget {
             ),
         ],
       ),
-      trailing: (canKick || canAssignRole)
+      trailing: (canKick || canBan || canTimeout || canAssignRole)
           ? Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -155,6 +199,20 @@ class _MemberTile extends ConsumerWidget {
                     tooltip: l10n.spaceAssignRole,
                     icon: const Icon(Icons.badge_outlined),
                     onPressed: () => _pickRole(context, ref),
+                  ),
+                if (canTimeout)
+                  IconButton(
+                    key: timeoutKey,
+                    tooltip: l10n.spaceTimeout,
+                    icon: const Icon(Icons.timer_off_outlined),
+                    onPressed: () => _confirmTimeout(context, ref, label),
+                  ),
+                if (canBan)
+                  IconButton(
+                    key: banKey,
+                    tooltip: l10n.spaceBan,
+                    icon: const Icon(Icons.block_outlined),
+                    onPressed: () => _confirmBan(context, ref, label),
                   ),
                 if (canKick)
                   IconButton(
@@ -167,6 +225,95 @@ class _MemberTile extends ConsumerWidget {
             )
           : null,
     );
+  }
+
+  Future<void> _confirmBan(
+    BuildContext context,
+    WidgetRef ref,
+    String label,
+  ) async {
+    final l10n = AppLocalizations.of(context)!;
+    final profile = ref.read(profileProvider(member.profileId)).valueOrNull;
+    final accountId = profile?.accountId;
+    if (accountId == null || accountId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.spaceBanError('missing account'))),
+      );
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final dialogL10n = AppLocalizations.of(ctx)!;
+        return AlertDialog(
+          title: Text(dialogL10n.spaceBanConfirmTitle),
+          content: Text(dialogL10n.spaceBanConfirmMessage(label)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text(dialogL10n.commonCancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: Text(dialogL10n.spaceBan),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true || !context.mounted) return;
+    final err = await ref.read(spaceMemberActionsProvider).banMember(
+      spaceId: spaceId,
+      accountId: accountId,
+      profileId: member.profileId,
+    );
+    if (!context.mounted) return;
+    if (err != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.spaceBanError(err))),
+      );
+    }
+  }
+
+  Future<void> _confirmTimeout(
+    BuildContext context,
+    WidgetRef ref,
+    String label,
+  ) async {
+    final l10n = AppLocalizations.of(context)!;
+    const durationSeconds = 600;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final dialogL10n = AppLocalizations.of(ctx)!;
+        return AlertDialog(
+          title: Text(dialogL10n.spaceTimeoutConfirmTitle),
+          content: Text(dialogL10n.spaceTimeoutConfirmMessage(label)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text(dialogL10n.commonCancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: Text(dialogL10n.spaceTimeout),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true || !context.mounted) return;
+    final err = await ref.read(spaceMemberActionsProvider).timeoutMember(
+      spaceId: spaceId,
+      profileId: member.profileId,
+      durationSeconds: durationSeconds,
+    );
+    if (!context.mounted) return;
+    if (err != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.spaceTimeoutError(err))),
+      );
+    }
   }
 
   Future<void> _confirmKick(

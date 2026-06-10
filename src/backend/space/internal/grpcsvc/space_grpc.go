@@ -11,7 +11,8 @@ import (
 // SpaceGRPC implements SpaceService RPCs backed by space_db.
 type SpaceGRPC struct {
 	spacev1.UnimplementedSpaceServiceServer
-	Store       *store.SpaceStore
-	SpaceEvents spaceevents.Publisher // optional; CreateSpace publishes space.created
-	Roles       rolev1.RoleServiceClient
+	Store           *store.SpaceStore
+	SpaceEvents     spaceevents.Publisher // optional; CreateSpace publishes space.created
+	Roles           rolev1.RoleServiceClient
+	ProfileAccounts ProfileAccountLookup // optional; resolves profile_id → account_id for bans
 }

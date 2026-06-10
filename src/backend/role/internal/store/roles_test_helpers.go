@@ -26,12 +26,14 @@ func StartRoleDBForStoreTest(t *testing.T, ctx context.Context) *pgxpool.Pool {
 	return integrationtest.StartPostgres(t, ctx, "roledb", "")
 }
 
-// ApplyRoleMigrationsForStoreTest applies role_db v1 DDL.
+// ApplyRoleMigrationsForStoreTest applies role_db DDL through the latest migration.
 func ApplyRoleMigrationsForStoreTest(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
-	migrationPath := filepath.Join(repoRoot(t), "src", "backend", "migrations", "role_db", "000001_init.up.sql")
-	sqlBytes, err := os.ReadFile(migrationPath)
-	require.NoError(t, err)
-	_, err = pool.Exec(ctx, string(sqlBytes))
-	require.NoError(t, err)
+	dir := filepath.Join(repoRoot(t), "src", "backend", "migrations", "role_db")
+	for _, name := range []string{"000001_init.up.sql", "000002_moderation_permissions.up.sql"} {
+		sqlBytes, err := os.ReadFile(filepath.Join(dir, name))
+		require.NoError(t, err)
+		_, err = pool.Exec(ctx, string(sqlBytes))
+		require.NoError(t, err)
+	}
 }

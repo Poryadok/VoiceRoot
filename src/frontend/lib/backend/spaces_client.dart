@@ -423,6 +423,75 @@ class VoiceSpacesClient {
     return _mapJson(result, spaceMemberListFromJson);
   }
 
+  Future<SpacesApiResult<void>> banMember({
+    required String authorization,
+    required String spaceId,
+    required String accountId,
+    String? profileId,
+    String? reason,
+  }) async {
+    final body = <String, dynamic>{'account_id': accountId};
+    if (profileId != null && profileId.isNotEmpty) {
+      body['profile_id'] = profileId;
+    }
+    if (reason != null && reason.isNotEmpty) {
+      body['reason'] = reason;
+    }
+    final result = await _gateway.postJson(
+      uri: _gateway.resolve('/api/v1/spaces/$spaceId/bans'),
+      authorization: authorization,
+      body: body,
+    );
+    return _mapVoidJson(result);
+  }
+
+  Future<SpacesApiResult<void>> unbanMember({
+    required String authorization,
+    required String spaceId,
+    required String accountId,
+  }) async {
+    final result = await _gateway.deleteEmpty(
+      uri: _gateway.resolve('/api/v1/spaces/$spaceId/bans/$accountId'),
+      authorization: authorization,
+    );
+    return _mapVoidHttp(result);
+  }
+
+  Future<SpacesApiResult<void>> timeoutMember({
+    required String authorization,
+    required String spaceId,
+    required String profileId,
+    required int durationSeconds,
+    String? reason,
+  }) async {
+    final body = <String, dynamic>{'duration_seconds': durationSeconds};
+    if (reason != null && reason.isNotEmpty) {
+      body['reason'] = reason;
+    }
+    final result = await _gateway.postJson(
+      uri: _gateway.resolve(
+        '/api/v1/spaces/$spaceId/members/$profileId/timeout',
+      ),
+      authorization: authorization,
+      body: body,
+    );
+    return _mapVoidJson(result);
+  }
+
+  Future<SpacesApiResult<void>> removeMemberTimeout({
+    required String authorization,
+    required String spaceId,
+    required String profileId,
+  }) async {
+    final result = await _gateway.deleteEmpty(
+      uri: _gateway.resolve(
+        '/api/v1/spaces/$spaceId/members/$profileId/timeout',
+      ),
+      authorization: authorization,
+    );
+    return _mapVoidHttp(result);
+  }
+
   Future<SpacesApiResult<void>> kickMember({
     required String authorization,
     required String spaceId,
@@ -432,14 +501,7 @@ class VoiceSpacesClient {
       uri: _gateway.resolve('/api/v1/spaces/$spaceId/members/$profileId'),
       authorization: authorization,
     );
-    return switch (result) {
-      GatewayHttpOk() => const SpacesApiOk(null),
-      GatewayHttpFailure(:final error) => SpacesApiFailure(
-        message: GatewayApiResultMapper.failureMessage(error),
-        errorCode: GatewayApiResultMapper.failureCode(error),
-        statusCode: GatewayApiResultMapper.failureStatus(error),
-      ),
-    };
+    return _mapVoidHttp(result);
   }
 
   Future<SpacesApiResult<SpaceTreeNodeData>> createSpaceChat({
@@ -466,6 +528,30 @@ class VoiceSpacesClient {
   ) {
     return switch (result) {
       GatewayHttpOk(:final data) => SpacesApiOk(parse(data)),
+      GatewayHttpFailure(:final error) => SpacesApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
+  }
+
+  SpacesApiResult<void> _mapVoidHttp(GatewayHttpResult<dynamic> result) {
+    return switch (result) {
+      GatewayHttpOk() => const SpacesApiOk(null),
+      GatewayHttpFailure(:final error) => SpacesApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
+  }
+
+  SpacesApiResult<void> _mapVoidJson(
+    GatewayHttpResult<Map<String, dynamic>> result,
+  ) {
+    return switch (result) {
+      GatewayHttpOk() => const SpacesApiOk(null),
       GatewayHttpFailure(:final error) => SpacesApiFailure(
         message: GatewayApiResultMapper.failureMessage(error),
         errorCode: GatewayApiResultMapper.failureCode(error),

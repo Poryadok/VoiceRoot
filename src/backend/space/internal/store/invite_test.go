@@ -58,7 +58,7 @@ func TestInvite_Join_IncrementsUseCount(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	member, err := st.JoinByInvite(ctx, inv.Code, joiner)
+	member, err := st.JoinByInvite(ctx, inv.Code, joiner, uuid.New())
 	require.NoError(t, err)
 	require.Equal(t, joiner, member.ProfileID)
 
@@ -87,9 +87,10 @@ func TestInvite_Join_IdempotentForExistingMember(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	first, err := st.JoinByInvite(ctx, inv.Code, owner)
+	ownerAcct := uuid.New()
+	first, err := st.JoinByInvite(ctx, inv.Code, owner, ownerAcct)
 	require.NoError(t, err)
-	second, err := st.JoinByInvite(ctx, inv.Code, owner)
+	second, err := st.JoinByInvite(ctx, inv.Code, owner, ownerAcct)
 	require.NoError(t, err)
 	require.Equal(t, first.JoinedAt, second.JoinedAt)
 
@@ -117,7 +118,7 @@ func TestInvite_ExpiredRejected(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = st.JoinByInvite(ctx, inv.Code, joiner)
+	_, err = st.JoinByInvite(ctx, inv.Code, joiner, uuid.New())
 	require.ErrorIs(t, err, ErrInviteExpired)
 }
 
@@ -140,11 +141,11 @@ func TestInvite_MaxUsesRejected(t *testing.T) {
 	require.NoError(t, err)
 
 	joiner1 := uuid.New()
-	_, err = st.JoinByInvite(ctx, inv.Code, joiner1)
+	_, err = st.JoinByInvite(ctx, inv.Code, joiner1, uuid.New())
 	require.NoError(t, err)
 
 	joiner2 := uuid.New()
-	_, err = st.JoinByInvite(ctx, inv.Code, joiner2)
+	_, err = st.JoinByInvite(ctx, inv.Code, joiner2, uuid.New())
 	require.ErrorIs(t, err, ErrInviteMaxUses)
 }
 
@@ -166,6 +167,6 @@ func TestInvite_RevokedRejected(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, st.RevokeInvite(ctx, inv.ID))
 
-	_, err = st.JoinByInvite(ctx, inv.Code, joiner)
+	_, err = st.JoinByInvite(ctx, inv.Code, joiner, uuid.New())
 	require.ErrorIs(t, err, ErrInviteRevoked)
 }

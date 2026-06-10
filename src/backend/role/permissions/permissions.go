@@ -19,10 +19,14 @@ const (
 	MemberManageNicknames = "MEMBER_MANAGE_NICKNAMES"
 	MemberAssignRoles     = "MEMBER_ASSIGN_ROLES"
 
-	TextChatCreateInSpace  = "TEXT_CHAT_CREATE_IN_SPACE"
-	TextChatView           = "TEXT_CHAT_VIEW"
-	TextChatSendMessages   = "TEXT_CHAT_SEND_MESSAGES"
-	TextChatManageMessages = "TEXT_CHAT_MANAGE_MESSAGES"
+	TextChatCreateInSpace   = "TEXT_CHAT_CREATE_IN_SPACE"
+	TextChatView            = "TEXT_CHAT_VIEW"
+	TextChatManageSettings  = "TEXT_CHAT_MANAGE_SETTINGS"
+	TextChatSendMessages    = "TEXT_CHAT_SEND_MESSAGES"
+	TextChatManageMessages  = "TEXT_CHAT_MANAGE_MESSAGES"
+	TextChatSetSlowMode     = "TEXT_CHAT_SET_SLOW_MODE"
+
+	ModerationTimeoutMembers = "MODERATION_TIMEOUT_MEMBERS"
 
 	VoiceJoin       = "VOICE_JOIN"
 	VoiceSpeak      = "VOICE_SPEAK"
@@ -53,13 +57,16 @@ var permissionBits = map[string]uint64{
 	MemberBan:               1 << 10,
 	MemberManageNicknames:   1 << 11,
 	MemberAssignRoles:       1 << 12,
-	TextChatCreateInSpace:   1 << 13,
-	TextChatView:            1 << 14,
-	TextChatSendMessages:    1 << 15,
-	TextChatManageMessages:  1 << 16,
-	VoiceJoin:               1 << 17,
-	VoiceSpeak:              1 << 18,
-	VoiceMuteOthers:         1 << 19,
+	TextChatCreateInSpace:    1 << 13,
+	TextChatView:             1 << 14,
+	TextChatSendMessages:     1 << 15,
+	TextChatManageMessages:   1 << 16,
+	VoiceJoin:                1 << 17,
+	VoiceSpeak:               1 << 18,
+	VoiceMuteOthers:          1 << 19,
+	TextChatManageSettings:   1 << 20,
+	TextChatSetSlowMode:      1 << 21,
+	ModerationTimeoutMembers: 1 << 22,
 }
 
 // MaskFor returns the bitmask bit for a permission name.
@@ -146,7 +153,10 @@ func moderatorDefaultMask() (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	for _, p := range []string{MemberKick, MemberBan, MemberAssignRoles, TextChatManageMessages, VoiceMuteOthers} {
+	for _, p := range []string{
+		MemberKick, MemberBan, MemberAssignRoles, TextChatManageMessages, VoiceMuteOthers,
+		ModerationTimeoutMembers, TextChatSetSlowMode,
+	} {
 		bit, err := MaskFor(p)
 		if err != nil {
 			return 0, err

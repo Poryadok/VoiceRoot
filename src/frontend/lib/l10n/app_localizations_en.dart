@@ -695,6 +695,53 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get spaceBan => 'Ban';
+
+  @override
+  String get spaceBanConfirmTitle => 'Ban member?';
+
+  @override
+  String spaceBanConfirmMessage(String name) {
+    return 'Ban $name from this space? They will not be able to rejoin.';
+  }
+
+  @override
+  String spaceBanError(String message) {
+    return 'Could not ban member: $message';
+  }
+
+  @override
+  String get spaceTimeout => 'Timeout';
+
+  @override
+  String get spaceTimeoutConfirmTitle => 'Timeout member?';
+
+  @override
+  String spaceTimeoutConfirmMessage(String name) {
+    return 'Prevent $name from sending messages for 10 minutes?';
+  }
+
+  @override
+  String spaceTimeoutError(String message) {
+    return 'Could not timeout member: $message';
+  }
+
+  @override
+  String get spaceSlowMode => 'Slow mode';
+
+  @override
+  String get spaceSlowModeSubtitle =>
+      'Minimum delay between messages in this channel';
+
+  @override
+  String get spaceSlowModeOff => 'Off';
+
+  @override
+  String spaceSlowModeSeconds(int seconds) {
+    return '${seconds}s';
+  }
+
+  @override
   String get spaceAssignRole => 'Assign role';
 
   @override

@@ -308,6 +308,56 @@ class SpaceMemberActions {
 
   final Ref _ref;
 
+  Future<String?> banMember({
+    required String spaceId,
+    required String accountId,
+    String? profileId,
+    String? reason,
+  }) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+
+    final result = await _ref.read(voiceSpacesClientProvider).banMember(
+      authorization: auth,
+      spaceId: spaceId,
+      accountId: accountId,
+      profileId: profileId,
+      reason: reason,
+    );
+    return switch (result) {
+      SpacesApiFailure(:final message) => message,
+      SpacesApiOk() => () {
+        _ref.invalidate(spaceMembersProvider(spaceId));
+        return null;
+      }(),
+    };
+  }
+
+  Future<String?> timeoutMember({
+    required String spaceId,
+    required String profileId,
+    required int durationSeconds,
+    String? reason,
+  }) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+
+    final result = await _ref.read(voiceSpacesClientProvider).timeoutMember(
+      authorization: auth,
+      spaceId: spaceId,
+      profileId: profileId,
+      durationSeconds: durationSeconds,
+      reason: reason,
+    );
+    return switch (result) {
+      SpacesApiFailure(:final message) => message,
+      SpacesApiOk() => () {
+        _ref.invalidate(spaceMembersProvider(spaceId));
+        return null;
+      }(),
+    };
+  }
+
   Future<String?> kickMember({
     required String spaceId,
     required String profileId,
@@ -393,3 +443,23 @@ bool viewerCanManageSpaceMembers(
   }
   return false;
 }
+
+typedef SpacePermissionQuery = ({String spaceId, String permission});
+
+final spacePermissionProvider = FutureProvider.family<bool, SpacePermissionQuery>(
+  (ref, query) async {
+    final auth = ref.watch(authorizationHeaderProvider);
+    final profileId = ref.watch(spaceViewerProfileIdProvider);
+    if (auth == null || profileId == null) return false;
+    final result = await ref.read(voiceRolesClientProvider).checkPermission(
+      authorization: auth,
+      spaceId: query.spaceId,
+      profileId: profileId,
+      permissionName: query.permission,
+    );
+    return switch (result) {
+      RolesApiOk(:final data) => data,
+      RolesApiFailure() => false,
+    };
+  },
+);

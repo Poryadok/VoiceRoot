@@ -8,6 +8,8 @@ import (
 
 	"voice/backend/chat/internal/chatevents"
 	"voice/backend/chat/internal/store"
+
+	rolev1 "voice.app/voice/role/v1"
 )
 
 // ChatGRPC implements ChatService RPCs backed by chat_db (Phase 1: DM).
@@ -19,6 +21,8 @@ type ChatGRPC struct {
 	ListEnrich ListChatsEnrichment // optional; Messaging S2S for preview + unread
 	// ChatEvents is optional; when set, new DM creation publishes to NATS JetStream (stream chat_events, subjects chat.*).
 	ChatEvents chatevents.Publisher
+	// Roles is optional; space channel slow mode checks TEXT_CHAT_SET_SLOW_MODE when set.
+	Roles rolev1.RoleServiceClient
 }
 
 // DMStore persists chats and lists the caller's inbox (DM + standalone groups).
@@ -36,6 +40,6 @@ type DMStore interface {
 	AddGroupMembers(ctx context.Context, chatID uuid.UUID, profileIDs []uuid.UUID) ([]uuid.UUID, error)
 	RemoveGroupMember(ctx context.Context, chatID, profileID uuid.UUID) error
 	LeaveGroupChat(ctx context.Context, chatID, profileID uuid.UUID) error
-	UpdateGroupChat(ctx context.Context, chatID uuid.UUID, name, avatarURL *string) (*store.ChatRow, error)
+	UpdateGroupChat(ctx context.Context, chatID uuid.UUID, name, avatarURL *string, slowModeSeconds *int32) (*store.ChatRow, error)
 	GetMemberRole(ctx context.Context, chatID, profileID uuid.UUID) (string, error)
 }

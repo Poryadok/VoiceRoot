@@ -380,6 +380,43 @@
       "message": { "type": "String" }
     }
   },
+  "spaceBan": "Ban",
+  "spaceBanConfirmTitle": "Ban member?",
+  "spaceBanConfirmMessage": "Ban {name} from this space? They will not be able to rejoin.",
+  "@spaceBanConfirmMessage": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "spaceBanError": "Could not ban member: {message}",
+  "@spaceBanError": {
+    "placeholders": {
+      "message": { "type": "String" }
+    }
+  },
+  "spaceTimeout": "Timeout",
+  "spaceTimeoutConfirmTitle": "Timeout member?",
+  "spaceTimeoutConfirmMessage": "Prevent {name} from sending messages for 10 minutes?",
+  "@spaceTimeoutConfirmMessage": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "spaceTimeoutError": "Could not timeout member: {message}",
+  "@spaceTimeoutError": {
+    "placeholders": {
+      "message": { "type": "String" }
+    }
+  },
+  "spaceSlowMode": "Slow mode",
+  "spaceSlowModeSubtitle": "Minimum delay between messages in this channel",
+  "spaceSlowModeOff": "Off",
+  "spaceSlowModeSeconds": "{seconds}s",
+  "@spaceSlowModeSeconds": {
+    "placeholders": {
+      "seconds": { "type": "int" }
+    }
+  },
   "spaceAssignRole": "Assign role",
   "spaceAssignRoleTitle": "Assign role",
   "spaceAssignRoleEmpty": "No assignable roles",

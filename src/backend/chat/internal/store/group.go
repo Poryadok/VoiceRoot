@@ -325,16 +325,16 @@ WHERE m.chat_id = c.id AND c.type = 'group'
 	return nil
 }
 
-// UpdateGroupChat updates mutable group fields (name, avatar_url).
-func (s *DMStore) UpdateGroupChat(ctx context.Context, chatID uuid.UUID, name, avatarURL *string) (*ChatRow, error) {
+// UpdateGroupChat updates mutable group fields (name, avatar_url, slow_mode_seconds).
+func (s *DMStore) UpdateGroupChat(ctx context.Context, chatID uuid.UUID, name, avatarURL *string, slowModeSeconds *int32) (*ChatRow, error) {
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("dm store: pool not configured")
 	}
-	if name == nil && avatarURL == nil {
+	if name == nil && avatarURL == nil && slowModeSeconds == nil {
 		return s.FindChatByID(ctx, chatID)
 	}
-	sets := make([]string, 0, 3)
-	args := make([]any, 0, 4)
+	sets := make([]string, 0, 4)
+	args := make([]any, 0, 5)
 	argN := 1
 	if name != nil {
 		sets = append(sets, fmt.Sprintf("name = $%d", argN))
@@ -344,6 +344,11 @@ func (s *DMStore) UpdateGroupChat(ctx context.Context, chatID uuid.UUID, name, a
 	if avatarURL != nil {
 		sets = append(sets, fmt.Sprintf("avatar_url = $%d", argN))
 		args = append(args, *avatarURL)
+		argN++
+	}
+	if slowModeSeconds != nil {
+		sets = append(sets, fmt.Sprintf("slow_mode_seconds = $%d", argN))
+		args = append(args, *slowModeSeconds)
 		argN++
 	}
 	sets = append(sets, "updated_at = now()")

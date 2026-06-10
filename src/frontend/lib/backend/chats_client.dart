@@ -36,6 +36,8 @@ class VoiceChat {
     required this.creatorProfileId,
     this.name,
     this.avatarUrl,
+    this.spaceId,
+    this.slowModeSeconds = 0,
   });
 
   final String id;
@@ -43,6 +45,8 @@ class VoiceChat {
   final String creatorProfileId;
   final String? name;
   final String? avatarUrl;
+  final String? spaceId;
+  final int slowModeSeconds;
 
   bool get isDm => type == ChatType.CHAT_TYPE_DM.name;
   bool get isGroup => type == ChatType.CHAT_TYPE_GROUP.name;
@@ -54,8 +58,12 @@ class VoiceChat {
       creatorProfileId: json['creator_profile_id'] as String? ?? '',
       name: json['name'] as String?,
       avatarUrl: json['avatar_url'] as String?,
+      spaceId: json['space_id'] as String?,
+      slowModeSeconds: json['slow_mode_seconds'] as int? ?? 0,
     );
   }
+
+  bool get isSpaceChannel => spaceId != null && spaceId!.isNotEmpty;
 }
 
 class ChatListItem {
@@ -243,11 +251,16 @@ class VoiceChatsClient {
     required String chatId,
     String? name,
     String? avatarUrl,
+    int? slowModeSeconds,
   }) async {
     final result = await _gateway.patchProto(
       uri: _gateway.resolve('/api/v1/chats/$chatId'),
       authorization: authorization,
-      body: updateChatRequestToProto(name: name, avatarUrl: avatarUrl),
+      body: updateChatRequestToProto(
+        name: name,
+        avatarUrl: avatarUrl,
+        slowModeSeconds: slowModeSeconds,
+      ),
       createEmpty: chat_pb.UpdateChatResponse.create,
     );
     return _map(result, (data) => voiceChatFromProto(data.chat));
