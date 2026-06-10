@@ -336,6 +336,44 @@
   "spaceInviteJoinCodeHint": "abc123xyz",
   "spaceInviteJoinSubmit": "Вступить",
   "spaceInviteJoinError": "Не удалось вступить: {message}",
+  "@spaceInviteJoinError": {
+    "placeholders": {
+      "message": { "type": "String" }
+    }
+  },
+  "spaceMembersTooltip": "Участники спейса",
+  "spaceMembersTitle": "Участники",
+  "spaceMembersSubtitle": "Владелец и администраторы могут назначать роли и удалять участников.",
+  "spaceMembersLoadError": "Не удалось загрузить участников",
+  "spaceMemberYou": "{name} (вы)",
+  "@spaceMemberYou": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "spaceKick": "Удалить",
+  "spaceKickConfirmTitle": "Удалить участника?",
+  "spaceKickConfirmMessage": "Удалить {name} из спейса?",
+  "@spaceKickConfirmMessage": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "spaceKickError": "Не удалось удалить участника: {message}",
+  "@spaceKickError": {
+    "placeholders": {
+      "message": { "type": "String" }
+    }
+  },
+  "spaceAssignRole": "Назначить роль",
+  "spaceAssignRoleTitle": "Назначить роль",
+  "spaceAssignRoleEmpty": "Нет доступных ролей",
+  "spaceAssignRoleError": "Не удалось назначить роль: {message}",
+  "@spaceAssignRoleError": {
+    "placeholders": {
+      "message": { "type": "String" }
+    }
+  },
   "chatGroupMembersTooltip": "Участники группы",
   "chatGroupMembersTitle": "Участники",
   "chatGroupMembersSubtitle": "Владелец может удалять участников. Участники могут выйти из группы.",

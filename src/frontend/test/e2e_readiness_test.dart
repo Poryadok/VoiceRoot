@@ -20,6 +20,11 @@ void main() {
     'test/phase4_group_voice_e2e_live_test.dart',
     'test/phase4_forward_e2e_live_test.dart',
     'test/phase4_reactions_e2e_live_test.dart',
+    'test/phase4_in_app_notifications_e2e_live_test.dart',
+    'test/phase5_space_creation_e2e_live_test.dart',
+    'test/phase5_space_tree_e2e_live_test.dart',
+    'test/phase5_space_invites_e2e_live_test.dart',
+    'test/phase5_space_roles_e2e_live_test.dart',
   ];
 
   for (final path in liveTests) {

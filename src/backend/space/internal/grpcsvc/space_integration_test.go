@@ -26,6 +26,7 @@ import (
 	"voice/backend/space/internal/store"
 
 	commonv1 "voice.app/voice/common/v1"
+	rolev1 "voice.app/voice/role/v1"
 	spacev1 "voice.app/voice/space/v1"
 )
 
@@ -115,6 +116,10 @@ type spaceServerOption func(*SpaceGRPC)
 
 func withSpaceEventsPublisher(p spaceevents.Publisher) spaceServerOption {
 	return func(s *SpaceGRPC) { s.SpaceEvents = p }
+}
+
+func withRoleClient(c rolev1.RoleServiceClient) spaceServerOption {
+	return func(s *SpaceGRPC) { s.Roles = c }
 }
 
 func startSpaceGRPCTestServer(t *testing.T, pool *pgxpool.Pool, opts ...spaceServerOption) (spacev1.SpaceServiceClient, func()) {

@@ -4,6 +4,7 @@ import (
 	"voice/backend/space/internal/spaceevents"
 	"voice/backend/space/internal/store"
 
+	rolev1 "voice.app/voice/role/v1"
 	spacev1 "voice.app/voice/space/v1"
 )
 
@@ -12,4 +13,5 @@ type SpaceGRPC struct {
 	spacev1.UnimplementedSpaceServiceServer
 	Store       *store.SpaceStore
 	SpaceEvents spaceevents.Publisher // optional; CreateSpace publishes space.created
+	Roles       rolev1.RoleServiceClient
 }

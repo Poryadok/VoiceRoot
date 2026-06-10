@@ -230,6 +230,7 @@ message SpaceMembership {
   string profile_id = 2;
   google.protobuf.Timestamp joined_at = 3;
   optional string nickname = 4;
+  repeated string role_names = 5;
 }
 
 message JoinSpaceRequest {

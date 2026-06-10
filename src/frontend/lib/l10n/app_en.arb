@@ -356,6 +356,39 @@
       "message": { "type": "String" }
     }
   },
+  "spaceMembersTooltip": "Space members",
+  "spaceMembersTitle": "Members",
+  "spaceMembersSubtitle": "Owners and admins can assign roles and remove members.",
+  "spaceMembersLoadError": "Could not load members",
+  "spaceMemberYou": "{name} (you)",
+  "@spaceMemberYou": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "spaceKick": "Remove",
+  "spaceKickConfirmTitle": "Remove member?",
+  "spaceKickConfirmMessage": "Remove {name} from this space?",
+  "@spaceKickConfirmMessage": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "spaceKickError": "Could not remove member: {message}",
+  "@spaceKickError": {
+    "placeholders": {
+      "message": { "type": "String" }
+    }
+  },
+  "spaceAssignRole": "Assign role",
+  "spaceAssignRoleTitle": "Assign role",
+  "spaceAssignRoleEmpty": "No assignable roles",
+  "spaceAssignRoleError": "Could not assign role: {message}",
+  "@spaceAssignRoleError": {
+    "placeholders": {
+      "message": { "type": "String" }
+    }
+  },
   "chatGroupMembersTooltip": "Group members",
   "chatGroupMembersTitle": "Members",
   "chatGroupMembersSubtitle": "Owner can remove members. Members can leave the group.",

@@ -14,13 +14,16 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	grpcsvc "voice/backend/space/internal/grpcsvc"
 	"voice/backend/space/internal/spaceevents"
 	"voice/backend/space/internal/store"
+	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
 
+	rolev1 "voice.app/voice/role/v1"
 	spacev1 "voice.app/voice/space/v1"
 )
 
@@ -65,10 +68,21 @@ func main() {
 		if err != nil {
 			log.Fatalf("grpc listen: %v", err)
 		}
+		var roleClient rolev1.RoleServiceClient
+		if roleAddr := strings.TrimSpace(os.Getenv("ROLE_GRPC_ADDR")); roleAddr != "" {
+			rconn, err := grpc.NewClient(grpcclient.DialTarget(roleAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if err != nil {
+				log.Fatalf("role grpc dial: %v", err)
+			}
+			defer func() { _ = rconn.Close() }()
+			roleClient = rolev1.NewRoleServiceClient(rconn)
+		}
+
 		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger)...)
 		spacev1.RegisterSpaceServiceServer(grpcSrv, &grpcsvc.SpaceGRPC{
 			Store:       spaceStore,
 			SpaceEvents: spaceEvents,
+			Roles:       roleClient,
 		})
 		go func() {
 			logger.Info("gRPC listening", slog.String("addr", grpcListen))

@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"voice/backend/role/permissions"
 	"voice/backend/space/internal/authctx"
 	"voice/backend/space/internal/store"
 
@@ -78,7 +79,7 @@ func (s *SpaceGRPC) CreateInvite(ctx context.Context, req *spacev1.CreateInviteR
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireSpaceOwner(ctx, spaceID); err != nil {
+	if err := s.requireSpacePermission(ctx, spaceID, permissions.SpaceManageInvites); err != nil {
 		return nil, err
 	}
 	caller, ok := authctx.ProfileID(ctx)
@@ -206,7 +207,12 @@ func (s *SpaceGRPC) JoinByInvite(ctx context.Context, req *spacev1.JoinByInviteR
 	if err != nil {
 		return nil, mapInviteStoreErr(err)
 	}
-	return &spacev1.JoinByInviteResponse{SpaceMembership: membershipRowToProto(member)}, nil
+	if err := s.assignDefaultMemberRole(ctx, member.SpaceID, profileID); err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	protoMember := membershipRowToProto(member)
+	protoMember.RoleNames = s.memberRoleNames(ctx, member.SpaceID, profileID)
+	return &spacev1.JoinByInviteResponse{SpaceMembership: protoMember}, nil
 }
 
 func logInviteEventFailure(err error) {

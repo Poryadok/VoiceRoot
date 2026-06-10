@@ -665,6 +665,54 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get spaceMembersTooltip => 'Участники спейса';
+
+  @override
+  String get spaceMembersTitle => 'Участники';
+
+  @override
+  String get spaceMembersSubtitle =>
+      'Владелец и администраторы могут назначать роли и удалять участников.';
+
+  @override
+  String get spaceMembersLoadError => 'Не удалось загрузить участников';
+
+  @override
+  String spaceMemberYou(String name) {
+    return '$name (вы)';
+  }
+
+  @override
+  String get spaceKick => 'Удалить';
+
+  @override
+  String get spaceKickConfirmTitle => 'Удалить участника?';
+
+  @override
+  String spaceKickConfirmMessage(String name) {
+    return 'Удалить $name из спейса?';
+  }
+
+  @override
+  String spaceKickError(String message) {
+    return 'Не удалось удалить участника: $message';
+  }
+
+  @override
+  String get spaceAssignRole => 'Назначить роль';
+
+  @override
+  String get spaceAssignRoleTitle => 'Назначить роль';
+
+  @override
+  String get spaceAssignRoleEmpty => 'Нет доступных ролей';
+
+  @override
+  String spaceAssignRoleError(String message) {
+    return 'Не удалось назначить роль: $message';
+  }
+
+  @override
   String get chatGroupMembersTooltip => 'Участники группы';
 
   @override

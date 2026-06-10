@@ -661,6 +661,54 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get spaceMembersTooltip => 'Space members';
+
+  @override
+  String get spaceMembersTitle => 'Members';
+
+  @override
+  String get spaceMembersSubtitle =>
+      'Owners and admins can assign roles and remove members.';
+
+  @override
+  String get spaceMembersLoadError => 'Could not load members';
+
+  @override
+  String spaceMemberYou(String name) {
+    return '$name (you)';
+  }
+
+  @override
+  String get spaceKick => 'Remove';
+
+  @override
+  String get spaceKickConfirmTitle => 'Remove member?';
+
+  @override
+  String spaceKickConfirmMessage(String name) {
+    return 'Remove $name from this space?';
+  }
+
+  @override
+  String spaceKickError(String message) {
+    return 'Could not remove member: $message';
+  }
+
+  @override
+  String get spaceAssignRole => 'Assign role';
+
+  @override
+  String get spaceAssignRoleTitle => 'Assign role';
+
+  @override
+  String get spaceAssignRoleEmpty => 'No assignable roles';
+
+  @override
+  String spaceAssignRoleError(String message) {
+    return 'Could not assign role: $message';
+  }
+
+  @override
   String get chatGroupMembersTooltip => 'Group members';
 
   @override

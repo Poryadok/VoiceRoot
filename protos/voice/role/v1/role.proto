@@ -29,7 +29,17 @@ service RoleService {
 
   rpc CheckPermission(CheckPermissionRequest) returns (CheckPermissionResponse);
   rpc GetEffectivePermissions(GetEffectivePermissionsRequest) returns (GetEffectivePermissionsResponse);
+
+  // Called by Space Service after CreateSpace — seeds system roles and assigns Owner.
+  rpc BootstrapSpaceRoles(BootstrapSpaceRolesRequest) returns (BootstrapSpaceRolesResponse);
 }
+
+message BootstrapSpaceRolesRequest {
+  string space_id = 1;
+  string owner_profile_id = 2;
+}
+
+message BootstrapSpaceRolesResponse {}
 
 message Role {
   string id = 1;

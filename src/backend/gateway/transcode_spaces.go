@@ -72,6 +72,9 @@ func (t *transcoder) serveSpaces(w http.ResponseWriter, r *http.Request, rest st
 			if t.serveSpacesInvites(w, r, rest) {
 				return true
 			}
+			if t.serveSpacesMembers(w, r, rest) {
+				return true
+			}
 			return t.serveSpacesTree(w, r, rest)
 		}
 		return false

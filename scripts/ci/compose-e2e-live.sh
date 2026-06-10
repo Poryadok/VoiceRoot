@@ -32,5 +32,8 @@ flutter test --concurrency=1 \
   test/phase4_reactions_e2e_live_test.dart \
   test/phase4_in_app_notifications_e2e_live_test.dart \
   test/phase5_space_creation_e2e_live_test.dart \
+  test/phase5_space_tree_e2e_live_test.dart \
+  test/phase5_space_invites_e2e_live_test.dart \
+  test/phase5_space_roles_e2e_live_test.dart \
   --dart-define=VOICE_RUN_LIVE_INTEGRATION=true \
   --dart-define=VOICE_API_BASE_URL="${VOICE_API_BASE_URL}"

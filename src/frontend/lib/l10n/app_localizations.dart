@@ -1274,6 +1274,84 @@ abstract class AppLocalizations {
   /// **'Could not join space: {message}'**
   String spaceInviteJoinError(String message);
 
+  /// No description provided for @spaceMembersTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Space members'**
+  String get spaceMembersTooltip;
+
+  /// No description provided for @spaceMembersTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Members'**
+  String get spaceMembersTitle;
+
+  /// No description provided for @spaceMembersSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Owners and admins can assign roles and remove members.'**
+  String get spaceMembersSubtitle;
+
+  /// No description provided for @spaceMembersLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load members'**
+  String get spaceMembersLoadError;
+
+  /// No description provided for @spaceMemberYou.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} (you)'**
+  String spaceMemberYou(String name);
+
+  /// No description provided for @spaceKick.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get spaceKick;
+
+  /// No description provided for @spaceKickConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove member?'**
+  String get spaceKickConfirmTitle;
+
+  /// No description provided for @spaceKickConfirmMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove {name} from this space?'**
+  String spaceKickConfirmMessage(String name);
+
+  /// No description provided for @spaceKickError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not remove member: {message}'**
+  String spaceKickError(String message);
+
+  /// No description provided for @spaceAssignRole.
+  ///
+  /// In en, this message translates to:
+  /// **'Assign role'**
+  String get spaceAssignRole;
+
+  /// No description provided for @spaceAssignRoleTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Assign role'**
+  String get spaceAssignRoleTitle;
+
+  /// No description provided for @spaceAssignRoleEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No assignable roles'**
+  String get spaceAssignRoleEmpty;
+
+  /// No description provided for @spaceAssignRoleError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not assign role: {message}'**
+  String spaceAssignRoleError(String message);
+
   /// No description provided for @chatGroupMembersTooltip.
   ///
   /// In en, this message translates to:

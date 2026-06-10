@@ -7,6 +7,7 @@ import 'backend/auth_session_storage.dart';
 import 'backend/discover_hint_storage.dart';
 import 'bootstrap/voice_app_bootstrap.dart';
 import 'state/auth_providers.dart';
+import 'state/space_providers.dart';
 import 'theme/profile_accent_storage.dart';
 import 'theme/voice_theme_providers.dart';
 
@@ -25,6 +26,9 @@ Future<void> main() async {
         ),
         profileAccentStorageProvider.overrideWithValue(
           SharedPreferencesProfileAccentStorage(prefs),
+        ),
+        spaceViewerProfileIdProvider.overrideWith(
+          (ref) => ref.watch(authControllerProvider).activeProfileId,
         ),
       ],
       child: const VoiceAppBootstrap(),

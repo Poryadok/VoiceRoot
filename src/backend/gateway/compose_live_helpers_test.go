@@ -1208,3 +1208,119 @@ func sendComposeMessageWithAttachmentsJSON(
 	require.NotEmpty(t, parsed.Message.ID)
 	return parsed.Message.ID
 }
+
+type composeSpaceRole struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+func listComposeSpaceRoles(t *testing.T, client *http.Client, base, accessToken, spaceID string) []composeSpaceRole {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, base+"/api/v1/roles?space_id="+spaceID, nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "GET roles body=%s", string(body))
+
+	var parsed struct {
+		RoleList struct {
+			Roles []composeSpaceRole `json:"roles"`
+		} `json:"role_list"`
+	}
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	return parsed.RoleList.Roles
+}
+
+func getComposeMemberRoles(t *testing.T, client *http.Client, base, accessToken, spaceID, profileID string) []string {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, base+"/api/v1/roles/members?space_id="+spaceID+"&profile_id="+profileID, nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "GET member roles body=%s", string(body))
+
+	var parsed struct {
+		RoleList struct {
+			Roles []struct {
+				Name string `json:"name"`
+			} `json:"roles"`
+		} `json:"role_list"`
+	}
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	var names []string
+	for _, r := range parsed.RoleList.Roles {
+		names = append(names, r.Name)
+	}
+	return names
+}
+
+type composeSpaceMember struct {
+	ProfileID string   `json:"profile_id"`
+	RoleNames []string `json:"role_names"`
+}
+
+func listComposeSpaceMembers(t *testing.T, client *http.Client, base, accessToken, spaceID string) []composeSpaceMember {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, base+"/api/v1/spaces/"+spaceID+"/members", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "GET space members body=%s", string(body))
+
+	var parsed struct {
+		SpaceMemberList struct {
+			Members []composeSpaceMember `json:"members"`
+		} `json:"space_member_list"`
+	}
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	return parsed.SpaceMemberList.Members
+}
+
+func createComposeSpaceInviteStatus(t *testing.T, client *http.Client, base, accessToken, spaceID string) int {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/spaces/"+spaceID+"/invites", bytes.NewReader([]byte("{}")))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	_, _ = io.ReadAll(resp.Body)
+	return resp.StatusCode
+}
+
+func assignComposeSpaceRole(t *testing.T, client *http.Client, base, accessToken, spaceID, profileID, roleName string) {
+	t.Helper()
+	roles := listComposeSpaceRoles(t, client, base, accessToken, spaceID)
+	var roleID string
+	for _, r := range roles {
+		if r.Name == roleName {
+			roleID = r.ID
+		}
+	}
+	require.NotEmpty(t, roleID, "role %q not found", roleName)
+	payload, err := json.Marshal(map[string]string{
+		"space_id":   spaceID,
+		"profile_id": profileID,
+		"role_id":    roleID,
+	})
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/roles/assign", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "POST assign role body=%s", string(body))
+}

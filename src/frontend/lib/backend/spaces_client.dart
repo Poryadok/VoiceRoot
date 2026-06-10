@@ -152,6 +152,29 @@ class SpaceMembershipData {
   final String? nickname;
 }
 
+class SpaceMemberRosterEntry {
+  const SpaceMemberRosterEntry({
+    required this.profileId,
+    required this.roleNames,
+    required this.joinedAt,
+    this.nickname,
+  });
+
+  final String profileId;
+  final List<String> roleNames;
+  final DateTime joinedAt;
+  final String? nickname;
+
+  bool get isOwner => roleNames.contains('Owner');
+}
+
+class SpaceMemberListData {
+  const SpaceMemberListData({required this.members, this.nextCursor});
+
+  final List<SpaceMemberRosterEntry> members;
+  final String? nextCursor;
+}
+
 class SpaceTreeData {
   const SpaceTreeData({
     required this.categories,
@@ -383,6 +406,42 @@ class VoiceSpacesClient {
     );
   }
 
+  Future<SpacesApiResult<SpaceMemberListData>> listMembers({
+    required String authorization,
+    required String spaceId,
+    String? cursor,
+    int? pageSize,
+  }) async {
+    final params = <String, String>{};
+    if (cursor != null && cursor.isNotEmpty) params['cursor'] = cursor;
+    if (pageSize != null) params['page_size'] = '$pageSize';
+    final uri = _gateway.replace(
+      path: '/api/v1/spaces/$spaceId/members',
+      queryParameters: params.isEmpty ? null : params,
+    );
+    final result = await _gateway.getJson(uri, authorization: authorization);
+    return _mapJson(result, spaceMemberListFromJson);
+  }
+
+  Future<SpacesApiResult<void>> kickMember({
+    required String authorization,
+    required String spaceId,
+    required String profileId,
+  }) async {
+    final result = await _gateway.deleteEmpty(
+      uri: _gateway.resolve('/api/v1/spaces/$spaceId/members/$profileId'),
+      authorization: authorization,
+    );
+    return switch (result) {
+      GatewayHttpOk() => const SpacesApiOk(null),
+      GatewayHttpFailure(:final error) => SpacesApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
+  }
+
   Future<SpacesApiResult<SpaceTreeNodeData>> createSpaceChat({
     required String authorization,
     required String spaceId,
@@ -414,4 +473,66 @@ class VoiceSpacesClient {
       ),
     };
   }
+
+  SpacesApiResult<T> _mapJson<T>(
+    GatewayHttpResult<Map<String, dynamic>> result,
+    T Function(Map<String, dynamic> data) parse,
+  ) {
+    return switch (result) {
+      GatewayHttpOk(:final data) => SpacesApiOk(parse(data)),
+      GatewayHttpFailure(:final error) => SpacesApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
+  }
+}
+
+SpaceMemberListData spaceMemberListFromJson(Map<String, dynamic> data) {
+  final list = data['space_member_list'];
+  if (list is! Map<String, dynamic>) {
+    return const SpaceMemberListData(members: []);
+  }
+  final rawMembers = list['members'];
+  final members = <SpaceMemberRosterEntry>[];
+  if (rawMembers is List) {
+    for (final item in rawMembers) {
+      if (item is! Map<String, dynamic>) continue;
+      final roleNames = item['role_names'];
+      members.add(
+        SpaceMemberRosterEntry(
+          profileId: item['profile_id'] as String? ?? '',
+          roleNames: roleNames is List
+              ? roleNames.whereType<String>().toList(growable: false)
+              : const [],
+          joinedAt: _spaceMemberJoinedAtFromJson(item['joined_at']) ??
+              DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+          nickname: item['nickname'] as String?,
+        ),
+      );
+    }
+  }
+  final nextCursor = list['next_cursor'] as String?;
+  return SpaceMemberListData(
+    members: members,
+    nextCursor: nextCursor == null || nextCursor.isEmpty ? null : nextCursor,
+  );
+}
+
+DateTime? _spaceMemberJoinedAtFromJson(dynamic raw) {
+  if (raw is String && raw.isNotEmpty) {
+    return DateTime.tryParse(raw);
+  }
+  if (raw is Map<String, dynamic>) {
+    final seconds = raw['seconds'];
+    if (seconds is num) {
+      final nanos = (raw['nanos'] as num?)?.toInt() ?? 0;
+      return DateTime.fromMillisecondsSinceEpoch(
+        seconds.toInt() * 1000 + (nanos ~/ 1000000),
+        isUtc: true,
+      );
+    }
+  }
+  return null;
 }

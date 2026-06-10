@@ -1,12 +1,20 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../backend/api_errors.dart';
+import '../backend/roles_client.dart';
 import '../backend/spaces_client.dart';
 import 'auth_providers.dart';
 
 final voiceSpacesClientProvider = Provider<VoiceSpacesClient>((ref) {
   return VoiceSpacesClient(gateway: ref.watch(gatewayHttpClientProvider));
 });
+
+final voiceRolesClientProvider = Provider<VoiceRolesClient>((ref) {
+  return VoiceRolesClient(gateway: ref.watch(gatewayHttpClientProvider));
+});
+
+/// Active profile for space member UI; override in tests. Wired from auth in [VoiceApp].
+final spaceViewerProfileIdProvider = Provider<String?>((ref) => null);
 
 final _mySpacesRefreshTokenProvider = StateProvider<int>((ref) => 0);
 
@@ -250,3 +258,138 @@ class SpaceInviteActions {
 final spaceInviteActionsProvider = Provider<SpaceInviteActions>((ref) {
   return SpaceInviteActions(ref);
 });
+
+/// Space member roster with [SpaceMemberRosterEntry.roleNames] from `GET /api/v1/spaces/{id}/members`.
+final spaceMembersProvider =
+    FutureProvider.family<List<SpaceMemberRosterEntry>, String>((
+  ref,
+  spaceId,
+) async {
+  final auth = ref.watch(authorizationHeaderProvider);
+  if (auth == null) {
+    throw StateError('not_authenticated');
+  }
+  final result = await ref
+      .read(voiceSpacesClientProvider)
+      .listMembers(authorization: auth, spaceId: spaceId);
+  return switch (result) {
+    SpacesApiOk(:final data) => data.members,
+    SpacesApiFailure(:final statusCode)
+        when isBackendUnavailable(statusCode) =>
+      throw const BackendUnavailableException(),
+    SpacesApiFailure(:final message) => throw Exception(message),
+  };
+});
+
+/// Role hierarchy for a space from `GET /api/v1/roles?space_id=`.
+final spaceRolesProvider = FutureProvider.family<List<SpaceRole>, String>((
+  ref,
+  spaceId,
+) async {
+  final auth = ref.watch(authorizationHeaderProvider);
+  if (auth == null) {
+    throw StateError('not_authenticated');
+  }
+  final result = await ref.read(voiceRolesClientProvider).listRoles(
+    authorization: auth,
+    spaceId: spaceId,
+  );
+  return switch (result) {
+    RolesApiOk(:final data) => data,
+    RolesApiFailure(:final statusCode)
+        when isBackendUnavailable(statusCode) =>
+      throw const BackendUnavailableException(),
+    RolesApiFailure(:final message) => throw Exception(message),
+  };
+});
+
+class SpaceMemberActions {
+  SpaceMemberActions(this._ref);
+
+  final Ref _ref;
+
+  Future<String?> kickMember({
+    required String spaceId,
+    required String profileId,
+  }) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+
+    final result = await _ref.read(voiceSpacesClientProvider).kickMember(
+      authorization: auth,
+      spaceId: spaceId,
+      profileId: profileId,
+    );
+    return switch (result) {
+      SpacesApiFailure(:final message) => message,
+      SpacesApiOk() => () {
+        _ref.invalidate(spaceMembersProvider(spaceId));
+        return null;
+      }(),
+    };
+  }
+
+  Future<String?> assignRole({
+    required String spaceId,
+    required String profileId,
+    required String roleId,
+  }) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+
+    final result = await _ref.read(voiceRolesClientProvider).assignRole(
+      authorization: auth,
+      spaceId: spaceId,
+      profileId: profileId,
+      roleId: roleId,
+    );
+    return switch (result) {
+      RolesApiFailure(:final message) => message,
+      RolesApiOk() => () {
+        _ref.invalidate(spaceMembersProvider(spaceId));
+        return null;
+      }(),
+    };
+  }
+
+  Future<String?> revokeRole({
+    required String spaceId,
+    required String profileId,
+    required String roleId,
+  }) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+
+    final result = await _ref.read(voiceRolesClientProvider).revokeRole(
+      authorization: auth,
+      spaceId: spaceId,
+      profileId: profileId,
+      roleId: roleId,
+    );
+    return switch (result) {
+      RolesApiFailure(:final message) => message,
+      RolesApiOk() => () {
+        _ref.invalidate(spaceMembersProvider(spaceId));
+        return null;
+      }(),
+    };
+  }
+}
+
+final spaceMemberActionsProvider = Provider<SpaceMemberActions>((ref) {
+  return SpaceMemberActions(ref);
+});
+
+bool viewerCanManageSpaceMembers(
+  List<SpaceMemberRosterEntry> members,
+  String? activeProfileId,
+) {
+  if (activeProfileId == null) return true;
+  for (final member in members) {
+    if (member.profileId != activeProfileId) continue;
+    return member.roleNames.any(
+      (role) => role == kSpaceRoleOwner || role == kSpaceRoleAdmin,
+    );
+  }
+  return false;
+}

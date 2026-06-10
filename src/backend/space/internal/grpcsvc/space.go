@@ -32,6 +32,9 @@ func (s *SpaceGRPC) CreateSpace(ctx context.Context, req *spacev1.CreateSpaceReq
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+	if err := s.bootstrapSpaceRoles(ctx, row.ID, caller); err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
 	if s.SpaceEvents != nil {
 		if err := s.SpaceEvents.PublishSpaceCreated(ctx, row.ID.String(), row.OwnerProfileID.String()); err != nil {
 			log.Printf("space: publish space.created: %v", err)

@@ -165,6 +165,43 @@ class GatewayHttpClient {
     );
   }
 
+  Future<GatewayHttpResult<Map<String, dynamic>>> getJson(
+    Uri uri, {
+    String? authorization,
+  }) {
+    return _sendJsonMap(
+      (preferProvider) => _http.get(
+        uri,
+        headers: _headers(
+          authorization: authorization,
+          preferProvider: preferProvider,
+        ),
+      ),
+      isAuthRoute: _isAuthRoute(uri),
+    );
+  }
+
+  Future<GatewayHttpResult<Map<String, dynamic>>> postJson({
+    required Uri uri,
+    String? authorization,
+    required Map<String, dynamic> body,
+    bool allowNoContent = false,
+  }) {
+    return _sendJsonMap(
+      (preferProvider) => _http.post(
+        uri,
+        headers: _headers(
+          authorization: authorization,
+          json: true,
+          preferProvider: preferProvider,
+        ),
+        body: jsonEncode(body),
+      ),
+      isAuthRoute: _isAuthRoute(uri),
+      allowNoContent: allowNoContent,
+    );
+  }
+
   Future<GatewayHttpResult<void>> putBytes({
     required Uri uri,
     required Map<String, String> headers,
@@ -204,20 +241,20 @@ class GatewayHttpClient {
         _onUpgradeRequired?.call(err);
         return GatewayHttpFailure(err);
       }
-      if (response.statusCode == 401 &&
-          !retried &&
-          !isAuthRoute &&
-          _onUnauthorized != null) {
-        final refreshed = await _onUnauthorized!();
-        if (refreshed) {
-          return _send(
+      if (response.statusCode == 401 && !retried && !isAuthRoute) {
+        final onUnauthorized = _onUnauthorized;
+        if (onUnauthorized != null) {
+          final refreshed = await onUnauthorized();
+          if (refreshed) {
+            return _send(
             send,
             createEmpty: createEmpty,
             allowNotFound: allowNotFound,
             allowNoContent: allowNoContent,
             isAuthRoute: isAuthRoute,
             retried: true,
-          );
+            );
+          }
         }
       }
       if (response.statusCode == 404 && allowNotFound) {
@@ -244,6 +281,68 @@ class GatewayHttpClient {
     }
   }
 
+  Future<GatewayHttpResult<Map<String, dynamic>>> _sendJsonMap(
+    Future<http.Response> Function(bool preferProvider) send, {
+    required bool isAuthRoute,
+    bool allowNoContent = false,
+    bool retried = false,
+  }) async {
+    if (!_config.hasBaseUrl) {
+      return const GatewayHttpFailure(missingBaseUrl);
+    }
+    try {
+      final response = await send(retried);
+      if (response.statusCode == 426) {
+        final err = GatewayApiError.fromResponse(response)!;
+        _onUpgradeRequired?.call(err);
+        return GatewayHttpFailure(err);
+      }
+      if (response.statusCode == 401 && !retried && !isAuthRoute) {
+        final onUnauthorized = _onUnauthorized;
+        if (onUnauthorized != null) {
+          final refreshed = await onUnauthorized();
+          if (refreshed) {
+            return _sendJsonMap(
+            send,
+            isAuthRoute: isAuthRoute,
+            allowNoContent: allowNoContent,
+            retried: true,
+            );
+          }
+        }
+      }
+      if (response.statusCode == 204 && allowNoContent) {
+        return const GatewayHttpOk(<String, dynamic>{});
+      }
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final raw = _responseBodyUtf8(response);
+        if (raw.trim().isEmpty) {
+          return const GatewayHttpOk(<String, dynamic>{});
+        }
+        final decoded = jsonDecode(raw);
+        if (decoded is Map<String, dynamic>) {
+          return GatewayHttpOk(decoded);
+        }
+        return GatewayHttpFailure(
+          GatewayApiError(
+            errorCode: 'invalid_response',
+            message: 'expected JSON object',
+            statusCode: response.statusCode,
+          ),
+        );
+      }
+      return GatewayHttpFailure(GatewayApiError.fromResponse(response)!);
+    } catch (e) {
+      return GatewayHttpFailure(
+        GatewayApiError(
+          errorCode: 'network_error',
+          message: '$e',
+          statusCode: 0,
+        ),
+      );
+    }
+  }
+
   Future<GatewayHttpResult<void>> _sendVoid(
     Future<http.Response> Function(bool preferProvider) send, {
     required bool isAuthRoute,
@@ -259,13 +358,13 @@ class GatewayHttpClient {
         _onUpgradeRequired?.call(err);
         return GatewayHttpFailure(err);
       }
-      if (response.statusCode == 401 &&
-          !retried &&
-          !isAuthRoute &&
-          _onUnauthorized != null) {
-        final refreshed = await _onUnauthorized!();
-        if (refreshed) {
-          return _sendVoid(send, isAuthRoute: isAuthRoute, retried: true);
+      if (response.statusCode == 401 && !retried && !isAuthRoute) {
+        final onUnauthorized = _onUnauthorized;
+        if (onUnauthorized != null) {
+          final refreshed = await onUnauthorized();
+          if (refreshed) {
+            return _sendVoid(send, isAuthRoute: isAuthRoute, retried: true);
+          }
         }
       }
       if (response.statusCode >= 200 && response.statusCode < 300) {
