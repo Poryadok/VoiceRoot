@@ -230,6 +230,7 @@ services:
     environment:
       LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/messaging_db?sslmode=disable
+      CHAT_DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/chat_db?sslmode=disable
       MESSAGING_GRPC_LISTEN: :9090
       CHAT_GRPC_ADDR: chat:9090
       SOCIAL_GRPC_ADDR: social:9090

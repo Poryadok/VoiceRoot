@@ -491,9 +491,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
               onTap: () => Navigator.pop(ctx, '@here '),
             ),
             for (final id in memberIds)
-              ListTile(
-                title: Text(l10n.chatMentionMember(id)),
-                onTap: () => Navigator.pop(ctx, '@$id '),
+              _MentionMemberTile(
+                profileId: id,
+                onPick: () => Navigator.pop(ctx, '@$id '),
               ),
           ],
         ),
@@ -1185,6 +1185,22 @@ class _PinnedMessagesBar extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _MentionMemberTile extends ConsumerWidget {
+  const _MentionMemberTile({required this.profileId, required this.onPick});
+
+  final String profileId;
+  final VoidCallback onPick;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context)!;
+    final profile = ref.watch(profileProvider(profileId)).valueOrNull;
+    final label =
+        profile?.displayName ?? profile?.handle ?? l10n.chatMentionMember(profileId);
+    return ListTile(title: Text(label), onTap: onPick);
   }
 }
 

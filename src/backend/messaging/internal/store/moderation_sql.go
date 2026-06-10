@@ -15,10 +15,44 @@ var (
 	ErrSlowModeActive = errors.New("slow mode active")
 )
 
-// SQLModerationGuard enforces space timeouts and chat slow mode using shared chat_db tables.
-// space_member_timeouts lives in space_db in production; integration tests apply both schemas to one Postgres.
+// SQLModerationGuard enforces space timeouts and chat slow mode.
+// ChatMeta reads chat_db; LastSenderMessageAt reads messaging_db; timeouts read space_db when configured.
+// Integration tests may point all pools at one merged schema; production uses separate URLs.
 type SQLModerationGuard struct {
-	Pool *pgxpool.Pool
+	Pool      *pgxpool.Pool // legacy single-DB tests
+	ChatPool  *pgxpool.Pool
+	MsgPool   *pgxpool.Pool
+	SpacePool *pgxpool.Pool
+}
+
+func (g *SQLModerationGuard) chatPool() *pgxpool.Pool {
+	if g != nil && g.ChatPool != nil {
+		return g.ChatPool
+	}
+	if g != nil {
+		return g.Pool
+	}
+	return nil
+}
+
+func (g *SQLModerationGuard) msgPool() *pgxpool.Pool {
+	if g != nil && g.MsgPool != nil {
+		return g.MsgPool
+	}
+	if g != nil {
+		return g.Pool
+	}
+	return nil
+}
+
+func (g *SQLModerationGuard) spacePool() *pgxpool.Pool {
+	if g != nil && g.SpacePool != nil {
+		return g.SpacePool
+	}
+	if g != nil {
+		return g.Pool
+	}
+	return nil
 }
 
 type ChatModerationMeta struct {
@@ -28,11 +62,12 @@ type ChatModerationMeta struct {
 
 func (g *SQLModerationGuard) ChatMeta(ctx context.Context, chatID uuid.UUID) (ChatModerationMeta, error) {
 	var meta ChatModerationMeta
-	if g == nil || g.Pool == nil {
+	pool := g.chatPool()
+	if g == nil || pool == nil {
 		return meta, nil
 	}
 	var spaceID *uuid.UUID
-	err := g.Pool.QueryRow(ctx, `
+	err := pool.QueryRow(ctx, `
 SELECT space_id, slow_mode_seconds FROM chats WHERE id = $1
 `, chatID).Scan(&spaceID, &meta.SlowModeSeconds)
 	if err != nil {
@@ -43,11 +78,12 @@ SELECT space_id, slow_mode_seconds FROM chats WHERE id = $1
 }
 
 func (g *SQLModerationGuard) IsTimedOut(ctx context.Context, spaceID, profileID uuid.UUID) (bool, error) {
-	if g == nil || g.Pool == nil {
+	pool := g.spacePool()
+	if g == nil || pool == nil {
 		return false, nil
 	}
 	var until time.Time
-	err := g.Pool.QueryRow(ctx, `
+	err := pool.QueryRow(ctx, `
 SELECT timed_out_until FROM space_member_timeouts
 WHERE space_id = $1 AND profile_id = $2
 `, spaceID, profileID).Scan(&until)
@@ -61,11 +97,12 @@ WHERE space_id = $1 AND profile_id = $2
 }
 
 func (g *SQLModerationGuard) LastSenderMessageAt(ctx context.Context, chatID, profileID uuid.UUID) (*time.Time, error) {
-	if g == nil || g.Pool == nil {
+	pool := g.msgPool()
+	if g == nil || pool == nil {
 		return nil, nil
 	}
 	var at time.Time
-	err := g.Pool.QueryRow(ctx, `
+	err := pool.QueryRow(ctx, `
 SELECT created_at FROM messages
 WHERE chat_id = $1 AND sender_profile_id = $2
 ORDER BY created_at DESC

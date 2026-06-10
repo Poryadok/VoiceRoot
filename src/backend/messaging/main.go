@@ -73,6 +73,18 @@ func main() {
 		}
 		defer pool.Close()
 
+		var chatMetaPool *pgxpool.Pool
+		if chatDB := strings.TrimSpace(os.Getenv("CHAT_DATABASE_URL")); chatDB != "" {
+			cctx, ccancel := context.WithTimeout(context.Background(), 15*time.Second)
+			cp, err := pgxpool.New(cctx, chatDB)
+			ccancel()
+			if err != nil {
+				log.Fatalf("chat postgres: %v", err)
+			}
+			chatMetaPool = cp
+			defer chatMetaPool.Close()
+		}
+
 		var chatGuard grpcsvc.ChatGuard
 		if chatAddr := strings.TrimSpace(os.Getenv("CHAT_GRPC_ADDR")); chatAddr != "" {
 			cconn, err := grpc.NewClient(grpcclient.DialTarget(chatAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -87,20 +99,10 @@ func main() {
 			}
 			waitCancel()
 			chatGuard = s2s.NewGRPCChatGuard(chatv1.NewChatServiceClient(cconn))
+		} else if chatMetaPool != nil {
+			chatGuard = &store.SQLChatGuard{Pool: chatMetaPool}
 		} else {
-			chatDB := strings.TrimSpace(os.Getenv("CHAT_DATABASE_URL"))
-			if chatDB != "" {
-				cctx, ccancel := context.WithTimeout(context.Background(), 15*time.Second)
-				chatPool, err := pgxpool.New(cctx, chatDB)
-				ccancel()
-				if err != nil {
-					log.Fatalf("chat postgres: %v", err)
-				}
-				defer chatPool.Close()
-				chatGuard = &store.SQLChatGuard{Pool: chatPool}
-			} else {
-				chatGuard = &store.SQLChatGuard{Pool: pool}
-			}
+			chatGuard = &store.SQLChatGuard{Pool: pool}
 		}
 
 		var blocks grpcsvc.AccountPairBlockChecker
@@ -198,8 +200,18 @@ func main() {
 			UserProfiles:     profiles,
 			Files:            files,
 			MessageEvents:    msgEvents,
-			Moderation:       &store.SQLModerationGuard{Pool: pool},
-			ChatMentionsMeta: &store.SQLChatMentionsMeta{Pool: pool},
+			Moderation: &store.SQLModerationGuard{
+				Pool:     pool,
+				ChatPool: chatMetaPool,
+				MsgPool:  pool,
+			},
+			ChatMentionsMeta: func() *store.SQLChatMentionsMeta {
+				metaPool := pool
+				if chatMetaPool != nil {
+					metaPool = chatMetaPool
+				}
+				return &store.SQLChatMentionsMeta{Pool: metaPool}
+			}(),
 			RolePermissions:  rolePerms,
 			UserPresence:     userPresence,
 		})
