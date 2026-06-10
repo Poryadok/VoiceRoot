@@ -44,7 +44,7 @@ void main() {
       final invite = await chats.addGroupMembers(
         authorization: sender.authorizationHeader,
         chatId: group.id,
-        profileIds: [member.activeProfileId],
+        profileIds: [peer.activeProfileId, member.activeProfileId],
       );
       expect(invite, isA<ChatsApiOk<void>>());
 

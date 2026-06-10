@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -22,8 +21,6 @@ func TestMessagingAddReaction_persistsEmoji(t *testing.T) {
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
-	applyReactionsSchemaForTest(t, ctx, pool)
-
 	chatID := uuid.New()
 	profA := uuid.New()
 	profB := uuid.New()
@@ -63,8 +60,6 @@ func TestMessagingAddReaction_idempotentForSameUser(t *testing.T) {
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
-	applyReactionsSchemaForTest(t, ctx, pool)
-
 	chatID := uuid.New()
 	profA := uuid.New()
 	profB := uuid.New()
@@ -102,8 +97,6 @@ func TestMessagingAddReaction_aggregatesCounts(t *testing.T) {
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
-	applyReactionsSchemaForTest(t, ctx, pool)
-
 	chatID := uuid.New()
 	profA := uuid.New()
 	profB := uuid.New()
@@ -148,8 +141,6 @@ func TestMessagingRemoveReaction_clearsReaction(t *testing.T) {
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
-	applyReactionsSchemaForTest(t, ctx, pool)
-
 	chatID := uuid.New()
 	profA := uuid.New()
 	profB := uuid.New()
@@ -189,8 +180,6 @@ func TestMessagingAddReaction_nonMemberDenied(t *testing.T) {
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
-	applyReactionsSchemaForTest(t, ctx, pool)
-
 	chatID := uuid.New()
 	profA := uuid.New()
 	profB := uuid.New()
@@ -212,17 +201,3 @@ func TestMessagingAddReaction_nonMemberDenied(t *testing.T) {
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
-func applyReactionsSchemaForTest(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
-	t.Helper()
-	_, err := pool.Exec(ctx, `
-CREATE TABLE IF NOT EXISTS reactions (
-    message_id UUID NOT NULL,
-    profile_id UUID NOT NULL,
-    emoji TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (message_id, profile_id, emoji)
-);
-CREATE INDEX IF NOT EXISTS reactions_message_id_emoji_idx ON reactions (message_id, emoji);
-`)
-	require.NoError(t, err)
-}

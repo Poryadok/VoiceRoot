@@ -122,6 +122,39 @@ func (t *transcoder) serveMessages(w http.ResponseWriter, r *http.Request, rest 
 		writeProtoJSON(w, http.StatusOK, resp)
 		return true
 
+	case r.Method == http.MethodPost && strings.HasSuffix(rest, "/reactions"):
+		msgID := strings.TrimSuffix(rest, "/reactions")
+		msgID = strings.Trim(msgID, "/")
+		req := &messagingv1.AddReactionRequest{MessageId: msgID}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		if req.MessageId == "" {
+			req.MessageId = msgID
+		}
+		_, err := t.clients.messaging.AddReaction(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return true
+
+	case r.Method == http.MethodDelete && strings.HasSuffix(rest, "/reactions"):
+		msgID := strings.TrimSuffix(rest, "/reactions")
+		msgID = strings.Trim(msgID, "/")
+		_, err := t.clients.messaging.RemoveReaction(ctx, &messagingv1.RemoveReactionRequest{
+			MessageId: msgID,
+			Emoji:     queryFirst(r, "emoji"),
+		})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return true
+
 	case r.Method == http.MethodGet && rest == "read-state":
 		resp, err := t.clients.messaging.GetReadState(ctx, &messagingv1.GetReadStateRequest{
 			Chat: &chatv1.ChatRef{Id: queryFirst(r, "chat_id")},

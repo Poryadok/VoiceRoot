@@ -1,6 +1,6 @@
 -- messaging_db v1 — keep in sync with src/backend/migrations/messaging_db/000001_init.up.sql
 -- 000002_client_message_id.up.sql, 000003_attachment_only_messages.up.sql,
--- and 000004_delete_for_me.up.sql
+-- 000004_delete_for_me.up.sql, and 000005_reactions.up.sql
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TABLE messages (
@@ -51,3 +51,13 @@ CREATE TABLE message_hides (
 
 CREATE INDEX message_hides_profile_id_idx
     ON message_hides (profile_id, hidden_at DESC);
+
+CREATE TABLE IF NOT EXISTS reactions (
+    message_id UUID NOT NULL,
+    profile_id UUID NOT NULL,
+    emoji TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (message_id, profile_id, emoji)
+);
+
+CREATE INDEX IF NOT EXISTS reactions_message_id_emoji_idx ON reactions (message_id, emoji);

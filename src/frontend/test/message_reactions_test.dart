@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,6 +15,7 @@ import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/chat/chat_room_panel.dart';
 
 import 'support/auth_test_overrides.dart';
+import 'support/gateway_test_client.dart';
 import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
 
@@ -62,7 +62,7 @@ void main() {
       reactionsTestApp(
         client: MockClient((req) async {
           if (req.url.path == '/api/v1/messages') {
-            return http.Response(
+            return utf8JsonResponse(
               jsonEncode({
                 'message_list': {
                   'messages': [
@@ -71,12 +71,15 @@ void main() {
                       'chat': {'id': 'chat-abc'},
                       'sender_profile_id': 'profile-b',
                       'content': 'React here',
+                      'reactions_json': jsonEncode([
+                        {'emoji': '👍', 'count': 2, 'reacted_by_me': false},
+                        {'emoji': '🔥', 'count': 1, 'reacted_by_me': false},
+                      ]),
                       'created_at': '2024-01-01T00:00:00Z',
                     },
                   ],
                 },
               }),
-              200,
             );
           }
           if (req.url.path == '/api/v1/messages/read') {
@@ -111,7 +114,7 @@ void main() {
       reactionsTestApp(
         client: MockClient((req) async {
           if (req.url.path == '/api/v1/messages') {
-            return http.Response(
+            return utf8JsonResponse(
               jsonEncode({
                 'message_list': {
                   'messages': [
@@ -120,12 +123,14 @@ void main() {
                       'chat': {'id': 'chat-abc'},
                       'sender_profile_id': 'profile-b',
                       'content': 'Tap react',
+                      'reactions_json': jsonEncode([
+                        {'emoji': '👍', 'count': 1, 'reacted_by_me': false},
+                      ]),
                       'created_at': '2024-01-01T00:00:00Z',
                     },
                   ],
                 },
               }),
-              200,
             );
           }
           if (req.url.path == '/api/v1/messages/msg-1/reactions' &&

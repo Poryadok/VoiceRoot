@@ -58,6 +58,14 @@ func (s *spyMessageEvents) PublishMessageRead(_ context.Context, messageID, chat
 	return nil
 }
 
+func (s *spyMessageEvents) PublishReactionAdded(_ context.Context, messageID, chatID, profileID, emoji string) error {
+	return nil
+}
+
+func (s *spyMessageEvents) PublishReactionRemoved(_ context.Context, messageID, chatID, profileID, emoji string) error {
+	return nil
+}
+
 func (s *spyMessageEvents) snapshot() (sent [][3]string, edited [][2]string, deleted [][2]string, read [][3]string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

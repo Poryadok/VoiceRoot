@@ -483,6 +483,21 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           if (chatId == this.chatId) {
             unawaited(loadInitial());
           }
+        } else if (frame.op == 'reaction_add' || frame.op == 'reaction_remove') {
+          final chatId = frame.data?['chat_id'] as String?;
+          if (chatId != this.chatId) return;
+          final profileId = frame.data?['profile_id'] as String?;
+          final activeProfile = _ref.read(authControllerProvider).activeProfileId;
+          if (profileId == activeProfile) return;
+          final messageId = frame.data?['message_id'] as String?;
+          final emoji = frame.data?['emoji'] as String?;
+          if (messageId == null || emoji == null || emoji.isEmpty) return;
+          _applyReactionDelta(
+            messageId: messageId,
+            emoji: emoji,
+            add: frame.op == 'reaction_add',
+            reactedByMe: false,
+          );
         }
       });
     });
@@ -680,6 +695,100 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       MessagesApiOk(:final data) => _replaceMessage(data),
       MessagesApiFailure(:final message) => message,
     };
+  }
+
+  Future<String?> toggleReaction(
+    String messageId,
+    String emoji, {
+    required bool currentlyReacted,
+  }) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+    _applyReactionDelta(
+      messageId: messageId,
+      emoji: emoji,
+      add: !currentlyReacted,
+      reactedByMe: !currentlyReacted,
+    );
+    final client = _ref.read(voiceMessagesClientProvider);
+    final result = currentlyReacted
+        ? await client.removeReaction(
+            authorization: auth,
+            messageId: messageId,
+            emoji: emoji,
+          )
+        : await client.addReaction(
+            authorization: auth,
+            messageId: messageId,
+            emoji: emoji,
+          );
+    if (!mounted) return null;
+    switch (result) {
+      case MessagesApiOk<void>():
+        return null;
+      case MessagesApiFailure(:final message):
+        unawaited(loadInitial());
+        state = state.copyWith(errorMessage: message);
+        return message;
+    }
+  }
+
+  Future<String?> addReaction(String messageId, String emoji) async {
+    final existing = state.messages
+        .where((m) => m.id == messageId)
+        .map((m) => m.reactions.where((r) => r.emoji == emoji).firstOrNull)
+        .firstOrNull;
+    return toggleReaction(
+      messageId,
+      emoji,
+      currentlyReacted: existing?.reactedByMe ?? false,
+    );
+  }
+
+  void _applyReactionDelta({
+    required String messageId,
+    required String emoji,
+    required bool add,
+    required bool reactedByMe,
+  }) {
+    state = state.copyWith(
+      messages: state.messages.map((message) {
+        if (message.id != messageId) return message;
+        final reactions = [...message.reactions];
+        final index = reactions.indexWhere((r) => r.emoji == emoji);
+        if (add) {
+          if (index >= 0) {
+            final current = reactions[index];
+            reactions[index] = MessageReaction(
+              emoji: emoji,
+              count: current.count + 1,
+              reactedByMe: current.reactedByMe || reactedByMe,
+            );
+          } else {
+            reactions.add(
+              MessageReaction(
+                emoji: emoji,
+                count: 1,
+                reactedByMe: reactedByMe,
+              ),
+            );
+          }
+        } else if (index >= 0) {
+          final current = reactions[index];
+          final nextCount = current.count - 1;
+          if (nextCount <= 0) {
+            reactions.removeAt(index);
+          } else {
+            reactions[index] = MessageReaction(
+              emoji: emoji,
+              count: nextCount,
+              reactedByMe: reactedByMe ? false : current.reactedByMe,
+            );
+          }
+        }
+        return message.copyWith(reactions: reactions);
+      }).toList(),
+    );
   }
 
   Future<String?> deleteMessage(String messageId, {required bool forMe}) async {

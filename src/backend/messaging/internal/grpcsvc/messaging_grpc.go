@@ -34,6 +34,7 @@ const (
 type MessagingGRPC struct {
 	messagingv1.UnimplementedMessagingServiceServer
 	Messages  *store.MessagesStore
+	Reactions *store.ReactionsStore
 	ChatGuard ChatGuard
 	// Blocks and UserProfiles are optional S2S gates for SendMessage (Social + User); both must be set to enforce.
 	Blocks       AccountPairBlockChecker
@@ -56,7 +57,7 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 	if err != nil {
 		return nil, err
 	}
-	if err := validateChatRefDM(req.GetChat()); err != nil {
+	if err := validateChatRefMessaging(req.GetChat()); err != nil {
 		return nil, err
 	}
 	if s.ChatGuard != nil {
@@ -136,7 +137,7 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 			log.Printf("messaging: publish message.sent: %v", err)
 		}
 	}
-	return &messagingv1.SendMessageResponse{Message: messageRowToProto(saved, kind)}, nil
+	return &messagingv1.SendMessageResponse{Message: messageRowToProto(saved, kind, "")}, nil
 }
 
 type messageAttachment struct {
@@ -209,6 +210,12 @@ func (s *MessagingGRPC) checkDMBlocksForSend(ctx context.Context, chatID, profil
 		if errors.Is(err, store.ErrNotChatMember) {
 			return status.Error(codes.PermissionDenied, "not a chat member")
 		}
+		if st, ok := status.FromError(err); ok && st.Code() == codes.FailedPrecondition {
+			return nil
+		}
+		if strings.Contains(err.Error(), "dm must have exactly two members") {
+			return nil
+		}
 		return status.Error(codes.Internal, err.Error())
 	}
 	peerAcct, err := s.UserProfiles.AccountIDByProfileID(ctx, peer)
@@ -277,7 +284,7 @@ func (s *MessagingGRPC) EditMessage(ctx context.Context, req *messagingv1.EditMe
 			log.Printf("messaging: publish message.edited: %v", err)
 		}
 	}
-	return &messagingv1.EditMessageResponse{Message: messageRowToProto(updated, messagingv1.MessageKind_MESSAGE_KIND_UNSPECIFIED)}, nil
+	return &messagingv1.EditMessageResponse{Message: messageRowToProto(updated, messagingv1.MessageKind_MESSAGE_KIND_UNSPECIFIED, "")}, nil
 }
 
 func (s *MessagingGRPC) DeleteMessage(ctx context.Context, req *messagingv1.DeleteMessageRequest) (*messagingv1.DeleteMessageResponse, error) {
@@ -470,9 +477,21 @@ func (s *MessagingGRPC) GetMessages(ctx context.Context, req *messagingv1.GetMes
 		rows = rows[:limit]
 	}
 
+	msgIDs := make([]uuid.UUID, len(rows))
+	for i := range rows {
+		msgIDs[i] = rows[i].ID
+	}
+	reactionsByMsg := map[uuid.UUID]string{}
+	if s.Reactions != nil && len(msgIDs) > 0 {
+		reactionsByMsg, err = s.Reactions.ReactionsJSONByMessageIDs(ctx, msgIDs, profileID)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+	}
+
 	msgs := make([]*messagingv1.Message, 0, len(rows))
 	for i := range rows {
-		msgs = append(msgs, messageRowToProto(&rows[i], messagingv1.MessageKind_MESSAGE_KIND_UNSPECIFIED))
+		msgs = append(msgs, messageRowToProto(&rows[i], messagingv1.MessageKind_MESSAGE_KIND_UNSPECIFIED, reactionsByMsg[rows[i].ID]))
 	}
 
 	next := ""
@@ -576,7 +595,83 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 		}
 	}
 	kind := messagingv1.MessageKind_MESSAGE_KIND_FORWARD
-	return &messagingv1.ForwardMessageResponse{Message: messageRowToProto(saved, kind)}, nil
+	return &messagingv1.ForwardMessageResponse{Message: messageRowToProto(saved, kind, "")}, nil
+}
+
+func (s *MessagingGRPC) AddReaction(ctx context.Context, req *messagingv1.AddReactionRequest) (*messagingv1.AddReactionResponse, error) {
+	chatID, err := s.mutateReaction(ctx, req.GetMessageId(), req.GetEmoji(), true)
+	if err != nil {
+		return nil, err
+	}
+	_ = chatID
+	return &messagingv1.AddReactionResponse{}, nil
+}
+
+func (s *MessagingGRPC) RemoveReaction(ctx context.Context, req *messagingv1.RemoveReactionRequest) (*messagingv1.RemoveReactionResponse, error) {
+	chatID, err := s.mutateReaction(ctx, req.GetMessageId(), req.GetEmoji(), false)
+	if err != nil {
+		return nil, err
+	}
+	_ = chatID
+	return &messagingv1.RemoveReactionResponse{}, nil
+}
+
+func (s *MessagingGRPC) mutateReaction(ctx context.Context, messageIDStr, emoji string, add bool) (uuid.UUID, error) {
+	if s == nil || s.Messages == nil || s.Reactions == nil {
+		return uuid.Nil, status.Error(codes.FailedPrecondition, "messaging persistence not configured")
+	}
+	profileID, ok := authctx.ProfileID(ctx)
+	if !ok {
+		return uuid.Nil, status.Error(codes.Unauthenticated, "missing profile")
+	}
+	messageID, err := parseUUIDField("message_id", messageIDStr)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	emoji = strings.TrimSpace(emoji)
+	if emoji == "" {
+		return uuid.Nil, status.Error(codes.InvalidArgument, "emoji is required")
+	}
+
+	msg, err := s.Messages.GetMessageByID(ctx, messageID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return uuid.Nil, status.Error(codes.NotFound, "message not found")
+		}
+		return uuid.Nil, status.Error(codes.Internal, err.Error())
+	}
+	if msg.DeletedAt != nil {
+		return uuid.Nil, status.Error(codes.NotFound, "message not found")
+	}
+	if s.ChatGuard != nil {
+		if err := s.ChatGuard.EnsureMember(ctx, msg.ChatID, profileID); err != nil {
+			if errors.Is(err, store.ErrNotChatMember) {
+				return uuid.Nil, status.Error(codes.PermissionDenied, "not a chat member")
+			}
+			return uuid.Nil, status.Error(codes.Internal, err.Error())
+		}
+	}
+
+	if add {
+		if err := s.Reactions.UpsertReaction(ctx, messageID, profileID, emoji); err != nil {
+			return uuid.Nil, status.Error(codes.Internal, err.Error())
+		}
+		if s.MessageEvents != nil {
+			if err := s.MessageEvents.PublishReactionAdded(ctx, messageID.String(), msg.ChatID.String(), profileID.String(), emoji); err != nil {
+				log.Printf("messaging: publish reaction.added: %v", err)
+			}
+		}
+	} else {
+		if err := s.Reactions.DeleteReaction(ctx, messageID, profileID, emoji); err != nil {
+			return uuid.Nil, status.Error(codes.Internal, err.Error())
+		}
+		if s.MessageEvents != nil {
+			if err := s.MessageEvents.PublishReactionRemoved(ctx, messageID.String(), msg.ChatID.String(), profileID.String(), emoji); err != nil {
+				log.Printf("messaging: publish reaction.removed: %v", err)
+			}
+		}
+	}
+	return msg.ChatID, nil
 }
 
 func forwardAttribution(source *store.MessageRow) (uuid.UUID, string) {
@@ -811,7 +906,7 @@ func messageKindToWire(k messagingv1.MessageKind) (typeStr string, out messaging
 	}
 }
 
-func messageRowToProto(m *store.MessageRow, kind messagingv1.MessageKind) *messagingv1.Message {
+func messageRowToProto(m *store.MessageRow, kind messagingv1.MessageKind, reactionsJSON string) *messagingv1.Message {
 	if m == nil {
 		return nil
 	}
@@ -825,6 +920,7 @@ func messageRowToProto(m *store.MessageRow, kind messagingv1.MessageKind) *messa
 		Type:            m.Type,
 		AttachmentsJson: m.AttachmentsJSON,
 		MentionsJson:    m.MentionsJSON,
+		ReactionsJson:   reactionsJSON,
 		CreatedAt:       timestamppb.New(m.CreatedAt.UTC()),
 	}
 	if m.ThreadParentID != nil {

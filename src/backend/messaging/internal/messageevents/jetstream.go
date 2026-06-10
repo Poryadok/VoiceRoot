@@ -22,7 +22,9 @@ const (
 	subjectMessageSent    = "message.sent"
 	subjectMessageEdited  = "message.edited"
 	subjectMessageDeleted = "message.deleted"
-	subjectMessageRead    = "message.read"
+	subjectMessageRead       = "message.read"
+	subjectReactionAdded     = "message.reaction_added"
+	subjectReactionRemoved   = "message.reaction_removed"
 )
 
 // JetStreamPublisher publishes MessageStreamEvent payloads to NATS JetStream.
@@ -65,27 +67,51 @@ func (p *JetStreamPublisher) EnsureStream() error {
 	return p.ensureStream()
 }
 
+func messageEventStreamSubjects() []string {
+	return []string{
+		subjectMessageSent,
+		subjectMessageEdited,
+		subjectMessageDeleted,
+		subjectMessageRead,
+		subjectReactionAdded,
+		subjectReactionRemoved,
+	}
+}
+
 func (p *JetStreamPublisher) ensureStream() error {
 	if p == nil || p.js == nil {
 		return fmt.Errorf("jetstream publisher not initialized")
 	}
 	p.ensureOnce.Do(func() {
-		if _, err := p.js.StreamInfo(streamName); err == nil {
+		desired := messageEventStreamSubjects()
+		info, err := p.js.StreamInfo(streamName)
+		if err != nil {
+			_, p.ensureErr = p.js.AddStream(&nats.StreamConfig{
+				Name:      streamName,
+				Subjects:  desired,
+				Retention: nats.LimitsPolicy,
+				MaxAge:    7 * 24 * time.Hour,
+				Storage:   nats.FileStorage,
+			})
 			return
 		}
-		_, p.ensureErr = p.js.AddStream(&nats.StreamConfig{
-			Name: streamName,
-			Subjects: []string{
-				subjectMessageSent,
-				subjectMessageEdited,
-				subjectMessageDeleted,
-				subjectMessageRead,
-				"message.reaction_added",
-			},
-			Retention: nats.LimitsPolicy,
-			MaxAge:    7 * 24 * time.Hour,
-			Storage:   nats.FileStorage,
-		})
+		existing := make(map[string]struct{}, len(info.Config.Subjects))
+		for _, subject := range info.Config.Subjects {
+			existing[subject] = struct{}{}
+		}
+		merged := append([]string(nil), info.Config.Subjects...)
+		for _, subject := range desired {
+			if _, ok := existing[subject]; ok {
+				continue
+			}
+			merged = append(merged, subject)
+		}
+		if len(merged) == len(info.Config.Subjects) {
+			return
+		}
+		cfg := info.Config
+		cfg.Subjects = merged
+		_, p.ensureErr = p.js.UpdateStream(&cfg)
 	})
 	return p.ensureErr
 }
@@ -128,6 +154,14 @@ func messageEventLogAttrs(env *eventsv1.MessageStreamEvent) []slog.Attr {
 		}
 	case *eventsv1.MessageStreamEvent_MessageRead:
 		if r := p.MessageRead; r != nil {
+			attrs = append(attrs, slog.String("message_id", r.GetMessageId()), slog.String("chat_id", r.GetChatId()), slog.String("profile_id", r.GetProfileId()))
+		}
+	case *eventsv1.MessageStreamEvent_ReactionAdded:
+		if r := p.ReactionAdded; r != nil {
+			attrs = append(attrs, slog.String("message_id", r.GetMessageId()), slog.String("chat_id", r.GetChatId()), slog.String("profile_id", r.GetProfileId()))
+		}
+	case *eventsv1.MessageStreamEvent_ReactionRemoved:
+		if r := p.ReactionRemoved; r != nil {
 			attrs = append(attrs, slog.String("message_id", r.GetMessageId()), slog.String("chat_id", r.GetChatId()), slog.String("profile_id", r.GetProfileId()))
 		}
 	}
@@ -194,6 +228,40 @@ func (p *JetStreamPublisher) PublishMessageDeleted(ctx context.Context, messageI
 		},
 	}
 	return p.publishProto(ctx, subjectMessageDeleted, env)
+}
+
+// PublishReactionAdded implements MessageEventsPublisher.
+func (p *JetStreamPublisher) PublishReactionAdded(ctx context.Context, messageID, chatID, profileID, emoji string) error {
+	env := &eventsv1.MessageStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.New(time.Now().UTC()),
+		Payload: &eventsv1.MessageStreamEvent_ReactionAdded{
+			ReactionAdded: &eventsv1.ReactionAdded{
+				MessageId: messageID,
+				ChatId:    chatID,
+				ProfileId: profileID,
+				Emoji:     emoji,
+			},
+		},
+	}
+	return p.publishProto(ctx, subjectReactionAdded, env)
+}
+
+// PublishReactionRemoved implements MessageEventsPublisher.
+func (p *JetStreamPublisher) PublishReactionRemoved(ctx context.Context, messageID, chatID, profileID, emoji string) error {
+	env := &eventsv1.MessageStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.New(time.Now().UTC()),
+		Payload: &eventsv1.MessageStreamEvent_ReactionRemoved{
+			ReactionRemoved: &eventsv1.ReactionRemoved{
+				MessageId: messageID,
+				ChatId:    chatID,
+				ProfileId: profileID,
+				Emoji:     emoji,
+			},
+		},
+	}
+	return p.publishProto(ctx, subjectReactionRemoved, env)
 }
 
 // Close drains the underlying NATS connection.

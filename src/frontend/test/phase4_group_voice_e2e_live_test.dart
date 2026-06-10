@@ -25,6 +25,7 @@ void main() {
 
       final owner = await ctx.registerUser('gv-owner');
       final member = await ctx.registerUser('gv-member');
+      final filler = await ctx.registerUser('gv-filler');
 
       final chats = ctx.chatsClient();
       final created = await chats.createGroup(
@@ -37,7 +38,7 @@ void main() {
       final invite = await chats.addGroupMembers(
         authorization: owner.authorizationHeader,
         chatId: group.id,
-        profileIds: [member.activeProfileId],
+        profileIds: [member.activeProfileId, filler.activeProfileId],
       );
       expect(invite, isA<ChatsApiOk<void>>());
 

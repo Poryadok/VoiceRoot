@@ -236,6 +236,7 @@
   "chatAttachFile": "Прикрепить файл",
   "chatMessageEdit": "Изменить",
   "chatMessageForward": "Переслать",
+  "chatMessageAddReaction": "Добавить реакцию",
   "chatForwardTitle": "Переслать в",
   "chatForwardSearchHint": "Поиск чатов",
   "chatForwardFrom": "Переслано от {sender}",

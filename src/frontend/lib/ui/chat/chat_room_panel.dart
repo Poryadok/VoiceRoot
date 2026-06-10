@@ -22,6 +22,7 @@ import '../core/voice_state_panel.dart';
 import '../core/voice_send_button.dart';
 import '../social/presence_indicator.dart';
 import 'chat_message_list.dart';
+import 'message_reactions_row.dart';
 import 'forward_message_sheet.dart';
 import 'group_members_sheet.dart';
 
@@ -493,12 +494,18 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (message.deletedAt == null &&
-                  message.messageKind != VoiceMessageKind.system)
+                  message.messageKind != VoiceMessageKind.system) ...[
+                ListTile(
+                  leading: const Icon(Icons.add_reaction_outlined),
+                  title: Text(sheetL10n.chatMessageAddReaction),
+                  onTap: () => Navigator.of(context).pop('react'),
+                ),
                 ListTile(
                   leading: const Icon(Icons.forward_outlined),
                   title: Text(sheetL10n.chatMessageForward),
                   onTap: () => Navigator.of(context).pop('forward'),
                 ),
+              ],
               if (isMine)
                 ListTile(
                   leading: const Icon(Icons.edit_outlined),
@@ -525,7 +532,12 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     final controller = ref.read(
       chatRoomControllerProvider(widget.chatId).notifier,
     );
-    if (action == 'forward') {
+    if (action == 'react') {
+      final emoji = await _pickReactionEmoji();
+      if (emoji != null) {
+        await controller.addReaction(message.id, emoji);
+      }
+    } else if (action == 'forward') {
       await ForwardMessageSheet.show(
         context,
         sourceMessage: message,
@@ -541,6 +553,30 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     } else if (action == 'delete_everyone') {
       await controller.deleteMessage(message.id, forMe: false);
     }
+  }
+
+  Future<String?> _pickReactionEmoji() async {
+    const choices = ['👍', '❤️', '🔥', '😂', '🎉'];
+    return showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+          child: Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              for (final emoji in choices)
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(emoji),
+                  icon: Text(emoji, style: const TextStyle(fontSize: 28)),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<String?> _promptEdit(String initial) async {
@@ -735,6 +771,17 @@ class _MessageListView extends ConsumerWidget {
                     : null,
                 content: _MessageBubbleContent(message: msg, l10n: l10n),
               ),
+            ),
+            MessageReactionsRow(
+              message: msg,
+              isMine: isMine,
+              onToggle: (emoji, reactedByMe) => ref
+                  .read(chatRoomControllerProvider(chatId).notifier)
+                  .toggleReaction(
+                    msg.id,
+                    emoji,
+                    currentlyReacted: reactedByMe,
+                  ),
             ),
           ],
         );

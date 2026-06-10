@@ -427,6 +427,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatMessageForward => 'Переслать';
 
   @override
+  String get chatMessageAddReaction => 'Добавить реакцию';
+
+  @override
   String get chatForwardTitle => 'Переслать в';
 
   @override

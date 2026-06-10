@@ -116,6 +116,25 @@ class VoiceMessage {
     if (raw is! String || raw.isEmpty) return null;
     return DateTime.tryParse(raw);
   }
+
+  VoiceMessage copyWith({
+    List<MessageReaction>? reactions,
+  }) {
+    return VoiceMessage(
+      id: id,
+      chatId: chatId,
+      senderProfileId: senderProfileId,
+      content: content,
+      attachments: attachments,
+      reactions: reactions ?? this.reactions,
+      messageKind: messageKind,
+      forwardFromId: forwardFromId,
+      forwardFromSender: forwardFromSender,
+      editedAt: editedAt,
+      deletedAt: deletedAt,
+      createdAt: createdAt,
+    );
+  }
 }
 
 class MessageAttachment {

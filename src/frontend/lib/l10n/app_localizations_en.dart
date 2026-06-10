@@ -424,6 +424,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatMessageForward => 'Forward';
 
   @override
+  String get chatMessageAddReaction => 'Add reaction';
+
+  @override
   String get chatForwardTitle => 'Forward to';
 
   @override

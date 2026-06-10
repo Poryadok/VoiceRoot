@@ -51,6 +51,7 @@ VoiceMessage voiceMessageFromProto(messaging_pb.Message msg) {
     senderProfileId: msg.senderProfileId,
     content: msg.content,
     attachments: MessageAttachment.listFromWire(msg.attachmentsJson),
+    reactions: MessageReaction.listFromWire(msg.reactionsJson),
     messageKind: msg.hasMessageKind()
         ? voiceMessageKindFromProto(msg.messageKind)
         : VoiceMessageKind.regular,

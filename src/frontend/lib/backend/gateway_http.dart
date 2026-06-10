@@ -230,7 +230,9 @@ class GatewayHttpClient {
       if (err != null) {
         return GatewayHttpFailure(err);
       }
-      return GatewayHttpOk(decodeGatewayProto(createEmpty, response.body));
+      return GatewayHttpOk(
+        decodeGatewayProto(createEmpty, _responseBodyUtf8(response)),
+      );
     } catch (e) {
       return GatewayHttpFailure(
         GatewayApiError(
@@ -298,4 +300,9 @@ class GatewayHttpClient {
   }
 
   bool _isAuthRoute(Uri uri) => uri.path.contains('/api/v1/auth/');
+
+  static String _responseBodyUtf8(http.Response response) {
+    if (response.bodyBytes.isEmpty) return '';
+    return utf8.decode(response.bodyBytes, allowMalformed: true);
+  }
 }

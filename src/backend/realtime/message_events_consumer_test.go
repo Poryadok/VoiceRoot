@@ -137,6 +137,7 @@ func TestMessageEventBytesToFanout_SentEditedDeleted(t *testing.T) {
 // TestMessageEventBytesToFanout_ReactionAdd documents PLAN Phase 4 / realtime-service.md:
 // message.reaction_added → WebSocket reaction_add for live counter updates.
 func TestMessageEventBytesToFanout_ReactionAdd(t *testing.T) {
+	chatID := uuid.NewString()
 	msgID := uuid.NewString()
 	profileID := uuid.NewString()
 	ev := &eventsv1.MessageStreamEvent{
@@ -145,6 +146,7 @@ func TestMessageEventBytesToFanout_ReactionAdd(t *testing.T) {
 		Payload: &eventsv1.MessageStreamEvent_ReactionAdded{
 			ReactionAdded: &eventsv1.ReactionAdded{
 				MessageId: msgID,
+				ChatId:    chatID,
 				ProfileId: profileID,
 				Emoji:     "👍",
 			},
@@ -152,15 +154,45 @@ func TestMessageEventBytesToFanout_ReactionAdd(t *testing.T) {
 	}
 	b, _ := proto.Marshal(ev)
 	gotChat, fe, ok := messageEventBytesToFanout(b)
-	if !ok || gotChat == "" || fe.Op != "reaction_add" {
+	if !ok || gotChat != chatID || fe.Op != "reaction_add" {
 		t.Fatalf("reaction_add: ok=%v chat=%q op=%q", ok, gotChat, fe.Op)
 	}
 	var d map[string]string
 	if err := json.Unmarshal(fe.D, &d); err != nil {
 		t.Fatal(err)
 	}
-	if d["chat_id"] == "" || d["message_id"] != msgID || d["profile_id"] != profileID || d["emoji"] != "👍" {
+	if d["chat_id"] != chatID || d["message_id"] != msgID || d["profile_id"] != profileID || d["emoji"] != "👍" {
 		t.Fatalf("reaction_add d=%v", d)
+	}
+}
+
+func TestMessageEventBytesToFanout_ReactionRemove(t *testing.T) {
+	chatID := uuid.NewString()
+	msgID := uuid.NewString()
+	profileID := uuid.NewString()
+	ev := &eventsv1.MessageStreamEvent{
+		EventId:    "e",
+		OccurredAt: timestamppb.Now(),
+		Payload: &eventsv1.MessageStreamEvent_ReactionRemoved{
+			ReactionRemoved: &eventsv1.ReactionRemoved{
+				MessageId: msgID,
+				ChatId:    chatID,
+				ProfileId: profileID,
+				Emoji:     "🔥",
+			},
+		},
+	}
+	b, _ := proto.Marshal(ev)
+	gotChat, fe, ok := messageEventBytesToFanout(b)
+	if !ok || gotChat != chatID || fe.Op != "reaction_remove" {
+		t.Fatalf("reaction_remove: ok=%v chat=%q op=%q", ok, gotChat, fe.Op)
+	}
+	var d map[string]string
+	if err := json.Unmarshal(fe.D, &d); err != nil {
+		t.Fatal(err)
+	}
+	if d["chat_id"] != chatID || d["message_id"] != msgID || d["profile_id"] != profileID || d["emoji"] != "🔥" {
+		t.Fatalf("reaction_remove d=%v", d)
 	}
 }
 

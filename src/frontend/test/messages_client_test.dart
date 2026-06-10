@@ -286,9 +286,9 @@ void main() {
   });
 
   group('VoiceMessagesClient.getMessages reactions_json', () {
-    test('ignores unknown reactions_json until proto exposes the field', () async {
+    test('parses reactions_json from getMessages proto response', () async {
       final mock = MockClient((req) async {
-        return http.Response(
+        return utf8JsonResponse(
           jsonEncode({
             'message_list': {
               'messages': [
@@ -305,7 +305,6 @@ void main() {
               ],
             },
           }),
-          200,
         );
       });
       final client = VoiceMessagesClient(

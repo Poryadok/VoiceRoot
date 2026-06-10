@@ -132,6 +132,53 @@ func TestJetStreamPublisher_MessageEditedAndDeleted(t *testing.T) {
 	require.Equal(t, cid, deleted.GetMessageDeleted().GetChatId())
 }
 
+func TestJetStreamPublisher_ReactionAddedAndRemoved(t *testing.T) {
+	ctx := context.Background()
+	s := startJSTestServer(t)
+	url := s.ClientURL()
+
+	nc, err := nats.Connect(url)
+	require.NoError(t, err)
+	t.Cleanup(nc.Close)
+
+	subAdd, err := nc.SubscribeSync(subjectReactionAdded)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = subAdd.Unsubscribe() })
+	subRem, err := nc.SubscribeSync(subjectReactionRemoved)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = subRem.Unsubscribe() })
+
+	pub, err := NewJetStreamPublisher(url)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = pub.Close() })
+
+	const mid, cid, pid, emoji = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "cccccccc-cccc-cccc-cccc-cccccccccccc", "👍"
+	require.NoError(t, pub.PublishReactionAdded(ctx, mid, cid, pid, emoji))
+	require.NoError(t, pub.PublishReactionRemoved(ctx, mid, cid, pid, emoji))
+
+	am, err := subAdd.NextMsg(3 * time.Second)
+	require.NoError(t, err)
+	var added eventsv1.MessageStreamEvent
+	require.NoError(t, proto.Unmarshal(am.Data, &added))
+	ra := added.GetReactionAdded()
+	require.NotNil(t, ra)
+	require.Equal(t, mid, ra.GetMessageId())
+	require.Equal(t, cid, ra.GetChatId())
+	require.Equal(t, pid, ra.GetProfileId())
+	require.Equal(t, emoji, ra.GetEmoji())
+
+	rm, err := subRem.NextMsg(3 * time.Second)
+	require.NoError(t, err)
+	var removed eventsv1.MessageStreamEvent
+	require.NoError(t, proto.Unmarshal(rm.Data, &removed))
+	rr := removed.GetReactionRemoved()
+	require.NotNil(t, rr)
+	require.Equal(t, mid, rr.GetMessageId())
+	require.Equal(t, cid, rr.GetChatId())
+	require.Equal(t, pid, rr.GetProfileId())
+	require.Equal(t, emoji, rr.GetEmoji())
+}
+
 func TestNewJetStreamPublisher_emptyURL(t *testing.T) {
 	t.Parallel()
 	_, err := NewJetStreamPublisher("")

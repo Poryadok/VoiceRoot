@@ -235,6 +235,7 @@
   "chatAttachFile": "Attach file",
   "chatMessageEdit": "Edit",
   "chatMessageForward": "Forward",
+  "chatMessageAddReaction": "Add reaction",
   "chatForwardTitle": "Forward to",
   "chatForwardSearchHint": "Search chats",
   "chatForwardFrom": "Forwarded from {sender}",

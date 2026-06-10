@@ -842,6 +842,12 @@ abstract class AppLocalizations {
   /// **'Forward'**
   String get chatMessageForward;
 
+  /// No description provided for @chatMessageAddReaction.
+  ///
+  /// In en, this message translates to:
+  /// **'Add reaction'**
+  String get chatMessageAddReaction;
+
   /// No description provided for @chatForwardTitle.
   ///
   /// In en, this message translates to:

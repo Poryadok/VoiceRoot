@@ -89,6 +89,36 @@ func messageEventBytesToFanout(data []byte) (chatID string, env fanoutEnvelope, 
 			return "", fanoutEnvelope{}, false
 		}
 		return mr.GetChatId(), fanoutEnvelope{Op: "message_read", D: d}, true
+	case *eventsv1.MessageStreamEvent_ReactionAdded:
+		ra := p.ReactionAdded
+		if ra == nil || ra.GetChatId() == "" || ra.GetMessageId() == "" || ra.GetProfileId() == "" || ra.GetEmoji() == "" {
+			return "", fanoutEnvelope{}, false
+		}
+		d, err := json.Marshal(map[string]string{
+			"chat_id":    ra.GetChatId(),
+			"message_id": ra.GetMessageId(),
+			"profile_id": ra.GetProfileId(),
+			"emoji":      ra.GetEmoji(),
+		})
+		if err != nil {
+			return "", fanoutEnvelope{}, false
+		}
+		return ra.GetChatId(), fanoutEnvelope{Op: "reaction_add", D: d}, true
+	case *eventsv1.MessageStreamEvent_ReactionRemoved:
+		rr := p.ReactionRemoved
+		if rr == nil || rr.GetChatId() == "" || rr.GetMessageId() == "" || rr.GetProfileId() == "" || rr.GetEmoji() == "" {
+			return "", fanoutEnvelope{}, false
+		}
+		d, err := json.Marshal(map[string]string{
+			"chat_id":    rr.GetChatId(),
+			"message_id": rr.GetMessageId(),
+			"profile_id": rr.GetProfileId(),
+			"emoji":      rr.GetEmoji(),
+		})
+		if err != nil {
+			return "", fanoutEnvelope{}, false
+		}
+		return rr.GetChatId(), fanoutEnvelope{Op: "reaction_remove", D: d}, true
 	default:
 		return "", fanoutEnvelope{}, false
 	}
@@ -115,6 +145,14 @@ func messageEventLogAttrs(data []byte) []slog.Attr {
 		}
 	case *eventsv1.MessageStreamEvent_MessageRead:
 		if r := p.MessageRead; r != nil {
+			attrs = append(attrs, slog.String("message_id", r.GetMessageId()), slog.String("chat_id", r.GetChatId()), slog.String("profile_id", r.GetProfileId()))
+		}
+	case *eventsv1.MessageStreamEvent_ReactionAdded:
+		if r := p.ReactionAdded; r != nil {
+			attrs = append(attrs, slog.String("message_id", r.GetMessageId()), slog.String("chat_id", r.GetChatId()), slog.String("profile_id", r.GetProfileId()))
+		}
+	case *eventsv1.MessageStreamEvent_ReactionRemoved:
+		if r := p.ReactionRemoved; r != nil {
 			attrs = append(attrs, slog.String("message_id", r.GetMessageId()), slog.String("chat_id", r.GetChatId()), slog.String("profile_id", r.GetProfileId()))
 		}
 	}
