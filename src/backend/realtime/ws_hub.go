@@ -251,6 +251,29 @@ func fanoutLogAttrs(chatID, profileID, op, requestID string, targets []*connReg)
 	return attrs
 }
 
+// profileIDsSubscribedToChat returns unique non-empty profile IDs with at least one connection subscribed to chatID.
+func (h *wsHub) profileIDsSubscribedToChat(chatID string) []string {
+	if chatID == "" {
+		return nil
+	}
+	h.mu.RLock()
+	m := h.byChat[chatID]
+	seen := make(map[string]struct{}, len(m))
+	var ids []string
+	for reg := range m {
+		if reg.profileID == "" {
+			continue
+		}
+		if _, ok := seen[reg.profileID]; ok {
+			continue
+		}
+		seen[reg.profileID] = struct{}{}
+		ids = append(ids, reg.profileID)
+	}
+	h.mu.RUnlock()
+	return ids
+}
+
 // broadcastToChat delivers a fan-out envelope to every connection subscribed to chatID (local hub only).
 func (h *wsHub) broadcastToChat(chatID string, env fanoutEnvelope, logger *slog.Logger, requestID string) {
 	if chatID == "" {

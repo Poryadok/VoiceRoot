@@ -352,3 +352,306 @@ func TestRunMessageEventsConsumer_JetStreamToHub(t *testing.T) {
 		t.Fatal("consumer did not exit")
 	}
 }
+
+// TestRunMessageEventsConsumer_InAppNotificationOnMessageSent documents PLAN Phase 4:
+// MessageSent → message_create to chat subscribers AND personal notification (new_message)
+// to every subscribed profile except the sender.
+func TestRunMessageEventsConsumer_InAppNotificationOnMessageSent(t *testing.T) {
+	s := startRealtimeJSTestServer(t)
+	natsURL := s.ClientURL()
+
+	nc, err := nats.Connect(natsURL)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	t.Cleanup(nc.Close)
+	js, err := nc.JetStream()
+	if err != nil {
+		t.Fatalf("jetstream: %v", err)
+	}
+	_, err = js.AddStream(&nats.StreamConfig{
+		Name:      "message_events",
+		Subjects:  []string{"message.>"},
+		Retention: nats.LimitsPolicy,
+		MaxAge:    24 * time.Hour,
+		Storage:   nats.FileStorage,
+	})
+	if err != nil {
+		t.Fatalf("add stream: %v", err)
+	}
+
+	chatID := "55555555-5555-5555-5555-555555555555"
+	msgID := uuid.NewString()
+	senderID := "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+	recipientID := "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+
+	hub := newWSHub()
+	senderReg := hub.attachConn("test-inst", "conn-sender", senderID, 16)
+	recipientReg := hub.attachConn("test-inst", "conn-recipient", recipientID, 16)
+	hub.addChat(senderReg, chatID)
+	hub.addChat(recipientReg, chatID)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	errCh := make(chan error, 1)
+	go func() { errCh <- runMessageEventsConsumer(ctx, hub, natsURL, "test-notify-inst", nil) }()
+	time.Sleep(200 * time.Millisecond)
+
+	env := &eventsv1.MessageStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.Now(),
+		Payload: &eventsv1.MessageStreamEvent_MessageSent{
+			MessageSent: &eventsv1.MessageSent{
+				MessageId:       msgID,
+				ChatId:          chatID,
+				SenderProfileId: senderID,
+			},
+		},
+	}
+	payload, err := proto.Marshal(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := js.Publish("message.sent", payload); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+
+	// Sender: message_create only (no personal notification).
+	select {
+	case fe := <-senderReg.fanout:
+		if fe.Op != "message_create" {
+			t.Fatalf("sender first op=%q want message_create", fe.Op)
+		}
+	case <-time.After(8 * time.Second):
+		t.Fatal("timeout waiting for sender message_create")
+	}
+	select {
+	case fe := <-senderReg.fanout:
+		t.Fatalf("sender unexpected second frame op=%q", fe.Op)
+	case <-time.After(300 * time.Millisecond):
+	}
+
+	// Recipient: message_create then personal notification.
+	select {
+	case fe := <-recipientReg.fanout:
+		if fe.Op != "message_create" {
+			t.Fatalf("recipient first op=%q want message_create", fe.Op)
+		}
+	case <-time.After(8 * time.Second):
+		t.Fatal("timeout waiting for recipient message_create")
+	}
+	select {
+	case fe := <-recipientReg.fanout:
+		if fe.Op != "notification" {
+			t.Fatalf("recipient second op=%q want notification", fe.Op)
+		}
+		var d map[string]string
+		if err := json.Unmarshal(fe.D, &d); err != nil {
+			t.Fatal(err)
+		}
+		if d["type"] != "new_message" || d["chat_id"] != chatID || d["message_id"] != msgID || d["sender_profile_id"] != senderID {
+			t.Fatalf("notification payload=%v", d)
+		}
+	case <-time.After(8 * time.Second):
+		t.Fatal("timeout waiting for recipient notification")
+	}
+
+	cancel()
+	select {
+	case err := <-errCh:
+		if err != nil && err != context.Canceled {
+			t.Fatalf("consumer exit: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("consumer did not exit")
+	}
+}
+
+// TestRunMessageEventsConsumer_MessageReadNoInAppNotification documents PLAN Phase 4:
+// MessageRead (mark_read sync) fans out message_read only — no personal notification op.
+func TestRunMessageEventsConsumer_MessageReadNoInAppNotification(t *testing.T) {
+	s := startRealtimeJSTestServer(t)
+	natsURL := s.ClientURL()
+
+	nc, err := nats.Connect(natsURL)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	t.Cleanup(nc.Close)
+	js, err := nc.JetStream()
+	if err != nil {
+		t.Fatalf("jetstream: %v", err)
+	}
+	_, err = js.AddStream(&nats.StreamConfig{
+		Name:      "message_events",
+		Subjects:  []string{"message.>"},
+		Retention: nats.LimitsPolicy,
+		MaxAge:    24 * time.Hour,
+		Storage:   nats.FileStorage,
+	})
+	if err != nil {
+		t.Fatalf("add stream: %v", err)
+	}
+
+	chatID := "77777777-7777-7777-7777-777777777777"
+	msgID := uuid.NewString()
+	readerID := "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
+	otherID := "ffffffff-ffff-ffff-ffff-ffffffffffff"
+
+	hub := newWSHub()
+	readerReg := hub.attachConn("test-inst", "conn-reader", readerID, 16)
+	otherReg := hub.attachConn("test-inst", "conn-other", otherID, 16)
+	hub.addChat(readerReg, chatID)
+	hub.addChat(otherReg, chatID)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	errCh := make(chan error, 1)
+	go func() { errCh <- runMessageEventsConsumer(ctx, hub, natsURL, "test-read-notify-inst", nil) }()
+	time.Sleep(200 * time.Millisecond)
+
+	env := &eventsv1.MessageStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.Now(),
+		Payload: &eventsv1.MessageStreamEvent_MessageRead{
+			MessageRead: &eventsv1.MessageRead{
+				MessageId: msgID,
+				ChatId:    chatID,
+				ProfileId: readerID,
+			},
+		},
+	}
+	payload, err := proto.Marshal(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := js.Publish("message.read", payload); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+
+	for _, reg := range []*connReg{readerReg, otherReg} {
+		select {
+		case fe := <-reg.fanout:
+			if fe.Op != "message_read" {
+				t.Fatalf("first op=%q want message_read", fe.Op)
+			}
+		case <-time.After(8 * time.Second):
+			t.Fatal("timeout waiting for message_read")
+		}
+		select {
+		case fe := <-reg.fanout:
+			t.Fatalf("unexpected second frame op=%q (no notification)", fe.Op)
+		case <-time.After(300 * time.Millisecond):
+		}
+	}
+
+	cancel()
+	select {
+	case err := <-errCh:
+		if err != nil && err != context.Canceled {
+			t.Fatalf("consumer exit: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("consumer did not exit")
+	}
+}
+
+// TestRunMessageEventsConsumer_InAppNotificationOnReactionAdded documents PLAN Phase 4:
+// ReactionAdded → reaction_add to chat AND personal notification (reaction) to message author.
+func TestRunMessageEventsConsumer_InAppNotificationOnReactionAdded(t *testing.T) {
+	s := startRealtimeJSTestServer(t)
+	natsURL := s.ClientURL()
+
+	nc, err := nats.Connect(natsURL)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	t.Cleanup(nc.Close)
+	js, err := nc.JetStream()
+	if err != nil {
+		t.Fatalf("jetstream: %v", err)
+	}
+	_, err = js.AddStream(&nats.StreamConfig{
+		Name:      "message_events",
+		Subjects:  []string{"message.>"},
+		Retention: nats.LimitsPolicy,
+		MaxAge:    24 * time.Hour,
+		Storage:   nats.FileStorage,
+	})
+	if err != nil {
+		t.Fatalf("add stream: %v", err)
+	}
+
+	chatID := "66666666-6666-6666-6666-666666666666"
+	msgID := uuid.NewString()
+	authorID := "cccccccc-cccc-cccc-cccc-cccccccccccc"
+	reactorID := "dddddddd-dddd-dddd-dddd-dddddddddddd"
+
+	hub := newWSHub()
+	authorReg := hub.attachConn("test-inst", "conn-author", authorID, 16)
+	reactorReg := hub.attachConn("test-inst", "conn-reactor", reactorID, 16)
+	hub.addChat(authorReg, chatID)
+	hub.addChat(reactorReg, chatID)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	errCh := make(chan error, 1)
+	go func() { errCh <- runMessageEventsConsumer(ctx, hub, natsURL, "test-reaction-notify-inst", nil) }()
+	time.Sleep(200 * time.Millisecond)
+
+	env := &eventsv1.MessageStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.Now(),
+		Payload: &eventsv1.MessageStreamEvent_ReactionAdded{
+			ReactionAdded: &eventsv1.ReactionAdded{
+				MessageId: msgID,
+				ChatId:    chatID,
+				ProfileId: reactorID,
+				Emoji:     "👍",
+				// Contract: message_author_profile_id = 5 on ReactionAdded (jetstream_events.proto).
+			},
+		},
+	}
+	payload, err := proto.Marshal(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := js.Publish("message.reaction_added", payload); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+
+	select {
+	case fe := <-authorReg.fanout:
+		if fe.Op != "notification" {
+			t.Fatalf("author first op=%q want notification", fe.Op)
+		}
+		var d map[string]string
+		if err := json.Unmarshal(fe.D, &d); err != nil {
+			t.Fatal(err)
+		}
+		if d["type"] != "reaction" || d["chat_id"] != chatID || d["message_id"] != msgID {
+			t.Fatalf("author notification payload=%v", d)
+		}
+	case <-time.After(8 * time.Second):
+		t.Fatal("timeout waiting for author reaction notification")
+	}
+
+	select {
+	case fe := <-reactorReg.fanout:
+		if fe.Op != "reaction_add" {
+			t.Fatalf("reactor op=%q want reaction_add", fe.Op)
+		}
+	case <-time.After(8 * time.Second):
+		t.Fatal("timeout waiting for reactor reaction_add")
+	}
+
+	cancel()
+	select {
+	case err := <-errCh:
+		if err != nil && err != context.Canceled {
+			t.Fatalf("consumer exit: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("consumer did not exit")
+	}
+}

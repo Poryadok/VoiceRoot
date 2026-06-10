@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -8,6 +9,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
+import 'package:voice_frontend/backend/realtime_client.dart';
 import 'package:voice_frontend/backend/users_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
@@ -50,6 +52,93 @@ void main() {
       ),
     );
   }
+
+  testWidgets(
+    'ChatListPanel bumps unread badge when notification arrives for another chat',
+    (tester) async {
+      late _CapturingRealtimeHub hub;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ...voiceThemeTestOverrides(),
+            profileAccentStorageProvider.overrideWithValue(
+              testProfileAccentStorage,
+            ),
+            authSessionStorageProvider.overrideWithValue(
+              InMemoryAuthSessionStorage(),
+            ),
+            authControllerProvider.overrideWith(authenticatedAuthController),
+            gatewayConfigProvider.overrideWithValue(
+              const GatewayConfig(baseUrl: 'http://api.test'),
+            ),
+            httpClientProvider.overrideWithValue(
+              MockClient((req) async {
+                if (req.url.path == '/api/v1/chats') {
+                  return http.Response(
+                    jsonEncode({
+                      'chat_list': {
+                        'items': [
+                          {
+                            'chat': {
+                              'id': 'chat-quiet',
+                              'type': 'CHAT_TYPE_DM',
+                              'creator_profile_id': 'profile-a',
+                            },
+                            'last_message_preview': 'Quiet chat',
+                            'unread_count': 0,
+                          },
+                          {
+                            'chat': {
+                              'id': 'chat-open',
+                              'type': 'CHAT_TYPE_DM',
+                              'creator_profile_id': 'profile-b',
+                            },
+                            'last_message_preview': 'Open chat',
+                            'unread_count': 0,
+                          },
+                        ],
+                      },
+                    }),
+                    200,
+                  );
+                }
+                return http.Response('{}', 404);
+              }),
+            ),
+            realtimeAutoConnectProvider.overrideWithValue(false),
+            realtimeHubProvider.overrideWith((ref) => hub = _CapturingRealtimeHub(ref)),
+            selectedChatIdProvider.overrideWith((ref) => 'chat-open'),
+          ],
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            locale: const Locale('en'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const Scaffold(body: ChatListPanel()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('0'), findsNothing);
+
+      hub.emit(
+        const RealtimeFrame(
+          op: 'notification',
+          data: {
+            'type': 'new_message',
+            'chat_id': 'chat-quiet',
+            'message_id': 'msg-live',
+            'sender_profile_id': 'profile-a',
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(ChatListPanel.tileKey('chat-quiet')), findsOneWidget);
+      expect(find.text('1'), findsOneWidget);
+    },
+  );
 
   testWidgets('ChatListPanel shows chats from REST', (tester) async {
     await tester.pumpWidget(
@@ -860,4 +949,26 @@ class _NoopRealtimeHub extends RealtimeHub {
 
   @override
   void ensureSubscribed(String chatId) {}
+}
+
+class _CapturingRealtimeHub extends RealtimeHub {
+  _CapturingRealtimeHub(super.ref);
+
+  final _events = StreamController<RealtimeFrame>.broadcast();
+
+  @override
+  Stream<RealtimeFrame> get events => _events.stream;
+
+  @override
+  Future<void> ensureConnected() async {}
+
+  @override
+  void ensureSubscribed(String chatId) {}
+
+  void emit(RealtimeFrame frame) => _events.add(frame);
+
+  @override
+  Future<void> dispose() async {
+    await _events.close();
+  }
 }

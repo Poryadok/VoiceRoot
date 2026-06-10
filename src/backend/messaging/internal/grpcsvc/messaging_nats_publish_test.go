@@ -58,7 +58,7 @@ func (s *spyMessageEvents) PublishMessageRead(_ context.Context, messageID, chat
 	return nil
 }
 
-func (s *spyMessageEvents) PublishReactionAdded(_ context.Context, messageID, chatID, profileID, emoji string) error {
+func (s *spyMessageEvents) PublishReactionAdded(_ context.Context, messageID, chatID, profileID, messageAuthorProfileID, emoji string) error {
 	return nil
 }
 

@@ -163,9 +163,9 @@ func subscribeMessageEvents(js nats.JetStreamContext, hub *wsHub, instanceID str
 	durable := consumerDurableName(instanceID)
 	handler := func(msg *nats.Msg) {
 		attrs := messageEventLogAttrs(msg.Data)
-		if chatID, fe, ok := messageEventBytesToFanout(msg.Data); ok {
+		if _, _, ok := messageEventBytesToFanout(msg.Data); ok {
 			natslog.LogConsume(logger, msg, slog.LevelInfo, "message event consumed", attrs...)
-			hub.broadcastToChat(chatID, fe, logger, natslog.RequestIDFromMsg(msg))
+			dispatchMessageStreamEvent(hub, msg.Data, logger, natslog.RequestIDFromMsg(msg))
 			return
 		}
 		natslog.LogConsume(logger, msg, slog.LevelWarn, "unknown message event payload", attrs...)

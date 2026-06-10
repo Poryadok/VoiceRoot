@@ -657,7 +657,7 @@ func (s *MessagingGRPC) mutateReaction(ctx context.Context, messageIDStr, emoji 
 			return uuid.Nil, status.Error(codes.Internal, err.Error())
 		}
 		if s.MessageEvents != nil {
-			if err := s.MessageEvents.PublishReactionAdded(ctx, messageID.String(), msg.ChatID.String(), profileID.String(), emoji); err != nil {
+			if err := s.MessageEvents.PublishReactionAdded(ctx, messageID.String(), msg.ChatID.String(), profileID.String(), msg.SenderProfileID.String(), emoji); err != nil {
 				log.Printf("messaging: publish reaction.added: %v", err)
 			}
 		}

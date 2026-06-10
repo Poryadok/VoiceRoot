@@ -152,8 +152,8 @@ func TestJetStreamPublisher_ReactionAddedAndRemoved(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = pub.Close() })
 
-	const mid, cid, pid, emoji = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "cccccccc-cccc-cccc-cccc-cccccccccccc", "👍"
-	require.NoError(t, pub.PublishReactionAdded(ctx, mid, cid, pid, emoji))
+	const mid, cid, pid, authorID, emoji = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "cccccccc-cccc-cccc-cccc-cccccccccccc", "dddddddd-dddd-dddd-dddd-dddddddddddd", "👍"
+	require.NoError(t, pub.PublishReactionAdded(ctx, mid, cid, pid, authorID, emoji))
 	require.NoError(t, pub.PublishReactionRemoved(ctx, mid, cid, pid, emoji))
 
 	am, err := subAdd.NextMsg(3 * time.Second)
@@ -165,6 +165,7 @@ func TestJetStreamPublisher_ReactionAddedAndRemoved(t *testing.T) {
 	require.Equal(t, mid, ra.GetMessageId())
 	require.Equal(t, cid, ra.GetChatId())
 	require.Equal(t, pid, ra.GetProfileId())
+	require.Equal(t, authorID, ra.GetMessageAuthorProfileId())
 	require.Equal(t, emoji, ra.GetEmoji())
 
 	rm, err := subRem.NextMsg(3 * time.Second)

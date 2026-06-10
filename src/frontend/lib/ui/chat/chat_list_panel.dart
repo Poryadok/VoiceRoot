@@ -6,6 +6,7 @@ import '../../backend/chats_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/chat_providers.dart';
+import '../../state/in_app_notifications.dart';
 import '../../state/presence_providers.dart';
 import '../../state/social_providers.dart';
 import '../../theme/voice_colors.dart';
@@ -33,6 +34,7 @@ class ChatListPanel extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(inAppNotificationControllerProvider);
     final l10n = AppLocalizations.of(context)!;
     final chats = ref.watch(chatListControllerProvider);
     final inbox = ref.watch(chatInboxProvider);

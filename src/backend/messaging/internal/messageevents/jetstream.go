@@ -231,16 +231,17 @@ func (p *JetStreamPublisher) PublishMessageDeleted(ctx context.Context, messageI
 }
 
 // PublishReactionAdded implements MessageEventsPublisher.
-func (p *JetStreamPublisher) PublishReactionAdded(ctx context.Context, messageID, chatID, profileID, emoji string) error {
+func (p *JetStreamPublisher) PublishReactionAdded(ctx context.Context, messageID, chatID, profileID, messageAuthorProfileID, emoji string) error {
 	env := &eventsv1.MessageStreamEvent{
 		EventId:    uuid.NewString(),
 		OccurredAt: timestamppb.New(time.Now().UTC()),
 		Payload: &eventsv1.MessageStreamEvent_ReactionAdded{
 			ReactionAdded: &eventsv1.ReactionAdded{
-				MessageId: messageID,
-				ChatId:    chatID,
-				ProfileId: profileID,
-				Emoji:     emoji,
+				MessageId:              messageID,
+				ChatId:                 chatID,
+				ProfileId:              profileID,
+				Emoji:                  emoji,
+				MessageAuthorProfileId: messageAuthorProfileID,
 			},
 		},
 	}

@@ -86,7 +86,7 @@ func TestWSReceivesMessageSentUpdateDeleteFromJetStreamNATS(t *testing.T) {
 
 	chatID := "55555555-5555-5555-5555-555555555555"
 	msgID := "66666666-6666-6666-6666-666666666666"
-	sender := "77777777-7777-7777-7777-777777777777"
+	sender := "profile-1" // same as WS profile: sender does not get in-app notification
 
 	if err := c.WriteJSON(map[string]any{"op": "subscribe", "d": map[string]any{"chat_id": chatID}}); err != nil {
 		t.Fatalf("subscribe: %v", err)

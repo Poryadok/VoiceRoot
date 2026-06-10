@@ -294,6 +294,25 @@ class ChatListController extends StateNotifier<ChatListState> {
     _invalidateChatLists(_ref);
     return null;
   }
+
+  /// Optimistic unread bump when an in-app notification arrives for a background chat.
+  void bumpUnread(String chatId, {int delta = 1}) {
+    if (delta <= 0) return;
+    final index = state.items.indexWhere((item) => item.chatId == chatId);
+    if (index < 0) return;
+    final item = state.items[index];
+    final updated = ChatListItem(
+      chat: item.chat,
+      lastMessagePreview: item.lastMessagePreview,
+      unreadCount: item.unreadCount + delta,
+      inbox: item.inbox,
+      isStranger: item.isStranger,
+      dmPeerProfileId: item.dmPeerProfileId,
+    );
+    final items = [...state.items];
+    items[index] = updated;
+    state = state.copyWith(items: items);
+  }
 }
 
 List<ChatListItem> _mergeChatItems(

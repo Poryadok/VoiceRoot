@@ -173,6 +173,7 @@ message ReactionAdded {
   string profile_id = 2;
   string emoji = 3;
   string chat_id = 4;
+  string message_author_profile_id = 5;
 }
 
 message ReactionRemoved {
