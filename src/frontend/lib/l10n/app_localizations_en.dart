@@ -579,6 +579,88 @@ class AppLocalizationsEn extends AppLocalizations {
   String get spaceOpenAction => 'Open space';
 
   @override
+  String get spaceInvitesTooltip => 'Invite people';
+
+  @override
+  String get spaceInvitesTitle => 'Invite links';
+
+  @override
+  String get spaceInvitesSubtitle =>
+      'Create a link to invite people to this space.';
+
+  @override
+  String get spaceInvitesEmpty => 'No active invite links';
+
+  @override
+  String get spaceInvitesLoadError => 'Could not load invites';
+
+  @override
+  String get spaceInvitesRetry => 'Retry';
+
+  @override
+  String get spaceInviteCreate => 'Create link';
+
+  @override
+  String get spaceInviteAdvancedToggle => 'Advanced';
+
+  @override
+  String get spaceInviteMaxUsesLabel => 'Max uses';
+
+  @override
+  String get spaceInviteMaxUsesHint => 'Unlimited if empty';
+
+  @override
+  String get spaceInviteMaxUsesInvalid => 'Max uses must be a positive number';
+
+  @override
+  String spaceInviteCreateError(String message) {
+    return 'Could not create invite: $message';
+  }
+
+  @override
+  String spaceInviteRevokeError(String message) {
+    return 'Could not revoke invite: $message';
+  }
+
+  @override
+  String get spaceInviteCopy => 'Copy link';
+
+  @override
+  String get spaceInviteCopied => 'Invite link copied';
+
+  @override
+  String get spaceInviteRevoke => 'Revoke';
+
+  @override
+  String spaceInviteUses(int used, String maxSuffix) {
+    return '$used uses$maxSuffix';
+  }
+
+  @override
+  String get spaceInviteJoinTooltip => 'Join space by invite';
+
+  @override
+  String get spaceInviteJoinTitle => 'Join a space';
+
+  @override
+  String get spaceInviteJoinSubtitle =>
+      'Paste an invite code or link from a friend.';
+
+  @override
+  String get spaceInviteJoinCodeLabel => 'Invite code';
+
+  @override
+  String get spaceInviteJoinCodeHint => 'abc123xyz';
+
+  @override
+  String get spaceInviteJoinSubmit => 'Join space';
+
+  @override
+  String spaceInviteJoinError(String message) {
+    return 'Could not join space: $message';
+  }
+
+  @override
   String get chatGroupMembersTooltip => 'Group members';
 
   @override

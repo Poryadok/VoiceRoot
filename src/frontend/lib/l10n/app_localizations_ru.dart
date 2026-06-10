@@ -583,6 +583,88 @@ class AppLocalizationsRu extends AppLocalizations {
   String get spaceOpenAction => 'Открыть спейс';
 
   @override
+  String get spaceInvitesTooltip => 'Пригласить людей';
+
+  @override
+  String get spaceInvitesTitle => 'Инвайт-ссылки';
+
+  @override
+  String get spaceInvitesSubtitle =>
+      'Создайте ссылку, чтобы пригласить людей в спейс.';
+
+  @override
+  String get spaceInvitesEmpty => 'Нет активных инвайт-ссылок';
+
+  @override
+  String get spaceInvitesLoadError => 'Не удалось загрузить инвайты';
+
+  @override
+  String get spaceInvitesRetry => 'Повторить';
+
+  @override
+  String get spaceInviteCreate => 'Создать ссылку';
+
+  @override
+  String get spaceInviteAdvancedToggle => 'Дополнительно';
+
+  @override
+  String get spaceInviteMaxUsesLabel => 'Лимит использований';
+
+  @override
+  String get spaceInviteMaxUsesHint => 'Пусто — без лимита';
+
+  @override
+  String get spaceInviteMaxUsesInvalid =>
+      'Лимит должен быть положительным числом';
+
+  @override
+  String spaceInviteCreateError(String message) {
+    return 'Не удалось создать инвайт: $message';
+  }
+
+  @override
+  String spaceInviteRevokeError(String message) {
+    return 'Не удалось отозвать инвайт: $message';
+  }
+
+  @override
+  String get spaceInviteCopy => 'Копировать ссылку';
+
+  @override
+  String get spaceInviteCopied => 'Ссылка скопирована';
+
+  @override
+  String get spaceInviteRevoke => 'Отозвать';
+
+  @override
+  String spaceInviteUses(int used, String maxSuffix) {
+    return '$used использований$maxSuffix';
+  }
+
+  @override
+  String get spaceInviteJoinTooltip => 'Вступить по инвайту';
+
+  @override
+  String get spaceInviteJoinTitle => 'Вступить в спейс';
+
+  @override
+  String get spaceInviteJoinSubtitle => 'Вставьте код или ссылку от друга.';
+
+  @override
+  String get spaceInviteJoinCodeLabel => 'Код инвайта';
+
+  @override
+  String get spaceInviteJoinCodeHint => 'abc123xyz';
+
+  @override
+  String get spaceInviteJoinSubmit => 'Вступить';
+
+  @override
+  String spaceInviteJoinError(String message) {
+    return 'Не удалось вступить: $message';
+  }
+
+  @override
   String get chatGroupMembersTooltip => 'Участники группы';
 
   @override

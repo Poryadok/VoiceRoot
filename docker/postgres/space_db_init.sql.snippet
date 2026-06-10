@@ -72,3 +72,18 @@ CREATE TABLE space_tree_nodes (
 CREATE INDEX space_tree_nodes_space_sort_idx ON space_tree_nodes (space_id, category_id, sort_order);
 CREATE UNIQUE INDEX space_tree_nodes_voice_room_uidx ON space_tree_nodes (voice_room_id) WHERE voice_room_id IS NOT NULL;
 CREATE UNIQUE INDEX space_tree_nodes_chat_uidx ON space_tree_nodes (chat_id) WHERE chat_id IS NOT NULL;
+
+CREATE TABLE invites (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    space_id UUID NOT NULL REFERENCES spaces (id) ON DELETE CASCADE,
+    code VARCHAR(32) NOT NULL UNIQUE,
+    creator_profile_id UUID NOT NULL,
+    max_uses INTEGER NULL,
+    use_count INTEGER NOT NULL DEFAULT 0,
+    expires_at TIMESTAMPTZ NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    revoked_at TIMESTAMPTZ NULL
+);
+
+CREATE INDEX invites_space_id_idx ON invites (space_id);
+CREATE INDEX invites_code_idx ON invites (code);

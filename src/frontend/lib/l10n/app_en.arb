@@ -311,6 +311,51 @@
   "spaceTreeUncategorized": "Channels",
   "spaceListTitle": "My spaces",
   "spaceOpenAction": "Open space",
+  "spaceInvitesTooltip": "Invite people",
+  "spaceInvitesTitle": "Invite links",
+  "spaceInvitesSubtitle": "Create a link to invite people to this space.",
+  "spaceInvitesEmpty": "No active invite links",
+  "spaceInvitesLoadError": "Could not load invites",
+  "spaceInvitesRetry": "Retry",
+  "spaceInviteCreate": "Create link",
+  "spaceInviteAdvancedToggle": "Advanced",
+  "spaceInviteMaxUsesLabel": "Max uses",
+  "spaceInviteMaxUsesHint": "Unlimited if empty",
+  "spaceInviteMaxUsesInvalid": "Max uses must be a positive number",
+  "spaceInviteCreateError": "Could not create invite: {message}",
+  "@spaceInviteCreateError": {
+    "placeholders": {
+      "message": { "type": "String" }
+    }
+  },
+  "spaceInviteRevokeError": "Could not revoke invite: {message}",
+  "@spaceInviteRevokeError": {
+    "placeholders": {
+      "message": { "type": "String" }
+    }
+  },
+  "spaceInviteCopy": "Copy link",
+  "spaceInviteCopied": "Invite link copied",
+  "spaceInviteRevoke": "Revoke",
+  "spaceInviteUses": "{used} uses{maxSuffix}",
+  "@spaceInviteUses": {
+    "placeholders": {
+      "used": { "type": "int" },
+      "maxSuffix": { "type": "String" }
+    }
+  },
+  "spaceInviteJoinTooltip": "Join space by invite",
+  "spaceInviteJoinTitle": "Join a space",
+  "spaceInviteJoinSubtitle": "Paste an invite code or link from a friend.",
+  "spaceInviteJoinCodeLabel": "Invite code",
+  "spaceInviteJoinCodeHint": "abc123xyz",
+  "spaceInviteJoinSubmit": "Join space",
+  "spaceInviteJoinError": "Could not join space: {message}",
+  "@spaceInviteJoinError": {
+    "placeholders": {
+      "message": { "type": "String" }
+    }
+  },
   "chatGroupMembersTooltip": "Group members",
   "chatGroupMembersTitle": "Members",
   "chatGroupMembersSubtitle": "Owner can remove members. Members can leave the group.",

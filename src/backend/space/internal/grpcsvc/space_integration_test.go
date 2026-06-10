@@ -43,7 +43,7 @@ func startSpacePostgresForTest(t *testing.T, ctx context.Context) *pgxpool.Pool 
 
 func applySpaceMigration(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
-	for _, name := range []string{"000001_init.up.sql", "000002_tree.up.sql"} {
+	for _, name := range []string{"000001_init.up.sql", "000002_tree.up.sql", "000003_invites.up.sql"} {
 		migrationPath := filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", name)
 		sqlBytes, err := os.ReadFile(migrationPath)
 		require.NoError(t, err)
@@ -83,6 +83,8 @@ func (spySpaceEvents) PublishVoiceRoomCreated(context.Context, string, string) e
 
 func (spySpaceEvents) PublishVoiceRoomDeleted(context.Context, string, string) error { return nil }
 
+func (spySpaceEvents) PublishInviteCreated(context.Context, string, string) error { return nil }
+
 func (s *spySpaceEvents) snapshot() [][2]string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -104,6 +106,10 @@ func (errSpaceEvents) PublishTreeNodeRemoved(context.Context, string, string) er
 func (errSpaceEvents) PublishVoiceRoomCreated(context.Context, string, string) error { return nil }
 
 func (errSpaceEvents) PublishVoiceRoomDeleted(context.Context, string, string) error { return nil }
+
+func (errSpaceEvents) PublishInviteCreated(context.Context, string, string) error {
+	return errors.New("nats unavailable")
+}
 
 type spaceServerOption func(*SpaceGRPC)
 

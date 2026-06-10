@@ -23,6 +23,7 @@ const (
 	subjectSpaceTreeChanged = "space.tree_changed"
 	subjectVoiceRoomCreated = "space.voice_room_created"
 	subjectVoiceRoomDeleted = "space.voice_room_deleted"
+	subjectSpaceInviteCreated = "space.invite_created"
 )
 
 // JetStreamPublisher publishes ChatStreamEvent payloads to NATS JetStream.
@@ -64,7 +65,7 @@ func (p *JetStreamPublisher) ensureStream() error {
 	}
 	p.ensureOnce.Do(func() {
 		if info, err := p.js.StreamInfo(streamName); err == nil {
-			for _, subj := range []string{subjectSpaceCreated, subjectSpaceTreeChanged, subjectVoiceRoomCreated, subjectVoiceRoomDeleted} {
+			for _, subj := range []string{subjectSpaceCreated, subjectSpaceTreeChanged, subjectVoiceRoomCreated, subjectVoiceRoomDeleted, subjectSpaceInviteCreated} {
 				if !streamHasSubject(info, subj) {
 					cfg := info.Config
 					cfg.Subjects = append(cfg.Subjects, subj)
@@ -89,6 +90,7 @@ func (p *JetStreamPublisher) ensureStream() error {
 				subjectSpaceCreated,
 				subjectVoiceRoomCreated,
 				subjectVoiceRoomDeleted,
+				subjectSpaceInviteCreated,
 			},
 			Retention: nats.LimitsPolicy,
 			MaxAge:    7 * 24 * time.Hour,
@@ -179,6 +181,21 @@ func (p *JetStreamPublisher) PublishVoiceRoomDeleted(ctx context.Context, spaceI
 	_ = spaceID
 	_ = voiceRoomID
 	return nil
+}
+
+// PublishInviteCreated implements Publisher.
+func (p *JetStreamPublisher) PublishInviteCreated(ctx context.Context, spaceID, inviteCode string) error {
+	env := &eventsv1.ChatStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.New(time.Now().UTC()),
+		Payload: &eventsv1.ChatStreamEvent_SpaceCreated{
+			SpaceCreated: &eventsv1.SpaceCreated{
+				SpaceId:         spaceID,
+				OwnerProfileId: inviteCode,
+			},
+		},
+	}
+	return p.publishProto(ctx, subjectSpaceInviteCreated, env)
 }
 
 // PublishSpaceCreated implements Publisher.

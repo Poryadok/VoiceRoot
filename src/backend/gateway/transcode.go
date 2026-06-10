@@ -144,6 +144,11 @@ func (t *transcoder) serveNamespace(w http.ResponseWriter, r *http.Request, name
 			return false
 		}
 		return t.serveSpaces(w, r, rest)
+	case "invites":
+		if t.clients.space == nil {
+			return false
+		}
+		return t.serveInvites(w, r, rest)
 	default:
 		return false
 	}

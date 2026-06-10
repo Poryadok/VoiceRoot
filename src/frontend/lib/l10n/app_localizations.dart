@@ -1130,6 +1130,150 @@ abstract class AppLocalizations {
   /// **'Open space'**
   String get spaceOpenAction;
 
+  /// No description provided for @spaceInvitesTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite people'**
+  String get spaceInvitesTooltip;
+
+  /// No description provided for @spaceInvitesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite links'**
+  String get spaceInvitesTitle;
+
+  /// No description provided for @spaceInvitesSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Create a link to invite people to this space.'**
+  String get spaceInvitesSubtitle;
+
+  /// No description provided for @spaceInvitesEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No active invite links'**
+  String get spaceInvitesEmpty;
+
+  /// No description provided for @spaceInvitesLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load invites'**
+  String get spaceInvitesLoadError;
+
+  /// No description provided for @spaceInvitesRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get spaceInvitesRetry;
+
+  /// No description provided for @spaceInviteCreate.
+  ///
+  /// In en, this message translates to:
+  /// **'Create link'**
+  String get spaceInviteCreate;
+
+  /// No description provided for @spaceInviteAdvancedToggle.
+  ///
+  /// In en, this message translates to:
+  /// **'Advanced'**
+  String get spaceInviteAdvancedToggle;
+
+  /// No description provided for @spaceInviteMaxUsesLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Max uses'**
+  String get spaceInviteMaxUsesLabel;
+
+  /// No description provided for @spaceInviteMaxUsesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlimited if empty'**
+  String get spaceInviteMaxUsesHint;
+
+  /// No description provided for @spaceInviteMaxUsesInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Max uses must be a positive number'**
+  String get spaceInviteMaxUsesInvalid;
+
+  /// No description provided for @spaceInviteCreateError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not create invite: {message}'**
+  String spaceInviteCreateError(String message);
+
+  /// No description provided for @spaceInviteRevokeError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not revoke invite: {message}'**
+  String spaceInviteRevokeError(String message);
+
+  /// No description provided for @spaceInviteCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy link'**
+  String get spaceInviteCopy;
+
+  /// No description provided for @spaceInviteCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite link copied'**
+  String get spaceInviteCopied;
+
+  /// No description provided for @spaceInviteRevoke.
+  ///
+  /// In en, this message translates to:
+  /// **'Revoke'**
+  String get spaceInviteRevoke;
+
+  /// No description provided for @spaceInviteUses.
+  ///
+  /// In en, this message translates to:
+  /// **'{used} uses{maxSuffix}'**
+  String spaceInviteUses(int used, String maxSuffix);
+
+  /// No description provided for @spaceInviteJoinTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Join space by invite'**
+  String get spaceInviteJoinTooltip;
+
+  /// No description provided for @spaceInviteJoinTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Join a space'**
+  String get spaceInviteJoinTitle;
+
+  /// No description provided for @spaceInviteJoinSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste an invite code or link from a friend.'**
+  String get spaceInviteJoinSubtitle;
+
+  /// No description provided for @spaceInviteJoinCodeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite code'**
+  String get spaceInviteJoinCodeLabel;
+
+  /// No description provided for @spaceInviteJoinCodeHint.
+  ///
+  /// In en, this message translates to:
+  /// **'abc123xyz'**
+  String get spaceInviteJoinCodeHint;
+
+  /// No description provided for @spaceInviteJoinSubmit.
+  ///
+  /// In en, this message translates to:
+  /// **'Join space'**
+  String get spaceInviteJoinSubmit;
+
+  /// No description provided for @spaceInviteJoinError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not join space: {message}'**
+  String spaceInviteJoinError(String message);
+
   /// No description provided for @chatGroupMembersTooltip.
   ///
   /// In en, this message translates to:

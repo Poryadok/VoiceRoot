@@ -564,6 +564,61 @@ SpaceTreeData spaceTreeFromProto(space_pb.ListSpaceTreeResponse resp) {
   );
 }
 
+pb_ts.Timestamp dateTimeToProtoTimestamp(DateTime dt) {
+  final utc = dt.toUtc();
+  return pb_ts.Timestamp()
+    ..seconds = Int64(utc.millisecondsSinceEpoch ~/ 1000)
+    ..nanos = (utc.millisecondsSinceEpoch % 1000) * 1000000;
+}
+
+SpaceInvite spaceInviteFromProto(space_pb.Invite invite) {
+  return SpaceInvite(
+    id: invite.id,
+    spaceId: invite.spaceId,
+    code: invite.code,
+    creatorProfileId: invite.creatorProfileId,
+    maxUses: invite.hasMaxUses() ? invite.maxUses : null,
+    useCount: invite.useCount,
+    expiresAt: protoTimestampToDateTime(
+      invite.hasExpiresAt() ? invite.expiresAt : null,
+    ),
+    createdAt:
+        protoTimestampToDateTime(invite.hasCreatedAt() ? invite.createdAt : null) ??
+        DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+    revokedAt: protoTimestampToDateTime(
+      invite.hasRevokedAt() ? invite.revokedAt : null,
+    ),
+  );
+}
+
+SpaceMembershipData spaceMembershipFromProto(space_pb.SpaceMembership membership) {
+  return SpaceMembershipData(
+    spaceId: membership.spaceId,
+    profileId: membership.profileId,
+    joinedAt:
+        protoTimestampToDateTime(
+          membership.hasJoinedAt() ? membership.joinedAt : null,
+        ) ??
+        DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+    nickname: membership.hasNickname() ? emptyToNull(membership.nickname) : null,
+  );
+}
+
+space_pb.CreateInviteRequest createInviteRequestToProto({
+  required String spaceId,
+  int? maxUses,
+  DateTime? expiresAt,
+}) {
+  final req = space_pb.CreateInviteRequest(spaceId: spaceId);
+  if (maxUses != null) {
+    req.maxUses = maxUses;
+  }
+  if (expiresAt != null) {
+    req.expiresAt = dateTimeToProtoTimestamp(expiresAt);
+  }
+  return req;
+}
+
 SpaceTreeNodeData spaceTreeNodeFromProto(
   space_pb.SpaceTreeNode node,
   Map<String, VoiceRoomData> voiceById,

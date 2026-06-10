@@ -78,6 +78,32 @@ func TestJetStreamPublisher_SpaceCreatedRoundTrip(t *testing.T) {
 	// Full ChatStreamEvent.space_created round-trip requires SpaceCreated in jetstream_events.proto (green phase).
 }
 
+func TestJetStreamPublisher_InviteCreatedRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	s := startJSTestServer(t)
+	url := s.ClientURL()
+
+	nc, err := nats.Connect(url)
+	require.NoError(t, err)
+	t.Cleanup(nc.Close)
+
+	sub, err := nc.SubscribeSync(subjectSpaceInviteCreated)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sub.Unsubscribe() })
+
+	pub, err := NewJetStreamPublisher(url)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = pub.Close() })
+
+	const spaceID = "33333333-3333-3333-3333-333333333333"
+	const inviteCode = "invite-code-abc"
+	require.NoError(t, pub.PublishInviteCreated(ctx, spaceID, inviteCode))
+
+	msg, err := sub.NextMsg(3 * time.Second)
+	require.NoError(t, err)
+	require.NotEmpty(t, msg.Data)
+}
+
 // TestJetStreamPublisher_EnsureStreamUpdatesExisting documents stream subject migration when chat_events exists without space.created.
 func TestJetStreamPublisher_EnsureStreamUpdatesExisting(t *testing.T) {
 	ctx := context.Background()

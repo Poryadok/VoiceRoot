@@ -10,4 +10,5 @@ type Publisher interface {
 	PublishTreeNodeRemoved(ctx context.Context, spaceID, nodeID string) error
 	PublishVoiceRoomCreated(ctx context.Context, spaceID, voiceRoomID string) error
 	PublishVoiceRoomDeleted(ctx context.Context, spaceID, voiceRoomID string) error
+	PublishInviteCreated(ctx context.Context, spaceID, inviteCode string) error
 }

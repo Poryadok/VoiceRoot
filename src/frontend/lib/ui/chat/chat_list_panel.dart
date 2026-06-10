@@ -19,6 +19,7 @@ import '../core/voice_state_panel.dart';
 import '../social/presence_indicator.dart';
 import '../../state/space_providers.dart';
 import '../space/create_space_sheet.dart';
+import '../space/join_space_invite_sheet.dart';
 import '../space/space_view.dart';
 import 'create_group_sheet.dart';
 
@@ -35,6 +36,7 @@ class ChatListPanel extends ConsumerWidget {
   static const Key unavailableKey = Key('chat_list_unavailable');
   static const Key createGroupKey = Key('chat_list_create_group');
   static const Key createSpaceKey = Key('chat_list_create_space');
+  static const Key joinSpaceInviteKey = Key('chat_list_join_space_invite');
   static Key spaceTileKey(String spaceId) => Key('chat_list_space_$spaceId');
 
   @override
@@ -69,6 +71,12 @@ class ChatListPanel extends ConsumerWidget {
                 icon: const Icon(Icons.hub_outlined),
                 tooltip: l10n.spaceCreateTooltip,
                 onPressed: () => CreateSpaceSheet.show(context),
+              ),
+              IconButton(
+                key: ChatListPanel.joinSpaceInviteKey,
+                icon: const Icon(Icons.link),
+                tooltip: l10n.spaceInviteJoinTooltip,
+                onPressed: () => JoinSpaceInviteSheet.show(context),
               ),
               IconButton(
                 key: ChatListPanel.createGroupKey,

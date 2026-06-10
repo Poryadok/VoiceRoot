@@ -5,6 +5,7 @@ import '../../l10n/app_localizations.dart';
 import '../../state/chat_providers.dart';
 import '../../state/space_providers.dart';
 import '../chat/chat_room_panel.dart';
+import 'space_invites_sheet.dart';
 import 'space_tree_panel.dart';
 
 /// Space shell: header + channel tree + optional open text chat.
@@ -30,6 +31,14 @@ class SpaceView extends ConsumerWidget {
           loading: () => Text(l10n.spaceTreeTitle),
           error: (_, _) => Text(l10n.spaceTreeTitle),
         ),
+        actions: [
+          IconButton(
+            key: const Key('space_invites_action'),
+            icon: const Icon(Icons.person_add_outlined),
+            tooltip: l10n.spaceInvitesTooltip,
+            onPressed: () => SpaceInvitesSheet.show(context, spaceId: spaceId),
+          ),
+        ],
       ),
       body: spaceAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),

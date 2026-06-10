@@ -79,3 +79,44 @@ func TestComposeSpacesTree_live(t *testing.T) {
 	require.Equal(t, chatNodeID, after.Nodes[0].ID)
 	require.Equal(t, voiceNodeID, after.Nodes[1].ID)
 }
+
+// TestComposeSpacesInvites_live: create invite, list, join as second user, revoke blocks new joins.
+func TestComposeSpacesInvites_live(t *testing.T) {
+	if !liveComposeEnabled() {
+		t.Skip("set VOICE_RUN_LIVE_COMPOSE=true to run against local compose")
+	}
+	clearLiveComposeAuthRateLimit(t)
+
+	client := &http.Client{Timeout: 45 * time.Second}
+	base := liveGatewayBaseURL()
+
+	n := time.Now().UnixNano()
+	ownerSess := registerComposeUser(t, client, base, formatComposeEmail("space-invite-owner", n), "VoiceQaTest1!")
+	joinerSess := registerComposeUser(t, client, base, formatComposeEmail("space-invite-joiner", n), "VoiceQaTest1!")
+
+	spaceID := createComposeSpace(t, client, base, ownerSess.AccessToken, "Invite QA", "invites e2e")
+	inv := createComposeSpaceInvite(t, client, base, ownerSess.AccessToken, spaceID)
+
+	list := listComposeSpaceInvites(t, client, base, ownerSess.AccessToken, spaceID)
+	require.True(t, slices.ContainsFunc(list, func(item composeSpaceInvite) bool {
+		return item.ID == inv.ID && item.Code == inv.Code
+	}))
+
+	joinComposeSpaceByInvite(t, client, base, joinerSess.AccessToken, inv.Code)
+
+	joinerList := listComposeSpaces(t, client, base, joinerSess.AccessToken)
+	require.True(t, slices.ContainsFunc(joinerList, func(item composeSpaceItem) bool {
+		return item.ID == spaceID
+	}))
+
+	revokeComposeSpaceInvite(t, client, base, ownerSess.AccessToken, spaceID, inv.ID)
+
+	lateSess := registerComposeUser(t, client, base, formatComposeEmail("space-invite-late", n), "VoiceQaTest1!")
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/invites/"+inv.Code+"/join", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+lateSess.AccessToken)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+}

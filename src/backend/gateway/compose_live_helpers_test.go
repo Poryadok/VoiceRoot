@@ -319,6 +319,85 @@ func reorderComposeSpaceTree(t *testing.T, client *http.Client, base, accessToke
 	require.Equal(t, http.StatusNoContent, resp.StatusCode, "POST reorder body=%s", string(body))
 }
 
+type composeSpaceInvite struct {
+	ID   string
+	Code string
+}
+
+func createComposeSpaceInvite(t *testing.T, client *http.Client, base, accessToken, spaceID string) composeSpaceInvite {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/spaces/"+spaceID+"/invites", bytes.NewReader([]byte("{}")))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "POST invite body=%s", string(body))
+
+	var parsed struct {
+		Invite struct {
+			ID   string `json:"id"`
+			Code string `json:"code"`
+		} `json:"invite"`
+	}
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	require.NotEmpty(t, parsed.Invite.Code)
+	return composeSpaceInvite{ID: parsed.Invite.ID, Code: parsed.Invite.Code}
+}
+
+func listComposeSpaceInvites(t *testing.T, client *http.Client, base, accessToken, spaceID string) []composeSpaceInvite {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, base+"/api/v1/spaces/"+spaceID+"/invites", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "GET invites body=%s", string(body))
+
+	var parsed struct {
+		InviteList struct {
+			Invites []struct {
+				ID   string `json:"id"`
+				Code string `json:"code"`
+			} `json:"invites"`
+		} `json:"invite_list"`
+	}
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	var out []composeSpaceInvite
+	for _, inv := range parsed.InviteList.Invites {
+		out = append(out, composeSpaceInvite{ID: inv.ID, Code: inv.Code})
+	}
+	return out
+}
+
+func joinComposeSpaceByInvite(t *testing.T, client *http.Client, base, accessToken, code string) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/invites/"+code+"/join", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "POST join body=%s", string(body))
+}
+
+func revokeComposeSpaceInvite(t *testing.T, client *http.Client, base, accessToken, spaceID, inviteID string) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodDelete, base+"/api/v1/spaces/"+spaceID+"/invites/"+inviteID, nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusNoContent, resp.StatusCode, "DELETE invite body=%s", string(body))
+}
+
 func updateComposeSpace(t *testing.T, client *http.Client, base, accessToken, spaceID, iconURL, description string) {
 	t.Helper()
 	payload, err := json.Marshal(map[string]string{

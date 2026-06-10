@@ -112,6 +112,46 @@ class SpaceTreeNodeData {
   bool get isVoiceRoom => kind == 'voice_room';
 }
 
+class SpaceInvite {
+  const SpaceInvite({
+    required this.id,
+    required this.spaceId,
+    required this.code,
+    required this.creatorProfileId,
+    this.maxUses,
+    required this.useCount,
+    this.expiresAt,
+    required this.createdAt,
+    this.revokedAt,
+  });
+
+  final String id;
+  final String spaceId;
+  final String code;
+  final String creatorProfileId;
+  final int? maxUses;
+  final int useCount;
+  final DateTime? expiresAt;
+  final DateTime createdAt;
+  final DateTime? revokedAt;
+
+  String get inviteLink => 'https://voice.gg/invite/$code';
+}
+
+class SpaceMembershipData {
+  const SpaceMembershipData({
+    required this.spaceId,
+    required this.profileId,
+    required this.joinedAt,
+    this.nickname,
+  });
+
+  final String spaceId;
+  final String profileId;
+  final DateTime joinedAt;
+  final String? nickname;
+}
+
 class SpaceTreeData {
   const SpaceTreeData({
     required this.categories,
@@ -258,6 +298,89 @@ class VoiceSpacesClient {
       final vr = data.voiceRoom;
       return VoiceRoomData(id: vr.id, spaceId: vr.spaceId, name: vr.name);
     });
+  }
+
+  Future<SpacesApiResult<SpaceInvite>> createInvite({
+    required String authorization,
+    required String spaceId,
+    int? maxUses,
+    DateTime? expiresAt,
+  }) async {
+    final result = await _gateway.postProto(
+      uri: _gateway.resolve('/api/v1/spaces/$spaceId/invites'),
+      authorization: authorization,
+      body: createInviteRequestToProto(
+        spaceId: spaceId,
+        maxUses: maxUses,
+        expiresAt: expiresAt,
+      ),
+      createEmpty: space_pb.CreateInviteResponse.create,
+    );
+    return _map(result, (data) => spaceInviteFromProto(data.invite));
+  }
+
+  Future<SpacesApiResult<List<SpaceInvite>>> listInvites({
+    required String authorization,
+    required String spaceId,
+  }) async {
+    final result = await _gateway.getProto(
+      _gateway.resolve('/api/v1/spaces/$spaceId/invites'),
+      authorization: authorization,
+      createEmpty: space_pb.ListInvitesResponse.create,
+    );
+    return _map<List<SpaceInvite>>(result, (data) {
+      final list = data.hasInviteList() ? data.inviteList : space_pb.InviteList();
+      return <SpaceInvite>[
+        for (final invite in list.invites) spaceInviteFromProto(invite),
+      ];
+    });
+  }
+
+  Future<SpacesApiResult<void>> revokeInvite({
+    required String authorization,
+    required String spaceId,
+    required String inviteId,
+  }) async {
+    final result = await _gateway.deleteEmpty(
+      uri: _gateway.resolve('/api/v1/spaces/$spaceId/invites/$inviteId'),
+      authorization: authorization,
+    );
+    return switch (result) {
+      GatewayHttpOk() => const SpacesApiOk(null),
+      GatewayHttpFailure(:final error) => SpacesApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
+  }
+
+  Future<SpacesApiResult<SpaceInvite>> getInvite({
+    required String authorization,
+    required String code,
+  }) async {
+    final result = await _gateway.getProto(
+      _gateway.resolve('/api/v1/invites/$code'),
+      authorization: authorization,
+      createEmpty: space_pb.GetInviteResponse.create,
+    );
+    return _map(result, (data) => spaceInviteFromProto(data.invite));
+  }
+
+  Future<SpacesApiResult<SpaceMembershipData>> joinByInvite({
+    required String authorization,
+    required String code,
+  }) async {
+    final result = await _gateway.postProto(
+      uri: _gateway.resolve('/api/v1/invites/$code/join'),
+      authorization: authorization,
+      body: space_pb.JoinByInviteRequest(code: code),
+      createEmpty: space_pb.JoinByInviteResponse.create,
+    );
+    return _map(
+      result,
+      (data) => spaceMembershipFromProto(data.spaceMembership),
+    );
   }
 
   Future<SpacesApiResult<SpaceTreeNodeData>> createSpaceChat({
