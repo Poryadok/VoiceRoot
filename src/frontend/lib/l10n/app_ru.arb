@@ -310,6 +310,7 @@
   "spaceTreeTextChat": "Текстовый чат",
   "spaceTreeVoiceRoom": "Голосовая комната",
   "spaceTreeUncategorized": "Каналы",
+  "spaceSelectPrompt": "Выберите спейс",
   "spaceListTitle": "Мои спейсы",
   "spaceOpenAction": "Открыть спейс",
   "spaceInvitesTooltip": "Пригласить людей",

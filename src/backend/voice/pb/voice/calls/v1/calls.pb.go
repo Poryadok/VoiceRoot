@@ -967,6 +967,7 @@ func (x *UpdateVoiceStateRequest) GetIsVideoOn() bool {
 type GetVoiceStatesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	RoomId        string                 `protobuf:"bytes,1,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
+	VoiceRoomId   *string                `protobuf:"bytes,2,opt,name=voice_room_id,json=voiceRoomId,proto3,oneof" json:"voice_room_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1004,6 +1005,13 @@ func (*GetVoiceStatesRequest) Descriptor() ([]byte, []int) {
 func (x *GetVoiceStatesRequest) GetRoomId() string {
 	if x != nil {
 		return x.RoomId
+	}
+	return ""
+}
+
+func (x *GetVoiceStatesRequest) GetVoiceRoomId() string {
+	if x != nil && x.VoiceRoomId != nil {
+		return *x.VoiceRoomId
 	}
 	return ""
 }

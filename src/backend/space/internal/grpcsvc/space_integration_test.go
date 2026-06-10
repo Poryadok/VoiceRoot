@@ -134,6 +134,10 @@ func withProfileAccounts(m mapProfileAccounts) spaceServerOption {
 	return func(s *SpaceGRPC) { s.ProfileAccounts = m }
 }
 
+func withSpaceChatLookup(l ChatLookup) spaceServerOption {
+	return func(s *SpaceGRPC) { s.Chats = l }
+}
+
 func startSpaceGRPCTestServer(t *testing.T, pool *pgxpool.Pool, opts ...spaceServerOption) (spacev1.SpaceServiceClient, func()) {
 	t.Helper()
 	const bufSize = 1 << 20

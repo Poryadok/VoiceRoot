@@ -72,6 +72,34 @@ class VoiceJoinToken {
   final String? livekitUrl;
 }
 
+class VoiceRoomSession {
+  const VoiceRoomSession({
+    required this.roomId,
+    required this.livekitRoomName,
+    required this.voiceRoomId,
+  });
+
+  final String roomId;
+  final String livekitRoomName;
+  final String voiceRoomId;
+}
+
+class VoiceRoomParticipantState {
+  const VoiceRoomParticipantState({
+    required this.profileId,
+    this.isMuted = false,
+    this.isDeafened = false,
+    this.isVideoOn = false,
+    this.isScreenSharing = false,
+  });
+
+  final String profileId;
+  final bool isMuted;
+  final bool isDeafened;
+  final bool isVideoOn;
+  final bool isScreenSharing;
+}
+
 class VoiceCallsClient {
   VoiceCallsClient({required GatewayHttpClient gateway}) : _gateway = gateway;
 
@@ -215,6 +243,44 @@ class VoiceCallsClient {
     );
   }
 
+  /// Phase 5 space voice room — join persistent room in a space.
+  Future<VoiceApiResult<VoiceRoomSession>> joinVoiceRoom({
+    required String authorization,
+    required String voiceRoomId,
+    required String spaceId,
+  }) async {
+    final result = await _gateway.postJson(
+      uri: _gateway.resolve('/api/v1/voice/rooms/$voiceRoomId/join'),
+      authorization: authorization,
+      body: {
+        'space': {'id': spaceId},
+      },
+    );
+    return _mapJson(result, voiceRoomSessionFromJson);
+  }
+
+  Future<VoiceApiResult<void>> leaveVoiceRoom({
+    required String authorization,
+    required String voiceRoomId,
+  }) async {
+    final result = await _gateway.postEmpty(
+      uri: _gateway.resolve('/api/v1/voice/rooms/$voiceRoomId/leave'),
+      authorization: authorization,
+    );
+    return _mapEmpty(result);
+  }
+
+  Future<VoiceApiResult<List<VoiceRoomParticipantState>>> getVoiceRoomStates({
+    required String authorization,
+    required String voiceRoomId,
+  }) async {
+    final result = await _gateway.getJson(
+      _gateway.resolve('/api/v1/voice/rooms/$voiceRoomId/states'),
+      authorization: authorization,
+    );
+    return _mapJson(result, voiceRoomParticipantStatesFromJson);
+  }
+
   Future<VoiceApiResult<void>> updateVoiceState({
     required String authorization,
     required String roomId,
@@ -265,6 +331,20 @@ class VoiceCallsClient {
   VoiceApiResult<T> _map<T>(
     GatewayHttpResult<dynamic> result,
     T Function(dynamic data) parse,
+  ) {
+    return switch (result) {
+      GatewayHttpOk(:final data) => VoiceApiOk(parse(data)),
+      GatewayHttpFailure(:final error) => VoiceApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
+  }
+
+  VoiceApiResult<T> _mapJson<T>(
+    GatewayHttpResult<Map<String, dynamic>> result,
+    T Function(Map<String, dynamic> data) parse,
   ) {
     return switch (result) {
       GatewayHttpOk(:final data) => VoiceApiOk(parse(data)),

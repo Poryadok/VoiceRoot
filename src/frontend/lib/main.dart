@@ -7,7 +7,9 @@ import 'backend/auth_session_storage.dart';
 import 'backend/discover_hint_storage.dart';
 import 'bootstrap/voice_app_bootstrap.dart';
 import 'state/auth_providers.dart';
+import 'state/call_providers.dart';
 import 'state/space_providers.dart';
+import 'state/voice_room_providers.dart';
 import 'theme/profile_accent_storage.dart';
 import 'theme/voice_theme_providers.dart';
 
@@ -30,6 +32,14 @@ Future<void> main() async {
         spaceViewerProfileIdProvider.overrideWith(
           (ref) => ref.watch(authControllerProvider).activeProfileId,
         ),
+        joinVoiceRoomActionProvider.overrideWith((ref) {
+          return ({required String voiceRoomId, required String spaceId}) async {
+            await ref.read(callControllerProvider.notifier).joinVoiceRoom(
+              voiceRoomId: voiceRoomId,
+              spaceId: spaceId,
+            );
+          };
+        }),
       ],
       child: const VoiceAppBootstrap(),
     ),

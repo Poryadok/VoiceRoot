@@ -96,6 +96,7 @@ class SpaceTreeNodeData {
     required this.sortOrder,
     this.isSystem = false,
     required this.displayName,
+    this.chatType,
   });
 
   final String id;
@@ -107,9 +108,16 @@ class SpaceTreeNodeData {
   final int sortOrder;
   final bool isSystem;
   final String displayName;
+  /// Wire value from [ChatType] proto enum, e.g. `CHAT_TYPE_CHANNEL`.
+  final String? chatType;
 
   bool get isTextChat => kind == 'text_chat';
   bool get isVoiceRoom => kind == 'voice_room';
+  bool get isChannelChat => chatType == 'CHAT_TYPE_CHANNEL';
+  bool get isGroupChat =>
+      chatType == null ||
+      chatType == 'CHAT_TYPE_GROUP' ||
+      chatType == 'CHAT_TYPE_UNSPECIFIED';
 }
 
 class SpaceInvite {
@@ -268,15 +276,11 @@ class VoiceSpacesClient {
     required String authorization,
     required String spaceId,
   }) async {
-    final result = await _gateway.getProto(
+    final result = await _gateway.getJson(
       _gateway.resolve('/api/v1/spaces/$spaceId/tree'),
       authorization: authorization,
-      createEmpty: space_pb.ListSpaceTreeResponse.create,
     );
-    return _map(
-      result,
-      (data) => spaceTreeFromProto(data as space_pb.ListSpaceTreeResponse),
-    );
+    return _mapJson(result, spaceTreeFromJson);
   }
 
   Future<SpacesApiResult<SpaceCategory>> createCategory({

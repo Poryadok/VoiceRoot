@@ -573,6 +573,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get spaceTreeUncategorized => 'Channels';
 
   @override
+  String get spaceSelectPrompt => 'Select a space';
+
+  @override
   String get spaceListTitle => 'My spaces';
 
   @override

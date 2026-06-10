@@ -27,3 +27,26 @@ func (m *mapChatMembers) EnsureMember(_ context.Context, chatID, profileID strin
 	}
 	return nil
 }
+
+// ErrNotSpaceMember is returned when a profile is not a member of the space.
+var ErrNotSpaceMember = errors.New("not a space member")
+
+// SpaceMembership validates that a profile belongs to a space.
+type SpaceMembership interface {
+	EnsureMember(ctx context.Context, spaceID, profileID string) error
+}
+
+type mapSpaceMembers struct {
+	members map[string]map[string]bool
+}
+
+func (m *mapSpaceMembers) EnsureMember(_ context.Context, spaceID, profileID string) error {
+	if m == nil {
+		return nil
+	}
+	space, ok := m.members[spaceID]
+	if !ok || !space[profileID] {
+		return ErrNotSpaceMember
+	}
+	return nil
+}

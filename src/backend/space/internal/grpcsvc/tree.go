@@ -68,7 +68,7 @@ func (s *SpaceGRPC) ListSpaceTree(ctx context.Context, req *spacev1.ListSpaceTre
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	return spaceTreeDataToProto(data), nil
+	return s.spaceTreeDataToProto(ctx, data), nil
 }
 
 func (s *SpaceGRPC) CreateCategory(ctx context.Context, req *spacev1.CreateCategoryRequest) (*spacev1.CreateCategoryResponse, error) {
@@ -311,7 +311,7 @@ func (s *SpaceGRPC) UpsertTreeNode(ctx context.Context, req *spacev1.UpsertTreeN
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	s.publishTreeUpserted(ctx, spaceID, node)
-	return &spacev1.UpsertTreeNodeResponse{SpaceTreeNode: treeNodeRowToProto(node)}, nil
+	return &spacev1.UpsertTreeNodeResponse{SpaceTreeNode: treeNodeRowToProto(node, nil)}, nil
 }
 
 func (s *SpaceGRPC) RemoveTreeNode(ctx context.Context, req *spacev1.RemoveTreeNodeRequest) (*spacev1.RemoveTreeNodeResponse, error) {
@@ -392,10 +392,11 @@ func (s *SpaceGRPC) publishTreeRemoved(ctx context.Context, spaceID, nodeID uuid
 	}
 }
 
-func spaceTreeDataToProto(data *store.SpaceTreeData) *spacev1.ListSpaceTreeResponse {
+func (s *SpaceGRPC) spaceTreeDataToProto(ctx context.Context, data *store.SpaceTreeData) *spacev1.ListSpaceTreeResponse {
 	if data == nil {
 		return &spacev1.ListSpaceTreeResponse{}
 	}
+	chatInfo := s.lookupChatInfo(ctx, data.Nodes)
 	out := &spacev1.ListSpaceTreeResponse{
 		Categories: make([]*spacev1.Category, 0, len(data.Categories)),
 		Nodes:      make([]*spacev1.SpaceTreeNode, 0, len(data.Nodes)),
@@ -405,12 +406,39 @@ func spaceTreeDataToProto(data *store.SpaceTreeData) *spacev1.ListSpaceTreeRespo
 		out.Categories = append(out.Categories, categoryRowToProto(c))
 	}
 	for _, n := range data.Nodes {
-		out.Nodes = append(out.Nodes, treeNodeRowToProto(n))
+		out.Nodes = append(out.Nodes, treeNodeRowToProto(n, chatInfo))
 	}
 	for _, r := range data.VoiceRooms {
 		out.VoiceRooms = append(out.VoiceRooms, voiceRoomRowToProto(r))
 	}
 	return out
+}
+
+func (s *SpaceGRPC) lookupChatInfo(ctx context.Context, nodes []*store.TreeNodeRow) map[uuid.UUID]ChatInfo {
+	if s == nil || s.Chats == nil || len(nodes) == 0 {
+		return nil
+	}
+	ids := make([]uuid.UUID, 0, len(nodes))
+	seen := make(map[uuid.UUID]struct{}, len(nodes))
+	for _, n := range nodes {
+		if n == nil || n.Kind != "text_chat" || n.ChatID == nil {
+			continue
+		}
+		if _, ok := seen[*n.ChatID]; ok {
+			continue
+		}
+		seen[*n.ChatID] = struct{}{}
+		ids = append(ids, *n.ChatID)
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	info, err := s.Chats.GetChatNames(ctx, ids)
+	if err != nil {
+		log.Printf("space: chat lookup for tree: %v", err)
+		return nil
+	}
+	return info
 }
 
 func categoryRowToProto(r *store.CategoryRow) *spacev1.Category {
@@ -437,7 +465,7 @@ func voiceRoomRowToProto(r *store.VoiceRoomRow) *spacev1.VoiceRoom {
 	}
 }
 
-func treeNodeRowToProto(r *store.TreeNodeRow) *spacev1.SpaceTreeNode {
+func treeNodeRowToProto(r *store.TreeNodeRow, chatInfo map[uuid.UUID]ChatInfo) *spacev1.SpaceTreeNode {
 	if r == nil {
 		return nil
 	}
@@ -453,7 +481,18 @@ func treeNodeRowToProto(r *store.TreeNodeRow) *spacev1.SpaceTreeNode {
 		out.CategoryId = &cid
 	}
 	if r.ChatID != nil {
-		out.LinkedChat = &chatv1.ChatRef{Id: r.ChatID.String()}
+		ref := &chatv1.ChatRef{Id: r.ChatID.String()}
+		if chatInfo != nil {
+			if info, ok := chatInfo[*r.ChatID]; ok {
+				ct := info.ChatType
+				ref.Type = &ct
+				if info.Name != "" {
+					dn := info.Name
+					out.DisplayName = &dn
+				}
+			}
+		}
+		out.LinkedChat = ref
 	}
 	if r.VoiceRoomID != nil {
 		vid := r.VoiceRoomID.String()

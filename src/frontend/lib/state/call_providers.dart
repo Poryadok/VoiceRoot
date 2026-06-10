@@ -127,6 +127,7 @@ class CallController extends StateNotifier<CallState> {
   VoiceLiveKitRoom? _room;
   bool _startCallInFlight = false;
   bool _groupVoiceInFlight = false;
+  bool _voiceRoomInFlight = false;
   int _connectGeneration = 0;
 
   void _refreshGroupActiveCalls() {
@@ -230,6 +231,48 @@ class CallController extends StateNotifier<CallState> {
       }
     } finally {
       _groupVoiceInFlight = false;
+    }
+  }
+
+  Future<void> joinVoiceRoom({
+    required String voiceRoomId,
+    required String spaceId,
+  }) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return;
+    if (_voiceRoomInFlight) return;
+    _voiceRoomInFlight = true;
+    state = state.copyWith(phase: CallPhase.connecting, clearError: true);
+    try {
+      final result = await _ref.read(voiceCallsClientProvider).joinVoiceRoom(
+        authorization: auth,
+        voiceRoomId: voiceRoomId,
+        spaceId: spaceId,
+      );
+      if (!mounted) return;
+      switch (result) {
+        case VoiceApiOk(:final data):
+          final session = VoiceCallSession(
+            roomId: data.roomId,
+            livekitRoomName: data.livekitRoomName,
+            chatId: '',
+            initiatorProfileId: '',
+            calleeProfileId: '',
+            mediaKind: VoiceCallMediaKind.audio,
+            status: VoiceCallStatus.active,
+            sessionKind: VoiceSessionKind.voiceRoom,
+          );
+          state = state.copyWith(session: session, clearOutgoingTarget: true);
+          await _connectLiveKit(session);
+        case VoiceApiFailure(:final message):
+          state = state.copyWith(
+            phase: CallPhase.failed,
+            errorMessage: message,
+            clearOutgoingTarget: true,
+          );
+      }
+    } finally {
+      _voiceRoomInFlight = false;
     }
   }
 

@@ -31,7 +31,7 @@ func (s *RedisCallStore) CreateCall(ctx context.Context, call Call) (Call, error
 	if err != nil && !errors.Is(err, ErrNotFound) {
 		return Call{}, err
 	}
-	if !call.IsGroupVoice() && call.CalleeProfileID != "" {
+	if !call.isOpenVoiceSession() && call.CalleeProfileID != "" {
 		active, err = s.GetActiveCall(ctx, call.CalleeProfileID)
 		if err == nil && active.RoomID != "" {
 			return Call{}, ErrActiveCall
@@ -102,12 +102,50 @@ func (s *RedisCallStore) GetActiveCall(ctx context.Context, profileID string) (C
 	return call, nil
 }
 
+func (s *RedisCallStore) GetCallByVoiceRoomID(ctx context.Context, voiceRoomID string) (Call, error) {
+	roomID, err := s.client.Get(ctx, s.activeVoiceRoomKey(voiceRoomID)).Result()
+	if errors.Is(err, redis.Nil) {
+		return Call{}, ErrNotFound
+	}
+	if err != nil {
+		return Call{}, err
+	}
+	call, err := s.GetCall(ctx, roomID)
+	if err != nil {
+		return Call{}, err
+	}
+	if !call.IsVoiceRoom() || call.Status != callsv1.CallStatus_CALL_STATUS_ACTIVE {
+		_ = s.client.Del(ctx, s.activeVoiceRoomKey(voiceRoomID)).Err()
+		return Call{}, ErrNotFound
+	}
+	return call, nil
+}
+
+func (s *RedisCallStore) RemoveParticipant(ctx context.Context, roomID, profileID string) (Call, error) {
+	call, err := s.GetCall(ctx, roomID)
+	if err != nil {
+		return Call{}, err
+	}
+	if !call.isOpenVoiceSession() || call.Status != callsv1.CallStatus_CALL_STATUS_ACTIVE {
+		return Call{}, ErrInvalidState
+	}
+	if !call.IsParticipant(profileID) {
+		return Call{}, ErrNotParticipant
+	}
+	delete(call.States, profileID)
+	if err := s.save(ctx, call); err != nil {
+		return Call{}, err
+	}
+	_ = s.client.Del(ctx, s.activeKey(profileID)).Err()
+	return call, nil
+}
+
 func (s *RedisCallStore) AddParticipant(ctx context.Context, roomID, profileID string, maxParticipants int) (Call, error) {
 	call, err := s.GetCall(ctx, roomID)
 	if err != nil {
 		return Call{}, err
 	}
-	if !call.IsGroupVoice() || call.Status != callsv1.CallStatus_CALL_STATUS_ACTIVE {
+	if !call.isOpenVoiceSession() || call.Status != callsv1.CallStatus_CALL_STATUS_ACTIVE {
 		return Call{}, ErrInvalidState
 	}
 	if call.IsParticipant(profileID) {
@@ -213,6 +251,13 @@ func (s *RedisCallStore) save(ctx context.Context, call Call) error {
 			pipe.Del(ctx, s.activeChatKey(call.ChatID))
 		}
 	}
+	if call.IsVoiceRoom() && call.VoiceRoomID != "" {
+		if call.Status == callsv1.CallStatus_CALL_STATUS_ACTIVE {
+			pipe.Set(ctx, s.activeVoiceRoomKey(call.VoiceRoomID), call.RoomID, 24*time.Hour)
+		} else {
+			pipe.Del(ctx, s.activeVoiceRoomKey(call.VoiceRoomID))
+		}
+	}
 	activeProfiles := call.ProfileIDs()
 	if call.Status == callsv1.CallStatus_CALL_STATUS_RINGING || call.Status == callsv1.CallStatus_CALL_STATUS_ACTIVE {
 		for _, profileID := range activeProfiles {
@@ -245,4 +290,8 @@ func (s *RedisCallStore) activeKey(profileID string) string {
 
 func (s *RedisCallStore) activeChatKey(chatID string) string {
 	return s.prefix + "active_chat:" + chatID
+}
+
+func (s *RedisCallStore) activeVoiceRoomKey(voiceRoomID string) string {
+	return s.prefix + "active_voice_room:" + voiceRoomID
 }

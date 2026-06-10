@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -25,9 +26,7 @@ func writeActiveCallResponse(w http.ResponseWriter, resp *callsv1.GetActiveCallR
 	writeProtoJSON(w, http.StatusOK, resp)
 }
 
-func (t *transcoder) serveVoice(w http.ResponseWriter, r *http.Request, rest string) bool {
-	ctx := withGRPCMetadata(r.Context(), r)
-
+func (t *transcoder) serveVoiceCalls(w http.ResponseWriter, r *http.Request, rest string, ctx context.Context) bool {
 	switch {
 	case r.Method == http.MethodPost && rest == "calls":
 		req, err := readStartCallJSON(r)

@@ -5,8 +5,10 @@ import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/discover_hint_storage.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
+import 'package:voice_frontend/backend/spaces_client.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
+import 'package:voice_frontend/state/space_providers.dart';
 import 'package:voice_frontend/theme/profile_accent_storage.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 
@@ -26,6 +28,7 @@ List<Override> voiceAppTestOverrides({required http.Client client}) => [
   ),
   httpClientProvider.overrideWithValue(client),
   realtimeAutoConnectProvider.overrideWithValue(false),
+  mySpacesProvider.overrideWith((_) async => const SpaceListData(spaces: [])),
 ];
 
 /// Pre-authenticated [AuthController] for widget tests of the main shell.

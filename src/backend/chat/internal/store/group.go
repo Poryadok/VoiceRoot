@@ -17,6 +17,38 @@ const (
 	MinGroupMembers  = 3
 )
 
+// CreateSpaceChannelChat inserts a channel chat bound to a space; members inherit from space_members.
+func (s *DMStore) CreateSpaceChannelChat(ctx context.Context, creatorProfileID, spaceID uuid.UUID, name string) (*ChatRow, error) {
+	if s == nil || s.Pool == nil {
+		return nil, errors.New("dm store: pool not configured")
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, errors.New("channel name is required")
+	}
+	var chatID uuid.UUID
+	var createdAt, updatedAt time.Time
+	err := s.Pool.QueryRow(ctx, `
+INSERT INTO chats (type, space_id, name, creator_profile_id, slow_mode_seconds)
+VALUES ('channel', $1, $2, $3, 0)
+RETURNING id, created_at, updated_at
+`, spaceID, name, creatorProfileID).Scan(&chatID, &createdAt, &updatedAt)
+	if err != nil {
+		return nil, err
+	}
+	n := name
+	sid := spaceID
+	return &ChatRow{
+		ID:               chatID,
+		Type:             "channel",
+		SpaceID:          &sid,
+		Name:             &n,
+		CreatorProfileID: creatorProfileID,
+		CreatedAt:        createdAt.UTC(),
+		UpdatedAt:        updatedAt.UTC(),
+	}, nil
+}
+
 // CreateSpaceGroupChat inserts a group chat bound to a space; members inherit from space_members.
 func (s *DMStore) CreateSpaceGroupChat(ctx context.Context, creatorProfileID, spaceID uuid.UUID, name string) (*ChatRow, error) {
 	if s == nil || s.Pool == nil {

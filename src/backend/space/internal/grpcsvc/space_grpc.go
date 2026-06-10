@@ -15,4 +15,5 @@ type SpaceGRPC struct {
 	SpaceEvents     spaceevents.Publisher // optional; CreateSpace publishes space.created
 	Roles           rolev1.RoleServiceClient
 	ProfileAccounts ProfileAccountLookup // optional; resolves profile_id → account_id for bans
+	Chats           ChatLookup           // optional; enriches text_chat nodes in ListSpaceTree
 }

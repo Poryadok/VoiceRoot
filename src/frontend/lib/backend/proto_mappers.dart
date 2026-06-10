@@ -570,6 +570,56 @@ SpaceTreeData spaceTreeFromProto(space_pb.ListSpaceTreeResponse resp) {
   );
 }
 
+SpaceTreeData spaceTreeFromJson(Map<String, dynamic> data) {
+  final voiceRooms = <VoiceRoomData>[];
+  final voiceById = <String, VoiceRoomData>{};
+  final rawVoiceRooms = data['voice_rooms'];
+  if (rawVoiceRooms is List) {
+    for (final item in rawVoiceRooms) {
+      if (item is! Map<String, dynamic>) continue;
+      final vr = VoiceRoomData(
+        id: item['id'] as String? ?? '',
+        spaceId: item['space_id'] as String? ?? '',
+        name: item['name'] as String? ?? '',
+      );
+      voiceRooms.add(vr);
+      voiceById[vr.id] = vr;
+    }
+  }
+
+  final categories = <SpaceCategory>[];
+  final rawCategories = data['categories'];
+  if (rawCategories is List) {
+    for (final item in rawCategories) {
+      if (item is! Map<String, dynamic>) continue;
+      categories.add(
+        SpaceCategory(
+          id: item['id'] as String? ?? '',
+          spaceId: item['space_id'] as String? ?? '',
+          name: item['name'] as String? ?? '',
+          sortOrder: (item['sort_order'] as num?)?.toInt() ?? 0,
+        ),
+      );
+    }
+  }
+
+  final nodes = <SpaceTreeNodeData>[];
+  final rawNodes = data['nodes'];
+  if (rawNodes is List) {
+    for (final item in rawNodes) {
+      if (item is Map<String, dynamic>) {
+        nodes.add(spaceTreeNodeFromJson(item, voiceById));
+      }
+    }
+  }
+
+  return SpaceTreeData(
+    categories: categories,
+    nodes: nodes,
+    voiceRooms: voiceRooms,
+  );
+}
+
 pb_ts.Timestamp dateTimeToProtoTimestamp(DateTime dt) {
   final utc = dt.toUtc();
   return pb_ts.Timestamp()
@@ -633,6 +683,9 @@ SpaceTreeNodeData spaceTreeNodeFromProto(
   final linkedChatId =
       node.hasLinkedChat() && node.linkedChat.hasId() ? node.linkedChat.id : null;
   final voiceName = voiceRoomId != null ? voiceById[voiceRoomId]?.name : null;
+  final chatType = node.hasLinkedChat() && node.linkedChat.hasType()
+      ? node.linkedChat.type.name
+      : null;
   return SpaceTreeNodeData(
     id: node.id,
     spaceId: node.spaceId,
@@ -643,5 +696,71 @@ SpaceTreeNodeData spaceTreeNodeFromProto(
     sortOrder: node.sortOrder,
     isSystem: node.isSystem,
     displayName: voiceName ?? linkedChatId ?? node.id,
+    chatType: chatType,
   );
+}
+
+SpaceTreeNodeData spaceTreeNodeFromJson(
+  Map<String, dynamic> node,
+  Map<String, VoiceRoomData> voiceById,
+) {
+  final voiceRoomId = emptyToNull(node['voice_room_id'] as String?);
+  final linkedChat = node['linked_chat'];
+  String? linkedChatId;
+  String? chatType;
+  if (linkedChat is Map<String, dynamic>) {
+    linkedChatId = emptyToNull(linkedChat['id'] as String?);
+    final rawType = linkedChat['type'] as String?;
+    if (rawType != null && rawType.isNotEmpty) {
+      chatType = rawType;
+    }
+  }
+  final voiceName = voiceRoomId != null ? voiceById[voiceRoomId]?.name : null;
+  final enrichedName = emptyToNull(node['display_name'] as String?);
+  return SpaceTreeNodeData(
+    id: node['id'] as String? ?? '',
+    spaceId: node['space_id'] as String? ?? '',
+    categoryId: emptyToNull(node['category_id'] as String?),
+    kind: node['kind'] as String? ?? '',
+    linkedChatId: linkedChatId,
+    voiceRoomId: voiceRoomId,
+    sortOrder: (node['sort_order'] as num?)?.toInt() ?? 0,
+    isSystem: node['is_system'] as bool? ?? false,
+    displayName: enrichedName ?? voiceName ?? linkedChatId ?? node['id'] as String? ?? '',
+    chatType: chatType,
+  );
+}
+
+VoiceRoomSession voiceRoomSessionFromJson(Map<String, dynamic> data) {
+  final session = data['voice_session'];
+  if (session is! Map<String, dynamic>) {
+    return const VoiceRoomSession(
+      roomId: '',
+      livekitRoomName: '',
+      voiceRoomId: '',
+    );
+  }
+  return VoiceRoomSession(
+    roomId: session['room_id'] as String? ?? '',
+    livekitRoomName: session['livekit_room_name'] as String? ?? '',
+    voiceRoomId: session['voice_room_id'] as String? ?? '',
+  );
+}
+
+List<VoiceRoomParticipantState> voiceRoomParticipantStatesFromJson(
+  Map<String, dynamic> data,
+) {
+  final raw = data['participants'];
+  if (raw is! List) return const [];
+  return [
+    for (final item in raw)
+      if (item is Map<String, dynamic>)
+        VoiceRoomParticipantState(
+          profileId: item['profile_id'] as String? ?? '',
+          isMuted: item['is_muted'] as bool? ?? false,
+          isDeafened: item['is_deafened'] as bool? ?? false,
+          isVideoOn: item['is_video_on'] as bool? ?? false,
+          isScreenSharing: item['is_screen_sharing'] as bool? ?? false,
+        ),
+  ];
 }

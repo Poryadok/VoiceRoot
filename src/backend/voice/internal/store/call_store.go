@@ -9,7 +9,10 @@ import (
 	callsv1 "voice.app/voice/calls/v1"
 )
 
-const MaxGroupVoiceParticipants = 32
+const (
+	MaxGroupVoiceParticipants = 32
+	MaxVoiceRoomParticipants  = 32
+)
 
 var (
 	ErrNotFound       = errors.New("call not found")
@@ -31,6 +34,8 @@ type Call struct {
 	RoomID             string                      `json:"room_id"`
 	LivekitRoomName    string                      `json:"livekit_room_name"`
 	ChatID             string                      `json:"chat_id"`
+	VoiceRoomID        string                      `json:"voice_room_id,omitempty"`
+	SpaceID            string                      `json:"space_id,omitempty"`
 	SessionKind        callsv1.VoiceSessionKind    `json:"session_kind,omitempty"`
 	InitiatorProfileID string                      `json:"initiator_profile_id"`
 	CalleeProfileID    string                      `json:"callee_profile_id"`
@@ -46,8 +51,16 @@ func (c Call) IsGroupVoice() bool {
 	return c.SessionKind == callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE
 }
 
+func (c Call) IsVoiceRoom() bool {
+	return c.SessionKind == callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM
+}
+
+func (c Call) isOpenVoiceSession() bool {
+	return c.IsGroupVoice() || c.IsVoiceRoom()
+}
+
 func (c Call) ProfileIDs() []string {
-	if c.IsGroupVoice() {
+	if c.isOpenVoiceSession() {
 		ids := make([]string, 0, len(c.States))
 		for id := range c.States {
 			ids = append(ids, id)
@@ -61,7 +74,7 @@ func (c Call) IsParticipant(profileID string) bool {
 	if profileID == "" {
 		return false
 	}
-	if c.IsGroupVoice() {
+	if c.isOpenVoiceSession() {
 		_, ok := c.States[profileID]
 		return ok
 	}
@@ -72,7 +85,7 @@ func (c Call) IsActiveForProfile(profileID string) bool {
 	if !c.IsParticipant(profileID) {
 		return false
 	}
-	if c.IsGroupVoice() {
+	if c.isOpenVoiceSession() {
 		return c.Status == callsv1.CallStatus_CALL_STATUS_ACTIVE
 	}
 	return c.Status == callsv1.CallStatus_CALL_STATUS_RINGING || c.Status == callsv1.CallStatus_CALL_STATUS_ACTIVE
@@ -91,6 +104,8 @@ type CallStore interface {
 	GetActiveGroupCallForChat(ctx context.Context, chatID string) (Call, error)
 	SetStatus(ctx context.Context, roomID string, status callsv1.CallStatus, endedAt time.Time) (Call, error)
 	AddParticipant(ctx context.Context, roomID, profileID string, maxParticipants int) (Call, error)
+	RemoveParticipant(ctx context.Context, roomID, profileID string) (Call, error)
+	GetCallByVoiceRoomID(ctx context.Context, voiceRoomID string) (Call, error)
 	UpdateVoiceState(ctx context.Context, roomID, profileID string, patch VoiceStatePatch) (Call, ParticipantState, error)
 	ListExpiredRinging(ctx context.Context, now time.Time) ([]Call, error)
 }
@@ -110,7 +125,7 @@ func (s *MemoryCallStore) CreateCall(_ context.Context, call Call) (Call, error)
 	if err := s.ensureNoActiveCallLocked(call.InitiatorProfileID); err != nil {
 		return Call{}, err
 	}
-	if !call.IsGroupVoice() && call.CalleeProfileID != "" {
+	if !call.isOpenVoiceSession() && call.CalleeProfileID != "" {
 		if err := s.ensureNoActiveCallLocked(call.CalleeProfileID); err != nil {
 			return Call{}, err
 		}
@@ -172,7 +187,7 @@ func (s *MemoryCallStore) AddParticipant(_ context.Context, roomID, profileID st
 	if !ok {
 		return Call{}, ErrNotFound
 	}
-	if !call.IsGroupVoice() || call.Status != callsv1.CallStatus_CALL_STATUS_ACTIVE {
+	if !call.isOpenVoiceSession() || call.Status != callsv1.CallStatus_CALL_STATUS_ACTIVE {
 		return Call{}, ErrInvalidState
 	}
 	if call.IsParticipant(profileID) {
@@ -193,6 +208,37 @@ func (s *MemoryCallStore) AddParticipant(_ context.Context, roomID, profileID st
 	}
 	s.calls[roomID] = call
 	return call, nil
+}
+
+func (s *MemoryCallStore) RemoveParticipant(_ context.Context, roomID, profileID string) (Call, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	call, ok := s.calls[roomID]
+	if !ok {
+		return Call{}, ErrNotFound
+	}
+	if !call.isOpenVoiceSession() || call.Status != callsv1.CallStatus_CALL_STATUS_ACTIVE {
+		return Call{}, ErrInvalidState
+	}
+	if !call.IsParticipant(profileID) {
+		return Call{}, ErrNotParticipant
+	}
+	delete(call.States, profileID)
+	s.calls[roomID] = call
+	return call, nil
+}
+
+func (s *MemoryCallStore) GetCallByVoiceRoomID(_ context.Context, voiceRoomID string) (Call, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, call := range s.calls {
+		if call.IsVoiceRoom() &&
+			call.VoiceRoomID == voiceRoomID &&
+			call.Status == callsv1.CallStatus_CALL_STATUS_ACTIVE {
+			return call, nil
+		}
+	}
+	return Call{}, ErrNotFound
 }
 
 func (s *MemoryCallStore) SetStatus(_ context.Context, roomID string, status callsv1.CallStatus, endedAt time.Time) (Call, error) {
@@ -249,7 +295,7 @@ func (s *MemoryCallStore) ListExpiredRinging(_ context.Context, now time.Time) (
 }
 
 func defaultStates(call Call) map[string]ParticipantState {
-	if call.IsGroupVoice() {
+	if call.isOpenVoiceSession() {
 		return map[string]ParticipantState{
 			call.InitiatorProfileID: {
 				ProfileID: call.InitiatorProfileID,

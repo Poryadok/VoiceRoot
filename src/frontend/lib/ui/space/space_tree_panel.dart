@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../backend/spaces_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/space_providers.dart';
+import '../../state/voice_room_providers.dart';
 import '../core/voice_list_row.dart';
 import '../core/voice_skeleton.dart';
 import '../core/voice_state_panel.dart';
@@ -30,28 +33,30 @@ class SpaceTreePanel extends ConsumerWidget {
     final l10n = AppLocalizations.of(context)!;
     final treeAsync = ref.watch(spaceTreeProvider(spaceId));
 
-    return treeAsync.when(
-      loading: () => const VoiceListSkeleton(),
-      error: (e, _) => VoiceStatePanel(
-        title: l10n.spaceTreeLoadError,
-        message: e.toString(),
-        icon: Icons.account_tree_outlined,
-        actionLabel: l10n.commonRetry,
-        onAction: () => ref.invalidate(spaceTreeProvider(spaceId)),
-      ),
-      data: (tree) {
-        if (tree.nodes.isEmpty && tree.categories.isEmpty) {
-          return VoiceStatePanel(
-            title: l10n.spaceTreeEmpty,
-            icon: Icons.account_tree_outlined,
+    return KeyedSubtree(
+      key: panelKey,
+      child: treeAsync.when(
+        loading: () => const VoiceListSkeleton(),
+        error: (e, _) => VoiceStatePanel(
+          title: l10n.spaceTreeLoadError,
+          message: e.toString(),
+          icon: Icons.account_tree_outlined,
+          actionLabel: l10n.commonRetry,
+          onAction: () => ref.invalidate(spaceTreeProvider(spaceId)),
+        ),
+        data: (tree) {
+          if (tree.nodes.isEmpty && tree.categories.isEmpty) {
+            return VoiceStatePanel(
+              title: l10n.spaceTreeEmpty,
+              icon: Icons.account_tree_outlined,
+            );
+          }
+          return ListView(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            children: _buildSections(context, l10n, tree),
           );
-        }
-        return ListView(
-          key: panelKey,
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          children: _buildSections(context, l10n, tree),
-        );
-      },
+        },
+      ),
     );
   }
 
@@ -159,7 +164,7 @@ class _CategorySectionState extends State<_CategorySection> {
               key: SpaceTreePanel.nodeKey(node.id),
               node: node,
               l10n: widget.l10n,
-              selected: node.linkedChatId == widget.selectedChatId,
+              selectedChatId: widget.selectedChatId,
               onTextChatSelected: widget.onTextChatSelected,
             ),
           ),
@@ -168,35 +173,110 @@ class _CategorySectionState extends State<_CategorySection> {
   }
 }
 
-class _TreeNodeTile extends StatelessWidget {
+class _TreeNodeTile extends ConsumerWidget {
   const _TreeNodeTile({
     super.key,
     required this.node,
     required this.l10n,
-    required this.selected,
+    required this.selectedChatId,
     required this.onTextChatSelected,
   });
 
   final SpaceTreeNodeData node;
   final AppLocalizations l10n;
-  final bool selected;
+  final String? selectedChatId;
   final ValueChanged<String> onTextChatSelected;
 
   @override
-  Widget build(BuildContext context) {
-    final icon = node.isVoiceRoom ? Icons.volume_up_outlined : Icons.tag_outlined;
-    final subtitle = node.isVoiceRoom
-        ? l10n.spaceTreeVoiceRoom
-        : l10n.spaceTreeTextChat;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final selectedVoiceRoomId = ref.watch(selectedVoiceRoomIdProvider);
+    final voiceRoomId = node.voiceRoomId;
+    final isVoiceSelected =
+        node.isVoiceRoom && voiceRoomId != null && selectedVoiceRoomId == voiceRoomId;
+    final textSelected =
+        node.isTextChat && node.linkedChatId == selectedChatId;
 
-    return VoiceListRow(
-      selected: selected,
-      title: node.displayName,
-      subtitle: subtitle,
-      leading: Icon(icon, size: 20),
-      onTap: node.isTextChat && node.linkedChatId != null
-          ? () => onTextChatSelected(node.linkedChatId!)
-          : null,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        VoiceListRow(
+          selected: textSelected || isVoiceSelected,
+          title: node.displayName,
+          subtitle: node.isVoiceRoom
+              ? l10n.spaceTreeVoiceRoom
+              : l10n.spaceTreeTextChat,
+          leading: Icon(_nodeIcon(node), size: 20),
+          onTap: () => _onTap(ref),
+        ),
+        if (isVoiceSelected)
+          _VoiceRoomParticipants(voiceRoomId: voiceRoomId),
+      ],
+    );
+  }
+
+  IconData _nodeIcon(SpaceTreeNodeData node) {
+    if (node.isVoiceRoom) return Icons.volume_up_outlined;
+    if (node.isChannelChat) return Icons.tag_outlined;
+    return Icons.forum_outlined;
+  }
+
+  void _onTap(WidgetRef ref) {
+    if (node.isTextChat && node.linkedChatId != null) {
+      onTextChatSelected(node.linkedChatId!);
+      return;
+    }
+    final voiceRoomId = node.voiceRoomId;
+    if (!node.isVoiceRoom || voiceRoomId == null) return;
+    ref.read(selectedVoiceRoomIdProvider.notifier).state = voiceRoomId;
+    unawaited(
+      ref.read(joinVoiceRoomActionProvider)(
+        voiceRoomId: voiceRoomId,
+        spaceId: node.spaceId,
+      ),
+    );
+  }
+}
+
+class _VoiceRoomParticipants extends ConsumerWidget {
+  const _VoiceRoomParticipants({required this.voiceRoomId});
+
+  final String voiceRoomId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final participantsAsync = ref.watch(voiceRoomParticipantsProvider(voiceRoomId));
+    return participantsAsync.when(
+      loading: () => const Padding(
+        padding: EdgeInsets.only(left: 40, bottom: 4),
+        child: SizedBox(
+          height: 16,
+          width: 16,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      ),
+      error: (_, _) => const SizedBox.shrink(),
+      data: (participants) {
+        if (participants.isEmpty) {
+          return const SizedBox.shrink();
+        }
+        return Padding(
+          key: Key('voice_room_participants_$voiceRoomId'),
+          padding: const EdgeInsets.only(left: 36, bottom: 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final participant in participants)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Text(
+                    participant.displayName,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

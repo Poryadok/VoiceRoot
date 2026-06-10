@@ -25,6 +25,10 @@ void main() {
     'test/phase5_space_tree_e2e_live_test.dart',
     'test/phase5_space_invites_e2e_live_test.dart',
     'test/phase5_space_roles_e2e_live_test.dart',
+    'test/phase5_space_moderation_e2e_live_test.dart',
+    'test/phase5_space_voice_e2e_live_test.dart',
+    'test/phase5_space_channel_e2e_live_test.dart',
+    'test/phase5_space_shell_e2e_live_test.dart',
   ];
 
   for (final path in liveTests) {

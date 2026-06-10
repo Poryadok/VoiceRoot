@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -27,6 +28,7 @@ type VoiceGRPC struct {
 
 	Calls        voicestore.CallStore
 	ChatMembers  ChatMembership
+	SpaceMembers SpaceMembership
 	Tokens       livekit.TokenIssuer
 	Events       voiceevents.Publisher
 	Now          func() time.Time
@@ -229,9 +231,36 @@ func (s *VoiceGRPC) GetVoiceStates(ctx context.Context, req *callsv1.GetVoiceSta
 	if err != nil {
 		return nil, err
 	}
-	call, err := s.requireCall(ctx, req.GetRoomId(), profileID)
-	if err != nil {
-		return nil, err
+	var call voicestore.Call
+	voiceRoomID := strings.TrimSpace(req.GetVoiceRoomId())
+	if voiceRoomID == "" {
+		if md, ok := metadata.FromIncomingContext(ctx); ok {
+			if vals := md.Get("x-voice-room-id"); len(vals) > 0 {
+				voiceRoomID = strings.TrimSpace(vals[0])
+			}
+		}
+	}
+	if voiceRoomID != "" {
+		if s == nil || s.Calls == nil {
+			return nil, status.Error(codes.FailedPrecondition, "voice persistence not configured")
+		}
+		call, err = s.Calls.GetCallByVoiceRoomID(ctx, voiceRoomID)
+		if errors.Is(err, voicestore.ErrNotFound) {
+			return &callsv1.GetVoiceStatesResponse{}, nil
+		}
+		if err != nil {
+			return nil, storeErr(err)
+		}
+		if call.SpaceID != "" {
+			if err := s.ensureSpaceMember(ctx, call.SpaceID, profileID); err != nil {
+				return nil, err
+			}
+		}
+	} else {
+		call, err = s.requireCall(ctx, req.GetRoomId(), profileID)
+		if err != nil {
+			return nil, err
+		}
 	}
 	var participants []*callsv1.VoiceParticipantState
 	for _, id := range call.ProfileIDs() {
@@ -415,6 +444,9 @@ func callToProto(call voicestore.Call) *callsv1.CallSession {
 	if call.IsGroupVoice() {
 		roomType = "group_voice"
 		kind = callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE
+	} else if call.IsVoiceRoom() {
+		roomType = "voice_room"
+		kind = callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM
 	}
 	group := chatv1.ChatType_CHAT_TYPE_GROUP
 	linkedChat := &chatv1.ChatRef{Id: call.ChatID}
@@ -431,6 +463,10 @@ func callToProto(call voicestore.Call) *callsv1.CallSession {
 		CalleeProfileId:    call.CalleeProfileID,
 		MediaKind:          call.MediaKind,
 		Status:             call.Status,
+	}
+	if call.VoiceRoomID != "" {
+		vr := call.VoiceRoomID
+		out.VoiceRoomId = &vr
 	}
 	if !call.StartedAt.IsZero() {
 		out.StartedAt = timestamppb.New(call.StartedAt)

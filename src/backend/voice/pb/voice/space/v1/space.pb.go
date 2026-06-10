@@ -810,6 +810,7 @@ type SpaceTreeNode struct {
 	VoiceRoomId   *string                `protobuf:"bytes,6,opt,name=voice_room_id,json=voiceRoomId,proto3,oneof" json:"voice_room_id,omitempty"`
 	SortOrder     int32                  `protobuf:"varint,7,opt,name=sort_order,json=sortOrder,proto3" json:"sort_order,omitempty"`
 	IsSystem      bool                   `protobuf:"varint,8,opt,name=is_system,json=isSystem,proto3" json:"is_system,omitempty"`
+	DisplayName   *string                `protobuf:"bytes,9,opt,name=display_name,json=displayName,proto3,oneof" json:"display_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -898,6 +899,13 @@ func (x *SpaceTreeNode) GetIsSystem() bool {
 		return x.IsSystem
 	}
 	return false
+}
+
+func (x *SpaceTreeNode) GetDisplayName() string {
+	if x != nil && x.DisplayName != nil {
+		return *x.DisplayName
+	}
+	return ""
 }
 
 type UpsertTreeNodeRequest struct {

@@ -20,12 +20,27 @@ class VoiceAvatar extends StatelessWidget {
     final voice = VoiceColors.of(context);
     final initial = label.isNotEmpty ? label[0].toUpperCase() : '?';
     final url = imageUrl;
+    if (url == null || url.isEmpty) {
+      return CircleAvatar(
+        radius: radius,
+        backgroundColor: voice.muted,
+        foregroundColor: voice.textPrimary,
+        child: Text(initial),
+      );
+    }
     return CircleAvatar(
       radius: radius,
       backgroundColor: voice.muted,
       foregroundColor: voice.textPrimary,
-      backgroundImage: url != null && url.isNotEmpty ? NetworkImage(url) : null,
-      child: url != null && url.isNotEmpty ? null : Text(initial),
+      child: ClipOval(
+        child: Image.network(
+          url,
+          width: radius * 2,
+          height: radius * 2,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => Center(child: Text(initial)),
+        ),
+      ),
     );
   }
 }

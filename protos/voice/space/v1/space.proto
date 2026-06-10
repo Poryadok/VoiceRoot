@@ -139,6 +139,7 @@ message SpaceTreeNode {
   optional string voice_room_id = 6;
   int32 sort_order = 7;
   bool is_system = 8;
+  optional string display_name = 9; // enriched from Chat for text_chat nodes
 }
 
 message UpsertTreeNodeRequest {

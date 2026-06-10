@@ -309,6 +309,7 @@
   "spaceTreeTextChat": "Text chat",
   "spaceTreeVoiceRoom": "Voice room",
   "spaceTreeUncategorized": "Channels",
+  "spaceSelectPrompt": "Select a space",
   "spaceListTitle": "My spaces",
   "spaceOpenAction": "Open space",
   "spaceInvitesTooltip": "Invite people",

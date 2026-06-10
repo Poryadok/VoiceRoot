@@ -1118,6 +1118,12 @@ abstract class AppLocalizations {
   /// **'Channels'**
   String get spaceTreeUncategorized;
 
+  /// No description provided for @spaceSelectPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Select a space'**
+  String get spaceSelectPrompt;
+
   /// No description provided for @spaceListTitle.
   ///
   /// In en, this message translates to:

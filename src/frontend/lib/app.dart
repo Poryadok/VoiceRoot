@@ -9,7 +9,10 @@ import 'state/auth_providers.dart';
 import 'state/gateway_providers.dart';
 import 'state/chat_providers.dart';
 import 'state/in_app_notifications.dart';
+import 'state/space_providers.dart';
 import 'state/social_providers.dart';
+import 'ui/space/space_rail.dart';
+import 'ui/space/space_tree_panel.dart';
 import 'theme/voice_colors.dart';
 import 'theme/voice_theme_providers.dart';
 import 'ui/auth/auth_screen.dart';
@@ -184,6 +187,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
     final l10n = AppLocalizations.of(context)!;
     final health = ref.watch(gatewayHealthProvider);
     final selectedChatId = ref.watch(selectedChatIdProvider);
+    final selectedSpaceId = ref.watch(selectedSpaceIdProvider);
     final profileAsync = ref.watch(activeProfileProvider);
     final voice = VoiceColors.of(context);
     final socialBadge =
@@ -218,17 +222,33 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
                     : () => ref.read(selectedChatIdProvider.notifier).state =
                           null;
                 return ThreeColumnShell(
-                  railChild: _SocialRail(
-                    active: _socialPanelOpen,
-                    badgeCount: socialBadge,
-                    onOpenSocial: _openSocialPanel,
+                  railChild: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const SizedBox(width: 72, child: SpaceRail()),
+                      Expanded(
+                        child: _SocialRail(
+                          active: _socialPanelOpen,
+                          badgeCount: socialBadge,
+                          onOpenSocial: _openSocialPanel,
+                        ),
+                      ),
+                    ],
                   ),
                   mobileRailChild: _MobileRailStrip(
                     active: _socialPanelOpen,
                     badgeCount: socialBadge,
                     onOpenSocial: _openSocialPanel,
                   ),
-                  listChild: const ChatListPanel(),
+                  listChild: selectedSpaceId == null
+                      ? const ChatListPanel()
+                      : SpaceTreePanel(
+                          spaceId: selectedSpaceId,
+                          selectedChatId: selectedChatId,
+                          onTextChatSelected: (chatId) => ref
+                              .read(selectedChatIdProvider.notifier)
+                              .state = chatId,
+                        ),
                   mainChild: selectedChatId == null
                       ? Center(child: Text(l10n.chatRoomSelectPrompt))
                       : ChatRoomPanel(

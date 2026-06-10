@@ -577,6 +577,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get spaceTreeUncategorized => 'Каналы';
 
   @override
+  String get spaceSelectPrompt => 'Выберите спейс';
+
+  @override
   String get spaceListTitle => 'Мои спейсы';
 
   @override

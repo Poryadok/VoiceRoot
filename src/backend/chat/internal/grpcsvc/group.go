@@ -21,8 +21,9 @@ func (s *ChatGRPC) CreateChat(ctx context.Context, req *chatv1.CreateChatRequest
 	if s == nil || s.DM == nil {
 		return nil, status.Error(codes.FailedPrecondition, "chat persistence not configured")
 	}
-	if req.GetType() != chatv1.ChatType_CHAT_TYPE_GROUP {
-		return nil, status.Error(codes.InvalidArgument, "only group chats are supported")
+	chatType := req.GetType()
+	if chatType != chatv1.ChatType_CHAT_TYPE_GROUP && chatType != chatv1.ChatType_CHAT_TYPE_CHANNEL {
+		return nil, status.Error(codes.InvalidArgument, "only group and channel chats are supported")
 	}
 	caller, ok := authctx.ProfileID(ctx)
 	if !ok {
@@ -35,8 +36,18 @@ func (s *ChatGRPC) CreateChat(ctx context.Context, req *chatv1.CreateChatRequest
 
 	var row *store.ChatRow
 	var err error
-	if req.SpaceId != nil && strings.TrimSpace(req.GetSpaceId()) != "" {
-		spaceID, parseErr := parseUUIDField("space_id", req.GetSpaceId())
+	spaceIDRaw := strings.TrimSpace(req.GetSpaceId())
+	if chatType == chatv1.ChatType_CHAT_TYPE_CHANNEL {
+		if spaceIDRaw == "" {
+			return nil, status.Error(codes.InvalidArgument, "space_id is required for channels")
+		}
+		spaceID, parseErr := parseUUIDField("space_id", spaceIDRaw)
+		if parseErr != nil {
+			return nil, parseErr
+		}
+		row, err = s.DM.CreateSpaceChannelChat(ctx, caller, spaceID, name)
+	} else if spaceIDRaw != "" {
+		spaceID, parseErr := parseUUIDField("space_id", spaceIDRaw)
 		if parseErr != nil {
 			return nil, parseErr
 		}
@@ -48,11 +59,17 @@ func (s *ChatGRPC) CreateChat(ctx context.Context, req *chatv1.CreateChatRequest
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	if s.ChatEvents != nil {
-		if err := s.ChatEvents.PublishChatCreated(ctx, row.ID.String(), "group"); err != nil {
+		eventType := "group"
+		if row.Type == "channel" {
+			eventType = "channel"
+		}
+		if err := s.ChatEvents.PublishChatCreated(ctx, row.ID.String(), eventType); err != nil {
 			log.Printf("chat: publish chat.created: %v", err)
 		}
-		if err := s.ChatEvents.PublishChatMemberChanged(ctx, row.ID.String(), caller.String(), "joined"); err != nil {
-			log.Printf("chat: publish chat.member_changed: %v", err)
+		if row.Type == "group" && row.SpaceID == nil {
+			if err := s.ChatEvents.PublishChatMemberChanged(ctx, row.ID.String(), caller.String(), "joined"); err != nil {
+				log.Printf("chat: publish chat.member_changed: %v", err)
+			}
 		}
 	}
 	return &chatv1.CreateChatResponse{Chat: chatRowToProto(row)}, nil
