@@ -28,6 +28,9 @@ const (
 
 	ModerationTimeoutMembers = "MODERATION_TIMEOUT_MEMBERS"
 
+	TextChatMentionAllOnline = "TEXT_CHAT_MENTION_ALL_ONLINE"
+	TextChatMentionAllInChat = "TEXT_CHAT_MENTION_ALL_IN_CHAT"
+
 	VoiceJoin       = "VOICE_JOIN"
 	VoiceSpeak      = "VOICE_SPEAK"
 	VoiceMuteOthers = "VOICE_MUTE_OTHERS"
@@ -67,6 +70,8 @@ var permissionBits = map[string]uint64{
 	TextChatManageSettings:   1 << 20,
 	TextChatSetSlowMode:      1 << 21,
 	ModerationTimeoutMembers: 1 << 22,
+	TextChatMentionAllOnline:  1 << 23,
+	TextChatMentionAllInChat:  1 << 24,
 }
 
 // MaskFor returns the bitmask bit for a permission name.
@@ -156,6 +161,7 @@ func moderatorDefaultMask() (uint64, error) {
 	for _, p := range []string{
 		MemberKick, MemberBan, MemberAssignRoles, TextChatManageMessages, VoiceMuteOthers,
 		ModerationTimeoutMembers, TextChatSetSlowMode,
+		TextChatMentionAllOnline, TextChatMentionAllInChat,
 	} {
 		bit, err := MaskFor(p)
 		if err != nil {

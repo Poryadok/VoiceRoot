@@ -137,6 +137,17 @@
   "chatRoomLoadOlder": "Load older messages",
   "chatRoomInputHint": "Message",
   "chatSendMessage": "Send message",
+  "chatMentionInsert": "Insert mention",
+  "chatMentionEveryone": "@everyone",
+  "chatMentionHere": "@here",
+  "chatMentionMember": "Member {profileId}",
+  "@chatMentionMember": {
+    "placeholders": {
+      "profileId": {
+        "type": "String"
+      }
+    }
+  },
   "chatRoomError": "Error: {message}",
   "@chatRoomError": {
     "placeholders": {

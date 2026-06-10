@@ -119,6 +119,9 @@ func messageEventBytesToFanout(data []byte) (chatID string, env fanoutEnvelope, 
 			return "", fanoutEnvelope{}, false
 		}
 		return rr.GetChatId(), fanoutEnvelope{Op: "reaction_remove", D: d}, true
+	case *eventsv1.MessageStreamEvent_MentionAdded:
+		// Personal mention fan-out is handled in dispatchMessageStreamEvent; no chat-wide envelope.
+		return "", fanoutEnvelope{}, false
 	default:
 		return "", fanoutEnvelope{}, false
 	}
@@ -155,6 +158,10 @@ func messageEventLogAttrs(data []byte) []slog.Attr {
 		if r := p.ReactionRemoved; r != nil {
 			attrs = append(attrs, slog.String("message_id", r.GetMessageId()), slog.String("chat_id", r.GetChatId()), slog.String("profile_id", r.GetProfileId()))
 		}
+	case *eventsv1.MessageStreamEvent_MentionAdded:
+		if m := p.MentionAdded; m != nil {
+			attrs = append(attrs, slog.String("message_id", m.GetMessageId()), slog.String("chat_id", m.GetChatId()))
+		}
 	}
 	return attrs
 }
@@ -163,6 +170,11 @@ func subscribeMessageEvents(js nats.JetStreamContext, hub *wsHub, instanceID str
 	durable := consumerDurableName(instanceID)
 	handler := func(msg *nats.Msg) {
 		attrs := messageEventLogAttrs(msg.Data)
+		if mentionAddedFromBytes(msg.Data) != nil {
+			natslog.LogConsume(logger, msg, slog.LevelInfo, "message event consumed", attrs...)
+			dispatchMessageStreamEvent(hub, msg.Data, logger, natslog.RequestIDFromMsg(msg))
+			return
+		}
 		if _, _, ok := messageEventBytesToFanout(msg.Data); ok {
 			natslog.LogConsume(logger, msg, slog.LevelInfo, "message event consumed", attrs...)
 			dispatchMessageStreamEvent(hub, msg.Data, logger, natslog.RequestIDFromMsg(msg))

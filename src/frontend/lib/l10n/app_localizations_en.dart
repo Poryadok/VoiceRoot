@@ -242,6 +242,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatSendMessage => 'Send message';
 
   @override
+  String get chatMentionInsert => 'Insert mention';
+
+  @override
+  String get chatMentionEveryone => '@everyone';
+
+  @override
+  String get chatMentionHere => '@here';
+
+  @override
+  String chatMentionMember(String profileId) {
+    return 'Member $profileId';
+  }
+
+  @override
   String chatRoomError(String message) {
     return 'Error: $message';
   }

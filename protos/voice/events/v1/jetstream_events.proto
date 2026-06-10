@@ -149,6 +149,7 @@ message MessageStreamEvent {
     ReactionAdded reaction_added = 13;
     MessageRead message_read = 14;
     ReactionRemoved reaction_removed = 15;
+    MentionAdded mention_added = 16;
   }
 }
 
@@ -156,6 +157,14 @@ message MessageSent {
   string message_id = 1;
   string chat_id = 2;
   string sender_profile_id = 3;
+  bool has_mentions = 4;
+}
+
+message MentionAdded {
+  string message_id = 1;
+  string chat_id = 2;
+  string sender_profile_id = 3;
+  repeated string mentioned_profile_ids = 4;
 }
 
 message MessageEdited {

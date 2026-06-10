@@ -25,6 +25,7 @@ const (
 	subjectMessageRead       = "message.read"
 	subjectReactionAdded     = "message.reaction_added"
 	subjectReactionRemoved   = "message.reaction_removed"
+	subjectMentionAdded      = "message.mention_added"
 )
 
 // JetStreamPublisher publishes MessageStreamEvent payloads to NATS JetStream.
@@ -75,6 +76,7 @@ func messageEventStreamSubjects() []string {
 		subjectMessageRead,
 		subjectReactionAdded,
 		subjectReactionRemoved,
+		subjectMentionAdded,
 	}
 }
 
@@ -164,24 +166,46 @@ func messageEventLogAttrs(env *eventsv1.MessageStreamEvent) []slog.Attr {
 		if r := p.ReactionRemoved; r != nil {
 			attrs = append(attrs, slog.String("message_id", r.GetMessageId()), slog.String("chat_id", r.GetChatId()), slog.String("profile_id", r.GetProfileId()))
 		}
+	case *eventsv1.MessageStreamEvent_MentionAdded:
+		if m := p.MentionAdded; m != nil {
+			attrs = append(attrs, slog.String("message_id", m.GetMessageId()), slog.String("chat_id", m.GetChatId()))
+		}
 	}
 	return attrs
 }
 
 // PublishMessageSent implements MessageEventsPublisher.
-func (p *JetStreamPublisher) PublishMessageSent(ctx context.Context, messageID, chatID, senderProfileID string) error {
+func (p *JetStreamPublisher) PublishMessageSent(ctx context.Context, messageID, chatID, senderProfileID string, hasMentions bool) error {
 	env := &eventsv1.MessageStreamEvent{
 		EventId:    uuid.NewString(),
 		OccurredAt: timestamppb.New(time.Now().UTC()),
 		Payload: &eventsv1.MessageStreamEvent_MessageSent{
 			MessageSent: &eventsv1.MessageSent{
-				MessageId:         messageID,
-				ChatId:            chatID,
-				SenderProfileId:   senderProfileID,
+				MessageId:       messageID,
+				ChatId:          chatID,
+				SenderProfileId: senderProfileID,
+				HasMentions:     hasMentions,
 			},
 		},
 	}
 	return p.publishProto(ctx, subjectMessageSent, env)
+}
+
+// PublishMentionAdded implements MessageEventsPublisher.
+func (p *JetStreamPublisher) PublishMentionAdded(ctx context.Context, messageID, chatID, senderProfileID string, mentionedProfileIDs []string) error {
+	env := &eventsv1.MessageStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.New(time.Now().UTC()),
+		Payload: &eventsv1.MessageStreamEvent_MentionAdded{
+			MentionAdded: &eventsv1.MentionAdded{
+				MessageId:           messageID,
+				ChatId:              chatID,
+				SenderProfileId:     senderProfileID,
+				MentionedProfileIds: append([]string(nil), mentionedProfileIDs...),
+			},
+		},
+	}
+	return p.publishProto(ctx, subjectMentionAdded, env)
 }
 
 // PublishMessageEdited implements MessageEventsPublisher.

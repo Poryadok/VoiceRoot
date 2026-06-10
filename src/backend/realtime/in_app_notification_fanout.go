@@ -25,9 +25,38 @@ func inAppNotificationFanouts(data []byte, chatMemberProfileIDs []string, reacti
 		return newMessageNotificationFanouts(p.MessageSent, chatMemberProfileIDs)
 	case *eventsv1.MessageStreamEvent_ReactionAdded:
 		return reactionNotificationFanouts(p.ReactionAdded, chatMemberProfileIDs, reactionMessageAuthorProfileID)
+	case *eventsv1.MessageStreamEvent_MentionAdded:
+		return mentionNotificationFanouts(p.MentionAdded)
 	default:
 		return nil, false
 	}
+}
+
+func mentionNotificationFanouts(ma *eventsv1.MentionAdded) ([]profileFanout, bool) {
+	if ma == nil || ma.GetChatId() == "" || ma.GetMessageId() == "" {
+		return nil, false
+	}
+	senderID := ma.GetSenderProfileId()
+	var fanouts []profileFanout
+	for _, profileID := range ma.GetMentionedProfileIds() {
+		if profileID == "" || profileID == senderID {
+			continue
+		}
+		d, err := json.Marshal(map[string]string{
+			"type":              "mention",
+			"chat_id":           ma.GetChatId(),
+			"message_id":        ma.GetMessageId(),
+			"sender_profile_id": senderID,
+		})
+		if err != nil {
+			return nil, false
+		}
+		fanouts = append(fanouts, profileFanout{
+			ProfileID: profileID,
+			Envelope:  fanoutEnvelope{Op: "notification", D: d},
+		})
+	}
+	return fanouts, true
 }
 
 func newMessageNotificationFanouts(ms *eventsv1.MessageSent, chatMemberProfileIDs []string) ([]profileFanout, bool) {
@@ -94,6 +123,10 @@ func reactionNotificationFanouts(ra *eventsv1.ReactionAdded, chatMemberProfileID
 }
 
 func dispatchMessageStreamEvent(hub *wsHub, data []byte, logger *slog.Logger, requestID string) {
+	if ma := mentionAddedFromBytes(data); ma != nil {
+		dispatchMentionAdded(hub, ma, data, logger, requestID)
+		return
+	}
 	chatID, fe, ok := messageEventBytesToFanout(data)
 	if !ok || chatID == "" {
 		return
@@ -107,6 +140,42 @@ func dispatchMessageStreamEvent(hub *wsHub, data []byte, logger *slog.Logger, re
 	}
 	hub.broadcastToChat(chatID, fe, logger, requestID)
 	if !notifyFirst && notifyOk {
+		for _, f := range fanouts {
+			hub.broadcastToProfile(f.ProfileID, f.Envelope, logger, requestID)
+		}
+	}
+}
+
+func mentionAddedFromBytes(data []byte) *eventsv1.MentionAdded {
+	var e eventsv1.MessageStreamEvent
+	if err := proto.Unmarshal(data, &e); err != nil {
+		return nil
+	}
+	ma, ok := e.GetPayload().(*eventsv1.MessageStreamEvent_MentionAdded)
+	if !ok || ma.MentionAdded == nil {
+		return nil
+	}
+	return ma.MentionAdded
+}
+
+func dispatchMentionAdded(hub *wsHub, ma *eventsv1.MentionAdded, data []byte, logger *slog.Logger, requestID string) {
+	senderID := ma.GetSenderProfileId()
+	for _, profileID := range ma.GetMentionedProfileIds() {
+		if profileID == "" || profileID == senderID {
+			continue
+		}
+		d, err := json.Marshal(map[string]string{
+			"chat_id":    ma.GetChatId(),
+			"message_id": ma.GetMessageId(),
+			"user_id":    profileID,
+		})
+		if err != nil {
+			continue
+		}
+		hub.broadcastToProfile(profileID, fanoutEnvelope{Op: "mention", D: d}, logger, requestID)
+	}
+	fanouts, ok := inAppNotificationFanouts(data, nil, "")
+	if ok {
 		for _, f := range fanouts {
 			hub.broadcastToProfile(f.ProfileID, f.Envelope, logger, requestID)
 		}

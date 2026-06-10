@@ -134,6 +134,30 @@ func TestMessageEventBytesToFanout_SentEditedDeleted(t *testing.T) {
 	}
 }
 
+// TestMessageEventBytesToFanout_MentionAddedNoChatBroadcast documents mention events use personal fan-out only.
+func TestMessageEventBytesToFanout_MentionAddedNoChatBroadcast(t *testing.T) {
+	ev := &eventsv1.MessageStreamEvent{
+		EventId:    "e-mention",
+		OccurredAt: timestamppb.Now(),
+		Payload: &eventsv1.MessageStreamEvent_MentionAdded{
+			MentionAdded: &eventsv1.MentionAdded{
+				MessageId:           uuid.NewString(),
+				ChatId:              uuid.NewString(),
+				SenderProfileId:     uuid.NewString(),
+				MentionedProfileIds: []string{uuid.NewString()},
+			},
+		},
+	}
+	b, err := proto.Marshal(ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chatID, fe, ok := messageEventBytesToFanout(b)
+	if ok || chatID != "" || fe.Op != "" {
+		t.Fatalf("mention must not chat-broadcast: ok=%v chat=%q op=%q", ok, chatID, fe.Op)
+	}
+}
+
 // TestMessageEventBytesToFanout_ReactionAdd documents PLAN Phase 4 / realtime-service.md:
 // message.reaction_added → WebSocket reaction_add for live counter updates.
 func TestMessageEventBytesToFanout_ReactionAdd(t *testing.T) {
@@ -654,4 +678,99 @@ func TestRunMessageEventsConsumer_InAppNotificationOnReactionAdded(t *testing.T)
 	case <-time.After(3 * time.Second):
 		t.Fatal("consumer did not exit")
 	}
+}
+
+// TestRunMessageEventsConsumer_MentionAdded documents PLAN Phase 6:
+// MentionAdded → personal mention op and notification to mentioned profile.
+func TestRunMessageEventsConsumer_MentionAdded(t *testing.T) {
+	s := startRealtimeJSTestServer(t)
+	natsURL := s.ClientURL()
+
+	nc, err := nats.Connect(natsURL)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	t.Cleanup(nc.Close)
+	js, err := nc.JetStream()
+	if err != nil {
+		t.Fatalf("jetstream: %v", err)
+	}
+	_, err = js.AddStream(&nats.StreamConfig{
+		Name:      "message_events",
+		Subjects:  []string{"message.>"},
+		Retention: nats.LimitsPolicy,
+		MaxAge:    24 * time.Hour,
+		Storage:   nats.FileStorage,
+	})
+	if err != nil {
+		t.Fatalf("add stream: %v", err)
+	}
+
+	chatID := "77777777-7777-7777-7777-777777777777"
+	msgID := uuid.NewString()
+	senderID := "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+	targetID := "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+
+	hub := newWSHub()
+	targetReg := hub.attachConn("test-inst", "conn-target", targetID, 16)
+	hub.addChat(targetReg, chatID)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	errCh := make(chan error, 1)
+	go func() { errCh <- runMessageEventsConsumer(ctx, hub, natsURL, "test-mention-inst", nil) }()
+	time.Sleep(200 * time.Millisecond)
+
+	env := &eventsv1.MessageStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.Now(),
+		Payload: &eventsv1.MessageStreamEvent_MentionAdded{
+			MentionAdded: &eventsv1.MentionAdded{
+				MessageId:           msgID,
+				ChatId:              chatID,
+				SenderProfileId:     senderID,
+				MentionedProfileIds: []string{targetID},
+			},
+		},
+	}
+	payload, err := proto.Marshal(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := js.Publish("message.mention_added", payload); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+
+	ops := make([]string, 0, 2)
+	deadline := time.After(8 * time.Second)
+	for len(ops) < 2 {
+		select {
+		case fe := <-targetReg.fanout:
+			ops = append(ops, fe.Op)
+		case <-deadline:
+			t.Fatalf("timeout waiting for mention fanout, ops=%v", ops)
+		}
+	}
+	if !containsString(ops, "mention") || !containsString(ops, "notification") {
+		t.Fatalf("ops=%v want mention and notification", ops)
+	}
+
+	cancel()
+	select {
+	case err := <-errCh:
+		if err != nil && err != context.Canceled {
+			t.Fatalf("consumer exit: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("consumer did not exit")
+	}
+}
+
+func containsString(list []string, want string) bool {
+	for _, s := range list {
+		if s == want {
+			return true
+		}
+	}
+	return false
 }

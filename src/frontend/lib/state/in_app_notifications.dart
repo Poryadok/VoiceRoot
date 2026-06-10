@@ -10,6 +10,8 @@ import 'chat_providers.dart';
 abstract class NotificationSoundPlayer {
   void playNewMessage();
   void playReaction();
+
+  void playMention();
 }
 
 /// Default production player — no external audio dependency; override in tests.
@@ -21,6 +23,9 @@ class NoOpNotificationSoundPlayer implements NotificationSoundPlayer {
 
   @override
   void playReaction() {}
+
+  @override
+  void playMention() {}
 }
 
 final inAppNotificationsSoundEnabledProvider = Provider<bool>((ref) => true);
@@ -74,6 +79,13 @@ class InAppNotificationController {
           playNewMessageSound: false,
           playReactionSound: true,
         );
+      case 'mention':
+        _handleIncomingActivity(
+          chatId: chatId,
+          actorProfileId: data['sender_profile_id'] as String?,
+          playNewMessageSound: false,
+          playMentionSound: true,
+        );
       default:
         break;
     }
@@ -90,6 +102,7 @@ class InAppNotificationController {
     required String? actorProfileId,
     bool playNewMessageSound = false,
     bool playReactionSound = false,
+    bool playMentionSound = false,
   }) {
     final activeProfile = _ref.read(authControllerProvider).activeProfileId;
     if (actorProfileId != null &&
@@ -110,6 +123,8 @@ class InAppNotificationController {
       player.playNewMessage();
     } else if (playReactionSound) {
       player.playReaction();
+    } else if (playMentionSound) {
+      player.playMention();
     }
   }
 }

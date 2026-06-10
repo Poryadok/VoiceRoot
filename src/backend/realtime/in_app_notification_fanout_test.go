@@ -276,6 +276,84 @@ func TestInAppNotificationFanouts_ReactionUsesProtoAuthorID(t *testing.T) {
 	}
 }
 
+func TestInAppNotificationFanouts_MentionNotifiesTargets(t *testing.T) {
+	chatID := uuid.NewString()
+	msgID := uuid.NewString()
+	senderID := uuid.NewString()
+	targetA := uuid.NewString()
+	targetB := uuid.NewString()
+
+	ev := &eventsv1.MessageStreamEvent{
+		EventId:    "e-mention",
+		OccurredAt: timestamppb.Now(),
+		Payload: &eventsv1.MessageStreamEvent_MentionAdded{
+			MentionAdded: &eventsv1.MentionAdded{
+				MessageId:           msgID,
+				ChatId:              chatID,
+				SenderProfileId:     senderID,
+				MentionedProfileIds: []string{targetA, targetB, senderID},
+			},
+		},
+	}
+	b, err := proto.Marshal(ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fanouts, ok := inAppNotificationFanouts(b, nil, "")
+	if !ok {
+		t.Fatal("expected ok")
+	}
+	if len(fanouts) != 2 {
+		t.Fatalf("fanouts=%d want 2", len(fanouts))
+	}
+	byProfile := map[string]map[string]string{}
+	for _, f := range fanouts {
+		byProfile[f.ProfileID] = notificationPayload(t, f.Envelope)
+	}
+	for _, id := range []string{targetA, targetB} {
+		d := byProfile[id]
+		if d["type"] != "mention" || d["chat_id"] != chatID || d["message_id"] != msgID || d["sender_profile_id"] != senderID {
+			t.Fatalf("target %s payload=%v", id, d)
+		}
+	}
+}
+
+func TestDispatchMessageStreamEvent_MentionFansOutPersonalOp(t *testing.T) {
+	chatID := uuid.NewString()
+	msgID := uuid.NewString()
+	senderID := uuid.NewString()
+	targetID := uuid.NewString()
+
+	hub := newWSHub()
+	targetReg := hub.attachConn("inst", "conn-target", targetID, 8)
+	hub.addChat(targetReg, chatID)
+
+	ev := &eventsv1.MessageStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.Now(),
+		Payload: &eventsv1.MessageStreamEvent_MentionAdded{
+			MentionAdded: &eventsv1.MentionAdded{
+				MessageId:           msgID,
+				ChatId:              chatID,
+				SenderProfileId:     senderID,
+				MentionedProfileIds: []string{targetID},
+			},
+		},
+	}
+	payload, err := proto.Marshal(ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dispatchMessageStreamEvent(hub, payload, nil, "")
+
+	ops := drainFanoutOps(t, targetReg, 2*time.Second)
+	if !containsOp(ops, "mention") || !containsOp(ops, "notification") {
+		t.Fatalf("target ops=%v", ops)
+	}
+}
+
 func TestInAppNotificationFanouts_ReactionSkipsSelfReaction(t *testing.T) {
 	authorID := uuid.NewString()
 	ev := &eventsv1.MessageStreamEvent{

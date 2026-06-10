@@ -138,6 +138,10 @@
   "chatRoomLoadOlder": "Загрузить старые сообщения",
   "chatRoomInputHint": "Сообщение",
   "chatSendMessage": "Отправить сообщение",
+  "chatMentionInsert": "Вставить упоминание",
+  "chatMentionEveryone": "@everyone",
+  "chatMentionHere": "@here",
+  "chatMentionMember": "Участник {profileId}",
   "chatRoomError": "Ошибка: {message}",
   "@chatRoomError": {
     "placeholders": {

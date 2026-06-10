@@ -502,6 +502,11 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           if (chatId == this.chatId) {
             unawaited(loadInitial());
           }
+        } else if (frame.op == 'mention') {
+          final chatId = frame.data?['chat_id'] as String?;
+          if (chatId == this.chatId) {
+            unawaited(_catchUpAfterEvent());
+          }
         } else if (frame.op == 'reaction_add' || frame.op == 'reaction_remove') {
           final chatId = frame.data?['chat_id'] as String?;
           if (chatId != this.chatId) return;
@@ -642,6 +647,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
   Future<String?> sendMessage(
     String content, {
     List<MessageAttachment> attachments = const [],
+    List<MessageMention> mentions = const [],
   }) async {
     final trimmed = content.trim();
     if (trimmed.isEmpty && attachments.isEmpty) return null;
@@ -656,6 +662,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           chatId: chatId,
           content: trimmed,
           attachments: attachments,
+          mentions: mentions,
         );
     if (!mounted) return null;
     switch (result) {

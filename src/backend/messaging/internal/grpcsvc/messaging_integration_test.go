@@ -27,6 +27,7 @@ import (
 
 	"voice/backend/chat/testchat"
 	"voice/backend/messaging/internal/authctx"
+	"voice/backend/messaging/internal/mentions"
 	"voice/backend/messaging/internal/messageevents"
 	"voice/backend/messaging/internal/s2s"
 	"voice/backend/messaging/internal/store"
@@ -63,6 +64,7 @@ func applySQLFile(t *testing.T, ctx context.Context, pool *pgxpool.Pool, relPath
 	}
 	if strings.HasSuffix(relPath, filepath.Join("chat_db", "000001_init.up.sql")) {
 		applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000002_dm_requests.up.sql"))
+		applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000003_groups.up.sql"))
 	}
 }
 
@@ -105,14 +107,17 @@ func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire
 		moderation = &store.SQLModerationGuard{Pool: pool}
 	}
 	messagingv1.RegisterMessagingServiceServer(srv, &MessagingGRPC{
-		Messages:      &store.MessagesStore{Pool: pool},
-		Reactions:     &store.ReactionsStore{Pool: pool},
-		ChatGuard:     guard,
-		Blocks:        w.Blocks,
-		UserProfiles:  w.UserProfiles,
-		MessageEvents: w.MessageEvents,
-		Files:         w.Files,
-		Moderation:    moderation,
+		Messages:         &store.MessagesStore{Pool: pool},
+		Reactions:        &store.ReactionsStore{Pool: pool},
+		ChatGuard:        guard,
+		Blocks:           w.Blocks,
+		UserProfiles:     w.UserProfiles,
+		MessageEvents:    w.MessageEvents,
+		Files:            w.Files,
+		Moderation:       moderation,
+		ChatMentionsMeta: &store.SQLChatMentionsMeta{Pool: pool},
+		RolePermissions:  w.RolePermissions,
+		UserPresence:     w.UserPresence,
 	})
 	go func() {
 		if err := srv.Serve(lis); err != nil {
@@ -131,12 +136,14 @@ func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire
 }
 
 type messagingWire struct {
-	ChatGuard     ChatGuard
-	Moderation    *store.SQLModerationGuard
-	UserProfiles  ProfileAccountLookup
-	Blocks        AccountPairBlockChecker
-	MessageEvents messageevents.MessageEventsPublisher
-	Files         FileMetadataLookup
+	ChatGuard        ChatGuard
+	Moderation       *store.SQLModerationGuard
+	UserProfiles     ProfileAccountLookup
+	Blocks           AccountPairBlockChecker
+	MessageEvents    messageevents.MessageEventsPublisher
+	Files            FileMetadataLookup
+	RolePermissions  mentions.RolePermissionChecker
+	UserPresence     mentions.OnlinePresenceLookup
 }
 
 func startMessagingServer(t *testing.T, pool *pgxpool.Pool) (messagingv1.MessagingServiceClient, func()) {

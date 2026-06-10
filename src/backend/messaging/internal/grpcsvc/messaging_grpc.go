@@ -14,6 +14,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"voice/backend/messaging/internal/authctx"
+	"voice/backend/messaging/internal/mentions"
 	"voice/backend/messaging/internal/messageevents"
 	"voice/backend/messaging/internal/messageid"
 	"voice/backend/messaging/internal/store"
@@ -45,6 +46,12 @@ type MessagingGRPC struct {
 	MessageEvents messageevents.MessageEventsPublisher
 	// Moderation is optional; enforces space timeouts and chat slow mode before send.
 	Moderation *store.SQLModerationGuard
+	// ChatMentionsMeta loads chat members for mention validation.
+	ChatMentionsMeta *store.SQLChatMentionsMeta
+	// RolePermissions checks TEXT_CHAT_MENTION_* in space chats.
+	RolePermissions mentions.RolePermissionChecker
+	// UserPresence resolves online members for @here.
+	UserPresence mentions.OnlinePresenceLookup
 }
 
 func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMessageRequest) (*messagingv1.SendMessageResponse, error) {
@@ -99,9 +106,26 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 	if len(content) > 4000 {
 		return nil, status.Error(codes.InvalidArgument, "content exceeds 4000 characters")
 	}
-	mentions := strings.TrimSpace(req.GetMentionsJson())
-	if mentions == "" {
-		mentions = "[]"
+	mentionsRaw := strings.TrimSpace(req.GetMentionsJson())
+	if mentionsRaw == "" {
+		mentionsRaw = "[]"
+	}
+	var mentionTargets []uuid.UUID
+	mentionsJSON := mentionsRaw
+	if mentionsRaw != "[]" {
+		meta, merr := s.loadChatMeta(ctx, chatID)
+		if merr != nil {
+			if errors.Is(merr, store.ErrNotChatMember) {
+				return nil, status.Error(codes.PermissionDenied, "not a chat member")
+			}
+			return nil, status.Error(codes.Internal, merr.Error())
+		}
+		normalized, targets, verr := mentions.Process(ctx, meta, profileID, mentionsRaw, s.RolePermissions, s.UserPresence)
+		if verr != nil {
+			return nil, verr
+		}
+		mentionsJSON = normalized
+		mentionTargets = targets
 	}
 	typeStr, kind := messageKindToWire(req.GetMessageKind())
 
@@ -135,7 +159,7 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 		Type:            typeStr,
 		ThreadParentID:  threadParent,
 		AttachmentsJSON: attachments,
-		MentionsJSON:    mentions,
+		MentionsJSON:    mentionsJSON,
 		ClientMessageID: clientID,
 	}
 	saved, err := s.Messages.InsertMessage(ctx, row)
@@ -146,11 +170,28 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	if s.MessageEvents != nil {
-		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String()); err != nil {
+		hasMentions := len(mentionTargets) > 0
+		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), hasMentions); err != nil {
 			log.Printf("messaging: publish message.sent: %v", err)
+		}
+		if hasMentions {
+			ids := make([]string, 0, len(mentionTargets))
+			for _, pid := range mentionTargets {
+				ids = append(ids, pid.String())
+			}
+			if err := s.MessageEvents.PublishMentionAdded(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), ids); err != nil {
+				log.Printf("messaging: publish message.mention_added: %v", err)
+			}
 		}
 	}
 	return &messagingv1.SendMessageResponse{Message: messageRowToProto(saved, kind, "")}, nil
+}
+
+func (s *MessagingGRPC) loadChatMeta(ctx context.Context, chatID uuid.UUID) (mentions.ChatMeta, error) {
+	if s.ChatMentionsMeta != nil {
+		return s.ChatMentionsMeta.LoadChatMeta(ctx, chatID)
+	}
+	return mentions.ChatMeta{}, errors.New("chat mentions meta not configured")
 }
 
 type messageAttachment struct {
@@ -603,7 +644,7 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	if s.MessageEvents != nil {
-		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String()); err != nil {
+		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), false); err != nil {
 			log.Printf("messaging: publish message.sent: %v", err)
 		}
 	}

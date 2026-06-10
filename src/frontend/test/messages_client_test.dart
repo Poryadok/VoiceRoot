@@ -143,6 +143,46 @@ void main() {
       expect((r as MessagesApiOk<VoiceMessage>).data.id, 'msg-new');
     });
 
+    test('POST /api/v1/messages/send includes mentions_json', () async {
+      final mock = MockClient((req) async {
+        final body = jsonDecode(req.body) as Map<String, dynamic>;
+        final mentions =
+            jsonDecode(body['mentions_json'] as String) as List<dynamic>;
+        expect(mentions.single, containsPair('type', 'user'));
+        expect(
+          mentions.single,
+          containsPair('target_id', '22222222-2222-2222-2222-222222222222'),
+        );
+        return http.Response(
+          jsonEncode({
+            'message': {
+              'id': 'msg-mention',
+              'chat': {'id': 'chat-1'},
+              'sender_profile_id': 'profile-a',
+              'content': 'hey',
+              'mentions_json': body['mentions_json'],
+            },
+          }),
+          200,
+        );
+      });
+      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
+      final r = await client.sendMessage(
+        authorization: auth,
+        chatId: 'chat-1',
+        content: 'hey @user',
+        mentions: const [
+          MessageMention(
+            type: 'user',
+            targetId: '22222222-2222-2222-2222-222222222222',
+          ),
+        ],
+      );
+      expect(r, isA<MessagesApiOk<VoiceMessage>>());
+      final msg = (r as MessagesApiOk<VoiceMessage>).data;
+      expect(msg.mentions.single.targetId, '22222222-2222-2222-2222-222222222222');
+    });
+
     test('POST /api/v1/messages/send includes attachments_json', () async {
       final mock = MockClient((req) async {
         final body = jsonDecode(req.body) as Map<String, dynamic>;

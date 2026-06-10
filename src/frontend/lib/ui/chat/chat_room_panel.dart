@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../l10n/app_localizations.dart';
 import '../../backend/chats_client.dart';
 import '../../backend/files_client.dart';
+import '../../backend/mention_parser.dart';
 import '../../backend/messages_client.dart';
 import '../../backend/voice_client.dart';
 import '../../state/auth_providers.dart';
@@ -25,7 +26,7 @@ import '../social/presence_indicator.dart';
 import 'chat_message_list.dart';
 import 'message_reactions_row.dart';
 import 'forward_message_sheet.dart';
-import 'markdown_message_content.dart';
+import 'mention_message_content.dart';
 import 'group_members_sheet.dart';
 import '../space/space_chat_slow_mode_sheet.dart';
 
@@ -388,6 +389,11 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
             padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
             child: Row(
               children: [
+                IconButton(
+                  tooltip: l10n.chatMentionInsert,
+                  onPressed: room.isSending ? null : () => _showMentionMenu(context),
+                  icon: const Icon(Icons.alternate_email),
+                ),
                 Expanded(
                   child: TextField(
                     key: ChatRoomPanel.inputKey,
@@ -438,12 +444,56 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     );
   }
 
+  Future<void> _showMentionMenu(BuildContext context) async {
+    final l10n = AppLocalizations.of(context)!;
+    final membersAsync = ref.read(groupMembersProvider(widget.chatId));
+    final memberIds = membersAsync.maybeWhen(
+      data: (data) => data.members.map((m) => m.profileId).toList(),
+      orElse: () => const <String>[],
+    );
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: Text(l10n.chatMentionEveryone),
+              onTap: () => Navigator.pop(ctx, '@everyone '),
+            ),
+            ListTile(
+              title: Text(l10n.chatMentionHere),
+              onTap: () => Navigator.pop(ctx, '@here '),
+            ),
+            for (final id in memberIds)
+              ListTile(
+                title: Text(l10n.chatMentionMember(id)),
+                onTap: () => Navigator.pop(ctx, '@$id '),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
+    final text = _composer.text;
+    _composer.text = '$text$choice';
+    _composer.selection = TextSelection.collapsed(offset: _composer.text.length);
+    _refocusComposer();
+  }
+
   Future<void> _send() async {
     final text = _composer.text;
     ref.read(realtimeHubProvider).typingStop(widget.chatId);
+    final memberIds = ref
+        .read(groupMembersProvider(widget.chatId))
+        .maybeWhen(
+          data: (data) => data.members.map((m) => m.profileId),
+          orElse: () => const <String>[],
+        );
+    final mentions = parseMentionsFromContent(text, memberProfileIds: memberIds);
     final err = await ref
         .read(chatRoomControllerProvider(widget.chatId).notifier)
-        .sendMessage(text);
+        .sendMessage(text, mentions: mentions);
     if (!mounted) return;
     if (err == null) {
       _composer.clear();
@@ -911,7 +961,10 @@ class _MessageBubbleContent extends StatelessWidget {
             ),
           ),
         if (message.content.isNotEmpty)
-          MarkdownMessageContent(content: message.content),
+          MentionMessageContent(
+            content: message.content,
+            mentions: message.mentions,
+          ),
         if (message.editedAt != null)
           Text(
             l10n.chatMessageEdited,

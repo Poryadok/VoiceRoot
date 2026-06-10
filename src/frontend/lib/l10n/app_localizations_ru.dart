@@ -243,6 +243,20 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatSendMessage => 'Отправить сообщение';
 
   @override
+  String get chatMentionInsert => 'Вставить упоминание';
+
+  @override
+  String get chatMentionEveryone => '@everyone';
+
+  @override
+  String get chatMentionHere => '@here';
+
+  @override
+  String chatMentionMember(String profileId) {
+    return 'Участник $profileId';
+  }
+
+  @override
   String chatRoomError(String message) {
     return 'Ошибка: $message';
   }

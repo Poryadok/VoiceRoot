@@ -54,6 +54,7 @@ VoiceMessage voiceMessageFromProto(messaging_pb.Message msg) {
     content: msg.content,
     attachments: MessageAttachment.listFromWire(msg.attachmentsJson),
     reactions: MessageReaction.listFromWire(msg.reactionsJson),
+    mentions: MessageMention.listFromWire(msg.mentionsJson),
     messageKind: msg.hasMessageKind()
         ? voiceMessageKindFromProto(msg.messageKind)
         : VoiceMessageKind.regular,
@@ -92,6 +93,7 @@ messaging_pb.SendMessageRequest sendMessageRequestToProto({
   required String chatId,
   required String content,
   List<MessageAttachment> attachments = const [],
+  List<MessageMention> mentions = const [],
   String? clientMessageId,
 }) {
   return messaging_pb.SendMessageRequest(
@@ -103,6 +105,7 @@ messaging_pb.SendMessageRequest sendMessageRequestToProto({
         : jsonEncode(
             attachments.map((a) => a.toJson()).toList(growable: false),
           ),
+    mentionsJson: MessageMention.encodeJson(mentions),
   );
 }
 

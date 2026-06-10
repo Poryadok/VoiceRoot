@@ -30,6 +30,52 @@ final class MessagesApiFailure extends MessagesApiResult<Never> {
 
 enum VoiceMessageKind { regular, system, forward, unknown }
 
+/// Structured mention entry (`mentions_json` array element).
+class MessageMention {
+  const MessageMention({required this.type, this.targetId});
+
+  final String type;
+  final String? targetId;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'type': type,
+      if (targetId != null && targetId!.isNotEmpty) 'target_id': targetId,
+    };
+  }
+
+  factory MessageMention.fromJson(Map<String, dynamic> json) {
+    return MessageMention(
+      type: json['type'] as String? ?? '',
+      targetId: json['target_id'] as String?,
+    );
+  }
+
+  static List<MessageMention> listFromWire(dynamic raw) {
+    Object? decoded = raw;
+    if (raw is String && raw.trim().isNotEmpty) {
+      try {
+        decoded = jsonDecode(raw);
+      } catch (_) {
+        decoded = const [];
+      }
+    }
+    if (decoded is! List) return const [];
+    return decoded
+        .whereType<Map<String, dynamic>>()
+        .map(MessageMention.fromJson)
+        .where((m) => m.type.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  static String encodeJson(List<MessageMention> mentions) {
+    if (mentions.isEmpty) return '[]';
+    return jsonEncode(
+      mentions.map((m) => m.toJson()).toList(growable: false),
+    );
+  }
+}
+
 /// Aggregated emoji reaction on a message (PLAN Phase 4 / text-chat.md).
 class MessageReaction {
   const MessageReaction({
@@ -76,6 +122,7 @@ class VoiceMessage {
     required this.content,
     this.attachments = const [],
     this.reactions = const [],
+    this.mentions = const [],
     this.messageKind = VoiceMessageKind.regular,
     this.forwardFromId,
     this.forwardFromSender,
@@ -90,6 +137,7 @@ class VoiceMessage {
   final String content;
   final List<MessageAttachment> attachments;
   final List<MessageReaction> reactions;
+  final List<MessageMention> mentions;
   final VoiceMessageKind messageKind;
   final String? forwardFromId;
   final String? forwardFromSender;
@@ -106,6 +154,7 @@ class VoiceMessage {
       content: json['content'] as String? ?? '',
       attachments: MessageAttachment.listFromWire(json['attachments_json']),
       reactions: MessageReaction.listFromWire(json['reactions_json']),
+      mentions: MessageMention.listFromWire(json['mentions_json']),
       editedAt: VoiceMessage.parseTimestamp(json['edited_at']),
       deletedAt: VoiceMessage.parseTimestamp(json['deleted_at']),
       createdAt: VoiceMessage.parseTimestamp(json['created_at']),
@@ -119,6 +168,7 @@ class VoiceMessage {
 
   VoiceMessage copyWith({
     List<MessageReaction>? reactions,
+    List<MessageMention>? mentions,
   }) {
     return VoiceMessage(
       id: id,
@@ -127,6 +177,7 @@ class VoiceMessage {
       content: content,
       attachments: attachments,
       reactions: reactions ?? this.reactions,
+      mentions: mentions ?? this.mentions,
       messageKind: messageKind,
       forwardFromId: forwardFromId,
       forwardFromSender: forwardFromSender,
@@ -281,6 +332,7 @@ class VoiceMessagesClient {
     required String chatId,
     required String content,
     List<MessageAttachment> attachments = const [],
+    List<MessageMention> mentions = const [],
     String? clientMessageId,
   }) async {
     final result = await _gateway.postProto(
@@ -290,6 +342,7 @@ class VoiceMessagesClient {
         chatId: chatId,
         content: content,
         attachments: attachments,
+        mentions: mentions,
         clientMessageId: clientMessageId,
       ),
       createEmpty: messaging_pb.SendMessageResponse.create,

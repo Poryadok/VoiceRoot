@@ -117,6 +117,41 @@ func TestAssignRole_GetMemberRoles(t *testing.T) {
 	require.Equal(t, permissions.RoleMember, got.GetRoleList().GetRoles()[0].GetName())
 }
 
+// TestCheckPermission_MentionPermissions documents TEXT_CHAT_MENTION_* permission names resolve.
+func TestCheckPermission_MentionPermissions(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	s, cleanup := startRoleStoreTest(t)
+	defer cleanup()
+	client, stop := startRoleGRPCTestServer(t, s.Pool)
+	defer stop()
+
+	spaceID := uuid.New()
+	ownerID := uuid.New()
+	require.NoError(t, s.BootstrapSystemRoles(context.Background(), spaceID))
+
+	roles, err := s.ListRoles(context.Background(), spaceID)
+	require.NoError(t, err)
+	var ownerRoleID uuid.UUID
+	for _, r := range roles {
+		if r.Name == permissions.RoleOwner {
+			ownerRoleID = r.ID
+		}
+	}
+	require.NoError(t, s.AssignMemberRole(context.Background(), spaceID, ownerID, ownerRoleID, ownerID))
+
+	for _, perm := range []string{permissions.TextChatMentionAllInChat, permissions.TextChatMentionAllOnline} {
+		resp, err := client.CheckPermission(context.Background(), &rolev1.CheckPermissionRequest{
+			SpaceId:        spaceID.String(),
+			ProfileId:      ownerID.String(),
+			PermissionName: perm,
+		})
+		require.NoError(t, err)
+		require.True(t, resp.GetAllowed(), "owner should have %s", perm)
+	}
+}
+
 // TestCheckPermission_SpaceScope documents CheckPermission for SPACE_MANAGE_INVITES.
 func TestCheckPermission_SpaceScope(t *testing.T) {
 	if testing.Short() {

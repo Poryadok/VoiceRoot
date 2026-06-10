@@ -29,6 +29,7 @@ import (
 	chatv1 "voice.app/voice/chat/v1"
 	filev1 "voice.app/voice/file/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
+	rolev1 "voice.app/voice/role/v1"
 	userv1 "voice.app/voice/user/v1"
 )
 
@@ -119,6 +120,7 @@ func main() {
 		}
 
 		var profiles grpcsvc.ProfileAccountLookup
+		var userPresence *s2s.GRPCUserPresence
 		if userAddr := strings.TrimSpace(os.Getenv("USER_GRPC_ADDR")); userAddr != "" {
 			uconn, err := grpc.NewClient(grpcclient.DialTarget(userAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
@@ -131,7 +133,25 @@ func main() {
 				log.Fatalf("user grpc dial: %v", err)
 			}
 			waitCancel()
-			profiles = &s2s.UserGRPCProfiles{Client: userv1.NewUserServiceClient(uconn)}
+			userCli := userv1.NewUserServiceClient(uconn)
+			profiles = &s2s.UserGRPCProfiles{Client: userCli}
+			userPresence = &s2s.GRPCUserPresence{Client: userCli}
+		}
+
+		var rolePerms *s2s.GRPCRolePermissions
+		if roleAddr := strings.TrimSpace(os.Getenv("ROLE_GRPC_ADDR")); roleAddr != "" {
+			rconn, err := grpc.NewClient(grpcclient.DialTarget(roleAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if err != nil {
+				log.Fatalf("role grpc: %v", err)
+			}
+			defer func() { _ = rconn.Close() }()
+			waitCtx, waitCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			if err := waitForGRPCReady(waitCtx, rconn); err != nil {
+				waitCancel()
+				log.Fatalf("role grpc dial: %v", err)
+			}
+			waitCancel()
+			rolePerms = &s2s.GRPCRolePermissions{Client: rolev1.NewRoleServiceClient(rconn)}
 		}
 
 		var files grpcsvc.FileMetadataLookup
@@ -170,13 +190,17 @@ func main() {
 		}
 		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger)...)
 		messagingv1.RegisterMessagingServiceServer(grpcSrv, &grpcsvc.MessagingGRPC{
-			Messages:      &store.MessagesStore{Pool: pool},
-			Reactions:     &store.ReactionsStore{Pool: pool},
-			ChatGuard:     chatGuard,
-			Blocks:        blocks,
-			UserProfiles:  profiles,
-			Files:         files,
-			MessageEvents: msgEvents,
+			Messages:         &store.MessagesStore{Pool: pool},
+			Reactions:        &store.ReactionsStore{Pool: pool},
+			ChatGuard:        chatGuard,
+			Blocks:           blocks,
+			UserProfiles:     profiles,
+			Files:            files,
+			MessageEvents:    msgEvents,
+			Moderation:       &store.SQLModerationGuard{Pool: pool},
+			ChatMentionsMeta: &store.SQLChatMentionsMeta{Pool: pool},
+			RolePermissions:  rolePerms,
+			UserPresence:     userPresence,
 		})
 		go func() {
 			logger.Info("gRPC listening", slog.String("addr", grpcListen))

@@ -506,6 +506,30 @@ abstract class AppLocalizations {
   /// **'Send message'**
   String get chatSendMessage;
 
+  /// No description provided for @chatMentionInsert.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert mention'**
+  String get chatMentionInsert;
+
+  /// No description provided for @chatMentionEveryone.
+  ///
+  /// In en, this message translates to:
+  /// **'@everyone'**
+  String get chatMentionEveryone;
+
+  /// No description provided for @chatMentionHere.
+  ///
+  /// In en, this message translates to:
+  /// **'@here'**
+  String get chatMentionHere;
+
+  /// No description provided for @chatMentionMember.
+  ///
+  /// In en, this message translates to:
+  /// **'Member {profileId}'**
+  String chatMentionMember(String profileId);
+
   /// No description provided for @chatRoomError.
   ///
   /// In en, this message translates to:

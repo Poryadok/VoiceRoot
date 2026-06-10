@@ -515,12 +515,16 @@ ProviderContainer _container({
 class _RecordingSoundPlayer implements NotificationSoundPlayer {
   var newMessagePlays = 0;
   var reactionPlays = 0;
+  var mentionPlays = 0;
 
   @override
   void playNewMessage() => newMessagePlays++;
 
   @override
   void playReaction() => reactionPlays++;
+
+  @override
+  void playMention() => mentionPlays++;
 }
 
 class _FakeRealtimeHub extends RealtimeHub {

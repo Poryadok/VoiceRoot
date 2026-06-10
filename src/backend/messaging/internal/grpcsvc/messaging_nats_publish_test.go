@@ -3,6 +3,7 @@ package grpcsvc
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -23,17 +24,29 @@ import (
 const contractMessageSentSubject = "message.sent"
 
 type spyMessageEvents struct {
-	mu      sync.Mutex
-	sent    [][3]string // message_id, chat_id, sender_profile_id
-	edited  [][2]string
-	deleted [][2]string
-	read    [][3]string // message_id, chat_id, profile_id
+	mu       sync.Mutex
+	sent     [][4]string // message_id, chat_id, sender_profile_id, has_mentions
+	mentions [][4]string // message_id, chat_id, sender_profile_id, mentioned_ids_csv
+	edited   [][2]string
+	deleted  [][2]string
+	read     [][3]string // message_id, chat_id, profile_id
 }
 
-func (s *spyMessageEvents) PublishMessageSent(_ context.Context, messageID, chatID, senderProfileID string) error {
+func (s *spyMessageEvents) PublishMessageSent(_ context.Context, messageID, chatID, senderProfileID string, hasMentions bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.sent = append(s.sent, [3]string{messageID, chatID, senderProfileID})
+	flag := "false"
+	if hasMentions {
+		flag = "true"
+	}
+	s.sent = append(s.sent, [4]string{messageID, chatID, senderProfileID, flag})
+	return nil
+}
+
+func (s *spyMessageEvents) PublishMentionAdded(_ context.Context, messageID, chatID, senderProfileID string, mentionedProfileIDs []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mentions = append(s.mentions, [4]string{messageID, chatID, senderProfileID, strings.Join(mentionedProfileIDs, ",")})
 	return nil
 }
 
@@ -66,10 +79,10 @@ func (s *spyMessageEvents) PublishReactionRemoved(_ context.Context, messageID, 
 	return nil
 }
 
-func (s *spyMessageEvents) snapshot() (sent [][3]string, edited [][2]string, deleted [][2]string, read [][3]string) {
+func (s *spyMessageEvents) snapshot() (sent [][4]string, mentions [][4]string, edited [][2]string, deleted [][2]string, read [][3]string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return append([][3]string(nil), s.sent...), append([][2]string(nil), s.edited...), append([][2]string(nil), s.deleted...), append([][3]string(nil), s.read...)
+	return append([][4]string(nil), s.sent...), append([][4]string(nil), s.mentions...), append([][2]string(nil), s.edited...), append([][2]string(nil), s.deleted...), append([][3]string(nil), s.read...)
 }
 
 func startMessagingJSTestServer(t *testing.T) *server.Server {
@@ -148,6 +161,7 @@ func TestMessagingGRPC_JetStream_MessageSentRoundTrip(t *testing.T) {
 	require.Equal(t, msgID, sent.GetMessageId())
 	require.Equal(t, chatID.String(), sent.GetChatId())
 	require.Equal(t, profA.String(), sent.GetSenderProfileId())
+	require.False(t, sent.GetHasMentions())
 }
 
 func TestMessagingGRPC_MessageEvents_SendEditDelete(t *testing.T) {
@@ -179,11 +193,13 @@ func TestMessagingGRPC_MessageEvents_SendEditDelete(t *testing.T) {
 	require.NoError(t, err)
 	msgID := sendResp.GetMessage().GetId()
 
-	sent, edited, deleted, read := spy.snapshot()
+	sent, mentionEv, edited, deleted, read := spy.snapshot()
 	require.Len(t, sent, 1)
 	require.Equal(t, msgID, sent[0][0])
 	require.Equal(t, chatID.String(), sent[0][1])
 	require.Equal(t, profA.String(), sent[0][2])
+	require.Equal(t, "false", sent[0][3])
+	require.Empty(t, mentionEv)
 	require.Empty(t, edited)
 	require.Empty(t, deleted)
 	require.Empty(t, read)
@@ -203,7 +219,7 @@ func TestMessagingGRPC_MessageEvents_SendEditDelete(t *testing.T) {
 	_, err = client.DeleteMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.DeleteMessageRequest{MessageId: msgID})
 	require.NoError(t, err)
 
-	sent, edited, deleted, read = spy.snapshot()
+	sent, _, edited, deleted, read = spy.snapshot()
 	require.Len(t, sent, 1)
 	require.Len(t, read, 1)
 	require.Equal(t, msgID, read[0][0])
