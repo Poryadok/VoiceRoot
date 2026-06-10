@@ -12,11 +12,13 @@ import '../gen/voice/file/v1/file.pb.dart' as file_pb;
 import '../gen/voice/messaging/v1/messaging.pb.dart' as messaging_pb;
 import '../gen/voice/messaging/v1/messaging.pbenum.dart';
 import '../gen/voice/social/v1/social.pb.dart' as social_pb;
+import '../gen/voice/space/v1/space.pb.dart' as space_pb;
 import '../gen/voice/user/v1/user.pb.dart' as user_pb;
 import 'chats_client.dart';
 import 'files_client.dart';
 import 'friends_client.dart';
 import 'messages_client.dart';
+import 'spaces_client.dart';
 import 'users_client.dart';
 import 'voice_client.dart';
 
@@ -484,4 +486,55 @@ calls_pb.UpdateVoiceStateRequest updateVoiceStateRequestToProto({
     isDeafened: isDeafened,
     isVideoOn: isVideoOn,
   );
+}
+
+VoiceSpace voiceSpaceFromProto(space_pb.Space space) {
+  return VoiceSpace(
+    id: space.id,
+    name: space.name,
+    description: emptyToNull(space.description),
+    iconUrl: space.hasIconUrl() ? emptyToNull(space.iconUrl) : null,
+    visibility: space.visibility,
+    ownerProfileId: space.ownerProfileId,
+    memberCount: space.memberCount,
+    createdAt: protoTimestampToDateTime(
+      space.hasCreatedAt() ? space.createdAt : null,
+    ),
+    updatedAt: protoTimestampToDateTime(
+      space.hasUpdatedAt() ? space.updatedAt : null,
+    ),
+  );
+}
+
+SpaceListData spaceListFromProto(space_pb.SpaceList list) {
+  return SpaceListData(
+    spaces: list.spaces.map(voiceSpaceFromProto).toList(growable: false),
+    nextCursor: emptyToNull(list.nextCursor),
+  );
+}
+
+space_pb.CreateSpaceRequest createSpaceRequestToProto({
+  required String name,
+  String? description,
+  String visibility = 'private',
+}) {
+  final req = space_pb.CreateSpaceRequest(name: name, visibility: visibility);
+  if (description != null && description.isNotEmpty) {
+    req.description = description;
+  }
+  return req;
+}
+
+space_pb.UpdateSpaceRequest updateSpaceRequestToProto({
+  String? iconUrl,
+  String? description,
+}) {
+  final req = space_pb.UpdateSpaceRequest();
+  if (iconUrl != null && iconUrl.isNotEmpty) {
+    req.iconUrl = iconUrl;
+  }
+  if (description != null) {
+    req.description = description;
+  }
+  return req;
 }

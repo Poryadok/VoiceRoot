@@ -17,6 +17,7 @@ import '../core/voice_list_row.dart';
 import '../core/voice_skeleton.dart';
 import '../core/voice_state_panel.dart';
 import '../social/presence_indicator.dart';
+import '../space/create_space_sheet.dart';
 import 'create_group_sheet.dart';
 
 /// Middle column: DM chat list from `GET /api/v1/chats`.
@@ -31,6 +32,7 @@ class ChatListPanel extends ConsumerWidget {
   static const Key loadMoreKey = Key('chat_list_load_more');
   static const Key unavailableKey = Key('chat_list_unavailable');
   static const Key createGroupKey = Key('chat_list_create_group');
+  static const Key createSpaceKey = Key('chat_list_create_space');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -58,6 +60,12 @@ class ChatListPanel extends ConsumerWidget {
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
+              ),
+              IconButton(
+                key: ChatListPanel.createSpaceKey,
+                icon: const Icon(Icons.hub_outlined),
+                tooltip: l10n.spaceCreateTooltip,
+                onPressed: () => CreateSpaceSheet.show(context),
               ),
               IconButton(
                 key: ChatListPanel.createGroupKey,

@@ -527,6 +527,38 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get spaceCreateTooltip => 'Создать спейс';
+
+  @override
+  String get spaceCreateTitle => 'Новый спейс';
+
+  @override
+  String get spaceCreateNameLabel => 'Название спейса';
+
+  @override
+  String get spaceCreateNameHint => 'Пятничная тусовка';
+
+  @override
+  String get spaceCreateDescriptionLabel => 'Описание';
+
+  @override
+  String get spaceCreateDescriptionHint => 'О чём этот спейс?';
+
+  @override
+  String get spaceCreateIconLabel => 'URL иконки';
+
+  @override
+  String get spaceCreateIconHint => 'https://cdn.example/icon.webp';
+
+  @override
+  String get spaceCreateSubmit => 'Создать спейс';
+
+  @override
+  String spaceCreateError(String message) {
+    return 'Не удалось создать спейс: $message';
+  }
+
+  @override
   String get chatGroupMembersTooltip => 'Участники группы';
 
   @override

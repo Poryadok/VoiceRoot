@@ -523,6 +523,38 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get spaceCreateTooltip => 'Create space';
+
+  @override
+  String get spaceCreateTitle => 'New space';
+
+  @override
+  String get spaceCreateNameLabel => 'Space name';
+
+  @override
+  String get spaceCreateNameHint => 'Friday squad';
+
+  @override
+  String get spaceCreateDescriptionLabel => 'Description';
+
+  @override
+  String get spaceCreateDescriptionHint => 'What is this space about?';
+
+  @override
+  String get spaceCreateIconLabel => 'Icon URL';
+
+  @override
+  String get spaceCreateIconHint => 'https://cdn.example/icon.webp';
+
+  @override
+  String get spaceCreateSubmit => 'Create space';
+
+  @override
+  String spaceCreateError(String message) {
+    return 'Could not create space: $message';
+  }
+
+  @override
   String get chatGroupMembersTooltip => 'Group members';
 
   @override

@@ -1022,6 +1022,66 @@ abstract class AppLocalizations {
   /// **'Could not create group: {message}'**
   String chatCreateGroupError(String message);
 
+  /// No description provided for @spaceCreateTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Create space'**
+  String get spaceCreateTooltip;
+
+  /// No description provided for @spaceCreateTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'New space'**
+  String get spaceCreateTitle;
+
+  /// No description provided for @spaceCreateNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Space name'**
+  String get spaceCreateNameLabel;
+
+  /// No description provided for @spaceCreateNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Friday squad'**
+  String get spaceCreateNameHint;
+
+  /// No description provided for @spaceCreateDescriptionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Description'**
+  String get spaceCreateDescriptionLabel;
+
+  /// No description provided for @spaceCreateDescriptionHint.
+  ///
+  /// In en, this message translates to:
+  /// **'What is this space about?'**
+  String get spaceCreateDescriptionHint;
+
+  /// No description provided for @spaceCreateIconLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Icon URL'**
+  String get spaceCreateIconLabel;
+
+  /// No description provided for @spaceCreateIconHint.
+  ///
+  /// In en, this message translates to:
+  /// **'https://cdn.example/icon.webp'**
+  String get spaceCreateIconHint;
+
+  /// No description provided for @spaceCreateSubmit.
+  ///
+  /// In en, this message translates to:
+  /// **'Create space'**
+  String get spaceCreateSubmit;
+
+  /// No description provided for @spaceCreateError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not create space: {message}'**
+  String spaceCreateError(String message);
+
   /// No description provided for @chatGroupMembersTooltip.
   ///
   /// In en, this message translates to:

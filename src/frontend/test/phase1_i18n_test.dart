@@ -206,6 +206,7 @@ void main() {
                 return http.Response('{}', 404);
               }),
             ),
+            realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
           ],
           child: MaterialApp(
             theme: voiceTestTheme(),
@@ -252,6 +253,7 @@ void main() {
                 return http.Response('{}', 404);
               }),
             ),
+            realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
           ],
           child: MaterialApp(
             theme: voiceTestTheme(),

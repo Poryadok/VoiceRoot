@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS space_members;
+DROP TABLE IF EXISTS spaces;

@@ -24,6 +24,11 @@ func TestComposePhase1Wiring_yaml(t *testing.T) {
 	require.Contains(t, yml, `"friends":"social:9090"`)
 	require.Contains(t, yml, `"chats":"chat:9090"`)
 	require.Contains(t, yml, `"messages":"messaging:9090"`)
+	require.Contains(t, yml, `"spaces":"space:9090"`)
+
+	require.Contains(t, yml, "\n  space:\n")
+	require.Contains(t, yml, "SPACE_GRPC_LISTEN: :9090")
+	require.Contains(t, yml, "space_db")
 
 	require.Contains(t, yml, "GATEWAY_REALTIME_UPSTREAM_URL:")
 	require.Contains(t, yml, "http://realtime:8080")

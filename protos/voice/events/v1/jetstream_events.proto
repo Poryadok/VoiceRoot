@@ -198,6 +198,7 @@ message ChatStreamEvent {
     ChatCreated chat_created = 10;
     ChatMemberChanged chat_member_changed = 11;
     SpaceTreeChanged space_tree_changed = 12;
+    SpaceCreated space_created = 13;
   }
 }
 
@@ -216,6 +217,11 @@ message SpaceTreeChanged {
   string space_id = 1;
   string node_id = 2;
   string change = 3; // upserted | removed
+}
+
+message SpaceCreated {
+  string space_id = 1;
+  string owner_profile_id = 2;
 }
 
 // --- voice.events ---

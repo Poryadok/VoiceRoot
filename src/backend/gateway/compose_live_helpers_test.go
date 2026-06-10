@@ -107,6 +107,120 @@ func waitComposeWSOp(
 	return composeWSFrame{}
 }
 
+type composeSpaceItem struct {
+	ID          string
+	Name        string
+	Description string
+	IconURL     string
+}
+
+func createComposeSpace(t *testing.T, client *http.Client, base, accessToken, name, description string) string {
+	t.Helper()
+	payload, err := json.Marshal(map[string]string{
+		"name":        name,
+		"description": description,
+	})
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/spaces", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "POST /api/v1/spaces body=%s", string(body))
+
+	var parsed struct {
+		Space struct {
+			ID string `json:"id"`
+		} `json:"space"`
+	}
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	require.NotEmpty(t, parsed.Space.ID)
+	return parsed.Space.ID
+}
+
+func listComposeSpaces(t *testing.T, client *http.Client, base, accessToken string) []composeSpaceItem {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, base+"/api/v1/spaces", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "GET /api/v1/spaces body=%s", string(body))
+
+	var parsed struct {
+		SpaceList struct {
+			Spaces []struct {
+				ID          string `json:"id"`
+				Name        string `json:"name"`
+				Description string `json:"description"`
+				IconURL     string `json:"icon_url"`
+			} `json:"spaces"`
+		} `json:"space_list"`
+	}
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	var out []composeSpaceItem
+	for _, s := range parsed.SpaceList.Spaces {
+		out = append(out, composeSpaceItem{
+			ID:          s.ID,
+			Name:        s.Name,
+			Description: s.Description,
+			IconURL:     s.IconURL,
+		})
+	}
+	return out
+}
+
+func getComposeSpace(t *testing.T, client *http.Client, base, accessToken, spaceID string) composeSpaceItem {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, base+"/api/v1/spaces/"+spaceID, nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "GET space body=%s", string(body))
+
+	var parsed struct {
+		Space struct {
+			ID          string `json:"id"`
+			Name        string `json:"name"`
+			Description string `json:"description"`
+			IconURL     string `json:"icon_url"`
+		} `json:"space"`
+	}
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	return composeSpaceItem{
+		ID:          parsed.Space.ID,
+		Name:        parsed.Space.Name,
+		Description: parsed.Space.Description,
+		IconURL:     parsed.Space.IconURL,
+	}
+}
+
+func updateComposeSpace(t *testing.T, client *http.Client, base, accessToken, spaceID, iconURL, description string) {
+	t.Helper()
+	payload, err := json.Marshal(map[string]string{
+		"icon_url":    iconURL,
+		"description": description,
+	})
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPatch, base+"/api/v1/spaces/"+spaceID, bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "PATCH space body=%s", string(body))
+}
+
 func createComposeGroup(t *testing.T, client *http.Client, base, accessToken, name string) string {
 	t.Helper()
 	payload, err := json.Marshal(map[string]string{

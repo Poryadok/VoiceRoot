@@ -13,6 +13,7 @@ import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/gateway_http.dart';
 import 'package:voice_frontend/backend/messages_client.dart';
 import 'package:voice_frontend/backend/realtime_client.dart';
+import 'package:voice_frontend/backend/spaces_client.dart';
 
 /// Compile-time API base (`--dart-define=VOICE_API_BASE_URL=...`).
 String liveGatewayBaseUrl() {
@@ -210,6 +211,9 @@ class LiveGatewayContext {
       VoiceFriendsClient(gateway: gatewayHttp());
 
   VoiceChatsClient chatsClient() => VoiceChatsClient(gateway: gatewayHttp());
+
+  VoiceSpacesClient spacesClient() =>
+      VoiceSpacesClient(gateway: gatewayHttp());
 
   VoiceMessagesClient messagesClient() =>
       VoiceMessagesClient(gateway: gatewayHttp());

@@ -287,6 +287,23 @@
       }
     }
   },
+  "spaceCreateTooltip": "Создать спейс",
+  "spaceCreateTitle": "Новый спейс",
+  "spaceCreateNameLabel": "Название спейса",
+  "spaceCreateNameHint": "Пятничная тусовка",
+  "spaceCreateDescriptionLabel": "Описание",
+  "spaceCreateDescriptionHint": "О чём этот спейс?",
+  "spaceCreateIconLabel": "URL иконки",
+  "spaceCreateIconHint": "https://cdn.example/icon.webp",
+  "spaceCreateSubmit": "Создать спейс",
+  "spaceCreateError": "Не удалось создать спейс: {message}",
+  "@spaceCreateError": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
   "chatGroupMembersTooltip": "Участники группы",
   "chatGroupMembersTitle": "Участники",
   "chatGroupMembersSubtitle": "Владелец может удалять участников. Участники могут выйти из группы.",
