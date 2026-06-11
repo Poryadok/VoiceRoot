@@ -1,9 +1,22 @@
 # Notification Service
 
-Go scaffold for the Voice notification service.
+Push routing for FCM (Web + Android): device tokens, offline delivery for `new_message` / `mention`, `match_found` foundation.
 
-Current public surface:
+## Surfaces
 
-- GET /health returns {"service":"notification","status":"ok"}.
+- gRPC `NotificationService` on `:9090` (`NOTIFICATION_GRPC_LISTEN`)
+- GET `/health` on `:8080`
 
-Domain behavior, gRPC handlers, database repositories, and migrations are intentionally out of scope for this initialization step.
+## Environment
+
+| Variable | Purpose |
+|----------|---------|
+| `DATABASE_URL` | `notification_db` PostgreSQL |
+| `NOTIFICATION_REDIS_ADDR` | Push grouping state (optional; degraded = ungrouped) |
+| `NATS_URL` | `message.events` consumer (optional) |
+| `USER_GRPC_ADDR` | Presence check for online vs push routing |
+| `FCM_CREDENTIALS_JSON` | Firebase service account; unset = noop sender (Tier-1 degraded) |
+
+## Local compose
+
+Service `notification` in `docker-compose.yml` (`--profile app`). Gateway route: `/api/v1/notifications/**`.

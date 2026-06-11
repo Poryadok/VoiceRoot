@@ -9,6 +9,7 @@ import 'state/auth_providers.dart';
 import 'state/gateway_providers.dart';
 import 'state/chat_providers.dart';
 import 'state/in_app_notifications.dart';
+import 'state/push_notifications_controller.dart';
 import 'state/shell_providers.dart';
 import 'state/social_providers.dart';
 import 'state/space_providers.dart';
@@ -177,6 +178,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
   @override
   Widget build(BuildContext context) {
     ref.watch(inAppNotificationControllerProvider);
+    ref.watch(pushNotificationsControllerProvider);
     final l10n = AppLocalizations.of(context)!;
     final health = ref.watch(gatewayHealthProvider);
     final selectedChatId = ref.watch(selectedChatIdProvider);

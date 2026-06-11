@@ -17,6 +17,7 @@ require (
 	voice.app/voice/common v0.0.0
 	voice.app/voice/file v0.0.0
 	voice.app/voice/messaging v0.0.0
+	voice.app/voice/notification v0.0.0
 	voice.app/voice/role v0.0.0
 	voice.app/voice/social v0.0.0
 	voice.app/voice/space v0.0.0
@@ -110,6 +111,8 @@ replace voice.app/voice/common => ../user/pb/voice/common
 replace voice.app/voice/chat => ../chat/pb/voice/chat
 
 replace voice.app/voice/messaging => ../messaging/pb/voice/messaging
+
+replace voice.app/voice/notification => ../voice/pb/voice/notification
 
 replace voice.app/voice/calls => ../voice/pb/voice/calls
 

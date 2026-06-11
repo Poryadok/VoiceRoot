@@ -49,6 +49,8 @@ dependencies:
   url_launcher: ^6.3.1
   flutter_highlight: ^0.7.0
   highlight: ^0.7.0
+  firebase_core: ^3.13.0
+  firebase_messaging: ^15.2.5
 
 dev_dependencies:
   flutter_test:

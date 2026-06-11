@@ -1,10 +1,18 @@
 # syntax=docker/dockerfile:1
+# Build context must be `src/backend`.
 
 FROM golang:1.26-alpine AS build
 WORKDIR /src
-COPY go.mod ./
-RUN go mod download
-COPY . .
+COPY pkg/go.mod ./pkg/
+COPY notification/go.mod ./notification/
+COPY voice/pb/voice/notification/go.mod ./voice/pb/voice/notification/
+COPY messaging/pb/voice/events/go.mod ./messaging/pb/voice/events/
+RUN cd notification && go mod download
+COPY pkg ./pkg
+COPY voice/pb ./voice/pb
+COPY messaging/pb ./messaging/pb
+COPY notification ./notification
+WORKDIR /src/notification
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/service .
 
 FROM alpine:3.20

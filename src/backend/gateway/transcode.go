@@ -16,6 +16,7 @@ import (
 	filev1 "voice.app/voice/file/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
 	socialv1 "voice.app/voice/social/v1"
+	notificationv1 "voice.app/voice/notification/v1"
 	rolev1 "voice.app/voice/role/v1"
 	spacev1 "voice.app/voice/space/v1"
 	userv1 "voice.app/voice/user/v1"
@@ -28,8 +29,9 @@ type grpcClients struct {
 	messaging messagingv1.MessagingServiceClient
 	voice     callsv1.VoiceServiceClient
 	file      filev1.FileServiceClient
-	space     spacev1.SpaceServiceClient
-	role      rolev1.RoleServiceClient
+	space        spacev1.SpaceServiceClient
+	role         rolev1.RoleServiceClient
+	notification notificationv1.NotificationServiceClient
 }
 
 type transcoder struct {
@@ -96,7 +98,12 @@ func grpcClientsFromEnv() *grpcClients {
 	} else if conn != nil {
 		clients.role = rolev1.NewRoleServiceClient(conn)
 	}
-	if clients.user == nil && clients.social == nil && clients.chat == nil && clients.messaging == nil && clients.voice == nil && clients.file == nil && clients.space == nil && clients.role == nil {
+	if conn, err := dial(addrFor("notifications")); err != nil {
+		log.Printf("gateway grpc dial notifications: %v", err)
+	} else if conn != nil {
+		clients.notification = notificationv1.NewNotificationServiceClient(conn)
+	}
+	if clients.user == nil && clients.social == nil && clients.chat == nil && clients.messaging == nil && clients.voice == nil && clients.file == nil && clients.space == nil && clients.role == nil && clients.notification == nil {
 		return nil
 	}
 	return clients
@@ -161,6 +168,11 @@ func (t *transcoder) serveNamespace(w http.ResponseWriter, r *http.Request, name
 			return false
 		}
 		return t.serveRoles(w, r, rest)
+	case "notifications":
+		if t.clients.notification == nil {
+			return false
+		}
+		return t.serveNotifications(w, r, rest)
 	default:
 		return false
 	}

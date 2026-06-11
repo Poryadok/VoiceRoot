@@ -8,7 +8,6 @@ import 'package:voice_frontend/state/space_providers.dart';
 import 'package:http/testing.dart';
 
 import 'support/auth_test_overrides.dart';
-import 'support/gateway_test_client.dart';
 
 void main() {
   group('ShellNavigation', () {

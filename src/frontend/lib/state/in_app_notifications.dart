@@ -48,6 +48,9 @@ class InAppNotificationController {
 
   void dispose() => _eventSub?.close();
 
+  /// Applies a push notification payload using the same path as WS `notification`.
+  void onPushNotificationData(Map<String, dynamic>? data) => _onNotification(data);
+
   void _onFrame(RealtimeFrame frame) {
     switch (frame.op) {
       case 'notification':

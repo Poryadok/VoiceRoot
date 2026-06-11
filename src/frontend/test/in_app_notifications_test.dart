@@ -421,6 +421,39 @@ void main() {
       expect(sound.newMessagePlays, 0);
     });
 
+    test('mention notification plays mention sound when enabled', () async {
+      final sound = _RecordingSoundPlayer();
+      final hub = _FakeRealtimeHub();
+      final container = _container(sound: sound, hub: hub);
+      addTearDown(container.dispose);
+
+      container.read(chatListControllerProvider);
+      await pumpEventQueue();
+      container.read(selectedChatIdProvider.notifier).state = 'chat-open';
+      container.read(inAppNotificationControllerProvider);
+
+      hub.emit(
+        const RealtimeFrame(
+          op: 'notification',
+          data: {
+            'type': 'mention',
+            'chat_id': 'chat-other',
+            'message_id': 'msg-mention',
+            'sender_profile_id': 'peer-1',
+          },
+        ),
+      );
+      await pumpEventQueue();
+
+      final item = container
+          .read(chatListControllerProvider)
+          .items
+          .firstWhere((row) => row.chatId == 'chat-other');
+      expect(item.unreadCount, 1);
+      expect(sound.mentionPlays, 1);
+      expect(sound.newMessagePlays, 0);
+    });
+
     test('global mute disables sound but badge still updates', () async {
       final sound = _RecordingSoundPlayer();
       final hub = _FakeRealtimeHub();
