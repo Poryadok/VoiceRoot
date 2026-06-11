@@ -17,7 +17,7 @@ void main() {
 
     final base = String.fromEnvironment(
       'VOICE_API_BASE_URL',
-      defaultValue: 'http://127.0.0.1:8080',
+      defaultValue: 'http://127.0.0.1:18080',
     );
     final client = http.Client();
     addTearDown(client.close);

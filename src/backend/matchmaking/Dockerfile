@@ -3,10 +3,10 @@
 
 FROM golang:1.26-alpine AS build
 WORKDIR /src
-COPY pkg/go.mod ./pkg/
-COPY matchmaking/go.mod ./matchmaking/
+COPY pkg/go.mod pkg/go.sum ./pkg/
+COPY matchmaking/go.mod matchmaking/go.sum ./matchmaking/
 COPY voice/pb/voice/matchmaking/go.mod ./voice/pb/voice/matchmaking/
-COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
+COPY user/pb/voice/common/go.mod user/pb/voice/common/go.sum ./user/pb/voice/common/
 COPY messaging/pb/voice/events/go.mod ./messaging/pb/voice/events/
 RUN cd matchmaking && go mod download
 COPY pkg ./pkg

@@ -35,7 +35,11 @@ func TestComposeMatchmakingSearch_live(t *testing.T) {
 
 	var gamesPayload map[string]any
 	require.NoError(t, json.Unmarshal(gamesRaw, &gamesPayload))
-	gameList := gamesPayload["gameList"].(map[string]any)
+	gameList, ok := gamesPayload["gameList"].(map[string]any)
+	if !ok {
+		gameList, ok = gamesPayload["game_list"].(map[string]any)
+	}
+	require.True(t, ok, "expected gameList in response: %s", string(gamesRaw))
 	games := gameList["games"].([]any)
 	var gameID string
 	for _, g := range games {
@@ -76,7 +80,11 @@ func TestComposeMatchmakingSearch_live(t *testing.T) {
 
 	var startPayload map[string]any
 	require.NoError(t, json.Unmarshal(startRaw, &startPayload))
-	session := startPayload["searchSession"].(map[string]any)
+	session, ok := startPayload["searchSession"].(map[string]any)
+	if !ok {
+		session, ok = startPayload["search_session"].(map[string]any)
+	}
+	require.True(t, ok, "expected searchSession in response: %s", string(startRaw))
 	sessionID, _ := session["id"].(string)
 	require.NotEmpty(t, sessionID)
 	require.Equal(t, "searching", session["status"])
