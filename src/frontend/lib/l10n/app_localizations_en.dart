@@ -906,4 +906,35 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bootstrapRestoring => 'Restoring session…';
+
+  @override
+  String get gameCatalogTitle => 'Game catalog';
+
+  @override
+  String get gameCatalogEntry => 'Browse games';
+
+  @override
+  String get gameCatalogSearchHint => 'Search games';
+
+  @override
+  String get gameCatalogLoadError => 'Could not load game catalog';
+
+  @override
+  String get gameCatalogEmpty => 'No games found';
+
+  @override
+  String get gameCatalogInGameRoles => 'In-game roles';
+
+  @override
+  String get gameCatalogRankLadder => 'Rank ladder';
+
+  @override
+  String gameCatalogRegions(String regions) {
+    return 'Regions: $regions';
+  }
+
+  @override
+  String gameCatalogModeSlots(int slots, int min, int max) {
+    return '$slots players · party $min–$max';
+  }
 }

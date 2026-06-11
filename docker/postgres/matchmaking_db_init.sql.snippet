@@ -1,0 +1,117 @@
+-- matchmaking_db v1 — keep in sync with src/backend/migrations/matchmaking_db/000001_init.up.sql
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+CREATE TABLE games (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    icon_url TEXT,
+    external_id TEXT,
+    config JSONB NOT NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived')),
+    created_by UUID,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX games_name_active_uq ON games (lower(name)) WHERE status = 'active';
+CREATE INDEX games_status_created_idx ON games (status, created_at DESC, id);
+CREATE INDEX games_name_lower_idx ON games (lower(name));
+
+INSERT INTO games (name, config, status) VALUES
+(
+    'Dota 2',
+    '{
+      "genre": "MOBA",
+      "platforms": ["pc"],
+      "regions": ["eu", "cis"],
+      "modes": [{
+        "name": "5v5 Ranked",
+        "slots": 10,
+        "party_size_min": 1,
+        "party_size_max": 5,
+        "roles_required": true,
+        "rank_required": true,
+        "roles": [
+          {"name": "Carry", "required": true},
+          {"name": "Mid", "required": false},
+          {"name": "Support", "required": false}
+        ],
+        "ranks": [
+          {"name": "Herald", "value": 0},
+          {"name": "Guardian", "value": 770},
+          {"name": "Ancient", "value": 3850}
+        ]
+      }]
+    }'::jsonb,
+    'active'
+),
+(
+    'Counter-Strike 2',
+    '{
+      "genre": "Shooter",
+      "platforms": ["pc"],
+      "regions": ["eu", "cis", "na"],
+      "modes": [{
+        "name": "Premier",
+        "slots": 10,
+        "party_size_min": 1,
+        "party_size_max": 5,
+        "roles_required": false,
+        "rank_required": true,
+        "roles": [],
+        "ranks": [
+          {"name": "Silver", "value": 0},
+          {"name": "Gold", "value": 15000},
+          {"name": "Global Elite", "value": 30000}
+        ]
+      }]
+    }'::jsonb,
+    'active'
+),
+(
+    'Valorant',
+    '{
+      "genre": "Shooter",
+      "platforms": ["pc"],
+      "regions": ["eu", "na"],
+      "modes": [{
+        "name": "Competitive",
+        "slots": 10,
+        "party_size_min": 1,
+        "party_size_max": 5,
+        "roles_required": true,
+        "rank_required": true,
+        "roles": [
+          {"name": "Duelist", "required": false},
+          {"name": "Controller", "required": false},
+          {"name": "Initiator", "required": false},
+          {"name": "Sentinel", "required": false}
+        ],
+        "ranks": [
+          {"name": "Iron", "value": 0},
+          {"name": "Gold", "value": 3000},
+          {"name": "Radiant", "value": 24000}
+        ]
+      }]
+    }'::jsonb,
+    'active'
+),
+(
+    'PUBG',
+    '{
+      "genre": "Battle Royale",
+      "platforms": ["pc", "console"],
+      "regions": ["eu", "asia"],
+      "modes": [{
+        "name": "Squads",
+        "slots": 4,
+        "party_size_min": 1,
+        "party_size_max": 4,
+        "roles_required": false,
+        "rank_required": false,
+        "roles": [],
+        "ranks": []
+      }]
+    }'::jsonb,
+    'active'
+);

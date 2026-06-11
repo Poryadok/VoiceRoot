@@ -50,6 +50,11 @@ func TestComposePhase1Wiring_yaml(t *testing.T) {
 	require.Contains(t, yml, "NOTIFICATION_GRPC_LISTEN: :9090")
 	require.Contains(t, yml, "notification_db")
 	require.Contains(t, yml, `"notifications":"notification:9090"`)
+
+	require.Contains(t, yml, "\n  matchmaking:\n")
+	require.Contains(t, yml, "MATCHMAKING_GRPC_LISTEN: :9090")
+	require.Contains(t, yml, "matchmaking_db")
+	require.Contains(t, yml, `"matchmaking":"matchmaking:9090"`)
 }
 
 func repoRootFromTest(t *testing.T) string {

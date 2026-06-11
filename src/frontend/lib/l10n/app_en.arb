@@ -504,5 +504,26 @@
   "profileBlockConfirmMessage": "They will not be able to message you.",
   "callVideoPlaceholder": "Video preview",
   "themeLoadError": "Could not load theme",
-  "bootstrapRestoring": "Restoring session…"
+  "bootstrapRestoring": "Restoring session…",
+  "gameCatalogTitle": "Game catalog",
+  "gameCatalogEntry": "Browse games",
+  "gameCatalogSearchHint": "Search games",
+  "gameCatalogLoadError": "Could not load game catalog",
+  "gameCatalogEmpty": "No games found",
+  "gameCatalogInGameRoles": "In-game roles",
+  "gameCatalogRankLadder": "Rank ladder",
+  "gameCatalogRegions": "Regions: {regions}",
+  "@gameCatalogRegions": {
+    "placeholders": {
+      "regions": { "type": "String" }
+    }
+  },
+  "gameCatalogModeSlots": "{slots} players · party {min}–{max}",
+  "@gameCatalogModeSlots": {
+    "placeholders": {
+      "slots": { "type": "int" },
+      "min": { "type": "int" },
+      "max": { "type": "int" }
+    }
+  }
 }

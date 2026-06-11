@@ -7,6 +7,7 @@ import '../api_error_messages.dart';
 import '../../state/presence_providers.dart';
 import '../../state/social_providers.dart';
 import '../core/voice_state_panel.dart';
+import '../matchmaking/game_catalog_screen.dart';
 import 'presence_indicator.dart';
 import 'profile_detail_sheet.dart';
 
@@ -84,6 +85,21 @@ class _SocialPanelState extends ConsumerState<SocialPanel>
       key: SocialPanel.panelKey,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            key: const Key('social_game_catalog_entry'),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const GameCatalogScreen(),
+                ),
+              );
+            },
+            icon: const Icon(Icons.sports_esports_outlined),
+            label: Text(l10n.gameCatalogEntry),
+          ),
+        ),
         TabBar(
           controller: _tabs,
           tabs: [

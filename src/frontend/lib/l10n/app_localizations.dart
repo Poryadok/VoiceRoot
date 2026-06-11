@@ -1687,6 +1687,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Restoring session…'**
   String get bootstrapRestoring;
+
+  /// No description provided for @gameCatalogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Game catalog'**
+  String get gameCatalogTitle;
+
+  /// No description provided for @gameCatalogEntry.
+  ///
+  /// In en, this message translates to:
+  /// **'Browse games'**
+  String get gameCatalogEntry;
+
+  /// No description provided for @gameCatalogSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search games'**
+  String get gameCatalogSearchHint;
+
+  /// No description provided for @gameCatalogLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load game catalog'**
+  String get gameCatalogLoadError;
+
+  /// No description provided for @gameCatalogEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No games found'**
+  String get gameCatalogEmpty;
+
+  /// No description provided for @gameCatalogInGameRoles.
+  ///
+  /// In en, this message translates to:
+  /// **'In-game roles'**
+  String get gameCatalogInGameRoles;
+
+  /// No description provided for @gameCatalogRankLadder.
+  ///
+  /// In en, this message translates to:
+  /// **'Rank ladder'**
+  String get gameCatalogRankLadder;
+
+  /// No description provided for @gameCatalogRegions.
+  ///
+  /// In en, this message translates to:
+  /// **'Regions: {regions}'**
+  String gameCatalogRegions(String regions);
+
+  /// No description provided for @gameCatalogModeSlots.
+  ///
+  /// In en, this message translates to:
+  /// **'{slots} players · party {min}–{max}'**
+  String gameCatalogModeSlots(int slots, int min, int max);
 }
 
 class _AppLocalizationsDelegate

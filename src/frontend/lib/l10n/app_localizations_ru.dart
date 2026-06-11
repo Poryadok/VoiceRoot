@@ -911,4 +911,35 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get bootstrapRestoring => 'Восстановление сессии…';
+
+  @override
+  String get gameCatalogTitle => 'Каталог игр';
+
+  @override
+  String get gameCatalogEntry => 'Каталог игр';
+
+  @override
+  String get gameCatalogSearchHint => 'Поиск игр';
+
+  @override
+  String get gameCatalogLoadError => 'Не удалось загрузить каталог игр';
+
+  @override
+  String get gameCatalogEmpty => 'Игры не найдены';
+
+  @override
+  String get gameCatalogInGameRoles => 'Игровые роли';
+
+  @override
+  String get gameCatalogRankLadder => 'Ранги';
+
+  @override
+  String gameCatalogRegions(String regions) {
+    return 'Регионы: $regions';
+  }
+
+  @override
+  String gameCatalogModeSlots(int slots, int min, int max) {
+    return '$slots игроков · пати $min–$max';
+  }
 }

@@ -482,5 +482,26 @@
   "profileBlockConfirmMessage": "Он не сможет писать вам сообщения.",
   "callVideoPlaceholder": "Видео",
   "themeLoadError": "Не удалось загрузить тему",
-  "bootstrapRestoring": "Восстановление сессии…"
+  "bootstrapRestoring": "Восстановление сессии…",
+  "gameCatalogTitle": "Каталог игр",
+  "gameCatalogEntry": "Каталог игр",
+  "gameCatalogSearchHint": "Поиск игр",
+  "gameCatalogLoadError": "Не удалось загрузить каталог игр",
+  "gameCatalogEmpty": "Игры не найдены",
+  "gameCatalogInGameRoles": "Игровые роли",
+  "gameCatalogRankLadder": "Ранги",
+  "gameCatalogRegions": "Регионы: {regions}",
+  "@gameCatalogRegions": {
+    "placeholders": {
+      "regions": { "type": "String" }
+    }
+  },
+  "gameCatalogModeSlots": "{slots} игроков · пати {min}–{max}",
+  "@gameCatalogModeSlots": {
+    "placeholders": {
+      "slots": { "type": "int" },
+      "min": { "type": "int" },
+      "max": { "type": "int" }
+    }
+  }
 }
