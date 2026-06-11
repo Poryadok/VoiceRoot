@@ -55,13 +55,22 @@ void main() {
   testWidgets('group room shows members sheet with owner badge and kick', (
     tester,
   ) async {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.binding.setSurfaceSize(const Size(400, 800));
     const chatId = 'group-roles-1';
     const ownerId = 'prof-test';
     const memberId = 'profile-member';
 
     await tester.pumpWidget(
       testApp(
-        home: const ChatRoomPanel(chatId: chatId),
+        home: MediaQuery(
+          data: const MediaQueryData(size: Size(400, 800)),
+          child: const SizedBox(
+            width: 400,
+            height: 800,
+            child: ChatRoomPanel(chatId: chatId),
+          ),
+        ),
         client: MockClient((req) async {
           final path = req.url.path;
           if (path == '/api/v1/chats') {

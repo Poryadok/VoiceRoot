@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../../state/shell_providers.dart';
 import '../../state/space_providers.dart';
 import '../core/voice_bottom_sheet.dart';
-import 'space_view.dart';
 
 /// Bottom sheet: paste invite code and join a space.
 class JoinSpaceInviteSheet extends ConsumerStatefulWidget {
@@ -72,12 +72,7 @@ class _JoinSpaceInviteSheetState extends ConsumerState<JoinSpaceInviteSheet> {
     if (!mounted) return;
     Navigator.of(context).pop();
     if (spaceId != null) {
-      ref.read(selectedSpaceIdProvider.notifier).state = spaceId;
-      await Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => SpaceView(spaceId: spaceId),
-        ),
-      );
+      ref.read(shellNavigationProvider).selectSpace(spaceId);
     }
   }
 

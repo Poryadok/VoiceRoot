@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../theme/voice_colors.dart';
 
-/// Desktop: [active rail | chat list | open chat] per docs/features/navigation.md.
-/// Narrow width: stacked column ([navMobileStack]) preserving the same child keys.
+/// Desktop shell per docs/features/navigation.md.
+/// Supports legacy 3-column (rail | list | main) and extended layout with
+/// navigation column, optional space tree, chat, and side panel.
 class ThreeColumnShell extends StatelessWidget {
   const ThreeColumnShell({
     super.key,
@@ -15,6 +16,13 @@ class ThreeColumnShell extends StatelessWidget {
     this.mainFlex = 2,
     this.showMainOnlyOnNarrow = false,
     this.mobileRailChild,
+    this.navigationChild,
+    this.navigationCollapsed = false,
+    this.middleChild,
+    this.sidePanelChild,
+    this.navigationExpandedWidth = 260,
+    this.navigationCollapsedWidth = 72,
+    this.sidePanelWidth = 300,
   });
 
   final Widget? header;
@@ -26,9 +34,20 @@ class ThreeColumnShell extends StatelessWidget {
   final bool showMainOnlyOnNarrow;
   final Widget? mobileRailChild;
 
+  /// When set, enables the new shell layout (navigation | middle? | main | side?).
+  final Widget? navigationChild;
+  final bool navigationCollapsed;
+  final Widget? middleChild;
+  final Widget? sidePanelChild;
+  final double navigationExpandedWidth;
+  final double navigationCollapsedWidth;
+  final double sidePanelWidth;
+
   static const Key navActiveRail = Key('nav_active_rail');
   static const Key navChatList = Key('nav_chat_list');
   static const Key navOpenChat = Key('nav_open_chat');
+  static const Key navSpaceTree = Key('nav_space_tree');
+  static const Key navSidePanel = Key('nav_side_panel');
   static const Key navMobileStack = Key('nav_mobile_stack');
   static const Key navMobileStrip = Key('nav_mobile_strip');
 
@@ -36,84 +55,175 @@ class ThreeColumnShell extends StatelessWidget {
   Widget build(BuildContext context) {
     final voice = VoiceColors.of(context);
 
-    Widget railContent() =>
-        railChild ??
-        ColoredBox(color: voice.muted, child: const SizedBox.expand());
-
-    Widget listContent() => ColoredBox(
-      color: voice.surface,
-      child: listChild ?? const SizedBox.expand(),
-    );
+    Widget columnDivider() =>
+        VerticalDivider(width: 1, color: voice.borderDefault);
 
     Widget mainContent() => ColoredBox(
       color: voice.canvas,
       child: mainChild ?? const SizedBox.expand(),
     );
 
-    Widget columnDivider() =>
-        VerticalDivider(width: 1, color: voice.borderDefault);
+    Widget legacyRail() =>
+        railChild ??
+        ColoredBox(color: voice.muted, child: const SizedBox.expand());
 
-    Widget rail() => Expanded(
-      flex: 1,
-      key: navActiveRail,
-      child: railContent(),
+    Widget legacyList() => ColoredBox(
+      color: voice.surface,
+      child: listChild ?? const SizedBox.expand(),
     );
 
-    Widget list() => Expanded(
+    Widget navigationColumn() {
+      final width = navigationCollapsed
+          ? navigationCollapsedWidth
+          : navigationExpandedWidth;
+      return SizedBox(
+        key: navActiveRail,
+        width: width,
+        child: navigationChild,
+      );
+    }
+
+    Widget middleColumn() => Expanded(
+      flex: listFlex,
+      key: navSpaceTree,
+      child: ColoredBox(
+        color: voice.surface,
+        child: middleChild!,
+      ),
+    );
+
+    Widget legacyListColumn() => Expanded(
       flex: listFlex,
       key: navChatList,
-      child: listContent(),
+      child: legacyList(),
     );
 
-    Widget main() => Expanded(
+    Widget mainColumn() => Expanded(
       flex: mainFlex,
       key: navOpenChat,
       child: mainContent(),
     );
 
+    Widget sideColumn() => SizedBox(
+      key: navSidePanel,
+      width: sidePanelWidth,
+      child: ColoredBox(
+        color: voice.surface,
+        child: sidePanelChild!,
+      ),
+    );
+
+    Widget desktopBody({required bool narrow}) {
+      if (navigationChild != null) {
+        final children = <Widget>[
+          navigationColumn(),
+          columnDivider(),
+        ];
+        if (middleChild != null) {
+          children.add(middleColumn());
+          children.add(columnDivider());
+        }
+        children.add(mainColumn());
+        if (sidePanelChild != null) {
+          children.add(columnDivider());
+          children.add(sideColumn());
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: children,
+        );
+      }
+
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(key: navActiveRail, child: legacyRail()),
+          columnDivider(),
+          legacyListColumn(),
+          columnDivider(),
+          mainColumn(),
+        ],
+      );
+    }
+
+    Widget narrowBody() {
+      if (navigationChild != null) {
+        if (showMainOnlyOnNarrow) {
+          return Column(
+            key: navMobileStack,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                key: navMobileStrip,
+                height: 48,
+                child: mobileRailChild ?? navigationColumn(),
+              ),
+              Expanded(key: navOpenChat, child: mainContent()),
+            ],
+          );
+        }
+        if (middleChild != null && !showMainOnlyOnNarrow) {
+          return Column(
+            key: navMobileStack,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                key: navMobileStrip,
+                height: 48,
+                child: mobileRailChild ?? navigationColumn(),
+              ),
+              Divider(height: 1, color: voice.borderDefault),
+              Expanded(key: navSpaceTree, child: middleChild!),
+            ],
+          );
+        }
+        return Column(
+          key: navMobileStack,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(key: navActiveRail, child: navigationChild!),
+            if (mainChild != null && showMainOnlyOnNarrow) ...[
+              Divider(height: 1, color: voice.borderDefault),
+              Expanded(key: navOpenChat, child: mainContent()),
+            ],
+          ],
+        );
+      }
+
+      return Column(
+        key: navMobileStack,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: showMainOnlyOnNarrow
+            ? [
+                SizedBox(
+                  key: navMobileStrip,
+                  height: 48,
+                  child: mobileRailChild ?? legacyRail(),
+                ),
+                Expanded(key: navOpenChat, child: mainContent()),
+              ]
+            : [
+                SizedBox(
+                  key: navActiveRail,
+                  height: 48,
+                  child: mobileRailChild ?? legacyRail(),
+                ),
+                Divider(height: 1, color: voice.borderDefault),
+                Expanded(key: navChatList, child: legacyList()),
+              ],
+      );
+    }
+
     return LayoutBuilder(
       builder: (context, c) {
         final narrow = c.maxWidth < 600;
-        final body = narrow
-            ? Column(
-                key: navMobileStack,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: showMainOnlyOnNarrow
-                    ? [
-                        SizedBox(
-                          key: navMobileStrip,
-                          height: 48,
-                          child: mobileRailChild ?? railContent(),
-                        ),
-                        Expanded(key: navOpenChat, child: mainContent()),
-                      ]
-                    : [
-                        SizedBox(
-                          key: navActiveRail,
-                          height: 48,
-                          child: mobileRailChild ?? railContent(),
-                        ),
-                        Divider(height: 1, color: voice.borderDefault),
-                        Expanded(key: navChatList, child: listContent()),
-                      ],
-              )
-            : Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  rail(),
-                  columnDivider(),
-                  list(),
-                  columnDivider(),
-                  main(),
-                ],
-              );
+        final body = narrow ? narrowBody() : desktopBody(narrow: narrow);
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             ?header,
-            if (header != null)
-              Divider(height: 1, color: voice.borderDefault),
+            if (header != null) Divider(height: 1, color: voice.borderDefault),
             Expanded(child: body),
           ],
         );

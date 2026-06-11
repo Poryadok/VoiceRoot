@@ -11,6 +11,101 @@ import '../core/voice_avatar.dart';
 import '../core/voice_bottom_sheet.dart';
 import '../core/voice_state_panel.dart';
 
+/// Group members list (embedded in side panel or bottom sheet).
+class GroupMembersContent extends ConsumerWidget {
+  const GroupMembersContent({
+    super.key,
+    required this.chatId,
+    this.groupName,
+    this.showHeader = true,
+  });
+
+  final String chatId;
+  final String? groupName;
+  final bool showHeader;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+    final membersAsync = ref.watch(groupMembersProvider(chatId));
+    final activeId = ref.watch(authControllerProvider).activeProfileId;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (showHeader) ...[
+          Text(
+            groupName ?? l10n.chatGroupMembersTitle,
+            style: theme.textTheme.titleMedium,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            l10n.chatGroupMembersSubtitle,
+            style: theme.textTheme.bodySmall,
+          ),
+          const SizedBox(height: 12),
+        ],
+        Expanded(
+          child: membersAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (error, _) => VoiceStatePanel(
+              title: l10n.chatGroupMembersLoadError,
+              message: '$error',
+              icon: Icons.cloud_off_outlined,
+              actionLabel: l10n.commonRetry,
+              onAction: () => ref.invalidate(groupMembersProvider(chatId)),
+            ),
+            data: (data) {
+              final myRole = _myRole(data.members, activeId);
+              final isOwner = myRole == kChatRoleOwner;
+              return Column(
+                children: [
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: data.members.length,
+                      itemBuilder: (context, index) {
+                        final member = data.members[index];
+                        return _MemberTile(
+                          key: GroupMembersSheet.memberTileKey(member.profileId),
+                          member: member,
+                          isSelf: member.profileId == activeId,
+                          canKick: isOwner && !member.isOwner,
+                          kickKey: GroupMembersSheet.kickMemberKey(member.profileId),
+                          onKick: () => _confirmKick(
+                            context,
+                            ref,
+                            chatId,
+                            member.profileId,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  if (isOwner)
+                    Text(
+                      key: GroupMembersSheet.ownerLeaveHintKey,
+                      l10n.chatGroupOwnerLeaveHint,
+                      style: theme.textTheme.bodySmall,
+                      textAlign: TextAlign.center,
+                    )
+                  else
+                    OutlinedButton(
+                      key: GroupMembersSheet.leaveKey,
+                      onPressed: () => _confirmLeave(context, ref, chatId),
+                      child: Text(l10n.chatGroupLeave),
+                    ),
+                ],
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 /// Bottom sheet: group members with owner badge; owner can kick; members can leave.
 class GroupMembersSheet extends ConsumerWidget {
   const GroupMembersSheet({super.key, required this.chatId, this.groupName});
@@ -46,101 +141,30 @@ class GroupMembersSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final l10n = AppLocalizations.of(context)!;
-    final theme = Theme.of(context);
-    final membersAsync = ref.watch(groupMembersProvider(chatId));
-    final activeId = ref.watch(authControllerProvider).activeProfileId;
-
     return SafeArea(
       child: Padding(
         key: sheetKey,
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              groupName ?? l10n.chatGroupMembersTitle,
-              style: theme.textTheme.titleMedium,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              l10n.chatGroupMembersSubtitle,
-              style: theme.textTheme.bodySmall,
-            ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: membersAsync.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (error, _) => VoiceStatePanel(
-                  title: l10n.chatGroupMembersLoadError,
-                  message: '$error',
-                  icon: Icons.cloud_off_outlined,
-                  actionLabel: l10n.commonRetry,
-                  onAction: () => ref.invalidate(groupMembersProvider(chatId)),
-                ),
-                data: (data) {
-                  final myRole = _myRole(data.members, activeId);
-                  final isOwner = myRole == kChatRoleOwner;
-                  return Column(
-                    children: [
-                      Expanded(
-                        child: ListView.builder(
-                          itemCount: data.members.length,
-                          itemBuilder: (context, index) {
-                            final member = data.members[index];
-                            return _MemberTile(
-                              key: memberTileKey(member.profileId),
-                              member: member,
-                              isSelf: member.profileId == activeId,
-                              canKick: isOwner && !member.isOwner,
-                              kickKey: kickMemberKey(member.profileId),
-                              onKick: () => _confirmKick(
-                                context,
-                                ref,
-                                member.profileId,
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      if (isOwner)
-                        Text(
-                          key: ownerLeaveHintKey,
-                          l10n.chatGroupOwnerLeaveHint,
-                          style: theme.textTheme.bodySmall,
-                          textAlign: TextAlign.center,
-                        )
-                      else
-                        OutlinedButton(
-                          key: leaveKey,
-                          onPressed: () => _confirmLeave(context, ref),
-                          child: Text(l10n.chatGroupLeave),
-                        ),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
+        child: GroupMembersContent(chatId: chatId, groupName: groupName),
       ),
     );
   }
+}
 
-  String? _myRole(List<ChatMember> members, String? activeId) {
-    if (activeId == null) return null;
-    for (final member in members) {
-      if (member.profileId == activeId) return member.role;
-    }
-    return null;
+String? _myRole(List<ChatMember> members, String? activeId) {
+  if (activeId == null) return null;
+  for (final member in members) {
+    if (member.profileId == activeId) return member.role;
   }
+  return null;
+}
 
-  Future<void> _confirmKick(
-    BuildContext context,
-    WidgetRef ref,
-    String profileId,
-  ) async {
+Future<void> _confirmKick(
+  BuildContext context,
+  WidgetRef ref,
+  String chatId,
+  String profileId,
+) async {
     final l10n = AppLocalizations.of(context)!;
     final profile = ref.read(profileProvider(profileId)).valueOrNull;
     final name =
@@ -180,7 +204,11 @@ class GroupMembersSheet extends ConsumerWidget {
     ref.invalidate(groupMembersProvider(chatId));
   }
 
-  Future<void> _confirmLeave(BuildContext context, WidgetRef ref) async {
+Future<void> _confirmLeave(
+  BuildContext context,
+  WidgetRef ref,
+  String chatId,
+) async {
     final l10n = AppLocalizations.of(context)!;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -211,9 +239,10 @@ class GroupMembersSheet extends ConsumerWidget {
       );
       return;
     }
-    Navigator.of(context).pop();
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
   }
-}
 
 class _MemberTile extends ConsumerWidget {
   const _MemberTile({

@@ -13,6 +13,7 @@ import '../backend/messages_client.dart';
 import '../backend/realtime_client.dart';
 import 'auth_providers.dart';
 import 'gateway_providers.dart';
+import 'space_providers.dart';
 
 final voiceChatsClientProvider = Provider<VoiceChatsClient>((ref) {
   return VoiceChatsClient(gateway: ref.watch(gatewayHttpClientProvider));
@@ -90,6 +91,7 @@ String? resolveDmPeerForChatId({
   if (cached != null && cached.isNotEmpty) return cached;
   for (final item in listItems) {
     if (item.chatId != chatId) continue;
+    if (item.chat.isGroup) return null;
     final fromList = resolveDmPeerProfileId(
       item: item,
       knownPeerId: null,
@@ -1213,9 +1215,26 @@ class ChatActions {
   }
 
   void selectChat(String chatId) {
+    _syncSpaceForChat(chatId);
     _ref.read(selectedChatIdProvider.notifier).state = chatId;
     _ref.read(realtimeHubProvider).ensureSubscribed(chatId);
     _rememberDmPeerForChat(chatId);
+  }
+
+  void rememberDmPeerForChat(String chatId) => _rememberDmPeerForChat(chatId);
+
+  void _syncSpaceForChat(String chatId) {
+    final items = _ref.read(chatListControllerProvider).items;
+    for (final item in items) {
+      if (item.chatId != chatId) continue;
+      final spaceId = item.chat.spaceId;
+      if (spaceId != null && spaceId.isNotEmpty) {
+        _ref.read(selectedSpaceIdProvider.notifier).state = spaceId;
+      } else {
+        _ref.read(selectedSpaceIdProvider.notifier).state = null;
+      }
+      return;
+    }
   }
 
   /// Forwards a message with attribution into another chat the user belongs to.

@@ -1199,6 +1199,88 @@ void main() {
     expect(plain, contains('bold'));
     expect(plain, isNot(contains('**')));
   });
+
+  testWidgets('ChatRoomPanel shows group name without DM call actions', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          profileAccentStorageProvider.overrideWithValue(
+            testProfileAccentStorage,
+          ),
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          authControllerProvider.overrideWith(authenticatedAuthController),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(
+              baseUrl: 'http://api.test',
+              livekitUrl: 'wss://livekit.test',
+            ),
+          ),
+          httpClientProvider.overrideWithValue(
+            MockClient((req) async {
+              if (req.url.path == '/api/v1/chats') {
+                return http.Response(
+                  jsonEncode({
+                    'chat_list': {
+                      'items': [
+                        {
+                          'chat': {
+                            'id': 'group-1',
+                            'type': 'CHAT_TYPE_GROUP',
+                            'creator_profile_id': 'owner',
+                            'name': 'Squad Chat',
+                          },
+                        },
+                      ],
+                    },
+                  }),
+                  200,
+                );
+              }
+              if (req.url.path == '/api/v1/messages') {
+                return http.Response(
+                  jsonEncode({
+                    'message_list': {
+                      'messages': [
+                        {
+                          'id': 'm1',
+                          'chat': {'id': 'group-1'},
+                          'sender_profile_id': 'peer-b',
+                          'content': 'hello team',
+                        },
+                      ],
+                    },
+                  }),
+                  200,
+                );
+              }
+              return http.Response('{}', 404);
+            }),
+          ),
+          realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
+          selectedChatIdProvider.overrideWith((ref) => 'group-1'),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: ChatRoomPanel(chatId: 'group-1')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Squad Chat'), findsOneWidget);
+    expect(find.text('peer-b'), findsNothing);
+    expect(find.byKey(ChatRoomPanel.audioCallKey), findsNothing);
+    expect(find.byKey(ChatRoomPanel.videoCallKey), findsNothing);
+    expect(find.byKey(ChatRoomPanel.groupMembersKey), findsOneWidget);
+  });
 }
 
 class _NoopRealtimeHub extends RealtimeHub {

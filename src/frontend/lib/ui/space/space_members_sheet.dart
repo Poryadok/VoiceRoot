@@ -10,6 +10,110 @@ import '../core/voice_avatar.dart';
 import '../core/voice_bottom_sheet.dart';
 import '../core/voice_state_panel.dart';
 
+/// Space members list (embedded in side panel or bottom sheet).
+class SpaceMembersContent extends ConsumerWidget {
+  const SpaceMembersContent({
+    super.key,
+    required this.spaceId,
+    this.showHeader = true,
+  });
+
+  final String spaceId;
+  final bool showHeader;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+    final membersAsync = ref.watch(spaceMembersProvider(spaceId));
+    final activeId = ref.watch(spaceViewerProfileIdProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (showHeader) ...[
+          Text(
+            l10n.spaceMembersTitle,
+            style: theme.textTheme.titleMedium,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            l10n.spaceMembersSubtitle,
+            style: theme.textTheme.bodySmall,
+          ),
+          const SizedBox(height: 12),
+        ],
+        Expanded(
+          child: membersAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (error, _) => VoiceStatePanel(
+              title: l10n.spaceMembersLoadError,
+              message: '$error',
+              icon: Icons.cloud_off_outlined,
+              actionLabel: l10n.commonRetry,
+              onAction: () => ref.invalidate(spaceMembersProvider(spaceId)),
+            ),
+            data: (members) {
+              final canAssignRole = viewerCanManageSpaceMembers(
+                members,
+                activeId,
+              );
+              final canKick = ref
+                      .watch(
+                        spacePermissionProvider((
+                          spaceId: spaceId,
+                          permission: 'MEMBER_KICK',
+                        )),
+                      )
+                      .valueOrNull ??
+                  false;
+              final canBan = ref
+                      .watch(
+                        spacePermissionProvider((
+                          spaceId: spaceId,
+                          permission: 'MEMBER_BAN',
+                        )),
+                      )
+                      .valueOrNull ??
+                  false;
+              final canTimeout = ref
+                      .watch(
+                        spacePermissionProvider((
+                          spaceId: spaceId,
+                          permission: 'MODERATION_TIMEOUT_MEMBERS',
+                        )),
+                      )
+                      .valueOrNull ??
+                  false;
+              return ListView.builder(
+                itemCount: members.length,
+                itemBuilder: (context, index) {
+                  final member = members[index];
+                  return _MemberTile(
+                    spaceId: spaceId,
+                    member: member,
+                    isSelf: member.profileId == activeId,
+                    canKick: canKick && !member.isOwner,
+                    canBan: canBan && !member.isOwner,
+                    canTimeout: canTimeout && !member.isOwner,
+                    canAssignRole: canAssignRole && !member.isOwner,
+                    kickKey: SpaceMembersSheet.kickMemberKey(member.profileId),
+                    banKey: SpaceMembersSheet.banMemberKey(member.profileId),
+                    timeoutKey:
+                        SpaceMembersSheet.timeoutMemberKey(member.profileId),
+                    assignRoleKey:
+                        SpaceMembersSheet.assignRoleKey(member.profileId),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 /// Bottom sheet: space members with role badges; Owner/Admin can kick and assign roles.
 class SpaceMembersSheet extends ConsumerWidget {
   const SpaceMembersSheet({super.key, required this.spaceId});
@@ -41,94 +145,11 @@ class SpaceMembersSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final l10n = AppLocalizations.of(context)!;
-    final theme = Theme.of(context);
-    final membersAsync = ref.watch(spaceMembersProvider(spaceId));
-    final activeId = ref.watch(spaceViewerProfileIdProvider);
-
     return SafeArea(
       child: Padding(
         key: sheetKey,
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              l10n.spaceMembersTitle,
-              style: theme.textTheme.titleMedium,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              l10n.spaceMembersSubtitle,
-              style: theme.textTheme.bodySmall,
-            ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: membersAsync.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (error, _) => VoiceStatePanel(
-                  title: l10n.spaceMembersLoadError,
-                  message: '$error',
-                  icon: Icons.cloud_off_outlined,
-                  actionLabel: l10n.commonRetry,
-                  onAction: () => ref.invalidate(spaceMembersProvider(spaceId)),
-                ),
-                data: (members) {
-                  final canAssignRole = viewerCanManageSpaceMembers(
-                    members,
-                    activeId,
-                  );
-                  final canKick = ref
-                          .watch(
-                            spacePermissionProvider((
-                              spaceId: spaceId,
-                              permission: 'MEMBER_KICK',
-                            )),
-                          )
-                          .valueOrNull ??
-                      false;
-                  final canBan = ref
-                          .watch(
-                            spacePermissionProvider((
-                              spaceId: spaceId,
-                              permission: 'MEMBER_BAN',
-                            )),
-                          )
-                          .valueOrNull ??
-                      false;
-                  final canTimeout = ref
-                          .watch(
-                            spacePermissionProvider((
-                              spaceId: spaceId,
-                              permission: 'MODERATION_TIMEOUT_MEMBERS',
-                            )),
-                          )
-                          .valueOrNull ??
-                      false;
-                  return ListView.builder(
-                    itemCount: members.length,
-                    itemBuilder: (context, index) {
-                      final member = members[index];
-                      return _MemberTile(
-                        spaceId: spaceId,
-                        member: member,
-                        isSelf: member.profileId == activeId,
-                        canKick: canKick && !member.isOwner,
-                        canBan: canBan && !member.isOwner,
-                        canTimeout: canTimeout && !member.isOwner,
-                        canAssignRole: canAssignRole && !member.isOwner,
-                        kickKey: kickMemberKey(member.profileId),
-                        banKey: banMemberKey(member.profileId),
-                        timeoutKey: timeoutMemberKey(member.profileId),
-                        assignRoleKey: assignRoleKey(member.profileId),
-                      );
-                    },
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
+        child: SpaceMembersContent(spaceId: spaceId),
       ),
     );
   }

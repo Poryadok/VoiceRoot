@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../l10n/app_localizations.dart';
 import '../state/chat_providers.dart';
+import '../state/shell_providers.dart';
 import '../state/space_providers.dart';
 import '../theme/voice_colors.dart';
 import '../ui/chat/chat_room_panel.dart';
@@ -35,7 +36,7 @@ class AppSpaceShell extends ConsumerWidget {
         spaceId: selectedSpaceId,
         selectedChatId: selectedChatId,
         onTextChatSelected: (chatId) {
-          ref.read(selectedChatIdProvider.notifier).state = chatId;
+          ref.read(shellNavigationProvider).selectChatInSpace(chatId);
         },
       );
     }

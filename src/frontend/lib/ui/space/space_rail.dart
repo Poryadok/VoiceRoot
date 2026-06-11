@@ -7,9 +7,11 @@ import '../../theme/voice_colors.dart';
 import '../core/voice_avatar.dart';
 /// Left rail: vertical list of joined spaces (Discord-style server icons).
 class SpaceRail extends ConsumerWidget {
-  const SpaceRail({super.key});
+  const SpaceRail({super.key, this.onSpaceSelected});
 
   static const Key railKey = Key('space_rail');
+
+  final void Function(String spaceId)? onSpaceSelected;
   static Key spaceIconKey(String spaceId) => Key('space_icon_$spaceId');
 
   @override
@@ -44,8 +46,13 @@ class SpaceRail extends ConsumerWidget {
                 key: spaceIconKey(space.id),
                 space: space,
                 selected: selectedSpaceId == space.id,
-                onTap: () =>
-                    ref.read(selectedSpaceIdProvider.notifier).state = space.id,
+                onTap: () {
+                  if (onSpaceSelected != null) {
+                    onSpaceSelected!(space.id);
+                  } else {
+                    ref.read(selectedSpaceIdProvider.notifier).state = space.id;
+                  }
+                },
               ),
           ],
         ),

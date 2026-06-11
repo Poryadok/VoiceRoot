@@ -27,8 +27,9 @@ import 'chat_message_list.dart';
 import 'message_reactions_row.dart';
 import 'forward_message_sheet.dart';
 import 'mention_message_content.dart';
-import 'group_members_sheet.dart';
+import '../shell/side_panel.dart';
 import '../space/space_chat_slow_mode_sheet.dart';
+import '../../state/shell_providers.dart';
 
 /// Main column: message history (REST) + composer; live updates via Realtime WS.
 class ChatRoomPanel extends ConsumerStatefulWidget {
@@ -51,6 +52,7 @@ class ChatRoomPanel extends ConsumerStatefulWidget {
   static const Key newMessagesChipKey = Key('chat_room_new_messages');
   static const Key pinnedBarKey = Key('chat_room_pinned_bar');
   static const Key groupMembersKey = Key('chat_room_group_members');
+  static const Key emojiPickerKey = Key('chat_room_emoji_picker');
   static const Key spaceSlowModeKey = Key('chat_room_space_slow_mode');
   static const Key groupVoiceStartKey = Key('chat_room_group_voice_start');
   static const Key groupVoiceJoinKey = Key('chat_room_group_voice_join');
@@ -154,20 +156,6 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     final l10n = AppLocalizations.of(context)!;
     final room = ref.watch(chatRoomControllerProvider(widget.chatId));
     final activeId = ref.watch(authControllerProvider).activeProfileId;
-    final peerId = resolveDmPeerForChatId(
-      chatId: widget.chatId,
-      knownPeers: ref.watch(dmPeerProfileByChatIdProvider),
-      listItems: ref.watch(chatListControllerProvider).items,
-      activeProfileId: activeId,
-      messages: room.messages,
-    );
-    final peerProfile = peerId != null
-        ? ref.watch(profileProvider(peerId)).valueOrNull
-        : null;
-    final peerName = peerProfile?.displayName;
-    final peerPresence = peerId != null
-        ? ref.watch(presenceProvider(peerId))
-        : null;
     final canCall = ref.watch(gatewayConfigProvider).canPlaceVoiceCalls;
     String? groupName;
     String? spaceId;
@@ -182,6 +170,22 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         break;
       }
     }
+    final peerId = isGroup
+        ? null
+        : resolveDmPeerForChatId(
+            chatId: widget.chatId,
+            knownPeers: ref.watch(dmPeerProfileByChatIdProvider),
+            listItems: ref.watch(chatListControllerProvider).items,
+            activeProfileId: activeId,
+            messages: room.messages,
+          );
+    final peerProfile = peerId != null
+        ? ref.watch(profileProvider(peerId)).valueOrNull
+        : null;
+    final peerName = peerProfile?.displayName;
+    final peerPresence = peerId != null
+        ? ref.watch(presenceProvider(peerId))
+        : null;
     final canSetSlowMode = spaceId != null
         ? ref
                 .watch(
@@ -201,10 +205,12 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         callState.isActive &&
         callState.session?.chatId == widget.chatId &&
         callState.session?.isGroupVoice == true;
-    final title =
-        peerName ??
-        groupName ??
-        l10n.chatRoomTitle(widget.chatId.substring(0, 8));
+    final shortId = widget.chatId.length <= 8
+        ? widget.chatId
+        : widget.chatId.substring(0, 8);
+    final title = isGroup
+        ? (groupName ?? l10n.chatRoomTitle(shortId))
+        : (peerName ?? groupName ?? l10n.chatRoomTitle(shortId));
     final voice = VoiceColors.of(context);
 
     if (!_unreadCaptured) {
@@ -229,6 +235,15 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
           setState(() => _pendingNewMessages += added);
         }
       }
+    });
+
+    ref.listen(pendingComposerEmojiProvider, (prev, next) {
+      if (next == null || next.isEmpty) return;
+      final text = _composer.text;
+      _composer.text = '$text$next';
+      _composer.selection = TextSelection.collapsed(offset: _composer.text.length);
+      ref.read(pendingComposerEmojiProvider.notifier).state = null;
+      _composerFocus.requestFocus();
     });
 
     return Column(
@@ -294,15 +309,16 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   IconButton(
                     key: ChatRoomPanel.groupMembersKey,
                     tooltip: l10n.chatGroupMembersTooltip,
-                    onPressed: () => GroupMembersSheet.show(
+                    onPressed: () => openMembersPanel(
                       context,
+                      ref,
                       chatId: widget.chatId,
                       groupName: groupName,
                     ),
                     icon: const Icon(Icons.group_outlined),
                   ),
                 ],
-                if (peerId != null && canCall) ...[
+                if (!isGroup && peerId != null && canCall) ...[
                   IconButton(
                     key: ChatRoomPanel.audioCallKey,
                     tooltip: l10n.callStartAudio,
@@ -418,6 +434,22 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   tooltip: l10n.chatMentionInsert,
                   onPressed: room.isSending ? null : () => _showMentionMenu(context),
                   icon: const Icon(Icons.alternate_email),
+                ),
+                IconButton(
+                  key: ChatRoomPanel.emojiPickerKey,
+                  tooltip: l10n.chatMessageAddReaction,
+                  onPressed: room.isSending
+                      ? null
+                      : () => openEmojiPanel(
+                          context,
+                          ref,
+                          onSelected: (emoji) {
+                            ref
+                                .read(pendingComposerEmojiProvider.notifier)
+                                .state = emoji;
+                          },
+                        ),
+                  icon: const Icon(Icons.emoji_emotions_outlined),
                 ),
                 Expanded(
                   child: TextField(
