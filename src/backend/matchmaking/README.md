@@ -1,14 +1,16 @@
 # Matchmaking Service
 
-Phase 7 catalog: games with roles/ranks in `config` JSONB.
+Phase 7: game catalog + per-profile player game settings (region, role, rank).
 
 ## Endpoints
 
 | Surface | Path / RPC |
 |---------|------------|
 | Health | `GET /health` |
-| gRPC | `MatchmakingService` catalog RPCs (`ListGames`, `GetGame`, `CreateGame`, `UpdateGame`, `SearchGames`) |
+| gRPC | Catalog: `ListGames`, `GetGame`, `CreateGame`, `UpdateGame`, `SearchGames` |
+| gRPC | Player profile: `GetMyPlayerProfile`, `GetPlayerProfile`, `UpsertPlayerGameEntry`, `DeletePlayerGameEntry` |
 | Gateway | `GET/POST/PATCH /api/v1/matchmaking/games*` |
+| Gateway | `GET /api/v1/matchmaking/profile/me`, `GET .../profile/{id}`, `PUT/DELETE .../profile/games/{game_id}` |
 
 ## Environment
 
@@ -22,4 +24,4 @@ Phase 7 catalog: games with roles/ranks in `config` JSONB.
 
 Migrations: `src/backend/migrations/matchmaking_db/`. Fresh compose applies `docker/postgres/matchmaking_db_init.sql.snippet` (seed: Dota 2, CS2, Valorant, PUBG).
 
-Queue, matching, and player profile RPCs are not implemented in this phase.
+Queue and matching RPCs are not implemented yet. Apply migration `000002_profile_game_entries` on existing DB volumes (or recreate Postgres volume).

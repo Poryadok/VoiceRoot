@@ -47,6 +47,95 @@ final gameCatalogSearchProvider =
 
 final selectedCatalogGameIdProvider = StateProvider<String?>((ref) => null);
 
+final myPlayerProfileProvider =
+    FutureProvider.autoDispose<PlayerProfileData>((ref) async {
+  final auth = ref.watch(authControllerProvider);
+  final token = auth.session?.accessToken;
+  if (token == null || token.isEmpty) {
+    throw StateError('not authenticated');
+  }
+  final client = ref.watch(voiceMatchmakingClientProvider);
+  final result = await client.getMyPlayerProfile(authorization: 'Bearer $token');
+  return switch (result) {
+    MatchmakingApiOk(:final data) => data,
+    MatchmakingApiFailure(:final message) => throw Exception(message),
+  };
+});
+
+final playerProfileProvider =
+    FutureProvider.autoDispose.family<PlayerProfileData, String>((ref, profileId) async {
+  final auth = ref.watch(authControllerProvider);
+  final token = auth.session?.accessToken;
+  if (token == null || token.isEmpty) {
+    throw StateError('not authenticated');
+  }
+  final client = ref.watch(voiceMatchmakingClientProvider);
+  final result = await client.getPlayerProfile(
+    authorization: 'Bearer $token',
+    profileId: profileId,
+  );
+  return switch (result) {
+    MatchmakingApiOk(:final data) => data,
+    MatchmakingApiFailure(:final message) => throw Exception(message),
+  };
+});
+
+class PlayerProfileActions {
+  PlayerProfileActions(this._ref);
+
+  final Ref _ref;
+
+  Future<void> upsertEntry({
+    required String gameId,
+    required String region,
+    String? role,
+    String? rank,
+  }) async {
+    final auth = _ref.read(authControllerProvider);
+    final token = auth.session?.accessToken;
+    if (token == null || token.isEmpty) {
+      throw StateError('not authenticated');
+    }
+    final client = _ref.read(voiceMatchmakingClientProvider);
+    final result = await client.upsertPlayerGameEntry(
+      authorization: 'Bearer $token',
+      gameId: gameId,
+      region: region,
+      role: role,
+      rank: rank,
+    );
+    switch (result) {
+      case MatchmakingApiOk():
+        _ref.invalidate(myPlayerProfileProvider);
+      case MatchmakingApiFailure(:final message):
+        throw Exception(message);
+    }
+  }
+
+  Future<void> deleteEntry(String gameId) async {
+    final auth = _ref.read(authControllerProvider);
+    final token = auth.session?.accessToken;
+    if (token == null || token.isEmpty) {
+      throw StateError('not authenticated');
+    }
+    final client = _ref.read(voiceMatchmakingClientProvider);
+    final result = await client.deletePlayerGameEntry(
+      authorization: 'Bearer $token',
+      gameId: gameId,
+    );
+    switch (result) {
+      case MatchmakingApiOk():
+        _ref.invalidate(myPlayerProfileProvider);
+      case MatchmakingApiFailure(:final message):
+        throw Exception(message);
+    }
+  }
+}
+
+final playerProfileActionsProvider = Provider<PlayerProfileActions>((ref) {
+  return PlayerProfileActions(ref);
+});
+
 final selectedCatalogGameProvider =
     FutureProvider.autoDispose<CatalogGame?>((ref) async {
   final gameId = ref.watch(selectedCatalogGameIdProvider);

@@ -9,6 +9,7 @@ import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/social_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../matchmaking/player_profile_sheet.dart';
 
 typedef ProfileAvatarPicker = Future<ProfileAvatarFile?> Function();
 
@@ -139,6 +140,20 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ],
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: _saving
+                    ? null
+                    : () {
+                        showModalBottomSheet<void>(
+                          context: context,
+                          isScrollControlled: true,
+                          builder: (_) => const PlayerProfileSheet(),
+                        );
+                      },
+                icon: const Icon(Icons.sports_esports_outlined),
+                label: Text(l10n.playerProfileEntry),
+              ),
               const SizedBox(height: 20),
               Row(
                 children: [

@@ -48,12 +48,16 @@ func main() {
 		defer pool.Close()
 
 		gameStore := &store.GameStore{Pool: pool}
+		profileStore := &store.ProfileGamesStore{Pool: pool}
 		lis, err := net.Listen("tcp", grpcListen)
 		if err != nil {
 			log.Fatalf("grpc listen: %v", err)
 		}
 		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger)...)
-		matchmakingv1.RegisterMatchmakingServiceServer(grpcSrv, &grpcsvc.MatchmakingGRPC{Games: gameStore})
+		matchmakingv1.RegisterMatchmakingServiceServer(grpcSrv, &grpcsvc.MatchmakingGRPC{
+			Games:        gameStore,
+			ProfileGames: profileStore,
+		})
 		go func() {
 			logger.Info("gRPC listening", slog.String("addr", grpcListen))
 			if err := grpcSrv.Serve(lis); err != nil {

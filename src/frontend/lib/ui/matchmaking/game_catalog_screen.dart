@@ -9,7 +9,10 @@ import 'game_detail_screen.dart';
 
 /// Browse matchmaking game catalog (Phase 7).
 class GameCatalogScreen extends ConsumerStatefulWidget {
-  const GameCatalogScreen({super.key});
+  const GameCatalogScreen({super.key, this.selectMode = false});
+
+  /// When true, tapping a game returns it to the previous route.
+  final bool selectMode;
 
   static const Key screenKey = Key('game_catalog_screen');
   static const Key searchFieldKey = Key('game_catalog_search');
@@ -62,6 +65,10 @@ class _GameCatalogScreenState extends ConsumerState<GameCatalogScreen> {
                 key: GameCatalogScreen.listKey,
                 games: data.games,
                 onTap: (game) {
+                  if (widget.selectMode) {
+                    Navigator.of(context).pop(game);
+                    return;
+                  }
                   Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => GameDetailScreen(game: game),

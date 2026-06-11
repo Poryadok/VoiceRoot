@@ -1,0 +1,14 @@
+# Local Go codegen when BSR remote plugins are unavailable.
+# Run: buf generate --template buf.gen.local.yaml
+version: v1
+plugins:
+  - plugin: go
+    path: protoc-gen-go
+    out: gen/go
+    opt:
+      - paths=source_relative
+  - plugin: go-grpc
+    path: protoc-gen-go-grpc
+    out: gen/go
+    opt:
+      - paths=source_relative

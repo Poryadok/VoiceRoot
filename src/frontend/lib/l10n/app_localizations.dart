@@ -1741,6 +1741,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{slots} players · party {min}–{max}'**
   String gameCatalogModeSlots(int slots, int min, int max);
+
+  /// No description provided for @playerProfileTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Matchmaking profile'**
+  String get playerProfileTitle;
+
+  /// No description provided for @playerProfileEntry.
+  ///
+  /// In en, this message translates to:
+  /// **'Matchmaking profile'**
+  String get playerProfileEntry;
+
+  /// No description provided for @playerProfileLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load matchmaking profile'**
+  String get playerProfileLoadError;
+
+  /// No description provided for @playerProfileEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No games configured yet'**
+  String get playerProfileEmpty;
+
+  /// No description provided for @playerProfileAddGame.
+  ///
+  /// In en, this message translates to:
+  /// **'Add game'**
+  String get playerProfileAddGame;
+
+  /// No description provided for @playerProfileSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save game profile'**
+  String get playerProfileSave;
+
+  /// No description provided for @playerProfileSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Matchmaking'**
+  String get playerProfileSection;
+
+  /// No description provided for @playerProfileForGame.
+  ///
+  /// In en, this message translates to:
+  /// **'My profile for this game'**
+  String get playerProfileForGame;
 }
 
 class _AppLocalizationsDelegate

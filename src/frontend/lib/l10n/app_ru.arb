@@ -503,5 +503,13 @@
       "min": { "type": "int" },
       "max": { "type": "int" }
     }
-  }
+  },
+  "playerProfileTitle": "Профиль игрока",
+  "playerProfileEntry": "Профиль игрока",
+  "playerProfileLoadError": "Не удалось загрузить профиль игрока",
+  "playerProfileEmpty": "Игры ещё не настроены",
+  "playerProfileAddGame": "Добавить игру",
+  "playerProfileSave": "Сохранить",
+  "playerProfileSection": "Матчмейкинг",
+  "playerProfileForGame": "Мой профиль для этой игры"
 }

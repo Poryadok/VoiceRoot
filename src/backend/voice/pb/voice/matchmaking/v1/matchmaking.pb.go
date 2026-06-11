@@ -1923,6 +1923,442 @@ func (x *GetMMBanStatusResponse) GetMmBanStatus() *MMBanStatus {
 	return nil
 }
 
+type PlayerGameEntry struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	GameId        string                 `protobuf:"bytes,1,opt,name=game_id,json=gameId,proto3" json:"game_id,omitempty"`
+	Region        string                 `protobuf:"bytes,2,opt,name=region,proto3" json:"region,omitempty"`
+	Role          *string                `protobuf:"bytes,3,opt,name=role,proto3,oneof" json:"role,omitempty"`
+	Rank          *string                `protobuf:"bytes,4,opt,name=rank,proto3,oneof" json:"rank,omitempty"`
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PlayerGameEntry) Reset() {
+	*x = PlayerGameEntry{}
+	mi := &file_voice_matchmaking_v1_matchmaking_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PlayerGameEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PlayerGameEntry) ProtoMessage() {}
+
+func (x *PlayerGameEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_matchmaking_v1_matchmaking_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PlayerGameEntry.ProtoReflect.Descriptor instead.
+func (*PlayerGameEntry) Descriptor() ([]byte, []int) {
+	return file_voice_matchmaking_v1_matchmaking_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *PlayerGameEntry) GetGameId() string {
+	if x != nil {
+		return x.GameId
+	}
+	return ""
+}
+
+func (x *PlayerGameEntry) GetRegion() string {
+	if x != nil {
+		return x.Region
+	}
+	return ""
+}
+
+func (x *PlayerGameEntry) GetRole() string {
+	if x != nil && x.Role != nil {
+		return *x.Role
+	}
+	return ""
+}
+
+func (x *PlayerGameEntry) GetRank() string {
+	if x != nil && x.Rank != nil {
+		return *x.Rank
+	}
+	return ""
+}
+
+func (x *PlayerGameEntry) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
+type GetMyPlayerProfileRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetMyPlayerProfileRequest) Reset() {
+	*x = GetMyPlayerProfileRequest{}
+	mi := &file_voice_matchmaking_v1_matchmaking_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetMyPlayerProfileRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetMyPlayerProfileRequest) ProtoMessage() {}
+
+func (x *GetMyPlayerProfileRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_matchmaking_v1_matchmaking_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetMyPlayerProfileRequest.ProtoReflect.Descriptor instead.
+func (*GetMyPlayerProfileRequest) Descriptor() ([]byte, []int) {
+	return file_voice_matchmaking_v1_matchmaking_proto_rawDescGZIP(), []int{38}
+}
+
+type GetMyPlayerProfileResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Entries       []*PlayerGameEntry     `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetMyPlayerProfileResponse) Reset() {
+	*x = GetMyPlayerProfileResponse{}
+	mi := &file_voice_matchmaking_v1_matchmaking_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetMyPlayerProfileResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetMyPlayerProfileResponse) ProtoMessage() {}
+
+func (x *GetMyPlayerProfileResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_matchmaking_v1_matchmaking_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetMyPlayerProfileResponse.ProtoReflect.Descriptor instead.
+func (*GetMyPlayerProfileResponse) Descriptor() ([]byte, []int) {
+	return file_voice_matchmaking_v1_matchmaking_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *GetMyPlayerProfileResponse) GetEntries() []*PlayerGameEntry {
+	if x != nil {
+		return x.Entries
+	}
+	return nil
+}
+
+type GetPlayerProfileRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ProfileId     string                 `protobuf:"bytes,1,opt,name=profile_id,json=profileId,proto3" json:"profile_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetPlayerProfileRequest) Reset() {
+	*x = GetPlayerProfileRequest{}
+	mi := &file_voice_matchmaking_v1_matchmaking_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetPlayerProfileRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetPlayerProfileRequest) ProtoMessage() {}
+
+func (x *GetPlayerProfileRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_matchmaking_v1_matchmaking_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetPlayerProfileRequest.ProtoReflect.Descriptor instead.
+func (*GetPlayerProfileRequest) Descriptor() ([]byte, []int) {
+	return file_voice_matchmaking_v1_matchmaking_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *GetPlayerProfileRequest) GetProfileId() string {
+	if x != nil {
+		return x.ProfileId
+	}
+	return ""
+}
+
+type GetPlayerProfileResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Entries       []*PlayerGameEntry     `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetPlayerProfileResponse) Reset() {
+	*x = GetPlayerProfileResponse{}
+	mi := &file_voice_matchmaking_v1_matchmaking_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetPlayerProfileResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetPlayerProfileResponse) ProtoMessage() {}
+
+func (x *GetPlayerProfileResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_matchmaking_v1_matchmaking_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetPlayerProfileResponse.ProtoReflect.Descriptor instead.
+func (*GetPlayerProfileResponse) Descriptor() ([]byte, []int) {
+	return file_voice_matchmaking_v1_matchmaking_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *GetPlayerProfileResponse) GetEntries() []*PlayerGameEntry {
+	if x != nil {
+		return x.Entries
+	}
+	return nil
+}
+
+type UpsertPlayerGameEntryRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	GameId        string                 `protobuf:"bytes,1,opt,name=game_id,json=gameId,proto3" json:"game_id,omitempty"`
+	Region        string                 `protobuf:"bytes,2,opt,name=region,proto3" json:"region,omitempty"`
+	Role          *string                `protobuf:"bytes,3,opt,name=role,proto3,oneof" json:"role,omitempty"`
+	Rank          *string                `protobuf:"bytes,4,opt,name=rank,proto3,oneof" json:"rank,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpsertPlayerGameEntryRequest) Reset() {
+	*x = UpsertPlayerGameEntryRequest{}
+	mi := &file_voice_matchmaking_v1_matchmaking_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpsertPlayerGameEntryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpsertPlayerGameEntryRequest) ProtoMessage() {}
+
+func (x *UpsertPlayerGameEntryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_matchmaking_v1_matchmaking_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpsertPlayerGameEntryRequest.ProtoReflect.Descriptor instead.
+func (*UpsertPlayerGameEntryRequest) Descriptor() ([]byte, []int) {
+	return file_voice_matchmaking_v1_matchmaking_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *UpsertPlayerGameEntryRequest) GetGameId() string {
+	if x != nil {
+		return x.GameId
+	}
+	return ""
+}
+
+func (x *UpsertPlayerGameEntryRequest) GetRegion() string {
+	if x != nil {
+		return x.Region
+	}
+	return ""
+}
+
+func (x *UpsertPlayerGameEntryRequest) GetRole() string {
+	if x != nil && x.Role != nil {
+		return *x.Role
+	}
+	return ""
+}
+
+func (x *UpsertPlayerGameEntryRequest) GetRank() string {
+	if x != nil && x.Rank != nil {
+		return *x.Rank
+	}
+	return ""
+}
+
+type UpsertPlayerGameEntryResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Entry         *PlayerGameEntry       `protobuf:"bytes,1,opt,name=entry,proto3" json:"entry,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpsertPlayerGameEntryResponse) Reset() {
+	*x = UpsertPlayerGameEntryResponse{}
+	mi := &file_voice_matchmaking_v1_matchmaking_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpsertPlayerGameEntryResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpsertPlayerGameEntryResponse) ProtoMessage() {}
+
+func (x *UpsertPlayerGameEntryResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_matchmaking_v1_matchmaking_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpsertPlayerGameEntryResponse.ProtoReflect.Descriptor instead.
+func (*UpsertPlayerGameEntryResponse) Descriptor() ([]byte, []int) {
+	return file_voice_matchmaking_v1_matchmaking_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *UpsertPlayerGameEntryResponse) GetEntry() *PlayerGameEntry {
+	if x != nil {
+		return x.Entry
+	}
+	return nil
+}
+
+type DeletePlayerGameEntryRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	GameId        string                 `protobuf:"bytes,1,opt,name=game_id,json=gameId,proto3" json:"game_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeletePlayerGameEntryRequest) Reset() {
+	*x = DeletePlayerGameEntryRequest{}
+	mi := &file_voice_matchmaking_v1_matchmaking_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeletePlayerGameEntryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeletePlayerGameEntryRequest) ProtoMessage() {}
+
+func (x *DeletePlayerGameEntryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_matchmaking_v1_matchmaking_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeletePlayerGameEntryRequest.ProtoReflect.Descriptor instead.
+func (*DeletePlayerGameEntryRequest) Descriptor() ([]byte, []int) {
+	return file_voice_matchmaking_v1_matchmaking_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *DeletePlayerGameEntryRequest) GetGameId() string {
+	if x != nil {
+		return x.GameId
+	}
+	return ""
+}
+
+type DeletePlayerGameEntryResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeletePlayerGameEntryResponse) Reset() {
+	*x = DeletePlayerGameEntryResponse{}
+	mi := &file_voice_matchmaking_v1_matchmaking_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeletePlayerGameEntryResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeletePlayerGameEntryResponse) ProtoMessage() {}
+
+func (x *DeletePlayerGameEntryResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_matchmaking_v1_matchmaking_proto_msgTypes[45]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeletePlayerGameEntryResponse.ProtoReflect.Descriptor instead.
+func (*DeletePlayerGameEntryResponse) Descriptor() ([]byte, []int) {
+	return file_voice_matchmaking_v1_matchmaking_proto_rawDescGZIP(), []int{45}
+}
+
 var File_voice_matchmaking_v1_matchmaking_proto protoreflect.FileDescriptor
 
 const file_voice_matchmaking_v1_matchmaking_proto_rawDesc = "" +
@@ -2070,7 +2506,36 @@ const file_voice_matchmaking_v1_matchmaking_proto_rawDesc = "" +
 	"\x11BanFromMMResponse\"\x15\n" +
 	"\x13UnbanFromMMResponse\"_\n" +
 	"\x16GetMMBanStatusResponse\x12E\n" +
-	"\rmm_ban_status\x18\x01 \x01(\v2!.voice.matchmaking.v1.MMBanStatusR\vmmBanStatus2\xf3\v\n" +
+	"\rmm_ban_status\x18\x01 \x01(\v2!.voice.matchmaking.v1.MMBanStatusR\vmmBanStatus\"\xc1\x01\n" +
+	"\x0fPlayerGameEntry\x12\x17\n" +
+	"\agame_id\x18\x01 \x01(\tR\x06gameId\x12\x16\n" +
+	"\x06region\x18\x02 \x01(\tR\x06region\x12\x17\n" +
+	"\x04role\x18\x03 \x01(\tH\x00R\x04role\x88\x01\x01\x12\x17\n" +
+	"\x04rank\x18\x04 \x01(\tH\x01R\x04rank\x88\x01\x01\x129\n" +
+	"\n" +
+	"updated_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAtB\a\n" +
+	"\x05_roleB\a\n" +
+	"\x05_rank\"\x1b\n" +
+	"\x19GetMyPlayerProfileRequest\"]\n" +
+	"\x1aGetMyPlayerProfileResponse\x12?\n" +
+	"\aentries\x18\x01 \x03(\v2%.voice.matchmaking.v1.PlayerGameEntryR\aentries\"8\n" +
+	"\x17GetPlayerProfileRequest\x12\x1d\n" +
+	"\n" +
+	"profile_id\x18\x01 \x01(\tR\tprofileId\"[\n" +
+	"\x18GetPlayerProfileResponse\x12?\n" +
+	"\aentries\x18\x01 \x03(\v2%.voice.matchmaking.v1.PlayerGameEntryR\aentries\"\x93\x01\n" +
+	"\x1cUpsertPlayerGameEntryRequest\x12\x17\n" +
+	"\agame_id\x18\x01 \x01(\tR\x06gameId\x12\x16\n" +
+	"\x06region\x18\x02 \x01(\tR\x06region\x12\x17\n" +
+	"\x04role\x18\x03 \x01(\tH\x00R\x04role\x88\x01\x01\x12\x17\n" +
+	"\x04rank\x18\x04 \x01(\tH\x01R\x04rank\x88\x01\x01B\a\n" +
+	"\x05_roleB\a\n" +
+	"\x05_rank\"\\\n" +
+	"\x1dUpsertPlayerGameEntryResponse\x12;\n" +
+	"\x05entry\x18\x01 \x01(\v2%.voice.matchmaking.v1.PlayerGameEntryR\x05entry\"7\n" +
+	"\x1cDeletePlayerGameEntryRequest\x12\x17\n" +
+	"\agame_id\x18\x01 \x01(\tR\x06gameId\"\x1f\n" +
+	"\x1dDeletePlayerGameEntryResponse2\xe5\x0f\n" +
 	"\x12MatchmakingService\x12\\\n" +
 	"\tListGames\x12&.voice.matchmaking.v1.ListGamesRequest\x1a'.voice.matchmaking.v1.ListGamesResponse\x12V\n" +
 	"\aGetGame\x12$.voice.matchmaking.v1.GetGameRequest\x1a%.voice.matchmaking.v1.GetGameResponse\x12_\n" +
@@ -2088,7 +2553,11 @@ const file_voice_matchmaking_v1_matchmaking_proto_rawDesc = "" +
 	"\x0fGetPlayerRating\x12,.voice.matchmaking.v1.GetPlayerRatingRequest\x1a-.voice.matchmaking.v1.GetPlayerRatingResponse\x12\\\n" +
 	"\tBanFromMM\x12&.voice.matchmaking.v1.BanFromMMRequest\x1a'.voice.matchmaking.v1.BanFromMMResponse\x12b\n" +
 	"\vUnbanFromMM\x12(.voice.matchmaking.v1.UnbanFromMMRequest\x1a).voice.matchmaking.v1.UnbanFromMMResponse\x12k\n" +
-	"\x0eGetMMBanStatus\x12+.voice.matchmaking.v1.GetMMBanStatusRequest\x1a,.voice.matchmaking.v1.GetMMBanStatusResponseB.Z,voice.app/voice/matchmaking/v1;matchmakingv1b\x06proto3"
+	"\x0eGetMMBanStatus\x12+.voice.matchmaking.v1.GetMMBanStatusRequest\x1a,.voice.matchmaking.v1.GetMMBanStatusResponse\x12w\n" +
+	"\x12GetMyPlayerProfile\x12/.voice.matchmaking.v1.GetMyPlayerProfileRequest\x1a0.voice.matchmaking.v1.GetMyPlayerProfileResponse\x12q\n" +
+	"\x10GetPlayerProfile\x12-.voice.matchmaking.v1.GetPlayerProfileRequest\x1a..voice.matchmaking.v1.GetPlayerProfileResponse\x12\x80\x01\n" +
+	"\x15UpsertPlayerGameEntry\x122.voice.matchmaking.v1.UpsertPlayerGameEntryRequest\x1a3.voice.matchmaking.v1.UpsertPlayerGameEntryResponse\x12\x80\x01\n" +
+	"\x15DeletePlayerGameEntry\x122.voice.matchmaking.v1.DeletePlayerGameEntryRequest\x1a3.voice.matchmaking.v1.DeletePlayerGameEntryResponseB.Z,voice.app/voice/matchmaking/v1;matchmakingv1b\x06proto3"
 
 var (
 	file_voice_matchmaking_v1_matchmaking_proto_rawDescOnce sync.Once
@@ -2102,59 +2571,68 @@ func file_voice_matchmaking_v1_matchmaking_proto_rawDescGZIP() []byte {
 	return file_voice_matchmaking_v1_matchmaking_proto_rawDescData
 }
 
-var file_voice_matchmaking_v1_matchmaking_proto_msgTypes = make([]protoimpl.MessageInfo, 37)
+var file_voice_matchmaking_v1_matchmaking_proto_msgTypes = make([]protoimpl.MessageInfo, 46)
 var file_voice_matchmaking_v1_matchmaking_proto_goTypes = []any{
-	(*Game)(nil),                    // 0: voice.matchmaking.v1.Game
-	(*ListGamesRequest)(nil),        // 1: voice.matchmaking.v1.ListGamesRequest
-	(*GameList)(nil),                // 2: voice.matchmaking.v1.GameList
-	(*GetGameRequest)(nil),          // 3: voice.matchmaking.v1.GetGameRequest
-	(*CreateGameRequest)(nil),       // 4: voice.matchmaking.v1.CreateGameRequest
-	(*UpdateGameRequest)(nil),       // 5: voice.matchmaking.v1.UpdateGameRequest
-	(*SearchGamesRequest)(nil),      // 6: voice.matchmaking.v1.SearchGamesRequest
-	(*StartSearchRequest)(nil),      // 7: voice.matchmaking.v1.StartSearchRequest
-	(*SearchSession)(nil),           // 8: voice.matchmaking.v1.SearchSession
-	(*CancelSearchRequest)(nil),     // 9: voice.matchmaking.v1.CancelSearchRequest
-	(*GetSearchStatusRequest)(nil),  // 10: voice.matchmaking.v1.GetSearchStatusRequest
-	(*Match)(nil),                   // 11: voice.matchmaking.v1.Match
-	(*GetMatchRequest)(nil),         // 12: voice.matchmaking.v1.GetMatchRequest
-	(*GetMatchHistoryRequest)(nil),  // 13: voice.matchmaking.v1.GetMatchHistoryRequest
-	(*MatchList)(nil),               // 14: voice.matchmaking.v1.MatchList
-	(*RateMatchRequest)(nil),        // 15: voice.matchmaking.v1.RateMatchRequest
-	(*GetPlayerRatingRequest)(nil),  // 16: voice.matchmaking.v1.GetPlayerRatingRequest
-	(*PlayerRating)(nil),            // 17: voice.matchmaking.v1.PlayerRating
-	(*BanFromMMRequest)(nil),        // 18: voice.matchmaking.v1.BanFromMMRequest
-	(*UnbanFromMMRequest)(nil),      // 19: voice.matchmaking.v1.UnbanFromMMRequest
-	(*GetMMBanStatusRequest)(nil),   // 20: voice.matchmaking.v1.GetMMBanStatusRequest
-	(*MMBanStatus)(nil),             // 21: voice.matchmaking.v1.MMBanStatus
-	(*ListGamesResponse)(nil),       // 22: voice.matchmaking.v1.ListGamesResponse
-	(*GetGameResponse)(nil),         // 23: voice.matchmaking.v1.GetGameResponse
-	(*CreateGameResponse)(nil),      // 24: voice.matchmaking.v1.CreateGameResponse
-	(*UpdateGameResponse)(nil),      // 25: voice.matchmaking.v1.UpdateGameResponse
-	(*SearchGamesResponse)(nil),     // 26: voice.matchmaking.v1.SearchGamesResponse
-	(*StartSearchResponse)(nil),     // 27: voice.matchmaking.v1.StartSearchResponse
-	(*CancelSearchResponse)(nil),    // 28: voice.matchmaking.v1.CancelSearchResponse
-	(*GetSearchStatusResponse)(nil), // 29: voice.matchmaking.v1.GetSearchStatusResponse
-	(*GetMatchResponse)(nil),        // 30: voice.matchmaking.v1.GetMatchResponse
-	(*GetMatchHistoryResponse)(nil), // 31: voice.matchmaking.v1.GetMatchHistoryResponse
-	(*RateMatchResponse)(nil),       // 32: voice.matchmaking.v1.RateMatchResponse
-	(*GetPlayerRatingResponse)(nil), // 33: voice.matchmaking.v1.GetPlayerRatingResponse
-	(*BanFromMMResponse)(nil),       // 34: voice.matchmaking.v1.BanFromMMResponse
-	(*UnbanFromMMResponse)(nil),     // 35: voice.matchmaking.v1.UnbanFromMMResponse
-	(*GetMMBanStatusResponse)(nil),  // 36: voice.matchmaking.v1.GetMMBanStatusResponse
-	(*timestamppb.Timestamp)(nil),   // 37: google.protobuf.Timestamp
-	(*v1.CursorPageRequest)(nil),    // 38: voice.common.v1.CursorPageRequest
+	(*Game)(nil),                          // 0: voice.matchmaking.v1.Game
+	(*ListGamesRequest)(nil),              // 1: voice.matchmaking.v1.ListGamesRequest
+	(*GameList)(nil),                      // 2: voice.matchmaking.v1.GameList
+	(*GetGameRequest)(nil),                // 3: voice.matchmaking.v1.GetGameRequest
+	(*CreateGameRequest)(nil),             // 4: voice.matchmaking.v1.CreateGameRequest
+	(*UpdateGameRequest)(nil),             // 5: voice.matchmaking.v1.UpdateGameRequest
+	(*SearchGamesRequest)(nil),            // 6: voice.matchmaking.v1.SearchGamesRequest
+	(*StartSearchRequest)(nil),            // 7: voice.matchmaking.v1.StartSearchRequest
+	(*SearchSession)(nil),                 // 8: voice.matchmaking.v1.SearchSession
+	(*CancelSearchRequest)(nil),           // 9: voice.matchmaking.v1.CancelSearchRequest
+	(*GetSearchStatusRequest)(nil),        // 10: voice.matchmaking.v1.GetSearchStatusRequest
+	(*Match)(nil),                         // 11: voice.matchmaking.v1.Match
+	(*GetMatchRequest)(nil),               // 12: voice.matchmaking.v1.GetMatchRequest
+	(*GetMatchHistoryRequest)(nil),        // 13: voice.matchmaking.v1.GetMatchHistoryRequest
+	(*MatchList)(nil),                     // 14: voice.matchmaking.v1.MatchList
+	(*RateMatchRequest)(nil),              // 15: voice.matchmaking.v1.RateMatchRequest
+	(*GetPlayerRatingRequest)(nil),        // 16: voice.matchmaking.v1.GetPlayerRatingRequest
+	(*PlayerRating)(nil),                  // 17: voice.matchmaking.v1.PlayerRating
+	(*BanFromMMRequest)(nil),              // 18: voice.matchmaking.v1.BanFromMMRequest
+	(*UnbanFromMMRequest)(nil),            // 19: voice.matchmaking.v1.UnbanFromMMRequest
+	(*GetMMBanStatusRequest)(nil),         // 20: voice.matchmaking.v1.GetMMBanStatusRequest
+	(*MMBanStatus)(nil),                   // 21: voice.matchmaking.v1.MMBanStatus
+	(*ListGamesResponse)(nil),             // 22: voice.matchmaking.v1.ListGamesResponse
+	(*GetGameResponse)(nil),               // 23: voice.matchmaking.v1.GetGameResponse
+	(*CreateGameResponse)(nil),            // 24: voice.matchmaking.v1.CreateGameResponse
+	(*UpdateGameResponse)(nil),            // 25: voice.matchmaking.v1.UpdateGameResponse
+	(*SearchGamesResponse)(nil),           // 26: voice.matchmaking.v1.SearchGamesResponse
+	(*StartSearchResponse)(nil),           // 27: voice.matchmaking.v1.StartSearchResponse
+	(*CancelSearchResponse)(nil),          // 28: voice.matchmaking.v1.CancelSearchResponse
+	(*GetSearchStatusResponse)(nil),       // 29: voice.matchmaking.v1.GetSearchStatusResponse
+	(*GetMatchResponse)(nil),              // 30: voice.matchmaking.v1.GetMatchResponse
+	(*GetMatchHistoryResponse)(nil),       // 31: voice.matchmaking.v1.GetMatchHistoryResponse
+	(*RateMatchResponse)(nil),             // 32: voice.matchmaking.v1.RateMatchResponse
+	(*GetPlayerRatingResponse)(nil),       // 33: voice.matchmaking.v1.GetPlayerRatingResponse
+	(*BanFromMMResponse)(nil),             // 34: voice.matchmaking.v1.BanFromMMResponse
+	(*UnbanFromMMResponse)(nil),           // 35: voice.matchmaking.v1.UnbanFromMMResponse
+	(*GetMMBanStatusResponse)(nil),        // 36: voice.matchmaking.v1.GetMMBanStatusResponse
+	(*PlayerGameEntry)(nil),               // 37: voice.matchmaking.v1.PlayerGameEntry
+	(*GetMyPlayerProfileRequest)(nil),     // 38: voice.matchmaking.v1.GetMyPlayerProfileRequest
+	(*GetMyPlayerProfileResponse)(nil),    // 39: voice.matchmaking.v1.GetMyPlayerProfileResponse
+	(*GetPlayerProfileRequest)(nil),       // 40: voice.matchmaking.v1.GetPlayerProfileRequest
+	(*GetPlayerProfileResponse)(nil),      // 41: voice.matchmaking.v1.GetPlayerProfileResponse
+	(*UpsertPlayerGameEntryRequest)(nil),  // 42: voice.matchmaking.v1.UpsertPlayerGameEntryRequest
+	(*UpsertPlayerGameEntryResponse)(nil), // 43: voice.matchmaking.v1.UpsertPlayerGameEntryResponse
+	(*DeletePlayerGameEntryRequest)(nil),  // 44: voice.matchmaking.v1.DeletePlayerGameEntryRequest
+	(*DeletePlayerGameEntryResponse)(nil), // 45: voice.matchmaking.v1.DeletePlayerGameEntryResponse
+	(*timestamppb.Timestamp)(nil),         // 46: google.protobuf.Timestamp
+	(*v1.CursorPageRequest)(nil),          // 47: voice.common.v1.CursorPageRequest
 }
 var file_voice_matchmaking_v1_matchmaking_proto_depIdxs = []int32{
-	37, // 0: voice.matchmaking.v1.Game.created_at:type_name -> google.protobuf.Timestamp
-	38, // 1: voice.matchmaking.v1.ListGamesRequest.page:type_name -> voice.common.v1.CursorPageRequest
+	46, // 0: voice.matchmaking.v1.Game.created_at:type_name -> google.protobuf.Timestamp
+	47, // 1: voice.matchmaking.v1.ListGamesRequest.page:type_name -> voice.common.v1.CursorPageRequest
 	0,  // 2: voice.matchmaking.v1.GameList.games:type_name -> voice.matchmaking.v1.Game
-	37, // 3: voice.matchmaking.v1.SearchSession.timeout_at:type_name -> google.protobuf.Timestamp
-	37, // 4: voice.matchmaking.v1.SearchSession.matched_at:type_name -> google.protobuf.Timestamp
-	37, // 5: voice.matchmaking.v1.Match.created_at:type_name -> google.protobuf.Timestamp
-	38, // 6: voice.matchmaking.v1.GetMatchHistoryRequest.page:type_name -> voice.common.v1.CursorPageRequest
+	46, // 3: voice.matchmaking.v1.SearchSession.timeout_at:type_name -> google.protobuf.Timestamp
+	46, // 4: voice.matchmaking.v1.SearchSession.matched_at:type_name -> google.protobuf.Timestamp
+	46, // 5: voice.matchmaking.v1.Match.created_at:type_name -> google.protobuf.Timestamp
+	47, // 6: voice.matchmaking.v1.GetMatchHistoryRequest.page:type_name -> voice.common.v1.CursorPageRequest
 	11, // 7: voice.matchmaking.v1.MatchList.matches:type_name -> voice.matchmaking.v1.Match
-	37, // 8: voice.matchmaking.v1.BanFromMMRequest.until:type_name -> google.protobuf.Timestamp
-	37, // 9: voice.matchmaking.v1.MMBanStatus.until:type_name -> google.protobuf.Timestamp
+	46, // 8: voice.matchmaking.v1.BanFromMMRequest.until:type_name -> google.protobuf.Timestamp
+	46, // 9: voice.matchmaking.v1.MMBanStatus.until:type_name -> google.protobuf.Timestamp
 	2,  // 10: voice.matchmaking.v1.ListGamesResponse.game_list:type_name -> voice.matchmaking.v1.GameList
 	0,  // 11: voice.matchmaking.v1.GetGameResponse.game:type_name -> voice.matchmaking.v1.Game
 	0,  // 12: voice.matchmaking.v1.CreateGameResponse.game:type_name -> voice.matchmaking.v1.Game
@@ -2166,41 +2644,53 @@ var file_voice_matchmaking_v1_matchmaking_proto_depIdxs = []int32{
 	14, // 18: voice.matchmaking.v1.GetMatchHistoryResponse.match_list:type_name -> voice.matchmaking.v1.MatchList
 	17, // 19: voice.matchmaking.v1.GetPlayerRatingResponse.player_rating:type_name -> voice.matchmaking.v1.PlayerRating
 	21, // 20: voice.matchmaking.v1.GetMMBanStatusResponse.mm_ban_status:type_name -> voice.matchmaking.v1.MMBanStatus
-	1,  // 21: voice.matchmaking.v1.MatchmakingService.ListGames:input_type -> voice.matchmaking.v1.ListGamesRequest
-	3,  // 22: voice.matchmaking.v1.MatchmakingService.GetGame:input_type -> voice.matchmaking.v1.GetGameRequest
-	4,  // 23: voice.matchmaking.v1.MatchmakingService.CreateGame:input_type -> voice.matchmaking.v1.CreateGameRequest
-	5,  // 24: voice.matchmaking.v1.MatchmakingService.UpdateGame:input_type -> voice.matchmaking.v1.UpdateGameRequest
-	6,  // 25: voice.matchmaking.v1.MatchmakingService.SearchGames:input_type -> voice.matchmaking.v1.SearchGamesRequest
-	7,  // 26: voice.matchmaking.v1.MatchmakingService.StartSearch:input_type -> voice.matchmaking.v1.StartSearchRequest
-	9,  // 27: voice.matchmaking.v1.MatchmakingService.CancelSearch:input_type -> voice.matchmaking.v1.CancelSearchRequest
-	10, // 28: voice.matchmaking.v1.MatchmakingService.GetSearchStatus:input_type -> voice.matchmaking.v1.GetSearchStatusRequest
-	12, // 29: voice.matchmaking.v1.MatchmakingService.GetMatch:input_type -> voice.matchmaking.v1.GetMatchRequest
-	13, // 30: voice.matchmaking.v1.MatchmakingService.GetMatchHistory:input_type -> voice.matchmaking.v1.GetMatchHistoryRequest
-	15, // 31: voice.matchmaking.v1.MatchmakingService.RateMatch:input_type -> voice.matchmaking.v1.RateMatchRequest
-	16, // 32: voice.matchmaking.v1.MatchmakingService.GetPlayerRating:input_type -> voice.matchmaking.v1.GetPlayerRatingRequest
-	18, // 33: voice.matchmaking.v1.MatchmakingService.BanFromMM:input_type -> voice.matchmaking.v1.BanFromMMRequest
-	19, // 34: voice.matchmaking.v1.MatchmakingService.UnbanFromMM:input_type -> voice.matchmaking.v1.UnbanFromMMRequest
-	20, // 35: voice.matchmaking.v1.MatchmakingService.GetMMBanStatus:input_type -> voice.matchmaking.v1.GetMMBanStatusRequest
-	22, // 36: voice.matchmaking.v1.MatchmakingService.ListGames:output_type -> voice.matchmaking.v1.ListGamesResponse
-	23, // 37: voice.matchmaking.v1.MatchmakingService.GetGame:output_type -> voice.matchmaking.v1.GetGameResponse
-	24, // 38: voice.matchmaking.v1.MatchmakingService.CreateGame:output_type -> voice.matchmaking.v1.CreateGameResponse
-	25, // 39: voice.matchmaking.v1.MatchmakingService.UpdateGame:output_type -> voice.matchmaking.v1.UpdateGameResponse
-	26, // 40: voice.matchmaking.v1.MatchmakingService.SearchGames:output_type -> voice.matchmaking.v1.SearchGamesResponse
-	27, // 41: voice.matchmaking.v1.MatchmakingService.StartSearch:output_type -> voice.matchmaking.v1.StartSearchResponse
-	28, // 42: voice.matchmaking.v1.MatchmakingService.CancelSearch:output_type -> voice.matchmaking.v1.CancelSearchResponse
-	29, // 43: voice.matchmaking.v1.MatchmakingService.GetSearchStatus:output_type -> voice.matchmaking.v1.GetSearchStatusResponse
-	30, // 44: voice.matchmaking.v1.MatchmakingService.GetMatch:output_type -> voice.matchmaking.v1.GetMatchResponse
-	31, // 45: voice.matchmaking.v1.MatchmakingService.GetMatchHistory:output_type -> voice.matchmaking.v1.GetMatchHistoryResponse
-	32, // 46: voice.matchmaking.v1.MatchmakingService.RateMatch:output_type -> voice.matchmaking.v1.RateMatchResponse
-	33, // 47: voice.matchmaking.v1.MatchmakingService.GetPlayerRating:output_type -> voice.matchmaking.v1.GetPlayerRatingResponse
-	34, // 48: voice.matchmaking.v1.MatchmakingService.BanFromMM:output_type -> voice.matchmaking.v1.BanFromMMResponse
-	35, // 49: voice.matchmaking.v1.MatchmakingService.UnbanFromMM:output_type -> voice.matchmaking.v1.UnbanFromMMResponse
-	36, // 50: voice.matchmaking.v1.MatchmakingService.GetMMBanStatus:output_type -> voice.matchmaking.v1.GetMMBanStatusResponse
-	36, // [36:51] is the sub-list for method output_type
-	21, // [21:36] is the sub-list for method input_type
-	21, // [21:21] is the sub-list for extension type_name
-	21, // [21:21] is the sub-list for extension extendee
-	0,  // [0:21] is the sub-list for field type_name
+	46, // 21: voice.matchmaking.v1.PlayerGameEntry.updated_at:type_name -> google.protobuf.Timestamp
+	37, // 22: voice.matchmaking.v1.GetMyPlayerProfileResponse.entries:type_name -> voice.matchmaking.v1.PlayerGameEntry
+	37, // 23: voice.matchmaking.v1.GetPlayerProfileResponse.entries:type_name -> voice.matchmaking.v1.PlayerGameEntry
+	37, // 24: voice.matchmaking.v1.UpsertPlayerGameEntryResponse.entry:type_name -> voice.matchmaking.v1.PlayerGameEntry
+	1,  // 25: voice.matchmaking.v1.MatchmakingService.ListGames:input_type -> voice.matchmaking.v1.ListGamesRequest
+	3,  // 26: voice.matchmaking.v1.MatchmakingService.GetGame:input_type -> voice.matchmaking.v1.GetGameRequest
+	4,  // 27: voice.matchmaking.v1.MatchmakingService.CreateGame:input_type -> voice.matchmaking.v1.CreateGameRequest
+	5,  // 28: voice.matchmaking.v1.MatchmakingService.UpdateGame:input_type -> voice.matchmaking.v1.UpdateGameRequest
+	6,  // 29: voice.matchmaking.v1.MatchmakingService.SearchGames:input_type -> voice.matchmaking.v1.SearchGamesRequest
+	7,  // 30: voice.matchmaking.v1.MatchmakingService.StartSearch:input_type -> voice.matchmaking.v1.StartSearchRequest
+	9,  // 31: voice.matchmaking.v1.MatchmakingService.CancelSearch:input_type -> voice.matchmaking.v1.CancelSearchRequest
+	10, // 32: voice.matchmaking.v1.MatchmakingService.GetSearchStatus:input_type -> voice.matchmaking.v1.GetSearchStatusRequest
+	12, // 33: voice.matchmaking.v1.MatchmakingService.GetMatch:input_type -> voice.matchmaking.v1.GetMatchRequest
+	13, // 34: voice.matchmaking.v1.MatchmakingService.GetMatchHistory:input_type -> voice.matchmaking.v1.GetMatchHistoryRequest
+	15, // 35: voice.matchmaking.v1.MatchmakingService.RateMatch:input_type -> voice.matchmaking.v1.RateMatchRequest
+	16, // 36: voice.matchmaking.v1.MatchmakingService.GetPlayerRating:input_type -> voice.matchmaking.v1.GetPlayerRatingRequest
+	18, // 37: voice.matchmaking.v1.MatchmakingService.BanFromMM:input_type -> voice.matchmaking.v1.BanFromMMRequest
+	19, // 38: voice.matchmaking.v1.MatchmakingService.UnbanFromMM:input_type -> voice.matchmaking.v1.UnbanFromMMRequest
+	20, // 39: voice.matchmaking.v1.MatchmakingService.GetMMBanStatus:input_type -> voice.matchmaking.v1.GetMMBanStatusRequest
+	38, // 40: voice.matchmaking.v1.MatchmakingService.GetMyPlayerProfile:input_type -> voice.matchmaking.v1.GetMyPlayerProfileRequest
+	40, // 41: voice.matchmaking.v1.MatchmakingService.GetPlayerProfile:input_type -> voice.matchmaking.v1.GetPlayerProfileRequest
+	42, // 42: voice.matchmaking.v1.MatchmakingService.UpsertPlayerGameEntry:input_type -> voice.matchmaking.v1.UpsertPlayerGameEntryRequest
+	44, // 43: voice.matchmaking.v1.MatchmakingService.DeletePlayerGameEntry:input_type -> voice.matchmaking.v1.DeletePlayerGameEntryRequest
+	22, // 44: voice.matchmaking.v1.MatchmakingService.ListGames:output_type -> voice.matchmaking.v1.ListGamesResponse
+	23, // 45: voice.matchmaking.v1.MatchmakingService.GetGame:output_type -> voice.matchmaking.v1.GetGameResponse
+	24, // 46: voice.matchmaking.v1.MatchmakingService.CreateGame:output_type -> voice.matchmaking.v1.CreateGameResponse
+	25, // 47: voice.matchmaking.v1.MatchmakingService.UpdateGame:output_type -> voice.matchmaking.v1.UpdateGameResponse
+	26, // 48: voice.matchmaking.v1.MatchmakingService.SearchGames:output_type -> voice.matchmaking.v1.SearchGamesResponse
+	27, // 49: voice.matchmaking.v1.MatchmakingService.StartSearch:output_type -> voice.matchmaking.v1.StartSearchResponse
+	28, // 50: voice.matchmaking.v1.MatchmakingService.CancelSearch:output_type -> voice.matchmaking.v1.CancelSearchResponse
+	29, // 51: voice.matchmaking.v1.MatchmakingService.GetSearchStatus:output_type -> voice.matchmaking.v1.GetSearchStatusResponse
+	30, // 52: voice.matchmaking.v1.MatchmakingService.GetMatch:output_type -> voice.matchmaking.v1.GetMatchResponse
+	31, // 53: voice.matchmaking.v1.MatchmakingService.GetMatchHistory:output_type -> voice.matchmaking.v1.GetMatchHistoryResponse
+	32, // 54: voice.matchmaking.v1.MatchmakingService.RateMatch:output_type -> voice.matchmaking.v1.RateMatchResponse
+	33, // 55: voice.matchmaking.v1.MatchmakingService.GetPlayerRating:output_type -> voice.matchmaking.v1.GetPlayerRatingResponse
+	34, // 56: voice.matchmaking.v1.MatchmakingService.BanFromMM:output_type -> voice.matchmaking.v1.BanFromMMResponse
+	35, // 57: voice.matchmaking.v1.MatchmakingService.UnbanFromMM:output_type -> voice.matchmaking.v1.UnbanFromMMResponse
+	36, // 58: voice.matchmaking.v1.MatchmakingService.GetMMBanStatus:output_type -> voice.matchmaking.v1.GetMMBanStatusResponse
+	39, // 59: voice.matchmaking.v1.MatchmakingService.GetMyPlayerProfile:output_type -> voice.matchmaking.v1.GetMyPlayerProfileResponse
+	41, // 60: voice.matchmaking.v1.MatchmakingService.GetPlayerProfile:output_type -> voice.matchmaking.v1.GetPlayerProfileResponse
+	43, // 61: voice.matchmaking.v1.MatchmakingService.UpsertPlayerGameEntry:output_type -> voice.matchmaking.v1.UpsertPlayerGameEntryResponse
+	45, // 62: voice.matchmaking.v1.MatchmakingService.DeletePlayerGameEntry:output_type -> voice.matchmaking.v1.DeletePlayerGameEntryResponse
+	44, // [44:63] is the sub-list for method output_type
+	25, // [25:44] is the sub-list for method input_type
+	25, // [25:25] is the sub-list for extension type_name
+	25, // [25:25] is the sub-list for extension extendee
+	0,  // [0:25] is the sub-list for field type_name
 }
 
 func init() { file_voice_matchmaking_v1_matchmaking_proto_init() }
@@ -2214,13 +2704,15 @@ func file_voice_matchmaking_v1_matchmaking_proto_init() {
 	file_voice_matchmaking_v1_matchmaking_proto_msgTypes[8].OneofWrappers = []any{}
 	file_voice_matchmaking_v1_matchmaking_proto_msgTypes[18].OneofWrappers = []any{}
 	file_voice_matchmaking_v1_matchmaking_proto_msgTypes[21].OneofWrappers = []any{}
+	file_voice_matchmaking_v1_matchmaking_proto_msgTypes[37].OneofWrappers = []any{}
+	file_voice_matchmaking_v1_matchmaking_proto_msgTypes[42].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_voice_matchmaking_v1_matchmaking_proto_rawDesc), len(file_voice_matchmaking_v1_matchmaking_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   37,
+			NumMessages:   46,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

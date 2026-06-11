@@ -937,4 +937,28 @@ class AppLocalizationsEn extends AppLocalizations {
   String gameCatalogModeSlots(int slots, int min, int max) {
     return '$slots players · party $min–$max';
   }
+
+  @override
+  String get playerProfileTitle => 'Matchmaking profile';
+
+  @override
+  String get playerProfileEntry => 'Matchmaking profile';
+
+  @override
+  String get playerProfileLoadError => 'Could not load matchmaking profile';
+
+  @override
+  String get playerProfileEmpty => 'No games configured yet';
+
+  @override
+  String get playerProfileAddGame => 'Add game';
+
+  @override
+  String get playerProfileSave => 'Save game profile';
+
+  @override
+  String get playerProfileSection => 'Matchmaking';
+
+  @override
+  String get playerProfileForGame => 'My profile for this game';
 }

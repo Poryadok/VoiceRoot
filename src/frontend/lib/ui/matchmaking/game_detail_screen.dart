@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../backend/matchmaking_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/voice_colors.dart';
+import 'player_profile_sheet.dart';
 
 /// Game page with modes, in-game roles and ranks from catalog config.
 class GameDetailScreen extends StatelessWidget {
@@ -79,6 +80,18 @@ class GameDetailScreen extends StatelessWidget {
               ),
             ],
           ],
+          const SizedBox(height: 24),
+          OutlinedButton.icon(
+            onPressed: () {
+              showModalBottomSheet<void>(
+                context: context,
+                isScrollControlled: true,
+                builder: (_) => PlayerProfileSheet(initialGame: game),
+              );
+            },
+            icon: const Icon(Icons.person_outline),
+            label: Text(l10n.playerProfileForGame),
+          ),
         ],
       ),
     );

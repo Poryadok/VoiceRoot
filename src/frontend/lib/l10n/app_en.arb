@@ -525,5 +525,13 @@
       "min": { "type": "int" },
       "max": { "type": "int" }
     }
-  }
+  },
+  "playerProfileTitle": "Matchmaking profile",
+  "playerProfileEntry": "Matchmaking profile",
+  "playerProfileLoadError": "Could not load matchmaking profile",
+  "playerProfileEmpty": "No games configured yet",
+  "playerProfileAddGame": "Add game",
+  "playerProfileSave": "Save game profile",
+  "playerProfileSection": "Matchmaking",
+  "playerProfileForGame": "My profile for this game"
 }

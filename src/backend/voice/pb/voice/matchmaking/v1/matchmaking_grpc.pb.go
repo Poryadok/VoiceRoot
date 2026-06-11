@@ -19,21 +19,25 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	MatchmakingService_ListGames_FullMethodName       = "/voice.matchmaking.v1.MatchmakingService/ListGames"
-	MatchmakingService_GetGame_FullMethodName         = "/voice.matchmaking.v1.MatchmakingService/GetGame"
-	MatchmakingService_CreateGame_FullMethodName      = "/voice.matchmaking.v1.MatchmakingService/CreateGame"
-	MatchmakingService_UpdateGame_FullMethodName      = "/voice.matchmaking.v1.MatchmakingService/UpdateGame"
-	MatchmakingService_SearchGames_FullMethodName     = "/voice.matchmaking.v1.MatchmakingService/SearchGames"
-	MatchmakingService_StartSearch_FullMethodName     = "/voice.matchmaking.v1.MatchmakingService/StartSearch"
-	MatchmakingService_CancelSearch_FullMethodName    = "/voice.matchmaking.v1.MatchmakingService/CancelSearch"
-	MatchmakingService_GetSearchStatus_FullMethodName = "/voice.matchmaking.v1.MatchmakingService/GetSearchStatus"
-	MatchmakingService_GetMatch_FullMethodName        = "/voice.matchmaking.v1.MatchmakingService/GetMatch"
-	MatchmakingService_GetMatchHistory_FullMethodName = "/voice.matchmaking.v1.MatchmakingService/GetMatchHistory"
-	MatchmakingService_RateMatch_FullMethodName       = "/voice.matchmaking.v1.MatchmakingService/RateMatch"
-	MatchmakingService_GetPlayerRating_FullMethodName = "/voice.matchmaking.v1.MatchmakingService/GetPlayerRating"
-	MatchmakingService_BanFromMM_FullMethodName       = "/voice.matchmaking.v1.MatchmakingService/BanFromMM"
-	MatchmakingService_UnbanFromMM_FullMethodName     = "/voice.matchmaking.v1.MatchmakingService/UnbanFromMM"
-	MatchmakingService_GetMMBanStatus_FullMethodName  = "/voice.matchmaking.v1.MatchmakingService/GetMMBanStatus"
+	MatchmakingService_ListGames_FullMethodName             = "/voice.matchmaking.v1.MatchmakingService/ListGames"
+	MatchmakingService_GetGame_FullMethodName               = "/voice.matchmaking.v1.MatchmakingService/GetGame"
+	MatchmakingService_CreateGame_FullMethodName            = "/voice.matchmaking.v1.MatchmakingService/CreateGame"
+	MatchmakingService_UpdateGame_FullMethodName            = "/voice.matchmaking.v1.MatchmakingService/UpdateGame"
+	MatchmakingService_SearchGames_FullMethodName           = "/voice.matchmaking.v1.MatchmakingService/SearchGames"
+	MatchmakingService_StartSearch_FullMethodName           = "/voice.matchmaking.v1.MatchmakingService/StartSearch"
+	MatchmakingService_CancelSearch_FullMethodName          = "/voice.matchmaking.v1.MatchmakingService/CancelSearch"
+	MatchmakingService_GetSearchStatus_FullMethodName       = "/voice.matchmaking.v1.MatchmakingService/GetSearchStatus"
+	MatchmakingService_GetMatch_FullMethodName              = "/voice.matchmaking.v1.MatchmakingService/GetMatch"
+	MatchmakingService_GetMatchHistory_FullMethodName       = "/voice.matchmaking.v1.MatchmakingService/GetMatchHistory"
+	MatchmakingService_RateMatch_FullMethodName             = "/voice.matchmaking.v1.MatchmakingService/RateMatch"
+	MatchmakingService_GetPlayerRating_FullMethodName       = "/voice.matchmaking.v1.MatchmakingService/GetPlayerRating"
+	MatchmakingService_BanFromMM_FullMethodName             = "/voice.matchmaking.v1.MatchmakingService/BanFromMM"
+	MatchmakingService_UnbanFromMM_FullMethodName           = "/voice.matchmaking.v1.MatchmakingService/UnbanFromMM"
+	MatchmakingService_GetMMBanStatus_FullMethodName        = "/voice.matchmaking.v1.MatchmakingService/GetMMBanStatus"
+	MatchmakingService_GetMyPlayerProfile_FullMethodName    = "/voice.matchmaking.v1.MatchmakingService/GetMyPlayerProfile"
+	MatchmakingService_GetPlayerProfile_FullMethodName      = "/voice.matchmaking.v1.MatchmakingService/GetPlayerProfile"
+	MatchmakingService_UpsertPlayerGameEntry_FullMethodName = "/voice.matchmaking.v1.MatchmakingService/UpsertPlayerGameEntry"
+	MatchmakingService_DeletePlayerGameEntry_FullMethodName = "/voice.matchmaking.v1.MatchmakingService/DeletePlayerGameEntry"
 )
 
 // MatchmakingServiceClient is the client API for MatchmakingService service.
@@ -57,6 +61,11 @@ type MatchmakingServiceClient interface {
 	BanFromMM(ctx context.Context, in *BanFromMMRequest, opts ...grpc.CallOption) (*BanFromMMResponse, error)
 	UnbanFromMM(ctx context.Context, in *UnbanFromMMRequest, opts ...grpc.CallOption) (*UnbanFromMMResponse, error)
 	GetMMBanStatus(ctx context.Context, in *GetMMBanStatusRequest, opts ...grpc.CallOption) (*GetMMBanStatusResponse, error)
+	// Player profile (per-game MM settings)
+	GetMyPlayerProfile(ctx context.Context, in *GetMyPlayerProfileRequest, opts ...grpc.CallOption) (*GetMyPlayerProfileResponse, error)
+	GetPlayerProfile(ctx context.Context, in *GetPlayerProfileRequest, opts ...grpc.CallOption) (*GetPlayerProfileResponse, error)
+	UpsertPlayerGameEntry(ctx context.Context, in *UpsertPlayerGameEntryRequest, opts ...grpc.CallOption) (*UpsertPlayerGameEntryResponse, error)
+	DeletePlayerGameEntry(ctx context.Context, in *DeletePlayerGameEntryRequest, opts ...grpc.CallOption) (*DeletePlayerGameEntryResponse, error)
 }
 
 type matchmakingServiceClient struct {
@@ -217,6 +226,46 @@ func (c *matchmakingServiceClient) GetMMBanStatus(ctx context.Context, in *GetMM
 	return out, nil
 }
 
+func (c *matchmakingServiceClient) GetMyPlayerProfile(ctx context.Context, in *GetMyPlayerProfileRequest, opts ...grpc.CallOption) (*GetMyPlayerProfileResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetMyPlayerProfileResponse)
+	err := c.cc.Invoke(ctx, MatchmakingService_GetMyPlayerProfile_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchmakingServiceClient) GetPlayerProfile(ctx context.Context, in *GetPlayerProfileRequest, opts ...grpc.CallOption) (*GetPlayerProfileResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetPlayerProfileResponse)
+	err := c.cc.Invoke(ctx, MatchmakingService_GetPlayerProfile_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchmakingServiceClient) UpsertPlayerGameEntry(ctx context.Context, in *UpsertPlayerGameEntryRequest, opts ...grpc.CallOption) (*UpsertPlayerGameEntryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpsertPlayerGameEntryResponse)
+	err := c.cc.Invoke(ctx, MatchmakingService_UpsertPlayerGameEntry_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchmakingServiceClient) DeletePlayerGameEntry(ctx context.Context, in *DeletePlayerGameEntryRequest, opts ...grpc.CallOption) (*DeletePlayerGameEntryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeletePlayerGameEntryResponse)
+	err := c.cc.Invoke(ctx, MatchmakingService_DeletePlayerGameEntry_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MatchmakingServiceServer is the server API for MatchmakingService service.
 // All implementations must embed UnimplementedMatchmakingServiceServer
 // for forward compatibility.
@@ -238,6 +287,11 @@ type MatchmakingServiceServer interface {
 	BanFromMM(context.Context, *BanFromMMRequest) (*BanFromMMResponse, error)
 	UnbanFromMM(context.Context, *UnbanFromMMRequest) (*UnbanFromMMResponse, error)
 	GetMMBanStatus(context.Context, *GetMMBanStatusRequest) (*GetMMBanStatusResponse, error)
+	// Player profile (per-game MM settings)
+	GetMyPlayerProfile(context.Context, *GetMyPlayerProfileRequest) (*GetMyPlayerProfileResponse, error)
+	GetPlayerProfile(context.Context, *GetPlayerProfileRequest) (*GetPlayerProfileResponse, error)
+	UpsertPlayerGameEntry(context.Context, *UpsertPlayerGameEntryRequest) (*UpsertPlayerGameEntryResponse, error)
+	DeletePlayerGameEntry(context.Context, *DeletePlayerGameEntryRequest) (*DeletePlayerGameEntryResponse, error)
 	mustEmbedUnimplementedMatchmakingServiceServer()
 }
 
@@ -292,6 +346,18 @@ func (UnimplementedMatchmakingServiceServer) UnbanFromMM(context.Context, *Unban
 }
 func (UnimplementedMatchmakingServiceServer) GetMMBanStatus(context.Context, *GetMMBanStatusRequest) (*GetMMBanStatusResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetMMBanStatus not implemented")
+}
+func (UnimplementedMatchmakingServiceServer) GetMyPlayerProfile(context.Context, *GetMyPlayerProfileRequest) (*GetMyPlayerProfileResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetMyPlayerProfile not implemented")
+}
+func (UnimplementedMatchmakingServiceServer) GetPlayerProfile(context.Context, *GetPlayerProfileRequest) (*GetPlayerProfileResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetPlayerProfile not implemented")
+}
+func (UnimplementedMatchmakingServiceServer) UpsertPlayerGameEntry(context.Context, *UpsertPlayerGameEntryRequest) (*UpsertPlayerGameEntryResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpsertPlayerGameEntry not implemented")
+}
+func (UnimplementedMatchmakingServiceServer) DeletePlayerGameEntry(context.Context, *DeletePlayerGameEntryRequest) (*DeletePlayerGameEntryResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeletePlayerGameEntry not implemented")
 }
 func (UnimplementedMatchmakingServiceServer) mustEmbedUnimplementedMatchmakingServiceServer() {}
 func (UnimplementedMatchmakingServiceServer) testEmbeddedByValue()                            {}
@@ -584,6 +650,78 @@ func _MatchmakingService_GetMMBanStatus_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MatchmakingService_GetMyPlayerProfile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetMyPlayerProfileRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchmakingServiceServer).GetMyPlayerProfile(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchmakingService_GetMyPlayerProfile_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchmakingServiceServer).GetMyPlayerProfile(ctx, req.(*GetMyPlayerProfileRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchmakingService_GetPlayerProfile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetPlayerProfileRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchmakingServiceServer).GetPlayerProfile(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchmakingService_GetPlayerProfile_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchmakingServiceServer).GetPlayerProfile(ctx, req.(*GetPlayerProfileRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchmakingService_UpsertPlayerGameEntry_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpsertPlayerGameEntryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchmakingServiceServer).UpsertPlayerGameEntry(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchmakingService_UpsertPlayerGameEntry_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchmakingServiceServer).UpsertPlayerGameEntry(ctx, req.(*UpsertPlayerGameEntryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchmakingService_DeletePlayerGameEntry_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeletePlayerGameEntryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchmakingServiceServer).DeletePlayerGameEntry(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchmakingService_DeletePlayerGameEntry_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchmakingServiceServer).DeletePlayerGameEntry(ctx, req.(*DeletePlayerGameEntryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MatchmakingService_ServiceDesc is the grpc.ServiceDesc for MatchmakingService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -650,6 +788,22 @@ var MatchmakingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetMMBanStatus",
 			Handler:    _MatchmakingService_GetMMBanStatus_Handler,
+		},
+		{
+			MethodName: "GetMyPlayerProfile",
+			Handler:    _MatchmakingService_GetMyPlayerProfile_Handler,
+		},
+		{
+			MethodName: "GetPlayerProfile",
+			Handler:    _MatchmakingService_GetPlayerProfile_Handler,
+		},
+		{
+			MethodName: "UpsertPlayerGameEntry",
+			Handler:    _MatchmakingService_UpsertPlayerGameEntry_Handler,
+		},
+		{
+			MethodName: "DeletePlayerGameEntry",
+			Handler:    _MatchmakingService_DeletePlayerGameEntry_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

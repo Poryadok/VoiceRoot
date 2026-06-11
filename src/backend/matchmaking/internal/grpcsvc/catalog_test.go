@@ -2,7 +2,6 @@ package grpcsvc
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -31,11 +30,7 @@ func repoRoot(t *testing.T) string {
 func startDB(t *testing.T, ctx context.Context) *pgxpool.Pool {
 	t.Helper()
 	pool := integrationtest.StartPostgres(t, ctx, "matchmakinggrpc", "")
-	migrationPath := filepath.Join(repoRoot(t), "src", "backend", "migrations", "matchmaking_db", "000001_init.up.sql")
-	sqlBytes, err := os.ReadFile(migrationPath)
-	require.NoError(t, err)
-	_, err = pool.Exec(ctx, string(sqlBytes))
-	require.NoError(t, err)
+	store.ApplyMatchmakingMigrationsForStoreTest(t, ctx, pool)
 	return pool
 }
 

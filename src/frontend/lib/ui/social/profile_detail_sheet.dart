@@ -1,14 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../backend/matchmaking_client.dart';
 import '../../backend/users_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/chat_providers.dart';
 import '../../state/presence_providers.dart';
+import '../../state/matchmaking_providers.dart';
 import '../../state/social_providers.dart';
 import '../core/voice_avatar.dart';
 import 'presence_indicator.dart';
+
+String _mmEntryLabel(AsyncValue<GameListData> catalogAsync, PlayerGameEntry entry) {
+  final games = catalogAsync.valueOrNull?.games ?? const [];
+  var name = entry.gameId;
+  for (final g in games) {
+    if (g.id == entry.gameId) {
+      name = g.name;
+      break;
+    }
+  }
+  final parts = <String>[name, entry.region];
+  if (entry.role != null && entry.role!.isNotEmpty) parts.add(entry.role!);
+  if (entry.rank != null && entry.rank!.isNotEmpty) parts.add(entry.rank!);
+  return parts.join(' · ');
+}
 
 /// Bottom sheet with profile details, presence, and friend-request action.
 class ProfileDetailSheet extends ConsumerWidget {
@@ -26,6 +43,8 @@ class ProfileDetailSheet extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     final profileAsync = ref.watch(profileProvider(profileId));
+    final mmProfileAsync = ref.watch(playerProfileProvider(profileId));
+    final catalogAsync = ref.watch(gameCatalogProvider);
     final presence = ref.watch(presenceProvider(profileId));
     final requestsAsync = ref.watch(friendRequestsProvider);
     final activeId = ref.watch(authControllerProvider).activeProfileId;
@@ -88,6 +107,29 @@ class ProfileDetailSheet extends ConsumerWidget {
                   const SizedBox(height: 16),
                   Text(profile.bio!),
                 ],
+                mmProfileAsync.when(
+                  loading: () => const SizedBox.shrink(),
+                  error: (error, stackTrace) => const SizedBox.shrink(),
+                  data: (mmProfile) {
+                    if (mmProfile.entries.isEmpty) return const SizedBox.shrink();
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const SizedBox(height: 16),
+                        Text(
+                          l10n.playerProfileSection,
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        const SizedBox(height: 8),
+                        for (final entry in mmProfile.entries)
+                          Text(
+                            _mmEntryLabel(catalogAsync, entry),
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                      ],
+                    );
+                  },
+                ),
                 if (!isSelf) ...[
                   const SizedBox(height: 20),
                   OutlinedButton(

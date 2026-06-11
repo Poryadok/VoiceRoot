@@ -130,6 +130,15 @@ mm_bans
 ├── expires_at (nullable — null = permanent)
 ├── created_at
 └── revoked_at (nullable)
+
+profile_game_entries
+├── profile_id (UUID)
+├── game_id (FK → games)
+├── region (TEXT, required)
+├── role (TEXT, optional)
+├── rank (TEXT, optional)
+├── updated_at
+└── PRIMARY KEY (profile_id, game_id)
 ```
 
 ## Алгоритм матчинга

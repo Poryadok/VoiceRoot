@@ -20,7 +20,8 @@ import (
 // MatchmakingGRPC implements catalog RPCs for Phase 7.
 type MatchmakingGRPC struct {
 	matchmakingv1.UnimplementedMatchmakingServiceServer
-	Games *store.GameStore
+	Games        *store.GameStore
+	ProfileGames *store.ProfileGamesStore
 }
 
 func (s *MatchmakingGRPC) ListGames(ctx context.Context, req *matchmakingv1.ListGamesRequest) (*matchmakingv1.ListGamesResponse, error) {

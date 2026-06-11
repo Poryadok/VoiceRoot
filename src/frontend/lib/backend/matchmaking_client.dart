@@ -161,6 +161,39 @@ class GameListData {
   final String? nextCursor;
 }
 
+class PlayerGameEntry {
+  const PlayerGameEntry({
+    required this.gameId,
+    required this.region,
+    this.role,
+    this.rank,
+    this.updatedAt,
+  });
+
+  final String gameId;
+  final String region;
+  final String? role;
+  final String? rank;
+  final DateTime? updatedAt;
+
+  static PlayerGameEntry fromGatewayJson(Map<String, dynamic> json) {
+    final updatedRaw = json['updatedAt'] as String? ?? json['updated_at'] as String?;
+    return PlayerGameEntry(
+      gameId: json['gameId'] as String? ?? json['game_id'] as String? ?? '',
+      region: json['region'] as String? ?? '',
+      role: json['role'] as String?,
+      rank: json['rank'] as String?,
+      updatedAt: updatedRaw != null ? DateTime.tryParse(updatedRaw) : null,
+    );
+  }
+}
+
+class PlayerProfileData {
+  const PlayerProfileData({required this.entries});
+
+  final List<PlayerGameEntry> entries;
+}
+
 /// Gateway client for /api/v1/matchmaking/games/** (Phase 7 catalog).
 class VoiceMatchmakingClient {
   VoiceMatchmakingClient({required GatewayHttpClient gateway}) : _gateway = gateway;
@@ -207,6 +240,80 @@ class VoiceMatchmakingClient {
     );
     final result = await _gateway.getJson(uri, authorization: authorization);
     return _mapList(result);
+  }
+
+  Future<MatchmakingApiResult<PlayerProfileData>> getMyPlayerProfile({
+    required String authorization,
+  }) async {
+    final result = await _gateway.getJson(
+      _gateway.resolve('/api/v1/matchmaking/profile/me'),
+      authorization: authorization,
+    );
+    return _mapProfile(result);
+  }
+
+  Future<MatchmakingApiResult<PlayerProfileData>> getPlayerProfile({
+    required String authorization,
+    required String profileId,
+  }) async {
+    final result = await _gateway.getJson(
+      _gateway.resolve('/api/v1/matchmaking/profile/$profileId'),
+      authorization: authorization,
+    );
+    return _mapProfile(result);
+  }
+
+  Future<MatchmakingApiResult<PlayerGameEntry>> upsertPlayerGameEntry({
+    required String authorization,
+    required String gameId,
+    required String region,
+    String? role,
+    String? rank,
+  }) async {
+    final body = <String, dynamic>{
+      'region': region,
+      if (role != null && role.isNotEmpty) 'role': role,
+      if (rank != null && rank.isNotEmpty) 'rank': rank,
+    };
+    final result = await _gateway.putJson(
+      uri: _gateway.resolve('/api/v1/matchmaking/profile/games/$gameId'),
+      authorization: authorization,
+      body: body,
+    );
+    return _map(result, (data) {
+      final entry = data['entry'] as Map<String, dynamic>? ?? data;
+      return PlayerGameEntry.fromGatewayJson(entry);
+    });
+  }
+
+  Future<MatchmakingApiResult<void>> deletePlayerGameEntry({
+    required String authorization,
+    required String gameId,
+  }) async {
+    final result = await _gateway.deleteEmpty(
+      uri: _gateway.resolve('/api/v1/matchmaking/profile/games/$gameId'),
+      authorization: authorization,
+    );
+    return switch (result) {
+      GatewayHttpOk() => const MatchmakingApiOk(null),
+      GatewayHttpFailure(:final error) => MatchmakingApiFailure(
+        message: error.message,
+        statusCode: error.statusCode,
+      ),
+    };
+  }
+
+  MatchmakingApiResult<PlayerProfileData> _mapProfile(
+    GatewayHttpResult<Map<String, dynamic>> result,
+  ) {
+    return _map(result, (data) {
+      final entriesRaw = data['entries'] as List<dynamic>? ?? const [];
+      final entries = <PlayerGameEntry>[
+        for (final item in entriesRaw)
+          if (item is Map<String, dynamic>) PlayerGameEntry.fromGatewayJson(item),
+      ];
+      return PlayerProfileData(entries: entries);
+    });
   }
 
   MatchmakingApiResult<GameListData> _mapList(GatewayHttpResult<Map<String, dynamic>> result) {

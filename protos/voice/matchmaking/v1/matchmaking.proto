@@ -28,6 +28,12 @@ service MatchmakingService {
   rpc BanFromMM(BanFromMMRequest) returns (BanFromMMResponse);
   rpc UnbanFromMM(UnbanFromMMRequest) returns (UnbanFromMMResponse);
   rpc GetMMBanStatus(GetMMBanStatusRequest) returns (GetMMBanStatusResponse);
+
+  // Player profile (per-game MM settings)
+  rpc GetMyPlayerProfile(GetMyPlayerProfileRequest) returns (GetMyPlayerProfileResponse);
+  rpc GetPlayerProfile(GetPlayerProfileRequest) returns (GetPlayerProfileResponse);
+  rpc UpsertPlayerGameEntry(UpsertPlayerGameEntryRequest) returns (UpsertPlayerGameEntryResponse);
+  rpc DeletePlayerGameEntry(DeletePlayerGameEntryRequest) returns (DeletePlayerGameEntryResponse);
 }
 
 message Game {
@@ -193,3 +199,42 @@ message UnbanFromMMResponse {}
 message GetMMBanStatusResponse {
   MMBanStatus mm_ban_status = 1;
 }
+
+message PlayerGameEntry {
+  string game_id = 1;
+  string region = 2;
+  optional string role = 3;
+  optional string rank = 4;
+  google.protobuf.Timestamp updated_at = 5;
+}
+
+message GetMyPlayerProfileRequest {}
+
+message GetMyPlayerProfileResponse {
+  repeated PlayerGameEntry entries = 1;
+}
+
+message GetPlayerProfileRequest {
+  string profile_id = 1;
+}
+
+message GetPlayerProfileResponse {
+  repeated PlayerGameEntry entries = 1;
+}
+
+message UpsertPlayerGameEntryRequest {
+  string game_id = 1;
+  string region = 2;
+  optional string role = 3;
+  optional string rank = 4;
+}
+
+message UpsertPlayerGameEntryResponse {
+  PlayerGameEntry entry = 1;
+}
+
+message DeletePlayerGameEntryRequest {
+  string game_id = 1;
+}
+
+message DeletePlayerGameEntryResponse {}

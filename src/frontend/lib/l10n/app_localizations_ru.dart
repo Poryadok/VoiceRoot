@@ -942,4 +942,28 @@ class AppLocalizationsRu extends AppLocalizations {
   String gameCatalogModeSlots(int slots, int min, int max) {
     return '$slots игроков · пати $min–$max';
   }
+
+  @override
+  String get playerProfileTitle => 'Профиль игрока';
+
+  @override
+  String get playerProfileEntry => 'Профиль игрока';
+
+  @override
+  String get playerProfileLoadError => 'Не удалось загрузить профиль игрока';
+
+  @override
+  String get playerProfileEmpty => 'Игры ещё не настроены';
+
+  @override
+  String get playerProfileAddGame => 'Добавить игру';
+
+  @override
+  String get playerProfileSave => 'Сохранить';
+
+  @override
+  String get playerProfileSection => 'Матчмейкинг';
+
+  @override
+  String get playerProfileForGame => 'Мой профиль для этой игры';
 }
