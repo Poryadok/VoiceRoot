@@ -1885,6 +1885,90 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not respond to match'**
   String get matchFoundRespondError;
+
+  /// No description provided for @matchSquadLeave.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave squad'**
+  String get matchSquadLeave;
+
+  /// No description provided for @matchSquadLeaveError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not leave match squad'**
+  String get matchSquadLeaveError;
+
+  /// No description provided for @matchRatingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Rate your teammates'**
+  String get matchRatingTitle;
+
+  /// No description provided for @matchRatingSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Stars are optional for each player.'**
+  String get matchRatingSubtitle;
+
+  /// No description provided for @matchRatingSkipTeammate.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip'**
+  String get matchRatingSkipTeammate;
+
+  /// No description provided for @matchRatingSkipAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip all'**
+  String get matchRatingSkipAll;
+
+  /// No description provided for @matchRatingSkipped.
+  ///
+  /// In en, this message translates to:
+  /// **'Skipped'**
+  String get matchRatingSkipped;
+
+  /// No description provided for @matchRatingSubmit.
+  ///
+  /// In en, this message translates to:
+  /// **'Submit ratings'**
+  String get matchRatingSubmit;
+
+  /// No description provided for @matchRatingBanTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Ban from matchmaking?'**
+  String get matchRatingBanTitle;
+
+  /// No description provided for @matchRatingBanMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop matching with {name} in matchmaking?'**
+  String matchRatingBanMessage(String name);
+
+  /// No description provided for @matchRatingBanCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get matchRatingBanCancel;
+
+  /// No description provided for @matchRatingBanConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Ban'**
+  String get matchRatingBanConfirm;
+
+  /// No description provided for @matchRatingBanAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Ban from MM'**
+  String get matchRatingBanAction;
+
+  /// No description provided for @profileMmRating.
+  ///
+  /// In en, this message translates to:
+  /// **'MM rating: {rating} ★'**
+  String profileMmRating(String rating);
 }
 
 class _AppLocalizationsDelegate

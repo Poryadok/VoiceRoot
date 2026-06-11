@@ -1,0 +1,34 @@
+-- Post-match ratings and peer MM bans (matchmaking_db migration 000005)
+
+ALTER TABLE matches
+    ADD COLUMN IF NOT EXISTS left_profile_ids JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+CREATE TABLE IF NOT EXISTS match_ratings (
+    match_id UUID NOT NULL,
+    rater_profile_id UUID NOT NULL,
+    rated_profile_id UUID NOT NULL,
+    score SMALLINT NOT NULL CHECK (score BETWEEN 1 AND 5),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (match_id, rater_profile_id, rated_profile_id)
+);
+
+CREATE TABLE IF NOT EXISTS player_ratings (
+    profile_id UUID NOT NULL,
+    game_id UUID NOT NULL REFERENCES games (id),
+    average_rating DOUBLE PRECISION NOT NULL DEFAULT 0,
+    total_ratings_received INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (profile_id, game_id)
+);
+
+CREATE TABLE IF NOT EXISTS mm_bans (
+    blocker_profile_id UUID NOT NULL,
+    blocked_profile_id UUID NOT NULL,
+    reason TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (blocker_profile_id, blocked_profile_id)
+);
+
+CREATE INDEX IF NOT EXISTS match_ratings_rated_idx ON match_ratings (rated_profile_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS mm_bans_blocked_idx ON mm_bans (blocked_profile_id);

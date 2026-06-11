@@ -33,6 +33,7 @@ func ApplyMatchmakingMigrationsForStoreTest(t *testing.T, ctx context.Context, p
 		"000002_profile_game_entries.up.sql",
 		"000003_search_sessions.up.sql",
 		"000004_matches.up.sql",
+		"000005_ratings_and_bans.up.sql",
 	} {
 		migrationPath := filepath.Join(root, "src", "backend", "migrations", "matchmaking_db", name)
 		sqlBytes, err := os.ReadFile(migrationPath)

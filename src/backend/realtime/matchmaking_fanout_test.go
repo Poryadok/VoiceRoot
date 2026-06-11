@@ -124,3 +124,100 @@ func TestMatchmakingFanouts_InvalidProtobuf(t *testing.T) {
 		t.Fatalf("invalid protobuf: ok=%v fanouts=%v", ok, fanouts)
 	}
 }
+
+func matchCompletedPayload(t *testing.T, env fanoutEnvelope) map[string]string {
+	t.Helper()
+	if env.Op != "match_completed" {
+		t.Fatalf("op=%q want match_completed", env.Op)
+	}
+	var d map[string]string
+	if err := json.Unmarshal(env.D, &d); err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
+
+func TestMatchmakingFanouts_MatchCompletedEnvelope(t *testing.T) {
+	matchID := uuid.NewString()
+	profileA := uuid.NewString()
+	profileB := uuid.NewString()
+
+	ev := &eventsv1.MatchmakingStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.Now(),
+		Payload: &eventsv1.MatchmakingStreamEvent_MatchCompleted{
+			MatchCompleted: &eventsv1.MatchCompleted{
+				MatchId:         matchID,
+				DurationSeconds: 1200,
+				ProfileIds:      []string{profileA, profileB},
+			},
+		},
+	}
+	b, err := proto.Marshal(ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fanouts, ok := matchmakingFanouts(b)
+	if !ok {
+		t.Fatal("expected ok")
+	}
+	if len(fanouts) != 2 {
+		t.Fatalf("fanouts=%d want 2", len(fanouts))
+	}
+
+	byProfile := map[string]map[string]string{}
+	for _, f := range fanouts {
+		byProfile[f.ProfileID] = matchCompletedPayload(t, f.Envelope)
+	}
+
+	for _, profileID := range []string{profileA, profileB} {
+		d, found := byProfile[profileID]
+		if !found {
+			t.Fatalf("missing profile %s", profileID)
+		}
+		if d["type"] != "match_completed" {
+			t.Fatalf("type=%q want match_completed", d["type"])
+		}
+		if d["match_id"] != matchID {
+			t.Fatalf("profile %s payload=%v", profileID, d)
+		}
+		if d["duration_seconds"] != "1200" {
+			t.Fatalf("duration_seconds=%q want 1200", d["duration_seconds"])
+		}
+	}
+}
+
+func TestDispatchMatchmakingStreamEvent_MatchCompletedFansOutPersonalOp(t *testing.T) {
+	matchID := uuid.NewString()
+	profileA := uuid.NewString()
+	profileB := uuid.NewString()
+
+	hub := newWSHub()
+	regA := hub.attachConn("inst", "conn-a", profileA, 8)
+	regB := hub.attachConn("inst", "conn-b", profileB, 8)
+
+	ev := &eventsv1.MatchmakingStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.Now(),
+		Payload: &eventsv1.MatchmakingStreamEvent_MatchCompleted{
+			MatchCompleted: &eventsv1.MatchCompleted{
+				MatchId:         matchID,
+				DurationSeconds: 600,
+				ProfileIds:      []string{profileA, profileB},
+			},
+		},
+	}
+	payload, err := proto.Marshal(ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dispatchMatchmakingStreamEvent(hub, payload)
+
+	opsA := drainFanoutOps(t, regA, 2*time.Second)
+	opsB := drainFanoutOps(t, regB, 2*time.Second)
+	if !containsOp(opsA, "match_completed") || !containsOp(opsB, "match_completed") {
+		t.Fatalf("opsA=%v opsB=%v", opsA, opsB)
+	}
+}

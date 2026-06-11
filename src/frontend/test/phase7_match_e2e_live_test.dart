@@ -59,7 +59,104 @@ void main() {
         match['voiceRoomId'] as String? ?? match['voice_room_id'] as String?;
     expect(chatId, isNotNull);
     expect(voiceRoomId, isNotNull);
+
+    await _complete(client, base, tokenA, matchId);
+    await _complete(client, base, tokenB, matchId);
+
+    final profileIds = (match['profileIds'] as List<dynamic>? ??
+            match['profile_ids'] as List<dynamic>? ??
+            const [])
+        .cast<String>();
+    final selfB = await _profileId(client, base, tokenB);
+    final ratedId = profileIds.firstWhere(
+      (id) => id != selfB,
+      orElse: () => profileIds.last,
+    );
+
+    await _rate(client, base, tokenA, matchId, ratedId, stars: 5);
+
+    final rating = await _playerRating(
+      client,
+      base,
+      tokenA,
+      ratedId,
+      gameId,
+    );
+    final value = (rating['ratingValue'] as num?)?.toDouble() ??
+        (rating['rating_value'] as num?)?.toDouble();
+    expect(value, 5.0);
   });
+}
+
+Future<String> _profileId(
+  http.Client client,
+  String base,
+  String token,
+) async {
+  final resp = await client.get(
+    Uri.parse('$base/api/v1/users/me'),
+    headers: {'Authorization': 'Bearer $token'},
+  );
+  expect(resp.statusCode, 200);
+  final body = jsonDecode(resp.body) as Map<String, dynamic>;
+  final profile = body['profile'] as Map<String, dynamic>? ??
+      body['active_profile'] as Map<String, dynamic>?;
+  return profile?['id'] as String? ?? '';
+}
+
+Future<void> _complete(
+  http.Client client,
+  String base,
+  String token,
+  String matchId,
+) async {
+  final resp = await client.post(
+    Uri.parse('$base/api/v1/matchmaking/matches/$matchId/complete'),
+    headers: {'Authorization': 'Bearer $token'},
+  );
+  expect(resp.statusCode, 200);
+}
+
+Future<void> _rate(
+  http.Client client,
+  String base,
+  String token,
+  String matchId,
+  String ratedProfileId, {
+  required int stars,
+}) async {
+  final resp = await client.post(
+    Uri.parse('$base/api/v1/matchmaking/matches/$matchId/rate'),
+    headers: {
+      'Authorization': 'Bearer $token',
+      'Content-Type': 'application/json',
+    },
+    body: jsonEncode({
+      'ratedProfileId': ratedProfileId,
+      'stars': stars,
+    }),
+  );
+  expect(resp.statusCode, 200);
+}
+
+Future<Map<String, dynamic>> _playerRating(
+  http.Client client,
+  String base,
+  String token,
+  String profileId,
+  String gameId,
+) async {
+  final resp = await client.get(
+    Uri.parse(
+      '$base/api/v1/matchmaking/players/$profileId/rating?game_id=$gameId',
+    ),
+    headers: {'Authorization': 'Bearer $token'},
+  );
+  expect(resp.statusCode, 200);
+  final body = jsonDecode(resp.body) as Map<String, dynamic>;
+  return body['playerRating'] as Map<String, dynamic>? ??
+      body['player_rating'] as Map<String, dynamic>? ??
+      body;
 }
 
 Future<String> _register(http.Client client, String base, String email) async {

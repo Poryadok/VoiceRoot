@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"google.golang.org/protobuf/proto"
 
@@ -13,11 +14,20 @@ func matchmakingFanouts(data []byte) ([]profileFanout, bool) {
 	if err := proto.Unmarshal(data, &e); err != nil {
 		return nil, false
 	}
-	mf, ok := e.GetPayload().(*eventsv1.MatchmakingStreamEvent_MatchFound)
-	if !ok || mf.MatchFound == nil || mf.MatchFound.GetMatchId() == "" {
+	switch payload := e.GetPayload().(type) {
+	case *eventsv1.MatchmakingStreamEvent_MatchFound:
+		return matchFoundFanouts(payload.MatchFound)
+	case *eventsv1.MatchmakingStreamEvent_MatchCompleted:
+		return matchCompletedFanouts(payload.MatchCompleted)
+	default:
 		return nil, false
 	}
-	ev := mf.MatchFound
+}
+
+func matchFoundFanouts(ev *eventsv1.MatchFound) ([]profileFanout, bool) {
+	if ev == nil || ev.GetMatchId() == "" {
+		return nil, false
+	}
 	payload := map[string]string{
 		"type":     "match_found",
 		"match_id": ev.GetMatchId(),
@@ -34,13 +44,29 @@ func matchmakingFanouts(data []byte) ([]profileFanout, bool) {
 	if len(ev.GetSessionIds()) > 0 {
 		payload["session_id"] = ev.GetSessionIds()[0]
 	}
+	return fanoutsForProfiles(ev.GetProfileIds(), "match_found", payload)
+}
+
+func matchCompletedFanouts(ev *eventsv1.MatchCompleted) ([]profileFanout, bool) {
+	if ev == nil || ev.GetMatchId() == "" {
+		return nil, false
+	}
+	payload := map[string]string{
+		"type":              "match_completed",
+		"match_id":          ev.GetMatchId(),
+		"duration_seconds":  fmt.Sprintf("%d", ev.GetDurationSeconds()),
+	}
+	return fanoutsForProfiles(ev.GetProfileIds(), "match_completed", payload)
+}
+
+func fanoutsForProfiles(profileIDs []string, op string, payload map[string]string) ([]profileFanout, bool) {
 	b, err := json.Marshal(payload)
 	if err != nil {
 		return nil, false
 	}
-	env := fanoutEnvelope{Op: "match_found", D: b}
+	env := fanoutEnvelope{Op: op, D: b}
 	var fanouts []profileFanout
-	for _, profileID := range ev.GetProfileIds() {
+	for _, profileID := range profileIDs {
 		if profileID == "" {
 			continue
 		}

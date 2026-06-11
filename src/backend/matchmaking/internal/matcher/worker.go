@@ -27,12 +27,18 @@ type EventPublisher interface {
 	PublishMatchFound(ctx context.Context, ev MatchFoundEvent) error
 }
 
+// PeerBanChecker reports whether two profiles must not be matched.
+type PeerBanChecker interface {
+	IsPairBanned(ctx context.Context, a, b uuid.UUID) (bool, error)
+}
+
 // Worker polls queues and creates match proposals.
 type Worker struct {
 	Queue    *queue.RedisQueue
 	Sessions *store.SessionStore
 	Matches  *store.MatchStore
 	Games    *store.GameStore
+	Bans     PeerBanChecker
 	Events   EventPublisher
 	Logger   *slog.Logger
 }
@@ -117,12 +123,33 @@ func (w *Worker) tryMatchQueue(ctx context.Context, gameID uuid.UUID, mode confi
 			if !criteria.Compatible(anchorCrit, candCrit, mode) {
 				continue
 			}
+			if w.Bans != nil {
+				banned, err := w.Bans.IsPairBanned(ctx, anchor.ProfileID, candidate.ProfileID)
+				if err != nil {
+					if w.Logger != nil {
+						w.Logger.Warn("peer ban check failed; fail-open", slog.Any("error", err))
+					}
+				} else if banned {
+					continue
+				}
+			}
 			compatible := true
 			for _, existing := range group {
 				existCrit, err := criteria.Parse(existing.Criteria)
 				if err != nil || !criteria.Compatible(existCrit, candCrit, mode) {
 					compatible = false
 					break
+				}
+				if w.Bans != nil {
+					banned, err := w.Bans.IsPairBanned(ctx, existing.ProfileID, candidate.ProfileID)
+					if err != nil {
+						if w.Logger != nil {
+							w.Logger.Warn("peer ban check failed; fail-open", slog.Any("error", err))
+						}
+					} else if banned {
+						compatible = false
+						break
+					}
 				}
 			}
 			if !compatible {

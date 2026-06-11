@@ -142,6 +142,27 @@ final activeSearchSessionProvider = StateProvider<SearchSessionData?>((ref) => n
 /// Active match squad to navigate into after full accept.
 final activeSquadMatchProvider = StateProvider<MatchData?>((ref) => null);
 
+final playerRatingProvider = FutureProvider.autoDispose
+    .family<PlayerRatingData?, ({String profileId, String gameId})>(
+  (ref, args) async {
+    if (args.gameId.isEmpty) return null;
+    final auth = ref.watch(authControllerProvider);
+    final token = auth.session?.accessToken;
+    if (token == null || token.isEmpty) return null;
+    final client = ref.watch(voiceMatchmakingClientProvider);
+    final result = await client.getPlayerRating(
+      authorization: 'Bearer $token',
+      profileId: args.profileId,
+      gameId: args.gameId,
+    );
+    return switch (result) {
+      MatchmakingApiOk(:final data) =>
+        data.gamesPlayed > 0 ? data : null,
+      MatchmakingApiFailure() => null,
+    };
+  },
+);
+
 final selectedCatalogGameProvider =
     FutureProvider.autoDispose<CatalogGame?>((ref) async {
   final gameId = ref.watch(selectedCatalogGameIdProvider);

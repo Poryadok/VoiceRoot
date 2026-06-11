@@ -229,6 +229,38 @@ class SearchSessionData {
   }
 }
 
+class PlayerRatingData {
+  const PlayerRatingData({
+    required this.profileId,
+    required this.gameId,
+    required this.ratingValue,
+    required this.gamesPlayed,
+  });
+
+  final String profileId;
+  final String gameId;
+  final double ratingValue;
+  final int gamesPlayed;
+
+  static PlayerRatingData fromGatewayJson(Map<String, dynamic> json) {
+    final rating = json['playerRating'] as Map<String, dynamic>? ??
+        json['player_rating'] as Map<String, dynamic>? ??
+        json;
+    return PlayerRatingData(
+      profileId: rating['profileId'] as String? ??
+          rating['profile_id'] as String? ??
+          '',
+      gameId: rating['gameId'] as String? ?? rating['game_id'] as String? ?? '',
+      ratingValue: (rating['ratingValue'] as num?)?.toDouble() ??
+          (rating['rating_value'] as num?)?.toDouble() ??
+          0,
+      gamesPlayed: (rating['gamesPlayed'] as num?)?.toInt() ??
+          (rating['games_played'] as num?)?.toInt() ??
+          0,
+    );
+  }
+}
+
 class MatchData {
   const MatchData({
     required this.id,
@@ -420,6 +452,78 @@ class VoiceMatchmakingClient {
       authorization: authorization,
     );
     return _map(result, MatchData.fromGatewayJson);
+  }
+
+  Future<MatchmakingApiResult<MatchData>> completeMatch({
+    required String authorization,
+    required String matchId,
+  }) async {
+    final result = await _gateway.postJson(
+      uri: _gateway.resolve('/api/v1/matchmaking/matches/$matchId/complete'),
+      authorization: authorization,
+      body: const <String, dynamic>{},
+    );
+    return _map(result, MatchData.fromGatewayJson);
+  }
+
+  Future<MatchmakingApiResult<void>> rateMatch({
+    required String authorization,
+    required String matchId,
+    required String ratedProfileId,
+    required int stars,
+  }) async {
+    final result = await _gateway.postJson(
+      uri: _gateway.resolve('/api/v1/matchmaking/matches/$matchId/rate'),
+      authorization: authorization,
+      body: {
+        'ratedProfileId': ratedProfileId,
+        'stars': stars,
+      },
+    );
+    return switch (result) {
+      GatewayHttpOk() => const MatchmakingApiOk(null),
+      GatewayHttpFailure(:final error) => MatchmakingApiFailure(
+        message: error.message,
+        statusCode: error.statusCode,
+      ),
+    };
+  }
+
+  Future<MatchmakingApiResult<PlayerRatingData>> getPlayerRating({
+    required String authorization,
+    required String profileId,
+    required String gameId,
+  }) async {
+    final result = await _gateway.getJson(
+      _gateway.replace(
+        path: '/api/v1/matchmaking/players/$profileId/rating',
+        queryParameters: {'game_id': gameId},
+      ),
+      authorization: authorization,
+    );
+    return _map(result, PlayerRatingData.fromGatewayJson);
+  }
+
+  Future<MatchmakingApiResult<void>> banFromMM({
+    required String authorization,
+    required String targetProfileId,
+    String? reason,
+  }) async {
+    final result = await _gateway.postJson(
+      uri: _gateway.resolve('/api/v1/matchmaking/bans'),
+      authorization: authorization,
+      body: {
+        'targetProfileId': targetProfileId,
+        if (reason != null && reason.isNotEmpty) 'reason': reason,
+      },
+    );
+    return switch (result) {
+      GatewayHttpOk() => const MatchmakingApiOk(null),
+      GatewayHttpFailure(:final error) => MatchmakingApiFailure(
+        message: error.message,
+        statusCode: error.statusCode,
+      ),
+    };
   }
 
   Future<MatchmakingApiResult<RespondToMatchData>> respondToMatch({

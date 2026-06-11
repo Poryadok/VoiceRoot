@@ -1016,4 +1016,51 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get matchFoundRespondError => 'Не удалось ответить на матч';
+
+  @override
+  String get matchSquadLeave => 'Выйти из отряда';
+
+  @override
+  String get matchSquadLeaveError => 'Не удалось выйти из матч-отряда';
+
+  @override
+  String get matchRatingTitle => 'Оцените тиммейтов';
+
+  @override
+  String get matchRatingSubtitle =>
+      'Звёзды можно пропустить для каждого игрока.';
+
+  @override
+  String get matchRatingSkipTeammate => 'Пропустить';
+
+  @override
+  String get matchRatingSkipAll => 'Пропустить всех';
+
+  @override
+  String get matchRatingSkipped => 'Пропущено';
+
+  @override
+  String get matchRatingSubmit => 'Отправить оценки';
+
+  @override
+  String get matchRatingBanTitle => 'Забанить в матчмейкинге?';
+
+  @override
+  String matchRatingBanMessage(String name) {
+    return 'Больше не матчиться с $name?';
+  }
+
+  @override
+  String get matchRatingBanCancel => 'Отмена';
+
+  @override
+  String get matchRatingBanConfirm => 'Забанить';
+
+  @override
+  String get matchRatingBanAction => 'Бан в ММ';
+
+  @override
+  String profileMmRating(String rating) {
+    return 'Рейтинг ММ: $rating ★';
+  }
 }

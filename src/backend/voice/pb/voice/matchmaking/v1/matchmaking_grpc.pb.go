@@ -29,6 +29,7 @@ const (
 	MatchmakingService_GetSearchStatus_FullMethodName       = "/voice.matchmaking.v1.MatchmakingService/GetSearchStatus"
 	MatchmakingService_GetMatch_FullMethodName              = "/voice.matchmaking.v1.MatchmakingService/GetMatch"
 	MatchmakingService_RespondToMatch_FullMethodName        = "/voice.matchmaking.v1.MatchmakingService/RespondToMatch"
+	MatchmakingService_CompleteMatch_FullMethodName         = "/voice.matchmaking.v1.MatchmakingService/CompleteMatch"
 	MatchmakingService_GetMatchHistory_FullMethodName       = "/voice.matchmaking.v1.MatchmakingService/GetMatchHistory"
 	MatchmakingService_RateMatch_FullMethodName             = "/voice.matchmaking.v1.MatchmakingService/RateMatch"
 	MatchmakingService_GetPlayerRating_FullMethodName       = "/voice.matchmaking.v1.MatchmakingService/GetPlayerRating"
@@ -57,6 +58,7 @@ type MatchmakingServiceClient interface {
 	GetSearchStatus(ctx context.Context, in *GetSearchStatusRequest, opts ...grpc.CallOption) (*GetSearchStatusResponse, error)
 	GetMatch(ctx context.Context, in *GetMatchRequest, opts ...grpc.CallOption) (*GetMatchResponse, error)
 	RespondToMatch(ctx context.Context, in *RespondToMatchRequest, opts ...grpc.CallOption) (*RespondToMatchResponse, error)
+	CompleteMatch(ctx context.Context, in *CompleteMatchRequest, opts ...grpc.CallOption) (*CompleteMatchResponse, error)
 	GetMatchHistory(ctx context.Context, in *GetMatchHistoryRequest, opts ...grpc.CallOption) (*GetMatchHistoryResponse, error)
 	RateMatch(ctx context.Context, in *RateMatchRequest, opts ...grpc.CallOption) (*RateMatchResponse, error)
 	GetPlayerRating(ctx context.Context, in *GetPlayerRatingRequest, opts ...grpc.CallOption) (*GetPlayerRatingResponse, error)
@@ -172,6 +174,16 @@ func (c *matchmakingServiceClient) RespondToMatch(ctx context.Context, in *Respo
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(RespondToMatchResponse)
 	err := c.cc.Invoke(ctx, MatchmakingService_RespondToMatch_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchmakingServiceClient) CompleteMatch(ctx context.Context, in *CompleteMatchRequest, opts ...grpc.CallOption) (*CompleteMatchResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CompleteMatchResponse)
+	err := c.cc.Invoke(ctx, MatchmakingService_CompleteMatch_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -294,6 +306,7 @@ type MatchmakingServiceServer interface {
 	GetSearchStatus(context.Context, *GetSearchStatusRequest) (*GetSearchStatusResponse, error)
 	GetMatch(context.Context, *GetMatchRequest) (*GetMatchResponse, error)
 	RespondToMatch(context.Context, *RespondToMatchRequest) (*RespondToMatchResponse, error)
+	CompleteMatch(context.Context, *CompleteMatchRequest) (*CompleteMatchResponse, error)
 	GetMatchHistory(context.Context, *GetMatchHistoryRequest) (*GetMatchHistoryResponse, error)
 	RateMatch(context.Context, *RateMatchRequest) (*RateMatchResponse, error)
 	GetPlayerRating(context.Context, *GetPlayerRatingRequest) (*GetPlayerRatingResponse, error)
@@ -344,6 +357,9 @@ func (UnimplementedMatchmakingServiceServer) GetMatch(context.Context, *GetMatch
 }
 func (UnimplementedMatchmakingServiceServer) RespondToMatch(context.Context, *RespondToMatchRequest) (*RespondToMatchResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RespondToMatch not implemented")
+}
+func (UnimplementedMatchmakingServiceServer) CompleteMatch(context.Context, *CompleteMatchRequest) (*CompleteMatchResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CompleteMatch not implemented")
 }
 func (UnimplementedMatchmakingServiceServer) GetMatchHistory(context.Context, *GetMatchHistoryRequest) (*GetMatchHistoryResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetMatchHistory not implemented")
@@ -576,6 +592,24 @@ func _MatchmakingService_RespondToMatch_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MatchmakingService_CompleteMatch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CompleteMatchRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchmakingServiceServer).CompleteMatch(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchmakingService_CompleteMatch_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchmakingServiceServer).CompleteMatch(ctx, req.(*CompleteMatchRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _MatchmakingService_GetMatchHistory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetMatchHistoryRequest)
 	if err := dec(in); err != nil {
@@ -802,6 +836,10 @@ var MatchmakingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RespondToMatch",
 			Handler:    _MatchmakingService_RespondToMatch_Handler,
+		},
+		{
+			MethodName: "CompleteMatch",
+			Handler:    _MatchmakingService_CompleteMatch_Handler,
 		},
 		{
 			MethodName: "GetMatchHistory",

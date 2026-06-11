@@ -45,6 +45,14 @@ class ProfileDetailSheet extends ConsumerWidget {
     final profileAsync = ref.watch(profileProvider(profileId));
     final mmProfileAsync = ref.watch(playerProfileProvider(profileId));
     final catalogAsync = ref.watch(gameCatalogProvider);
+    final firstGameId = mmProfileAsync.valueOrNull?.entries.firstOrNull?.gameId;
+    final mmRatingAsync = firstGameId == null
+        ? const AsyncValue<PlayerRatingData?>.data(null)
+        : ref.watch(
+            playerRatingProvider(
+              (profileId: profileId, gameId: firstGameId),
+            ),
+          );
     final presence = ref.watch(presenceProvider(profileId));
     final requestsAsync = ref.watch(friendRequestsProvider);
     final activeId = ref.watch(authControllerProvider).activeProfileId;
@@ -97,6 +105,22 @@ class ProfileDetailSheet extends ConsumerWidget {
                               const SizedBox(width: 8),
                               Text(_presenceLabel(context, l10n, presence)),
                             ],
+                          ),
+                          mmRatingAsync.when(
+                            loading: () => const SizedBox.shrink(),
+                            error: (error, stackTrace) => const SizedBox.shrink(),
+                            data: (rating) {
+                              if (rating == null) return const SizedBox.shrink();
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  l10n.profileMmRating(
+                                    rating.ratingValue.toStringAsFixed(1),
+                                  ),
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              );
+                            },
                           ),
                         ],
                       ),

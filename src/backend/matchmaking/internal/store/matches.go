@@ -36,16 +36,44 @@ type MatchParticipant struct {
 
 // Match is a row in matches.
 type Match struct {
-	ID          uuid.UUID
-	GameID      uuid.UUID
-	Mode        string
-	Region      string
-	Participants []MatchParticipant
-	VoiceRoomID *string
-	ChatID      *string
-	Status      string
-	CreatedAt   time.Time
-	CompletedAt *time.Time
+	ID              uuid.UUID
+	GameID          uuid.UUID
+	Mode            string
+	Region          string
+	Participants    []MatchParticipant
+	LeftProfileIDs  []uuid.UUID
+	VoiceRoomID     *string
+	ChatID          *string
+	Status          string
+	CreatedAt       time.Time
+	CompletedAt     *time.Time
+}
+
+// HasLeft reports whether profileID has left the squad.
+func (m Match) HasLeft(profileID uuid.UUID) bool {
+	for _, id := range m.LeftProfileIDs {
+		if id == profileID {
+			return true
+		}
+	}
+	return false
+}
+
+func allParticipantsLeft(m Match) bool {
+	if len(m.Participants) == 0 {
+		return false
+	}
+	left := make(map[uuid.UUID]bool, len(m.LeftProfileIDs))
+	for _, id := range m.LeftProfileIDs {
+		left[id] = true
+	}
+	for _, p := range m.Participants {
+		pid, err := uuid.Parse(p.ProfileID)
+		if err != nil || !left[pid] {
+			return false
+		}
+	}
+	return true
 }
 
 // SlotCount returns the number of participant slots in the match.
@@ -134,18 +162,22 @@ func (s *MatchStore) CreateProposal(ctx context.Context, p CreateProposalParams)
 	}
 
 	var match Match
+	var leftJSON []byte
 	err = tx.QueryRow(ctx, `
 		INSERT INTO matches (id, game_id, mode, region, participants, status, created_at)
 		VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
-		RETURNING id, game_id, mode, region, participants, voice_room_id, chat_id, status, created_at, completed_at
+		RETURNING id, game_id, mode, region, participants, left_profile_ids, voice_room_id, chat_id, status, created_at, completed_at
 	`, matchID, p.GameID, p.Mode, p.Region, string(participantsJSON), MatchStatusPendingAccept, now).Scan(
-		&match.ID, &match.GameID, &match.Mode, &match.Region, &participantsJSON,
+		&match.ID, &match.GameID, &match.Mode, &match.Region, &participantsJSON, &leftJSON,
 		&match.VoiceRoomID, &match.ChatID, &match.Status, &match.CreatedAt, &match.CompletedAt,
 	)
 	if err != nil {
 		return CreateProposalResult{}, err
 	}
 	if err := json.Unmarshal(participantsJSON, &match.Participants); err != nil {
+		return CreateProposalResult{}, err
+	}
+	if err := unmarshalLeftProfileIDs(leftJSON, &match.LeftProfileIDs); err != nil {
 		return CreateProposalResult{}, err
 	}
 
@@ -186,13 +218,13 @@ func (s *MatchStore) Get(ctx context.Context, id uuid.UUID) (Match, error) {
 	if s == nil || s.Pool == nil {
 		return Match{}, errors.New("match store unavailable")
 	}
-	var participantsJSON []byte
+	var participantsJSON, leftJSON []byte
 	var m Match
 	err := s.Pool.QueryRow(ctx, `
-		SELECT id, game_id, mode, region, participants, voice_room_id, chat_id, status, created_at, completed_at
+		SELECT id, game_id, mode, region, participants, left_profile_ids, voice_room_id, chat_id, status, created_at, completed_at
 		FROM matches WHERE id = $1
 	`, id).Scan(
-		&m.ID, &m.GameID, &m.Mode, &m.Region, &participantsJSON,
+		&m.ID, &m.GameID, &m.Mode, &m.Region, &participantsJSON, &leftJSON,
 		&m.VoiceRoomID, &m.ChatID, &m.Status, &m.CreatedAt, &m.CompletedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -202,6 +234,9 @@ func (s *MatchStore) Get(ctx context.Context, id uuid.UUID) (Match, error) {
 		return Match{}, err
 	}
 	if err := json.Unmarshal(participantsJSON, &m.Participants); err != nil {
+		return Match{}, err
+	}
+	if err := unmarshalLeftProfileIDs(leftJSON, &m.LeftProfileIDs); err != nil {
 		return Match{}, err
 	}
 	return m, nil
@@ -305,15 +340,15 @@ func (s *MatchStore) ActivateMatch(ctx context.Context, matchID uuid.UUID, voice
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	now := time.Now().UTC()
-	var participantsJSON []byte
+	var participantsJSON, leftJSON []byte
 	var m Match
 	err = tx.QueryRow(ctx, `
 		UPDATE matches
 		SET status = $2, voice_room_id = $3, chat_id = $4
 		WHERE id = $1 AND status = $5
-		RETURNING id, game_id, mode, region, participants, voice_room_id, chat_id, status, created_at, completed_at
+		RETURNING id, game_id, mode, region, participants, left_profile_ids, voice_room_id, chat_id, status, created_at, completed_at
 	`, matchID, MatchStatusActive, voiceRoomID, chatID, MatchStatusPendingAccept).Scan(
-		&m.ID, &m.GameID, &m.Mode, &m.Region, &participantsJSON,
+		&m.ID, &m.GameID, &m.Mode, &m.Region, &participantsJSON, &leftJSON,
 		&m.VoiceRoomID, &m.ChatID, &m.Status, &m.CreatedAt, &m.CompletedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -323,6 +358,9 @@ func (s *MatchStore) ActivateMatch(ctx context.Context, matchID uuid.UUID, voice
 		return Match{}, err
 	}
 	if err := json.Unmarshal(participantsJSON, &m.Participants); err != nil {
+		return Match{}, err
+	}
+	if err := unmarshalLeftProfileIDs(leftJSON, &m.LeftProfileIDs); err != nil {
 		return Match{}, err
 	}
 
@@ -339,6 +377,106 @@ func (s *MatchStore) ActivateMatch(ctx context.Context, matchID uuid.UUID, voice
 		return Match{}, err
 	}
 	return m, nil
+}
+
+func unmarshalLeftProfileIDs(raw []byte, out *[]uuid.UUID) error {
+	if len(raw) == 0 {
+		*out = nil
+		return nil
+	}
+	var ids []string
+	if err := json.Unmarshal(raw, &ids); err != nil {
+		return err
+	}
+	parsed := make([]uuid.UUID, 0, len(ids))
+	for _, s := range ids {
+		id, err := uuid.Parse(s)
+		if err != nil {
+			continue
+		}
+		parsed = append(parsed, id)
+	}
+	*out = parsed
+	return nil
+}
+
+func marshalLeftProfileIDs(ids []uuid.UUID) (string, error) {
+	strs := make([]string, len(ids))
+	for i, id := range ids {
+		strs[i] = id.String()
+	}
+	b, err := json.Marshal(strs)
+	return string(b), err
+}
+
+// CompleteMatchLeave records a participant leaving an active match squad.
+func (s *MatchStore) CompleteMatchLeave(ctx context.Context, matchID, profileID uuid.UUID) (Match, error) {
+	if s == nil || s.Pool == nil {
+		return Match{}, errors.New("match store unavailable")
+	}
+	match, err := s.Get(ctx, matchID)
+	if err != nil {
+		return Match{}, err
+	}
+	if !matchHasProfileID(match, profileID) {
+		return Match{}, ErrNotMatchParticipant
+	}
+	if match.Status != MatchStatusActive && match.Status != MatchStatusCompleted {
+		return Match{}, errors.New("match not leaveable")
+	}
+
+	left := append([]uuid.UUID{}, match.LeftProfileIDs...)
+	if !match.HasLeft(profileID) {
+		left = append(left, profileID)
+	}
+	leftJSON, err := marshalLeftProfileIDs(left)
+	if err != nil {
+		return Match{}, err
+	}
+
+	now := time.Now().UTC()
+	status := match.Status
+	var completedAt *time.Time
+	if allParticipantsLeft(Match{Participants: match.Participants, LeftProfileIDs: left}) {
+		status = MatchStatusCompleted
+		completedAt = &now
+	}
+
+	var participantsJSON, leftRaw []byte
+	var m Match
+	err = s.Pool.QueryRow(ctx, `
+		UPDATE matches
+		SET left_profile_ids = $2::jsonb,
+		    status = $3,
+		    completed_at = COALESCE($4, completed_at)
+		WHERE id = $1 AND status IN ('active', 'completed')
+		RETURNING id, game_id, mode, region, participants, left_profile_ids, voice_room_id, chat_id, status, created_at, completed_at
+	`, matchID, leftJSON, status, completedAt).Scan(
+		&m.ID, &m.GameID, &m.Mode, &m.Region, &participantsJSON, &leftRaw,
+		&m.VoiceRoomID, &m.ChatID, &m.Status, &m.CreatedAt, &m.CompletedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Match{}, ErrMatchNotFound
+	}
+	if err != nil {
+		return Match{}, err
+	}
+	if err := json.Unmarshal(participantsJSON, &m.Participants); err != nil {
+		return Match{}, err
+	}
+	if err := unmarshalLeftProfileIDs(leftRaw, &m.LeftProfileIDs); err != nil {
+		return Match{}, err
+	}
+	return m, nil
+}
+
+func matchHasProfileID(match Match, profileID uuid.UUID) bool {
+	for _, id := range match.ProfileIDs() {
+		if id == profileID {
+			return true
+		}
+	}
+	return false
 }
 
 // AbandonMatch marks match abandoned and cancels pending sessions.

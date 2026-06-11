@@ -555,5 +555,29 @@
   },
   "matchFoundAccept": "Accept",
   "matchFoundDecline": "Decline",
-  "matchFoundRespondError": "Could not respond to match"
+  "matchFoundRespondError": "Could not respond to match",
+  "matchSquadLeave": "Leave squad",
+  "matchSquadLeaveError": "Could not leave match squad",
+  "matchRatingTitle": "Rate your teammates",
+  "matchRatingSubtitle": "Stars are optional for each player.",
+  "matchRatingSkipTeammate": "Skip",
+  "matchRatingSkipAll": "Skip all",
+  "matchRatingSkipped": "Skipped",
+  "matchRatingSubmit": "Submit ratings",
+  "matchRatingBanTitle": "Ban from matchmaking?",
+  "matchRatingBanMessage": "Stop matching with {name} in matchmaking?",
+  "@matchRatingBanMessage": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "matchRatingBanCancel": "Cancel",
+  "matchRatingBanConfirm": "Ban",
+  "matchRatingBanAction": "Ban from MM",
+  "profileMmRating": "MM rating: {rating} ★",
+  "@profileMmRating": {
+    "placeholders": {
+      "rating": {"type": "String"}
+    }
+  }
 }

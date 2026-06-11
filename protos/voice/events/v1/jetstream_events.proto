@@ -422,6 +422,7 @@ message MatchmakingStreamEvent {
     MatchTimeout match_timeout = 12;
     RatingSubmitted rating_submitted = 13;
     SearchCancelled search_cancelled = 14;
+    MatchCompleted match_completed = 15;
   }
 }
 
@@ -453,10 +454,17 @@ message MatchTimeout {
   string session_id = 1;
 }
 
+message MatchCompleted {
+  string match_id = 1;
+  int64 duration_seconds = 2;
+  repeated string profile_ids = 3;
+}
+
 message RatingSubmitted {
   string match_id = 1;
-  string profile_id = 2;
-  int32 stars = 3;
+  string rater_profile_id = 2;
+  string rated_profile_id = 3;
+  int32 stars = 4;
 }
 
 // --- story.events ---

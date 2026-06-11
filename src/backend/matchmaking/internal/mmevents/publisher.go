@@ -19,10 +19,12 @@ import (
 )
 
 const (
-	streamName           = "matchmaking_events"
-	subjectSearchStarted = "mm.search_started"
-	subjectSearchCancel  = "mm.search_cancelled"
-	subjectMatchFound    = "mm.match_found"
+	streamName            = "matchmaking_events"
+	subjectSearchStarted  = "mm.search_started"
+	subjectSearchCancel   = "mm.search_cancelled"
+	subjectMatchFound     = "mm.match_found"
+	subjectMatchCompleted = "mm.match_completed"
+	subjectRatingSubmitted = "mm.rating_submitted"
 )
 
 // MatchFoundEvent is emitted when a match proposal is created.
@@ -35,11 +37,28 @@ type MatchFoundEvent struct {
 	SessionIDs []string
 }
 
+// MatchCompletedEvent is emitted when all participants left a match squad.
+type MatchCompletedEvent struct {
+	MatchID         string
+	DurationSeconds int64
+	ProfileIDs      []string
+}
+
+// RatingSubmittedEvent is emitted when a peer rating is stored.
+type RatingSubmittedEvent struct {
+	MatchID        string
+	RaterProfileID string
+	RatedProfileID string
+	Stars          int32
+}
+
 // Publisher publishes matchmaking domain events.
 type Publisher interface {
 	PublishSearchStarted(ctx context.Context, sessionID, profileID, gameID, mode, region string) error
 	PublishSearchCancelled(ctx context.Context, sessionID, profileID string) error
 	PublishMatchFound(ctx context.Context, ev MatchFoundEvent) error
+	PublishMatchCompleted(ctx context.Context, ev MatchCompletedEvent) error
+	PublishRatingSubmitted(ctx context.Context, ev RatingSubmittedEvent) error
 	Close() error
 }
 
@@ -50,8 +69,10 @@ func (NoopPublisher) PublishSearchStarted(context.Context, string, string, strin
 	return nil
 }
 func (NoopPublisher) PublishSearchCancelled(context.Context, string, string) error { return nil }
-func (NoopPublisher) PublishMatchFound(context.Context, MatchFoundEvent) error     { return nil }
-func (NoopPublisher) Close() error                                               { return nil }
+func (NoopPublisher) PublishMatchFound(context.Context, MatchFoundEvent) error      { return nil }
+func (NoopPublisher) PublishMatchCompleted(context.Context, MatchCompletedEvent) error { return nil }
+func (NoopPublisher) PublishRatingSubmitted(context.Context, RatingSubmittedEvent) error { return nil }
+func (NoopPublisher) Close() error                                                { return nil }
 
 // searchCancelledJSON is published until generated SearchCancelled proto is wired (buf generate).
 type searchCancelledJSON struct {
@@ -192,6 +213,39 @@ func (p *JetStreamPublisher) PublishMatchFound(ctx context.Context, ev MatchFoun
 		},
 	}
 	return p.publishProto(ctx, subjectMatchFound, env)
+}
+
+// PublishMatchCompleted implements Publisher.
+func (p *JetStreamPublisher) PublishMatchCompleted(ctx context.Context, ev MatchCompletedEvent) error {
+	env := &eventsv1.MatchmakingStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.New(time.Now().UTC()),
+		Payload: &eventsv1.MatchmakingStreamEvent_MatchCompleted{
+			MatchCompleted: &eventsv1.MatchCompleted{
+				MatchId:         ev.MatchID,
+				DurationSeconds: ev.DurationSeconds,
+				ProfileIds:      ev.ProfileIDs,
+			},
+		},
+	}
+	return p.publishProto(ctx, subjectMatchCompleted, env)
+}
+
+// PublishRatingSubmitted implements Publisher.
+func (p *JetStreamPublisher) PublishRatingSubmitted(ctx context.Context, ev RatingSubmittedEvent) error {
+	env := &eventsv1.MatchmakingStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.New(time.Now().UTC()),
+		Payload: &eventsv1.MatchmakingStreamEvent_RatingSubmitted{
+			RatingSubmitted: &eventsv1.RatingSubmitted{
+				MatchId:         ev.MatchID,
+				RaterProfileId:  ev.RaterProfileID,
+				RatedProfileId:  ev.RatedProfileID,
+				Stars:           ev.Stars,
+			},
+		},
+	}
+	return p.publishProto(ctx, subjectRatingSubmitted, env)
 }
 
 // PublishSearchCancelled implements Publisher.

@@ -1011,4 +1011,50 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get matchFoundRespondError => 'Could not respond to match';
+
+  @override
+  String get matchSquadLeave => 'Leave squad';
+
+  @override
+  String get matchSquadLeaveError => 'Could not leave match squad';
+
+  @override
+  String get matchRatingTitle => 'Rate your teammates';
+
+  @override
+  String get matchRatingSubtitle => 'Stars are optional for each player.';
+
+  @override
+  String get matchRatingSkipTeammate => 'Skip';
+
+  @override
+  String get matchRatingSkipAll => 'Skip all';
+
+  @override
+  String get matchRatingSkipped => 'Skipped';
+
+  @override
+  String get matchRatingSubmit => 'Submit ratings';
+
+  @override
+  String get matchRatingBanTitle => 'Ban from matchmaking?';
+
+  @override
+  String matchRatingBanMessage(String name) {
+    return 'Stop matching with $name in matchmaking?';
+  }
+
+  @override
+  String get matchRatingBanCancel => 'Cancel';
+
+  @override
+  String get matchRatingBanConfirm => 'Ban';
+
+  @override
+  String get matchRatingBanAction => 'Ban from MM';
+
+  @override
+  String profileMmRating(String rating) {
+    return 'MM rating: $rating ★';
+  }
 }

@@ -79,6 +79,8 @@ func main() {
 		profileStore := &store.ProfileGamesStore{Pool: pool}
 		sessionStore := &store.SessionStore{Pool: pool}
 		matchStore := &store.MatchStore{Pool: pool}
+		ratingStore := &store.RatingStore{Pool: pool}
+		banStore := &store.BanStore{Pool: pool}
 
 		var events mmevents.Publisher = mmevents.NoopPublisher{}
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
@@ -141,6 +143,8 @@ func main() {
 			ProfileGames: profileStore,
 			Sessions:     sessionStore,
 			Matches:      matchStore,
+			Ratings:      ratingStore,
+			Bans:         banStore,
 			Queue:        redisQueue,
 			Events:       events,
 			Squad:        squadProvisioner,
@@ -154,6 +158,7 @@ func main() {
 				Sessions: sessionStore,
 				Matches:  matchStore,
 				Games:    gameStore,
+				Bans:     banStore,
 				Events:   matcher.MMEventsAdapter{Pub: events},
 				Logger:   logger,
 			}

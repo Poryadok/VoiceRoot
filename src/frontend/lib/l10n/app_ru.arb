@@ -533,5 +533,19 @@
   },
   "matchFoundAccept": "Принять",
   "matchFoundDecline": "Отклонить",
-  "matchFoundRespondError": "Не удалось ответить на матч"
+  "matchFoundRespondError": "Не удалось ответить на матч",
+  "matchSquadLeave": "Выйти из отряда",
+  "matchSquadLeaveError": "Не удалось выйти из матч-отряда",
+  "matchRatingTitle": "Оцените тиммейтов",
+  "matchRatingSubtitle": "Звёзды можно пропустить для каждого игрока.",
+  "matchRatingSkipTeammate": "Пропустить",
+  "matchRatingSkipAll": "Пропустить всех",
+  "matchRatingSkipped": "Пропущено",
+  "matchRatingSubmit": "Отправить оценки",
+  "matchRatingBanTitle": "Забанить в матчмейкинге?",
+  "matchRatingBanMessage": "Больше не матчиться с {name}?",
+  "matchRatingBanCancel": "Отмена",
+  "matchRatingBanConfirm": "Забанить",
+  "matchRatingBanAction": "Бан в ММ",
+  "profileMmRating": "Рейтинг ММ: {rating} ★"
 }

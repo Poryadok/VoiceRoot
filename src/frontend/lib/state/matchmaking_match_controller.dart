@@ -9,6 +9,7 @@ import '../ui/matchmaking/match_found_overlay.dart';
 import 'auth_providers.dart';
 import 'chat_providers.dart';
 import 'matchmaking_providers.dart';
+import 'matchmaking_rating_controller.dart';
 
 class PendingMatchState {
   const PendingMatchState({this.match});
@@ -47,6 +48,14 @@ class MatchmakingMatchController extends Notifier<PendingMatchState> {
       }
       return;
     }
+    if (frame.op == 'match_completed') {
+      final data = frame.data;
+      final matchId = data?['match_id'] as String?;
+      if (matchId != null && matchId.isNotEmpty) {
+        unawaited(_loadCompletedForRating(matchId));
+      }
+      return;
+    }
     if (frame.op == 'notification' && dataIsMatchFound(frame.data)) {
       onPushNotificationData(frame.data);
     }
@@ -54,6 +63,21 @@ class MatchmakingMatchController extends Notifier<PendingMatchState> {
 
   bool dataIsMatchFound(Map<String, dynamic>? data) =>
       data != null && data['type'] == 'match_found';
+
+  Future<void> _loadCompletedForRating(String matchId) async {
+    final token = ref.read(authControllerProvider).session?.accessToken;
+    if (token == null || token.isEmpty) return;
+    final client = ref.read(voiceMatchmakingClientProvider);
+    final result = await client.getMatch(
+      authorization: 'Bearer $token',
+      matchId: matchId,
+    );
+    if (result is! MatchmakingApiOk<MatchData>) return;
+    if (result.data.status != 'completed') return;
+    ref.read(matchmakingRatingControllerProvider.notifier).showRatingForMatch(
+          result.data,
+        );
+  }
 
   Future<void> _loadAndShow(String matchId) async {
     final token = ref.read(authControllerProvider).session?.accessToken;

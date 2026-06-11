@@ -21,7 +21,7 @@ import 'ui/call/call_error_listener.dart';
 import 'ui/call/incoming_call_overlay.dart';
 import 'ui/call/outgoing_call_overlay.dart';
 import 'state/matchmaking_match_controller.dart';
-import 'ui/matchmaking/match_found_overlay.dart';
+import 'state/matchmaking_rating_controller.dart';
 import 'ui/matchmaking/match_squad_navigator.dart';
 import 'ui/chat/chat_room_panel.dart';
 import 'ui/core/profile_accent_dot.dart';
@@ -276,6 +276,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
               ),
               const IncomingCallOverlay(),
               const MatchmakingMatchOverlayHost(),
+              const MatchRatingOverlayHost(),
               const OutgoingCallOverlay(),
               const SafeArea(child: ActiveCallPanel()),
             ],
