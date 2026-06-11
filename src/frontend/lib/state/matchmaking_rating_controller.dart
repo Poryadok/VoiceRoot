@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../backend/matchmaking_client.dart';
+import '../l10n/app_localizations.dart';
 import '../ui/matchmaking/match_rating_overlay.dart';
 import 'auth_providers.dart';
 import 'matchmaking_providers.dart';
@@ -57,12 +58,13 @@ class MatchRatingOverlayHost extends ConsumerWidget {
         raterProfileId: raterId,
         teammates: teammates,
         onRate: (profileId, stars) => _rate(
+          context,
           ref,
           pending.id,
           profileId,
           stars,
         ),
-        onBan: (profileId) => _ban(ref, profileId),
+        onBan: (profileId) => _ban(context, ref, profileId),
         onSkipAll: () =>
             ref.read(matchmakingRatingControllerProvider.notifier).clear(),
         onDone: () =>
@@ -71,31 +73,56 @@ class MatchRatingOverlayHost extends ConsumerWidget {
     );
   }
 
-  Future<void> _rate(
+  Future<bool> _rate(
+    BuildContext context,
     WidgetRef ref,
     String matchId,
     String profileId,
     int stars,
   ) async {
     final token = ref.read(authControllerProvider).session?.accessToken;
-    if (token == null || token.isEmpty) return;
+    if (token == null || token.isEmpty) return false;
     final client = ref.read(voiceMatchmakingClientProvider);
-    await client.rateMatch(
+    final result = await client.rateMatch(
       authorization: 'Bearer $token',
       matchId: matchId,
       ratedProfileId: profileId,
       stars: stars,
     );
+    if (result is MatchmakingApiFailure) {
+      if (context.mounted) {
+        final l10n = AppLocalizations.of(context)!;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.matchRatingSubmitError)),
+        );
+      }
+      return false;
+    }
+    return true;
   }
 
-  Future<void> _ban(WidgetRef ref, String profileId) async {
+  Future<bool> _ban(
+    BuildContext context,
+    WidgetRef ref,
+    String profileId,
+  ) async {
     final token = ref.read(authControllerProvider).session?.accessToken;
-    if (token == null || token.isEmpty) return;
+    if (token == null || token.isEmpty) return false;
     final client = ref.read(voiceMatchmakingClientProvider);
-    await client.banFromMM(
+    final result = await client.banFromMM(
       authorization: 'Bearer $token',
       targetProfileId: profileId,
       reason: 'low_match_rating',
     );
+    if (result is MatchmakingApiFailure) {
+      if (context.mounted) {
+        final l10n = AppLocalizations.of(context)!;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.matchRatingBanError)),
+        );
+      }
+      return false;
+    }
+    return true;
   }
 }

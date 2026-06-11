@@ -1054,6 +1054,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get matchRatingBanAction => 'Ban from MM';
 
   @override
+  String get matchRatingSubmitError => 'Could not submit rating';
+
+  @override
+  String get matchRatingBanError => 'Could not ban from matchmaking';
+
+  @override
   String profileMmRating(String rating) {
     return 'MM rating: $rating ★';
   }

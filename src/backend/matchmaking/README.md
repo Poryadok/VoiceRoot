@@ -27,7 +27,9 @@ Phase 7: game catalog, player profile entries, and solo search queue.
 
 - Catalog and profile RPCs work with Postgres only.
 - `StartSearch` returns **Unavailable** when Redis is down or unreachable (queue infra required).
-- NATS publish failures are logged; search still persists (fail-open on events).
+- NATS publish failures are logged; search, `CompleteMatch`, and `RateMatch` still persist after DB commit (fail-open on events).
+- Peer-ban lookup failures in the matcher worker are fail-open (matching continues).
+- Client rating UI is non-blocking: submit/ban errors show a toast; the overlay can still be dismissed.
 
 ## Database
 

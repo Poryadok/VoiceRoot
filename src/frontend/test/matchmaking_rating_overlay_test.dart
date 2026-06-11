@@ -62,6 +62,7 @@ void main() {
             onRate: (profileId, stars) async {
               ratedProfileId = profileId;
               submittedStars = stars;
+              return true;
             },
           ),
         ),
@@ -95,6 +96,7 @@ void main() {
             ],
             onBan: (profileId) async {
               bannedProfileId = profileId;
+              return true;
             },
           ),
         ),

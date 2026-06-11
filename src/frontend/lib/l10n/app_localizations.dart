@@ -1964,6 +1964,18 @@ abstract class AppLocalizations {
   /// **'Ban from MM'**
   String get matchRatingBanAction;
 
+  /// No description provided for @matchRatingSubmitError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not submit rating'**
+  String get matchRatingSubmitError;
+
+  /// No description provided for @matchRatingBanError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not ban from matchmaking'**
+  String get matchRatingBanError;
+
   /// No description provided for @profileMmRating.
   ///
   /// In en, this message translates to:

@@ -1060,6 +1060,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get matchRatingBanAction => 'Бан в ММ';
 
   @override
+  String get matchRatingSubmitError => 'Не удалось отправить оценку';
+
+  @override
+  String get matchRatingBanError => 'Не удалось забанить в матчмейкинге';
+
+  @override
   String profileMmRating(String rating) {
     return 'Рейтинг ММ: $rating ★';
   }

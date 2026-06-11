@@ -574,6 +574,8 @@
   "matchRatingBanCancel": "Cancel",
   "matchRatingBanConfirm": "Ban",
   "matchRatingBanAction": "Ban from MM",
+  "matchRatingSubmitError": "Could not submit rating",
+  "matchRatingBanError": "Could not ban from matchmaking",
   "profileMmRating": "MM rating: {rating} ★",
   "@profileMmRating": {
     "placeholders": {

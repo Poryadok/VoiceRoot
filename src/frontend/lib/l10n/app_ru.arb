@@ -547,5 +547,7 @@
   "matchRatingBanCancel": "Отмена",
   "matchRatingBanConfirm": "Забанить",
   "matchRatingBanAction": "Бан в ММ",
+  "matchRatingSubmitError": "Не удалось отправить оценку",
+  "matchRatingBanError": "Не удалось забанить в матчмейкинге",
   "profileMmRating": "Рейтинг ММ: {rating} ★"
 }

@@ -29,8 +29,8 @@ class MatchRatingOverlay extends StatefulWidget {
   final MatchData match;
   final String raterProfileId;
   final List<RatedTeammate> teammates;
-  final Future<void> Function(String profileId, int stars)? onRate;
-  final Future<void> Function(String profileId)? onBan;
+  final Future<bool> Function(String profileId, int stars)? onRate;
+  final Future<bool> Function(String profileId)? onBan;
   final VoidCallback? onSkipAll;
   final VoidCallback? onDone;
 
@@ -66,7 +66,9 @@ class _MatchRatingOverlayState extends State<MatchRatingOverlay> {
         if (_skipped.contains(teammate.profileId)) continue;
         final stars = _stars[teammate.profileId];
         if (stars == null) continue;
-        await widget.onRate?.call(teammate.profileId, stars);
+        final rated = await widget.onRate?.call(teammate.profileId, stars) ??
+            true;
+        if (!rated) continue;
         if (stars <= 2) {
           final ban = await _confirmBan(teammate);
           if (ban) {
