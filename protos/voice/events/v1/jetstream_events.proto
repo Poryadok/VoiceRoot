@@ -421,6 +421,7 @@ message MatchmakingStreamEvent {
     MatchFound match_found = 11;
     MatchTimeout match_timeout = 12;
     RatingSubmitted rating_submitted = 13;
+    SearchCancelled search_cancelled = 14;
   }
 }
 
@@ -428,6 +429,13 @@ message SearchStarted {
   string session_id = 1;
   string profile_id = 2;
   string game_id = 3;
+  string mode = 4;
+  string region = 5;
+}
+
+message SearchCancelled {
+  string session_id = 1;
+  string profile_id = 2;
 }
 
 message MatchFound {

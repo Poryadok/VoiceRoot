@@ -194,6 +194,38 @@ class PlayerProfileData {
   final List<PlayerGameEntry> entries;
 }
 
+class SearchSessionData {
+  const SearchSessionData({
+    required this.id,
+    required this.profileId,
+    required this.gameId,
+    required this.mode,
+    required this.criteriaJson,
+    required this.status,
+  });
+
+  final String id;
+  final String profileId;
+  final String gameId;
+  final String mode;
+  final String criteriaJson;
+  final String status;
+
+  static SearchSessionData fromGatewayJson(Map<String, dynamic> json) {
+    final session = json['searchSession'] as Map<String, dynamic>? ??
+        json['search_session'] as Map<String, dynamic>? ??
+        json;
+    return SearchSessionData(
+      id: session['id'] as String? ?? '',
+      profileId: session['profileId'] as String? ?? session['profile_id'] as String? ?? '',
+      gameId: session['gameId'] as String? ?? session['game_id'] as String? ?? '',
+      mode: session['mode'] as String? ?? '',
+      criteriaJson: session['criteriaJson'] as String? ?? session['criteria_json'] as String? ?? '',
+      status: session['status'] as String? ?? '',
+    );
+  }
+}
+
 /// Gateway client for /api/v1/matchmaking/games/** (Phase 7 catalog).
 class VoiceMatchmakingClient {
   VoiceMatchmakingClient({required GatewayHttpClient gateway}) : _gateway = gateway;
@@ -284,6 +316,52 @@ class VoiceMatchmakingClient {
       final entry = data['entry'] as Map<String, dynamic>? ?? data;
       return PlayerGameEntry.fromGatewayJson(entry);
     });
+  }
+
+  Future<MatchmakingApiResult<SearchSessionData>> startSearch({
+    required String authorization,
+    required String gameId,
+    required String mode,
+    required Map<String, dynamic> criteria,
+  }) async {
+    final result = await _gateway.postJson(
+      uri: _gateway.resolve('/api/v1/matchmaking/search'),
+      authorization: authorization,
+      body: {
+        'gameId': gameId,
+        'mode': mode,
+        'criteriaJson': jsonEncode(criteria),
+      },
+    );
+    return _map(result, SearchSessionData.fromGatewayJson);
+  }
+
+  Future<MatchmakingApiResult<SearchSessionData>> getSearchStatus({
+    required String authorization,
+    required String sessionId,
+  }) async {
+    final result = await _gateway.getJson(
+      _gateway.resolve('/api/v1/matchmaking/search/$sessionId'),
+      authorization: authorization,
+    );
+    return _map(result, SearchSessionData.fromGatewayJson);
+  }
+
+  Future<MatchmakingApiResult<void>> cancelSearch({
+    required String authorization,
+    required String sessionId,
+  }) async {
+    final result = await _gateway.deleteEmpty(
+      uri: _gateway.resolve('/api/v1/matchmaking/search/$sessionId'),
+      authorization: authorization,
+    );
+    return switch (result) {
+      GatewayHttpOk() => const MatchmakingApiOk(null),
+      GatewayHttpFailure(:final error) => MatchmakingApiFailure(
+        message: error.message,
+        statusCode: error.statusCode,
+      ),
+    };
   }
 
   Future<MatchmakingApiResult<void>> deletePlayerGameEntry({

@@ -966,4 +966,37 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get playerProfileForGame => 'Мой профиль для этой игры';
+
+  @override
+  String get queueSearchStart => 'Встать в очередь';
+
+  @override
+  String get queueSearchTitle => 'Поиск тиммейтов';
+
+  @override
+  String get queueSearchSearching => 'Ищем тиммейтов…';
+
+  @override
+  String get queueSearchCancel => 'Отменить поиск';
+
+  @override
+  String get queueSearchRegion => 'Регион';
+
+  @override
+  String get queueSearchRole => 'Ваша роль';
+
+  @override
+  String get queueSearchRank => 'Ваш ранг';
+
+  @override
+  String get queueSearchSoughtRankMin => 'Мин. ранг в поиске';
+
+  @override
+  String get queueSearchSoughtRankMax => 'Макс. ранг в поиске';
+
+  @override
+  String get queueSearchStartError => 'Не удалось начать поиск';
+
+  @override
+  String get queueSearchCancelError => 'Не удалось отменить поиск';
 }

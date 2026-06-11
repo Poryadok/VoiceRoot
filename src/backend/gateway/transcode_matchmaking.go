@@ -19,6 +19,55 @@ func (t *transcoder) serveMatchmaking(w http.ResponseWriter, r *http.Request, re
 		sub := strings.TrimPrefix(rest, "games")
 		sub = strings.TrimPrefix(sub, "/")
 		return t.serveMatchmakingGames(w, r, sub)
+	case strings.HasPrefix(rest, "search"):
+		sub := strings.TrimPrefix(rest, "search")
+		sub = strings.TrimPrefix(sub, "/")
+		return t.serveMatchmakingSearch(w, r, sub)
+	default:
+		return false
+	}
+}
+
+func (t *transcoder) serveMatchmakingSearch(w http.ResponseWriter, r *http.Request, rest string) bool {
+	ctx := withGRPCMetadata(r.Context(), r)
+
+	switch {
+	case r.Method == http.MethodPost && rest == "":
+		req := &matchmakingv1.StartSearchRequest{}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.matchmaking.StartSearch(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodGet && rest != "" && !strings.Contains(rest, "/"):
+		resp, err := t.clients.matchmaking.GetSearchStatus(ctx, &matchmakingv1.GetSearchStatusRequest{
+			SessionId: rest,
+		})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodDelete && rest != "" && !strings.Contains(rest, "/"):
+		_, err := t.clients.matchmaking.CancelSearch(ctx, &matchmakingv1.CancelSearchRequest{
+			SessionId: rest,
+		})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, &matchmakingv1.CancelSearchResponse{})
+		return true
+
 	default:
 		return false
 	}

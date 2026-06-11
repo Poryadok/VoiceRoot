@@ -3,6 +3,7 @@ package grpcsvc
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
@@ -12,16 +13,22 @@ import (
 
 	"voice/backend/matchmaking/internal/authctx"
 	"voice/backend/matchmaking/internal/config"
+	"voice/backend/matchmaking/internal/mmevents"
+	"voice/backend/matchmaking/internal/queue"
 	"voice/backend/matchmaking/internal/store"
 
 	matchmakingv1 "voice.app/voice/matchmaking/v1"
 )
 
-// MatchmakingGRPC implements catalog RPCs for Phase 7.
+// MatchmakingGRPC implements catalog and search RPCs for Phase 7.
 type MatchmakingGRPC struct {
 	matchmakingv1.UnimplementedMatchmakingServiceServer
 	Games        *store.GameStore
 	ProfileGames *store.ProfileGamesStore
+	Sessions     *store.SessionStore
+	Queue        *queue.RedisQueue
+	Events       mmevents.Publisher
+	Logger       *slog.Logger
 }
 
 func (s *MatchmakingGRPC) ListGames(ctx context.Context, req *matchmakingv1.ListGamesRequest) (*matchmakingv1.ListGamesResponse, error) {

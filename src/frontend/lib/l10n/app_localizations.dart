@@ -1789,6 +1789,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'My profile for this game'**
   String get playerProfileForGame;
+
+  /// No description provided for @queueSearchStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Start queue'**
+  String get queueSearchStart;
+
+  /// No description provided for @queueSearchTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Find teammates'**
+  String get queueSearchTitle;
+
+  /// No description provided for @queueSearchSearching.
+  ///
+  /// In en, this message translates to:
+  /// **'Searching for teammates…'**
+  String get queueSearchSearching;
+
+  /// No description provided for @queueSearchCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel search'**
+  String get queueSearchCancel;
+
+  /// No description provided for @queueSearchRegion.
+  ///
+  /// In en, this message translates to:
+  /// **'Region'**
+  String get queueSearchRegion;
+
+  /// No description provided for @queueSearchRole.
+  ///
+  /// In en, this message translates to:
+  /// **'Your role'**
+  String get queueSearchRole;
+
+  /// No description provided for @queueSearchRank.
+  ///
+  /// In en, this message translates to:
+  /// **'Your rank'**
+  String get queueSearchRank;
+
+  /// No description provided for @queueSearchSoughtRankMin.
+  ///
+  /// In en, this message translates to:
+  /// **'Min rank sought'**
+  String get queueSearchSoughtRankMin;
+
+  /// No description provided for @queueSearchSoughtRankMax.
+  ///
+  /// In en, this message translates to:
+  /// **'Max rank sought'**
+  String get queueSearchSoughtRankMax;
+
+  /// No description provided for @queueSearchStartError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not start search'**
+  String get queueSearchStartError;
+
+  /// No description provided for @queueSearchCancelError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not cancel search'**
+  String get queueSearchCancelError;
 }
 
 class _AppLocalizationsDelegate

@@ -136,6 +136,9 @@ final playerProfileActionsProvider = Provider<PlayerProfileActions>((ref) {
   return PlayerProfileActions(ref);
 });
 
+/// Active MM search session for queue UI (solo v1).
+final activeSearchSessionProvider = StateProvider<SearchSessionData?>((ref) => null);
+
 final selectedCatalogGameProvider =
     FutureProvider.autoDispose<CatalogGame?>((ref) async {
   final gameId = ref.watch(selectedCatalogGameIdProvider);

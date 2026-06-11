@@ -511,5 +511,16 @@
   "playerProfileAddGame": "Добавить игру",
   "playerProfileSave": "Сохранить",
   "playerProfileSection": "Матчмейкинг",
-  "playerProfileForGame": "Мой профиль для этой игры"
+  "playerProfileForGame": "Мой профиль для этой игры",
+  "queueSearchStart": "Встать в очередь",
+  "queueSearchTitle": "Поиск тиммейтов",
+  "queueSearchSearching": "Ищем тиммейтов…",
+  "queueSearchCancel": "Отменить поиск",
+  "queueSearchRegion": "Регион",
+  "queueSearchRole": "Ваша роль",
+  "queueSearchRank": "Ваш ранг",
+  "queueSearchSoughtRankMin": "Мин. ранг в поиске",
+  "queueSearchSoughtRankMax": "Макс. ранг в поиске",
+  "queueSearchStartError": "Не удалось начать поиск",
+  "queueSearchCancelError": "Не удалось отменить поиск"
 }

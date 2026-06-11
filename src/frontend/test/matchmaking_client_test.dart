@@ -38,6 +38,48 @@ void main() {
     expect(cfg.modes.first.ranks.last.name, 'Ancient');
   });
 
+  test('startSearch posts criteria to gateway', () async {
+    String? path;
+    String? body;
+    final client = VoiceMatchmakingClient(
+      gateway: GatewayHttpClient(
+        httpClient: MockClient((request) async {
+          path = request.url.path;
+          body = request.body;
+          return http.Response(
+            jsonEncode({
+              'searchSession': {
+                'id': 'sess-1',
+                'profileId': 'p1',
+                'gameId': 'g1',
+                'mode': '5v5 Ranked',
+                'criteriaJson': '{"region":"eu"}',
+                'status': 'searching',
+              },
+            }),
+            200,
+          );
+        }),
+        config: const GatewayConfig(baseUrl: 'http://api.test'),
+      ),
+    );
+    final result = await client.startSearch(
+      authorization: 'Bearer t',
+      gameId: 'g1',
+      mode: '5v5 Ranked',
+      criteria: {
+        'region': 'eu',
+        'self': {'role': 'Carry', 'rank': 'Herald'},
+      },
+    );
+    expect(path, '/api/v1/matchmaking/search');
+    expect(body, contains('criteriaJson'));
+    expect(result, isA<MatchmakingApiOk<SearchSessionData>>());
+    final session = (result as MatchmakingApiOk<SearchSessionData>).data;
+    expect(session.status, 'searching');
+    expect(session.id, 'sess-1');
+  });
+
   test('listGames loads catalog from gateway', () async {
     String? path;
     final client = VoiceMatchmakingClient(

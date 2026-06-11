@@ -4,6 +4,7 @@ import '../../backend/matchmaking_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/voice_colors.dart';
 import 'player_profile_sheet.dart';
+import 'queue_search_screen.dart';
 
 /// Game page with modes, in-game roles and ranks from catalog config.
 class GameDetailScreen extends StatelessWidget {
@@ -79,6 +80,18 @@ class GameDetailScreen extends StatelessWidget {
                 ],
               ),
             ],
+            const SizedBox(height: 12),
+            FilledButton(
+              key: Key('game_detail_start_queue_${mode.name}'),
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => QueueSearchScreen(game: game, mode: mode),
+                  ),
+                );
+              },
+              child: Text(l10n.queueSearchStart),
+            ),
           ],
           const SizedBox(height: 24),
           OutlinedButton.icon(

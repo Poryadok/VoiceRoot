@@ -59,6 +59,42 @@ func (s *recordingMatchmakingGRPC) CreateGame(_ context.Context, req *matchmakin
 	}, nil
 }
 
+type recordingMatchmakingSearchGRPC struct {
+	recordingMatchmakingGRPC
+	lastStart  *matchmakingv1.StartSearchRequest
+	lastCancel *matchmakingv1.CancelSearchRequest
+	lastStatus *matchmakingv1.GetSearchStatusRequest
+}
+
+func (s *recordingMatchmakingSearchGRPC) StartSearch(_ context.Context, req *matchmakingv1.StartSearchRequest) (*matchmakingv1.StartSearchResponse, error) {
+	s.lastStart = req
+	return &matchmakingv1.StartSearchResponse{
+		SearchSession: &matchmakingv1.SearchSession{
+			Id:           "session-1",
+			ProfileId:    "profile-1",
+			GameId:       req.GetGameId(),
+			Mode:         req.GetMode(),
+			CriteriaJson: req.GetCriteriaJson(),
+			Status:       "searching",
+		},
+	}, nil
+}
+
+func (s *recordingMatchmakingSearchGRPC) CancelSearch(_ context.Context, req *matchmakingv1.CancelSearchRequest) (*matchmakingv1.CancelSearchResponse, error) {
+	s.lastCancel = req
+	return &matchmakingv1.CancelSearchResponse{}, nil
+}
+
+func (s *recordingMatchmakingSearchGRPC) GetSearchStatus(_ context.Context, req *matchmakingv1.GetSearchStatusRequest) (*matchmakingv1.GetSearchStatusResponse, error) {
+	s.lastStatus = req
+	return &matchmakingv1.GetSearchStatusResponse{
+		SearchSession: &matchmakingv1.SearchSession{
+			Id:     req.GetSessionId(),
+			Status: "searching",
+		},
+	}, nil
+}
+
 func startBufconnMatchmakingConn(t *testing.T, impl matchmakingv1.MatchmakingServiceServer) (grpc.ClientConnInterface, func()) {
 	t.Helper()
 	lis := bufconn.Listen(1 << 20)
@@ -153,6 +189,65 @@ func TestTranscodeMatchmakingCreateGameRequiresAuth(t *testing.T) {
 	})
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "New Game", grpcRec.lastCreate.GetName())
+}
+
+func TestTranscodeMatchmakingStartSearch(t *testing.T) {
+	t.Parallel()
+	grpcRec := &recordingMatchmakingSearchGRPC{}
+	conn, cleanup := startBufconnMatchmakingConn(t, grpcRec)
+	t.Cleanup(cleanup)
+
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+		},
+		transcoder: &transcoder{clients: grpcClients{matchmaking: matchmakingv1.NewMatchmakingServiceClient(conn)}},
+	})
+	body := `{"gameId":"game-1","mode":"5v5 Ranked","criteriaJson":"{\"region\":\"eu\"}"}`
+	rec := performRequest(h, http.MethodPost, "/api/v1/matchmaking/search", body, map[string]string{
+		"Authorization": "Bearer valid-user-token",
+		"Content-Type":  "application/json",
+	})
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "game-1", grpcRec.lastStart.GetGameId())
+}
+
+func TestTranscodeMatchmakingGetSearchStatus(t *testing.T) {
+	t.Parallel()
+	grpcRec := &recordingMatchmakingSearchGRPC{}
+	conn, cleanup := startBufconnMatchmakingConn(t, grpcRec)
+	t.Cleanup(cleanup)
+
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+		},
+		transcoder: &transcoder{clients: grpcClients{matchmaking: matchmakingv1.NewMatchmakingServiceClient(conn)}},
+	})
+	rec := performRequest(h, http.MethodGet, "/api/v1/matchmaking/search/session-1", "", map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "session-1", grpcRec.lastStatus.GetSessionId())
+}
+
+func TestTranscodeMatchmakingCancelSearch(t *testing.T) {
+	t.Parallel()
+	grpcRec := &recordingMatchmakingSearchGRPC{}
+	conn, cleanup := startBufconnMatchmakingConn(t, grpcRec)
+	t.Cleanup(cleanup)
+
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+		},
+		transcoder: &transcoder{clients: grpcClients{matchmaking: matchmakingv1.NewMatchmakingServiceClient(conn)}},
+	})
+	rec := performRequest(h, http.MethodDelete, "/api/v1/matchmaking/search/session-1", "", map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "session-1", grpcRec.lastCancel.GetSessionId())
 }
 
 func TestTranscodeMatchmakingUnavailableWhenClientNil(t *testing.T) {

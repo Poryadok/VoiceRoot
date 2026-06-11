@@ -961,4 +961,37 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playerProfileForGame => 'My profile for this game';
+
+  @override
+  String get queueSearchStart => 'Start queue';
+
+  @override
+  String get queueSearchTitle => 'Find teammates';
+
+  @override
+  String get queueSearchSearching => 'Searching for teammates…';
+
+  @override
+  String get queueSearchCancel => 'Cancel search';
+
+  @override
+  String get queueSearchRegion => 'Region';
+
+  @override
+  String get queueSearchRole => 'Your role';
+
+  @override
+  String get queueSearchRank => 'Your rank';
+
+  @override
+  String get queueSearchSoughtRankMin => 'Min rank sought';
+
+  @override
+  String get queueSearchSoughtRankMax => 'Max rank sought';
+
+  @override
+  String get queueSearchStartError => 'Could not start search';
+
+  @override
+  String get queueSearchCancelError => 'Could not cancel search';
 }

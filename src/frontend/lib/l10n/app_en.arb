@@ -533,5 +533,16 @@
   "playerProfileAddGame": "Add game",
   "playerProfileSave": "Save game profile",
   "playerProfileSection": "Matchmaking",
-  "playerProfileForGame": "My profile for this game"
+  "playerProfileForGame": "My profile for this game",
+  "queueSearchStart": "Start queue",
+  "queueSearchTitle": "Find teammates",
+  "queueSearchSearching": "Searching for teammates…",
+  "queueSearchCancel": "Cancel search",
+  "queueSearchRegion": "Region",
+  "queueSearchRole": "Your role",
+  "queueSearchRank": "Your rank",
+  "queueSearchSoughtRankMin": "Min rank sought",
+  "queueSearchSoughtRankMax": "Max rank sought",
+  "queueSearchStartError": "Could not start search",
+  "queueSearchCancelError": "Could not cancel search"
 }

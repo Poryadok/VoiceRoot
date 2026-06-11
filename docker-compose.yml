@@ -300,9 +300,15 @@ services:
       LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/matchmaking_db?sslmode=disable
       MATCHMAKING_GRPC_LISTEN: :9090
+      MATCHMAKING_REDIS_ADDR: redis:6379
+      NATS_URL: nats://nats:4222
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_started
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
       interval: 5s
