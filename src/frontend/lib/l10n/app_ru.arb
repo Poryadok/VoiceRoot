@@ -522,5 +522,16 @@
   "queueSearchSoughtRankMin": "Мин. ранг в поиске",
   "queueSearchSoughtRankMax": "Макс. ранг в поиске",
   "queueSearchStartError": "Не удалось начать поиск",
-  "queueSearchCancelError": "Не удалось отменить поиск"
+  "queueSearchCancelError": "Не удалось отменить поиск",
+  "matchFoundTitle": "Матч найден",
+  "matchFoundSubtitle": "{gameName} · {mode}",
+  "@matchFoundSubtitle": {
+    "placeholders": {
+      "gameName": {"type": "String"},
+      "mode": {"type": "String"}
+    }
+  },
+  "matchFoundAccept": "Принять",
+  "matchFoundDecline": "Отклонить",
+  "matchFoundRespondError": "Не удалось ответить на матч"
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"log/slog"
 	"net"
@@ -15,18 +16,41 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
+	"google.golang.org/grpc/credentials/insecure"
 
 	grpcsvc "voice/backend/matchmaking/internal/grpcsvc"
+	"voice/backend/matchmaking/internal/matcher"
 	"voice/backend/matchmaking/internal/mmevents"
 	"voice/backend/matchmaking/internal/queue"
+	"voice/backend/matchmaking/internal/squad"
 	"voice/backend/matchmaking/internal/store"
+	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
 
+	callsv1 "voice.app/voice/calls/v1"
+	chatv1 "voice.app/voice/chat/v1"
 	matchmakingv1 "voice.app/voice/matchmaking/v1"
 )
 
 const serviceName = "matchmaking"
+
+func waitForGRPCReady(ctx context.Context, conn *grpc.ClientConn) error {
+	conn.Connect()
+	for {
+		st := conn.GetState()
+		if st == connectivity.Ready {
+			return nil
+		}
+		if st == connectivity.Shutdown {
+			return fmt.Errorf("grpc connection shutdown")
+		}
+		if !conn.WaitForStateChange(ctx, st) {
+			return fmt.Errorf("grpc dial: %w", context.Cause(ctx))
+		}
+	}
+}
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
@@ -54,6 +78,7 @@ func main() {
 		gameStore := &store.GameStore{Pool: pool}
 		profileStore := &store.ProfileGamesStore{Pool: pool}
 		sessionStore := &store.SessionStore{Pool: pool}
+		matchStore := &store.MatchStore{Pool: pool}
 
 		var events mmevents.Publisher = mmevents.NoopPublisher{}
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
@@ -78,15 +103,70 @@ func main() {
 		if err != nil {
 			log.Fatalf("grpc listen: %v", err)
 		}
+		var squadProvisioner grpcsvc.SquadProvisioner
+		chatAddr := strings.TrimSpace(os.Getenv("CHAT_GRPC_ADDR"))
+		voiceAddr := strings.TrimSpace(os.Getenv("VOICE_GRPC_ADDR"))
+		if chatAddr != "" && voiceAddr != "" {
+			cconn, err := grpc.NewClient(grpcclient.DialTarget(chatAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if err != nil {
+				log.Fatalf("chat grpc: %v", err)
+			}
+			defer func() { _ = cconn.Close() }()
+			vconn, err := grpc.NewClient(grpcclient.DialTarget(voiceAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if err != nil {
+				log.Fatalf("voice grpc: %v", err)
+			}
+			defer func() { _ = vconn.Close() }()
+			waitCtx, waitCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			if err := waitForGRPCReady(waitCtx, cconn); err != nil {
+				waitCancel()
+				log.Fatalf("chat grpc dial: %v", err)
+			}
+			if err := waitForGRPCReady(waitCtx, vconn); err != nil {
+				waitCancel()
+				log.Fatalf("voice grpc dial: %v", err)
+			}
+			waitCancel()
+			squadProvisioner = &squad.Provisioner{
+				Chat:  &squad.GRPCChatClient{Client: chatv1.NewChatServiceClient(cconn)},
+				Voice: &squad.GRPCVoiceClient{Client: callsv1.NewVoiceServiceClient(vconn)},
+			}
+		} else if chatAddr != "" || voiceAddr != "" {
+			logger.Warn("squad provisioning disabled: set both CHAT_GRPC_ADDR and VOICE_GRPC_ADDR")
+		}
+
 		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger)...)
-		matchmakingv1.RegisterMatchmakingServiceServer(grpcSrv, &grpcsvc.MatchmakingGRPC{
+		mmSvc := &grpcsvc.MatchmakingGRPC{
 			Games:        gameStore,
 			ProfileGames: profileStore,
 			Sessions:     sessionStore,
+			Matches:      matchStore,
 			Queue:        redisQueue,
 			Events:       events,
+			Squad:        squadProvisioner,
 			Logger:       logger,
-		})
+		}
+		matchmakingv1.RegisterMatchmakingServiceServer(grpcSrv, mmSvc)
+
+		if redisQueue != nil {
+			worker := &matcher.Worker{
+				Queue:    redisQueue,
+				Sessions: sessionStore,
+				Matches:  matchStore,
+				Games:    gameStore,
+				Events:   matcher.MMEventsAdapter{Pub: events},
+				Logger:   logger,
+			}
+			go func() {
+				ticker := time.NewTicker(2 * time.Second)
+				defer ticker.Stop()
+				for range ticker.C {
+					if err := worker.RunOnce(context.Background()); err != nil && logger != nil {
+						logger.Warn("matcher tick failed", slog.Any("error", err))
+					}
+				}
+			}()
+		}
 		go func() {
 			logger.Info("gRPC listening", slog.String("addr", grpcListen))
 			if err := grpcSrv.Serve(lis); err != nil {

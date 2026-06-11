@@ -301,11 +301,17 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/matchmaking_db?sslmode=disable
       MATCHMAKING_GRPC_LISTEN: :9090
       MATCHMAKING_REDIS_ADDR: redis:6379
+      CHAT_GRPC_ADDR: chat:9090
+      VOICE_GRPC_ADDR: voice:9090
       NATS_URL: nats://nats:4222
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      chat:
+        condition: service_healthy
+      voice:
         condition: service_healthy
       nats:
         condition: service_started

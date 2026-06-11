@@ -441,6 +441,12 @@ message SearchCancelled {
 message MatchFound {
   string match_id = 1;
   repeated string profile_ids = 2;
+  string game_id = 3;
+  string mode = 4;
+  string region = 5;
+  repeated string session_ids = 6;
+  optional string chat_id = 7;
+  optional string voice_room_id = 8;
 }
 
 message MatchTimeout {

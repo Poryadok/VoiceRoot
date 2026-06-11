@@ -20,6 +20,7 @@ service MatchmakingService {
   rpc GetSearchStatus(GetSearchStatusRequest) returns (GetSearchStatusResponse);
 
   rpc GetMatch(GetMatchRequest) returns (GetMatchResponse);
+  rpc RespondToMatch(RespondToMatchRequest) returns (RespondToMatchResponse);
   rpc GetMatchHistory(GetMatchHistoryRequest) returns (GetMatchHistoryResponse);
 
   rpc RateMatch(RateMatchRequest) returns (RateMatchResponse);
@@ -110,10 +111,24 @@ message Match {
   string mode = 3;
   repeated string profile_ids = 4;
   google.protobuf.Timestamp created_at = 5;
+  optional string voice_room_id = 6;
+  optional string chat_id = 7;
+  string status = 8;
+  string region = 9;
 }
 
 message GetMatchRequest {
   string match_id = 1;
+}
+
+message RespondToMatchRequest {
+  string match_id = 1;
+  bool accept = 2;
+}
+
+message RespondToMatchResponse {
+  Match match = 1;
+  SearchSession search_session = 2;
 }
 
 message GetMatchHistoryRequest {

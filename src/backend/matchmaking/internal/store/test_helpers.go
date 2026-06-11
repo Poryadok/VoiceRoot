@@ -28,7 +28,12 @@ func StartMatchmakingDBForStoreTest(t *testing.T, ctx context.Context) *pgxpool.
 func ApplyMatchmakingMigrationsForStoreTest(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
 	root := repoRoot(t)
-	for _, name := range []string{"000001_init.up.sql", "000002_profile_game_entries.up.sql", "000003_search_sessions.up.sql"} {
+	for _, name := range []string{
+		"000001_init.up.sql",
+		"000002_profile_game_entries.up.sql",
+		"000003_search_sessions.up.sql",
+		"000004_matches.up.sql",
+	} {
 		migrationPath := filepath.Join(root, "src", "backend", "migrations", "matchmaking_db", name)
 		sqlBytes, err := os.ReadFile(migrationPath)
 		require.NoError(t, err)

@@ -22,12 +22,24 @@ const (
 	streamName           = "matchmaking_events"
 	subjectSearchStarted = "mm.search_started"
 	subjectSearchCancel  = "mm.search_cancelled"
+	subjectMatchFound    = "mm.match_found"
 )
+
+// MatchFoundEvent is emitted when a match proposal is created.
+type MatchFoundEvent struct {
+	MatchID    string
+	GameID     string
+	Mode       string
+	Region     string
+	ProfileIDs []string
+	SessionIDs []string
+}
 
 // Publisher publishes matchmaking domain events.
 type Publisher interface {
 	PublishSearchStarted(ctx context.Context, sessionID, profileID, gameID, mode, region string) error
 	PublishSearchCancelled(ctx context.Context, sessionID, profileID string) error
+	PublishMatchFound(ctx context.Context, ev MatchFoundEvent) error
 	Close() error
 }
 
@@ -38,6 +50,7 @@ func (NoopPublisher) PublishSearchStarted(context.Context, string, string, strin
 	return nil
 }
 func (NoopPublisher) PublishSearchCancelled(context.Context, string, string) error { return nil }
+func (NoopPublisher) PublishMatchFound(context.Context, MatchFoundEvent) error     { return nil }
 func (NoopPublisher) Close() error                                               { return nil }
 
 // searchCancelledJSON is published until generated SearchCancelled proto is wired (buf generate).
@@ -146,8 +159,6 @@ func (p *JetStreamPublisher) publishJSON(ctx context.Context, subject string, pa
 
 // PublishSearchStarted implements Publisher.
 func (p *JetStreamPublisher) PublishSearchStarted(ctx context.Context, sessionID, profileID, gameID, mode, region string) error {
-	_ = mode
-	_ = region // mode/region in proto after buf generate (jetstream_events.proto fields 4–5)
 	env := &eventsv1.MatchmakingStreamEvent{
 		EventId:    uuid.NewString(),
 		OccurredAt: timestamppb.New(time.Now().UTC()),
@@ -156,10 +167,31 @@ func (p *JetStreamPublisher) PublishSearchStarted(ctx context.Context, sessionID
 				SessionId: sessionID,
 				ProfileId: profileID,
 				GameId:    gameID,
+				Mode:      mode,
+				Region:    region,
 			},
 		},
 	}
 	return p.publishProto(ctx, subjectSearchStarted, env)
+}
+
+// PublishMatchFound implements Publisher.
+func (p *JetStreamPublisher) PublishMatchFound(ctx context.Context, ev MatchFoundEvent) error {
+	env := &eventsv1.MatchmakingStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.New(time.Now().UTC()),
+		Payload: &eventsv1.MatchmakingStreamEvent_MatchFound{
+			MatchFound: &eventsv1.MatchFound{
+				MatchId:    ev.MatchID,
+				ProfileIds: ev.ProfileIDs,
+				GameId:     ev.GameID,
+				Mode:       ev.Mode,
+				Region:     ev.Region,
+				SessionIds: ev.SessionIDs,
+			},
+		},
+	}
+	return p.publishProto(ctx, subjectMatchFound, env)
 }
 
 // PublishSearchCancelled implements Publisher.

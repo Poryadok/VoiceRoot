@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../backend/realtime_client.dart';
 import 'auth_providers.dart';
 import 'chat_providers.dart';
+import 'matchmaking_match_controller.dart';
 
 /// Plays short in-app notification sounds (no FCM).
 abstract class NotificationSoundPlayer {
@@ -55,6 +56,8 @@ class InAppNotificationController {
     switch (frame.op) {
       case 'notification':
         _onNotification(frame.data);
+      case 'match_found':
+        _ref.read(matchmakingMatchControllerProvider.notifier).onPushNotificationData(frame.data);
       case 'mark_read':
         _onMarkRead(frame.data);
       default:
@@ -65,6 +68,10 @@ class InAppNotificationController {
   void _onNotification(Map<String, dynamic>? data) {
     if (data == null) return;
     final type = data['type'] as String?;
+    if (type == 'match_found') {
+      _ref.read(matchmakingMatchControllerProvider.notifier).onPushNotificationData(data);
+      return;
+    }
     final chatId = data['chat_id'] as String?;
     if (chatId == null || chatId.isEmpty) return;
 

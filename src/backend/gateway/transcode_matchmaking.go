@@ -23,6 +23,51 @@ func (t *transcoder) serveMatchmaking(w http.ResponseWriter, r *http.Request, re
 		sub := strings.TrimPrefix(rest, "search")
 		sub = strings.TrimPrefix(sub, "/")
 		return t.serveMatchmakingSearch(w, r, sub)
+	case strings.HasPrefix(rest, "matches"):
+		sub := strings.TrimPrefix(rest, "matches")
+		sub = strings.TrimPrefix(sub, "/")
+		return t.serveMatchmakingMatches(w, r, sub)
+	default:
+		return false
+	}
+}
+
+func (t *transcoder) serveMatchmakingMatches(w http.ResponseWriter, r *http.Request, rest string) bool {
+	ctx := withGRPCMetadata(r.Context(), r)
+	if rest == "" {
+		return false
+	}
+	parts := strings.Split(rest, "/")
+	matchID := parts[0]
+	if matchID == "" {
+		return false
+	}
+
+	switch {
+	case r.Method == http.MethodGet && len(parts) == 1:
+		resp, err := t.clients.matchmaking.GetMatch(ctx, &matchmakingv1.GetMatchRequest{MatchId: matchID})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodPost && len(parts) == 2 && parts[1] == "respond":
+		req := &matchmakingv1.RespondToMatchRequest{}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		req.MatchId = matchID
+		resp, err := t.clients.matchmaking.RespondToMatch(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
 	default:
 		return false
 	}

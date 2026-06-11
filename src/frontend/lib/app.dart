@@ -20,6 +20,9 @@ import 'ui/call/active_call_panel.dart';
 import 'ui/call/call_error_listener.dart';
 import 'ui/call/incoming_call_overlay.dart';
 import 'ui/call/outgoing_call_overlay.dart';
+import 'state/matchmaking_match_controller.dart';
+import 'ui/matchmaking/match_found_overlay.dart';
+import 'ui/matchmaking/match_squad_navigator.dart';
 import 'ui/chat/chat_room_panel.dart';
 import 'ui/core/profile_accent_dot.dart';
 import 'ui/core/voice_bottom_sheet.dart';
@@ -70,7 +73,9 @@ class VoiceApp extends ConsumerWidget {
           onGenerateTitle: (ctx) => AppLocalizations.of(ctx)!.appTitle,
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: _AuthenticatedShell(locale: effectiveLocale),
+          home: MatchSquadNavigator(
+            child: _AuthenticatedShell(locale: effectiveLocale),
+          ),
         );
       },
       loading: () => MaterialApp(
@@ -178,6 +183,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
   @override
   Widget build(BuildContext context) {
     ref.watch(inAppNotificationControllerProvider);
+    ref.watch(matchmakingMatchControllerProvider);
     ref.watch(pushNotificationsControllerProvider);
     final l10n = AppLocalizations.of(context)!;
     final health = ref.watch(gatewayHealthProvider);
@@ -269,6 +275,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
                 ),
               ),
               const IncomingCallOverlay(),
+              const MatchmakingMatchOverlayHost(),
               const OutgoingCallOverlay(),
               const SafeArea(child: ActiveCallPanel()),
             ],

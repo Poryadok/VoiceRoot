@@ -202,6 +202,7 @@ class SearchSessionData {
     required this.mode,
     required this.criteriaJson,
     required this.status,
+    this.matchId,
   });
 
   final String id;
@@ -210,6 +211,7 @@ class SearchSessionData {
   final String mode;
   final String criteriaJson;
   final String status;
+  final String? matchId;
 
   static SearchSessionData fromGatewayJson(Map<String, dynamic> json) {
     final session = json['searchSession'] as Map<String, dynamic>? ??
@@ -222,6 +224,68 @@ class SearchSessionData {
       mode: session['mode'] as String? ?? '',
       criteriaJson: session['criteriaJson'] as String? ?? session['criteria_json'] as String? ?? '',
       status: session['status'] as String? ?? '',
+      matchId: session['matchId'] as String? ?? session['match_id'] as String?,
+    );
+  }
+}
+
+class MatchData {
+  const MatchData({
+    required this.id,
+    required this.gameId,
+    required this.mode,
+    required this.region,
+    required this.status,
+    required this.profileIds,
+    this.voiceRoomId,
+    this.chatId,
+    this.gameName,
+  });
+
+  final String id;
+  final String gameId;
+  final String mode;
+  final String region;
+  final String status;
+  final List<String> profileIds;
+  final String? voiceRoomId;
+  final String? chatId;
+  final String? gameName;
+
+  static MatchData fromGatewayJson(Map<String, dynamic> json) {
+    final match = json['match'] as Map<String, dynamic>? ?? json;
+    final profilesRaw = match['profileIds'] as List<dynamic>? ??
+        match['profile_ids'] as List<dynamic>? ??
+        const [];
+    return MatchData(
+      id: match['id'] as String? ?? '',
+      gameId: match['gameId'] as String? ?? match['game_id'] as String? ?? '',
+      mode: match['mode'] as String? ?? '',
+      region: match['region'] as String? ?? '',
+      status: match['status'] as String? ?? '',
+      voiceRoomId: match['voiceRoomId'] as String? ?? match['voice_room_id'] as String?,
+      chatId: match['chatId'] as String? ?? match['chat_id'] as String?,
+      profileIds: [
+        for (final p in profilesRaw)
+          if (p is String) p,
+      ],
+    );
+  }
+}
+
+class RespondToMatchData {
+  const RespondToMatchData({
+    required this.match,
+    required this.searchSession,
+  });
+
+  final MatchData match;
+  final SearchSessionData searchSession;
+
+  static RespondToMatchData fromGatewayJson(Map<String, dynamic> json) {
+    return RespondToMatchData(
+      match: MatchData.fromGatewayJson(json),
+      searchSession: SearchSessionData.fromGatewayJson(json),
     );
   }
 }
@@ -345,6 +409,30 @@ class VoiceMatchmakingClient {
       authorization: authorization,
     );
     return _map(result, SearchSessionData.fromGatewayJson);
+  }
+
+  Future<MatchmakingApiResult<MatchData>> getMatch({
+    required String authorization,
+    required String matchId,
+  }) async {
+    final result = await _gateway.getJson(
+      _gateway.resolve('/api/v1/matchmaking/matches/$matchId'),
+      authorization: authorization,
+    );
+    return _map(result, MatchData.fromGatewayJson);
+  }
+
+  Future<MatchmakingApiResult<RespondToMatchData>> respondToMatch({
+    required String authorization,
+    required String matchId,
+    required bool accept,
+  }) async {
+    final result = await _gateway.postJson(
+      uri: _gateway.resolve('/api/v1/matchmaking/matches/$matchId/respond'),
+      authorization: authorization,
+      body: {'accept': accept},
+    );
+    return _map(result, RespondToMatchData.fromGatewayJson);
   }
 
   Future<MatchmakingApiResult<void>> cancelSearch({

@@ -26,8 +26,10 @@ type MatchmakingGRPC struct {
 	Games        *store.GameStore
 	ProfileGames *store.ProfileGamesStore
 	Sessions     *store.SessionStore
+	Matches      *store.MatchStore
 	Queue        *queue.RedisQueue
 	Events       mmevents.Publisher
+	Squad        SquadProvisioner
 	Logger       *slog.Logger
 }
 

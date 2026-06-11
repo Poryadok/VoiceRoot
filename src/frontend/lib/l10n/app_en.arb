@@ -544,5 +544,16 @@
   "queueSearchSoughtRankMin": "Min rank sought",
   "queueSearchSoughtRankMax": "Max rank sought",
   "queueSearchStartError": "Could not start search",
-  "queueSearchCancelError": "Could not cancel search"
+  "queueSearchCancelError": "Could not cancel search",
+  "matchFoundTitle": "Match found",
+  "matchFoundSubtitle": "{gameName} · {mode}",
+  "@matchFoundSubtitle": {
+    "placeholders": {
+      "gameName": {"type": "String"},
+      "mode": {"type": "String"}
+    }
+  },
+  "matchFoundAccept": "Accept",
+  "matchFoundDecline": "Decline",
+  "matchFoundRespondError": "Could not respond to match"
 }

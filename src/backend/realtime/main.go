@@ -95,6 +95,12 @@ func main() {
 				logger.Error("chat.events consumer exited", slog.String("error", err.Error()))
 			}
 		}()
+		go func() {
+			err := runMatchmakingEventsConsumer(ctx, hub, natsURL, instanceID, logger)
+			if err != nil && err != context.Canceled {
+				logger.Error("matchmaking.events consumer exited", slog.String("error", err.Error()))
+			}
+		}()
 	}
 
 	server := &http.Server{

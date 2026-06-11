@@ -994,4 +994,21 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get queueSearchCancelError => 'Could not cancel search';
+
+  @override
+  String get matchFoundTitle => 'Match found';
+
+  @override
+  String matchFoundSubtitle(String gameName, String mode) {
+    return '$gameName · $mode';
+  }
+
+  @override
+  String get matchFoundAccept => 'Accept';
+
+  @override
+  String get matchFoundDecline => 'Decline';
+
+  @override
+  String get matchFoundRespondError => 'Could not respond to match';
 }

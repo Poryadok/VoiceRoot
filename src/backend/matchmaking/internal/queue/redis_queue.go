@@ -101,6 +101,30 @@ func (q *RedisQueue) Dequeue(ctx context.Context, gameID uuid.UUID, mode, region
 	return nil
 }
 
+// ListSessionIDs returns session IDs in FIFO order up to limit (0 = all).
+func (q *RedisQueue) ListSessionIDs(ctx context.Context, gameID uuid.UUID, mode, region string, limit int64) ([]uuid.UUID, error) {
+	if q == nil || q.Client == nil {
+		return nil, ErrQueueUnavailable
+	}
+	var stop int64 = -1
+	if limit > 0 {
+		stop = limit - 1
+	}
+	members, err := q.Client.ZRange(ctx, q.queueKey(gameID, mode, region), 0, stop).Result()
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrQueueUnavailable, err)
+	}
+	out := make([]uuid.UUID, 0, len(members))
+	for _, m := range members {
+		id, err := uuid.Parse(m)
+		if err != nil {
+			continue
+		}
+		out = append(out, id)
+	}
+	return out, nil
+}
+
 // QueueDepth returns the number of sessions waiting in the queue.
 func (q *RedisQueue) QueueDepth(ctx context.Context, gameID uuid.UUID, mode, region string) (int64, error) {
 	if q == nil || q.Client == nil {

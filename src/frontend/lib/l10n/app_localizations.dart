@@ -1855,6 +1855,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not cancel search'**
   String get queueSearchCancelError;
+
+  /// No description provided for @matchFoundTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Match found'**
+  String get matchFoundTitle;
+
+  /// No description provided for @matchFoundSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{gameName} · {mode}'**
+  String matchFoundSubtitle(String gameName, String mode);
+
+  /// No description provided for @matchFoundAccept.
+  ///
+  /// In en, this message translates to:
+  /// **'Accept'**
+  String get matchFoundAccept;
+
+  /// No description provided for @matchFoundDecline.
+  ///
+  /// In en, this message translates to:
+  /// **'Decline'**
+  String get matchFoundDecline;
+
+  /// No description provided for @matchFoundRespondError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not respond to match'**
+  String get matchFoundRespondError;
 }
 
 class _AppLocalizationsDelegate

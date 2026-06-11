@@ -12,10 +12,11 @@ import (
 )
 
 const (
-	SessionStatusSearching = "searching"
-	SessionStatusMatched   = "matched"
-	SessionStatusTimeout   = "timeout"
-	SessionStatusCancelled = "cancelled"
+	SessionStatusSearching     = "searching"
+	SessionStatusPendingAccept = "pending_accept"
+	SessionStatusMatched       = "matched"
+	SessionStatusTimeout       = "timeout"
+	SessionStatusCancelled     = "cancelled"
 )
 
 var (
@@ -95,7 +96,7 @@ func (s *SessionStore) Get(ctx context.Context, id uuid.UUID) (SearchSession, er
 	return sess, err
 }
 
-// GetActiveSearching returns the active searching session for a profile, if any.
+// GetActiveSearching returns the active searching or pending-accept session for a profile.
 func (s *SessionStore) GetActiveSearching(ctx context.Context, profileID uuid.UUID) (SearchSession, error) {
 	if s == nil || s.Pool == nil {
 		return SearchSession{}, errors.New("session store unavailable")
@@ -104,10 +105,10 @@ func (s *SessionStore) GetActiveSearching(ctx context.Context, profileID uuid.UU
 		SELECT id, profile_id, party_id, game_id, mode, criteria::text, status,
 		       timeout_at, matched_at, match_id, created_at, updated_at
 		FROM search_sessions
-		WHERE profile_id = $1 AND status = $2
+		WHERE profile_id = $1 AND status IN ($2, $3)
 		ORDER BY created_at DESC
 		LIMIT 1
-	`, profileID, SessionStatusSearching)
+	`, profileID, SessionStatusSearching, SessionStatusPendingAccept)
 	sess, err := scanSession(row)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return SearchSession{}, ErrSessionNotFound
@@ -133,6 +134,55 @@ func (s *SessionStore) Cancel(ctx context.Context, id uuid.UUID) (SearchSession,
 		return SearchSession{}, ErrSessionNotSearchable
 	}
 	return sess, err
+}
+
+// ResetToSearching clears match link and returns session to searching.
+func (s *SessionStore) ResetToSearching(ctx context.Context, id uuid.UUID) (SearchSession, error) {
+	if s == nil || s.Pool == nil {
+		return SearchSession{}, errors.New("session store unavailable")
+	}
+	now := time.Now().UTC()
+	row := s.Pool.QueryRow(ctx, `
+		UPDATE search_sessions
+		SET status = $2, match_id = NULL, matched_at = NULL, updated_at = $3
+		WHERE id = $1 AND status IN ($4, $5)
+		RETURNING id, profile_id, party_id, game_id, mode, criteria::text, status,
+		          timeout_at, matched_at, match_id, created_at, updated_at
+	`, id, SessionStatusSearching, now, SessionStatusPendingAccept, SessionStatusMatched)
+	sess, err := scanSession(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return SearchSession{}, ErrSessionNotSearchable
+	}
+	return sess, err
+}
+
+// ListSearchingByIDs loads searching sessions for the given IDs.
+func (s *SessionStore) ListSearchingByIDs(ctx context.Context, ids []uuid.UUID) ([]SearchSession, error) {
+	if s == nil || s.Pool == nil {
+		return nil, errors.New("session store unavailable")
+	}
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	rows, err := s.Pool.Query(ctx, `
+		SELECT id, profile_id, party_id, game_id, mode, criteria::text, status,
+		       timeout_at, matched_at, match_id, created_at, updated_at
+		FROM search_sessions
+		WHERE id = ANY($1) AND status = $2
+	`, ids, SessionStatusSearching)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []SearchSession
+	for rows.Next() {
+		sess, err := scanSession(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, sess)
+	}
+	return out, rows.Err()
 }
 
 func scanSession(row pgx.Row) (SearchSession, error) {

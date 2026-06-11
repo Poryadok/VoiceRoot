@@ -999,4 +999,21 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get queueSearchCancelError => 'Не удалось отменить поиск';
+
+  @override
+  String get matchFoundTitle => 'Матч найден';
+
+  @override
+  String matchFoundSubtitle(String gameName, String mode) {
+    return '$gameName · $mode';
+  }
+
+  @override
+  String get matchFoundAccept => 'Принять';
+
+  @override
+  String get matchFoundDecline => 'Отклонить';
+
+  @override
+  String get matchFoundRespondError => 'Не удалось ответить на матч';
 }
