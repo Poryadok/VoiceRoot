@@ -2,6 +2,27 @@ import 'dart:convert';
 
 import 'gateway_http.dart';
 
+DateTime? _parseGatewayTimestamp(dynamic value) {
+  if (value == null) return null;
+  if (value is String && value.isNotEmpty) {
+    return DateTime.tryParse(value);
+  }
+  if (value is Map<String, dynamic>) {
+    final seconds = value['seconds'];
+    if (seconds is String) {
+      final sec = int.tryParse(seconds);
+      if (sec != null) {
+        return DateTime.fromMillisecondsSinceEpoch(sec * 1000, isUtc: true);
+      }
+    }
+    if (seconds is num) {
+      return DateTime.fromMillisecondsSinceEpoch(seconds.toInt() * 1000,
+          isUtc: true);
+    }
+  }
+  return null;
+}
+
 sealed class MatchmakingApiResult<T> {
   const MatchmakingApiResult();
 }
@@ -217,27 +238,6 @@ class SearchSessionData {
   final DateTime? timeoutAt;
   final DateTime? createdAt;
 
-  static DateTime? _parseTimestamp(dynamic value) {
-    if (value == null) return null;
-    if (value is String && value.isNotEmpty) {
-      return DateTime.tryParse(value);
-    }
-    if (value is Map<String, dynamic>) {
-      final seconds = value['seconds'];
-      if (seconds is String) {
-        final sec = int.tryParse(seconds);
-        if (sec != null) {
-          return DateTime.fromMillisecondsSinceEpoch(sec * 1000, isUtc: true);
-        }
-      }
-      if (seconds is num) {
-        return DateTime.fromMillisecondsSinceEpoch(seconds.toInt() * 1000,
-            isUtc: true);
-      }
-    }
-    return null;
-  }
-
   static SearchSessionData fromGatewayJson(Map<String, dynamic> json) {
     final session = json['searchSession'] as Map<String, dynamic>? ??
         json['search_session'] as Map<String, dynamic>? ??
@@ -250,8 +250,8 @@ class SearchSessionData {
       criteriaJson: session['criteriaJson'] as String? ?? session['criteria_json'] as String? ?? '',
       status: session['status'] as String? ?? '',
       matchId: session['matchId'] as String? ?? session['match_id'] as String?,
-      timeoutAt: _parseTimestamp(session['timeoutAt'] ?? session['timeout_at']),
-      createdAt: _parseTimestamp(session['createdAt'] ?? session['created_at']),
+      timeoutAt: _parseGatewayTimestamp(session['timeoutAt'] ?? session['timeout_at']),
+      createdAt: _parseGatewayTimestamp(session['createdAt'] ?? session['created_at']),
     );
   }
 }
@@ -299,6 +299,7 @@ class MatchData {
     this.voiceRoomId,
     this.chatId,
     this.gameName,
+    this.createdAt,
   });
 
   final String id;
@@ -310,6 +311,7 @@ class MatchData {
   final String? voiceRoomId;
   final String? chatId;
   final String? gameName;
+  final DateTime? createdAt;
 
   static MatchData fromGatewayJson(Map<String, dynamic> json) {
     final match = json['match'] as Map<String, dynamic>? ?? json;
@@ -324,10 +326,32 @@ class MatchData {
       status: match['status'] as String? ?? '',
       voiceRoomId: match['voiceRoomId'] as String? ?? match['voice_room_id'] as String?,
       chatId: match['chatId'] as String? ?? match['chat_id'] as String?,
+      createdAt: _parseGatewayTimestamp(match['createdAt'] ?? match['created_at']),
       profileIds: [
         for (final p in profilesRaw)
           if (p is String) p,
       ],
+    );
+  }
+}
+
+class MatchListData {
+  const MatchListData({required this.matches, this.nextCursor});
+
+  final List<MatchData> matches;
+  final String? nextCursor;
+
+  static MatchListData fromGatewayJson(Map<String, dynamic> json) {
+    final list = json['matchList'] as Map<String, dynamic>? ??
+        json['match_list'] as Map<String, dynamic>? ??
+        json;
+    final matchesRaw = list['matches'] as List<dynamic>? ?? const [];
+    return MatchListData(
+      matches: [
+        for (final item in matchesRaw)
+          if (item is Map<String, dynamic>) MatchData.fromGatewayJson(item),
+      ],
+      nextCursor: list['nextCursor'] as String? ?? list['next_cursor'] as String?,
     );
   }
 }
@@ -395,6 +419,22 @@ class VoiceMatchmakingClient {
     );
     final result = await _gateway.getJson(uri, authorization: authorization);
     return _mapList(result);
+  }
+
+  Future<MatchmakingApiResult<MatchListData>> listMatchHistory({
+    required String authorization,
+    String? cursor,
+    int? pageSize,
+  }) async {
+    final params = <String, String>{};
+    if (cursor != null && cursor.isNotEmpty) params['cursor'] = cursor;
+    if (pageSize != null) params['page_size'] = '$pageSize';
+    final uri = _gateway.replace(
+      path: '/api/v1/matchmaking/profile/me/matches',
+      queryParameters: params.isEmpty ? null : params,
+    );
+    final result = await _gateway.getJson(uri, authorization: authorization);
+    return _map(result, MatchListData.fromGatewayJson);
   }
 
   Future<MatchmakingApiResult<PlayerProfileData>> getMyPlayerProfile({

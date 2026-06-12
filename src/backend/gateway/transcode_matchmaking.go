@@ -274,6 +274,25 @@ func (t *transcoder) serveMatchmakingProfile(w http.ResponseWriter, r *http.Requ
 	ctx := withGRPCMetadata(r.Context(), r)
 
 	switch {
+	case r.Method == http.MethodGet && rest == "me/matches":
+		page := &commonv1.CursorPageRequest{}
+		_ = decodeQueryJSON(page, queryFirst(r, "page"))
+		if page.Cursor == "" {
+			page.Cursor = queryFirst(r, "cursor")
+		}
+		if page.PageSize == 0 {
+			page.PageSize = parseInt32Query(queryFirst(r, "page_size"))
+		}
+		resp, err := t.clients.matchmaking.GetMatchHistory(ctx, &matchmakingv1.GetMatchHistoryRequest{
+			Page: page,
+		})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
 	case r.Method == http.MethodGet && rest == "me":
 		resp, err := t.clients.matchmaking.GetMyPlayerProfile(ctx, &matchmakingv1.GetMyPlayerProfileRequest{})
 		if err != nil {

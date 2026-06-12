@@ -585,5 +585,14 @@
     "placeholders": {
       "rating": {"type": "String"}
     }
-  }
+  },
+  "matchHistoryTitle": "Match history",
+  "matchHistoryEntry": "Match history",
+  "matchHistoryLoadError": "Could not load match history",
+  "matchHistoryEmpty": "No match squads yet",
+  "matchHistoryParticipants": "Teammates",
+  "matchHistoryStatusActive": "Active",
+  "matchHistoryStatusCompleted": "Completed",
+  "matchHistoryLoadMore": "Load more",
+  "matchHistoryAddFriend": "Add friend"
 }

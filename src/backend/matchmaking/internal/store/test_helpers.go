@@ -35,6 +35,7 @@ func ApplyMatchmakingMigrationsForStoreTest(t *testing.T, ctx context.Context, p
 		"000004_matches.up.sql",
 		"000005_ratings_and_bans.up.sql",
 		"000006_search_nudge.up.sql",
+		"000007_match_history_index.up.sql",
 	} {
 		migrationPath := filepath.Join(root, "src", "backend", "migrations", "matchmaking_db", name)
 		sqlBytes, err := os.ReadFile(migrationPath)

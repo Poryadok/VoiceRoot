@@ -1081,4 +1081,31 @@ class AppLocalizationsRu extends AppLocalizations {
   String profileMmRating(String rating) {
     return 'Рейтинг ММ: $rating ★';
   }
+
+  @override
+  String get matchHistoryTitle => 'Match history';
+
+  @override
+  String get matchHistoryEntry => 'Match history';
+
+  @override
+  String get matchHistoryLoadError => 'Could not load match history';
+
+  @override
+  String get matchHistoryEmpty => 'No match squads yet';
+
+  @override
+  String get matchHistoryParticipants => 'Teammates';
+
+  @override
+  String get matchHistoryStatusActive => 'Active';
+
+  @override
+  String get matchHistoryStatusCompleted => 'Completed';
+
+  @override
+  String get matchHistoryLoadMore => 'Load more';
+
+  @override
+  String get matchHistoryAddFriend => 'Add friend';
 }

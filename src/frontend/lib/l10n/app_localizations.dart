@@ -2005,6 +2005,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'MM rating: {rating} ★'**
   String profileMmRating(String rating);
+
+  /// No description provided for @matchHistoryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Match history'**
+  String get matchHistoryTitle;
+
+  /// No description provided for @matchHistoryEntry.
+  ///
+  /// In en, this message translates to:
+  /// **'Match history'**
+  String get matchHistoryEntry;
+
+  /// No description provided for @matchHistoryLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load match history'**
+  String get matchHistoryLoadError;
+
+  /// No description provided for @matchHistoryEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No match squads yet'**
+  String get matchHistoryEmpty;
+
+  /// No description provided for @matchHistoryParticipants.
+  ///
+  /// In en, this message translates to:
+  /// **'Teammates'**
+  String get matchHistoryParticipants;
+
+  /// No description provided for @matchHistoryStatusActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Active'**
+  String get matchHistoryStatusActive;
+
+  /// No description provided for @matchHistoryStatusCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Completed'**
+  String get matchHistoryStatusCompleted;
+
+  /// No description provided for @matchHistoryLoadMore.
+  ///
+  /// In en, this message translates to:
+  /// **'Load more'**
+  String get matchHistoryLoadMore;
+
+  /// No description provided for @matchHistoryAddFriend.
+  ///
+  /// In en, this message translates to:
+  /// **'Add friend'**
+  String get matchHistoryAddFriend;
 }
 
 class _AppLocalizationsDelegate

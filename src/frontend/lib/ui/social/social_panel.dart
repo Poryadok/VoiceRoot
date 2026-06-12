@@ -8,6 +8,7 @@ import '../../state/presence_providers.dart';
 import '../../state/social_providers.dart';
 import '../core/voice_state_panel.dart';
 import '../matchmaking/game_catalog_screen.dart';
+import '../matchmaking/match_history_screen.dart';
 import 'presence_indicator.dart';
 import 'profile_detail_sheet.dart';
 
@@ -87,17 +88,34 @@ class _SocialPanelState extends ConsumerState<SocialPanel>
       children: [
         Align(
           alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            key: const Key('social_game_catalog_entry'),
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const GameCatalogScreen(),
-                ),
-              );
-            },
-            icon: const Icon(Icons.sports_esports_outlined),
-            label: Text(l10n.gameCatalogEntry),
+          child: Wrap(
+            spacing: 4,
+            children: [
+              TextButton.icon(
+                key: const Key('social_game_catalog_entry'),
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const GameCatalogScreen(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.sports_esports_outlined),
+                label: Text(l10n.gameCatalogEntry),
+              ),
+              TextButton.icon(
+                key: const Key('social_match_history_entry'),
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const MatchHistoryScreen(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.history),
+                label: Text(l10n.matchHistoryEntry),
+              ),
+            ],
           ),
         ),
         TabBar(

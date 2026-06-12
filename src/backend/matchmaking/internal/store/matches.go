@@ -479,6 +479,96 @@ func matchHasProfileID(match Match, profileID uuid.UUID) bool {
 	return false
 }
 
+// ListMatchHistoryParams filters paginated match history for a profile.
+type ListMatchHistoryParams struct {
+	ProfileID uuid.UUID
+	Cursor    string
+	PageSize  int32
+}
+
+// ListMatchHistoryResult is a page of match history.
+type ListMatchHistoryResult struct {
+	Matches    []Match
+	NextCursor string
+}
+
+// ListHistoryForProfile returns active and completed matches the profile participated in.
+func (s *MatchStore) ListHistoryForProfile(ctx context.Context, p ListMatchHistoryParams) (ListMatchHistoryResult, error) {
+	if s == nil || s.Pool == nil {
+		return ListMatchHistoryResult{}, errors.New("match store unavailable")
+	}
+	limit := int(p.PageSize)
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	cursorTime, cursorID, err := decodeCursor(p.Cursor)
+	if err != nil {
+		return ListMatchHistoryResult{}, err
+	}
+
+	profileID := p.ProfileID.String()
+	args := []any{profileID, limit + 1}
+	query := `
+		SELECT id, game_id, mode, region, participants, left_profile_ids, voice_room_id, chat_id, status, created_at, completed_at
+		FROM matches
+		WHERE status IN ('active', 'completed')
+		  AND EXISTS (
+		    SELECT 1 FROM jsonb_array_elements(participants) AS elem
+		    WHERE elem->>'profile_id' = $1
+		  )
+	`
+	if cursorTime != nil && cursorID != nil {
+		query += ` AND (created_at, id) < ($3, $4)`
+		args = append(args, *cursorTime, *cursorID)
+	}
+	query += ` ORDER BY created_at DESC, id DESC LIMIT $2`
+
+	rows, err := s.Pool.Query(ctx, query, args...)
+	if err != nil {
+		return ListMatchHistoryResult{}, err
+	}
+	defer rows.Close()
+
+	var matches []Match
+	for rows.Next() {
+		m, err := scanMatchRow(rows)
+		if err != nil {
+			return ListMatchHistoryResult{}, err
+		}
+		matches = append(matches, m)
+	}
+	if err := rows.Err(); err != nil {
+		return ListMatchHistoryResult{}, err
+	}
+
+	var nextCursor string
+	if len(matches) > limit {
+		last := matches[limit-1]
+		nextCursor = encodeCursor(last.CreatedAt, last.ID)
+		matches = matches[:limit]
+	}
+	return ListMatchHistoryResult{Matches: matches, NextCursor: nextCursor}, nil
+}
+
+func scanMatchRow(rows pgx.Rows) (Match, error) {
+	var participantsJSON, leftJSON []byte
+	var m Match
+	err := rows.Scan(
+		&m.ID, &m.GameID, &m.Mode, &m.Region, &participantsJSON, &leftJSON,
+		&m.VoiceRoomID, &m.ChatID, &m.Status, &m.CreatedAt, &m.CompletedAt,
+	)
+	if err != nil {
+		return Match{}, err
+	}
+	if err := json.Unmarshal(participantsJSON, &m.Participants); err != nil {
+		return Match{}, err
+	}
+	if err := unmarshalLeftProfileIDs(leftJSON, &m.LeftProfileIDs); err != nil {
+		return Match{}, err
+	}
+	return m, nil
+}
+
 // AbandonMatch marks match abandoned and cancels pending sessions.
 func (s *MatchStore) AbandonMatch(ctx context.Context, matchID uuid.UUID) error {
 	if s == nil || s.Pool == nil {
