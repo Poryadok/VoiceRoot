@@ -22,4 +22,25 @@ void main() {
     expect(headers['X-Voice-Client-Platform'], 'android');
     expect(headers['X-Voice-Client-Version'], isNotEmpty);
   });
+
+  test('platform returns windows on Windows target', () {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    expect(ClientVersion.platform, 'windows');
+  });
+
+  test('headers include platform and version on windows desktop', () {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final headers = ClientVersion.headers;
+    expect(headers['X-Voice-Client-Platform'], 'windows');
+    expect(headers['X-Voice-Client-Version'], isNotEmpty);
+  });
+
+  test('uses desktop auto updater on windows', () {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    expect(ClientVersion.usesDesktopAutoUpdater, isTrue);
+    expect(ClientVersion.desktopUpdaterChannel, 'voice/desktop_updater');
+  });
 }

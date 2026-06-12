@@ -23,6 +23,12 @@ abstract final class ClientVersion {
   /// Whether to attach version headers on REST (web skips per updates.md).
   static bool get sendVersionHeaders => !kIsWeb;
 
+  /// WinSparkle-backed auto updater on Windows desktop.
+  static bool get usesDesktopAutoUpdater =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
+
+  static const desktopUpdaterChannel = 'voice/desktop_updater';
+
   static Map<String, String> get headers {
     if (!sendVersionHeaders) return const {};
     return {

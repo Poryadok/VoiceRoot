@@ -6,9 +6,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../backend/client_version.dart';
 import '../backend/gateway_api_error.dart';
+import '../services/desktop_updater_service.dart';
 import 'gateway_providers.dart';
 
-enum VersionPolicyPhase { ok, softUpdate, forceUpdate }
+enum VersionPolicyPhase {
+  ok,
+  softUpdate,
+  forceUpdate,
+  desktopReadyToRestart,
+}
 
 class VersionPolicyState {
   const VersionPolicyState({
@@ -72,18 +78,33 @@ class VersionPolicyController extends StateNotifier<VersionPolicyState> {
           updateUrl: decoded['update_url'] as String?,
           releaseNotes: decoded['release_notes'] as String?,
         );
+        await _maybeStartDesktopUpdate(state);
       } else if (decoded['update_available'] == true) {
-        state = VersionPolicyState(
+        final next = VersionPolicyState(
           phase: VersionPolicyPhase.softUpdate,
           latestVersion: decoded['latest_version'] as String?,
           updateUrl: decoded['update_url'] as String?,
           releaseNotes: decoded['release_notes'] as String?,
         );
+        state = next;
+        await _maybeStartDesktopUpdate(next);
       } else {
         state = const VersionPolicyState();
       }
     } catch (_) {
       // ignore malformed policy
+    }
+  }
+
+  Future<void> _maybeStartDesktopUpdate(VersionPolicyState policy) async {
+    if (!ClientVersion.usesDesktopAutoUpdater) return;
+    final updateUrl = policy.updateUrl;
+    if (updateUrl == null || updateUrl.isEmpty) return;
+    final updater = _ref.read(desktopUpdaterServiceProvider);
+    final status = await updater.checkForUpdate(updateUrl);
+    if (status == DesktopUpdateStatus.downloading ||
+        status == DesktopUpdateStatus.readyToRestart) {
+      state = policy.copyWith(phase: VersionPolicyPhase.desktopReadyToRestart);
     }
   }
 
@@ -97,8 +118,20 @@ class VersionPolicyController extends StateNotifier<VersionPolicyState> {
   }
 
   void dismissSoftUpdate() {
-    if (state.phase == VersionPolicyPhase.softUpdate) {
+    if (state.phase == VersionPolicyPhase.softUpdate ||
+        state.phase == VersionPolicyPhase.desktopReadyToRestart) {
       state = const VersionPolicyState();
+    }
+  }
+
+  Future<void> restartDesktopUpdate() async {
+    await _ref.read(desktopUpdaterServiceProvider).restartAndApply();
+  }
+
+  void markDesktopReadyToRestart() {
+    if (state.phase == VersionPolicyPhase.softUpdate ||
+        state.phase == VersionPolicyPhase.forceUpdate) {
+      state = state.copyWith(phase: VersionPolicyPhase.desktopReadyToRestart);
     }
   }
 

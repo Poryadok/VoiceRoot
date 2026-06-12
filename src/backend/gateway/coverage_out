@@ -1213,7 +1213,7 @@ voice/backend/gateway/version_store.go:46.2,46.42 1 1
 voice/backend/gateway/version_store.go:49.95,51.9 2 1
 voice/backend/gateway/version_store.go:51.9,53.3 1 1
 voice/backend/gateway/version_store.go:54.2,54.45 1 1
-voice/backend/gateway/version_store.go:57.83,66.2 2 0
+voice/backend/gateway/version_store.go:57.83,66.2 2 1
 voice/backend/gateway/version_store.go:72.55,74.2 1 0
 voice/backend/gateway/version_store.go:76.102,91.35 4 0
 voice/backend/gateway/version_store.go:91.35,93.3 1 0
@@ -1233,7 +1233,7 @@ voice/backend/gateway/version_store.go:140.85,141.15 1 1
 voice/backend/gateway/version_store.go:141.15,143.3 1 0
 voice/backend/gateway/version_store.go:144.2,144.36 1 1
 voice/backend/gateway/websocket.go:10.75,11.61 1 1
-voice/backend/gateway/websocket.go:11.61,18.3 3 0
+voice/backend/gateway/websocket.go:11.61,18.3 3 1
 voice/backend/gateway/websocket.go:19.2,19.28 1 1
 voice/backend/gateway/websocket.go:19.28,22.3 2 1
 voice/backend/gateway/websocket.go:23.2,25.16 3 1

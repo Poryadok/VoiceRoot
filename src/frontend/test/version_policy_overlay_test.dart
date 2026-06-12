@@ -145,6 +145,115 @@ void main() {
     expect(launcher.lastImmediate, isFalse);
   });
 
+  testWidgets('force update shows Update button', (tester) async {
+    final container = ProviderContainer(
+      overrides: [
+        ...voiceAppTestOverrides(client: MockClient((_) async => http.Response('{}', 404))),
+        versionUpdateLauncherProvider.overrideWithValue(_RecordingLauncher()),
+        versionPolicyProvider.overrideWith(
+          (ref) => VersionPolicyController(ref, enablePolling: false),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    container.read(versionPolicyProvider.notifier).state = const VersionPolicyState(
+      phase: VersionPolicyPhase.forceUpdate,
+      updateUrl: 'https://updates.voice.example/windows/appcast.xml',
+    );
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const VersionPolicyOverlay(
+            child: Scaffold(body: Text('App body')),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const Key('version_force_update_button')), findsOneWidget);
+  });
+
+  testWidgets('soft update shows Update and Later buttons', (tester) async {
+    final container = ProviderContainer(
+      overrides: [
+        ...voiceAppTestOverrides(client: MockClient((_) async => http.Response('{}', 404))),
+        versionUpdateLauncherProvider.overrideWithValue(_RecordingLauncher()),
+        versionPolicyProvider.overrideWith(
+          (ref) => VersionPolicyController(ref, enablePolling: false),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    container.read(versionPolicyProvider.notifier).state = const VersionPolicyState(
+      phase: VersionPolicyPhase.softUpdate,
+      latestVersion: '1.8.0',
+      updateUrl: 'https://updates.voice.example/windows/appcast.xml',
+    );
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const VersionPolicyOverlay(
+            child: Scaffold(body: Text('App body')),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const Key('version_soft_update_button')), findsOneWidget);
+    expect(find.byKey(const Key('version_soft_update_dismiss')), findsOneWidget);
+  });
+
+  testWidgets('windows desktop soft update shows restart and update button', (tester) async {
+    final container = ProviderContainer(
+      overrides: [
+        ...voiceAppTestOverrides(client: MockClient((_) async => http.Response('{}', 404))),
+        versionUpdateLauncherProvider.overrideWithValue(_RecordingLauncher()),
+        versionPolicyProvider.overrideWith(
+          (ref) => VersionPolicyController(ref, enablePolling: false),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    container.read(versionPolicyProvider.notifier).state = const VersionPolicyState(
+      phase: VersionPolicyPhase.desktopReadyToRestart,
+      latestVersion: '1.8.0',
+      updateUrl: 'https://updates.voice.example/windows/appcast.xml',
+    );
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const VersionPolicyOverlay(
+            child: Scaffold(body: Text('App body')),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const Key('version_desktop_restart_button')), findsOneWidget);
+    expect(find.byKey(const Key('version_soft_update_dismiss')), findsOneWidget);
+  });
+
   testWidgets('soft update banner dismisses', (tester) async {
     final container = ProviderContainer(
       overrides: [

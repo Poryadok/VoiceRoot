@@ -251,7 +251,7 @@
 - [x] **FCM** — доработка под мобилу, согласованность с APNs
 - [x] **Flutter mobile** — layout, Android / iOS релизы
 - [ ] **Оффлайн-кэш** — последние N сообщений на чат (SQLite)
-- [ ] **Windows** — desktop-сборка, auto-updater
+- [x] **Windows** — desktop-сборка, auto-updater
 
 **Результат:** мультиплатформа для основной аудитории.
 

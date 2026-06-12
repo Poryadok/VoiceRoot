@@ -216,6 +216,85 @@ func TestForceUpdateBlocksEveryAPIRouteExceptVersion(t *testing.T) {
 	}
 }
 
+func TestVersionEndpointWindows(t *testing.T) {
+	t.Parallel()
+
+	h := newGatewayForContract(t, gatewayTestOptions{
+		versionConfigs: map[string]versionConfig{
+			"windows": {
+				MinSupportedVersion: "1.4.0",
+				LatestVersion:       "1.7.2",
+				UpdateURL:           "https://updates.voice.example/windows/appcast.xml",
+				ReleaseNotes:        "Windows desktop voice fixes",
+			},
+		},
+	})
+
+	tests := []struct {
+		name                string
+		target              string
+		wantForceUpdate     bool
+		wantUpdateAvailable bool
+	}{
+		{
+			name:                "current windows version reports no update",
+			target:              "/api/v1/version?platform=windows&version=1.7.2",
+			wantForceUpdate:     false,
+			wantUpdateAvailable: false,
+		},
+		{
+			name:                "below windows minimum forces update",
+			target:              "/api/v1/version?platform=windows&version=1.3.9",
+			wantForceUpdate:     true,
+			wantUpdateAvailable: true,
+		},
+		{
+			name:                "below windows latest offers soft update",
+			target:              "/api/v1/version?platform=windows&version=1.6.0",
+			wantForceUpdate:     false,
+			wantUpdateAvailable: true,
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			rec := performRequest(h, http.MethodGet, tc.target, "", nil)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d; body=%q", rec.Code, http.StatusOK, rec.Body.String())
+			}
+
+			var got struct {
+				ForceUpdate     bool   `json:"force_update"`
+				UpdateAvailable bool   `json:"update_available"`
+				LatestVersion   string `json:"latest_version"`
+				MinSupported    string `json:"min_supported_version"`
+				UpdateURL       string `json:"update_url"`
+				ReleaseNotes    string `json:"release_notes"`
+			}
+			decodeJSON(t, rec.Body, &got)
+
+			if got.ForceUpdate != tc.wantForceUpdate {
+				t.Fatalf("force_update = %v, want %v", got.ForceUpdate, tc.wantForceUpdate)
+			}
+			if got.UpdateAvailable != tc.wantUpdateAvailable {
+				t.Fatalf("update_available = %v, want %v", got.UpdateAvailable, tc.wantUpdateAvailable)
+			}
+			if got.LatestVersion != "1.7.2" || got.MinSupported != "1.4.0" {
+				t.Fatalf("versions = latest %q min %q, want latest 1.7.2 min 1.4.0", got.LatestVersion, got.MinSupported)
+			}
+			if got.UpdateURL != "https://updates.voice.example/windows/appcast.xml" {
+				t.Fatalf("update_url = %q", got.UpdateURL)
+			}
+			if got.ReleaseNotes != "Windows desktop voice fixes" {
+				t.Fatalf("release_notes = %q", got.ReleaseNotes)
+			}
+		})
+	}
+}
+
 func TestVersionEndpointRejectsMalformedVersion(t *testing.T) {
 	t.Parallel()
 

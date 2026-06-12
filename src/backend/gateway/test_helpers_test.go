@@ -13,6 +13,8 @@ import (
 
 type gatewayTestOptions struct {
 	versionConfigs     map[string]versionConfig
+	versionStore       versionStore
+	versionCacheRedis  string
 	forceUpdate        *forceUpdatePolicy
 	tokenClaims        map[string]tokenClaims
 	rateLimitedGroups  map[string]bool
@@ -36,6 +38,8 @@ func newGatewayForContract(_ *testing.T, options gatewayTestOptions) http.Handle
 	}
 	return newGateway(gatewayConfig{
 		versionConfigs:     options.versionConfigs,
+		versionStore:       options.versionStore,
+		versionCacheRedis:  options.versionCacheRedis,
 		forceUpdate:        options.forceUpdate,
 		tokenClaims:        options.tokenClaims,
 		rateLimitedGroups:  options.rateLimitedGroups,

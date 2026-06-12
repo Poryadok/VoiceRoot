@@ -1670,6 +1670,12 @@ abstract class AppLocalizations {
   /// **'Update'**
   String get versionUpdateNow;
 
+  /// No description provided for @versionRestartToUpdate.
+  ///
+  /// In en, this message translates to:
+  /// **'Restart and update'**
+  String get versionRestartToUpdate;
+
   /// No description provided for @profileBlock.
   ///
   /// In en, this message translates to:

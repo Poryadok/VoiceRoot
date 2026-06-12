@@ -37,6 +37,7 @@ void main() {
     'test/phase8_fcm_android_e2e_live_test.dart',
     'test/phase8_mobile_layout_e2e_live_test.dart',
     'test/phase8_offline_cache_e2e_live_test.dart',
+    'test/phase8_windows_version_e2e_live_test.dart',
   ];
 
   for (final path in liveTests) {

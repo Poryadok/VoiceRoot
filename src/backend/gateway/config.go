@@ -1,10 +1,13 @@
 package main
 
 import (
+	"database/sql"
 	"log"
 	"net/http"
 	"os"
 	"strings"
+
+	_ "github.com/jackc/pgx/v5/stdlib"
 
 	voicecfg "voice/backend/pkg/config"
 	voicejwt "voice/backend/pkg/jwt"
@@ -27,8 +30,16 @@ func loadGatewayConfigFromEnv() gatewayConfig {
 	config.restUpstreams = restUpstreamsFromEnv()
 	config.transcoder = newTranscoder(grpcClientsFromEnv())
 	config.realtimeUpstream = proxyFromEnv("GATEWAY_REALTIME_UPSTREAM_URL")
+	if dbURL := strings.TrimSpace(os.Getenv("GATEWAY_DATABASE_URL")); dbURL != "" {
+		if db, err := sql.Open("pgx", dbURL); err == nil {
+			config.versionStore = versionStoreFromEnv(config.versionConfigs, db)
+		} else {
+			log.Printf("invalid GATEWAY_DATABASE_URL: %v", err)
+		}
+	}
 	if redisAddr := strings.TrimSpace(os.Getenv("GATEWAY_REDIS_ADDR")); redisAddr != "" {
 		password := os.Getenv("GATEWAY_REDIS_PASSWORD")
+		config.versionCacheRedis = redisAddr
 		config.rateLimiter = newRedisSlidingWindowLimiter(redisAddr, password, rateLimitRulesFromEnv())
 		config.tokenBlacklist = newRedisTokenBlacklist(redisAddr, password, os.Getenv("GATEWAY_JWT_BLACKLIST_PREFIX"))
 	} else if strings.EqualFold(os.Getenv("GATEWAY_IN_MEMORY_RATE_LIMITS"), "true") {

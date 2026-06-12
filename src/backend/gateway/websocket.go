@@ -8,6 +8,14 @@ import (
 )
 
 func (g *gateway) handleWebSocket(w http.ResponseWriter, r *http.Request) {
+	if blocked, updateURL := g.forceUpdateDecision(r); blocked {
+		g.metrics.ObserveForceUpdateBlock(r.Header.Get("X-Voice-Client-Platform"))
+		writeJSON(w, http.StatusUpgradeRequired, map[string]string{
+			"error":      "client_outdated",
+			"update_url": updateURL,
+		})
+		return
+	}
 	if !isWebSocketUpgrade(r) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "websocket_upgrade_required"})
 		return

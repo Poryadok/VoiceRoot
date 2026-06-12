@@ -480,6 +480,7 @@
   "versionUpdateAvailableGeneric": "Доступно обновление",
   "versionUpdateLater": "Позже",
   "versionUpdateNow": "Обновить",
+  "versionRestartToUpdate": "Перезапустить и обновить",
   "profileBlock": "Заблокировать",
   "profileBlockConfirmTitle": "Заблокировать пользователя?",
   "profileBlockConfirmMessage": "Он не сможет писать вам сообщения.",

@@ -6,10 +6,11 @@ import (
 )
 
 func (g *gateway) handleREST(w http.ResponseWriter, r *http.Request) {
-	if g.isForceUpdateBlocked(r) {
+	if blocked, updateURL := g.forceUpdateDecision(r); blocked {
+		g.metrics.ObserveForceUpdateBlock(r.Header.Get("X-Voice-Client-Platform"))
 		writeJSON(w, http.StatusUpgradeRequired, map[string]string{
 			"error":      "client_outdated",
-			"update_url": g.config.forceUpdate.UpdateURL,
+			"update_url": updateURL,
 		})
 		return
 	}

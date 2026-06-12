@@ -502,6 +502,7 @@
   "versionUpdateAvailableGeneric": "Update available",
   "versionUpdateLater": "Later",
   "versionUpdateNow": "Update",
+  "versionRestartToUpdate": "Restart and update",
   "profileBlock": "Block user",
   "profileBlockConfirmTitle": "Block this user?",
   "profileBlockConfirmMessage": "They will not be able to message you.",

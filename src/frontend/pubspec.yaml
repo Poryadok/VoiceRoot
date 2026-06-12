@@ -52,6 +52,7 @@ dependencies:
   firebase_core: ^3.13.0
   firebase_messaging: ^15.2.5
   in_app_update: ^4.2.3
+  auto_updater: ^1.0.0
   drift: ^2.28.0
   drift_flutter: ^0.2.4
   sqlite3_flutter_libs: ^0.5.34

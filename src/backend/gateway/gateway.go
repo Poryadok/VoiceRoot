@@ -15,6 +15,8 @@ import (
 
 type gatewayConfig struct {
 	versionConfigs     map[string]versionConfig
+	versionStore       versionStore
+	versionCacheRedis  string
 	forceUpdate        *forceUpdatePolicy
 	tokenClaims        map[string]tokenClaims
 	rateLimitedGroups  map[string]bool
@@ -33,6 +35,7 @@ type gatewayConfig struct {
 
 type gateway struct {
 	config         gatewayConfig
+	versionCache   versionPolicyCache
 	tokenValidator tokenValidator
 	tokenBlacklist tokenBlacklist
 	rateLimiter    rateLimiter
@@ -75,8 +78,12 @@ func newGateway(config gatewayConfig) http.Handler {
 	if config.slogLogger == nil {
 		config.slogLogger = voicelog.NewJSONLogger(voicelog.LevelFromEnv(), slog.String("service", "gateway"))
 	}
+	if config.versionStore == nil {
+		config.versionStore = versionStoreFromEnv(config.versionConfigs, nil)
+	}
 	core := &gateway{
 		config:         config,
+		versionCache:   versionPolicyCacheFromConfig(config),
 		tokenValidator: config.tokenValidator,
 		tokenBlacklist: config.tokenBlacklist,
 		rateLimiter:    config.rateLimiter,
@@ -106,6 +113,8 @@ func (g *gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		g.handleWebSocket(rec, r)
 	case r.URL.Path == "/api/v1/version":
 		g.handleVersion(rec, r)
+	case strings.HasPrefix(r.URL.Path, "/api/v1/admin/client-versions"):
+		g.handleAdminClientVersions(rec, r)
 	case strings.HasPrefix(r.URL.Path, "/api/v1/"):
 		g.handleREST(rec, r)
 	default:

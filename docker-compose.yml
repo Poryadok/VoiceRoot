@@ -480,6 +480,8 @@ services:
       GATEWAY_RATE_LIMIT_RULES_JSON: '{"Auth":{"limit":0,"window":"15m"}}'
       # Compose dev only: Flutter web may use any localhost port as Origin.
       GATEWAY_CORS_ALLOWED_ORIGINS: "*"
+      GATEWAY_DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/gateway_db?sslmode=disable
+      GATEWAY_VERSION_CONFIGS_JSON: '{"windows":{"min_supported_version":"1.0.0","latest_version":"1.0.0","update_url":"https://updates.voice.example/windows/appcast.xml","release_notes":"Compose dev"},"android":{"min_supported_version":"1.0.0","latest_version":"1.0.0","update_url":"https://play.google.com/store/apps/details?id=voice.app.voice_frontend","release_notes":"","shorebird_patch":0}}'
     depends_on:
       redis:
         condition: service_healthy

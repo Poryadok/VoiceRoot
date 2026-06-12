@@ -898,6 +898,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get versionUpdateNow => 'Update';
 
   @override
+  String get versionRestartToUpdate => 'Restart and update';
+
+  @override
   String get profileBlock => 'Block user';
 
   @override

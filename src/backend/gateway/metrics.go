@@ -11,18 +11,29 @@ import (
 )
 
 type gatewayMetrics struct {
-	mu               sync.Mutex
-	requestCount     map[string]int64
-	requestLatencyMS map[string]float64
-	rateLimitHits    map[string]int64
+	mu                 sync.Mutex
+	requestCount       map[string]int64
+	requestLatencyMS   map[string]float64
+	rateLimitHits      map[string]int64
+	forceUpdateBlocks  map[string]int64
 }
 
 func newGatewayMetrics() *gatewayMetrics {
 	return &gatewayMetrics{
-		requestCount:     map[string]int64{},
-		requestLatencyMS: map[string]float64{},
-		rateLimitHits:    map[string]int64{},
+		requestCount:      map[string]int64{},
+		requestLatencyMS:  map[string]float64{},
+		rateLimitHits:     map[string]int64{},
+		forceUpdateBlocks: map[string]int64{},
 	}
+}
+
+func (m *gatewayMetrics) ObserveForceUpdateBlock(platform string) {
+	if platform == "" {
+		platform = "unknown"
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.forceUpdateBlocks[platform]++
 }
 
 func (m *gatewayMetrics) ObserveRequest(group, method string, status int, duration time.Duration) {
@@ -55,6 +66,15 @@ func (m *gatewayMetrics) WritePrometheus(w http.ResponseWriter) {
 	sort.Strings(groups)
 	for _, group := range groups {
 		_, _ = fmt.Fprintf(w, "gateway_ratelimit_hit{group=%q} %d\n", group, m.rateLimitHits[group])
+	}
+	_, _ = fmt.Fprintln(w, "# TYPE gateway_force_update_blocks counter")
+	platforms := make([]string, 0, len(m.forceUpdateBlocks))
+	for platform := range m.forceUpdateBlocks {
+		platforms = append(platforms, platform)
+	}
+	sort.Strings(platforms)
+	for _, platform := range platforms {
+		_, _ = fmt.Fprintf(w, "gateway_force_update_blocks{platform=%q} %d\n", platform, m.forceUpdateBlocks[platform])
 	}
 }
 

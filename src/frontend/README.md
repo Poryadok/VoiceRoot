@@ -22,7 +22,16 @@ flutter test
 
 Из корня репозитория (нужен Flutter на `PATH`): **`make flutter-ci`** — те же шаги ([Makefile](../../Makefile)).
 
-CI: [.github/workflows/ci.yml](../../.github/workflows/ci.yml) job `flutter`. Цель **`make build-all`** Flutter не запускает — см. [docs/TESTING.md](../../docs/TESTING.md).
+CI: [.github/workflows/ci.yml](../../.github/workflows/ci.yml) jobs `flutter` and `flutter-windows`. Цель **`make build-all`** Flutter не запускает — см. [docs/TESTING.md](../../docs/TESTING.md).
+
+## Windows desktop release
+
+```powershell
+.\scripts\release\windows-build.ps1 -Version 1.0.0 -ApiBaseUrl http://127.0.0.1:18080
+```
+
+- Build uses `auto_updater` (WinSparkle) for signed delta updates; publish `appcast.xml` from [`scripts/release/appcast-template.xml`](../../scripts/release/appcast-template.xml) to CDN/R2.
+- Gateway serves `/api/v1/version?platform=windows` and returns `426` when `X-Voice-Client-Version` is below `min_supported_version` ([docs/features/updates.md](../../docs/features/updates.md)).
 
 ## Docker (Phase 1 stack)
 
