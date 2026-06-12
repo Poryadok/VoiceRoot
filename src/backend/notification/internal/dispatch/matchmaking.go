@@ -14,7 +14,7 @@ import (
 
 // MatchmakingPusher sends pushes for routed matchmaking notifications.
 type MatchmakingPusher struct {
-	Tokens *store.DeviceTokenStore
+	Tokens TokenRepository
 	Pusher *PushDispatcher
 }
 
@@ -40,6 +40,9 @@ func (p *MatchmakingPusher) SendPush(ctx context.Context, decisions map[string]d
 			continue
 		}
 		for _, tok := range tokens {
+			if !ShouldDeliverPushToToken(payload.Data["type"], tok.PushService) {
+				continue
+			}
 			if err := p.Pusher.Send(ctx, recipient, tok, payload); err != nil {
 				if err == fcm.ErrInvalidToken || err == apns.ErrInvalidToken {
 					_ = p.Tokens.DeleteByToken(ctx, tok.Token)

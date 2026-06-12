@@ -24,10 +24,7 @@ type NotificationGRPC struct {
 }
 
 func shouldDeliverPushToToken(notificationType, pushService string) bool {
-	if notificationType == "incoming_call" {
-		return pushService == "voip_apns"
-	}
-	return pushService != "voip_apns"
+	return dispatch.ShouldDeliverPushToToken(notificationType, pushService)
 }
 
 func (s *NotificationGRPC) pusher() *dispatch.PushDispatcher {
@@ -55,10 +52,11 @@ func (s *NotificationGRPC) RegisterDevice(ctx context.Context, req *notification
 	if s.Tokens == nil {
 		return nil, status.Error(codes.Unavailable, "token store unavailable")
 	}
-	if _, err := s.Tokens.Register(ctx, profileID, req.GetPlatform(), req.GetToken(), pushService); err != nil {
+	id, err := s.Tokens.Register(ctx, profileID, req.GetPlatform(), req.GetToken(), pushService)
+	if err != nil {
 		return nil, status.Errorf(codes.Internal, "register device: %v", err)
 	}
-	return &notificationv1.RegisterDeviceResponse{}, nil
+	return &notificationv1.RegisterDeviceResponse{DeviceTokenId: id.String()}, nil
 }
 
 func (s *NotificationGRPC) UnregisterDevice(ctx context.Context, req *notificationv1.UnregisterDeviceRequest) (*notificationv1.UnregisterDeviceResponse, error) {

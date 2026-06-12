@@ -7,15 +7,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../backend/notifications_client.dart';
 import 'auth_providers.dart';
 import 'in_app_notifications.dart';
-import 'push_notifications.dart';
+import 'push_background_handler.dart';
+import 'push_notification_handler.dart';
 import 'push_notifications_bootstrap.dart';
 import 'push_platform.dart';
 
-/// Background FCM handler (Android/iOS); must be top-level.
-@pragma('vm:entry-point')
-Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // Payload is processed when the app resumes; keep handler registered for OS delivery.
-}
+export 'push_background_handler.dart' show firebaseMessagingBackgroundHandler;
 
 final voiceNotificationsClientProvider = Provider<VoiceNotificationsClient>((ref) {
   return VoiceNotificationsClient(gateway: ref.watch(gatewayHttpClientProvider));
@@ -37,7 +34,7 @@ class PushNotificationsController {
         unawaited(_syncToken());
       }
       if (!next.isAuthenticated && prev?.isAuthenticated == true) {
-        unawaited(_teardown());
+        unawaited(_teardown(unregister: true));
       }
     }, fireImmediately: true);
   }
@@ -46,18 +43,43 @@ class PushNotificationsController {
   ProviderSubscription<AuthState>? _authSub;
   StreamSubscription<RemoteMessage>? _foregroundSub;
   StreamSubscription<String>? _tokenRefreshSub;
+  StreamSubscription<RemoteMessage>? _openedSub;
+  String? _deviceTokenId;
+  String? _lastAuthorization;
 
   void dispose() {
     _authSub?.close();
-    _foregroundSub?.cancel();
-    _tokenRefreshSub?.cancel();
+    unawaited(_teardown(unregister: false));
   }
 
-  Future<void> _teardown() async {
+  Future<void> _teardown({required bool unregister}) async {
     _foregroundSub?.cancel();
     _foregroundSub = null;
     _tokenRefreshSub?.cancel();
     _tokenRefreshSub = null;
+    _openedSub?.cancel();
+    _openedSub = null;
+
+    if (unregister) {
+      final deviceTokenId = _deviceTokenId;
+      final authorization = _lastAuthorization;
+      _deviceTokenId = null;
+      _lastAuthorization = null;
+      if (deviceTokenId != null &&
+          deviceTokenId.isNotEmpty &&
+          authorization != null) {
+        try {
+          const bootstrap = PushNotificationsBootstrap();
+          await bootstrap.unregisterToken(
+            client: _ref.read(voiceNotificationsClientProvider),
+            authorization: authorization,
+            deviceTokenId: deviceTokenId,
+          );
+        } catch (_) {
+          // Best-effort unregister on logout; registration will upsert on next login.
+        }
+      }
+    }
   }
 
   Future<void> _syncToken() async {
@@ -81,15 +103,20 @@ class PushNotificationsController {
     if (token == null || token.isEmpty) return;
 
     const bootstrap = PushNotificationsBootstrap();
-    await bootstrap.registerToken(
+    final deviceTokenId = await bootstrap.registerToken(
       client: _ref.read(voiceNotificationsClientProvider),
       authorization: header,
       platform: platform,
       token: token,
       pushService: pushService,
     );
+    _deviceTokenId = deviceTokenId;
+    _lastAuthorization = header;
 
     _foregroundSub ??= FirebaseMessaging.onMessage.listen(_onForegroundMessage);
+    _openedSub ??= FirebaseMessaging.onMessageOpenedApp.listen(_onOpenedMessage);
+    await _handleInitialMessage(messaging);
+
     _tokenRefreshSub ??= messaging.onTokenRefresh.listen((_) async {
       final currentHeader =
           _ref.read(authControllerProvider).session?.authorizationHeader;
@@ -99,23 +126,40 @@ class PushNotificationsController {
         pushServiceForTarget(),
       );
       if (refreshed == null || refreshed.isEmpty) return;
-      await bootstrap.registerToken(
+      final newId = await bootstrap.registerToken(
         client: _ref.read(voiceNotificationsClientProvider),
         authorization: currentHeader,
         platform: pushPlatformForTarget(),
         token: refreshed,
         pushService: pushServiceForTarget(),
       );
+      _deviceTokenId = newId;
+      _lastAuthorization = currentHeader;
     });
   }
 
   void _onForegroundMessage(RemoteMessage message) {
-    final data = message.data.map((k, v) => MapEntry(k, v.toString()));
-    final frame = fcmDataToRealtimeNotification(data);
-    if (frame == null) return;
-    _ref
-        .read(inAppNotificationControllerProvider)
-        ?.onPushNotificationData(frame.data);
+    _dispatchPushData(message.data);
+  }
+
+  void _onOpenedMessage(RemoteMessage message) {
+    _dispatchPushData(message.data);
+  }
+
+  Future<void> _handleInitialMessage(FirebaseMessaging messaging) async {
+    final initial = await messaging.getInitialMessage();
+    if (initial != null) {
+      _onOpenedMessage(initial);
+    }
+  }
+
+  void _dispatchPushData(Map<String, dynamic> data) {
+    final normalized = data.map((k, v) => MapEntry(k, v.toString()));
+    handlePushPayloadMap(normalized, (notificationData) {
+      _ref
+          .read(inAppNotificationControllerProvider)
+          ?.onPushNotificationData(notificationData);
+    });
   }
 
   Future<void> _ensureFirebase() async {

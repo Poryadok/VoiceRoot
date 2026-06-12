@@ -13,12 +13,16 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 
 	grpcsvc "voice/backend/notification/internal/grpcsvc"
 	"voice/backend/notification/internal/apns"
+	"voice/backend/notification/internal/chatmembers"
 	"voice/backend/notification/internal/dispatch"
 	"voice/backend/notification/internal/fcm"
+	"voice/backend/notification/internal/grouping"
+	"voice/backend/notification/internal/presence"
 	"voice/backend/notification/internal/store"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
@@ -52,8 +56,14 @@ func main() {
 
 		tokenStore := &store.DeviceTokenStore{Pool: pool}
 		fcmSender := fcm.Sender(&fcm.NoopSender{Logger: logger})
-		if strings.TrimSpace(os.Getenv("FCM_CREDENTIALS_JSON")) != "" {
-			logger.Info("FCM credentials configured; using noop until HTTP sender is enabled")
+		if cfg, ok := fcm.ConfigFromEnv(); ok {
+			httpSender, err := fcm.NewHTTPSender(cfg)
+			if err != nil {
+				logger.Warn("FCM credentials invalid; using noop sender", slog.Any("error", err))
+			} else {
+				fcmSender = httpSender
+				logger.Info("FCM HTTP sender enabled", slog.String("project_id", cfg.ProjectID))
+			}
 		}
 		apnsSender := apns.Sender(&apns.NoopSender{Logger: logger})
 		voipSender := apns.VoIPSender(&apns.VoIPNoopSender{})
@@ -75,8 +85,49 @@ func main() {
 		}
 		pusher := &dispatch.PushDispatcher{FCM: fcmSender, APNs: apnsSender, VoIP: voipSender}
 
+		var groupingStore grouping.Store
+		if redisAddr := strings.TrimSpace(os.Getenv("NOTIFICATION_REDIS_ADDR")); redisAddr != "" {
+			rdb := redis.NewClient(&redis.Options{Addr: redisAddr})
+			groupingStore = grouping.NewRedisStore(rdb)
+			logger.Info("push grouping redis enabled", slog.String("addr", redisAddr))
+		}
+
+		presenceChecker := presence.Checker(presence.OfflineChecker{})
+		if userAddr := strings.TrimSpace(os.Getenv("USER_GRPC_ADDR")); userAddr != "" {
+			if pc, err := presence.NewGRPCChecker(userAddr); err != nil {
+				logger.Warn("user presence checker unavailable; offline-only routing", slog.Any("error", err))
+			} else {
+				presenceChecker = pc
+				logger.Info("user presence checker enabled", slog.String("addr", userAddr))
+			}
+		}
+
+		var chatLister chatmembers.Lister = chatmembers.NoopLister{}
+		if chatAddr := strings.TrimSpace(os.Getenv("CHAT_GRPC_ADDR")); chatAddr != "" {
+			if cl, err := chatmembers.NewGRPCLister(chatAddr); err != nil {
+				logger.Warn("chat members lister unavailable; MessageSent push skipped", slog.Any("error", err))
+			} else {
+				chatLister = cl
+				logger.Info("chat members lister enabled", slog.String("addr", chatAddr))
+			}
+		}
+
+		msgPusher := &dispatch.MessagePusher{
+			Tokens:   tokenStore,
+			Pusher:   pusher,
+			Grouping: groupingStore,
+			Presence: presenceChecker,
+		}
+
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
 			instanceID := strings.TrimSpace(os.Getenv("HOSTNAME"))
+			go func() {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				if err := runMessageEventsConsumer(ctx, natsURL, instanceID, tokenStore, chatLister, msgPusher, logger); err != nil && logger != nil {
+					logger.Error("message.events consumer exited", slog.Any("error", err))
+				}
+			}()
 			go func() {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()

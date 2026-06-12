@@ -869,6 +869,7 @@ func (x *RelayNotificationRequest) GetPayloadJson() string {
 
 type RegisterDeviceResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	DeviceTokenId string                 `protobuf:"bytes,1,opt,name=device_token_id,json=deviceTokenId,proto3" json:"device_token_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -901,6 +902,13 @@ func (x *RegisterDeviceResponse) ProtoReflect() protoreflect.Message {
 // Deprecated: Use RegisterDeviceResponse.ProtoReflect.Descriptor instead.
 func (*RegisterDeviceResponse) Descriptor() ([]byte, []int) {
 	return file_voice_notification_v1_notification_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *RegisterDeviceResponse) GetDeviceTokenId() string {
+	if x != nil {
+		return x.DeviceTokenId
+	}
+	return ""
 }
 
 type UnregisterDeviceResponse struct {

@@ -56,7 +56,7 @@ void main() {
         token: 'fcm-token-abc',
       );
 
-      expect(result, isA<NotificationsApiOk<void>>());
+      expect(result, isA<NotificationsApiOk<String?>>());
       expect(capturedPath, '/api/v1/notifications/register-device');
       expect(capturedBody?['platform'], 'web');
       expect(capturedBody?['token'], 'fcm-token-abc');
@@ -82,7 +82,7 @@ void main() {
         pushService: 'apns',
       );
 
-      expect(result, isA<NotificationsApiOk<void>>());
+      expect(result, isA<NotificationsApiOk<String?>>());
       expect(capturedBody?['platform'], 'ios');
       expect(capturedBody?['token'], 'apns-token-xyz');
       expect(capturedBody?['push_service'], 'apns');
@@ -107,7 +107,7 @@ void main() {
         pushService: 'voip_apns',
       );
 
-      expect(result, isA<NotificationsApiOk<void>>());
+      expect(result, isA<NotificationsApiOk<String?>>());
       expect(capturedBody?['push_service'], 'voip_apns');
     });
   });

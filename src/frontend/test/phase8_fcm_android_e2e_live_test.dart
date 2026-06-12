@@ -3,16 +3,16 @@ import 'package:voice_frontend/backend/notifications_client.dart';
 
 import 'support/live_gateway_harness.dart';
 
-/// Phase-6 FCM E2E: device token registration via Gateway (compose stack).
+/// Phase-8 FCM Android E2E: device token registration via Gateway (compose stack).
 ///
 /// ```text
-/// flutter test test/phase6_fcm_e2e_live_test.dart ^
+/// flutter test test/phase8_fcm_android_e2e_live_test.dart ^
 ///   --dart-define=VOICE_RUN_LIVE_INTEGRATION=true ^
 ///   --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080
 /// ```
 void main() {
   test(
-    'register-device accepts FCM token for authenticated user',
+    'register-device accepts FCM token for android platform',
     () async {
       final probe = await probeLiveGateway();
       expect(
@@ -22,13 +22,14 @@ void main() {
       );
       final ctx = (probe as LiveGatewayReady).context;
 
-      final user = await ctx.registerUser('fcm-phase6');
+      final user = await ctx.registerUser('fcm-phase8-android');
       final notifications = VoiceNotificationsClient(gateway: ctx.gatewayHttp());
 
       final result = await notifications.registerDevice(
         authorization: user.authorizationHeader,
-        platform: 'web',
-        token: 'qa-fcm-${user.activeProfileId}-${DateTime.now().millisecondsSinceEpoch}',
+        platform: 'android',
+        token: 'qa-fcm-android-${user.activeProfileId}-${DateTime.now().millisecondsSinceEpoch}',
+        pushService: 'fcm',
       );
       expect(result, isA<NotificationsApiOk<String?>>());
     },

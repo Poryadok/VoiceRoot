@@ -4,7 +4,7 @@ import '../backend/notifications_client.dart';
 class PushNotificationsBootstrap {
   const PushNotificationsBootstrap();
 
-  Future<void> registerToken({
+  Future<String?> registerToken({
     required VoiceNotificationsClient client,
     required String authorization,
     required String platform,
@@ -17,9 +17,10 @@ class PushNotificationsBootstrap {
       token: token,
       pushService: pushService,
     );
-    if (result is NotificationsApiFailure) {
-      throw StateError(result.message);
-    }
+    return switch (result) {
+      NotificationsApiOk(:final data) => data,
+      NotificationsApiFailure(:final message) => throw StateError(message),
+    };
   }
 
   Future<void> unregisterToken({

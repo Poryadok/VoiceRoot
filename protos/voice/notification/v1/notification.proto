@@ -128,7 +128,9 @@ message RelayNotificationRequest {
   string payload_json = 2;
 }
 
-message RegisterDeviceResponse {}
+message RegisterDeviceResponse {
+  string device_token_id = 1;
+}
 message UnregisterDeviceResponse {}
 message GetNotificationSettingsResponse {
   NotificationSettings notification_settings = 1;

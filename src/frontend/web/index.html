@@ -31,6 +31,13 @@
 
   <title>voice_frontend</title>
   <link rel="manifest" href="manifest.json">
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/firebase-messaging-sw.js').catch(() => {});
+      });
+    }
+  </script>
 </head>
 <body>
   <!--

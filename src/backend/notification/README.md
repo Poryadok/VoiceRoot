@@ -15,6 +15,7 @@ Push routing for FCM (Web + Android) and APNs (iOS): device tokens, offline deli
 | `NOTIFICATION_REDIS_ADDR` | Push grouping state (optional; degraded = ungrouped) |
 | `NATS_URL` | `message.events` consumer (optional) |
 | `USER_GRPC_ADDR` | Presence check for online vs push routing |
+| `CHAT_GRPC_ADDR` | Chat member list for `MessageSent` offline push fan-out |
 | `FCM_CREDENTIALS_JSON` | Firebase service account; unset = noop sender (Tier-1 degraded) |
 | `APNS_KEY_ID` | Apple Push Notifications auth key id |
 | `APNS_TEAM_ID` | Apple Developer team id |

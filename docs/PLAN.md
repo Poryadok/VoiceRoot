@@ -248,7 +248,7 @@
 
 - [ ] **APNs** — обычные пуши (тот же контур, что FCM)
 - [ ] **VoIP** — PushKit + CallKit для входящих на iOS
-- [ ] **FCM** — доработка под мобилу, согласованность с APNs
+- [x] **FCM** — доработка под мобилу, согласованность с APNs
 - [ ] **Flutter mobile** — layout, Android / iOS релизы
 - [ ] **Оффлайн-кэш** — последние N сообщений на чат (SQLite)
 - [ ] **Windows** — desktop-сборка, auto-updater
