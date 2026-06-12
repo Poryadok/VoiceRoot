@@ -43,3 +43,25 @@ func (h *MatchmakingEventHandler) HandleMatchFound(ctx context.Context, ev *even
 	}
 	return out
 }
+
+// HandleSearchNudge returns delivery decision for a search nudge event.
+func (h *MatchmakingEventHandler) HandleSearchNudge(ctx context.Context, ev *eventsv1.SearchNudge) map[string]delivery.DeliveryDecision {
+	_ = ctx
+	if ev == nil || ev.GetProfileId() == "" {
+		return nil
+	}
+	return map[string]delivery.DeliveryDecision{
+		ev.GetProfileId(): h.route(ev.GetProfileId(), delivery.TypeSearchNudge),
+	}
+}
+
+// HandleSearchTimeout returns delivery decision for a search timeout event.
+func (h *MatchmakingEventHandler) HandleSearchTimeout(ctx context.Context, ev *eventsv1.MatchTimeout) map[string]delivery.DeliveryDecision {
+	_ = ctx
+	if ev == nil || ev.GetProfileId() == "" {
+		return nil
+	}
+	return map[string]delivery.DeliveryDecision{
+		ev.GetProfileId(): h.route(ev.GetProfileId(), delivery.TypeSearchTimeout),
+	}
+}

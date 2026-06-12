@@ -523,6 +523,10 @@
   "queueSearchSoughtRankMax": "Макс. ранг в поиске",
   "queueSearchStartError": "Не удалось начать поиск",
   "queueSearchCancelError": "Не удалось отменить поиск",
+  "queueSearchNudgeTitle": "Долго ищем",
+  "queueSearchNudgeBody": "Попробуйте изменить параметры поиска.",
+  "queueSearchTimeoutTitle": "Не удалось найти",
+  "queueSearchTimeoutBody": "Найти не удалось, попробуйте снова.",
   "matchFoundTitle": "Матч найден",
   "matchFoundSubtitle": "{gameName} · {mode}",
   "@matchFoundSubtitle": {

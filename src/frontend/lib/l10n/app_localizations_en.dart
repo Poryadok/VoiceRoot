@@ -996,6 +996,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get queueSearchCancelError => 'Could not cancel search';
 
   @override
+  String get queueSearchNudgeTitle => 'Still searching';
+
+  @override
+  String get queueSearchNudgeBody =>
+      'Taking a while. Try adjusting your search parameters.';
+
+  @override
+  String get queueSearchTimeoutTitle => 'No match found';
+
+  @override
+  String get queueSearchTimeoutBody =>
+      'We couldn\'t find teammates this time. Please try again.';
+
+  @override
   String get matchFoundTitle => 'Match found';
 
   @override

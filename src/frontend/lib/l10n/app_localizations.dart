@@ -1856,6 +1856,30 @@ abstract class AppLocalizations {
   /// **'Could not cancel search'**
   String get queueSearchCancelError;
 
+  /// No description provided for @queueSearchNudgeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Still searching'**
+  String get queueSearchNudgeTitle;
+
+  /// No description provided for @queueSearchNudgeBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Taking a while. Try adjusting your search parameters.'**
+  String get queueSearchNudgeBody;
+
+  /// No description provided for @queueSearchTimeoutTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No match found'**
+  String get queueSearchTimeoutTitle;
+
+  /// No description provided for @queueSearchTimeoutBody.
+  ///
+  /// In en, this message translates to:
+  /// **'We couldn\'t find teammates this time. Please try again.'**
+  String get queueSearchTimeoutBody;
+
   /// No description provided for @matchFoundTitle.
   ///
   /// In en, this message translates to:

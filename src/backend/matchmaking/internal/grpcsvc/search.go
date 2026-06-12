@@ -17,12 +17,11 @@ import (
 	"voice/backend/matchmaking/internal/criteria"
 	"voice/backend/matchmaking/internal/mmevents"
 	"voice/backend/matchmaking/internal/queue"
+	"voice/backend/matchmaking/internal/runtimeconfig"
 	"voice/backend/matchmaking/internal/store"
 
 	matchmakingv1 "voice.app/voice/matchmaking/v1"
 )
-
-const searchTimeoutDuration = 30 * time.Minute
 
 // SearchDeps wires queue search RPC dependencies.
 type SearchDeps struct {
@@ -99,7 +98,8 @@ func (s *MatchmakingGRPC) StartSearch(ctx context.Context, req *matchmakingv1.St
 	}
 
 	canonical := criteria.MustMarshal(crit)
-	timeoutAt := time.Now().UTC().Add(searchTimeoutDuration)
+	searchTiming := runtimeconfig.LoadSearchTiming()
+	timeoutAt := time.Now().UTC().Add(searchTiming.Timeout)
 	sess, err := deps.Sessions.Create(ctx, store.CreateSessionParams{
 		ProfileID: profileID,
 		GameID:    gameID,

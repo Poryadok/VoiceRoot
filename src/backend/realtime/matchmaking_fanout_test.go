@@ -118,6 +118,80 @@ func TestDispatchMatchmakingStreamEvent_MatchFoundFansOutPersonalOp(t *testing.T
 	}
 }
 
+func searchEventPayload(t *testing.T, env fanoutEnvelope, wantType string) map[string]string {
+	t.Helper()
+	var d map[string]string
+	if err := json.Unmarshal(env.D, &d); err != nil {
+		t.Fatal(err)
+	}
+	if d["type"] != wantType {
+		t.Fatalf("type=%q want %s", d["type"], wantType)
+	}
+	return d
+}
+
+func TestMatchmakingFanouts_SearchNudgeEnvelope(t *testing.T) {
+	profileID := uuid.NewString()
+	sessionID := uuid.NewString()
+	gameID := uuid.NewString()
+
+	ev := &eventsv1.MatchmakingStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.Now(),
+		Payload: &eventsv1.MatchmakingStreamEvent_SearchNudge{
+			SearchNudge: &eventsv1.SearchNudge{
+				SessionId: sessionID,
+				ProfileId: profileID,
+				GameId:    gameID,
+				Mode:      "Duo",
+			},
+		},
+	}
+	b, err := proto.Marshal(ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fanouts, ok := matchmakingFanouts(b)
+	if !ok || len(fanouts) != 1 {
+		t.Fatalf("fanouts=%v ok=%v", fanouts, ok)
+	}
+	if fanouts[0].ProfileID != profileID || fanouts[0].Envelope.Op != "search_nudge" {
+		t.Fatalf("fanout=%+v", fanouts[0])
+	}
+	d := searchEventPayload(t, fanouts[0].Envelope, "search_nudge")
+	if d["session_id"] != sessionID {
+		t.Fatalf("payload=%v", d)
+	}
+}
+
+func TestMatchmakingFanouts_SearchTimeoutEnvelope(t *testing.T) {
+	profileID := uuid.NewString()
+	sessionID := uuid.NewString()
+
+	ev := &eventsv1.MatchmakingStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.Now(),
+		Payload: &eventsv1.MatchmakingStreamEvent_MatchTimeout{
+			MatchTimeout: &eventsv1.MatchTimeout{
+				SessionId: sessionID,
+				ProfileId: profileID,
+				GameId:    uuid.NewString(),
+				Mode:      "Duo",
+			},
+		},
+	}
+	b, err := proto.Marshal(ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fanouts, ok := matchmakingFanouts(b)
+	if !ok || len(fanouts) != 1 || fanouts[0].Envelope.Op != "search_timeout" {
+		t.Fatalf("fanouts=%v ok=%v", fanouts, ok)
+	}
+}
+
 func TestMatchmakingFanouts_InvalidProtobuf(t *testing.T) {
 	fanouts, ok := matchmakingFanouts([]byte{0x01, 0x02})
 	if ok || fanouts != nil {

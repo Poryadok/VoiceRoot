@@ -55,6 +55,17 @@ func main() {
 			logger.Info("FCM credentials configured; using noop until HTTP sender is enabled")
 		}
 
+		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
+			instanceID := strings.TrimSpace(os.Getenv("HOSTNAME"))
+			go func() {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				if err := runMatchmakingEventsConsumer(ctx, natsURL, instanceID, tokenStore, sender, logger); err != nil && logger != nil {
+					logger.Error("matchmaking.events consumer exited", slog.Any("error", err))
+				}
+			}()
+		}
+
 		lis, err := net.Listen("tcp", grpcListen)
 		if err != nil {
 			log.Fatalf("grpc listen: %v", err)

@@ -15,8 +15,10 @@ const (
 	TypeReply        NotificationType = "reply"
 	TypeReaction     NotificationType = "reaction"
 	TypeFriendReq    NotificationType = "friend_request"
-	TypeMatchFound   NotificationType = "match_found"
-	TypeIncomingCall NotificationType = "incoming_call"
+	TypeMatchFound      NotificationType = "match_found"
+	TypeSearchNudge     NotificationType = "search_nudge"
+	TypeSearchTimeout   NotificationType = "search_timeout"
+	TypeIncomingCall    NotificationType = "incoming_call"
 	TypeSystem       NotificationType = "system"
 )
 

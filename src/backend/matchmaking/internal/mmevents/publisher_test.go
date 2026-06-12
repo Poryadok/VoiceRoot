@@ -13,6 +13,8 @@ func TestNoopPublisher(t *testing.T) {
 	ctx := context.Background()
 	require.NoError(t, p.PublishSearchStarted(ctx, "s", "p", "g", "m", "eu"))
 	require.NoError(t, p.PublishSearchCancelled(ctx, "s", "p"))
+	require.NoError(t, p.PublishSearchNudge(ctx, "s", "p", "g", "m"))
+	require.NoError(t, p.PublishSearchTimeout(ctx, "s", "p", "g", "m"))
 	require.NoError(t, p.Close())
 }
 

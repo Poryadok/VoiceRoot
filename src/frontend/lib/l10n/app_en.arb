@@ -545,6 +545,10 @@
   "queueSearchSoughtRankMax": "Max rank sought",
   "queueSearchStartError": "Could not start search",
   "queueSearchCancelError": "Could not cancel search",
+  "queueSearchNudgeTitle": "Still searching",
+  "queueSearchNudgeBody": "Taking a while. Try adjusting your search parameters.",
+  "queueSearchTimeoutTitle": "No match found",
+  "queueSearchTimeoutBody": "We couldn't find teammates this time. Please try again.",
   "matchFoundTitle": "Match found",
   "matchFoundSubtitle": "{gameName} · {mode}",
   "@matchFoundSubtitle": {

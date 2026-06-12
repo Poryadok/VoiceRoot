@@ -203,6 +203,8 @@ class SearchSessionData {
     required this.criteriaJson,
     required this.status,
     this.matchId,
+    this.timeoutAt,
+    this.createdAt,
   });
 
   final String id;
@@ -212,6 +214,29 @@ class SearchSessionData {
   final String criteriaJson;
   final String status;
   final String? matchId;
+  final DateTime? timeoutAt;
+  final DateTime? createdAt;
+
+  static DateTime? _parseTimestamp(dynamic value) {
+    if (value == null) return null;
+    if (value is String && value.isNotEmpty) {
+      return DateTime.tryParse(value);
+    }
+    if (value is Map<String, dynamic>) {
+      final seconds = value['seconds'];
+      if (seconds is String) {
+        final sec = int.tryParse(seconds);
+        if (sec != null) {
+          return DateTime.fromMillisecondsSinceEpoch(sec * 1000, isUtc: true);
+        }
+      }
+      if (seconds is num) {
+        return DateTime.fromMillisecondsSinceEpoch(seconds.toInt() * 1000,
+            isUtc: true);
+      }
+    }
+    return null;
+  }
 
   static SearchSessionData fromGatewayJson(Map<String, dynamic> json) {
     final session = json['searchSession'] as Map<String, dynamic>? ??
@@ -225,6 +250,8 @@ class SearchSessionData {
       criteriaJson: session['criteriaJson'] as String? ?? session['criteria_json'] as String? ?? '',
       status: session['status'] as String? ?? '',
       matchId: session['matchId'] as String? ?? session['match_id'] as String?,
+      timeoutAt: _parseTimestamp(session['timeoutAt'] ?? session['timeout_at']),
+      createdAt: _parseTimestamp(session['createdAt'] ?? session['created_at']),
     );
   }
 }

@@ -19,6 +19,10 @@ func matchmakingFanouts(data []byte) ([]profileFanout, bool) {
 		return matchFoundFanouts(payload.MatchFound)
 	case *eventsv1.MatchmakingStreamEvent_MatchCompleted:
 		return matchCompletedFanouts(payload.MatchCompleted)
+	case *eventsv1.MatchmakingStreamEvent_SearchNudge:
+		return searchNudgeFanouts(payload.SearchNudge)
+	case *eventsv1.MatchmakingStreamEvent_MatchTimeout:
+		return searchTimeoutFanouts(payload.MatchTimeout)
 	default:
 		return nil, false
 	}
@@ -45,6 +49,32 @@ func matchFoundFanouts(ev *eventsv1.MatchFound) ([]profileFanout, bool) {
 		payload["session_id"] = ev.GetSessionIds()[0]
 	}
 	return fanoutsForProfiles(ev.GetProfileIds(), "match_found", payload)
+}
+
+func searchNudgeFanouts(ev *eventsv1.SearchNudge) ([]profileFanout, bool) {
+	if ev == nil || ev.GetSessionId() == "" || ev.GetProfileId() == "" {
+		return nil, false
+	}
+	payload := map[string]string{
+		"type":       "search_nudge",
+		"session_id": ev.GetSessionId(),
+		"game_id":    ev.GetGameId(),
+		"mode":       ev.GetMode(),
+	}
+	return fanoutsForProfiles([]string{ev.GetProfileId()}, "search_nudge", payload)
+}
+
+func searchTimeoutFanouts(ev *eventsv1.MatchTimeout) ([]profileFanout, bool) {
+	if ev == nil || ev.GetSessionId() == "" || ev.GetProfileId() == "" {
+		return nil, false
+	}
+	payload := map[string]string{
+		"type":       "search_timeout",
+		"session_id": ev.GetSessionId(),
+		"game_id":    ev.GetGameId(),
+		"mode":       ev.GetMode(),
+	}
+	return fanoutsForProfiles([]string{ev.GetProfileId()}, "search_timeout", payload)
 }
 
 func matchCompletedFanouts(ev *eventsv1.MatchCompleted) ([]profileFanout, bool) {

@@ -56,3 +56,35 @@ func TestHandleMatchFound_SkipsEmptyProfileIDs(t *testing.T) {
 	decisions := h.HandleMatchFound(context.Background(), ev)
 	require.Len(t, decisions, 1)
 }
+
+func TestHandleSearchNudge_RoutesPushAndInApp(t *testing.T) {
+	profileID := uuid.NewString()
+	h := &consumer.MatchmakingEventHandler{Router: delivery.DecideRouting}
+	ev := &eventsv1.SearchNudge{
+		SessionId: uuid.NewString(),
+		ProfileId: profileID,
+		GameId:    uuid.NewString(),
+		Mode:      "Duo",
+	}
+	decisions := h.HandleSearchNudge(context.Background(), ev)
+	require.Len(t, decisions, 1)
+	d := decisions[profileID]
+	require.True(t, d.InApp)
+	require.True(t, d.Push)
+}
+
+func TestHandleSearchTimeout_RoutesPushAndInApp(t *testing.T) {
+	profileID := uuid.NewString()
+	h := &consumer.MatchmakingEventHandler{Router: delivery.DecideRouting}
+	ev := &eventsv1.MatchTimeout{
+		SessionId: uuid.NewString(),
+		ProfileId: profileID,
+		GameId:    uuid.NewString(),
+		Mode:      "Duo",
+	}
+	decisions := h.HandleSearchTimeout(context.Background(), ev)
+	require.Len(t, decisions, 1)
+	d := decisions[profileID]
+	require.True(t, d.InApp)
+	require.True(t, d.Push)
+}

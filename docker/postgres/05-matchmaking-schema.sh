@@ -5,3 +5,4 @@ psql -v ON_ERROR_STOP=1 --username "${POSTGRES_USER}" --dbname matchmaking_db -f
 psql -v ON_ERROR_STOP=1 --username "${POSTGRES_USER}" --dbname matchmaking_db -f /docker-entrypoint-initdb.d/matchmaking_db_search_sessions.sql.snippet
 psql -v ON_ERROR_STOP=1 --username "${POSTGRES_USER}" --dbname matchmaking_db -f /docker-entrypoint-initdb.d/matchmaking_db_matches.sql.snippet
 psql -v ON_ERROR_STOP=1 --username "${POSTGRES_USER}" --dbname matchmaking_db -f /docker-entrypoint-initdb.d/matchmaking_db_ratings.sql.snippet
+psql -v ON_ERROR_STOP=1 --username "${POSTGRES_USER}" --dbname matchmaking_db -f /docker-entrypoint-initdb.d/matchmaking_db_search_nudge.sql.snippet

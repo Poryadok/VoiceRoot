@@ -304,6 +304,8 @@ services:
       CHAT_GRPC_ADDR: chat:9090
       VOICE_GRPC_ADDR: voice:9090
       NATS_URL: nats://nats:4222
+      MATCHMAKING_SEARCH_NUDGE_AFTER: ${MATCHMAKING_SEARCH_NUDGE_AFTER:-15m}
+      MATCHMAKING_SEARCH_TIMEOUT: ${MATCHMAKING_SEARCH_TIMEOUT:-30m}
     depends_on:
       postgres:
         condition: service_healthy

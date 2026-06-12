@@ -5,7 +5,9 @@ import '../../backend/matchmaking_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/matchmaking_providers.dart';
+import '../../state/matchmaking_search_controller.dart';
 import '../../theme/voice_colors.dart';
+import '../core/voice_compact_banner.dart';
 
 /// Solo queue search: criteria form, searching state, cancel.
 class QueueSearchScreen extends ConsumerStatefulWidget {
@@ -19,6 +21,8 @@ class QueueSearchScreen extends ConsumerStatefulWidget {
   static const Key startButtonKey = Key('queue_search_start');
   static const Key cancelButtonKey = Key('queue_search_cancel');
   static const Key searchingStateKey = Key('queue_search_searching');
+  static const Key nudgeBannerKey = Key('queue_search_nudge');
+  static const Key timeoutStateKey = Key('queue_search_timeout');
 
   final CatalogGame game;
   final GameMode mode;
@@ -54,7 +58,26 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final voice = VoiceColors.of(context);
-    final searching = _session != null && _session!.status == 'searching';
+    final globalSession = ref.watch(activeSearchSessionProvider);
+    final searchState = ref.watch(matchmakingSearchControllerProvider);
+    final session = _session ?? globalSession;
+    final searching = session != null && session.status == 'searching';
+    final timedOut = searchState.timedOut && !searching;
+
+    ref.listen<SearchSessionData?>(activeSearchSessionProvider, (prev, next) {
+      if (next == null && prev != null && mounted) {
+        setState(() => _session = null);
+      } else if (next != null && next != _session && mounted) {
+        setState(() => _session = next);
+      }
+    });
+
+    ref.listen<MatchmakingSearchState>(matchmakingSearchControllerProvider,
+        (prev, next) {
+      if (next.timedOut && mounted) {
+        setState(() => _session = null);
+      }
+    });
 
     return Scaffold(
       key: QueueSearchScreen.screenKey,
@@ -66,7 +89,48 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
           const SizedBox(height: 4),
           Text(widget.mode.name, style: Theme.of(context).textTheme.bodyMedium),
           const SizedBox(height: 16),
-          if (searching) ...[
+          if (timedOut) ...[
+            Card(
+              key: QueueSearchScreen.timeoutStateKey,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      l10n.queueSearchTimeoutTitle,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(l10n.queueSearchTimeoutBody),
+                    const SizedBox(height: 12),
+                    FilledButton(
+                      onPressed: () {
+                        ref
+                            .read(matchmakingSearchControllerProvider.notifier)
+                            .clearTimedOut();
+                        setState(() {});
+                      },
+                      child: Text(l10n.queueSearchStart),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ] else if (searching) ...[
+            if (searchState.nudgeVisible)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: VoiceCompactBanner(
+                  key: QueueSearchScreen.nudgeBannerKey,
+                  message: '${l10n.queueSearchNudgeTitle}. ${l10n.queueSearchNudgeBody}',
+                  tone: VoiceBannerTone.warning,
+                  actionLabel: MaterialLocalizations.of(context).closeButtonLabel,
+                  onAction: () => ref
+                      .read(matchmakingSearchControllerProvider.notifier)
+                      .dismissNudge(),
+                ),
+              ),
             Card(
               key: QueueSearchScreen.searchingStateKey,
               child: Padding(

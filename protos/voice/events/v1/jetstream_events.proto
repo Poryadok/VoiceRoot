@@ -423,6 +423,7 @@ message MatchmakingStreamEvent {
     RatingSubmitted rating_submitted = 13;
     SearchCancelled search_cancelled = 14;
     MatchCompleted match_completed = 15;
+    SearchNudge search_nudge = 16;
   }
 }
 
@@ -452,6 +453,16 @@ message MatchFound {
 
 message MatchTimeout {
   string session_id = 1;
+  string profile_id = 2;
+  string game_id = 3;
+  string mode = 4;
+}
+
+message SearchNudge {
+  string session_id = 1;
+  string profile_id = 2;
+  string game_id = 3;
+  string mode = 4;
 }
 
 message MatchCompleted {

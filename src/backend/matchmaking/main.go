@@ -23,8 +23,10 @@ import (
 	"voice/backend/matchmaking/internal/matcher"
 	"voice/backend/matchmaking/internal/mmevents"
 	"voice/backend/matchmaking/internal/queue"
+	"voice/backend/matchmaking/internal/runtimeconfig"
 	"voice/backend/matchmaking/internal/squad"
 	"voice/backend/matchmaking/internal/store"
+	"voice/backend/matchmaking/internal/timeout"
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
@@ -168,6 +170,23 @@ func main() {
 				for range ticker.C {
 					if err := worker.RunOnce(context.Background()); err != nil && logger != nil {
 						logger.Warn("matcher tick failed", slog.Any("error", err))
+					}
+				}
+			}()
+
+			sweeper := &timeout.Sweeper{
+				Sessions: sessionStore,
+				Queue:    redisQueue,
+				Events:   events,
+				Timing:   runtimeconfig.LoadSearchTiming(),
+				Logger:   logger,
+			}
+			go func() {
+				ticker := time.NewTicker(30 * time.Second)
+				defer ticker.Stop()
+				for range ticker.C {
+					if err := sweeper.RunOnce(context.Background()); err != nil && logger != nil {
+						logger.Warn("search timeout sweeper failed", slog.Any("error", err))
 					}
 				}
 			}()

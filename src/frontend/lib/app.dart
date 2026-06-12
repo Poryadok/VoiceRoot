@@ -21,6 +21,7 @@ import 'ui/call/call_error_listener.dart';
 import 'ui/call/incoming_call_overlay.dart';
 import 'ui/call/outgoing_call_overlay.dart';
 import 'state/matchmaking_match_controller.dart';
+import 'state/matchmaking_search_controller.dart';
 import 'state/matchmaking_rating_controller.dart';
 import 'ui/matchmaking/match_squad_navigator.dart';
 import 'ui/chat/chat_room_panel.dart';
@@ -184,6 +185,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
   Widget build(BuildContext context) {
     ref.watch(inAppNotificationControllerProvider);
     ref.watch(matchmakingMatchControllerProvider);
+    ref.watch(matchmakingSearchControllerProvider);
     ref.watch(pushNotificationsControllerProvider);
     final l10n = AppLocalizations.of(context)!;
     final health = ref.watch(gatewayHealthProvider);

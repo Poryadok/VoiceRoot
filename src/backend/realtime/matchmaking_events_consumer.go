@@ -25,12 +25,16 @@ func matchmakingConsumerDurableName(instanceID string) string {
 func subscribeMatchmakingEvents(js nats.JetStreamContext, hub *wsHub, instanceID string, logger *slog.Logger) (*nats.Subscription, error) {
 	durable := matchmakingConsumerDurableName(instanceID)
 	handler := func(msg *nats.Msg) {
-		if strings.HasSuffix(msg.Subject, "mm.match_found") {
+		switch {
+		case strings.HasSuffix(msg.Subject, "mm.match_found"),
+			strings.HasSuffix(msg.Subject, "mm.match_completed"),
+			strings.HasSuffix(msg.Subject, "mm.search_nudge"),
+			strings.HasSuffix(msg.Subject, "mm.search_timeout"):
 			natslog.LogConsume(logger, msg, slog.LevelInfo, "matchmaking event consumed")
 			dispatchMatchmakingStreamEvent(hub, msg.Data)
-			return
+		default:
+			natslog.LogConsume(logger, msg, slog.LevelWarn, "unknown matchmaking event payload")
 		}
-		natslog.LogConsume(logger, msg, slog.LevelWarn, "unknown matchmaking event payload")
 	}
 	sub, err := js.Subscribe("mm.>", handler,
 		nats.Durable(durable),

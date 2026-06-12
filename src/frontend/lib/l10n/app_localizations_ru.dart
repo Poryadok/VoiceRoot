@@ -1001,6 +1001,18 @@ class AppLocalizationsRu extends AppLocalizations {
   String get queueSearchCancelError => 'Не удалось отменить поиск';
 
   @override
+  String get queueSearchNudgeTitle => 'Долго ищем';
+
+  @override
+  String get queueSearchNudgeBody => 'Попробуйте изменить параметры поиска.';
+
+  @override
+  String get queueSearchTimeoutTitle => 'Не удалось найти';
+
+  @override
+  String get queueSearchTimeoutBody => 'Найти не удалось, попробуйте снова.';
+
+  @override
   String get matchFoundTitle => 'Матч найден';
 
   @override

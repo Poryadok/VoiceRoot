@@ -23,8 +23,10 @@ const (
 	subjectSearchStarted  = "mm.search_started"
 	subjectSearchCancel   = "mm.search_cancelled"
 	subjectMatchFound     = "mm.match_found"
-	subjectMatchCompleted = "mm.match_completed"
+	subjectMatchCompleted  = "mm.match_completed"
 	subjectRatingSubmitted = "mm.rating_submitted"
+	subjectSearchNudge     = "mm.search_nudge"
+	subjectSearchTimeout   = "mm.search_timeout"
 )
 
 // MatchFoundEvent is emitted when a match proposal is created.
@@ -59,6 +61,8 @@ type Publisher interface {
 	PublishMatchFound(ctx context.Context, ev MatchFoundEvent) error
 	PublishMatchCompleted(ctx context.Context, ev MatchCompletedEvent) error
 	PublishRatingSubmitted(ctx context.Context, ev RatingSubmittedEvent) error
+	PublishSearchNudge(ctx context.Context, sessionID, profileID, gameID, mode string) error
+	PublishSearchTimeout(ctx context.Context, sessionID, profileID, gameID, mode string) error
 	Close() error
 }
 
@@ -72,7 +76,13 @@ func (NoopPublisher) PublishSearchCancelled(context.Context, string, string) err
 func (NoopPublisher) PublishMatchFound(context.Context, MatchFoundEvent) error      { return nil }
 func (NoopPublisher) PublishMatchCompleted(context.Context, MatchCompletedEvent) error { return nil }
 func (NoopPublisher) PublishRatingSubmitted(context.Context, RatingSubmittedEvent) error { return nil }
-func (NoopPublisher) Close() error                                                { return nil }
+func (NoopPublisher) PublishSearchNudge(context.Context, string, string, string, string) error {
+	return nil
+}
+func (NoopPublisher) PublishSearchTimeout(context.Context, string, string, string, string) error {
+	return nil
+}
+func (NoopPublisher) Close() error { return nil }
 
 // searchCancelledJSON is published until generated SearchCancelled proto is wired (buf generate).
 type searchCancelledJSON struct {
@@ -127,7 +137,8 @@ func (p *JetStreamPublisher) ensureStream() error {
 			Subjects: []string{
 				subjectSearchStarted,
 				subjectSearchCancel,
-				"mm.search_timeout",
+				subjectSearchNudge,
+				subjectSearchTimeout,
 				"mm.match_found",
 				"mm.match_completed",
 				"mm.rating_submitted",
@@ -246,6 +257,40 @@ func (p *JetStreamPublisher) PublishRatingSubmitted(ctx context.Context, ev Rati
 		},
 	}
 	return p.publishProto(ctx, subjectRatingSubmitted, env)
+}
+
+// PublishSearchNudge implements Publisher.
+func (p *JetStreamPublisher) PublishSearchNudge(ctx context.Context, sessionID, profileID, gameID, mode string) error {
+	env := &eventsv1.MatchmakingStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.New(time.Now().UTC()),
+		Payload: &eventsv1.MatchmakingStreamEvent_SearchNudge{
+			SearchNudge: &eventsv1.SearchNudge{
+				SessionId: sessionID,
+				ProfileId: profileID,
+				GameId:    gameID,
+				Mode:      mode,
+			},
+		},
+	}
+	return p.publishProto(ctx, subjectSearchNudge, env)
+}
+
+// PublishSearchTimeout implements Publisher.
+func (p *JetStreamPublisher) PublishSearchTimeout(ctx context.Context, sessionID, profileID, gameID, mode string) error {
+	env := &eventsv1.MatchmakingStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.New(time.Now().UTC()),
+		Payload: &eventsv1.MatchmakingStreamEvent_MatchTimeout{
+			MatchTimeout: &eventsv1.MatchTimeout{
+				SessionId: sessionID,
+				ProfileId: profileID,
+				GameId:    gameID,
+				Mode:      mode,
+			},
+		},
+	}
+	return p.publishProto(ctx, subjectSearchTimeout, env)
 }
 
 // PublishSearchCancelled implements Publisher.
