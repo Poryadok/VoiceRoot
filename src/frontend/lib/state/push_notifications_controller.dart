@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../backend/notifications_client.dart';
@@ -10,6 +9,7 @@ import 'auth_providers.dart';
 import 'in_app_notifications.dart';
 import 'push_notifications.dart';
 import 'push_notifications_bootstrap.dart';
+import 'push_platform.dart';
 
 /// Background FCM handler (Android/iOS); must be top-level.
 @pragma('vm:entry-point')
@@ -75,27 +75,36 @@ class PushNotificationsController {
     await messaging.requestPermission();
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
-    final token = await messaging.getToken();
+    final platform = pushPlatformForTarget();
+    final pushService = pushServiceForTarget();
+    final token = await _resolvePushToken(messaging, pushService);
     if (token == null || token.isEmpty) return;
 
     const bootstrap = PushNotificationsBootstrap();
     await bootstrap.registerToken(
       client: _ref.read(voiceNotificationsClientProvider),
       authorization: header,
-      platform: _pushPlatform(),
+      platform: platform,
       token: token,
+      pushService: pushService,
     );
 
     _foregroundSub ??= FirebaseMessaging.onMessage.listen(_onForegroundMessage);
-    _tokenRefreshSub ??= messaging.onTokenRefresh.listen((next) async {
+    _tokenRefreshSub ??= messaging.onTokenRefresh.listen((_) async {
       final currentHeader =
           _ref.read(authControllerProvider).session?.authorizationHeader;
       if (currentHeader == null) return;
+      final refreshed = await _resolvePushToken(
+        messaging,
+        pushServiceForTarget(),
+      );
+      if (refreshed == null || refreshed.isEmpty) return;
       await bootstrap.registerToken(
         client: _ref.read(voiceNotificationsClientProvider),
         authorization: currentHeader,
-        platform: _pushPlatform(),
-        token: next,
+        platform: pushPlatformForTarget(),
+        token: refreshed,
+        pushService: pushServiceForTarget(),
       );
     });
   }
@@ -114,15 +123,20 @@ class PushNotificationsController {
     await Firebase.initializeApp();
   }
 
-  String _pushPlatform() {
-    if (kIsWeb) return 'web';
-    switch (defaultTargetPlatform) {
-      case TargetPlatform.android:
-        return 'android';
-      case TargetPlatform.iOS:
-        return 'ios';
-      default:
-        return 'desktop';
+  Future<String?> _resolvePushToken(
+    FirebaseMessaging messaging,
+    String pushService,
+  ) async {
+    if (pushService == 'apns') {
+      for (var attempt = 0; attempt < 5; attempt++) {
+        final apnsToken = await messaging.getAPNSToken();
+        if (apnsToken != null && apnsToken.isNotEmpty) {
+          return apnsToken;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      }
+      return null;
     }
+    return messaging.getToken();
   }
 }

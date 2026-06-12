@@ -5,20 +5,22 @@ import (
 
 	"github.com/google/uuid"
 
+	"voice/backend/notification/internal/apns"
 	"voice/backend/notification/internal/delivery"
 	"voice/backend/notification/internal/fcm"
+	"voice/backend/notification/internal/push"
 	"voice/backend/notification/internal/store"
 )
 
-// MatchmakingPusher sends FCM pushes for routed matchmaking notifications.
+// MatchmakingPusher sends pushes for routed matchmaking notifications.
 type MatchmakingPusher struct {
 	Tokens *store.DeviceTokenStore
-	FCM    fcm.Sender
+	Pusher *PushDispatcher
 }
 
 // SendPush delivers a push to all device tokens for each recipient with Push=true.
-func (p *MatchmakingPusher) SendPush(ctx context.Context, decisions map[string]delivery.DeliveryDecision, payload fcm.PushPayload) error {
-	if p == nil || p.Tokens == nil || p.FCM == nil || len(decisions) == 0 {
+func (p *MatchmakingPusher) SendPush(ctx context.Context, decisions map[string]delivery.DeliveryDecision, payload push.Payload) error {
+	if p == nil || p.Tokens == nil || p.Pusher == nil || len(decisions) == 0 {
 		return nil
 	}
 	for profileID, decision := range decisions {
@@ -34,12 +36,12 @@ func (p *MatchmakingPusher) SendPush(ctx context.Context, decisions map[string]d
 			return err
 		}
 		if len(tokens) == 0 {
-			_ = p.FCM.Send(ctx, recipient, store.DeviceToken{}, payload)
+			_ = p.Pusher.Send(ctx, recipient, store.DeviceToken{PushService: "fcm"}, payload)
 			continue
 		}
 		for _, tok := range tokens {
-			if err := p.FCM.Send(ctx, recipient, tok, payload); err != nil {
-				if err == fcm.ErrInvalidToken {
+			if err := p.Pusher.Send(ctx, recipient, tok, payload); err != nil {
+				if err == fcm.ErrInvalidToken || err == apns.ErrInvalidToken {
 					_ = p.Tokens.DeleteByToken(ctx, tok.Token)
 					continue
 				}

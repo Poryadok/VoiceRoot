@@ -23,7 +23,8 @@ func (r *recordingFCM) Send(_ context.Context, _ uuid.UUID, _ store.DeviceToken,
 
 func TestMatchmakingPusher_SendPush(t *testing.T) {
 	rec := &recordingFCM{}
-	pusher := &MatchmakingPusher{Tokens: &store.DeviceTokenStore{}, FCM: rec}
+	dispatcher := &PushDispatcher{FCM: rec}
+	pusher := &MatchmakingPusher{Tokens: &store.DeviceTokenStore{}, Pusher: dispatcher}
 	profileID := uuid.NewString()
 	err := pusher.SendPush(context.Background(), map[string]delivery.DeliveryDecision{
 		profileID: {Push: true, InApp: true},

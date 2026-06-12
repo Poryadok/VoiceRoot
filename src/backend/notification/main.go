@@ -16,6 +16,8 @@ import (
 	"google.golang.org/grpc"
 
 	grpcsvc "voice/backend/notification/internal/grpcsvc"
+	"voice/backend/notification/internal/apns"
+	"voice/backend/notification/internal/dispatch"
 	"voice/backend/notification/internal/fcm"
 	"voice/backend/notification/internal/store"
 	"voice/backend/pkg/grpcmw"
@@ -49,18 +51,28 @@ func main() {
 		defer pool.Close()
 
 		tokenStore := &store.DeviceTokenStore{Pool: pool}
-		var sender fcm.Sender = &fcm.NoopSender{Logger: logger}
+		fcmSender := fcm.Sender(&fcm.NoopSender{Logger: logger})
 		if strings.TrimSpace(os.Getenv("FCM_CREDENTIALS_JSON")) != "" {
-			// HTTP v1 sender can be wired when credentials are present.
 			logger.Info("FCM credentials configured; using noop until HTTP sender is enabled")
 		}
+		apnsSender := apns.Sender(&apns.NoopSender{Logger: logger})
+		if cfg, ok := apns.ConfigFromEnv(); ok {
+			httpSender, err := apns.NewHTTPSender(cfg)
+			if err != nil {
+				logger.Warn("APNs credentials invalid; using noop sender", slog.Any("error", err))
+			} else {
+				apnsSender = httpSender
+				logger.Info("APNs HTTP sender enabled", slog.Bool("production", cfg.Production))
+			}
+		}
+		pusher := &dispatch.PushDispatcher{FCM: fcmSender, APNs: apnsSender}
 
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
 			instanceID := strings.TrimSpace(os.Getenv("HOSTNAME"))
 			go func() {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
-				if err := runMatchmakingEventsConsumer(ctx, natsURL, instanceID, tokenStore, sender, logger); err != nil && logger != nil {
+				if err := runMatchmakingEventsConsumer(ctx, natsURL, instanceID, tokenStore, pusher, logger); err != nil && logger != nil {
 					logger.Error("matchmaking.events consumer exited", slog.Any("error", err))
 				}
 			}()
@@ -73,7 +85,7 @@ func main() {
 		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger)...)
 		notificationv1.RegisterNotificationServiceServer(grpcSrv, &grpcsvc.NotificationGRPC{
 			Tokens: tokenStore,
-			FCM:    sender,
+			Pusher: pusher,
 		})
 		go func() {
 			logger.Info("gRPC listening", slog.String("addr", grpcListen))

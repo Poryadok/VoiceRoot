@@ -9,11 +9,13 @@ class PushNotificationsBootstrap {
     required String authorization,
     required String platform,
     required String token,
+    String pushService = 'fcm',
   }) async {
     final result = await client.registerDevice(
       authorization: authorization,
       platform: platform,
       token: token,
+      pushService: pushService,
     );
     if (result is NotificationsApiFailure) {
       throw StateError(result.message);

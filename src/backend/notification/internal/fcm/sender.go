@@ -4,17 +4,13 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+
+	"voice/backend/notification/internal/push"
 	"voice/backend/notification/internal/store"
 )
 
 // PushPayload is the FCM data message envelope.
-type PushPayload struct {
-	Title       string
-	Body        string
-	CollapseTag string
-	Counter     int
-	Data        map[string]string
-}
+type PushPayload = push.Payload
 
 // Sender delivers push notifications via FCM.
 type Sender interface {

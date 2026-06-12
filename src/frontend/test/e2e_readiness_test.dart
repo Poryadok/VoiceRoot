@@ -33,6 +33,7 @@ void main() {
     'test/phase6_mentions_e2e_live_test.dart',
     'test/phase6_pins_e2e_live_test.dart',
     'test/phase6_fcm_e2e_live_test.dart',
+    'test/phase8_apns_e2e_live_test.dart',
   ];
 
   for (final path in liveTests) {

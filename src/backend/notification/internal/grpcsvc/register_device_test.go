@@ -133,6 +133,33 @@ func TestUnregisterDevice_TokenStoreUnavailable(t *testing.T) {
 	require.Equal(t, codes.Unavailable, status.Code(err))
 }
 
+func TestRegisterDevice_APNSServicePersisted(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startNotificationPostgresForTest(t, ctx)
+	applyNotificationMigration(t, ctx, pool)
+
+	client, cleanup := startNotificationGRPCTestServer(t, pool)
+	t.Cleanup(cleanup)
+
+	profileID := uuid.New()
+	_, err := client.RegisterDevice(withProfileCtx(ctx, profileID), &notificationv1.RegisterDeviceRequest{
+		Platform:    "ios",
+		Token:       "apns-device-token",
+		PushService: "apns",
+	})
+	require.NoError(t, err)
+
+	tokens := &store.DeviceTokenStore{Pool: pool}
+	rows, err := tokens.ListByProfile(ctx, profileID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "apns", rows[0].PushService)
+	require.Equal(t, "ios", rows[0].Platform)
+}
+
 func TestRegisterDevice_DefaultPushService(t *testing.T) {
 	if testing.Short() {
 		t.Skip()

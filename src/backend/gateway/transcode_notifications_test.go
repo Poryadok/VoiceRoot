@@ -68,6 +68,31 @@ func startBufconnNotificationConn(t *testing.T, impl notificationv1.Notification
 	}
 }
 
+func TestTranscodeNotificationsRegisterDeviceAPNS(t *testing.T) {
+	t.Parallel()
+
+	grpcRec := &recordingNotificationGRPC{}
+	conn, cleanup := startBufconnNotificationConn(t, grpcRec)
+	t.Cleanup(cleanup)
+
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+		},
+		transcoder: &transcoder{clients: grpcClients{notification: notificationv1.NewNotificationServiceClient(conn)}},
+	})
+
+	body := `{"platform":"ios","token":"apns-token","push_service":"apns"}`
+	resp := performRequest(h, http.MethodPost, "/api/v1/notifications/register-device", body, map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	require.Equal(t, http.StatusOK, resp.Code, "body=%s", resp.Body.String())
+	require.NotNil(t, grpcRec.lastRegister)
+	require.Equal(t, "ios", grpcRec.lastRegister.GetPlatform())
+	require.Equal(t, "apns-token", grpcRec.lastRegister.GetToken())
+	require.Equal(t, "apns", grpcRec.lastRegister.GetPushService())
+}
+
 func TestTranscodeNotificationsRegisterDevice(t *testing.T) {
 	t.Parallel()
 

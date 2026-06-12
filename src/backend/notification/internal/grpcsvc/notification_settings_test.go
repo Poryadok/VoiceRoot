@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	"voice/backend/notification/internal/apns"
 	"voice/backend/notification/internal/authctx"
 	"voice/backend/notification/internal/fcm"
 	"voice/backend/notification/internal/store"
@@ -98,7 +99,7 @@ func TestUpdateNotificationSettings_MissingSettings(t *testing.T) {
 
 func TestSendBulkNotification_ForwardsEachProfile(t *testing.T) {
 	rec := &recordingFCMSender{}
-	svc := &NotificationGRPC{FCM: rec}
+	svc := &NotificationGRPC{Pusher: testPusher(rec, &recordingAPNSSender{})}
 
 	ids := []string{uuid.NewString(), uuid.NewString()}
 	_, err := svc.SendBulkNotification(context.Background(), &notificationv1.SendBulkNotificationRequest{
@@ -120,7 +121,7 @@ func TestRelayNotification_Unimplemented(t *testing.T) {
 
 func TestSendNotification_NoopFCMDoesNotFail(t *testing.T) {
 	svc := &NotificationGRPC{
-		FCM:    &fcm.NoopSender{},
+		Pusher: testPusher(&fcm.NoopSender{}, &apns.NoopSender{}),
 		Tokens: &store.DeviceTokenStore{},
 	}
 	_, err := svc.SendNotification(context.Background(), &notificationv1.SendNotificationRequest{

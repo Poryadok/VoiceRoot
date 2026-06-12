@@ -6,6 +6,7 @@ import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/notifications_client.dart';
 import 'package:voice_frontend/state/push_notifications.dart';
 import 'package:voice_frontend/state/push_notifications_bootstrap.dart';
+import 'package:voice_frontend/state/push_platform.dart';
 
 import 'support/gateway_test_client.dart';
 
@@ -60,6 +61,37 @@ void main() {
       expect(capturedBody?['platform'], 'web');
       expect(capturedBody?['token'], 'fcm-token-abc');
       expect(capturedBody?['push_service'], 'fcm');
+    });
+
+    test('registerDevice sends apns push_service when requested', () async {
+      Map<String, dynamic>? capturedBody;
+
+      final client = VoiceNotificationsClient(
+        gateway: gatewayHttpForTest(
+          MockClient((request) async {
+            capturedBody = jsonDecode(request.body) as Map<String, dynamic>;
+            return http.Response('{}', 200);
+          }),
+        ),
+      );
+
+      final result = await client.registerDevice(
+        authorization: 'Bearer test-jwt',
+        platform: 'ios',
+        token: 'apns-token-xyz',
+        pushService: 'apns',
+      );
+
+      expect(result, isA<NotificationsApiOk<void>>());
+      expect(capturedBody?['platform'], 'ios');
+      expect(capturedBody?['token'], 'apns-token-xyz');
+      expect(capturedBody?['push_service'], 'apns');
+    });
+  });
+
+  group('pushServiceForTarget', () {
+    test('defaults to fcm on test VM', () {
+      expect(pushServiceForTarget(), 'fcm');
     });
   });
 

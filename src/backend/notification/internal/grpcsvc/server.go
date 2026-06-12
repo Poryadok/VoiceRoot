@@ -6,8 +6,11 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"voice/backend/notification/internal/apns"
 	"voice/backend/notification/internal/authctx"
+	"voice/backend/notification/internal/dispatch"
 	"voice/backend/notification/internal/fcm"
+	"voice/backend/notification/internal/push"
 	"voice/backend/notification/internal/store"
 
 	notificationv1 "voice.app/voice/notification/v1"
@@ -17,7 +20,17 @@ import (
 type NotificationGRPC struct {
 	notificationv1.UnimplementedNotificationServiceServer
 	Tokens *store.DeviceTokenStore
-	FCM    fcm.Sender
+	Pusher *dispatch.PushDispatcher
+}
+
+func (s *NotificationGRPC) pusher() *dispatch.PushDispatcher {
+	if s == nil {
+		return nil
+	}
+	if s.Pusher != nil {
+		return s.Pusher
+	}
+	return nil
 }
 
 func (s *NotificationGRPC) RegisterDevice(ctx context.Context, req *notificationv1.RegisterDeviceRequest) (*notificationv1.RegisterDeviceResponse, error) {
@@ -69,14 +82,15 @@ func (s *NotificationGRPC) SendNotification(ctx context.Context, req *notificati
 	if req.GetProfileId() == "" || req.GetNotificationType() == "" {
 		return nil, status.Error(codes.InvalidArgument, "profile_id and notification_type required")
 	}
-	if s.FCM == nil {
-		return nil, status.Error(codes.Unavailable, "fcm sender unavailable")
+	pusher := s.pusher()
+	if pusher == nil {
+		return nil, status.Error(codes.Unavailable, "push sender unavailable")
 	}
 	profileID, err := parseUUID(req.GetProfileId())
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid profile_id")
 	}
-	payload := fcm.PushPayload{
+	payload := push.Payload{
 		Title: req.GetTitle(),
 		Body:  req.GetBody(),
 		Data: map[string]string{
@@ -88,14 +102,14 @@ func (s *NotificationGRPC) SendNotification(ctx context.Context, req *notificati
 		return nil, status.Errorf(codes.Internal, "list tokens: %v", err)
 	}
 	if len(tokens) == 0 {
-		if err := s.FCM.Send(ctx, profileID, store.DeviceToken{}, payload); err != nil {
+		if err := pusher.Send(ctx, profileID, store.DeviceToken{PushService: "fcm"}, payload); err != nil {
 			return nil, status.Errorf(codes.Internal, "send push: %v", err)
 		}
 		return &notificationv1.SendNotificationResponse{}, nil
 	}
 	for _, tok := range tokens {
-		if err := s.FCM.Send(ctx, profileID, tok, payload); err != nil {
-			if err == fcm.ErrInvalidToken {
+		if err := pusher.Send(ctx, profileID, tok, payload); err != nil {
+			if err == fcm.ErrInvalidToken || err == apns.ErrInvalidToken {
 				_ = s.Tokens.DeleteByToken(ctx, tok.Token)
 				continue
 			}

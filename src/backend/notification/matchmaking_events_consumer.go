@@ -13,7 +13,7 @@ import (
 	"voice/backend/notification/internal/consumer"
 	"voice/backend/notification/internal/delivery"
 	"voice/backend/notification/internal/dispatch"
-	"voice/backend/notification/internal/fcm"
+	"voice/backend/notification/internal/push"
 	"voice/backend/notification/internal/store"
 	"voice/backend/pkg/natslog"
 	eventsv1 "voice.app/voice/events/v1"
@@ -33,10 +33,10 @@ func runMatchmakingEventsConsumer(
 	ctx context.Context,
 	natsURL, instanceID string,
 	tokens *store.DeviceTokenStore,
-	sender fcm.Sender,
+	pusher *dispatch.PushDispatcher,
 	logger *slog.Logger,
 ) error {
-	if tokens == nil || sender == nil || strings.TrimSpace(natsURL) == "" {
+	if tokens == nil || pusher == nil || strings.TrimSpace(natsURL) == "" {
 		return fmt.Errorf("matchmaking notification consumer: missing deps")
 	}
 	nc, err := nats.Connect(natsURL,
@@ -57,7 +57,7 @@ func runMatchmakingEventsConsumer(
 	}
 
 	handler := &consumer.MatchmakingEventHandler{Router: delivery.DecideRouting}
-	pusher := &dispatch.MatchmakingPusher{Tokens: tokens, FCM: sender}
+	mmPusher := &dispatch.MatchmakingPusher{Tokens: tokens, Pusher: pusher}
 	durable := notificationMatchmakingDurable(instanceID)
 
 	msgHandler := func(msg *nats.Msg) {
@@ -71,7 +71,7 @@ func runMatchmakingEventsConsumer(
 			return
 		}
 		natslog.LogConsume(logger, msg, slog.LevelInfo, "matchmaking notification event consumed")
-		if err := pusher.SendPush(context.Background(), decisions, payload); err != nil && logger != nil {
+		if err := mmPusher.SendPush(context.Background(), decisions, payload); err != nil && logger != nil {
 			logger.Warn("matchmaking push failed", slog.Any("error", err))
 		}
 	}
@@ -97,14 +97,14 @@ func runMatchmakingEventsConsumer(
 	return ctx.Err()
 }
 
-func routeMatchmakingNotification(h *consumer.MatchmakingEventHandler, env *eventsv1.MatchmakingStreamEvent) (map[string]delivery.DeliveryDecision, fcm.PushPayload, bool) {
+func routeMatchmakingNotification(h *consumer.MatchmakingEventHandler, env *eventsv1.MatchmakingStreamEvent) (map[string]delivery.DeliveryDecision, push.Payload, bool) {
 	if h == nil || env == nil {
-		return nil, fcm.PushPayload{}, false
+		return nil, push.Payload{}, false
 	}
 	switch p := env.GetPayload().(type) {
 	case *eventsv1.MatchmakingStreamEvent_MatchFound:
 		ev := p.MatchFound
-		return h.HandleMatchFound(context.Background(), ev), fcm.PushPayload{
+		return h.HandleMatchFound(context.Background(), ev), push.Payload{
 			Title: "Match found",
 			Body:  "A match is ready — accept or decline",
 			Data: map[string]string{
@@ -116,7 +116,7 @@ func routeMatchmakingNotification(h *consumer.MatchmakingEventHandler, env *even
 		}, true
 	case *eventsv1.MatchmakingStreamEvent_SearchNudge:
 		ev := p.SearchNudge
-		return h.HandleSearchNudge(context.Background(), ev), fcm.PushPayload{
+		return h.HandleSearchNudge(context.Background(), ev), push.Payload{
 			Title: "Still searching",
 			Body:  "Try adjusting your search parameters",
 			Data: map[string]string{
@@ -128,7 +128,7 @@ func routeMatchmakingNotification(h *consumer.MatchmakingEventHandler, env *even
 		}, true
 	case *eventsv1.MatchmakingStreamEvent_MatchTimeout:
 		ev := p.MatchTimeout
-		return h.HandleSearchTimeout(context.Background(), ev), fcm.PushPayload{
+		return h.HandleSearchTimeout(context.Background(), ev), push.Payload{
 			Title: "Search ended",
 			Body:  "Could not find a match — try again",
 			Data: map[string]string{
@@ -139,6 +139,6 @@ func routeMatchmakingNotification(h *consumer.MatchmakingEventHandler, env *even
 			},
 		}, true
 	default:
-		return nil, fcm.PushPayload{}, false
+		return nil, push.Payload{}, false
 	}
 }
