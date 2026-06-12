@@ -49,7 +49,7 @@ func TestSendNotification_RoutesInScopeTypesToAPNS(t *testing.T) {
 	}
 }
 
-func TestSendNotification_SkipsVoIPAPNSToken(t *testing.T) {
+func TestSendNotification_SkipsVoIPAPNSTokenForNonCallTypes(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -64,7 +64,37 @@ func TestSendNotification_SkipsVoIPAPNSToken(t *testing.T) {
 
 	apnsRec := &recordingAPNSSender{}
 	fcmRec := &recordingFCMSender{}
-	svc := &NotificationGRPC{Pusher: testPusher(fcmRec, apnsRec), Tokens: tokens}
+	voipRec := &recordingVoIPSender{}
+	svc := &NotificationGRPC{Pusher: testPusherWithVoIP(fcmRec, apnsRec, voipRec), Tokens: tokens}
+	_, err = svc.SendNotification(ctx, &notificationv1.SendNotificationRequest{
+		ProfileId:        profileID.String(),
+		NotificationType: "new_message",
+		Body:             "hi",
+	})
+	require.NoError(t, err)
+	require.Empty(t, apnsRec.sent)
+	require.Empty(t, fcmRec.sent)
+	require.Empty(t, voipRec.sent)
+}
+
+func TestSendNotification_RoutesIncomingCallToVoIP(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startNotificationPostgresForTest(t, ctx)
+	applyNotificationMigration(t, ctx, pool)
+
+	tokens := &store.DeviceTokenStore{Pool: pool}
+	profileID := uuid.New()
+	_, err := tokens.Register(ctx, profileID, "ios", "regular-apns", "apns")
+	require.NoError(t, err)
+	_, err = tokens.Register(ctx, profileID, "ios", "voip-tok", "voip_apns")
+	require.NoError(t, err)
+
+	apnsRec := &recordingAPNSSender{}
+	voipRec := &recordingVoIPSender{}
+	svc := &NotificationGRPC{Pusher: testPusherWithVoIP(&recordingFCMSender{}, apnsRec, voipRec), Tokens: tokens}
 	_, err = svc.SendNotification(ctx, &notificationv1.SendNotificationRequest{
 		ProfileId:        profileID.String(),
 		NotificationType: "incoming_call",
@@ -72,6 +102,7 @@ func TestSendNotification_SkipsVoIPAPNSToken(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Empty(t, apnsRec.sent)
-	require.Empty(t, fcmRec.sent)
+	require.Len(t, voipRec.sent, 1)
+	require.Equal(t, "incoming_call", voipRec.sent[0].Data["type"])
 }
 

@@ -56,6 +56,7 @@ func main() {
 			logger.Info("FCM credentials configured; using noop until HTTP sender is enabled")
 		}
 		apnsSender := apns.Sender(&apns.NoopSender{Logger: logger})
+		voipSender := apns.VoIPSender(&apns.VoIPNoopSender{})
 		if cfg, ok := apns.ConfigFromEnv(); ok {
 			httpSender, err := apns.NewHTTPSender(cfg)
 			if err != nil {
@@ -64,8 +65,15 @@ func main() {
 				apnsSender = httpSender
 				logger.Info("APNs HTTP sender enabled", slog.Bool("production", cfg.Production))
 			}
+			voipHTTP, err := apns.NewHTTPVoIPSender(cfg)
+			if err != nil {
+				logger.Warn("APNs VoIP credentials invalid; using noop sender", slog.Any("error", err))
+			} else {
+				voipSender = voipHTTP
+				logger.Info("APNs VoIP HTTP sender enabled", slog.Bool("production", cfg.Production))
+			}
 		}
-		pusher := &dispatch.PushDispatcher{FCM: fcmSender, APNs: apnsSender}
+		pusher := &dispatch.PushDispatcher{FCM: fcmSender, APNs: apnsSender, VoIP: voipSender}
 
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
 			instanceID := strings.TrimSpace(os.Getenv("HOSTNAME"))
@@ -74,6 +82,13 @@ func main() {
 				defer cancel()
 				if err := runMatchmakingEventsConsumer(ctx, natsURL, instanceID, tokenStore, pusher, logger); err != nil && logger != nil {
 					logger.Error("matchmaking.events consumer exited", slog.Any("error", err))
+				}
+			}()
+			go func() {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				if err := runVoiceEventsConsumer(ctx, natsURL, instanceID, tokenStore, pusher, logger); err != nil && logger != nil {
+					logger.Error("voice.events consumer exited", slog.Any("error", err))
 				}
 			}()
 		}

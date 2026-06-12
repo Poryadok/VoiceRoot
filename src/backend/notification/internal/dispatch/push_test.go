@@ -31,10 +31,20 @@ func (r *recordingAPNSTokens) Send(_ context.Context, _ uuid.UUID, token store.D
 	return nil
 }
 
+type recordingVoIPSender struct {
+	sent []store.DeviceToken
+}
+
+func (r *recordingVoIPSender) Send(_ context.Context, _ uuid.UUID, token store.DeviceToken, _ push.Payload) error {
+	r.sent = append(r.sent, token)
+	return nil
+}
+
 func TestPushDispatcher_RoutesByPushService(t *testing.T) {
 	fcmRec := &recordingFCMSender{}
 	apnsRec := &recordingAPNSTokens{}
-	d := &PushDispatcher{FCM: fcmRec, APNs: apnsRec}
+	voipRec := &recordingVoIPSender{}
+	d := &PushDispatcher{FCM: fcmRec, APNs: apnsRec, VoIP: voipRec}
 	profileID := uuid.New()
 	payload := push.Payload{Body: "hi", Data: map[string]string{"type": "new_message"}}
 
@@ -55,6 +65,19 @@ func TestPushDispatcher_RoutesByPushService(t *testing.T) {
 	require.Equal(t, "android-tok", fcmRec.sent[0].Token)
 	require.Len(t, apnsRec.sent, 1)
 	require.Equal(t, "ios-tok", apnsRec.sent[0].Token)
+	require.Len(t, voipRec.sent, 1)
+	require.Equal(t, "voip-tok", voipRec.sent[0].Token)
+}
+
+func TestPushDispatcher_RoutesVoIPTokenToVoIPSender(t *testing.T) {
+	voipRec := &recordingVoIPSender{}
+	d := &PushDispatcher{VoIP: voipRec}
+	payload := push.Payload{Data: map[string]string{"type": "incoming_call", "room_id": "r1"}}
+	require.NoError(t, d.Send(context.Background(), uuid.New(), store.DeviceToken{
+		Token:       "voip-device",
+		PushService: "voip_apns",
+	}, payload))
+	require.Len(t, voipRec.sent, 1)
 }
 
 func TestPushDispatcher_ForwardsCollapseTagToAPNS(t *testing.T) {
@@ -82,6 +105,12 @@ type recordingAPNSSender struct {
 func (r *recordingAPNSSender) Send(_ context.Context, _ uuid.UUID, _ store.DeviceToken, payload push.Payload) error {
 	r.sent = append(r.sent, payload)
 	return nil
+}
+
+func TestPushDispatcher_VoIPUnavailable(t *testing.T) {
+	d := &PushDispatcher{}
+	err := d.Send(context.Background(), uuid.New(), store.DeviceToken{PushService: "voip_apns"}, push.Payload{})
+	require.Error(t, err)
 }
 
 func TestPushDispatcher_InvalidTokenErrors(t *testing.T) {

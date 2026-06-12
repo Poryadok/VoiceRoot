@@ -192,6 +192,23 @@ class CallController extends StateNotifier<CallState> {
     }
   }
 
+  /// Applies incoming call state from VoIP / CallKit before user action.
+  void applyIncomingFromVoIP(VoiceCallSession session) {
+    final current = state.session;
+    final sameRoomInProgress =
+        current?.roomId == session.roomId &&
+        (state.phase == CallPhase.outgoing ||
+            state.phase == CallPhase.connecting ||
+            state.phase == CallPhase.active ||
+            state.phase == CallPhase.incoming);
+    if (sameRoomInProgress) return;
+    state = CallState(
+      phase: CallPhase.incoming,
+      session: session,
+      isVideoEnabled: session.mediaKind == VoiceCallMediaKind.video,
+    );
+  }
+
   Future<void> startGroupVoice({
     required String groupChatId,
     VoiceCallMediaKind mediaKind = VoiceCallMediaKind.audio,

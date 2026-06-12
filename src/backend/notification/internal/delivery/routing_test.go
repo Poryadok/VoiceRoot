@@ -40,6 +40,34 @@ func TestDecideRouting_OfflinePush(t *testing.T) {
 	require.True(t, decision.Push, "offline users receive push for new_message")
 }
 
+func TestDecideRouting_IncomingCallOfflinePush(t *testing.T) {
+	recipient := uuid.New()
+	sender := uuid.New()
+	decision := delivery.DecideRouting(delivery.DeliveryInput{
+		RecipientProfileID: recipient,
+		SenderProfileID:    sender,
+		Type:               delivery.TypeIncomingCall,
+		IsOnline:           false,
+		At:                 time.Now().UTC(),
+	})
+	require.True(t, decision.Push)
+	require.True(t, decision.InApp)
+}
+
+func TestDecideRouting_IncomingCallOnlineNoPush(t *testing.T) {
+	recipient := uuid.New()
+	sender := uuid.New()
+	decision := delivery.DecideRouting(delivery.DeliveryInput{
+		RecipientProfileID: recipient,
+		SenderProfileID:    sender,
+		Type:               delivery.TypeIncomingCall,
+		IsOnline:           true,
+		At:                 time.Now().UTC(),
+	})
+	require.False(t, decision.Push)
+	require.True(t, decision.InApp)
+}
+
 func TestDecideRouting_SenderExcluded(t *testing.T) {
 	sender := uuid.New()
 	decision := delivery.DecideRouting(delivery.DeliveryInput{

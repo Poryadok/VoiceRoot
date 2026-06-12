@@ -23,6 +23,13 @@ type NotificationGRPC struct {
 	Pusher *dispatch.PushDispatcher
 }
 
+func shouldDeliverPushToToken(notificationType, pushService string) bool {
+	if notificationType == "incoming_call" {
+		return pushService == "voip_apns"
+	}
+	return pushService != "voip_apns"
+}
+
 func (s *NotificationGRPC) pusher() *dispatch.PushDispatcher {
 	if s == nil {
 		return nil
@@ -102,12 +109,19 @@ func (s *NotificationGRPC) SendNotification(ctx context.Context, req *notificati
 		return nil, status.Errorf(codes.Internal, "list tokens: %v", err)
 	}
 	if len(tokens) == 0 {
-		if err := pusher.Send(ctx, profileID, store.DeviceToken{PushService: "fcm"}, payload); err != nil {
+		fallbackService := "fcm"
+		if req.GetNotificationType() == "incoming_call" {
+			fallbackService = "voip_apns"
+		}
+		if err := pusher.Send(ctx, profileID, store.DeviceToken{PushService: fallbackService}, payload); err != nil {
 			return nil, status.Errorf(codes.Internal, "send push: %v", err)
 		}
 		return &notificationv1.SendNotificationResponse{}, nil
 	}
 	for _, tok := range tokens {
+		if !shouldDeliverPushToToken(req.GetNotificationType(), tok.PushService) {
+			continue
+		}
 		if err := pusher.Send(ctx, profileID, tok, payload); err != nil {
 			if err == fcm.ErrInvalidToken || err == apns.ErrInvalidToken {
 				_ = s.Tokens.DeleteByToken(ctx, tok.Token)
