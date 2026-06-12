@@ -15,6 +15,7 @@ import 'state/shell_providers.dart';
 import 'state/social_providers.dart';
 import 'state/space_providers.dart';
 import 'theme/voice_colors.dart';
+import 'theme/voice_layout.dart';
 import 'theme/voice_theme_providers.dart';
 import 'ui/auth/auth_screen.dart';
 import 'ui/call/active_call_panel.dart';
@@ -31,6 +32,7 @@ import 'ui/core/voice_bottom_sheet.dart';
 import 'ui/core/voice_state_panel.dart';
 import 'ui/profile/profile_edit_sheet.dart';
 import 'ui/settings/settings_sheet.dart';
+import 'ui/shell/mobile_chat_strip.dart';
 import 'ui/shell/navigation_panel.dart';
 import 'ui/shell/side_panel.dart';
 import 'ui/space/space_tree_column.dart';
@@ -222,7 +224,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
               SafeArea(
                 child: LayoutBuilder(
                   builder: (context, constraints) {
-                    final narrow = constraints.maxWidth < 600;
+                    final narrow = VoiceLayout.isNarrow(constraints.maxWidth);
                     final onBackToChats = selectedChatId == null
                         ? null
                         : () =>
@@ -252,6 +254,9 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
                             ),
                       sidePanelChild: sidePanelChild,
                       showMainOnlyOnNarrow: selectedChatId != null,
+                      mobileRailChild: narrow && selectedChatId != null
+                          ? const MobileChatStrip()
+                          : null,
                       header: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [

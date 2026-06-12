@@ -5,10 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
-import 'package:voice_frontend/state/auth_providers.dart';
-import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/ui/matchmaking/match_history_screen.dart';
 
 import 'support/auth_test_overrides.dart';

@@ -5,6 +5,7 @@ import '../../l10n/app_localizations.dart';
 import '../../state/shell_providers.dart';
 import '../../state/space_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../../theme/voice_layout.dart';
 import 'space_invites_sheet.dart';
 import 'space_members_sheet.dart';
 import 'space_tree_panel.dart';
@@ -28,7 +29,7 @@ class SpaceTreeColumn extends ConsumerWidget {
     final voice = VoiceColors.of(context);
     final spaceAsync = ref.watch(spaceProvider(spaceId));
     final shellNav = ref.read(shellNavigationProvider);
-    final narrow = MediaQuery.sizeOf(context).width < 600;
+    final narrow = VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

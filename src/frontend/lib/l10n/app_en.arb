@@ -499,6 +499,7 @@
   },
   "versionUpdateAvailableGeneric": "Update available",
   "versionUpdateLater": "Later",
+  "versionUpdateNow": "Update",
   "profileBlock": "Block user",
   "profileBlockConfirmTitle": "Block this user?",
   "profileBlockConfirmMessage": "They will not be able to message you.",

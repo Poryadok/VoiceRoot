@@ -477,6 +477,7 @@
   },
   "versionUpdateAvailableGeneric": "Доступно обновление",
   "versionUpdateLater": "Позже",
+  "versionUpdateNow": "Обновить",
   "profileBlock": "Заблокировать",
   "profileBlockConfirmTitle": "Заблокировать пользователя?",
   "profileBlockConfirmMessage": "Он не сможет писать вам сообщения.",

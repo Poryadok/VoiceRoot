@@ -48,5 +48,7 @@ void main() {
     expect(joinerSpaces, isA<SpacesApiOk<SpaceListData>>());
     final list = (joinerSpaces as SpacesApiOk<SpaceListData>).data.spaces;
     expect(list.any((s) => s.id == spaceId), isTrue);
-  });
+  }, skip: runLiveIntegration
+      ? null
+      : 'Opt in with --dart-define=VOICE_RUN_LIVE_INTEGRATION=true');
 }

@@ -1652,6 +1652,12 @@ abstract class AppLocalizations {
   /// **'Later'**
   String get versionUpdateLater;
 
+  /// No description provided for @versionUpdateNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Update'**
+  String get versionUpdateNow;
+
   /// No description provided for @profileBlock.
   ///
   /// In en, this message translates to:

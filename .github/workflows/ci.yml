@@ -61,6 +61,16 @@ jobs:
           flutter pub get
           flutter analyze
           flutter test
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Flutter Android release APK smoke
+        working-directory: src/frontend
+        run: |
+          flutter build apk --release --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080
 
   golangci:
     runs-on: ubuntu-latest

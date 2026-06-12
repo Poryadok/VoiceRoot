@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_frontend/shell/three_column_shell.dart';
+import 'package:voice_frontend/ui/shell/mobile_chat_strip.dart';
 
 import 'support/voice_test_theme.dart';
 
@@ -80,5 +81,27 @@ void main() {
     expect(find.text('Mini strip'), findsOneWidget);
     expect(find.text('Open chat'), findsOneWidget);
     expect(find.text('Chat list'), findsNothing);
+  });
+
+  testWidgets('narrow open chat uses mobile chat strip key when provided', (
+    tester,
+  ) async {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.binding.setSurfaceSize(const Size(400, 800));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: voiceTestTheme(),
+        home: const Scaffold(
+          body: ThreeColumnShell(
+            showMainOnlyOnNarrow: true,
+            mobileRailChild: SizedBox(key: MobileChatStrip.stripKey),
+            mainChild: Text('Open chat'),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(MobileChatStrip.stripKey), findsOneWidget);
+    expect(find.byKey(ThreeColumnShell.navOpenChat), findsOneWidget);
   });
 }

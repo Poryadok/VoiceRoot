@@ -19,6 +19,7 @@ API-level live tests run on the VM with `flutter test` (not a browser driver).
 | [`test/phase3_delivery_e2e_live_test.dart`](../test/phase3_delivery_e2e_live_test.dart) | `delivery_ack` → sender `message_delivered` |
 | [`test/phase3_dm_requests_e2e_live_test.dart`](../test/phase3_dm_requests_e2e_live_test.dart) | Stranger DM → `requests` inbox → accept → `main` |
 | [`test/phase3_file_attachment_e2e_live_test.dart`](../test/phase3_file_attachment_e2e_live_test.dart) | File upload + attachment message (skips without MinIO/R2) |
+| [`test/phase8_mobile_layout_e2e_live_test.dart`](../test/phase8_mobile_layout_e2e_live_test.dart) | Phase-8 mobile layout: gateway health + narrow breakpoint contract |
 
 Go Gateway mirror tests: `src/backend/gateway/compose_*_live_test.go` — run via `make compose-e2e-live` (Go only) or **`make compose-e2e-full`** (Go + Flutter).
 

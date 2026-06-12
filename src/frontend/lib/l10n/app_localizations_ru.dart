@@ -895,6 +895,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get versionUpdateLater => 'Позже';
 
   @override
+  String get versionUpdateNow => 'Обновить';
+
+  @override
   String get profileBlock => 'Заблокировать';
 
   @override

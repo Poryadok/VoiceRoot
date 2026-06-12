@@ -91,5 +91,7 @@ void main() {
       spaceId: spaceId,
     );
     expect(delegateInviteAfter, isA<SpacesApiOk<SpaceInvite>>());
-  });
+  }, skip: runLiveIntegration
+      ? null
+      : 'Opt in with --dart-define=VOICE_RUN_LIVE_INTEGRATION=true');
 }

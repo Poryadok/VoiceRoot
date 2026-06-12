@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/voice_colors.dart';
+import '../theme/voice_layout.dart';
 
 /// Desktop shell per docs/features/navigation.md.
 /// Supports legacy 3-column (rail | list | main) and extended layout with
@@ -216,7 +217,7 @@ class ThreeColumnShell extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, c) {
-        final narrow = c.maxWidth < 600;
+        final narrow = VoiceLayout.isNarrow(c.maxWidth);
         final body = narrow ? narrowBody() : desktopBody(narrow: narrow);
 
         return Column(

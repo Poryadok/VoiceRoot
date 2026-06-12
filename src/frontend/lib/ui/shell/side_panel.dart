@@ -6,6 +6,7 @@ import '../../state/chat_providers.dart';
 import '../../state/shell_providers.dart';
 import '../../state/space_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../../theme/voice_layout.dart';
 import '../chat/group_members_sheet.dart';
 import '../space/space_members_sheet.dart';
 
@@ -159,7 +160,7 @@ void openMembersPanel(
   required String chatId,
   String? groupName,
 }) {
-  final narrow = MediaQuery.sizeOf(context).width < 600;
+  final narrow = VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width);
   if (narrow) {
     GroupMembersSheet.show(context, chatId: chatId, groupName: groupName);
     return;
@@ -173,7 +174,7 @@ Future<void> openEmojiPanel(
   WidgetRef ref, {
   required void Function(String emoji) onSelected,
 }) async {
-  final narrow = MediaQuery.sizeOf(context).width < 600;
+  final narrow = VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width);
   if (narrow) {
     final emoji = await showModalBottomSheet<String>(
       context: context,

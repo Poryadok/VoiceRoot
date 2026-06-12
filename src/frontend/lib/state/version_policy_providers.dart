@@ -44,8 +44,9 @@ final versionPolicyProvider =
     });
 
 class VersionPolicyController extends StateNotifier<VersionPolicyState> {
-  VersionPolicyController(this._ref) : super(const VersionPolicyState()) {
-    if (!kIsWeb) {
+  VersionPolicyController(this._ref, {bool enablePolling = true})
+    : super(const VersionPolicyState()) {
+    if (!kIsWeb && enablePolling) {
       unawaited(refresh());
       _timer = Timer.periodic(const Duration(hours: 4), (_) => refresh());
     }

@@ -343,7 +343,7 @@ class _ParticipantRow extends ConsumerWidget {
         ),
         title: Text('…'),
       ),
-      error: (_, _st) => ListTile(
+      error: (_, _) => ListTile(
         dense: true,
         title: Text(profileId),
         onTap: onOpenProfile,

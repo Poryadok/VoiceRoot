@@ -9,6 +9,7 @@ import '../backend/voice_client.dart';
 import 'auth_providers.dart';
 import 'chat_providers.dart';
 import 'gateway_providers.dart';
+import 'voice_background_mobile.dart';
 
 /// Call signaling must use the raw hub stream — [realtimeEventProvider] keeps only
 /// the latest frame and can drop `call_incoming` between heartbeats.
@@ -125,6 +126,20 @@ class CallController extends StateNotifier<CallState> {
   StreamSubscription<RealtimeFrame>? _eventsSub;
   ProviderSubscription<RealtimeLinkStatus>? _linkSub;
   VoiceLiveKitRoom? _room;
+
+  @override
+  set state(CallState value) {
+    final prevActive = super.state.phase == CallPhase.active ||
+        super.state.phase == CallPhase.connecting;
+    super.state = value;
+    final nextActive = value.phase == CallPhase.active ||
+        value.phase == CallPhase.connecting;
+    if (prevActive != nextActive) {
+      unawaited(
+        _ref.read(voiceBackgroundSessionProvider).setActive(nextActive),
+      );
+    }
+  }
   bool _startCallInFlight = false;
   bool _groupVoiceInFlight = false;
   bool _voiceRoomInFlight = false;

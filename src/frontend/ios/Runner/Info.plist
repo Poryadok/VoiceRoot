@@ -7,7 +7,13 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Voice Frontend</string>
+	<string>Voice</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Voice needs camera access for video calls.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Voice needs microphone access for voice and video calls.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Voice needs photo library access to send image attachments.</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -51,6 +57,7 @@
 	<true/>
 	<key>UIBackgroundModes</key>
 	<array>
+		<string>audio</string>
 		<string>remote-notification</string>
 		<string>voip</string>
 	</array>
