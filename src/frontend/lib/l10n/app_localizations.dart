@@ -290,6 +290,84 @@ abstract class AppLocalizations {
   /// **'Searching…'**
   String get socialSearchLoading;
 
+  /// No description provided for @globalSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search contacts, spaces, messages'**
+  String get globalSearchHint;
+
+  /// No description provided for @globalSearchContacts.
+  ///
+  /// In en, this message translates to:
+  /// **'Contacts'**
+  String get globalSearchContacts;
+
+  /// No description provided for @globalSearchSpaces.
+  ///
+  /// In en, this message translates to:
+  /// **'Spaces'**
+  String get globalSearchSpaces;
+
+  /// No description provided for @globalSearchMessages.
+  ///
+  /// In en, this message translates to:
+  /// **'Messages'**
+  String get globalSearchMessages;
+
+  /// No description provided for @globalSearchStartHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Type to search across your chats and spaces.'**
+  String get globalSearchStartHint;
+
+  /// No description provided for @globalSearchEmptyContacts.
+  ///
+  /// In en, this message translates to:
+  /// **'No matching contacts'**
+  String get globalSearchEmptyContacts;
+
+  /// No description provided for @globalSearchEmptySpaces.
+  ///
+  /// In en, this message translates to:
+  /// **'No matching spaces'**
+  String get globalSearchEmptySpaces;
+
+  /// No description provided for @globalSearchEmptyMessages.
+  ///
+  /// In en, this message translates to:
+  /// **'No matching messages'**
+  String get globalSearchEmptyMessages;
+
+  /// No description provided for @inChatSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search in this chat'**
+  String get inChatSearchHint;
+
+  /// No description provided for @inChatSearchPrevious.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous match'**
+  String get inChatSearchPrevious;
+
+  /// No description provided for @inChatSearchNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Next match'**
+  String get inChatSearchNext;
+
+  /// No description provided for @inChatSearchResultScore.
+  ///
+  /// In en, this message translates to:
+  /// **'Score {score}'**
+  String inChatSearchResultScore(String score);
+
+  /// No description provided for @inChatSearchOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Search messages'**
+  String get inChatSearchOpen;
+
   /// No description provided for @socialAddFriend.
   ///
   /// In en, this message translates to:

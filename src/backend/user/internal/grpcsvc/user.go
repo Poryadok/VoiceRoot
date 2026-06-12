@@ -2,6 +2,7 @@ package grpcsvc
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -31,6 +32,8 @@ type UserGRPC struct {
 	AvatarPresigner AvatarPresigner
 	// AvatarPublicBaseURL is used to build public_url and to validate UpdateProfile.avatar_url (empty skips validation).
 	AvatarPublicBaseURL string
+	// Events optional JetStream publisher for user.events.
+	Events UserEventsPublisher
 }
 
 func (s *UserGRPC) GetProfile(ctx context.Context, req *userv1.GetProfileRequest) (*userv1.GetProfileResponse, error) {
@@ -164,6 +167,26 @@ func (s *UserGRPC) UpdateProfile(ctx context.Context, req *userv1.UpdateProfileR
 	if row == nil {
 		return nil, status.Error(codes.NotFound, "profile not found or not owned")
 	}
+	if s.Events != nil {
+		changed := make([]string, 0, 4)
+		if in.DisplayName != nil {
+			changed = append(changed, "display_name")
+		}
+		if in.AvatarURL != nil {
+			changed = append(changed, "avatar_url")
+		}
+		if in.Bio != nil {
+			changed = append(changed, "bio")
+		}
+		if in.Locale != nil {
+			changed = append(changed, "locale")
+		}
+		if in.Theme != nil {
+			changed = append(changed, "theme")
+		}
+		fieldsJSON, _ := json.Marshal(changed)
+		_ = s.Events.PublishProfileUpdated(ctx, row.ID.String(), row.AccountID.String(), string(fieldsJSON))
+	}
 	return &userv1.UpdateProfileResponse{Profile: rowToProto(row)}, nil
 }
 
@@ -187,6 +210,9 @@ func (s *UserGRPC) CreateProfile(ctx context.Context, req *userv1.CreateProfileR
 	row, err := s.Profiles.CreateSecondaryProfile(ctx, accountID, dn, usernameHint)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if s.Events != nil {
+		_ = s.Events.PublishProfileCreated(ctx, row.ID.String(), row.AccountID.String())
 	}
 	return &userv1.CreateProfileResponse{Profile: rowToProto(row)}, nil
 }

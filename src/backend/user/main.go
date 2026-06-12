@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	grpcsvc "voice/backend/user/internal/grpcsvc"
+	"voice/backend/user/internal/userevents"
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
@@ -116,6 +117,17 @@ func main() {
 		if err != nil {
 			log.Fatalf("grpc listen: %v", err)
 		}
+		var events grpcsvc.UserEventsPublisher
+		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
+			pub, err := userevents.NewJetStreamPublisher(natsURL)
+			if err != nil {
+				log.Fatalf("nats jetstream publisher: %v", err)
+			}
+			pub.Logger = logger
+			defer func() { _ = pub.Close() }()
+			events = pub
+		}
+
 		srv := grpc.NewServer(grpcmw.ServerOptions(logger)...)
 		userv1.RegisterUserServiceServer(srv, &grpcsvc.UserGRPC{
 			Profiles:            store.NewProfileStore(pool),
@@ -123,6 +135,7 @@ func main() {
 			Blocks:              blocks,
 			AvatarPresigner:     avatarPresigner,
 			AvatarPublicBaseURL: avatarPublicBase,
+			Events:              events,
 		})
 		go func() {
 			logger.Info("gRPC listening", slog.String("addr", grpcAddr))

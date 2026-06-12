@@ -121,6 +121,48 @@ class AppLocalizationsEn extends AppLocalizations {
   String get socialSearchLoading => 'Searching…';
 
   @override
+  String get globalSearchHint => 'Search contacts, spaces, messages';
+
+  @override
+  String get globalSearchContacts => 'Contacts';
+
+  @override
+  String get globalSearchSpaces => 'Spaces';
+
+  @override
+  String get globalSearchMessages => 'Messages';
+
+  @override
+  String get globalSearchStartHint =>
+      'Type to search across your chats and spaces.';
+
+  @override
+  String get globalSearchEmptyContacts => 'No matching contacts';
+
+  @override
+  String get globalSearchEmptySpaces => 'No matching spaces';
+
+  @override
+  String get globalSearchEmptyMessages => 'No matching messages';
+
+  @override
+  String get inChatSearchHint => 'Search in this chat';
+
+  @override
+  String get inChatSearchPrevious => 'Previous match';
+
+  @override
+  String get inChatSearchNext => 'Next match';
+
+  @override
+  String inChatSearchResultScore(String score) {
+    return 'Score $score';
+  }
+
+  @override
+  String get inChatSearchOpen => 'Search messages';
+
+  @override
   String get socialAddFriend => 'Add friend';
 
   @override

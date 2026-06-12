@@ -1,0 +1,45 @@
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+CREATE TABLE message_search_documents (
+    message_id UUID PRIMARY KEY,
+    chat_id UUID NOT NULL,
+    sender_profile_id UUID NOT NULL,
+    body TEXT NOT NULL,
+    search_vector tsvector GENERATED ALWAYS AS (to_tsvector('simple', coalesce(body, ''))) STORED,
+    created_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX message_search_documents_vector_idx ON message_search_documents USING GIN (search_vector);
+CREATE INDEX message_search_documents_chat_created_idx ON message_search_documents (chat_id, created_at DESC, message_id DESC);
+
+CREATE TABLE profile_search_documents (
+    profile_id UUID PRIMARY KEY,
+    username TEXT NOT NULL,
+    discriminator CHAR(4) NOT NULL,
+    display_name TEXT NOT NULL,
+    username_lower TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX profile_search_documents_username_trgm_idx ON profile_search_documents USING gin (username_lower gin_trgm_ops);
+CREATE INDEX profile_search_documents_display_trgm_idx ON profile_search_documents USING gin (display_name gin_trgm_ops);
+
+CREATE TABLE chat_search_documents (
+    chat_id UUID PRIMARY KEY,
+    title TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX chat_search_documents_title_trgm_idx ON chat_search_documents USING gin (title gin_trgm_ops);
+
+CREATE TABLE space_search_documents (
+    space_id UUID PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    visibility VARCHAR(16) NOT NULL CHECK (visibility IN ('public', 'invite_only', 'private')),
+    member_count INT NOT NULL DEFAULT 0,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX space_search_documents_name_trgm_idx ON space_search_documents USING gin (name gin_trgm_ops);
+CREATE INDEX space_search_documents_desc_trgm_idx ON space_search_documents USING gin (description gin_trgm_ops);

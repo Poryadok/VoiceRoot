@@ -7,7 +7,9 @@ import (
 	"strings"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 
 	"voice/backend/pkg/grpcclient"
 
@@ -19,6 +21,7 @@ import (
 	matchmakingv1 "voice.app/voice/matchmaking/v1"
 	notificationv1 "voice.app/voice/notification/v1"
 	rolev1 "voice.app/voice/role/v1"
+	searchv1 "voice.app/voice/search/v1"
 	spacev1 "voice.app/voice/space/v1"
 	userv1 "voice.app/voice/user/v1"
 )
@@ -34,6 +37,7 @@ type grpcClients struct {
 	role         rolev1.RoleServiceClient
 	notification notificationv1.NotificationServiceClient
 	matchmaking  matchmakingv1.MatchmakingServiceClient
+	search       searchv1.SearchServiceClient
 }
 
 type transcoder struct {
@@ -110,7 +114,12 @@ func grpcClientsFromEnv() *grpcClients {
 	} else if conn != nil {
 		clients.matchmaking = matchmakingv1.NewMatchmakingServiceClient(conn)
 	}
-	if clients.user == nil && clients.social == nil && clients.chat == nil && clients.messaging == nil && clients.voice == nil && clients.file == nil && clients.space == nil && clients.role == nil && clients.notification == nil && clients.matchmaking == nil {
+	if conn, err := dial(addrFor("search")); err != nil {
+		log.Printf("gateway grpc dial search: %v", err)
+	} else if conn != nil {
+		clients.search = searchv1.NewSearchServiceClient(conn)
+	}
+	if clients.user == nil && clients.social == nil && clients.chat == nil && clients.messaging == nil && clients.voice == nil && clients.file == nil && clients.space == nil && clients.role == nil && clients.notification == nil && clients.matchmaking == nil && clients.search == nil {
 		return nil
 	}
 	return clients
@@ -185,6 +194,12 @@ func (t *transcoder) serveNamespace(w http.ResponseWriter, r *http.Request, name
 			return false
 		}
 		return t.serveMatchmaking(w, r, rest)
+	case "search":
+		if t.clients.search == nil {
+			writeGRPCError(w, status.Error(codes.Unavailable, "search unavailable"))
+			return true
+		}
+		return t.serveSearch(w, r, rest)
 	default:
 		return false
 	}

@@ -30,6 +30,7 @@ import 'forward_message_sheet.dart';
 import 'mention_message_content.dart';
 import '../shell/side_panel.dart';
 import '../space/space_chat_slow_mode_sheet.dart';
+import '../search/in_chat_search.dart';
 import '../../state/shell_providers.dart';
 
 /// Main column: message history (REST) + composer; live updates via Realtime WS.
@@ -56,6 +57,7 @@ class ChatRoomPanel extends ConsumerStatefulWidget {
   static const Key emojiPickerKey = Key('chat_room_emoji_picker');
   static const Key offlineBannerKey = Key('chat_room_offline_banner');
   static const Key spaceSlowModeKey = Key('chat_room_space_slow_mode');
+  static const Key inChatSearchKey = Key('chat_room_in_chat_search');
   static const Key groupVoiceStartKey = Key('chat_room_group_voice_start');
   static const Key groupVoiceJoinKey = Key('chat_room_group_voice_join');
   static Key attachmentPreviewKey(String fileId) =>
@@ -290,6 +292,21 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                     title,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
+                ),
+                IconButton(
+                  key: ChatRoomPanel.inChatSearchKey,
+                  tooltip: l10n.inChatSearchOpen,
+                  onPressed: () {
+                    showModalBottomSheet<void>(
+                      context: context,
+                      isScrollControlled: true,
+                      builder: (context) => SizedBox(
+                        height: MediaQuery.sizeOf(context).height * 0.5,
+                        child: InChatSearch(chatId: widget.chatId),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.search),
                 ),
                 if (isGroup) ...[
                   if (canCall && !inThisGroupVoice)

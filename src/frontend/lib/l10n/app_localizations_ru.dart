@@ -121,6 +121,48 @@ class AppLocalizationsRu extends AppLocalizations {
   String get socialSearchLoading => 'Идёт поиск…';
 
   @override
+  String get globalSearchHint => 'Поиск контактов, спейсов и сообщений';
+
+  @override
+  String get globalSearchContacts => 'Контакты';
+
+  @override
+  String get globalSearchSpaces => 'Спейсы';
+
+  @override
+  String get globalSearchMessages => 'Сообщения';
+
+  @override
+  String get globalSearchStartHint =>
+      'Введите запрос для поиска по чатам и спейсам.';
+
+  @override
+  String get globalSearchEmptyContacts => 'Контакты не найдены';
+
+  @override
+  String get globalSearchEmptySpaces => 'Спейсы не найдены';
+
+  @override
+  String get globalSearchEmptyMessages => 'Сообщения не найдены';
+
+  @override
+  String get inChatSearchHint => 'Поиск в этом чате';
+
+  @override
+  String get inChatSearchPrevious => 'Предыдущее совпадение';
+
+  @override
+  String get inChatSearchNext => 'Следующее совпадение';
+
+  @override
+  String inChatSearchResultScore(String score) {
+    return 'Релевантность $score';
+  }
+
+  @override
+  String get inChatSearchOpen => 'Поиск по сообщениям';
+
+  @override
   String get socialAddFriend => 'Добавить в друзья';
 
   @override

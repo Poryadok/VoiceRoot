@@ -66,6 +66,26 @@
   "socialSearchEmpty": "No profiles found",
   "socialSearchEmptyHint": "Check the spelling or try another handle.",
   "socialSearchLoading": "Searching…",
+  "globalSearchHint": "Search contacts, spaces, messages",
+  "globalSearchContacts": "Contacts",
+  "globalSearchSpaces": "Spaces",
+  "globalSearchMessages": "Messages",
+  "globalSearchStartHint": "Type to search across your chats and spaces.",
+  "globalSearchEmptyContacts": "No matching contacts",
+  "globalSearchEmptySpaces": "No matching spaces",
+  "globalSearchEmptyMessages": "No matching messages",
+  "inChatSearchHint": "Search in this chat",
+  "inChatSearchPrevious": "Previous match",
+  "inChatSearchNext": "Next match",
+  "inChatSearchResultScore": "Score {score}",
+  "@inChatSearchResultScore": {
+    "placeholders": {
+      "score": {
+        "type": "String"
+      }
+    }
+  },
+  "inChatSearchOpen": "Search messages",
   "socialAddFriend": "Add friend",
   "socialAcceptRequest": "Accept",
   "socialDeclineRequest": "Decline",
