@@ -12,8 +12,13 @@ import '../backend/messaging_read_sync.dart';
 import '../backend/messages_client.dart';
 import '../backend/realtime_client.dart';
 import 'auth_providers.dart';
+import 'connectivity_providers.dart';
 import 'gateway_providers.dart';
+import 'message_cache_providers.dart';
 import 'space_providers.dart';
+
+/// Returned by [ChatRoomController.sendMessage] when offline send is blocked.
+const String kChatOfflineBlockedError = 'offline_blocked';
 
 final voiceChatsClientProvider = Provider<VoiceChatsClient>((ref) {
   return VoiceChatsClient(gateway: ref.watch(gatewayHttpClientProvider));
@@ -371,6 +376,7 @@ class ChatRoomState {
     this.deliveredMessageIds = const {},
     this.readMessageIds = const {},
     this.pinnedMessages = const [],
+    this.isOfflineCache = false,
   });
 
   final List<VoiceMessage> messages;
@@ -385,6 +391,7 @@ class ChatRoomState {
   final Set<String> deliveredMessageIds;
   final Set<String> readMessageIds;
   final List<VoiceMessage> pinnedMessages;
+  final bool isOfflineCache;
 
   String? get lastMessageId => messages.isEmpty ? null : messages.last.id;
 
@@ -403,6 +410,7 @@ class ChatRoomState {
     Set<String>? deliveredMessageIds,
     Set<String>? readMessageIds,
     List<VoiceMessage>? pinnedMessages,
+    bool? isOfflineCache,
   }) {
     return ChatRoomState(
       messages: messages ?? this.messages,
@@ -417,6 +425,7 @@ class ChatRoomState {
       deliveredMessageIds: deliveredMessageIds ?? this.deliveredMessageIds,
       readMessageIds: readMessageIds ?? this.readMessageIds,
       pinnedMessages: pinnedMessages ?? this.pinnedMessages,
+      isOfflineCache: isOfflineCache ?? this.isOfflineCache,
     );
   }
 }
@@ -566,25 +575,40 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
   Future<void> loadInitial() async {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return;
-    state = state.copyWith(isLoading: true, clearError: true);
+    state = state.copyWith(isLoading: true, clearError: true, isOfflineCache: false);
+    if (_isDeviceOffline()) {
+      final served = await _serveCachedMessages();
+      if (served) return;
+    }
     final result = await _ref
         .read(voiceMessagesClientProvider)
         .getMessages(authorization: auth, chatId: chatId);
     if (!mounted) return;
     switch (result) {
       case MessagesApiOk(:final data):
+        final sorted = _sortMessages(data.messages);
         state = state.copyWith(
-          messages: _sortMessages(data.messages),
+          messages: sorted,
           isLoading: false,
+          isOfflineCache: false,
           nextCursor: data.nextCursor,
           clearNextCursor: data.nextCursor == null,
           hasMore: data.hasMore && data.nextCursor != null,
           clearError: true,
         );
+        unawaited(_writeCache(sorted));
         unawaited(_markLatestRead());
         unawaited(_refreshPinnedMessages(auth));
-      case MessagesApiFailure(:final message):
-        state = state.copyWith(isLoading: false, errorMessage: message);
+      case MessagesApiFailure(:final message, :final errorCode):
+        if (errorCode == 'network_error') {
+          final served = await _serveCachedMessages();
+          if (served) return;
+        }
+        state = state.copyWith(
+          isLoading: false,
+          errorMessage: message,
+          isOfflineCache: false,
+        );
     }
   }
 
@@ -639,13 +663,20 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           merged.add(m);
         }
       }
-      state = state.copyWith(messages: _sortMessages(merged), clearError: true);
+      final sorted = _sortMessages(merged);
+      state = state.copyWith(
+        messages: sorted,
+        clearError: true,
+        isOfflineCache: false,
+      );
+      unawaited(_writeCache(sorted));
       unawaited(_markLatestRead());
       _invalidateChatLists(_ref);
     }
   }
 
   Future<void> loadOlderMessages() async {
+    if (_isDeviceOffline()) return;
     final cursor = state.nextCursor;
     if (cursor == null || cursor.isEmpty || state.isLoadingOlder) return;
     final auth = _ref.read(authorizationHeaderProvider);
@@ -663,14 +694,17 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
             merged.add(m);
           }
         }
+        final sorted = _sortMessages(merged);
         state = state.copyWith(
-          messages: _sortMessages(merged),
+          messages: sorted,
           isLoadingOlder: false,
+          isOfflineCache: false,
           nextCursor: data.nextCursor,
           clearNextCursor: data.nextCursor == null,
           hasMore: data.hasMore && data.nextCursor != null,
           clearError: true,
         );
+        unawaited(_writeCache(sorted));
       case MessagesApiFailure(:final message):
         state = state.copyWith(isLoadingOlder: false, errorMessage: message);
     }
@@ -685,6 +719,9 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     if (trimmed.isEmpty && attachments.isEmpty) return null;
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return 'not_authenticated';
+    if (_isDeviceOffline()) {
+      return kChatOfflineBlockedError;
+    }
 
     state = state.copyWith(isSending: true, clearError: true);
     final result = await _ref
@@ -703,11 +740,14 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
         if (!merged.any((m) => m.id == data.id)) {
           merged.add(data);
         }
+        final sorted = _sortMessages(merged);
         state = state.copyWith(
-          messages: _sortMessages(merged),
+          messages: sorted,
           isSending: false,
+          isOfflineCache: false,
           clearError: true,
         );
+        unawaited(_writeCache(sorted));
         unawaited(_markLatestRead());
         _invalidateChatLists(_ref);
         return null;
@@ -715,6 +755,40 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
         state = state.copyWith(isSending: false, errorMessage: message);
         return message;
     }
+  }
+
+  bool _isDeviceOffline() => _ref.read(isDeviceOfflineProvider);
+
+  String? _activeProfileId() =>
+      _ref.read(authControllerProvider).activeProfileId;
+
+  Future<bool> _serveCachedMessages() async {
+    final profileId = _activeProfileId();
+    if (profileId == null) return false;
+    final cached = await _ref
+        .read(messageCacheStoreProvider)
+        .getMessages(profileId: profileId, chatId: chatId);
+    if (!mounted) return false;
+    if (cached.isEmpty) return false;
+    state = state.copyWith(
+      messages: _sortMessages(cached),
+      isLoading: false,
+      isOfflineCache: true,
+      clearError: true,
+      hasMore: false,
+      clearNextCursor: true,
+    );
+    return true;
+  }
+
+  Future<void> _writeCache(List<VoiceMessage> messages) async {
+    final profileId = _activeProfileId();
+    if (profileId == null || messages.isEmpty) return;
+    await _ref.read(messageCacheStoreProvider).replaceChatMessages(
+      profileId: profileId,
+      chatId: chatId,
+      messages: messages,
+    );
   }
 
   Future<void> _markLatestRead() async {
@@ -911,10 +985,10 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     if (!mounted) return null;
     switch (result) {
       case MessagesApiOk<void>():
-        state = state.copyWith(
-          messages: state.messages.where((m) => m.id != messageId).toList(),
-          clearError: true,
-        );
+        final messages =
+            state.messages.where((m) => m.id != messageId).toList();
+        state = state.copyWith(messages: messages, clearError: true);
+        unawaited(_writeCache(messages));
         _invalidateChatLists(_ref);
         return null;
       case MessagesApiFailure(:final message):
@@ -924,12 +998,11 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
   }
 
   String? _replaceMessage(VoiceMessage message) {
-    state = state.copyWith(
-      messages: state.messages
-          .map((m) => m.id == message.id ? message : m)
-          .toList(),
-      clearError: true,
-    );
+    final messages = state.messages
+        .map((m) => m.id == message.id ? message : m)
+        .toList();
+    state = state.copyWith(messages: messages, clearError: true);
+    unawaited(_writeCache(messages));
     _invalidateChatLists(_ref);
     return null;
   }
@@ -941,7 +1014,9 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     if (!merged.any((m) => m.id == message.id)) {
       merged.add(message);
     }
-    state = state.copyWith(messages: _sortMessages(merged), clearError: true);
+    final sorted = _sortMessages(merged);
+    state = state.copyWith(messages: sorted, clearError: true);
+    unawaited(_writeCache(sorted));
   }
 }
 

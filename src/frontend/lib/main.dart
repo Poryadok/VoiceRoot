@@ -8,6 +8,7 @@ import 'backend/discover_hint_storage.dart';
 import 'bootstrap/voice_app_bootstrap.dart';
 import 'state/auth_providers.dart';
 import 'state/call_providers.dart';
+import 'state/message_cache_providers.dart';
 import 'state/space_providers.dart';
 import 'state/voice_room_providers.dart';
 import 'theme/profile_accent_storage.dart';
@@ -17,9 +18,11 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await LiveKitClient.initialize();
   final prefs = await SharedPreferences.getInstance();
+  final messageCacheStore = await openDefaultMessageCacheStore();
   runApp(
     ProviderScope(
       overrides: [
+        messageCacheStoreProvider.overrideWithValue(messageCacheStore),
         authSessionStorageProvider.overrideWithValue(
           SharedPreferencesAuthSessionStorage(prefs),
         ),

@@ -560,6 +560,18 @@ abstract class AppLocalizations {
   /// **'Offline'**
   String get chatRealtimeOffline;
 
+  /// No description provided for @chatOfflineReadOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re offline. Showing saved messages.'**
+  String get chatOfflineReadOnly;
+
+  /// No description provided for @chatOfflineSendBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t send messages while offline.'**
+  String get chatOfflineSendBlocked;
+
   /// No description provided for @chatOpenDm.
   ///
   /// In en, this message translates to:

@@ -151,17 +151,69 @@ class VoiceMessage {
     final chat = json['chat'] as Map<String, dynamic>? ?? {};
     return VoiceMessage(
       id: json['id'] as String,
-      chatId: chat['id'] as String? ?? '',
+      chatId: chat['id'] as String? ?? json['chat_id'] as String? ?? '',
       senderProfileId: json['sender_profile_id'] as String? ?? '',
       content: json['content'] as String? ?? '',
       attachments: MessageAttachment.listFromWire(json['attachments_json']),
       reactions: MessageReaction.listFromWire(json['reactions_json']),
       mentions: MessageMention.listFromWire(json['mentions_json']),
+      messageKind: _messageKindFromWire(json['message_kind'] as String?),
+      forwardFromId: json['forward_from_id'] as String?,
+      forwardFromSender: json['forward_from_sender'] as String?,
       editedAt: VoiceMessage.parseTimestamp(json['edited_at']),
       deletedAt: VoiceMessage.parseTimestamp(json['deleted_at']),
       createdAt: VoiceMessage.parseTimestamp(json['created_at']),
       isPinned: json['is_pinned'] as bool? ?? false,
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'chat': {'id': chatId},
+      'chat_id': chatId,
+      'sender_profile_id': senderProfileId,
+      'content': content,
+      if (attachments.isNotEmpty)
+        'attachments_json': attachments.map((a) => a.toJson()).toList(),
+      if (reactions.isNotEmpty)
+        'reactions_json': reactions
+            .map(
+              (r) => {
+                'emoji': r.emoji,
+                'count': r.count,
+                'reacted_by_me': r.reactedByMe,
+              },
+            )
+            .toList(),
+      if (mentions.isNotEmpty)
+        'mentions_json': mentions.map((m) => m.toJson()).toList(),
+      'message_kind': _messageKindToWire(messageKind),
+      if (forwardFromId != null) 'forward_from_id': forwardFromId,
+      if (forwardFromSender != null) 'forward_from_sender': forwardFromSender,
+      if (editedAt != null) 'edited_at': editedAt!.toUtc().toIso8601String(),
+      if (deletedAt != null) 'deleted_at': deletedAt!.toUtc().toIso8601String(),
+      if (createdAt != null) 'created_at': createdAt!.toUtc().toIso8601String(),
+      'is_pinned': isPinned,
+    };
+  }
+
+  static VoiceMessageKind _messageKindFromWire(String? raw) {
+    return switch (raw) {
+      'system' => VoiceMessageKind.system,
+      'forward' => VoiceMessageKind.forward,
+      'regular' => VoiceMessageKind.regular,
+      _ => VoiceMessageKind.unknown,
+    };
+  }
+
+  static String _messageKindToWire(VoiceMessageKind kind) {
+    return switch (kind) {
+      VoiceMessageKind.system => 'system',
+      VoiceMessageKind.forward => 'forward',
+      VoiceMessageKind.regular => 'regular',
+      VoiceMessageKind.unknown => 'unknown',
+    };
   }
 
   static DateTime? parseTimestamp(dynamic raw) {

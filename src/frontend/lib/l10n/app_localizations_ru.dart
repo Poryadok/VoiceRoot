@@ -274,6 +274,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatRealtimeOffline => 'Офлайн';
 
   @override
+  String get chatOfflineReadOnly => 'Нет сети. Показаны сохранённые сообщения.';
+
+  @override
+  String get chatOfflineSendBlocked => 'Нельзя отправить сообщение без сети.';
+
+  @override
   String get chatOpenDm => 'Написать';
 
   @override

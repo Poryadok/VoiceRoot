@@ -13,6 +13,7 @@ import '../../backend/voice_client.dart';
 import '../../state/auth_providers.dart';
 import '../../state/call_providers.dart';
 import '../../state/chat_providers.dart';
+import '../../state/connectivity_providers.dart';
 import '../../state/gateway_providers.dart';
 import '../../state/presence_providers.dart';
 import '../../state/social_providers.dart';
@@ -53,6 +54,7 @@ class ChatRoomPanel extends ConsumerStatefulWidget {
   static const Key pinnedBarKey = Key('chat_room_pinned_bar');
   static const Key groupMembersKey = Key('chat_room_group_members');
   static const Key emojiPickerKey = Key('chat_room_emoji_picker');
+  static const Key offlineBannerKey = Key('chat_room_offline_banner');
   static const Key spaceSlowModeKey = Key('chat_room_space_slow_mode');
   static const Key groupVoiceStartKey = Key('chat_room_group_voice_start');
   static const Key groupVoiceJoinKey = Key('chat_room_group_voice_join');
@@ -155,6 +157,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final room = ref.watch(chatRoomControllerProvider(widget.chatId));
+    final isOffline = ref.watch(isDeviceOfflineProvider) || room.isOfflineCache;
     final activeId = ref.watch(authControllerProvider).activeProfileId;
     final canCall = ref.watch(gatewayConfigProvider).canPlaceVoiceCalls;
     String? groupName;
@@ -355,6 +358,13 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
             icon: Icons.sync_problem,
             tone: VoiceBannerTone.warning,
           ),
+        if (room.isOfflineCache || ref.watch(isDeviceOfflineProvider))
+          VoiceCompactBanner(
+            key: ChatRoomPanel.offlineBannerKey,
+            message: l10n.chatOfflineReadOnly,
+            icon: Icons.cloud_off_outlined,
+            tone: VoiceBannerTone.warning,
+          ),
         if (isGroup && canCall && !inThisGroupVoice)
           _GroupVoiceJoinBanner(
             activeGroupCall: activeGroupCall,
@@ -432,13 +442,15 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
               children: [
                 IconButton(
                   tooltip: l10n.chatMentionInsert,
-                  onPressed: room.isSending ? null : () => _showMentionMenu(context),
+                  onPressed: room.isSending || isOffline
+                      ? null
+                      : () => _showMentionMenu(context),
                   icon: const Icon(Icons.alternate_email),
                 ),
                 IconButton(
                   key: ChatRoomPanel.emojiPickerKey,
                   tooltip: l10n.chatMessageAddReaction,
-                  onPressed: room.isSending
+                  onPressed: room.isSending || isOffline
                       ? null
                       : () => openEmojiPanel(
                           context,
@@ -468,14 +480,15 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                         hub.typingStart(widget.chatId);
                       }
                     },
-                    onSubmitted: room.isSending ? null : (_) => _send(),
+                    onSubmitted: room.isSending || isOffline ? null : (_) => _send(),
+                    readOnly: isOffline,
                   ),
                 ),
                 const SizedBox(width: 8),
                 IconButton(
                   key: ChatRoomPanel.attachKey,
                   tooltip: l10n.chatAttachFile,
-                  onPressed: room.isSending || _uploadingAttachment
+                  onPressed: room.isSending || _uploadingAttachment || isOffline
                       ? null
                       : _attachAndSend,
                   icon: _uploadingAttachment
@@ -489,7 +502,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                 const SizedBox(width: 4),
                 VoiceSendButton(
                   key: ChatRoomPanel.sendKey,
-                  onPressed: _send,
+                  onPressed: room.isSending ? null : _send,
                   isLoading: room.isSending,
                   tooltip: l10n.chatSendMessage,
                 ),
@@ -539,6 +552,14 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   }
 
   Future<void> _send() async {
+    if (ref.read(isDeviceOfflineProvider) ||
+        ref.read(chatRoomControllerProvider(widget.chatId)).isOfflineCache) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context)!.chatOfflineSendBlocked)),
+      );
+      return;
+    }
     final text = _composer.text;
     ref.read(realtimeHubProvider).typingStop(widget.chatId);
     final memberIds = ref
@@ -552,7 +573,14 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         .read(chatRoomControllerProvider(widget.chatId).notifier)
         .sendMessage(text, mentions: mentions);
     if (!mounted) return;
-    if (err == null) {
+    if (err == kChatOfflineBlockedError) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.chatOfflineSendBlocked),
+        ),
+      );
+    } else if (err == null) {
       _composer.clear();
     }
     _refocusComposer();

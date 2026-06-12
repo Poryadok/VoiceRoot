@@ -8,7 +8,9 @@ import 'shell/three_column_shell.dart';
 import 'state/auth_providers.dart';
 import 'state/gateway_providers.dart';
 import 'state/chat_providers.dart';
+import 'state/connectivity_providers.dart';
 import 'state/in_app_notifications.dart';
+import 'state/message_cache_providers.dart';
 import 'state/push_notifications_controller.dart';
 import 'state/voip_push_controller.dart';
 import 'state/shell_providers.dart';
@@ -54,6 +56,8 @@ class VoiceApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(connectivityWatcherProvider);
+    ref.watch(messageCacheLifecycleProvider);
     final themeAsync = ref.watch(voiceMaterialThemeProvider);
     final auth = ref.watch(authControllerProvider);
     final localePref = ref.watch(appLocalePreferenceProvider);

@@ -154,6 +154,8 @@
   "chatRealtimeConnecting": "Подключение…",
   "chatRealtimeReconnecting": "Переподключение…",
   "chatRealtimeOffline": "Офлайн",
+  "chatOfflineReadOnly": "Нет сети. Показаны сохранённые сообщения.",
+  "chatOfflineSendBlocked": "Нельзя отправить сообщение без сети.",
   "chatOpenDm": "Написать",
   "callStartAudio": "Начать аудиозвонок",
   "callStartVideo": "Начать видеозвонок",

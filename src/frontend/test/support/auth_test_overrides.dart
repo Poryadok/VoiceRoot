@@ -6,8 +6,11 @@ import 'package:voice_frontend/backend/discover_hint_storage.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/backend/spaces_client.dart';
+import 'package:voice_frontend/backend/message_cache/in_memory_message_cache_store.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
+import 'package:voice_frontend/state/connectivity_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
+import 'package:voice_frontend/state/message_cache_providers.dart';
 import 'package:voice_frontend/state/space_providers.dart';
 import 'package:voice_frontend/theme/profile_accent_storage.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
@@ -28,6 +31,8 @@ List<Override> voiceAppTestOverrides({required http.Client client}) => [
   ),
   httpClientProvider.overrideWithValue(client),
   realtimeAutoConnectProvider.overrideWithValue(false),
+  messageCacheStoreProvider.overrideWithValue(InMemoryMessageCacheStore()),
+  isDeviceOfflineProvider.overrideWith((ref) => false),
   mySpacesProvider.overrideWith((_) async => const SpaceListData(spaces: [])),
 ];
 

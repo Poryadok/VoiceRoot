@@ -160,6 +160,8 @@
   "chatRealtimeConnecting": "Connecting…",
   "chatRealtimeReconnecting": "Reconnecting…",
   "chatRealtimeOffline": "Offline",
+  "chatOfflineReadOnly": "You're offline. Showing saved messages.",
+  "chatOfflineSendBlocked": "Can't send messages while offline.",
   "chatOpenDm": "Message",
   "callStartAudio": "Start audio call",
   "callStartVideo": "Start video call",

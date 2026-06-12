@@ -273,6 +273,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatRealtimeOffline => 'Offline';
 
   @override
+  String get chatOfflineReadOnly => 'You\'re offline. Showing saved messages.';
+
+  @override
+  String get chatOfflineSendBlocked => 'Can\'t send messages while offline.';
+
+  @override
   String get chatOpenDm => 'Message';
 
   @override
