@@ -6,6 +6,7 @@ Thumbs.db
 
 # buf generate (see buf.gen.yaml in repo root)
 gen/
+!src/frontend/lib/gen/
 
 # Java/Maven build output
 /src/backend/auth/target/

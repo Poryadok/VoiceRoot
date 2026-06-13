@@ -1,0 +1,751 @@
+// This is a generated file - do not edit.
+//
+// Generated from voice/bot/v1/bot.proto.
+
+// @dart = 3.3
+
+// ignore_for_file: annotate_overrides, camel_case_types, comment_references
+// ignore_for_file: constant_identifier_names
+// ignore_for_file: curly_braces_in_flow_control_structures
+// ignore_for_file: deprecated_member_use_from_same_package, library_prefixes
+// ignore_for_file: non_constant_identifier_names, prefer_relative_imports
+// ignore_for_file: unused_import
+
+import 'dart:convert' as $convert;
+import 'dart:core' as $core;
+import 'dart:typed_data' as $typed_data;
+
+@$core.Deprecated('Use botLifecycleStatusDescriptor instead')
+const BotLifecycleStatus$json = {
+  '1': 'BotLifecycleStatus',
+  '2': [
+    {'1': 'BOT_LIFECYCLE_STATUS_UNSPECIFIED', '2': 0},
+    {'1': 'BOT_LIFECYCLE_STATUS_DRAFT', '2': 1},
+    {'1': 'BOT_LIFECYCLE_STATUS_LIVE', '2': 2},
+    {'1': 'BOT_LIFECYCLE_STATUS_DISABLED', '2': 3},
+  ],
+};
+
+/// Descriptor for `BotLifecycleStatus`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List botLifecycleStatusDescriptor = $convert.base64Decode(
+    'ChJCb3RMaWZlY3ljbGVTdGF0dXMSJAogQk9UX0xJRkVDWUNMRV9TVEFUVVNfVU5TUEVDSUZJRU'
+    'QQABIeChpCT1RfTElGRUNZQ0xFX1NUQVRVU19EUkFGVBABEh0KGUJPVF9MSUZFQ1lDTEVfU1RB'
+    'VFVTX0xJVkUQAhIhCh1CT1RfTElGRUNZQ0xFX1NUQVRVU19ESVNBQkxFRBAD');
+
+@$core.Deprecated('Use botDescriptor instead')
+const Bot$json = {
+  '1': 'Bot',
+  '2': [
+    {'1': 'id', '3': 1, '4': 1, '5': 9, '10': 'id'},
+    {'1': 'owner_account_id', '3': 2, '4': 1, '5': 9, '10': 'ownerAccountId'},
+    {'1': 'name', '3': 3, '4': 1, '5': 9, '10': 'name'},
+    {'1': 'description', '3': 4, '4': 1, '5': 9, '10': 'description'},
+    {
+      '1': 'avatar_url',
+      '3': 5,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'avatarUrl',
+      '17': true
+    },
+    {
+      '1': 'webhook_url',
+      '3': 6,
+      '4': 1,
+      '5': 9,
+      '9': 1,
+      '10': 'webhookUrl',
+      '17': true
+    },
+    {'1': 'is_polling_mode', '3': 7, '4': 1, '5': 8, '10': 'isPollingMode'},
+    {'1': 'scopes_json', '3': 8, '4': 1, '5': 9, '10': 'scopesJson'},
+    {'1': 'status', '3': 9, '4': 1, '5': 9, '10': 'status'},
+    {
+      '1': 'created_at',
+      '3': 10,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'createdAt'
+    },
+    {
+      '1': 'status_enum',
+      '3': 11,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.bot.v1.BotLifecycleStatus',
+      '9': 2,
+      '10': 'statusEnum',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_avatar_url'},
+    {'1': '_webhook_url'},
+    {'1': '_status_enum'},
+  ],
+};
+
+/// Descriptor for `Bot`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List botDescriptor = $convert.base64Decode(
+    'CgNCb3QSDgoCaWQYASABKAlSAmlkEigKEG93bmVyX2FjY291bnRfaWQYAiABKAlSDm93bmVyQW'
+    'Njb3VudElkEhIKBG5hbWUYAyABKAlSBG5hbWUSIAoLZGVzY3JpcHRpb24YBCABKAlSC2Rlc2Ny'
+    'aXB0aW9uEiIKCmF2YXRhcl91cmwYBSABKAlIAFIJYXZhdGFyVXJsiAEBEiQKC3dlYmhvb2tfdX'
+    'JsGAYgASgJSAFSCndlYmhvb2tVcmyIAQESJgoPaXNfcG9sbGluZ19tb2RlGAcgASgIUg1pc1Bv'
+    'bGxpbmdNb2RlEh8KC3Njb3Blc19qc29uGAggASgJUgpzY29wZXNKc29uEhYKBnN0YXR1cxgJIA'
+    'EoCVIGc3RhdHVzEjkKCmNyZWF0ZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0'
+    'YW1wUgljcmVhdGVkQXQSRgoLc3RhdHVzX2VudW0YCyABKA4yIC52b2ljZS5ib3QudjEuQm90TG'
+    'lmZWN5Y2xlU3RhdHVzSAJSCnN0YXR1c0VudW2IAQFCDQoLX2F2YXRhcl91cmxCDgoMX3dlYmhv'
+    'b2tfdXJsQg4KDF9zdGF0dXNfZW51bQ==');
+
+@$core.Deprecated('Use registerBotRequestDescriptor instead')
+const RegisterBotRequest$json = {
+  '1': 'RegisterBotRequest',
+  '2': [
+    {'1': 'name', '3': 1, '4': 1, '5': 9, '10': 'name'},
+    {'1': 'description', '3': 2, '4': 1, '5': 9, '10': 'description'},
+    {'1': 'scopes_json', '3': 3, '4': 1, '5': 9, '10': 'scopesJson'},
+  ],
+};
+
+/// Descriptor for `RegisterBotRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List registerBotRequestDescriptor = $convert.base64Decode(
+    'ChJSZWdpc3RlckJvdFJlcXVlc3QSEgoEbmFtZRgBIAEoCVIEbmFtZRIgCgtkZXNjcmlwdGlvbh'
+    'gCIAEoCVILZGVzY3JpcHRpb24SHwoLc2NvcGVzX2pzb24YAyABKAlSCnNjb3Blc0pzb24=');
+
+@$core.Deprecated('Use updateBotRequestDescriptor instead')
+const UpdateBotRequest$json = {
+  '1': 'UpdateBotRequest',
+  '2': [
+    {'1': 'bot_id', '3': 1, '4': 1, '5': 9, '10': 'botId'},
+    {'1': 'name', '3': 2, '4': 1, '5': 9, '9': 0, '10': 'name', '17': true},
+    {
+      '1': 'description',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '9': 1,
+      '10': 'description',
+      '17': true
+    },
+    {
+      '1': 'avatar_url',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '9': 2,
+      '10': 'avatarUrl',
+      '17': true
+    },
+    {
+      '1': 'scopes_json',
+      '3': 5,
+      '4': 1,
+      '5': 9,
+      '9': 3,
+      '10': 'scopesJson',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_name'},
+    {'1': '_description'},
+    {'1': '_avatar_url'},
+    {'1': '_scopes_json'},
+  ],
+};
+
+/// Descriptor for `UpdateBotRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List updateBotRequestDescriptor = $convert.base64Decode(
+    'ChBVcGRhdGVCb3RSZXF1ZXN0EhUKBmJvdF9pZBgBIAEoCVIFYm90SWQSFwoEbmFtZRgCIAEoCU'
+    'gAUgRuYW1liAEBEiUKC2Rlc2NyaXB0aW9uGAMgASgJSAFSC2Rlc2NyaXB0aW9uiAEBEiIKCmF2'
+    'YXRhcl91cmwYBCABKAlIAlIJYXZhdGFyVXJsiAEBEiQKC3Njb3Blc19qc29uGAUgASgJSANSCn'
+    'Njb3Blc0pzb26IAQFCBwoFX25hbWVCDgoMX2Rlc2NyaXB0aW9uQg0KC19hdmF0YXJfdXJsQg4K'
+    'DF9zY29wZXNfanNvbg==');
+
+@$core.Deprecated('Use deleteBotRequestDescriptor instead')
+const DeleteBotRequest$json = {
+  '1': 'DeleteBotRequest',
+  '2': [
+    {'1': 'bot_id', '3': 1, '4': 1, '5': 9, '10': 'botId'},
+  ],
+};
+
+/// Descriptor for `DeleteBotRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List deleteBotRequestDescriptor = $convert
+    .base64Decode('ChBEZWxldGVCb3RSZXF1ZXN0EhUKBmJvdF9pZBgBIAEoCVIFYm90SWQ=');
+
+@$core.Deprecated('Use getBotRequestDescriptor instead')
+const GetBotRequest$json = {
+  '1': 'GetBotRequest',
+  '2': [
+    {'1': 'bot_id', '3': 1, '4': 1, '5': 9, '10': 'botId'},
+  ],
+};
+
+/// Descriptor for `GetBotRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getBotRequestDescriptor = $convert
+    .base64Decode('Cg1HZXRCb3RSZXF1ZXN0EhUKBmJvdF9pZBgBIAEoCVIFYm90SWQ=');
+
+@$core.Deprecated('Use listBotsRequestDescriptor instead')
+const ListBotsRequest$json = {
+  '1': 'ListBotsRequest',
+};
+
+/// Descriptor for `ListBotsRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List listBotsRequestDescriptor =
+    $convert.base64Decode('Cg9MaXN0Qm90c1JlcXVlc3Q=');
+
+@$core.Deprecated('Use botListDescriptor instead')
+const BotList$json = {
+  '1': 'BotList',
+  '2': [
+    {
+      '1': 'bots',
+      '3': 1,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.bot.v1.Bot',
+      '10': 'bots'
+    },
+  ],
+};
+
+/// Descriptor for `BotList`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List botListDescriptor = $convert.base64Decode(
+    'CgdCb3RMaXN0EiUKBGJvdHMYASADKAsyES52b2ljZS5ib3QudjEuQm90UgRib3Rz');
+
+@$core.Deprecated('Use regenerateTokenRequestDescriptor instead')
+const RegenerateTokenRequest$json = {
+  '1': 'RegenerateTokenRequest',
+  '2': [
+    {'1': 'bot_id', '3': 1, '4': 1, '5': 9, '10': 'botId'},
+  ],
+};
+
+/// Descriptor for `RegenerateTokenRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List regenerateTokenRequestDescriptor =
+    $convert.base64Decode(
+        'ChZSZWdlbmVyYXRlVG9rZW5SZXF1ZXN0EhUKBmJvdF9pZBgBIAEoCVIFYm90SWQ=');
+
+@$core.Deprecated('Use tokenResponseDescriptor instead')
+const TokenResponse$json = {
+  '1': 'TokenResponse',
+  '2': [
+    {'1': 'token', '3': 1, '4': 1, '5': 9, '10': 'token'},
+  ],
+};
+
+/// Descriptor for `TokenResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List tokenResponseDescriptor = $convert
+    .base64Decode('Cg1Ub2tlblJlc3BvbnNlEhQKBXRva2VuGAEgASgJUgV0b2tlbg==');
+
+@$core.Deprecated('Use registerCommandsRequestDescriptor instead')
+const RegisterCommandsRequest$json = {
+  '1': 'RegisterCommandsRequest',
+  '2': [
+    {'1': 'bot_id', '3': 1, '4': 1, '5': 9, '10': 'botId'},
+    {'1': 'commands_json', '3': 2, '4': 1, '5': 9, '10': 'commandsJson'},
+  ],
+};
+
+/// Descriptor for `RegisterCommandsRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List registerCommandsRequestDescriptor =
+    $convert.base64Decode(
+        'ChdSZWdpc3RlckNvbW1hbmRzUmVxdWVzdBIVCgZib3RfaWQYASABKAlSBWJvdElkEiMKDWNvbW'
+        '1hbmRzX2pzb24YAiABKAlSDGNvbW1hbmRzSnNvbg==');
+
+@$core.Deprecated('Use getCommandsRequestDescriptor instead')
+const GetCommandsRequest$json = {
+  '1': 'GetCommandsRequest',
+  '2': [
+    {'1': 'bot_id', '3': 1, '4': 1, '5': 9, '10': 'botId'},
+  ],
+};
+
+/// Descriptor for `GetCommandsRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getCommandsRequestDescriptor =
+    $convert.base64Decode(
+        'ChJHZXRDb21tYW5kc1JlcXVlc3QSFQoGYm90X2lkGAEgASgJUgVib3RJZA==');
+
+@$core.Deprecated('Use commandListDescriptor instead')
+const CommandList$json = {
+  '1': 'CommandList',
+  '2': [
+    {'1': 'commands_json', '3': 1, '4': 1, '5': 9, '10': 'commandsJson'},
+  ],
+};
+
+/// Descriptor for `CommandList`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List commandListDescriptor = $convert.base64Decode(
+    'CgtDb21tYW5kTGlzdBIjCg1jb21tYW5kc19qc29uGAEgASgJUgxjb21tYW5kc0pzb24=');
+
+@$core.Deprecated('Use setWebhookURLRequestDescriptor instead')
+const SetWebhookURLRequest$json = {
+  '1': 'SetWebhookURLRequest',
+  '2': [
+    {'1': 'bot_id', '3': 1, '4': 1, '5': 9, '10': 'botId'},
+    {'1': 'url', '3': 2, '4': 1, '5': 9, '10': 'url'},
+  ],
+};
+
+/// Descriptor for `SetWebhookURLRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List setWebhookURLRequestDescriptor = $convert.base64Decode(
+    'ChRTZXRXZWJob29rVVJMUmVxdWVzdBIVCgZib3RfaWQYASABKAlSBWJvdElkEhAKA3VybBgCIA'
+    'EoCVIDdXJs');
+
+@$core.Deprecated('Use getWebhookURLRequestDescriptor instead')
+const GetWebhookURLRequest$json = {
+  '1': 'GetWebhookURLRequest',
+  '2': [
+    {'1': 'bot_id', '3': 1, '4': 1, '5': 9, '10': 'botId'},
+  ],
+};
+
+/// Descriptor for `GetWebhookURLRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getWebhookURLRequestDescriptor =
+    $convert.base64Decode(
+        'ChRHZXRXZWJob29rVVJMUmVxdWVzdBIVCgZib3RfaWQYASABKAlSBWJvdElk');
+
+@$core.Deprecated('Use setChatWhitelistRequestDescriptor instead')
+const SetChatWhitelistRequest$json = {
+  '1': 'SetChatWhitelistRequest',
+  '2': [
+    {'1': 'bot_id', '3': 1, '4': 1, '5': 9, '10': 'botId'},
+    {
+      '1': 'allowed_chats',
+      '3': 2,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.chat.v1.ChatRef',
+      '10': 'allowedChats'
+    },
+  ],
+};
+
+/// Descriptor for `SetChatWhitelistRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List setChatWhitelistRequestDescriptor = $convert.base64Decode(
+    'ChdTZXRDaGF0V2hpdGVsaXN0UmVxdWVzdBIVCgZib3RfaWQYASABKAlSBWJvdElkEjsKDWFsbG'
+    '93ZWRfY2hhdHMYAiADKAsyFi52b2ljZS5jaGF0LnYxLkNoYXRSZWZSDGFsbG93ZWRDaGF0cw==');
+
+@$core.Deprecated('Use getChatWhitelistRequestDescriptor instead')
+const GetChatWhitelistRequest$json = {
+  '1': 'GetChatWhitelistRequest',
+  '2': [
+    {'1': 'bot_id', '3': 1, '4': 1, '5': 9, '10': 'botId'},
+  ],
+};
+
+/// Descriptor for `GetChatWhitelistRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getChatWhitelistRequestDescriptor =
+    $convert.base64Decode(
+        'ChdHZXRDaGF0V2hpdGVsaXN0UmVxdWVzdBIVCgZib3RfaWQYASABKAlSBWJvdElk');
+
+@$core.Deprecated('Use sendBotMessageRequestDescriptor instead')
+const SendBotMessageRequest$json = {
+  '1': 'SendBotMessageRequest',
+  '2': [
+    {'1': 'bot_id', '3': 1, '4': 1, '5': 9, '10': 'botId'},
+    {
+      '1': 'chat',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.chat.v1.ChatRef',
+      '10': 'chat'
+    },
+    {'1': 'content', '3': 3, '4': 1, '5': 9, '10': 'content'},
+    {
+      '1': 'thread_parent_id',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'threadParentId',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_thread_parent_id'},
+  ],
+};
+
+/// Descriptor for `SendBotMessageRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List sendBotMessageRequestDescriptor = $convert.base64Decode(
+    'ChVTZW5kQm90TWVzc2FnZVJlcXVlc3QSFQoGYm90X2lkGAEgASgJUgVib3RJZBIqCgRjaGF0GA'
+    'IgASgLMhYudm9pY2UuY2hhdC52MS5DaGF0UmVmUgRjaGF0EhgKB2NvbnRlbnQYAyABKAlSB2Nv'
+    'bnRlbnQSLQoQdGhyZWFkX3BhcmVudF9pZBgEIAEoCUgAUg50aHJlYWRQYXJlbnRJZIgBAUITCh'
+    'FfdGhyZWFkX3BhcmVudF9pZA==');
+
+@$core.Deprecated('Use editBotMessageRequestDescriptor instead')
+const EditBotMessageRequest$json = {
+  '1': 'EditBotMessageRequest',
+  '2': [
+    {'1': 'bot_id', '3': 1, '4': 1, '5': 9, '10': 'botId'},
+    {'1': 'message_id', '3': 2, '4': 1, '5': 9, '10': 'messageId'},
+    {'1': 'content', '3': 3, '4': 1, '5': 9, '10': 'content'},
+  ],
+};
+
+/// Descriptor for `EditBotMessageRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List editBotMessageRequestDescriptor = $convert.base64Decode(
+    'ChVFZGl0Qm90TWVzc2FnZVJlcXVlc3QSFQoGYm90X2lkGAEgASgJUgVib3RJZBIdCgptZXNzYW'
+    'dlX2lkGAIgASgJUgltZXNzYWdlSWQSGAoHY29udGVudBgDIAEoCVIHY29udGVudA==');
+
+@$core.Deprecated('Use sendEphemeralRequestDescriptor instead')
+const SendEphemeralRequest$json = {
+  '1': 'SendEphemeralRequest',
+  '2': [
+    {'1': 'bot_id', '3': 1, '4': 1, '5': 9, '10': 'botId'},
+    {
+      '1': 'chat',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.chat.v1.ChatRef',
+      '10': 'chat'
+    },
+    {'1': 'target_profile_id', '3': 3, '4': 1, '5': 9, '10': 'targetProfileId'},
+    {'1': 'content', '3': 4, '4': 1, '5': 9, '10': 'content'},
+  ],
+};
+
+/// Descriptor for `SendEphemeralRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List sendEphemeralRequestDescriptor = $convert.base64Decode(
+    'ChRTZW5kRXBoZW1lcmFsUmVxdWVzdBIVCgZib3RfaWQYASABKAlSBWJvdElkEioKBGNoYXQYAi'
+    'ABKAsyFi52b2ljZS5jaGF0LnYxLkNoYXRSZWZSBGNoYXQSKgoRdGFyZ2V0X3Byb2ZpbGVfaWQY'
+    'AyABKAlSD3RhcmdldFByb2ZpbGVJZBIYCgdjb250ZW50GAQgASgJUgdjb250ZW50');
+
+@$core.Deprecated('Use deferResponseRequestDescriptor instead')
+const DeferResponseRequest$json = {
+  '1': 'DeferResponseRequest',
+  '2': [
+    {'1': 'bot_id', '3': 1, '4': 1, '5': 9, '10': 'botId'},
+    {
+      '1': 'interaction_token',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '10': 'interactionToken'
+    },
+  ],
+};
+
+/// Descriptor for `DeferResponseRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List deferResponseRequestDescriptor = $convert.base64Decode(
+    'ChREZWZlclJlc3BvbnNlUmVxdWVzdBIVCgZib3RfaWQYASABKAlSBWJvdElkEisKEWludGVyYW'
+    'N0aW9uX3Rva2VuGAIgASgJUhBpbnRlcmFjdGlvblRva2Vu');
+
+@$core.Deprecated('Use pollEventsRequestDescriptor instead')
+const PollEventsRequest$json = {
+  '1': 'PollEventsRequest',
+  '2': [
+    {'1': 'bot_id', '3': 1, '4': 1, '5': 9, '10': 'botId'},
+    {'1': 'cursor', '3': 2, '4': 1, '5': 9, '9': 0, '10': 'cursor', '17': true},
+  ],
+  '8': [
+    {'1': '_cursor'},
+  ],
+};
+
+/// Descriptor for `PollEventsRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List pollEventsRequestDescriptor = $convert.base64Decode(
+    'ChFQb2xsRXZlbnRzUmVxdWVzdBIVCgZib3RfaWQYASABKAlSBWJvdElkEhsKBmN1cnNvchgCIA'
+    'EoCUgAUgZjdXJzb3KIAQFCCQoHX2N1cnNvcg==');
+
+@$core.Deprecated('Use botEventDescriptor instead')
+const BotEvent$json = {
+  '1': 'BotEvent',
+  '2': [
+    {'1': 'event_id', '3': 1, '4': 1, '5': 9, '10': 'eventId'},
+    {'1': 'event_type', '3': 2, '4': 1, '5': 9, '10': 'eventType'},
+    {'1': 'payload_json', '3': 3, '4': 1, '5': 9, '10': 'payloadJson'},
+    {
+      '1': 'created_at',
+      '3': 4,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'createdAt'
+    },
+  ],
+};
+
+/// Descriptor for `BotEvent`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List botEventDescriptor = $convert.base64Decode(
+    'CghCb3RFdmVudBIZCghldmVudF9pZBgBIAEoCVIHZXZlbnRJZBIdCgpldmVudF90eXBlGAIgAS'
+    'gJUglldmVudFR5cGUSIQoMcGF5bG9hZF9qc29uGAMgASgJUgtwYXlsb2FkSnNvbhI5CgpjcmVh'
+    'dGVkX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcFIJY3JlYXRlZEF0');
+
+@$core.Deprecated('Use registerBotResponseDescriptor instead')
+const RegisterBotResponse$json = {
+  '1': 'RegisterBotResponse',
+  '2': [
+    {
+      '1': 'bot',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.bot.v1.Bot',
+      '10': 'bot'
+    },
+  ],
+};
+
+/// Descriptor for `RegisterBotResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List registerBotResponseDescriptor = $convert.base64Decode(
+    'ChNSZWdpc3RlckJvdFJlc3BvbnNlEiMKA2JvdBgBIAEoCzIRLnZvaWNlLmJvdC52MS5Cb3RSA2'
+    'JvdA==');
+
+@$core.Deprecated('Use updateBotResponseDescriptor instead')
+const UpdateBotResponse$json = {
+  '1': 'UpdateBotResponse',
+  '2': [
+    {
+      '1': 'bot',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.bot.v1.Bot',
+      '10': 'bot'
+    },
+  ],
+};
+
+/// Descriptor for `UpdateBotResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List updateBotResponseDescriptor = $convert.base64Decode(
+    'ChFVcGRhdGVCb3RSZXNwb25zZRIjCgNib3QYASABKAsyES52b2ljZS5ib3QudjEuQm90UgNib3'
+    'Q=');
+
+@$core.Deprecated('Use deleteBotResponseDescriptor instead')
+const DeleteBotResponse$json = {
+  '1': 'DeleteBotResponse',
+};
+
+/// Descriptor for `DeleteBotResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List deleteBotResponseDescriptor =
+    $convert.base64Decode('ChFEZWxldGVCb3RSZXNwb25zZQ==');
+
+@$core.Deprecated('Use getBotResponseDescriptor instead')
+const GetBotResponse$json = {
+  '1': 'GetBotResponse',
+  '2': [
+    {
+      '1': 'bot',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.bot.v1.Bot',
+      '10': 'bot'
+    },
+  ],
+};
+
+/// Descriptor for `GetBotResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getBotResponseDescriptor = $convert.base64Decode(
+    'Cg5HZXRCb3RSZXNwb25zZRIjCgNib3QYASABKAsyES52b2ljZS5ib3QudjEuQm90UgNib3Q=');
+
+@$core.Deprecated('Use listBotsResponseDescriptor instead')
+const ListBotsResponse$json = {
+  '1': 'ListBotsResponse',
+  '2': [
+    {
+      '1': 'bot_list',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.bot.v1.BotList',
+      '10': 'botList'
+    },
+  ],
+};
+
+/// Descriptor for `ListBotsResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List listBotsResponseDescriptor = $convert.base64Decode(
+    'ChBMaXN0Qm90c1Jlc3BvbnNlEjAKCGJvdF9saXN0GAEgASgLMhUudm9pY2UuYm90LnYxLkJvdE'
+    'xpc3RSB2JvdExpc3Q=');
+
+@$core.Deprecated('Use regenerateTokenResponseDescriptor instead')
+const RegenerateTokenResponse$json = {
+  '1': 'RegenerateTokenResponse',
+  '2': [
+    {
+      '1': 'token_response',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.bot.v1.TokenResponse',
+      '10': 'tokenResponse'
+    },
+  ],
+};
+
+/// Descriptor for `RegenerateTokenResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List regenerateTokenResponseDescriptor =
+    $convert.base64Decode(
+        'ChdSZWdlbmVyYXRlVG9rZW5SZXNwb25zZRJCCg50b2tlbl9yZXNwb25zZRgBIAEoCzIbLnZvaW'
+        'NlLmJvdC52MS5Ub2tlblJlc3BvbnNlUg10b2tlblJlc3BvbnNl');
+
+@$core.Deprecated('Use registerCommandsResponseDescriptor instead')
+const RegisterCommandsResponse$json = {
+  '1': 'RegisterCommandsResponse',
+};
+
+/// Descriptor for `RegisterCommandsResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List registerCommandsResponseDescriptor =
+    $convert.base64Decode('ChhSZWdpc3RlckNvbW1hbmRzUmVzcG9uc2U=');
+
+@$core.Deprecated('Use getCommandsResponseDescriptor instead')
+const GetCommandsResponse$json = {
+  '1': 'GetCommandsResponse',
+  '2': [
+    {
+      '1': 'command_list',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.bot.v1.CommandList',
+      '10': 'commandList'
+    },
+  ],
+};
+
+/// Descriptor for `GetCommandsResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getCommandsResponseDescriptor = $convert.base64Decode(
+    'ChNHZXRDb21tYW5kc1Jlc3BvbnNlEjwKDGNvbW1hbmRfbGlzdBgBIAEoCzIZLnZvaWNlLmJvdC'
+    '52MS5Db21tYW5kTGlzdFILY29tbWFuZExpc3Q=');
+
+@$core.Deprecated('Use setWebhookURLResponseDescriptor instead')
+const SetWebhookURLResponse$json = {
+  '1': 'SetWebhookURLResponse',
+};
+
+/// Descriptor for `SetWebhookURLResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List setWebhookURLResponseDescriptor =
+    $convert.base64Decode('ChVTZXRXZWJob29rVVJMUmVzcG9uc2U=');
+
+@$core.Deprecated('Use getWebhookURLResponseDescriptor instead')
+const GetWebhookURLResponse$json = {
+  '1': 'GetWebhookURLResponse',
+  '2': [
+    {'1': 'url', '3': 1, '4': 1, '5': 9, '9': 0, '10': 'url', '17': true},
+  ],
+  '8': [
+    {'1': '_url'},
+  ],
+};
+
+/// Descriptor for `GetWebhookURLResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getWebhookURLResponseDescriptor = $convert.base64Decode(
+    'ChVHZXRXZWJob29rVVJMUmVzcG9uc2USFQoDdXJsGAEgASgJSABSA3VybIgBAUIGCgRfdXJs');
+
+@$core.Deprecated('Use setChatWhitelistResponseDescriptor instead')
+const SetChatWhitelistResponse$json = {
+  '1': 'SetChatWhitelistResponse',
+};
+
+/// Descriptor for `SetChatWhitelistResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List setChatWhitelistResponseDescriptor =
+    $convert.base64Decode('ChhTZXRDaGF0V2hpdGVsaXN0UmVzcG9uc2U=');
+
+@$core.Deprecated('Use getChatWhitelistResponseDescriptor instead')
+const GetChatWhitelistResponse$json = {
+  '1': 'GetChatWhitelistResponse',
+  '2': [
+    {
+      '1': 'allowed_chats',
+      '3': 1,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.chat.v1.ChatRef',
+      '10': 'allowedChats'
+    },
+  ],
+};
+
+/// Descriptor for `GetChatWhitelistResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getChatWhitelistResponseDescriptor =
+    $convert.base64Decode(
+        'ChhHZXRDaGF0V2hpdGVsaXN0UmVzcG9uc2USOwoNYWxsb3dlZF9jaGF0cxgBIAMoCzIWLnZvaW'
+        'NlLmNoYXQudjEuQ2hhdFJlZlIMYWxsb3dlZENoYXRz');
+
+@$core.Deprecated('Use sendBotMessageResponseDescriptor instead')
+const SendBotMessageResponse$json = {
+  '1': 'SendBotMessageResponse',
+  '2': [
+    {
+      '1': 'message',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.messaging.v1.Message',
+      '10': 'message'
+    },
+  ],
+};
+
+/// Descriptor for `SendBotMessageResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List sendBotMessageResponseDescriptor =
+    $convert.base64Decode(
+        'ChZTZW5kQm90TWVzc2FnZVJlc3BvbnNlEjUKB21lc3NhZ2UYASABKAsyGy52b2ljZS5tZXNzYW'
+        'dpbmcudjEuTWVzc2FnZVIHbWVzc2FnZQ==');
+
+@$core.Deprecated('Use editBotMessageResponseDescriptor instead')
+const EditBotMessageResponse$json = {
+  '1': 'EditBotMessageResponse',
+  '2': [
+    {
+      '1': 'message',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.messaging.v1.Message',
+      '10': 'message'
+    },
+  ],
+};
+
+/// Descriptor for `EditBotMessageResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List editBotMessageResponseDescriptor =
+    $convert.base64Decode(
+        'ChZFZGl0Qm90TWVzc2FnZVJlc3BvbnNlEjUKB21lc3NhZ2UYASABKAsyGy52b2ljZS5tZXNzYW'
+        'dpbmcudjEuTWVzc2FnZVIHbWVzc2FnZQ==');
+
+@$core.Deprecated('Use sendEphemeralResponseDescriptor instead')
+const SendEphemeralResponse$json = {
+  '1': 'SendEphemeralResponse',
+};
+
+/// Descriptor for `SendEphemeralResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List sendEphemeralResponseDescriptor =
+    $convert.base64Decode('ChVTZW5kRXBoZW1lcmFsUmVzcG9uc2U=');
+
+@$core.Deprecated('Use deferResponseResponseDescriptor instead')
+const DeferResponseResponse$json = {
+  '1': 'DeferResponseResponse',
+};
+
+/// Descriptor for `DeferResponseResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List deferResponseResponseDescriptor =
+    $convert.base64Decode('ChVEZWZlclJlc3BvbnNlUmVzcG9uc2U=');
+
+@$core.Deprecated('Use pollEventsResponseDescriptor instead')
+const PollEventsResponse$json = {
+  '1': 'PollEventsResponse',
+  '2': [
+    {
+      '1': 'bot_event',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.bot.v1.BotEvent',
+      '10': 'botEvent'
+    },
+  ],
+};
+
+/// Descriptor for `PollEventsResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List pollEventsResponseDescriptor = $convert.base64Decode(
+    'ChJQb2xsRXZlbnRzUmVzcG9uc2USMwoJYm90X2V2ZW50GAEgASgLMhYudm9pY2UuYm90LnYxLk'
+    'JvdEV2ZW50Ughib3RFdmVudA==');
