@@ -19,6 +19,7 @@ service ChatService {
   rpc AddMembers(AddMembersRequest) returns (AddMembersResponse);
   rpc RemoveMember(RemoveMemberRequest) returns (RemoveMemberResponse);
   rpc LeaveChat(LeaveChatRequest) returns (LeaveChatResponse);
+  rpc TransferGroupOwnership(TransferGroupOwnershipRequest) returns (TransferGroupOwnershipResponse);
   rpc ListMembers(ListMembersRequest) returns (ListMembersResponse);
 
   rpc ListChats(ListChatsRequest) returns (ListChatsResponse);
@@ -100,6 +101,13 @@ message RemoveMemberRequest {
 message LeaveChatRequest {
   string chat_id = 1;
 }
+
+message TransferGroupOwnershipRequest {
+  string chat_id = 1;
+  string new_owner_profile_id = 2;
+}
+
+message TransferGroupOwnershipResponse {}
 
 message ListMembersRequest {
   string chat_id = 1;

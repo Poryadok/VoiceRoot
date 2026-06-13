@@ -1,12 +1,12 @@
-# Voice — План разработки
+﻿# Voice — План разработки
 
-> Каждая фаза — **один ощутимый сдвиг** для пользователя или для команды (релизный инкремент). Внутри фазы пункты короткие; крупные спеки — в `docs/features/` и `docs/microservices/`.
+> Каждая фаза — **один ощутимый сдвиг** для пользователя или для команды (релизный инкремент). Ниже — **развёрнутые чеклисты с границами**: что именно строить, до какого уровня, какой сервис полноценный vs минимальный. Продуктовые детали — в `docs/features/` и `docs/microservices/`; здесь — **критерии «готово»** для разработки без догадок.
 
 ---
 
 ## Текущее состояние кодовой базы
 
-Репозиторий: **фундамент Фазы 0 закрыт**, идёт **дозакрытие Фазы 1** (DM, друзья, профиль, presence) — см. чеклист ниже. **Локальный стенд:** `make compose-app-up` поднимает Auth, User, Social, Chat, Messaging, Realtime, Gateway и Flutter web ([README.md](../README.md)); Postgres init (`docker/postgres/`) на новом volume создаёт схемы `social_db`, `chat_db`, `messaging_db` вместе с `user_db`. **CI на GitHub:** на push в `master` образы Go-сервисов и Auth в GHCR; на **staging** end-to-end выкатан в основном **gateway** (`voice.tastytest.online`) — полный Phase-1 upstream там может отставать от локального compose.
+Репозиторий: **фазы 0–10 закрыты на локальном `make compose-app-up`** (см. чеклисты ниже). **Локальный стенд:** Auth, User, Social, Chat, Messaging, Realtime, Gateway, Space, Role, Voice, File, Search, Matchmaking, Notification и Flutter web ([README.md](../README.md)). **Staging:** полный k8s-стек — [`deploy/staging/`](../deploy/staging/), `scripts/staging/render-and-apply.sh`; FCM/APNs на устройстве требуют секретов в кластере ([DEPLOYMENT.md](DEPLOYMENT.md)).
 
 **Auth (Java):** register/login/refresh/logout/validate (REST+gRPC), JWT/JWKS, PostgreSQL + Flyway, Redis blacklist, стабильный JWKS из PKCS#8; Testcontainers `AuthJdbcRedisIntegrationTest`.
 
@@ -62,11 +62,11 @@
 | - [x]  | 3    | Вложения, typing, статусы, DM «запросы», edit/delete UX | Web                   |
 | - [x]  | 4    | Группы, групповой голос, реакции                   | Web                   |
 | - [x]  | 5    | Спейсы: структура и клиент                         | Web                   |
-| - [ ]  | 6    | Markdown, @mentions, пины, FCM (space channels OK; staging Firebase optional) | Web + Android (push)  |
-| - [ ]  | 7    | Матчмейкинг (squad voice UI; catalog/match_found E2E open) | Web (+ push где есть) |
-| - [ ]  | 8    | Мобильные клиенты, APNs/VoIP prod creds, Win, кэш | Все                   |
+| - [x]  | 6    | Markdown, @mentions, пины, FCM (space channels OK; staging Firebase optional) | Web + Android (push)  |
+| - [x]  | 7    | Матчмейкинг (squad voice UI; catalog/match_found E2E) | Web (+ push где есть) |
+| - [x]  | 8    | Мобильные клиенты, APNs/VoIP prod creds, Win, кэш | Все                   |
 | - [x]  | 9    | Поиск                                              | Все                   |
-| - [ ]  | 10   | Треды, шаринг экрана, shared media, кастомные роли | Все                   |
+| - [x]  | 10   | Треды, шаринг экрана, shared media, кастомные роли | Все                   |
 | - [ ]  | 11   | Репорты (без панели), 2FA, приватность             | Все                   |
 | - [ ]  | 12   | Подписки и платежи                                 | Все                   |
 | - [ ]  | 13   | Мульти-профиль, верификация                        | Все                   |
@@ -79,275 +79,900 @@
 
 ---
 
+## Как читать фазы (легенда)
+
+### Уровни реализации сервиса
+
+| Уровень | Что это | Достаточно для закрытия фазы? |
+|---------|---------|-------------------------------|
+| **Scaffold** | `GET /health`, Dockerfile, CI matrix, пустой gRPC-сервер | **Нет** — только подготовка каталога |
+| **Минимальный (MVP фазы)** | Реальная БД + миграции, gRPC/REST для сценариев **этой** фазы, интеграционные тесты на критический путь, сервис в `docker-compose` профиле `app` | **Да**, если фаза от него зависит |
+| **Полный (целевой)** | Всё из спеки микросервиса: все RPC, edge cases, observability, rate limits по доку | **Нет** — дозакрывается в следующих фазах, если не указано иное |
+| **Внешняя интеграция** | LiveKit, R2, ClamAV, FCM/APNs, Paddle и т.д. | Нужна **рабочая** связка в dev/staging, не mock в прод-пути |
+
+**Правило:** если пункт фазы помечен сервисом (например, «Messaging»), для закрытия пункта нужен уровень **минимальный** для этого сценария. Scaffold **не засчитывается**, кроме явно помеченных «заглушка допустима».
+
+### Структура пункта чеклиста
+
+- **Сервис(ы)** — куда класть код ([таблица размещения](#план-размещения-кода--целевой-микросервис) выше).
+- **Объём** — API, таблицы, NATS streams ([CONTRACT_MATRIX.md](CONTRACT_MATRIX.md)).
+- **Не делать** — что сознательно отложено (ссылка на фазу).
+- **Готово когда** — проверяемые критерии (ручной сценарий + автотесты).
+- **Тесты** — минимум по [TESTING.md](TESTING.md).
+
+### Когда фаза считается закрытой
+
+1. Все чекбоксы секции «Фаза N» отмечены.
+2. `make build-all` и `make flutter-ci` зелёные; для фазы добавлены opt-in live-тесты, если есть сквозной сценарий.
+3. Затронутые сервисы в compose `app` (или документированы env для внешних зависимостей).
+4. Gateway transcoding / маршруты для новых RPC добавлены в [CONTRACT_MATRIX.md](CONTRACT_MATRIX.md).
+5. Критерии приёмки в конце фазы выполняются на локальном стенде двумя тестовыми пользователями (если фаза про multi-user).
+
+### Заглушка vs минимальный сервис — типичные решения
+
+| Ситуация | Решение |
+|----------|---------|
+| Фаза требует отправку сообщений | **Messaging** — минимальный, не stub |
+| Фаза требует только проверку JWT | **Auth** уже есть с Фазы 0 |
+| Новый домен (спейс, ММ, биллинг) | Новый сервис **минимальный** + миграции своей БД |
+| Admin UI для модераторов | Отдельное веб-приложение `src/admin/`, не заглушка в Flutter |
+| Analytics, Meilisearch v2 | **Не в фазах 0–12** — scaffold достаточен |
+| S2S между сервисами | Реальный gRPC client; сквозной путь — против реального сервиса в compose |
+
+---
+
 ## Фаза 0 — Фундамент
 
-**Цель:** инфраструктура, без которой нельзя строить фичи.
+**Цель для пользователя:** пока нет — инфраструктура для команды.
 
-- [x] **Схемы БД (первая волна)** — миграции под Фазу 0 + 1: `auth_db`, `user_db`, `social_db`, `chat_db`, `messaging_db` — [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md), детали целевых таблиц — секции «Модель данных» в [microservices/](microservices/)
-- [x] **API Gateway** — REST + WebSocket edge proxy: JWT/JWKS, Redis blacklist/rate limit, CORS, request id/logging, `/metrics`, `/api/v1/version`, REST→gRPC transcoding для Phase-1 API, тесты и Docker-образ — [src/backend/gateway/](../src/backend/gateway/).
-- [x] **CI/CD в эксплуатации** — репозиторий на GitHub, Actions на PR/push; GHCR и staging (секреты/variables); smoke gateway после деплоя ([DEPLOYMENT.md](DEPLOYMENT.md)). Локальная проверка «как у job’ов» — **`make build-all`** ([Makefile](../Makefile))
-- [x] **Docker Compose (dev), инфраструктура** — PostgreSQL (логические БД), Redis, NATS; init DDL для `user_db`/`social_db`/`chat_db`/`messaging_db` ([README.md](../README.md)). Прикладной стек Фазы 1 — профиль **`app`**, `make compose-app-up`
-- [x] **Backend project scaffolds** — инициализированы проекты всех backend-микросервисов: Auth (Java/Spring Boot) и Go-сервисы с `GET /health`, smoke-тестами, Dockerfile и включением в `make build-all` / CI matrix. Бизнес-логика сервисов остаётся в следующих пунктах фаз.
-- [x] **Auth** — refresh (opaque, 30 дней), logout, валидация, REST+gRPC; **PostgreSQL** (`JdbcAccountRepository` / `JdbcRefreshTokenRepository` + Flyway), **Redis** (`RedisTokenBlacklist`), **JWKS из PKCS#8** (`auth.jwt.private-key-pem` / `auth.jwt.private-key-location`; `JwtService.forTests` только при `auth.persistence=memory`), Dockerfile **8080+9090**, интеграционный тест Testcontainers на JDBC+Redis.
-- [x] **Auth — smoke запущенного контейнера в CI** — после сборки образа: health + минимальный REST/gRPC против Postgres+Redis (дополнение к unit/integration in-process); см. [TESTING.md](TESTING.md).
-- [x] **Общая библиотека Go** — JWT, middleware, логирование, конфиг
-- [x] **Flutter: скелет** — three-column layout, бэкенд, DI, state — [`src/frontend/`](../src/frontend/), job `flutter` в [.github/workflows/ci.yml](../.github/workflows/ci.yml)
-- [x] **i18n-каркас** — ARB, EN+RU, `flutter gen-l10n` — [features/i18n.md](features/i18n.md)
+**Цель для команды:** любой разработчик поднимает локальный стенд, логинится через бэкенд, CI ловит регрессии до merge.
 
-**Результат:** локальный стенд, логин через бэкенд. Процесс: [CONTRIBUTING.md](CONTRIBUTING.md), [TESTING.md](TESTING.md), [DEPLOYMENT.md](DEPLOYMENT.md).
+### Границы фазы
 
-### Первый вертикальный срез (после фундамента Фазы 0, до полного закрытия Фазы 1)
+| Входит | Не входит |
+|--------|-----------|
+| Compose infra + профиль `app` для Phase-1 стека | Продуктовые фичи (DM, звонки…) |
+| Auth, Gateway, миграции v1, buf/CI | Реализация Space, Voice, File, Notification и др. |
+| Scaffold **всех** backend-сервисов | Бизнес-логика в scaffold-сервисах |
+| Flutter shell + i18n каркас | Полноценный UI чатов |
 
-**Цель:** один сквозной сценарий для проверки стенда, CI и контрактов: **Auth (Java) + API Gateway + один продуктовый поток** (например регистрация/логин и выдача JWT через Gateway, или health + валидация токена — конкретику зафиксировать в PR при старте реализации).
+### Уровень сервисов
 
-Воспроизводимые команды и критерии приёмки (JWT + `user_db.profiles`): [EXEC_PLAN.md](EXEC_PLAN.md).
+| Сервис | Уровень в Фазе 0 |
+|--------|------------------|
+| Auth | **Минимальный** — register/login/refresh/logout/validate, JWT, JWKS, Postgres, Redis blacklist |
+| Gateway | **Минимальный** — JWT, CORS, rate limit, `/metrics`, `/api/v1/version`, прокси Auth |
+| User, Social, Chat, Messaging, Realtime | Scaffold или начало Фазы 1 (вертикальный срез) |
+| Остальные 15 сервисов | **Scaffold** только |
 
-- Выполняется **после** каркаса: Compose, миграции v1 в репозитории, buf/CI, скелеты `src/*`.
-- Не заменяет полный чеклист Фазы 1 (DM, друзья, Realtime, Messaging) — это следующий объём работ.
+### Бэкенд
 
-Чеклист выката и стендов: [DEPLOYMENT.md](DEPLOYMENT.md).
+- [x] **Схемы БД (первая волна)** — [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md), [DATA_STORES.md](DATA_STORES.md)
+  - **Объём:** `auth_db`, `user_db`, `social_db`, `chat_db`, `messaging_db`; init в `docker/postgres/`; Flyway для Auth.
+  - **Готово когда:** чистый compose на новом volume создаёт все схемы.
+
+- [x] **API Gateway** — [api-gateway.md](microservices/api-gateway.md)
+  - **Объём:** REST edge, JWT/JWKS, Redis blacklist + rate limit, CORS, logging, `/metrics`, `/api/v1/version`, health; позже transcoding Phase-1.
+  - **Тесты:** in-process integration tests в `src/backend/gateway/`.
+
+- [x] **CI/CD** — [DEPLOYMENT.md](DEPLOYMENT.md)
+  - **Объём:** Actions PR/push, `make build-all`, GHCR, staging gateway, smoke после деплоя.
+
+- [x] **Docker Compose (dev)** — Postgres, Redis, NATS; профиль `app`; `make compose-app-up`.
+
+- [x] **Backend project scaffolds** — все `src/backend/<service>/`: health, Dockerfile, CI matrix. **Не** закрывает продуктовые задачи.
+
+- [x] **Auth (Java)** — [auth-service.md](microservices/auth-service.md)
+  - **Объём:** REST+gRPC; refresh opaque 30d; Flyway; Redis blacklist; JWKS PKCS#8; Testcontainers.
+  - **Готово когда:** register → login → refresh → logout; validate для Gateway.
+
+- [x] **Auth — smoke контейнера в CI** — health + минимальный REST/gRPC против Postgres+Redis.
+
+- [x] **Общая библиотека Go** — `src/backend/pkg/`: JWT, middleware, logging, config, integrationtest.
+
+### Клиент
+
+- [x] **Flutter скелет** — layout, backend client, DI — [navigation.md](features/navigation.md)
+- [x] **i18n-каркас** — ARB EN+RU — [i18n.md](features/i18n.md)
+
+### Критерии приёмки
+
+1. `make build-all` зелёный с Docker.
+2. Регистрация/логин через Gateway → валидный JWT.
+3. Все backend-модули в CI; scaffold отвечает health.
+
+**Результат:** репозиторий готов к вертикальным срезам; локальный стенд и CI — единый контур. Продуктового чата ещё нет. Процесс: [CONTRIBUTING.md](CONTRIBUTING.md), [TESTING.md](TESTING.md), [DEPLOYMENT.md](DEPLOYMENT.md).
+
+### Первый вертикальный срез (до полного закрытия Фазы 1)
+
+JWT + `user_db.profiles` — [EXEC_PLAN.md](EXEC_PLAN.md). Не заменяет чеклист Фазы 1.
 
 ---
 
 ## Фаза 1 — MVP: личные сообщения
 
-**Цель:** регистрация, друг, переписка 1-на-1.
+**Цель для пользователя:** зарегистрироваться, найти человека, написать в личку, видеть онлайн и переписку в реальном времени.
 
-**Скоуп DM (Фаза 1):** DM доступен **без** обязательного статуса «друзья» (любой может написать первым в личку при прочих правилах продукта). **Отдельная папка «запросы»** для сообщений от незнакомцев, как в [friends.md](features/friends.md), **не входит** в Фазу 1: один общий список диалогов; перенос — **Фаза 3**. Так проще не резать модель чата сейчас и добавить папку без перелопачивания ядра Messaging.
+**Цель для команды:** сквозной DM-поток через Gateway → gRPC → Postgres/NATS → WS; основа для всех последующих типов чатов.
+
+### Границы фазы
+
+| Входит | Не входит (фаза) |
+|--------|------------------|
+| DM 1-на-1 без обязательной дружбы | Папка «запросы» от незнакомцев (**3**) |
+| Текст, базовый edit/delete (одна политика, без UX «(ред.)») | Полный edit/delete UX (**3**) |
+| Друзья: invite/accept/decline/block | Группы (**4**) |
+| Профиль: имя, статичный аватар (presigned R2 в User), bio | File Service, вложения в чат (**3**) |
+| Presence online/offline, last_seen | Кастомные статусы DND (**позже**) |
+| Web-клиент EN+RU | Звонки (**2**), push (**6/8**) |
+
+**Скоуп DM:** любой может написать первым; **один** список диалогов (без папки «запросы»).
+
+### Уровень сервисов
+
+| Сервис | Уровень |
+|--------|---------|
+| User | **Минимальный** — profiles, SearchProfiles, avatar presigned PUT, presence API |
+| Social | **Минимальный** — friends flow + block |
+| Chat | **Минимальный** — DM only: CreateDM, ListChats, members, unread enrichment |
+| Messaging | **Минимальный** — send/history/cursor, UUIDv7, basic edit/delete, read receipts, NATS publish |
+| Realtime | **Минимальный** — WS JWT, subscribe, message_create, s/resume, mark_read, presence → User |
+| Gateway | Transcoding `/api/v1/users`, `/friends`, `/chats`, `/messages`; `/ws` → Realtime |
+| File | **Не нужен** — аватар через User + R2 presigned |
+| Notification | Scaffold |
 
 ### Бэкенд
 
-- [x] **Compose: NATS / JetStream** — в [`docker-compose.yml`](../docker-compose.yml); переменная **`NATS_URL`** для Messaging и Realtime — в карточках сервисов и [DEPLOYMENT.md](DEPLOYMENT.md). Создание JetStream streams (`message.events`, `chat.events`, …) — по мере включения публикации в коде ([CONTRACT_MATRIX.md](CONTRACT_MATRIX.md)).
-- [x] **Messaging** — отправка/получение; **базовое** edit/delete (одна политика, без «для всех/себя» и без метки «(ред.)» в UI — **Фаза 3**); PostgreSQL, курсор, REST
-- [x] **UUIDv7 для `messages.id`** — вместе с реализацией Messaging: по спеке генерация UUIDv7; при необходимости расширение БД/генератор — [messaging-service.md](microservices/messaging-service.md)
-- [x] **Realtime Service** — JWT, доставка сообщений, Redis Pub/Sub, `s` + `resume`, догрузка через Messaging — [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md)
-- [x] **Чаты (DM)** — создание диалогов, список с превью и unread, `mark_read`
-- [x] **Друзья** — запрос, accept/decline, список, блок
-- [x] **Профиль (базовый)** — имя, аватар (R2), «О себе»
-- [x] **Presence** — онлайн/оффлайн по WS, последний визит
+- [x] **Compose: NATS / JetStream** — `NATS_URL`; streams `message.events`, `chat.events` по [CONTRACT_MATRIX.md](CONTRACT_MATRIX.md).
 
-**R2 / аватар (минимум Фазы 1, без раздувания):** статичный аватар профиля — **presigned PUT (или эквивалент) в Cloudflare R2** и сохранение стабильного **URL или ключа объекта** в `profiles` (**User Service**, `user_db`). Жёсткие лимиты: небольшой max size (ориентир 2–5 MB), whitelist MIME для изображений. **Не требуются:** отдельный микросервис File Service, PostgreSQL `file_db`, дедуп SHA-256, ClamAV, конвертация/thumbnail, NATS `file.events`, квоты Subscription — это **полный File Service** и вложения в чате → **Фаза 3** и [file-service.md](microservices/file-service.md).
+- [x] **Messaging** — [messaging-service.md](microservices/messaging-service.md)
+  - **API:** SendMessage, GetHistory (cursor per `chat_id`), EditMessage, DeleteMessage, MarkRead.
+  - **БД:** `messages` UUIDv7, `message_reads`; курсор по `(created_at, id)`.
+  - **События:** publish `message.events` (create/edit/delete/read).
+  - **Не делать:** вложения, reactions, threads, pins.
+  - **Готово когда:** два пользователя обмениваются текстом; history после reconnect через REST cursor.
+  - **Тесты:** store integration + gRPC handler tests.
+
+- [x] **UUIDv7 для `messages.id`** — генерация по спеке messaging-service.
+
+- [x] **Realtime** — [realtime-service.md](microservices/realtime-service.md), [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md)
+  - **WS:** hello, subscribe(chat_ids), message_create fan-out, `s`/`resume`, mark_read, presence_update.
+  - **Догрузка:** только через Messaging REST, не «догнать всё по WS».
+  - **Redis:** pub/sub между инстансами; NATS consumer `chat.events`.
+  - **Тесты:** WS protocol unit + integration.
+
+- [x] **Чаты (DM)** — [chat-service.md](microservices/chat-service.md)
+  - CreateDM, ListChats с preview/unread (S2S Messaging; degraded без Messaging).
+  - **Не делать:** groups, channels, space folders.
+
+- [x] **Друзья** — [social-service.md](microservices/social-service.md)
+  - Invite, accept, decline, list, block.
+
+- [x] **Профиль** — [user-service.md](microservices/user-service.md)
+  - Display name, bio, avatar: presigned PUT R2, URL в `profiles`; max 2–5 MB, image MIME whitelist.
+  - **Не делать:** animated avatar, banner (**12**).
+
+- [x] **Presence** — [presence.md](features/presence.md)
+  - Online/offline via WS → User gRPC; last_seen в профиле.
 
 ### Клиент (Web)
 
-- [x] Логин / регистрация, список диалогов, чат в реальном времени
-- [x] Поиск пользователей (`UserService.SearchProfiles`, см. [user-service.md](microservices/user-service.md)), запрос в друзья, профиль, индикатор онлайн
-- [x] **Локализация** — экраны Фазы 1 на EN+RU
+- [x] Login/register с локализованными ошибками auth.
+- [x] Список диалогов, комната чата, realtime через WS + catch-up.
+- [x] SearchProfiles, friend request, профиль, online indicator.
+- [x] Локализация EN+RU всех экранов фазы.
 
-### Не входит
+### Критерии приёмки
 
-Каждый пункт ниже **намеренно вне Фазы 1** и закрывается в указанной фазе (детали — в секции «Фаза N» ниже).
+1. Два аккаунта: A находит B, пишет DM; B видит сообщение <2s по WS.
+2. Reconnect: `resume` + history cursor восстанавливает ленту.
+3. Friend flow: invite → accept → в списке друзей.
+4. Avatar upload через presigned URL отображается у собеседника.
+5. Opt-in live: `phase1_two_users_e2e_live_test`, `gateway_dm_ws_live_integration_test`.
 
-| Тема | Фаза |
-|------|------|
-| Звонки 1:1 | **2** |
-| Вложения в сообщениях; typing; статусы доставки; edit/delete UX; **полноценный File Service** для чата (`file_db`, антивирус, превью, дедуп, NATS `file.events`, квоты — см. [file-service.md](microservices/file-service.md)); **отдельная папка / инбокс «запросы» для DM от незнакомцев** ([friends.md](features/friends.md)) | **3** |
-| Лимиты размера файлов из **подписки** (сверх free tier) | **12** |
-| Реакции | **4** |
-| Markdown, @mentions, пины | **6** |
-| Треды | **10** |
-| Push (FCM Web/Android; доработка под мобилу) | **6**, **8** |
-
-**Результат:** веб-мессенджер 1-на-1 для первых тестеров.
+**Результат:** веб-мессенджер 1-на-1 для первых тестеров; архитектурный паттерн «Messaging + Realtime + Chat» зафиксирован для всех типов чатов.
 
 ---
 
 ## Фаза 2 — Звонки 1:1
 
-**Цель:** позвонить другу.
+**Цель для пользователя:** позвонить собеседнику в DM — входящий/исходящий, принять/отклонить, говорить, положить трубку.
 
-- [x] **LiveKit** — сервер, выдача токенов
-- [x] **1:1** — исходящий/входящий (WS), accept/decline
-- [x] **Signaling** — LiveKit-native WebRTC signaling; backend управляет lifecycle / токенами, без Firebase
-- [x] **Клиент** — экран звонка, mute, speaker, hangup
+### Границы фазы
 
-**Результат:** голос поверх уже работающих DM.
+| Входит | Не входит |
+|--------|-----------|
+| Голос 1:1 в DM | Видео в DM (опционально позже в voice-chat.md) |
+| LiveKit SFU self-hosted | Групповой голос (**4**) |
+| Signaling через WS + Voice Service tokens | PushKit/CallKit (**8**) |
+| Mute, speaker, hangup в UI | Screen share (**10**) |
+
+### Уровень сервисов
+
+| Сервис | Уровень |
+|--------|---------|
+| Voice | **Минимальный** — CreateCall, Accept, Decline, End; LiveKit room + token; lifecycle в Postgres/Redis |
+| Realtime | WS events: `call_incoming`, `call_accepted`, `call_ended` |
+| LiveKit | **Внешняя интеграция** в compose |
+
+### Бэкенд
+
+- [x] **LiveKit** — сервер в compose; Voice Service выдаёт JWT room token с TTL.
+- [x] **1:1 signaling** — исходящий/входящий через Realtime WS; callee accept/decline; один активный call per pair policy.
+- [x] **Signaling** — LiveKit-native WebRTC; backend только lifecycle + tokens, **без** Firebase.
+- **Готово когда:** A звонит B → B принимает → оба слышат друг друга → hangup освобождает room.
+
+### Клиент
+
+- [x] Экран звонка: incoming overlay, outgoing state, mute, speaker, hangup.
+- [x] Интеграция LiveKit SDK web.
+
+### Критерии приёмки
+
+1. Полный цикл call на локальном compose с LiveKit.
+2. Decline не оставляет «висящую» room.
+3. Widget/integration test на signaling state machine (минимум).
+
+**Результат:** голос поверх DM; Voice Service и LiveKit в стеке — база для группового войса.
 
 ---
 
 ## Фаза 3 — Медиа и «живой» чат
 
-**Цель:** картинки/файлы в переписке + ощущение «живого» диалога.
+**Цель для пользователя:** отправлять картинки/файлы, видеть «печатает…» и галочки доставки; незнакомцы — в папке «запросы».
 
-- [x] **R2 + presigned** — лимит 50MB (free)
-- [x] **Вложения** — картинки (thumb + full), файлы (иконка, имя, размер)
-- [x] **Изображения** — WebP, thumbnail
-- [x] **ClamAV** — после появления вложений
-- [x] **Typing indicator** — throttle ~3 с
-- [x] **Статусы доставки** — отправлено / доставлено / прочитано
-- [x] **Edit/delete в UX** — «(ред.)», для всех / для себя (согласовано с API)
-- [x] **DM — папка «запросы»** для сообщений от незнакомцев (не входило в Фазу 1) — [friends.md](features/friends.md); Chat/Messaging + клиент: отдельный список / инбокс, пометка «незнакомец»
+### Границы фазы
 
-**Результат:** базовый паритет с Telegram по медиа и сигналам в DM.
+| Входит | Не входит |
+|--------|-----------|
+| File Service **минимальный** для вложений чата | Квоты Premium 200MB (**12**) |
+| ClamAV scan после upload | Голосовые сообщения, GIF, стикеры (backlog text-chat) |
+| Typing ~3s throttle | @mentions (**6**) |
+| Delivery: sent/delivered/read в DM | Счётчик просмотров в группах (уже в **4** если группы есть) |
+| Edit/delete UX: «(ред.)», for all / for self | Markdown (**6**) |
+| DM inbox «запросы» | Privacy presets (**11**) |
+
+### Уровень сервисов
+
+| Сервис | Уровень |
+|--------|---------|
+| File | **Минимальный** — presigned upload, metadata, ClamAV hook, thumb WebP, `file_db`, NATS `file.events` |
+| Messaging | Attachments в messages, edit/delete policies |
+| Chat | Request folder model для DM от незнакомцев |
+| Realtime | `typing_start`/`typing_stop` events |
+
+### Бэкенд
+
+- [x] **R2 + presigned** — 50MB free tier; [file-service.md](microservices/file-service.md).
+- [x] **Вложения** — image thumb+full; file icon+name+size в message payload.
+- [x] **WebP thumbnails** — server-side или worker в File Service.
+- [x] **ClamAV** — async scan; block/quarantine infected; compose service.
+- [x] **Typing** — Realtime broadcast, throttle 3s, expire 5s — [text-chat.md](features/text-chat.md).
+- [x] **Статусы доставки** — sent/delivered/read в DM; WS + Messaging state.
+- [x] **Edit/delete UX API** — dual policy for all/self; `edited_at`; согласовано с клиентом.
+- [x] **DM «запросы»** — [friends.md](features/friends.md): Chat flags + отдельный список; accept → main inbox.
+
+### Клиент
+
+- [x] Attachment picker, preview, progress upload.
+- [x] Typing indicator в шапке чата.
+- [x] Checkmarks delivered/read.
+- [x] Edited label, delete for all/self dialogs.
+- [x] Requests folder UI.
+
+### Критерии приёмки
+
+1. Image + file в DM; thumb отображается; infected file rejected.
+2. Typing visible to peer, не спамит WS.
+3. Stranger DM попадает в «запросы» до accept.
+4. Integration tests File + Messaging attachment path.
+
+**Результат:** базовый паритет с Telegram по медиа и сигналам в DM; File Service в прод-пути (не stub).
 
 ---
 
 ## Фаза 4 — Групповые чаты
 
-**Цель:** общение компанией, текст + голос в группе.
+**Цель для пользователя:** группа до ~500 человек, текст, групповой голос, реакции, пересылка.
 
-- [x] **Группы** — до ~500 участников, invite/kick, аватар
-- [x] **Роли (простые)** — owner и участники
-- [x] **Групповой голос** — до 32, join к активному звонку
-- [x] **Forward** — с атрибуцией
-- [x] **Реакции** — эмодзи, счётчики
-- [x] **In-app уведомления** — badge; звук на web — `NoOpNotificationSoundPlayer` до web audio player (FCM — Фаза 6)
+### Границы фазы
 
-**Результат:** «пати в одном чате».
+| Входит | Не входит |
+|--------|-----------|
+| Group chat type в Chat | Space channels (**5**) |
+| Owner + members (простые роли) | Кастомные роли 32+ (**10**) |
+| Group voice до 32 | Space voice rooms (**5**) |
+| Reactions unicode | Custom emoji space (**12**) |
+| Forward с атрибуцией | Копия без атрибуции (backlog) |
+| In-app notification badge | FCM (**6**) |
+
+### Уровень сервисов
+
+| Сервис | Уровень |
+|--------|---------|
+| Chat | Groups: create, invite, kick, avatar, member list |
+| Messaging | Reactions, forward metadata |
+| Voice | Group room attach to `chat_id`, join active call |
+| Role | **Минимальный** — owner flag only или built-in owner/member |
+
+### Бэкенд
+
+- [x] **Группы** — max ~500; create from DM/contacts; group avatar via File/User pattern.
+- [x] **Роли простые** — owner (creator) + member; owner can kick.
+- [x] **Групповой голос** — temporary/adhoc room; max 32; join mid-call.
+- [x] **Forward** — [forward-messages.md](features/forward-messages.md); attribution block in message.
+- [x] **Реакции** — add/remove, counts per emoji; WS fan-out.
+- [x] **In-app notifications** — unread badge; web sound = NoOp until web audio (**6**).
+
+### Клиент
+
+- [x] Create group, member management, group chat room.
+- [x] Group call UI, participant list.
+- [x] Reaction picker, forward flow.
+- [x] In-app notification center/badge.
+
+### Критерии приёмки
+
+1. 3+ users group messaging realtime.
+2. Group call: 4 users simultaneous.
+3. Reaction counts consistent after reconnect.
+4. Forward shows original author attribution.
+
+**Результат:** «пати в одном чате» без спейсов; паттерны group reuse в space channels.
 
 ---
 
 ## Фаза 5 — Спейсы: структура
 
-**Цель:** сервер как у Discord — каркас сообщества.
+**Цель для пользователя:** создать сообщество как Discord-сервер: дерево текстовых чатов и голосовых комнат, инвайты, базовые роли и модерация.
 
-- [x] **Спейс** — создание, иконка, описание
-- [x] **Дерево** — `space_tree_nodes`: текстовые чаты (Chat) и голосовые комнаты в одном порядке сортировки, категории
-- [x] **Инвайты** — ссылка, срок, лимит использований
-- [x] **Роли** — Owner → Admin → Mod → Member → Guest
-- [x] **Модерация спейса** — кик, бан, мьют (`space_member_timeouts`; proto `MuteChat` — stub), slow mode
-- [x] **Клиент** — sidebar спейсов, дерево текстовых чатов (группы + каналы), голосовые комнаты (join/leave, участники)
+### Границы фазы
 
-**Результат:** можно жить в спейсе; чат в текстовом чате спейса ещё без Markdown/пинов и без push.
+| Входит | Не входит |
+|--------|-----------|
+| Space CRUD, icon, description | Space Pro лимиты (**12**) |
+| `space_tree_nodes`: categories, text chats, voice rooms | Markdown, pins (**6**) |
+| Invites: link, expiry, max uses | Verification on join (капча, screening) — backlog spaces.md |
+| Built-in roles Owner→Guest | Custom roles granular (**10**) |
+| Kick, ban, timeout mute, slow mode | Global moderation reports (**11**) |
+| Client: space sidebar, tree, voice join | Push (**6**) |
+| Text in space channels — **plain text** как в DM | @mentions (**6**) |
+
+### Уровень сервисов
+
+| Сервис | Уровень |
+|--------|---------|
+| Space | **Минимальный** — spaces, tree, invites, member join/leave |
+| Role | **Минимальный** — 5 built-in roles, permission checks for mod actions |
+| Chat | `type=group|channel` linked to space; space channels |
+| Voice | Persistent `voice_rooms` in space tree |
+| Search | Публичный каталог спейсов — может быть stub до **9** |
+
+### Бэкенд
+
+- [x] **Спейс** — create, update icon/description, visibility public/invite/private.
+- [x] **Дерево** — `space_tree_nodes`: `text_chat`, `voice_room`, `category`; sort order; CRUD + reorder.
+- [x] **Инвайты** — token, expires_at, max_uses, revoke; join by link.
+- [x] **Роли** — Owner, Admin, Mod, Member, Guest; assign on join default Member.
+- [x] **Модерация** — kick, ban (`space_bans`), timeout (`space_member_timeouts`); slow mode per channel; `MuteChat` proto может быть stub если timeout покрывает MVP.
+- [x] **Gateway routes** для Space + Role gRPC.
+
+### Клиент
+
+- [x] Space list sidebar, switch active space.
+- [x] Channel tree expand/collapse, select text channel → chat room (plain).
+- [x] Voice room: join/leave, participant strip, speaking indicator.
+
+### Критерии приёмки
+
+1. Create space → add text channel + voice room → second user joins via invite → both chat and voice work.
+2. Mod kicks user → user loses access to space channels.
+3. Slow mode blocks rapid sends server-side.
+4. Integration tests space membership + role checks.
+
+**Результат:** можно «жить» в спейсе; текстовый чат канала — без форматирования и пинов (сознательно до Фазы 6).
 
 ---
 
 ## Фаза 6 — Спейсы: чат и FCM
 
-**Цель:** нормальный чат в группах/каналах и пуши Web/Android.
+**Цель для пользователя:** нормальный чат в каналах/группах спейса (markdown, @mentions, пины) + push на Web/Android когда офлайн.
 
-- [x] **Markdown** — жирный, курсив, код, цитаты, ссылки
-- [x] **Упоминания** — @user, @everyone, @here (online WS + in-app; offline FCM — ниже)
-- [x] **Пины**
-- [x] **FCM** — Web + Android: токены, новые сообщения и @mentions; база для матчмейкинга (**Фаза 7**)
-- [x] **Группировка push** — по чату, где позволяет платформа
+### Границы фазы
 
-**Результат:** спейс ощущается «готовым» на вебе/Android; iOS-push — **Фаза 8**.
+| Входит | Не входит |
+|--------|-----------|
+| Markdown subset — [text-chat.md](features/text-chat.md) | Полный markdown (спойлер, H1–H3) — дозакрыть по text-chat |
+| @user, @everyone, @here с проверкой прав Role | iOS APNs (**8**) |
+| Pins per channel | Thread defaults (**10**) |
+| FCM Web + Android: register token, new msg, @mention | VoIP push (**8**) |
+| Push grouping per chat | Granular notification settings per channel — backlog notifications.md |
+| Notification Service **минимальный** | Email event notifications |
+
+### Уровень сервисов
+
+| Сервис | Уровень |
+|--------|---------|
+| Messaging | Markdown storage/render hints, mentions parsing, pins |
+| Role | Permissions `TEXT_CHAT_MENTION_ALL_*` |
+| Notification | **Минимальный** — FCM sender, token registry, consumer `message.events`, enriched body via User/Messaging gRPC |
+| Chat | Mention guard (membership) |
+
+### Бэкенд
+
+- [x] **Markdown** — bold, italic, code, blockquote, links; server stores raw; client renders.
+- [x] **Упоминания** — parse `@userId`, `@everyone`, `@here`; WS `mention` event online; offline → Notification.
+  - @here = online in **this text chat** only; requires `TEXT_CHAT_MENTION_ALL_ONLINE`.
+  - @everyone = all chat members; requires `TEXT_CHAT_MENTION_ALL_IN_CHAT`.
+- [x] **Пины** — PinMessage, ListPins, max pins per policy; permission mod+.
+- [x] **FCM** — [notifications.md](features/notifications.md): RegisterDeviceToken; push on new message (muted chats respect settings v1); @mention breaks mute default.
+- [x] **Группировка push** — collapse key per `chat_id`; update existing notification.
+
+### Клиент
+
+- [x] Markdown composer + renderer in space channels.
+- [x] Mention autocomplete @.
+- [x] Pinned messages panel.
+- [x] FCM web SW + Android firebase; tap → open chat.
+- [x] Permission errors for @everyone/@here shown inline.
+- [x] FCM push delivery proof on compose (`phase6_fcm_delivery_e2e_live_test`, notification debug recorder).
+
+### Критерии приёмки
+
+1. @mention offline user → FCM received with sender name + excerpt.
+2. @everyone without permission → server error, no fan-out.
+3. Pin visible to all channel members after reload.
+4. Live E2E optional: `phase6_space_channel_mentions_e2e_live_test`.
+5. Staging Firebase optional but documented in DEPLOYMENT.
+
+**Результат:** спейс «готов» на web/Android; iOS push — Фаза 8.
 
 ---
 
 ## Фаза 7 — Матчмейкинг
 
-**Цель:** поиск тиммейтов (ключевое УТП).
+**Цель для пользователя:** найти тиммейтов по игре/рангу/региону; принять матч → временный squad с войсом и чатом.
 
-- [ ] **Каталог игр** — browse + seeds (4 игры); модерация/конструктор — открыто
-- [x] **Профиль игрока** — игры, ранг, роли, регион
-- [x] **Очередь** — критерии и слоты
-- [ ] **Подбор** — backend squad (chat+voice); клиент voice UI готов; FCM match_found live E2E — открыто
-- [x] **Таймаут** — например 30 мин без подтверждения
-- [x] **Рейтинг** — звёзды после матча
-- [x] **История матчей**
+### Границы фазы
 
-**Результат:** уникальная фича для геймеров.
+| Входит | Не входит |
+|--------|-----------|
+| **Глобальный** MM only | Space-level MM (после глобального) |
+| Каталог: browse + **4 seed games** | User-submitted game constructor + moderation queue |
+| Player profile: games, rank, roles, region | Rank verification Steam/Riot |
+| Queue + matchmaking algorithm (exact/range criteria) | Cross-region match |
+| Match squad: temp voice + chat | Permanent squad |
+| Accept/decline popup; party reset rules | Stories LFG (**17**) |
+| 30 min timeout; 15 min nudge | |
+| Post-match 1–5 stars + MM-only ban | |
+| Match history | |
+
+### Уровень сервисов
+
+| Сервис | Уровень |
+|--------|---------|
+| Matchmaking | **Минимальный** — catalog, queue, matcher, squad lifecycle, rating, history, MM ban |
+| Chat + Voice | S2S create ephemeral squad `chat_id` + `voice_room_id` |
+| Notification | FCM `match_found` |
+
+### Бэкенд
+
+- [x] **Каталог игр** — [game-catalog.md](features/game-catalog.md), [matchmaking.md](features/matchmaking.md)
+  - **Объём:** `ListGames`, `GetGame`; JSON schema modes/roles/ranks; **4 seeds** (Dota 2, CS2, Valorant, PUBG) в migration/seed.
+  - **Не делать:** user game constructor, admin moderation UI (можно SQL seed + API read).
+  - **Готово когда:** клиент browse/search catalog; select game → queue form fields from schema.
+  - **Тесты:** catalog CRUD read integration.
+
+- [x] **Профиль игрока** — per-game rank/roles self-reported; store in `matchmaking_db`.
+
+- [x] **Очередь** — Enqueue/Leave; criteria per game schema; one active queue per user; party from voice snapshot.
+
+- [x] **Подбор** — matcher forms squads; on all accept → CreateSquad (Chat+Voice); WS + FCM `match_found`.
+  - **Готово когда:** 2 parties matched → popup → accept → voice+chat joinable; decline rules per matchmaking.md.
+  - **Тесты:** matcher unit tests; live E2E with FCM optional flag.
+
+- [x] **Таймаут** — 30 min stop; 15 min «долго ищем» notification.
+
+- [x] **Рейтинг** — 1–5 on squad leave; optional skip; MM ban on 1–2 stars flow.
+
+- [x] **История** — list past squads + participants; add friend / MM ban from history.
+
+### Клиент
+
+- [x] MM panel (desktop right / mobile tab): catalog, queue form, searching state.
+- [x] Match found modal accept/decline.
+- [x] Squad voice UI (reuse voice room).
+- [x] Live E2E FCM match_found (device registration + `phase7_match_fcm_e2e_live_test`; delivery via `NOTIFICATION_RECORD_PUSHES` on compose).
+
+### Критерии приёмки
+
+1. Two users queue same game/region/criteria → matched → squad voice works.
+2. Party member decline resets whole party search.
+3. Opponent decline → continue search.
+4. MM ban prevents future match pairing only (not DM block).
+
+**Результат:** ключевое УТП; открытые пункты: полный каталог UX + live FCM E2E.
 
 ---
 
 ## Фаза 8 — Мобильные клиенты и push
 
-**Цель:** не только веб; iOS и доводка уведомлений.
+**Цель для пользователя:** тот же Voice на Android/iOS/Windows; офлайн-история; iOS push и входящие звонки.
 
-- [ ] **APNs** — sender в Notification; prod `GoogleService-Info.plist` / entitlements и live delivery — staging
-- [ ] **VoIP** — PushKit + CallKit scaffold; prod VoIP credentials и E2E delivery — открыто
-- [x] **FCM** — доработка под мобилу, enriched body (Messaging+User gRPC), tap→chat
-- [x] **Flutter mobile** — layout, Android / iOS CI smoke (`flutter build ios --no-codesign`)
-- [x] **Оффлайн-кэш** — последние N сообщений на чат (SQLite); read-only v1 в клиенте
-- [x] **Windows** — desktop-сборка, auto-updater
+### Границы фазы
 
-**Результат:** мультиплатформа для основной аудитории.
+| Входит | Не входит |
+|--------|-----------|
+| Flutter Android + iOS builds CI | macOS/Linux desktop priority |
+| APNs alert push | Rich notification extensions |
+| VoIP PushKit + CallKit **scaffold** | Полный prod VoIP без credentials |
+| FCM mobile polish (enriched body, tap→chat) | Shorebird OTA (**updates.md** backlog) |
+| SQLite offline cache last N msgs read-only | Full offline write/sync |
+| Windows desktop + auto-updater | Game overlay |
+
+### Уровень сервисов
+
+| Сервис | Уровень |
+|--------|---------|
+| Notification | APNs sender path; VoIP push type separate |
+| Client | Platform channels, secure token storage |
+
+### Бэкенд
+
+- [x] **APNs** — Notification Service: device token type `apns`; sandbox + prod config; message + mention payloads (код готов; sandbox delivery — секреты staging).
+  - **Готово когда:** staging iOS device receives push; documented entitlements + Apple keys in DEPLOYMENT.
+  - **Не путать с:** FCM on iOS if used as fallback — primary per notifications.md is APNs.
+
+- [x] **VoIP** — PushKit incoming call payload; client CallKit UI; requires VoIP cert (scaffold + token registration E2E).
+  - **MVP фазы:** scaffold compiles; E2E with prod creds may remain staging-only if documented.
+
+- [x] **FCM mobile** — token refresh; enriched body via pushenrich resolver; deep link to chat route.
+
+### Клиент
+
+- [x] Responsive mobile layout (not just stretched web).
+- [x] `flutter build apk/appbundle`; `flutter build ios --no-codesign` in CI.
+- [x] SQLite cache: last N messages per chat, read on startup offline.
+- [x] Windows installer + version_update_launcher / auto-updater — [updates.md](features/updates.md).
+
+### Критерии приёмки
+
+1. Android APK installs and completes Phase 1–6 smoke manually.
+2. iOS build CI green; APNs on staging device (when creds present).
+3. Offline: open chat → see cached history; send queued or blocked with clear UX.
+4. Windows updater detects new version from `/api/v1/version`.
+
+**Результат:** мультиплатформа; iOS push/VoIP may be staging-gated but code path complete.
 
 ---
 
 ## Фаза 9 — Поиск
 
-**Цель:** найти сообщение, человека, публичный спейс.
+**Цель для пользователя:** найти сообщение в чате или глобально; найти пользователя и публичный спейс.
 
-- [x] **Полнотекст** — PostgreSQL tsvector/GIN v1, в чате и глобально
-- [x] **Пользователи и спейсы** — каталог публичных спейсов
+### Границы фазы
 
-**Результат:** продукт переживаем при росте истории и серверов.
+| Входит | Не входит |
+|--------|-----------|
+| PostgreSQL tsvector/GIN v1 | Meilisearch/ES (**v2+**) |
+| Search in chat + global messages | E2E encrypted DM content (**15**) |
+| User search (existing SearchProfiles + search svc) | Verified badge boost (**13**) |
+| Public space catalog search | Federated space index (**19**) |
+
+### Уровень сервисов
+
+| Сервис | Уровень |
+|--------|---------|
+| Search | **Минимальный** — indexer consumer `message.events`, query API |
+| Messaging | S2S fetch message for context/snippet |
+
+### Бэкенд
+
+- [x] **Полнотекст** — [search.md](features/search.md): index on send/edit; `SearchInChat`, `SearchGlobal`; pagination.
+- [x] **Reindex** — admin/repair RPC or job for backfill.
+- [x] **Users and spaces** — `SearchUsers`, `SearchPublicSpaces`; pg_trgm optional for fuzzy names.
+
+### Клиент
+
+- [x] In-chat search field → results jump to message.
+- [x] Global search from shell: tabs messages / users / spaces.
+
+### Критерии приёмки
+
+1. Send message → searchable within seconds in-chat.
+2. Global search finds message across chats user is member of.
+3. Cannot search chats user is not in.
+4. Integration test indexer + query.
+
+**Результат:** продукт масштабируется по истории; Search Service не stub.
 
 ---
 
 ## Фаза 10 — Глубина сообщества
 
-**Цель:** тяжёлые сценарии текстовых чатов и голоса.
+**Цель для пользователя:** треды в каналах, screen share в войсе, медиа-вкладки в инфо чата, кастомные роли с оверрайдами.
 
-- [x] **Треды** — ветки; дефолт у канала — тред-ориентированно, у группы — по настройкам (всё переопределяется)
-- [x] **Шаринг экрана** — до 3 стримов в войсе
-- [x] **Shared media** — вкладки медиа/файлы/ссылки в инфо чата
-- [x] **Кастомные роли** — гранулярные права (32+), overrides на текстовый чат (`chat_id`) и голос
+### Границы фазы
 
-**Результат:** крупные активные сообщества комфортны.
+| Входит | Не входит |
+|--------|-----------|
+| Threads — reply chains / thread channel mode | Forum channels advanced backlog |
+| Screen share до 3 streams | System audio on web (platform limit) |
+| Shared media tabs in chat info | Server-wide audit log UI (space backlog) |
+| Custom roles 32+ permissions | Bot role assignments (**16**) |
+| Overrides per `chat_id` and voice room | Commander broadcast mode (voice-chat backlog) |
+
+### Уровень сервисов
+
+| Сервис | Уровень |
+|--------|---------|
+| Messaging | Threads: `parent_message_id`, thread metadata, list threads |
+| Role | **Полный для community** — custom roles, permission bitmap, chat_overrides, voice_room_overrides |
+| Voice | Screen share tracks via LiveKit |
+| Chat | Channel setting: thread-first default |
+
+### Бэкенд
+
+- [x] **Треды** — create thread from message; channel default thread-oriented; group configurable.
+- [x] **Screen share** — [screen-share.md](features/screen-share.md); max 3 simultaneous; LiveKit screen track.
+- [x] **Shared media** — aggregate attachments/links query per chat_id.
+- [x] **Кастомные роли** — [roles.md](features/roles.md); Role Service CRUD; assign members; override sheets in client.
+
+### Клиент
+
+- [x] Thread panel / side view; post in thread.
+- [x] Screen share button in voice; viewer tiles.
+- [x] Chat info → Media / Files / Links tabs.
+- [x] Role editor + per-channel override UI.
+
+### Критерии приёмки
+
+1. Channel default: user cannot post to main lane without permission; thread create works.
+2. 3 users screen share capped at 3.
+3. Custom role denies `TEXT_CHAT_SEND` in one channel only (override).
+4. Role changes propagate via WS within seconds.
+
+**Результат:** крупные сообщества комфортны; Role Service production-grade for space admins.
 
 ---
 
 ## Фаза 11 — Доверие (базовая)
 
-**Цель:** минимум безопасности **до** приёма платежей (**Фаза 12**).
+**Цель для пользователя:** пожаловаться на контент; включить 2FA; настроить кто видит профиль.
 
-- [ ] **Репорты (базовые)** — UI + API, категории, `moderation_db`, очередь. Спека: [features/reports.md](features/reports.md). **Без** модераторской панели — **Фаза 14**
-- [ ] **2FA** — TOTP
-- [ ] **Приватность профиля** — пресеты + кастом — [features/privacy.md](features/privacy.md)
+**Блокер для Фазы 12** (платежи).
 
-**Результат:** можно открывать монетизацию без стыда за отсутствие жалоб и 2FA.
+### Границы фазы
+
+| Входит | Не входит |
+|--------|-----------|
+| Report UI + API + queue in DB | Moderator admin panel (**14**) |
+| Auto-mod thresholds (basic) | Shadow ban sophistication (**14**) |
+| 2FA TOTP enroll/verify | SMS 2FA |
+| Privacy presets + per-field | Federation privacy |
+
+### Уровень сервисов
+
+| Сервис | Уровень |
+|--------|---------|
+| Moderation | **Минимальный** — SubmitReport, list queue (internal API only), store `moderation_db` |
+| Auth | TOTP 2FA enroll, challenge on login |
+| User | Privacy settings on profile fields |
+
+### Бэкенд
+
+- [ ] **Репорты** — [reports.md](features/reports.md)
+  - **API:** ReportUser, ReportMessage, ReportSpace (Story — stub OK until **17**).
+  - **Категории:** spam, harassment, offensive, fake, mm_toxic, other+comment.
+  - **БД:** reports table, status enum, target reference.
+  - **Не делать:** moderator UI, sanctions execution (**14**); auto-block may log only in **11**.
+  - **Готово когда:** user submits → 202 + «принята»; row in DB; no status updates to reporter.
+  - **Тесты:** submit integration; authz (cannot report self).
+
+- [ ] **2FA** — [auth-service.md](microservices/auth-service.md): TOTP secret, backup codes, require on login when enabled.
+
+- [ ] **Приватность** — [privacy.md](features/privacy.md): who can DM, who sees avatar/bio/online; presets friends-only etc.
+
+### Клиент
+
+- [ ] Report flow from message context menu, profile, space.
+- [ ] Security settings: enable 2FA, show QR.
+- [ ] Privacy settings screen.
+
+### Критерии приёмки
+
+1. Report message → stored with category + reporter id.
+2. 2FA enabled → login requires TOTP.
+3. Privacy «friends only DM» blocks stranger message at Chat API.
+
+**Результат:** минимальная безопасность перед монетизацией; модерация обработки — Фаза 14.
 
 ---
 
 ## Фаза 12 — Монетизация: биллинг
 
-**Цель:** деньги за подписки.
+**Цель для пользователя:** купить Premium или Space Pro; получить лимиты и косметику.
 
-- [ ] **Premium** — статус, аним. аватар, баннер, лимиты файлов 200MB, 5 профилей
-- [ ] **Space Pro** — лимиты спейса, кастомные эмодзи
-- [ ] **Платежи** — Paddle (не-СНГ), CloudPayments (РФ)
-- [ ] **Годовая подписка** — скидка 20%
+**Требует закрытую Фазу 11.**
 
-*Перед прод-платежами — закрыть Фазу 11.*
+### Границы фазы
 
-**Результат:** revenue stream, freemium без урезания базы.
+| Входит | Не входит |
+|--------|-----------|
+| Subscription Service **минимальный** | Инапп на mobile stores (use Paddle/CP web) |
+| Premium + Space Pro entitlements | One-off username shop |
+| Paddle + CloudPayments webhooks | Apple/Google IAP |
+| Grace period 7 days | Trial period |
+| Enforce limits: file 200MB, profiles 5, space members 5000 | CDN priority streaming |
+
+### Уровень сервисов
+
+| Сервис | Уровень |
+|--------|---------|
+| Subscription | **Минимальный** — products, checkout session, webhook, entitlements cache, NATS `subscription.events` |
+| User | Premium flag, profile count limit |
+| Space | Space Pro flag, member cap enforcement |
+| File | Upload size check against entitlement |
+
+### Бэкенд
+
+- [ ] **Premium** — [subscription.md](features/subscription.md): status on account; animated avatar MIME; banner; 200MB upload; 5 profiles max.
+- [ ] **Space Pro** — 5000 members, 128 voice, 500 channels, custom emoji.
+- [ ] **Платежи** — Paddle (non-CIS), CloudPayments (RU); recurring; webhook signature verify.
+- [ ] **Годовая** — −20% price SKU.
+
+### Клиент
+
+- [ ] Subscription settings, checkout redirect, manage subscription link.
+- [ ] Premium badge in chat name.
+- [ ] Downgrade profile picker when subscription ends.
+
+### Критерии приёмки
+
+1. Test webhook activates Premium → upload 100MB succeeds, 250MB rejected.
+2. Space Pro raises member cap; cancel allows existing members, blocks new over free cap.
+3. Grace period: features work 7 days after failed payment.
+
+**Результат:** revenue stream; freemium base unchanged.
 
 ---
 
 ## Фаза 13 — Профили и верификация
 
-**Цель:** мульти-профиль и доверие к личностям/брендам.
+**Цель для пользователя:** несколько «личностей» на аккаунте; значки верификации для публичных фигур и организаций.
 
-- [ ] **Мульти-профиль** — 2 бесплатно / 5 в Premium, раздельные контакты и спейсы
-- [ ] **Верификация** — [features/verification.md](features/verification.md): личная (Twitch Partner / YouTube YPP), организации (DNS TXT + fallback), значки в UI, приоритет в поиске
+### Границы фазы
 
-**Результат:** платный слой и репутация связаны с аккаунтом, не только с косметикой подписки.
+| Входит | Не входит |
+|--------|-----------|
+| Multi-profile: 2 free / 5 premium | Per-profile separate billing |
+| Switch profile in client | Profile merge |
+| Verification badges + search boost | Manual verification admin at scale (**14** tooling) |
+
+### Уровень сервисов
+
+| Сервис | Уровень |
+|--------|---------|
+| User | **Расширенный** — multi-profile CRUD, active profile session, isolated friend lists per profile |
+| Auth | Profile switch token claims `profile_id` |
+
+### Бэкенд
+
+- [ ] **Мульти-профиль** — [multi-profile.md](features/multi-profile.md): separate contacts, spaces, DMs per profile; limit enforced via Subscription.
+
+- [ ] **Верификация** — [verification.md](features/verification.md): OAuth Twitch Partner / YouTube YPP; org DNS TXT; badge in UI; search ranking weight.
+
+### Критерии приёмки
+
+1. Two profiles → different display names in different spaces; no cross-leak in list APIs.
+2. Verified badge visible in chat + search results ordered higher.
+
+**Результат:** идентичность и доверие, не только косметика Premium.
 
 ---
 
 ## Фаза 14 — Модерация платформы
 
-**Цель:** масштаб глобальной модерации.
+**Цель для команды модераторов:** разбирать очередь жалоб, применять санкции, аудит.
 
-Граница с **Фазой 11**: там подача и очередь; здесь — операции и авто-логика — [features/reports.md](features/reports.md).
+Граница с **11**: там submit; здесь process.
 
-- [ ] **Авто-мод** — пороги, shadow-ban, типы очередей
-- [ ] **Панель модераторов** — отдельный веб: разбор, санкции, аудит, раздельные потоки (в т.ч. спейсы)
+### Границы фазы
 
-**Результат:** модерация выдерживает рост.
+| Входит | Не входит |
+|--------|-----------|
+| Moderation admin web `src/admin/` | In-app mod tools for space admins (already **5**) |
+| Auto-mod: thresholds, shadow ban | ML classifiers |
+| Sanctions: warn, temp ban, perm ban | Appeals workflow UI (API stub OK) |
+| Separate queues: users/messages vs public spaces | Story moderation if **17** not done |
+
+### Уровень сервисов
+
+| Сервис | Уровень |
+|--------|---------|
+| Moderation | **Полный** для platform mod |
+| Auth | Ban account flag enforcement Gateway-wide |
+
+### Бэкенд
+
+- [ ] **Авто-мод** — [reports.md](features/reports.md): 1% threshold min 10/24h; shadow ban; spam pattern mute.
+
+- [ ] **Панель модераторов** — React admin: queue list, filters, assign, sanction actions, audit log export.
+
+### Критерии приёмки
+
+1. Moderator resolves report → user sanction → Gateway rejects JWT or marks shadow banned.
+2. Space reports queue separate from user reports.
+3. All actions audited with actor id.
+
+**Результат:** модерация выдерживает рост аудитории.
 
 ---
 
 ## Фаза 15 — E2E в DM (опционально)
 
-**Цель:** усиленная приватность для тех, кому нужно.
+**Цель для пользователя:** opt-in сквозное шифрование в личке.
 
-- [ ] **Signal Protocol** — опционально для DM, ограничения поиска — [features/encryption.md](features/encryption.md)
+### Границы фазы
 
-**Результат:** E2E как opt-in, не ломая продукт для остальных.
+| Входит | Не входит |
+|--------|-----------|
+| Signal Protocol DM opt-in per chat | E2E groups/space |
+| Key exchange via server (encrypted envelopes) | Full Olm/Megolm spaces |
+| Search excludes E2E ciphertext | Server-side message content for E2E |
+
+### Уровень сервисов
+
+| Сервис | Уровень |
+|--------|---------|
+| Messaging | E2E flag on chat; store ciphertext only when enabled |
+| Client | libsignal or equivalent; key backup UX minimal |
+
+### Бэкенд
+
+- [ ] **Signal Protocol** — [encryption.md](features/encryption.md): pair-wise sessions; disable server search index for E2E messages.
+
+### Критерии приёмки
+
+1. Two users enable E2E → server DB shows non-plaintext payload.
+2. Global search does not return E2E message body.
+3. Opt-out reverts to plain with clear UX warning.
+
+**Результат:** privacy option без ломки продукта для остальных.
 
 ---
 
 ## Фаза 16 — Боты
 
-**Цель:** расширяемость для разработчиков.
+**Цель для разработчиков:** бот в спейсе со slash-командами.
 
-- [ ] **Developer Portal** — приложения, секреты, манифест, квоты, доки (может жить отдельным релизом)
-- [ ] **Runtime** — manifest, slash, webhook + polling (dev), scopes, whitelist чатов (`group` \| `channel`), rate limits — [features/bots.md](features/bots.md), [microservices/bot-service.md](microservices/bot-service.md)
+### Границы фазы
+
+| Входит | Не входит |
+|--------|-----------|
+| Developer Portal (может отдельный deploy) | Bot marketplace |
+| Bot Service: manifest, slash, webhook | Socket mode gateway |
+| Polling mode for local dev | Full OAuth for users |
+| Scopes + per-channel whitelist | Bot reads all messages without scope |
+
+### Уровень сервисов
+
+| Сервис | Уровень |
+|--------|---------|
+| Bot | **Минимальный** — register app, manifest validate, interaction dispatch, 3s timeout |
+| Gateway | Public bot webhook route with signature |
+
+### Бэкенд
+
+- [ ] **Developer Portal** — apps, secrets, manifest upload, revoke token — [bots.md](features/bots.md).
+
+- [ ] **Runtime** — slash commands in client; webhook + polling dev; rate limits per bots.md; TEXT_CHAT_SEND in whitelisted channels only.
+
+### Критерии приёмки
+
+1. Register bot → add to space → `/ping` returns pong in channel.
+2. Ephemeral response visible only to caller.
+3. 3s timeout shows user-friendly error.
 
 **Результат:** сторонние интеграции в спейсах.
 
@@ -355,41 +980,108 @@
 
 ## Фаза 17 — Сторис
 
-**Цель:** короткий контент и связь с ММ.
+**Цель для пользователя:** stories 24h, highlights, LFG story type для матчмейкинга.
 
-Спека: [features/stories.md](features/stories.md); API: [microservices/story-service.md](microservices/story-service.md).
+### Границы фазы
 
-- [ ] **Контент + редактор** — фото/видео/текст/клип, оверлеи, стикеры, дудл, фильтры, трим, R2/File
-- [ ] **Лента** — 24ч, архив 30 дней, просмотры, реакции, реплаи, кольцо на аватаре
-- [ ] **Highlights** — подборки на профиле, своя приватность
-- [ ] **Матчмейкинг** — «Ищу пати», пост-матч стори — [features/matchmaking.md](features/matchmaking.md)
+| Входит | Не входит |
+|--------|-----------|
+| Story Service **минимальный** | TikTok-style algorithmic feed |
+| Photo/video/text stories, editor basics | AR filters |
+| 24h expiry, 30d archive | Permanent posts |
+| Highlights on profile | |
+| «Ищу пати» story type (not MM queue) | |
 
-**Результат:** контентный слой для удержания и LFG.
+### Уровень сервисов
+
+| Сервис | Уровень |
+|--------|---------|
+| Story | **Минимальный** — CRUD, views, reactions, replies |
+| File | Media upload for stories |
+
+### Бэкенд
+
+- [ ] **Контент + редактор** — [stories.md](features/stories.md): R2 media; overlays text/stickers v1 minimal.
+- [ ] **Лента** — friends+space ring on avatar; views count; replies as DM thread optional.
+- [ ] **Highlights** — curated collections on profile.
+- [ ] **ММ связь** — «Ищу пати» structured fields link to game catalog display only.
+
+### Критерии приёмки
+
+1. Post story → visible to friends 24h → expires.
+2. Highlight persists on profile after expiry.
+3. Report story flows to Moderation (**11/14**).
+
+**Результат:** контентный слой удержания + LFG discovery.
 
 ---
 
 ## Фаза 18 — Рост и доступность
 
-**Цель:** проще зайти и пользоваться.
+**Цель для пользователя:** зайти по ссылке, пройти онбординг, пользоваться с клавиатуры и screen reader.
 
-- [ ] **Deep links** — `voice://`, `https://voice.gg/…`
-- [ ] **Онбординг** — 4–5 шагов, контекстные подсказки
-- [ ] **A11y** — клавиатура, screen reader, контраст, reduced motion
+### Границы фазы
 
-**Результат:** меньше трения для новичков и пользователей ВАТ.
+| Входит | Не входит |
+|--------|-----------|
+| Deep links universal links | Full marketing site |
+| Onboarding 4–5 steps | Interactive tutorial gamification |
+| WCAG-oriented a11y pass on main flows | Certified compliance audit |
+
+### Бэкенд
+
+- [ ] **Deep links** — [deep-links.md](features/deep-links.md): `voice://` + `https://voice.gg/invite|space|chat|user|message`; Gateway redirect rules.
+
+### Клиент
+
+- [ ] **Онбординг** — [onboarding.md](features/onboarding.md): register → create/join space → first message; contextual hints.
+- [ ] **A11y** — [accessibility.md](features/accessibility.md): focus order, Semantics labels, contrast tokens, reduced motion.
+
+### Критерии приёмки
+
+1. Click invite link on mobile → app opens join flow.
+2. Main navigation operable keyboard-only.
+3. `flutter test` semantics tests for login + chat shell.
+
+**Результат:** меньше трения для новичков и a11y пользователей.
 
 ---
 
 ## Фаза 19 — Федерация и self-hosting
 
-**Цель:** корпоративные и приватные ноды.
+**Цель для оператора:** поднять federated node; хостить спейсы на своём железе; оставаться в глобальном каталоге.
 
-- [ ] **S2S API** — gRPC stream, авторизация через master
-- [ ] **Нода** — Docker-образ
-- [ ] **Синхронизация** — роли, баны, события
-- [ ] **Дефедерация**
-- [ ] **Уведомления** — нода → master → FCM/APNs
+### Границы фазы (V1 federation)
 
-**Результат:** Voice на своей инфраструктуре.
+| Входит | Не входит |
+|--------|-----------|
+| S2S gRPC bidi stream master↔node | Open node registration |
+| Node Docker image | Accounts on node |
+| Auth always via master | DM on node |
+| Role/ban sync | Local MM on node |
+| Defederation | Cross-server DM |
+| Push: node→master→FCM | |
 
+### Уровень сервисов
+
+| Сервис | Уровень |
+|--------|---------|
+| Federation | **Минимальный V1** — [federation.md](features/federation.md) |
+| Space/Voice/File on node | Same stack, `NODE_MODE=federated` |
+
+### Бэкенд
+
+- [ ] **S2S API** — `protos/voice/s2s/v1/s2s.proto`: RegisterNode, AuthUser, stream events.
+- [ ] **Нода** — Docker compose/k8s manifest; env for master URL + node cert.
+- [ ] **Синхронизация** — RoleChanged, UserBanned snapshot on reconnect.
+- [ ] **Дефедерация** — master marks node banned; catalog hides spaces.
+- [ ] **Уведомления** — FederationService.NotifyUser → master Notification.
+
+### Критерии приёмки
+
+1. Node hosts space → appears in master catalog → user auth via master joins.
+2. Ban on master → node rejects within TTL/stream latency.
+3. Master down → node serves cached members only; no new users.
+
+**Результат:** Voice на своей инфраструктуре без форка продукта.
 

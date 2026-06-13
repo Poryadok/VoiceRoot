@@ -1374,6 +1374,29 @@ class ChatActions {
     };
   }
 
+  Future<String?> transferGroupOwnership(
+    String chatId,
+    String newOwnerProfileId,
+  ) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+    final result = await _ref
+        .read(voiceChatsClientProvider)
+        .transferGroupOwnership(
+          authorization: auth,
+          chatId: chatId,
+          newOwnerProfileId: newOwnerProfileId,
+        );
+    return switch (result) {
+      ChatsApiFailure(:final message) => message,
+      ChatsApiOk() => () {
+        _ref.invalidate(groupMembersProvider(chatId));
+        _invalidateChatLists(_ref);
+        return null;
+      }(),
+    };
+  }
+
   Future<String?> leaveGroup(String chatId) async {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return 'not_authenticated';

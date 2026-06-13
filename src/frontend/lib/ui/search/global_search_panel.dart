@@ -185,9 +185,11 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
                     title: _SnippetText(snippet: hit.snippet),
                     subtitle: Text(hit.messageId),
                     onTap: () {
-                      final chatId = _results!.matchedChatIds.isNotEmpty
-                          ? _results!.matchedChatIds.first
-                          : null;
+                      final chatId = hit.chatId.isNotEmpty
+                          ? hit.chatId
+                          : (_results!.matchedChatIds.isNotEmpty
+                              ? _results!.matchedChatIds.first
+                              : null);
                       if (chatId != null) {
                         ref.read(selectedChatIdProvider.notifier).state =
                             chatId;

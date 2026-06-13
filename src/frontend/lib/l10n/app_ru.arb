@@ -458,8 +458,9 @@
   "spaceRoleManaged": "Системная роль",
   "spaceRoleCustom": "Кастомная роль",
   "spaceChatOverrideTitle": "Оверрайды доступа к чату",
-  "spaceChatOverrideHint": "Запретить просмотр чата для роли только здесь.",
+  "spaceChatOverrideHint": "Запретить просмотр или отправку для роли только в этом чате.",
   "spaceChatOverrideDenyView": "Запретить просмотр",
+  "spaceChatOverrideDenySend": "Запретить отправку",
   "spaceVoiceOverrideTitle": "Оверрайды голосовой комнаты",
   "spaceVoiceOverrideHint": "Запретить вход для роли только в этой комнате.",
   "spaceVoiceOverrideDenyJoin": "Запретить вход в голос",
@@ -507,7 +508,21 @@
   "chatGroupLeave": "Выйти из группы",
   "chatGroupLeaveConfirmTitle": "Выйти из группы?",
   "chatGroupLeaveConfirmMessage": "Вы больше не будете получать сообщения из этой группы.",
-  "chatGroupOwnerLeaveHint": "Владелец не может выйти, пока не передаст права (скоро).",
+  "chatGroupOwnerLeaveHint": "Передайте владение другому участнику перед выходом.",
+  "chatGroupTransferOwnershipTo": "Передать владение: {name}",
+  "@chatGroupTransferOwnershipTo": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "chatGroupTransferOwnershipTitle": "Передать владение группой",
+  "chatGroupTransferOwnershipMessage": "Сделать {name} новым владельцем?",
+  "@chatGroupTransferOwnershipMessage": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "chatGroupTransferOwnershipConfirm": "Передать",
   "settingsTitle": "Настройки",
   "settingsTooltip": "Настройки",
   "settingsTheme": "Тема",

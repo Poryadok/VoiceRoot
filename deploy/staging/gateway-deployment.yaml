@@ -1,4 +1,5 @@
 # Image is substituted in CI (sed) before kubectl apply — see docs/DEPLOYMENT.md.
+# Full phases 0–10 upstreams: voice-app-config ConfigMap + voice-app-secrets Secret.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -22,17 +23,33 @@ spec:
           ports:
             - name: http
               containerPort: 8080
+          env:
+            - name: LISTEN_ADDR
+              value: ":8080"
+            - name: GATEWAY_REDIS_ADDR
+              valueFrom:
+                configMapKeyRef:
+                  name: voice-app-config
+                  key: REDIS_ADDR
+            - name: GATEWAY_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: voice-app-secrets
+                  key: GATEWAY_DATABASE_URL
+          envFrom:
+            - configMapRef:
+                name: voice-app-config
           readinessProbe:
             httpGet:
               path: /health
               port: http
-            initialDelaySeconds: 2
+            initialDelaySeconds: 5
             periodSeconds: 5
           livenessProbe:
             httpGet:
               path: /health
               port: http
-            initialDelaySeconds: 5
+            initialDelaySeconds: 10
             periodSeconds: 10
 ---
 apiVersion: v1

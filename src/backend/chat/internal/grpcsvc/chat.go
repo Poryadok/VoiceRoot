@@ -43,6 +43,7 @@ type DMStore interface {
 	AddGroupMembers(ctx context.Context, chatID uuid.UUID, profileIDs []uuid.UUID) ([]uuid.UUID, error)
 	RemoveGroupMember(ctx context.Context, chatID, profileID uuid.UUID) error
 	LeaveGroupChat(ctx context.Context, chatID, profileID uuid.UUID) error
+	TransferGroupOwnership(ctx context.Context, chatID, ownerID, newOwnerID uuid.UUID) error
 	UpdateGroupChat(ctx context.Context, chatID uuid.UUID, name, avatarURL *string, slowModeSeconds *int32) (*store.ChatRow, error)
 	GetMemberRole(ctx context.Context, chatID, profileID uuid.UUID) (string, error)
 }

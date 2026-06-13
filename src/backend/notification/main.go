@@ -66,6 +66,10 @@ func main() {
 				logger.Info("FCM HTTP sender enabled", slog.String("project_id", cfg.ProjectID))
 			}
 		}
+		if strings.EqualFold(strings.TrimSpace(os.Getenv("NOTIFICATION_RECORD_PUSHES")), "true") {
+			fcmSender = &fcm.RecordSender{Inner: fcmSender}
+			logger.Info("FCM push recording enabled (NOTIFICATION_RECORD_PUSHES)")
+		}
 		apnsSender := apns.Sender(&apns.NoopSender{Logger: logger})
 		voipSender := apns.VoIPSender(&apns.VoIPNoopSender{})
 		if cfg, ok := apns.ConfigFromEnv(); ok {
@@ -178,7 +182,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              httpAddr,
-		Handler:           httpserver.Wrap(healthHandler(serviceName), logger),
+		Handler:           httpserver.Wrap(notificationHTTPHandler(serviceName), logger),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,

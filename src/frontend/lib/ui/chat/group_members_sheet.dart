@@ -83,14 +83,22 @@ class GroupMembersContent extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  if (isOwner)
-                    Text(
-                      key: GroupMembersSheet.ownerLeaveHintKey,
-                      l10n.chatGroupOwnerLeaveHint,
-                      style: theme.textTheme.bodySmall,
-                      textAlign: TextAlign.center,
-                    )
-                  else
+                  if (isOwner) ...[
+                    for (final member in data.members)
+                      if (!member.isOwner && member.profileId != activeId)
+                        _TransferOwnershipButton(
+                          key: GroupMembersSheet.transferOwnerKey(
+                            member.profileId,
+                          ),
+                          chatId: chatId,
+                          profileId: member.profileId,
+                        ),
+                    OutlinedButton(
+                      key: GroupMembersSheet.leaveKey,
+                      onPressed: () => _confirmLeave(context, ref, chatId),
+                      child: Text(l10n.chatGroupLeave),
+                    ),
+                  ] else
                     OutlinedButton(
                       key: GroupMembersSheet.leaveKey,
                       onPressed: () => _confirmLeave(context, ref, chatId),
@@ -113,6 +121,9 @@ class GroupMembersSheet extends ConsumerWidget {
   static const Key sheetKey = Key('group_members_sheet');
   static const Key leaveKey = Key('group_members_leave');
   static const Key ownerLeaveHintKey = Key('group_members_owner_leave_hint');
+
+  static Key transferOwnerKey(String profileId) =>
+      Key('group_members_transfer_owner_$profileId');
 
   static Key memberTileKey(String profileId) =>
       Key('group_member_tile_$profileId');
@@ -243,6 +254,78 @@ Future<void> _confirmLeave(
       Navigator.of(context).pop();
     }
   }
+
+Future<void> _confirmTransferOwnership(
+  BuildContext context,
+  WidgetRef ref,
+  String chatId,
+  String newOwnerProfileId,
+  String displayName,
+) async {
+  final l10n = AppLocalizations.of(context)!;
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (ctx) {
+      final dialogL10n = AppLocalizations.of(ctx)!;
+      return AlertDialog(
+        title: Text(dialogL10n.chatGroupTransferOwnershipTitle),
+        content: Text(dialogL10n.chatGroupTransferOwnershipMessage(displayName)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(dialogL10n.commonCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(dialogL10n.chatGroupTransferOwnershipConfirm),
+          ),
+        ],
+      );
+    },
+  );
+  if (confirmed != true || !context.mounted) return;
+  final err = await ref.read(chatActionsProvider).transferGroupOwnership(
+        chatId,
+        newOwnerProfileId,
+      );
+  if (!context.mounted) return;
+  if (err != null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(socialActionErrorMessage(l10n, err))),
+    );
+  } else {
+    ref.invalidate(groupMembersProvider(chatId));
+  }
+}
+
+class _TransferOwnershipButton extends ConsumerWidget {
+  const _TransferOwnershipButton({
+    super.key,
+    required this.chatId,
+    required this.profileId,
+  });
+
+  final String chatId;
+  final String profileId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context)!;
+    final profile = ref.watch(profileProvider(profileId)).valueOrNull;
+    final name =
+        profile?.displayName ?? profile?.handle ?? profileId.substring(0, 8);
+    return TextButton(
+      onPressed: () => _confirmTransferOwnership(
+        context,
+        ref,
+        chatId,
+        profileId,
+        name,
+      ),
+      child: Text(l10n.chatGroupTransferOwnershipTo(name)),
+    );
+  }
+}
 
 class _MemberTile extends ConsumerWidget {
   const _MemberTile({

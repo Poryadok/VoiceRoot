@@ -330,7 +330,10 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                       isScrollControlled: true,
                       builder: (context) => SizedBox(
                         height: MediaQuery.sizeOf(context).height * 0.5,
-                        child: InChatSearch(chatId: widget.chatId),
+                        child: InChatSearch(
+                          chatId: widget.chatId,
+                          onActiveMessageChanged: _scrollToMessage,
+                        ),
                       ),
                     );
                   },

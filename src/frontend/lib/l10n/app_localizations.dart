@@ -1670,6 +1670,9 @@ abstract class AppLocalizations {
   /// **'Deny view chat'**
   String get spaceChatOverrideDenyView;
 
+  /// No description provided for @spaceChatOverrideDenySend.
+  String get spaceChatOverrideDenySend;
+
   /// No description provided for @spaceVoiceOverrideTitle.
   ///
   /// In en, this message translates to:
@@ -1837,6 +1840,14 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'As the owner, transfer ownership before leaving (coming soon).'**
   String get chatGroupOwnerLeaveHint;
+
+  String chatGroupTransferOwnershipTo(String name);
+
+  String get chatGroupTransferOwnershipTitle;
+
+  String chatGroupTransferOwnershipMessage(String name);
+
+  String get chatGroupTransferOwnershipConfirm;
 
   /// No description provided for @settingsTitle.
   ///

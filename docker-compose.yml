@@ -369,11 +369,14 @@ services:
     build:
       context: ./src/backend
       dockerfile: notification/Dockerfile
+    ports:
+      - "${NOTIFICATION_DEBUG_PORT:-18091}:8080"
     environment:
       LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/notification_db?sslmode=disable
       NOTIFICATION_GRPC_LISTEN: :9090
       NOTIFICATION_REDIS_ADDR: redis:6379
+      NOTIFICATION_RECORD_PUSHES: "true"
       NATS_URL: nats://nats:4222
       USER_GRPC_ADDR: user:9090
       CHAT_GRPC_ADDR: chat:9090

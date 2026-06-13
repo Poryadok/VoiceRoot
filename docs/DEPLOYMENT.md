@@ -31,7 +31,7 @@
 ```
 
 - **Staging**: образ **API Gateway** (минимальный каркас в [`src/backend/gateway/`](../src/backend/gateway/)) собирается и пушится в **GHCR** при каждом push в `master` (workflow [`CI`](../.github/workflows/ci.yml), job `gateway-image`). Деплой в namespace `voice-staging` выполняет workflow **[`Staging deploy`](../.github/workflows/staging-deploy.yml)** (`kubectl apply` к манифестам в [`deploy/staging/`](../deploy/staging/)): **ручной** запуск (`workflow_dispatch`, ввод тега образа, по умолчанию `latest`); **авто** после успешного `CI` на push в `master` — только при `STAGING_DEPLOY_ENABLED` = `true` (см. раздел ниже). Пока кластер или kubeconfig не готовы — только ручной выкат или отключённый автодеплой.
-- **Ограничение staging (текущее):** [`deploy/staging/gateway-deployment.yaml`](../deploy/staging/gateway-deployment.yaml) поднимает **только** Gateway без `GATEWAY_GRPC_UPSTREAMS_JSON` / `GATEWAY_REALTIME_UPSTREAM_URL`. Публичный FQDN (`voice.tastytest.online`) отвечает на `/health`; Phase-1 REST (`/api/v1/users`, `/chats`, …) и `/ws` **не работают**, пока в кластер не выкатаны upstream-сервисы (Auth, User, Social, Chat, Messaging, Realtime, …) и не заданы env Gateway. Локальный полный стек — `make compose-app-up` ([README.md](../README.md)).
+- **Ограничение staging (историческое):** ранее выкатывался только Gateway. **Текущее:** workflow **Staging deploy** применяет полный стек [`deploy/staging/`](../deploy/staging/) через `scripts/staging/render-and-apply.sh` (все сервисы фаз 0–10 + ConfigMap upstreams). Требуются `voice-app-secrets` (см. `secret.example.yaml`) и образы всех сервисов в GHCR. Опционально: `STAGING_SMOKE_ENABLED=true` → `scripts/staging/smoke-staging.sh`.
 - **Production**: деплой только с **явным шагом** (approval в GitHub Environments, ручной запуск job или утверждённый релизный тег) — без автоматического «всё, что в master, сразу в prod».
 
 Версионирование образов: тег по **git SHA** `master` для непрерывного staging; для prod — тег **semver** (`v1.2.3`) или тот же SHA, зафиксированный в релизном манифесте.
@@ -111,8 +111,9 @@ kubectl create secret tls voice-gateway-tls -n voice-staging --cert=tls.crt --ke
 ### APNs / VoIP (iOS)
 
 - Notification service reads APNs credentials from env (`APNS_*` — see `src/backend/notification/internal/apns/config.go`).
-- **Staging:** upload APNs Auth Key (.p8) to secrets; set `APNS_PRODUCTION=false` for sandbox devices.
-- **Production:** `APNS_PRODUCTION=true`, separate VoIP topic/key if required; add `GoogleService-Info.plist` to iOS target and enable Push Notifications + Background Modes (remote notifications, VoIP) in Xcode.
+- **Staging:** copy [`deploy/staging/secret.example.yaml`](../deploy/staging/secret.example.yaml) → `secret.yaml`; set `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_PRIVATE_KEY` (Auth Key .p8 PEM), `APNS_BUNDLE_ID`, `APNS_VOIP_TOPIC`, `APNS_PRODUCTION=false` for sandbox devices.
+- **Production:** `APNS_PRODUCTION=true`, separate VoIP topic/key if required; enable Push Notifications + Background Modes (remote notifications, VoIP) in Xcode.
+- **Compose dev:** token registration E2E (`phase8_apns_e2e_live_test`, `phase8_voip_e2e_live_test`); alert delivery on device requires staging secrets above.
 - Live delivery tests: `src/frontend/test/phase8_apns_e2e_live_test.dart`, `phase8_voip_e2e_live_test.dart` (opt-in `VOICE_RUN_LIVE_INTEGRATION=true`).
 
 ---

@@ -67,8 +67,24 @@ jobs:
       - name: Apply staging manifests
         run: |
           set -eux
-          kubectl apply -f deploy/staging/namespace.yaml
-          sed "s|IMAGE_PLACEHOLDER|${{ steps.image.outputs.full }}|g" deploy/staging/gateway-deployment.yaml | kubectl apply -f -
+          REGISTRY="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+          TAG="${{ steps.tag_dispatch.outputs.tag }}"
+          if [ -z "${TAG}" ]; then
+            TAG="${{ steps.tag_run.outputs.tag }}"
+          fi
+          if [ -z "${TAG}" ]; then
+            TAG="latest"
+          fi
+          export VOICE_IMAGE_REGISTRY="${REGISTRY}"
+          export VOICE_IMAGE_TAG="${TAG}"
+          export VOICE_K8S_NAMESPACE="${{ vars.VOICE_K8S_NAMESPACE }}"
+          bash scripts/staging/render-and-apply.sh
+
+      - name: Staging smoke (optional)
+        if: vars.STAGING_SMOKE_ENABLED == 'true'
+        env:
+          VOICE_STAGING_URL: https://${{ vars.VOICE_GATEWAY_INGRESS_HOST }}
+        run: bash scripts/staging/smoke-staging.sh
 
       - name: Apply gateway Ingress (optional)
         env:

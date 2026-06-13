@@ -31,6 +31,7 @@ func (s *recordingSearchGRPC) SearchInChat(_ context.Context, req *searchv1.Sear
 		SearchResults: &searchv1.SearchResults{
 			Hits: []*searchv1.SearchHit{{
 				MessageId: "msg-1",
+				ChatId:    "chat-1",
 				Snippet:   "matched snippet",
 				Score:     1.0,
 			}},
@@ -42,7 +43,7 @@ func (s *recordingSearchGRPC) SearchGlobal(_ context.Context, req *searchv1.Sear
 	s.lastGlobal = req
 	return &searchv1.SearchGlobalResponse{
 		GlobalSearchResults: &searchv1.GlobalSearchResults{
-			Messages: []*searchv1.SearchHit{{MessageId: "msg-global", Snippet: "global hit"}},
+			Messages: []*searchv1.SearchHit{{MessageId: "msg-global", ChatId: "chat-1", Snippet: "global hit"}},
 			ProfileIds: []string{"profile-1"},
 			MatchedChats: []*chatv1.ChatRef{{Id: "chat-1"}},
 			SpaceIds: []string{"space-1"},

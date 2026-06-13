@@ -253,6 +253,18 @@ class VoiceChatsClient {
     return _postEmpty('/api/v1/chats/$chatId/leave', authorization);
   }
 
+  Future<ChatsApiResult<void>> transferGroupOwnership({
+    required String authorization,
+    required String chatId,
+    required String newOwnerProfileId,
+  }) {
+    return _postEmpty(
+      '/api/v1/chats/$chatId/transfer-ownership',
+      authorization,
+      jsonBody: {'new_owner_profile_id': newOwnerProfileId},
+    );
+  }
+
   Future<ChatsApiResult<VoiceChat>> updateGroup({
     required String authorization,
     required String chatId,
@@ -277,7 +289,16 @@ class VoiceChatsClient {
     String path,
     String authorization, {
     GeneratedMessage? body,
+    Map<String, dynamic>? jsonBody,
   }) async {
+    if (jsonBody != null) {
+      final result = await _gateway.postEmpty(
+        uri: _gateway.resolve(path),
+        authorization: authorization,
+        jsonBody: jsonBody,
+      );
+      return _mapEmpty(result);
+    }
     final result = body == null
         ? await _gateway.postEmpty(
             uri: _gateway.resolve(path),

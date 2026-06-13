@@ -1,11 +1,11 @@
 # Frontend (Flutter)
 
-Voice client (Flutter Web/Desktop/Mobile). Roadmap: [docs/PLAN.md](../../docs/PLAN.md).
+Voice client (Flutter Web/Desktop/Mobile). Phases 0–10 UI on local `make compose-app-up` — см. [docs/PLAN.md](../../docs/PLAN.md).
 
-## Client (Phase 1 in progress)
+## Client
 
-- Three-column shell ([docs/features/navigation.md](../../docs/features/navigation.md)); narrow width stacks the same regions.
-- Auth (register/login), social (search, friends, start DM), chat list + room, Realtime WS — см. [docs/PLAN.md](../../docs/PLAN.md) § «Фаза 1».
+- Three-column shell ([docs/features/navigation.md](../../docs/features/navigation.md)); mobile strip + responsive layout (Phase 8).
+- Auth, social, DM/groups/spaces, matchmaking, search, voice, push hooks — чеклисты в [docs/PLAN.md](../../docs/PLAN.md).
 - API base URL: `--dart-define=VOICE_API_BASE_URL=https://your-gateway` (empty = offline / tests inject via Riverpod).
 - Riverpod + Gateway/Auth/Users/Social/Chat/Messaging/Realtime clients.
 

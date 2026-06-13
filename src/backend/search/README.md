@@ -1,9 +1,7 @@
-# Search Service
+# Search Service (Go)
 
-Go scaffold for the Voice search service.
+PostgreSQL full-text search (Phase 9): indexes `message.events` / profile / space catalog; gRPC `SearchInChat`, `SearchGlobal`, `SearchUsers`, `SearchPublicSpaces`, `ReindexChat`.
 
-Current public surface:
+HTTP via Gateway: `/api/v1/search/*` — see [transcode_search.go](../gateway/transcode_search.go).
 
-- GET /health returns {"service":"search","status":"ok"}.
-
-Domain behavior, gRPC handlers, database repositories, and migrations are intentionally out of scope for this initialization step.
+Local: part of `docker compose --profile app`; DB `search_db`.

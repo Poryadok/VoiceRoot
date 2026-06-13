@@ -22,11 +22,13 @@ class SearchHit {
     required this.messageId,
     required this.snippet,
     required this.score,
+    this.chatId = '',
   });
 
   final String messageId;
   final String snippet;
   final double score;
+  final String chatId;
 }
 
 class InChatSearchData {
@@ -106,6 +108,8 @@ class VoiceSearchClient {
                 '',
             snippet: item['snippet'] as String? ?? '',
             score: (item['score'] as num?)?.toDouble() ?? 0,
+            chatId:
+                item['chat_id'] as String? ?? item['chatId'] as String? ?? '',
           ),
     ];
   }

@@ -291,3 +291,46 @@ func (s *ChatGRPC) LeaveChat(ctx context.Context, req *chatv1.LeaveChatRequest) 
 	}
 	return &chatv1.LeaveChatResponse{}, nil
 }
+
+func (s *ChatGRPC) TransferGroupOwnership(ctx context.Context, req *chatv1.TransferGroupOwnershipRequest) (*chatv1.TransferGroupOwnershipResponse, error) {
+	if s == nil || s.DM == nil {
+		return nil, status.Error(codes.FailedPrecondition, "chat persistence not configured")
+	}
+	caller, ok := authctx.ProfileID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing profile")
+	}
+	chatID, err := parseUUIDField("chat_id", req.GetChatId())
+	if err != nil {
+		return nil, err
+	}
+	newOwner, err := parseUUIDField("new_owner_profile_id", req.GetNewOwnerProfileId())
+	if err != nil {
+		return nil, err
+	}
+	row, err := s.DM.FindChatByID(ctx, chatID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if row == nil {
+		return nil, status.Error(codes.NotFound, "chat not found")
+	}
+	if row.Type != "group" {
+		return nil, status.Error(codes.InvalidArgument, "transfer only supported for groups")
+	}
+	if err := s.DM.TransferGroupOwnership(ctx, chatID, caller, newOwner); err != nil {
+		if errors.Is(err, store.ErrNotGroupOwner) {
+			return nil, status.Error(codes.PermissionDenied, err.Error())
+		}
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, status.Error(codes.NotFound, "new owner is not a group member")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if s.ChatEvents != nil {
+		if err := s.ChatEvents.PublishChatMemberChanged(ctx, chatID.String(), newOwner.String(), "owner_transferred"); err != nil {
+			log.Printf("chat: publish chat.member_changed: %v", err)
+		}
+	}
+	return &chatv1.TransferGroupOwnershipResponse{}, nil
+}

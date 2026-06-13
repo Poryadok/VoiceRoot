@@ -31,6 +31,7 @@ message SearchHit {
   string message_id = 1;
   string snippet = 2;
   double score = 3;
+  string chat_id = 4;
 }
 
 message SearchGlobalRequest {

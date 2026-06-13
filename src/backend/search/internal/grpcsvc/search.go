@@ -120,6 +120,7 @@ func toProtoHits(hits []MessageHit) []*searchv1.SearchHit {
 	for _, h := range hits {
 		out = append(out, &searchv1.SearchHit{
 			MessageId: h.MessageID.String(),
+			ChatId:    h.ChatID.String(),
 			Snippet:   h.Snippet,
 			Score:     h.Score,
 		})

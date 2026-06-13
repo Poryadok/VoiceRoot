@@ -8,7 +8,11 @@ import '../../state/search_providers.dart';
 import '../../theme/voice_colors.dart';
 
 class InChatSearch extends ConsumerStatefulWidget {
-  const InChatSearch({super.key, required this.chatId});
+  const InChatSearch({
+    super.key,
+    required this.chatId,
+    this.onActiveMessageChanged,
+  });
 
   static const Key panelKey = Key('in_chat_search_panel');
   static const Key searchFieldKey = Key('in_chat_search_field');
@@ -20,6 +24,7 @@ class InChatSearch extends ConsumerStatefulWidget {
       Key('in_chat_search_active_$messageId');
 
   final String chatId;
+  final ValueChanged<String>? onActiveMessageChanged;
 
   @override
   ConsumerState<InChatSearch> createState() => _InChatSearchState();
@@ -60,6 +65,7 @@ class _InChatSearchState extends ConsumerState<InChatSearch> {
         _hits = result.data.hits;
         _activeIndex = 0;
       });
+      _notifyActive();
     } else {
       setState(() {
         _hits = const [];
@@ -74,6 +80,15 @@ class _InChatSearchState extends ConsumerState<InChatSearch> {
       _activeIndex = (_activeIndex + delta) % _hits.length;
       if (_activeIndex < 0) _activeIndex += _hits.length;
     });
+    _notifyActive();
+  }
+
+  void _notifyActive() {
+    if (_hits.isEmpty) return;
+    final id = _hits[_activeIndex].messageId;
+    if (id.isNotEmpty) {
+      widget.onActiveMessageChanged?.call(id);
+    }
   }
 
   @override
@@ -127,6 +142,10 @@ class _InChatSearchState extends ConsumerState<InChatSearch> {
                 key: isActive
                     ? InChatSearch.activeHitKey(hit.messageId)
                     : null,
+                onTap: () {
+                  setState(() => _activeIndex = index);
+                  _notifyActive();
+                },
                 title: _HighlightedSnippet(
                   snippet: hit.snippet,
                   highlightKey:

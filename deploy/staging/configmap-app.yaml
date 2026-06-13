@@ -1,0 +1,41 @@
+# Shared non-secret configuration for Voice staging (phases 0–10).
+# Apply with scripts/staging/render-and-apply.sh after substituting image registry/tag.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: voice-app-config
+  namespace: voice-staging
+data:
+  LOG_LEVEL: "info"
+  POSTGRES_USER: "voice"
+  POSTGRES_HOST: "voice-postgres"
+  POSTGRES_PORT: "5432"
+  REDIS_ADDR: "voice-redis:6379"
+  NATS_URL: "nats://voice-nats:4222"
+  LIVEKIT_URL: "ws://voice-livekit:7880"
+  LIVEKIT_API_KEY: "devkey"
+  LIVEKIT_API_SECRET: "secret"
+  GATEWAY_JWT_ISSUER: "voice-auth"
+  GATEWAY_JWT_AUDIENCE: "voice-client"
+  GATEWAY_JWKS_URL: "http://voice-auth:8080/api/v1/auth/.well-known/jwks.json"
+  GATEWAY_REST_UPSTREAMS_JSON: '{"auth":"http://voice-auth:8080"}'
+  GATEWAY_GRPC_UPSTREAMS_JSON: '{"users":"voice-user:9090","friends":"voice-social:9090","chats":"voice-chat:9090","messages":"voice-messaging:9090","spaces":"voice-space:9090","roles":"voice-role:9090","voice":"voice-voice:9090","files":"voice-file:9090","notifications":"voice-notification:9090","matchmaking":"voice-matchmaking:9090","search":"voice-search:9090"}'
+  GATEWAY_REALTIME_UPSTREAM_URL: "http://voice-realtime:8080"
+  GATEWAY_CORS_ALLOWED_ORIGINS: "*"
+  REALTIME_JWKS_URL: "http://voice-auth:8080/api/v1/auth/.well-known/jwks.json"
+  REALTIME_JWT_ISSUER: "voice-auth"
+  REALTIME_JWT_AUDIENCE: "voice-client"
+  REALTIME_CHAT_GRPC_ADDR: "voice-chat:9090"
+  REALTIME_USER_GRPC_ADDR: "voice-user:9090"
+  SOCIAL_GRPC_ADDR: "voice-social:9090"
+  USER_GRPC_ADDR: "voice-user:9090"
+  CHAT_GRPC_ADDR: "voice-chat:9090"
+  MESSAGING_GRPC_ADDR: "voice-messaging:9090"
+  FILE_GRPC_ADDR: "voice-file:9090"
+  ROLE_GRPC_ADDR: "voice-role:9090"
+  SPACE_GRPC_ADDR: "voice-space:9090"
+  VOICE_GRPC_ADDR: "voice-voice:9090"
+  CLAMAV_ADDR: "voice-clamav:3310"
+  MATCHMAKING_SEARCH_NUDGE_AFTER: "15m"
+  MATCHMAKING_SEARCH_TIMEOUT: "30m"
+  NOTIFICATION_RECORD_PUSHES: "true"

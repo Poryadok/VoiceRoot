@@ -901,6 +901,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get spaceChatOverrideDenyView => 'Запретить просмотр';
 
   @override
+  String get spaceChatOverrideDenySend => 'Запретить отправку';
+
+  @override
   String get spaceVoiceOverrideTitle => 'Оверрайды голосовой комнаты';
 
   @override
@@ -994,7 +997,21 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get chatGroupOwnerLeaveHint =>
-      'Владелец не может выйти, пока не передаст права (скоро).';
+      'Передайте владение другому участнику перед выходом.';
+
+  @override
+  String chatGroupTransferOwnershipTo(String name) =>
+      'Передать владение: $name';
+
+  @override
+  String get chatGroupTransferOwnershipTitle => 'Передать владение группой';
+
+  @override
+  String chatGroupTransferOwnershipMessage(String name) =>
+      'Сделать $name новым владельцем?';
+
+  @override
+  String get chatGroupTransferOwnershipConfirm => 'Передать';
 
   @override
   String get settingsTitle => 'Настройки';

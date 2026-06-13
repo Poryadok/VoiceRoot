@@ -284,6 +284,54 @@ SELECT EXISTS(
 	return exists, err
 }
 
+// ThreadSummaryRow is a thread listing entry for a text channel.
+type ThreadSummaryRow struct {
+	ThreadParentID   uuid.UUID
+	ReplyCount       int32
+	LastReplyAt      time.Time
+	LastReplyPreview string
+}
+
+// ListThreads returns thread roots in a chat ordered by latest reply.
+func (s *MessagesStore) ListThreads(ctx context.Context, chatID uuid.UUID, limit int) ([]ThreadSummaryRow, error) {
+	if s == nil || s.Pool == nil {
+		return nil, errors.New("messages store: pool not configured")
+	}
+	if limit < 1 {
+		limit = 20
+	}
+	rows, err := s.Pool.Query(ctx, `
+SELECT m.thread_parent_id,
+       COUNT(*)::int AS reply_count,
+       MAX(m.created_at) AS last_reply_at,
+       (SELECT LEFT(content, 120) FROM messages lm
+        WHERE lm.chat_id = $1 AND lm.thread_parent_id = m.thread_parent_id AND lm.deleted_at IS NULL
+        ORDER BY lm.created_at DESC LIMIT 1) AS last_preview
+FROM messages m
+WHERE m.chat_id = $1 AND m.thread_parent_id IS NOT NULL AND m.deleted_at IS NULL
+GROUP BY m.thread_parent_id
+ORDER BY last_reply_at DESC
+LIMIT $2
+`, chatID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ThreadSummaryRow
+	for rows.Next() {
+		var row ThreadSummaryRow
+		var preview *string
+		if err := rows.Scan(&row.ThreadParentID, &row.ReplyCount, &row.LastReplyAt, &preview); err != nil {
+			return nil, err
+		}
+		if preview != nil {
+			row.LastReplyPreview = *preview
+		}
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
 func (s *MessagesStore) listMessagesFiltered(ctx context.Context, chatID, viewerProfileID uuid.UUID, mode ListMode, refID *uuid.UUID, limit int, mainFeedOnly bool, threadParentID *uuid.UUID) ([]MessageRow, error) {
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("messages store: pool not configured")

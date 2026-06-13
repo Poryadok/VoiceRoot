@@ -171,6 +171,25 @@ func (t *transcoder) serveChats(w http.ResponseWriter, r *http.Request, rest str
 		w.WriteHeader(http.StatusNoContent)
 		return true
 
+	case r.Method == http.MethodPost && strings.HasSuffix(rest, "/transfer-ownership"):
+		chatID := strings.TrimSuffix(rest, "/transfer-ownership")
+		chatID = strings.Trim(chatID, "/")
+		req := &chatv1.TransferGroupOwnershipRequest{ChatId: chatID}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		if req.ChatId == "" {
+			req.ChatId = chatID
+		}
+		_, err := t.clients.chat.TransferGroupOwnership(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return true
+
 	case r.Method == http.MethodPost && strings.HasSuffix(rest, "/members"):
 		chatID := strings.TrimSuffix(rest, "/members")
 		chatID = strings.Trim(chatID, "/")

@@ -1,0 +1,461 @@
+# Voice application services (phases 0–10). Image placeholders substituted by render-and-apply.sh.
+# Services: auth, social, user, chat, messaging, file, matchmaking, search, notification, realtime, space, role, voice, gateway
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-auth
+  namespace: voice-staging
+  labels: {app: voice-auth}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-auth}
+  template:
+    metadata:
+      labels: {app: voice-auth}
+    spec:
+      containers:
+        - name: auth
+          image: __IMAGE_REGISTRY__/auth:__IMAGE_TAG__
+          ports: [{containerPort: 8080, name: http}, {containerPort: 9090, name: grpc}]
+          env:
+            - {name: SPRING_DATASOURCE_URL, value: "jdbc:postgresql://voice-postgres:5432/auth_db"}
+            - {name: SPRING_DATASOURCE_USERNAME, valueFrom: {configMapKeyRef: {name: voice-app-config, key: POSTGRES_USER}}}
+            - {name: SPRING_DATASOURCE_PASSWORD, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: POSTGRES_PASSWORD}}}
+            - {name: AUTH_USER_DB_JDBC_URL, value: "jdbc:postgresql://voice-postgres:5432/user_db"}
+            - {name: AUTH_USER_DB_USERNAME, valueFrom: {configMapKeyRef: {name: voice-app-config, key: POSTGRES_USER}}}
+            - {name: AUTH_USER_DB_PASSWORD, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: POSTGRES_PASSWORD}}}
+            - {name: SPRING_DATA_REDIS_HOST, value: voice-redis}
+            - {name: SPRING_DATA_REDIS_PORT, value: "6379"}
+            - {name: AUTH_JWT_PRIVATE_KEY_LOCATION, value: "file:/run/jwt.pem"}
+          volumeMounts:
+            - {name: jwt-key, mountPath: /run/jwt.pem, subPath: jwt.pem, readOnly: true}
+          readinessProbe: {httpGet: {path: /health, port: http}, initialDelaySeconds: 30, periodSeconds: 5}
+      volumes:
+        - name: jwt-key
+          secret: {secretName: voice-app-secrets, items: [{key: AUTH_JWT_PRIVATE_KEY, path: jwt.pem}]}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-auth
+  namespace: voice-staging
+spec:
+  selector: {app: voice-auth}
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-social
+  namespace: voice-staging
+  labels: {app: voice-social}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-social}
+  template:
+    metadata:
+      labels: {app: voice-social}
+    spec:
+      containers:
+        - name: social
+          image: __IMAGE_REGISTRY__/social:__IMAGE_TAG__
+          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          env:
+            - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: SOCIAL_DATABASE_URL}}}
+            - {name: SOCIAL_GRPC_LISTEN, value: ":9090"}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-social
+  namespace: voice-staging
+spec:
+  selector: {app: voice-social}
+  ports: [{port: 8080}, {port: 9090}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-user
+  namespace: voice-staging
+  labels: {app: voice-user}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-user}
+  template:
+    metadata:
+      labels: {app: voice-user}
+    spec:
+      containers:
+        - name: user
+          image: __IMAGE_REGISTRY__/user:__IMAGE_TAG__
+          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          env:
+            - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: USER_DATABASE_URL}}}
+            - {name: USER_GRPC_ADDR, value: ":9090"}
+            - {name: USER_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
+            - {name: USER_R2_ENDPOINT, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: USER_R2_ENDPOINT}}}
+            - {name: USER_R2_ACCESS_KEY_ID, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: USER_R2_ACCESS_KEY_ID}}}
+            - {name: USER_R2_SECRET_ACCESS_KEY, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: USER_R2_SECRET_ACCESS_KEY}}}
+            - {name: USER_R2_BUCKET, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: USER_R2_BUCKET}}}
+            - {name: USER_R2_PUBLIC_BASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: USER_R2_PUBLIC_BASE_URL}}}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-user
+  namespace: voice-staging
+spec:
+  selector: {app: voice-user}
+  ports: [{port: 8080}, {port: 9090}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-role
+  namespace: voice-staging
+  labels: {app: voice-role}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-role}
+  template:
+    metadata:
+      labels: {app: voice-role}
+    spec:
+      containers:
+        - name: role
+          image: __IMAGE_REGISTRY__/role:__IMAGE_TAG__
+          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          env:
+            - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: ROLE_DATABASE_URL}}}
+            - {name: ROLE_GRPC_LISTEN, value: ":9090"}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-role
+  namespace: voice-staging
+spec:
+  selector: {app: voice-role}
+  ports: [{port: 8080}, {port: 9090}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-space
+  namespace: voice-staging
+  labels: {app: voice-space}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-space}
+  template:
+    metadata:
+      labels: {app: voice-space}
+    spec:
+      containers:
+        - name: space
+          image: __IMAGE_REGISTRY__/space:__IMAGE_TAG__
+          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          env:
+            - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: SPACE_DATABASE_URL}}}
+            - {name: SPACE_GRPC_LISTEN, value: ":9090"}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-space
+  namespace: voice-staging
+spec:
+  selector: {app: voice-space}
+  ports: [{port: 8080}, {port: 9090}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-chat
+  namespace: voice-staging
+  labels: {app: voice-chat}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-chat}
+  template:
+    metadata:
+      labels: {app: voice-chat}
+    spec:
+      containers:
+        - name: chat
+          image: __IMAGE_REGISTRY__/chat:__IMAGE_TAG__
+          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          env:
+            - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: CHAT_DATABASE_URL}}}
+            - {name: SPACE_DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: SPACE_DATABASE_URL}}}
+            - {name: CHAT_GRPC_LISTEN, value: ":9090"}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-chat
+  namespace: voice-staging
+spec:
+  selector: {app: voice-chat}
+  ports: [{port: 8080}, {port: 9090}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-file
+  namespace: voice-staging
+  labels: {app: voice-file}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-file}
+  template:
+    metadata:
+      labels: {app: voice-file}
+    spec:
+      containers:
+        - name: file
+          image: __IMAGE_REGISTRY__/file:__IMAGE_TAG__
+          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          env:
+            - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: FILE_DATABASE_URL}}}
+            - {name: FILE_GRPC_LISTEN, value: ":9090"}
+            - {name: FILE_R2_ENDPOINT, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: FILE_R2_ENDPOINT}}}
+            - {name: FILE_R2_ACCESS_KEY_ID, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: FILE_R2_ACCESS_KEY_ID}}}
+            - {name: FILE_R2_SECRET_ACCESS_KEY, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: FILE_R2_SECRET_ACCESS_KEY}}}
+            - {name: FILE_R2_BUCKET, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: FILE_R2_BUCKET}}}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-file
+  namespace: voice-staging
+spec:
+  selector: {app: voice-file}
+  ports: [{port: 8080}, {port: 9090}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-messaging
+  namespace: voice-staging
+  labels: {app: voice-messaging}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-messaging}
+  template:
+    metadata:
+      labels: {app: voice-messaging}
+    spec:
+      containers:
+        - name: messaging
+          image: __IMAGE_REGISTRY__/messaging:__IMAGE_TAG__
+          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          env:
+            - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: MESSAGING_DATABASE_URL}}}
+            - {name: CHAT_DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: CHAT_DATABASE_URL}}}
+            - {name: SPACE_DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: SPACE_DATABASE_URL}}}
+            - {name: MESSAGING_GRPC_LISTEN, value: ":9090"}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-messaging
+  namespace: voice-staging
+spec:
+  selector: {app: voice-messaging}
+  ports: [{port: 8080}, {port: 9090}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-voice
+  namespace: voice-staging
+  labels: {app: voice-voice}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-voice}
+  template:
+    metadata:
+      labels: {app: voice-voice}
+    spec:
+      containers:
+        - name: voice
+          image: __IMAGE_REGISTRY__/voice:__IMAGE_TAG__
+          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          env:
+            - {name: VOICE_GRPC_LISTEN, value: ":9090"}
+            - {name: VOICE_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
+            - {name: LIVEKIT_URL, valueFrom: {configMapKeyRef: {name: voice-app-config, key: LIVEKIT_URL}}}
+            - {name: LIVEKIT_API_KEY, valueFrom: {configMapKeyRef: {name: voice-app-config, key: LIVEKIT_API_KEY}}}
+            - {name: LIVEKIT_API_SECRET, valueFrom: {configMapKeyRef: {name: voice-app-config, key: LIVEKIT_API_SECRET}}}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-voice
+  namespace: voice-staging
+spec:
+  selector: {app: voice-voice}
+  ports: [{port: 8080}, {port: 9090}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-matchmaking
+  namespace: voice-staging
+  labels: {app: voice-matchmaking}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-matchmaking}
+  template:
+    metadata:
+      labels: {app: voice-matchmaking}
+    spec:
+      containers:
+        - name: matchmaking
+          image: __IMAGE_REGISTRY__/matchmaking:__IMAGE_TAG__
+          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          env:
+            - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: MATCHMAKING_DATABASE_URL}}}
+            - {name: MATCHMAKING_GRPC_LISTEN, value: ":9090"}
+            - {name: MATCHMAKING_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-matchmaking
+  namespace: voice-staging
+spec:
+  selector: {app: voice-matchmaking}
+  ports: [{port: 8080}, {port: 9090}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-search
+  namespace: voice-staging
+  labels: {app: voice-search}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-search}
+  template:
+    metadata:
+      labels: {app: voice-search}
+    spec:
+      containers:
+        - name: search
+          image: __IMAGE_REGISTRY__/search:__IMAGE_TAG__
+          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          env:
+            - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: SEARCH_DATABASE_URL}}}
+            - {name: SEARCH_GRPC_LISTEN, value: ":9090"}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-search
+  namespace: voice-staging
+spec:
+  selector: {app: voice-search}
+  ports: [{port: 8080}, {port: 9090}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-notification
+  namespace: voice-staging
+  labels: {app: voice-notification}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-notification}
+  template:
+    metadata:
+      labels: {app: voice-notification}
+    spec:
+      containers:
+        - name: notification
+          image: __IMAGE_REGISTRY__/notification:__IMAGE_TAG__
+          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          env:
+            - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: NOTIFICATION_DATABASE_URL}}}
+            - {name: NOTIFICATION_GRPC_LISTEN, value: ":9090"}
+            - {name: NOTIFICATION_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
+            - {name: FCM_PROJECT_ID, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: FCM_PROJECT_ID, optional: true}}}
+            - {name: FCM_SERVICE_ACCOUNT_JSON, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: FCM_SERVICE_ACCOUNT_JSON, optional: true}}}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-notification
+  namespace: voice-staging
+spec:
+  selector: {app: voice-notification}
+  ports: [{port: 8080}, {port: 9090}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-realtime
+  namespace: voice-staging
+  labels: {app: voice-realtime}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-realtime}
+  template:
+    metadata:
+      labels: {app: voice-realtime}
+    spec:
+      containers:
+        - name: realtime
+          image: __IMAGE_REGISTRY__/realtime:__IMAGE_TAG__
+          ports: [{containerPort: 8080}]
+          env:
+            - {name: REALTIME_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-realtime
+  namespace: voice-staging
+spec:
+  selector: {app: voice-realtime}
+  ports: [{port: 8080}]

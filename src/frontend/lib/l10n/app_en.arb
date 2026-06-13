@@ -493,8 +493,9 @@
   "spaceRoleManaged": "System role",
   "spaceRoleCustom": "Custom role",
   "spaceChatOverrideTitle": "Chat access overrides",
-  "spaceChatOverrideHint": "Deny view for a role in this chat only.",
+  "spaceChatOverrideHint": "Deny view or send for a role in this chat only.",
   "spaceChatOverrideDenyView": "Deny view chat",
+  "spaceChatOverrideDenySend": "Deny send messages",
   "spaceVoiceOverrideTitle": "Voice room access overrides",
   "spaceVoiceOverrideHint": "Deny join for a role in this voice room only.",
   "spaceVoiceOverrideDenyJoin": "Deny join voice",
@@ -546,7 +547,21 @@
   "chatGroupLeave": "Leave group",
   "chatGroupLeaveConfirmTitle": "Leave group?",
   "chatGroupLeaveConfirmMessage": "You will no longer receive messages from this group.",
-  "chatGroupOwnerLeaveHint": "As the owner, transfer ownership before leaving (coming soon).",
+  "chatGroupOwnerLeaveHint": "Transfer ownership to another member before leaving.",
+  "chatGroupTransferOwnershipTo": "Transfer ownership to {name}",
+  "@chatGroupTransferOwnershipTo": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "chatGroupTransferOwnershipTitle": "Transfer group ownership",
+  "chatGroupTransferOwnershipMessage": "Make {name} the new group owner?",
+  "@chatGroupTransferOwnershipMessage": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "chatGroupTransferOwnershipConfirm": "Transfer",
   "settingsTitle": "Settings",
   "settingsTooltip": "Settings",
   "settingsTheme": "Theme",

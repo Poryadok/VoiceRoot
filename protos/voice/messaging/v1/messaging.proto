@@ -35,6 +35,7 @@ service MessagingService {
   rpc GetMessage(GetMessageRequest) returns (GetMessageResponse);
 
   rpc GetThreadMessages(GetThreadMessagesRequest) returns (GetThreadMessagesResponse);
+  rpc ListThreads(ListThreadsRequest) returns (ListThreadsResponse);
 
   rpc AddReaction(AddReactionRequest) returns (AddReactionResponse);
   rpc RemoveReaction(RemoveReactionRequest) returns (RemoveReactionResponse);
@@ -132,6 +133,23 @@ message GetThreadMessagesRequest {
   voice.common.v1.CursorPageRequest page = 3;
 }
 
+message ThreadSummary {
+  string thread_parent_id = 1;
+  int32 reply_count = 2;
+  optional google.protobuf.Timestamp last_reply_at = 3;
+  optional string last_reply_preview = 4;
+}
+
+message ListThreadsRequest {
+  voice.chat.v1.ChatRef chat = 1;
+  voice.common.v1.CursorPageRequest page = 2;
+}
+
+message ThreadList {
+  repeated ThreadSummary threads = 1;
+  string next_cursor = 2;
+}
+
 message AddReactionRequest {
   string message_id = 1;
   string emoji = 2;
@@ -208,6 +226,9 @@ message GetMessageResponse {
 }
 message GetThreadMessagesResponse {
   MessageList message_list = 1;
+}
+message ListThreadsResponse {
+  ThreadList thread_list = 1;
 }
 message AddReactionResponse {}
 message RemoveReactionResponse {}

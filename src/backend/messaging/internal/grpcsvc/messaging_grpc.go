@@ -746,6 +746,55 @@ func (s *MessagingGRPC) GetThreadMessages(ctx context.Context, req *messagingv1.
 	return &messagingv1.GetThreadMessagesResponse{MessageList: ml}, nil
 }
 
+func (s *MessagingGRPC) ListThreads(ctx context.Context, req *messagingv1.ListThreadsRequest) (*messagingv1.ListThreadsResponse, error) {
+	if s == nil || s.Messages == nil {
+		return nil, status.Error(codes.FailedPrecondition, "messaging persistence not configured")
+	}
+	profileID, ok := authctx.ProfileID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing profile")
+	}
+	chatID, err := parseUUIDField("chat.id", req.GetChat().GetId())
+	if err != nil {
+		return nil, err
+	}
+	if err := validateChatRefMessaging(req.GetChat()); err != nil {
+		return nil, err
+	}
+	if s.ChatGuard != nil {
+		if err := s.ChatGuard.EnsureMember(ctx, chatID, profileID); err != nil {
+			if errors.Is(err, store.ErrNotChatMember) {
+				return nil, status.Error(codes.PermissionDenied, "not a chat member")
+			}
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+	}
+	limit := int(req.GetPage().GetPageSize())
+	if limit <= 0 {
+		limit = defaultPageSize
+	}
+	if limit > maxPageSize {
+		limit = maxPageSize
+	}
+	rows, err := s.Messages.ListThreads(ctx, chatID, limit)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	threads := make([]*messagingv1.ThreadSummary, 0, len(rows))
+	for _, row := range rows {
+		ts := timestamppb.New(row.LastReplyAt)
+		threads = append(threads, &messagingv1.ThreadSummary{
+			ThreadParentId:   row.ThreadParentID.String(),
+			ReplyCount:       row.ReplyCount,
+			LastReplyAt:      ts,
+			LastReplyPreview: row.LastReplyPreview,
+		})
+	}
+	return &messagingv1.ListThreadsResponse{
+		ThreadList: &messagingv1.ThreadList{Threads: threads},
+	}, nil
+}
+
 func nextCursorForPage(mode store.ListMode, rows []store.MessageRow) string {
 	if len(rows) == 0 {
 		return ""
