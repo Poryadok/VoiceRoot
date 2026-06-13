@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../backend/message_cache/drift_message_cache_store.dart';
@@ -22,6 +23,11 @@ final messageCacheLifecycleProvider = Provider<void>((ref) {
 });
 
 Future<MessageCacheStore> openDefaultMessageCacheStore() async {
+  // Drift on web needs sqlite3.wasm + drift_worker.js; persistent offline
+  // cache is a mobile/desktop Phase 8 feature (docs/PLAN.md).
+  if (kIsWeb) {
+    return InMemoryMessageCacheStore();
+  }
   final db = MessageCacheDatabase.defaults();
   return DriftMessageCacheStore(db);
 }
