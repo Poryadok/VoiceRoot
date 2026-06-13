@@ -262,6 +262,7 @@ message VoiceStreamEvent {
     CallDeclined call_declined = 15;
     CallMissed call_missed = 16;
     VoiceStateChanged voice_state_changed = 17;
+    ScreenShareStopped screen_share_stopped = 18;
   }
 }
 
@@ -286,6 +287,15 @@ message CallEnded {
 message ScreenShareStarted {
   string room_id = 1;
   string profile_id = 2;
+  string stream_id = 3;
+  repeated string profile_ids = 4;
+}
+
+message ScreenShareStopped {
+  string room_id = 1;
+  string profile_id = 2;
+  string stream_id = 3;
+  repeated string profile_ids = 4;
 }
 
 message CallIncoming {

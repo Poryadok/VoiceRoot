@@ -302,6 +302,40 @@ class VoiceCallsClient {
     return _mapEmpty(result);
   }
 
+  Future<VoiceApiResult<String>> startScreenShare({
+    required String authorization,
+    required String roomId,
+  }) async {
+    final result = await _gateway.postProto(
+      uri: _gateway.resolve('/api/v1/voice/calls/$roomId/screen-share/start'),
+      authorization: authorization,
+      body: calls_pb.StartScreenShareRequest(roomId: roomId),
+      createEmpty: calls_pb.StartScreenShareResponse.create,
+    );
+    return _map(result, (data) {
+      final resp = data as calls_pb.StartScreenShareResponse;
+      return resp.screenShareSession.streamId;
+    });
+  }
+
+  Future<VoiceApiResult<void>> stopScreenShare({
+    required String authorization,
+    required String roomId,
+    String? streamId,
+  }) async {
+    final body = <String, dynamic>{};
+    if (streamId != null && streamId.isNotEmpty) {
+      body['stream_id'] = streamId;
+    }
+    final result = await _gateway.postJson(
+      uri: _gateway.resolve('/api/v1/voice/calls/$roomId/screen-share/stop'),
+      authorization: authorization,
+      body: body,
+      allowNoContent: true,
+    );
+    return _mapEmpty(result);
+  }
+
   Future<VoiceApiResult<VoiceCallSession>> _postSession<T extends GeneratedMessage>(
     String path,
     String authorization,

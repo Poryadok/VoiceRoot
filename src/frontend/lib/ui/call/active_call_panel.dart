@@ -5,6 +5,7 @@ import '../../l10n/app_localizations.dart';
 import '../../state/call_providers.dart';
 import '../../state/gateway_providers.dart';
 import '../../theme/voice_colors.dart';
+import 'screen_share_panel.dart';
 
 class ActiveCallPanel extends ConsumerWidget {
   const ActiveCallPanel({super.key});
@@ -42,6 +43,7 @@ class ActiveCallPanel extends ConsumerWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            const ScreenSharePanel(),
             if (showVideo)
               Container(
                 key: videoPlaceholderKey,
@@ -140,6 +142,8 @@ class ActiveCallPanel extends ConsumerWidget {
                       call.isVideoEnabled ? Icons.videocam : Icons.videocam_off,
                     ),
                   ),
+                  const ScreenShareCallButton(),
+                  const ScreenSharePauseButton(),
                   const SizedBox(width: 8),
                   IconButton.filled(
                     key: hangupKey,

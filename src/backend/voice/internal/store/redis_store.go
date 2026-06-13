@@ -133,6 +133,7 @@ func (s *RedisCallStore) RemoveParticipant(ctx context.Context, roomID, profileI
 		return Call{}, ErrNotParticipant
 	}
 	delete(call.States, profileID)
+	call = removeScreenSharesForProfile(call, profileID)
 	if err := s.save(ctx, call); err != nil {
 		return Call{}, err
 	}
@@ -235,6 +236,57 @@ func (s *RedisCallStore) ListExpiredRinging(ctx context.Context, now time.Time) 
 		}
 	}
 	return out, nil
+}
+
+func (s *RedisCallStore) StartScreenShare(ctx context.Context, roomID, profileID, streamID string) (Call, ScreenShareEntry, error) {
+	call, err := s.GetCall(ctx, roomID)
+	if err != nil {
+		return Call{}, ScreenShareEntry{}, err
+	}
+	if !call.IsParticipant(profileID) {
+		return Call{}, ScreenShareEntry{}, ErrNotParticipant
+	}
+	if call.Status != callsv1.CallStatus_CALL_STATUS_ACTIVE {
+		return Call{}, ScreenShareEntry{}, ErrInvalidState
+	}
+	call, entry, err := startScreenShareLocked(call, profileID, streamID)
+	if err != nil {
+		return Call{}, ScreenShareEntry{}, err
+	}
+	if err := s.save(ctx, call); err != nil {
+		return Call{}, ScreenShareEntry{}, err
+	}
+	return call, entry, nil
+}
+
+func (s *RedisCallStore) StopScreenShare(ctx context.Context, roomID, profileID, streamID string) (Call, error) {
+	call, err := s.GetCall(ctx, roomID)
+	if err != nil {
+		return Call{}, err
+	}
+	if !call.IsParticipant(profileID) {
+		return Call{}, ErrNotParticipant
+	}
+	call, err = stopScreenShareLocked(call, profileID, streamID)
+	if err != nil {
+		return Call{}, err
+	}
+	if err := s.save(ctx, call); err != nil {
+		return Call{}, err
+	}
+	return call, nil
+}
+
+func (s *RedisCallStore) StopScreenSharesForProfile(ctx context.Context, roomID, profileID string) (Call, error) {
+	call, err := s.GetCall(ctx, roomID)
+	if err != nil {
+		return Call{}, err
+	}
+	call = removeScreenSharesForProfile(call, profileID)
+	if err := s.save(ctx, call); err != nil {
+		return Call{}, err
+	}
+	return call, nil
 }
 
 func (s *RedisCallStore) save(ctx context.Context, call Call) error {

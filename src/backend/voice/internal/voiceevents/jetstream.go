@@ -99,6 +99,22 @@ func (p *JetStreamPublisher) PublishVoiceStateChanged(ctx context.Context, ev *e
 	})
 }
 
+func (p *JetStreamPublisher) PublishScreenShareStarted(ctx context.Context, ev *eventsv1.ScreenShareStarted) error {
+	return p.publish(ctx, "voice.screen_share_started", &eventsv1.VoiceStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.Now(),
+		Payload:    &eventsv1.VoiceStreamEvent_ScreenShareStarted{ScreenShareStarted: ev},
+	})
+}
+
+func (p *JetStreamPublisher) PublishScreenShareStopped(ctx context.Context, ev *eventsv1.ScreenShareStopped) error {
+	return p.publish(ctx, "voice.screen_share_stopped", &eventsv1.VoiceStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.Now(),
+		Payload:    &eventsv1.VoiceStreamEvent_ScreenShareStopped{ScreenShareStopped: ev},
+	})
+}
+
 func (p *JetStreamPublisher) publish(ctx context.Context, subject string, env *eventsv1.VoiceStreamEvent) error {
 	if err := p.ensureStream(); err != nil {
 		return err

@@ -1892,6 +1892,60 @@ abstract class AppLocalizations {
   /// **'Video preview'**
   String get callVideoPlaceholder;
 
+  /// No description provided for @screenShareStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Share screen'**
+  String get screenShareStart;
+
+  /// No description provided for @screenShareStop.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop sharing'**
+  String get screenShareStop;
+
+  /// No description provided for @screenSharePause.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause share'**
+  String get screenSharePause;
+
+  /// No description provided for @screenShareResume.
+  ///
+  /// In en, this message translates to:
+  /// **'Resume share'**
+  String get screenShareResume;
+
+  /// No description provided for @screenShareQualityTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Share quality'**
+  String get screenShareQualityTitle;
+
+  /// No description provided for @screenShareQuality720p15.
+  ///
+  /// In en, this message translates to:
+  /// **'720p · 15 FPS'**
+  String get screenShareQuality720p15;
+
+  /// No description provided for @screenShareQuality720p30.
+  ///
+  /// In en, this message translates to:
+  /// **'720p · 30 FPS'**
+  String get screenShareQuality720p30;
+
+  /// No description provided for @screenShareLimitReached.
+  ///
+  /// In en, this message translates to:
+  /// **'This voice chat already has 3 screen shares'**
+  String get screenShareLimitReached;
+
+  /// No description provided for @screenShareWaitingForVideo.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for screen video…'**
+  String get screenShareWaitingForVideo;
+
   /// No description provided for @themeLoadError.
   ///
   /// In en, this message translates to:

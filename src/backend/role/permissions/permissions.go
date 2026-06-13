@@ -176,7 +176,7 @@ func memberDefaultMask() (uint64, error) {
 		SpaceView, SpaceViewMemberList, TextChatView, TextChatSendMessages,
 		TextChatSendMedia, TextChatEmbedLinks, TextChatAttachFiles, TextChatAddReactions,
 		TextChatUseExternalEmojis, TextChatReadHistory,
-		TextChatCreateInSpace, VoiceJoin, VoiceSpeak, VoiceVideo, VoiceUsePTT,
+		TextChatCreateInSpace, VoiceJoin, VoiceSpeak, VoiceVideo, VoiceScreenShare, VoiceUsePTT,
 		TextChatCreateThreads, TextChatSendInThreads,
 	}
 	var mask uint64

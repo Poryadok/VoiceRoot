@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
+import 'package:livekit_client/livekit_client.dart' as livekit;
 import 'package:voice_frontend/backend/livekit_room.dart';
 import 'package:voice_frontend/backend/livekit_url.dart';
 import 'package:voice_frontend/backend/realtime_client.dart';
@@ -57,6 +58,29 @@ class _FakeLiveKitRoom implements VoiceLiveKitRoom {
 
   @override
   Future<void> setVideoEnabled(bool enabled) async {}
+
+  @override
+  bool get isScreenSharing => false;
+
+  @override
+  bool get isScreenSharePaused => false;
+
+  @override
+  Future<void> pauseScreenShare(bool paused) async {}
+
+  @override
+  List<livekit.RemoteVideoTrack> remoteScreenShareTracks({
+    String? participantIdentity,
+  }) => [];
+
+  @override
+  Future<void> startScreenShare({
+    double maxFrameRate = 15,
+    bool captureSystemAudio = false,
+  }) async {}
+
+  @override
+  Future<void> stopScreenShare() async {}
 }
 
 VoiceCallSession _ringingSession({

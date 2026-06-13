@@ -100,6 +100,7 @@ func (s *VoiceGRPC) LeaveVoiceRoom(ctx context.Context, req *callsv1.LeaveVoiceR
 	if !call.IsParticipant(profileID) {
 		return &callsv1.LeaveVoiceRoomResponse{}, nil
 	}
+	s.clearScreenShareForProfile(ctx, call, profileID)
 	if _, err := s.Calls.RemoveParticipant(ctx, call.RoomID, profileID); err != nil {
 		return nil, storeErr(err)
 	}

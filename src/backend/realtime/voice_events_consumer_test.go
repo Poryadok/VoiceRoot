@@ -94,6 +94,59 @@ func TestVoiceEventBytesToFanout_IncomingAcceptedEnded(t *testing.T) {
 	}
 }
 
+func TestVoiceEventBytesToFanout_ScreenShare(t *testing.T) {
+	roomID := uuid.NewString()
+	sharer := uuid.NewString()
+	viewer := uuid.NewString()
+	streamID := uuid.NewString()
+
+	started := &eventsv1.VoiceStreamEvent{
+		EventId:    "voice-ss-1",
+		OccurredAt: timestamppb.Now(),
+		Payload: &eventsv1.VoiceStreamEvent_ScreenShareStarted{
+			ScreenShareStarted: &eventsv1.ScreenShareStarted{
+				RoomId:     roomID,
+				ProfileId:  sharer,
+				StreamId:   streamID,
+				ProfileIds: []string{sharer, viewer},
+			},
+		},
+	}
+	b, err := proto.Marshal(started)
+	if err != nil {
+		t.Fatal(err)
+	}
+	profiles, fe, ok := voiceEventBytesToFanout(b)
+	if !ok || fe.Op != "screen_share_started" || len(profiles) != 2 {
+		t.Fatalf("started ok=%v op=%q profiles=%v", ok, fe.Op, profiles)
+	}
+	var d map[string]any
+	if err := json.Unmarshal(fe.D, &d); err != nil {
+		t.Fatal(err)
+	}
+	if d["stream_id"] != streamID {
+		t.Fatalf("stream_id=%v", d["stream_id"])
+	}
+
+	stopped := &eventsv1.VoiceStreamEvent{
+		EventId:    "voice-ss-2",
+		OccurredAt: timestamppb.Now(),
+		Payload: &eventsv1.VoiceStreamEvent_ScreenShareStopped{
+			ScreenShareStopped: &eventsv1.ScreenShareStopped{
+				RoomId:     roomID,
+				ProfileId:  sharer,
+				StreamId:   streamID,
+				ProfileIds: []string{sharer, viewer},
+			},
+		},
+	}
+	b, _ = proto.Marshal(stopped)
+	profiles, fe, ok = voiceEventBytesToFanout(b)
+	if !ok || fe.Op != "screen_share_stopped" || len(profiles) != 2 {
+		t.Fatalf("stopped ok=%v op=%q profiles=%v", ok, fe.Op, profiles)
+	}
+}
+
 func TestRunVoiceEventsConsumer_JetStreamToProfileHub(t *testing.T) {
 	s := startRealtimeJSTestServer(t)
 	natsURL := s.ClientURL()

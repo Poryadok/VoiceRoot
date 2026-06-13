@@ -29,6 +29,7 @@ type VoiceGRPC struct {
 	Calls        voicestore.CallStore
 	ChatMembers  ChatMembership
 	SpaceMembers SpaceMembership
+	Roles        RolePermissionChecker
 	Tokens       livekit.TokenIssuer
 	Events       voiceevents.Publisher
 	Now          func() time.Time
@@ -366,6 +367,10 @@ func storeErr(err error) error {
 		return status.Error(codes.FailedPrecondition, "invalid call state")
 	case errors.Is(err, voicestore.ErrRoomFull):
 		return status.Error(codes.ResourceExhausted, "voice room is full")
+	case errors.Is(err, voicestore.ErrScreenShareLimit):
+		return status.Error(codes.ResourceExhausted, "screen share limit reached")
+	case errors.Is(err, voicestore.ErrNotScreenSharing):
+		return status.Error(codes.FailedPrecondition, "not screen sharing")
 	default:
 		return status.Error(codes.Internal, err.Error())
 	}

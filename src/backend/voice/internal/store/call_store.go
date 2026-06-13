@@ -12,15 +12,24 @@ import (
 const (
 	MaxGroupVoiceParticipants = 32
 	MaxVoiceRoomParticipants  = 32
+	MaxScreenSharesPerRoom    = 3
 )
 
 var (
-	ErrNotFound       = errors.New("call not found")
-	ErrActiveCall     = errors.New("profile already has active call")
-	ErrInvalidState   = errors.New("invalid call state")
-	ErrNotParticipant = errors.New("profile is not a call participant")
-	ErrRoomFull       = errors.New("voice room is full")
+	ErrNotFound          = errors.New("call not found")
+	ErrActiveCall        = errors.New("profile already has active call")
+	ErrInvalidState      = errors.New("invalid call state")
+	ErrNotParticipant    = errors.New("profile is not a call participant")
+	ErrRoomFull          = errors.New("voice room is full")
+	ErrScreenShareLimit  = errors.New("screen share limit reached")
+	ErrNotScreenSharing  = errors.New("profile is not screen sharing")
+	ErrScreenShareDenied = errors.New("screen share not permitted")
 )
+
+type ScreenShareEntry struct {
+	ProfileID string `json:"profile_id"`
+	StreamID  string `json:"stream_id"`
+}
 
 type ParticipantState struct {
 	ProfileID       string `json:"profile_id"`
@@ -45,6 +54,7 @@ type Call struct {
 	ExpiresAt          time.Time                   `json:"expires_at"`
 	EndedAt            time.Time                   `json:"ended_at,omitempty"`
 	States             map[string]ParticipantState `json:"states"`
+	ScreenShares       []ScreenShareEntry          `json:"screen_shares,omitempty"`
 }
 
 func (c Call) IsGroupVoice() bool {
@@ -107,6 +117,9 @@ type CallStore interface {
 	RemoveParticipant(ctx context.Context, roomID, profileID string) (Call, error)
 	GetCallByVoiceRoomID(ctx context.Context, voiceRoomID string) (Call, error)
 	UpdateVoiceState(ctx context.Context, roomID, profileID string, patch VoiceStatePatch) (Call, ParticipantState, error)
+	StartScreenShare(ctx context.Context, roomID, profileID, streamID string) (Call, ScreenShareEntry, error)
+	StopScreenShare(ctx context.Context, roomID, profileID, streamID string) (Call, error)
+	StopScreenSharesForProfile(ctx context.Context, roomID, profileID string) (Call, error)
 	ListExpiredRinging(ctx context.Context, now time.Time) ([]Call, error)
 }
 
@@ -224,6 +237,7 @@ func (s *MemoryCallStore) RemoveParticipant(_ context.Context, roomID, profileID
 		return Call{}, ErrNotParticipant
 	}
 	delete(call.States, profileID)
+	call = removeScreenSharesForProfile(call, profileID)
 	s.calls[roomID] = call
 	return call, nil
 }
@@ -292,6 +306,144 @@ func (s *MemoryCallStore) ListExpiredRinging(_ context.Context, now time.Time) (
 		}
 	}
 	return out, nil
+}
+
+func (s *MemoryCallStore) StartScreenShare(_ context.Context, roomID, profileID, streamID string) (Call, ScreenShareEntry, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	call, ok := s.calls[roomID]
+	if !ok {
+		return Call{}, ScreenShareEntry{}, ErrNotFound
+	}
+	if !call.IsParticipant(profileID) {
+		return Call{}, ScreenShareEntry{}, ErrNotParticipant
+	}
+	if call.Status != callsv1.CallStatus_CALL_STATUS_ACTIVE {
+		return Call{}, ScreenShareEntry{}, ErrInvalidState
+	}
+	call, entry, err := startScreenShareLocked(call, profileID, streamID)
+	if err != nil {
+		return Call{}, ScreenShareEntry{}, err
+	}
+	s.calls[roomID] = call
+	return call, entry, nil
+}
+
+func (s *MemoryCallStore) StopScreenShare(_ context.Context, roomID, profileID, streamID string) (Call, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	call, ok := s.calls[roomID]
+	if !ok {
+		return Call{}, ErrNotFound
+	}
+	if !call.IsParticipant(profileID) {
+		return Call{}, ErrNotParticipant
+	}
+	call, err := stopScreenShareLocked(call, profileID, streamID)
+	if err != nil {
+		return Call{}, err
+	}
+	s.calls[roomID] = call
+	return call, nil
+}
+
+func (s *MemoryCallStore) StopScreenSharesForProfile(_ context.Context, roomID, profileID string) (Call, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	call, ok := s.calls[roomID]
+	if !ok {
+		return Call{}, ErrNotFound
+	}
+	call = removeScreenSharesForProfile(call, profileID)
+	s.calls[roomID] = call
+	return call, nil
+}
+
+func startScreenShareLocked(call Call, profileID, streamID string) (Call, ScreenShareEntry, error) {
+	call.ScreenShares = removeProfileScreenShares(call.ScreenShares, profileID)
+	if len(call.ScreenShares) >= MaxScreenSharesPerRoom {
+		return Call{}, ScreenShareEntry{}, ErrScreenShareLimit
+	}
+	entry := ScreenShareEntry{ProfileID: profileID, StreamID: streamID}
+	call.ScreenShares = append(call.ScreenShares, entry)
+	if call.States == nil {
+		call.States = defaultStates(call)
+	}
+	state := call.States[profileID]
+	state.IsScreenSharing = true
+	call.States[profileID] = state
+	return call, entry, nil
+}
+
+func stopScreenShareLocked(call Call, profileID, streamID string) (Call, error) {
+	if !hasScreenShare(call, profileID, streamID) {
+		return Call{}, ErrNotScreenSharing
+	}
+	call.ScreenShares = removeProfileScreenShare(call.ScreenShares, profileID, streamID)
+	if call.States == nil {
+		call.States = defaultStates(call)
+	}
+	state := call.States[profileID]
+	state.IsScreenSharing = hasProfileScreenShare(call, profileID)
+	call.States[profileID] = state
+	return call, nil
+}
+
+func removeScreenSharesForProfile(call Call, profileID string) Call {
+	call.ScreenShares = removeProfileScreenShares(call.ScreenShares, profileID)
+	if call.States == nil {
+		return call
+	}
+	if state, ok := call.States[profileID]; ok {
+		state.IsScreenSharing = false
+		call.States[profileID] = state
+	}
+	return call
+}
+
+func removeProfileScreenShares(shares []ScreenShareEntry, profileID string) []ScreenShareEntry {
+	if len(shares) == 0 {
+		return shares
+	}
+	out := shares[:0]
+	for _, share := range shares {
+		if share.ProfileID != profileID {
+			out = append(out, share)
+		}
+	}
+	return out
+}
+
+func removeProfileScreenShare(shares []ScreenShareEntry, profileID, streamID string) []ScreenShareEntry {
+	if len(shares) == 0 {
+		return shares
+	}
+	out := shares[:0]
+	for _, share := range shares {
+		if share.ProfileID == profileID && (streamID == "" || share.StreamID == streamID) {
+			continue
+		}
+		out = append(out, share)
+	}
+	return out
+}
+
+func hasScreenShare(call Call, profileID, streamID string) bool {
+	for _, share := range call.ScreenShares {
+		if share.ProfileID == profileID && (streamID == "" || share.StreamID == streamID) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasProfileScreenShare(call Call, profileID string) bool {
+	for _, share := range call.ScreenShares {
+		if share.ProfileID == profileID {
+			return true
+		}
+	}
+	return false
 }
 
 func defaultStates(call Call) map[string]ParticipantState {

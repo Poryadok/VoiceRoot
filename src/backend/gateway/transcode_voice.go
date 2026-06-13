@@ -57,10 +57,40 @@ func (t *transcoder) serveVoiceCalls(w http.ResponseWriter, r *http.Request, res
 
 	case strings.HasPrefix(rest, "calls/"):
 		parts := strings.Split(strings.TrimPrefix(rest, "calls/"), "/")
-		if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" {
+		if len(parts) < 2 || strings.TrimSpace(parts[0]) == "" {
 			return false
 		}
 		roomID := strings.TrimSpace(parts[0])
+		if len(parts) == 3 && parts[1] == "screen-share" {
+			switch {
+			case r.Method == http.MethodPost && parts[2] == "start":
+				resp, err := t.clients.voice.StartScreenShare(ctx, &callsv1.StartScreenShareRequest{RoomId: roomID})
+				if err != nil {
+					writeGRPCError(w, err)
+					return true
+				}
+				writeProtoJSON(w, http.StatusOK, resp)
+				return true
+			case r.Method == http.MethodPost && parts[2] == "stop":
+				req := &callsv1.StopScreenShareRequest{RoomId: roomID}
+				if err := readProtoJSON(r, req); err != nil && r.ContentLength != 0 {
+					writeGRPCError(w, err)
+					return true
+				}
+				req.RoomId = roomID
+				_, err := t.clients.voice.StopScreenShare(ctx, req)
+				if err != nil {
+					writeGRPCError(w, err)
+					return true
+				}
+				w.WriteHeader(http.StatusNoContent)
+				return true
+			}
+			return false
+		}
+		if len(parts) != 2 {
+			return false
+		}
 		action := parts[1]
 		switch {
 		case r.Method == http.MethodPost && action == "accept":

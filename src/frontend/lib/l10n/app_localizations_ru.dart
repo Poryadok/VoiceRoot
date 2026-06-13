@@ -1024,6 +1024,34 @@ class AppLocalizationsRu extends AppLocalizations {
   String get callVideoPlaceholder => 'Видео';
 
   @override
+  String get screenShareStart => 'Демонстрация экрана';
+
+  @override
+  String get screenShareStop => 'Остановить демонстрацию';
+
+  @override
+  String get screenSharePause => 'Пауза';
+
+  @override
+  String get screenShareResume => 'Продолжить';
+
+  @override
+  String get screenShareQualityTitle => 'Качество демонстрации';
+
+  @override
+  String get screenShareQuality720p15 => '720p · 15 FPS';
+
+  @override
+  String get screenShareQuality720p30 => '720p · 30 FPS';
+
+  @override
+  String get screenShareLimitReached =>
+      'В этом войсе уже 3 демонстрации экрана';
+
+  @override
+  String get screenShareWaitingForVideo => 'Ожидание видео…';
+
+  @override
   String get themeLoadError => 'Не удалось загрузить тему';
 
   @override

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../backend/livekit_room.dart';
+import '../backend/screen_share_capabilities.dart';
 import '../backend/livekit_url.dart';
 import '../backend/realtime_client.dart';
 import '../backend/voice_client.dart';
@@ -10,6 +11,7 @@ import 'auth_providers.dart';
 import 'chat_providers.dart';
 import 'gateway_providers.dart';
 import 'voice_background_mobile.dart';
+import 'screen_share_providers.dart';
 
 /// Call signaling must use the raw hub stream — [realtimeEventProvider] keeps only
 /// the latest frame and can drop `call_incoming` between heartbeats.
@@ -382,6 +384,7 @@ class CallController extends StateNotifier<CallState> {
     }
     if (mounted) {
       state = const CallState();
+      _ref.read(screenShareControllerProvider.notifier).clearForRoomEnd();
       _refreshGroupActiveCalls();
     }
   }
@@ -428,6 +431,74 @@ class CallController extends StateNotifier<CallState> {
           );
     }
   }
+
+  Future<void> startScreenShare({double maxFrameRate = 15}) async {
+    if (!canStartScreenShare) return;
+    final auth = _ref.read(authorizationHeaderProvider);
+    final current = state.session;
+    if (auth == null || current == null || _room == null) return;
+    final api = _ref.read(voiceCallsClientProvider);
+    final started = await api.startScreenShare(
+      authorization: auth,
+      roomId: current.roomId,
+    );
+    switch (started) {
+      case VoiceApiOk(:final data):
+        try {
+          await _room!.startScreenShare(
+            maxFrameRate: maxFrameRate,
+            captureSystemAudio: canCaptureSystemAudioWithScreenShare,
+          );
+          _ref
+              .read(screenShareControllerProvider.notifier)
+              .setLocalSharing(isSharing: true, streamId: data);
+        } on Object catch (e) {
+          await api.stopScreenShare(
+            authorization: auth,
+            roomId: current.roomId,
+            streamId: data,
+          );
+          _ref
+              .read(screenShareControllerProvider.notifier)
+              .setError('$e');
+        }
+      case VoiceApiFailure(:final message, :final statusCode):
+        _ref.read(screenShareControllerProvider.notifier).setError(
+          statusCode == 429 || message.contains('limit')
+              ? 'screen_share_limit'
+              : message,
+        );
+    }
+  }
+
+  Future<void> stopScreenShare() async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    final current = state.session;
+    final share = _ref.read(screenShareControllerProvider);
+    if (auth == null || current == null) return;
+    await _room?.stopScreenShare();
+    await _ref.read(voiceCallsClientProvider).stopScreenShare(
+      authorization: auth,
+      roomId: current.roomId,
+      streamId: share.localStreamId,
+    );
+    _ref
+        .read(screenShareControllerProvider.notifier)
+        .setLocalSharing(isSharing: false);
+  }
+
+  Future<void> pauseScreenShare(bool paused) async {
+    await _room?.pauseScreenShare(paused);
+    _ref
+        .read(screenShareControllerProvider.notifier)
+        .setLocalSharing(
+          isSharing: true,
+          streamId: _ref.read(screenShareControllerProvider).localStreamId,
+          isPaused: paused,
+        );
+  }
+
+  VoiceLiveKitRoom? get liveKitRoom => _room;
 
   Future<void> _connectLiveKit(VoiceCallSession session) async {
     if (state.phase == CallPhase.active &&
@@ -572,6 +643,7 @@ class CallController extends StateNotifier<CallState> {
           unawaited(_room?.disconnect());
           _room = null;
           state = const CallState();
+          _ref.read(screenShareControllerProvider.notifier).clearForRoomEnd();
         }
         if (endedRoomId != null && endedRoomId.isNotEmpty) {
           _refreshGroupActiveCalls();

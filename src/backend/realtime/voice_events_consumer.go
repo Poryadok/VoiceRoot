@@ -130,6 +130,42 @@ func voiceEventBytesToFanout(data []byte) (profileIDs []string, env fanoutEnvelo
 			return nil, fanoutEnvelope{}, false
 		}
 		return ev.GetProfileIds(), fanoutEnvelope{Op: "voice_state_update", D: d}, true
+	case *eventsv1.VoiceStreamEvent_ScreenShareStarted:
+		ev := p.ScreenShareStarted
+		if ev == nil || ev.GetRoomId() == "" || ev.GetProfileId() == "" {
+			return nil, fanoutEnvelope{}, false
+		}
+		profileIDs := ev.GetProfileIds()
+		if len(profileIDs) == 0 {
+			profileIDs = []string{ev.GetProfileId()}
+		}
+		d, err := json.Marshal(map[string]any{
+			"room_id":    ev.GetRoomId(),
+			"profile_id": ev.GetProfileId(),
+			"stream_id":  ev.GetStreamId(),
+		})
+		if err != nil {
+			return nil, fanoutEnvelope{}, false
+		}
+		return profileIDs, fanoutEnvelope{Op: "screen_share_started", D: d}, true
+	case *eventsv1.VoiceStreamEvent_ScreenShareStopped:
+		ev := p.ScreenShareStopped
+		if ev == nil || ev.GetRoomId() == "" || ev.GetProfileId() == "" {
+			return nil, fanoutEnvelope{}, false
+		}
+		profileIDs := ev.GetProfileIds()
+		if len(profileIDs) == 0 {
+			profileIDs = []string{ev.GetProfileId()}
+		}
+		d, err := json.Marshal(map[string]any{
+			"room_id":    ev.GetRoomId(),
+			"profile_id": ev.GetProfileId(),
+			"stream_id":  ev.GetStreamId(),
+		})
+		if err != nil {
+			return nil, fanoutEnvelope{}, false
+		}
+		return profileIDs, fanoutEnvelope{Op: "screen_share_stopped", D: d}, true
 	default:
 		return nil, fanoutEnvelope{}, false
 	}

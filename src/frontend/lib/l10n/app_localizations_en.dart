@@ -1019,6 +1019,34 @@ class AppLocalizationsEn extends AppLocalizations {
   String get callVideoPlaceholder => 'Video preview';
 
   @override
+  String get screenShareStart => 'Share screen';
+
+  @override
+  String get screenShareStop => 'Stop sharing';
+
+  @override
+  String get screenSharePause => 'Pause share';
+
+  @override
+  String get screenShareResume => 'Resume share';
+
+  @override
+  String get screenShareQualityTitle => 'Share quality';
+
+  @override
+  String get screenShareQuality720p15 => '720p · 15 FPS';
+
+  @override
+  String get screenShareQuality720p30 => '720p · 30 FPS';
+
+  @override
+  String get screenShareLimitReached =>
+      'This voice chat already has 3 screen shares';
+
+  @override
+  String get screenShareWaitingForVideo => 'Waiting for screen video…';
+
+  @override
   String get themeLoadError => 'Could not load theme';
 
   @override

@@ -13,4 +13,6 @@ type Publisher interface {
 	PublishCallMissed(context.Context, *eventsv1.CallMissed) error
 	PublishCallEnded(context.Context, *eventsv1.CallEnded) error
 	PublishVoiceStateChanged(context.Context, *eventsv1.VoiceStateChanged) error
+	PublishScreenShareStarted(context.Context, *eventsv1.ScreenShareStarted) error
+	PublishScreenShareStopped(context.Context, *eventsv1.ScreenShareStopped) error
 }
