@@ -27,12 +27,15 @@ void main() {
     'test/phase5_space_roles_e2e_live_test.dart',
     'test/phase10_custom_roles_e2e_live_test.dart',
     'test/phase10_shared_media_e2e_live_test.dart',
+    'test/phase10_threads_e2e_live_test.dart',
+    'test/phase10_screen_share_e2e_live_test.dart',
     'test/phase5_space_moderation_e2e_live_test.dart',
     'test/phase5_space_voice_e2e_live_test.dart',
     'test/phase5_space_channel_e2e_live_test.dart',
     'test/phase5_space_shell_e2e_live_test.dart',
     'test/phase6_markdown_e2e_live_test.dart',
     'test/phase6_mentions_e2e_live_test.dart',
+    'test/phase6_space_channel_mentions_e2e_live_test.dart',
     'test/phase6_pins_e2e_live_test.dart',
     'test/phase6_fcm_e2e_live_test.dart',
     'test/phase8_apns_e2e_live_test.dart',
@@ -40,6 +43,11 @@ void main() {
     'test/phase8_mobile_layout_e2e_live_test.dart',
     'test/phase8_offline_cache_e2e_live_test.dart',
     'test/phase8_windows_version_e2e_live_test.dart',
+    'test/phase8_voip_e2e_live_test.dart',
+    'test/phase7_queue_e2e_live_test.dart',
+    'test/phase7_match_e2e_live_test.dart',
+    'test/phase7_match_history_e2e_live_test.dart',
+    'test/phase9_search_e2e_live_test.dart',
   ];
 
   for (final path in liveTests) {

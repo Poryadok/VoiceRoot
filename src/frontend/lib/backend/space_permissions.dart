@@ -8,6 +8,7 @@ abstract final class SpacePermissions {
   static const memberBan = 'MEMBER_BAN';
   static const memberAssignRoles = 'MEMBER_ASSIGN_ROLES';
   static const textChatSendMessages = 'TEXT_CHAT_SEND_MESSAGES';
+  static const textChatView = 'TEXT_CHAT_VIEW';
   static const textChatSetSlowMode = 'TEXT_CHAT_SET_SLOW_MODE';
   static const textChatManageSettings = 'TEXT_CHAT_MANAGE_SETTINGS';
   static const voiceJoin = 'VOICE_JOIN';
@@ -74,11 +75,28 @@ abstract final class SpacePermissions {
       textChatSendMessages,
       'TEXT_CHAT_SEND_MEDIA',
       'TEXT_CHAT_ATTACH_FILES',
+      'TEXT_CHAT_EMBED_LINKS',
+      'TEXT_CHAT_ADD_REACTIONS',
+      'TEXT_CHAT_MENTION_ALL_IN_CHAT',
+      'TEXT_CHAT_MENTION_ALL_ONLINE',
+      'TEXT_CHAT_PIN_MESSAGES',
+      'TEXT_CHAT_CREATE_THREADS',
+      'TEXT_CHAT_SEND_IN_THREADS',
+      'TEXT_CHAT_MANAGE_THREADS',
       textChatManageSettings,
       textChatSetSlowMode,
       'TEXT_CHAT_MANAGE_MESSAGES',
+      'TEXT_CHAT_READ_HISTORY',
     ],
-    'Voice': [voiceJoin, voiceSpeak, voiceMuteOthers, 'VOICE_VIDEO'],
+    'Voice': [
+      voiceJoin,
+      voiceSpeak,
+      voiceMuteOthers,
+      'VOICE_VIDEO',
+      'VOICE_SCREEN_SHARE',
+      'VOICE_DEAFEN_OTHERS',
+      'VOICE_MOVE_OTHERS',
+    ],
     'Moderation': [moderationTimeoutMembers],
   };
 

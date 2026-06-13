@@ -136,6 +136,17 @@ func main() {
 		}
 
 		dmStore := &store.DMStore{Pool: pool}
+		var spaceMembers *store.SpaceMembersStore
+		if spaceDB := strings.TrimSpace(os.Getenv("SPACE_DATABASE_URL")); spaceDB != "" {
+			sctx, scancel := context.WithTimeout(context.Background(), 15*time.Second)
+			spacePool, serr := pgxpool.New(sctx, spaceDB)
+			scancel()
+			if serr != nil {
+				log.Fatalf("space postgres: %v", serr)
+			}
+			defer spacePool.Close()
+			spaceMembers = &store.SpaceMembersStore{Pool: spacePool}
+		}
 		natsURL := strings.TrimSpace(os.Getenv("NATS_URL"))
 		var chatEvents chatevents.Publisher
 		if natsURL != "" {
@@ -159,12 +170,13 @@ func main() {
 		}
 		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger)...)
 		chatv1.RegisterChatServiceServer(grpcSrv, &grpcsvc.ChatGRPC{
-			DM:         dmStore,
-			Profiles:   profiles,
-			Blocks:     blocks,
-			ListEnrich: listEnrich,
-			ChatEvents: chatEvents,
-			Roles:      roleClient,
+			DM:           dmStore,
+			Profiles:     profiles,
+			Blocks:       blocks,
+			ListEnrich:   listEnrich,
+			ChatEvents:   chatEvents,
+			Roles:        roleClient,
+			SpaceMembers: spaceMembers,
 		})
 		go func() {
 			logger.Info("gRPC listening", slog.String("addr", grpcListen))

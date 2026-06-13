@@ -7,6 +7,7 @@ import 'auth_providers.dart';
 import 'chat_providers.dart';
 import 'matchmaking_match_controller.dart';
 import 'matchmaking_search_controller.dart';
+import 'shell_providers.dart';
 
 /// Plays short in-app notification sounds (no FCM).
 abstract class NotificationSoundPlayer {
@@ -51,7 +52,11 @@ class InAppNotificationController {
   void dispose() => _eventSub?.close();
 
   /// Applies a push notification payload using the same path as WS `notification`.
-  void onPushNotificationData(Map<String, dynamic>? data) => _onNotification(data);
+  void onPushNotificationData(
+    Map<String, dynamic>? data, {
+    bool navigateToChat = false,
+  }) =>
+      _onNotification(data, navigateToChat: navigateToChat);
 
   void _onFrame(RealtimeFrame frame) {
     switch (frame.op) {
@@ -66,7 +71,10 @@ class InAppNotificationController {
     }
   }
 
-  void _onNotification(Map<String, dynamic>? data) {
+  void _onNotification(
+    Map<String, dynamic>? data, {
+    bool navigateToChat = false,
+  }) {
     if (data == null) return;
     final type = data['type'] as String?;
     if (type == 'match_found') {
@@ -79,6 +87,11 @@ class InAppNotificationController {
     }
     final chatId = data['chat_id'] as String?;
     if (chatId == null || chatId.isEmpty) return;
+
+    if (navigateToChat) {
+      _ref.read(navigationSectionProvider.notifier).state = NavigationSection.chats;
+      _ref.read(chatActionsProvider).selectChat(chatId);
+    }
 
     switch (type) {
       case 'new_message':

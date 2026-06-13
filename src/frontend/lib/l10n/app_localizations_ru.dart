@@ -891,6 +891,26 @@ class AppLocalizationsRu extends AppLocalizations {
   String get spaceRoleCustom => 'Кастомная роль';
 
   @override
+  String get spaceChatOverrideTitle => 'Оверрайды доступа к чату';
+
+  @override
+  String get spaceChatOverrideHint =>
+      'Запретить просмотр чата для роли только здесь.';
+
+  @override
+  String get spaceChatOverrideDenyView => 'Запретить просмотр';
+
+  @override
+  String get spaceVoiceOverrideTitle => 'Оверрайды голосовой комнаты';
+
+  @override
+  String get spaceVoiceOverrideHint =>
+      'Запретить вход для роли только в этой комнате.';
+
+  @override
+  String get spaceVoiceOverrideDenyJoin => 'Запретить вход в голос';
+
+  @override
   String get spaceSetDefaultJoinRole => 'Роль при вступлении';
 
   @override

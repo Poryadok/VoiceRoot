@@ -492,6 +492,12 @@
   "spaceRoleNameLabel": "Role name",
   "spaceRoleManaged": "System role",
   "spaceRoleCustom": "Custom role",
+  "spaceChatOverrideTitle": "Chat access overrides",
+  "spaceChatOverrideHint": "Deny view for a role in this chat only.",
+  "spaceChatOverrideDenyView": "Deny view chat",
+  "spaceVoiceOverrideTitle": "Voice room access overrides",
+  "spaceVoiceOverrideHint": "Deny join for a role in this voice room only.",
+  "spaceVoiceOverrideDenyJoin": "Deny join voice",
   "spaceSetDefaultJoinRole": "Set as default join role",
   "spaceDefaultJoinRole": "Default join role: {name}",
   "@spaceDefaultJoinRole": {

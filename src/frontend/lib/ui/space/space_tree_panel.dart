@@ -4,12 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../backend/spaces_client.dart';
+import '../../backend/space_permissions.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/space_providers.dart';
 import '../../state/voice_room_providers.dart';
 import '../core/voice_list_row.dart';
 import '../core/voice_skeleton.dart';
 import '../core/voice_state_panel.dart';
+import 'space_voice_room_override_sheet.dart';
 
 /// Sidebar tree: categories with text chats and voice rooms.
 class SpaceTreePanel extends ConsumerWidget {
@@ -195,6 +197,17 @@ class _TreeNodeTile extends ConsumerWidget {
         node.isVoiceRoom && voiceRoomId != null && selectedVoiceRoomId == voiceRoomId;
     final textSelected =
         node.isTextChat && node.linkedChatId == selectedChatId;
+    final canManageRoles = ref
+            .watch(
+              spacePermissionProvider((
+                spaceId: node.spaceId,
+                permission: SpacePermissions.spaceManageRoles,
+                chatId: null,
+                voiceRoomId: null,
+              )),
+            )
+            .valueOrNull ??
+        false;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -206,6 +219,20 @@ class _TreeNodeTile extends ConsumerWidget {
               ? l10n.spaceTreeVoiceRoom
               : l10n.spaceTreeTextChat,
           leading: Icon(_nodeIcon(node), size: 20),
+          trailing: node.isVoiceRoom &&
+                  voiceRoomId != null &&
+                  canManageRoles
+              ? IconButton(
+                  key: Key('voice_room_overrides_$voiceRoomId'),
+                  icon: const Icon(Icons.admin_panel_settings_outlined, size: 18),
+                  tooltip: l10n.spaceVoiceOverrideTitle,
+                  onPressed: () => SpaceVoiceRoomOverrideSheet.show(
+                    context,
+                    spaceId: node.spaceId,
+                    voiceRoomId: voiceRoomId,
+                  ),
+                )
+              : null,
           onTap: () => _onTap(ref),
         ),
         if (isVoiceSelected)

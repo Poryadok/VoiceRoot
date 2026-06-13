@@ -885,6 +885,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get spaceRoleCustom => 'Custom role';
 
   @override
+  String get spaceChatOverrideTitle => 'Chat access overrides';
+
+  @override
+  String get spaceChatOverrideHint => 'Deny view for a role in this chat only.';
+
+  @override
+  String get spaceChatOverrideDenyView => 'Deny view chat';
+
+  @override
+  String get spaceVoiceOverrideTitle => 'Voice room access overrides';
+
+  @override
+  String get spaceVoiceOverrideHint =>
+      'Deny join for a role in this voice room only.';
+
+  @override
+  String get spaceVoiceOverrideDenyJoin => 'Deny join voice';
+
+  @override
   String get spaceSetDefaultJoinRole => 'Set as default join role';
 
   @override

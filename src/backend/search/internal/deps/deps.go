@@ -47,6 +47,56 @@ func (m *MessagingFetcher) GetMessageBody(ctx context.Context, chatID, messageID
 	return msg.GetContent(), created, nil
 }
 
+// MessageRow is a message body for bulk reindex.
+type MessageRow struct {
+	ID              uuid.UUID
+	SenderProfileID uuid.UUID
+	Body            string
+	CreatedAt       time.Time
+}
+
+// ListChatMessages pages messages in a chat for reindex.
+func (m *MessagingFetcher) ListChatMessages(ctx context.Context, chatID uuid.UUID, cursor string, pageSize int32) ([]MessageRow, string, error) {
+	if m == nil || m.Client == nil {
+		return nil, "", fmt.Errorf("messaging client unavailable")
+	}
+	if pageSize <= 0 {
+		pageSize = 50
+	}
+	resp, err := m.Client.GetMessages(ctx, &messagingv1.GetMessagesRequest{
+		Chat: &chatv1.ChatRef{Id: chatID.String()},
+		Page: &commonv1.CursorPageRequest{
+			PageSize: pageSize,
+			Cursor:   cursor,
+		},
+	})
+	if err != nil {
+		return nil, "", err
+	}
+	list := resp.GetMessageList()
+	if list == nil {
+		return nil, "", nil
+	}
+	out := make([]MessageRow, 0, len(list.GetMessages()))
+	for _, msg := range list.GetMessages() {
+		if msg == nil {
+			continue
+		}
+		id, err := uuid.Parse(strings.TrimSpace(msg.GetId()))
+		if err != nil {
+			continue
+		}
+		sender, _ := uuid.Parse(strings.TrimSpace(msg.GetSenderProfileId()))
+		out = append(out, MessageRow{
+			ID:              id,
+			SenderProfileID: sender,
+			Body:            msg.GetContent(),
+			CreatedAt:       msg.GetCreatedAt().AsTime(),
+		})
+	}
+	return out, strings.TrimSpace(list.GetNextCursor()), nil
+}
+
 // RoleAccess checks TEXT_CHAT_VIEW for space channels.
 type RoleAccess struct {
 	Client rolev1.RoleServiceClient

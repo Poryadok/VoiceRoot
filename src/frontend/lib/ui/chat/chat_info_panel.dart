@@ -11,6 +11,9 @@ import '../../theme/voice_colors.dart';
 import '../../theme/voice_layout.dart';
 import '../core/voice_state_panel.dart';
 import 'group_members_sheet.dart';
+import '../space/space_chat_override_sheet.dart';
+import '../../backend/space_permissions.dart';
+import '../../state/space_providers.dart';
 
 /// Chat info with shared media tabs (Phase 10).
 class ChatInfoPanel extends ConsumerStatefulWidget {
@@ -55,6 +58,7 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final voice = VoiceColors.of(context);
+    final spaceId = _spaceIdForChat(ref, widget.chatId);
 
     return Column(
       key: ChatInfoPanel.panelKey,
@@ -71,6 +75,8 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
           ),
           Divider(height: 1, color: voice.borderDefault),
         ],
+        if (spaceId != null)
+          _ChatOverrideBar(spaceId: spaceId, chatId: widget.chatId),
         TabBar(
           controller: _tabs,
           isScrollable: true,
@@ -312,4 +318,48 @@ void openChatInfoPanel(
     return;
   }
   ref.read(shellNavigationProvider).toggleSidePanel(ShellSidePanel.chatInfo);
+}
+
+String? _spaceIdForChat(WidgetRef ref, String chatId) {
+  for (final item in ref.watch(chatListControllerProvider).items) {
+    if (item.chatId == chatId) return item.chat.spaceId;
+  }
+  return null;
+}
+
+class _ChatOverrideBar extends ConsumerWidget {
+  const _ChatOverrideBar({required this.spaceId, required this.chatId});
+
+  final String spaceId;
+  final String chatId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context)!;
+    final canManage = ref
+            .watch(
+              spacePermissionProvider((
+                spaceId: spaceId,
+                permission: SpacePermissions.spaceManageRoles,
+                chatId: null,
+                voiceRoomId: null,
+              )),
+            )
+            .valueOrNull ??
+        false;
+    if (!canManage) return const SizedBox.shrink();
+    return Align(
+      alignment: Alignment.centerRight,
+      child: TextButton.icon(
+        key: const Key('chat_info_role_overrides'),
+        onPressed: () => SpaceChatOverrideSheet.show(
+          context,
+          spaceId: spaceId,
+          chatId: chatId,
+        ),
+        icon: const Icon(Icons.admin_panel_settings_outlined, size: 18),
+        label: Text(l10n.spaceChatOverrideTitle),
+      ),
+    );
+  }
 }

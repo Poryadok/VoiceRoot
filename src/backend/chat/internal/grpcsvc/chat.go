@@ -23,6 +23,8 @@ type ChatGRPC struct {
 	ChatEvents chatevents.Publisher
 	// Roles is optional; space channel slow mode checks TEXT_CHAT_SET_SLOW_MODE when set.
 	Roles rolev1.RoleServiceClient
+	// SpaceMembers resolves space_db.space_members for chats with space_id (optional).
+	SpaceMembers *store.SpaceMembersStore
 }
 
 // DMStore persists chats and lists the caller's inbox (DM + standalone groups).

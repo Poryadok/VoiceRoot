@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../backend/notifications_client.dart';
 import 'auth_providers.dart';
+import '../firebase_options.dart';
 import 'in_app_notifications.dart';
 import 'push_background_handler.dart';
 import 'push_notification_handler.dart';
@@ -143,7 +144,7 @@ class PushNotificationsController {
   }
 
   void _onOpenedMessage(RemoteMessage message) {
-    _dispatchPushData(message.data);
+    _dispatchPushData(message.data, openChat: true);
   }
 
   Future<void> _handleInitialMessage(FirebaseMessaging messaging) async {
@@ -153,18 +154,19 @@ class PushNotificationsController {
     }
   }
 
-  void _dispatchPushData(Map<String, dynamic> data) {
+  void _dispatchPushData(Map<String, dynamic> data, {bool openChat = false}) {
     final normalized = data.map((k, v) => MapEntry(k, v.toString()));
     handlePushPayloadMap(normalized, (notificationData) {
-      _ref
-          .read(inAppNotificationControllerProvider)
-          ?.onPushNotificationData(notificationData);
+      _ref.read(inAppNotificationControllerProvider)?.onPushNotificationData(
+            notificationData,
+            navigateToChat: openChat,
+          );
     });
   }
 
   Future<void> _ensureFirebase() async {
     if (Firebase.apps.isNotEmpty) return;
-    await Firebase.initializeApp();
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   }
 
   Future<String?> _resolvePushToken(

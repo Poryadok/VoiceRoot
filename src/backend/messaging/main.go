@@ -85,6 +85,18 @@ func main() {
 			defer chatMetaPool.Close()
 		}
 
+		var spaceMetaPool *pgxpool.Pool
+		if spaceDB := strings.TrimSpace(os.Getenv("SPACE_DATABASE_URL")); spaceDB != "" {
+			sctx, scancel := context.WithTimeout(context.Background(), 15*time.Second)
+			sp, err := pgxpool.New(sctx, spaceDB)
+			scancel()
+			if err != nil {
+				log.Fatalf("space postgres: %v", err)
+			}
+			spaceMetaPool = sp
+			defer spaceMetaPool.Close()
+		}
+
 		var chatGuard grpcsvc.ChatGuard
 		if chatAddr := strings.TrimSpace(os.Getenv("CHAT_GRPC_ADDR")); chatAddr != "" {
 			cconn, err := grpc.NewClient(grpcclient.DialTarget(chatAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -100,9 +112,9 @@ func main() {
 			waitCancel()
 			chatGuard = s2s.NewGRPCChatGuard(chatv1.NewChatServiceClient(cconn))
 		} else if chatMetaPool != nil {
-			chatGuard = &store.SQLChatGuard{Pool: chatMetaPool}
+			chatGuard = &store.SQLChatGuard{Pool: chatMetaPool, SpacePool: spaceMetaPool}
 		} else {
-			chatGuard = &store.SQLChatGuard{Pool: pool}
+			chatGuard = &store.SQLChatGuard{Pool: pool, SpacePool: spaceMetaPool}
 		}
 
 		var blocks grpcsvc.AccountPairBlockChecker
@@ -211,7 +223,7 @@ func main() {
 				if chatMetaPool != nil {
 					metaPool = chatMetaPool
 				}
-				return &store.SQLChatMentionsMeta{Pool: metaPool}
+				return &store.SQLChatMentionsMeta{Pool: metaPool, SpacePool: spaceMetaPool}
 			}(),
 			RolePermissions:  rolePerms,
 			UserPresence:     userPresence,

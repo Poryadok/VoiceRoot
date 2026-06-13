@@ -81,6 +81,11 @@ func WithChatEventsPublisher(p chatevents.Publisher) chatServerOption {
 	return func(c *ChatGRPC) { c.ChatEvents = p }
 }
 
+// WithSpaceMembers wires space_db member resolution for integration tests.
+func WithSpaceMembers(s *store.SpaceMembersStore) chatServerOption {
+	return func(c *ChatGRPC) { c.SpaceMembers = s }
+}
+
 func startChatGRPCTestServer(t *testing.T, pool *pgxpool.Pool, profiles UserProfileLookup, blocks AccountBlockChecker, enrich ListChatsEnrichment, opts ...chatServerOption) (chatv1.ChatServiceClient, func()) {
 	t.Helper()
 	const bufSize = 1 << 20

@@ -61,6 +61,11 @@ type ChatAccess interface {
 	SearchChats(ctx context.Context, query string, limit int) ([]uuid.UUID, error)
 }
 
+// ChatReindexer backfills search index for one chat.
+type ChatReindexer interface {
+	ReindexChat(ctx context.Context, chatID uuid.UUID) error
+}
+
 // SearchGRPC implements voice.search.v1.SearchService.
 type SearchGRPC struct {
 	searchv1.UnimplementedSearchServiceServer
@@ -70,6 +75,7 @@ type SearchGRPC struct {
 	Chats    ChatAccess
 	Roles    RoleChecker
 	Blocks   BlockList
+	Reindex  ChatReindexer
 }
 
 func pageSize(page *commonv1.CursorPageRequest) int {
@@ -313,6 +319,26 @@ func (s *SearchGRPC) ReindexChat(ctx context.Context, req *searchv1.ReindexChatR
 	}
 	if req.GetChat() == nil || strings.TrimSpace(req.GetChat().GetId()) == "" {
 		return nil, status.Error(codes.InvalidArgument, "chat required")
+	}
+	if s.Reindex == nil {
+		return nil, status.Error(codes.Unavailable, "chat reindex unavailable")
+	}
+	chatID, err := uuid.Parse(strings.TrimSpace(req.GetChat().GetId()))
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid chat id")
+	}
+	if s.Roles != nil {
+		viewer, _ := authctx.ProfileID(ctx)
+		allowed, perr := s.Roles.CanReadMessages(ctx, viewer, chatID)
+		if perr != nil {
+			return nil, status.Error(codes.Internal, perr.Error())
+		}
+		if !allowed {
+			return nil, status.Error(codes.PermissionDenied, "cannot read chat")
+		}
+	}
+	if err := s.Reindex.ReindexChat(ctx, chatID); err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	return &searchv1.ReindexChatResponse{}, nil
 }

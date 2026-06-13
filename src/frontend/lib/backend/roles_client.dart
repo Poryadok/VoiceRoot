@@ -326,6 +326,28 @@ class VoiceRolesClient {
     return _mapEmpty(result);
   }
 
+  Future<RolesApiResult<void>> setVoiceRoomOverride({
+    required String authorization,
+    required String spaceId,
+    required String voiceRoomId,
+    required String roleId,
+    int allowMask = 0,
+    int denyMask = 0,
+  }) async {
+    final result = await _gateway.postEmpty(
+      uri: _gateway.resolve('/api/v1/roles/voice-overrides'),
+      authorization: authorization,
+      jsonBody: {
+        'space_id': spaceId,
+        'voice_room_id': voiceRoomId,
+        'role_id': roleId,
+        'allow_mask': allowMask,
+        'deny_mask': denyMask,
+      },
+    );
+    return _mapEmpty(result);
+  }
+
   List<SpaceRole> _rolesFromListPayload(Map<String, dynamic> data) {
     final roleList = data['role_list'] ?? data['roleList'];
     if (roleList is! Map<String, dynamic>) return const [];

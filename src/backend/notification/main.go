@@ -23,6 +23,7 @@ import (
 	"voice/backend/notification/internal/fcm"
 	"voice/backend/notification/internal/grouping"
 	"voice/backend/notification/internal/presence"
+	"voice/backend/notification/internal/pushenrich"
 	"voice/backend/notification/internal/store"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
@@ -112,6 +113,18 @@ func main() {
 			}
 		}
 
+		var pushEnrich pushenrich.Resolver = pushenrich.NoopResolver{}
+		if msgAddr := strings.TrimSpace(os.Getenv("MESSAGING_GRPC_ADDR")); msgAddr != "" {
+			if userAddr := strings.TrimSpace(os.Getenv("USER_GRPC_ADDR")); userAddr != "" {
+				if resolver, err := pushenrich.NewGRPCResolver(msgAddr, userAddr); err != nil {
+					logger.Warn("push copy enricher unavailable; generic push body", slog.Any("error", err))
+				} else {
+					pushEnrich = resolver
+					logger.Info("push copy enricher enabled")
+				}
+			}
+		}
+
 		msgPusher := &dispatch.MessagePusher{
 			Tokens:   tokenStore,
 			Pusher:   pusher,
@@ -124,7 +137,7 @@ func main() {
 			go func() {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
-				if err := runMessageEventsConsumer(ctx, natsURL, instanceID, tokenStore, chatLister, msgPusher, logger); err != nil && logger != nil {
+				if err := runMessageEventsConsumer(ctx, natsURL, instanceID, tokenStore, chatLister, msgPusher, pushEnrich, logger); err != nil && logger != nil {
 					logger.Error("message.events consumer exited", slog.Any("error", err))
 				}
 			}()

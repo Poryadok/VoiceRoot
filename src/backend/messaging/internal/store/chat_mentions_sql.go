@@ -13,7 +13,8 @@ import (
 
 // SQLChatMentionsMeta loads chat type, optional space_id, and member profile IDs from chat_db.
 type SQLChatMentionsMeta struct {
-	Pool *pgxpool.Pool
+	Pool      *pgxpool.Pool
+	SpacePool *pgxpool.Pool // optional space_db for chats with space_id
 }
 
 func (s *SQLChatMentionsMeta) LoadChatMeta(ctx context.Context, chatID uuid.UUID) (mentions.ChatMeta, error) {
@@ -49,10 +50,38 @@ SELECT profile_id FROM chat_members WHERE chat_id = $1
 	if err := rows.Err(); err != nil {
 		return mentions.ChatMeta{}, err
 	}
+	if spaceID != nil && len(members) == 0 && s.SpacePool != nil {
+		members, err = s.loadSpaceMembers(ctx, *spaceID)
+		if err != nil {
+			return mentions.ChatMeta{}, err
+		}
+	}
 	return mentions.ChatMeta{
 		ChatID:   chatID,
 		ChatType: chatType,
 		SpaceID:  spaceID,
 		Members:  members,
 	}, nil
+}
+
+func (s *SQLChatMentionsMeta) loadSpaceMembers(ctx context.Context, spaceID uuid.UUID) ([]uuid.UUID, error) {
+	if s == nil || s.SpacePool == nil {
+		return nil, errors.New("chat mentions meta: space pool not configured")
+	}
+	rows, err := s.SpacePool.Query(ctx, `
+SELECT profile_id FROM space_members WHERE space_id = $1
+`, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var members []uuid.UUID
+	for rows.Next() {
+		var pid uuid.UUID
+		if err := rows.Scan(&pid); err != nil {
+			return nil, err
+		}
+		members = append(members, pid)
+	}
+	return members, rows.Err()
 }

@@ -1652,6 +1652,42 @@ abstract class AppLocalizations {
   /// **'Custom role'**
   String get spaceRoleCustom;
 
+  /// No description provided for @spaceChatOverrideTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat access overrides'**
+  String get spaceChatOverrideTitle;
+
+  /// No description provided for @spaceChatOverrideHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Deny view for a role in this chat only.'**
+  String get spaceChatOverrideHint;
+
+  /// No description provided for @spaceChatOverrideDenyView.
+  ///
+  /// In en, this message translates to:
+  /// **'Deny view chat'**
+  String get spaceChatOverrideDenyView;
+
+  /// No description provided for @spaceVoiceOverrideTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice room access overrides'**
+  String get spaceVoiceOverrideTitle;
+
+  /// No description provided for @spaceVoiceOverrideHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Deny join for a role in this voice room only.'**
+  String get spaceVoiceOverrideHint;
+
+  /// No description provided for @spaceVoiceOverrideDenyJoin.
+  ///
+  /// In en, this message translates to:
+  /// **'Deny join voice'**
+  String get spaceVoiceOverrideDenyJoin;
+
   /// No description provided for @spaceSetDefaultJoinRole.
   ///
   /// In en, this message translates to:

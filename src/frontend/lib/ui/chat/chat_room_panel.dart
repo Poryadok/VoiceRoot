@@ -642,7 +642,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
             for (final id in memberIds)
               _MentionMemberTile(
                 profileId: id,
-                onPick: () => Navigator.pop(ctx, '@$id '),
+                onPick: (token) => Navigator.pop(ctx, '$token '),
               ),
           ],
         ),
@@ -672,7 +672,19 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
           data: (data) => data.members.map((m) => m.profileId),
           orElse: () => const <String>[],
         );
-    final mentions = parseMentionsFromContent(text, memberProfileIds: memberIds);
+    final handleToProfileId = <String, String>{};
+    for (final id in memberIds) {
+      final profile = ref.read(profileProvider(id)).valueOrNull;
+      final handle = profile?.handle;
+      if (handle != null && handle.isNotEmpty) {
+        handleToProfileId[handle] = id;
+      }
+    }
+    final mentions = parseMentionsFromContent(
+      text,
+      memberProfileIds: memberIds,
+      handleToProfileId: handleToProfileId,
+    );
     final replyTarget = ref.read(chatReplyTargetProvider(widget.chatId));
     final err = await ref
         .read(chatRoomControllerProvider(widget.chatId).notifier)
@@ -1371,10 +1383,13 @@ class _PinnedMessagesBar extends StatelessWidget {
 }
 
 class _MentionMemberTile extends ConsumerWidget {
-  const _MentionMemberTile({required this.profileId, required this.onPick});
+  const _MentionMemberTile({
+    required this.profileId,
+    required this.onPick,
+  });
 
   final String profileId;
-  final VoidCallback onPick;
+  final void Function(String mentionToken) onPick;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1382,7 +1397,13 @@ class _MentionMemberTile extends ConsumerWidget {
     final profile = ref.watch(profileProvider(profileId)).valueOrNull;
     final label =
         profile?.displayName ?? profile?.handle ?? l10n.chatMentionMember(profileId);
-    return ListTile(title: Text(label), onTap: onPick);
+    final handle = profile?.handle;
+    final token = handle != null && handle.isNotEmpty
+        ? '@$handle'
+        : (profile?.displayName != null && profile!.displayName!.isNotEmpty)
+            ? '@${profile.displayName}'
+            : '@$profileId';
+    return ListTile(title: Text(label), onTap: () => onPick(token));
   }
 }
 

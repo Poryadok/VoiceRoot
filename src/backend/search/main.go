@@ -69,6 +69,15 @@ func main() {
 			Spaces:   &grpcsvc.SpaceStoreAdapter{ProfileSpaceSearchStore: profileSpaceStore},
 		}
 
+		if conn, err := dialOptional(os.Getenv("MESSAGING_GRPC_ADDR")); err == nil && conn != nil {
+			defer func() { _ = conn.Close() }()
+			messagingFetcher := &deps.MessagingFetcher{Client: messagingv1.NewMessagingServiceClient(conn)}
+			svc.Reindex = &grpcsvc.ChatReindexService{
+				Messages: messagingFetcher,
+				Store:    msgStore,
+			}
+		}
+
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
 			instanceID := strings.TrimSpace(os.Getenv("SEARCH_INSTANCE_ID"))
 			var messaging indexer.MessagingClient

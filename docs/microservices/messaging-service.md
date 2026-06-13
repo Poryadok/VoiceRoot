@@ -47,6 +47,7 @@ service MessagingService {
   rpc GetReadState(GetReadStateRequest) returns (GetReadStateResponse);
   rpc GetBulkReadState(GetBulkReadStateRequest) returns (GetBulkReadStateResponse); // map chat_id -> ReadState
   rpc GetChatListMetadata(GetChatListMetadataRequest) returns (GetChatListMetadataResponse); // S2S: preview + unread for Chat ListChats
+  rpc ListSharedMedia(ListSharedMediaRequest) returns (ListSharedMediaResponse); // media / files / links / voice tabs in chat info
 }
 ```
 

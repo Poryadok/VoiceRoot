@@ -103,6 +103,18 @@ kubectl create secret tls voice-gateway-tls -n voice-staging --cert=tls.crt --ke
 - Различия local / staging / prod — через **переменные окружения** и Kubernetes ConfigMaps/Secrets, не через разные ветки кода.
 - URL внешних API (Paddle, FCM, R2 и т.д.) — отдельные credentials на staging и prod.
 
+### Firebase / FCM (Web, Android)
+
+- Dev: `src/frontend/lib/firebase_options.dart` — placeholder; override via `--dart-define` or regenerate with FlutterFire CLI.
+- Staging/prod: store `google-services.json` (Android) and Firebase web config in CI secrets; set `FCM_*` env on Notification service (see `src/backend/notification/internal/fcm/`).
+
+### APNs / VoIP (iOS)
+
+- Notification service reads APNs credentials from env (`APNS_*` — see `src/backend/notification/internal/apns/config.go`).
+- **Staging:** upload APNs Auth Key (.p8) to secrets; set `APNS_PRODUCTION=false` for sandbox devices.
+- **Production:** `APNS_PRODUCTION=true`, separate VoIP topic/key if required; add `GoogleService-Info.plist` to iOS target and enable Push Notifications + Background Modes (remote notifications, VoIP) in Xcode.
+- Live delivery tests: `src/frontend/test/phase8_apns_e2e_live_test.dart`, `phase8_voip_e2e_live_test.dart` (opt-in `VOICE_RUN_LIVE_INTEGRATION=true`).
+
 ---
 
 ## Связанные документы

@@ -16,6 +16,8 @@ import (
 	"voice/backend/notification/internal/delivery"
 	"voice/backend/notification/internal/dispatch"
 	"voice/backend/notification/internal/push"
+	"voice/backend/notification/internal/pushcopy"
+	"voice/backend/notification/internal/pushenrich"
 	"voice/backend/notification/internal/store"
 	"voice/backend/pkg/natslog"
 	eventsv1 "voice.app/voice/events/v1"
@@ -37,6 +39,7 @@ func runMessageEventsConsumer(
 	tokens *store.DeviceTokenStore,
 	members chatmembers.Lister,
 	pusher *dispatch.MessagePusher,
+	enrich pushenrich.Resolver,
 	logger *slog.Logger,
 ) error {
 	if tokens == nil || pusher == nil || strings.TrimSpace(natsURL) == "" {
@@ -68,7 +71,7 @@ func runMessageEventsConsumer(
 			natslog.LogConsume(logger, msg, slog.LevelWarn, "message event unmarshal failed")
 			return
 		}
-		if err := routeMessageNotification(ctx, handler, members, pusher, &env); err != nil && logger != nil {
+		if err := routeMessageNotification(ctx, handler, members, pusher, enrich, &env); err != nil && logger != nil {
 			logger.Warn("message push failed", slog.Any("error", err))
 		} else {
 			natslog.LogConsume(logger, msg, slog.LevelInfo, "message notification event consumed")
@@ -101,6 +104,7 @@ func routeMessageNotification(
 	handler *consumer.MessageEventHandler,
 	members chatmembers.Lister,
 	pusher *dispatch.MessagePusher,
+	enrich pushenrich.Resolver,
 	env *eventsv1.MessageStreamEvent,
 ) error {
 	if handler == nil || pusher == nil || env == nil {
@@ -122,9 +126,10 @@ func routeMessageNotification(
 		raw := handler.HandleMessageSent(ctx, ev, memberIDs)
 		senderID, _ := uuid.Parse(ev.GetSenderProfileId())
 		decisions := enrichDecisions(ctx, pusher, raw, senderID, ev.GetChatId(), delivery.TypeNewMessage)
+		preview, senderLabel := pushCopyFields(ctx, enrich, ev.GetMessageId(), ev.GetSenderProfileId())
 		payload := push.Payload{
-			Title: "New message",
-			Body:  "You have a new message",
+			Title: pushcopy.TitleForSender(senderLabel, "New message"),
+			Body:  pushcopy.MessageBody(preview),
 			Data: map[string]string{
 				"type":              string(delivery.TypeNewMessage),
 				"chat_id":           ev.GetChatId(),
@@ -145,9 +150,10 @@ func routeMessageNotification(
 		raw := handler.HandleMentionAdded(ctx, ev)
 		senderID, _ := uuid.Parse(ev.GetSenderProfileId())
 		decisions := enrichDecisions(ctx, pusher, raw, senderID, ev.GetChatId(), delivery.TypeMention)
+		preview, senderLabel := pushCopyFields(ctx, enrich, ev.GetMessageId(), ev.GetSenderProfileId())
 		payload := push.Payload{
-			Title: "Mention",
-			Body:  "You were mentioned",
+			Title: pushcopy.TitleForSender(senderLabel, "Mention"),
+			Body:  pushcopy.MentionBody(preview),
 			Data: map[string]string{
 				"type":              string(delivery.TypeMention),
 				"chat_id":           ev.GetChatId(),
@@ -189,4 +195,17 @@ func enrichDecisions(
 		out[profileID] = enriched
 	}
 	return out
+}
+
+func pushCopyFields(
+	ctx context.Context,
+	enrich pushenrich.Resolver,
+	messageID, senderProfileID string,
+) (preview, senderLabel string) {
+	if enrich == nil {
+		return "", ""
+	}
+	preview, _ = enrich.MessagePreview(ctx, messageID)
+	senderLabel, _ = enrich.SenderLabel(ctx, senderProfileID)
+	return preview, senderLabel
 }

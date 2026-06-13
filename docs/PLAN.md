@@ -62,10 +62,10 @@
 | - [x]  | 3    | Вложения, typing, статусы, DM «запросы», edit/delete UX | Web                   |
 | - [x]  | 4    | Группы, групповой голос, реакции                   | Web                   |
 | - [x]  | 5    | Спейсы: структура и клиент                         | Web                   |
-| - [ ]  | 6    | Markdown, @mentions, пины, FCM                     | Web + Android (push)  |
-| - [ ]  | 7    | Матчмейкинг                                        | Web (+ push где есть) |
-| - [ ]  | 8    | Мобильные клиенты, APNs/VoIP, Win, кэш             | Все                   |
-| - [ ]  | 9    | Поиск                                              | Все                   |
+| - [ ]  | 6    | Markdown, @mentions, пины, FCM (space channels OK; staging Firebase optional) | Web + Android (push)  |
+| - [ ]  | 7    | Матчмейкинг (squad voice UI; catalog/match_found E2E open) | Web (+ push где есть) |
+| - [ ]  | 8    | Мобильные клиенты, APNs/VoIP prod creds, Win, кэш | Все                   |
+| - [x]  | 9    | Поиск                                              | Все                   |
 | - [ ]  | 10   | Треды, шаринг экрана, shared media, кастомные роли | Все                   |
 | - [ ]  | 11   | Репорты (без панели), 2FA, приватность             | Все                   |
 | - [ ]  | 12   | Подписки и платежи                                 | Все                   |
@@ -230,10 +230,10 @@
 
 **Цель:** поиск тиммейтов (ключевое УТП).
 
-- [ ] **Каталог игр** — роли/ранги в конфиге
+- [ ] **Каталог игр** — browse + seeds (4 игры); модерация/конструктор — открыто
 - [x] **Профиль игрока** — игры, ранг, роли, регион
 - [x] **Очередь** — критерии и слоты
-- [ ] **Подбор** — матч-отряд (текст + голос); уведомление через **FCM (Фаза 6)**; iOS — после **APNs (Фаза 8)**, до тех пор in-app/WS
+- [ ] **Подбор** — backend squad (chat+voice); клиент voice UI готов; FCM match_found live E2E — открыто
 - [x] **Таймаут** — например 30 мин без подтверждения
 - [x] **Рейтинг** — звёзды после матча
 - [x] **История матчей**
@@ -246,11 +246,11 @@
 
 **Цель:** не только веб; iOS и доводка уведомлений.
 
-- [ ] **APNs** — обычные пуши (тот же контур, что FCM)
-- [ ] **VoIP** — PushKit + CallKit для входящих на iOS
-- [x] **FCM** — доработка под мобилу, согласованность с APNs
-- [x] **Flutter mobile** — layout, Android / iOS релизы
-- [ ] **Оффлайн-кэш** — последние N сообщений на чат (SQLite)
+- [ ] **APNs** — sender в Notification; prod `GoogleService-Info.plist` / entitlements и live delivery — staging
+- [ ] **VoIP** — PushKit + CallKit scaffold; prod VoIP credentials и E2E delivery — открыто
+- [x] **FCM** — доработка под мобилу, enriched body (Messaging+User gRPC), tap→chat
+- [x] **Flutter mobile** — layout, Android / iOS CI smoke (`flutter build ios --no-codesign`)
+- [x] **Оффлайн-кэш** — последние N сообщений на чат (SQLite); read-only v1 в клиенте
 - [x] **Windows** — desktop-сборка, auto-updater
 
 **Результат:** мультиплатформа для основной аудитории.
@@ -261,8 +261,8 @@
 
 **Цель:** найти сообщение, человека, публичный спейс.
 
-- [ ] **Полнотекст** — PostgreSQL tsvector/GIN v1, в чате и глобально
-- [ ] **Пользователи и спейсы** — каталог публичных спейсов
+- [x] **Полнотекст** — PostgreSQL tsvector/GIN v1, в чате и глобально
+- [x] **Пользователи и спейсы** — каталог публичных спейсов
 
 **Результат:** продукт переживаем при росте истории и серверов.
 

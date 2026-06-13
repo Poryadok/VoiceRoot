@@ -32,14 +32,14 @@ func (s *ChatGRPC) ListMembers(ctx context.Context, req *chatv1.ListMembersReque
 	if row == nil {
 		return nil, status.Error(codes.NotFound, "chat not found")
 	}
-	member, err := s.DM.IsChatMember(ctx, chatID, caller)
+	member, err := s.isEffectiveChatMember(ctx, row, caller)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	if !member {
 		return nil, status.Error(codes.PermissionDenied, "not a chat member")
 	}
-	members, err := s.DM.ListChatMembers(ctx, chatID)
+	members, err := s.listEffectiveChatMembers(ctx, row)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -124,7 +124,7 @@ func (s *ChatGRPC) GetChat(ctx context.Context, req *chatv1.GetChatRequest) (*ch
 	if row == nil {
 		return nil, status.Error(codes.NotFound, "chat not found")
 	}
-	member, err := s.DM.IsChatMember(ctx, chatID, caller)
+	member, err := s.isEffectiveChatMember(ctx, row, caller)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
