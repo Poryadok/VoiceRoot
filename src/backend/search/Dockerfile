@@ -6,12 +6,13 @@ WORKDIR /src
 COPY pkg/go.mod pkg/go.sum ./pkg/
 COPY search/go.mod search/go.sum ./search/
 COPY voice/pb/voice/search/go.mod ./voice/pb/voice/search/
-COPY voice/pb/voice/chat/go.mod ./voice/pb/voice/chat/
+COPY voice/pb/voice/space/go.mod ./voice/pb/voice/space/
 COPY chat/pb/voice/chat/go.mod ./chat/pb/voice/chat/
 COPY messaging/pb/voice/messaging/go.mod ./messaging/pb/voice/messaging/
 COPY messaging/pb/voice/events/go.mod ./messaging/pb/voice/events/
 COPY role/pb/voice/role/go.mod ./role/pb/voice/role/
 COPY user/pb/voice/social/go.mod ./user/pb/voice/social/
+COPY user/pb/voice/user/go.mod ./user/pb/voice/user/
 COPY user/pb/voice/common/go.mod user/pb/voice/common/go.sum ./user/pb/voice/common/
 RUN cd search && go mod download
 COPY pkg ./pkg

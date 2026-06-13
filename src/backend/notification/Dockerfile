@@ -7,10 +7,15 @@ COPY pkg/go.mod ./pkg/
 COPY notification/go.mod ./notification/
 COPY voice/pb/voice/notification/go.mod ./voice/pb/voice/notification/
 COPY messaging/pb/voice/events/go.mod ./messaging/pb/voice/events/
+COPY chat/pb/voice/chat/go.mod ./chat/pb/voice/chat/
+COPY user/pb/voice/user/go.mod ./user/pb/voice/user/
+COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
 RUN cd notification && go mod download
 COPY pkg ./pkg
 COPY voice/pb ./voice/pb
 COPY messaging/pb ./messaging/pb
+COPY chat/pb/voice/chat ./chat/pb/voice/chat
+COPY user/pb ./user/pb
 COPY notification ./notification
 WORKDIR /src/notification
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/service .
