@@ -108,6 +108,14 @@ String? resolveDmPeerForChatId({
   return inferDmPeerFromMessages(messages, activeProfileId);
 }
 
+/// Active reply target per chat (thread parent message id for composer).
+final chatReplyTargetProvider =
+    StateProvider.family<VoiceMessage?, String>((ref, chatId) => null);
+
+/// Open thread panel parent message id per chat.
+final chatActiveThreadProvider =
+    StateProvider.family<String?, String>((ref, chatId) => null);
+
 final _chatListRefreshTokenProvider = StateProvider<int>((ref) => 0);
 final chatInboxProvider = StateProvider<String>((ref) => 'main');
 
@@ -714,6 +722,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     String content, {
     List<MessageAttachment> attachments = const [],
     List<MessageMention> mentions = const [],
+    String? threadParentId,
   }) async {
     final trimmed = content.trim();
     if (trimmed.isEmpty && attachments.isEmpty) return null;
@@ -732,6 +741,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           content: trimmed,
           attachments: attachments,
           mentions: mentions,
+          threadParentId: threadParentId,
         );
     if (!mounted) return null;
     switch (result) {

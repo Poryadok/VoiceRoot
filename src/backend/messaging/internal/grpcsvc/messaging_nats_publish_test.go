@@ -32,7 +32,7 @@ type spyMessageEvents struct {
 	read     [][3]string // message_id, chat_id, profile_id
 }
 
-func (s *spyMessageEvents) PublishMessageSent(_ context.Context, messageID, chatID, senderProfileID string, hasMentions bool) error {
+func (s *spyMessageEvents) PublishMessageSent(_ context.Context, messageID, chatID, senderProfileID string, hasMentions bool, _ string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	flag := "false"

@@ -495,6 +495,23 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatMessageForward => 'Переслать';
 
   @override
+  String get chatMessageReply => 'Ответить';
+
+  @override
+  String chatReplyingTo(String preview) {
+    return 'Ответ на $preview';
+  }
+
+  @override
+  String get chatThreadTitle => 'Тред';
+
+  @override
+  String get chatThreadEmpty => 'Пока нет ответов';
+
+  @override
+  String get chatChannelMainFeedBlocked => 'Пишите в тред или от имени канала';
+
+  @override
   String get chatMessageAddReaction => 'Добавить реакцию';
 
   @override

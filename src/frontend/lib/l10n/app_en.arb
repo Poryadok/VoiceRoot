@@ -270,6 +270,18 @@
   "chatAttachFile": "Attach file",
   "chatMessageEdit": "Edit",
   "chatMessageForward": "Forward",
+  "chatMessageReply": "Reply",
+  "chatReplyingTo": "Replying to {preview}",
+  "@chatReplyingTo": {
+    "placeholders": {
+      "preview": {
+        "type": "String"
+      }
+    }
+  },
+  "chatThreadTitle": "Thread",
+  "chatThreadEmpty": "No replies yet",
+  "chatChannelMainFeedBlocked": "Post in a thread or as the channel",
   "chatMessageAddReaction": "Add reaction",
   "chatMessagePin": "Pin message",
   "chatMessageUnpin": "Unpin message",

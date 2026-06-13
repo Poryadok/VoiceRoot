@@ -54,6 +54,23 @@ type MessagingGRPC struct {
 	RolePermissions mentions.RolePermissionChecker
 	// UserPresence resolves online members for @here.
 	UserPresence mentions.OnlinePresenceLookup
+	// ChatThreadPolicy loads thread settings from chat_db (Phase 10).
+	ChatThreadPolicy *store.SQLChatThreadPolicy
+	// ChatRolePermissions checks TEXT_CHAT_*_THREADS in space chats.
+	ChatRolePermissions ChatRolePermissions
+}
+
+// ChatRolePermissions checks permissions scoped to a text chat in a space.
+type ChatRolePermissions interface {
+	HasChatPermission(ctx context.Context, spaceID, profileID, chatID uuid.UUID, permission string) (bool, error)
+}
+
+func (s *MessagingGRPC) threadPolicyDeps() threadPolicyDeps {
+	return threadPolicyDeps{
+		Policy:    s.ChatThreadPolicy,
+		Messages:  s.Messages,
+		RolePerms: s.ChatRolePermissions,
+	}
 }
 
 func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMessageRequest) (*messagingv1.SendMessageResponse, error) {
@@ -82,6 +99,21 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 	if err := s.checkDMBlocksForSend(ctx, chatID, profileID); err != nil {
 		return nil, err
 	}
+
+	var threadParent *uuid.UUID
+	if req.GetThreadParentId() != "" {
+		tid, err := parseUUIDField("thread_parent_id", req.GetThreadParentId())
+		if err != nil {
+			return nil, err
+		}
+		threadParent = &tid
+	}
+
+	postedAsChat := req.GetPostedAsChat()
+	if err := s.threadPolicyDeps().validateSend(ctx, chatID, profileID, threadParent, postedAsChat); err != nil {
+		return nil, err
+	}
+
 	if s.Moderation != nil {
 		if err := s.Moderation.EnsureCanSend(ctx, chatID, profileID); err != nil {
 			if errors.Is(err, store.ErrMemberTimedOut) {
@@ -131,13 +163,23 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 	}
 	typeStr, kind := messageKindToWire(req.GetMessageKind())
 
-	var threadParent *uuid.UUID
-	if req.GetThreadParentId() != "" {
-		tid, err := parseUUIDField("thread_parent_id", req.GetThreadParentId())
-		if err != nil {
-			return nil, err
+	chatType := "dm"
+	var displayChatID *uuid.UUID
+	if s.ChatThreadPolicy != nil {
+		pol, perr := s.ChatThreadPolicy.Load(ctx, chatID)
+		if errors.Is(perr, store.ErrChatNotFound) {
+			return nil, status.Error(codes.NotFound, "chat not found")
 		}
-		threadParent = &tid
+		if perr != nil {
+			return nil, status.Error(codes.Internal, perr.Error())
+		}
+		if pol != nil {
+			chatType = pol.ChatType
+			if postedAsChat {
+				cid := chatID
+				displayChatID = &cid
+			}
+		}
 	}
 
 	var clientID *uuid.UUID
@@ -156,7 +198,10 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 	row := store.MessageRow{
 		ID:              msgID,
 		ChatID:          chatID,
+		ChatType:        chatType,
 		SenderProfileID: profileID,
+		PostedAsChat:    postedAsChat,
+		DisplayChatID:   displayChatID,
 		Content:         content,
 		Type:            typeStr,
 		ThreadParentID:  threadParent,
@@ -173,7 +218,11 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 	}
 	if s.MessageEvents != nil {
 		hasMentions := len(mentionTargets) > 0
-		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), hasMentions); err != nil {
+		threadParentID := ""
+		if saved.ThreadParentID != nil {
+			threadParentID = saved.ThreadParentID.String()
+		}
+		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), hasMentions, threadParentID); err != nil {
 			log.Printf("messaging: publish message.sent: %v", err)
 		}
 		if hasMentions {
@@ -443,7 +492,7 @@ func (s *MessagingGRPC) GetMessages(ctx context.Context, req *messagingv1.GetMes
 	if err != nil {
 		return nil, err
 	}
-	if err := validateChatRefDM(req.GetChat()); err != nil {
+	if err := validateChatRefMessaging(req.GetChat()); err != nil {
 		return nil, err
 	}
 	if s.ChatGuard != nil {
@@ -605,6 +654,97 @@ func (s *MessagingGRPC) GetMessages(ctx context.Context, req *messagingv1.GetMes
 	return &messagingv1.GetMessagesResponse{MessageList: ml}, nil
 }
 
+func (s *MessagingGRPC) GetThreadMessages(ctx context.Context, req *messagingv1.GetThreadMessagesRequest) (*messagingv1.GetThreadMessagesResponse, error) {
+	if s == nil || s.Messages == nil {
+		return nil, status.Error(codes.FailedPrecondition, "messaging persistence not configured")
+	}
+	profileID, ok := authctx.ProfileID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing profile")
+	}
+	chatID, err := parseUUIDField("chat.id", req.GetChat().GetId())
+	if err != nil {
+		return nil, err
+	}
+	parentID, err := parseUUIDField("thread_parent_id", req.GetThreadParentId())
+	if err != nil {
+		return nil, err
+	}
+	if err := validateChatRefMessaging(req.GetChat()); err != nil {
+		return nil, err
+	}
+	if s.ChatGuard != nil {
+		if err := s.ChatGuard.EnsureMember(ctx, chatID, profileID); err != nil {
+			if errors.Is(err, store.ErrNotChatMember) {
+				return nil, status.Error(codes.PermissionDenied, "not a chat member")
+			}
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+	}
+	parent, err := s.Messages.GetMessageByID(ctx, parentID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, status.Error(codes.NotFound, "thread parent not found")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if parent.DeletedAt != nil || parent.ChatID != chatID || parent.ThreadParentID != nil {
+		return nil, status.Error(codes.NotFound, "thread parent not found")
+	}
+
+	pageSize := int(req.GetPage().GetPageSize())
+	if pageSize <= 0 {
+		pageSize = defaultPageSize
+	}
+	if pageSize > maxPageSize {
+		pageSize = maxPageSize
+	}
+	beforeFromCursor, afterFromCursor, err := store.DecodeHistoryCursor(req.GetPage().GetCursor())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid page cursor")
+	}
+
+	var mode store.ListMode
+	var refID *uuid.UUID
+	switch {
+	case beforeFromCursor != nil:
+		mode = store.ListBeforeID
+		refID = beforeFromCursor
+	case afterFromCursor != nil:
+		mode = store.ListAfterID
+		refID = afterFromCursor
+	default:
+		mode = store.ListLatest
+	}
+
+	rows, err := s.Messages.ListThreadMessages(ctx, chatID, profileID, parentID, mode, refID, pageSize)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	hasMore := len(rows) > pageSize
+	if hasMore {
+		rows = rows[:pageSize]
+	}
+	msgs := make([]*messagingv1.Message, 0, len(rows))
+	for i := range rows {
+		msgs = append(msgs, messageRowToProto(&rows[i], messagingv1.MessageKind_MESSAGE_KIND_UNSPECIFIED, "[]", false))
+	}
+	next := ""
+	if hasMore {
+		next = nextCursorForPage(mode, rows)
+	}
+	ml := &messagingv1.MessageList{
+		Messages:   msgs,
+		NextCursor: next,
+		HasMore:    hasMore,
+		Page: &commonv1.CursorPageResponse{
+			NextCursor: next,
+			HasMore:    hasMore,
+		},
+	}
+	return &messagingv1.GetThreadMessagesResponse{MessageList: ml}, nil
+}
+
 func nextCursorForPage(mode store.ListMode, rows []store.MessageRow) string {
 	if len(rows) == 0 {
 		return ""
@@ -684,7 +824,7 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	if s.MessageEvents != nil {
-		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), false); err != nil {
+		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), false, ""); err != nil {
 			log.Printf("messaging: publish message.sent: %v", err)
 		}
 	}
@@ -1134,7 +1274,8 @@ func validateChatRefMessaging(ref *chatv1.ChatRef) error {
 	switch ref.GetType() {
 	case chatv1.ChatType_CHAT_TYPE_UNSPECIFIED,
 		chatv1.ChatType_CHAT_TYPE_DM,
-		chatv1.ChatType_CHAT_TYPE_GROUP:
+		chatv1.ChatType_CHAT_TYPE_GROUP,
+		chatv1.ChatType_CHAT_TYPE_CHANNEL:
 		return nil
 	default:
 		return status.Error(codes.InvalidArgument, "unsupported chat type")
@@ -1161,12 +1302,18 @@ func messageRowToProto(m *store.MessageRow, kind messagingv1.MessageKind, reacti
 	if m == nil {
 		return nil
 	}
-	dm := chatv1.ChatType_CHAT_TYPE_DM
+	chatType := chatv1.ChatType_CHAT_TYPE_DM
+	switch m.ChatType {
+	case "group":
+		chatType = chatv1.ChatType_CHAT_TYPE_GROUP
+	case "channel":
+		chatType = chatv1.ChatType_CHAT_TYPE_CHANNEL
+	}
 	out := &messagingv1.Message{
 		Id:              m.ID.String(),
-		Chat:            &chatv1.ChatRef{Id: m.ChatID.String(), Type: &dm},
+		Chat:            &chatv1.ChatRef{Id: m.ChatID.String(), Type: &chatType},
 		SenderProfileId: m.SenderProfileID.String(),
-		PostedAsChat:    false,
+		PostedAsChat:    m.PostedAsChat,
 		Content:         m.Content,
 		Type:            m.Type,
 		AttachmentsJson: m.AttachmentsJSON,
@@ -1176,6 +1323,9 @@ func messageRowToProto(m *store.MessageRow, kind messagingv1.MessageKind, reacti
 	}
 	if isPinned {
 		out.IsPinned = ptrBool(true)
+	}
+	if m.DisplayChatID != nil {
+		out.DisplayChatId = ptrString(m.DisplayChatID.String())
 	}
 	if m.ThreadParentID != nil {
 		out.ThreadParentId = ptrString(m.ThreadParentID.String())

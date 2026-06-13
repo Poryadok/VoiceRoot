@@ -177,6 +177,7 @@ func memberDefaultMask() (uint64, error) {
 		TextChatSendMedia, TextChatEmbedLinks, TextChatAttachFiles, TextChatAddReactions,
 		TextChatUseExternalEmojis, TextChatReadHistory,
 		TextChatCreateInSpace, VoiceJoin, VoiceSpeak, VoiceVideo, VoiceUsePTT,
+		TextChatCreateThreads, TextChatSendInThreads,
 	}
 	var mask uint64
 	for _, p := range parts {
@@ -198,6 +199,7 @@ func moderatorDefaultMask() (uint64, error) {
 		MemberKick, MemberBan, MemberAssignRoles, TextChatManageMessages, VoiceMuteOthers,
 		ModerationTimeoutMembers, TextChatSetSlowMode,
 		TextChatMentionAllOnline, TextChatMentionAllInChat, TextChatPinMessages,
+		TextChatManageThreads,
 	} {
 		bit, err := MaskFor(p)
 		if err != nil {

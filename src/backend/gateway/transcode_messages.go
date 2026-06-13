@@ -41,6 +41,28 @@ func (t *transcoder) serveMessages(w http.ResponseWriter, r *http.Request, rest 
 		writeProtoJSON(w, http.StatusOK, resp)
 		return true
 
+	case r.Method == http.MethodGet && rest == "thread":
+		req := &messagingv1.GetThreadMessagesRequest{
+			Chat:           &chatv1.ChatRef{Id: queryFirst(r, "chat_id")},
+			ThreadParentId: queryFirst(r, "thread_parent_id"),
+		}
+		page := &commonv1.CursorPageRequest{}
+		_ = decodeQueryJSON(page, queryFirst(r, "page"))
+		if page.Cursor == "" {
+			page.Cursor = queryFirst(r, "cursor")
+		}
+		if page.PageSize == 0 {
+			page.PageSize = parseInt32Query(queryFirst(r, "page_size"))
+		}
+		req.Page = page
+		resp, err := t.clients.messaging.GetThreadMessages(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
 	case r.Method == http.MethodGet && rest == "":
 		req := &messagingv1.GetMessagesRequest{
 			Chat: &chatv1.ChatRef{Id: queryFirst(r, "chat_id")},

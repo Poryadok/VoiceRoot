@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,7 +19,10 @@ import (
 type MessageRow struct {
 	ID                uuid.UUID
 	ChatID            uuid.UUID
+	ChatType          string
 	SenderProfileID   uuid.UUID
+	PostedAsChat      bool
+	DisplayChatID     *uuid.UUID
 	Content           string
 	Type              string
 	ThreadParentID    *uuid.UUID
@@ -101,22 +105,30 @@ func (s *MessagesStore) InsertMessage(ctx context.Context, row MessageRow) (*Mes
 	if row.ForwardFromSender != "" {
 		forwardSenderAny = row.ForwardFromSender
 	}
+	chatType := row.ChatType
+	if chatType == "" {
+		chatType = "dm"
+	}
+	var displayAny any
+	if row.DisplayChatID != nil {
+		displayAny = *row.DisplayChatID
+	}
 
 	q := `
 INSERT INTO messages (
-  id, chat_id, chat_type, sender_profile_id, posted_as_chat,
+  id, chat_id, chat_type, sender_profile_id, posted_as_chat, display_chat_id,
   content, type, thread_parent_id, forward_from_id, forward_from_sender,
   attachments, mentions, client_message_id
 ) VALUES (
-  $1, $2, 'dm', $3, false,
-  $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11
+  $1, $2, $3, $4, $5, $6,
+  $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14
 )
 ON CONFLICT (chat_id, sender_profile_id, client_message_id)
   WHERE client_message_id IS NOT NULL
   DO NOTHING
 `
 	ct, err := s.Pool.Exec(ctx, q,
-		row.ID, row.ChatID, row.SenderProfileID,
+		row.ID, row.ChatID, chatType, row.SenderProfileID, row.PostedAsChat, displayAny,
 		row.Content, row.Type, threadAny, forwardFromAny, forwardSenderAny,
 		row.AttachmentsJSON, row.MentionsJSON, clientAny,
 	)
@@ -137,12 +149,14 @@ LIMIT 1
 }
 
 const messageSelectSQL = `
-SELECT id, chat_id, sender_profile_id, content, type, thread_parent_id,
+SELECT id, chat_id, chat_type, sender_profile_id, posted_as_chat, display_chat_id,
+       content, type, thread_parent_id,
        forward_from_id, forward_from_sender,
        attachments::text, mentions::text, client_message_id, edited_at, deleted_at, created_at
 `
 
-const messageReturningCols = `id, chat_id, sender_profile_id, content, type, thread_parent_id,
+const messageReturningCols = `id, chat_id, chat_type, sender_profile_id, posted_as_chat, display_chat_id,
+       content, type, thread_parent_id,
        forward_from_id, forward_from_sender,
        attachments::text, mentions::text, client_message_id, edited_at, deleted_at, created_at`
 
@@ -152,8 +166,10 @@ func scanMessageRow(row pgx.Row) (*MessageRow, error) {
 	var forwardFromID *uuid.UUID
 	var forwardSender *string
 	var clientID *uuid.UUID
+	var displayID *uuid.UUID
 	err := row.Scan(
-		&m.ID, &m.ChatID, &m.SenderProfileID, &m.Content, &m.Type, &threadID,
+		&m.ID, &m.ChatID, &m.ChatType, &m.SenderProfileID, &m.PostedAsChat, &displayID,
+		&m.Content, &m.Type, &threadID,
 		&forwardFromID, &forwardSender,
 		&m.AttachmentsJSON, &m.MentionsJSON, &clientID, &m.EditedAt, &m.DeletedAt, &m.CreatedAt,
 	)
@@ -161,6 +177,7 @@ func scanMessageRow(row pgx.Row) (*MessageRow, error) {
 		return nil, err
 	}
 	m.ThreadParentID = threadID
+	m.DisplayChatID = displayID
 	if forwardFromID != nil {
 		m.ForwardFromID = forwardFromID
 	}
@@ -246,6 +263,28 @@ const (
 )
 
 func (s *MessagesStore) ListMessages(ctx context.Context, chatID, viewerProfileID uuid.UUID, mode ListMode, refID *uuid.UUID, limit int) ([]MessageRow, error) {
+	return s.listMessagesFiltered(ctx, chatID, viewerProfileID, mode, refID, limit, true, nil)
+}
+
+func (s *MessagesStore) ListThreadMessages(ctx context.Context, chatID, viewerProfileID, threadParentID uuid.UUID, mode ListMode, refID *uuid.UUID, limit int) ([]MessageRow, error) {
+	return s.listMessagesFiltered(ctx, chatID, viewerProfileID, mode, refID, limit, false, &threadParentID)
+}
+
+func (s *MessagesStore) ThreadHasReplies(ctx context.Context, chatID, threadParentID uuid.UUID) (bool, error) {
+	if s == nil || s.Pool == nil {
+		return false, errors.New("messages store: pool not configured")
+	}
+	var exists bool
+	err := s.Pool.QueryRow(ctx, `
+SELECT EXISTS(
+  SELECT 1 FROM messages
+  WHERE chat_id = $1 AND thread_parent_id = $2 AND deleted_at IS NULL
+)
+`, chatID, threadParentID).Scan(&exists)
+	return exists, err
+}
+
+func (s *MessagesStore) listMessagesFiltered(ctx context.Context, chatID, viewerProfileID uuid.UUID, mode ListMode, refID *uuid.UUID, limit int, mainFeedOnly bool, threadParentID *uuid.UUID) ([]MessageRow, error) {
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("messages store: pool not configured")
 	}
@@ -254,42 +293,56 @@ func (s *MessagesStore) ListMessages(ctx context.Context, chatID, viewerProfileI
 	}
 	fetch := limit + 1
 
+	threadClause := ""
+	argsBase := []any{chatID}
+	argN := 2
+	if mainFeedOnly {
+		threadClause = " AND thread_parent_id IS NULL"
+	} else if threadParentID != nil {
+		threadClause = " AND thread_parent_id = $" + itoa(argN)
+		argsBase = append(argsBase, *threadParentID)
+		argN++
+	}
+
 	var rows pgx.Rows
 	var err error
 	switch mode {
 	case ListLatest:
+		args := append(append([]any{}, argsBase...), fetch, viewerProfileID)
 		rows, err = s.Pool.Query(ctx, messageSelectSQL+`
 FROM messages
-WHERE chat_id = $1 AND deleted_at IS NULL
+WHERE chat_id = $1 AND deleted_at IS NULL`+threadClause+`
   AND NOT EXISTS (
     SELECT 1 FROM message_hides h
-    WHERE h.message_id = messages.id AND h.profile_id = $3
+    WHERE h.message_id = messages.id AND h.profile_id = $`+itoa(argN+1)+`
   )
 ORDER BY id DESC
-LIMIT $2
-`, chatID, fetch, viewerProfileID)
+LIMIT $`+itoa(argN)+`
+`, args...)
 	case ListBeforeID:
+		args := append(append([]any{}, argsBase...), *refID, fetch, viewerProfileID)
 		rows, err = s.Pool.Query(ctx, messageSelectSQL+`
 FROM messages
-WHERE chat_id = $1 AND deleted_at IS NULL AND id < $2::uuid
+WHERE chat_id = $1 AND deleted_at IS NULL AND id < $`+itoa(argN)+`::uuid`+threadClause+`
   AND NOT EXISTS (
     SELECT 1 FROM message_hides h
-    WHERE h.message_id = messages.id AND h.profile_id = $4
+    WHERE h.message_id = messages.id AND h.profile_id = $`+itoa(argN+2)+`
   )
 ORDER BY id DESC
-LIMIT $3
-`, chatID, *refID, fetch, viewerProfileID)
+LIMIT $`+itoa(argN+1)+`
+`, args...)
 	case ListAfterID:
+		args := append(append([]any{}, argsBase...), *refID, fetch, viewerProfileID)
 		rows, err = s.Pool.Query(ctx, messageSelectSQL+`
 FROM messages
-WHERE chat_id = $1 AND deleted_at IS NULL AND id > $2::uuid
+WHERE chat_id = $1 AND deleted_at IS NULL AND id > $`+itoa(argN)+`::uuid`+threadClause+`
   AND NOT EXISTS (
     SELECT 1 FROM message_hides h
-    WHERE h.message_id = messages.id AND h.profile_id = $4
+    WHERE h.message_id = messages.id AND h.profile_id = $`+itoa(argN+2)+`
   )
 ORDER BY id ASC
-LIMIT $3
-`, chatID, *refID, fetch, viewerProfileID)
+LIMIT $`+itoa(argN+1)+`
+`, args...)
 	default:
 		return nil, errors.New("messages store: unknown list mode")
 	}
@@ -305,14 +358,17 @@ LIMIT $3
 		var forwardFromID *uuid.UUID
 		var forwardSender *string
 		var clientID *uuid.UUID
+		var displayID *uuid.UUID
 		if err := rows.Scan(
-			&m.ID, &m.ChatID, &m.SenderProfileID, &m.Content, &m.Type, &threadID,
+			&m.ID, &m.ChatID, &m.ChatType, &m.SenderProfileID, &m.PostedAsChat, &displayID,
+			&m.Content, &m.Type, &threadID,
 			&forwardFromID, &forwardSender,
 			&m.AttachmentsJSON, &m.MentionsJSON, &clientID, &m.EditedAt, &m.DeletedAt, &m.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
 		m.ThreadParentID = threadID
+		m.DisplayChatID = displayID
 		if forwardFromID != nil {
 			m.ForwardFromID = forwardFromID
 		}
@@ -323,6 +379,10 @@ LIMIT $3
 		out = append(out, m)
 	}
 	return out, rows.Err()
+}
+
+func itoa(n int) string {
+	return strconv.Itoa(n)
 }
 
 func (s *MessagesStore) UpsertReadReceipt(ctx context.Context, chatID, profileID, lastReadMessageID uuid.UUID) error {

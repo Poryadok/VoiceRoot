@@ -88,6 +88,8 @@ type Chat struct {
 	LastMessageAt    *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=last_message_at,json=lastMessageAt,proto3,oneof" json:"last_message_at,omitempty"`
 	CreatedAt        *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt        *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	ThreadsEnabled     bool                   `protobuf:"varint,12,opt,name=threads_enabled,json=threadsEnabled,proto3" json:"threads_enabled,omitempty"`
+	AllowUserMainFeed  bool                   `protobuf:"varint,13,opt,name=allow_user_main_feed,json=allowUserMainFeed,proto3" json:"allow_user_main_feed,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -197,6 +199,20 @@ func (x *Chat) GetUpdatedAt() *timestamppb.Timestamp {
 		return x.UpdatedAt
 	}
 	return nil
+}
+
+func (x *Chat) GetThreadsEnabled() bool {
+	if x != nil {
+		return x.ThreadsEnabled
+	}
+	return false
+}
+
+func (x *Chat) GetAllowUserMainFeed() bool {
+	if x != nil {
+		return x.AllowUserMainFeed
+	}
+	return false
 }
 
 type CreateDMRequest struct {

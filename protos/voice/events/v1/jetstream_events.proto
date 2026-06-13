@@ -160,6 +160,7 @@ message MessageSent {
   string chat_id = 2;
   string sender_profile_id = 3;
   bool has_mentions = 4;
+  optional string thread_parent_id = 5;
 }
 
 message MentionAdded {

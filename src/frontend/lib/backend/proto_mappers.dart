@@ -64,6 +64,7 @@ VoiceMessage voiceMessageFromProto(messaging_pb.Message msg) {
     deletedAt: protoTimestampToDateTime(msg.hasDeletedAt() ? msg.deletedAt : null),
     createdAt: protoTimestampToDateTime(msg.hasCreatedAt() ? msg.createdAt : null),
     isPinned: msg.hasIsPinned() && msg.isPinned,
+    threadParentId: msg.hasThreadParentId() ? emptyToNull(msg.threadParentId) : null,
   );
 }
 
@@ -106,11 +107,13 @@ messaging_pb.SendMessageRequest sendMessageRequestToProto({
   List<MessageAttachment> attachments = const [],
   List<MessageMention> mentions = const [],
   String? clientMessageId,
+  String? threadParentId,
 }) {
   return messaging_pb.SendMessageRequest(
     chat: chatRefToProto(chatId),
     content: content,
     clientMessageId: clientMessageId,
+    threadParentId: threadParentId,
     attachmentsJson: attachments.isEmpty
         ? ''
         : jsonEncode(

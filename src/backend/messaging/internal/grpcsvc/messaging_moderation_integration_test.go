@@ -29,6 +29,7 @@ func applyModerationSchemasForMessagingTest(t *testing.T, ctx context.Context, p
 	root := messagingRepoRoot(t)
 	for _, path := range []string{
 		"src/backend/migrations/chat_db/000004_slow_mode.up.sql",
+		"src/backend/migrations/chat_db/000005_thread_settings.up.sql",
 		"src/backend/migrations/space_db/000001_init.up.sql",
 		"src/backend/migrations/space_db/000004_moderation.up.sql",
 	} {

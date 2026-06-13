@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 
+	"github.com/nats-io/nats.go"
 	"google.golang.org/protobuf/proto"
 
 	eventsv1 "voice.app/voice/events/v1"
@@ -122,12 +123,12 @@ func reactionNotificationFanouts(ra *eventsv1.ReactionAdded, chatMemberProfileID
 	}}, true
 }
 
-func dispatchMessageStreamEvent(hub *wsHub, data []byte, logger *slog.Logger, requestID string) {
+func dispatchMessageStreamEvent(hub *wsHub, data []byte, header nats.Header, logger *slog.Logger, requestID string) {
 	if ma := mentionAddedFromBytes(data); ma != nil {
 		dispatchMentionAdded(hub, ma, data, logger, requestID)
 		return
 	}
-	chatID, fe, ok := messageEventBytesToFanout(data)
+	chatID, fe, ok := messageEventToFanout(data, header)
 	if !ok || chatID == "" {
 		return
 	}

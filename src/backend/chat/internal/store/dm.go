@@ -25,6 +25,8 @@ type ChatRow struct {
 	UpdatedAt        time.Time
 	LastMessageAt    *time.Time
 	InboxBucket      string
+	ThreadsEnabled   bool
+	AllowUserMainFeed bool
 }
 
 // DMStore persists DM chats and membership (Phase 1).

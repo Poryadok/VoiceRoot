@@ -29,8 +29,8 @@ func (s *DMStore) CreateSpaceChannelChat(ctx context.Context, creatorProfileID, 
 	var chatID uuid.UUID
 	var createdAt, updatedAt time.Time
 	err := s.Pool.QueryRow(ctx, `
-INSERT INTO chats (type, space_id, name, creator_profile_id, slow_mode_seconds)
-VALUES ('channel', $1, $2, $3, 0)
+INSERT INTO chats (type, space_id, name, creator_profile_id, slow_mode_seconds, threads_enabled, allow_user_main_feed)
+VALUES ('channel', $1, $2, $3, 0, true, false)
 RETURNING id, created_at, updated_at
 `, spaceID, name, creatorProfileID).Scan(&chatID, &createdAt, &updatedAt)
 	if err != nil {
@@ -39,13 +39,15 @@ RETURNING id, created_at, updated_at
 	n := name
 	sid := spaceID
 	return &ChatRow{
-		ID:               chatID,
-		Type:             "channel",
-		SpaceID:          &sid,
-		Name:             &n,
-		CreatorProfileID: creatorProfileID,
-		CreatedAt:        createdAt.UTC(),
-		UpdatedAt:        updatedAt.UTC(),
+		ID:                chatID,
+		Type:              "channel",
+		SpaceID:           &sid,
+		Name:              &n,
+		CreatorProfileID:  creatorProfileID,
+		ThreadsEnabled:    true,
+		AllowUserMainFeed: false,
+		CreatedAt:         createdAt.UTC(),
+		UpdatedAt:         updatedAt.UTC(),
 	}, nil
 }
 
@@ -134,7 +136,7 @@ func (s *DMStore) FindChatByID(ctx context.Context, chatID uuid.UUID) (*ChatRow,
 	}
 	return scanChatRow(s.Pool.QueryRow(ctx, `
 SELECT id, type, space_id, name, avatar_url, topic, creator_profile_id, slow_mode_seconds,
-       last_message_at, created_at, updated_at
+       last_message_at, created_at, updated_at, threads_enabled, allow_user_main_feed
 FROM chats
 WHERE id = $1
 `, chatID))
@@ -148,8 +150,9 @@ func scanChatRow(row pgx.Row) (*ChatRow, error) {
 	var slowMode int32
 	var lastMsg sql.NullTime
 	var createdAt, updatedAt time.Time
+	var threadsEnabled, allowUserMainFeed bool
 	err := row.Scan(&id, &chatType, &spaceID, &name, &avatarURL, &topic, &creator, &slowMode,
-		&lastMsg, &createdAt, &updatedAt)
+		&lastMsg, &createdAt, &updatedAt, &threadsEnabled, &allowUserMainFeed)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -157,12 +160,14 @@ func scanChatRow(row pgx.Row) (*ChatRow, error) {
 		return nil, err
 	}
 	r := &ChatRow{
-		ID:               id,
-		Type:             chatType,
-		CreatorProfileID: creator,
-		SlowModeSeconds:  slowMode,
-		CreatedAt:        createdAt.UTC(),
-		UpdatedAt:        updatedAt.UTC(),
+		ID:                id,
+		Type:              chatType,
+		CreatorProfileID:  creator,
+		SlowModeSeconds:   slowMode,
+		CreatedAt:         createdAt.UTC(),
+		UpdatedAt:         updatedAt.UTC(),
+		ThreadsEnabled:    threadsEnabled,
+		AllowUserMainFeed: allowUserMainFeed,
 	}
 	if spaceID.Valid {
 		if sid, perr := uuid.Parse(spaceID.String); perr == nil {
@@ -390,7 +395,7 @@ UPDATE chats
 SET %s
 WHERE id = $%d AND type = 'group'
 RETURNING id, type, space_id, name, avatar_url, topic, creator_profile_id, slow_mode_seconds,
-          last_message_at, created_at, updated_at
+          last_message_at, created_at, updated_at, threads_enabled, allow_user_main_feed
 `, strings.Join(sets, ", "), argN)
 	return scanChatRow(s.Pool.QueryRow(ctx, q, args...))
 }

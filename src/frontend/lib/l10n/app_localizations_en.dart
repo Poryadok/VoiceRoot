@@ -492,6 +492,23 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatMessageForward => 'Forward';
 
   @override
+  String get chatMessageReply => 'Reply';
+
+  @override
+  String chatReplyingTo(String preview) {
+    return 'Replying to $preview';
+  }
+
+  @override
+  String get chatThreadTitle => 'Thread';
+
+  @override
+  String get chatThreadEmpty => 'No replies yet';
+
+  @override
+  String get chatChannelMainFeedBlocked => 'Post in a thread or as the channel';
+
+  @override
   String get chatMessageAddReaction => 'Add reaction';
 
   @override

@@ -136,6 +136,7 @@ type SendMessageRequest struct {
 	ThreadParentId  *string                `protobuf:"bytes,6,opt,name=thread_parent_id,json=threadParentId,proto3,oneof" json:"thread_parent_id,omitempty"`
 	// Prefer when set; aligns outgoing Message.type / Message.message_kind for new sends (docs/REPOSITORIES.md).
 	MessageKind   *MessageKind `protobuf:"varint,7,opt,name=message_kind,json=messageKind,proto3,enum=voice.messaging.v1.MessageKind,oneof" json:"message_kind,omitempty"`
+	PostedAsChat  *bool        `protobuf:"varint,8,opt,name=posted_as_chat,json=postedAsChat,proto3,oneof" json:"posted_as_chat,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -217,6 +218,13 @@ func (x *SendMessageRequest) GetMessageKind() MessageKind {
 		return *x.MessageKind
 	}
 	return MessageKind_MESSAGE_KIND_UNSPECIFIED
+}
+
+func (x *SendMessageRequest) GetPostedAsChat() bool {
+	if x != nil && x.PostedAsChat != nil {
+		return *x.PostedAsChat
+	}
+	return false
 }
 
 type EditMessageRequest struct {

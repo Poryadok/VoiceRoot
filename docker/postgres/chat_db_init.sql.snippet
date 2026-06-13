@@ -32,3 +32,12 @@ CREATE TABLE chat_members (
 
 CREATE INDEX chat_members_profile_id_idx ON chat_members (profile_id, joined_at DESC);
 CREATE INDEX chat_members_profile_inbox_idx ON chat_members (profile_id, inbox_bucket);
+
+-- 000005_thread_settings.up.sql (Phase 10)
+ALTER TABLE chats
+    ADD COLUMN IF NOT EXISTS threads_enabled BOOLEAN NOT NULL DEFAULT false,
+    ADD COLUMN IF NOT EXISTS allow_user_main_feed BOOLEAN NOT NULL DEFAULT true;
+
+UPDATE chats
+SET threads_enabled = true, allow_user_main_feed = false
+WHERE type = 'channel';

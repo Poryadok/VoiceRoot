@@ -32,6 +32,7 @@ import '../shell/side_panel.dart';
 import '../space/space_chat_slow_mode_sheet.dart';
 import '../search/in_chat_search.dart';
 import '../../state/shell_providers.dart';
+import 'thread_side_panel.dart';
 
 /// Main column: message history (REST) + composer; live updates via Realtime WS.
 class ChatRoomPanel extends ConsumerStatefulWidget {
@@ -166,15 +167,25 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     String? spaceId;
     var slowModeSeconds = 0;
     var isGroup = false;
+    VoiceChat? chatMeta;
     for (final item in ref.watch(chatListControllerProvider).items) {
-      if (item.chatId == widget.chatId && item.chat.isGroup) {
-        groupName = item.chat.name;
-        spaceId = item.chat.spaceId;
-        slowModeSeconds = item.chat.slowModeSeconds;
-        isGroup = true;
+      if (item.chatId == widget.chatId) {
+        chatMeta = item.chat;
+        if (item.chat.isGroup) {
+          groupName = item.chat.name;
+          spaceId = item.chat.spaceId;
+          slowModeSeconds = item.chat.slowModeSeconds;
+          isGroup = true;
+        }
         break;
       }
     }
+    final replyTarget = ref.watch(chatReplyTargetProvider(widget.chatId));
+    final activeThreadId = ref.watch(chatActiveThreadProvider(widget.chatId));
+    final blockChannelMainFeed =
+        chatMeta?.isChannel == true && chatMeta!.allowUserMainFeed == false;
+    final composerBlocked =
+        isOffline || (blockChannelMainFeed && replyTarget == null);
     final peerId = isGroup
         ? null
         : resolveDmPeerForChatId(
@@ -253,7 +264,11 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       _composerFocus.requestFocus();
     });
 
-    return Column(
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: Column(
       key: ChatRoomPanel.panelKey,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -453,6 +468,27 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
           ),
+        if (replyTarget != null)
+          Material(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            child: ListTile(
+              dense: true,
+              title: Text(
+                l10n.chatReplyingTo(
+                  replyTarget.content.trim().isEmpty
+                      ? '…'
+                      : replyTarget.content.trim(),
+                ),
+              ),
+              trailing: IconButton(
+                icon: const Icon(Icons.close, size: 18),
+                onPressed: () {
+                  ref.read(chatReplyTargetProvider(widget.chatId).notifier).state =
+                      null;
+                },
+              ),
+            ),
+          ),
         SafeArea(
           top: false,
           child: Padding(
@@ -461,7 +497,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
               children: [
                 IconButton(
                   tooltip: l10n.chatMentionInsert,
-                  onPressed: room.isSending || isOffline
+                  onPressed: room.isSending || composerBlocked
                       ? null
                       : () => _showMentionMenu(context),
                   icon: const Icon(Icons.alternate_email),
@@ -469,7 +505,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                 IconButton(
                   key: ChatRoomPanel.emojiPickerKey,
                   tooltip: l10n.chatMessageAddReaction,
-                  onPressed: room.isSending || isOffline
+                  onPressed: room.isSending || composerBlocked
                       ? null
                       : () => openEmojiPanel(
                           context,
@@ -488,7 +524,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                     controller: _composer,
                     focusNode: _composerFocus,
                     decoration: InputDecoration(
-                      hintText: l10n.chatRoomInputHint,
+                      hintText: blockChannelMainFeed && replyTarget == null
+                          ? l10n.chatChannelMainFeedBlocked
+                          : l10n.chatRoomInputHint,
                       isDense: true,
                     ),
                     onChanged: (value) {
@@ -499,15 +537,15 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                         hub.typingStart(widget.chatId);
                       }
                     },
-                    onSubmitted: room.isSending || isOffline ? null : (_) => _send(),
-                    readOnly: isOffline,
+                    onSubmitted: room.isSending || composerBlocked ? null : (_) => _send(),
+                    readOnly: composerBlocked,
                   ),
                 ),
                 const SizedBox(width: 8),
                 IconButton(
                   key: ChatRoomPanel.attachKey,
                   tooltip: l10n.chatAttachFile,
-                  onPressed: room.isSending || _uploadingAttachment || isOffline
+                  onPressed: room.isSending || _uploadingAttachment || composerBlocked
                       ? null
                       : _attachAndSend,
                   icon: _uploadingAttachment
@@ -521,7 +559,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                 const SizedBox(width: 4),
                 VoiceSendButton(
                   key: ChatRoomPanel.sendKey,
-                  onPressed: room.isSending ? null : _send,
+                  onPressed: room.isSending || composerBlocked ? null : _send,
                   isLoading: room.isSending,
                   tooltip: l10n.chatSendMessage,
                 ),
@@ -529,6 +567,29 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
             ),
           ),
         ),
+      ],
+          ),
+        ),
+        if (activeThreadId != null)
+          SizedBox(
+            width: 320,
+            child: ThreadSidePanel(
+              chatId: widget.chatId,
+              parentMessageId: activeThreadId,
+              parentPreview: replyTarget?.content ??
+                  room.messages
+                      .where((m) => m.id == activeThreadId)
+                      .map((m) => m.content)
+                      .firstOrNull ??
+                  '',
+              onClose: () {
+                ref.read(chatActiveThreadProvider(widget.chatId).notifier).state =
+                    null;
+                ref.read(chatReplyTargetProvider(widget.chatId).notifier).state =
+                    null;
+              },
+            ),
+          ),
       ],
     );
   }
@@ -588,9 +649,14 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
           orElse: () => const <String>[],
         );
     final mentions = parseMentionsFromContent(text, memberProfileIds: memberIds);
+    final replyTarget = ref.read(chatReplyTargetProvider(widget.chatId));
     final err = await ref
         .read(chatRoomControllerProvider(widget.chatId).notifier)
-        .sendMessage(text, mentions: mentions);
+        .sendMessage(
+          text,
+          mentions: mentions,
+          threadParentId: replyTarget?.id,
+        );
     if (!mounted) return;
     if (err == kChatOfflineBlockedError) {
       if (!mounted) return;
@@ -601,6 +667,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       );
     } else if (err == null) {
       _composer.clear();
+      if (replyTarget != null) {
+        ref.read(chatReplyTargetProvider(widget.chatId).notifier).state = null;
+      }
     }
     _refocusComposer();
   }
@@ -685,6 +754,11 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   onTap: () => Navigator.of(context).pop('react'),
                 ),
                 ListTile(
+                  leading: const Icon(Icons.reply_outlined),
+                  title: Text(sheetL10n.chatMessageReply),
+                  onTap: () => Navigator.of(context).pop('reply'),
+                ),
+                ListTile(
                   leading: const Icon(Icons.forward_outlined),
                   title: Text(sheetL10n.chatMessageForward),
                   onTap: () => Navigator.of(context).pop('forward'),
@@ -739,6 +813,11 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         message.id,
         currentlyPinned: message.isPinned,
       );
+    } else if (action == 'reply') {
+      ref.read(chatReplyTargetProvider(widget.chatId).notifier).state = message;
+      ref.read(chatActiveThreadProvider(widget.chatId).notifier).state =
+          message.id;
+      _refocusComposer();
     } else if (action == 'forward') {
       await ForwardMessageSheet.show(
         context,

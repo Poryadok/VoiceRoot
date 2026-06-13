@@ -130,12 +130,21 @@ func (s *RoleGRPC) ReorderRoles(ctx context.Context, req *rolev1.ReorderRolesReq
 		if err != nil {
 			return nil, err
 		}
-		can, err := s.Store.CanEditRole(ctx, spaceID, actor, id)
+		target, err := s.Store.GetRoleByID(ctx, id)
 		if err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
-		if !can {
-			return nil, status.Error(codes.PermissionDenied, "cannot reorder roles above your hierarchy")
+		if target == nil || target.SpaceID != spaceID {
+			return nil, status.Error(codes.InvalidArgument, "role not in space")
+		}
+		if !target.Managed {
+			can, err := s.Store.CanEditRole(ctx, spaceID, actor, id)
+			if err != nil {
+				return nil, status.Error(codes.Internal, err.Error())
+			}
+			if !can {
+				return nil, status.Error(codes.PermissionDenied, "cannot reorder roles above your hierarchy")
+			}
 		}
 		ids = append(ids, id)
 	}

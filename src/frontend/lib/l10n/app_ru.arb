@@ -257,6 +257,18 @@
   "chatAttachFile": "Прикрепить файл",
   "chatMessageEdit": "Изменить",
   "chatMessageForward": "Переслать",
+  "chatMessageReply": "Ответить",
+  "chatReplyingTo": "Ответ на {preview}",
+  "@chatReplyingTo": {
+    "placeholders": {
+      "preview": {
+        "type": "String"
+      }
+    }
+  },
+  "chatThreadTitle": "Тред",
+  "chatThreadEmpty": "Пока нет ответов",
+  "chatChannelMainFeedBlocked": "Пишите в тред или от имени канала",
   "chatMessageAddReaction": "Добавить реакцию",
   "chatMessagePin": "Закрепить сообщение",
   "chatMessageUnpin": "Открепить сообщение",

@@ -105,6 +105,8 @@ func chatRowToProto(r *store.ChatRow) *chatv1.Chat {
 		SlowModeSeconds:  r.SlowModeSeconds,
 		CreatedAt:        timestamppb.New(r.CreatedAt),
 		UpdatedAt:        timestamppb.New(r.UpdatedAt),
+		ThreadsEnabled:     r.ThreadsEnabled,
+		AllowUserMainFeed:  r.AllowUserMainFeed,
 	}
 	if r.SpaceID != nil {
 		sid := r.SpaceID.String()

@@ -130,6 +130,7 @@ class VoiceMessage {
     this.deletedAt,
     this.createdAt,
     this.isPinned = false,
+    this.threadParentId,
   });
 
   final String id;
@@ -146,6 +147,7 @@ class VoiceMessage {
   final DateTime? deletedAt;
   final DateTime? createdAt;
   final bool isPinned;
+  final String? threadParentId;
 
   factory VoiceMessage.fromJson(Map<String, dynamic> json) {
     final chat = json['chat'] as Map<String, dynamic>? ?? {};
@@ -164,6 +166,7 @@ class VoiceMessage {
       deletedAt: VoiceMessage.parseTimestamp(json['deleted_at']),
       createdAt: VoiceMessage.parseTimestamp(json['created_at']),
       isPinned: json['is_pinned'] as bool? ?? false,
+      threadParentId: json['thread_parent_id'] as String?,
     );
   }
 
@@ -195,6 +198,7 @@ class VoiceMessage {
       if (deletedAt != null) 'deleted_at': deletedAt!.toUtc().toIso8601String(),
       if (createdAt != null) 'created_at': createdAt!.toUtc().toIso8601String(),
       'is_pinned': isPinned,
+      if (threadParentId != null) 'thread_parent_id': threadParentId,
     };
   }
 
@@ -315,6 +319,19 @@ class MessageListData {
   final List<VoiceMessage> messages;
   final String? nextCursor;
   final bool hasMore;
+
+  factory MessageListData.fromJson(Map<String, dynamic> json) {
+    final list = json['message_list'] as Map<String, dynamic>? ?? json;
+    final raw = list['messages'] as List<dynamic>? ?? const [];
+    return MessageListData(
+      messages: raw
+          .whereType<Map<String, dynamic>>()
+          .map(VoiceMessage.fromJson)
+          .toList(growable: false),
+      nextCursor: list['next_cursor'] as String?,
+      hasMore: list['has_more'] as bool? ?? false,
+    );
+  }
 }
 
 class ReadStateData {
@@ -384,6 +401,39 @@ class VoiceMessagesClient {
     );
   }
 
+  Future<MessagesApiResult<MessageListData>> getThreadMessages({
+    required String authorization,
+    required String chatId,
+    required String threadParentId,
+    String? cursor,
+    int? pageSize,
+  }) async {
+    final params = <String, String>{
+      'chat_id': chatId,
+      'thread_parent_id': threadParentId,
+    };
+    if (cursor != null && cursor.isNotEmpty) params['cursor'] = cursor;
+    if (pageSize != null) params['page_size'] = '$pageSize';
+
+    final uri = _gateway.replace(
+      path: '/api/v1/messages/thread',
+      queryParameters: params,
+    );
+    final result = await _gateway.getProto(
+      uri,
+      authorization: authorization,
+      createEmpty: messaging_pb.GetThreadMessagesResponse.create,
+    );
+    return _map(
+      result,
+      (data) => messageListFromProto(
+        data.hasMessageList()
+            ? data.messageList
+            : messaging_pb.MessageList(),
+      ),
+    );
+  }
+
   Future<MessagesApiResult<VoiceMessage>> sendMessage({
     required String authorization,
     required String chatId,
@@ -391,6 +441,7 @@ class VoiceMessagesClient {
     List<MessageAttachment> attachments = const [],
     List<MessageMention> mentions = const [],
     String? clientMessageId,
+    String? threadParentId,
   }) async {
     final result = await _gateway.postProto(
       uri: _gateway.resolve('/api/v1/messages/send'),
@@ -401,6 +452,7 @@ class VoiceMessagesClient {
         attachments: attachments,
         mentions: mentions,
         clientMessageId: clientMessageId,
+        threadParentId: threadParentId,
       ),
       createEmpty: messaging_pb.SendMessageResponse.create,
     );

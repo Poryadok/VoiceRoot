@@ -1584,6 +1584,7 @@ type MessageSent struct {
 	ChatId          string                 `protobuf:"bytes,2,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
 	SenderProfileId string                 `protobuf:"bytes,3,opt,name=sender_profile_id,json=senderProfileId,proto3" json:"sender_profile_id,omitempty"`
 	HasMentions     bool                   `protobuf:"varint,4,opt,name=has_mentions,json=hasMentions,proto3" json:"has_mentions,omitempty"`
+	ThreadParentId  *string                `protobuf:"bytes,5,opt,name=thread_parent_id,json=threadParentId,proto3,oneof" json:"thread_parent_id,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -1644,6 +1645,13 @@ func (x *MessageSent) GetHasMentions() bool {
 		return x.HasMentions
 	}
 	return false
+}
+
+func (x *MessageSent) GetThreadParentId() string {
+	if x != nil && x.ThreadParentId != nil {
+		return *x.ThreadParentId
+	}
+	return ""
 }
 
 type MentionAdded struct {

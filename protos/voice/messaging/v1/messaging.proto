@@ -60,6 +60,7 @@ message SendMessageRequest {
   optional string thread_parent_id = 6;
   // Prefer when set; aligns outgoing Message.type / Message.message_kind for new sends (docs/REPOSITORIES.md).
   optional MessageKind message_kind = 7;
+  optional bool posted_as_chat = 8;
 }
 
 message EditMessageRequest {

@@ -38,6 +38,8 @@ class VoiceChat {
     this.avatarUrl,
     this.spaceId,
     this.slowModeSeconds = 0,
+    this.threadsEnabled = false,
+    this.allowUserMainFeed = true,
   });
 
   final String id;
@@ -47,9 +49,12 @@ class VoiceChat {
   final String? avatarUrl;
   final String? spaceId;
   final int slowModeSeconds;
+  final bool threadsEnabled;
+  final bool allowUserMainFeed;
 
   bool get isDm => type == ChatType.CHAT_TYPE_DM.name;
   bool get isGroup => type == ChatType.CHAT_TYPE_GROUP.name;
+  bool get isChannel => type == ChatType.CHAT_TYPE_CHANNEL.name;
 
   factory VoiceChat.fromJson(Map<String, dynamic> json) {
     return VoiceChat(
@@ -60,6 +65,8 @@ class VoiceChat {
       avatarUrl: json['avatar_url'] as String?,
       spaceId: json['space_id'] as String?,
       slowModeSeconds: json['slow_mode_seconds'] as int? ?? 0,
+      threadsEnabled: json['threads_enabled'] as bool? ?? false,
+      allowUserMainFeed: json['allow_user_main_feed'] as bool? ?? true,
     );
   }
 

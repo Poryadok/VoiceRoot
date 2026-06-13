@@ -54,6 +54,8 @@ message Chat {
   optional google.protobuf.Timestamp last_message_at = 9;
   google.protobuf.Timestamp created_at = 10;
   google.protobuf.Timestamp updated_at = 11;
+  bool threads_enabled = 12;
+  bool allow_user_main_feed = 13;
 }
 
 message CreateDMRequest {
@@ -77,6 +79,8 @@ message UpdateChatRequest {
   optional string topic = 3;
   optional int32 slow_mode_seconds = 4;
   optional string avatar_url = 5;
+  optional bool threads_enabled = 6;
+  optional bool allow_user_main_feed = 7;
 }
 
 message DeleteChatRequest {

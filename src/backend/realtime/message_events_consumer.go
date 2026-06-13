@@ -16,7 +16,8 @@ import (
 )
 
 const (
-	jsStreamMessageEvents = "message_events"
+	jsStreamMessageEvents  = "message_events"
+	natsHeaderThreadParentID = "X-Voice-Thread-Parent-Id"
 )
 
 func consumerDurableName(instanceID string) string {
@@ -28,8 +29,12 @@ func consumerDurableName(instanceID string) string {
 }
 
 // messageEventBytesToFanout maps Messaging JetStream protobuf (message.events) to a WebSocket fan-out envelope.
-// Returns ok=false for unknown payloads (e.g. reactions) or invalid data.
 func messageEventBytesToFanout(data []byte) (chatID string, env fanoutEnvelope, ok bool) {
+	return messageEventToFanout(data, nil)
+}
+
+// messageEventToFanout maps protobuf payload; optional NATS headers carry thread_parent_id until proto regen in CI.
+func messageEventToFanout(data []byte, header nats.Header) (chatID string, env fanoutEnvelope, ok bool) {
 	var e eventsv1.MessageStreamEvent
 	if err := proto.Unmarshal(data, &e); err != nil {
 		return "", fanoutEnvelope{}, false
@@ -40,10 +45,15 @@ func messageEventBytesToFanout(data []byte) (chatID string, env fanoutEnvelope, 
 		if ms == nil || ms.GetChatId() == "" {
 			return "", fanoutEnvelope{}, false
 		}
+		threadParentID := ms.GetThreadParentId()
+		if threadParentID == "" && header != nil {
+			threadParentID = header.Get(natsHeaderThreadParentID)
+		}
 		d, err := json.Marshal(map[string]string{
 			"chat_id":           ms.GetChatId(),
 			"message_id":        ms.GetMessageId(),
 			"sender_profile_id": ms.GetSenderProfileId(),
+			"thread_parent_id":  threadParentID,
 		})
 		if err != nil {
 			return "", fanoutEnvelope{}, false
@@ -200,12 +210,12 @@ func subscribeMessageEvents(js nats.JetStreamContext, hub *wsHub, instanceID str
 		attrs := messageEventLogAttrs(msg.Data)
 		if mentionAddedFromBytes(msg.Data) != nil {
 			natslog.LogConsume(logger, msg, slog.LevelInfo, "message event consumed", attrs...)
-			dispatchMessageStreamEvent(hub, msg.Data, logger, natslog.RequestIDFromMsg(msg))
+			dispatchMessageStreamEvent(hub, msg.Data, msg.Header, logger, natslog.RequestIDFromMsg(msg))
 			return
 		}
 		if _, _, ok := messageEventBytesToFanout(msg.Data); ok {
 			natslog.LogConsume(logger, msg, slog.LevelInfo, "message event consumed", attrs...)
-			dispatchMessageStreamEvent(hub, msg.Data, logger, natslog.RequestIDFromMsg(msg))
+			dispatchMessageStreamEvent(hub, msg.Data, msg.Header, logger, natslog.RequestIDFromMsg(msg))
 			return
 		}
 		natslog.LogConsume(logger, msg, slog.LevelWarn, "unknown message event payload", attrs...)

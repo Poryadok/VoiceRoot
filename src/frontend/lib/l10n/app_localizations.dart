@@ -968,6 +968,36 @@ abstract class AppLocalizations {
   /// **'Forward'**
   String get chatMessageForward;
 
+  /// No description provided for @chatMessageReply.
+  ///
+  /// In en, this message translates to:
+  /// **'Reply'**
+  String get chatMessageReply;
+
+  /// No description provided for @chatReplyingTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Replying to {preview}'**
+  String chatReplyingTo(String preview);
+
+  /// No description provided for @chatThreadTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Thread'**
+  String get chatThreadTitle;
+
+  /// No description provided for @chatThreadEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No replies yet'**
+  String get chatThreadEmpty;
+
+  /// No description provided for @chatChannelMainFeedBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Post in a thread or as the channel'**
+  String get chatChannelMainFeedBlocked;
+
   /// No description provided for @chatMessageAddReaction.
   ///
   /// In en, this message translates to:

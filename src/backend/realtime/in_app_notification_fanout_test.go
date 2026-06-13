@@ -346,7 +346,7 @@ func TestDispatchMessageStreamEvent_MentionFansOutPersonalOp(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dispatchMessageStreamEvent(hub, payload, nil, "")
+	dispatchMessageStreamEvent(hub, payload, nil, nil, "")
 
 	ops := drainFanoutOps(t, targetReg, 2*time.Second)
 	if !containsOp(ops, "mention") || !containsOp(ops, "notification") {
@@ -410,7 +410,7 @@ func TestDispatchMessageStreamEvent_MessageSentFansOutChatAndNotifications(t *te
 		t.Fatal(err)
 	}
 
-	dispatchMessageStreamEvent(hub, payload, nil, "")
+	dispatchMessageStreamEvent(hub, payload, nil, nil, "")
 
 	senderOps := drainFanoutOps(t, senderReg, 2*time.Second)
 	recipientOps := drainFanoutOps(t, recipientReg, 2*time.Second)
@@ -454,7 +454,7 @@ func TestDispatchMessageStreamEvent_MessageReadNoNotification(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dispatchMessageStreamEvent(hub, payload, nil, "")
+	dispatchMessageStreamEvent(hub, payload, nil, nil, "")
 
 	for _, reg := range []*connReg{readerReg, otherReg} {
 		ops := drainFanoutOps(t, reg, 2*time.Second)
@@ -497,7 +497,7 @@ func TestDispatchMessageStreamEvent_ReactionFansOutChatAndAuthorNotification(t *
 	}
 
 	// Until proto carries message_author_profile_id, hub dispatch derives author from chat state / event enrichment.
-	dispatchMessageStreamEvent(hub, payload, nil, "")
+	dispatchMessageStreamEvent(hub, payload, nil, nil, "")
 
 	authorOps := drainFanoutOps(t, authorReg, 2*time.Second)
 	reactorOps := drainFanoutOps(t, reactorReg, 2*time.Second)

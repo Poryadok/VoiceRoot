@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -28,6 +29,7 @@ const (
 	subjectMentionAdded      = "message.mention_added"
 	subjectMessagePinned     = "message.pinned"
 	subjectMessageUnpinned   = "message.unpinned"
+	natsHeaderThreadParentID = "X-Voice-Thread-Parent-Id"
 )
 
 // JetStreamPublisher publishes MessageStreamEvent payloads to NATS JetStream.
@@ -123,6 +125,10 @@ func (p *JetStreamPublisher) ensureStream() error {
 }
 
 func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, env *eventsv1.MessageStreamEvent) error {
+	return p.publishProtoWithHeaders(ctx, subject, env, nil)
+}
+
+func (p *JetStreamPublisher) publishProtoWithHeaders(ctx context.Context, subject string, env *eventsv1.MessageStreamEvent, extra nats.Header) error {
 	if err := p.ensureStream(); err != nil {
 		return err
 	}
@@ -132,6 +138,11 @@ func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, e
 	}
 	requestID := correlation.FromGRPC(ctx)
 	msg := &nats.Msg{Subject: subject, Data: b, Header: nats.Header{}}
+	for k, vals := range extra {
+		for _, v := range vals {
+			msg.Header.Add(k, v)
+		}
+	}
 	natslog.SetRequestIDHeader(msg.Header, requestID)
 	if _, err := p.js.PublishMsg(msg); err != nil {
 		return fmt.Errorf("jetstream publish %s: %w", subject, err)
@@ -187,7 +198,7 @@ func messageEventLogAttrs(env *eventsv1.MessageStreamEvent) []slog.Attr {
 }
 
 // PublishMessageSent implements MessageEventsPublisher.
-func (p *JetStreamPublisher) PublishMessageSent(ctx context.Context, messageID, chatID, senderProfileID string, hasMentions bool) error {
+func (p *JetStreamPublisher) PublishMessageSent(ctx context.Context, messageID, chatID, senderProfileID string, hasMentions bool, threadParentID string) error {
 	env := &eventsv1.MessageStreamEvent{
 		EventId:    uuid.NewString(),
 		OccurredAt: timestamppb.New(time.Now().UTC()),
@@ -197,10 +208,28 @@ func (p *JetStreamPublisher) PublishMessageSent(ctx context.Context, messageID, 
 				ChatId:          chatID,
 				SenderProfileId: senderProfileID,
 				HasMentions:     hasMentions,
+				ThreadParentId:  ptrIfNonEmpty(threadParentID),
 			},
 		},
 	}
-	return p.publishProto(ctx, subjectMessageSent, env)
+	return p.publishProtoWithHeaders(ctx, subjectMessageSent, env, messageSentPublishHeaders(threadParentID))
+}
+
+func messageSentPublishHeaders(threadParentID string) nats.Header {
+	if strings.TrimSpace(threadParentID) == "" {
+		return nil
+	}
+	h := nats.Header{}
+	h.Set(natsHeaderThreadParentID, strings.TrimSpace(threadParentID))
+	return h
+}
+
+func ptrIfNonEmpty(s string) *string {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	v := strings.TrimSpace(s)
+	return &v
 }
 
 // PublishMentionAdded implements MessageEventsPublisher.

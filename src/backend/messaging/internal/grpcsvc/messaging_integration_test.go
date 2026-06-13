@@ -62,16 +62,25 @@ func applySQLFile(t *testing.T, ctx context.Context, pool *pgxpool.Pool, relPath
 		applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000004_delete_for_me.up.sql"))
 		applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000005_reactions.up.sql"))
 		applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000006_pins.up.sql"))
+		applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000007_thread_index.up.sql"))
 	}
 	if strings.HasSuffix(relPath, filepath.Join("chat_db", "000001_init.up.sql")) {
 		applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000002_dm_requests.up.sql"))
 		applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000003_groups.up.sql"))
+		applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000005_thread_settings.up.sql"))
 	}
 }
 
 func withProfileCtx(ctx context.Context, accountID, profileID uuid.UUID) context.Context {
 	ctx = metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountID.String())
 	return metadata.AppendToOutgoingContext(ctx, authctx.HeaderProfileID, profileID.String())
+}
+
+func incomingProfileCtx(ctx context.Context, accountID, profileID uuid.UUID) context.Context {
+	return metadata.NewIncomingContext(ctx, metadata.Pairs(
+		authctx.HeaderUserID, accountID.String(),
+		authctx.HeaderProfileID, profileID.String(),
+	))
 }
 
 func chatDMRef(chatID uuid.UUID) *chatv1.ChatRef {
@@ -108,18 +117,19 @@ func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire
 		moderation = &store.SQLModerationGuard{Pool: pool}
 	}
 	messagingv1.RegisterMessagingServiceServer(srv, &MessagingGRPC{
-		Messages:         &store.MessagesStore{Pool: pool},
-		Reactions:        &store.ReactionsStore{Pool: pool},
-		Pins:             &store.PinsStore{Pool: pool},
-		ChatGuard:        guard,
-		Blocks:           w.Blocks,
-		UserProfiles:     w.UserProfiles,
-		MessageEvents:    w.MessageEvents,
-		Files:            w.Files,
-		Moderation:       moderation,
-		ChatMentionsMeta: &store.SQLChatMentionsMeta{Pool: pool},
-		RolePermissions:  w.RolePermissions,
-		UserPresence:     w.UserPresence,
+		Messages:          &store.MessagesStore{Pool: pool},
+		Reactions:         &store.ReactionsStore{Pool: pool},
+		Pins:              &store.PinsStore{Pool: pool},
+		ChatGuard:         guard,
+		Blocks:            w.Blocks,
+		UserProfiles:      w.UserProfiles,
+		MessageEvents:     w.MessageEvents,
+		Files:             w.Files,
+		Moderation:        moderation,
+		ChatMentionsMeta:  &store.SQLChatMentionsMeta{Pool: pool},
+		RolePermissions:   w.RolePermissions,
+		UserPresence:      w.UserPresence,
+		ChatThreadPolicy:  &store.SQLChatThreadPolicy{Pool: pool},
 	})
 	go func() {
 		if err := srv.Serve(lis); err != nil {
@@ -151,6 +161,20 @@ type messagingWire struct {
 func startMessagingServer(t *testing.T, pool *pgxpool.Pool) (messagingv1.MessagingServiceClient, func()) {
 	t.Helper()
 	return startMessagingServerWired(t, pool, messagingWire{})
+}
+
+func startMessagingDirect(t *testing.T, pool *pgxpool.Pool) *MessagingGRPC {
+	t.Helper()
+	guard := &store.SQLChatGuard{Pool: pool}
+	return &MessagingGRPC{
+		Messages:         &store.MessagesStore{Pool: pool},
+		Reactions:        &store.ReactionsStore{Pool: pool},
+		Pins:             &store.PinsStore{Pool: pool},
+		ChatGuard:        guard,
+		Moderation:       &store.SQLModerationGuard{Pool: pool},
+		ChatMentionsMeta: &store.SQLChatMentionsMeta{Pool: pool},
+		ChatThreadPolicy: &store.SQLChatThreadPolicy{Pool: pool},
+	}
 }
 
 type profileAcctMap map[uuid.UUID]uuid.UUID
@@ -1213,12 +1237,6 @@ func TestMessagingSendMessage_kindsAndValidation(t *testing.T) {
 	badThread := "not-uuid"
 	_, err = client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
 		Chat: chatDMRef(chatID), Content: "t", ThreadParentId: &badThread, AttachmentsJson: "[]", MentionsJson: "[]",
-	})
-	require.Equal(t, codes.InvalidArgument, status.Code(err))
-
-	channel := chatv1.ChatType_CHAT_TYPE_CHANNEL
-	_, err = client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
-		Chat: &chatv1.ChatRef{Id: chatID.String(), Type: &channel}, Content: "nope", AttachmentsJson: "[]", MentionsJson: "[]",
 	})
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }
