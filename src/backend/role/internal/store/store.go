@@ -19,3 +19,12 @@ type RoleRow struct {
 	Position        int32
 	Managed         bool
 }
+
+// OverrideRow is a chat or voice permission override with role metadata.
+type OverrideRow struct {
+	ChatID       uuid.UUID
+	VoiceRoomID  uuid.UUID
+	RoleID       uuid.UUID
+	RoleName     string
+	Allow, Deny  uint64
+}

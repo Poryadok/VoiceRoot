@@ -223,6 +223,27 @@ class GatewayHttpClient {
     );
   }
 
+  Future<GatewayHttpResult<Map<String, dynamic>>> patchJson({
+    required Uri uri,
+    String? authorization,
+    required Map<String, dynamic> body,
+    bool allowNoContent = false,
+  }) {
+    return _sendJsonMap(
+      (preferProvider) => _http.patch(
+        uri,
+        headers: _headers(
+          authorization: authorization,
+          json: true,
+          preferProvider: preferProvider,
+        ),
+        body: jsonEncode(body),
+      ),
+      isAuthRoute: _isAuthRoute(uri),
+      allowNoContent: allowNoContent,
+    );
+  }
+
   Future<GatewayHttpResult<void>> putBytes({
     required Uri uri,
     required Map<String, String> headers,

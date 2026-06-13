@@ -16,11 +16,14 @@ import (
 
 type recordingRoleService struct {
 	rolev1.UnimplementedRoleServiceServer
-	lastList   *rolev1.ListRolesRequest
-	lastCreate *rolev1.CreateRoleRequest
-	lastAssign *rolev1.AssignRoleRequest
-	lastCheck  *rolev1.CheckPermissionRequest
-	lastChat   *rolev1.SetChatOverrideRequest
+	lastList      *rolev1.ListRolesRequest
+	lastCreate    *rolev1.CreateRoleRequest
+	lastAssign    *rolev1.AssignRoleRequest
+	lastCheck     *rolev1.CheckPermissionRequest
+	lastChat      *rolev1.SetChatOverrideRequest
+	lastUpdate    *rolev1.UpdateRoleRequest
+	lastDelete    *rolev1.DeleteRoleRequest
+	lastEffective *rolev1.GetEffectivePermissionsRequest
 }
 
 func (s *recordingRoleService) ListRoles(_ context.Context, req *rolev1.ListRolesRequest) (*rolev1.ListRolesResponse, error) {
@@ -52,6 +55,23 @@ func (s *recordingRoleService) CheckPermission(_ context.Context, req *rolev1.Ch
 func (s *recordingRoleService) SetChatOverride(_ context.Context, req *rolev1.SetChatOverrideRequest) (*rolev1.SetChatOverrideResponse, error) {
 	s.lastChat = req
 	return &rolev1.SetChatOverrideResponse{}, nil
+}
+
+func (s *recordingRoleService) DeleteRole(_ context.Context, req *rolev1.DeleteRoleRequest) (*rolev1.DeleteRoleResponse, error) {
+	s.lastDelete = req
+	return &rolev1.DeleteRoleResponse{}, nil
+}
+
+func (s *recordingRoleService) UpdateRole(_ context.Context, req *rolev1.UpdateRoleRequest) (*rolev1.UpdateRoleResponse, error) {
+	s.lastUpdate = req
+	return &rolev1.UpdateRoleResponse{Role: &rolev1.Role{Id: req.GetRoleId(), Name: req.GetName()}}, nil
+}
+
+func (s *recordingRoleService) GetEffectivePermissions(_ context.Context, req *rolev1.GetEffectivePermissionsRequest) (*rolev1.GetEffectivePermissionsResponse, error) {
+	s.lastEffective = req
+	return &rolev1.GetEffectivePermissionsResponse{
+		PermissionSet: &rolev1.PermissionSet{EffectiveMask: 1},
+	}, nil
 }
 
 func startBufconnRoleConn(t *testing.T, impl rolev1.RoleServiceServer) (rolev1.RoleServiceClient, func()) {
@@ -151,11 +171,53 @@ func TestTranscodeRolesChatOverride(t *testing.T) {
 	rec := &recordingRoleService{}
 	h := newRolesContractGateway(t, rec)
 
-	body := `{"space_id":"space-1","chat":{"id":"chat-1"},"deny_mask":8}`
+	body := `{"space_id":"space-1","chat":{"id":"chat-1"},"role_id":"role-member","deny_mask":8}`
 	resp := performRequest(h, http.MethodPost, "/api/v1/roles/chat-overrides", body, map[string]string{
 		"Authorization": "Bearer valid-user-token",
 	})
 	require.Equal(t, http.StatusOK, resp.Code)
 	require.NotNil(t, rec.lastChat)
 	require.Equal(t, "chat-1", rec.lastChat.GetChat().GetId())
+	require.Equal(t, "role-member", rec.lastChat.GetRoleId())
+}
+
+// TestTranscodeRolesUpdate documents PATCH /api/v1/roles/{role_id}.
+func TestTranscodeRolesUpdate(t *testing.T) {
+	t.Parallel()
+	rec := &recordingRoleService{}
+	h := newRolesContractGateway(t, rec)
+
+	body := `{"name":"Renamed"}`
+	resp := performRequest(h, http.MethodPatch, "/api/v1/roles/role-42", body, map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	require.Equal(t, http.StatusOK, resp.Code)
+	require.NotNil(t, rec.lastUpdate)
+	require.Equal(t, "role-42", rec.lastUpdate.GetRoleId())
+}
+
+// TestTranscodeRolesEffective documents GET /api/v1/roles/effective.
+func TestTranscodeRolesDelete(t *testing.T) {
+	t.Parallel()
+	rec := &recordingRoleService{}
+	h := newRolesContractGateway(t, rec)
+
+	resp := performRequest(h, http.MethodDelete, "/api/v1/roles/role-del", "", map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	require.Equal(t, http.StatusOK, resp.Code)
+	require.NotNil(t, rec.lastDelete)
+	require.Equal(t, "role-del", rec.lastDelete.GetRoleId())
+}
+
+func TestTranscodeRolesEffective(t *testing.T) {
+	t.Parallel()
+	rec := &recordingRoleService{}
+	h := newRolesContractGateway(t, rec)
+
+	resp := performRequest(h, http.MethodGet, "/api/v1/roles/effective?space_id=space-1&profile_id=profile-1", "", map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	require.Equal(t, http.StatusOK, resp.Code)
+	require.NotNil(t, rec.lastEffective)
 }

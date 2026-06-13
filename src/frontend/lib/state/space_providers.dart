@@ -444,7 +444,12 @@ bool viewerCanManageSpaceMembers(
   return false;
 }
 
-typedef SpacePermissionQuery = ({String spaceId, String permission});
+typedef SpacePermissionQuery = ({
+  String spaceId,
+  String permission,
+  String? chatId,
+  String? voiceRoomId,
+});
 
 final spacePermissionProvider = FutureProvider.family<bool, SpacePermissionQuery>(
   (ref, query) async {
@@ -456,6 +461,8 @@ final spacePermissionProvider = FutureProvider.family<bool, SpacePermissionQuery
       spaceId: query.spaceId,
       profileId: profileId,
       permissionName: query.permission,
+      chatId: query.chatId,
+      voiceRoomId: query.voiceRoomId,
     );
     return switch (result) {
       RolesApiOk(:final data) => data,
@@ -463,3 +470,115 @@ final spacePermissionProvider = FutureProvider.family<bool, SpacePermissionQuery
     };
   },
 );
+
+final defaultJoinRoleProvider = FutureProvider.family<SpaceRole?, String>((
+  ref,
+  spaceId,
+) async {
+  final auth = ref.watch(authorizationHeaderProvider);
+  if (auth == null) return null;
+  final result = await ref.read(voiceRolesClientProvider).getDefaultJoinRole(
+    authorization: auth,
+    spaceId: spaceId,
+  );
+  return switch (result) {
+    RolesApiOk(:final data) => data,
+    RolesApiFailure() => null,
+  };
+});
+
+class SpaceRoleActions {
+  SpaceRoleActions(this._ref);
+
+  final Ref _ref;
+
+  Future<String?> createRole({
+    required String spaceId,
+    required String name,
+    int permissionsMask = 0,
+    int position = 1,
+  }) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+    final result = await _ref.read(voiceRolesClientProvider).createRole(
+      authorization: auth,
+      spaceId: spaceId,
+      name: name,
+      permissionsMask: permissionsMask,
+      position: position,
+    );
+    return switch (result) {
+      RolesApiFailure(:final message) => message,
+      RolesApiOk() => () {
+        _ref.invalidate(spaceRolesProvider(spaceId));
+        return null;
+      }(),
+    };
+  }
+
+  Future<String?> updateRole({
+    required String spaceId,
+    required String roleId,
+    String? name,
+    int? permissionsMask,
+  }) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+    final result = await _ref.read(voiceRolesClientProvider).updateRole(
+      authorization: auth,
+      roleId: roleId,
+      name: name,
+      permissionsMask: permissionsMask,
+    );
+    return switch (result) {
+      RolesApiFailure(:final message) => message,
+      RolesApiOk() => () {
+        _ref.invalidate(spaceRolesProvider(spaceId));
+        return null;
+      }(),
+    };
+  }
+
+  Future<String?> deleteRole({
+    required String spaceId,
+    required String roleId,
+  }) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+    final result = await _ref.read(voiceRolesClientProvider).deleteRole(
+      authorization: auth,
+      roleId: roleId,
+    );
+    return switch (result) {
+      RolesApiFailure(:final message) => message,
+      RolesApiOk() => () {
+        _ref.invalidate(spaceRolesProvider(spaceId));
+        return null;
+      }(),
+    };
+  }
+
+  Future<String?> setDefaultJoinRole({
+    required String spaceId,
+    required String roleId,
+  }) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+    final result = await _ref.read(voiceRolesClientProvider).setDefaultJoinRole(
+      authorization: auth,
+      spaceId: spaceId,
+      roleId: roleId,
+    );
+    return switch (result) {
+      RolesApiFailure(:final message) => message,
+      RolesApiOk() => () {
+        _ref.invalidate(defaultJoinRoleProvider(spaceId));
+        return null;
+      }(),
+    };
+  }
+}
+
+final spaceRoleActionsProvider = Provider<SpaceRoleActions>((ref) {
+  return SpaceRoleActions(ref);
+});

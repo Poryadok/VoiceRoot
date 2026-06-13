@@ -462,6 +462,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get commonCancel => 'Отмена';
 
   @override
+  String get commonEdit => 'Изменить';
+
+  @override
+  String get commonDelete => 'Удалить';
+
+  @override
   String get commonSave => 'Сохранить';
 
   @override
@@ -841,6 +847,46 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String spaceAssignRoleError(String message) {
     return 'Не удалось назначить роль: $message';
+  }
+
+  @override
+  String get spaceRolesTooltip => 'Управление ролями';
+
+  @override
+  String get spaceRolesTitle => 'Роли';
+
+  @override
+  String get spaceRolesLoadError => 'Не удалось загрузить роли';
+
+  @override
+  String get spaceRoleCreateTitle => 'Создать роль';
+
+  @override
+  String get spaceRoleEditTitle => 'Редактировать роль';
+
+  @override
+  String get spaceRoleNameLabel => 'Название роли';
+
+  @override
+  String get spaceRoleManaged => 'Системная роль';
+
+  @override
+  String get spaceRoleCustom => 'Кастомная роль';
+
+  @override
+  String get spaceSetDefaultJoinRole => 'Роль при вступлении';
+
+  @override
+  String spaceDefaultJoinRole(String name) {
+    return 'Роль при вступлении: $name';
+  }
+
+  @override
+  String get spaceRevokeRole => 'Снять';
+
+  @override
+  String spaceRevokeRoleError(String message) {
+    return 'Не удалось снять роль: $message';
   }
 
   @override

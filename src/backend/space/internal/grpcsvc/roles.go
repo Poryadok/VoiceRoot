@@ -58,20 +58,27 @@ func (s *SpaceGRPC) assignDefaultMemberRole(ctx context.Context, spaceID, profil
 	if err != nil || spaceRow == nil {
 		return status.Error(codes.Internal, "space not found for role assignment")
 	}
-	list, err := s.Roles.ListRoles(ctx, &rolev1.ListRolesRequest{SpaceId: spaceID.String()})
+	resp, err := s.Roles.GetDefaultJoinRole(ctx, &rolev1.GetDefaultJoinRoleRequest{SpaceId: spaceID.String()})
 	if err != nil {
-		return err
-	}
-	var memberRoleID string
-	for _, r := range list.GetRoleList().GetRoles() {
-		if r.GetName() == permissions.RoleMember {
-			memberRoleID = r.GetId()
-			break
+		if status.Code(err) == codes.NotFound {
+			list, listErr := s.Roles.ListRoles(ctx, &rolev1.ListRolesRequest{SpaceId: spaceID.String()})
+			if listErr != nil {
+				return listErr
+			}
+			for _, r := range list.GetRoleList().GetRoles() {
+				if r.GetName() == permissions.RoleMember {
+					resp = &rolev1.GetDefaultJoinRoleResponse{Role: r}
+					break
+				}
+			}
+		} else {
+			return err
 		}
 	}
-	if memberRoleID == "" {
-		return status.Error(codes.FailedPrecondition, "member role not found")
+	if resp == nil || resp.GetRole() == nil || resp.GetRole().GetId() == "" {
+		return status.Error(codes.FailedPrecondition, "default join role not found")
 	}
+	memberRoleID := resp.GetRole().GetId()
 	ownerCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderProfileID, spaceRow.OwnerProfileID.String())
 	_, err = s.Roles.AssignRole(ownerCtx, &rolev1.AssignRoleRequest{
 		SpaceId:   spaceID.String(),

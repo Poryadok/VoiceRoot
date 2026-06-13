@@ -75,6 +75,40 @@ void main() {
     expect(result, isA<RolesApiOk<void>>());
   });
 
+  test('createRole posts create route', () async {
+    String? path;
+    final client = VoiceRolesClient(
+      gateway: GatewayHttpClient(
+        httpClient: MockClient((request) async {
+          path = request.url.path;
+          return http.Response(
+            jsonEncode({
+              'role': {
+                'id': 'role-new',
+                'space_id': 'space-1',
+                'name': 'Raid Leader',
+                'permissions_mask': 8,
+              },
+            }),
+            200,
+          );
+        }),
+        config: const GatewayConfig(baseUrl: 'http://api.test'),
+      ),
+    );
+
+    final result = await client.createRole(
+      authorization: 'Bearer t',
+      spaceId: 'space-1',
+      name: 'Raid Leader',
+      permissionsMask: 8,
+    );
+
+    expect(path, '/api/v1/roles');
+    expect(result, isA<RolesApiOk<SpaceRole>>());
+    expect((result as RolesApiOk<SpaceRole>).data.name, 'Raid Leader');
+  });
+
   test('checkPermission parses allowed flag', () async {
     final client = VoiceRolesClient(
       gateway: GatewayHttpClient(

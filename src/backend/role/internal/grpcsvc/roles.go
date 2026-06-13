@@ -90,8 +90,15 @@ func (s *RoleGRPC) CreateRole(ctx context.Context, req *rolev1.CreateRoleRequest
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "role persistence not configured")
 	}
+	actor, ok := authctx.ProfileID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing profile")
+	}
 	spaceID, err := parseUUIDField("space_id", req.GetSpaceId())
 	if err != nil {
+		return nil, err
+	}
+	if err := s.requireManageRoles(ctx, spaceID, actor); err != nil {
 		return nil, err
 	}
 	name := strings.TrimSpace(req.GetName())
@@ -245,8 +252,15 @@ func (s *RoleGRPC) SetChatOverride(ctx context.Context, req *rolev1.SetChatOverr
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "role persistence not configured")
 	}
+	actor, ok := authctx.ProfileID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing profile")
+	}
 	spaceID, err := parseUUIDField("space_id", req.GetSpaceId())
 	if err != nil {
+		return nil, err
+	}
+	if err := s.requireManageRoles(ctx, spaceID, actor); err != nil {
 		return nil, err
 	}
 	if req.GetChat() == nil || strings.TrimSpace(req.GetChat().GetId()) == "" {
@@ -256,15 +270,19 @@ func (s *RoleGRPC) SetChatOverride(ctx context.Context, req *rolev1.SetChatOverr
 	if err != nil {
 		return nil, err
 	}
-	memberRoleID, err := s.Store.RoleIDByName(ctx, spaceID, permissions.RoleMember)
+	roleID, err := parseUUIDField("role_id", req.GetRoleId())
 	if err != nil {
-		return nil, status.Error(codes.NotFound, "member role not found")
+		return nil, err
 	}
-	if err := s.Store.SetChatOverride(ctx, chatID, memberRoleID, req.GetAllowMask(), req.GetDenyMask()); err != nil {
+	row, err := s.Store.GetRoleByID(ctx, roleID)
+	if err != nil || row == nil || row.SpaceID != spaceID {
+		return nil, status.Error(codes.NotFound, "role not found")
+	}
+	if err := s.Store.SetChatOverride(ctx, chatID, roleID, req.GetAllowMask(), req.GetDenyMask()); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	if s.Events != nil {
-		_ = s.Events.PublishChatOverrideSet(ctx, chatID.String(), memberRoleID.String())
+		_ = s.Events.PublishChatOverrideSet(ctx, chatID.String(), roleID.String())
 	}
 	return &rolev1.SetChatOverrideResponse{}, nil
 }

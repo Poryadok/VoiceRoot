@@ -30,6 +30,9 @@ service RoleService {
   rpc CheckPermission(CheckPermissionRequest) returns (CheckPermissionResponse);
   rpc GetEffectivePermissions(GetEffectivePermissionsRequest) returns (GetEffectivePermissionsResponse);
 
+  rpc SetDefaultJoinRole(SetDefaultJoinRoleRequest) returns (SetDefaultJoinRoleResponse);
+  rpc GetDefaultJoinRole(GetDefaultJoinRoleRequest) returns (GetDefaultJoinRoleResponse);
+
   // Called by Space Service after CreateSpace — seeds system roles and assigns Owner.
   rpc BootstrapSpaceRoles(BootstrapSpaceRolesRequest) returns (BootstrapSpaceRolesResponse);
 }
@@ -104,11 +107,13 @@ message SetChatOverrideRequest {
   voice.chat.v1.ChatRef chat = 2;
   uint64 deny_mask = 3;
   uint64 allow_mask = 4;
+  string role_id = 5;
 }
 
 message RemoveChatOverrideRequest {
   string space_id = 1;
   voice.chat.v1.ChatRef chat = 2;
+  string role_id = 3;
 }
 
 message GetChatOverridesRequest {
@@ -121,11 +126,13 @@ message SetVoiceRoomOverrideRequest {
   string voice_room_id = 2;
   uint64 deny_mask = 3;
   uint64 allow_mask = 4;
+  string role_id = 5;
 }
 
 message RemoveVoiceRoomOverrideRequest {
   string space_id = 1;
   string voice_room_id = 2;
+  string role_id = 3;
 }
 
 message GetVoiceRoomOverridesRequest {
@@ -142,6 +149,17 @@ message PermissionOverride {
   optional string voice_room_id = 2;
   uint64 deny_mask = 3;
   uint64 allow_mask = 4;
+  string role_id = 5;
+  string role_name = 6;
+}
+
+message SetDefaultJoinRoleRequest {
+  string space_id = 1;
+  string role_id = 2;
+}
+
+message GetDefaultJoinRoleRequest {
+  string space_id = 1;
 }
 
 message CheckPermissionRequest {
@@ -196,4 +214,8 @@ message GetVoiceRoomOverridesResponse {
 }
 message GetEffectivePermissionsResponse {
   PermissionSet permission_set = 1;
+}
+message SetDefaultJoinRoleResponse {}
+message GetDefaultJoinRoleResponse {
+  Role role = 1;
 }

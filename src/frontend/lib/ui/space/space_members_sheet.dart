@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../backend/roles_client.dart';
+import '../../backend/space_permissions.dart';
 import '../../backend/spaces_client.dart';
 import '../../l10n/app_localizations.dart';
+import '../../state/auth_providers.dart';
 import '../../state/space_providers.dart';
 import '../../state/social_providers.dart';
 import '../core/voice_avatar.dart';
@@ -54,15 +56,24 @@ class SpaceMembersContent extends ConsumerWidget {
               onAction: () => ref.invalidate(spaceMembersProvider(spaceId)),
             ),
             data: (members) {
-              final canAssignRole = viewerCanManageSpaceMembers(
-                members,
-                activeId,
-              );
+              final canAssignRole = ref
+                      .watch(
+                        spacePermissionProvider((
+                          spaceId: spaceId,
+                          permission: SpacePermissions.memberAssignRoles,
+                          chatId: null,
+                          voiceRoomId: null,
+                        )),
+                      )
+                      .valueOrNull ??
+                  false;
               final canKick = ref
                       .watch(
                         spacePermissionProvider((
                           spaceId: spaceId,
                           permission: 'MEMBER_KICK',
+                          chatId: null,
+                          voiceRoomId: null,
                         )),
                       )
                       .valueOrNull ??
@@ -72,6 +83,8 @@ class SpaceMembersContent extends ConsumerWidget {
                         spacePermissionProvider((
                           spaceId: spaceId,
                           permission: 'MEMBER_BAN',
+                          chatId: null,
+                          voiceRoomId: null,
                         )),
                       )
                       .valueOrNull ??
@@ -81,6 +94,8 @@ class SpaceMembersContent extends ConsumerWidget {
                         spacePermissionProvider((
                           spaceId: spaceId,
                           permission: 'MODERATION_TIMEOUT_MEMBERS',
+                          chatId: null,
+                          voiceRoomId: null,
                         )),
                       )
                       .valueOrNull ??
@@ -390,7 +405,17 @@ class _MemberTile extends ConsumerWidget {
       return;
     }
 
-    final picked = await showDialog<SpaceRole>(
+    final memberRoles = await ref.read(voiceRolesClientProvider).getMemberRoles(
+      authorization: ref.read(authorizationHeaderProvider)!,
+      spaceId: spaceId,
+      profileId: member.profileId,
+    );
+    final assignedIds = switch (memberRoles) {
+      RolesApiOk(:final data) => data.map((r) => r.id).toSet(),
+      RolesApiFailure() => <String>{},
+    };
+
+    final action = await showDialog<({String roleId, bool revoke})>(
       context: context,
       builder: (ctx) {
         final dialogL10n = AppLocalizations.of(ctx)!;
@@ -398,25 +423,44 @@ class _MemberTile extends ConsumerWidget {
           title: Text(dialogL10n.spaceAssignRoleTitle),
           children: [
             for (final role in assignable)
-              SimpleDialogOption(
-                onPressed: () => Navigator.of(ctx).pop(role),
-                child: Text(role.name),
-              ),
+              if (!assignedIds.contains(role.id))
+                SimpleDialogOption(
+                  onPressed: () => Navigator.of(ctx).pop((roleId: role.id, revoke: false)),
+                  child: Text('${dialogL10n.spaceAssignRole}: ${role.name}'),
+                ),
+            for (final role in assignable)
+              if (assignedIds.contains(role.id) && role.name != kSpaceRoleOwner)
+                SimpleDialogOption(
+                  onPressed: () => Navigator.of(ctx).pop((roleId: role.id, revoke: true)),
+                  child: Text('${dialogL10n.spaceRevokeRole}: ${role.name}'),
+                ),
           ],
         );
       },
     );
-    if (picked == null || !context.mounted) return;
+    if (action == null || !context.mounted) return;
 
-    final err = await ref.read(spaceMemberActionsProvider).assignRole(
-      spaceId: spaceId,
-      profileId: member.profileId,
-      roleId: picked.id,
-    );
+    final err = action.revoke
+        ? await ref.read(spaceMemberActionsProvider).revokeRole(
+            spaceId: spaceId,
+            profileId: member.profileId,
+            roleId: action.roleId,
+          )
+        : await ref.read(spaceMemberActionsProvider).assignRole(
+            spaceId: spaceId,
+            profileId: member.profileId,
+            roleId: action.roleId,
+          );
     if (!context.mounted) return;
     if (err != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.spaceAssignRoleError(err))),
+        SnackBar(
+          content: Text(
+            action.revoke
+                ? l10n.spaceRevokeRoleError(err)
+                : l10n.spaceAssignRoleError(err),
+          ),
+        ),
       );
     }
   }

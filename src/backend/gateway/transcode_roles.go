@@ -31,6 +31,82 @@ func (t *transcoder) serveRoles(w http.ResponseWriter, r *http.Request, rest str
 		writeProtoJSON(w, http.StatusOK, resp)
 		return true
 
+	case r.Method == http.MethodGet && rest == "check":
+		req := &rolev1.CheckPermissionRequest{
+			SpaceId:        queryFirst(r, "space_id"),
+			ProfileId:      queryFirst(r, "profile_id"),
+			PermissionName: queryFirst(r, "permission_name"),
+		}
+		if chatID := queryFirst(r, "chat_id"); chatID != "" {
+			req.Chat = &chatv1.ChatRef{Id: chatID}
+		}
+		if voiceRoomID := queryFirst(r, "voice_room_id"); voiceRoomID != "" {
+			req.VoiceRoomId = &voiceRoomID
+		}
+		resp, err := t.clients.role.CheckPermission(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodGet && rest == "effective":
+		req := &rolev1.GetEffectivePermissionsRequest{
+			SpaceId:   queryFirst(r, "space_id"),
+			ProfileId: queryFirst(r, "profile_id"),
+		}
+		if chatID := queryFirst(r, "chat_id"); chatID != "" {
+			req.Chat = &chatv1.ChatRef{Id: chatID}
+		}
+		if voiceRoomID := queryFirst(r, "voice_room_id"); voiceRoomID != "" {
+			req.VoiceRoomId = &voiceRoomID
+		}
+		resp, err := t.clients.role.GetEffectivePermissions(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodGet && rest == "default-join":
+		resp, err := t.clients.role.GetDefaultJoinRole(ctx, &rolev1.GetDefaultJoinRoleRequest{
+			SpaceId: queryFirst(r, "space_id"),
+		})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodGet && rest == "chat-overrides":
+		req := &rolev1.GetChatOverridesRequest{SpaceId: queryFirst(r, "space_id")}
+		if chatID := queryFirst(r, "chat_id"); chatID != "" {
+			req.FilterChat = &chatv1.ChatRef{Id: chatID}
+		}
+		resp, err := t.clients.role.GetChatOverrides(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodGet && rest == "voice-overrides":
+		req := &rolev1.GetVoiceRoomOverridesRequest{SpaceId: queryFirst(r, "space_id")}
+		if voiceRoomID := queryFirst(r, "voice_room_id"); voiceRoomID != "" {
+			req.VoiceRoomId = &voiceRoomID
+		}
+		resp, err := t.clients.role.GetVoiceRoomOverrides(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
 	case r.Method == http.MethodGet && rest == "":
 		spaceID := queryFirst(r, "space_id")
 		if spaceID == "" {
@@ -87,16 +163,13 @@ func (t *transcoder) serveRoles(w http.ResponseWriter, r *http.Request, rest str
 		writeProtoJSON(w, http.StatusOK, resp)
 		return true
 
-	case r.Method == http.MethodGet && rest == "check":
-		req := &rolev1.CheckPermissionRequest{
-			SpaceId:        queryFirst(r, "space_id"),
-			ProfileId:      queryFirst(r, "profile_id"),
-			PermissionName: queryFirst(r, "permission_name"),
+	case r.Method == http.MethodPost && rest == "reorder":
+		req := &rolev1.ReorderRolesRequest{}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
 		}
-		if chatID := queryFirst(r, "chat_id"); chatID != "" {
-			req.Chat = &chatv1.ChatRef{Id: chatID}
-		}
-		resp, err := t.clients.role.CheckPermission(ctx, req)
+		resp, err := t.clients.role.ReorderRoles(ctx, req)
 		if err != nil {
 			writeGRPCError(w, err)
 			return true
@@ -111,6 +184,89 @@ func (t *transcoder) serveRoles(w http.ResponseWriter, r *http.Request, rest str
 			return true
 		}
 		resp, err := t.clients.role.SetChatOverride(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodPost && rest == "voice-overrides":
+		req := &rolev1.SetVoiceRoomOverrideRequest{}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.role.SetVoiceRoomOverride(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodPut && rest == "default-join":
+		req := &rolev1.SetDefaultJoinRoleRequest{}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.role.SetDefaultJoinRole(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodDelete && rest == "chat-overrides":
+		req := &rolev1.RemoveChatOverrideRequest{
+			SpaceId: queryFirst(r, "space_id"),
+			RoleId:  queryFirst(r, "role_id"),
+		}
+		if chatID := queryFirst(r, "chat_id"); chatID != "" {
+			req.Chat = &chatv1.ChatRef{Id: chatID}
+		}
+		resp, err := t.clients.role.RemoveChatOverride(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodDelete && rest == "voice-overrides":
+		voiceRoomID := queryFirst(r, "voice_room_id")
+		req := &rolev1.RemoveVoiceRoomOverrideRequest{
+			SpaceId: queryFirst(r, "space_id"),
+			RoleId:  queryFirst(r, "role_id"),
+		}
+		req.VoiceRoomId = voiceRoomID
+		resp, err := t.clients.role.RemoveVoiceRoomOverride(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodPatch && rest != "" && !strings.Contains(rest, "/"):
+		req := &rolev1.UpdateRoleRequest{}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		req.RoleId = rest
+		resp, err := t.clients.role.UpdateRole(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodDelete && rest != "" && !strings.Contains(rest, "/"):
+		resp, err := t.clients.role.DeleteRole(ctx, &rolev1.DeleteRoleRequest{RoleId: rest})
 		if err != nil {
 			writeGRPCError(w, err)
 			return true

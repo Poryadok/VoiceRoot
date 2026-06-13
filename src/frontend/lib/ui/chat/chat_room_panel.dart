@@ -197,6 +197,8 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   spacePermissionProvider((
                     spaceId: spaceId,
                     permission: 'TEXT_CHAT_SET_SLOW_MODE',
+                    chatId: widget.chatId,
+                    voiceRoomId: null,
                   )),
                 )
                 .valueOrNull ??

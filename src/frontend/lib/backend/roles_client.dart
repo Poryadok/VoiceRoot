@@ -143,6 +143,7 @@ class VoiceRolesClient {
     required String profileId,
     required String permissionName,
     String? chatId,
+    String? voiceRoomId,
   }) async {
     final params = <String, String>{
       'space_id': spaceId,
@@ -152,12 +153,177 @@ class VoiceRolesClient {
     if (chatId != null && chatId.isNotEmpty) {
       params['chat_id'] = chatId;
     }
+    if (voiceRoomId != null && voiceRoomId.isNotEmpty) {
+      params['voice_room_id'] = voiceRoomId;
+    }
     final uri = _gateway.replace(
       path: '/api/v1/roles/check',
       queryParameters: params,
     );
     final result = await _gateway.getJson(uri, authorization: authorization);
     return _map(result, (data) => data['allowed'] as bool? ?? false);
+  }
+
+  Future<RolesApiResult<SpaceRole>> createRole({
+    required String authorization,
+    required String spaceId,
+    required String name,
+    int permissionsMask = 0,
+    int position = 1,
+  }) async {
+    final result = await _gateway.postJson(
+      uri: _gateway.resolve('/api/v1/roles'),
+      authorization: authorization,
+      body: {
+        'space_id': spaceId,
+        'name': name,
+        'permissions_mask': permissionsMask,
+        'position': position,
+      },
+    );
+    return _map(result, (data) {
+      final role = data['role'];
+      if (role is Map<String, dynamic>) return SpaceRole.fromJson(role);
+      return SpaceRole.fromJson(data);
+    });
+  }
+
+  Future<RolesApiResult<SpaceRole>> updateRole({
+    required String authorization,
+    required String roleId,
+    String? name,
+    int? permissionsMask,
+    int? position,
+  }) async {
+    final body = <String, dynamic>{};
+    if (name != null) body['name'] = name;
+    if (permissionsMask != null) body['permissions_mask'] = permissionsMask;
+    if (position != null) body['position'] = position;
+    final result = await _gateway.patchJson(
+      uri: _gateway.resolve('/api/v1/roles/$roleId'),
+      authorization: authorization,
+      body: body,
+    );
+    return _map(result, (data) {
+      final role = data['role'];
+      if (role is Map<String, dynamic>) return SpaceRole.fromJson(role);
+      return SpaceRole.fromJson(data);
+    });
+  }
+
+  Future<RolesApiResult<void>> deleteRole({
+    required String authorization,
+    required String roleId,
+  }) async {
+    final result = await _gateway.deleteEmpty(
+      uri: _gateway.resolve('/api/v1/roles/$roleId'),
+      authorization: authorization,
+    );
+    return _mapEmpty(result);
+  }
+
+  Future<RolesApiResult<void>> reorderRoles({
+    required String authorization,
+    required String spaceId,
+    required List<String> orderedRoleIds,
+  }) async {
+    final result = await _gateway.postEmpty(
+      uri: _gateway.resolve('/api/v1/roles/reorder'),
+      authorization: authorization,
+      jsonBody: {
+        'space_id': spaceId,
+        'ordered_role_ids': orderedRoleIds,
+      },
+    );
+    return _mapEmpty(result);
+  }
+
+  Future<RolesApiResult<int>> getEffectivePermissions({
+    required String authorization,
+    required String spaceId,
+    required String profileId,
+    String? chatId,
+    String? voiceRoomId,
+  }) async {
+    final params = <String, String>{
+      'space_id': spaceId,
+      'profile_id': profileId,
+    };
+    if (chatId != null && chatId.isNotEmpty) params['chat_id'] = chatId;
+    if (voiceRoomId != null && voiceRoomId.isNotEmpty) {
+      params['voice_room_id'] = voiceRoomId;
+    }
+    final uri = _gateway.replace(
+      path: '/api/v1/roles/effective',
+      queryParameters: params,
+    );
+    final result = await _gateway.getJson(uri, authorization: authorization);
+    return _map(result, (data) {
+      final set = data['permission_set'] ?? data['permissionSet'];
+      if (set is Map<String, dynamic>) {
+        return _jsonInt(set['effective_mask'] ?? set['effectiveMask']);
+      }
+      return 0;
+    });
+  }
+
+  Future<RolesApiResult<SpaceRole>> getDefaultJoinRole({
+    required String authorization,
+    required String spaceId,
+  }) async {
+    final uri = _gateway.replace(
+      path: '/api/v1/roles/default-join',
+      queryParameters: {'space_id': spaceId},
+    );
+    final result = await _gateway.getJson(uri, authorization: authorization);
+    return _map(result, (data) {
+      final role = data['role'];
+      if (role is Map<String, dynamic>) return SpaceRole.fromJson(role);
+      return SpaceRole.fromJson(data);
+    });
+  }
+
+  Future<RolesApiResult<void>> setDefaultJoinRole({
+    required String authorization,
+    required String spaceId,
+    required String roleId,
+  }) async {
+    final result = await _gateway.putJson(
+      uri: _gateway.resolve('/api/v1/roles/default-join'),
+      authorization: authorization,
+      body: {'space_id': spaceId, 'role_id': roleId},
+      allowNoContent: true,
+    );
+    return switch (result) {
+      GatewayHttpOk() => const RolesApiOk(null),
+      GatewayHttpFailure(:final error) => RolesApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
+  }
+
+  Future<RolesApiResult<void>> setChatOverride({
+    required String authorization,
+    required String spaceId,
+    required String chatId,
+    required String roleId,
+    int allowMask = 0,
+    int denyMask = 0,
+  }) async {
+    final result = await _gateway.postEmpty(
+      uri: _gateway.resolve('/api/v1/roles/chat-overrides'),
+      authorization: authorization,
+      jsonBody: {
+        'space_id': spaceId,
+        'chat': {'id': chatId},
+        'role_id': roleId,
+        'allow_mask': allowMask,
+        'deny_mask': denyMask,
+      },
+    );
+    return _mapEmpty(result);
   }
 
   List<SpaceRole> _rolesFromListPayload(Map<String, dynamic> data) {

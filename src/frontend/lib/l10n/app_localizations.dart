@@ -902,6 +902,18 @@ abstract class AppLocalizations {
   /// **'Cancel'**
   String get commonCancel;
 
+  /// No description provided for @commonEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get commonEdit;
+
+  /// No description provided for @commonDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get commonDelete;
+
   /// No description provided for @commonSave.
   ///
   /// In en, this message translates to:
@@ -1561,6 +1573,78 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not assign role: {message}'**
   String spaceAssignRoleError(String message);
+
+  /// No description provided for @spaceRolesTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage roles'**
+  String get spaceRolesTooltip;
+
+  /// No description provided for @spaceRolesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Roles'**
+  String get spaceRolesTitle;
+
+  /// No description provided for @spaceRolesLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load roles'**
+  String get spaceRolesLoadError;
+
+  /// No description provided for @spaceRoleCreateTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Create role'**
+  String get spaceRoleCreateTitle;
+
+  /// No description provided for @spaceRoleEditTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit role'**
+  String get spaceRoleEditTitle;
+
+  /// No description provided for @spaceRoleNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Role name'**
+  String get spaceRoleNameLabel;
+
+  /// No description provided for @spaceRoleManaged.
+  ///
+  /// In en, this message translates to:
+  /// **'System role'**
+  String get spaceRoleManaged;
+
+  /// No description provided for @spaceRoleCustom.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom role'**
+  String get spaceRoleCustom;
+
+  /// No description provided for @spaceSetDefaultJoinRole.
+  ///
+  /// In en, this message translates to:
+  /// **'Set as default join role'**
+  String get spaceSetDefaultJoinRole;
+
+  /// No description provided for @spaceDefaultJoinRole.
+  ///
+  /// In en, this message translates to:
+  /// **'Default join role: {name}'**
+  String spaceDefaultJoinRole(String name);
+
+  /// No description provided for @spaceRevokeRole.
+  ///
+  /// In en, this message translates to:
+  /// **'Revoke'**
+  String get spaceRevokeRole;
+
+  /// No description provided for @spaceRevokeRoleError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not revoke role: {message}'**
+  String spaceRevokeRoleError(String message);
 
   /// No description provided for @chatGroupMembersTooltip.
   ///

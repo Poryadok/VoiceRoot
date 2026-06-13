@@ -459,6 +459,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get commonCancel => 'Cancel';
 
   @override
+  String get commonEdit => 'Edit';
+
+  @override
+  String get commonDelete => 'Delete';
+
+  @override
   String get commonSave => 'Save';
 
   @override
@@ -835,6 +841,46 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String spaceAssignRoleError(String message) {
     return 'Could not assign role: $message';
+  }
+
+  @override
+  String get spaceRolesTooltip => 'Manage roles';
+
+  @override
+  String get spaceRolesTitle => 'Roles';
+
+  @override
+  String get spaceRolesLoadError => 'Could not load roles';
+
+  @override
+  String get spaceRoleCreateTitle => 'Create role';
+
+  @override
+  String get spaceRoleEditTitle => 'Edit role';
+
+  @override
+  String get spaceRoleNameLabel => 'Role name';
+
+  @override
+  String get spaceRoleManaged => 'System role';
+
+  @override
+  String get spaceRoleCustom => 'Custom role';
+
+  @override
+  String get spaceSetDefaultJoinRole => 'Set as default join role';
+
+  @override
+  String spaceDefaultJoinRole(String name) {
+    return 'Default join role: $name';
+  }
+
+  @override
+  String get spaceRevokeRole => 'Revoke';
+
+  @override
+  String spaceRevokeRoleError(String message) {
+    return 'Could not revoke role: $message';
   }
 
   @override

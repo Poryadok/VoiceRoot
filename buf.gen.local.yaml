@@ -1,13 +1,12 @@
-# Local codegen without BSR remote plugins (offline / 403 on buf.build).
 version: v1
 plugins:
-  - plugin: go
-    path: C:\GoPath\bin\protoc-gen-go.exe
+  - name: go
     out: gen/go
     opt:
       - paths=source_relative
-  - plugin: go-grpc
-    path: C:\GoPath\bin\protoc-gen-go-grpc.exe
+    path: protoc-gen-go
+  - name: go-grpc
     out: gen/go
     opt:
       - paths=source_relative
+    path: protoc-gen-go-grpc

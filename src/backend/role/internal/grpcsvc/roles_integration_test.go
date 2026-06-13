@@ -66,7 +66,9 @@ func TestCreateRole_CustomRole(t *testing.T) {
 	sendMask, err := permissions.MaskFor(permissions.TextChatSendMessages)
 	require.NoError(t, err)
 
-	resp, err := client.CreateRole(context.Background(), &rolev1.CreateRoleRequest{
+	ownerID := uuid.New()
+	require.NoError(t, s.BootstrapSpaceRoles(context.Background(), uuid.MustParse(spaceID), ownerID))
+	resp, err := client.CreateRole(ctxWithProfile(ownerID), &rolev1.CreateRoleRequest{
 		SpaceId:         spaceID,
 		Name:            "Raid Leader",
 		PermissionsMask: sendMask,
@@ -194,23 +196,27 @@ func TestSetChatOverride_CheckPermission(t *testing.T) {
 	defer stop()
 
 	spaceID := uuid.New()
+	ownerID := uuid.New()
 	profileID := uuid.New()
 	chatID := uuid.New().String()
-	require.NoError(t, s.BootstrapSystemRoles(context.Background(), spaceID))
+	require.NoError(t, s.BootstrapSpaceRoles(context.Background(), spaceID, ownerID))
 
 	roles, err := s.ListRoles(context.Background(), spaceID)
 	require.NoError(t, err)
+	var memberRoleID string
 	for _, r := range roles {
 		if r.Name == permissions.RoleMember {
-			require.NoError(t, s.AssignMemberRole(context.Background(), spaceID, profileID, r.ID, profileID))
+			memberRoleID = r.ID.String()
+			require.NoError(t, s.AssignMemberRole(context.Background(), spaceID, profileID, r.ID, ownerID))
 		}
 	}
 
 	sendMask, err := permissions.MaskFor(permissions.TextChatSendMessages)
 	require.NoError(t, err)
-	_, err = client.SetChatOverride(context.Background(), &rolev1.SetChatOverrideRequest{
+	_, err = client.SetChatOverride(ctxWithProfile(ownerID), &rolev1.SetChatOverrideRequest{
 		SpaceId:  spaceID.String(),
 		Chat:     &chatv1.ChatRef{Id: chatID},
+		RoleId:   memberRoleID,
 		DenyMask: sendMask,
 	})
 	require.NoError(t, err)

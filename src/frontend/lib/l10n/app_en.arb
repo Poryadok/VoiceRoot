@@ -259,6 +259,8 @@
     }
   },
   "commonCancel": "Cancel",
+  "commonEdit": "Edit",
+  "commonDelete": "Delete",
   "commonSave": "Save",
   "commonRetry": "Try again",
   "commonLoading": "…",
@@ -466,6 +468,28 @@
   "spaceAssignRoleEmpty": "No assignable roles",
   "spaceAssignRoleError": "Could not assign role: {message}",
   "@spaceAssignRoleError": {
+    "placeholders": {
+      "message": { "type": "String" }
+    }
+  },
+  "spaceRolesTooltip": "Manage roles",
+  "spaceRolesTitle": "Roles",
+  "spaceRolesLoadError": "Could not load roles",
+  "spaceRoleCreateTitle": "Create role",
+  "spaceRoleEditTitle": "Edit role",
+  "spaceRoleNameLabel": "Role name",
+  "spaceRoleManaged": "System role",
+  "spaceRoleCustom": "Custom role",
+  "spaceSetDefaultJoinRole": "Set as default join role",
+  "spaceDefaultJoinRole": "Default join role: {name}",
+  "@spaceDefaultJoinRole": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "spaceRevokeRole": "Revoke",
+  "spaceRevokeRoleError": "Could not revoke role: {message}",
+  "@spaceRevokeRoleError": {
     "placeholders": {
       "message": { "type": "String" }
     }

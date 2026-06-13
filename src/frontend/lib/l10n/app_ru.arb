@@ -246,6 +246,8 @@
     }
   },
   "commonCancel": "Отмена",
+  "commonEdit": "Изменить",
+  "commonDelete": "Удалить",
   "commonSave": "Сохранить",
   "commonRetry": "Попробовать снова",
   "commonLoading": "…",
@@ -435,6 +437,18 @@
   "spaceAssignRole": "Назначить роль",
   "spaceAssignRoleTitle": "Назначить роль",
   "spaceAssignRoleEmpty": "Нет доступных ролей",
+  "spaceRolesTooltip": "Управление ролями",
+  "spaceRolesTitle": "Роли",
+  "spaceRolesLoadError": "Не удалось загрузить роли",
+  "spaceRoleCreateTitle": "Создать роль",
+  "spaceRoleEditTitle": "Редактировать роль",
+  "spaceRoleNameLabel": "Название роли",
+  "spaceRoleManaged": "Системная роль",
+  "spaceRoleCustom": "Кастомная роль",
+  "spaceSetDefaultJoinRole": "Роль при вступлении",
+  "spaceDefaultJoinRole": "Роль при вступлении: {name}",
+  "spaceRevokeRole": "Снять",
+  "spaceRevokeRoleError": "Не удалось снять роль: {message}",
   "spaceAssignRoleError": "Не удалось назначить роль: {message}",
   "@spaceAssignRoleError": {
     "placeholders": {

@@ -8,6 +8,7 @@ import '../../theme/voice_colors.dart';
 import '../../theme/voice_layout.dart';
 import 'space_invites_sheet.dart';
 import 'space_members_sheet.dart';
+import 'space_roles_sheet.dart';
 import 'space_tree_panel.dart';
 
 /// Middle column: space tree with header actions (members, invites).
@@ -68,6 +69,12 @@ class SpaceTreeColumn extends ConsumerWidget {
                       shellNav.toggleSidePanel(ShellSidePanel.members);
                     }
                   },
+                ),
+                IconButton(
+                  key: const Key('space_roles_action'),
+                  icon: const Icon(Icons.badge_outlined),
+                  tooltip: l10n.spaceRolesTooltip,
+                  onPressed: () => SpaceRolesSheet.show(context, spaceId: spaceId),
                 ),
                 IconButton(
                   key: const Key('space_invites_action'),

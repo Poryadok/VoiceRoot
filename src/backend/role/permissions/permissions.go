@@ -22,19 +22,35 @@ const (
 	TextChatCreateInSpace   = "TEXT_CHAT_CREATE_IN_SPACE"
 	TextChatView            = "TEXT_CHAT_VIEW"
 	TextChatManageSettings  = "TEXT_CHAT_MANAGE_SETTINGS"
-	TextChatSendMessages    = "TEXT_CHAT_SEND_MESSAGES"
-	TextChatManageMessages  = "TEXT_CHAT_MANAGE_MESSAGES"
-	TextChatSetSlowMode     = "TEXT_CHAT_SET_SLOW_MODE"
+	TextChatSendMessages       = "TEXT_CHAT_SEND_MESSAGES"
+	TextChatSendMedia          = "TEXT_CHAT_SEND_MEDIA"
+	TextChatEmbedLinks         = "TEXT_CHAT_EMBED_LINKS"
+	TextChatAttachFiles        = "TEXT_CHAT_ATTACH_FILES"
+	TextChatAddReactions       = "TEXT_CHAT_ADD_REACTIONS"
+	TextChatUseExternalEmojis  = "TEXT_CHAT_USE_EXTERNAL_EMOJIS"
+	TextChatManageMessages     = "TEXT_CHAT_MANAGE_MESSAGES"
+	TextChatReadHistory        = "TEXT_CHAT_READ_HISTORY"
+	TextChatCreateThreads      = "TEXT_CHAT_CREATE_THREADS"
+	TextChatSendInThreads      = "TEXT_CHAT_SEND_IN_THREADS"
+	TextChatManageThreads      = "TEXT_CHAT_MANAGE_THREADS"
+	TextChatSetSlowMode        = "TEXT_CHAT_SET_SLOW_MODE"
 
 	ModerationTimeoutMembers = "MODERATION_TIMEOUT_MEMBERS"
+	ModerationManageReports  = "MODERATION_MANAGE_REPORTS"
 
 	TextChatMentionAllOnline = "TEXT_CHAT_MENTION_ALL_ONLINE"
 	TextChatMentionAllInChat = "TEXT_CHAT_MENTION_ALL_IN_CHAT"
 	TextChatPinMessages      = "TEXT_CHAT_PIN_MESSAGES"
 
-	VoiceJoin       = "VOICE_JOIN"
-	VoiceSpeak      = "VOICE_SPEAK"
-	VoiceMuteOthers = "VOICE_MUTE_OTHERS"
+	VoiceJoin            = "VOICE_JOIN"
+	VoiceSpeak           = "VOICE_SPEAK"
+	VoiceVideo           = "VOICE_VIDEO"
+	VoiceScreenShare     = "VOICE_SCREEN_SHARE"
+	VoiceMuteOthers      = "VOICE_MUTE_OTHERS"
+	VoiceDeafenOthers    = "VOICE_DEAFEN_OTHERS"
+	VoiceMoveOthers      = "VOICE_MOVE_OTHERS"
+	VoiceUsePTT          = "VOICE_USE_PTT"
+	VoicePrioritySpeaker = "VOICE_PRIORITY_SPEAKER"
 )
 
 // System role names seeded per space — docs/features/roles.md.
@@ -74,6 +90,22 @@ var permissionBits = map[string]uint64{
 	TextChatMentionAllOnline:  1 << 23,
 	TextChatMentionAllInChat:  1 << 24,
 	TextChatPinMessages:       1 << 25,
+	TextChatSendMedia:          1 << 26,
+	TextChatEmbedLinks:         1 << 27,
+	TextChatAttachFiles:        1 << 28,
+	TextChatAddReactions:       1 << 29,
+	TextChatUseExternalEmojis:  1 << 30,
+	TextChatReadHistory:        1 << 31,
+	TextChatCreateThreads:      1 << 32,
+	TextChatSendInThreads:      1 << 33,
+	TextChatManageThreads:      1 << 34,
+	VoiceVideo:                 1 << 35,
+	VoiceScreenShare:           1 << 36,
+	VoiceDeafenOthers:          1 << 37,
+	VoiceMoveOthers:            1 << 38,
+	VoiceUsePTT:                1 << 39,
+	VoicePrioritySpeaker:       1 << 40,
+	ModerationManageReports:    1 << 41,
 }
 
 // MaskFor returns the bitmask bit for a permission name.
@@ -142,7 +174,9 @@ func SystemRoles() ([]SystemRoleSpec, error) {
 func memberDefaultMask() (uint64, error) {
 	parts := []string{
 		SpaceView, SpaceViewMemberList, TextChatView, TextChatSendMessages,
-		TextChatCreateInSpace, VoiceJoin, VoiceSpeak,
+		TextChatSendMedia, TextChatEmbedLinks, TextChatAttachFiles, TextChatAddReactions,
+		TextChatUseExternalEmojis, TextChatReadHistory,
+		TextChatCreateInSpace, VoiceJoin, VoiceSpeak, VoiceVideo, VoiceUsePTT,
 	}
 	var mask uint64
 	for _, p := range parts {
