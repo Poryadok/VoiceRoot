@@ -63,6 +63,7 @@ func applySQLFile(t *testing.T, ctx context.Context, pool *pgxpool.Pool, relPath
 		applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000005_reactions.up.sql"))
 		applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000006_pins.up.sql"))
 		applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000007_thread_index.up.sql"))
+		applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000008_shared_media_indexes.up.sql"))
 	}
 	if strings.HasSuffix(relPath, filepath.Join("chat_db", "000001_init.up.sql")) {
 		applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000002_dm_requests.up.sql"))
@@ -120,6 +121,7 @@ func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire
 		Messages:          &store.MessagesStore{Pool: pool},
 		Reactions:         &store.ReactionsStore{Pool: pool},
 		Pins:              &store.PinsStore{Pool: pool},
+		SharedMedia:       &store.SharedMediaStore{Pool: pool},
 		ChatGuard:         guard,
 		Blocks:            w.Blocks,
 		UserProfiles:      w.UserProfiles,
@@ -170,6 +172,7 @@ func startMessagingDirect(t *testing.T, pool *pgxpool.Pool) *MessagingGRPC {
 		Messages:         &store.MessagesStore{Pool: pool},
 		Reactions:        &store.ReactionsStore{Pool: pool},
 		Pins:             &store.PinsStore{Pool: pool},
+		SharedMedia:      &store.SharedMediaStore{Pool: pool},
 		ChatGuard:        guard,
 		Moderation:       &store.SQLModerationGuard{Pool: pool},
 		ChatMentionsMeta: &store.SQLChatMentionsMeta{Pool: pool},

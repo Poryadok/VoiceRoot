@@ -86,6 +86,31 @@ MessageListData messageListFromProto(messaging_pb.MessageList list) {
   );
 }
 
+SharedMediaListData sharedMediaListFromProto(messaging_pb.SharedMediaList list) {
+  return SharedMediaListData(
+    items: list.items.map(sharedMediaItemFromProto).toList(growable: false),
+    nextCursor: emptyToNull(list.nextCursor),
+    hasMore: list.hasMore,
+  );
+}
+
+SharedMediaItemData sharedMediaItemFromProto(messaging_pb.SharedMediaItem item) {
+  return SharedMediaItemData(
+    messageId: item.messageId,
+    senderProfileId: item.senderProfileId,
+    createdAt: item.hasCreatedAt() ? item.createdAt.toDateTime() : null,
+    fileId: item.hasFileId() ? emptyToNull(item.fileId) : null,
+    attachmentType:
+        item.hasAttachmentType() ? emptyToNull(item.attachmentType) : null,
+    externalUrl: item.hasExternalUrl() ? emptyToNull(item.externalUrl) : null,
+    title: item.hasTitle() ? emptyToNull(item.title) : null,
+    sortOrder: item.sortOrder,
+    originalName:
+        item.hasOriginalName() ? emptyToNull(item.originalName) : null,
+    sizeBytes: item.hasSizeBytes() ? item.sizeBytes.toInt() : null,
+  );
+}
+
 ReadStateData readStateFromProto(messaging_pb.ReadState state) {
   return ReadStateData(
     chatId: state.hasChat() ? state.chat.id : '',

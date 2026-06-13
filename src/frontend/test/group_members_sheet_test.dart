@@ -12,6 +12,7 @@ import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
+import 'package:voice_frontend/ui/chat/chat_info_panel.dart';
 import 'package:voice_frontend/ui/chat/chat_room_panel.dart';
 import 'package:voice_frontend/ui/chat/group_members_sheet.dart';
 
@@ -111,6 +112,18 @@ void main() {
               200,
             );
           }
+          if (path.startsWith('/api/v1/chats/$chatId/shared-media')) {
+            return http.Response(
+              jsonEncode({
+                'shared_media_list': {
+                  'items': [],
+                  'next_cursor': '',
+                  'has_more': false,
+                },
+              }),
+              200,
+            );
+          }
           if (path.startsWith('/api/v1/users/profiles/')) {
             final id = path.split('/').last;
             return http.Response(
@@ -135,7 +148,7 @@ void main() {
     await tester.tap(find.byKey(ChatRoomPanel.groupMembersKey));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(GroupMembersSheet.sheetKey), findsOneWidget);
+    expect(find.byKey(ChatInfoPanel.panelKey), findsOneWidget);
     expect(find.text('Owner'), findsOneWidget);
     expect(
       find.byKey(GroupMembersSheet.kickMemberKey(memberId)),

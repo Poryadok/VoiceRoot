@@ -920,6 +920,30 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatGroupMembersLoadError => 'Не удалось загрузить участников';
 
   @override
+  String get chatInfoTitle => 'Информация о чате';
+
+  @override
+  String get chatInfoOpen => 'Информация о чате';
+
+  @override
+  String get chatSharedMediaTabMedia => 'Медиа';
+
+  @override
+  String get chatSharedMediaTabFiles => 'Файлы';
+
+  @override
+  String get chatSharedMediaTabLinks => 'Ссылки';
+
+  @override
+  String get chatSharedMediaTabVoice => 'Голосовые';
+
+  @override
+  String get chatSharedMediaEmpty => 'Пока ничего нет';
+
+  @override
+  String get chatSharedMediaLoadError => 'Не удалось загрузить медиа';
+
+  @override
   String get chatGroupRoleOwner => 'Владелец';
 
   @override

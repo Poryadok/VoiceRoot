@@ -49,6 +49,16 @@ service MessagingService {
   rpc GetReadState(GetReadStateRequest) returns (GetReadStateResponse);
   rpc GetBulkReadState(GetBulkReadStateRequest) returns (GetBulkReadStateResponse);
   rpc GetChatListMetadata(GetChatListMetadataRequest) returns (GetChatListMetadataResponse);
+  rpc ListSharedMedia(ListSharedMediaRequest) returns (ListSharedMediaResponse);
+}
+
+// Shared media tabs in chat info (docs/features/text-chat.md, docs/features/search.md).
+enum SharedMediaKind {
+  SHARED_MEDIA_KIND_UNSPECIFIED = 0;
+  SHARED_MEDIA_KIND_MEDIA = 1;  // image + video
+  SHARED_MEDIA_KIND_FILES = 2;  // document + other
+  SHARED_MEDIA_KIND_LINKS = 3;  // URLs from message content
+  SHARED_MEDIA_KIND_VOICE = 4;  // audio + voice_message attachments
 }
 
 message SendMessageRequest {
@@ -218,4 +228,34 @@ message GetBulkReadStateResponse {
 }
 message GetChatListMetadataResponse {
   map<string, ChatListMetadata> by_chat_id = 1;
+}
+
+message ListSharedMediaRequest {
+  voice.chat.v1.ChatRef chat = 1;
+  SharedMediaKind kind = 2;
+  voice.common.v1.CursorPageRequest page = 3;
+}
+
+message SharedMediaItem {
+  string message_id = 1;
+  string sender_profile_id = 2;
+  google.protobuf.Timestamp created_at = 3;
+  optional string file_id = 4;
+  optional string attachment_type = 5;
+  optional string external_url = 6;
+  optional string title = 7;
+  int32 sort_order = 8;
+  optional string original_name = 9;
+  optional int64 size_bytes = 10;
+}
+
+message SharedMediaList {
+  repeated SharedMediaItem items = 1;
+  string next_cursor = 2;
+  bool has_more = 3;
+  optional voice.common.v1.CursorPageResponse page = 4;
+}
+
+message ListSharedMediaResponse {
+  SharedMediaList shared_media_list = 1;
 }

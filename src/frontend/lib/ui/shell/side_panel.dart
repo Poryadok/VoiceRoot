@@ -7,6 +7,7 @@ import '../../state/shell_providers.dart';
 import '../../state/space_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../../theme/voice_layout.dart';
+import '../chat/chat_info_panel.dart';
 import '../chat/group_members_sheet.dart';
 import '../space/space_members_sheet.dart';
 
@@ -37,6 +38,9 @@ class SidePanelHost extends ConsumerWidget {
       case ShellSidePanel.members:
         title = _membersTitle(ref, l10n);
         body = _MembersPanelBody();
+      case ShellSidePanel.chatInfo:
+        title = l10n.chatInfoTitle;
+        body = _ChatInfoPanelBody();
       case ShellSidePanel.emoji:
         title = l10n.chatMessageAddReaction;
         body = _EmojiPickerBody(onSelected: onEmojiSelected);
@@ -124,6 +128,33 @@ class _MembersPanelBody extends ConsumerWidget {
       );
     }
     return const SizedBox.shrink();
+  }
+}
+
+class _ChatInfoPanelBody extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final chatId = ref.watch(selectedChatIdProvider);
+    if (chatId == null) return const SizedBox.shrink();
+
+    var isGroup = false;
+    String? groupName;
+    for (final item in ref.watch(chatListControllerProvider).items) {
+      if (item.chatId == chatId) {
+        isGroup = item.chat.isGroup;
+        groupName = item.chat.name;
+        break;
+      }
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+      child: ChatInfoPanel(
+        chatId: chatId,
+        groupName: groupName,
+        isGroup: isGroup,
+      ),
+    );
   }
 }
 

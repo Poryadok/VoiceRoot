@@ -4,6 +4,9 @@ import (
 	"net/http"
 	"strings"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	chatv1 "voice.app/voice/chat/v1"
 	commonv1 "voice.app/voice/common/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
@@ -107,6 +110,34 @@ func (t *transcoder) serveChats(w http.ResponseWriter, r *http.Request, rest str
 		writeProtoJSON(w, http.StatusOK, resp)
 		return true
 
+	case r.Method == http.MethodGet && strings.HasSuffix(rest, "/shared-media"):
+		chatID := strings.TrimSuffix(rest, "/shared-media")
+		chatID = strings.Trim(chatID, "/")
+		page := &commonv1.CursorPageRequest{}
+		_ = decodeQueryJSON(page, queryFirst(r, "page"))
+		if page.Cursor == "" {
+			page.Cursor = queryFirst(r, "cursor")
+		}
+		if page.PageSize == 0 {
+			page.PageSize = parseInt32Query(queryFirst(r, "page_size"))
+		}
+		kind, err := parseSharedMediaKindQuery(queryFirst(r, "kind"))
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.messaging.ListSharedMedia(ctx, &messagingv1.ListSharedMediaRequest{
+			Chat: &chatv1.ChatRef{Id: chatID},
+			Kind: kind,
+			Page: page,
+		})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
 	case r.Method == http.MethodGet && strings.HasSuffix(rest, "/members"):
 		chatID := strings.TrimSuffix(rest, "/members")
 		chatID = strings.Trim(chatID, "/")
@@ -201,5 +232,22 @@ func (t *transcoder) serveChats(w http.ResponseWriter, r *http.Request, rest str
 
 	default:
 		return false
+	}
+}
+
+func parseSharedMediaKindQuery(raw string) (messagingv1.SharedMediaKind, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "media":
+		return messagingv1.SharedMediaKind_SHARED_MEDIA_KIND_MEDIA, nil
+	case "files":
+		return messagingv1.SharedMediaKind_SHARED_MEDIA_KIND_FILES, nil
+	case "links":
+		return messagingv1.SharedMediaKind_SHARED_MEDIA_KIND_LINKS, nil
+	case "voice":
+		return messagingv1.SharedMediaKind_SHARED_MEDIA_KIND_VOICE, nil
+	case "":
+		return messagingv1.SharedMediaKind_SHARED_MEDIA_KIND_UNSPECIFIED, status.Error(codes.InvalidArgument, "kind is required")
+	default:
+		return messagingv1.SharedMediaKind_SHARED_MEDIA_KIND_UNSPECIFIED, status.Error(codes.InvalidArgument, "invalid kind")
 	}
 }

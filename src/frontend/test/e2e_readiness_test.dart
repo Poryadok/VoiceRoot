@@ -26,6 +26,7 @@ void main() {
     'test/phase5_space_invites_e2e_live_test.dart',
     'test/phase5_space_roles_e2e_live_test.dart',
     'test/phase10_custom_roles_e2e_live_test.dart',
+    'test/phase10_shared_media_e2e_live_test.dart',
     'test/phase5_space_moderation_e2e_live_test.dart',
     'test/phase5_space_voice_e2e_live_test.dart',
     'test/phase5_space_channel_e2e_live_test.dart',

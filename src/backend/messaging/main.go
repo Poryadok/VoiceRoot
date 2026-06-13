@@ -195,6 +195,7 @@ func main() {
 			Messages:         &store.MessagesStore{Pool: pool},
 			Reactions:        &store.ReactionsStore{Pool: pool},
 			Pins:             &store.PinsStore{Pool: pool},
+			SharedMedia:      &store.SharedMediaStore{Pool: pool},
 			ChatGuard:        chatGuard,
 			Blocks:           blocks,
 			UserProfiles:     profiles,

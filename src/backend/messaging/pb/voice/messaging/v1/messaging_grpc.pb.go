@@ -35,6 +35,7 @@ const (
 	MessagingService_GetReadState_FullMethodName        = "/voice.messaging.v1.MessagingService/GetReadState"
 	MessagingService_GetBulkReadState_FullMethodName    = "/voice.messaging.v1.MessagingService/GetBulkReadState"
 	MessagingService_GetChatListMetadata_FullMethodName = "/voice.messaging.v1.MessagingService/GetChatListMetadata"
+	MessagingService_ListSharedMedia_FullMethodName     = "/voice.messaging.v1.MessagingService/ListSharedMedia"
 )
 
 // MessagingServiceClient is the client API for MessagingService service.
@@ -63,6 +64,7 @@ type MessagingServiceClient interface {
 	GetReadState(ctx context.Context, in *GetReadStateRequest, opts ...grpc.CallOption) (*GetReadStateResponse, error)
 	GetBulkReadState(ctx context.Context, in *GetBulkReadStateRequest, opts ...grpc.CallOption) (*GetBulkReadStateResponse, error)
 	GetChatListMetadata(ctx context.Context, in *GetChatListMetadataRequest, opts ...grpc.CallOption) (*GetChatListMetadataResponse, error)
+	ListSharedMedia(ctx context.Context, in *ListSharedMediaRequest, opts ...grpc.CallOption) (*ListSharedMediaResponse, error)
 }
 
 type messagingServiceClient struct {
@@ -233,6 +235,16 @@ func (c *messagingServiceClient) GetChatListMetadata(ctx context.Context, in *Ge
 	return out, nil
 }
 
+func (c *messagingServiceClient) ListSharedMedia(ctx context.Context, in *ListSharedMediaRequest, opts ...grpc.CallOption) (*ListSharedMediaResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListSharedMediaResponse)
+	err := c.cc.Invoke(ctx, MessagingService_ListSharedMedia_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MessagingServiceServer is the server API for MessagingService service.
 // All implementations must embed UnimplementedMessagingServiceServer
 // for forward compatibility.
@@ -259,6 +271,7 @@ type MessagingServiceServer interface {
 	GetReadState(context.Context, *GetReadStateRequest) (*GetReadStateResponse, error)
 	GetBulkReadState(context.Context, *GetBulkReadStateRequest) (*GetBulkReadStateResponse, error)
 	GetChatListMetadata(context.Context, *GetChatListMetadataRequest) (*GetChatListMetadataResponse, error)
+	ListSharedMedia(context.Context, *ListSharedMediaRequest) (*ListSharedMediaResponse, error)
 	mustEmbedUnimplementedMessagingServiceServer()
 }
 
@@ -316,6 +329,9 @@ func (UnimplementedMessagingServiceServer) GetBulkReadState(context.Context, *Ge
 }
 func (UnimplementedMessagingServiceServer) GetChatListMetadata(context.Context, *GetChatListMetadataRequest) (*GetChatListMetadataResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetChatListMetadata not implemented")
+}
+func (UnimplementedMessagingServiceServer) ListSharedMedia(context.Context, *ListSharedMediaRequest) (*ListSharedMediaResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListSharedMedia not implemented")
 }
 func (UnimplementedMessagingServiceServer) mustEmbedUnimplementedMessagingServiceServer() {}
 func (UnimplementedMessagingServiceServer) testEmbeddedByValue()                          {}
@@ -626,6 +642,24 @@ func _MessagingService_GetChatListMetadata_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MessagingService_ListSharedMedia_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListSharedMediaRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServiceServer).ListSharedMedia(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessagingService_ListSharedMedia_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServiceServer).ListSharedMedia(ctx, req.(*ListSharedMediaRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MessagingService_ServiceDesc is the grpc.ServiceDesc for MessagingService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -696,6 +730,10 @@ var MessagingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetChatListMetadata",
 			Handler:    _MessagingService_GetChatListMetadata_Handler,
+		},
+		{
+			MethodName: "ListSharedMedia",
+			Handler:    _MessagingService_ListSharedMedia_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

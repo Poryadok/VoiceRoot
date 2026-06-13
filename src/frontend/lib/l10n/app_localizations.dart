@@ -1700,6 +1700,54 @@ abstract class AppLocalizations {
   /// **'Could not load members'**
   String get chatGroupMembersLoadError;
 
+  /// No description provided for @chatInfoTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat info'**
+  String get chatInfoTitle;
+
+  /// No description provided for @chatInfoOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat info'**
+  String get chatInfoOpen;
+
+  /// No description provided for @chatSharedMediaTabMedia.
+  ///
+  /// In en, this message translates to:
+  /// **'Media'**
+  String get chatSharedMediaTabMedia;
+
+  /// No description provided for @chatSharedMediaTabFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Files'**
+  String get chatSharedMediaTabFiles;
+
+  /// No description provided for @chatSharedMediaTabLinks.
+  ///
+  /// In en, this message translates to:
+  /// **'Links'**
+  String get chatSharedMediaTabLinks;
+
+  /// No description provided for @chatSharedMediaTabVoice.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice'**
+  String get chatSharedMediaTabVoice;
+
+  /// No description provided for @chatSharedMediaEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing here yet'**
+  String get chatSharedMediaEmpty;
+
+  /// No description provided for @chatSharedMediaLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load shared media'**
+  String get chatSharedMediaLoadError;
+
   /// No description provided for @chatGroupRoleOwner.
   ///
   /// In en, this message translates to:

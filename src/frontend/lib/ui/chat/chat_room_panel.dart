@@ -24,6 +24,7 @@ import '../core/voice_compact_banner.dart';
 import '../core/voice_state_panel.dart';
 import '../core/voice_send_button.dart';
 import '../social/presence_indicator.dart';
+import 'chat_info_panel.dart';
 import 'chat_message_list.dart';
 import 'message_reactions_row.dart';
 import 'forward_message_sheet.dart';
@@ -32,6 +33,7 @@ import '../shell/side_panel.dart';
 import '../space/space_chat_slow_mode_sheet.dart';
 import '../search/in_chat_search.dart';
 import '../../state/shell_providers.dart';
+import '../../state/shared_media_providers.dart';
 import 'thread_side_panel.dart';
 
 /// Main column: message history (REST) + composer; live updates via Realtime WS.
@@ -59,6 +61,7 @@ class ChatRoomPanel extends ConsumerStatefulWidget {
   static const Key offlineBannerKey = Key('chat_room_offline_banner');
   static const Key spaceSlowModeKey = Key('chat_room_space_slow_mode');
   static const Key inChatSearchKey = Key('chat_room_in_chat_search');
+  static const Key chatInfoKey = Key('chat_room_chat_info');
   static const Key groupVoiceStartKey = Key('chat_room_group_voice_start');
   static const Key groupVoiceJoinKey = Key('chat_room_group_voice_join');
   static Key attachmentPreviewKey(String fileId) =>
@@ -243,6 +246,14 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       _unreadCaptured = true;
     }
 
+    ref.listen(pendingChatMessageScrollProvider(widget.chatId), (prev, next) {
+      if (next != null && next.isNotEmpty) {
+        _scrollToMessage(next);
+        ref.read(pendingChatMessageScrollProvider(widget.chatId).notifier).state =
+            null;
+      }
+    });
+
     ref.listen(chatRoomControllerProvider(widget.chatId), (prev, next) {
       final prevLen = prev?.messages.length ?? 0;
       if (next.messages.length > prevLen) {
@@ -325,6 +336,18 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   },
                   icon: const Icon(Icons.search),
                 ),
+                IconButton(
+                  key: ChatRoomPanel.chatInfoKey,
+                  tooltip: l10n.chatInfoOpen,
+                  onPressed: () => openChatInfoPanel(
+                    context,
+                    ref,
+                    chatId: widget.chatId,
+                    groupName: groupName,
+                    isGroup: isGroup,
+                  ),
+                  icon: const Icon(Icons.info_outline),
+                ),
                 if (isGroup) ...[
                   if (canCall && !inThisGroupVoice)
                     _GroupVoiceHeaderButton(
@@ -346,11 +369,12 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   IconButton(
                     key: ChatRoomPanel.groupMembersKey,
                     tooltip: l10n.chatGroupMembersTooltip,
-                    onPressed: () => openMembersPanel(
+                    onPressed: () => openChatInfoPanel(
                       context,
                       ref,
                       chatId: widget.chatId,
                       groupName: groupName,
+                      isGroup: true,
                     ),
                     icon: const Icon(Icons.group_outlined),
                   ),

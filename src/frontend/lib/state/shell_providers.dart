@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'chat_providers.dart';
 import 'space_providers.dart';
 
-enum ShellSidePanel { none, members, emoji }
+enum ShellSidePanel { none, members, emoji, chatInfo }
 
 enum NavigationSection { chats, social }
 

@@ -914,6 +914,30 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatGroupMembersLoadError => 'Could not load members';
 
   @override
+  String get chatInfoTitle => 'Chat info';
+
+  @override
+  String get chatInfoOpen => 'Chat info';
+
+  @override
+  String get chatSharedMediaTabMedia => 'Media';
+
+  @override
+  String get chatSharedMediaTabFiles => 'Files';
+
+  @override
+  String get chatSharedMediaTabLinks => 'Links';
+
+  @override
+  String get chatSharedMediaTabVoice => 'Voice';
+
+  @override
+  String get chatSharedMediaEmpty => 'Nothing here yet';
+
+  @override
+  String get chatSharedMediaLoadError => 'Could not load shared media';
+
+  @override
   String get chatGroupRoleOwner => 'Owner';
 
   @override

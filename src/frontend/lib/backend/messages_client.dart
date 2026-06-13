@@ -334,6 +334,72 @@ class MessageListData {
   }
 }
 
+/// Shared media tab kind (Phase 10 — docs/features/search.md).
+enum SharedMediaTabKind { media, files, links, voice }
+
+extension SharedMediaTabKindWire on SharedMediaTabKind {
+  String get wireValue => switch (this) {
+    SharedMediaTabKind.media => 'media',
+    SharedMediaTabKind.files => 'files',
+    SharedMediaTabKind.links => 'links',
+    SharedMediaTabKind.voice => 'voice',
+  };
+
+  static SharedMediaTabKind fromProto(messaging_pb.SharedMediaKind kind) {
+    return switch (kind) {
+      messaging_pb.SharedMediaKind.SHARED_MEDIA_KIND_MEDIA =>
+        SharedMediaTabKind.media,
+      messaging_pb.SharedMediaKind.SHARED_MEDIA_KIND_FILES =>
+        SharedMediaTabKind.files,
+      messaging_pb.SharedMediaKind.SHARED_MEDIA_KIND_LINKS =>
+        SharedMediaTabKind.links,
+      messaging_pb.SharedMediaKind.SHARED_MEDIA_KIND_VOICE =>
+        SharedMediaTabKind.voice,
+      _ => SharedMediaTabKind.media,
+    };
+  }
+}
+
+class SharedMediaItemData {
+  const SharedMediaItemData({
+    required this.messageId,
+    required this.senderProfileId,
+    this.createdAt,
+    this.fileId,
+    this.attachmentType,
+    this.externalUrl,
+    this.title,
+    this.sortOrder = 0,
+    this.originalName,
+    this.sizeBytes,
+  });
+
+  final String messageId;
+  final String senderProfileId;
+  final DateTime? createdAt;
+  final String? fileId;
+  final String? attachmentType;
+  final String? externalUrl;
+  final String? title;
+  final int sortOrder;
+  final String? originalName;
+  final int? sizeBytes;
+
+  bool get isLink => externalUrl != null && externalUrl!.isNotEmpty;
+}
+
+class SharedMediaListData {
+  const SharedMediaListData({
+    required this.items,
+    this.nextCursor,
+    this.hasMore = false,
+  });
+
+  final List<SharedMediaItemData> items;
+  final String? nextCursor;
+  final bool hasMore;
+}
+
 class ReadStateData {
   const ReadStateData({
     required this.chatId,
@@ -611,6 +677,35 @@ class VoiceMessagesClient {
       createEmpty: messaging_pb.ForwardMessageResponse.create,
     );
     return _map(result, (data) => voiceMessageFromProto(data.message));
+  }
+
+  /// Phase 10 shared media tab listing.
+  Future<MessagesApiResult<SharedMediaListData>> listSharedMedia({
+    required String authorization,
+    required String chatId,
+    required SharedMediaTabKind kind,
+    String? cursor,
+  }) async {
+    final uri = _gateway.replace(
+      path: '/api/v1/chats/$chatId/shared-media',
+      queryParameters: {
+        'kind': kind.wireValue,
+        if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+      },
+    );
+    final result = await _gateway.getProto(
+      uri,
+      authorization: authorization,
+      createEmpty: messaging_pb.ListSharedMediaResponse.create,
+    );
+    return _map(
+      result,
+      (data) => sharedMediaListFromProto(
+        data.hasSharedMediaList()
+            ? data.sharedMediaList
+            : messaging_pb.SharedMediaList(),
+      ),
+    );
   }
 
   Future<MessagesApiResult<ReadStateData>> getReadState({

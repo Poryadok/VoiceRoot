@@ -38,6 +38,7 @@ type MessagingGRPC struct {
 	Messages  *store.MessagesStore
 	Reactions *store.ReactionsStore
 	Pins      *store.PinsStore
+	SharedMedia *store.SharedMediaStore
 	ChatGuard ChatGuard
 	// Blocks and UserProfiles are optional S2S gates for SendMessage (Social + User); both must be set to enforce.
 	Blocks       AccountPairBlockChecker
@@ -1359,6 +1360,143 @@ func messageRowToProto(m *store.MessageRow, kind messagingv1.MessageKind, reacti
 		}
 	}
 	return out
+}
+
+func (s *MessagingGRPC) ListSharedMedia(ctx context.Context, req *messagingv1.ListSharedMediaRequest) (*messagingv1.ListSharedMediaResponse, error) {
+	if s == nil || s.SharedMedia == nil {
+		return nil, status.Error(codes.FailedPrecondition, "shared media not configured")
+	}
+	profileID, ok := authctx.ProfileID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing profile")
+	}
+	chatID, err := parseUUIDField("chat.id", req.GetChat().GetId())
+	if err != nil {
+		return nil, err
+	}
+	if err := validateChatRefMessaging(req.GetChat()); err != nil {
+		return nil, err
+	}
+	if s.ChatGuard != nil {
+		if err := s.ChatGuard.EnsureMember(ctx, chatID, profileID); err != nil {
+			if errors.Is(err, store.ErrNotChatMember) {
+				return nil, status.Error(codes.PermissionDenied, "not a chat member")
+			}
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+	}
+	kind, err := protoSharedMediaKind(req.GetKind())
+	if err != nil {
+		return nil, err
+	}
+	pageSize := defaultSharedMediaPageSize
+	cursor := ""
+	if page := req.GetPage(); page != nil {
+		if page.GetPageSize() > 0 {
+			pageSize = page.GetPageSize()
+		}
+		cursor = strings.TrimSpace(page.GetCursor())
+	}
+	if pageSize > maxPageSize {
+		pageSize = maxPageSize
+	}
+
+	rows, nextCursor, hasMore, err := s.SharedMedia.List(ctx, chatID, kind, cursor, pageSize)
+	if err != nil {
+		if strings.Contains(err.Error(), "invalid shared media cursor") {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	fileIDs := make([]string, 0, len(rows))
+	for _, row := range rows {
+		if row.FileID != nil {
+			fileIDs = append(fileIDs, row.FileID.String())
+		}
+	}
+	metaByID := map[string]*filev1.FileMetadata{}
+	if len(fileIDs) > 0 && s.Files != nil {
+		resp, err := s.Files.GetBulkMetadata(ctx, &filev1.GetBulkMetadataRequest{FileIds: fileIDs})
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		metaByID = resp.GetBulkFileMetadata().GetByFileId()
+	}
+
+	items := make([]*messagingv1.SharedMediaItem, 0, len(rows))
+	for _, row := range rows {
+		item := &messagingv1.SharedMediaItem{
+			MessageId:       row.MessageID.String(),
+			SenderProfileId: row.SenderProfileID.String(),
+			CreatedAt:       timestamppb.New(row.CreatedAt),
+			SortOrder:       row.SortOrder,
+		}
+		if row.FileID != nil {
+			fid := row.FileID.String()
+			item.FileId = &fid
+			meta := metaByID[fid]
+			if meta == nil {
+				continue
+			}
+			if meta.GetStatus() != "ready" {
+				continue
+			}
+			switch meta.GetScanResult() {
+			case "clean", "skipped":
+			default:
+				continue
+			}
+			if meta.GetChat().GetId() != "" && meta.GetChat().GetId() != chatID.String() {
+				continue
+			}
+			attType := row.AttachmentType
+			item.AttachmentType = &attType
+			if name := strings.TrimSpace(meta.GetOriginalName()); name != "" {
+				item.OriginalName = &name
+			}
+			size := meta.GetSizeBytes()
+			item.SizeBytes = &size
+		} else if row.ExternalURL != "" {
+			url := row.ExternalURL
+			item.ExternalUrl = &url
+			if title := strings.TrimSpace(row.Title); title != "" {
+				item.Title = &title
+			}
+		} else {
+			continue
+		}
+		items = append(items, item)
+	}
+
+	return &messagingv1.ListSharedMediaResponse{
+		SharedMediaList: &messagingv1.SharedMediaList{
+			Items:      items,
+			NextCursor: nextCursor,
+			HasMore:    hasMore,
+			Page: &commonv1.CursorPageResponse{
+				NextCursor: nextCursor,
+				HasMore:    hasMore,
+			},
+		},
+	}, nil
+}
+
+const defaultSharedMediaPageSize int32 = 20
+
+func protoSharedMediaKind(k messagingv1.SharedMediaKind) (store.SharedMediaKind, error) {
+	switch k {
+	case messagingv1.SharedMediaKind_SHARED_MEDIA_KIND_MEDIA:
+		return store.SharedMediaKindMedia, nil
+	case messagingv1.SharedMediaKind_SHARED_MEDIA_KIND_FILES:
+		return store.SharedMediaKindFiles, nil
+	case messagingv1.SharedMediaKind_SHARED_MEDIA_KIND_LINKS:
+		return store.SharedMediaKindLinks, nil
+	case messagingv1.SharedMediaKind_SHARED_MEDIA_KIND_VOICE:
+		return store.SharedMediaKindVoice, nil
+	default:
+		return 0, status.Error(codes.InvalidArgument, "kind is required")
+	}
 }
 
 func ptrString(s string) *string { return &s }
