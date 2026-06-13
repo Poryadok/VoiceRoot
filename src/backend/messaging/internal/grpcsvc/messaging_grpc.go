@@ -783,12 +783,15 @@ func (s *MessagingGRPC) ListThreads(ctx context.Context, req *messagingv1.ListTh
 	threads := make([]*messagingv1.ThreadSummary, 0, len(rows))
 	for _, row := range rows {
 		ts := timestamppb.New(row.LastReplyAt)
-		threads = append(threads, &messagingv1.ThreadSummary{
-			ThreadParentId:   row.ThreadParentID.String(),
-			ReplyCount:       row.ReplyCount,
-			LastReplyAt:      ts,
-			LastReplyPreview: row.LastReplyPreview,
-		})
+		item := &messagingv1.ThreadSummary{
+			ThreadParentId: row.ThreadParentID.String(),
+			ReplyCount:     row.ReplyCount,
+			LastReplyAt:    ts,
+		}
+		if row.LastReplyPreview != "" {
+			item.LastReplyPreview = ptrString(row.LastReplyPreview)
+		}
+		threads = append(threads, item)
 	}
 	return &messagingv1.ListThreadsResponse{
 		ThreadList: &messagingv1.ThreadList{Threads: threads},
