@@ -54,6 +54,7 @@ message Enable2FARequest {
 message Enable2FAResponse {
   string totp_uri = 1;
   string secret_backup_hint = 2;
+  repeated string backup_codes = 3;
 }
 
 message Verify2FARequest {

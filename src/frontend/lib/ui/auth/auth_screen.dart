@@ -28,11 +28,14 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _totpController = TextEditingController();
+  var _awaitingTotp = false;
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _totpController.dispose();
     super.dispose();
   }
 
@@ -51,8 +54,18 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     final controller = ref.read(authControllerProvider.notifier);
     if (register) {
       await controller.register(email: email, password: password);
-    } else {
-      await controller.login(email: email, password: password);
+      return;
+    }
+    final totpCode = _awaitingTotp ? _totpController.text.trim() : null;
+    await controller.login(
+      email: email,
+      password: password,
+      totpCode: totpCode?.isEmpty == true ? null : totpCode,
+    );
+    if (!mounted) return;
+    final errorKey = ref.read(authControllerProvider).errorKey;
+    if (errorKey == AuthErrorKeys.totpRequired) {
+      setState(() => _awaitingTotp = true);
     }
   }
 
@@ -135,6 +148,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                           controller: _passwordController,
                           obscureText: true,
                           autofillHints: const [AutofillHints.password],
+                          enabled: !_awaitingTotp,
                           decoration: InputDecoration(
                             labelText: l10n.authPasswordLabel,
                             helperText: l10n.authPasswordHelper,
@@ -142,7 +156,27 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                           validator: (v) => _passwordValidator(v, l10n),
                           onFieldSubmitted: (_) => _submit(false),
                         ),
-                        if (auth.errorKey != null) ...[
+                        if (_awaitingTotp) ...[
+                          const SizedBox(height: 12),
+                          Text(
+                            l10n.authTotpStepTitle,
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                          const SizedBox(height: 8),
+                          TextFormField(
+                            key: const Key('auth_totp'),
+                            controller: _totpController,
+                            keyboardType: TextInputType.number,
+                            autofillHints: const [AutofillHints.oneTimeCode],
+                            decoration: InputDecoration(
+                              labelText: l10n.authTotpLabel,
+                              helperText: l10n.authTotpHelper,
+                            ),
+                            onFieldSubmitted: (_) => _submit(false),
+                          ),
+                        ],
+                        if (auth.errorKey != null &&
+                            auth.errorKey != AuthErrorKeys.totpRequired) ...[
                           const SizedBox(height: 12),
                           Text(
                             authErrorMessage(l10n, auth.errorKey!),

@@ -10,6 +10,7 @@ import '../../state/presence_providers.dart';
 import '../../state/matchmaking_providers.dart';
 import '../../state/social_providers.dart';
 import '../core/voice_avatar.dart';
+import '../report/report_sheet.dart';
 import 'presence_indicator.dart';
 
 String _mmEntryLabel(AsyncValue<GameListData> catalogAsync, PlayerGameEntry entry) {
@@ -175,6 +176,18 @@ class ProfileDetailSheet extends ConsumerWidget {
                       foregroundColor: Theme.of(context).colorScheme.error,
                     ),
                     child: Text(l10n.profileBlock),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    key: const Key('profile_report'),
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      ReportSheet.show(
+                        context,
+                        target: ReportUserTarget(profileId: profileId),
+                      );
+                    },
+                    child: Text(l10n.reportAction),
                   ),
                 ],
               ],

@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS auto_mod_log;
+DROP TABLE IF EXISTS reports;

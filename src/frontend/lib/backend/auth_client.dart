@@ -29,6 +29,39 @@ final class AuthSessionFailure extends AuthSessionResult {
   final int? statusCode;
 }
 
+sealed class Enable2FAResult {
+  const Enable2FAResult();
+}
+
+final class Enable2FAOk extends Enable2FAResult {
+  const Enable2FAOk(this.enrollment);
+  final TotpEnrollmentData enrollment;
+}
+
+final class Enable2FAFailure extends Enable2FAResult {
+  const Enable2FAFailure({
+    required this.message,
+    this.errorCode,
+    this.statusCode,
+  });
+
+  final String message;
+  final String? errorCode;
+  final int? statusCode;
+}
+
+class TotpEnrollmentData {
+  const TotpEnrollmentData({
+    required this.totpUri,
+    required this.secretBackupHint,
+    required this.backupCodes,
+  });
+
+  final String totpUri;
+  final String secretBackupHint;
+  final List<String> backupCodes;
+}
+
 /// HTTP client for public Auth routes via API Gateway (`/api/v1/auth/*`).
 class VoiceAuthClient {
   VoiceAuthClient({required GatewayHttpClient gateway}) : _gateway = gateway;
@@ -56,17 +89,69 @@ class VoiceAuthClient {
   Future<AuthSessionResult> login({
     required String email,
     required String password,
+    String? totpCode,
   }) {
     return _postSession(
       '/api/v1/auth/login',
       auth_pb.LoginRequest(
         email: email,
         password: password,
+        totpCode: totpCode,
         deviceInfoJson: _deviceInfoJson,
       ),
       auth_pb.LoginResponse.create,
       (response) => response.session,
     );
+  }
+
+  Future<Enable2FAResult> enable2FA({
+    required AuthSession session,
+    required String password,
+  }) async {
+    final result = await _gateway.postJson(
+      uri: _gateway.resolve('/api/v1/auth/2fa/enable'),
+      authorization: session.authorizationHeader,
+      body: {'password': password},
+    );
+    return switch (result) {
+      GatewayHttpOk(:final data) => Enable2FAOk(
+        TotpEnrollmentData(
+          totpUri: data['totp_uri'] as String? ?? '',
+          secretBackupHint: data['secret_backup_hint'] as String? ?? '',
+          backupCodes:
+              (data['backup_codes'] as List<dynamic>?)
+                  ?.map((e) => e.toString())
+                  .toList() ??
+              const [],
+        ),
+      ),
+      GatewayHttpFailure(:final error) => Enable2FAFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
+  }
+
+  Future<AuthSessionResult> verify2FA({
+    required AuthSession session,
+    required String totpCode,
+  }) async {
+    final result = await _gateway.postJson(
+      uri: _gateway.resolve('/api/v1/auth/2fa/verify'),
+      authorization: session.authorizationHeader,
+      body: {'totp_code': totpCode},
+    );
+    return switch (result) {
+      GatewayHttpOk(:final data) => AuthSessionOk(
+        AuthSession.fromAuthResponse(data),
+      ),
+      GatewayHttpFailure(:final error) => AuthSessionFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
   }
 
   Future<AuthSessionResult> refresh({required String refreshToken}) {
@@ -99,10 +184,12 @@ class VoiceAuthClient {
     String path,
     GeneratedMessage body,
     T Function() createEmpty,
-    auth_pb.AuthSession Function(T response) readSession,
-  ) async {
+    auth_pb.AuthSession Function(T response) readSession, {
+    String? authorization,
+  }) async {
     final result = await _gateway.postProto(
       uri: _gateway.resolve(path),
+      authorization: authorization,
       body: body,
       createEmpty: createEmpty,
     );

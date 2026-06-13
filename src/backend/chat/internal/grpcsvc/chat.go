@@ -18,6 +18,8 @@ type ChatGRPC struct {
 	DM         DMStore
 	Profiles   UserProfileLookup
 	Blocks     AccountBlockChecker
+	Privacy    PrivacyChecker
+	Friends    ProfileFriendChecker
 	ListEnrich ListChatsEnrichment // optional; Messaging S2S for preview + unread
 	// ChatEvents is optional; when set, new DM creation publishes to NATS JetStream (stream chat_events, subjects chat.*).
 	ChatEvents chatevents.Publisher
@@ -25,6 +27,16 @@ type ChatGRPC struct {
 	Roles rolev1.RoleServiceClient
 	// SpaceMembers resolves space_db.space_members for chats with space_id (optional).
 	SpaceMembers *store.SpaceMembersStore
+}
+
+// PrivacyChecker reads recipient privacy policy for DM gate.
+type PrivacyChecker interface {
+	AllowDM(ctx context.Context, profileID uuid.UUID) (string, error)
+}
+
+// ProfileFriendChecker verifies if two profiles are friends.
+type ProfileFriendChecker interface {
+	AreFriends(ctx context.Context, profileA, profileB uuid.UUID) (bool, error)
 }
 
 // DMStore persists chats and lists the caller's inbox (DM + standalone groups).

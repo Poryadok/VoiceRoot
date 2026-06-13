@@ -133,13 +133,15 @@ const Enable2FAResponse$json = {
       '5': 9,
       '10': 'secretBackupHint'
     },
+    {'1': 'backup_codes', '3': 3, '4': 3, '5': 9, '10': 'backupCodes'},
   ],
 };
 
 /// Descriptor for `Enable2FAResponse`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List enable2FAResponseDescriptor = $convert.base64Decode(
     'ChFFbmFibGUyRkFSZXNwb25zZRIZCgh0b3RwX3VyaRgBIAEoCVIHdG90cFVyaRIsChJzZWNyZX'
-    'RfYmFja3VwX2hpbnQYAiABKAlSEHNlY3JldEJhY2t1cEhpbnQ=');
+    'RfYmFja3VwX2hpbnQYAiABKAlSEHNlY3JldEJhY2t1cEhpbnQSIQoMYmFja3VwX2NvZGVzGAMg'
+    'AygJUgtiYWNrdXBDb2Rlcw==');
 
 @$core.Deprecated('Use verify2FARequestDescriptor instead')
 const Verify2FARequest$json = {

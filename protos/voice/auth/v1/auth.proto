@@ -57,6 +57,8 @@ message Enable2FARequest {
 message Enable2FAResponse {
   string totp_uri = 1;
   string secret_backup_hint = 2;
+  // One-time plaintext backup codes; shown only at enrollment (docs/features/auth-and-contacts.md).
+  repeated string backup_codes = 3;
 }
 
 message Verify2FARequest {

@@ -86,6 +86,14 @@ func WithSpaceMembers(s *store.SpaceMembersStore) chatServerOption {
 	return func(c *ChatGRPC) { c.SpaceMembers = s }
 }
 
+func WithPrivacyChecker(p PrivacyChecker) chatServerOption {
+	return func(c *ChatGRPC) { c.Privacy = p }
+}
+
+func WithFriendChecker(f ProfileFriendChecker) chatServerOption {
+	return func(c *ChatGRPC) { c.Friends = f }
+}
+
 func startChatGRPCTestServer(t *testing.T, pool *pgxpool.Pool, profiles UserProfileLookup, blocks AccountBlockChecker, enrich ListChatsEnrichment, opts ...chatServerOption) (chatv1.ChatServiceClient, func()) {
 	t.Helper()
 	const bufSize = 1 << 20

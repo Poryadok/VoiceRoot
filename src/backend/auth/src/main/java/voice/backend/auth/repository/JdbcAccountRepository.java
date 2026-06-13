@@ -18,6 +18,8 @@ public class JdbcAccountRepository implements AccountRepository {
               rs.getString("password_hash"),
               rs.getString("type"),
               rs.getString("status"),
+              rs.getBytes("totp_secret"),
+              rs.getBoolean("totp_enabled"),
               rs.getTimestamp("created_at").toInstant());
 
   private final NamedParameterJdbcTemplate jdbc;
@@ -39,7 +41,7 @@ public class JdbcAccountRepository implements AccountRepository {
           """
           INSERT INTO accounts (email, phone, password_hash, type, status)
           VALUES (:email, :phone, :passwordHash, :type, 'active')
-          RETURNING id, email, phone, password_hash, type, status, created_at
+          RETURNING id, email, phone, password_hash, type, status, totp_secret, totp_enabled, created_at
           """,
           params,
           ROW_MAPPER);
@@ -55,7 +57,7 @@ public class JdbcAccountRepository implements AccountRepository {
     }
     return jdbc.query(
             """
-            SELECT id, email, phone, password_hash, type, status, created_at
+            SELECT id, email, phone, password_hash, type, status, totp_secret, totp_enabled, created_at
             FROM accounts WHERE email = :email LIMIT 1
             """,
             new MapSqlParameterSource("email", email),
@@ -71,7 +73,7 @@ public class JdbcAccountRepository implements AccountRepository {
     }
     return jdbc.query(
             """
-            SELECT id, email, phone, password_hash, type, status, created_at
+            SELECT id, email, phone, password_hash, type, status, totp_secret, totp_enabled, created_at
             FROM accounts WHERE phone = :phone LIMIT 1
             """,
             new MapSqlParameterSource("phone", phone),
@@ -86,7 +88,7 @@ public class JdbcAccountRepository implements AccountRepository {
       UUID uuid = UUID.fromString(id);
       return jdbc.query(
               """
-              SELECT id, email, phone, password_hash, type, status, created_at
+              SELECT id, email, phone, password_hash, type, status, totp_secret, totp_enabled, created_at
               FROM accounts WHERE id = :id LIMIT 1
               """,
               new MapSqlParameterSource("id", uuid),
@@ -96,5 +98,32 @@ public class JdbcAccountRepository implements AccountRepository {
     } catch (IllegalArgumentException ex) {
       return Optional.empty();
     }
+  }
+
+  @Override
+  public void saveTotpSecret(UUID accountId, byte[] encryptedSecret, boolean enabled) {
+    jdbc.update(
+        """
+        UPDATE accounts
+        SET totp_secret = :secret, totp_enabled = :enabled, updated_at = now()
+        WHERE id = :id
+        """,
+        new MapSqlParameterSource()
+            .addValue("id", accountId)
+            .addValue("secret", encryptedSecret)
+            .addValue("enabled", enabled));
+  }
+
+  @Override
+  public void setTotpEnabled(UUID accountId, boolean enabled) {
+    jdbc.update(
+        """
+        UPDATE accounts
+        SET totp_enabled = :enabled, updated_at = now()
+        WHERE id = :id
+        """,
+        new MapSqlParameterSource()
+            .addValue("id", accountId)
+            .addValue("enabled", enabled));
   }
 }

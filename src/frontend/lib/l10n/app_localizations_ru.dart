@@ -895,7 +895,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get spaceChatOverrideHint =>
-      'Запретить просмотр чата для роли только здесь.';
+      'Запретить просмотр или отправку для роли только в этом чате.';
 
   @override
   String get spaceChatOverrideDenyView => 'Запретить просмотр';
@@ -1000,15 +1000,17 @@ class AppLocalizationsRu extends AppLocalizations {
       'Передайте владение другому участнику перед выходом.';
 
   @override
-  String chatGroupTransferOwnershipTo(String name) =>
-      'Передать владение: $name';
+  String chatGroupTransferOwnershipTo(String name) {
+    return 'Передать владение: $name';
+  }
 
   @override
   String get chatGroupTransferOwnershipTitle => 'Передать владение группой';
 
   @override
-  String chatGroupTransferOwnershipMessage(String name) =>
-      'Сделать $name новым владельцем?';
+  String chatGroupTransferOwnershipMessage(String name) {
+    return 'Сделать $name новым владельцем?';
+  }
 
   @override
   String get chatGroupTransferOwnershipConfirm => 'Передать';
@@ -1048,6 +1050,167 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get settingsAccent => 'Акцент профиля';
+
+  @override
+  String get settingsSecurity => 'Безопасность и доверие';
+
+  @override
+  String get securitySettingsTitle => 'Безопасность';
+
+  @override
+  String get security2faEnableTitle => 'Двухфакторная аутентификация';
+
+  @override
+  String get security2faEnableHint =>
+      'Подтвердите пароль, чтобы начать настройку 2FA.';
+
+  @override
+  String get security2faContinue => 'Продолжить';
+
+  @override
+  String get security2faScanQr =>
+      'Отсканируйте QR-код в приложении-аутентификаторе';
+
+  @override
+  String get security2faBackupCodesTitle => 'Резервные коды (сохраните сейчас)';
+
+  @override
+  String get security2faVerifyTitle => 'Подтвердите аутентификатор';
+
+  @override
+  String get security2faVerifyHint =>
+      'Введите 6-значный код или резервный код.';
+
+  @override
+  String get security2faVerify => 'Включить 2FA';
+
+  @override
+  String get security2faBackToQr => 'Назад к QR';
+
+  @override
+  String get security2faEnabled => 'Двухфакторная аутентификация включена.';
+
+  @override
+  String get privacySettingsTitle => 'Приватность';
+
+  @override
+  String get privacyLoadError => 'Не удалось загрузить настройки приватности';
+
+  @override
+  String get privacySaved => 'Настройки приватности сохранены';
+
+  @override
+  String get privacyPresetTitle => 'Пресет';
+
+  @override
+  String get privacyPresetPersonal => 'Личный';
+
+  @override
+  String get privacyPresetGaming => 'Игровой';
+
+  @override
+  String get privacyPresetWork => 'Рабочий';
+
+  @override
+  String get privacyAllowDm => 'Кто может писать в ЛС';
+
+  @override
+  String get privacyAllowGuestDm => 'Разрешить гостевые аккаунты в ЛС';
+
+  @override
+  String get privacyVisibilityTitle => 'Видимость';
+
+  @override
+  String get privacyShowOnline => 'Онлайн-статус';
+
+  @override
+  String get privacyShowGameStatus => 'Статус «в игре»';
+
+  @override
+  String get privacyShowMmRating => 'Рейтинг ММ';
+
+  @override
+  String get privacyShowPhone => 'Телефон';
+
+  @override
+  String get privacyShowStories => 'Стори';
+
+  @override
+  String get privacyAllowFriendRequests => 'Заявки в друзья';
+
+  @override
+  String get privacyAudienceEveryone => 'Все';
+
+  @override
+  String get privacyAudienceFriends => 'Друзья';
+
+  @override
+  String get privacyAudienceFriendsOfFriends => 'Друзья друзей';
+
+  @override
+  String get privacyAudienceNobody => 'Никто';
+
+  @override
+  String get reportAction => 'Пожаловаться';
+
+  @override
+  String get reportTitle => 'Жалоба';
+
+  @override
+  String get reportSubtitle => 'Выберите категорию. Мы рассмотрим обращение.';
+
+  @override
+  String get reportCategorySpam => 'Спам';
+
+  @override
+  String get reportCategoryHarassment => 'Домогательство';
+
+  @override
+  String get reportCategoryOffensive => 'Оскорбительный контент';
+
+  @override
+  String get reportCategoryFake => 'Фейк / выдача себя за другого';
+
+  @override
+  String get reportCategoryMmToxic => 'Читерство / токсик в ММ';
+
+  @override
+  String get reportCategoryOther => 'Другое';
+
+  @override
+  String get reportCommentLabel => 'Комментарий';
+
+  @override
+  String get reportCommentRequired =>
+      'Обязательно для «Другое» (до 500 символов)';
+
+  @override
+  String get reportSubmit => 'Отправить жалобу';
+
+  @override
+  String get reportAcceptedTitle => 'Жалоба принята';
+
+  @override
+  String get reportAcceptedMessage =>
+      'Мы рассмотрим её в ближайшее время. Статус жалобы не сообщается.';
+
+  @override
+  String get authTotpStepTitle => 'Код двухфакторной аутентификации';
+
+  @override
+  String get authTotpLabel => 'Код аутентификатора или резервный';
+
+  @override
+  String get authTotpHelper =>
+      'Введите код из приложения-аутентификатора или резервный код.';
+
+  @override
+  String get authErrorTotpRequired =>
+      'Введите код двухфакторной аутентификации.';
+
+  @override
+  String get authErrorInvalidTotp =>
+      'Неверный код аутентификатора или резервный код.';
 
   @override
   String get authTagline => 'Голос и сообщения для геймеров';

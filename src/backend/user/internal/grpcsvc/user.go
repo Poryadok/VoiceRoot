@@ -25,6 +25,7 @@ import (
 type UserGRPC struct {
 	userv1.UnimplementedUserServiceServer
 	Profiles *store.ProfileStore
+	Privacy  *store.PrivacyStore
 	Presence *store.PresenceStore
 	// Blocks optional Social S2S checker; nil skips block filtering (dev / tests).
 	Blocks AccountBlockChecker

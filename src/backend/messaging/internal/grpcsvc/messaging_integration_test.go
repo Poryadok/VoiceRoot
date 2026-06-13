@@ -118,20 +118,22 @@ func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire
 		moderation = &store.SQLModerationGuard{Pool: pool}
 	}
 	messagingv1.RegisterMessagingServiceServer(srv, &MessagingGRPC{
-		Messages:          &store.MessagesStore{Pool: pool},
-		Reactions:         &store.ReactionsStore{Pool: pool},
-		Pins:              &store.PinsStore{Pool: pool},
-		SharedMedia:       &store.SharedMediaStore{Pool: pool},
-		ChatGuard:         guard,
-		Blocks:            w.Blocks,
-		UserProfiles:      w.UserProfiles,
-		MessageEvents:     w.MessageEvents,
-		Files:             w.Files,
-		Moderation:        moderation,
-		ChatMentionsMeta:  &store.SQLChatMentionsMeta{Pool: pool},
-		RolePermissions:   w.RolePermissions,
-		UserPresence:      w.UserPresence,
-		ChatThreadPolicy:  &store.SQLChatThreadPolicy{Pool: pool},
+		Messages:         &store.MessagesStore{Pool: pool},
+		Reactions:        &store.ReactionsStore{Pool: pool},
+		Pins:             &store.PinsStore{Pool: pool},
+		SharedMedia:      &store.SharedMediaStore{Pool: pool},
+		ChatGuard:        guard,
+		Blocks:           w.Blocks,
+		UserProfiles:     w.UserProfiles,
+		Privacy:          w.Privacy,
+		Friends:          w.Friends,
+		MessageEvents:    w.MessageEvents,
+		Files:            w.Files,
+		Moderation:       moderation,
+		ChatMentionsMeta: &store.SQLChatMentionsMeta{Pool: pool},
+		RolePermissions:  w.RolePermissions,
+		UserPresence:     w.UserPresence,
+		ChatThreadPolicy: &store.SQLChatThreadPolicy{Pool: pool},
 	})
 	go func() {
 		if err := srv.Serve(lis); err != nil {
@@ -150,14 +152,16 @@ func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire
 }
 
 type messagingWire struct {
-	ChatGuard        ChatGuard
-	Moderation       *store.SQLModerationGuard
-	UserProfiles     ProfileAccountLookup
-	Blocks           AccountPairBlockChecker
-	MessageEvents    messageevents.MessageEventsPublisher
-	Files            FileMetadataLookup
-	RolePermissions  mentions.RolePermissionChecker
-	UserPresence     mentions.OnlinePresenceLookup
+	ChatGuard       ChatGuard
+	Moderation      *store.SQLModerationGuard
+	UserProfiles    ProfileAccountLookup
+	Blocks          AccountPairBlockChecker
+	Privacy         PrivacyChecker
+	Friends         ProfileFriendChecker
+	MessageEvents   messageevents.MessageEventsPublisher
+	Files           FileMetadataLookup
+	RolePermissions mentions.RolePermissionChecker
+	UserPresence    mentions.OnlinePresenceLookup
 }
 
 func startMessagingServer(t *testing.T, pool *pgxpool.Pool) (messagingv1.MessagingServiceClient, func()) {
@@ -1187,9 +1191,9 @@ func TestMessagingGetMessages_beforeMessageID(t *testing.T) {
 	}
 	anchor := ids[2]
 	page, err := client.GetMessages(withProfileCtx(ctx, acctA, profA), &messagingv1.GetMessagesRequest{
-		Chat:             chatDMRef(chatID),
-		BeforeMessageId:  &anchor,
-		Page:             &commonv1.CursorPageRequest{PageSize: 10},
+		Chat:            chatDMRef(chatID),
+		BeforeMessageId: &anchor,
+		Page:            &commonv1.CursorPageRequest{PageSize: 10},
 	})
 	require.NoError(t, err)
 	require.NotEmpty(t, page.GetMessageList().GetMessages())

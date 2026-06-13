@@ -1,0 +1,220 @@
+package grpcsvc
+
+import (
+	"context"
+	"net"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/alicebob/miniredis/v2"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/test/bufconn"
+
+	"voice/backend/pkg/integrationtest"
+	"voice/backend/user/internal/authctx"
+	"voice/backend/user/internal/store"
+
+	userv1 "voice.app/voice/user/v1"
+)
+
+func applyUserPrivacyMigrations(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
+	root := repoRoot(t)
+	for _, name := range []string{"000001_init.up.sql", "000002_privacy_settings.up.sql"} {
+		path := filepath.Join(root, "src", "backend", "migrations", "user_db", name)
+		sqlBytes, err := os.ReadFile(path)
+		require.NoError(t, err)
+		_, err = pool.Exec(ctx, string(sqlBytes))
+		require.NoError(t, err)
+	}
+}
+
+func startUserPrivacyTestServer(t *testing.T, pool *store.ProfileStore, rdb *redis.Client) userv1.UserServiceClient {
+	t.Helper()
+	lis := bufconn.Listen(1024 * 1024)
+	t.Cleanup(func() { _ = lis.Close() })
+	srv := grpc.NewServer()
+	userv1.RegisterUserServiceServer(srv, &UserGRPC{
+		Profiles: pool,
+		Presence: store.NewPresenceStore(rdb),
+	})
+	go func() { _ = srv.Serve(lis) }()
+	t.Cleanup(srv.Stop)
+
+	conn, err := grpc.NewClient("passthrough:///bufnet",
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return lis.Dial() }),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+	return userv1.NewUserServiceClient(conn)
+}
+
+func withUserAuthCtx(ctx context.Context, accountID, profileID uuid.UUID) context.Context {
+	ctx = metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountID.String())
+	return metadata.AppendToOutgoingContext(ctx, authctx.HeaderProfileID, profileID.String())
+}
+
+// TestGetPrivacySettings_GamingPresetDefaults documents gaming preset defaults from docs/features/privacy.md.
+func TestGetPrivacySettings_GamingPresetDefaults(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "userdb", "")
+	applyUserPrivacyMigrations(t, ctx, pool)
+
+	accountID := uuid.New()
+	profileID := uuid.New()
+	_, err := pool.Exec(ctx, `
+INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+VALUES ($1, $2, 'gamer', '4242', 'Gamer', true)`,
+		profileID, accountID)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `
+INSERT INTO privacy_settings (profile_id, preset, show_online, show_game_status, show_mm_rating, show_phone, show_stories, allow_dm, allow_friend_requests, allow_guest_dm)
+VALUES ($1, 'gaming', 'everyone', 'everyone', 'everyone', 'nobody', 'everyone', 'everyone', 'everyone', true)`,
+		profileID)
+	require.NoError(t, err)
+
+	mr := miniredis.RunT(t)
+	t.Cleanup(func() { mr.Close() })
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), rdb)
+
+	resp, err := cli.GetPrivacySettings(withUserAuthCtx(ctx, accountID, profileID), &userv1.GetPrivacySettingsRequest{
+		ProfileId: profileID.String(),
+	})
+	require.NoError(t, err)
+	ps := resp.GetPrivacySettings()
+	require.Equal(t, "gaming", ps.GetPreset())
+	require.Equal(t, "everyone", ps.GetShowOnline())
+	require.Equal(t, "everyone", ps.GetAllowDm())
+	require.Equal(t, "nobody", ps.GetShowPhone())
+}
+
+// TestGetPrivacySettings_PersonalPresetDefaults documents personal preset DM audience defaults.
+func TestGetPrivacySettings_PersonalPresetDefaults(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "userdb", "")
+	applyUserPrivacyMigrations(t, ctx, pool)
+
+	accountID := uuid.New()
+	profileID := uuid.New()
+	_, err := pool.Exec(ctx, `
+INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+VALUES ($1, $2, 'private', '1111', 'Private', true)`,
+		profileID, accountID)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `
+INSERT INTO privacy_settings (profile_id, preset, show_online, show_game_status, show_mm_rating, show_phone, show_stories, allow_dm, allow_friend_requests, allow_guest_dm)
+VALUES ($1, 'personal', 'friends', 'friends', 'friends_of_friends', 'nobody', 'friends_of_friends', 'friends_of_friends', 'everyone', false)`,
+		profileID)
+	require.NoError(t, err)
+
+	mr := miniredis.RunT(t)
+	t.Cleanup(func() { mr.Close() })
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), rdb)
+
+	resp, err := cli.GetPrivacySettings(withUserAuthCtx(ctx, accountID, profileID), &userv1.GetPrivacySettingsRequest{
+		ProfileId: profileID.String(),
+	})
+	require.NoError(t, err)
+	ps := resp.GetPrivacySettings()
+	require.Equal(t, "personal", ps.GetPreset())
+	require.Equal(t, "friends", ps.GetShowOnline())
+	require.Equal(t, "friends_of_friends", ps.GetAllowDm())
+}
+
+// TestUpdatePrivacySettings_FriendsOnlyDM documents allow_dm=friends persists and round-trips.
+func TestUpdatePrivacySettings_FriendsOnlyDM(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "userdb", "")
+	applyUserPrivacyMigrations(t, ctx, pool)
+
+	accountID := uuid.New()
+	profileID := uuid.New()
+	_, err := pool.Exec(ctx, `
+INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+VALUES ($1, $2, 'setter', '2222', 'Setter', true)`,
+		profileID, accountID)
+	require.NoError(t, err)
+
+	mr := miniredis.RunT(t)
+	t.Cleanup(func() { mr.Close() })
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), rdb)
+
+	_, err = cli.UpdatePrivacySettings(withUserAuthCtx(ctx, accountID, profileID), &userv1.UpdatePrivacySettingsRequest{
+		ProfileId: profileID.String(),
+		Settings: &userv1.PrivacySettings{
+			ProfileId:           profileID.String(),
+			Preset:              "personal",
+			ShowOnline:          "friends",
+			ShowGameStatus:      "friends",
+			ShowMmRating:        "friends",
+			ShowPhone:           "nobody",
+			ShowStories:         "friends",
+			AllowDm:             "friends",
+			AllowFriendRequests: "everyone",
+			AllowGuestDm:        false,
+		},
+	})
+	require.NoError(t, err)
+
+	var allowDM string
+	err = pool.QueryRow(ctx, `SELECT allow_dm FROM privacy_settings WHERE profile_id = $1`, profileID).Scan(&allowDM)
+	require.NoError(t, err)
+	require.Equal(t, "friends", allowDM)
+}
+
+// TestGetPrivacySettings_NewProfile_BootstrapPreset documents primary profile gets default preset row on first read.
+func TestGetPrivacySettings_NewProfile_BootstrapPreset(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "userdb", "")
+	applyUserPrivacyMigrations(t, ctx, pool)
+
+	accountID := uuid.New()
+	profileID := uuid.New()
+	_, err := pool.Exec(ctx, `
+INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+VALUES ($1, $2, 'newbie', '3333', 'Newbie', true)`,
+		profileID, accountID)
+	require.NoError(t, err)
+
+	mr := miniredis.RunT(t)
+	t.Cleanup(func() { mr.Close() })
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), rdb)
+
+	resp, err := cli.GetPrivacySettings(withUserAuthCtx(ctx, accountID, profileID), &userv1.GetPrivacySettingsRequest{
+		ProfileId: profileID.String(),
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, resp.GetPrivacySettings().GetPreset())
+}

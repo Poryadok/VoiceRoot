@@ -22,6 +22,7 @@ import voice.backend.auth.service.LogoutCommand;
 import voice.backend.auth.service.RefreshCommand;
 import voice.backend.auth.service.RegisterCommand;
 import voice.backend.auth.service.TokenClaims;
+import voice.backend.auth.service.TotpEnrollment;
 
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -41,7 +42,22 @@ public class AuthRestController {
   @PostMapping("/login")
   public SessionEnvelope login(@Valid @RequestBody LoginRequest request) {
     return SessionEnvelope.from(authService.login(new LoginCommand(
-        request.email(), request.phone(), request.password(), request.deviceInfoJson())));
+        request.email(), request.phone(), request.password(), request.totpCode(), request.deviceInfoJson())));
+  }
+
+  @PostMapping("/2fa/enable")
+  public Enable2FAResponse enable2FA(
+      @RequestHeader(name = "Authorization", required = false) String authorization,
+      @Valid @RequestBody Enable2FARequest request) {
+    TotpEnrollment enrollment = authService.enable2FA(authorization, request.password());
+    return Enable2FAResponse.from(enrollment);
+  }
+
+  @PostMapping("/2fa/verify")
+  public SessionEnvelope verify2FA(
+      @RequestHeader(name = "Authorization", required = false) String authorization,
+      @Valid @RequestBody Verify2FARequest request) {
+    return SessionEnvelope.from(authService.verify2FA(authorization, request.totpCode()));
   }
 
   @PostMapping("/refresh")
@@ -88,7 +104,12 @@ public class AuthRestController {
       String email,
       String phone,
       @NotBlank String password,
+      @JsonProperty("totp_code") String totpCode,
       @JsonProperty("device_info_json") String deviceInfoJson) {}
+
+  public record Enable2FARequest(@NotBlank String password) {}
+
+  public record Verify2FARequest(@JsonProperty("totp_code") @NotBlank String totpCode) {}
 
   public record RefreshRequest(
       @JsonProperty("refresh_token") @NotBlank String refreshToken,
@@ -134,6 +155,15 @@ public class AuthRestController {
           claims.subscriptionTier(),
           claims.expiresAt().toString(),
           claims.jti());
+    }
+  }
+
+  public record Enable2FAResponse(
+      @JsonProperty("totp_uri") String totpUri,
+      @JsonProperty("secret_backup_hint") String secretBackupHint,
+      @JsonProperty("backup_codes") List<String> backupCodes) {
+    public static Enable2FAResponse from(TotpEnrollment enrollment) {
+      return new Enable2FAResponse(enrollment.totpUri(), enrollment.secretBackupHint(), enrollment.backupCodes());
     }
   }
 }

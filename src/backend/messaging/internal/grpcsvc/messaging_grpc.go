@@ -35,14 +35,16 @@ const (
 // MessagingGRPC implements MessagingService (Phase 1: DM send, history, read receipts).
 type MessagingGRPC struct {
 	messagingv1.UnimplementedMessagingServiceServer
-	Messages  *store.MessagesStore
-	Reactions *store.ReactionsStore
-	Pins      *store.PinsStore
+	Messages    *store.MessagesStore
+	Reactions   *store.ReactionsStore
+	Pins        *store.PinsStore
 	SharedMedia *store.SharedMediaStore
-	ChatGuard ChatGuard
+	ChatGuard   ChatGuard
 	// Blocks and UserProfiles are optional S2S gates for SendMessage (Social + User); both must be set to enforce.
 	Blocks       AccountPairBlockChecker
 	UserProfiles ProfileAccountLookup
+	Privacy      PrivacyChecker
+	Friends      ProfileFriendChecker
 	// Files is optional for text-only messages and required for non-empty attachments_json.
 	Files FileMetadataLookup
 	// MessageEvents is optional; when set, successful send/edit/delete publishes to NATS JetStream (stream message_events, subjects message.*).
@@ -98,6 +100,9 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 		}
 	}
 	if err := s.checkDMBlocksForSend(ctx, chatID, profileID); err != nil {
+		return nil, err
+	}
+	if err := s.checkDMPrivacyForSend(ctx, chatID, profileID); err != nil {
 		return nil, err
 	}
 
@@ -334,6 +339,47 @@ func (s *MessagingGRPC) checkDMBlocksForSend(ctx context.Context, chatID, profil
 	}
 	if blocked {
 		return status.Error(codes.PermissionDenied, "cannot send messages between blocked accounts")
+	}
+	return nil
+}
+
+func (s *MessagingGRPC) checkDMPrivacyForSend(ctx context.Context, chatID, senderProfileID uuid.UUID) error {
+	if s.Privacy == nil || s.ChatGuard == nil {
+		return nil
+	}
+	recipientProfileID, err := s.ChatGuard.DMOtherProfileID(ctx, chatID, senderProfileID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotChatMember) {
+			return status.Error(codes.PermissionDenied, "not a chat member")
+		}
+		if st, ok := status.FromError(err); ok && st.Code() == codes.FailedPrecondition {
+			return nil
+		}
+		if strings.Contains(err.Error(), "dm must have exactly two members") {
+			return nil
+		}
+		return status.Error(codes.Internal, err.Error())
+	}
+	allowDM, err := s.Privacy.AllowDM(ctx, recipientProfileID)
+	if err != nil {
+		return status.Error(codes.Internal, err.Error())
+	}
+	switch strings.ToLower(strings.TrimSpace(allowDM)) {
+	case "", "everyone":
+		return nil
+	case "nobody":
+		return status.Error(codes.PermissionDenied, "dm blocked by recipient privacy settings")
+	case "friends":
+		if s.Friends == nil {
+			return status.Error(codes.PermissionDenied, "dm blocked by recipient privacy settings")
+		}
+		friends, err := s.Friends.AreFriends(ctx, senderProfileID, recipientProfileID)
+		if err != nil {
+			return status.Error(codes.Internal, err.Error())
+		}
+		if !friends {
+			return status.Error(codes.PermissionDenied, "dm blocked by recipient privacy settings")
+		}
 	}
 	return nil
 }

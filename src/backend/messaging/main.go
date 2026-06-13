@@ -118,6 +118,7 @@ func main() {
 		}
 
 		var blocks grpcsvc.AccountPairBlockChecker
+		var friends grpcsvc.ProfileFriendChecker
 		if socialAddr := strings.TrimSpace(os.Getenv("SOCIAL_GRPC_ADDR")); socialAddr != "" {
 			sconn, err := grpc.NewClient(grpcclient.DialTarget(socialAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
@@ -131,9 +132,11 @@ func main() {
 			}
 			waitCancel()
 			blocks = s2s.NewSocialGRPCBlocks(sconn)
+			friends = s2s.NewSocialGRPCFriends(sconn)
 		}
 
 		var profiles grpcsvc.ProfileAccountLookup
+		var privacy grpcsvc.PrivacyChecker
 		var userPresence *s2s.GRPCUserPresence
 		if userAddr := strings.TrimSpace(os.Getenv("USER_GRPC_ADDR")); userAddr != "" {
 			uconn, err := grpc.NewClient(grpcclient.DialTarget(userAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -149,6 +152,7 @@ func main() {
 			waitCancel()
 			userCli := userv1.NewUserServiceClient(uconn)
 			profiles = &s2s.UserGRPCProfiles{Client: userCli}
+			privacy = &s2s.GRPCUserPrivacy{Client: userCli}
 			userPresence = &s2s.GRPCUserPresence{Client: userCli}
 		}
 
@@ -204,15 +208,17 @@ func main() {
 		}
 		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger)...)
 		messagingv1.RegisterMessagingServiceServer(grpcSrv, &grpcsvc.MessagingGRPC{
-			Messages:         &store.MessagesStore{Pool: pool},
-			Reactions:        &store.ReactionsStore{Pool: pool},
-			Pins:             &store.PinsStore{Pool: pool},
-			SharedMedia:      &store.SharedMediaStore{Pool: pool},
-			ChatGuard:        chatGuard,
-			Blocks:           blocks,
-			UserProfiles:     profiles,
-			Files:            files,
-			MessageEvents:    msgEvents,
+			Messages:      &store.MessagesStore{Pool: pool},
+			Reactions:     &store.ReactionsStore{Pool: pool},
+			Pins:          &store.PinsStore{Pool: pool},
+			SharedMedia:   &store.SharedMediaStore{Pool: pool},
+			ChatGuard:     chatGuard,
+			Blocks:        blocks,
+			UserProfiles:  profiles,
+			Privacy:       privacy,
+			Friends:       friends,
+			Files:         files,
+			MessageEvents: msgEvents,
 			Moderation: &store.SQLModerationGuard{
 				Pool:     pool,
 				ChatPool: chatMetaPool,
@@ -225,8 +231,8 @@ func main() {
 				}
 				return &store.SQLChatMentionsMeta{Pool: metaPool, SpacePool: spaceMetaPool}
 			}(),
-			RolePermissions:  rolePerms,
-			UserPresence:     userPresence,
+			RolePermissions: rolePerms,
+			UserPresence:    userPresence,
 		})
 		go func() {
 			logger.Info("gRPC listening", slog.String("addr", grpcListen))

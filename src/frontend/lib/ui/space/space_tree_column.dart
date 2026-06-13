@@ -10,6 +10,7 @@ import 'space_invites_sheet.dart';
 import 'space_members_sheet.dart';
 import 'space_roles_sheet.dart';
 import 'space_tree_panel.dart';
+import '../report/report_sheet.dart';
 
 /// Middle column: space tree with header actions (members, invites).
 class SpaceTreeColumn extends ConsumerWidget {
@@ -82,6 +83,15 @@ class SpaceTreeColumn extends ConsumerWidget {
                   tooltip: l10n.spaceInvitesTooltip,
                   onPressed: () =>
                       SpaceInvitesSheet.show(context, spaceId: spaceId),
+                ),
+                IconButton(
+                  key: const Key('space_report_action'),
+                  icon: const Icon(Icons.flag_outlined),
+                  tooltip: l10n.reportAction,
+                  onPressed: () => ReportSheet.show(
+                    context,
+                    target: ReportSpaceTarget(spaceId: spaceId),
+                  ),
                 ),
               ],
             ),

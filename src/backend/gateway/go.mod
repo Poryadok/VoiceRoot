@@ -20,6 +20,7 @@ require (
 	voice.app/voice/file v0.0.0
 	voice.app/voice/matchmaking v0.0.0
 	voice.app/voice/messaging v0.0.0
+	voice.app/voice/moderation v0.0.0
 	voice.app/voice/notification v0.0.0
 	voice.app/voice/role v0.0.0
 	voice.app/voice/search v0.0.0
@@ -118,6 +119,8 @@ replace voice.app/voice/common => ../user/pb/voice/common
 replace voice.app/voice/chat => ../chat/pb/voice/chat
 
 replace voice.app/voice/messaging => ../messaging/pb/voice/messaging
+
+replace voice.app/voice/moderation => ../voice/pb/voice/moderation
 
 replace voice.app/voice/matchmaking => ../voice/pb/voice/matchmaking
 

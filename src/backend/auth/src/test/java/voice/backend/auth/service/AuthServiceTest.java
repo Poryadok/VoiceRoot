@@ -10,6 +10,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import org.junit.jupiter.api.Test;
 import voice.backend.auth.repository.InMemoryAccountRepository;
+import voice.backend.auth.repository.InMemoryBackupCodeRepository;
 import voice.backend.auth.repository.InMemoryRefreshTokenRepository;
 import voice.backend.auth.security.BCryptPasswordHasher;
 import voice.backend.auth.security.InMemoryTokenBlacklist;
@@ -129,6 +130,8 @@ class AuthServiceTest {
         new BCryptPasswordHasher(),
         jwt,
         blacklist,
+        new TotpService(new voice.backend.auth.config.AuthProperties()),
+        new BackupCodeService(new InMemoryBackupCodeRepository()),
         clock,
         Duration.ofDays(30),
         new voice.backend.auth.userdb.InMemoryPrimaryProfileProvisioner());

@@ -26,6 +26,16 @@ type AccountPairBlockChecker interface {
 	AccountPairBlocked(ctx context.Context, viewerAccountID, otherAccountID uuid.UUID) (bool, error)
 }
 
+// PrivacyChecker reads recipient DM privacy policy.
+type PrivacyChecker interface {
+	AllowDM(ctx context.Context, profileID uuid.UUID) (string, error)
+}
+
+// ProfileFriendChecker verifies if two profiles are friends.
+type ProfileFriendChecker interface {
+	AreFriends(ctx context.Context, profileA, profileB uuid.UUID) (bool, error)
+}
+
 // FileMetadataLookup validates File Service metadata for message attachments.
 type FileMetadataLookup interface {
 	GetBulkMetadata(ctx context.Context, req *filev1.GetBulkMetadataRequest, opts ...grpc.CallOption) (*filev1.GetBulkMetadataResponse, error)

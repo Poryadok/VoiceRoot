@@ -393,10 +393,12 @@ class Enable2FAResponse extends $pb.GeneratedMessage {
   factory Enable2FAResponse({
     $core.String? totpUri,
     $core.String? secretBackupHint,
+    $core.Iterable<$core.String>? backupCodes,
   }) {
     final result = create();
     if (totpUri != null) result.totpUri = totpUri;
     if (secretBackupHint != null) result.secretBackupHint = secretBackupHint;
+    if (backupCodes != null) result.backupCodes.addAll(backupCodes);
     return result;
   }
 
@@ -415,6 +417,7 @@ class Enable2FAResponse extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'totpUri')
     ..aOS(2, _omitFieldNames ? '' : 'secretBackupHint')
+    ..pPS(3, _omitFieldNames ? '' : 'backupCodes')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -453,6 +456,10 @@ class Enable2FAResponse extends $pb.GeneratedMessage {
   $core.bool hasSecretBackupHint() => $_has(1);
   @$pb.TagNumber(2)
   void clearSecretBackupHint() => $_clearField(2);
+
+  /// One-time plaintext backup codes; shown only at enrollment (docs/features/auth-and-contacts.md).
+  @$pb.TagNumber(3)
+  $pb.PbList<$core.String> get backupCodes => $_getList(2);
 }
 
 class Verify2FARequest extends $pb.GeneratedMessage {

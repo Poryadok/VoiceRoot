@@ -125,6 +125,8 @@ services:
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: "6379"
       AUTH_JWT_PRIVATE_KEY_LOCATION: file:/run/jwt.pem
+      # Compose dev only: accept TOTP code 000000 for live E2E (see AuthProperties.totp.testBypass).
+      AUTH_TOTP_TEST_BYPASS: "true"
     volumes:
       - ./src/backend/auth/src/test/resources/jwt-test-private.pem:/run/jwt.pem:ro
     depends_on:
@@ -401,6 +403,25 @@ services:
       retries: 10
       start_period: 15s
 
+  moderation:
+    profiles: ["app"]
+    build:
+      context: ./src/backend
+      dockerfile: moderation/Dockerfile
+    environment:
+      LOG_LEVEL: debug
+      DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/moderation_db?sslmode=disable
+      MODERATION_GRPC_LISTEN: :9090
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
   realtime:
     profiles: ["app"]
     build:
@@ -520,7 +541,7 @@ services:
       LISTEN_ADDR: ":8080"
       GATEWAY_REDIS_ADDR: redis:6379
       GATEWAY_REST_UPSTREAMS_JSON: '{"auth":"http://auth:8080"}'
-      GATEWAY_GRPC_UPSTREAMS_JSON: '{"users":"user:9090","friends":"social:9090","chats":"chat:9090","messages":"messaging:9090","spaces":"space:9090","roles":"role:9090","voice":"voice:9090","files":"file:9090","notifications":"notification:9090","matchmaking":"matchmaking:9090","search":"search:9090"}'
+      GATEWAY_GRPC_UPSTREAMS_JSON: '{"users":"user:9090","friends":"social:9090","chats":"chat:9090","messages":"messaging:9090","spaces":"space:9090","roles":"role:9090","voice":"voice:9090","files":"file:9090","notifications":"notification:9090","matchmaking":"matchmaking:9090","search":"search:9090","moderation":"moderation:9090"}'
       GATEWAY_REALTIME_UPSTREAM_URL: http://realtime:8080
       GATEWAY_JWKS_URL: http://auth:8080/api/v1/auth/.well-known/jwks.json
       GATEWAY_JWT_ISSUER: voice-auth
@@ -555,6 +576,8 @@ services:
       voice:
         condition: service_healthy
       notification:
+        condition: service_healthy
+      moderation:
         condition: service_healthy
       matchmaking:
         condition: service_healthy

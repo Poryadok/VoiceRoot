@@ -7,6 +7,8 @@ abstract final class AuthErrorKeys {
   static const validationFailed = 'validation_failed';
   static const rateLimited = 'rate_limited';
   static const invalidCredentials = 'invalid_credentials';
+  static const totpRequired = 'totp_required';
+  static const invalidTotp = 'invalid_totp';
 }
 
 /// Normalizes gateway/auth HTTP failures to an [AuthErrorKeys] value when possible.
@@ -29,6 +31,10 @@ String authErrorMessage(AppLocalizations l10n, String key) {
       return l10n.authErrorRateLimited;
     case AuthErrorKeys.invalidCredentials:
       return l10n.authErrorInvalidCredentials;
+    case AuthErrorKeys.totpRequired:
+      return l10n.authErrorTotpRequired;
+    case AuthErrorKeys.invalidTotp:
+      return l10n.authErrorInvalidTotp;
     default:
       return key;
   }

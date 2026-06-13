@@ -13,6 +13,37 @@ func (t *transcoder) serveUsers(w http.ResponseWriter, r *http.Request, rest str
 	profileID := strings.TrimSpace(r.Header.Get("X-Voice-Profile-Id"))
 
 	switch {
+	case r.Method == http.MethodGet && rest == "me/privacy":
+		resp, err := t.clients.user.GetPrivacySettings(ctx, &userv1.GetPrivacySettingsRequest{
+			ProfileId: profileID,
+		})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodPatch && rest == "me/privacy":
+		req := &userv1.UpdatePrivacySettingsRequest{ProfileId: profileID}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		if req.ProfileId == "" {
+			req.ProfileId = profileID
+		}
+		if req.GetSettings() != nil && req.GetSettings().GetProfileId() == "" {
+			req.Settings.ProfileId = profileID
+		}
+		resp, err := t.clients.user.UpdatePrivacySettings(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
 	case r.Method == http.MethodGet && rest == "me":
 		resp, err := t.clients.user.GetProfile(ctx, &userv1.GetProfileRequest{
 			By: &userv1.GetProfileRequest_ProfileId{ProfileId: profileID},

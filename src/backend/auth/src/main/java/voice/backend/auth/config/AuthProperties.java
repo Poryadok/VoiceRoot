@@ -10,6 +10,7 @@ public class AuthProperties {
   private final Redis redis = new Redis();
   private final Grpc grpc = new Grpc();
   private final UserDb userDb = new UserDb();
+  private final Totp totp = new Totp();
   private PersistenceMode persistence = PersistenceMode.JDBC;
 
   public UserDb getUserDb() {
@@ -43,6 +44,10 @@ public class AuthProperties {
 
   public Grpc getGrpc() {
     return grpc;
+  }
+
+  public Totp getTotp() {
+    return totp;
   }
 
   public static class Jwt {
@@ -177,6 +182,27 @@ public class AuthProperties {
 
     public String resolvePassword() {
       return password == null ? "" : password;
+    }
+  }
+
+  public static class Totp {
+    private boolean testBypass = false;
+    private String encryptionKey = "";
+
+    public boolean isTestBypass() {
+      return testBypass;
+    }
+
+    public void setTestBypass(boolean testBypass) {
+      this.testBypass = testBypass;
+    }
+
+    public String getEncryptionKey() {
+      return encryptionKey;
+    }
+
+    public void setEncryptionKey(String encryptionKey) {
+      this.encryptionKey = encryptionKey;
     }
   }
 }

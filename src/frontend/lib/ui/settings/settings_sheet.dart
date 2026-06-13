@@ -5,6 +5,8 @@ import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../../theme/voice_theme_providers.dart';
+import 'privacy_settings_screen.dart';
+import 'security_settings_screen.dart';
 
 class SettingsSheet extends ConsumerWidget {
   const SettingsSheet({super.key});
@@ -34,6 +36,37 @@ class SettingsSheet extends ConsumerWidget {
             Text(
               l10n.settingsTitle,
               style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 16),
+            Text(l10n.settingsSecurity, style: TextStyle(color: voice.textSecondary)),
+            const SizedBox(height: 8),
+            ListTile(
+              key: const Key('settings_security'),
+              contentPadding: EdgeInsets.zero,
+              title: Text(l10n.securitySettingsTitle),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const SecuritySettingsScreen(),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              key: const Key('settings_privacy'),
+              contentPadding: EdgeInsets.zero,
+              title: Text(l10n.privacySettingsTitle),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const PrivacySettingsScreen(),
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 16),
             Text(l10n.settingsTheme, style: TextStyle(color: voice.textSecondary)),

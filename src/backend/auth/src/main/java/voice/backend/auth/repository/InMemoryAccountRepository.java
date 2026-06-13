@@ -1,6 +1,7 @@
 package voice.backend.auth.repository;
 
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -19,7 +20,7 @@ public class InMemoryAccountRepository implements AccountRepository {
     if (phone != null && byPhone.containsKey(phone)) {
       throw new IllegalArgumentException("duplicate phone");
     }
-    Account account = new Account(UUID.randomUUID(), email, phone, passwordHash, type, "active", Instant.now());
+    Account account = new Account(UUID.randomUUID(), email, phone, passwordHash, type, "active", null, false, Instant.now());
     byId.put(account.id(), account);
     if (email != null) {
       byEmail.put(email, account.id());
@@ -47,5 +48,42 @@ public class InMemoryAccountRepository implements AccountRepository {
     } catch (IllegalArgumentException ex) {
       return Optional.empty();
     }
+  }
+
+  @Override
+  public synchronized void saveTotpSecret(UUID accountId, byte[] encryptedSecret, boolean enabled) {
+    Account existing = byId.get(accountId);
+    if (existing == null) {
+      return;
+    }
+    byte[] secretCopy = encryptedSecret == null ? null : Arrays.copyOf(encryptedSecret, encryptedSecret.length);
+    byId.put(accountId, new Account(
+        existing.id(),
+        existing.email(),
+        existing.phone(),
+        existing.passwordHash(),
+        existing.type(),
+        existing.status(),
+        secretCopy,
+        enabled,
+        existing.createdAt()));
+  }
+
+  @Override
+  public synchronized void setTotpEnabled(UUID accountId, boolean enabled) {
+    Account existing = byId.get(accountId);
+    if (existing == null) {
+      return;
+    }
+    byId.put(accountId, new Account(
+        existing.id(),
+        existing.email(),
+        existing.phone(),
+        existing.passwordHash(),
+        existing.type(),
+        existing.status(),
+        existing.totpSecret(),
+        enabled,
+        existing.createdAt()));
   }
 }

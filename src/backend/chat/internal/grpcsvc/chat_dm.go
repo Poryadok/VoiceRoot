@@ -3,7 +3,9 @@ package grpcsvc
 import (
 	"context"
 	"log"
+	"strings"
 
+	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -68,6 +70,9 @@ func (s *ChatGRPC) ensureDM(ctx context.Context, otherProfileRaw string) (*store
 			return nil, status.Error(codes.PermissionDenied, "dm not allowed between blocked accounts")
 		}
 	}
+	if err := s.ensureDMPrivacy(ctx, callerProfile, otherProfile); err != nil {
+		return nil, err
+	}
 
 	row, created, err := s.DM.EnsureDM(ctx, callerProfile, otherProfile)
 	if err != nil {
@@ -87,6 +92,34 @@ func (s *ChatGRPC) ensureDM(ctx context.Context, otherProfileRaw string) (*store
 	return row, nil
 }
 
+func (s *ChatGRPC) ensureDMPrivacy(ctx context.Context, callerProfile, recipientProfile uuid.UUID) error {
+	if s == nil || s.Privacy == nil {
+		return nil
+	}
+	allowDM, err := s.Privacy.AllowDM(ctx, recipientProfile)
+	if err != nil {
+		return status.Error(codes.Internal, err.Error())
+	}
+	switch strings.ToLower(strings.TrimSpace(allowDM)) {
+	case "", "everyone":
+		return nil
+	case "nobody":
+		return status.Error(codes.PermissionDenied, "dm blocked by recipient privacy settings")
+	case "friends":
+		if s.Friends == nil {
+			return status.Error(codes.PermissionDenied, "dm blocked by recipient privacy settings")
+		}
+		ok, err := s.Friends.AreFriends(ctx, callerProfile, recipientProfile)
+		if err != nil {
+			return status.Error(codes.Internal, err.Error())
+		}
+		if !ok {
+			return status.Error(codes.PermissionDenied, "dm blocked by recipient privacy settings")
+		}
+	}
+	return nil
+}
+
 func chatRowToProto(r *store.ChatRow) *chatv1.Chat {
 	if r == nil {
 		return nil
@@ -99,14 +132,14 @@ func chatRowToProto(r *store.ChatRow) *chatv1.Chat {
 		chatType = chatv1.ChatType_CHAT_TYPE_CHANNEL
 	}
 	out := &chatv1.Chat{
-		Id:               r.ID.String(),
-		Type:             chatType,
-		CreatorProfileId: r.CreatorProfileID.String(),
-		SlowModeSeconds:  r.SlowModeSeconds,
-		CreatedAt:        timestamppb.New(r.CreatedAt),
-		UpdatedAt:        timestamppb.New(r.UpdatedAt),
-		ThreadsEnabled:     r.ThreadsEnabled,
-		AllowUserMainFeed:  r.AllowUserMainFeed,
+		Id:                r.ID.String(),
+		Type:              chatType,
+		CreatorProfileId:  r.CreatorProfileID.String(),
+		SlowModeSeconds:   r.SlowModeSeconds,
+		CreatedAt:         timestamppb.New(r.CreatedAt),
+		UpdatedAt:         timestamppb.New(r.UpdatedAt),
+		ThreadsEnabled:    r.ThreadsEnabled,
+		AllowUserMainFeed: r.AllowUserMainFeed,
 	}
 	if r.SpaceID != nil {
 		sid := r.SpaceID.String()

@@ -58,6 +58,7 @@ func main() {
 		defer pool.Close()
 
 		var blocks grpcsvc.AccountBlockChecker
+		var friends grpcsvc.ProfileFriendChecker
 		if socialAddr := strings.TrimSpace(os.Getenv("SOCIAL_GRPC_ADDR")); socialAddr != "" {
 			sconn, err := grpc.NewClient(grpcclient.DialTarget(socialAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
@@ -84,9 +85,11 @@ func main() {
 			waitCancel()
 			defer func() { _ = sconn.Close() }()
 			blocks = grpcsvc.NewSocialGRPCBlocks(sconn)
+			friends = grpcsvc.NewSocialGRPCFriends(sconn)
 		}
 
 		var profiles grpcsvc.UserProfileLookup
+		var privacy grpcsvc.PrivacyChecker
 		if userAddr := strings.TrimSpace(os.Getenv("USER_GRPC_ADDR")); userAddr != "" {
 			uconn, err := grpc.NewClient(grpcclient.DialTarget(userAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
@@ -112,7 +115,9 @@ func main() {
 			}
 			waitCancel()
 			defer func() { _ = uconn.Close() }()
-			profiles = &grpcsvc.UserGRPCProfiles{Client: userv1.NewUserServiceClient(uconn)}
+			userClient := userv1.NewUserServiceClient(uconn)
+			profiles = &grpcsvc.UserGRPCProfiles{Client: userClient}
+			privacy = &grpcsvc.UserGRPCPrivacy{Client: userClient}
 		}
 
 		var roleClient rolev1.RoleServiceClient
@@ -173,6 +178,8 @@ func main() {
 			DM:           dmStore,
 			Profiles:     profiles,
 			Blocks:       blocks,
+			Privacy:      privacy,
+			Friends:      friends,
 			ListEnrich:   listEnrich,
 			ChatEvents:   chatEvents,
 			Roles:        roleClient,

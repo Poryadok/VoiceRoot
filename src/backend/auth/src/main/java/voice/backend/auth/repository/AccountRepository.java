@@ -1,6 +1,7 @@
 package voice.backend.auth.repository;
 
 import java.util.Optional;
+import java.util.UUID;
 
 public interface AccountRepository {
   Account create(String email, String phone, String passwordHash, String type);
@@ -10,4 +11,8 @@ public interface AccountRepository {
   Optional<Account> findByPhone(String phone);
 
   Optional<Account> findById(String id);
+
+  void saveTotpSecret(UUID accountId, byte[] encryptedSecret, boolean enabled);
+
+  void setTotpEnabled(UUID accountId, boolean enabled);
 }

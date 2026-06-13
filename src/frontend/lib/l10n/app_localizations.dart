@@ -1661,7 +1661,7 @@ abstract class AppLocalizations {
   /// No description provided for @spaceChatOverrideHint.
   ///
   /// In en, this message translates to:
-  /// **'Deny view for a role in this chat only.'**
+  /// **'Deny view or send for a role in this chat only.'**
   String get spaceChatOverrideHint;
 
   /// No description provided for @spaceChatOverrideDenyView.
@@ -1671,6 +1671,9 @@ abstract class AppLocalizations {
   String get spaceChatOverrideDenyView;
 
   /// No description provided for @spaceChatOverrideDenySend.
+  ///
+  /// In en, this message translates to:
+  /// **'Deny send messages'**
   String get spaceChatOverrideDenySend;
 
   /// No description provided for @spaceVoiceOverrideTitle.
@@ -1838,15 +1841,31 @@ abstract class AppLocalizations {
   /// No description provided for @chatGroupOwnerLeaveHint.
   ///
   /// In en, this message translates to:
-  /// **'As the owner, transfer ownership before leaving (coming soon).'**
+  /// **'Transfer ownership to another member before leaving.'**
   String get chatGroupOwnerLeaveHint;
 
+  /// No description provided for @chatGroupTransferOwnershipTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer ownership to {name}'**
   String chatGroupTransferOwnershipTo(String name);
 
+  /// No description provided for @chatGroupTransferOwnershipTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer group ownership'**
   String get chatGroupTransferOwnershipTitle;
 
+  /// No description provided for @chatGroupTransferOwnershipMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Make {name} the new group owner?'**
   String chatGroupTransferOwnershipMessage(String name);
 
+  /// No description provided for @chatGroupTransferOwnershipConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer'**
   String get chatGroupTransferOwnershipConfirm;
 
   /// No description provided for @settingsTitle.
@@ -1920,6 +1939,312 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Profile accent'**
   String get settingsAccent;
+
+  /// No description provided for @settingsSecurity.
+  ///
+  /// In en, this message translates to:
+  /// **'Security & trust'**
+  String get settingsSecurity;
+
+  /// No description provided for @securitySettingsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Security'**
+  String get securitySettingsTitle;
+
+  /// No description provided for @security2faEnableTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Two-factor authentication'**
+  String get security2faEnableTitle;
+
+  /// No description provided for @security2faEnableHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm your password to start 2FA setup.'**
+  String get security2faEnableHint;
+
+  /// No description provided for @security2faContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get security2faContinue;
+
+  /// No description provided for @security2faScanQr.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan this QR code in your authenticator app'**
+  String get security2faScanQr;
+
+  /// No description provided for @security2faBackupCodesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup codes (save these now)'**
+  String get security2faBackupCodesTitle;
+
+  /// No description provided for @security2faVerifyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Verify authenticator'**
+  String get security2faVerifyTitle;
+
+  /// No description provided for @security2faVerifyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter the 6-digit code or a backup code.'**
+  String get security2faVerifyHint;
+
+  /// No description provided for @security2faVerify.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable 2FA'**
+  String get security2faVerify;
+
+  /// No description provided for @security2faBackToQr.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to QR'**
+  String get security2faBackToQr;
+
+  /// No description provided for @security2faEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Two-factor authentication is enabled.'**
+  String get security2faEnabled;
+
+  /// No description provided for @privacySettingsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy'**
+  String get privacySettingsTitle;
+
+  /// No description provided for @privacyLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load privacy settings'**
+  String get privacyLoadError;
+
+  /// No description provided for @privacySaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy settings saved'**
+  String get privacySaved;
+
+  /// No description provided for @privacyPresetTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Preset'**
+  String get privacyPresetTitle;
+
+  /// No description provided for @privacyPresetPersonal.
+  ///
+  /// In en, this message translates to:
+  /// **'Personal'**
+  String get privacyPresetPersonal;
+
+  /// No description provided for @privacyPresetGaming.
+  ///
+  /// In en, this message translates to:
+  /// **'Gaming'**
+  String get privacyPresetGaming;
+
+  /// No description provided for @privacyPresetWork.
+  ///
+  /// In en, this message translates to:
+  /// **'Work'**
+  String get privacyPresetWork;
+
+  /// No description provided for @privacyAllowDm.
+  ///
+  /// In en, this message translates to:
+  /// **'Who can message you'**
+  String get privacyAllowDm;
+
+  /// No description provided for @privacyAllowGuestDm.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow guest accounts in DMs'**
+  String get privacyAllowGuestDm;
+
+  /// No description provided for @privacyVisibilityTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Visibility'**
+  String get privacyVisibilityTitle;
+
+  /// No description provided for @privacyShowOnline.
+  ///
+  /// In en, this message translates to:
+  /// **'Online status'**
+  String get privacyShowOnline;
+
+  /// No description provided for @privacyShowGameStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'In-game status'**
+  String get privacyShowGameStatus;
+
+  /// No description provided for @privacyShowMmRating.
+  ///
+  /// In en, this message translates to:
+  /// **'Matchmaking rating'**
+  String get privacyShowMmRating;
+
+  /// No description provided for @privacyShowPhone.
+  ///
+  /// In en, this message translates to:
+  /// **'Phone number'**
+  String get privacyShowPhone;
+
+  /// No description provided for @privacyShowStories.
+  ///
+  /// In en, this message translates to:
+  /// **'Stories'**
+  String get privacyShowStories;
+
+  /// No description provided for @privacyAllowFriendRequests.
+  ///
+  /// In en, this message translates to:
+  /// **'Friend requests'**
+  String get privacyAllowFriendRequests;
+
+  /// No description provided for @privacyAudienceEveryone.
+  ///
+  /// In en, this message translates to:
+  /// **'Everyone'**
+  String get privacyAudienceEveryone;
+
+  /// No description provided for @privacyAudienceFriends.
+  ///
+  /// In en, this message translates to:
+  /// **'Friends'**
+  String get privacyAudienceFriends;
+
+  /// No description provided for @privacyAudienceFriendsOfFriends.
+  ///
+  /// In en, this message translates to:
+  /// **'Friends of friends'**
+  String get privacyAudienceFriendsOfFriends;
+
+  /// No description provided for @privacyAudienceNobody.
+  ///
+  /// In en, this message translates to:
+  /// **'Nobody'**
+  String get privacyAudienceNobody;
+
+  /// No description provided for @reportAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Report'**
+  String get reportAction;
+
+  /// No description provided for @reportTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Report'**
+  String get reportTitle;
+
+  /// No description provided for @reportSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a category. We will review your report.'**
+  String get reportSubtitle;
+
+  /// No description provided for @reportCategorySpam.
+  ///
+  /// In en, this message translates to:
+  /// **'Spam'**
+  String get reportCategorySpam;
+
+  /// No description provided for @reportCategoryHarassment.
+  ///
+  /// In en, this message translates to:
+  /// **'Harassment'**
+  String get reportCategoryHarassment;
+
+  /// No description provided for @reportCategoryOffensive.
+  ///
+  /// In en, this message translates to:
+  /// **'Offensive content'**
+  String get reportCategoryOffensive;
+
+  /// No description provided for @reportCategoryFake.
+  ///
+  /// In en, this message translates to:
+  /// **'Fake / impersonation'**
+  String get reportCategoryFake;
+
+  /// No description provided for @reportCategoryMmToxic.
+  ///
+  /// In en, this message translates to:
+  /// **'Cheating / MM toxic'**
+  String get reportCategoryMmToxic;
+
+  /// No description provided for @reportCategoryOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Other'**
+  String get reportCategoryOther;
+
+  /// No description provided for @reportCommentLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Comment'**
+  String get reportCommentLabel;
+
+  /// No description provided for @reportCommentRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Required for «Other» (up to 500 characters)'**
+  String get reportCommentRequired;
+
+  /// No description provided for @reportSubmit.
+  ///
+  /// In en, this message translates to:
+  /// **'Submit report'**
+  String get reportSubmit;
+
+  /// No description provided for @reportAcceptedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Report accepted'**
+  String get reportAcceptedTitle;
+
+  /// No description provided for @reportAcceptedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'We will review it shortly. You will not receive status updates.'**
+  String get reportAcceptedMessage;
+
+  /// No description provided for @authTotpStepTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Two-factor code'**
+  String get authTotpStepTitle;
+
+  /// No description provided for @authTotpLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Authenticator or backup code'**
+  String get authTotpLabel;
+
+  /// No description provided for @authTotpHelper.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter the code from your authenticator app or a backup code.'**
+  String get authTotpHelper;
+
+  /// No description provided for @authErrorTotpRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter your two-factor code to continue.'**
+  String get authErrorTotpRequired;
+
+  /// No description provided for @authErrorInvalidTotp.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid authenticator or backup code.'**
+  String get authErrorInvalidTotp;
 
   /// No description provided for @authTagline.
   ///

@@ -22,6 +22,8 @@ public class AuthService {
   private final BCryptPasswordHasher passwordHasher;
   private final JwtService jwtService;
   private final TokenBlacklist tokenBlacklist;
+  private final TotpService totpService;
+  private final BackupCodeService backupCodeService;
   private final Clock clock;
   private final Duration refreshTtl;
   private final PrimaryProfileProvisioner primaryProfileProvisioner;
@@ -33,6 +35,8 @@ public class AuthService {
       BCryptPasswordHasher passwordHasher,
       JwtService jwtService,
       TokenBlacklist tokenBlacklist,
+      TotpService totpService,
+      BackupCodeService backupCodeService,
       Clock clock,
       Duration refreshTtl,
       PrimaryProfileProvisioner primaryProfileProvisioner) {
@@ -42,6 +46,8 @@ public class AuthService {
     this.passwordHasher = passwordHasher;
     this.jwtService = jwtService;
     this.tokenBlacklist = tokenBlacklist;
+    this.totpService = totpService;
+    this.backupCodeService = backupCodeService;
     this.clock = clock;
     this.refreshTtl = refreshTtl;
     this.primaryProfileProvisioner = primaryProfileProvisioner;
@@ -55,6 +61,8 @@ public class AuthService {
         passwordHasher,
         jwtService.withClock(newClock),
         tokenBlacklist,
+        totpService,
+        backupCodeService,
         newClock,
         refreshTtl,
         primaryProfileProvisioner);
@@ -84,6 +92,16 @@ public class AuthService {
       throw new AuthException("invalid_credentials");
     }
     ensureActive(account);
+    if (account.totpEnabled()) {
+      String code = command.totpCode();
+      if (code == null || code.isBlank()) {
+        throw new AuthException("totp_required");
+      }
+      boolean validTotp = account.totpSecret() != null && totpService.verifyEncrypted(account.totpSecret(), code.trim());
+      if (!validTotp && !backupCodeService.consume(account.id(), code.trim())) {
+        throw new AuthException("invalid_totp");
+      }
+    }
     return issueSession(account, command.deviceInfoJson());
   }
 
@@ -122,6 +140,41 @@ public class AuthService {
 
   public String jwksJson() {
     return jwtService.jwksJson();
+  }
+
+  public TotpEnrollment enable2FA(String accessToken, String password) {
+    TokenClaims claims = validate(accessToken);
+    Account account = accounts.findById(claims.userId()).orElseThrow(() -> new AuthException("invalid_token"));
+    if (!passwordHasher.matches(password, account.passwordHash())) {
+      throw new AuthException("invalid_credentials");
+    }
+    String secret = totpService.generateSecret();
+    byte[] encrypted = totpService.encryptSecret(secret);
+    accounts.saveTotpSecret(account.id(), encrypted, false);
+    List<String> backupCodes = backupCodeService.generateAndStore(account.id());
+    String label = displayHint(account);
+    String hint = "Saved";
+    if (backupCodes.size() > 1) {
+      hint = "Saved " + backupCodes.size() + " codes";
+    }
+    return new TotpEnrollment(
+        totpService.buildTotpUriFromSecret(label, secret),
+        hint,
+        backupCodes);
+  }
+
+  public AuthSession verify2FA(String accessToken, String totpCode) {
+    TokenClaims claims = validate(accessToken);
+    Account account = accounts.findById(claims.userId()).orElseThrow(() -> new AuthException("invalid_token"));
+    if (account.totpSecret() == null || account.totpSecret().length == 0) {
+      throw new AuthException("totp_not_enrolled");
+    }
+    if (!totpService.verifyEncrypted(account.totpSecret(), totpCode)) {
+      throw new AuthException("invalid_totp");
+    }
+    accounts.setTotpEnabled(account.id(), true);
+    Account fresh = accounts.findById(account.id().toString()).orElse(account);
+    return issueSession(fresh, "{}");
   }
 
   private AuthSession issueSession(Account account, String deviceInfoJson) {

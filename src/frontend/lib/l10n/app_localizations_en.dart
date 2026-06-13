@@ -888,7 +888,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get spaceChatOverrideTitle => 'Chat access overrides';
 
   @override
-  String get spaceChatOverrideHint => 'Deny view for a role in this chat only.';
+  String get spaceChatOverrideHint =>
+      'Deny view or send for a role in this chat only.';
 
   @override
   String get spaceChatOverrideDenyView => 'Deny view chat';
@@ -993,15 +994,17 @@ class AppLocalizationsEn extends AppLocalizations {
       'Transfer ownership to another member before leaving.';
 
   @override
-  String chatGroupTransferOwnershipTo(String name) =>
-      'Transfer ownership to $name';
+  String chatGroupTransferOwnershipTo(String name) {
+    return 'Transfer ownership to $name';
+  }
 
   @override
   String get chatGroupTransferOwnershipTitle => 'Transfer group ownership';
 
   @override
-  String chatGroupTransferOwnershipMessage(String name) =>
-      'Make $name the new group owner?';
+  String chatGroupTransferOwnershipMessage(String name) {
+    return 'Make $name the new group owner?';
+  }
 
   @override
   String get chatGroupTransferOwnershipConfirm => 'Transfer';
@@ -1041,6 +1044,164 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsAccent => 'Profile accent';
+
+  @override
+  String get settingsSecurity => 'Security & trust';
+
+  @override
+  String get securitySettingsTitle => 'Security';
+
+  @override
+  String get security2faEnableTitle => 'Two-factor authentication';
+
+  @override
+  String get security2faEnableHint =>
+      'Confirm your password to start 2FA setup.';
+
+  @override
+  String get security2faContinue => 'Continue';
+
+  @override
+  String get security2faScanQr => 'Scan this QR code in your authenticator app';
+
+  @override
+  String get security2faBackupCodesTitle => 'Backup codes (save these now)';
+
+  @override
+  String get security2faVerifyTitle => 'Verify authenticator';
+
+  @override
+  String get security2faVerifyHint =>
+      'Enter the 6-digit code or a backup code.';
+
+  @override
+  String get security2faVerify => 'Enable 2FA';
+
+  @override
+  String get security2faBackToQr => 'Back to QR';
+
+  @override
+  String get security2faEnabled => 'Two-factor authentication is enabled.';
+
+  @override
+  String get privacySettingsTitle => 'Privacy';
+
+  @override
+  String get privacyLoadError => 'Could not load privacy settings';
+
+  @override
+  String get privacySaved => 'Privacy settings saved';
+
+  @override
+  String get privacyPresetTitle => 'Preset';
+
+  @override
+  String get privacyPresetPersonal => 'Personal';
+
+  @override
+  String get privacyPresetGaming => 'Gaming';
+
+  @override
+  String get privacyPresetWork => 'Work';
+
+  @override
+  String get privacyAllowDm => 'Who can message you';
+
+  @override
+  String get privacyAllowGuestDm => 'Allow guest accounts in DMs';
+
+  @override
+  String get privacyVisibilityTitle => 'Visibility';
+
+  @override
+  String get privacyShowOnline => 'Online status';
+
+  @override
+  String get privacyShowGameStatus => 'In-game status';
+
+  @override
+  String get privacyShowMmRating => 'Matchmaking rating';
+
+  @override
+  String get privacyShowPhone => 'Phone number';
+
+  @override
+  String get privacyShowStories => 'Stories';
+
+  @override
+  String get privacyAllowFriendRequests => 'Friend requests';
+
+  @override
+  String get privacyAudienceEveryone => 'Everyone';
+
+  @override
+  String get privacyAudienceFriends => 'Friends';
+
+  @override
+  String get privacyAudienceFriendsOfFriends => 'Friends of friends';
+
+  @override
+  String get privacyAudienceNobody => 'Nobody';
+
+  @override
+  String get reportAction => 'Report';
+
+  @override
+  String get reportTitle => 'Report';
+
+  @override
+  String get reportSubtitle => 'Choose a category. We will review your report.';
+
+  @override
+  String get reportCategorySpam => 'Spam';
+
+  @override
+  String get reportCategoryHarassment => 'Harassment';
+
+  @override
+  String get reportCategoryOffensive => 'Offensive content';
+
+  @override
+  String get reportCategoryFake => 'Fake / impersonation';
+
+  @override
+  String get reportCategoryMmToxic => 'Cheating / MM toxic';
+
+  @override
+  String get reportCategoryOther => 'Other';
+
+  @override
+  String get reportCommentLabel => 'Comment';
+
+  @override
+  String get reportCommentRequired =>
+      'Required for «Other» (up to 500 characters)';
+
+  @override
+  String get reportSubmit => 'Submit report';
+
+  @override
+  String get reportAcceptedTitle => 'Report accepted';
+
+  @override
+  String get reportAcceptedMessage =>
+      'We will review it shortly. You will not receive status updates.';
+
+  @override
+  String get authTotpStepTitle => 'Two-factor code';
+
+  @override
+  String get authTotpLabel => 'Authenticator or backup code';
+
+  @override
+  String get authTotpHelper =>
+      'Enter the code from your authenticator app or a backup code.';
+
+  @override
+  String get authErrorTotpRequired => 'Enter your two-factor code to continue.';
+
+  @override
+  String get authErrorInvalidTotp => 'Invalid authenticator or backup code.';
 
   @override
   String get authTagline => 'Voice chat and messages for gamers';

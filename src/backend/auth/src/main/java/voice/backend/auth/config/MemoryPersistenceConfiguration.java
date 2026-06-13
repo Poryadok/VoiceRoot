@@ -5,7 +5,9 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import voice.backend.auth.repository.AccountRepository;
+import voice.backend.auth.repository.BackupCodeRepository;
 import voice.backend.auth.repository.InMemoryAccountRepository;
+import voice.backend.auth.repository.InMemoryBackupCodeRepository;
 import voice.backend.auth.repository.InMemoryRefreshTokenRepository;
 import voice.backend.auth.repository.RefreshTokenRepository;
 import voice.backend.auth.security.InMemoryTokenBlacklist;
@@ -22,6 +24,11 @@ public class MemoryPersistenceConfiguration {
   @Bean
   RefreshTokenRepository refreshTokenRepository() {
     return new InMemoryRefreshTokenRepository();
+  }
+
+  @Bean
+  BackupCodeRepository backupCodeRepository() {
+    return new InMemoryBackupCodeRepository();
   }
 
   @Bean

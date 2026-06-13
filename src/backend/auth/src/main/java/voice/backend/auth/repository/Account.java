@@ -10,4 +10,6 @@ public record Account(
     String passwordHash,
     String type,
     String status,
+    byte[] totpSecret,
+    boolean totpEnabled,
     Instant createdAt) {}

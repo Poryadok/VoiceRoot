@@ -6,7 +6,9 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import voice.backend.auth.repository.AccountRepository;
+import voice.backend.auth.repository.BackupCodeRepository;
 import voice.backend.auth.repository.JdbcAccountRepository;
+import voice.backend.auth.repository.JdbcBackupCodeRepository;
 import voice.backend.auth.repository.JdbcRefreshTokenRepository;
 import voice.backend.auth.repository.RefreshTokenRepository;
 import voice.backend.auth.security.RedisTokenBlacklist;
@@ -23,6 +25,11 @@ public class JdbcPersistenceConfiguration {
   @Bean
   RefreshTokenRepository refreshTokenRepository(NamedParameterJdbcTemplate jdbc) {
     return new JdbcRefreshTokenRepository(jdbc);
+  }
+
+  @Bean
+  BackupCodeRepository backupCodeRepository(NamedParameterJdbcTemplate jdbc) {
+    return new JdbcBackupCodeRepository(jdbc);
   }
 
   @Bean

@@ -116,8 +116,22 @@ class AuthController extends StateNotifier<AuthState> {
         () => _authClient.register(email: email, password: password),
       );
 
-  Future<void> login({required String email, required String password}) =>
-      _authenticate(() => _authClient.login(email: email, password: password));
+  Future<void> login({
+    required String email,
+    required String password,
+    String? totpCode,
+  }) => _authenticate(
+    () => _authClient.login(
+      email: email,
+      password: password,
+      totpCode: totpCode,
+    ),
+  );
+
+  Future<void> applySession(AuthSession session) async {
+    await _persist(session);
+    state = state.copyWith(session: session, clearError: true);
+  }
 
   void setClientError(String errorKey) {
     state = state.copyWith(errorKey: errorKey, isSubmitting: false);

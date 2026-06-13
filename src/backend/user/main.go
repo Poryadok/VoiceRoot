@@ -131,6 +131,7 @@ func main() {
 		srv := grpc.NewServer(grpcmw.ServerOptions(logger)...)
 		userv1.RegisterUserServiceServer(srv, &grpcsvc.UserGRPC{
 			Profiles:            store.NewProfileStore(pool),
+			Privacy:             store.NewPrivacyStore(pool),
 			Presence:            presence,
 			Blocks:              blocks,
 			AvatarPresigner:     avatarPresigner,

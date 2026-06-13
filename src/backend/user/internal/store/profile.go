@@ -46,6 +46,13 @@ func NewProfileStore(pool *pgxpool.Pool) *ProfileStore {
 	return &ProfileStore{pool: pool}
 }
 
+func (s *ProfileStore) Pool() *pgxpool.Pool {
+	if s == nil {
+		return nil
+	}
+	return s.pool
+}
+
 func (s *ProfileStore) GetByID(ctx context.Context, id uuid.UUID) (*ProfileRow, error) {
 	return s.scanOne(ctx, `SELECT id, account_id, username, discriminator, display_name, avatar_url, bio,
 		locale, theme, is_primary, verification_type, verification_badge, created_at, updated_at

@@ -15,7 +15,7 @@ void main() {
       markTestSkipped('object storage not configured (MinIO/R2)');
     }
     final users = VoiceUsersClient(gateway: ctx.gatewayHttp());
-    const png = Uint8List.fromList([
+    final png = Uint8List.fromList([
       0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
     ]);
     final ticket = await users.createAvatarPresignedUpload(
@@ -26,7 +26,7 @@ void main() {
     expect(ticket, isA<UsersApiOk<AvatarPresignedUpload>>());
     final upload = (ticket as UsersApiOk<AvatarPresignedUpload>).data;
     final put = await users.uploadAvatarBytes(
-      uploadUrl: upload.presignedPutUrl,
+      uploadUrl: Uri.parse(upload.uploadUrl),
       requiredHeaders: upload.requiredHeaders,
       bytes: png,
     );

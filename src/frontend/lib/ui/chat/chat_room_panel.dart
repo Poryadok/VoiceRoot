@@ -24,6 +24,7 @@ import '../core/voice_compact_banner.dart';
 import '../core/voice_state_panel.dart';
 import '../core/voice_send_button.dart';
 import '../social/presence_indicator.dart';
+import '../report/report_sheet.dart';
 import 'chat_info_panel.dart';
 import 'chat_message_list.dart';
 import 'message_reactions_row.dart';
@@ -827,6 +828,14 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                 title: Text(sheetL10n.chatMessageDeleteForMe),
                 onTap: () => Navigator.of(context).pop('delete_me'),
               ),
+              if (!isMine &&
+                  message.deletedAt == null &&
+                  message.messageKind != VoiceMessageKind.system)
+                ListTile(
+                  leading: const Icon(Icons.flag_outlined),
+                  title: Text(sheetL10n.reportAction),
+                  onTap: () => Navigator.of(context).pop('report'),
+                ),
               if (isMine)
                 ListTile(
                   leading: const Icon(Icons.delete_forever_outlined),
@@ -872,6 +881,14 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       await controller.deleteMessage(message.id, forMe: true);
     } else if (action == 'delete_everyone') {
       await controller.deleteMessage(message.id, forMe: false);
+    } else if (action == 'report') {
+      await ReportSheet.show(
+        context,
+        target: ReportMessageTarget(
+          messageId: message.id,
+          chatId: widget.chatId,
+        ),
+      );
     }
   }
 
