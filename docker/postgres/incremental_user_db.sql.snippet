@@ -1,0 +1,33 @@
+-- Idempotent deltas for user_db on volumes created before newer migrations.
+-- Keep in sync with src/backend/migrations/user_db/000002..000004
+
+CREATE TABLE IF NOT EXISTS privacy_settings (
+    profile_id UUID PRIMARY KEY,
+    preset VARCHAR(16) NOT NULL CHECK (preset IN ('personal', 'gaming', 'work')),
+    show_online VARCHAR(32) NOT NULL,
+    show_game_status VARCHAR(32) NOT NULL,
+    show_mm_rating VARCHAR(32) NOT NULL,
+    show_phone VARCHAR(32) NOT NULL,
+    show_stories VARCHAR(32) NOT NULL,
+    allow_dm VARCHAR(32) NOT NULL CHECK (allow_dm IN ('everyone', 'friends', 'friends_of_friends', 'nobody')),
+    allow_friend_requests VARCHAR(32) NOT NULL CHECK (allow_friend_requests IN ('everyone', 'friends_of_friends', 'nobody')),
+    allow_guest_dm BOOLEAN NOT NULL DEFAULT false,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS banner_url TEXT NULL;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS frozen_at TIMESTAMPTZ NULL;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ NULL;
+
+CREATE TABLE IF NOT EXISTS organization_verification_requests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    profile_id UUID NOT NULL,
+    domain TEXT NOT NULL,
+    txt_token TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'verified', 'expired')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    verified_at TIMESTAMPTZ NULL
+);
+
+CREATE INDEX IF NOT EXISTS organization_verification_profile_idx
+    ON organization_verification_requests (profile_id, created_at DESC);

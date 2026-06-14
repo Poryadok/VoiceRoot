@@ -1,0 +1,16 @@
+-- Idempotent deltas for chat_db on volumes created before newer migrations.
+-- Keep in sync with src/backend/migrations/chat_db/000004_slow_mode.up.sql,
+-- 000005_thread_settings.up.sql
+
+ALTER TABLE chats DROP CONSTRAINT IF EXISTS chats_slow_mode_seconds_check;
+ALTER TABLE chats ADD CONSTRAINT chats_slow_mode_seconds_check
+    CHECK (slow_mode_seconds = 0 OR (slow_mode_seconds >= 5 AND slow_mode_seconds <= 21600));
+
+ALTER TABLE chats
+    ADD COLUMN IF NOT EXISTS threads_enabled BOOLEAN NOT NULL DEFAULT false,
+    ADD COLUMN IF NOT EXISTS allow_user_main_feed BOOLEAN NOT NULL DEFAULT true;
+
+UPDATE chats
+SET threads_enabled = true, allow_user_main_feed = false
+WHERE type = 'channel'
+  AND (threads_enabled IS DISTINCT FROM true OR allow_user_main_feed IS DISTINCT FROM false);
