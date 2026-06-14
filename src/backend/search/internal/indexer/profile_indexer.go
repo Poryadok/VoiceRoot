@@ -19,7 +19,7 @@ type ProfileStore interface {
 
 // ProfileHydrator loads profile fields for indexing.
 type ProfileHydrator interface {
-	LoadProfile(ctx context.Context, profileID uuid.UUID) (accountID uuid.UUID, username, discriminator, displayName string, err error)
+	LoadProfile(ctx context.Context, profileID uuid.UUID) (accountID uuid.UUID, username, discriminator, displayName, verificationType string, err error)
 }
 
 // ProfileIndexer handles user.events profile payloads.
@@ -47,15 +47,16 @@ func (idx *ProfileIndexer) upsert(ctx context.Context, profileRaw string) error 
 	if err != nil {
 		return fmt.Errorf("invalid profile_id: %w", err)
 	}
-	accountID, username, discriminator, displayName, err := idx.Profiles.LoadProfile(ctx, profileID)
+	accountID, username, discriminator, displayName, verificationType, err := idx.Profiles.LoadProfile(ctx, profileID)
 	if err != nil {
 		return err
 	}
 	return idx.Store.UpsertProfile(ctx, store.ProfileDocument{
-		ProfileID:     profileID,
-		AccountID:     accountID,
-		Username:      username,
-		Discriminator: discriminator,
-		DisplayName:   displayName,
+		ProfileID:        profileID,
+		AccountID:        accountID,
+		Username:         username,
+		Discriminator:    discriminator,
+		DisplayName:      displayName,
+		VerificationType: verificationType,
 	})
 }

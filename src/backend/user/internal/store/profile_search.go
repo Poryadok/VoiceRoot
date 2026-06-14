@@ -70,9 +70,11 @@ func (s *ProfileStore) SearchProfilesAfter(ctx context.Context, excludeAccount u
 	q := fmt.Sprintf(`SELECT %s
 		FROM profiles
 		WHERE account_id <> $1
+		AND deleted_at IS NULL
 		AND (username ILIKE $2 ESCAPE '\' OR display_name ILIKE $2 ESCAPE '\')
 		%s
-		ORDER BY lower(username) ASC, discriminator ASC, id ASC
+		ORDER BY (CASE WHEN verification_type <> 'none' THEN 0 ELSE 1 END),
+		         lower(username) ASC, discriminator ASC, id ASC
 		LIMIT $%d`, profileSelectCols, extra, limitArg)
 	args = append(args, limit)
 

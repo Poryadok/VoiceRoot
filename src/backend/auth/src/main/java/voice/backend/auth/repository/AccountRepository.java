@@ -15,4 +15,6 @@ public interface AccountRepository {
   void saveTotpSecret(UUID accountId, byte[] encryptedSecret, boolean enabled);
 
   void setTotpEnabled(UUID accountId, boolean enabled);
+
+  void setStatus(UUID accountId, String status);
 }

@@ -377,10 +377,12 @@ class ListReportsRequest extends $pb.GeneratedMessage {
   factory ListReportsRequest({
     $core.String? statusFilter,
     $2.CursorPageRequest? page,
+    $core.String? queueFilter,
   }) {
     final result = create();
     if (statusFilter != null) result.statusFilter = statusFilter;
     if (page != null) result.page = page;
+    if (queueFilter != null) result.queueFilter = queueFilter;
     return result;
   }
 
@@ -401,6 +403,7 @@ class ListReportsRequest extends $pb.GeneratedMessage {
     ..aOS(1, _omitFieldNames ? '' : 'statusFilter')
     ..aOM<$2.CursorPageRequest>(2, _omitFieldNames ? '' : 'page',
         subBuilder: $2.CursorPageRequest.create)
+    ..aOS(3, _omitFieldNames ? '' : 'queueFilter')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -441,6 +444,16 @@ class ListReportsRequest extends $pb.GeneratedMessage {
   void clearPage() => $_clearField(2);
   @$pb.TagNumber(2)
   $2.CursorPageRequest ensurePage() => $_ensure(1);
+
+  /// Phase 14: "content" (user/message) vs "spaces" queues — docs/features/reports.md.
+  @$pb.TagNumber(3)
+  $core.String get queueFilter => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set queueFilter($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasQueueFilter() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearQueueFilter() => $_clearField(3);
 }
 
 class ReportList extends $pb.GeneratedMessage {
@@ -509,11 +522,14 @@ class ResolveReportRequest extends $pb.GeneratedMessage {
     $core.String? reportId,
     $core.String? resolutionJson,
     $core.String? newStatus,
+    $core.String? assignedToProfileId,
   }) {
     final result = create();
     if (reportId != null) result.reportId = reportId;
     if (resolutionJson != null) result.resolutionJson = resolutionJson;
     if (newStatus != null) result.newStatus = newStatus;
+    if (assignedToProfileId != null)
+      result.assignedToProfileId = assignedToProfileId;
     return result;
   }
 
@@ -534,6 +550,7 @@ class ResolveReportRequest extends $pb.GeneratedMessage {
     ..aOS(1, _omitFieldNames ? '' : 'reportId')
     ..aOS(2, _omitFieldNames ? '' : 'resolutionJson')
     ..aOS(3, _omitFieldNames ? '' : 'newStatus')
+    ..aOS(4, _omitFieldNames ? '' : 'assignedToProfileId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -581,6 +598,15 @@ class ResolveReportRequest extends $pb.GeneratedMessage {
   $core.bool hasNewStatus() => $_has(2);
   @$pb.TagNumber(3)
   void clearNewStatus() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get assignedToProfileId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set assignedToProfileId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasAssignedToProfileId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearAssignedToProfileId() => $_clearField(4);
 }
 
 class Sanction extends $pb.GeneratedMessage {

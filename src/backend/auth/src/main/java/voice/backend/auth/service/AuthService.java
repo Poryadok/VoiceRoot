@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import voice.backend.auth.userdb.PrimaryProfileProvisioner;
+import voice.backend.auth.userdb.ProfileSwitchValidator;
 import voice.backend.auth.repository.Account;
 import voice.backend.auth.repository.AccountRepository;
 import voice.backend.auth.repository.RefreshTokenRecord;
@@ -28,6 +29,7 @@ public class AuthService {
   private final Duration refreshTtl;
   private final PrimaryProfileProvisioner primaryProfileProvisioner;
   private final SubscriptionTierResolver subscriptionTierResolver;
+  private final ProfileSwitchValidator profileSwitchValidator;
 
   public AuthService(
       AccountRepository accounts,
@@ -41,7 +43,8 @@ public class AuthService {
       Clock clock,
       Duration refreshTtl,
       PrimaryProfileProvisioner primaryProfileProvisioner,
-      SubscriptionTierResolver subscriptionTierResolver) {
+      SubscriptionTierResolver subscriptionTierResolver,
+      ProfileSwitchValidator profileSwitchValidator) {
     this.accounts = accounts;
     this.refreshTokens = refreshTokens;
     this.refreshTokenCodec = refreshTokenCodec;
@@ -54,6 +57,7 @@ public class AuthService {
     this.refreshTtl = refreshTtl;
     this.primaryProfileProvisioner = primaryProfileProvisioner;
     this.subscriptionTierResolver = subscriptionTierResolver;
+    this.profileSwitchValidator = profileSwitchValidator;
   }
 
   public AuthService withClock(Clock newClock) {
@@ -69,7 +73,8 @@ public class AuthService {
         newClock,
         refreshTtl,
         primaryProfileProvisioner,
-        subscriptionTierResolver);
+        subscriptionTierResolver,
+        profileSwitchValidator);
   }
 
   public AuthSession register(RegisterCommand command) {
@@ -146,6 +151,18 @@ public class AuthService {
     return jwtService.jwksJson();
   }
 
+  public void setAccountStatus(String accountId, String status) {
+    if (accountId == null || accountId.isBlank()) {
+      throw new AuthException("invalid_account");
+    }
+    if (!"active".equals(status) && !"suspended".equals(status)) {
+      throw new AuthException("invalid_status");
+    }
+    UUID id = UUID.fromString(accountId);
+    accounts.findById(accountId).orElseThrow(() -> new AuthException("invalid_account"));
+    accounts.setStatus(id, status);
+  }
+
   public TotpEnrollment enable2FA(String accessToken, String password) {
     TokenClaims claims = validate(accessToken);
     Account account = accounts.findById(claims.userId()).orElseThrow(() -> new AuthException("invalid_token"));
@@ -181,8 +198,23 @@ public class AuthService {
     return issueSession(fresh, "{}");
   }
 
+  public AuthSession switchActiveProfile(String accessToken, String profileId, String deviceInfoJson) {
+    TokenClaims claims = validate(accessToken);
+    UUID accountId = UUID.fromString(claims.userId());
+    UUID targetProfile = UUID.fromString(profileId);
+    profileSwitchValidator.validateOwnedSwitchable(accountId, targetProfile);
+    Account account = accounts.findById(claims.userId()).orElseThrow(() -> new AuthException("invalid_token"));
+    ensureActive(account);
+    tokenBlacklist.revoke(claims.jti(), jwtService.ttl(claims));
+    return issueSessionForProfile(account, profileId, deviceInfoJson == null ? "{}" : deviceInfoJson);
+  }
+
   private AuthSession issueSession(Account account, String deviceInfoJson) {
     String profileId = primaryProfileProvisioner.ensurePrimaryProfile(account.id(), displayHint(account));
+    return issueSessionForProfile(account, profileId, deviceInfoJson);
+  }
+
+  private AuthSession issueSessionForProfile(Account account, String profileId, String deviceInfoJson) {
     String tier = subscriptionTierResolver.resolveTier(account.id());
     String accessToken = jwtService.issue(account.id().toString(), profileId, List.of("user"), tier);
     TokenClaims claims = jwtService.validate(accessToken);

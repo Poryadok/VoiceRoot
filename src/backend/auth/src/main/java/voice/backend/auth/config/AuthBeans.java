@@ -62,7 +62,8 @@ public class AuthBeans {
       Clock clock,
       AuthProperties properties,
       voice.backend.auth.userdb.PrimaryProfileProvisioner primaryProfileProvisioner,
-      SubscriptionTierResolver subscriptionTierResolver) {
+      SubscriptionTierResolver subscriptionTierResolver,
+      voice.backend.auth.userdb.ProfileSwitchValidator profileSwitchValidator) {
     return new AuthService(
         accounts,
         refreshTokens,
@@ -75,6 +76,7 @@ public class AuthBeans {
         clock,
         properties.getRefresh().getTtl(),
         primaryProfileProvisioner,
-        subscriptionTierResolver);
+        subscriptionTierResolver,
+        profileSwitchValidator);
   }
 }

@@ -18,9 +18,11 @@ import (
 )
 
 const (
-	streamName             = "user_events"
-	subjectProfileCreated  = "user.profile_created"
-	subjectProfileUpdated  = "user.profile_updated"
+	streamName                = "user_events"
+	subjectProfileCreated     = "user.profile_created"
+	subjectProfileUpdated     = "user.profile_updated"
+	subjectProfileSwitched    = "user.profile_switched"
+	subjectProfileVerified    = "user.verified"
 )
 
 // JetStreamPublisher publishes UserStreamEvent payloads to NATS JetStream.
@@ -69,6 +71,8 @@ func (p *JetStreamPublisher) ensureStream() error {
 			Subjects: []string{
 				subjectProfileCreated,
 				subjectProfileUpdated,
+				subjectProfileSwitched,
+				subjectProfileVerified,
 			},
 			Retention: nats.LimitsPolicy,
 			MaxAge:    7 * 24 * time.Hour,
@@ -126,6 +130,38 @@ func (p *JetStreamPublisher) PublishProfileUpdated(ctx context.Context, profileI
 		},
 	}
 	return p.publishProto(ctx, subjectProfileUpdated, env)
+}
+
+// PublishProfileSwitched emits user.profile_switched.
+func (p *JetStreamPublisher) PublishProfileSwitched(ctx context.Context, accountID, oldProfileID, newProfileID string) error {
+	_ = oldProfileID
+	env := &eventsv1.UserStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.New(time.Now().UTC()),
+		Payload: &eventsv1.UserStreamEvent_ProfileSwitched{
+			ProfileSwitched: &eventsv1.ProfileSwitched{
+				AccountId: accountID,
+				ProfileId: newProfileID,
+			},
+		},
+	}
+	return p.publishProto(ctx, subjectProfileSwitched, env)
+}
+
+// PublishVerified emits user.verified.
+func (p *JetStreamPublisher) PublishVerified(ctx context.Context, profileID, accountID, verificationType string) error {
+	env := &eventsv1.UserStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.New(time.Now().UTC()),
+		Payload: &eventsv1.UserStreamEvent_ProfileCreated{
+			ProfileCreated: &eventsv1.ProfileCreated{
+				ProfileId: profileID,
+				AccountId: accountID,
+			},
+		},
+	}
+	_ = verificationType
+	return p.publishProto(ctx, subjectProfileVerified, env)
 }
 
 // Close drains the underlying NATS connection.

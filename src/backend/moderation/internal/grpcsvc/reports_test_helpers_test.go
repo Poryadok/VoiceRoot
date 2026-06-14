@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 
 	"voice/backend/moderation/internal/store"
+	"voice/backend/pkg/integrationtest"
 
 	moderationv1 "voice.app/voice/moderation/v1"
 )
@@ -36,13 +37,25 @@ func integrationtestApplySQL(t *testing.T, ctx context.Context, pool *pgxpool.Po
 	require.NoError(t, err)
 }
 
+func startModerationPostgresPhase14(t *testing.T, ctx context.Context) *pgxpool.Pool {
+	t.Helper()
+	root := repoRoot(t)
+	pool := integrationtest.StartPostgres(t, ctx, "moderationdb", filepath.Join(root, "src", "backend", "migrations", "moderation_db", "000001_reports.up.sql"))
+	integrationtestApplySQL(t, ctx, pool, filepath.Join(root, "src", "backend", "migrations", "moderation_db", "000002_phase14_sanctions.up.sql"))
+	return pool
+}
+
 func startModerationGRPCTestServer(t *testing.T, pool *pgxpool.Pool) (moderationv1.ModerationServiceClient, func()) {
 	t.Helper()
 	const bufSize = 1 << 20
 	lis := bufconn.Listen(bufSize)
 	srv := grpc.NewServer()
 	moderationv1.RegisterModerationServiceServer(srv, &ModerationGRPC{
-		Reports: &store.ReportStore{Pool: pool},
+		Reports:   &store.ReportStore{Pool: pool},
+		Sanctions: &store.SanctionStore{Pool: pool},
+		Appeals:   &store.AppealStore{Pool: pool},
+		AuditLog:  &store.AuditLogStore{Pool: pool},
+		AutoMod:   &store.AutoModStore{Pool: pool},
 	})
 	go func() {
 		if err := srv.Serve(lis); err != nil {
@@ -65,4 +78,9 @@ func startModerationGRPCTestServer(t *testing.T, pool *pgxpool.Pool) (moderation
 
 func withReporterProfile(ctx context.Context, profileID uuid.UUID) context.Context {
 	return metadata.AppendToOutgoingContext(ctx, "x-voice-profile-id", profileID.String())
+}
+
+func withInternalModCtx(ctx context.Context, moderatorProfileID uuid.UUID) context.Context {
+	ctx = metadata.AppendToOutgoingContext(ctx, "x-voice-internal", "true")
+	return metadata.AppendToOutgoingContext(ctx, "x-voice-profile-id", moderatorProfileID.String())
 }

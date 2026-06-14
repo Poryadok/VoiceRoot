@@ -325,8 +325,14 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                       ? ChatAuthorLabel(
                           displayName: title,
                           isPremium: peerIsPremium,
+                          verificationType:
+                              peerProfile?.verificationType ?? 'none',
                           style: Theme.of(context).textTheme.titleMedium,
                           premiumBadgeSemanticLabel: l10n.premiumBadgeLabel,
+                          verifiedBadgeSemanticLabel:
+                              peerProfile?.verificationType == 'organization'
+                              ? l10n.verifiedBadgeOrganization
+                              : l10n.verifiedBadgePersonal,
                         )
                       : Text(
                           title,

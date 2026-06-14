@@ -119,6 +119,22 @@ class AuthServiceClient extends $grpc.Client {
     return $createUnaryCall(_$getJWKS, request, options: options);
   }
 
+  /// Phase 13: switch active profile claim in next access JWT (primary-profile-bootstrap.md).
+  $grpc.ResponseFuture<$0.SwitchActiveProfileResponse> switchActiveProfile(
+    $0.SwitchActiveProfileRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$switchActiveProfile, request, options: options);
+  }
+
+  /// Phase 14: internal — platform moderation suspends account (docs/PLAN.md phase 14).
+  $grpc.ResponseFuture<$0.SetAccountStatusResponse> setAccountStatus(
+    $0.SetAccountStatusRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$setAccountStatus, request, options: options);
+  }
+
   // method descriptors
 
   static final _$register =
@@ -180,6 +196,16 @@ class AuthServiceClient extends $grpc.Client {
           '/voice.auth.v1.AuthService/GetJWKS',
           ($0.GetJWKSRequest value) => value.writeToBuffer(),
           $0.GetJWKSResponse.fromBuffer);
+  static final _$switchActiveProfile = $grpc.ClientMethod<
+          $0.SwitchActiveProfileRequest, $0.SwitchActiveProfileResponse>(
+      '/voice.auth.v1.AuthService/SwitchActiveProfile',
+      ($0.SwitchActiveProfileRequest value) => value.writeToBuffer(),
+      $0.SwitchActiveProfileResponse.fromBuffer);
+  static final _$setAccountStatus = $grpc.ClientMethod<
+          $0.SetAccountStatusRequest, $0.SetAccountStatusResponse>(
+      '/voice.auth.v1.AuthService/SetAccountStatus',
+      ($0.SetAccountStatusRequest value) => value.writeToBuffer(),
+      $0.SetAccountStatusResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.auth.v1.AuthService')
@@ -281,6 +307,24 @@ abstract class AuthServiceBase extends $grpc.Service {
         false,
         ($core.List<$core.int> value) => $0.GetJWKSRequest.fromBuffer(value),
         ($0.GetJWKSResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.SwitchActiveProfileRequest,
+            $0.SwitchActiveProfileResponse>(
+        'SwitchActiveProfile',
+        switchActiveProfile_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.SwitchActiveProfileRequest.fromBuffer(value),
+        ($0.SwitchActiveProfileResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.SetAccountStatusRequest,
+            $0.SetAccountStatusResponse>(
+        'SetAccountStatus',
+        setAccountStatus_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.SetAccountStatusRequest.fromBuffer(value),
+        ($0.SetAccountStatusResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.RegisterResponse> register_Pre($grpc.ServiceCall $call,
@@ -383,4 +427,22 @@ abstract class AuthServiceBase extends $grpc.Service {
 
   $async.Future<$0.GetJWKSResponse> getJWKS(
       $grpc.ServiceCall call, $0.GetJWKSRequest request);
+
+  $async.Future<$0.SwitchActiveProfileResponse> switchActiveProfile_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.SwitchActiveProfileRequest> $request) async {
+    return switchActiveProfile($call, await $request);
+  }
+
+  $async.Future<$0.SwitchActiveProfileResponse> switchActiveProfile(
+      $grpc.ServiceCall call, $0.SwitchActiveProfileRequest request);
+
+  $async.Future<$0.SetAccountStatusResponse> setAccountStatus_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.SetAccountStatusRequest> $request) async {
+    return setAccountStatus($call, await $request);
+  }
+
+  $async.Future<$0.SetAccountStatusResponse> setAccountStatus(
+      $grpc.ServiceCall call, $0.SetAccountStatusRequest request);
 }

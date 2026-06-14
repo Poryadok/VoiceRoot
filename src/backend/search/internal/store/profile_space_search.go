@@ -32,16 +32,17 @@ func (s *ProfileSpaceSearchStore) UpsertProfile(ctx context.Context, doc Profile
 		return fmt.Errorf("profile search store unavailable")
 	}
 	_, err := s.Pool.Exec(ctx, `
-		INSERT INTO profile_search_documents (profile_id, account_id, username, discriminator, display_name, username_lower, updated_at)
-		VALUES ($1, $2, $3, $4, $5, lower($3), now())
+		INSERT INTO profile_search_documents (profile_id, account_id, username, discriminator, display_name, username_lower, verification_type, updated_at)
+		VALUES ($1, $2, $3, $4, $5, lower($3), $6, now())
 		ON CONFLICT (profile_id) DO UPDATE SET
 			account_id = EXCLUDED.account_id,
 			username = EXCLUDED.username,
 			discriminator = EXCLUDED.discriminator,
 			display_name = EXCLUDED.display_name,
 			username_lower = EXCLUDED.username_lower,
+			verification_type = EXCLUDED.verification_type,
 			updated_at = now()`,
-		doc.ProfileID, doc.AccountID, doc.Username, doc.Discriminator, doc.DisplayName,
+		doc.ProfileID, doc.AccountID, doc.Username, doc.Discriminator, doc.DisplayName, doc.VerificationType,
 	)
 	return err
 }
@@ -74,7 +75,8 @@ func (s *ProfileSpaceSearchStore) SearchProfiles(ctx context.Context, _ uuid.UUI
 		FROM profile_search_documents
 		WHERE (username ILIKE $1 ESCAPE '\' OR display_name ILIKE $1 ESCAPE '\')
 		%s
-		ORDER BY username_lower ASC, discriminator ASC, profile_id ASC
+		ORDER BY (CASE WHEN verification_type <> 'none' AND verification_type <> '' THEN 0 ELSE 1 END),
+		         username_lower ASC, discriminator ASC, profile_id ASC
 		LIMIT $%d`, excludeSQL, len(args))
 
 	rows, err := s.Pool.Query(ctx, sql, args...)

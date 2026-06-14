@@ -487,3 +487,66 @@ final $typed_data.Uint8List tokenClaimsDescriptor = $convert.base64Decode(
     'EoCVIJcHJvZmlsZUlkEhQKBXJvbGVzGAMgAygJUgVyb2xlcxIrChFzdWJzY3JpcHRpb25fdGll'
     'chgEIAEoCVIQc3Vic2NyaXB0aW9uVGllchI5CgpleHBpcmVzX2F0GAUgASgLMhouZ29vZ2xlLn'
     'Byb3RvYnVmLlRpbWVzdGFtcFIJZXhwaXJlc0F0');
+
+@$core.Deprecated('Use switchActiveProfileRequestDescriptor instead')
+const SwitchActiveProfileRequest$json = {
+  '1': 'SwitchActiveProfileRequest',
+  '2': [
+    {'1': 'access_token', '3': 1, '4': 1, '5': 9, '10': 'accessToken'},
+    {'1': 'profile_id', '3': 2, '4': 1, '5': 9, '10': 'profileId'},
+    {'1': 'device_info_json', '3': 3, '4': 1, '5': 9, '10': 'deviceInfoJson'},
+  ],
+};
+
+/// Descriptor for `SwitchActiveProfileRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List switchActiveProfileRequestDescriptor =
+    $convert.base64Decode(
+        'ChpTd2l0Y2hBY3RpdmVQcm9maWxlUmVxdWVzdBIhCgxhY2Nlc3NfdG9rZW4YASABKAlSC2FjY2'
+        'Vzc1Rva2VuEh0KCnByb2ZpbGVfaWQYAiABKAlSCXByb2ZpbGVJZBIoChBkZXZpY2VfaW5mb19q'
+        'c29uGAMgASgJUg5kZXZpY2VJbmZvSnNvbg==');
+
+@$core.Deprecated('Use switchActiveProfileResponseDescriptor instead')
+const SwitchActiveProfileResponse$json = {
+  '1': 'SwitchActiveProfileResponse',
+  '2': [
+    {
+      '1': 'session',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.auth.v1.AuthSession',
+      '10': 'session'
+    },
+  ],
+};
+
+/// Descriptor for `SwitchActiveProfileResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List switchActiveProfileResponseDescriptor =
+    $convert.base64Decode(
+        'ChtTd2l0Y2hBY3RpdmVQcm9maWxlUmVzcG9uc2USNAoHc2Vzc2lvbhgBIAEoCzIaLnZvaWNlLm'
+        'F1dGgudjEuQXV0aFNlc3Npb25SB3Nlc3Npb24=');
+
+@$core.Deprecated('Use setAccountStatusRequestDescriptor instead')
+const SetAccountStatusRequest$json = {
+  '1': 'SetAccountStatusRequest',
+  '2': [
+    {'1': 'account_id', '3': 1, '4': 1, '5': 9, '10': 'accountId'},
+    {'1': 'status', '3': 2, '4': 1, '5': 9, '10': 'status'},
+    {'1': 'reason', '3': 3, '4': 1, '5': 9, '10': 'reason'},
+  ],
+};
+
+/// Descriptor for `SetAccountStatusRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List setAccountStatusRequestDescriptor =
+    $convert.base64Decode(
+        'ChdTZXRBY2NvdW50U3RhdHVzUmVxdWVzdBIdCgphY2NvdW50X2lkGAEgASgJUglhY2NvdW50SW'
+        'QSFgoGc3RhdHVzGAIgASgJUgZzdGF0dXMSFgoGcmVhc29uGAMgASgJUgZyZWFzb24=');
+
+@$core.Deprecated('Use setAccountStatusResponseDescriptor instead')
+const SetAccountStatusResponse$json = {
+  '1': 'SetAccountStatusResponse',
+};
+
+/// Descriptor for `SetAccountStatusResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List setAccountStatusResponseDescriptor =
+    $convert.base64Decode('ChhTZXRBY2NvdW50U3RhdHVzUmVzcG9uc2U=');

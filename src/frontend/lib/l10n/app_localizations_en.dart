@@ -1106,6 +1106,28 @@ class AppLocalizationsEn extends AppLocalizations {
   String get securitySettingsTitle => 'Security';
 
   @override
+  String get verificationSettingsTitle => 'Verification';
+
+  @override
+  String get verificationSettingsHint =>
+      'Link platforms to earn a verified badge, or verify your organization domain.';
+
+  @override
+  String get verificationLinkedAccountsTitle => 'Linked accounts';
+
+  @override
+  String get verificationLinkedAccountsEmpty => 'No linked accounts yet.';
+
+  @override
+  String get verificationLinkTwitch => 'Link Twitch';
+
+  @override
+  String get verifiedBadgePersonal => 'Verified';
+
+  @override
+  String get verifiedBadgeOrganization => 'Verified organization';
+
+  @override
   String get security2faEnableTitle => 'Two-factor authentication';
 
   @override

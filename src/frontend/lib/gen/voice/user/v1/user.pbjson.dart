@@ -221,6 +221,16 @@ const Profile$json = {
       '6': '.google.protobuf.Timestamp',
       '10': 'updatedAt'
     },
+    {
+      '1': 'frozen_at',
+      '3': 17,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '9': 5,
+      '10': 'frozenAt',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_avatar_url'},
@@ -228,6 +238,7 @@ const Profile$json = {
     {'1': '_bio'},
     {'1': '_custom_status'},
     {'1': '_verification_badge'},
+    {'1': '_frozen_at'},
   ],
 };
 
@@ -243,8 +254,10 @@ final $typed_data.Uint8List profileDescriptor = $convert.base64Decode(
     'R5cGUYDSABKAlSEHZlcmlmaWNhdGlvblR5cGUSMgoSdmVyaWZpY2F0aW9uX2JhZGdlGA4gASgJ'
     'SARSEXZlcmlmaWNhdGlvbkJhZGdliAEBEjkKCmNyZWF0ZWRfYXQYDyABKAsyGi5nb29nbGUucH'
     'JvdG9idWYuVGltZXN0YW1wUgljcmVhdGVkQXQSOQoKdXBkYXRlZF9hdBgQIAEoCzIaLmdvb2ds'
-    'ZS5wcm90b2J1Zi5UaW1lc3RhbXBSCXVwZGF0ZWRBdEINCgtfYXZhdGFyX3VybEINCgtfYmFubm'
-    'VyX3VybEIGCgRfYmlvQhAKDl9jdXN0b21fc3RhdHVzQhUKE192ZXJpZmljYXRpb25fYmFkZ2U=');
+    'ZS5wcm90b2J1Zi5UaW1lc3RhbXBSCXVwZGF0ZWRBdBI8Cglmcm96ZW5fYXQYESABKAsyGi5nb2'
+    '9nbGUucHJvdG9idWYuVGltZXN0YW1wSAVSCGZyb3plbkF0iAEBQg0KC19hdmF0YXJfdXJsQg0K'
+    'C19iYW5uZXJfdXJsQgYKBF9iaW9CEAoOX2N1c3RvbV9zdGF0dXNCFQoTX3ZlcmlmaWNhdGlvbl'
+    '9iYWRnZUIMCgpfZnJvemVuX2F0');
 
 @$core.Deprecated('Use updateProfileRequestDescriptor instead')
 const UpdateProfileRequest$json = {
@@ -1234,3 +1247,177 @@ final $typed_data.Uint8List getVerificationStatusResponseDescriptor =
         'Ch1HZXRWZXJpZmljYXRpb25TdGF0dXNSZXNwb25zZRJSChN2ZXJpZmljYXRpb25fc3RhdHVzGA'
         'EgASgLMiEudm9pY2UudXNlci52MS5WZXJpZmljYXRpb25TdGF0dXNSEnZlcmlmaWNhdGlvblN0'
         'YXR1cw==');
+
+@$core.Deprecated('Use setVerificationRequestDescriptor instead')
+const SetVerificationRequest$json = {
+  '1': 'SetVerificationRequest',
+  '2': [
+    {'1': 'profile_id', '3': 1, '4': 1, '5': 9, '10': 'profileId'},
+    {
+      '1': 'verification_type',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '10': 'verificationType'
+    },
+    {'1': 'badge', '3': 3, '4': 1, '5': 9, '9': 0, '10': 'badge', '17': true},
+  ],
+  '8': [
+    {'1': '_badge'},
+  ],
+};
+
+/// Descriptor for `SetVerificationRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List setVerificationRequestDescriptor = $convert.base64Decode(
+    'ChZTZXRWZXJpZmljYXRpb25SZXF1ZXN0Eh0KCnByb2ZpbGVfaWQYASABKAlSCXByb2ZpbGVJZB'
+    'IrChF2ZXJpZmljYXRpb25fdHlwZRgCIAEoCVIQdmVyaWZpY2F0aW9uVHlwZRIZCgViYWRnZRgD'
+    'IAEoCUgAUgViYWRnZYgBAUIICgZfYmFkZ2U=');
+
+@$core.Deprecated('Use setVerificationResponseDescriptor instead')
+const SetVerificationResponse$json = {
+  '1': 'SetVerificationResponse',
+  '2': [
+    {
+      '1': 'verification_status',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.user.v1.VerificationStatus',
+      '10': 'verificationStatus'
+    },
+  ],
+};
+
+/// Descriptor for `SetVerificationResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List setVerificationResponseDescriptor = $convert.base64Decode(
+    'ChdTZXRWZXJpZmljYXRpb25SZXNwb25zZRJSChN2ZXJpZmljYXRpb25fc3RhdHVzGAEgASgLMi'
+    'Eudm9pY2UudXNlci52MS5WZXJpZmljYXRpb25TdGF0dXNSEnZlcmlmaWNhdGlvblN0YXR1cw==');
+
+@$core.Deprecated('Use clearVerificationRequestDescriptor instead')
+const ClearVerificationRequest$json = {
+  '1': 'ClearVerificationRequest',
+  '2': [
+    {'1': 'profile_id', '3': 1, '4': 1, '5': 9, '10': 'profileId'},
+  ],
+};
+
+/// Descriptor for `ClearVerificationRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List clearVerificationRequestDescriptor =
+    $convert.base64Decode(
+        'ChhDbGVhclZlcmlmaWNhdGlvblJlcXVlc3QSHQoKcHJvZmlsZV9pZBgBIAEoCVIJcHJvZmlsZU'
+        'lk');
+
+@$core.Deprecated('Use clearVerificationResponseDescriptor instead')
+const ClearVerificationResponse$json = {
+  '1': 'ClearVerificationResponse',
+  '2': [
+    {
+      '1': 'verification_status',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.user.v1.VerificationStatus',
+      '10': 'verificationStatus'
+    },
+  ],
+};
+
+/// Descriptor for `ClearVerificationResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List clearVerificationResponseDescriptor = $convert.base64Decode(
+    'ChlDbGVhclZlcmlmaWNhdGlvblJlc3BvbnNlElIKE3ZlcmlmaWNhdGlvbl9zdGF0dXMYASABKA'
+    'syIS52b2ljZS51c2VyLnYxLlZlcmlmaWNhdGlvblN0YXR1c1ISdmVyaWZpY2F0aW9uU3RhdHVz');
+
+@$core.Deprecated('Use startOrganizationVerificationRequestDescriptor instead')
+const StartOrganizationVerificationRequest$json = {
+  '1': 'StartOrganizationVerificationRequest',
+  '2': [
+    {'1': 'profile_id', '3': 1, '4': 1, '5': 9, '10': 'profileId'},
+    {'1': 'domain', '3': 2, '4': 1, '5': 9, '10': 'domain'},
+  ],
+};
+
+/// Descriptor for `StartOrganizationVerificationRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List startOrganizationVerificationRequestDescriptor =
+    $convert.base64Decode(
+        'CiRTdGFydE9yZ2FuaXphdGlvblZlcmlmaWNhdGlvblJlcXVlc3QSHQoKcHJvZmlsZV9pZBgBIA'
+        'EoCVIJcHJvZmlsZUlkEhYKBmRvbWFpbhgCIAEoCVIGZG9tYWlu');
+
+@$core.Deprecated('Use startOrganizationVerificationResponseDescriptor instead')
+const StartOrganizationVerificationResponse$json = {
+  '1': 'StartOrganizationVerificationResponse',
+  '2': [
+    {'1': 'domain', '3': 1, '4': 1, '5': 9, '10': 'domain'},
+    {'1': 'txt_record', '3': 2, '4': 1, '5': 9, '10': 'txtRecord'},
+  ],
+};
+
+/// Descriptor for `StartOrganizationVerificationResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List startOrganizationVerificationResponseDescriptor =
+    $convert.base64Decode(
+        'CiVTdGFydE9yZ2FuaXphdGlvblZlcmlmaWNhdGlvblJlc3BvbnNlEhYKBmRvbWFpbhgBIAEoCV'
+        'IGZG9tYWluEh0KCnR4dF9yZWNvcmQYAiABKAlSCXR4dFJlY29yZA==');
+
+@$core.Deprecated('Use checkOrganizationVerificationRequestDescriptor instead')
+const CheckOrganizationVerificationRequest$json = {
+  '1': 'CheckOrganizationVerificationRequest',
+  '2': [
+    {'1': 'profile_id', '3': 1, '4': 1, '5': 9, '10': 'profileId'},
+  ],
+};
+
+/// Descriptor for `CheckOrganizationVerificationRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List checkOrganizationVerificationRequestDescriptor =
+    $convert.base64Decode(
+        'CiRDaGVja09yZ2FuaXphdGlvblZlcmlmaWNhdGlvblJlcXVlc3QSHQoKcHJvZmlsZV9pZBgBIA'
+        'EoCVIJcHJvZmlsZUlk');
+
+@$core.Deprecated('Use checkOrganizationVerificationResponseDescriptor instead')
+const CheckOrganizationVerificationResponse$json = {
+  '1': 'CheckOrganizationVerificationResponse',
+  '2': [
+    {
+      '1': 'verification_status',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.user.v1.VerificationStatus',
+      '10': 'verificationStatus'
+    },
+  ],
+};
+
+/// Descriptor for `CheckOrganizationVerificationResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List checkOrganizationVerificationResponseDescriptor =
+    $convert.base64Decode(
+        'CiVDaGVja09yZ2FuaXphdGlvblZlcmlmaWNhdGlvblJlc3BvbnNlElIKE3ZlcmlmaWNhdGlvbl'
+        '9zdGF0dXMYASABKAsyIS52b2ljZS51c2VyLnYxLlZlcmlmaWNhdGlvblN0YXR1c1ISdmVyaWZp'
+        'Y2F0aW9uU3RhdHVz');
+
+@$core.Deprecated('Use applyDowngradeProfilesRequestDescriptor instead')
+const ApplyDowngradeProfilesRequest$json = {
+  '1': 'ApplyDowngradeProfilesRequest',
+  '2': [
+    {'1': 'account_id', '3': 1, '4': 1, '5': 9, '10': 'accountId'},
+    {'1': 'kept_profile_ids', '3': 2, '4': 3, '5': 9, '10': 'keptProfileIds'},
+  ],
+};
+
+/// Descriptor for `ApplyDowngradeProfilesRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List applyDowngradeProfilesRequestDescriptor =
+    $convert.base64Decode(
+        'Ch1BcHBseURvd25ncmFkZVByb2ZpbGVzUmVxdWVzdBIdCgphY2NvdW50X2lkGAEgASgJUglhY2'
+        'NvdW50SWQSKAoQa2VwdF9wcm9maWxlX2lkcxgCIAMoCVIOa2VwdFByb2ZpbGVJZHM=');
+
+@$core.Deprecated('Use applyDowngradeProfilesResponseDescriptor instead')
+const ApplyDowngradeProfilesResponse$json = {
+  '1': 'ApplyDowngradeProfilesResponse',
+  '2': [
+    {'1': 'kept_profile_ids', '3': 1, '4': 3, '5': 9, '10': 'keptProfileIds'},
+  ],
+};
+
+/// Descriptor for `ApplyDowngradeProfilesResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List applyDowngradeProfilesResponseDescriptor =
+    $convert.base64Decode(
+        'Ch5BcHBseURvd25ncmFkZVByb2ZpbGVzUmVzcG9uc2USKAoQa2VwdF9wcm9maWxlX2lkcxgBIA'
+        'MoCVIOa2VwdFByb2ZpbGVJZHM=');

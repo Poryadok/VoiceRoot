@@ -124,15 +124,39 @@ void main() {
               200,
             );
           }
+          if (path == '/api/v1/users/profiles' && req.method == 'GET') {
+            return http.Response(
+              jsonEncode({
+                'profile_list': {
+                  'profiles': [
+                    {
+                      'id': ownerId,
+                      'account_id': 'acc-owner',
+                      'username': 'owner',
+                      'discriminator': '0001',
+                      'display_name': 'Owner',
+                      'is_primary': true,
+                      'verification_type': 'none',
+                    },
+                  ],
+                },
+              }),
+              200,
+            );
+          }
           if (path.startsWith('/api/v1/users/profiles/')) {
-            final id = path.split('/').last;
+            final segments = path.split('/');
+            final id = segments.length >= 5 ? segments[4] : path.split('/').last;
             return http.Response(
               jsonEncode({
                 'profile': {
                   'id': id,
                   'account_id': 'acc-$id',
-                  'handle': '@$id',
-                  'display_name': id,
+                  'username': id,
+                  'discriminator': '0001',
+                  'display_name': id == ownerId ? 'Owner' : 'Member',
+                  'is_primary': id == ownerId,
+                  'verification_type': 'none',
                 },
               }),
               200,
@@ -150,6 +174,16 @@ void main() {
 
     expect(find.byKey(ChatInfoPanel.panelKey), findsOneWidget);
     expect(find.text('Owner'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(GroupMembersSheet.kickMemberKey(memberId)),
+      48,
+      scrollable: find
+          .descendant(
+            of: find.byKey(ChatInfoPanel.panelKey),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
     expect(
       find.byKey(GroupMembersSheet.kickMemberKey(memberId)),
       findsOneWidget,
@@ -158,8 +192,7 @@ void main() {
       find.byKey(GroupMembersSheet.kickMemberKey(ownerId)),
       findsNothing,
     );
-    expect(find.byKey(GroupMembersSheet.ownerLeaveHintKey), findsOneWidget);
-    expect(find.byKey(GroupMembersSheet.leaveKey), findsNothing);
+    expect(find.byKey(GroupMembersSheet.leaveKey), findsOneWidget);
   });
 }
 

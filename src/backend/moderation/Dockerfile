@@ -6,12 +6,16 @@ WORKDIR /src
 COPY pkg/go.mod ./pkg/
 COPY moderation/go.mod ./moderation/
 COPY voice/pb/voice/moderation/go.mod ./voice/pb/voice/moderation/
+COPY voice/pb/voice/auth/go.mod ./voice/pb/voice/auth/
 COPY chat/pb/voice/chat/go.mod ./chat/pb/voice/chat/
 COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
+COPY user/pb/voice/user/go.mod ./user/pb/voice/user/
 RUN cd moderation && go mod download
 COPY pkg ./pkg
 COPY chat/pb/voice/chat ./chat/pb/voice/chat
 COPY user/pb/voice/common ./user/pb/voice/common
+COPY user/pb/voice/user ./user/pb/voice/user
+COPY voice/pb/voice/auth ./voice/pb/voice/auth
 COPY voice/pb/voice/moderation ./voice/pb/voice/moderation
 COPY moderation ./moderation
 WORKDIR /src/moderation

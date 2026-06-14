@@ -2055,6 +2055,122 @@ class GetBillingHistoryResponse extends $pb.GeneratedMessage {
   BillingHistoryList ensureBillingHistoryList() => $_ensure(0);
 }
 
+class ApplyDowngradeProfilesRequest extends $pb.GeneratedMessage {
+  factory ApplyDowngradeProfilesRequest({
+    $core.String? accountId,
+    $core.Iterable<$core.String>? keptProfileIds,
+  }) {
+    final result = create();
+    if (accountId != null) result.accountId = accountId;
+    if (keptProfileIds != null) result.keptProfileIds.addAll(keptProfileIds);
+    return result;
+  }
+
+  ApplyDowngradeProfilesRequest._();
+
+  factory ApplyDowngradeProfilesRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ApplyDowngradeProfilesRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ApplyDowngradeProfilesRequest',
+      package: const $pb.PackageName(
+          _omitMessageNames ? '' : 'voice.subscription.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'accountId')
+    ..pPS(2, _omitFieldNames ? '' : 'keptProfileIds')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplyDowngradeProfilesRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplyDowngradeProfilesRequest copyWith(
+          void Function(ApplyDowngradeProfilesRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as ApplyDowngradeProfilesRequest))
+          as ApplyDowngradeProfilesRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ApplyDowngradeProfilesRequest create() =>
+      ApplyDowngradeProfilesRequest._();
+  @$core.override
+  ApplyDowngradeProfilesRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ApplyDowngradeProfilesRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ApplyDowngradeProfilesRequest>(create);
+  static ApplyDowngradeProfilesRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get accountId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set accountId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAccountId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAccountId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $pb.PbList<$core.String> get keptProfileIds => $_getList(1);
+}
+
+class ApplyDowngradeProfilesResponse extends $pb.GeneratedMessage {
+  factory ApplyDowngradeProfilesResponse({
+    $core.Iterable<$core.String>? keptProfileIds,
+  }) {
+    final result = create();
+    if (keptProfileIds != null) result.keptProfileIds.addAll(keptProfileIds);
+    return result;
+  }
+
+  ApplyDowngradeProfilesResponse._();
+
+  factory ApplyDowngradeProfilesResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ApplyDowngradeProfilesResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ApplyDowngradeProfilesResponse',
+      package: const $pb.PackageName(
+          _omitMessageNames ? '' : 'voice.subscription.v1'),
+      createEmptyInstance: create)
+    ..pPS(1, _omitFieldNames ? '' : 'keptProfileIds')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplyDowngradeProfilesResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplyDowngradeProfilesResponse copyWith(
+          void Function(ApplyDowngradeProfilesResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as ApplyDowngradeProfilesResponse))
+          as ApplyDowngradeProfilesResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ApplyDowngradeProfilesResponse create() =>
+      ApplyDowngradeProfilesResponse._();
+  @$core.override
+  ApplyDowngradeProfilesResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ApplyDowngradeProfilesResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ApplyDowngradeProfilesResponse>(create);
+  static ApplyDowngradeProfilesResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $pb.PbList<$core.String> get keptProfileIds => $_getList(0);
+}
+
 const $core.bool _omitFieldNames =
     $core.bool.fromEnvironment('protobuf.omit_field_names');
 const $core.bool _omitMessageNames =

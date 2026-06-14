@@ -30,6 +30,7 @@ const (
 	SubscriptionService_HandlePaddleWebhook_FullMethodName        = "/voice.subscription.v1.SubscriptionService/HandlePaddleWebhook"
 	SubscriptionService_HandleCloudPaymentsWebhook_FullMethodName = "/voice.subscription.v1.SubscriptionService/HandleCloudPaymentsWebhook"
 	SubscriptionService_GetBillingHistory_FullMethodName          = "/voice.subscription.v1.SubscriptionService/GetBillingHistory"
+	SubscriptionService_ApplyDowngradeProfiles_FullMethodName     = "/voice.subscription.v1.SubscriptionService/ApplyDowngradeProfiles"
 )
 
 // SubscriptionServiceClient is the client API for SubscriptionService service.
@@ -49,6 +50,8 @@ type SubscriptionServiceClient interface {
 	HandlePaddleWebhook(ctx context.Context, in *HandlePaddleWebhookRequest, opts ...grpc.CallOption) (*HandlePaddleWebhookResponse, error)
 	HandleCloudPaymentsWebhook(ctx context.Context, in *HandleCloudPaymentsWebhookRequest, opts ...grpc.CallOption) (*HandleCloudPaymentsWebhookResponse, error)
 	GetBillingHistory(ctx context.Context, in *GetBillingHistoryRequest, opts ...grpc.CallOption) (*GetBillingHistoryResponse, error)
+	// Phase 13: keep selected profiles when downgrading from premium (multi-profile.md).
+	ApplyDowngradeProfiles(ctx context.Context, in *ApplyDowngradeProfilesRequest, opts ...grpc.CallOption) (*ApplyDowngradeProfilesResponse, error)
 }
 
 type subscriptionServiceClient struct {
@@ -169,6 +172,16 @@ func (c *subscriptionServiceClient) GetBillingHistory(ctx context.Context, in *G
 	return out, nil
 }
 
+func (c *subscriptionServiceClient) ApplyDowngradeProfiles(ctx context.Context, in *ApplyDowngradeProfilesRequest, opts ...grpc.CallOption) (*ApplyDowngradeProfilesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApplyDowngradeProfilesResponse)
+	err := c.cc.Invoke(ctx, SubscriptionService_ApplyDowngradeProfiles_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SubscriptionServiceServer is the server API for SubscriptionService service.
 // All implementations must embed UnimplementedSubscriptionServiceServer
 // for forward compatibility.
@@ -186,6 +199,8 @@ type SubscriptionServiceServer interface {
 	HandlePaddleWebhook(context.Context, *HandlePaddleWebhookRequest) (*HandlePaddleWebhookResponse, error)
 	HandleCloudPaymentsWebhook(context.Context, *HandleCloudPaymentsWebhookRequest) (*HandleCloudPaymentsWebhookResponse, error)
 	GetBillingHistory(context.Context, *GetBillingHistoryRequest) (*GetBillingHistoryResponse, error)
+	// Phase 13: keep selected profiles when downgrading from premium (multi-profile.md).
+	ApplyDowngradeProfiles(context.Context, *ApplyDowngradeProfilesRequest) (*ApplyDowngradeProfilesResponse, error)
 	mustEmbedUnimplementedSubscriptionServiceServer()
 }
 
@@ -228,6 +243,9 @@ func (UnimplementedSubscriptionServiceServer) HandleCloudPaymentsWebhook(context
 }
 func (UnimplementedSubscriptionServiceServer) GetBillingHistory(context.Context, *GetBillingHistoryRequest) (*GetBillingHistoryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetBillingHistory not implemented")
+}
+func (UnimplementedSubscriptionServiceServer) ApplyDowngradeProfiles(context.Context, *ApplyDowngradeProfilesRequest) (*ApplyDowngradeProfilesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ApplyDowngradeProfiles not implemented")
 }
 func (UnimplementedSubscriptionServiceServer) mustEmbedUnimplementedSubscriptionServiceServer() {}
 func (UnimplementedSubscriptionServiceServer) testEmbeddedByValue()                             {}
@@ -448,6 +466,24 @@ func _SubscriptionService_GetBillingHistory_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SubscriptionService_ApplyDowngradeProfiles_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplyDowngradeProfilesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SubscriptionServiceServer).ApplyDowngradeProfiles(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SubscriptionService_ApplyDowngradeProfiles_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SubscriptionServiceServer).ApplyDowngradeProfiles(ctx, req.(*ApplyDowngradeProfilesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SubscriptionService_ServiceDesc is the grpc.ServiceDesc for SubscriptionService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -498,6 +534,10 @@ var SubscriptionService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetBillingHistory",
 			Handler:    _SubscriptionService_GetBillingHistory_Handler,
+		},
+		{
+			MethodName: "ApplyDowngradeProfiles",
+			Handler:    _SubscriptionService_ApplyDowngradeProfiles_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

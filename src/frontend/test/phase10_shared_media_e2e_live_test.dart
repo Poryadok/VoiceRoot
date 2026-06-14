@@ -105,5 +105,5 @@ void main() {
       (linksList as MessagesApiOk<SharedMediaListData>).data.items,
       isNotEmpty,
     );
-  });
+  }, skip: runLiveIntegration ? null : 'opt-in live');
 }

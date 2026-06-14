@@ -114,6 +114,16 @@ class SubscriptionServiceClient extends $grpc.Client {
     return $createUnaryCall(_$getBillingHistory, request, options: options);
   }
 
+  /// Phase 13: keep selected profiles when downgrading from premium (multi-profile.md).
+  $grpc.ResponseFuture<$0.ApplyDowngradeProfilesResponse>
+      applyDowngradeProfiles(
+    $0.ApplyDowngradeProfilesRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$applyDowngradeProfiles, request,
+        options: options);
+  }
+
   // method descriptors
 
   static final _$getSubscription =
@@ -173,6 +183,11 @@ class SubscriptionServiceClient extends $grpc.Client {
       '/voice.subscription.v1.SubscriptionService/GetBillingHistory',
       ($0.GetBillingHistoryRequest value) => value.writeToBuffer(),
       $0.GetBillingHistoryResponse.fromBuffer);
+  static final _$applyDowngradeProfiles = $grpc.ClientMethod<
+          $0.ApplyDowngradeProfilesRequest, $0.ApplyDowngradeProfilesResponse>(
+      '/voice.subscription.v1.SubscriptionService/ApplyDowngradeProfiles',
+      ($0.ApplyDowngradeProfilesRequest value) => value.writeToBuffer(),
+      $0.ApplyDowngradeProfilesResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.subscription.v1.SubscriptionService')
@@ -277,6 +292,15 @@ abstract class SubscriptionServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.GetBillingHistoryRequest.fromBuffer(value),
         ($0.GetBillingHistoryResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ApplyDowngradeProfilesRequest,
+            $0.ApplyDowngradeProfilesResponse>(
+        'ApplyDowngradeProfiles',
+        applyDowngradeProfiles_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ApplyDowngradeProfilesRequest.fromBuffer(value),
+        ($0.ApplyDowngradeProfilesResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.GetSubscriptionResponse> getSubscription_Pre(
@@ -377,4 +401,13 @@ abstract class SubscriptionServiceBase extends $grpc.Service {
 
   $async.Future<$0.GetBillingHistoryResponse> getBillingHistory(
       $grpc.ServiceCall call, $0.GetBillingHistoryRequest request);
+
+  $async.Future<$0.ApplyDowngradeProfilesResponse> applyDowngradeProfiles_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.ApplyDowngradeProfilesRequest> $request) async {
+    return applyDowngradeProfiles($call, await $request);
+  }
+
+  $async.Future<$0.ApplyDowngradeProfilesResponse> applyDowngradeProfiles(
+      $grpc.ServiceCall call, $0.ApplyDowngradeProfilesRequest request);
 }

@@ -29,6 +29,7 @@ import (
 	chatv1 "voice.app/voice/chat/v1"
 	filev1 "voice.app/voice/file/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
+	moderationv1 "voice.app/voice/moderation/v1"
 	rolev1 "voice.app/voice/role/v1"
 	userv1 "voice.app/voice/user/v1"
 )
@@ -202,6 +203,22 @@ func main() {
 			msgEvents = jsPub
 		}
 
+		var platformMod grpcsvc.PlatformModerationChecker
+		if modAddr := strings.TrimSpace(os.Getenv("MODERATION_GRPC_ADDR")); modAddr != "" {
+			mconn, err := grpc.NewClient(grpcclient.DialTarget(modAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if err != nil {
+				log.Fatalf("moderation grpc: %v", err)
+			}
+			defer func() { _ = mconn.Close() }()
+			waitCtx, waitCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			if err := waitForGRPCReady(waitCtx, mconn); err != nil {
+				waitCancel()
+				log.Fatalf("moderation grpc dial: %v", err)
+			}
+			waitCancel()
+			platformMod = &s2s.GRPCPlatformModeration{Client: moderationv1.NewModerationServiceClient(mconn)}
+		}
+
 		lis, err := net.Listen("tcp", grpcListen)
 		if err != nil {
 			log.Fatalf("grpc listen: %v", err)
@@ -233,6 +250,7 @@ func main() {
 			}(),
 			RolePermissions: rolePerms,
 			UserPresence:    userPresence,
+			PlatformMod:     platformMod,
 		})
 		go func() {
 			logger.Info("gRPC listening", slog.String("addr", grpcListen))

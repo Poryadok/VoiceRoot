@@ -86,4 +86,22 @@ public class InMemoryAccountRepository implements AccountRepository {
         enabled,
         existing.createdAt()));
   }
+
+  @Override
+  public synchronized void setStatus(UUID accountId, String status) {
+    Account existing = byId.get(accountId);
+    if (existing == null) {
+      return;
+    }
+    byId.put(accountId, new Account(
+        existing.id(),
+        existing.email(),
+        existing.phone(),
+        existing.passwordHash(),
+        existing.type(),
+        status,
+        existing.totpSecret(),
+        existing.totpEnabled(),
+        existing.createdAt()));
+  }
 }

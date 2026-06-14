@@ -1,5 +1,9 @@
 package voice.backend.auth.grpc;
 
+import app.voice.auth.v1.SetAccountStatusRequest;
+import app.voice.auth.v1.SetAccountStatusResponse;
+import app.voice.auth.v1.SwitchActiveProfileRequest;
+import app.voice.auth.v1.SwitchActiveProfileResponse;
 import app.voice.auth.v1.AuthServiceGrpc;
 import app.voice.auth.v1.AuthSession;
 import app.voice.auth.v1.Enable2FARequest;
@@ -108,6 +112,31 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
   @Override
   public void getJWKS(GetJWKSRequest request, StreamObserver<GetJWKSResponse> responseObserver) {
     run(responseObserver, () -> GetJWKSResponse.newBuilder().setKeysJson(authService.jwksJson()).build());
+  }
+
+  @Override
+  public void setAccountStatus(SetAccountStatusRequest request, StreamObserver<SetAccountStatusResponse> responseObserver) {
+    run(responseObserver, () -> {
+      authService.setAccountStatus(request.getAccountId(), request.getStatus());
+      return SetAccountStatusResponse.getDefaultInstance();
+    });
+  }
+
+  @Override
+  public void switchActiveProfile(
+      SwitchActiveProfileRequest request, StreamObserver<SwitchActiveProfileResponse> responseObserver) {
+    run(responseObserver, () -> {
+      String token = request.getAccessToken();
+      if (token == null || token.isBlank()) {
+        token = lastAccessToken.get();
+      } else if (!token.regionMatches(true, 0, "Bearer ", 0, 7)) {
+        token = "Bearer " + token.trim();
+      }
+      voice.backend.auth.service.AuthSession session =
+          authService.switchActiveProfile(token, request.getProfileId(), request.getDeviceInfoJson());
+      rememberAccess(session.accessToken());
+      return SwitchActiveProfileResponse.newBuilder().setSession(toProto(session)).build();
+    });
   }
 
   private <T> void run(StreamObserver<T> observer, GrpcCall<T> call) {

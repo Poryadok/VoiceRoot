@@ -288,6 +288,9 @@ VoiceProfile voiceProfileFromProto(user_pb.Profile profile) {
         ? emptyToNull(profile.customStatus)
         : null,
     isPrimary: profile.isPrimary,
+    verificationType: profile.verificationType.isNotEmpty
+        ? profile.verificationType
+        : 'none',
     verificationBadge: profile.hasVerificationBadge()
         ? emptyToNull(profile.verificationBadge)
         : null,

@@ -15,11 +15,13 @@ COPY user/pb/voice/user/go.mod ./user/pb/voice/user/
 COPY user/pb/voice/social/go.mod ./user/pb/voice/social/
 COPY role/go.mod ./role/
 COPY role/pb/voice/role/go.mod ./role/pb/voice/role/
+COPY voice/pb/voice/moderation/go.mod ./voice/pb/voice/moderation/
 RUN cd messaging && go mod download
 COPY pkg ./pkg
 COPY user/pb ./user/pb
 COPY file/pb ./file/pb
 COPY role/pb ./role/pb
+COPY voice/pb/voice/moderation ./voice/pb/voice/moderation
 COPY role/permissions ./role/permissions
 COPY role ./role
 COPY messaging/pb ./messaging/pb

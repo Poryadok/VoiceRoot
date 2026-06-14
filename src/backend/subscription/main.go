@@ -15,13 +15,16 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	grpcsvc "voice/backend/subscription/internal/grpcsvc"
 	"voice/backend/subscription/internal/store"
+	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
 
 	subscriptionv1 "voice.app/voice/subscription/v1"
+	userv1 "voice.app/voice/user/v1"
 )
 
 const serviceName = "subscription"
@@ -57,8 +60,18 @@ func main() {
 			log.Fatalf("grpc listen: %v", err)
 		}
 		st := &store.SubscriptionStore{Pool: pool}
+		svc := grpcsvc.NewSubscriptionGRPC(st)
+		if userAddr := grpcclient.DialTarget(strings.TrimSpace(os.Getenv("USER_GRPC_ADDR"))); userAddr != "" {
+			conn, err := grpc.NewClient(userAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if err != nil {
+				log.Fatalf("user grpc: %v", err)
+			}
+			defer conn.Close()
+			svc.UserProfiles = &grpcsvc.UserGRPCProfileDowngrade{Client: userv1.NewUserServiceClient(conn)}
+			logger.Info("user profile downgrade client enabled", slog.String("addr", userAddr))
+		}
 		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger)...)
-		subscriptionv1.RegisterSubscriptionServiceServer(grpcSrv, grpcsvc.NewSubscriptionGRPC(st))
+		subscriptionv1.RegisterSubscriptionServiceServer(grpcSrv, svc)
 		go func() {
 			logger.Info("gRPC listening", slog.String("addr", grpcAddr))
 			if err := grpcSrv.Serve(lis); err != nil {

@@ -27,6 +27,8 @@ type UserGRPC struct {
 	Profiles *store.ProfileStore
 	Privacy  *store.PrivacyStore
 	Presence *store.PresenceStore
+	// DNSResolver optional; nil uses system resolver.
+	DNSResolver DNSResolver
 	// Blocks optional Social S2S checker; nil skips block filtering (dev / tests).
 	Blocks AccountBlockChecker
 	// AvatarPresigner optional; nil → CreateAvatarPresignedUpload returns FailedPrecondition.
@@ -225,6 +227,14 @@ func (s *UserGRPC) CreateProfile(ctx context.Context, req *userv1.CreateProfileR
 		if u == "" {
 			return nil, status.Error(codes.InvalidArgument, "username must not be empty when set")
 		}
+		key := store.NormalizeUsernameKey(u)
+		conflict, err := s.Profiles.HasVerifiedUsernameConflict(ctx, key, uuid.Nil)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		if conflict {
+			return nil, status.Error(codes.FailedPrecondition, "username too similar to verified profile")
+		}
 		usernameHint = &u
 	}
 	row, err := s.Profiles.CreateSecondaryProfile(ctx, accountID, dn, usernameHint)
@@ -260,10 +270,20 @@ func (s *UserGRPC) SwitchProfile(ctx context.Context, req *userv1.SwitchProfileR
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	if row == nil {
+		// Deleted or foreign profile.
+		var deleted bool
+		_ = s.Profiles.Pool().QueryRow(ctx, `SELECT deleted_at IS NOT NULL FROM profiles WHERE id = $1 AND account_id = $2`, profileID, accountID).Scan(&deleted)
+		if deleted {
+			return nil, status.Error(codes.FailedPrecondition, "profile is deleted")
+		}
 		return nil, status.Error(codes.NotFound, "profile not found or not owned")
 	}
 	if row.FrozenAt != nil {
 		return nil, status.Error(codes.FailedPrecondition, "profile is frozen")
+	}
+	oldProfileID, _ := authctx.ProfileID(ctx)
+	if s.Events != nil && oldProfileID != uuid.Nil && oldProfileID != profileID {
+		_ = s.Events.PublishProfileSwitched(ctx, accountID.String(), oldProfileID.String(), profileID.String())
 	}
 	return &userv1.SwitchProfileResponse{Profile: rowToProto(row)}, nil
 }
@@ -332,6 +352,9 @@ func rowToProto(p *store.ProfileRow) *userv1.Profile {
 	}
 	if p.VerificationBadge != nil {
 		out.VerificationBadge = proto.String(*p.VerificationBadge)
+	}
+	if p.FrozenAt != nil {
+		out.FrozenAt = timestamppb.New(*p.FrozenAt)
 	}
 	return out
 }

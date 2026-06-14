@@ -1113,6 +1113,28 @@ class AppLocalizationsRu extends AppLocalizations {
   String get securitySettingsTitle => 'Безопасность';
 
   @override
+  String get verificationSettingsTitle => 'Верификация';
+
+  @override
+  String get verificationSettingsHint =>
+      'Привяжите платформы для значка верификации или подтвердите домен организации.';
+
+  @override
+  String get verificationLinkedAccountsTitle => 'Связанные аккаунты';
+
+  @override
+  String get verificationLinkedAccountsEmpty => 'Связанных аккаунтов пока нет.';
+
+  @override
+  String get verificationLinkTwitch => 'Привязать Twitch';
+
+  @override
+  String get verifiedBadgePersonal => 'Верифицирован';
+
+  @override
+  String get verifiedBadgeOrganization => 'Верифицированная организация';
+
+  @override
   String get security2faEnableTitle => 'Двухфакторная аутентификация';
 
   @override

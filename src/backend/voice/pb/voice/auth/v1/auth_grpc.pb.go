@@ -19,18 +19,20 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AuthService_Register_FullMethodName       = "/voice.auth.v1.AuthService/Register"
-	AuthService_Login_FullMethodName          = "/voice.auth.v1.AuthService/Login"
-	AuthService_Logout_FullMethodName         = "/voice.auth.v1.AuthService/Logout"
-	AuthService_RefreshToken_FullMethodName   = "/voice.auth.v1.AuthService/RefreshToken"
-	AuthService_Enable2FA_FullMethodName      = "/voice.auth.v1.AuthService/Enable2FA"
-	AuthService_Verify2FA_FullMethodName      = "/voice.auth.v1.AuthService/Verify2FA"
-	AuthService_VerifyOTP_FullMethodName      = "/voice.auth.v1.AuthService/VerifyOTP"
-	AuthService_ConvertGuest_FullMethodName   = "/voice.auth.v1.AuthService/ConvertGuest"
-	AuthService_DeleteAccount_FullMethodName  = "/voice.auth.v1.AuthService/DeleteAccount"
-	AuthService_RestoreAccount_FullMethodName = "/voice.auth.v1.AuthService/RestoreAccount"
-	AuthService_ValidateToken_FullMethodName  = "/voice.auth.v1.AuthService/ValidateToken"
-	AuthService_GetJWKS_FullMethodName        = "/voice.auth.v1.AuthService/GetJWKS"
+	AuthService_Register_FullMethodName            = "/voice.auth.v1.AuthService/Register"
+	AuthService_Login_FullMethodName               = "/voice.auth.v1.AuthService/Login"
+	AuthService_Logout_FullMethodName              = "/voice.auth.v1.AuthService/Logout"
+	AuthService_RefreshToken_FullMethodName        = "/voice.auth.v1.AuthService/RefreshToken"
+	AuthService_Enable2FA_FullMethodName           = "/voice.auth.v1.AuthService/Enable2FA"
+	AuthService_Verify2FA_FullMethodName           = "/voice.auth.v1.AuthService/Verify2FA"
+	AuthService_VerifyOTP_FullMethodName           = "/voice.auth.v1.AuthService/VerifyOTP"
+	AuthService_ConvertGuest_FullMethodName        = "/voice.auth.v1.AuthService/ConvertGuest"
+	AuthService_DeleteAccount_FullMethodName       = "/voice.auth.v1.AuthService/DeleteAccount"
+	AuthService_RestoreAccount_FullMethodName      = "/voice.auth.v1.AuthService/RestoreAccount"
+	AuthService_ValidateToken_FullMethodName       = "/voice.auth.v1.AuthService/ValidateToken"
+	AuthService_GetJWKS_FullMethodName             = "/voice.auth.v1.AuthService/GetJWKS"
+	AuthService_SwitchActiveProfile_FullMethodName = "/voice.auth.v1.AuthService/SwitchActiveProfile"
+	AuthService_SetAccountStatus_FullMethodName    = "/voice.auth.v1.AuthService/SetAccountStatus"
 )
 
 // AuthServiceClient is the client API for AuthService service.
@@ -53,6 +55,10 @@ type AuthServiceClient interface {
 	ValidateToken(ctx context.Context, in *ValidateTokenRequest, opts ...grpc.CallOption) (*ValidateTokenResponse, error)
 	// Public JWKS for JWT verification.
 	GetJWKS(ctx context.Context, in *GetJWKSRequest, opts ...grpc.CallOption) (*GetJWKSResponse, error)
+	// Phase 13: switch active profile claim in next access JWT (primary-profile-bootstrap.md).
+	SwitchActiveProfile(ctx context.Context, in *SwitchActiveProfileRequest, opts ...grpc.CallOption) (*SwitchActiveProfileResponse, error)
+	// Phase 14: internal — platform moderation suspends account (docs/PLAN.md phase 14).
+	SetAccountStatus(ctx context.Context, in *SetAccountStatusRequest, opts ...grpc.CallOption) (*SetAccountStatusResponse, error)
 }
 
 type authServiceClient struct {
@@ -183,6 +189,26 @@ func (c *authServiceClient) GetJWKS(ctx context.Context, in *GetJWKSRequest, opt
 	return out, nil
 }
 
+func (c *authServiceClient) SwitchActiveProfile(ctx context.Context, in *SwitchActiveProfileRequest, opts ...grpc.CallOption) (*SwitchActiveProfileResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SwitchActiveProfileResponse)
+	err := c.cc.Invoke(ctx, AuthService_SwitchActiveProfile_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) SetAccountStatus(ctx context.Context, in *SetAccountStatusRequest, opts ...grpc.CallOption) (*SetAccountStatusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetAccountStatusResponse)
+	err := c.cc.Invoke(ctx, AuthService_SetAccountStatus_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AuthServiceServer is the server API for AuthService service.
 // All implementations must embed UnimplementedAuthServiceServer
 // for forward compatibility.
@@ -203,6 +229,10 @@ type AuthServiceServer interface {
 	ValidateToken(context.Context, *ValidateTokenRequest) (*ValidateTokenResponse, error)
 	// Public JWKS for JWT verification.
 	GetJWKS(context.Context, *GetJWKSRequest) (*GetJWKSResponse, error)
+	// Phase 13: switch active profile claim in next access JWT (primary-profile-bootstrap.md).
+	SwitchActiveProfile(context.Context, *SwitchActiveProfileRequest) (*SwitchActiveProfileResponse, error)
+	// Phase 14: internal — platform moderation suspends account (docs/PLAN.md phase 14).
+	SetAccountStatus(context.Context, *SetAccountStatusRequest) (*SetAccountStatusResponse, error)
 	mustEmbedUnimplementedAuthServiceServer()
 }
 
@@ -248,6 +278,12 @@ func (UnimplementedAuthServiceServer) ValidateToken(context.Context, *ValidateTo
 }
 func (UnimplementedAuthServiceServer) GetJWKS(context.Context, *GetJWKSRequest) (*GetJWKSResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetJWKS not implemented")
+}
+func (UnimplementedAuthServiceServer) SwitchActiveProfile(context.Context, *SwitchActiveProfileRequest) (*SwitchActiveProfileResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SwitchActiveProfile not implemented")
+}
+func (UnimplementedAuthServiceServer) SetAccountStatus(context.Context, *SetAccountStatusRequest) (*SetAccountStatusResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetAccountStatus not implemented")
 }
 func (UnimplementedAuthServiceServer) mustEmbedUnimplementedAuthServiceServer() {}
 func (UnimplementedAuthServiceServer) testEmbeddedByValue()                     {}
@@ -486,6 +522,42 @@ func _AuthService_GetJWKS_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthService_SwitchActiveProfile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SwitchActiveProfileRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).SwitchActiveProfile(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_SwitchActiveProfile_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).SwitchActiveProfile(ctx, req.(*SwitchActiveProfileRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_SetAccountStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetAccountStatusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).SetAccountStatus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_SetAccountStatus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).SetAccountStatus(ctx, req.(*SetAccountStatusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AuthService_ServiceDesc is the grpc.ServiceDesc for AuthService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -540,6 +612,14 @@ var AuthService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetJWKS",
 			Handler:    _AuthService_GetJWKS_Handler,
+		},
+		{
+			MethodName: "SwitchActiveProfile",
+			Handler:    _AuthService_SwitchActiveProfile_Handler,
+		},
+		{
+			MethodName: "SetAccountStatus",
+			Handler:    _AuthService_SetAccountStatus_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -25,6 +25,9 @@ service SubscriptionService {
   rpc HandleCloudPaymentsWebhook(HandleCloudPaymentsWebhookRequest) returns (HandleCloudPaymentsWebhookResponse);
 
   rpc GetBillingHistory(GetBillingHistoryRequest) returns (GetBillingHistoryResponse);
+
+  // Phase 13: keep selected profiles when downgrading from premium (multi-profile.md).
+  rpc ApplyDowngradeProfiles(ApplyDowngradeProfilesRequest) returns (ApplyDowngradeProfilesResponse);
 }
 
 message Subscription {
@@ -159,4 +162,13 @@ message HandlePaddleWebhookResponse {}
 message HandleCloudPaymentsWebhookResponse {}
 message GetBillingHistoryResponse {
   BillingHistoryList billing_history_list = 1;
+}
+
+message ApplyDowngradeProfilesRequest {
+  string account_id = 1;
+  repeated string kept_profile_ids = 2;
+}
+
+message ApplyDowngradeProfilesResponse {
+  repeated string kept_profile_ids = 1;
 }

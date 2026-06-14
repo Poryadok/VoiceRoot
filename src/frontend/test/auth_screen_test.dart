@@ -50,6 +50,28 @@ void main() {
                   200,
                 );
               }
+              if (request.url.path == '/api/v1/users/profiles') {
+                return http.Response(
+                  jsonEncode({
+                    'profile_list': {
+                      'profiles': [
+                        {
+                          'id': 'prof-42',
+                          'account_id': 'acc',
+                          'username': 'alice',
+                          'discriminator': '0001',
+                          'display_name': 'Alice',
+                          'locale': 'en',
+                          'theme': 'dark',
+                          'is_primary': true,
+                          'verification_type': 'none',
+                        },
+                      ],
+                    },
+                  }),
+                  200,
+                );
+              }
               if (request.url.path == '/api/v1/users/profiles/prof-42') {
                 return http.Response(
                   jsonEncode({

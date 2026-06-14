@@ -15,6 +15,7 @@ require (
 	voice.app/voice/events v0.0.0
 	voice.app/voice/file v0.0.0
 	voice.app/voice/messaging v0.0.0
+	voice.app/voice/moderation v0.0.0
 	voice.app/voice/role v0.0.0
 	voice.app/voice/social v0.0.0
 	voice.app/voice/user v0.0.0
@@ -106,3 +107,5 @@ replace voice.app/voice/social => ../user/pb/voice/social
 replace voice.app/voice/user => ../user/pb/voice/user
 
 replace voice.app/voice/file => ../file/pb/voice/file
+
+replace voice.app/voice/moderation => ../voice/pb/voice/moderation

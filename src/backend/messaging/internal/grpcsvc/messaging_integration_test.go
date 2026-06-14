@@ -134,6 +134,7 @@ func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire
 		RolePermissions:  w.RolePermissions,
 		UserPresence:     w.UserPresence,
 		ChatThreadPolicy: &store.SQLChatThreadPolicy{Pool: pool},
+		PlatformMod:      w.PlatformMod,
 	})
 	go func() {
 		if err := srv.Serve(lis); err != nil {
@@ -162,6 +163,7 @@ type messagingWire struct {
 	Files           FileMetadataLookup
 	RolePermissions mentions.RolePermissionChecker
 	UserPresence    mentions.OnlinePresenceLookup
+	PlatformMod     PlatformModerationChecker
 }
 
 func startMessagingServer(t *testing.T, pool *pgxpool.Pool) (messagingv1.MessagingServiceClient, func()) {

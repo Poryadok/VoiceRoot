@@ -39,6 +39,24 @@ func (v staticTokenValidator) Validate(r *http.Request) (tokenClaims, string) {
 	return claims, ""
 }
 
+// chainedTokenValidator checks static dev tokens first, then delegates (e.g. JWKS).
+type chainedTokenValidator struct {
+	static staticTokenValidator
+	next   tokenValidator
+}
+
+func (v chainedTokenValidator) Validate(r *http.Request) (tokenClaims, string) {
+	if len(v.static) > 0 {
+		if claims, code := v.static.Validate(r); code == "" {
+			return claims, ""
+		}
+	}
+	if v.next != nil {
+		return v.next.Validate(r)
+	}
+	return tokenClaims{}, "invalid_token"
+}
+
 func (g *gateway) authenticate(r *http.Request) (tokenClaims, string) {
 	claims, code := g.tokenValidator.Validate(r)
 	if code != "" {

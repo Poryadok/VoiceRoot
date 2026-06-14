@@ -21,6 +21,10 @@ service AuthService {
   rpc RestoreAccount(RestoreAccountRequest) returns (RestoreAccountResponse);
   rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse);
   rpc GetJWKS(GetJWKSRequest) returns (GetJWKSResponse);
+  // Phase 13: switch active profile claim in next access JWT (primary-profile-bootstrap.md).
+  rpc SwitchActiveProfile(SwitchActiveProfileRequest) returns (SwitchActiveProfileResponse);
+  // Phase 14: internal — platform moderation suspends account (docs/PLAN.md phase 14).
+  rpc SetAccountStatus(SetAccountStatusRequest) returns (SetAccountStatusResponse);
 }
 
 message RegisterRequest {
@@ -146,3 +150,21 @@ message TokenClaims {
   string subscription_tier = 4;
   google.protobuf.Timestamp expires_at = 5;
 }
+
+message SwitchActiveProfileRequest {
+  string access_token = 1;
+  string profile_id = 2;
+  string device_info_json = 3;
+}
+
+message SwitchActiveProfileResponse {
+  AuthSession session = 1;
+}
+
+message SetAccountStatusRequest {
+  string account_id = 1;
+  string status = 2; // active | suspended
+  string reason = 3;
+}
+
+message SetAccountStatusResponse {}

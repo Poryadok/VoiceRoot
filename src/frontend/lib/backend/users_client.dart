@@ -48,6 +48,7 @@ class VoiceProfile {
     this.bio,
     this.customStatus,
     this.isPrimary = false,
+    this.verificationType = 'none',
     this.verificationBadge,
   });
 
@@ -60,6 +61,7 @@ class VoiceProfile {
   final String? bio;
   final String? customStatus;
   final bool isPrimary;
+  final String verificationType;
   final String? verificationBadge;
 
   String get handle => '@$username#$discriminator';
@@ -125,7 +127,7 @@ class VoiceUsersClient {
     required String authorization,
   }) async {
     final result = await _gateway.getProto(
-      _gateway.resolve('/api/v1/users/me/profiles'),
+      _gateway.resolve('/api/v1/users/profiles'),
       authorization: authorization,
       createEmpty: user_pb.ListMyProfilesResponse.create,
     );
@@ -133,6 +135,29 @@ class VoiceUsersClient {
       result,
       (data) => voiceProfileListFromProto(
         data.hasProfileList() ? data.profileList : user_pb.ProfileList(),
+      ),
+    );
+  }
+
+  Future<UsersApiResult<VoiceProfile>> createProfile({
+    required String authorization,
+    required String displayName,
+    String? username,
+  }) async {
+    final body = user_pb.CreateProfileRequest(displayName: displayName);
+    if (username != null && username.isNotEmpty) {
+      body.username = username;
+    }
+    final result = await _gateway.postProto(
+      uri: _gateway.resolve('/api/v1/users/profiles'),
+      authorization: authorization,
+      body: body,
+      createEmpty: user_pb.CreateProfileResponse.create,
+    );
+    return _map(
+      result,
+      (data) => voiceProfileFromProto(
+        data.hasProfile() ? data.profile : user_pb.Profile(),
       ),
     );
   }

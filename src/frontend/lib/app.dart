@@ -32,6 +32,7 @@ import 'ui/chat/chat_room_panel.dart';
 import 'ui/core/profile_accent_dot.dart';
 import 'ui/core/voice_bottom_sheet.dart';
 import 'ui/core/voice_state_panel.dart';
+import 'ui/profile/profile_switcher.dart';
 import 'ui/profile/profile_edit_sheet.dart';
 import 'ui/settings/settings_sheet.dart';
 import 'ui/shell/mobile_chat_strip.dart';
@@ -265,6 +266,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           _SessionBar(
+                            useProfileSwitcher: !narrow,
                             onLogout: () => ref
                                 .read(authControllerProvider.notifier)
                                 .logout(),
@@ -302,6 +304,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
 
 class _SessionBar extends StatelessWidget {
   const _SessionBar({
+    required this.useProfileSwitcher,
     required this.onLogout,
     required this.onEditProfile,
     required this.onOpenSettings,
@@ -311,6 +314,7 @@ class _SessionBar extends StatelessWidget {
     required this.settingsTooltip,
   });
 
+  final bool useProfileSwitcher;
   final VoidCallback onLogout;
   final VoidCallback? onEditProfile;
   final VoidCallback onOpenSettings;
@@ -335,12 +339,14 @@ class _SessionBar extends StatelessWidget {
               const ProfileAccentDot(),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(
-                  sessionLabel,
-                  key: const Key('auth_session_profile'),
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: voice.textPrimary),
-                ),
+                child: useProfileSwitcher
+                    ? const ProfileSwitcher()
+                    : Text(
+                        sessionLabel,
+                        key: const Key('auth_session_profile'),
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: voice.textPrimary),
+                      ),
               ),
               IconButton(
                 key: const Key('settings_open'),

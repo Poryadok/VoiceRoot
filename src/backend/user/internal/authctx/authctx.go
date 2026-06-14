@@ -13,6 +13,7 @@ const (
 	HeaderUserID           = "x-voice-user-id"    // JWT claim user_id == account_id
 	HeaderProfileID        = "x-voice-profile-id" // active profile_id (optional for some RPCs)
 	HeaderSubscriptionTier = "x-voice-subscription-tier"
+	HeaderInternalCaller   = "x-voice-internal-caller" // S2S: auth, subscription, …
 )
 
 // AccountID returns the caller's account UUID from incoming gRPC metadata, if present and valid.
@@ -64,4 +65,14 @@ func ProfileID(ctx context.Context) (uuid.UUID, bool) {
 		return uuid.Nil, false
 	}
 	return id, true
+}
+
+// IsInternalService is true when a trusted peer service invokes S2S RPCs.
+func IsInternalService(ctx context.Context) bool {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return false
+	}
+	vals := md.Get(HeaderInternalCaller)
+	return len(vals) > 0 && strings.TrimSpace(vals[0]) != ""
 }

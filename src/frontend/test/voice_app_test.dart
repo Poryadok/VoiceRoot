@@ -51,6 +51,17 @@ void main() {
   });
 
   testWidgets('session bar shows @handle when profile loads', (tester) async {
+    const profileJson = {
+      'id': 'prof-test',
+      'account_id': 'acc-test',
+      'username': 'voiceuser',
+      'discriminator': '4242',
+      'display_name': 'Voice User',
+      'locale': 'en',
+      'theme': 'dark',
+      'is_primary': true,
+      'verification_type': 'none',
+    };
     await tester.pumpWidget(
       ProviderScope(
         overrides: voiceAppTestOverrides(
@@ -58,21 +69,17 @@ void main() {
             if (request.url.path == '/health') {
               return http.Response('OK', 200);
             }
-            if (request.url.path == '/api/v1/users/profiles/prof-test') {
+            if (request.url.path == '/api/v1/users/profiles') {
               return http.Response(
                 jsonEncode({
-                  'profile': {
-                    'id': 'prof-test',
-                    'account_id': 'acc-test',
-                    'username': 'voiceuser',
-                    'discriminator': '4242',
-                    'display_name': 'Voice User',
-                    'locale': 'en',
-                    'theme': 'dark',
-                    'is_primary': true,
-                    'verification_type': 'none',
-                  },
+                  'profile_list': {'profiles': [profileJson]},
                 }),
+                200,
+              );
+            }
+            if (request.url.path == '/api/v1/users/profiles/prof-test') {
+              return http.Response(
+                jsonEncode({'profile': profileJson}),
                 200,
               );
             }

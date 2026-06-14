@@ -61,6 +61,8 @@ type MessagingGRPC struct {
 	ChatThreadPolicy *store.SQLChatThreadPolicy
 	// ChatRolePermissions checks TEXT_CHAT_*_THREADS in space chats.
 	ChatRolePermissions ChatRolePermissions
+	// PlatformMod optional platform moderation (shadow ban, spam mute).
+	PlatformMod PlatformModerationChecker
 }
 
 // ChatRolePermissions checks permissions scoped to a text chat in a space.
@@ -146,6 +148,25 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 	if len(content) > 4000 {
 		return nil, status.Error(codes.InvalidArgument, "content exceeds 4000 characters")
 	}
+	var ghostOnly bool
+	if s.PlatformMod != nil {
+		accountID, ok := authctx.AccountID(ctx)
+		if !ok && s.UserProfiles != nil {
+			var lookupErr error
+			accountID, lookupErr = s.UserProfiles.AccountIDByProfileID(ctx, profileID)
+			ok = lookupErr == nil
+		}
+		if ok {
+			if err := s.PlatformMod.CheckMessageAllowed(ctx, profileID, chatID, content); err != nil {
+				return nil, status.Error(codes.PermissionDenied, err.Error())
+			}
+			banned, err := s.PlatformMod.IsShadowBanned(ctx, accountID)
+			if err != nil {
+				return nil, status.Error(codes.Unavailable, "moderation_unavailable")
+			}
+			ghostOnly = banned
+		}
+	}
 	mentionsRaw := strings.TrimSpace(req.GetMentionsJson())
 	if mentionsRaw == "" {
 		mentionsRaw = "[]"
@@ -214,6 +235,7 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 		AttachmentsJSON: attachments,
 		MentionsJSON:    mentionsJSON,
 		ClientMessageID: clientID,
+		GhostOnly:       ghostOnly,
 	}
 	saved, err := s.Messages.InsertMessage(ctx, row)
 	if err != nil {
@@ -222,7 +244,7 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	if s.MessageEvents != nil {
+	if s.MessageEvents != nil && !ghostOnly {
 		hasMentions := len(mentionTargets) > 0
 		threadParentID := ""
 		if saved.ThreadParentID != nil {

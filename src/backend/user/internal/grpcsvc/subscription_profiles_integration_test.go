@@ -29,7 +29,7 @@ import (
 func applyUserMigrationsForSubscriptionTests(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
 	root := repoRoot(t)
-	for _, name := range []string{"000001_init.up.sql", "000003_profile_subscription.up.sql"} {
+	for _, name := range []string{"000001_init.up.sql", "000003_profile_subscription.up.sql", "000004_phase13_profiles_verification.up.sql"} {
 		sqlBytes, err := os.ReadFile(filepath.Join(root, "src", "backend", "migrations", "user_db", name))
 		require.NoError(t, err)
 		_, err = pool.Exec(ctx, string(sqlBytes))

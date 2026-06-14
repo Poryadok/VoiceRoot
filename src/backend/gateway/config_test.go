@@ -73,10 +73,17 @@ func TestGatewayConfigFromEnvSelectsAuthMode(t *testing.T) {
 	}
 
 	t.Setenv("GATEWAY_AUTH_MODE", "")
+	t.Setenv("GATEWAY_STATIC_TOKENS_JSON", "")
 	t.Setenv("GATEWAY_JWKS_URL", "https://auth.voice.example/.well-known/jwks.json")
 	jwksConfig := loadGatewayConfigFromEnv()
 	if _, ok := jwksConfig.tokenValidator.(*voicejwt.Validator); !ok {
 		t.Fatalf("jwks tokenValidator = %T, want *voicejwt.Validator", jwksConfig.tokenValidator)
+	}
+
+	t.Setenv("GATEWAY_STATIC_TOKENS_JSON", `{"staff-token":{"UserID":"staff","Roles":["staff"]}}`)
+	chainedConfig := loadGatewayConfigFromEnv()
+	if _, ok := chainedConfig.tokenValidator.(chainedTokenValidator); !ok {
+		t.Fatalf("jwks+static tokenValidator = %T, want chainedTokenValidator", chainedConfig.tokenValidator)
 	}
 }
 

@@ -17,8 +17,10 @@ import org.springframework.web.bind.annotation.RestController;
 import voice.backend.auth.service.AuthException;
 import voice.backend.auth.service.AuthService;
 import voice.backend.auth.service.AuthSession;
+import voice.backend.auth.service.LinkedAccountsService;
 import voice.backend.auth.service.LoginCommand;
 import voice.backend.auth.service.LogoutCommand;
+import voice.backend.auth.service.ProfileSwitchException;
 import voice.backend.auth.service.RefreshCommand;
 import voice.backend.auth.service.RegisterCommand;
 import voice.backend.auth.service.TokenClaims;
@@ -28,9 +30,11 @@ import voice.backend.auth.service.TotpEnrollment;
 @RequestMapping("/api/v1/auth")
 public class AuthRestController {
   private final AuthService authService;
+  private final LinkedAccountsService linkedAccountsService;
 
-  public AuthRestController(AuthService authService) {
+  public AuthRestController(AuthService authService, LinkedAccountsService linkedAccountsService) {
     this.authService = authService;
+    this.linkedAccountsService = linkedAccountsService;
   }
 
   @PostMapping("/register")
@@ -78,9 +82,58 @@ public class AuthRestController {
     return ClaimsResponse.from(authService.validate(authorization));
   }
 
+  @PostMapping("/switch-profile")
+  public SessionBody switchProfile(
+      @RequestHeader(name = "Authorization", required = false) String authorization,
+      @Valid @RequestBody SwitchProfileRequest request) {
+    AuthSession session =
+        authService.switchActiveProfile(authorization, request.profileId(), "{}");
+    return SessionBody.from(session);
+  }
+
+  @GetMapping("/linked-accounts")
+  public Map<String, Object> listLinkedAccounts() {
+    return Map.of("linked_accounts", List.of());
+  }
+
+  @PostMapping("/linked-accounts/twitch/callback")
+  public Map<String, String> twitchCallback(
+      @RequestHeader(name = "Authorization", required = false) String authorization,
+      @Valid @RequestBody OAuthCallbackRequest request) {
+    TokenClaims claims = authService.validate(authorization);
+    var result =
+        linkedAccountsService.completeTwitchCallback(
+            java.util.UUID.fromString(claims.profileId()), request.code());
+    return Map.of("verification_type", result.verificationType(), "badge", result.badge());
+  }
+
+  @PostMapping("/linked-accounts/twitch/unlink")
+  public ResponseEntity<Void> twitchUnlink(
+      @RequestHeader(name = "Authorization", required = false) String authorization) {
+    TokenClaims claims = authService.validate(authorization);
+    linkedAccountsService.unlinkTwitch(java.util.UUID.fromString(claims.profileId()));
+    return ResponseEntity.noContent().build();
+  }
+
+  @PostMapping("/linked-accounts/twitch/link")
+  public Map<String, String> twitchLinkStart() {
+    return Map.of("authorization_url", "https://id.twitch.tv/oauth2/authorize");
+  }
+
   @GetMapping("/.well-known/jwks.json")
   public ResponseEntity<String> jwks() {
     return ResponseEntity.ok(authService.jwksJson());
+  }
+
+  @ExceptionHandler(ProfileSwitchException.class)
+  public ResponseEntity<Map<String, String>> profileSwitchError(ProfileSwitchException ex) {
+    HttpStatus status =
+        switch (ex.kind()) {
+          case FORBIDDEN -> HttpStatus.FORBIDDEN;
+          case PRECONDITION -> HttpStatus.PRECONDITION_FAILED;
+          case NOT_FOUND -> HttpStatus.NOT_FOUND;
+        };
+    return ResponseEntity.status(status).body(Map.of("error", ex.getMessage()));
   }
 
   @ExceptionHandler(AuthException.class)
@@ -116,6 +169,11 @@ public class AuthRestController {
       @JsonProperty("device_info_json") String deviceInfoJson) {}
 
   public record LogoutRequest(@JsonProperty("refresh_token") @NotBlank String refreshToken) {}
+
+  public record SwitchProfileRequest(@JsonProperty("profile_id") @NotBlank String profileId) {}
+
+  public record OAuthCallbackRequest(
+      @NotBlank String code, @JsonProperty("redirect_uri") String redirectUri) {}
 
   /** Aligns with proto `RegisterResponse` / `AuthSession` nesting. */
   public record SessionEnvelope(@JsonProperty("session") SessionBody session) {

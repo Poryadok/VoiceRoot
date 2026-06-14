@@ -145,6 +145,7 @@ const ListReportsRequest$json = {
       '6': '.voice.common.v1.CursorPageRequest',
       '10': 'page'
     },
+    {'1': 'queue_filter', '3': 3, '4': 1, '5': 9, '10': 'queueFilter'},
   ],
 };
 
@@ -152,7 +153,7 @@ const ListReportsRequest$json = {
 final $typed_data.Uint8List listReportsRequestDescriptor = $convert.base64Decode(
     'ChJMaXN0UmVwb3J0c1JlcXVlc3QSIwoNc3RhdHVzX2ZpbHRlchgBIAEoCVIMc3RhdHVzRmlsdG'
     'VyEjYKBHBhZ2UYAiABKAsyIi52b2ljZS5jb21tb24udjEuQ3Vyc29yUGFnZVJlcXVlc3RSBHBh'
-    'Z2U=');
+    'Z2USIQoMcXVldWVfZmlsdGVyGAMgASgJUgtxdWV1ZUZpbHRlcg==');
 
 @$core.Deprecated('Use reportListDescriptor instead')
 const ReportList$json = {
@@ -182,6 +183,18 @@ const ResolveReportRequest$json = {
     {'1': 'report_id', '3': 1, '4': 1, '5': 9, '10': 'reportId'},
     {'1': 'resolution_json', '3': 2, '4': 1, '5': 9, '10': 'resolutionJson'},
     {'1': 'new_status', '3': 3, '4': 1, '5': 9, '10': 'newStatus'},
+    {
+      '1': 'assigned_to_profile_id',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'assignedToProfileId',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_assigned_to_profile_id'},
   ],
 };
 
@@ -189,7 +202,8 @@ const ResolveReportRequest$json = {
 final $typed_data.Uint8List resolveReportRequestDescriptor = $convert.base64Decode(
     'ChRSZXNvbHZlUmVwb3J0UmVxdWVzdBIbCglyZXBvcnRfaWQYASABKAlSCHJlcG9ydElkEicKD3'
     'Jlc29sdXRpb25fanNvbhgCIAEoCVIOcmVzb2x1dGlvbkpzb24SHQoKbmV3X3N0YXR1cxgDIAEo'
-    'CVIJbmV3U3RhdHVz');
+    'CVIJbmV3U3RhdHVzEjgKFmFzc2lnbmVkX3RvX3Byb2ZpbGVfaWQYBCABKAlIAFITYXNzaWduZW'
+    'RUb1Byb2ZpbGVJZIgBAUIZChdfYXNzaWduZWRfdG9fcHJvZmlsZV9pZA==');
 
 @$core.Deprecated('Use sanctionDescriptor instead')
 const Sanction$json = {

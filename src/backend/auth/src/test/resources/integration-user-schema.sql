@@ -14,6 +14,8 @@ CREATE TABLE profiles (
     is_primary BOOLEAN NOT NULL DEFAULT true,
     verification_type VARCHAR(32) NOT NULL DEFAULT 'none' CHECK (verification_type IN ('none', 'personal', 'organization')),
     verification_badge VARCHAR(32) NULL,
+    frozen_at TIMESTAMPTZ NULL,
+    deleted_at TIMESTAMPTZ NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

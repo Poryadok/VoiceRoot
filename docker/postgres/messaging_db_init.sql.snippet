@@ -85,3 +85,6 @@ CREATE INDEX IF NOT EXISTS messages_chat_thread_parent_id_desc_idx
 CREATE INDEX IF NOT EXISTS messages_chat_main_feed_idx
     ON messages (chat_id, id DESC)
     WHERE thread_parent_id IS NULL AND deleted_at IS NULL;
+
+-- Phase 14: ghost_only for platform shadow-ban delivery
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS ghost_only BOOLEAN NOT NULL DEFAULT false;

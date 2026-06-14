@@ -55,6 +55,12 @@ service UserService {
   rpc CompleteOnboardingStep(CompleteOnboardingStepRequest) returns (CompleteOnboardingStepResponse);
 
   rpc GetVerificationStatus(GetVerificationStatusRequest) returns (GetVerificationStatusResponse);
+  // S2S from Auth after OAuth identity checks (verification.md).
+  rpc SetVerification(SetVerificationRequest) returns (SetVerificationResponse);
+  rpc ClearVerification(ClearVerificationRequest) returns (ClearVerificationResponse);
+  rpc StartOrganizationVerification(StartOrganizationVerificationRequest) returns (StartOrganizationVerificationResponse);
+  rpc CheckOrganizationVerification(CheckOrganizationVerificationRequest) returns (CheckOrganizationVerificationResponse);
+  rpc ApplyDowngradeProfiles(ApplyDowngradeProfilesRequest) returns (ApplyDowngradeProfilesResponse);
 
   // Phase 1 (PLAN § R2): presigned PUT to Cloudflare R2 for static profile avatar (no File Service).
   rpc CreateAvatarPresignedUpload(CreateAvatarPresignedUploadRequest) returns (CreateAvatarPresignedUploadResponse);
@@ -104,6 +110,7 @@ message Profile {
   optional string verification_badge = 14;
   google.protobuf.Timestamp created_at = 15;
   google.protobuf.Timestamp updated_at = 16;
+  optional google.protobuf.Timestamp frozen_at = 17;
 }
 
 message UpdateProfileRequest {
@@ -294,4 +301,49 @@ message CompleteOnboardingStepResponse {
 }
 message GetVerificationStatusResponse {
   VerificationStatus verification_status = 1;
+}
+
+message SetVerificationRequest {
+  string profile_id = 1;
+  string verification_type = 2; // personal | organization
+  optional string badge = 3;
+}
+
+message SetVerificationResponse {
+  VerificationStatus verification_status = 1;
+}
+
+message ClearVerificationRequest {
+  string profile_id = 1;
+}
+
+message ClearVerificationResponse {
+  VerificationStatus verification_status = 1;
+}
+
+message StartOrganizationVerificationRequest {
+  string profile_id = 1;
+  string domain = 2;
+}
+
+message StartOrganizationVerificationResponse {
+  string domain = 1;
+  string txt_record = 2;
+}
+
+message CheckOrganizationVerificationRequest {
+  string profile_id = 1;
+}
+
+message CheckOrganizationVerificationResponse {
+  VerificationStatus verification_status = 1;
+}
+
+message ApplyDowngradeProfilesRequest {
+  string account_id = 1;
+  repeated string kept_profile_ids = 2;
+}
+
+message ApplyDowngradeProfilesResponse {
+  repeated string kept_profile_ids = 1;
 }

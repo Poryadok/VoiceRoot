@@ -26,6 +26,13 @@ type SubscriptionGRPC struct {
 	subscriptionv1.UnimplementedSubscriptionServiceServer
 	Store   *store.SubscriptionStore
 	Catalog *catalog.ProductCatalog
+	// UserProfiles optional; when set, downgrade delegates profile freeze to User service.
+	UserProfiles UserProfileDowngradeClient
+}
+
+// UserProfileDowngradeClient applies profile selection on subscription downgrade.
+type UserProfileDowngradeClient interface {
+	ApplyDowngradeProfiles(ctx context.Context, accountID uuid.UUID, keptProfileIDs []uuid.UUID) error
 }
 
 // NewSubscriptionGRPC constructs the gRPC service.
@@ -211,6 +218,27 @@ func (s *SubscriptionGRPC) GetBillingHistory(ctx context.Context, req *subscript
 	return &subscriptionv1.GetBillingHistoryResponse{
 		BillingHistoryList: &subscriptionv1.BillingHistoryList{},
 	}, nil
+}
+
+func (s *SubscriptionGRPC) ApplyDowngradeProfiles(ctx context.Context, req *subscriptionv1.ApplyDowngradeProfilesRequest) (*subscriptionv1.ApplyDowngradeProfilesResponse, error) {
+	accountID, err := parseAccountID(req.GetAccountId())
+	if err != nil {
+		return nil, err
+	}
+	kept := make([]uuid.UUID, 0, len(req.GetKeptProfileIds()))
+	for _, raw := range req.GetKeptProfileIds() {
+		id, err := parseUUIDField("kept_profile_id", raw)
+		if err != nil {
+			return nil, err
+		}
+		kept = append(kept, id)
+	}
+	if s.UserProfiles != nil {
+		if err := s.UserProfiles.ApplyDowngradeProfiles(ctx, accountID, kept); err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+	}
+	return &subscriptionv1.ApplyDowngradeProfilesResponse{KeptProfileIds: req.GetKeptProfileIds()}, nil
 }
 
 func subscriptionToProto(row *store.SubscriptionRow) *subscriptionv1.Subscription {

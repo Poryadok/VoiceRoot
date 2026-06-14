@@ -1,0 +1,75 @@
+-- moderation_db — keep in sync with src/backend/migrations/moderation_db/
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+CREATE TABLE IF NOT EXISTS reports (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    reporter_profile_id UUID NOT NULL,
+    target_type VARCHAR(16) NOT NULL CHECK (target_type IN ('user', 'message', 'space')),
+    target_id UUID NOT NULL,
+    category VARCHAR(32) NOT NULL CHECK (category IN ('spam', 'harassment', 'offensive', 'fake', 'cheating', 'other')),
+    description TEXT NULL,
+    evidence JSONB NOT NULL DEFAULT '{}'::jsonb,
+    status VARCHAR(16) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'reviewing', 'resolved', 'dismissed')),
+    assigned_to UUID NULL,
+    resolved_at TIMESTAMPTZ NULL,
+    resolution JSONB NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS reports_target_created_idx ON reports (target_type, target_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS reports_status_created_idx ON reports (status, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS auto_mod_log (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    target_profile_id UUID NOT NULL,
+    trigger VARCHAR(32) NOT NULL,
+    action VARCHAR(32) NOT NULL,
+    details JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    reverted_at TIMESTAMPTZ NULL
+);
+
+CREATE INDEX IF NOT EXISTS auto_mod_log_target_created_idx ON auto_mod_log (target_profile_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS sanctions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    target_account_id UUID NOT NULL,
+    type VARCHAR(32) NOT NULL CHECK (type IN ('warning', 'temp_ban', 'perm_ban', 'shadow_ban', 'mm_ban')),
+    reason TEXT NOT NULL,
+    report_id UUID NULL REFERENCES reports (id),
+    issued_by UUID NOT NULL,
+    expires_at TIMESTAMPTZ NULL,
+    revoked_at TIMESTAMPTZ NULL,
+    revoked_by UUID NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS sanctions_target_active_idx ON sanctions (target_account_id, created_at DESC)
+    WHERE revoked_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS appeals (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    sanction_id UUID NOT NULL REFERENCES sanctions (id),
+    appellant_account_id UUID NOT NULL,
+    reason TEXT NOT NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'denied')),
+    reviewed_by UUID NULL,
+    reviewed_at TIMESTAMPTZ NULL,
+    review_notes TEXT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (sanction_id)
+);
+
+CREATE TABLE IF NOT EXISTS moderation_audit_log (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    actor_profile_id UUID NOT NULL,
+    action VARCHAR(64) NOT NULL,
+    target_type VARCHAR(32) NOT NULL,
+    target_id UUID NOT NULL,
+    details JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS moderation_audit_log_created_idx ON moderation_audit_log (created_at DESC);

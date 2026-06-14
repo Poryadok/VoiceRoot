@@ -277,9 +277,11 @@ func (x *GetReportRequest) GetReportId() string {
 }
 
 type ListReportsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	StatusFilter  string                 `protobuf:"bytes,1,opt,name=status_filter,json=statusFilter,proto3" json:"status_filter,omitempty"`
-	Page          *v1.CursorPageRequest  `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	StatusFilter string                 `protobuf:"bytes,1,opt,name=status_filter,json=statusFilter,proto3" json:"status_filter,omitempty"`
+	Page         *v1.CursorPageRequest  `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
+	// Phase 14: "content" (user/message) vs "spaces" queues — docs/features/reports.md.
+	QueueFilter   string `protobuf:"bytes,3,opt,name=queue_filter,json=queueFilter,proto3" json:"queue_filter,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -326,6 +328,13 @@ func (x *ListReportsRequest) GetPage() *v1.CursorPageRequest {
 		return x.Page
 	}
 	return nil
+}
+
+func (x *ListReportsRequest) GetQueueFilter() string {
+	if x != nil {
+		return x.QueueFilter
+	}
+	return ""
 }
 
 type ReportList struct {
@@ -381,12 +390,13 @@ func (x *ReportList) GetNextCursor() string {
 }
 
 type ResolveReportRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	ReportId       string                 `protobuf:"bytes,1,opt,name=report_id,json=reportId,proto3" json:"report_id,omitempty"`
-	ResolutionJson string                 `protobuf:"bytes,2,opt,name=resolution_json,json=resolutionJson,proto3" json:"resolution_json,omitempty"`
-	NewStatus      string                 `protobuf:"bytes,3,opt,name=new_status,json=newStatus,proto3" json:"new_status,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	ReportId            string                 `protobuf:"bytes,1,opt,name=report_id,json=reportId,proto3" json:"report_id,omitempty"`
+	ResolutionJson      string                 `protobuf:"bytes,2,opt,name=resolution_json,json=resolutionJson,proto3" json:"resolution_json,omitempty"`
+	NewStatus           string                 `protobuf:"bytes,3,opt,name=new_status,json=newStatus,proto3" json:"new_status,omitempty"`
+	AssignedToProfileId *string                `protobuf:"bytes,4,opt,name=assigned_to_profile_id,json=assignedToProfileId,proto3,oneof" json:"assigned_to_profile_id,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *ResolveReportRequest) Reset() {
@@ -436,6 +446,13 @@ func (x *ResolveReportRequest) GetResolutionJson() string {
 func (x *ResolveReportRequest) GetNewStatus() string {
 	if x != nil {
 		return x.NewStatus
+	}
+	return ""
+}
+
+func (x *ResolveReportRequest) GetAssignedToProfileId() string {
+	if x != nil && x.AssignedToProfileId != nil {
+		return *x.AssignedToProfileId
 	}
 	return ""
 }
@@ -1934,20 +1951,23 @@ const file_voice_moderation_v1_moderation_proto_rawDesc = "" +
 	"\revidence_json\x18\x05 \x01(\tR\fevidenceJsonB\x0e\n" +
 	"\f_description\"/\n" +
 	"\x10GetReportRequest\x12\x1b\n" +
-	"\treport_id\x18\x01 \x01(\tR\breportId\"q\n" +
+	"\treport_id\x18\x01 \x01(\tR\breportId\"\x94\x01\n" +
 	"\x12ListReportsRequest\x12#\n" +
 	"\rstatus_filter\x18\x01 \x01(\tR\fstatusFilter\x126\n" +
-	"\x04page\x18\x02 \x01(\v2\".voice.common.v1.CursorPageRequestR\x04page\"d\n" +
+	"\x04page\x18\x02 \x01(\v2\".voice.common.v1.CursorPageRequestR\x04page\x12!\n" +
+	"\fqueue_filter\x18\x03 \x01(\tR\vqueueFilter\"d\n" +
 	"\n" +
 	"ReportList\x125\n" +
 	"\areports\x18\x01 \x03(\v2\x1b.voice.moderation.v1.ReportR\areports\x12\x1f\n" +
 	"\vnext_cursor\x18\x02 \x01(\tR\n" +
-	"nextCursor\"{\n" +
+	"nextCursor\"\xd0\x01\n" +
 	"\x14ResolveReportRequest\x12\x1b\n" +
 	"\treport_id\x18\x01 \x01(\tR\breportId\x12'\n" +
 	"\x0fresolution_json\x18\x02 \x01(\tR\x0eresolutionJson\x12\x1d\n" +
 	"\n" +
-	"new_status\x18\x03 \x01(\tR\tnewStatus\"\xac\x03\n" +
+	"new_status\x18\x03 \x01(\tR\tnewStatus\x128\n" +
+	"\x16assigned_to_profile_id\x18\x04 \x01(\tH\x00R\x13assignedToProfileId\x88\x01\x01B\x19\n" +
+	"\x17_assigned_to_profile_id\"\xac\x03\n" +
 	"\bSanction\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12*\n" +
 	"\x11target_account_id\x18\x02 \x01(\tR\x0ftargetAccountId\x12\x12\n" +
@@ -2186,6 +2206,7 @@ func file_voice_moderation_v1_moderation_proto_init() {
 	}
 	file_voice_moderation_v1_moderation_proto_msgTypes[0].OneofWrappers = []any{}
 	file_voice_moderation_v1_moderation_proto_msgTypes[1].OneofWrappers = []any{}
+	file_voice_moderation_v1_moderation_proto_msgTypes[5].OneofWrappers = []any{}
 	file_voice_moderation_v1_moderation_proto_msgTypes[6].OneofWrappers = []any{}
 	file_voice_moderation_v1_moderation_proto_msgTypes[7].OneofWrappers = []any{}
 	file_voice_moderation_v1_moderation_proto_msgTypes[12].OneofWrappers = []any{}

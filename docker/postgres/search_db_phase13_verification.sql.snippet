@@ -1,0 +1,7 @@
+-- Keep in sync with src/backend/migrations/search_db/000002_phase13_verification_type.up.sql
+
+ALTER TABLE profile_search_documents
+    ADD COLUMN IF NOT EXISTS verification_type TEXT NOT NULL DEFAULT 'none';
+
+CREATE INDEX IF NOT EXISTS profile_search_documents_verified_idx
+    ON profile_search_documents ((CASE WHEN verification_type <> 'none' THEN 0 ELSE 1 END));

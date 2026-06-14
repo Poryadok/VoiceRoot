@@ -1,0 +1,29 @@
+/* Generated from design/tokens/voice.tokens.json — light theme */
+:root {
+  --color-background-canvas: #ffffff;
+  --color-background-surface: #f5f5f5;
+  --color-background-elevated: #eeeeee;
+  --color-background-muted: #e8e8e8;
+  --color-text-primary: #1a1a1a;
+  --color-text-secondary: #5c5c5c;
+  --color-text-disabled: #9e9e9e;
+  --color-border-default: #e0e0e0;
+  --color-border-strong: #1a1a1a;
+  --color-semantic-error: #c62828;
+  --color-focus-ring: #7ec8e3;
+
+  --space-4: 4px;
+  --space-8: 8px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-24: 24px;
+  --space-32: 32px;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  --profile-accent-0: #7ec8e3;
+  --profile-accent-1: #9ed9a6;
+  --profile-accent-2: #f0a8a8;
+}

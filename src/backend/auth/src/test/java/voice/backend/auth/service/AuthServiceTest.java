@@ -139,6 +139,7 @@ class AuthServiceTest {
         clock,
         Duration.ofDays(30),
         new voice.backend.auth.userdb.InMemoryPrimaryProfileProvisioner(),
-        tierResolver);
+        tierResolver,
+        new voice.backend.auth.userdb.NoOpProfileSwitchValidator());
   }
 }

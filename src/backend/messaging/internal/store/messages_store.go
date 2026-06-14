@@ -33,6 +33,7 @@ type MessageRow struct {
 	ClientMessageID   *uuid.UUID
 	EditedAt          *time.Time
 	DeletedAt         *time.Time
+	GhostOnly         bool
 	CreatedAt         time.Time
 }
 
@@ -118,10 +119,10 @@ func (s *MessagesStore) InsertMessage(ctx context.Context, row MessageRow) (*Mes
 INSERT INTO messages (
   id, chat_id, chat_type, sender_profile_id, posted_as_chat, display_chat_id,
   content, type, thread_parent_id, forward_from_id, forward_from_sender,
-  attachments, mentions, client_message_id
+  attachments, mentions, client_message_id, ghost_only
 ) VALUES (
   $1, $2, $3, $4, $5, $6,
-  $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14
+  $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14, $15
 )
 ON CONFLICT (chat_id, sender_profile_id, client_message_id)
   WHERE client_message_id IS NOT NULL
@@ -130,7 +131,7 @@ ON CONFLICT (chat_id, sender_profile_id, client_message_id)
 	ct, err := s.Pool.Exec(ctx, q,
 		row.ID, row.ChatID, chatType, row.SenderProfileID, row.PostedAsChat, displayAny,
 		row.Content, row.Type, threadAny, forwardFromAny, forwardSenderAny,
-		row.AttachmentsJSON, row.MentionsJSON, clientAny,
+		row.AttachmentsJSON, row.MentionsJSON, clientAny, row.GhostOnly,
 	)
 	if err != nil {
 		return nil, err
@@ -360,6 +361,7 @@ func (s *MessagesStore) listMessagesFiltered(ctx context.Context, chatID, viewer
 		rows, err = s.Pool.Query(ctx, messageSelectSQL+`
 FROM messages
 WHERE chat_id = $1 AND deleted_at IS NULL`+threadClause+`
+  AND (NOT COALESCE(ghost_only, false) OR sender_profile_id = $`+itoa(argN+1)+`)
   AND NOT EXISTS (
     SELECT 1 FROM message_hides h
     WHERE h.message_id = messages.id AND h.profile_id = $`+itoa(argN+1)+`
@@ -372,6 +374,7 @@ LIMIT $`+itoa(argN)+`
 		rows, err = s.Pool.Query(ctx, messageSelectSQL+`
 FROM messages
 WHERE chat_id = $1 AND deleted_at IS NULL AND id < $`+itoa(argN)+`::uuid`+threadClause+`
+  AND (NOT COALESCE(ghost_only, false) OR sender_profile_id = $`+itoa(argN+2)+`)
   AND NOT EXISTS (
     SELECT 1 FROM message_hides h
     WHERE h.message_id = messages.id AND h.profile_id = $`+itoa(argN+2)+`
@@ -384,6 +387,7 @@ LIMIT $`+itoa(argN+1)+`
 		rows, err = s.Pool.Query(ctx, messageSelectSQL+`
 FROM messages
 WHERE chat_id = $1 AND deleted_at IS NULL AND id > $`+itoa(argN)+`::uuid`+threadClause+`
+  AND (NOT COALESCE(ghost_only, false) OR sender_profile_id = $`+itoa(argN+2)+`)
   AND NOT EXISTS (
     SELECT 1 FROM message_hides h
     WHERE h.message_id = messages.id AND h.profile_id = $`+itoa(argN+2)+`

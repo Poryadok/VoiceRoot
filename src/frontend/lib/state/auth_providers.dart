@@ -133,6 +133,25 @@ class AuthController extends StateNotifier<AuthState> {
     state = state.copyWith(session: session, clearError: true);
   }
 
+  Future<String?> switchActiveProfile(String profileId) async {
+    final current = state.session;
+    if (current == null) return 'not_authenticated';
+    if (current.activeProfileId == profileId) return null;
+
+    final result = await _authClient.switchActiveProfile(
+      session: current,
+      profileId: profileId,
+    );
+    switch (result) {
+      case AuthSessionOk(:final session):
+        await _persist(session);
+        state = state.copyWith(session: session, clearError: true);
+        return null;
+      case AuthSessionFailure(:final message):
+        return message;
+    }
+  }
+
   void setClientError(String errorKey) {
     state = state.copyWith(errorKey: errorKey, isSubmitting: false);
   }
@@ -235,6 +254,8 @@ final voiceAuthClientProvider = Provider<VoiceAuthClient>((ref) {
     ),
   );
 });
+
+final profileSwitchInProgressProvider = StateProvider<bool>((ref) => false);
 
 final StateNotifierProvider<AuthController, AuthState> authControllerProvider =
     StateNotifierProvider<AuthController, AuthState>((ref) {

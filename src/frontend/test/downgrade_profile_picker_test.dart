@@ -12,7 +12,7 @@ import 'support/voice_test_theme.dart';
 void main() {
   testWidgets('downgrade profile picker keeps two profiles active', (tester) async {
     final client = MockClient((req) async {
-      if (req.url.path == '/api/v1/users/me/profiles' && req.method == 'GET') {
+      if (req.url.path == '/api/v1/users/profiles' && req.method == 'GET') {
         return http.Response(
           '{"profile_list":{"profiles":['
           '{"id":"p1","display_name":"Main","is_primary":true},'

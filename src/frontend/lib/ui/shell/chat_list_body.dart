@@ -213,8 +213,14 @@ class ChatListBody extends ConsumerWidget {
                             ? ChatAuthorLabel(
                                 displayName: title,
                                 isPremium: showPremium,
+                                verificationType:
+                                    profile?.verificationType ?? 'none',
                                 premiumBadgeSemanticLabel:
                                     l10n.premiumBadgeLabel,
+                                verifiedBadgeSemanticLabel:
+                                    profile?.verificationType == 'organization'
+                                    ? l10n.verifiedBadgeOrganization
+                                    : l10n.verifiedBadgePersonal,
                               )
                             : null,
                         subtitle: subtitle.isEmpty ? null : subtitle,

@@ -615,3 +615,32 @@ final $typed_data.Uint8List getBillingHistoryResponseDescriptor = $convert.base6
     'ChlHZXRCaWxsaW5nSGlzdG9yeVJlc3BvbnNlElsKFGJpbGxpbmdfaGlzdG9yeV9saXN0GAEgAS'
     'gLMikudm9pY2Uuc3Vic2NyaXB0aW9uLnYxLkJpbGxpbmdIaXN0b3J5TGlzdFISYmlsbGluZ0hp'
     'c3RvcnlMaXN0');
+
+@$core.Deprecated('Use applyDowngradeProfilesRequestDescriptor instead')
+const ApplyDowngradeProfilesRequest$json = {
+  '1': 'ApplyDowngradeProfilesRequest',
+  '2': [
+    {'1': 'account_id', '3': 1, '4': 1, '5': 9, '10': 'accountId'},
+    {'1': 'kept_profile_ids', '3': 2, '4': 3, '5': 9, '10': 'keptProfileIds'},
+  ],
+};
+
+/// Descriptor for `ApplyDowngradeProfilesRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List applyDowngradeProfilesRequestDescriptor =
+    $convert.base64Decode(
+        'Ch1BcHBseURvd25ncmFkZVByb2ZpbGVzUmVxdWVzdBIdCgphY2NvdW50X2lkGAEgASgJUglhY2'
+        'NvdW50SWQSKAoQa2VwdF9wcm9maWxlX2lkcxgCIAMoCVIOa2VwdFByb2ZpbGVJZHM=');
+
+@$core.Deprecated('Use applyDowngradeProfilesResponseDescriptor instead')
+const ApplyDowngradeProfilesResponse$json = {
+  '1': 'ApplyDowngradeProfilesResponse',
+  '2': [
+    {'1': 'kept_profile_ids', '3': 1, '4': 3, '5': 9, '10': 'keptProfileIds'},
+  ],
+};
+
+/// Descriptor for `ApplyDowngradeProfilesResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List applyDowngradeProfilesResponseDescriptor =
+    $convert.base64Decode(
+        'Ch5BcHBseURvd25ncmFkZVByb2ZpbGVzUmVzcG9uc2USKAoQa2VwdF9wcm9maWxlX2lkcxgBIA'
+        'MoCVIOa2VwdFByb2ZpbGVJZHM=');

@@ -9,6 +9,7 @@ import '../../theme/voice_theme_providers.dart';
 import 'privacy_settings_screen.dart';
 import 'security_settings_screen.dart';
 import 'subscription_settings_screen.dart';
+import 'verification_settings_sheet.dart';
 
 class SettingsSheet extends ConsumerWidget {
   const SettingsSheet({super.key});
@@ -55,6 +56,20 @@ class SettingsSheet extends ConsumerWidget {
                   MaterialPageRoute<void>(
                     builder: (_) => const SecuritySettingsScreen(),
                   ),
+                );
+              },
+            ),
+            ListTile(
+              key: const Key('settings_verification'),
+              contentPadding: EdgeInsets.zero,
+              title: Text(l10n.verificationSettingsTitle),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.of(context).pop();
+                showModalBottomSheet<void>(
+                  context: context,
+                  isScrollControlled: true,
+                  builder: (_) => const VerificationSettingsSheet(),
                 );
               },
             ),

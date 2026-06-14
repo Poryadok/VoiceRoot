@@ -126,4 +126,17 @@ public class JdbcAccountRepository implements AccountRepository {
             .addValue("id", accountId)
             .addValue("enabled", enabled));
   }
+
+  @Override
+  public void setStatus(UUID accountId, String status) {
+    jdbc.update(
+        """
+        UPDATE accounts
+        SET status = :status, updated_at = now()
+        WHERE id = :id
+        """,
+        new MapSqlParameterSource()
+            .addValue("id", accountId)
+            .addValue("status", status));
+  }
 }

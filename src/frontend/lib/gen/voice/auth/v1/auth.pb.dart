@@ -1646,6 +1646,264 @@ class TokenClaims extends $pb.GeneratedMessage {
   $1.Timestamp ensureExpiresAt() => $_ensure(4);
 }
 
+class SwitchActiveProfileRequest extends $pb.GeneratedMessage {
+  factory SwitchActiveProfileRequest({
+    $core.String? accessToken,
+    $core.String? profileId,
+    $core.String? deviceInfoJson,
+  }) {
+    final result = create();
+    if (accessToken != null) result.accessToken = accessToken;
+    if (profileId != null) result.profileId = profileId;
+    if (deviceInfoJson != null) result.deviceInfoJson = deviceInfoJson;
+    return result;
+  }
+
+  SwitchActiveProfileRequest._();
+
+  factory SwitchActiveProfileRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SwitchActiveProfileRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SwitchActiveProfileRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'accessToken')
+    ..aOS(2, _omitFieldNames ? '' : 'profileId')
+    ..aOS(3, _omitFieldNames ? '' : 'deviceInfoJson')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SwitchActiveProfileRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SwitchActiveProfileRequest copyWith(
+          void Function(SwitchActiveProfileRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as SwitchActiveProfileRequest))
+          as SwitchActiveProfileRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SwitchActiveProfileRequest create() => SwitchActiveProfileRequest._();
+  @$core.override
+  SwitchActiveProfileRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SwitchActiveProfileRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SwitchActiveProfileRequest>(create);
+  static SwitchActiveProfileRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get accessToken => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set accessToken($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAccessToken() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAccessToken() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get profileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set profileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearProfileId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get deviceInfoJson => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set deviceInfoJson($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasDeviceInfoJson() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearDeviceInfoJson() => $_clearField(3);
+}
+
+class SwitchActiveProfileResponse extends $pb.GeneratedMessage {
+  factory SwitchActiveProfileResponse({
+    AuthSession? session,
+  }) {
+    final result = create();
+    if (session != null) result.session = session;
+    return result;
+  }
+
+  SwitchActiveProfileResponse._();
+
+  factory SwitchActiveProfileResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SwitchActiveProfileResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SwitchActiveProfileResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..aOM<AuthSession>(1, _omitFieldNames ? '' : 'session',
+        subBuilder: AuthSession.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SwitchActiveProfileResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SwitchActiveProfileResponse copyWith(
+          void Function(SwitchActiveProfileResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as SwitchActiveProfileResponse))
+          as SwitchActiveProfileResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SwitchActiveProfileResponse create() =>
+      SwitchActiveProfileResponse._();
+  @$core.override
+  SwitchActiveProfileResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SwitchActiveProfileResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SwitchActiveProfileResponse>(create);
+  static SwitchActiveProfileResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  AuthSession get session => $_getN(0);
+  @$pb.TagNumber(1)
+  set session(AuthSession value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSession() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSession() => $_clearField(1);
+  @$pb.TagNumber(1)
+  AuthSession ensureSession() => $_ensure(0);
+}
+
+class SetAccountStatusRequest extends $pb.GeneratedMessage {
+  factory SetAccountStatusRequest({
+    $core.String? accountId,
+    $core.String? status,
+    $core.String? reason,
+  }) {
+    final result = create();
+    if (accountId != null) result.accountId = accountId;
+    if (status != null) result.status = status;
+    if (reason != null) result.reason = reason;
+    return result;
+  }
+
+  SetAccountStatusRequest._();
+
+  factory SetAccountStatusRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SetAccountStatusRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SetAccountStatusRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'accountId')
+    ..aOS(2, _omitFieldNames ? '' : 'status')
+    ..aOS(3, _omitFieldNames ? '' : 'reason')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetAccountStatusRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetAccountStatusRequest copyWith(
+          void Function(SetAccountStatusRequest) updates) =>
+      super.copyWith((message) => updates(message as SetAccountStatusRequest))
+          as SetAccountStatusRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SetAccountStatusRequest create() => SetAccountStatusRequest._();
+  @$core.override
+  SetAccountStatusRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SetAccountStatusRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SetAccountStatusRequest>(create);
+  static SetAccountStatusRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get accountId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set accountId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAccountId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAccountId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get status => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set status($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasStatus() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearStatus() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get reason => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set reason($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasReason() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearReason() => $_clearField(3);
+}
+
+class SetAccountStatusResponse extends $pb.GeneratedMessage {
+  factory SetAccountStatusResponse() => create();
+
+  SetAccountStatusResponse._();
+
+  factory SetAccountStatusResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SetAccountStatusResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SetAccountStatusResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetAccountStatusResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetAccountStatusResponse copyWith(
+          void Function(SetAccountStatusResponse) updates) =>
+      super.copyWith((message) => updates(message as SetAccountStatusResponse))
+          as SetAccountStatusResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SetAccountStatusResponse create() => SetAccountStatusResponse._();
+  @$core.override
+  SetAccountStatusResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SetAccountStatusResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SetAccountStatusResponse>(create);
+  static SetAccountStatusResponse? _defaultInstance;
+}
+
 const $core.bool _omitFieldNames =
     $core.bool.fromEnvironment('protobuf.omit_field_names');
 const $core.bool _omitMessageNames =

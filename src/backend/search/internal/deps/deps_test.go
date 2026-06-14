@@ -23,6 +23,6 @@ func TestSocialBlocks_nilClient(t *testing.T) {
 
 func TestProfileHydrator_nilClient(t *testing.T) {
 	t.Parallel()
-	_, _, _, _, err := (&ProfileHydrator{}).LoadProfile(context.Background(), uuid.Nil)
+	_, _, _, _, _, err := (&ProfileHydrator{}).LoadProfile(context.Background(), uuid.Nil)
 	require.Error(t, err)
 }

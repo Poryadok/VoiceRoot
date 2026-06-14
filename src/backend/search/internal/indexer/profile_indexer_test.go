@@ -33,8 +33,8 @@ type stubProfileHydrator struct {
 	display   string
 }
 
-func (s *stubProfileHydrator) LoadProfile(_ context.Context, _ uuid.UUID) (uuid.UUID, string, string, string, error) {
-	return s.accountID, s.username, s.disc, s.display, nil
+func (s *stubProfileHydrator) LoadProfile(_ context.Context, _ uuid.UUID) (uuid.UUID, string, string, string, string, error) {
+	return s.accountID, s.username, s.disc, s.display, "", nil
 }
 
 func TestProfileIndexer_ProfileCreated_UpsertsDocument(t *testing.T) {

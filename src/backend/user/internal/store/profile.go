@@ -126,7 +126,7 @@ func (s *ProfileStore) GetByIDs(ctx context.Context, ids []uuid.UUID) ([]*Profil
 
 // ListByAccountID returns all profiles owned by the account (primary first, then created_at).
 func (s *ProfileStore) ListByAccountID(ctx context.Context, accountID uuid.UUID) ([]*ProfileRow, error) {
-	rows, err := s.pool.Query(ctx, `SELECT `+profileSelectCols+` FROM profiles WHERE account_id = $1
+	rows, err := s.pool.Query(ctx, `SELECT `+profileSelectCols+` FROM profiles WHERE account_id = $1 AND deleted_at IS NULL
 		ORDER BY is_primary DESC, created_at ASC`, accountID)
 	if err != nil {
 		return nil, err
@@ -332,7 +332,7 @@ func (s *ProfileStore) ApplyFreeTierFreeze(ctx context.Context, accountID uuid.U
 	return nil
 }
 
-// GetOwnedProfile returns a profile owned by the account.
+// GetOwnedProfile returns a profile owned by the account (not soft-deleted).
 func (s *ProfileStore) GetOwnedProfile(ctx context.Context, accountID, profileID uuid.UUID) (*ProfileRow, error) {
-	return s.scanOne(ctx, `SELECT `+profileSelectCols+` FROM profiles WHERE id = $1 AND account_id = $2`, profileID, accountID)
+	return s.scanOne(ctx, `SELECT `+profileSelectCols+` FROM profiles WHERE id = $1 AND account_id = $2 AND deleted_at IS NULL`, profileID, accountID)
 }

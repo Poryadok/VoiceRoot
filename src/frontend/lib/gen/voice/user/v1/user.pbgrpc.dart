@@ -172,6 +172,48 @@ class UserServiceClient extends $grpc.Client {
     return $createUnaryCall(_$getVerificationStatus, request, options: options);
   }
 
+  /// S2S from Auth after OAuth identity checks (verification.md).
+  $grpc.ResponseFuture<$0.SetVerificationResponse> setVerification(
+    $0.SetVerificationRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$setVerification, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.ClearVerificationResponse> clearVerification(
+    $0.ClearVerificationRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$clearVerification, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.StartOrganizationVerificationResponse>
+      startOrganizationVerification(
+    $0.StartOrganizationVerificationRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$startOrganizationVerification, request,
+        options: options);
+  }
+
+  $grpc.ResponseFuture<$0.CheckOrganizationVerificationResponse>
+      checkOrganizationVerification(
+    $0.CheckOrganizationVerificationRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$checkOrganizationVerification, request,
+        options: options);
+  }
+
+  $grpc.ResponseFuture<$0.ApplyDowngradeProfilesResponse>
+      applyDowngradeProfiles(
+    $0.ApplyDowngradeProfilesRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$applyDowngradeProfiles, request,
+        options: options);
+  }
+
   /// Phase 1 (PLAN § R2): presigned PUT to Cloudflare R2 for static profile avatar (no File Service).
   $grpc.ResponseFuture<$0.CreateAvatarPresignedUploadResponse>
       createAvatarPresignedUpload(
@@ -279,6 +321,33 @@ class UserServiceClient extends $grpc.Client {
       '/voice.user.v1.UserService/GetVerificationStatus',
       ($0.GetVerificationStatusRequest value) => value.writeToBuffer(),
       $0.GetVerificationStatusResponse.fromBuffer);
+  static final _$setVerification =
+      $grpc.ClientMethod<$0.SetVerificationRequest, $0.SetVerificationResponse>(
+          '/voice.user.v1.UserService/SetVerification',
+          ($0.SetVerificationRequest value) => value.writeToBuffer(),
+          $0.SetVerificationResponse.fromBuffer);
+  static final _$clearVerification = $grpc.ClientMethod<
+          $0.ClearVerificationRequest, $0.ClearVerificationResponse>(
+      '/voice.user.v1.UserService/ClearVerification',
+      ($0.ClearVerificationRequest value) => value.writeToBuffer(),
+      $0.ClearVerificationResponse.fromBuffer);
+  static final _$startOrganizationVerification = $grpc.ClientMethod<
+          $0.StartOrganizationVerificationRequest,
+          $0.StartOrganizationVerificationResponse>(
+      '/voice.user.v1.UserService/StartOrganizationVerification',
+      ($0.StartOrganizationVerificationRequest value) => value.writeToBuffer(),
+      $0.StartOrganizationVerificationResponse.fromBuffer);
+  static final _$checkOrganizationVerification = $grpc.ClientMethod<
+          $0.CheckOrganizationVerificationRequest,
+          $0.CheckOrganizationVerificationResponse>(
+      '/voice.user.v1.UserService/CheckOrganizationVerification',
+      ($0.CheckOrganizationVerificationRequest value) => value.writeToBuffer(),
+      $0.CheckOrganizationVerificationResponse.fromBuffer);
+  static final _$applyDowngradeProfiles = $grpc.ClientMethod<
+          $0.ApplyDowngradeProfilesRequest, $0.ApplyDowngradeProfilesResponse>(
+      '/voice.user.v1.UserService/ApplyDowngradeProfiles',
+      ($0.ApplyDowngradeProfilesRequest value) => value.writeToBuffer(),
+      $0.ApplyDowngradeProfilesResponse.fromBuffer);
   static final _$createAvatarPresignedUpload = $grpc.ClientMethod<
           $0.CreateAvatarPresignedUploadRequest,
           $0.CreateAvatarPresignedUploadResponse>(
@@ -461,6 +530,53 @@ abstract class UserServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.GetVerificationStatusRequest.fromBuffer(value),
         ($0.GetVerificationStatusResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.SetVerificationRequest,
+            $0.SetVerificationResponse>(
+        'SetVerification',
+        setVerification_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.SetVerificationRequest.fromBuffer(value),
+        ($0.SetVerificationResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ClearVerificationRequest,
+            $0.ClearVerificationResponse>(
+        'ClearVerification',
+        clearVerification_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ClearVerificationRequest.fromBuffer(value),
+        ($0.ClearVerificationResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.StartOrganizationVerificationRequest,
+            $0.StartOrganizationVerificationResponse>(
+        'StartOrganizationVerification',
+        startOrganizationVerification_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.StartOrganizationVerificationRequest.fromBuffer(value),
+        ($0.StartOrganizationVerificationResponse value) =>
+            value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.CheckOrganizationVerificationRequest,
+            $0.CheckOrganizationVerificationResponse>(
+        'CheckOrganizationVerification',
+        checkOrganizationVerification_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.CheckOrganizationVerificationRequest.fromBuffer(value),
+        ($0.CheckOrganizationVerificationResponse value) =>
+            value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ApplyDowngradeProfilesRequest,
+            $0.ApplyDowngradeProfilesResponse>(
+        'ApplyDowngradeProfiles',
+        applyDowngradeProfiles_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ApplyDowngradeProfilesRequest.fromBuffer(value),
+        ($0.ApplyDowngradeProfilesResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.CreateAvatarPresignedUploadRequest,
             $0.CreateAvatarPresignedUploadResponse>(
         'CreateAvatarPresignedUpload',
@@ -639,6 +755,57 @@ abstract class UserServiceBase extends $grpc.Service {
 
   $async.Future<$0.GetVerificationStatusResponse> getVerificationStatus(
       $grpc.ServiceCall call, $0.GetVerificationStatusRequest request);
+
+  $async.Future<$0.SetVerificationResponse> setVerification_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.SetVerificationRequest> $request) async {
+    return setVerification($call, await $request);
+  }
+
+  $async.Future<$0.SetVerificationResponse> setVerification(
+      $grpc.ServiceCall call, $0.SetVerificationRequest request);
+
+  $async.Future<$0.ClearVerificationResponse> clearVerification_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.ClearVerificationRequest> $request) async {
+    return clearVerification($call, await $request);
+  }
+
+  $async.Future<$0.ClearVerificationResponse> clearVerification(
+      $grpc.ServiceCall call, $0.ClearVerificationRequest request);
+
+  $async.Future<$0.StartOrganizationVerificationResponse>
+      startOrganizationVerification_Pre(
+          $grpc.ServiceCall $call,
+          $async.Future<$0.StartOrganizationVerificationRequest>
+              $request) async {
+    return startOrganizationVerification($call, await $request);
+  }
+
+  $async.Future<$0.StartOrganizationVerificationResponse>
+      startOrganizationVerification($grpc.ServiceCall call,
+          $0.StartOrganizationVerificationRequest request);
+
+  $async.Future<$0.CheckOrganizationVerificationResponse>
+      checkOrganizationVerification_Pre(
+          $grpc.ServiceCall $call,
+          $async.Future<$0.CheckOrganizationVerificationRequest>
+              $request) async {
+    return checkOrganizationVerification($call, await $request);
+  }
+
+  $async.Future<$0.CheckOrganizationVerificationResponse>
+      checkOrganizationVerification($grpc.ServiceCall call,
+          $0.CheckOrganizationVerificationRequest request);
+
+  $async.Future<$0.ApplyDowngradeProfilesResponse> applyDowngradeProfiles_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.ApplyDowngradeProfilesRequest> $request) async {
+    return applyDowngradeProfiles($call, await $request);
+  }
+
+  $async.Future<$0.ApplyDowngradeProfilesResponse> applyDowngradeProfiles(
+      $grpc.ServiceCall call, $0.ApplyDowngradeProfilesRequest request);
 
   $async.Future<$0.CreateAvatarPresignedUploadResponse>
       createAvatarPresignedUpload_Pre($grpc.ServiceCall $call,

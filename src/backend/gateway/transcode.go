@@ -26,6 +26,7 @@ import (
 	subscriptionv1 "voice.app/voice/subscription/v1"
 	spacev1 "voice.app/voice/space/v1"
 	userv1 "voice.app/voice/user/v1"
+	authv1 "voice.app/voice/auth/v1"
 )
 
 type grpcClients struct {
@@ -42,6 +43,7 @@ type grpcClients struct {
 	moderation   moderationv1.ModerationServiceClient
 	subscription subscriptionv1.SubscriptionServiceClient
 	search       searchv1.SearchServiceClient
+	auth         authv1.AuthServiceClient
 }
 
 type transcoder struct {
@@ -133,6 +135,11 @@ func grpcClientsFromEnv() *grpcClients {
 	} else if conn != nil {
 		clients.subscription = subscriptionv1.NewSubscriptionServiceClient(conn)
 	}
+	if conn, err := dial(addrFor("auth")); err != nil {
+		log.Printf("gateway grpc dial auth: %v", err)
+	} else if conn != nil {
+		clients.auth = authv1.NewAuthServiceClient(conn)
+	}
 	if clients.user == nil && clients.social == nil && clients.chat == nil && clients.messaging == nil && clients.voice == nil && clients.file == nil && clients.space == nil && clients.role == nil && clients.notification == nil && clients.matchmaking == nil && clients.search == nil && clients.moderation == nil && clients.subscription == nil {
 		return nil
 	}
@@ -153,6 +160,8 @@ func (t *transcoder) serveNamespace(w http.ResponseWriter, r *http.Request, name
 	rest := strings.TrimPrefix(r.URL.Path, "/api/v1/"+namespace)
 	rest = strings.TrimPrefix(rest, "/")
 	switch namespace {
+	case "auth":
+		return t.serveAuthREST(w, r, rest)
 	case "users":
 		if t.clients.user == nil {
 			return false

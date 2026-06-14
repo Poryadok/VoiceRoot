@@ -2054,6 +2054,48 @@ abstract class AppLocalizations {
   /// **'Security'**
   String get securitySettingsTitle;
 
+  /// No description provided for @verificationSettingsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Verification'**
+  String get verificationSettingsTitle;
+
+  /// No description provided for @verificationSettingsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Link platforms to earn a verified badge, or verify your organization domain.'**
+  String get verificationSettingsHint;
+
+  /// No description provided for @verificationLinkedAccountsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Linked accounts'**
+  String get verificationLinkedAccountsTitle;
+
+  /// No description provided for @verificationLinkedAccountsEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No linked accounts yet.'**
+  String get verificationLinkedAccountsEmpty;
+
+  /// No description provided for @verificationLinkTwitch.
+  ///
+  /// In en, this message translates to:
+  /// **'Link Twitch'**
+  String get verificationLinkTwitch;
+
+  /// No description provided for @verifiedBadgePersonal.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified'**
+  String get verifiedBadgePersonal;
+
+  /// No description provided for @verifiedBadgeOrganization.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified organization'**
+  String get verifiedBadgeOrganization;
+
   /// No description provided for @security2faEnableTitle.
   ///
   /// In en, this message translates to:

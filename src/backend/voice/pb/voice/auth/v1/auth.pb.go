@@ -360,8 +360,10 @@ type Enable2FAResponse struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	TotpUri          string                 `protobuf:"bytes,1,opt,name=totp_uri,json=totpUri,proto3" json:"totp_uri,omitempty"`
 	SecretBackupHint string                 `protobuf:"bytes,2,opt,name=secret_backup_hint,json=secretBackupHint,proto3" json:"secret_backup_hint,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// One-time plaintext backup codes; shown only at enrollment (docs/features/auth-and-contacts.md).
+	BackupCodes   []string `protobuf:"bytes,3,rep,name=backup_codes,json=backupCodes,proto3" json:"backup_codes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Enable2FAResponse) Reset() {
@@ -406,6 +408,13 @@ func (x *Enable2FAResponse) GetSecretBackupHint() string {
 		return x.SecretBackupHint
 	}
 	return ""
+}
+
+func (x *Enable2FAResponse) GetBackupCodes() []string {
+	if x != nil {
+		return x.BackupCodes
+	}
+	return nil
 }
 
 type Verify2FARequest struct {
@@ -1353,6 +1362,206 @@ func (x *TokenClaims) GetExpiresAt() *timestamppb.Timestamp {
 	return nil
 }
 
+type SwitchActiveProfileRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	AccessToken    string                 `protobuf:"bytes,1,opt,name=access_token,json=accessToken,proto3" json:"access_token,omitempty"`
+	ProfileId      string                 `protobuf:"bytes,2,opt,name=profile_id,json=profileId,proto3" json:"profile_id,omitempty"`
+	DeviceInfoJson string                 `protobuf:"bytes,3,opt,name=device_info_json,json=deviceInfoJson,proto3" json:"device_info_json,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *SwitchActiveProfileRequest) Reset() {
+	*x = SwitchActiveProfileRequest{}
+	mi := &file_voice_auth_v1_auth_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SwitchActiveProfileRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SwitchActiveProfileRequest) ProtoMessage() {}
+
+func (x *SwitchActiveProfileRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_auth_v1_auth_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SwitchActiveProfileRequest.ProtoReflect.Descriptor instead.
+func (*SwitchActiveProfileRequest) Descriptor() ([]byte, []int) {
+	return file_voice_auth_v1_auth_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *SwitchActiveProfileRequest) GetAccessToken() string {
+	if x != nil {
+		return x.AccessToken
+	}
+	return ""
+}
+
+func (x *SwitchActiveProfileRequest) GetProfileId() string {
+	if x != nil {
+		return x.ProfileId
+	}
+	return ""
+}
+
+func (x *SwitchActiveProfileRequest) GetDeviceInfoJson() string {
+	if x != nil {
+		return x.DeviceInfoJson
+	}
+	return ""
+}
+
+type SwitchActiveProfileResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Session       *AuthSession           `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SwitchActiveProfileResponse) Reset() {
+	*x = SwitchActiveProfileResponse{}
+	mi := &file_voice_auth_v1_auth_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SwitchActiveProfileResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SwitchActiveProfileResponse) ProtoMessage() {}
+
+func (x *SwitchActiveProfileResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_auth_v1_auth_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SwitchActiveProfileResponse.ProtoReflect.Descriptor instead.
+func (*SwitchActiveProfileResponse) Descriptor() ([]byte, []int) {
+	return file_voice_auth_v1_auth_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *SwitchActiveProfileResponse) GetSession() *AuthSession {
+	if x != nil {
+		return x.Session
+	}
+	return nil
+}
+
+type SetAccountStatusRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AccountId     string                 `protobuf:"bytes,1,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
+	Status        string                 `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"` // active | suspended
+	Reason        string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetAccountStatusRequest) Reset() {
+	*x = SetAccountStatusRequest{}
+	mi := &file_voice_auth_v1_auth_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetAccountStatusRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetAccountStatusRequest) ProtoMessage() {}
+
+func (x *SetAccountStatusRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_auth_v1_auth_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetAccountStatusRequest.ProtoReflect.Descriptor instead.
+func (*SetAccountStatusRequest) Descriptor() ([]byte, []int) {
+	return file_voice_auth_v1_auth_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *SetAccountStatusRequest) GetAccountId() string {
+	if x != nil {
+		return x.AccountId
+	}
+	return ""
+}
+
+func (x *SetAccountStatusRequest) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *SetAccountStatusRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type SetAccountStatusResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetAccountStatusResponse) Reset() {
+	*x = SetAccountStatusResponse{}
+	mi := &file_voice_auth_v1_auth_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetAccountStatusResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetAccountStatusResponse) ProtoMessage() {}
+
+func (x *SetAccountStatusResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_auth_v1_auth_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetAccountStatusResponse.ProtoReflect.Descriptor instead.
+func (*SetAccountStatusResponse) Descriptor() ([]byte, []int) {
+	return file_voice_auth_v1_auth_proto_rawDescGZIP(), []int{29}
+}
+
 var File_voice_auth_v1_auth_proto protoreflect.FileDescriptor
 
 const file_voice_auth_v1_auth_proto_rawDesc = "" +
@@ -1381,10 +1590,11 @@ const file_voice_auth_v1_auth_proto_rawDesc = "" +
 	"\rrefresh_token\x18\x01 \x01(\tR\frefreshToken\x12(\n" +
 	"\x10device_info_json\x18\x02 \x01(\tR\x0edeviceInfoJson\".\n" +
 	"\x10Enable2FARequest\x12\x1a\n" +
-	"\bpassword\x18\x01 \x01(\tR\bpassword\"\\\n" +
+	"\bpassword\x18\x01 \x01(\tR\bpassword\"\x7f\n" +
 	"\x11Enable2FAResponse\x12\x19\n" +
 	"\btotp_uri\x18\x01 \x01(\tR\atotpUri\x12,\n" +
-	"\x12secret_backup_hint\x18\x02 \x01(\tR\x10secretBackupHint\"/\n" +
+	"\x12secret_backup_hint\x18\x02 \x01(\tR\x10secretBackupHint\x12!\n" +
+	"\fbackup_codes\x18\x03 \x03(\tR\vbackupCodes\"/\n" +
 	"\x10Verify2FARequest\x12\x1b\n" +
 	"\ttotp_code\x18\x01 \x01(\tR\btotpCode\"\x94\x01\n" +
 	"\x10VerifyOTPRequest\x12\x12\n" +
@@ -1439,11 +1649,24 @@ const file_voice_auth_v1_auth_proto_rawDesc = "" +
 	"\x05roles\x18\x03 \x03(\tR\x05roles\x12+\n" +
 	"\x11subscription_tier\x18\x04 \x01(\tR\x10subscriptionTier\x129\n" +
 	"\n" +
-	"expires_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt*[\n" +
+	"expires_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"\x88\x01\n" +
+	"\x1aSwitchActiveProfileRequest\x12!\n" +
+	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x12\x1d\n" +
+	"\n" +
+	"profile_id\x18\x02 \x01(\tR\tprofileId\x12(\n" +
+	"\x10device_info_json\x18\x03 \x01(\tR\x0edeviceInfoJson\"S\n" +
+	"\x1bSwitchActiveProfileResponse\x124\n" +
+	"\asession\x18\x01 \x01(\v2\x1a.voice.auth.v1.AuthSessionR\asession\"h\n" +
+	"\x17SetAccountStatusRequest\x12\x1d\n" +
+	"\n" +
+	"account_id\x18\x01 \x01(\tR\taccountId\x12\x16\n" +
+	"\x06status\x18\x02 \x01(\tR\x06status\x12\x16\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"\x1a\n" +
+	"\x18SetAccountStatusResponse*[\n" +
 	"\aOtpType\x12\x18\n" +
 	"\x14OTP_TYPE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15OTP_TYPE_EMAIL_VERIFY\x10\x01\x12\x1b\n" +
-	"\x17OTP_TYPE_PASSWORD_RESET\x10\x022\xe8\a\n" +
+	"\x17OTP_TYPE_PASSWORD_RESET\x10\x022\xbb\t\n" +
 	"\vAuthService\x12K\n" +
 	"\bRegister\x12\x1e.voice.auth.v1.RegisterRequest\x1a\x1f.voice.auth.v1.RegisterResponse\x12B\n" +
 	"\x05Login\x12\x1b.voice.auth.v1.LoginRequest\x1a\x1c.voice.auth.v1.LoginResponse\x12E\n" +
@@ -1456,7 +1679,9 @@ const file_voice_auth_v1_auth_proto_rawDesc = "" +
 	"\rDeleteAccount\x12#.voice.auth.v1.DeleteAccountRequest\x1a$.voice.auth.v1.DeleteAccountResponse\x12]\n" +
 	"\x0eRestoreAccount\x12$.voice.auth.v1.RestoreAccountRequest\x1a%.voice.auth.v1.RestoreAccountResponse\x12Z\n" +
 	"\rValidateToken\x12#.voice.auth.v1.ValidateTokenRequest\x1a$.voice.auth.v1.ValidateTokenResponse\x12H\n" +
-	"\aGetJWKS\x12\x1d.voice.auth.v1.GetJWKSRequest\x1a\x1e.voice.auth.v1.GetJWKSResponseB5\n" +
+	"\aGetJWKS\x12\x1d.voice.auth.v1.GetJWKSRequest\x1a\x1e.voice.auth.v1.GetJWKSResponse\x12l\n" +
+	"\x13SwitchActiveProfile\x12).voice.auth.v1.SwitchActiveProfileRequest\x1a*.voice.auth.v1.SwitchActiveProfileResponse\x12c\n" +
+	"\x10SetAccountStatus\x12&.voice.auth.v1.SetAccountStatusRequest\x1a'.voice.auth.v1.SetAccountStatusResponseB5\n" +
 	"\x11app.voice.auth.v1P\x01Z\x1evoice.app/voice/auth/v1;authv1b\x06proto3"
 
 var (
@@ -1472,36 +1697,40 @@ func file_voice_auth_v1_auth_proto_rawDescGZIP() []byte {
 }
 
 var file_voice_auth_v1_auth_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_voice_auth_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
+var file_voice_auth_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
 var file_voice_auth_v1_auth_proto_goTypes = []any{
-	(OtpType)(0),                   // 0: voice.auth.v1.OtpType
-	(*RegisterRequest)(nil),        // 1: voice.auth.v1.RegisterRequest
-	(*LoginRequest)(nil),           // 2: voice.auth.v1.LoginRequest
-	(*LogoutRequest)(nil),          // 3: voice.auth.v1.LogoutRequest
-	(*RefreshTokenRequest)(nil),    // 4: voice.auth.v1.RefreshTokenRequest
-	(*Enable2FARequest)(nil),       // 5: voice.auth.v1.Enable2FARequest
-	(*Enable2FAResponse)(nil),      // 6: voice.auth.v1.Enable2FAResponse
-	(*Verify2FARequest)(nil),       // 7: voice.auth.v1.Verify2FARequest
-	(*VerifyOTPRequest)(nil),       // 8: voice.auth.v1.VerifyOTPRequest
-	(*ConvertGuestRequest)(nil),    // 9: voice.auth.v1.ConvertGuestRequest
-	(*DeleteAccountRequest)(nil),   // 10: voice.auth.v1.DeleteAccountRequest
-	(*RestoreAccountRequest)(nil),  // 11: voice.auth.v1.RestoreAccountRequest
-	(*ValidateTokenRequest)(nil),   // 12: voice.auth.v1.ValidateTokenRequest
-	(*AuthSession)(nil),            // 13: voice.auth.v1.AuthSession
-	(*RegisterResponse)(nil),       // 14: voice.auth.v1.RegisterResponse
-	(*LoginResponse)(nil),          // 15: voice.auth.v1.LoginResponse
-	(*LogoutResponse)(nil),         // 16: voice.auth.v1.LogoutResponse
-	(*RefreshTokenResponse)(nil),   // 17: voice.auth.v1.RefreshTokenResponse
-	(*Verify2FAResponse)(nil),      // 18: voice.auth.v1.Verify2FAResponse
-	(*VerifyOTPResponse)(nil),      // 19: voice.auth.v1.VerifyOTPResponse
-	(*ConvertGuestResponse)(nil),   // 20: voice.auth.v1.ConvertGuestResponse
-	(*DeleteAccountResponse)(nil),  // 21: voice.auth.v1.DeleteAccountResponse
-	(*RestoreAccountResponse)(nil), // 22: voice.auth.v1.RestoreAccountResponse
-	(*ValidateTokenResponse)(nil),  // 23: voice.auth.v1.ValidateTokenResponse
-	(*GetJWKSRequest)(nil),         // 24: voice.auth.v1.GetJWKSRequest
-	(*GetJWKSResponse)(nil),        // 25: voice.auth.v1.GetJWKSResponse
-	(*TokenClaims)(nil),            // 26: voice.auth.v1.TokenClaims
-	(*timestamppb.Timestamp)(nil),  // 27: google.protobuf.Timestamp
+	(OtpType)(0),                        // 0: voice.auth.v1.OtpType
+	(*RegisterRequest)(nil),             // 1: voice.auth.v1.RegisterRequest
+	(*LoginRequest)(nil),                // 2: voice.auth.v1.LoginRequest
+	(*LogoutRequest)(nil),               // 3: voice.auth.v1.LogoutRequest
+	(*RefreshTokenRequest)(nil),         // 4: voice.auth.v1.RefreshTokenRequest
+	(*Enable2FARequest)(nil),            // 5: voice.auth.v1.Enable2FARequest
+	(*Enable2FAResponse)(nil),           // 6: voice.auth.v1.Enable2FAResponse
+	(*Verify2FARequest)(nil),            // 7: voice.auth.v1.Verify2FARequest
+	(*VerifyOTPRequest)(nil),            // 8: voice.auth.v1.VerifyOTPRequest
+	(*ConvertGuestRequest)(nil),         // 9: voice.auth.v1.ConvertGuestRequest
+	(*DeleteAccountRequest)(nil),        // 10: voice.auth.v1.DeleteAccountRequest
+	(*RestoreAccountRequest)(nil),       // 11: voice.auth.v1.RestoreAccountRequest
+	(*ValidateTokenRequest)(nil),        // 12: voice.auth.v1.ValidateTokenRequest
+	(*AuthSession)(nil),                 // 13: voice.auth.v1.AuthSession
+	(*RegisterResponse)(nil),            // 14: voice.auth.v1.RegisterResponse
+	(*LoginResponse)(nil),               // 15: voice.auth.v1.LoginResponse
+	(*LogoutResponse)(nil),              // 16: voice.auth.v1.LogoutResponse
+	(*RefreshTokenResponse)(nil),        // 17: voice.auth.v1.RefreshTokenResponse
+	(*Verify2FAResponse)(nil),           // 18: voice.auth.v1.Verify2FAResponse
+	(*VerifyOTPResponse)(nil),           // 19: voice.auth.v1.VerifyOTPResponse
+	(*ConvertGuestResponse)(nil),        // 20: voice.auth.v1.ConvertGuestResponse
+	(*DeleteAccountResponse)(nil),       // 21: voice.auth.v1.DeleteAccountResponse
+	(*RestoreAccountResponse)(nil),      // 22: voice.auth.v1.RestoreAccountResponse
+	(*ValidateTokenResponse)(nil),       // 23: voice.auth.v1.ValidateTokenResponse
+	(*GetJWKSRequest)(nil),              // 24: voice.auth.v1.GetJWKSRequest
+	(*GetJWKSResponse)(nil),             // 25: voice.auth.v1.GetJWKSResponse
+	(*TokenClaims)(nil),                 // 26: voice.auth.v1.TokenClaims
+	(*SwitchActiveProfileRequest)(nil),  // 27: voice.auth.v1.SwitchActiveProfileRequest
+	(*SwitchActiveProfileResponse)(nil), // 28: voice.auth.v1.SwitchActiveProfileResponse
+	(*SetAccountStatusRequest)(nil),     // 29: voice.auth.v1.SetAccountStatusRequest
+	(*SetAccountStatusResponse)(nil),    // 30: voice.auth.v1.SetAccountStatusResponse
+	(*timestamppb.Timestamp)(nil),       // 31: google.protobuf.Timestamp
 }
 var file_voice_auth_v1_auth_proto_depIdxs = []int32{
 	0,  // 0: voice.auth.v1.VerifyOTPRequest.otp_type_enum:type_name -> voice.auth.v1.OtpType
@@ -1512,36 +1741,41 @@ var file_voice_auth_v1_auth_proto_depIdxs = []int32{
 	13, // 5: voice.auth.v1.ConvertGuestResponse.session:type_name -> voice.auth.v1.AuthSession
 	13, // 6: voice.auth.v1.RestoreAccountResponse.session:type_name -> voice.auth.v1.AuthSession
 	26, // 7: voice.auth.v1.ValidateTokenResponse.claims:type_name -> voice.auth.v1.TokenClaims
-	27, // 8: voice.auth.v1.TokenClaims.expires_at:type_name -> google.protobuf.Timestamp
-	1,  // 9: voice.auth.v1.AuthService.Register:input_type -> voice.auth.v1.RegisterRequest
-	2,  // 10: voice.auth.v1.AuthService.Login:input_type -> voice.auth.v1.LoginRequest
-	3,  // 11: voice.auth.v1.AuthService.Logout:input_type -> voice.auth.v1.LogoutRequest
-	4,  // 12: voice.auth.v1.AuthService.RefreshToken:input_type -> voice.auth.v1.RefreshTokenRequest
-	5,  // 13: voice.auth.v1.AuthService.Enable2FA:input_type -> voice.auth.v1.Enable2FARequest
-	7,  // 14: voice.auth.v1.AuthService.Verify2FA:input_type -> voice.auth.v1.Verify2FARequest
-	8,  // 15: voice.auth.v1.AuthService.VerifyOTP:input_type -> voice.auth.v1.VerifyOTPRequest
-	9,  // 16: voice.auth.v1.AuthService.ConvertGuest:input_type -> voice.auth.v1.ConvertGuestRequest
-	10, // 17: voice.auth.v1.AuthService.DeleteAccount:input_type -> voice.auth.v1.DeleteAccountRequest
-	11, // 18: voice.auth.v1.AuthService.RestoreAccount:input_type -> voice.auth.v1.RestoreAccountRequest
-	12, // 19: voice.auth.v1.AuthService.ValidateToken:input_type -> voice.auth.v1.ValidateTokenRequest
-	24, // 20: voice.auth.v1.AuthService.GetJWKS:input_type -> voice.auth.v1.GetJWKSRequest
-	14, // 21: voice.auth.v1.AuthService.Register:output_type -> voice.auth.v1.RegisterResponse
-	15, // 22: voice.auth.v1.AuthService.Login:output_type -> voice.auth.v1.LoginResponse
-	16, // 23: voice.auth.v1.AuthService.Logout:output_type -> voice.auth.v1.LogoutResponse
-	17, // 24: voice.auth.v1.AuthService.RefreshToken:output_type -> voice.auth.v1.RefreshTokenResponse
-	6,  // 25: voice.auth.v1.AuthService.Enable2FA:output_type -> voice.auth.v1.Enable2FAResponse
-	18, // 26: voice.auth.v1.AuthService.Verify2FA:output_type -> voice.auth.v1.Verify2FAResponse
-	19, // 27: voice.auth.v1.AuthService.VerifyOTP:output_type -> voice.auth.v1.VerifyOTPResponse
-	20, // 28: voice.auth.v1.AuthService.ConvertGuest:output_type -> voice.auth.v1.ConvertGuestResponse
-	21, // 29: voice.auth.v1.AuthService.DeleteAccount:output_type -> voice.auth.v1.DeleteAccountResponse
-	22, // 30: voice.auth.v1.AuthService.RestoreAccount:output_type -> voice.auth.v1.RestoreAccountResponse
-	23, // 31: voice.auth.v1.AuthService.ValidateToken:output_type -> voice.auth.v1.ValidateTokenResponse
-	25, // 32: voice.auth.v1.AuthService.GetJWKS:output_type -> voice.auth.v1.GetJWKSResponse
-	21, // [21:33] is the sub-list for method output_type
-	9,  // [9:21] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	31, // 8: voice.auth.v1.TokenClaims.expires_at:type_name -> google.protobuf.Timestamp
+	13, // 9: voice.auth.v1.SwitchActiveProfileResponse.session:type_name -> voice.auth.v1.AuthSession
+	1,  // 10: voice.auth.v1.AuthService.Register:input_type -> voice.auth.v1.RegisterRequest
+	2,  // 11: voice.auth.v1.AuthService.Login:input_type -> voice.auth.v1.LoginRequest
+	3,  // 12: voice.auth.v1.AuthService.Logout:input_type -> voice.auth.v1.LogoutRequest
+	4,  // 13: voice.auth.v1.AuthService.RefreshToken:input_type -> voice.auth.v1.RefreshTokenRequest
+	5,  // 14: voice.auth.v1.AuthService.Enable2FA:input_type -> voice.auth.v1.Enable2FARequest
+	7,  // 15: voice.auth.v1.AuthService.Verify2FA:input_type -> voice.auth.v1.Verify2FARequest
+	8,  // 16: voice.auth.v1.AuthService.VerifyOTP:input_type -> voice.auth.v1.VerifyOTPRequest
+	9,  // 17: voice.auth.v1.AuthService.ConvertGuest:input_type -> voice.auth.v1.ConvertGuestRequest
+	10, // 18: voice.auth.v1.AuthService.DeleteAccount:input_type -> voice.auth.v1.DeleteAccountRequest
+	11, // 19: voice.auth.v1.AuthService.RestoreAccount:input_type -> voice.auth.v1.RestoreAccountRequest
+	12, // 20: voice.auth.v1.AuthService.ValidateToken:input_type -> voice.auth.v1.ValidateTokenRequest
+	24, // 21: voice.auth.v1.AuthService.GetJWKS:input_type -> voice.auth.v1.GetJWKSRequest
+	27, // 22: voice.auth.v1.AuthService.SwitchActiveProfile:input_type -> voice.auth.v1.SwitchActiveProfileRequest
+	29, // 23: voice.auth.v1.AuthService.SetAccountStatus:input_type -> voice.auth.v1.SetAccountStatusRequest
+	14, // 24: voice.auth.v1.AuthService.Register:output_type -> voice.auth.v1.RegisterResponse
+	15, // 25: voice.auth.v1.AuthService.Login:output_type -> voice.auth.v1.LoginResponse
+	16, // 26: voice.auth.v1.AuthService.Logout:output_type -> voice.auth.v1.LogoutResponse
+	17, // 27: voice.auth.v1.AuthService.RefreshToken:output_type -> voice.auth.v1.RefreshTokenResponse
+	6,  // 28: voice.auth.v1.AuthService.Enable2FA:output_type -> voice.auth.v1.Enable2FAResponse
+	18, // 29: voice.auth.v1.AuthService.Verify2FA:output_type -> voice.auth.v1.Verify2FAResponse
+	19, // 30: voice.auth.v1.AuthService.VerifyOTP:output_type -> voice.auth.v1.VerifyOTPResponse
+	20, // 31: voice.auth.v1.AuthService.ConvertGuest:output_type -> voice.auth.v1.ConvertGuestResponse
+	21, // 32: voice.auth.v1.AuthService.DeleteAccount:output_type -> voice.auth.v1.DeleteAccountResponse
+	22, // 33: voice.auth.v1.AuthService.RestoreAccount:output_type -> voice.auth.v1.RestoreAccountResponse
+	23, // 34: voice.auth.v1.AuthService.ValidateToken:output_type -> voice.auth.v1.ValidateTokenResponse
+	25, // 35: voice.auth.v1.AuthService.GetJWKS:output_type -> voice.auth.v1.GetJWKSResponse
+	28, // 36: voice.auth.v1.AuthService.SwitchActiveProfile:output_type -> voice.auth.v1.SwitchActiveProfileResponse
+	30, // 37: voice.auth.v1.AuthService.SetAccountStatus:output_type -> voice.auth.v1.SetAccountStatusResponse
+	24, // [24:38] is the sub-list for method output_type
+	10, // [10:24] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_voice_auth_v1_auth_proto_init() }
@@ -1559,7 +1793,7 @@ func file_voice_auth_v1_auth_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_voice_auth_v1_auth_proto_rawDesc), len(file_voice_auth_v1_auth_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   26,
+			NumMessages:   30,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -11,6 +11,7 @@ public class AuthProperties {
   private final Grpc grpc = new Grpc();
   private final UserDb userDb = new UserDb();
   private final Totp totp = new Totp();
+  private final OAuth oauth = new OAuth();
   private PersistenceMode persistence = PersistenceMode.JDBC;
 
   public UserDb getUserDb() {
@@ -48,6 +49,22 @@ public class AuthProperties {
 
   public Totp getTotp() {
     return totp;
+  }
+
+  public OAuth getOauth() {
+    return oauth;
+  }
+
+  public static class OAuth {
+    private String twitchApiBaseUrl = "https://api.twitch.tv";
+
+    public String getTwitchApiBaseUrl() {
+      return twitchApiBaseUrl;
+    }
+
+    public void setTwitchApiBaseUrl(String twitchApiBaseUrl) {
+      this.twitchApiBaseUrl = twitchApiBaseUrl;
+    }
   }
 
   public static class Jwt {

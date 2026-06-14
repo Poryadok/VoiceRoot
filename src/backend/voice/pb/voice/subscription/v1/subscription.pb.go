@@ -1520,6 +1520,102 @@ func (x *GetBillingHistoryResponse) GetBillingHistoryList() *BillingHistoryList 
 	return nil
 }
 
+type ApplyDowngradeProfilesRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	AccountId      string                 `protobuf:"bytes,1,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
+	KeptProfileIds []string               `protobuf:"bytes,2,rep,name=kept_profile_ids,json=keptProfileIds,proto3" json:"kept_profile_ids,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ApplyDowngradeProfilesRequest) Reset() {
+	*x = ApplyDowngradeProfilesRequest{}
+	mi := &file_voice_subscription_v1_subscription_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ApplyDowngradeProfilesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ApplyDowngradeProfilesRequest) ProtoMessage() {}
+
+func (x *ApplyDowngradeProfilesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_subscription_v1_subscription_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ApplyDowngradeProfilesRequest.ProtoReflect.Descriptor instead.
+func (*ApplyDowngradeProfilesRequest) Descriptor() ([]byte, []int) {
+	return file_voice_subscription_v1_subscription_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *ApplyDowngradeProfilesRequest) GetAccountId() string {
+	if x != nil {
+		return x.AccountId
+	}
+	return ""
+}
+
+func (x *ApplyDowngradeProfilesRequest) GetKeptProfileIds() []string {
+	if x != nil {
+		return x.KeptProfileIds
+	}
+	return nil
+}
+
+type ApplyDowngradeProfilesResponse struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	KeptProfileIds []string               `protobuf:"bytes,1,rep,name=kept_profile_ids,json=keptProfileIds,proto3" json:"kept_profile_ids,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ApplyDowngradeProfilesResponse) Reset() {
+	*x = ApplyDowngradeProfilesResponse{}
+	mi := &file_voice_subscription_v1_subscription_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ApplyDowngradeProfilesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ApplyDowngradeProfilesResponse) ProtoMessage() {}
+
+func (x *ApplyDowngradeProfilesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_subscription_v1_subscription_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ApplyDowngradeProfilesResponse.ProtoReflect.Descriptor instead.
+func (*ApplyDowngradeProfilesResponse) Descriptor() ([]byte, []int) {
+	return file_voice_subscription_v1_subscription_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *ApplyDowngradeProfilesResponse) GetKeptProfileIds() []string {
+	if x != nil {
+		return x.KeptProfileIds
+	}
+	return nil
+}
+
 var File_voice_subscription_v1_subscription_proto protoreflect.FileDescriptor
 
 const file_voice_subscription_v1_subscription_proto_rawDesc = "" +
@@ -1632,8 +1728,13 @@ const file_voice_subscription_v1_subscription_proto_rawDesc = "" +
 	"\x1bHandlePaddleWebhookResponse\"$\n" +
 	"\"HandleCloudPaymentsWebhookResponse\"x\n" +
 	"\x19GetBillingHistoryResponse\x12[\n" +
-	"\x14billing_history_list\x18\x01 \x01(\v2).voice.subscription.v1.BillingHistoryListR\x12billingHistoryList2\xe4\n" +
+	"\x14billing_history_list\x18\x01 \x01(\v2).voice.subscription.v1.BillingHistoryListR\x12billingHistoryList\"h\n" +
+	"\x1dApplyDowngradeProfilesRequest\x12\x1d\n" +
 	"\n" +
+	"account_id\x18\x01 \x01(\tR\taccountId\x12(\n" +
+	"\x10kept_profile_ids\x18\x02 \x03(\tR\x0ekeptProfileIds\"J\n" +
+	"\x1eApplyDowngradeProfilesResponse\x12(\n" +
+	"\x10kept_profile_ids\x18\x01 \x03(\tR\x0ekeptProfileIds2\xec\v\n" +
 	"\x13SubscriptionService\x12p\n" +
 	"\x0fGetSubscription\x12-.voice.subscription.v1.GetSubscriptionRequest\x1a..voice.subscription.v1.GetSubscriptionResponse\x12\x82\x01\n" +
 	"\x15CreateCheckoutSession\x123.voice.subscription.v1.CreateCheckoutSessionRequest\x1a4.voice.subscription.v1.CreateCheckoutSessionResponse\x12y\n" +
@@ -1646,7 +1747,8 @@ const file_voice_subscription_v1_subscription_proto_rawDesc = "" +
 	"CheckLimit\x12(.voice.subscription.v1.CheckLimitRequest\x1a).voice.subscription.v1.CheckLimitResponse\x12|\n" +
 	"\x13HandlePaddleWebhook\x121.voice.subscription.v1.HandlePaddleWebhookRequest\x1a2.voice.subscription.v1.HandlePaddleWebhookResponse\x12\x91\x01\n" +
 	"\x1aHandleCloudPaymentsWebhook\x128.voice.subscription.v1.HandleCloudPaymentsWebhookRequest\x1a9.voice.subscription.v1.HandleCloudPaymentsWebhookResponse\x12v\n" +
-	"\x11GetBillingHistory\x12/.voice.subscription.v1.GetBillingHistoryRequest\x1a0.voice.subscription.v1.GetBillingHistoryResponseB0Z.voice.app/voice/subscription/v1;subscriptionv1b\x06proto3"
+	"\x11GetBillingHistory\x12/.voice.subscription.v1.GetBillingHistoryRequest\x1a0.voice.subscription.v1.GetBillingHistoryResponse\x12\x85\x01\n" +
+	"\x16ApplyDowngradeProfiles\x124.voice.subscription.v1.ApplyDowngradeProfilesRequest\x1a5.voice.subscription.v1.ApplyDowngradeProfilesResponseB0Z.voice.app/voice/subscription/v1;subscriptionv1b\x06proto3"
 
 var (
 	file_voice_subscription_v1_subscription_proto_rawDescOnce sync.Once
@@ -1660,7 +1762,7 @@ func file_voice_subscription_v1_subscription_proto_rawDescGZIP() []byte {
 	return file_voice_subscription_v1_subscription_proto_rawDescData
 }
 
-var file_voice_subscription_v1_subscription_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
+var file_voice_subscription_v1_subscription_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
 var file_voice_subscription_v1_subscription_proto_goTypes = []any{
 	(*Subscription)(nil),                       // 0: voice.subscription.v1.Subscription
 	(*GetSubscriptionRequest)(nil),             // 1: voice.subscription.v1.GetSubscriptionRequest
@@ -1690,24 +1792,26 @@ var file_voice_subscription_v1_subscription_proto_goTypes = []any{
 	(*HandlePaddleWebhookResponse)(nil),        // 25: voice.subscription.v1.HandlePaddleWebhookResponse
 	(*HandleCloudPaymentsWebhookResponse)(nil), // 26: voice.subscription.v1.HandleCloudPaymentsWebhookResponse
 	(*GetBillingHistoryResponse)(nil),          // 27: voice.subscription.v1.GetBillingHistoryResponse
-	(*timestamppb.Timestamp)(nil),              // 28: google.protobuf.Timestamp
-	(*v1.SpaceRef)(nil),                        // 29: voice.space.v1.SpaceRef
-	(*v11.CursorPageRequest)(nil),              // 30: voice.common.v1.CursorPageRequest
+	(*ApplyDowngradeProfilesRequest)(nil),      // 28: voice.subscription.v1.ApplyDowngradeProfilesRequest
+	(*ApplyDowngradeProfilesResponse)(nil),     // 29: voice.subscription.v1.ApplyDowngradeProfilesResponse
+	(*timestamppb.Timestamp)(nil),              // 30: google.protobuf.Timestamp
+	(*v1.SpaceRef)(nil),                        // 31: voice.space.v1.SpaceRef
+	(*v11.CursorPageRequest)(nil),              // 32: voice.common.v1.CursorPageRequest
 }
 var file_voice_subscription_v1_subscription_proto_depIdxs = []int32{
-	28, // 0: voice.subscription.v1.Subscription.current_period_start:type_name -> google.protobuf.Timestamp
-	28, // 1: voice.subscription.v1.Subscription.current_period_end:type_name -> google.protobuf.Timestamp
-	28, // 2: voice.subscription.v1.Subscription.grace_period_end:type_name -> google.protobuf.Timestamp
-	28, // 3: voice.subscription.v1.Subscription.cancelled_at:type_name -> google.protobuf.Timestamp
-	29, // 4: voice.subscription.v1.SpaceSubscription.space:type_name -> voice.space.v1.SpaceRef
-	28, // 5: voice.subscription.v1.SpaceSubscription.current_period_start:type_name -> google.protobuf.Timestamp
-	28, // 6: voice.subscription.v1.SpaceSubscription.current_period_end:type_name -> google.protobuf.Timestamp
-	29, // 7: voice.subscription.v1.GetSpaceSubscriptionRequest.space:type_name -> voice.space.v1.SpaceRef
-	29, // 8: voice.subscription.v1.CreateSpaceCheckoutSessionRequest.space:type_name -> voice.space.v1.SpaceRef
-	29, // 9: voice.subscription.v1.GetLimitsRequest.scope_space:type_name -> voice.space.v1.SpaceRef
-	30, // 10: voice.subscription.v1.GetBillingHistoryRequest.page:type_name -> voice.common.v1.CursorPageRequest
+	30, // 0: voice.subscription.v1.Subscription.current_period_start:type_name -> google.protobuf.Timestamp
+	30, // 1: voice.subscription.v1.Subscription.current_period_end:type_name -> google.protobuf.Timestamp
+	30, // 2: voice.subscription.v1.Subscription.grace_period_end:type_name -> google.protobuf.Timestamp
+	30, // 3: voice.subscription.v1.Subscription.cancelled_at:type_name -> google.protobuf.Timestamp
+	31, // 4: voice.subscription.v1.SpaceSubscription.space:type_name -> voice.space.v1.SpaceRef
+	30, // 5: voice.subscription.v1.SpaceSubscription.current_period_start:type_name -> google.protobuf.Timestamp
+	30, // 6: voice.subscription.v1.SpaceSubscription.current_period_end:type_name -> google.protobuf.Timestamp
+	31, // 7: voice.subscription.v1.GetSpaceSubscriptionRequest.space:type_name -> voice.space.v1.SpaceRef
+	31, // 8: voice.subscription.v1.CreateSpaceCheckoutSessionRequest.space:type_name -> voice.space.v1.SpaceRef
+	31, // 9: voice.subscription.v1.GetLimitsRequest.scope_space:type_name -> voice.space.v1.SpaceRef
+	32, // 10: voice.subscription.v1.GetBillingHistoryRequest.page:type_name -> voice.common.v1.CursorPageRequest
 	17, // 11: voice.subscription.v1.BillingHistoryList.events:type_name -> voice.subscription.v1.BillingEvent
-	28, // 12: voice.subscription.v1.BillingEvent.occurred_at:type_name -> google.protobuf.Timestamp
+	30, // 12: voice.subscription.v1.BillingEvent.occurred_at:type_name -> google.protobuf.Timestamp
 	0,  // 13: voice.subscription.v1.GetSubscriptionResponse.subscription:type_name -> voice.subscription.v1.Subscription
 	3,  // 14: voice.subscription.v1.CreateCheckoutSessionResponse.checkout_response:type_name -> voice.subscription.v1.CheckoutResponse
 	0,  // 15: voice.subscription.v1.CancelSubscriptionResponse.subscription:type_name -> voice.subscription.v1.Subscription
@@ -1727,19 +1831,21 @@ var file_voice_subscription_v1_subscription_proto_depIdxs = []int32{
 	13, // 29: voice.subscription.v1.SubscriptionService.HandlePaddleWebhook:input_type -> voice.subscription.v1.HandlePaddleWebhookRequest
 	14, // 30: voice.subscription.v1.SubscriptionService.HandleCloudPaymentsWebhook:input_type -> voice.subscription.v1.HandleCloudPaymentsWebhookRequest
 	15, // 31: voice.subscription.v1.SubscriptionService.GetBillingHistory:input_type -> voice.subscription.v1.GetBillingHistoryRequest
-	18, // 32: voice.subscription.v1.SubscriptionService.GetSubscription:output_type -> voice.subscription.v1.GetSubscriptionResponse
-	19, // 33: voice.subscription.v1.SubscriptionService.CreateCheckoutSession:output_type -> voice.subscription.v1.CreateCheckoutSessionResponse
-	20, // 34: voice.subscription.v1.SubscriptionService.CancelSubscription:output_type -> voice.subscription.v1.CancelSubscriptionResponse
-	21, // 35: voice.subscription.v1.SubscriptionService.ResumeSubscription:output_type -> voice.subscription.v1.ResumeSubscriptionResponse
-	22, // 36: voice.subscription.v1.SubscriptionService.GetSpaceSubscription:output_type -> voice.subscription.v1.GetSpaceSubscriptionResponse
-	23, // 37: voice.subscription.v1.SubscriptionService.CreateSpaceCheckoutSession:output_type -> voice.subscription.v1.CreateSpaceCheckoutSessionResponse
-	24, // 38: voice.subscription.v1.SubscriptionService.GetLimits:output_type -> voice.subscription.v1.GetLimitsResponse
-	12, // 39: voice.subscription.v1.SubscriptionService.CheckLimit:output_type -> voice.subscription.v1.CheckLimitResponse
-	25, // 40: voice.subscription.v1.SubscriptionService.HandlePaddleWebhook:output_type -> voice.subscription.v1.HandlePaddleWebhookResponse
-	26, // 41: voice.subscription.v1.SubscriptionService.HandleCloudPaymentsWebhook:output_type -> voice.subscription.v1.HandleCloudPaymentsWebhookResponse
-	27, // 42: voice.subscription.v1.SubscriptionService.GetBillingHistory:output_type -> voice.subscription.v1.GetBillingHistoryResponse
-	32, // [32:43] is the sub-list for method output_type
-	21, // [21:32] is the sub-list for method input_type
+	28, // 32: voice.subscription.v1.SubscriptionService.ApplyDowngradeProfiles:input_type -> voice.subscription.v1.ApplyDowngradeProfilesRequest
+	18, // 33: voice.subscription.v1.SubscriptionService.GetSubscription:output_type -> voice.subscription.v1.GetSubscriptionResponse
+	19, // 34: voice.subscription.v1.SubscriptionService.CreateCheckoutSession:output_type -> voice.subscription.v1.CreateCheckoutSessionResponse
+	20, // 35: voice.subscription.v1.SubscriptionService.CancelSubscription:output_type -> voice.subscription.v1.CancelSubscriptionResponse
+	21, // 36: voice.subscription.v1.SubscriptionService.ResumeSubscription:output_type -> voice.subscription.v1.ResumeSubscriptionResponse
+	22, // 37: voice.subscription.v1.SubscriptionService.GetSpaceSubscription:output_type -> voice.subscription.v1.GetSpaceSubscriptionResponse
+	23, // 38: voice.subscription.v1.SubscriptionService.CreateSpaceCheckoutSession:output_type -> voice.subscription.v1.CreateSpaceCheckoutSessionResponse
+	24, // 39: voice.subscription.v1.SubscriptionService.GetLimits:output_type -> voice.subscription.v1.GetLimitsResponse
+	12, // 40: voice.subscription.v1.SubscriptionService.CheckLimit:output_type -> voice.subscription.v1.CheckLimitResponse
+	25, // 41: voice.subscription.v1.SubscriptionService.HandlePaddleWebhook:output_type -> voice.subscription.v1.HandlePaddleWebhookResponse
+	26, // 42: voice.subscription.v1.SubscriptionService.HandleCloudPaymentsWebhook:output_type -> voice.subscription.v1.HandleCloudPaymentsWebhookResponse
+	27, // 43: voice.subscription.v1.SubscriptionService.GetBillingHistory:output_type -> voice.subscription.v1.GetBillingHistoryResponse
+	29, // 44: voice.subscription.v1.SubscriptionService.ApplyDowngradeProfiles:output_type -> voice.subscription.v1.ApplyDowngradeProfilesResponse
+	33, // [33:45] is the sub-list for method output_type
+	21, // [21:33] is the sub-list for method input_type
 	21, // [21:21] is the sub-list for extension type_name
 	21, // [21:21] is the sub-list for extension extendee
 	0,  // [0:21] is the sub-list for field type_name
@@ -1758,7 +1864,7 @@ func file_voice_subscription_v1_subscription_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_voice_subscription_v1_subscription_proto_rawDesc), len(file_voice_subscription_v1_subscription_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   28,
+			NumMessages:   30,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -62,6 +62,57 @@ class TotpEnrollmentData {
   final List<String> backupCodes;
 }
 
+sealed class AuthApiResult<T> {
+  const AuthApiResult();
+}
+
+final class AuthApiOk<T> extends AuthApiResult<T> {
+  const AuthApiOk(this.data);
+  final T data;
+}
+
+final class AuthApiFailure extends AuthApiResult<Never> {
+  const AuthApiFailure({
+    required this.message,
+    this.errorCode,
+    this.statusCode,
+  });
+
+  final String message;
+  final String? errorCode;
+  final int? statusCode;
+}
+
+class LinkedAccount {
+  const LinkedAccount({
+    required this.platform,
+    this.externalId,
+    this.displayName,
+    this.linkedAt,
+  });
+
+  final String platform;
+  final String? externalId;
+  final String? displayName;
+  final DateTime? linkedAt;
+}
+
+List<LinkedAccount> linkedAccountsFromJson(Map<String, dynamic> json) {
+  final raw = json['linked_accounts'];
+  if (raw is! List<dynamic>) return const [];
+  return raw
+      .whereType<Map<String, dynamic>>()
+      .map(
+        (item) => LinkedAccount(
+          platform: item['platform'] as String? ?? '',
+          externalId: item['external_id'] as String?,
+          displayName: item['display_name'] as String?,
+        ),
+      )
+      .where((a) => a.platform.isNotEmpty)
+      .toList(growable: false);
+}
+
 /// HTTP client for public Auth routes via API Gateway (`/api/v1/auth/*`).
 class VoiceAuthClient {
   VoiceAuthClient({required GatewayHttpClient gateway}) : _gateway = gateway;
@@ -147,6 +198,71 @@ class VoiceAuthClient {
         AuthSession.fromAuthResponse(data),
       ),
       GatewayHttpFailure(:final error) => AuthSessionFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
+  }
+
+  Future<AuthSessionResult> switchActiveProfile({
+    required AuthSession session,
+    required String profileId,
+  }) async {
+    final result = await _gateway.postJson(
+      uri: _gateway.resolve('/api/v1/auth/switch-profile'),
+      authorization: session.authorizationHeader,
+      body: {
+        'profile_id': profileId,
+        'device_info_json': _deviceInfoJson,
+      },
+    );
+    return switch (result) {
+      GatewayHttpOk(:final data) => AuthSessionOk(
+        AuthSession.fromAuthResponse(data),
+      ),
+      GatewayHttpFailure(:final error) => AuthSessionFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
+  }
+
+  Future<AuthApiResult<List<LinkedAccount>>> listLinkedAccounts({
+    required AuthSession session,
+  }) async {
+    final result = await _gateway.getJson(
+      _gateway.resolve('/api/v1/auth/linked-accounts'),
+      authorization: session.authorizationHeader,
+    );
+    return switch (result) {
+      GatewayHttpOk(:final data) => AuthApiOk(
+        linkedAccountsFromJson(data),
+      ),
+      GatewayHttpFailure(:final error) => AuthApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
+  }
+
+  Future<AuthApiResult<String>> startLinkedAccountLink({
+    required AuthSession session,
+    required String platform,
+    required String redirectUri,
+  }) async {
+    final result = await _gateway.postJson(
+      uri: _gateway.resolve('/api/v1/auth/linked-accounts/$platform/link'),
+      authorization: session.authorizationHeader,
+      body: {'redirect_uri': redirectUri},
+    );
+    return switch (result) {
+      GatewayHttpOk(:final data) => AuthApiOk(
+        data['authorization_url'] as String? ?? '',
+      ),
+      GatewayHttpFailure(:final error) => AuthApiFailure(
         message: GatewayApiResultMapper.failureMessage(error),
         errorCode: GatewayApiResultMapper.failureCode(error),
         statusCode: GatewayApiResultMapper.failureStatus(error),

@@ -21,11 +21,17 @@ func loadGatewayConfigFromEnv() gatewayConfig {
 	}
 	loadJSONEnv("GATEWAY_VERSION_CONFIGS_JSON", &config.versionConfigs)
 	loadJSONEnv("GATEWAY_FORCE_UPDATE_JSON", &config.forceUpdate)
+	loadJSONEnv("GATEWAY_STATIC_TOKENS_JSON", &config.tokenClaims)
+	static := staticTokenValidator(config.tokenClaims)
 	if strings.EqualFold(os.Getenv("GATEWAY_AUTH_MODE"), "static") {
-		loadJSONEnv("GATEWAY_STATIC_TOKENS_JSON", &config.tokenClaims)
-		config.tokenValidator = staticTokenValidator(config.tokenClaims)
+		config.tokenValidator = static
 	} else if jwksURL := strings.TrimSpace(os.Getenv("GATEWAY_JWKS_URL")); jwksURL != "" {
-		config.tokenValidator = voicejwt.NewJWKSValidator(jwksURL, os.Getenv("GATEWAY_JWT_ISSUER"), os.Getenv("GATEWAY_JWT_AUDIENCE"))
+		jwks := voicejwt.NewJWKSValidator(jwksURL, os.Getenv("GATEWAY_JWT_ISSUER"), os.Getenv("GATEWAY_JWT_AUDIENCE"))
+		if len(static) > 0 {
+			config.tokenValidator = chainedTokenValidator{static: static, next: jwks}
+		} else {
+			config.tokenValidator = jwks
+		}
 	}
 	config.restUpstreams = restUpstreamsFromEnv()
 	config.transcoder = newTranscoder(grpcClientsFromEnv())

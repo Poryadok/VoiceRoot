@@ -25,11 +25,12 @@ type MessageHit struct {
 
 // ProfileDocument is a projection row for profile discovery search.
 type ProfileDocument struct {
-	ProfileID     uuid.UUID
-	AccountID     uuid.UUID
-	Username      string
-	Discriminator string
-	DisplayName   string
+	ProfileID         uuid.UUID
+	AccountID         uuid.UUID
+	Username          string
+	Discriminator     string
+	DisplayName       string
+	VerificationType  string
 }
 
 // ProfileHit is a profile search result row.

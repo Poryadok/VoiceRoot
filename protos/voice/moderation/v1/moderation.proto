@@ -60,6 +60,8 @@ message GetReportRequest {
 message ListReportsRequest {
   string status_filter = 1;
   voice.common.v1.CursorPageRequest page = 2;
+  // Phase 14: "content" (user/message) vs "spaces" queues — docs/features/reports.md.
+  string queue_filter = 3;
 }
 
 message ReportList {
@@ -71,6 +73,7 @@ message ResolveReportRequest {
   string report_id = 1;
   string resolution_json = 2;
   string new_status = 3;
+  optional string assigned_to_profile_id = 4;
 }
 
 message Sanction {

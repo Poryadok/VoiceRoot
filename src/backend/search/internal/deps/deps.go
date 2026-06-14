@@ -202,25 +202,25 @@ type ProfileHydrator struct {
 	Client userv1.UserServiceClient
 }
 
-func (p *ProfileHydrator) LoadProfile(ctx context.Context, profileID uuid.UUID) (uuid.UUID, string, string, string, error) {
+func (p *ProfileHydrator) LoadProfile(ctx context.Context, profileID uuid.UUID) (uuid.UUID, string, string, string, string, error) {
 	if p == nil || p.Client == nil {
-		return uuid.Nil, "", "", "", fmt.Errorf("user client unavailable")
+		return uuid.Nil, "", "", "", "", fmt.Errorf("user client unavailable")
 	}
 	resp, err := p.Client.GetProfile(ctx, &userv1.GetProfileRequest{
 		By: &userv1.GetProfileRequest_ProfileId{ProfileId: profileID.String()},
 	})
 	if err != nil {
-		return uuid.Nil, "", "", "", err
+		return uuid.Nil, "", "", "", "", err
 	}
 	prof := resp.GetProfile()
 	if prof == nil {
-		return uuid.Nil, "", "", "", fmt.Errorf("profile not found")
+		return uuid.Nil, "", "", "", "", fmt.Errorf("profile not found")
 	}
 	accountID, err := uuid.Parse(prof.GetAccountId())
 	if err != nil {
-		return uuid.Nil, "", "", "", err
+		return uuid.Nil, "", "", "", "", err
 	}
-	return accountID, prof.GetUsername(), prof.GetDiscriminator(), prof.GetDisplayName(), nil
+	return accountID, prof.GetUsername(), prof.GetDiscriminator(), prof.GetDisplayName(), prof.GetVerificationType(), nil
 }
 
 // ChatHydrator loads chat titles for search projections.
