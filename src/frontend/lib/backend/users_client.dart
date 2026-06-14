@@ -47,6 +47,8 @@ class VoiceProfile {
     this.avatarUrl,
     this.bio,
     this.customStatus,
+    this.isPrimary = false,
+    this.verificationBadge,
   });
 
   final String id;
@@ -57,6 +59,8 @@ class VoiceProfile {
   final String? avatarUrl;
   final String? bio;
   final String? customStatus;
+  final bool isPrimary;
+  final String? verificationBadge;
 
   String get handle => '@$username#$discriminator';
 }
@@ -116,6 +120,22 @@ class VoiceUsersClient {
   VoiceUsersClient({required GatewayHttpClient gateway}) : _gateway = gateway;
 
   final GatewayHttpClient _gateway;
+
+  Future<UsersApiResult<List<VoiceProfile>>> listMyProfiles({
+    required String authorization,
+  }) async {
+    final result = await _gateway.getProto(
+      _gateway.resolve('/api/v1/users/me/profiles'),
+      authorization: authorization,
+      createEmpty: user_pb.ListMyProfilesResponse.create,
+    );
+    return _map(
+      result,
+      (data) => voiceProfileListFromProto(
+        data.hasProfileList() ? data.profileList : user_pb.ProfileList(),
+      ),
+    );
+  }
 
   Future<UsersApiResult<VoiceProfile>> getMe({
     required String authorization,

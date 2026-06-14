@@ -63,7 +63,13 @@ func (s *VoiceGRPC) JoinVoiceRoom(ctx context.Context, req *callsv1.JoinVoiceRoo
 	}
 
 	if !call.IsParticipant(profileID) {
-		call, err = s.Calls.AddParticipant(ctx, call.RoomID, profileID, voicestore.MaxVoiceRoomParticipants)
+		maxParticipants := voicestore.MaxVoiceRoomParticipants
+		if s.SpacePro != nil {
+			if ok, err := s.SpacePro.HasSpacePro(ctx, spaceID); err == nil && ok {
+				maxParticipants = voicestore.MaxSpaceProVoiceParticipants
+			}
+		}
+		call, err = s.Calls.AddParticipant(ctx, call.RoomID, profileID, maxParticipants)
 		if err != nil {
 			return nil, storeErr(err)
 		}

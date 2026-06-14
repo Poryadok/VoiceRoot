@@ -535,6 +535,28 @@
   "settingsLanguageEn": "English",
   "settingsLanguageRu": "Русский",
   "settingsAccent": "Акцент профиля",
+  "settingsSubscription": "Подписка",
+  "subscriptionSettingsTitle": "Подписка",
+  "subscriptionCurrentPlan": "Текущий план",
+  "subscriptionStatusFree": "Бесплатный",
+  "subscriptionStatusPremium": "Премиум",
+  "subscriptionBillingPeriod": "Оплата: {period}",
+  "@subscriptionBillingPeriod": {
+    "placeholders": {
+      "period": { "type": "String" }
+    }
+  },
+  "subscriptionUpgradeTitle": "Перейти на Премиум",
+  "subscriptionUpgradeMonthly": "Премиум — помесячно",
+  "subscriptionUpgradeYearly": "Премиум — годовой (−20%)",
+  "subscriptionManageBilling": "Управление подпиской",
+  "subscriptionCancel": "Отменить подписку",
+  "subscriptionProfilesLoadError": "Не удалось загрузить профили",
+  "downgradeProfilePickerTitle": "Выберите 2 профиля, которые останутся активными",
+  "downgradeProfilePickerHint": "Остальные профили будут заморожены до продления Премиума.",
+  "downgradeProfilePickerConfirm": "Сохранить выбранные профили",
+  "downgradeProfilePrimary": "Основной профиль",
+  "premiumBadgeLabel": "Премиум",
   "settingsSecurity": "Безопасность и доверие",
   "securitySettingsTitle": "Безопасность",
   "security2faEnableTitle": "Двухфакторная аутентификация",

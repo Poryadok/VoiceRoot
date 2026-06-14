@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
+import '../../state/subscription_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../../theme/voice_theme_providers.dart';
 import 'privacy_settings_screen.dart';
 import 'security_settings_screen.dart';
+import 'subscription_settings_screen.dart';
 
 class SettingsSheet extends ConsumerWidget {
   const SettingsSheet({super.key});
@@ -24,12 +26,14 @@ class SettingsSheet extends ConsumerWidget {
     final localePref = ref.watch(appLocalePreferenceProvider);
     final catalogAsync = ref.watch(voiceTokenCatalogProvider);
     final profileId = ref.watch(authControllerProvider).activeProfileId;
+    final subscription = ref.watch(subscriptionProvider).valueOrNull;
 
     return SafeArea(
       child: Padding(
         key: sheetKey,
         padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-        child: Column(
+        child: SingleChildScrollView(
+          child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -64,6 +68,24 @@ class SettingsSheet extends ConsumerWidget {
                 Navigator.of(context).push(
                   MaterialPageRoute<void>(
                     builder: (_) => const PrivacySettingsScreen(),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              key: const Key('settings_subscription'),
+              contentPadding: EdgeInsets.zero,
+              title: Text(l10n.subscriptionSettingsTitle),
+              subtitle: subscription != null
+                  ? Text(subscription.plan)
+                  : null,
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const SubscriptionSettingsScreen(),
                   ),
                 );
               },
@@ -139,6 +161,7 @@ class SettingsSheet extends ConsumerWidget {
               ),
             ],
           ],
+        ),
         ),
       ),
     );

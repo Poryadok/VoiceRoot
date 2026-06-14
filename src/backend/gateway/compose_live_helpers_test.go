@@ -2,12 +2,16 @@ package main
 
 import (
 	"bytes"
+	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -1323,4 +1327,90 @@ func assignComposeSpaceRole(t *testing.T, client *http.Client, base, accessToken
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
 	require.Equal(t, http.StatusOK, resp.StatusCode, "POST assign role body=%s", string(body))
+}
+
+const (
+	composeUpload100MiB = 100 << 20
+	composeUpload250MiB = 250 << 20
+	composeUpload51MiB  = 51 << 20
+)
+
+func composeSignPaddleWebhook(t *testing.T, body string) string {
+	t.Helper()
+	secret := strings.TrimSpace(os.Getenv("PADDLE_WEBHOOK_SECRET"))
+	if secret == "" {
+		secret = "test-webhook-secret"
+	}
+	ts := strconv.FormatInt(time.Unix(1700000000, 0).Unix(), 10)
+	mac := hmac.New(sha256.New, []byte(secret))
+	_, err := mac.Write([]byte(ts + ":" + body))
+	require.NoError(t, err)
+	return "ts=" + ts + ",h1=" + hex.EncodeToString(mac.Sum(nil))
+}
+
+func composePremiumWebhookBody(t *testing.T, accountID string) string {
+	t.Helper()
+	body, err := json.Marshal(map[string]any{
+		"event_id":   "evt_paddle_" + strconv.FormatInt(time.Now().UnixNano(), 10),
+		"event_type": "subscription.activated",
+		"data": map[string]any{
+			"custom_data": map[string]string{
+				"account_id": accountID,
+				"plan":       "premium",
+			},
+			"status": "active",
+		},
+	})
+	require.NoError(t, err)
+	return string(body)
+}
+
+func composeActivatePremiumWebhook(t *testing.T, client *http.Client, base, accountID string) {
+	t.Helper()
+	body := composePremiumWebhookBody(t, accountID)
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/subscription/webhooks/paddle", bytes.NewReader([]byte(body)))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Paddle-Signature", composeSignPaddleWebhook(t, body))
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "premium webhook body=%s", string(raw))
+}
+
+func composeGetSubscriptionPlan(t *testing.T, client *http.Client, base, accessToken string) string {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, base+"/api/v1/subscription/me", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "subscription/me body=%s", string(body))
+	var parsed struct {
+		Subscription struct {
+			Plan   string `json:"plan"`
+			Status string `json:"status"`
+		} `json:"subscription"`
+	}
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	return parsed.Subscription.Plan
+}
+
+func composeRequestUploadStatus(
+	t *testing.T,
+	client *http.Client,
+	base, accessToken string,
+	sizeBytes int64,
+) int {
+	t.Helper()
+	payload, err := json.Marshal(map[string]any{
+		"original_name": "phase12-boundary.bin",
+		"mime_type":     "application/octet-stream",
+		"size_bytes":    sizeBytes,
+	})
+	require.NoError(t, err)
+	return composePostStatus(t, client, base, accessToken, "/api/v1/files/upload", payload)
 }

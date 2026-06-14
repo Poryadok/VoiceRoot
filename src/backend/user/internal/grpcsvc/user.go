@@ -145,6 +145,14 @@ func (s *UserGRPC) UpdateProfile(ctx context.Context, req *userv1.UpdateProfileR
 		}
 		in.Bio = req.Bio
 	}
+	if req.BannerUrl != nil {
+		tier := authctx.SubscriptionTier(ctx)
+		if tier != "premium" {
+			return nil, status.Error(codes.FailedPrecondition, "profile banners require premium subscription")
+		}
+		b := strings.TrimSpace(*req.BannerUrl)
+		in.BannerURL = &b
+	}
 	if req.Locale != nil {
 		l := strings.TrimSpace(*req.Locale)
 		if l != "ru" && l != "en" {
@@ -159,7 +167,7 @@ func (s *UserGRPC) UpdateProfile(ctx context.Context, req *userv1.UpdateProfileR
 		}
 		in.Theme = &t
 	}
-	// v1 DDL has no banner_url / custom_status columns — ignore for persistence.
+	// custom_status not persisted in v1 DDL.
 
 	row, err := s.Profiles.UpdateOwnedProfile(ctx, accountID, profileID, in)
 	if err != nil {
@@ -179,6 +187,9 @@ func (s *UserGRPC) UpdateProfile(ctx context.Context, req *userv1.UpdateProfileR
 		if in.Bio != nil {
 			changed = append(changed, "bio")
 		}
+		if in.BannerURL != nil {
+			changed = append(changed, "banner_url")
+		}
 		if in.Locale != nil {
 			changed = append(changed, "locale")
 		}
@@ -195,6 +206,14 @@ func (s *UserGRPC) CreateProfile(ctx context.Context, req *userv1.CreateProfileR
 	accountID, ok := authctx.AccountID(ctx)
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing credentials")
+	}
+	tier := authctx.SubscriptionTier(ctx)
+	count, err := s.Profiles.CountByAccountID(ctx, accountID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if count >= store.MaxProfilesForTier(tier) {
+		return nil, status.Error(codes.ResourceExhausted, "profile limit reached for subscription tier")
 	}
 	dn := strings.TrimSpace(req.GetDisplayName())
 	if dn == "" || len(dn) > store.MaxDisplayNameRunes {
@@ -216,6 +235,37 @@ func (s *UserGRPC) CreateProfile(ctx context.Context, req *userv1.CreateProfileR
 		_ = s.Events.PublishProfileCreated(ctx, row.ID.String(), row.AccountID.String())
 	}
 	return &userv1.CreateProfileResponse{Profile: rowToProto(row)}, nil
+}
+
+func (s *UserGRPC) SwitchProfile(ctx context.Context, req *userv1.SwitchProfileRequest) (*userv1.SwitchProfileResponse, error) {
+	accountID, ok := authctx.AccountID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing credentials")
+	}
+	if s.Profiles == nil {
+		return nil, status.Error(codes.FailedPrecondition, "profile store not configured")
+	}
+	tier := authctx.SubscriptionTier(ctx)
+	if tier == "free" {
+		if err := s.Profiles.ApplyFreeTierFreeze(ctx, accountID); err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+	}
+	profileID, err := uuid.Parse(strings.TrimSpace(req.GetProfileId()))
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid profile_id")
+	}
+	row, err := s.Profiles.GetOwnedProfile(ctx, accountID, profileID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if row == nil {
+		return nil, status.Error(codes.NotFound, "profile not found or not owned")
+	}
+	if row.FrozenAt != nil {
+		return nil, status.Error(codes.FailedPrecondition, "profile is frozen")
+	}
+	return &userv1.SwitchProfileResponse{Profile: rowToProto(row)}, nil
 }
 
 func (s *UserGRPC) ListMyProfiles(ctx context.Context, _ *userv1.ListMyProfilesRequest) (*userv1.ListMyProfilesResponse, error) {

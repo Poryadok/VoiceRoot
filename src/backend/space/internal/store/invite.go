@@ -266,6 +266,18 @@ WHERE space_id = $1 AND profile_id = $2
 		return existing, nil
 	}
 
+	cap, err := memberCapTx(ctx, tx, inv.SpaceID)
+	if err != nil {
+		return nil, err
+	}
+	var memberCount int32
+	if err := tx.QueryRow(ctx, `SELECT member_count FROM spaces WHERE id = $1`, inv.SpaceID).Scan(&memberCount); err != nil {
+		return nil, err
+	}
+	if memberCount >= cap {
+		return nil, ErrMemberCapReached
+	}
+
 	if _, err := tx.Exec(ctx, `
 INSERT INTO space_members (space_id, profile_id)
 VALUES ($1, $2)
@@ -297,4 +309,20 @@ WHERE space_id = $1 AND profile_id = $2
 		return nil, err
 	}
 	return member, nil
+}
+
+func memberCapTx(ctx context.Context, tx pgx.Tx, spaceID uuid.UUID) (int32, error) {
+	var hasPro bool
+	err := tx.QueryRow(ctx, `
+SELECT EXISTS (
+	SELECT 1 FROM space_subscriptions
+	WHERE space_id = $1 AND status IN ('active', 'grace_period')
+)`, spaceID).Scan(&hasPro)
+	if err != nil {
+		return 0, err
+	}
+	if hasPro {
+		return 5000, nil
+	}
+	return freeSpaceMemberCap, nil
 }

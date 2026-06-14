@@ -574,6 +574,28 @@
   "settingsLanguageEn": "English",
   "settingsLanguageRu": "Russian",
   "settingsAccent": "Profile accent",
+  "settingsSubscription": "Subscription",
+  "subscriptionSettingsTitle": "Subscription",
+  "subscriptionCurrentPlan": "Current plan",
+  "subscriptionStatusFree": "Free",
+  "subscriptionStatusPremium": "Premium",
+  "subscriptionBillingPeriod": "Billing: {period}",
+  "@subscriptionBillingPeriod": {
+    "placeholders": {
+      "period": { "type": "String" }
+    }
+  },
+  "subscriptionUpgradeTitle": "Upgrade to Premium",
+  "subscriptionUpgradeMonthly": "Premium — monthly",
+  "subscriptionUpgradeYearly": "Premium — yearly (−20%)",
+  "subscriptionManageBilling": "Manage subscription",
+  "subscriptionCancel": "Cancel subscription",
+  "subscriptionProfilesLoadError": "Could not load profiles",
+  "downgradeProfilePickerTitle": "Choose 2 profiles to keep",
+  "downgradeProfilePickerHint": "Other profiles will be frozen until you renew Premium.",
+  "downgradeProfilePickerConfirm": "Keep selected profiles",
+  "downgradeProfilePrimary": "Primary profile",
+  "premiumBadgeLabel": "Premium",
   "settingsSecurity": "Security & trust",
   "securitySettingsTitle": "Security",
   "security2faEnableTitle": "Two-factor authentication",

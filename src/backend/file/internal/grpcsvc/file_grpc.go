@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -124,7 +125,8 @@ func (s *FileGRPC) RequestUpload(ctx context.Context, req *filev1.RequestUploadR
 	originalName := strings.TrimSpace(req.GetOriginalName())
 	mimeType := strings.TrimSpace(strings.ToLower(req.GetMimeType()))
 	sizeBytes := req.GetSizeBytes()
-	if err := r2file.ValidateUpload(originalName, mimeType, sizeBytes); err != nil {
+	maxBytes := uploadMaxBytes(ctx)
+	if err := r2file.ValidateUpload(originalName, mimeType, sizeBytes, maxBytes); err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	chatID, chatType, err := s.chatContext(ctx, req.GetContextChat(), profileID)
@@ -138,6 +140,7 @@ func (s *FileGRPC) RequestUpload(ctx context.Context, req *filev1.RequestUploadR
 		Key:           r2Key,
 		ContentType:   mimeType,
 		ContentLength: sizeBytes,
+		MaxBytes:      maxBytes,
 		TTL:           r2file.DefaultURLTTL,
 	})
 	if err != nil {
@@ -507,6 +510,29 @@ func parseUUID(field, value string) (uuid.UUID, error) {
 		return uuid.Nil, status.Errorf(codes.InvalidArgument, "invalid %s", field)
 	}
 	return id, nil
+}
+
+func uploadMaxBytes(ctx context.Context) int64 {
+	if tier, ok := subscriptionTier(ctx); ok && tier == "premium" {
+		return r2file.MaxPremiumFileBytes
+	}
+	return r2file.MaxFreeFileBytes
+}
+
+func subscriptionTier(ctx context.Context) (string, bool) {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return "", false
+	}
+	vals := md.Get("x-voice-subscription-tier")
+	if len(vals) == 0 {
+		return "", false
+	}
+	tier := strings.TrimSpace(strings.ToLower(vals[0]))
+	if tier == "" {
+		return "", false
+	}
+	return tier, true
 }
 
 func shouldScan(originalName, mimeType string) bool {

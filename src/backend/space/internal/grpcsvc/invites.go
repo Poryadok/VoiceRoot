@@ -66,6 +66,8 @@ func mapInviteStoreErr(err error) error {
 		return status.Error(codes.FailedPrecondition, "invite expired")
 	case errors.Is(err, store.ErrInviteMaxUses):
 		return status.Error(codes.FailedPrecondition, "invite max uses reached")
+	case errors.Is(err, store.ErrMemberCapReached):
+		return status.Error(codes.ResourceExhausted, "space member cap reached")
 	case errors.Is(err, store.ErrAccountBanned):
 		return status.Error(codes.PermissionDenied, "account is banned from this space")
 	default:

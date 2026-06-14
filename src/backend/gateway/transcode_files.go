@@ -8,7 +8,7 @@ import (
 )
 
 func (t *transcoder) serveFiles(w http.ResponseWriter, r *http.Request, rest string) bool {
-	ctx := withGRPCMetadata(r.Context(), r)
+	ctx := t.withFileGRPCMetadata(r.Context(), r)
 
 	switch {
 	case r.Method == http.MethodPost && rest == "upload":

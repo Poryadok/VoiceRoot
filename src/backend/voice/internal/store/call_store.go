@@ -10,8 +10,9 @@ import (
 )
 
 const (
-	MaxGroupVoiceParticipants = 32
-	MaxVoiceRoomParticipants  = 32
+	MaxGroupVoiceParticipants    = 32
+	MaxVoiceRoomParticipants     = 32
+	MaxSpaceProVoiceParticipants = 128
 	MaxScreenSharesPerRoom    = 3
 )
 

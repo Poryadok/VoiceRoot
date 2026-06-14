@@ -27,6 +27,7 @@ public class AuthService {
   private final Clock clock;
   private final Duration refreshTtl;
   private final PrimaryProfileProvisioner primaryProfileProvisioner;
+  private final SubscriptionTierResolver subscriptionTierResolver;
 
   public AuthService(
       AccountRepository accounts,
@@ -39,7 +40,8 @@ public class AuthService {
       BackupCodeService backupCodeService,
       Clock clock,
       Duration refreshTtl,
-      PrimaryProfileProvisioner primaryProfileProvisioner) {
+      PrimaryProfileProvisioner primaryProfileProvisioner,
+      SubscriptionTierResolver subscriptionTierResolver) {
     this.accounts = accounts;
     this.refreshTokens = refreshTokens;
     this.refreshTokenCodec = refreshTokenCodec;
@@ -51,6 +53,7 @@ public class AuthService {
     this.clock = clock;
     this.refreshTtl = refreshTtl;
     this.primaryProfileProvisioner = primaryProfileProvisioner;
+    this.subscriptionTierResolver = subscriptionTierResolver;
   }
 
   public AuthService withClock(Clock newClock) {
@@ -65,7 +68,8 @@ public class AuthService {
         backupCodeService,
         newClock,
         refreshTtl,
-        primaryProfileProvisioner);
+        primaryProfileProvisioner,
+        subscriptionTierResolver);
   }
 
   public AuthSession register(RegisterCommand command) {
@@ -179,7 +183,8 @@ public class AuthService {
 
   private AuthSession issueSession(Account account, String deviceInfoJson) {
     String profileId = primaryProfileProvisioner.ensurePrimaryProfile(account.id(), displayHint(account));
-    String accessToken = jwtService.issue(account.id().toString(), profileId, List.of("user"), "free");
+    String tier = subscriptionTierResolver.resolveTier(account.id());
+    String accessToken = jwtService.issue(account.id().toString(), profileId, List.of("user"), tier);
     TokenClaims claims = jwtService.validate(accessToken);
     String refreshToken = refreshTokenCodec.generate();
     refreshTokens.create(

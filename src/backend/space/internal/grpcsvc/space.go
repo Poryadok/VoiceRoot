@@ -32,6 +32,9 @@ func (s *SpaceGRPC) CreateSpace(ctx context.Context, req *spacev1.CreateSpaceReq
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+	if accountID, ok := authctx.AccountID(ctx); ok && s.SeedSpaceProActive {
+		_ = s.Store.UpsertSpaceSubscription(ctx, row.ID, accountID, "active")
+	}
 	if err := s.bootstrapSpaceRoles(ctx, row.ID, caller); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}

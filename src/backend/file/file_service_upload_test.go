@@ -431,6 +431,7 @@ func startFilePostgres(t *testing.T, ctx context.Context) *pgxpool.Pool {
 	t.Helper()
 	pool := integrationtest.StartPostgres(t, ctx, "db", "")
 	applyFileSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000001_init.up.sql"))
+	applyFileSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000002_premium_upload_limit.up.sql"))
 	return pool
 }
 

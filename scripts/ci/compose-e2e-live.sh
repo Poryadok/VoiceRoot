@@ -64,5 +64,7 @@ flutter test --concurrency=1 \
   test/phase10_shared_media_e2e_live_test.dart \
   test/phase10_threads_e2e_live_test.dart \
   test/phase10_screen_share_e2e_live_test.dart \
+  test/phase11_trust_e2e_live_test.dart \
+  test/phase12_billing_e2e_live_test.dart \
   --dart-define=VOICE_RUN_LIVE_INTEGRATION=true \
   --dart-define=VOICE_API_BASE_URL="${VOICE_API_BASE_URL}"

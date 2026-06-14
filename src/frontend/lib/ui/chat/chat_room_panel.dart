@@ -18,7 +18,9 @@ import '../../state/gateway_providers.dart';
 import '../../state/presence_providers.dart';
 import '../../state/social_providers.dart';
 import '../../state/space_providers.dart';
+import '../../state/subscription_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../core/chat_author_label.dart';
 import '../core/voice_avatar.dart';
 import '../core/voice_compact_banner.dart';
 import '../core/voice_state_panel.dart';
@@ -233,6 +235,8 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     final title = isGroup
         ? (groupName ?? l10n.chatRoomTitle(shortId))
         : (peerName ?? groupName ?? l10n.chatRoomTitle(shortId));
+    final peerIsPremium = peerId != null &&
+        ref.watch(profilePremiumBadgeProvider(peerId));
     final voice = VoiceColors.of(context);
 
     if (!_unreadCaptured) {
@@ -317,10 +321,17 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   const SizedBox(width: 8),
                 ],
                 Expanded(
-                  child: Text(
-                    title,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
+                  child: !isGroup && peerProfile != null
+                      ? ChatAuthorLabel(
+                          displayName: title,
+                          isPremium: peerIsPremium,
+                          style: Theme.of(context).textTheme.titleMedium,
+                          premiumBadgeSemanticLabel: l10n.premiumBadgeLabel,
+                        )
+                      : Text(
+                          title,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
                 ),
                 IconButton(
                   key: ChatRoomPanel.inChatSearchKey,
@@ -1418,10 +1429,11 @@ class _MentionMemberTile extends ConsumerWidget {
     final label =
         profile?.displayName ?? profile?.handle ?? l10n.chatMentionMember(profileId);
     final handle = profile?.handle;
+    final displayName = profile?.displayName;
     final token = handle != null && handle.isNotEmpty
         ? '@$handle'
-        : (profile?.displayName != null && profile!.displayName!.isNotEmpty)
-            ? '@${profile.displayName}'
+        : (displayName != null && displayName.isNotEmpty)
+            ? '@$displayName'
             : '@$profileId';
     return ListTile(title: Text(label), onTap: () => onPick(token));
   }

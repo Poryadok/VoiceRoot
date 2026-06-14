@@ -1940,6 +1940,108 @@ abstract class AppLocalizations {
   /// **'Profile accent'**
   String get settingsAccent;
 
+  /// No description provided for @settingsSubscription.
+  ///
+  /// In en, this message translates to:
+  /// **'Subscription'**
+  String get settingsSubscription;
+
+  /// No description provided for @subscriptionSettingsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Subscription'**
+  String get subscriptionSettingsTitle;
+
+  /// No description provided for @subscriptionCurrentPlan.
+  ///
+  /// In en, this message translates to:
+  /// **'Current plan'**
+  String get subscriptionCurrentPlan;
+
+  /// No description provided for @subscriptionStatusFree.
+  ///
+  /// In en, this message translates to:
+  /// **'Free'**
+  String get subscriptionStatusFree;
+
+  /// No description provided for @subscriptionStatusPremium.
+  ///
+  /// In en, this message translates to:
+  /// **'Premium'**
+  String get subscriptionStatusPremium;
+
+  /// No description provided for @subscriptionBillingPeriod.
+  ///
+  /// In en, this message translates to:
+  /// **'Billing: {period}'**
+  String subscriptionBillingPeriod(String period);
+
+  /// No description provided for @subscriptionUpgradeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Upgrade to Premium'**
+  String get subscriptionUpgradeTitle;
+
+  /// No description provided for @subscriptionUpgradeMonthly.
+  ///
+  /// In en, this message translates to:
+  /// **'Premium — monthly'**
+  String get subscriptionUpgradeMonthly;
+
+  /// No description provided for @subscriptionUpgradeYearly.
+  ///
+  /// In en, this message translates to:
+  /// **'Premium — yearly (−20%)'**
+  String get subscriptionUpgradeYearly;
+
+  /// No description provided for @subscriptionManageBilling.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage subscription'**
+  String get subscriptionManageBilling;
+
+  /// No description provided for @subscriptionCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel subscription'**
+  String get subscriptionCancel;
+
+  /// No description provided for @subscriptionProfilesLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load profiles'**
+  String get subscriptionProfilesLoadError;
+
+  /// No description provided for @downgradeProfilePickerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose 2 profiles to keep'**
+  String get downgradeProfilePickerTitle;
+
+  /// No description provided for @downgradeProfilePickerHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Other profiles will be frozen until you renew Premium.'**
+  String get downgradeProfilePickerHint;
+
+  /// No description provided for @downgradeProfilePickerConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep selected profiles'**
+  String get downgradeProfilePickerConfirm;
+
+  /// No description provided for @downgradeProfilePrimary.
+  ///
+  /// In en, this message translates to:
+  /// **'Primary profile'**
+  String get downgradeProfilePrimary;
+
+  /// No description provided for @premiumBadgeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Premium'**
+  String get premiumBadgeLabel;
+
   /// No description provided for @settingsSecurity.
   ///
   /// In en, this message translates to:

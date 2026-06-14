@@ -23,12 +23,17 @@ import (
 	eventsv1 "voice.app/voice/events/v1"
 )
 
+type SpaceProLookup interface {
+	HasSpacePro(ctx context.Context, spaceID string) (bool, error)
+}
+
 type VoiceGRPC struct {
 	callsv1.UnimplementedVoiceServiceServer
 
 	Calls        voicestore.CallStore
 	ChatMembers  ChatMembership
 	SpaceMembers SpaceMembership
+	SpacePro     SpaceProLookup
 	Roles        RolePermissionChecker
 	Tokens       livekit.TokenIssuer
 	Events       voiceevents.Publisher

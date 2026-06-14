@@ -2,6 +2,7 @@ package authctx
 
 import (
 	"context"
+	"strings"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/metadata"
@@ -9,8 +10,9 @@ import (
 
 // Metadata keys aligned with Gateway downstream headers (see gateway applyClaims).
 const (
-	HeaderUserID    = "x-voice-user-id"    // JWT claim user_id == account_id
-	HeaderProfileID = "x-voice-profile-id" // active profile_id (optional for some RPCs)
+	HeaderUserID           = "x-voice-user-id"    // JWT claim user_id == account_id
+	HeaderProfileID        = "x-voice-profile-id" // active profile_id (optional for some RPCs)
+	HeaderSubscriptionTier = "x-voice-subscription-tier"
 )
 
 // AccountID returns the caller's account UUID from incoming gRPC metadata, if present and valid.
@@ -28,6 +30,23 @@ func AccountID(ctx context.Context) (uuid.UUID, bool) {
 		return uuid.Nil, false
 	}
 	return id, true
+}
+
+// SubscriptionTier returns the caller subscription tier from gRPC metadata (free when absent).
+func SubscriptionTier(ctx context.Context) string {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return "free"
+	}
+	vals := md.Get(HeaderSubscriptionTier)
+	if len(vals) == 0 {
+		return "free"
+	}
+	tier := strings.TrimSpace(strings.ToLower(vals[0]))
+	if tier == "" {
+		return "free"
+	}
+	return tier
 }
 
 // ProfileID returns the caller's active profile UUID from incoming gRPC metadata, if present and valid.

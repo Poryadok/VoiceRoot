@@ -15,27 +15,36 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const maxDiscriminatorAttempts = 24
+const (
+	maxDiscriminatorAttempts = 24
+	profileCountFree         = 2
+	profileCountPremium      = 5
+)
+
+const profileSelectCols = `id, account_id, username, discriminator, display_name, avatar_url, banner_url, bio,
+		locale, theme, is_primary, verification_type, verification_badge, frozen_at, created_at, updated_at`
 
 // MaxDisplayNameRunes is the maximum length of profile display_name (aligned with Discord).
 const MaxDisplayNameRunes = 32
 
 // ProfileRow mirrors user_db.profiles v1 (docs/microservices/user-service.md).
 type ProfileRow struct {
-	ID                  uuid.UUID
-	AccountID           uuid.UUID
-	Username            string
-	Discriminator       string
-	DisplayName         string
-	AvatarURL           *string
-	Bio                 *string
-	Locale              string
-	Theme               string
-	IsPrimary           bool
-	VerificationType    string
+	ID                uuid.UUID
+	AccountID         uuid.UUID
+	Username          string
+	Discriminator     string
+	DisplayName       string
+	AvatarURL         *string
+	BannerURL         *string
+	Bio               *string
+	Locale            string
+	Theme             string
+	IsPrimary         bool
+	VerificationType  string
 	VerificationBadge *string
-	CreatedAt           time.Time
-	UpdatedAt           time.Time
+	FrozenAt          *time.Time
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
 type ProfileStore struct {
@@ -54,15 +63,11 @@ func (s *ProfileStore) Pool() *pgxpool.Pool {
 }
 
 func (s *ProfileStore) GetByID(ctx context.Context, id uuid.UUID) (*ProfileRow, error) {
-	return s.scanOne(ctx, `SELECT id, account_id, username, discriminator, display_name, avatar_url, bio,
-		locale, theme, is_primary, verification_type, verification_badge, created_at, updated_at
-		FROM profiles WHERE id = $1`, id)
+	return s.scanOne(ctx, `SELECT `+profileSelectCols+` FROM profiles WHERE id = $1`, id)
 }
 
 func (s *ProfileStore) GetByUsernameDiscriminator(ctx context.Context, username, discriminator string) (*ProfileRow, error) {
-	return s.scanOne(ctx, `SELECT id, account_id, username, discriminator, display_name, avatar_url, bio,
-		locale, theme, is_primary, verification_type, verification_badge, created_at, updated_at
-		FROM profiles WHERE lower(username) = lower($1) AND discriminator = $2`, username, discriminator)
+	return s.scanOne(ctx, `SELECT `+profileSelectCols+` FROM profiles WHERE lower(username) = lower($1) AND discriminator = $2`, username, discriminator)
 }
 
 func (s *ProfileStore) scanOne(ctx context.Context, sql string, args ...any) (*ProfileRow, error) {
@@ -81,8 +86,8 @@ func scanProfile(row pgx.Row) (*ProfileRow, error) {
 	var p ProfileRow
 	err := row.Scan(
 		&p.ID, &p.AccountID, &p.Username, &p.Discriminator, &p.DisplayName,
-		&p.AvatarURL, &p.Bio, &p.Locale, &p.Theme, &p.IsPrimary,
-		&p.VerificationType, &p.VerificationBadge, &p.CreatedAt, &p.UpdatedAt,
+		&p.AvatarURL, &p.BannerURL, &p.Bio, &p.Locale, &p.Theme, &p.IsPrimary,
+		&p.VerificationType, &p.VerificationBadge, &p.FrozenAt, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -101,9 +106,7 @@ func (s *ProfileStore) GetByIDs(ctx context.Context, ids []uuid.UUID) ([]*Profil
 		ph[i] = fmt.Sprintf("$%d", i+1)
 		args[i] = id
 	}
-	q := fmt.Sprintf(`SELECT id, account_id, username, discriminator, display_name, avatar_url, bio,
-		locale, theme, is_primary, verification_type, verification_badge, created_at, updated_at
-		FROM profiles WHERE id IN (%s)`, strings.Join(ph, ","))
+	q := fmt.Sprintf(`SELECT %s FROM profiles WHERE id IN (%s)`, profileSelectCols, strings.Join(ph, ","))
 	rows, err := s.pool.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
@@ -123,9 +126,7 @@ func (s *ProfileStore) GetByIDs(ctx context.Context, ids []uuid.UUID) ([]*Profil
 
 // ListByAccountID returns all profiles owned by the account (primary first, then created_at).
 func (s *ProfileStore) ListByAccountID(ctx context.Context, accountID uuid.UUID) ([]*ProfileRow, error) {
-	rows, err := s.pool.Query(ctx, `SELECT id, account_id, username, discriminator, display_name, avatar_url, bio,
-		locale, theme, is_primary, verification_type, verification_badge, created_at, updated_at
-		FROM profiles WHERE account_id = $1
+	rows, err := s.pool.Query(ctx, `SELECT `+profileSelectCols+` FROM profiles WHERE account_id = $1
 		ORDER BY is_primary DESC, created_at ASC`, accountID)
 	if err != nil {
 		return nil, err
@@ -156,6 +157,7 @@ func (s *ProfileStore) GetPrimaryProfileIDForAccount(ctx context.Context, accoun
 type UpdateProfileInput struct {
 	DisplayName *string
 	AvatarURL   *string
+	BannerURL   *string
 	Bio         *string
 	Locale      *string
 	Theme       *string
@@ -176,6 +178,11 @@ func (s *ProfileStore) UpdateOwnedProfile(ctx context.Context, accountID, profil
 		args = append(args, *in.AvatarURL)
 		n++
 	}
+	if in.BannerURL != nil {
+		set = append(set, fmt.Sprintf("banner_url = $%d", n))
+		args = append(args, *in.BannerURL)
+		n++
+	}
 	if in.Bio != nil {
 		set = append(set, fmt.Sprintf("bio = $%d", n))
 		args = append(args, *in.Bio)
@@ -192,17 +199,14 @@ func (s *ProfileStore) UpdateOwnedProfile(ctx context.Context, accountID, profil
 		n++
 	}
 	if len(set) == 0 {
-		return s.scanOne(ctx, `SELECT id, account_id, username, discriminator, display_name, avatar_url, bio,
-			locale, theme, is_primary, verification_type, verification_badge, created_at, updated_at
-			FROM profiles WHERE id = $1 AND account_id = $2`, profileID, accountID)
+		return s.scanOne(ctx, `SELECT `+profileSelectCols+` FROM profiles WHERE id = $1 AND account_id = $2`, profileID, accountID)
 	}
 	set = append(set, "updated_at = now()")
 
 	w1, w2 := n, n+1
 	args = append(args, profileID, accountID)
-	sql := fmt.Sprintf(`UPDATE profiles SET %s WHERE id = $%d AND account_id = $%d RETURNING id, account_id, username, discriminator, display_name, avatar_url, bio,
-		locale, theme, is_primary, verification_type, verification_badge, created_at, updated_at`,
-		strings.Join(set, ", "), w1, w2)
+	sql := fmt.Sprintf(`UPDATE profiles SET %s WHERE id = $%d AND account_id = $%d RETURNING %s`,
+		strings.Join(set, ", "), w1, w2, profileSelectCols)
 
 	row := s.pool.QueryRow(ctx, sql, args...)
 	p, err := scanProfile(row)
@@ -234,8 +238,7 @@ func (s *ProfileStore) CreateSecondaryProfile(ctx context.Context, accountID uui
 		row := s.pool.QueryRow(ctx, `
 			INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary, locale, theme, verification_type)
 			VALUES ($1, $2, $3, $4, $5, false, 'ru', 'dark', 'none')
-			RETURNING id, account_id, username, discriminator, display_name, avatar_url, bio,
-				locale, theme, is_primary, verification_type, verification_badge, created_at, updated_at`,
+			RETURNING `+profileSelectCols,
 			id, accountID, base, disc, dn,
 		)
 		p, err := scanProfile(row)
@@ -290,4 +293,46 @@ func randomDiscriminator() string {
 	_, _ = rand.Read(b[:])
 	n := int(binary.BigEndian.Uint16(b[:])) % 10000
 	return fmt.Sprintf("%04d", n)
+}
+
+// CountByAccountID returns how many profiles the account owns.
+func (s *ProfileStore) CountByAccountID(ctx context.Context, accountID uuid.UUID) (int, error) {
+	var n int
+	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM profiles WHERE account_id = $1`, accountID).Scan(&n)
+	return n, err
+}
+
+// MaxProfilesForTier returns allowed profile count for subscription tier.
+func MaxProfilesForTier(tier string) int {
+	if tier == "premium" {
+		return profileCountPremium
+	}
+	return profileCountFree
+}
+
+// ApplyFreeTierFreeze marks profiles beyond the free cap as frozen (keeps primary + earliest secondaries).
+func (s *ProfileStore) ApplyFreeTierFreeze(ctx context.Context, accountID uuid.UUID) error {
+	rows, err := s.ListByAccountID(ctx, accountID)
+	if err != nil {
+		return err
+	}
+	if len(rows) <= profileCountFree {
+		return nil
+	}
+	for i := profileCountFree; i < len(rows); i++ {
+		if rows[i].FrozenAt != nil {
+			continue
+		}
+		_, err := s.pool.Exec(ctx, `UPDATE profiles SET frozen_at = now(), updated_at = now()
+			WHERE id = $1 AND account_id = $2 AND frozen_at IS NULL`, rows[i].ID, accountID)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// GetOwnedProfile returns a profile owned by the account.
+func (s *ProfileStore) GetOwnedProfile(ctx context.Context, accountID, profileID uuid.UUID) (*ProfileRow, error) {
+	return s.scanOne(ctx, `SELECT `+profileSelectCols+` FROM profiles WHERE id = $1 AND account_id = $2`, profileID, accountID)
 }

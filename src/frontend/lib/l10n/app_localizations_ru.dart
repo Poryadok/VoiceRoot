@@ -1052,6 +1052,61 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsAccent => 'Акцент профиля';
 
   @override
+  String get settingsSubscription => 'Подписка';
+
+  @override
+  String get subscriptionSettingsTitle => 'Подписка';
+
+  @override
+  String get subscriptionCurrentPlan => 'Текущий план';
+
+  @override
+  String get subscriptionStatusFree => 'Бесплатный';
+
+  @override
+  String get subscriptionStatusPremium => 'Премиум';
+
+  @override
+  String subscriptionBillingPeriod(String period) {
+    return 'Оплата: $period';
+  }
+
+  @override
+  String get subscriptionUpgradeTitle => 'Перейти на Премиум';
+
+  @override
+  String get subscriptionUpgradeMonthly => 'Премиум — помесячно';
+
+  @override
+  String get subscriptionUpgradeYearly => 'Премиум — годовой (−20%)';
+
+  @override
+  String get subscriptionManageBilling => 'Управление подпиской';
+
+  @override
+  String get subscriptionCancel => 'Отменить подписку';
+
+  @override
+  String get subscriptionProfilesLoadError => 'Не удалось загрузить профили';
+
+  @override
+  String get downgradeProfilePickerTitle =>
+      'Выберите 2 профиля, которые останутся активными';
+
+  @override
+  String get downgradeProfilePickerHint =>
+      'Остальные профили будут заморожены до продления Премиума.';
+
+  @override
+  String get downgradeProfilePickerConfirm => 'Сохранить выбранные профили';
+
+  @override
+  String get downgradeProfilePrimary => 'Основной профиль';
+
+  @override
+  String get premiumBadgeLabel => 'Премиум';
+
+  @override
   String get settingsSecurity => 'Безопасность и доверие';
 
   @override

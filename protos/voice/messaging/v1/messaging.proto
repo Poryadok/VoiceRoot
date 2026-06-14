@@ -56,10 +56,10 @@ service MessagingService {
 // Shared media tabs in chat info (docs/features/text-chat.md, docs/features/search.md).
 enum SharedMediaKind {
   SHARED_MEDIA_KIND_UNSPECIFIED = 0;
-  SHARED_MEDIA_KIND_MEDIA = 1;  // image + video
-  SHARED_MEDIA_KIND_FILES = 2;  // document + other
-  SHARED_MEDIA_KIND_LINKS = 3;  // URLs from message content
-  SHARED_MEDIA_KIND_VOICE = 4;  // audio + voice_message attachments
+  SHARED_MEDIA_KIND_MEDIA = 1; // image + video
+  SHARED_MEDIA_KIND_FILES = 2; // document + other
+  SHARED_MEDIA_KIND_LINKS = 3; // URLs from message content
+  SHARED_MEDIA_KIND_VOICE = 4; // audio + voice_message attachments
 }
 
 message SendMessageRequest {

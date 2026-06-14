@@ -19,14 +19,16 @@ import (
 )
 
 const (
-	MaxFreeFileBytes = 50 * 1024 * 1024
-	DefaultURLTTL    = time.Hour
+	MaxFreeFileBytes     = 50 * 1024 * 1024
+	MaxPremiumFileBytes  = 200 * 1024 * 1024
+	DefaultURLTTL        = time.Hour
 )
 
 type PutPresignInput struct {
 	Key           string
 	ContentType   string
 	ContentLength int64
+	MaxBytes      int64
 	TTL           time.Duration
 }
 
@@ -96,7 +98,11 @@ func NewS3R2Presigner(cfg S3R2Config) (*S3R2Presigner, error) {
 }
 
 func (p *S3R2Presigner) PresignPut(ctx context.Context, in PutPresignInput) (string, error) {
-	if err := ValidateUpload(in.OriginalNameForValidation(), in.ContentType, in.ContentLength); err != nil {
+	maxBytes := in.MaxBytes
+	if maxBytes <= 0 {
+		maxBytes = MaxFreeFileBytes
+	}
+	if err := ValidateUpload(in.OriginalNameForValidation(), in.ContentType, in.ContentLength, maxBytes); err != nil {
 		return "", err
 	}
 	key := strings.TrimSpace(in.Key)
@@ -174,7 +180,10 @@ func (p *S3R2Presigner) PresignGet(ctx context.Context, in GetPresignInput) (str
 	return out.URL, nil
 }
 
-func ValidateUpload(originalName, contentType string, sizeBytes int64) error {
+func ValidateUpload(originalName, contentType string, sizeBytes, maxBytes int64) error {
+	if maxBytes <= 0 {
+		maxBytes = MaxFreeFileBytes
+	}
 	if strings.TrimSpace(originalName) == "" {
 		return fmt.Errorf("original_name is required")
 	}
@@ -191,8 +200,8 @@ func ValidateUpload(originalName, contentType string, sizeBytes int64) error {
 	if sizeBytes <= 0 {
 		return fmt.Errorf("size_bytes must be positive")
 	}
-	if sizeBytes > MaxFreeFileBytes {
-		return fmt.Errorf("size_bytes exceeds max of %d bytes", MaxFreeFileBytes)
+	if sizeBytes > maxBytes {
+		return fmt.Errorf("size_bytes exceeds max of %d bytes", maxBytes)
 	}
 	return nil
 }

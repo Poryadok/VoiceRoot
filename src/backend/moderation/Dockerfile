@@ -1,10 +1,20 @@
 # syntax=docker/dockerfile:1
+# Build context must be `src/backend`.
 
 FROM golang:1.26-alpine AS build
 WORKDIR /src
-COPY go.mod ./
-RUN go mod download
-COPY . .
+COPY pkg/go.mod ./pkg/
+COPY moderation/go.mod ./moderation/
+COPY voice/pb/voice/moderation/go.mod ./voice/pb/voice/moderation/
+COPY chat/pb/voice/chat/go.mod ./chat/pb/voice/chat/
+COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
+RUN cd moderation && go mod download
+COPY pkg ./pkg
+COPY chat/pb/voice/chat ./chat/pb/voice/chat
+COPY user/pb/voice/common ./user/pb/voice/common
+COPY voice/pb/voice/moderation ./voice/pb/voice/moderation
+COPY moderation ./moderation
+WORKDIR /src/moderation
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/service .
 
 FROM alpine:3.20

@@ -3,6 +3,7 @@ package grpcsvc
 import (
 	"context"
 	"net"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -73,11 +74,15 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 	ctx := context.Background()
 	migrationPath := filepath.Join(repoRoot(t), "src", "backend", "migrations", "user_db", "000001_init.up.sql")
 	pool := integrationtest.StartPostgres(t, ctx, "userdb", migrationPath)
+	subMigration, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "user_db", "000003_profile_subscription.up.sql"))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(subMigration))
+	require.NoError(t, err)
 
 	accountA := uuid.New()
 	accountB := uuid.New()
 	pid := uuid.New()
-	_, err := pool.Exec(ctx, `
+	_, err = pool.Exec(ctx, `
 		INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
 		VALUES ($1, $2, 'alice', '0001', 'Alice', true)`,
 		pid, accountA)

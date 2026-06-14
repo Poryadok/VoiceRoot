@@ -1,0 +1,24 @@
+module voice.app/voice/subscription
+
+go 1.26
+
+require (
+	google.golang.org/grpc v1.70.0
+	google.golang.org/protobuf v1.36.5
+	voice.app/voice/common v0.0.0
+	voice.app/voice/space v0.0.0
+)
+
+require (
+	golang.org/x/net v0.32.0 // indirect
+	golang.org/x/sys v0.28.0 // indirect
+	golang.org/x/text v0.21.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20241202173237-19429a94021a // indirect
+	voice.app/voice/chat v0.0.0-00010101000000-000000000000 // indirect
+)
+
+replace voice.app/voice/common => ../../../../user/pb/voice/common
+
+replace voice.app/voice/space => ../space
+
+replace voice.app/voice/chat => ../../../../chat/pb/voice/chat

@@ -13,4 +13,6 @@ psql -v ON_ERROR_STOP=1 --username "${POSTGRES_USER}" --dbname "${POSTGRES_DB}" 
 	CREATE DATABASE matchmaking_db;
 	CREATE DATABASE gateway_db;
 	CREATE DATABASE search_db;
+	CREATE DATABASE subscription_db;
+	CREATE DATABASE moderation_db;
 EOSQL

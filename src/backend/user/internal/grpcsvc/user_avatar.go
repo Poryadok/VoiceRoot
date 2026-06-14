@@ -36,6 +36,9 @@ func (s *UserGRPC) CreateAvatarPresignedUpload(ctx context.Context, req *userv1.
 	}
 	ct := strings.TrimSpace(req.GetContentType())
 	clen := req.GetContentLength()
+	if strings.EqualFold(ct, "image/gif") && authctx.SubscriptionTier(ctx) != "premium" {
+		return nil, status.Error(codes.FailedPrecondition, "animated avatars require premium subscription")
+	}
 	if err := r2avatar.ValidateUploadParams(ct, clen); err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}

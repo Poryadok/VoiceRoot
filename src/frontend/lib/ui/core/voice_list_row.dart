@@ -8,6 +8,7 @@ class VoiceListRow extends StatelessWidget {
   const VoiceListRow({
     super.key,
     required this.title,
+    this.titleWidget,
     this.subtitle,
     this.leading,
     this.trailing,
@@ -17,6 +18,7 @@ class VoiceListRow extends StatelessWidget {
 
   final Widget? leading;
   final String title;
+  final Widget? titleWidget;
   final String? subtitle;
   final Widget? trailing;
   final bool selected;
@@ -42,12 +44,13 @@ class VoiceListRow extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodyLarge,
-                    ),
+                    titleWidget ??
+                        Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodyLarge,
+                        ),
                     if (subtitle != null && subtitle!.isNotEmpty)
                       Text(
                         subtitle!,

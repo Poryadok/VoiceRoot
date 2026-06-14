@@ -13,6 +13,8 @@ import voice.backend.auth.security.RefreshTokenCodec;
 import voice.backend.auth.security.TokenBlacklist;
 import voice.backend.auth.service.AuthService;
 import voice.backend.auth.service.BackupCodeService;
+import voice.backend.auth.service.InMemorySubscriptionTierStore;
+import voice.backend.auth.service.SubscriptionTierResolver;
 import voice.backend.auth.service.TotpService;
 
 @Configuration
@@ -43,6 +45,11 @@ public class AuthBeans {
   }
 
   @Bean
+  SubscriptionTierResolver subscriptionTierResolver() {
+    return new InMemorySubscriptionTierStore();
+  }
+
+  @Bean
   AuthService authService(
       AccountRepository accounts,
       RefreshTokenRepository refreshTokens,
@@ -54,7 +61,8 @@ public class AuthBeans {
       TotpService totpService,
       Clock clock,
       AuthProperties properties,
-      voice.backend.auth.userdb.PrimaryProfileProvisioner primaryProfileProvisioner) {
+      voice.backend.auth.userdb.PrimaryProfileProvisioner primaryProfileProvisioner,
+      SubscriptionTierResolver subscriptionTierResolver) {
     return new AuthService(
         accounts,
         refreshTokens,
@@ -66,6 +74,7 @@ public class AuthBeans {
         backupCodeService,
         clock,
         properties.getRefresh().getTtl(),
-        primaryProfileProvisioner);
+        primaryProfileProvisioner,
+        subscriptionTierResolver);
   }
 }

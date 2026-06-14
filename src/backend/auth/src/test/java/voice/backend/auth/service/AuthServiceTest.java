@@ -122,6 +122,10 @@ class AuthServiceTest {
   }
 
   private static AuthService service(Clock clock, InMemoryTokenBlacklist blacklist) {
+    return service(clock, blacklist, new InMemorySubscriptionTierStore());
+  }
+
+  private static AuthService service(Clock clock, InMemoryTokenBlacklist blacklist, SubscriptionTierResolver tierResolver) {
     JwtService jwt = JwtService.forTests("voice-auth", "voice-client", "test-key", Duration.ofMinutes(15), clock);
     return new AuthService(
         new InMemoryAccountRepository(),
@@ -134,6 +138,7 @@ class AuthServiceTest {
         new BackupCodeService(new InMemoryBackupCodeRepository()),
         clock,
         Duration.ofDays(30),
-        new voice.backend.auth.userdb.InMemoryPrimaryProfileProvisioner());
+        new voice.backend.auth.userdb.InMemoryPrimaryProfileProvisioner(),
+        tierResolver);
   }
 }

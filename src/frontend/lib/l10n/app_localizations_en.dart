@@ -1046,6 +1046,60 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsAccent => 'Profile accent';
 
   @override
+  String get settingsSubscription => 'Subscription';
+
+  @override
+  String get subscriptionSettingsTitle => 'Subscription';
+
+  @override
+  String get subscriptionCurrentPlan => 'Current plan';
+
+  @override
+  String get subscriptionStatusFree => 'Free';
+
+  @override
+  String get subscriptionStatusPremium => 'Premium';
+
+  @override
+  String subscriptionBillingPeriod(String period) {
+    return 'Billing: $period';
+  }
+
+  @override
+  String get subscriptionUpgradeTitle => 'Upgrade to Premium';
+
+  @override
+  String get subscriptionUpgradeMonthly => 'Premium — monthly';
+
+  @override
+  String get subscriptionUpgradeYearly => 'Premium — yearly (−20%)';
+
+  @override
+  String get subscriptionManageBilling => 'Manage subscription';
+
+  @override
+  String get subscriptionCancel => 'Cancel subscription';
+
+  @override
+  String get subscriptionProfilesLoadError => 'Could not load profiles';
+
+  @override
+  String get downgradeProfilePickerTitle => 'Choose 2 profiles to keep';
+
+  @override
+  String get downgradeProfilePickerHint =>
+      'Other profiles will be frozen until you renew Premium.';
+
+  @override
+  String get downgradeProfilePickerConfirm => 'Keep selected profiles';
+
+  @override
+  String get downgradeProfilePrimary => 'Primary profile';
+
+  @override
+  String get premiumBadgeLabel => 'Premium';
+
+  @override
   String get settingsSecurity => 'Security & trust';
 
   @override

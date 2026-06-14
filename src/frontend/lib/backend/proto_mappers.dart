@@ -13,12 +13,14 @@ import '../gen/voice/messaging/v1/messaging.pb.dart' as messaging_pb;
 import '../gen/voice/messaging/v1/messaging.pbenum.dart';
 import '../gen/voice/social/v1/social.pb.dart' as social_pb;
 import '../gen/voice/space/v1/space.pb.dart' as space_pb;
+import '../gen/voice/subscription/v1/subscription.pb.dart' as sub_pb;
 import '../gen/voice/user/v1/user.pb.dart' as user_pb;
 import 'chats_client.dart';
 import 'files_client.dart';
 import 'friends_client.dart';
 import 'messages_client.dart';
 import 'spaces_client.dart';
+import 'subscription_client.dart';
 import 'users_client.dart';
 import 'voice_client.dart';
 
@@ -285,7 +287,57 @@ VoiceProfile voiceProfileFromProto(user_pb.Profile profile) {
     customStatus: profile.hasCustomStatus()
         ? emptyToNull(profile.customStatus)
         : null,
+    isPrimary: profile.isPrimary,
+    verificationBadge: profile.hasVerificationBadge()
+        ? emptyToNull(profile.verificationBadge)
+        : null,
   );
+}
+
+List<VoiceProfile> voiceProfileListFromProto(user_pb.ProfileList list) {
+  return list.profiles.map(voiceProfileFromProto).toList(growable: false);
+}
+
+VoiceSubscription voiceSubscriptionFromProto(sub_pb.Subscription subscription) {
+  return VoiceSubscription(
+    id: subscription.id,
+    accountId: subscription.accountId,
+    plan: subscription.plan.isNotEmpty ? subscription.plan : 'free',
+    billingPeriod: subscription.billingPeriod.isNotEmpty
+        ? subscription.billingPeriod
+        : 'monthly',
+    status: subscription.status.isNotEmpty ? subscription.status : 'cancelled',
+    provider: emptyToNull(subscription.provider),
+    providerSubscriptionId: emptyToNull(subscription.providerSubscriptionId),
+    currentPeriodEnd: protoTimestampToDateTime(
+      subscription.hasCurrentPeriodEnd() ? subscription.currentPeriodEnd : null,
+    ),
+  );
+}
+
+sub_pb.CreateCheckoutSessionRequest createCheckoutSessionRequestToProto({
+  required String plan,
+  required String billingPeriod,
+  required String successUrl,
+  required String cancelUrl,
+}) {
+  return sub_pb.CreateCheckoutSessionRequest(
+    plan: plan,
+    billingPeriod: billingPeriod,
+    successUrl: successUrl,
+    cancelUrl: cancelUrl,
+  );
+}
+
+VoiceCheckoutSession voiceCheckoutSessionFromProto(sub_pb.CheckoutResponse resp) {
+  return VoiceCheckoutSession(
+    checkoutUrl: resp.checkoutUrl,
+    sessionId: resp.sessionId,
+  );
+}
+
+VoiceSubscriptionLimits voiceSubscriptionLimitsFromProto(sub_pb.Limits limits) {
+  return VoiceSubscriptionLimits(limitsJson: limits.limitsJson);
 }
 
 VoicePresence voicePresenceFromProto(user_pb.PresenceStatus status) {

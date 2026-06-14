@@ -11,8 +11,10 @@ import '../../state/presence_providers.dart';
 import '../../state/shell_providers.dart';
 import '../../state/social_providers.dart';
 import '../../state/space_providers.dart';
+import '../../state/subscription_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../api_error_messages.dart';
+import '../core/chat_author_label.dart';
 import '../core/voice_avatar.dart';
 import '../core/voice_badge.dart';
 import '../core/voice_list_row.dart';
@@ -193,6 +195,8 @@ class ChatListBody extends ConsumerWidget {
                       profile?.displayName ??
                       item.chat.name ??
                       l10n.chatListDmFallback(_shortChatId(item.chatId));
+                  final showPremium = peerId != null &&
+                      ref.watch(profilePremiumBadgeProvider(peerId));
                   final subtitle = item.lastMessagePreview ?? '';
                   final selected = item.chatId == selectedId;
                   final presence = peerId != null
@@ -205,6 +209,14 @@ class ChatListBody extends ConsumerWidget {
                       VoiceListRow(
                         selected: selected,
                         title: title,
+                        titleWidget: peerId != null && !item.chat.isGroup
+                            ? ChatAuthorLabel(
+                                displayName: title,
+                                isPremium: showPremium,
+                                premiumBadgeSemanticLabel:
+                                    l10n.premiumBadgeLabel,
+                              )
+                            : null,
                         subtitle: subtitle.isEmpty ? null : subtitle,
                         leading: item.chat.isGroup
                             ? VoiceAvatar(

@@ -23,6 +23,7 @@ import (
 	notificationv1 "voice.app/voice/notification/v1"
 	rolev1 "voice.app/voice/role/v1"
 	searchv1 "voice.app/voice/search/v1"
+	subscriptionv1 "voice.app/voice/subscription/v1"
 	spacev1 "voice.app/voice/space/v1"
 	userv1 "voice.app/voice/user/v1"
 )
@@ -39,6 +40,7 @@ type grpcClients struct {
 	notification notificationv1.NotificationServiceClient
 	matchmaking  matchmakingv1.MatchmakingServiceClient
 	moderation   moderationv1.ModerationServiceClient
+	subscription subscriptionv1.SubscriptionServiceClient
 	search       searchv1.SearchServiceClient
 }
 
@@ -126,7 +128,12 @@ func grpcClientsFromEnv() *grpcClients {
 	} else if conn != nil {
 		clients.moderation = moderationv1.NewModerationServiceClient(conn)
 	}
-	if clients.user == nil && clients.social == nil && clients.chat == nil && clients.messaging == nil && clients.voice == nil && clients.file == nil && clients.space == nil && clients.role == nil && clients.notification == nil && clients.matchmaking == nil && clients.search == nil && clients.moderation == nil {
+	if conn, err := dial(addrFor("subscription")); err != nil {
+		log.Printf("gateway grpc dial subscription: %v", err)
+	} else if conn != nil {
+		clients.subscription = subscriptionv1.NewSubscriptionServiceClient(conn)
+	}
+	if clients.user == nil && clients.social == nil && clients.chat == nil && clients.messaging == nil && clients.voice == nil && clients.file == nil && clients.space == nil && clients.role == nil && clients.notification == nil && clients.matchmaking == nil && clients.search == nil && clients.moderation == nil && clients.subscription == nil {
 		return nil
 	}
 	return clients
@@ -212,6 +219,8 @@ func (t *transcoder) serveNamespace(w http.ResponseWriter, r *http.Request, name
 			return false
 		}
 		return t.serveModeration(w, r, rest)
+	case "subscription":
+		return t.serveSubscription(w, r, rest)
 	default:
 		return false
 	}

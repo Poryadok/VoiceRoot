@@ -67,14 +67,13 @@ func (s *ProfileStore) SearchProfilesAfter(ctx context.Context, excludeAccount u
 		args = append(args, after.UsernameLower, after.Discriminator, after.ID)
 	}
 	limitArg := len(args) + 1
-	q := fmt.Sprintf(`SELECT id, account_id, username, discriminator, display_name, avatar_url, bio,
-		locale, theme, is_primary, verification_type, verification_badge, created_at, updated_at
+	q := fmt.Sprintf(`SELECT %s
 		FROM profiles
 		WHERE account_id <> $1
 		AND (username ILIKE $2 ESCAPE '\' OR display_name ILIKE $2 ESCAPE '\')
 		%s
 		ORDER BY lower(username) ASC, discriminator ASC, id ASC
-		LIMIT $%d`, extra, limitArg)
+		LIMIT $%d`, profileSelectCols, extra, limitArg)
 	args = append(args, limit)
 
 	rows, err := s.pool.Query(ctx, q, args...)
