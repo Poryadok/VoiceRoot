@@ -38,6 +38,22 @@ String? emptyToNull(String? value) {
   return value;
 }
 
+bool _protoBoolField(messaging_pb.Message msg, bool Function() read) {
+  try {
+    return read();
+  } catch (_) {
+    return false;
+  }
+}
+
+bool _protoChatE2eEnabled(chat_pb.Chat chat) {
+  try {
+    return chat.e2eEnabled;
+  } catch (_) {
+    return false;
+  }
+}
+
 VoiceMessageKind voiceMessageKindFromProto(MessageKind kind) {
   return switch (kind) {
     MessageKind.MESSAGE_KIND_FORWARD => VoiceMessageKind.forward,
@@ -67,6 +83,7 @@ VoiceMessage voiceMessageFromProto(messaging_pb.Message msg) {
     createdAt: protoTimestampToDateTime(msg.hasCreatedAt() ? msg.createdAt : null),
     isPinned: msg.hasIsPinned() && msg.isPinned,
     threadParentId: msg.hasThreadParentId() ? emptyToNull(msg.threadParentId) : null,
+    isE2e: _protoBoolField(msg, () => msg.isE2e),
   );
 }
 
@@ -135,8 +152,9 @@ messaging_pb.SendMessageRequest sendMessageRequestToProto({
   List<MessageMention> mentions = const [],
   String? clientMessageId,
   String? threadParentId,
+  bool isE2e = false,
 }) {
-  return messaging_pb.SendMessageRequest(
+  final request = messaging_pb.SendMessageRequest(
     chat: chatRefToProto(chatId),
     content: content,
     clientMessageId: clientMessageId,
@@ -148,6 +166,10 @@ messaging_pb.SendMessageRequest sendMessageRequestToProto({
           ),
     mentionsJson: MessageMention.encodeJson(mentions),
   );
+  if (isE2e) {
+    request.isE2e = true;
+  }
+  return request;
 }
 
 messaging_pb.MarkReadRequest markReadRequestToProto({
@@ -197,6 +219,10 @@ VoiceChat voiceChatFromProto(chat_pb.Chat chat) {
     avatarUrl: chat.hasAvatarUrl() ? emptyToNull(chat.avatarUrl) : null,
     spaceId: chat.hasSpaceId() ? emptyToNull(chat.spaceId) : null,
     slowModeSeconds: chat.slowModeSeconds,
+    threadsEnabled: chat.hasThreadsEnabled() && chat.threadsEnabled,
+    allowUserMainFeed:
+        !chat.hasAllowUserMainFeed() || chat.allowUserMainFeed,
+    e2eEnabled: _protoChatE2eEnabled(chat),
   );
 }
 

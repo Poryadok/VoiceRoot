@@ -1985,6 +1985,7 @@ class MessageSent extends $pb.GeneratedMessage {
     $core.String? senderProfileId,
     $core.bool? hasMentions,
     $core.String? threadParentId,
+    $core.bool? isE2e,
   }) {
     final result = create();
     if (messageId != null) result.messageId = messageId;
@@ -1992,6 +1993,7 @@ class MessageSent extends $pb.GeneratedMessage {
     if (senderProfileId != null) result.senderProfileId = senderProfileId;
     if (hasMentions != null) result.hasMentions = hasMentions;
     if (threadParentId != null) result.threadParentId = threadParentId;
+    if (isE2e != null) result.isE2e = isE2e;
     return result;
   }
 
@@ -2014,6 +2016,7 @@ class MessageSent extends $pb.GeneratedMessage {
     ..aOS(3, _omitFieldNames ? '' : 'senderProfileId')
     ..aOB(4, _omitFieldNames ? '' : 'hasMentions')
     ..aOS(5, _omitFieldNames ? '' : 'threadParentId')
+    ..aOB(6, _omitFieldNames ? '' : 'isE2e')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2079,6 +2082,15 @@ class MessageSent extends $pb.GeneratedMessage {
   $core.bool hasThreadParentId() => $_has(4);
   @$pb.TagNumber(5)
   void clearThreadParentId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.bool get isE2e => $_getBF(5);
+  @$pb.TagNumber(6)
+  set isE2e($core.bool value) => $_setBool(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasIsE2e() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearIsE2e() => $_clearField(6);
 }
 
 class MentionAdded extends $pb.GeneratedMessage {
@@ -2171,10 +2183,12 @@ class MessageEdited extends $pb.GeneratedMessage {
   factory MessageEdited({
     $core.String? messageId,
     $core.String? chatId,
+    $core.bool? isE2e,
   }) {
     final result = create();
     if (messageId != null) result.messageId = messageId;
     if (chatId != null) result.chatId = chatId;
+    if (isE2e != null) result.isE2e = isE2e;
     return result;
   }
 
@@ -2194,6 +2208,7 @@ class MessageEdited extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'messageId')
     ..aOS(2, _omitFieldNames ? '' : 'chatId')
+    ..aOB(6, _omitFieldNames ? '' : 'isE2e')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2232,6 +2247,15 @@ class MessageEdited extends $pb.GeneratedMessage {
   $core.bool hasChatId() => $_has(1);
   @$pb.TagNumber(2)
   void clearChatId() => $_clearField(2);
+
+  @$pb.TagNumber(6)
+  $core.bool get isE2e => $_getBF(2);
+  @$pb.TagNumber(6)
+  set isE2e($core.bool value) => $_setBool(2, value);
+  @$pb.TagNumber(6)
+  $core.bool hasIsE2e() => $_has(2);
+  @$pb.TagNumber(6)
+  void clearIsE2e() => $_clearField(6);
 }
 
 class MessageDeleted extends $pb.GeneratedMessage {

@@ -29,7 +29,7 @@ func startChatDBForStoreTest(t *testing.T, ctx context.Context) *pgxpool.Pool {
 func applyChatMigrationsForStoreTest(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
 	root := chatRepoRoot(t)
-	for _, name := range []string{"000001_init.up.sql", "000002_dm_requests.up.sql", "000003_groups.up.sql", "000005_thread_settings.up.sql"} {
+	for _, name := range []string{"000001_init.up.sql", "000002_dm_requests.up.sql", "000003_groups.up.sql", "000005_thread_settings.up.sql", "000006_e2e_enabled.up.sql"} {
 		sqlBytes, err := os.ReadFile(filepath.Join(root, "src", "backend", "migrations", "chat_db", name))
 		require.NoError(t, err)
 		_, err = pool.Exec(ctx, string(sqlBytes))

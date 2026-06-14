@@ -25,8 +25,9 @@ type ChatRow struct {
 	UpdatedAt        time.Time
 	LastMessageAt    *time.Time
 	InboxBucket      string
-	ThreadsEnabled   bool
+	ThreadsEnabled    bool
 	AllowUserMainFeed bool
+	E2EEnabled        bool
 }
 
 // DMStore persists DM chats and membership (Phase 1).
@@ -142,14 +143,15 @@ func findDMInTx(ctx context.Context, tx pgx.Tx, profileA, profileB uuid.UUID) (*
 	var id, creator uuid.UUID
 	var createdAt, updatedAt time.Time
 	var lastMsg sql.NullTime
+	var e2eEnabled bool
 	err := tx.QueryRow(ctx, `
-SELECT c.id, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at
+SELECT c.id, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at, c.e2e_enabled
 FROM chats c
 INNER JOIN chat_members m1 ON m1.chat_id = c.id AND m1.profile_id = $1
 INNER JOIN chat_members m2 ON m2.chat_id = c.id AND m2.profile_id = $2
 WHERE c.type = 'dm'
 LIMIT 1
-`, profileA, profileB).Scan(&id, &creator, &lastMsg, &createdAt, &updatedAt)
+`, profileA, profileB).Scan(&id, &creator, &lastMsg, &createdAt, &updatedAt, &e2eEnabled)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -168,5 +170,6 @@ LIMIT 1
 		CreatedAt:        createdAt.UTC(),
 		UpdatedAt:        updatedAt.UTC(),
 		LastMessageAt:    lm,
+		E2EEnabled:       e2eEnabled,
 	}, nil
 }

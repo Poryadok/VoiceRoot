@@ -8,15 +8,15 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.UUID;
-import voice.backend.auth.userdb.JdbcUserVerificationSync;
+import voice.backend.auth.userdb.UserVerificationSync;
 
 public class LinkedAccountsService {
-  private final JdbcUserVerificationSync verificationSync;
+  private final UserVerificationSync verificationSync;
   private final HttpClient httpClient;
   private final ObjectMapper objectMapper;
   private final String twitchApiBaseUrl;
 
-  public LinkedAccountsService(JdbcUserVerificationSync verificationSync, String twitchApiBaseUrl) {
+  public LinkedAccountsService(UserVerificationSync verificationSync, String twitchApiBaseUrl) {
     this.verificationSync = verificationSync;
     this.twitchApiBaseUrl = twitchApiBaseUrl == null || twitchApiBaseUrl.isBlank() ? "https://api.twitch.tv" : twitchApiBaseUrl;
     this.httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();

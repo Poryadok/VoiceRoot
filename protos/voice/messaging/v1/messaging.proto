@@ -51,6 +51,10 @@ service MessagingService {
   rpc GetBulkReadState(GetBulkReadStateRequest) returns (GetBulkReadStateResponse);
   rpc GetChatListMetadata(GetChatListMetadataRequest) returns (GetChatListMetadataResponse);
   rpc ListSharedMedia(ListSharedMediaRequest) returns (ListSharedMediaResponse);
+
+  // Phase 15: Signal pre-key directory for DM E2E (docs/features/encryption.md).
+  rpc UploadPreKeyBundle(UploadPreKeyBundleRequest) returns (UploadPreKeyBundleResponse);
+  rpc GetPreKeyBundle(GetPreKeyBundleRequest) returns (GetPreKeyBundleResponse);
 }
 
 // Shared media tabs in chat info (docs/features/text-chat.md, docs/features/search.md).
@@ -72,6 +76,7 @@ message SendMessageRequest {
   // Prefer when set; aligns outgoing Message.type / Message.message_kind for new sends (docs/REPOSITORIES.md).
   optional MessageKind message_kind = 7;
   optional bool posted_as_chat = 8;
+  optional bool is_e2e = 9;
 }
 
 message EditMessageRequest {
@@ -125,6 +130,7 @@ message Message {
   optional MessageKind message_kind = 17;
   string reactions_json = 18; // JSON array [{emoji,count,reacted_by_me}]
   optional bool is_pinned = 19;
+  bool is_e2e = 20;
 }
 
 message GetThreadMessagesRequest {
@@ -279,4 +285,18 @@ message SharedMediaList {
 
 message ListSharedMediaResponse {
   SharedMediaList shared_media_list = 1;
+}
+
+message UploadPreKeyBundleRequest {
+  string bundle = 1; // opaque Signal pre-key bundle (base64)
+}
+
+message UploadPreKeyBundleResponse {}
+
+message GetPreKeyBundleRequest {
+  string profile_id = 1;
+}
+
+message GetPreKeyBundleResponse {
+  string bundle = 1;
 }

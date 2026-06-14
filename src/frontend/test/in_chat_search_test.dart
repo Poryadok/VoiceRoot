@@ -6,9 +6,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
+import 'package:voice_frontend/backend/chats_client.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
+import 'package:voice_frontend/backend/messages_client.dart';
+import 'package:voice_frontend/backend/realtime_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
+import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/search/in_chat_search.dart';
@@ -16,6 +20,96 @@ import 'package:voice_frontend/ui/search/in_chat_search.dart';
 import 'support/auth_test_overrides.dart';
 import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
+
+const _e2eChatId = 'e2e-chat-1';
+
+class _E2eChatListController extends ChatListController {
+  _E2eChatListController(super.ref) : super() {
+    state = const ChatListState(
+      items: [
+        ChatListItem(
+          chat: VoiceChat(
+            id: _e2eChatId,
+            type: 'CHAT_TYPE_DM',
+            creatorProfileId: 'peer-1',
+            e2eEnabled: true,
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Future<void> loadInitial() async {}
+
+  @override
+  Future<void> loadMore() async {}
+}
+
+class _E2eChatRoomController extends ChatRoomController {
+  _E2eChatRoomController(super.ref, super.chatId) : super() {
+    state = const ChatRoomState(
+      messages: [
+        VoiceMessage(
+          id: 'msg-local-1',
+          chatId: _e2eChatId,
+          senderProfileId: 'peer-1',
+          content: 'loaded local secret needle',
+          isE2e: true,
+        ),
+      ],
+    );
+  }
+}
+
+class _FakeRealtimeHub extends RealtimeHub {
+  _FakeRealtimeHub(super.ref);
+
+  @override
+  Stream<RealtimeFrame> get events => const Stream.empty();
+
+  @override
+  Future<void> ensureConnected() async {}
+
+  @override
+  void ensureSubscribed(String chatId) {}
+}
+
+Widget e2eInChatSearchTestApp({
+  required http.Client client,
+  required String chatId,
+}) {
+  return ProviderScope(
+    overrides: [
+      ...voiceThemeTestOverrides(),
+      profileAccentStorageProvider.overrideWithValue(
+        testProfileAccentStorage,
+      ),
+      authSessionStorageProvider.overrideWithValue(
+        InMemoryAuthSessionStorage(),
+      ),
+      authControllerProvider.overrideWith(authenticatedAuthController),
+      gatewayConfigProvider.overrideWithValue(
+        const GatewayConfig(baseUrl: 'http://api.test'),
+      ),
+      httpClientProvider.overrideWithValue(client),
+      chatListControllerProvider.overrideWith(_E2eChatListController.new),
+      realtimeHubProvider.overrideWith(_FakeRealtimeHub.new),
+      chatRoomControllerProvider(chatId).overrideWith(
+        (ref) => _E2eChatRoomController(ref, chatId),
+      ),
+    ],
+    child: MaterialApp(
+      theme: voiceTestTheme(),
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(
+        body: InChatSearch(chatId: chatId),
+      ),
+    ),
+  );
+}
 
 void main() {
   Widget inChatSearchTestApp({
@@ -185,5 +279,46 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(InChatSearch.highlightKey), findsOneWidget);
+  });
+
+  testWidgets('E2E chat shows local-only search banner', (tester) async {
+    await tester.pumpWidget(
+      e2eInChatSearchTestApp(
+        chatId: _e2eChatId,
+        client: MockClient((_) async => http.Response('not found', 404)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('loaded history on this device', findRichText: true),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('E2E in-chat search uses local cache without server search', (
+    tester,
+  ) async {
+    var serverSearchCalls = 0;
+    await tester.pumpWidget(
+      e2eInChatSearchTestApp(
+        chatId: _e2eChatId,
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/search/in-chat') {
+            serverSearchCalls++;
+          }
+          return http.Response('not found', 404);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(InChatSearch.searchFieldKey), 'needle');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+
+    expect(serverSearchCalls, 0);
+    expect(find.textContaining('loaded local secret needle'), findsOneWidget);
+    expect(find.byKey(InChatSearch.activeHitKey('msg-local-1')), findsOneWidget);
   });
 }

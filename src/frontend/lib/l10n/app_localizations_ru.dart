@@ -1554,4 +1554,72 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get matchHistoryAddFriend => 'Add friend';
+
+  @override
+  String get e2eEnableTitle => 'Включить сквозное шифрование';
+
+  @override
+  String get e2eEnableBody =>
+      'Включён режим сквозного шифрования для этого чата.\n\nСообщения зашифрованы и недоступны серверу.\n— Глобальный поиск не найдёт тексты сообщений этого чата.\n— Локальный поиск работает только по истории на этом устройстве.';
+
+  @override
+  String get e2eEnableConfirm => 'Включить E2E';
+
+  @override
+  String get e2eEnableCancel => 'Отмена';
+
+  @override
+  String get e2eDisableTitle => 'Отключить сквозное шифрование?';
+
+  @override
+  String get e2eDisableBody =>
+      'При отключении E2E новые сообщения сохраняются на сервере в открытом виде, и серверный поиск снова будет работать.';
+
+  @override
+  String get e2eDisableConfirm => 'Отключить E2E';
+
+  @override
+  String get e2eDisableCancel => 'Отмена';
+
+  @override
+  String get e2eKeyBackupTitle => 'Резервная копия ключей E2E';
+
+  @override
+  String get e2eKeyBackupHint =>
+      'Задайте пароль резервной копии, чтобы восстановить ключи на новом устройстве.';
+
+  @override
+  String get e2eKeyBackupPasswordLabel => 'Пароль резервной копии';
+
+  @override
+  String get e2eKeyBackupPasswordHintLabel =>
+      'Подсказка к паролю (необязательно)';
+
+  @override
+  String get e2eKeyBackupSave => 'Сохранить копию';
+
+  @override
+  String get e2eKeyBackupRestore => 'Восстановить из копии';
+
+  @override
+  String get e2eUndecryptableGeneric =>
+      'Сообщение зашифровано и недоступно на этом устройстве. Настройте резервную копию ключей.';
+
+  @override
+  String e2eUndecryptableBefore(String date) {
+    return 'Сообщения до $date зашифрованы и недоступны на этом устройстве. Настройте резервную копию ключей.';
+  }
+
+  @override
+  String get e2eInChatSearchLocalOnly =>
+      'Шифрованный чат: поиск только по загруженной истории на устройстве';
+
+  @override
+  String get e2eChatSettingsEnable => 'Включить E2E';
+
+  @override
+  String get e2eChatSettingsDisable => 'Отключить E2E';
+
+  @override
+  String get e2eChatSettingsKeyBackup => 'Резервная копия ключей';
 }

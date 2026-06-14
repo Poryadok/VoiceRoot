@@ -225,6 +225,31 @@ func (t *transcoder) serveMessages(w http.ResponseWriter, r *http.Request, rest 
 		writeProtoJSON(w, http.StatusOK, resp)
 		return true
 
+	case r.Method == http.MethodPost && rest == "prekeys":
+		req := &messagingv1.UploadPreKeyBundleRequest{}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		_, err := t.clients.messaging.UploadPreKeyBundle(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return true
+
+	case r.Method == http.MethodGet && rest == "prekeys":
+		resp, err := t.clients.messaging.GetPreKeyBundle(ctx, &messagingv1.GetPreKeyBundleRequest{
+			ProfileId: queryFirst(r, "profile_id"),
+		})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
 	default:
 		return false
 	}

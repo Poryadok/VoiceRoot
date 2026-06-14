@@ -32,6 +32,7 @@ import 'chat_message_list.dart';
 import 'message_reactions_row.dart';
 import 'forward_message_sheet.dart';
 import 'mention_message_content.dart';
+import 'e2e_chat_settings.dart';
 import '../shell/side_panel.dart';
 import '../space/space_chat_slow_mode_sheet.dart';
 import '../search/in_chat_search.dart';
@@ -326,11 +327,11 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                           displayName: title,
                           isPremium: peerIsPremium,
                           verificationType:
-                              peerProfile?.verificationType ?? 'none',
+                              peerProfile.verificationType,
                           style: Theme.of(context).textTheme.titleMedium,
                           premiumBadgeSemanticLabel: l10n.premiumBadgeLabel,
                           verifiedBadgeSemanticLabel:
-                              peerProfile?.verificationType == 'organization'
+                              peerProfile.verificationType == 'organization'
                               ? l10n.verifiedBadgeOrganization
                               : l10n.verifiedBadgePersonal,
                         )
@@ -1234,7 +1235,9 @@ class _MessageBubbleContent extends StatelessWidget {
               ],
             ),
           ),
-        if (message.content.isNotEmpty)
+        if (message.decryptionFailed)
+          E2eUndecryptableMessagePlaceholder(beforeDate: message.createdAt)
+        else if (message.content.isNotEmpty)
           MentionMessageContent(
             content: message.content,
             mentions: message.mentions,

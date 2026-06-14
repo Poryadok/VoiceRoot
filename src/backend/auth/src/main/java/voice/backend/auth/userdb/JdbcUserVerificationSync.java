@@ -5,7 +5,7 @@ import java.util.UUID;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
-public class JdbcUserVerificationSync {
+public class JdbcUserVerificationSync implements UserVerificationSync {
   private final NamedParameterJdbcTemplate jdbc;
 
   public JdbcUserVerificationSync(NamedParameterJdbcTemplate jdbc) {

@@ -16,6 +16,7 @@ type ChatThreadPolicy struct {
 	SpaceID           *uuid.UUID
 	ThreadsEnabled    bool
 	AllowUserMainFeed bool
+	E2EEnabled        bool
 }
 
 // SQLChatThreadPolicy loads thread settings from chat_db.
@@ -29,13 +30,13 @@ func (s *SQLChatThreadPolicy) Load(ctx context.Context, chatID uuid.UUID) (*Chat
 	}
 	var chatType string
 	var spaceID *uuid.UUID
-	var threadsEnabled, allowUserMainFeed bool
+	var threadsEnabled, allowUserMainFeed, e2eEnabled bool
 	var spaceRaw sql.NullString
 	err := s.Pool.QueryRow(ctx, `
-SELECT type, space_id::text, threads_enabled, allow_user_main_feed
+SELECT type, space_id::text, threads_enabled, allow_user_main_feed, e2e_enabled
 FROM chats
 WHERE id = $1
-`, chatID).Scan(&chatType, &spaceRaw, &threadsEnabled, &allowUserMainFeed)
+`, chatID).Scan(&chatType, &spaceRaw, &threadsEnabled, &allowUserMainFeed, &e2eEnabled)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrChatNotFound
 	}
@@ -52,5 +53,6 @@ WHERE id = $1
 		SpaceID:           spaceID,
 		ThreadsEnabled:    threadsEnabled,
 		AllowUserMainFeed: allowUserMainFeed,
+		E2EEnabled:        e2eEnabled,
 	}, nil
 }

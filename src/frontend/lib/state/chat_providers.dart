@@ -15,6 +15,7 @@ import 'auth_providers.dart';
 import 'connectivity_providers.dart';
 import 'gateway_providers.dart';
 import 'message_cache_providers.dart';
+import 'e2e_providers.dart';
 import 'space_providers.dart';
 
 /// Returned by [ChatRoomController.sendMessage] when offline send is blocked.
@@ -573,6 +574,30 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
   ProviderSubscription<AsyncValue<RealtimeFrame>>? _eventSub;
   String? _lastMarkedReadMessageId;
 
+  bool _isE2eChat() => _ref.read(chatE2eEnabledProvider(chatId));
+
+  String? _dmPeerProfileId() {
+    return resolveDmPeerForChatId(
+      chatId: chatId,
+      knownPeers: _ref.read(dmPeerProfileByChatIdProvider),
+      listItems: _ref.read(chatListControllerProvider).items,
+      activeProfileId: _activeProfileId(),
+      messages: state.messages,
+    );
+  }
+
+  Future<List<VoiceMessage>> _finalizeMessages(List<VoiceMessage> messages) async {
+    if (!_isE2eChat()) return messages;
+    final localId = _activeProfileId();
+    final peerId = _dmPeerProfileId();
+    if (localId == null || peerId == null) return messages;
+    return _ref.read(e2eMessageServiceProvider).decryptAllForDisplay(
+      messages: messages,
+      localProfileId: localId,
+      peerProfileId: peerId,
+    );
+  }
+
   @override
   void dispose() {
     _realtimeSub?.close();
@@ -594,7 +619,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     if (!mounted) return;
     switch (result) {
       case MessagesApiOk(:final data):
-        final sorted = _sortMessages(data.messages);
+        final sorted = await _finalizeMessages(_sortMessages(data.messages));
         state = state.copyWith(
           messages: sorted,
           isLoading: false,
@@ -671,7 +696,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           merged.add(m);
         }
       }
-      final sorted = _sortMessages(merged);
+      final sorted = await _finalizeMessages(_sortMessages(merged));
       state = state.copyWith(
         messages: sorted,
         clearError: true,
@@ -702,7 +727,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
             merged.add(m);
           }
         }
-        final sorted = _sortMessages(merged);
+        final sorted = await _finalizeMessages(_sortMessages(merged));
         state = state.copyWith(
           messages: sorted,
           isLoadingOlder: false,
@@ -732,16 +757,32 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       return kChatOfflineBlockedError;
     }
 
+    var outbound = trimmed;
+    var isE2e = false;
+    if (_isE2eChat()) {
+      final peerId = _dmPeerProfileId();
+      final localId = _activeProfileId();
+      if (peerId != null && localId != null && outbound.isNotEmpty) {
+        outbound = await _ref.read(e2eMessageServiceProvider).encryptOutgoing(
+          localProfileId: localId,
+          peerProfileId: peerId,
+          plaintext: outbound,
+        );
+        isE2e = true;
+      }
+    }
+
     state = state.copyWith(isSending: true, clearError: true);
     final result = await _ref
         .read(voiceMessagesClientProvider)
         .sendMessage(
           authorization: auth,
           chatId: chatId,
-          content: trimmed,
+          content: outbound,
           attachments: attachments,
           mentions: mentions,
           threadParentId: threadParentId,
+          isE2e: isE2e,
         );
     if (!mounted) return null;
     switch (result) {
@@ -750,7 +791,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
         if (!merged.any((m) => m.id == data.id)) {
           merged.add(data);
         }
-        final sorted = _sortMessages(merged);
+        final sorted = await _finalizeMessages(_sortMessages(merged));
         state = state.copyWith(
           messages: sorted,
           isSending: false,
@@ -780,8 +821,9 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
         .getMessages(profileId: profileId, chatId: chatId);
     if (!mounted) return false;
     if (cached.isEmpty) return false;
+    final sorted = await _finalizeMessages(_sortMessages(cached));
     state = state.copyWith(
-      messages: _sortMessages(cached),
+      messages: sorted,
       isLoading: false,
       isOfflineCache: true,
       clearError: true,

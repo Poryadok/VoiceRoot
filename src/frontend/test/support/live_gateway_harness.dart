@@ -123,6 +123,49 @@ Future<void> clearLiveAuthRateLimit() async {
   }
 }
 
+/// Reads `messages.content` from compose `messaging_db` (Phase 15 ciphertext-at-rest).
+///
+/// Returns null when compose/postgres is unavailable; live tests should treat that
+/// as a soft skip for the DB assertion only.
+Future<String?> queryMessagingDbMessageContent(String messageId) async {
+  if (!runLiveIntegration) {
+    return null;
+  }
+  final root = liveRepoRoot();
+  if (root == null) {
+    return null;
+  }
+  try {
+    final result = await Process.run(
+      'docker',
+      [
+        'compose',
+        'exec',
+        '-T',
+        'postgres',
+        'psql',
+        '-U',
+        'voice',
+        '-d',
+        'messaging_db',
+        '-t',
+        '-A',
+        '-c',
+        "SELECT content FROM messages WHERE id = '$messageId'",
+      ],
+      workingDirectory: root,
+      runInShell: Platform.isWindows,
+    );
+    if (result.exitCode != 0) {
+      return null;
+    }
+    final content = (result.stdout as String).trim();
+    return content.isEmpty ? null : content;
+  } catch (_) {
+    return null;
+  }
+}
+
 sealed class LiveGatewayProbe {
   const LiveGatewayProbe();
 }

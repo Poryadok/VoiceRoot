@@ -175,6 +175,21 @@ class ChatServiceClient extends $grpc.Client {
     return $createUnaryCall(_$archiveChat, request, options: options);
   }
 
+  /// Phase 15: DM-only opt-in E2E encryption (docs/features/encryption.md).
+  $grpc.ResponseFuture<$0.EnableChatE2EResponse> enableChatE2E(
+    $0.EnableChatE2ERequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$enableChatE2E, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.DisableChatE2EResponse> disableChatE2E(
+    $0.DisableChatE2ERequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$disableChatE2E, request, options: options);
+  }
+
   // method descriptors
 
   static final _$createDM =
@@ -276,6 +291,16 @@ class ChatServiceClient extends $grpc.Client {
           '/voice.chat.v1.ChatService/ArchiveChat',
           ($0.ArchiveChatRequest value) => value.writeToBuffer(),
           $0.ArchiveChatResponse.fromBuffer);
+  static final _$enableChatE2E =
+      $grpc.ClientMethod<$0.EnableChatE2ERequest, $0.EnableChatE2EResponse>(
+          '/voice.chat.v1.ChatService/EnableChatE2E',
+          ($0.EnableChatE2ERequest value) => value.writeToBuffer(),
+          $0.EnableChatE2EResponse.fromBuffer);
+  static final _$disableChatE2E =
+      $grpc.ClientMethod<$0.DisableChatE2ERequest, $0.DisableChatE2EResponse>(
+          '/voice.chat.v1.ChatService/DisableChatE2E',
+          ($0.DisableChatE2ERequest value) => value.writeToBuffer(),
+          $0.DisableChatE2EResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.chat.v1.ChatService')
@@ -443,6 +468,24 @@ abstract class ChatServiceBase extends $grpc.Service {
             ($core.List<$core.int> value) =>
                 $0.ArchiveChatRequest.fromBuffer(value),
             ($0.ArchiveChatResponse value) => value.writeToBuffer()));
+    $addMethod(
+        $grpc.ServiceMethod<$0.EnableChatE2ERequest, $0.EnableChatE2EResponse>(
+            'EnableChatE2E',
+            enableChatE2E_Pre,
+            false,
+            false,
+            ($core.List<$core.int> value) =>
+                $0.EnableChatE2ERequest.fromBuffer(value),
+            ($0.EnableChatE2EResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.DisableChatE2ERequest,
+            $0.DisableChatE2EResponse>(
+        'DisableChatE2E',
+        disableChatE2E_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.DisableChatE2ERequest.fromBuffer(value),
+        ($0.DisableChatE2EResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.CreateDMResponse> createDM_Pre($grpc.ServiceCall $call,
@@ -611,4 +654,22 @@ abstract class ChatServiceBase extends $grpc.Service {
 
   $async.Future<$0.ArchiveChatResponse> archiveChat(
       $grpc.ServiceCall call, $0.ArchiveChatRequest request);
+
+  $async.Future<$0.EnableChatE2EResponse> enableChatE2E_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.EnableChatE2ERequest> $request) async {
+    return enableChatE2E($call, await $request);
+  }
+
+  $async.Future<$0.EnableChatE2EResponse> enableChatE2E(
+      $grpc.ServiceCall call, $0.EnableChatE2ERequest request);
+
+  $async.Future<$0.DisableChatE2EResponse> disableChatE2E_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.DisableChatE2ERequest> $request) async {
+    return disableChatE2E($call, await $request);
+  }
+
+  $async.Future<$0.DisableChatE2EResponse> disableChatE2E(
+      $grpc.ServiceCall call, $0.DisableChatE2ERequest request);
 }

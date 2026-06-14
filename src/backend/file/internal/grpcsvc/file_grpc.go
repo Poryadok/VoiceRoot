@@ -136,6 +136,12 @@ func (s *FileGRPC) RequestUpload(ctx context.Context, req *filev1.RequestUploadR
 
 	fileID := uuid.New()
 	r2Key := r2file.ObjectKey(fileID, originalName)
+	isE2E := req.IsE2E != nil && *req.IsE2E
+	var expiresAt *time.Time
+	if isE2E {
+		t := time.Now().UTC().Add(90 * 24 * time.Hour)
+		expiresAt = &t
+	}
 	putURL, err := s.presigner.PresignPut(ctx, r2file.PutPresignInput{
 		Key:           r2Key,
 		ContentType:   mimeType,
@@ -158,6 +164,8 @@ func (s *FileGRPC) RequestUpload(ctx context.Context, req *filev1.RequestUploadR
 		FileType:          r2file.MediaCategory(mimeType),
 		ChatID:            chatID,
 		ChatType:          chatType,
+		IsE2E:             isE2E,
+		ExpiresAt:         expiresAt,
 		ScanResult:        "pending",
 	})
 	if err != nil {

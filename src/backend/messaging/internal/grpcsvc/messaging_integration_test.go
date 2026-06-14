@@ -61,14 +61,17 @@ func applySQLFile(t *testing.T, ctx context.Context, pool *pgxpool.Pool, relPath
 		applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000003_attachment_only_messages.up.sql"))
 		applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000004_delete_for_me.up.sql"))
 		applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000005_reactions.up.sql"))
+		applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000006_ghost_only.up.sql"))
 		applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000006_pins.up.sql"))
 		applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000007_thread_index.up.sql"))
 		applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000008_shared_media_indexes.up.sql"))
+		applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000009_e2e.up.sql"))
 	}
 	if strings.HasSuffix(relPath, filepath.Join("chat_db", "000001_init.up.sql")) {
 		applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000002_dm_requests.up.sql"))
 		applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000003_groups.up.sql"))
 		applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000005_thread_settings.up.sql"))
+		applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000006_e2e_enabled.up.sql"))
 	}
 }
 
@@ -135,6 +138,7 @@ func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire
 		UserPresence:     w.UserPresence,
 		ChatThreadPolicy: &store.SQLChatThreadPolicy{Pool: pool},
 		PlatformMod:      w.PlatformMod,
+		PreKeyBundles:    &store.E2EPreKeyStore{Pool: pool},
 	})
 	go func() {
 		if err := srv.Serve(lis); err != nil {
@@ -183,6 +187,7 @@ func startMessagingDirect(t *testing.T, pool *pgxpool.Pool) *MessagingGRPC {
 		Moderation:       &store.SQLModerationGuard{Pool: pool},
 		ChatMentionsMeta: &store.SQLChatMentionsMeta{Pool: pool},
 		ChatThreadPolicy: &store.SQLChatThreadPolicy{Pool: pool},
+		PreKeyBundles:    &store.E2EPreKeyStore{Pool: pool},
 	}
 }
 

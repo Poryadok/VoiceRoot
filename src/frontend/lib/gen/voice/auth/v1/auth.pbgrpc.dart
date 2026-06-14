@@ -135,6 +135,21 @@ class AuthServiceClient extends $grpc.Client {
     return $createUnaryCall(_$setAccountStatus, request, options: options);
   }
 
+  /// Phase 15: encrypted key backup (opaque blob; docs/features/encryption.md).
+  $grpc.ResponseFuture<$0.PutE2EKeyBackupResponse> putE2EKeyBackup(
+    $0.PutE2EKeyBackupRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$putE2EKeyBackup, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.GetE2EKeyBackupResponse> getE2EKeyBackup(
+    $0.GetE2EKeyBackupRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getE2EKeyBackup, request, options: options);
+  }
+
   // method descriptors
 
   static final _$register =
@@ -206,6 +221,16 @@ class AuthServiceClient extends $grpc.Client {
       '/voice.auth.v1.AuthService/SetAccountStatus',
       ($0.SetAccountStatusRequest value) => value.writeToBuffer(),
       $0.SetAccountStatusResponse.fromBuffer);
+  static final _$putE2EKeyBackup =
+      $grpc.ClientMethod<$0.PutE2EKeyBackupRequest, $0.PutE2EKeyBackupResponse>(
+          '/voice.auth.v1.AuthService/PutE2EKeyBackup',
+          ($0.PutE2EKeyBackupRequest value) => value.writeToBuffer(),
+          $0.PutE2EKeyBackupResponse.fromBuffer);
+  static final _$getE2EKeyBackup =
+      $grpc.ClientMethod<$0.GetE2EKeyBackupRequest, $0.GetE2EKeyBackupResponse>(
+          '/voice.auth.v1.AuthService/GetE2EKeyBackup',
+          ($0.GetE2EKeyBackupRequest value) => value.writeToBuffer(),
+          $0.GetE2EKeyBackupResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.auth.v1.AuthService')
@@ -325,6 +350,24 @@ abstract class AuthServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.SetAccountStatusRequest.fromBuffer(value),
         ($0.SetAccountStatusResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.PutE2EKeyBackupRequest,
+            $0.PutE2EKeyBackupResponse>(
+        'PutE2EKeyBackup',
+        putE2EKeyBackup_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.PutE2EKeyBackupRequest.fromBuffer(value),
+        ($0.PutE2EKeyBackupResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.GetE2EKeyBackupRequest,
+            $0.GetE2EKeyBackupResponse>(
+        'GetE2EKeyBackup',
+        getE2EKeyBackup_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.GetE2EKeyBackupRequest.fromBuffer(value),
+        ($0.GetE2EKeyBackupResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.RegisterResponse> register_Pre($grpc.ServiceCall $call,
@@ -445,4 +488,22 @@ abstract class AuthServiceBase extends $grpc.Service {
 
   $async.Future<$0.SetAccountStatusResponse> setAccountStatus(
       $grpc.ServiceCall call, $0.SetAccountStatusRequest request);
+
+  $async.Future<$0.PutE2EKeyBackupResponse> putE2EKeyBackup_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.PutE2EKeyBackupRequest> $request) async {
+    return putE2EKeyBackup($call, await $request);
+  }
+
+  $async.Future<$0.PutE2EKeyBackupResponse> putE2EKeyBackup(
+      $grpc.ServiceCall call, $0.PutE2EKeyBackupRequest request);
+
+  $async.Future<$0.GetE2EKeyBackupResponse> getE2EKeyBackup_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.GetE2EKeyBackupRequest> $request) async {
+    return getE2EKeyBackup($call, await $request);
+  }
+
+  $async.Future<$0.GetE2EKeyBackupResponse> getE2EKeyBackup(
+      $grpc.ServiceCall call, $0.GetE2EKeyBackupRequest request);
 }

@@ -653,6 +653,7 @@ const MessageSent$json = {
       '10': 'threadParentId',
       '17': true
     },
+    {'1': 'is_e2e', '3': 6, '4': 1, '5': 8, '10': 'isE2e'},
   ],
   '8': [
     {'1': '_thread_parent_id'},
@@ -664,7 +665,8 @@ final $typed_data.Uint8List messageSentDescriptor = $convert.base64Decode(
     'CgtNZXNzYWdlU2VudBIdCgptZXNzYWdlX2lkGAEgASgJUgltZXNzYWdlSWQSFwoHY2hhdF9pZB'
     'gCIAEoCVIGY2hhdElkEioKEXNlbmRlcl9wcm9maWxlX2lkGAMgASgJUg9zZW5kZXJQcm9maWxl'
     'SWQSIQoMaGFzX21lbnRpb25zGAQgASgIUgtoYXNNZW50aW9ucxItChB0aHJlYWRfcGFyZW50X2'
-    'lkGAUgASgJSABSDnRocmVhZFBhcmVudElkiAEBQhMKEV90aHJlYWRfcGFyZW50X2lk');
+    'lkGAUgASgJSABSDnRocmVhZFBhcmVudElkiAEBEhUKBmlzX2UyZRgGIAEoCFIFaXNFMmVCEwoR'
+    'X3RocmVhZF9wYXJlbnRfaWQ=');
 
 @$core.Deprecated('Use mentionAddedDescriptor instead')
 const MentionAdded$json = {
@@ -696,13 +698,14 @@ const MessageEdited$json = {
   '2': [
     {'1': 'message_id', '3': 1, '4': 1, '5': 9, '10': 'messageId'},
     {'1': 'chat_id', '3': 2, '4': 1, '5': 9, '10': 'chatId'},
+    {'1': 'is_e2e', '3': 6, '4': 1, '5': 8, '10': 'isE2e'},
   ],
 };
 
 /// Descriptor for `MessageEdited`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List messageEditedDescriptor = $convert.base64Decode(
     'Cg1NZXNzYWdlRWRpdGVkEh0KCm1lc3NhZ2VfaWQYASABKAlSCW1lc3NhZ2VJZBIXCgdjaGF0X2'
-    'lkGAIgASgJUgZjaGF0SWQ=');
+    'lkGAIgASgJUgZjaGF0SWQSFQoGaXNfZTJlGAYgASgIUgVpc0UyZQ==');
 
 @$core.Deprecated('Use messageDeletedDescriptor instead')
 const MessageDeleted$json = {

@@ -1,5 +1,9 @@
 package voice.backend.auth.grpc;
 
+import app.voice.auth.v1.GetE2EKeyBackupRequest;
+import app.voice.auth.v1.GetE2EKeyBackupResponse;
+import app.voice.auth.v1.PutE2EKeyBackupRequest;
+import app.voice.auth.v1.PutE2EKeyBackupResponse;
 import app.voice.auth.v1.SetAccountStatusRequest;
 import app.voice.auth.v1.SetAccountStatusResponse;
 import app.voice.auth.v1.SwitchActiveProfileRequest;
@@ -112,6 +116,29 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
   @Override
   public void getJWKS(GetJWKSRequest request, StreamObserver<GetJWKSResponse> responseObserver) {
     run(responseObserver, () -> GetJWKSResponse.newBuilder().setKeysJson(authService.jwksJson()).build());
+  }
+
+  @Override
+  public void putE2EKeyBackup(
+      PutE2EKeyBackupRequest request, StreamObserver<PutE2EKeyBackupResponse> responseObserver) {
+    run(responseObserver, () -> {
+      authService.putE2EKeyBackup(
+          lastAccessToken(), request.getEncryptedBlob(), request.getPasswordHint());
+      return PutE2EKeyBackupResponse.getDefaultInstance();
+    });
+  }
+
+  @Override
+  public void getE2EKeyBackup(
+      GetE2EKeyBackupRequest request, StreamObserver<GetE2EKeyBackupResponse> responseObserver) {
+    run(responseObserver, () -> {
+      var backup = authService.getE2EKeyBackup(lastAccessToken());
+      var builder = GetE2EKeyBackupResponse.newBuilder().setEncryptedBlob(backup.encryptedBlob());
+      if (backup.passwordHint() != null && !backup.passwordHint().isBlank()) {
+        builder.setPasswordHint(backup.passwordHint());
+      }
+      return builder.build();
+    });
   }
 
   @Override

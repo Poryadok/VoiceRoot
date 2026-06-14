@@ -39,6 +39,7 @@ class Chat extends $pb.GeneratedMessage {
     $1.Timestamp? updatedAt,
     $core.bool? threadsEnabled,
     $core.bool? allowUserMainFeed,
+    $core.bool? e2eEnabled,
   }) {
     final result = create();
     if (id != null) result.id = id;
@@ -54,6 +55,7 @@ class Chat extends $pb.GeneratedMessage {
     if (updatedAt != null) result.updatedAt = updatedAt;
     if (threadsEnabled != null) result.threadsEnabled = threadsEnabled;
     if (allowUserMainFeed != null) result.allowUserMainFeed = allowUserMainFeed;
+    if (e2eEnabled != null) result.e2eEnabled = e2eEnabled;
     return result;
   }
 
@@ -87,6 +89,7 @@ class Chat extends $pb.GeneratedMessage {
         subBuilder: $1.Timestamp.create)
     ..aOB(12, _omitFieldNames ? '' : 'threadsEnabled')
     ..aOB(13, _omitFieldNames ? '' : 'allowUserMainFeed')
+    ..aOB(14, _omitFieldNames ? '' : 'e2eEnabled')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -229,6 +232,15 @@ class Chat extends $pb.GeneratedMessage {
   $core.bool hasAllowUserMainFeed() => $_has(12);
   @$pb.TagNumber(13)
   void clearAllowUserMainFeed() => $_clearField(13);
+
+  @$pb.TagNumber(14)
+  $core.bool get e2eEnabled => $_getBF(13);
+  @$pb.TagNumber(14)
+  set e2eEnabled($core.bool value) => $_setBool(13, value);
+  @$pb.TagNumber(14)
+  $core.bool hasE2eEnabled() => $_has(13);
+  @$pb.TagNumber(14)
+  void clearE2eEnabled() => $_clearField(14);
 }
 
 class CreateDMRequest extends $pb.GeneratedMessage {
@@ -2082,6 +2094,115 @@ class ArchiveChatRequest extends $pb.GeneratedMessage {
   void clearArchived() => $_clearField(2);
 }
 
+class EnableChatE2ERequest extends $pb.GeneratedMessage {
+  factory EnableChatE2ERequest({
+    $core.String? chatId,
+  }) {
+    final result = create();
+    if (chatId != null) result.chatId = chatId;
+    return result;
+  }
+
+  EnableChatE2ERequest._();
+
+  factory EnableChatE2ERequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory EnableChatE2ERequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'EnableChatE2ERequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'chatId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  EnableChatE2ERequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  EnableChatE2ERequest copyWith(void Function(EnableChatE2ERequest) updates) =>
+      super.copyWith((message) => updates(message as EnableChatE2ERequest))
+          as EnableChatE2ERequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static EnableChatE2ERequest create() => EnableChatE2ERequest._();
+  @$core.override
+  EnableChatE2ERequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static EnableChatE2ERequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<EnableChatE2ERequest>(create);
+  static EnableChatE2ERequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get chatId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set chatId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasChatId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearChatId() => $_clearField(1);
+}
+
+class DisableChatE2ERequest extends $pb.GeneratedMessage {
+  factory DisableChatE2ERequest({
+    $core.String? chatId,
+  }) {
+    final result = create();
+    if (chatId != null) result.chatId = chatId;
+    return result;
+  }
+
+  DisableChatE2ERequest._();
+
+  factory DisableChatE2ERequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory DisableChatE2ERequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'DisableChatE2ERequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'chatId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DisableChatE2ERequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DisableChatE2ERequest copyWith(
+          void Function(DisableChatE2ERequest) updates) =>
+      super.copyWith((message) => updates(message as DisableChatE2ERequest))
+          as DisableChatE2ERequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static DisableChatE2ERequest create() => DisableChatE2ERequest._();
+  @$core.override
+  DisableChatE2ERequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static DisableChatE2ERequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<DisableChatE2ERequest>(create);
+  static DisableChatE2ERequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get chatId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set chatId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasChatId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearChatId() => $_clearField(1);
+}
+
 /// Cross-service pointer to chat_db.chats (docs/DATA_MODEL.md). Use in other packages instead of parallel chat_id + chat_type strings.
 class ChatRef extends $pb.GeneratedMessage {
   factory ChatRef({
@@ -3054,6 +3175,84 @@ class ArchiveChatResponse extends $pb.GeneratedMessage {
   static ArchiveChatResponse getDefault() => _defaultInstance ??=
       $pb.GeneratedMessage.$_defaultFor<ArchiveChatResponse>(create);
   static ArchiveChatResponse? _defaultInstance;
+}
+
+class EnableChatE2EResponse extends $pb.GeneratedMessage {
+  factory EnableChatE2EResponse() => create();
+
+  EnableChatE2EResponse._();
+
+  factory EnableChatE2EResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory EnableChatE2EResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'EnableChatE2EResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  EnableChatE2EResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  EnableChatE2EResponse copyWith(
+          void Function(EnableChatE2EResponse) updates) =>
+      super.copyWith((message) => updates(message as EnableChatE2EResponse))
+          as EnableChatE2EResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static EnableChatE2EResponse create() => EnableChatE2EResponse._();
+  @$core.override
+  EnableChatE2EResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static EnableChatE2EResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<EnableChatE2EResponse>(create);
+  static EnableChatE2EResponse? _defaultInstance;
+}
+
+class DisableChatE2EResponse extends $pb.GeneratedMessage {
+  factory DisableChatE2EResponse() => create();
+
+  DisableChatE2EResponse._();
+
+  factory DisableChatE2EResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory DisableChatE2EResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'DisableChatE2EResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DisableChatE2EResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DisableChatE2EResponse copyWith(
+          void Function(DisableChatE2EResponse) updates) =>
+      super.copyWith((message) => updates(message as DisableChatE2EResponse))
+          as DisableChatE2EResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static DisableChatE2EResponse create() => DisableChatE2EResponse._();
+  @$core.override
+  DisableChatE2EResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static DisableChatE2EResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<DisableChatE2EResponse>(create);
+  static DisableChatE2EResponse? _defaultInstance;
 }
 
 const $core.bool _omitFieldNames =

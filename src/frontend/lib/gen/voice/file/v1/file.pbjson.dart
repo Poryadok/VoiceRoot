@@ -93,9 +93,11 @@ const RequestUploadRequest$json = {
       '10': 'contextChat',
       '17': true
     },
+    {'1': 'is_e2e', '3': 6, '4': 1, '5': 8, '9': 1, '10': 'isE2e', '17': true},
   ],
   '8': [
     {'1': '_context_chat'},
+    {'1': '_is_e2e'},
   ],
   '9': [
     {'1': 5, '2': 6},
@@ -108,7 +110,8 @@ final $typed_data.Uint8List requestUploadRequestDescriptor = $convert.base64Deco
     'ChRSZXF1ZXN0VXBsb2FkUmVxdWVzdBIjCg1vcmlnaW5hbF9uYW1lGAEgASgJUgxvcmlnaW5hbE'
     '5hbWUSGwoJbWltZV90eXBlGAIgASgJUghtaW1lVHlwZRIdCgpzaXplX2J5dGVzGAMgASgDUglz'
     'aXplQnl0ZXMSPgoMY29udGV4dF9jaGF0GAQgASgLMhYudm9pY2UuY2hhdC52MS5DaGF0UmVmSA'
-    'BSC2NvbnRleHRDaGF0iAEBQg8KDV9jb250ZXh0X2NoYXRKBAgFEAZSCWNoYXRfdHlwZQ==');
+    'BSC2NvbnRleHRDaGF0iAEBEhoKBmlzX2UyZRgGIAEoCEgBUgVpc0UyZYgBAUIPCg1fY29udGV4'
+    'dF9jaGF0QgkKB19pc19lMmVKBAgFEAZSCWNoYXRfdHlwZQ==');
 
 @$core.Deprecated('Use uploadResponseDescriptor instead')
 const UploadResponse$json = {

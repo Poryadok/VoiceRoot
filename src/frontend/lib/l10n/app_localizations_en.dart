@@ -1546,4 +1546,71 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get matchHistoryAddFriend => 'Add friend';
+
+  @override
+  String get e2eEnableTitle => 'Enable end-to-end encryption';
+
+  @override
+  String get e2eEnableBody =>
+      'End-to-end encryption is enabled for this chat.\n\nMessages are encrypted and unavailable to the server.\n— Global search will not find message bodies from this chat.\n— Local search works only on history loaded on this device.';
+
+  @override
+  String get e2eEnableConfirm => 'Enable E2E';
+
+  @override
+  String get e2eEnableCancel => 'Cancel';
+
+  @override
+  String get e2eDisableTitle => 'Disable end-to-end encryption?';
+
+  @override
+  String get e2eDisableBody =>
+      'If you disable E2E, new messages are stored in plain text on the server and server search will work again for this chat.';
+
+  @override
+  String get e2eDisableConfirm => 'Disable E2E';
+
+  @override
+  String get e2eDisableCancel => 'Cancel';
+
+  @override
+  String get e2eKeyBackupTitle => 'E2E key backup';
+
+  @override
+  String get e2eKeyBackupHint =>
+      'Set a backup password so you can restore E2E keys on a new device.';
+
+  @override
+  String get e2eKeyBackupPasswordLabel => 'Backup password';
+
+  @override
+  String get e2eKeyBackupPasswordHintLabel => 'Password hint (optional)';
+
+  @override
+  String get e2eKeyBackupSave => 'Save backup';
+
+  @override
+  String get e2eKeyBackupRestore => 'Restore from backup';
+
+  @override
+  String get e2eUndecryptableGeneric =>
+      'This message is encrypted and cannot be decrypted on this device. Set up key backup to avoid losing history.';
+
+  @override
+  String e2eUndecryptableBefore(String date) {
+    return 'Messages before $date are encrypted and unavailable on this device. Set up key backup to avoid losing history.';
+  }
+
+  @override
+  String get e2eInChatSearchLocalOnly =>
+      'Encrypted chat: searching loaded history on this device only';
+
+  @override
+  String get e2eChatSettingsEnable => 'Enable E2E encryption';
+
+  @override
+  String get e2eChatSettingsDisable => 'Disable E2E encryption';
+
+  @override
+  String get e2eChatSettingsKeyBackup => 'Key backup';
 }

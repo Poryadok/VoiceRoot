@@ -31,12 +31,14 @@ class RequestUploadRequest extends $pb.GeneratedMessage {
     $core.String? mimeType,
     $fixnum.Int64? sizeBytes,
     $1.ChatRef? contextChat,
+    $core.bool? isE2e,
   }) {
     final result = create();
     if (originalName != null) result.originalName = originalName;
     if (mimeType != null) result.mimeType = mimeType;
     if (sizeBytes != null) result.sizeBytes = sizeBytes;
     if (contextChat != null) result.contextChat = contextChat;
+    if (isE2e != null) result.isE2e = isE2e;
     return result;
   }
 
@@ -58,6 +60,7 @@ class RequestUploadRequest extends $pb.GeneratedMessage {
     ..aInt64(3, _omitFieldNames ? '' : 'sizeBytes')
     ..aOM<$1.ChatRef>(4, _omitFieldNames ? '' : 'contextChat',
         subBuilder: $1.ChatRef.create)
+    ..aOB(6, _omitFieldNames ? '' : 'isE2e')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -116,6 +119,15 @@ class RequestUploadRequest extends $pb.GeneratedMessage {
   void clearContextChat() => $_clearField(4);
   @$pb.TagNumber(4)
   $1.ChatRef ensureContextChat() => $_ensure(3);
+
+  @$pb.TagNumber(6)
+  $core.bool get isE2e => $_getBF(4);
+  @$pb.TagNumber(6)
+  set isE2e($core.bool value) => $_setBool(4, value);
+  @$pb.TagNumber(6)
+  $core.bool hasIsE2e() => $_has(4);
+  @$pb.TagNumber(6)
+  void clearIsE2e() => $_clearField(6);
 }
 
 class UploadResponse extends $pb.GeneratedMessage {

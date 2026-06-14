@@ -58,4 +58,5 @@ type DMStore interface {
 	TransferGroupOwnership(ctx context.Context, chatID, ownerID, newOwnerID uuid.UUID) error
 	UpdateGroupChat(ctx context.Context, chatID uuid.UUID, name, avatarURL *string, slowModeSeconds *int32) (*store.ChatRow, error)
 	GetMemberRole(ctx context.Context, chatID, profileID uuid.UUID) (string, error)
+	SetChatE2EEnabled(ctx context.Context, chatID uuid.UUID, enabled bool) error
 }

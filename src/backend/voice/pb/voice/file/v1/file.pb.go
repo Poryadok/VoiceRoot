@@ -207,6 +207,7 @@ type RequestUploadRequest struct {
 	MimeType      string                 `protobuf:"bytes,2,opt,name=mime_type,json=mimeType,proto3" json:"mime_type,omitempty"`
 	SizeBytes     int64                  `protobuf:"varint,3,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
 	ContextChat   *v1.ChatRef            `protobuf:"bytes,4,opt,name=context_chat,json=contextChat,proto3,oneof" json:"context_chat,omitempty"`
+	IsE2E         *bool                  `protobuf:"varint,6,opt,name=is_e2e,json=isE2e,proto3,oneof" json:"is_e2e,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -267,6 +268,13 @@ func (x *RequestUploadRequest) GetContextChat() *v1.ChatRef {
 		return x.ContextChat
 	}
 	return nil
+}
+
+func (x *RequestUploadRequest) GetIsE2E() bool {
+	if x != nil && x.IsE2E != nil {
+		return *x.IsE2E
+	}
+	return false
 }
 
 type UploadResponse struct {
@@ -1377,14 +1385,16 @@ var File_voice_file_v1_file_proto protoreflect.FileDescriptor
 
 const file_voice_file_v1_file_proto_rawDesc = "" +
 	"\n" +
-	"\x18voice/file/v1/file.proto\x12\rvoice.file.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x18voice/chat/v1/chat.proto\x1a\x1cvoice/common/v1/common.proto\"\xd9\x01\n" +
+	"\x18voice/file/v1/file.proto\x12\rvoice.file.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x18voice/chat/v1/chat.proto\x1a\x1cvoice/common/v1/common.proto\"\x80\x02\n" +
 	"\x14RequestUploadRequest\x12#\n" +
 	"\roriginal_name\x18\x01 \x01(\tR\foriginalName\x12\x1b\n" +
 	"\tmime_type\x18\x02 \x01(\tR\bmimeType\x12\x1d\n" +
 	"\n" +
 	"size_bytes\x18\x03 \x01(\x03R\tsizeBytes\x12>\n" +
-	"\fcontext_chat\x18\x04 \x01(\v2\x16.voice.chat.v1.ChatRefH\x00R\vcontextChat\x88\x01\x01B\x0f\n" +
-	"\r_context_chatJ\x04\b\x05\x10\x06R\tchat_type\"l\n" +
+	"\fcontext_chat\x18\x04 \x01(\v2\x16.voice.chat.v1.ChatRefH\x00R\vcontextChat\x88\x01\x01\x12\x1a\n" +
+	"\x06is_e2e\x18\x06 \x01(\bH\x01R\x05isE2e\x88\x01\x01B\x0f\n" +
+	"\r_context_chatB\t\n" +
+	"\a_is_e2eJ\x04\b\x05\x10\x06R\tchat_type\"l\n" +
 	"\x0eUploadResponse\x12\x17\n" +
 	"\afile_id\x18\x01 \x01(\tR\x06fileId\x12*\n" +
 	"\x11presigned_put_url\x18\x02 \x01(\tR\x0fpresignedPutUrl\x12\x15\n" +

@@ -28,6 +28,9 @@ service AuthService {
   rpc SwitchActiveProfile(SwitchActiveProfileRequest) returns (SwitchActiveProfileResponse);
   // Phase 14: internal — platform moderation suspends account (docs/PLAN.md phase 14).
   rpc SetAccountStatus(SetAccountStatusRequest) returns (SetAccountStatusResponse);
+  // Phase 15: encrypted key backup (opaque blob; docs/features/encryption.md).
+  rpc PutE2EKeyBackup(PutE2EKeyBackupRequest) returns (PutE2EKeyBackupResponse);
+  rpc GetE2EKeyBackup(GetE2EKeyBackupRequest) returns (GetE2EKeyBackupResponse);
 }
 
 message RegisterRequest {
@@ -174,3 +177,17 @@ message SetAccountStatusRequest {
 }
 
 message SetAccountStatusResponse {}
+
+message PutE2EKeyBackupRequest {
+  string encrypted_blob = 1;
+  optional string password_hint = 2;
+}
+
+message PutE2EKeyBackupResponse {}
+
+message GetE2EKeyBackupRequest {}
+
+message GetE2EKeyBackupResponse {
+  string encrypted_blob = 1;
+  optional string password_hint = 2;
+}

@@ -118,12 +118,14 @@ const SendMessageRequest$json = {
       '10': 'postedAsChat',
       '17': true
     },
+    {'1': 'is_e2e', '3': 9, '4': 1, '5': 8, '9': 4, '10': 'isE2e', '17': true},
   ],
   '8': [
     {'1': '_client_message_id'},
     {'1': '_thread_parent_id'},
     {'1': '_message_kind'},
     {'1': '_posted_as_chat'},
+    {'1': '_is_e2e'},
   ],
 };
 
@@ -135,9 +137,10 @@ final $typed_data.Uint8List sendMessageRequestDescriptor = $convert.base64Decode
     '9hdHRhY2htZW50c0pzb24SIwoNbWVudGlvbnNfanNvbhgFIAEoCVIMbWVudGlvbnNKc29uEi0K'
     'EHRocmVhZF9wYXJlbnRfaWQYBiABKAlIAVIOdGhyZWFkUGFyZW50SWSIAQESRwoMbWVzc2FnZV'
     '9raW5kGAcgASgOMh8udm9pY2UubWVzc2FnaW5nLnYxLk1lc3NhZ2VLaW5kSAJSC21lc3NhZ2VL'
-    'aW5kiAEBEikKDnBvc3RlZF9hc19jaGF0GAggASgISANSDHBvc3RlZEFzQ2hhdIgBAUIUChJfY2'
-    'xpZW50X21lc3NhZ2VfaWRCEwoRX3RocmVhZF9wYXJlbnRfaWRCDwoNX21lc3NhZ2Vfa2luZEIR'
-    'Cg9fcG9zdGVkX2FzX2NoYXQ=');
+    'aW5kiAEBEikKDnBvc3RlZF9hc19jaGF0GAggASgISANSDHBvc3RlZEFzQ2hhdIgBARIaCgZpc1'
+    '9lMmUYCSABKAhIBFIFaXNFMmWIAQFCFAoSX2NsaWVudF9tZXNzYWdlX2lkQhMKEV90aHJlYWRf'
+    'cGFyZW50X2lkQg8KDV9tZXNzYWdlX2tpbmRCEQoPX3Bvc3RlZF9hc19jaGF0QgkKB19pc19lMm'
+    'U=');
 
 @$core.Deprecated('Use editMessageRequestDescriptor instead')
 const EditMessageRequest$json = {
@@ -396,6 +399,7 @@ const Message$json = {
       '10': 'isPinned',
       '17': true
     },
+    {'1': 'is_e2e', '3': 20, '4': 1, '5': 8, '10': 'isE2e'},
   ],
   '8': [
     {'1': '_display_chat_id'},
@@ -429,10 +433,10 @@ final $typed_data.Uint8List messageDescriptor = $convert.base64Decode(
     'EoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBSCWNyZWF0ZWRBdBJHCgxtZXNzYWdlX2tp'
     'bmQYESABKA4yHy52b2ljZS5tZXNzYWdpbmcudjEuTWVzc2FnZUtpbmRIBlILbWVzc2FnZUtpbm'
     'SIAQESJQoOcmVhY3Rpb25zX2pzb24YEiABKAlSDXJlYWN0aW9uc0pzb24SIAoJaXNfcGlubmVk'
-    'GBMgASgISAdSCGlzUGlubmVkiAEBQhIKEF9kaXNwbGF5X2NoYXRfaWRCEwoRX3RocmVhZF9wYX'
-    'JlbnRfaWRCEgoQX2ZvcndhcmRfZnJvbV9pZEIWChRfZm9yd2FyZF9mcm9tX3NlbmRlckIMCgpf'
-    'ZWRpdGVkX2F0Qg0KC19kZWxldGVkX2F0Qg8KDV9tZXNzYWdlX2tpbmRCDAoKX2lzX3Bpbm5lZE'
-    'oECAMQBFIJY2hhdF90eXBl');
+    'GBMgASgISAdSCGlzUGlubmVkiAEBEhUKBmlzX2UyZRgUIAEoCFIFaXNFMmVCEgoQX2Rpc3BsYX'
+    'lfY2hhdF9pZEITChFfdGhyZWFkX3BhcmVudF9pZEISChBfZm9yd2FyZF9mcm9tX2lkQhYKFF9m'
+    'b3J3YXJkX2Zyb21fc2VuZGVyQgwKCl9lZGl0ZWRfYXRCDQoLX2RlbGV0ZWRfYXRCDwoNX21lc3'
+    'NhZ2Vfa2luZEIMCgpfaXNfcGlubmVkSgQIAxAEUgljaGF0X3R5cGU=');
 
 @$core.Deprecated('Use getThreadMessagesRequestDescriptor instead')
 const GetThreadMessagesRequest$json = {
@@ -1350,3 +1354,52 @@ const ListSharedMediaResponse$json = {
 final $typed_data.Uint8List listSharedMediaResponseDescriptor = $convert.base64Decode(
     'ChdMaXN0U2hhcmVkTWVkaWFSZXNwb25zZRJPChFzaGFyZWRfbWVkaWFfbGlzdBgBIAEoCzIjLn'
     'ZvaWNlLm1lc3NhZ2luZy52MS5TaGFyZWRNZWRpYUxpc3RSD3NoYXJlZE1lZGlhTGlzdA==');
+
+@$core.Deprecated('Use uploadPreKeyBundleRequestDescriptor instead')
+const UploadPreKeyBundleRequest$json = {
+  '1': 'UploadPreKeyBundleRequest',
+  '2': [
+    {'1': 'bundle', '3': 1, '4': 1, '5': 9, '10': 'bundle'},
+  ],
+};
+
+/// Descriptor for `UploadPreKeyBundleRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List uploadPreKeyBundleRequestDescriptor =
+    $convert.base64Decode(
+        'ChlVcGxvYWRQcmVLZXlCdW5kbGVSZXF1ZXN0EhYKBmJ1bmRsZRgBIAEoCVIGYnVuZGxl');
+
+@$core.Deprecated('Use uploadPreKeyBundleResponseDescriptor instead')
+const UploadPreKeyBundleResponse$json = {
+  '1': 'UploadPreKeyBundleResponse',
+};
+
+/// Descriptor for `UploadPreKeyBundleResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List uploadPreKeyBundleResponseDescriptor =
+    $convert.base64Decode('ChpVcGxvYWRQcmVLZXlCdW5kbGVSZXNwb25zZQ==');
+
+@$core.Deprecated('Use getPreKeyBundleRequestDescriptor instead')
+const GetPreKeyBundleRequest$json = {
+  '1': 'GetPreKeyBundleRequest',
+  '2': [
+    {'1': 'profile_id', '3': 1, '4': 1, '5': 9, '10': 'profileId'},
+  ],
+};
+
+/// Descriptor for `GetPreKeyBundleRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getPreKeyBundleRequestDescriptor =
+    $convert.base64Decode(
+        'ChZHZXRQcmVLZXlCdW5kbGVSZXF1ZXN0Eh0KCnByb2ZpbGVfaWQYASABKAlSCXByb2ZpbGVJZA'
+        '==');
+
+@$core.Deprecated('Use getPreKeyBundleResponseDescriptor instead')
+const GetPreKeyBundleResponse$json = {
+  '1': 'GetPreKeyBundleResponse',
+  '2': [
+    {'1': 'bundle', '3': 1, '4': 1, '5': 9, '10': 'bundle'},
+  ],
+};
+
+/// Descriptor for `GetPreKeyBundleResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getPreKeyBundleResponseDescriptor =
+    $convert.base64Decode(
+        'ChdHZXRQcmVLZXlCdW5kbGVSZXNwb25zZRIWCgZidW5kbGUYASABKAlSBmJ1bmRsZQ==');

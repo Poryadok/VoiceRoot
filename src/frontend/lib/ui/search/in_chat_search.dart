@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../backend/search_client.dart';
+import '../../e2e/e2e_message_service.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
+import '../../state/chat_providers.dart';
+import '../../state/e2e_providers.dart';
 import '../../state/search_providers.dart';
 import '../../theme/voice_colors.dart';
 
@@ -50,6 +53,39 @@ class _InChatSearchState extends ConsumerState<InChatSearch> {
   }
 
   Future<void> _runSearch(String query) async {
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) {
+      setState(() {
+        _hits = const [];
+        _activeIndex = 0;
+      });
+      return;
+    }
+
+    final e2eEnabled = ref.read(chatE2eEnabledProvider(widget.chatId));
+    if (e2eEnabled) {
+      final room = ref.read(chatRoomControllerProvider(widget.chatId));
+      final localHits = localE2eMessageSearch(
+        messages: room.messages,
+        query: trimmed,
+      );
+      if (!mounted) return;
+      setState(() {
+        _hits = localHits
+            .map(
+              (m) => SearchHit(
+                messageId: m.id,
+                snippet: m.content,
+                score: 1,
+              ),
+            )
+            .toList(growable: false);
+        _activeIndex = 0;
+      });
+      _notifyActive();
+      return;
+    }
+
     final authorization =
         ref.read(authControllerProvider).session?.authorizationHeader;
     if (authorization == null) return;
@@ -57,7 +93,7 @@ class _InChatSearchState extends ConsumerState<InChatSearch> {
     final result = await client.searchInChat(
       authorization: authorization,
       chatId: widget.chatId,
-      query: query,
+      query: trimmed,
     );
     if (!mounted) return;
     if (result is SearchApiOk<InChatSearchData>) {
@@ -95,12 +131,23 @@ class _InChatSearchState extends ConsumerState<InChatSearch> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final voice = VoiceColors.of(context);
+    final e2eEnabled = ref.watch(chatE2eEnabledProvider(widget.chatId));
     final active = _hits.isEmpty ? null : _hits[_activeIndex];
 
     return Column(
       key: InChatSearch.panelKey,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (e2eEnabled)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+            child: Text(
+              l10n.e2eInChatSearchLocalOnly,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: voice.textSecondary,
+              ),
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.all(12),
           child: Row(

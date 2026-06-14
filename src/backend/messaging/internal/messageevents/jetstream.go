@@ -198,7 +198,7 @@ func messageEventLogAttrs(env *eventsv1.MessageStreamEvent) []slog.Attr {
 }
 
 // PublishMessageSent implements MessageEventsPublisher.
-func (p *JetStreamPublisher) PublishMessageSent(ctx context.Context, messageID, chatID, senderProfileID string, hasMentions bool, threadParentID string) error {
+func (p *JetStreamPublisher) PublishMessageSent(ctx context.Context, messageID, chatID, senderProfileID string, hasMentions bool, threadParentID string, isE2E bool) error {
 	env := &eventsv1.MessageStreamEvent{
 		EventId:    uuid.NewString(),
 		OccurredAt: timestamppb.New(time.Now().UTC()),
@@ -209,6 +209,7 @@ func (p *JetStreamPublisher) PublishMessageSent(ctx context.Context, messageID, 
 				SenderProfileId: senderProfileID,
 				HasMentions:     hasMentions,
 				ThreadParentId:  ptrIfNonEmpty(threadParentID),
+				IsE2E:           isE2E,
 			},
 		},
 	}
@@ -250,7 +251,7 @@ func (p *JetStreamPublisher) PublishMentionAdded(ctx context.Context, messageID,
 }
 
 // PublishMessageEdited implements MessageEventsPublisher.
-func (p *JetStreamPublisher) PublishMessageEdited(ctx context.Context, messageID, chatID string) error {
+func (p *JetStreamPublisher) PublishMessageEdited(ctx context.Context, messageID, chatID string, isE2E bool) error {
 	env := &eventsv1.MessageStreamEvent{
 		EventId:    uuid.NewString(),
 		OccurredAt: timestamppb.New(time.Now().UTC()),
@@ -258,6 +259,7 @@ func (p *JetStreamPublisher) PublishMessageEdited(ctx context.Context, messageID
 			MessageEdited: &eventsv1.MessageEdited{
 				MessageId: messageID,
 				ChatId:    chatID,
+				IsE2E:     isE2E,
 			},
 		},
 	}

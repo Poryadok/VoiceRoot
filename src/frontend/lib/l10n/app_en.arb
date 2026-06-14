@@ -772,5 +772,30 @@
   "matchHistoryStatusActive": "Active",
   "matchHistoryStatusCompleted": "Completed",
   "matchHistoryLoadMore": "Load more",
-  "matchHistoryAddFriend": "Add friend"
+  "matchHistoryAddFriend": "Add friend",
+  "e2eEnableTitle": "Enable end-to-end encryption",
+  "e2eEnableBody": "End-to-end encryption is enabled for this chat.\n\nMessages are encrypted and unavailable to the server.\n— Global search will not find message bodies from this chat.\n— Local search works only on history loaded on this device.",
+  "e2eEnableConfirm": "Enable E2E",
+  "e2eEnableCancel": "Cancel",
+  "e2eDisableTitle": "Disable end-to-end encryption?",
+  "e2eDisableBody": "If you disable E2E, new messages are stored in plain text on the server and server search will work again for this chat.",
+  "e2eDisableConfirm": "Disable E2E",
+  "e2eDisableCancel": "Cancel",
+  "e2eKeyBackupTitle": "E2E key backup",
+  "e2eKeyBackupHint": "Set a backup password so you can restore E2E keys on a new device.",
+  "e2eKeyBackupPasswordLabel": "Backup password",
+  "e2eKeyBackupPasswordHintLabel": "Password hint (optional)",
+  "e2eKeyBackupSave": "Save backup",
+  "e2eKeyBackupRestore": "Restore from backup",
+  "e2eUndecryptableGeneric": "This message is encrypted and cannot be decrypted on this device. Set up key backup to avoid losing history.",
+  "e2eUndecryptableBefore": "Messages before {date} are encrypted and unavailable on this device. Set up key backup to avoid losing history.",
+  "@e2eUndecryptableBefore": {
+    "placeholders": {
+      "date": {"type": "String"}
+    }
+  },
+  "e2eInChatSearchLocalOnly": "Encrypted chat: searching loaded history on this device only",
+  "e2eChatSettingsEnable": "Enable E2E encryption",
+  "e2eChatSettingsDisable": "Disable E2E encryption",
+  "e2eChatSettingsKeyBackup": "Key backup"
 }

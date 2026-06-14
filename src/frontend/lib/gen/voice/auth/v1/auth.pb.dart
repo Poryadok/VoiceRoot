@@ -1904,6 +1904,218 @@ class SetAccountStatusResponse extends $pb.GeneratedMessage {
   static SetAccountStatusResponse? _defaultInstance;
 }
 
+class PutE2EKeyBackupRequest extends $pb.GeneratedMessage {
+  factory PutE2EKeyBackupRequest({
+    $core.String? encryptedBlob,
+    $core.String? passwordHint,
+  }) {
+    final result = create();
+    if (encryptedBlob != null) result.encryptedBlob = encryptedBlob;
+    if (passwordHint != null) result.passwordHint = passwordHint;
+    return result;
+  }
+
+  PutE2EKeyBackupRequest._();
+
+  factory PutE2EKeyBackupRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory PutE2EKeyBackupRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'PutE2EKeyBackupRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'encryptedBlob')
+    ..aOS(2, _omitFieldNames ? '' : 'passwordHint')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  PutE2EKeyBackupRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  PutE2EKeyBackupRequest copyWith(
+          void Function(PutE2EKeyBackupRequest) updates) =>
+      super.copyWith((message) => updates(message as PutE2EKeyBackupRequest))
+          as PutE2EKeyBackupRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static PutE2EKeyBackupRequest create() => PutE2EKeyBackupRequest._();
+  @$core.override
+  PutE2EKeyBackupRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static PutE2EKeyBackupRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<PutE2EKeyBackupRequest>(create);
+  static PutE2EKeyBackupRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get encryptedBlob => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set encryptedBlob($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasEncryptedBlob() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearEncryptedBlob() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get passwordHint => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set passwordHint($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasPasswordHint() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearPasswordHint() => $_clearField(2);
+}
+
+class PutE2EKeyBackupResponse extends $pb.GeneratedMessage {
+  factory PutE2EKeyBackupResponse() => create();
+
+  PutE2EKeyBackupResponse._();
+
+  factory PutE2EKeyBackupResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory PutE2EKeyBackupResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'PutE2EKeyBackupResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  PutE2EKeyBackupResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  PutE2EKeyBackupResponse copyWith(
+          void Function(PutE2EKeyBackupResponse) updates) =>
+      super.copyWith((message) => updates(message as PutE2EKeyBackupResponse))
+          as PutE2EKeyBackupResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static PutE2EKeyBackupResponse create() => PutE2EKeyBackupResponse._();
+  @$core.override
+  PutE2EKeyBackupResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static PutE2EKeyBackupResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<PutE2EKeyBackupResponse>(create);
+  static PutE2EKeyBackupResponse? _defaultInstance;
+}
+
+class GetE2EKeyBackupRequest extends $pb.GeneratedMessage {
+  factory GetE2EKeyBackupRequest() => create();
+
+  GetE2EKeyBackupRequest._();
+
+  factory GetE2EKeyBackupRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetE2EKeyBackupRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetE2EKeyBackupRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetE2EKeyBackupRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetE2EKeyBackupRequest copyWith(
+          void Function(GetE2EKeyBackupRequest) updates) =>
+      super.copyWith((message) => updates(message as GetE2EKeyBackupRequest))
+          as GetE2EKeyBackupRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetE2EKeyBackupRequest create() => GetE2EKeyBackupRequest._();
+  @$core.override
+  GetE2EKeyBackupRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetE2EKeyBackupRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetE2EKeyBackupRequest>(create);
+  static GetE2EKeyBackupRequest? _defaultInstance;
+}
+
+class GetE2EKeyBackupResponse extends $pb.GeneratedMessage {
+  factory GetE2EKeyBackupResponse({
+    $core.String? encryptedBlob,
+    $core.String? passwordHint,
+  }) {
+    final result = create();
+    if (encryptedBlob != null) result.encryptedBlob = encryptedBlob;
+    if (passwordHint != null) result.passwordHint = passwordHint;
+    return result;
+  }
+
+  GetE2EKeyBackupResponse._();
+
+  factory GetE2EKeyBackupResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetE2EKeyBackupResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetE2EKeyBackupResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'encryptedBlob')
+    ..aOS(2, _omitFieldNames ? '' : 'passwordHint')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetE2EKeyBackupResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetE2EKeyBackupResponse copyWith(
+          void Function(GetE2EKeyBackupResponse) updates) =>
+      super.copyWith((message) => updates(message as GetE2EKeyBackupResponse))
+          as GetE2EKeyBackupResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetE2EKeyBackupResponse create() => GetE2EKeyBackupResponse._();
+  @$core.override
+  GetE2EKeyBackupResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetE2EKeyBackupResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetE2EKeyBackupResponse>(create);
+  static GetE2EKeyBackupResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get encryptedBlob => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set encryptedBlob($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasEncryptedBlob() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearEncryptedBlob() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get passwordHint => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set passwordHint($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasPasswordHint() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearPasswordHint() => $_clearField(2);
+}
+
 const $core.bool _omitFieldNames =
     $core.bool.fromEnvironment('protobuf.omit_field_names');
 const $core.bool _omitMessageNames =

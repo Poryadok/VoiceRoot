@@ -36,8 +36,14 @@ func (idx *MessageIndexer) Handle(ctx context.Context, env *eventsv1.MessageStre
 	}
 	switch p := env.GetPayload().(type) {
 	case *eventsv1.MessageStreamEvent_MessageSent:
+		if p.MessageSent.GetIsE2E() {
+			return nil
+		}
 		return idx.handleUpsert(ctx, p.MessageSent.GetChatId(), p.MessageSent.GetMessageId(), p.MessageSent.GetSenderProfileId())
 	case *eventsv1.MessageStreamEvent_MessageEdited:
+		if p.MessageEdited.GetIsE2E() {
+			return nil
+		}
 		return idx.handleUpsert(ctx, p.MessageEdited.GetChatId(), p.MessageEdited.GetMessageId(), "")
 	case *eventsv1.MessageStreamEvent_MessageDeleted:
 		return idx.handleDelete(ctx, p.MessageDeleted.GetMessageId())

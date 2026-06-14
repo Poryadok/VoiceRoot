@@ -35,6 +35,7 @@ class SendMessageRequest extends $pb.GeneratedMessage {
     $core.String? threadParentId,
     MessageKind? messageKind,
     $core.bool? postedAsChat,
+    $core.bool? isE2e,
   }) {
     final result = create();
     if (chat != null) result.chat = chat;
@@ -45,6 +46,7 @@ class SendMessageRequest extends $pb.GeneratedMessage {
     if (threadParentId != null) result.threadParentId = threadParentId;
     if (messageKind != null) result.messageKind = messageKind;
     if (postedAsChat != null) result.postedAsChat = postedAsChat;
+    if (isE2e != null) result.isE2e = isE2e;
     return result;
   }
 
@@ -72,6 +74,7 @@ class SendMessageRequest extends $pb.GeneratedMessage {
     ..aE<MessageKind>(7, _omitFieldNames ? '' : 'messageKind',
         enumValues: MessageKind.values)
     ..aOB(8, _omitFieldNames ? '' : 'postedAsChat')
+    ..aOB(9, _omitFieldNames ? '' : 'isE2e')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -167,6 +170,15 @@ class SendMessageRequest extends $pb.GeneratedMessage {
   $core.bool hasPostedAsChat() => $_has(7);
   @$pb.TagNumber(8)
   void clearPostedAsChat() => $_clearField(8);
+
+  @$pb.TagNumber(9)
+  $core.bool get isE2e => $_getBF(8);
+  @$pb.TagNumber(9)
+  set isE2e($core.bool value) => $_setBool(8, value);
+  @$pb.TagNumber(9)
+  $core.bool hasIsE2e() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearIsE2e() => $_clearField(9);
 }
 
 class EditMessageRequest extends $pb.GeneratedMessage {
@@ -578,6 +590,7 @@ class Message extends $pb.GeneratedMessage {
     MessageKind? messageKind,
     $core.String? reactionsJson,
     $core.bool? isPinned,
+    $core.bool? isE2e,
   }) {
     final result = create();
     if (id != null) result.id = id;
@@ -598,6 +611,7 @@ class Message extends $pb.GeneratedMessage {
     if (messageKind != null) result.messageKind = messageKind;
     if (reactionsJson != null) result.reactionsJson = reactionsJson;
     if (isPinned != null) result.isPinned = isPinned;
+    if (isE2e != null) result.isE2e = isE2e;
     return result;
   }
 
@@ -638,6 +652,7 @@ class Message extends $pb.GeneratedMessage {
         enumValues: MessageKind.values)
     ..aOS(18, _omitFieldNames ? '' : 'reactionsJson')
     ..aOB(19, _omitFieldNames ? '' : 'isPinned')
+    ..aOB(20, _omitFieldNames ? '' : 'isE2e')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -827,6 +842,15 @@ class Message extends $pb.GeneratedMessage {
   $core.bool hasIsPinned() => $_has(17);
   @$pb.TagNumber(19)
   void clearIsPinned() => $_clearField(19);
+
+  @$pb.TagNumber(20)
+  $core.bool get isE2e => $_getBF(18);
+  @$pb.TagNumber(20)
+  set isE2e($core.bool value) => $_setBool(18, value);
+  @$pb.TagNumber(20)
+  $core.bool hasIsE2e() => $_has(18);
+  @$pb.TagNumber(20)
+  void clearIsE2e() => $_clearField(20);
 }
 
 class GetThreadMessagesRequest extends $pb.GeneratedMessage {
@@ -3259,6 +3283,215 @@ class ListSharedMediaResponse extends $pb.GeneratedMessage {
   void clearSharedMediaList() => $_clearField(1);
   @$pb.TagNumber(1)
   SharedMediaList ensureSharedMediaList() => $_ensure(0);
+}
+
+class UploadPreKeyBundleRequest extends $pb.GeneratedMessage {
+  factory UploadPreKeyBundleRequest({
+    $core.String? bundle,
+  }) {
+    final result = create();
+    if (bundle != null) result.bundle = bundle;
+    return result;
+  }
+
+  UploadPreKeyBundleRequest._();
+
+  factory UploadPreKeyBundleRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory UploadPreKeyBundleRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'UploadPreKeyBundleRequest',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.messaging.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'bundle')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UploadPreKeyBundleRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UploadPreKeyBundleRequest copyWith(
+          void Function(UploadPreKeyBundleRequest) updates) =>
+      super.copyWith((message) => updates(message as UploadPreKeyBundleRequest))
+          as UploadPreKeyBundleRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static UploadPreKeyBundleRequest create() => UploadPreKeyBundleRequest._();
+  @$core.override
+  UploadPreKeyBundleRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static UploadPreKeyBundleRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<UploadPreKeyBundleRequest>(create);
+  static UploadPreKeyBundleRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get bundle => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set bundle($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasBundle() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearBundle() => $_clearField(1);
+}
+
+class UploadPreKeyBundleResponse extends $pb.GeneratedMessage {
+  factory UploadPreKeyBundleResponse() => create();
+
+  UploadPreKeyBundleResponse._();
+
+  factory UploadPreKeyBundleResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory UploadPreKeyBundleResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'UploadPreKeyBundleResponse',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.messaging.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UploadPreKeyBundleResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UploadPreKeyBundleResponse copyWith(
+          void Function(UploadPreKeyBundleResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as UploadPreKeyBundleResponse))
+          as UploadPreKeyBundleResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static UploadPreKeyBundleResponse create() => UploadPreKeyBundleResponse._();
+  @$core.override
+  UploadPreKeyBundleResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static UploadPreKeyBundleResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<UploadPreKeyBundleResponse>(create);
+  static UploadPreKeyBundleResponse? _defaultInstance;
+}
+
+class GetPreKeyBundleRequest extends $pb.GeneratedMessage {
+  factory GetPreKeyBundleRequest({
+    $core.String? profileId,
+  }) {
+    final result = create();
+    if (profileId != null) result.profileId = profileId;
+    return result;
+  }
+
+  GetPreKeyBundleRequest._();
+
+  factory GetPreKeyBundleRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetPreKeyBundleRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetPreKeyBundleRequest',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.messaging.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'profileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetPreKeyBundleRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetPreKeyBundleRequest copyWith(
+          void Function(GetPreKeyBundleRequest) updates) =>
+      super.copyWith((message) => updates(message as GetPreKeyBundleRequest))
+          as GetPreKeyBundleRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetPreKeyBundleRequest create() => GetPreKeyBundleRequest._();
+  @$core.override
+  GetPreKeyBundleRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetPreKeyBundleRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetPreKeyBundleRequest>(create);
+  static GetPreKeyBundleRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get profileId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set profileId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProfileId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProfileId() => $_clearField(1);
+}
+
+class GetPreKeyBundleResponse extends $pb.GeneratedMessage {
+  factory GetPreKeyBundleResponse({
+    $core.String? bundle,
+  }) {
+    final result = create();
+    if (bundle != null) result.bundle = bundle;
+    return result;
+  }
+
+  GetPreKeyBundleResponse._();
+
+  factory GetPreKeyBundleResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetPreKeyBundleResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetPreKeyBundleResponse',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.messaging.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'bundle')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetPreKeyBundleResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetPreKeyBundleResponse copyWith(
+          void Function(GetPreKeyBundleResponse) updates) =>
+      super.copyWith((message) => updates(message as GetPreKeyBundleResponse))
+          as GetPreKeyBundleResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetPreKeyBundleResponse create() => GetPreKeyBundleResponse._();
+  @$core.override
+  GetPreKeyBundleResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetPreKeyBundleResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetPreKeyBundleResponse>(create);
+  static GetPreKeyBundleResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get bundle => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set bundle($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasBundle() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearBundle() => $_clearField(1);
 }
 
 const $core.bool _omitFieldNames =

@@ -22,6 +22,37 @@ func (t *transcoder) serveAuthREST(w http.ResponseWriter, r *http.Request, rest 
 		writeJSON(w, http.StatusOK, map[string]any{"authorization_url": "https://id.twitch.tv/oauth2/authorize"})
 		return true
 
+	case r.Method == http.MethodPut && rest == "e2e-key-backup":
+		if t.clients.auth == nil {
+			http.NotFound(w, r)
+			return true
+		}
+		req := &authv1.PutE2EKeyBackupRequest{}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		_, err := t.clients.auth.PutE2EKeyBackup(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return true
+
+	case r.Method == http.MethodGet && rest == "e2e-key-backup":
+		if t.clients.auth == nil {
+			http.NotFound(w, r)
+			return true
+		}
+		resp, err := t.clients.auth.GetE2EKeyBackup(ctx, &authv1.GetE2EKeyBackupRequest{})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
 	case r.Method == http.MethodPost && rest == "switch-profile":
 		if t.clients.auth == nil {
 			http.NotFound(w, r)

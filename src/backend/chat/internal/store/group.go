@@ -136,7 +136,7 @@ func (s *DMStore) FindChatByID(ctx context.Context, chatID uuid.UUID) (*ChatRow,
 	}
 	return scanChatRow(s.Pool.QueryRow(ctx, `
 SELECT id, type, space_id, name, avatar_url, topic, creator_profile_id, slow_mode_seconds,
-       last_message_at, created_at, updated_at, threads_enabled, allow_user_main_feed
+       last_message_at, created_at, updated_at, threads_enabled, allow_user_main_feed, e2e_enabled
 FROM chats
 WHERE id = $1
 `, chatID))
@@ -150,9 +150,9 @@ func scanChatRow(row pgx.Row) (*ChatRow, error) {
 	var slowMode int32
 	var lastMsg sql.NullTime
 	var createdAt, updatedAt time.Time
-	var threadsEnabled, allowUserMainFeed bool
+	var threadsEnabled, allowUserMainFeed, e2eEnabled bool
 	err := row.Scan(&id, &chatType, &spaceID, &name, &avatarURL, &topic, &creator, &slowMode,
-		&lastMsg, &createdAt, &updatedAt, &threadsEnabled, &allowUserMainFeed)
+		&lastMsg, &createdAt, &updatedAt, &threadsEnabled, &allowUserMainFeed, &e2eEnabled)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -168,6 +168,7 @@ func scanChatRow(row pgx.Row) (*ChatRow, error) {
 		UpdatedAt:         updatedAt.UTC(),
 		ThreadsEnabled:    threadsEnabled,
 		AllowUserMainFeed: allowUserMainFeed,
+		E2EEnabled:        e2eEnabled,
 	}
 	if spaceID.Valid {
 		if sid, perr := uuid.Parse(spaceID.String); perr == nil {
@@ -445,7 +446,7 @@ UPDATE chats
 SET %s
 WHERE id = $%d AND type = 'group'
 RETURNING id, type, space_id, name, avatar_url, topic, creator_profile_id, slow_mode_seconds,
-          last_message_at, created_at, updated_at, threads_enabled, allow_user_main_feed
+          last_message_at, created_at, updated_at, threads_enabled, allow_user_main_feed, e2e_enabled
 `, strings.Join(sets, ", "), argN)
 	return scanChatRow(s.Pool.QueryRow(ctx, q, args...))
 }

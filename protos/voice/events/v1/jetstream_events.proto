@@ -161,6 +161,7 @@ message MessageSent {
   string sender_profile_id = 3;
   bool has_mentions = 4;
   optional string thread_parent_id = 5;
+  bool is_e2e = 6;
 }
 
 message MentionAdded {
@@ -173,6 +174,7 @@ message MentionAdded {
 message MessageEdited {
   string message_id = 1;
   string chat_id = 2;
+  bool is_e2e = 6;
 }
 
 message MessageDeleted {

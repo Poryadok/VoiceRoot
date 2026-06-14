@@ -7,8 +7,10 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import voice.backend.auth.repository.AccountRepository;
 import voice.backend.auth.repository.BackupCodeRepository;
+import voice.backend.auth.repository.E2EKeyBackupRepository;
 import voice.backend.auth.repository.JdbcAccountRepository;
 import voice.backend.auth.repository.JdbcBackupCodeRepository;
+import voice.backend.auth.repository.JdbcE2EKeyBackupRepository;
 import voice.backend.auth.repository.JdbcRefreshTokenRepository;
 import voice.backend.auth.repository.RefreshTokenRepository;
 import voice.backend.auth.security.RedisTokenBlacklist;
@@ -30,6 +32,11 @@ public class JdbcPersistenceConfiguration {
   @Bean
   BackupCodeRepository backupCodeRepository(NamedParameterJdbcTemplate jdbc) {
     return new JdbcBackupCodeRepository(jdbc);
+  }
+
+  @Bean
+  E2EKeyBackupRepository e2eKeyBackupRepository(NamedParameterJdbcTemplate jdbc) {
+    return new JdbcE2EKeyBackupRepository(jdbc);
   }
 
   @Bean

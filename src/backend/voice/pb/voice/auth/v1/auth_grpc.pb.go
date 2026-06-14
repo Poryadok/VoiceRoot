@@ -33,6 +33,8 @@ const (
 	AuthService_GetJWKS_FullMethodName             = "/voice.auth.v1.AuthService/GetJWKS"
 	AuthService_SwitchActiveProfile_FullMethodName = "/voice.auth.v1.AuthService/SwitchActiveProfile"
 	AuthService_SetAccountStatus_FullMethodName    = "/voice.auth.v1.AuthService/SetAccountStatus"
+	AuthService_PutE2EKeyBackup_FullMethodName     = "/voice.auth.v1.AuthService/PutE2EKeyBackup"
+	AuthService_GetE2EKeyBackup_FullMethodName     = "/voice.auth.v1.AuthService/GetE2EKeyBackup"
 )
 
 // AuthServiceClient is the client API for AuthService service.
@@ -59,6 +61,9 @@ type AuthServiceClient interface {
 	SwitchActiveProfile(ctx context.Context, in *SwitchActiveProfileRequest, opts ...grpc.CallOption) (*SwitchActiveProfileResponse, error)
 	// Phase 14: internal — platform moderation suspends account (docs/PLAN.md phase 14).
 	SetAccountStatus(ctx context.Context, in *SetAccountStatusRequest, opts ...grpc.CallOption) (*SetAccountStatusResponse, error)
+	// Phase 15: encrypted key backup (opaque blob; docs/features/encryption.md).
+	PutE2EKeyBackup(ctx context.Context, in *PutE2EKeyBackupRequest, opts ...grpc.CallOption) (*PutE2EKeyBackupResponse, error)
+	GetE2EKeyBackup(ctx context.Context, in *GetE2EKeyBackupRequest, opts ...grpc.CallOption) (*GetE2EKeyBackupResponse, error)
 }
 
 type authServiceClient struct {
@@ -209,6 +214,26 @@ func (c *authServiceClient) SetAccountStatus(ctx context.Context, in *SetAccount
 	return out, nil
 }
 
+func (c *authServiceClient) PutE2EKeyBackup(ctx context.Context, in *PutE2EKeyBackupRequest, opts ...grpc.CallOption) (*PutE2EKeyBackupResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PutE2EKeyBackupResponse)
+	err := c.cc.Invoke(ctx, AuthService_PutE2EKeyBackup_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) GetE2EKeyBackup(ctx context.Context, in *GetE2EKeyBackupRequest, opts ...grpc.CallOption) (*GetE2EKeyBackupResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetE2EKeyBackupResponse)
+	err := c.cc.Invoke(ctx, AuthService_GetE2EKeyBackup_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AuthServiceServer is the server API for AuthService service.
 // All implementations must embed UnimplementedAuthServiceServer
 // for forward compatibility.
@@ -233,6 +258,9 @@ type AuthServiceServer interface {
 	SwitchActiveProfile(context.Context, *SwitchActiveProfileRequest) (*SwitchActiveProfileResponse, error)
 	// Phase 14: internal — platform moderation suspends account (docs/PLAN.md phase 14).
 	SetAccountStatus(context.Context, *SetAccountStatusRequest) (*SetAccountStatusResponse, error)
+	// Phase 15: encrypted key backup (opaque blob; docs/features/encryption.md).
+	PutE2EKeyBackup(context.Context, *PutE2EKeyBackupRequest) (*PutE2EKeyBackupResponse, error)
+	GetE2EKeyBackup(context.Context, *GetE2EKeyBackupRequest) (*GetE2EKeyBackupResponse, error)
 	mustEmbedUnimplementedAuthServiceServer()
 }
 
@@ -284,6 +312,12 @@ func (UnimplementedAuthServiceServer) SwitchActiveProfile(context.Context, *Swit
 }
 func (UnimplementedAuthServiceServer) SetAccountStatus(context.Context, *SetAccountStatusRequest) (*SetAccountStatusResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetAccountStatus not implemented")
+}
+func (UnimplementedAuthServiceServer) PutE2EKeyBackup(context.Context, *PutE2EKeyBackupRequest) (*PutE2EKeyBackupResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PutE2EKeyBackup not implemented")
+}
+func (UnimplementedAuthServiceServer) GetE2EKeyBackup(context.Context, *GetE2EKeyBackupRequest) (*GetE2EKeyBackupResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetE2EKeyBackup not implemented")
 }
 func (UnimplementedAuthServiceServer) mustEmbedUnimplementedAuthServiceServer() {}
 func (UnimplementedAuthServiceServer) testEmbeddedByValue()                     {}
@@ -558,6 +592,42 @@ func _AuthService_SetAccountStatus_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthService_PutE2EKeyBackup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PutE2EKeyBackupRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).PutE2EKeyBackup(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_PutE2EKeyBackup_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).PutE2EKeyBackup(ctx, req.(*PutE2EKeyBackupRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_GetE2EKeyBackup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetE2EKeyBackupRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).GetE2EKeyBackup(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_GetE2EKeyBackup_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).GetE2EKeyBackup(ctx, req.(*GetE2EKeyBackupRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AuthService_ServiceDesc is the grpc.ServiceDesc for AuthService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -620,6 +690,14 @@ var AuthService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetAccountStatus",
 			Handler:    _AuthService_SetAccountStatus_Handler,
+		},
+		{
+			MethodName: "PutE2EKeyBackup",
+			Handler:    _AuthService_PutE2EKeyBackup_Handler,
+		},
+		{
+			MethodName: "GetE2EKeyBackup",
+			Handler:    _AuthService_GetE2EKeyBackup_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

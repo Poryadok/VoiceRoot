@@ -63,6 +63,8 @@ type MessagingGRPC struct {
 	ChatRolePermissions ChatRolePermissions
 	// PlatformMod optional platform moderation (shadow ban, spam mute).
 	PlatformMod PlatformModerationChecker
+	// PreKeyBundles optional Signal pre-key directory (Phase 15 E2E).
+	PreKeyBundles *store.E2EPreKeyStore
 }
 
 // ChatRolePermissions checks permissions scoped to a text chat in a space.
@@ -105,6 +107,11 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 		return nil, err
 	}
 	if err := s.checkDMPrivacyForSend(ctx, chatID, profileID); err != nil {
+		return nil, err
+	}
+
+	isE2E := req.IsE2E != nil && *req.IsE2E
+	if err := s.validateE2ESend(ctx, chatID, isE2E); err != nil {
 		return nil, err
 	}
 
@@ -236,6 +243,7 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 		MentionsJSON:    mentionsJSON,
 		ClientMessageID: clientID,
 		GhostOnly:       ghostOnly,
+		IsE2E:           isE2E,
 	}
 	saved, err := s.Messages.InsertMessage(ctx, row)
 	if err != nil {
@@ -250,7 +258,7 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 		if saved.ThreadParentID != nil {
 			threadParentID = saved.ThreadParentID.String()
 		}
-		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), hasMentions, threadParentID); err != nil {
+		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), hasMentions, threadParentID, saved.IsE2E); err != nil {
 			log.Printf("messaging: publish message.sent: %v", err)
 		}
 		if hasMentions {
@@ -476,7 +484,7 @@ func (s *MessagingGRPC) EditMessage(ctx context.Context, req *messagingv1.EditMe
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	if s.MessageEvents != nil {
-		if err := s.MessageEvents.PublishMessageEdited(ctx, updated.ID.String(), updated.ChatID.String()); err != nil {
+		if err := s.MessageEvents.PublishMessageEdited(ctx, updated.ID.String(), updated.ChatID.String(), updated.IsE2E); err != nil {
 			log.Printf("messaging: publish message.edited: %v", err)
 		}
 		if len(mentionTargets) > 0 && mentionsJSON != row.MentionsJSON {
@@ -945,7 +953,7 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	if s.MessageEvents != nil {
-		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), false, ""); err != nil {
+		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), false, "", saved.IsE2E); err != nil {
 			log.Printf("messaging: publish message.sent: %v", err)
 		}
 	}
@@ -1441,6 +1449,7 @@ func messageRowToProto(m *store.MessageRow, kind messagingv1.MessageKind, reacti
 		MentionsJson:    m.MentionsJSON,
 		ReactionsJson:   reactionsJSON,
 		CreatedAt:       timestamppb.New(m.CreatedAt.UTC()),
+		IsE2E:           m.IsE2E,
 	}
 	if isPinned {
 		out.IsPinned = ptrBool(true)

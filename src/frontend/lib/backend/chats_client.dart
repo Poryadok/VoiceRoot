@@ -40,6 +40,7 @@ class VoiceChat {
     this.slowModeSeconds = 0,
     this.threadsEnabled = false,
     this.allowUserMainFeed = true,
+    this.e2eEnabled = false,
   });
 
   final String id;
@@ -51,6 +52,7 @@ class VoiceChat {
   final int slowModeSeconds;
   final bool threadsEnabled;
   final bool allowUserMainFeed;
+  final bool e2eEnabled;
 
   bool get isDm => type == ChatType.CHAT_TYPE_DM.name;
   bool get isGroup => type == ChatType.CHAT_TYPE_GROUP.name;
@@ -67,6 +69,7 @@ class VoiceChat {
       slowModeSeconds: json['slow_mode_seconds'] as int? ?? 0,
       threadsEnabled: json['threads_enabled'] as bool? ?? false,
       allowUserMainFeed: json['allow_user_main_feed'] as bool? ?? true,
+      e2eEnabled: json['e2e_enabled'] as bool? ?? false,
     );
   }
 

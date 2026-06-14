@@ -32,7 +32,7 @@ type spyMessageEvents struct {
 	read     [][3]string // message_id, chat_id, profile_id
 }
 
-func (s *spyMessageEvents) PublishMessageSent(_ context.Context, messageID, chatID, senderProfileID string, hasMentions bool, _ string) error {
+func (s *spyMessageEvents) PublishMessageSent(_ context.Context, messageID, chatID, senderProfileID string, hasMentions bool, _ string, _ bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	flag := "false"
@@ -50,7 +50,7 @@ func (s *spyMessageEvents) PublishMentionAdded(_ context.Context, messageID, cha
 	return nil
 }
 
-func (s *spyMessageEvents) PublishMessageEdited(_ context.Context, messageID, chatID string) error {
+func (s *spyMessageEvents) PublishMessageEdited(_ context.Context, messageID, chatID string, _ bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.edited = append(s.edited, [2]string{messageID, chatID})

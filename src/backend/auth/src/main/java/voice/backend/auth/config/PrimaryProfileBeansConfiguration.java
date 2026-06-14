@@ -9,6 +9,9 @@ import voice.backend.auth.userdb.InMemoryPrimaryProfileProvisioner;
 import voice.backend.auth.userdb.JdbcPrimaryProfileProvisioner;
 import voice.backend.auth.userdb.JdbcProfileSwitchValidator;
 import voice.backend.auth.userdb.JdbcUserVerificationSync;
+import voice.backend.auth.userdb.NoOpUserVerificationSync;
+import voice.backend.auth.userdb.UserVerificationSync;
+import voice.backend.auth.userdb.NoOpProfileSwitchValidator;
 import voice.backend.auth.userdb.PrimaryProfileProvisioner;
 import voice.backend.auth.userdb.ProfileSwitchValidator;
 import voice.backend.auth.service.LinkedAccountsService;
@@ -32,7 +35,11 @@ public class PrimaryProfileBeansConfiguration {
 
   @Bean
   ProfileSwitchValidator profileSwitchValidator(
+      AuthProperties props,
       @Autowired(required = false) @Qualifier("userJdbc") NamedParameterJdbcTemplate userJdbc) {
+    if (props.getPersistence() == AuthProperties.PersistenceMode.MEMORY) {
+      return new NoOpProfileSwitchValidator();
+    }
     if (userJdbc == null) {
       throw new IllegalStateException("userJdbc required for profile switch validation");
     }
@@ -40,8 +47,12 @@ public class PrimaryProfileBeansConfiguration {
   }
 
   @Bean
-  JdbcUserVerificationSync userVerificationSync(
+  UserVerificationSync userVerificationSync(
+      AuthProperties props,
       @Autowired(required = false) @Qualifier("userJdbc") NamedParameterJdbcTemplate userJdbc) {
+    if (props.getPersistence() == AuthProperties.PersistenceMode.MEMORY) {
+      return new NoOpUserVerificationSync();
+    }
     if (userJdbc == null) {
       throw new IllegalStateException("userJdbc required for verification sync");
     }
@@ -50,7 +61,7 @@ public class PrimaryProfileBeansConfiguration {
 
   @Bean
   LinkedAccountsService linkedAccountsService(
-      JdbcUserVerificationSync verificationSync, AuthProperties properties) {
+      UserVerificationSync verificationSync, AuthProperties properties) {
     return new LinkedAccountsService(verificationSync, properties.getOauth().getTwitchApiBaseUrl());
   }
 }

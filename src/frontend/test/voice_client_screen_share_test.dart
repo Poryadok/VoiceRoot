@@ -41,6 +41,7 @@ void main() {
       final mock = MockClient((req) async {
         expect(req.method, 'POST');
         expect(req.url.path, '/api/v1/voice/calls/room-1/screen-share/stop');
+        // ignore: unnecessary_cast
         final body = jsonDecode(req.body as String) as Map<String, dynamic>;
         expect(body['stream_id'], 'stream-abc');
         return http.Response('', 204);

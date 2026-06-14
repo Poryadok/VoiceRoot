@@ -6,6 +6,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import voice.backend.auth.repository.AccountRepository;
 import voice.backend.auth.repository.BackupCodeRepository;
+import voice.backend.auth.repository.E2EKeyBackupRepository;
 import voice.backend.auth.repository.RefreshTokenRepository;
 import voice.backend.auth.security.BCryptPasswordHasher;
 import voice.backend.auth.security.JwtService;
@@ -63,7 +64,8 @@ public class AuthBeans {
       AuthProperties properties,
       voice.backend.auth.userdb.PrimaryProfileProvisioner primaryProfileProvisioner,
       SubscriptionTierResolver subscriptionTierResolver,
-      voice.backend.auth.userdb.ProfileSwitchValidator profileSwitchValidator) {
+      voice.backend.auth.userdb.ProfileSwitchValidator profileSwitchValidator,
+      E2EKeyBackupRepository e2eKeyBackupRepository) {
     return new AuthService(
         accounts,
         refreshTokens,
@@ -77,6 +79,7 @@ public class AuthBeans {
         properties.getRefresh().getTtl(),
         primaryProfileProvisioner,
         subscriptionTierResolver,
-        profileSwitchValidator);
+        profileSwitchValidator,
+        e2eKeyBackupRepository);
   }
 }

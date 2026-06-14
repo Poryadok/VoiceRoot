@@ -60,6 +60,7 @@ message RequestUploadRequest {
   optional voice.chat.v1.ChatRef context_chat = 4;
   reserved 5;
   reserved "chat_type";
+  optional bool is_e2e = 6;
 }
 
 message UploadResponse {

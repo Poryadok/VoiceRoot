@@ -9,6 +9,8 @@ import voice.backend.auth.userdb.PrimaryProfileProvisioner;
 import voice.backend.auth.userdb.ProfileSwitchValidator;
 import voice.backend.auth.repository.Account;
 import voice.backend.auth.repository.AccountRepository;
+import voice.backend.auth.repository.E2EKeyBackupRecord;
+import voice.backend.auth.repository.E2EKeyBackupRepository;
 import voice.backend.auth.repository.RefreshTokenRecord;
 import voice.backend.auth.repository.RefreshTokenRepository;
 import voice.backend.auth.security.BCryptPasswordHasher;
@@ -30,6 +32,7 @@ public class AuthService {
   private final PrimaryProfileProvisioner primaryProfileProvisioner;
   private final SubscriptionTierResolver subscriptionTierResolver;
   private final ProfileSwitchValidator profileSwitchValidator;
+  private final E2EKeyBackupRepository e2eKeyBackups;
 
   public AuthService(
       AccountRepository accounts,
@@ -44,7 +47,8 @@ public class AuthService {
       Duration refreshTtl,
       PrimaryProfileProvisioner primaryProfileProvisioner,
       SubscriptionTierResolver subscriptionTierResolver,
-      ProfileSwitchValidator profileSwitchValidator) {
+      ProfileSwitchValidator profileSwitchValidator,
+      E2EKeyBackupRepository e2eKeyBackups) {
     this.accounts = accounts;
     this.refreshTokens = refreshTokens;
     this.refreshTokenCodec = refreshTokenCodec;
@@ -58,6 +62,7 @@ public class AuthService {
     this.primaryProfileProvisioner = primaryProfileProvisioner;
     this.subscriptionTierResolver = subscriptionTierResolver;
     this.profileSwitchValidator = profileSwitchValidator;
+    this.e2eKeyBackups = e2eKeyBackups;
   }
 
   public AuthService withClock(Clock newClock) {
@@ -74,7 +79,8 @@ public class AuthService {
         refreshTtl,
         primaryProfileProvisioner,
         subscriptionTierResolver,
-        profileSwitchValidator);
+        profileSwitchValidator,
+        e2eKeyBackups);
   }
 
   public AuthSession register(RegisterCommand command) {
@@ -207,6 +213,21 @@ public class AuthService {
     ensureActive(account);
     tokenBlacklist.revoke(claims.jti(), jwtService.ttl(claims));
     return issueSessionForProfile(account, profileId, deviceInfoJson == null ? "{}" : deviceInfoJson);
+  }
+
+  public void putE2EKeyBackup(String accessToken, String encryptedBlob, String passwordHint) {
+    if (encryptedBlob == null || encryptedBlob.isBlank()) {
+      throw new AuthException("validation_failed");
+    }
+    TokenClaims claims = validate(accessToken);
+    e2eKeyBackups.put(UUID.fromString(claims.userId()), encryptedBlob, passwordHint);
+  }
+
+  public E2EKeyBackupRecord getE2EKeyBackup(String accessToken) {
+    TokenClaims claims = validate(accessToken);
+    return e2eKeyBackups
+        .get(UUID.fromString(claims.userId()))
+        .orElseThrow(() -> new AuthException("not_found"));
   }
 
   private AuthSession issueSession(Account account, String deviceInfoJson) {

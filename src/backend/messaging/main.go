@@ -257,6 +257,7 @@ func main() {
 			RolePermissions:     rolePerms,
 			ChatRolePermissions: rolePerms,
 			ChatThreadPolicy:    chatThreadPolicy,
+			PreKeyBundles:       &store.E2EPreKeyStore{Pool: pool},
 			UserPresence:        userPresence,
 			PlatformMod:         platformMod,
 		})

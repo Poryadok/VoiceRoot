@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS e2e_prekey_bundles;
+
+ALTER TABLE messages DROP COLUMN IF EXISTS is_e2e;

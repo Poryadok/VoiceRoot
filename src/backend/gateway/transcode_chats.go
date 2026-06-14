@@ -249,6 +249,28 @@ func (t *transcoder) serveChats(w http.ResponseWriter, r *http.Request, rest str
 		writeProtoJSON(w, http.StatusOK, resp)
 		return true
 
+	case r.Method == http.MethodPost && strings.HasSuffix(rest, "/e2e-enable"):
+		chatID := strings.TrimSuffix(rest, "/e2e-enable")
+		chatID = strings.Trim(chatID, "/")
+		_, err := t.clients.chat.EnableChatE2E(ctx, &chatv1.EnableChatE2ERequest{ChatId: chatID})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return true
+
+	case r.Method == http.MethodPost && strings.HasSuffix(rest, "/e2e-disable"):
+		chatID := strings.TrimSuffix(rest, "/e2e-disable")
+		chatID = strings.Trim(chatID, "/")
+		_, err := t.clients.chat.DisableChatE2E(ctx, &chatv1.DisableChatE2ERequest{ChatId: chatID})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return true
+
 	default:
 		return false
 	}

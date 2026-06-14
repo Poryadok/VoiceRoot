@@ -45,6 +45,10 @@ func (s *stubMessagingClient) GetMessageBody(_ context.Context, chatID, messageI
 }
 
 func messageSentEvent(chatID, messageID, senderID uuid.UUID) *eventsv1.MessageStreamEvent {
+	return messageSentEventE2E(chatID, messageID, senderID, false)
+}
+
+func messageSentEventE2E(chatID, messageID, senderID uuid.UUID, isE2E bool) *eventsv1.MessageStreamEvent {
 	return &eventsv1.MessageStreamEvent{
 		EventId:     uuid.New().String(),
 		OccurredAt:  timestamppb.Now(),
@@ -53,6 +57,7 @@ func messageSentEvent(chatID, messageID, senderID uuid.UUID) *eventsv1.MessageSt
 				MessageId:       messageID.String(),
 				ChatId:          chatID.String(),
 				SenderProfileId: senderID.String(),
+				IsE2E:           isE2E,
 			},
 		},
 	}
@@ -129,6 +134,38 @@ func TestMessageIndexer_MessageDeleted_RemovesDocument(t *testing.T) {
 	require.NoError(t, idx.Handle(ctxBackground(), messageDeletedEvent(chatID, msgID)))
 	require.Empty(t, rec.upserts)
 	require.Equal(t, []uuid.UUID{msgID}, rec.deletes)
+}
+
+// TestMessageIndexer_MessageSent_E2E_SkipsUpsert documents Phase 15: E2E ciphertext is not indexed.
+func TestMessageIndexer_MessageSent_E2E_SkipsUpsert(t *testing.T) {
+	t.Parallel()
+	rec := &recordingMessageStore{}
+	messaging := &stubMessagingClient{body: "should-not-be-fetched"}
+	idx := &MessageIndexer{Store: rec, Messaging: messaging}
+
+	chatID := uuid.New()
+	msgID := uuid.New()
+	senderID := uuid.New()
+
+	require.NoError(t, idx.Handle(ctxBackground(), messageSentEventE2E(chatID, msgID, senderID, true)))
+	require.Empty(t, rec.upserts, "E2E messages must not be upserted into search index")
+	require.Equal(t, uuid.Nil, messaging.fetchID, "indexer must not fetch body for E2E messages")
+}
+
+// TestMessageIndexer_MessageSent_NonE2E_StillUpserts documents regression: plaintext messages remain indexed.
+func TestMessageIndexer_MessageSent_NonE2E_StillUpserts(t *testing.T) {
+	t.Parallel()
+	rec := &recordingMessageStore{}
+	messaging := &stubMessagingClient{body: "indexed plaintext"}
+	idx := &MessageIndexer{Store: rec, Messaging: messaging}
+
+	chatID := uuid.New()
+	msgID := uuid.New()
+	senderID := uuid.New()
+
+	require.NoError(t, idx.Handle(ctxBackground(), messageSentEventE2E(chatID, msgID, senderID, false)))
+	require.Len(t, rec.upserts, 1)
+	require.Equal(t, "indexed plaintext", rec.upserts[0].Body)
 }
 
 func TestMessageIndexer_SkipsUpsertWhenMessagingUnavailable(t *testing.T) {

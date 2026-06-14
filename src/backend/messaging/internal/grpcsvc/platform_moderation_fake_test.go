@@ -2,7 +2,6 @@ package grpcsvc
 
 import (
 	"context"
-	"errors"
 
 	"github.com/google/uuid"
 )

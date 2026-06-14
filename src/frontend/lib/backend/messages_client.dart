@@ -131,6 +131,8 @@ class VoiceMessage {
     this.createdAt,
     this.isPinned = false,
     this.threadParentId,
+    this.isE2e = false,
+    this.decryptionFailed = false,
   });
 
   final String id;
@@ -148,6 +150,8 @@ class VoiceMessage {
   final DateTime? createdAt;
   final bool isPinned;
   final String? threadParentId;
+  final bool isE2e;
+  final bool decryptionFailed;
 
   factory VoiceMessage.fromJson(Map<String, dynamic> json) {
     final chat = json['chat'] as Map<String, dynamic>? ?? {};
@@ -167,6 +171,7 @@ class VoiceMessage {
       createdAt: VoiceMessage.parseTimestamp(json['created_at']),
       isPinned: json['is_pinned'] as bool? ?? false,
       threadParentId: json['thread_parent_id'] as String?,
+      isE2e: json['is_e2e'] as bool? ?? false,
     );
   }
 
@@ -199,6 +204,7 @@ class VoiceMessage {
       if (createdAt != null) 'created_at': createdAt!.toUtc().toIso8601String(),
       'is_pinned': isPinned,
       if (threadParentId != null) 'thread_parent_id': threadParentId,
+      'is_e2e': isE2e,
     };
   }
 
@@ -229,12 +235,15 @@ class VoiceMessage {
     List<MessageReaction>? reactions,
     List<MessageMention>? mentions,
     bool? isPinned,
+    String? content,
+    bool? isE2e,
+    bool? decryptionFailed,
   }) {
     return VoiceMessage(
       id: id,
       chatId: chatId,
       senderProfileId: senderProfileId,
-      content: content,
+      content: content ?? this.content,
       attachments: attachments,
       reactions: reactions ?? this.reactions,
       mentions: mentions ?? this.mentions,
@@ -245,6 +254,9 @@ class VoiceMessage {
       deletedAt: deletedAt,
       createdAt: createdAt,
       isPinned: isPinned ?? this.isPinned,
+      threadParentId: threadParentId,
+      isE2e: isE2e ?? this.isE2e,
+      decryptionFailed: decryptionFailed ?? this.decryptionFailed,
     );
   }
 }
@@ -508,18 +520,21 @@ class VoiceMessagesClient {
     List<MessageMention> mentions = const [],
     String? clientMessageId,
     String? threadParentId,
+    bool isE2e = false,
   }) async {
+    final body = sendMessageRequestToProto(
+      chatId: chatId,
+      content: content,
+      attachments: attachments,
+      mentions: mentions,
+      clientMessageId: clientMessageId,
+      threadParentId: threadParentId,
+      isE2e: isE2e,
+    );
     final result = await _gateway.postProto(
       uri: _gateway.resolve('/api/v1/messages/send'),
       authorization: authorization,
-      body: sendMessageRequestToProto(
-        chatId: chatId,
-        content: content,
-        attachments: attachments,
-        mentions: mentions,
-        clientMessageId: clientMessageId,
-        threadParentId: threadParentId,
-      ),
+      body: body,
       createEmpty: messaging_pb.SendMessageResponse.create,
     );
     return _map(result, (data) => voiceMessageFromProto(data.message));

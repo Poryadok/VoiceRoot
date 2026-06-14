@@ -106,6 +106,7 @@ const Chat$json = {
       '5': 8,
       '10': 'allowUserMainFeed'
     },
+    {'1': 'e2e_enabled', '3': 14, '4': 1, '5': 8, '10': 'e2eEnabled'},
   ],
   '8': [
     {'1': '_space_id'},
@@ -128,8 +129,8 @@ final $typed_data.Uint8List chatDescriptor = $convert.base64Decode(
     '5UaW1lc3RhbXBSCWNyZWF0ZWRBdBI5Cgp1cGRhdGVkX2F0GAsgASgLMhouZ29vZ2xlLnByb3Rv'
     'YnVmLlRpbWVzdGFtcFIJdXBkYXRlZEF0EicKD3RocmVhZHNfZW5hYmxlZBgMIAEoCFIOdGhyZW'
     'Fkc0VuYWJsZWQSLwoUYWxsb3dfdXNlcl9tYWluX2ZlZWQYDSABKAhSEWFsbG93VXNlck1haW5G'
-    'ZWVkQgsKCV9zcGFjZV9pZEIHCgVfbmFtZUINCgtfYXZhdGFyX3VybEIICgZfdG9waWNCEgoQX2'
-    'xhc3RfbWVzc2FnZV9hdA==');
+    'ZWVkEh8KC2UyZV9lbmFibGVkGA4gASgIUgplMmVFbmFibGVkQgsKCV9zcGFjZV9pZEIHCgVfbm'
+    'FtZUINCgtfYXZhdGFyX3VybEIICgZfdG9waWNCEgoQX2xhc3RfbWVzc2FnZV9hdA==');
 
 @$core.Deprecated('Use createDMRequestDescriptor instead')
 const CreateDMRequest$json = {
@@ -731,6 +732,32 @@ final $typed_data.Uint8List archiveChatRequestDescriptor = $convert.base64Decode
     'ChJBcmNoaXZlQ2hhdFJlcXVlc3QSFwoHY2hhdF9pZBgBIAEoCVIGY2hhdElkEhoKCGFyY2hpdm'
     'VkGAIgASgIUghhcmNoaXZlZA==');
 
+@$core.Deprecated('Use enableChatE2ERequestDescriptor instead')
+const EnableChatE2ERequest$json = {
+  '1': 'EnableChatE2ERequest',
+  '2': [
+    {'1': 'chat_id', '3': 1, '4': 1, '5': 9, '10': 'chatId'},
+  ],
+};
+
+/// Descriptor for `EnableChatE2ERequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List enableChatE2ERequestDescriptor =
+    $convert.base64Decode(
+        'ChRFbmFibGVDaGF0RTJFUmVxdWVzdBIXCgdjaGF0X2lkGAEgASgJUgZjaGF0SWQ=');
+
+@$core.Deprecated('Use disableChatE2ERequestDescriptor instead')
+const DisableChatE2ERequest$json = {
+  '1': 'DisableChatE2ERequest',
+  '2': [
+    {'1': 'chat_id', '3': 1, '4': 1, '5': 9, '10': 'chatId'},
+  ],
+};
+
+/// Descriptor for `DisableChatE2ERequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List disableChatE2ERequestDescriptor =
+    $convert.base64Decode(
+        'ChVEaXNhYmxlQ2hhdEUyRVJlcXVlc3QSFwoHY2hhdF9pZBgBIAEoCVIGY2hhdElk');
+
 @$core.Deprecated('Use chatRefDescriptor instead')
 const ChatRef$json = {
   '1': 'ChatRef',
@@ -1037,3 +1064,21 @@ const ArchiveChatResponse$json = {
 /// Descriptor for `ArchiveChatResponse`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List archiveChatResponseDescriptor =
     $convert.base64Decode('ChNBcmNoaXZlQ2hhdFJlc3BvbnNl');
+
+@$core.Deprecated('Use enableChatE2EResponseDescriptor instead')
+const EnableChatE2EResponse$json = {
+  '1': 'EnableChatE2EResponse',
+};
+
+/// Descriptor for `EnableChatE2EResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List enableChatE2EResponseDescriptor =
+    $convert.base64Decode('ChVFbmFibGVDaGF0RTJFUmVzcG9uc2U=');
+
+@$core.Deprecated('Use disableChatE2EResponseDescriptor instead')
+const DisableChatE2EResponse$json = {
+  '1': 'DisableChatE2EResponse',
+};
+
+/// Descriptor for `DisableChatE2EResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List disableChatE2EResponseDescriptor =
+    $convert.base64Decode('ChZEaXNhYmxlQ2hhdEUyRVJlc3BvbnNl');

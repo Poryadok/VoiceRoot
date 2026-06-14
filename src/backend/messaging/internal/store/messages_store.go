@@ -34,6 +34,7 @@ type MessageRow struct {
 	EditedAt          *time.Time
 	DeletedAt         *time.Time
 	GhostOnly         bool
+	IsE2E             bool
 	CreatedAt         time.Time
 }
 
@@ -119,10 +120,10 @@ func (s *MessagesStore) InsertMessage(ctx context.Context, row MessageRow) (*Mes
 INSERT INTO messages (
   id, chat_id, chat_type, sender_profile_id, posted_as_chat, display_chat_id,
   content, type, thread_parent_id, forward_from_id, forward_from_sender,
-  attachments, mentions, client_message_id, ghost_only
+  attachments, mentions, client_message_id, ghost_only, is_e2e
 ) VALUES (
   $1, $2, $3, $4, $5, $6,
-  $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14, $15
+  $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14, $15, $16
 )
 ON CONFLICT (chat_id, sender_profile_id, client_message_id)
   WHERE client_message_id IS NOT NULL
@@ -131,7 +132,7 @@ ON CONFLICT (chat_id, sender_profile_id, client_message_id)
 	ct, err := s.Pool.Exec(ctx, q,
 		row.ID, row.ChatID, chatType, row.SenderProfileID, row.PostedAsChat, displayAny,
 		row.Content, row.Type, threadAny, forwardFromAny, forwardSenderAny,
-		row.AttachmentsJSON, row.MentionsJSON, clientAny, row.GhostOnly,
+		row.AttachmentsJSON, row.MentionsJSON, clientAny, row.GhostOnly, row.IsE2E,
 	)
 	if err != nil {
 		return nil, err
@@ -153,13 +154,13 @@ const messageSelectSQL = `
 SELECT id, chat_id, chat_type, sender_profile_id, posted_as_chat, display_chat_id,
        content, type, thread_parent_id,
        forward_from_id, forward_from_sender,
-       attachments::text, mentions::text, client_message_id, edited_at, deleted_at, created_at
+       attachments::text, mentions::text, client_message_id, edited_at, deleted_at, created_at, is_e2e
 `
 
 const messageReturningCols = `id, chat_id, chat_type, sender_profile_id, posted_as_chat, display_chat_id,
        content, type, thread_parent_id,
        forward_from_id, forward_from_sender,
-       attachments::text, mentions::text, client_message_id, edited_at, deleted_at, created_at`
+       attachments::text, mentions::text, client_message_id, edited_at, deleted_at, created_at, is_e2e`
 
 func scanMessageRow(row pgx.Row) (*MessageRow, error) {
 	var m MessageRow
@@ -172,7 +173,7 @@ func scanMessageRow(row pgx.Row) (*MessageRow, error) {
 		&m.ID, &m.ChatID, &m.ChatType, &m.SenderProfileID, &m.PostedAsChat, &displayID,
 		&m.Content, &m.Type, &threadID,
 		&forwardFromID, &forwardSender,
-		&m.AttachmentsJSON, &m.MentionsJSON, &clientID, &m.EditedAt, &m.DeletedAt, &m.CreatedAt,
+		&m.AttachmentsJSON, &m.MentionsJSON, &clientID, &m.EditedAt, &m.DeletedAt, &m.CreatedAt, &m.IsE2E,
 	)
 	if err != nil {
 		return nil, err
@@ -415,7 +416,7 @@ LIMIT $`+itoa(argN+1)+`
 			&m.ID, &m.ChatID, &m.ChatType, &m.SenderProfileID, &m.PostedAsChat, &displayID,
 			&m.Content, &m.Type, &threadID,
 			&forwardFromID, &forwardSender,
-			&m.AttachmentsJSON, &m.MentionsJSON, &clientID, &m.EditedAt, &m.DeletedAt, &m.CreatedAt,
+			&m.AttachmentsJSON, &m.MentionsJSON, &clientID, &m.EditedAt, &m.DeletedAt, &m.CreatedAt, &m.IsE2E,
 		); err != nil {
 			return nil, err
 		}

@@ -56,6 +56,7 @@ void main() {
     'test/phase7_match_fcm_e2e_live_test.dart',
     'test/phase9_search_e2e_live_test.dart',
     'test/phase11_trust_e2e_live_test.dart',
+    'test/phase15_e2e_dm_live_test.dart',
   ];
 
   for (final path in liveTests) {

@@ -34,6 +34,10 @@ service ChatService {
 
   rpc MuteChat(MuteChatRequest) returns (MuteChatResponse);
   rpc ArchiveChat(ArchiveChatRequest) returns (ArchiveChatResponse);
+
+  // Phase 15: DM-only opt-in E2E encryption (docs/features/encryption.md).
+  rpc EnableChatE2E(EnableChatE2ERequest) returns (EnableChatE2EResponse);
+  rpc DisableChatE2E(DisableChatE2ERequest) returns (DisableChatE2EResponse);
 }
 
 enum ChatType {
@@ -57,6 +61,7 @@ message Chat {
   google.protobuf.Timestamp updated_at = 11;
   bool threads_enabled = 12;
   bool allow_user_main_feed = 13;
+  bool e2e_enabled = 14;
 }
 
 message CreateDMRequest {
@@ -202,6 +207,14 @@ message ArchiveChatRequest {
   bool archived = 2;
 }
 
+message EnableChatE2ERequest {
+  string chat_id = 1;
+}
+
+message DisableChatE2ERequest {
+  string chat_id = 1;
+}
+
 // Cross-service pointer to chat_db.chats (docs/DATA_MODEL.md). Use in other packages instead of parallel chat_id + chat_type strings.
 message ChatRef {
   string id = 1;
@@ -247,3 +260,5 @@ message AcceptDMRequestResponse {}
 message DeclineDMRequestResponse {}
 message MuteChatResponse {}
 message ArchiveChatResponse {}
+message EnableChatE2EResponse {}
+message DisableChatE2EResponse {}

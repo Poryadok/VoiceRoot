@@ -550,3 +550,73 @@ const SetAccountStatusResponse$json = {
 /// Descriptor for `SetAccountStatusResponse`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List setAccountStatusResponseDescriptor =
     $convert.base64Decode('ChhTZXRBY2NvdW50U3RhdHVzUmVzcG9uc2U=');
+
+@$core.Deprecated('Use putE2EKeyBackupRequestDescriptor instead')
+const PutE2EKeyBackupRequest$json = {
+  '1': 'PutE2EKeyBackupRequest',
+  '2': [
+    {'1': 'encrypted_blob', '3': 1, '4': 1, '5': 9, '10': 'encryptedBlob'},
+    {
+      '1': 'password_hint',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'passwordHint',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_password_hint'},
+  ],
+};
+
+/// Descriptor for `PutE2EKeyBackupRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List putE2EKeyBackupRequestDescriptor = $convert.base64Decode(
+    'ChZQdXRFMkVLZXlCYWNrdXBSZXF1ZXN0EiUKDmVuY3J5cHRlZF9ibG9iGAEgASgJUg1lbmNyeX'
+    'B0ZWRCbG9iEigKDXBhc3N3b3JkX2hpbnQYAiABKAlIAFIMcGFzc3dvcmRIaW50iAEBQhAKDl9w'
+    'YXNzd29yZF9oaW50');
+
+@$core.Deprecated('Use putE2EKeyBackupResponseDescriptor instead')
+const PutE2EKeyBackupResponse$json = {
+  '1': 'PutE2EKeyBackupResponse',
+};
+
+/// Descriptor for `PutE2EKeyBackupResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List putE2EKeyBackupResponseDescriptor =
+    $convert.base64Decode('ChdQdXRFMkVLZXlCYWNrdXBSZXNwb25zZQ==');
+
+@$core.Deprecated('Use getE2EKeyBackupRequestDescriptor instead')
+const GetE2EKeyBackupRequest$json = {
+  '1': 'GetE2EKeyBackupRequest',
+};
+
+/// Descriptor for `GetE2EKeyBackupRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getE2EKeyBackupRequestDescriptor =
+    $convert.base64Decode('ChZHZXRFMkVLZXlCYWNrdXBSZXF1ZXN0');
+
+@$core.Deprecated('Use getE2EKeyBackupResponseDescriptor instead')
+const GetE2EKeyBackupResponse$json = {
+  '1': 'GetE2EKeyBackupResponse',
+  '2': [
+    {'1': 'encrypted_blob', '3': 1, '4': 1, '5': 9, '10': 'encryptedBlob'},
+    {
+      '1': 'password_hint',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'passwordHint',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_password_hint'},
+  ],
+};
+
+/// Descriptor for `GetE2EKeyBackupResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getE2EKeyBackupResponseDescriptor = $convert.base64Decode(
+    'ChdHZXRFMkVLZXlCYWNrdXBSZXNwb25zZRIlCg5lbmNyeXB0ZWRfYmxvYhgBIAEoCVINZW5jcn'
+    'lwdGVkQmxvYhIoCg1wYXNzd29yZF9oaW50GAIgASgJSABSDHBhc3N3b3JkSGludIgBAUIQCg5f'
+    'cGFzc3dvcmRfaGludA==');

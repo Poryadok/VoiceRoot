@@ -163,6 +163,21 @@ class MessagingServiceClient extends $grpc.Client {
     return $createUnaryCall(_$listSharedMedia, request, options: options);
   }
 
+  /// Phase 15: Signal pre-key directory for DM E2E (docs/features/encryption.md).
+  $grpc.ResponseFuture<$0.UploadPreKeyBundleResponse> uploadPreKeyBundle(
+    $0.UploadPreKeyBundleRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$uploadPreKeyBundle, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.GetPreKeyBundleResponse> getPreKeyBundle(
+    $0.GetPreKeyBundleRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getPreKeyBundle, request, options: options);
+  }
+
   // method descriptors
 
   static final _$sendMessage =
@@ -255,6 +270,16 @@ class MessagingServiceClient extends $grpc.Client {
           '/voice.messaging.v1.MessagingService/ListSharedMedia',
           ($0.ListSharedMediaRequest value) => value.writeToBuffer(),
           $0.ListSharedMediaResponse.fromBuffer);
+  static final _$uploadPreKeyBundle = $grpc.ClientMethod<
+          $0.UploadPreKeyBundleRequest, $0.UploadPreKeyBundleResponse>(
+      '/voice.messaging.v1.MessagingService/UploadPreKeyBundle',
+      ($0.UploadPreKeyBundleRequest value) => value.writeToBuffer(),
+      $0.UploadPreKeyBundleResponse.fromBuffer);
+  static final _$getPreKeyBundle =
+      $grpc.ClientMethod<$0.GetPreKeyBundleRequest, $0.GetPreKeyBundleResponse>(
+          '/voice.messaging.v1.MessagingService/GetPreKeyBundle',
+          ($0.GetPreKeyBundleRequest value) => value.writeToBuffer(),
+          $0.GetPreKeyBundleResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.messaging.v1.MessagingService')
@@ -418,6 +443,24 @@ abstract class MessagingServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.ListSharedMediaRequest.fromBuffer(value),
         ($0.ListSharedMediaResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.UploadPreKeyBundleRequest,
+            $0.UploadPreKeyBundleResponse>(
+        'UploadPreKeyBundle',
+        uploadPreKeyBundle_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.UploadPreKeyBundleRequest.fromBuffer(value),
+        ($0.UploadPreKeyBundleResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.GetPreKeyBundleRequest,
+            $0.GetPreKeyBundleResponse>(
+        'GetPreKeyBundle',
+        getPreKeyBundle_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.GetPreKeyBundleRequest.fromBuffer(value),
+        ($0.GetPreKeyBundleResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.SendMessageResponse> sendMessage_Pre($grpc.ServiceCall $call,
@@ -573,4 +616,22 @@ abstract class MessagingServiceBase extends $grpc.Service {
 
   $async.Future<$0.ListSharedMediaResponse> listSharedMedia(
       $grpc.ServiceCall call, $0.ListSharedMediaRequest request);
+
+  $async.Future<$0.UploadPreKeyBundleResponse> uploadPreKeyBundle_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.UploadPreKeyBundleRequest> $request) async {
+    return uploadPreKeyBundle($call, await $request);
+  }
+
+  $async.Future<$0.UploadPreKeyBundleResponse> uploadPreKeyBundle(
+      $grpc.ServiceCall call, $0.UploadPreKeyBundleRequest request);
+
+  $async.Future<$0.GetPreKeyBundleResponse> getPreKeyBundle_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.GetPreKeyBundleRequest> $request) async {
+    return getPreKeyBundle($call, await $request);
+  }
+
+  $async.Future<$0.GetPreKeyBundleResponse> getPreKeyBundle(
+      $grpc.ServiceCall call, $0.GetPreKeyBundleRequest request);
 }

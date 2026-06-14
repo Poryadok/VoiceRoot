@@ -1,0 +1,1 @@
+ALTER TABLE chats DROP COLUMN IF EXISTS e2e_enabled;

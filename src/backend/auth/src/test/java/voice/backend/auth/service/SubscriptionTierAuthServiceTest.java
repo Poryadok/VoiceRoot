@@ -54,6 +54,7 @@ class SubscriptionTierAuthServiceTest {
         Duration.ofDays(30),
         new voice.backend.auth.userdb.InMemoryPrimaryProfileProvisioner(),
         tierResolver,
-        new voice.backend.auth.userdb.NoOpProfileSwitchValidator());
+        new voice.backend.auth.userdb.NoOpProfileSwitchValidator(),
+        new voice.backend.auth.repository.InMemoryE2EKeyBackupRepository());
   }
 }

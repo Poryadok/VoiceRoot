@@ -2893,6 +2893,126 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Add friend'**
   String get matchHistoryAddFriend;
+
+  /// No description provided for @e2eEnableTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable end-to-end encryption'**
+  String get e2eEnableTitle;
+
+  /// No description provided for @e2eEnableBody.
+  ///
+  /// In en, this message translates to:
+  /// **'End-to-end encryption is enabled for this chat.\n\nMessages are encrypted and unavailable to the server.\n— Global search will not find message bodies from this chat.\n— Local search works only on history loaded on this device.'**
+  String get e2eEnableBody;
+
+  /// No description provided for @e2eEnableConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable E2E'**
+  String get e2eEnableConfirm;
+
+  /// No description provided for @e2eEnableCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get e2eEnableCancel;
+
+  /// No description provided for @e2eDisableTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Disable end-to-end encryption?'**
+  String get e2eDisableTitle;
+
+  /// No description provided for @e2eDisableBody.
+  ///
+  /// In en, this message translates to:
+  /// **'If you disable E2E, new messages are stored in plain text on the server and server search will work again for this chat.'**
+  String get e2eDisableBody;
+
+  /// No description provided for @e2eDisableConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Disable E2E'**
+  String get e2eDisableConfirm;
+
+  /// No description provided for @e2eDisableCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get e2eDisableCancel;
+
+  /// No description provided for @e2eKeyBackupTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'E2E key backup'**
+  String get e2eKeyBackupTitle;
+
+  /// No description provided for @e2eKeyBackupHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Set a backup password so you can restore E2E keys on a new device.'**
+  String get e2eKeyBackupHint;
+
+  /// No description provided for @e2eKeyBackupPasswordLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup password'**
+  String get e2eKeyBackupPasswordLabel;
+
+  /// No description provided for @e2eKeyBackupPasswordHintLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Password hint (optional)'**
+  String get e2eKeyBackupPasswordHintLabel;
+
+  /// No description provided for @e2eKeyBackupSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save backup'**
+  String get e2eKeyBackupSave;
+
+  /// No description provided for @e2eKeyBackupRestore.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore from backup'**
+  String get e2eKeyBackupRestore;
+
+  /// No description provided for @e2eUndecryptableGeneric.
+  ///
+  /// In en, this message translates to:
+  /// **'This message is encrypted and cannot be decrypted on this device. Set up key backup to avoid losing history.'**
+  String get e2eUndecryptableGeneric;
+
+  /// No description provided for @e2eUndecryptableBefore.
+  ///
+  /// In en, this message translates to:
+  /// **'Messages before {date} are encrypted and unavailable on this device. Set up key backup to avoid losing history.'**
+  String e2eUndecryptableBefore(String date);
+
+  /// No description provided for @e2eInChatSearchLocalOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Encrypted chat: searching loaded history on this device only'**
+  String get e2eInChatSearchLocalOnly;
+
+  /// No description provided for @e2eChatSettingsEnable.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable E2E encryption'**
+  String get e2eChatSettingsEnable;
+
+  /// No description provided for @e2eChatSettingsDisable.
+  ///
+  /// In en, this message translates to:
+  /// **'Disable E2E encryption'**
+  String get e2eChatSettingsDisable;
+
+  /// No description provided for @e2eChatSettingsKeyBackup.
+  ///
+  /// In en, this message translates to:
+  /// **'Key backup'**
+  String get e2eChatSettingsKeyBackup;
 }
 
 class _AppLocalizationsDelegate
