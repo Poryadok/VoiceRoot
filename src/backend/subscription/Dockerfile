@@ -8,10 +8,12 @@ COPY subscription/go.mod ./subscription/
 COPY voice/pb/voice/subscription/go.mod ./voice/pb/voice/subscription/
 COPY voice/pb/voice/space/go.mod ./voice/pb/voice/space/
 COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
+COPY user/pb/voice/user/go.mod ./user/pb/voice/user/
 COPY chat/pb/voice/chat/go.mod ./chat/pb/voice/chat/
 RUN cd subscription && go mod download
 COPY pkg ./pkg
 COPY user/pb/voice/common ./user/pb/voice/common
+COPY user/pb/voice/user ./user/pb/voice/user
 COPY chat/pb/voice/chat ./chat/pb/voice/chat
 COPY voice/pb/voice/space ./voice/pb/voice/space
 COPY voice/pb/voice/subscription ./voice/pb/voice/subscription

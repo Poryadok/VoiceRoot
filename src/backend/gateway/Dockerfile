@@ -18,6 +18,7 @@ COPY voice/pb/voice/matchmaking/go.mod ./voice/pb/voice/matchmaking/
 COPY voice/pb/voice/search/go.mod ./voice/pb/voice/search/
 COPY voice/pb/voice/moderation/go.mod ./voice/pb/voice/moderation/
 COPY voice/pb/voice/subscription/go.mod ./voice/pb/voice/subscription/
+COPY voice/pb/voice/auth/go.mod ./voice/pb/voice/auth/
 COPY gateway/go.mod ./gateway/
 RUN cd gateway && go mod download
 COPY pkg ./pkg

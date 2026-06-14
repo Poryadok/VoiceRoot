@@ -426,6 +426,22 @@ services:
       retries: 10
       start_period: 10s
 
+  moderation-db-init:
+    profiles: ["app"]
+    image: postgres:16-alpine
+    restart: "no"
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER:-voice}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-voice}
+    volumes:
+      - ./docker/postgres/ensure-moderation-db.sh:/ensure.sh:ro
+      - ./docker/postgres/moderation_db_init.sql.snippet:/schema/moderation_db_init.sql.snippet:ro
+    entrypoint: ["/bin/sh", "/ensure.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   moderation:
     profiles: ["app"]
     build:
@@ -441,6 +457,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      moderation-db-init:
+        condition: service_completed_successfully
       user:
         condition: service_healthy
     healthcheck:
@@ -632,6 +650,26 @@ services:
         VOICE_LIVEKIT_URL: ${VOICE_LIVEKIT_PUBLIC_URL:-ws://127.0.0.1:7880}
     ports:
       - "${WEB_PORT:-9080}:80"
+    depends_on:
+      gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  admin:
+    profiles: ["app"]
+    build:
+      context: ./src/admin
+      dockerfile: Dockerfile
+      args:
+        VITE_VOICE_API_BASE: ${VOICE_API_PUBLIC_URL:-http://127.0.0.1:8080}
+        VITE_STAFF_TOKEN: ${ADMIN_STAFF_TOKEN:-compose-staff-token}
+    ports:
+      - "${ADMIN_PORT:-9081}:80"
     depends_on:
       gateway:
         condition: service_healthy

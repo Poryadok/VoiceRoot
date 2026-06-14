@@ -44,6 +44,9 @@ export function SanctionActions({
       </section>
     );
   }
+
+  const resolvedAccountId = accountId;
+
   async function submitSanction(type: SanctionType) {
     if (!report) {
       return;
@@ -52,7 +55,7 @@ export function SanctionActions({
     setError(undefined);
     try {
       await applySanction({
-        target_account_id: accountId,
+        target_account_id: resolvedAccountId,
         type,
         reason: reason.trim() || `Sanction from report ${report.id}`,
         report_id: report.id,
@@ -121,7 +124,7 @@ export function SanctionActions({
         title="Apply destructive sanction?"
         description={
           pending
-            ? `This will apply a ${formatSanctionLabel(pending.type)} to account ${accountId}. This action is audited and may restrict the user immediately.`
+            ? `This will apply a ${formatSanctionLabel(pending.type)} to account ${resolvedAccountId}. This action is audited and may restrict the user immediately.`
             : ""
         }
         confirmLabel="Apply sanction"
