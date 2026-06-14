@@ -581,7 +581,7 @@ services:
       context: ./src/backend
       dockerfile: gateway/Dockerfile
     ports:
-      - "${GATEWAY_PORT:-8080}:8080"
+      - "${GATEWAY_PORT:-18080}:8080"
     environment:
       LOG_LEVEL: debug
       LISTEN_ADDR: ":8080"
@@ -646,7 +646,7 @@ services:
       context: ./src/frontend
       dockerfile: Dockerfile
       args:
-        VOICE_API_BASE_URL: ${VOICE_API_PUBLIC_URL:-http://127.0.0.1:8080}
+        VOICE_API_BASE_URL: ${VOICE_API_PUBLIC_URL:-http://127.0.0.1:18080}
         VOICE_LIVEKIT_URL: ${VOICE_LIVEKIT_PUBLIC_URL:-ws://127.0.0.1:7880}
     ports:
       - "${WEB_PORT:-9080}:80"
@@ -666,7 +666,7 @@ services:
       context: ./src/admin
       dockerfile: Dockerfile
       args:
-        VITE_VOICE_API_BASE: ${VOICE_API_PUBLIC_URL:-http://127.0.0.1:8080}
+        VITE_VOICE_API_BASE: ${VOICE_API_PUBLIC_URL:-http://127.0.0.1:18080}
         VITE_STAFF_TOKEN: ${ADMIN_STAFF_TOKEN:-compose-staff-token}
     ports:
       - "${ADMIN_PORT:-9081}:80"
