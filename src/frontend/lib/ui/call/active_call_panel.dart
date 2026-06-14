@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:livekit_client/livekit_client.dart' as livekit;
 
 import '../../l10n/app_localizations.dart';
 import '../../state/call_providers.dart';
@@ -33,6 +34,8 @@ class ActiveCallPanel extends ConsumerWidget {
     final voice = VoiceColors.of(context);
     final connecting = call.phase == CallPhase.connecting;
     final showVideo = session.mediaKind.name == 'video';
+    // Rebuild when LiveKit camera tracks are published/subscribed.
+    final _ = call.mediaTracksVersion;
 
     return Align(
       alignment: Alignment.bottomCenter,
@@ -45,16 +48,12 @@ class ActiveCallPanel extends ConsumerWidget {
           children: [
             const ScreenSharePanel(),
             if (showVideo)
-              Container(
+              _CallVideoPreview(
                 key: videoPlaceholderKey,
-                width: double.infinity,
-                height: 160,
-                color: voice.muted,
-                alignment: Alignment.center,
-                child: Text(
-                  l10n.callVideoPlaceholder,
-                  style: TextStyle(color: voice.textSecondary),
-                ),
+                isVideoEnabled: call.isVideoEnabled,
+                placeholder: l10n.callVideoPlaceholder,
+                mutedColor: voice.muted,
+                textColor: voice.textSecondary,
               ),
             if (call.needsAudioPlaybackUnlock)
               Material(
@@ -159,6 +158,46 @@ class ActiveCallPanel extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _CallVideoPreview extends ConsumerWidget {
+  const _CallVideoPreview({
+    required super.key,
+    required this.isVideoEnabled,
+    required this.placeholder,
+    required this.mutedColor,
+    required this.textColor,
+  });
+
+  final bool isVideoEnabled;
+  final String placeholder;
+  final Color mutedColor;
+  final Color textColor;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final room = ref.read(callControllerProvider.notifier).liveKitRoom;
+    livekit.VideoTrack? track;
+    if (room != null && isVideoEnabled) {
+      track = room.remoteCameraTrack() ?? room.localCameraTrack();
+    }
+
+    return Container(
+      width: double.infinity,
+      height: 160,
+      color: mutedColor,
+      alignment: Alignment.center,
+      child: track != null
+          ? livekit.VideoTrackRenderer(
+              track,
+              fit: livekit.VideoViewFit.cover,
+            )
+          : Text(
+              placeholder,
+              style: TextStyle(color: textColor),
+            ),
     );
   }
 }

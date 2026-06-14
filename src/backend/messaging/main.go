@@ -224,6 +224,12 @@ func main() {
 			log.Fatalf("grpc listen: %v", err)
 		}
 		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger)...)
+		var chatThreadPolicy *store.SQLChatThreadPolicy
+		if chatMetaPool != nil {
+			chatThreadPolicy = &store.SQLChatThreadPolicy{Pool: chatMetaPool}
+		} else {
+			logger.Warn("CHAT_DATABASE_URL not set; thread policy checks disabled")
+		}
 		messagingv1.RegisterMessagingServiceServer(grpcSrv, &grpcsvc.MessagingGRPC{
 			Messages:      &store.MessagesStore{Pool: pool},
 			Reactions:     &store.ReactionsStore{Pool: pool},
@@ -248,9 +254,11 @@ func main() {
 				}
 				return &store.SQLChatMentionsMeta{Pool: metaPool, SpacePool: spaceMetaPool}
 			}(),
-			RolePermissions: rolePerms,
-			UserPresence:    userPresence,
-			PlatformMod:     platformMod,
+			RolePermissions:     rolePerms,
+			ChatRolePermissions: rolePerms,
+			ChatThreadPolicy:    chatThreadPolicy,
+			UserPresence:        userPresence,
+			PlatformMod:         platformMod,
 		})
 		go func() {
 			logger.Info("gRPC listening", slog.String("addr", grpcListen))

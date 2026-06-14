@@ -6,6 +6,9 @@ abstract interface class VoiceLiveKitRoom {
   /// Called when the browser blocks remote audio playback (web autoplay policy).
   void Function(bool needsUnlock)? onAudioPlaybackUnlockNeeded;
 
+  /// Called when local/remote camera tracks are published or subscribed.
+  void Function()? onTracksChanged;
+
   Future<void> connect({
     required String url,
     required String token,
@@ -27,6 +30,8 @@ abstract interface class VoiceLiveKitRoom {
   List<livekit.RemoteVideoTrack> remoteScreenShareTracks({
     String? participantIdentity,
   });
+  livekit.LocalVideoTrack? localCameraTrack();
+  livekit.RemoteVideoTrack? remoteCameraTrack();
   Future<void> disconnect();
 }
 
@@ -57,6 +62,9 @@ class LiveKitVoiceRoom implements VoiceLiveKitRoom {
       iceRestart: Duration(seconds: 15),
     ),
   );
+
+  @override
+  void Function()? onTracksChanged;
 
   @override
   Future<void> connect({
@@ -94,6 +102,8 @@ class LiveKitVoiceRoom implements VoiceLiveKitRoom {
     await ensureAudioPlayback();
   }
 
+  void _notifyTracksChanged() => onTracksChanged?.call();
+
   void _setupListener() {
     _listener?.dispose();
     _listener = _room.createListener()
@@ -103,8 +113,31 @@ class LiveKitVoiceRoom implements VoiceLiveKitRoom {
         }
       })
       ..on<livekit.TrackSubscribedEvent>((event) {
-        if (_speakerMuted && event.track.kind == livekit.TrackType.AUDIO) {
-          event.track.mediaStreamTrack.enabled = false;
+        if (event.track.kind == livekit.TrackType.AUDIO) {
+          if (_speakerMuted) {
+            event.track.mediaStreamTrack.enabled = false;
+          }
+          unawaited(ensureAudioPlayback());
+        }
+        if (event.track.kind == livekit.TrackType.VIDEO &&
+            event.publication.source == livekit.TrackSource.camera) {
+          _notifyTracksChanged();
+        }
+      })
+      ..on<livekit.TrackUnsubscribedEvent>((event) {
+        if (event.track.kind == livekit.TrackType.VIDEO &&
+            event.publication.source == livekit.TrackSource.camera) {
+          _notifyTracksChanged();
+        }
+      })
+      ..on<livekit.LocalTrackPublishedEvent>((event) {
+        if (event.publication.source == livekit.TrackSource.camera) {
+          _notifyTracksChanged();
+        }
+      })
+      ..on<livekit.LocalTrackUnpublishedEvent>((event) {
+        if (event.publication.source == livekit.TrackSource.camera) {
+          _notifyTracksChanged();
         }
       });
   }
@@ -147,6 +180,33 @@ class LiveKitVoiceRoom implements VoiceLiveKitRoom {
     await _room.localParticipant
         ?.setCameraEnabled(enabled)
         .timeout(_mediaEnableTimeout);
+    _notifyTracksChanged();
+  }
+
+  @override
+  livekit.LocalVideoTrack? localCameraTrack() {
+    final participant = _room.localParticipant;
+    if (participant == null) return null;
+    for (final publication in participant.videoTrackPublications) {
+      if (publication.source == livekit.TrackSource.camera &&
+          publication.track is livekit.LocalVideoTrack) {
+        return publication.track as livekit.LocalVideoTrack;
+      }
+    }
+    return null;
+  }
+
+  @override
+  livekit.RemoteVideoTrack? remoteCameraTrack() {
+    for (final remote in _room.remoteParticipants.values) {
+      for (final publication in remote.videoTrackPublications) {
+        if (publication.source == livekit.TrackSource.camera &&
+            publication.track is livekit.RemoteVideoTrack) {
+          return publication.track as livekit.RemoteVideoTrack;
+        }
+      }
+    }
+    return null;
   }
 
   @override

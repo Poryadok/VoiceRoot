@@ -30,6 +30,9 @@ class _FakeLiveKitRoom implements VoiceLiveKitRoom {
   void Function(bool needsUnlock)? onAudioPlaybackUnlockNeeded;
 
   @override
+  void Function()? onTracksChanged;
+
+  @override
   Future<void> ensureAudioPlayback() async {}
 
   @override
@@ -72,6 +75,12 @@ class _FakeLiveKitRoom implements VoiceLiveKitRoom {
   List<livekit.RemoteVideoTrack> remoteScreenShareTracks({
     String? participantIdentity,
   }) => [];
+
+  @override
+  livekit.LocalVideoTrack? localCameraTrack() => null;
+
+  @override
+  livekit.RemoteVideoTrack? remoteCameraTrack() => null;
 
   @override
   Future<void> startScreenShare({

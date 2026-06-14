@@ -58,6 +58,7 @@ class CallState {
     this.isSpeakerMuted = false,
     this.isVideoEnabled = false,
     this.needsAudioPlaybackUnlock = false,
+    this.mediaTracksVersion = 0,
     this.errorMessage,
   });
 
@@ -69,6 +70,7 @@ class CallState {
   final bool isSpeakerMuted;
   final bool isVideoEnabled;
   final bool needsAudioPlaybackUnlock;
+  final int mediaTracksVersion;
   final String? errorMessage;
 
   bool get hasCall => session != null && phase != CallPhase.idle;
@@ -88,6 +90,7 @@ class CallState {
     bool? isSpeakerMuted,
     bool? isVideoEnabled,
     bool? needsAudioPlaybackUnlock,
+    int? mediaTracksVersion,
     String? errorMessage,
     bool clearError = false,
   }) {
@@ -105,6 +108,7 @@ class CallState {
       isVideoEnabled: isVideoEnabled ?? this.isVideoEnabled,
       needsAudioPlaybackUnlock:
           needsAudioPlaybackUnlock ?? this.needsAudioPlaybackUnlock,
+      mediaTracksVersion: mediaTracksVersion ?? this.mediaTracksVersion,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
     );
   }
@@ -543,6 +547,12 @@ class CallController extends StateNotifier<CallState> {
         room.onAudioPlaybackUnlockNeeded = (needsUnlock) {
           if (!mounted) return;
           state = state.copyWith(needsAudioPlaybackUnlock: needsUnlock);
+        };
+        room.onTracksChanged = () {
+          if (!mounted) return;
+          state = state.copyWith(
+            mediaTracksVersion: state.mediaTracksVersion + 1,
+          );
         };
         _room = room;
         try {
