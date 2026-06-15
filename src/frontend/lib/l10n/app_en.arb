@@ -169,6 +169,7 @@
     }
   },
   "botTimeoutError": "The bot did not respond in time. Try again later.",
+  "botDeferredProcessing": "Processing your request…",
   "slashCommandsTitle": "Commands",
   "ephemeralMessageLabel": "Only visible to you",
   "chatRoomError": "Error: {message}",

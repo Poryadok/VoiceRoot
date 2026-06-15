@@ -410,6 +410,16 @@ WHERE id = $1`, eventID)
 	return err
 }
 
+func (s *BotStore) MarkInteractionDelivered(ctx context.Context, botID uuid.UUID, token string) error {
+	if strings.TrimSpace(token) == "" {
+		return nil
+	}
+	_, err := s.Pool.Exec(ctx, `
+UPDATE bot_event_log SET delivery_status = 'delivered', delivered_at = now(), attempts = attempts + 1
+WHERE bot_id = $1 AND interaction_token = $2 AND delivery_status = 'pending'`, botID, token)
+	return err
+}
+
 func scanBot(row pgx.Row) (*BotRow, error) {
 	var b BotRow
 	err := row.Scan(

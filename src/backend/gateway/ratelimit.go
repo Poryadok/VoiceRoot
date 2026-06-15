@@ -146,6 +146,8 @@ func rateLimitGroup(method, path string) string {
 		return "FileUpload"
 	case method == http.MethodPost && path == "/api/v1/spaces":
 		return "SpaceCreation"
+	case (method == http.MethodPost || method == http.MethodGet) && strings.HasPrefix(path, "/api/v1/bots/me/"):
+		return "BotAPI"
 	case method == http.MethodPost && strings.HasPrefix(path, "/api/v1/bots/"):
 		return "BotAPI"
 	default:
@@ -153,7 +155,23 @@ func rateLimitGroup(method, path string) string {
 	}
 }
 
+func rateLimitRetryAfterSeconds(group string) int {
+	rules := defaultRateLimitRules()
+	rule, ok := rules[group]
+	if !ok || rule.Window <= 0 {
+		return 0
+	}
+	sec := int(rule.Window.Seconds())
+	if sec < 1 {
+		return 1
+	}
+	return sec
+}
+
 func (g *gateway) rateLimitKey(r *http.Request, claims tokenClaims, publicRoute bool) string {
+	if token := botBearerToken(r); token != "" {
+		return "bot:" + token
+	}
 	if publicRoute || claims.UserID == "" {
 		return "ip:" + g.clientIP(r)
 	}

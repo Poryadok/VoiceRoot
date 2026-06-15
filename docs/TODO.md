@@ -45,29 +45,29 @@ Scaffold Bot Service, Gateway `/api/v1/bots/**`, polling slash E2E и миним
 
 ### P0 — блокеры prod / критерии приёмки
 
-- [ ] **Bot actor profile** — `RegisterBot` вызывает `User.CreateProfile` при `USER_GRPC_ADDR`; `InstallBotInSpace` требует успешный `Chat.AddMembers` для actor. Нужен rebuild compose `bot` и live-проверка не-ephemeral `pong` в истории; display name в пузырях — отдельно.
-- [ ] **Deferred follow-up end-to-end** — после `deferred` Hub снимается (`defer Cancel`); клиент не показывает «обрабатываю…»; нет согласованного пути `DeferResponse` / `SendBotMessage`+`interaction_token` / WS push для финального ответа; Gateway не экспонирует `POST /api/v1/bots/me/interactions/defer`.
-- [ ] **Критерий приёмки #1** — довести compose/live сценарий до не-ephemeral `pong` в истории чата (Messaging + Realtime), не только `content` в `ExecuteSlashInteractionResponse` (сейчас E2E — ephemeral `pong`).
+- [x] **Bot actor profile** — `RegisterBot` → `User.CreateProfile` (S2S metadata); `InstallBotInSpace` → `Chat.AddMembers`; compose live с не-ephemeral `pong` в истории. Display name в пузырях — см. P1.
+- [x] **Deferred follow-up end-to-end** — Hub deferred lifecycle; `POST /api/v1/bots/me/interactions/defer`; `SendBotMessage`+`interaction_token` follow-up; Flutter «обрабатываю…»; compose `TestComposePhase16BotsSlashDeferred_live`.
+- [x] **Критерий приёмки #1** — compose/live: не-ephemeral `pong` в истории (`GET /messages`) + `message` в interaction response.
 - [x] **`SetChatWhitelist` space_id** — `SetChatWhitelist` резолвит `space_id` через `PrimaryInstalledSpace` (одна installation).
 
 ### P1 — высокий приоритет
 
-- [ ] **NATS `bot.events`** — публиковать `BotRegistered`, `CommandExecuted`, `WebhookDelivered`/`WebhookFailed` по [bot-service.md](microservices/bot-service.md) и `jetstream_events.proto`; сейчас publisher отсутствует.
+- [x] **NATS `bot.events`** — publisher в Bot Service (`bot.registered`, `bot.command_executed`, `bot.webhook_delivered`); требует `NATS_URL` в compose.
 - [ ] **Bot online / offline** — heartbeat или webhook health; в `ListSlashCommandsForChat` и Flutter `/`-меню: greyout + tooltip «Бот недоступен» ([bots.md](features/bots.md)).
 - [ ] **Autocomplete** — RPC + Gateway route для partial input; клиент шлёт запросы при наборе опций с `autocomplete: true`; до 25 вариантов.
 - [ ] **Subcommands** — модель команд (`/queue join`), валидация манифеста, группировка в `/`-меню ([bots.md](features/bots.md)).
 - [ ] **Display name бота в Messaging** — резолв `sender_profile_id` → имя бота (User/bot profile), не UUID/unknown в пузырях чата.
-- [ ] **Rate limit 5000/min per bot** — `BotAPI` сейчас bucket по user/IP; `GET/POST /api/v1/bots/me/**` не по спеке; ответ `429` + заголовок `Retry-After` ([bots.md](features/bots.md)); тесты на 429 (сейчас только mapping group в `ratelimit_test.go`).
+- [x] **Rate limit 5000/min per bot** — `BotAPI` bucket key `bot:<token>` на `/api/v1/bots/me/**`; `429` + `Retry-After`; тесты `TestGateway_botAPIRateLimit_returns429WithRetryAfter`.
 - [ ] **Per-chat bot toggles** — RPC `enabled` на `bot_chat_whitelist` + UI в настройках текстового чата ([bots.md](features/bots.md)); колонка есть, API/UI нет.
 - [ ] **`TEXT_CHAT_READ_HISTORY`** — privileged scope: предупреждение при install, enforcement в Bot/Gateway ([bots.md](features/bots.md)).
 - [ ] **`MEMBER_ASSIGN_ROLES` runtime** — выдача/снятие ролей через Bot API с проверкой иерархии в Role Service ([bots.md](features/bots.md)).
 - [ ] **Developer Portal auth** — заменить ручной paste JWT на login/OAuth flow; показ/rotate `webhook_secret`, revoke token, list apps.
-- [ ] **Compose profile для Developer Portal** — сервис `developer-portal` в `docker-compose.yml` (сейчас только локальный `npm run dev`).
-- [ ] **Gateway REST parity** — `GET/PATCH/DELETE` bot, uninstall, `ListInstalledBots`, webhook URL, ephemeral/defer bot routes; сейчас subset в `transcode_bots.go`.
+- [x] **Compose profile для Developer Portal** — сервис `developer-portal` в `docker-compose.yml` (порт 9082).
+- [ ] **Gateway REST parity** — `GET/PATCH/DELETE` bot, uninstall, `ListInstalledBots`, webhook URL; defer route добавлен, остальной subset в `transcode_bots.go`.
 - [ ] **Install bot в клиенте** — UI добавления в спейс: scopes human-readable, whitelist чатов, `SPACE_MANAGE_BOTS` ([bots.md](features/bots.md)); только slash-меню, без install flow.
 - [ ] **Uninstall cleanup** — при удалении бота из спейса: роли бота, pin сообщений, команды из меню ([bots.md](features/bots.md)); сейчас только `DELETE` installation row.
-- [ ] **Webhook delivery hardening** — retry 3× exponential backoff, `bot_event_log` failed/timeout ([bot-service.md](microservices/bot-service.md)); polling: не `MarkEventDelivered` до успешного `CompleteInteraction`.
-- [ ] **RegisterBot token UX** — вернуть token в `RegisterBotResponse` или one-shot secret; сейчас обязателен лишний `RegenerateToken`.
+- [x] **Webhook delivery hardening (partial)** — retry 3× в `webhook.DeliverPOST`; polling: `MarkEventDelivered` только после `CompleteInteraction` (`MarkInteractionDelivered`). Осталось: `bot_event_log` failed/timeout rows, webhook failed NATS event.
+- [x] **RegisterBot token UX** — `token_response` в `RegisterBotResponse` (proto + gateway).
 
 ### P2 — можно после MVP
 
@@ -75,10 +75,25 @@ Scaffold Bot Service, Gateway `/api/v1/bots/**`, polling slash E2E и миним
 - [ ] **`EditBotMessage`** — сейчас `Unimplemented` в Bot Service.
 - [ ] **Остальные scopes runtime** — `DM_SEND`, `TEXT_CHAT_CREATE_IN_SPACE` (10/день), `SPACE_VIEW_MEMBER_LIST`; валидация типов опций slash (integer, user, channel, role, attachment).
 - [ ] **Страница бота** — `voice.app/bots/{slug}`: описание, scopes, install CTA ([bots.md](features/bots.md)).
-- [ ] **Slash UI** — опции команд, loading/deferred state, command greyout по offline; не глотать ошибки списка команд (`BotsApiFailure` → `[]`).
+- [ ] **Slash UI** — опции команд, greyout по offline; deferred UI добавлен; всё ещё глотает ошибки списка команд (`BotsApiFailure` → `[]`).
 - [ ] **Миграции bot_db** — golang-migrate versioning вместо `Exec` всего `000001_init.up.sql` на каждый старт.
-- [ ] **Тесты** — Gateway 429+`Retry-After` для BotAPI; deferred follow-up integration; Flutter live install+channel pong; coverage Bot `main`/grpcsvc ≥ CI порог. `scripts/dev/ping-bot/` + `ping_bot_test.go` (HMAC/pong) есть.
+- [ ] **Тесты** — Flutter live install+channel pong; coverage Bot `grpcsvc` ≥80% (сейчас ~30% на полном пакете internal). Gateway 429 + deferred compose — есть.
 - [ ] **PLAN.md §16** — отметить чеклисты backend/client после закрытия P0/P1.
+
+### Аудит реализации (2026-06-15)
+
+- [ ] **Hub in-memory only** — deferred tokens не переживают рестарт Bot Service; для prod — persist deferred state или таймаут follow-up в `bot_event_log`.
+- [ ] **InstallBotInSpace + space channel** — `AddMembers` требует caller ∈ chat и min 3 members для group; space-linked channel install может падать — нужен S2S bypass или Space API add-bot-member.
+- [ ] **Role gRPC на InstallBotInSpace** — `CheckPermission` без forwarded metadata при S2S из Bot; в compose Role может быть nil → permission skip.
+- [ ] **Deferred UX** — клиент не снимает deferred bubble по WS `message_create` (только при `message` в interaction response); нужен listener в `chatRoomController`.
+- [ ] **NATS `WebhookFailed`** — публикуется только success path в webhook deliver; failed delivery → добавить `webhook_delivered{success:false}`.
+- [ ] **`GRPC_DIAL_TIMEOUT`** — env добавлен в compose для `bot`; user/chat/messaging/file используют `grpcclient.DialTimeoutFromEnv()`; задокументировать в `.env.example`.
+
+## Сейчас (по мере работы с контрактами)
+
+- [ ] **Политика `protos/` и генерации** — зафиксировать в [REPOSITORIES.md](REPOSITORIES.md) и в скриптах сборки: что коммитим в git (Go/Java), что генерируем при CI/локально, по мере расширения публичных gRPC.
+
+- [x] **`GRPC_DIAL_TIMEOUT` для S2S dial при старте** — `grpcclient.DialTimeoutFromEnv()` (дефолт `15s`); user/chat/messaging/file `main.go`; compose `GRPC_DIAL_TIMEOUT` на bot.
 
 ## Позже / по событию
 

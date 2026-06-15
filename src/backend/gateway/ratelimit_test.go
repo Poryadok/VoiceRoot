@@ -278,6 +278,40 @@ func TestRateLimitKey_messagesSend_usesUserID(t *testing.T) {
 	r := httptest.NewRequest(http.MethodPost, "/api/v1/messages/send", nil)
 	claims := tokenClaims{UserID: "account-99", ProfileID: "prof-1"}
 	if got := g.rateLimitKey(r, claims, false); got != "user:account-99" {
-		t.Fatalf("key=%q", got)
+		t.Fatalf("rateLimitKey = %q, want user:account-99", got)
+	}
+}
+
+func TestGateway_botAPIRateLimit_returns429WithRetryAfter(t *testing.T) {
+	t.Parallel()
+	limiter := newSlidingWindowLimiter(map[string]rateLimitRule{
+		"BotAPI": {Limit: 1, Window: time.Minute},
+	})
+	tc := newTranscoder(&grpcClients{bot: &fakeBotClient{}})
+	h := newGatewayForContract(t, gatewayTestOptions{
+		rateLimiter: limiter,
+		transcoder:  tc,
+	})
+	headers := map[string]string{"Authorization": "Bot vb_ratelimit_test"}
+	rec := performRequest(h, http.MethodGet, "/api/v1/bots/me/interactions/poll", "", headers)
+	if rec.Code != http.StatusOK && rec.Code != http.StatusNoContent {
+		t.Fatalf("first poll status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	rec2 := performRequest(h, http.MethodGet, "/api/v1/bots/me/interactions/poll", "", headers)
+	if rec2.Code != http.StatusTooManyRequests {
+		t.Fatalf("second poll status=%d, want 429", rec2.Code)
+	}
+	if got := rec2.Header().Get("Retry-After"); got == "" {
+		t.Fatalf("missing Retry-After header on 429")
+	}
+}
+
+func TestRateLimitKey_botRoute_usesBotToken(t *testing.T) {
+	t.Parallel()
+	g := &gateway{config: gatewayConfig{trustedProxyCIDRs: nil}}
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/bots/me/interactions/poll", nil)
+	r.Header.Set("Authorization", "Bot vb_token_key")
+	if got := g.rateLimitKey(r, tokenClaims{}, false); got != "bot:vb_token_key" {
+		t.Fatalf("rateLimitKey = %q, want bot:vb_token_key", got)
 	}
 }

@@ -65,7 +65,7 @@ func main() {
 				log.Fatalf("social grpc: %v", err)
 			}
 			sconn.Connect()
-			waitCtx, waitCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			waitCtx, waitCancel := context.WithTimeout(context.Background(), grpcclient.DialTimeoutFromEnv())
 			for {
 				st := sconn.GetState()
 				if st == connectivity.Ready {

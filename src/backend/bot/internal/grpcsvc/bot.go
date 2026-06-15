@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -34,6 +35,14 @@ type BotGRPC struct {
 	Messaging  messagingv1.MessagingServiceClient
 	Role       rolev1.RoleServiceClient
 	User       userv1.UserServiceClient
+	Events     BotEventPublisher
+}
+
+// BotEventPublisher publishes bot lifecycle events (optional NATS).
+type BotEventPublisher interface {
+	PublishBotRegistered(ctx context.Context, botID, ownerID string) error
+	PublishCommandExecuted(ctx context.Context, botID, command, chatID string) error
+	PublishWebhookDelivered(ctx context.Context, botID, deliveryID string, success bool) error
 }
 
 func NewBotGRPC(st *store.BotStore, hub *dispatch.Hub) *BotGRPC {
@@ -55,13 +64,21 @@ func (s *BotGRPC) RegisterBot(ctx context.Context, req *botv1.RegisterBotRequest
 	if scopes == "" {
 		scopes = `["TEXT_CHAT_SEND_MESSAGES"]`
 	}
-	actorID := s.provisionActorProfile(ctx, req.GetName())
+	actorID, actorErr := s.provisionActorProfile(ctx, req.GetName())
+	if actorErr != nil {
+		return nil, actorErr
+	}
 	row, plain, err := s.Store.CreateBot(ctx, owner, req.GetName(), req.GetDescription(), scopes, actorID)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	resp := &botv1.RegisterBotResponse{Bot: botToProto(row)}
-	_ = plain // returned via RegenerateToken only; RegisterBotResponse could include token in future
+	resp := &botv1.RegisterBotResponse{
+		Bot: botToProto(row),
+		TokenResponse: &botv1.TokenResponse{Token: plain},
+	}
+	if s.Events != nil {
+		_ = s.Events.PublishBotRegistered(ctx, row.ID.String(), owner.String())
+	}
 	return resp, nil
 }
 
@@ -361,7 +378,6 @@ func (s *BotGRPC) PollEvents(req *botv1.PollEventsRequest, stream botv1.BotServi
 		if err := stream.Send(&botv1.PollEventsResponse{BotEvent: evt}); err != nil {
 			return err
 		}
-		_ = s.Store.MarkEventDelivered(ctx, id)
 	}
 	return nil
 }
@@ -422,6 +438,18 @@ func parseUUID(field, raw string) (uuid.UUID, error) {
 	return id, nil
 }
 
+func (s *BotGRPC) userCallCtx(ctx context.Context) context.Context {
+	account, ok := authctx.AccountID(ctx)
+	if !ok {
+		return ctx
+	}
+	pairs := []string{authctx.HeaderUserID, account.String()}
+	if profile, ok := authctx.ProfileID(ctx); ok {
+		pairs = append(pairs, authctx.HeaderProfileID, profile.String())
+	}
+	return metadata.AppendToOutgoingContext(ctx, pairs...)
+}
+
 func mapStoreErr(err error) error {
 	if err == store.ErrNotFound {
 		return status.Error(codes.NotFound, "not found")
@@ -429,25 +457,29 @@ func mapStoreErr(err error) error {
 	return status.Error(codes.Internal, err.Error())
 }
 
-func (s *BotGRPC) provisionActorProfile(ctx context.Context, botName string) uuid.UUID {
+func (s *BotGRPC) provisionActorProfile(ctx context.Context, botName string) (uuid.UUID, error) {
 	if s.User == nil {
-		return uuid.Nil
+		return uuid.Nil, nil
 	}
 	name := strings.TrimSpace(botName)
 	if name == "" {
 		name = "Bot"
 	}
 	hint := store.SlugFromName(name)
-	resp, err := s.User.CreateProfile(ctx, &userv1.CreateProfileRequest{
+	userCtx := s.userCallCtx(ctx)
+	resp, err := s.User.CreateProfile(userCtx, &userv1.CreateProfileRequest{
 		DisplayName: name,
 		Username:    &hint,
 	})
-	if err != nil || resp.GetProfile() == nil {
-		return uuid.Nil
+	if err != nil {
+		return uuid.Nil, status.Errorf(codes.FailedPrecondition, "create bot actor profile: %v", err)
+	}
+	if resp.GetProfile() == nil {
+		return uuid.Nil, status.Error(codes.FailedPrecondition, "create bot actor profile: empty response")
 	}
 	id, err := uuid.Parse(resp.GetProfile().GetId())
 	if err != nil {
-		return uuid.Nil
+		return uuid.Nil, status.Errorf(codes.FailedPrecondition, "create bot actor profile: invalid id")
 	}
-	return id
+	return id, nil
 }

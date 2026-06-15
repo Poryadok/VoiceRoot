@@ -72,6 +72,34 @@ final ephemeralMessagesProvider = StateNotifierProvider.autoDispose
       (ref, chatId) => EphemeralMessagesNotifier(),
     );
 
+class DeferredBotInteraction {
+  const DeferredBotInteraction({
+    required this.botName,
+    required this.interactionToken,
+  });
+
+  final String botName;
+  final String interactionToken;
+}
+
+class DeferredInteractionNotifier extends StateNotifier<DeferredBotInteraction?> {
+  DeferredInteractionNotifier() : super(null);
+
+  void setDeferred({required String botName, required String interactionToken}) {
+    state = DeferredBotInteraction(
+      botName: botName,
+      interactionToken: interactionToken,
+    );
+  }
+
+  void clear() => state = null;
+}
+
+final deferredBotInteractionProvider = StateNotifierProvider.autoDispose
+    .family<DeferredInteractionNotifier, DeferredBotInteraction?, String>(
+      (ref, chatId) => DeferredInteractionNotifier(),
+    );
+
 enum SlashInteractionFailure { botTimeout, requestFailed }
 
 final slashInteractionExecutorProvider = Provider<SlashInteractionExecutor>((
@@ -120,6 +148,13 @@ class SlashInteractionExecutor {
     if (data.isBotTimeout) {
       return SlashInteractionFailure.botTimeout;
     }
+    if (data.deferred) {
+      _ref.read(deferredBotInteractionProvider(chatId).notifier).setDeferred(
+        botName: command.botName,
+        interactionToken: data.interactionToken,
+      );
+      return null;
+    }
     if (data.isEphemeral) {
       final content = data.content?.trim();
       if (content != null && content.isNotEmpty) {
@@ -134,6 +169,7 @@ class SlashInteractionExecutor {
       return null;
     }
     if (data.message != null) {
+      _ref.read(deferredBotInteractionProvider(chatId).notifier).clear();
       final msg = voiceMessageFromProto(data.message!);
       final room = _ref.read(chatRoomControllerProvider(chatId));
       if (!room.messages.any((m) => m.id == msg.id)) {

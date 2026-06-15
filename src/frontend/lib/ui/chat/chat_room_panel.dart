@@ -197,6 +197,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     final replyTarget = ref.watch(chatReplyTargetProvider(widget.chatId));
     final activeThreadId = ref.watch(chatActiveThreadProvider(widget.chatId));
     final ephemeralMessages = ref.watch(ephemeralMessagesProvider(widget.chatId));
+    final deferredInteraction = ref.watch(deferredBotInteractionProvider(widget.chatId));
     final blockChannelMainFeed =
         chatMeta?.isChannel == true && chatMeta!.allowUserMainFeed == false;
     final composerBlocked =
@@ -510,6 +511,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   scrollController: _scrollController,
                   room: room,
                   ephemeralMessages: ephemeralMessages,
+                  deferredInteraction: deferredInteraction,
                   activeId: activeId,
                   l10n: l10n,
                   initialUnreadCount: _initialUnreadCount,
@@ -1130,6 +1132,7 @@ class _MessageListView extends ConsumerWidget {
     required this.scrollController,
     required this.room,
     required this.ephemeralMessages,
+    this.deferredInteraction,
     required this.activeId,
     required this.l10n,
     required this.initialUnreadCount,
@@ -1140,6 +1143,7 @@ class _MessageListView extends ConsumerWidget {
   final ScrollController scrollController;
   final ChatRoomState room;
   final List<EphemeralBotMessage> ephemeralMessages;
+  final DeferredBotInteraction? deferredInteraction;
   final String? activeId;
   final AppLocalizations l10n;
   final int initialUnreadCount;
@@ -1153,10 +1157,11 @@ class _MessageListView extends ConsumerWidget {
     );
     final hasOlderControl = room.hasMore || room.isLoadingOlder;
     final ephemeralCount = ephemeralMessages.length;
+    final deferredCount = deferredInteraction != null ? 1 : 0;
     return ListView.builder(
       controller: scrollController,
       padding: const EdgeInsets.all(12),
-      itemCount: rows.length + ephemeralCount + (hasOlderControl ? 1 : 0),
+      itemCount: rows.length + ephemeralCount + deferredCount + (hasOlderControl ? 1 : 0),
       itemBuilder: (context, index) {
         if (hasOlderControl && index == 0) {
           return Center(
@@ -1180,6 +1185,9 @@ class _MessageListView extends ConsumerWidget {
           );
         }
         final rowIndex = hasOlderControl ? index - 1 : index;
+        if (rowIndex >= rows.length + ephemeralCount) {
+          return _DeferredBotBubble(l10n: l10n);
+        }
         if (rowIndex >= rows.length) {
           final ephemeral = ephemeralMessages[rowIndex - rows.length];
           return _EphemeralBotBubble(message: ephemeral, l10n: l10n);
@@ -1545,6 +1553,38 @@ class _EphemeralBotBubble extends StatelessWidget {
                 ),
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DeferredBotBubble extends StatelessWidget {
+  const _DeferredBotBubble({required this.l10n});
+
+  final AppLocalizations l10n;
+
+  @override
+  Widget build(BuildContext context) {
+    final voice = VoiceColors.of(context);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: VoiceChatBubble(
+        isMine: false,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: voice.profileAccent,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(l10n.botDeferredProcessing),
           ],
         ),
       ),

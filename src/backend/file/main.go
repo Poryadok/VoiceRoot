@@ -83,7 +83,7 @@ func main() {
 				log.Fatalf("chat grpc: %v", err)
 			}
 			defer func() { _ = cconn.Close() }()
-			waitCtx, waitCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			waitCtx, waitCancel := context.WithTimeout(context.Background(), grpcclient.DialTimeoutFromEnv())
 			if err := waitForGRPCReady(waitCtx, cconn); err != nil {
 				waitCancel()
 				log.Fatalf("chat grpc dial: %v", err)

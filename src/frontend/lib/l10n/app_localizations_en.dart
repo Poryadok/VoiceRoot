@@ -302,6 +302,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'The bot did not respond in time. Try again later.';
 
   @override
+  String get botDeferredProcessing => 'Processing your request…';
+
+  @override
   String get slashCommandsTitle => 'Commands';
 
   @override

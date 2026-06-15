@@ -614,6 +614,9 @@ abstract class AppLocalizations {
   /// **'The bot did not respond in time. Try again later.'**
   String get botTimeoutError;
 
+  /// No description provided for @botDeferredProcessing.
+  String get botDeferredProcessing;
+
   /// No description provided for @slashCommandsTitle.
   ///
   /// In en, this message translates to:

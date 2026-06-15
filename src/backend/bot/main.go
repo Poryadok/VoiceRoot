@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"voice/backend/bot/internal/botevents"
 	"voice/backend/bot/internal/dispatch"
 	grpcsvc "voice/backend/bot/internal/grpcsvc"
 	"voice/backend/bot/internal/store"
@@ -67,6 +68,16 @@ func main() {
 		hub := dispatch.NewHub()
 		svc := grpcsvc.NewBotGRPC(st, hub)
 		wireDownstream(svc, logger)
+		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
+			pub, err := botevents.NewJetStreamPublisher(natsURL)
+			if err != nil {
+				log.Fatalf("nats bot events: %v", err)
+			}
+			pub.Logger = logger
+			svc.Events = pub
+			defer pub.Close()
+			logger.Info("bot.events publisher enabled")
+		}
 		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger)...)
 		botv1.RegisterBotServiceServer(grpcSrv, svc)
 		go func() {

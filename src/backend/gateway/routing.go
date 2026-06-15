@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -58,6 +59,9 @@ func (g *gateway) handleREST(w http.ResponseWriter, r *http.Request) {
 		}
 		if !allowed {
 			g.metrics.ObserveRateLimitHit(group)
+			if retryAfter := rateLimitRetryAfterSeconds(group); retryAfter > 0 {
+				w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
+			}
 			writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "rate_limited"})
 			return
 		}

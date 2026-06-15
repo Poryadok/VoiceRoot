@@ -105,7 +105,7 @@ func main() {
 				log.Fatalf("chat grpc: %v", err)
 			}
 			defer func() { _ = cconn.Close() }()
-			waitCtx, waitCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			waitCtx, waitCancel := context.WithTimeout(context.Background(), grpcclient.DialTimeoutFromEnv())
 			if err := waitForGRPCReady(waitCtx, cconn); err != nil {
 				waitCancel()
 				log.Fatalf("chat grpc dial: %v", err)
@@ -126,7 +126,7 @@ func main() {
 				log.Fatalf("social grpc: %v", err)
 			}
 			defer func() { _ = sconn.Close() }()
-			waitCtx, waitCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			waitCtx, waitCancel := context.WithTimeout(context.Background(), grpcclient.DialTimeoutFromEnv())
 			if err := waitForGRPCReady(waitCtx, sconn); err != nil {
 				waitCancel()
 				log.Fatalf("social grpc dial: %v", err)
@@ -145,7 +145,7 @@ func main() {
 				log.Fatalf("user grpc: %v", err)
 			}
 			defer func() { _ = uconn.Close() }()
-			waitCtx, waitCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			waitCtx, waitCancel := context.WithTimeout(context.Background(), grpcclient.DialTimeoutFromEnv())
 			if err := waitForGRPCReady(waitCtx, uconn); err != nil {
 				waitCancel()
 				log.Fatalf("user grpc dial: %v", err)
@@ -164,7 +164,7 @@ func main() {
 				log.Fatalf("role grpc: %v", err)
 			}
 			defer func() { _ = rconn.Close() }()
-			waitCtx, waitCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			waitCtx, waitCancel := context.WithTimeout(context.Background(), grpcclient.DialTimeoutFromEnv())
 			if err := waitForGRPCReady(waitCtx, rconn); err != nil {
 				waitCancel()
 				log.Fatalf("role grpc dial: %v", err)
@@ -180,7 +180,7 @@ func main() {
 				log.Fatalf("file grpc: %v", err)
 			}
 			defer func() { _ = fconn.Close() }()
-			waitCtx, waitCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			waitCtx, waitCancel := context.WithTimeout(context.Background(), grpcclient.DialTimeoutFromEnv())
 			if err := waitForGRPCReady(waitCtx, fconn); err != nil {
 				waitCancel()
 				log.Fatalf("file grpc dial: %v", err)
@@ -210,7 +210,7 @@ func main() {
 				log.Fatalf("moderation grpc: %v", err)
 			}
 			defer func() { _ = mconn.Close() }()
-			waitCtx, waitCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			waitCtx, waitCancel := context.WithTimeout(context.Background(), grpcclient.DialTimeoutFromEnv())
 			if err := waitForGRPCReady(waitCtx, mconn); err != nil {
 				waitCancel()
 				log.Fatalf("moderation grpc dial: %v", err)

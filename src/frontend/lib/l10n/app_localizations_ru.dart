@@ -302,6 +302,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get botTimeoutError => 'Бот не ответил вовремя. Попробуйте позже.';
 
   @override
+  String get botDeferredProcessing => 'Обрабатываю запрос…';
+
+  @override
   String get slashCommandsTitle => 'Команды';
 
   @override

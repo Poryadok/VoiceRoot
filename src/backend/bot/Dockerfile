@@ -8,6 +8,7 @@ COPY bot/go.mod ./bot/
 COPY voice/pb/voice/bot/go.mod ./voice/pb/voice/bot/
 COPY chat/pb/voice/chat/go.mod ./chat/pb/voice/chat/
 COPY messaging/pb/voice/messaging/go.mod ./messaging/pb/voice/messaging/
+COPY messaging/pb/voice/events/go.mod ./messaging/pb/voice/events/
 COPY role/pb/voice/role/go.mod ./role/pb/voice/role/
 COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
 COPY user/pb/voice/user/go.mod ./user/pb/voice/user/
@@ -18,6 +19,7 @@ COPY user/pb/voice/user ./user/pb/voice/user
 COPY voice/pb/voice/bot ./voice/pb/voice/bot
 COPY chat/pb/voice/chat ./chat/pb/voice/chat
 COPY messaging/pb/voice/messaging ./messaging/pb/voice/messaging
+COPY messaging/pb/voice/events ./messaging/pb/voice/events
 COPY role/pb/voice/role ./role/pb/voice/role
 COPY bot ./bot
 COPY migrations/bot_db ./migrations/bot_db

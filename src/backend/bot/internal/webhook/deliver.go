@@ -29,7 +29,10 @@ type InteractionResponse struct {
 	Deferred  bool   `json:"deferred"`
 }
 
+const maxDeliveryAttempts = 3
+
 // DeliverPOST sends signed interaction to webhook and parses sync response.
+// Retries up to maxDeliveryAttempts with exponential backoff on transport errors and 5xx.
 func DeliverPOST(ctx context.Context, client *http.Client, url, secret string, payload InteractionPayload, timeout time.Duration) (InteractionResponse, error) {
 	if client == nil {
 		client = http.DefaultClient
@@ -42,6 +45,32 @@ func DeliverPOST(ctx context.Context, client *http.Client, url, secret string, p
 		return InteractionResponse{}, err
 	}
 	ts := time.Now().Unix()
+
+	var lastErr error
+	for attempt := 0; attempt < maxDeliveryAttempts; attempt++ {
+		if attempt > 0 {
+			backoff := time.Duration(1<<uint(attempt-1)) * 100 * time.Millisecond
+			select {
+			case <-ctx.Done():
+				return InteractionResponse{}, ctx.Err()
+			case <-time.After(backoff):
+			}
+		}
+		reqCtx, cancel := context.WithTimeout(ctx, timeout)
+		resp, err := deliverOnce(reqCtx, client, url, secret, ts, body)
+		cancel()
+		if err == nil {
+			return resp, nil
+		}
+		lastErr = err
+		if !isRetryableWebhookError(err) {
+			break
+		}
+	}
+	return InteractionResponse{}, lastErr
+}
+
+func deliverOnce(ctx context.Context, client *http.Client, url, secret string, ts int64, body []byte) (InteractionResponse, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimSpace(url), bytes.NewReader(body))
 	if err != nil {
 		return InteractionResponse{}, err
@@ -58,15 +87,26 @@ func DeliverPOST(ctx context.Context, client *http.Client, url, secret string, p
 	if err != nil {
 		return InteractionResponse{}, err
 	}
+	if resp.StatusCode >= 500 {
+		return InteractionResponse{}, fmt.Errorf("webhook status %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return InteractionResponse{}, fmt.Errorf("webhook status %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
 	}
 	var out InteractionResponse
-	if len(bytes.TrimSpace(raw)) == 0 {
+	if len(strings.TrimSpace(string(raw))) == 0 {
 		return out, nil
 	}
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return InteractionResponse{}, err
 	}
 	return out, nil
+}
+
+func isRetryableWebhookError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "webhook status 5")
 }

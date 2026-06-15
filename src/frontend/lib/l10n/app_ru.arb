@@ -156,6 +156,7 @@
   "chatMentionHere": "@here",
   "chatMentionMember": "Участник {profileId}",
   "botTimeoutError": "Бот не ответил вовремя. Попробуйте позже.",
+  "botDeferredProcessing": "Обрабатываю запрос…",
   "slashCommandsTitle": "Команды",
   "ephemeralMessageLabel": "Только для вас",
   "chatRoomError": "Ошибка: {message}",

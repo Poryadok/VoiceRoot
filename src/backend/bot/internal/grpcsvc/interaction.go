@@ -61,8 +61,9 @@ func (s *BotGRPC) InstallBotInSpace(ctx context.Context, req *botv1.InstallBotIn
 	}
 	if s.Chat != nil {
 		actorID := botRow.ActorProfileID.String()
+		chatCtx := s.userCallCtx(ctx)
 		for _, cid := range chats {
-			if _, err := s.Chat.AddMembers(ctx, &chatv1.AddMembersRequest{
+			if _, err := s.Chat.AddMembers(chatCtx, &chatv1.AddMembersRequest{
 				ChatId:     cid.String(),
 				ProfileIds: []string{actorID},
 			}); err != nil {
@@ -247,6 +248,10 @@ func (s *BotGRPC) ExecuteSlashInteraction(ctx context.Context, req *botv1.Execut
 		return nil, status.Error(codes.NotFound, "unknown command")
 	}
 
+	if s.Events != nil {
+		_ = s.Events.PublishCommandExecuted(ctx, botID.String(), cmdName, chatID.String())
+	}
+
 	token := uuid.NewString()
 	var options map[string]any
 	_ = json.Unmarshal([]byte(req.GetOptionsJson()), &options)
@@ -260,7 +265,6 @@ func (s *BotGRPC) ExecuteSlashInteraction(ctx context.Context, req *botv1.Execut
 		InvokerProfileID: invoker.String(),
 	}
 	ch := s.Hub.Register(token)
-	defer s.Hub.Cancel(token)
 
 	if botRow.IsPollingMode || botRow.WebhookURL == nil || strings.TrimSpace(*botRow.WebhookURL) == "" {
 		eventPayload := map[string]any{
@@ -276,8 +280,14 @@ func (s *BotGRPC) ExecuteSlashInteraction(ctx context.Context, req *botv1.Execut
 		go func() {
 			resp, err := webhook.DeliverPOST(context.Background(), s.HTTPClient, url, botRow.WebhookSecret, payload, dispatch.DefaultTimeout)
 			if err != nil {
+				if s.Events != nil {
+					_ = s.Events.PublishWebhookDelivered(context.Background(), botID.String(), token, false)
+				}
 				s.Hub.Complete(token, store.InteractionReply{Err: err})
 				return
+			}
+			if s.Events != nil {
+				_ = s.Events.PublishWebhookDelivered(context.Background(), botID.String(), token, true)
 			}
 			s.Hub.Complete(token, store.InteractionReply{
 				Content:   resp.Content,
@@ -289,6 +299,7 @@ func (s *BotGRPC) ExecuteSlashInteraction(ctx context.Context, req *botv1.Execut
 
 	reply, ok := s.Hub.Wait(ch, dispatch.DefaultTimeout)
 	if !ok || reply.Err == dispatch.ErrTimeout {
+		s.Hub.Cancel(token)
 		code := "bot_timeout"
 		msg := "Bot did not respond in time. Try again later."
 		return &botv1.ExecuteSlashInteractionResponse{
@@ -298,6 +309,7 @@ func (s *BotGRPC) ExecuteSlashInteraction(ctx context.Context, req *botv1.Execut
 		}, nil
 	}
 	if reply.Err != nil {
+		s.Hub.Cancel(token)
 		return nil, status.Error(codes.Unavailable, reply.Err.Error())
 	}
 	if reply.Deferred {
@@ -307,22 +319,45 @@ func (s *BotGRPC) ExecuteSlashInteraction(ctx context.Context, req *botv1.Execut
 			Deferred:         def,
 		}, nil
 	}
-	return s.finishInteraction(ctx, botRow, req.GetChat(), invoker, token, reply.Content, reply.Ephemeral)
+	resp, err := s.finishInteraction(ctx, botRow, req.GetChat(), invoker, token, reply.Content, reply.Ephemeral)
+	if err != nil {
+		s.Hub.Cancel(token)
+		return nil, err
+	}
+	s.Hub.Cancel(token)
+	return resp, nil
 }
 
 func (s *BotGRPC) CompleteInteraction(ctx context.Context, req *botv1.CompleteInteractionRequest) (*botv1.CompleteInteractionResponse, error) {
-	if _, err := s.botFromToken(ctx); err != nil {
+	botRow, err := s.botFromToken(ctx)
+	if err != nil {
 		return nil, err
 	}
+	token := strings.TrimSpace(req.GetInteractionToken())
 	reply := store.InteractionReply{
 		Content:   strings.TrimSpace(req.GetContent()),
 		Ephemeral: req.GetIsEphemeral(),
 		Deferred:  req.GetDeferred(),
 	}
-	if !s.Hub.Complete(req.GetInteractionToken(), reply) {
-		return nil, status.Error(codes.NotFound, "unknown interaction token")
+	if s.Hub.Complete(token, reply) {
+		if !reply.Deferred {
+			_ = s.Store.MarkInteractionDelivered(ctx, botRow.ID, token)
+		}
+		return &botv1.CompleteInteractionResponse{}, nil
 	}
-	return &botv1.CompleteInteractionResponse{}, nil
+	if reply.Content != "" && !reply.Deferred && !reply.Ephemeral {
+		_, _, ref, lerr := s.lookupInteraction(ctx, botRow.ID, token)
+		if lerr != nil {
+			return nil, lerr
+		}
+		if _, err := s.postMessage(ctx, botRow, ref, reply.Content); err != nil {
+			return nil, err
+		}
+		s.Hub.FinishDeferred(token)
+		_ = s.Store.MarkInteractionDelivered(ctx, botRow.ID, token)
+		return &botv1.CompleteInteractionResponse{}, nil
+	}
+	return nil, status.Error(codes.NotFound, "unknown interaction token")
 }
 
 func (s *BotGRPC) lookupInteraction(ctx context.Context, botID uuid.UUID, token string) (uuid.UUID, uuid.UUID, *chatv1.ChatRef, error) {
@@ -367,8 +402,26 @@ func (s *BotGRPC) SendBotMessage(ctx context.Context, req *botv1.SendBotMessageR
 		}
 	}
 	if req.GetInteractionToken() != "" {
+		token := strings.TrimSpace(req.GetInteractionToken())
+		if s.Hub.IsDeferred(token) {
+			_, _, ref, lerr := s.lookupInteraction(ctx, botRow.ID, token)
+			if lerr != nil {
+				return nil, lerr
+			}
+			content := strings.TrimSpace(req.GetContent())
+			if content == "" {
+				return nil, status.Error(codes.InvalidArgument, "content required")
+			}
+			msg, perr := s.postMessage(ctx, botRow, ref, content)
+			if perr != nil {
+				return nil, perr
+			}
+			s.Hub.FinishDeferred(token)
+			_ = s.Store.MarkInteractionDelivered(ctx, botRow.ID, token)
+			return &botv1.SendBotMessageResponse{Message: msg}, nil
+		}
 		reply := store.InteractionReply{Content: req.GetContent()}
-		if s.Hub.Complete(req.GetInteractionToken(), reply) {
+		if s.Hub.Complete(token, reply) {
 			return &botv1.SendBotMessageResponse{}, nil
 		}
 	}

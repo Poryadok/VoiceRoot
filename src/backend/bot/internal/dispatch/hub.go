@@ -13,10 +13,14 @@ const DefaultTimeout = 3 * time.Second
 type Hub struct {
 	mu       sync.Mutex
 	pending  map[string]chan store.InteractionReply
+	deferred map[string]struct{}
 }
 
 func NewHub() *Hub {
-	return &Hub{pending: make(map[string]chan store.InteractionReply)}
+	return &Hub{
+		pending:  make(map[string]chan store.InteractionReply),
+		deferred: make(map[string]struct{}),
+	}
 }
 
 func (h *Hub) Register(token string) chan store.InteractionReply {
@@ -31,7 +35,12 @@ func (h *Hub) Complete(token string, reply store.InteractionReply) bool {
 	h.mu.Lock()
 	ch, ok := h.pending[token]
 	if ok {
-		delete(h.pending, token)
+		if reply.Deferred {
+			h.deferred[token] = struct{}{}
+		} else {
+			delete(h.pending, token)
+			delete(h.deferred, token)
+		}
 	}
 	h.mu.Unlock()
 	if !ok {
@@ -44,6 +53,31 @@ func (h *Hub) Complete(token string, reply store.InteractionReply) bool {
 func (h *Hub) Cancel(token string) {
 	h.mu.Lock()
 	delete(h.pending, token)
+	delete(h.deferred, token)
+	h.mu.Unlock()
+}
+
+// IsPending reports whether a token is still registered (including deferred follow-up).
+func (h *Hub) IsPending(token string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	_, ok := h.pending[token]
+	return ok
+}
+
+// IsDeferred reports whether the interaction was deferred and awaits async completion.
+func (h *Hub) IsDeferred(token string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	_, ok := h.deferred[token]
+	return ok
+}
+
+// FinishDeferred removes a deferred token after async follow-up completes.
+func (h *Hub) FinishDeferred(token string) {
+	h.mu.Lock()
+	delete(h.pending, token)
+	delete(h.deferred, token)
 	h.mu.Unlock()
 }
 

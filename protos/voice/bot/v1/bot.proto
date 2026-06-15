@@ -177,6 +177,8 @@ message BotEvent {
 
 message RegisterBotResponse {
   Bot bot = 1;
+  // One-shot bot token; same value as RegenerateToken (shown once at registration).
+  optional TokenResponse token_response = 2;
 }
 message UpdateBotResponse {
   Bot bot = 1;
