@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../backend/bots_client.dart';
+import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/bot_providers.dart';
 import '../../theme/voice_colors.dart';
@@ -106,6 +107,7 @@ class _SlashCommandOptionsSheetState
   @override
   Widget build(BuildContext context) {
     final voice = VoiceColors.of(context);
+    final l10n = AppLocalizations.of(context)!;
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.only(
@@ -124,13 +126,27 @@ class _SlashCommandOptionsSheetState
             ),
             const SizedBox(height: 12),
             for (final opt in widget.command.options) ...[
-              TextField(
-                controller: _controllerFor(opt.name),
-                decoration: InputDecoration(
-                  labelText: opt.name + (opt.required ? ' *' : ''),
+              if (opt.type == 'boolean')
+                SwitchListTile(
+                  title: Text(opt.name + (opt.required ? ' *' : '')),
+                  value: _values[opt.name] == 'true',
+                  onChanged: (v) {
+                    setState(() {
+                      _values[opt.name] = v ? 'true' : 'false';
+                    });
+                  },
+                )
+              else
+                TextField(
+                  controller: _controllerFor(opt.name),
+                  keyboardType: opt.type == 'integer'
+                      ? TextInputType.number
+                      : TextInputType.text,
+                  decoration: InputDecoration(
+                    labelText: opt.name + (opt.required ? ' *' : ''),
+                  ),
+                  onChanged: (v) => _onOptionChanged(opt, v),
                 ),
-                onChanged: (v) => _onOptionChanged(opt, v),
-              ),
               if (opt.autocomplete &&
                   (_suggestions[opt.name]?.isNotEmpty ?? false))
                 Wrap(
@@ -156,7 +172,7 @@ class _SlashCommandOptionsSheetState
               onPressed: _canSubmit
                   ? () => Navigator.pop(context, Map<String, dynamic>.from(_values))
                   : null,
-              child: const Text('Run command'),
+              child: Text(l10n.slashCommandRun),
             ),
           ],
         ),

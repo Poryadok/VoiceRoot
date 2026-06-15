@@ -404,6 +404,10 @@ func botToProto(row store.BotRow) *botv1.Bot {
 	if row.WebhookURL != nil {
 		b.WebhookUrl = row.WebhookURL
 	}
+	if row.ActorProfileID != uuid.Nil {
+		id := row.ActorProfileID.String()
+		b.ActorProfileId = &id
+	}
 	return b
 }
 

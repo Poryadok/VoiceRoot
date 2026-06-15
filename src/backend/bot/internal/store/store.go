@@ -293,8 +293,88 @@ VALUES ($1, $2, $3, true, $4)`,
 }
 
 func (s *BotStore) UninstallFromSpace(ctx context.Context, botID, spaceID uuid.UUID) error {
-	_, err := s.Pool.Exec(ctx, `DELETE FROM bot_space_installations WHERE bot_id = $1 AND space_id = $2`, botID, spaceID)
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `DELETE FROM bot_chat_whitelist WHERE bot_id = $1 AND space_id = $2`, botID, spaceID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM bot_space_installations WHERE bot_id = $1 AND space_id = $2`, botID, spaceID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func (s *BotStore) SetChatEnabled(ctx context.Context, botID, chatID, spaceID, installer uuid.UUID, enabled bool) error {
+	var exists bool
+	err := s.Pool.QueryRow(ctx, `
+SELECT EXISTS(SELECT 1 FROM bot_space_installations WHERE bot_id = $1 AND space_id = $2)`,
+		botID, spaceID).Scan(&exists)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return ErrNotFound
+	}
+	var whitelisted bool
+	err = s.Pool.QueryRow(ctx, `
+SELECT EXISTS(SELECT 1 FROM bot_chat_whitelist WHERE bot_id = $1 AND chat_id = $2 AND space_id = $3)`,
+		botID, chatID, spaceID).Scan(&whitelisted)
+	if err != nil {
+		return err
+	}
+	if whitelisted {
+		_, err = s.Pool.Exec(ctx, `
+UPDATE bot_chat_whitelist SET enabled = $4 WHERE bot_id = $1 AND chat_id = $2 AND space_id = $3`,
+			botID, chatID, spaceID, enabled)
+		return err
+	}
+	if !enabled {
+		return nil
+	}
+	_, err = s.Pool.Exec(ctx, `
+INSERT INTO bot_chat_whitelist (bot_id, chat_id, space_id, enabled, added_by_profile_id)
+VALUES ($1, $2, $3, true, $4)`,
+		botID, chatID, spaceID, installer)
 	return err
+}
+
+type ChatBotRow struct {
+	BotRow      BotRow
+	Enabled     bool
+	Whitelisted bool
+}
+
+func (s *BotStore) ListBotsInChat(ctx context.Context, chatID, spaceID uuid.UUID) ([]ChatBotRow, error) {
+	rows, err := s.Pool.Query(ctx, `
+SELECT b.id, b.owner_account_id, b.name, b.description, b.avatar_url, b.webhook_url,
+	b.is_polling_mode, b.scopes::text, b.status, b.actor_profile_id, b.slug, b.created_at, b.updated_at,
+	COALESCE(w.enabled, false), (w.bot_id IS NOT NULL)
+FROM bot_space_installations i
+JOIN bots b ON b.id = i.bot_id AND b.status = 'live'
+LEFT JOIN bot_chat_whitelist w ON w.bot_id = b.id AND w.chat_id = $1 AND w.space_id = $2
+WHERE i.space_id = $2
+ORDER BY b.name`, chatID, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ChatBotRow
+	for rows.Next() {
+		var row ChatBotRow
+		if err := rows.Scan(
+			&row.BotRow.ID, &row.BotRow.OwnerAccountID, &row.BotRow.Name, &row.BotRow.Description,
+			&row.BotRow.AvatarURL, &row.BotRow.WebhookURL, &row.BotRow.IsPollingMode, &row.BotRow.ScopesJSON,
+			&row.BotRow.Status, &row.BotRow.ActorProfileID, &row.BotRow.Slug, &row.BotRow.CreatedAt, &row.BotRow.UpdatedAt,
+			&row.Enabled, &row.Whitelisted,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, row)
+	}
+	return out, rows.Err()
 }
 
 // PrimaryInstalledSpace returns the space_id when the bot has exactly one installation.

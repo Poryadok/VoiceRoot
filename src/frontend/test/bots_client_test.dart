@@ -115,4 +115,76 @@ void main() {
       expect(data.errorCode, kBotTimeoutErrorCode);
     });
   });
+
+  group('VoiceBotsClient.listBotsInChat', () {
+    test('GET /api/v1/bots/chats/{id} parses chat bot settings', () async {
+      final mock = MockClient((req) async {
+        expect(req.method, 'GET');
+        expect(req.url.path, '/api/v1/bots/chats/chat-1');
+        expect(req.url.queryParameters['space_id'], 'space-1');
+        return http.Response(
+          jsonEncode({
+            'bots': [
+              {
+                'bot': {
+                  'id': 'bot-1',
+                  'name': 'PingBot',
+                  'description': '',
+                  'scopes_json': '[]',
+                  'status': 'live',
+                },
+                'enabled': true,
+                'whitelisted': true,
+              },
+            ],
+          }),
+          200,
+        );
+      });
+      final client = VoiceBotsClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
+      final result = await client.listBotsInChat(
+        authorization: auth,
+        chatId: 'chat-1',
+        chatType: 'CHAT_TYPE_CHANNEL',
+        spaceId: 'space-1',
+      );
+      expect(result, isA<BotsApiOk<List<ChatBotSettings>>>());
+      final bots = (result as BotsApiOk<List<ChatBotSettings>>).data;
+      expect(bots.first.bot.name, 'PingBot');
+      expect(bots.first.enabled, isTrue);
+    });
+  });
+
+  group('VoiceBotsClient.listSlashCommandsForChat online', () {
+    test('parses online flag on slash commands', () async {
+      final mock = MockClient((req) async {
+        return http.Response(
+          jsonEncode({
+            'commands': [
+              {
+                'bot_id': 'bot-1',
+                'bot_name': 'DownBot',
+                'name': 'slow',
+                'description': 'Slow',
+                'online': false,
+              },
+            ],
+          }),
+          200,
+        );
+      });
+      final client = VoiceBotsClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
+      final result = await client.listSlashCommandsForChat(
+        authorization: auth,
+        chatId: 'chat-1',
+        chatType: 'CHAT_TYPE_CHANNEL',
+      );
+      final commands = (result as BotsApiOk<List<BotSlashCommand>>).data;
+      expect(commands.first.online, isFalse);
+    });
+  });
 }

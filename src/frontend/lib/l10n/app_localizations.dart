@@ -626,6 +626,96 @@ abstract class AppLocalizations {
   /// **'Commands'**
   String get slashCommandsTitle;
 
+  /// No description provided for @slashCommandsLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load bot commands.'**
+  String get slashCommandsLoadError;
+
+  /// No description provided for @slashCommandsEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No bot commands in this chat.'**
+  String get slashCommandsEmpty;
+
+  /// No description provided for @botUnavailableTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Bot unavailable'**
+  String get botUnavailableTooltip;
+
+  /// No description provided for @slashCommandRun.
+  ///
+  /// In en, this message translates to:
+  /// **'Run command'**
+  String get slashCommandRun;
+
+  /// No description provided for @chatBotsSectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Bots'**
+  String get chatBotsSectionTitle;
+
+  /// No description provided for @chatBotsLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load bots for this chat.'**
+  String get chatBotsLoadError;
+
+  /// No description provided for @chatBotsEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No bots installed in this space.'**
+  String get chatBotsEmpty;
+
+  /// No description provided for @spaceBotsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Space bots'**
+  String get spaceBotsTitle;
+
+  /// No description provided for @spaceBotsInstall.
+  ///
+  /// In en, this message translates to:
+  /// **'Install bot'**
+  String get spaceBotsInstall;
+
+  /// No description provided for @spaceBotsUninstall.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove from space'**
+  String get spaceBotsUninstall;
+
+  /// No description provided for @spaceBotsInstallConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Install'**
+  String get spaceBotsInstallConfirm;
+
+  /// No description provided for @spaceBotsScopeWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'This bot requests privileged access to read chat history.'**
+  String get spaceBotsScopeWarning;
+
+  /// No description provided for @spaceBotsSelectChats.
+  ///
+  /// In en, this message translates to:
+  /// **'Allowed text chats'**
+  String get spaceBotsSelectChats;
+
+  /// No description provided for @spaceBotsInstallSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Bot installed.'**
+  String get spaceBotsInstallSuccess;
+
+  /// No description provided for @spaceBotsUninstallSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Bot removed from space.'**
+  String get spaceBotsUninstallSuccess;
+
   /// No description provided for @ephemeralMessageLabel.
   ///
   /// In en, this message translates to:

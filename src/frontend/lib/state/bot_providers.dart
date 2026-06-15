@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 export 'bot_deferred_providers.dart';
@@ -44,9 +42,67 @@ final slashCommandsForChatProvider = FutureProvider.autoDispose
           );
       return switch (result) {
         BotsApiOk(:final data) => data,
-        BotsApiFailure() => const [],
+        BotsApiFailure(:final message) => throw BotsCommandsLoadException(message),
       };
     });
+
+class BotsCommandsLoadException implements Exception {
+  BotsCommandsLoadException(this.message);
+  final String message;
+  @override
+  String toString() => message;
+}
+
+typedef ChatSpaceKey = ({String chatId, String spaceId});
+
+final botsInChatProvider = FutureProvider.autoDispose
+    .family<List<ChatBotSettings>, ChatSpaceKey>((ref, key) async {
+      final auth = ref.watch(authorizationHeaderProvider);
+      if (auth == null) return const [];
+
+      final chatType =
+          ref.watch(chatTypeForChatProvider(key.chatId)) ?? 'CHAT_TYPE_CHANNEL';
+      final result = await ref.read(voiceBotsClientProvider).listBotsInChat(
+        authorization: auth,
+        chatId: key.chatId,
+        chatType: chatType,
+        spaceId: key.spaceId,
+      );
+      return switch (result) {
+        BotsApiOk(:final data) => data,
+        BotsApiFailure(:final message) => throw Exception(message),
+      };
+    });
+
+final installedBotsProvider = FutureProvider.autoDispose
+    .family<List<InstalledBotInfo>, String>((ref, spaceId) async {
+      final auth = ref.watch(authorizationHeaderProvider);
+      if (auth == null) return const [];
+
+      final result = await ref.read(voiceBotsClientProvider).listInstalledBots(
+        authorization: auth,
+        spaceId: spaceId,
+      );
+      return switch (result) {
+        BotsApiOk(:final data) => data,
+        BotsApiFailure(:final message) => throw Exception(message),
+      };
+    });
+
+final discoverableBotsProvider = FutureProvider.autoDispose<List<VoiceBotSummary>>((
+  ref,
+) async {
+  final auth = ref.watch(authorizationHeaderProvider);
+  if (auth == null) return const [];
+
+  final result = await ref.read(voiceBotsClientProvider).listBots(
+    authorization: auth,
+  );
+  return switch (result) {
+    BotsApiOk(:final data) => data,
+    BotsApiFailure(:final message) => throw Exception(message),
+  };
+});
 
 class EphemeralBotMessage {
   EphemeralBotMessage({

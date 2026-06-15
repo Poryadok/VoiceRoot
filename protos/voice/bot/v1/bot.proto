@@ -49,6 +49,8 @@ service BotService {
   rpc InstallBotInSpace(InstallBotInSpaceRequest) returns (InstallBotInSpaceResponse);
   rpc UninstallBotFromSpace(UninstallBotFromSpaceRequest) returns (UninstallBotFromSpaceResponse);
   rpc ListInstalledBots(ListInstalledBotsRequest) returns (ListInstalledBotsResponse);
+  rpc ListBotsInChat(ListBotsInChatRequest) returns (ListBotsInChatResponse);
+  rpc SetBotChatEnabled(SetBotChatEnabledRequest) returns (SetBotChatEnabledResponse);
 
   // Client slash interactions.
   rpc ExecuteSlashInteraction(ExecuteSlashInteractionRequest) returns (ExecuteSlashInteractionResponse);
@@ -69,6 +71,8 @@ message Bot {
   string status = 9; // prefer status_enum when set
   google.protobuf.Timestamp created_at = 10;
   optional BotLifecycleStatus status_enum = 11;
+  // Actor profile used as sender_profile_id for bot messages.
+  optional string actor_profile_id = 12;
 }
 
 message RegisterBotRequest {
@@ -268,6 +272,30 @@ message ListInstalledBotsResponse {
   repeated InstalledBot installed_bots = 1;
 }
 
+message ListBotsInChatRequest {
+  voice.chat.v1.ChatRef chat = 1;
+  string space_id = 2;
+}
+
+message ChatBotEntry {
+  Bot bot = 1;
+  bool enabled = 2;
+  bool whitelisted = 3;
+}
+
+message ListBotsInChatResponse {
+  repeated ChatBotEntry bots = 1;
+}
+
+message SetBotChatEnabledRequest {
+  string bot_id = 1;
+  voice.chat.v1.ChatRef chat = 2;
+  bool enabled = 3;
+  string space_id = 4;
+}
+
+message SetBotChatEnabledResponse {}
+
 message SlashCommandOption {
   string name = 1;
   string type = 2;
@@ -283,6 +311,8 @@ message SlashCommand {
   repeated SlashCommandOption options = 5;
   // Parent command for subcommands, e.g. "queue" for "/queue join".
   optional string group_name = 6;
+  // False when bot is offline (BOT-C will drive heartbeat; default true until then).
+  bool online = 7;
 }
 
 message ListSlashCommandsForChatRequest {

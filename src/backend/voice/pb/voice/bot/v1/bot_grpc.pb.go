@@ -41,6 +41,8 @@ const (
 	BotService_InstallBotInSpace_FullMethodName        = "/voice.bot.v1.BotService/InstallBotInSpace"
 	BotService_UninstallBotFromSpace_FullMethodName    = "/voice.bot.v1.BotService/UninstallBotFromSpace"
 	BotService_ListInstalledBots_FullMethodName        = "/voice.bot.v1.BotService/ListInstalledBots"
+	BotService_ListBotsInChat_FullMethodName           = "/voice.bot.v1.BotService/ListBotsInChat"
+	BotService_SetBotChatEnabled_FullMethodName        = "/voice.bot.v1.BotService/SetBotChatEnabled"
 	BotService_ExecuteSlashInteraction_FullMethodName  = "/voice.bot.v1.BotService/ExecuteSlashInteraction"
 	BotService_ListSlashCommandsForChat_FullMethodName = "/voice.bot.v1.BotService/ListSlashCommandsForChat"
 	BotService_CompleteInteraction_FullMethodName      = "/voice.bot.v1.BotService/CompleteInteraction"
@@ -77,6 +79,8 @@ type BotServiceClient interface {
 	InstallBotInSpace(ctx context.Context, in *InstallBotInSpaceRequest, opts ...grpc.CallOption) (*InstallBotInSpaceResponse, error)
 	UninstallBotFromSpace(ctx context.Context, in *UninstallBotFromSpaceRequest, opts ...grpc.CallOption) (*UninstallBotFromSpaceResponse, error)
 	ListInstalledBots(ctx context.Context, in *ListInstalledBotsRequest, opts ...grpc.CallOption) (*ListInstalledBotsResponse, error)
+	ListBotsInChat(ctx context.Context, in *ListBotsInChatRequest, opts ...grpc.CallOption) (*ListBotsInChatResponse, error)
+	SetBotChatEnabled(ctx context.Context, in *SetBotChatEnabledRequest, opts ...grpc.CallOption) (*SetBotChatEnabledResponse, error)
 	// Client slash interactions.
 	ExecuteSlashInteraction(ctx context.Context, in *ExecuteSlashInteractionRequest, opts ...grpc.CallOption) (*ExecuteSlashInteractionResponse, error)
 	ListSlashCommandsForChat(ctx context.Context, in *ListSlashCommandsForChatRequest, opts ...grpc.CallOption) (*ListSlashCommandsForChatResponse, error)
@@ -321,6 +325,26 @@ func (c *botServiceClient) ListInstalledBots(ctx context.Context, in *ListInstal
 	return out, nil
 }
 
+func (c *botServiceClient) ListBotsInChat(ctx context.Context, in *ListBotsInChatRequest, opts ...grpc.CallOption) (*ListBotsInChatResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListBotsInChatResponse)
+	err := c.cc.Invoke(ctx, BotService_ListBotsInChat_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *botServiceClient) SetBotChatEnabled(ctx context.Context, in *SetBotChatEnabledRequest, opts ...grpc.CallOption) (*SetBotChatEnabledResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetBotChatEnabledResponse)
+	err := c.cc.Invoke(ctx, BotService_SetBotChatEnabled_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *botServiceClient) ExecuteSlashInteraction(ctx context.Context, in *ExecuteSlashInteractionRequest, opts ...grpc.CallOption) (*ExecuteSlashInteractionResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ExecuteSlashInteractionResponse)
@@ -391,6 +415,8 @@ type BotServiceServer interface {
 	InstallBotInSpace(context.Context, *InstallBotInSpaceRequest) (*InstallBotInSpaceResponse, error)
 	UninstallBotFromSpace(context.Context, *UninstallBotFromSpaceRequest) (*UninstallBotFromSpaceResponse, error)
 	ListInstalledBots(context.Context, *ListInstalledBotsRequest) (*ListInstalledBotsResponse, error)
+	ListBotsInChat(context.Context, *ListBotsInChatRequest) (*ListBotsInChatResponse, error)
+	SetBotChatEnabled(context.Context, *SetBotChatEnabledRequest) (*SetBotChatEnabledResponse, error)
 	// Client slash interactions.
 	ExecuteSlashInteraction(context.Context, *ExecuteSlashInteractionRequest) (*ExecuteSlashInteractionResponse, error)
 	ListSlashCommandsForChat(context.Context, *ListSlashCommandsForChatRequest) (*ListSlashCommandsForChatResponse, error)
@@ -471,6 +497,12 @@ func (UnimplementedBotServiceServer) UninstallBotFromSpace(context.Context, *Uni
 }
 func (UnimplementedBotServiceServer) ListInstalledBots(context.Context, *ListInstalledBotsRequest) (*ListInstalledBotsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListInstalledBots not implemented")
+}
+func (UnimplementedBotServiceServer) ListBotsInChat(context.Context, *ListBotsInChatRequest) (*ListBotsInChatResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListBotsInChat not implemented")
+}
+func (UnimplementedBotServiceServer) SetBotChatEnabled(context.Context, *SetBotChatEnabledRequest) (*SetBotChatEnabledResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetBotChatEnabled not implemented")
 }
 func (UnimplementedBotServiceServer) ExecuteSlashInteraction(context.Context, *ExecuteSlashInteractionRequest) (*ExecuteSlashInteractionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ExecuteSlashInteraction not implemented")
@@ -894,6 +926,42 @@ func _BotService_ListInstalledBots_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BotService_ListBotsInChat_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListBotsInChatRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BotServiceServer).ListBotsInChat(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BotService_ListBotsInChat_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BotServiceServer).ListBotsInChat(ctx, req.(*ListBotsInChatRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BotService_SetBotChatEnabled_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetBotChatEnabledRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BotServiceServer).SetBotChatEnabled(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BotService_SetBotChatEnabled_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BotServiceServer).SetBotChatEnabled(ctx, req.(*SetBotChatEnabledRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _BotService_ExecuteSlashInteraction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ExecuteSlashInteractionRequest)
 	if err := dec(in); err != nil {
@@ -1056,6 +1124,14 @@ var BotService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListInstalledBots",
 			Handler:    _BotService_ListInstalledBots_Handler,
+		},
+		{
+			MethodName: "ListBotsInChat",
+			Handler:    _BotService_ListBotsInChat_Handler,
+		},
+		{
+			MethodName: "SetBotChatEnabled",
+			Handler:    _BotService_SetBotChatEnabled_Handler,
 		},
 		{
 			MethodName: "ExecuteSlashInteraction",

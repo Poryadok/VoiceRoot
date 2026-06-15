@@ -47,10 +47,15 @@ class SlashCommandMenuSheet extends ConsumerWidget {
               padding: EdgeInsets.all(24),
               child: Center(child: CircularProgressIndicator()),
             ),
-            error: (_, _) => VoiceStatePanel(
+            error: (error, _) => VoiceStatePanel(
               title: l10n.slashCommandsTitle,
-              message: l10n.chatRoomEmptyHint,
-              icon: Icons.smart_toy_outlined,
+              message: error is BotsCommandsLoadException
+                  ? error.message
+                  : l10n.slashCommandsLoadError,
+              icon: Icons.cloud_off_outlined,
+              actionLabel: l10n.commonRetry,
+              onAction: () =>
+                  ref.invalidate(slashCommandsForChatProvider(chatId)),
             ),
             data: (commands) {
               final filtered = normalizedFilter.isEmpty
@@ -69,7 +74,7 @@ class SlashCommandMenuSheet extends ConsumerWidget {
               if (filtered.isEmpty) {
                 return VoiceStatePanel(
                   title: l10n.slashCommandsTitle,
-                  message: l10n.chatRoomEmptyHint,
+                  message: l10n.slashCommandsEmpty,
                   icon: Icons.smart_toy_outlined,
                 );
               }
@@ -91,18 +96,36 @@ class SlashCommandMenuSheet extends ConsumerWidget {
                     );
                   }
                   final cmd = (entry as _SlashMenuItem).command;
-                  return ListTile(
-                    key: ValueKey(
-                      'slash_command_${cmd.botId}_${cmd.fullCommandName}',
+                  final offline = !cmd.online;
+                  return Tooltip(
+                    message: offline ? l10n.botUnavailableTooltip : '',
+                    child: ListTile(
+                      key: ValueKey(
+                        'slash_command_${cmd.botId}_${cmd.fullCommandName}',
+                      ),
+                      enabled: !offline,
+                      leading: Icon(
+                        Icons.terminal,
+                        color: offline
+                            ? voice.textDisabled
+                            : voice.profileAccent,
+                      ),
+                      title: Text(
+                        cmd.displayName,
+                        style: offline
+                            ? TextStyle(color: voice.textDisabled)
+                            : null,
+                      ),
+                      subtitle: Text(
+                        cmd.description.isEmpty ? cmd.botName : cmd.description,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: offline
+                            ? TextStyle(color: voice.textDisabled)
+                            : null,
+                      ),
+                      onTap: offline ? null : () => onSelected(cmd),
                     ),
-                    leading: Icon(Icons.terminal, color: voice.profileAccent),
-                    title: Text(cmd.displayName),
-                    subtitle: Text(
-                      cmd.description.isEmpty ? cmd.botName : cmd.description,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    onTap: () => onSelected(cmd),
                   );
                 },
               );

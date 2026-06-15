@@ -66,6 +66,20 @@ func (f *fakeBotClient) AutocompleteSlashOption(ctx context.Context, in *botv1.A
 	}, nil
 }
 
+func (f *fakeBotClient) ListBotsInChat(ctx context.Context, in *botv1.ListBotsInChatRequest, _ ...grpc.CallOption) (*botv1.ListBotsInChatResponse, error) {
+	return &botv1.ListBotsInChatResponse{
+		Bots: []*botv1.ChatBotEntry{{
+			Bot:         &botv1.Bot{Id: "bot-1", Name: "TestBot"},
+			Enabled:     true,
+			Whitelisted: true,
+		}},
+	}, nil
+}
+
+func (f *fakeBotClient) SetBotChatEnabled(ctx context.Context, in *botv1.SetBotChatEnabledRequest, _ ...grpc.CallOption) (*botv1.SetBotChatEnabledResponse, error) {
+	return &botv1.SetBotChatEnabledResponse{}, nil
+}
+
 func (f *fakeBotClient) EditBotMessage(ctx context.Context, in *botv1.EditBotMessageRequest, _ ...grpc.CallOption) (*botv1.EditBotMessageResponse, error) {
 	return &botv1.EditBotMessageResponse{}, nil
 }
@@ -175,4 +189,28 @@ func TestServeBots_webhookURLRoutesRegistered(t *testing.T) {
 	patchRec := httptest.NewRecorder()
 	require.True(t, tc.serveBots(patchRec, patchReq, "bot-1/webhook"))
 	require.Equal(t, http.StatusNoContent, patchRec.Code)
+}
+
+func TestServeBots_listBotsInChatRouteRegistered(t *testing.T) {
+	tc := newTranscoder(&grpcClients{bot: &fakeBotClient{}})
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/bots/chats/chat-1?space_id=space-1&chat_type=CHAT_TYPE_CHANNEL", http.NoBody)
+	req.Header.Set("Authorization", "Bearer token")
+	req.Header.Set("X-Voice-User-Id", "00000000-0000-0000-0000-000000000001")
+	req.Header.Set("X-Voice-Profile-Id", "00000000-0000-0000-0000-000000000002")
+	rec := httptest.NewRecorder()
+	ok := tc.serveBots(rec, req, "chats/chat-1")
+	require.True(t, ok)
+	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestServeBots_setBotChatEnabledRouteRegistered(t *testing.T) {
+	tc := newTranscoder(&grpcClients{bot: &fakeBotClient{}})
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/bots/bot-1/chats/chat-1/enabled", http.NoBody)
+	req.Header.Set("Authorization", "Bearer token")
+	req.Header.Set("X-Voice-User-Id", "00000000-0000-0000-0000-000000000001")
+	req.Header.Set("X-Voice-Profile-Id", "00000000-0000-0000-0000-000000000002")
+	rec := httptest.NewRecorder()
+	ok := tc.serveBots(rec, req, "bot-1/chats/chat-1/enabled")
+	require.True(t, ok)
+	require.Equal(t, http.StatusNoContent, rec.Code)
 }

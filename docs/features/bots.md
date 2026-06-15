@@ -146,7 +146,7 @@ commands:
 
 ### Polling (v1, для разработки)
 
-Альтернатива вебхуку для локальной разработки — бот сам опрашивает endpoint платформы: `GET /api/bots/me/interactions/poll`. Не требует публичного URL. **Только для тестирования**, не рекомендуется для production.
+Альтернатива вебхуку для локальной разработки — бот сам опрашивает endpoint платформы: `GET /api/bots/me/interactions/poll`. Не требует публичного URL. **Политика:** локальные тесты — только polling; webhook — staging и production (E2E webhook на staging).
 
 ---
 

@@ -14,4 +14,15 @@ void main() {
     expect(cmd.displayName, '/queue join');
     expect(cmd.menuGroupKey, 'QueueBot::queue');
   });
+
+  test('BotSlashCommand includes online flag', () {
+    const cmd = BotSlashCommand(
+      botId: 'b',
+      botName: 'Bot',
+      name: 'ping',
+      description: 'd',
+      online: false,
+    );
+    expect(cmd.online, isFalse);
+  });
 }

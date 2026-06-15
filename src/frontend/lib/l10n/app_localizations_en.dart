@@ -308,6 +308,52 @@ class AppLocalizationsEn extends AppLocalizations {
   String get slashCommandsTitle => 'Commands';
 
   @override
+  String get slashCommandsLoadError => 'Could not load bot commands.';
+
+  @override
+  String get slashCommandsEmpty => 'No bot commands in this chat.';
+
+  @override
+  String get botUnavailableTooltip => 'Bot unavailable';
+
+  @override
+  String get slashCommandRun => 'Run command';
+
+  @override
+  String get chatBotsSectionTitle => 'Bots';
+
+  @override
+  String get chatBotsLoadError => 'Could not load bots for this chat.';
+
+  @override
+  String get chatBotsEmpty => 'No bots installed in this space.';
+
+  @override
+  String get spaceBotsTitle => 'Space bots';
+
+  @override
+  String get spaceBotsInstall => 'Install bot';
+
+  @override
+  String get spaceBotsUninstall => 'Remove from space';
+
+  @override
+  String get spaceBotsInstallConfirm => 'Install';
+
+  @override
+  String get spaceBotsScopeWarning =>
+      'This bot requests privileged access to read chat history.';
+
+  @override
+  String get spaceBotsSelectChats => 'Allowed text chats';
+
+  @override
+  String get spaceBotsInstallSuccess => 'Bot installed.';
+
+  @override
+  String get spaceBotsUninstallSuccess => 'Bot removed from space.';
+
+  @override
   String get ephemeralMessageLabel => 'Only visible to you';
 
   @override

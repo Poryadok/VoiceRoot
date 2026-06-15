@@ -20,11 +20,11 @@
 - [x] **Лицензия crypto (P0 E2E)** — решено: оставляем `libsignal_protocol_dart` (GPL-3.0); Flutter-клиент — open source под GPL-3.0, бэкенд проприетарный.
 - [x] **Offline cache (P2 E2E)** — решено: encrypted SQLite + ключ в secure storage; decrypted bodies в кэше для локального поиска ([encryption.md](features/encryption.md) § Offline cache).
 - [x] **Safety number / TOFU (P2 E2E)** — решено: v1 — implicit TOFU; баннер при смене identity key; короткий код верификации `XX-XX-XX` (6 символов) в инфо DM, опционально ([encryption.md](features/encryption.md) § Доверие к ключам).
+- [x] **Public webhook ingress (dev, P2 боты)** — решено: локально — только polling; webhook остаётся для staging/prod, E2E webhook проверяется на staging (tunnel/ngrok в dev не требуется).
 
 ### Секреты, аккаунты, внешние сервисы
 
 - [ ] **Developer Portal OAuth** — завести OAuth/OIDC app (или временно оставить paste JWT): `client_id`, `client_secret`, redirect URI (`http://localhost:9082/callback` в dev), issuer. Агент может сделать flow **после** того как ключи лежат в `.env` / compose secrets.
-- [ ] **Public webhook ingress (dev, P2 боты)** — если боты с webhook, а не polling: tunnel (ngrok / Cloudflare Tunnel) или явное «только polling в dev». Нужен публичный URL или токен tunnel — агент не выдаёт.
 - [ ] **Buf Schema Registry (позже)** — аккаунт BSR, имя модуля, `BUF_TOKEN` в CI. Агент обновит workflow **после** создания registry.
 
 ### Запуск стенда (вы, не агент)
@@ -132,13 +132,23 @@
 
 ### Batch BOT-B — «Bot UX во Flutter»
 
-- [ ] **Display name бота в Messaging** — `sender_profile_id` → имя в пузырях.
-- [ ] **Slash UI** — опции команд; не глотать `BotsApiFailure`; greyout по offline (см. BOT-C для backend online).
-- [ ] **Per-chat bot toggles** — RPC `enabled` + UI в настройках текстового чата.
-- [ ] **Install bot в клиенте** — scopes human-readable, whitelist, `SPACE_MANAGE_BOTS`.
-- [ ] **Uninstall cleanup** — роли, pins, команды из меню при uninstall.
+- [x] **Display name бота в Messaging** — `sender_profile_id` → имя в пузырях.
+- [x] **Slash UI** — опции команд; не глотать `BotsApiFailure`; greyout по offline (см. BOT-C для backend online).
+- [x] **Per-chat bot toggles** — RPC `enabled` + UI в настройках текстового чата.
+- [x] **Install bot в клиенте** — scopes human-readable, whitelist, `SPACE_MANAGE_BOTS`.
+- [x] **Uninstall cleanup** — роли, pins, команды из меню при uninstall.
 
 **Промпт-якорь:** `Phase 16 bots — batch BOT-B Flutter UX`.
+
+**Аудит (post BOT-B):**
+- [ ] **Uninstall roles/pins** — `UninstallBotFromSpace` очищает whitelist; Role Service + Messaging pins при удалении бота — BOT-C/отдельная задача.
+- [ ] **Bot online heartbeat** — `SlashCommand.online` всегда `true` до BOT-C; greyout UI готов на клиенте.
+- [ ] **Slash option types P2** — `user`/`channel`/`role`/`attachment` pickers; v1: `string`/`integer`/`boolean`.
+- [ ] **grpcsvc coverage ≥80%** — ~56% после BOT-B; добить в BOT-D.
+- [ ] **Gateway bot routes в api-gateway.md** — `ListBotsInChat`, `SetBotChatEnabled` не в CONTRACT_MATRIX.
+- [ ] **Flutter live E2E install+pong** — `phase16_bots_slash_live_test` + install flow с `VOICE_RUN_LIVE_INTEGRATION=true` (BOT-D).
+- [ ] **Страница бота `voice.app/bots/{slug}`** — space sheet вместо portal (BOT-D P2).
+- [ ] **bot-service.md stale** — нет `ListBotsInChat`, `SetBotChatEnabled`, `actor_profile_id`.
 
 ---
 
@@ -184,7 +194,7 @@
 | Если готовы… | Дайте агенту batch |
 |--------------|-------------------|
 | E2E P0 (GPL ок) | **E2E-A** (самый заметный user-facing сдвиг) |
-| Нужен быстрый bot win | **BOT-A** + **Slash UI** из BOT-B |
+| Нужен быстрый bot win | **BOT-C** (online heartbeat) или **BOT-D** (live E2E) |
 | Есть OAuth keys в `.env` | **BOT-D** |
 | Только доки/онбординг | **Infra** |
 

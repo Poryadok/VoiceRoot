@@ -79,11 +79,21 @@ const Bot$json = {
       '10': 'statusEnum',
       '17': true
     },
+    {
+      '1': 'actor_profile_id',
+      '3': 12,
+      '4': 1,
+      '5': 9,
+      '9': 3,
+      '10': 'actorProfileId',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_avatar_url'},
     {'1': '_webhook_url'},
     {'1': '_status_enum'},
+    {'1': '_actor_profile_id'},
   ],
 };
 
@@ -96,8 +106,9 @@ final $typed_data.Uint8List botDescriptor = $convert.base64Decode(
     'bGxpbmdNb2RlEh8KC3Njb3Blc19qc29uGAggASgJUgpzY29wZXNKc29uEhYKBnN0YXR1cxgJIA'
     'EoCVIGc3RhdHVzEjkKCmNyZWF0ZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0'
     'YW1wUgljcmVhdGVkQXQSRgoLc3RhdHVzX2VudW0YCyABKA4yIC52b2ljZS5ib3QudjEuQm90TG'
-    'lmZWN5Y2xlU3RhdHVzSAJSCnN0YXR1c0VudW2IAQFCDQoLX2F2YXRhcl91cmxCDgoMX3dlYmhv'
-    'b2tfdXJsQg4KDF9zdGF0dXNfZW51bQ==');
+    'lmZWN5Y2xlU3RhdHVzSAJSCnN0YXR1c0VudW2IAQESLQoQYWN0b3JfcHJvZmlsZV9pZBgMIAEo'
+    'CUgDUg5hY3RvclByb2ZpbGVJZIgBAUINCgtfYXZhdGFyX3VybEIOCgxfd2ViaG9va191cmxCDg'
+    'oMX3N0YXR1c19lbnVtQhMKEV9hY3Rvcl9wcm9maWxlX2lk');
 
 @$core.Deprecated('Use registerBotRequestDescriptor instead')
 const RegisterBotRequest$json = {
@@ -975,6 +986,103 @@ final $typed_data.Uint8List listInstalledBotsResponseDescriptor =
         'ChlMaXN0SW5zdGFsbGVkQm90c1Jlc3BvbnNlEkEKDmluc3RhbGxlZF9ib3RzGAEgAygLMhoudm'
         '9pY2UuYm90LnYxLkluc3RhbGxlZEJvdFINaW5zdGFsbGVkQm90cw==');
 
+@$core.Deprecated('Use listBotsInChatRequestDescriptor instead')
+const ListBotsInChatRequest$json = {
+  '1': 'ListBotsInChatRequest',
+  '2': [
+    {
+      '1': 'chat',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.chat.v1.ChatRef',
+      '10': 'chat'
+    },
+    {'1': 'space_id', '3': 2, '4': 1, '5': 9, '10': 'spaceId'},
+  ],
+};
+
+/// Descriptor for `ListBotsInChatRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List listBotsInChatRequestDescriptor = $convert.base64Decode(
+    'ChVMaXN0Qm90c0luQ2hhdFJlcXVlc3QSKgoEY2hhdBgBIAEoCzIWLnZvaWNlLmNoYXQudjEuQ2'
+    'hhdFJlZlIEY2hhdBIZCghzcGFjZV9pZBgCIAEoCVIHc3BhY2VJZA==');
+
+@$core.Deprecated('Use chatBotEntryDescriptor instead')
+const ChatBotEntry$json = {
+  '1': 'ChatBotEntry',
+  '2': [
+    {
+      '1': 'bot',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.bot.v1.Bot',
+      '10': 'bot'
+    },
+    {'1': 'enabled', '3': 2, '4': 1, '5': 8, '10': 'enabled'},
+    {'1': 'whitelisted', '3': 3, '4': 1, '5': 8, '10': 'whitelisted'},
+  ],
+};
+
+/// Descriptor for `ChatBotEntry`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List chatBotEntryDescriptor = $convert.base64Decode(
+    'CgxDaGF0Qm90RW50cnkSIwoDYm90GAEgASgLMhEudm9pY2UuYm90LnYxLkJvdFIDYm90EhgKB2'
+    'VuYWJsZWQYAiABKAhSB2VuYWJsZWQSIAoLd2hpdGVsaXN0ZWQYAyABKAhSC3doaXRlbGlzdGVk');
+
+@$core.Deprecated('Use listBotsInChatResponseDescriptor instead')
+const ListBotsInChatResponse$json = {
+  '1': 'ListBotsInChatResponse',
+  '2': [
+    {
+      '1': 'bots',
+      '3': 1,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.bot.v1.ChatBotEntry',
+      '10': 'bots'
+    },
+  ],
+};
+
+/// Descriptor for `ListBotsInChatResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List listBotsInChatResponseDescriptor =
+    $convert.base64Decode(
+        'ChZMaXN0Qm90c0luQ2hhdFJlc3BvbnNlEi4KBGJvdHMYASADKAsyGi52b2ljZS5ib3QudjEuQ2'
+        'hhdEJvdEVudHJ5UgRib3Rz');
+
+@$core.Deprecated('Use setBotChatEnabledRequestDescriptor instead')
+const SetBotChatEnabledRequest$json = {
+  '1': 'SetBotChatEnabledRequest',
+  '2': [
+    {'1': 'bot_id', '3': 1, '4': 1, '5': 9, '10': 'botId'},
+    {
+      '1': 'chat',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.chat.v1.ChatRef',
+      '10': 'chat'
+    },
+    {'1': 'enabled', '3': 3, '4': 1, '5': 8, '10': 'enabled'},
+    {'1': 'space_id', '3': 4, '4': 1, '5': 9, '10': 'spaceId'},
+  ],
+};
+
+/// Descriptor for `SetBotChatEnabledRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List setBotChatEnabledRequestDescriptor = $convert.base64Decode(
+    'ChhTZXRCb3RDaGF0RW5hYmxlZFJlcXVlc3QSFQoGYm90X2lkGAEgASgJUgVib3RJZBIqCgRjaG'
+    'F0GAIgASgLMhYudm9pY2UuY2hhdC52MS5DaGF0UmVmUgRjaGF0EhgKB2VuYWJsZWQYAyABKAhS'
+    'B2VuYWJsZWQSGQoIc3BhY2VfaWQYBCABKAlSB3NwYWNlSWQ=');
+
+@$core.Deprecated('Use setBotChatEnabledResponseDescriptor instead')
+const SetBotChatEnabledResponse$json = {
+  '1': 'SetBotChatEnabledResponse',
+};
+
+/// Descriptor for `SetBotChatEnabledResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List setBotChatEnabledResponseDescriptor =
+    $convert.base64Decode('ChlTZXRCb3RDaGF0RW5hYmxlZFJlc3BvbnNl');
+
 @$core.Deprecated('Use slashCommandOptionDescriptor instead')
 const SlashCommandOption$json = {
   '1': 'SlashCommandOption',
@@ -1017,6 +1125,7 @@ const SlashCommand$json = {
       '10': 'groupName',
       '17': true
     },
+    {'1': 'online', '3': 7, '4': 1, '5': 8, '10': 'online'},
   ],
   '8': [
     {'1': '_group_name'},
@@ -1028,8 +1137,8 @@ final $typed_data.Uint8List slashCommandDescriptor = $convert.base64Decode(
     'CgxTbGFzaENvbW1hbmQSFQoGYm90X2lkGAEgASgJUgVib3RJZBIZCghib3RfbmFtZRgCIAEoCV'
     'IHYm90TmFtZRISCgRuYW1lGAMgASgJUgRuYW1lEiAKC2Rlc2NyaXB0aW9uGAQgASgJUgtkZXNj'
     'cmlwdGlvbhI6CgdvcHRpb25zGAUgAygLMiAudm9pY2UuYm90LnYxLlNsYXNoQ29tbWFuZE9wdG'
-    'lvblIHb3B0aW9ucxIiCgpncm91cF9uYW1lGAYgASgJSABSCWdyb3VwTmFtZYgBAUINCgtfZ3Jv'
-    'dXBfbmFtZQ==');
+    'lvblIHb3B0aW9ucxIiCgpncm91cF9uYW1lGAYgASgJSABSCWdyb3VwTmFtZYgBARIWCgZvbmxp'
+    'bmUYByABKAhSBm9ubGluZUINCgtfZ3JvdXBfbmFtZQ==');
 
 @$core.Deprecated('Use listSlashCommandsForChatRequestDescriptor instead')
 const ListSlashCommandsForChatRequest$json = {

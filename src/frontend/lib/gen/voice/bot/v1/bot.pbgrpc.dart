@@ -191,6 +191,20 @@ class BotServiceClient extends $grpc.Client {
     return $createUnaryCall(_$listInstalledBots, request, options: options);
   }
 
+  $grpc.ResponseFuture<$0.ListBotsInChatResponse> listBotsInChat(
+    $0.ListBotsInChatRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$listBotsInChat, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.SetBotChatEnabledResponse> setBotChatEnabled(
+    $0.SetBotChatEnabledRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$setBotChatEnabled, request, options: options);
+  }
+
   /// Client slash interactions.
   $grpc.ResponseFuture<$0.ExecuteSlashInteractionResponse>
       executeSlashInteraction(
@@ -338,6 +352,16 @@ class BotServiceClient extends $grpc.Client {
       '/voice.bot.v1.BotService/ListInstalledBots',
       ($0.ListInstalledBotsRequest value) => value.writeToBuffer(),
       $0.ListInstalledBotsResponse.fromBuffer);
+  static final _$listBotsInChat =
+      $grpc.ClientMethod<$0.ListBotsInChatRequest, $0.ListBotsInChatResponse>(
+          '/voice.bot.v1.BotService/ListBotsInChat',
+          ($0.ListBotsInChatRequest value) => value.writeToBuffer(),
+          $0.ListBotsInChatResponse.fromBuffer);
+  static final _$setBotChatEnabled = $grpc.ClientMethod<
+          $0.SetBotChatEnabledRequest, $0.SetBotChatEnabledResponse>(
+      '/voice.bot.v1.BotService/SetBotChatEnabled',
+      ($0.SetBotChatEnabledRequest value) => value.writeToBuffer(),
+      $0.SetBotChatEnabledResponse.fromBuffer);
   static final _$executeSlashInteraction = $grpc.ClientMethod<
           $0.ExecuteSlashInteractionRequest,
           $0.ExecuteSlashInteractionResponse>(
@@ -556,6 +580,24 @@ abstract class BotServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.ListInstalledBotsRequest.fromBuffer(value),
         ($0.ListInstalledBotsResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ListBotsInChatRequest,
+            $0.ListBotsInChatResponse>(
+        'ListBotsInChat',
+        listBotsInChat_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ListBotsInChatRequest.fromBuffer(value),
+        ($0.ListBotsInChatResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.SetBotChatEnabledRequest,
+            $0.SetBotChatEnabledResponse>(
+        'SetBotChatEnabled',
+        setBotChatEnabled_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.SetBotChatEnabledRequest.fromBuffer(value),
+        ($0.SetBotChatEnabledResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.ExecuteSlashInteractionRequest,
             $0.ExecuteSlashInteractionResponse>(
         'ExecuteSlashInteraction',
@@ -784,6 +826,24 @@ abstract class BotServiceBase extends $grpc.Service {
 
   $async.Future<$0.ListInstalledBotsResponse> listInstalledBots(
       $grpc.ServiceCall call, $0.ListInstalledBotsRequest request);
+
+  $async.Future<$0.ListBotsInChatResponse> listBotsInChat_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.ListBotsInChatRequest> $request) async {
+    return listBotsInChat($call, await $request);
+  }
+
+  $async.Future<$0.ListBotsInChatResponse> listBotsInChat(
+      $grpc.ServiceCall call, $0.ListBotsInChatRequest request);
+
+  $async.Future<$0.SetBotChatEnabledResponse> setBotChatEnabled_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.SetBotChatEnabledRequest> $request) async {
+    return setBotChatEnabled($call, await $request);
+  }
+
+  $async.Future<$0.SetBotChatEnabledResponse> setBotChatEnabled(
+      $grpc.ServiceCall call, $0.SetBotChatEnabledRequest request);
 
   $async.Future<$0.ExecuteSlashInteractionResponse> executeSlashInteraction_Pre(
       $grpc.ServiceCall $call,

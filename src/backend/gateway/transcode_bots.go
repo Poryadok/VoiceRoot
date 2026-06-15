@@ -170,6 +170,51 @@ func (t *transcoder) serveBots(w http.ResponseWriter, r *http.Request, rest stri
 		writeProtoJSON(w, http.StatusOK, resp)
 		return true
 
+	case r.Method == http.MethodGet && strings.HasPrefix(rest, "chats/"):
+		chatID := strings.TrimPrefix(rest, "chats/")
+		chatID = strings.Trim(chatID, "/")
+		chatType := queryFirst(r, "chat_type")
+		if chatType == "" {
+			chatType = "CHAT_TYPE_CHANNEL"
+		}
+		spaceID := queryFirst(r, "space_id")
+		ref := &chatv1.ChatRef{Id: chatID, Type: chatTypePtr(chatTypeToEnum(chatType))}
+		resp, err := t.clients.bot.ListBotsInChat(ctx, &botv1.ListBotsInChatRequest{
+			Chat:    ref,
+			SpaceId: spaceID,
+		})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodPatch && strings.Contains(rest, "/chats/") && strings.HasSuffix(rest, "/enabled"):
+		parts := strings.Split(strings.Trim(rest, "/"), "/")
+		// bot_id/chats/chat_id/enabled
+		if len(parts) == 4 && parts[1] == "chats" && parts[3] == "enabled" {
+			req := &botv1.SetBotChatEnabledRequest{BotId: parts[0]}
+			if err := readProtoJSON(r, req); err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			req.BotId = parts[0]
+			if req.GetChat() == nil {
+				req.Chat = &chatv1.ChatRef{Id: parts[2]}
+			} else if req.GetChat().GetId() == "" {
+				req.Chat.Id = parts[2]
+			}
+			_, err := t.clients.bot.SetBotChatEnabled(ctx, req)
+			if err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return true
+		}
+		return false
+
 	case r.Method == http.MethodPost && strings.HasSuffix(rest, "/manifest"):
 		botID := strings.TrimSuffix(rest, "/manifest")
 		botID = strings.Trim(botID, "/")

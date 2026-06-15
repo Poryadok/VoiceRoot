@@ -308,6 +308,52 @@ class AppLocalizationsRu extends AppLocalizations {
   String get slashCommandsTitle => 'Команды';
 
   @override
+  String get slashCommandsLoadError => 'Не удалось загрузить команды ботов.';
+
+  @override
+  String get slashCommandsEmpty => 'В этом чате нет команд ботов.';
+
+  @override
+  String get botUnavailableTooltip => 'Бот недоступен';
+
+  @override
+  String get slashCommandRun => 'Выполнить команду';
+
+  @override
+  String get chatBotsSectionTitle => 'Боты';
+
+  @override
+  String get chatBotsLoadError => 'Не удалось загрузить ботов для чата.';
+
+  @override
+  String get chatBotsEmpty => 'В спейсе нет установленных ботов.';
+
+  @override
+  String get spaceBotsTitle => 'Боты спейса';
+
+  @override
+  String get spaceBotsInstall => 'Установить бота';
+
+  @override
+  String get spaceBotsUninstall => 'Удалить из спейса';
+
+  @override
+  String get spaceBotsInstallConfirm => 'Установить';
+
+  @override
+  String get spaceBotsScopeWarning =>
+      'Бот запрашивает привилегированный доступ к истории чата.';
+
+  @override
+  String get spaceBotsSelectChats => 'Разрешённые текстовые чаты';
+
+  @override
+  String get spaceBotsInstallSuccess => 'Бот установлен.';
+
+  @override
+  String get spaceBotsUninstallSuccess => 'Бот удалён из спейса.';
+
+  @override
   String get ephemeralMessageLabel => 'Только для вас';
 
   @override

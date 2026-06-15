@@ -13,6 +13,9 @@ import '../core/voice_state_panel.dart';
 import 'group_members_sheet.dart';
 import '../space/space_chat_override_sheet.dart';
 import '../../backend/space_permissions.dart';
+import '../../backend/bots_client.dart';
+import '../../state/auth_providers.dart';
+import '../../state/bot_providers.dart';
 import '../../state/space_providers.dart';
 import 'e2e_chat_settings.dart';
 
@@ -79,6 +82,11 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
         ],
         if (spaceId != null)
           _ChatOverrideBar(spaceId: spaceId, chatId: widget.chatId),
+        if (spaceId != null && widget.isGroup)
+          ChatBotsSettingsSection(
+            chatId: widget.chatId,
+            spaceId: spaceId,
+          ),
         if (!widget.isGroup) DmE2eSettingsSection(chatId: widget.chatId),
         TabBar(
           controller: _tabs,
@@ -323,13 +331,6 @@ void openChatInfoPanel(
   ref.read(shellNavigationProvider).toggleSidePanel(ShellSidePanel.chatInfo);
 }
 
-String? _spaceIdForChat(WidgetRef ref, String chatId) {
-  for (final item in ref.watch(chatListControllerProvider).items) {
-    if (item.chatId == chatId) return item.chat.spaceId;
-  }
-  return null;
-}
-
 class _ChatOverrideBar extends ConsumerWidget {
   const _ChatOverrideBar({required this.spaceId, required this.chatId});
 
@@ -363,6 +364,131 @@ class _ChatOverrideBar extends ConsumerWidget {
         icon: const Icon(Icons.admin_panel_settings_outlined, size: 18),
         label: Text(l10n.spaceChatOverrideTitle),
       ),
+    );
+  }
+}
+
+String? _spaceIdForChat(WidgetRef ref, String chatId) {
+  for (final item in ref.watch(chatListControllerProvider).items) {
+    if (item.chatId == chatId) return item.chat.spaceId;
+  }
+  return null;
+}
+
+/// Per-chat bot enable toggles — docs/features/bots.md.
+class ChatBotsSettingsSection extends ConsumerWidget {
+  const ChatBotsSettingsSection({
+    super.key,
+    required this.chatId,
+    required this.spaceId,
+  });
+
+  static const Key sectionKey = Key('chat_info_bots_section');
+
+  final String chatId;
+  final String spaceId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context)!;
+    final voice = VoiceColors.of(context);
+    final canManage = ref
+            .watch(
+              spacePermissionProvider((
+                spaceId: spaceId,
+                permission: SpacePermissions.spaceManageBots,
+                chatId: null,
+                voiceRoomId: null,
+              )),
+            )
+            .valueOrNull ??
+        false;
+    if (!canManage) return const SizedBox.shrink();
+
+    final botsAsync = ref.watch(
+      botsInChatProvider((chatId: chatId, spaceId: spaceId)),
+    );
+
+    return Column(
+      key: sectionKey,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Divider(height: 1, color: voice.borderDefault),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: Text(
+            l10n.chatBotsSectionTitle,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+        ),
+        botsAsync.when(
+          loading: () => const Padding(
+            padding: EdgeInsets.all(16),
+            child: Center(child: CircularProgressIndicator()),
+          ),
+          error: (error, _) => Padding(
+            padding: const EdgeInsets.all(16),
+            child: VoiceStatePanel(
+              title: l10n.chatBotsSectionTitle,
+              message: l10n.chatBotsLoadError,
+              icon: Icons.cloud_off_outlined,
+              actionLabel: l10n.commonRetry,
+              onAction: () => ref.invalidate(
+                botsInChatProvider((chatId: chatId, spaceId: spaceId)),
+              ),
+            ),
+          ),
+          data: (bots) {
+            if (bots.isEmpty) {
+              return Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(l10n.chatBotsEmpty),
+              );
+            }
+            return Column(
+              children: [
+                for (final entry in bots)
+                  SwitchListTile(
+                    key: Key('chat_bot_toggle_${entry.bot.id}'),
+                    title: Text(entry.bot.name),
+                    subtitle: entry.whitelisted
+                        ? null
+                        : Text(l10n.spaceBotsSelectChats),
+                    value: entry.enabled && entry.whitelisted,
+                    onChanged: (enabled) async {
+                      final auth = ref.read(authorizationHeaderProvider);
+                      if (auth == null) return;
+                      final chatType = ref.read(chatTypeForChatProvider(chatId)) ??
+                          'CHAT_TYPE_CHANNEL';
+                      final result = await ref
+                          .read(voiceBotsClientProvider)
+                          .setBotChatEnabled(
+                            authorization: auth,
+                            botId: entry.bot.id,
+                            chatId: chatId,
+                            chatType: chatType,
+                            spaceId: spaceId,
+                            enabled: enabled,
+                          );
+                      if (!context.mounted) return;
+                      switch (result) {
+                        case BotsApiOk():
+                          ref.invalidate(
+                            botsInChatProvider((chatId: chatId, spaceId: spaceId)),
+                          );
+                          ref.invalidate(slashCommandsForChatProvider(chatId));
+                        case BotsApiFailure(:final message):
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(l10n.chatRoomError(message))),
+                          );
+                      }
+                    },
+                  ),
+              ],
+            );
+          },
+        ),
+      ],
     );
   }
 }

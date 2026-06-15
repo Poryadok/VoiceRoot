@@ -154,6 +154,77 @@ WHERE i.space_id = $1 AND b.status = 'live'`, spaceID)
 	return &botv1.ListInstalledBotsResponse{InstalledBots: out}, nil
 }
 
+func (s *BotGRPC) checkManageBots(ctx context.Context, spaceID uuid.UUID) (uuid.UUID, error) {
+	profile, ok := authctx.ProfileID(ctx)
+	if !ok {
+		return uuid.Nil, status.Error(codes.Unauthenticated, "missing profile")
+	}
+	if s.Role != nil {
+		resp, err := s.Role.CheckPermission(ctx, &rolev1.CheckPermissionRequest{
+			SpaceId:        spaceID.String(),
+			ProfileId:      profile.String(),
+			PermissionName: "SPACE_MANAGE_BOTS",
+		})
+		if err != nil {
+			return uuid.Nil, status.Error(codes.Internal, err.Error())
+		}
+		if !resp.GetAllowed() {
+			return uuid.Nil, status.Error(codes.PermissionDenied, "SPACE_MANAGE_BOTS required")
+		}
+	}
+	return profile, nil
+}
+
+func (s *BotGRPC) ListBotsInChat(ctx context.Context, req *botv1.ListBotsInChatRequest) (*botv1.ListBotsInChatResponse, error) {
+	chatID, err := parseUUID("chat.id", req.GetChat().GetId())
+	if err != nil {
+		return nil, err
+	}
+	spaceID, err := parseUUID("space_id", req.GetSpaceId())
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.checkManageBots(ctx, spaceID); err != nil {
+		return nil, err
+	}
+	rows, err := s.Store.ListBotsInChat(ctx, chatID, spaceID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	out := make([]*botv1.ChatBotEntry, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, &botv1.ChatBotEntry{
+			Bot:         botToProto(row.BotRow),
+			Enabled:     row.Enabled,
+			Whitelisted: row.Whitelisted,
+		})
+	}
+	return &botv1.ListBotsInChatResponse{Bots: out}, nil
+}
+
+func (s *BotGRPC) SetBotChatEnabled(ctx context.Context, req *botv1.SetBotChatEnabledRequest) (*botv1.SetBotChatEnabledResponse, error) {
+	botID, err := parseUUID("bot_id", req.GetBotId())
+	if err != nil {
+		return nil, err
+	}
+	chatID, err := parseUUID("chat.id", req.GetChat().GetId())
+	if err != nil {
+		return nil, err
+	}
+	spaceID, err := parseUUID("space_id", req.GetSpaceId())
+	if err != nil {
+		return nil, err
+	}
+	profile, err := s.checkManageBots(ctx, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.Store.SetChatEnabled(ctx, botID, chatID, spaceID, profile, req.GetEnabled()); err != nil {
+		return nil, mapStoreErr(err)
+	}
+	return &botv1.SetBotChatEnabledResponse{}, nil
+}
+
 func (s *BotGRPC) ListSlashCommandsForChat(ctx context.Context, req *botv1.ListSlashCommandsForChatRequest) (*botv1.ListSlashCommandsForChatResponse, error) {
 	chatID, err := parseUUID("chat.id", req.GetChat().GetId())
 	if err != nil {
@@ -182,6 +253,7 @@ ORDER BY b.name, c.name`, chatID)
 			BotName:     botName,
 			Name:        name,
 			Description: desc,
+			Online:      true,
 		}
 		if parts := strings.SplitN(strings.TrimSpace(name), " ", 2); len(parts) == 2 {
 			group := parts[0]

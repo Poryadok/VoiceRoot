@@ -4,6 +4,7 @@ abstract final class SpacePermissions {
   static const spaceManageSettings = 'SPACE_MANAGE_SETTINGS';
   static const spaceManageRoles = 'SPACE_MANAGE_ROLES';
   static const spaceManageInvites = 'SPACE_MANAGE_INVITES';
+  static const spaceManageBots = 'SPACE_MANAGE_BOTS';
   static const memberKick = 'MEMBER_KICK';
   static const memberBan = 'MEMBER_BAN';
   static const memberAssignRoles = 'MEMBER_ASSIGN_ROLES';

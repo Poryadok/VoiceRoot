@@ -115,6 +115,7 @@ class GatewayHttpClient {
     String? authorization,
     required GeneratedMessage body,
     required T Function() createEmpty,
+    bool allowNoContent = false,
   }) {
     return _send(
       (preferProvider) => _http.patch(
@@ -127,6 +128,7 @@ class GatewayHttpClient {
         body: encodeGatewayProto(body),
       ),
       createEmpty: createEmpty,
+      allowNoContent: allowNoContent,
       isAuthRoute: _isAuthRoute(uri),
     );
   }

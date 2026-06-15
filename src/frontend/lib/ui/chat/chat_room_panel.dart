@@ -547,6 +547,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   ephemeralMessages: ephemeralMessages,
                   deferredInteraction: deferredInteraction,
                   activeId: activeId,
+                  isGroup: isGroup,
                   l10n: l10n,
                   initialUnreadCount: _initialUnreadCount,
                   onLongPress: (msg, isMine) =>
@@ -1206,6 +1207,7 @@ class _MessageListView extends ConsumerWidget {
     required this.ephemeralMessages,
     this.deferredInteraction,
     required this.activeId,
+    required this.isGroup,
     required this.l10n,
     required this.initialUnreadCount,
     required this.onLongPress,
@@ -1217,6 +1219,7 @@ class _MessageListView extends ConsumerWidget {
   final List<EphemeralBotMessage> ephemeralMessages;
   final DeferredBotInteraction? deferredInteraction;
   final String? activeId;
+  final bool isGroup;
   final AppLocalizations l10n;
   final int initialUnreadCount;
   final void Function(VoiceMessage message, bool isMine) onLongPress;
@@ -1258,7 +1261,10 @@ class _MessageListView extends ConsumerWidget {
         }
         final rowIndex = hasOlderControl ? index - 1 : index;
         if (rowIndex >= rows.length + ephemeralCount) {
-          return _DeferredBotBubble(l10n: l10n);
+          return _DeferredBotBubble(
+            l10n: l10n,
+            botName: deferredInteraction?.botName,
+          );
         }
         if (rowIndex >= rows.length) {
           final ephemeral = ephemeralMessages[rowIndex - rows.length];
@@ -1271,6 +1277,8 @@ class _MessageListView extends ConsumerWidget {
           children: [
             if (row.unreadSeparator)
               ChatUnreadSeparator(label: l10n.chatUnreadSeparator),
+            if (isGroup && !isMine && row.showTimestamp)
+              _MessageAuthorHeader(senderProfileId: msg.senderProfileId),
             GestureDetector(
               onLongPress: () => onLongPress(msg, isMine),
               child: ChatMessageBubbleTile(
@@ -1673,9 +1681,10 @@ class _EphemeralBotBubble extends StatelessWidget {
 }
 
 class _DeferredBotBubble extends StatelessWidget {
-  const _DeferredBotBubble({required this.l10n});
+  const _DeferredBotBubble({required this.l10n, this.botName});
 
   final AppLocalizations l10n;
+  final String? botName;
 
   @override
   Widget build(BuildContext context) {
@@ -1684,20 +1693,71 @@ class _DeferredBotBubble extends StatelessWidget {
       alignment: Alignment.centerLeft,
       child: VoiceChatBubble(
         isMine: false,
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: voice.profileAccent,
+            if (botName != null && botName!.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  botName!,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: voice.profileAccent,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: voice.profileAccent,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(l10n.botDeferredProcessing),
+              ],
             ),
-            const SizedBox(width: 8),
-            Text(l10n.botDeferredProcessing),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MessageAuthorHeader extends ConsumerWidget {
+  const _MessageAuthorHeader({required this.senderProfileId});
+
+  final String senderProfileId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profileAsync = ref.watch(profileProvider(senderProfileId));
+    final displayName = profileAsync.valueOrNull?.displayName ??
+        senderProfileId.substring(
+          0,
+          senderProfileId.length < 8 ? senderProfileId.length : 8,
+        );
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 2, top: 8),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: ChatAuthorLabel(
+          displayName: displayName,
+          isPremium: false,
+          verificationType: profileAsync.valueOrNull?.verificationType ?? 'none',
+          style: Theme.of(context).textTheme.labelMedium,
+          premiumBadgeSemanticLabel:
+              AppLocalizations.of(context)!.premiumBadgeLabel,
+          verifiedBadgeSemanticLabel:
+              profileAsync.valueOrNull?.verificationType == 'organization'
+              ? AppLocalizations.of(context)!.verifiedBadgeOrganization
+              : AppLocalizations.of(context)!.verifiedBadgePersonal,
         ),
       ),
     );

@@ -24,6 +24,13 @@ const _commands = [
     name: 'help',
     description: 'Shows help',
   ),
+  BotSlashCommand(
+    botId: 'bot-offline',
+    botName: 'DownBot',
+    name: 'slow',
+    description: 'Unavailable',
+    online: false,
+  ),
 ];
 
 void main() {
@@ -101,5 +108,28 @@ void main() {
 
     expect(find.text('/help'), findsOneWidget);
     expect(find.text('/ping'), findsNothing);
+  });
+
+  testWidgets('SlashCommandMenuSheet greys out offline bot commands', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      slashMenuApp(
+        overrides: [
+          slashCommandsForChatProvider('chat-1').overrideWith(
+            (ref) async => _commands,
+          ),
+        ],
+        onSelected: (_) {},
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final slowTile = find.byKey(
+      const ValueKey('slash_command_bot-offline_slow'),
+    );
+    expect(slowTile, findsOneWidget);
+    final tile = tester.widget<ListTile>(slowTile);
+    expect(tile.enabled, isFalse);
   });
 }

@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../state/shell_providers.dart';
+import '../../backend/space_permissions.dart';
 import '../../state/space_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../../theme/voice_layout.dart';
 import 'space_invites_sheet.dart';
+import 'space_bots_sheet.dart';
 import 'space_members_sheet.dart';
 import 'space_roles_sheet.dart';
 import 'space_tree_panel.dart';
@@ -32,6 +34,17 @@ class SpaceTreeColumn extends ConsumerWidget {
     final spaceAsync = ref.watch(spaceProvider(spaceId));
     final shellNav = ref.read(shellNavigationProvider);
     final narrow = VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width);
+    final canManageBots = ref
+            .watch(
+              spacePermissionProvider((
+                spaceId: spaceId,
+                permission: SpacePermissions.spaceManageBots,
+                chatId: null,
+                voiceRoomId: null,
+              )),
+            )
+            .valueOrNull ??
+        false;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -76,6 +89,14 @@ class SpaceTreeColumn extends ConsumerWidget {
                   icon: const Icon(Icons.badge_outlined),
                   tooltip: l10n.spaceRolesTooltip,
                   onPressed: () => SpaceRolesSheet.show(context, spaceId: spaceId),
+                ),
+                IconButton(
+                  key: const Key('space_bots_action'),
+                  icon: const Icon(Icons.smart_toy_outlined),
+                  tooltip: l10n.spaceBotsTitle,
+                  onPressed: canManageBots
+                      ? () => SpaceBotsSheet.show(context, spaceId: spaceId)
+                      : null,
                 ),
                 IconButton(
                   key: const Key('space_invites_action'),
