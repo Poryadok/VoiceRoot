@@ -1,4 +1,3 @@
-import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_frontend/backend/message_cache/drift_message_cache_store.dart';
 import 'package:voice_frontend/backend/message_cache/message_cache_database.dart';
@@ -11,7 +10,7 @@ void main() {
     late DriftMessageCacheStore store;
 
     setUp(() {
-      db = MessageCacheDatabase(NativeDatabase.memory());
+      db = MessageCacheDatabase.forTesting();
       store = DriftMessageCacheStore(db);
     });
 

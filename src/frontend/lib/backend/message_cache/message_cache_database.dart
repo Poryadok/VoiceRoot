@@ -1,5 +1,7 @@
 import 'package:drift/drift.dart';
-import 'package:drift_flutter/drift_flutter.dart';
+import 'package:drift/native.dart';
+
+import 'message_cache_database_open.dart';
 
 part 'message_cache_database.g.dart';
 
@@ -18,10 +20,15 @@ class CachedMessages extends Table {
 class MessageCacheDatabase extends _$MessageCacheDatabase {
   MessageCacheDatabase(super.e);
 
-  factory MessageCacheDatabase.defaults() {
-    return MessageCacheDatabase(
-      driftDatabase(name: 'voice_message_cache'),
-    );
+  /// Encrypted persistent cache for mobile/desktop (docs/features/encryption.md).
+  static Future<MessageCacheDatabase> openEncrypted() async {
+    final executor = await openEncryptedMessageCacheExecutor();
+    return MessageCacheDatabase(executor);
+  }
+
+  /// Unencrypted in-memory database for unit tests.
+  factory MessageCacheDatabase.forTesting() {
+    return MessageCacheDatabase(NativeDatabase.memory());
   }
 
   @override

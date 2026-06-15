@@ -4,9 +4,9 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   file_selector_linux
+  flutter_secure_storage_linux
   flutter_webrtc
   livekit_client
-  sqlite3_flutter_libs
   url_launcher_linux
 )
 

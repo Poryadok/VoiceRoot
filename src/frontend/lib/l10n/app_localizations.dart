@@ -615,6 +615,9 @@ abstract class AppLocalizations {
   String get botTimeoutError;
 
   /// No description provided for @botDeferredProcessing.
+  ///
+  /// In en, this message translates to:
+  /// **'Processing your request…'**
   String get botDeferredProcessing;
 
   /// No description provided for @slashCommandsTitle.

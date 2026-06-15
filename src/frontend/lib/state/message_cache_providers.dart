@@ -28,7 +28,7 @@ Future<MessageCacheStore> openDefaultMessageCacheStore() async {
   if (kIsWeb) {
     return InMemoryMessageCacheStore();
   }
-  final db = MessageCacheDatabase.defaults();
+  final db = await MessageCacheDatabase.openEncrypted();
   return DriftMessageCacheStore(db);
 }
 

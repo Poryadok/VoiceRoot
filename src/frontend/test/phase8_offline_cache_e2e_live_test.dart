@@ -49,7 +49,7 @@ void main() {
     final page = (history as MessagesApiOk<MessageListData>).data.messages;
     expect(page.any((m) => m.id == messageId && m.content == body), isTrue);
 
-    final db = MessageCacheDatabase.defaults();
+    final db = await MessageCacheDatabase.openEncrypted();
     addTearDown(db.close);
     final store = DriftMessageCacheStore(db);
     await store.replaceChatMessages(
