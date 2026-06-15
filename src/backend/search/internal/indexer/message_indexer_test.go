@@ -64,6 +64,10 @@ func messageSentEventE2E(chatID, messageID, senderID uuid.UUID, isE2E bool) *eve
 }
 
 func messageEditedEvent(chatID, messageID uuid.UUID) *eventsv1.MessageStreamEvent {
+	return messageEditedEventE2E(chatID, messageID, false)
+}
+
+func messageEditedEventE2E(chatID, messageID uuid.UUID, isE2E bool) *eventsv1.MessageStreamEvent {
 	return &eventsv1.MessageStreamEvent{
 		EventId:    uuid.New().String(),
 		OccurredAt: timestamppb.Now(),
@@ -71,6 +75,7 @@ func messageEditedEvent(chatID, messageID uuid.UUID) *eventsv1.MessageStreamEven
 			MessageEdited: &eventsv1.MessageEdited{
 				MessageId: messageID.String(),
 				ChatId:    chatID.String(),
+				IsE2E:     isE2E,
 			},
 		},
 	}
@@ -166,6 +171,21 @@ func TestMessageIndexer_MessageSent_NonE2E_StillUpserts(t *testing.T) {
 	require.NoError(t, idx.Handle(ctxBackground(), messageSentEventE2E(chatID, msgID, senderID, false)))
 	require.Len(t, rec.upserts, 1)
 	require.Equal(t, "indexed plaintext", rec.upserts[0].Body)
+}
+
+// TestMessageIndexer_MessageEdited_E2E_SkipsUpsert documents Phase 15: edited E2E ciphertext is not indexed.
+func TestMessageIndexer_MessageEdited_E2E_SkipsUpsert(t *testing.T) {
+	t.Parallel()
+	rec := &recordingMessageStore{}
+	messaging := &stubMessagingClient{body: "should-not-be-fetched"}
+	idx := &MessageIndexer{Store: rec, Messaging: messaging}
+
+	chatID := uuid.New()
+	msgID := uuid.New()
+
+	require.NoError(t, idx.Handle(ctxBackground(), messageEditedEventE2E(chatID, msgID, true)))
+	require.Empty(t, rec.upserts, "E2E message edits must not be upserted into search index")
+	require.Equal(t, uuid.Nil, messaging.fetchID, "indexer must not fetch body for E2E edits")
 }
 
 func TestMessageIndexer_SkipsUpsertWhenMessagingUnavailable(t *testing.T) {

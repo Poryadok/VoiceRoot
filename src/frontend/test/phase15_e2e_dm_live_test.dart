@@ -118,10 +118,8 @@ void main() {
               reason: 'search must not surface E2E plaintext',
             );
           case SearchApiErr(:final error):
-            expect(
-              error.statusCode,
-              anyOf(503, 502, 504, 500),
-              reason: 'search unavailable still satisfies E2E exclusion',
+            fail(
+              'search must return 200 with empty hits when healthy; got ${error.statusCode}',
             );
         }
       }

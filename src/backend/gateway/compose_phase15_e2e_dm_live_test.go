@@ -29,8 +29,8 @@ func TestComposePhase15E2EDM_live(t *testing.T) {
 	sessB := registerComposeUser(t, client, base, formatComposeEmail("p15-b", n), "VoiceQaTest1!")
 	chatID := createComposeDM(t, client, base, sessA.AccessToken, sessB.ProfileID)
 
-	uploadComposePreKeyBundle(t, client, base, sessA.AccessToken, "compose-prekey-a")
-	uploadComposePreKeyBundle(t, client, base, sessB.AccessToken, "compose-prekey-b")
+	uploadComposePreKeyBundle(t, client, base, sessA.AccessToken, validComposePreKeyBundleB64())
+	uploadComposePreKeyBundle(t, client, base, sessB.AccessToken, validComposePreKeyBundleB64())
 	enableComposeChatE2E(t, client, base, sessA.AccessToken, chatID)
 	enableComposeChatE2E(t, client, base, sessB.AccessToken, chatID)
 
@@ -42,11 +42,11 @@ func TestComposePhase15E2EDM_live(t *testing.T) {
 	require.NotEqual(t, secret, getComposeMessageContent(t, client, base, sessA.AccessToken, chatID, msgID))
 
 	globalURL := fmt.Sprintf("%s/api/v1/search/global?q=%s", base, url.QueryEscape(secret))
-	assertComposeSearchExcludesToken(t, client, sessA.AccessToken, globalURL, secret)
+	requireComposeSearchExcludesToken(t, client, sessA.AccessToken, globalURL, secret)
 
 	inChatURL := fmt.Sprintf("%s/api/v1/search/in-chat?chat_id=%s&q=%s",
 		base, url.QueryEscape(chatID), url.QueryEscape(secret))
-	assertComposeSearchExcludesToken(t, client, sessA.AccessToken, inChatURL, secret)
+	requireComposeSearchExcludesToken(t, client, sessA.AccessToken, inChatURL, secret)
 }
 
 // TestComposePhase15E2E_GroupEnableRejected_live documents E2E is DM-only (encryption.md).
@@ -83,7 +83,7 @@ func TestComposePhase15E2E_EnableRejectedWhenPeerMissingPreKey_live(t *testing.T
 	sessB := registerComposeUser(t, client, base, formatComposeEmail("p15-gate-b", n), "VoiceQaTest1!")
 	chatID := createComposeDM(t, client, base, sessA.AccessToken, sessB.ProfileID)
 
-	uploadComposePreKeyBundle(t, client, base, sessA.AccessToken, "compose-prekey-gate-a-only")
+	uploadComposePreKeyBundle(t, client, base, sessA.AccessToken, validComposePreKeyBundleB64())
 
 	status := postComposeChatE2EEnableStatus(t, client, base, sessA.AccessToken, chatID)
 	require.NotEqual(t, http.StatusOK, status, "E2E enable must fail when peer has no pre-key bundle")

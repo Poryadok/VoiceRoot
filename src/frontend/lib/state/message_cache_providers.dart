@@ -1,13 +1,12 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../backend/message_cache/drift_message_cache_store.dart';
 import '../backend/message_cache/in_memory_message_cache_store.dart';
-import '../backend/message_cache/message_cache_database.dart';
 import '../backend/message_cache/message_cache_store.dart';
 import 'auth_providers.dart';
+import 'message_cache_open_io.dart'
+    if (dart.library.html) 'message_cache_open_web.dart';
 
 final messageCacheStoreProvider = Provider<MessageCacheStore>((ref) {
   return InMemoryMessageCacheStore();
@@ -23,13 +22,7 @@ final messageCacheLifecycleProvider = Provider<void>((ref) {
 });
 
 Future<MessageCacheStore> openDefaultMessageCacheStore() async {
-  // Drift on web needs sqlite3.wasm + drift_worker.js; persistent offline
-  // cache is a mobile/desktop Phase 8 feature (docs/PLAN.md).
-  if (kIsWeb) {
-    return InMemoryMessageCacheStore();
-  }
-  final db = await MessageCacheDatabase.openEncrypted();
-  return DriftMessageCacheStore(db);
+  return openDefaultMessageCacheStoreImpl();
 }
 
 MessageCacheStore inMemoryMessageCacheStoreForTests() {

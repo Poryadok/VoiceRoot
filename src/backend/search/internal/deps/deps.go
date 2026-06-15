@@ -14,6 +14,7 @@ import (
 
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/search/internal/authctx"
+	"voice/backend/search/internal/s2s"
 
 	commonv1 "voice.app/voice/common/v1"
 	chatv1 "voice.app/voice/chat/v1"
@@ -33,6 +34,7 @@ func (m *MessagingFetcher) GetMessageBody(ctx context.Context, chatID, messageID
 	if m == nil || m.Client == nil {
 		return "", time.Time{}, fmt.Errorf("messaging client unavailable")
 	}
+	ctx = s2s.ForwardIncomingMetadata(ctx)
 	resp, err := m.Client.GetMessage(ctx, &messagingv1.GetMessageRequest{
 		MessageId: messageID.String(),
 	})
@@ -63,6 +65,7 @@ func (m *MessagingFetcher) ListChatMessages(ctx context.Context, chatID uuid.UUI
 	if pageSize <= 0 {
 		pageSize = 50
 	}
+	ctx = s2s.ForwardIncomingMetadata(ctx)
 	resp, err := m.Client.GetMessages(ctx, &messagingv1.GetMessagesRequest{
 		Chat: &chatv1.ChatRef{Id: chatID.String()},
 		Page: &commonv1.CursorPageRequest{
@@ -106,6 +109,7 @@ func (r *RoleAccess) CanReadMessages(ctx context.Context, viewer, chatID uuid.UU
 	if r == nil || r.Client == nil {
 		return true, nil
 	}
+	ctx = s2s.ForwardIncomingMetadata(ctx)
 	resp, err := r.Client.CheckPermission(ctx, &rolev1.CheckPermissionRequest{
 		ProfileId:      viewer.String(),
 		PermissionName: "TEXT_CHAT_VIEW",
@@ -136,6 +140,7 @@ func (s *SocialBlocks) BlockedAccountIDs(ctx context.Context) ([]uuid.UUID, erro
 	seen := make(map[uuid.UUID]struct{})
 	var cursor string
 	for {
+		ctx = s2s.ForwardIncomingMetadata(ctx)
 		resp, err := s.Client.ListBlocked(ctx, &socialv1.ListBlockedRequest{
 			Page: &commonv1.CursorPageRequest{
 				PageSize: 100,
@@ -177,6 +182,7 @@ func (c *ChatMembership) AccessibleChatIDs(ctx context.Context, viewer uuid.UUID
 	if c == nil || c.Client == nil {
 		return nil, nil
 	}
+	ctx = s2s.ForwardIncomingMetadata(ctx)
 	resp, err := c.Client.ListChats(ctx, &chatv1.ListChatsRequest{})
 	if err != nil {
 		return nil, err
@@ -206,6 +212,7 @@ func (p *ProfileHydrator) LoadProfile(ctx context.Context, profileID uuid.UUID) 
 	if p == nil || p.Client == nil {
 		return uuid.Nil, "", "", "", "", fmt.Errorf("user client unavailable")
 	}
+	ctx = s2s.ForwardIncomingMetadata(ctx)
 	resp, err := p.Client.GetProfile(ctx, &userv1.GetProfileRequest{
 		By: &userv1.GetProfileRequest_ProfileId{ProfileId: profileID.String()},
 	})
@@ -232,6 +239,7 @@ func (c *ChatHydrator) LoadChatTitle(ctx context.Context, chatID uuid.UUID) (str
 	if c == nil || c.Client == nil {
 		return "", fmt.Errorf("chat client unavailable")
 	}
+	ctx = s2s.ForwardIncomingMetadata(ctx)
 	resp, err := c.Client.GetChat(ctx, &chatv1.GetChatRequest{ChatId: chatID.String()})
 	if err != nil {
 		return "", err
@@ -255,6 +263,7 @@ func (h *SpaceHydrator) LoadSpace(ctx context.Context, spaceID uuid.UUID) (strin
 	if h == nil || h.Client == nil {
 		return "", "", "", 0, fmt.Errorf("space client unavailable")
 	}
+	ctx = s2s.ForwardIncomingMetadata(ctx)
 	resp, err := h.Client.GetSpace(ctx, &spacev1.GetSpaceRequest{SpaceId: spaceID.String()})
 	if err != nil {
 		return "", "", "", 0, err

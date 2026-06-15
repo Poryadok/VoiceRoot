@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -126,6 +127,30 @@ func TestUploadPreKeyBundle_RejectsInvalidBundle(t *testing.T) {
 	invalidBundle := base64.StdEncoding.EncodeToString([]byte("not-a-signal-prekey-bundle"))
 	_, err := client.UploadPreKeyBundle(withProfileCtx(ctx, acctOwner, profOwner), &messagingv1.UploadPreKeyBundleRequest{
 		Bundle: invalidBundle,
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+func TestUploadPreKeyBundle_RejectsOversizedBundle(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	profOwner, acctOwner := uuid.New(), uuid.New()
+	profiles := profileAcctMap{profOwner: acctOwner}
+
+	client, cleanup := startMessagingServerWired(t, pool, messagingWire{UserProfiles: profiles})
+	t.Cleanup(cleanup)
+
+	oversized := strings.Repeat("a", maxPreKeyBundleWireBytes+1)
+	_, err := client.UploadPreKeyBundle(withProfileCtx(ctx, acctOwner, profOwner), &messagingv1.UploadPreKeyBundleRequest{
+		Bundle: oversized,
 	})
 	require.Error(t, err)
 	require.Equal(t, codes.InvalidArgument, status.Code(err))

@@ -19,6 +19,9 @@ import voice.backend.auth.security.RefreshTokenCodec;
 import voice.backend.auth.security.TokenBlacklist;
 
 public class AuthService {
+  /** Max opaque encrypted blob size for E2E key backup (512 KiB). */
+  public static final int E2E_KEY_BACKUP_MAX_BLOB_BYTES = 512 * 1024;
+
   private final AccountRepository accounts;
   private final RefreshTokenRepository refreshTokens;
   private final RefreshTokenCodec refreshTokenCodec;
@@ -217,6 +220,9 @@ public class AuthService {
 
   public void putE2EKeyBackup(String accessToken, String encryptedBlob, String passwordHint) {
     if (encryptedBlob == null || encryptedBlob.isBlank()) {
+      throw new AuthException("validation_failed");
+    }
+    if (encryptedBlob.length() > E2E_KEY_BACKUP_MAX_BLOB_BYTES) {
       throw new AuthException("validation_failed");
     }
     TokenClaims claims = validate(accessToken);

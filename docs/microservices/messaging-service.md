@@ -181,4 +181,48 @@ read_receipts
 
 При >100M сообщений — шардинг PostgreSQL по `chat_id` (consistent hashing). Каждый шард содержит все сообщения одного чата → локальные запросы без cross-shard joins.
 
+## E2E / pre-keys / edit policy (Phase 15)
+
+Нормативное поведение: [encryption.md](../features/encryption.md). Поиск по E2E-телу на сервере не индексируется ([search-service.md](search-service.md)).
+
+### gRPC (дополнение к `MessagingService`)
+
+| RPC | Назначение |
+|-----|------------|
+| `UploadPreKeyBundle` | Сохранить Signal pre-key bundle для `sender_profile_id` из контекста |
+| `GetPreKeyBundle` | Выдать bundle собеседника; при fetch один OTPK потребляется из пула |
+
+REST через Gateway: `POST/GET /api/v1/messages/prekeys` (см. [api-gateway.md](api-gateway.md)).
+
+### Модель и миграции
+
+- `messages.is_e2e` — ciphertext-only payload при `true`
+- `e2e_prekey_bundles` — opaque wire bundle per `profile_id` (`messaging_db` migration `000009_e2e`)
+
+### Политика отправки (`validateE2ESend`)
+
+- Только **DM** (`chat_type = dm`)
+- Когда у чата `e2e_enabled = true`: `is_e2e` обязателен, `content` — opaque ciphertext
+- Plaintext send отклоняется после включения E2E в чате
+
+### Политика редактирования (`validateE2EEdit`)
+
+- Plaintext edit **запрещён**, если чат `e2e_enabled`
+- Сообщение с `is_e2e = true`: разрешён edit с новым ciphertext (тот же `message_id`)
+- Событие `message.edited` в NATS несёт `is_e2e` — Search indexer пропускает E2E upsert
+
+### Лимиты (Gateway / сервис)
+
+| Маршрут / операция | Лимит (дефолт Gateway) |
+|--------------------|-------------------------|
+| `PUT /api/v1/auth/e2e-key-backup` | 5 / мин на user (Auth Service) |
+| `GET /api/v1/auth/e2e-key-backup` | 30 / мин |
+| `POST /api/v1/messages/prekeys` | 10 / мин |
+| `GET /api/v1/messages/prekeys` | 60 / мин |
+| Max pre-key bundle wire | 64 KiB (Messaging) |
+| Max key backup blob | 512 KiB (Auth) |
+
+Key backup хранится в **Auth Service** (`PutE2EKeyBackup` / `GetE2EKeyBackup`), не в Messaging.
+
+Включение E2E в DM — **Chat Service** (`E2EPreKeyGate`: оба участника должны иметь pre-key bundle).
 

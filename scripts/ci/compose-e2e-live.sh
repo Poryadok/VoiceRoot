@@ -69,6 +69,7 @@ flutter test --concurrency=1 \
   test/phase13_profiles_verification_e2e_live_test.dart \
   test/phase14_moderation_e2e_live_test.dart \
   test/phase15_e2e_dm_live_test.dart \
+  test/phase15_e2e_edit_live_test.dart \
   test/phase16_bots_slash_live_test.dart \
   --dart-define=VOICE_RUN_LIVE_INTEGRATION=true \
   --dart-define=VOICE_API_BASE_URL="${VOICE_API_BASE_URL}"

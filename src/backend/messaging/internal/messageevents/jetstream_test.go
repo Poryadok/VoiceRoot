@@ -123,6 +123,14 @@ func TestJetStreamPublisher_MessageEditedAndDeleted(t *testing.T) {
 	require.NoError(t, proto.Unmarshal(em.Data, &edited))
 	require.Equal(t, mid, edited.GetMessageEdited().GetMessageId())
 	require.Equal(t, cid, edited.GetMessageEdited().GetChatId())
+	require.False(t, edited.GetMessageEdited().GetIsE2E())
+
+	require.NoError(t, pub.PublishMessageEdited(ctx, mid, cid, true))
+	emE2E, err := subEd.NextMsg(3 * time.Second)
+	require.NoError(t, err)
+	var editedE2E eventsv1.MessageStreamEvent
+	require.NoError(t, proto.Unmarshal(emE2E.Data, &editedE2E))
+	require.True(t, editedE2E.GetMessageEdited().GetIsE2E())
 
 	dm, err := subDel.NextMsg(3 * time.Second)
 	require.NoError(t, err)

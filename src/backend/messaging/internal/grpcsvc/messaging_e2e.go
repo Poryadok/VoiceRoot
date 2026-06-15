@@ -16,6 +16,8 @@ import (
 	messagingv1 "voice.app/voice/messaging/v1"
 )
 
+const maxPreKeyBundleWireBytes = 64 * 1024
+
 func (s *MessagingGRPC) UploadPreKeyBundle(ctx context.Context, req *messagingv1.UploadPreKeyBundleRequest) (*messagingv1.UploadPreKeyBundleResponse, error) {
 	if s == nil || s.PreKeyBundles == nil {
 		return nil, status.Error(codes.FailedPrecondition, "e2e pre-key store not configured")
@@ -27,6 +29,9 @@ func (s *MessagingGRPC) UploadPreKeyBundle(ctx context.Context, req *messagingv1
 	bundle := strings.TrimSpace(req.GetBundle())
 	if bundle == "" {
 		return nil, status.Error(codes.InvalidArgument, "bundle is required")
+	}
+	if len(bundle) > maxPreKeyBundleWireBytes {
+		return nil, status.Error(codes.InvalidArgument, "bundle too large")
 	}
 	wire, err := prekey.ParseWire(bundle)
 	if err != nil {

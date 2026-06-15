@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/test/bufconn"
 
 	commonv1 "voice.app/voice/common/v1"
@@ -19,13 +20,20 @@ import (
 
 type recordingSearchGRPC struct {
 	searchv1.UnimplementedSearchServiceServer
+	lastMD      metadata.MD
 	lastInChat  *searchv1.SearchInChatRequest
 	lastGlobal  *searchv1.SearchGlobalRequest
 	lastUsers   *searchv1.SearchUsersRequest
 	lastSpaces  *searchv1.SearchSpacesRequest
 }
 
-func (s *recordingSearchGRPC) SearchInChat(_ context.Context, req *searchv1.SearchInChatRequest) (*searchv1.SearchInChatResponse, error) {
+func (s *recordingSearchGRPC) captureMD(ctx context.Context) {
+	md, _ := metadata.FromIncomingContext(ctx)
+	s.lastMD = md
+}
+
+func (s *recordingSearchGRPC) SearchInChat(ctx context.Context, req *searchv1.SearchInChatRequest) (*searchv1.SearchInChatResponse, error) {
+	s.captureMD(ctx)
 	s.lastInChat = req
 	return &searchv1.SearchInChatResponse{
 		SearchResults: &searchv1.SearchResults{
@@ -39,7 +47,8 @@ func (s *recordingSearchGRPC) SearchInChat(_ context.Context, req *searchv1.Sear
 	}, nil
 }
 
-func (s *recordingSearchGRPC) SearchGlobal(_ context.Context, req *searchv1.SearchGlobalRequest) (*searchv1.SearchGlobalResponse, error) {
+func (s *recordingSearchGRPC) SearchGlobal(ctx context.Context, req *searchv1.SearchGlobalRequest) (*searchv1.SearchGlobalResponse, error) {
+	s.captureMD(ctx)
 	s.lastGlobal = req
 	return &searchv1.SearchGlobalResponse{
 		GlobalSearchResults: &searchv1.GlobalSearchResults{
@@ -51,14 +60,16 @@ func (s *recordingSearchGRPC) SearchGlobal(_ context.Context, req *searchv1.Sear
 	}, nil
 }
 
-func (s *recordingSearchGRPC) SearchUsers(_ context.Context, req *searchv1.SearchUsersRequest) (*searchv1.SearchUsersResponse, error) {
+func (s *recordingSearchGRPC) SearchUsers(ctx context.Context, req *searchv1.SearchUsersRequest) (*searchv1.SearchUsersResponse, error) {
+	s.captureMD(ctx)
 	s.lastUsers = req
 	return &searchv1.SearchUsersResponse{
 		UserSearchResults: &searchv1.UserSearchResults{ProfileIds: []string{"profile-2"}},
 	}, nil
 }
 
-func (s *recordingSearchGRPC) SearchSpaces(_ context.Context, req *searchv1.SearchSpacesRequest) (*searchv1.SearchSpacesResponse, error) {
+func (s *recordingSearchGRPC) SearchSpaces(ctx context.Context, req *searchv1.SearchSpacesRequest) (*searchv1.SearchSpacesResponse, error) {
+	s.captureMD(ctx)
 	s.lastSpaces = req
 	return &searchv1.SearchSpacesResponse{
 		SpaceSearchResults: &searchv1.SpaceSearchResults{SpaceIds: []string{"space-public"}},
@@ -219,4 +230,29 @@ func TestTranscodeSearchGlobal_ReturnsSections(t *testing.T) {
 	require.NotEmpty(t, body.GlobalSearchResults.MatchedChats, "matchedChats=%v", body.GlobalSearchResults.MatchedChats)
 	require.NotEmpty(t, body.GlobalSearchResults.SpaceIds)
 	_ = commonv1.CursorPageRequest{}
+}
+
+func TestTranscodeSearchPropagatesVoiceHeaders(t *testing.T) {
+	t.Parallel()
+	grpcRec := &recordingSearchGRPC{}
+	conn, cleanup := startBufconnSearchConn(t, grpcRec)
+	t.Cleanup(cleanup)
+
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+		},
+		transcoder: &transcoder{clients: grpcClients{search: searchv1.NewSearchServiceClient(conn)}},
+	})
+
+	rec := performRequest(h, http.MethodGet, "/api/v1/search/global?q=raid", "", map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	require.Equal(t, http.StatusOK, rec.Code, "body=%s", rec.Body.String())
+	if got := grpcRec.lastMD.Get("x-voice-user-id"); len(got) != 1 || got[0] != "account-1" {
+		t.Fatalf("x-voice-user-id = %v, want account-1", got)
+	}
+	if got := grpcRec.lastMD.Get("x-voice-profile-id"); len(got) != 1 || got[0] != "profile-1" {
+		t.Fatalf("x-voice-profile-id = %v, want profile-1", got)
+	}
 }

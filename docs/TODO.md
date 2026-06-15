@@ -93,13 +93,18 @@
 
 ### Batch E2E-C — «E2E тесты и поиск»
 
-- [ ] **Search + compose** — `x-voice-profile-id` в Search global/in-chat (live 500 `missing credentials`); E2E exclusion на 200 + empty hits.
-- [ ] **Тесты E2E** — gateway live edit-in-E2E step; `MessageEdited` indexer skip; coverage ≥80% `lib/e2e/` + E2E backend packages (prekey **80%+** done; grpcsvc ~73% — add edge-case tests).
-- [ ] **Key backup limits (P2)** — max blob, rate limit put/get pre-keys (лимиты можно взять из спеки или дефолты в коде).
-- [ ] **docs/microservices/messaging-service.md** — добавить секцию E2E/pre-keys/edit policy.
-- [ ] **Flutter web docker image** — `flutter build web` падает на `dart:ffi` (sqlite3mc/native); smoke через `flutter run -d edge` на хосте.
+- [x] **Search + compose** — `x-voice-profile-id` в Search global/in-chat (live 500 `missing credentials`); E2E exclusion на 200 + empty hits.
+- [x] **Тесты E2E** — gateway live edit-in-E2E step; `MessageEdited` indexer skip; coverage ≥80% `lib/e2e/` + E2E backend packages (prekey **80%+** done; grpcsvc ~73% — add edge-case tests).
+- [x] **Key backup limits (P2)** — max blob, rate limit put/get pre-keys (лимиты можно взять из спеки или дефолты в коде).
+- [x] **docs/microservices/messaging-service.md** — добавить секцию E2E/pre-keys/edit policy.
+- [x] **Flutter web docker image** — `flutter build web` падает на `dart:ffi` (sqlite3mc/native); smoke через `flutter run -d edge` на хосте.
 
 **Промпт-якорь:** `Phase 15 E2E — batch E2E-C tests and search`.
+
+**Аудит (post E2E-C):**
+- [ ] **Auth JDBC backup IT** — `Phase15E2EKeyBackupJdbcIntegrationTest` в CI (Testcontainers) — перенесено из E2E-B.
+- [ ] **auth-service.md** — документировать `PutE2EKeyBackup` / `GetE2EKeyBackup` и таблицу `e2e_key_backups`.
+- [ ] **Pre-key signature cross-check** — server Ed25519 vs real `libsignal_protocol_dart` bundles (E2E-B).
 
 ---
 

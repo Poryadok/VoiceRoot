@@ -205,6 +205,29 @@ func TestRateLimitGroup_authPaths(t *testing.T) {
 	}
 }
 
+func TestRateLimitGroup_e2eKeyBackupAndPreKeys(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		method string
+		path   string
+		want   string
+	}{
+		{http.MethodPut, "/api/v1/auth/e2e-key-backup", "E2EKeyBackupPut"},
+		{http.MethodGet, "/api/v1/auth/e2e-key-backup", "E2EKeyBackupGet"},
+		{http.MethodPost, "/api/v1/messages/prekeys", "PreKeyUpload"},
+		{http.MethodGet, "/api/v1/messages/prekeys", "PreKeyGet"},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.path, func(t *testing.T) {
+			t.Parallel()
+			if got := rateLimitGroup(tc.method, tc.path); got != tc.want {
+				t.Fatalf("group=%q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestRateLimitRulesFromEnv_authAliasDisablesBoth(t *testing.T) {
 	t.Setenv("GATEWAY_RATE_LIMIT_RULES_JSON", `{"Auth":{"limit":0,"window":"15m"}}`)
 	rules := rateLimitRulesFromEnv()

@@ -76,6 +76,10 @@ func defaultRateLimitRules() map[string]rateLimitRule {
 		"FileUpload":    {Limit: 10, Window: time.Hour},
 		"SpaceCreation": {Limit: 5, Window: 24 * time.Hour},
 		"BotAPI":        {Limit: 5000, Window: time.Minute},
+		"E2EKeyBackupPut": {Limit: 5, Window: time.Minute},
+		"E2EKeyBackupGet": {Limit: 30, Window: time.Minute},
+		"PreKeyUpload":    {Limit: 10, Window: time.Minute},
+		"PreKeyGet":       {Limit: 60, Window: time.Minute},
 	}
 }
 
@@ -150,6 +154,14 @@ func rateLimitGroup(method, path string) string {
 		return "BotAPI"
 	case method == http.MethodPost && strings.HasPrefix(path, "/api/v1/bots/"):
 		return "BotAPI"
+	case method == http.MethodPut && path == "/api/v1/auth/e2e-key-backup":
+		return "E2EKeyBackupPut"
+	case method == http.MethodGet && path == "/api/v1/auth/e2e-key-backup":
+		return "E2EKeyBackupGet"
+	case method == http.MethodPost && path == "/api/v1/messages/prekeys":
+		return "PreKeyUpload"
+	case method == http.MethodGet && path == "/api/v1/messages/prekeys":
+		return "PreKeyGet"
 	default:
 		return ""
 	}
