@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 export 'bot_deferred_providers.dart';
@@ -103,7 +105,7 @@ class SlashInteractionExecutor {
       chatId: chatId,
       chatType: chatType,
       botId: command.botId,
-      commandName: command.name,
+      commandName: command.fullCommandName,
       optionsJson: optionsJson,
     );
 

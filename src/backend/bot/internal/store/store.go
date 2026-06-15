@@ -222,12 +222,16 @@ WHERE id = $1`,
 	if err != nil {
 		return err
 	}
-	for _, cmd := range doc.Commands {
+	for _, cmd := range manifest.FlattenCommands(doc.Commands) {
 		params, _ := json.Marshal(cmd.Options)
+		storeName := cmd.Name
+		if cmd.GroupName != "" {
+			storeName = cmd.GroupName + " " + cmd.Name
+		}
 		_, err = tx.Exec(ctx, `
 INSERT INTO bot_commands (id, bot_id, name, description, parameters)
 VALUES ($1, $2, $3, $4, $5::jsonb)`,
-			uuid.New(), botID, strings.TrimSpace(cmd.Name), strings.TrimSpace(cmd.Description), string(params))
+			uuid.New(), botID, strings.TrimSpace(storeName), strings.TrimSpace(cmd.Description), string(params))
 		if err != nil {
 			return err
 		}
@@ -416,6 +420,36 @@ func (s *BotStore) MarkInteractionDelivered(ctx context.Context, botID uuid.UUID
 	}
 	_, err := s.Pool.Exec(ctx, `
 UPDATE bot_event_log SET delivery_status = 'delivered', delivered_at = now(), attempts = attempts + 1
+WHERE bot_id = $1 AND interaction_token = $2 AND delivery_status = 'pending'`, botID, token)
+	return err
+}
+
+func (s *BotStore) MarkEventFailed(ctx context.Context, botID uuid.UUID, token string) error {
+	if strings.TrimSpace(token) == "" {
+		return nil
+	}
+	_, err := s.Pool.Exec(ctx, `
+UPDATE bot_event_log SET delivery_status = 'failed', attempts = attempts + 1
+WHERE bot_id = $1 AND interaction_token = $2 AND delivery_status = 'pending'`, botID, token)
+	return err
+}
+
+func (s *BotStore) MarkEventTimeout(ctx context.Context, botID uuid.UUID, token string) error {
+	if strings.TrimSpace(token) == "" {
+		return nil
+	}
+	_, err := s.Pool.Exec(ctx, `
+UPDATE bot_event_log SET delivery_status = 'timeout', attempts = attempts + 1
+WHERE bot_id = $1 AND interaction_token = $2 AND delivery_status = 'pending'`, botID, token)
+	return err
+}
+
+func (s *BotStore) IncrementEventAttempts(ctx context.Context, botID uuid.UUID, token string) error {
+	if strings.TrimSpace(token) == "" {
+		return nil
+	}
+	_, err := s.Pool.Exec(ctx, `
+UPDATE bot_event_log SET attempts = attempts + 1
 WHERE bot_id = $1 AND interaction_token = $2 AND delivery_status = 'pending'`, botID, token)
 	return err
 }

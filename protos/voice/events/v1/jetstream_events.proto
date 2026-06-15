@@ -567,6 +567,7 @@ message BotStreamEvent {
     BotRegistered bot_registered = 10;
     CommandExecuted command_executed = 11;
     WebhookDelivered webhook_delivered = 12;
+    WebhookFailed webhook_failed = 13;
   }
 }
 
@@ -585,4 +586,10 @@ message WebhookDelivered {
   string bot_id = 1;
   string delivery_id = 2;
   bool success = 3;
+}
+
+message WebhookFailed {
+  string bot_id = 1;
+  string event_type = 2;
+  string error = 3;
 }

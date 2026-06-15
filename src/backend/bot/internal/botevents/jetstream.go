@@ -22,6 +22,7 @@ const (
 	subjectBotRegistered = "bot.registered"
 	subjectCommandExec   = "bot.command_executed"
 	subjectWebhookDeliv  = "bot.webhook_delivered"
+	subjectWebhookFailed = "bot.webhook_failed"
 )
 
 // JetStreamPublisher publishes BotStreamEvent payloads to NATS JetStream.
@@ -68,7 +69,7 @@ func (p *JetStreamPublisher) ensureStream() error {
 		return fmt.Errorf("jetstream publisher not initialized")
 	}
 	p.ensureOnce.Do(func() {
-		subjects := []string{subjectBotRegistered, subjectCommandExec, subjectWebhookDeliv}
+		subjects := []string{subjectBotRegistered, subjectCommandExec, subjectWebhookDeliv, subjectWebhookFailed}
 		if info, err := p.js.StreamInfo(streamName); err == nil {
 			for _, subj := range subjects {
 				if !streamHasSubject(info, subj) {
@@ -163,6 +164,19 @@ func (p *JetStreamPublisher) PublishWebhookDelivered(ctx context.Context, botID,
 				BotId:      botID,
 				DeliveryId: deliveryID,
 				Success:    success,
+			},
+		},
+	})
+}
+
+// PublishWebhookFailed emits bot.webhook_failed.
+func (p *JetStreamPublisher) PublishWebhookFailed(ctx context.Context, botID, eventType, errMsg string) error {
+	return p.publish(ctx, subjectWebhookFailed, &eventsv1.BotStreamEvent{
+		Payload: &eventsv1.BotStreamEvent_WebhookFailed{
+			WebhookFailed: &eventsv1.WebhookFailed{
+				BotId:     botID,
+				EventType: eventType,
+				Error:     errMsg,
 			},
 		},
 	})

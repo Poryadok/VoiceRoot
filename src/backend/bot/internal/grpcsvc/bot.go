@@ -43,6 +43,7 @@ type BotEventPublisher interface {
 	PublishBotRegistered(ctx context.Context, botID, ownerID string) error
 	PublishCommandExecuted(ctx context.Context, botID, command, chatID string) error
 	PublishWebhookDelivered(ctx context.Context, botID, deliveryID string, success bool) error
+	PublishWebhookFailed(ctx context.Context, botID, eventType, errMsg string) error
 }
 
 func NewBotGRPC(st *store.BotStore, hub *dispatch.Hub) *BotGRPC {
@@ -187,20 +188,23 @@ func (s *BotGRPC) RegisterCommands(ctx context.Context, req *botv1.RegisterComma
 	if err := json.Unmarshal([]byte(req.GetCommandsJson()), &commands); err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid commands_json")
 	}
-	doc := manifest.Document{Commands: commands}
-	if errs := manifest.Validate(doc); len(errs) > 0 {
+	if errs := manifest.ValidateCommands(commands); len(errs) > 0 {
 		return nil, status.Error(codes.InvalidArgument, strings.Join(errs, "; "))
 	}
 	_, err = s.Store.Pool.Exec(ctx, `DELETE FROM bot_commands WHERE bot_id = $1`, botID)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	for _, cmd := range commands {
+	for _, cmd := range manifest.FlattenCommands(commands) {
 		params, _ := json.Marshal(cmd.Options)
+		storeName := cmd.Name
+		if cmd.GroupName != "" {
+			storeName = cmd.GroupName + " " + cmd.Name
+		}
 		_, err = s.Store.Pool.Exec(ctx, `
 INSERT INTO bot_commands (id, bot_id, name, description, parameters)
 VALUES ($1, $2, $3, $4, $5::jsonb)`,
-			uuid.New(), botID, cmd.Name, cmd.Description, string(params))
+			uuid.New(), botID, storeName, cmd.Description, string(params))
 		if err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}

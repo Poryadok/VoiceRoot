@@ -7141,6 +7141,7 @@ enum BotStreamEvent_Payload {
   botRegistered,
   commandExecuted,
   webhookDelivered,
+  webhookFailed,
   notSet
 }
 
@@ -7151,6 +7152,7 @@ class BotStreamEvent extends $pb.GeneratedMessage {
     BotRegistered? botRegistered,
     CommandExecuted? commandExecuted,
     WebhookDelivered? webhookDelivered,
+    WebhookFailed? webhookFailed,
   }) {
     final result = create();
     if (eventId != null) result.eventId = eventId;
@@ -7158,6 +7160,7 @@ class BotStreamEvent extends $pb.GeneratedMessage {
     if (botRegistered != null) result.botRegistered = botRegistered;
     if (commandExecuted != null) result.commandExecuted = commandExecuted;
     if (webhookDelivered != null) result.webhookDelivered = webhookDelivered;
+    if (webhookFailed != null) result.webhookFailed = webhookFailed;
     return result;
   }
 
@@ -7175,6 +7178,7 @@ class BotStreamEvent extends $pb.GeneratedMessage {
     10: BotStreamEvent_Payload.botRegistered,
     11: BotStreamEvent_Payload.commandExecuted,
     12: BotStreamEvent_Payload.webhookDelivered,
+    13: BotStreamEvent_Payload.webhookFailed,
     0: BotStreamEvent_Payload.notSet
   };
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
@@ -7182,7 +7186,7 @@ class BotStreamEvent extends $pb.GeneratedMessage {
       package:
           const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
       createEmptyInstance: create)
-    ..oo(0, [10, 11, 12])
+    ..oo(0, [10, 11, 12, 13])
     ..aOS(1, _omitFieldNames ? '' : 'eventId')
     ..aOM<$0.Timestamp>(2, _omitFieldNames ? '' : 'occurredAt',
         subBuilder: $0.Timestamp.create)
@@ -7192,6 +7196,8 @@ class BotStreamEvent extends $pb.GeneratedMessage {
         subBuilder: CommandExecuted.create)
     ..aOM<WebhookDelivered>(12, _omitFieldNames ? '' : 'webhookDelivered',
         subBuilder: WebhookDelivered.create)
+    ..aOM<WebhookFailed>(13, _omitFieldNames ? '' : 'webhookFailed',
+        subBuilder: WebhookFailed.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -7216,11 +7222,13 @@ class BotStreamEvent extends $pb.GeneratedMessage {
   @$pb.TagNumber(10)
   @$pb.TagNumber(11)
   @$pb.TagNumber(12)
+  @$pb.TagNumber(13)
   BotStreamEvent_Payload whichPayload() =>
       _BotStreamEvent_PayloadByTag[$_whichOneof(0)]!;
   @$pb.TagNumber(10)
   @$pb.TagNumber(11)
   @$pb.TagNumber(12)
+  @$pb.TagNumber(13)
   void clearPayload() => $_clearField($_whichOneof(0));
 
   @$pb.TagNumber(1)
@@ -7275,6 +7283,17 @@ class BotStreamEvent extends $pb.GeneratedMessage {
   void clearWebhookDelivered() => $_clearField(12);
   @$pb.TagNumber(12)
   WebhookDelivered ensureWebhookDelivered() => $_ensure(4);
+
+  @$pb.TagNumber(13)
+  WebhookFailed get webhookFailed => $_getN(5);
+  @$pb.TagNumber(13)
+  set webhookFailed(WebhookFailed value) => $_setField(13, value);
+  @$pb.TagNumber(13)
+  $core.bool hasWebhookFailed() => $_has(5);
+  @$pb.TagNumber(13)
+  void clearWebhookFailed() => $_clearField(13);
+  @$pb.TagNumber(13)
+  WebhookFailed ensureWebhookFailed() => $_ensure(5);
 }
 
 class BotRegistered extends $pb.GeneratedMessage {
@@ -7500,6 +7519,85 @@ class WebhookDelivered extends $pb.GeneratedMessage {
   $core.bool hasSuccess() => $_has(2);
   @$pb.TagNumber(3)
   void clearSuccess() => $_clearField(3);
+}
+
+class WebhookFailed extends $pb.GeneratedMessage {
+  factory WebhookFailed({
+    $core.String? botId,
+    $core.String? eventType,
+    $core.String? error,
+  }) {
+    final result = create();
+    if (botId != null) result.botId = botId;
+    if (eventType != null) result.eventType = eventType;
+    if (error != null) result.error = error;
+    return result;
+  }
+
+  WebhookFailed._();
+
+  factory WebhookFailed.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory WebhookFailed.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'WebhookFailed',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'botId')
+    ..aOS(2, _omitFieldNames ? '' : 'eventType')
+    ..aOS(3, _omitFieldNames ? '' : 'error')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  WebhookFailed clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  WebhookFailed copyWith(void Function(WebhookFailed) updates) =>
+      super.copyWith((message) => updates(message as WebhookFailed))
+          as WebhookFailed;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static WebhookFailed create() => WebhookFailed._();
+  @$core.override
+  WebhookFailed createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static WebhookFailed getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<WebhookFailed>(create);
+  static WebhookFailed? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get botId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set botId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasBotId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearBotId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get eventType => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set eventType($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasEventType() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearEventType() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get error => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set error($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasError() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearError() => $_clearField(3);
 }
 
 const $core.bool _omitFieldNames =

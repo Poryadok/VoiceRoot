@@ -5611,6 +5611,7 @@ type BotStreamEvent struct {
 	//	*BotStreamEvent_BotRegistered
 	//	*BotStreamEvent_CommandExecuted
 	//	*BotStreamEvent_WebhookDelivered
+	//	*BotStreamEvent_WebhookFailed
 	Payload       isBotStreamEvent_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -5694,6 +5695,15 @@ func (x *BotStreamEvent) GetWebhookDelivered() *WebhookDelivered {
 	return nil
 }
 
+func (x *BotStreamEvent) GetWebhookFailed() *WebhookFailed {
+	if x != nil {
+		if x, ok := x.Payload.(*BotStreamEvent_WebhookFailed); ok {
+			return x.WebhookFailed
+		}
+	}
+	return nil
+}
+
 type isBotStreamEvent_Payload interface {
 	isBotStreamEvent_Payload()
 }
@@ -5710,11 +5720,17 @@ type BotStreamEvent_WebhookDelivered struct {
 	WebhookDelivered *WebhookDelivered `protobuf:"bytes,12,opt,name=webhook_delivered,json=webhookDelivered,proto3,oneof"`
 }
 
+type BotStreamEvent_WebhookFailed struct {
+	WebhookFailed *WebhookFailed `protobuf:"bytes,13,opt,name=webhook_failed,json=webhookFailed,proto3,oneof"`
+}
+
 func (*BotStreamEvent_BotRegistered) isBotStreamEvent_Payload() {}
 
 func (*BotStreamEvent_CommandExecuted) isBotStreamEvent_Payload() {}
 
 func (*BotStreamEvent_WebhookDelivered) isBotStreamEvent_Payload() {}
+
+func (*BotStreamEvent_WebhookFailed) isBotStreamEvent_Payload() {}
 
 type BotRegistered struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
@@ -5886,6 +5902,66 @@ func (x *WebhookDelivered) GetSuccess() bool {
 		return x.Success
 	}
 	return false
+}
+
+type WebhookFailed struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	BotId         string                 `protobuf:"bytes,1,opt,name=bot_id,json=botId,proto3" json:"bot_id,omitempty"`
+	EventType     string                 `protobuf:"bytes,2,opt,name=event_type,json=eventType,proto3" json:"event_type,omitempty"`
+	Error         string                 `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WebhookFailed) Reset() {
+	*x = WebhookFailed{}
+	mi := &file_voice_events_v1_jetstream_events_proto_msgTypes[79]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WebhookFailed) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WebhookFailed) ProtoMessage() {}
+
+func (x *WebhookFailed) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_events_v1_jetstream_events_proto_msgTypes[79]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WebhookFailed.ProtoReflect.Descriptor instead.
+func (*WebhookFailed) Descriptor() ([]byte, []int) {
+	return file_voice_events_v1_jetstream_events_proto_rawDescGZIP(), []int{79}
+}
+
+func (x *WebhookFailed) GetBotId() string {
+	if x != nil {
+		return x.BotId
+	}
+	return ""
+}
+
+func (x *WebhookFailed) GetEventType() string {
+	if x != nil {
+		return x.EventType
+	}
+	return ""
+}
+
+func (x *WebhookFailed) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
 }
 
 var File_voice_events_v1_jetstream_events_proto protoreflect.FileDescriptor
@@ -6731,7 +6807,7 @@ var file_voice_events_v1_jetstream_events_proto_rawDesc = string([]byte{
 	0x64, 0x65, 0x72, 0x61, 0x74, 0x65, 0x64, 0x12, 0x17, 0x0a, 0x07, 0x6e, 0x6f, 0x64, 0x65, 0x5f,
 	0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x06, 0x6e, 0x6f, 0x64, 0x65, 0x49, 0x64,
 	0x12, 0x16, 0x0a, 0x06, 0x72, 0x65, 0x61, 0x73, 0x6f, 0x6e, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09,
-	0x52, 0x06, 0x72, 0x65, 0x61, 0x73, 0x6f, 0x6e, 0x22, 0xdd, 0x02, 0x0a, 0x0e, 0x42, 0x6f, 0x74,
+	0x52, 0x06, 0x72, 0x65, 0x61, 0x73, 0x6f, 0x6e, 0x22, 0xa6, 0x03, 0x0a, 0x0e, 0x42, 0x6f, 0x74,
 	0x53, 0x74, 0x72, 0x65, 0x61, 0x6d, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x12, 0x19, 0x0a, 0x08, 0x65,
 	0x76, 0x65, 0x6e, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x65,
 	0x76, 0x65, 0x6e, 0x74, 0x49, 0x64, 0x12, 0x3b, 0x0a, 0x0b, 0x6f, 0x63, 0x63, 0x75, 0x72, 0x72,
@@ -6752,28 +6828,39 @@ var file_voice_events_v1_jetstream_events_proto_rawDesc = string([]byte{
 	0x18, 0x0c, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x21, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x65,
 	0x76, 0x65, 0x6e, 0x74, 0x73, 0x2e, 0x76, 0x31, 0x2e, 0x57, 0x65, 0x62, 0x68, 0x6f, 0x6f, 0x6b,
 	0x44, 0x65, 0x6c, 0x69, 0x76, 0x65, 0x72, 0x65, 0x64, 0x48, 0x00, 0x52, 0x10, 0x77, 0x65, 0x62,
-	0x68, 0x6f, 0x6f, 0x6b, 0x44, 0x65, 0x6c, 0x69, 0x76, 0x65, 0x72, 0x65, 0x64, 0x42, 0x09, 0x0a,
-	0x07, 0x70, 0x61, 0x79, 0x6c, 0x6f, 0x61, 0x64, 0x22, 0x50, 0x0a, 0x0d, 0x42, 0x6f, 0x74, 0x52,
-	0x65, 0x67, 0x69, 0x73, 0x74, 0x65, 0x72, 0x65, 0x64, 0x12, 0x15, 0x0a, 0x06, 0x62, 0x6f, 0x74,
-	0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x62, 0x6f, 0x74, 0x49, 0x64,
-	0x12, 0x28, 0x0a, 0x10, 0x6f, 0x77, 0x6e, 0x65, 0x72, 0x5f, 0x61, 0x63, 0x63, 0x6f, 0x75, 0x6e,
-	0x74, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0e, 0x6f, 0x77, 0x6e, 0x65,
-	0x72, 0x41, 0x63, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x49, 0x64, 0x22, 0x5b, 0x0a, 0x0f, 0x43, 0x6f,
-	0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x45, 0x78, 0x65, 0x63, 0x75, 0x74, 0x65, 0x64, 0x12, 0x15, 0x0a,
-	0x06, 0x62, 0x6f, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x62,
-	0x6f, 0x74, 0x49, 0x64, 0x12, 0x18, 0x0a, 0x07, 0x63, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x18,
-	0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x63, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x12, 0x17,
-	0x0a, 0x07, 0x63, 0x68, 0x61, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52,
-	0x06, 0x63, 0x68, 0x61, 0x74, 0x49, 0x64, 0x22, 0x64, 0x0a, 0x10, 0x57, 0x65, 0x62, 0x68, 0x6f,
-	0x6f, 0x6b, 0x44, 0x65, 0x6c, 0x69, 0x76, 0x65, 0x72, 0x65, 0x64, 0x12, 0x15, 0x0a, 0x06, 0x62,
-	0x6f, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x62, 0x6f, 0x74,
-	0x49, 0x64, 0x12, 0x1f, 0x0a, 0x0b, 0x64, 0x65, 0x6c, 0x69, 0x76, 0x65, 0x72, 0x79, 0x5f, 0x69,
-	0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0a, 0x64, 0x65, 0x6c, 0x69, 0x76, 0x65, 0x72,
-	0x79, 0x49, 0x64, 0x12, 0x18, 0x0a, 0x07, 0x73, 0x75, 0x63, 0x63, 0x65, 0x73, 0x73, 0x18, 0x03,
-	0x20, 0x01, 0x28, 0x08, 0x52, 0x07, 0x73, 0x75, 0x63, 0x63, 0x65, 0x73, 0x73, 0x42, 0x24, 0x5a,
-	0x22, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x61, 0x70, 0x70, 0x2f, 0x76, 0x6f, 0x69, 0x63, 0x65,
-	0x2f, 0x65, 0x76, 0x65, 0x6e, 0x74, 0x73, 0x2f, 0x76, 0x31, 0x3b, 0x65, 0x76, 0x65, 0x6e, 0x74,
-	0x73, 0x76, 0x31, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x68, 0x6f, 0x6f, 0x6b, 0x44, 0x65, 0x6c, 0x69, 0x76, 0x65, 0x72, 0x65, 0x64, 0x12, 0x47, 0x0a,
+	0x0e, 0x77, 0x65, 0x62, 0x68, 0x6f, 0x6f, 0x6b, 0x5f, 0x66, 0x61, 0x69, 0x6c, 0x65, 0x64, 0x18,
+	0x0d, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1e, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x65, 0x76,
+	0x65, 0x6e, 0x74, 0x73, 0x2e, 0x76, 0x31, 0x2e, 0x57, 0x65, 0x62, 0x68, 0x6f, 0x6f, 0x6b, 0x46,
+	0x61, 0x69, 0x6c, 0x65, 0x64, 0x48, 0x00, 0x52, 0x0d, 0x77, 0x65, 0x62, 0x68, 0x6f, 0x6f, 0x6b,
+	0x46, 0x61, 0x69, 0x6c, 0x65, 0x64, 0x42, 0x09, 0x0a, 0x07, 0x70, 0x61, 0x79, 0x6c, 0x6f, 0x61,
+	0x64, 0x22, 0x50, 0x0a, 0x0d, 0x42, 0x6f, 0x74, 0x52, 0x65, 0x67, 0x69, 0x73, 0x74, 0x65, 0x72,
+	0x65, 0x64, 0x12, 0x15, 0x0a, 0x06, 0x62, 0x6f, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x09, 0x52, 0x05, 0x62, 0x6f, 0x74, 0x49, 0x64, 0x12, 0x28, 0x0a, 0x10, 0x6f, 0x77, 0x6e,
+	0x65, 0x72, 0x5f, 0x61, 0x63, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20,
+	0x01, 0x28, 0x09, 0x52, 0x0e, 0x6f, 0x77, 0x6e, 0x65, 0x72, 0x41, 0x63, 0x63, 0x6f, 0x75, 0x6e,
+	0x74, 0x49, 0x64, 0x22, 0x5b, 0x0a, 0x0f, 0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x45, 0x78,
+	0x65, 0x63, 0x75, 0x74, 0x65, 0x64, 0x12, 0x15, 0x0a, 0x06, 0x62, 0x6f, 0x74, 0x5f, 0x69, 0x64,
+	0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x62, 0x6f, 0x74, 0x49, 0x64, 0x12, 0x18, 0x0a,
+	0x07, 0x63, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07,
+	0x63, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x12, 0x17, 0x0a, 0x07, 0x63, 0x68, 0x61, 0x74, 0x5f,
+	0x69, 0x64, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x06, 0x63, 0x68, 0x61, 0x74, 0x49, 0x64,
+	0x22, 0x64, 0x0a, 0x10, 0x57, 0x65, 0x62, 0x68, 0x6f, 0x6f, 0x6b, 0x44, 0x65, 0x6c, 0x69, 0x76,
+	0x65, 0x72, 0x65, 0x64, 0x12, 0x15, 0x0a, 0x06, 0x62, 0x6f, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x01,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x62, 0x6f, 0x74, 0x49, 0x64, 0x12, 0x1f, 0x0a, 0x0b, 0x64,
+	0x65, 0x6c, 0x69, 0x76, 0x65, 0x72, 0x79, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09,
+	0x52, 0x0a, 0x64, 0x65, 0x6c, 0x69, 0x76, 0x65, 0x72, 0x79, 0x49, 0x64, 0x12, 0x18, 0x0a, 0x07,
+	0x73, 0x75, 0x63, 0x63, 0x65, 0x73, 0x73, 0x18, 0x03, 0x20, 0x01, 0x28, 0x08, 0x52, 0x07, 0x73,
+	0x75, 0x63, 0x63, 0x65, 0x73, 0x73, 0x22, 0x5b, 0x0a, 0x0d, 0x57, 0x65, 0x62, 0x68, 0x6f, 0x6f,
+	0x6b, 0x46, 0x61, 0x69, 0x6c, 0x65, 0x64, 0x12, 0x15, 0x0a, 0x06, 0x62, 0x6f, 0x74, 0x5f, 0x69,
+	0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x62, 0x6f, 0x74, 0x49, 0x64, 0x12, 0x1d,
+	0x0a, 0x0a, 0x65, 0x76, 0x65, 0x6e, 0x74, 0x5f, 0x74, 0x79, 0x70, 0x65, 0x18, 0x02, 0x20, 0x01,
+	0x28, 0x09, 0x52, 0x09, 0x65, 0x76, 0x65, 0x6e, 0x74, 0x54, 0x79, 0x70, 0x65, 0x12, 0x14, 0x0a,
+	0x05, 0x65, 0x72, 0x72, 0x6f, 0x72, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x65, 0x72,
+	0x72, 0x6f, 0x72, 0x42, 0x24, 0x5a, 0x22, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x61, 0x70, 0x70,
+	0x2f, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2f, 0x65, 0x76, 0x65, 0x6e, 0x74, 0x73, 0x2f, 0x76, 0x31,
+	0x3b, 0x65, 0x76, 0x65, 0x6e, 0x74, 0x73, 0x76, 0x31, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f,
+	0x33,
 })
 
 var (
@@ -6788,7 +6875,7 @@ func file_voice_events_v1_jetstream_events_proto_rawDescGZIP() []byte {
 	return file_voice_events_v1_jetstream_events_proto_rawDescData
 }
 
-var file_voice_events_v1_jetstream_events_proto_msgTypes = make([]protoimpl.MessageInfo, 79)
+var file_voice_events_v1_jetstream_events_proto_msgTypes = make([]protoimpl.MessageInfo, 80)
 var file_voice_events_v1_jetstream_events_proto_goTypes = []any{
 	(*UserStreamEvent)(nil),         // 0: voice.events.v1.UserStreamEvent
 	(*UserRegistered)(nil),          // 1: voice.events.v1.UserRegistered
@@ -6869,10 +6956,11 @@ var file_voice_events_v1_jetstream_events_proto_goTypes = []any{
 	(*BotRegistered)(nil),           // 76: voice.events.v1.BotRegistered
 	(*CommandExecuted)(nil),         // 77: voice.events.v1.CommandExecuted
 	(*WebhookDelivered)(nil),        // 78: voice.events.v1.WebhookDelivered
-	(*timestamppb.Timestamp)(nil),   // 79: google.protobuf.Timestamp
+	(*WebhookFailed)(nil),           // 79: voice.events.v1.WebhookFailed
+	(*timestamppb.Timestamp)(nil),   // 80: google.protobuf.Timestamp
 }
 var file_voice_events_v1_jetstream_events_proto_depIdxs = []int32{
-	79, // 0: voice.events.v1.UserStreamEvent.occurred_at:type_name -> google.protobuf.Timestamp
+	80, // 0: voice.events.v1.UserStreamEvent.occurred_at:type_name -> google.protobuf.Timestamp
 	1,  // 1: voice.events.v1.UserStreamEvent.user_registered:type_name -> voice.events.v1.UserRegistered
 	2,  // 2: voice.events.v1.UserStreamEvent.user_logged_in:type_name -> voice.events.v1.UserLoggedIn
 	3,  // 3: voice.events.v1.UserStreamEvent.user_logged_out:type_name -> voice.events.v1.UserLoggedOut
@@ -6884,15 +6972,15 @@ var file_voice_events_v1_jetstream_events_proto_depIdxs = []int32{
 	9,  // 9: voice.events.v1.UserStreamEvent.profile_switched:type_name -> voice.events.v1.ProfileSwitched
 	10, // 10: voice.events.v1.UserStreamEvent.settings_changed:type_name -> voice.events.v1.SettingsChanged
 	11, // 11: voice.events.v1.UserStreamEvent.presence_change:type_name -> voice.events.v1.PresenceChange
-	79, // 12: voice.events.v1.SocialStreamEvent.occurred_at:type_name -> google.protobuf.Timestamp
+	80, // 12: voice.events.v1.SocialStreamEvent.occurred_at:type_name -> google.protobuf.Timestamp
 	13, // 13: voice.events.v1.SocialStreamEvent.friend_added:type_name -> voice.events.v1.FriendAdded
 	14, // 14: voice.events.v1.SocialStreamEvent.friend_removed:type_name -> voice.events.v1.FriendRemoved
 	15, // 15: voice.events.v1.SocialStreamEvent.contact_synced:type_name -> voice.events.v1.ContactSynced
 	16, // 16: voice.events.v1.SocialStreamEvent.user_blocked:type_name -> voice.events.v1.UserBlocked
-	79, // 17: voice.events.v1.RoleStreamEvent.occurred_at:type_name -> google.protobuf.Timestamp
+	80, // 17: voice.events.v1.RoleStreamEvent.occurred_at:type_name -> google.protobuf.Timestamp
 	18, // 18: voice.events.v1.RoleStreamEvent.role_assignment_changed:type_name -> voice.events.v1.RoleAssignmentChanged
 	19, // 19: voice.events.v1.RoleStreamEvent.role_definition_changed:type_name -> voice.events.v1.RoleDefinitionChanged
-	79, // 20: voice.events.v1.MessageStreamEvent.occurred_at:type_name -> google.protobuf.Timestamp
+	80, // 20: voice.events.v1.MessageStreamEvent.occurred_at:type_name -> google.protobuf.Timestamp
 	21, // 21: voice.events.v1.MessageStreamEvent.message_sent:type_name -> voice.events.v1.MessageSent
 	23, // 22: voice.events.v1.MessageStreamEvent.message_edited:type_name -> voice.events.v1.MessageEdited
 	24, // 23: voice.events.v1.MessageStreamEvent.message_deleted:type_name -> voice.events.v1.MessageDeleted
@@ -6902,12 +6990,12 @@ var file_voice_events_v1_jetstream_events_proto_depIdxs = []int32{
 	22, // 27: voice.events.v1.MessageStreamEvent.mention_added:type_name -> voice.events.v1.MentionAdded
 	28, // 28: voice.events.v1.MessageStreamEvent.message_pinned:type_name -> voice.events.v1.MessagePinned
 	29, // 29: voice.events.v1.MessageStreamEvent.message_unpinned:type_name -> voice.events.v1.MessageUnpinned
-	79, // 30: voice.events.v1.ChatStreamEvent.occurred_at:type_name -> google.protobuf.Timestamp
+	80, // 30: voice.events.v1.ChatStreamEvent.occurred_at:type_name -> google.protobuf.Timestamp
 	31, // 31: voice.events.v1.ChatStreamEvent.chat_created:type_name -> voice.events.v1.ChatCreated
 	32, // 32: voice.events.v1.ChatStreamEvent.chat_member_changed:type_name -> voice.events.v1.ChatMemberChanged
 	33, // 33: voice.events.v1.ChatStreamEvent.space_tree_changed:type_name -> voice.events.v1.SpaceTreeChanged
 	34, // 34: voice.events.v1.ChatStreamEvent.space_created:type_name -> voice.events.v1.SpaceCreated
-	79, // 35: voice.events.v1.VoiceStreamEvent.occurred_at:type_name -> google.protobuf.Timestamp
+	80, // 35: voice.events.v1.VoiceStreamEvent.occurred_at:type_name -> google.protobuf.Timestamp
 	36, // 36: voice.events.v1.VoiceStreamEvent.call_started:type_name -> voice.events.v1.CallStarted
 	37, // 37: voice.events.v1.VoiceStreamEvent.call_ended:type_name -> voice.events.v1.CallEnded
 	38, // 38: voice.events.v1.VoiceStreamEvent.screen_share_started:type_name -> voice.events.v1.ScreenShareStarted
@@ -6917,20 +7005,20 @@ var file_voice_events_v1_jetstream_events_proto_depIdxs = []int32{
 	43, // 42: voice.events.v1.VoiceStreamEvent.call_missed:type_name -> voice.events.v1.CallMissed
 	44, // 43: voice.events.v1.VoiceStreamEvent.voice_state_changed:type_name -> voice.events.v1.VoiceStateChanged
 	39, // 44: voice.events.v1.VoiceStreamEvent.screen_share_stopped:type_name -> voice.events.v1.ScreenShareStopped
-	79, // 45: voice.events.v1.CallIncoming.expires_at:type_name -> google.protobuf.Timestamp
-	79, // 46: voice.events.v1.ModerationStreamEvent.occurred_at:type_name -> google.protobuf.Timestamp
+	80, // 45: voice.events.v1.CallIncoming.expires_at:type_name -> google.protobuf.Timestamp
+	80, // 46: voice.events.v1.ModerationStreamEvent.occurred_at:type_name -> google.protobuf.Timestamp
 	46, // 47: voice.events.v1.ModerationStreamEvent.report_created:type_name -> voice.events.v1.ReportCreated
 	47, // 48: voice.events.v1.ModerationStreamEvent.sanction_applied:type_name -> voice.events.v1.SanctionApplied
 	48, // 49: voice.events.v1.ModerationStreamEvent.appeal_submitted:type_name -> voice.events.v1.AppealSubmitted
-	79, // 50: voice.events.v1.SubscriptionStreamEvent.occurred_at:type_name -> google.protobuf.Timestamp
+	80, // 50: voice.events.v1.SubscriptionStreamEvent.occurred_at:type_name -> google.protobuf.Timestamp
 	50, // 51: voice.events.v1.SubscriptionStreamEvent.plan_started:type_name -> voice.events.v1.PlanStarted
 	51, // 52: voice.events.v1.SubscriptionStreamEvent.plan_cancelled:type_name -> voice.events.v1.PlanCancelled
 	52, // 53: voice.events.v1.SubscriptionStreamEvent.payment_success:type_name -> voice.events.v1.PaymentSuccess
 	53, // 54: voice.events.v1.SubscriptionStreamEvent.payment_failed:type_name -> voice.events.v1.PaymentFailed
-	79, // 55: voice.events.v1.FileStreamEvent.occurred_at:type_name -> google.protobuf.Timestamp
+	80, // 55: voice.events.v1.FileStreamEvent.occurred_at:type_name -> google.protobuf.Timestamp
 	55, // 56: voice.events.v1.FileStreamEvent.file_uploaded:type_name -> voice.events.v1.FileUploaded
 	56, // 57: voice.events.v1.FileStreamEvent.file_scan_result:type_name -> voice.events.v1.FileScanResult
-	79, // 58: voice.events.v1.MatchmakingStreamEvent.occurred_at:type_name -> google.protobuf.Timestamp
+	80, // 58: voice.events.v1.MatchmakingStreamEvent.occurred_at:type_name -> google.protobuf.Timestamp
 	58, // 59: voice.events.v1.MatchmakingStreamEvent.search_started:type_name -> voice.events.v1.SearchStarted
 	60, // 60: voice.events.v1.MatchmakingStreamEvent.match_found:type_name -> voice.events.v1.MatchFound
 	61, // 61: voice.events.v1.MatchmakingStreamEvent.match_timeout:type_name -> voice.events.v1.MatchTimeout
@@ -6938,25 +7026,26 @@ var file_voice_events_v1_jetstream_events_proto_depIdxs = []int32{
 	59, // 63: voice.events.v1.MatchmakingStreamEvent.search_cancelled:type_name -> voice.events.v1.SearchCancelled
 	63, // 64: voice.events.v1.MatchmakingStreamEvent.match_completed:type_name -> voice.events.v1.MatchCompleted
 	62, // 65: voice.events.v1.MatchmakingStreamEvent.search_nudge:type_name -> voice.events.v1.SearchNudge
-	79, // 66: voice.events.v1.StoryStreamEvent.occurred_at:type_name -> google.protobuf.Timestamp
+	80, // 66: voice.events.v1.StoryStreamEvent.occurred_at:type_name -> google.protobuf.Timestamp
 	66, // 67: voice.events.v1.StoryStreamEvent.story_created:type_name -> voice.events.v1.StoryCreated
 	67, // 68: voice.events.v1.StoryStreamEvent.story_viewed:type_name -> voice.events.v1.StoryViewed
 	68, // 69: voice.events.v1.StoryStreamEvent.highlight_added:type_name -> voice.events.v1.HighlightAdded
-	79, // 70: voice.events.v1.FederationStreamEvent.occurred_at:type_name -> google.protobuf.Timestamp
+	80, // 70: voice.events.v1.FederationStreamEvent.occurred_at:type_name -> google.protobuf.Timestamp
 	70, // 71: voice.events.v1.FederationStreamEvent.node_connected:type_name -> voice.events.v1.NodeConnected
 	71, // 72: voice.events.v1.FederationStreamEvent.node_disconnected:type_name -> voice.events.v1.NodeDisconnected
 	72, // 73: voice.events.v1.FederationStreamEvent.event_synced:type_name -> voice.events.v1.EventSynced
 	73, // 74: voice.events.v1.FederationStreamEvent.sync_failed:type_name -> voice.events.v1.SyncFailed
 	74, // 75: voice.events.v1.FederationStreamEvent.node_defederated:type_name -> voice.events.v1.NodeDefederated
-	79, // 76: voice.events.v1.BotStreamEvent.occurred_at:type_name -> google.protobuf.Timestamp
+	80, // 76: voice.events.v1.BotStreamEvent.occurred_at:type_name -> google.protobuf.Timestamp
 	76, // 77: voice.events.v1.BotStreamEvent.bot_registered:type_name -> voice.events.v1.BotRegistered
 	77, // 78: voice.events.v1.BotStreamEvent.command_executed:type_name -> voice.events.v1.CommandExecuted
 	78, // 79: voice.events.v1.BotStreamEvent.webhook_delivered:type_name -> voice.events.v1.WebhookDelivered
-	80, // [80:80] is the sub-list for method output_type
-	80, // [80:80] is the sub-list for method input_type
-	80, // [80:80] is the sub-list for extension type_name
-	80, // [80:80] is the sub-list for extension extendee
-	0,  // [0:80] is the sub-list for field type_name
+	79, // 80: voice.events.v1.BotStreamEvent.webhook_failed:type_name -> voice.events.v1.WebhookFailed
+	81, // [81:81] is the sub-list for method output_type
+	81, // [81:81] is the sub-list for method input_type
+	81, // [81:81] is the sub-list for extension type_name
+	81, // [81:81] is the sub-list for extension extendee
+	0,  // [0:81] is the sub-list for field type_name
 }
 
 func init() { file_voice_events_v1_jetstream_events_proto_init() }
@@ -7058,6 +7147,7 @@ func file_voice_events_v1_jetstream_events_proto_init() {
 		(*BotStreamEvent_BotRegistered)(nil),
 		(*BotStreamEvent_CommandExecuted)(nil),
 		(*BotStreamEvent_WebhookDelivered)(nil),
+		(*BotStreamEvent_WebhookFailed)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -7065,7 +7155,7 @@ func file_voice_events_v1_jetstream_events_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_voice_events_v1_jetstream_events_proto_rawDesc), len(file_voice_events_v1_jetstream_events_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   79,
+			NumMessages:   80,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

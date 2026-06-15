@@ -58,7 +58,9 @@ class SlashCommandMenuSheet extends ConsumerWidget {
                   : commands
                         .where(
                           (cmd) =>
-                              cmd.name.toLowerCase().contains(normalizedFilter) ||
+                              cmd.fullCommandName
+                                  .toLowerCase()
+                                  .contains(normalizedFilter) ||
                               cmd.botName.toLowerCase().contains(
                                 normalizedFilter,
                               ),
@@ -71,20 +73,35 @@ class SlashCommandMenuSheet extends ConsumerWidget {
                   icon: Icons.smart_toy_outlined,
                 );
               }
+              final grouped = _groupCommands(filtered);
               return ListView.builder(
                 shrinkWrap: true,
-                itemCount: filtered.length,
+                itemCount: grouped.length,
                 itemBuilder: (context, index) {
-                  final cmd = filtered[index];
-                  return ListTile(
-                    key: ValueKey('slash_command_${cmd.botId}_${cmd.name}'),
-                    leading: Icon(Icons.terminal, color: voice.profileAccent),
-                      title: Text(cmd.displayName),
-                      subtitle: Text(
-                        cmd.description.isEmpty ? cmd.botName : cmd.description,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                  final entry = grouped[index];
+                  if (entry is _SlashMenuHeader) {
+                    return Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                      child: Text(
+                        entry.label,
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                       ),
+                    );
+                  }
+                  final cmd = (entry as _SlashMenuItem).command;
+                  return ListTile(
+                    key: ValueKey(
+                      'slash_command_${cmd.botId}_${cmd.fullCommandName}',
+                    ),
+                    leading: Icon(Icons.terminal, color: voice.profileAccent),
+                    title: Text(cmd.displayName),
+                    subtitle: Text(
+                      cmd.description.isEmpty ? cmd.botName : cmd.description,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     onTap: () => onSelected(cmd),
                   );
                 },
@@ -95,6 +112,42 @@ class SlashCommandMenuSheet extends ConsumerWidget {
       ),
     );
   }
+
+  List<_SlashMenuEntry> _groupCommands(List<BotSlashCommand> commands) {
+    final sorted = [...commands]
+      ..sort((a, b) {
+        final bot = a.botName.compareTo(b.botName);
+        if (bot != 0) return bot;
+        final group = (a.groupName ?? '').compareTo(b.groupName ?? '');
+        if (group != 0) return group;
+        return a.name.compareTo(b.name);
+      });
+    final out = <_SlashMenuEntry>[];
+    String? lastHeader;
+    for (final cmd in sorted) {
+      final header = cmd.groupName != null && cmd.groupName!.isNotEmpty
+          ? '${cmd.botName} / ${cmd.groupName}'
+          : cmd.botName;
+      if (header != lastHeader) {
+        out.add(_SlashMenuHeader(header));
+        lastHeader = header;
+      }
+      out.add(_SlashMenuItem(cmd));
+    }
+    return out;
+  }
+}
+
+sealed class _SlashMenuEntry {}
+
+class _SlashMenuHeader extends _SlashMenuEntry {
+  _SlashMenuHeader(this.label);
+  final String label;
+}
+
+class _SlashMenuItem extends _SlashMenuEntry {
+  _SlashMenuItem(this.command);
+  final BotSlashCommand command;
 }
 
 Future<void> showSlashCommandMenu({

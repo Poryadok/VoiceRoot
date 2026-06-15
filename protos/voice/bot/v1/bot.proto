@@ -54,6 +54,7 @@ service BotService {
   rpc ExecuteSlashInteraction(ExecuteSlashInteractionRequest) returns (ExecuteSlashInteractionResponse);
   rpc ListSlashCommandsForChat(ListSlashCommandsForChatRequest) returns (ListSlashCommandsForChatResponse);
   rpc CompleteInteraction(CompleteInteractionRequest) returns (CompleteInteractionResponse);
+  rpc AutocompleteSlashOption(AutocompleteSlashOptionRequest) returns (AutocompleteSlashOptionResponse);
 }
 
 message Bot {
@@ -280,6 +281,8 @@ message SlashCommand {
   string name = 3;
   string description = 4;
   repeated SlashCommandOption options = 5;
+  // Parent command for subcommands, e.g. "queue" for "/queue join".
+  optional string group_name = 6;
 }
 
 message ListSlashCommandsForChatRequest {
@@ -316,4 +319,22 @@ message CompleteInteractionRequest {
 
 message CompleteInteractionResponse {
   optional voice.messaging.v1.Message message = 1;
+}
+
+message AutocompleteSlashOptionRequest {
+  voice.chat.v1.ChatRef chat = 1;
+  string bot_id = 2;
+  string command_name = 3;
+  string option_name = 4;
+  string focused_value = 5;
+  string options_json = 6;
+}
+
+message AutocompleteChoice {
+  string name = 1;
+  string value = 2;
+}
+
+message AutocompleteSlashOptionResponse {
+  repeated AutocompleteChoice choices = 1;
 }

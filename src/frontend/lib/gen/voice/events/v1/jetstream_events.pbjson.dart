@@ -2126,6 +2126,15 @@ const BotStreamEvent$json = {
       '9': 0,
       '10': 'webhookDelivered'
     },
+    {
+      '1': 'webhook_failed',
+      '3': 13,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.WebhookFailed',
+      '9': 0,
+      '10': 'webhookFailed'
+    },
   ],
   '8': [
     {'1': 'payload'},
@@ -2140,7 +2149,8 @@ final $typed_data.Uint8List botStreamEventDescriptor = $convert.base64Decode(
     'RSZWdpc3RlcmVkEk0KEGNvbW1hbmRfZXhlY3V0ZWQYCyABKAsyIC52b2ljZS5ldmVudHMudjEu'
     'Q29tbWFuZEV4ZWN1dGVkSABSD2NvbW1hbmRFeGVjdXRlZBJQChF3ZWJob29rX2RlbGl2ZXJlZB'
     'gMIAEoCzIhLnZvaWNlLmV2ZW50cy52MS5XZWJob29rRGVsaXZlcmVkSABSEHdlYmhvb2tEZWxp'
-    'dmVyZWRCCQoHcGF5bG9hZA==');
+    'dmVyZWQSRwoOd2ViaG9va19mYWlsZWQYDSABKAsyHi52b2ljZS5ldmVudHMudjEuV2ViaG9va0'
+    'ZhaWxlZEgAUg13ZWJob29rRmFpbGVkQgkKB3BheWxvYWQ=');
 
 @$core.Deprecated('Use botRegisteredDescriptor instead')
 const BotRegistered$json = {
@@ -2185,3 +2195,18 @@ const WebhookDelivered$json = {
 final $typed_data.Uint8List webhookDeliveredDescriptor = $convert.base64Decode(
     'ChBXZWJob29rRGVsaXZlcmVkEhUKBmJvdF9pZBgBIAEoCVIFYm90SWQSHwoLZGVsaXZlcnlfaW'
     'QYAiABKAlSCmRlbGl2ZXJ5SWQSGAoHc3VjY2VzcxgDIAEoCFIHc3VjY2Vzcw==');
+
+@$core.Deprecated('Use webhookFailedDescriptor instead')
+const WebhookFailed$json = {
+  '1': 'WebhookFailed',
+  '2': [
+    {'1': 'bot_id', '3': 1, '4': 1, '5': 9, '10': 'botId'},
+    {'1': 'event_type', '3': 2, '4': 1, '5': 9, '10': 'eventType'},
+    {'1': 'error', '3': 3, '4': 1, '5': 9, '10': 'error'},
+  ],
+};
+
+/// Descriptor for `WebhookFailed`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List webhookFailedDescriptor = $convert.base64Decode(
+    'Cg1XZWJob29rRmFpbGVkEhUKBmJvdF9pZBgBIAEoCVIFYm90SWQSHQoKZXZlbnRfdHlwZRgCIA'
+    'EoCVIJZXZlbnRUeXBlEhQKBWVycm9yGAMgASgJUgVlcnJvcg==');

@@ -30,20 +30,59 @@ final class BotsApiFailure extends BotsApiResult<Never> {
   final int? statusCode;
 }
 
+class BotSlashCommandOption {
+  const BotSlashCommandOption({
+    required this.name,
+    required this.type,
+    this.required = false,
+    this.autocomplete = false,
+  });
+
+  final String name;
+  final String type;
+  final bool required;
+  final bool autocomplete;
+
+  factory BotSlashCommandOption.fromProto(bot_pb.SlashCommandOption opt) {
+    return BotSlashCommandOption(
+      name: opt.name,
+      type: opt.type,
+      required: opt.required,
+      autocomplete: opt.autocomplete,
+    );
+  }
+}
+
+class BotAutocompleteChoice {
+  const BotAutocompleteChoice({required this.name, required this.value});
+
+  final String name;
+  final String value;
+}
+
 class BotSlashCommand {
   const BotSlashCommand({
     required this.botId,
     required this.botName,
     required this.name,
     required this.description,
+    this.groupName,
+    this.options = const [],
   });
 
   final String botId;
   final String botName;
   final String name;
   final String description;
+  final String? groupName;
+  final List<BotSlashCommandOption> options;
 
-  String get displayName => '/$name';
+  String get fullCommandName =>
+      groupName != null && groupName!.isNotEmpty ? '$groupName $name' : name;
+
+  String get displayName => '/$fullCommandName';
+
+  String get menuGroupKey => '$botName::${groupName ?? ''}';
 
   factory BotSlashCommand.fromProto(bot_pb.SlashCommand cmd) {
     return BotSlashCommand(
@@ -51,6 +90,8 @@ class BotSlashCommand {
       botName: cmd.botName,
       name: cmd.name,
       description: cmd.description,
+      groupName: cmd.hasGroupName() ? cmd.groupName : null,
+      options: cmd.options.map(BotSlashCommandOption.fromProto).toList(),
     );
   }
 }
@@ -134,6 +175,42 @@ class VoiceBotsClient {
       (data) => _slashOutcomeFromProto(
         data as bot_pb.ExecuteSlashInteractionResponse,
       ),
+    );
+  }
+
+  Future<BotsApiResult<List<BotAutocompleteChoice>>> autocompleteOption({
+    required String authorization,
+    required String chatId,
+    required String chatType,
+    required String botId,
+    required String commandName,
+    required String optionName,
+    required String focusedValue,
+    String optionsJson = '{}',
+  }) async {
+    final result = await _gateway.postProto(
+      uri: _gateway.resolve('/api/v1/bots/autocomplete'),
+      authorization: authorization,
+      body: bot_pb.AutocompleteSlashOptionRequest(
+        chat: chat_pb.ChatRef(id: chatId, type: _chatTypeFromWire(chatType)),
+        botId: botId,
+        commandName: commandName,
+        optionName: optionName,
+        focusedValue: focusedValue,
+        optionsJson: optionsJson,
+      ),
+      createEmpty: bot_pb.AutocompleteSlashOptionResponse.create,
+    );
+    return _map(
+      result,
+      (data) {
+        final response = data as bot_pb.AutocompleteSlashOptionResponse;
+        return response.choices
+            .map(
+              (c) => BotAutocompleteChoice(name: c.name, value: c.value),
+            )
+            .toList(growable: false);
+      },
     );
   }
 

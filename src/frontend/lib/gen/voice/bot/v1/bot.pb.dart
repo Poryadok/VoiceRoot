@@ -3232,6 +3232,7 @@ class SlashCommand extends $pb.GeneratedMessage {
     $core.String? name,
     $core.String? description,
     $core.Iterable<SlashCommandOption>? options,
+    $core.String? groupName,
   }) {
     final result = create();
     if (botId != null) result.botId = botId;
@@ -3239,6 +3240,7 @@ class SlashCommand extends $pb.GeneratedMessage {
     if (name != null) result.name = name;
     if (description != null) result.description = description;
     if (options != null) result.options.addAll(options);
+    if (groupName != null) result.groupName = groupName;
     return result;
   }
 
@@ -3261,6 +3263,7 @@ class SlashCommand extends $pb.GeneratedMessage {
     ..aOS(4, _omitFieldNames ? '' : 'description')
     ..pPM<SlashCommandOption>(5, _omitFieldNames ? '' : 'options',
         subBuilder: SlashCommandOption.create)
+    ..aOS(6, _omitFieldNames ? '' : 'groupName')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -3320,6 +3323,16 @@ class SlashCommand extends $pb.GeneratedMessage {
 
   @$pb.TagNumber(5)
   $pb.PbList<SlashCommandOption> get options => $_getList(4);
+
+  /// Parent command for subcommands, e.g. "queue" for "/queue join".
+  @$pb.TagNumber(6)
+  $core.String get groupName => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set groupName($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasGroupName() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearGroupName() => $_clearField(6);
 }
 
 class ListSlashCommandsForChatRequest extends $pb.GeneratedMessage {
@@ -3816,6 +3829,245 @@ class CompleteInteractionResponse extends $pb.GeneratedMessage {
   void clearMessage() => $_clearField(1);
   @$pb.TagNumber(1)
   $3.Message ensureMessage() => $_ensure(0);
+}
+
+class AutocompleteSlashOptionRequest extends $pb.GeneratedMessage {
+  factory AutocompleteSlashOptionRequest({
+    $2.ChatRef? chat,
+    $core.String? botId,
+    $core.String? commandName,
+    $core.String? optionName,
+    $core.String? focusedValue,
+    $core.String? optionsJson,
+  }) {
+    final result = create();
+    if (chat != null) result.chat = chat;
+    if (botId != null) result.botId = botId;
+    if (commandName != null) result.commandName = commandName;
+    if (optionName != null) result.optionName = optionName;
+    if (focusedValue != null) result.focusedValue = focusedValue;
+    if (optionsJson != null) result.optionsJson = optionsJson;
+    return result;
+  }
+
+  AutocompleteSlashOptionRequest._();
+
+  factory AutocompleteSlashOptionRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory AutocompleteSlashOptionRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'AutocompleteSlashOptionRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.bot.v1'),
+      createEmptyInstance: create)
+    ..aOM<$2.ChatRef>(1, _omitFieldNames ? '' : 'chat',
+        subBuilder: $2.ChatRef.create)
+    ..aOS(2, _omitFieldNames ? '' : 'botId')
+    ..aOS(3, _omitFieldNames ? '' : 'commandName')
+    ..aOS(4, _omitFieldNames ? '' : 'optionName')
+    ..aOS(5, _omitFieldNames ? '' : 'focusedValue')
+    ..aOS(6, _omitFieldNames ? '' : 'optionsJson')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AutocompleteSlashOptionRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AutocompleteSlashOptionRequest copyWith(
+          void Function(AutocompleteSlashOptionRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as AutocompleteSlashOptionRequest))
+          as AutocompleteSlashOptionRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static AutocompleteSlashOptionRequest create() =>
+      AutocompleteSlashOptionRequest._();
+  @$core.override
+  AutocompleteSlashOptionRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static AutocompleteSlashOptionRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<AutocompleteSlashOptionRequest>(create);
+  static AutocompleteSlashOptionRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $2.ChatRef get chat => $_getN(0);
+  @$pb.TagNumber(1)
+  set chat($2.ChatRef value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasChat() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearChat() => $_clearField(1);
+  @$pb.TagNumber(1)
+  $2.ChatRef ensureChat() => $_ensure(0);
+
+  @$pb.TagNumber(2)
+  $core.String get botId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set botId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasBotId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearBotId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get commandName => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set commandName($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasCommandName() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearCommandName() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get optionName => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set optionName($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasOptionName() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearOptionName() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get focusedValue => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set focusedValue($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasFocusedValue() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearFocusedValue() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get optionsJson => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set optionsJson($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasOptionsJson() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearOptionsJson() => $_clearField(6);
+}
+
+class AutocompleteChoice extends $pb.GeneratedMessage {
+  factory AutocompleteChoice({
+    $core.String? name,
+    $core.String? value,
+  }) {
+    final result = create();
+    if (name != null) result.name = name;
+    if (value != null) result.value = value;
+    return result;
+  }
+
+  AutocompleteChoice._();
+
+  factory AutocompleteChoice.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory AutocompleteChoice.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'AutocompleteChoice',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.bot.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'name')
+    ..aOS(2, _omitFieldNames ? '' : 'value')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AutocompleteChoice clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AutocompleteChoice copyWith(void Function(AutocompleteChoice) updates) =>
+      super.copyWith((message) => updates(message as AutocompleteChoice))
+          as AutocompleteChoice;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static AutocompleteChoice create() => AutocompleteChoice._();
+  @$core.override
+  AutocompleteChoice createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static AutocompleteChoice getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<AutocompleteChoice>(create);
+  static AutocompleteChoice? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get name => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set name($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasName() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearName() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get value => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set value($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasValue() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearValue() => $_clearField(2);
+}
+
+class AutocompleteSlashOptionResponse extends $pb.GeneratedMessage {
+  factory AutocompleteSlashOptionResponse({
+    $core.Iterable<AutocompleteChoice>? choices,
+  }) {
+    final result = create();
+    if (choices != null) result.choices.addAll(choices);
+    return result;
+  }
+
+  AutocompleteSlashOptionResponse._();
+
+  factory AutocompleteSlashOptionResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory AutocompleteSlashOptionResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'AutocompleteSlashOptionResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.bot.v1'),
+      createEmptyInstance: create)
+    ..pPM<AutocompleteChoice>(1, _omitFieldNames ? '' : 'choices',
+        subBuilder: AutocompleteChoice.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AutocompleteSlashOptionResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AutocompleteSlashOptionResponse copyWith(
+          void Function(AutocompleteSlashOptionResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as AutocompleteSlashOptionResponse))
+          as AutocompleteSlashOptionResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static AutocompleteSlashOptionResponse create() =>
+      AutocompleteSlashOptionResponse._();
+  @$core.override
+  AutocompleteSlashOptionResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static AutocompleteSlashOptionResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<AutocompleteSlashOptionResponse>(
+          create);
+  static AutocompleteSlashOptionResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $pb.PbList<AutocompleteChoice> get choices => $_getList(0);
 }
 
 const $core.bool _omitFieldNames =

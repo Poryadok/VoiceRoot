@@ -110,14 +110,23 @@
 
 ### Batch BOT-A — «Bot API и Gateway parity»
 
-- [ ] **Gateway REST parity** — `GET/PATCH/DELETE` bot, uninstall, `ListInstalledBots`, webhook URL (`transcode_bots.go`).
-- [ ] **Autocomplete** — RPC + Gateway; клиент при `autocomplete: true`, до 25 вариантов.
-- [ ] **Subcommands** — `/queue join`, валидация манифеста, группировка в `/`-меню.
-- [ ] **`bot_event_log` delivery failures** — failed/timeout rows при webhook delivery.
-- [ ] **Миграции bot_db** — golang-migrate вместо `Exec` всего `000001` на старт.
-- [ ] **`EditBotMessage`** — реализация в Bot Service.
+- [x] **Gateway REST parity** — `GET/PATCH/DELETE` bot, uninstall, `ListInstalledBots`, webhook URL (`transcode_bots.go`).
+- [x] **Autocomplete** — RPC + Gateway; клиент при `autocomplete: true`, до 25 вариантов.
+- [x] **Subcommands** — `/queue join`, валидация манифеста, группировка в `/`-меню.
+- [x] **`bot_event_log` delivery failures** — failed/timeout rows при webhook delivery.
+- [x] **Миграции bot_db** — golang-migrate вместо `Exec` всего `000001` на старт.
+- [x] **`EditBotMessage`** — реализация в Bot Service.
 
 **Промпт-якорь:** `Phase 16 bots — batch BOT-A API/gateway`.
+
+**Аудит (post BOT-A):**
+- [ ] **grpcsvc coverage ≥80%** — сейчас ~55%; добить unit/integration (пересекается с BOT-D).
+- [ ] **Autocomplete polling mode** — webhook-only sync path; polling боты получают пустой список (док/бот API).
+- [ ] **EditBotMessage** — нет integration test с Messaging mock; ownership edge cases.
+- [ ] **Hub deferred persistence** — остаётся BOT-C (`bot_event_log` для defer).
+- [ ] **docs/features/bots.md** — polling path `/api/bots/...` vs фактический `/api/v1/bots/...`.
+- [ ] **buf generate BSR** — `make buf-generate` 403; локально `buf generate --template buf.gen.local-go.yaml`.
+- [ ] **Gateway Docker build** — `go mod download` в образе gateway (missing messaging context) — блокирует `compose-app-up` на чистой машине.
 
 ---
 

@@ -10,6 +10,7 @@ Per-database folders for Phase 0–1 ([docs/DATA_SCOPE_V1.md](../../../docs/DATA
 | `chat_db/` | `chat_db` | Chat Service |
 | `messaging_db/` | `messaging_db` | Messaging Service |
 | `file_db/` | `file_db` | File Service |
+| `bot_db/` | `bot_db` | Bot Service |
 
 Apply against the matching database only; do not run one folder against another DB ([docs/OPERATIONS.md](../../../docs/OPERATIONS.md)).
 
@@ -32,7 +33,7 @@ Example with [migrate](https://github.com/golang-migrate/migrate) CLI for a Go-o
 migrate -path src/backend/migrations/user_db -database "postgres://voice:voice@localhost:5432/user_db?sslmode=disable" up
 ```
 
-Repeat for `social_db`, `chat_db`, `messaging_db`, `file_db`.
+Repeat for `social_db`, `chat_db`, `messaging_db`, `file_db`, `bot_db`.
 
 **Phase 15 E2E (compose Path A):** `e2e_key_backups` via Auth Flyway `V4__e2e_key_backups.sql` on boot. `chat_db` / `messaging_db` DDL (`e2e_enabled`, `is_e2e`, `e2e_prekey_bundles`) via idempotent `docker/postgres/incremental_*.sql.snippet`, or `make compose-migrate-phase15` for golang-migrate on Go-owned DBs.
 

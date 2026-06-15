@@ -30,6 +30,46 @@ func (f *fakeBotClient) PollEvents(ctx context.Context, in *botv1.PollEventsRequ
 	return &fakeBotPollStream{}, nil
 }
 
+func (f *fakeBotClient) GetBot(ctx context.Context, in *botv1.GetBotRequest, _ ...grpc.CallOption) (*botv1.GetBotResponse, error) {
+	return &botv1.GetBotResponse{Bot: &botv1.Bot{Id: in.GetBotId(), Name: "TestBot"}}, nil
+}
+
+func (f *fakeBotClient) UpdateBot(ctx context.Context, in *botv1.UpdateBotRequest, _ ...grpc.CallOption) (*botv1.UpdateBotResponse, error) {
+	name := in.GetName()
+	return &botv1.UpdateBotResponse{Bot: &botv1.Bot{Id: in.GetBotId(), Name: name}}, nil
+}
+
+func (f *fakeBotClient) DeleteBot(ctx context.Context, in *botv1.DeleteBotRequest, _ ...grpc.CallOption) (*botv1.DeleteBotResponse, error) {
+	return &botv1.DeleteBotResponse{}, nil
+}
+
+func (f *fakeBotClient) GetWebhookURL(ctx context.Context, in *botv1.GetWebhookURLRequest, _ ...grpc.CallOption) (*botv1.GetWebhookURLResponse, error) {
+	url := "https://example.com/hook"
+	return &botv1.GetWebhookURLResponse{Url: &url}, nil
+}
+
+func (f *fakeBotClient) SetWebhookURL(ctx context.Context, in *botv1.SetWebhookURLRequest, _ ...grpc.CallOption) (*botv1.SetWebhookURLResponse, error) {
+	return &botv1.SetWebhookURLResponse{}, nil
+}
+
+func (f *fakeBotClient) ListInstalledBots(ctx context.Context, in *botv1.ListInstalledBotsRequest, _ ...grpc.CallOption) (*botv1.ListInstalledBotsResponse, error) {
+	return &botv1.ListInstalledBotsResponse{}, nil
+}
+
+func (f *fakeBotClient) UninstallBotFromSpace(ctx context.Context, in *botv1.UninstallBotFromSpaceRequest, _ ...grpc.CallOption) (*botv1.UninstallBotFromSpaceResponse, error) {
+	return &botv1.UninstallBotFromSpaceResponse{}, nil
+}
+
+func (f *fakeBotClient) AutocompleteSlashOption(ctx context.Context, in *botv1.AutocompleteSlashOptionRequest, _ ...grpc.CallOption) (*botv1.AutocompleteSlashOptionResponse, error) {
+	return &botv1.AutocompleteSlashOptionResponse{
+		Choices: []*botv1.AutocompleteChoice{{Name: "CS2", Value: "cs2"}},
+	}, nil
+}
+
+func (f *fakeBotClient) EditBotMessage(ctx context.Context, in *botv1.EditBotMessageRequest, _ ...grpc.CallOption) (*botv1.EditBotMessageResponse, error) {
+	return &botv1.EditBotMessageResponse{}, nil
+}
+
 type fakeBotPollStream struct {
 	grpc.ClientStream
 }
@@ -59,6 +99,7 @@ func TestBotBearerToken_parsesBotPrefix(t *testing.T) {
 func TestIsBotTokenRESTRoute(t *testing.T) {
 	require.True(t, isBotTokenRESTRoute("/api/v1/bots/me/interactions/poll"))
 	require.True(t, isBotTokenRESTRoute("/api/v1/bots/me/interactions/defer"))
+	require.True(t, isBotTokenRESTRoute("/api/v1/bots/me/messages/msg-1"))
 	require.False(t, isBotTokenRESTRoute("/api/v1/bots/interactions"))
 }
 
@@ -70,4 +111,68 @@ func TestServeBots_deferRouteRegistered(t *testing.T) {
 	ok := tc.serveBots(rec, req, "me/interactions/defer")
 	require.True(t, ok)
 	require.Equal(t, http.StatusNoContent, rec.Code)
+}
+
+func TestServeBots_getBotRouteRegistered(t *testing.T) {
+	tc := newTranscoder(&grpcClients{bot: &fakeBotClient{}})
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/bots/bot-1", http.NoBody)
+	req.Header.Set("Authorization", "Bearer token")
+	req.Header.Set("X-Voice-User-Id", "00000000-0000-0000-0000-000000000001")
+	req.Header.Set("X-Voice-Account-Id", "00000000-0000-0000-0000-000000000001")
+	rec := httptest.NewRecorder()
+	ok := tc.serveBots(rec, req, "bot-1")
+	require.True(t, ok)
+	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestServeBots_autocompleteRouteRegistered(t *testing.T) {
+	tc := newTranscoder(&grpcClients{bot: &fakeBotClient{}})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/bots/autocomplete", http.NoBody)
+	req.Header.Set("Authorization", "Bearer token")
+	req.Header.Set("X-Voice-User-Id", "00000000-0000-0000-0000-000000000001")
+	req.Header.Set("X-Voice-Profile-Id", "00000000-0000-0000-0000-000000000002")
+	rec := httptest.NewRecorder()
+	ok := tc.serveBots(rec, req, "autocomplete")
+	require.True(t, ok)
+	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestServeBots_editMessageRouteRegistered(t *testing.T) {
+	tc := newTranscoder(&grpcClients{bot: &fakeBotClient{}})
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/bots/me/messages/msg-42", http.NoBody)
+	req.Header.Set("Authorization", "Bot vb_testtoken")
+	rec := httptest.NewRecorder()
+	ok := tc.serveBots(rec, req, "me/messages/msg-42")
+	require.True(t, ok)
+	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestServeBots_listInstalledBotsRouteRegistered(t *testing.T) {
+	tc := newTranscoder(&grpcClients{bot: &fakeBotClient{}})
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/bots/spaces/space-1/installed", http.NoBody)
+	req.Header.Set("Authorization", "Bearer token")
+	req.Header.Set("X-Voice-User-Id", "00000000-0000-0000-0000-000000000001")
+	rec := httptest.NewRecorder()
+	ok := tc.serveBots(rec, req, "spaces/space-1/installed")
+	require.True(t, ok)
+	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestServeBots_webhookURLRoutesRegistered(t *testing.T) {
+	tc := newTranscoder(&grpcClients{bot: &fakeBotClient{}})
+	getReq := httptest.NewRequest(http.MethodGet, "/api/v1/bots/bot-1/webhook", http.NoBody)
+	getReq.Header.Set("Authorization", "Bearer token")
+	getReq.Header.Set("X-Voice-User-Id", "00000000-0000-0000-0000-000000000001")
+	getReq.Header.Set("X-Voice-Account-Id", "00000000-0000-0000-0000-000000000001")
+	getRec := httptest.NewRecorder()
+	require.True(t, tc.serveBots(getRec, getReq, "bot-1/webhook"))
+	require.Equal(t, http.StatusOK, getRec.Code)
+
+	patchReq := httptest.NewRequest(http.MethodPatch, "/api/v1/bots/bot-1/webhook", http.NoBody)
+	patchReq.Header.Set("Authorization", "Bearer token")
+	patchReq.Header.Set("X-Voice-User-Id", "00000000-0000-0000-0000-000000000001")
+	patchReq.Header.Set("X-Voice-Account-Id", "00000000-0000-0000-0000-000000000001")
+	patchRec := httptest.NewRecorder()
+	require.True(t, tc.serveBots(patchRec, patchReq, "bot-1/webhook"))
+	require.Equal(t, http.StatusNoContent, patchRec.Code)
 }

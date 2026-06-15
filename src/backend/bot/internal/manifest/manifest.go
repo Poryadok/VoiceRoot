@@ -8,11 +8,26 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Subcommand is a grouped slash subcommand (e.g. queue join).
+type Subcommand struct {
+	Name        string `json:"name" yaml:"name"`
+	Description string `json:"description" yaml:"description"`
+}
+
 // Command describes a slash command from manifest.
 type Command struct {
-	Name        string   `json:"name" yaml:"name"`
-	Description string   `json:"description" yaml:"description"`
-	Options     []Option `json:"options" yaml:"options"`
+	Name        string       `json:"name" yaml:"name"`
+	Description string       `json:"description" yaml:"description"`
+	Options     []Option     `json:"options" yaml:"options"`
+	Subcommands []Subcommand `json:"subcommands" yaml:"subcommands"`
+}
+
+// FlatCommand is a stored slash command after subcommand expansion.
+type FlatCommand struct {
+	Name        string
+	GroupName   string
+	Description string
+	Options     []Option
 }
 
 // Option is a slash command parameter.
@@ -70,19 +85,80 @@ func Validate(doc Document) []string {
 			errs = append(errs, "unknown scope: "+scope)
 		}
 	}
+	errs = append(errs, validateCommands(doc.Commands)...)
+	return errs
+}
+
+// ValidateCommands validates slash command definitions without manifest metadata.
+func ValidateCommands(commands []Command) []string {
+	return validateCommands(commands)
+}
+
+func validateCommands(commands []Command) []string {
+	var errs []string
 	seen := map[string]struct{}{}
-	for _, cmd := range doc.Commands {
+	for _, cmd := range commands {
 		name := strings.TrimSpace(cmd.Name)
 		if name == "" {
 			errs = append(errs, "command name is required")
 			continue
 		}
-		if _, dup := seen[name]; dup {
-			errs = append(errs, "duplicate command: "+name)
+		if len(cmd.Subcommands) > 0 && len(cmd.Options) > 0 {
+			errs = append(errs, "command "+name+": cannot have both options and subcommands")
 		}
-		seen[name] = struct{}{}
+		if len(cmd.Subcommands) == 0 {
+			if _, dup := seen[name]; dup {
+				errs = append(errs, "duplicate command: "+name)
+			}
+			seen[name] = struct{}{}
+			continue
+		}
+		for _, sub := range cmd.Subcommands {
+			subName := strings.TrimSpace(sub.Name)
+			if subName == "" {
+				errs = append(errs, "subcommand name is required for "+name)
+				continue
+			}
+			full := name + " " + subName
+			if _, dup := seen[full]; dup {
+				errs = append(errs, "duplicate command: "+full)
+			}
+			seen[full] = struct{}{}
+		}
 	}
 	return errs
+}
+
+// FlattenCommands expands subcommands into storable slash commands.
+func FlattenCommands(commands []Command) []FlatCommand {
+	var out []FlatCommand
+	for _, cmd := range commands {
+		name := strings.TrimSpace(cmd.Name)
+		if len(cmd.Subcommands) == 0 {
+			out = append(out, FlatCommand{
+				Name:        name,
+				Description: strings.TrimSpace(cmd.Description),
+				Options:     cmd.Options,
+			})
+			continue
+		}
+		for _, sub := range cmd.Subcommands {
+			subName := strings.TrimSpace(sub.Name)
+			if subName == "" {
+				continue
+			}
+			desc := strings.TrimSpace(sub.Description)
+			if desc == "" {
+				desc = strings.TrimSpace(cmd.Description)
+			}
+			out = append(out, FlatCommand{
+				Name:        subName,
+				GroupName:   name,
+				Description: desc,
+			})
+		}
+	}
+	return out
 }
 
 // ToJSON returns normalized manifest JSON for storage.

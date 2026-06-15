@@ -44,6 +44,7 @@ const (
 	BotService_ExecuteSlashInteraction_FullMethodName  = "/voice.bot.v1.BotService/ExecuteSlashInteraction"
 	BotService_ListSlashCommandsForChat_FullMethodName = "/voice.bot.v1.BotService/ListSlashCommandsForChat"
 	BotService_CompleteInteraction_FullMethodName      = "/voice.bot.v1.BotService/CompleteInteraction"
+	BotService_AutocompleteSlashOption_FullMethodName  = "/voice.bot.v1.BotService/AutocompleteSlashOption"
 )
 
 // BotServiceClient is the client API for BotService service.
@@ -80,6 +81,7 @@ type BotServiceClient interface {
 	ExecuteSlashInteraction(ctx context.Context, in *ExecuteSlashInteractionRequest, opts ...grpc.CallOption) (*ExecuteSlashInteractionResponse, error)
 	ListSlashCommandsForChat(ctx context.Context, in *ListSlashCommandsForChatRequest, opts ...grpc.CallOption) (*ListSlashCommandsForChatResponse, error)
 	CompleteInteraction(ctx context.Context, in *CompleteInteractionRequest, opts ...grpc.CallOption) (*CompleteInteractionResponse, error)
+	AutocompleteSlashOption(ctx context.Context, in *AutocompleteSlashOptionRequest, opts ...grpc.CallOption) (*AutocompleteSlashOptionResponse, error)
 }
 
 type botServiceClient struct {
@@ -349,6 +351,16 @@ func (c *botServiceClient) CompleteInteraction(ctx context.Context, in *Complete
 	return out, nil
 }
 
+func (c *botServiceClient) AutocompleteSlashOption(ctx context.Context, in *AutocompleteSlashOptionRequest, opts ...grpc.CallOption) (*AutocompleteSlashOptionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AutocompleteSlashOptionResponse)
+	err := c.cc.Invoke(ctx, BotService_AutocompleteSlashOption_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // BotServiceServer is the server API for BotService service.
 // All implementations must embed UnimplementedBotServiceServer
 // for forward compatibility.
@@ -383,6 +395,7 @@ type BotServiceServer interface {
 	ExecuteSlashInteraction(context.Context, *ExecuteSlashInteractionRequest) (*ExecuteSlashInteractionResponse, error)
 	ListSlashCommandsForChat(context.Context, *ListSlashCommandsForChatRequest) (*ListSlashCommandsForChatResponse, error)
 	CompleteInteraction(context.Context, *CompleteInteractionRequest) (*CompleteInteractionResponse, error)
+	AutocompleteSlashOption(context.Context, *AutocompleteSlashOptionRequest) (*AutocompleteSlashOptionResponse, error)
 	mustEmbedUnimplementedBotServiceServer()
 }
 
@@ -467,6 +480,9 @@ func (UnimplementedBotServiceServer) ListSlashCommandsForChat(context.Context, *
 }
 func (UnimplementedBotServiceServer) CompleteInteraction(context.Context, *CompleteInteractionRequest) (*CompleteInteractionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CompleteInteraction not implemented")
+}
+func (UnimplementedBotServiceServer) AutocompleteSlashOption(context.Context, *AutocompleteSlashOptionRequest) (*AutocompleteSlashOptionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AutocompleteSlashOption not implemented")
 }
 func (UnimplementedBotServiceServer) mustEmbedUnimplementedBotServiceServer() {}
 func (UnimplementedBotServiceServer) testEmbeddedByValue()                    {}
@@ -932,6 +948,24 @@ func _BotService_CompleteInteraction_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BotService_AutocompleteSlashOption_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AutocompleteSlashOptionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BotServiceServer).AutocompleteSlashOption(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BotService_AutocompleteSlashOption_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BotServiceServer).AutocompleteSlashOption(ctx, req.(*AutocompleteSlashOptionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // BotService_ServiceDesc is the grpc.ServiceDesc for BotService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1034,6 +1068,10 @@ var BotService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CompleteInteraction",
 			Handler:    _BotService_CompleteInteraction_Handler,
+		},
+		{
+			MethodName: "AutocompleteSlashOption",
+			Handler:    _BotService_AutocompleteSlashOption_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

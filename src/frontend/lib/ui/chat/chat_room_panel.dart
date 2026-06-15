@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
@@ -49,6 +50,7 @@ import '../../e2e/e2e_store_factory.dart';
 import '../../e2e/e2e_verification_code.dart';
 import '../../backend/e2e_client.dart';
 import 'slash_command_menu.dart';
+import 'slash_command_options_sheet.dart';
 import 'thread_side_panel.dart';
 
 /// Main column: message history (REST) + composer; live updates via Realtime WS.
@@ -760,9 +762,27 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         setState(() => _executingSlash = true);
         final messenger = ScaffoldMessenger.of(context);
         try {
+          Map<String, dynamic> options = const {};
+          if (command.options.isNotEmpty) {
+            final collected = await showSlashCommandOptionsSheet(
+              context: context,
+              ref: ref,
+              chatId: widget.chatId,
+              command: command,
+            );
+            if (!mounted) return;
+            if (collected == null) {
+              return;
+            }
+            options = collected;
+          }
           final failure = await ref
               .read(slashInteractionExecutorProvider)
-              .execute(chatId: widget.chatId, command: command);
+              .execute(
+                chatId: widget.chatId,
+                command: command,
+                optionsJson: jsonEncode(options),
+              );
           if (!mounted) return;
           if (failure == SlashInteractionFailure.botTimeout) {
             messenger.showSnackBar(

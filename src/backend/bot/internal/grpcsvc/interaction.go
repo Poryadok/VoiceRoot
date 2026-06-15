@@ -183,6 +183,11 @@ ORDER BY b.name, c.name`, chatID)
 			Name:        name,
 			Description: desc,
 		}
+		if parts := strings.SplitN(strings.TrimSpace(name), " ", 2); len(parts) == 2 {
+			group := parts[0]
+			cmd.GroupName = &group
+			cmd.Name = parts[1]
+		}
 		var opts []manifestOption
 		_ = json.Unmarshal([]byte(params), &opts)
 		for _, o := range opts {
@@ -266,22 +271,26 @@ func (s *BotGRPC) ExecuteSlashInteraction(ctx context.Context, req *botv1.Execut
 	}
 	ch := s.Hub.Register(token)
 
+	eventPayload := map[string]any{
+		"interaction_token":  token,
+		"command_name":       cmdName,
+		"options":            options,
+		"chat_id":            chatID.String(),
+		"invoker_profile_id": invoker.String(),
+	}
+	_, _ = s.Store.EnqueueEvent(ctx, botID, "interaction", eventPayload, token)
+
 	if botRow.IsPollingMode || botRow.WebhookURL == nil || strings.TrimSpace(*botRow.WebhookURL) == "" {
-		eventPayload := map[string]any{
-			"interaction_token":  token,
-			"command_name":       cmdName,
-			"options":            options,
-			"chat_id":            chatID.String(),
-			"invoker_profile_id": invoker.String(),
-		}
-		_, _ = s.Store.EnqueueEvent(ctx, botID, "interaction", eventPayload, token)
+		// polling delivery via event queue
 	} else {
 		url := strings.TrimSpace(*botRow.WebhookURL)
 		go func() {
 			resp, err := webhook.DeliverPOST(context.Background(), s.HTTPClient, url, botRow.WebhookSecret, payload, dispatch.DefaultTimeout)
 			if err != nil {
+				_ = s.Store.MarkEventFailed(context.Background(), botID, token)
 				if s.Events != nil {
 					_ = s.Events.PublishWebhookDelivered(context.Background(), botID.String(), token, false)
+					_ = s.Events.PublishWebhookFailed(context.Background(), botID.String(), "interaction", err.Error())
 				}
 				s.Hub.Complete(token, store.InteractionReply{Err: err})
 				return
@@ -300,6 +309,7 @@ func (s *BotGRPC) ExecuteSlashInteraction(ctx context.Context, req *botv1.Execut
 	reply, ok := s.Hub.Wait(ch, dispatch.DefaultTimeout)
 	if !ok || reply.Err == dispatch.ErrTimeout {
 		s.Hub.Cancel(token)
+		_ = s.Store.MarkEventTimeout(ctx, botID, token)
 		code := "bot_timeout"
 		msg := "Bot did not respond in time. Try again later."
 		return &botv1.ExecuteSlashInteractionResponse{
@@ -310,6 +320,7 @@ func (s *BotGRPC) ExecuteSlashInteraction(ctx context.Context, req *botv1.Execut
 	}
 	if reply.Err != nil {
 		s.Hub.Cancel(token)
+		_ = s.Store.MarkEventFailed(ctx, botID, token)
 		return nil, status.Error(codes.Unavailable, reply.Err.Error())
 	}
 	if reply.Deferred {
@@ -324,6 +335,7 @@ func (s *BotGRPC) ExecuteSlashInteraction(ctx context.Context, req *botv1.Execut
 		s.Hub.Cancel(token)
 		return nil, err
 	}
+	_ = s.Store.MarkInteractionDelivered(ctx, botID, token)
 	s.Hub.Cancel(token)
 	return resp, nil
 }
@@ -473,10 +485,33 @@ func (s *BotGRPC) SendEphemeral(ctx context.Context, req *botv1.SendEphemeralReq
 }
 
 func (s *BotGRPC) EditBotMessage(ctx context.Context, req *botv1.EditBotMessageRequest) (*botv1.EditBotMessageResponse, error) {
-	if _, err := s.botFromToken(ctx); err != nil {
+	botRow, err := s.botFromToken(ctx)
+	if err != nil {
 		return nil, err
 	}
-	return nil, status.Error(codes.Unimplemented, "edit not implemented in phase 16")
+	messageID := strings.TrimSpace(req.GetMessageId())
+	if messageID == "" {
+		return nil, status.Error(codes.InvalidArgument, "message_id required")
+	}
+	content := strings.TrimSpace(req.GetContent())
+	if content == "" {
+		return nil, status.Error(codes.InvalidArgument, "content required")
+	}
+	if s.Messaging == nil {
+		return nil, status.Error(codes.FailedPrecondition, "messaging client not configured")
+	}
+	ctx = metadata.AppendToOutgoingContext(ctx,
+		authctx.HeaderProfileID, botRow.ActorProfileID.String(),
+		authctx.HeaderUserID, botRow.OwnerAccountID.String(),
+	)
+	resp, err := s.Messaging.EditMessage(ctx, &messagingv1.EditMessageRequest{
+		MessageId: messageID,
+		Content:   content,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &botv1.EditBotMessageResponse{Message: resp.GetMessage()}, nil
 }
 
 func (s *BotGRPC) finishInteraction(ctx context.Context, botRow *store.BotRow, chat *chatv1.ChatRef, invoker uuid.UUID, token, content string, ephemeral bool) (*botv1.ExecuteSlashInteractionResponse, error) {

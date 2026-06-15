@@ -217,6 +217,15 @@ class BotServiceClient extends $grpc.Client {
     return $createUnaryCall(_$completeInteraction, request, options: options);
   }
 
+  $grpc.ResponseFuture<$0.AutocompleteSlashOptionResponse>
+      autocompleteSlashOption(
+    $0.AutocompleteSlashOptionRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$autocompleteSlashOption, request,
+        options: options);
+  }
+
   // method descriptors
 
   static final _$registerBot =
@@ -346,6 +355,12 @@ class BotServiceClient extends $grpc.Client {
       '/voice.bot.v1.BotService/CompleteInteraction',
       ($0.CompleteInteractionRequest value) => value.writeToBuffer(),
       $0.CompleteInteractionResponse.fromBuffer);
+  static final _$autocompleteSlashOption = $grpc.ClientMethod<
+          $0.AutocompleteSlashOptionRequest,
+          $0.AutocompleteSlashOptionResponse>(
+      '/voice.bot.v1.BotService/AutocompleteSlashOption',
+      ($0.AutocompleteSlashOptionRequest value) => value.writeToBuffer(),
+      $0.AutocompleteSlashOptionResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.bot.v1.BotService')
@@ -568,6 +583,15 @@ abstract class BotServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.CompleteInteractionRequest.fromBuffer(value),
         ($0.CompleteInteractionResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.AutocompleteSlashOptionRequest,
+            $0.AutocompleteSlashOptionResponse>(
+        'AutocompleteSlashOption',
+        autocompleteSlashOption_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.AutocompleteSlashOptionRequest.fromBuffer(value),
+        ($0.AutocompleteSlashOptionResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.RegisterBotResponse> registerBot_Pre($grpc.ServiceCall $call,
@@ -787,4 +811,13 @@ abstract class BotServiceBase extends $grpc.Service {
 
   $async.Future<$0.CompleteInteractionResponse> completeInteraction(
       $grpc.ServiceCall call, $0.CompleteInteractionRequest request);
+
+  $async.Future<$0.AutocompleteSlashOptionResponse> autocompleteSlashOption_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.AutocompleteSlashOptionRequest> $request) async {
+    return autocompleteSlashOption($call, await $request);
+  }
+
+  $async.Future<$0.AutocompleteSlashOptionResponse> autocompleteSlashOption(
+      $grpc.ServiceCall call, $0.AutocompleteSlashOptionRequest request);
 }

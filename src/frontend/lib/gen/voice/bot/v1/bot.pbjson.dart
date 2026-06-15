@@ -1008,6 +1008,18 @@ const SlashCommand$json = {
       '6': '.voice.bot.v1.SlashCommandOption',
       '10': 'options'
     },
+    {
+      '1': 'group_name',
+      '3': 6,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'groupName',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_group_name'},
   ],
 };
 
@@ -1016,7 +1028,8 @@ final $typed_data.Uint8List slashCommandDescriptor = $convert.base64Decode(
     'CgxTbGFzaENvbW1hbmQSFQoGYm90X2lkGAEgASgJUgVib3RJZBIZCghib3RfbmFtZRgCIAEoCV'
     'IHYm90TmFtZRISCgRuYW1lGAMgASgJUgRuYW1lEiAKC2Rlc2NyaXB0aW9uGAQgASgJUgtkZXNj'
     'cmlwdGlvbhI6CgdvcHRpb25zGAUgAygLMiAudm9pY2UuYm90LnYxLlNsYXNoQ29tbWFuZE9wdG'
-    'lvblIHb3B0aW9ucw==');
+    'lvblIHb3B0aW9ucxIiCgpncm91cF9uYW1lGAYgASgJSABSCWdyb3VwTmFtZYgBAUINCgtfZ3Jv'
+    'dXBfbmFtZQ==');
 
 @$core.Deprecated('Use listSlashCommandsForChatRequestDescriptor instead')
 const ListSlashCommandsForChatRequest$json = {
@@ -1204,3 +1217,66 @@ final $typed_data.Uint8List completeInteractionResponseDescriptor =
     $convert.base64Decode(
         'ChtDb21wbGV0ZUludGVyYWN0aW9uUmVzcG9uc2USOgoHbWVzc2FnZRgBIAEoCzIbLnZvaWNlLm'
         '1lc3NhZ2luZy52MS5NZXNzYWdlSABSB21lc3NhZ2WIAQFCCgoIX21lc3NhZ2U=');
+
+@$core.Deprecated('Use autocompleteSlashOptionRequestDescriptor instead')
+const AutocompleteSlashOptionRequest$json = {
+  '1': 'AutocompleteSlashOptionRequest',
+  '2': [
+    {
+      '1': 'chat',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.chat.v1.ChatRef',
+      '10': 'chat'
+    },
+    {'1': 'bot_id', '3': 2, '4': 1, '5': 9, '10': 'botId'},
+    {'1': 'command_name', '3': 3, '4': 1, '5': 9, '10': 'commandName'},
+    {'1': 'option_name', '3': 4, '4': 1, '5': 9, '10': 'optionName'},
+    {'1': 'focused_value', '3': 5, '4': 1, '5': 9, '10': 'focusedValue'},
+    {'1': 'options_json', '3': 6, '4': 1, '5': 9, '10': 'optionsJson'},
+  ],
+};
+
+/// Descriptor for `AutocompleteSlashOptionRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List autocompleteSlashOptionRequestDescriptor = $convert.base64Decode(
+    'Ch5BdXRvY29tcGxldGVTbGFzaE9wdGlvblJlcXVlc3QSKgoEY2hhdBgBIAEoCzIWLnZvaWNlLm'
+    'NoYXQudjEuQ2hhdFJlZlIEY2hhdBIVCgZib3RfaWQYAiABKAlSBWJvdElkEiEKDGNvbW1hbmRf'
+    'bmFtZRgDIAEoCVILY29tbWFuZE5hbWUSHwoLb3B0aW9uX25hbWUYBCABKAlSCm9wdGlvbk5hbW'
+    'USIwoNZm9jdXNlZF92YWx1ZRgFIAEoCVIMZm9jdXNlZFZhbHVlEiEKDG9wdGlvbnNfanNvbhgG'
+    'IAEoCVILb3B0aW9uc0pzb24=');
+
+@$core.Deprecated('Use autocompleteChoiceDescriptor instead')
+const AutocompleteChoice$json = {
+  '1': 'AutocompleteChoice',
+  '2': [
+    {'1': 'name', '3': 1, '4': 1, '5': 9, '10': 'name'},
+    {'1': 'value', '3': 2, '4': 1, '5': 9, '10': 'value'},
+  ],
+};
+
+/// Descriptor for `AutocompleteChoice`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List autocompleteChoiceDescriptor = $convert.base64Decode(
+    'ChJBdXRvY29tcGxldGVDaG9pY2USEgoEbmFtZRgBIAEoCVIEbmFtZRIUCgV2YWx1ZRgCIAEoCV'
+    'IFdmFsdWU=');
+
+@$core.Deprecated('Use autocompleteSlashOptionResponseDescriptor instead')
+const AutocompleteSlashOptionResponse$json = {
+  '1': 'AutocompleteSlashOptionResponse',
+  '2': [
+    {
+      '1': 'choices',
+      '3': 1,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.bot.v1.AutocompleteChoice',
+      '10': 'choices'
+    },
+  ],
+};
+
+/// Descriptor for `AutocompleteSlashOptionResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List autocompleteSlashOptionResponseDescriptor =
+    $convert.base64Decode(
+        'Ch9BdXRvY29tcGxldGVTbGFzaE9wdGlvblJlc3BvbnNlEjoKB2Nob2ljZXMYASADKAsyIC52b2'
+        'ljZS5ib3QudjEuQXV0b2NvbXBsZXRlQ2hvaWNlUgdjaG9pY2Vz');

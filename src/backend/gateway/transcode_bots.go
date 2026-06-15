@@ -80,6 +80,23 @@ func (t *transcoder) serveBots(w http.ResponseWriter, r *http.Request, rest stri
 			}
 			writeProtoJSON(w, http.StatusOK, resp)
 			return true
+
+		case r.Method == http.MethodPatch && strings.HasPrefix(meRest, "messages/"):
+			messageID := strings.TrimPrefix(meRest, "messages/")
+			messageID = strings.Trim(messageID, "/")
+			req := &botv1.EditBotMessageRequest{MessageId: messageID}
+			if err := readProtoJSON(r, req); err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			req.MessageId = messageID
+			resp, err := t.clients.bot.EditBotMessage(ctx, req)
+			if err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			writeProtoJSON(w, http.StatusOK, resp)
+			return true
 		}
 		return false
 	}
@@ -179,6 +196,109 @@ func (t *transcoder) serveBots(w http.ResponseWriter, r *http.Request, rest stri
 			return true
 		}
 		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodPost && rest == "autocomplete":
+		req := &botv1.AutocompleteSlashOptionRequest{}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.bot.AutocompleteSlashOption(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodGet && strings.HasPrefix(rest, "spaces/") && strings.HasSuffix(rest, "/installed"):
+		spaceID := strings.TrimSuffix(strings.TrimPrefix(rest, "spaces/"), "/installed")
+		spaceID = strings.Trim(spaceID, "/")
+		resp, err := t.clients.bot.ListInstalledBots(ctx, &botv1.ListInstalledBotsRequest{SpaceId: spaceID})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case strings.HasSuffix(rest, "/webhook"):
+		botID := strings.TrimSuffix(rest, "/webhook")
+		botID = strings.Trim(botID, "/")
+		switch r.Method {
+		case http.MethodGet:
+			resp, err := t.clients.bot.GetWebhookURL(ctx, &botv1.GetWebhookURLRequest{BotId: botID})
+			if err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			writeProtoJSON(w, http.StatusOK, resp)
+			return true
+		case http.MethodPatch:
+			req := &botv1.SetWebhookURLRequest{BotId: botID}
+			if err := readProtoJSON(r, req); err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			req.BotId = botID
+			_, err := t.clients.bot.SetWebhookURL(ctx, req)
+			if err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return true
+		}
+		return false
+
+	case r.Method == http.MethodDelete && strings.Contains(rest, "/spaces/") && !strings.HasSuffix(rest, "/install"):
+		parts := strings.Split(strings.Trim(rest, "/"), "/")
+		if len(parts) == 3 && parts[1] == "spaces" {
+			_, err := t.clients.bot.UninstallBotFromSpace(ctx, &botv1.UninstallBotFromSpaceRequest{
+				BotId:   parts[0],
+				SpaceId: parts[2],
+			})
+			if err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return true
+		}
+		return false
+
+	case r.Method == http.MethodGet && rest != "" && !strings.Contains(rest, "/"):
+		resp, err := t.clients.bot.GetBot(ctx, &botv1.GetBotRequest{BotId: rest})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodPatch && rest != "" && !strings.Contains(rest, "/"):
+		req := &botv1.UpdateBotRequest{BotId: rest}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		req.BotId = rest
+		resp, err := t.clients.bot.UpdateBot(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodDelete && rest != "" && !strings.Contains(rest, "/"):
+		_, err := t.clients.bot.DeleteBot(ctx, &botv1.DeleteBotRequest{BotId: rest})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		w.WriteHeader(http.StatusNoContent)
 		return true
 
 	case r.Method == http.MethodPost && strings.Contains(rest, "/spaces/") && strings.HasSuffix(rest, "/install"):
