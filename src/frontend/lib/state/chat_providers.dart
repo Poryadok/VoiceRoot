@@ -12,6 +12,7 @@ import '../backend/messaging_read_sync.dart';
 import '../backend/messages_client.dart';
 import '../backend/realtime_client.dart';
 import 'auth_providers.dart';
+import 'bot_deferred_providers.dart';
 import 'connectivity_providers.dart';
 import 'gateway_providers.dart';
 import 'message_cache_providers.dart';
@@ -462,6 +463,9 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
         if (frame.op == 'message_create') {
           final chatId = frame.data?['chat_id'] as String?;
           if (chatId == this.chatId) {
+            if (_ref.read(deferredBotInteractionProvider(this.chatId)) != null) {
+              _ref.read(deferredBotInteractionProvider(this.chatId).notifier).clear();
+            }
             final senderProfileId = frame.data?['sender_profile_id'] as String?;
             final messageId = frame.data?['message_id'] as String?;
             final activeProfile = _ref

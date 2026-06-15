@@ -12,6 +12,7 @@ import 'package:voice_frontend/backend/messages_client.dart';
 import 'package:voice_frontend/backend/realtime_client.dart';
 import 'package:voice_frontend/backend/message_cache/in_memory_message_cache_store.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
+import 'package:voice_frontend/state/bot_deferred_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/connectivity_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
@@ -166,6 +167,49 @@ void main() {
         expect(messages.getCalls.last.afterMessageId, 'msg-1');
       },
     );
+
+    test('clears deferred bot interaction on message_create', () async {
+      late _FakeRealtimeHub hub;
+      final messages = _FakeMessagesClient(
+        pages: [
+          MessageListData(messages: [_message('msg-1')]),
+          MessageListData(messages: [_message('msg-1'), _message('msg-2')]),
+        ],
+      );
+      final container = _container(
+        chatsClient: _FakeChatsClient(),
+        messagesClient: messages,
+        realtimeHubBuilder: (ref) => hub = _FakeRealtimeHub(ref),
+      );
+      addTearDown(container.dispose);
+
+      container
+          .read(deferredBotInteractionProvider('chat-1').notifier)
+          .setDeferred(botName: 'PingBot', interactionToken: 'tok-1');
+      expect(
+        container.read(deferredBotInteractionProvider('chat-1'))?.botName,
+        'PingBot',
+      );
+
+      final sub = container.listen<ChatRoomState>(
+        chatRoomControllerProvider('chat-1'),
+        (_, _) {},
+        fireImmediately: true,
+      );
+      addTearDown(sub.close);
+      await pumpEventQueue();
+
+      hub.addFrame(
+        const RealtimeFrame(
+          op: 'message_create',
+          data: {'chat_id': 'chat-1', 'message_id': 'msg-2'},
+          sequence: 2,
+        ),
+      );
+      await pumpEventQueue();
+
+      expect(container.read(deferredBotInteractionProvider('chat-1')), isNull);
+    });
 
     test('uses last_message_id for reconnect catch-up', () async {
       final messages = _FakeMessagesClient(
