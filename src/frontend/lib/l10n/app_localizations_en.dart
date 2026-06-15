@@ -1579,7 +1579,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get e2eEnableBody =>
-      'End-to-end encryption is enabled for this chat.\n\nMessages are encrypted and unavailable to the server.\n— Global search will not find message bodies from this chat.\n— Local search works only on history loaded on this device.';
+      'End-to-end encryption is enabled for this chat.\n\nMessages are encrypted and unavailable to the server.\n— Global search will not find message bodies from this chat.\n— Local search works only on history loaded on this device.\n— Attachments are encrypted and automatically deleted after 90 days.';
 
   @override
   String get e2eEnableConfirm => 'Enable E2E';
@@ -1662,4 +1662,8 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get e2eIdentityKeyChangedDistrust => 'Don\'t trust';
+
+  @override
+  String get e2eFileRetentionNotice =>
+      'Encrypted attachments in this chat are automatically deleted after 90 days.';
 }

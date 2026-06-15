@@ -13,6 +13,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"voice/backend/messaging/internal/e2e/prekey"
+
 	messagingv1 "voice.app/voice/messaging/v1"
 )
 
@@ -51,21 +53,17 @@ func fakeSignature64() []byte {
 
 // validTestPreKeyBundleB64 matches src/frontend/lib/e2e/e2e_store_factory.dart serializePreKeyBundle wire format.
 func validTestPreKeyBundleB64() string {
-	payload := map[string]any{
-		"registration_id":          42_001,
-		"device_id":                1,
-		"pre_key_id":               7,
-		"pre_key_public":           base64.StdEncoding.EncodeToString(fakeCurvePoint33(0x01)),
-		"signed_pre_key_id":        1,
-		"signed_pre_key_public":    base64.StdEncoding.EncodeToString(fakeCurvePoint33(0x02)),
-		"signed_pre_key_signature": base64.StdEncoding.EncodeToString(fakeSignature64()),
-		"identity_key":             base64.StdEncoding.EncodeToString(fakeCurvePoint33(0x03)),
-	}
-	raw, err := json.Marshal(payload)
-	if err != nil {
-		panic(err)
-	}
-	return base64.StdEncoding.EncodeToString(raw)
+	seed := prekey.TestIdentitySeed(0x03)
+	return prekey.TestBundleB64(map[string]any{
+		"registration_id":       42_001,
+		"device_id":             1,
+		"pre_key_id":            7,
+		"pre_key_public":        base64.StdEncoding.EncodeToString(fakeCurvePoint33(0x01)),
+		"signed_pre_key_id":     1,
+		"signed_pre_key_public": base64.StdEncoding.EncodeToString(fakeCurvePoint33(0x02)),
+		"identity_key":          base64.StdEncoding.EncodeToString(prekey.TestIdentityKeyWire(seed)),
+		"_test_identity_seed":   seed,
+	})
 }
 
 func decodePreKeyBundlePayload(t *testing.T, wire string) map[string]any {
@@ -131,6 +129,113 @@ func TestUploadPreKeyBundle_RejectsInvalidBundle(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+// TestUploadPreKeyBundle_RejectsInvalidSignedPreKeySignature documents libsignal signature verify on upload.
+func TestUploadPreKeyBundle_RejectsInvalidSignedPreKeySignature(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	profOwner, acctOwner := uuid.New(), uuid.New()
+	profiles := profileAcctMap{profOwner: acctOwner}
+
+	client, cleanup := startMessagingServerWired(t, pool, messagingWire{UserProfiles: profiles})
+	t.Cleanup(cleanup)
+
+	bundle := validTestPreKeyBundleB64()
+	payload := decodePreKeyBundlePayload(t, bundle)
+	sigB64, ok := payload["signed_pre_key_signature"].(string)
+	require.True(t, ok)
+	sigBytes, err := base64.StdEncoding.DecodeString(sigB64)
+	require.NoError(t, err)
+	sigBytes[0] ^= 0xff
+	payload["signed_pre_key_signature"] = base64.StdEncoding.EncodeToString(sigBytes)
+	tamperedRaw, err := json.Marshal(payload)
+	require.NoError(t, err)
+	tampered := base64.StdEncoding.EncodeToString(tamperedRaw)
+
+	_, err = client.UploadPreKeyBundle(withProfileCtx(ctx, acctOwner, profOwner), &messagingv1.UploadPreKeyBundleRequest{
+		Bundle: tampered,
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+func multiOTPKPreKeyBundleB64() string {
+	seed := prekey.TestIdentitySeed(0x03)
+	return prekey.TestBundleB64(map[string]any{
+		"registration_id":       42_001,
+		"device_id":             1,
+		"pre_key_id":            7,
+		"pre_key_public":        base64.StdEncoding.EncodeToString(fakeCurvePoint33(0x01)),
+		"signed_pre_key_id":     1,
+		"signed_pre_key_public": base64.StdEncoding.EncodeToString(fakeCurvePoint33(0x02)),
+		"identity_key":          base64.StdEncoding.EncodeToString(prekey.TestIdentityKeyWire(seed)),
+		"_test_identity_seed":   seed,
+		"pre_keys": []map[string]any{
+			{"pre_key_id": 7, "pre_key_public": base64.StdEncoding.EncodeToString(fakeCurvePoint33(0x11))},
+			{"pre_key_id": 8, "pre_key_public": base64.StdEncoding.EncodeToString(fakeCurvePoint33(0x12))},
+			{"pre_key_id": 9, "pre_key_public": base64.StdEncoding.EncodeToString(fakeCurvePoint33(0x13))},
+		},
+	})
+}
+
+func preKeyIDFromPayload(t *testing.T, payload map[string]any) int {
+	t.Helper()
+	id, ok := payload["pre_key_id"].(float64)
+	require.True(t, ok, "pre_key_id missing from bundle")
+	return int(id)
+}
+
+// TestGetPreKeyBundle_ConsumesOTPKFromPool documents multi-OTPK pool: each fetch serves next key.
+func TestGetPreKeyBundle_ConsumesOTPKFromPool(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	profOwner, acctOwner := uuid.New(), uuid.New()
+	profPeer, acctPeer := uuid.New(), uuid.New()
+	profiles := profileAcctMap{profOwner: acctOwner, profPeer: acctPeer}
+
+	client, cleanup := startMessagingServerWired(t, pool, messagingWire{UserProfiles: profiles})
+	t.Cleanup(cleanup)
+
+	bundle := multiOTPKPreKeyBundleB64()
+	_, err := client.UploadPreKeyBundle(withProfileCtx(ctx, acctOwner, profOwner), &messagingv1.UploadPreKeyBundleRequest{
+		Bundle: bundle,
+	})
+	require.NoError(t, err)
+
+	wantIDs := []int{7, 8, 9}
+	for _, wantID := range wantIDs {
+		got, err := client.GetPreKeyBundle(withProfileCtx(ctx, acctPeer, profPeer), &messagingv1.GetPreKeyBundleRequest{
+			ProfileId: profOwner.String(),
+		})
+		require.NoError(t, err)
+		payload := decodePreKeyBundlePayload(t, got.GetBundle())
+		require.Equal(t, wantID, preKeyIDFromPayload(t, payload))
+	}
+
+	empty, err := client.GetPreKeyBundle(withProfileCtx(ctx, acctPeer, profPeer), &messagingv1.GetPreKeyBundleRequest{
+		ProfileId: profOwner.String(),
+	})
+	require.NoError(t, err)
+	emptyPayload := decodePreKeyBundlePayload(t, empty.GetBundle())
+	_, hasPreKeyID := emptyPayload["pre_key_id"]
+	_, hasPreKeyPublic := emptyPayload["pre_key_public"]
+	require.False(t, hasPreKeyID, "OTPK pool exhausted")
+	require.False(t, hasPreKeyPublic, "OTPK pool exhausted")
 }
 
 // TestGetPreKeyBundle_ConsumesOTPK documents one-time pre-key is removed after first fetch.

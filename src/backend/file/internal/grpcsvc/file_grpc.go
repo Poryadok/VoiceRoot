@@ -269,7 +269,7 @@ func (s *FileGRPC) ConfirmUpload(ctx context.Context, req *filev1.ConfirmUploadR
 	if row.Status != "ready" {
 		return &filev1.ConfirmUploadResponse{FileMetadata: fileRowToProto(row)}, nil
 	}
-	if row.FileType == "image" && s.processor != nil {
+	if row.FileType == "image" && !row.IsE2E && s.processor != nil {
 		processed, err := s.processor.ProcessImage(ctx, row)
 		if err != nil {
 			return nil, status.Error(codes.Internal, err.Error())

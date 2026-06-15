@@ -62,6 +62,20 @@ func (gatePresigner) PresignGet(_ context.Context, in r2file.GetPresignInput) (s
 	return "https://r2.example/download/" + in.Key, nil
 }
 
+type gateImageProcessor struct {
+	calls int
+}
+
+func (p *gateImageProcessor) ProcessImage(_ context.Context, row store.FileRow) (ImageProcessingResult, error) {
+	p.calls++
+	return ImageProcessingResult{
+		ConvertedR2Key: "processed/" + row.ID.String() + "/full.webp",
+		ThumbnailR2Key: "processed/" + row.ID.String() + "/thumb.webp",
+		Width:          640,
+		Height:         480,
+	}, nil
+}
+
 func TestRequestUpload_E2E_RejectedWhenChatNotE2EEnabled(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
@@ -146,6 +160,47 @@ func TestRequestUpload_E2E_RejectedForGroupChat(t *testing.T) {
 	require.Equal(t, codes.FailedPrecondition, status.Code(err))
 }
 
+// TestConfirmUpload_E2E_SkipsImageProcessing documents E2E ciphertext blobs skip imgproc (docs/features/encryption.md).
+func TestConfirmUpload_E2E_SkipsImageProcessing(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startFileGatePostgres(t, ctx)
+	chatID := uuid.New()
+	prof := uuid.New()
+	acct := uuid.New()
+	guard := e2eGateGuard{
+		members:    map[uuid.UUID][]uuid.UUID{chatID: {prof}},
+		e2eEnabled: map[uuid.UUID]bool{chatID: true},
+		chatTypes:  map[uuid.UUID]string{chatID: "dm"},
+	}
+	proc := &gateImageProcessor{}
+	client := startFileGateGRPCWithProcessor(t, pool, guard, proc)
+
+	isE2E := true
+	uploadResp, err := client.RequestUpload(fileGateCtx(ctx, acct, prof), &filev1.RequestUploadRequest{
+		OriginalName: "cipher.png",
+		MimeType:     "image/png",
+		SizeBytes:    4096,
+		ContextChat:  chatDMRefGate(chatID),
+		IsE2E:        &isE2E,
+	})
+	require.NoError(t, err)
+
+	confirmed, err := client.ConfirmUpload(fileGateCtx(ctx, acct, prof), &filev1.ConfirmUploadRequest{
+		FileId:     uploadResp.GetUploadResponse().GetFileId(),
+		Sha256Hash: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+	})
+	require.NoError(t, err)
+	meta := confirmed.GetFileMetadata()
+	require.Equal(t, "ready", meta.GetStatus())
+	require.True(t, meta.GetIsE2E())
+	require.Equal(t, 0, proc.calls, "E2E confirm must skip image processing")
+	require.Empty(t, meta.GetThumbnailR2Key())
+	require.Empty(t, meta.GetConvertedR2Key())
+}
+
 func chatDMRefGate(chatID uuid.UUID) *chatv1.ChatRef {
 	dm := chatv1.ChatType_CHAT_TYPE_DM
 	return &chatv1.ChatRef{Id: chatID.String(), Type: &dm}
@@ -162,6 +217,15 @@ func fileGateCtx(ctx context.Context, accountID, profileID uuid.UUID) context.Co
 }
 
 func startFileGateGRPC(t *testing.T, pool *pgxpool.Pool, guard e2eGateGuard) filev1.FileServiceClient {
+	return startFileGateGRPCWithProcessor(t, pool, guard, nil)
+}
+
+func startFileGateGRPCWithProcessor(
+	t *testing.T,
+	pool *pgxpool.Pool,
+	guard e2eGateGuard,
+	processor ImageProcessor,
+) filev1.FileServiceClient {
 	t.Helper()
 	lis := bufconn.Listen(1 << 20)
 	srv := grpc.NewServer()
@@ -169,6 +233,7 @@ func startFileGateGRPC(t *testing.T, pool *pgxpool.Pool, guard e2eGateGuard) fil
 		Files:     store.NewFilesStore(pool),
 		Presigner: gatePresigner{},
 		ChatGuard: guard,
+		Processor: processor,
 	}))
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(func() {

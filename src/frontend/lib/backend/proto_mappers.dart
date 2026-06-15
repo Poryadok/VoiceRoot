@@ -453,6 +453,8 @@ FileMetadataData fileMetadataFromProto(file_pb.FileMetadata meta) {
     originalName: meta.originalName,
     // HTTP URLs come from GET /files/{id}/url, not R2 keys in metadata.
     sizeBytes: meta.hasSizeBytes() ? meta.sizeBytes.toInt() : null,
+    isE2e: meta.isE2e,
+    expiresAt: meta.hasExpiresAt() ? meta.expiresAt.toDateTime() : null,
   );
 }
 
@@ -462,8 +464,9 @@ file_pb.RequestUploadRequest requestUploadToProto({
   required int sizeBytes,
   String? chatId,
   ChatType chatType = ChatType.CHAT_TYPE_DM,
+  bool isE2e = false,
 }) {
-  return file_pb.RequestUploadRequest(
+  final request = file_pb.RequestUploadRequest(
     originalName: originalName,
     mimeType: mimeType,
     sizeBytes: Int64(sizeBytes),
@@ -471,6 +474,10 @@ file_pb.RequestUploadRequest requestUploadToProto({
         ? null
         : chatRefToProto(chatId, type: chatType),
   );
+  if (isE2e) {
+    request.isE2e = true;
+  }
+  return request;
 }
 
 file_pb.ConfirmUploadRequest confirmUploadRequestToProto({

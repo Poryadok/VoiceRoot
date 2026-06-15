@@ -12,21 +12,17 @@ import (
 
 // Wire format matches src/frontend/lib/e2e/e2e_store_factory.dart serializePreKeyBundle.
 func validTestPreKeyBundleB64() string {
-	payload := map[string]any{
-		"registration_id":            42_001,
-		"device_id":                  1,
-		"pre_key_id":                 7,
-		"pre_key_public":             base64.StdEncoding.EncodeToString(fakeCurvePoint33(0x01)),
-		"signed_pre_key_id":          1,
-		"signed_pre_key_public":      base64.StdEncoding.EncodeToString(fakeCurvePoint33(0x02)),
-		"signed_pre_key_signature":   base64.StdEncoding.EncodeToString(fakeSignature64()),
-		"identity_key":               base64.StdEncoding.EncodeToString(fakeCurvePoint33(0x03)),
-	}
-	raw, err := json.Marshal(payload)
-	if err != nil {
-		panic(err)
-	}
-	return base64.StdEncoding.EncodeToString(raw)
+	seed := prekey.TestIdentitySeed(0x03)
+	return prekey.TestBundleB64(map[string]any{
+		"registration_id":       42_001,
+		"device_id":             1,
+		"pre_key_id":            7,
+		"pre_key_public":        base64.StdEncoding.EncodeToString(fakeCurvePoint33(0x01)),
+		"signed_pre_key_id":     1,
+		"signed_pre_key_public": base64.StdEncoding.EncodeToString(fakeCurvePoint33(0x02)),
+		"identity_key":          base64.StdEncoding.EncodeToString(prekey.TestIdentityKeyWire(seed)),
+		"_test_identity_seed":   seed,
+	})
 }
 
 func fakeCurvePoint33(tag byte) []byte {
@@ -82,6 +78,8 @@ func TestValidateForUpload_RejectsShortPreKeyPublic(t *testing.T) {
 	wire, err := prekey.ParseWire(validTestPreKeyBundleB64())
 	require.NoError(t, err)
 	wire.PreKeyPublic = []byte{0x05, 0x01}
+	require.Len(t, wire.OTPKPool, 1)
+	wire.OTPKPool[0].Public = []byte{0x05, 0x01}
 	require.Error(t, prekey.ValidateForUpload(wire))
 }
 
@@ -90,6 +88,104 @@ func TestValidateForUpload_RejectsShortSignature(t *testing.T) {
 	require.NoError(t, err)
 	wire.SignedPreKeySignature = make([]byte, 32)
 	require.Error(t, prekey.ValidateForUpload(wire))
+}
+
+func TestVerifySignedPreKeySignature_RejectsTamperedSignature(t *testing.T) {
+	wire, err := prekey.ParseWire(validTestPreKeyBundleB64())
+	require.NoError(t, err)
+	require.NoError(t, prekey.VerifySignedPreKeySignature(wire))
+
+	wire.SignedPreKeySignature[0] ^= 0xff
+	require.Error(t, prekey.VerifySignedPreKeySignature(wire))
+}
+
+func multiOTPKTestBundleB64() string {
+	seed := prekey.TestIdentitySeed(0x03)
+	return prekey.TestBundleB64(map[string]any{
+		"registration_id":       42_001,
+		"device_id":             1,
+		"pre_key_id":            7,
+		"pre_key_public":        base64.StdEncoding.EncodeToString(fakeCurvePoint33(0x01)),
+		"signed_pre_key_id":     1,
+		"signed_pre_key_public": base64.StdEncoding.EncodeToString(fakeCurvePoint33(0x02)),
+		"identity_key":          base64.StdEncoding.EncodeToString(prekey.TestIdentityKeyWire(seed)),
+		"_test_identity_seed":   seed,
+		"pre_keys": []map[string]any{
+			{"pre_key_id": 7, "pre_key_public": base64.StdEncoding.EncodeToString(fakeCurvePoint33(0x11))},
+			{"pre_key_id": 8, "pre_key_public": base64.StdEncoding.EncodeToString(fakeCurvePoint33(0x12))},
+			{"pre_key_id": 9, "pre_key_public": base64.StdEncoding.EncodeToString(fakeCurvePoint33(0x13))},
+		},
+	})
+}
+
+func TestConsumeNextOTPKFromPool_ServesKeysInOrder(t *testing.T) {
+	wire, err := prekey.ParseWire(multiOTPKTestBundleB64())
+	require.NoError(t, err)
+	require.Equal(t, 3, wire.OTPKPoolSize())
+
+	first, err := prekey.ConsumeNextOTPKFromPool(wire)
+	require.NoError(t, err)
+	require.Equal(t, 7, first.PreKeyID)
+	require.Equal(t, 2, first.OTPKPoolSize())
+
+	second, err := prekey.ConsumeNextOTPKFromPool(first)
+	require.NoError(t, err)
+	require.Equal(t, 8, second.PreKeyID)
+	require.Equal(t, 1, second.OTPKPoolSize())
+
+	third, err := prekey.ConsumeNextOTPKFromPool(second)
+	require.NoError(t, err)
+	require.Equal(t, 9, third.PreKeyID)
+	require.Equal(t, 0, third.OTPKPoolSize())
+	require.False(t, third.HasOTPK())
+}
+
+func TestPopOTPKForFetch_ReturnsEmptyWhenPoolExhausted(t *testing.T) {
+	wire, err := prekey.ParseWire(validTestPreKeyBundleB64())
+	require.NoError(t, err)
+	for wire.OTPKPoolSize() > 0 {
+		_, wire, err = prekey.PopOTPKForFetch(wire)
+		require.NoError(t, err)
+	}
+	response, stored, err := prekey.PopOTPKForFetch(wire)
+	require.NoError(t, err)
+	require.False(t, response.HasOTPK())
+	require.False(t, stored.HasOTPK())
+}
+
+func TestValidateForUpload_RejectsNilWire(t *testing.T) {
+	require.Error(t, prekey.ValidateForUpload(nil))
+}
+
+func TestEncodeWire_RejectsNilWire(t *testing.T) {
+	_, err := prekey.EncodeWire(nil)
+	require.Error(t, err)
+}
+
+func TestVerifySignedPreKeySignature_RejectsNilWire(t *testing.T) {
+	require.Error(t, prekey.VerifySignedPreKeySignature(nil))
+}
+
+func TestPopOTPKForFetch_RejectsNilWire(t *testing.T) {
+	_, _, err := prekey.PopOTPKForFetch(nil)
+	require.Error(t, err)
+}
+
+func TestVerifySignedPreKeySignature_RejectsInvalidIdentityKey(t *testing.T) {
+	wire, err := prekey.ParseWire(validTestPreKeyBundleB64())
+	require.NoError(t, err)
+	wire.IdentityKey[1] ^= 0xff
+	require.Error(t, prekey.VerifySignedPreKeySignature(wire))
+}
+
+func TestEncodeWire_RoundtripsMultiOTPKPool(t *testing.T) {
+	original, err := prekey.ParseWire(multiOTPKTestBundleB64())
+	require.NoError(t, err)
+	encoded, err := prekey.EncodeWire(original)
+	require.NoError(t, err)
+	parsed, err := prekey.ParseWire(encoded)
+	require.NoError(t, err)
+	require.Equal(t, 3, parsed.OTPKPoolSize())
 }
 
 func TestConsumeOTPK_RemovesOneTimeKeyFields(t *testing.T) {

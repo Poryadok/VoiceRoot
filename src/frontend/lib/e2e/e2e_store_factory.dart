@@ -4,7 +4,9 @@ import 'package:libsignal_protocol_dart/libsignal_protocol_dart.dart';
 
 const int _defaultDeviceId = 1;
 const int _defaultSignedPreKeyId = 1;
-const int _defaultOneTimePreKeyId = 1;
+const int _otpkPoolStartId = 1;
+const int otpkPoolSize = 10;
+const int otpkReplenishThreshold = 3;
 
 /// Creates an in-memory Signal store with identity + pre-keys loaded.
 Future<InMemorySignalProtocolStore> createInitializedSignalStore() async {
@@ -15,8 +17,10 @@ Future<InMemorySignalProtocolStore> createInitializedSignalStore() async {
   final signedPreKey = generateSignedPreKey(identityKeyPair, _defaultSignedPreKeyId);
   await store.storeSignedPreKey(_defaultSignedPreKeyId, signedPreKey);
 
-  final preKeys = generatePreKeys(_defaultOneTimePreKeyId, 1);
-  await store.storePreKey(_defaultOneTimePreKeyId, preKeys.first);
+  final preKeys = generatePreKeys(_otpkPoolStartId, otpkPoolSize);
+  for (final preKey in preKeys) {
+    await store.storePreKey(preKey.id, preKey);
+  }
 
   return store;
 }
@@ -25,17 +29,37 @@ SignalProtocolAddress signalAddressForProfile(String profileId) {
   return SignalProtocolAddress(profileId, _defaultDeviceId);
 }
 
-/// Builds a [PreKeyBundle] from keys currently in [store].
+/// Ensures at least [otpkPoolSize] one-time pre-keys exist in [store].
+Future<void> replenishOneTimePreKeysIfNeeded(SignalProtocolStore store) async {
+  var available = 0;
+  for (var id = _otpkPoolStartId; id < _otpkPoolStartId + otpkPoolSize; id++) {
+    try {
+      await store.loadPreKey(id);
+      available++;
+    } catch (_) {
+      break;
+    }
+  }
+  if (available >= otpkReplenishThreshold) return;
+
+  final startId = _otpkPoolStartId + otpkPoolSize;
+  final preKeys = generatePreKeys(startId, otpkPoolSize - available);
+  for (final preKey in preKeys) {
+    await store.storePreKey(preKey.id, preKey);
+  }
+}
+
+/// Builds a [PreKeyBundle] from keys currently in [store] (first available OTPK).
 Future<PreKeyBundle> exportPreKeyBundle(SignalProtocolStore store) async {
   final registrationId = await store.getLocalRegistrationId();
   final identityKeyPair = await store.getIdentityKeyPair();
   final signedPreKey = await store.loadSignedPreKey(_defaultSignedPreKeyId);
-  final preKey = await store.loadPreKey(_defaultOneTimePreKeyId);
+  final preKey = await store.loadPreKey(_otpkPoolStartId);
 
   return PreKeyBundle(
     registrationId,
     _defaultDeviceId,
-    _defaultOneTimePreKeyId,
+    _otpkPoolStartId,
     preKey.getKeyPair().publicKey,
     _defaultSignedPreKeyId,
     signedPreKey.getKeyPair().publicKey,
@@ -44,9 +68,28 @@ Future<PreKeyBundle> exportPreKeyBundle(SignalProtocolStore store) async {
   );
 }
 
+Future<List<Map<String, dynamic>>> _collectStoredPreKeys(
+  SignalProtocolStore store,
+) async {
+  final out = <Map<String, dynamic>>[];
+  for (var id = _otpkPoolStartId; id < _otpkPoolStartId + otpkPoolSize * 2; id++) {
+    try {
+      final preKey = await store.loadPreKey(id);
+      out.add({
+        'pre_key_id': id,
+        'pre_key_public': base64Encode(preKey.getKeyPair().publicKey.serialize()),
+      });
+    } catch (_) {
+      if (out.isNotEmpty) break;
+    }
+  }
+  return out;
+}
+
 /// Opaque base64 blob uploaded to Messaging pre-key directory.
 Future<String> serializePreKeyBundle(SignalProtocolStore store) async {
   final bundle = await exportPreKeyBundle(store);
+  final pool = await _collectStoredPreKeys(store);
   final payload = <String, dynamic>{
     'registration_id': bundle.getRegistrationId(),
     'device_id': bundle.getDeviceId(),
@@ -56,6 +99,7 @@ Future<String> serializePreKeyBundle(SignalProtocolStore store) async {
     'signed_pre_key_public': base64Encode(bundle.getSignedPreKey()!.serialize()),
     'signed_pre_key_signature': base64Encode(bundle.getSignedPreKeySignature()!),
     'identity_key': base64Encode(bundle.getIdentityKey().serialize()),
+    if (pool.isNotEmpty) 'pre_keys': pool,
   };
   return base64Encode(utf8.encode(jsonEncode(payload)));
 }

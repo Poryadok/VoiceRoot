@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../backend/chats_client.dart';
+import '../../e2e/e2e_file_crypto.dart';
 import '../../backend/files_client.dart';
 import '../../backend/mention_parser.dart';
 import '../../backend/messages_client.dart';
@@ -848,6 +849,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     setState(() => _uploadingAttachment = true);
     try {
       final files = ref.read(voiceFilesClientProvider);
+      final isE2eChat = ref.read(chatE2eEnabledProvider(widget.chatId));
       final chatType = ref
           .read(chatListProvider)
           .valueOrNull
@@ -855,25 +857,43 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
           .where((item) => item.chatId == widget.chatId)
           .map((item) => item.chat.type)
           .firstOrNull;
+      var uploadBytes = picked.bytes;
+      String? e2eKeyWire;
+      if (isE2eChat) {
+        final activeId = ref.read(authControllerProvider).activeProfileId;
+        final peerId = ref.read(dmPeerProfileByChatIdProvider)[widget.chatId];
+        if (activeId == null || peerId == null || peerId.isEmpty) return;
+        final encrypted = await const E2eFileCrypto().encryptBytes(
+          plaintext: uploadBytes,
+          messageService: ref.read(e2eMessageServiceProvider),
+          localProfileId: activeId,
+          peerProfileId: peerId,
+          authorization: auth,
+          chatId: widget.chatId,
+        );
+        uploadBytes = encrypted.ciphertext;
+        e2eKeyWire = encrypted.keyWire;
+      }
       final ticket = await files.requestUpload(
         authorization: auth,
         originalName: picked.name,
         mimeType: picked.contentType,
-        sizeBytes: picked.bytes.length,
+        sizeBytes: uploadBytes.length,
         chatId: widget.chatId,
         chatType: chatType,
+        isE2e: isE2eChat,
       );
       if (ticket is! FilesApiOk<FileUploadTicket>) return;
       final put = await files.putBytes(
         uploadUrl: ticket.data.presignedPutUrl,
-        bytes: picked.bytes,
+        bytes: uploadBytes,
         mimeType: picked.contentType,
       );
       if (put is! FilesApiOk<void>) return;
       final confirmed = await files.confirmUpload(
         authorization: auth,
         fileId: ticket.data.fileId,
-        bytes: picked.bytes,
+        bytes: uploadBytes,
       );
       if (confirmed is! FilesApiOk<FileMetadataData>) return;
       final metadata = confirmed.data;
@@ -887,6 +907,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                 type: metadata.fileType,
                 name: metadata.originalName,
                 sizeBytes: metadata.sizeBytes,
+                e2eKeyWire: e2eKeyWire,
               ),
             ],
           );
@@ -1371,7 +1392,11 @@ class _MessageBubbleContent extends StatelessWidget {
           if (message.content.isNotEmpty ||
               attachment != message.attachments.first)
             const SizedBox(height: 6),
-          _AttachmentPreview(attachment: attachment),
+          _AttachmentPreview(
+            attachment: attachment,
+            chatId: message.chatId,
+            senderProfileId: message.senderProfileId,
+          ),
         ],
       ],
     );
@@ -1379,9 +1404,15 @@ class _MessageBubbleContent extends StatelessWidget {
 }
 
 class _AttachmentPreview extends ConsumerWidget {
-  const _AttachmentPreview({required this.attachment});
+  const _AttachmentPreview({
+    required this.attachment,
+    required this.chatId,
+    required this.senderProfileId,
+  });
 
   final MessageAttachment attachment;
+  final String chatId;
+  final String senderProfileId;
 
   static bool _isHttpUrl(String? value) {
     if (value == null || value.isEmpty) return false;
@@ -1393,6 +1424,36 @@ class _AttachmentPreview extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final voice = VoiceColors.of(context);
     if (attachment.isImage) {
+      if (attachment.isE2eEncrypted) {
+        final decryptRequest = E2eAttachmentDecryptRequest(
+          fileId: attachment.fileId,
+          e2eKeyWire: attachment.e2eKeyWire!,
+          senderProfileId: senderProfileId,
+          chatId: chatId,
+        );
+        final bytesAsync =
+            ref.watch(e2eDecryptedAttachmentBytesProvider(decryptRequest));
+        return Semantics(
+          key: ChatRoomPanel.attachmentPreviewKey(attachment.fileId),
+          label: attachment.name ??
+              AppLocalizations.of(context)!.chatImageAttachment,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 220, maxHeight: 160),
+              color: voice.surface,
+              child: bytesAsync.isLoading || bytesAsync.valueOrNull == null
+                  ? const _AttachmentIcon(icon: Icons.image_outlined)
+                  : Image.memory(
+                      bytesAsync.valueOrNull!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) =>
+                          const _AttachmentIcon(icon: Icons.image_outlined),
+                    ),
+            ),
+          ),
+        );
+      }
       final direct =
           _isHttpUrl(attachment.previewUrl) ? attachment.previewUrl : null;
       final directUrl =

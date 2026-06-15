@@ -29,7 +29,7 @@
 
 ### Запуск стенда (вы, не агент)
 
-- [ ] **Compose + миграции Phase 15** — на вашей машине: `make compose-app-up`, при необходимости Path B для `auth_db` ([migrations README](../src/backend/migrations/README.md)). Агент может автоматизировать скрипт (batch Infra), но первый прогон — вы.
+- [x] **Compose + миграции Phase 15** — incremental snippets + `make compose-migrate-phase15`; Auth Flyway V4 (`IF NOT EXISTS`).
 - [ ] **Реальные ключи dev** — если тестируете File/R2/FCM в compose: скопировать `.env.example` → `.env`, заполнить `FILE_R2_*`, `USER_R2_*` и т.д. ([`.env.example`](../.env.example)).
 
 ---
@@ -70,20 +70,31 @@
 *После или параллельно E2E-A; Auth Flyway — согласовать с Path A/B для `auth_db`.*
 
 - [x] **Key backup по спеке** — client AEAD + KDF + export identity/sessions/pre-keys + restore (Auth хранит opaque blob).
-- [ ] **Auth Flyway** — `V2__e2e_key_backup.sql` (+ паритет `auth_db/000005` golang-migrate).
-- [ ] **Compose migrations Phase 15** — автоматизировать `chat_db/000006`, `messaging_db/000009`, `auth_db/000005` (Makefile/scripts; см. batch Infra).
-- [ ] **Pre-key directory** — libsignal signature verify + multi-OTPK pool + ротация (v1: single OTPK consume only).
+- [x] **Auth Flyway** — `V4__e2e_key_backups.sql` (+ паритет `auth_db/000005` golang-migrate); `CREATE TABLE IF NOT EXISTS` для compose volumes с Path B.
+- [x] **Compose migrations Phase 15** — `incremental_chat_db` / `incremental_messaging_db` snippets + `make compose-migrate-phase15`.
+- [x] **Pre-key directory** — Ed25519 signed-pre-key verify + multi-OTPK pool + client replenishment on bootstrap.
 - [x] **EditMessage E2E** — ciphertext edit path for `is_e2e` messages.
-- [ ] **File E2E** — client encrypt + `is_e2e` upload; expiry 90d UX (server gate done).
+- [x] **File E2E** — client AES-GCM + `is_e2e` upload; 90d UX in enable/settings copy (server gate done).
 
 **Промпт-якорь:** `Phase 15 E2E — batch E2E-B backend`.
+
+---
+
+### Batch E2E-B audit follow-ups (post-implementation)
+
+- [ ] **Pre-key signature cross-check** — server Ed25519 verify vs real `libsignal_protocol_dart` bundles (not only Go test fixtures); reject upload if Dart/Go wire mismatch.
+- [ ] **E2E file live compose test** — finish `phase15_e2e_file_live_test.dart` (encrypted upload roundtrip + decrypt preview) when MinIO/R2 up.
+- [ ] **E2E attachment download** — non-image files: decrypt + open/save UX (images only via `Image.memory` today).
+- [ ] **E2E file thumbnails** — skip server imgproc (done); optional client-side thumb after decrypt.
+- [ ] **ClamAV / scan on E2E blobs** — skip or mark `skipped` for `is_e2e` ciphertext (scanner sees noise).
+- [ ] **Auth JDBC backup IT** — `Phase15E2EKeyBackupJdbcIntegrationTest` in CI (Testcontainers).
 
 ---
 
 ### Batch E2E-C — «E2E тесты и поиск»
 
 - [ ] **Search + compose** — `x-voice-profile-id` в Search global/in-chat (live 500 `missing credentials`); E2E exclusion на 200 + empty hits.
-- [ ] **Тесты E2E** — gateway live edit-in-E2E step; `MessageEdited` indexer skip; coverage ≥80% `lib/e2e/` + E2E backend packages (prekey ~71%, grpcsvc ~73% — add edge-case tests).
+- [ ] **Тесты E2E** — gateway live edit-in-E2E step; `MessageEdited` indexer skip; coverage ≥80% `lib/e2e/` + E2E backend packages (prekey **80%+** done; grpcsvc ~73% — add edge-case tests).
 - [ ] **Key backup limits (P2)** — max blob, rate limit put/get pre-keys (лимиты можно взять из спеки или дефолты в коде).
 - [ ] **docs/microservices/messaging-service.md** — добавить секцию E2E/pre-keys/edit policy.
 - [ ] **Flutter web docker image** — `flutter build web` падает на `dart:ffi` (sqlite3mc/native); smoke через `flutter run -d edge` на хосте.

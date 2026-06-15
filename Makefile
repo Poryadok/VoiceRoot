@@ -29,7 +29,7 @@ GO_TEST_TARGETS := $(GO_SERVICES:%=go-test-%)
 GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
 
 .PHONY: buf-lint buf-format buf-breaking buf-generate buf-generate-dart buf-dart-check compose-up compose-app-up compose-down compose-logs-collect \
-	compose-e2e-live compose-e2e-full compose-e2e-voice-live \
+	compose-migrate-phase15 compose-e2e-live compose-e2e-full compose-e2e-voice-live \
 	build-all build-all-breaking check-toolchain compose-config-ci buf-ci backend-test-ci backend-image-ci \
 	gateway-test-ci gateway-image-ci go-test-pkg auth-test-ci auth-image-ci buf-breaking-ci \
 	golangci-ci gateway-test-race-ci design-tokens-check flutter-ui-color-gate flutter-ci coverage-report testcontainers-prune
@@ -62,6 +62,17 @@ compose-up:
 
 compose-app-up:
 	docker compose --profile app up -d --build
+
+# Phase 15 E2E DDL for Go-owned DBs (auth_db uses Flyway Path A on Auth boot).
+compose-migrate-phase15:
+	docker run --rm --network voice_default \
+		-v "$(ROOT)/src/backend/migrations/chat_db:/migrations" migrate/migrate \
+		-path /migrations \
+		-database "postgres://voice:voice@postgres:5432/chat_db?sslmode=disable" up
+	docker run --rm --network voice_default \
+		-v "$(ROOT)/src/backend/migrations/messaging_db:/migrations" migrate/migrate \
+		-path /migrations \
+		-database "postgres://voice:voice@postgres:5432/messaging_db?sslmode=disable" up
 
 compose-down:
 	docker compose down

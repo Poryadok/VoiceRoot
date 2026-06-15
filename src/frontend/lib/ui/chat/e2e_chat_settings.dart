@@ -359,6 +359,14 @@ class _DmE2eSettingsSectionState extends ConsumerState<DmE2eSettingsSection> {
                 },
         ),
         if (enabled) _EncryptionCodeBlock(chatId: widget.chatId),
+        if (enabled)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Text(
+              l10n.e2eFileRetentionNotice,
+              style: TextStyle(color: voice.textSecondary, fontSize: 12),
+            ),
+          ),
         ListTile(
           leading: const Icon(Icons.backup_outlined),
           title: Text(l10n.e2eChatInfoKeyBackup),

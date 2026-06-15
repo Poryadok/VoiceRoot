@@ -26,3 +26,13 @@ CREATE INDEX IF NOT EXISTS messages_chat_shared_attachments_idx
 CREATE INDEX IF NOT EXISTS messages_chat_shared_links_idx
     ON messages (chat_id, id DESC)
     WHERE deleted_at IS NULL AND content ~ 'https?://';
+
+-- Phase 15 E2E (keep in sync with src/backend/migrations/messaging_db/000009_e2e.up.sql)
+ALTER TABLE messages
+    ADD COLUMN IF NOT EXISTS is_e2e BOOLEAN NOT NULL DEFAULT false;
+
+CREATE TABLE IF NOT EXISTS e2e_prekey_bundles (
+    profile_id UUID PRIMARY KEY,
+    bundle TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

@@ -14,3 +14,7 @@ UPDATE chats
 SET threads_enabled = true, allow_user_main_feed = false
 WHERE type = 'channel'
   AND (threads_enabled IS DISTINCT FROM true OR allow_user_main_feed IS DISTINCT FROM false);
+
+-- Phase 15 E2E (keep in sync with src/backend/migrations/chat_db/000006_e2e_enabled.up.sql)
+ALTER TABLE chats
+    ADD COLUMN IF NOT EXISTS e2e_enabled BOOLEAN NOT NULL DEFAULT false;

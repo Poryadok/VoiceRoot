@@ -2951,7 +2951,7 @@ abstract class AppLocalizations {
   /// No description provided for @e2eEnableBody.
   ///
   /// In en, this message translates to:
-  /// **'End-to-end encryption is enabled for this chat.\n\nMessages are encrypted and unavailable to the server.\n— Global search will not find message bodies from this chat.\n— Local search works only on history loaded on this device.'**
+  /// **'End-to-end encryption is enabled for this chat.\n\nMessages are encrypted and unavailable to the server.\n— Global search will not find message bodies from this chat.\n— Local search works only on history loaded on this device.\n— Attachments are encrypted and automatically deleted after 90 days.'**
   String get e2eEnableBody;
 
   /// No description provided for @e2eEnableConfirm.
@@ -3097,6 +3097,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Don\'t trust'**
   String get e2eIdentityKeyChangedDistrust;
+
+  /// No description provided for @e2eFileRetentionNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Encrypted attachments in this chat are automatically deleted after 90 days.'**
+  String get e2eFileRetentionNotice;
 }
 
 class _AppLocalizationsDelegate

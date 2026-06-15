@@ -50,6 +50,8 @@ class FileMetadataData {
     this.url,
     this.previewUrl,
     this.sizeBytes,
+    this.isE2e = false,
+    this.expiresAt,
   });
 
   final String fileId;
@@ -59,6 +61,8 @@ class FileMetadataData {
   final String? url;
   final String? previewUrl;
   final int? sizeBytes;
+  final bool isE2e;
+  final DateTime? expiresAt;
 }
 
 class VoiceFilesClient {
@@ -73,6 +77,7 @@ class VoiceFilesClient {
     required int sizeBytes,
     String? chatId,
     String? chatType,
+    bool isE2e = false,
   }) async {
     final result = await _gateway.postProto(
       uri: _gateway.resolve('/api/v1/files/upload'),
@@ -83,6 +88,7 @@ class VoiceFilesClient {
         sizeBytes: sizeBytes,
         chatId: chatId,
         chatType: chatTypeFromWire(chatType),
+        isE2e: isE2e,
       ),
       createEmpty: file_pb.RequestUploadResponse.create,
     );
@@ -116,6 +122,37 @@ class VoiceFilesClient {
         data.hasFileMetadata() ? data.fileMetadata : file_pb.FileMetadata(),
       ),
     );
+  }
+
+  Future<FilesApiResult<Uint8List>> fetchFileBytes({
+    required String authorization,
+    required String fileId,
+  }) async {
+    final urlResult = await getFileUrl(
+      authorization: authorization,
+      fileId: fileId,
+    );
+    return switch (urlResult) {
+      FilesApiOk(:final data) => _downloadPresigned(Uri.parse(data)),
+      FilesApiFailure(:final message, :final errorCode, :final statusCode) =>
+        FilesApiFailure(
+          message: message,
+          errorCode: errorCode,
+          statusCode: statusCode,
+        ),
+    };
+  }
+
+  Future<FilesApiResult<Uint8List>> _downloadPresigned(Uri uri) async {
+    final result = await _gateway.getBytes(uri: uri);
+    return switch (result) {
+      GatewayHttpOk(:final data) => FilesApiOk(data),
+      GatewayHttpFailure(:final error) => FilesApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
   }
 
   Future<FilesApiResult<String>> getFileUrl({

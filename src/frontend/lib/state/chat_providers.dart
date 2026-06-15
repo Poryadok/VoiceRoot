@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,6 +13,7 @@ import '../backend/messaging_read_sync.dart';
 import '../backend/messages_client.dart';
 import '../backend/realtime_client.dart';
 import '../e2e/e2e_exceptions.dart';
+import '../e2e/e2e_file_crypto.dart';
 import 'auth_providers.dart';
 import 'bot_deferred_providers.dart';
 import 'connectivity_providers.dart';
@@ -50,6 +52,67 @@ final fileAttachmentUrlProvider = FutureProvider.family<String?, String>((
     FilesApiOk(:final data) => data.isEmpty ? null : data,
     FilesApiFailure() => null,
   };
+});
+
+/// Request to decrypt an E2E file attachment for display.
+class E2eAttachmentDecryptRequest {
+  const E2eAttachmentDecryptRequest({
+    required this.fileId,
+    required this.e2eKeyWire,
+    required this.senderProfileId,
+    required this.chatId,
+  });
+
+  final String fileId;
+  final String e2eKeyWire;
+  final String senderProfileId;
+  final String chatId;
+
+  @override
+  bool operator ==(Object other) {
+    return other is E2eAttachmentDecryptRequest &&
+        other.fileId == fileId &&
+        other.e2eKeyWire == e2eKeyWire &&
+        other.senderProfileId == senderProfileId &&
+        other.chatId == chatId;
+  }
+
+  @override
+  int get hashCode => Object.hash(fileId, e2eKeyWire, senderProfileId, chatId);
+}
+
+/// Downloads and decrypts E2E ciphertext blobs for attachment preview.
+final e2eDecryptedAttachmentBytesProvider =
+    FutureProvider.family<Uint8List?, E2eAttachmentDecryptRequest>((
+  ref,
+  request,
+) async {
+  if (request.fileId.isEmpty || request.e2eKeyWire.isEmpty) return null;
+  final auth = ref.watch(authorizationHeaderProvider);
+  final localProfileId = ref.watch(authControllerProvider).activeProfileId;
+  if (auth == null || localProfileId == null || localProfileId.isEmpty) {
+    return null;
+  }
+  final files = ref.read(voiceFilesClientProvider);
+  final downloaded = await files.fetchFileBytes(
+    authorization: auth,
+    fileId: request.fileId,
+  );
+  if (downloaded is! FilesApiOk<Uint8List>) return null;
+  final crypto = const E2eFileCrypto();
+  final messageService = ref.read(e2eMessageServiceProvider);
+  try {
+    return await crypto.decryptBytes(
+      ciphertext: downloaded.data,
+      keyWire: request.e2eKeyWire,
+      messageService: messageService,
+      localProfileId: localProfileId,
+      peerProfileId: request.senderProfileId,
+      authorization: auth,
+    );
+  } on Object {
+    return null;
+  }
 });
 
 /// Active DM chat id in the main column, or null.

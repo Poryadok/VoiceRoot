@@ -34,6 +34,8 @@ migrate -path src/backend/migrations/user_db -database "postgres://voice:voice@l
 
 Repeat for `social_db`, `chat_db`, `messaging_db`, `file_db`.
 
+**Phase 15 E2E (compose Path A):** `e2e_key_backups` via Auth Flyway `V4__e2e_key_backups.sql` on boot. `chat_db` / `messaging_db` DDL (`e2e_enabled`, `is_e2e`, `e2e_prekey_bundles`) via idempotent `docker/postgres/incremental_*.sql.snippet`, or `make compose-migrate-phase15` for golang-migrate on Go-owned DBs.
+
 Path B for `auth_db` only (then set `AUTH_FLYWAY_ENABLED=false` for Auth):
 
 ```text

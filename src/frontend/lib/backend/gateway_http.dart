@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 import 'package:protobuf/protobuf.dart';
@@ -254,6 +255,32 @@ class GatewayHttpClient {
       final err = GatewayApiError.fromResponse(res);
       if (err == null) return const GatewayHttpOk(null);
       return GatewayHttpFailure(err);
+    } catch (e) {
+      return GatewayHttpFailure(
+        GatewayApiError(
+          errorCode: 'network_error',
+          message: '$e',
+          statusCode: 0,
+        ),
+      );
+    }
+  }
+
+  Future<GatewayHttpResult<Uint8List>> getBytes({required Uri uri}) async {
+    try {
+      final res = await _http.get(uri);
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        return GatewayHttpOk(Uint8List.fromList(res.bodyBytes));
+      }
+      final err = GatewayApiError.fromResponse(res);
+      return GatewayHttpFailure(
+        err ??
+            GatewayApiError(
+              errorCode: 'download_failed',
+              message: 'HTTP ${res.statusCode}',
+              statusCode: res.statusCode,
+            ),
+      );
     } catch (e) {
       return GatewayHttpFailure(
         GatewayApiError(

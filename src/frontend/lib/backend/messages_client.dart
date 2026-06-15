@@ -269,6 +269,7 @@ class MessageAttachment {
     this.previewUrl,
     this.name,
     this.sizeBytes,
+    this.e2eKeyWire,
   });
 
   final String fileId;
@@ -277,8 +278,10 @@ class MessageAttachment {
   final String? previewUrl;
   final String? name;
   final int? sizeBytes;
+  final String? e2eKeyWire;
 
   bool get isImage => type == 'image';
+  bool get isE2eEncrypted => e2eKeyWire != null && e2eKeyWire!.isNotEmpty;
 
   Map<String, dynamic> toJson() {
     return {
@@ -289,6 +292,8 @@ class MessageAttachment {
         'preview_url': previewUrl,
       if (name != null && name!.isNotEmpty) 'name': name,
       if (sizeBytes != null) 'size_bytes': sizeBytes,
+      if (e2eKeyWire != null && e2eKeyWire!.isNotEmpty)
+        'e2e_key_wire': e2eKeyWire,
     };
   }
 
@@ -300,6 +305,7 @@ class MessageAttachment {
       previewUrl: json['preview_url'] as String?,
       name: json['name'] as String?,
       sizeBytes: (json['size_bytes'] as num?)?.toInt(),
+      e2eKeyWire: json['e2e_key_wire'] as String?,
     );
   }
 
