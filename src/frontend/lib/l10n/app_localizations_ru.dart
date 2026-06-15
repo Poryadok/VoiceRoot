@@ -299,6 +299,15 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get botTimeoutError => 'Бот не ответил вовремя. Попробуйте позже.';
+
+  @override
+  String get slashCommandsTitle => 'Команды';
+
+  @override
+  String get ephemeralMessageLabel => 'Только для вас';
+
+  @override
   String chatRoomError(String message) {
     return 'Ошибка: $message';
   }

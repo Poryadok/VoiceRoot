@@ -1,0 +1,176 @@
+import '../gen/voice/bot/v1/bot.pb.dart' as bot_pb;
+import '../gen/voice/chat/v1/chat.pb.dart' as chat_pb;
+import '../gen/voice/chat/v1/chat.pbenum.dart';
+import '../gen/voice/messaging/v1/messaging.pb.dart' as messaging_pb;
+import 'api_result.dart';
+import 'gateway_http.dart';
+import 'proto_mappers.dart';
+
+const String kBotsMissingBaseUrlDetail = 'missing base URL';
+const String kBotTimeoutErrorCode = 'bot_timeout';
+
+sealed class BotsApiResult<T> {
+  const BotsApiResult();
+}
+
+final class BotsApiOk<T> extends BotsApiResult<T> {
+  const BotsApiOk(this.data);
+  final T data;
+}
+
+final class BotsApiFailure extends BotsApiResult<Never> {
+  const BotsApiFailure({
+    required this.message,
+    this.errorCode,
+    this.statusCode,
+  });
+
+  final String message;
+  final String? errorCode;
+  final int? statusCode;
+}
+
+class BotSlashCommand {
+  const BotSlashCommand({
+    required this.botId,
+    required this.botName,
+    required this.name,
+    required this.description,
+  });
+
+  final String botId;
+  final String botName;
+  final String name;
+  final String description;
+
+  String get displayName => '/$name';
+
+  factory BotSlashCommand.fromProto(bot_pb.SlashCommand cmd) {
+    return BotSlashCommand(
+      botId: cmd.botId,
+      botName: cmd.botName,
+      name: cmd.name,
+      description: cmd.description,
+    );
+  }
+}
+
+class SlashInteractionOutcome {
+  const SlashInteractionOutcome({
+    required this.interactionToken,
+    this.content,
+    this.isEphemeral = false,
+    this.deferred = false,
+    this.errorCode,
+    this.errorMessage,
+    this.message,
+  });
+
+  final String interactionToken;
+  final String? content;
+  final bool isEphemeral;
+  final bool deferred;
+  final String? errorCode;
+  final String? errorMessage;
+  final messaging_pb.Message? message;
+
+  bool get isBotTimeout => errorCode == kBotTimeoutErrorCode;
+}
+
+/// HTTP client for Bot routes via API Gateway (`/api/v1/bots/**`).
+class VoiceBotsClient {
+  VoiceBotsClient({required GatewayHttpClient gateway}) : _gateway = gateway;
+
+  final GatewayHttpClient _gateway;
+
+  Future<BotsApiResult<List<BotSlashCommand>>> listSlashCommandsForChat({
+    required String authorization,
+    required String chatId,
+    required String chatType,
+  }) async {
+    final result = await _gateway.getProto(
+      _gateway.replace(
+        path: '/api/v1/bots/commands',
+        queryParameters: {
+          'chat_id': chatId,
+          'chat_type': chatType,
+        },
+      ),
+      authorization: authorization,
+      createEmpty: bot_pb.ListSlashCommandsForChatResponse.create,
+    );
+    return _map(
+      result,
+      (data) {
+        final response = data as bot_pb.ListSlashCommandsForChatResponse;
+        return response.commands
+            .map(BotSlashCommand.fromProto)
+            .toList(growable: false);
+      },
+    );
+  }
+
+  Future<BotsApiResult<SlashInteractionOutcome>> executeSlashInteraction({
+    required String authorization,
+    required String chatId,
+    required String chatType,
+    required String botId,
+    required String commandName,
+    String optionsJson = '{}',
+  }) async {
+    final result = await _gateway.postProto(
+      uri: _gateway.resolve('/api/v1/bots/interactions'),
+      authorization: authorization,
+      body: bot_pb.ExecuteSlashInteractionRequest(
+        chat: chat_pb.ChatRef(id: chatId, type: _chatTypeFromWire(chatType)),
+        botId: botId,
+        commandName: commandName,
+        optionsJson: optionsJson,
+      ),
+      createEmpty: bot_pb.ExecuteSlashInteractionResponse.create,
+    );
+    return _map(
+      result,
+      (data) => _slashOutcomeFromProto(
+        data as bot_pb.ExecuteSlashInteractionResponse,
+      ),
+    );
+  }
+
+  BotsApiResult<T> _map<T>(
+    GatewayHttpResult<dynamic> result,
+    T Function(dynamic data) parse,
+  ) {
+    return switch (result) {
+      GatewayHttpOk(:final data) => BotsApiOk(parse(data)),
+      GatewayHttpFailure(:final error) => BotsApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
+  }
+}
+
+ChatType _chatTypeFromWire(String raw) {
+  return switch (raw) {
+    'CHAT_TYPE_DM' => ChatType.CHAT_TYPE_DM,
+    'CHAT_TYPE_GROUP' => ChatType.CHAT_TYPE_GROUP,
+    'CHAT_TYPE_CHANNEL' => ChatType.CHAT_TYPE_CHANNEL,
+    _ => ChatType.CHAT_TYPE_CHANNEL,
+  };
+}
+
+SlashInteractionOutcome _slashOutcomeFromProto(
+  bot_pb.ExecuteSlashInteractionResponse data,
+) {
+  return SlashInteractionOutcome(
+    interactionToken: data.interactionToken,
+    content: emptyToNull(data.content),
+    isEphemeral: data.isEphemeral,
+    deferred: data.deferred,
+    errorCode: emptyToNull(data.errorCode),
+    errorMessage: emptyToNull(data.errorMessage),
+    message: data.hasMessage() ? data.message : null,
+  );
+}

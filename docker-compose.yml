@@ -489,6 +489,53 @@ services:
       retries: 10
       start_period: 10s
 
+  bot-db-init:
+    profiles: ["app"]
+    image: postgres:16-alpine
+    restart: "no"
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER:-voice}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-voice}
+    volumes:
+      - ./docker/postgres/ensure-bot-db.sh:/ensure.sh:ro
+      - ./docker/postgres/bot_db_init.sql.snippet:/schema/bot_db_init.sql.snippet:ro
+    entrypoint: ["/bin/sh", "/ensure.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  bot:
+    profiles: ["app"]
+    build:
+      context: ./src/backend
+      dockerfile: bot/Dockerfile
+    environment:
+      LOG_LEVEL: debug
+      DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/bot_db?sslmode=disable
+      BOT_GRPC_LISTEN: :9090
+      MESSAGING_GRPC_ADDR: messaging:9090
+      CHAT_GRPC_ADDR: chat:9090
+      ROLE_GRPC_ADDR: role:9090
+      USER_GRPC_ADDR: user:9090
+    depends_on:
+      postgres:
+        condition: service_healthy
+      bot-db-init:
+        condition: service_completed_successfully
+      messaging:
+        condition: service_healthy
+      chat:
+        condition: service_healthy
+      role:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
   realtime:
     profiles: ["app"]
     build:
@@ -610,7 +657,7 @@ services:
       LISTEN_ADDR: ":8080"
       GATEWAY_REDIS_ADDR: redis:6379
       GATEWAY_REST_UPSTREAMS_JSON: '{"auth":"http://auth:8080"}'
-      GATEWAY_GRPC_UPSTREAMS_JSON: '{"users":"user:9090","friends":"social:9090","chats":"chat:9090","messages":"messaging:9090","spaces":"space:9090","roles":"role:9090","voice":"voice:9090","files":"file:9090","notifications":"notification:9090","matchmaking":"matchmaking:9090","search":"search:9090","moderation":"moderation:9090","subscription":"subscription:9090"}'
+      GATEWAY_GRPC_UPSTREAMS_JSON: '{"users":"user:9090","friends":"social:9090","chats":"chat:9090","messages":"messaging:9090","spaces":"space:9090","roles":"role:9090","voice":"voice:9090","files":"file:9090","notifications":"notification:9090","matchmaking":"matchmaking:9090","search":"search:9090","moderation":"moderation:9090","subscription":"subscription:9090","bots":"bot:9090"}'
       GATEWAY_REALTIME_UPSTREAM_URL: http://realtime:8080
       GATEWAY_JWKS_URL: http://auth:8080/api/v1/auth/.well-known/jwks.json
       GATEWAY_JWT_ISSUER: voice-auth
@@ -655,6 +702,8 @@ services:
       search:
         condition: service_healthy
       subscription:
+        condition: service_healthy
+      bot:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]

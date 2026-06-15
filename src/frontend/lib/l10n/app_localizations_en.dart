@@ -298,6 +298,16 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get botTimeoutError =>
+      'The bot did not respond in time. Try again later.';
+
+  @override
+  String get slashCommandsTitle => 'Commands';
+
+  @override
+  String get ephemeralMessageLabel => 'Only visible to you';
+
+  @override
   String chatRoomError(String message) {
     return 'Error: $message';
   }

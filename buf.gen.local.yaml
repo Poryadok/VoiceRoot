@@ -1,10 +1,11 @@
+# Local codegen without BSR remote plugins. Output to committed service pb trees.
 version: v1
 plugins:
   - plugin: go
-    out: gen/go
+    out: src/backend/voice/pb
     opt:
       - paths=source_relative
   - plugin: go-grpc
-    out: gen/go
+    out: src/backend/voice/pb
     opt:
       - paths=source_relative

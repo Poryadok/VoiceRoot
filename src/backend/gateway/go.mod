@@ -15,6 +15,7 @@ require (
 	google.golang.org/grpc v1.80.0
 	google.golang.org/protobuf v1.36.11
 	voice.app/voice/auth v0.0.0
+	voice.app/voice/bot v0.0.0
 	voice.app/voice/calls v0.0.0
 	voice.app/voice/chat v0.0.0
 	voice.app/voice/common v0.0.0
@@ -113,6 +114,8 @@ require (
 replace voice/backend/pkg => ../pkg
 
 replace voice.app/voice/auth => ../voice/pb/voice/auth
+
+replace voice.app/voice/bot => ../voice/pb/voice/bot
 
 replace voice.app/voice/user => ../user/pb/voice/user
 

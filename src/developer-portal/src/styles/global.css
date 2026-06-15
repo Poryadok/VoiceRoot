@@ -1,0 +1,53 @@
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: #0f1115;
+  color: #e8eaed;
+}
+
+.page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+input,
+textarea {
+  padding: 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #3a3f4b;
+  background: #1a1d24;
+  color: inherit;
+}
+
+.actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+button {
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  border: none;
+  background: #5865f2;
+  color: white;
+  cursor: pointer;
+}
+
+.hint,
+.status {
+  color: #9aa0a6;
+}
+
+code {
+  word-break: break-all;
+}

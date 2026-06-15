@@ -19,6 +19,7 @@ COPY voice/pb/voice/search/go.mod ./voice/pb/voice/search/
 COPY voice/pb/voice/moderation/go.mod ./voice/pb/voice/moderation/
 COPY voice/pb/voice/subscription/go.mod ./voice/pb/voice/subscription/
 COPY voice/pb/voice/auth/go.mod ./voice/pb/voice/auth/
+COPY voice/pb/voice/bot/go.mod ./voice/pb/voice/bot/
 COPY gateway/go.mod ./gateway/
 RUN cd gateway && go mod download
 COPY pkg ./pkg

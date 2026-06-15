@@ -154,6 +154,69 @@ class BotServiceClient extends $grpc.Client {
         options: options);
   }
 
+  /// Manifest (Developer Portal).
+  $grpc.ResponseFuture<$0.ValidateManifestResponse> validateManifest(
+    $0.ValidateManifestRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$validateManifest, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.ApplyManifestResponse> applyManifest(
+    $0.ApplyManifestRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$applyManifest, request, options: options);
+  }
+
+  /// Space lifecycle.
+  $grpc.ResponseFuture<$0.InstallBotInSpaceResponse> installBotInSpace(
+    $0.InstallBotInSpaceRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$installBotInSpace, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.UninstallBotFromSpaceResponse> uninstallBotFromSpace(
+    $0.UninstallBotFromSpaceRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$uninstallBotFromSpace, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.ListInstalledBotsResponse> listInstalledBots(
+    $0.ListInstalledBotsRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$listInstalledBots, request, options: options);
+  }
+
+  /// Client slash interactions.
+  $grpc.ResponseFuture<$0.ExecuteSlashInteractionResponse>
+      executeSlashInteraction(
+    $0.ExecuteSlashInteractionRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$executeSlashInteraction, request,
+        options: options);
+  }
+
+  $grpc.ResponseFuture<$0.ListSlashCommandsForChatResponse>
+      listSlashCommandsForChat(
+    $0.ListSlashCommandsForChatRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$listSlashCommandsForChat, request,
+        options: options);
+  }
+
+  $grpc.ResponseFuture<$0.CompleteInteractionResponse> completeInteraction(
+    $0.CompleteInteractionRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$completeInteraction, request, options: options);
+  }
+
   // method descriptors
 
   static final _$registerBot =
@@ -241,6 +304,48 @@ class BotServiceClient extends $grpc.Client {
           '/voice.bot.v1.BotService/PollEvents',
           ($0.PollEventsRequest value) => value.writeToBuffer(),
           $0.PollEventsResponse.fromBuffer);
+  static final _$validateManifest = $grpc.ClientMethod<
+          $0.ValidateManifestRequest, $0.ValidateManifestResponse>(
+      '/voice.bot.v1.BotService/ValidateManifest',
+      ($0.ValidateManifestRequest value) => value.writeToBuffer(),
+      $0.ValidateManifestResponse.fromBuffer);
+  static final _$applyManifest =
+      $grpc.ClientMethod<$0.ApplyManifestRequest, $0.ApplyManifestResponse>(
+          '/voice.bot.v1.BotService/ApplyManifest',
+          ($0.ApplyManifestRequest value) => value.writeToBuffer(),
+          $0.ApplyManifestResponse.fromBuffer);
+  static final _$installBotInSpace = $grpc.ClientMethod<
+          $0.InstallBotInSpaceRequest, $0.InstallBotInSpaceResponse>(
+      '/voice.bot.v1.BotService/InstallBotInSpace',
+      ($0.InstallBotInSpaceRequest value) => value.writeToBuffer(),
+      $0.InstallBotInSpaceResponse.fromBuffer);
+  static final _$uninstallBotFromSpace = $grpc.ClientMethod<
+          $0.UninstallBotFromSpaceRequest, $0.UninstallBotFromSpaceResponse>(
+      '/voice.bot.v1.BotService/UninstallBotFromSpace',
+      ($0.UninstallBotFromSpaceRequest value) => value.writeToBuffer(),
+      $0.UninstallBotFromSpaceResponse.fromBuffer);
+  static final _$listInstalledBots = $grpc.ClientMethod<
+          $0.ListInstalledBotsRequest, $0.ListInstalledBotsResponse>(
+      '/voice.bot.v1.BotService/ListInstalledBots',
+      ($0.ListInstalledBotsRequest value) => value.writeToBuffer(),
+      $0.ListInstalledBotsResponse.fromBuffer);
+  static final _$executeSlashInteraction = $grpc.ClientMethod<
+          $0.ExecuteSlashInteractionRequest,
+          $0.ExecuteSlashInteractionResponse>(
+      '/voice.bot.v1.BotService/ExecuteSlashInteraction',
+      ($0.ExecuteSlashInteractionRequest value) => value.writeToBuffer(),
+      $0.ExecuteSlashInteractionResponse.fromBuffer);
+  static final _$listSlashCommandsForChat = $grpc.ClientMethod<
+          $0.ListSlashCommandsForChatRequest,
+          $0.ListSlashCommandsForChatResponse>(
+      '/voice.bot.v1.BotService/ListSlashCommandsForChat',
+      ($0.ListSlashCommandsForChatRequest value) => value.writeToBuffer(),
+      $0.ListSlashCommandsForChatResponse.fromBuffer);
+  static final _$completeInteraction = $grpc.ClientMethod<
+          $0.CompleteInteractionRequest, $0.CompleteInteractionResponse>(
+      '/voice.bot.v1.BotService/CompleteInteraction',
+      ($0.CompleteInteractionRequest value) => value.writeToBuffer(),
+      $0.CompleteInteractionResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.bot.v1.BotService')
@@ -391,6 +496,78 @@ abstract class BotServiceBase extends $grpc.Service {
         true,
         ($core.List<$core.int> value) => $0.PollEventsRequest.fromBuffer(value),
         ($0.PollEventsResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ValidateManifestRequest,
+            $0.ValidateManifestResponse>(
+        'ValidateManifest',
+        validateManifest_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ValidateManifestRequest.fromBuffer(value),
+        ($0.ValidateManifestResponse value) => value.writeToBuffer()));
+    $addMethod(
+        $grpc.ServiceMethod<$0.ApplyManifestRequest, $0.ApplyManifestResponse>(
+            'ApplyManifest',
+            applyManifest_Pre,
+            false,
+            false,
+            ($core.List<$core.int> value) =>
+                $0.ApplyManifestRequest.fromBuffer(value),
+            ($0.ApplyManifestResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.InstallBotInSpaceRequest,
+            $0.InstallBotInSpaceResponse>(
+        'InstallBotInSpace',
+        installBotInSpace_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.InstallBotInSpaceRequest.fromBuffer(value),
+        ($0.InstallBotInSpaceResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.UninstallBotFromSpaceRequest,
+            $0.UninstallBotFromSpaceResponse>(
+        'UninstallBotFromSpace',
+        uninstallBotFromSpace_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.UninstallBotFromSpaceRequest.fromBuffer(value),
+        ($0.UninstallBotFromSpaceResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ListInstalledBotsRequest,
+            $0.ListInstalledBotsResponse>(
+        'ListInstalledBots',
+        listInstalledBots_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ListInstalledBotsRequest.fromBuffer(value),
+        ($0.ListInstalledBotsResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ExecuteSlashInteractionRequest,
+            $0.ExecuteSlashInteractionResponse>(
+        'ExecuteSlashInteraction',
+        executeSlashInteraction_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ExecuteSlashInteractionRequest.fromBuffer(value),
+        ($0.ExecuteSlashInteractionResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ListSlashCommandsForChatRequest,
+            $0.ListSlashCommandsForChatResponse>(
+        'ListSlashCommandsForChat',
+        listSlashCommandsForChat_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ListSlashCommandsForChatRequest.fromBuffer(value),
+        ($0.ListSlashCommandsForChatResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.CompleteInteractionRequest,
+            $0.CompleteInteractionResponse>(
+        'CompleteInteraction',
+        completeInteraction_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.CompleteInteractionRequest.fromBuffer(value),
+        ($0.CompleteInteractionResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.RegisterBotResponse> registerBot_Pre($grpc.ServiceCall $call,
@@ -538,4 +715,76 @@ abstract class BotServiceBase extends $grpc.Service {
 
   $async.Stream<$0.PollEventsResponse> pollEvents(
       $grpc.ServiceCall call, $0.PollEventsRequest request);
+
+  $async.Future<$0.ValidateManifestResponse> validateManifest_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.ValidateManifestRequest> $request) async {
+    return validateManifest($call, await $request);
+  }
+
+  $async.Future<$0.ValidateManifestResponse> validateManifest(
+      $grpc.ServiceCall call, $0.ValidateManifestRequest request);
+
+  $async.Future<$0.ApplyManifestResponse> applyManifest_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.ApplyManifestRequest> $request) async {
+    return applyManifest($call, await $request);
+  }
+
+  $async.Future<$0.ApplyManifestResponse> applyManifest(
+      $grpc.ServiceCall call, $0.ApplyManifestRequest request);
+
+  $async.Future<$0.InstallBotInSpaceResponse> installBotInSpace_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.InstallBotInSpaceRequest> $request) async {
+    return installBotInSpace($call, await $request);
+  }
+
+  $async.Future<$0.InstallBotInSpaceResponse> installBotInSpace(
+      $grpc.ServiceCall call, $0.InstallBotInSpaceRequest request);
+
+  $async.Future<$0.UninstallBotFromSpaceResponse> uninstallBotFromSpace_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.UninstallBotFromSpaceRequest> $request) async {
+    return uninstallBotFromSpace($call, await $request);
+  }
+
+  $async.Future<$0.UninstallBotFromSpaceResponse> uninstallBotFromSpace(
+      $grpc.ServiceCall call, $0.UninstallBotFromSpaceRequest request);
+
+  $async.Future<$0.ListInstalledBotsResponse> listInstalledBots_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.ListInstalledBotsRequest> $request) async {
+    return listInstalledBots($call, await $request);
+  }
+
+  $async.Future<$0.ListInstalledBotsResponse> listInstalledBots(
+      $grpc.ServiceCall call, $0.ListInstalledBotsRequest request);
+
+  $async.Future<$0.ExecuteSlashInteractionResponse> executeSlashInteraction_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.ExecuteSlashInteractionRequest> $request) async {
+    return executeSlashInteraction($call, await $request);
+  }
+
+  $async.Future<$0.ExecuteSlashInteractionResponse> executeSlashInteraction(
+      $grpc.ServiceCall call, $0.ExecuteSlashInteractionRequest request);
+
+  $async.Future<$0.ListSlashCommandsForChatResponse>
+      listSlashCommandsForChat_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.ListSlashCommandsForChatRequest> $request) async {
+    return listSlashCommandsForChat($call, await $request);
+  }
+
+  $async.Future<$0.ListSlashCommandsForChatResponse> listSlashCommandsForChat(
+      $grpc.ServiceCall call, $0.ListSlashCommandsForChatRequest request);
+
+  $async.Future<$0.CompleteInteractionResponse> completeInteraction_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.CompleteInteractionRequest> $request) async {
+    return completeInteraction($call, await $request);
+  }
+
+  $async.Future<$0.CompleteInteractionResponse> completeInteraction(
+      $grpc.ServiceCall call, $0.CompleteInteractionRequest request);
 }

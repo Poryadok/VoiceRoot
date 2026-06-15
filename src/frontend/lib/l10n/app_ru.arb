@@ -155,6 +155,9 @@
   "chatMentionEveryone": "@everyone",
   "chatMentionHere": "@here",
   "chatMentionMember": "Участник {profileId}",
+  "botTimeoutError": "Бот не ответил вовремя. Попробуйте позже.",
+  "slashCommandsTitle": "Команды",
+  "ephemeralMessageLabel": "Только для вас",
   "chatRoomError": "Ошибка: {message}",
   "@chatRoomError": {
     "placeholders": {

@@ -168,6 +168,9 @@
       }
     }
   },
+  "botTimeoutError": "The bot did not respond in time. Try again later.",
+  "slashCommandsTitle": "Commands",
+  "ephemeralMessageLabel": "Only visible to you",
   "chatRoomError": "Error: {message}",
   "@chatRoomError": {
     "placeholders": {

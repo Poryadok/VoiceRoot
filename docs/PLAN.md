@@ -964,9 +964,9 @@ JWT + `user_db.profiles` — [EXEC_PLAN.md](EXEC_PLAN.md). Не заменяет
 
 ### Бэкенд
 
-- [ ] **Developer Portal** — apps, secrets, manifest upload, revoke token — [bots.md](features/bots.md).
+- [x] **Developer Portal** — apps, secrets, manifest upload, revoke token — [bots.md](features/bots.md). Minimal: [`src/developer-portal/`](../src/developer-portal/).
 
-- [ ] **Runtime** — slash commands in client; webhook + polling dev; rate limits per bots.md; TEXT_CHAT_SEND in whitelisted channels only.
+- [x] **Runtime** — slash commands in client; webhook + polling dev; rate limits per bots.md; TEXT_CHAT_SEND in whitelisted channels only.
 
 ### Критерии приёмки
 

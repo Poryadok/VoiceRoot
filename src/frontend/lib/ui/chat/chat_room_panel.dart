@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
@@ -10,6 +11,7 @@ import '../../backend/files_client.dart';
 import '../../backend/mention_parser.dart';
 import '../../backend/messages_client.dart';
 import '../../backend/voice_client.dart';
+import '../../state/bot_providers.dart';
 import '../../state/auth_providers.dart';
 import '../../state/call_providers.dart';
 import '../../state/chat_providers.dart';
@@ -24,6 +26,7 @@ import '../core/chat_author_label.dart';
 import '../core/voice_avatar.dart';
 import '../core/voice_compact_banner.dart';
 import '../core/voice_state_panel.dart';
+import '../core/voice_chat_bubble.dart';
 import '../core/voice_send_button.dart';
 import '../social/presence_indicator.dart';
 import '../report/report_sheet.dart';
@@ -38,6 +41,7 @@ import '../space/space_chat_slow_mode_sheet.dart';
 import '../search/in_chat_search.dart';
 import '../../state/shell_providers.dart';
 import '../../state/shared_media_providers.dart';
+import 'slash_command_menu.dart';
 import 'thread_side_panel.dart';
 
 /// Main column: message history (REST) + composer; live updates via Realtime WS.
@@ -61,6 +65,7 @@ class ChatRoomPanel extends ConsumerStatefulWidget {
   static const Key newMessagesChipKey = Key('chat_room_new_messages');
   static const Key pinnedBarKey = Key('chat_room_pinned_bar');
   static const Key groupMembersKey = Key('chat_room_group_members');
+  static const Key slashCommandsKey = Key('chat_room_slash_commands');
   static const Key emojiPickerKey = Key('chat_room_emoji_picker');
   static const Key offlineBannerKey = Key('chat_room_offline_banner');
   static const Key spaceSlowModeKey = Key('chat_room_space_slow_mode');
@@ -102,6 +107,8 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   var _unreadCaptured = false;
   var _pendingNewMessages = 0;
   var _wasNearBottom = true;
+  var _slashMenuOpen = false;
+  var _executingSlash = false;
 
   @override
   void initState() {
@@ -189,6 +196,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     }
     final replyTarget = ref.watch(chatReplyTargetProvider(widget.chatId));
     final activeThreadId = ref.watch(chatActiveThreadProvider(widget.chatId));
+    final ephemeralMessages = ref.watch(ephemeralMessagesProvider(widget.chatId));
     final blockChannelMainFeed =
         chatMeta?.isChannel == true && chatMeta!.allowUserMainFeed == false;
     final composerBlocked =
@@ -475,7 +483,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
             onTap: (messageId) => _scrollToMessage(messageId),
           ),
         Expanded(
-          child: room.messages.isEmpty && !room.isLoading
+          child: room.messages.isEmpty &&
+                  ephemeralMessages.isEmpty &&
+                  !room.isLoading
               ? room.errorMessage != null
                     ? VoiceStatePanel(
                         title: l10n.chatRoomError(room.errorMessage!),
@@ -499,6 +509,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   chatId: widget.chatId,
                   scrollController: _scrollController,
                   room: room,
+                  ephemeralMessages: ephemeralMessages,
                   activeId: activeId,
                   l10n: l10n,
                   initialUnreadCount: _initialUnreadCount,
@@ -581,6 +592,19 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                         hub.typingStop(widget.chatId);
                       } else {
                         hub.typingStart(widget.chatId);
+                      }
+                      if (!_slashMenuOpen &&
+                          !_executingSlash &&
+                          !composerBlocked &&
+                          (value == '/' || value.endsWith(' /'))) {
+                        _slashMenuOpen = true;
+                        unawaited(
+                          _showSlashCommandMenu(context).whenComplete(() {
+                            if (mounted) {
+                              setState(() => _slashMenuOpen = false);
+                            }
+                          }),
+                        );
                       }
                     },
                     onSubmitted: room.isSending || composerBlocked ? null : (_) => _send(),
@@ -675,6 +699,56 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     _composer.text = '$text$choice';
     _composer.selection = TextSelection.collapsed(offset: _composer.text.length);
     _refocusComposer();
+  }
+
+  Future<void> _showSlashCommandMenu(BuildContext context) async {
+    final l10n = AppLocalizations.of(context)!;
+    final text = _composer.text;
+    final slashIndex = text.lastIndexOf('/');
+    final filter = slashIndex >= 0 ? text.substring(slashIndex + 1) : '';
+
+    await showSlashCommandMenu(
+      context: context,
+      ref: ref,
+      chatId: widget.chatId,
+      filter: filter,
+      onSelected: (command) async {
+        if (slashIndex >= 0) {
+          final prefix = text.substring(0, slashIndex).trimRight();
+          _composer.text = prefix;
+          _composer.selection = TextSelection.collapsed(
+            offset: _composer.text.length,
+          );
+        } else {
+          _composer.clear();
+        }
+
+        setState(() => _executingSlash = true);
+        final messenger = ScaffoldMessenger.of(context);
+        try {
+          final failure = await ref
+              .read(slashInteractionExecutorProvider)
+              .execute(chatId: widget.chatId, command: command);
+          if (!mounted) return;
+          if (failure == SlashInteractionFailure.botTimeout) {
+            messenger.showSnackBar(
+              SnackBar(content: Text(l10n.botTimeoutError)),
+            );
+          } else if (failure == SlashInteractionFailure.requestFailed) {
+            messenger.showSnackBar(
+              SnackBar(content: Text(l10n.chatRoomError(command.name))),
+            );
+          } else {
+            _scrollToBottom();
+          }
+        } finally {
+          if (mounted) {
+            setState(() => _executingSlash = false);
+          }
+        }
+        _refocusComposer();
+      },
+    );
   }
 
   Future<void> _send() async {
@@ -1055,6 +1129,7 @@ class _MessageListView extends ConsumerWidget {
     required this.chatId,
     required this.scrollController,
     required this.room,
+    required this.ephemeralMessages,
     required this.activeId,
     required this.l10n,
     required this.initialUnreadCount,
@@ -1064,6 +1139,7 @@ class _MessageListView extends ConsumerWidget {
   final String chatId;
   final ScrollController scrollController;
   final ChatRoomState room;
+  final List<EphemeralBotMessage> ephemeralMessages;
   final String? activeId;
   final AppLocalizations l10n;
   final int initialUnreadCount;
@@ -1076,10 +1152,11 @@ class _MessageListView extends ConsumerWidget {
       unreadCount: initialUnreadCount,
     );
     final hasOlderControl = room.hasMore || room.isLoadingOlder;
+    final ephemeralCount = ephemeralMessages.length;
     return ListView.builder(
       controller: scrollController,
       padding: const EdgeInsets.all(12),
-      itemCount: rows.length + (hasOlderControl ? 1 : 0),
+      itemCount: rows.length + ephemeralCount + (hasOlderControl ? 1 : 0),
       itemBuilder: (context, index) {
         if (hasOlderControl && index == 0) {
           return Center(
@@ -1103,6 +1180,10 @@ class _MessageListView extends ConsumerWidget {
           );
         }
         final rowIndex = hasOlderControl ? index - 1 : index;
+        if (rowIndex >= rows.length) {
+          final ephemeral = ephemeralMessages[rowIndex - rows.length];
+          return _EphemeralBotBubble(message: ephemeral, l10n: l10n);
+        }
         final row = rows[rowIndex];
         final msg = row.message;
         final isMine = msg.senderProfileId == activeId;
@@ -1416,6 +1497,55 @@ class _PinnedMessagesBar extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EphemeralBotBubble extends StatelessWidget {
+  const _EphemeralBotBubble({
+    required this.message,
+    required this.l10n,
+  });
+
+  final EphemeralBotMessage message;
+  final AppLocalizations l10n;
+
+  @override
+  Widget build(BuildContext context) {
+    final voice = VoiceColors.of(context);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: VoiceChatBubble(
+        isMine: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (message.botName != null && message.botName!.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  message.botName!,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: voice.profileAccent,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            Text(message.content),
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                l10n.ephemeralMessageLabel,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: voice.textSecondary,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -40,6 +40,20 @@ service BotService {
   rpc DeferResponse(DeferResponseRequest) returns (DeferResponseResponse);
 
   rpc PollEvents(PollEventsRequest) returns (stream PollEventsResponse);
+
+  // Manifest (Developer Portal).
+  rpc ValidateManifest(ValidateManifestRequest) returns (ValidateManifestResponse);
+  rpc ApplyManifest(ApplyManifestRequest) returns (ApplyManifestResponse);
+
+  // Space lifecycle.
+  rpc InstallBotInSpace(InstallBotInSpaceRequest) returns (InstallBotInSpaceResponse);
+  rpc UninstallBotFromSpace(UninstallBotFromSpaceRequest) returns (UninstallBotFromSpaceResponse);
+  rpc ListInstalledBots(ListInstalledBotsRequest) returns (ListInstalledBotsResponse);
+
+  // Client slash interactions.
+  rpc ExecuteSlashInteraction(ExecuteSlashInteractionRequest) returns (ExecuteSlashInteractionResponse);
+  rpc ListSlashCommandsForChat(ListSlashCommandsForChatRequest) returns (ListSlashCommandsForChatResponse);
+  rpc CompleteInteraction(CompleteInteractionRequest) returns (CompleteInteractionResponse);
 }
 
 message Bot {
@@ -128,6 +142,7 @@ message SendBotMessageRequest {
   voice.chat.v1.ChatRef chat = 2;
   string content = 3;
   optional string thread_parent_id = 4;
+  optional string interaction_token = 5;
 }
 
 message EditBotMessageRequest {
@@ -198,4 +213,105 @@ message SendEphemeralResponse {}
 message DeferResponseResponse {}
 message PollEventsResponse {
   BotEvent bot_event = 1;
+}
+
+message ValidateManifestRequest {
+  string manifest_yaml = 1;
+}
+
+message ValidateManifestResponse {
+  bool valid = 1;
+  repeated string errors = 2;
+  optional string normalized_manifest_json = 3;
+}
+
+message ApplyManifestRequest {
+  string bot_id = 1;
+  string manifest_yaml = 2;
+}
+
+message ApplyManifestResponse {
+  Bot bot = 1;
+}
+
+message InstallBotInSpaceRequest {
+  string bot_id = 1;
+  string space_id = 2;
+  repeated voice.chat.v1.ChatRef allowed_chats = 3;
+}
+
+message InstallBotInSpaceResponse {
+  string installation_id = 1;
+}
+
+message UninstallBotFromSpaceRequest {
+  string bot_id = 1;
+  string space_id = 2;
+}
+
+message UninstallBotFromSpaceResponse {}
+
+message ListInstalledBotsRequest {
+  string space_id = 1;
+}
+
+message InstalledBot {
+  Bot bot = 1;
+  string installation_id = 2;
+  repeated voice.chat.v1.ChatRef allowed_chats = 3;
+}
+
+message ListInstalledBotsResponse {
+  repeated InstalledBot installed_bots = 1;
+}
+
+message SlashCommandOption {
+  string name = 1;
+  string type = 2;
+  bool required = 3;
+  bool autocomplete = 4;
+}
+
+message SlashCommand {
+  string bot_id = 1;
+  string bot_name = 2;
+  string name = 3;
+  string description = 4;
+  repeated SlashCommandOption options = 5;
+}
+
+message ListSlashCommandsForChatRequest {
+  voice.chat.v1.ChatRef chat = 1;
+}
+
+message ListSlashCommandsForChatResponse {
+  repeated SlashCommand commands = 1;
+}
+
+message ExecuteSlashInteractionRequest {
+  voice.chat.v1.ChatRef chat = 1;
+  string bot_id = 2;
+  string command_name = 3;
+  string options_json = 4;
+}
+
+message ExecuteSlashInteractionResponse {
+  string interaction_token = 1;
+  optional string content = 2;
+  bool is_ephemeral = 3;
+  bool deferred = 4;
+  optional voice.messaging.v1.Message message = 5;
+  optional string error_code = 6;
+  optional string error_message = 7;
+}
+
+message CompleteInteractionRequest {
+  string interaction_token = 1;
+  string content = 2;
+  bool is_ephemeral = 3;
+  bool deferred = 4;
+}
+
+message CompleteInteractionResponse {
+  optional voice.messaging.v1.Message message = 1;
 }

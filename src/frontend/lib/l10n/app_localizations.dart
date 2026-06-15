@@ -608,6 +608,24 @@ abstract class AppLocalizations {
   /// **'Member {profileId}'**
   String chatMentionMember(String profileId);
 
+  /// No description provided for @botTimeoutError.
+  ///
+  /// In en, this message translates to:
+  /// **'The bot did not respond in time. Try again later.'**
+  String get botTimeoutError;
+
+  /// No description provided for @slashCommandsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Commands'**
+  String get slashCommandsTitle;
+
+  /// No description provided for @ephemeralMessageLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Only visible to you'**
+  String get ephemeralMessageLabel;
+
   /// No description provided for @chatRoomError.
   ///
   /// In en, this message translates to:

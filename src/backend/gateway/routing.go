@@ -23,22 +23,30 @@ func (g *gateway) handleREST(w http.ResponseWriter, r *http.Request) {
 
 	var claims tokenClaims
 	publicRoute := isPublicRESTRoute(r.Method, r.URL.Path)
+	botRoute := isBotTokenRESTRoute(r.URL.Path)
 	if !publicRoute {
-		var code string
-		claims, code = g.authenticate(r)
-		if code != "" {
-			status := http.StatusUnauthorized
-			if code == "auth_unavailable" {
-				status = http.StatusServiceUnavailable
+		if botRoute {
+			if botBearerToken(r) == "" {
+				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_token"})
+				return
 			}
-			writeJSON(w, status, map[string]string{"error": code})
-			return
+		} else {
+			var code string
+			claims, code = g.authenticate(r)
+			if code != "" {
+				status := http.StatusUnauthorized
+				if code == "auth_unavailable" {
+					status = http.StatusServiceUnavailable
+				}
+				writeJSON(w, status, map[string]string{"error": code})
+				return
+			}
+			if namespace == "analytics" && !hasRole(claims, "staff") {
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+				return
+			}
+			applyClaims(r, claims)
 		}
-		if namespace == "analytics" && !hasRole(claims, "staff") {
-			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
-			return
-		}
-		applyClaims(r, claims)
 	}
 
 	if group := rateLimitGroup(r.Method, r.URL.Path); group != "" {
@@ -98,6 +106,10 @@ func isPublicRESTRoute(method, path string) bool {
 		return true
 	}
 	return method == http.MethodGet && path == "/api/v1/version"
+}
+
+func isBotTokenRESTRoute(path string) bool {
+	return strings.HasPrefix(path, "/api/v1/bots/me/")
 }
 
 func publicRESTNamespaces() []string {
