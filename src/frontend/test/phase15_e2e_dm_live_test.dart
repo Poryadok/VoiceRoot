@@ -138,6 +138,22 @@ void main() {
         query: secretPhrase,
       );
       expectSearchExcludesPhrase(inChatSearch, secretPhrase);
+
+      // Batch E2E-A audit: B must decrypt A's ciphertext over the live HTTP path.
+      final bMessages = await messages.getMessages(
+        authorization: sessionB.authorizationHeader,
+        chatId: chatId,
+      );
+      expect(bMessages, isA<MessagesApiOk<MessageListData>>());
+      final received = (bMessages as MessagesApiOk<MessageListData>).data.messages
+          .firstWhere((m) => m.id == sent.id);
+      final decrypted = await e2eB.decryptForChat(
+        authorization: sessionB.authorizationHeader,
+        chatId: chatId,
+        peerProfileId: sessionA.activeProfileId,
+        ciphertext: received.content,
+      );
+      expect(decrypted, equals(secretPhrase));
     },
     skip: runLiveIntegration
         ? null

@@ -805,5 +805,16 @@
   "e2eInChatSearchLocalOnly": "Encrypted chat: searching loaded history on this device only",
   "e2eChatSettingsEnable": "Enable E2E encryption",
   "e2eChatSettingsDisable": "Disable E2E encryption",
-  "e2eChatSettingsKeyBackup": "Key backup"
+  "e2eChatSettingsKeyBackup": "Key backup",
+  "e2eEncryptionCodeTitle": "Encryption code",
+  "e2eEncryptionCodeBody": "Compare with your contact in voice or in person. Codes must match. If they do not match, your chat may not be protected from eavesdropping.",
+  "e2eIdentityKeyChangedTitle": "{nick}'s encryption key changed",
+  "@e2eIdentityKeyChangedTitle": {
+    "placeholders": {
+      "nick": {"type": "String"}
+    }
+  },
+  "e2eIdentityKeyChangedBody": "This usually happens after reinstalling the app or switching devices without a key backup. Continue only if you expected this. If unsure, compare the encryption code in chat settings.",
+  "e2eIdentityKeyChangedContinue": "Continue",
+  "e2eIdentityKeyChangedDistrust": "Don't trust"
 }

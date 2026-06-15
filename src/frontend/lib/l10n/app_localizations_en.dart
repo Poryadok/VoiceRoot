@@ -1640,4 +1640,26 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get e2eChatSettingsKeyBackup => 'Key backup';
+
+  @override
+  String get e2eEncryptionCodeTitle => 'Encryption code';
+
+  @override
+  String get e2eEncryptionCodeBody =>
+      'Compare with your contact in voice or in person. Codes must match. If they do not match, your chat may not be protected from eavesdropping.';
+
+  @override
+  String e2eIdentityKeyChangedTitle(String nick) {
+    return '$nick\'s encryption key changed';
+  }
+
+  @override
+  String get e2eIdentityKeyChangedBody =>
+      'This usually happens after reinstalling the app or switching devices without a key backup. Continue only if you expected this. If unsure, compare the encryption code in chat settings.';
+
+  @override
+  String get e2eIdentityKeyChangedContinue => 'Continue';
+
+  @override
+  String get e2eIdentityKeyChangedDistrust => 'Don\'t trust';
 }

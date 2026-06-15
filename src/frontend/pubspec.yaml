@@ -43,6 +43,7 @@ dependencies:
   file_selector: ^1.1.0
   livekit_client: ^2.7.0
   crypto: ^3.0.7
+  pointycastle: ^4.0.0
   protobuf: ^6.0.0
   fixnum: ^1.1.1
   grpc: ^5.1.0

@@ -13,6 +13,7 @@ import '../../backend/messages_client.dart';
 import '../../backend/voice_client.dart';
 import '../../state/bot_providers.dart';
 import '../../state/auth_providers.dart';
+import '../../state/e2e_providers.dart';
 import '../../state/call_providers.dart';
 import '../../state/chat_providers.dart';
 import '../../state/connectivity_providers.dart';
@@ -36,11 +37,16 @@ import 'message_reactions_row.dart';
 import 'forward_message_sheet.dart';
 import 'mention_message_content.dart';
 import 'e2e_chat_settings.dart';
+import 'e2e_identity_change_banner.dart';
 import '../shell/side_panel.dart';
 import '../space/space_chat_slow_mode_sheet.dart';
 import '../search/in_chat_search.dart';
 import '../../state/shell_providers.dart';
 import '../../state/shared_media_providers.dart';
+import '../../e2e/e2e_identity_trust.dart';
+import '../../e2e/e2e_store_factory.dart';
+import '../../e2e/e2e_verification_code.dart';
+import '../../backend/e2e_client.dart';
 import 'slash_command_menu.dart';
 import 'thread_side_panel.dart';
 
@@ -453,6 +459,31 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
             message: l10n.chatOfflineReadOnly,
             icon: Icons.cloud_off_outlined,
             tone: VoiceBannerTone.warning,
+          ),
+        if (peerId != null &&
+            ref.watch(e2eIdentityTrustProvider).pendingKeyChangePeers.contains(peerId))
+          E2eIdentityChangeBanner(
+            peerDisplayName: peerName ?? '@$shortId',
+            onContinue: () {
+              final bundleFuture = ref.read(voiceE2eClientProvider).getPreKeyBundle(
+                authorization: ref.read(authorizationHeaderProvider)!,
+                profileId: peerId,
+              );
+              unawaited(bundleFuture.then((result) {
+                if (result is! E2eApiOk<String>) return;
+                final parsed = parseSerializedPreKeyBundle(result.data);
+                if (parsed == null) return;
+                ref.read(e2eIdentityTrustProvider.notifier).acceptKeyChange(
+                  peerId,
+                  identityKeyBytesFromSerialized(
+                    parsed.getIdentityKey().serialize(),
+                  ),
+                );
+              }));
+            },
+            onDistrust: () {
+              ref.read(e2eIdentityTrustProvider.notifier).distrustPeer(peerId);
+            },
           ),
         if (isGroup && canCall && !inThisGroupVoice)
           _GroupVoiceJoinBanner(

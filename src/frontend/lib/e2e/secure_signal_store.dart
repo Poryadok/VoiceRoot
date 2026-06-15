@@ -42,13 +42,48 @@ class FlutterSecureSignalStorage implements SecureSignalStorage {
 
 /// Persistent [SignalProtocolStore] for one profile (Batch E2E-A).
 class SecureSignalStore implements SignalProtocolStore {
-  SecureSignalStore._(this._inner, this._storage);
+  SecureSignalStore._(
+    this._inner,
+    this._storage, {
+    Set<String>? sessionAddresses,
+    Map<String, String>? trustedIdentities,
+  })  : _sessionAddresses = sessionAddresses ?? <String>{},
+        _trustedIdentities = trustedIdentities ?? <String, String>{};
 
   final InMemorySignalProtocolStore _inner;
   final SecureSignalStorage _storage;
+  final Set<String> _sessionAddresses;
+  final Map<String, String> _trustedIdentities;
   var _dirty = false;
 
   static const _stateKey = 'state_v1';
+
+  static String _addressKey(SignalProtocolAddress address) =>
+      '${address.getName()}:${address.getDeviceId()}';
+
+  /// Exports full cryptographic state for password-wrapped cloud backup.
+  static Future<Map<String, dynamic>> exportForBackup(String profileId) async {
+    final store = await open(profileId: profileId);
+    try {
+      final raw = await store._storage.read(key: _stateKey);
+      if (raw == null || raw.isEmpty) {
+        await store.close();
+        return jsonDecode(await store._serializeState()) as Map<String, dynamic>;
+      }
+      return jsonDecode(raw) as Map<String, dynamic>;
+    } finally {
+      await store.close();
+    }
+  }
+
+  /// Restores cryptographic state from a decrypted backup payload.
+  static Future<void> importFromBackup(
+    String profileId,
+    Map<String, dynamic> payload,
+  ) async {
+    final backing = FlutterSecureSignalStorage(profileId: profileId);
+    await backing.write(key: _stateKey, value: jsonEncode(payload));
+  }
 
   static Future<SecureSignalStore> open({
     required String profileId,
@@ -57,8 +92,18 @@ class SecureSignalStore implements SignalProtocolStore {
     final backing = storage ?? FlutterSecureSignalStorage(profileId: profileId);
     final raw = await backing.read(key: _stateKey);
     if (raw != null && raw.isNotEmpty) {
-      final inner = await _deserializeState(raw);
-      return SecureSignalStore._(inner, backing);
+      final parsed = jsonDecode(raw) as Map<String, dynamic>;
+      final inner = await _deserializeState(parsed);
+      return SecureSignalStore._(
+        inner,
+        backing,
+        sessionAddresses: (parsed['session_addresses'] as List<dynamic>? ?? [])
+            .map((e) => e as String)
+            .toSet(),
+        trustedIdentities:
+            (parsed['trusted_identities'] as Map<String, dynamic>? ?? {})
+                .map((k, v) => MapEntry(k, v as String)),
+      );
     }
     final inner = await createInitializedSignalStore();
     final store = SecureSignalStore._(inner, backing).._dirty = true;
@@ -68,12 +113,13 @@ class SecureSignalStore implements SignalProtocolStore {
 
   Future<void> close() async {
     if (!_dirty) return;
-    await _storage.write(key: _stateKey, value: await _serializeState(_inner));
+    await _storage.write(key: _stateKey, value: await _serializeState());
     _dirty = false;
   }
 
-  static Future<InMemorySignalProtocolStore> _deserializeState(String raw) async {
-    final json = jsonDecode(raw) as Map<String, dynamic>;
+  static Future<InMemorySignalProtocolStore> _deserializeState(
+    Map<String, dynamic> json,
+  ) async {
     final identity = IdentityKeyPair.fromSerialized(
       base64Decode(json['identity_key_pair'] as String),
     );
@@ -95,10 +141,33 @@ class SecureSignalStore implements SignalProtocolStore {
         PreKeyRecord.fromBuffer(base64Decode(entry.value as String)),
       );
     }
+
+    final sessions = json['sessions'] as Map<String, dynamic>? ?? {};
+    for (final entry in sessions.entries) {
+      final parts = entry.key.split(':');
+      if (parts.length != 2) continue;
+      final address = SignalProtocolAddress(parts[0], int.parse(parts[1]));
+      await store.storeSession(
+        address,
+        SessionRecord.fromSerialized(base64Decode(entry.value as String)),
+      );
+    }
+
+    final trusted = json['trusted_identities'] as Map<String, dynamic>? ?? {};
+    for (final entry in trusted.entries) {
+      final parts = entry.key.split(':');
+      if (parts.length != 2) continue;
+      final address = SignalProtocolAddress(parts[0], int.parse(parts[1]));
+      await store.saveIdentity(
+        address,
+        IdentityKey.fromBytes(base64Decode(entry.value as String), 0),
+      );
+    }
     return store;
   }
 
-  static Future<String> _serializeState(InMemorySignalProtocolStore inner) async {
+  Future<String> _serializeState() async {
+    final inner = _inner;
     final identity = await inner.getIdentityKeyPair();
     final registrationId = await inner.getLocalRegistrationId();
     final signedPreKeys = <String, String>{};
@@ -112,11 +181,24 @@ class SecureSignalStore implements SignalProtocolStore {
         preKeys['$id'] = base64Encode(record.serialize());
       }
     }
+    final sessions = <String, String>{};
+    for (final key in _sessionAddresses) {
+      final parts = key.split(':');
+      if (parts.length != 2) continue;
+      final address = SignalProtocolAddress(parts[0], int.parse(parts[1]));
+      if (await inner.containsSession(address)) {
+        final record = await inner.loadSession(address);
+        sessions[key] = base64Encode(record.serialize());
+      }
+    }
     return jsonEncode({
       'identity_key_pair': base64Encode(identity.serialize()),
       'registration_id': registrationId,
       'signed_pre_keys': signedPreKeys,
       'pre_keys': preKeys,
+      'sessions': sessions,
+      'session_addresses': _sessionAddresses.toList(),
+      'trusted_identities': _trustedIdentities,
     });
   }
 
@@ -136,6 +218,10 @@ class SecureSignalStore implements SignalProtocolStore {
     IdentityKey? identityKey,
   ) async {
     _markDirty();
+    if (identityKey != null) {
+      _trustedIdentities[_addressKey(address)] =
+          base64Encode(identityKey.serialize());
+    }
     return _inner.saveIdentity(address, identityKey);
   }
 
@@ -182,6 +268,7 @@ class SecureSignalStore implements SignalProtocolStore {
     SessionRecord record,
   ) async {
     _markDirty();
+    _sessionAddresses.add(_addressKey(address));
     await _inner.storeSession(address, record);
   }
 
@@ -192,6 +279,7 @@ class SecureSignalStore implements SignalProtocolStore {
   @override
   Future<void> deleteSession(SignalProtocolAddress address) async {
     _markDirty();
+    _sessionAddresses.remove(_addressKey(address));
     await _inner.deleteSession(address);
   }
 

@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../backend/e2e_client.dart';
+import '../../e2e/e2e_store_factory.dart';
+import '../../e2e/e2e_verification_code.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/chat_providers.dart';
@@ -304,7 +308,10 @@ class _DmE2eSettingsSectionState extends ConsumerState<DmE2eSettingsSection> {
           if (context.mounted) Navigator.of(context).pop();
         },
         onRestore: (password) async {
-          final result = await e2e.getKeyBackup(authorization: auth);
+          final result = await e2e.restoreKeyBackup(
+            authorization: auth,
+            password: password,
+          );
           if (result is E2eApiFailure) throw StateError(result.message);
           if (context.mounted) Navigator.of(context).pop();
         },
@@ -351,6 +358,7 @@ class _DmE2eSettingsSectionState extends ConsumerState<DmE2eSettingsSection> {
                   }
                 },
         ),
+        if (enabled) _EncryptionCodeBlock(chatId: widget.chatId),
         ListTile(
           leading: const Icon(Icons.backup_outlined),
           title: Text(l10n.e2eChatInfoKeyBackup),
@@ -358,6 +366,108 @@ class _DmE2eSettingsSectionState extends ConsumerState<DmE2eSettingsSection> {
         ),
         Divider(height: 1, color: voice.borderDefault),
       ],
+    );
+  }
+}
+
+class _EncryptionCodeBlock extends ConsumerStatefulWidget {
+  const _EncryptionCodeBlock({required this.chatId});
+
+  final String chatId;
+
+  @override
+  ConsumerState<_EncryptionCodeBlock> createState() =>
+      _EncryptionCodeBlockState();
+}
+
+class _EncryptionCodeBlockState extends ConsumerState<_EncryptionCodeBlock> {
+  String? _code;
+  var _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadCode());
+  }
+
+  Future<void> _loadCode() async {
+    final auth = ref.read(authorizationHeaderProvider);
+    final peerId = dmPeerProfileIdForChat(ref, widget.chatId);
+    final localId = ref.read(authControllerProvider).activeProfileId;
+    if (auth == null || peerId == null || localId == null) {
+      if (mounted) setState(() => _loading = false);
+      return;
+    }
+    try {
+      final adapter = ref.read(e2eCryptoAdapterProvider);
+      final localStore = await adapter.sessionManager.storeForProfile(localId);
+      final localIdentity = await localStore.getIdentityKeyPair();
+      final peerBundleResult = await ref.read(voiceE2eClientProvider).getPreKeyBundle(
+        authorization: auth,
+        profileId: peerId,
+      );
+      if (peerBundleResult is! E2eApiOk<String> || peerBundleResult.data.isEmpty) {
+        if (mounted) setState(() => _loading = false);
+        return;
+      }
+      final parsed = parseSerializedPreKeyBundle(peerBundleResult.data);
+      if (parsed == null) {
+        if (mounted) setState(() => _loading = false);
+        return;
+      }
+      final code = computeVerificationCode(
+        localIdentityKey: identityKeyBytesFromSerialized(
+          localIdentity.getPublicKey().serialize(),
+        ),
+        remoteIdentityKey: identityKeyBytesFromSerialized(
+          parsed.getIdentityKey().serialize(),
+        ),
+        localProfileId: localId,
+        remoteProfileId: peerId,
+      );
+      if (mounted) setState(() {
+        _code = code;
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final voice = VoiceColors.of(context);
+    if (_loading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: LinearProgressIndicator(minHeight: 2),
+      );
+    }
+    if (_code == null) return const SizedBox.shrink();
+
+    return Padding(
+      key: const Key('e2e_encryption_code_block'),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(l10n.e2eEncryptionCodeTitle, style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 8),
+          Text(
+            _code!,
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              letterSpacing: 2,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            l10n.e2eEncryptionCodeBody,
+            style: TextStyle(color: voice.textSecondary, fontSize: 12),
+          ),
+        ],
+      ),
     );
   }
 }

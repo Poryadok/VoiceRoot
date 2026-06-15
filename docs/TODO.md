@@ -52,14 +52,16 @@
 
 ### Batch E2E-A audit follow-ups (post-implementation)
 
-- [ ] **Key backup codec (E2E-B)** — `E2eKeyBackupCodec` still XOR+SHA256 stub; replace with AEAD+KDF per `encryption.md`.
-- [ ] **EditMessage E2E ciphertext** — server rejects all edits in E2E chats (v1); encrypted edit path deferred to E2E-B.
-- [ ] **Pre-key validation / OTPK consume** — Messaging stores opaque bundles without libsignal validation or one-time key consumption.
-- [ ] **Verification code UI (P2)** — TOFU banner + `XX-XX-XX` fingerprint block in DM info per `encryption.md` § Доверие к ключам.
-- [ ] **Identity key change banner (P2)** — client UX when peer identity key rotates.
-- [ ] **File E2E upload gate** — File service `is_e2e` without `chat.e2e_enabled` cross-check (E2E-B).
-- [ ] **Two-device libsignal live test** — extend `phase15_e2e_dm_live_test.dart` with real decrypt roundtrip over HTTP (partially covered by unit/network tests).
-- [ ] **applySQLFile path normalization** — fixed Windows suffix chain; consider shared migration helper for all integration tests.
+- [x] **Key backup codec (E2E-B)** — `E2eKeyBackupCodecV2` (PBKDF2 + AES-GCM); full `SecureSignalStore` export/restore wired.
+- [x] **EditMessage E2E ciphertext** — Messaging allows ciphertext edit when `is_e2e`; client encrypts before API call.
+- [x] **Pre-key validation / OTPK consume** — structural bundle validation + OTPK consume on `GetPreKeyBundle`.
+- [x] **Verification code UI (P2)** — `XX-XX-XX` Crockford block in DM info (`e2e_chat_settings.dart`).
+- [x] **Identity key change banner (P2)** — `E2eIdentityChangeBanner` + trust state in `e2e_identity_trust.dart`.
+- [x] **File E2E upload gate** — `RequestUpload` cross-checks `chat.e2e_enabled` + DM-only for `is_e2e`.
+- [x] **Two-device libsignal live test** — `phase15_e2e_dm_live_test.dart` B-side `decryptForChat` roundtrip.
+- [x] **applySQLFile path normalization** — shared `integrationtest.ApplySQLFile` + `MigrationSuffixMatches`.
+
+**Остаточные риски (см. E2E-B/C ниже):** сервер не проверяет libsignal signature на signed pre-key; ротация OTPK pool; Auth Flyway для backup blob.
 
 ---
 
@@ -67,12 +69,12 @@
 
 *После или параллельно E2E-A; Auth Flyway — согласовать с Path A/B для `auth_db`.*
 
-- [ ] **Key backup по спеке** — AEAD + KDF (PBKDF2/Argon2), export identity/sessions/pre-keys, restore с историей.
+- [x] **Key backup по спеке** — client AEAD + KDF + export identity/sessions/pre-keys + restore (Auth хранит opaque blob).
 - [ ] **Auth Flyway** — `V2__e2e_key_backup.sql` (+ паритет `auth_db/000005` golang-migrate).
 - [ ] **Compose migrations Phase 15** — автоматизировать `chat_db/000006`, `messaging_db/000009`, `auth_db/000005` (Makefile/scripts; см. batch Infra).
-- [ ] **Pre-key directory** — валидация bundle, consume OTPK, ротация.
-- [ ] **EditMessage E2E** — ciphertext edit или reject для `is_e2e`.
-- [ ] **File E2E** — client encrypt + `is_e2e` upload; File service gate по `chat.e2e_enabled`; expiry 90d + UX.
+- [ ] **Pre-key directory** — libsignal signature verify + multi-OTPK pool + ротация (v1: single OTPK consume only).
+- [x] **EditMessage E2E** — ciphertext edit path for `is_e2e` messages.
+- [ ] **File E2E** — client encrypt + `is_e2e` upload; expiry 90d UX (server gate done).
 
 **Промпт-якорь:** `Phase 15 E2E — batch E2E-B backend`.
 
@@ -81,8 +83,10 @@
 ### Batch E2E-C — «E2E тесты и поиск»
 
 - [ ] **Search + compose** — `x-voice-profile-id` в Search global/in-chat (live 500 `missing credentials`); E2E exclusion на 200 + empty hits.
-- [ ] **Тесты E2E** — two-client libsignal over HTTP; reject plain when `e2e_enabled`; `MessageEdited` indexer skip; coverage ≥80% `lib/e2e/` + E2E backend packages.
+- [ ] **Тесты E2E** — gateway live edit-in-E2E step; `MessageEdited` indexer skip; coverage ≥80% `lib/e2e/` + E2E backend packages (prekey ~71%, grpcsvc ~73% — add edge-case tests).
 - [ ] **Key backup limits (P2)** — max blob, rate limit put/get pre-keys (лимиты можно взять из спеки или дефолты в коде).
+- [ ] **docs/microservices/messaging-service.md** — добавить секцию E2E/pre-keys/edit policy.
+- [ ] **Flutter web docker image** — `flutter build web` падает на `dart:ffi` (sqlite3mc/native); smoke через `flutter run -d edge` на хосте.
 
 **Промпт-якорь:** `Phase 15 E2E — batch E2E-C tests and search`.
 

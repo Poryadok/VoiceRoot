@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"voice/backend/messaging/internal/authctx"
+	"voice/backend/messaging/internal/e2e/prekey"
 	"voice/backend/messaging/internal/store"
 
 	messagingv1 "voice.app/voice/messaging/v1"
@@ -26,6 +27,13 @@ func (s *MessagingGRPC) UploadPreKeyBundle(ctx context.Context, req *messagingv1
 	bundle := strings.TrimSpace(req.GetBundle())
 	if bundle == "" {
 		return nil, status.Error(codes.InvalidArgument, "bundle is required")
+	}
+	wire, err := prekey.ParseWire(bundle)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if err := prekey.ValidateForUpload(wire); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	if err := s.PreKeyBundles.UpsertBundle(ctx, profileID, bundle); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -50,6 +58,23 @@ func (s *MessagingGRPC) GetPreKeyBundle(ctx context.Context, req *messagingv1.Ge
 	}
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
+	}
+	wire, err := prekey.ParseWire(bundle)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if wire.HasOTPK() {
+		consumed, err := prekey.ConsumeOTPK(wire)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		consumedWire, err := prekey.EncodeWire(consumed)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		if err := s.PreKeyBundles.UpsertBundle(ctx, targetID, consumedWire); err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
 	}
 	return &messagingv1.GetPreKeyBundleResponse{Bundle: bundle}, nil
 }
@@ -82,7 +107,7 @@ func (s *MessagingGRPC) validateE2ESend(ctx context.Context, chatID uuid.UUID, i
 
 func (s *MessagingGRPC) validateE2EEdit(ctx context.Context, chatID uuid.UUID, messageIsE2E bool) error {
 	if messageIsE2E {
-		return status.Error(codes.FailedPrecondition, "e2e messages cannot be edited")
+		return nil
 	}
 	if s.ChatThreadPolicy == nil {
 		return status.Error(codes.FailedPrecondition, "chat policy not configured")

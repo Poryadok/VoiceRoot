@@ -742,5 +742,16 @@
   "e2eInChatSearchLocalOnly": "Шифрованный чат: поиск только по загруженной истории на устройстве",
   "e2eChatSettingsEnable": "Включить E2E",
   "e2eChatSettingsDisable": "Отключить E2E",
-  "e2eChatSettingsKeyBackup": "Резервная копия ключей"
+  "e2eChatSettingsKeyBackup": "Резервная копия ключей",
+  "e2eEncryptionCodeTitle": "Код шифрования",
+  "e2eEncryptionCodeBody": "Сверьте с собеседником в войсе или лично. Коды должны совпадать. Если коды не совпадают, переписка может быть не защищена от прослушивания.",
+  "e2eIdentityKeyChangedTitle": "У {nick} сменился ключ шифрования",
+  "@e2eIdentityKeyChangedTitle": {
+    "placeholders": {
+      "nick": {"type": "String"}
+    }
+  },
+  "e2eIdentityKeyChangedBody": "Так бывает после переустановки приложения или смены устройства без резервной копии. Продолжайте только если вы это ожидали. При сомнении сверьте код в настройках чата.",
+  "e2eIdentityKeyChangedContinue": "Продолжить",
+  "e2eIdentityKeyChangedDistrust": "Не доверять"
 }

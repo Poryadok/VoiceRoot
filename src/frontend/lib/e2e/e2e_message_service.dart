@@ -1,20 +1,35 @@
+import 'dart:typed_data';
+
 import 'package:libsignal_protocol_dart/libsignal_protocol_dart.dart';
 
 import '../backend/e2e_client.dart';
 import '../backend/messages_client.dart';
 import 'e2e_crypto_adapter.dart';
 import 'e2e_prekey_sync.dart';
+import 'e2e_store_factory.dart';
+import 'e2e_verification_code.dart';
+
+typedef PeerIdentityObserver = void Function(
+  String peerProfileId,
+  Uint8List identityKeyBytes,
+);
 
 /// Encrypt/decrypt chat message bodies for E2E-enabled DMs.
 class E2eMessageService {
   E2eMessageService({
     E2eCryptoAdapter? adapter,
     VoiceE2eClient? e2eClient,
-  }) : _adapter = adapter ?? E2eCryptoAdapter(),
-       _e2eClient = e2eClient;
+    PeerIdentityObserver? onPeerIdentityObserved,
+    bool Function(String peerProfileId)? isPeerDistrusted,
+  })  : _adapter = adapter ?? E2eCryptoAdapter(),
+        _e2eClient = e2eClient,
+        _onPeerIdentityObserved = onPeerIdentityObserved,
+        _isPeerDistrusted = isPeerDistrusted;
 
   final E2eCryptoAdapter _adapter;
   final VoiceE2eClient? _e2eClient;
+  final PeerIdentityObserver? _onPeerIdentityObserved;
+  final bool Function(String peerProfileId)? _isPeerDistrusted;
 
   E2eCryptoAdapter get adapter => _adapter;
 
@@ -62,10 +77,15 @@ class E2eMessageService {
     String? authorization,
   }) async {
     if (!message.isE2e) return message;
+    final senderProfile = _peerForMessage(
+      message: message,
+      localProfileId: localProfileId,
+      fallbackPeerId: peerProfileId,
+    );
+    if (_isPeerDistrusted?.call(senderProfile) ?? false) {
+      return message.copyWith(decryptionFailed: true);
+    }
     try {
-      final senderId = message.senderProfileId;
-      final senderProfile =
-          senderId != localProfileId ? senderId : peerProfileId;
       final remoteBundle = await _fetchRemoteBundle(
         authorization: authorization,
         profileId: senderProfile,
@@ -123,7 +143,15 @@ class E2eMessageService {
     if (result is! E2eApiOk<String> || result.data.isEmpty) {
       return null;
     }
-    return _preKeys.bundleFromWire(result.data);
+    final wire = result.data;
+    final parsed = parseSerializedPreKeyBundle(wire);
+    if (parsed != null) {
+      _onPeerIdentityObserved?.call(
+        profileId,
+        identityKeyBytesFromSerialized(parsed.getIdentityKey().serialize()),
+      );
+    }
+    return _preKeys.bundleFromWire(wire);
   }
 
   String _peerForMessage({

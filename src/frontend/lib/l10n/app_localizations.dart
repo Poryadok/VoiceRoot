@@ -3061,6 +3061,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Key backup'**
   String get e2eChatSettingsKeyBackup;
+
+  /// No description provided for @e2eEncryptionCodeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Encryption code'**
+  String get e2eEncryptionCodeTitle;
+
+  /// No description provided for @e2eEncryptionCodeBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Compare with your contact in voice or in person. Codes must match. If they do not match, your chat may not be protected from eavesdropping.'**
+  String get e2eEncryptionCodeBody;
+
+  /// No description provided for @e2eIdentityKeyChangedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{nick}\'s encryption key changed'**
+  String e2eIdentityKeyChangedTitle(String nick);
+
+  /// No description provided for @e2eIdentityKeyChangedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This usually happens after reinstalling the app or switching devices without a key backup. Continue only if you expected this. If unsure, compare the encryption code in chat settings.'**
+  String get e2eIdentityKeyChangedBody;
+
+  /// No description provided for @e2eIdentityKeyChangedContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get e2eIdentityKeyChangedContinue;
+
+  /// No description provided for @e2eIdentityKeyChangedDistrust.
+  ///
+  /// In en, this message translates to:
+  /// **'Don\'t trust'**
+  String get e2eIdentityKeyChangedDistrust;
 }
 
 class _AppLocalizationsDelegate

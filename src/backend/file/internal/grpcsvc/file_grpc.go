@@ -29,6 +29,7 @@ var ErrNotChatMember = errors.New("not a chat member")
 
 type ChatGuard interface {
 	EnsureMember(ctx context.Context, chatID, profileID uuid.UUID) error
+	ChatE2EState(ctx context.Context, chatID uuid.UUID) (chatType string, e2eEnabled bool, err error)
 }
 
 type ImageProcessingResult struct {
@@ -134,9 +135,26 @@ func (s *FileGRPC) RequestUpload(ctx context.Context, req *filev1.RequestUploadR
 		return nil, err
 	}
 
+	isE2E := req.IsE2E != nil && *req.IsE2E
+	if chatID != nil && s.chatGuard != nil {
+		typ, e2eEnabled, err := s.chatGuard.ChatE2EState(ctx, *chatID)
+		if err != nil {
+			if errors.Is(err, ErrNotChatMember) {
+				return nil, status.Error(codes.PermissionDenied, "not a chat member")
+			}
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		if isE2E {
+			if typ != "dm" || !e2eEnabled {
+				return nil, status.Error(codes.FailedPrecondition, "e2e file upload requires e2e-enabled dm chat")
+			}
+		} else if e2eEnabled {
+			return nil, status.Error(codes.FailedPrecondition, "e2e chat requires encrypted file upload")
+		}
+	}
+
 	fileID := uuid.New()
 	r2Key := r2file.ObjectKey(fileID, originalName)
-	isE2E := req.IsE2E != nil && *req.IsE2E
 	var expiresAt *time.Time
 	if isE2E {
 		t := time.Now().UTC().Add(90 * 24 * time.Hour)

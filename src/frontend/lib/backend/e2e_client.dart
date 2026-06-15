@@ -1,8 +1,9 @@
 import 'package:libsignal_protocol_dart/libsignal_protocol_dart.dart';
 
 import '../e2e/e2e_crypto_adapter.dart';
-import '../e2e/e2e_key_backup.dart';
+import '../e2e/e2e_key_backup_v2.dart';
 import '../e2e/e2e_prekey_sync.dart';
+import '../e2e/secure_signal_store.dart';
 import 'api_result.dart';
 import 'gateway_http.dart';
 import 'jwt_claims.dart';
@@ -127,15 +128,51 @@ class VoiceE2eClient {
     required String peerProfileId,
     required String plaintext,
   }) async {
+    try {
+      return await _encryptForChatOnce(
+        authorization: authorization,
+        peerProfileId: peerProfileId,
+        plaintext: plaintext,
+      );
+    } catch (_) {
+      await uploadPreKeyBundle(authorization: authorization);
+      return _encryptForChatOnce(
+        authorization: authorization,
+        peerProfileId: peerProfileId,
+        plaintext: plaintext,
+      );
+    }
+  }
+
+  Future<String> decryptForChat({
+    required String authorization,
+    required String chatId,
+    required String peerProfileId,
+    required String ciphertext,
+  }) async {
     final localProfileId = _requireProfileId(authorization);
-    PreKeyBundle? remoteBundle;
-    final peerBundle = await getPreKeyBundle(
+    final remoteBundle = await _fetchPeerBundle(
       authorization: authorization,
       profileId: peerProfileId,
     );
-    if (peerBundle is E2eApiOk<String> && peerBundle.data.isNotEmpty) {
-      remoteBundle = _preKeys.bundleFromWire(peerBundle.data);
-    }
+    return _adapter.decryptFromWire(
+      receiverProfileId: localProfileId,
+      senderProfileId: peerProfileId,
+      wire: ciphertext,
+      remoteBundle: remoteBundle,
+    );
+  }
+
+  Future<String> _encryptForChatOnce({
+    required String authorization,
+    required String peerProfileId,
+    required String plaintext,
+  }) async {
+    final localProfileId = _requireProfileId(authorization);
+    final remoteBundle = await _fetchPeerBundle(
+      authorization: authorization,
+      profileId: peerProfileId,
+    );
 
     final session = await _adapter.ensureSession(
       localProfileId: localProfileId,
@@ -145,20 +182,36 @@ class VoiceE2eClient {
     return _adapter.encryptToWire(session: session, plaintext: plaintext);
   }
 
+  Future<PreKeyBundle?> _fetchPeerBundle({
+    required String authorization,
+    required String profileId,
+  }) async {
+    final peerBundle = await getPreKeyBundle(
+      authorization: authorization,
+      profileId: profileId,
+    );
+    if (peerBundle is E2eApiOk<String> && peerBundle.data.isNotEmpty) {
+      return _preKeys.bundleFromWire(peerBundle.data);
+    }
+    return null;
+  }
+
   Future<E2eApiResult<void>> putKeyBackup({
     required String authorization,
     required String password,
     String? passwordHint,
   }) async {
     final profileId = _requireProfileId(authorization);
-    final codec = const E2eKeyBackupCodec();
-    final blob = codec.encryptPayload(
+    final codec = E2eKeyBackupCodecV2();
+    final exported = await SecureSignalStore.exportForBackup(profileId);
+    final blob = await codec.encryptPayload(
       password: password,
       passwordHint: passwordHint,
       payload: {
         'profile_id': profileId,
-        'version': 1,
+        'version': 2,
         'exported_at': DateTime.now().toUtc().toIso8601String(),
+        'signal_state': exported,
       },
     );
     final result = await _gateway.putJson(
@@ -172,6 +225,37 @@ class VoiceE2eClient {
       allowNoContent: true,
     );
     return _mapVoid(result);
+  }
+
+  Future<E2eApiResult<void>> restoreKeyBackup({
+    required String authorization,
+    required String password,
+  }) async {
+    final profileId = _requireProfileId(authorization);
+    final backup = await getKeyBackup(authorization: authorization);
+    if (backup is E2eApiFailure) {
+      return E2eApiFailure(
+        message: backup.message,
+        errorCode: backup.errorCode,
+        statusCode: backup.statusCode,
+      );
+    }
+    final codec = E2eKeyBackupCodecV2();
+    try {
+      final payload = await codec.decryptPayload(
+        password: password,
+        encryptedBlob: (backup as E2eApiOk<E2eKeyBackupData>).data.encryptedBlob,
+      );
+      final state = payload['signal_state'];
+      if (state is! Map<String, dynamic>) {
+        return const E2eApiFailure(message: 'invalid backup payload');
+      }
+      await SecureSignalStore.importFromBackup(profileId, state);
+      await uploadPreKeyBundle(authorization: authorization);
+      return const E2eApiOk(null);
+    } on FormatException catch (e) {
+      return E2eApiFailure(message: e.message);
+    }
   }
 
   Future<E2eApiResult<E2eKeyBackupData>> getKeyBackup({

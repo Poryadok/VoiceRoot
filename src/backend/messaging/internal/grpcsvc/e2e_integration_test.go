@@ -3,6 +3,7 @@ package grpcsvc
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"path/filepath"
 	"testing"
 
@@ -31,9 +32,49 @@ func messageContentInDB(t *testing.T, ctx context.Context, pool *pgxpool.Pool, m
 	return content
 }
 
-func samplePreKeyBundleB64() string {
-	// Placeholder Signal pre-key bundle blob until client lib generates real payloads.
-	return base64.StdEncoding.EncodeToString([]byte("phase15-test-prekey-bundle-v1"))
+func fakeCurvePoint33(tag byte) []byte {
+	b := make([]byte, 33)
+	b[0] = 0x05
+	for i := 1; i < 33; i++ {
+		b[i] = tag ^ byte(i)
+	}
+	return b
+}
+
+func fakeSignature64() []byte {
+	sig := make([]byte, 64)
+	for i := range sig {
+		sig[i] = byte(i * 5)
+	}
+	return sig
+}
+
+// validTestPreKeyBundleB64 matches src/frontend/lib/e2e/e2e_store_factory.dart serializePreKeyBundle wire format.
+func validTestPreKeyBundleB64() string {
+	payload := map[string]any{
+		"registration_id":          42_001,
+		"device_id":                1,
+		"pre_key_id":               7,
+		"pre_key_public":           base64.StdEncoding.EncodeToString(fakeCurvePoint33(0x01)),
+		"signed_pre_key_id":        1,
+		"signed_pre_key_public":    base64.StdEncoding.EncodeToString(fakeCurvePoint33(0x02)),
+		"signed_pre_key_signature": base64.StdEncoding.EncodeToString(fakeSignature64()),
+		"identity_key":             base64.StdEncoding.EncodeToString(fakeCurvePoint33(0x03)),
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		panic(err)
+	}
+	return base64.StdEncoding.EncodeToString(raw)
+}
+
+func decodePreKeyBundlePayload(t *testing.T, wire string) map[string]any {
+	t.Helper()
+	jsonBytes, err := base64.StdEncoding.DecodeString(wire)
+	require.NoError(t, err)
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(jsonBytes, &payload))
+	return payload
 }
 
 // TestUploadPreKeyBundle_GetPreKeyBundle_Roundtrip documents server-side pre-key directory for X3DH.
@@ -54,7 +95,7 @@ func TestUploadPreKeyBundle_GetPreKeyBundle_Roundtrip(t *testing.T) {
 	client, cleanup := startMessagingServerWired(t, pool, messagingWire{UserProfiles: profiles})
 	t.Cleanup(cleanup)
 
-	bundle := samplePreKeyBundleB64()
+	bundle := validTestPreKeyBundleB64()
 	_, err := client.UploadPreKeyBundle(withProfileCtx(ctx, acctOwner, profOwner), &messagingv1.UploadPreKeyBundleRequest{
 		Bundle: bundle,
 	})
@@ -65,6 +106,74 @@ func TestUploadPreKeyBundle_GetPreKeyBundle_Roundtrip(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, bundle, got.GetBundle())
+}
+
+// TestUploadPreKeyBundle_RejectsInvalidBundle documents invalid wire is rejected before persistence.
+func TestUploadPreKeyBundle_RejectsInvalidBundle(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	profOwner, acctOwner := uuid.New(), uuid.New()
+	profiles := profileAcctMap{profOwner: acctOwner}
+
+	client, cleanup := startMessagingServerWired(t, pool, messagingWire{UserProfiles: profiles})
+	t.Cleanup(cleanup)
+
+	invalidBundle := base64.StdEncoding.EncodeToString([]byte("not-a-signal-prekey-bundle"))
+	_, err := client.UploadPreKeyBundle(withProfileCtx(ctx, acctOwner, profOwner), &messagingv1.UploadPreKeyBundleRequest{
+		Bundle: invalidBundle,
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+// TestGetPreKeyBundle_ConsumesOTPK documents one-time pre-key is removed after first fetch.
+func TestGetPreKeyBundle_ConsumesOTPK(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	profOwner, acctOwner := uuid.New(), uuid.New()
+	profPeer, acctPeer := uuid.New(), uuid.New()
+	profiles := profileAcctMap{profOwner: acctOwner, profPeer: acctPeer}
+
+	client, cleanup := startMessagingServerWired(t, pool, messagingWire{UserProfiles: profiles})
+	t.Cleanup(cleanup)
+
+	bundle := validTestPreKeyBundleB64()
+	_, err := client.UploadPreKeyBundle(withProfileCtx(ctx, acctOwner, profOwner), &messagingv1.UploadPreKeyBundleRequest{
+		Bundle: bundle,
+	})
+	require.NoError(t, err)
+
+	first, err := client.GetPreKeyBundle(withProfileCtx(ctx, acctPeer, profPeer), &messagingv1.GetPreKeyBundleRequest{
+		ProfileId: profOwner.String(),
+	})
+	require.NoError(t, err)
+	firstPayload := decodePreKeyBundlePayload(t, first.GetBundle())
+	require.NotNil(t, firstPayload["pre_key_id"])
+	require.NotNil(t, firstPayload["pre_key_public"])
+
+	second, err := client.GetPreKeyBundle(withProfileCtx(ctx, acctPeer, profPeer), &messagingv1.GetPreKeyBundleRequest{
+		ProfileId: profOwner.String(),
+	})
+	require.NoError(t, err)
+	secondPayload := decodePreKeyBundlePayload(t, second.GetBundle())
+	_, hasPreKeyID := secondPayload["pre_key_id"]
+	_, hasPreKeyPublic := secondPayload["pre_key_public"]
+	require.False(t, hasPreKeyID, "OTPK must be consumed after first fetch")
+	require.False(t, hasPreKeyPublic, "OTPK public key must be consumed after first fetch")
 }
 
 // TestSendMessage_E2E_WhenChatEnabled_StoresOpaqueContent documents ciphertext-at-rest in messaging_db.messages.content.
@@ -229,8 +338,8 @@ func TestSendMessage_E2E_RequiredFlagWhenEnabled(t *testing.T) {
 	require.Equal(t, codes.FailedPrecondition, status.Code(err))
 }
 
-// TestEditMessage_Rejected_WhenMessageIsE2E documents E2E ciphertext messages cannot be edited in place.
-func TestEditMessage_Rejected_WhenMessageIsE2E(t *testing.T) {
+// TestEditMessage_AllowsE2ECiphertextUpdate documents E2E ciphertext edits replace opaque content.
+func TestEditMessage_AllowsE2ECiphertextUpdate(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -249,22 +358,28 @@ func TestEditMessage_Rejected_WhenMessageIsE2E(t *testing.T) {
 	client, _ := startMessagingServer(t, pool)
 
 	isE2E := true
-	ciphertext := base64.StdEncoding.EncodeToString([]byte("opaque-e2e-edit-test"))
+	ciphertextV1 := base64.StdEncoding.EncodeToString([]byte("opaque-e2e-edit-v1"))
 	sent, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
 		Chat:            chatDMRef(chatID),
-		Content:         ciphertext,
+		Content:         ciphertextV1,
 		IsE2E:           &isE2E,
 		AttachmentsJson: "[]",
 		MentionsJson:    "[]",
 	})
 	require.NoError(t, err)
 
-	_, err = client.EditMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.EditMessageRequest{
+	ciphertextV2 := base64.StdEncoding.EncodeToString([]byte("opaque-e2e-edit-v2"))
+	edited, err := client.EditMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.EditMessageRequest{
 		MessageId: sent.GetMessage().GetId(),
-		Content:   "edited-plaintext",
+		Content:   ciphertextV2,
 	})
-	require.Error(t, err)
-	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	require.NoError(t, err)
+	require.Equal(t, ciphertextV2, edited.GetMessage().GetContent())
+	require.True(t, edited.GetMessage().GetIsE2E())
+
+	msgID, err := uuid.Parse(sent.GetMessage().GetId())
+	require.NoError(t, err)
+	require.Equal(t, ciphertextV2, messageContentInDB(t, ctx, pool, msgID))
 }
 
 // TestEditMessage_Rejected_WhenChatE2EEnabled documents plain EditMessage is rejected in e2e_enabled chats.

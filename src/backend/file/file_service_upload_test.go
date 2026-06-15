@@ -504,6 +504,10 @@ func (g memberGuard) EnsureMember(_ context.Context, chatID, profileID uuid.UUID
 	return grpcsvc.ErrNotChatMember
 }
 
+func (g memberGuard) ChatE2EState(_ context.Context, _ uuid.UUID) (string, bool, error) {
+	return "dm", false, nil
+}
+
 func seedFile(t *testing.T, ctx context.Context, pool *pgxpool.Pool, fileID, profileID uuid.UUID, r2Key, status string) {
 	t.Helper()
 	_, err := pool.Exec(ctx, `

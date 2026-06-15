@@ -1648,4 +1648,26 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get e2eChatSettingsKeyBackup => 'Резервная копия ключей';
+
+  @override
+  String get e2eEncryptionCodeTitle => 'Код шифрования';
+
+  @override
+  String get e2eEncryptionCodeBody =>
+      'Сверьте с собеседником в войсе или лично. Коды должны совпадать. Если коды не совпадают, переписка может быть не защищена от прослушивания.';
+
+  @override
+  String e2eIdentityKeyChangedTitle(String nick) {
+    return 'У $nick сменился ключ шифрования';
+  }
+
+  @override
+  String get e2eIdentityKeyChangedBody =>
+      'Так бывает после переустановки приложения или смены устройства без резервной копии. Продолжайте только если вы это ожидали. При сомнении сверьте код в настройках чата.';
+
+  @override
+  String get e2eIdentityKeyChangedContinue => 'Продолжить';
+
+  @override
+  String get e2eIdentityKeyChangedDistrust => 'Не доверять';
 }

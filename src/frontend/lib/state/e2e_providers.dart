@@ -6,6 +6,7 @@ import '../backend/chats_client.dart';
 import '../backend/e2e_client.dart';
 import '../e2e/e2e_bootstrap.dart';
 import '../e2e/e2e_crypto_adapter.dart';
+import '../e2e/e2e_identity_trust.dart';
 import '../e2e/e2e_message_service.dart';
 import 'auth_providers.dart';
 import 'chat_providers.dart';
@@ -22,9 +23,17 @@ final voiceE2eClientProvider = Provider<VoiceE2eClient>((ref) {
 });
 
 final e2eMessageServiceProvider = Provider<E2eMessageService>((ref) {
+  final trust = ref.watch(e2eIdentityTrustProvider.notifier);
   return E2eMessageService(
     adapter: ref.watch(e2eCryptoAdapterProvider),
     e2eClient: ref.watch(voiceE2eClientProvider),
+    onPeerIdentityObserved: (peerId, identityBytes) {
+      trust.notePeerIdentityKey(
+        peerProfileId: peerId,
+        identityKeyBytes: identityBytes,
+      );
+    },
+    isPeerDistrusted: trust.isDistrusted,
   );
 });
 

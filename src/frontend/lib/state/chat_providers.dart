@@ -885,12 +885,39 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     if (trimmed.isEmpty) return null;
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return 'not_authenticated';
+
+    var outbound = trimmed;
+    VoiceMessage? existing;
+    for (final message in state.messages) {
+      if (message.id == messageId) {
+        existing = message;
+        break;
+      }
+    }
+    if (existing != null && existing.isE2e) {
+      final peerId = _dmPeerProfileId();
+      final localId = _activeProfileId();
+      if (peerId != null && localId != null) {
+        try {
+          outbound = await _ref.read(e2eMessageServiceProvider).encryptOutgoing(
+            localProfileId: localId,
+            peerProfileId: peerId,
+            plaintext: outbound,
+            authorization: auth,
+            chatId: chatId,
+          );
+        } on E2eEncryptException catch (e) {
+          return e.message;
+        }
+      }
+    }
+
     final result = await _ref
         .read(voiceMessagesClientProvider)
         .editMessage(
           authorization: auth,
           messageId: messageId,
-          content: trimmed,
+          content: outbound,
         );
     if (!mounted) return null;
     return switch (result) {

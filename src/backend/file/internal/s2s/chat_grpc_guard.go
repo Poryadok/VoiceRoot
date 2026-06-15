@@ -45,3 +45,31 @@ func (g *GRPCChatGuard) EnsureMember(ctx context.Context, chatID, profileID uuid
 	}
 	return grpcsvc.ErrNotChatMember
 }
+
+func (g *GRPCChatGuard) ChatE2EState(ctx context.Context, chatID uuid.UUID) (string, bool, error) {
+	if g == nil || g.Client == nil {
+		return "", false, status.Error(codes.FailedPrecondition, "chat service not configured")
+	}
+	ctx = ForwardIncomingMetadata(ctx)
+	resp, err := g.Client.GetChat(ctx, &chatv1.GetChatRequest{ChatId: chatID.String()})
+	if err != nil {
+		st, ok := status.FromError(err)
+		if ok && (st.Code() == codes.PermissionDenied || st.Code() == codes.NotFound) {
+			return "", false, grpcsvc.ErrNotChatMember
+		}
+		return "", false, err
+	}
+	chat := resp.GetChat()
+	var typ string
+	switch chat.GetType() {
+	case chatv1.ChatType_CHAT_TYPE_DM:
+		typ = "dm"
+	case chatv1.ChatType_CHAT_TYPE_GROUP:
+		typ = "group"
+	case chatv1.ChatType_CHAT_TYPE_CHANNEL:
+		typ = "channel"
+	default:
+		typ = ""
+	}
+	return typ, chat.GetE2EEnabled(), nil
+}
