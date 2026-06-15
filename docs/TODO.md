@@ -19,7 +19,7 @@
 
 - [x] **Лицензия crypto (P0 E2E)** — решено: оставляем `libsignal_protocol_dart` (GPL-3.0); Flutter-клиент — open source под GPL-3.0, бэкенд проприетарный.
 - [x] **Offline cache (P2 E2E)** — решено: encrypted SQLite + ключ в secure storage; decrypted bodies в кэше для локального поиска ([encryption.md](features/encryption.md) § Offline cache).
-- [ ] **Safety number / TOFU (P2 E2E)** — нужен ли в v1, формат UX при смене identity key (продукт + копирайт).
+- [x] **Safety number / TOFU (P2 E2E)** — решено: v1 — implicit TOFU; баннер при смене identity key; короткий код верификации `XX-XX-XX` (6 символов) в инфо DM, опционально ([encryption.md](features/encryption.md) § Доверие к ключам).
 
 ### Секреты, аккаунты, внешние сервисы
 
@@ -40,13 +40,26 @@
 
 *Зависимости: GPL-решение закрыто (open source клиент).*
 
-- [ ] **Persistent Signal store** — `flutter_secure_storage` / web encrypted store вместо `InMemorySignalProtocolStore`.
-- [ ] **Pre-key sync по сети** — login / перед send: `UploadPreKeyBundle`, `GetPreKeyBundle(peer)`, X3DH; убрать in-process bilateral sessions из prod-пути.
-- [ ] **UI opt-in/opt-out** — wire `E2eEnableConfirmDialog` / `E2eDisableConfirmDialog` / `E2eKeyBackupSheet` в `ChatInfoPanel`.
-- [ ] **Запрет plaintext в E2E-чате** — Messaging: reject `is_e2e=false` и plain `EditMessage` при `e2e_enabled`; клиент: не plain send при ошибке encrypt.
-- [ ] **E2E enable gate** — оба peer с pre-keys перед enable (согласовать с Chat/Messaging API).
+- [x] **Persistent Signal store** — `flutter_secure_storage` / web encrypted store вместо `InMemorySignalProtocolStore`.
+- [x] **Pre-key sync по сети** — login / перед send: `UploadPreKeyBundle`, `GetPreKeyBundle(peer)`, X3DH; убрать in-process bilateral sessions из prod-пути.
+- [x] **UI opt-in/opt-out** — wire `E2eEnableConfirmDialog` / `E2eDisableConfirmDialog` / `E2eKeyBackupSheet` в `ChatInfoPanel`.
+- [x] **Запрет plaintext в E2E-чате** — Messaging: reject `is_e2e=false` и plain `EditMessage` при `e2e_enabled`; клиент: не plain send при ошибке encrypt.
+- [x] **E2E enable gate** — оба peer с pre-keys перед enable (согласовать с Chat/Messaging API).
 
 **Промпт-якорь:** `Phase 15 E2E P0 — batch E2E-A, TDD, docs/features/encryption.md`.
+
+---
+
+### Batch E2E-A audit follow-ups (post-implementation)
+
+- [ ] **Key backup codec (E2E-B)** — `E2eKeyBackupCodec` still XOR+SHA256 stub; replace with AEAD+KDF per `encryption.md`.
+- [ ] **EditMessage E2E ciphertext** — server rejects all edits in E2E chats (v1); encrypted edit path deferred to E2E-B.
+- [ ] **Pre-key validation / OTPK consume** — Messaging stores opaque bundles without libsignal validation or one-time key consumption.
+- [ ] **Verification code UI (P2)** — TOFU banner + `XX-XX-XX` fingerprint block in DM info per `encryption.md` § Доверие к ключам.
+- [ ] **Identity key change banner (P2)** — client UX when peer identity key rotates.
+- [ ] **File E2E upload gate** — File service `is_e2e` without `chat.e2e_enabled` cross-check (E2E-B).
+- [ ] **Two-device libsignal live test** — extend `phase15_e2e_dm_live_test.dart` with real decrypt roundtrip over HTTP (partially covered by unit/network tests).
+- [ ] **applySQLFile path normalization** — fixed Windows suffix chain; consider shared migration helper for all integration tests.
 
 ---
 

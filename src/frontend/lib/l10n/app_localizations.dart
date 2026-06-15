@@ -2924,6 +2924,30 @@ abstract class AppLocalizations {
   /// **'Enable end-to-end encryption'**
   String get e2eEnableTitle;
 
+  /// No description provided for @e2eChatInfoSwitchLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'End-to-end encryption'**
+  String get e2eChatInfoSwitchLabel;
+
+  /// No description provided for @e2eChatInfoKeyBackup.
+  ///
+  /// In en, this message translates to:
+  /// **'Key backup'**
+  String get e2eChatInfoKeyBackup;
+
+  /// No description provided for @e2eEncryptFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not encrypt this message. Open the app on both devices and try again.'**
+  String get e2eEncryptFailed;
+
+  /// No description provided for @e2ePeerMissingPreKeys.
+  ///
+  /// In en, this message translates to:
+  /// **'Your contact has not set up encryption keys yet.'**
+  String get e2ePeerMissingPreKeys;
+
   /// No description provided for @e2eEnableBody.
   ///
   /// In en, this message translates to:

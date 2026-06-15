@@ -1571,6 +1571,20 @@ class AppLocalizationsRu extends AppLocalizations {
   String get e2eEnableTitle => 'Включить сквозное шифрование';
 
   @override
+  String get e2eChatInfoSwitchLabel => 'Сквозное шифрование';
+
+  @override
+  String get e2eChatInfoKeyBackup => 'Резервная копия ключей';
+
+  @override
+  String get e2eEncryptFailed =>
+      'Не удалось зашифровать сообщение. Откройте приложение на обоих устройствах и повторите попытку.';
+
+  @override
+  String get e2ePeerMissingPreKeys =>
+      'У собеседника ещё не настроены ключи шифрования.';
+
+  @override
   String get e2eEnableBody =>
       'Включён режим сквозного шифрования для этого чата.\n\nСообщения зашифрованы и недоступны серверу.\n— Глобальный поиск не найдёт тексты сообщений этого чата.\n— Локальный поиск работает только по истории на этом устройстве.';
 

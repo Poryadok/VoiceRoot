@@ -11,17 +11,19 @@ void main() {
   });
 
   group('E2eSessionManager', () {
-    test('ensureSession creates bilateral stores per profile pair', () async {
-      final manager = E2eSessionManager();
+    test('ensureSession creates session with remote pre-key bundle', () async {
+      final manager = E2eSessionManager.inMemory();
+      final remoteStore = await manager.storeForProfile('beta');
+      final remoteBundle = await exportPreKeyBundle(remoteStore);
       final session = await manager.ensureSession(
         localProfileId: 'alpha',
         remoteProfileId: 'beta',
+        remoteBundle: remoteBundle,
       );
 
       expect(session.localProfileId, 'alpha');
       expect(session.remoteProfileId, 'beta');
       expect(await session.localStore.containsSession(session.remoteAddress), isTrue);
-      expect(await session.remoteStore.containsSession(session.localAddress), isTrue);
     });
 
     test('serialize and parse pre-key bundle roundtrip', () async {

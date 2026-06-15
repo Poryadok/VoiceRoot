@@ -26,7 +26,7 @@ SignalProtocolAddress signalAddressForProfile(String profileId) {
 }
 
 /// Builds a [PreKeyBundle] from keys currently in [store].
-Future<PreKeyBundle> exportPreKeyBundle(InMemorySignalProtocolStore store) async {
+Future<PreKeyBundle> exportPreKeyBundle(SignalProtocolStore store) async {
   final registrationId = await store.getLocalRegistrationId();
   final identityKeyPair = await store.getIdentityKeyPair();
   final signedPreKey = await store.loadSignedPreKey(_defaultSignedPreKeyId);
@@ -45,7 +45,7 @@ Future<PreKeyBundle> exportPreKeyBundle(InMemorySignalProtocolStore store) async
 }
 
 /// Opaque base64 blob uploaded to Messaging pre-key directory.
-Future<String> serializePreKeyBundle(InMemorySignalProtocolStore store) async {
+Future<String> serializePreKeyBundle(SignalProtocolStore store) async {
   final bundle = await exportPreKeyBundle(store);
   final payload = <String, dynamic>{
     'registration_id': bundle.getRegistrationId(),

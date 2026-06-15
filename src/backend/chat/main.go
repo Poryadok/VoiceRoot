@@ -131,13 +131,16 @@ func main() {
 		}
 
 		var listEnrich grpcsvc.ListChatsEnrichment
+		var e2ePreKeyGate grpcsvc.E2EPreKeyGate
 		if msgAddr := strings.TrimSpace(os.Getenv("MESSAGING_GRPC_ADDR")); msgAddr != "" {
 			mconn, err := grpc.NewClient(grpcclient.DialTarget(msgAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
 				log.Fatalf("messaging grpc: %v", err)
 			}
 			defer func() { _ = mconn.Close() }()
-			listEnrich = grpcsvc.NewMessagingListEnricher(messagingv1.NewMessagingServiceClient(mconn))
+			msgClient := messagingv1.NewMessagingServiceClient(mconn)
+			listEnrich = grpcsvc.NewMessagingListEnricher(msgClient)
+			e2ePreKeyGate = grpcsvc.NewMessagingE2EPreKeyGate(msgClient)
 		}
 
 		dmStore := &store.DMStore{Pool: pool}
@@ -175,15 +178,16 @@ func main() {
 		}
 		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger)...)
 		chatv1.RegisterChatServiceServer(grpcSrv, &grpcsvc.ChatGRPC{
-			DM:           dmStore,
-			Profiles:     profiles,
-			Blocks:       blocks,
-			Privacy:      privacy,
-			Friends:      friends,
-			ListEnrich:   listEnrich,
-			ChatEvents:   chatEvents,
-			Roles:        roleClient,
-			SpaceMembers: spaceMembers,
+			DM:            dmStore,
+			Profiles:      profiles,
+			Blocks:        blocks,
+			Privacy:       privacy,
+			Friends:       friends,
+			ListEnrich:    listEnrich,
+			E2EPreKeyGate: e2ePreKeyGate,
+			ChatEvents:    chatEvents,
+			Roles:         roleClient,
+			SpaceMembers:  spaceMembers,
 		})
 		go func() {
 			logger.Info("gRPC listening", slog.String("addr", grpcListen))

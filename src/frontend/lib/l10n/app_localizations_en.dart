@@ -1564,6 +1564,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get e2eEnableTitle => 'Enable end-to-end encryption';
 
   @override
+  String get e2eChatInfoSwitchLabel => 'End-to-end encryption';
+
+  @override
+  String get e2eChatInfoKeyBackup => 'Key backup';
+
+  @override
+  String get e2eEncryptFailed =>
+      'Could not encrypt this message. Open the app on both devices and try again.';
+
+  @override
+  String get e2ePeerMissingPreKeys =>
+      'Your contact has not set up encryption keys yet.';
+
+  @override
   String get e2eEnableBody =>
       'End-to-end encryption is enabled for this chat.\n\nMessages are encrypted and unavailable to the server.\n— Global search will not find message bodies from this chat.\n— Local search works only on history loaded on this device.';
 

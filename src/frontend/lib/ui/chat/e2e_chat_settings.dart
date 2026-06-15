@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../backend/e2e_client.dart';
 import '../../l10n/app_localizations.dart';
+import '../../state/auth_providers.dart';
+import '../../state/chat_providers.dart';
+import '../../state/e2e_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../core/voice_bottom_sheet.dart';
 
 /// Opt-in confirmation for enabling E2E in a DM (docs/features/encryption.md).
 class E2eEnableConfirmDialog extends StatelessWidget {
@@ -194,6 +200,164 @@ class _E2eKeyBackupSheetState extends State<E2eKeyBackupSheet> {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// DM chat info: E2E opt-in/out + key backup entry (docs/features/encryption.md).
+class DmE2eSettingsSection extends ConsumerStatefulWidget {
+  const DmE2eSettingsSection({super.key, required this.chatId});
+
+  final String chatId;
+
+  @override
+  ConsumerState<DmE2eSettingsSection> createState() =>
+      _DmE2eSettingsSectionState();
+}
+
+class _DmE2eSettingsSectionState extends ConsumerState<DmE2eSettingsSection> {
+  var _busy = false;
+
+  Future<void> _setBusy(Future<void> Function() action) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await action();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _enableE2e() async {
+    final auth = ref.read(authorizationHeaderProvider);
+    if (auth == null) return;
+    final e2e = ref.read(voiceE2eClientProvider);
+    final peerId = dmPeerProfileIdForChat(ref, widget.chatId);
+    if (peerId != null) {
+      final peerBundle = await e2e.getPreKeyBundle(
+        authorization: auth,
+        profileId: peerId,
+      );
+      if (peerBundle is E2eApiFailure &&
+          (peerBundle.statusCode == 404 || peerBundle.errorCode == 'not_found')) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppLocalizations.of(context)!.e2ePeerMissingPreKeys)),
+        );
+        return;
+      }
+    }
+    final upload = await e2e.uploadPreKeyBundle(authorization: auth);
+    if (upload is E2eApiFailure) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(upload.message)),
+      );
+      return;
+    }
+    final result = await e2e.enableChatE2e(
+      authorization: auth,
+      chatId: widget.chatId,
+    );
+    if (result is E2eApiFailure) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.message)),
+      );
+      return;
+    }
+    await ref.read(chatListControllerProvider.notifier).loadInitial();
+  }
+
+  Future<void> _disableE2e() async {
+    final auth = ref.read(authorizationHeaderProvider);
+    if (auth == null) return;
+    final result = await ref.read(voiceE2eClientProvider).disableChatE2e(
+      authorization: auth,
+      chatId: widget.chatId,
+    );
+    if (result is E2eApiFailure) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.message)),
+      );
+      return;
+    }
+    await ref.read(chatListControllerProvider.notifier).loadInitial();
+  }
+
+  void _openKeyBackupSheet() {
+    final auth = ref.read(authorizationHeaderProvider);
+    if (auth == null) return;
+    final e2e = ref.read(voiceE2eClientProvider);
+    showVoiceBottomSheet<void>(
+      context: context,
+      scrollable: false,
+      child: E2eKeyBackupSheet(
+        onSave: (password, hint) async {
+          final result = await e2e.putKeyBackup(
+            authorization: auth,
+            password: password,
+            passwordHint: hint,
+          );
+          if (result is E2eApiFailure) throw StateError(result.message);
+          if (context.mounted) Navigator.of(context).pop();
+        },
+        onRestore: (password) async {
+          final result = await e2e.getKeyBackup(authorization: auth);
+          if (result is E2eApiFailure) throw StateError(result.message);
+          if (context.mounted) Navigator.of(context).pop();
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final voice = VoiceColors.of(context);
+    final enabled = ref.watch(chatE2eEnabledProvider(widget.chatId));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SwitchListTile(
+          key: const Key('chat_info_e2e_toggle'),
+          title: Text(l10n.e2eChatInfoSwitchLabel),
+          subtitle: Text(
+            enabled ? l10n.e2eEnableBody.split('\n').first : l10n.e2eEnableTitle,
+            style: TextStyle(color: voice.textSecondary, fontSize: 12),
+          ),
+          value: enabled,
+          onChanged: _busy
+              ? null
+              : (next) async {
+                  if (next) {
+                    await showDialog<void>(
+                      context: context,
+                      builder: (context) => E2eEnableConfirmDialog(
+                        chatId: widget.chatId,
+                        onConfirmed: () => _setBusy(_enableE2e),
+                      ),
+                    );
+                  } else {
+                    await showDialog<void>(
+                      context: context,
+                      builder: (context) => E2eDisableConfirmDialog(
+                        chatId: widget.chatId,
+                        onConfirmed: () => _setBusy(_disableE2e),
+                      ),
+                    );
+                  }
+                },
+        ),
+        ListTile(
+          leading: const Icon(Icons.backup_outlined),
+          title: Text(l10n.e2eChatInfoKeyBackup),
+          onTap: _busy ? null : _openKeyBackupSheet,
+        ),
+        Divider(height: 1, color: voice.borderDefault),
+      ],
     );
   }
 }

@@ -68,6 +68,27 @@ func TestComposePhase15E2E_GroupEnableRejected_live(t *testing.T) {
 	require.NotEqual(t, http.StatusOK, status, "E2E enable must fail on group chats")
 }
 
+// TestComposePhase15E2E_EnableRejectedWhenPeerMissingPreKey_live documents pre-key gate (Batch E2E-A).
+func TestComposePhase15E2E_EnableRejectedWhenPeerMissingPreKey_live(t *testing.T) {
+	if !liveComposeEnabled() {
+		t.Skip("set VOICE_RUN_LIVE_COMPOSE=true to run against local compose")
+	}
+	clearLiveComposeAuthRateLimit(t)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	base := liveGatewayBaseURL()
+
+	n := time.Now().UnixNano()
+	sessA := registerComposeUser(t, client, base, formatComposeEmail("p15-gate-a", n), "VoiceQaTest1!")
+	sessB := registerComposeUser(t, client, base, formatComposeEmail("p15-gate-b", n), "VoiceQaTest1!")
+	chatID := createComposeDM(t, client, base, sessA.AccessToken, sessB.ProfileID)
+
+	uploadComposePreKeyBundle(t, client, base, sessA.AccessToken, "compose-prekey-gate-a-only")
+
+	status := postComposeChatE2EEnableStatus(t, client, base, sessA.AccessToken, chatID)
+	require.NotEqual(t, http.StatusOK, status, "E2E enable must fail when peer has no pre-key bundle")
+}
+
 func uploadComposePreKeyBundle(t *testing.T, client *http.Client, base, accessToken, bundle string) {
 	t.Helper()
 	payload, err := json.Marshal(map[string]string{"bundle": bundle})

@@ -1600,9 +1600,11 @@ class BotEvent extends $pb.GeneratedMessage {
 class RegisterBotResponse extends $pb.GeneratedMessage {
   factory RegisterBotResponse({
     Bot? bot,
+    TokenResponse? tokenResponse,
   }) {
     final result = create();
     if (bot != null) result.bot = bot;
+    if (tokenResponse != null) result.tokenResponse = tokenResponse;
     return result;
   }
 
@@ -1620,6 +1622,8 @@ class RegisterBotResponse extends $pb.GeneratedMessage {
       package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.bot.v1'),
       createEmptyInstance: create)
     ..aOM<Bot>(1, _omitFieldNames ? '' : 'bot', subBuilder: Bot.create)
+    ..aOM<TokenResponse>(2, _omitFieldNames ? '' : 'tokenResponse',
+        subBuilder: TokenResponse.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1651,6 +1655,18 @@ class RegisterBotResponse extends $pb.GeneratedMessage {
   void clearBot() => $_clearField(1);
   @$pb.TagNumber(1)
   Bot ensureBot() => $_ensure(0);
+
+  /// One-shot bot token; same value as RegenerateToken (shown once at registration).
+  @$pb.TagNumber(2)
+  TokenResponse get tokenResponse => $_getN(1);
+  @$pb.TagNumber(2)
+  set tokenResponse(TokenResponse value) => $_setField(2, value);
+  @$pb.TagNumber(2)
+  $core.bool hasTokenResponse() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearTokenResponse() => $_clearField(2);
+  @$pb.TagNumber(2)
+  TokenResponse ensureTokenResponse() => $_ensure(1);
 }
 
 class UpdateBotResponse extends $pb.GeneratedMessage {

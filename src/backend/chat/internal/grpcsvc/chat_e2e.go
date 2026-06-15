@@ -3,6 +3,7 @@ package grpcsvc
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -53,6 +54,19 @@ func (s *ChatGRPC) setChatE2E(ctx context.Context, chatRaw string, enabled bool)
 	}
 	if !member {
 		return status.Error(codes.PermissionDenied, "not a chat member")
+	}
+	if enabled && s.E2EPreKeyGate != nil {
+		members, err := s.DM.ListChatMembers(ctx, chatID)
+		if err != nil {
+			return status.Error(codes.Internal, err.Error())
+		}
+		profileIDs := make([]uuid.UUID, 0, len(members))
+		for _, m := range members {
+			profileIDs = append(profileIDs, m.ProfileID)
+		}
+		if err := s.E2EPreKeyGate.EnsureAllMembersHavePreKeys(ctx, profileIDs); err != nil {
+			return err
+		}
 	}
 	if err := s.DM.SetChatE2EEnabled(ctx, chatID, enabled); err != nil {
 		return status.Error(codes.Internal, err.Error())

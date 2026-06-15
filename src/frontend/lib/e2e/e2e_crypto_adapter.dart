@@ -13,7 +13,8 @@ class E2eCryptoAdapter {
   E2eCryptoAdapter({E2eSessionManager? sessionManager})
       : _sessions = sessionManager ?? E2eSessionManager();
 
-  factory E2eCryptoAdapter.inMemoryForTest() => E2eCryptoAdapter();
+  factory E2eCryptoAdapter.inMemoryForTest() =>
+      E2eCryptoAdapter(sessionManager: E2eSessionManager.inMemory());
 
   final E2eSessionManager _sessions;
 
@@ -62,10 +63,12 @@ class E2eCryptoAdapter {
     required String receiverProfileId,
     required String senderProfileId,
     required String wire,
+    PreKeyBundle? remoteBundle,
   }) async {
     final session = await ensureSession(
       localProfileId: receiverProfileId,
       remoteProfileId: senderProfileId,
+      remoteBundle: remoteBundle,
     );
     final cipher = SessionCipher.fromStore(
       session.localStore,

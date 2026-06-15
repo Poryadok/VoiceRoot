@@ -55,9 +55,6 @@ func (s *MessagingGRPC) GetPreKeyBundle(ctx context.Context, req *messagingv1.Ge
 }
 
 func (s *MessagingGRPC) validateE2ESend(ctx context.Context, chatID uuid.UUID, isE2E bool) error {
-	if !isE2E {
-		return nil
-	}
 	if s.ChatThreadPolicy == nil {
 		return status.Error(codes.FailedPrecondition, "chat policy not configured")
 	}
@@ -69,10 +66,36 @@ func (s *MessagingGRPC) validateE2ESend(ctx context.Context, chatID uuid.UUID, i
 		return status.Error(codes.Internal, err.Error())
 	}
 	if pol.ChatType != "dm" {
-		return status.Error(codes.FailedPrecondition, "e2e is dm-only")
+		if isE2E {
+			return status.Error(codes.FailedPrecondition, "e2e is dm-only")
+		}
+		return nil
 	}
-	if !pol.E2EEnabled {
+	if pol.E2EEnabled && !isE2E {
+		return status.Error(codes.FailedPrecondition, "e2e chat requires encrypted messages")
+	}
+	if isE2E && !pol.E2EEnabled {
 		return status.Error(codes.FailedPrecondition, "e2e not enabled for chat")
+	}
+	return nil
+}
+
+func (s *MessagingGRPC) validateE2EEdit(ctx context.Context, chatID uuid.UUID, messageIsE2E bool) error {
+	if messageIsE2E {
+		return status.Error(codes.FailedPrecondition, "e2e messages cannot be edited")
+	}
+	if s.ChatThreadPolicy == nil {
+		return status.Error(codes.FailedPrecondition, "chat policy not configured")
+	}
+	pol, err := s.ChatThreadPolicy.Load(ctx, chatID)
+	if errors.Is(err, store.ErrChatNotFound) {
+		return status.Error(codes.NotFound, "chat not found")
+	}
+	if err != nil {
+		return status.Error(codes.Internal, err.Error())
+	}
+	if pol.E2EEnabled {
+		return status.Error(codes.FailedPrecondition, "e2e chat does not allow plain message edits")
 	}
 	return nil
 }

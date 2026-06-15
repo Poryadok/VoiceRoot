@@ -14,6 +14,7 @@ import 'group_members_sheet.dart';
 import '../space/space_chat_override_sheet.dart';
 import '../../backend/space_permissions.dart';
 import '../../state/space_providers.dart';
+import 'e2e_chat_settings.dart';
 
 /// Chat info with shared media tabs (Phase 10).
 class ChatInfoPanel extends ConsumerStatefulWidget {
@@ -25,6 +26,7 @@ class ChatInfoPanel extends ConsumerStatefulWidget {
   });
 
   static const Key panelKey = Key('chat_info_panel');
+  static const Key e2eToggleKey = Key('chat_info_e2e_toggle');
   static const Key mediaTabKey = Key('chat_info_tab_media');
   static const Key filesTabKey = Key('chat_info_tab_files');
   static const Key linksTabKey = Key('chat_info_tab_links');
@@ -77,6 +79,7 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
         ],
         if (spaceId != null)
           _ChatOverrideBar(spaceId: spaceId, chatId: widget.chatId),
+        if (!widget.isGroup) DmE2eSettingsSection(chatId: widget.chatId),
         TabBar(
           controller: _tabs,
           isScrollable: true,

@@ -103,4 +103,23 @@ void main() {
 
     expect(confirmed, isTrue);
   });
+
+  testWidgets('E2eKeyBackupSheet shows password fields and save action', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      e2eDialogTestApp(
+        child: E2eKeyBackupSheet(
+          onSave: (_, _) async {},
+          onRestore: (_) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(E2eKeyBackupSheet.sheetKey), findsOneWidget);
+    expect(find.byKey(E2eKeyBackupSheet.passwordFieldKey), findsOneWidget);
+    expect(find.byKey(E2eKeyBackupSheet.saveButtonKey), findsOneWidget);
+    expect(find.byKey(E2eKeyBackupSheet.restoreButtonKey), findsOneWidget);
+  });
 }

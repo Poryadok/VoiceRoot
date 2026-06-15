@@ -454,6 +454,9 @@ func (s *MessagingGRPC) EditMessage(ctx context.Context, req *messagingv1.EditMe
 	if row.SenderProfileID != profileID {
 		return nil, status.Error(codes.PermissionDenied, "only the message author can edit")
 	}
+	if err := s.validateE2EEdit(ctx, row.ChatID, row.IsE2E); err != nil {
+		return nil, err
+	}
 	mentionsRaw := mentions.EntriesJSONFromContent(content)
 	var mentionTargets []uuid.UUID
 	mentionsJSON := mentionsRaw

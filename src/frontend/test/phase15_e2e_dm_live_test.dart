@@ -4,6 +4,7 @@ import 'package:voice_frontend/backend/e2e_client.dart';
 import 'package:voice_frontend/backend/gateway_http.dart';
 import 'package:voice_frontend/backend/messages_client.dart';
 import 'package:voice_frontend/backend/search_client.dart';
+import 'package:voice_frontend/e2e/e2e_crypto_adapter.dart';
 
 import 'support/live_gateway_harness.dart';
 
@@ -35,7 +36,10 @@ void main() {
         config: ctx.config,
       );
       final chats = VoiceChatsClient(gateway: gateway);
-      final e2e = VoiceE2eClient(gateway: gateway);
+      final adapterA = E2eCryptoAdapter.inMemoryForTest();
+      final adapterB = E2eCryptoAdapter.inMemoryForTest();
+      final e2eA = VoiceE2eClient(gateway: gateway, adapter: adapterA);
+      final e2eB = VoiceE2eClient(gateway: gateway, adapter: adapterB);
       final messages = VoiceMessagesClient(gateway: gateway);
       final search = VoiceSearchClient(gateway: gateway);
 
@@ -46,25 +50,23 @@ void main() {
       expect(dmResult, isA<ChatsApiOk<VoiceChat>>());
       final chatId = (dmResult as ChatsApiOk<VoiceChat>).data.id;
 
-      final preKeyA = await e2e.uploadPreKeyBundle(
+      final preKeyA = await e2eA.uploadPreKeyBundle(
         authorization: sessionA.authorizationHeader,
-        bundle: 'live-prekey-bundle-a',
       );
       expect(preKeyA, isA<E2eApiOk<void>>());
 
-      final preKeyB = await e2e.uploadPreKeyBundle(
+      final preKeyB = await e2eB.uploadPreKeyBundle(
         authorization: sessionB.authorizationHeader,
-        bundle: 'live-prekey-bundle-b',
       );
       expect(preKeyB, isA<E2eApiOk<void>>());
 
-      final enableA = await e2e.enableChatE2e(
+      final enableA = await e2eA.enableChatE2e(
         authorization: sessionA.authorizationHeader,
         chatId: chatId,
       );
       expect(enableA, isA<E2eApiOk<void>>());
 
-      final enableB = await e2e.enableChatE2e(
+      final enableB = await e2eB.enableChatE2e(
         authorization: sessionB.authorizationHeader,
         chatId: chatId,
       );
@@ -72,7 +74,7 @@ void main() {
 
       final secretPhrase =
           'phase15-live-secret-${DateTime.now().microsecondsSinceEpoch}';
-      final ciphertext = await e2e.encryptForChat(
+      final ciphertext = await e2eA.encryptForChat(
         authorization: sessionA.authorizationHeader,
         chatId: chatId,
         peerProfileId: sessionB.activeProfileId,

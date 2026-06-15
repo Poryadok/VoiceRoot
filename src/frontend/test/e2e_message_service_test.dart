@@ -2,22 +2,33 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_frontend/backend/messages_client.dart';
 import 'package:voice_frontend/e2e/e2e_crypto_adapter.dart';
 import 'package:voice_frontend/e2e/e2e_message_service.dart';
+import 'package:voice_frontend/e2e/e2e_store_factory.dart';
 import 'package:voice_frontend/e2e/e2e_prekey_sync.dart';
 
 void main() {
   group('E2eMessageService', () {
-    late E2eMessageService service;
-
-    setUp(() {
-      service = E2eMessageService(adapter: E2eCryptoAdapter.inMemoryForTest());
-    });
-
     test('encryptOutgoing and decryptForDisplay roundtrip', () async {
       const plaintext = 'service-layer-secret';
-      final wire = await service.encryptOutgoing(
+      final adapter = E2eCryptoAdapter.inMemoryForTest();
+      final svc = E2eMessageService(adapter: adapter);
+      final peerStore = await adapter.sessionManager.storeForProfile('peer');
+      final peerBundle = await exportPreKeyBundle(peerStore);
+      await adapter.ensureSession(
+        localProfileId: 'me',
+        remoteProfileId: 'peer',
+        remoteBundle: peerBundle,
+      );
+      final wire = await svc.encryptOutgoing(
         localProfileId: 'me',
         peerProfileId: 'peer',
         plaintext: plaintext,
+      );
+      final meStore = await adapter.sessionManager.storeForProfile('me');
+      final meBundle = await exportPreKeyBundle(meStore);
+      await adapter.ensureSession(
+        localProfileId: 'peer',
+        remoteProfileId: 'me',
+        remoteBundle: meBundle,
       );
       final message = VoiceMessage(
         id: 'm1',
@@ -26,7 +37,7 @@ void main() {
         content: wire,
         isE2e: true,
       );
-      final shown = await service.decryptForDisplay(
+      final shown = await svc.decryptForDisplay(
         message: message,
         localProfileId: 'peer',
         peerProfileId: 'me',

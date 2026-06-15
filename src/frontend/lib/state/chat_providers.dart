@@ -11,6 +11,7 @@ import '../backend/gateway_request_id.dart';
 import '../backend/messaging_read_sync.dart';
 import '../backend/messages_client.dart';
 import '../backend/realtime_client.dart';
+import '../e2e/e2e_exceptions.dart';
 import 'auth_providers.dart';
 import 'bot_deferred_providers.dart';
 import 'connectivity_providers.dart';
@@ -595,10 +596,12 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     final localId = _activeProfileId();
     final peerId = _dmPeerProfileId();
     if (localId == null || peerId == null) return messages;
+    final auth = _ref.read(authorizationHeaderProvider);
     return _ref.read(e2eMessageServiceProvider).decryptAllForDisplay(
       messages: messages,
       localProfileId: localId,
       peerProfileId: peerId,
+      authorization: auth,
     );
   }
 
@@ -767,12 +770,23 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       final peerId = _dmPeerProfileId();
       final localId = _activeProfileId();
       if (peerId != null && localId != null && outbound.isNotEmpty) {
-        outbound = await _ref.read(e2eMessageServiceProvider).encryptOutgoing(
-          localProfileId: localId,
-          peerProfileId: peerId,
-          plaintext: outbound,
-        );
-        isE2e = true;
+        try {
+          outbound = await _ref.read(e2eMessageServiceProvider).encryptOutgoing(
+            localProfileId: localId,
+            peerProfileId: peerId,
+            plaintext: outbound,
+            authorization: auth,
+            chatId: chatId,
+          );
+          isE2e = true;
+        } on E2eEncryptException catch (e) {
+          if (!mounted) return e.message;
+          state = state.copyWith(
+            isSending: false,
+            errorMessage: e.message,
+          );
+          return e.message;
+        }
       }
     }
 

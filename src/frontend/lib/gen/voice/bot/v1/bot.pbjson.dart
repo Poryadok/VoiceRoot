@@ -501,13 +501,27 @@ const RegisterBotResponse$json = {
       '6': '.voice.bot.v1.Bot',
       '10': 'bot'
     },
+    {
+      '1': 'token_response',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.bot.v1.TokenResponse',
+      '9': 0,
+      '10': 'tokenResponse',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_token_response'},
   ],
 };
 
 /// Descriptor for `RegisterBotResponse`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List registerBotResponseDescriptor = $convert.base64Decode(
     'ChNSZWdpc3RlckJvdFJlc3BvbnNlEiMKA2JvdBgBIAEoCzIRLnZvaWNlLmJvdC52MS5Cb3RSA2'
-    'JvdA==');
+    'JvdBJHCg50b2tlbl9yZXNwb25zZRgCIAEoCzIbLnZvaWNlLmJvdC52MS5Ub2tlblJlc3BvbnNl'
+    'SABSDXRva2VuUmVzcG9uc2WIAQFCEQoPX3Rva2VuX3Jlc3BvbnNl');
 
 @$core.Deprecated('Use updateBotResponseDescriptor instead')
 const UpdateBotResponse$json = {

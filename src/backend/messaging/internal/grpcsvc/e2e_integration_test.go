@@ -166,3 +166,141 @@ func TestSendMessage_E2E_OnGroup_Fails(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, codes.FailedPrecondition, status.Code(err))
 }
+
+// TestSendMessage_PlaintextRejected_WhenE2EEnabled documents Batch E2E-A: plaintext send
+// is rejected when chat e2e_enabled=true (docs/features/encryption.md).
+func TestSendMessage_PlaintextRejected_WhenE2EEnabled(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	profA, acctA := uuid.New(), uuid.New()
+	profB := uuid.New()
+	chatID := uuid.New()
+	seedDMChat(t, ctx, pool, chatID, profA, profB)
+	seedE2EEnabledDM(t, ctx, pool, chatID)
+
+	client, _ := startMessagingServer(t, pool)
+
+	isE2E := false
+	_, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+		Chat:            chatDMRef(chatID),
+		Content:         "plaintext-not-allowed",
+		IsE2E:           &isE2E,
+		AttachmentsJson: "[]",
+		MentionsJson:    "[]",
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+}
+
+// TestSendMessage_E2E_RequiredFlagWhenEnabled documents is_e2e must be set when chat e2e_enabled.
+func TestSendMessage_E2E_RequiredFlagWhenEnabled(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	profA, acctA := uuid.New(), uuid.New()
+	profB := uuid.New()
+	chatID := uuid.New()
+	seedDMChat(t, ctx, pool, chatID, profA, profB)
+	seedE2EEnabledDM(t, ctx, pool, chatID)
+
+	client, _ := startMessagingServer(t, pool)
+
+	// Omit is_e2e — must be rejected same as explicit false.
+	_, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+		Chat:            chatDMRef(chatID),
+		Content:         "implicit-plaintext",
+		AttachmentsJson: "[]",
+		MentionsJson:    "[]",
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+}
+
+// TestEditMessage_Rejected_WhenMessageIsE2E documents E2E ciphertext messages cannot be edited in place.
+func TestEditMessage_Rejected_WhenMessageIsE2E(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	profA, acctA := uuid.New(), uuid.New()
+	profB := uuid.New()
+	chatID := uuid.New()
+	seedDMChat(t, ctx, pool, chatID, profA, profB)
+	seedE2EEnabledDM(t, ctx, pool, chatID)
+
+	client, _ := startMessagingServer(t, pool)
+
+	isE2E := true
+	ciphertext := base64.StdEncoding.EncodeToString([]byte("opaque-e2e-edit-test"))
+	sent, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+		Chat:            chatDMRef(chatID),
+		Content:         ciphertext,
+		IsE2E:           &isE2E,
+		AttachmentsJson: "[]",
+		MentionsJson:    "[]",
+	})
+	require.NoError(t, err)
+
+	_, err = client.EditMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.EditMessageRequest{
+		MessageId: sent.GetMessage().GetId(),
+		Content:   "edited-plaintext",
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+}
+
+// TestEditMessage_Rejected_WhenChatE2EEnabled documents plain EditMessage is rejected in e2e_enabled chats.
+func TestEditMessage_Rejected_WhenChatE2EEnabled(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	profA, acctA := uuid.New(), uuid.New()
+	profB := uuid.New()
+	chatID := uuid.New()
+	seedDMChat(t, ctx, pool, chatID, profA, profB)
+
+	client, _ := startMessagingServer(t, pool)
+	mk := messagingv1.MessageKind_MESSAGE_KIND_REGULAR
+
+	sent, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+		Chat:            chatDMRef(chatID),
+		Content:         "legacy-plain-before-gate",
+		AttachmentsJson: "[]",
+		MentionsJson:    "[]",
+		MessageKind:     &mk,
+	})
+	require.NoError(t, err)
+
+	seedE2EEnabledDM(t, ctx, pool, chatID)
+
+	_, err = client.EditMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.EditMessageRequest{
+		MessageId: sent.GetMessage().GetId(),
+		Content:   "edited-in-e2e-chat",
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+}
