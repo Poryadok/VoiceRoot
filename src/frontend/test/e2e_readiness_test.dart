@@ -57,6 +57,8 @@ void main() {
     'test/phase9_search_e2e_live_test.dart',
     'test/phase11_trust_e2e_live_test.dart',
     'test/phase15_e2e_dm_live_test.dart',
+    'test/phase15_e2e_edit_live_test.dart',
+    'test/phase15_e2e_file_live_test.dart',
     'test/phase16_bots_slash_live_test.dart',
   ];
 

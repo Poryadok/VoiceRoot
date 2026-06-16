@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -13,8 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
-	"voice/backend/messaging/internal/e2e/prekey"
 
 	messagingv1 "voice.app/voice/messaging/v1"
 )
@@ -35,36 +34,10 @@ func messageContentInDB(t *testing.T, ctx context.Context, pool *pgxpool.Pool, m
 	return content
 }
 
-func fakeCurvePoint33(tag byte) []byte {
-	b := make([]byte, 33)
-	b[0] = 0x05
-	for i := 1; i < 33; i++ {
-		b[i] = tag ^ byte(i)
-	}
-	return b
-}
-
-func fakeSignature64() []byte {
-	sig := make([]byte, 64)
-	for i := range sig {
-		sig[i] = byte(i * 5)
-	}
-	return sig
-}
-
-// validTestPreKeyBundleB64 matches src/frontend/lib/e2e/e2e_store_factory.dart serializePreKeyBundle wire format.
-func validTestPreKeyBundleB64() string {
-	seed := prekey.TestIdentitySeed(0x03)
-	return prekey.TestBundleB64(map[string]any{
-		"registration_id":       42_001,
-		"device_id":             1,
-		"pre_key_id":            7,
-		"pre_key_public":        base64.StdEncoding.EncodeToString(fakeCurvePoint33(0x01)),
-		"signed_pre_key_id":     1,
-		"signed_pre_key_public": base64.StdEncoding.EncodeToString(fakeCurvePoint33(0x02)),
-		"identity_key":          base64.StdEncoding.EncodeToString(prekey.TestIdentityKeyWire(seed)),
-		"_test_identity_seed":   seed,
-	})
+// validTestPreKeyBundleB64 returns the committed libsignal golden wire for integration tests.
+func validTestPreKeyBundleB64(t *testing.T) string {
+	t.Helper()
+	return libsignalGoldenPreKeyBundleB64(t)
 }
 
 func decodePreKeyBundlePayload(t *testing.T, wire string) map[string]any {
@@ -94,7 +67,7 @@ func TestUploadPreKeyBundle_GetPreKeyBundle_Roundtrip(t *testing.T) {
 	client, cleanup := startMessagingServerWired(t, pool, messagingWire{UserProfiles: profiles})
 	t.Cleanup(cleanup)
 
-	bundle := validTestPreKeyBundleB64()
+	bundle := validTestPreKeyBundleB64(t)
 	_, err := client.UploadPreKeyBundle(withProfileCtx(ctx, acctOwner, profOwner), &messagingv1.UploadPreKeyBundleRequest{
 		Bundle: bundle,
 	})
@@ -104,7 +77,11 @@ func TestUploadPreKeyBundle_GetPreKeyBundle_Roundtrip(t *testing.T) {
 		ProfileId: profOwner.String(),
 	})
 	require.NoError(t, err)
-	require.Equal(t, bundle, got.GetBundle())
+	uploaded := decodePreKeyBundlePayload(t, bundle)
+	fetched := decodePreKeyBundlePayload(t, got.GetBundle())
+	require.Equal(t, uploaded["identity_key"], fetched["identity_key"])
+	require.Equal(t, uploaded["signed_pre_key_public"], fetched["signed_pre_key_public"])
+	require.NotNil(t, fetched["pre_key_id"])
 }
 
 // TestUploadPreKeyBundle_RejectsInvalidBundle documents invalid wire is rejected before persistence.
@@ -156,6 +133,38 @@ func TestUploadPreKeyBundle_RejectsOversizedBundle(t *testing.T) {
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
+// TestUploadPreKeyBundle_AcceptsLibsignalGoldenBundle documents upload accepts libsignal-signed pre-key wire.
+func TestUploadPreKeyBundle_AcceptsLibsignalGoldenBundle(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	profOwner, acctOwner := uuid.New(), uuid.New()
+	profiles := profileAcctMap{profOwner: acctOwner}
+
+	client, cleanup := startMessagingServerWired(t, pool, messagingWire{UserProfiles: profiles})
+	t.Cleanup(cleanup)
+
+	bundle := libsignalGoldenPreKeyBundleB64(t)
+	_, err := client.UploadPreKeyBundle(withProfileCtx(ctx, acctOwner, profOwner), &messagingv1.UploadPreKeyBundleRequest{
+		Bundle: bundle,
+	})
+	require.NoError(t, err)
+}
+
+func libsignalGoldenPreKeyBundleB64(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(repoRoot(t), "src", "backend", "messaging", "testfixture", "prekey_libsignal_golden.b64")
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err, "run src/frontend/test/tools/export_prekey_golden_test.dart to generate golden")
+	return strings.TrimSpace(string(raw))
+}
+
 // TestUploadPreKeyBundle_RejectsInvalidSignedPreKeySignature documents libsignal signature verify on upload.
 func TestUploadPreKeyBundle_RejectsInvalidSignedPreKeySignature(t *testing.T) {
 	if testing.Short() {
@@ -173,7 +182,7 @@ func TestUploadPreKeyBundle_RejectsInvalidSignedPreKeySignature(t *testing.T) {
 	client, cleanup := startMessagingServerWired(t, pool, messagingWire{UserProfiles: profiles})
 	t.Cleanup(cleanup)
 
-	bundle := validTestPreKeyBundleB64()
+	bundle := validTestPreKeyBundleB64(t)
 	payload := decodePreKeyBundlePayload(t, bundle)
 	sigB64, ok := payload["signed_pre_key_signature"].(string)
 	require.True(t, ok)
@@ -192,23 +201,9 @@ func TestUploadPreKeyBundle_RejectsInvalidSignedPreKeySignature(t *testing.T) {
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
-func multiOTPKPreKeyBundleB64() string {
-	seed := prekey.TestIdentitySeed(0x03)
-	return prekey.TestBundleB64(map[string]any{
-		"registration_id":       42_001,
-		"device_id":             1,
-		"pre_key_id":            7,
-		"pre_key_public":        base64.StdEncoding.EncodeToString(fakeCurvePoint33(0x01)),
-		"signed_pre_key_id":     1,
-		"signed_pre_key_public": base64.StdEncoding.EncodeToString(fakeCurvePoint33(0x02)),
-		"identity_key":          base64.StdEncoding.EncodeToString(prekey.TestIdentityKeyWire(seed)),
-		"_test_identity_seed":   seed,
-		"pre_keys": []map[string]any{
-			{"pre_key_id": 7, "pre_key_public": base64.StdEncoding.EncodeToString(fakeCurvePoint33(0x11))},
-			{"pre_key_id": 8, "pre_key_public": base64.StdEncoding.EncodeToString(fakeCurvePoint33(0x12))},
-			{"pre_key_id": 9, "pre_key_public": base64.StdEncoding.EncodeToString(fakeCurvePoint33(0x13))},
-		},
-	})
+func multiOTPKPreKeyBundleB64(t *testing.T) string {
+	t.Helper()
+	return libsignalGoldenPreKeyBundleB64(t)
 }
 
 func preKeyIDFromPayload(t *testing.T, payload map[string]any) int {
@@ -236,13 +231,13 @@ func TestGetPreKeyBundle_ConsumesOTPKFromPool(t *testing.T) {
 	client, cleanup := startMessagingServerWired(t, pool, messagingWire{UserProfiles: profiles})
 	t.Cleanup(cleanup)
 
-	bundle := multiOTPKPreKeyBundleB64()
+	bundle := multiOTPKPreKeyBundleB64(t)
 	_, err := client.UploadPreKeyBundle(withProfileCtx(ctx, acctOwner, profOwner), &messagingv1.UploadPreKeyBundleRequest{
 		Bundle: bundle,
 	})
 	require.NoError(t, err)
 
-	wantIDs := []int{7, 8, 9}
+	wantIDs := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 	for _, wantID := range wantIDs {
 		got, err := client.GetPreKeyBundle(withProfileCtx(ctx, acctPeer, profPeer), &messagingv1.GetPreKeyBundleRequest{
 			ProfileId: profOwner.String(),
@@ -281,7 +276,7 @@ func TestGetPreKeyBundle_ConsumesOTPK(t *testing.T) {
 	client, cleanup := startMessagingServerWired(t, pool, messagingWire{UserProfiles: profiles})
 	t.Cleanup(cleanup)
 
-	bundle := validTestPreKeyBundleB64()
+	bundle := validTestPreKeyBundleB64(t)
 	_, err := client.UploadPreKeyBundle(withProfileCtx(ctx, acctOwner, profOwner), &messagingv1.UploadPreKeyBundleRequest{
 		Bundle: bundle,
 	})
@@ -293,17 +288,16 @@ func TestGetPreKeyBundle_ConsumesOTPK(t *testing.T) {
 	require.NoError(t, err)
 	firstPayload := decodePreKeyBundlePayload(t, first.GetBundle())
 	require.NotNil(t, firstPayload["pre_key_id"])
-	require.NotNil(t, firstPayload["pre_key_public"])
+	firstID := preKeyIDFromPayload(t, firstPayload)
 
 	second, err := client.GetPreKeyBundle(withProfileCtx(ctx, acctPeer, profPeer), &messagingv1.GetPreKeyBundleRequest{
 		ProfileId: profOwner.String(),
 	})
 	require.NoError(t, err)
 	secondPayload := decodePreKeyBundlePayload(t, second.GetBundle())
-	_, hasPreKeyID := secondPayload["pre_key_id"]
-	_, hasPreKeyPublic := secondPayload["pre_key_public"]
-	require.False(t, hasPreKeyID, "OTPK must be consumed after first fetch")
-	require.False(t, hasPreKeyPublic, "OTPK public key must be consumed after first fetch")
+	require.NotNil(t, secondPayload["pre_key_id"])
+	secondID := preKeyIDFromPayload(t, secondPayload)
+	require.NotEqual(t, firstID, secondID, "OTPK pool must serve next key after first fetch")
 }
 
 // TestSendMessage_E2E_WhenChatEnabled_StoresOpaqueContent documents ciphertext-at-rest in messaging_db.messages.content.

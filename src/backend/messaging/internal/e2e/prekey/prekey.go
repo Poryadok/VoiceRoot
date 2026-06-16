@@ -1,7 +1,6 @@
 package prekey
 
 import (
-	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -183,7 +182,8 @@ func ValidateForUpload(w *Wire) error {
 	return nil
 }
 
-// VerifySignedPreKeySignature checks the libsignal signed-pre-key signature (Ed25519 over serialized public key).
+// VerifySignedPreKeySignature checks the libsignal signed-pre-key signature
+// (Curve25519 identity key signing the serialized signed-pre-key public bytes).
 func VerifySignedPreKeySignature(w *Wire) error {
 	if w == nil {
 		return errors.New("prekey: bundle is nil")
@@ -197,8 +197,7 @@ func VerifySignedPreKeySignature(w *Wire) error {
 	if len(w.SignedPreKeySignature) != signatureLen {
 		return fmt.Errorf("prekey: signed_pre_key_signature must be %d bytes", signatureLen)
 	}
-	pub := ed25519.PublicKey(w.IdentityKey[1:])
-	if !ed25519.Verify(pub, w.SignedPreKeyPublic, w.SignedPreKeySignature) {
+	if !verifyCurve25519Signature(w.IdentityKey[1:], w.SignedPreKeyPublic, w.SignedPreKeySignature) {
 		return errors.New("prekey: invalid signed pre-key signature")
 	}
 	return nil

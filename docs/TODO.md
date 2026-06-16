@@ -82,12 +82,18 @@
 
 ### Batch E2E-B audit follow-ups (post-implementation)
 
-- [ ] **Pre-key signature cross-check** — server Ed25519 verify vs real `libsignal_protocol_dart` bundles (not only Go test fixtures); reject upload if Dart/Go wire mismatch.
-- [ ] **E2E file live compose test** — finish `phase15_e2e_file_live_test.dart` (encrypted upload roundtrip + decrypt preview) when MinIO/R2 up.
-- [ ] **E2E attachment download** — non-image files: decrypt + open/save UX (images only via `Image.memory` today).
-- [ ] **E2E file thumbnails** — skip server imgproc (done); optional client-side thumb after decrypt.
-- [ ] **ClamAV / scan on E2E blobs** — skip or mark `skipped` for `is_e2e` ciphertext (scanner sees noise).
-- [ ] **Auth JDBC backup IT** — `Phase15E2EKeyBackupJdbcIntegrationTest` in CI (Testcontainers).
+- [x] **Pre-key signature cross-check** — `curve25519sig.go` + committed `prekey_libsignal_golden.b64` (from `export_prekey_golden_test.dart`); upload rejects invalid sig.
+- [x] **E2E file live compose test** — `phase15_e2e_file_live_test.dart` (encrypt upload → message → peer decrypt); wired in `scripts/ci/compose-e2e-live.sh`.
+- [x] **E2E attachment download** — non-image E2E: decrypt + tap-to-save via `e2e_attachment_actions_*` in `chat_room_panel.dart`.
+- [x] **E2E file thumbnails** — server imgproc skipped for `is_e2e`; client `e2e_image_thumb.dart` + `e2eDecryptedAttachmentThumbProvider`.
+- [x] **ClamAV / scan on E2E blobs** — `scanConfirmedFile` marks `skipped` for `is_e2e` (`file_e2e_scan_test.go`).
+- [x] **Auth JDBC backup IT** — `Phase15E2EKeyBackupJdbcIntegrationTest` (Flyway `e2e_key_backups`, roundtrip, oversize); CI `backend-auth` when Docker available.
+
+**Аудит (post E2E-B follow-ups):**
+- [ ] **Pre-key golden drift** — CI/Makefile check that `prekey_libsignal_golden.b64` matches `export_prekey_golden_test.dart`; retire `sign_testutil.go` ed25519 shortcut in unit fixtures.
+- [ ] **E2E attachment UX tests** — widget coverage for `ChatRoomPanel` E2E download + thumb (live test covers API only).
+- [ ] **E2E shared media panel** — `chat_info_panel.dart` lock placeholder only; decrypt preview/download for E2E shared media.
+- [ ] **auth-service.md** — document `PutE2EKeyBackup` / `GetE2EKeyBackup` and `e2e_key_backups` table (carry-over from E2E-C).
 
 ---
 
@@ -102,9 +108,9 @@
 **Промпт-якорь:** `Phase 15 E2E — batch E2E-C tests and search`.
 
 **Аудит (post E2E-C):**
-- [ ] **Auth JDBC backup IT** — `Phase15E2EKeyBackupJdbcIntegrationTest` в CI (Testcontainers) — перенесено из E2E-B.
+- [x] **Auth JDBC backup IT** — `Phase15E2EKeyBackupJdbcIntegrationTest` in CI `backend-auth` (Testcontainers); see E2E-B.
 - [ ] **auth-service.md** — документировать `PutE2EKeyBackup` / `GetE2EKeyBackup` и таблицу `e2e_key_backups`.
-- [ ] **Pre-key signature cross-check** — server Ed25519 vs real `libsignal_protocol_dart` bundles (E2E-B).
+- [x] **Pre-key signature cross-check** — libsignal golden + `curve25519sig.go`; see E2E-B.
 
 ---
 

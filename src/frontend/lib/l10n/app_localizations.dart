@@ -3199,6 +3199,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Encrypted attachments in this chat are automatically deleted after 90 days.'**
   String get e2eFileRetentionNotice;
+
+  /// No description provided for @e2eAttachmentTapToDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to download encrypted file'**
+  String get e2eAttachmentTapToDownload;
+
+  /// No description provided for @e2eAttachmentDownloadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save attachment'**
+  String get e2eAttachmentDownloadFailed;
+
+  /// No description provided for @e2eAttachmentDecryptFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not decrypt attachment'**
+  String get e2eAttachmentDecryptFailed;
 }
 
 class _AppLocalizationsDelegate

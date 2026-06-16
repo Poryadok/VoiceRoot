@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../backend/messages_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/chat_providers.dart';
+import '../../state/e2e_providers.dart';
 import '../../state/shared_media_providers.dart';
 import '../../state/shell_providers.dart';
 import '../../theme/voice_colors.dart';
@@ -188,6 +189,17 @@ class _MediaTile extends ConsumerWidget {
     final voice = VoiceColors.of(context);
     final fileId = item.fileId;
     if (fileId == null) return const SizedBox.shrink();
+    final e2eChat = ref.watch(chatE2eEnabledProvider(chatId));
+    if (e2eChat) {
+      return InkWell(
+        key: Key('shared_media_item_${item.messageId}_${item.sortOrder}'),
+        onTap: () => _openMessage(context, ref, chatId, item.messageId),
+        child: ColoredBox(
+          color: voice.muted,
+          child: Icon(Icons.lock_outline, color: voice.textSecondary),
+        ),
+      );
+    }
     final urlAsync = ref.watch(fileAttachmentUrlProvider(fileId));
 
     return InkWell(
@@ -225,6 +237,8 @@ class _ListTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final voice = VoiceColors.of(context);
+    final e2eChat = ref.watch(chatE2eEnabledProvider(chatId));
     final title = item.isLink
         ? (item.title?.isNotEmpty == true ? item.title! : item.externalUrl!)
         : (item.originalName ?? item.attachmentType ?? 'file');
@@ -235,10 +249,13 @@ class _ListTile extends ConsumerWidget {
       leading: Icon(
         item.isLink
             ? Icons.link
+            : e2eChat && !item.isLink
+            ? Icons.lock_outline
             : item.attachmentType == 'audio' ||
                   item.attachmentType == 'voice_message'
             ? Icons.mic_outlined
             : Icons.insert_drive_file_outlined,
+        color: e2eChat && !item.isLink ? voice.textSecondary : null,
       ),
       title: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
       subtitle: subtitle != null

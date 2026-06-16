@@ -91,7 +91,7 @@ func TestValidateForUpload_RejectsShortSignature(t *testing.T) {
 }
 
 func TestVerifySignedPreKeySignature_RejectsTamperedSignature(t *testing.T) {
-	wire, err := prekey.ParseWire(validTestPreKeyBundleB64())
+	wire, err := prekey.ParseWire(loadLibsignalGoldenPreKeyBundleB64(t))
 	require.NoError(t, err)
 	require.NoError(t, prekey.VerifySignedPreKeySignature(wire))
 

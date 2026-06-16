@@ -833,5 +833,8 @@
   "e2eIdentityKeyChangedBody": "This usually happens after reinstalling the app or switching devices without a key backup. Continue only if you expected this. If unsure, compare the encryption code in chat settings.",
   "e2eIdentityKeyChangedContinue": "Continue",
   "e2eIdentityKeyChangedDistrust": "Don't trust",
-  "e2eFileRetentionNotice": "Encrypted attachments in this chat are automatically deleted after 90 days."
+  "e2eFileRetentionNotice": "Encrypted attachments in this chat are automatically deleted after 90 days.",
+  "e2eAttachmentTapToDownload": "Tap to download encrypted file",
+  "e2eAttachmentDownloadFailed": "Could not save attachment",
+  "e2eAttachmentDecryptFailed": "Could not decrypt attachment"
 }

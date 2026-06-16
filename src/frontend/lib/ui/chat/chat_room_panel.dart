@@ -38,6 +38,7 @@ import 'chat_message_list.dart';
 import 'message_reactions_row.dart';
 import 'forward_message_sheet.dart';
 import 'mention_message_content.dart';
+import 'e2e_attachment_actions.dart';
 import 'e2e_chat_settings.dart';
 import 'e2e_identity_change_banner.dart';
 import '../shell/side_panel.dart';
@@ -1464,7 +1465,7 @@ class _AttachmentPreview extends ConsumerWidget {
           chatId: chatId,
         );
         final bytesAsync =
-            ref.watch(e2eDecryptedAttachmentBytesProvider(decryptRequest));
+            ref.watch(e2eDecryptedAttachmentThumbProvider(decryptRequest));
         return Semantics(
           key: ChatRoomPanel.attachmentPreviewKey(attachment.fileId),
           label: attachment.name ??
@@ -1514,6 +1515,85 @@ class _AttachmentPreview extends ConsumerWidget {
         ),
       );
     }
+    if (attachment.isE2eEncrypted) {
+      final l10n = AppLocalizations.of(context)!;
+      final decryptRequest = E2eAttachmentDecryptRequest(
+        fileId: attachment.fileId,
+        e2eKeyWire: attachment.e2eKeyWire!,
+        senderProfileId: senderProfileId,
+        chatId: chatId,
+      );
+      final bytesAsync =
+          ref.watch(e2eDecryptedAttachmentBytesProvider(decryptRequest));
+      return Material(
+        key: ChatRoomPanel.attachmentPreviewKey(attachment.fileId),
+        color: voice.surface,
+        borderRadius: BorderRadius.circular(4),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(4),
+          onTap: bytesAsync.isLoading
+              ? null
+              : () => _downloadE2eAttachment(
+                    context,
+                    ref,
+                    decryptRequest: decryptRequest,
+                    fileName: attachment.name ?? attachment.fileId,
+                    cachedBytes: bytesAsync.valueOrNull,
+                  ),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 260),
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: voice.borderDefault),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                bytesAsync.isLoading
+                    ? SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: voice.textSecondary,
+                        ),
+                      )
+                    : Icon(
+                        Icons.lock_outline,
+                        size: 20,
+                        color: voice.textSecondary,
+                      ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        attachment.name ?? attachment.fileId,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        l10n.e2eAttachmentTapToDownload,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: voice.textSecondary,
+                            ),
+                      ),
+                      if (attachment.sizeBytes != null)
+                        Text(
+                          _formatBytes(attachment.sizeBytes!),
+                          style: Theme.of(context).textTheme.labelSmall,
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     return Container(
       key: ChatRoomPanel.attachmentPreviewKey(attachment.fileId),
       constraints: const BoxConstraints(maxWidth: 260),
@@ -1548,6 +1628,35 @@ class _AttachmentPreview extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _downloadE2eAttachment(
+    BuildContext context,
+    WidgetRef ref, {
+    required E2eAttachmentDecryptRequest decryptRequest,
+    required String fileName,
+    Uint8List? cachedBytes,
+  }) async {
+    final l10n = AppLocalizations.of(context)!;
+    final bytes = cachedBytes ??
+        await ref.read(e2eDecryptedAttachmentBytesProvider(decryptRequest).future);
+    if (!context.mounted) return;
+    if (bytes == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.e2eAttachmentDecryptFailed)),
+      );
+      return;
+    }
+    final saved = await saveDecryptedE2eAttachment(
+      bytes: bytes,
+      fileName: fileName,
+    );
+    if (!context.mounted) return;
+    if (!saved) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.e2eAttachmentDownloadFailed)),
+      );
+    }
   }
 }
 

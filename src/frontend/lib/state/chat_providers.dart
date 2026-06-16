@@ -14,6 +14,7 @@ import '../backend/messages_client.dart';
 import '../backend/realtime_client.dart';
 import '../e2e/e2e_exceptions.dart';
 import '../e2e/e2e_file_crypto.dart';
+import '../e2e/e2e_image_thumb.dart';
 import 'auth_providers.dart';
 import 'bot_deferred_providers.dart';
 import 'connectivity_providers.dart';
@@ -113,6 +114,19 @@ final e2eDecryptedAttachmentBytesProvider =
   } on Object {
     return null;
   }
+});
+
+/// Client-side thumbnail for decrypted E2E image attachments (cached per [fileId]).
+final e2eDecryptedAttachmentThumbProvider =
+    FutureProvider.family<Uint8List?, E2eAttachmentDecryptRequest>((
+  ref,
+  request,
+) async {
+  if (request.fileId.isEmpty) return null;
+  final fullBytes =
+      await ref.watch(e2eDecryptedAttachmentBytesProvider(request).future);
+  if (fullBytes == null) return null;
+  return resizeImageBytesForThumb(fullBytes);
 });
 
 /// Active DM chat id in the main column, or null.

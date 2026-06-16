@@ -1724,4 +1724,14 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get e2eFileRetentionNotice =>
       'Зашифрованные вложения в этом чате автоматически удаляются через 90 дней.';
+
+  @override
+  String get e2eAttachmentTapToDownload =>
+      'Нажмите, чтобы скачать зашифрованный файл';
+
+  @override
+  String get e2eAttachmentDownloadFailed => 'Не удалось сохранить вложение';
+
+  @override
+  String get e2eAttachmentDecryptFailed => 'Не удалось расшифровать вложение';
 }

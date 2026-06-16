@@ -770,5 +770,8 @@
   "e2eIdentityKeyChangedBody": "Так бывает после переустановки приложения или смены устройства без резервной копии. Продолжайте только если вы это ожидали. При сомнении сверьте код в настройках чата.",
   "e2eIdentityKeyChangedContinue": "Продолжить",
   "e2eIdentityKeyChangedDistrust": "Не доверять",
-  "e2eFileRetentionNotice": "Зашифрованные вложения в этом чате автоматически удаляются через 90 дней."
+  "e2eFileRetentionNotice": "Зашифрованные вложения в этом чате автоматически удаляются через 90 дней.",
+  "e2eAttachmentTapToDownload": "Нажмите, чтобы скачать зашифрованный файл",
+  "e2eAttachmentDownloadFailed": "Не удалось сохранить вложение",
+  "e2eAttachmentDecryptFailed": "Не удалось расшифровать вложение"
 }

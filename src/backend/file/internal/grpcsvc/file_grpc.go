@@ -283,6 +283,13 @@ func (s *FileGRPC) ConfirmUpload(ctx context.Context, req *filev1.ConfirmUploadR
 }
 
 func (s *FileGRPC) scanConfirmedFile(ctx context.Context, row store.FileRow) (store.FileRow, error) {
+	if row.IsE2E {
+		updated, err := s.files.ApplyScanResult(ctx, row.ID, "ready", "skipped")
+		if err != nil {
+			return store.FileRow{}, status.Error(codes.Internal, err.Error())
+		}
+		return updated, nil
+	}
 	if !shouldScan(row.OriginalName, row.MimeType) {
 		return row, nil
 	}

@@ -1716,4 +1716,13 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get e2eFileRetentionNotice =>
       'Encrypted attachments in this chat are automatically deleted after 90 days.';
+
+  @override
+  String get e2eAttachmentTapToDownload => 'Tap to download encrypted file';
+
+  @override
+  String get e2eAttachmentDownloadFailed => 'Could not save attachment';
+
+  @override
+  String get e2eAttachmentDecryptFailed => 'Could not decrypt attachment';
 }
