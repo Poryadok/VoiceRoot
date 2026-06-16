@@ -117,6 +117,8 @@ func (g *gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		g.handleAdminClientVersions(rec, r)
 	case strings.HasPrefix(r.URL.Path, "/api/v1/admin/moderation"):
 		g.handleAdminModeration(rec, r)
+	case g.handleWellKnown(rec, r):
+	case g.handleDeepLinkPublic(rec, r):
 	case strings.HasPrefix(r.URL.Path, "/api/v1/"):
 		g.handleREST(rec, r)
 	default:

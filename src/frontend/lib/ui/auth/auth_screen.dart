@@ -96,7 +96,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       key: AuthScreen.screenKey,
       backgroundColor: voice.canvas,
       body: SafeArea(
-        child: Center(
+        child: Semantics(
+          label: 'Sign in to Voice',
+          container: true,
+          child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 420),
             child: Padding(
@@ -132,29 +135,37 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
                         const SizedBox(height: 16),
-                        TextFormField(
-                          key: AuthScreen.emailFieldKey,
-                          controller: _emailController,
-                          keyboardType: TextInputType.emailAddress,
-                          autofillHints: const [AutofillHints.email],
-                          decoration: InputDecoration(
-                            labelText: l10n.authEmailLabel,
+                        Semantics(
+                          label: 'Email address',
+                          textField: true,
+                          child: TextFormField(
+                            key: AuthScreen.emailFieldKey,
+                            controller: _emailController,
+                            keyboardType: TextInputType.emailAddress,
+                            autofillHints: const [AutofillHints.email],
+                            decoration: InputDecoration(
+                              labelText: l10n.authEmailLabel,
+                            ),
+                            validator: (v) => _emailValidator(v, l10n),
                           ),
-                          validator: (v) => _emailValidator(v, l10n),
                         ),
                         const SizedBox(height: 12),
-                        TextFormField(
-                          key: AuthScreen.passwordFieldKey,
-                          controller: _passwordController,
-                          obscureText: true,
-                          autofillHints: const [AutofillHints.password],
-                          enabled: !_awaitingTotp,
-                          decoration: InputDecoration(
-                            labelText: l10n.authPasswordLabel,
-                            helperText: l10n.authPasswordHelper,
+                        Semantics(
+                          label: 'Password',
+                          textField: true,
+                          child: TextFormField(
+                            key: AuthScreen.passwordFieldKey,
+                            controller: _passwordController,
+                            obscureText: true,
+                            autofillHints: const [AutofillHints.password],
+                            enabled: !_awaitingTotp,
+                            decoration: InputDecoration(
+                              labelText: l10n.authPasswordLabel,
+                              helperText: l10n.authPasswordHelper,
+                            ),
+                            validator: (v) => _passwordValidator(v, l10n),
+                            onFieldSubmitted: (_) => _submit(false),
                           ),
-                          validator: (v) => _passwordValidator(v, l10n),
-                          onFieldSubmitted: (_) => _submit(false),
                         ),
                         if (_awaitingTotp) ...[
                           const SizedBox(height: 12),
@@ -187,21 +198,29 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                           ),
                         ],
                         const SizedBox(height: 24),
-                        VoicePrimaryButton(
-                          key: AuthScreen.loginButtonKey,
-                          onPressed: auth.isSubmitting
-                              ? null
-                              : () => _submit(false),
-                          isLoading: auth.isSubmitting,
-                          child: Text(l10n.authLogin),
+                        Semantics(
+                          button: true,
+                          label: 'Log in',
+                          child: VoicePrimaryButton(
+                            key: AuthScreen.loginButtonKey,
+                            onPressed: auth.isSubmitting
+                                ? null
+                                : () => _submit(false),
+                            isLoading: auth.isSubmitting,
+                            child: Text(l10n.authLogin),
+                          ),
                         ),
                         const SizedBox(height: 8),
-                        VoiceSecondaryButton(
-                          key: AuthScreen.registerButtonKey,
-                          onPressed: auth.isSubmitting
-                              ? null
-                              : () => _submit(true),
-                          child: Text(l10n.authRegister),
+                        Semantics(
+                          button: true,
+                          label: 'Create account',
+                          child: VoiceSecondaryButton(
+                            key: AuthScreen.registerButtonKey,
+                            onPressed: auth.isSubmitting
+                                ? null
+                                : () => _submit(true),
+                            child: Text(l10n.authRegister),
+                          ),
                         ),
                       ],
                     ),
@@ -210,6 +229,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
               ),
             ),
           ),
+        ),
         ),
       ),
     );

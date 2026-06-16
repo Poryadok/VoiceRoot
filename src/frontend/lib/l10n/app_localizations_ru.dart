@@ -1114,6 +1114,47 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsAccent => 'Акцент профиля';
 
   @override
+  String get settingsReducedMotion => 'Уменьшить анимацию';
+
+  @override
+  String get settingsHelp => 'Помощь';
+
+  @override
+  String get settingsHelpTitle => 'Помощь';
+
+  @override
+  String get settingsHelpChatsTitle => 'Чаты';
+
+  @override
+  String get settingsHelpChatsBody =>
+      'ЛС, группы и каналы — в списке чатов. Используйте папки для организации.';
+
+  @override
+  String get settingsHelpSpacesTitle => 'Спейсы';
+
+  @override
+  String get settingsHelpSpacesBody =>
+      'Вступайте в спейсы или создавайте сообщества с каналами и войс-комнатами.';
+
+  @override
+  String get settingsHelpMatchmakingTitle => 'Матчмейкинг';
+
+  @override
+  String get settingsHelpMatchmakingBody =>
+      'Ищите команду по игре и критериям во вкладке матчмейкинга.';
+
+  @override
+  String get settingsHelpVoiceTitle => 'Голос';
+
+  @override
+  String get settingsHelpVoiceBody =>
+      'Подключайтесь к войс-комнатам в спейсах или звоните из ЛС.';
+
+  @override
+  String get settingsHelpFooter =>
+      'Нужна помощь? Напишите в поддержку через настройки аккаунта.';
+
+  @override
   String get settingsSubscription => 'Подписка';
 
   @override

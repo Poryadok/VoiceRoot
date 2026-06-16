@@ -77,32 +77,54 @@ class ThreeColumnShell extends StatelessWidget {
       final width = navigationCollapsed
           ? navigationCollapsedWidth
           : navigationExpandedWidth;
-      return SizedBox(
-        key: navActiveRail,
-        width: width,
-        child: navigationChild,
+      return Semantics(
+        label: 'Navigation',
+        container: true,
+        child: SizedBox(
+          key: navActiveRail,
+          width: width,
+          child: navigationChild,
+        ),
       );
     }
 
     Widget middleColumn() => Expanded(
       flex: listFlex,
-      key: navSpaceTree,
-      child: ColoredBox(
-        color: voice.surface,
-        child: middleChild!,
+      child: Semantics(
+        label: 'Chat list',
+        container: true,
+        child: ColoredBox(
+          key: navSpaceTree,
+          color: voice.surface,
+          child: middleChild!,
+        ),
       ),
     );
 
     Widget legacyListColumn() => Expanded(
       flex: listFlex,
-      key: navChatList,
-      child: legacyList(),
+      child: Semantics(
+        label: 'Chat list',
+        container: true,
+        child: ColoredBox(
+          key: navChatList,
+          color: voice.surface,
+          child: listChild ?? const SizedBox.expand(),
+        ),
+      ),
     );
 
     Widget mainColumn() => Expanded(
       flex: mainFlex,
-      key: navOpenChat,
-      child: mainContent(),
+      child: Semantics(
+        label: 'Conversation',
+        container: true,
+        child: ColoredBox(
+          key: navOpenChat,
+          color: voice.canvas,
+          child: mainChild ?? const SizedBox.expand(),
+        ),
+      ),
     );
 
     Widget sideColumn() => SizedBox(

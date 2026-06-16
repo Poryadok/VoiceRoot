@@ -31,6 +31,13 @@ import 'state/matchmaking_search_controller.dart';
 import 'state/matchmaking_rating_controller.dart';
 import 'ui/matchmaking/match_squad_navigator.dart';
 import 'routing/app_router.dart';
+import 'routing/deep_link_controller.dart';
+import 'routing/deep_link_listener.dart';
+import 'routing/deep_link_parser.dart';
+import 'state/deep_link_navigation.dart';
+import 'state/onboarding_controller.dart';
+import 'ui/a11y/voice_shortcuts.dart';
+import 'ui/onboarding/onboarding_overlay.dart';
 import 'ui/chat/chat_room_panel.dart';
 import 'ui/core/profile_accent_dot.dart';
 import 'ui/core/voice_bottom_sheet.dart';
@@ -130,9 +137,14 @@ class _AuthenticatedRouterApp extends StatefulWidget {
 class _AuthenticatedRouterAppState extends State<_AuthenticatedRouterApp> {
   late final GoRouter _router = createVoiceGoRouter(
     shellBuilder: (context, state) => MatchSquadNavigator(
-      child: _AuthenticatedShell(locale: widget.locale),
+      child: _AuthenticatedShell(locale: widget.locale, routeState: state),
     ),
+    onDeepLinkPath: _handleRouteDeepLink,
   );
+
+  void _handleRouteDeepLink(GoRouterState state) {
+    // Web path-based deep links are handled when shell mounts.
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -148,9 +160,10 @@ class _AuthenticatedRouterAppState extends State<_AuthenticatedRouterApp> {
 }
 
 class _AuthenticatedShell extends ConsumerStatefulWidget {
-  const _AuthenticatedShell({this.locale});
+  const _AuthenticatedShell({this.locale, this.routeState});
 
   final Locale? locale;
+  final GoRouterState? routeState;
 
   @override
   ConsumerState<_AuthenticatedShell> createState() =>
@@ -161,13 +174,54 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
   var _discoverHintScheduled = false;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await ref.read(deepLinkListenerProvider).start();
+      await _handleInitialRouteLink();
+    });
+  }
+
+  Future<void> _handleInitialRouteLink() async {
+    final state = widget.routeState;
+    if (state == null) return;
+    final uri = Uri.base.replace(path: state.uri.path, query: state.uri.query);
+    if (state.uri.path == '/' || state.uri.path.isEmpty) return;
+    try {
+      final target = parseDeepLinkUrl(uri.toString());
+      await ref.read(deepLinkControllerProvider.notifier).onIncomingLink(target);
+      await resolveAndNavigateDeepLink(ref, target);
+    } catch (_) {}
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _scheduleDiscoverHintIfNeeded();
+    _handleSettingsShortcut();
+    _handleResolvedDeepLink();
+  }
+
+  void _handleSettingsShortcut() {
+    if (ref.read(settingsSheetRequestProvider)) {
+      ref.read(settingsSheetRequestProvider.notifier).state = false;
+      _openSettingsSheet();
+    }
+  }
+
+  void _handleResolvedDeepLink() {
+    final resolved = ref.read(deepLinkControllerProvider).resolved;
+    if (resolved == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await resolveAndNavigateDeepLink(ref, resolved);
+      ref.read(deepLinkControllerProvider.notifier).clearResolved();
+    });
   }
 
   void _scheduleDiscoverHintIfNeeded() {
     if (_discoverHintScheduled) return;
+    final onboarding = ref.read(onboardingControllerProvider);
+    if (onboarding.shouldShowHints) return;
     final auth = ref.read(authControllerProvider);
     if (!auth.pendingDiscoverHint) return;
     _discoverHintScheduled = true;
@@ -251,7 +305,9 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
       ),
     );
 
-    return VersionPolicyOverlay(
+    return VoiceShortcuts(
+      child: OnboardingOverlay(
+        child: VersionPolicyOverlay(
       child: CallErrorListener(
         child: Scaffold(
           backgroundColor: voice.canvas,
@@ -328,6 +384,8 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
             ],
           ),
         ),
+      ),
+      ),
       ),
     );
   }

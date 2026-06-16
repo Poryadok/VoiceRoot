@@ -1109,6 +1109,47 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsAccent => 'Profile accent';
 
   @override
+  String get settingsReducedMotion => 'Reduced motion';
+
+  @override
+  String get settingsHelp => 'Help';
+
+  @override
+  String get settingsHelpTitle => 'Help';
+
+  @override
+  String get settingsHelpChatsTitle => 'Chats';
+
+  @override
+  String get settingsHelpChatsBody =>
+      'Direct messages, groups, and channels appear in the chat list. Use folders to organize.';
+
+  @override
+  String get settingsHelpSpacesTitle => 'Spaces';
+
+  @override
+  String get settingsHelpSpacesBody =>
+      'Join or create spaces for communities with text channels and voice rooms.';
+
+  @override
+  String get settingsHelpMatchmakingTitle => 'Matchmaking';
+
+  @override
+  String get settingsHelpMatchmakingBody =>
+      'Find teammates by game and criteria from the matchmaking tab.';
+
+  @override
+  String get settingsHelpVoiceTitle => 'Voice';
+
+  @override
+  String get settingsHelpVoiceBody =>
+      'Join voice rooms in spaces or start DM calls from a chat.';
+
+  @override
+  String get settingsHelpFooter =>
+      'Need more? Contact support from your account settings.';
+
+  @override
   String get settingsSubscription => 'Subscription';
 
   @override

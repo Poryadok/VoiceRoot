@@ -1030,12 +1030,12 @@ JWT + `user_db.profiles` — [EXEC_PLAN.md](EXEC_PLAN.md). Не заменяет
 
 ### Бэкенд
 
-- [ ] **Deep links** — [deep-links.md](features/deep-links.md): `voice://` + `https://voice.gg/invite|space|chat|user|message`; Gateway redirect rules.
+- [x] **Deep links** — [deep-links.md](features/deep-links.md): `voice://` + `https://voice.gg/invite|space|chat|user|message`; Gateway redirect rules.
 
 ### Клиент
 
-- [ ] **Онбординг** — [onboarding.md](features/onboarding.md): register → create/join space → first message; contextual hints.
-- [ ] **A11y** — [accessibility.md](features/accessibility.md): focus order, Semantics labels, contrast tokens, reduced motion.
+- [x] **Онбординг** — [onboarding.md](features/onboarding.md): register → create/join space → first message; contextual hints.
+- [x] **A11y** — [accessibility.md](features/accessibility.md): focus order, Semantics labels, contrast tokens, reduced motion.
 
 ### Критерии приёмки
 

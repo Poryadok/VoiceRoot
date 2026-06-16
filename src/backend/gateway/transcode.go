@@ -254,6 +254,8 @@ func (t *transcoder) serveNamespace(w http.ResponseWriter, r *http.Request, name
 			return false
 		}
 		return t.serveStories(w, r, rest)
+	case "links":
+		return t.serveLinks(w, r, rest)
 	default:
 		return false
 	}

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../routing/deep_link_parser.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/shell_providers.dart';
 import '../../state/space_providers.dart';
@@ -50,8 +51,8 @@ class _JoinSpaceInviteSheetState extends ConsumerState<JoinSpaceInviteSheet> {
   }
 
   Future<void> _submit() async {
-    final code = _codeController.text.trim();
-    if (code.isEmpty || _submitting) return;
+    final code = extractInviteCode(_codeController.text.trim());
+    if (code == null || code.isEmpty || _submitting) return;
 
     setState(() => _submitting = true);
     final l10n = AppLocalizations.of(context)!;

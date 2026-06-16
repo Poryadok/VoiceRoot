@@ -8,10 +8,16 @@ final rootNavigatorKey = GlobalKey<NavigatorState>();
 
 typedef VoiceShellBuilder = Widget Function(BuildContext context, GoRouterState state);
 
-/// Builds the authenticated app [GoRouter] (home shell + story overlays).
+abstract final class VoiceAppRoutes {
+  static const home = '/';
+  static const invitePrefix = '/invite/';
+}
+
+/// Builds the authenticated app [GoRouter] (home shell + story overlays + deep links).
 GoRouter createVoiceGoRouter({
   required VoiceShellBuilder shellBuilder,
   List<NavigatorObserver>? observers,
+  void Function(GoRouterState state)? onDeepLinkPath,
 }) {
   return GoRouter(
     navigatorKey: rootNavigatorKey,
@@ -21,6 +27,34 @@ GoRouter createVoiceGoRouter({
       GoRoute(
         path: VoiceAppRoutes.home,
         builder: shellBuilder,
+      ),
+      GoRoute(
+        path: '/invite/:code',
+        builder: (context, state) {
+          onDeepLinkPath?.call(state);
+          return shellBuilder(context, state);
+        },
+      ),
+      GoRoute(
+        path: '/s/:spaceId',
+        builder: (context, state) {
+          onDeepLinkPath?.call(state);
+          return shellBuilder(context, state);
+        },
+      ),
+      GoRoute(
+        path: '/s/:spaceId/c/:chatId',
+        builder: (context, state) {
+          onDeepLinkPath?.call(state);
+          return shellBuilder(context, state);
+        },
+      ),
+      GoRoute(
+        path: '/ch/:chatId',
+        builder: (context, state) {
+          onDeepLinkPath?.call(state);
+          return shellBuilder(context, state);
+        },
       ),
       ...StoriesRoutes.routes(rootKey: rootNavigatorKey),
     ],

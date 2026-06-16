@@ -90,7 +90,7 @@ func restNamespace(path string) string {
 
 func isPublicRESTNamespace(namespace string) bool {
 	switch namespace {
-	case "auth", "users", "friends", "chats", "messages", "spaces", "invites", "roles", "voice", "files", "notifications", "search", "matchmaking", "moderation", "subscription", "bots", "stories", "analytics":
+	case "auth", "users", "friends", "chats", "messages", "spaces", "invites", "roles", "voice", "files", "notifications", "search", "matchmaking", "moderation", "subscription", "bots", "stories", "analytics", "links":
 		return true
 	default:
 		return false
@@ -117,5 +117,5 @@ func isBotTokenRESTRoute(path string) bool {
 }
 
 func publicRESTNamespaces() []string {
-	return []string{"auth", "users", "friends", "chats", "messages", "spaces", "invites", "roles", "voice", "files", "notifications", "search", "matchmaking", "moderation", "subscription", "bots", "stories", "analytics"}
+	return []string{"auth", "users", "friends", "chats", "messages", "spaces", "invites", "roles", "voice", "files", "notifications", "search", "matchmaking", "moderation", "subscription", "bots", "stories", "analytics", "links"}
 }

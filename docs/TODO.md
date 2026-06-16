@@ -254,6 +254,41 @@
 
 ---
 
+### Batch Phase-18 audit follow-ups (Growth & Accessibility)
+
+*Post Phase 18 implementation — gaps vs full spec.*
+
+#### Deep links
+
+- [ ] **Prod universal links** — real `voice.gg` AASA + `assetlinks.json` with production app IDs / SHA256 (Gateway serves dev placeholders).
+- [ ] **Share buttons** — copy `https://voice.gg/...` from space, chat, message, profile (invite only today).
+- [ ] **Push payload migration** — FCM/APNs use canonical `deep_link` URL instead of raw `chat_id` only.
+- [ ] **Message anchor scroll/highlight** — client scroll-to-message for `/m/{messageId}` routes.
+- [ ] **DM / profile deep link UI** — navigate to DM compose and public profile from `/dm/` and `/u/` links.
+- [ ] **Mobile device E2E** — real App Links / custom scheme on Android/iOS (CI skips device).
+
+#### Onboarding
+
+- [ ] **Coach-mark anchors** — steps 2–4 tooltips pinned to nav/search/MM widgets (modals today, not anchored overlays).
+- [ ] **Onboarding after guest register** — verify step 1 with guest account flow end-to-end.
+
+#### A11y
+
+- [ ] **Message list keyboard nav** — `↑/↓`, `R`, `E` per [accessibility.md](features/accessibility.md).
+- [ ] **Focus trap in all modals** — onboarding uses `AlertDialog`; bottom sheets need explicit trap audit.
+- [ ] **aria-live for new messages** — web semantics region (Flutter web).
+- [ ] **Manual TalkBack / VoiceOver** — pre-release checklist (not automated).
+- [ ] **Axe / contrast CI** — automated contrast ratio checks on token pairs.
+
+#### Tests & ops
+
+- [ ] **User store onboarding coverage** — run `onboarding_test.go` in CI with testcontainers.
+- [ ] **Web driver E2E** — `integration_test/phase18_deeplink_web_test.dart` for Edge/Chrome path routing.
+
+**Промпт-якорь:** `Phase 18 Growth/A11y — batch Phase-18 audit follow-ups`.
+
+---
+
 ## Сводка: что отдать агенту следующим
 
 | Если готовы… | Дайте агенту batch |

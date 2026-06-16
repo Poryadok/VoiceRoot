@@ -9,6 +9,8 @@ import '../../theme/voice_theme_providers.dart';
 import 'privacy_settings_screen.dart';
 import 'security_settings_screen.dart';
 import 'subscription_settings_screen.dart';
+import '../../settings/reduced_motion.dart';
+import 'help_sheet.dart';
 import 'verification_settings_sheet.dart';
 
 class SettingsSheet extends ConsumerWidget {
@@ -28,6 +30,7 @@ class SettingsSheet extends ConsumerWidget {
     final catalogAsync = ref.watch(voiceTokenCatalogProvider);
     final profileId = ref.watch(authControllerProvider).activeProfileId;
     final subscription = ref.watch(subscriptionProvider).valueOrNull;
+    final reducedMotion = ref.watch(reducedMotionEnabledProvider);
 
     return SafeArea(
       child: Padding(
@@ -103,6 +106,25 @@ class SettingsSheet extends ConsumerWidget {
                     builder: (_) => const SubscriptionSettingsScreen(),
                   ),
                 );
+              },
+            ),
+            const SizedBox(height: 16),
+            SwitchListTile(
+              key: const Key('settings_reduced_motion'),
+              contentPadding: EdgeInsets.zero,
+              title: Text(l10n.settingsReducedMotion),
+              value: reducedMotion,
+              onChanged: (v) =>
+                  ref.read(reducedMotionEnabledProvider.notifier).setEnabled(v),
+            ),
+            ListTile(
+              key: const Key('settings_help'),
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.help_outline),
+              title: Text(l10n.settingsHelp),
+              onTap: () {
+                Navigator.of(context).pop();
+                HelpSheet.show(context);
               },
             ),
             const SizedBox(height: 16),

@@ -2060,6 +2060,78 @@ abstract class AppLocalizations {
   /// **'Profile accent'**
   String get settingsAccent;
 
+  /// No description provided for @settingsReducedMotion.
+  ///
+  /// In en, this message translates to:
+  /// **'Reduced motion'**
+  String get settingsReducedMotion;
+
+  /// No description provided for @settingsHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Help'**
+  String get settingsHelp;
+
+  /// No description provided for @settingsHelpTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Help'**
+  String get settingsHelpTitle;
+
+  /// No description provided for @settingsHelpChatsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Chats'**
+  String get settingsHelpChatsTitle;
+
+  /// No description provided for @settingsHelpChatsBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Direct messages, groups, and channels appear in the chat list. Use folders to organize.'**
+  String get settingsHelpChatsBody;
+
+  /// No description provided for @settingsHelpSpacesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Spaces'**
+  String get settingsHelpSpacesTitle;
+
+  /// No description provided for @settingsHelpSpacesBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Join or create spaces for communities with text channels and voice rooms.'**
+  String get settingsHelpSpacesBody;
+
+  /// No description provided for @settingsHelpMatchmakingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Matchmaking'**
+  String get settingsHelpMatchmakingTitle;
+
+  /// No description provided for @settingsHelpMatchmakingBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Find teammates by game and criteria from the matchmaking tab.'**
+  String get settingsHelpMatchmakingBody;
+
+  /// No description provided for @settingsHelpVoiceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice'**
+  String get settingsHelpVoiceTitle;
+
+  /// No description provided for @settingsHelpVoiceBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Join voice rooms in spaces or start DM calls from a chat.'**
+  String get settingsHelpVoiceBody;
+
+  /// No description provided for @settingsHelpFooter.
+  ///
+  /// In en, this message translates to:
+  /// **'Need more? Contact support from your account settings.'**
+  String get settingsHelpFooter;
+
   /// No description provided for @settingsSubscription.
   ///
   /// In en, this message translates to:
