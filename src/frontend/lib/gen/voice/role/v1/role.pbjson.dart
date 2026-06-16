@@ -39,6 +39,38 @@ const BootstrapSpaceRolesResponse$json = {
 final $typed_data.Uint8List bootstrapSpaceRolesResponseDescriptor =
     $convert.base64Decode('ChtCb290c3RyYXBTcGFjZVJvbGVzUmVzcG9uc2U=');
 
+@$core.Deprecated('Use deleteRolesCreatedByProfileRequestDescriptor instead')
+const DeleteRolesCreatedByProfileRequest$json = {
+  '1': 'DeleteRolesCreatedByProfileRequest',
+  '2': [
+    {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'created_by_profile_id',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '10': 'createdByProfileId'
+    },
+  ],
+};
+
+/// Descriptor for `DeleteRolesCreatedByProfileRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List deleteRolesCreatedByProfileRequestDescriptor =
+    $convert.base64Decode(
+        'CiJEZWxldGVSb2xlc0NyZWF0ZWRCeVByb2ZpbGVSZXF1ZXN0EhkKCHNwYWNlX2lkGAEgASgJUg'
+        'dzcGFjZUlkEjEKFWNyZWF0ZWRfYnlfcHJvZmlsZV9pZBgCIAEoCVISY3JlYXRlZEJ5UHJvZmls'
+        'ZUlk');
+
+@$core.Deprecated('Use deleteRolesCreatedByProfileResponseDescriptor instead')
+const DeleteRolesCreatedByProfileResponse$json = {
+  '1': 'DeleteRolesCreatedByProfileResponse',
+};
+
+/// Descriptor for `DeleteRolesCreatedByProfileResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List deleteRolesCreatedByProfileResponseDescriptor =
+    $convert
+        .base64Decode('CiNEZWxldGVSb2xlc0NyZWF0ZWRCeVByb2ZpbGVSZXNwb25zZQ==');
+
 @$core.Deprecated('Use roleDescriptor instead')
 const Role$json = {
   '1': 'Role',
@@ -57,6 +89,18 @@ const Role$json = {
       '6': '.google.protobuf.Timestamp',
       '10': 'createdAt'
     },
+    {
+      '1': 'created_by_profile_id',
+      '3': 8,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'createdByProfileId',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_created_by_profile_id'},
   ],
 };
 
@@ -66,7 +110,8 @@ final $typed_data.Uint8List roleDescriptor = $convert.base64Decode(
     '1lGAMgASgJUgRuYW1lEikKEHBlcm1pc3Npb25zX21hc2sYBCABKARSD3Blcm1pc3Npb25zTWFz'
     'axIaCghwb3NpdGlvbhgFIAEoBVIIcG9zaXRpb24SGAoHbWFuYWdlZBgGIAEoCFIHbWFuYWdlZB'
     'I5CgpjcmVhdGVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcFIJY3JlYXRl'
-    'ZEF0');
+    'ZEF0EjYKFWNyZWF0ZWRfYnlfcHJvZmlsZV9pZBgIIAEoCUgAUhJjcmVhdGVkQnlQcm9maWxlSW'
+    'SIAQFCGAoWX2NyZWF0ZWRfYnlfcHJvZmlsZV9pZA==');
 
 @$core.Deprecated('Use createRoleRequestDescriptor instead')
 const CreateRoleRequest$json = {

@@ -1,9 +1,11 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../backend/deep_links_client.dart';
+import '../routing/app_router.dart';
 import '../routing/deep_link_parser.dart';
+import '../ui/bots/bot_install_page.dart';
 import 'auth_providers.dart';
-import 'gateway_providers.dart';
 import 'chat_providers.dart';
 import 'shell_providers.dart';
 import 'space_providers.dart';
@@ -48,6 +50,16 @@ Future<void> applyDeepLinkNavigation(
       if (spaceId != null) {
         ref.read(shellNavigationProvider).selectSpace(spaceId);
       }
+    case DeepLinkKind.bot:
+      final slug = target.botSlug;
+      if (slug == null || slug.isEmpty) return;
+      final ctx = rootNavigatorKey.currentContext;
+      if (ctx == null || !ctx.mounted) return;
+      await Navigator.of(ctx).push<void>(
+        MaterialPageRoute<void>(
+          builder: (context) => BotInstallPage(slug: slug),
+        ),
+      );
     case DeepLinkKind.profile:
     case DeepLinkKind.dm:
       break;

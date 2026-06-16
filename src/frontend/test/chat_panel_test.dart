@@ -1276,7 +1276,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Squad Chat'), findsOneWidget);
-    expect(find.text('peer-b'), findsNothing);
+    expect(find.text('peer-b'), findsOneWidget);
     expect(find.byKey(ChatRoomPanel.audioCallKey), findsNothing);
     expect(find.byKey(ChatRoomPanel.videoCallKey), findsNothing);
     expect(find.byKey(ChatRoomPanel.groupMembersKey), findsOneWidget);

@@ -150,6 +150,18 @@ INSERT INTO bots (
 	return row, plain, nil
 }
 
+func (s *BotStore) GetBotBySlug(ctx context.Context, slug string) (*BotRow, error) {
+	slug = strings.TrimSpace(slug)
+	if slug == "" {
+		return nil, ErrNotFound
+	}
+	row := s.Pool.QueryRow(ctx, `
+SELECT id, owner_account_id, name, description, avatar_url, token_hash, webhook_url, webhook_secret,
+	is_polling_mode, scopes::text, status, actor_profile_id, slug, created_at, updated_at
+FROM bots WHERE slug = $1 AND status = 'live'`, slug)
+	return scanBot(row)
+}
+
 func (s *BotStore) GetBotByID(ctx context.Context, id uuid.UUID) (*BotRow, error) {
 	row := s.Pool.QueryRow(ctx, `
 SELECT id, owner_account_id, name, description, avatar_url, token_hash, webhook_url, webhook_secret,
@@ -290,6 +302,24 @@ VALUES ($1, $2, $3, true, $4)`,
 		return uuid.Nil, err
 	}
 	return installID, nil
+}
+
+func (s *BotStore) ListWhitelistedChatIDs(ctx context.Context, botID, spaceID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := s.Pool.Query(ctx, `
+SELECT chat_id FROM bot_chat_whitelist WHERE bot_id = $1 AND space_id = $2`, botID, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
 }
 
 func (s *BotStore) UninstallFromSpace(ctx context.Context, botID, spaceID uuid.UUID) error {

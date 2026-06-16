@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	chatv1 "voice.app/voice/chat/v1"
+	botv1 "voice.app/voice/bot/v1"
 	spacev1 "voice.app/voice/space/v1"
 	userv1 "voice.app/voice/user/v1"
 )
@@ -24,6 +25,7 @@ type resolveDeepLinkResponse struct {
 	InviteCode  string `json:"invite_code,omitempty"`
 	Username    string `json:"username,omitempty"`
 	UserID      string `json:"user_id,omitempty"`
+	BotSlug     string `json:"bot_slug,omitempty"`
 	AppURI      string `json:"app_uri,omitempty"`
 	WebPath     string `json:"web_path,omitempty"`
 }
@@ -53,7 +55,7 @@ func (g *gateway) handleDeepLinkPublic(w http.ResponseWriter, r *http.Request) b
 	switch target.Kind {
 	case DeepLinkKindInvite, DeepLinkKindSpace, DeepLinkKindSpaceChat, DeepLinkKindVoiceRoom,
 		DeepLinkKindSpaceMessage, DeepLinkKindChat, DeepLinkKindChatMessage,
-		DeepLinkKindProfile, DeepLinkKindDM:
+		DeepLinkKindProfile, DeepLinkKindDM, DeepLinkKindBot:
 		g.writeDeepLinkBridgeHTML(w, target)
 		return true
 	default:
@@ -101,6 +103,8 @@ func deepLinkAppURI(t DeepLinkTarget) string {
 		return "voice://u/" + t.Username
 	case DeepLinkKindDM:
 		return "voice://dm/" + t.UserID
+	case DeepLinkKindBot:
+		return "voice://bots/" + t.BotSlug
 	default:
 		return "voice://"
 	}
@@ -126,6 +130,8 @@ func deepLinkWebPath(t DeepLinkTarget) string {
 		return "/u/" + t.Username
 	case DeepLinkKindDM:
 		return "/dm/" + t.UserID
+	case DeepLinkKindBot:
+		return "/bots/" + t.BotSlug
 	default:
 		return "/"
 	}
@@ -185,6 +191,7 @@ func (t *transcoder) resolveDeepLink(ctx context.Context, target DeepLinkTarget)
 		InviteCode:  target.InviteCode,
 		Username:    target.Username,
 		UserID:      target.UserID,
+		BotSlug:     target.BotSlug,
 		AppURI:      deepLinkAppURI(target),
 		WebPath:     deepLinkWebPath(target),
 	}
@@ -264,6 +271,14 @@ func (t *transcoder) resolveDeepLink(ctx context.Context, target DeepLinkTarget)
 		if _, err := t.clients.user.GetProfile(ctx, &userv1.GetProfileRequest{
 			By: &userv1.GetProfileRequest_ProfileId{ProfileId: target.UserID},
 		}); err != nil {
+			return out, err
+		}
+
+	case DeepLinkKindBot:
+		if t.clients.bot == nil {
+			return out, status.Error(codes.Unavailable, "bot unavailable")
+		}
+		if _, err := t.clients.bot.GetBotBySlug(ctx, &botv1.GetBotBySlugRequest{Slug: target.BotSlug}); err != nil {
 			return out, err
 		}
 

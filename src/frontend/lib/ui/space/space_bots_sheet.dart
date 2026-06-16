@@ -200,18 +200,10 @@ class _SpaceBotsSheetState extends ConsumerState<SpaceBotsSheet> {
                   return Column(
                     children: [
                       for (final entry in installed)
-                        ListTile(
-                          key: Key('installed_bot_${entry.bot.id}'),
-                          title: Text(entry.bot.name),
-                          subtitle: Text(
-                            '${entry.allowedChatIds.length} chats',
-                          ),
-                          trailing: TextButton(
-                            onPressed: _busy
-                                ? null
-                                : () => _uninstall(context, entry.bot.id),
-                            child: Text(l10n.spaceBotsUninstall),
-                          ),
+                        _InstalledBotTile(
+                          entry: entry,
+                          busy: _busy,
+                          onUninstall: () => _uninstall(context, entry.bot.id),
                         ),
                     ],
                   );
@@ -321,6 +313,59 @@ class _SpaceBotsSheetState extends ConsumerState<SpaceBotsSheet> {
           SnackBar(content: Text(l10n.chatRoomError(message))),
         );
     }
+  }
+}
+
+class _InstalledBotTile extends StatelessWidget {
+  const _InstalledBotTile({
+    required this.entry,
+    required this.busy,
+    required this.onUninstall,
+  });
+
+  final InstalledBotInfo entry;
+  final bool busy;
+  final VoidCallback onUninstall;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final voice = VoiceColors.of(context);
+    final offline = !entry.online;
+    final statusTooltip = offline ? l10n.botUnavailableTooltip : l10n.botOnlineStatus;
+
+    return Tooltip(
+      message: statusTooltip,
+      child: ListTile(
+        key: Key('installed_bot_${entry.bot.id}'),
+        enabled: !busy,
+        leading: offline
+            ? Icon(
+                Icons.circle,
+                key: Key('space_bots_offline_indicator_${entry.bot.id}'),
+                size: 10,
+                color: voice.textDisabled,
+              )
+            : Icon(
+                Icons.circle,
+                key: Key('space_bots_online_indicator_${entry.bot.id}'),
+                size: 10,
+                color: voice.profileAccent,
+              ),
+        title: Text(
+          entry.bot.name,
+          style: offline ? TextStyle(color: voice.textDisabled) : null,
+        ),
+        subtitle: Text(
+          '${entry.allowedChatIds.length} chats',
+          style: offline ? TextStyle(color: voice.textDisabled) : null,
+        ),
+        trailing: TextButton(
+          onPressed: busy ? null : onUninstall,
+          child: Text(l10n.spaceBotsUninstall),
+        ),
+      ),
+    );
   }
 }
 

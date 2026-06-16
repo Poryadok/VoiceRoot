@@ -466,6 +466,15 @@ func addComposeGroupMembers(t *testing.T, client *http.Client, base, accessToken
 	require.Equal(t, http.StatusNoContent, resp.StatusCode, "POST members body=%s", string(body))
 }
 
+// ensureComposeGroupReadyForBot adds two members so a group has ≥3 humans before bot install
+// (Chat Service requires at least 3 members when adding a bot actor to a group).
+func ensureComposeGroupReadyForBot(t *testing.T, client *http.Client, base, ownerToken, chatID string, n int64) {
+	t.Helper()
+	sessB := registerComposeUser(t, client, base, formatComposeEmail("p16-bot-member-b", n), "VoiceQaTest1!")
+	sessC := registerComposeUser(t, client, base, formatComposeEmail("p16-bot-member-c", n), "VoiceQaTest1!")
+	addComposeGroupMembers(t, client, base, ownerToken, chatID, sessB.ProfileID, sessC.ProfileID)
+}
+
 func removeComposeGroupMember(t *testing.T, client *http.Client, base, accessToken, chatID, profileID string) {
 	t.Helper()
 	req, err := http.NewRequest(http.MethodDelete, base+"/api/v1/chats/"+chatID+"/members/"+profileID, nil)

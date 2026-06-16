@@ -146,6 +146,18 @@ func (s *BotGRPC) GetBot(ctx context.Context, req *botv1.GetBotRequest) (*botv1.
 	return &botv1.GetBotResponse{Bot: botToProto(*row)}, nil
 }
 
+func (s *BotGRPC) GetBotBySlug(ctx context.Context, req *botv1.GetBotBySlugRequest) (*botv1.GetBotResponse, error) {
+	slug := strings.TrimSpace(req.GetSlug())
+	if slug == "" {
+		return nil, status.Error(codes.InvalidArgument, "slug required")
+	}
+	row, err := s.Store.GetBotBySlug(ctx, slug)
+	if err != nil {
+		return nil, mapStoreErr(err)
+	}
+	return &botv1.GetBotResponse{Bot: botToProto(*row)}, nil
+}
+
 func (s *BotGRPC) ListBots(ctx context.Context, _ *botv1.ListBotsRequest) (*botv1.ListBotsResponse, error) {
 	owner, ok := authctx.AccountID(ctx)
 	if !ok {
@@ -414,6 +426,10 @@ func botToProto(row store.BotRow) *botv1.Bot {
 	if row.ActorProfileID != uuid.Nil {
 		id := row.ActorProfileID.String()
 		b.ActorProfileId = &id
+	}
+	if row.Slug != "" {
+		slug := row.Slug
+		b.Slug = &slug
 	}
 	return b
 }

@@ -79,6 +79,40 @@
 
 **Не через этот REST-префикс:** [Federation Service](federation-service.md) (S2S gRPC, отдельный ingress / mTLS). Публичные Flutter-клиенты не вызывают Analytics.
 
+**Фаза 16 — Bot API:** namespace `GET/POST/PATCH/DELETE /api/v1/bots/**` транскодится в `BotService` ([bot-service.md](bot-service.md)). Реализация: `transcode_bots.go`. Два режима auth:
+
+- **JWT** (`Authorization: Bearer …`) — портал, клиент, install/uninstall, slash autocomplete/interactions.
+- **Bot token** (`Authorization: Bot <token>`) — маршруты `…/bots/me/**` (polling, defer/complete interaction, send/edit message).
+
+| Method | Route | gRPC | Auth | Тело / query |
+|--------|-------|------|------|----------------|
+| `POST` | `/api/v1/bots` | `RegisterBot` | JWT | `name`, `description`, `scopes_json` |
+| `GET` | `/api/v1/bots` | `ListBots` | JWT | — |
+| `GET` | `/api/v1/bots/{bot_id}` | `GetBot` | JWT | — |
+| `PATCH` | `/api/v1/bots/{bot_id}` | `UpdateBot` | JWT | partial `Bot` fields |
+| `DELETE` | `/api/v1/bots/{bot_id}` | `DeleteBot` | JWT | — |
+| `GET` | `/api/v1/bots/slug/{slug}` | `GetBotBySlug` | JWT | публичный lookup по `slug` (deep link `voice.gg` / `voice.app`) |
+| `POST` | `/api/v1/bots/{bot_id}/token/regenerate` | `RegenerateToken` | JWT | — |
+| `POST` | `/api/v1/bots/{bot_id}/manifest` | `ApplyManifest` | JWT | `manifest_yaml` |
+| `POST` | `/api/v1/bots/manifest/validate` | `ValidateManifest` | JWT | `manifest_yaml` |
+| `GET` | `/api/v1/bots/{bot_id}/webhook` | `GetWebhookURL` | JWT | — |
+| `PATCH` | `/api/v1/bots/{bot_id}/webhook` | `SetWebhookURL` | JWT | `url` |
+| `POST` | `/api/v1/bots/{bot_id}/spaces/{space_id}/install` | `InstallBotInSpace` | JWT | `allowed_chats`, `acknowledge_privileged_scopes` |
+| `DELETE` | `/api/v1/bots/{bot_id}/spaces/{space_id}` | `UninstallBotFromSpace` | JWT | — |
+| `GET` | `/api/v1/bots/spaces/{space_id}/installed` | `ListInstalledBots` | JWT | `InstalledBot.online` из `bot_presence` |
+| `GET` | `/api/v1/bots/chats/{chat_id}` | `ListBotsInChat` | JWT | `space_id`, `chat_type` (default `CHAT_TYPE_CHANNEL`) |
+| `PATCH` | `/api/v1/bots/{bot_id}/chats/{chat_id}/enabled` | `SetBotChatEnabled` | JWT | `enabled`, optional `chat`, `space_id` |
+| `GET` | `/api/v1/bots/commands` | `ListSlashCommandsForChat` | JWT | `chat_id`, `chat_type`; `online` всегда в JSON (`EmitUnpopulated`) |
+| `POST` | `/api/v1/bots/interactions` | `ExecuteSlashInteraction` | JWT | `chat`, `bot_id`, `command_name`, `options_json` |
+| `POST` | `/api/v1/bots/autocomplete` | `AutocompleteSlashOption` | JWT | `chat`, `bot_id`, `command_name`, `option_name`, `focused_value`, `options_json` |
+| `GET` | `/api/v1/bots/me/interactions/poll` | `PollEvents` (stream → JSON array) | Bot token | — |
+| `POST` | `/api/v1/bots/me/interactions/defer` | `DeferResponse` | Bot token | `interaction_token` |
+| `POST` | `/api/v1/bots/me/interactions/complete` | `CompleteInteraction` | Bot token | `interaction_token`, `content`, `is_ephemeral`, `deferred` |
+| `POST` | `/api/v1/bots/me/messages` | `SendBotMessage` | Bot token | `chat`, `content`, optional `thread_parent_id`, `interaction_token` |
+| `PATCH` | `/api/v1/bots/me/messages/{message_id}` | `EditBotMessage` | Bot token | `content` |
+
+**gRPC-only (нет REST transcoding):** `TouchPresence`, `AssignBotRole`, `RevokeBotRole`, `ListSpaceMembersForBot`, `CreateBotChat`, `GetChatMessagesForBot` — см. [bot-service.md](bot-service.md) и открытые пункты в [TODO.md](../TODO.md) (BOT-C).
+
 ## Маршруты персонала (Admin API)
 
 `/api/v1/analytics/**` — для **React Admin Panel** и внутренних операторов. После валидации JWT Gateway проверяет, что в claims есть роль персонала (набор имён и источник истины — Auth / Role; например платформенный staff и/или доступ к модераторской панели). Без этого — **403 Forbidden**. Все вызовы с чувствительными отчётами и **export** должны писаться в audit log (subject, маршрут, время) на стороне Analytics или общего аудита.

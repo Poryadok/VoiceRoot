@@ -172,6 +172,16 @@ class RoleServiceClient extends $grpc.Client {
     return $createUnaryCall(_$bootstrapSpaceRoles, request, options: options);
   }
 
+  /// BOT-B: remove custom roles created by a profile (e.g. bot actor on uninstall).
+  $grpc.ResponseFuture<$0.DeleteRolesCreatedByProfileResponse>
+      deleteRolesCreatedByProfile(
+    $0.DeleteRolesCreatedByProfileRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$deleteRolesCreatedByProfile, request,
+        options: options);
+  }
+
   // method descriptors
 
   static final _$createRole =
@@ -271,6 +281,12 @@ class RoleServiceClient extends $grpc.Client {
       '/voice.role.v1.RoleService/BootstrapSpaceRoles',
       ($0.BootstrapSpaceRolesRequest value) => value.writeToBuffer(),
       $0.BootstrapSpaceRolesResponse.fromBuffer);
+  static final _$deleteRolesCreatedByProfile = $grpc.ClientMethod<
+          $0.DeleteRolesCreatedByProfileRequest,
+          $0.DeleteRolesCreatedByProfileResponse>(
+      '/voice.role.v1.RoleService/DeleteRolesCreatedByProfile',
+      ($0.DeleteRolesCreatedByProfileRequest value) => value.writeToBuffer(),
+      $0.DeleteRolesCreatedByProfileResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.role.v1.RoleService')
@@ -437,6 +453,16 @@ abstract class RoleServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.BootstrapSpaceRolesRequest.fromBuffer(value),
         ($0.BootstrapSpaceRolesResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.DeleteRolesCreatedByProfileRequest,
+            $0.DeleteRolesCreatedByProfileResponse>(
+        'DeleteRolesCreatedByProfile',
+        deleteRolesCreatedByProfile_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.DeleteRolesCreatedByProfileRequest.fromBuffer(value),
+        ($0.DeleteRolesCreatedByProfileResponse value) =>
+            value.writeToBuffer()));
   }
 
   $async.Future<$0.CreateRoleResponse> createRole_Pre($grpc.ServiceCall $call,
@@ -603,4 +629,14 @@ abstract class RoleServiceBase extends $grpc.Service {
 
   $async.Future<$0.BootstrapSpaceRolesResponse> bootstrapSpaceRoles(
       $grpc.ServiceCall call, $0.BootstrapSpaceRolesRequest request);
+
+  $async.Future<$0.DeleteRolesCreatedByProfileResponse>
+      deleteRolesCreatedByProfile_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.DeleteRolesCreatedByProfileRequest> $request) async {
+    return deleteRolesCreatedByProfile($call, await $request);
+  }
+
+  $async.Future<$0.DeleteRolesCreatedByProfileResponse>
+      deleteRolesCreatedByProfile($grpc.ServiceCall call,
+          $0.DeleteRolesCreatedByProfileRequest request);
 }

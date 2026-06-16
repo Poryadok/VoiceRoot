@@ -314,6 +314,17 @@ func (t *transcoder) serveBots(w http.ResponseWriter, r *http.Request, rest stri
 		}
 		return false
 
+	case r.Method == http.MethodGet && strings.HasPrefix(rest, "slug/"):
+		slug := strings.TrimPrefix(rest, "slug/")
+		slug = strings.Trim(slug, "/")
+		resp, err := t.clients.bot.GetBotBySlug(ctx, &botv1.GetBotBySlugRequest{Slug: slug})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
 	case r.Method == http.MethodGet && rest != "" && !strings.Contains(rest, "/"):
 		resp, err := t.clients.bot.GetBot(ctx, &botv1.GetBotRequest{BotId: rest})
 		if err != nil {

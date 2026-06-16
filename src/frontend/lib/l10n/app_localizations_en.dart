@@ -317,6 +317,70 @@ class AppLocalizationsEn extends AppLocalizations {
   String get botUnavailableTooltip => 'Bot unavailable';
 
   @override
+  String get botOnlineStatus => 'Bot online';
+
+  @override
+  String get botOfflineStatus => 'Bot offline';
+
+  @override
+  String get botInstallTitle => 'Install bot';
+
+  @override
+  String get botInstallDescriptionHeading => 'About';
+
+  @override
+  String get botInstallScopesHeading => 'Permissions';
+
+  @override
+  String get botInstallCommandsHeading => 'Commands';
+
+  @override
+  String get botInstallCommandsEmpty =>
+      'Slash commands will appear here once registered.';
+
+  @override
+  String get botInstallWhitelistHeading => 'Install to space';
+
+  @override
+  String get botInstallSelectSpace => 'Choose a space';
+
+  @override
+  String get botInstallNoSpaces =>
+      'Join or create a space to install this bot.';
+
+  @override
+  String get botInstallConfirm => 'Install bot';
+
+  @override
+  String slashOptionPickUser(String name) {
+    return 'User: $name';
+  }
+
+  @override
+  String slashOptionPickChannel(String name) {
+    return 'Channel: $name';
+  }
+
+  @override
+  String slashOptionPickRole(String name) {
+    return 'Role: $name';
+  }
+
+  @override
+  String slashOptionPickAttachment(String name) {
+    return 'Attachment: $name';
+  }
+
+  @override
+  String slashOptionAttachmentSelected(String fileName) {
+    return 'Selected: $fileName';
+  }
+
+  @override
+  String get slashOptionPickerUnavailable =>
+      'Picker unavailable in this chat context.';
+
+  @override
   String get slashCommandRun => 'Run command';
 
   @override

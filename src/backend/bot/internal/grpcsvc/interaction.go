@@ -133,18 +133,50 @@ func (s *BotGRPC) UninstallBotFromSpace(ctx context.Context, req *botv1.Uninstal
 			return nil, status.Error(codes.PermissionDenied, "SPACE_MANAGE_BOTS required")
 		}
 	}
+	botRow, err := s.Store.GetBotByID(ctx, botID)
+	if err != nil {
+		return nil, mapStoreErr(err)
+	}
+	chatIDs, _ := s.Store.ListWhitelistedChatIDs(ctx, botID, spaceID)
+	s2sCtx := s2s.ForwardIncomingMetadata(ctx)
+	if s.Role != nil {
+		_, _ = s.Role.DeleteRolesCreatedByProfile(s2sCtx, &rolev1.DeleteRolesCreatedByProfileRequest{
+			SpaceId:            spaceID.String(),
+			CreatedByProfileId: botRow.ActorProfileID.String(),
+		})
+		memberRoles, merr := s.Role.GetMemberRoles(s2sCtx, &rolev1.GetMemberRolesRequest{
+			SpaceId:   spaceID.String(),
+			ProfileId: botRow.ActorProfileID.String(),
+		})
+		if merr == nil {
+			for _, role := range memberRoles.GetRoleList().GetRoles() {
+				_, _ = s.Role.RevokeRole(s2sCtx, &rolev1.RevokeRoleRequest{
+					SpaceId:   spaceID.String(),
+					ProfileId: botRow.ActorProfileID.String(),
+					RoleId:    role.GetId(),
+				})
+			}
+		}
+	}
+	if s.Messaging != nil && len(chatIDs) > 0 {
+		ids := make([]string, 0, len(chatIDs))
+		for _, cid := range chatIDs {
+			ids = append(ids, cid.String())
+		}
+		_, _ = s.Messaging.UnpinMessagesBySenderInChats(s2sCtx, &messagingv1.UnpinMessagesBySenderInChatsRequest{
+			SenderProfileId: botRow.ActorProfileID.String(),
+			ChatIds:         ids,
+		})
+	}
 	if err := s.Store.UninstallFromSpace(ctx, botID, spaceID); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	if s.Space != nil {
-		botRow, err := s.Store.GetBotByID(ctx, botID)
-		if err == nil && botRow != nil {
-			spaceCtx := s2s.ForwardIncomingMetadata(ctx)
-			_, _ = s.Space.RemoveBotMember(spaceCtx, &spacev1.RemoveBotMemberRequest{
-				SpaceId:   spaceID.String(),
-				ProfileId: botRow.ActorProfileID.String(),
-			})
-		}
+		spaceCtx := s2s.ForwardIncomingMetadata(ctx)
+		_, _ = s.Space.RemoveBotMember(spaceCtx, &spacev1.RemoveBotMemberRequest{
+			SpaceId:   spaceID.String(),
+			ProfileId: botRow.ActorProfileID.String(),
+		})
 	}
 	return &botv1.UninstallBotFromSpaceResponse{}, nil
 }
@@ -188,6 +220,7 @@ WHERE i.space_id = $1 AND b.status = 'live'`, spaceID)
 			Bot:            botToProto(row),
 			InstallationId: installID.String(),
 			AllowedChats:   refs,
+			Online:         s.isBotOnline(ctx, row.ID),
 		})
 	}
 	return &botv1.ListInstalledBotsResponse{InstalledBots: out}, nil

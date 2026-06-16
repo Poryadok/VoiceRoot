@@ -43,6 +43,8 @@ service MessagingService {
   rpc PinMessage(PinMessageRequest) returns (PinMessageResponse);
   rpc UnpinMessage(UnpinMessageRequest) returns (UnpinMessageResponse);
   rpc GetPinnedMessages(GetPinnedMessagesRequest) returns (GetPinnedMessagesResponse);
+  // BOT-B: bulk unpin for bot uninstall cleanup (sender_profile_id + chat_ids).
+  rpc UnpinMessagesBySenderInChats(UnpinMessagesBySenderInChatsRequest) returns (UnpinMessagesBySenderInChatsResponse);
 
   rpc ForwardMessage(ForwardMessageRequest) returns (ForwardMessageResponse);
 
@@ -292,6 +294,13 @@ message UploadPreKeyBundleRequest {
 }
 
 message UploadPreKeyBundleResponse {}
+
+message UnpinMessagesBySenderInChatsRequest {
+  string sender_profile_id = 1;
+  repeated string chat_ids = 2;
+}
+
+message UnpinMessagesBySenderInChatsResponse {}
 
 message GetPreKeyBundleRequest {
   string profile_id = 1;

@@ -12,6 +12,7 @@ COPY messaging/pb/voice/events/go.mod ./messaging/pb/voice/events/
 COPY role/pb/voice/role/go.mod ./role/pb/voice/role/
 COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
 COPY user/pb/voice/user/go.mod ./user/pb/voice/user/
+COPY voice/pb/voice/space/go.mod ./voice/pb/voice/space/
 RUN cd bot && go mod download
 COPY pkg ./pkg
 COPY user/pb/voice/common ./user/pb/voice/common
@@ -21,6 +22,7 @@ COPY chat/pb/voice/chat ./chat/pb/voice/chat
 COPY messaging/pb/voice/messaging ./messaging/pb/voice/messaging
 COPY messaging/pb/voice/events ./messaging/pb/voice/events
 COPY role/pb/voice/role ./role/pb/voice/role
+COPY voice/pb/voice/space ./voice/pb/voice/space
 COPY bot ./bot
 COPY migrations/bot_db ./migrations/bot_db
 WORKDIR /src/bot

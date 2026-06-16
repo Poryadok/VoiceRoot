@@ -644,6 +644,108 @@ abstract class AppLocalizations {
   /// **'Bot unavailable'**
   String get botUnavailableTooltip;
 
+  /// No description provided for @botOnlineStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Bot online'**
+  String get botOnlineStatus;
+
+  /// No description provided for @botOfflineStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Bot offline'**
+  String get botOfflineStatus;
+
+  /// No description provided for @botInstallTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Install bot'**
+  String get botInstallTitle;
+
+  /// No description provided for @botInstallDescriptionHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'About'**
+  String get botInstallDescriptionHeading;
+
+  /// No description provided for @botInstallScopesHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Permissions'**
+  String get botInstallScopesHeading;
+
+  /// No description provided for @botInstallCommandsHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Commands'**
+  String get botInstallCommandsHeading;
+
+  /// No description provided for @botInstallCommandsEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Slash commands will appear here once registered.'**
+  String get botInstallCommandsEmpty;
+
+  /// No description provided for @botInstallWhitelistHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Install to space'**
+  String get botInstallWhitelistHeading;
+
+  /// No description provided for @botInstallSelectSpace.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a space'**
+  String get botInstallSelectSpace;
+
+  /// No description provided for @botInstallNoSpaces.
+  ///
+  /// In en, this message translates to:
+  /// **'Join or create a space to install this bot.'**
+  String get botInstallNoSpaces;
+
+  /// No description provided for @botInstallConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Install bot'**
+  String get botInstallConfirm;
+
+  /// No description provided for @slashOptionPickUser.
+  ///
+  /// In en, this message translates to:
+  /// **'User: {name}'**
+  String slashOptionPickUser(String name);
+
+  /// No description provided for @slashOptionPickChannel.
+  ///
+  /// In en, this message translates to:
+  /// **'Channel: {name}'**
+  String slashOptionPickChannel(String name);
+
+  /// No description provided for @slashOptionPickRole.
+  ///
+  /// In en, this message translates to:
+  /// **'Role: {name}'**
+  String slashOptionPickRole(String name);
+
+  /// No description provided for @slashOptionPickAttachment.
+  ///
+  /// In en, this message translates to:
+  /// **'Attachment: {name}'**
+  String slashOptionPickAttachment(String name);
+
+  /// No description provided for @slashOptionAttachmentSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected: {fileName}'**
+  String slashOptionAttachmentSelected(String fileName);
+
+  /// No description provided for @slashOptionPickerUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Picker unavailable in this chat context.'**
+  String get slashOptionPickerUnavailable;
+
   /// No description provided for @slashCommandRun.
   ///
   /// In en, this message translates to:

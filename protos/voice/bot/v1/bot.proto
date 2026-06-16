@@ -22,6 +22,7 @@ service BotService {
   rpc UpdateBot(UpdateBotRequest) returns (UpdateBotResponse);
   rpc DeleteBot(DeleteBotRequest) returns (DeleteBotResponse);
   rpc GetBot(GetBotRequest) returns (GetBotResponse);
+  rpc GetBotBySlug(GetBotBySlugRequest) returns (GetBotResponse);
   rpc ListBots(ListBotsRequest) returns (ListBotsResponse);
   rpc RegenerateToken(RegenerateTokenRequest) returns (RegenerateTokenResponse);
 
@@ -81,6 +82,7 @@ message Bot {
   optional BotLifecycleStatus status_enum = 11;
   // Actor profile used as sender_profile_id for bot messages.
   optional string actor_profile_id = 12;
+  optional string slug = 13;
 }
 
 message RegisterBotRequest {
@@ -103,6 +105,10 @@ message DeleteBotRequest {
 
 message GetBotRequest {
   string bot_id = 1;
+}
+
+message GetBotBySlugRequest {
+  string slug = 1;
 }
 
 message ListBotsRequest {}
@@ -276,6 +282,7 @@ message InstalledBot {
   Bot bot = 1;
   string installation_id = 2;
   repeated voice.chat.v1.ChatRef allowed_chats = 3;
+  bool online = 4;
 }
 
 message ListInstalledBotsResponse {

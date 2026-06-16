@@ -63,12 +63,14 @@ func scanRoleRow(row pgx.Row) (RoleRow, error) {
 	var r RoleRow
 	var perms int64
 	var isSystem bool
-	err := row.Scan(&r.ID, &r.SpaceID, &r.Name, &isSystem, &r.Position, &perms)
+	var createdBy *uuid.UUID
+	err := row.Scan(&r.ID, &r.SpaceID, &r.Name, &isSystem, &r.Position, &perms, &createdBy)
 	if err != nil {
 		return RoleRow{}, err
 	}
 	r.PermissionsMask = uint64(perms)
 	r.Managed = isSystem
+	r.CreatedByProfileID = createdBy
 	return r, nil
 }
 
@@ -78,7 +80,7 @@ func (s *RoleStore) ListRoles(ctx context.Context, spaceID uuid.UUID) ([]RoleRow
 		return nil, errors.New("role store: pool not configured")
 	}
 	rows, err := s.Pool.Query(ctx, `
-SELECT id, space_id, name, is_system, position, permissions
+SELECT id, space_id, name, is_system, position, permissions, created_by_profile_id
 FROM roles
 WHERE space_id = $1
 ORDER BY position DESC, name ASC
@@ -101,7 +103,7 @@ ORDER BY position DESC, name ASC
 // GetRoleByID loads a single role.
 func (s *RoleStore) GetRoleByID(ctx context.Context, roleID uuid.UUID) (*RoleRow, error) {
 	row := s.Pool.QueryRow(ctx, `
-SELECT id, space_id, name, is_system, position, permissions
+SELECT id, space_id, name, is_system, position, permissions, created_by_profile_id
 FROM roles WHERE id = $1
 `, roleID)
 	r, err := scanRoleRow(row)
@@ -141,7 +143,7 @@ func (s *RoleStore) GetMemberRoles(ctx context.Context, spaceID, profileID uuid.
 		return nil, errors.New("role store: pool not configured")
 	}
 	rows, err := s.Pool.Query(ctx, `
-SELECT r.id, r.space_id, r.name, r.is_system, r.position, r.permissions
+SELECT r.id, r.space_id, r.name, r.is_system, r.position, r.permissions, r.created_by_profile_id
 FROM member_roles mr
 JOIN roles r ON r.id = mr.role_id
 WHERE mr.space_id = $1 AND mr.profile_id = $2
@@ -368,6 +370,21 @@ WHERE id = $1
 	return s.GetRoleByID(ctx, roleID)
 }
 
+// DeleteRolesCreatedByProfile removes non-system roles created by profileID in spaceID.
+func (s *RoleStore) DeleteRolesCreatedByProfile(ctx context.Context, spaceID, profileID uuid.UUID) (int64, error) {
+	if s == nil || s.Pool == nil {
+		return 0, errors.New("role store: pool not configured")
+	}
+	tag, err := s.Pool.Exec(ctx, `
+DELETE FROM roles
+WHERE space_id = $1 AND created_by_profile_id = $2 AND is_system = false
+`, spaceID, profileID)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
+}
+
 // DeleteRole removes a non-system role.
 func (s *RoleStore) DeleteRole(ctx context.Context, roleID uuid.UUID) error {
 	row, err := s.GetRoleByID(ctx, roleID)
@@ -521,7 +538,7 @@ func (s *RoleStore) GetDefaultJoinRole(ctx context.Context, spaceID uuid.UUID) (
 		return nil, errors.New("role store: pool not configured")
 	}
 	row := s.Pool.QueryRow(ctx, `
-SELECT id, space_id, name, is_system, position, permissions
+SELECT id, space_id, name, is_system, position, permissions, created_by_profile_id
 FROM roles WHERE space_id = $1 AND is_default_join = true
 LIMIT 1
 `, spaceID)

@@ -35,6 +35,9 @@ service RoleService {
 
   // Called by Space Service after CreateSpace — seeds system roles and assigns Owner.
   rpc BootstrapSpaceRoles(BootstrapSpaceRolesRequest) returns (BootstrapSpaceRolesResponse);
+
+  // BOT-B: remove custom roles created by a profile (e.g. bot actor on uninstall).
+  rpc DeleteRolesCreatedByProfile(DeleteRolesCreatedByProfileRequest) returns (DeleteRolesCreatedByProfileResponse);
 }
 
 message BootstrapSpaceRolesRequest {
@@ -44,6 +47,13 @@ message BootstrapSpaceRolesRequest {
 
 message BootstrapSpaceRolesResponse {}
 
+message DeleteRolesCreatedByProfileRequest {
+  string space_id = 1;
+  string created_by_profile_id = 2;
+}
+
+message DeleteRolesCreatedByProfileResponse {}
+
 message Role {
   string id = 1;
   string space_id = 2;
@@ -52,6 +62,7 @@ message Role {
   int32 position = 5;
   bool managed = 6;
   google.protobuf.Timestamp created_at = 7;
+  optional string created_by_profile_id = 8;
 }
 
 message CreateRoleRequest {

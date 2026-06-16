@@ -12,12 +12,13 @@ type RoleStore struct {
 
 // RoleRow is a roles table row.
 type RoleRow struct {
-	ID              uuid.UUID
-	SpaceID         uuid.UUID
-	Name            string
-	PermissionsMask uint64
-	Position        int32
-	Managed         bool
+	ID                  uuid.UUID
+	SpaceID             uuid.UUID
+	Name                string
+	PermissionsMask     uint64
+	Position            int32
+	Managed             bool
+	CreatedByProfileID  *uuid.UUID
 }
 
 // OverrideRow is a chat or voice permission override with role metadata.

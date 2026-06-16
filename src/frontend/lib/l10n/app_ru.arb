@@ -161,6 +161,58 @@
   "slashCommandsLoadError": "Не удалось загрузить команды ботов.",
   "slashCommandsEmpty": "В этом чате нет команд ботов.",
   "botUnavailableTooltip": "Бот недоступен",
+  "botOnlineStatus": "Бот в сети",
+  "botOfflineStatus": "Бот офлайн",
+  "botInstallTitle": "Установка бота",
+  "botInstallDescriptionHeading": "Описание",
+  "botInstallScopesHeading": "Разрешения",
+  "botInstallCommandsHeading": "Команды",
+  "botInstallCommandsEmpty": "Slash-команды появятся после регистрации.",
+  "botInstallWhitelistHeading": "Установить в спейс",
+  "botInstallSelectSpace": "Выберите спейс",
+  "botInstallNoSpaces": "Вступите или создайте спейс, чтобы установить бота.",
+  "botInstallConfirm": "Установить бота",
+  "slashOptionPickUser": "Пользователь: {name}",
+  "@slashOptionPickUser": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "slashOptionPickChannel": "Канал: {name}",
+  "@slashOptionPickChannel": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "slashOptionPickRole": "Роль: {name}",
+  "@slashOptionPickRole": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "slashOptionPickAttachment": "Вложение: {name}",
+  "@slashOptionPickAttachment": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "slashOptionAttachmentSelected": "Выбрано: {fileName}",
+  "@slashOptionAttachmentSelected": {
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+  "slashOptionPickerUnavailable": "Выбор недоступен в этом чате.",
   "slashCommandRun": "Выполнить команду",
   "chatBotsSectionTitle": "Боты",
   "chatBotsLoadError": "Не удалось загрузить ботов для чата.",

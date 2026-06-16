@@ -106,6 +106,8 @@ class VoiceBotSummary {
     required this.description,
     required this.scopesJson,
     this.actorProfileId,
+    this.slug,
+    this.avatarUrl,
   });
 
   final String id;
@@ -113,6 +115,8 @@ class VoiceBotSummary {
   final String description;
   final String scopesJson;
   final String? actorProfileId;
+  final String? slug;
+  final String? avatarUrl;
 
   factory VoiceBotSummary.fromProto(bot_pb.Bot bot) {
     return VoiceBotSummary(
@@ -121,6 +125,8 @@ class VoiceBotSummary {
       description: bot.description,
       scopesJson: bot.scopesJson,
       actorProfileId: bot.hasActorProfileId() ? bot.actorProfileId : null,
+      slug: bot.hasSlug() ? bot.slug : null,
+      avatarUrl: bot.hasAvatarUrl() ? bot.avatarUrl : null,
     );
   }
 }
@@ -130,17 +136,20 @@ class InstalledBotInfo {
     required this.bot,
     required this.installationId,
     required this.allowedChatIds,
+    this.online = false,
   });
 
   final VoiceBotSummary bot;
   final String installationId;
   final List<String> allowedChatIds;
+  final bool online;
 
   factory InstalledBotInfo.fromProto(bot_pb.InstalledBot installed) {
     return InstalledBotInfo(
       bot: VoiceBotSummary.fromProto(installed.bot),
       installationId: installed.installationId,
       allowedChatIds: installed.allowedChats.map((c) => c.id).toList(),
+      online: installed.online,
     );
   }
 }
@@ -308,6 +317,23 @@ class VoiceBotsClient {
   }) async {
     final result = await _gateway.getProto(
       _gateway.resolve('/api/v1/bots/$botId'),
+      authorization: authorization,
+      createEmpty: bot_pb.GetBotResponse.create,
+    );
+    return _map(
+      result,
+      (data) => VoiceBotSummary.fromProto(
+        (data as bot_pb.GetBotResponse).bot,
+      ),
+    );
+  }
+
+  Future<BotsApiResult<VoiceBotSummary>> getBotBySlug({
+    required String authorization,
+    required String slug,
+  }) async {
+    final result = await _gateway.getProto(
+      _gateway.resolve('/api/v1/bots/slug/$slug'),
       authorization: authorization,
       createEmpty: bot_pb.GetBotResponse.create,
     );

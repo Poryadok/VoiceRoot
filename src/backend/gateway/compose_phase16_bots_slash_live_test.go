@@ -39,6 +39,7 @@ func TestComposePhase16BotsSlash_live(t *testing.T) {
 	done := make(chan struct{})
 	go composePollingPingBot(client, base, botToken, done)
 	defer close(done)
+	waitComposeBotOnline(t, client, base, sess.AccessToken, chatID, 15*time.Second)
 
 	payload, _ := json.Marshal(map[string]any{
 		"chat":         map[string]string{"id": chatID, "type": "CHAT_TYPE_GROUP"},
@@ -93,6 +94,7 @@ func TestComposePhase16BotsSlashDeferred_live(t *testing.T) {
 	done := make(chan struct{})
 	go composePollingDeferBot(client, base, botToken, chatID, done)
 	defer close(done)
+	waitComposeBotOnline(t, client, base, sess.AccessToken, chatID, 15*time.Second)
 
 	payload, _ := json.Marshal(map[string]any{
 		"chat":         map[string]string{"id": chatID, "type": "CHAT_TYPE_GROUP"},
@@ -133,6 +135,7 @@ func TestComposePhase16BotsOfflineGreyout_live(t *testing.T) {
 	sess := registerComposeUser(t, client, base, formatComposeEmail("p16-greyout", n), "VoiceQaTest1!")
 	spaceID := createComposeSpace(t, client, base, sess.AccessToken, fmt.Sprintf("Bots Greyout %d", n), "phase16")
 	chatID := createComposeGroup(t, client, base, sess.AccessToken, fmt.Sprintf("bots-greyout-%d", n))
+	ensureComposeGroupReadyForBot(t, client, base, sess.AccessToken, chatID, n)
 
 	botID, _ := registerComposeBot(t, client, base, sess.AccessToken, fmt.Sprintf("GreyoutBot-%d", n))
 	applyComposeBotManifestPolling(t, client, base, sess.AccessToken, botID)
@@ -158,6 +161,60 @@ func TestComposePhase16BotsOfflineGreyout_live(t *testing.T) {
 	require.NotEmpty(t, parsed.Commands, "expected slash commands after install")
 	require.False(t, parsed.Commands[0].Online,
 		"bot without poll/presence must be offline (online:false), body=%s", string(body))
+}
+
+// TestComposePhase16BotsPerChatToggle_live disables a bot in one chat via REST PATCH
+// while slash commands remain available in another whitelisted chat (BOT-B).
+func TestComposePhase16BotsPerChatToggle_live(t *testing.T) {
+	if !liveComposeEnabled() {
+		t.Skip("set VOICE_RUN_LIVE_COMPOSE=true to run against local compose")
+	}
+	clearLiveComposeAuthRateLimit(t)
+
+	client := &http.Client{Timeout: 45 * time.Second}
+	base := liveGatewayBaseURL()
+	n := time.Now().UnixNano()
+
+	sess := registerComposeUser(t, client, base, formatComposeEmail("p16-toggle", n), "VoiceQaTest1!")
+	spaceID := createComposeSpace(t, client, base, sess.AccessToken, fmt.Sprintf("Bots Toggle %d", n), "phase16")
+	chatA := createComposeGroup(t, client, base, sess.AccessToken, fmt.Sprintf("bots-toggle-a-%d", n))
+	chatB := createComposeGroup(t, client, base, sess.AccessToken, fmt.Sprintf("bots-toggle-b-%d", n))
+	ensureComposeGroupReadyForBot(t, client, base, sess.AccessToken, chatA, n+1)
+	ensureComposeGroupReadyForBot(t, client, base, sess.AccessToken, chatB, n+2)
+
+	botID, botToken := registerComposeBot(t, client, base, sess.AccessToken, fmt.Sprintf("ToggleBot-%d", n))
+	applyComposeBotManifestPolling(t, client, base, sess.AccessToken, botID)
+	installComposeBotChats(t, client, base, sess.AccessToken, botID, spaceID, chatA, chatB)
+
+	done := make(chan struct{})
+	go composePollingPingBot(client, base, botToken, done)
+	defer close(done)
+
+	commandsA := listComposeSlashCommands(t, client, base, sess.AccessToken, chatA)
+	require.NotEmpty(t, commandsA, "chat A must list slash commands after install")
+	require.Equal(t, "ping", commandsA[0].Name)
+
+	commandsB := listComposeSlashCommands(t, client, base, sess.AccessToken, chatB)
+	require.NotEmpty(t, commandsB, "chat B must list slash commands after install")
+
+	setComposeBotChatEnabled(t, client, base, sess.AccessToken, botID, spaceID, chatA, false)
+
+	commandsADisabled := listComposeSlashCommands(t, client, base, sess.AccessToken, chatA)
+	require.Empty(t, commandsADisabled,
+		"disabled bot must not appear in /-menu for that chat (BOT-B)")
+
+	commandsBStill := listComposeSlashCommands(t, client, base, sess.AccessToken, chatB)
+	require.NotEmpty(t, commandsBStill,
+		"bot disabled in chat A must remain available in chat B")
+
+	inChatA := listComposeBotsInChat(t, client, base, sess.AccessToken, spaceID, chatA)
+	require.Len(t, inChatA, 1)
+	require.False(t, inChatA[0].Enabled, "per-chat toggle must report enabled:false")
+	require.True(t, inChatA[0].Whitelisted)
+
+	setComposeBotChatEnabled(t, client, base, sess.AccessToken, botID, spaceID, chatA, true)
+	commandsAReenabled := listComposeSlashCommands(t, client, base, sess.AccessToken, chatA)
+	require.NotEmpty(t, commandsAReenabled, "re-enabling bot must restore slash commands")
 }
 
 // TestComposePhase16BotsPrivilegedInstall_live rejects installing a history bot without owner ack.
@@ -315,11 +372,89 @@ commands:
 	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
 }
 
-func installComposeBot(t *testing.T, client *http.Client, base, token, botID, spaceID, chatID string) {
+type composeSlashCommand struct {
+	Name   string
+	Online bool
+}
+
+type composeChatBotEntry struct {
+	Enabled     bool
+	Whitelisted bool
+}
+
+func listComposeSlashCommands(t *testing.T, client *http.Client, base, token, chatID string) []composeSlashCommand {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet,
+		base+"/api/v1/bots/commands?chat_id="+chatID+"&chat_type=CHAT_TYPE_GROUP", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "list commands body=%s", string(body))
+	var parsed struct {
+		Commands []composeSlashCommand `json:"commands"`
+	}
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	return parsed.Commands
+}
+
+func listComposeBotsInChat(t *testing.T, client *http.Client, base, token, spaceID, chatID string) []composeChatBotEntry {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet,
+		base+"/api/v1/bots/chats/"+chatID+"?space_id="+spaceID+"&chat_type=CHAT_TYPE_GROUP", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "list bots in chat body=%s", string(body))
+	var parsed struct {
+		Bots []struct {
+			Enabled     bool `json:"enabled"`
+			Whitelisted bool `json:"whitelisted"`
+		} `json:"bots"`
+	}
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	out := make([]composeChatBotEntry, 0, len(parsed.Bots))
+	for _, b := range parsed.Bots {
+		out = append(out, composeChatBotEntry{
+			Enabled:     b.Enabled,
+			Whitelisted: b.Whitelisted,
+		})
+	}
+	return out
+}
+
+func setComposeBotChatEnabled(t *testing.T, client *http.Client, base, token, botID, spaceID, chatID string, enabled bool) {
 	t.Helper()
 	payload, _ := json.Marshal(map[string]any{
-		"allowed_chats": []map[string]string{{"id": chatID, "type": "CHAT_TYPE_GROUP"}},
+		"chat":     map[string]string{"id": chatID, "type": "CHAT_TYPE_GROUP"},
+		"space_id": spaceID,
+		"enabled":  enabled,
 	})
+	req, err := http.NewRequest(http.MethodPatch,
+		base+"/api/v1/bots/"+botID+"/chats/"+chatID+"/enabled", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusNoContent, resp.StatusCode,
+		"set bot chat enabled body=%s", string(body))
+}
+
+func installComposeBotChats(t *testing.T, client *http.Client, base, token, botID, spaceID string, chatIDs ...string) {
+	t.Helper()
+	allowed := make([]map[string]string, 0, len(chatIDs))
+	for _, id := range chatIDs {
+		allowed = append(allowed, map[string]string{"id": id, "type": "CHAT_TYPE_GROUP"})
+	}
+	payload, _ := json.Marshal(map[string]any{"allowed_chats": allowed})
 	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/bots/"+botID+"/spaces/"+spaceID+"/install", bytes.NewReader(payload))
 	require.NoError(t, err)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -329,6 +464,38 @@ func installComposeBot(t *testing.T, client *http.Client, base, token, botID, sp
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
 	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
+}
+
+func installComposeBot(t *testing.T, client *http.Client, base, token, botID, spaceID, chatID string) {
+	t.Helper()
+	installComposeBotChats(t, client, base, token, botID, spaceID, chatID)
+}
+
+// waitComposeBotOnline polls slash commands until the bot reports online (poll loop touches presence).
+func waitComposeBotOnline(t *testing.T, client *http.Client, base, token, chatID string, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		req, err := http.NewRequest(http.MethodGet,
+			base+"/api/v1/bots/commands?chat_id="+chatID+"&chat_type=CHAT_TYPE_GROUP", nil)
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := client.Do(req)
+		if err == nil && resp != nil {
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			var parsed struct {
+				Commands []struct {
+					Online bool `json:"online"`
+				} `json:"commands"`
+			}
+			if json.Unmarshal(body, &parsed) == nil && len(parsed.Commands) > 0 && parsed.Commands[0].Online {
+				return
+			}
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	t.Fatal("timed out waiting for bot online presence")
 }
 
 func composePollingPingBot(client *http.Client, base, botToken string, stop <-chan struct{}) {

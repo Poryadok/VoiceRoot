@@ -317,6 +317,69 @@ class AppLocalizationsRu extends AppLocalizations {
   String get botUnavailableTooltip => 'Бот недоступен';
 
   @override
+  String get botOnlineStatus => 'Бот в сети';
+
+  @override
+  String get botOfflineStatus => 'Бот офлайн';
+
+  @override
+  String get botInstallTitle => 'Установка бота';
+
+  @override
+  String get botInstallDescriptionHeading => 'Описание';
+
+  @override
+  String get botInstallScopesHeading => 'Разрешения';
+
+  @override
+  String get botInstallCommandsHeading => 'Команды';
+
+  @override
+  String get botInstallCommandsEmpty =>
+      'Slash-команды появятся после регистрации.';
+
+  @override
+  String get botInstallWhitelistHeading => 'Установить в спейс';
+
+  @override
+  String get botInstallSelectSpace => 'Выберите спейс';
+
+  @override
+  String get botInstallNoSpaces =>
+      'Вступите или создайте спейс, чтобы установить бота.';
+
+  @override
+  String get botInstallConfirm => 'Установить бота';
+
+  @override
+  String slashOptionPickUser(String name) {
+    return 'Пользователь: $name';
+  }
+
+  @override
+  String slashOptionPickChannel(String name) {
+    return 'Канал: $name';
+  }
+
+  @override
+  String slashOptionPickRole(String name) {
+    return 'Роль: $name';
+  }
+
+  @override
+  String slashOptionPickAttachment(String name) {
+    return 'Вложение: $name';
+  }
+
+  @override
+  String slashOptionAttachmentSelected(String fileName) {
+    return 'Выбрано: $fileName';
+  }
+
+  @override
+  String get slashOptionPickerUnavailable => 'Выбор недоступен в этом чате.';
+
+  @override
   String get slashCommandRun => 'Выполнить команду';
 
   @override

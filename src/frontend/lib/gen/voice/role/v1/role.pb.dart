@@ -130,6 +130,121 @@ class BootstrapSpaceRolesResponse extends $pb.GeneratedMessage {
   static BootstrapSpaceRolesResponse? _defaultInstance;
 }
 
+class DeleteRolesCreatedByProfileRequest extends $pb.GeneratedMessage {
+  factory DeleteRolesCreatedByProfileRequest({
+    $core.String? spaceId,
+    $core.String? createdByProfileId,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (createdByProfileId != null)
+      result.createdByProfileId = createdByProfileId;
+    return result;
+  }
+
+  DeleteRolesCreatedByProfileRequest._();
+
+  factory DeleteRolesCreatedByProfileRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory DeleteRolesCreatedByProfileRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'DeleteRolesCreatedByProfileRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.role.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'createdByProfileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DeleteRolesCreatedByProfileRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DeleteRolesCreatedByProfileRequest copyWith(
+          void Function(DeleteRolesCreatedByProfileRequest) updates) =>
+      super.copyWith((message) =>
+              updates(message as DeleteRolesCreatedByProfileRequest))
+          as DeleteRolesCreatedByProfileRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static DeleteRolesCreatedByProfileRequest create() =>
+      DeleteRolesCreatedByProfileRequest._();
+  @$core.override
+  DeleteRolesCreatedByProfileRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static DeleteRolesCreatedByProfileRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<DeleteRolesCreatedByProfileRequest>(
+          create);
+  static DeleteRolesCreatedByProfileRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get createdByProfileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set createdByProfileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasCreatedByProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearCreatedByProfileId() => $_clearField(2);
+}
+
+class DeleteRolesCreatedByProfileResponse extends $pb.GeneratedMessage {
+  factory DeleteRolesCreatedByProfileResponse() => create();
+
+  DeleteRolesCreatedByProfileResponse._();
+
+  factory DeleteRolesCreatedByProfileResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory DeleteRolesCreatedByProfileResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'DeleteRolesCreatedByProfileResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.role.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DeleteRolesCreatedByProfileResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DeleteRolesCreatedByProfileResponse copyWith(
+          void Function(DeleteRolesCreatedByProfileResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as DeleteRolesCreatedByProfileResponse))
+          as DeleteRolesCreatedByProfileResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static DeleteRolesCreatedByProfileResponse create() =>
+      DeleteRolesCreatedByProfileResponse._();
+  @$core.override
+  DeleteRolesCreatedByProfileResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static DeleteRolesCreatedByProfileResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          DeleteRolesCreatedByProfileResponse>(create);
+  static DeleteRolesCreatedByProfileResponse? _defaultInstance;
+}
+
 class Role extends $pb.GeneratedMessage {
   factory Role({
     $core.String? id,
@@ -139,6 +254,7 @@ class Role extends $pb.GeneratedMessage {
     $core.int? position,
     $core.bool? managed,
     $1.Timestamp? createdAt,
+    $core.String? createdByProfileId,
   }) {
     final result = create();
     if (id != null) result.id = id;
@@ -148,6 +264,8 @@ class Role extends $pb.GeneratedMessage {
     if (position != null) result.position = position;
     if (managed != null) result.managed = managed;
     if (createdAt != null) result.createdAt = createdAt;
+    if (createdByProfileId != null)
+      result.createdByProfileId = createdByProfileId;
     return result;
   }
 
@@ -174,6 +292,7 @@ class Role extends $pb.GeneratedMessage {
     ..aOB(6, _omitFieldNames ? '' : 'managed')
     ..aOM<$1.Timestamp>(7, _omitFieldNames ? '' : 'createdAt',
         subBuilder: $1.Timestamp.create)
+    ..aOS(8, _omitFieldNames ? '' : 'createdByProfileId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -258,6 +377,15 @@ class Role extends $pb.GeneratedMessage {
   void clearCreatedAt() => $_clearField(7);
   @$pb.TagNumber(7)
   $1.Timestamp ensureCreatedAt() => $_ensure(6);
+
+  @$pb.TagNumber(8)
+  $core.String get createdByProfileId => $_getSZ(7);
+  @$pb.TagNumber(8)
+  set createdByProfileId($core.String value) => $_setString(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasCreatedByProfileId() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearCreatedByProfileId() => $_clearField(8);
 }
 
 class CreateRoleRequest extends $pb.GeneratedMessage {

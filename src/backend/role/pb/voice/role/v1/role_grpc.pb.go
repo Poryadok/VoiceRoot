@@ -19,25 +19,26 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	RoleService_CreateRole_FullMethodName              = "/voice.role.v1.RoleService/CreateRole"
-	RoleService_UpdateRole_FullMethodName              = "/voice.role.v1.RoleService/UpdateRole"
-	RoleService_DeleteRole_FullMethodName              = "/voice.role.v1.RoleService/DeleteRole"
-	RoleService_ListRoles_FullMethodName               = "/voice.role.v1.RoleService/ListRoles"
-	RoleService_ReorderRoles_FullMethodName            = "/voice.role.v1.RoleService/ReorderRoles"
-	RoleService_AssignRole_FullMethodName              = "/voice.role.v1.RoleService/AssignRole"
-	RoleService_RevokeRole_FullMethodName              = "/voice.role.v1.RoleService/RevokeRole"
-	RoleService_GetMemberRoles_FullMethodName          = "/voice.role.v1.RoleService/GetMemberRoles"
-	RoleService_SetChatOverride_FullMethodName         = "/voice.role.v1.RoleService/SetChatOverride"
-	RoleService_RemoveChatOverride_FullMethodName      = "/voice.role.v1.RoleService/RemoveChatOverride"
-	RoleService_GetChatOverrides_FullMethodName        = "/voice.role.v1.RoleService/GetChatOverrides"
-	RoleService_SetVoiceRoomOverride_FullMethodName    = "/voice.role.v1.RoleService/SetVoiceRoomOverride"
-	RoleService_RemoveVoiceRoomOverride_FullMethodName = "/voice.role.v1.RoleService/RemoveVoiceRoomOverride"
-	RoleService_GetVoiceRoomOverrides_FullMethodName   = "/voice.role.v1.RoleService/GetVoiceRoomOverrides"
-	RoleService_CheckPermission_FullMethodName         = "/voice.role.v1.RoleService/CheckPermission"
-	RoleService_GetEffectivePermissions_FullMethodName = "/voice.role.v1.RoleService/GetEffectivePermissions"
-	RoleService_SetDefaultJoinRole_FullMethodName      = "/voice.role.v1.RoleService/SetDefaultJoinRole"
-	RoleService_GetDefaultJoinRole_FullMethodName      = "/voice.role.v1.RoleService/GetDefaultJoinRole"
-	RoleService_BootstrapSpaceRoles_FullMethodName     = "/voice.role.v1.RoleService/BootstrapSpaceRoles"
+	RoleService_CreateRole_FullMethodName                  = "/voice.role.v1.RoleService/CreateRole"
+	RoleService_UpdateRole_FullMethodName                  = "/voice.role.v1.RoleService/UpdateRole"
+	RoleService_DeleteRole_FullMethodName                  = "/voice.role.v1.RoleService/DeleteRole"
+	RoleService_ListRoles_FullMethodName                   = "/voice.role.v1.RoleService/ListRoles"
+	RoleService_ReorderRoles_FullMethodName                = "/voice.role.v1.RoleService/ReorderRoles"
+	RoleService_AssignRole_FullMethodName                  = "/voice.role.v1.RoleService/AssignRole"
+	RoleService_RevokeRole_FullMethodName                  = "/voice.role.v1.RoleService/RevokeRole"
+	RoleService_GetMemberRoles_FullMethodName              = "/voice.role.v1.RoleService/GetMemberRoles"
+	RoleService_SetChatOverride_FullMethodName             = "/voice.role.v1.RoleService/SetChatOverride"
+	RoleService_RemoveChatOverride_FullMethodName          = "/voice.role.v1.RoleService/RemoveChatOverride"
+	RoleService_GetChatOverrides_FullMethodName            = "/voice.role.v1.RoleService/GetChatOverrides"
+	RoleService_SetVoiceRoomOverride_FullMethodName        = "/voice.role.v1.RoleService/SetVoiceRoomOverride"
+	RoleService_RemoveVoiceRoomOverride_FullMethodName     = "/voice.role.v1.RoleService/RemoveVoiceRoomOverride"
+	RoleService_GetVoiceRoomOverrides_FullMethodName       = "/voice.role.v1.RoleService/GetVoiceRoomOverrides"
+	RoleService_CheckPermission_FullMethodName             = "/voice.role.v1.RoleService/CheckPermission"
+	RoleService_GetEffectivePermissions_FullMethodName     = "/voice.role.v1.RoleService/GetEffectivePermissions"
+	RoleService_SetDefaultJoinRole_FullMethodName          = "/voice.role.v1.RoleService/SetDefaultJoinRole"
+	RoleService_GetDefaultJoinRole_FullMethodName          = "/voice.role.v1.RoleService/GetDefaultJoinRole"
+	RoleService_BootstrapSpaceRoles_FullMethodName         = "/voice.role.v1.RoleService/BootstrapSpaceRoles"
+	RoleService_DeleteRolesCreatedByProfile_FullMethodName = "/voice.role.v1.RoleService/DeleteRolesCreatedByProfile"
 )
 
 // RoleServiceClient is the client API for RoleService service.
@@ -67,6 +68,8 @@ type RoleServiceClient interface {
 	GetDefaultJoinRole(ctx context.Context, in *GetDefaultJoinRoleRequest, opts ...grpc.CallOption) (*GetDefaultJoinRoleResponse, error)
 	// Called by Space Service after CreateSpace — seeds system roles and assigns Owner.
 	BootstrapSpaceRoles(ctx context.Context, in *BootstrapSpaceRolesRequest, opts ...grpc.CallOption) (*BootstrapSpaceRolesResponse, error)
+	// BOT-B: remove custom roles created by a profile (e.g. bot actor on uninstall).
+	DeleteRolesCreatedByProfile(ctx context.Context, in *DeleteRolesCreatedByProfileRequest, opts ...grpc.CallOption) (*DeleteRolesCreatedByProfileResponse, error)
 }
 
 type roleServiceClient struct {
@@ -267,6 +270,16 @@ func (c *roleServiceClient) BootstrapSpaceRoles(ctx context.Context, in *Bootstr
 	return out, nil
 }
 
+func (c *roleServiceClient) DeleteRolesCreatedByProfile(ctx context.Context, in *DeleteRolesCreatedByProfileRequest, opts ...grpc.CallOption) (*DeleteRolesCreatedByProfileResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteRolesCreatedByProfileResponse)
+	err := c.cc.Invoke(ctx, RoleService_DeleteRolesCreatedByProfile_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // RoleServiceServer is the server API for RoleService service.
 // All implementations must embed UnimplementedRoleServiceServer
 // for forward compatibility.
@@ -294,6 +307,8 @@ type RoleServiceServer interface {
 	GetDefaultJoinRole(context.Context, *GetDefaultJoinRoleRequest) (*GetDefaultJoinRoleResponse, error)
 	// Called by Space Service after CreateSpace — seeds system roles and assigns Owner.
 	BootstrapSpaceRoles(context.Context, *BootstrapSpaceRolesRequest) (*BootstrapSpaceRolesResponse, error)
+	// BOT-B: remove custom roles created by a profile (e.g. bot actor on uninstall).
+	DeleteRolesCreatedByProfile(context.Context, *DeleteRolesCreatedByProfileRequest) (*DeleteRolesCreatedByProfileResponse, error)
 	mustEmbedUnimplementedRoleServiceServer()
 }
 
@@ -360,6 +375,9 @@ func (UnimplementedRoleServiceServer) GetDefaultJoinRole(context.Context, *GetDe
 }
 func (UnimplementedRoleServiceServer) BootstrapSpaceRoles(context.Context, *BootstrapSpaceRolesRequest) (*BootstrapSpaceRolesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method BootstrapSpaceRoles not implemented")
+}
+func (UnimplementedRoleServiceServer) DeleteRolesCreatedByProfile(context.Context, *DeleteRolesCreatedByProfileRequest) (*DeleteRolesCreatedByProfileResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteRolesCreatedByProfile not implemented")
 }
 func (UnimplementedRoleServiceServer) mustEmbedUnimplementedRoleServiceServer() {}
 func (UnimplementedRoleServiceServer) testEmbeddedByValue()                     {}
@@ -724,6 +742,24 @@ func _RoleService_BootstrapSpaceRoles_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _RoleService_DeleteRolesCreatedByProfile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteRolesCreatedByProfileRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RoleServiceServer).DeleteRolesCreatedByProfile(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RoleService_DeleteRolesCreatedByProfile_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RoleServiceServer).DeleteRolesCreatedByProfile(ctx, req.(*DeleteRolesCreatedByProfileRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // RoleService_ServiceDesc is the grpc.ServiceDesc for RoleService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -806,6 +842,10 @@ var RoleService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "BootstrapSpaceRoles",
 			Handler:    _RoleService_BootstrapSpaceRoles_Handler,
+		},
+		{
+			MethodName: "DeleteRolesCreatedByProfile",
+			Handler:    _RoleService_DeleteRolesCreatedByProfile_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

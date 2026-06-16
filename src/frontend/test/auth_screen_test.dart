@@ -11,6 +11,7 @@ import 'package:voice_frontend/backend/discover_hint_storage.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
+import 'package:voice_frontend/state/onboarding_controller.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/auth/auth_screen.dart';
@@ -30,6 +31,9 @@ void main() {
             InMemoryAuthSessionStorage(),
           ),
           discoverHintStorageProvider.overrideWithValue(hintStorage),
+          onboardingControllerProvider.overrideWith(
+            () => _CompletedOnboardingController(),
+          ),
           gatewayConfigProvider.overrideWithValue(
             const GatewayConfig(baseUrl: 'http://api.test'),
           ),
@@ -337,4 +341,9 @@ void main() {
 
     expect(find.text('At least 8 characters'), findsOneWidget);
   });
+}
+
+class _CompletedOnboardingController extends OnboardingController {
+  @override
+  OnboardingUiState build() => const OnboardingUiState(completed: true);
 }

@@ -147,14 +147,22 @@
 **Промпт-якорь:** `Phase 16 bots — batch BOT-B Flutter UX`.
 
 **Аудит (post BOT-B):**
-- [ ] **Uninstall roles/pins** — `UninstallBotFromSpace` очищает whitelist; Role Service + Messaging pins при удалении бота — BOT-C/отдельная задача.
+- [x] **Uninstall roles/pins** — `UninstallBotFromSpace`: whitelist + `Role.DeleteRolesCreatedByProfile` + `Messaging.UnpinMessagesBySenderInChats` + `Space.RemoveBotMember`.
 - [x] **Bot online heartbeat** — `SlashCommand.online` из `bot_presence`; greyout UI на клиенте (BOT-C).
-- [ ] **Slash option types P2** — `user`/`channel`/`role`/`attachment` pickers; v1: `string`/`integer`/`boolean`.
-- [ ] **grpcsvc coverage ≥80%** — ~56% после BOT-B; добить в BOT-D.
-- [ ] **Gateway bot routes в api-gateway.md** — `ListBotsInChat`, `SetBotChatEnabled` не в CONTRACT_MATRIX.
+- [x] **Slash option types P2** — Flutter pickers `user`/`channel`/`role`/`attachment` (`slash_command_options_sheet.dart`).
+- [x] **grpcsvc coverage ≥80%** — **80.7%** после BOT-B audit; оставшиеся ветки — BOT-D.
+- [x] **Gateway bot routes в api-gateway.md** — таблица `/api/v1/bots/**` по `transcode_bots.go` (вкл. `GetBotBySlug`, `ListBotsInChat`, `SetBotChatEnabled`).
 - [ ] **Flutter live E2E install+pong** — `phase16_bots_slash_live_test` + install flow с `VOICE_RUN_LIVE_INTEGRATION=true` (BOT-D).
-- [ ] **Страница бота `voice.app/bots/{slug}`** — space sheet вместо portal (BOT-D P2).
-- [ ] **bot-service.md stale** — нет `ListBotsInChat`, `SetBotChatEnabled`, `actor_profile_id`.
+- [x] **Страница бота `voice.app/bots/{slug}`** — deep link + `BotInstallPage` (portal polish — BOT-D P2).
+- [x] **bot-service.md stale** — полный gRPC surface, `actor_profile_id`, `slug`, install/uninstall, presence.
+
+**Аудит (post BOT-B, открытые пробелы):**
+- [ ] **Bot `CreateRole` API** — нет RPC для бота создавать роли; uninstall чистит только роли с `created_by_profile_id` (Role `000007`).
+- [ ] **role_db duplicate `000006`** — две миграции с версией `000006` блокируют `golang-migrate` на чистом `role_db`.
+- [ ] **docs/features/bots.md** — polling path `/api/bots/...` vs фактический `/api/v1/bots/...` (дублирует BOT-A audit).
+- [ ] **Rate limits / REST heartbeat / `GetChatMessagesForBot`** — см. BOT-C audit ниже.
+- [ ] **Developer Portal OAuth** — BOT-D; ключи в секции «Только вы».
+- [ ] **ru l10n bot scopes** — `BotScopeLabels` в `bot_scopes.dart` только EN; arb-ключи для scope labels не добавлены.
 
 ---
 
@@ -171,10 +179,10 @@
 **Промпт-якорь:** `Phase 16 bots — batch BOT-C backend hardening`.
 
 **Аудит (post BOT-C):**
-- [ ] **Online в списке ботов спейса** — `ListInstalledBots` / `space_bots_sheet` без online/offline (`bots.md` §«Статус бота»).
+- [x] **Online в списке ботов спейса** — `InstalledBot.online` в `ListInstalledBots`; `space_bots_sheet` показывает online/offline.
 - [ ] **Gateway REST для scope RPC** — нет transcoding: `TouchPresence`, `AssignBotRole`/`RevokeBotRole`, `ListSpaceMembersForBot`, `CreateBotChat`, `GetChatMessagesForBot`.
 - [ ] **`GetChatMessagesForBot`** — `Unimplemented`; нет Messaging read + Gateway route.
-- [ ] **Uninstall roles/pins** — `UninstallBotFromSpace` не чистит роли бота и pins в Messaging (`bots.md` §«Удаление бота»).
+- [x] **Uninstall roles/pins** — реализовано в BOT-B (`DeleteRolesCreatedByProfile`, `UnpinMessagesBySenderInChats`).
 - [ ] **Deferred TTL** — нет expiry/abandon для `delivery_status=deferred` в `bot_event_log`.
 - [ ] **Rate limits** — 5000 req/min и 100 role ops/min + `429 Retry-After` не реализованы (`bots.md` §Rate Limiting).
 - [ ] **REST heartbeat для webhook-ботов** — `POST /api/v1/bots/me/presence` или документировать gRPC-only.

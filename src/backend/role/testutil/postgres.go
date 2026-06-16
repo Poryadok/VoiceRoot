@@ -37,6 +37,7 @@ func ApplyRoleMigrations(t *testing.T, ctx context.Context, pool *pgxpool.Pool) 
 		"000004_pin_messages_permission.up.sql",
 		"000005_extended_permissions.up.sql",
 		"000006_default_join_role.up.sql",
+		"000007_created_by_profile.up.sql",
 	} {
 		sqlBytes, err := os.ReadFile(filepath.Join(dir, name))
 		require.NoError(t, err)

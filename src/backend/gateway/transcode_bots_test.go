@@ -53,6 +53,11 @@ func (f *fakeBotClient) GetBot(ctx context.Context, in *botv1.GetBotRequest, _ .
 	return &botv1.GetBotResponse{Bot: &botv1.Bot{Id: in.GetBotId(), Name: "TestBot"}}, nil
 }
 
+func (f *fakeBotClient) GetBotBySlug(ctx context.Context, in *botv1.GetBotBySlugRequest, _ ...grpc.CallOption) (*botv1.GetBotResponse, error) {
+	slug := in.GetSlug()
+	return &botv1.GetBotResponse{Bot: &botv1.Bot{Id: "bot-1", Name: "TestBot", Slug: &slug}}, nil
+}
+
 func (f *fakeBotClient) UpdateBot(ctx context.Context, in *botv1.UpdateBotRequest, _ ...grpc.CallOption) (*botv1.UpdateBotResponse, error) {
 	name := in.GetName()
 	return &botv1.UpdateBotResponse{Bot: &botv1.Bot{Id: in.GetBotId(), Name: name}}, nil
@@ -264,4 +269,18 @@ func TestServeBots_listCommandsIncludesOnlineField(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Contains(t, rec.Body.String(), `"online"`, "commands response must include online field (BOT-C)")
 	require.Contains(t, rec.Body.String(), `"online":false`)
+}
+
+func TestServeBots_getBotBySlugRouteRegistered(t *testing.T) {
+	bot := &fakeBotClient{}
+	tc := newTranscoder(&grpcClients{bot: bot})
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/bots/slug/ping-bot", http.NoBody)
+	req.Header.Set("Authorization", "Bearer token")
+	req.Header.Set("X-Voice-User-Id", "00000000-0000-0000-0000-000000000001")
+	req.Header.Set("X-Voice-Account-Id", "00000000-0000-0000-0000-000000000001")
+	rec := httptest.NewRecorder()
+	ok := tc.serveBots(rec, req, "slug/ping-bot")
+	require.True(t, ok, "GET /api/v1/bots/slug/{slug} must be registered (BOT-B)")
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), `"slug"`, "GetBotBySlug response must include slug field")
 }

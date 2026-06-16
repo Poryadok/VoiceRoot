@@ -26,6 +26,36 @@ final chatTypeForChatProvider = Provider.autoDispose.family<String?, String>((
   return null;
 });
 
+final spaceIdForChatProvider = Provider.autoDispose.family<String?, String>((
+  ref,
+  chatId,
+) {
+  final items = ref.watch(chatListProvider).valueOrNull?.items;
+  if (items == null) return null;
+  for (final item in items) {
+    if (item.chatId == chatId) {
+      return item.chat.spaceId;
+    }
+  }
+  return null;
+});
+
+final botBySlugProvider = FutureProvider.autoDispose
+    .family<VoiceBotSummary, String>((ref, slug) async {
+      final auth = ref.watch(authorizationHeaderProvider);
+      if (auth == null) {
+        throw StateError('not_authenticated');
+      }
+      final result = await ref.read(voiceBotsClientProvider).getBotBySlug(
+        authorization: auth,
+        slug: slug,
+      );
+      return switch (result) {
+        BotsApiOk(:final data) => data,
+        BotsApiFailure(:final message) => throw Exception(message),
+      };
+    });
+
 final slashCommandsForChatProvider = FutureProvider.autoDispose
     .family<List<BotSlashCommand>, String>((ref, chatId) async {
       final auth = ref.watch(authorizationHeaderProvider);

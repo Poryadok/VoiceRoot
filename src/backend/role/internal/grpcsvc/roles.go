@@ -32,7 +32,7 @@ func roleRowToProto(r *store.RoleRow) *rolev1.Role {
 	if r == nil {
 		return nil
 	}
-	return &rolev1.Role{
+	out := &rolev1.Role{
 		Id:              r.ID.String(),
 		SpaceId:         r.SpaceID.String(),
 		Name:            r.Name,
@@ -41,6 +41,11 @@ func roleRowToProto(r *store.RoleRow) *rolev1.Role {
 		Managed:         r.Managed,
 		CreatedAt:       timestamppb.Now(),
 	}
+	if r.CreatedByProfileID != nil && *r.CreatedByProfileID != uuid.Nil {
+		id := r.CreatedByProfileID.String()
+		out.CreatedByProfileId = &id
+	}
+	return out
 }
 
 func (s *RoleGRPC) BootstrapSpaceRoles(ctx context.Context, req *rolev1.BootstrapSpaceRolesRequest) (*rolev1.BootstrapSpaceRolesResponse, error) {

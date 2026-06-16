@@ -1377,6 +1377,31 @@ const UploadPreKeyBundleResponse$json = {
 final $typed_data.Uint8List uploadPreKeyBundleResponseDescriptor =
     $convert.base64Decode('ChpVcGxvYWRQcmVLZXlCdW5kbGVSZXNwb25zZQ==');
 
+@$core.Deprecated('Use unpinMessagesBySenderInChatsRequestDescriptor instead')
+const UnpinMessagesBySenderInChatsRequest$json = {
+  '1': 'UnpinMessagesBySenderInChatsRequest',
+  '2': [
+    {'1': 'sender_profile_id', '3': 1, '4': 1, '5': 9, '10': 'senderProfileId'},
+    {'1': 'chat_ids', '3': 2, '4': 3, '5': 9, '10': 'chatIds'},
+  ],
+};
+
+/// Descriptor for `UnpinMessagesBySenderInChatsRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List unpinMessagesBySenderInChatsRequestDescriptor =
+    $convert.base64Decode(
+        'CiNVbnBpbk1lc3NhZ2VzQnlTZW5kZXJJbkNoYXRzUmVxdWVzdBIqChFzZW5kZXJfcHJvZmlsZV'
+        '9pZBgBIAEoCVIPc2VuZGVyUHJvZmlsZUlkEhkKCGNoYXRfaWRzGAIgAygJUgdjaGF0SWRz');
+
+@$core.Deprecated('Use unpinMessagesBySenderInChatsResponseDescriptor instead')
+const UnpinMessagesBySenderInChatsResponse$json = {
+  '1': 'UnpinMessagesBySenderInChatsResponse',
+};
+
+/// Descriptor for `UnpinMessagesBySenderInChatsResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List unpinMessagesBySenderInChatsResponseDescriptor =
+    $convert
+        .base64Decode('CiRVbnBpbk1lc3NhZ2VzQnlTZW5kZXJJbkNoYXRzUmVzcG9uc2U=');
+
 @$core.Deprecated('Use getPreKeyBundleRequestDescriptor instead')
 const GetPreKeyBundleRequest$json = {
   '1': 'GetPreKeyBundleRequest',

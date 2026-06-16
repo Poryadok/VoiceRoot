@@ -23,6 +23,7 @@ const (
 	BotService_UpdateBot_FullMethodName                = "/voice.bot.v1.BotService/UpdateBot"
 	BotService_DeleteBot_FullMethodName                = "/voice.bot.v1.BotService/DeleteBot"
 	BotService_GetBot_FullMethodName                   = "/voice.bot.v1.BotService/GetBot"
+	BotService_GetBotBySlug_FullMethodName             = "/voice.bot.v1.BotService/GetBotBySlug"
 	BotService_ListBots_FullMethodName                 = "/voice.bot.v1.BotService/ListBots"
 	BotService_RegenerateToken_FullMethodName          = "/voice.bot.v1.BotService/RegenerateToken"
 	BotService_RegisterCommands_FullMethodName         = "/voice.bot.v1.BotService/RegisterCommands"
@@ -65,6 +66,7 @@ type BotServiceClient interface {
 	UpdateBot(ctx context.Context, in *UpdateBotRequest, opts ...grpc.CallOption) (*UpdateBotResponse, error)
 	DeleteBot(ctx context.Context, in *DeleteBotRequest, opts ...grpc.CallOption) (*DeleteBotResponse, error)
 	GetBot(ctx context.Context, in *GetBotRequest, opts ...grpc.CallOption) (*GetBotResponse, error)
+	GetBotBySlug(ctx context.Context, in *GetBotBySlugRequest, opts ...grpc.CallOption) (*GetBotResponse, error)
 	ListBots(ctx context.Context, in *ListBotsRequest, opts ...grpc.CallOption) (*ListBotsResponse, error)
 	RegenerateToken(ctx context.Context, in *RegenerateTokenRequest, opts ...grpc.CallOption) (*RegenerateTokenResponse, error)
 	RegisterCommands(ctx context.Context, in *RegisterCommandsRequest, opts ...grpc.CallOption) (*RegisterCommandsResponse, error)
@@ -143,6 +145,16 @@ func (c *botServiceClient) GetBot(ctx context.Context, in *GetBotRequest, opts .
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetBotResponse)
 	err := c.cc.Invoke(ctx, BotService_GetBot_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *botServiceClient) GetBotBySlug(ctx context.Context, in *GetBotBySlugRequest, opts ...grpc.CallOption) (*GetBotResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetBotResponse)
+	err := c.cc.Invoke(ctx, BotService_GetBotBySlug_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -468,6 +480,7 @@ type BotServiceServer interface {
 	UpdateBot(context.Context, *UpdateBotRequest) (*UpdateBotResponse, error)
 	DeleteBot(context.Context, *DeleteBotRequest) (*DeleteBotResponse, error)
 	GetBot(context.Context, *GetBotRequest) (*GetBotResponse, error)
+	GetBotBySlug(context.Context, *GetBotBySlugRequest) (*GetBotResponse, error)
 	ListBots(context.Context, *ListBotsRequest) (*ListBotsResponse, error)
 	RegenerateToken(context.Context, *RegenerateTokenRequest) (*RegenerateTokenResponse, error)
 	RegisterCommands(context.Context, *RegisterCommandsRequest) (*RegisterCommandsResponse, error)
@@ -523,6 +536,9 @@ func (UnimplementedBotServiceServer) DeleteBot(context.Context, *DeleteBotReques
 }
 func (UnimplementedBotServiceServer) GetBot(context.Context, *GetBotRequest) (*GetBotResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetBot not implemented")
+}
+func (UnimplementedBotServiceServer) GetBotBySlug(context.Context, *GetBotBySlugRequest) (*GetBotResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetBotBySlug not implemented")
 }
 func (UnimplementedBotServiceServer) ListBots(context.Context, *ListBotsRequest) (*ListBotsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListBots not implemented")
@@ -703,6 +719,24 @@ func _BotService_GetBot_Handler(srv interface{}, ctx context.Context, dec func(i
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(BotServiceServer).GetBot(ctx, req.(*GetBotRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BotService_GetBotBySlug_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetBotBySlugRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BotServiceServer).GetBotBySlug(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BotService_GetBotBySlug_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BotServiceServer).GetBotBySlug(ctx, req.(*GetBotBySlugRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1262,6 +1296,10 @@ var BotService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetBot",
 			Handler:    _BotService_GetBot_Handler,
+		},
+		{
+			MethodName: "GetBotBySlug",
+			Handler:    _BotService_GetBotBySlug_Handler,
 		},
 		{
 			MethodName: "ListBots",

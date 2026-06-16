@@ -45,6 +45,20 @@
 
 Типичные **синхронные** gRPC между сервисами (не через Gateway) и async-паттерн для ядра чата — таблица «Tier 0: типичные связи» в [MICROSERVICES.md](MICROSERVICES.md).
 
+### Bot Service → S2S (примеры, Фаза 16)
+
+| Caller | Callee | RPC | Триггер |
+|--------|--------|-----|---------|
+| Bot | Role | `CheckPermission` | `InstallBotInSpace` (`SPACE_MANAGE_BOTS`) |
+| Bot | Space | `AddBotMember` / `RemoveBotMember` | install / `UninstallBotFromSpace` |
+| Bot | Role | `DeleteRolesCreatedByProfile` | `UninstallBotFromSpace` — удаляет custom-роли с `created_by_profile_id = bot.actor_profile_id` |
+| Bot | Role | `GetMemberRoles`, `RevokeRole` | `UninstallBotFromSpace` — снимает роли, назначенные боту в спейсе |
+| Bot | Messaging | `UnpinMessagesBySenderInChats` | `UninstallBotFromSpace` — открепляет pins сообщений бота в whitelisted чатах |
+| Bot | Role | `AssignRole` / `RevokeRole` | `AssignBotRole` / `RevokeBotRole` (scope `MEMBER_ASSIGN_ROLES`) |
+| Bot | Messaging | (send/edit) | `SendBotMessage`, `EditBotMessage` |
+
+Полный REST transcoding Bot API — [microservices/api-gateway.md](microservices/api-gateway.md); gRPC-only RPC (`TouchPresence`, scope runtime без REST) — [microservices/bot-service.md](microservices/bot-service.md).
+
 ---
 
 ## NATS JetStream: streams, publishers, subscribers

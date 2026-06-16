@@ -1436,3 +1436,51 @@ func TestEditBotMessage_failedPreconditionWithoutMessaging(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, codes.FailedPrecondition, status.Code(err))
 }
+
+func TestGetBotBySlug_returnsRegisteredBot(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	client, _, cleanup := startBotGRPC(t)
+	defer cleanup()
+	ctx := withAccount(context.Background(), uuid.New(), uuid.New())
+
+	reg, err := client.RegisterBot(ctx, &botv1.RegisterBotRequest{
+		Name: "SlugBot", Description: "by slug", ScopesJson: `["TEXT_CHAT_SEND_MESSAGES"]`,
+	})
+	require.NoError(t, err)
+	slug := reg.GetBot().GetSlug()
+	require.NotEmpty(t, slug)
+
+	got, err := client.GetBotBySlug(ctx, &botv1.GetBotBySlugRequest{Slug: slug})
+	require.NoError(t, err)
+	require.Equal(t, reg.GetBot().GetId(), got.GetBot().GetId())
+	require.Equal(t, "SlugBot", got.GetBot().GetName())
+	require.Equal(t, "by slug", got.GetBot().GetDescription())
+}
+
+func TestGetBotBySlug_invalidArgumentWhenEmpty(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	client, _, cleanup := startBotGRPC(t)
+	defer cleanup()
+	ctx := withAccount(context.Background(), uuid.New(), uuid.New())
+
+	_, err := client.GetBotBySlug(ctx, &botv1.GetBotBySlugRequest{Slug: "  "})
+	require.Error(t, err)
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+func TestGetBotBySlug_notFoundForUnknownSlug(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	client, _, cleanup := startBotGRPC(t)
+	defer cleanup()
+	ctx := withAccount(context.Background(), uuid.New(), uuid.New())
+
+	_, err := client.GetBotBySlug(ctx, &botv1.GetBotBySlugRequest{Slug: "missing-bot-slug"})
+	require.Error(t, err)
+	require.Equal(t, codes.NotFound, status.Code(err))
+}

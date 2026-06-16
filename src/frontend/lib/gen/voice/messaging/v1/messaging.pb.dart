@@ -3382,6 +3382,116 @@ class UploadPreKeyBundleResponse extends $pb.GeneratedMessage {
   static UploadPreKeyBundleResponse? _defaultInstance;
 }
 
+class UnpinMessagesBySenderInChatsRequest extends $pb.GeneratedMessage {
+  factory UnpinMessagesBySenderInChatsRequest({
+    $core.String? senderProfileId,
+    $core.Iterable<$core.String>? chatIds,
+  }) {
+    final result = create();
+    if (senderProfileId != null) result.senderProfileId = senderProfileId;
+    if (chatIds != null) result.chatIds.addAll(chatIds);
+    return result;
+  }
+
+  UnpinMessagesBySenderInChatsRequest._();
+
+  factory UnpinMessagesBySenderInChatsRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory UnpinMessagesBySenderInChatsRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'UnpinMessagesBySenderInChatsRequest',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.messaging.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'senderProfileId')
+    ..pPS(2, _omitFieldNames ? '' : 'chatIds')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UnpinMessagesBySenderInChatsRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UnpinMessagesBySenderInChatsRequest copyWith(
+          void Function(UnpinMessagesBySenderInChatsRequest) updates) =>
+      super.copyWith((message) =>
+              updates(message as UnpinMessagesBySenderInChatsRequest))
+          as UnpinMessagesBySenderInChatsRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static UnpinMessagesBySenderInChatsRequest create() =>
+      UnpinMessagesBySenderInChatsRequest._();
+  @$core.override
+  UnpinMessagesBySenderInChatsRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static UnpinMessagesBySenderInChatsRequest getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          UnpinMessagesBySenderInChatsRequest>(create);
+  static UnpinMessagesBySenderInChatsRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get senderProfileId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set senderProfileId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSenderProfileId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSenderProfileId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $pb.PbList<$core.String> get chatIds => $_getList(1);
+}
+
+class UnpinMessagesBySenderInChatsResponse extends $pb.GeneratedMessage {
+  factory UnpinMessagesBySenderInChatsResponse() => create();
+
+  UnpinMessagesBySenderInChatsResponse._();
+
+  factory UnpinMessagesBySenderInChatsResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory UnpinMessagesBySenderInChatsResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'UnpinMessagesBySenderInChatsResponse',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.messaging.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UnpinMessagesBySenderInChatsResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UnpinMessagesBySenderInChatsResponse copyWith(
+          void Function(UnpinMessagesBySenderInChatsResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as UnpinMessagesBySenderInChatsResponse))
+          as UnpinMessagesBySenderInChatsResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static UnpinMessagesBySenderInChatsResponse create() =>
+      UnpinMessagesBySenderInChatsResponse._();
+  @$core.override
+  UnpinMessagesBySenderInChatsResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static UnpinMessagesBySenderInChatsResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          UnpinMessagesBySenderInChatsResponse>(create);
+  static UnpinMessagesBySenderInChatsResponse? _defaultInstance;
+}
+
 class GetPreKeyBundleRequest extends $pb.GeneratedMessage {
   factory GetPreKeyBundleRequest({
     $core.String? profileId,

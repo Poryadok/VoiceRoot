@@ -120,6 +120,24 @@ SELECT message_id FROM pins WHERE chat_id = $1 AND message_id = ANY($2)
 	return out, rows.Err()
 }
 
+// DeletePinsBySenderInChats removes pins on messages sent by senderProfileID in the given chats.
+func (s *PinsStore) DeletePinsBySenderInChats(ctx context.Context, senderProfileID uuid.UUID, chatIDs []uuid.UUID) error {
+	if s == nil || s.Pool == nil {
+		return ErrStoreNotConfigured
+	}
+	if len(chatIDs) == 0 {
+		return nil
+	}
+	_, err := s.Pool.Exec(ctx, `
+DELETE FROM pins p
+USING messages m
+WHERE p.message_id = m.id
+  AND m.sender_profile_id = $1
+  AND p.chat_id = ANY($2)
+`, senderProfileID, chatIDs)
+	return err
+}
+
 // DeletePinIfMessageMissing removes pins whose message was deleted (housekeeping).
 func (s *PinsStore) DeletePinIfMessageMissing(ctx context.Context, chatID, messageID uuid.UUID) error {
 	if s == nil || s.Pool == nil {

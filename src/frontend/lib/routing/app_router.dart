@@ -56,6 +56,13 @@ GoRouter createVoiceGoRouter({
           return shellBuilder(context, state);
         },
       ),
+      GoRoute(
+        path: '/bots/:slug',
+        builder: (context, state) {
+          onDeepLinkPath?.call(state);
+          return shellBuilder(context, state);
+        },
+      ),
       ...StoriesRoutes.routes(rootKey: rootNavigatorKey),
     ],
   );

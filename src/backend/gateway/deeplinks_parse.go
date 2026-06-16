@@ -21,6 +21,7 @@ const (
 	DeepLinkKindChatMessage   DeepLinkKind = "chat_message"
 	DeepLinkKindProfile       DeepLinkKind = "profile"
 	DeepLinkKindDM            DeepLinkKind = "dm"
+	DeepLinkKindBot           DeepLinkKind = "bot"
 )
 
 // DeepLinkTarget is a parsed deep link before domain validation.
@@ -33,6 +34,7 @@ type DeepLinkTarget struct {
 	InviteCode  string
 	Username    string
 	UserID      string
+	BotSlug     string
 	RawURL      string
 }
 
@@ -96,6 +98,11 @@ func parseDeepLinkPath(path, raw string) (DeepLinkTarget, error) {
 			return DeepLinkTarget{}, errInvalidDeepLink
 		}
 		return DeepLinkTarget{Kind: DeepLinkKindDM, UserID: parts[1], RawURL: raw}, nil
+	case "bots":
+		if len(parts) != 2 || parts[1] == "" {
+			return DeepLinkTarget{}, errInvalidDeepLink
+		}
+		return DeepLinkTarget{Kind: DeepLinkKindBot, BotSlug: parts[1], RawURL: raw}, nil
 	default:
 		return DeepLinkTarget{}, errInvalidDeepLink
 	}

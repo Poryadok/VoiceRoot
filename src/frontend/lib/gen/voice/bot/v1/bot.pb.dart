@@ -38,6 +38,7 @@ class Bot extends $pb.GeneratedMessage {
     $1.Timestamp? createdAt,
     BotLifecycleStatus? statusEnum,
     $core.String? actorProfileId,
+    $core.String? slug,
   }) {
     final result = create();
     if (id != null) result.id = id;
@@ -52,6 +53,7 @@ class Bot extends $pb.GeneratedMessage {
     if (createdAt != null) result.createdAt = createdAt;
     if (statusEnum != null) result.statusEnum = statusEnum;
     if (actorProfileId != null) result.actorProfileId = actorProfileId;
+    if (slug != null) result.slug = slug;
     return result;
   }
 
@@ -82,6 +84,7 @@ class Bot extends $pb.GeneratedMessage {
     ..aE<BotLifecycleStatus>(11, _omitFieldNames ? '' : 'statusEnum',
         enumValues: BotLifecycleStatus.values)
     ..aOS(12, _omitFieldNames ? '' : 'actorProfileId')
+    ..aOS(13, _omitFieldNames ? '' : 'slug')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -212,6 +215,15 @@ class Bot extends $pb.GeneratedMessage {
   $core.bool hasActorProfileId() => $_has(11);
   @$pb.TagNumber(12)
   void clearActorProfileId() => $_clearField(12);
+
+  @$pb.TagNumber(13)
+  $core.String get slug => $_getSZ(12);
+  @$pb.TagNumber(13)
+  set slug($core.String value) => $_setString(12, value);
+  @$pb.TagNumber(13)
+  $core.bool hasSlug() => $_has(12);
+  @$pb.TagNumber(13)
+  void clearSlug() => $_clearField(13);
 }
 
 class RegisterBotRequest extends $pb.GeneratedMessage {
@@ -500,6 +512,60 @@ class GetBotRequest extends $pb.GeneratedMessage {
   $core.bool hasBotId() => $_has(0);
   @$pb.TagNumber(1)
   void clearBotId() => $_clearField(1);
+}
+
+class GetBotBySlugRequest extends $pb.GeneratedMessage {
+  factory GetBotBySlugRequest({
+    $core.String? slug,
+  }) {
+    final result = create();
+    if (slug != null) result.slug = slug;
+    return result;
+  }
+
+  GetBotBySlugRequest._();
+
+  factory GetBotBySlugRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetBotBySlugRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetBotBySlugRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.bot.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'slug')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetBotBySlugRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetBotBySlugRequest copyWith(void Function(GetBotBySlugRequest) updates) =>
+      super.copyWith((message) => updates(message as GetBotBySlugRequest))
+          as GetBotBySlugRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetBotBySlugRequest create() => GetBotBySlugRequest._();
+  @$core.override
+  GetBotBySlugRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetBotBySlugRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetBotBySlugRequest>(create);
+  static GetBotBySlugRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get slug => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set slug($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSlug() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSlug() => $_clearField(1);
 }
 
 class ListBotsRequest extends $pb.GeneratedMessage {
@@ -3042,11 +3108,13 @@ class InstalledBot extends $pb.GeneratedMessage {
     Bot? bot,
     $core.String? installationId,
     $core.Iterable<$2.ChatRef>? allowedChats,
+    $core.bool? online,
   }) {
     final result = create();
     if (bot != null) result.bot = bot;
     if (installationId != null) result.installationId = installationId;
     if (allowedChats != null) result.allowedChats.addAll(allowedChats);
+    if (online != null) result.online = online;
     return result;
   }
 
@@ -3067,6 +3135,7 @@ class InstalledBot extends $pb.GeneratedMessage {
     ..aOS(2, _omitFieldNames ? '' : 'installationId')
     ..pPM<$2.ChatRef>(3, _omitFieldNames ? '' : 'allowedChats',
         subBuilder: $2.ChatRef.create)
+    ..aOB(4, _omitFieldNames ? '' : 'online')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -3110,6 +3179,15 @@ class InstalledBot extends $pb.GeneratedMessage {
 
   @$pb.TagNumber(3)
   $pb.PbList<$2.ChatRef> get allowedChats => $_getList(2);
+
+  @$pb.TagNumber(4)
+  $core.bool get online => $_getBF(3);
+  @$pb.TagNumber(4)
+  set online($core.bool value) => $_setBool(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasOnline() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearOnline() => $_clearField(4);
 }
 
 class ListInstalledBotsResponse extends $pb.GeneratedMessage {

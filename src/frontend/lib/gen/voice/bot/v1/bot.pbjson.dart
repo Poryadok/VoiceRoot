@@ -88,12 +88,14 @@ const Bot$json = {
       '10': 'actorProfileId',
       '17': true
     },
+    {'1': 'slug', '3': 13, '4': 1, '5': 9, '9': 4, '10': 'slug', '17': true},
   ],
   '8': [
     {'1': '_avatar_url'},
     {'1': '_webhook_url'},
     {'1': '_status_enum'},
     {'1': '_actor_profile_id'},
+    {'1': '_slug'},
   ],
 };
 
@@ -107,8 +109,9 @@ final $typed_data.Uint8List botDescriptor = $convert.base64Decode(
     'EoCVIGc3RhdHVzEjkKCmNyZWF0ZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0'
     'YW1wUgljcmVhdGVkQXQSRgoLc3RhdHVzX2VudW0YCyABKA4yIC52b2ljZS5ib3QudjEuQm90TG'
     'lmZWN5Y2xlU3RhdHVzSAJSCnN0YXR1c0VudW2IAQESLQoQYWN0b3JfcHJvZmlsZV9pZBgMIAEo'
-    'CUgDUg5hY3RvclByb2ZpbGVJZIgBAUINCgtfYXZhdGFyX3VybEIOCgxfd2ViaG9va191cmxCDg'
-    'oMX3N0YXR1c19lbnVtQhMKEV9hY3Rvcl9wcm9maWxlX2lk');
+    'CUgDUg5hY3RvclByb2ZpbGVJZIgBARIXCgRzbHVnGA0gASgJSARSBHNsdWeIAQFCDQoLX2F2YX'
+    'Rhcl91cmxCDgoMX3dlYmhvb2tfdXJsQg4KDF9zdGF0dXNfZW51bUITChFfYWN0b3JfcHJvZmls'
+    'ZV9pZEIHCgVfc2x1Zw==');
 
 @$core.Deprecated('Use registerBotRequestDescriptor instead')
 const RegisterBotRequest$json = {
@@ -198,6 +201,18 @@ const GetBotRequest$json = {
 /// Descriptor for `GetBotRequest`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List getBotRequestDescriptor = $convert
     .base64Decode('Cg1HZXRCb3RSZXF1ZXN0EhUKBmJvdF9pZBgBIAEoCVIFYm90SWQ=');
+
+@$core.Deprecated('Use getBotBySlugRequestDescriptor instead')
+const GetBotBySlugRequest$json = {
+  '1': 'GetBotBySlugRequest',
+  '2': [
+    {'1': 'slug', '3': 1, '4': 1, '5': 9, '10': 'slug'},
+  ],
+};
+
+/// Descriptor for `GetBotBySlugRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getBotBySlugRequestDescriptor = $convert
+    .base64Decode('ChNHZXRCb3RCeVNsdWdSZXF1ZXN0EhIKBHNsdWcYASABKAlSBHNsdWc=');
 
 @$core.Deprecated('Use listBotsRequestDescriptor instead')
 const ListBotsRequest$json = {
@@ -964,6 +979,7 @@ const InstalledBot$json = {
       '6': '.voice.chat.v1.ChatRef',
       '10': 'allowedChats'
     },
+    {'1': 'online', '3': 4, '4': 1, '5': 8, '10': 'online'},
   ],
 };
 
@@ -971,7 +987,8 @@ const InstalledBot$json = {
 final $typed_data.Uint8List installedBotDescriptor = $convert.base64Decode(
     'CgxJbnN0YWxsZWRCb3QSIwoDYm90GAEgASgLMhEudm9pY2UuYm90LnYxLkJvdFIDYm90EicKD2'
     'luc3RhbGxhdGlvbl9pZBgCIAEoCVIOaW5zdGFsbGF0aW9uSWQSOwoNYWxsb3dlZF9jaGF0cxgD'
-    'IAMoCzIWLnZvaWNlLmNoYXQudjEuQ2hhdFJlZlIMYWxsb3dlZENoYXRz');
+    'IAMoCzIWLnZvaWNlLmNoYXQudjEuQ2hhdFJlZlIMYWxsb3dlZENoYXRzEhYKBm9ubGluZRgEIA'
+    'EoCFIGb25saW5l');
 
 @$core.Deprecated('Use listInstalledBotsResponseDescriptor instead')
 const ListInstalledBotsResponse$json = {

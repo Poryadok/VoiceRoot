@@ -103,9 +103,9 @@ func (f *fakeChatClient) CreateChat(_ context.Context, req *chatv1.CreateChatReq
 
 type botCDeps struct {
 	user  *fakeUserClient
-	msg   *fakeMessagingClient
+	msg   messagingv1.MessagingServiceServer
 	chat  *fakeChatClient
-	role  *fakeRoleClient
+	role  rolev1.RoleServiceServer
 	space *fakeSpaceClient
 }
 

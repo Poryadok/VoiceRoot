@@ -11,6 +11,7 @@ enum DeepLinkKind {
   chatMessage,
   profile,
   dm,
+  bot,
 }
 
 class DeepLinkParseException implements Exception {
@@ -31,6 +32,7 @@ class DeepLinkTarget {
     this.inviteCode,
     this.username,
     this.userId,
+    this.botSlug,
   });
 
   final DeepLinkKind kind;
@@ -42,6 +44,7 @@ class DeepLinkTarget {
   final String? inviteCode;
   final String? username;
   final String? userId;
+  final String? botSlug;
 
   @override
   bool operator ==(Object other) =>
@@ -55,7 +58,8 @@ class DeepLinkTarget {
           messageId == other.messageId &&
           inviteCode == other.inviteCode &&
           username == other.username &&
-          userId == other.userId;
+          userId == other.userId &&
+          botSlug == other.botSlug;
 
   @override
   int get hashCode => Object.hash(
@@ -68,6 +72,7 @@ class DeepLinkTarget {
         inviteCode,
         username,
         userId,
+        botSlug,
       );
 }
 
@@ -96,7 +101,10 @@ DeepLinkTarget parseDeepLinkUrl(String raw) {
     path = voicePath;
   } else if (uri.scheme == 'https' || uri.scheme == 'http') {
     final host = uri.host.toLowerCase();
-    if (host != 'voice.gg' && host != 'www.voice.gg') {
+    if (host != 'voice.gg' &&
+        host != 'www.voice.gg' &&
+        host != 'voice.app' &&
+        host != 'www.voice.app') {
       throw DeepLinkParseException('foreign host');
     }
     path = uri.path.replaceFirst(RegExp(r'^/+'), '').replaceAll(RegExp(r'/+$'), '');
@@ -143,6 +151,15 @@ DeepLinkTarget _parseDeepLinkPath(String path, String raw) {
       return DeepLinkTarget(
         kind: DeepLinkKind.dm,
         userId: parts[1],
+        rawUrl: raw,
+      );
+    case 'bots':
+      if (parts.length != 2 || parts[1].isEmpty) {
+        throw DeepLinkParseException('invalid bot');
+      }
+      return DeepLinkTarget(
+        kind: DeepLinkKind.bot,
+        botSlug: parts[1],
         rawUrl: raw,
       );
     default:
