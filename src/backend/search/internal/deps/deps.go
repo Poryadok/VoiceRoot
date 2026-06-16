@@ -19,7 +19,6 @@ import (
 	commonv1 "voice.app/voice/common/v1"
 	chatv1 "voice.app/voice/chat/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
-	rolev1 "voice.app/voice/role/v1"
 	socialv1 "voice.app/voice/social/v1"
 	spacev1 "voice.app/voice/space/v1"
 	userv1 "voice.app/voice/user/v1"
@@ -100,28 +99,27 @@ func (m *MessagingFetcher) ListChatMessages(ctx context.Context, chatID uuid.UUI
 	return out, strings.TrimSpace(list.GetNextCursor()), nil
 }
 
-// RoleAccess checks TEXT_CHAT_VIEW for space channels.
-type RoleAccess struct {
-	Client rolev1.RoleServiceClient
+// ChatReadAccess verifies the viewer can read a chat via Chat Service GetChat
+// (membership for DMs/groups; TEXT_CHAT_VIEW for space channels).
+type ChatReadAccess struct {
+	Client chatv1.ChatServiceClient
 }
 
-func (r *RoleAccess) CanReadMessages(ctx context.Context, viewer, chatID uuid.UUID) (bool, error) {
-	if r == nil || r.Client == nil {
+func (c *ChatReadAccess) CanReadMessages(ctx context.Context, _, chatID uuid.UUID) (bool, error) {
+	if c == nil || c.Client == nil {
 		return true, nil
 	}
 	ctx = s2s.ForwardIncomingMetadata(ctx)
-	resp, err := r.Client.CheckPermission(ctx, &rolev1.CheckPermissionRequest{
-		ProfileId:      viewer.String(),
-		PermissionName: "TEXT_CHAT_VIEW",
-		Chat:           &chatv1.ChatRef{Id: chatID.String()},
-	})
+	_, err := c.Client.GetChat(ctx, &chatv1.GetChatRequest{ChatId: chatID.String()})
 	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return true, nil
+		switch status.Code(err) {
+		case codes.PermissionDenied, codes.NotFound:
+			return false, nil
+		default:
+			return false, err
 		}
-		return false, err
 	}
-	return resp.GetAllowed(), nil
+	return true, nil
 }
 
 // SocialBlocks lists blocked account IDs for the viewer account.

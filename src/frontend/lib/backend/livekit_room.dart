@@ -115,7 +115,7 @@ class LiveKitVoiceRoom implements VoiceLiveKitRoom {
       ..on<livekit.TrackSubscribedEvent>((event) {
         if (event.track.kind == livekit.TrackType.AUDIO) {
           if (_speakerMuted) {
-            event.track.mediaStreamTrack.enabled = false;
+            unawaited(_setRemoteAudioTrackAudible(event.track, audible: false));
           }
           unawaited(ensureAudioPlayback());
         }
@@ -168,10 +168,37 @@ class LiveKitVoiceRoom implements VoiceLiveKitRoom {
   @override
   Future<void> setSpeakerMuted(bool muted) async {
     _speakerMuted = muted;
+    await _applyRemoteSpeakerMuted(muted);
+    if (!muted) {
+      await ensureAudioPlayback();
+    }
+  }
+
+  Future<void> _applyRemoteSpeakerMuted(bool muted) async {
     for (final participant in _room.remoteParticipants.values) {
       for (final publication in participant.audioTrackPublications) {
-        publication.track?.mediaStreamTrack.enabled = !muted;
+        final track = publication.track;
+        if (track == null) continue;
+        await _setRemoteAudioTrackAudible(track, audible: !muted);
       }
+    }
+  }
+
+  Future<void> _setRemoteAudioTrackAudible(
+    livekit.Track track, {
+    required bool audible,
+  }) async {
+    try {
+      if (audible) {
+        await track.enable();
+        if (track is livekit.RemoteAudioTrack) {
+          await track.start();
+        }
+      } else {
+        await track.disable();
+      }
+    } catch (_) {
+      // Web audio elements can fail transiently during subscribe/unmute.
     }
   }
 

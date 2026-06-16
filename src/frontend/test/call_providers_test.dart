@@ -25,6 +25,8 @@ class _FakeLiveKitRoom implements VoiceLiveKitRoom {
   String? lastUrl;
   bool connectThrows = false;
   bool endDisconnectCalled = false;
+  bool throwOnSetSpeakerMuted = false;
+  bool throwOnSetMuted = false;
 
   @override
   void Function(bool needsUnlock)? onAudioPlaybackUnlockNeeded;
@@ -54,10 +56,14 @@ class _FakeLiveKitRoom implements VoiceLiveKitRoom {
   }
 
   @override
-  Future<void> setMuted(bool muted) async {}
+  Future<void> setMuted(bool muted) async {
+    if (throwOnSetMuted) throw Exception('mic failed');
+  }
 
   @override
-  Future<void> setSpeakerMuted(bool muted) async {}
+  Future<void> setSpeakerMuted(bool muted) async {
+    if (throwOnSetSpeakerMuted) throw Exception('speaker failed');
+  }
 
   @override
   Future<void> setVideoEnabled(bool enabled) async {}
@@ -396,6 +402,47 @@ void main() {
     final call = container.read(callControllerProvider);
     expect(call.phase, CallPhase.failed);
     expect(call.errorMessage, 'livekit_connect_failed');
+  });
+
+  test('setSpeakerMuted reverts state when LiveKit throws', () async {
+    final session = _ringingSession();
+    final client = MockClient((req) async {
+      if (req.method == 'GET' && req.url.path.endsWith('/token')) {
+        return http.Response(
+          jsonEncode({'jwt': 'jwt', 'livekit_url': 'ws://127.0.0.1:7880'}),
+          200,
+        );
+      }
+      return http.Response('{}', 404);
+    });
+    final realtime = StreamController<RealtimeFrame>.broadcast();
+    final fakeRoom = _FakeLiveKitRoom()..throwOnSetSpeakerMuted = true;
+    final container = _callTestContainer(
+      client: client,
+      realtime: realtime,
+      fakeRoom: fakeRoom,
+      activeProfileId: 'prof-caller',
+    );
+    addTearDown(container.dispose);
+    addTearDown(realtime.close);
+
+    final notifier = container.read(callControllerProvider.notifier);
+    notifier.state = CallState(
+      phase: CallPhase.outgoing,
+      session: session,
+    );
+    realtime.add(
+      RealtimeFrame(op: 'call_accepted', data: {'room_id': session.roomId}),
+    );
+    await drainMicrotasks();
+    expect(container.read(callControllerProvider).phase, CallPhase.active);
+
+    notifier.state = container.read(callControllerProvider).copyWith(
+      isSpeakerMuted: true,
+    );
+    await notifier.setSpeakerMuted(false);
+
+    expect(container.read(callControllerProvider).isSpeakerMuted, isTrue);
   });
 
   test('startGroupVoice connects LiveKit without outgoing overlay phase', () async {

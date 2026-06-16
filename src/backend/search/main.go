@@ -26,7 +26,6 @@ import (
 
 	chatv1 "voice.app/voice/chat/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
-	rolev1 "voice.app/voice/role/v1"
 	searchv1 "voice.app/voice/search/v1"
 	socialv1 "voice.app/voice/social/v1"
 	spacev1 "voice.app/voice/space/v1"
@@ -127,18 +126,19 @@ func main() {
 			}()
 		}
 
-		if conn, err := dialOptional(os.Getenv("ROLE_GRPC_ADDR")); err == nil && conn != nil {
+		var chatClient chatv1.ChatServiceClient
+		if conn, err := dialOptional(os.Getenv("CHAT_GRPC_ADDR")); err == nil && conn != nil {
 			defer func() { _ = conn.Close() }()
-			svc.Roles = &deps.RoleAccess{Client: rolev1.NewRoleServiceClient(conn)}
+			chatClient = chatv1.NewChatServiceClient(conn)
+			svc.Roles = &deps.ChatReadAccess{Client: chatClient}
 		}
 		if conn, err := dialOptional(os.Getenv("SOCIAL_GRPC_ADDR")); err == nil && conn != nil {
 			defer func() { _ = conn.Close() }()
 			svc.Blocks = &deps.SocialBlocks{Client: socialv1.NewSocialServiceClient(conn)}
 		}
 		chatAccess := &grpcsvc.ProjectionChatAccess{Store: profileSpaceStore}
-		if conn, err := dialOptional(os.Getenv("CHAT_GRPC_ADDR")); err == nil && conn != nil {
-			defer func() { _ = conn.Close() }()
-			chatAccess.Accessible = (&deps.ChatMembership{Client: chatv1.NewChatServiceClient(conn)}).AccessibleChatIDs
+		if chatClient != nil {
+			chatAccess.Accessible = (&deps.ChatMembership{Client: chatClient}).AccessibleChatIDs
 		}
 		svc.Chats = chatAccess
 

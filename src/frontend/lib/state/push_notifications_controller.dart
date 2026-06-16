@@ -87,6 +87,7 @@ class PushNotificationsController {
     final auth = _ref.read(authControllerProvider);
     final header = auth.session?.authorizationHeader;
     if (header == null) return;
+    if (DefaultFirebaseOptions.usesDevPlaceholder) return;
 
     try {
       await _ensureFirebase();
@@ -95,48 +96,54 @@ class PushNotificationsController {
     }
 
     final messaging = FirebaseMessaging.instance;
-    await messaging.requestPermission();
-    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    try {
+      await messaging.requestPermission();
+      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
-    final platform = pushPlatformForTarget();
-    final pushService = pushServiceForTarget();
-    final token = await _resolvePushToken(messaging, pushService);
-    if (token == null || token.isEmpty) return;
+      final platform = pushPlatformForTarget();
+      final pushService = pushServiceForTarget();
+      final token = await _resolvePushToken(messaging, pushService);
+      if (token == null || token.isEmpty) return;
 
-    const bootstrap = PushNotificationsBootstrap();
-    final deviceTokenId = await bootstrap.registerToken(
-      client: _ref.read(voiceNotificationsClientProvider),
-      authorization: header,
-      platform: platform,
-      token: token,
-      pushService: pushService,
-    );
-    _deviceTokenId = deviceTokenId;
-    _lastAuthorization = header;
-
-    _foregroundSub ??= FirebaseMessaging.onMessage.listen(_onForegroundMessage);
-    _openedSub ??= FirebaseMessaging.onMessageOpenedApp.listen(_onOpenedMessage);
-    await _handleInitialMessage(messaging);
-
-    _tokenRefreshSub ??= messaging.onTokenRefresh.listen((_) async {
-      final currentHeader =
-          _ref.read(authControllerProvider).session?.authorizationHeader;
-      if (currentHeader == null) return;
-      final refreshed = await _resolvePushToken(
-        messaging,
-        pushServiceForTarget(),
-      );
-      if (refreshed == null || refreshed.isEmpty) return;
-      final newId = await bootstrap.registerToken(
+      const bootstrap = PushNotificationsBootstrap();
+      final deviceTokenId = await bootstrap.registerToken(
         client: _ref.read(voiceNotificationsClientProvider),
-        authorization: currentHeader,
-        platform: pushPlatformForTarget(),
-        token: refreshed,
-        pushService: pushServiceForTarget(),
+        authorization: header,
+        platform: platform,
+        token: token,
+        pushService: pushService,
       );
-      _deviceTokenId = newId;
-      _lastAuthorization = currentHeader;
-    });
+      _deviceTokenId = deviceTokenId;
+      _lastAuthorization = header;
+
+      _foregroundSub ??=
+          FirebaseMessaging.onMessage.listen(_onForegroundMessage);
+      _openedSub ??=
+          FirebaseMessaging.onMessageOpenedApp.listen(_onOpenedMessage);
+      await _handleInitialMessage(messaging);
+
+      _tokenRefreshSub ??= messaging.onTokenRefresh.listen((_) async {
+        final currentHeader =
+            _ref.read(authControllerProvider).session?.authorizationHeader;
+        if (currentHeader == null) return;
+        final refreshed = await _resolvePushToken(
+          messaging,
+          pushServiceForTarget(),
+        );
+        if (refreshed == null || refreshed.isEmpty) return;
+        final newId = await bootstrap.registerToken(
+          client: _ref.read(voiceNotificationsClientProvider),
+          authorization: currentHeader,
+          platform: pushPlatformForTarget(),
+          token: refreshed,
+          pushService: pushServiceForTarget(),
+        );
+        _deviceTokenId = newId;
+        _lastAuthorization = currentHeader;
+      });
+    } catch (_) {
+      // FCM unavailable (misconfigured project, blocked network, etc.).
+    }
   }
 
   void _onForegroundMessage(RemoteMessage message) {

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/notifications_client.dart';
+import 'package:voice_frontend/firebase_options.dart';
 import 'package:voice_frontend/state/push_notifications.dart';
 import 'package:voice_frontend/state/push_notifications_bootstrap.dart';
 import 'package:voice_frontend/state/push_platform.dart';
@@ -115,6 +116,12 @@ void main() {
   group('pushServiceForTarget', () {
     test('defaults to fcm on test VM', () {
       expect(pushServiceForTarget(), 'fcm');
+    });
+  });
+
+  group('DefaultFirebaseOptions', () {
+    test('usesDevPlaceholder when apiKey is dev', () {
+      expect(DefaultFirebaseOptions.usesDevPlaceholder, isTrue);
     });
   });
 

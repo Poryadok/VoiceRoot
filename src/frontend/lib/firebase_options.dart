@@ -6,6 +6,9 @@ import 'package:flutter/foundation.dart'
 
 /// Default [FirebaseOptions] for Voice (replace with project values for production).
 class DefaultFirebaseOptions {
+  /// True when options were not replaced with a real Firebase project (local dev).
+  static bool get usesDevPlaceholder => web.apiKey == 'dev';
+
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
       return web;

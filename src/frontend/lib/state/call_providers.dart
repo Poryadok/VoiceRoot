@@ -394,30 +394,44 @@ class CallController extends StateNotifier<CallState> {
   }
 
   Future<void> unlockAudioPlayback() async {
-    await _room?.ensureAudioPlayback();
+    try {
+      await _room?.ensureAudioPlayback();
+    } catch (_) {
+      // Browser autoplay policy — user can retry from the banner.
+    }
   }
 
   Future<void> setMuted(bool muted) async {
     final auth = _ref.read(authorizationHeaderProvider);
     final current = state.session;
+    final previous = state.isMuted;
     state = state.copyWith(isMuted: muted);
-    await _room?.ensureAudioPlayback();
-    await _room?.setMuted(muted);
-    if (auth != null && current != null) {
-      await _ref
-          .read(voiceCallsClientProvider)
-          .updateVoiceState(
-            authorization: auth,
-            roomId: current.roomId,
-            isMuted: muted,
-          );
+    try {
+      await _room?.ensureAudioPlayback();
+      await _room?.setMuted(muted);
+      if (auth != null && current != null) {
+        await _ref
+            .read(voiceCallsClientProvider)
+            .updateVoiceState(
+              authorization: auth,
+              roomId: current.roomId,
+              isMuted: muted,
+            );
+      }
+    } catch (_) {
+      if (mounted) state = state.copyWith(isMuted: previous);
     }
   }
 
   Future<void> setSpeakerMuted(bool muted) async {
+    final previous = state.isSpeakerMuted;
     state = state.copyWith(isSpeakerMuted: muted);
-    await _room?.ensureAudioPlayback();
-    await _room?.setSpeakerMuted(muted);
+    try {
+      await _room?.ensureAudioPlayback();
+      await _room?.setSpeakerMuted(muted);
+    } catch (_) {
+      if (mounted) state = state.copyWith(isSpeakerMuted: previous);
+    }
   }
 
   Future<void> setVideoEnabled(bool enabled) async {
