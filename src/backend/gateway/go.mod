@@ -28,6 +28,7 @@ require (
 	voice.app/voice/search v0.0.0
 	voice.app/voice/social v0.0.0
 	voice.app/voice/space v0.0.0
+	voice.app/voice/story v0.0.0
 	voice.app/voice/subscription v0.0.0
 	voice.app/voice/user v0.0.0
 	voice/backend/messaging v0.0.0
@@ -141,6 +142,8 @@ replace voice.app/voice/role => ../role/pb/voice/role
 replace voice.app/voice/search => ../voice/pb/voice/search
 
 replace voice.app/voice/space => ../voice/pb/voice/space
+
+replace voice.app/voice/story => ../voice/pb/voice/story
 
 replace voice.app/voice/subscription => ../voice/pb/voice/subscription
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import 'backend/gateway_client.dart';
 import 'backend/users_client.dart';
@@ -29,6 +30,7 @@ import 'state/matchmaking_match_controller.dart';
 import 'state/matchmaking_search_controller.dart';
 import 'state/matchmaking_rating_controller.dart';
 import 'ui/matchmaking/match_squad_navigator.dart';
+import 'routing/app_router.dart';
 import 'ui/chat/chat_room_panel.dart';
 import 'ui/core/profile_accent_dot.dart';
 import 'ui/core/voice_bottom_sheet.dart';
@@ -78,15 +80,9 @@ class VoiceApp extends ConsumerWidget {
             home: const AuthScreen(),
           );
         }
-        return MaterialApp(
+        return _AuthenticatedRouterApp(
           locale: effectiveLocale,
           theme: theme,
-          onGenerateTitle: (ctx) => AppLocalizations.of(ctx)!.appTitle,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: MatchSquadNavigator(
-            child: _AuthenticatedShell(locale: effectiveLocale),
-          ),
         );
       },
       loading: () => MaterialApp(
@@ -114,6 +110,39 @@ class VoiceApp extends ConsumerWidget {
           },
         ),
       ),
+    );
+  }
+}
+
+class _AuthenticatedRouterApp extends StatefulWidget {
+  const _AuthenticatedRouterApp({
+    required this.locale,
+    required this.theme,
+  });
+
+  final Locale? locale;
+  final ThemeData theme;
+
+  @override
+  State<_AuthenticatedRouterApp> createState() => _AuthenticatedRouterAppState();
+}
+
+class _AuthenticatedRouterAppState extends State<_AuthenticatedRouterApp> {
+  late final GoRouter _router = createVoiceGoRouter(
+    shellBuilder: (context, state) => MatchSquadNavigator(
+      child: _AuthenticatedShell(locale: widget.locale),
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp.router(
+      locale: widget.locale,
+      theme: widget.theme,
+      onGenerateTitle: (ctx) => AppLocalizations.of(ctx)!.appTitle,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      routerConfig: _router,
     );
   }
 }

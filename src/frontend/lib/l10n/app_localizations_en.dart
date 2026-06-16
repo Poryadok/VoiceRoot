@@ -1725,4 +1725,65 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get e2eAttachmentDecryptFailed => 'Could not decrypt attachment';
+
+  @override
+  String get storyRingActiveLabel => 'Active story';
+
+  @override
+  String get storyCreateTitle => 'New story';
+
+  @override
+  String get storyCreateTypeText => 'Text';
+
+  @override
+  String get storyCreateTypePhoto => 'Photo';
+
+  @override
+  String get storyCreateTypeVideo => 'Video';
+
+  @override
+  String get storyCreateTextLabel => 'Story text';
+
+  @override
+  String get storyCreateCaptionLabel => 'Caption';
+
+  @override
+  String get storyCreatePickMedia => 'Choose media';
+
+  @override
+  String get storyCreateSubmit => 'Publish story';
+
+  @override
+  String get storyCreateTextRequired => 'Enter story text';
+
+  @override
+  String get storyCreateMediaRequired => 'Choose a photo or video first';
+
+  @override
+  String get storyViewerEmpty => 'No stories to show';
+
+  @override
+  String get storyViewerLoadError => 'Could not load story';
+
+  @override
+  String get storyViewerNoMedia => 'Media unavailable';
+
+  @override
+  String get storyViewerVideoPlaceholder =>
+      'Video playback is not available in this build';
+
+  @override
+  String get storyReactTooltip => 'React';
+
+  @override
+  String get storyReactSent => 'Reaction sent';
+
+  @override
+  String get storyHighlightsTitle => 'Highlights';
+
+  @override
+  String get storyLfpTitle => 'Looking for party';
+
+  @override
+  String get storyLfpGame => 'Game';
 }

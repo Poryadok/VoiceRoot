@@ -25,6 +25,7 @@ import (
 	searchv1 "voice.app/voice/search/v1"
 	subscriptionv1 "voice.app/voice/subscription/v1"
 	botv1 "voice.app/voice/bot/v1"
+	storyv1 "voice.app/voice/story/v1"
 	spacev1 "voice.app/voice/space/v1"
 	userv1 "voice.app/voice/user/v1"
 	authv1 "voice.app/voice/auth/v1"
@@ -44,6 +45,7 @@ type grpcClients struct {
 	moderation   moderationv1.ModerationServiceClient
 	subscription subscriptionv1.SubscriptionServiceClient
 	bot          botv1.BotServiceClient
+	story        storyv1.StoryServiceClient
 	search       searchv1.SearchServiceClient
 	auth         authv1.AuthServiceClient
 }
@@ -142,12 +144,17 @@ func grpcClientsFromEnv() *grpcClients {
 	} else if conn != nil {
 		clients.bot = botv1.NewBotServiceClient(conn)
 	}
+	if conn, err := dial(addrFor("stories")); err != nil {
+		log.Printf("gateway grpc dial stories: %v", err)
+	} else if conn != nil {
+		clients.story = storyv1.NewStoryServiceClient(conn)
+	}
 	if conn, err := dial(addrFor("auth")); err != nil {
 		log.Printf("gateway grpc dial auth: %v", err)
 	} else if conn != nil {
 		clients.auth = authv1.NewAuthServiceClient(conn)
 	}
-	if clients.user == nil && clients.social == nil && clients.chat == nil && clients.messaging == nil && clients.voice == nil && clients.file == nil && clients.space == nil && clients.role == nil && clients.notification == nil && clients.matchmaking == nil && clients.search == nil && clients.moderation == nil && clients.subscription == nil && clients.bot == nil {
+	if clients.user == nil && clients.social == nil && clients.chat == nil && clients.messaging == nil && clients.voice == nil && clients.file == nil && clients.space == nil && clients.role == nil && clients.notification == nil && clients.matchmaking == nil && clients.search == nil && clients.moderation == nil && clients.subscription == nil && clients.bot == nil && clients.story == nil {
 		return nil
 	}
 	return clients
@@ -242,6 +249,11 @@ func (t *transcoder) serveNamespace(w http.ResponseWriter, r *http.Request, name
 			return false
 		}
 		return t.serveBots(w, r, rest)
+	case "stories":
+		if t.clients.story == nil {
+			return false
+		}
+		return t.serveStories(w, r, rest)
 	default:
 		return false
 	}

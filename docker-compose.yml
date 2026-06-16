@@ -505,6 +505,22 @@ services:
       postgres:
         condition: service_healthy
 
+  story-db-init:
+    profiles: ["app"]
+    image: postgres:16-alpine
+    restart: "no"
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER:-voice}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-voice}
+    volumes:
+      - ./docker/postgres/ensure-story-db.sh:/ensure.sh:ro
+      - ./docker/postgres/story_db_init.sql.snippet:/schema/story_db_init.sql.snippet:ro
+    entrypoint: ["/bin/sh", "/ensure.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   bot:
     profiles: ["app"]
     build:
@@ -530,6 +546,38 @@ services:
       chat:
         condition: service_healthy
       role:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  story:
+    profiles: ["app"]
+    build:
+      context: ./src/backend
+      dockerfile: story/Dockerfile
+    environment:
+      LOG_LEVEL: debug
+      DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/story_db?sslmode=disable
+      STORY_GRPC_LISTEN: :9090
+      SOCIAL_GRPC_ADDR: social:9090
+      USER_GRPC_ADDR: user:9090
+      GRPC_DIAL_TIMEOUT: ${GRPC_DIAL_TIMEOUT:-15s}
+      NATS_URL: nats://nats:4222
+      STORY_TTL_DEV: ${STORY_TTL_DEV:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      story-db-init:
+        condition: service_completed_successfully
+      social:
+        condition: service_healthy
+      user:
+        condition: service_healthy
+      nats:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
@@ -659,7 +707,7 @@ services:
       LISTEN_ADDR: ":8080"
       GATEWAY_REDIS_ADDR: redis:6379
       GATEWAY_REST_UPSTREAMS_JSON: '{"auth":"http://auth:8080"}'
-      GATEWAY_GRPC_UPSTREAMS_JSON: '{"users":"user:9090","friends":"social:9090","chats":"chat:9090","messages":"messaging:9090","spaces":"space:9090","roles":"role:9090","voice":"voice:9090","files":"file:9090","notifications":"notification:9090","matchmaking":"matchmaking:9090","search":"search:9090","moderation":"moderation:9090","subscription":"subscription:9090","bots":"bot:9090"}'
+      GATEWAY_GRPC_UPSTREAMS_JSON: '{"users":"user:9090","friends":"social:9090","chats":"chat:9090","messages":"messaging:9090","spaces":"space:9090","roles":"role:9090","voice":"voice:9090","files":"file:9090","notifications":"notification:9090","matchmaking":"matchmaking:9090","search":"search:9090","moderation":"moderation:9090","subscription":"subscription:9090","bots":"bot:9090","stories":"story:9090"}'
       GATEWAY_REALTIME_UPSTREAM_URL: http://realtime:8080
       GATEWAY_JWKS_URL: http://auth:8080/api/v1/auth/.well-known/jwks.json
       GATEWAY_JWT_ISSUER: voice-auth
@@ -706,6 +754,8 @@ services:
       subscription:
         condition: service_healthy
       bot:
+        condition: service_healthy
+      story:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]

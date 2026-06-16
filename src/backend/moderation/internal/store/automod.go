@@ -118,7 +118,7 @@ func (s *ReportStore) ListReportsFiltered(ctx context.Context, statusFilter, que
 	queueSQL := ""
 	switch queueFilter {
 	case "content":
-		queueSQL = " AND target_type IN ('user', 'message')"
+		queueSQL = " AND target_type IN ('user', 'message', 'story')"
 	case "spaces":
 		queueSQL = " AND target_type = 'space'"
 	}

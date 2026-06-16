@@ -72,6 +72,21 @@ final class ReportSpaceTarget extends ReportTarget {
   Map<String, Object?> get evidence => const {};
 }
 
+final class ReportStoryTarget extends ReportTarget {
+  const ReportStoryTarget({required this.storyId});
+
+  final String storyId;
+
+  @override
+  String get targetType => 'story';
+
+  @override
+  String get targetId => storyId;
+
+  @override
+  Map<String, Object?> get evidence => const {};
+}
+
 /// Category ids sent to the moderation API (`mm_toxic` is remapped server-side).
 abstract final class ReportCategories {
   static const spam = 'spam';

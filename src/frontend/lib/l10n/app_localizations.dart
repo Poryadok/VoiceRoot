@@ -3217,6 +3217,126 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not decrypt attachment'**
   String get e2eAttachmentDecryptFailed;
+
+  /// No description provided for @storyRingActiveLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Active story'**
+  String get storyRingActiveLabel;
+
+  /// No description provided for @storyCreateTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'New story'**
+  String get storyCreateTitle;
+
+  /// No description provided for @storyCreateTypeText.
+  ///
+  /// In en, this message translates to:
+  /// **'Text'**
+  String get storyCreateTypeText;
+
+  /// No description provided for @storyCreateTypePhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo'**
+  String get storyCreateTypePhoto;
+
+  /// No description provided for @storyCreateTypeVideo.
+  ///
+  /// In en, this message translates to:
+  /// **'Video'**
+  String get storyCreateTypeVideo;
+
+  /// No description provided for @storyCreateTextLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Story text'**
+  String get storyCreateTextLabel;
+
+  /// No description provided for @storyCreateCaptionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Caption'**
+  String get storyCreateCaptionLabel;
+
+  /// No description provided for @storyCreatePickMedia.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose media'**
+  String get storyCreatePickMedia;
+
+  /// No description provided for @storyCreateSubmit.
+  ///
+  /// In en, this message translates to:
+  /// **'Publish story'**
+  String get storyCreateSubmit;
+
+  /// No description provided for @storyCreateTextRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter story text'**
+  String get storyCreateTextRequired;
+
+  /// No description provided for @storyCreateMediaRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a photo or video first'**
+  String get storyCreateMediaRequired;
+
+  /// No description provided for @storyViewerEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No stories to show'**
+  String get storyViewerEmpty;
+
+  /// No description provided for @storyViewerLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load story'**
+  String get storyViewerLoadError;
+
+  /// No description provided for @storyViewerNoMedia.
+  ///
+  /// In en, this message translates to:
+  /// **'Media unavailable'**
+  String get storyViewerNoMedia;
+
+  /// No description provided for @storyViewerVideoPlaceholder.
+  ///
+  /// In en, this message translates to:
+  /// **'Video playback is not available in this build'**
+  String get storyViewerVideoPlaceholder;
+
+  /// No description provided for @storyReactTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'React'**
+  String get storyReactTooltip;
+
+  /// No description provided for @storyReactSent.
+  ///
+  /// In en, this message translates to:
+  /// **'Reaction sent'**
+  String get storyReactSent;
+
+  /// No description provided for @storyHighlightsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Highlights'**
+  String get storyHighlightsTitle;
+
+  /// No description provided for @storyLfpTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Looking for party'**
+  String get storyLfpTitle;
+
+  /// No description provided for @storyLfpGame.
+  ///
+  /// In en, this message translates to:
+  /// **'Game'**
+  String get storyLfpGame;
 }
 
 class _AppLocalizationsDelegate

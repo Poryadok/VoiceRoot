@@ -6,9 +6,12 @@ import '../../l10n/app_localizations.dart';
 import '../api_error_messages.dart';
 import '../../state/presence_providers.dart';
 import '../../state/social_providers.dart';
+import '../../state/stories_providers.dart';
 import '../core/voice_state_panel.dart';
 import '../matchmaking/game_catalog_screen.dart';
 import '../matchmaking/match_history_screen.dart';
+import '../stories/story_ring_avatar.dart';
+import '../../routing/stories_routes.dart';
 import 'presence_indicator.dart';
 import 'profile_detail_sheet.dart';
 
@@ -80,6 +83,7 @@ class _SocialPanelState extends ConsumerState<SocialPanel>
   @override
   Widget build(BuildContext context) {
     ref.watch(friendsPresenceSyncProvider);
+    ref.watch(storyFeedProvider);
     final l10n = AppLocalizations.of(context)!;
 
     return Column(
@@ -489,7 +493,7 @@ class _ProfileIdTile extends ConsumerWidget {
   }
 }
 
-class _ProfileListTile extends StatelessWidget {
+class _ProfileListTile extends ConsumerWidget {
   const _ProfileListTile({
     super.key,
     required this.profile,
@@ -504,18 +508,32 @@ class _ProfileListTile extends StatelessWidget {
   final String? subtitle;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final presence = this.presence;
+    final activeAuthors = ref.watch(activeStoryAuthorIdsProvider);
+    final hasActiveStory = activeAuthors.contains(profile.id);
+    final profileStoriesAsync = ref.watch(profileStoriesProvider(profile.id));
+
     return ListTile(
       leading: Stack(
         clipBehavior: Clip.none,
         children: [
-          CircleAvatar(
-            child: Text(
-              profile.displayName.isNotEmpty
-                  ? profile.displayName[0].toUpperCase()
-                  : '?',
-            ),
+          StoryRingAvatar(
+            displayName: profile.displayName,
+            imageUrl: profile.avatarUrl,
+            hasActiveStory: hasActiveStory,
+            size: 40,
+            onTap: hasActiveStory
+                ? () {
+                    final stories = profileStoriesAsync.valueOrNull;
+                    if (stories == null || stories.isEmpty) return;
+                    StoriesRoutes.openViewer(
+                      context,
+                      storyIds: stories.map((s) => s.id).toList(),
+                      profileId: profile.id,
+                    );
+                  }
+                : null,
           ),
           if (presence != null)
             Positioned(

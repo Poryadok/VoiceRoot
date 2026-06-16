@@ -205,6 +205,55 @@
 
 ---
 
+## Phase 17 — Stories (follow-ups)
+
+*Audit vs [stories.md](features/stories.md) and [PLAN.md](PLAN.md) §17. MVP backend + partial Flutter landed; items below are genuine gaps, not out-of-phase scope (AR, algorithmic feed, post-match auto-story, monetization).*
+
+### Backend — events & integrations
+
+- [ ] **`story.events` NATS publisher** — JetStream stream per [story-service.md](microservices/story-service.md): publish on create, view, react, expire, highlight create, LFP create.
+- [ ] **Mention notifications** — on story create with `mention_profile_ids`, event → Notification Service.
+- [ ] **Reply-to-story → DM** — gRPC + Gateway route: private reply opens/sends DM thread ([stories.md](features/stories.md) §Ответы).
+- [ ] **Archive purge → File Service** — `PurgeArchivedStories` deletes orphaned `media_file_id` in R2.
+- [ ] **Story media upload context** — File `RequestUpload` purpose/lifecycle for story attachments.
+
+### Backend — API & privacy
+
+- [ ] **Highlight privacy** — enforce `highlights.visibility` in `GetHighlights`; expose on proto + create/update.
+- [ ] **User privacy policy** — resolve story audience from User/Social privacy settings ([privacy.md](features/privacy.md)).
+- [ ] **`custom` / `close_friends` audiences** — proto enums exist; handler only supports `everyone`/`friends`.
+- [ ] **Author-only view stats** — hide `view_count` from non-authors; `GetStoryReactions` (author-only).
+- [ ] **Premium anonymous views** — gate `MarkViewed(anonymous=true)` via Subscription Service.
+- [ ] **Feed pagination** — cursor/`HasMore` in `GetStoryFeed`.
+- [ ] **Feed shape** — friends + space members grouped by author for ring UX.
+- [ ] **CreateStory: mentions & game_tag** — wire proto fields + validation.
+- [ ] **LFP visibility floor** — LFP visibility ≥ user story privacy setting.
+
+### Frontend — UX & editor (Phase 17 basics)
+
+- [ ] **Story create entry point** — shell affordance calling `StoriesRoutes.openCreate`.
+- [ ] **Media picker** — wire `image_picker` / file upload for photo/video in `story_create_screen.dart`.
+- [ ] **Video playback** — replace viewer placeholder with player (≤60s).
+- [ ] **Text story styling** — colored background / `text_style_json` minimal editor.
+- [ ] **Highlights on profile** — mount `HighlightsSection` on profile; archive → add-to-highlight for owner.
+- [ ] **Profile story ring** — tap avatar on profile opens viewer.
+- [ ] **Author insights** — viewers list + view count UI for own active stories.
+- [ ] **Reply-to-story UI** — DM compose from viewer (depends on backend reply RPC).
+- [ ] **LFP actions** — Join / Write navigation stubs on `LfpStoryCard` per [matchmaking.md](features/matchmaking.md).
+- [ ] **Game tag on create** — catalog picker → `game_tag`.
+
+### Tests, CI & docs
+
+- [ ] **Story `grpcsvc` coverage ≥80%** — jobs workers, `privacy.FriendChecker` with Social mock.
+- [ ] **Expiry acceptance test** — publish → expire → archive → purge integration.
+- [ ] **Flutter widget tests** — viewer, create, highlights screens.
+- [ ] **`story-service.md` parity** — document REST map; note deferred LFP→Matchmaking NATS.
+- [ ] **`make compose-migrate-story` in CI** — `story_db` migrations on fresh compose volumes.
+
+**Промпт-якорь:** `Phase 17 Stories — follow-ups from docs/TODO.md §Phase 17`.
+
+---
+
 ## Сводка: что отдать агенту следующим
 
 | Если готовы… | Дайте агенту batch |

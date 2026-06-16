@@ -42,7 +42,7 @@ func (s *ModerationGRPC) CreateReport(ctx context.Context, req *moderationv1.Cre
 		return nil, status.Error(codes.InvalidArgument, "target_type is required")
 	}
 	switch targetType {
-	case "user", "message", "space":
+	case "user", "message", "space", "story":
 	default:
 		return nil, status.Error(codes.InvalidArgument, "invalid target_type")
 	}

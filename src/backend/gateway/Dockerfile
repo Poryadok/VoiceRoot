@@ -9,6 +9,7 @@ COPY user/pb/voice/user/go.mod ./user/pb/voice/user/
 COPY user/pb/voice/social/go.mod ./user/pb/voice/social/
 COPY chat/pb/voice/chat/go.mod ./chat/pb/voice/chat/
 COPY messaging/pb/voice/messaging/go.mod ./messaging/pb/voice/messaging/
+COPY messaging/go.mod ./messaging/
 COPY file/pb/voice/file/go.mod ./file/pb/voice/file/
 COPY voice/pb/voice/calls/go.mod ./voice/pb/voice/calls/
 COPY voice/pb/voice/space/go.mod ./voice/pb/voice/space/
@@ -20,12 +21,14 @@ COPY voice/pb/voice/moderation/go.mod ./voice/pb/voice/moderation/
 COPY voice/pb/voice/subscription/go.mod ./voice/pb/voice/subscription/
 COPY voice/pb/voice/auth/go.mod ./voice/pb/voice/auth/
 COPY voice/pb/voice/bot/go.mod ./voice/pb/voice/bot/
+COPY voice/pb/voice/story/go.mod ./voice/pb/voice/story/
 COPY gateway/go.mod ./gateway/
 RUN cd gateway && go mod download
 COPY pkg ./pkg
 COPY user/pb ./user/pb
 COPY chat/pb ./chat/pb
 COPY messaging/pb ./messaging/pb
+COPY messaging ./messaging
 COPY file/pb ./file/pb
 COPY voice/pb ./voice/pb
 COPY role/pb ./role/pb

@@ -63,6 +63,7 @@ dependencies:
   connectivity_plus: ^7.1.1
   qr_flutter: ^4.1.0
   libsignal_protocol_dart: ^0.8.0
+  go_router: ^15.1.2
 
 dev_dependencies:
   flutter_test:

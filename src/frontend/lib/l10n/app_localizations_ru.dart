@@ -1734,4 +1734,65 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get e2eAttachmentDecryptFailed => 'Не удалось расшифровать вложение';
+
+  @override
+  String get storyRingActiveLabel => 'Активная сторис';
+
+  @override
+  String get storyCreateTitle => 'Новая сторис';
+
+  @override
+  String get storyCreateTypeText => 'Текст';
+
+  @override
+  String get storyCreateTypePhoto => 'Фото';
+
+  @override
+  String get storyCreateTypeVideo => 'Видео';
+
+  @override
+  String get storyCreateTextLabel => 'Текст сторис';
+
+  @override
+  String get storyCreateCaptionLabel => 'Подпись';
+
+  @override
+  String get storyCreatePickMedia => 'Выбрать медиа';
+
+  @override
+  String get storyCreateSubmit => 'Опубликовать';
+
+  @override
+  String get storyCreateTextRequired => 'Введите текст сторис';
+
+  @override
+  String get storyCreateMediaRequired => 'Сначала выберите фото или видео';
+
+  @override
+  String get storyViewerEmpty => 'Нет сторис для просмотра';
+
+  @override
+  String get storyViewerLoadError => 'Не удалось загрузить сторис';
+
+  @override
+  String get storyViewerNoMedia => 'Медиа недоступно';
+
+  @override
+  String get storyViewerVideoPlaceholder =>
+      'Воспроизведение видео недоступно в этой сборке';
+
+  @override
+  String get storyReactTooltip => 'Реакция';
+
+  @override
+  String get storyReactSent => 'Реакция отправлена';
+
+  @override
+  String get storyHighlightsTitle => 'Избранное';
+
+  @override
+  String get storyLfpTitle => 'Ищу пати';
+
+  @override
+  String get storyLfpGame => 'Игра';
 }
