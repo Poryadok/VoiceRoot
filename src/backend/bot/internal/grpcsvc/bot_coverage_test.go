@@ -59,6 +59,7 @@ func TestChatWhitelist_roundTrip(t *testing.T) {
 	chatID := uuid.New()
 	_, err = st.InstallInSpace(ctx, botUUID, spaceID, profile, []uuid.UUID{chatID})
 	require.NoError(t, err)
+	require.NoError(t, st.TouchPresence(ctx, botUUID))
 
 	chatType := chatv1.ChatType_CHAT_TYPE_CHANNEL
 	_, err = client.SetChatWhitelist(ctx, &botv1.SetChatWhitelistRequest{
@@ -108,6 +109,7 @@ commands:
 	chatID := uuid.New()
 	_, err = st.InstallInSpace(ctx, botUUID, uuid.New(), profile, []uuid.UUID{chatID})
 	require.NoError(t, err)
+	require.NoError(t, st.TouchPresence(ctx, botUUID))
 
 	chatType := chatv1.ChatType_CHAT_TYPE_CHANNEL
 	_, err = client.ExecuteSlashInteraction(ctx, &botv1.ExecuteSlashInteractionRequest{

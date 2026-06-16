@@ -118,6 +118,107 @@ func TestComposePhase16BotsSlashDeferred_live(t *testing.T) {
 	assertComposeMessageInHistory(t, client, base, sess.AccessToken, chatID, "pong-deferred")
 }
 
+// TestComposePhase16BotsOfflineGreyout_live lists slash commands after install without polling;
+// bot must appear offline (online:false) until presence heartbeat.
+func TestComposePhase16BotsOfflineGreyout_live(t *testing.T) {
+	if !liveComposeEnabled() {
+		t.Skip("set VOICE_RUN_LIVE_COMPOSE=true to run against local compose")
+	}
+	clearLiveComposeAuthRateLimit(t)
+
+	client := &http.Client{Timeout: 45 * time.Second}
+	base := liveGatewayBaseURL()
+	n := time.Now().UnixNano()
+
+	sess := registerComposeUser(t, client, base, formatComposeEmail("p16-greyout", n), "VoiceQaTest1!")
+	spaceID := createComposeSpace(t, client, base, sess.AccessToken, fmt.Sprintf("Bots Greyout %d", n), "phase16")
+	chatID := createComposeGroup(t, client, base, sess.AccessToken, fmt.Sprintf("bots-greyout-%d", n))
+
+	botID, _ := registerComposeBot(t, client, base, sess.AccessToken, fmt.Sprintf("GreyoutBot-%d", n))
+	applyComposeBotManifestPolling(t, client, base, sess.AccessToken, botID)
+	installComposeBot(t, client, base, sess.AccessToken, botID, spaceID, chatID)
+
+	req, err := http.NewRequest(http.MethodGet,
+		base+"/api/v1/bots/commands?chat_id="+chatID+"&chat_type=CHAT_TYPE_GROUP", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+sess.AccessToken)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "list commands body=%s", string(body))
+
+	var parsed struct {
+		Commands []struct {
+			Name   string `json:"name"`
+			Online bool   `json:"online"`
+		} `json:"commands"`
+	}
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	require.NotEmpty(t, parsed.Commands, "expected slash commands after install")
+	require.False(t, parsed.Commands[0].Online,
+		"bot without poll/presence must be offline (online:false), body=%s", string(body))
+}
+
+// TestComposePhase16BotsPrivilegedInstall_live rejects installing a history bot without owner ack.
+func TestComposePhase16BotsPrivilegedInstall_live(t *testing.T) {
+	if !liveComposeEnabled() {
+		t.Skip("set VOICE_RUN_LIVE_COMPOSE=true to run against local compose")
+	}
+	clearLiveComposeAuthRateLimit(t)
+
+	client := &http.Client{Timeout: 45 * time.Second}
+	base := liveGatewayBaseURL()
+	n := time.Now().UnixNano()
+
+	sess := registerComposeUser(t, client, base, formatComposeEmail("p16-priv", n), "VoiceQaTest1!")
+	spaceID := createComposeSpace(t, client, base, sess.AccessToken, fmt.Sprintf("Bots Priv %d", n), "phase16")
+	chatID := createComposeGroup(t, client, base, sess.AccessToken, fmt.Sprintf("bots-priv-%d", n))
+
+	botID := registerComposePrivilegedBot(t, client, base, sess.AccessToken, fmt.Sprintf("HistoryBot-%d", n))
+	applyComposeBotManifestPolling(t, client, base, sess.AccessToken, botID)
+
+	payload, _ := json.Marshal(map[string]any{
+		"allowed_chats": []map[string]string{{"id": chatID, "type": "CHAT_TYPE_GROUP"}},
+	})
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/bots/"+botID+"/spaces/"+spaceID+"/install", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+sess.AccessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.NotEqual(t, http.StatusOK, resp.StatusCode,
+		"install without acknowledge_privileged_scopes must fail, body=%s", string(body))
+}
+
+func registerComposePrivilegedBot(t *testing.T, client *http.Client, base, token, name string) string {
+	t.Helper()
+	payload, _ := json.Marshal(map[string]string{
+		"name":        name,
+		"description": "history bot",
+		"scopes_json": `["TEXT_CHAT_SEND_MESSAGES","TEXT_CHAT_READ_HISTORY"]`,
+	})
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/bots", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
+	var parsed struct {
+		Bot struct {
+			ID string `json:"id"`
+		} `json:"bot"`
+	}
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	require.NotEmpty(t, parsed.Bot.ID)
+	return parsed.Bot.ID
+}
+
 func createComposeSpaceChatLinkedID(t *testing.T, client *http.Client, base, accessToken, spaceID, name string) string {
 	t.Helper()
 	payload, err := json.Marshal(map[string]string{

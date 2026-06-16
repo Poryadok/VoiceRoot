@@ -12,6 +12,7 @@ import (
 
 	"voice/backend/bot/internal/authctx"
 	"voice/backend/bot/internal/dispatch"
+	"voice/backend/bot/internal/s2s"
 	"voice/backend/bot/internal/store"
 	"voice/backend/bot/internal/webhook"
 
@@ -19,7 +20,16 @@ import (
 	chatv1 "voice.app/voice/chat/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
 	rolev1 "voice.app/voice/role/v1"
+	spacev1 "voice.app/voice/space/v1"
 )
+
+func chatRefIsChannel(ref *chatv1.ChatRef) bool {
+	return ref != nil && ref.Type != nil && *ref.Type == chatv1.ChatType_CHAT_TYPE_CHANNEL
+}
+
+func chatRefIsDM(ref *chatv1.ChatRef) bool {
+	return ref != nil && ref.Type != nil && *ref.Type == chatv1.ChatType_CHAT_TYPE_DM
+}
 
 func (s *BotGRPC) InstallBotInSpace(ctx context.Context, req *botv1.InstallBotInSpaceRequest) (*botv1.InstallBotInSpaceResponse, error) {
 	botID, err := parseUUID("bot_id", req.GetBotId())
@@ -59,10 +69,29 @@ func (s *BotGRPC) InstallBotInSpace(ctx context.Context, req *botv1.InstallBotIn
 	if err != nil {
 		return nil, mapStoreErr(err)
 	}
+	if store.HasPrivilegedScope(botRow.ScopesJSON) && !req.GetAcknowledgePrivilegedScopes() {
+		return nil, status.Error(codes.FailedPrecondition, "acknowledge_privileged_scopes required for privileged bot scopes")
+	}
+	if s.Space != nil {
+		spaceCtx := s2s.ForwardIncomingMetadata(ctx)
+		if _, err := s.Space.AddBotMember(spaceCtx, &spacev1.AddBotMemberRequest{
+			SpaceId:   spaceID.String(),
+			ProfileId: botRow.ActorProfileID.String(),
+		}); err != nil {
+			return nil, status.Errorf(codes.FailedPrecondition, "add bot to space: %v", err)
+		}
+	}
 	if s.Chat != nil {
 		actorID := botRow.ActorProfileID.String()
-		chatCtx := s.userCallCtx(ctx)
-		for _, cid := range chats {
+		chatCtx := s2s.ForwardIncomingMetadata(ctx)
+		for _, ref := range req.GetAllowedChats() {
+			if chatRefIsChannel(ref) {
+				continue
+			}
+			cid, err := parseUUID("chat.id", ref.GetId())
+			if err != nil {
+				return nil, err
+			}
 			if _, err := s.Chat.AddMembers(chatCtx, &chatv1.AddMembersRequest{
 				ChatId:     cid.String(),
 				ProfileIds: []string{actorID},
@@ -106,6 +135,16 @@ func (s *BotGRPC) UninstallBotFromSpace(ctx context.Context, req *botv1.Uninstal
 	}
 	if err := s.Store.UninstallFromSpace(ctx, botID, spaceID); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if s.Space != nil {
+		botRow, err := s.Store.GetBotByID(ctx, botID)
+		if err == nil && botRow != nil {
+			spaceCtx := s2s.ForwardIncomingMetadata(ctx)
+			_, _ = s.Space.RemoveBotMember(spaceCtx, &spacev1.RemoveBotMemberRequest{
+				SpaceId:   spaceID.String(),
+				ProfileId: botRow.ActorProfileID.String(),
+			})
+		}
 	}
 	return &botv1.UninstallBotFromSpaceResponse{}, nil
 }
@@ -253,7 +292,7 @@ ORDER BY b.name, c.name`, chatID)
 			BotName:     botName,
 			Name:        name,
 			Description: desc,
-			Online:      true,
+			Online:      s.isBotOnline(ctx, botID),
 		}
 		if parts := strings.SplitN(strings.TrimSpace(name), " ", 2); len(parts) == 2 {
 			group := parts[0]
@@ -308,6 +347,14 @@ func (s *BotGRPC) ExecuteSlashInteraction(ctx context.Context, req *botv1.Execut
 	}
 	if !store.ScopeAllows(botRow.ScopesJSON, "TEXT_CHAT_SEND_MESSAGES") {
 		return nil, status.Error(codes.PermissionDenied, "bot lacks TEXT_CHAT_SEND_MESSAGES")
+	}
+	if !s.isBotOnline(ctx, botID) {
+		code := "bot_unavailable"
+		msg := "Bot is unavailable."
+		return &botv1.ExecuteSlashInteractionResponse{
+			ErrorCode:    &code,
+			ErrorMessage: &msg,
+		}, nil
 	}
 	cmdName := strings.TrimPrefix(strings.TrimSpace(req.GetCommandName()), "/")
 	commands, err := s.Store.ListCommands(ctx, botID)
@@ -370,6 +417,7 @@ func (s *BotGRPC) ExecuteSlashInteraction(ctx context.Context, req *botv1.Execut
 			if s.Events != nil {
 				_ = s.Events.PublishWebhookDelivered(context.Background(), botID.String(), token, true)
 			}
+			s.touchPresence(context.Background(), botID)
 			s.Hub.Complete(token, store.InteractionReply{
 				Content:   resp.Content,
 				Ephemeral: resp.Ephemeral,
@@ -396,6 +444,7 @@ func (s *BotGRPC) ExecuteSlashInteraction(ctx context.Context, req *botv1.Execut
 		return nil, status.Error(codes.Unavailable, reply.Err.Error())
 	}
 	if reply.Deferred {
+		_ = s.Store.MarkEventDeferred(ctx, botID, token)
 		def := true
 		return &botv1.ExecuteSlashInteractionResponse{
 			InteractionToken: token,
@@ -512,6 +561,14 @@ func (s *BotGRPC) SendBotMessage(ctx context.Context, req *botv1.SendBotMessageR
 	chatID, err := parseUUID("chat.id", req.GetChat().GetId())
 	if err != nil {
 		return nil, err
+	}
+	if chatRefIsDM(req.GetChat()) {
+		if err := s.requireScope(botRow, "DM_SEND"); err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(req.GetInteractionToken()) == "" {
+			return nil, status.Error(codes.PermissionDenied, "DM_SEND requires interaction context")
+		}
 	}
 	allowed, err := s.Store.IsChatWhitelisted(ctx, botRow.ID, chatID)
 	if err != nil {

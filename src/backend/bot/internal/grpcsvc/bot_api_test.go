@@ -81,6 +81,7 @@ commands:
 	botUUID, _ := uuid.Parse(botID)
 	_, err = st.InstallInSpace(ctx, botUUID, uuid.New(), profile, []uuid.UUID{chatID})
 	require.NoError(t, err)
+	require.NoError(t, st.TouchPresence(ctx, botUUID))
 
 	chatType := chatv1.ChatType_CHAT_TYPE_CHANNEL
 	list, err := client.ListSlashCommandsForChat(ctx, &botv1.ListSlashCommandsForChatRequest{
@@ -134,6 +135,7 @@ commands:
 	botUUID, _ := uuid.Parse(botID)
 	_, err = st.InstallInSpace(ctx, botUUID, uuid.New(), profile, []uuid.UUID{chatID})
 	require.NoError(t, err)
+	require.NoError(t, st.TouchPresence(ctx, botUUID))
 
 	chatType := chatv1.ChatType_CHAT_TYPE_CHANNEL
 	resp, err := client.AutocompleteSlashOption(ctx, &botv1.AutocompleteSlashOptionRequest{
@@ -176,6 +178,7 @@ commands:
 	chatID := uuid.New()
 	_, err = st.InstallInSpace(ctx, botUUID, uuid.New(), profile, []uuid.UUID{chatID})
 	require.NoError(t, err)
+	require.NoError(t, st.TouchPresence(ctx, botUUID))
 
 	chatType := chatv1.ChatType_CHAT_TYPE_CHANNEL
 	_, err = client.ExecuteSlashInteraction(ctx, &botv1.ExecuteSlashInteractionRequest{
@@ -209,6 +212,7 @@ func TestUninstallAndListInstalledBots(t *testing.T) {
 	chatID := uuid.New()
 	_, err = st.InstallInSpace(ctx, botUUID, spaceID, profile, []uuid.UUID{chatID})
 	require.NoError(t, err)
+	require.NoError(t, st.TouchPresence(ctx, botUUID))
 
 	list, err := client.ListInstalledBots(ctx, &botv1.ListInstalledBotsRequest{SpaceId: spaceID.String()})
 	require.NoError(t, err)

@@ -33,6 +33,7 @@ class _SpaceBotsSheetState extends ConsumerState<SpaceBotsSheet> {
   String? _selectedBotId;
   final _selectedChatIds = <String>{};
   bool _busy = false;
+  bool _privilegedAcknowledged = false;
 
   @override
   Widget build(BuildContext context) {
@@ -109,13 +110,28 @@ class _SpaceBotsSheetState extends ConsumerState<SpaceBotsSheet> {
                         : (v) => setState(() {
                             _selectedBotId = v;
                             _selectedChatIds.clear();
+                            _privilegedAcknowledged = false;
                           }),
                   );
                 },
               ),
               if (_selectedBotId != null) ...[
                 const SizedBox(height: 12),
-                _ScopeList(botId: _selectedBotId!),
+                _ScopeList(
+                  botId: _selectedBotId!,
+                  onPrivilegedDetected: (hasPrivileged) {
+                    if (!hasPrivileged && _privilegedAcknowledged) {
+                      setState(() => _privilegedAcknowledged = false);
+                    }
+                  },
+                ),
+                _PrivilegedAckCheckbox(
+                  botId: _selectedBotId!,
+                  acknowledged: _privilegedAcknowledged,
+                  onChanged: _busy
+                      ? null
+                      : (v) => setState(() => _privilegedAcknowledged = v ?? false),
+                ),
                 const SizedBox(height: 12),
                 Text(
                   l10n.spaceBotsSelectChats,
@@ -160,7 +176,9 @@ class _SpaceBotsSheetState extends ConsumerState<SpaceBotsSheet> {
                   style: FilledButton.styleFrom(
                     backgroundColor: voice.profileAccent,
                   ),
-                  onPressed: _busy || _selectedBotId == null
+                  onPressed: _busy ||
+                          _selectedBotId == null ||
+                          !_canInstall(ref)
                       ? null
                       : () => _install(context),
                   child: Text(l10n.spaceBotsInstallConfirm),
@@ -206,6 +224,26 @@ class _SpaceBotsSheetState extends ConsumerState<SpaceBotsSheet> {
     );
   }
 
+  bool _canInstall(WidgetRef ref) {
+    final botId = _selectedBotId;
+    if (botId == null) return false;
+    final bots = ref.read(discoverableBotsProvider).valueOrNull;
+    if (bots == null) return true;
+    VoiceBotSummary? bot;
+    for (final candidate in bots) {
+      if (candidate.id == botId) {
+        bot = candidate;
+        break;
+      }
+    }
+    if (bot == null) return true;
+    final scopes = BotScopeLabels.parseScopesJson(bot.scopesJson);
+    final needsAck = scopes.any(
+      (s) => BotScopeLabels.privilegedScopes.contains(s),
+    );
+    return !needsAck || _privilegedAcknowledged;
+  }
+
   Future<void> _install(BuildContext context) async {
     final l10n = AppLocalizations.of(context)!;
     final auth = ref.read(authorizationHeaderProvider);
@@ -234,6 +272,7 @@ class _SpaceBotsSheetState extends ConsumerState<SpaceBotsSheet> {
       botId: botId,
       spaceId: widget.spaceId,
       allowedChats: allowedChats,
+      acknowledgePrivilegedScopes: _privilegedAcknowledged,
     );
     if (!mounted) return;
     setState(() => _busy = false);
@@ -286,9 +325,13 @@ class _SpaceBotsSheetState extends ConsumerState<SpaceBotsSheet> {
 }
 
 class _ScopeList extends ConsumerWidget {
-  const _ScopeList({required this.botId});
+  const _ScopeList({
+    required this.botId,
+    this.onPrivilegedDetected,
+  });
 
   final String botId;
+  final void Function(bool hasPrivileged)? onPrivilegedDetected;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -310,6 +353,9 @@ class _ScopeList extends ConsumerWidget {
         final hasPrivileged = scopes.any(
           (s) => BotScopeLabels.privilegedScopes.contains(s),
         );
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          onPrivilegedDetected?.call(hasPrivileged);
+        });
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -326,6 +372,51 @@ class _ScopeList extends ConsumerWidget {
               ),
             ],
           ],
+        );
+      },
+    );
+  }
+}
+
+class _PrivilegedAckCheckbox extends ConsumerWidget {
+  const _PrivilegedAckCheckbox({
+    required this.botId,
+    required this.acknowledged,
+    required this.onChanged,
+  });
+
+  final String botId;
+  final bool acknowledged;
+  final ValueChanged<bool?>? onChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context)!;
+    final auth = ref.watch(authorizationHeaderProvider);
+    if (auth == null) return const SizedBox.shrink();
+
+    return FutureBuilder<BotsApiResult<VoiceBotSummary>>(
+      future: ref.read(voiceBotsClientProvider).getBot(
+        authorization: auth,
+        botId: botId,
+      ),
+      builder: (context, snapshot) {
+        final result = snapshot.data;
+        if (result is! BotsApiOk<VoiceBotSummary>) {
+          return const SizedBox.shrink();
+        }
+        final scopes = BotScopeLabels.parseScopesJson(result.data.scopesJson);
+        final needsAck = scopes.any(
+          (s) => BotScopeLabels.privilegedScopes.contains(s),
+        );
+        if (!needsAck) return const SizedBox.shrink();
+        return CheckboxListTile(
+          key: const Key('space_bots_privileged_ack_checkbox'),
+          value: acknowledged,
+          onChanged: onChanged,
+          title: Text(l10n.spaceBotsPrivilegedAck),
+          subtitle: Text(l10n.spaceBotsScopeWarning),
+          controlAffinity: ListTileControlAffinity.leading,
         );
       },
     );

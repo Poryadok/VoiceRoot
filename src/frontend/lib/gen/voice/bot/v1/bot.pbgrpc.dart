@@ -240,6 +240,51 @@ class BotServiceClient extends $grpc.Client {
         options: options);
   }
 
+  /// BOT-C: presence, scopes runtime, history gate.
+  $grpc.ResponseFuture<$0.TouchPresenceResponse> touchPresence(
+    $0.TouchPresenceRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$touchPresence, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.AssignBotRoleResponse> assignBotRole(
+    $0.AssignBotRoleRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$assignBotRole, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.RevokeBotRoleResponse> revokeBotRole(
+    $0.RevokeBotRoleRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$revokeBotRole, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.ListSpaceMembersForBotResponse>
+      listSpaceMembersForBot(
+    $0.ListSpaceMembersForBotRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$listSpaceMembersForBot, request,
+        options: options);
+  }
+
+  $grpc.ResponseFuture<$0.CreateBotChatResponse> createBotChat(
+    $0.CreateBotChatRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$createBotChat, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.GetChatMessagesForBotResponse> getChatMessagesForBot(
+    $0.GetChatMessagesForBotRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getChatMessagesForBot, request, options: options);
+  }
+
   // method descriptors
 
   static final _$registerBot =
@@ -385,6 +430,36 @@ class BotServiceClient extends $grpc.Client {
       '/voice.bot.v1.BotService/AutocompleteSlashOption',
       ($0.AutocompleteSlashOptionRequest value) => value.writeToBuffer(),
       $0.AutocompleteSlashOptionResponse.fromBuffer);
+  static final _$touchPresence =
+      $grpc.ClientMethod<$0.TouchPresenceRequest, $0.TouchPresenceResponse>(
+          '/voice.bot.v1.BotService/TouchPresence',
+          ($0.TouchPresenceRequest value) => value.writeToBuffer(),
+          $0.TouchPresenceResponse.fromBuffer);
+  static final _$assignBotRole =
+      $grpc.ClientMethod<$0.AssignBotRoleRequest, $0.AssignBotRoleResponse>(
+          '/voice.bot.v1.BotService/AssignBotRole',
+          ($0.AssignBotRoleRequest value) => value.writeToBuffer(),
+          $0.AssignBotRoleResponse.fromBuffer);
+  static final _$revokeBotRole =
+      $grpc.ClientMethod<$0.RevokeBotRoleRequest, $0.RevokeBotRoleResponse>(
+          '/voice.bot.v1.BotService/RevokeBotRole',
+          ($0.RevokeBotRoleRequest value) => value.writeToBuffer(),
+          $0.RevokeBotRoleResponse.fromBuffer);
+  static final _$listSpaceMembersForBot = $grpc.ClientMethod<
+          $0.ListSpaceMembersForBotRequest, $0.ListSpaceMembersForBotResponse>(
+      '/voice.bot.v1.BotService/ListSpaceMembersForBot',
+      ($0.ListSpaceMembersForBotRequest value) => value.writeToBuffer(),
+      $0.ListSpaceMembersForBotResponse.fromBuffer);
+  static final _$createBotChat =
+      $grpc.ClientMethod<$0.CreateBotChatRequest, $0.CreateBotChatResponse>(
+          '/voice.bot.v1.BotService/CreateBotChat',
+          ($0.CreateBotChatRequest value) => value.writeToBuffer(),
+          $0.CreateBotChatResponse.fromBuffer);
+  static final _$getChatMessagesForBot = $grpc.ClientMethod<
+          $0.GetChatMessagesForBotRequest, $0.GetChatMessagesForBotResponse>(
+      '/voice.bot.v1.BotService/GetChatMessagesForBot',
+      ($0.GetChatMessagesForBotRequest value) => value.writeToBuffer(),
+      $0.GetChatMessagesForBotResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.bot.v1.BotService')
@@ -634,6 +709,60 @@ abstract class BotServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.AutocompleteSlashOptionRequest.fromBuffer(value),
         ($0.AutocompleteSlashOptionResponse value) => value.writeToBuffer()));
+    $addMethod(
+        $grpc.ServiceMethod<$0.TouchPresenceRequest, $0.TouchPresenceResponse>(
+            'TouchPresence',
+            touchPresence_Pre,
+            false,
+            false,
+            ($core.List<$core.int> value) =>
+                $0.TouchPresenceRequest.fromBuffer(value),
+            ($0.TouchPresenceResponse value) => value.writeToBuffer()));
+    $addMethod(
+        $grpc.ServiceMethod<$0.AssignBotRoleRequest, $0.AssignBotRoleResponse>(
+            'AssignBotRole',
+            assignBotRole_Pre,
+            false,
+            false,
+            ($core.List<$core.int> value) =>
+                $0.AssignBotRoleRequest.fromBuffer(value),
+            ($0.AssignBotRoleResponse value) => value.writeToBuffer()));
+    $addMethod(
+        $grpc.ServiceMethod<$0.RevokeBotRoleRequest, $0.RevokeBotRoleResponse>(
+            'RevokeBotRole',
+            revokeBotRole_Pre,
+            false,
+            false,
+            ($core.List<$core.int> value) =>
+                $0.RevokeBotRoleRequest.fromBuffer(value),
+            ($0.RevokeBotRoleResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ListSpaceMembersForBotRequest,
+            $0.ListSpaceMembersForBotResponse>(
+        'ListSpaceMembersForBot',
+        listSpaceMembersForBot_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ListSpaceMembersForBotRequest.fromBuffer(value),
+        ($0.ListSpaceMembersForBotResponse value) => value.writeToBuffer()));
+    $addMethod(
+        $grpc.ServiceMethod<$0.CreateBotChatRequest, $0.CreateBotChatResponse>(
+            'CreateBotChat',
+            createBotChat_Pre,
+            false,
+            false,
+            ($core.List<$core.int> value) =>
+                $0.CreateBotChatRequest.fromBuffer(value),
+            ($0.CreateBotChatResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.GetChatMessagesForBotRequest,
+            $0.GetChatMessagesForBotResponse>(
+        'GetChatMessagesForBot',
+        getChatMessagesForBot_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.GetChatMessagesForBotRequest.fromBuffer(value),
+        ($0.GetChatMessagesForBotResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.RegisterBotResponse> registerBot_Pre($grpc.ServiceCall $call,
@@ -880,4 +1009,58 @@ abstract class BotServiceBase extends $grpc.Service {
 
   $async.Future<$0.AutocompleteSlashOptionResponse> autocompleteSlashOption(
       $grpc.ServiceCall call, $0.AutocompleteSlashOptionRequest request);
+
+  $async.Future<$0.TouchPresenceResponse> touchPresence_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.TouchPresenceRequest> $request) async {
+    return touchPresence($call, await $request);
+  }
+
+  $async.Future<$0.TouchPresenceResponse> touchPresence(
+      $grpc.ServiceCall call, $0.TouchPresenceRequest request);
+
+  $async.Future<$0.AssignBotRoleResponse> assignBotRole_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.AssignBotRoleRequest> $request) async {
+    return assignBotRole($call, await $request);
+  }
+
+  $async.Future<$0.AssignBotRoleResponse> assignBotRole(
+      $grpc.ServiceCall call, $0.AssignBotRoleRequest request);
+
+  $async.Future<$0.RevokeBotRoleResponse> revokeBotRole_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.RevokeBotRoleRequest> $request) async {
+    return revokeBotRole($call, await $request);
+  }
+
+  $async.Future<$0.RevokeBotRoleResponse> revokeBotRole(
+      $grpc.ServiceCall call, $0.RevokeBotRoleRequest request);
+
+  $async.Future<$0.ListSpaceMembersForBotResponse> listSpaceMembersForBot_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.ListSpaceMembersForBotRequest> $request) async {
+    return listSpaceMembersForBot($call, await $request);
+  }
+
+  $async.Future<$0.ListSpaceMembersForBotResponse> listSpaceMembersForBot(
+      $grpc.ServiceCall call, $0.ListSpaceMembersForBotRequest request);
+
+  $async.Future<$0.CreateBotChatResponse> createBotChat_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.CreateBotChatRequest> $request) async {
+    return createBotChat($call, await $request);
+  }
+
+  $async.Future<$0.CreateBotChatResponse> createBotChat(
+      $grpc.ServiceCall call, $0.CreateBotChatRequest request);
+
+  $async.Future<$0.GetChatMessagesForBotResponse> getChatMessagesForBot_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.GetChatMessagesForBotRequest> $request) async {
+    return getChatMessagesForBot($call, await $request);
+  }
+
+  $async.Future<$0.GetChatMessagesForBotResponse> getChatMessagesForBot(
+      $grpc.ServiceCall call, $0.GetChatMessagesForBotRequest request);
 }

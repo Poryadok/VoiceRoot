@@ -345,6 +345,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'This bot requests privileged access to read chat history.';
 
   @override
+  String get spaceBotsPrivilegedAck =>
+      'I understand this bot can read chat history';
+
+  @override
   String get spaceBotsSelectChats => 'Allowed text chats';
 
   @override

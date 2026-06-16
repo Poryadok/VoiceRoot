@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -15,6 +16,24 @@ import (
 
 type fakeBotClient struct {
 	botv1.BotServiceClient
+	lastInstallReq *botv1.InstallBotInSpaceRequest
+}
+
+func (f *fakeBotClient) InstallBotInSpace(ctx context.Context, in *botv1.InstallBotInSpaceRequest, _ ...grpc.CallOption) (*botv1.InstallBotInSpaceResponse, error) {
+	f.lastInstallReq = in
+	return &botv1.InstallBotInSpaceResponse{InstallationId: "inst-1"}, nil
+}
+
+func (f *fakeBotClient) ListSlashCommandsForChat(ctx context.Context, in *botv1.ListSlashCommandsForChatRequest, _ ...grpc.CallOption) (*botv1.ListSlashCommandsForChatResponse, error) {
+	online := false
+	return &botv1.ListSlashCommandsForChatResponse{
+		Commands: []*botv1.SlashCommand{{
+			Name:        "ping",
+			Description: "Ping",
+			BotId:       "bot-1",
+			Online:      online,
+		}},
+	}, nil
 }
 
 func (f *fakeBotClient) ExecuteSlashInteraction(ctx context.Context, in *botv1.ExecuteSlashInteractionRequest, _ ...grpc.CallOption) (*botv1.ExecuteSlashInteractionResponse, error) {
@@ -213,4 +232,36 @@ func TestServeBots_setBotChatEnabledRouteRegistered(t *testing.T) {
 	ok := tc.serveBots(rec, req, "bot-1/chats/chat-1/enabled")
 	require.True(t, ok)
 	require.Equal(t, http.StatusNoContent, rec.Code)
+}
+
+func TestServeBots_installPassesAcknowledgePrivilegedScopes(t *testing.T) {
+	bot := &fakeBotClient{}
+	tc := newTranscoder(&grpcClients{bot: bot})
+	body := `{"allowed_chats":[{"id":"chat-1","type":"CHAT_TYPE_GROUP"}],"acknowledge_privileged_scopes":true}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/bots/bot-1/spaces/space-1/install", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer token")
+	req.Header.Set("X-Voice-User-Id", "00000000-0000-0000-0000-000000000001")
+	req.Header.Set("X-Voice-Profile-Id", "00000000-0000-0000-0000-000000000002")
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	ok := tc.serveBots(rec, req, "bot-1/spaces/space-1/install")
+	require.True(t, ok)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.NotNil(t, bot.lastInstallReq)
+	require.True(t, bot.lastInstallReq.GetAcknowledgePrivilegedScopes(),
+		"install JSON must map acknowledge_privileged_scopes to gRPC request (BOT-C)")
+}
+
+func TestServeBots_listCommandsIncludesOnlineField(t *testing.T) {
+	tc := newTranscoder(&grpcClients{bot: &fakeBotClient{}})
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/bots/commands?chat_id=chat-1&chat_type=CHAT_TYPE_CHANNEL", nil)
+	req.Header.Set("Authorization", "Bearer token")
+	req.Header.Set("X-Voice-User-Id", "00000000-0000-0000-0000-000000000001")
+	req.Header.Set("X-Voice-Profile-Id", "00000000-0000-0000-0000-000000000002")
+	rec := httptest.NewRecorder()
+	ok := tc.serveBots(rec, req, "commands")
+	require.True(t, ok)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), `"online"`, "commands response must include online field (BOT-C)")
+	require.Contains(t, rec.Body.String(), `"online":false`)
 }

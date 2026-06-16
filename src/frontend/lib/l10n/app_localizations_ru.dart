@@ -345,6 +345,10 @@ class AppLocalizationsRu extends AppLocalizations {
       'Бот запрашивает привилегированный доступ к истории чата.';
 
   @override
+  String get spaceBotsPrivilegedAck =>
+      'Я понимаю, что бот может читать историю чата';
+
+  @override
   String get spaceBotsSelectChats => 'Разрешённые текстовые чаты';
 
   @override

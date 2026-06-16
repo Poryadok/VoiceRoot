@@ -170,6 +170,7 @@
   "spaceBotsUninstall": "Удалить из спейса",
   "spaceBotsInstallConfirm": "Установить",
   "spaceBotsScopeWarning": "Бот запрашивает привилегированный доступ к истории чата.",
+  "spaceBotsPrivilegedAck": "Я понимаю, что бот может читать историю чата",
   "spaceBotsSelectChats": "Разрешённые текстовые чаты",
   "spaceBotsInstallSuccess": "Бот установлен.",
   "spaceBotsUninstallSuccess": "Бот удалён из спейса.",

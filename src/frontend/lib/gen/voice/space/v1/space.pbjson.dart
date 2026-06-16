@@ -1097,6 +1097,35 @@ final $typed_data.Uint8List transferOwnershipRequestDescriptor =
         'ChhUcmFuc2Zlck93bmVyc2hpcFJlcXVlc3QSGQoIc3BhY2VfaWQYASABKAlSB3NwYWNlSWQSLw'
         'oUbmV3X293bmVyX3Byb2ZpbGVfaWQYAiABKAlSEW5ld093bmVyUHJvZmlsZUlk');
 
+@$core.Deprecated('Use addBotMemberRequestDescriptor instead')
+const AddBotMemberRequest$json = {
+  '1': 'AddBotMemberRequest',
+  '2': [
+    {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'profile_id', '3': 2, '4': 1, '5': 9, '10': 'profileId'},
+  ],
+};
+
+/// Descriptor for `AddBotMemberRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List addBotMemberRequestDescriptor = $convert.base64Decode(
+    'ChNBZGRCb3RNZW1iZXJSZXF1ZXN0EhkKCHNwYWNlX2lkGAEgASgJUgdzcGFjZUlkEh0KCnByb2'
+    'ZpbGVfaWQYAiABKAlSCXByb2ZpbGVJZA==');
+
+@$core.Deprecated('Use removeBotMemberRequestDescriptor instead')
+const RemoveBotMemberRequest$json = {
+  '1': 'RemoveBotMemberRequest',
+  '2': [
+    {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'profile_id', '3': 2, '4': 1, '5': 9, '10': 'profileId'},
+  ],
+};
+
+/// Descriptor for `RemoveBotMemberRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List removeBotMemberRequestDescriptor =
+    $convert.base64Decode(
+        'ChZSZW1vdmVCb3RNZW1iZXJSZXF1ZXN0EhkKCHNwYWNlX2lkGAEgASgJUgdzcGFjZUlkEh0KCn'
+        'Byb2ZpbGVfaWQYAiABKAlSCXByb2ZpbGVJZA==');
+
 @$core.Deprecated('Use listTemplatesRequestDescriptor instead')
 const ListTemplatesRequest$json = {
   '1': 'ListTemplatesRequest',
@@ -1741,6 +1770,24 @@ const TransferOwnershipResponse$json = {
 /// Descriptor for `TransferOwnershipResponse`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List transferOwnershipResponseDescriptor =
     $convert.base64Decode('ChlUcmFuc2Zlck93bmVyc2hpcFJlc3BvbnNl');
+
+@$core.Deprecated('Use addBotMemberResponseDescriptor instead')
+const AddBotMemberResponse$json = {
+  '1': 'AddBotMemberResponse',
+};
+
+/// Descriptor for `AddBotMemberResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List addBotMemberResponseDescriptor =
+    $convert.base64Decode('ChRBZGRCb3RNZW1iZXJSZXNwb25zZQ==');
+
+@$core.Deprecated('Use removeBotMemberResponseDescriptor instead')
+const RemoveBotMemberResponse$json = {
+  '1': 'RemoveBotMemberResponse',
+};
+
+/// Descriptor for `RemoveBotMemberResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List removeBotMemberResponseDescriptor =
+    $convert.base64Decode('ChdSZW1vdmVCb3RNZW1iZXJSZXNwb25zZQ==');
 
 @$core.Deprecated('Use listTemplatesResponseDescriptor instead')
 const ListTemplatesResponse$json = {

@@ -81,6 +81,14 @@ func (h *Hub) FinishDeferred(token string) {
 	h.mu.Unlock()
 }
 
+// RegisterDeferred marks a token as deferred without a live waiter (restart recovery).
+func (h *Hub) RegisterDeferred(token string) {
+	h.mu.Lock()
+	h.pending[token] = make(chan store.InteractionReply, 1)
+	h.deferred[token] = struct{}{}
+	h.mu.Unlock()
+}
+
 func (h *Hub) Wait(ch chan store.InteractionReply, timeout time.Duration) (store.InteractionReply, bool) {
 	if timeout <= 0 {
 		timeout = DefaultTimeout

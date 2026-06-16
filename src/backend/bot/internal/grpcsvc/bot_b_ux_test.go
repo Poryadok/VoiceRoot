@@ -40,6 +40,7 @@ commands:
 	botUUID, _ := uuid.Parse(botID)
 	_, err = st.InstallInSpace(ctx, botUUID, spaceID, profile, []uuid.UUID{chatID})
 	require.NoError(t, err)
+	require.NoError(t, st.TouchPresence(ctx, botUUID))
 
 	chatType := chatv1.ChatType_CHAT_TYPE_CHANNEL
 	chatRef := &chatv1.ChatRef{Id: chatID.String(), Type: &chatType}
@@ -91,6 +92,7 @@ func TestUninstallFromSpace_clearsWhitelist(t *testing.T) {
 	botUUID, _ := uuid.Parse(botID)
 	_, err = st.InstallInSpace(ctx, botUUID, spaceID, profile, []uuid.UUID{chatID})
 	require.NoError(t, err)
+	require.NoError(t, st.TouchPresence(ctx, botUUID))
 
 	_, err = client.UninstallBotFromSpace(ctx, &botv1.UninstallBotFromSpaceRequest{
 		BotId:   botID,
@@ -124,6 +126,7 @@ func TestSetBotChatEnabled_enablesWhitelistForNewChat(t *testing.T) {
 	botUUID, _ := uuid.Parse(botID)
 	_, err = st.InstallInSpace(ctx, botUUID, spaceID, profile, []uuid.UUID{chatA})
 	require.NoError(t, err)
+	require.NoError(t, st.TouchPresence(ctx, botUUID))
 
 	chatType := chatv1.ChatType_CHAT_TYPE_GROUP
 	_, err = client.SetBotChatEnabled(ctx, &botv1.SetBotChatEnabledRequest{

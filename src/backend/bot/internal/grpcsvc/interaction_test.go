@@ -29,9 +29,13 @@ import (
 type fakeUserClient struct {
 	userv1.UnimplementedUserServiceServer
 	profileID string
+	createErr error
 }
 
 func (f *fakeUserClient) CreateProfile(context.Context, *userv1.CreateProfileRequest) (*userv1.CreateProfileResponse, error) {
+	if f.createErr != nil {
+		return nil, f.createErr
+	}
 	return &userv1.CreateProfileResponse{
 		Profile: &userv1.Profile{Id: f.profileID, DisplayName: "Bot"},
 	}, nil
@@ -40,6 +44,7 @@ func (f *fakeUserClient) CreateProfile(context.Context, *userv1.CreateProfileReq
 type fakeMessagingClient struct {
 	messagingv1.UnimplementedMessagingServiceServer
 	lastContent string
+	editCalls   int
 }
 
 func (f *fakeMessagingClient) SendMessage(_ context.Context, req *messagingv1.SendMessageRequest) (*messagingv1.SendMessageResponse, error) {
@@ -47,6 +52,16 @@ func (f *fakeMessagingClient) SendMessage(_ context.Context, req *messagingv1.Se
 	return &messagingv1.SendMessageResponse{
 		Message: &messagingv1.Message{
 			Id:      uuid.NewString(),
+			Content: req.GetContent(),
+		},
+	}, nil
+}
+
+func (f *fakeMessagingClient) EditMessage(_ context.Context, req *messagingv1.EditMessageRequest) (*messagingv1.EditMessageResponse, error) {
+	f.editCalls++
+	return &messagingv1.EditMessageResponse{
+		Message: &messagingv1.Message{
+			Id:      req.GetMessageId(),
 			Content: req.GetContent(),
 		},
 	}, nil
@@ -159,6 +174,7 @@ commands:
 	profile, _ := authProfile(ctx)
 	_, err = st.InstallInSpace(ctx, botUUID, uuid.New(), profile, []uuid.UUID{chatID})
 	require.NoError(t, err)
+	require.NoError(t, st.TouchPresence(ctx, botUUID))
 
 	chatType := chatv1.ChatType_CHAT_TYPE_CHANNEL
 	respCh := make(chan *botv1.ExecuteSlashInteractionResponse, 1)

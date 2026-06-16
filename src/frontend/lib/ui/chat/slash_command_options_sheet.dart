@@ -47,6 +47,7 @@ class _SlashCommandOptionsSheetState
   final _controllers = <String, TextEditingController>{};
   final _suggestions = <String, List<BotAutocompleteChoice>>{};
   Timer? _debounce;
+  String? _autocompleteError;
 
   @override
   void dispose() {
@@ -82,6 +83,10 @@ class _SlashCommandOptionsSheetState
       _suggestions[optionName] = switch (result) {
         BotsApiOk(:final data) => data,
         BotsApiFailure() => const [],
+      };
+      _autocompleteError = switch (result) {
+        BotsApiFailure(:final message) => message,
+        _ => null,
       };
     });
   }
@@ -124,6 +129,13 @@ class _SlashCommandOptionsSheetState
               widget.command.displayName,
               style: Theme.of(context).textTheme.titleMedium,
             ),
+            if (_autocompleteError != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                _autocompleteError!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ],
             const SizedBox(height: 12),
             for (final opt in widget.command.options) ...[
               if (opt.type == 'boolean')

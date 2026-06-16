@@ -88,7 +88,7 @@ voice/backend/bot/internal/grpcsvc/bot.go:163.2,163.74 1 1
 voice/backend/bot/internal/grpcsvc/bot.go:166.131,168.16 2 1
 voice/backend/bot/internal/grpcsvc/bot.go:168.16,170.3 1 0
 voice/backend/bot/internal/grpcsvc/bot.go:171.2,171.50 1 1
-voice/backend/bot/internal/grpcsvc/bot.go:171.50,173.3 1 1
+voice/backend/bot/internal/grpcsvc/bot.go:171.50,173.3 1 0
 voice/backend/bot/internal/grpcsvc/bot.go:174.2,175.16 2 1
 voice/backend/bot/internal/grpcsvc/bot.go:175.16,177.3 1 0
 voice/backend/bot/internal/grpcsvc/bot.go:178.2,178.95 1 1
@@ -99,7 +99,7 @@ voice/backend/bot/internal/grpcsvc/bot.go:186.50,188.3 1 0
 voice/backend/bot/internal/grpcsvc/bot.go:189.2,190.81 2 1
 voice/backend/bot/internal/grpcsvc/bot.go:190.81,192.3 1 1
 voice/backend/bot/internal/grpcsvc/bot.go:193.2,193.64 1 1
-voice/backend/bot/internal/grpcsvc/bot.go:193.64,195.3 1 1
+voice/backend/bot/internal/grpcsvc/bot.go:193.64,195.3 1 0
 voice/backend/bot/internal/grpcsvc/bot.go:196.2,197.16 2 1
 voice/backend/bot/internal/grpcsvc/bot.go:197.16,199.3 1 0
 voice/backend/bot/internal/grpcsvc/bot.go:200.2,200.57 1 1
@@ -535,11 +535,11 @@ voice/backend/bot/internal/grpcsvc/interaction.go:613.2,613.44 1 1
 voice/backend/bot/internal/grpcsvc/interaction.go:616.128,618.16 2 1
 voice/backend/bot/internal/grpcsvc/interaction.go:618.16,620.3 1 0
 voice/backend/bot/internal/grpcsvc/interaction.go:621.2,622.21 2 1
-voice/backend/bot/internal/grpcsvc/interaction.go:622.21,624.3 1 1
+voice/backend/bot/internal/grpcsvc/interaction.go:622.21,624.3 1 0
 voice/backend/bot/internal/grpcsvc/interaction.go:625.2,626.19 2 1
 voice/backend/bot/internal/grpcsvc/interaction.go:626.19,628.3 1 1
 voice/backend/bot/internal/grpcsvc/interaction.go:629.2,629.24 1 1
-voice/backend/bot/internal/grpcsvc/interaction.go:629.24,631.3 1 1
+voice/backend/bot/internal/grpcsvc/interaction.go:629.24,631.3 1 0
 voice/backend/bot/internal/grpcsvc/interaction.go:632.2,640.16 3 1
 voice/backend/bot/internal/grpcsvc/interaction.go:640.16,642.3 1 0
 voice/backend/bot/internal/grpcsvc/interaction.go:643.2,643.71 1 1

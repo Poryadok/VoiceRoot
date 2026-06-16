@@ -250,6 +250,21 @@ class SpaceServiceClient extends $grpc.Client {
     return $createUnaryCall(_$transferOwnership, request, options: options);
   }
 
+  /// S2S: Bot Service adds bot actor profile to space membership on install.
+  $grpc.ResponseFuture<$0.AddBotMemberResponse> addBotMember(
+    $0.AddBotMemberRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$addBotMember, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.RemoveBotMemberResponse> removeBotMember(
+    $0.RemoveBotMemberRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$removeBotMember, request, options: options);
+  }
+
   $grpc.ResponseFuture<$0.ListTemplatesResponse> listTemplates(
     $0.ListTemplatesRequest request, {
     $grpc.CallOptions? options,
@@ -428,6 +443,16 @@ class SpaceServiceClient extends $grpc.Client {
       '/voice.space.v1.SpaceService/TransferOwnership',
       ($0.TransferOwnershipRequest value) => value.writeToBuffer(),
       $0.TransferOwnershipResponse.fromBuffer);
+  static final _$addBotMember =
+      $grpc.ClientMethod<$0.AddBotMemberRequest, $0.AddBotMemberResponse>(
+          '/voice.space.v1.SpaceService/AddBotMember',
+          ($0.AddBotMemberRequest value) => value.writeToBuffer(),
+          $0.AddBotMemberResponse.fromBuffer);
+  static final _$removeBotMember =
+      $grpc.ClientMethod<$0.RemoveBotMemberRequest, $0.RemoveBotMemberResponse>(
+          '/voice.space.v1.SpaceService/RemoveBotMember',
+          ($0.RemoveBotMemberRequest value) => value.writeToBuffer(),
+          $0.RemoveBotMemberResponse.fromBuffer);
   static final _$listTemplates =
       $grpc.ClientMethod<$0.ListTemplatesRequest, $0.ListTemplatesResponse>(
           '/voice.space.v1.SpaceService/ListTemplates',
@@ -715,6 +740,24 @@ abstract class SpaceServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.TransferOwnershipRequest.fromBuffer(value),
         ($0.TransferOwnershipResponse value) => value.writeToBuffer()));
+    $addMethod(
+        $grpc.ServiceMethod<$0.AddBotMemberRequest, $0.AddBotMemberResponse>(
+            'AddBotMember',
+            addBotMember_Pre,
+            false,
+            false,
+            ($core.List<$core.int> value) =>
+                $0.AddBotMemberRequest.fromBuffer(value),
+            ($0.AddBotMemberResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.RemoveBotMemberRequest,
+            $0.RemoveBotMemberResponse>(
+        'RemoveBotMember',
+        removeBotMember_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.RemoveBotMemberRequest.fromBuffer(value),
+        ($0.RemoveBotMemberResponse value) => value.writeToBuffer()));
     $addMethod(
         $grpc.ServiceMethod<$0.ListTemplatesRequest, $0.ListTemplatesResponse>(
             'ListTemplates',
@@ -1009,6 +1052,24 @@ abstract class SpaceServiceBase extends $grpc.Service {
 
   $async.Future<$0.TransferOwnershipResponse> transferOwnership(
       $grpc.ServiceCall call, $0.TransferOwnershipRequest request);
+
+  $async.Future<$0.AddBotMemberResponse> addBotMember_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.AddBotMemberRequest> $request) async {
+    return addBotMember($call, await $request);
+  }
+
+  $async.Future<$0.AddBotMemberResponse> addBotMember(
+      $grpc.ServiceCall call, $0.AddBotMemberRequest request);
+
+  $async.Future<$0.RemoveBotMemberResponse> removeBotMember_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.RemoveBotMemberRequest> $request) async {
+    return removeBotMember($call, await $request);
+  }
+
+  $async.Future<$0.RemoveBotMemberResponse> removeBotMember(
+      $grpc.ServiceCall call, $0.RemoveBotMemberRequest request);
 
   $async.Future<$0.ListTemplatesResponse> listTemplates_Pre(
       $grpc.ServiceCall $call,

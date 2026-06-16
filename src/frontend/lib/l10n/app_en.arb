@@ -183,6 +183,7 @@
   "spaceBotsUninstall": "Remove from space",
   "spaceBotsInstallConfirm": "Install",
   "spaceBotsScopeWarning": "This bot requests privileged access to read chat history.",
+  "spaceBotsPrivilegedAck": "I understand this bot can read chat history",
   "spaceBotsSelectChats": "Allowed text chats",
   "spaceBotsInstallSuccess": "Bot installed.",
   "spaceBotsUninstallSuccess": "Bot removed from space.",

@@ -23,6 +23,7 @@ import (
 	messagingv1 "voice.app/voice/messaging/v1"
 	rolev1 "voice.app/voice/role/v1"
 	userv1 "voice.app/voice/user/v1"
+	spacev1 "voice.app/voice/space/v1"
 )
 
 // BotGRPC implements voice.bot.v1.BotService.
@@ -35,6 +36,7 @@ type BotGRPC struct {
 	Messaging  messagingv1.MessagingServiceClient
 	Role       rolev1.RoleServiceClient
 	User       userv1.UserServiceClient
+	Space      spacev1.SpaceServiceClient
 	Events     BotEventPublisher
 }
 
@@ -355,10 +357,13 @@ SELECT chat_id::text FROM bot_chat_whitelist WHERE bot_id = $1 AND enabled = tru
 }
 
 func (s *BotGRPC) DeferResponse(ctx context.Context, req *botv1.DeferResponseRequest) (*botv1.DeferResponseResponse, error) {
-	if _, err := s.botFromToken(ctx); err != nil {
+	botRow, err := s.botFromToken(ctx)
+	if err != nil {
 		return nil, err
 	}
-	s.Hub.Complete(req.GetInteractionToken(), store.InteractionReply{Deferred: true})
+	token := strings.TrimSpace(req.GetInteractionToken())
+	s.Hub.Complete(token, store.InteractionReply{Deferred: true})
+	_ = s.Store.MarkEventDeferred(ctx, botRow.ID, token)
 	return &botv1.DeferResponseResponse{}, nil
 }
 
@@ -368,6 +373,7 @@ func (s *BotGRPC) PollEvents(req *botv1.PollEventsRequest, stream botv1.BotServi
 	if err != nil {
 		return err
 	}
+	s.touchPresence(ctx, botRow.ID)
 	ids, types, payloads, err := s.Store.ListPendingEvents(ctx, botRow.ID, 25)
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())
@@ -382,6 +388,7 @@ func (s *BotGRPC) PollEvents(req *botv1.PollEventsRequest, stream botv1.BotServi
 		if err := stream.Send(&botv1.PollEventsResponse{BotEvent: evt}); err != nil {
 			return err
 		}
+		_ = s.Store.MarkEventDelivered(ctx, id)
 	}
 	return nil
 }

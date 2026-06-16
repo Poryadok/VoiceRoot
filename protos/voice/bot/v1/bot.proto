@@ -57,6 +57,14 @@ service BotService {
   rpc ListSlashCommandsForChat(ListSlashCommandsForChatRequest) returns (ListSlashCommandsForChatResponse);
   rpc CompleteInteraction(CompleteInteractionRequest) returns (CompleteInteractionResponse);
   rpc AutocompleteSlashOption(AutocompleteSlashOptionRequest) returns (AutocompleteSlashOptionResponse);
+
+  // BOT-C: presence, scopes runtime, history gate.
+  rpc TouchPresence(TouchPresenceRequest) returns (TouchPresenceResponse);
+  rpc AssignBotRole(AssignBotRoleRequest) returns (AssignBotRoleResponse);
+  rpc RevokeBotRole(RevokeBotRoleRequest) returns (RevokeBotRoleResponse);
+  rpc ListSpaceMembersForBot(ListSpaceMembersForBotRequest) returns (ListSpaceMembersForBotResponse);
+  rpc CreateBotChat(CreateBotChatRequest) returns (CreateBotChatResponse);
+  rpc GetChatMessagesForBot(GetChatMessagesForBotRequest) returns (GetChatMessagesForBotResponse);
 }
 
 message Bot {
@@ -245,6 +253,8 @@ message InstallBotInSpaceRequest {
   string bot_id = 1;
   string space_id = 2;
   repeated voice.chat.v1.ChatRef allowed_chats = 3;
+  // Required true when bot manifest includes privileged scopes (e.g. TEXT_CHAT_READ_HISTORY).
+  bool acknowledge_privileged_scopes = 4;
 }
 
 message InstallBotInSpaceResponse {
@@ -367,4 +377,57 @@ message AutocompleteChoice {
 
 message AutocompleteSlashOptionResponse {
   repeated AutocompleteChoice choices = 1;
+}
+
+message TouchPresenceRequest {
+  string bot_id = 1;
+}
+
+message TouchPresenceResponse {}
+
+message AssignBotRoleRequest {
+  string space_id = 1;
+  string profile_id = 2;
+  string role_id = 3;
+}
+
+message AssignBotRoleResponse {}
+
+message RevokeBotRoleRequest {
+  string space_id = 1;
+  string profile_id = 2;
+  string role_id = 3;
+}
+
+message RevokeBotRoleResponse {}
+
+message ListSpaceMembersForBotRequest {
+  string space_id = 1;
+  optional string cursor = 2;
+}
+
+message ListSpaceMembersForBotResponse {
+  repeated string profile_ids = 1;
+  optional string next_cursor = 2;
+}
+
+message CreateBotChatRequest {
+  string space_id = 1;
+  string name = 2;
+  // "group" or "channel"
+  string chat_type = 3;
+}
+
+message CreateBotChatResponse {
+  voice.chat.v1.ChatRef chat = 1;
+}
+
+message GetChatMessagesForBotRequest {
+  voice.chat.v1.ChatRef chat = 1;
+  optional string cursor = 2;
+}
+
+message GetChatMessagesForBotResponse {
+  repeated string message_ids = 1;
+  optional string next_cursor = 2;
 }

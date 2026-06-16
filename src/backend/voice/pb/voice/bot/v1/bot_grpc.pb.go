@@ -47,6 +47,12 @@ const (
 	BotService_ListSlashCommandsForChat_FullMethodName = "/voice.bot.v1.BotService/ListSlashCommandsForChat"
 	BotService_CompleteInteraction_FullMethodName      = "/voice.bot.v1.BotService/CompleteInteraction"
 	BotService_AutocompleteSlashOption_FullMethodName  = "/voice.bot.v1.BotService/AutocompleteSlashOption"
+	BotService_TouchPresence_FullMethodName            = "/voice.bot.v1.BotService/TouchPresence"
+	BotService_AssignBotRole_FullMethodName            = "/voice.bot.v1.BotService/AssignBotRole"
+	BotService_RevokeBotRole_FullMethodName            = "/voice.bot.v1.BotService/RevokeBotRole"
+	BotService_ListSpaceMembersForBot_FullMethodName   = "/voice.bot.v1.BotService/ListSpaceMembersForBot"
+	BotService_CreateBotChat_FullMethodName            = "/voice.bot.v1.BotService/CreateBotChat"
+	BotService_GetChatMessagesForBot_FullMethodName    = "/voice.bot.v1.BotService/GetChatMessagesForBot"
 )
 
 // BotServiceClient is the client API for BotService service.
@@ -86,6 +92,13 @@ type BotServiceClient interface {
 	ListSlashCommandsForChat(ctx context.Context, in *ListSlashCommandsForChatRequest, opts ...grpc.CallOption) (*ListSlashCommandsForChatResponse, error)
 	CompleteInteraction(ctx context.Context, in *CompleteInteractionRequest, opts ...grpc.CallOption) (*CompleteInteractionResponse, error)
 	AutocompleteSlashOption(ctx context.Context, in *AutocompleteSlashOptionRequest, opts ...grpc.CallOption) (*AutocompleteSlashOptionResponse, error)
+	// BOT-C: presence, scopes runtime, history gate.
+	TouchPresence(ctx context.Context, in *TouchPresenceRequest, opts ...grpc.CallOption) (*TouchPresenceResponse, error)
+	AssignBotRole(ctx context.Context, in *AssignBotRoleRequest, opts ...grpc.CallOption) (*AssignBotRoleResponse, error)
+	RevokeBotRole(ctx context.Context, in *RevokeBotRoleRequest, opts ...grpc.CallOption) (*RevokeBotRoleResponse, error)
+	ListSpaceMembersForBot(ctx context.Context, in *ListSpaceMembersForBotRequest, opts ...grpc.CallOption) (*ListSpaceMembersForBotResponse, error)
+	CreateBotChat(ctx context.Context, in *CreateBotChatRequest, opts ...grpc.CallOption) (*CreateBotChatResponse, error)
+	GetChatMessagesForBot(ctx context.Context, in *GetChatMessagesForBotRequest, opts ...grpc.CallOption) (*GetChatMessagesForBotResponse, error)
 }
 
 type botServiceClient struct {
@@ -385,6 +398,66 @@ func (c *botServiceClient) AutocompleteSlashOption(ctx context.Context, in *Auto
 	return out, nil
 }
 
+func (c *botServiceClient) TouchPresence(ctx context.Context, in *TouchPresenceRequest, opts ...grpc.CallOption) (*TouchPresenceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TouchPresenceResponse)
+	err := c.cc.Invoke(ctx, BotService_TouchPresence_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *botServiceClient) AssignBotRole(ctx context.Context, in *AssignBotRoleRequest, opts ...grpc.CallOption) (*AssignBotRoleResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AssignBotRoleResponse)
+	err := c.cc.Invoke(ctx, BotService_AssignBotRole_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *botServiceClient) RevokeBotRole(ctx context.Context, in *RevokeBotRoleRequest, opts ...grpc.CallOption) (*RevokeBotRoleResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RevokeBotRoleResponse)
+	err := c.cc.Invoke(ctx, BotService_RevokeBotRole_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *botServiceClient) ListSpaceMembersForBot(ctx context.Context, in *ListSpaceMembersForBotRequest, opts ...grpc.CallOption) (*ListSpaceMembersForBotResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListSpaceMembersForBotResponse)
+	err := c.cc.Invoke(ctx, BotService_ListSpaceMembersForBot_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *botServiceClient) CreateBotChat(ctx context.Context, in *CreateBotChatRequest, opts ...grpc.CallOption) (*CreateBotChatResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateBotChatResponse)
+	err := c.cc.Invoke(ctx, BotService_CreateBotChat_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *botServiceClient) GetChatMessagesForBot(ctx context.Context, in *GetChatMessagesForBotRequest, opts ...grpc.CallOption) (*GetChatMessagesForBotResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetChatMessagesForBotResponse)
+	err := c.cc.Invoke(ctx, BotService_GetChatMessagesForBot_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // BotServiceServer is the server API for BotService service.
 // All implementations must embed UnimplementedBotServiceServer
 // for forward compatibility.
@@ -422,6 +495,13 @@ type BotServiceServer interface {
 	ListSlashCommandsForChat(context.Context, *ListSlashCommandsForChatRequest) (*ListSlashCommandsForChatResponse, error)
 	CompleteInteraction(context.Context, *CompleteInteractionRequest) (*CompleteInteractionResponse, error)
 	AutocompleteSlashOption(context.Context, *AutocompleteSlashOptionRequest) (*AutocompleteSlashOptionResponse, error)
+	// BOT-C: presence, scopes runtime, history gate.
+	TouchPresence(context.Context, *TouchPresenceRequest) (*TouchPresenceResponse, error)
+	AssignBotRole(context.Context, *AssignBotRoleRequest) (*AssignBotRoleResponse, error)
+	RevokeBotRole(context.Context, *RevokeBotRoleRequest) (*RevokeBotRoleResponse, error)
+	ListSpaceMembersForBot(context.Context, *ListSpaceMembersForBotRequest) (*ListSpaceMembersForBotResponse, error)
+	CreateBotChat(context.Context, *CreateBotChatRequest) (*CreateBotChatResponse, error)
+	GetChatMessagesForBot(context.Context, *GetChatMessagesForBotRequest) (*GetChatMessagesForBotResponse, error)
 	mustEmbedUnimplementedBotServiceServer()
 }
 
@@ -515,6 +595,24 @@ func (UnimplementedBotServiceServer) CompleteInteraction(context.Context, *Compl
 }
 func (UnimplementedBotServiceServer) AutocompleteSlashOption(context.Context, *AutocompleteSlashOptionRequest) (*AutocompleteSlashOptionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AutocompleteSlashOption not implemented")
+}
+func (UnimplementedBotServiceServer) TouchPresence(context.Context, *TouchPresenceRequest) (*TouchPresenceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method TouchPresence not implemented")
+}
+func (UnimplementedBotServiceServer) AssignBotRole(context.Context, *AssignBotRoleRequest) (*AssignBotRoleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AssignBotRole not implemented")
+}
+func (UnimplementedBotServiceServer) RevokeBotRole(context.Context, *RevokeBotRoleRequest) (*RevokeBotRoleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RevokeBotRole not implemented")
+}
+func (UnimplementedBotServiceServer) ListSpaceMembersForBot(context.Context, *ListSpaceMembersForBotRequest) (*ListSpaceMembersForBotResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListSpaceMembersForBot not implemented")
+}
+func (UnimplementedBotServiceServer) CreateBotChat(context.Context, *CreateBotChatRequest) (*CreateBotChatResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateBotChat not implemented")
+}
+func (UnimplementedBotServiceServer) GetChatMessagesForBot(context.Context, *GetChatMessagesForBotRequest) (*GetChatMessagesForBotResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetChatMessagesForBot not implemented")
 }
 func (UnimplementedBotServiceServer) mustEmbedUnimplementedBotServiceServer() {}
 func (UnimplementedBotServiceServer) testEmbeddedByValue()                    {}
@@ -1034,6 +1132,114 @@ func _BotService_AutocompleteSlashOption_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BotService_TouchPresence_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TouchPresenceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BotServiceServer).TouchPresence(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BotService_TouchPresence_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BotServiceServer).TouchPresence(ctx, req.(*TouchPresenceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BotService_AssignBotRole_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AssignBotRoleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BotServiceServer).AssignBotRole(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BotService_AssignBotRole_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BotServiceServer).AssignBotRole(ctx, req.(*AssignBotRoleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BotService_RevokeBotRole_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RevokeBotRoleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BotServiceServer).RevokeBotRole(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BotService_RevokeBotRole_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BotServiceServer).RevokeBotRole(ctx, req.(*RevokeBotRoleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BotService_ListSpaceMembersForBot_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListSpaceMembersForBotRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BotServiceServer).ListSpaceMembersForBot(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BotService_ListSpaceMembersForBot_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BotServiceServer).ListSpaceMembersForBot(ctx, req.(*ListSpaceMembersForBotRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BotService_CreateBotChat_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateBotChatRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BotServiceServer).CreateBotChat(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BotService_CreateBotChat_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BotServiceServer).CreateBotChat(ctx, req.(*CreateBotChatRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BotService_GetChatMessagesForBot_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetChatMessagesForBotRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BotServiceServer).GetChatMessagesForBot(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BotService_GetChatMessagesForBot_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BotServiceServer).GetChatMessagesForBot(ctx, req.(*GetChatMessagesForBotRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // BotService_ServiceDesc is the grpc.ServiceDesc for BotService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1148,6 +1354,30 @@ var BotService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AutocompleteSlashOption",
 			Handler:    _BotService_AutocompleteSlashOption_Handler,
+		},
+		{
+			MethodName: "TouchPresence",
+			Handler:    _BotService_TouchPresence_Handler,
+		},
+		{
+			MethodName: "AssignBotRole",
+			Handler:    _BotService_AssignBotRole_Handler,
+		},
+		{
+			MethodName: "RevokeBotRole",
+			Handler:    _BotService_RevokeBotRole_Handler,
+		},
+		{
+			MethodName: "ListSpaceMembersForBot",
+			Handler:    _BotService_ListSpaceMembersForBot_Handler,
+		},
+		{
+			MethodName: "CreateBotChat",
+			Handler:    _BotService_CreateBotChat_Handler,
+		},
+		{
+			MethodName: "GetChatMessagesForBot",
+			Handler:    _BotService_GetChatMessagesForBot_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

@@ -45,6 +45,10 @@ service SpaceService {
   rpc RemoveMemberTimeout(RemoveMemberTimeoutRequest) returns (RemoveMemberTimeoutResponse);
   rpc TransferOwnership(TransferOwnershipRequest) returns (TransferOwnershipResponse);
 
+  // S2S: Bot Service adds bot actor profile to space membership on install.
+  rpc AddBotMember(AddBotMemberRequest) returns (AddBotMemberResponse);
+  rpc RemoveBotMember(RemoveBotMemberRequest) returns (RemoveBotMemberResponse);
+
   rpc ListTemplates(ListTemplatesRequest) returns (ListTemplatesResponse);
   rpc CreateFromTemplate(CreateFromTemplateRequest) returns (CreateFromTemplateResponse);
 
@@ -304,6 +308,16 @@ message TransferOwnershipRequest {
   string new_owner_profile_id = 2;
 }
 
+message AddBotMemberRequest {
+  string space_id = 1;
+  string profile_id = 2;
+}
+
+message RemoveBotMemberRequest {
+  string space_id = 1;
+  string profile_id = 2;
+}
+
 message ListTemplatesRequest {}
 
 message TemplateList {
@@ -416,6 +430,8 @@ message ListBansResponse {
 message TimeoutMemberResponse {}
 message RemoveMemberTimeoutResponse {}
 message TransferOwnershipResponse {}
+message AddBotMemberResponse {}
+message RemoveBotMemberResponse {}
 message ListTemplatesResponse {
   TemplateList template_list = 1;
 }

@@ -120,10 +120,10 @@
 **Промпт-якорь:** `Phase 16 bots — batch BOT-A API/gateway`.
 
 **Аудит (post BOT-A):**
-- [ ] **grpcsvc coverage ≥80%** — сейчас ~55%; добить unit/integration (пересекается с BOT-D).
+- [ ] **grpcsvc coverage ≥80%** — **80.4%** после BOT-C; закрыть оставшиеся ветки в BOT-D.
 - [ ] **Autocomplete polling mode** — webhook-only sync path; polling боты получают пустой список (док/бот API).
 - [ ] **EditBotMessage** — нет integration test с Messaging mock; ownership edge cases.
-- [ ] **Hub deferred persistence** — остаётся BOT-C (`bot_event_log` для defer).
+- [x] **Hub deferred persistence** — `MarkEventDeferred` + `RehydrateDeferred` (BOT-C).
 - [ ] **docs/features/bots.md** — polling path `/api/bots/...` vs фактический `/api/v1/bots/...`.
 - [ ] **buf generate BSR** — `make buf-generate` 403; локально `buf generate --template buf.gen.local-go.yaml`.
 - [ ] **Gateway Docker build** — `go mod download` в образе gateway (missing messaging context) — блокирует `compose-app-up` на чистой машине.
@@ -142,7 +142,7 @@
 
 **Аудит (post BOT-B):**
 - [ ] **Uninstall roles/pins** — `UninstallBotFromSpace` очищает whitelist; Role Service + Messaging pins при удалении бота — BOT-C/отдельная задача.
-- [ ] **Bot online heartbeat** — `SlashCommand.online` всегда `true` до BOT-C; greyout UI готов на клиенте.
+- [x] **Bot online heartbeat** — `SlashCommand.online` из `bot_presence`; greyout UI на клиенте (BOT-C).
 - [ ] **Slash option types P2** — `user`/`channel`/`role`/`attachment` pickers; v1: `string`/`integer`/`boolean`.
 - [ ] **grpcsvc coverage ≥80%** — ~56% после BOT-B; добить в BOT-D.
 - [ ] **Gateway bot routes в api-gateway.md** — `ListBotsInChat`, `SetBotChatEnabled` не в CONTRACT_MATRIX.
@@ -154,15 +154,25 @@
 
 ### Batch BOT-C — «Bot backend: надёжность и scopes»
 
-- [ ] **Bot online / offline** — heartbeat или webhook health; greyout в `ListSlashCommandsForChat` + Flutter.
-- [ ] **`TEXT_CHAT_READ_HISTORY`** — warning при install + enforcement Bot/Gateway.
-- [ ] **`MEMBER_ASSIGN_ROLES` runtime** — Bot API + иерархия Role Service.
-- [ ] **Остальные scopes runtime (P2)** — `DM_SEND`, `TEXT_CHAT_CREATE_IN_SPACE`, `SPACE_VIEW_MEMBER_LIST`; типы опций slash.
-- [ ] **Hub in-memory only** — persist deferred или таймаут в `bot_event_log`.
-- [ ] **InstallBotInSpace + space channel** — S2S bypass / Space API add-bot-member.
-- [ ] **Role gRPC на InstallBotInSpace** — forward metadata при S2S из Bot.
+- [x] **Bot online / offline** — `bot_presence`, `TouchPresence`, poll/webhook touch; `online` в `ListSlashCommandsForChat`; Gateway `EmitUnpopulated`; Flutter greyout + `bot_unavailable`/`bot_timeout`.
+- [x] **`TEXT_CHAT_READ_HISTORY`** — `acknowledge_privileged_scopes` при install (backend + Flutter); scope gate на `GetChatMessagesForBot`.
+- [x] **`MEMBER_ASSIGN_ROLES` runtime** — `AssignBotRole`/`RevokeBotRole` gRPC + делегирование Role Service.
+- [ ] **Остальные scopes runtime (P2)** — `DM_SEND` (interaction-only), `TEXT_CHAT_CREATE_IN_SPACE`, `SPACE_VIEW_MEMBER_LIST` — gRPC есть; Gateway REST + slash pickers — нет.
+- [x] **Hub in-memory only** — `MarkEventDeferred`, `ListDeferredTokens`, `RehydrateDeferred` при старте.
+- [x] **InstallBotInSpace + space channel** — `Space.AddBotMember`; channel без `Chat.AddMembers`; group с `AddMembers`.
+- [x] **Role gRPC на InstallBotInSpace** — `CheckPermission` + `s2s.ForwardIncomingMetadata`.
 
 **Промпт-якорь:** `Phase 16 bots — batch BOT-C backend hardening`.
+
+**Аудит (post BOT-C):**
+- [ ] **Online в списке ботов спейса** — `ListInstalledBots` / `space_bots_sheet` без online/offline (`bots.md` §«Статус бота»).
+- [ ] **Gateway REST для scope RPC** — нет transcoding: `TouchPresence`, `AssignBotRole`/`RevokeBotRole`, `ListSpaceMembersForBot`, `CreateBotChat`, `GetChatMessagesForBot`.
+- [ ] **`GetChatMessagesForBot`** — `Unimplemented`; нет Messaging read + Gateway route.
+- [ ] **Uninstall roles/pins** — `UninstallBotFromSpace` не чистит роли бота и pins в Messaging (`bots.md` §«Удаление бота»).
+- [ ] **Deferred TTL** — нет expiry/abandon для `delivery_status=deferred` в `bot_event_log`.
+- [ ] **Rate limits** — 5000 req/min и 100 role ops/min + `429 Retry-After` не реализованы (`bots.md` §Rate Limiting).
+- [ ] **REST heartbeat для webhook-ботов** — `POST /api/v1/bots/me/presence` или документировать gRPC-only.
+- [ ] **Live compose BOT-C** — `compose_phase16_bots_slash_live_test` (greyout, privileged install); прогон с `VOICE_RUN_LIVE_COMPOSE=true`.
 
 ---
 
@@ -171,7 +181,7 @@
 *Developer Portal login — после ключей OAuth (секция «Только вы»).*
 
 - [ ] **Developer Portal auth** — login/OAuth flow, rotate `webhook_secret`, revoke token, list apps (ключи из `.env`).
-- [ ] **Тесты** — Flutter live install+channel pong; Bot `grpcsvc` coverage ≥80%.
+- [ ] **Тесты** — Flutter live install+channel pong; Bot `grpcsvc` coverage ≥80% — grpcsvc **80.4%** (BOT-C); live compose — audit.
 - [ ] **Страница бота (P2)** — `voice.app/bots/{slug}` (если есть маршрутизация в клиенте).
 
 **Промпт-якорь:** `Phase 16 bots — batch BOT-D portal and tests`.

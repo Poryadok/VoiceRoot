@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -31,10 +32,15 @@ import (
 func migrationSQL(t *testing.T) string {
 	t.Helper()
 	_, file, _, _ := runtime.Caller(0)
-	root := filepath.Join(filepath.Dir(file), "..", "..", "..", "migrations", "bot_db", "000001_init.up.sql")
-	b, err := os.ReadFile(root)
-	require.NoError(t, err)
-	return string(b)
+	dir := filepath.Join(filepath.Dir(file), "..", "..", "..", "migrations", "bot_db")
+	var b strings.Builder
+	for _, name := range []string{"000001_init.up.sql", "000002_bot_presence.up.sql"} {
+		raw, err := os.ReadFile(filepath.Join(dir, name))
+		require.NoError(t, err)
+		b.Write(raw)
+		b.WriteByte('\n')
+	}
+	return b.String()
 }
 
 func startBotGRPC(t *testing.T) (botv1.BotServiceClient, *store.BotStore, func()) {
@@ -105,8 +111,7 @@ func TestExecuteSlashInteraction_webhookPong(t *testing.T) {
 	chatID := uuid.New()
 	spaceID := uuid.New()
 	botUUID, _ := uuid.Parse(botID)
-	_, err = st.InstallInSpace(ctx, botUUID, spaceID, profile, []uuid.UUID{chatID})
-	require.NoError(t, err)
+	installBotInSpaceWithPresence(t, st, ctx, botUUID, spaceID, profile, []uuid.UUID{chatID})
 
 	chatType := chatv1.ChatType_CHAT_TYPE_CHANNEL
 	resp, err := client.ExecuteSlashInteraction(ctx, &botv1.ExecuteSlashInteractionRequest{
@@ -163,6 +168,7 @@ commands:
 	profile, _ := authProfile(ctx)
 	_, err = st.InstallInSpace(ctx, botUUID, uuid.New(), profile, []uuid.UUID{chatID})
 	require.NoError(t, err)
+	require.NoError(t, st.TouchPresence(ctx, botUUID))
 
 	chatType := chatv1.ChatType_CHAT_TYPE_CHANNEL
 	resp, err := client.ExecuteSlashInteraction(ctx, &botv1.ExecuteSlashInteractionRequest{
@@ -215,4 +221,19 @@ func authProfile(ctx context.Context) (uuid.UUID, bool) {
 	}
 	id, err := uuid.Parse(vals[0])
 	return id, err == nil
+}
+
+func installBotInSpaceWithPresence(
+	t *testing.T,
+	st *store.BotStore,
+	ctx context.Context,
+	botID uuid.UUID,
+	spaceID uuid.UUID,
+	profile uuid.UUID,
+	chats []uuid.UUID,
+) {
+	t.Helper()
+	_, err := st.InstallInSpace(ctx, botID, spaceID, profile, chats)
+	require.NoError(t, err)
+	require.NoError(t, st.TouchPresence(ctx, botID))
 }

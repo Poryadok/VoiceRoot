@@ -133,7 +133,9 @@ final ephemeralMessagesProvider = StateNotifierProvider.autoDispose
       (ref, chatId) => EphemeralMessagesNotifier(),
     );
 
-enum SlashInteractionFailure { botTimeout, requestFailed }
+enum SlashInteractionFailure { botTimeout, botUnavailable, requestFailed }
+
+const kBotUnavailableErrorCode = 'bot_unavailable';
 
 final slashInteractionExecutorProvider = Provider<SlashInteractionExecutor>((
   ref,
@@ -169,6 +171,8 @@ class SlashInteractionExecutor {
       BotsApiOk(:final data) => _handleOutcome(chatId, command, data),
       BotsApiFailure(:final errorCode) when errorCode == kBotTimeoutErrorCode =>
         SlashInteractionFailure.botTimeout,
+      BotsApiFailure(:final errorCode) when errorCode == kBotUnavailableErrorCode =>
+        SlashInteractionFailure.botUnavailable,
       BotsApiFailure() => SlashInteractionFailure.requestFailed,
     };
   }
@@ -180,6 +184,9 @@ class SlashInteractionExecutor {
   ) {
     if (data.isBotTimeout) {
       return SlashInteractionFailure.botTimeout;
+    }
+    if (data.errorCode == kBotUnavailableErrorCode) {
+      return SlashInteractionFailure.botUnavailable;
     }
     if (data.deferred) {
       _ref.read(deferredBotInteractionProvider(chatId).notifier).setDeferred(

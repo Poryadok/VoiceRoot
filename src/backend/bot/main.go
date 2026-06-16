@@ -29,6 +29,7 @@ import (
 	messagingv1 "voice.app/voice/messaging/v1"
 	rolev1 "voice.app/voice/role/v1"
 	userv1 "voice.app/voice/user/v1"
+	spacev1 "voice.app/voice/space/v1"
 )
 
 const serviceName = "bot"
@@ -63,6 +64,7 @@ func main() {
 		hub := dispatch.NewHub()
 		svc := grpcsvc.NewBotGRPC(st, hub)
 		wireDownstream(svc, logger)
+		svc.RehydrateDeferred(context.Background())
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
 			pub, err := botevents.NewJetStreamPublisher(natsURL)
 			if err != nil {
@@ -150,5 +152,13 @@ func wireDownstream(svc *grpcsvc.BotGRPC, logger *slog.Logger) {
 		}
 		svc.User = userv1.NewUserServiceClient(conn)
 		logger.Info("user client enabled", slog.String("addr", addr))
+	}
+	if addr := grpcclient.DialTarget(strings.TrimSpace(os.Getenv("SPACE_GRPC_ADDR"))); addr != "" {
+		conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			log.Fatalf("space grpc: %v", err)
+		}
+		svc.Space = spacev1.NewSpaceServiceClient(conn)
+		logger.Info("space client enabled", slog.String("addr", addr))
 	}
 }

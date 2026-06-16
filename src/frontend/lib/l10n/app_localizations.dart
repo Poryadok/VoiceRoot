@@ -698,6 +698,12 @@ abstract class AppLocalizations {
   /// **'This bot requests privileged access to read chat history.'**
   String get spaceBotsScopeWarning;
 
+  /// No description provided for @spaceBotsPrivilegedAck.
+  ///
+  /// In en, this message translates to:
+  /// **'I understand this bot can read chat history'**
+  String get spaceBotsPrivilegedAck;
+
   /// No description provided for @spaceBotsSelectChats.
   ///
   /// In en, this message translates to:

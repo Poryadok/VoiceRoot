@@ -9,6 +9,7 @@ import (
 
 	botv1 "voice.app/voice/bot/v1"
 	chatv1 "voice.app/voice/chat/v1"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 func (t *transcoder) serveBots(w http.ResponseWriter, r *http.Request, rest string) bool {
@@ -167,7 +168,7 @@ func (t *transcoder) serveBots(w http.ResponseWriter, r *http.Request, rest stri
 			writeGRPCError(w, err)
 			return true
 		}
-		writeProtoJSON(w, http.StatusOK, resp)
+		writeBotSlashCommandsJSON(w, http.StatusOK, resp)
 		return true
 
 	case r.Method == http.MethodGet && strings.HasPrefix(rest, "chats/"):
@@ -407,4 +408,17 @@ func botBearerToken(r *http.Request) string {
 		return strings.TrimSpace(h[4:])
 	}
 	return ""
+}
+
+// writeBotSlashCommandsJSON serializes slash commands with explicit online (false must not be omitted).
+func writeBotSlashCommandsJSON(w http.ResponseWriter, httpStatus int, resp *botv1.ListSlashCommandsForChatResponse) {
+	opts := protojson.MarshalOptions{UseProtoNames: true, EmitUnpopulated: true}
+	b, err := opts.Marshal(resp)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "encode_failed"})
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(httpStatus)
+	_, _ = w.Write(b)
 }

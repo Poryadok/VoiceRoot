@@ -789,6 +789,10 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
             messenger.showSnackBar(
               SnackBar(content: Text(l10n.botTimeoutError)),
             );
+          } else if (failure == SlashInteractionFailure.botUnavailable) {
+            messenger.showSnackBar(
+              SnackBar(content: Text(l10n.botUnavailableTooltip)),
+            );
           } else if (failure == SlashInteractionFailure.requestFailed) {
             messenger.showSnackBar(
               SnackBar(content: Text(l10n.chatRoomError(command.name))),

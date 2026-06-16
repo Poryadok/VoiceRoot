@@ -404,6 +404,7 @@ class VoiceBotsClient {
     required String botId,
     required String spaceId,
     required List<({String id, String type})> allowedChats,
+    bool acknowledgePrivilegedScopes = false,
   }) async {
     final result = await _gateway.postProto(
       uri: _gateway.resolve(
@@ -421,6 +422,7 @@ class VoiceBotsClient {
               ),
             )
             .toList(),
+        acknowledgePrivilegedScopes: acknowledgePrivilegedScopes,
       ),
       createEmpty: bot_pb.InstallBotInSpaceResponse.create,
     );

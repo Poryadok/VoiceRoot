@@ -50,6 +50,8 @@ const (
 	SpaceService_TimeoutMember_FullMethodName       = "/voice.space.v1.SpaceService/TimeoutMember"
 	SpaceService_RemoveMemberTimeout_FullMethodName = "/voice.space.v1.SpaceService/RemoveMemberTimeout"
 	SpaceService_TransferOwnership_FullMethodName   = "/voice.space.v1.SpaceService/TransferOwnership"
+	SpaceService_AddBotMember_FullMethodName        = "/voice.space.v1.SpaceService/AddBotMember"
+	SpaceService_RemoveBotMember_FullMethodName     = "/voice.space.v1.SpaceService/RemoveBotMember"
 	SpaceService_ListTemplates_FullMethodName       = "/voice.space.v1.SpaceService/ListTemplates"
 	SpaceService_CreateFromTemplate_FullMethodName  = "/voice.space.v1.SpaceService/CreateFromTemplate"
 	SpaceService_GetAuditLog_FullMethodName         = "/voice.space.v1.SpaceService/GetAuditLog"
@@ -92,6 +94,9 @@ type SpaceServiceClient interface {
 	TimeoutMember(ctx context.Context, in *TimeoutMemberRequest, opts ...grpc.CallOption) (*TimeoutMemberResponse, error)
 	RemoveMemberTimeout(ctx context.Context, in *RemoveMemberTimeoutRequest, opts ...grpc.CallOption) (*RemoveMemberTimeoutResponse, error)
 	TransferOwnership(ctx context.Context, in *TransferOwnershipRequest, opts ...grpc.CallOption) (*TransferOwnershipResponse, error)
+	// S2S: Bot Service adds bot actor profile to space membership on install.
+	AddBotMember(ctx context.Context, in *AddBotMemberRequest, opts ...grpc.CallOption) (*AddBotMemberResponse, error)
+	RemoveBotMember(ctx context.Context, in *RemoveBotMemberRequest, opts ...grpc.CallOption) (*RemoveBotMemberResponse, error)
 	ListTemplates(ctx context.Context, in *ListTemplatesRequest, opts ...grpc.CallOption) (*ListTemplatesResponse, error)
 	CreateFromTemplate(ctx context.Context, in *CreateFromTemplateRequest, opts ...grpc.CallOption) (*CreateFromTemplateResponse, error)
 	GetAuditLog(ctx context.Context, in *GetAuditLogRequest, opts ...grpc.CallOption) (*GetAuditLogResponse, error)
@@ -415,6 +420,26 @@ func (c *spaceServiceClient) TransferOwnership(ctx context.Context, in *Transfer
 	return out, nil
 }
 
+func (c *spaceServiceClient) AddBotMember(ctx context.Context, in *AddBotMemberRequest, opts ...grpc.CallOption) (*AddBotMemberResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AddBotMemberResponse)
+	err := c.cc.Invoke(ctx, SpaceService_AddBotMember_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *spaceServiceClient) RemoveBotMember(ctx context.Context, in *RemoveBotMemberRequest, opts ...grpc.CallOption) (*RemoveBotMemberResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RemoveBotMemberResponse)
+	err := c.cc.Invoke(ctx, SpaceService_RemoveBotMember_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *spaceServiceClient) ListTemplates(ctx context.Context, in *ListTemplatesRequest, opts ...grpc.CallOption) (*ListTemplatesResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListTemplatesResponse)
@@ -482,6 +507,9 @@ type SpaceServiceServer interface {
 	TimeoutMember(context.Context, *TimeoutMemberRequest) (*TimeoutMemberResponse, error)
 	RemoveMemberTimeout(context.Context, *RemoveMemberTimeoutRequest) (*RemoveMemberTimeoutResponse, error)
 	TransferOwnership(context.Context, *TransferOwnershipRequest) (*TransferOwnershipResponse, error)
+	// S2S: Bot Service adds bot actor profile to space membership on install.
+	AddBotMember(context.Context, *AddBotMemberRequest) (*AddBotMemberResponse, error)
+	RemoveBotMember(context.Context, *RemoveBotMemberRequest) (*RemoveBotMemberResponse, error)
 	ListTemplates(context.Context, *ListTemplatesRequest) (*ListTemplatesResponse, error)
 	CreateFromTemplate(context.Context, *CreateFromTemplateRequest) (*CreateFromTemplateResponse, error)
 	GetAuditLog(context.Context, *GetAuditLogRequest) (*GetAuditLogResponse, error)
@@ -587,6 +615,12 @@ func (UnimplementedSpaceServiceServer) RemoveMemberTimeout(context.Context, *Rem
 }
 func (UnimplementedSpaceServiceServer) TransferOwnership(context.Context, *TransferOwnershipRequest) (*TransferOwnershipResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method TransferOwnership not implemented")
+}
+func (UnimplementedSpaceServiceServer) AddBotMember(context.Context, *AddBotMemberRequest) (*AddBotMemberResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AddBotMember not implemented")
+}
+func (UnimplementedSpaceServiceServer) RemoveBotMember(context.Context, *RemoveBotMemberRequest) (*RemoveBotMemberResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoveBotMember not implemented")
 }
 func (UnimplementedSpaceServiceServer) ListTemplates(context.Context, *ListTemplatesRequest) (*ListTemplatesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListTemplates not implemented")
@@ -1176,6 +1210,42 @@ func _SpaceService_TransferOwnership_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SpaceService_AddBotMember_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddBotMemberRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).AddBotMember(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_AddBotMember_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).AddBotMember(ctx, req.(*AddBotMemberRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SpaceService_RemoveBotMember_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveBotMemberRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).RemoveBotMember(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_RemoveBotMember_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).RemoveBotMember(ctx, req.(*RemoveBotMemberRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _SpaceService_ListTemplates_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListTemplatesRequest)
 	if err := dec(in); err != nil {
@@ -1360,6 +1430,14 @@ var SpaceService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "TransferOwnership",
 			Handler:    _SpaceService_TransferOwnership_Handler,
+		},
+		{
+			MethodName: "AddBotMember",
+			Handler:    _SpaceService_AddBotMember_Handler,
+		},
+		{
+			MethodName: "RemoveBotMember",
+			Handler:    _SpaceService_RemoveBotMember_Handler,
 		},
 		{
 			MethodName: "ListTemplates",
