@@ -2,8 +2,10 @@
 
 FROM golang:1.26-alpine AS build
 WORKDIR /src
+ENV GOPROXY=https://proxy.golang.org,direct
+COPY scripts/docker-go-mod-download.sh /usr/local/bin/docker-go-mod-download.sh
 COPY go.mod ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod sh /usr/local/bin/docker-go-mod-download.sh
 COPY . .
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/service .
 

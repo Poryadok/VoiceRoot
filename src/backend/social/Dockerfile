@@ -3,11 +3,13 @@
 
 FROM golang:1.26-alpine AS build
 WORKDIR /src
+ENV GOPROXY=https://proxy.golang.org,direct
+COPY scripts/docker-go-mod-download.sh /usr/local/bin/docker-go-mod-download.sh
 COPY pkg/go.mod ./pkg/
 COPY social/go.mod ./social/
 COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
 COPY user/pb/voice/social/go.mod ./user/pb/voice/social/
-RUN cd social && go mod download
+RUN --mount=type=cache,target=/go/pkg/mod sh /usr/local/bin/docker-go-mod-download.sh social
 COPY pkg ./pkg
 COPY user/pb ./user/pb
 COPY social ./social

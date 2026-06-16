@@ -61,7 +61,7 @@ compose-up:
 	docker compose up -d
 
 compose-app-up:
-	docker compose --profile app up -d --build
+	COMPOSE_PARALLEL_LIMIT=4 docker compose --profile app up -d --build
 
 # Phase 15 E2E DDL for Go-owned DBs (auth_db uses Flyway Path A on Auth boot).
 compose-migrate-phase15:

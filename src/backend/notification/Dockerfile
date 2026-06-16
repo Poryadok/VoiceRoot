@@ -3,6 +3,8 @@
 
 FROM golang:1.26-alpine AS build
 WORKDIR /src
+ENV GOPROXY=https://proxy.golang.org,direct
+COPY scripts/docker-go-mod-download.sh /usr/local/bin/docker-go-mod-download.sh
 COPY pkg/go.mod ./pkg/
 COPY notification/go.mod ./notification/
 COPY voice/pb/voice/notification/go.mod ./voice/pb/voice/notification/
@@ -11,7 +13,7 @@ COPY messaging/pb/voice/messaging/go.mod ./messaging/pb/voice/messaging/
 COPY chat/pb/voice/chat/go.mod ./chat/pb/voice/chat/
 COPY user/pb/voice/user/go.mod ./user/pb/voice/user/
 COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
-RUN cd notification && go mod download
+RUN --mount=type=cache,target=/go/pkg/mod sh /usr/local/bin/docker-go-mod-download.sh notification
 COPY pkg ./pkg
 COPY voice/pb ./voice/pb
 COPY messaging/pb ./messaging/pb
