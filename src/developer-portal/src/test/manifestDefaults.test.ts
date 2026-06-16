@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultManifest } from './manifestDefaults';
+import { defaultManifest } from '../manifestDefaults';
 
 describe('manifest defaults', () => {
   it('includes ping command', () => {

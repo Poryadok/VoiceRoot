@@ -16,6 +16,8 @@ import voice.backend.auth.service.AuthService;
 import voice.backend.auth.service.BackupCodeService;
 import voice.backend.auth.service.InMemorySubscriptionTierStore;
 import voice.backend.auth.service.SubscriptionTierResolver;
+import voice.backend.auth.oauth.OAuth2Service;
+import voice.backend.auth.oauth.OAuthAuthorizationCodeStore;
 import voice.backend.auth.service.TotpService;
 
 @Configuration
@@ -81,5 +83,14 @@ public class AuthBeans {
         subscriptionTierResolver,
         profileSwitchValidator,
         e2eKeyBackupRepository);
+  }
+
+  @Bean
+  OAuth2Service oauth2Service(
+      AuthProperties properties,
+      AuthService authService,
+      OAuthAuthorizationCodeStore codeStore,
+      Clock clock) {
+    return new OAuth2Service(properties, authService, codeStore, clock);
   }
 }

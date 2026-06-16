@@ -1,32 +1,95 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { OAuthCallback } from './OAuthCallback';
+import { apiFetch, apiBase, oauthClientId, oauthDisabled } from './oauth/api';
+import { callbackRedirectUri } from './oauth/callback';
+import { buildAuthorizeUrl, randomCodeVerifier, s256Challenge } from './oauth/pkce';
+import { clearSession, getAccessToken, isLoggedIn, setAccessToken, setPkceVerifier } from './oauth/session';
+import { defaultManifest } from './manifestDefaults';
 
-const apiBase = import.meta.env.VITE_VOICE_API_BASE ?? 'http://127.0.0.1:18080';
-
-const defaultManifest = `name: MyBot
-description: Example bot
-scopes:
-  - TEXT_CHAT_SEND_MESSAGES
-commands:
-  - name: ping
-    description: Health check
-`;
+type BotSummary = {
+  id?: string;
+  name?: string;
+  description?: string;
+};
 
 export function App() {
-  const [token, setToken] = useState('');
-  const [jwt, setJwt] = useState('');
+  if (window.location.pathname === '/callback') {
+    return <OAuthCallback />;
+  }
+  return <Portal />;
+}
+
+function Portal() {
+  const [loggedIn, setLoggedIn] = useState(isLoggedIn());
+  const [pasteJwt, setPasteJwt] = useState('');
   const [manifest, setManifest] = useState(defaultManifest);
-  const [botId, setBotId] = useState('');
+  const [bots, setBots] = useState<BotSummary[]>([]);
+  const [selectedBotId, setSelectedBotId] = useState('');
   const [botToken, setBotToken] = useState('');
   const [status, setStatus] = useState('');
 
+  const refreshBots = useCallback(async () => {
+    if (!isLoggedIn()) {
+      return;
+    }
+    const res = await apiFetch('/api/v1/bots');
+    if (!res.ok) {
+      setStatus(`List bots failed: ${res.status}`);
+      return;
+    }
+    const body = await res.json();
+    const list: BotSummary[] = (body.bots ?? []).map((row: { bot?: BotSummary }) => row.bot ?? row);
+    setBots(list);
+    if (list.length > 0 && list[0].id) {
+      setSelectedBotId(list[0].id);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (loggedIn) {
+      void refreshBots();
+    }
+  }, [loggedIn, refreshBots]);
+
+  async function signInWithVoice() {
+    const verifier = randomCodeVerifier();
+    const challenge = await s256Challenge(verifier);
+    setPkceVerifier(verifier);
+    const state = crypto.randomUUID();
+    const redirectUri = callbackRedirectUri(window.location.origin);
+    const url = buildAuthorizeUrl({
+      apiBase,
+      clientId: oauthClientId,
+      redirectUri,
+      state,
+      codeChallenge: challenge,
+    });
+    window.location.assign(url);
+  }
+
+  function usePastedJwt() {
+    const trimmed = pasteJwt.trim();
+    if (!trimmed) {
+      setStatus('Paste a JWT first');
+      return;
+    }
+    setAccessToken(trimmed);
+    setLoggedIn(true);
+    setStatus('Using pasted JWT');
+  }
+
+  function logout() {
+    clearSession();
+    setLoggedIn(false);
+    setBots([]);
+    setBotToken('');
+    setStatus('Signed out');
+  }
+
   async function registerBot() {
     setStatus('Registering…');
-    const res = await fetch(`${apiBase}/api/v1/bots`, {
+    const res = await apiFetch('/api/v1/bots', {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${jwt}`,
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify({
         name: 'DevPortal Bot',
         description: 'Created from developer portal',
@@ -39,23 +102,32 @@ export function App() {
       return;
     }
     const id = body.bot?.id ?? '';
-    setBotId(id);
-    const regen = await fetch(`${apiBase}/api/v1/bots/${id}/token/regenerate`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${jwt}` },
-    });
+    setSelectedBotId(id);
+    const regen = await apiFetch(`/api/v1/bots/${id}/token/regenerate`, { method: 'POST' });
     const regenBody = await regen.json();
     setBotToken(regenBody.token_response?.token ?? '');
     setStatus(`Registered bot ${id}`);
+    await refreshBots();
+  }
+
+  async function regenerateBotToken() {
+    if (!selectedBotId) {
+      setStatus('Select a bot first');
+      return;
+    }
+    const res = await apiFetch(`/api/v1/bots/${selectedBotId}/token/regenerate`, { method: 'POST' });
+    const body = await res.json();
+    if (!res.ok) {
+      setStatus(JSON.stringify(body));
+      return;
+    }
+    setBotToken(body.token_response?.token ?? '');
+    setStatus('Bot token regenerated');
   }
 
   async function validateManifest() {
-    const res = await fetch(`${apiBase}/api/v1/bots/manifest/validate`, {
+    const res = await apiFetch('/api/v1/bots/manifest/validate', {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${jwt}`,
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify({ manifest_yaml: manifest }),
     });
     const body = await res.json();
@@ -63,16 +135,12 @@ export function App() {
   }
 
   async function applyManifest() {
-    if (!botId) {
-      setStatus('Register a bot first');
+    if (!selectedBotId) {
+      setStatus('Select or register a bot first');
       return;
     }
-    const res = await fetch(`${apiBase}/api/v1/bots/${botId}/manifest`, {
+    const res = await apiFetch(`/api/v1/bots/${selectedBotId}/manifest`, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${jwt}`,
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify({ manifest_yaml: manifest }),
     });
     const body = await res.json();
@@ -81,31 +149,75 @@ export function App() {
 
   return (
     <main className="page">
-      <h1>Voice Developer Portal</h1>
-      <p className="hint">Phase 16 minimal — register bots, validate/apply manifest, view bot token.</p>
+      <header className="topbar">
+        <h1>Voice Developer Portal</h1>
+        {loggedIn ? (
+          <button type="button" onClick={logout}>Sign out</button>
+        ) : oauthDisabled ? (
+          <span className="hint">OAuth disabled (dev paste JWT)</span>
+        ) : (
+          <button type="button" onClick={() => void signInWithVoice()}>Sign in with Voice</button>
+        )}
+      </header>
 
-      <label>
-        User JWT
-        <input value={jwt} onChange={(e) => setJwt(e.target.value)} placeholder="Bearer access token" />
-      </label>
+      {!loggedIn && oauthDisabled && (
+        <label>
+          User JWT (dev only)
+          <input value={pasteJwt} onChange={(e) => setPasteJwt(e.target.value)} placeholder="Bearer access token" />
+          <button type="button" onClick={usePastedJwt}>Use JWT</button>
+        </label>
+      )}
 
-      <section>
-        <button type="button" onClick={registerBot}>Register bot</button>
-        {botId && <p>Bot ID: <code>{botId}</code></p>}
-        {botToken && <p>Bot token: <code>{botToken}</code></p>}
-      </section>
+      {!loggedIn && !oauthDisabled && (
+        <p className="hint">Sign in with your Voice account to manage bots.</p>
+      )}
 
-      <label>
-        Manifest YAML
-        <textarea rows={12} value={manifest} onChange={(e) => setManifest(e.target.value)} />
-      </label>
+      {loggedIn && (
+        <>
+          <section>
+            <h2>Your bots</h2>
+            {bots.length === 0 ? (
+              <p className="hint">No bots yet — register one below.</p>
+            ) : (
+              <ul className="bot-list">
+                {bots.map((bot) => (
+                  <li key={bot.id}>
+                    <button
+                      type="button"
+                      className={bot.id === selectedBotId ? 'selected' : ''}
+                      onClick={() => bot.id && setSelectedBotId(bot.id)}
+                    >
+                      {bot.name ?? bot.id}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <button type="button" onClick={() => void registerBot()}>Register bot</button>
+            {selectedBotId && (
+              <p>Selected bot: <code>{selectedBotId}</code></p>
+            )}
+            {botToken && <p>Bot token: <code>{botToken}</code></p>}
+            <button type="button" disabled={!selectedBotId} onClick={() => void regenerateBotToken()}>
+              Regenerate bot token
+            </button>
+            <p className="hint">Rotate webhook secret — TODO (API not exposed yet).</p>
+          </section>
 
-      <section className="actions">
-        <button type="button" onClick={validateManifest}>Validate</button>
-        <button type="button" onClick={applyManifest}>Apply to bot</button>
-      </section>
+          <label>
+            Manifest YAML
+            <textarea rows={12} value={manifest} onChange={(e) => setManifest(e.target.value)} />
+          </label>
+
+          <section className="actions">
+            <button type="button" onClick={() => void validateManifest()}>Validate</button>
+            <button type="button" onClick={() => void applyManifest()}>Apply to bot</button>
+          </section>
+        </>
+      )}
 
       <p className="status">{status}</p>
+      {loggedIn && !getAccessToken() && <p className="status error">Session expired</p>}
     </main>
   );
 }

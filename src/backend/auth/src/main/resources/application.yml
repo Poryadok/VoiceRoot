@@ -34,6 +34,14 @@ auth:
     blacklist-prefix: "jwt:blacklist:"
   grpc:
     port: 9090
+  oauth:
+    public-api-base-url: "${AUTH_OAUTH_PUBLIC_API_BASE_URL:http://127.0.0.1:18080}"
+    developer-portal:
+      enabled: ${AUTH_OAUTH_DEVELOPER_PORTAL_ENABLED:true}
+      client-id: "${AUTH_OAUTH_DEVELOPER_PORTAL_CLIENT_ID:}"
+      client-secret: "${AUTH_OAUTH_DEVELOPER_PORTAL_CLIENT_SECRET:}"
+      redirect-uris: "${AUTH_OAUTH_DEVELOPER_PORTAL_REDIRECT_URIS:}"
+      authorization-code-ttl: ${AUTH_OAUTH_AUTHORIZATION_CODE_TTL:PT60S}
 
 server:
   port: ${SERVER_PORT:8080}

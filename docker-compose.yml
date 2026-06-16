@@ -127,6 +127,12 @@ services:
       AUTH_JWT_PRIVATE_KEY_LOCATION: file:/run/jwt.pem
       # Compose dev only: accept TOTP code 000000 for live E2E (see AuthProperties.totp.testBypass).
       AUTH_TOTP_TEST_BYPASS: "true"
+      AUTH_OAUTH_PUBLIC_API_BASE_URL: ${VOICE_API_PUBLIC_URL:-http://127.0.0.1:18080}
+      AUTH_OAUTH_DEVELOPER_PORTAL_ENABLED: "true"
+      AUTH_OAUTH_DEVELOPER_PORTAL_CLIENT_ID: ${DEVELOPER_PORTAL_OAUTH_CLIENT_ID:-voice-developer-portal}
+      AUTH_OAUTH_DEVELOPER_PORTAL_CLIENT_SECRET: ${DEVELOPER_PORTAL_OAUTH_CLIENT_SECRET:-}
+      AUTH_OAUTH_DEVELOPER_PORTAL_REDIRECT_URIS: ${DEVELOPER_PORTAL_OAUTH_REDIRECT_URIS:-http://localhost:9082/callback,http://127.0.0.1:9082/callback}
+      AUTH_OAUTH_AUTHORIZATION_CODE_TTL: ${AUTH_OAUTH_AUTHORIZATION_CODE_TTL:-PT60S}
     volumes:
       - ./src/backend/auth/src/test/resources/jwt-test-private.pem:/run/jwt.pem:ro
     depends_on:
@@ -789,6 +795,10 @@ services:
     build:
       context: ./src/developer-portal
       dockerfile: Dockerfile
+      args:
+        VITE_VOICE_API_BASE: ${VOICE_API_PUBLIC_URL:-http://127.0.0.1:18080}
+        VITE_OAUTH_CLIENT_ID: ${DEVELOPER_PORTAL_OAUTH_CLIENT_ID:-voice-developer-portal}
+        VITE_OAUTH_DISABLED: ${DEVELOPER_PORTAL_OAUTH_DISABLED:-false}
     ports:
       - "${DEVELOPER_PORTAL_PORT:-9082}:80"
     depends_on:

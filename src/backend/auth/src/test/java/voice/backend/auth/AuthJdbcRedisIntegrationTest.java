@@ -41,16 +41,20 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import voice.backend.auth.oauth.FormUrlEncodedTestSupport;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -272,6 +276,93 @@ class AuthJdbcRedisIntegrationTest {
     mockMvc.perform(post("/api/v1/auth/validate").header("Authorization", "Bearer " + forged))
         .andExpect(status().isUnauthorized())
         .andExpect(jsonPath("$.error", is("invalid_token")));
+  }
+
+  @Test
+  void oauthAuthorizationCodeFlowStoresCodeInRedisAndIssuesJwt() throws Exception {
+    registerOAuthUser("oauth-jdbc@example.com");
+    String codeVerifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1hvtT0ZLU3-8xr4";
+    String codeChallenge = voice.backend.auth.oauth.PkceVerifier.s256Challenge(codeVerifier);
+    String code = oauthAuthorizeAndLogin("oauth-jdbc@example.com", "Correct horse battery staple", codeChallenge);
+
+    String tokenBody =
+        mockMvc
+            .perform(
+                FormUrlEncodedTestSupport.postForm(
+                    post("/api/v1/auth/oauth2/token"), oauthTokenForm(code, codeVerifier)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.access_token", not(blankOrNullString())))
+            .andExpect(jsonPath("$.token_type", is("Bearer")))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+
+    String accessToken = objectMapper.readTree(tokenBody).get("access_token").asText();
+    mockMvc
+        .perform(post("/api/v1/auth/validate").header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.user_id", not(blankOrNullString())));
+  }
+
+  private void registerOAuthUser(String email) throws Exception {
+    mockMvc
+        .perform(
+            post("/api/v1/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"email\":\""
+                        + email
+                        + "\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"{}\"}"))
+        .andExpect(status().isOk());
+  }
+
+  private String oauthAuthorizeAndLogin(String email, String password, String codeChallenge) throws Exception {
+    mockMvc
+        .perform(
+            get("/api/v1/auth/oauth2/authorize")
+                .queryParam("response_type", "code")
+                .queryParam("client_id", "voice-developer-portal")
+                .queryParam("redirect_uri", "http://localhost:9082/callback")
+                .queryParam("state", "jdbc-state")
+                .queryParam("code_challenge", codeChallenge)
+                .queryParam("code_challenge_method", "S256"))
+        .andExpect(status().isOk());
+
+    MultiValueMap<String, String> login = new LinkedMultiValueMap<>();
+    login.add("email", email);
+    login.add("password", password);
+    login.add("response_type", "code");
+    login.add("client_id", "voice-developer-portal");
+    login.add("redirect_uri", "http://localhost:9082/callback");
+    login.add("state", "jdbc-state");
+    login.add("code_challenge", codeChallenge);
+    login.add("code_challenge_method", "S256");
+
+    String location =
+        mockMvc
+            .perform(
+                FormUrlEncodedTestSupport.postForm(
+                    post("/api/v1/auth/oauth2/authorize"), login))
+            .andExpect(status().isFound())
+            .andReturn()
+            .getResponse()
+            .getHeader("Location");
+
+    int codeIdx = location.indexOf("code=");
+    assertThat(codeIdx).isGreaterThan(-1);
+    String tail = location.substring(codeIdx + 5);
+    int amp = tail.indexOf('&');
+    return amp < 0 ? tail : tail.substring(0, amp);
+  }
+
+  private MultiValueMap<String, String> oauthTokenForm(String code, String codeVerifier) {
+    MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+    form.add("grant_type", "authorization_code");
+    form.add("code", code);
+    form.add("redirect_uri", "http://localhost:9082/callback");
+    form.add("client_id", "voice-developer-portal");
+    form.add("code_verifier", codeVerifier);
+    return form;
   }
 
   private static String readClasspathPem() throws Exception {

@@ -57,6 +57,8 @@ public class AuthProperties {
 
   public static class OAuth {
     private String twitchApiBaseUrl = "https://api.twitch.tv";
+    private String publicApiBaseUrl = "http://127.0.0.1:18080";
+    private final DeveloperPortalOAuth developerPortal = new DeveloperPortalOAuth();
 
     public String getTwitchApiBaseUrl() {
       return twitchApiBaseUrl;
@@ -64,6 +66,66 @@ public class AuthProperties {
 
     public void setTwitchApiBaseUrl(String twitchApiBaseUrl) {
       this.twitchApiBaseUrl = twitchApiBaseUrl;
+    }
+
+    public String getPublicApiBaseUrl() {
+      return publicApiBaseUrl;
+    }
+
+    public void setPublicApiBaseUrl(String publicApiBaseUrl) {
+      this.publicApiBaseUrl = publicApiBaseUrl;
+    }
+
+    public DeveloperPortalOAuth getDeveloperPortal() {
+      return developerPortal;
+    }
+  }
+
+  public static class DeveloperPortalOAuth {
+    private boolean enabled = true;
+    private String clientId = "";
+    private String clientSecret = "";
+    private java.util.List<String> redirectUris = java.util.List.of();
+    private Duration authorizationCodeTtl = Duration.ofSeconds(60);
+
+    public boolean isEnabled() {
+      return enabled;
+    }
+
+    public void setEnabled(boolean enabled) {
+      this.enabled = enabled;
+    }
+
+    public String getClientId() {
+      return clientId;
+    }
+
+    public void setClientId(String clientId) {
+      this.clientId = clientId;
+    }
+
+    public String getClientSecret() {
+      return clientSecret;
+    }
+
+    public void setClientSecret(String clientSecret) {
+      this.clientSecret = clientSecret;
+    }
+
+    public java.util.List<String> getRedirectUris() {
+      return redirectUris;
+    }
+
+    public void setRedirectUris(java.util.List<String> redirectUris) {
+      this.redirectUris = redirectUris;
+    }
+
+    public Duration getAuthorizationCodeTtl() {
+      return authorizationCodeTtl;
+    }
+
+    public void setAuthorizationCodeTtl(Duration authorizationCodeTtl) {
+      this.authorizationCodeTtl = authorizationCodeTtl;
     }
   }
 

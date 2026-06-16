@@ -160,6 +160,18 @@ public class AuthService {
     return jwtService.jwksJson();
   }
 
+  /** Issues a user access JWT for OAuth authorization_code grant (no refresh token). */
+  public String issueOAuthAccessToken(String accountId, String profileId) {
+    Account account = accounts.findById(accountId).orElseThrow(() -> new AuthException("invalid_token"));
+    ensureActive(account);
+    String tier = subscriptionTierResolver.resolveTier(account.id());
+    return jwtService.issue(account.id().toString(), profileId, List.of("user"), tier);
+  }
+
+  public long accessTokenTtlSeconds() {
+    return jwtService.accessTtl().toSeconds();
+  }
+
   public void setAccountStatus(String accountId, String status) {
     if (accountId == null || accountId.isBlank()) {
       throw new AuthException("invalid_account");

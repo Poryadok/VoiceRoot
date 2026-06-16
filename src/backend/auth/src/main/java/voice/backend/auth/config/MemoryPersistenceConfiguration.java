@@ -12,6 +12,9 @@ import voice.backend.auth.repository.InMemoryBackupCodeRepository;
 import voice.backend.auth.repository.InMemoryE2EKeyBackupRepository;
 import voice.backend.auth.repository.InMemoryRefreshTokenRepository;
 import voice.backend.auth.repository.RefreshTokenRepository;
+import voice.backend.auth.oauth.InMemoryOAuthAuthorizationCodeStore;
+import voice.backend.auth.oauth.OAuthAuthorizationCodeCodec;
+import voice.backend.auth.oauth.OAuthAuthorizationCodeStore;
 import voice.backend.auth.security.InMemoryTokenBlacklist;
 import voice.backend.auth.security.TokenBlacklist;
 
@@ -41,5 +44,15 @@ public class MemoryPersistenceConfiguration {
   @Bean
   TokenBlacklist tokenBlacklist(Clock clock) {
     return new InMemoryTokenBlacklist(clock);
+  }
+
+  @Bean
+  OAuthAuthorizationCodeStore oauthAuthorizationCodeStore(Clock clock) {
+    return new InMemoryOAuthAuthorizationCodeStore(clock);
+  }
+
+  @Bean
+  OAuthAuthorizationCodeCodec oauthAuthorizationCodeCodec() {
+    return new OAuthAuthorizationCodeCodec();
   }
 }

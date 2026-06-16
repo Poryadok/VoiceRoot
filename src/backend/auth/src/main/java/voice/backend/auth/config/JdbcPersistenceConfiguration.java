@@ -13,6 +13,9 @@ import voice.backend.auth.repository.JdbcBackupCodeRepository;
 import voice.backend.auth.repository.JdbcE2EKeyBackupRepository;
 import voice.backend.auth.repository.JdbcRefreshTokenRepository;
 import voice.backend.auth.repository.RefreshTokenRepository;
+import voice.backend.auth.oauth.OAuthAuthorizationCodeCodec;
+import voice.backend.auth.oauth.OAuthAuthorizationCodeStore;
+import voice.backend.auth.oauth.RedisOAuthAuthorizationCodeStore;
 import voice.backend.auth.security.RedisTokenBlacklist;
 import voice.backend.auth.security.TokenBlacklist;
 
@@ -42,5 +45,16 @@ public class JdbcPersistenceConfiguration {
   @Bean
   TokenBlacklist tokenBlacklist(StringRedisTemplate redis, AuthProperties properties) {
     return new RedisTokenBlacklist(redis, properties.getRedis().getBlacklistPrefix());
+  }
+
+  @Bean
+  OAuthAuthorizationCodeStore oauthAuthorizationCodeStore(
+      StringRedisTemplate redis, OAuthAuthorizationCodeCodec codec) {
+    return new RedisOAuthAuthorizationCodeStore(redis, codec);
+  }
+
+  @Bean
+  OAuthAuthorizationCodeCodec oauthAuthorizationCodeCodec() {
+    return new OAuthAuthorizationCodeCodec();
   }
 }

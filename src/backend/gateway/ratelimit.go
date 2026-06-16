@@ -71,6 +71,7 @@ func defaultRateLimitRules() map[string]rateLimitRule {
 	return map[string]rateLimitRule{
 		"AuthLogin":     {Limit: 5, Window: 15 * time.Minute},
 		"AuthRegister":  {Limit: 5, Window: 15 * time.Minute},
+		"AuthOAuth":     {Limit: 30, Window: 15 * time.Minute},
 		"OTP":           {Limit: 3, Window: 10 * time.Minute},
 		"MessagesSend":  {Limit: 5, Window: 5 * time.Second},
 		"FileUpload":    {Limit: 10, Window: time.Hour},
@@ -139,6 +140,10 @@ func rateLimitGroup(method, path string) string {
 		return "AuthLogin"
 	case method == http.MethodPost && path == "/api/v1/auth/register":
 		return "AuthRegister"
+	case method == http.MethodPost && path == "/api/v1/auth/oauth2/token":
+		return "AuthOAuth"
+	case method == http.MethodGet && path == "/api/v1/auth/oauth2/authorize":
+		return "AuthOAuth"
 	case method == http.MethodPost && strings.HasPrefix(path, "/api/v1/auth/otp/"):
 		return "OTP"
 	case method == http.MethodPost && path == "/api/v1/messages/send":
