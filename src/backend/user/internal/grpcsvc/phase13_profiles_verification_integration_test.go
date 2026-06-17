@@ -36,10 +36,14 @@ func startUserGRPCForPhase13(t *testing.T, profiles *store.ProfileStore, events 
 	lis := bufconn.Listen(1024 * 1024)
 	t.Cleanup(func() { _ = lis.Close() })
 	srv := grpc.NewServer()
+	var eventsPub UserEventsPublisher
+	if events != nil {
+		eventsPub = events
+	}
 	userv1.RegisterUserServiceServer(srv, &UserGRPC{
 		Profiles:            profiles,
 		Presence:            store.NewPresenceStore(rdb),
-		Events:              events,
+		Events:              eventsPub,
 		AvatarPresigner:     stubAvatarPresigner{},
 		AvatarPublicBaseURL: "https://cdn-test.example",
 	})

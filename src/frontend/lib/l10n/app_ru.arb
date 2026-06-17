@@ -94,6 +94,7 @@
   "socialFriendsBackendUnavailable": "Друзья недоступны. Запустите полный API-стек (docker compose --profile app).",
   "socialRequestsLoadError": "Не удалось загрузить заявки",
   "socialProfileLoadError": "Не удалось загрузить профиль",
+  "socialProfileUnavailable": "Пользователь недоступен",
   "socialPresenceOnline": "В сети",
   "socialPresenceIdle": "Отошёл",
   "socialPresenceDnd": "Не беспокоить",

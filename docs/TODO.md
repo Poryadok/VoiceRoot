@@ -20,6 +20,10 @@
 ### Секреты и внешние сервисы
 
 - [ ] **Developer Portal OAuth** — проверить OAuth/OIDC app: `client_id`, `client_secret`, redirect URI (`http://localhost:9082/callback` в dev), issuer в `.env` / compose secrets. Агент может доделать flow после ключей.
+result: address http://localhost:9082/callback?code=whWjBm-KaSI0y7Fg4aagdfbyiXDLjlsFn-pDbIZmyXU&state=0518b710-5f64-4b4a-8ec9-f2117951dace 
+request
+http://127.0.0.1:18080/api/v1/auth/oauth2/token
+{"error":"invalid_client"}
 
 ### Отложено (staging недоступен, локально — compose)
 
@@ -54,10 +58,7 @@
 
 ### Репорты
 
-- [ ] **API shape** — один gRPC `CreateReport` + `target_type` вместо отдельных `ReportUser` / `ReportMessage` / `ReportSpace` (функционально ок; PLAN/доки называют иначе).
-- [ ] **Категория mm_toxic** — в БД/proto канон `cheating`; Gateway/Flutter шлют `mm_toxic`; прямой gRPC отклоняет `mm_toxic` (`reports_integration_test.go`).
-- [ ] **Длина комментария** — клиент cap 500 символов (`report_sheet.dart`); **нет server-side max** в Moderation.
-- [ ] **Auto-mod Phase 11** — PLAN: «log only»; код при пороге пишет `shadow_ban` sanction (`reports.go`), не только `auto_mod_log`.
+- [ ] **API shape** — один gRPC `CreateReport` + `target_type` вместо отдельных `ReportUser` / `ReportMessage` / `ReportSpace` (функционально ок; PLAN/доки называют иначе; синхронизация docs-only).
 
 ### 2FA
 
@@ -68,9 +69,9 @@
 - [ ] **Пресеты ≠ privacy.md** — work: `show_online` в коде `friends_of_friends`, в доке «УС»; нет audience `space_members` в proto/валидации.
 - [ ] **Мультиселект аудитории** — single-value dropdowns; нет «Все/Никто», per-space picker ([privacy.md](features/privacy.md) §«Контрол выбора аудитории»).
 - [ ] **Поля действий** — нет в модели/UI: phone search, calls, files, voice, chat/space invites; нет avatar/bio visibility (PLAN §11 упоминает avatar/bio/online).
-- [ ] **allow_dm=friends_of_friends** — `ensureDMPrivacy` не обрабатывает FoF → **разрешён любому** (`chat_dm.go` switch без case).
-- [ ] **Online visibility** — enforcement только для guest-viewer (`GetPresence`); friends/FoF для обычных пользователей не проверяются; `GetBulkPresence` без guest filter (см. также «Гостевые аккаунты»).
-- [ ] **Block UX** — search скрывает blocked IDs; Telegram-style «пользователь недоступен» в профиле не реализован.
+- [ ] **FoF live E2E** — unit/integration + FoF DM есть; нет compose/Flutter live «A—C—B, stranger denied / FoF allowed».
+- [ ] **Presence privacy без `privacy_settings`** — при отсутствии таблицы/строки `mayViewOnlineStatus` degrades open (legacy tests); зафиксировать в docs/OPERATIONS или fail-closed.
+- [ ] **ListFriendsOfFriends cap** — store обходит до 5000 друзей на hop; при росте графа нужен SQL FoF или pagination audit.
 
 **Промпт-якорь:** `Phase 11 Trust — privacy and reports parity from docs/TODO.md`.
 

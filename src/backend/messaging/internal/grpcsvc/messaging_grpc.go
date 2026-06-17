@@ -410,6 +410,24 @@ func (s *MessagingGRPC) checkDMPrivacyForSend(ctx context.Context, chatID, sende
 		if !friends {
 			return status.Error(codes.PermissionDenied, "dm blocked by recipient privacy settings")
 		}
+	case "friends_of_friends":
+		if s.Friends == nil {
+			return status.Error(codes.PermissionDenied, "dm blocked by recipient privacy settings")
+		}
+		friends, err := s.Friends.AreFriends(ctx, senderProfileID, recipientProfileID)
+		if err != nil {
+			return status.Error(codes.Internal, err.Error())
+		}
+		if friends {
+			return nil
+		}
+		fof, err := s.Friends.AreFriendsOfFriends(ctx, senderProfileID, recipientProfileID)
+		if err != nil {
+			return status.Error(codes.Internal, err.Error())
+		}
+		if !fof {
+			return status.Error(codes.PermissionDenied, "dm blocked by recipient privacy settings")
+		}
 	}
 	return nil
 }

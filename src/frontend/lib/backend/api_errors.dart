@@ -12,3 +12,8 @@ bool isNotFoundError(String? errorCode, int? statusCode) {
 class BackendUnavailableException implements Exception {
   const BackendUnavailableException();
 }
+
+/// Profile hidden (blocked user or opaque not-found from privacy enforcement).
+class ProfileUnavailableException implements Exception {
+  const ProfileUnavailableException();
+}

@@ -100,6 +100,7 @@
   "socialFriendsBackendUnavailable": "Friends are unavailable. Start the full API stack (docker compose --profile app).",
   "socialRequestsLoadError": "Could not load requests",
   "socialProfileLoadError": "Could not load profile",
+  "socialProfileUnavailable": "User unavailable",
   "socialPresenceOnline": "Online",
   "socialPresenceIdle": "Idle",
   "socialPresenceDnd": "Do not disturb",

@@ -277,3 +277,69 @@ SELECT EXISTS(
 	}
 	return exists, nil
 }
+
+// AreFriendsOfFriendsAccepted reports whether profileB is a one-hop friend-of-friend of profileA
+// (privacy.md: single level, not recursive). Direct friends return false.
+func (s *FriendshipStore) AreFriendsOfFriendsAccepted(ctx context.Context, profileA, profileB uuid.UUID) (bool, error) {
+	if profileA == profileB {
+		return false, nil
+	}
+	direct, err := s.AreFriendsAccepted(ctx, profileA, profileB)
+	if err != nil {
+		return false, err
+	}
+	if direct {
+		return false, nil
+	}
+	var exists bool
+	err = s.Pool.QueryRow(ctx, `
+SELECT EXISTS (
+  SELECT 1
+  FROM friendships f1
+  JOIN friendships f2 ON f1.status = 'accepted' AND f2.status = 'accepted'
+  WHERE (
+    (f1.requester_profile_id = $1 AND f1.target_profile_id = f2.requester_profile_id AND f2.target_profile_id = $2)
+    OR (f1.requester_profile_id = $1 AND f1.target_profile_id = f2.target_profile_id AND f2.requester_profile_id = $2)
+    OR (f1.target_profile_id = $1 AND f1.requester_profile_id = f2.requester_profile_id AND f2.target_profile_id = $2)
+    OR (f1.target_profile_id = $1 AND f1.requester_profile_id = f2.target_profile_id AND f2.requester_profile_id = $2)
+  )
+)`, profileA, profileB).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
+// ListFriendsOfFriends returns distinct profile IDs one friendship hop away from profileID (excluding self and direct friends).
+func (s *FriendshipStore) ListFriendsOfFriends(ctx context.Context, profileID uuid.UUID) ([]uuid.UUID, error) {
+	directRows, err := s.ListFriends(ctx, profileID, nil, 5000)
+	if err != nil {
+		return nil, err
+	}
+	direct := make(map[uuid.UUID]struct{}, len(directRows))
+	for _, row := range directRows {
+		direct[row.OtherProfileID] = struct{}{}
+	}
+	fof := make(map[uuid.UUID]struct{})
+	for friendID := range direct {
+		rows, err := s.ListFriends(ctx, friendID, nil, 5000)
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			id := row.OtherProfileID
+			if id == profileID {
+				continue
+			}
+			if _, ok := direct[id]; ok {
+				continue
+			}
+			fof[id] = struct{}{}
+		}
+	}
+	out := make([]uuid.UUID, 0, len(fof))
+	for id := range fof {
+		out = append(out, id)
+	}
+	return out, nil
+}

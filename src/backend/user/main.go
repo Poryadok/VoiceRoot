@@ -57,6 +57,7 @@ func main() {
 
 	if pool != nil {
 		var blocks grpcsvc.AccountBlockChecker
+		var socialGraph grpcsvc.SocialGraphChecker
 		if socialAddr := strings.TrimSpace(os.Getenv("SOCIAL_GRPC_ADDR")); socialAddr != "" {
 			sconn, err := grpc.NewClient(grpcclient.DialTarget(socialAddr),
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -85,6 +86,7 @@ func main() {
 			waitCancel()
 			defer func() { _ = sconn.Close() }()
 			blocks = grpcsvc.NewSocialGRPCBlocks(sconn)
+			socialGraph = grpcsvc.NewSocialGRPCGraph(sconn)
 		}
 
 		var presence *store.PresenceStore
@@ -134,6 +136,7 @@ func main() {
 			Privacy:             store.NewPrivacyStore(pool),
 			Presence:            presence,
 			Blocks:              blocks,
+			SocialGraph:         socialGraph,
 			AvatarPresigner:     avatarPresigner,
 			AvatarPublicBaseURL: avatarPublicBase,
 			Events:              events,

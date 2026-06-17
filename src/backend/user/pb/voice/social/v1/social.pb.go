@@ -2233,7 +2233,7 @@ var file_voice_social_v1_social_proto_rawDesc = string([]byte{
 	0x0b, 0x32, 0x1e, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x73, 0x6f, 0x63, 0x69, 0x61, 0x6c,
 	0x2e, 0x76, 0x31, 0x2e, 0x50, 0x72, 0x6f, 0x66, 0x69, 0x6c, 0x65, 0x49, 0x64, 0x4c, 0x69, 0x73,
 	0x74, 0x52, 0x0d, 0x70, 0x72, 0x6f, 0x66, 0x69, 0x6c, 0x65, 0x49, 0x64, 0x4c, 0x69, 0x73, 0x74,
-	0x32, 0x94, 0x0e, 0x0a, 0x0d, 0x53, 0x6f, 0x63, 0x69, 0x61, 0x6c, 0x53, 0x65, 0x72, 0x76, 0x69,
+	0x32, 0xf4, 0x0e, 0x0a, 0x0d, 0x53, 0x6f, 0x63, 0x69, 0x61, 0x6c, 0x53, 0x65, 0x72, 0x76, 0x69,
 	0x63, 0x65, 0x12, 0x73, 0x0a, 0x14, 0x53, 0x65, 0x6e, 0x64, 0x46, 0x72, 0x69, 0x65, 0x6e, 0x64,
 	0x49, 0x6e, 0x76, 0x69, 0x74, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x12, 0x2c, 0x2e, 0x76, 0x6f, 0x69,
 	0x63, 0x65, 0x2e, 0x73, 0x6f, 0x63, 0x69, 0x61, 0x6c, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65, 0x6e,
@@ -2335,6 +2335,12 @@ var file_voice_social_v1_social_proto_rawDesc = string([]byte{
 	0x63, 0x65, 0x2e, 0x73, 0x6f, 0x63, 0x69, 0x61, 0x6c, 0x2e, 0x76, 0x31, 0x2e, 0x49, 0x73, 0x42,
 	0x6c, 0x6f, 0x63, 0x6b, 0x65, 0x64, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x55,
 	0x0a, 0x0a, 0x41, 0x72, 0x65, 0x46, 0x72, 0x69, 0x65, 0x6e, 0x64, 0x73, 0x12, 0x22, 0x2e, 0x76,
+	0x6f, 0x69, 0x63, 0x65, 0x2e, 0x73, 0x6f, 0x63, 0x69, 0x61, 0x6c, 0x2e, 0x76, 0x31, 0x2e, 0x41,
+	0x72, 0x65, 0x46, 0x72, 0x69, 0x65, 0x6e, 0x64, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
+	0x1a, 0x23, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x73, 0x6f, 0x63, 0x69, 0x61, 0x6c, 0x2e,
+	0x76, 0x31, 0x2e, 0x41, 0x72, 0x65, 0x46, 0x72, 0x69, 0x65, 0x6e, 0x64, 0x73, 0x52, 0x65, 0x73,
+	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x5e, 0x0a, 0x13, 0x41, 0x72, 0x65, 0x46, 0x72, 0x69, 0x65,
+	0x6e, 0x64, 0x73, 0x4f, 0x66, 0x46, 0x72, 0x69, 0x65, 0x6e, 0x64, 0x73, 0x12, 0x22, 0x2e, 0x76,
 	0x6f, 0x69, 0x63, 0x65, 0x2e, 0x73, 0x6f, 0x63, 0x69, 0x61, 0x6c, 0x2e, 0x76, 0x31, 0x2e, 0x41,
 	0x72, 0x65, 0x46, 0x72, 0x69, 0x65, 0x6e, 0x64, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
 	0x1a, 0x23, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x73, 0x6f, 0x63, 0x69, 0x61, 0x6c, 0x2e,
@@ -2449,27 +2455,29 @@ var file_voice_social_v1_social_proto_depIdxs = []int32{
 	21, // 31: voice.social.v1.SocialService.ListBlocked:input_type -> voice.social.v1.ListBlockedRequest
 	24, // 32: voice.social.v1.SocialService.IsBlocked:input_type -> voice.social.v1.IsBlockedRequest
 	26, // 33: voice.social.v1.SocialService.AreFriends:input_type -> voice.social.v1.AreFriendsRequest
-	28, // 34: voice.social.v1.SocialService.GetFriendsOfFriends:input_type -> voice.social.v1.GetFriendsOfFriendsRequest
-	30, // 35: voice.social.v1.SocialService.SendFriendInvitation:output_type -> voice.social.v1.SendFriendInvitationResponse
-	31, // 36: voice.social.v1.SocialService.AcceptFriendInvitation:output_type -> voice.social.v1.AcceptFriendInvitationResponse
-	32, // 37: voice.social.v1.SocialService.DeclineFriendInvitation:output_type -> voice.social.v1.DeclineFriendInvitationResponse
-	33, // 38: voice.social.v1.SocialService.RemoveFriend:output_type -> voice.social.v1.RemoveFriendResponse
-	34, // 39: voice.social.v1.SocialService.ListFriends:output_type -> voice.social.v1.ListFriendsResponse
-	35, // 40: voice.social.v1.SocialService.ListFriendRequests:output_type -> voice.social.v1.ListFriendRequestsResponse
-	36, // 41: voice.social.v1.SocialService.AddContact:output_type -> voice.social.v1.AddContactResponse
-	37, // 42: voice.social.v1.SocialService.RemoveContact:output_type -> voice.social.v1.RemoveContactResponse
-	38, // 43: voice.social.v1.SocialService.ListContacts:output_type -> voice.social.v1.ListContactsResponse
-	16, // 44: voice.social.v1.SocialService.SyncPhoneContacts:output_type -> voice.social.v1.SyncPhoneContactsResponse
-	39, // 45: voice.social.v1.SocialService.SetFavorite:output_type -> voice.social.v1.SetFavoriteResponse
-	40, // 46: voice.social.v1.SocialService.ListFavorites:output_type -> voice.social.v1.ListFavoritesResponse
-	41, // 47: voice.social.v1.SocialService.BlockAccount:output_type -> voice.social.v1.BlockAccountResponse
-	42, // 48: voice.social.v1.SocialService.UnblockAccount:output_type -> voice.social.v1.UnblockAccountResponse
-	43, // 49: voice.social.v1.SocialService.ListBlocked:output_type -> voice.social.v1.ListBlockedResponse
-	25, // 50: voice.social.v1.SocialService.IsBlocked:output_type -> voice.social.v1.IsBlockedResponse
-	27, // 51: voice.social.v1.SocialService.AreFriends:output_type -> voice.social.v1.AreFriendsResponse
-	44, // 52: voice.social.v1.SocialService.GetFriendsOfFriends:output_type -> voice.social.v1.GetFriendsOfFriendsResponse
-	35, // [35:53] is the sub-list for method output_type
-	17, // [17:35] is the sub-list for method input_type
+	26, // 34: voice.social.v1.SocialService.AreFriendsOfFriends:input_type -> voice.social.v1.AreFriendsRequest
+	28, // 35: voice.social.v1.SocialService.GetFriendsOfFriends:input_type -> voice.social.v1.GetFriendsOfFriendsRequest
+	30, // 36: voice.social.v1.SocialService.SendFriendInvitation:output_type -> voice.social.v1.SendFriendInvitationResponse
+	31, // 37: voice.social.v1.SocialService.AcceptFriendInvitation:output_type -> voice.social.v1.AcceptFriendInvitationResponse
+	32, // 38: voice.social.v1.SocialService.DeclineFriendInvitation:output_type -> voice.social.v1.DeclineFriendInvitationResponse
+	33, // 39: voice.social.v1.SocialService.RemoveFriend:output_type -> voice.social.v1.RemoveFriendResponse
+	34, // 40: voice.social.v1.SocialService.ListFriends:output_type -> voice.social.v1.ListFriendsResponse
+	35, // 41: voice.social.v1.SocialService.ListFriendRequests:output_type -> voice.social.v1.ListFriendRequestsResponse
+	36, // 42: voice.social.v1.SocialService.AddContact:output_type -> voice.social.v1.AddContactResponse
+	37, // 43: voice.social.v1.SocialService.RemoveContact:output_type -> voice.social.v1.RemoveContactResponse
+	38, // 44: voice.social.v1.SocialService.ListContacts:output_type -> voice.social.v1.ListContactsResponse
+	16, // 45: voice.social.v1.SocialService.SyncPhoneContacts:output_type -> voice.social.v1.SyncPhoneContactsResponse
+	39, // 46: voice.social.v1.SocialService.SetFavorite:output_type -> voice.social.v1.SetFavoriteResponse
+	40, // 47: voice.social.v1.SocialService.ListFavorites:output_type -> voice.social.v1.ListFavoritesResponse
+	41, // 48: voice.social.v1.SocialService.BlockAccount:output_type -> voice.social.v1.BlockAccountResponse
+	42, // 49: voice.social.v1.SocialService.UnblockAccount:output_type -> voice.social.v1.UnblockAccountResponse
+	43, // 50: voice.social.v1.SocialService.ListBlocked:output_type -> voice.social.v1.ListBlockedResponse
+	25, // 51: voice.social.v1.SocialService.IsBlocked:output_type -> voice.social.v1.IsBlockedResponse
+	27, // 52: voice.social.v1.SocialService.AreFriends:output_type -> voice.social.v1.AreFriendsResponse
+	27, // 53: voice.social.v1.SocialService.AreFriendsOfFriends:output_type -> voice.social.v1.AreFriendsResponse
+	44, // 54: voice.social.v1.SocialService.GetFriendsOfFriends:output_type -> voice.social.v1.GetFriendsOfFriendsResponse
+	36, // [36:55] is the sub-list for method output_type
+	17, // [17:36] is the sub-list for method input_type
 	17, // [17:17] is the sub-list for extension type_name
 	17, // [17:17] is the sub-list for extension extendee
 	0,  // [0:17] is the sub-list for field type_name

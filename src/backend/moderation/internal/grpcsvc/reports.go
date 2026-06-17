@@ -56,6 +56,9 @@ func (s *ModerationGRPC) CreateReport(ctx context.Context, req *moderationv1.Cre
 	}
 
 	category := strings.TrimSpace(req.GetCategory())
+	if strings.EqualFold(category, "mm_toxic") {
+		category = "cheating"
+	}
 	if _, ok := allowedCategories[category]; !ok {
 		return nil, status.Error(codes.InvalidArgument, "invalid category")
 	}
@@ -63,6 +66,9 @@ func (s *ModerationGRPC) CreateReport(ctx context.Context, req *moderationv1.Cre
 	var description *string
 	desc := strings.TrimSpace(req.GetDescription())
 	if desc != "" {
+		if len([]rune(desc)) > 500 {
+			return nil, status.Error(codes.InvalidArgument, "description must be at most 500 characters")
+		}
 		description = &desc
 	}
 	if category == "other" && description == nil {
@@ -277,12 +283,6 @@ func (s *ModerationGRPC) maybeAutoShadowBan(ctx context.Context, targetProfileID
 	if err := s.Reports.InsertAutoModLog(ctx, targetProfileID, "report_threshold", "shadow_ban", details); err != nil {
 		return err
 	}
-	if s.Sanctions != nil {
-		systemIssuer := uuid.Nil
-		_, err := s.Sanctions.InsertSanction(ctx, targetAccountID, "shadow_ban", "auto-mod report threshold", nil, systemIssuer, nil)
-		if err != nil {
-			return err
-		}
-	}
+	_ = targetAccountID // Phase 14 applies sanctions; Phase 11 logs only (PLAN §11).
 	return nil
 }

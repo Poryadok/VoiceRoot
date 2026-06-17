@@ -31,6 +31,8 @@ type UserGRPC struct {
 	DNSResolver DNSResolver
 	// Blocks optional Social S2S checker; nil skips block filtering (dev / tests).
 	Blocks AccountBlockChecker
+	// SocialGraph optional Social S2S checker for privacy presence enforcement.
+	SocialGraph SocialGraphChecker
 	// AvatarPresigner optional; nil → CreateAvatarPresignedUpload returns FailedPrecondition.
 	AvatarPresigner AvatarPresigner
 	// AvatarPublicBaseURL is used to build public_url and to validate UpdateProfile.avatar_url (empty skips validation).
@@ -40,38 +42,40 @@ type UserGRPC struct {
 }
 
 func (s *UserGRPC) GetProfile(ctx context.Context, req *userv1.GetProfileRequest) (*userv1.GetProfileResponse, error) {
+	var row *store.ProfileRow
+	var err error
 	switch b := req.GetBy().(type) {
 	case *userv1.GetProfileRequest_ProfileId:
-		id, err := uuid.Parse(strings.TrimSpace(b.ProfileId))
-		if err != nil {
+		id, parseErr := uuid.Parse(strings.TrimSpace(b.ProfileId))
+		if parseErr != nil {
 			return nil, status.Error(codes.InvalidArgument, "invalid profile_id")
 		}
-		row, err := s.Profiles.GetByID(ctx, id)
-		if err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
-		if row == nil {
-			return nil, status.Error(codes.NotFound, "profile not found")
-		}
-		return &userv1.GetProfileResponse{Profile: rowToProto(row)}, nil
-
+		row, err = s.Profiles.GetByID(ctx, id)
 	case *userv1.GetProfileRequest_Username:
-		u, d, err := parseHandle(b.Username)
-		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, err.Error())
+		u, d, parseErr := parseHandle(b.Username)
+		if parseErr != nil {
+			return nil, status.Error(codes.InvalidArgument, parseErr.Error())
 		}
-		row, err := s.Profiles.GetByUsernameDiscriminator(ctx, u, d)
-		if err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
-		if row == nil {
-			return nil, status.Error(codes.NotFound, "profile not found")
-		}
-		return &userv1.GetProfileResponse{Profile: rowToProto(row)}, nil
-
+		row, err = s.Profiles.GetByUsernameDiscriminator(ctx, u, d)
 	default:
 		return nil, status.Error(codes.InvalidArgument, "profile_id or username required")
 	}
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if row == nil {
+		return nil, status.Error(codes.NotFound, "profile not found")
+	}
+	if viewerAccountID, ok := authctx.AccountID(ctx); ok && s.Blocks != nil {
+		blocked, blockErr := s.Blocks.AccountPairBlocked(ctx, viewerAccountID, row.AccountID)
+		if blockErr != nil {
+			return nil, status.Error(codes.Internal, blockErr.Error())
+		}
+		if blocked {
+			return nil, status.Error(codes.NotFound, "profile not found")
+		}
+	}
+	return &userv1.GetProfileResponse{Profile: rowToProto(row)}, nil
 }
 
 func (s *UserGRPC) GetProfiles(ctx context.Context, req *userv1.GetProfilesRequest) (*userv1.GetProfilesResponse, error) {

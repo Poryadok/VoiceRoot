@@ -100,4 +100,51 @@ void main() {
     expect(find.text('Remove from friends'), findsOneWidget);
     expect(find.byKey(ProfileDetailSheet.addFriendKey), findsNothing);
   });
+
+  testWidgets('profile detail shows unavailable when profile returns 404', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          profileAccentStorageProvider.overrideWithValue(
+            testProfileAccentStorage,
+          ),
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          authControllerProvider.overrideWith(authenticatedAuthController),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          realtimeAutoConnectProvider.overrideWithValue(false),
+          httpClientProvider.overrideWithValue(
+            MockClient((req) async {
+              if (req.url.path == '/api/v1/users/profiles/p-blocked') {
+                return http.Response(
+                  jsonEncode({'error': 'not_found', 'message': 'profile not found'}),
+                  404,
+                );
+              }
+              return http.Response('{}', 200);
+            }),
+          ),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(
+            body: ProfileDetailSheet(profileId: 'p-blocked'),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('User unavailable'), findsOneWidget);
+    expect(find.text('Could not load profile'), findsNothing);
+  });
 }

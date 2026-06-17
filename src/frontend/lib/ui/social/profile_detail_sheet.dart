@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../backend/api_errors.dart';
 import '../../backend/matchmaking_client.dart';
 import '../../backend/users_client.dart';
 import '../../l10n/app_localizations.dart';
@@ -73,7 +74,11 @@ class ProfileDetailSheet extends ConsumerWidget {
         padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
         child: profileAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, st) => Text(l10n.socialProfileLoadError),
+          error: (e, st) => Text(
+            e is ProfileUnavailableException
+                ? l10n.socialProfileUnavailable
+                : l10n.socialProfileLoadError,
+          ),
           data: (profile) {
             if (profile == null) {
               return Text(l10n.socialProfileLoadError);

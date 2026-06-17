@@ -13,8 +13,10 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
 	"voice/backend/pkg/integrationtest"
@@ -32,6 +34,7 @@ func applyUserPrivacyMigrations(t *testing.T, ctx context.Context, pool *pgxpool
 		"000002_privacy_settings.up.sql",
 		"000003_profile_subscription.up.sql",
 		"000004_phase13_profiles_verification.up.sql",
+		"000005_privacy_guest_audience.up.sql",
 	} {
 		path := filepath.Join(root, "src", "backend", "migrations", "user_db", name)
 		sqlBytes, err := os.ReadFile(path)
@@ -41,15 +44,20 @@ func applyUserPrivacyMigrations(t *testing.T, ctx context.Context, pool *pgxpool
 	}
 }
 
-func startUserPrivacyTestServer(t *testing.T, pool *store.ProfileStore, rdb *redis.Client) userv1.UserServiceClient {
+func startUserPrivacyTestServer(t *testing.T, pool *store.ProfileStore, privacy *store.PrivacyStore, rdb *redis.Client, opts ...func(*UserGRPC)) userv1.UserServiceClient {
 	t.Helper()
 	lis := bufconn.Listen(1024 * 1024)
 	t.Cleanup(func() { _ = lis.Close() })
-	srv := grpc.NewServer()
-	userv1.RegisterUserServiceServer(srv, &UserGRPC{
+	svc := &UserGRPC{
 		Profiles: pool,
+		Privacy:  privacy,
 		Presence: store.NewPresenceStore(rdb),
-	})
+	}
+	for _, opt := range opts {
+		opt(svc)
+	}
+	srv := grpc.NewServer()
+	userv1.RegisterUserServiceServer(srv, svc)
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(srv.Stop)
 
@@ -60,6 +68,53 @@ func startUserPrivacyTestServer(t *testing.T, pool *store.ProfileStore, rdb *red
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close() })
 	return userv1.NewUserServiceClient(conn)
+}
+
+type alwaysFriendsGraph struct{}
+
+func (alwaysFriendsGraph) AreFriends(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	return true, nil
+}
+
+func (alwaysFriendsGraph) AreFriendsOfFriends(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	return false, nil
+}
+
+type stubSocialGraph struct {
+	friends map[string]bool
+	fof     map[string]bool
+}
+
+func (s stubSocialGraph) AreFriends(_ context.Context, a, b uuid.UUID) (bool, error) {
+	if s.friends == nil {
+		return false, nil
+	}
+	return s.friends[privacyPairKey(a, b)], nil
+}
+
+func (s stubSocialGraph) AreFriendsOfFriends(_ context.Context, a, b uuid.UUID) (bool, error) {
+	if s.fof == nil {
+		return false, nil
+	}
+	return s.fof[privacyPairKey(a, b)], nil
+}
+
+func privacyPairKey(a, b uuid.UUID) string {
+	if a.String() < b.String() {
+		return a.String() + ":" + b.String()
+	}
+	return b.String() + ":" + a.String()
+}
+
+type stubProfileBlocks struct {
+	blocked map[string]bool
+}
+
+func (s stubProfileBlocks) AccountPairBlocked(_ context.Context, viewer, other uuid.UUID) (bool, error) {
+	if s.blocked == nil {
+		return false, nil
+	}
+	return s.blocked[viewer.String()+":"+other.String()], nil
 }
 
 func withUserAuthCtx(ctx context.Context, accountID, profileID uuid.UUID) context.Context {
@@ -94,7 +149,7 @@ VALUES ($1, 'gaming', 'everyone', 'everyone', 'everyone', 'nobody', 'everyone', 
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = rdb.Close() })
 
-	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), rdb)
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb)
 
 	resp, err := cli.GetPrivacySettings(withUserAuthCtx(ctx, accountID, profileID), &userv1.GetPrivacySettingsRequest{
 		ProfileId: profileID.String(),
@@ -134,7 +189,7 @@ VALUES ($1, 'personal', 'friends', 'friends', 'friends_of_friends', 'nobody', 'f
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = rdb.Close() })
 
-	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), rdb)
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb)
 
 	resp, err := cli.GetPrivacySettings(withUserAuthCtx(ctx, accountID, profileID), &userv1.GetPrivacySettingsRequest{
 		ProfileId: profileID.String(),
@@ -168,7 +223,7 @@ VALUES ($1, $2, 'setter', '2222', 'Setter', true)`,
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = rdb.Close() })
 
-	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), rdb)
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb)
 
 	_, err = cli.UpdatePrivacySettings(withUserAuthCtx(ctx, accountID, profileID), &userv1.UpdatePrivacySettingsRequest{
 		ProfileId: profileID.String(),
@@ -221,7 +276,7 @@ VALUES ($1, $2, 'privacy', '3333', 'Privacy', true)`,
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = rdb.Close() })
 
-	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), rdb)
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb)
 
 	_, err = pool.Exec(ctx, `
 ALTER TABLE privacy_settings
@@ -296,7 +351,7 @@ VALUES ($1, 'personal', 'friends', 'friends', 'friends', 'nobody', 'friends', 'f
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = rdb.Close() })
 
-	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), rdb)
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb)
 
 	_, err = cli.UpdatePresence(withUserAuthCtx(ctx, ownerAccount, ownerProfile), &userv1.UpdatePresenceRequest{
 		Status: "online",
@@ -333,11 +388,229 @@ VALUES ($1, $2, 'newbie', '3333', 'Newbie', true)`,
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = rdb.Close() })
 
-	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), rdb)
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb)
 
 	resp, err := cli.GetPrivacySettings(withUserAuthCtx(ctx, accountID, profileID), &userv1.GetPrivacySettingsRequest{
 		ProfileId: profileID.String(),
 	})
 	require.NoError(t, err)
 	require.NotEmpty(t, resp.GetPrivacySettings().GetPreset())
+}
+
+// TestGetPresence_FriendsOnly_HiddenFromStranger documents show_online=friends hides live status from non-friends.
+func TestGetPresence_FriendsOnly_HiddenFromStranger(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "userdb", "")
+	applyUserPrivacyMigrations(t, ctx, pool)
+
+	ownerAccount := uuid.New()
+	ownerProfile := uuid.New()
+	strangerAccount := uuid.New()
+	strangerProfile := uuid.New()
+	_, err := pool.Exec(ctx, `
+INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+VALUES ($1, $2, 'owner', '4444', 'Owner', true),
+       ($3, $4, 'stranger', '5555', 'Stranger', true)`,
+		ownerProfile, ownerAccount, strangerProfile, strangerAccount)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `
+INSERT INTO privacy_settings (profile_id, preset, show_online, show_game_status, show_mm_rating, show_phone, show_stories, allow_dm, allow_friend_requests, allow_guest_dm)
+VALUES ($1, 'personal', 'friends', 'friends', 'friends', 'nobody', 'friends', 'friends', 'everyone', false)`,
+		ownerProfile)
+	require.NoError(t, err)
+
+	mr := miniredis.RunT(t)
+	t.Cleanup(func() { mr.Close() })
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb,
+		func(s *UserGRPC) { s.SocialGraph = stubSocialGraph{} },
+	)
+
+	_, err = cli.UpdatePresence(withUserAuthCtx(ctx, ownerAccount, ownerProfile), &userv1.UpdatePresenceRequest{
+		Status: "online",
+	})
+	require.NoError(t, err)
+
+	resp, err := cli.GetPresence(withUserAuthCtx(ctx, strangerAccount, strangerProfile), &userv1.GetPresenceRequest{
+		ProfileId: ownerProfile.String(),
+	})
+	require.NoError(t, err)
+	require.Empty(t, resp.GetPresenceStatus().GetStatus())
+}
+
+// TestGetPresence_Everyone_VisibleToAnyViewer documents show_online=everyone returns live status to any viewer.
+func TestGetPresence_Everyone_VisibleToAnyViewer(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "userdb", "")
+	applyUserPrivacyMigrations(t, ctx, pool)
+
+	ownerAccount := uuid.New()
+	ownerProfile := uuid.New()
+	friendAccount := uuid.New()
+	friendProfile := uuid.New()
+	_, err := pool.Exec(ctx, `
+INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+VALUES ($1, $2, 'owner', '4444', 'Owner', true),
+       ($3, $4, 'friend', '5555', 'Friend', true)`,
+		ownerProfile, ownerAccount, friendProfile, friendAccount)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `
+INSERT INTO privacy_settings (profile_id, preset, show_online, show_game_status, show_mm_rating, show_phone, show_stories, allow_dm, allow_friend_requests, allow_guest_dm)
+VALUES ($1, 'personal', 'everyone', 'friends', 'friends', 'nobody', 'friends', 'friends', 'everyone', false)`,
+		ownerProfile)
+	require.NoError(t, err)
+
+	mr := miniredis.RunT(t)
+	t.Cleanup(func() { mr.Close() })
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb)
+
+	_, err = cli.UpdatePresence(withUserAuthCtx(ctx, ownerAccount, ownerProfile), &userv1.UpdatePresenceRequest{
+		Status: "online",
+	})
+	require.NoError(t, err)
+
+	resp, err := cli.GetPresence(withUserAuthCtx(ctx, friendAccount, friendProfile), &userv1.GetPresenceRequest{
+		ProfileId: ownerProfile.String(),
+	})
+	require.NoError(t, err)
+	require.Equal(t, "online", resp.GetPresenceStatus().GetStatus())
+}
+
+// TestGetPresence_FriendsOnly_VisibleToFriend documents show_online=friends allows friends to see status.
+func TestGetPresence_FriendsOnly_VisibleToFriend(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "userdb", "")
+	applyUserPrivacyMigrations(t, ctx, pool)
+
+	ownerAccount := uuid.New()
+	ownerProfile := uuid.New()
+	friendAccount := uuid.New()
+	friendProfile := uuid.New()
+	_, err := pool.Exec(ctx, `
+INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+VALUES ($1, $2, 'owner', '4444', 'Owner', true),
+       ($3, $4, 'friend', '5555', 'Friend', true)`,
+		ownerProfile, ownerAccount, friendProfile, friendAccount)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `
+INSERT INTO privacy_settings (profile_id, preset, show_online, show_game_status, show_mm_rating, show_phone, show_stories, allow_dm, allow_friend_requests, allow_guest_dm)
+VALUES ($1, 'personal', 'friends', 'friends', 'friends', 'nobody', 'friends', 'friends', 'everyone', false)`,
+		ownerProfile)
+	require.NoError(t, err)
+
+	mr := miniredis.RunT(t)
+	t.Cleanup(func() { mr.Close() })
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb,
+		func(s *UserGRPC) { s.SocialGraph = alwaysFriendsGraph{} },
+	)
+
+	_, err = cli.UpdatePresence(withUserAuthCtx(ctx, ownerAccount, ownerProfile), &userv1.UpdatePresenceRequest{
+		Status: "online",
+	})
+	require.NoError(t, err)
+
+	resp, err := cli.GetPresence(withUserAuthCtx(ctx, friendAccount, friendProfile), &userv1.GetPresenceRequest{
+		ProfileId: ownerProfile.String(),
+	})
+	require.NoError(t, err)
+	require.Equal(t, "online", resp.GetPresenceStatus().GetStatus())
+}
+
+// TestGetBulkPresence_FriendsOnly_FiltersStranger documents bulk presence applies same privacy rules.
+func TestGetBulkPresence_FriendsOnly_FiltersStranger(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "userdb", "")
+	applyUserPrivacyMigrations(t, ctx, pool)
+
+	ownerAccount := uuid.New()
+	ownerProfile := uuid.New()
+	strangerAccount := uuid.New()
+	strangerProfile := uuid.New()
+	_, err := pool.Exec(ctx, `
+INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+VALUES ($1, $2, 'owner', '4444', 'Owner', true),
+       ($3, $4, 'stranger', '5555', 'Stranger', true)`,
+		ownerProfile, ownerAccount, strangerProfile, strangerAccount)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `
+INSERT INTO privacy_settings (profile_id, preset, show_online, show_game_status, show_mm_rating, show_phone, show_stories, allow_dm, allow_friend_requests, allow_guest_dm)
+VALUES ($1, 'personal', 'friends', 'friends', 'friends', 'nobody', 'friends', 'friends', 'everyone', false)`,
+		ownerProfile)
+	require.NoError(t, err)
+
+	mr := miniredis.RunT(t)
+	t.Cleanup(func() { mr.Close() })
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb,
+		func(s *UserGRPC) { s.SocialGraph = stubSocialGraph{} },
+	)
+
+	_, err = cli.UpdatePresence(withUserAuthCtx(ctx, ownerAccount, ownerProfile), &userv1.UpdatePresenceRequest{
+		Status: "online",
+	})
+	require.NoError(t, err)
+
+	resp, err := cli.GetBulkPresence(withUserAuthCtx(ctx, strangerAccount, strangerProfile), &userv1.GetBulkPresenceRequest{
+		ProfileIds: []string{ownerProfile.String()},
+	})
+	require.NoError(t, err)
+	require.Empty(t, resp.GetByProfileId()[ownerProfile.String()].GetStatus())
+}
+
+// TestGetProfile_BlockedPair_NotFound documents privacy.md block UX: opaque not found for blocked profiles.
+func TestGetProfile_BlockedPair_NotFound(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "userdb", "")
+	applyUserPrivacyMigrations(t, ctx, pool)
+
+	viewerAccount := uuid.New()
+	targetAccount := uuid.New()
+	targetProfile := uuid.New()
+	_, err := pool.Exec(ctx, `
+INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+VALUES ($1, $2, 'blocked', '7777', 'Blocked', true)`,
+		targetProfile, targetAccount)
+	require.NoError(t, err)
+
+	mr := miniredis.RunT(t)
+	t.Cleanup(func() { mr.Close() })
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb,
+		func(s *UserGRPC) {
+			s.Blocks = stubProfileBlocks{blocked: map[string]bool{viewerAccount.String() + ":" + targetAccount.String(): true}}
+		},
+	)
+
+	_, err = cli.GetProfile(withUserAuthCtx(ctx, viewerAccount, uuid.New()), &userv1.GetProfileRequest{
+		By: &userv1.GetProfileRequest_ProfileId{ProfileId: targetProfile.String()},
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.NotFound, status.Code(err))
 }

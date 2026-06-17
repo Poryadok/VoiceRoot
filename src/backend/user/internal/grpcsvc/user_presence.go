@@ -62,28 +62,62 @@ func (s *UserGRPC) GetPresence(ctx context.Context, req *userv1.GetPresenceReque
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	if snap != nil && snap.Live && !s.guestMayViewOnlineStatus(ctx, profileID) {
+	if snap != nil && snap.Live && !s.mayViewOnlineStatus(ctx, profileID) {
 		return &userv1.GetPresenceResponse{PresenceStatus: presenceSnapshotToProto(profileID, nil)}, nil
 	}
 	return &userv1.GetPresenceResponse{PresenceStatus: presenceSnapshotToProto(profileID, snap)}, nil
 }
 
-func (s *UserGRPC) guestMayViewOnlineStatus(ctx context.Context, targetProfile uuid.UUID) bool {
-	if !guestguard.IsGuest(ctx) {
+func (s *UserGRPC) mayViewOnlineStatus(ctx context.Context, targetProfile uuid.UUID) bool {
+	viewerProfile, hasViewer := authctx.ProfileID(ctx)
+	if hasViewer && viewerProfile == targetProfile {
 		return true
 	}
 	privacyStore := s.privacyStore()
 	if privacyStore == nil {
-		return false
+		return !guestguard.IsGuest(ctx)
 	}
 	privacy, err := privacyStore.GetByProfileID(ctx, targetProfile)
-	if err != nil || privacy == nil {
+	if err != nil {
+		return !guestguard.IsGuest(ctx)
+	}
+	if privacy == nil {
+		return !guestguard.IsGuest(ctx)
+	}
+	showOnline := strings.ToLower(strings.TrimSpace(privacy.ShowOnline))
+	if guestguard.IsGuest(ctx) {
+		if showOnline == "everyone" {
+			return true
+		}
+		return privacy.ShowOnlineIncludeGuests
+	}
+	switch showOnline {
+	case "", "everyone":
+		return true
+	case "nobody":
+		return false
+	case "friends":
+		if !hasViewer || s.SocialGraph == nil {
+			return false
+		}
+		ok, err := s.SocialGraph.AreFriends(ctx, viewerProfile, targetProfile)
+		return err == nil && ok
+	case "friends_of_friends":
+		if !hasViewer || s.SocialGraph == nil {
+			return false
+		}
+		if ok, err := s.SocialGraph.AreFriends(ctx, viewerProfile, targetProfile); err == nil && ok {
+			return true
+		}
+		fof, err := s.SocialGraph.AreFriendsOfFriends(ctx, viewerProfile, targetProfile)
+		return err == nil && fof
+	default:
 		return false
 	}
-	if strings.EqualFold(strings.TrimSpace(privacy.ShowOnline), "everyone") {
-		return true
-	}
-	return privacy.ShowOnlineIncludeGuests
+}
+
+func (s *UserGRPC) guestMayViewOnlineStatus(ctx context.Context, targetProfile uuid.UUID) bool {
+	return s.mayViewOnlineStatus(ctx, targetProfile)
 }
 
 func (s *UserGRPC) GetBulkPresence(ctx context.Context, req *userv1.GetBulkPresenceRequest) (*userv1.GetBulkPresenceResponse, error) {
@@ -108,6 +142,10 @@ func (s *UserGRPC) GetBulkPresence(ctx context.Context, req *userv1.GetBulkPrese
 	}
 	out := make(map[string]*userv1.PresenceStatus, len(m))
 	for id, snap := range m {
+		if snap != nil && snap.Live && !s.mayViewOnlineStatus(ctx, id) {
+			out[id.String()] = presenceSnapshotToProto(id, nil)
+			continue
+		}
 		out[id.String()] = presenceSnapshotToProto(id, snap)
 	}
 	return &userv1.GetBulkPresenceResponse{ByProfileId: out}, nil

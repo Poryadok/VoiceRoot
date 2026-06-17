@@ -58,7 +58,7 @@ void main() {
         authorization: stranger.authorizationHeader,
         targetType: 'user',
         targetId: target.activeProfileId,
-        category: 'harassment',
+        category: 'mm_toxic',
       );
       expect(report, isA<ModerationApiOk<ReportSubmission>>());
       expect(

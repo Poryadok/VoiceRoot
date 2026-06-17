@@ -292,3 +292,45 @@ func (s *SocialGRPC) AreFriends(ctx context.Context, req *socialv1.AreFriendsReq
 	}
 	return &socialv1.AreFriendsResponse{Friends: ok}, nil
 }
+
+// AreFriendsOfFriends implements voice.social.v1.SocialService (internal S2S: Chat/Messaging/User).
+func (s *SocialGRPC) AreFriendsOfFriends(ctx context.Context, req *socialv1.AreFriendsRequest) (*socialv1.AreFriendsResponse, error) {
+	a, err := parseUUIDField("profile_id_a", req.GetProfileIdA())
+	if err != nil {
+		return nil, err
+	}
+	b, err := parseUUIDField("profile_id_b", req.GetProfileIdB())
+	if err != nil {
+		return nil, err
+	}
+	if s.Friends == nil {
+		return nil, status.Error(codes.FailedPrecondition, "persistence not configured")
+	}
+	ok, err := s.Friends.AreFriendsOfFriendsAccepted(ctx, a, b)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	return &socialv1.AreFriendsResponse{Friends: ok}, nil
+}
+
+// GetFriendsOfFriends implements voice.social.v1.SocialService.
+func (s *SocialGRPC) GetFriendsOfFriends(ctx context.Context, req *socialv1.GetFriendsOfFriendsRequest) (*socialv1.GetFriendsOfFriendsResponse, error) {
+	profileID, err := parseUUIDField("profile_id", req.GetProfileId())
+	if err != nil {
+		return nil, err
+	}
+	if s.Friends == nil {
+		return nil, status.Error(codes.FailedPrecondition, "persistence not configured")
+	}
+	ids, err := s.Friends.ListFriendsOfFriends(ctx, profileID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, id.String())
+	}
+	return &socialv1.GetFriendsOfFriendsResponse{
+		ProfileIdList: &socialv1.ProfileIdList{ProfileIds: out},
+	}, nil
+}

@@ -206,6 +206,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get socialProfileLoadError => 'Не удалось загрузить профиль';
 
   @override
+  String get socialProfileUnavailable => 'Пользователь недоступен';
+
+  @override
   String get socialPresenceOnline => 'В сети';
 
   @override

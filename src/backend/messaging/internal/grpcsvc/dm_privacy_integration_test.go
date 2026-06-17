@@ -29,6 +29,10 @@ func (noFriendsStub) AreFriends(context.Context, uuid.UUID, uuid.UUID) (bool, er
 	return false, nil
 }
 
+func (noFriendsStub) AreFriendsOfFriends(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	return false, nil
+}
+
 // TestSendMessage_FriendsOnlyPrivacy_StrangerDenied documents privacy enforcement on DM SendMessage.
 func TestSendMessage_FriendsOnlyPrivacy_StrangerDenied(t *testing.T) {
 	if testing.Short() {

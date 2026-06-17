@@ -30,6 +30,7 @@ service SocialService {
   rpc IsBlocked(IsBlockedRequest) returns (IsBlockedResponse);
 
   rpc AreFriends(AreFriendsRequest) returns (AreFriendsResponse);
+  rpc AreFriendsOfFriends(AreFriendsRequest) returns (AreFriendsResponse);
   rpc GetFriendsOfFriends(GetFriendsOfFriendsRequest) returns (GetFriendsOfFriendsResponse);
 }
 

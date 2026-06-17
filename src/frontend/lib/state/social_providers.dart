@@ -30,6 +30,11 @@ final profileProvider = FutureProvider.family<VoiceProfile?, String>((
       .getProfile(authorization: auth, profileId: profileId);
   return switch (result) {
     UsersApiOk(:final data) => data,
+    UsersApiFailure(:final statusCode, :final errorCode)
+        when isNotFoundError(errorCode, statusCode) =>
+      throw const ProfileUnavailableException(),
+    UsersApiFailure(:final statusCode) when isBackendUnavailable(statusCode) =>
+      throw const BackendUnavailableException(),
     UsersApiFailure() => null,
   };
 });

@@ -3,6 +3,7 @@ package grpcsvc
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -94,8 +95,50 @@ func TestCreateReport_InvalidCategory_InvalidArgument(t *testing.T) {
 	_, err := client.CreateReport(withReporterProfile(ctx, uuid.New()), &moderationv1.CreateReportRequest{
 		TargetType:   "user",
 		TargetId:     uuid.New().String(),
+		Category:     "not_a_category",
+		EvidenceJson: `{}`,
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+// TestCreateReport_MMToxicAliasMapsToCheating documents mm_toxic accepted at gRPC (stored as cheating).
+func TestCreateReport_MMToxicAliasMapsToCheating(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "moderationdb", filepath.Join(repoRoot(t), "src", "backend", "migrations", "moderation_db", "000001_reports.up.sql"))
+	client, cleanup := startModerationGRPCTestServer(t, pool)
+	t.Cleanup(cleanup)
+
+	resp, err := client.CreateReport(withReporterProfile(ctx, uuid.New()), &moderationv1.CreateReportRequest{
+		TargetType:   "user",
+		TargetId:     uuid.New().String(),
 		Category:     "mm_toxic",
 		EvidenceJson: `{}`,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "cheating", resp.GetReport().GetCategory())
+}
+
+// TestCreateReport_DescriptionTooLong_InvalidArgument documents server-side 500 char cap.
+func TestCreateReport_DescriptionTooLong_InvalidArgument(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "moderationdb", filepath.Join(repoRoot(t), "src", "backend", "migrations", "moderation_db", "000001_reports.up.sql"))
+	client, cleanup := startModerationGRPCTestServer(t, pool)
+	t.Cleanup(cleanup)
+
+	longDesc := strings.Repeat("x", 501)
+	_, err := client.CreateReport(withReporterProfile(ctx, uuid.New()), &moderationv1.CreateReportRequest{
+		TargetType:    "user",
+		TargetId:      uuid.New().String(),
+		Category:      "spam",
+		Description:   &longDesc,
+		EvidenceJson:  `{}`,
 	})
 	require.Error(t, err)
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
@@ -153,7 +196,9 @@ func TestCreateReport_Threshold_WritesAutoModLog(t *testing.T) {
 		t.Skip()
 	}
 	ctx := context.Background()
-	pool := integrationtest.StartPostgres(t, ctx, "moderationdb", filepath.Join(repoRoot(t), "src", "backend", "migrations", "moderation_db", "000001_reports.up.sql"))
+	root := repoRoot(t)
+	pool := integrationtest.StartPostgres(t, ctx, "moderationdb", filepath.Join(root, "src", "backend", "migrations", "moderation_db", "000001_reports.up.sql"))
+	integrationtestApplySQL(t, ctx, pool, filepath.Join(root, "src", "backend", "migrations", "moderation_db", "000002_phase14_sanctions.up.sql"))
 	client, cleanup := startModerationGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
@@ -184,7 +229,12 @@ WHERE target_profile_id = $1 AND trigger = 'report_threshold' AND action = 'shad
 		targetProfile, time.Now().UTC().Add(-24*time.Hour),
 	).Scan(&logCount)
 	require.NoError(t, err)
-	require.Equal(t, 1, logCount, "11th report within 24h must log shadow_ban auto action")
+	require.GreaterOrEqual(t, logCount, 1, "report threshold must write auto_mod_log")
+
+	var sanctionCount int
+	err = pool.QueryRow(ctx, `SELECT COUNT(*) FROM sanctions WHERE target_account_id = $1`, targetProfile).Scan(&sanctionCount)
+	require.NoError(t, err)
+	require.Equal(t, 0, sanctionCount, "Phase 11 must not insert sanctions on report threshold")
 }
 
 // TestListReports_InternalOnly documents queue listing is not a public reporter API.

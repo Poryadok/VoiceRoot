@@ -452,6 +452,12 @@ abstract class AppLocalizations {
   /// **'Could not load profile'**
   String get socialProfileLoadError;
 
+  /// No description provided for @socialProfileUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'User unavailable'**
+  String get socialProfileUnavailable;
+
   /// No description provided for @socialPresenceOnline.
   ///
   /// In en, this message translates to:

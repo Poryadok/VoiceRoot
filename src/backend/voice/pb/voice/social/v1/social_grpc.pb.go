@@ -36,6 +36,7 @@ const (
 	SocialService_ListBlocked_FullMethodName             = "/voice.social.v1.SocialService/ListBlocked"
 	SocialService_IsBlocked_FullMethodName               = "/voice.social.v1.SocialService/IsBlocked"
 	SocialService_AreFriends_FullMethodName              = "/voice.social.v1.SocialService/AreFriends"
+	SocialService_AreFriendsOfFriends_FullMethodName     = "/voice.social.v1.SocialService/AreFriendsOfFriends"
 	SocialService_GetFriendsOfFriends_FullMethodName     = "/voice.social.v1.SocialService/GetFriendsOfFriends"
 )
 
@@ -62,6 +63,7 @@ type SocialServiceClient interface {
 	ListBlocked(ctx context.Context, in *ListBlockedRequest, opts ...grpc.CallOption) (*ListBlockedResponse, error)
 	IsBlocked(ctx context.Context, in *IsBlockedRequest, opts ...grpc.CallOption) (*IsBlockedResponse, error)
 	AreFriends(ctx context.Context, in *AreFriendsRequest, opts ...grpc.CallOption) (*AreFriendsResponse, error)
+	AreFriendsOfFriends(ctx context.Context, in *AreFriendsRequest, opts ...grpc.CallOption) (*AreFriendsResponse, error)
 	GetFriendsOfFriends(ctx context.Context, in *GetFriendsOfFriendsRequest, opts ...grpc.CallOption) (*GetFriendsOfFriendsResponse, error)
 }
 
@@ -243,6 +245,16 @@ func (c *socialServiceClient) AreFriends(ctx context.Context, in *AreFriendsRequ
 	return out, nil
 }
 
+func (c *socialServiceClient) AreFriendsOfFriends(ctx context.Context, in *AreFriendsRequest, opts ...grpc.CallOption) (*AreFriendsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AreFriendsResponse)
+	err := c.cc.Invoke(ctx, SocialService_AreFriendsOfFriends_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *socialServiceClient) GetFriendsOfFriends(ctx context.Context, in *GetFriendsOfFriendsRequest, opts ...grpc.CallOption) (*GetFriendsOfFriendsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetFriendsOfFriendsResponse)
@@ -276,6 +288,7 @@ type SocialServiceServer interface {
 	ListBlocked(context.Context, *ListBlockedRequest) (*ListBlockedResponse, error)
 	IsBlocked(context.Context, *IsBlockedRequest) (*IsBlockedResponse, error)
 	AreFriends(context.Context, *AreFriendsRequest) (*AreFriendsResponse, error)
+	AreFriendsOfFriends(context.Context, *AreFriendsRequest) (*AreFriendsResponse, error)
 	GetFriendsOfFriends(context.Context, *GetFriendsOfFriendsRequest) (*GetFriendsOfFriendsResponse, error)
 	mustEmbedUnimplementedSocialServiceServer()
 }
@@ -337,6 +350,9 @@ func (UnimplementedSocialServiceServer) IsBlocked(context.Context, *IsBlockedReq
 }
 func (UnimplementedSocialServiceServer) AreFriends(context.Context, *AreFriendsRequest) (*AreFriendsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AreFriends not implemented")
+}
+func (UnimplementedSocialServiceServer) AreFriendsOfFriends(context.Context, *AreFriendsRequest) (*AreFriendsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AreFriendsOfFriends not implemented")
 }
 func (UnimplementedSocialServiceServer) GetFriendsOfFriends(context.Context, *GetFriendsOfFriendsRequest) (*GetFriendsOfFriendsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetFriendsOfFriends not implemented")
@@ -668,6 +684,24 @@ func _SocialService_AreFriends_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SocialService_AreFriendsOfFriends_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AreFriendsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SocialServiceServer).AreFriendsOfFriends(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SocialService_AreFriendsOfFriends_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SocialServiceServer).AreFriendsOfFriends(ctx, req.(*AreFriendsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _SocialService_GetFriendsOfFriends_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetFriendsOfFriendsRequest)
 	if err := dec(in); err != nil {
@@ -760,6 +794,10 @@ var SocialService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AreFriends",
 			Handler:    _SocialService_AreFriends_Handler,
+		},
+		{
+			MethodName: "AreFriendsOfFriends",
+			Handler:    _SocialService_AreFriendsOfFriends_Handler,
 		},
 		{
 			MethodName: "GetFriendsOfFriends",

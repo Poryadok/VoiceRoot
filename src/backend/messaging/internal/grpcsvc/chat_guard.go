@@ -31,9 +31,10 @@ type PrivacyChecker interface {
 	AllowDM(ctx context.Context, profileID uuid.UUID) (string, error)
 }
 
-// ProfileFriendChecker verifies if two profiles are friends.
+// ProfileFriendChecker verifies if two profiles are friends or friends-of-friends.
 type ProfileFriendChecker interface {
 	AreFriends(ctx context.Context, profileA, profileB uuid.UUID) (bool, error)
+	AreFriendsOfFriends(ctx context.Context, profileA, profileB uuid.UUID) (bool, error)
 }
 
 // FileMetadataLookup validates File Service metadata for message attachments.

@@ -206,6 +206,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get socialProfileLoadError => 'Could not load profile';
 
   @override
+  String get socialProfileUnavailable => 'User unavailable';
+
+  @override
   String get socialPresenceOnline => 'Online';
 
   @override

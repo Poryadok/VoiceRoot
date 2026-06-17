@@ -31,3 +31,18 @@ func (s *SocialGRPCFriends) AreFriends(ctx context.Context, profileA, profileB u
 	}
 	return resp.GetFriends(), nil
 }
+
+func (s *SocialGRPCFriends) AreFriendsOfFriends(ctx context.Context, profileA, profileB uuid.UUID) (bool, error) {
+	if s == nil || s.Client == nil {
+		return false, nil
+	}
+	ctx = ForwardIncomingMetadata(ctx)
+	resp, err := s.Client.AreFriendsOfFriends(ctx, &socialv1.AreFriendsRequest{
+		ProfileIdA: profileA.String(),
+		ProfileIdB: profileB.String(),
+	})
+	if err != nil {
+		return false, err
+	}
+	return resp.GetFriends(), nil
+}
