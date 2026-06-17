@@ -53,6 +53,7 @@ func TestAuthBoundary(t *testing.T) {
 		{method: http.MethodPost, route: "/api/v1/auth/register", body: `{}`},
 		{method: http.MethodPost, route: "/api/v1/auth/refresh", body: `{}`},
 		{method: http.MethodGet, route: "/api/v1/auth/oauth2/authorize?response_type=code&client_id=test&redirect_uri=http://localhost/cb&state=s&code_challenge=x&code_challenge_method=S256"},
+		{method: http.MethodPost, route: "/api/v1/auth/oauth2/authorize", body: "response_type=code&client_id=test&redirect_uri=http://localhost/cb&email=u%40example.com&password=secret"},
 		{method: http.MethodPost, route: "/api/v1/auth/oauth2/token", body: "grant_type=authorization_code"},
 		{method: http.MethodGet, route: "/api/v1/auth/.well-known/openid-configuration"},
 		{method: http.MethodGet, route: "/api/v1/version?platform=android&version=1.7.2"},

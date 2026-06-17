@@ -141,9 +141,10 @@ func rateLimitGroup(method, path string) string {
 		return "AuthLogin"
 	case method == http.MethodPost && path == "/api/v1/auth/register":
 		return "AuthRegister"
-	case method == http.MethodPost && path == "/api/v1/auth/oauth2/token":
+	case path == "/api/v1/auth/oauth2/authorize" &&
+		(method == http.MethodGet || method == http.MethodPost):
 		return "AuthOAuth"
-	case method == http.MethodGet && path == "/api/v1/auth/oauth2/authorize":
+	case method == http.MethodPost && path == "/api/v1/auth/oauth2/token":
 		return "AuthOAuth"
 	case method == http.MethodPost && strings.HasPrefix(path, "/api/v1/auth/otp/"):
 		return "OTP"
