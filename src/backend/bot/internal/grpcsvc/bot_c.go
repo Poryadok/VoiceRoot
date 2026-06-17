@@ -230,13 +230,17 @@ func (s *BotGRPC) GetChatMessagesForBot(ctx context.Context, req *botv1.GetChatM
 	if err != nil {
 		return nil, err
 	}
+	msgs := resp.GetMessageList().GetMessages()
 	var ids []string
-	for _, m := range resp.GetMessageList().GetMessages() {
+	for _, m := range msgs {
 		if m.GetId() != "" {
 			ids = append(ids, m.GetId())
 		}
 	}
-	out := &botv1.GetChatMessagesForBotResponse{MessageIds: ids}
+	out := &botv1.GetChatMessagesForBotResponse{
+		MessageIds: ids,
+		Messages:   msgs,
+	}
 	if next := resp.GetMessageList().GetNextCursor(); next != "" {
 		out.NextCursor = &next
 	}

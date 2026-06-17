@@ -97,7 +97,8 @@ func (s *BotGRPC) AutocompleteSlashOption(ctx context.Context, req *botv1.Autoco
 			"invoker_profile_id": invoker.String(),
 		}
 		_, _ = s.Store.EnqueueEvent(ctx, botID, "autocomplete", payload, "")
-		return &botv1.AutocompleteSlashOptionResponse{}, nil
+		pending := true
+		return &botv1.AutocompleteSlashOptionResponse{Pending: &pending}, nil
 	}
 	var options map[string]any
 	_ = json.Unmarshal([]byte(req.GetOptionsJson()), &options)

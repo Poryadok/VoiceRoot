@@ -13,12 +13,14 @@ import (
 
 	botv1 "voice.app/voice/bot/v1"
 	chatv1 "voice.app/voice/chat/v1"
+	messagingv1 "voice.app/voice/messaging/v1"
 	rolev1 "voice.app/voice/role/v1"
 )
 
 type fakeBotClient struct {
 	botv1.BotServiceClient
-	lastInstallReq *botv1.InstallBotInSpaceRequest
+	lastInstallReq      *botv1.InstallBotInSpaceRequest
+	chatMessageBodies   map[string]string // msg id -> content; Phase 16 maps to response messages[]
 }
 
 func (f *fakeBotClient) InstallBotInSpace(ctx context.Context, in *botv1.InstallBotInSpaceRequest, _ ...grpc.CallOption) (*botv1.InstallBotInSpaceResponse, error) {
@@ -130,7 +132,25 @@ func (f *fakeBotClient) CreateBotChat(ctx context.Context, in *botv1.CreateBotCh
 }
 
 func (f *fakeBotClient) GetChatMessagesForBot(ctx context.Context, in *botv1.GetChatMessagesForBotRequest, _ ...grpc.CallOption) (*botv1.GetChatMessagesForBotResponse, error) {
-	return &botv1.GetChatMessagesForBotResponse{MessageIds: []string{"msg-1"}}, nil
+	_ = ctx
+	_ = in
+	bodies := f.chatMessageBodies
+	if bodies == nil {
+		bodies = map[string]string{"msg-1": "hello"}
+	}
+	ids := make([]string, 0, len(bodies))
+	msgs := make([]*messagingv1.Message, 0, len(bodies))
+	for id, content := range bodies {
+		ids = append(ids, id)
+		msgs = append(msgs, &messagingv1.Message{Id: id, Content: content})
+	}
+	return &botv1.GetChatMessagesForBotResponse{MessageIds: ids, Messages: msgs}, nil
+}
+
+func (f *fakeBotClient) SendEphemeral(ctx context.Context, in *botv1.SendEphemeralRequest, _ ...grpc.CallOption) (*botv1.SendEphemeralResponse, error) {
+	_ = ctx
+	_ = in
+	return &botv1.SendEphemeralResponse{}, nil
 }
 
 func (f *fakeBotClient) CreateBotRole(ctx context.Context, in *botv1.CreateBotRoleRequest, _ ...grpc.CallOption) (*botv1.CreateBotRoleResponse, error) {
@@ -175,6 +195,7 @@ func TestIsBotTokenRESTRoute(t *testing.T) {
 	require.True(t, isBotTokenRESTRoute("/api/v1/bots/me/interactions/poll"))
 	require.True(t, isBotTokenRESTRoute("/api/v1/bots/me/interactions/defer"))
 	require.True(t, isBotTokenRESTRoute("/api/v1/bots/me/messages/msg-1"))
+	require.True(t, isBotTokenRESTRoute("/api/v1/bots/me/messages/ephemeral"))
 	require.False(t, isBotTokenRESTRoute("/api/v1/bots/interactions"))
 }
 
@@ -369,7 +390,20 @@ func TestServeBots_getChatMessagesForBotRouteRegistered(t *testing.T) {
 	ok := tc.serveBots(rec, req, "me/chats/chat-1/messages")
 	require.True(t, ok, "GET /api/v1/bots/me/chats/{chat_id}/messages must be registered (BOT-C)")
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Contains(t, rec.Body.String(), `"message_ids"`)
+	require.Contains(t, rec.Body.String(), `"messages"`, "history response must include message bodies (Phase 16)")
+	require.Contains(t, rec.Body.String(), `"content":"hello"`)
+}
+
+func TestServeBots_sendEphemeralRouteRegistered(t *testing.T) {
+	tc := newTranscoder(&grpcClients{bot: &fakeBotClient{}})
+	body := `{"chat":{"id":"chat-1","type":"CHAT_TYPE_CHANNEL"},"target_profile_id":"profile-1","content":"only you"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/bots/me/messages/ephemeral", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bot vb_testtoken")
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	ok := tc.serveBots(rec, req, "me/messages/ephemeral")
+	require.True(t, ok, "POST /api/v1/bots/me/messages/ephemeral must be registered (Phase 16)")
+	require.Equal(t, http.StatusNoContent, rec.Code)
 }
 
 func TestServeBots_createBotRoleRouteRegistered(t *testing.T) {

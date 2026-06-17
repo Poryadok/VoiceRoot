@@ -387,6 +387,8 @@ message AutocompleteChoice {
 
 message AutocompleteSlashOptionResponse {
   repeated AutocompleteChoice choices = 1;
+  // True when polling bot must CompleteAutocomplete before choices are available.
+  optional bool pending = 2;
 }
 
 message TouchPresenceRequest {
@@ -440,6 +442,7 @@ message GetChatMessagesForBotRequest {
 message GetChatMessagesForBotResponse {
   repeated string message_ids = 1;
   optional string next_cursor = 2;
+  repeated voice.messaging.v1.Message messages = 3;
 }
 
 message CreateBotRoleRequest {

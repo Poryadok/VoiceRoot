@@ -68,6 +68,20 @@ func (t *transcoder) serveBots(w http.ResponseWriter, r *http.Request, rest stri
 			w.WriteHeader(http.StatusNoContent)
 			return true
 
+		case r.Method == http.MethodPost && meRest == "messages/ephemeral":
+			req := &botv1.SendEphemeralRequest{}
+			if err := readProtoJSON(r, req); err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			_, err := t.clients.bot.SendEphemeral(ctx, req)
+			if err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return true
+
 		case r.Method == http.MethodPost && meRest == "messages":
 			req := &botv1.SendBotMessageRequest{}
 			if err := readProtoJSON(r, req); err != nil {

@@ -75,26 +75,46 @@ class _SlashCommandOptionsSheetState
     final chatType =
         ref.read(chatTypeForChatProvider(widget.chatId)) ?? 'CHAT_TYPE_CHANNEL';
     final selected = Map<String, dynamic>.from(_values);
-    final result = await ref.read(voiceBotsClientProvider).autocompleteOption(
-      authorization: auth,
-      chatId: widget.chatId,
-      chatType: chatType,
-      botId: widget.command.botId,
-      commandName: widget.command.fullCommandName,
-      optionName: optionName,
-      focusedValue: focused,
-      optionsJson: jsonEncode(selected),
-    );
+    const maxAttempts = 12;
+    const retryDelay = Duration(milliseconds: 200);
+    BotAutocompleteResult? lastResult;
+    String? lastError;
+
+    for (var attempt = 0; attempt < maxAttempts; attempt++) {
+      final result = await ref.read(voiceBotsClientProvider).autocompleteOption(
+        authorization: auth,
+        chatId: widget.chatId,
+        chatType: chatType,
+        botId: widget.command.botId,
+        commandName: widget.command.fullCommandName,
+        optionName: optionName,
+        focusedValue: focused,
+        optionsJson: jsonEncode(selected),
+      );
+      if (!mounted) return;
+      switch (result) {
+        case BotsApiOk(:final data):
+          lastResult = data;
+          lastError = null;
+          if (data.choices.isNotEmpty || !data.pending) {
+            setState(() {
+              _suggestions[optionName] = data.choices;
+              _autocompleteError = null;
+            });
+            return;
+          }
+        case BotsApiFailure(:final message):
+          lastError = message;
+      }
+      if (attempt < maxAttempts - 1) {
+        await Future<void>.delayed(retryDelay);
+      }
+    }
+
     if (!mounted) return;
     setState(() {
-      _suggestions[optionName] = switch (result) {
-        BotsApiOk(:final data) => data,
-        BotsApiFailure() => const [],
-      };
-      _autocompleteError = switch (result) {
-        BotsApiFailure(:final message) => message,
-        _ => null,
-      };
+      _suggestions[optionName] = lastResult?.choices ?? const [];
+      _autocompleteError = lastError;
     });
   }
 

@@ -60,6 +60,13 @@ class BotAutocompleteChoice {
   final String value;
 }
 
+class BotAutocompleteResult {
+  const BotAutocompleteResult({required this.choices, this.pending = false});
+
+  final List<BotAutocompleteChoice> choices;
+  final bool pending;
+}
+
 class BotSlashCommand {
   const BotSlashCommand({
     required this.botId,
@@ -256,7 +263,7 @@ class VoiceBotsClient {
     );
   }
 
-  Future<BotsApiResult<List<BotAutocompleteChoice>>> autocompleteOption({
+  Future<BotsApiResult<BotAutocompleteResult>> autocompleteOption({
     required String authorization,
     required String chatId,
     required String chatType,
@@ -283,11 +290,14 @@ class VoiceBotsClient {
       result,
       (data) {
         final response = data as bot_pb.AutocompleteSlashOptionResponse;
-        return response.choices
-            .map(
-              (c) => BotAutocompleteChoice(name: c.name, value: c.value),
-            )
-            .toList(growable: false);
+        return BotAutocompleteResult(
+          pending: response.hasPending() && response.pending,
+          choices: response.choices
+              .map(
+                (c) => BotAutocompleteChoice(name: c.name, value: c.value),
+              )
+              .toList(growable: false),
+        );
       },
     );
   }

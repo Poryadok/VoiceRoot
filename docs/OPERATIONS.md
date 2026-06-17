@@ -90,6 +90,18 @@
 
 ---
 
+## Bot Service (env)
+
+| Переменная | Назначение |
+|------------|------------|
+| `BOT_DEFERRED_TTL` | TTL deferred interaction до пометки `abandoned` в `bot_event_log`; default `24h` |
+| `BOT_DEFERRED_SWEEP_INTERVAL` | Интервал фонового sweeper (`RunDeferredTTLSweeper`); default `15m` |
+| `BOT_RATE_LIMIT_DISABLED` | Опционально: `true` отключает rate limits в Bot Service (dev/tests) |
+
+Подробнее deferred flow — [bot-service.md](microservices/bot-service.md).
+
+---
+
 ## Связанные документы
 
 - [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md) — rate limiting, протоколы, доставка сообщений; **пороги смены движка поиска и эволюции аналитики** (матрицы триггеров)

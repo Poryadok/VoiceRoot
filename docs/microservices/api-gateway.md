@@ -109,6 +109,7 @@
 | `POST` | `/api/v1/bots/me/interactions/defer` | `DeferResponse` | Bot token | `interaction_token` |
 | `POST` | `/api/v1/bots/me/interactions/complete` | `CompleteInteraction` | Bot token | `interaction_token`, `content`, `is_ephemeral`, `deferred` |
 | `POST` | `/api/v1/bots/me/messages` | `SendBotMessage` | Bot token | `chat`, `content`, optional `thread_parent_id`, `interaction_token` |
+| `POST` | `/api/v1/bots/me/messages/ephemeral` | `SendEphemeral` | Bot token | `chat`, `target_profile_id`, `content` |
 | `PATCH` | `/api/v1/bots/me/messages/{message_id}` | `EditBotMessage` | Bot token | `content` |
 | `POST` | `/api/v1/bots/me/presence` | `TouchPresence` | Bot token | — |
 | `GET` | `/api/v1/bots/me/spaces/{space_id}/members` | `ListSpaceMembersForBot` | Bot token | optional `cursor` |

@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -65,6 +67,200 @@ func TestComposePhase16BotsSlash_live(t *testing.T) {
 	require.NotNil(t, msg)
 	msgContent, _ := msg["content"].(string)
 	require.Equal(t, "pong", msgContent)
+
+	assertComposeMessageInHistory(t, client, base, sess.AccessToken, chatID, "pong")
+}
+
+// TestComposePhase16BotsEphemeral_live verifies ephemeral slash: invoker sees content,
+// no persisted message in response or chat history; other members see nothing.
+func TestComposePhase16BotsEphemeral_live(t *testing.T) {
+	if !liveComposeEnabled() {
+		t.Skip("set VOICE_RUN_LIVE_COMPOSE=true to run against local compose")
+	}
+	clearLiveComposeAuthRateLimit(t)
+
+	client := &http.Client{Timeout: 45 * time.Second}
+	base := liveGatewayBaseURL()
+	n := time.Now().UnixNano()
+
+	sessB := registerComposeUser(t, client, base, formatComposeEmail("p16-eph-b", n), "VoiceQaTest1!")
+	sessC := registerComposeUser(t, client, base, formatComposeEmail("p16-eph-c", n), "VoiceQaTest1!")
+	sess := registerComposeUser(t, client, base, formatComposeEmail("p16-eph-a", n), "VoiceQaTest1!")
+	spaceID := createComposeSpace(t, client, base, sess.AccessToken, fmt.Sprintf("Bots Ephemeral %d", n), "phase16")
+	chatID := createComposeGroup(t, client, base, sess.AccessToken, fmt.Sprintf("bots-eph-%d", n))
+	addComposeGroupMembers(t, client, base, sess.AccessToken, chatID, sessB.ProfileID, sessC.ProfileID)
+
+	botID, botToken := registerComposeBot(t, client, base, sess.AccessToken, fmt.Sprintf("EphBot-%d", n))
+	applyComposeBotManifestPolling(t, client, base, sess.AccessToken, botID)
+	installComposeBot(t, client, base, sess.AccessToken, botID, spaceID, chatID)
+
+	done := make(chan struct{})
+	go composePollingEphemeralBot(client, base, botToken, done)
+	defer close(done)
+	waitComposeBotOnline(t, client, base, sess.AccessToken, chatID, 15*time.Second)
+
+	payload, _ := json.Marshal(map[string]any{
+		"chat":         map[string]string{"id": chatID, "type": "CHAT_TYPE_GROUP"},
+		"bot_id":       botID,
+		"command_name": "ping",
+		"options_json": "{}",
+	})
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/bots/interactions", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+sess.AccessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "slash interaction body=%s", string(body))
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	ephemeral, _ := parsed["is_ephemeral"].(bool)
+	require.True(t, ephemeral, "invoker must receive is_ephemeral:true, body=%s", string(body))
+	content, _ := parsed["content"].(string)
+	require.Equal(t, "pong-ephemeral", content)
+	_, hasMessage := parsed["message"]
+	require.False(t, hasMessage, "ephemeral slash must not include persisted message, body=%s", string(body))
+
+	assertComposeMessageNotInHistory(t, client, base, sess.AccessToken, chatID, "pong-ephemeral")
+	assertComposeMessageNotInHistory(t, client, base, sessB.AccessToken, chatID, "pong-ephemeral")
+}
+
+// TestComposePhase16BotsTimeout_live returns error_code bot_timeout when polling bot never completes.
+func TestComposePhase16BotsTimeout_live(t *testing.T) {
+	if !liveComposeEnabled() {
+		t.Skip("set VOICE_RUN_LIVE_COMPOSE=true to run against local compose")
+	}
+	clearLiveComposeAuthRateLimit(t)
+
+	client := &http.Client{Timeout: 45 * time.Second}
+	base := liveGatewayBaseURL()
+	n := time.Now().UnixNano()
+
+	sess := registerComposeUser(t, client, base, formatComposeEmail("p16-timeout", n), "VoiceQaTest1!")
+	spaceID := createComposeSpace(t, client, base, sess.AccessToken, fmt.Sprintf("Bots Timeout %d", n), "phase16")
+	chatID := createComposeGroup(t, client, base, sess.AccessToken, fmt.Sprintf("bots-timeout-%d", n))
+	ensureComposeGroupReadyForBot(t, client, base, sess.AccessToken, chatID, n)
+
+	botID, botToken := registerComposeBot(t, client, base, sess.AccessToken, fmt.Sprintf("TimeoutBot-%d", n))
+	applyComposeBotManifestPolling(t, client, base, sess.AccessToken, botID)
+	installComposeBot(t, client, base, sess.AccessToken, botID, spaceID, chatID)
+
+	auth := "Bot " + botToken
+	presenceReq, err := http.NewRequest(http.MethodPost, base+"/api/v1/bots/me/presence", http.NoBody)
+	require.NoError(t, err)
+	presenceReq.Header.Set("Authorization", auth)
+	presenceResp, err := client.Do(presenceReq)
+	require.NoError(t, err)
+	presenceBody, _ := io.ReadAll(presenceResp.Body)
+	presenceResp.Body.Close()
+	require.Equal(t, http.StatusNoContent, presenceResp.StatusCode,
+		"POST /api/v1/bots/me/presence body=%s", string(presenceBody))
+
+	payload, _ := json.Marshal(map[string]any{
+		"chat":         map[string]string{"id": chatID, "type": "CHAT_TYPE_GROUP"},
+		"bot_id":       botID,
+		"command_name": "ping",
+		"options_json": "{}",
+	})
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/bots/interactions", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+sess.AccessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "slash interaction body=%s", string(body))
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	errorCode, _ := parsed["error_code"].(string)
+	require.Equal(t, "bot_timeout", errorCode, "polling bot without poller must time out, body=%s", string(body))
+}
+
+// TestComposePhase16BotsWebhook_live exercises webhook delivery via host.docker.internal.
+func TestComposePhase16BotsWebhook_live(t *testing.T) {
+	if !liveComposeEnabled() {
+		t.Skip("set VOICE_RUN_LIVE_COMPOSE=true to run against local compose")
+	}
+	clearLiveComposeAuthRateLimit(t)
+
+	client := &http.Client{Timeout: 45 * time.Second}
+	base := liveGatewayBaseURL()
+	n := time.Now().UnixNano()
+
+	sess := registerComposeUser(t, client, base, formatComposeEmail("p16-webhook", n), "VoiceQaTest1!")
+	spaceID := createComposeSpace(t, client, base, sess.AccessToken, fmt.Sprintf("Bots Webhook %d", n), "phase16")
+	chatID := createComposeGroup(t, client, base, sess.AccessToken, fmt.Sprintf("bots-webhook-%d", n))
+	ensureComposeGroupReadyForBot(t, client, base, sess.AccessToken, chatID, n)
+
+	ln, err := net.Listen("tcp", "0.0.0.0:0")
+	require.NoError(t, err)
+	defer ln.Close()
+	port := ln.Addr().(*net.TCPAddr).Port
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/ping" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(`{"content":"pong"}`))
+	}))
+	srv.Listener = ln
+	srv.Start()
+	defer srv.Close()
+
+	webhookURL := fmt.Sprintf("http://host.docker.internal:%d/ping", port)
+	botID, botToken := registerComposeBot(t, client, base, sess.AccessToken, fmt.Sprintf("WebhookBot-%d", n))
+	manifest := fmt.Sprintf(`name: WebhookBot
+description: webhook pong
+webhook_url: %s
+scopes: [TEXT_CHAT_SEND_MESSAGES]
+commands:
+  - name: ping
+    description: ping
+`, webhookURL)
+	manifestPayload, _ := json.Marshal(map[string]string{"manifest_yaml": manifest})
+	manifestReq, err := http.NewRequest(http.MethodPost, base+"/api/v1/bots/"+botID+"/manifest", bytes.NewReader(manifestPayload))
+	require.NoError(t, err)
+	manifestReq.Header.Set("Authorization", "Bearer "+sess.AccessToken)
+	manifestReq.Header.Set("Content-Type", "application/json")
+	manifestResp, err := client.Do(manifestReq)
+	require.NoError(t, err)
+	manifestBody, _ := io.ReadAll(manifestResp.Body)
+	manifestResp.Body.Close()
+	require.Equal(t, http.StatusOK, manifestResp.StatusCode, string(manifestBody))
+	installComposeBot(t, client, base, sess.AccessToken, botID, spaceID, chatID)
+
+	auth := "Bot " + botToken
+	presenceReq, err := http.NewRequest(http.MethodPost, base+"/api/v1/bots/me/presence", http.NoBody)
+	require.NoError(t, err)
+	presenceReq.Header.Set("Authorization", auth)
+	presenceResp, err := client.Do(presenceReq)
+	require.NoError(t, err)
+	presenceBody, _ := io.ReadAll(presenceResp.Body)
+	presenceResp.Body.Close()
+	require.Equal(t, http.StatusNoContent, presenceResp.StatusCode, string(presenceBody))
+
+	payload, _ := json.Marshal(map[string]any{
+		"chat":         map[string]string{"id": chatID, "type": "CHAT_TYPE_GROUP"},
+		"bot_id":       botID,
+		"command_name": "ping",
+		"options_json": "{}",
+	})
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/bots/interactions", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+sess.AccessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "slash interaction body=%s", string(body))
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	content, _ := parsed["content"].(string)
+	require.Equal(t, "pong", content)
 
 	assertComposeMessageInHistory(t, client, base, sess.AccessToken, chatID, "pong")
 }
@@ -737,6 +933,53 @@ func composePollingDeferBot(client *http.Client, base, botToken, chatID string, 
 	}
 }
 
+func composePollingEphemeralBot(client *http.Client, base, botToken string, stop <-chan struct{}) {
+	auth := "Bot " + botToken
+	for {
+		select {
+		case <-stop:
+			return
+		default:
+		}
+		req, _ := http.NewRequest(http.MethodGet, base+"/api/v1/bots/me/interactions/poll", nil)
+		req.Header.Set("Authorization", auth)
+		resp, err := client.Do(req)
+		if err != nil || resp == nil {
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		var parsed struct {
+			Events []struct {
+				PayloadJSON string `json:"payload_json"`
+			} `json:"events"`
+		}
+		_ = json.Unmarshal(body, &parsed)
+		for _, evt := range parsed.Events {
+			var payload map[string]any
+			_ = json.Unmarshal([]byte(evt.PayloadJSON), &payload)
+			tok, _ := payload["interaction_token"].(string)
+			if tok == "" {
+				continue
+			}
+			complete, _ := json.Marshal(map[string]any{
+				"interaction_token": tok,
+				"content":           "pong-ephemeral",
+				"is_ephemeral":      true,
+			})
+			creq, _ := http.NewRequest(http.MethodPost, base+"/api/v1/bots/me/interactions/complete", bytes.NewReader(complete))
+			creq.Header.Set("Authorization", auth)
+			creq.Header.Set("Content-Type", "application/json")
+			cresp, _ := client.Do(creq)
+			if cresp != nil {
+				cresp.Body.Close()
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
 func assertComposeMessageInHistory(t *testing.T, client *http.Client, base, accessToken, chatID, content string) {
 	t.Helper()
 	deadline := time.Now().Add(15 * time.Second)
@@ -774,4 +1017,28 @@ func assertComposeMessageInHistory(t *testing.T, client *http.Client, base, acce
 		time.Sleep(200 * time.Millisecond)
 	}
 	t.Fatalf("message with content %q not found in chat %s history", content, chatID)
+}
+
+func assertComposeMessageNotInHistory(t *testing.T, client *http.Client, base, accessToken, chatID, content string) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, base+"/api/v1/messages?chat_id="+chatID, nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "messages list body=%s", string(body))
+	var hist struct {
+		MessageList struct {
+			Messages []struct {
+				Content string `json:"content"`
+			} `json:"messages"`
+		} `json:"message_list"`
+	}
+	require.NoError(t, json.Unmarshal(body, &hist))
+	for _, m := range hist.MessageList.Messages {
+		require.NotEqual(t, strings.TrimSpace(content), strings.TrimSpace(m.Content),
+			"ephemeral content %q must not appear in chat %s history", content, chatID)
+	}
 }

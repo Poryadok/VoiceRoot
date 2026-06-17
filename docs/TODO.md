@@ -97,16 +97,13 @@ http://127.0.0.1:18080/api/v1/auth/oauth2/token
 
 ### Backend и Gateway
 
-- [ ] **Ephemeral multi-user E2E** — механизм + unit tests; нет compose/Flutter live «второй участник не видит bubble».
-- [ ] **Timeout E2E** — `bot_timeout` + SnackBar в клиенте; нет compose live / widget test на timeout UX.
-- [ ] **Webhook compose E2E** — polling live есть (`compose_phase16_bots_slash_live_test.go`); webhook path только integration tests.
-- [ ] **buf generate BSR** — `make buf-generate` 403; локально `buf generate --template buf.gen.local-go.yaml`.
-- [ ] **gRPC Bot API rate limits** — 5000/min только на Gateway `/api/v1/bots/me/**`; прямой gRPC `BotService` обходит `BotAPI` limiter.
-- [ ] **GetChatMessagesForBot response shape** — proto отдаёт только `message_ids`; нет тел сообщений для bot runtime без отдельного Messaging доступа.
-- [ ] **Autocomplete polling UX** — `AutocompleteSlashOption` сразу возвращает пустой список для polling-ботов; Flutter не ретраит до `CompleteAutocomplete`.
-- [ ] **SendEphemeral Gateway REST** — gRPC `SendEphemeral` есть; transcoding route в Gateway / `api-gateway.md` нет.
-- [ ] **SPACE_MANAGE_ROLES doc drift** — privileged scope в manifest/proto; отсутствует в таблице scopes [bots.md](features/bots.md).
-- [ ] **BOT_DEFERRED_TTL ops doc** — env/default 24h есть в [bot-service.md](microservices/bot-service.md); нет в [OPERATIONS.md](OPERATIONS.md).
+*Закрыто в Phase 16 backend batch (compose/Flutter live opt-in, gRPC rate limit, proto, docs).*
+
+**Аудит batch (2026-06-18):**
+
+- [ ] **Bot gRPC rate limit Redis** — лимитер in-process; для multi-replica Bot Service нужен Redis sliding-window (как Gateway), см. `internal/ratelimit`.
+- [ ] **Webhook compose Linux CI** — `TestComposePhase16BotsWebhook_live` зависит от `host.docker.internal`; на Linux runner может понадобиться `extra_hosts` или sidecar mock.
+- [ ] **Прямой gRPC Bot Service** — порт `:9090` в compose без network policy; prod должен принимать bot-runtime только от Gateway или mTLS.
 
 ### Developer Portal
 
@@ -123,10 +120,6 @@ http://127.0.0.1:18080/api/v1/auth/oauth2/token
 ### Тесты и покрытие
 
 - [ ] **BOT-C live tests in CI** — compose + Flutter live opt-in; не в default `make` / GitHub Actions matrix.
-
-### Документация
-
-- [ ] **docs/features/bots.md** — polling path `/api/bots/...` vs фактический `/api/v1/bots/...`.
 
 **Промпт-якорь:** `Phase 16 bots — follow-ups from docs/TODO.md`.
 

@@ -125,13 +125,20 @@ commands:
   }
 
   PollingBotSession startPollingBot(String botToken) {
-    final session = PollingBotSession(
+    return PollingBotSession(
       httpClient: httpClient,
       baseUrl: ctx.config.baseUrl,
       botToken: botToken,
-    );
-    session.start();
-    return session;
+    )..start();
+  }
+
+  PollingBotSession startEphemeralPollingBot(String botToken) {
+    return PollingBotSession(
+      httpClient: httpClient,
+      baseUrl: ctx.config.baseUrl,
+      botToken: botToken,
+      ephemeral: true,
+    )..start();
   }
 
   Future<BotsApiResult<SlashInteractionOutcome>> executePing(String botId) {
@@ -163,6 +170,32 @@ commands:
     }
     fail('message "$content" not found in chat $chatId history');
   }
+
+  Future<void> assertMessageNotInHistory(String content) async {
+    await assertMessageNotInHistoryFor(
+      authorization: owner.authorizationHeader,
+      content: content,
+    );
+  }
+
+  Future<void> assertMessageNotInHistoryFor({
+    required String authorization,
+    required String content,
+  }) async {
+    final messages = ctx.messagesClient();
+    final listed = await messages.getMessages(
+      authorization: authorization,
+      chatId: chatId,
+    );
+    expect(listed, isA<MessagesApiOk<MessageListData>>(), reason: '$listed');
+    for (final msg in (listed as MessagesApiOk<MessageListData>).data.messages) {
+      expect(
+        msg.content.trim(),
+        isNot(content),
+        reason: 'ephemeral "$content" must not appear in chat $chatId history',
+      );
+    }
+  }
 }
 
 class PollingBotSession {
@@ -170,11 +203,13 @@ class PollingBotSession {
     required this.httpClient,
     required this.baseUrl,
     required this.botToken,
+    this.ephemeral = false,
   });
 
   final http.Client httpClient;
   final String baseUrl;
   final String botToken;
+  final bool ephemeral;
 
   Timer? _timer;
   bool _running = false;
@@ -214,8 +249,8 @@ class PollingBotSession {
           },
           body: jsonEncode({
             'interaction_token': token,
-            'content': 'pong',
-            'is_ephemeral': false,
+            'content': ephemeral ? 'pong-ephemeral' : 'pong',
+            'is_ephemeral': ephemeral,
           }),
         );
       }

@@ -116,6 +116,37 @@ void main() {
     });
   });
 
+  group('VoiceBotsClient.autocompleteOption', () {
+    test('parses pending=true for polling autocomplete', () async {
+      final mock = MockClient((req) async {
+        expect(req.url.path, '/api/v1/bots/autocomplete');
+        return http.Response(
+          jsonEncode({
+            'choices': [],
+            'pending': true,
+          }),
+          200,
+        );
+      });
+      final client = VoiceBotsClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
+      final result = await client.autocompleteOption(
+        authorization: auth,
+        chatId: 'chat-1',
+        chatType: 'CHAT_TYPE_CHANNEL',
+        botId: 'bot-1',
+        commandName: 'stats',
+        optionName: 'game',
+        focusedValue: 'cs',
+      );
+      expect(result, isA<BotsApiOk<BotAutocompleteResult>>());
+      final data = (result as BotsApiOk<BotAutocompleteResult>).data;
+      expect(data.pending, isTrue);
+      expect(data.choices, isEmpty);
+    });
+  });
+
   group('VoiceBotsClient.listBotsInChat', () {
     test('GET /api/v1/bots/chats/{id} parses chat bot settings', () async {
       final mock = MockClient((req) async {

@@ -4473,9 +4473,11 @@ class AutocompleteChoice extends $pb.GeneratedMessage {
 class AutocompleteSlashOptionResponse extends $pb.GeneratedMessage {
   factory AutocompleteSlashOptionResponse({
     $core.Iterable<AutocompleteChoice>? choices,
+    $core.bool? pending,
   }) {
     final result = create();
     if (choices != null) result.choices.addAll(choices);
+    if (pending != null) result.pending = pending;
     return result;
   }
 
@@ -4494,6 +4496,7 @@ class AutocompleteSlashOptionResponse extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..pPM<AutocompleteChoice>(1, _omitFieldNames ? '' : 'choices',
         subBuilder: AutocompleteChoice.create)
+    ..aOB(2, _omitFieldNames ? '' : 'pending')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -4521,6 +4524,16 @@ class AutocompleteSlashOptionResponse extends $pb.GeneratedMessage {
 
   @$pb.TagNumber(1)
   $pb.PbList<AutocompleteChoice> get choices => $_getList(0);
+
+  /// True when polling bot must CompleteAutocomplete before choices are available.
+  @$pb.TagNumber(2)
+  $core.bool get pending => $_getBF(1);
+  @$pb.TagNumber(2)
+  set pending($core.bool value) => $_setBool(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasPending() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearPending() => $_clearField(2);
 }
 
 class TouchPresenceRequest extends $pb.GeneratedMessage {
@@ -5195,10 +5208,12 @@ class GetChatMessagesForBotResponse extends $pb.GeneratedMessage {
   factory GetChatMessagesForBotResponse({
     $core.Iterable<$core.String>? messageIds,
     $core.String? nextCursor,
+    $core.Iterable<$3.Message>? messages,
   }) {
     final result = create();
     if (messageIds != null) result.messageIds.addAll(messageIds);
     if (nextCursor != null) result.nextCursor = nextCursor;
+    if (messages != null) result.messages.addAll(messages);
     return result;
   }
 
@@ -5217,6 +5232,8 @@ class GetChatMessagesForBotResponse extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..pPS(1, _omitFieldNames ? '' : 'messageIds')
     ..aOS(2, _omitFieldNames ? '' : 'nextCursor')
+    ..pPM<$3.Message>(3, _omitFieldNames ? '' : 'messages',
+        subBuilder: $3.Message.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -5252,6 +5269,9 @@ class GetChatMessagesForBotResponse extends $pb.GeneratedMessage {
   $core.bool hasNextCursor() => $_has(1);
   @$pb.TagNumber(2)
   void clearNextCursor() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $pb.PbList<$3.Message> get messages => $_getList(2);
 }
 
 class CreateBotRoleRequest extends $pb.GeneratedMessage {

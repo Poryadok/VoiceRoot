@@ -146,7 +146,7 @@ commands:
 
 ### Polling (v1, для разработки)
 
-Альтернатива вебхуку для локальной разработки — бот сам опрашивает endpoint платформы: `GET /api/bots/me/interactions/poll`. Не требует публичного URL. **Политика:** локальные тесты — только polling; webhook — staging и production (E2E webhook на staging).
+Альтернатива вебхуку для локальной разработки — бот сам опрашивает endpoint платформы: `GET /api/v1/bots/me/interactions/poll`. Не требует публичного URL. **Политика:** локальные тесты — только polling; webhook — staging и production (E2E webhook на staging).
 
 ---
 
@@ -159,9 +159,10 @@ commands:
 | `SPACE_VIEW_MEMBER_LIST`    | Видеть список участников спейса                                               |
 | `MEMBER_ASSIGN_ROLES`       | Выдавать/забирать роли ниже бота по иерархии                                  |
 | `TEXT_CHAT_CREATE_IN_SPACE` | Создавать/архивировать текстовые чаты в спейсе (`group` \| `channel`)         |
+| `SPACE_MANAGE_ROLES` ⚠️     | Создавать и управлять ролями ниже бота по иерархии (привилегированный scope)  |
 | `TEXT_CHAT_READ_HISTORY` ⚠️ | Читать историю сообщений в разрешённых чатах (привилегированный scope)        |
 
-Scope `TEXT_CHAT_READ_HISTORY` для бота — привилегированный: при установке пользователь видит явное предупреждение. Предназначен для модерационных ботов. Имя совпадает с правом участника; политика проверки — в Bot Service / Gateway.
+Scopes `SPACE_MANAGE_ROLES` и `TEXT_CHAT_READ_HISTORY` для бота — привилегированные: при установке пользователь видит явное предупреждение. `TEXT_CHAT_READ_HISTORY` предназначен для модерационных ботов; `SPACE_MANAGE_ROLES` — для ботов, которым нужно создавать определения ролей (назначение участникам — `MEMBER_ASSIGN_ROLES`). Имена совпадают с правами участника; политика проверки — в Bot Service / Gateway.
 
 ---
 

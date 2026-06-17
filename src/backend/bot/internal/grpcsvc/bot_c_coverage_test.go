@@ -82,6 +82,66 @@ func TestGetChatMessagesForBot_returnsMessagesWithReadHistoryScope(t *testing.T)
 	require.Equal(t, 1, msg.getMessagesCalls)
 }
 
+func TestGetChatMessagesForBot_returnsMessageBodies(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	msg := &fakeMessagingClientWithHistory{
+		messageIDs: []string{"msg-a", "msg-b"},
+		messageBodies: map[string]string{
+			"msg-a": "alpha",
+			"msg-b": "bravo",
+		},
+	}
+	client, st, _, cleanup := startBotGRPCWithBotCDeps(t, &botCDeps{msg: msg})
+	defer cleanup()
+
+	_, _, botToken, chatID, _ := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_SEND_MESSAGES","TEXT_CHAT_READ_HISTORY"]`)
+	botCtx := withBotToken(context.Background(), botToken)
+	chatType := chatv1.ChatType_CHAT_TYPE_CHANNEL
+
+	resp, err := client.GetChatMessagesForBot(botCtx, &botv1.GetChatMessagesForBotRequest{
+		Chat: &chatv1.ChatRef{Id: chatID.String(), Type: &chatType},
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.GetMessages(), 2)
+	require.NotEmpty(t, resp.GetMessages()[0].GetContent(), "messages[] must include content bodies (Phase 16)")
+}
+
+func TestAutocompleteSlashOption_pollingBotReturnsPending(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	client, st, cleanup := startBotGRPC(t)
+	defer cleanup()
+	ctx, botID, _, chatID, _ := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_SEND_MESSAGES"]`)
+
+	manifestYAML := `name: BotC
+scopes: [TEXT_CHAT_SEND_MESSAGES]
+commands:
+  - name: stats
+    description: Stats
+    options:
+      - name: game
+        type: string
+        required: true
+        autocomplete: true
+`
+	_, err := client.ApplyManifest(ctx, &botv1.ApplyManifestRequest{BotId: botID, ManifestYaml: manifestYAML})
+	require.NoError(t, err)
+
+	chatType := chatv1.ChatType_CHAT_TYPE_CHANNEL
+	resp, err := client.AutocompleteSlashOption(ctx, &botv1.AutocompleteSlashOptionRequest{
+		Chat:         &chatv1.ChatRef{Id: chatID.String(), Type: &chatType},
+		BotId:        botID,
+		CommandName:  "stats",
+		OptionName:   "game",
+		FocusedValue: "cs",
+	})
+	require.NoError(t, err)
+	require.True(t, resp.GetPending(), "polling bot autocomplete must return pending=true until CompleteAutocomplete")
+}
+
 func TestGetChatMessagesForBot_deniedWhenChatNotWhitelisted(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
@@ -1516,13 +1576,20 @@ type fakeMessagingClientWithHistory struct {
 	fakeMessagingClient
 	getMessagesCalls int
 	messageIDs       []string
+	messageBodies    map[string]string
 }
 
 func (f *fakeMessagingClientWithHistory) GetMessages(_ context.Context, _ *messagingv1.GetMessagesRequest) (*messagingv1.GetMessagesResponse, error) {
 	f.getMessagesCalls++
 	msgs := make([]*messagingv1.Message, 0, len(f.messageIDs))
 	for _, id := range f.messageIDs {
-		msgs = append(msgs, &messagingv1.Message{Id: id})
+		content := id
+		if f.messageBodies != nil {
+			if body, ok := f.messageBodies[id]; ok {
+				content = body
+			}
+		}
+		msgs = append(msgs, &messagingv1.Message{Id: id, Content: content})
 	}
 	return &messagingv1.GetMessagesResponse{
 		MessageList: &messagingv1.MessageList{Messages: msgs},

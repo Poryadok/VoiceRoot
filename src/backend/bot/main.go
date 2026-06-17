@@ -19,6 +19,7 @@ import (
 	"voice/backend/bot/internal/botevents"
 	"voice/backend/bot/internal/dispatch"
 	grpcsvc "voice/backend/bot/internal/grpcsvc"
+	"voice/backend/bot/internal/ratelimit"
 	"voice/backend/bot/internal/store"
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
@@ -76,7 +77,13 @@ func main() {
 			defer pub.Close()
 			logger.Info("bot.events publisher enabled")
 		}
-		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger)...)
+		grpcSrv = grpc.NewServer(
+			grpc.ChainUnaryInterceptor(
+				ratelimit.FromEnv().UnaryServerInterceptor(),
+				grpcmw.UnaryRecovery(logger),
+				grpcmw.UnaryAccessLog(logger),
+			),
+		)
 		botv1.RegisterBotServiceServer(grpcSrv, svc)
 		go func() {
 			logger.Info("gRPC listening", slog.String("addr", grpcAddr))

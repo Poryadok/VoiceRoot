@@ -1406,6 +1406,18 @@ const AutocompleteSlashOptionResponse$json = {
       '6': '.voice.bot.v1.AutocompleteChoice',
       '10': 'choices'
     },
+    {
+      '1': 'pending',
+      '3': 2,
+      '4': 1,
+      '5': 8,
+      '9': 0,
+      '10': 'pending',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_pending'},
   ],
 };
 
@@ -1413,7 +1425,8 @@ const AutocompleteSlashOptionResponse$json = {
 final $typed_data.Uint8List autocompleteSlashOptionResponseDescriptor =
     $convert.base64Decode(
         'Ch9BdXRvY29tcGxldGVTbGFzaE9wdGlvblJlc3BvbnNlEjoKB2Nob2ljZXMYASADKAsyIC52b2'
-        'ljZS5ib3QudjEuQXV0b2NvbXBsZXRlQ2hvaWNlUgdjaG9pY2Vz');
+        'ljZS5ib3QudjEuQXV0b2NvbXBsZXRlQ2hvaWNlUgdjaG9pY2VzEh0KB3BlbmRpbmcYAiABKAhI'
+        'AFIHcGVuZGluZ4gBAUIKCghfcGVuZGluZw==');
 
 @$core.Deprecated('Use touchPresenceRequestDescriptor instead')
 const TouchPresenceRequest$json = {
@@ -1605,6 +1618,14 @@ const GetChatMessagesForBotResponse$json = {
       '10': 'nextCursor',
       '17': true
     },
+    {
+      '1': 'messages',
+      '3': 3,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.messaging.v1.Message',
+      '10': 'messages'
+    },
   ],
   '8': [
     {'1': '_next_cursor'},
@@ -1612,11 +1633,11 @@ const GetChatMessagesForBotResponse$json = {
 };
 
 /// Descriptor for `GetChatMessagesForBotResponse`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List getChatMessagesForBotResponseDescriptor =
-    $convert.base64Decode(
-        'Ch1HZXRDaGF0TWVzc2FnZXNGb3JCb3RSZXNwb25zZRIfCgttZXNzYWdlX2lkcxgBIAMoCVIKbW'
-        'Vzc2FnZUlkcxIkCgtuZXh0X2N1cnNvchgCIAEoCUgAUgpuZXh0Q3Vyc29yiAEBQg4KDF9uZXh0'
-        'X2N1cnNvcg==');
+final $typed_data.Uint8List getChatMessagesForBotResponseDescriptor = $convert.base64Decode(
+    'Ch1HZXRDaGF0TWVzc2FnZXNGb3JCb3RSZXNwb25zZRIfCgttZXNzYWdlX2lkcxgBIAMoCVIKbW'
+    'Vzc2FnZUlkcxIkCgtuZXh0X2N1cnNvchgCIAEoCUgAUgpuZXh0Q3Vyc29yiAEBEjcKCG1lc3Nh'
+    'Z2VzGAMgAygLMhsudm9pY2UubWVzc2FnaW5nLnYxLk1lc3NhZ2VSCG1lc3NhZ2VzQg4KDF9uZX'
+    'h0X2N1cnNvcg==');
 
 @$core.Deprecated('Use createBotRoleRequestDescriptor instead')
 const CreateBotRoleRequest$json = {
