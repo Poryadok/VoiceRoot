@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { callbackRedirectUri, parseCallbackSearch } from './callback';
-import { exchangeAuthorizationCode } from './api';
-import { setAccessToken, takePkceVerifier } from './session';
+import { exchangeAuthorizationCode } from './oauth/api';
+import { callbackRedirectUri, parseCallbackSearch } from './oauth/callback';
+import { setAccessToken, takePkceVerifier } from './oauth/session';
 
 export function OAuthCallback() {
   const [error, setError] = useState('');
