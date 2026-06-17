@@ -11,6 +11,8 @@
 
 **Порядок:** сначала закройте пункты в «Только вы», затем давайте агенту batch целиком (копируйте заголовок секции в промпт).
 
+Агенту: Удаляй отсюда все выполненные пункты.
+
 ---
 
 ## Только вы (не делегировать агенту целиком)
@@ -26,16 +28,63 @@
 
 ---
 
+## Документация vs код (аудит 2026-06-17)
+
+Сверка PLAN §11–§18 и `DATA_STORES.md` с кодом. **Критерии приёмки** — ниже; **синхронизация чекбоксов PLAN** — отдельный batch после закрытия остатков.
+
+### Вердикт по строкам из сводной таблицы PLAN
+
+| Фаза | PLAN сейчас | Код vs критерии приёмки | Можно ставить `[x]` в PLAN? |
+|------|-------------|-------------------------|----------------------------|
+| **11** | `[ ]` | 3/3 критерия **DONE**; privacy **PARTIAL** vs [privacy.md](features/privacy.md) | Сводную строку — **да** (с остатком в «Phase 11» ниже); чеклисты §11 — после остатка privacy |
+| **15** | `[ ]` | 2/3 **DONE**, opt-out **PARTIAL** (UX есть, live нет); shared media video — нет | Строку фазы — **почти**; §15 backend `[ ]` — после opt-out live + video tab |
+| **16** | `[ ]` | Критерии 1–3 **DONE**; portal **PARTIAL** (webhook_secret); rate limits **PARTIAL** | Строку `[ ]` оставить до Phase 16 остатка; §16 `[x]` Developer Portal — **завышен** |
+| **18** | `[ ]` | §18 backend/client `[x]` — **PARTIAL** (onboarding/a11y не полные spec); приёмка 1/3 | Сводную `[ ]` оставить; §18 `[x]` — baseline, не полное закрытие [accessibility.md](features/accessibility.md) |
+
+- [ ] **Синхронизировать PLAN.md** — обновить сводную таблицу и §11–§18 чеклисты по вердикту выше (не менять границы фаз).
+- [ ] **DATA_STORES.md** — добавить `e2e_key_backups` в инвентарь `auth_db` (таблица есть: Flyway `V4__e2e_key_backups.sql`, [auth-service.md](microservices/auth-service.md) L102–107).
+
+**Промпт-якорь:** `Docs audit — sync PLAN.md and DATA_STORES with code`.
+
+---
+
+## Phase 11 — Trust (остаток)
+
+*Критерии приёмки PLAN §11 закрыты в коде; ниже — расхождения с [reports.md](features/reports.md), [privacy.md](features/privacy.md), [auth-service.md](microservices/auth-service.md).*
+
+### Репорты
+
+- [ ] **API shape** — один gRPC `CreateReport` + `target_type` вместо отдельных `ReportUser` / `ReportMessage` / `ReportSpace` (функционально ок; PLAN/доки называют иначе).
+- [ ] **Категория mm_toxic** — в БД/proto канон `cheating`; Gateway/Flutter шлют `mm_toxic`; прямой gRPC отклоняет `mm_toxic` (`reports_integration_test.go`).
+- [ ] **Длина комментария** — клиент cap 500 символов (`report_sheet.dart`); **нет server-side max** в Moderation.
+- [ ] **Auto-mod Phase 11** — PLAN: «log only»; код при пороге пишет `shadow_ban` sanction (`reports.go`), не только `auto_mod_log`.
+
+### 2FA
+
+*Закрыто для §11: TOTP enroll/verify, backup codes, login challenge, Flutter QR, live `compose_phase11_trust_live_test` + `phase11_trust_e2e_live_test.dart`.*
+
+### Приватность
+
+- [ ] **Пресеты ≠ privacy.md** — work: `show_online` в коде `friends_of_friends`, в доке «УС»; нет audience `space_members` в proto/валидации.
+- [ ] **Мультиселект аудитории** — single-value dropdowns; нет «Все/Никто», per-space picker ([privacy.md](features/privacy.md) §«Контрол выбора аудитории»).
+- [ ] **Поля действий** — нет в модели/UI: phone search, calls, files, voice, chat/space invites; нет avatar/bio visibility (PLAN §11 упоминает avatar/bio/online).
+- [ ] **allow_dm=friends_of_friends** — `ensureDMPrivacy` не обрабатывает FoF → **разрешён любому** (`chat_dm.go` switch без case).
+- [ ] **Online visibility** — enforcement только для guest-viewer (`GetPresence`); friends/FoF для обычных пользователей не проверяются; `GetBulkPresence` без guest filter (см. также «Гостевые аккаунты»).
+- [ ] **Block UX** — search скрывает blocked IDs; Telegram-style «пользователь недоступен» в профиле не реализован.
+
+**Промпт-якорь:** `Phase 11 Trust — privacy and reports parity from docs/TODO.md`.
+
+---
+
 ## Phase 15 — E2E (остаток)
 
-_Закрыто в batch Phase 15 E2E follow-ups (2026-06)._
+*Backend Signal/prekeys/ciphertext/search-skip и opt-in live в compose — **DONE**; PLAN §15 и сводная строка ещё `[ ]`.*
 
-### Новые пробелы (аудит)
-
-- [ ] **DATA_STORES.md** — строка `e2e_key_backups` в инвентаре `auth_db`.
-- [ ] **Shared media video tab** — E2E decrypt для video-вложений (если тип поддержан в UI).
-- [ ] **Web saveDecryptedE2eAttachment** — паритет с desktop для скачивания расшифрованных файлов.
-- [ ] **libsignal version pin** — документировать/зафиксировать ожидаемую версию для pre-key golden (подпись non-deterministic).
+- [ ] **Opt-out live test** — `DisableChatE2E` + `E2eDisableConfirmDialog` есть; нет compose/Flutter live «disable → send plaintext».
+- [ ] **Key backup compose live** — JDBC `Phase15E2EKeyBackupJdbcIntegrationTest`; нет gateway compose live для PUT/GET `/api/v1/auth/e2e-key-backup`.
+- [ ] **Compose Go DM test** — `compose_phase15_e2e_dm_live_test.go` шлёт synthetic base64, не libsignal round-trip (Flutter `phase15_e2e_dm_live_test.dart` сильнее).
+- [ ] **Shared media video tab** — E2E decrypt для video-вложений в shared media (widget-тесты есть для image/file; video — нет).
+- [ ] **libsignal version pin** — зафиксировать в [encryption.md](features/encryption.md) пару `libsignal_protocol_dart` (^0.8.0) + golden `prekey_libsignal_golden.b64` (подпись non-deterministic).
 
 **Промпт-якорь:** `Phase 15 E2E — follow-ups from docs/TODO.md`.
 
@@ -43,22 +92,27 @@ _Закрыто в batch Phase 15 E2E follow-ups (2026-06)._
 
 ## Phase 16 — Боты (остаток)
 
+*Критерии приёмки §16: `/ping`→pong, ephemeral, 3s timeout — **DONE** (opt-in live). Developer Portal `[x]` в PLAN завышен (webhook_secret).*
+
 ### Backend и Gateway
 
+- [ ] **Ephemeral multi-user E2E** — механизм + unit tests; нет compose/Flutter live «второй участник не видит bubble».
+- [ ] **Timeout E2E** — `bot_timeout` + SnackBar в клиенте; нет compose live / widget test на timeout UX.
+- [ ] **Webhook compose E2E** — polling live есть (`compose_phase16_bots_slash_live_test.go`); webhook path только integration tests.
 - [ ] **buf generate BSR** — `make buf-generate` 403; локально `buf generate --template buf.gen.local-go.yaml`.
 - [ ] **gRPC Bot API rate limits** — 5000/min только на Gateway `/api/v1/bots/me/**`; прямой gRPC `BotService` обходит `BotAPI` limiter.
 - [ ] **GetChatMessagesForBot response shape** — proto отдаёт только `message_ids`; нет тел сообщений для bot runtime без отдельного Messaging доступа.
 - [ ] **Autocomplete polling UX** — `AutocompleteSlashOption` сразу возвращает пустой список для polling-ботов; Flutter не ретраит до `CompleteAutocomplete`.
 - [ ] **SendEphemeral Gateway REST** — gRPC `SendEphemeral` есть; transcoding route в Gateway / `api-gateway.md` нет.
-- [ ] **SPACE_MANAGE_ROLES doc drift** — privileged scope в manifest/proto; отсутствует в таблице scopes `docs/features/bots.md`.
-- [ ] **BOT_DEFERRED_TTL ops doc** — env и default 24h не задокументированы в `bot-service.md` / `OPERATIONS.md`.
+- [ ] **SPACE_MANAGE_ROLES doc drift** — privileged scope в manifest/proto; отсутствует в таблице scopes [bots.md](features/bots.md).
+- [ ] **BOT_DEFERRED_TTL ops doc** — env/default 24h есть в [bot-service.md](microservices/bot-service.md); нет в [OPERATIONS.md](OPERATIONS.md).
 
 ### Developer Portal
 
 *После ключей OAuth (секция «Только вы»).*
 
-- [ ] **Developer Portal auth** — login/OAuth flow, rotate `webhook_secret`, revoke token, list apps.
-- [ ] **Developer Portal webhook_secret rotate** — minimal portal (`src/developer-portal/`) умеет regenerate bot token; rotate `webhook_secret` / HMAC key — нет.
+- [ ] **Developer Portal auth** — login/OAuth flow, rotate `webhook_secret`, revoke token, list apps (minimal portal: paste JWT / PKCE; rotate webhook — stub в UI).
+- [ ] **Developer Portal webhook_secret rotate** — regenerate bot token есть; rotate `webhook_secret` / HMAC key — нет API в portal.
 - [ ] **Developer Portal production OAuth** — PKCE flow есть; production зависит от Auth OAuth client; dev — paste JWT (`oauthDisabled`).
 
 ### Клиент и локализация
@@ -81,7 +135,6 @@ _Закрыто в batch Phase 15 E2E follow-ups (2026-06)._
 
 - [ ] **Политика `protos/` и генерации** — [REPOSITORIES.md](REPOSITORIES.md) + Makefile/CI: что коммитим (Go `*.pb.go`, Dart gen), что генерим в CI.
 - [ ] **Скрипт стенд + миграции** — Makefile/scripts поверх [migrations README](../src/backend/migrations/README.md).
-- [ ] **PLAN.md §15 / §16** — отметить чеклисты после закрытия соответствующих batch.
 - [ ] **Аудит консистентности доков** — [DOCS_CONSISTENCY_AUDIT.md](DOCS_CONSISTENCY_AUDIT.md) после крупного контрактного PR.
 
 **Промпт-якорь:** `Infra batch — protos policy and migration script`.
@@ -114,8 +167,8 @@ _Закрыто в batch Phase 15 E2E follow-ups (2026-06)._
 
 ### Frontend — UX & editor
 
-- [ ] **Story create entry point** — shell affordance calling `StoriesRoutes.openCreate`.
-- [ ] **Media picker** — wire `image_picker` / file upload in `story_create_screen.dart`.
+- [ ] **Story create entry point** — shell affordance calling `StoriesRoutes.openCreate` (route есть, нет кнопки в shell).
+- [ ] **Media picker** — `story_create_screen.dart`: `_pickMedia` только меняет тип, не вызывает `image_picker` / file upload.
 - [ ] **Video playback** — replace viewer placeholder with player (≤60s).
 - [ ] **Text story styling** — colored background / `text_style_json` minimal editor.
 - [ ] **Highlights on profile** — mount `HighlightsSection`; archive → add-to-highlight for owner.
@@ -138,6 +191,15 @@ _Закрыто в batch Phase 15 E2E follow-ups (2026-06)._
 ---
 
 ## Phase 18 — Growth & Accessibility
+
+*PLAN §18 client/backend `[x]` — baseline; ниже — остаток vs [deep-links.md](features/deep-links.md), [onboarding.md](features/onboarding.md), [accessibility.md](features/accessibility.md).*
+
+### PLAN §18 — расхождения baseline vs spec
+
+- [ ] **Onboarding PLAN one-liner** — PLAN: «register → create/join space → first message»; код следует [onboarding.md](features/onboarding.md) (5 modal hints, не anchored).
+- [ ] **A11y PLAN `[x]`** — semantics login/shell **DONE**; message keyboard nav, aria-live, focus trap, axe CI — **MISSING** (см. ниже).
+- [ ] **Приёмка #1 invite→join** — **PARTIAL**: backend HTML+resolve OK; `DeepLinkListener` только в authed shell; `flushPendingAfterAuth()` **не вызывается** из auth flow (только unit test); iOS без associated domains; prod AASA placeholders.
+- [ ] **Приёмка #2 keyboard nav** — **PARTIAL**: только Ctrl+K / Ctrl+, (`voice_shortcuts.dart`); нет Alt+↑/↓, Escape→composer, message keys.
 
 ### Deep links
 
@@ -169,46 +231,19 @@ _Закрыто в batch Phase 15 E2E follow-ups (2026-06)._
 
 ---
 
-## Гостевые аккаунты (guest account type)
+## Гостевые аккаунты (остаток)
 
-_Аудит 2026-06 vs [auth-and-contacts.md](features/auth-and-contacts.md), [auth-service.md](microservices/auth-service.md), [privacy.md](features/privacy.md)._
+*Baseline закрыт (2026-06): register guest, JWT `account_type`, Gateway header, guest guards (CreateDM/StartCall/SendFriendInvitation/CreateSpace/JoinByInvite+`allow_guests`), convert-guest + NATS, TTL sweeper, Flutter auto-guest/convert/reminder/greyout, integration tests. См. [auth-and-contacts.md](features/auth-and-contacts.md).*
 
-**Уже есть (baseline):** `Register` с `guest:true`, JWT `account_type`, Gateway `X-Voice-Account-Type`, guest guards (CreateDM / StartCall / SendFriendInvitation / CreateSpace / JoinByInvite+`allow_guests`), `convert-guest` + NATS `user.guest_converted`, TTL sweeper; Flutter — auto guest on web, convert modal, save-account reminder, greyout, `isGuest` из JWT.
+### Backend — ограничения и privacy
 
-**Остаётся:** enforcement `allow_guest_dm` при **ответе** guest в существующем DM (Messaging); полный multiselect guest-audience для всех visibility-полей (v1: только `show_online_include_guests`).
+- [ ] **Messaging `allow_guest_dm`** — guest **reply/send** в существующем DM: проверять `allow_guest_dm` у получателя; инициация guest по-прежнему запрещена (`CreateDM` уже blocked). Messaging Service сейчас не читает `account_type`.
+- [ ] **GetBulkPresence guest filter** — `guestMayViewOnlineStatus` применяется в `GetPresence`, но **не** в `GetBulkPresence` (утечка online для guest-viewer).
+- [ ] **Guest audience (остальные поля)** — v1 `show_online_include_guests` + UI есть; нет multiselect «Гостевые аккаунты» для `show_game_status` / `show_mm_rating` / `show_stories` и enforcement.
 
-### Backend — ограничения и lifecycle
+### Frontend & tests
 
-- [x] **JWT `account_type` claim** — `regular` \| `guest` в access JWT (или общий lookup); без этого Go-сервисы не различают тип аккаунта.
-- [x] **Block guest-initiated DM** — Chat `CreateDM` (+ при необходимости первый send): `PermissionDenied` для guest caller ([auth-and-contacts.md](features/auth-and-contacts.md) §«не может инициировать разговор»).
-- [x] **Block guest-initiated calls** — Voice `StartCall` (DM audio/video) от guest account.
-- [x] **Block guest friend requests** — Social `SendFriendInvitation` от guest account.
-- [x] **Block guest self-join** — запрет `CreateSpace`, discover/join без invite; guest только `JoinByInvite` / явное приглашение.
-- [ ] **Enforce `allow_guest_dm`** — если caller — guest, DM к получателю только при `allow_guest_dm=true`; инициация guest всё равно запрещена (docs: действия guest не зависят от настроек получателя). *CreateDM blocked; reply/send в существующем чате — ещё нет.*
-- [x] **Space/chat `allow_guests` setting** — настройка входа гостям на уровне спейса/чата (schema + enforce при join/membership).
-- [x] **Guest TTL 30d** — `last_online_at` + sweeper деактивации/удаления guest после 30 дней без онлайна ([auth-and-contacts.md](features/auth-and-contacts.md) §жизненный цикл).
-- [x] **NATS `user.guest_converted`** — publish при `convert-guest` ([auth-service.md](microservices/auth-service.md)).
-
-### Backend — privacy
-
-- [ ] **Guest audience в visibility** — [privacy.md](features/privacy.md): опция «Гостевые аккаунты» для show_online / show_game_status / show_mm_rating / show_stories; v1: `show_online_include_guests` + фильтр presence; остальные поля — follow-up.
-- [x] **Reconcile `allow_guest_dm` vs privacy model** — bool в proto vs мультиселект аудитории в спеке; зафиксировать канон в `docs/features/privacy.md` (addendum).
-
-### Frontend
-
-- [x] **Auto guest on web** — при открытии без сессии auto `registerGuest` (docs); сейчас только кнопка (`guest_entry_test` проверяет отсутствие auto).
-- [x] **Guest convert-to-regular UI** — modal (email + password) → `POST /api/v1/auth/convert-guest`; не редирект в settings; optional email verification ([auth-and-contacts.md](features/auth-and-contacts.md) §convert-guest).
-- [x] **Guest save-account reminder** — не показывать на первом входе; на повторных — напоминание зарегистрироваться, max 1×/сутки ([auth-and-contacts.md](features/auth-and-contacts.md) §напоминание).
-- [x] **Guest action greyout** — disable DM compose, call, friend invite для guest (defense in depth).
-- [x] **Server-side `isGuest`** — из JWT/`/me`, не только heuristic `guest_password` в secure storage (новое устройство / refresh).
-- [ ] **Onboarding after guest register** — E2E: nickname → shell → onboarding step 1 coach-marks. *API live: `guest_onboarding_e2e_live_test`; widget coach-marks E2E — follow-up.*
-
-### Tests & docs
-
-- [x] **Integration tests guest restrictions** — CreateDM / StartCall / SendFriendInvitation / CreateSpace as guest → denied.
-- [x] **Docs: guest onboarding flow** — [auth-and-contacts.md](features/auth-and-contacts.md) §Гостевая учётка: nickname → повторное напоминание → convert-guest modal.
-
-**Follow-ups:** Messaging `allow_guest_dm` для guest reply; multiselect guest-audience для остальных visibility; compose DDL `space_bans` / migrate tool version для join-by-invite live; widget E2E onboarding coach-marks.
+- [ ] **Onboarding coach-marks E2E** — widget-тест якорей после guest nickname; API live: `guest_onboarding_e2e_live_test`.
 
 **Промпт-якорь:** `Guest accounts — restrictions and UX from docs/TODO.md`.
 
@@ -224,11 +259,13 @@ _Аудит 2026-06 vs [auth-and-contacts.md](features/auth-and-contacts.md), [a
 
 | Если готовы… | Дайте агенту |
 |--------------|--------------|
+| Синхронизировать план с кодом | **Документация vs код** |
+| Закрыть Trust privacy/reports | **Phase 11 — Trust (остаток)** |
 | Закрыть E2E хвосты | **Phase 15 — E2E (остаток)** |
 | Боты: backend hardening | **Phase 16 — Боты (остаток)** |
 | Есть OAuth keys в `.env` | **Developer Portal** (внутри Phase 16) |
-| Гостевые ограничения + UX | **Гостевые аккаунты** |
+| Гостевые ограничения + UX | **Гостевые аккаунты (остаток)** |
 | Сторис / growth | **Phase 17** или **Phase 18** |
 | Только доки/репо | **Инфраструктура и доки** |
 
-Фазовые детали и критерии «готово» — [PLAN.md](PLAN.md) §15–18, [encryption.md](features/encryption.md), [bots.md](features/bots.md).
+Фазовые детали и критерии «готово» — [PLAN.md](PLAN.md) §11–18, [encryption.md](features/encryption.md), [bots.md](features/bots.md).
