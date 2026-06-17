@@ -17,6 +17,7 @@ class AuthScreen extends ConsumerStatefulWidget {
   static const Key passwordFieldKey = Key('auth_password');
   static const Key loginButtonKey = Key('auth_login');
   static const Key registerButtonKey = Key('auth_register');
+  static const Key continueGuestButtonKey = Key('auth_continue_guest');
 
   static const int minPasswordLength = 8;
 
@@ -69,6 +70,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     }
   }
 
+  Future<void> _continueAsGuest() async {
+    await ref.read(authControllerProvider.notifier).registerGuest();
+  }
+
   String? _emailValidator(String? value, AppLocalizations l10n) {
     if (value == null || value.trim().isEmpty) {
       return l10n.authErrorEmptyFields;
@@ -91,6 +96,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     final l10n = AppLocalizations.of(context)!;
     final auth = ref.watch(authControllerProvider);
     final voice = VoiceColors.of(context);
+    final guestBusy = auth.isRestoring || auth.isSubmitting;
 
     return Scaffold(
       key: AuthScreen.screenKey,
@@ -216,10 +222,28 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                           label: 'Create account',
                           child: VoiceSecondaryButton(
                             key: AuthScreen.registerButtonKey,
-                            onPressed: auth.isSubmitting
+                            onPressed: guestBusy
                                 ? null
                                 : () => _submit(true),
                             child: Text(l10n.authRegister),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Semantics(
+                          button: true,
+                          label: 'Continue as guest',
+                          child: TextButton(
+                            key: AuthScreen.continueGuestButtonKey,
+                            onPressed: guestBusy ? null : _continueAsGuest,
+                            child: guestBusy
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Text(l10n.authContinueGuest),
                           ),
                         ),
                       ],

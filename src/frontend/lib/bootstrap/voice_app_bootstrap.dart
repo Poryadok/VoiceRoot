@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app.dart';
+import '../backend/guest_credentials_storage.dart';
+import '../backend/users_client.dart';
 import '../l10n/app_localizations.dart';
 import '../state/auth_providers.dart';
+import '../state/social_providers.dart';
 import '../theme/voice_theme_providers.dart';
 import '../ui/auth/guest_nickname_screen.dart';
 import '../ui/core/voice_state_panel.dart';
@@ -29,12 +32,39 @@ class _VoiceAppBootstrapState extends ConsumerState<VoiceAppBootstrap> {
 
   Future<void> _restoreSession() async {
     await ref.read(authControllerProvider.notifier).restore();
-    final auth = ref.read(authControllerProvider);
-    if (!auth.isAuthenticated) {
-      await ref.read(authControllerProvider.notifier).registerGuestIfNeeded();
-    }
+    await _resolveGuestNicknameAfterRestore();
     if (mounted) {
       setState(() => _restoreComplete = true);
+    }
+  }
+
+  Future<void> _resolveGuestNicknameAfterRestore() async {
+    final auth = ref.read(authControllerProvider);
+    if (!auth.isAuthenticated || !auth.isGuest || auth.needsGuestNickname) {
+      return;
+    }
+
+    final accountId = auth.session!.accountId;
+    final storage = ref.read(guestCredentialsStorageProvider);
+    if (await storage.isNicknameCompleted(accountId)) {
+      return;
+    }
+
+    final profileResult = await ref.read(voiceUsersClientProvider).getMe(
+      authorization: auth.session!.authorizationHeader,
+    );
+    switch (profileResult) {
+      case UsersApiOk(:final data):
+        if (isPlaceholderGuestDisplayName(
+          accountId: data.accountId,
+          displayName: data.displayName,
+        )) {
+          ref.read(authControllerProvider.notifier).requireGuestNickname();
+        } else {
+          await storage.markNicknameCompleted(accountId);
+        }
+      case UsersApiFailure():
+        ref.read(authControllerProvider.notifier).requireGuestNickname();
     }
   }
 

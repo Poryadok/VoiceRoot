@@ -67,6 +67,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get authRegister => 'Register';
 
   @override
+  String get authContinueGuest => 'Continue as guest';
+
+  @override
   String get authLogout => 'Log out';
 
   @override

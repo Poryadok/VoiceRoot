@@ -115,6 +115,7 @@ class AuthController extends StateNotifier<AuthState> {
       return;
     }
     final guestPassword = await _guestCredentialsStorage.readPassword();
+    final isGuest = guestPassword != null && guestPassword.isNotEmpty;
     state = state.copyWith(session: saved, isRestoring: true, clearError: true);
     final refreshed = await _authClient.refresh(
       refreshToken: saved.refreshToken,
@@ -122,12 +123,17 @@ class AuthController extends StateNotifier<AuthState> {
     switch (refreshed) {
       case AuthSessionOk(:final session):
         await _persist(session);
+        final needsGuestNickname = isGuest &&
+            !await _guestCredentialsStorage.isNicknameCompleted(
+              session.accountId,
+            );
         state = state.copyWith(
           session: session,
           isRestoring: false,
           clearError: true,
           clearDiscoverHint: true,
-          isGuest: guestPassword != null && guestPassword.isNotEmpty,
+          isGuest: isGuest,
+          needsGuestNickname: needsGuestNickname,
         );
       case AuthSessionFailure():
         await _storage.clear();
@@ -144,7 +150,7 @@ class AuthController extends StateNotifier<AuthState> {
         () => _authClient.register(email: email, password: password),
       );
 
-  Future<void> registerGuestIfNeeded() async {
+  Future<void> registerGuest() async {
     if (state.session != null) return;
     final password = _generateGuestPassword();
     await _guestCredentialsStorage.writePassword(password);
@@ -177,7 +183,15 @@ class AuthController extends StateNotifier<AuthState> {
     }
   }
 
-  void completeGuestNickname() {
+  void requireGuestNickname() {
+    if (!state.isGuest || state.session == null) return;
+    state = state.copyWith(needsGuestNickname: true);
+  }
+
+  Future<void> completeGuestNickname() async {
+    final accountId = state.session?.accountId;
+    if (accountId == null) return;
+    await _guestCredentialsStorage.markNicknameCompleted(accountId);
     state = state.copyWith(clearGuestNickname: true);
   }
 

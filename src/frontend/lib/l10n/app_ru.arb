@@ -31,6 +31,7 @@
   "authErrorInvalidCredentials": "Неверный email или пароль.",
   "authLogin": "Войти",
   "authRegister": "Регистрация",
+  "authContinueGuest": "Продолжить как гость",
   "authLogout": "Выйти",
   "authError": "Ошибка входа: {message}",
   "@authError": {

@@ -67,6 +67,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get authRegister => 'Регистрация';
 
   @override
+  String get authContinueGuest => 'Продолжить как гость';
+
+  @override
   String get authLogout => 'Выйти';
 
   @override

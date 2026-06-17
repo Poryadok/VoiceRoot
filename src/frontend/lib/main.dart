@@ -33,7 +33,7 @@ Future<void> main() async {
           SharedPreferencesAuthSessionStorage(prefs),
         ),
         guestCredentialsStorageProvider.overrideWithValue(
-          FlutterGuestCredentialsStorage(),
+          FlutterGuestCredentialsStorage(prefs: prefs),
         ),
         discoverHintStorageProvider.overrideWithValue(
           SharedPreferencesDiscoverHintStorage(prefs),

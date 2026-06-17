@@ -200,6 +200,12 @@ abstract class AppLocalizations {
   /// **'Register'**
   String get authRegister;
 
+  /// No description provided for @authContinueGuest.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue as guest'**
+  String get authContinueGuest;
+
   /// No description provided for @authLogout.
   ///
   /// In en, this message translates to:

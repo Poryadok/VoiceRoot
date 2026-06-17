@@ -68,6 +68,7 @@ void main() {
     });
 
     late AuthController authController;
+    final guestStorage = InMemoryGuestCredentialsStorage();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -78,9 +79,7 @@ void main() {
           authSessionStorageProvider.overrideWithValue(
             InMemoryAuthSessionStorage(),
           ),
-          guestCredentialsStorageProvider.overrideWithValue(
-            InMemoryGuestCredentialsStorage(),
-          ),
+          guestCredentialsStorageProvider.overrideWithValue(guestStorage),
           authControllerProvider.overrideWith((ref) {
             authController = _guestAuthController(ref);
             return authController;
@@ -113,6 +112,7 @@ void main() {
 
     expect(patchBody?['display_name'], 'PlayerOne');
     expect(authController.state.needsGuestNickname, isFalse);
+    expect(await guestStorage.isNicknameCompleted('guest-acc'), isTrue);
   });
 
   testWidgets('GuestNicknameScreen shows API error', (tester) async {

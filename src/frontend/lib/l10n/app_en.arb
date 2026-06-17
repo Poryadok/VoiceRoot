@@ -30,6 +30,7 @@
   "authErrorInvalidCredentials": "Incorrect email or password.",
   "authLogin": "Log in",
   "authRegister": "Register",
+  "authContinueGuest": "Continue as guest",
   "authLogout": "Log out",
   "authError": "Auth error: {message}",
   "@authError": {
