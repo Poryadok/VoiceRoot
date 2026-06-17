@@ -257,4 +257,105 @@ void main() {
       reason: 'install must stay disabled until privileged scopes are acknowledged (BOT-C)',
     );
   });
+
+  testWidgets(
+    'SPACE_MANAGE_ROLES bot install requires explicit acknowledgment (BOT-C)',
+    (tester) async {
+      const privilegedBot = VoiceBotSummary(
+        id: 'bot-roles',
+        name: 'RolesBot',
+        description: 'Manages roles',
+        scopesJson: '["TEXT_CHAT_SEND_MESSAGES","SPACE_MANAGE_ROLES"]',
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ...voiceAppTestOverrides(
+              client: MockClient((_) async => http.Response('{}', 404)),
+            ),
+            spacePermissionProvider.overrideWith((ref, query) async => true),
+            discoverableBotsProvider.overrideWith(
+              (ref) async => [privilegedBot],
+            ),
+            installedBotsProvider('space-1').overrideWith(
+              (ref) async => const [],
+            ),
+            spaceTreeProvider('space-1').overrideWith(
+              (ref) async => const SpaceTreeData(
+                categories: [],
+                voiceRooms: [],
+                nodes: [
+                  SpaceTreeNodeData(
+                    id: 'node-1',
+                    spaceId: 'space-1',
+                    kind: 'text_chat',
+                    sortOrder: 0,
+                    displayName: 'general',
+                    linkedChatId: 'chat-1',
+                    chatType: 'CHAT_TYPE_CHANNEL',
+                  ),
+                ],
+              ),
+            ),
+            voiceBotsClientProvider.overrideWith((ref) {
+              return VoiceBotsClient(
+                gateway: gatewayHttpForTest(
+                  MockClient((req) async {
+                    if (req.url.path.contains('/bots/bot-roles')) {
+                      return utf8JsonResponse(
+                        jsonEncode({
+                          'bot': {
+                            'id': 'bot-roles',
+                            'name': 'RolesBot',
+                            'description': 'Manages roles',
+                            'scopes_json': privilegedBot.scopesJson,
+                            'status': 'live',
+                          },
+                        }),
+                      );
+                    }
+                    return http.Response('{}', 404);
+                  }),
+                  config: config,
+                ),
+              );
+            }),
+          ],
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            locale: const Locale('en'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const Scaffold(
+              body: SpaceBotsSheet(spaceId: 'space-1'),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('space_bots_install_picker')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('RolesBot').last);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('space_bots_privileged_ack_checkbox')),
+        findsOneWidget,
+        reason:
+            'SPACE_MANAGE_ROLES install must require acknowledge checkbox (BOT-C)',
+      );
+
+      final installButton = tester.widget<FilledButton>(
+        find.byKey(const Key('space_bots_install_confirm')),
+      );
+      expect(
+        installButton.onPressed,
+        isNull,
+        reason:
+            'install must stay disabled until SPACE_MANAGE_ROLES is acknowledged (BOT-C)',
+      );
+    },
+  );
 }

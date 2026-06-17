@@ -21,7 +21,7 @@ func TestReorderRoles_UpdatesPositions(t *testing.T) {
 	spaceID := uuid.New()
 	require.NoError(t, s.BootstrapSystemRoles(ctx, spaceID))
 
-	custom, err := s.CreateCustomRole(ctx, spaceID, "Raid Leader", 0, 2)
+	custom, err := s.CreateCustomRole(ctx, spaceID, "Raid Leader", 0, 2, nil)
 	require.NoError(t, err)
 	roles, err := s.ListRoles(ctx, spaceID)
 	require.NoError(t, err)
@@ -163,7 +163,7 @@ func TestDeleteRole_CustomRole(t *testing.T) {
 	spaceID := uuid.New()
 	require.NoError(t, s.BootstrapSystemRoles(ctx, spaceID))
 
-	row, err := s.CreateCustomRole(ctx, spaceID, "Temp", 0, 2)
+	row, err := s.CreateCustomRole(ctx, spaceID, "Temp", 0, 2, nil)
 	require.NoError(t, err)
 	require.NoError(t, s.DeleteRole(ctx, row.ID))
 	got, err := s.GetRoleByID(ctx, row.ID)

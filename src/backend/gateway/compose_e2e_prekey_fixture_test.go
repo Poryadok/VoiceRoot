@@ -1,9 +1,9 @@
 package main
 
 import (
-	"voice/backend/messaging/testfixture"
+	"voice/backend/pkg/composefixture"
 )
 
 func validComposePreKeyBundleB64() string {
-	return testfixture.ComposePreKeyBundleB64()
+	return composefixture.ComposePreKeyBundleB64()
 }

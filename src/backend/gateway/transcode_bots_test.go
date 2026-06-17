@@ -12,6 +12,8 @@ import (
 	"google.golang.org/grpc"
 
 	botv1 "voice.app/voice/bot/v1"
+	chatv1 "voice.app/voice/chat/v1"
+	rolev1 "voice.app/voice/role/v1"
 )
 
 type fakeBotClient struct {
@@ -102,6 +104,41 @@ func (f *fakeBotClient) ListBotsInChat(ctx context.Context, in *botv1.ListBotsIn
 
 func (f *fakeBotClient) SetBotChatEnabled(ctx context.Context, in *botv1.SetBotChatEnabledRequest, _ ...grpc.CallOption) (*botv1.SetBotChatEnabledResponse, error) {
 	return &botv1.SetBotChatEnabledResponse{}, nil
+}
+
+func (f *fakeBotClient) TouchPresence(ctx context.Context, in *botv1.TouchPresenceRequest, _ ...grpc.CallOption) (*botv1.TouchPresenceResponse, error) {
+	return &botv1.TouchPresenceResponse{}, nil
+}
+
+func (f *fakeBotClient) ListSpaceMembersForBot(ctx context.Context, in *botv1.ListSpaceMembersForBotRequest, _ ...grpc.CallOption) (*botv1.ListSpaceMembersForBotResponse, error) {
+	return &botv1.ListSpaceMembersForBotResponse{ProfileIds: []string{"profile-1"}}, nil
+}
+
+func (f *fakeBotClient) AssignBotRole(ctx context.Context, in *botv1.AssignBotRoleRequest, _ ...grpc.CallOption) (*botv1.AssignBotRoleResponse, error) {
+	return &botv1.AssignBotRoleResponse{}, nil
+}
+
+func (f *fakeBotClient) RevokeBotRole(ctx context.Context, in *botv1.RevokeBotRoleRequest, _ ...grpc.CallOption) (*botv1.RevokeBotRoleResponse, error) {
+	return &botv1.RevokeBotRoleResponse{}, nil
+}
+
+func (f *fakeBotClient) CreateBotChat(ctx context.Context, in *botv1.CreateBotChatRequest, _ ...grpc.CallOption) (*botv1.CreateBotChatResponse, error) {
+	chatType := chatv1.ChatType_CHAT_TYPE_CHANNEL
+	return &botv1.CreateBotChatResponse{
+		Chat: &chatv1.ChatRef{Id: "chat-new", Type: &chatType},
+	}, nil
+}
+
+func (f *fakeBotClient) GetChatMessagesForBot(ctx context.Context, in *botv1.GetChatMessagesForBotRequest, _ ...grpc.CallOption) (*botv1.GetChatMessagesForBotResponse, error) {
+	return &botv1.GetChatMessagesForBotResponse{MessageIds: []string{"msg-1"}}, nil
+}
+
+func (f *fakeBotClient) CreateBotRole(ctx context.Context, in *botv1.CreateBotRoleRequest, _ ...grpc.CallOption) (*botv1.CreateBotRoleResponse, error) {
+	return &botv1.CreateBotRoleResponse{Role: &rolev1.Role{Id: "role-new", Name: in.GetName()}}, nil
+}
+
+func (f *fakeBotClient) CompleteAutocomplete(ctx context.Context, in *botv1.CompleteAutocompleteRequest, _ ...grpc.CallOption) (*botv1.CompleteAutocompleteResponse, error) {
+	return &botv1.CompleteAutocompleteResponse{}, nil
 }
 
 func (f *fakeBotClient) EditBotMessage(ctx context.Context, in *botv1.EditBotMessageRequest, _ ...grpc.CallOption) (*botv1.EditBotMessageResponse, error) {
@@ -269,6 +306,93 @@ func TestServeBots_listCommandsIncludesOnlineField(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Contains(t, rec.Body.String(), `"online"`, "commands response must include online field (BOT-C)")
 	require.Contains(t, rec.Body.String(), `"online":false`)
+}
+
+func TestServeBots_touchPresenceRouteRegistered(t *testing.T) {
+	tc := newTranscoder(&grpcClients{bot: &fakeBotClient{}})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/bots/me/presence", http.NoBody)
+	req.Header.Set("Authorization", "Bot vb_testtoken")
+	rec := httptest.NewRecorder()
+	ok := tc.serveBots(rec, req, "me/presence")
+	require.True(t, ok, "POST /api/v1/bots/me/presence must be registered (BOT-C)")
+	require.Equal(t, http.StatusNoContent, rec.Code)
+}
+
+func TestServeBots_listSpaceMembersRouteRegistered(t *testing.T) {
+	tc := newTranscoder(&grpcClients{bot: &fakeBotClient{}})
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/bots/me/spaces/space-1/members", http.NoBody)
+	req.Header.Set("Authorization", "Bot vb_testtoken")
+	rec := httptest.NewRecorder()
+	ok := tc.serveBots(rec, req, "me/spaces/space-1/members")
+	require.True(t, ok, "GET /api/v1/bots/me/spaces/{space_id}/members must be registered (BOT-C)")
+	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestServeBots_assignBotRoleRouteRegistered(t *testing.T) {
+	tc := newTranscoder(&grpcClients{bot: &fakeBotClient{}})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/bots/me/spaces/space-1/roles/assign", strings.NewReader(`{"profile_id":"p-1","role_id":"r-1"}`))
+	req.Header.Set("Authorization", "Bot vb_testtoken")
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	ok := tc.serveBots(rec, req, "me/spaces/space-1/roles/assign")
+	require.True(t, ok, "POST /api/v1/bots/me/spaces/{space_id}/roles/assign must be registered (BOT-C)")
+	require.Equal(t, http.StatusNoContent, rec.Code)
+}
+
+func TestServeBots_revokeBotRoleRouteRegistered(t *testing.T) {
+	tc := newTranscoder(&grpcClients{bot: &fakeBotClient{}})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/bots/me/spaces/space-1/roles/revoke", strings.NewReader(`{"profile_id":"p-1","role_id":"r-1"}`))
+	req.Header.Set("Authorization", "Bot vb_testtoken")
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	ok := tc.serveBots(rec, req, "me/spaces/space-1/roles/revoke")
+	require.True(t, ok, "POST /api/v1/bots/me/spaces/{space_id}/roles/revoke must be registered (BOT-C)")
+	require.Equal(t, http.StatusNoContent, rec.Code)
+}
+
+func TestServeBots_createBotChatRouteRegistered(t *testing.T) {
+	tc := newTranscoder(&grpcClients{bot: &fakeBotClient{}})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/bots/me/chats", strings.NewReader(`{"space_id":"space-1","name":"audit","chat_type":"channel"}`))
+	req.Header.Set("Authorization", "Bot vb_testtoken")
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	ok := tc.serveBots(rec, req, "me/chats")
+	require.True(t, ok, "POST /api/v1/bots/me/chats must be registered (BOT-C)")
+	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestServeBots_getChatMessagesForBotRouteRegistered(t *testing.T) {
+	tc := newTranscoder(&grpcClients{bot: &fakeBotClient{}})
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/bots/me/chats/chat-1/messages?chat_type=CHAT_TYPE_CHANNEL", http.NoBody)
+	req.Header.Set("Authorization", "Bot vb_testtoken")
+	rec := httptest.NewRecorder()
+	ok := tc.serveBots(rec, req, "me/chats/chat-1/messages")
+	require.True(t, ok, "GET /api/v1/bots/me/chats/{chat_id}/messages must be registered (BOT-C)")
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), `"message_ids"`)
+}
+
+func TestServeBots_createBotRoleRouteRegistered(t *testing.T) {
+	tc := newTranscoder(&grpcClients{bot: &fakeBotClient{}})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/bots/me/roles", strings.NewReader(`{"space_id":"space-1","name":"Helper","permissions_mask":1,"position":2}`))
+	req.Header.Set("Authorization", "Bot vb_testtoken")
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	ok := tc.serveBots(rec, req, "me/roles")
+	require.True(t, ok, "POST /api/v1/bots/me/roles must be registered (BOT-C)")
+	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestServeBots_completeAutocompleteRouteRegistered(t *testing.T) {
+	tc := newTranscoder(&grpcClients{bot: &fakeBotClient{}})
+	body := `{"request_id":"ac-req-1","choices":[{"name":"CS2","value":"cs2"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/bots/me/autocomplete/complete", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bot vb_testtoken")
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	ok := tc.serveBots(rec, req, "me/autocomplete/complete")
+	require.True(t, ok, "POST /api/v1/bots/me/autocomplete/complete must be registered (BOT-C)")
+	require.Equal(t, http.StatusNoContent, rec.Code)
 }
 
 func TestServeBots_getBotBySlugRouteRegistered(t *testing.T) {

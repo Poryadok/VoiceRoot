@@ -338,3 +338,64 @@ func TestRateLimitKey_botRoute_usesBotToken(t *testing.T) {
 		t.Fatalf("rateLimitKey = %q, want bot:vb_token_key", got)
 	}
 }
+
+func TestRateLimitGroup_botRoleOps(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		method string
+		path   string
+	}{
+		{http.MethodPost, "/api/v1/bots/me/spaces/space-1/roles/assign"},
+		{http.MethodPost, "/api/v1/bots/me/spaces/space-1/roles/revoke"},
+		{http.MethodPost, "/api/v1/bots/me/roles"},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.path, func(t *testing.T) {
+			t.Parallel()
+			if got := rateLimitGroup(tc.method, tc.path); got != "BotRoleOps" {
+				t.Fatalf("group=%q, want BotRoleOps for %s %s (BOT-C)", got, tc.method, tc.path)
+			}
+		})
+	}
+}
+
+func TestDefaultRateLimitRules_botRoleOps(t *testing.T) {
+	t.Parallel()
+	rule, ok := defaultRateLimitRules()["BotRoleOps"]
+	if !ok {
+		t.Fatal("missing BotRoleOps rule (BOT-C)")
+	}
+	if rule.Limit != 100 || rule.Window != time.Minute {
+		t.Fatalf("BotRoleOps rule = %#v, want limit 100 window 1m", rule)
+	}
+}
+
+func TestGateway_botRoleOpsRateLimit_returns429(t *testing.T) {
+	t.Parallel()
+	limiter := newSlidingWindowLimiter(map[string]rateLimitRule{
+		"BotRoleOps": {Limit: 2, Window: time.Minute},
+	})
+	tc := newTranscoder(&grpcClients{bot: &fakeBotClient{}})
+	h := newGatewayForContract(t, gatewayTestOptions{
+		rateLimiter: limiter,
+		transcoder:  tc,
+	})
+	headers := map[string]string{"Authorization": "Bot vb_role_ops_test"}
+	target := "/api/v1/bots/me/spaces/space-1/roles/assign"
+	body := `{"profile_id":"p-1","role_id":"r-1"}`
+
+	for i := 0; i < 2; i++ {
+		rec := performRequest(h, http.MethodPost, target, body, headers)
+		if rec.Code != http.StatusNoContent && rec.Code != http.StatusOK {
+			t.Fatalf("request %d: status=%d body=%q", i+1, rec.Code, rec.Body.String())
+		}
+	}
+	rec := performRequest(h, http.MethodPost, target, body, headers)
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("third role op: status=%d, want 429 (BOT-C BotRoleOps 100/min)", rec.Code)
+	}
+	if got := rec.Header().Get("Retry-After"); got == "" {
+		t.Fatal("missing Retry-After header on BotRoleOps 429")
+	}
+}

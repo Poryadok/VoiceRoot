@@ -18,6 +18,7 @@ import (
 	botv1 "voice.app/voice/bot/v1"
 	chatv1 "voice.app/voice/chat/v1"
 	commonv1 "voice.app/voice/common/v1"
+	messagingv1 "voice.app/voice/messaging/v1"
 	rolev1 "voice.app/voice/role/v1"
 	spacev1 "voice.app/voice/space/v1"
 )
@@ -217,7 +218,78 @@ func (s *BotGRPC) GetChatMessagesForBot(ctx context.Context, req *botv1.GetChatM
 	if !allowed {
 		return nil, status.Error(codes.PermissionDenied, "bot not enabled in chat")
 	}
-	return nil, status.Error(codes.Unimplemented, "history fetch not implemented in v1")
+	if s.Messaging == nil {
+		return nil, status.Error(codes.Unimplemented, "history fetch not implemented in v1")
+	}
+	msgReq := &messagingv1.GetMessagesRequest{Chat: req.GetChat()}
+	if c := strings.TrimSpace(req.GetCursor()); c != "" {
+		msgReq.Page = &commonv1.CursorPageRequest{Cursor: c}
+	}
+	msgCtx := s.botActorCtx(ctx, botRow)
+	resp, err := s.Messaging.GetMessages(msgCtx, msgReq)
+	if err != nil {
+		return nil, err
+	}
+	var ids []string
+	for _, m := range resp.GetMessageList().GetMessages() {
+		if m.GetId() != "" {
+			ids = append(ids, m.GetId())
+		}
+	}
+	out := &botv1.GetChatMessagesForBotResponse{MessageIds: ids}
+	if next := resp.GetMessageList().GetNextCursor(); next != "" {
+		out.NextCursor = &next
+	}
+	return out, nil
+}
+
+func (s *BotGRPC) CreateBotRole(ctx context.Context, req *botv1.CreateBotRoleRequest) (*botv1.CreateBotRoleResponse, error) {
+	botRow, err := s.botFromToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.requireScope(botRow, store.PrivilegedScopeManageRoles); err != nil {
+		return nil, err
+	}
+	if s.Role == nil {
+		return nil, status.Error(codes.FailedPrecondition, "role client not configured")
+	}
+	spaceID, err := parseUUID("space_id", req.GetSpaceId())
+	if err != nil {
+		return nil, err
+	}
+	name := strings.TrimSpace(req.GetName())
+	if name == "" {
+		return nil, status.Error(codes.InvalidArgument, "name required")
+	}
+	roleCtx := s.botActorCtx(ctx, botRow)
+	createResp, err := s.Role.CreateRole(roleCtx, &rolev1.CreateRoleRequest{
+		SpaceId:         spaceID.String(),
+		Name:            name,
+		PermissionsMask: req.GetPermissionsMask(),
+		Position:        req.GetPosition(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &botv1.CreateBotRoleResponse{Role: createResp.GetRole()}, nil
+}
+
+func deferredTTL() time.Duration {
+	if v := strings.TrimSpace(os.Getenv("BOT_DEFERRED_TTL")); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			return d
+		}
+	}
+	return 24 * time.Hour
+}
+
+// RunDeferredTTLSweeper abandons deferred interaction rows older than BOT_DEFERRED_TTL.
+func (s *BotGRPC) RunDeferredTTLSweeper(ctx context.Context) error {
+	if s == nil || s.Store == nil {
+		return nil
+	}
+	return s.Store.AbandonStaleDeferred(ctx, deferredTTL())
 }
 
 // RehydrateDeferred restores deferred interaction tokens into the hub after restart.

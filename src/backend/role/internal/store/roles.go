@@ -326,13 +326,22 @@ ON CONFLICT (voice_room_id, role_id) DO UPDATE SET allow = EXCLUDED.allow, deny 
 }
 
 // CreateCustomRole inserts a non-system role.
-func (s *RoleStore) CreateCustomRole(ctx context.Context, spaceID uuid.UUID, name string, permissionsMask uint64, position int32) (*RoleRow, error) {
+func (s *RoleStore) CreateCustomRole(ctx context.Context, spaceID uuid.UUID, name string, permissionsMask uint64, position int32, createdByProfileID *uuid.UUID) (*RoleRow, error) {
 	var id uuid.UUID
-	err := s.Pool.QueryRow(ctx, `
+	var err error
+	if createdByProfileID != nil && *createdByProfileID != uuid.Nil {
+		err = s.Pool.QueryRow(ctx, `
+INSERT INTO roles (space_id, name, is_system, position, permissions, created_by_profile_id)
+VALUES ($1, $2, false, $3, $4, $5)
+RETURNING id
+`, spaceID, name, position, int64(permissionsMask), *createdByProfileID).Scan(&id)
+	} else {
+		err = s.Pool.QueryRow(ctx, `
 INSERT INTO roles (space_id, name, is_system, position, permissions)
 VALUES ($1, $2, false, $3, $4)
 RETURNING id
 `, spaceID, name, position, int64(permissionsMask)).Scan(&id)
+	}
 	if err != nil {
 		return nil, err
 	}

@@ -5,6 +5,7 @@ package voice.bot.v1;
 import "google/protobuf/timestamp.proto";
 import "voice/chat/v1/chat.proto";
 import "voice/messaging/v1/messaging.proto";
+import "voice/role/v1/role.proto";
 
 option go_package = "voice.app/voice/bot/v1;botv1";
 
@@ -66,6 +67,8 @@ service BotService {
   rpc ListSpaceMembersForBot(ListSpaceMembersForBotRequest) returns (ListSpaceMembersForBotResponse);
   rpc CreateBotChat(CreateBotChatRequest) returns (CreateBotChatResponse);
   rpc GetChatMessagesForBot(GetChatMessagesForBotRequest) returns (GetChatMessagesForBotResponse);
+  rpc CreateBotRole(CreateBotRoleRequest) returns (CreateBotRoleResponse);
+  rpc CompleteAutocomplete(CompleteAutocompleteRequest) returns (CompleteAutocompleteResponse);
 }
 
 message Bot {
@@ -438,3 +441,21 @@ message GetChatMessagesForBotResponse {
   repeated string message_ids = 1;
   optional string next_cursor = 2;
 }
+
+message CreateBotRoleRequest {
+  string space_id = 1;
+  string name = 2;
+  uint64 permissions_mask = 3;
+  int32 position = 4;
+}
+
+message CreateBotRoleResponse {
+  voice.role.v1.Role role = 1;
+}
+
+message CompleteAutocompleteRequest {
+  string request_id = 1;
+  repeated AutocompleteChoice choices = 2;
+}
+
+message CompleteAutocompleteResponse {}

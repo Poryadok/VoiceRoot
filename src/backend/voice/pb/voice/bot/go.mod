@@ -7,8 +7,11 @@ require (
 	google.golang.org/protobuf v1.36.5
 	voice.app/voice/chat v0.0.0
 	voice.app/voice/messaging v0.0.0
+	voice.app/voice/role v0.0.0
 )
 
 replace voice.app/voice/chat => ../../../../chat/pb/voice/chat
 
 replace voice.app/voice/messaging => ../../../../messaging/pb/voice/messaging
+
+replace voice.app/voice/role => ../../../../role/pb/voice/role

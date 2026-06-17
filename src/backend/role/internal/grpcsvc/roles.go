@@ -110,7 +110,7 @@ func (s *RoleGRPC) CreateRole(ctx context.Context, req *rolev1.CreateRoleRequest
 	if name == "" {
 		return nil, status.Error(codes.InvalidArgument, "name is required")
 	}
-	row, err := s.Store.CreateCustomRole(ctx, spaceID, name, req.GetPermissionsMask(), req.GetPosition())
+	row, err := s.Store.CreateCustomRole(ctx, spaceID, name, req.GetPermissionsMask(), req.GetPosition(), &actor)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}

@@ -75,6 +75,28 @@ func (s *BotGRPC) AutocompleteSlashOption(ctx context.Context, req *botv1.Autoco
 		return nil, status.Error(codes.InvalidArgument, "option is not autocomplete")
 	}
 	if botRow.IsPollingMode || botRow.WebhookURL == nil || strings.TrimSpace(*botRow.WebhookURL) == "" {
+		cacheKey := dispatch.AutocompleteCacheKey(
+			botID.String(), chatID.String(), cmdName, optionName, strings.TrimSpace(req.GetFocusedValue()),
+		)
+		if choices, ok := s.Hub.GetAutocompleteChoices(cacheKey); ok {
+			return autocompleteChoicesToProto(choices), nil
+		}
+		requestID := s.Hub.NextAutocompleteRequestID()
+		s.Hub.RegisterAutocomplete(requestID, cacheKey)
+		var options map[string]any
+		_ = json.Unmarshal([]byte(req.GetOptionsJson()), &options)
+		payload := map[string]any{
+			"type":               "autocomplete",
+			"request_id":         requestID,
+			"command_name":       cmdName,
+			"option_name":        optionName,
+			"focused_value":      req.GetFocusedValue(),
+			"options":            options,
+			"chat_id":            chatID.String(),
+			"chat_type":          req.GetChat().GetType().String(),
+			"invoker_profile_id": invoker.String(),
+		}
+		_, _ = s.Store.EnqueueEvent(ctx, botID, "autocomplete", payload, "")
 		return &botv1.AutocompleteSlashOptionResponse{}, nil
 	}
 	var options map[string]any
@@ -101,4 +123,36 @@ func (s *BotGRPC) AutocompleteSlashOption(ctx context.Context, req *botv1.Autoco
 		out = append(out, &botv1.AutocompleteChoice{Name: ch.Name, Value: ch.Value})
 	}
 	return &botv1.AutocompleteSlashOptionResponse{Choices: out}, nil
+}
+
+func (s *BotGRPC) CompleteAutocomplete(ctx context.Context, req *botv1.CompleteAutocompleteRequest) (*botv1.CompleteAutocompleteResponse, error) {
+	if _, err := s.botFromToken(ctx); err != nil {
+		return nil, err
+	}
+	requestID := strings.TrimSpace(req.GetRequestId())
+	if requestID == "" {
+		return nil, status.Error(codes.InvalidArgument, "request_id required")
+	}
+	choices := make([]dispatch.AutocompleteChoice, 0, len(req.GetChoices()))
+	for _, ch := range req.GetChoices() {
+		choices = append(choices, dispatch.AutocompleteChoice{
+			Name:  strings.TrimSpace(ch.GetName()),
+			Value: strings.TrimSpace(ch.GetValue()),
+		})
+	}
+	if len(choices) > 25 {
+		choices = choices[:25]
+	}
+	if s.Hub == nil || !s.Hub.CompleteAutocomplete(requestID, choices) {
+		return nil, status.Error(codes.NotFound, "unknown autocomplete request")
+	}
+	return &botv1.CompleteAutocompleteResponse{}, nil
+}
+
+func autocompleteChoicesToProto(choices []dispatch.AutocompleteChoice) *botv1.AutocompleteSlashOptionResponse {
+	out := make([]*botv1.AutocompleteChoice, 0, len(choices))
+	for _, ch := range choices {
+		out = append(out, &botv1.AutocompleteChoice{Name: ch.Name, Value: ch.Value})
+	}
+	return &botv1.AutocompleteSlashOptionResponse{Choices: out}
 }

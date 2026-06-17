@@ -57,6 +57,12 @@ func (f *fakeRoleClient) RevokeRole(_ context.Context, _ *rolev1.RevokeRoleReque
 	return &rolev1.RevokeRoleResponse{}, nil
 }
 
+func (f *fakeRoleClient) CreateRole(_ context.Context, req *rolev1.CreateRoleRequest) (*rolev1.CreateRoleResponse, error) {
+	return &rolev1.CreateRoleResponse{
+		Role: &rolev1.Role{Id: uuid.NewString(), Name: req.GetName()},
+	}, nil
+}
+
 type fakeSpaceClient struct {
 	spacev1.UnimplementedSpaceServiceServer
 	removeCalls int

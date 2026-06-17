@@ -55,6 +55,7 @@ var allowedScopes = map[string]struct{}{
 	"MEMBER_ASSIGN_ROLES":       {},
 	"TEXT_CHAT_CREATE_IN_SPACE": {},
 	"TEXT_CHAT_READ_HISTORY":    {},
+	"SPACE_MANAGE_ROLES":        {},
 }
 
 // ParseYAML validates and normalizes manifest YAML.

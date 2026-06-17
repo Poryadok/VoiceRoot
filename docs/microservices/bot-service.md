@@ -17,7 +17,7 @@
 - HMAC-SHA256 подпись webhook запросов
 - Bot presence (`bot_presence`, `TouchPresence`); `online` в `ListSlashCommandsForChat` и `ListInstalledBots`
 - Scopes: `TEXT_CHAT_SEND_MESSAGES`, `DM_SEND`, `SPACE_VIEW_MEMBER_LIST`, `MEMBER_ASSIGN_ROLES`, `TEXT_CHAT_CREATE_IN_SPACE`, `TEXT_CHAT_READ_HISTORY` (privileged); строки совпадают с [role-service.md](role-service.md)
-- Rate limits (целевые): 5000 API req/min, 10 созданий текстовых чатов в спейсе / день на бота — см. [features/bots.md](../features/bots.md); enforcement — открытый пункт BOT-C
+- Rate limits: 5000 API req/min и 100 role ops/min — Gateway REST (`BotAPI`, `BotRoleOps`, `429` + `Retry-After`); 10 созданий текстовых чатов / день — Bot Service (`bot_daily_chat_creates`, `CreateBotChat`); прямой gRPC обходит Gateway limiter — см. [api-gateway.md](api-gateway.md)
 - Bot token: перманентный, ручной отзыв (`RegenerateToken`)
 - Bot DM: только в ответ на сообщение пользователя (v1)
 - Ephemeral и deferred responses; hub deferred tokens (`MarkEventDeferred`, `RehydrateDeferred`)
@@ -76,13 +76,15 @@ service BotService {
   rpc CompleteInteraction(CompleteInteractionRequest) returns (CompleteInteractionResponse);
   rpc AutocompleteSlashOption(AutocompleteSlashOptionRequest) returns (AutocompleteSlashOptionResponse);
 
-  // Presence & scopes runtime (gRPC-only; REST — см. TODO BOT-C)
+  // Presence & scopes runtime (REST via Gateway — api-gateway.md §Фаза 16)
   rpc TouchPresence(TouchPresenceRequest) returns (TouchPresenceResponse);
   rpc AssignBotRole(AssignBotRoleRequest) returns (AssignBotRoleResponse);
   rpc RevokeBotRole(RevokeBotRoleRequest) returns (RevokeBotRoleResponse);
   rpc ListSpaceMembersForBot(ListSpaceMembersForBotRequest) returns (ListSpaceMembersForBotResponse);
   rpc CreateBotChat(CreateBotChatRequest) returns (CreateBotChatResponse);
   rpc GetChatMessagesForBot(GetChatMessagesForBotRequest) returns (GetChatMessagesForBotResponse);
+  rpc CreateBotRole(CreateBotRoleRequest) returns (CreateBotRoleResponse);
+  rpc CompleteAutocomplete(CompleteAutocompleteRequest) returns (CompleteAutocompleteResponse);
 }
 ```
 
@@ -107,6 +109,13 @@ service BotService {
 
 - Таблица `bot_presence (bot_id, last_seen_at)`; обновляется `TouchPresence`, poll loop и успешный webhook touch.
 - `ListSlashCommandsForChat` и `ListInstalledBots` выставляют `online=false`, если heartbeat устарел.
+- Публичный heartbeat: `POST /api/v1/bots/me/presence` (Gateway → `TouchPresence`).
+
+### Deferred interactions
+
+- `DeferResponse` / webhook `deferred: true` → `bot_event_log.delivery_status = deferred`; hub держит token до `CompleteInteraction` / `SendBotMessage` follow-up.
+- `RehydrateDeferred` при старте восстанавливает tokens в hub из БД.
+- `RunDeferredTTLSweeper` (interval `BOT_DEFERRED_SWEEP_INTERVAL`, default 15m) помечает stale deferred как `abandoned` после `BOT_DEFERRED_TTL` (default 24h).
 
 ## Модель данных
 

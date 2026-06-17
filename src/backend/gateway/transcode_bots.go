@@ -98,6 +98,128 @@ func (t *transcoder) serveBots(w http.ResponseWriter, r *http.Request, rest stri
 			}
 			writeProtoJSON(w, http.StatusOK, resp)
 			return true
+
+		case r.Method == http.MethodPost && meRest == "presence":
+			_, err := t.clients.bot.TouchPresence(ctx, &botv1.TouchPresenceRequest{})
+			if err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return true
+
+		case r.Method == http.MethodGet && strings.HasPrefix(meRest, "spaces/") && strings.HasSuffix(meRest, "/members"):
+			spaceID := strings.TrimSuffix(strings.TrimPrefix(meRest, "spaces/"), "/members")
+			spaceID = strings.Trim(spaceID, "/")
+			cursor := queryFirst(r, "cursor")
+			req := &botv1.ListSpaceMembersForBotRequest{SpaceId: spaceID}
+			if cursor != "" {
+				req.Cursor = &cursor
+			}
+			resp, err := t.clients.bot.ListSpaceMembersForBot(ctx, req)
+			if err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			writeProtoJSON(w, http.StatusOK, resp)
+			return true
+
+		case r.Method == http.MethodPost && strings.HasPrefix(meRest, "spaces/") && strings.HasSuffix(meRest, "/roles/assign"):
+			spaceID := strings.TrimSuffix(strings.TrimPrefix(meRest, "spaces/"), "/roles/assign")
+			spaceID = strings.Trim(spaceID, "/")
+			req := &botv1.AssignBotRoleRequest{SpaceId: spaceID}
+			if err := readProtoJSON(r, req); err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			req.SpaceId = spaceID
+			_, err := t.clients.bot.AssignBotRole(ctx, req)
+			if err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return true
+
+		case r.Method == http.MethodPost && strings.HasPrefix(meRest, "spaces/") && strings.HasSuffix(meRest, "/roles/revoke"):
+			spaceID := strings.TrimSuffix(strings.TrimPrefix(meRest, "spaces/"), "/roles/revoke")
+			spaceID = strings.Trim(spaceID, "/")
+			req := &botv1.RevokeBotRoleRequest{SpaceId: spaceID}
+			if err := readProtoJSON(r, req); err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			req.SpaceId = spaceID
+			_, err := t.clients.bot.RevokeBotRole(ctx, req)
+			if err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return true
+
+		case r.Method == http.MethodPost && meRest == "chats":
+			req := &botv1.CreateBotChatRequest{}
+			if err := readProtoJSON(r, req); err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			resp, err := t.clients.bot.CreateBotChat(ctx, req)
+			if err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			writeProtoJSON(w, http.StatusOK, resp)
+			return true
+
+		case r.Method == http.MethodGet && strings.HasPrefix(meRest, "chats/") && strings.HasSuffix(meRest, "/messages"):
+			chatPath := strings.TrimSuffix(strings.TrimPrefix(meRest, "chats/"), "/messages")
+			chatPath = strings.Trim(chatPath, "/")
+			chatType := queryFirst(r, "chat_type")
+			if chatType == "" {
+				chatType = "CHAT_TYPE_CHANNEL"
+			}
+			ref := &chatv1.ChatRef{Id: chatPath, Type: chatTypePtr(chatTypeToEnum(chatType))}
+			cursor := queryFirst(r, "cursor")
+			req := &botv1.GetChatMessagesForBotRequest{Chat: ref}
+			if cursor != "" {
+				req.Cursor = &cursor
+			}
+			resp, err := t.clients.bot.GetChatMessagesForBot(ctx, req)
+			if err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			writeProtoJSON(w, http.StatusOK, resp)
+			return true
+
+		case r.Method == http.MethodPost && meRest == "roles":
+			req := &botv1.CreateBotRoleRequest{}
+			if err := readProtoJSON(r, req); err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			resp, err := t.clients.bot.CreateBotRole(ctx, req)
+			if err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			writeProtoJSON(w, http.StatusOK, resp)
+			return true
+
+		case r.Method == http.MethodPost && meRest == "autocomplete/complete":
+			req := &botv1.CompleteAutocompleteRequest{}
+			if err := readProtoJSON(r, req); err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			_, err := t.clients.bot.CompleteAutocomplete(ctx, req)
+			if err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return true
 		}
 		return false
 	}

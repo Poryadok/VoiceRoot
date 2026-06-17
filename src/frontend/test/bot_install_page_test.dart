@@ -76,4 +76,95 @@ void main() {
     expect(find.text(l10n.botInstallWhitelistHeading), findsOneWidget);
     expect(find.byKey(const Key('bot_install_confirm')), findsOneWidget);
   });
+
+  testWidgets(
+    'BotInstallPage requires privileged ack for SPACE_MANAGE_ROLES (BOT-C)',
+    (tester) async {
+      const privilegedBot = VoiceBotSummary(
+        id: 'bot-roles',
+        name: 'RolesBot',
+        slug: 'rolesbot',
+        description: 'Manages roles',
+        scopesJson: '["TEXT_CHAT_SEND_MESSAGES","SPACE_MANAGE_ROLES"]',
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ...voiceThemeTestOverrides(),
+            profileAccentStorageProvider.overrideWithValue(
+              testProfileAccentStorage,
+            ),
+            authorizationHeaderProvider.overrideWithValue(auth),
+            botBySlugProvider('rolesbot').overrideWith(
+              (ref) async => privilegedBot,
+            ),
+            mySpacesProvider.overrideWith(
+              (ref) async => const SpaceListData(
+                spaces: [
+                  VoiceSpace(
+                    id: 'space-1',
+                    name: 'Test Space',
+                    visibility: 'private',
+                    ownerProfileId: 'owner-1',
+                  ),
+                ],
+              ),
+            ),
+            spaceTreeProvider('space-1').overrideWith(
+              (ref) async => const SpaceTreeData(
+                categories: [],
+                voiceRooms: [],
+                nodes: [
+                  SpaceTreeNodeData(
+                    id: 'node-1',
+                    spaceId: 'space-1',
+                    kind: 'text_chat',
+                    sortOrder: 0,
+                    displayName: 'general',
+                    linkedChatId: 'chat-1',
+                    chatType: 'CHAT_TYPE_CHANNEL',
+                  ),
+                ],
+              ),
+            ),
+          ],
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            locale: const Locale('en'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const BotInstallPage(slug: 'rolesbot'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final l10n = AppLocalizationsEn();
+      expect(
+        find.text('• Create and manage roles below the bot (privileged)'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const Key('bot_install_space_picker')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Test Space').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text(l10n.spaceBotsPrivilegedAck), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('bot_install_chat_chat-1')));
+      await tester.pumpAndSettle();
+
+      final installButton = tester.widget<FilledButton>(
+        find.byKey(const Key('bot_install_confirm')),
+      );
+      expect(
+        installButton.onPressed,
+        isNull,
+        reason:
+            'SPACE_MANAGE_ROLES install must stay disabled until acknowledged (BOT-C)',
+      );
+    },
+  );
 }

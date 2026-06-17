@@ -27,6 +27,7 @@ import (
 
 	botv1 "voice.app/voice/bot/v1"
 	chatv1 "voice.app/voice/chat/v1"
+	messagingv1 "voice.app/voice/messaging/v1"
 )
 
 func migrationSQL(t *testing.T) string {
@@ -221,6 +222,127 @@ func authProfile(ctx context.Context) (uuid.UUID, bool) {
 	}
 	id, err := uuid.Parse(vals[0])
 	return id, err == nil
+}
+
+func TestEditBotMessage_integration_messagingMockOwnership(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	msg := &fakeMessagingClient{}
+	client, st, cleanup := startBotGRPCWithDeps(t, nil, msg)
+	defer cleanup()
+
+	ctx := withAccount(context.Background(), uuid.New(), uuid.New())
+	reg, err := client.RegisterBot(ctx, &botv1.RegisterBotRequest{
+		Name: "EditBot", ScopesJson: `["TEXT_CHAT_SEND_MESSAGES"]`,
+	})
+	require.NoError(t, err)
+	botID := reg.GetBot().GetId()
+	botToken := reg.GetTokenResponse().GetToken()
+
+	manifestYAML := `name: EditBot
+scopes: [TEXT_CHAT_SEND_MESSAGES]
+commands:
+  - name: ping
+    description: ping
+`
+	_, err = client.ApplyManifest(ctx, &botv1.ApplyManifestRequest{BotId: botID, ManifestYaml: manifestYAML})
+	require.NoError(t, err)
+
+	chatID := uuid.New()
+	botUUID, _ := uuid.Parse(botID)
+	profile, _ := authProfile(ctx)
+	_, err = st.InstallInSpace(ctx, botUUID, uuid.New(), profile, []uuid.UUID{chatID})
+	require.NoError(t, err)
+
+	botCtx := withBotToken(context.Background(), botToken)
+	chatType := chatv1.ChatType_CHAT_TYPE_GROUP
+	sendResp, err := client.SendBotMessage(botCtx, &botv1.SendBotMessageRequest{
+		Chat:    &chatv1.ChatRef{Id: chatID.String(), Type: &chatType},
+		Content: "original",
+	})
+	require.NoError(t, err)
+	messageID := sendResp.GetMessage().GetId()
+	require.NotEmpty(t, messageID)
+
+	editResp, err := client.EditBotMessage(botCtx, &botv1.EditBotMessageRequest{
+		MessageId: messageID,
+		Content:   "edited by bot",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "edited by bot", editResp.GetMessage().GetContent())
+	require.Equal(t, 1, msg.editCalls)
+
+	msg.editErr = status.Error(codes.PermissionDenied, "not message owner")
+	_, err = client.EditBotMessage(botCtx, &botv1.EditBotMessageRequest{
+		MessageId: messageID,
+		Content:   "should fail",
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+
+	msg.editErr = status.Error(codes.NotFound, "message not found")
+	_, err = client.EditBotMessage(botCtx, &botv1.EditBotMessageRequest{
+		MessageId: uuid.NewString(),
+		Content:   "missing",
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.NotFound, status.Code(err))
+
+	badCtx := withBotToken(context.Background(), "vb_invalid")
+	_, err = client.EditBotMessage(badCtx, &botv1.EditBotMessageRequest{
+		MessageId: messageID,
+		Content:   "nope",
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+}
+
+func TestEditBotMessage_integration_passesBotActorToMessaging(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	msg := &fakeMessagingClientCapturingActor{}
+	client, st, cleanup := startBotGRPCWithDeps(t, nil, msg)
+	defer cleanup()
+
+	ctx := withAccount(context.Background(), uuid.New(), uuid.New())
+	reg, err := client.RegisterBot(ctx, &botv1.RegisterBotRequest{
+		Name: "ActorBot", ScopesJson: `["TEXT_CHAT_SEND_MESSAGES"]`,
+	})
+	require.NoError(t, err)
+	botToken := reg.GetTokenResponse().GetToken()
+
+	botUUID, _ := uuid.Parse(reg.GetBot().GetId())
+	row, err := st.GetBotByID(context.Background(), botUUID)
+	require.NoError(t, err)
+
+	botCtx := withBotToken(context.Background(), botToken)
+	_, err = client.EditBotMessage(botCtx, &botv1.EditBotMessageRequest{
+		MessageId: uuid.NewString(),
+		Content:   "check actor",
+	})
+	require.NoError(t, err)
+	require.Equal(t, row.ActorProfileID.String(), msg.lastProfileID)
+	require.Equal(t, row.OwnerAccountID.String(), msg.lastUserID)
+}
+
+type fakeMessagingClientCapturingActor struct {
+	fakeMessagingClient
+	lastProfileID string
+	lastUserID    string
+}
+
+func (f *fakeMessagingClientCapturingActor) EditMessage(ctx context.Context, req *messagingv1.EditMessageRequest) (*messagingv1.EditMessageResponse, error) {
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		if vals := md.Get("x-voice-profile-id"); len(vals) > 0 {
+			f.lastProfileID = vals[0]
+		}
+		if vals := md.Get("x-voice-user-id"); len(vals) > 0 {
+			f.lastUserID = vals[0]
+		}
+	}
+	return f.fakeMessagingClient.EditMessage(ctx, req)
 }
 
 func installBotInSpaceWithPresence(

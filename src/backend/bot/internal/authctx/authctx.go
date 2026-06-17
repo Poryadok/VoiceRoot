@@ -22,15 +22,17 @@ func ProfileID(ctx context.Context) (uuid.UUID, bool) {
 }
 
 func BotToken(ctx context.Context) (string, bool) {
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return "", false
+	for _, from := range []func(context.Context) (metadata.MD, bool){
+		metadata.FromIncomingContext,
+		metadata.FromOutgoingContext,
+	} {
+		if md, ok := from(ctx); ok {
+			if vals := md.Get(HeaderBotToken); len(vals) > 0 && vals[0] != "" {
+				return vals[0], true
+			}
+		}
 	}
-	vals := md.Get(HeaderBotToken)
-	if len(vals) == 0 || vals[0] == "" {
-		return "", false
-	}
-	return vals[0], true
+	return "", false
 }
 
 func parseUUIDHeader(ctx context.Context, key string) (uuid.UUID, bool) {

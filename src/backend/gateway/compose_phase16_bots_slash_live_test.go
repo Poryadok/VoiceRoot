@@ -250,6 +250,135 @@ func TestComposePhase16BotsPrivilegedInstall_live(t *testing.T) {
 		"install without acknowledge_privileged_scopes must fail, body=%s", string(body))
 }
 
+// TestComposePhase16BotsBotCRoutes_live exercises BOT-C bot-token REST routes:
+// presence heartbeat, space member list, and create chat in space.
+func TestComposePhase16BotsBotCRoutes_live(t *testing.T) {
+	if !liveComposeEnabled() {
+		t.Skip("set VOICE_RUN_LIVE_COMPOSE=true to run against local compose")
+	}
+	clearLiveComposeAuthRateLimit(t)
+
+	client := &http.Client{Timeout: 45 * time.Second}
+	base := liveGatewayBaseURL()
+	n := time.Now().UnixNano()
+
+	sess := registerComposeUser(t, client, base, formatComposeEmail("p16-botc", n), "VoiceQaTest1!")
+	spaceID := createComposeSpace(t, client, base, sess.AccessToken, fmt.Sprintf("Bots BOT-C %d", n), "phase16")
+	chatID := createComposeGroup(t, client, base, sess.AccessToken, fmt.Sprintf("bots-botc-%d", n))
+	ensureComposeGroupReadyForBot(t, client, base, sess.AccessToken, chatID, n)
+
+	botID, botToken := registerComposeBotWithScopes(t, client, base, sess.AccessToken,
+		fmt.Sprintf("BotCRoutes-%d", n),
+		`["TEXT_CHAT_SEND_MESSAGES","SPACE_VIEW_MEMBER_LIST","TEXT_CHAT_CREATE_IN_SPACE"]`)
+	applyComposeBotManifestPollingScopes(t, client, base, sess.AccessToken, botID,
+		"TEXT_CHAT_SEND_MESSAGES, SPACE_VIEW_MEMBER_LIST, TEXT_CHAT_CREATE_IN_SPACE")
+	installComposeBot(t, client, base, sess.AccessToken, botID, spaceID, chatID)
+
+	auth := "Bot " + botToken
+
+	presenceReq, err := http.NewRequest(http.MethodPost, base+"/api/v1/bots/me/presence", http.NoBody)
+	require.NoError(t, err)
+	presenceReq.Header.Set("Authorization", auth)
+	presenceResp, err := client.Do(presenceReq)
+	require.NoError(t, err)
+	presenceBody, _ := io.ReadAll(presenceResp.Body)
+	presenceResp.Body.Close()
+	require.Equal(t, http.StatusNoContent, presenceResp.StatusCode,
+		"POST /api/v1/bots/me/presence body=%s", string(presenceBody))
+
+	commands := listComposeSlashCommands(t, client, base, sess.AccessToken, chatID)
+	require.NotEmpty(t, commands, "slash commands must be listed after install")
+	require.True(t, commands[0].Online,
+		"bot must report online after presence heartbeat (BOT-C)")
+
+	membersReq, err := http.NewRequest(http.MethodGet,
+		base+"/api/v1/bots/me/spaces/"+spaceID+"/members", nil)
+	require.NoError(t, err)
+	membersReq.Header.Set("Authorization", auth)
+	membersResp, err := client.Do(membersReq)
+	require.NoError(t, err)
+	membersBody, _ := io.ReadAll(membersResp.Body)
+	membersResp.Body.Close()
+	require.Equal(t, http.StatusOK, membersResp.StatusCode,
+		"GET /api/v1/bots/me/spaces/{space_id}/members body=%s", string(membersBody))
+	var membersParsed struct {
+		ProfileIds []string `json:"profile_ids"`
+	}
+	require.NoError(t, json.Unmarshal(membersBody, &membersParsed))
+	require.Contains(t, membersParsed.ProfileIds, sess.ProfileID,
+		"space member list must include space owner profile (BOT-C)")
+
+	createChatPayload, _ := json.Marshal(map[string]any{
+		"space_id":  spaceID,
+		"name":      fmt.Sprintf("bot-created-%d", n),
+		"chat_type": "channel",
+	})
+	createChatReq, err := http.NewRequest(http.MethodPost, base+"/api/v1/bots/me/chats", bytes.NewReader(createChatPayload))
+	require.NoError(t, err)
+	createChatReq.Header.Set("Authorization", auth)
+	createChatReq.Header.Set("Content-Type", "application/json")
+	createChatResp, err := client.Do(createChatReq)
+	require.NoError(t, err)
+	createChatBody, _ := io.ReadAll(createChatResp.Body)
+	createChatResp.Body.Close()
+	require.Equal(t, http.StatusOK, createChatResp.StatusCode,
+		"POST /api/v1/bots/me/chats body=%s", string(createChatBody))
+	var createChatParsed struct {
+		Chat struct {
+			ID string `json:"id"`
+		} `json:"chat"`
+	}
+	require.NoError(t, json.Unmarshal(createChatBody, &createChatParsed))
+	require.NotEmpty(t, createChatParsed.Chat.ID, "create chat must return linked chat id (BOT-C)")
+}
+
+func registerComposeBotWithScopes(t *testing.T, client *http.Client, base, token, name, scopesJSON string) (botID, botToken string) {
+	t.Helper()
+	payload, _ := json.Marshal(map[string]string{
+		"name":        name,
+		"description": "BOT-C routes bot",
+		"scopes_json": scopesJSON,
+	})
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/bots", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
+	var parsed struct {
+		Bot struct {
+			ID string `json:"id"`
+		} `json:"bot"`
+		TokenResponse struct {
+			Token string `json:"token"`
+		} `json:"tokenResponse"`
+	}
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	botID = parsed.Bot.ID
+	require.NotEmpty(t, botID)
+	if tok := strings.TrimSpace(parsed.TokenResponse.Token); tok != "" {
+		return botID, tok
+	}
+	regenReq, err := http.NewRequest(http.MethodPost, base+"/api/v1/bots/"+botID+"/token/regenerate", nil)
+	require.NoError(t, err)
+	regenReq.Header.Set("Authorization", "Bearer "+token)
+	regenResp, err := client.Do(regenReq)
+	require.NoError(t, err)
+	defer regenResp.Body.Close()
+	regenBody, _ := io.ReadAll(regenResp.Body)
+	require.Equal(t, http.StatusOK, regenResp.StatusCode, string(regenBody))
+	var tokenParsed struct {
+		TokenResponse struct {
+			Token string `json:"token"`
+		} `json:"token_response"`
+	}
+	require.NoError(t, json.Unmarshal(regenBody, &tokenParsed))
+	return botID, tokenParsed.TokenResponse.Token
+}
+
 func registerComposePrivilegedBot(t *testing.T, client *http.Client, base, token, name string) string {
 	t.Helper()
 	payload, _ := json.Marshal(map[string]string{
@@ -353,13 +482,18 @@ func registerComposeBot(t *testing.T, client *http.Client, base, token, name str
 
 func applyComposeBotManifestPolling(t *testing.T, client *http.Client, base, token, botID string) {
 	t.Helper()
+	applyComposeBotManifestPollingScopes(t, client, base, token, botID, "TEXT_CHAT_SEND_MESSAGES")
+}
+
+func applyComposeBotManifestPollingScopes(t *testing.T, client *http.Client, base, token, botID, scopesYAML string) {
+	t.Helper()
 	manifest := fmt.Sprintf(`name: PingBot
 description: pong
-scopes: [TEXT_CHAT_SEND_MESSAGES]
+scopes: [%s]
 commands:
   - name: ping
     description: ping
-`)
+`, scopesYAML)
 	payload, _ := json.Marshal(map[string]string{"manifest_yaml": manifest})
 	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/bots/"+botID+"/manifest", bytes.NewReader(payload))
 	require.NoError(t, err)

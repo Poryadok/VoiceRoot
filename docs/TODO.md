@@ -55,23 +55,31 @@ _Закрыто в batch Phase 15 E2E follow-ups (2026-06)._
 
 ### Backend и Gateway
 
-- [ ] **Остальные scopes runtime (P2)** — `DM_SEND`, `TEXT_CHAT_CREATE_IN_SPACE`, `SPACE_VIEW_MEMBER_LIST`: gRPC есть; Gateway REST + slash pickers — нет.
-- [ ] **Gateway REST для scope RPC** — transcoding: `TouchPresence`, `AssignBotRole`/`RevokeBotRole`, `ListSpaceMembersForBot`, `CreateBotChat`, `GetChatMessagesForBot`.
-- [ ] **`GetChatMessagesForBot`** — `Unimplemented`; Messaging read + Gateway route.
-- [ ] **Bot `CreateRole` API** — нет RPC для бота создавать роли; uninstall чистит только роли с `created_by_profile_id` (Role `000007`).
-- [ ] **Deferred TTL** — expiry/abandon для `delivery_status=deferred` в `bot_event_log`.
-- [ ] **Rate limits** — 5000 req/min и 100 role ops/min + `429 Retry-After` ([bots.md](features/bots.md) §Rate Limiting).
-- [ ] **REST heartbeat** — `POST /api/v1/bots/me/presence` или документировать gRPC-only.
-- [ ] **Autocomplete polling mode** — webhook-only sync path; polling-боты получают пустой список.
-- [ ] **role_db duplicate `000006`** — две миграции с версией `000006` блокируют `golang-migrate` на чистом `role_db`.
-- [ ] **Gateway Docker build** — `go mod download` в образе gateway (missing messaging context) блокирует `compose-app-up` на чистой машине.
+- [x] **Остальные scopes runtime (P2)** — `DM_SEND`, `TEXT_CHAT_CREATE_IN_SPACE`, `SPACE_VIEW_MEMBER_LIST`: gRPC + Gateway REST (`transcode_bots.go`); slash pickers user/channel/role в `slash_command_options_sheet.dart`.
+- [x] **Gateway REST для scope RPC** — transcoding: `TouchPresence`, `AssignBotRole`/`RevokeBotRole`, `ListSpaceMembersForBot`, `CreateBotChat`, `GetChatMessagesForBot`, `CreateBotRole`, `CompleteAutocomplete`.
+- [x] **`GetChatMessagesForBot`** — Messaging `GetMessages` + Gateway `GET …/bots/me/chats/{chat_id}/messages` (при настроенном Messaging client).
+- [x] **Bot `CreateRole` API** — `CreateBotRole` RPC + REST `POST /api/v1/bots/me/roles`; privileged scope `SPACE_MANAGE_ROLES`.
+- [x] **Deferred TTL** — `RunDeferredTTLSweeper`, `AbandonStaleDeferred`, `BOT_DEFERRED_TTL` (default 24h), `RehydrateDeferred` on startup.
+- [x] **Rate limits (Gateway REST)** — `BotAPI` 5000/min, `BotRoleOps` 100/min + `429` / `Retry-After` (`ratelimit.go`, `routing.go`).
+- [x] **REST heartbeat** — `POST /api/v1/bots/me/presence` → `TouchPresence`.
+- [x] **Autocomplete polling mode** — enqueue + `POST …/bots/me/autocomplete/complete`; см. остаток UX ниже.
+- [x] **role_db duplicate `000006`** — `member_thread_permissions` перенесена в `000008`; один `000006_default_join_role`.
+- [x] **Gateway Docker build** — убран `voice/backend/messaging` из `gateway/go.mod` (pb-only replace).
 - [ ] **buf generate BSR** — `make buf-generate` 403; локально `buf generate --template buf.gen.local-go.yaml`.
+- [ ] **gRPC Bot API rate limits** — 5000/min только на Gateway `/api/v1/bots/me/**`; прямой gRPC `BotService` обходит `BotAPI` limiter.
+- [ ] **GetChatMessagesForBot response shape** — proto отдаёт только `message_ids`; нет тел сообщений для bot runtime без отдельного Messaging доступа.
+- [ ] **Autocomplete polling UX** — `AutocompleteSlashOption` сразу возвращает пустой список для polling-ботов; Flutter не ретраит до `CompleteAutocomplete`.
+- [ ] **SendEphemeral Gateway REST** — gRPC `SendEphemeral` есть; transcoding route в Gateway / `api-gateway.md` нет.
+- [ ] **SPACE_MANAGE_ROLES doc drift** — privileged scope в manifest/proto; отсутствует в таблице scopes `docs/features/bots.md`.
+- [ ] **BOT_DEFERRED_TTL ops doc** — env и default 24h не задокументированы в `bot-service.md` / `OPERATIONS.md`.
 
 ### Developer Portal
 
 *После ключей OAuth (секция «Только вы»).*
 
 - [ ] **Developer Portal auth** — login/OAuth flow, rotate `webhook_secret`, revoke token, list apps.
+- [ ] **Developer Portal webhook_secret rotate** — minimal portal (`src/developer-portal/`) умеет regenerate bot token; rotate `webhook_secret` / HMAC key — нет.
+- [ ] **Developer Portal production OAuth** — PKCE flow есть; production зависит от Auth OAuth client; dev — paste JWT (`oauthDisabled`).
 
 ### Клиент и локализация
 
@@ -79,10 +87,11 @@ _Закрыто в batch Phase 15 E2E follow-ups (2026-06)._
 
 ### Тесты и покрытие
 
-- [ ] **grpcsvc coverage ≥80%** — закрыть оставшиеся ветки (сейчас ~80.4%).
-- [ ] **EditBotMessage** — integration test с Messaging mock; ownership edge cases.
-- [ ] **Flutter live E2E install+pong** — `phase16_bots_slash_live_test` + install flow с `VOICE_RUN_LIVE_INTEGRATION=true`.
-- [ ] **Live compose BOT-C** — `compose_phase16_bots_slash_live_test` (greyout, privileged install); `VOICE_RUN_LIVE_COMPOSE=true`.
+- [x] **grpcsvc coverage ≥80%** — `go tool cover`: grpcsvc **81.4%** (`bot_c_coverage_test.go` + integration).
+- [x] **EditBotMessage** — `bot_integration_test.go` (`TestEditBotMessage_integration_*`); ownership / actor headers.
+- [x] **Flutter live E2E install+pong** — `phase16_bots_slash_live_test.dart` + `bot_live_harness.dart`; opt-in `VOICE_RUN_LIVE_INTEGRATION=true`.
+- [x] **Live compose BOT-C** — `compose_phase16_bots_slash_live_test.go` (slash, defer, greyout, privileged install, BOT-C routes); opt-in `VOICE_RUN_LIVE_COMPOSE=true`.
+- [ ] **BOT-C live tests in CI** — compose + Flutter live opt-in; не в default `make` / GitHub Actions matrix.
 
 ### Документация
 

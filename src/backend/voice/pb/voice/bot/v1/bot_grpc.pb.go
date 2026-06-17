@@ -54,6 +54,8 @@ const (
 	BotService_ListSpaceMembersForBot_FullMethodName   = "/voice.bot.v1.BotService/ListSpaceMembersForBot"
 	BotService_CreateBotChat_FullMethodName            = "/voice.bot.v1.BotService/CreateBotChat"
 	BotService_GetChatMessagesForBot_FullMethodName    = "/voice.bot.v1.BotService/GetChatMessagesForBot"
+	BotService_CreateBotRole_FullMethodName            = "/voice.bot.v1.BotService/CreateBotRole"
+	BotService_CompleteAutocomplete_FullMethodName     = "/voice.bot.v1.BotService/CompleteAutocomplete"
 )
 
 // BotServiceClient is the client API for BotService service.
@@ -101,6 +103,8 @@ type BotServiceClient interface {
 	ListSpaceMembersForBot(ctx context.Context, in *ListSpaceMembersForBotRequest, opts ...grpc.CallOption) (*ListSpaceMembersForBotResponse, error)
 	CreateBotChat(ctx context.Context, in *CreateBotChatRequest, opts ...grpc.CallOption) (*CreateBotChatResponse, error)
 	GetChatMessagesForBot(ctx context.Context, in *GetChatMessagesForBotRequest, opts ...grpc.CallOption) (*GetChatMessagesForBotResponse, error)
+	CreateBotRole(ctx context.Context, in *CreateBotRoleRequest, opts ...grpc.CallOption) (*CreateBotRoleResponse, error)
+	CompleteAutocomplete(ctx context.Context, in *CompleteAutocompleteRequest, opts ...grpc.CallOption) (*CompleteAutocompleteResponse, error)
 }
 
 type botServiceClient struct {
@@ -470,6 +474,26 @@ func (c *botServiceClient) GetChatMessagesForBot(ctx context.Context, in *GetCha
 	return out, nil
 }
 
+func (c *botServiceClient) CreateBotRole(ctx context.Context, in *CreateBotRoleRequest, opts ...grpc.CallOption) (*CreateBotRoleResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateBotRoleResponse)
+	err := c.cc.Invoke(ctx, BotService_CreateBotRole_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *botServiceClient) CompleteAutocomplete(ctx context.Context, in *CompleteAutocompleteRequest, opts ...grpc.CallOption) (*CompleteAutocompleteResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CompleteAutocompleteResponse)
+	err := c.cc.Invoke(ctx, BotService_CompleteAutocomplete_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // BotServiceServer is the server API for BotService service.
 // All implementations must embed UnimplementedBotServiceServer
 // for forward compatibility.
@@ -515,6 +539,8 @@ type BotServiceServer interface {
 	ListSpaceMembersForBot(context.Context, *ListSpaceMembersForBotRequest) (*ListSpaceMembersForBotResponse, error)
 	CreateBotChat(context.Context, *CreateBotChatRequest) (*CreateBotChatResponse, error)
 	GetChatMessagesForBot(context.Context, *GetChatMessagesForBotRequest) (*GetChatMessagesForBotResponse, error)
+	CreateBotRole(context.Context, *CreateBotRoleRequest) (*CreateBotRoleResponse, error)
+	CompleteAutocomplete(context.Context, *CompleteAutocompleteRequest) (*CompleteAutocompleteResponse, error)
 	mustEmbedUnimplementedBotServiceServer()
 }
 
@@ -629,6 +655,12 @@ func (UnimplementedBotServiceServer) CreateBotChat(context.Context, *CreateBotCh
 }
 func (UnimplementedBotServiceServer) GetChatMessagesForBot(context.Context, *GetChatMessagesForBotRequest) (*GetChatMessagesForBotResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetChatMessagesForBot not implemented")
+}
+func (UnimplementedBotServiceServer) CreateBotRole(context.Context, *CreateBotRoleRequest) (*CreateBotRoleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateBotRole not implemented")
+}
+func (UnimplementedBotServiceServer) CompleteAutocomplete(context.Context, *CompleteAutocompleteRequest) (*CompleteAutocompleteResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CompleteAutocomplete not implemented")
 }
 func (UnimplementedBotServiceServer) mustEmbedUnimplementedBotServiceServer() {}
 func (UnimplementedBotServiceServer) testEmbeddedByValue()                    {}
@@ -1274,6 +1306,42 @@ func _BotService_GetChatMessagesForBot_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BotService_CreateBotRole_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateBotRoleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BotServiceServer).CreateBotRole(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BotService_CreateBotRole_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BotServiceServer).CreateBotRole(ctx, req.(*CreateBotRoleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BotService_CompleteAutocomplete_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CompleteAutocompleteRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BotServiceServer).CompleteAutocomplete(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BotService_CompleteAutocomplete_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BotServiceServer).CompleteAutocomplete(ctx, req.(*CompleteAutocompleteRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // BotService_ServiceDesc is the grpc.ServiceDesc for BotService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1416,6 +1484,14 @@ var BotService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetChatMessagesForBot",
 			Handler:    _BotService_GetChatMessagesForBot_Handler,
+		},
+		{
+			MethodName: "CreateBotRole",
+			Handler:    _BotService_CreateBotRole_Handler,
+		},
+		{
+			MethodName: "CompleteAutocomplete",
+			Handler:    _BotService_CompleteAutocomplete_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

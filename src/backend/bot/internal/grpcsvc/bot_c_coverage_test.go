@@ -3,19 +3,26 @@ package grpcsvc_test
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
+	"google.golang.org/grpc/test/bufconn"
 
 	grpcsvc "voice/backend/bot/internal/grpcsvc"
 
 	botv1 "voice.app/voice/bot/v1"
 	chatv1 "voice.app/voice/chat/v1"
+	messagingv1 "voice.app/voice/messaging/v1"
+	rolev1 "voice.app/voice/role/v1"
 )
 
 func TestGetChatMessagesForBot_deniedWithoutReadHistoryScope(t *testing.T) {
@@ -53,6 +60,26 @@ func TestGetChatMessagesForBot_unimplementedWithPrivilegedScope(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Equal(t, codes.Unimplemented, status.Code(err))
+}
+
+func TestGetChatMessagesForBot_returnsMessagesWithReadHistoryScope(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	msg := &fakeMessagingClientWithHistory{messageIDs: []string{"msg-a", "msg-b"}}
+	client, st, _, cleanup := startBotGRPCWithBotCDeps(t, &botCDeps{msg: msg})
+	defer cleanup()
+
+	_, _, botToken, chatID, _ := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_SEND_MESSAGES","TEXT_CHAT_READ_HISTORY"]`)
+	botCtx := withBotToken(context.Background(), botToken)
+	chatType := chatv1.ChatType_CHAT_TYPE_CHANNEL
+
+	resp, err := client.GetChatMessagesForBot(botCtx, &botv1.GetChatMessagesForBotRequest{
+		Chat: &chatv1.ChatRef{Id: chatID.String(), Type: &chatType},
+	})
+	require.NoError(t, err, "GetChatMessagesForBot must fetch history via Messaging (BOT-C)")
+	require.Equal(t, []string{"msg-a", "msg-b"}, resp.GetMessageIds())
+	require.Equal(t, 1, msg.getMessagesCalls)
 }
 
 func TestGetChatMessagesForBot_deniedWhenChatNotWhitelisted(t *testing.T) {
@@ -1483,4 +1510,296 @@ func TestGetBotBySlug_notFoundForUnknownSlug(t *testing.T) {
 	_, err := client.GetBotBySlug(ctx, &botv1.GetBotBySlugRequest{Slug: "missing-bot-slug"})
 	require.Error(t, err)
 	require.Equal(t, codes.NotFound, status.Code(err))
+}
+
+type fakeMessagingClientWithHistory struct {
+	fakeMessagingClient
+	getMessagesCalls int
+	messageIDs       []string
+}
+
+func (f *fakeMessagingClientWithHistory) GetMessages(_ context.Context, _ *messagingv1.GetMessagesRequest) (*messagingv1.GetMessagesResponse, error) {
+	f.getMessagesCalls++
+	msgs := make([]*messagingv1.Message, 0, len(f.messageIDs))
+	for _, id := range f.messageIDs {
+		msgs = append(msgs, &messagingv1.Message{Id: id})
+	}
+	return &messagingv1.GetMessagesResponse{
+		MessageList: &messagingv1.MessageList{Messages: msgs},
+	}, nil
+}
+
+func callBotGRPCMethod(t *testing.T, svc *grpcsvc.BotGRPC, ctx context.Context, method string, req any) (any, error) {
+	t.Helper()
+	m := reflect.ValueOf(svc).MethodByName(method)
+	require.True(t, m.IsValid(), "%s must be implemented on BotGRPC (BOT-C)", method)
+	args := []reflect.Value{reflect.ValueOf(ctx)}
+	if m.Type().NumIn() == 2 {
+		reqVal := reflect.ValueOf(req)
+		if req == nil {
+			reqVal = reflect.New(m.Type().In(1).Elem())
+		} else if reqVal.Kind() == reflect.Ptr && reqVal.Type() != m.Type().In(1) {
+			reqVal = reflect.ValueOf(req).Convert(m.Type().In(1))
+		}
+		args = append(args, reqVal)
+	}
+	out := m.Call(args)
+	if len(out) > 1 && !out[1].IsNil() {
+		return nil, out[1].Interface().(error)
+	}
+	if len(out) > 0 && out[0].CanInterface() {
+		return out[0].Interface(), nil
+	}
+	return nil, nil
+}
+
+func wireBotCServiceRole(t *testing.T, svc *grpcsvc.BotGRPC, role rolev1.RoleServiceServer) {
+	t.Helper()
+	rl := bufconn.Listen(1024)
+	rs := grpc.NewServer()
+	rolev1.RegisterRoleServiceServer(rs, role)
+	go func() { _ = rs.Serve(rl) }()
+	rconn, err := grpc.NewClient("passthrough:///bufnet",
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return rl.Dial() }),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	require.NoError(t, err)
+	svc.Role = rolev1.NewRoleServiceClient(rconn)
+}
+
+func TestCreateBotRole_requiresSpaceManageRolesScope(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	_, ok := reflect.TypeOf(&grpcsvc.BotGRPC{}).MethodByName("CreateBotRole")
+	require.True(t, ok, "CreateBotRole must exist on BotGRPC (BOT-C)")
+
+	roleFake := &fakeRoleClient{}
+	client, st, hub, cleanup := startBotGRPCWithBotCDeps(t, &botCDeps{role: roleFake})
+	defer cleanup()
+
+	_, _, botToken, _, spaceID := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_SEND_MESSAGES"]`)
+	botCtx := withBotToken(context.Background(), botToken)
+
+	svc := grpcsvc.NewBotGRPC(st, hub)
+	wireBotCServiceRole(t, svc, roleFake)
+
+	m, _ := reflect.TypeOf(&grpcsvc.BotGRPC{}).MethodByName("CreateBotRole")
+	req := reflect.New(m.Type.In(2).Elem())
+	if f := req.Elem().FieldByName("SpaceId"); f.IsValid() {
+		f.SetString(spaceID.String())
+	}
+	if f := req.Elem().FieldByName("Name"); f.IsValid() {
+		f.SetString("Helper")
+	}
+
+	_, err := callBotGRPCMethod(t, svc, botCtx, "CreateBotRole", req.Interface())
+	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err),
+		"CreateBotRole must require SPACE_MANAGE_ROLES privileged scope (BOT-C)")
+}
+
+func TestAutocompleteSlashOption_pollingBotReturnsChoicesAfterComplete(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	client, st, hub, cleanup := startBotGRPCWithBotCDeps(t, nil)
+	defer cleanup()
+	ctx, botID, botToken, chatID, _ := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_SEND_MESSAGES"]`)
+	botCtx := withBotToken(context.Background(), botToken)
+
+	manifestYAML := `name: BotC
+scopes: [TEXT_CHAT_SEND_MESSAGES]
+commands:
+  - name: stats
+    description: Stats
+    options:
+      - name: game
+        type: string
+        required: true
+        autocomplete: true
+`
+	_, err := client.ApplyManifest(ctx, &botv1.ApplyManifestRequest{BotId: botID, ManifestYaml: manifestYAML})
+	require.NoError(t, err)
+
+	chatType := chatv1.ChatType_CHAT_TYPE_CHANNEL
+	acReq := &botv1.AutocompleteSlashOptionRequest{
+		Chat:         &chatv1.ChatRef{Id: chatID.String(), Type: &chatType},
+		BotId:        botID,
+		CommandName:  "stats",
+		OptionName:   "game",
+		FocusedValue: "cs",
+	}
+
+	resp, err := client.AutocompleteSlashOption(ctx, acReq)
+	require.NoError(t, err)
+	require.Empty(t, resp.GetChoices(), "polling bot starts with empty choices until bot completes")
+
+	svc := grpcsvc.NewBotGRPC(st, hub)
+	_, ok := reflect.TypeOf(&grpcsvc.BotGRPC{}).MethodByName("CompleteAutocomplete")
+	require.True(t, ok, "CompleteAutocomplete must exist on BotGRPC (BOT-C)")
+
+	completeMethod, _ := reflect.TypeOf(&grpcsvc.BotGRPC{}).MethodByName("CompleteAutocomplete")
+	completeReq := reflect.New(completeMethod.Type.In(2).Elem())
+	if f := completeReq.Elem().FieldByName("RequestId"); f.IsValid() {
+		f.SetString("ac-req-1")
+	}
+	choicesField := completeReq.Elem().FieldByName("Choices")
+	if choicesField.IsValid() && choicesField.Type().Kind() == reflect.Slice {
+		choiceType := choicesField.Type().Elem()
+		if choiceType.Kind() == reflect.Ptr {
+			choiceType = choiceType.Elem()
+		}
+		choice := reflect.New(choiceType).Elem()
+		if n := choice.FieldByName("Name"); n.IsValid() {
+			n.SetString("CS2")
+		}
+		if v := choice.FieldByName("Value"); v.IsValid() {
+			v.SetString("cs2")
+		}
+		if choicesField.Type().Elem().Kind() == reflect.Ptr {
+			choicesField.Set(reflect.Append(choicesField, choice.Addr()))
+		} else {
+			choicesField.Set(reflect.Append(choicesField, choice))
+		}
+	}
+	_, err = callBotGRPCMethod(t, svc, botCtx, "CompleteAutocomplete", completeReq.Interface())
+	require.NoError(t, err)
+
+	resp, err = client.AutocompleteSlashOption(ctx, acReq)
+	require.NoError(t, err)
+	require.Len(t, resp.GetChoices(), 1, "polling autocomplete must return choices after CompleteAutocomplete (BOT-C)")
+	require.Equal(t, "CS2", resp.GetChoices()[0].GetName())
+}
+
+func TestDeferredTTLSweeper_abandonsStaleDeferredRows(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	client, st, hub, cleanup := startBotGRPCWithBotCDeps(t, nil)
+	defer cleanup()
+
+	ctx, botID, _, _, _ := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_SEND_MESSAGES"]`)
+	botUUID, err := uuid.Parse(botID)
+	require.NoError(t, err)
+
+	token := "defer-stale-" + uuid.NewString()
+	_, err = st.EnqueueEvent(ctx, botUUID, "interaction", map[string]any{"x": 1}, token)
+	require.NoError(t, err)
+	require.NoError(t, st.MarkEventDeferred(ctx, botUUID, token))
+
+	_, err = st.Pool.Exec(ctx, `
+UPDATE bot_event_log SET created_at = now() - interval '25 hours'
+WHERE bot_id = $1 AND interaction_token = $2`, botUUID, token)
+	require.NoError(t, err)
+
+	svc := grpcsvc.NewBotGRPC(st, hub)
+	_, ok := reflect.TypeOf(&grpcsvc.BotGRPC{}).MethodByName("RunDeferredTTLSweeper")
+	require.True(t, ok, "RunDeferredTTLSweeper must exist on BotGRPC (BOT-C)")
+	_, err = callBotGRPCMethod(t, svc, ctx, "RunDeferredTTLSweeper", nil)
+	require.NoError(t, err)
+
+	var deliveryStatus string
+	err = st.Pool.QueryRow(ctx, `
+SELECT delivery_status FROM bot_event_log WHERE bot_id = $1 AND interaction_token = $2`,
+		botUUID, token).Scan(&deliveryStatus)
+	require.NoError(t, err)
+	require.Equal(t, "abandoned", deliveryStatus,
+		"deferred TTL sweeper must abandon stale deferred rows (BOT-C)")
+}
+
+func TestCreateBotRole_createsRoleWithManageRolesScope(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	roleFake := &fakeRoleClient{}
+	client, st, _, cleanup := startBotGRPCWithBotCDeps(t, &botCDeps{role: roleFake})
+	defer cleanup()
+
+	_, _, botToken, _, spaceID := setupBotCCommandBot(t, client, st, `["SPACE_MANAGE_ROLES"]`)
+	botCtx := withBotToken(context.Background(), botToken)
+
+	resp, err := client.CreateBotRole(botCtx, &botv1.CreateBotRoleRequest{
+		SpaceId:         spaceID.String(),
+		Name:            "Helper",
+		PermissionsMask: 1,
+		Position:        2,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "Helper", resp.GetRole().GetName())
+}
+
+func TestCreateBotRole_requiresName(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	client, st, _, cleanup := startBotGRPCWithBotCDeps(t, &botCDeps{role: &fakeRoleClient{}})
+	defer cleanup()
+
+	_, _, botToken, _, spaceID := setupBotCCommandBot(t, client, st, `["SPACE_MANAGE_ROLES"]`)
+	botCtx := withBotToken(context.Background(), botToken)
+
+	_, err := client.CreateBotRole(botCtx, &botv1.CreateBotRoleRequest{
+		SpaceId: spaceID.String(),
+		Name:    "  ",
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+func TestCompleteAutocomplete_unknownRequestID(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	client, st, _, cleanup := startBotGRPCWithBotCDeps(t, nil)
+	defer cleanup()
+
+	_, _, botToken, _, _ := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_SEND_MESSAGES"]`)
+	botCtx := withBotToken(context.Background(), botToken)
+
+	_, err := client.CompleteAutocomplete(botCtx, &botv1.CompleteAutocompleteRequest{
+		RequestId: "missing-ac-req",
+		Choices:   []*botv1.AutocompleteChoice{{Name: "X", Value: "x"}},
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.NotFound, status.Code(err))
+}
+
+func TestCompleteAutocomplete_requiresRequestID(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	client, st, _, cleanup := startBotGRPCWithBotCDeps(t, nil)
+	defer cleanup()
+
+	_, _, botToken, _, _ := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_SEND_MESSAGES"]`)
+	botCtx := withBotToken(context.Background(), botToken)
+
+	_, err := client.CompleteAutocomplete(botCtx, &botv1.CompleteAutocompleteRequest{
+		RequestId: "  ",
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+func TestListSlashCommands_usesPresenceTTLFromEnv(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	t.Setenv("BOT_PRESENCE_TTL", "120")
+	client, st, cleanup := startBotGRPC(t)
+	defer cleanup()
+
+	ctx, botID, _, chatID, _ := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_SEND_MESSAGES"]`)
+	botUUID, err := uuid.Parse(botID)
+	require.NoError(t, err)
+	require.NoError(t, st.TouchPresence(ctx, botUUID))
+
+	chatType := chatv1.ChatType_CHAT_TYPE_GROUP
+	resp, err := client.ListSlashCommandsForChat(ctx, &botv1.ListSlashCommandsForChatRequest{
+		Chat: &chatv1.ChatRef{Id: chatID.String(), Type: &chatType},
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, resp.GetCommands())
+	require.True(t, resp.GetCommands()[0].GetOnline())
 }

@@ -31,7 +31,6 @@ require (
 	voice.app/voice/story v0.0.0
 	voice.app/voice/subscription v0.0.0
 	voice.app/voice/user v0.0.0
-	voice/backend/messaging v0.0.0
 	voice/backend/pkg v0.0.0
 )
 
@@ -148,5 +147,3 @@ replace voice.app/voice/story => ../voice/pb/voice/story
 replace voice.app/voice/subscription => ../voice/pb/voice/subscription
 
 replace voice.app/voice/file => ../file/pb/voice/file
-
-replace voice/backend/messaging => ../messaging

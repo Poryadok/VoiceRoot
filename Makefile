@@ -44,8 +44,12 @@ buf-format:
 buf-breaking:
 	buf breaking protos --against ".git#branch=master,subdir=protos"
 
-# Emits Go stubs under gen/go (gitignored); requires network for remote BSR plugins.
+# Emits Go stubs under gen/go (local plugins). Sync committed stubs under src/backend/*/pb as needed.
 buf-generate:
+	buf generate --template buf.gen.local-go.yaml
+
+# Remote BSR plugins (requires network).
+buf-generate-bsr:
 	buf generate
 
 # Committed Dart stubs for Flutter; uses local protoc-gen-dart (see scripts/ci/buf-generate-dart.sh).

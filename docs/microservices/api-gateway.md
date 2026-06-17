@@ -110,8 +110,16 @@
 | `POST` | `/api/v1/bots/me/interactions/complete` | `CompleteInteraction` | Bot token | `interaction_token`, `content`, `is_ephemeral`, `deferred` |
 | `POST` | `/api/v1/bots/me/messages` | `SendBotMessage` | Bot token | `chat`, `content`, optional `thread_parent_id`, `interaction_token` |
 | `PATCH` | `/api/v1/bots/me/messages/{message_id}` | `EditBotMessage` | Bot token | `content` |
+| `POST` | `/api/v1/bots/me/presence` | `TouchPresence` | Bot token | — |
+| `GET` | `/api/v1/bots/me/spaces/{space_id}/members` | `ListSpaceMembersForBot` | Bot token | optional `cursor` |
+| `POST` | `/api/v1/bots/me/spaces/{space_id}/roles/assign` | `AssignBotRole` | Bot token | `profile_id`, `role_id` |
+| `POST` | `/api/v1/bots/me/spaces/{space_id}/roles/revoke` | `RevokeBotRole` | Bot token | `profile_id`, `role_id` |
+| `POST` | `/api/v1/bots/me/chats` | `CreateBotChat` | Bot token | `space_id`, `name`, `chat_type` |
+| `GET` | `/api/v1/bots/me/chats/{chat_id}/messages` | `GetChatMessagesForBot` | Bot token | `chat_type`, optional `cursor` |
+| `POST` | `/api/v1/bots/me/roles` | `CreateBotRole` | Bot token | `space_id`, `name`, `permissions_mask`, `position` |
+| `POST` | `/api/v1/bots/me/autocomplete/complete` | `CompleteAutocomplete` | Bot token | `request_id`, `choices` |
 
-**gRPC-only (нет REST transcoding):** `TouchPresence`, `AssignBotRole`, `RevokeBotRole`, `ListSpaceMembersForBot`, `CreateBotChat`, `GetChatMessagesForBot` — см. [bot-service.md](bot-service.md) и открытые пункты в [TODO.md](../TODO.md) (BOT-C).
+**Rate limits (BOT-C):** `BotRoleOps` — 100/min per bot token on `roles/assign`, `roles/revoke`, `POST /me/roles`.
 
 ## Маршруты персонала (Admin API)
 

@@ -51,6 +51,18 @@ WHERE bot_id = $1 AND interaction_token = $2 AND delivery_status = 'pending'`, b
 	return err
 }
 
+// AbandonStaleDeferred marks deferred events older than ttl as abandoned.
+func (s *BotStore) AbandonStaleDeferred(ctx context.Context, ttl time.Duration) error {
+	if ttl <= 0 {
+		ttl = 24 * time.Hour
+	}
+	cutoff := time.Now().Add(-ttl)
+	_, err := s.Pool.Exec(ctx, `
+UPDATE bot_event_log SET delivery_status = 'abandoned'
+WHERE delivery_status = 'deferred' AND created_at < $1`, cutoff)
+	return err
+}
+
 // ListDeferredTokens returns interaction tokens awaiting async completion.
 func (s *BotStore) ListDeferredTokens(ctx context.Context) ([]string, error) {
 	rows, err := s.Pool.Query(ctx, `
@@ -72,8 +84,10 @@ WHERE delivery_status = 'deferred' AND interaction_token IS NOT NULL AND interac
 }
 
 const PrivilegedScopeReadHistory = "TEXT_CHAT_READ_HISTORY"
+const PrivilegedScopeManageRoles = "SPACE_MANAGE_ROLES"
 
 // HasPrivilegedScope reports whether scopes JSON includes a privileged install scope.
 func HasPrivilegedScope(scopesJSON string) bool {
-	return ScopeAllows(scopesJSON, PrivilegedScopeReadHistory)
+	return ScopeAllows(scopesJSON, PrivilegedScopeReadHistory) ||
+		ScopeAllows(scopesJSON, PrivilegedScopeManageRoles)
 }

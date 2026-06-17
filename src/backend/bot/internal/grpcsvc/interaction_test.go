@@ -45,6 +45,7 @@ type fakeMessagingClient struct {
 	messagingv1.UnimplementedMessagingServiceServer
 	lastContent string
 	editCalls   int
+	editErr     error
 }
 
 func (f *fakeMessagingClient) SendMessage(_ context.Context, req *messagingv1.SendMessageRequest) (*messagingv1.SendMessageResponse, error) {
@@ -59,6 +60,9 @@ func (f *fakeMessagingClient) SendMessage(_ context.Context, req *messagingv1.Se
 
 func (f *fakeMessagingClient) EditMessage(_ context.Context, req *messagingv1.EditMessageRequest) (*messagingv1.EditMessageResponse, error) {
 	f.editCalls++
+	if f.editErr != nil {
+		return nil, f.editErr
+	}
 	return &messagingv1.EditMessageResponse{
 		Message: &messagingv1.Message{
 			Id:      req.GetMessageId(),
@@ -67,7 +71,7 @@ func (f *fakeMessagingClient) EditMessage(_ context.Context, req *messagingv1.Ed
 	}, nil
 }
 
-func startBotGRPCWithDeps(t *testing.T, user *fakeUserClient, msg *fakeMessagingClient) (botv1.BotServiceClient, *store.BotStore, func()) {
+func startBotGRPCWithDeps(t *testing.T, user *fakeUserClient, msg messagingv1.MessagingServiceServer) (botv1.BotServiceClient, *store.BotStore, func()) {
 	t.Helper()
 	ctx := context.Background()
 	pool := integrationtest.StartPostgres(t, ctx, "botinteraction", "")

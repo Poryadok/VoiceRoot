@@ -65,6 +65,7 @@ func main() {
 		svc := grpcsvc.NewBotGRPC(st, hub)
 		wireDownstream(svc, logger)
 		svc.RehydrateDeferred(context.Background())
+		startDeferredTTLSweeper(svc, logger)
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
 			pub, err := botevents.NewJetStreamPublisher(natsURL)
 			if err != nil {
@@ -118,6 +119,25 @@ func main() {
 			log.Fatal(err)
 		}
 	}
+}
+
+func startDeferredTTLSweeper(svc *grpcsvc.BotGRPC, logger *slog.Logger) {
+	interval := 15 * time.Minute
+	if v := strings.TrimSpace(os.Getenv("BOT_DEFERRED_SWEEP_INTERVAL")); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			interval = d
+		}
+	}
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for range ticker.C {
+			if err := svc.RunDeferredTTLSweeper(context.Background()); err != nil {
+				logger.Warn("deferred TTL sweeper failed", slog.String("error", err.Error()))
+			}
+		}
+	}()
+	logger.Info("deferred TTL sweeper started", slog.String("interval", interval.String()))
 }
 
 func wireDownstream(svc *grpcsvc.BotGRPC, logger *slog.Logger) {
