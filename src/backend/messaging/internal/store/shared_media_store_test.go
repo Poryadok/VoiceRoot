@@ -43,3 +43,27 @@ VALUES ($1, $2, 'dm', $3, $4, '[]'::jsonb, '[]'::jsonb)
 	require.Len(t, links, 1)
 	require.Equal(t, "https://example.com", links[0].ExternalURL)
 }
+
+func TestSharedMediaStore_listAttachments_returnsE2eKeyWire(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForStoreTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000008_shared_media_indexes.up.sql"))
+
+	chatID := uuid.New()
+	sender := uuid.New()
+	msgID := uuid.New()
+	fileID := uuid.New()
+	const keyWire = "voice-e2e-file-key-v1:test"
+
+	store := &SharedMediaStore{Pool: pool}
+	require.NoError(t, InsertMessageAttachments(ctx, pool, msgID, chatID, sender, []map[string]string{
+		{"file_id": fileID.String(), "type": "image", "e2e_key_wire": keyWire},
+	}, " "))
+
+	media, _, _, err := store.List(ctx, chatID, SharedMediaKindMedia, "", 20)
+	require.NoError(t, err)
+	require.Len(t, media, 1)
+	require.Equal(t, keyWire, media[0].E2EKeyWire)
+}

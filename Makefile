@@ -32,7 +32,7 @@ GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
 	compose-migrate-phase15 compose-migrate-bot compose-migrate-story compose-e2e-live compose-e2e-full compose-e2e-voice-live \
 	build-all build-all-breaking check-toolchain compose-config-ci buf-ci backend-test-ci backend-image-ci \
 	gateway-test-ci gateway-image-ci go-test-pkg auth-test-ci auth-image-ci buf-breaking-ci \
-	golangci-ci gateway-test-race-ci design-tokens-check flutter-ui-color-gate flutter-ci coverage-report testcontainers-prune
+	golangci-ci gateway-test-race-ci design-tokens-check flutter-ui-color-gate flutter-ci prekey-golden-check coverage-report testcontainers-prune
 
 buf-lint:
 	buf lint
@@ -166,7 +166,10 @@ flutter-ui-color-gate:
 	$(BASH) "$(ROOT)/scripts/design/flutter-ui-color-gate.sh"
 
 # Host Flutter SDK (parity with job `flutter` in .github/workflows/ci.yml).
-flutter-ci: design-tokens-check flutter-ui-color-gate buf-dart-check
+prekey-golden-check:
+	cd $(ROOT)/src/frontend && flutter test test/tools/prekey_golden_drift_test.dart
+
+flutter-ci: design-tokens-check flutter-ui-color-gate buf-dart-check prekey-golden-check
 	cd $(ROOT)/src/frontend && flutter pub get && flutter analyze && flutter test
 
 # Go (-coverprofile), Auth (JaCoCo), Flutter (lcov). Writes .local/coverage/summary.txt

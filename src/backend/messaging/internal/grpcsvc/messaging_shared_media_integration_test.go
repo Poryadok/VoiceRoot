@@ -250,3 +250,47 @@ func TestMessagingListSharedMedia_filesKindFiltersDocument(t *testing.T) {
 	require.Len(t, resp.GetSharedMediaList().GetItems(), 1)
 	require.Equal(t, docID.String(), resp.GetSharedMediaList().GetItems()[0].GetFileId())
 }
+
+func TestMessagingListSharedMedia_returnsE2eKeyWire(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	chatID := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	acctA := uuid.New()
+	fileID := uuid.New()
+	msgID := uuid.New()
+	seedDMChat(t, ctx, pool, chatID, profA, profB)
+
+	const keyWire = "voice-e2e-file-key-v1:opaque"
+	require.NoError(t, store.InsertMessageAttachments(ctx, pool, msgID, chatID, profA, []map[string]string{
+		{"file_id": fileID.String(), "type": "image", "e2e_key_wire": keyWire},
+	}, " "))
+
+	client, _ := startMessagingServerWired(t, pool, messagingWire{
+		Files: fileMetadataMap{
+			fileID.String(): {
+				Id:           fileID.String(),
+				Status:       "ready",
+				FileType:     "image",
+				ScanResult:   "clean",
+				OriginalName: "cipher.png",
+				SizeBytes:    512,
+				Chat:         chatDMRef(chatID),
+			},
+		},
+	})
+
+	resp, err := client.ListSharedMedia(withProfileCtx(ctx, acctA, profB), &messagingv1.ListSharedMediaRequest{
+		Chat: chatDMRef(chatID),
+		Kind: messagingv1.SharedMediaKind_SHARED_MEDIA_KIND_MEDIA,
+	})
+	require.NoError(t, err)
+	items := resp.GetSharedMediaList().GetItems()
+	require.Len(t, items, 1)
+	require.Equal(t, keyWire, items[0].GetE2EKeyWire())
+}

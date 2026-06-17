@@ -34,6 +34,7 @@ type SharedMediaRow struct {
 	SortOrder       int32
 	FileID          *uuid.UUID
 	AttachmentType  string
+	E2EKeyWire      string
 	ExternalURL     string
 	Title           string
 }
@@ -98,7 +99,7 @@ func (s *SharedMediaStore) listAttachments(
 
 	query := `
 SELECT m.id, m.sender_profile_id, m.created_at,
-       att.elem->>'file_id', att.elem->>'type', (att.ordinality - 1)::int
+       att.elem->>'file_id', att.elem->>'type', COALESCE(att.elem->>'e2e_key_wire', ''), (att.ordinality - 1)::int
 FROM messages m
 CROSS JOIN LATERAL jsonb_array_elements(m.attachments) WITH ORDINALITY AS att(elem, ordinality)
 WHERE m.chat_id = $1
@@ -132,13 +133,15 @@ LIMIT $%d`, argN)
 		var row SharedMediaRow
 		var fileIDRaw *string
 		var attType string
+		var e2eKeyWire string
 		if err := rows.Scan(
 			&row.MessageID, &row.SenderProfileID, &row.CreatedAt,
-			&fileIDRaw, &attType, &row.SortOrder,
+			&fileIDRaw, &attType, &e2eKeyWire, &row.SortOrder,
 		); err != nil {
 			return nil, "", false, err
 		}
 		row.AttachmentType = strings.TrimSpace(attType)
+		row.E2EKeyWire = strings.TrimSpace(e2eKeyWire)
 		if fileIDRaw != nil && strings.TrimSpace(*fileIDRaw) != "" {
 			fid, err := uuid.Parse(strings.TrimSpace(*fileIDRaw))
 			if err != nil {

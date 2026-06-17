@@ -276,6 +276,7 @@ message SharedMediaItem {
   int32 sort_order = 8;
   optional string original_name = 9;
   optional int64 size_bytes = 10;
+  optional string e2e_key_wire = 11;
 }
 
 message SharedMediaList {

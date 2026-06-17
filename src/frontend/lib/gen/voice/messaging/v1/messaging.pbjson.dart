@@ -1275,6 +1275,15 @@ const SharedMediaItem$json = {
       '10': 'sizeBytes',
       '17': true
     },
+    {
+      '1': 'e2e_key_wire',
+      '3': 11,
+      '4': 1,
+      '5': 9,
+      '9': 6,
+      '10': 'e2eKeyWire',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_file_id'},
@@ -1283,6 +1292,7 @@ const SharedMediaItem$json = {
     {'1': '_title'},
     {'1': '_original_name'},
     {'1': '_size_bytes'},
+    {'1': '_e2e_key_wire'},
   ],
 };
 
@@ -1295,8 +1305,9 @@ final $typed_data.Uint8List sharedMediaItemDescriptor = $convert.base64Decode(
     'cGWIAQESJgoMZXh0ZXJuYWxfdXJsGAYgASgJSAJSC2V4dGVybmFsVXJsiAEBEhkKBXRpdGxlGA'
     'cgASgJSANSBXRpdGxliAEBEh0KCnNvcnRfb3JkZXIYCCABKAVSCXNvcnRPcmRlchIoCg1vcmln'
     'aW5hbF9uYW1lGAkgASgJSARSDG9yaWdpbmFsTmFtZYgBARIiCgpzaXplX2J5dGVzGAogASgDSA'
-    'VSCXNpemVCeXRlc4gBAUIKCghfZmlsZV9pZEISChBfYXR0YWNobWVudF90eXBlQg8KDV9leHRl'
-    'cm5hbF91cmxCCAoGX3RpdGxlQhAKDl9vcmlnaW5hbF9uYW1lQg0KC19zaXplX2J5dGVz');
+    'VSCXNpemVCeXRlc4gBARIlCgxlMmVfa2V5X3dpcmUYCyABKAlIBlIKZTJlS2V5V2lyZYgBAUIK'
+    'CghfZmlsZV9pZEISChBfYXR0YWNobWVudF90eXBlQg8KDV9leHRlcm5hbF91cmxCCAoGX3RpdG'
+    'xlQhAKDl9vcmlnaW5hbF9uYW1lQg0KC19zaXplX2J5dGVzQg8KDV9lMmVfa2V5X3dpcmU=');
 
 @$core.Deprecated('Use sharedMediaListDescriptor instead')
 const SharedMediaList$json = {

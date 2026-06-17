@@ -390,6 +390,7 @@ class SharedMediaItemData {
     this.sortOrder = 0,
     this.originalName,
     this.sizeBytes,
+    this.e2eKeyWire,
   });
 
   final String messageId;
@@ -402,8 +403,11 @@ class SharedMediaItemData {
   final int sortOrder;
   final String? originalName;
   final int? sizeBytes;
+  final String? e2eKeyWire;
 
   bool get isLink => externalUrl != null && externalUrl!.isNotEmpty;
+  bool get isE2eEncrypted =>
+      e2eKeyWire != null && e2eKeyWire!.isNotEmpty;
 }
 
 class SharedMediaListData {

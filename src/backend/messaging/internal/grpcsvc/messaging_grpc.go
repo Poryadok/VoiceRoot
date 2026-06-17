@@ -1589,6 +1589,9 @@ func (s *MessagingGRPC) ListSharedMedia(ctx context.Context, req *messagingv1.Li
 			}
 			size := meta.GetSizeBytes()
 			item.SizeBytes = &size
+			if wire := strings.TrimSpace(row.E2EKeyWire); wire != "" {
+				item.E2EKeyWire = &wire
+			}
 		} else if row.ExternalURL != "" {
 			url := row.ExternalURL
 			item.ExternalUrl = &url

@@ -127,6 +127,7 @@ SharedMediaItemData sharedMediaItemFromProto(messaging_pb.SharedMediaItem item) 
     originalName:
         item.hasOriginalName() ? emptyToNull(item.originalName) : null,
     sizeBytes: item.hasSizeBytes() ? item.sizeBytes.toInt() : null,
+    e2eKeyWire: item.hasE2eKeyWire() ? emptyToNull(item.e2eKeyWire) : null,
   );
 }
 

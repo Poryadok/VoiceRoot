@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -18,6 +20,7 @@ import '../../backend/bots_client.dart';
 import '../../state/auth_providers.dart';
 import '../../state/bot_providers.dart';
 import '../../state/space_providers.dart';
+import 'e2e_attachment_actions.dart';
 import 'e2e_chat_settings.dart';
 
 /// Chat info with shared media tabs (Phase 10).
@@ -189,6 +192,31 @@ class _MediaTile extends ConsumerWidget {
     final voice = VoiceColors.of(context);
     final fileId = item.fileId;
     if (fileId == null) return const SizedBox.shrink();
+    if (item.isE2eEncrypted) {
+      final decryptRequest = E2eAttachmentDecryptRequest(
+        fileId: fileId,
+        e2eKeyWire: item.e2eKeyWire!,
+        senderProfileId: item.senderProfileId,
+        chatId: chatId,
+      );
+      final bytesAsync =
+          ref.watch(e2eDecryptedAttachmentThumbProvider(decryptRequest));
+      return InkWell(
+        key: Key('shared_media_item_${item.messageId}_${item.sortOrder}'),
+        onTap: () => _openMessage(context, ref, chatId, item.messageId),
+        child: ColoredBox(
+          color: voice.muted,
+          child: bytesAsync.isLoading || bytesAsync.valueOrNull == null
+              ? Center(
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: voice.textSecondary,
+                  ),
+                )
+              : Image.memory(bytesAsync.valueOrNull!, fit: BoxFit.cover),
+        ),
+      );
+    }
     final e2eChat = ref.watch(chatE2eEnabledProvider(chatId));
     if (e2eChat) {
       return InkWell(
@@ -238,28 +266,38 @@ class _ListTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final voice = VoiceColors.of(context);
+    final l10n = AppLocalizations.of(context)!;
     final e2eChat = ref.watch(chatE2eEnabledProvider(chatId));
     final title = item.isLink
         ? (item.title?.isNotEmpty == true ? item.title! : item.externalUrl!)
         : (item.originalName ?? item.attachmentType ?? 'file');
     final subtitle = item.isLink ? item.externalUrl : _formatSize(item.sizeBytes);
+    final isLockedE2eFile = e2eChat && !item.isLink && !item.isE2eEncrypted;
 
     return ListTile(
       key: Key('shared_media_item_${item.messageId}_${item.sortOrder}'),
       leading: Icon(
         item.isLink
             ? Icons.link
-            : e2eChat && !item.isLink
+            : item.isE2eEncrypted
+            ? Icons.download_outlined
+            : isLockedE2eFile
             ? Icons.lock_outline
             : item.attachmentType == 'audio' ||
                   item.attachmentType == 'voice_message'
             ? Icons.mic_outlined
             : Icons.insert_drive_file_outlined,
-        color: e2eChat && !item.isLink ? voice.textSecondary : null,
+        color: isLockedE2eFile ? voice.textSecondary : null,
       ),
       title: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
       subtitle: subtitle != null
           ? Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis)
+          : item.isE2eEncrypted
+          ? Text(
+              l10n.e2eAttachmentTapToDownload,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            )
           : null,
       onTap: () {
         if (item.isLink) {
@@ -267,6 +305,16 @@ class _ListTile extends ConsumerWidget {
           if (uri != null) {
             launchUrl(uri, mode: LaunchMode.externalApplication);
           }
+        } else if (item.isE2eEncrypted && item.fileId != null) {
+          unawaited(
+            _downloadSharedE2eFile(
+              context,
+              ref,
+              chatId: chatId,
+              item: item,
+              fileName: title,
+            ),
+          );
         }
         _openMessage(context, ref, chatId, item.messageId);
       },
@@ -280,6 +328,44 @@ class _ListTile extends ConsumerWidget {
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
     return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+}
+
+Future<void> _downloadSharedE2eFile(
+  BuildContext context,
+  WidgetRef ref, {
+  required String chatId,
+  required SharedMediaItemData item,
+  required String fileName,
+}) async {
+  final l10n = AppLocalizations.of(context)!;
+  final fileId = item.fileId;
+  final keyWire = item.e2eKeyWire;
+  if (fileId == null || keyWire == null || keyWire.isEmpty) return;
+  final decryptRequest = E2eAttachmentDecryptRequest(
+    fileId: fileId,
+    e2eKeyWire: keyWire,
+    senderProfileId: item.senderProfileId,
+    chatId: chatId,
+  );
+  final bytes =
+      await ref.read(e2eDecryptedAttachmentBytesProvider(decryptRequest).future);
+  if (!context.mounted) return;
+  if (bytes == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(l10n.e2eAttachmentDecryptFailed)),
+    );
+    return;
+  }
+  final saved = await saveDecryptedE2eAttachment(
+    bytes: bytes,
+    fileName: fileName,
+  );
+  if (!context.mounted) return;
+  if (!saved) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(l10n.e2eAttachmentDownloadFailed)),
+    );
   }
 }
 

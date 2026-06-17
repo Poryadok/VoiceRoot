@@ -47,8 +47,23 @@ service AuthService {
   rpc RestoreAccount(RestoreAccountRequest) returns (RestoreAccountResponse);
   rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse); // internal
   rpc GetJWKS(GetJWKSRequest) returns (GetJWKSResponse); // public
+  rpc PutE2EKeyBackup(PutE2EKeyBackupRequest) returns (PutE2EKeyBackupResponse); // Phase 15
+  rpc GetE2EKeyBackup(GetE2EKeyBackupRequest) returns (GetE2EKeyBackupResponse);
 }
 ```
+
+### Phase 15 — E2E key backup (REST via Gateway)
+
+Клиент хранит парольно-зашифрованный бэкап ключей Signal на сервере; сервер видит только opaque blob ([encryption.md](../features/encryption.md)).
+
+| gRPC | REST (Gateway transcoding) | Назначение |
+|------|----------------------------|------------|
+| `PutE2EKeyBackup` | `PUT /api/v1/auth/e2e-key-backup` | Сохранить/обновить blob (`encrypted_blob`, опционально `password_hint`); `204 No Content` |
+| `GetE2EKeyBackup` | `GET /api/v1/auth/e2e-key-backup` | Получить blob для восстановления на новом устройстве; `404` до первого PUT |
+
+- **Владение данными:** пароль и ключ расшифровки — только на клиенте; Auth хранит `encrypted_blob` как есть.
+- **Лимиты Gateway:** `E2EKeyBackupPut` 5/min, `E2EKeyBackupGet` 30/min (`ratelimit.go`).
+- **Клиент:** `VoiceE2eClient` + UI в `e2e_chat_settings.dart`; см. также [messaging-service.md](messaging-service.md) (key backup не в Messaging).
 
 ## Модель данных
 
@@ -83,6 +98,12 @@ otp_codes
 ├── expires_at
 ├── used_at (nullable)
 └── created_at
+
+e2e_key_backups (Phase 15)
+├── account_id (UUID, PK, logical ref → accounts.id)
+├── encrypted_blob (TEXT, client-encrypted opaque payload)
+├── password_hint (nullable)
+└── updated_at
 ```
 
 ### V1 (Фаза 0-1) — детальный профиль для DDL
@@ -118,6 +139,12 @@ otp_codes
 ├── expires_at TIMESTAMPTZ NOT NULL
 ├── used_at TIMESTAMPTZ NULL
 └── created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+
+e2e_key_backups (Phase 15, Flyway V4__e2e_key_backups.sql)
+├── account_id UUID PRIMARY KEY -- logical ref → accounts.id
+├── encrypted_blob TEXT NOT NULL
+├── password_hint TEXT NULL
+└── updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 ```
 
 Индексы v1:

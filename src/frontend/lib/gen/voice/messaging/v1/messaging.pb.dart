@@ -2983,6 +2983,7 @@ class SharedMediaItem extends $pb.GeneratedMessage {
     $core.int? sortOrder,
     $core.String? originalName,
     $fixnum.Int64? sizeBytes,
+    $core.String? e2eKeyWire,
   }) {
     final result = create();
     if (messageId != null) result.messageId = messageId;
@@ -2995,6 +2996,7 @@ class SharedMediaItem extends $pb.GeneratedMessage {
     if (sortOrder != null) result.sortOrder = sortOrder;
     if (originalName != null) result.originalName = originalName;
     if (sizeBytes != null) result.sizeBytes = sizeBytes;
+    if (e2eKeyWire != null) result.e2eKeyWire = e2eKeyWire;
     return result;
   }
 
@@ -3023,6 +3025,7 @@ class SharedMediaItem extends $pb.GeneratedMessage {
     ..aI(8, _omitFieldNames ? '' : 'sortOrder')
     ..aOS(9, _omitFieldNames ? '' : 'originalName')
     ..aInt64(10, _omitFieldNames ? '' : 'sizeBytes')
+    ..aOS(11, _omitFieldNames ? '' : 'e2eKeyWire')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -3135,6 +3138,15 @@ class SharedMediaItem extends $pb.GeneratedMessage {
   $core.bool hasSizeBytes() => $_has(9);
   @$pb.TagNumber(10)
   void clearSizeBytes() => $_clearField(10);
+
+  @$pb.TagNumber(11)
+  $core.String get e2eKeyWire => $_getSZ(10);
+  @$pb.TagNumber(11)
+  set e2eKeyWire($core.String value) => $_setString(10, value);
+  @$pb.TagNumber(11)
+  $core.bool hasE2eKeyWire() => $_has(10);
+  @$pb.TagNumber(11)
+  void clearE2eKeyWire() => $_clearField(11);
 }
 
 class SharedMediaList extends $pb.GeneratedMessage {
