@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 
+	"google.golang.org/grpc/metadata"
+
 	authv1 "voice.app/voice/auth/v1"
 	subscriptionv1 "voice.app/voice/subscription/v1"
 	userv1 "voice.app/voice/user/v1"
@@ -76,6 +78,27 @@ func (t *transcoder) serveAuthREST(w http.ResponseWriter, r *http.Request, rest 
 		}
 		sess := resp.GetSession()
 		writeProtoJSON(w, http.StatusOK, sess)
+		return true
+
+	case r.Method == http.MethodPost && rest == "convert-guest":
+		if t.clients.auth == nil {
+			return false
+		}
+		req := &authv1.ConvertGuestRequest{}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		callCtx := ctx
+		if authz := strings.TrimSpace(r.Header.Get("Authorization")); authz != "" {
+			callCtx = metadata.AppendToOutgoingContext(callCtx, "authorization", authz)
+		}
+		resp, err := t.clients.auth.ConvertGuest(callCtx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"session": resp.GetSession()})
 		return true
 
 	default:

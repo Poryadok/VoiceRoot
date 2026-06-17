@@ -213,6 +213,34 @@ void main() {
     expect(find.byKey(SocialPanel.searchLoadingKey), findsNothing);
   });
 
+  testWidgets('profile search shows only one loading spinner', (tester) async {
+    final completer = Completer<http.Response>();
+    addTearDown(() {
+      if (!completer.isCompleted) {
+        completer.complete(http.Response('{}', 500));
+      }
+    });
+
+    await tester.pumpWidget(
+      socialTestApp(
+        home: const SocialPanel(),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/users/search') {
+            return completer.future;
+          }
+          return http.Response('not found', 404);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(SocialPanel.searchFieldKey), 'alice');
+    await tester.tap(find.byKey(SocialPanel.searchSubmitKey));
+    await tester.pump();
+
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+  });
+
   testWidgets('search shows a no-results state after an empty result', (
     tester,
   ) async {

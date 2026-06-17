@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../backend/realtime_client.dart';
+import 'auth_providers.dart';
 import 'call_providers.dart';
 
 class ActiveScreenShare {
@@ -98,9 +99,18 @@ class ScreenShareController extends StateNotifier<ScreenShareUiState> {
             streamId: streamId,
           ),
         ];
+        final selfId = _ref.read(authControllerProvider).activeProfileId;
+        final isRemote = selfId != null && profileId != selfId;
+        String? selected = state.selectedProfileId;
+        if (selected == null) {
+          selected = profileId;
+        } else if (isRemote &&
+            (selected == selfId || !state.streams.any((s) => s.profileId == selected))) {
+          selected = profileId;
+        }
         state = state.copyWith(
           streams: next,
-          selectedProfileId: state.selectedProfileId ?? profileId,
+          selectedProfileId: selected,
         );
       case 'screen_share_stopped':
         final profileId = data['profile_id'] as String? ?? '';

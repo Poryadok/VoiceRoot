@@ -169,6 +169,11 @@ final friendsListProvider = FutureProvider<FriendsListData>((ref) async {
   };
 });
 
+final isFriendProvider = Provider.family<bool, String>((ref, profileId) {
+  final friends = ref.watch(friendsListProvider).valueOrNull;
+  return friends?.friends.contains(profileId) ?? false;
+});
+
 final friendRequestsProvider = FutureProvider<FriendRequestsData>((ref) async {
   final auth = ref.watch(authorizationHeaderProvider);
   if (auth == null) {
@@ -234,6 +239,21 @@ class SocialActions {
           authorization: auth,
           requesterProfileId: requesterProfileId,
         );
+    _invalidateSocialLists();
+    return switch (result) {
+      FriendsApiEmpty() => null,
+      FriendsApiFailure(:final message) => message,
+      FriendsApiOk() => null,
+    };
+  }
+
+  Future<String?> removeFriend(String friendProfileId) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+    final result = await _ref.read(voiceFriendsClientProvider).removeFriend(
+      authorization: auth,
+      friendProfileId: friendProfileId,
+    );
     _invalidateSocialLists();
     return switch (result) {
       FriendsApiEmpty() => null,

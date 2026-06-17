@@ -105,15 +105,25 @@ class _ExpandedNavigationState extends ConsumerState<_ExpandedNavigation> {
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
             child: SegmentedButton<NavigationSection>(
+              style: SegmentedButton.styleFrom(
+                textStyle: Theme.of(context).textTheme.labelSmall,
+                visualDensity: VisualDensity.compact,
+              ),
               segments: [
                 ButtonSegment(
                   value: NavigationSection.chats,
-                  label: Text(l10n.chatListTitle),
+                  label: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(l10n.chatListTitle),
+                  ),
                   icon: const Icon(Icons.chat_bubble_outline, size: 18),
                 ),
                 ButtonSegment(
                   value: NavigationSection.social,
-                  label: Text(l10n.socialTabFriends),
+                  label: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(l10n.socialTabFriends),
+                  ),
                   icon: Badge(
                     isLabelVisible: socialBadge > 0,
                     label: Text(

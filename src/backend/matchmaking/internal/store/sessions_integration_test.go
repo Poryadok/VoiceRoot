@@ -49,6 +49,37 @@ func TestSessionStore_CreateAndCancel(t *testing.T) {
 	require.Equal(t, SessionStatusCancelled, cancelled.Status)
 }
 
+func TestSessionStore_ListSearchingNeedingNudge_requiresNudgedAtColumn(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := StartMatchmakingDBForStoreTest(t, ctx)
+	ApplyMatchmakingMigrationsThrough005ForStoreTest(t, ctx, pool)
+
+	gameStore := &GameStore{Pool: pool}
+	g, err := gameStore.List(ctx, ListGamesParams{PageSize: 1, Status: StatusActive})
+	require.NoError(t, err)
+
+	sessions := &SessionStore{Pool: pool}
+	now := time.Now().UTC()
+	sess, err := sessions.Create(ctx, CreateSessionParams{
+		ProfileID: uuid.New(),
+		GameID:    g.Games[0].ID,
+		Mode:      "5v5 Ranked",
+		Criteria:  `{"region":"eu","self":{"role":"Carry","rank":"Herald"}}`,
+		TimeoutAt: now.Add(30 * time.Minute),
+	})
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE search_sessions SET created_at = $2 WHERE id = $1`, sess.ID, now.Add(-20*time.Minute))
+	require.NoError(t, err)
+
+	needNudge, err := sessions.ListSearchingNeedingNudge(ctx, now.Add(-15*time.Minute), 10)
+	require.NoError(t, err, "ListSearchingNeedingNudge must work once nudged_at migration is applied")
+	require.Len(t, needNudge, 1)
+	require.Nil(t, needNudge[0].NudgedAt)
+}
+
 func TestSessionStore_NudgeAndExpire(t *testing.T) {
 	if testing.Short() {
 		t.Skip()

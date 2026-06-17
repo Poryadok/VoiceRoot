@@ -31,6 +31,7 @@ abstract interface class VoiceLiveKitRoom {
     String? participantIdentity,
   });
   livekit.LocalVideoTrack? localCameraTrack();
+  livekit.LocalVideoTrack? localScreenShareTrack();
   livekit.RemoteVideoTrack? remoteCameraTrack();
   Future<void> disconnect();
 }
@@ -120,23 +121,29 @@ class LiveKitVoiceRoom implements VoiceLiveKitRoom {
           unawaited(ensureAudioPlayback());
         }
         if (event.track.kind == livekit.TrackType.VIDEO &&
-            event.publication.source == livekit.TrackSource.camera) {
+            (event.publication.source == livekit.TrackSource.camera ||
+                event.publication.source ==
+                    livekit.TrackSource.screenShareVideo)) {
           _notifyTracksChanged();
         }
       })
       ..on<livekit.TrackUnsubscribedEvent>((event) {
         if (event.track.kind == livekit.TrackType.VIDEO &&
-            event.publication.source == livekit.TrackSource.camera) {
+            (event.publication.source == livekit.TrackSource.camera ||
+                event.publication.source ==
+                    livekit.TrackSource.screenShareVideo)) {
           _notifyTracksChanged();
         }
       })
       ..on<livekit.LocalTrackPublishedEvent>((event) {
-        if (event.publication.source == livekit.TrackSource.camera) {
+        if (event.publication.source == livekit.TrackSource.camera ||
+            event.publication.source == livekit.TrackSource.screenShareVideo) {
           _notifyTracksChanged();
         }
       })
       ..on<livekit.LocalTrackUnpublishedEvent>((event) {
-        if (event.publication.source == livekit.TrackSource.camera) {
+        if (event.publication.source == livekit.TrackSource.camera ||
+            event.publication.source == livekit.TrackSource.screenShareVideo) {
           _notifyTracksChanged();
         }
       });
@@ -216,6 +223,19 @@ class LiveKitVoiceRoom implements VoiceLiveKitRoom {
     if (participant == null) return null;
     for (final publication in participant.videoTrackPublications) {
       if (publication.source == livekit.TrackSource.camera &&
+          publication.track is livekit.LocalVideoTrack) {
+        return publication.track as livekit.LocalVideoTrack;
+      }
+    }
+    return null;
+  }
+
+  @override
+  livekit.LocalVideoTrack? localScreenShareTrack() {
+    final participant = _room.localParticipant;
+    if (participant == null) return null;
+    for (final publication in participant.videoTrackPublications) {
+      if (publication.source == livekit.TrackSource.screenShareVideo &&
           publication.track is livekit.LocalVideoTrack) {
         return publication.track as livekit.LocalVideoTrack;
       }

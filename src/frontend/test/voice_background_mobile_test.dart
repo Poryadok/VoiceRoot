@@ -115,6 +115,9 @@ class _FakeLiveKitRoom implements VoiceLiveKitRoom {
   livekit.LocalVideoTrack? localCameraTrack() => null;
 
   @override
+  livekit.LocalVideoTrack? localScreenShareTrack() => null;
+
+  @override
   livekit.RemoteVideoTrack? remoteCameraTrack() => null;
 
   @override

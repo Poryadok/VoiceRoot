@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/auth_session.dart';
+import 'package:voice_frontend/backend/guest_credentials_storage.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
@@ -20,10 +21,14 @@ void main() {
         ),
         httpClientProvider.overrideWithValue(mock),
         authSessionStorageProvider.overrideWithValue(InMemoryAuthSessionStorage()),
+        guestCredentialsStorageProvider.overrideWithValue(
+          InMemoryGuestCredentialsStorage(),
+        ),
         authControllerProvider.overrideWith((ref) {
           final c = AuthController(
             authClient: ref.watch(voiceAuthClientProvider),
             storage: ref.watch(authSessionStorageProvider),
+            guestCredentialsStorage: ref.watch(guestCredentialsStorageProvider),
           );
           c.state = const AuthState(
             session: AuthSession(

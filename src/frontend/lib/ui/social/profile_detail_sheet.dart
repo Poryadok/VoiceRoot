@@ -35,6 +35,7 @@ class ProfileDetailSheet extends ConsumerWidget {
   static const Key sheetKey = Key('profile_detail_sheet');
   static const Key onlineIndicatorKey = Key('profile_online_indicator');
   static const Key addFriendKey = Key('profile_add_friend');
+  static const Key removeFriendKey = Key('profile_remove_friend');
   static const Key messageKey = Key('profile_message');
   static const Key blockKey = Key('profile_block');
 
@@ -63,6 +64,7 @@ class ProfileDetailSheet extends ConsumerWidget {
     final incoming = requestsAsync.valueOrNull?.incoming ?? const [];
     final pendingOutgoing = outgoing.contains(profileId);
     final pendingIncoming = incoming.contains(profileId);
+    final isFriend = ref.watch(isFriendProvider(profileId));
 
     return SafeArea(
       child: Padding(
@@ -167,6 +169,7 @@ class ProfileDetailSheet extends ConsumerWidget {
                     profileId: profileId,
                     pendingOutgoing: pendingOutgoing,
                     pendingIncoming: pendingIncoming,
+                    isFriend: isFriend,
                   ),
                   const SizedBox(height: 8),
                   TextButton(
@@ -290,11 +293,13 @@ class _FriendActionButton extends ConsumerStatefulWidget {
     required this.profileId,
     required this.pendingOutgoing,
     required this.pendingIncoming,
+    required this.isFriend,
   });
 
   final String profileId;
   final bool pendingOutgoing;
   final bool pendingIncoming;
+  final bool isFriend;
 
   @override
   ConsumerState<_FriendActionButton> createState() =>
@@ -330,6 +335,25 @@ class _FriendActionButtonState extends ConsumerState<_FriendActionButton> {
     if (widget.pendingOutgoing) {
       return Text(l10n.socialRequestPending);
     }
+    if (widget.isFriend) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          OutlinedButton(
+            key: ProfileDetailSheet.removeFriendKey,
+            onPressed: _busy ? null : _removeFriend,
+            child: Text(l10n.socialRemoveFriend),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              l10n.socialActionError(_error!),
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ],
+        ],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -357,6 +381,22 @@ class _FriendActionButtonState extends ConsumerState<_FriendActionButton> {
     final err = await ref
         .read(socialActionsProvider)
         .sendFriendInvitation(widget.profileId);
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _error = err;
+    });
+    if (err == null) Navigator.of(context).pop();
+  }
+
+  Future<void> _removeFriend() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final err = await ref
+        .read(socialActionsProvider)
+        .removeFriend(widget.profileId);
     if (!mounted) return;
     setState(() {
       _busy = false;

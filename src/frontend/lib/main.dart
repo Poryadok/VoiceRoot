@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'backend/auth_session_storage.dart';
 import 'backend/client_version.dart';
 import 'backend/discover_hint_storage.dart';
+import 'backend/guest_credentials_storage.dart';
 import 'bootstrap/voice_app_bootstrap.dart';
 import 'state/auth_providers.dart';
 import 'state/call_providers.dart';
@@ -30,6 +31,9 @@ Future<void> main() async {
         messageCacheStoreProvider.overrideWithValue(messageCacheStore),
         authSessionStorageProvider.overrideWithValue(
           SharedPreferencesAuthSessionStorage(prefs),
+        ),
+        guestCredentialsStorageProvider.overrideWithValue(
+          FlutterGuestCredentialsStorage(),
         ),
         discoverHintStorageProvider.overrideWithValue(
           SharedPreferencesDiscoverHintStorage(prefs),

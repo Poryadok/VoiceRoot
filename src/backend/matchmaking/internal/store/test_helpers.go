@@ -25,7 +25,7 @@ func StartMatchmakingDBForStoreTest(t *testing.T, ctx context.Context) *pgxpool.
 	return integrationtest.StartPostgres(t, ctx, "matchmakingdb", "")
 }
 
-func ApplyMatchmakingMigrationsForStoreTest(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+func applyMatchmakingMigrationsUpTo(t *testing.T, ctx context.Context, pool *pgxpool.Pool, lastFile string) {
 	t.Helper()
 	root := repoRoot(t)
 	for _, name := range []string{
@@ -42,5 +42,19 @@ func ApplyMatchmakingMigrationsForStoreTest(t *testing.T, ctx context.Context, p
 		require.NoError(t, err)
 		_, err = pool.Exec(ctx, string(sqlBytes))
 		require.NoError(t, err)
+		if name == lastFile {
+			return
+		}
 	}
+	t.Fatalf("unknown migration file %q", lastFile)
+}
+
+func ApplyMatchmakingMigrationsForStoreTest(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
+	applyMatchmakingMigrationsUpTo(t, ctx, pool, "000007_match_history_index.up.sql")
+}
+
+func ApplyMatchmakingMigrationsThrough005ForStoreTest(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
+	applyMatchmakingMigrationsUpTo(t, ctx, pool, "000006_search_nudge.up.sql")
 }

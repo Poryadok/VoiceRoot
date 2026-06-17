@@ -1,5 +1,7 @@
 package voice.backend.auth.grpc;
 
+import app.voice.auth.v1.ConvertGuestRequest;
+import app.voice.auth.v1.ConvertGuestResponse;
 import app.voice.auth.v1.GetE2EKeyBackupRequest;
 import app.voice.auth.v1.GetE2EKeyBackupResponse;
 import app.voice.auth.v1.PutE2EKeyBackupRequest;
@@ -34,6 +36,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.stereotype.Component;
 import voice.backend.auth.service.AuthException;
 import voice.backend.auth.service.AuthService;
+import voice.backend.auth.service.ConvertGuestCommand;
 import voice.backend.auth.service.LoginCommand;
 import voice.backend.auth.service.LogoutCommand;
 import voice.backend.auth.service.RefreshCommand;
@@ -97,6 +100,21 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
       voice.backend.auth.service.AuthSession session = authService.verify2FA(lastAccessToken(), request.getTotpCode());
       rememberAccess(session.accessToken());
       return Verify2FAResponse.newBuilder().setSession(toProto(session)).build();
+    });
+  }
+
+  @Override
+  public void convertGuest(ConvertGuestRequest request, StreamObserver<ConvertGuestResponse> responseObserver) {
+    run(responseObserver, () -> {
+      voice.backend.auth.service.AuthSession session =
+          authService.convertGuest(
+              resolveAccessToken(),
+              new ConvertGuestCommand(
+                  request.hasEmail() ? request.getEmail() : null,
+                  request.hasPhone() ? request.getPhone() : null,
+                  request.getPassword()));
+      rememberAccess(session.accessToken());
+      return ConvertGuestResponse.newBuilder().setSession(toProto(session)).build();
     });
   }
 
@@ -211,5 +229,13 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
       throw new AuthException("invalid_token");
     }
     return token;
+  }
+
+  private String resolveAccessToken() {
+    String authorization = AuthorizationServerInterceptor.AUTHORIZATION.get();
+    if (authorization != null && !authorization.isBlank()) {
+      return authorization;
+    }
+    return lastAccessToken();
   }
 }

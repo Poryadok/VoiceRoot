@@ -12,16 +12,19 @@ public class AuthGrpcServer implements SmartLifecycle {
   private final AuthGrpcService authGrpcService;
   private final AuthProperties properties;
   private final RequestIdServerInterceptor requestIdServerInterceptor;
+  private final AuthorizationServerInterceptor authorizationServerInterceptor;
   private Server server;
   private boolean running;
 
   public AuthGrpcServer(
       AuthGrpcService authGrpcService,
       AuthProperties properties,
-      RequestIdServerInterceptor requestIdServerInterceptor) {
+      RequestIdServerInterceptor requestIdServerInterceptor,
+      AuthorizationServerInterceptor authorizationServerInterceptor) {
     this.authGrpcService = authGrpcService;
     this.properties = properties;
     this.requestIdServerInterceptor = requestIdServerInterceptor;
+    this.authorizationServerInterceptor = authorizationServerInterceptor;
   }
 
   @Override
@@ -32,6 +35,7 @@ public class AuthGrpcServer implements SmartLifecycle {
     try {
       server = NettyServerBuilder.forPort(properties.getGrpc().getPort())
           .intercept(requestIdServerInterceptor)
+          .intercept(authorizationServerInterceptor)
           .addService(authGrpcService)
           .build()
           .start();

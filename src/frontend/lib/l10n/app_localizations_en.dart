@@ -166,6 +166,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get socialAddFriend => 'Add friend';
 
   @override
+  String get socialRemoveFriend => 'Remove from friends';
+
+  @override
   String get socialAcceptRequest => 'Accept';
 
   @override
@@ -1516,6 +1519,22 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bootstrapRestoring => 'Restoring session…';
+
+  @override
+  String get guestNicknameTitle => 'Choose a nickname';
+
+  @override
+  String get guestNicknameSubtitle =>
+      'Guests need a display name before chatting.';
+
+  @override
+  String get guestNicknameLabel => 'Nickname';
+
+  @override
+  String get guestNicknameHint => 'How others will see you';
+
+  @override
+  String get guestNicknameContinue => 'Continue';
 
   @override
   String get gameCatalogTitle => 'Game catalog';

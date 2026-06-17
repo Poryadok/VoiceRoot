@@ -374,6 +374,12 @@ abstract class AppLocalizations {
   /// **'Add friend'**
   String get socialAddFriend;
 
+  /// No description provided for @socialRemoveFriend.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove from friends'**
+  String get socialRemoveFriend;
+
   /// No description provided for @socialAcceptRequest.
   ///
   /// In en, this message translates to:
@@ -2815,6 +2821,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Restoring session…'**
   String get bootstrapRestoring;
+
+  /// No description provided for @guestNicknameTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a nickname'**
+  String get guestNicknameTitle;
+
+  /// No description provided for @guestNicknameSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Guests need a display name before chatting.'**
+  String get guestNicknameSubtitle;
+
+  /// No description provided for @guestNicknameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Nickname'**
+  String get guestNicknameLabel;
+
+  /// No description provided for @guestNicknameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'How others will see you'**
+  String get guestNicknameHint;
+
+  /// No description provided for @guestNicknameContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get guestNicknameContinue;
 
   /// No description provided for @gameCatalogTitle.
   ///

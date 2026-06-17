@@ -119,6 +119,8 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   var _wasNearBottom = true;
   var _slashMenuOpen = false;
   var _executingSlash = false;
+  var _inChatSearchOpen = false;
+  final _inChatSearchController = TextEditingController();
 
   @override
   void initState() {
@@ -131,6 +133,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     _composer.dispose();
     _composerFocus.dispose();
     _scrollController.dispose();
+    _inChatSearchController.dispose();
     super.dispose();
   }
 
@@ -341,7 +344,22 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   const SizedBox(width: 8),
                 ],
                 Expanded(
-                  child: !isGroup && peerProfile != null
+                  child: _inChatSearchOpen
+                      ? KeyedSubtree(
+                          key: const Key('in_chat_search_inline_header'),
+                          child: TextField(
+                            key: InChatSearch.searchFieldKey,
+                            controller: _inChatSearchController,
+                            autofocus: true,
+                            decoration: InputDecoration(
+                              hintText: l10n.inChatSearchHint,
+                              isDense: true,
+                              border: InputBorder.none,
+                            ),
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        )
+                      : !isGroup && peerProfile != null
                       ? ChatAuthorLabel(
                           displayName: title,
                           isPremium: peerIsPremium,
@@ -363,19 +381,14 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   key: ChatRoomPanel.inChatSearchKey,
                   tooltip: l10n.inChatSearchOpen,
                   onPressed: () {
-                    showModalBottomSheet<void>(
-                      context: context,
-                      isScrollControlled: true,
-                      builder: (context) => SizedBox(
-                        height: MediaQuery.sizeOf(context).height * 0.5,
-                        child: InChatSearch(
-                          chatId: widget.chatId,
-                          onActiveMessageChanged: _scrollToMessage,
-                        ),
-                      ),
-                    );
+                    setState(() {
+                      _inChatSearchOpen = !_inChatSearchOpen;
+                      if (!_inChatSearchOpen) {
+                        _inChatSearchController.clear();
+                      }
+                    });
                   },
-                  icon: const Icon(Icons.search),
+                  icon: Icon(_inChatSearchOpen ? Icons.close : Icons.search),
                 ),
                 IconButton(
                   key: ChatRoomPanel.chatInfoKey,
@@ -519,41 +532,65 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
             onTap: (messageId) => _scrollToMessage(messageId),
           ),
         Expanded(
-          child: room.messages.isEmpty &&
-                  ephemeralMessages.isEmpty &&
-                  !room.isLoading
-              ? room.errorMessage != null
-                    ? VoiceStatePanel(
-                        title: l10n.chatRoomError(room.errorMessage!),
-                        icon: Icons.cloud_off_outlined,
-                        actionLabel: l10n.commonRetry,
-                        onAction: () => ref
-                            .read(
-                              chatRoomControllerProvider(
-                                widget.chatId,
-                              ).notifier,
-                            )
-                            .loadInitial(),
-                      )
-                    : VoiceStatePanel(
-                        title: l10n.chatRoomEmpty,
-                        message: l10n.chatRoomEmptyHint,
-                        icon: Icons.chat_bubble_outline,
-                      )
-              : _MessageListView(
-                  key: ChatRoomPanel.messagesKey,
-                  chatId: widget.chatId,
-                  scrollController: _scrollController,
-                  room: room,
-                  ephemeralMessages: ephemeralMessages,
-                  deferredInteraction: deferredInteraction,
-                  activeId: activeId,
-                  isGroup: isGroup,
-                  l10n: l10n,
-                  initialUnreadCount: _initialUnreadCount,
-                  onLongPress: (msg, isMine) =>
-                      _showMessageActions(msg, isMine),
+          child: Stack(
+            children: [
+              room.messages.isEmpty &&
+                      ephemeralMessages.isEmpty &&
+                      !room.isLoading
+                  ? room.errorMessage != null
+                        ? VoiceStatePanel(
+                            title: l10n.chatRoomError(room.errorMessage!),
+                            icon: Icons.cloud_off_outlined,
+                            actionLabel: l10n.commonRetry,
+                            onAction: () => ref
+                                .read(
+                                  chatRoomControllerProvider(
+                                    widget.chatId,
+                                  ).notifier,
+                                )
+                                .loadInitial(),
+                          )
+                        : VoiceStatePanel(
+                            title: l10n.chatRoomEmpty,
+                            message: l10n.chatRoomEmptyHint,
+                            icon: Icons.chat_bubble_outline,
+                          )
+                  : _MessageListView(
+                      key: ChatRoomPanel.messagesKey,
+                      chatId: widget.chatId,
+                      scrollController: _scrollController,
+                      room: room,
+                      ephemeralMessages: ephemeralMessages,
+                      deferredInteraction: deferredInteraction,
+                      activeId: activeId,
+                      isGroup: isGroup,
+                      l10n: l10n,
+                      initialUnreadCount: _initialUnreadCount,
+                      onLongPress: (msg, isMine) =>
+                          _showMessageActions(msg, isMine),
+                    ),
+              if (_inChatSearchOpen)
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: Material(
+                    elevation: 4,
+                    color: voice.surface,
+                    child: InChatSearch(
+                      chatId: widget.chatId,
+                      controller: _inChatSearchController,
+                      showSearchField: false,
+                      onActiveMessageChanged: _scrollToMessage,
+                      onDismiss: () => setState(() {
+                        _inChatSearchOpen = false;
+                        _inChatSearchController.clear();
+                      }),
+                    ),
+                  ),
                 ),
+            ],
+          ),
         ),
         if (room.errorMessage != null && room.messages.isNotEmpty)
           Padding(
@@ -590,13 +627,6 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
             padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
             child: Row(
               children: [
-                IconButton(
-                  tooltip: l10n.chatMentionInsert,
-                  onPressed: room.isSending || composerBlocked
-                      ? null
-                      : () => _showMentionMenu(context),
-                  icon: const Icon(Icons.alternate_email),
-                ),
                 IconButton(
                   key: ChatRoomPanel.emojiPickerKey,
                   tooltip: l10n.chatMessageAddReaction,
@@ -702,43 +732,6 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     );
   }
 
-  Future<void> _showMentionMenu(BuildContext context) async {
-    final l10n = AppLocalizations.of(context)!;
-    final membersAsync = ref.read(groupMembersProvider(widget.chatId));
-    final memberIds = membersAsync.maybeWhen(
-      data: (data) => data.members.map((m) => m.profileId).toList(),
-      orElse: () => const <String>[],
-    );
-    final choice = await showModalBottomSheet<String>(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              title: Text(l10n.chatMentionEveryone),
-              onTap: () => Navigator.pop(ctx, '@everyone '),
-            ),
-            ListTile(
-              title: Text(l10n.chatMentionHere),
-              onTap: () => Navigator.pop(ctx, '@here '),
-            ),
-            for (final id in memberIds)
-              _MentionMemberTile(
-                profileId: id,
-                onPick: (token) => Navigator.pop(ctx, '$token '),
-              ),
-          ],
-        ),
-      ),
-    );
-    if (choice == null || !mounted) return;
-    final text = _composer.text;
-    _composer.text = '$text$choice';
-    _composer.selection = TextSelection.collapsed(offset: _composer.text.length);
-    _refocusComposer();
-  }
-
   Future<void> _showSlashCommandMenu(BuildContext context) async {
     final l10n = AppLocalizations.of(context)!;
     final text = _composer.text;
@@ -841,12 +834,23 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       memberProfileIds: memberIds,
       handleToProfileId: handleToProfileId,
     );
+    final chatType = ref
+        .read(chatListProvider)
+        .valueOrNull
+        ?.items
+        .where((item) => item.chatId == widget.chatId)
+        .map((item) => item.chat.type)
+        .firstOrNull;
+    final isDm = chatType == 'CHAT_TYPE_DM';
+    final filteredMentions = isDm
+        ? mentions.where((m) => m.type == 'user').toList()
+        : mentions;
     final replyTarget = ref.read(chatReplyTargetProvider(widget.chatId));
     final err = await ref
         .read(chatRoomControllerProvider(widget.chatId).notifier)
         .sendMessage(
           text,
-          mentions: mentions,
+          mentions: filteredMentions,
           threadParentId: replyTarget?.id,
         );
     if (!mounted) return;
@@ -1874,32 +1878,6 @@ class _MessageAuthorHeader extends ConsumerWidget {
         ),
       ),
     );
-  }
-}
-
-class _MentionMemberTile extends ConsumerWidget {
-  const _MentionMemberTile({
-    required this.profileId,
-    required this.onPick,
-  });
-
-  final String profileId;
-  final void Function(String mentionToken) onPick;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final l10n = AppLocalizations.of(context)!;
-    final profile = ref.watch(profileProvider(profileId)).valueOrNull;
-    final label =
-        profile?.displayName ?? profile?.handle ?? l10n.chatMentionMember(profileId);
-    final handle = profile?.handle;
-    final displayName = profile?.displayName;
-    final token = handle != null && handle.isNotEmpty
-        ? '@$handle'
-        : (displayName != null && displayName.isNotEmpty)
-            ? '@$displayName'
-            : '@$profileId';
-    return ListTile(title: Text(label), onTap: () => onPick(token));
   }
 }
 

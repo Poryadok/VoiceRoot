@@ -20,8 +20,10 @@ apply_incremental() {
 
 ensure_database search_db
 ensure_database gateway_db
+ensure_database matchmaking_db
 
 apply_incremental chat_db incremental_chat_db.sql.snippet
+apply_incremental matchmaking_db incremental_matchmaking_db.sql.snippet
 apply_incremental messaging_db incremental_messaging_db.sql.snippet
 apply_incremental user_db incremental_user_db.sql.snippet
 apply_incremental role_db incremental_role_db.sql.snippet

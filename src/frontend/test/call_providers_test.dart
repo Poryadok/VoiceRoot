@@ -6,13 +6,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/auth_session.dart';
+import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:livekit_client/livekit_client.dart' as livekit;
 import 'package:voice_frontend/backend/livekit_room.dart';
 import 'package:voice_frontend/backend/livekit_url.dart';
 import 'package:voice_frontend/backend/realtime_client.dart';
 import 'package:voice_frontend/backend/voice_client.dart';
-import 'package:voice_frontend/backend/auth_session_storage.dart';
+import 'package:voice_frontend/backend/guest_credentials_storage.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/call_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
@@ -86,6 +87,9 @@ class _FakeLiveKitRoom implements VoiceLiveKitRoom {
   livekit.LocalVideoTrack? localCameraTrack() => null;
 
   @override
+  livekit.LocalVideoTrack? localScreenShareTrack() => null;
+
+  @override
   livekit.RemoteVideoTrack? remoteCameraTrack() => null;
 
   @override
@@ -133,6 +137,7 @@ AuthController _authControllerForProfile(Ref ref, String profileId) {
   final controller = AuthController(
     authClient: ref.watch(voiceAuthClientProvider),
     storage: ref.watch(authSessionStorageProvider),
+    guestCredentialsStorage: ref.watch(guestCredentialsStorageProvider),
   );
   controller.state = AuthState(
     session: AuthSession(
@@ -159,6 +164,9 @@ ProviderContainer _callTestContainer({
   return ProviderContainer(
     overrides: [
       authSessionStorageProvider.overrideWithValue(InMemoryAuthSessionStorage()),
+      guestCredentialsStorageProvider.overrideWithValue(
+        InMemoryGuestCredentialsStorage(),
+      ),
       httpClientProvider.overrideWithValue(client),
       gatewayConfigProvider.overrideWithValue(config),
       gatewayHttpClientProvider.overrideWithValue(

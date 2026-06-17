@@ -7,6 +7,7 @@ import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
+import 'package:voice_frontend/backend/guest_credentials_storage.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 
@@ -33,6 +34,9 @@ void main() {
         httpClientProvider.overrideWithValue(mock),
         authSessionStorageProvider.overrideWithValue(
           storage ?? InMemoryAuthSessionStorage(),
+        ),
+        guestCredentialsStorageProvider.overrideWithValue(
+          InMemoryGuestCredentialsStorage(),
         ),
       ],
     );

@@ -2,7 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../backend/onboarding_client.dart';
 import 'auth_providers.dart';
-import 'gateway_providers.dart';
 
 enum OnboardingStep {
   saveAccount,

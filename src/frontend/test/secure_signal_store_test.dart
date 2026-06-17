@@ -1,8 +1,6 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:libsignal_protocol_dart/libsignal_protocol_dart.dart';
-import 'package:voice_frontend/e2e/e2e_store_factory.dart';
 import 'package:voice_frontend/e2e/secure_signal_store.dart';
 
 /// Batch E2E-A red test: persistent Signal store survives reopen (docs/TODO.md).

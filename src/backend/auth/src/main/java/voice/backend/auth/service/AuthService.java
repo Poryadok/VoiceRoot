@@ -230,6 +230,50 @@ public class AuthService {
     return issueSessionForProfile(account, profileId, deviceInfoJson == null ? "{}" : deviceInfoJson);
   }
 
+  public AuthSession convertGuest(String accessToken, ConvertGuestCommand command) {
+    TokenClaims claims = validate(accessToken);
+    Account account = accounts.findById(claims.userId()).orElseThrow(() -> new AuthException("invalid_token"));
+    ensureActive(account);
+    if (!"guest".equals(account.type())) {
+      throw new AuthException("validation_failed");
+    }
+    if (command.password() == null || command.password().length() < 8) {
+      throw new AuthException("validation_failed");
+    }
+    if (!passwordHasher.matches(command.password(), account.passwordHash())) {
+      throw new AuthException("invalid_credentials");
+    }
+    String email = normalize(command.email());
+    String phone = normalize(command.phone());
+    if (email == null && phone == null) {
+      throw new AuthException("validation_failed");
+    }
+    if (email != null) {
+      accounts
+          .findByEmail(email)
+          .filter(existing -> !existing.id().equals(account.id()))
+          .ifPresent(ignored -> {
+            throw new AuthException("invalid_credentials");
+          });
+    }
+    if (phone != null) {
+      accounts
+          .findByPhone(phone)
+          .filter(existing -> !existing.id().equals(account.id()))
+          .ifPresent(ignored -> {
+            throw new AuthException("invalid_credentials");
+          });
+    }
+    Account converted;
+    try {
+      converted = accounts.convertGuest(account.id(), email, phone);
+    } catch (IllegalArgumentException ex) {
+      throw new AuthException("invalid_credentials");
+    }
+    tokenBlacklist.revoke(claims.jti(), jwtService.ttl(claims));
+    return issueSession(converted, "{}");
+  }
+
   public void putE2EKeyBackup(String accessToken, String encryptedBlob, String passwordHint) {
     if (encryptedBlob == null || encryptedBlob.isBlank()) {
       throw new AuthException("validation_failed");

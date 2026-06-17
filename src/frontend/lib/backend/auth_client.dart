@@ -137,6 +137,35 @@ class VoiceAuthClient {
     );
   }
 
+  Future<AuthSessionResult> registerGuest({required String password}) {
+    return _postSession(
+      '/api/v1/auth/register',
+      auth_pb.RegisterRequest(
+        password: password,
+        guest: true,
+      ),
+      auth_pb.RegisterResponse.create,
+      (response) => response.session,
+    );
+  }
+
+  Future<AuthSessionResult> convertGuest({
+    required AuthSession session,
+    required String email,
+    required String password,
+  }) {
+    return _postSession(
+      '/api/v1/auth/convert-guest',
+      auth_pb.ConvertGuestRequest(
+        email: email,
+        password: password,
+      ),
+      auth_pb.ConvertGuestResponse.create,
+      (response) => response.session,
+      authorization: session.authorizationHeader,
+    );
+  }
+
   Future<AuthSessionResult> login({
     required String email,
     required String password,

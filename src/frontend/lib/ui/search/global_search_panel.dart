@@ -34,6 +34,7 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
   GlobalSearchData? _results;
   final Map<String, VoiceProfile> _profiles = {};
   bool _loading = false;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -77,6 +78,13 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
           ..clear()
           ..addAll(profiles);
         _loading = false;
+        _errorMessage = null;
+      });
+    } else if (result is SearchApiErr) {
+      setState(() {
+        _results = null;
+        _loading = false;
+        _errorMessage = result.error.message;
       });
     } else {
       setState(() {
@@ -87,6 +95,7 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
           spaceIds: [],
         );
         _loading = false;
+        _errorMessage = null;
       });
     }
   }
@@ -97,6 +106,86 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
     final voice = VoiceColors.of(context);
 
     final showResults = _loading || _results != null;
+
+    final resultsList = ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      shrinkWrap: widget.compact,
+      physics: widget.compact
+          ? const ClampingScrollPhysics()
+          : const AlwaysScrollableScrollPhysics(),
+      children: [
+        _SectionHeader(
+          key: GlobalSearchPanel.contactsSectionKey,
+          title: l10n.globalSearchContacts,
+        ),
+        if (_results == null)
+          Text(
+            l10n.globalSearchStartHint,
+            style: TextStyle(color: voice.textSecondary),
+          )
+        else if (_results!.profileIds.isEmpty)
+          Text(
+            l10n.globalSearchEmptyContacts,
+            style: TextStyle(color: voice.textSecondary),
+          )
+        else
+          for (final profileId in _results!.profileIds)
+            ListTile(
+              leading: VoiceAvatar(
+                imageUrl: _profiles[profileId]?.avatarUrl,
+                label: _profiles[profileId]?.displayName ?? profileId,
+                radius: 18,
+              ),
+              title: Text(
+                _profiles[profileId]?.displayName ?? profileId,
+              ),
+            ),
+        const SizedBox(height: 12),
+        _SectionHeader(
+          key: GlobalSearchPanel.spacesSectionKey,
+          title: l10n.globalSearchSpaces,
+        ),
+        if (_results != null && _results!.spaceIds.isNotEmpty)
+          for (final spaceId in _results!.spaceIds)
+            ListTile(
+              leading: const Icon(Icons.public),
+              title: Text(spaceId),
+              onTap: () =>
+                  ref.read(shellNavigationProvider).selectSpace(spaceId),
+            )
+        else if (_results != null)
+          Text(
+            l10n.globalSearchEmptySpaces,
+            style: TextStyle(color: voice.textSecondary),
+          ),
+        const SizedBox(height: 12),
+        _SectionHeader(
+          key: GlobalSearchPanel.messagesSectionKey,
+          title: l10n.globalSearchMessages,
+        ),
+        if (_results != null && _results!.messages.isNotEmpty)
+          for (final hit in _results!.messages)
+            ListTile(
+              title: _SnippetText(snippet: hit.snippet),
+              subtitle: Text(hit.messageId),
+              onTap: () {
+                final chatId = hit.chatId.isNotEmpty
+                    ? hit.chatId
+                    : (_results!.matchedChatIds.isNotEmpty
+                        ? _results!.matchedChatIds.first
+                        : null);
+                if (chatId != null) {
+                  ref.read(selectedChatIdProvider.notifier).state = chatId;
+                }
+              },
+            )
+        else if (_results != null)
+          Text(
+            l10n.globalSearchEmptyMessages,
+            style: TextStyle(color: voice.textSecondary),
+          ),
+      ],
+    );
 
     return Column(
       key: GlobalSearchPanel.panelKey,
@@ -117,6 +206,15 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
         ),
         if (_loading)
           const LinearProgressIndicator(minHeight: 2),
+        if (_errorMessage != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            child: Text(
+              key: const Key('global_search_error'),
+              _errorMessage!,
+              style: TextStyle(color: voice.error),
+            ),
+          ),
         if (!showResults && !widget.compact)
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
@@ -126,84 +224,12 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
             ),
           ),
         if (showResults)
-          Expanded(
-            child: ListView(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            children: [
-              _SectionHeader(
-                key: GlobalSearchPanel.contactsSectionKey,
-                title: l10n.globalSearchContacts,
-              ),
-              if (_results == null)
-                Text(
-                  l10n.globalSearchStartHint,
-                  style: TextStyle(color: voice.textSecondary),
+          widget.compact
+              ? ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 260),
+                  child: resultsList,
                 )
-              else if (_results!.profileIds.isEmpty)
-                Text(
-                  l10n.globalSearchEmptyContacts,
-                  style: TextStyle(color: voice.textSecondary),
-                )
-              else
-                for (final profileId in _results!.profileIds)
-                  ListTile(
-                    leading: VoiceAvatar(
-                      imageUrl: _profiles[profileId]?.avatarUrl,
-                      label: _profiles[profileId]?.displayName ?? profileId,
-                      radius: 18,
-                    ),
-                    title: Text(
-                      _profiles[profileId]?.displayName ?? profileId,
-                    ),
-                  ),
-              const SizedBox(height: 12),
-              _SectionHeader(
-                key: GlobalSearchPanel.spacesSectionKey,
-                title: l10n.globalSearchSpaces,
-              ),
-              if (_results != null && _results!.spaceIds.isNotEmpty)
-                for (final spaceId in _results!.spaceIds)
-                  ListTile(
-                    leading: const Icon(Icons.public),
-                    title: Text(spaceId),
-                    onTap: () =>
-                        ref.read(shellNavigationProvider).selectSpace(spaceId),
-                  )
-              else if (_results != null)
-                Text(
-                  l10n.globalSearchEmptySpaces,
-                  style: TextStyle(color: voice.textSecondary),
-                ),
-              const SizedBox(height: 12),
-              _SectionHeader(
-                key: GlobalSearchPanel.messagesSectionKey,
-                title: l10n.globalSearchMessages,
-              ),
-              if (_results != null && _results!.messages.isNotEmpty)
-                for (final hit in _results!.messages)
-                  ListTile(
-                    title: _SnippetText(snippet: hit.snippet),
-                    subtitle: Text(hit.messageId),
-                    onTap: () {
-                      final chatId = hit.chatId.isNotEmpty
-                          ? hit.chatId
-                          : (_results!.matchedChatIds.isNotEmpty
-                              ? _results!.matchedChatIds.first
-                              : null);
-                      if (chatId != null) {
-                        ref.read(selectedChatIdProvider.notifier).state =
-                            chatId;
-                      }
-                    },
-                  )
-              else if (_results != null)
-                Text(
-                  l10n.globalSearchEmptyMessages,
-                  style: TextStyle(color: voice.textSecondary),
-                ),
-            ],
-            ),
-          ),
+              : Expanded(child: resultsList),
       ],
     );
   }

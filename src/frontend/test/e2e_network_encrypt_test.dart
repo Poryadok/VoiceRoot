@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/e2e_client.dart';
-import 'package:voice_frontend/backend/gateway_http.dart';
 import 'package:voice_frontend/e2e/e2e_crypto_adapter.dart';
 import 'package:voice_frontend/e2e/e2e_store_factory.dart';
 

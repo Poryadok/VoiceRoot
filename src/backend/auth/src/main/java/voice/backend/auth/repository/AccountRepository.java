@@ -17,4 +17,6 @@ public interface AccountRepository {
   void setTotpEnabled(UUID accountId, boolean enabled);
 
   void setStatus(UUID accountId, String status);
+
+  Account convertGuest(UUID accountId, String email, String phone);
 }

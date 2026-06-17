@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
+import 'package:voice_frontend/backend/guest_credentials_storage.dart';
 import 'package:voice_frontend/routing/deep_link_controller.dart';
 import 'package:voice_frontend/routing/deep_link_parser.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
@@ -48,10 +49,14 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         authSessionStorageProvider.overrideWithValue(InMemoryAuthSessionStorage()),
+        guestCredentialsStorageProvider.overrideWithValue(
+          InMemoryGuestCredentialsStorage(),
+        ),
         authControllerProvider.overrideWith((ref) {
           final c = AuthController(
             authClient: ref.watch(voiceAuthClientProvider),
             storage: ref.watch(authSessionStorageProvider),
+            guestCredentialsStorage: ref.watch(guestCredentialsStorageProvider),
           );
           c.state = const AuthState(
             session: AuthSession(

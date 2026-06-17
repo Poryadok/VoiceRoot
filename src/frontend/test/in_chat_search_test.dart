@@ -15,6 +15,7 @@ import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
+import 'package:voice_frontend/ui/chat/chat_room_panel.dart';
 import 'package:voice_frontend/ui/search/in_chat_search.dart';
 
 import 'support/auth_test_overrides.dart';
@@ -321,4 +322,117 @@ void main() {
     expect(find.textContaining('loaded local secret needle'), findsOneWidget);
     expect(find.byKey(InChatSearch.activeHitKey('msg-local-1')), findsOneWidget);
   });
+
+  testWidgets('in-chat search expands inline in header instead of bottom sheet', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      chatRoomInChatSearchTestApp(
+        client: MockClient((_) async => http.Response('{}', 200)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(ChatRoomPanel.inChatSearchKey));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(BottomSheet), findsNothing);
+    expect(find.byKey(const Key('in_chat_search_inline_header')), findsOneWidget);
+    expect(find.byKey(InChatSearch.searchFieldKey), findsOneWidget);
+  });
+
+  testWidgets('in-chat search shows error when API fails', (tester) async {
+    await tester.pumpWidget(
+      chatRoomInChatSearchTestApp(
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/search/in-chat') {
+            return http.Response(
+              jsonEncode({'error_code': 'internal', 'message': 'search failed'}),
+              500,
+            );
+          }
+          if (req.url.path == '/api/v1/messages') {
+            return http.Response(
+              jsonEncode({'message_list': {'messages': []}}),
+              200,
+            );
+          }
+          if (req.url.path == '/api/v1/messages/read') {
+            return http.Response('{}', 200);
+          }
+          return http.Response('{}', 200);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(ChatRoomPanel.inChatSearchKey));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(InChatSearch.searchFieldKey), 'needle');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('in_chat_search_error')), findsOneWidget);
+    expect(find.textContaining('search failed'), findsOneWidget);
+  });
+}
+
+Widget chatRoomInChatSearchTestApp({required http.Client client}) {
+  return ProviderScope(
+    overrides: [
+      ...voiceThemeTestOverrides(),
+      profileAccentStorageProvider.overrideWithValue(
+        testProfileAccentStorage,
+      ),
+      authSessionStorageProvider.overrideWithValue(
+        InMemoryAuthSessionStorage(),
+      ),
+      authControllerProvider.overrideWith(authenticatedAuthController),
+      gatewayConfigProvider.overrideWithValue(
+        const GatewayConfig(baseUrl: 'http://api.test'),
+      ),
+      httpClientProvider.overrideWithValue(client),
+      realtimeHubProvider.overrideWith(_FakeRealtimeHub.new),
+      chatListControllerProvider.overrideWith(_ChatRoomSearchListController.new),
+      chatRoomControllerProvider('chat-search').overrideWith(
+        (ref) => _ChatRoomSearchRoomController(ref, 'chat-search'),
+      ),
+    ],
+    child: MaterialApp(
+      theme: voiceTestTheme(),
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: const Scaffold(body: ChatRoomPanel(chatId: 'chat-search')),
+    ),
+  );
+}
+
+class _ChatRoomSearchListController extends ChatListController {
+  _ChatRoomSearchListController(super.ref) : super() {
+    state = const ChatListState(
+      items: [
+        ChatListItem(
+          chat: VoiceChat(
+            id: 'chat-search',
+            type: 'CHAT_TYPE_DM',
+            creatorProfileId: 'peer-1',
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Future<void> loadInitial() async {}
+
+  @override
+  Future<void> loadMore() async {}
+}
+
+class _ChatRoomSearchRoomController extends ChatRoomController {
+  _ChatRoomSearchRoomController(super.ref, super.chatId) : super() {
+    state = const ChatRoomState(messages: []);
+  }
 }

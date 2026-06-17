@@ -104,4 +104,42 @@ public class InMemoryAccountRepository implements AccountRepository {
         existing.totpEnabled(),
         existing.createdAt()));
   }
+
+  @Override
+  public synchronized Account convertGuest(UUID accountId, String email, String phone) {
+    Account existing = byId.get(accountId);
+    if (existing == null || !"guest".equals(existing.type())) {
+      throw new IllegalArgumentException("not a guest account");
+    }
+    if (email != null && byEmail.containsKey(email) && !byEmail.get(email).equals(accountId)) {
+      throw new IllegalArgumentException("duplicate email");
+    }
+    if (phone != null && byPhone.containsKey(phone) && !byPhone.get(phone).equals(accountId)) {
+      throw new IllegalArgumentException("duplicate phone");
+    }
+    if (existing.email() != null) {
+      byEmail.remove(existing.email());
+    }
+    if (existing.phone() != null) {
+      byPhone.remove(existing.phone());
+    }
+    Account converted = new Account(
+        existing.id(),
+        email,
+        phone,
+        existing.passwordHash(),
+        "regular",
+        existing.status(),
+        existing.totpSecret(),
+        existing.totpEnabled(),
+        existing.createdAt());
+    byId.put(accountId, converted);
+    if (email != null) {
+      byEmail.put(email, accountId);
+    }
+    if (phone != null) {
+      byPhone.put(phone, accountId);
+    }
+    return converted;
+  }
 }

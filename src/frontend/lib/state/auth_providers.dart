@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../backend/auth_client.dart';
 import '../backend/auth_session.dart';
 import '../backend/auth_session_storage.dart';
 import '../backend/discover_hint_storage.dart';
+import '../backend/guest_credentials_storage.dart';
 import '../backend/gateway_http.dart';
 import '../ui/auth/auth_errors.dart';
 import 'gateway_providers.dart';
@@ -23,6 +25,8 @@ class AuthState {
     this.isSubmitting = false,
     this.errorKey,
     this.pendingDiscoverHint = false,
+    this.isGuest = false,
+    this.needsGuestNickname = false,
   });
 
   final AuthSession? session;
@@ -34,6 +38,12 @@ class AuthState {
 
   /// True after login/register; cleared after discover snackbar is shown.
   final bool pendingDiscoverHint;
+
+  /// Guest account created via auto-register (no email).
+  final bool isGuest;
+
+  /// Guest must set a nickname before entering the main shell.
+  final bool needsGuestNickname;
 
   bool get isAuthenticated => session != null;
 
@@ -48,6 +58,10 @@ class AuthState {
     bool clearError = false,
     bool? pendingDiscoverHint,
     bool clearDiscoverHint = false,
+    bool? isGuest,
+    bool clearGuest = false,
+    bool? needsGuestNickname,
+    bool clearGuestNickname = false,
   }) {
     return AuthState(
       session: clearSession ? null : (session ?? this.session),
@@ -57,6 +71,10 @@ class AuthState {
       pendingDiscoverHint: clearDiscoverHint
           ? false
           : (pendingDiscoverHint ?? this.pendingDiscoverHint),
+      isGuest: clearGuest ? false : (isGuest ?? this.isGuest),
+      needsGuestNickname: clearGuestNickname
+          ? false
+          : (needsGuestNickname ?? this.needsGuestNickname),
     );
   }
 }
@@ -67,20 +85,28 @@ final authSessionStorageProvider = Provider<AuthSessionStorage>((ref) {
   );
 });
 
+final guestCredentialsStorageProvider = Provider<GuestCredentialsStorage>((ref) {
+  return InMemoryGuestCredentialsStorage();
+});
+
 
 class AuthController extends StateNotifier<AuthState> {
   AuthController({
     required VoiceAuthClient authClient,
     required AuthSessionStorage storage,
+    required GuestCredentialsStorage guestCredentialsStorage,
   }) : _authClient = authClient,
        _storage = storage,
+       _guestCredentialsStorage = guestCredentialsStorage,
        super(const AuthState()) {
     _scheduleProactiveRefresh();
   }
 
   final VoiceAuthClient _authClient;
   final AuthSessionStorage _storage;
+  final GuestCredentialsStorage _guestCredentialsStorage;
   Timer? _refreshTimer;
+  static final _random = Random.secure();
 
   Future<void> restore() async {
     final saved = await _storage.read();
@@ -88,6 +114,7 @@ class AuthController extends StateNotifier<AuthState> {
       state = state.copyWith(isRestoring: false, clearError: true);
       return;
     }
+    final guestPassword = await _guestCredentialsStorage.readPassword();
     state = state.copyWith(session: saved, isRestoring: true, clearError: true);
     final refreshed = await _authClient.refresh(
       refreshToken: saved.refreshToken,
@@ -100,6 +127,7 @@ class AuthController extends StateNotifier<AuthState> {
           isRestoring: false,
           clearError: true,
           clearDiscoverHint: true,
+          isGuest: guestPassword != null && guestPassword.isNotEmpty,
         );
       case AuthSessionFailure():
         await _storage.clear();
@@ -115,6 +143,70 @@ class AuthController extends StateNotifier<AuthState> {
       _authenticate(
         () => _authClient.register(email: email, password: password),
       );
+
+  Future<void> registerGuestIfNeeded() async {
+    if (state.session != null) return;
+    final password = _generateGuestPassword();
+    await _guestCredentialsStorage.writePassword(password);
+    state = state.copyWith(isRestoring: true, clearError: true);
+    final result = await _authClient.registerGuest(password: password);
+    switch (result) {
+      case AuthSessionOk(:final session):
+        await _persist(session);
+        state = state.copyWith(
+          session: session,
+          isRestoring: false,
+          clearError: true,
+          isGuest: true,
+          needsGuestNickname: true,
+        );
+      case AuthSessionFailure(
+        :final message,
+        :final errorCode,
+        :final statusCode,
+      ):
+        state = state.copyWith(
+          isRestoring: false,
+          errorKey:
+              resolveAuthErrorKey(
+                errorCode: errorCode,
+                statusCode: statusCode,
+              ) ??
+              message,
+        );
+    }
+  }
+
+  void completeGuestNickname() {
+    state = state.copyWith(clearGuestNickname: true);
+  }
+
+  Future<String?> convertGuest({
+    required String email,
+    required String password,
+  }) async {
+    final current = state.session;
+    if (current == null) return 'not_authenticated';
+    final result = await _authClient.convertGuest(
+      session: current,
+      email: email,
+      password: password,
+    );
+    switch (result) {
+      case AuthSessionOk(:final session):
+        await _guestCredentialsStorage.clear();
+        await _persist(session);
+        state = state.copyWith(
+          session: session,
+          clearGuest: true,
+          clearGuestNickname: true,
+          clearError: true,
+        );
+        return null;
+      case AuthSessionFailure(:final message):
+        return message;
+    }
+  }
 
   Future<void> login({
     required String email,
@@ -163,10 +255,13 @@ class AuthController extends StateNotifier<AuthState> {
       await _authClient.logout(session: current);
     }
     await _storage.clear();
+    await _guestCredentialsStorage.clear();
     state = state.copyWith(
       clearSession: true,
       isSubmitting: false,
       clearError: true,
+      clearGuest: true,
+      clearGuestNickname: true,
     );
   }
 
@@ -239,6 +334,12 @@ class AuthController extends StateNotifier<AuthState> {
     });
   }
 
+  String _generateGuestPassword() {
+    const chars =
+        'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    return List.generate(32, (_) => chars[_random.nextInt(chars.length)]).join();
+  }
+
   @override
   void dispose() {
     _refreshTimer?.cancel();
@@ -262,6 +363,7 @@ final StateNotifierProvider<AuthController, AuthState> authControllerProvider =
       return AuthController(
         authClient: ref.watch(voiceAuthClientProvider),
         storage: ref.watch(authSessionStorageProvider),
+        guestCredentialsStorage: ref.watch(guestCredentialsStorageProvider),
       );
     });
 

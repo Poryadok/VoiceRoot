@@ -5,6 +5,7 @@ import '../app.dart';
 import '../l10n/app_localizations.dart';
 import '../state/auth_providers.dart';
 import '../theme/voice_theme_providers.dart';
+import '../ui/auth/guest_nickname_screen.dart';
 import '../ui/core/voice_state_panel.dart';
 
 /// Restores persisted session (refresh) before showing [VoiceApp].
@@ -28,6 +29,10 @@ class _VoiceAppBootstrapState extends ConsumerState<VoiceAppBootstrap> {
 
   Future<void> _restoreSession() async {
     await ref.read(authControllerProvider.notifier).restore();
+    final auth = ref.read(authControllerProvider);
+    if (!auth.isAuthenticated) {
+      await ref.read(authControllerProvider.notifier).registerGuestIfNeeded();
+    }
     if (mounted) {
       setState(() => _restoreComplete = true);
     }
@@ -57,6 +62,39 @@ class _VoiceAppBootstrapState extends ConsumerState<VoiceAppBootstrap> {
               );
             },
           ),
+        ),
+        loading: () => MaterialApp(
+          locale: widget.locale,
+          theme: ThemeData(
+            useMaterial3: true,
+            brightness: Brightness.dark,
+            colorScheme: const ColorScheme.dark(primary: Color(0xFF7EC8E3)),
+          ),
+          home: const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          ),
+        ),
+        error: (_, _) => MaterialApp(
+          locale: widget.locale,
+          theme: ThemeData(
+            useMaterial3: true,
+            brightness: Brightness.dark,
+            colorScheme: const ColorScheme.dark(primary: Color(0xFF7EC8E3)),
+          ),
+          home: const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          ),
+        ),
+      );
+    }
+    if (auth.needsGuestNickname) {
+      return themeAsync.when(
+        data: (theme) => MaterialApp(
+          locale: widget.locale,
+          theme: theme,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const GuestNicknameScreen(),
         ),
         loading: () => MaterialApp(
           locale: widget.locale,

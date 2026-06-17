@@ -166,6 +166,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get socialAddFriend => 'Добавить в друзья';
 
   @override
+  String get socialRemoveFriend => 'Удалить из друзей';
+
+  @override
   String get socialAcceptRequest => 'Принять';
 
   @override
@@ -1523,6 +1526,21 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get bootstrapRestoring => 'Восстановление сессии…';
+
+  @override
+  String get guestNicknameTitle => 'Выберите никнейм';
+
+  @override
+  String get guestNicknameSubtitle => 'Гостям нужно имя перед началом общения.';
+
+  @override
+  String get guestNicknameLabel => 'Никнейм';
+
+  @override
+  String get guestNicknameHint => 'Как вас увидят другие';
+
+  @override
+  String get guestNicknameContinue => 'Продолжить';
 
   @override
   String get gameCatalogTitle => 'Каталог игр';

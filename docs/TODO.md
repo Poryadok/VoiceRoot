@@ -278,7 +278,8 @@
 #### Onboarding
 
 - [ ] **Coach-mark anchors** — steps 2–4 tooltips pinned to nav/search/MM widgets (modals today, not anchored overlays).
-- [ ] **Onboarding after guest register** — verify step 1 with guest account flow end-to-end.
+- [x] **Guest nickname first-run** — auto-register guest + `GuestNicknameScreen` (`guest_entry_test`, `guest_nickname_screen_test`).
+- [ ] **Onboarding after guest register** — E2E: guest nickname → shell → onboarding step 1 coach-marks (not verified end-to-end).
 
 #### A11y
 
@@ -307,3 +308,31 @@
 | Только доки/онбординг | **Infra** |
 
 Фазовые детали и критерии «готово» — [PLAN.md](PLAN.md) §15–16, [encryption.md](features/encryption.md), [bots.md](features/bots.md).
+
+---
+
+## Bug batch #1–15 (QA web pass, 2026-06) — resolved
+
+*Original repro list removed after fix batch. Widget/integration coverage noted where added.*
+
+- [x] **#1 Dual screen share in DM** — remote stream auto-select + local preview (`screen_share_providers`, `screen_share_panel_test`).
+- [x] **#2 In-chat message search** — `InChatSearch` wired to API / E2E-local (`in_chat_search_test`, `chat_room_panel` header + overlay).
+- [x] **#3 In-chat search UX** — inline header field left of search icon; results overlay above chat.
+- [x] **#4 Nav column width (web)** — 320px expanded rail + `FittedBox` labels (`navigation_width_test`).
+- [x] **#5 Remove friend** — `isFriendProvider` + remove button in `ProfileDetailSheet`.
+- [x] **#6 Matchmaking search 500 (`nudged_at`)** — `incremental_matchmaking_db.sql.snippet` via `compose-db-init`; `auth` in `GATEWAY_GRPC_UPSTREAMS_JSON` (`compose_matchmaking_search_live_test`).
+- [x] **#7 MM criteria from game profile** — `QueueSearchScreen._tryPrefillFromProfile`.
+- [x] **#8 Fullscreen video / screen share** — video + active screen share use fullscreen overlay + minimize bar (`active_call_panel_test`).
+- [x] **#9 Emoji / Noto font warning** — `GoogleFonts.notoSansTextTheme` for UI text (emoji picker glyphs may still need bundled color font).
+- [x] **#10 DM broadcast mentions 400** — mention picker removed; DM compose strips `@everyone`/`@here` from `mentions_json`.
+- [x] **#11 Remove @mention picker button** — composer button removed (`chat_room_panel_test`).
+- [x] **#12 Mention styling** — blue underline user links (`mention_message_content_test`).
+- [x] **#13 Duplicate profile-search spinner** — single loader in `SocialPanel` (`social_panel_test`).
+- [x] **#14 Global search in nav** — compact mode uses bounded `ConstrainedBox` instead of unbounded `Expanded` (`global_search_panel_test`).
+- [x] **#15 Guest-first entry** — auto guest register + nickname screen + backend/gateway `ConvertGuest`; `isGuest` restored when guest password in storage.
+
+### Bug batch #1–15 — remaining follow-ups
+
+- [ ] **Guest convert-to-regular UI** — settings flow: email + password → `POST /api/v1/auth/convert-guest`; optional email verification step.
+- [ ] **Bundle emoji font for web** — ship Noto Color Emoji for reaction/emoji picker; avoid runtime Noto fallback warning.
+- [ ] **Docs: guest onboarding flow** — short spec in `docs/features/` linking guest type → nickname → convert-guest.

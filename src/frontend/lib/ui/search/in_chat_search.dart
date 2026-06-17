@@ -15,6 +15,9 @@ class InChatSearch extends ConsumerStatefulWidget {
     super.key,
     required this.chatId,
     this.onActiveMessageChanged,
+    this.controller,
+    this.showSearchField = true,
+    this.onDismiss,
   });
 
   static const Key panelKey = Key('in_chat_search_panel');
@@ -22,33 +25,54 @@ class InChatSearch extends ConsumerStatefulWidget {
   static const Key prevHitKey = Key('in_chat_search_prev');
   static const Key nextHitKey = Key('in_chat_search_next');
   static const Key highlightKey = Key('in_chat_search_highlight');
+  static const Key errorKey = Key('in_chat_search_error');
+  static const Key resultsOverlayKey = Key('in_chat_search_results_overlay');
 
   static Key activeHitKey(String messageId) =>
       Key('in_chat_search_active_$messageId');
 
   final String chatId;
   final ValueChanged<String>? onActiveMessageChanged;
+  final TextEditingController? controller;
+  final bool showSearchField;
+  final VoidCallback? onDismiss;
 
   @override
   ConsumerState<InChatSearch> createState() => _InChatSearchState();
 }
 
 class _InChatSearchState extends ConsumerState<InChatSearch> {
-  final _controller = TextEditingController();
+  late final TextEditingController _controller;
+  late final bool _ownsController;
   SearchQueryDebouncer? _debouncer;
   List<SearchHit> _hits = const [];
   int _activeIndex = 0;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
+    _ownsController = widget.controller == null;
+    _controller = widget.controller ?? TextEditingController();
     _debouncer = SearchQueryDebouncer(onQuery: _runSearch);
+    if (!widget.showSearchField) {
+      _controller.addListener(_onControllerChanged);
+    }
+  }
+
+  void _onControllerChanged() {
+    _debouncer?.schedule(_controller.text);
   }
 
   @override
   void dispose() {
+    if (!widget.showSearchField) {
+      _controller.removeListener(_onControllerChanged);
+    }
     _debouncer?.dispose();
-    _controller.dispose();
+    if (_ownsController) {
+      _controller.dispose();
+    }
     super.dispose();
   }
 
@@ -58,6 +82,7 @@ class _InChatSearchState extends ConsumerState<InChatSearch> {
       setState(() {
         _hits = const [];
         _activeIndex = 0;
+        _errorMessage = null;
       });
       return;
     }
@@ -81,6 +106,7 @@ class _InChatSearchState extends ConsumerState<InChatSearch> {
             )
             .toList(growable: false);
         _activeIndex = 0;
+        _errorMessage = null;
       });
       _notifyActive();
       return;
@@ -100,12 +126,20 @@ class _InChatSearchState extends ConsumerState<InChatSearch> {
       setState(() {
         _hits = result.data.hits;
         _activeIndex = 0;
+        _errorMessage = null;
       });
       _notifyActive();
+    } else if (result is SearchApiErr) {
+      setState(() {
+        _hits = const [];
+        _activeIndex = 0;
+        _errorMessage = result.error.message;
+      });
     } else {
       setState(() {
         _hits = const [];
         _activeIndex = 0;
+        _errorMessage = null;
       });
     }
   }
@@ -117,6 +151,12 @@ class _InChatSearchState extends ConsumerState<InChatSearch> {
       if (_activeIndex < 0) _activeIndex += _hits.length;
     });
     _notifyActive();
+  }
+
+  void _selectHit(int index) {
+    setState(() => _activeIndex = index);
+    _notifyActive();
+    widget.onDismiss?.call();
   }
 
   void _notifyActive() {
@@ -133,6 +173,64 @@ class _InChatSearchState extends ConsumerState<InChatSearch> {
     final voice = VoiceColors.of(context);
     final e2eEnabled = ref.watch(chatE2eEnabledProvider(widget.chatId));
     final active = _hits.isEmpty ? null : _hits[_activeIndex];
+
+    final results = Column(
+      key: InChatSearch.resultsOverlayKey,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (_errorMessage != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: Text(
+              key: InChatSearch.errorKey,
+              _errorMessage!,
+              style: TextStyle(color: voice.error),
+            ),
+          ),
+        if (e2eEnabled && widget.showSearchField)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+            child: Text(
+              l10n.e2eInChatSearchLocalOnly,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: voice.textSecondary,
+              ),
+            ),
+          ),
+        if (_hits.isNotEmpty)
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 240),
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: _hits.length,
+              itemBuilder: (context, index) {
+                final hit = _hits[index];
+                final isActive = active?.messageId == hit.messageId;
+                return ListTile(
+                  key: isActive
+                      ? InChatSearch.activeHitKey(hit.messageId)
+                      : null,
+                  onTap: () => _selectHit(index),
+                  title: _HighlightedSnippet(
+                    snippet: hit.snippet,
+                    highlightKey:
+                        isActive ? InChatSearch.highlightKey : null,
+                  ),
+                  subtitle: Text(
+                    l10n.inChatSearchResultScore(hit.score.toStringAsFixed(1)),
+                    style: TextStyle(color: voice.textSecondary),
+                  ),
+                );
+              },
+            ),
+          ),
+      ],
+    );
+
+    if (!widget.showSearchField) {
+      return results;
+    }
 
     return Column(
       key: InChatSearch.panelKey,
@@ -179,6 +277,15 @@ class _InChatSearchState extends ConsumerState<InChatSearch> {
             ],
           ),
         ),
+        if (_errorMessage != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            child: Text(
+              key: InChatSearch.errorKey,
+              _errorMessage!,
+              style: TextStyle(color: voice.error),
+            ),
+          ),
         Expanded(
           child: ListView.builder(
             itemCount: _hits.length,
@@ -189,10 +296,7 @@ class _InChatSearchState extends ConsumerState<InChatSearch> {
                 key: isActive
                     ? InChatSearch.activeHitKey(hit.messageId)
                     : null,
-                onTap: () {
-                  setState(() => _activeIndex = index);
-                  _notifyActive();
-                },
+                onTap: () => _selectHit(index),
                 title: _HighlightedSnippet(
                   snippet: hit.snippet,
                   highlightKey:

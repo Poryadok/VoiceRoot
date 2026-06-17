@@ -163,4 +163,90 @@ void main() {
     expect(find.text('Carol'), findsOneWidget);
     expect(find.textContaining('raid tonight'), findsOneWidget);
   });
+
+  testWidgets('global search API error shows message to user', (tester) async {
+    await tester.pumpWidget(
+      globalSearchTestApp(
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/search/global') {
+            return http.Response(
+              jsonEncode({'error_code': 'internal', 'message': 'search unavailable'}),
+              500,
+            );
+          }
+          return http.Response('{}', 200);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(GlobalSearchPanel.searchFieldKey), 'raid');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('global_search_error')), findsOneWidget);
+    expect(find.textContaining('search unavailable'), findsOneWidget);
+  });
+
+  testWidgets('compact mode search results do not require Expanded parent', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          profileAccentStorageProvider.overrideWithValue(
+            testProfileAccentStorage,
+          ),
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          authControllerProvider.overrideWith(authenticatedAuthController),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          httpClientProvider.overrideWithValue(
+            MockClient((req) async {
+              if (req.url.path == '/api/v1/search/global') {
+                return http.Response(
+                  jsonEncode({
+                    'global_search_results': {
+                      'messages': [],
+                      'profile_ids': ['profile-carol'],
+                      'matched_chats': [],
+                      'space_ids': ['space-raid'],
+                    },
+                  }),
+                  200,
+                );
+              }
+              return http.Response('{}', 200);
+            }),
+          ),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(
+            body: Column(
+              children: [
+                GlobalSearchPanel(compact: true),
+                Expanded(child: SizedBox()),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(GlobalSearchPanel.searchFieldKey), 'raid');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(GlobalSearchPanel.contactsSectionKey), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }

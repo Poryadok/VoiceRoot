@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import voice.backend.auth.service.AuthException;
 import voice.backend.auth.service.AuthService;
 import voice.backend.auth.service.AuthSession;
+import voice.backend.auth.service.ConvertGuestCommand;
 import voice.backend.auth.service.LinkedAccountsService;
 import voice.backend.auth.service.LoginCommand;
 import voice.backend.auth.service.LogoutCommand;
@@ -89,6 +90,15 @@ public class AuthRestController {
     AuthSession session =
         authService.switchActiveProfile(authorization, request.profileId(), "{}");
     return SessionBody.from(session);
+  }
+
+  @PostMapping("/convert-guest")
+  public SessionEnvelope convertGuest(
+      @RequestHeader(name = "Authorization", required = false) String authorization,
+      @Valid @RequestBody ConvertGuestRequest request) {
+    return SessionEnvelope.from(
+        authService.convertGuest(
+            authorization, new ConvertGuestCommand(request.email(), request.phone(), request.password())));
   }
 
   @GetMapping("/linked-accounts")
@@ -171,6 +181,9 @@ public class AuthRestController {
   public record LogoutRequest(@JsonProperty("refresh_token") @NotBlank String refreshToken) {}
 
   public record SwitchProfileRequest(@JsonProperty("profile_id") @NotBlank String profileId) {}
+
+  public record ConvertGuestRequest(
+      String email, String phone, @NotBlank String password) {}
 
   public record OAuthCallbackRequest(
       @NotBlank String code, @JsonProperty("redirect_uri") String redirectUri) {}

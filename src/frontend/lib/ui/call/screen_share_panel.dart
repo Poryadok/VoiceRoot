@@ -4,6 +4,7 @@ import 'package:livekit_client/livekit_client.dart' as livekit;
 
 import '../../backend/screen_share_capabilities.dart';
 import '../../l10n/app_localizations.dart';
+import '../../state/auth_providers.dart';
 import '../../state/call_providers.dart';
 import '../../state/screen_share_providers.dart';
 import '../../theme/voice_colors.dart';
@@ -14,6 +15,7 @@ class ScreenSharePanel extends ConsumerWidget {
   static const Key panelKey = Key('screen_share_panel');
   static const Key shareButtonKey = Key('active_call_screen_share');
   static const Key streamPickerKey = Key('screen_share_stream_picker');
+  static const Key localPreviewKey = Key('screen_share_local_preview');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -26,14 +28,27 @@ class ScreenSharePanel extends ConsumerWidget {
 
     final l10n = AppLocalizations.of(context)!;
     final voice = VoiceColors.of(context);
+    final selfId = ref.watch(authControllerProvider).activeProfileId;
     final room = ref.read(callControllerProvider.notifier).liveKitRoom;
     final selected = share.selectedStream;
-    livekit.RemoteVideoTrack? track;
+    // Rebuild when LiveKit screen-share tracks are published/subscribed.
+    final _ = call.mediaTracksVersion;
+
+    livekit.VideoTrack? track;
+    final isLocalSelf = share.isSharing &&
+        selected != null &&
+        (selected.streamId == share.localStreamId ||
+            (selfId != null && selected.profileId == selfId));
+
     if (room != null && selected != null) {
-      final tracks = room.remoteScreenShareTracks(
-        participantIdentity: selected.profileId,
-      );
-      track = tracks.isNotEmpty ? tracks.first : null;
+      if (isLocalSelf) {
+        track = room.localScreenShareTrack();
+      } else {
+        final tracks = room.remoteScreenShareTracks(
+          participantIdentity: selected.profileId,
+        );
+        track = tracks.isNotEmpty ? tracks.first : null;
+      }
     }
 
     final hasStreams = share.streams.isNotEmpty || share.isSharing;
@@ -75,10 +90,31 @@ class ScreenSharePanel extends ConsumerWidget {
             child: Stack(
               alignment: Alignment.center,
               children: [
-                if (track != null)
-                  livekit.VideoTrackRenderer(
-                    track,
-                    fit: livekit.VideoViewFit.contain,
+                for (final stream in share.streams)
+                  if (stream.profileId != selected?.profileId)
+                    KeyedSubtree(
+                      key: Key('screen_share_remote_${stream.profileId}'),
+                      child: const SizedBox.shrink(),
+                    ),
+                if (isLocalSelf)
+                  KeyedSubtree(
+                    key: localPreviewKey,
+                    child: track != null
+                        ? livekit.VideoTrackRenderer(
+                            track,
+                            fit: livekit.VideoViewFit.contain,
+                          )
+                        : const SizedBox.expand(),
+                  )
+                else if (selected != null)
+                  KeyedSubtree(
+                    key: Key('screen_share_remote_${selected.profileId}'),
+                    child: track != null
+                        ? livekit.VideoTrackRenderer(
+                            track,
+                            fit: livekit.VideoViewFit.contain,
+                          )
+                        : const SizedBox.shrink(),
                   )
                 else
                   Text(

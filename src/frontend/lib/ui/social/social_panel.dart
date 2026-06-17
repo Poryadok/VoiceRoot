@@ -181,13 +181,7 @@ class _SearchTab extends ConsumerWidget {
               const SizedBox(width: 8),
               IconButton(
                 key: SocialPanel.searchSubmitKey,
-                icon: search.isLoading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.search),
+                icon: const Icon(Icons.search),
                 onPressed: search.isLoading
                     ? null
                     : () => ref

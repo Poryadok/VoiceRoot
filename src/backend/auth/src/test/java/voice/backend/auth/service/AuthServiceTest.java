@@ -88,6 +88,18 @@ class AuthServiceTest {
   }
 
   @Test
+  void registerGuestWithoutEmailOrPhoneSucceeds() {
+    AuthService service = service(CLOCK);
+    AuthSession guest =
+        service.register(
+            new RegisterCommand(null, null, "Correct horse battery staple", true, "{}"));
+
+    assertThat(guest.accountId()).matches("[0-9a-f-]{36}");
+    assertThat(guest.profileId()).matches("[0-9a-f-]{36}");
+    assertThat(guest.accessToken()).contains(".");
+  }
+
+  @Test
   void concurrentRefreshAllowsOnlyOneRotation() throws Exception {
     AuthService service = service(CLOCK);
     AuthSession session = service.register(new RegisterCommand("race@example.com", null, "Correct horse battery staple", false, "{}"));

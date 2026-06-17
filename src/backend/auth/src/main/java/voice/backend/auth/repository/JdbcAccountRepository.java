@@ -139,4 +139,28 @@ public class JdbcAccountRepository implements AccountRepository {
             .addValue("id", accountId)
             .addValue("status", status));
   }
+
+  @Override
+  public Account convertGuest(UUID accountId, String email, String phone) {
+    MapSqlParameterSource params =
+        new MapSqlParameterSource()
+            .addValue("id", accountId)
+            .addValue("email", email)
+            .addValue("phone", phone);
+    try {
+      return jdbc.queryForObject(
+          """
+          UPDATE accounts
+          SET email = :email, phone = :phone, type = 'regular', updated_at = now()
+          WHERE id = :id AND type = 'guest'
+          RETURNING id, email, phone, password_hash, type, status, totp_secret, totp_enabled, created_at
+          """,
+          params,
+          ROW_MAPPER);
+    } catch (org.springframework.dao.EmptyResultDataAccessException ex) {
+      throw new IllegalArgumentException("not a guest account", ex);
+    } catch (DuplicateKeyException ex) {
+      throw new IllegalArgumentException("duplicate account identifier", ex);
+    }
+  }
 }

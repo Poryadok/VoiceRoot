@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/discover_hint_storage.dart';
+import 'package:voice_frontend/backend/guest_credentials_storage.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/backend/spaces_client.dart';
@@ -24,6 +25,9 @@ List<Override> voiceAppTestOverrides({required http.Client client}) => [
   ...voiceThemeTestOverrides(),
   profileAccentStorageProvider.overrideWithValue(testProfileAccentStorage),
   authSessionStorageProvider.overrideWithValue(InMemoryAuthSessionStorage()),
+  guestCredentialsStorageProvider.overrideWithValue(
+    InMemoryGuestCredentialsStorage(),
+  ),
   discoverHintStorageProvider.overrideWithValue(testDiscoverHintStorage),
   authControllerProvider.overrideWith(authenticatedAuthController),
   gatewayConfigProvider.overrideWithValue(
@@ -41,6 +45,7 @@ AuthController authenticatedAuthController(Ref ref) {
   final controller = AuthController(
     authClient: ref.watch(voiceAuthClientProvider),
     storage: ref.watch(authSessionStorageProvider),
+    guestCredentialsStorage: ref.watch(guestCredentialsStorageProvider),
   );
   controller.state = const AuthState(
     session: AuthSession(

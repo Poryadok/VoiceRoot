@@ -62,16 +62,42 @@ class VoiceFriendsClient {
       path: '/api/v1/friends',
       queryParameters: params.isEmpty ? null : params,
     );
-    final result = await _gateway.getProto(
+    final result = await _gateway.getJson(
       uri,
       authorization: authorization,
-      createEmpty: social_pb.ListFriendsResponse.create,
     );
-    return _map(
-      result,
-      (data) => friendsListFromProto(
-        data.hasFriendList() ? data.friendList : social_pb.FriendList(),
+    return switch (result) {
+      GatewayHttpOk(:final data) => FriendsApiOk(_friendsListFromJson(data)),
+      GatewayHttpFailure(:final error) => FriendsApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
       ),
+    };
+  }
+
+  FriendsListData _friendsListFromJson(Map<String, dynamic> data) {
+    final list = data['friend_list'] as Map<String, dynamic>? ?? data;
+    final friendsRaw = list['friends'] as List<dynamic>?;
+    if (friendsRaw != null) {
+      final ids = <String>[
+        for (final item in friendsRaw)
+          if (item is Map<String, dynamic>)
+            item['profile_id'] as String? ??
+                item['profileId'] as String? ??
+                '',
+      ].where((id) => id.isNotEmpty).toList(growable: false);
+      return FriendsListData(
+        friends: ids,
+        nextCursor: list['next_cursor'] as String? ?? list['nextCursor'] as String?,
+      );
+    }
+    final profileIds = list['profile_ids'] as List<dynamic>? ??
+        list['profileIds'] as List<dynamic>? ??
+        const [];
+    return FriendsListData(
+      friends: profileIds.map((id) => id.toString()).toList(growable: false),
+      nextCursor: list['next_cursor'] as String? ?? list['nextCursor'] as String?,
     );
   }
 
@@ -124,6 +150,17 @@ class VoiceFriendsClient {
       '/api/v1/friends/invitations/$requesterProfileId/decline',
       authorization,
     );
+  }
+
+  Future<FriendsApiResult<void>> removeFriend({
+    required String authorization,
+    required String friendProfileId,
+  }) async {
+    final result = await _gateway.deleteEmpty(
+      uri: _gateway.resolve('/api/v1/friends/$friendProfileId'),
+      authorization: authorization,
+    );
+    return _mapEmpty(result);
   }
 
   Future<FriendsApiResult<void>> blockAccount({

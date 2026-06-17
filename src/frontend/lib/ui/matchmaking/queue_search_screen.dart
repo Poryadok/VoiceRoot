@@ -40,6 +40,7 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
   SearchSessionData? _session;
   var _busy = false;
   String? _error;
+  var _prefilledFromProfile = false;
 
   @override
   void initState() {
@@ -52,12 +53,42 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
       _soughtMin = widget.mode.ranks.first.name;
       _soughtMax = widget.mode.ranks.last.name;
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) => _tryPrefillFromProfile());
+  }
+
+  void _tryPrefillFromProfile() {
+    if (_prefilledFromProfile || !mounted) return;
+    final profile = ref.read(myPlayerProfileProvider).valueOrNull;
+    if (profile == null) return;
+    PlayerGameEntry? entry;
+    for (final candidate in profile.entries) {
+      if (candidate.gameId == widget.game.id) {
+        entry = candidate;
+        break;
+      }
+    }
+    if (entry == null) return;
+    final matched = entry;
+    setState(() {
+      if (matched.region.isNotEmpty) _region = matched.region;
+      if (matched.role != null && matched.role!.isNotEmpty) _role = matched.role;
+      if (matched.rank != null && matched.rank!.isNotEmpty) {
+        _rank = matched.rank;
+        _soughtMin = matched.rank;
+        _soughtMax = matched.rank;
+      }
+      _prefilledFromProfile = true;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final voice = VoiceColors.of(context);
+    final myProfile = ref.watch(myPlayerProfileProvider);
+    if (myProfile.hasValue && !_prefilledFromProfile) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _tryPrefillFromProfile());
+    }
     final globalSession = ref.watch(activeSearchSessionProvider);
     final searchState = ref.watch(matchmakingSearchControllerProvider);
     final session = _session ?? globalSession;
