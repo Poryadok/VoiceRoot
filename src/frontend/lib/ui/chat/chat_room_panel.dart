@@ -190,6 +190,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     final isOffline = ref.watch(isDeviceOfflineProvider) || room.isOfflineCache;
     final activeId = ref.watch(authControllerProvider).activeProfileId;
     final canCall = ref.watch(gatewayConfigProvider).canPlaceVoiceCalls;
+    final isGuest = ref.watch(authControllerProvider).isGuest;
     String? groupName;
     String? spaceId;
     var slowModeSeconds = 0;
@@ -437,24 +438,28 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   IconButton(
                     key: ChatRoomPanel.audioCallKey,
                     tooltip: l10n.callStartAudio,
-                    onPressed: () => ref
-                        .read(callControllerProvider.notifier)
-                        .startCall(
-                          chatId: widget.chatId,
-                          calleeProfileId: peerId,
-                        ),
+                    onPressed: isGuest
+                        ? null
+                        : () => ref
+                            .read(callControllerProvider.notifier)
+                            .startCall(
+                              chatId: widget.chatId,
+                              calleeProfileId: peerId,
+                            ),
                     icon: const Icon(Icons.call_outlined),
                   ),
                   IconButton(
                     key: ChatRoomPanel.videoCallKey,
                     tooltip: l10n.callStartVideo,
-                    onPressed: () => ref
-                        .read(callControllerProvider.notifier)
-                        .startCall(
-                          chatId: widget.chatId,
-                          calleeProfileId: peerId,
-                          mediaKind: VoiceCallMediaKind.video,
-                        ),
+                    onPressed: isGuest
+                        ? null
+                        : () => ref
+                            .read(callControllerProvider.notifier)
+                            .startCall(
+                              chatId: widget.chatId,
+                              calleeProfileId: peerId,
+                              mediaKind: VoiceCallMediaKind.video,
+                            ),
                     icon: const Icon(Icons.videocam_outlined),
                   ),
                 ],

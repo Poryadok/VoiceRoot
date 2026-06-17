@@ -1617,3 +1617,72 @@ final $typed_data.Uint8List getChatMessagesForBotResponseDescriptor =
         'Ch1HZXRDaGF0TWVzc2FnZXNGb3JCb3RSZXNwb25zZRIfCgttZXNzYWdlX2lkcxgBIAMoCVIKbW'
         'Vzc2FnZUlkcxIkCgtuZXh0X2N1cnNvchgCIAEoCUgAUgpuZXh0Q3Vyc29yiAEBQg4KDF9uZXh0'
         'X2N1cnNvcg==');
+
+@$core.Deprecated('Use createBotRoleRequestDescriptor instead')
+const CreateBotRoleRequest$json = {
+  '1': 'CreateBotRoleRequest',
+  '2': [
+    {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'name', '3': 2, '4': 1, '5': 9, '10': 'name'},
+    {'1': 'permissions_mask', '3': 3, '4': 1, '5': 4, '10': 'permissionsMask'},
+    {'1': 'position', '3': 4, '4': 1, '5': 5, '10': 'position'},
+  ],
+};
+
+/// Descriptor for `CreateBotRoleRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List createBotRoleRequestDescriptor = $convert.base64Decode(
+    'ChRDcmVhdGVCb3RSb2xlUmVxdWVzdBIZCghzcGFjZV9pZBgBIAEoCVIHc3BhY2VJZBISCgRuYW'
+    '1lGAIgASgJUgRuYW1lEikKEHBlcm1pc3Npb25zX21hc2sYAyABKARSD3Blcm1pc3Npb25zTWFz'
+    'axIaCghwb3NpdGlvbhgEIAEoBVIIcG9zaXRpb24=');
+
+@$core.Deprecated('Use createBotRoleResponseDescriptor instead')
+const CreateBotRoleResponse$json = {
+  '1': 'CreateBotRoleResponse',
+  '2': [
+    {
+      '1': 'role',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.role.v1.Role',
+      '10': 'role'
+    },
+  ],
+};
+
+/// Descriptor for `CreateBotRoleResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List createBotRoleResponseDescriptor = $convert.base64Decode(
+    'ChVDcmVhdGVCb3RSb2xlUmVzcG9uc2USJwoEcm9sZRgBIAEoCzITLnZvaWNlLnJvbGUudjEuUm'
+    '9sZVIEcm9sZQ==');
+
+@$core.Deprecated('Use completeAutocompleteRequestDescriptor instead')
+const CompleteAutocompleteRequest$json = {
+  '1': 'CompleteAutocompleteRequest',
+  '2': [
+    {'1': 'request_id', '3': 1, '4': 1, '5': 9, '10': 'requestId'},
+    {
+      '1': 'choices',
+      '3': 2,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.bot.v1.AutocompleteChoice',
+      '10': 'choices'
+    },
+  ],
+};
+
+/// Descriptor for `CompleteAutocompleteRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List completeAutocompleteRequestDescriptor =
+    $convert.base64Decode(
+        'ChtDb21wbGV0ZUF1dG9jb21wbGV0ZVJlcXVlc3QSHQoKcmVxdWVzdF9pZBgBIAEoCVIJcmVxdW'
+        'VzdElkEjoKB2Nob2ljZXMYAiADKAsyIC52b2ljZS5ib3QudjEuQXV0b2NvbXBsZXRlQ2hvaWNl'
+        'UgdjaG9pY2Vz');
+
+@$core.Deprecated('Use completeAutocompleteResponseDescriptor instead')
+const CompleteAutocompleteResponse$json = {
+  '1': 'CompleteAutocompleteResponse',
+};
+
+/// Descriptor for `CompleteAutocompleteResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List completeAutocompleteResponseDescriptor =
+    $convert.base64Decode('ChxDb21wbGV0ZUF1dG9jb21wbGV0ZVJlc3BvbnNl');

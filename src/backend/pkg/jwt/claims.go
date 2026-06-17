@@ -6,5 +6,6 @@ type Claims struct {
 	ProfileID        string
 	Roles            []string
 	SubscriptionTier string
+	AccountType      string
 	JTI              string
 }

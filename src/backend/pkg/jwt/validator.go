@@ -192,6 +192,7 @@ type jwtPayload struct {
 	ProfileID        string          `json:"profile_id"`
 	Roles            []string        `json:"roles"`
 	SubscriptionTier string          `json:"subscription_tier"`
+	AccountType      string          `json:"account_type"`
 	JTI              string          `json:"jti"`
 	Issuer           string          `json:"iss"`
 	Audience         json.RawMessage `json:"aud"`
@@ -215,11 +216,16 @@ func (p jwtPayload) toClaims(issuer, audience string, now time.Time) (Claims, er
 	if userID == "" {
 		return Claims{}, errors.New("missing subject")
 	}
+	accountType := strings.TrimSpace(p.AccountType)
+	if accountType == "" {
+		accountType = "regular"
+	}
 	return Claims{
 		UserID:           userID,
 		ProfileID:        p.ProfileID,
 		Roles:            p.Roles,
 		SubscriptionTier: p.SubscriptionTier,
+		AccountType:      accountType,
 		JTI:              p.JTI,
 	}, nil
 }

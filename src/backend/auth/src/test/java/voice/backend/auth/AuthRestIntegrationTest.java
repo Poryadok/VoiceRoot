@@ -27,6 +27,15 @@ class AuthRestIntegrationTest {
   @Autowired ObjectMapper objectMapper;
 
   @Test
+  void guestRegisterExposesAccountTypeOverRest() throws Exception {
+    JsonNode registered = session(postJson("/api/v1/auth/register",
+        "{\"password\":\"Correct horse battery staple\",\"guest\":true,\"device_info_json\":\"{}\"}"));
+    assertThat(registered.get("account_type").asText()).isEqualTo("guest");
+    assertThat(SignedJWT.parse(registered.get("access_token").asText()).getJWTClaimsSet().getStringClaim("account_type"))
+        .isEqualTo("guest");
+  }
+
+  @Test
   void registerLoginRefreshValidateLogoutAndJwksWorkOverRest() throws Exception {
     JsonNode registered = session(postJson("/api/v1/auth/register",
         "{\"email\":\"rest@example.com\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"{}\"}"));

@@ -12,6 +12,8 @@ import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/connectivity_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/state/message_cache_providers.dart';
+import 'package:voice_frontend/state/onboarding_controller.dart';
+import 'package:voice_frontend/state/guest_save_account_reminder.dart';
 import 'package:voice_frontend/state/space_providers.dart';
 import 'package:voice_frontend/theme/profile_accent_storage.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
@@ -38,6 +40,18 @@ List<Override> voiceAppTestOverrides({required http.Client client}) => [
   messageCacheStoreProvider.overrideWithValue(InMemoryMessageCacheStore()),
   isDeviceOfflineProvider.overrideWith((ref) => false),
   mySpacesProvider.overrideWith((_) async => const SpaceListData(spaces: [])),
+];
+
+/// Onboarding already completed — avoids overlay dialogs in shell widget tests.
+class TestCompletedOnboardingController extends OnboardingController {
+  @override
+  OnboardingUiState build() => const OnboardingUiState(completed: true);
+}
+
+List<Override> guestShellTestOverrides({required http.Client client}) => [
+  ...voiceAppTestOverrides(client: client),
+  onboardingControllerProvider.overrideWith(TestCompletedOnboardingController.new),
+  guestSaveAccountReminderVisibleProvider.overrideWith((ref) async => true),
 ];
 
 /// Pre-authenticated [AuthController] for widget tests of the main shell.

@@ -5,12 +5,14 @@ import (
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/metadata"
+	"voice/backend/pkg/guestguard"
 )
 
 // Metadata keys aligned with Gateway downstream headers (see gateway applyClaims).
 const (
 	HeaderUserID    = "x-voice-user-id"    // JWT claim user_id == account_id
 	HeaderProfileID = "x-voice-profile-id" // active profile_id
+	HeaderAccountType = guestguard.HeaderAccountType
 )
 
 // AccountID returns the caller's account UUID from incoming gRPC metadata, if present and valid.
@@ -45,4 +47,14 @@ func ProfileID(ctx context.Context) (uuid.UUID, bool) {
 		return uuid.Nil, false
 	}
 	return id, true
+}
+
+// AccountType returns caller account type (regular when absent).
+func AccountType(ctx context.Context) string {
+	return guestguard.AccountType(ctx)
+}
+
+// RequireRegular returns PermissionDenied for guest callers.
+func RequireRegular(ctx context.Context) error {
+	return guestguard.RequireRegular(ctx)
 }

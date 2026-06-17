@@ -292,6 +292,20 @@ class BotServiceClient extends $grpc.Client {
     return $createUnaryCall(_$getChatMessagesForBot, request, options: options);
   }
 
+  $grpc.ResponseFuture<$0.CreateBotRoleResponse> createBotRole(
+    $0.CreateBotRoleRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$createBotRole, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.CompleteAutocompleteResponse> completeAutocomplete(
+    $0.CompleteAutocompleteRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$completeAutocomplete, request, options: options);
+  }
+
   // method descriptors
 
   static final _$registerBot =
@@ -472,6 +486,16 @@ class BotServiceClient extends $grpc.Client {
       '/voice.bot.v1.BotService/GetChatMessagesForBot',
       ($0.GetChatMessagesForBotRequest value) => value.writeToBuffer(),
       $0.GetChatMessagesForBotResponse.fromBuffer);
+  static final _$createBotRole =
+      $grpc.ClientMethod<$0.CreateBotRoleRequest, $0.CreateBotRoleResponse>(
+          '/voice.bot.v1.BotService/CreateBotRole',
+          ($0.CreateBotRoleRequest value) => value.writeToBuffer(),
+          $0.CreateBotRoleResponse.fromBuffer);
+  static final _$completeAutocomplete = $grpc.ClientMethod<
+          $0.CompleteAutocompleteRequest, $0.CompleteAutocompleteResponse>(
+      '/voice.bot.v1.BotService/CompleteAutocomplete',
+      ($0.CompleteAutocompleteRequest value) => value.writeToBuffer(),
+      $0.CompleteAutocompleteResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.bot.v1.BotService')
@@ -783,6 +807,24 @@ abstract class BotServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.GetChatMessagesForBotRequest.fromBuffer(value),
         ($0.GetChatMessagesForBotResponse value) => value.writeToBuffer()));
+    $addMethod(
+        $grpc.ServiceMethod<$0.CreateBotRoleRequest, $0.CreateBotRoleResponse>(
+            'CreateBotRole',
+            createBotRole_Pre,
+            false,
+            false,
+            ($core.List<$core.int> value) =>
+                $0.CreateBotRoleRequest.fromBuffer(value),
+            ($0.CreateBotRoleResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.CompleteAutocompleteRequest,
+            $0.CompleteAutocompleteResponse>(
+        'CompleteAutocomplete',
+        completeAutocomplete_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.CompleteAutocompleteRequest.fromBuffer(value),
+        ($0.CompleteAutocompleteResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.RegisterBotResponse> registerBot_Pre($grpc.ServiceCall $call,
@@ -1091,4 +1133,22 @@ abstract class BotServiceBase extends $grpc.Service {
 
   $async.Future<$0.GetChatMessagesForBotResponse> getChatMessagesForBot(
       $grpc.ServiceCall call, $0.GetChatMessagesForBotRequest request);
+
+  $async.Future<$0.CreateBotRoleResponse> createBotRole_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.CreateBotRoleRequest> $request) async {
+    return createBotRole($call, await $request);
+  }
+
+  $async.Future<$0.CreateBotRoleResponse> createBotRole(
+      $grpc.ServiceCall call, $0.CreateBotRoleRequest request);
+
+  $async.Future<$0.CompleteAutocompleteResponse> completeAutocomplete_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.CompleteAutocompleteRequest> $request) async {
+    return completeAutocomplete($call, await $request);
+  }
+
+  $async.Future<$0.CompleteAutocompleteResponse> completeAutocomplete(
+      $grpc.ServiceCall call, $0.CompleteAutocompleteRequest request);
 }

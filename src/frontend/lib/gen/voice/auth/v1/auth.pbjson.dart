@@ -257,6 +257,7 @@ const AuthSession$json = {
     },
     {'1': 'account_id', '3': 4, '4': 1, '5': 9, '10': 'accountId'},
     {'1': 'profile_id', '3': 5, '4': 1, '5': 9, '10': 'profileId'},
+    {'1': 'account_type', '3': 6, '4': 1, '5': 9, '10': 'accountType'},
   ],
 };
 
@@ -265,7 +266,8 @@ final $typed_data.Uint8List authSessionDescriptor = $convert.base64Decode(
     'CgtBdXRoU2Vzc2lvbhIhCgxhY2Nlc3NfdG9rZW4YASABKAlSC2FjY2Vzc1Rva2VuEiMKDXJlZn'
     'Jlc2hfdG9rZW4YAiABKAlSDHJlZnJlc2hUb2tlbhIsChJleHBpcmVzX2luX3NlY29uZHMYAyAB'
     'KANSEGV4cGlyZXNJblNlY29uZHMSHQoKYWNjb3VudF9pZBgEIAEoCVIJYWNjb3VudElkEh0KCn'
-    'Byb2ZpbGVfaWQYBSABKAlSCXByb2ZpbGVJZA==');
+    'Byb2ZpbGVfaWQYBSABKAlSCXByb2ZpbGVJZBIhCgxhY2NvdW50X3R5cGUYBiABKAlSC2FjY291'
+    'bnRUeXBl');
 
 @$core.Deprecated('Use registerResponseDescriptor instead')
 const RegisterResponse$json = {
@@ -478,6 +480,7 @@ const TokenClaims$json = {
       '6': '.google.protobuf.Timestamp',
       '10': 'expiresAt'
     },
+    {'1': 'account_type', '3': 6, '4': 1, '5': 9, '10': 'accountType'},
   ],
 };
 
@@ -486,7 +489,8 @@ final $typed_data.Uint8List tokenClaimsDescriptor = $convert.base64Decode(
     'CgtUb2tlbkNsYWltcxIXCgd1c2VyX2lkGAEgASgJUgZ1c2VySWQSHQoKcHJvZmlsZV9pZBgCIA'
     'EoCVIJcHJvZmlsZUlkEhQKBXJvbGVzGAMgAygJUgVyb2xlcxIrChFzdWJzY3JpcHRpb25fdGll'
     'chgEIAEoCVIQc3Vic2NyaXB0aW9uVGllchI5CgpleHBpcmVzX2F0GAUgASgLMhouZ29vZ2xlLn'
-    'Byb3RvYnVmLlRpbWVzdGFtcFIJZXhwaXJlc0F0');
+    'Byb3RvYnVmLlRpbWVzdGFtcFIJZXhwaXJlc0F0EiEKDGFjY291bnRfdHlwZRgGIAEoCVILYWNj'
+    'b3VudFR5cGU=');
 
 @$core.Deprecated('Use switchActiveProfileRequestDescriptor instead')
 const SwitchActiveProfileRequest$json = {

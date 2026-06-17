@@ -200,6 +200,7 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
         .setExpiresInSeconds(session.expiresInSeconds())
         .setAccountId(session.accountId())
         .setProfileId(session.profileId())
+        .setAccountType(session.accountType() == null ? "regular" : session.accountType())
         .build();
   }
 
@@ -210,6 +211,7 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
         .addAllRoles(claims.roles())
         .setSubscriptionTier(claims.subscriptionTier())
         .setExpiresAt(Timestamp.newBuilder().setSeconds(claims.expiresAt().getEpochSecond()).setNanos(claims.expiresAt().getNano()))
+        .setAccountType(claims.normalizedAccountType())
         .build();
   }
 

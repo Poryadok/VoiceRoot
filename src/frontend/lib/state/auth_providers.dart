@@ -7,6 +7,7 @@ import '../backend/auth_session.dart';
 import '../backend/auth_session_storage.dart';
 import '../backend/discover_hint_storage.dart';
 import '../backend/guest_credentials_storage.dart';
+import '../backend/jwt_claims.dart';
 import '../backend/gateway_http.dart';
 import '../ui/auth/auth_errors.dart';
 import 'gateway_providers.dart';
@@ -114,8 +115,6 @@ class AuthController extends StateNotifier<AuthState> {
       state = state.copyWith(isRestoring: false, clearError: true);
       return;
     }
-    final guestPassword = await _guestCredentialsStorage.readPassword();
-    final isGuest = guestPassword != null && guestPassword.isNotEmpty;
     state = state.copyWith(session: saved, isRestoring: true, clearError: true);
     final refreshed = await _authClient.refresh(
       refreshToken: saved.refreshToken,
@@ -123,6 +122,7 @@ class AuthController extends StateNotifier<AuthState> {
     switch (refreshed) {
       case AuthSessionOk(:final session):
         await _persist(session);
+        final isGuest = await _resolveIsGuest(session);
         final needsGuestNickname = isGuest &&
             !await _guestCredentialsStorage.isNicknameCompleted(
               session.accountId,
@@ -141,6 +141,7 @@ class AuthController extends StateNotifier<AuthState> {
           clearSession: true,
           isRestoring: false,
           clearError: true,
+          clearGuest: true,
         );
     }
   }
@@ -163,7 +164,7 @@ class AuthController extends StateNotifier<AuthState> {
           session: session,
           isRestoring: false,
           clearError: true,
-          isGuest: true,
+          isGuest: await _resolveIsGuest(session),
           needsGuestNickname: true,
         );
       case AuthSessionFailure(
@@ -290,6 +291,7 @@ class AuthController extends StateNotifier<AuthState> {
           isSubmitting: false,
           clearError: true,
           pendingDiscoverHint: true,
+          isGuest: await _resolveIsGuest(session),
         );
       case AuthSessionFailure(
         :final message,
@@ -328,7 +330,11 @@ class AuthController extends StateNotifier<AuthState> {
     switch (refreshed) {
       case AuthSessionOk(:final session):
         await _persist(session);
-        state = state.copyWith(session: session, clearError: true);
+        state = state.copyWith(
+          session: session,
+          clearError: true,
+          isGuest: await _resolveIsGuest(session),
+        );
         return true;
       case AuthSessionFailure():
         await _storage.clear();
@@ -352,6 +358,15 @@ class AuthController extends StateNotifier<AuthState> {
     const chars =
         'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     return List.generate(32, (_) => chars[_random.nextInt(chars.length)]).join();
+  }
+
+  Future<bool> _resolveIsGuest(AuthSession session) async {
+    if (isGuestAccountType(session.accountType)) return true;
+    if (isGuestAccountType(accountTypeFromAccessToken(session.accessToken))) {
+      return true;
+    }
+    final guestPassword = await _guestCredentialsStorage.readPassword();
+    return guestPassword != null && guestPassword.isNotEmpty;
   }
 
   @override

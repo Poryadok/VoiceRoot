@@ -1546,6 +1546,27 @@ class AppLocalizationsRu extends AppLocalizations {
   String get guestNicknameContinue => 'Продолжить';
 
   @override
+  String get guestConvertTitle => 'Создайте аккаунт';
+
+  @override
+  String get guestConvertSubtitle =>
+      'Укажите email и пароль, чтобы сохранить чаты и профиль.';
+
+  @override
+  String get guestConvertSubmit => 'Создать аккаунт';
+
+  @override
+  String get guestSaveAccountReminder =>
+      'Зарегистрируйте аккаунт, чтобы не потерять доступ.';
+
+  @override
+  String get guestSaveAccountReminderCta => 'Зарегистрироваться';
+
+  @override
+  String get privacyShowOnlineIncludeGuests =>
+      'Гостевые аккаунты видят мой онлайн-статус';
+
+  @override
   String get gameCatalogTitle => 'Каталог игр';
 
   @override

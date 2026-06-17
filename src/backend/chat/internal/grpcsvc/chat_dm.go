@@ -12,6 +12,7 @@ import (
 
 	"voice/backend/chat/internal/authctx"
 	"voice/backend/chat/internal/store"
+	"voice/backend/pkg/guestguard"
 
 	chatv1 "voice.app/voice/chat/v1"
 )
@@ -36,6 +37,9 @@ func (s *ChatGRPC) GetDM(ctx context.Context, req *chatv1.GetDMRequest) (*chatv1
 func (s *ChatGRPC) ensureDM(ctx context.Context, otherProfileRaw string) (*store.ChatRow, error) {
 	if s == nil || s.DM == nil {
 		return nil, status.Error(codes.FailedPrecondition, "chat persistence not configured")
+	}
+	if err := guestguard.RequireRegular(ctx); err != nil {
+		return nil, err
 	}
 	if s.Profiles == nil {
 		return nil, status.Error(codes.FailedPrecondition, "user profile lookup not configured")

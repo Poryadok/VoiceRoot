@@ -12,12 +12,14 @@
 
 import 'dart:core' as $core;
 
+import 'package:fixnum/fixnum.dart' as $fixnum;
 import 'package:protobuf/protobuf.dart' as $pb;
 import 'package:protobuf/well_known_types/google/protobuf/timestamp.pb.dart'
     as $1;
 
 import '../../chat/v1/chat.pb.dart' as $2;
 import '../../messaging/v1/messaging.pb.dart' as $3;
+import '../../role/v1/role.pb.dart' as $4;
 import 'bot.pbenum.dart';
 
 export 'package:protobuf/protobuf.dart' show GeneratedMessageGenericExtensions;
@@ -5250,6 +5252,260 @@ class GetChatMessagesForBotResponse extends $pb.GeneratedMessage {
   $core.bool hasNextCursor() => $_has(1);
   @$pb.TagNumber(2)
   void clearNextCursor() => $_clearField(2);
+}
+
+class CreateBotRoleRequest extends $pb.GeneratedMessage {
+  factory CreateBotRoleRequest({
+    $core.String? spaceId,
+    $core.String? name,
+    $fixnum.Int64? permissionsMask,
+    $core.int? position,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (name != null) result.name = name;
+    if (permissionsMask != null) result.permissionsMask = permissionsMask;
+    if (position != null) result.position = position;
+    return result;
+  }
+
+  CreateBotRoleRequest._();
+
+  factory CreateBotRoleRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory CreateBotRoleRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'CreateBotRoleRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.bot.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'name')
+    ..a<$fixnum.Int64>(
+        3, _omitFieldNames ? '' : 'permissionsMask', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aI(4, _omitFieldNames ? '' : 'position')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CreateBotRoleRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CreateBotRoleRequest copyWith(void Function(CreateBotRoleRequest) updates) =>
+      super.copyWith((message) => updates(message as CreateBotRoleRequest))
+          as CreateBotRoleRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static CreateBotRoleRequest create() => CreateBotRoleRequest._();
+  @$core.override
+  CreateBotRoleRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static CreateBotRoleRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<CreateBotRoleRequest>(create);
+  static CreateBotRoleRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get name => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set name($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasName() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearName() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $fixnum.Int64 get permissionsMask => $_getI64(2);
+  @$pb.TagNumber(3)
+  set permissionsMask($fixnum.Int64 value) => $_setInt64(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasPermissionsMask() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearPermissionsMask() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.int get position => $_getIZ(3);
+  @$pb.TagNumber(4)
+  set position($core.int value) => $_setSignedInt32(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasPosition() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearPosition() => $_clearField(4);
+}
+
+class CreateBotRoleResponse extends $pb.GeneratedMessage {
+  factory CreateBotRoleResponse({
+    $4.Role? role,
+  }) {
+    final result = create();
+    if (role != null) result.role = role;
+    return result;
+  }
+
+  CreateBotRoleResponse._();
+
+  factory CreateBotRoleResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory CreateBotRoleResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'CreateBotRoleResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.bot.v1'),
+      createEmptyInstance: create)
+    ..aOM<$4.Role>(1, _omitFieldNames ? '' : 'role', subBuilder: $4.Role.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CreateBotRoleResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CreateBotRoleResponse copyWith(
+          void Function(CreateBotRoleResponse) updates) =>
+      super.copyWith((message) => updates(message as CreateBotRoleResponse))
+          as CreateBotRoleResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static CreateBotRoleResponse create() => CreateBotRoleResponse._();
+  @$core.override
+  CreateBotRoleResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static CreateBotRoleResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<CreateBotRoleResponse>(create);
+  static CreateBotRoleResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $4.Role get role => $_getN(0);
+  @$pb.TagNumber(1)
+  set role($4.Role value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasRole() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearRole() => $_clearField(1);
+  @$pb.TagNumber(1)
+  $4.Role ensureRole() => $_ensure(0);
+}
+
+class CompleteAutocompleteRequest extends $pb.GeneratedMessage {
+  factory CompleteAutocompleteRequest({
+    $core.String? requestId,
+    $core.Iterable<AutocompleteChoice>? choices,
+  }) {
+    final result = create();
+    if (requestId != null) result.requestId = requestId;
+    if (choices != null) result.choices.addAll(choices);
+    return result;
+  }
+
+  CompleteAutocompleteRequest._();
+
+  factory CompleteAutocompleteRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory CompleteAutocompleteRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'CompleteAutocompleteRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.bot.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'requestId')
+    ..pPM<AutocompleteChoice>(2, _omitFieldNames ? '' : 'choices',
+        subBuilder: AutocompleteChoice.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CompleteAutocompleteRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CompleteAutocompleteRequest copyWith(
+          void Function(CompleteAutocompleteRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as CompleteAutocompleteRequest))
+          as CompleteAutocompleteRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static CompleteAutocompleteRequest create() =>
+      CompleteAutocompleteRequest._();
+  @$core.override
+  CompleteAutocompleteRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static CompleteAutocompleteRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<CompleteAutocompleteRequest>(create);
+  static CompleteAutocompleteRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get requestId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set requestId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasRequestId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearRequestId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $pb.PbList<AutocompleteChoice> get choices => $_getList(1);
+}
+
+class CompleteAutocompleteResponse extends $pb.GeneratedMessage {
+  factory CompleteAutocompleteResponse() => create();
+
+  CompleteAutocompleteResponse._();
+
+  factory CompleteAutocompleteResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory CompleteAutocompleteResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'CompleteAutocompleteResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.bot.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CompleteAutocompleteResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CompleteAutocompleteResponse copyWith(
+          void Function(CompleteAutocompleteResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as CompleteAutocompleteResponse))
+          as CompleteAutocompleteResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static CompleteAutocompleteResponse create() =>
+      CompleteAutocompleteResponse._();
+  @$core.override
+  CompleteAutocompleteResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static CompleteAutocompleteResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<CompleteAutocompleteResponse>(create);
+  static CompleteAutocompleteResponse? _defaultInstance;
 }
 
 const $core.bool _omitFieldNames =

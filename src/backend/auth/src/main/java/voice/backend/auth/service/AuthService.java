@@ -16,6 +16,7 @@ import voice.backend.auth.repository.RefreshTokenRepository;
 import voice.backend.auth.security.BCryptPasswordHasher;
 import voice.backend.auth.security.JwtService;
 import voice.backend.auth.security.RefreshTokenCodec;
+import voice.backend.auth.events.AuthEventPublisher;
 import voice.backend.auth.security.TokenBlacklist;
 
 public class AuthService {
@@ -36,6 +37,7 @@ public class AuthService {
   private final SubscriptionTierResolver subscriptionTierResolver;
   private final ProfileSwitchValidator profileSwitchValidator;
   private final E2EKeyBackupRepository e2eKeyBackups;
+  private final AuthEventPublisher authEventPublisher;
 
   public AuthService(
       AccountRepository accounts,
@@ -51,7 +53,8 @@ public class AuthService {
       PrimaryProfileProvisioner primaryProfileProvisioner,
       SubscriptionTierResolver subscriptionTierResolver,
       ProfileSwitchValidator profileSwitchValidator,
-      E2EKeyBackupRepository e2eKeyBackups) {
+      E2EKeyBackupRepository e2eKeyBackups,
+      AuthEventPublisher authEventPublisher) {
     this.accounts = accounts;
     this.refreshTokens = refreshTokens;
     this.refreshTokenCodec = refreshTokenCodec;
@@ -66,6 +69,7 @@ public class AuthService {
     this.subscriptionTierResolver = subscriptionTierResolver;
     this.profileSwitchValidator = profileSwitchValidator;
     this.e2eKeyBackups = e2eKeyBackups;
+    this.authEventPublisher = authEventPublisher;
   }
 
   public AuthService withClock(Clock newClock) {
@@ -83,7 +87,8 @@ public class AuthService {
         primaryProfileProvisioner,
         subscriptionTierResolver,
         profileSwitchValidator,
-        e2eKeyBackups);
+        e2eKeyBackups,
+        authEventPublisher);
   }
 
   public AuthSession register(RegisterCommand command) {
@@ -101,6 +106,7 @@ public class AuthService {
     } catch (IllegalArgumentException ex) {
       throw new AuthException("invalid_credentials");
     }
+    touchLastOnline(account);
     return issueSession(account, command.deviceInfoJson());
   }
 
@@ -120,6 +126,7 @@ public class AuthService {
         throw new AuthException("invalid_totp");
       }
     }
+    touchLastOnline(account);
     return issueSession(account, command.deviceInfoJson());
   }
 
@@ -130,6 +137,7 @@ public class AuthService {
     Account account = accounts.findById(current.accountId().toString()).orElseThrow(() -> new AuthException("invalid_token"));
     ensureActive(account);
     tokenBlacklist.revoke(current.accessJti(), jwtService.accessTtl());
+    touchLastOnline(account);
     return issueSession(account, command.deviceInfoJson());
   }
 
@@ -165,7 +173,7 @@ public class AuthService {
     Account account = accounts.findById(accountId).orElseThrow(() -> new AuthException("invalid_token"));
     ensureActive(account);
     String tier = subscriptionTierResolver.resolveTier(account.id());
-    return jwtService.issue(account.id().toString(), profileId, List.of("user"), tier);
+    return jwtService.issue(account.id().toString(), profileId, List.of("user"), tier, account.type());
   }
 
   public long accessTokenTtlSeconds() {
@@ -271,6 +279,7 @@ public class AuthService {
       throw new AuthException("invalid_credentials");
     }
     tokenBlacklist.revoke(claims.jti(), jwtService.ttl(claims));
+    authEventPublisher.publishGuestConverted(converted.id());
     return issueSession(converted, "{}");
   }
 
@@ -299,7 +308,7 @@ public class AuthService {
 
   private AuthSession issueSessionForProfile(Account account, String profileId, String deviceInfoJson) {
     String tier = subscriptionTierResolver.resolveTier(account.id());
-    String accessToken = jwtService.issue(account.id().toString(), profileId, List.of("user"), tier);
+    String accessToken = jwtService.issue(account.id().toString(), profileId, List.of("user"), tier, account.type());
     TokenClaims claims = jwtService.validate(accessToken);
     String refreshToken = refreshTokenCodec.generate();
     refreshTokens.create(
@@ -310,7 +319,16 @@ public class AuthService {
         Instant.now(clock).plus(refreshTtl),
         Instant.now(clock));
     return new AuthSession(
-        accessToken, refreshToken, jwtService.accessTtl().toSeconds(), account.id().toString(), profileId);
+        accessToken,
+        refreshToken,
+        jwtService.accessTtl().toSeconds(),
+        account.id().toString(),
+        profileId,
+        account.type());
+  }
+
+  private void touchLastOnline(Account account) {
+    accounts.touchLastOnlineAt(account.id(), Instant.now(clock));
   }
 
   private static String displayHint(Account account) {

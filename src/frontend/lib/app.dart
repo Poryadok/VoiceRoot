@@ -37,6 +37,8 @@ import 'routing/deep_link_parser.dart';
 import 'state/deep_link_navigation.dart';
 import 'state/onboarding_controller.dart';
 import 'ui/a11y/voice_shortcuts.dart';
+import 'ui/auth/guest_restricted_actions.dart';
+import 'ui/auth/guest_save_account_reminder_banner.dart';
 import 'ui/onboarding/onboarding_overlay.dart';
 import 'ui/chat/chat_room_panel.dart';
 import 'ui/core/profile_accent_dot.dart';
@@ -352,6 +354,8 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
                       header: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          const GuestSaveAccountReminderBanner(),
+                          const GuestRestrictedActions(),
                           _SessionBar(
                             useProfileSwitcher: !narrow,
                             onLogout: () => ref

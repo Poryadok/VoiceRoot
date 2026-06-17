@@ -9,45 +9,66 @@ import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/guest_credentials_storage.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/bootstrap/voice_app_bootstrap.dart';
-import 'package:voice_frontend/state/auth_providers.dart';
+import 'package:voice_frontend/state/guest_bootstrap_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/onboarding_controller.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/auth/auth_screen.dart';
 
-import 'support/auth_test_overrides.dart';
+import 'support/guest_bootstrap_test_helpers.dart';
 import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
 
-const _guestAccountId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
+const _guestAccountId = guestBootstrapAccountId;
 
 void main() {
-  testWidgets('bootstrap shows auth screen without auto guest register', (
+  testWidgets('bootstrap auto-registers guest on web without manual tap', (
     tester,
   ) async {
     var guestRegisterCalls = 0;
     await tester.pumpWidget(
       ProviderScope(
-        overrides: _bootstrapOverrides(
-          onRequest: (request) async {
-            if (request.url.path == '/api/v1/auth/register') {
-              guestRegisterCalls++;
-            }
-            if (request.url.path == '/health') {
-              return http.Response('ok', 200);
-            }
-            return http.Response('not found', 404);
-          },
-        ),
+        overrides: [
+          ...guestBootstrapOverrides(
+            onRequest: (request) async {
+              if (request.url.path == '/api/v1/auth/register') {
+                guestRegisterCalls++;
+                final body = jsonDecode(request.body) as Map<String, dynamic>;
+                expect(body['guest'], isTrue);
+                return http.Response(
+                  jsonEncode({
+                    'session': {
+                      'access_token': 'guest-access',
+                      'refresh_token': 'guest-refresh',
+                      'expires_in_seconds': 900,
+                      'account_id': _guestAccountId,
+                      'profile_id': 'guest-prof',
+                    },
+                  }),
+                  200,
+                );
+              }
+              if (request.url.path == '/health') {
+                return http.Response('ok', 200);
+              }
+              return http.Response('not found', 404);
+            },
+          ),
+          webGuestAutoRegisterEnabledProvider.overrideWithValue(true),
+        ],
         child: const VoiceAppBootstrap(locale: Locale('en')),
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(guestRegisterCalls, 0);
-    expect(find.byKey(AuthScreen.screenKey), findsOneWidget);
-    expect(find.byKey(const Key('guest_nickname_screen')), findsNothing);
+    expect(
+      guestRegisterCalls,
+      1,
+      reason: 'web bootstrap must auto registerGuest when no session',
+    );
+    expect(find.byKey(AuthScreen.screenKey), findsNothing);
+    expect(find.byKey(const Key('guest_nickname_screen')), findsOneWidget);
   });
 
   testWidgets('continue as guest registers and shows nickname screen', (
@@ -56,7 +77,7 @@ void main() {
     var guestRegisterCalls = 0;
     await tester.pumpWidget(
       ProviderScope(
-        overrides: _bootstrapOverrides(
+        overrides: guestBootstrapOverrides(
           onRequest: (request) async {
             if (request.url.path == '/api/v1/auth/register') {
               guestRegisterCalls++;
@@ -97,31 +118,4 @@ void main() {
     expect(find.byKey(const Key('guest_nickname_screen')), findsOneWidget);
     expect(find.byKey(AuthScreen.emailFieldKey), findsNothing);
   });
-}
-
-List<Override> _bootstrapOverrides({
-  required Future<http.Response> Function(http.Request request) onRequest,
-}) {
-  return [
-    ...voiceThemeTestOverrides(),
-    voiceMaterialThemeProvider.overrideWith((ref) async => voiceTestTheme()),
-    profileAccentStorageProvider.overrideWithValue(testProfileAccentStorage),
-    authSessionStorageProvider.overrideWithValue(InMemoryAuthSessionStorage()),
-    guestCredentialsStorageProvider.overrideWithValue(
-      InMemoryGuestCredentialsStorage(),
-    ),
-    gatewayConfigProvider.overrideWithValue(
-      const GatewayConfig(baseUrl: 'http://api.test'),
-    ),
-    onboardingControllerProvider.overrideWith(
-      () => _CompletedOnboardingController(),
-    ),
-    realtimeAutoConnectProvider.overrideWithValue(false),
-    httpClientProvider.overrideWithValue(MockClient(onRequest)),
-  ];
-}
-
-class _CompletedOnboardingController extends OnboardingController {
-  @override
-  OnboardingUiState build() => const OnboardingUiState(completed: true);
 }

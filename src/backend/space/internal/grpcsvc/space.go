@@ -11,11 +11,15 @@ import (
 
 	"voice/backend/space/internal/authctx"
 	"voice/backend/space/internal/store"
+	"voice/backend/pkg/guestguard"
 
 	spacev1 "voice.app/voice/space/v1"
 )
 
 func (s *SpaceGRPC) CreateSpace(ctx context.Context, req *spacev1.CreateSpaceRequest) (*spacev1.CreateSpaceResponse, error) {
+	if err := guestguard.RequireRegular(ctx); err != nil {
+		return nil, err
+	}
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "space persistence not configured")
 	}

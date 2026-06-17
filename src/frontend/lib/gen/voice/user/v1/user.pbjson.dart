@@ -508,6 +508,13 @@ const PrivacySettings$json = {
       '10': 'presetEnum',
       '17': true
     },
+    {
+      '1': 'show_online_include_guests',
+      '3': 13,
+      '4': 1,
+      '5': 8,
+      '10': 'showOnlineIncludeGuests'
+    },
   ],
   '8': [
     {'1': '_preset_enum'},
@@ -524,8 +531,9 @@ final $typed_data.Uint8List privacySettingsDescriptor = $convert.base64Decode(
     '0SMgoVYWxsb3dfZnJpZW5kX3JlcXVlc3RzGAkgASgJUhNhbGxvd0ZyaWVuZFJlcXVlc3RzEiQK'
     'DmFsbG93X2d1ZXN0X2RtGAogASgIUgxhbGxvd0d1ZXN0RG0SOQoKdXBkYXRlZF9hdBgLIAEoCz'
     'IaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBSCXVwZGF0ZWRBdBJCCgtwcmVzZXRfZW51bRgM'
-    'IAEoDjIcLnZvaWNlLnVzZXIudjEuUHJpdmFjeVByZXNldEgAUgpwcmVzZXRFbnVtiAEBQg4KDF'
-    '9wcmVzZXRfZW51bQ==');
+    'IAEoDjIcLnZvaWNlLnVzZXIudjEuUHJpdmFjeVByZXNldEgAUgpwcmVzZXRFbnVtiAEBEjsKGn'
+    'Nob3dfb25saW5lX2luY2x1ZGVfZ3Vlc3RzGA0gASgIUhdzaG93T25saW5lSW5jbHVkZUd1ZXN0'
+    'c0IOCgxfcHJlc2V0X2VudW0=');
 
 @$core.Deprecated('Use updatePresenceRequestDescriptor instead')
 const UpdatePresenceRequest$json = {

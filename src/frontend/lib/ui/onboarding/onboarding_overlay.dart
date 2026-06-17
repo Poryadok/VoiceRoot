@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../state/auth_providers.dart';
 import '../../state/onboarding_controller.dart';
 import '../../state/social_providers.dart';
 import '../profile/profile_edit_sheet.dart';
@@ -37,6 +38,12 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
     if (!onboarding.shouldShowHints) return;
     final step = onboarding.currentStep;
     if (step == null) return;
+
+    if (step == OnboardingStep.saveAccount &&
+        ref.read(authControllerProvider).isGuest) {
+      ref.read(onboardingControllerProvider.notifier).completeCurrentStep();
+      return;
+    }
 
     switch (step) {
       case OnboardingStep.saveAccount:

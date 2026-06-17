@@ -98,4 +98,8 @@
 3. Action-oriented сервисы (`Messaging`, `Voice`, `Story`, `Matchmaking`) запрашивают/получают policy-решение перед выполнением действия.
 4. `Social Service` и `Space Service` поставляют membership/relationship факты для финального allow/deny.
 
+## `allow_guest_dm` vs мультиселект аудитории
+
+- **`allow_guest_dm`** (bool в `PrivacySettings`) — отдельный переключатель «разрешить гостям писать в DM» для **regular**-инициаторов; не отменяет запрет **guest-initiated** DM (см. `auth-and-contacts.md`).
+- **Мультиселект** (`show_online_include_guests` и будущие `*_include_guests`) — явное включение гостевых аккаунтов в аудиторию visibility-полей; «Все» в пресете подразумевает гостей, конкретные группы (Друзья, УС) — только при явной опции «Гостевые аккаунты».
 

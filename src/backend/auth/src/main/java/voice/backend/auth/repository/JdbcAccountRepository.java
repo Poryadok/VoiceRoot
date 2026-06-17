@@ -163,4 +163,28 @@ public class JdbcAccountRepository implements AccountRepository {
       throw new IllegalArgumentException("duplicate account identifier", ex);
     }
   }
+
+  @Override
+  public void touchLastOnlineAt(UUID accountId, Instant at) {
+    jdbc.update(
+        """
+        UPDATE accounts
+        SET last_online_at = :at, updated_at = now()
+        WHERE id = :id
+        """,
+        new MapSqlParameterSource().addValue("id", accountId).addValue("at", java.sql.Timestamp.from(at)));
+  }
+
+  @Override
+  public int deactivateExpiredGuests(Instant lastOnlineBefore) {
+    return jdbc.update(
+        """
+        UPDATE accounts
+        SET status = 'deleted', deleted_at = now(), updated_at = now()
+        WHERE type = 'guest'
+          AND status = 'active'
+          AND (last_online_at IS NULL OR last_online_at < :cutoff)
+        """,
+        new MapSqlParameterSource("cutoff", java.sql.Timestamp.from(lastOnlineBefore)));
+  }
 }

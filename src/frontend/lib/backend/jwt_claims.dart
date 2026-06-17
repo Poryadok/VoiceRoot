@@ -20,3 +20,13 @@ String? subscriptionTierFromAccessToken(String token) {
   if (tier is String && tier.isNotEmpty) return tier;
   return null;
 }
+
+/// Reads `account_type` from a JWT access token payload (regular | guest).
+String? accountTypeFromAccessToken(String accessToken) {
+  final payload = decodeJwtPayload(accessToken);
+  final raw = payload?['account_type'];
+  if (raw is String && raw.isNotEmpty) return raw;
+  return null;
+}
+
+bool isGuestAccountType(String? accountType) => accountType == 'guest';

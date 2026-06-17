@@ -9,4 +9,12 @@ public record TokenClaims(
     List<String> roles,
     String subscriptionTier,
     Instant expiresAt,
-    String jti) {}
+    String jti,
+    String accountType) {
+  public String normalizedAccountType() {
+    if (accountType == null || accountType.isBlank()) {
+      return "regular";
+    }
+    return accountType;
+  }
+}

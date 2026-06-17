@@ -55,6 +55,13 @@ func withAccountProfileCtx(ctx context.Context, accountID, profileID uuid.UUID) 
 	return metadata.AppendToOutgoingContext(ctx, authctx.HeaderProfileID, profileID.String())
 }
 
+const headerAccountType = "x-voice-account-type"
+
+func withGuestAccountProfileCtx(ctx context.Context, accountID, profileID uuid.UUID) context.Context {
+	ctx = withAccountProfileCtx(ctx, accountID, profileID)
+	return metadata.AppendToOutgoingContext(ctx, headerAccountType, "guest")
+}
+
 type mapProfileAccounts map[uuid.UUID]uuid.UUID
 
 func (m mapProfileAccounts) AccountIDByProfileID(_ context.Context, profileID uuid.UUID) (uuid.UUID, error) {
@@ -381,4 +388,56 @@ func TestCreateDM_MissingAuth_Unauthenticated(t *testing.T) {
 	_, err := client.CreateDM(ctx, &chatv1.CreateDMRequest{OtherProfileId: profB.String()})
 	require.Error(t, err)
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
+}
+
+// TestCreateDM_GuestCaller_PermissionDenied documents auth-and-contacts.md: guests cannot initiate DM.
+func TestCreateDM_GuestCaller_PermissionDenied(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	accGuest := uuid.New()
+	accB := uuid.New()
+	profGuest := uuid.New()
+	profB := uuid.New()
+	profiles := mapProfileAccounts{profGuest: accGuest, profB: accB}
+
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil)
+	t.Cleanup(cleanup)
+
+	ctxGuest := withGuestAccountProfileCtx(ctx, accGuest, profGuest)
+	_, err := client.CreateDM(ctxGuest, &chatv1.CreateDMRequest{OtherProfileId: profB.String()})
+	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+// TestCreateDM_GuestCaller_AllowGuestDMStillDenied documents guest-initiated DM stays blocked
+// even when recipient allow_guest_dm=true (docs: guest actions do not depend on recipient settings).
+func TestCreateDM_GuestCaller_AllowGuestDMStillDenied(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	accGuest := uuid.New()
+	accB := uuid.New()
+	profGuest := uuid.New()
+	profB := uuid.New()
+	profiles := mapProfileAccounts{profGuest: accGuest, profB: accB}
+
+	// Recipient privacy would allow guest DM (allow_guest_dm=true); guest initiation must still fail.
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil,
+		WithPrivacyChecker(dmPrivacyStub{}),
+	)
+	t.Cleanup(cleanup)
+
+	ctxGuest := withGuestAccountProfileCtx(ctx, accGuest, profGuest)
+	_, err := client.CreateDM(ctxGuest, &chatv1.CreateDMRequest{OtherProfileId: profB.String()})
+	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }

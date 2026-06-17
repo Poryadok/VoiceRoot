@@ -37,6 +37,7 @@ class VoicePrivacySettings {
     required this.allowDm,
     required this.allowFriendRequests,
     required this.allowGuestDm,
+    this.showOnlineIncludeGuests = false,
   });
 
   final String profileId;
@@ -49,6 +50,7 @@ class VoicePrivacySettings {
   final String allowDm;
   final String allowFriendRequests;
   final bool allowGuestDm;
+  final bool showOnlineIncludeGuests;
 
   user_pb.PrivacySettings toProto() {
     return user_pb.PrivacySettings(
@@ -62,6 +64,7 @@ class VoicePrivacySettings {
       allowDm: allowDm,
       allowFriendRequests: allowFriendRequests,
       allowGuestDm: allowGuestDm,
+      showOnlineIncludeGuests: showOnlineIncludeGuests,
     );
   }
 
@@ -75,6 +78,7 @@ class VoicePrivacySettings {
     String? allowDm,
     String? allowFriendRequests,
     bool? allowGuestDm,
+    bool? showOnlineIncludeGuests,
   }) {
     return VoicePrivacySettings(
       profileId: profileId,
@@ -87,6 +91,8 @@ class VoicePrivacySettings {
       allowDm: allowDm ?? this.allowDm,
       allowFriendRequests: allowFriendRequests ?? this.allowFriendRequests,
       allowGuestDm: allowGuestDm ?? this.allowGuestDm,
+      showOnlineIncludeGuests:
+          showOnlineIncludeGuests ?? this.showOnlineIncludeGuests,
     );
   }
 }
@@ -103,6 +109,7 @@ VoicePrivacySettings voicePrivacyFromProto(user_pb.PrivacySettings proto) {
     allowDm: proto.allowDm,
     allowFriendRequests: proto.allowFriendRequests,
     allowGuestDm: proto.allowGuestDm,
+    showOnlineIncludeGuests: proto.showOnlineIncludeGuests,
   );
 }
 

@@ -27,7 +27,12 @@ import (
 func applyUserPrivacyMigrations(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
 	root := repoRoot(t)
-	for _, name := range []string{"000001_init.up.sql", "000002_privacy_settings.up.sql"} {
+	for _, name := range []string{
+		"000001_init.up.sql",
+		"000002_privacy_settings.up.sql",
+		"000003_profile_subscription.up.sql",
+		"000004_phase13_profiles_verification.up.sql",
+	} {
 		path := filepath.Join(root, "src", "backend", "migrations", "user_db", name)
 		sqlBytes, err := os.ReadFile(path)
 		require.NoError(t, err)
@@ -186,6 +191,124 @@ VALUES ($1, $2, 'setter', '2222', 'Setter', true)`,
 	err = pool.QueryRow(ctx, `SELECT allow_dm FROM privacy_settings WHERE profile_id = $1`, profileID).Scan(&allowDM)
 	require.NoError(t, err)
 	require.Equal(t, "friends", allowDM)
+}
+
+func withGuestUserAuthCtx(ctx context.Context, accountID, profileID uuid.UUID) context.Context {
+	ctx = withUserAuthCtx(ctx, accountID, profileID)
+	return metadata.AppendToOutgoingContext(ctx, "x-voice-account-type", "guest")
+}
+
+// TestUpdatePrivacySettings_MultiselectIncludesGuestAccounts documents privacy.md audience multiselect
+// must expose "guest accounts" as an explicit option (stored separately from friends/space members).
+func TestUpdatePrivacySettings_MultiselectIncludesGuestAccounts(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "userdb", "")
+	applyUserPrivacyMigrations(t, ctx, pool)
+
+	accountID := uuid.New()
+	profileID := uuid.New()
+	_, err := pool.Exec(ctx, `
+INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+VALUES ($1, $2, 'privacy', '3333', 'Privacy', true)`,
+		profileID, accountID)
+	require.NoError(t, err)
+
+	mr := miniredis.RunT(t)
+	t.Cleanup(func() { mr.Close() })
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), rdb)
+
+	_, err = pool.Exec(ctx, `
+ALTER TABLE privacy_settings
+  ADD COLUMN IF NOT EXISTS show_online_include_guests BOOLEAN NOT NULL DEFAULT false`)
+	require.NoError(t, err)
+
+	_, err = cli.UpdatePrivacySettings(withUserAuthCtx(ctx, accountID, profileID), &userv1.UpdatePrivacySettingsRequest{
+		ProfileId: profileID.String(),
+		Settings: &userv1.PrivacySettings{
+			ProfileId:           profileID.String(),
+			Preset:              "personal",
+			ShowOnline:          "friends",
+			ShowGameStatus:      "friends",
+			ShowMmRating:        "friends",
+			ShowPhone:           "nobody",
+			ShowStories:         "friends",
+			AllowDm:             "friends",
+			AllowFriendRequests: "everyone",
+			AllowGuestDm:        false,
+		},
+	})
+	require.NoError(t, err)
+
+	// Explicit guest-audience selection (multiselect) must round-trip once API lands.
+	_, err = pool.Exec(ctx, `
+UPDATE privacy_settings SET show_online_include_guests = true WHERE profile_id = $1`, profileID)
+	require.NoError(t, err)
+
+	var includeGuests bool
+	err = pool.QueryRow(ctx, `
+SELECT show_online_include_guests FROM privacy_settings WHERE profile_id = $1`, profileID).Scan(&includeGuests)
+	require.NoError(t, err)
+	require.True(t, includeGuests, "guest audience selection must persist for multiselect")
+
+	resp, err := cli.GetPrivacySettings(withUserAuthCtx(ctx, accountID, profileID), &userv1.GetPrivacySettingsRequest{
+		ProfileId: profileID.String(),
+	})
+	require.NoError(t, err)
+	field := resp.GetPrivacySettings().ProtoReflect().Descriptor().Fields().ByName("show_online_include_guests")
+	require.NotNil(t, field, "PrivacySettings proto must expose guest audience selection")
+	require.True(t, resp.GetPrivacySettings().ProtoReflect().Get(field).Bool())
+}
+
+// TestGetPresence_GuestViewer_HiddenWhenGuestAudienceExcluded documents privacy.md:
+// guests do not see online status unless "guest accounts" is in the audience.
+func TestGetPresence_GuestViewer_HiddenWhenGuestAudienceExcluded(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "userdb", "")
+	applyUserPrivacyMigrations(t, ctx, pool)
+
+	ownerAccount := uuid.New()
+	ownerProfile := uuid.New()
+	guestAccount := uuid.New()
+	guestProfile := uuid.New()
+	_, err := pool.Exec(ctx, `
+INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+VALUES ($1, $2, 'owner', '4444', 'Owner', true),
+       ($3, $4, 'guestview', '5555', 'Guest Viewer', true)`,
+		ownerProfile, ownerAccount, guestProfile, guestAccount)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `
+INSERT INTO privacy_settings (profile_id, preset, show_online, show_game_status, show_mm_rating, show_phone, show_stories, allow_dm, allow_friend_requests, allow_guest_dm)
+VALUES ($1, 'personal', 'friends', 'friends', 'friends', 'nobody', 'friends', 'friends', 'everyone', false)`,
+		ownerProfile)
+	require.NoError(t, err)
+
+	mr := miniredis.RunT(t)
+	t.Cleanup(func() { mr.Close() })
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), rdb)
+
+	_, err = cli.UpdatePresence(withUserAuthCtx(ctx, ownerAccount, ownerProfile), &userv1.UpdatePresenceRequest{
+		Status: "online",
+	})
+	require.NoError(t, err)
+
+	resp, err := cli.GetPresence(withGuestUserAuthCtx(ctx, guestAccount, guestProfile), &userv1.GetPresenceRequest{
+		ProfileId: ownerProfile.String(),
+	})
+	require.NoError(t, err)
+	require.Empty(t, resp.GetPresenceStatus().GetStatus(),
+		"guest viewer must not see online status when guest audience is excluded")
 }
 
 // TestGetPrivacySettings_NewProfile_BootstrapPreset documents primary profile gets default preset row on first read.

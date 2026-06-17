@@ -103,6 +103,7 @@ message AuthSession {
   int64 expires_in_seconds = 3;
   string account_id = 4;
   string profile_id = 5;
+  string account_type = 6;
 }
 
 message RegisterResponse {
@@ -151,6 +152,7 @@ message TokenClaims {
   repeated string roles = 3;
   string subscription_tier = 4;
   google.protobuf.Timestamp expires_at = 5;
+  string account_type = 6;
 }
 
 message SwitchActiveProfileRequest {

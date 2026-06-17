@@ -121,6 +121,14 @@ class JwtServiceTest {
   }
 
   @Test
+  void issuesAccessTokenWithAccountTypeRegular() throws Exception {
+    JwtService jwt = JwtService.forTests("voice-auth", "voice-client", "test-key", Duration.ofMinutes(15), CLOCK);
+    String token = jwt.issue("account-1", "profile-1", List.of("user"), "free");
+
+    assertThat(SignedJWT.parse(token).getJWTClaimsSet().getStringClaim("account_type")).isEqualTo("regular");
+  }
+
+  @Test
   void rejectsInvalidSignatureAndExpiredToken() {
     JwtService jwt = JwtService.forTests("voice-auth", "voice-client", "test-key", Duration.ofMinutes(15), CLOCK);
     String token = jwt.issue("account-1", "profile-1", List.of("user"), "free");

@@ -200,14 +200,20 @@ public class AuthRestController {
       @JsonProperty("refresh_token") String refreshToken,
       @JsonProperty("expires_in_seconds") long expiresInSeconds,
       @JsonProperty("account_id") String accountId,
-      @JsonProperty("profile_id") String profileId) {
+      @JsonProperty("profile_id") String profileId,
+      @JsonProperty("account_type") String accountType) {
     public static SessionBody from(AuthSession session) {
+      String accountType = session.accountType();
+      if (accountType == null || accountType.isBlank()) {
+        accountType = "regular";
+      }
       return new SessionBody(
           session.accessToken(),
           session.refreshToken(),
           session.expiresInSeconds(),
           session.accountId(),
-          session.profileId());
+          session.profileId(),
+          accountType);
     }
   }
 

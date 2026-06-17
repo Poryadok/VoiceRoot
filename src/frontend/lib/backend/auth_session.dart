@@ -8,6 +8,7 @@ class AuthSession {
     required this.accountId,
     required this.activeProfileId,
     required this.expiresInSeconds,
+    this.accountType,
   });
 
   final String accessToken;
@@ -18,6 +19,9 @@ class AuthSession {
   final String activeProfileId;
   final int expiresInSeconds;
 
+  /// `regular` or `guest`; mirrors JWT `account_type` when present.
+  final String? accountType;
+
   String get authorizationHeader => 'Bearer $accessToken';
 
   Map<String, dynamic> toJson() => {
@@ -26,6 +30,7 @@ class AuthSession {
     'account_id': accountId,
     'profile_id': activeProfileId,
     'expires_in_seconds': expiresInSeconds,
+    if (accountType != null) 'account_type': accountType,
   };
 
   factory AuthSession.fromJson(Map<String, dynamic> json) {
@@ -35,6 +40,7 @@ class AuthSession {
       accountId: json['account_id'] as String,
       activeProfileId: json['profile_id'] as String,
       expiresInSeconds: (json['expires_in_seconds'] as num).toInt(),
+      accountType: json['account_type'] as String?,
     );
   }
 
@@ -45,6 +51,7 @@ class AuthSession {
       accountId: proto.accountId,
       activeProfileId: proto.profileId,
       expiresInSeconds: proto.expiresInSeconds.toInt(),
+      accountType: proto.accountType.isEmpty ? null : proto.accountType,
     );
   }
 

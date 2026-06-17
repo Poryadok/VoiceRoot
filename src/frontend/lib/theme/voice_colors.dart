@@ -33,9 +33,23 @@ class VoiceColors extends ThemeExtension<VoiceColors> {
 
   static VoiceColors of(BuildContext context) {
     final ext = Theme.of(context).extension<VoiceColors>();
-    assert(ext != null, 'VoiceColors ThemeExtension missing');
-    return ext!;
+    return ext ?? _fallback;
   }
+
+  static const _fallback = VoiceColors(
+    canvas: Color(0xFF1E1E1E),
+    surface: Color(0xFF2B2B2B),
+    elevated: Color(0xFF333333),
+    muted: Color(0xFF252525),
+    textPrimary: Color(0xFFF0F0F0),
+    textSecondary: Color(0xFFA8A8A8),
+    textDisabled: Color(0xFF6E6E6E),
+    borderDefault: Color(0xFF3D3D3D),
+    borderStrong: Color(0xFFF0F0F0),
+    error: Color(0xFFEF9A9A),
+    focusRing: Color(0xFF7EC8E3),
+    profileAccent: Color(0xFF7EC8E3),
+  );
 
   factory VoiceColors.fromTokenMap(
     Map<String, Color> tokens, {

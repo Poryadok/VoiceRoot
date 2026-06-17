@@ -4,6 +4,7 @@ import java.time.Clock;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import voice.backend.auth.events.AuthEventPublisher;
 import voice.backend.auth.repository.AccountRepository;
 import voice.backend.auth.repository.BackupCodeRepository;
 import voice.backend.auth.repository.E2EKeyBackupRepository;
@@ -67,7 +68,8 @@ public class AuthBeans {
       voice.backend.auth.userdb.PrimaryProfileProvisioner primaryProfileProvisioner,
       SubscriptionTierResolver subscriptionTierResolver,
       voice.backend.auth.userdb.ProfileSwitchValidator profileSwitchValidator,
-      E2EKeyBackupRepository e2eKeyBackupRepository) {
+      E2EKeyBackupRepository e2eKeyBackupRepository,
+      AuthEventPublisher authEventPublisher) {
     return new AuthService(
         accounts,
         refreshTokens,
@@ -82,7 +84,8 @@ public class AuthBeans {
         primaryProfileProvisioner,
         subscriptionTierResolver,
         profileSwitchValidator,
-        e2eKeyBackupRepository);
+        e2eKeyBackupRepository,
+        authEventPublisher);
   }
 
   @Bean

@@ -844,6 +844,7 @@ class AuthSession extends $pb.GeneratedMessage {
     $fixnum.Int64? expiresInSeconds,
     $core.String? accountId,
     $core.String? profileId,
+    $core.String? accountType,
   }) {
     final result = create();
     if (accessToken != null) result.accessToken = accessToken;
@@ -851,6 +852,7 @@ class AuthSession extends $pb.GeneratedMessage {
     if (expiresInSeconds != null) result.expiresInSeconds = expiresInSeconds;
     if (accountId != null) result.accountId = accountId;
     if (profileId != null) result.profileId = profileId;
+    if (accountType != null) result.accountType = accountType;
     return result;
   }
 
@@ -872,6 +874,7 @@ class AuthSession extends $pb.GeneratedMessage {
     ..aInt64(3, _omitFieldNames ? '' : 'expiresInSeconds')
     ..aOS(4, _omitFieldNames ? '' : 'accountId')
     ..aOS(5, _omitFieldNames ? '' : 'profileId')
+    ..aOS(6, _omitFieldNames ? '' : 'accountType')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -937,6 +940,16 @@ class AuthSession extends $pb.GeneratedMessage {
   $core.bool hasProfileId() => $_has(4);
   @$pb.TagNumber(5)
   void clearProfileId() => $_clearField(5);
+
+  /// regular | guest — mirrors JWT account_type claim.
+  @$pb.TagNumber(6)
+  $core.String get accountType => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set accountType($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasAccountType() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearAccountType() => $_clearField(6);
 }
 
 class RegisterResponse extends $pb.GeneratedMessage {
@@ -1554,6 +1567,7 @@ class TokenClaims extends $pb.GeneratedMessage {
     $core.Iterable<$core.String>? roles,
     $core.String? subscriptionTier,
     $1.Timestamp? expiresAt,
+    $core.String? accountType,
   }) {
     final result = create();
     if (userId != null) result.userId = userId;
@@ -1561,6 +1575,7 @@ class TokenClaims extends $pb.GeneratedMessage {
     if (roles != null) result.roles.addAll(roles);
     if (subscriptionTier != null) result.subscriptionTier = subscriptionTier;
     if (expiresAt != null) result.expiresAt = expiresAt;
+    if (accountType != null) result.accountType = accountType;
     return result;
   }
 
@@ -1583,6 +1598,7 @@ class TokenClaims extends $pb.GeneratedMessage {
     ..aOS(4, _omitFieldNames ? '' : 'subscriptionTier')
     ..aOM<$1.Timestamp>(5, _omitFieldNames ? '' : 'expiresAt',
         subBuilder: $1.Timestamp.create)
+    ..aOS(6, _omitFieldNames ? '' : 'accountType')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1644,6 +1660,16 @@ class TokenClaims extends $pb.GeneratedMessage {
   void clearExpiresAt() => $_clearField(5);
   @$pb.TagNumber(5)
   $1.Timestamp ensureExpiresAt() => $_ensure(4);
+
+  /// regular | guest — mirrors JWT account_type claim.
+  @$pb.TagNumber(6)
+  $core.String get accountType => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set accountType($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasAccountType() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearAccountType() => $_clearField(6);
 }
 
 class SwitchActiveProfileRequest extends $pb.GeneratedMessage {

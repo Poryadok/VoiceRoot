@@ -32,6 +32,7 @@ func grpcMetadataFromRequest(r *http.Request) metadata.MD {
 		"x-voice-profile-id",
 		"x-voice-roles",
 		"x-voice-subscription-tier",
+		"x-voice-account-type",
 		correlation.GRPCMetadataKey,
 	} {
 		if v := strings.TrimSpace(r.Header.Get(key)); v != "" {

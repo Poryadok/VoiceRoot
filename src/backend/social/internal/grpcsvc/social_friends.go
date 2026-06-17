@@ -15,6 +15,7 @@ import (
 
 	"voice/backend/social/internal/authctx"
 	"voice/backend/social/internal/store"
+	"voice/backend/pkg/guestguard"
 
 	socialv1 "voice.app/voice/social/v1"
 )
@@ -83,6 +84,9 @@ func parseUUIDField(name, value string) (uuid.UUID, error) {
 
 // SendFriendInvitation implements voice.social.v1.SocialService.
 func (s *SocialGRPC) SendFriendInvitation(ctx context.Context, req *socialv1.SendFriendInvitationRequest) (*socialv1.SendFriendInvitationResponse, error) {
+	if err := guestguard.RequireRegular(ctx); err != nil {
+		return nil, err
+	}
 	caller, ok := authctx.ProfileID(ctx)
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing credentials")

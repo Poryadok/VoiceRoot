@@ -80,6 +80,11 @@ func applyClaims(r *http.Request, claims tokenClaims) {
 	r.Header.Set("X-Voice-Profile-Id", claims.ProfileID)
 	r.Header.Set("X-Voice-Roles", strings.Join(claims.Roles, ","))
 	r.Header.Set("X-Voice-Subscription-Tier", claims.SubscriptionTier)
+	accountType := strings.TrimSpace(claims.AccountType)
+	if accountType == "" {
+		accountType = "regular"
+	}
+	r.Header.Set("X-Voice-Account-Type", accountType)
 }
 
 func hasRole(claims tokenClaims, role string) bool {

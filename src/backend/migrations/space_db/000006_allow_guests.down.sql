@@ -1,0 +1,1 @@
+ALTER TABLE spaces DROP COLUMN IF EXISTS allow_guests;

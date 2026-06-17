@@ -2858,6 +2858,42 @@ abstract class AppLocalizations {
   /// **'Continue'**
   String get guestNicknameContinue;
 
+  /// No description provided for @guestConvertTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Create your account'**
+  String get guestConvertTitle;
+
+  /// No description provided for @guestConvertSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add email and password to keep your chats and profile.'**
+  String get guestConvertSubtitle;
+
+  /// No description provided for @guestConvertSubmit.
+  ///
+  /// In en, this message translates to:
+  /// **'Create account'**
+  String get guestConvertSubmit;
+
+  /// No description provided for @guestSaveAccountReminder.
+  ///
+  /// In en, this message translates to:
+  /// **'Register your account so you do not lose access.'**
+  String get guestSaveAccountReminder;
+
+  /// No description provided for @guestSaveAccountReminderCta.
+  ///
+  /// In en, this message translates to:
+  /// **'Register'**
+  String get guestSaveAccountReminderCta;
+
+  /// No description provided for @privacyShowOnlineIncludeGuests.
+  ///
+  /// In en, this message translates to:
+  /// **'Guest accounts can see my online status'**
+  String get privacyShowOnlineIncludeGuests;
+
   /// No description provided for @gameCatalogTitle.
   ///
   /// In en, this message translates to:

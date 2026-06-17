@@ -253,3 +253,27 @@ func TestVoiceGRPCJoinLeaveAndGetActiveCall(t *testing.T) {
 	_, err = svc.GetActiveCall(voiceTestCtx("profile-a"), &callsv1.GetActiveCallRequest{})
 	require.Equal(t, codes.NotFound, status.Code(err))
 }
+
+func guestVoiceTestCtx(profileID string) context.Context {
+	md := metadata.Pairs(
+		"x-voice-profile-id", profileID,
+		"x-voice-account-type", "guest",
+	)
+	return metadata.NewIncomingContext(context.Background(), md)
+}
+
+// TestVoiceGRPC_GuestStartCall_PermissionDenied documents auth-and-contacts.md: guests cannot initiate calls.
+func TestVoiceGRPC_GuestStartCall_PermissionDenied(t *testing.T) {
+	now := time.Unix(1700000000, 0).UTC()
+	events := &recordingEvents{}
+	svc := newTestVoiceService(now, events)
+
+	_, err := svc.StartCall(guestVoiceTestCtx("profile-a"), &callsv1.StartCallRequest{
+		LinkedChat:      &chatv1.ChatRef{Id: "chat-1"},
+		CalleeProfileId: strPtr("profile-b"),
+		MediaKind:       mediaPtr(callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO),
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	require.Empty(t, events.incoming)
+}

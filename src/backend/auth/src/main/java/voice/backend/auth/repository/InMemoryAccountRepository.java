@@ -142,4 +142,14 @@ public class InMemoryAccountRepository implements AccountRepository {
     }
     return converted;
   }
+
+  @Override
+  public synchronized void touchLastOnlineAt(UUID accountId, Instant at) {
+    // In-memory tests do not model last_online_at column.
+  }
+
+  @Override
+  public synchronized int deactivateExpiredGuests(Instant lastOnlineBefore) {
+    return 0;
+  }
 }

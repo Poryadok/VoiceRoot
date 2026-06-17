@@ -9,6 +9,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import voice.backend.auth.events.NoopAuthEventPublisher;
 import voice.backend.auth.repository.InMemoryAccountRepository;
 import voice.backend.auth.repository.InMemoryBackupCodeRepository;
 import voice.backend.auth.repository.InMemoryRefreshTokenRepository;
@@ -55,6 +56,7 @@ class SubscriptionTierAuthServiceTest {
         new voice.backend.auth.userdb.InMemoryPrimaryProfileProvisioner(),
         tierResolver,
         new voice.backend.auth.userdb.NoOpProfileSwitchValidator(),
-        new voice.backend.auth.repository.InMemoryE2EKeyBackupRepository());
+        new voice.backend.auth.repository.InMemoryE2EKeyBackupRepository(),
+        new NoopAuthEventPublisher());
   }
 }

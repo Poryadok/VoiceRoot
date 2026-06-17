@@ -1236,6 +1236,7 @@ class PrivacySettings extends $pb.GeneratedMessage {
     $core.bool? allowGuestDm,
     $1.Timestamp? updatedAt,
     PrivacyPreset? presetEnum,
+    $core.bool? showOnlineIncludeGuests,
   }) {
     final result = create();
     if (profileId != null) result.profileId = profileId;
@@ -1251,6 +1252,8 @@ class PrivacySettings extends $pb.GeneratedMessage {
     if (allowGuestDm != null) result.allowGuestDm = allowGuestDm;
     if (updatedAt != null) result.updatedAt = updatedAt;
     if (presetEnum != null) result.presetEnum = presetEnum;
+    if (showOnlineIncludeGuests != null)
+      result.showOnlineIncludeGuests = showOnlineIncludeGuests;
     return result;
   }
 
@@ -1281,6 +1284,7 @@ class PrivacySettings extends $pb.GeneratedMessage {
         subBuilder: $1.Timestamp.create)
     ..aE<PrivacyPreset>(12, _omitFieldNames ? '' : 'presetEnum',
         enumValues: PrivacyPreset.values)
+    ..aOB(13, _omitFieldNames ? '' : 'showOnlineIncludeGuests')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1411,6 +1415,16 @@ class PrivacySettings extends $pb.GeneratedMessage {
   $core.bool hasPresetEnum() => $_has(11);
   @$pb.TagNumber(12)
   void clearPresetEnum() => $_clearField(12);
+
+  /// Multiselect audience: guest accounts may see show_online (privacy.md).
+  @$pb.TagNumber(13)
+  $core.bool get showOnlineIncludeGuests => $_getBF(12);
+  @$pb.TagNumber(13)
+  set showOnlineIncludeGuests($core.bool value) => $_setBool(12, value);
+  @$pb.TagNumber(13)
+  $core.bool hasShowOnlineIncludeGuests() => $_has(12);
+  @$pb.TagNumber(13)
+  void clearShowOnlineIncludeGuests() => $_clearField(13);
 }
 
 class UpdatePresenceRequest extends $pb.GeneratedMessage {

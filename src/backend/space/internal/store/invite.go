@@ -326,3 +326,23 @@ SELECT EXISTS (
 	}
 	return freeSpaceMemberCap, nil
 }
+
+// AllowGuestsForInvite reports whether guest accounts may join via invite code.
+func (s *SpaceStore) AllowGuestsForInvite(ctx context.Context, code string) (bool, error) {
+	if s == nil || s.Pool == nil {
+		return false, errors.New("space store: pool not configured")
+	}
+	var allow bool
+	err := s.Pool.QueryRow(ctx, `
+SELECT COALESCE(sp.allow_guests, true)
+FROM invites i
+JOIN spaces sp ON sp.id = i.space_id
+WHERE i.code = $1`, code).Scan(&allow)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, ErrInviteNotFound
+		}
+		return false, err
+	}
+	return allow, nil
+}

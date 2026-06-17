@@ -15,6 +15,7 @@ import (
 
 	"voice/backend/user/internal/authctx"
 	"voice/backend/user/internal/store"
+	"voice/backend/pkg/guestguard"
 
 	userv1 "voice.app/voice/user/v1"
 )
@@ -61,7 +62,28 @@ func (s *UserGRPC) GetPresence(ctx context.Context, req *userv1.GetPresenceReque
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+	if snap != nil && snap.Live && !s.guestMayViewOnlineStatus(ctx, profileID) {
+		return &userv1.GetPresenceResponse{PresenceStatus: presenceSnapshotToProto(profileID, nil)}, nil
+	}
 	return &userv1.GetPresenceResponse{PresenceStatus: presenceSnapshotToProto(profileID, snap)}, nil
+}
+
+func (s *UserGRPC) guestMayViewOnlineStatus(ctx context.Context, targetProfile uuid.UUID) bool {
+	if !guestguard.IsGuest(ctx) {
+		return true
+	}
+	privacyStore := s.privacyStore()
+	if privacyStore == nil {
+		return false
+	}
+	privacy, err := privacyStore.GetByProfileID(ctx, targetProfile)
+	if err != nil || privacy == nil {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(privacy.ShowOnline), "everyone") {
+		return true
+	}
+	return privacy.ShowOnlineIncludeGuests
 }
 
 func (s *UserGRPC) GetBulkPresence(ctx context.Context, req *userv1.GetBulkPresenceRequest) (*userv1.GetBulkPresenceResponse, error) {

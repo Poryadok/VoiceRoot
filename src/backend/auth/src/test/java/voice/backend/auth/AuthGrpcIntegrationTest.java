@@ -82,4 +82,44 @@ class AuthGrpcIntegrationTest {
       server.shutdownNow();
     }
   }
+
+  @org.junit.jupiter.api.Test
+  void registerGuestJwtContainsAccountTypeGuestAndValidateReturnsIt() throws Exception {
+    String serverName = InProcessServerBuilder.generateName();
+    Server server = InProcessServerBuilder.forName(serverName).directExecutor().addService(grpcService).build().start();
+    ManagedChannel channel = InProcessChannelBuilder.forName(serverName).directExecutor().build();
+    var client = AuthServiceGrpc.newBlockingStub(channel);
+    try {
+      var registered = client.register(RegisterRequest.newBuilder()
+          .setPassword("Correct horse battery staple")
+          .setGuest(true)
+          .build()).getSession();
+      var guestJwt = SignedJWT.parse(registered.getAccessToken()).getJWTClaimsSet();
+      assertThat(guestJwt.getStringClaim("account_type")).isEqualTo("guest");
+
+      var guestClaims = client.validateToken(ValidateTokenRequest.newBuilder()
+          .setAccessToken(registered.getAccessToken())
+          .build()).getClaims();
+      var guestAccountTypeField = guestClaims.getDescriptor().findFieldByName("account_type");
+      assertThat(guestAccountTypeField).as("TokenClaims.account_type proto field").isNotNull();
+      assertThat(guestClaims.getField(guestAccountTypeField)).isEqualTo("guest");
+
+      var regular = client.register(RegisterRequest.newBuilder()
+          .setEmail("regular-grpc@example.com")
+          .setPassword("Correct horse battery staple")
+          .build()).getSession();
+      var regularJwt = SignedJWT.parse(regular.getAccessToken()).getJWTClaimsSet();
+      assertThat(regularJwt.getStringClaim("account_type")).isEqualTo("regular");
+
+      var regularClaims = client.validateToken(ValidateTokenRequest.newBuilder()
+          .setAccessToken(regular.getAccessToken())
+          .build()).getClaims();
+      var regularAccountTypeField = regularClaims.getDescriptor().findFieldByName("account_type");
+      assertThat(regularAccountTypeField).as("TokenClaims.account_type proto field").isNotNull();
+      assertThat(regularClaims.getField(regularAccountTypeField)).isEqualTo("regular");
+    } finally {
+      channel.shutdownNow();
+      server.shutdownNow();
+    }
+  }
 }

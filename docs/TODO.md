@@ -30,16 +30,6 @@
 
 _Закрыто в batch Phase 15 E2E follow-ups (2026-06)._
 
-### Код и тесты
-
-- [x] **Pre-key golden drift** — `make prekey-golden-check`, export только с `VOICE_EXPORT_PREKEY_GOLDEN=true`; `sign_testutil.go` удалён.
-- [x] **E2E attachment UX tests** — `chat_room_panel_e2e_attachment_test.dart` (thumb + download).
-- [x] **E2E shared media panel** — `e2e_key_wire` в API + decrypt в `chat_info_panel.dart`; live `phase15_e2e_shared_media_live_test.dart`.
-
-### Документация
-
-- [x] **auth-service.md** — `PutE2EKeyBackup` / `GetE2EKeyBackup`, таблица `e2e_key_backups`.
-
 ### Новые пробелы (аудит)
 
 - [ ] **DATA_STORES.md** — строка `e2e_key_backups` в инвентаре `auth_db`.
@@ -55,16 +45,6 @@ _Закрыто в batch Phase 15 E2E follow-ups (2026-06)._
 
 ### Backend и Gateway
 
-- [x] **Остальные scopes runtime (P2)** — `DM_SEND`, `TEXT_CHAT_CREATE_IN_SPACE`, `SPACE_VIEW_MEMBER_LIST`: gRPC + Gateway REST (`transcode_bots.go`); slash pickers user/channel/role в `slash_command_options_sheet.dart`.
-- [x] **Gateway REST для scope RPC** — transcoding: `TouchPresence`, `AssignBotRole`/`RevokeBotRole`, `ListSpaceMembersForBot`, `CreateBotChat`, `GetChatMessagesForBot`, `CreateBotRole`, `CompleteAutocomplete`.
-- [x] **`GetChatMessagesForBot`** — Messaging `GetMessages` + Gateway `GET …/bots/me/chats/{chat_id}/messages` (при настроенном Messaging client).
-- [x] **Bot `CreateRole` API** — `CreateBotRole` RPC + REST `POST /api/v1/bots/me/roles`; privileged scope `SPACE_MANAGE_ROLES`.
-- [x] **Deferred TTL** — `RunDeferredTTLSweeper`, `AbandonStaleDeferred`, `BOT_DEFERRED_TTL` (default 24h), `RehydrateDeferred` on startup.
-- [x] **Rate limits (Gateway REST)** — `BotAPI` 5000/min, `BotRoleOps` 100/min + `429` / `Retry-After` (`ratelimit.go`, `routing.go`).
-- [x] **REST heartbeat** — `POST /api/v1/bots/me/presence` → `TouchPresence`.
-- [x] **Autocomplete polling mode** — enqueue + `POST …/bots/me/autocomplete/complete`; см. остаток UX ниже.
-- [x] **role_db duplicate `000006`** — `member_thread_permissions` перенесена в `000008`; один `000006_default_join_role`.
-- [x] **Gateway Docker build** — убран `voice/backend/messaging` из `gateway/go.mod` (pb-only replace).
 - [ ] **buf generate BSR** — `make buf-generate` 403; локально `buf generate --template buf.gen.local-go.yaml`.
 - [ ] **gRPC Bot API rate limits** — 5000/min только на Gateway `/api/v1/bots/me/**`; прямой gRPC `BotService` обходит `BotAPI` limiter.
 - [ ] **GetChatMessagesForBot response shape** — proto отдаёт только `message_ids`; нет тел сообщений для bot runtime без отдельного Messaging доступа.
@@ -87,10 +67,6 @@ _Закрыто в batch Phase 15 E2E follow-ups (2026-06)._
 
 ### Тесты и покрытие
 
-- [x] **grpcsvc coverage ≥80%** — `go tool cover`: grpcsvc **81.4%** (`bot_c_coverage_test.go` + integration).
-- [x] **EditBotMessage** — `bot_integration_test.go` (`TestEditBotMessage_integration_*`); ownership / actor headers.
-- [x] **Flutter live E2E install+pong** — `phase16_bots_slash_live_test.dart` + `bot_live_harness.dart`; opt-in `VOICE_RUN_LIVE_INTEGRATION=true`.
-- [x] **Live compose BOT-C** — `compose_phase16_bots_slash_live_test.go` (slash, defer, greyout, privileged install, BOT-C routes); opt-in `VOICE_RUN_LIVE_COMPOSE=true`.
 - [ ] **BOT-C live tests in CI** — compose + Flutter live opt-in; не в default `make` / GitHub Actions matrix.
 
 ### Документация
@@ -175,7 +151,6 @@ _Закрыто в batch Phase 15 E2E follow-ups (2026-06)._
 ### Onboarding
 
 - [ ] **Coach-mark anchors** — steps 2–4 tooltips pinned to nav/search/MM widgets (modals today, not anchored overlays).
-- [ ] **Onboarding after guest register** — E2E: guest nickname → shell → onboarding step 1 coach-marks (not verified end-to-end).
 
 ### Accessibility
 
@@ -194,11 +169,54 @@ _Закрыто в batch Phase 15 E2E follow-ups (2026-06)._
 
 ---
 
+## Гостевые аккаунты (guest account type)
+
+_Аудит 2026-06 vs [auth-and-contacts.md](features/auth-and-contacts.md), [auth-service.md](microservices/auth-service.md), [privacy.md](features/privacy.md)._
+
+**Уже есть (baseline):** `Register` с `guest:true`, JWT `account_type`, Gateway `X-Voice-Account-Type`, guest guards (CreateDM / StartCall / SendFriendInvitation / CreateSpace / JoinByInvite+`allow_guests`), `convert-guest` + NATS `user.guest_converted`, TTL sweeper; Flutter — auto guest on web, convert modal, save-account reminder, greyout, `isGuest` из JWT.
+
+**Остаётся:** enforcement `allow_guest_dm` при **ответе** guest в существующем DM (Messaging); полный multiselect guest-audience для всех visibility-полей (v1: только `show_online_include_guests`).
+
+### Backend — ограничения и lifecycle
+
+- [x] **JWT `account_type` claim** — `regular` \| `guest` в access JWT (или общий lookup); без этого Go-сервисы не различают тип аккаунта.
+- [x] **Block guest-initiated DM** — Chat `CreateDM` (+ при необходимости первый send): `PermissionDenied` для guest caller ([auth-and-contacts.md](features/auth-and-contacts.md) §«не может инициировать разговор»).
+- [x] **Block guest-initiated calls** — Voice `StartCall` (DM audio/video) от guest account.
+- [x] **Block guest friend requests** — Social `SendFriendInvitation` от guest account.
+- [x] **Block guest self-join** — запрет `CreateSpace`, discover/join без invite; guest только `JoinByInvite` / явное приглашение.
+- [ ] **Enforce `allow_guest_dm`** — если caller — guest, DM к получателю только при `allow_guest_dm=true`; инициация guest всё равно запрещена (docs: действия guest не зависят от настроек получателя). *CreateDM blocked; reply/send в существующем чате — ещё нет.*
+- [x] **Space/chat `allow_guests` setting** — настройка входа гостям на уровне спейса/чата (schema + enforce при join/membership).
+- [x] **Guest TTL 30d** — `last_online_at` + sweeper деактивации/удаления guest после 30 дней без онлайна ([auth-and-contacts.md](features/auth-and-contacts.md) §жизненный цикл).
+- [x] **NATS `user.guest_converted`** — publish при `convert-guest` ([auth-service.md](microservices/auth-service.md)).
+
+### Backend — privacy
+
+- [ ] **Guest audience в visibility** — [privacy.md](features/privacy.md): опция «Гостевые аккаунты» для show_online / show_game_status / show_mm_rating / show_stories; v1: `show_online_include_guests` + фильтр presence; остальные поля — follow-up.
+- [x] **Reconcile `allow_guest_dm` vs privacy model** — bool в proto vs мультиселект аудитории в спеке; зафиксировать канон в `docs/features/privacy.md` (addendum).
+
+### Frontend
+
+- [x] **Auto guest on web** — при открытии без сессии auto `registerGuest` (docs); сейчас только кнопка (`guest_entry_test` проверяет отсутствие auto).
+- [x] **Guest convert-to-regular UI** — modal (email + password) → `POST /api/v1/auth/convert-guest`; не редирект в settings; optional email verification ([auth-and-contacts.md](features/auth-and-contacts.md) §convert-guest).
+- [x] **Guest save-account reminder** — не показывать на первом входе; на повторных — напоминание зарегистрироваться, max 1×/сутки ([auth-and-contacts.md](features/auth-and-contacts.md) §напоминание).
+- [x] **Guest action greyout** — disable DM compose, call, friend invite для guest (defense in depth).
+- [x] **Server-side `isGuest`** — из JWT/`/me`, не только heuristic `guest_password` в secure storage (новое устройство / refresh).
+- [ ] **Onboarding after guest register** — E2E: nickname → shell → onboarding step 1 coach-marks. *API live: `guest_onboarding_e2e_live_test`; widget coach-marks E2E — follow-up.*
+
+### Tests & docs
+
+- [x] **Integration tests guest restrictions** — CreateDM / StartCall / SendFriendInvitation / CreateSpace as guest → denied.
+- [x] **Docs: guest onboarding flow** — [auth-and-contacts.md](features/auth-and-contacts.md) §Гостевая учётка: nickname → повторное напоминание → convert-guest modal.
+
+**Follow-ups:** Messaging `allow_guest_dm` для guest reply; multiselect guest-audience для остальных visibility; compose DDL `space_bans` / migrate tool version для join-by-invite live; widget E2E onboarding coach-marks.
+
+**Промпт-якорь:** `Guest accounts — restrictions and UX from docs/TODO.md`.
+
+---
+
 ## QA follow-ups (web pass 2026-06)
 
-- [ ] **Guest convert-to-regular UI** — settings flow: email + password → `POST /api/v1/auth/convert-guest`; optional email verification step.
 - [ ] **Bundle emoji font for web** — ship Noto Color Emoji for reaction/emoji picker; avoid runtime Noto fallback warning.
-- [ ] **Docs: guest onboarding flow** — short spec in `docs/features/` linking guest type → nickname → convert-guest.
 
 ---
 
@@ -209,7 +227,7 @@ _Закрыто в batch Phase 15 E2E follow-ups (2026-06)._
 | Закрыть E2E хвосты | **Phase 15 — E2E (остаток)** |
 | Боты: backend hardening | **Phase 16 — Боты (остаток)** |
 | Есть OAuth keys в `.env` | **Developer Portal** (внутри Phase 16) |
-| Guest UX после backend convert | **QA follow-ups** |
+| Гостевые ограничения + UX | **Гостевые аккаунты** |
 | Сторис / growth | **Phase 17** или **Phase 18** |
 | Только доки/репо | **Инфраструктура и доки** |
 

@@ -111,9 +111,15 @@ public class JwtService {
   }
 
   public String issue(String accountId, String profileId, List<String> roles, String subscriptionTier) {
+    return issue(accountId, profileId, roles, subscriptionTier, "regular");
+  }
+
+  public String issue(
+      String accountId, String profileId, List<String> roles, String subscriptionTier, String accountType) {
     if (profileId == null || profileId.isBlank()) {
       throw new IllegalArgumentException("profile_id required in access JWT");
     }
+    String normalizedType = accountType == null || accountType.isBlank() ? "regular" : accountType;
     try {
       Instant now = Instant.now(clock);
       JWTClaimsSet claims = new JWTClaimsSet.Builder()
@@ -124,6 +130,7 @@ public class JwtService {
           .claim("profile_id", profileId)
           .claim("roles", roles)
           .claim("subscription_tier", subscriptionTier)
+          .claim("account_type", normalizedType)
           .jwtID(UUID.randomUUID().toString())
           .issueTime(Date.from(now))
           .expirationTime(Date.from(now.plus(accessTtl)))
@@ -158,13 +165,18 @@ public class JwtService {
       if (profileId == null || profileId.isBlank()) {
         throw new AuthException("invalid_token");
       }
+      String accountType = claims.getStringClaim("account_type");
+      if (accountType == null || accountType.isBlank()) {
+        accountType = "regular";
+      }
       return new TokenClaims(
           userId,
           profileId,
           claims.getStringListClaim("roles"),
           claims.getStringClaim("subscription_tier"),
           expiresAt,
-          claims.getJWTID());
+          claims.getJWTID(),
+          accountType);
     } catch (AuthException ex) {
       throw ex;
     } catch (ParseException | JOSEException ex) {

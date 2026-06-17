@@ -88,6 +88,7 @@ func (s *UserGRPC) UpdatePrivacySettings(ctx context.Context, req *userv1.Update
 		AllowDM:             strings.TrimSpace(in.GetAllowDm()),
 		AllowFriendRequests: strings.TrimSpace(in.GetAllowFriendRequests()),
 		AllowGuestDM:        in.GetAllowGuestDm(),
+		ShowOnlineIncludeGuests: in.GetShowOnlineIncludeGuests(),
 	})
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -149,17 +150,18 @@ func privacyRowToProto(row *store.PrivacyRow) *userv1.PrivacySettings {
 		return nil
 	}
 	return &userv1.PrivacySettings{
-		ProfileId:           row.ProfileID.String(),
-		Preset:              row.Preset,
-		ShowOnline:          row.ShowOnline,
-		ShowGameStatus:      row.ShowGameStatus,
-		ShowMmRating:        row.ShowMmRating,
-		ShowPhone:           row.ShowPhone,
-		ShowStories:         row.ShowStories,
-		AllowDm:             row.AllowDM,
-		AllowFriendRequests: row.AllowFriendRequests,
-		AllowGuestDm:        row.AllowGuestDM,
-		UpdatedAt:           timestamppb.New(row.UpdatedAt.UTC()),
+		ProfileId:               row.ProfileID.String(),
+		Preset:                  row.Preset,
+		ShowOnline:              row.ShowOnline,
+		ShowGameStatus:          row.ShowGameStatus,
+		ShowMmRating:            row.ShowMmRating,
+		ShowPhone:               row.ShowPhone,
+		ShowStories:             row.ShowStories,
+		AllowDm:                 row.AllowDM,
+		AllowFriendRequests:     row.AllowFriendRequests,
+		AllowGuestDm:            row.AllowGuestDM,
+		ShowOnlineIncludeGuests: row.ShowOnlineIncludeGuests,
+		UpdatedAt:               timestamppb.New(row.UpdatedAt.UTC()),
 	}
 }
 

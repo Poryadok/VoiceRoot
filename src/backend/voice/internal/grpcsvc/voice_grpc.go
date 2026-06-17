@@ -17,6 +17,7 @@ import (
 	"voice/backend/voice/internal/livekit"
 	voicestore "voice/backend/voice/internal/store"
 	"voice/backend/voice/internal/voiceevents"
+	"voice/backend/pkg/guestguard"
 
 	callsv1 "voice.app/voice/calls/v1"
 	chatv1 "voice.app/voice/chat/v1"
@@ -42,6 +43,9 @@ type VoiceGRPC struct {
 }
 
 func (s *VoiceGRPC) StartCall(ctx context.Context, req *callsv1.StartCallRequest) (*callsv1.StartCallResponse, error) {
+	if err := guestguard.RequireRegular(ctx); err != nil {
+		return nil, err
+	}
 	profileID, err := callerProfile(ctx)
 	if err != nil {
 		return nil, err

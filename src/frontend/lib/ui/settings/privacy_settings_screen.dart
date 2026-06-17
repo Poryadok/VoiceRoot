@@ -185,6 +185,16 @@ class _PrivacySettingsScreenState extends ConsumerState<PrivacySettingsScreen> {
                       onChanged: (next) => setState(() => _settings = next),
                     ),
                     SwitchListTile(
+                      key: const Key('privacy_show_online_include_guests'),
+                      title: Text(l10n.privacyShowOnlineIncludeGuests),
+                      value: settings.showOnlineIncludeGuests,
+                      onChanged: (v) => setState(
+                        () => _settings = settings.copyWith(
+                          showOnlineIncludeGuests: v,
+                        ),
+                      ),
+                    ),
+                    SwitchListTile(
                       title: Text(l10n.privacyAllowGuestDm),
                       value: settings.allowGuestDm,
                       onChanged: (v) => setState(

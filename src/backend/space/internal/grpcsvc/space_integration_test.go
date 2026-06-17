@@ -735,3 +735,65 @@ func TestUpdateSpace_NameAndBanner_Owner(t *testing.T) {
 	require.Equal(t, name, updated.GetSpace().GetName())
 	require.Equal(t, banner, updated.GetSpace().GetBannerUrl())
 }
+
+const spaceHeaderAccountType = "x-voice-account-type"
+
+func withGuestAccountProfileCtx(ctx context.Context, accountID, profileID uuid.UUID) context.Context {
+	ctx = withAccountProfileCtx(ctx, accountID, profileID)
+	return metadata.AppendToOutgoingContext(ctx, spaceHeaderAccountType, "guest")
+}
+
+// TestCreateSpace_GuestCaller_PermissionDenied documents auth-and-contacts.md: guests cannot create spaces.
+func TestCreateSpace_GuestCaller_PermissionDenied(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	guestAccount := uuid.New()
+	guestProfile := uuid.New()
+	ctx := withGuestAccountProfileCtx(context.Background(), guestAccount, guestProfile)
+
+	pool := startSpacePostgresForTest(t, context.Background())
+	applySpaceMigration(t, context.Background(), pool)
+	client, cleanup := startSpaceGRPCTestServer(t, pool)
+	t.Cleanup(cleanup)
+
+	_, err := client.CreateSpace(ctx, &spacev1.CreateSpaceRequest{
+		Name:        "Guest space",
+		Description: "should be denied",
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+// TestJoinByInvite_GuestBlockedWhenAllowGuestsFalse documents space allow_guests enforcement.
+func TestJoinByInvite_GuestBlockedWhenAllowGuestsFalse(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	_, _, ownerCtx := profileFixture(t)
+	guestAccount := uuid.New()
+	guestProfile := uuid.New()
+	guestCtx := withGuestAccountProfileCtx(context.Background(), guestAccount, guestProfile)
+
+	pool := startSpacePostgresForTest(t, context.Background())
+	applySpaceMigration(t, context.Background(), pool)
+	bg := context.Background()
+	_, err := pool.Exec(bg, `ALTER TABLE spaces ADD COLUMN IF NOT EXISTS allow_guests BOOLEAN NOT NULL DEFAULT true`)
+	require.NoError(t, err)
+
+	client, cleanup := startSpaceGRPCTestServer(t, pool)
+	t.Cleanup(cleanup)
+
+	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "No guests"})
+	require.NoError(t, err)
+	spaceID := created.GetSpace().GetId()
+	_, err = pool.Exec(bg, `UPDATE spaces SET allow_guests = false WHERE id = $1`, spaceID)
+	require.NoError(t, err)
+
+	inv, err := client.CreateInvite(ownerCtx, &spacev1.CreateInviteRequest{SpaceId: spaceID})
+	require.NoError(t, err)
+
+	_, err = client.JoinByInvite(guestCtx, &spacev1.JoinByInviteRequest{Code: inv.GetInvite().GetCode()})
+	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+}

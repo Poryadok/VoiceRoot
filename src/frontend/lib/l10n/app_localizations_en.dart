@@ -1540,6 +1540,27 @@ class AppLocalizationsEn extends AppLocalizations {
   String get guestNicknameContinue => 'Continue';
 
   @override
+  String get guestConvertTitle => 'Create your account';
+
+  @override
+  String get guestConvertSubtitle =>
+      'Add email and password to keep your chats and profile.';
+
+  @override
+  String get guestConvertSubmit => 'Create account';
+
+  @override
+  String get guestSaveAccountReminder =>
+      'Register your account so you do not lose access.';
+
+  @override
+  String get guestSaveAccountReminderCta => 'Register';
+
+  @override
+  String get privacyShowOnlineIncludeGuests =>
+      'Guest accounts can see my online status';
+
+  @override
   String get gameCatalogTitle => 'Game catalog';
 
   @override

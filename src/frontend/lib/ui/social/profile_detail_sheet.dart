@@ -58,6 +58,7 @@ class ProfileDetailSheet extends ConsumerWidget {
     final presence = ref.watch(presenceProvider(profileId));
     final requestsAsync = ref.watch(friendRequestsProvider);
     final activeId = ref.watch(authControllerProvider).activeProfileId;
+    final isGuest = ref.watch(authControllerProvider).isGuest;
     final isSelf = activeId == profileId;
 
     final outgoing = requestsAsync.valueOrNull?.outgoing ?? const [];
@@ -161,7 +162,7 @@ class ProfileDetailSheet extends ConsumerWidget {
                   const SizedBox(height: 20),
                   OutlinedButton(
                     key: ProfileDetailSheet.messageKey,
-                    onPressed: () => _openDm(context, ref, profileId),
+                    onPressed: isGuest ? null : () => _openDm(context, ref, profileId),
                     child: Text(l10n.profileMessage),
                   ),
                   const SizedBox(height: 8),
@@ -170,6 +171,7 @@ class ProfileDetailSheet extends ConsumerWidget {
                     pendingOutgoing: pendingOutgoing,
                     pendingIncoming: pendingIncoming,
                     isFriend: isFriend,
+                    isGuest: isGuest,
                   ),
                   const SizedBox(height: 8),
                   TextButton(
@@ -294,12 +296,14 @@ class _FriendActionButton extends ConsumerStatefulWidget {
     required this.pendingOutgoing,
     required this.pendingIncoming,
     required this.isFriend,
+    required this.isGuest,
   });
 
   final String profileId;
   final bool pendingOutgoing;
   final bool pendingIncoming;
   final bool isFriend;
+  final bool isGuest;
 
   @override
   ConsumerState<_FriendActionButton> createState() =>
@@ -359,7 +363,7 @@ class _FriendActionButtonState extends ConsumerState<_FriendActionButton> {
       children: [
         FilledButton(
           key: ProfileDetailSheet.addFriendKey,
-          onPressed: _busy ? null : _sendRequest,
+          onPressed: widget.isGuest || _busy ? null : _sendRequest,
           child: Text(l10n.socialAddFriend),
         ),
         if (_error != null) ...[

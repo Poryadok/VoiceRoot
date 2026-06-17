@@ -171,6 +171,8 @@ message PrivacySettings {
   bool allow_guest_dm = 10;
   google.protobuf.Timestamp updated_at = 11;
   optional PrivacyPreset preset_enum = 12;
+  // Multiselect audience: guest accounts may see show_online (privacy.md).
+  bool show_online_include_guests = 13;
 }
 
 message UpdatePresenceRequest {

@@ -1,5 +1,6 @@
 package voice.backend.auth.repository;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -19,4 +20,8 @@ public interface AccountRepository {
   void setStatus(UUID accountId, String status);
 
   Account convertGuest(UUID accountId, String email, String phone);
+
+  void touchLastOnlineAt(UUID accountId, Instant at);
+
+  int deactivateExpiredGuests(Instant lastOnlineBefore);
 }

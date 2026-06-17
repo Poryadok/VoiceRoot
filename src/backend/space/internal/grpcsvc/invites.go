@@ -13,6 +13,7 @@ import (
 	"voice/backend/role/permissions"
 	"voice/backend/space/internal/authctx"
 	"voice/backend/space/internal/store"
+	"voice/backend/pkg/guestguard"
 
 	spacev1 "voice.app/voice/space/v1"
 )
@@ -210,6 +211,15 @@ func (s *SpaceGRPC) JoinByInvite(ctx context.Context, req *spacev1.JoinByInviteR
 	accountID, ok := authctx.AccountID(ctx)
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing account")
+	}
+	if guestguard.IsGuest(ctx) {
+		allow, err := s.Store.AllowGuestsForInvite(ctx, code)
+		if err != nil {
+			return nil, mapInviteStoreErr(err)
+		}
+		if !allow {
+			return nil, status.Error(codes.PermissionDenied, "guests not allowed in this space")
+		}
 	}
 	member, err := s.Store.JoinByInvite(ctx, code, profileID, accountID)
 	if err != nil {
