@@ -3,7 +3,6 @@ package grpcsvc
 import (
 	"context"
 	"log"
-	"strings"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
@@ -100,46 +99,11 @@ func (s *ChatGRPC) ensureDMPrivacy(ctx context.Context, callerProfile, recipient
 	if s == nil || s.Privacy == nil {
 		return nil
 	}
-	allowDM, err := s.Privacy.AllowDM(ctx, recipientProfile)
+	audience, err := s.Privacy.AllowDMAudience(ctx, recipientProfile)
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())
 	}
-	switch strings.ToLower(strings.TrimSpace(allowDM)) {
-	case "", "everyone":
-		return nil
-	case "nobody":
-		return status.Error(codes.PermissionDenied, "dm blocked by recipient privacy settings")
-	case "friends":
-		if s.Friends == nil {
-			return status.Error(codes.PermissionDenied, "dm blocked by recipient privacy settings")
-		}
-		ok, err := s.Friends.AreFriends(ctx, callerProfile, recipientProfile)
-		if err != nil {
-			return status.Error(codes.Internal, err.Error())
-		}
-		if !ok {
-			return status.Error(codes.PermissionDenied, "dm blocked by recipient privacy settings")
-		}
-	case "friends_of_friends":
-		if s.Friends == nil {
-			return status.Error(codes.PermissionDenied, "dm blocked by recipient privacy settings")
-		}
-		ok, err := s.Friends.AreFriends(ctx, callerProfile, recipientProfile)
-		if err != nil {
-			return status.Error(codes.Internal, err.Error())
-		}
-		if ok {
-			return nil
-		}
-		fof, err := s.Friends.AreFriendsOfFriends(ctx, callerProfile, recipientProfile)
-		if err != nil {
-			return status.Error(codes.Internal, err.Error())
-		}
-		if !fof {
-			return status.Error(codes.PermissionDenied, "dm blocked by recipient privacy settings")
-		}
-	}
-	return nil
+	return ensureAudienceAllowed(ctx, recipientProfile, callerProfile, audience, s.Friends, s.SpaceCoMembership)
 }
 
 func chatRowToProto(r *store.ChatRow) *chatv1.Chat {

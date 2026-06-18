@@ -1056,27 +1056,109 @@ func (x *UpdatePrivacySettingsRequest) GetSettings() *PrivacySettings {
 	return nil
 }
 
+// Multiselect audience union (privacy.md §«Контрол выбора аудитории»).
+type PrivacyAudience struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Friends          bool                   `protobuf:"varint,1,opt,name=friends,proto3" json:"friends,omitempty"`
+	FriendsOfFriends bool                   `protobuf:"varint,2,opt,name=friends_of_friends,json=friendsOfFriends,proto3" json:"friends_of_friends,omitempty"`
+	SpaceMembers     bool                   `protobuf:"varint,3,opt,name=space_members,json=spaceMembers,proto3" json:"space_members,omitempty"`
+	SpaceIds         []string               `protobuf:"bytes,4,rep,name=space_ids,json=spaceIds,proto3" json:"space_ids,omitempty"` // empty = all spaces of owner profile
+	IncludeGuests    bool                   `protobuf:"varint,5,opt,name=include_guests,json=includeGuests,proto3" json:"include_guests,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *PrivacyAudience) Reset() {
+	*x = PrivacyAudience{}
+	mi := &file_voice_user_v1_user_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PrivacyAudience) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PrivacyAudience) ProtoMessage() {}
+
+func (x *PrivacyAudience) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_user_v1_user_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PrivacyAudience.ProtoReflect.Descriptor instead.
+func (*PrivacyAudience) Descriptor() ([]byte, []int) {
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *PrivacyAudience) GetFriends() bool {
+	if x != nil {
+		return x.Friends
+	}
+	return false
+}
+
+func (x *PrivacyAudience) GetFriendsOfFriends() bool {
+	if x != nil {
+		return x.FriendsOfFriends
+	}
+	return false
+}
+
+func (x *PrivacyAudience) GetSpaceMembers() bool {
+	if x != nil {
+		return x.SpaceMembers
+	}
+	return false
+}
+
+func (x *PrivacyAudience) GetSpaceIds() []string {
+	if x != nil {
+		return x.SpaceIds
+	}
+	return nil
+}
+
+func (x *PrivacyAudience) GetIncludeGuests() bool {
+	if x != nil {
+		return x.IncludeGuests
+	}
+	return false
+}
+
 type PrivacySettings struct {
-	state               protoimpl.MessageState `protogen:"open.v1"`
-	ProfileId           string                 `protobuf:"bytes,1,opt,name=profile_id,json=profileId,proto3" json:"profile_id,omitempty"`
-	Preset              string                 `protobuf:"bytes,2,opt,name=preset,proto3" json:"preset,omitempty"` // personal | gaming | work; prefer preset_enum when set
-	ShowOnline          string                 `protobuf:"bytes,3,opt,name=show_online,json=showOnline,proto3" json:"show_online,omitempty"`
-	ShowGameStatus      string                 `protobuf:"bytes,4,opt,name=show_game_status,json=showGameStatus,proto3" json:"show_game_status,omitempty"`
-	ShowMmRating        string                 `protobuf:"bytes,5,opt,name=show_mm_rating,json=showMmRating,proto3" json:"show_mm_rating,omitempty"`
-	ShowPhone           string                 `protobuf:"bytes,6,opt,name=show_phone,json=showPhone,proto3" json:"show_phone,omitempty"`
-	ShowStories         string                 `protobuf:"bytes,7,opt,name=show_stories,json=showStories,proto3" json:"show_stories,omitempty"`
-	AllowDm             string                 `protobuf:"bytes,8,opt,name=allow_dm,json=allowDm,proto3" json:"allow_dm,omitempty"`
-	AllowFriendRequests string                 `protobuf:"bytes,9,opt,name=allow_friend_requests,json=allowFriendRequests,proto3" json:"allow_friend_requests,omitempty"`
-	AllowGuestDm        bool                   `protobuf:"varint,10,opt,name=allow_guest_dm,json=allowGuestDm,proto3" json:"allow_guest_dm,omitempty"`
-	UpdatedAt           *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	PresetEnum          *PrivacyPreset         `protobuf:"varint,12,opt,name=preset_enum,json=presetEnum,proto3,enum=voice.user.v1.PrivacyPreset,oneof" json:"preset_enum,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	ProfileId             string                 `protobuf:"bytes,1,opt,name=profile_id,json=profileId,proto3" json:"profile_id,omitempty"`
+	Preset                string                 `protobuf:"bytes,2,opt,name=preset,proto3" json:"preset,omitempty"` // personal | gaming | work; prefer preset_enum when set
+	ShowOnline            *PrivacyAudience       `protobuf:"bytes,3,opt,name=show_online,json=showOnline,proto3" json:"show_online,omitempty"`
+	ShowGameStatus        *PrivacyAudience       `protobuf:"bytes,4,opt,name=show_game_status,json=showGameStatus,proto3" json:"show_game_status,omitempty"`
+	ShowMmRating          *PrivacyAudience       `protobuf:"bytes,5,opt,name=show_mm_rating,json=showMmRating,proto3" json:"show_mm_rating,omitempty"`
+	ShowPhone             *PrivacyAudience       `protobuf:"bytes,6,opt,name=show_phone,json=showPhone,proto3" json:"show_phone,omitempty"`
+	ShowStories           *PrivacyAudience       `protobuf:"bytes,7,opt,name=show_stories,json=showStories,proto3" json:"show_stories,omitempty"`
+	AllowDm               *PrivacyAudience       `protobuf:"bytes,8,opt,name=allow_dm,json=allowDm,proto3" json:"allow_dm,omitempty"`
+	AllowFriendRequests   *PrivacyAudience       `protobuf:"bytes,9,opt,name=allow_friend_requests,json=allowFriendRequests,proto3" json:"allow_friend_requests,omitempty"`
+	AllowGuestDm          bool                   `protobuf:"varint,10,opt,name=allow_guest_dm,json=allowGuestDm,proto3" json:"allow_guest_dm,omitempty"`
+	UpdatedAt             *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	PresetEnum            *PrivacyPreset         `protobuf:"varint,12,opt,name=preset_enum,json=presetEnum,proto3,enum=voice.user.v1.PrivacyPreset,oneof" json:"preset_enum,omitempty"`
+	AllowPhoneSearch      *PrivacyAudience       `protobuf:"bytes,14,opt,name=allow_phone_search,json=allowPhoneSearch,proto3" json:"allow_phone_search,omitempty"`
+	AllowCalls            *PrivacyAudience       `protobuf:"bytes,15,opt,name=allow_calls,json=allowCalls,proto3" json:"allow_calls,omitempty"`
+	AllowChatSpaceInvites *PrivacyAudience       `protobuf:"bytes,16,opt,name=allow_chat_space_invites,json=allowChatSpaceInvites,proto3" json:"allow_chat_space_invites,omitempty"`
+	AllowFiles            *PrivacyAudience       `protobuf:"bytes,17,opt,name=allow_files,json=allowFiles,proto3" json:"allow_files,omitempty"`
+	AllowVoiceMessages    *PrivacyAudience       `protobuf:"bytes,18,opt,name=allow_voice_messages,json=allowVoiceMessages,proto3" json:"allow_voice_messages,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *PrivacySettings) Reset() {
 	*x = PrivacySettings{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[15]
+	mi := &file_voice_user_v1_user_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1088,7 +1170,7 @@ func (x *PrivacySettings) String() string {
 func (*PrivacySettings) ProtoMessage() {}
 
 func (x *PrivacySettings) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[15]
+	mi := &file_voice_user_v1_user_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1101,7 +1183,7 @@ func (x *PrivacySettings) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PrivacySettings.ProtoReflect.Descriptor instead.
 func (*PrivacySettings) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{15}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *PrivacySettings) GetProfileId() string {
@@ -1118,53 +1200,53 @@ func (x *PrivacySettings) GetPreset() string {
 	return ""
 }
 
-func (x *PrivacySettings) GetShowOnline() string {
+func (x *PrivacySettings) GetShowOnline() *PrivacyAudience {
 	if x != nil {
 		return x.ShowOnline
 	}
-	return ""
+	return nil
 }
 
-func (x *PrivacySettings) GetShowGameStatus() string {
+func (x *PrivacySettings) GetShowGameStatus() *PrivacyAudience {
 	if x != nil {
 		return x.ShowGameStatus
 	}
-	return ""
+	return nil
 }
 
-func (x *PrivacySettings) GetShowMmRating() string {
+func (x *PrivacySettings) GetShowMmRating() *PrivacyAudience {
 	if x != nil {
 		return x.ShowMmRating
 	}
-	return ""
+	return nil
 }
 
-func (x *PrivacySettings) GetShowPhone() string {
+func (x *PrivacySettings) GetShowPhone() *PrivacyAudience {
 	if x != nil {
 		return x.ShowPhone
 	}
-	return ""
+	return nil
 }
 
-func (x *PrivacySettings) GetShowStories() string {
+func (x *PrivacySettings) GetShowStories() *PrivacyAudience {
 	if x != nil {
 		return x.ShowStories
 	}
-	return ""
+	return nil
 }
 
-func (x *PrivacySettings) GetAllowDm() string {
+func (x *PrivacySettings) GetAllowDm() *PrivacyAudience {
 	if x != nil {
 		return x.AllowDm
 	}
-	return ""
+	return nil
 }
 
-func (x *PrivacySettings) GetAllowFriendRequests() string {
+func (x *PrivacySettings) GetAllowFriendRequests() *PrivacyAudience {
 	if x != nil {
 		return x.AllowFriendRequests
 	}
-	return ""
+	return nil
 }
 
 func (x *PrivacySettings) GetAllowGuestDm() bool {
@@ -1188,6 +1270,41 @@ func (x *PrivacySettings) GetPresetEnum() PrivacyPreset {
 	return PrivacyPreset_PRIVACY_PRESET_UNSPECIFIED
 }
 
+func (x *PrivacySettings) GetAllowPhoneSearch() *PrivacyAudience {
+	if x != nil {
+		return x.AllowPhoneSearch
+	}
+	return nil
+}
+
+func (x *PrivacySettings) GetAllowCalls() *PrivacyAudience {
+	if x != nil {
+		return x.AllowCalls
+	}
+	return nil
+}
+
+func (x *PrivacySettings) GetAllowChatSpaceInvites() *PrivacyAudience {
+	if x != nil {
+		return x.AllowChatSpaceInvites
+	}
+	return nil
+}
+
+func (x *PrivacySettings) GetAllowFiles() *PrivacyAudience {
+	if x != nil {
+		return x.AllowFiles
+	}
+	return nil
+}
+
+func (x *PrivacySettings) GetAllowVoiceMessages() *PrivacyAudience {
+	if x != nil {
+		return x.AllowVoiceMessages
+	}
+	return nil
+}
+
 type UpdatePresenceRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Status        string                 `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"` // online | idle | dnd | invisible; prefer status_enum when set
@@ -1201,7 +1318,7 @@ type UpdatePresenceRequest struct {
 
 func (x *UpdatePresenceRequest) Reset() {
 	*x = UpdatePresenceRequest{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[16]
+	mi := &file_voice_user_v1_user_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1213,7 +1330,7 @@ func (x *UpdatePresenceRequest) String() string {
 func (*UpdatePresenceRequest) ProtoMessage() {}
 
 func (x *UpdatePresenceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[16]
+	mi := &file_voice_user_v1_user_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1226,7 +1343,7 @@ func (x *UpdatePresenceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdatePresenceRequest.ProtoReflect.Descriptor instead.
 func (*UpdatePresenceRequest) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{16}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *UpdatePresenceRequest) GetStatus() string {
@@ -1273,7 +1390,7 @@ type GetPresenceRequest struct {
 
 func (x *GetPresenceRequest) Reset() {
 	*x = GetPresenceRequest{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[17]
+	mi := &file_voice_user_v1_user_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1285,7 +1402,7 @@ func (x *GetPresenceRequest) String() string {
 func (*GetPresenceRequest) ProtoMessage() {}
 
 func (x *GetPresenceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[17]
+	mi := &file_voice_user_v1_user_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1298,7 +1415,7 @@ func (x *GetPresenceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPresenceRequest.ProtoReflect.Descriptor instead.
 func (*GetPresenceRequest) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{17}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *GetPresenceRequest) GetProfileId() string {
@@ -1323,7 +1440,7 @@ type PresenceStatus struct {
 
 func (x *PresenceStatus) Reset() {
 	*x = PresenceStatus{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[18]
+	mi := &file_voice_user_v1_user_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1335,7 +1452,7 @@ func (x *PresenceStatus) String() string {
 func (*PresenceStatus) ProtoMessage() {}
 
 func (x *PresenceStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[18]
+	mi := &file_voice_user_v1_user_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1348,7 +1465,7 @@ func (x *PresenceStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PresenceStatus.ProtoReflect.Descriptor instead.
 func (*PresenceStatus) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{18}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *PresenceStatus) GetProfileId() string {
@@ -1409,7 +1526,7 @@ type GetBulkPresenceRequest struct {
 
 func (x *GetBulkPresenceRequest) Reset() {
 	*x = GetBulkPresenceRequest{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[19]
+	mi := &file_voice_user_v1_user_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1421,7 +1538,7 @@ func (x *GetBulkPresenceRequest) String() string {
 func (*GetBulkPresenceRequest) ProtoMessage() {}
 
 func (x *GetBulkPresenceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[19]
+	mi := &file_voice_user_v1_user_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1434,7 +1551,7 @@ func (x *GetBulkPresenceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBulkPresenceRequest.ProtoReflect.Descriptor instead.
 func (*GetBulkPresenceRequest) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{19}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *GetBulkPresenceRequest) GetProfileIds() []string {
@@ -1453,7 +1570,7 @@ type GetSettingsRequest struct {
 
 func (x *GetSettingsRequest) Reset() {
 	*x = GetSettingsRequest{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[20]
+	mi := &file_voice_user_v1_user_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1465,7 +1582,7 @@ func (x *GetSettingsRequest) String() string {
 func (*GetSettingsRequest) ProtoMessage() {}
 
 func (x *GetSettingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[20]
+	mi := &file_voice_user_v1_user_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1478,7 +1595,7 @@ func (x *GetSettingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSettingsRequest.ProtoReflect.Descriptor instead.
 func (*GetSettingsRequest) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{20}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *GetSettingsRequest) GetProfileId() string {
@@ -1498,7 +1615,7 @@ type UpdateSettingsRequest struct {
 
 func (x *UpdateSettingsRequest) Reset() {
 	*x = UpdateSettingsRequest{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[21]
+	mi := &file_voice_user_v1_user_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1510,7 +1627,7 @@ func (x *UpdateSettingsRequest) String() string {
 func (*UpdateSettingsRequest) ProtoMessage() {}
 
 func (x *UpdateSettingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[21]
+	mi := &file_voice_user_v1_user_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1523,7 +1640,7 @@ func (x *UpdateSettingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateSettingsRequest.ProtoReflect.Descriptor instead.
 func (*UpdateSettingsRequest) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{21}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *UpdateSettingsRequest) GetProfileId() string {
@@ -1552,7 +1669,7 @@ type UserSettings struct {
 
 func (x *UserSettings) Reset() {
 	*x = UserSettings{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[22]
+	mi := &file_voice_user_v1_user_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1564,7 +1681,7 @@ func (x *UserSettings) String() string {
 func (*UserSettings) ProtoMessage() {}
 
 func (x *UserSettings) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[22]
+	mi := &file_voice_user_v1_user_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1577,7 +1694,7 @@ func (x *UserSettings) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UserSettings.ProtoReflect.Descriptor instead.
 func (*UserSettings) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{22}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *UserSettings) GetProfileId() string {
@@ -1616,7 +1733,7 @@ type GetOnboardingStateRequest struct {
 
 func (x *GetOnboardingStateRequest) Reset() {
 	*x = GetOnboardingStateRequest{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[23]
+	mi := &file_voice_user_v1_user_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1628,7 +1745,7 @@ func (x *GetOnboardingStateRequest) String() string {
 func (*GetOnboardingStateRequest) ProtoMessage() {}
 
 func (x *GetOnboardingStateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[23]
+	mi := &file_voice_user_v1_user_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1641,7 +1758,7 @@ func (x *GetOnboardingStateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetOnboardingStateRequest.ProtoReflect.Descriptor instead.
 func (*GetOnboardingStateRequest) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{23}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{24}
 }
 
 type CompleteOnboardingStepRequest struct {
@@ -1653,7 +1770,7 @@ type CompleteOnboardingStepRequest struct {
 
 func (x *CompleteOnboardingStepRequest) Reset() {
 	*x = CompleteOnboardingStepRequest{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[24]
+	mi := &file_voice_user_v1_user_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1665,7 +1782,7 @@ func (x *CompleteOnboardingStepRequest) String() string {
 func (*CompleteOnboardingStepRequest) ProtoMessage() {}
 
 func (x *CompleteOnboardingStepRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[24]
+	mi := &file_voice_user_v1_user_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1678,7 +1795,7 @@ func (x *CompleteOnboardingStepRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteOnboardingStepRequest.ProtoReflect.Descriptor instead.
 func (*CompleteOnboardingStepRequest) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{24}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *CompleteOnboardingStepRequest) GetStepId() string {
@@ -1700,7 +1817,7 @@ type OnboardingState struct {
 
 func (x *OnboardingState) Reset() {
 	*x = OnboardingState{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[25]
+	mi := &file_voice_user_v1_user_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1712,7 +1829,7 @@ func (x *OnboardingState) String() string {
 func (*OnboardingState) ProtoMessage() {}
 
 func (x *OnboardingState) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[25]
+	mi := &file_voice_user_v1_user_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1725,7 +1842,7 @@ func (x *OnboardingState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OnboardingState.ProtoReflect.Descriptor instead.
 func (*OnboardingState) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{25}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *OnboardingState) GetProfileId() string {
@@ -1767,7 +1884,7 @@ type CreateAvatarPresignedUploadRequest struct {
 
 func (x *CreateAvatarPresignedUploadRequest) Reset() {
 	*x = CreateAvatarPresignedUploadRequest{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[26]
+	mi := &file_voice_user_v1_user_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1779,7 +1896,7 @@ func (x *CreateAvatarPresignedUploadRequest) String() string {
 func (*CreateAvatarPresignedUploadRequest) ProtoMessage() {}
 
 func (x *CreateAvatarPresignedUploadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[26]
+	mi := &file_voice_user_v1_user_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1792,7 +1909,7 @@ func (x *CreateAvatarPresignedUploadRequest) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use CreateAvatarPresignedUploadRequest.ProtoReflect.Descriptor instead.
 func (*CreateAvatarPresignedUploadRequest) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{26}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *CreateAvatarPresignedUploadRequest) GetProfileId() string {
@@ -1832,7 +1949,7 @@ type CreateAvatarPresignedUploadResponse struct {
 
 func (x *CreateAvatarPresignedUploadResponse) Reset() {
 	*x = CreateAvatarPresignedUploadResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[27]
+	mi := &file_voice_user_v1_user_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1844,7 +1961,7 @@ func (x *CreateAvatarPresignedUploadResponse) String() string {
 func (*CreateAvatarPresignedUploadResponse) ProtoMessage() {}
 
 func (x *CreateAvatarPresignedUploadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[27]
+	mi := &file_voice_user_v1_user_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1857,7 +1974,7 @@ func (x *CreateAvatarPresignedUploadResponse) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use CreateAvatarPresignedUploadResponse.ProtoReflect.Descriptor instead.
 func (*CreateAvatarPresignedUploadResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{27}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *CreateAvatarPresignedUploadResponse) GetHttpMethod() string {
@@ -1918,7 +2035,7 @@ type GetVerificationStatusRequest struct {
 
 func (x *GetVerificationStatusRequest) Reset() {
 	*x = GetVerificationStatusRequest{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[28]
+	mi := &file_voice_user_v1_user_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1930,7 +2047,7 @@ func (x *GetVerificationStatusRequest) String() string {
 func (*GetVerificationStatusRequest) ProtoMessage() {}
 
 func (x *GetVerificationStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[28]
+	mi := &file_voice_user_v1_user_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1943,7 +2060,7 @@ func (x *GetVerificationStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetVerificationStatusRequest.ProtoReflect.Descriptor instead.
 func (*GetVerificationStatusRequest) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{28}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *GetVerificationStatusRequest) GetProfileId() string {
@@ -1964,7 +2081,7 @@ type VerificationStatus struct {
 
 func (x *VerificationStatus) Reset() {
 	*x = VerificationStatus{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[29]
+	mi := &file_voice_user_v1_user_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1976,7 +2093,7 @@ func (x *VerificationStatus) String() string {
 func (*VerificationStatus) ProtoMessage() {}
 
 func (x *VerificationStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[29]
+	mi := &file_voice_user_v1_user_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1989,7 +2106,7 @@ func (x *VerificationStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VerificationStatus.ProtoReflect.Descriptor instead.
 func (*VerificationStatus) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{29}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *VerificationStatus) GetProfileId() string {
@@ -2022,7 +2139,7 @@ type GetProfileResponse struct {
 
 func (x *GetProfileResponse) Reset() {
 	*x = GetProfileResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[30]
+	mi := &file_voice_user_v1_user_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2034,7 +2151,7 @@ func (x *GetProfileResponse) String() string {
 func (*GetProfileResponse) ProtoMessage() {}
 
 func (x *GetProfileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[30]
+	mi := &file_voice_user_v1_user_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2047,7 +2164,7 @@ func (x *GetProfileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProfileResponse.ProtoReflect.Descriptor instead.
 func (*GetProfileResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{30}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *GetProfileResponse) GetProfile() *Profile {
@@ -2066,7 +2183,7 @@ type GetProfilesResponse struct {
 
 func (x *GetProfilesResponse) Reset() {
 	*x = GetProfilesResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[31]
+	mi := &file_voice_user_v1_user_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2078,7 +2195,7 @@ func (x *GetProfilesResponse) String() string {
 func (*GetProfilesResponse) ProtoMessage() {}
 
 func (x *GetProfilesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[31]
+	mi := &file_voice_user_v1_user_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2091,7 +2208,7 @@ func (x *GetProfilesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProfilesResponse.ProtoReflect.Descriptor instead.
 func (*GetProfilesResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{31}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *GetProfilesResponse) GetProfileList() *ProfileList {
@@ -2110,7 +2227,7 @@ type UpdateProfileResponse struct {
 
 func (x *UpdateProfileResponse) Reset() {
 	*x = UpdateProfileResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[32]
+	mi := &file_voice_user_v1_user_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2122,7 +2239,7 @@ func (x *UpdateProfileResponse) String() string {
 func (*UpdateProfileResponse) ProtoMessage() {}
 
 func (x *UpdateProfileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[32]
+	mi := &file_voice_user_v1_user_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2135,7 +2252,7 @@ func (x *UpdateProfileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateProfileResponse.ProtoReflect.Descriptor instead.
 func (*UpdateProfileResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{32}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *UpdateProfileResponse) GetProfile() *Profile {
@@ -2154,7 +2271,7 @@ type CreateProfileResponse struct {
 
 func (x *CreateProfileResponse) Reset() {
 	*x = CreateProfileResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[33]
+	mi := &file_voice_user_v1_user_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2166,7 +2283,7 @@ func (x *CreateProfileResponse) String() string {
 func (*CreateProfileResponse) ProtoMessage() {}
 
 func (x *CreateProfileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[33]
+	mi := &file_voice_user_v1_user_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2179,7 +2296,7 @@ func (x *CreateProfileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateProfileResponse.ProtoReflect.Descriptor instead.
 func (*CreateProfileResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{33}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *CreateProfileResponse) GetProfile() *Profile {
@@ -2197,7 +2314,7 @@ type DeleteProfileResponse struct {
 
 func (x *DeleteProfileResponse) Reset() {
 	*x = DeleteProfileResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[34]
+	mi := &file_voice_user_v1_user_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2209,7 +2326,7 @@ func (x *DeleteProfileResponse) String() string {
 func (*DeleteProfileResponse) ProtoMessage() {}
 
 func (x *DeleteProfileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[34]
+	mi := &file_voice_user_v1_user_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2222,7 +2339,7 @@ func (x *DeleteProfileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteProfileResponse.ProtoReflect.Descriptor instead.
 func (*DeleteProfileResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{34}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{35}
 }
 
 type SwitchProfileResponse struct {
@@ -2234,7 +2351,7 @@ type SwitchProfileResponse struct {
 
 func (x *SwitchProfileResponse) Reset() {
 	*x = SwitchProfileResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[35]
+	mi := &file_voice_user_v1_user_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2246,7 +2363,7 @@ func (x *SwitchProfileResponse) String() string {
 func (*SwitchProfileResponse) ProtoMessage() {}
 
 func (x *SwitchProfileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[35]
+	mi := &file_voice_user_v1_user_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2259,7 +2376,7 @@ func (x *SwitchProfileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SwitchProfileResponse.ProtoReflect.Descriptor instead.
 func (*SwitchProfileResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{35}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *SwitchProfileResponse) GetProfile() *Profile {
@@ -2278,7 +2395,7 @@ type ListMyProfilesResponse struct {
 
 func (x *ListMyProfilesResponse) Reset() {
 	*x = ListMyProfilesResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[36]
+	mi := &file_voice_user_v1_user_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2290,7 +2407,7 @@ func (x *ListMyProfilesResponse) String() string {
 func (*ListMyProfilesResponse) ProtoMessage() {}
 
 func (x *ListMyProfilesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[36]
+	mi := &file_voice_user_v1_user_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2303,7 +2420,7 @@ func (x *ListMyProfilesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMyProfilesResponse.ProtoReflect.Descriptor instead.
 func (*ListMyProfilesResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{36}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *ListMyProfilesResponse) GetProfileList() *ProfileList {
@@ -2322,7 +2439,7 @@ type GetPrivacySettingsResponse struct {
 
 func (x *GetPrivacySettingsResponse) Reset() {
 	*x = GetPrivacySettingsResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[37]
+	mi := &file_voice_user_v1_user_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2334,7 +2451,7 @@ func (x *GetPrivacySettingsResponse) String() string {
 func (*GetPrivacySettingsResponse) ProtoMessage() {}
 
 func (x *GetPrivacySettingsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[37]
+	mi := &file_voice_user_v1_user_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2347,7 +2464,7 @@ func (x *GetPrivacySettingsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPrivacySettingsResponse.ProtoReflect.Descriptor instead.
 func (*GetPrivacySettingsResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{37}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *GetPrivacySettingsResponse) GetPrivacySettings() *PrivacySettings {
@@ -2366,7 +2483,7 @@ type UpdatePrivacySettingsResponse struct {
 
 func (x *UpdatePrivacySettingsResponse) Reset() {
 	*x = UpdatePrivacySettingsResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[38]
+	mi := &file_voice_user_v1_user_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2378,7 +2495,7 @@ func (x *UpdatePrivacySettingsResponse) String() string {
 func (*UpdatePrivacySettingsResponse) ProtoMessage() {}
 
 func (x *UpdatePrivacySettingsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[38]
+	mi := &file_voice_user_v1_user_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2391,7 +2508,7 @@ func (x *UpdatePrivacySettingsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdatePrivacySettingsResponse.ProtoReflect.Descriptor instead.
 func (*UpdatePrivacySettingsResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{38}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *UpdatePrivacySettingsResponse) GetPrivacySettings() *PrivacySettings {
@@ -2409,7 +2526,7 @@ type UpdatePresenceResponse struct {
 
 func (x *UpdatePresenceResponse) Reset() {
 	*x = UpdatePresenceResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[39]
+	mi := &file_voice_user_v1_user_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2421,7 +2538,7 @@ func (x *UpdatePresenceResponse) String() string {
 func (*UpdatePresenceResponse) ProtoMessage() {}
 
 func (x *UpdatePresenceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[39]
+	mi := &file_voice_user_v1_user_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2434,7 +2551,7 @@ func (x *UpdatePresenceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdatePresenceResponse.ProtoReflect.Descriptor instead.
 func (*UpdatePresenceResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{39}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{40}
 }
 
 type GetPresenceResponse struct {
@@ -2446,7 +2563,7 @@ type GetPresenceResponse struct {
 
 func (x *GetPresenceResponse) Reset() {
 	*x = GetPresenceResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[40]
+	mi := &file_voice_user_v1_user_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2458,7 +2575,7 @@ func (x *GetPresenceResponse) String() string {
 func (*GetPresenceResponse) ProtoMessage() {}
 
 func (x *GetPresenceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[40]
+	mi := &file_voice_user_v1_user_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2471,7 +2588,7 @@ func (x *GetPresenceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPresenceResponse.ProtoReflect.Descriptor instead.
 func (*GetPresenceResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{40}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *GetPresenceResponse) GetPresenceStatus() *PresenceStatus {
@@ -2490,7 +2607,7 @@ type GetBulkPresenceResponse struct {
 
 func (x *GetBulkPresenceResponse) Reset() {
 	*x = GetBulkPresenceResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[41]
+	mi := &file_voice_user_v1_user_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2502,7 +2619,7 @@ func (x *GetBulkPresenceResponse) String() string {
 func (*GetBulkPresenceResponse) ProtoMessage() {}
 
 func (x *GetBulkPresenceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[41]
+	mi := &file_voice_user_v1_user_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2515,7 +2632,7 @@ func (x *GetBulkPresenceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBulkPresenceResponse.ProtoReflect.Descriptor instead.
 func (*GetBulkPresenceResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{41}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *GetBulkPresenceResponse) GetByProfileId() map[string]*PresenceStatus {
@@ -2534,7 +2651,7 @@ type GetSettingsResponse struct {
 
 func (x *GetSettingsResponse) Reset() {
 	*x = GetSettingsResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[42]
+	mi := &file_voice_user_v1_user_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2546,7 +2663,7 @@ func (x *GetSettingsResponse) String() string {
 func (*GetSettingsResponse) ProtoMessage() {}
 
 func (x *GetSettingsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[42]
+	mi := &file_voice_user_v1_user_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2559,7 +2676,7 @@ func (x *GetSettingsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSettingsResponse.ProtoReflect.Descriptor instead.
 func (*GetSettingsResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{42}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *GetSettingsResponse) GetUserSettings() *UserSettings {
@@ -2578,7 +2695,7 @@ type UpdateSettingsResponse struct {
 
 func (x *UpdateSettingsResponse) Reset() {
 	*x = UpdateSettingsResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[43]
+	mi := &file_voice_user_v1_user_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2590,7 +2707,7 @@ func (x *UpdateSettingsResponse) String() string {
 func (*UpdateSettingsResponse) ProtoMessage() {}
 
 func (x *UpdateSettingsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[43]
+	mi := &file_voice_user_v1_user_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2603,7 +2720,7 @@ func (x *UpdateSettingsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateSettingsResponse.ProtoReflect.Descriptor instead.
 func (*UpdateSettingsResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{43}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *UpdateSettingsResponse) GetUserSettings() *UserSettings {
@@ -2622,7 +2739,7 @@ type GetOnboardingStateResponse struct {
 
 func (x *GetOnboardingStateResponse) Reset() {
 	*x = GetOnboardingStateResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[44]
+	mi := &file_voice_user_v1_user_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2634,7 +2751,7 @@ func (x *GetOnboardingStateResponse) String() string {
 func (*GetOnboardingStateResponse) ProtoMessage() {}
 
 func (x *GetOnboardingStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[44]
+	mi := &file_voice_user_v1_user_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2647,7 +2764,7 @@ func (x *GetOnboardingStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetOnboardingStateResponse.ProtoReflect.Descriptor instead.
 func (*GetOnboardingStateResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{44}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *GetOnboardingStateResponse) GetOnboardingState() *OnboardingState {
@@ -2666,7 +2783,7 @@ type CompleteOnboardingStepResponse struct {
 
 func (x *CompleteOnboardingStepResponse) Reset() {
 	*x = CompleteOnboardingStepResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[45]
+	mi := &file_voice_user_v1_user_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2678,7 +2795,7 @@ func (x *CompleteOnboardingStepResponse) String() string {
 func (*CompleteOnboardingStepResponse) ProtoMessage() {}
 
 func (x *CompleteOnboardingStepResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[45]
+	mi := &file_voice_user_v1_user_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2691,7 +2808,7 @@ func (x *CompleteOnboardingStepResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteOnboardingStepResponse.ProtoReflect.Descriptor instead.
 func (*CompleteOnboardingStepResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{45}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *CompleteOnboardingStepResponse) GetOnboardingState() *OnboardingState {
@@ -2710,7 +2827,7 @@ type GetVerificationStatusResponse struct {
 
 func (x *GetVerificationStatusResponse) Reset() {
 	*x = GetVerificationStatusResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[46]
+	mi := &file_voice_user_v1_user_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2722,7 +2839,7 @@ func (x *GetVerificationStatusResponse) String() string {
 func (*GetVerificationStatusResponse) ProtoMessage() {}
 
 func (x *GetVerificationStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[46]
+	mi := &file_voice_user_v1_user_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2735,7 +2852,7 @@ func (x *GetVerificationStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetVerificationStatusResponse.ProtoReflect.Descriptor instead.
 func (*GetVerificationStatusResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{46}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *GetVerificationStatusResponse) GetVerificationStatus() *VerificationStatus {
@@ -2756,7 +2873,7 @@ type SetVerificationRequest struct {
 
 func (x *SetVerificationRequest) Reset() {
 	*x = SetVerificationRequest{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[47]
+	mi := &file_voice_user_v1_user_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2768,7 +2885,7 @@ func (x *SetVerificationRequest) String() string {
 func (*SetVerificationRequest) ProtoMessage() {}
 
 func (x *SetVerificationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[47]
+	mi := &file_voice_user_v1_user_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2781,7 +2898,7 @@ func (x *SetVerificationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetVerificationRequest.ProtoReflect.Descriptor instead.
 func (*SetVerificationRequest) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{47}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *SetVerificationRequest) GetProfileId() string {
@@ -2814,7 +2931,7 @@ type SetVerificationResponse struct {
 
 func (x *SetVerificationResponse) Reset() {
 	*x = SetVerificationResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[48]
+	mi := &file_voice_user_v1_user_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2826,7 +2943,7 @@ func (x *SetVerificationResponse) String() string {
 func (*SetVerificationResponse) ProtoMessage() {}
 
 func (x *SetVerificationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[48]
+	mi := &file_voice_user_v1_user_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2839,7 +2956,7 @@ func (x *SetVerificationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetVerificationResponse.ProtoReflect.Descriptor instead.
 func (*SetVerificationResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{48}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *SetVerificationResponse) GetVerificationStatus() *VerificationStatus {
@@ -2858,7 +2975,7 @@ type ClearVerificationRequest struct {
 
 func (x *ClearVerificationRequest) Reset() {
 	*x = ClearVerificationRequest{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[49]
+	mi := &file_voice_user_v1_user_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2870,7 +2987,7 @@ func (x *ClearVerificationRequest) String() string {
 func (*ClearVerificationRequest) ProtoMessage() {}
 
 func (x *ClearVerificationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[49]
+	mi := &file_voice_user_v1_user_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2883,7 +3000,7 @@ func (x *ClearVerificationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClearVerificationRequest.ProtoReflect.Descriptor instead.
 func (*ClearVerificationRequest) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{49}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *ClearVerificationRequest) GetProfileId() string {
@@ -2902,7 +3019,7 @@ type ClearVerificationResponse struct {
 
 func (x *ClearVerificationResponse) Reset() {
 	*x = ClearVerificationResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[50]
+	mi := &file_voice_user_v1_user_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2914,7 +3031,7 @@ func (x *ClearVerificationResponse) String() string {
 func (*ClearVerificationResponse) ProtoMessage() {}
 
 func (x *ClearVerificationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[50]
+	mi := &file_voice_user_v1_user_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2927,7 +3044,7 @@ func (x *ClearVerificationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClearVerificationResponse.ProtoReflect.Descriptor instead.
 func (*ClearVerificationResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{50}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *ClearVerificationResponse) GetVerificationStatus() *VerificationStatus {
@@ -2947,7 +3064,7 @@ type StartOrganizationVerificationRequest struct {
 
 func (x *StartOrganizationVerificationRequest) Reset() {
 	*x = StartOrganizationVerificationRequest{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[51]
+	mi := &file_voice_user_v1_user_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2959,7 +3076,7 @@ func (x *StartOrganizationVerificationRequest) String() string {
 func (*StartOrganizationVerificationRequest) ProtoMessage() {}
 
 func (x *StartOrganizationVerificationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[51]
+	mi := &file_voice_user_v1_user_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2972,7 +3089,7 @@ func (x *StartOrganizationVerificationRequest) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use StartOrganizationVerificationRequest.ProtoReflect.Descriptor instead.
 func (*StartOrganizationVerificationRequest) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{51}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *StartOrganizationVerificationRequest) GetProfileId() string {
@@ -2999,7 +3116,7 @@ type StartOrganizationVerificationResponse struct {
 
 func (x *StartOrganizationVerificationResponse) Reset() {
 	*x = StartOrganizationVerificationResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[52]
+	mi := &file_voice_user_v1_user_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3011,7 +3128,7 @@ func (x *StartOrganizationVerificationResponse) String() string {
 func (*StartOrganizationVerificationResponse) ProtoMessage() {}
 
 func (x *StartOrganizationVerificationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[52]
+	mi := &file_voice_user_v1_user_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3024,7 +3141,7 @@ func (x *StartOrganizationVerificationResponse) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use StartOrganizationVerificationResponse.ProtoReflect.Descriptor instead.
 func (*StartOrganizationVerificationResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{52}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *StartOrganizationVerificationResponse) GetDomain() string {
@@ -3050,7 +3167,7 @@ type CheckOrganizationVerificationRequest struct {
 
 func (x *CheckOrganizationVerificationRequest) Reset() {
 	*x = CheckOrganizationVerificationRequest{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[53]
+	mi := &file_voice_user_v1_user_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3062,7 +3179,7 @@ func (x *CheckOrganizationVerificationRequest) String() string {
 func (*CheckOrganizationVerificationRequest) ProtoMessage() {}
 
 func (x *CheckOrganizationVerificationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[53]
+	mi := &file_voice_user_v1_user_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3075,7 +3192,7 @@ func (x *CheckOrganizationVerificationRequest) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use CheckOrganizationVerificationRequest.ProtoReflect.Descriptor instead.
 func (*CheckOrganizationVerificationRequest) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{53}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *CheckOrganizationVerificationRequest) GetProfileId() string {
@@ -3094,7 +3211,7 @@ type CheckOrganizationVerificationResponse struct {
 
 func (x *CheckOrganizationVerificationResponse) Reset() {
 	*x = CheckOrganizationVerificationResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[54]
+	mi := &file_voice_user_v1_user_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3106,7 +3223,7 @@ func (x *CheckOrganizationVerificationResponse) String() string {
 func (*CheckOrganizationVerificationResponse) ProtoMessage() {}
 
 func (x *CheckOrganizationVerificationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[54]
+	mi := &file_voice_user_v1_user_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3119,7 +3236,7 @@ func (x *CheckOrganizationVerificationResponse) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use CheckOrganizationVerificationResponse.ProtoReflect.Descriptor instead.
 func (*CheckOrganizationVerificationResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{54}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *CheckOrganizationVerificationResponse) GetVerificationStatus() *VerificationStatus {
@@ -3139,7 +3256,7 @@ type ApplyDowngradeProfilesRequest struct {
 
 func (x *ApplyDowngradeProfilesRequest) Reset() {
 	*x = ApplyDowngradeProfilesRequest{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[55]
+	mi := &file_voice_user_v1_user_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3151,7 +3268,7 @@ func (x *ApplyDowngradeProfilesRequest) String() string {
 func (*ApplyDowngradeProfilesRequest) ProtoMessage() {}
 
 func (x *ApplyDowngradeProfilesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[55]
+	mi := &file_voice_user_v1_user_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3164,7 +3281,7 @@ func (x *ApplyDowngradeProfilesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyDowngradeProfilesRequest.ProtoReflect.Descriptor instead.
 func (*ApplyDowngradeProfilesRequest) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{55}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *ApplyDowngradeProfilesRequest) GetAccountId() string {
@@ -3190,7 +3307,7 @@ type ApplyDowngradeProfilesResponse struct {
 
 func (x *ApplyDowngradeProfilesResponse) Reset() {
 	*x = ApplyDowngradeProfilesResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[56]
+	mi := &file_voice_user_v1_user_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3202,7 +3319,7 @@ func (x *ApplyDowngradeProfilesResponse) String() string {
 func (*ApplyDowngradeProfilesResponse) ProtoMessage() {}
 
 func (x *ApplyDowngradeProfilesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[56]
+	mi := &file_voice_user_v1_user_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3215,7 +3332,7 @@ func (x *ApplyDowngradeProfilesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyDowngradeProfilesResponse.ProtoReflect.Descriptor instead.
 func (*ApplyDowngradeProfilesResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{56}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *ApplyDowngradeProfilesResponse) GetKeptProfileIds() []string {
@@ -3374,38 +3491,88 @@ var file_voice_user_v1_user_proto_rawDesc = string([]byte{
 	0x3a, 0x0a, 0x08, 0x73, 0x65, 0x74, 0x74, 0x69, 0x6e, 0x67, 0x73, 0x18, 0x02, 0x20, 0x01, 0x28,
 	0x0b, 0x32, 0x1e, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x75, 0x73, 0x65, 0x72, 0x2e, 0x76,
 	0x31, 0x2e, 0x50, 0x72, 0x69, 0x76, 0x61, 0x63, 0x79, 0x53, 0x65, 0x74, 0x74, 0x69, 0x6e, 0x67,
-	0x73, 0x52, 0x08, 0x73, 0x65, 0x74, 0x74, 0x69, 0x6e, 0x67, 0x73, 0x22, 0xff, 0x03, 0x0a, 0x0f,
-	0x50, 0x72, 0x69, 0x76, 0x61, 0x63, 0x79, 0x53, 0x65, 0x74, 0x74, 0x69, 0x6e, 0x67, 0x73, 0x12,
-	0x1d, 0x0a, 0x0a, 0x70, 0x72, 0x6f, 0x66, 0x69, 0x6c, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20,
-	0x01, 0x28, 0x09, 0x52, 0x09, 0x70, 0x72, 0x6f, 0x66, 0x69, 0x6c, 0x65, 0x49, 0x64, 0x12, 0x16,
-	0x0a, 0x06, 0x70, 0x72, 0x65, 0x73, 0x65, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x06,
-	0x70, 0x72, 0x65, 0x73, 0x65, 0x74, 0x12, 0x1f, 0x0a, 0x0b, 0x73, 0x68, 0x6f, 0x77, 0x5f, 0x6f,
-	0x6e, 0x6c, 0x69, 0x6e, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0a, 0x73, 0x68, 0x6f,
-	0x77, 0x4f, 0x6e, 0x6c, 0x69, 0x6e, 0x65, 0x12, 0x28, 0x0a, 0x10, 0x73, 0x68, 0x6f, 0x77, 0x5f,
-	0x67, 0x61, 0x6d, 0x65, 0x5f, 0x73, 0x74, 0x61, 0x74, 0x75, 0x73, 0x18, 0x04, 0x20, 0x01, 0x28,
-	0x09, 0x52, 0x0e, 0x73, 0x68, 0x6f, 0x77, 0x47, 0x61, 0x6d, 0x65, 0x53, 0x74, 0x61, 0x74, 0x75,
-	0x73, 0x12, 0x24, 0x0a, 0x0e, 0x73, 0x68, 0x6f, 0x77, 0x5f, 0x6d, 0x6d, 0x5f, 0x72, 0x61, 0x74,
-	0x69, 0x6e, 0x67, 0x18, 0x05, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0c, 0x73, 0x68, 0x6f, 0x77, 0x4d,
-	0x6d, 0x52, 0x61, 0x74, 0x69, 0x6e, 0x67, 0x12, 0x1d, 0x0a, 0x0a, 0x73, 0x68, 0x6f, 0x77, 0x5f,
-	0x70, 0x68, 0x6f, 0x6e, 0x65, 0x18, 0x06, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x73, 0x68, 0x6f,
-	0x77, 0x50, 0x68, 0x6f, 0x6e, 0x65, 0x12, 0x21, 0x0a, 0x0c, 0x73, 0x68, 0x6f, 0x77, 0x5f, 0x73,
-	0x74, 0x6f, 0x72, 0x69, 0x65, 0x73, 0x18, 0x07, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0b, 0x73, 0x68,
-	0x6f, 0x77, 0x53, 0x74, 0x6f, 0x72, 0x69, 0x65, 0x73, 0x12, 0x19, 0x0a, 0x08, 0x61, 0x6c, 0x6c,
-	0x6f, 0x77, 0x5f, 0x64, 0x6d, 0x18, 0x08, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x61, 0x6c, 0x6c,
-	0x6f, 0x77, 0x44, 0x6d, 0x12, 0x32, 0x0a, 0x15, 0x61, 0x6c, 0x6c, 0x6f, 0x77, 0x5f, 0x66, 0x72,
-	0x69, 0x65, 0x6e, 0x64, 0x5f, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x73, 0x18, 0x09, 0x20,
-	0x01, 0x28, 0x09, 0x52, 0x13, 0x61, 0x6c, 0x6c, 0x6f, 0x77, 0x46, 0x72, 0x69, 0x65, 0x6e, 0x64,
-	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x73, 0x12, 0x24, 0x0a, 0x0e, 0x61, 0x6c, 0x6c, 0x6f,
-	0x77, 0x5f, 0x67, 0x75, 0x65, 0x73, 0x74, 0x5f, 0x64, 0x6d, 0x18, 0x0a, 0x20, 0x01, 0x28, 0x08,
-	0x52, 0x0c, 0x61, 0x6c, 0x6c, 0x6f, 0x77, 0x47, 0x75, 0x65, 0x73, 0x74, 0x44, 0x6d, 0x12, 0x39,
-	0x0a, 0x0a, 0x75, 0x70, 0x64, 0x61, 0x74, 0x65, 0x64, 0x5f, 0x61, 0x74, 0x18, 0x0b, 0x20, 0x01,
-	0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74,
-	0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x09,
-	0x75, 0x70, 0x64, 0x61, 0x74, 0x65, 0x64, 0x41, 0x74, 0x12, 0x42, 0x0a, 0x0b, 0x70, 0x72, 0x65,
-	0x73, 0x65, 0x74, 0x5f, 0x65, 0x6e, 0x75, 0x6d, 0x18, 0x0c, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x1c,
+	0x73, 0x52, 0x08, 0x73, 0x65, 0x74, 0x74, 0x69, 0x6e, 0x67, 0x73, 0x22, 0xc2, 0x01, 0x0a, 0x0f,
+	0x50, 0x72, 0x69, 0x76, 0x61, 0x63, 0x79, 0x41, 0x75, 0x64, 0x69, 0x65, 0x6e, 0x63, 0x65, 0x12,
+	0x18, 0x0a, 0x07, 0x66, 0x72, 0x69, 0x65, 0x6e, 0x64, 0x73, 0x18, 0x01, 0x20, 0x01, 0x28, 0x08,
+	0x52, 0x07, 0x66, 0x72, 0x69, 0x65, 0x6e, 0x64, 0x73, 0x12, 0x2c, 0x0a, 0x12, 0x66, 0x72, 0x69,
+	0x65, 0x6e, 0x64, 0x73, 0x5f, 0x6f, 0x66, 0x5f, 0x66, 0x72, 0x69, 0x65, 0x6e, 0x64, 0x73, 0x18,
+	0x02, 0x20, 0x01, 0x28, 0x08, 0x52, 0x10, 0x66, 0x72, 0x69, 0x65, 0x6e, 0x64, 0x73, 0x4f, 0x66,
+	0x46, 0x72, 0x69, 0x65, 0x6e, 0x64, 0x73, 0x12, 0x23, 0x0a, 0x0d, 0x73, 0x70, 0x61, 0x63, 0x65,
+	0x5f, 0x6d, 0x65, 0x6d, 0x62, 0x65, 0x72, 0x73, 0x18, 0x03, 0x20, 0x01, 0x28, 0x08, 0x52, 0x0c,
+	0x73, 0x70, 0x61, 0x63, 0x65, 0x4d, 0x65, 0x6d, 0x62, 0x65, 0x72, 0x73, 0x12, 0x1b, 0x0a, 0x09,
+	0x73, 0x70, 0x61, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x73, 0x18, 0x04, 0x20, 0x03, 0x28, 0x09, 0x52,
+	0x08, 0x73, 0x70, 0x61, 0x63, 0x65, 0x49, 0x64, 0x73, 0x12, 0x25, 0x0a, 0x0e, 0x69, 0x6e, 0x63,
+	0x6c, 0x75, 0x64, 0x65, 0x5f, 0x67, 0x75, 0x65, 0x73, 0x74, 0x73, 0x18, 0x05, 0x20, 0x01, 0x28,
+	0x08, 0x52, 0x0d, 0x69, 0x6e, 0x63, 0x6c, 0x75, 0x64, 0x65, 0x47, 0x75, 0x65, 0x73, 0x74, 0x73,
+	0x22, 0xda, 0x08, 0x0a, 0x0f, 0x50, 0x72, 0x69, 0x76, 0x61, 0x63, 0x79, 0x53, 0x65, 0x74, 0x74,
+	0x69, 0x6e, 0x67, 0x73, 0x12, 0x1d, 0x0a, 0x0a, 0x70, 0x72, 0x6f, 0x66, 0x69, 0x6c, 0x65, 0x5f,
+	0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x70, 0x72, 0x6f, 0x66, 0x69, 0x6c,
+	0x65, 0x49, 0x64, 0x12, 0x16, 0x0a, 0x06, 0x70, 0x72, 0x65, 0x73, 0x65, 0x74, 0x18, 0x02, 0x20,
+	0x01, 0x28, 0x09, 0x52, 0x06, 0x70, 0x72, 0x65, 0x73, 0x65, 0x74, 0x12, 0x3f, 0x0a, 0x0b, 0x73,
+	0x68, 0x6f, 0x77, 0x5f, 0x6f, 0x6e, 0x6c, 0x69, 0x6e, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b,
+	0x32, 0x1e, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x75, 0x73, 0x65, 0x72, 0x2e, 0x76, 0x31,
+	0x2e, 0x50, 0x72, 0x69, 0x76, 0x61, 0x63, 0x79, 0x41, 0x75, 0x64, 0x69, 0x65, 0x6e, 0x63, 0x65,
+	0x52, 0x0a, 0x73, 0x68, 0x6f, 0x77, 0x4f, 0x6e, 0x6c, 0x69, 0x6e, 0x65, 0x12, 0x48, 0x0a, 0x10,
+	0x73, 0x68, 0x6f, 0x77, 0x5f, 0x67, 0x61, 0x6d, 0x65, 0x5f, 0x73, 0x74, 0x61, 0x74, 0x75, 0x73,
+	0x18, 0x04, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1e, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x75,
+	0x73, 0x65, 0x72, 0x2e, 0x76, 0x31, 0x2e, 0x50, 0x72, 0x69, 0x76, 0x61, 0x63, 0x79, 0x41, 0x75,
+	0x64, 0x69, 0x65, 0x6e, 0x63, 0x65, 0x52, 0x0e, 0x73, 0x68, 0x6f, 0x77, 0x47, 0x61, 0x6d, 0x65,
+	0x53, 0x74, 0x61, 0x74, 0x75, 0x73, 0x12, 0x44, 0x0a, 0x0e, 0x73, 0x68, 0x6f, 0x77, 0x5f, 0x6d,
+	0x6d, 0x5f, 0x72, 0x61, 0x74, 0x69, 0x6e, 0x67, 0x18, 0x05, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1e,
 	0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x75, 0x73, 0x65, 0x72, 0x2e, 0x76, 0x31, 0x2e, 0x50,
-	0x72, 0x69, 0x76, 0x61, 0x63, 0x79, 0x50, 0x72, 0x65, 0x73, 0x65, 0x74, 0x48, 0x00, 0x52, 0x0a,
-	0x70, 0x72, 0x65, 0x73, 0x65, 0x74, 0x45, 0x6e, 0x75, 0x6d, 0x88, 0x01, 0x01, 0x42, 0x0e, 0x0a,
+	0x72, 0x69, 0x76, 0x61, 0x63, 0x79, 0x41, 0x75, 0x64, 0x69, 0x65, 0x6e, 0x63, 0x65, 0x52, 0x0c,
+	0x73, 0x68, 0x6f, 0x77, 0x4d, 0x6d, 0x52, 0x61, 0x74, 0x69, 0x6e, 0x67, 0x12, 0x3d, 0x0a, 0x0a,
+	0x73, 0x68, 0x6f, 0x77, 0x5f, 0x70, 0x68, 0x6f, 0x6e, 0x65, 0x18, 0x06, 0x20, 0x01, 0x28, 0x0b,
+	0x32, 0x1e, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x75, 0x73, 0x65, 0x72, 0x2e, 0x76, 0x31,
+	0x2e, 0x50, 0x72, 0x69, 0x76, 0x61, 0x63, 0x79, 0x41, 0x75, 0x64, 0x69, 0x65, 0x6e, 0x63, 0x65,
+	0x52, 0x09, 0x73, 0x68, 0x6f, 0x77, 0x50, 0x68, 0x6f, 0x6e, 0x65, 0x12, 0x41, 0x0a, 0x0c, 0x73,
+	0x68, 0x6f, 0x77, 0x5f, 0x73, 0x74, 0x6f, 0x72, 0x69, 0x65, 0x73, 0x18, 0x07, 0x20, 0x01, 0x28,
+	0x0b, 0x32, 0x1e, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x75, 0x73, 0x65, 0x72, 0x2e, 0x76,
+	0x31, 0x2e, 0x50, 0x72, 0x69, 0x76, 0x61, 0x63, 0x79, 0x41, 0x75, 0x64, 0x69, 0x65, 0x6e, 0x63,
+	0x65, 0x52, 0x0b, 0x73, 0x68, 0x6f, 0x77, 0x53, 0x74, 0x6f, 0x72, 0x69, 0x65, 0x73, 0x12, 0x39,
+	0x0a, 0x08, 0x61, 0x6c, 0x6c, 0x6f, 0x77, 0x5f, 0x64, 0x6d, 0x18, 0x08, 0x20, 0x01, 0x28, 0x0b,
+	0x32, 0x1e, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x75, 0x73, 0x65, 0x72, 0x2e, 0x76, 0x31,
+	0x2e, 0x50, 0x72, 0x69, 0x76, 0x61, 0x63, 0x79, 0x41, 0x75, 0x64, 0x69, 0x65, 0x6e, 0x63, 0x65,
+	0x52, 0x07, 0x61, 0x6c, 0x6c, 0x6f, 0x77, 0x44, 0x6d, 0x12, 0x52, 0x0a, 0x15, 0x61, 0x6c, 0x6c,
+	0x6f, 0x77, 0x5f, 0x66, 0x72, 0x69, 0x65, 0x6e, 0x64, 0x5f, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73,
+	0x74, 0x73, 0x18, 0x09, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1e, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65,
+	0x2e, 0x75, 0x73, 0x65, 0x72, 0x2e, 0x76, 0x31, 0x2e, 0x50, 0x72, 0x69, 0x76, 0x61, 0x63, 0x79,
+	0x41, 0x75, 0x64, 0x69, 0x65, 0x6e, 0x63, 0x65, 0x52, 0x13, 0x61, 0x6c, 0x6c, 0x6f, 0x77, 0x46,
+	0x72, 0x69, 0x65, 0x6e, 0x64, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x73, 0x12, 0x24, 0x0a,
+	0x0e, 0x61, 0x6c, 0x6c, 0x6f, 0x77, 0x5f, 0x67, 0x75, 0x65, 0x73, 0x74, 0x5f, 0x64, 0x6d, 0x18,
+	0x0a, 0x20, 0x01, 0x28, 0x08, 0x52, 0x0c, 0x61, 0x6c, 0x6c, 0x6f, 0x77, 0x47, 0x75, 0x65, 0x73,
+	0x74, 0x44, 0x6d, 0x12, 0x39, 0x0a, 0x0a, 0x75, 0x70, 0x64, 0x61, 0x74, 0x65, 0x64, 0x5f, 0x61,
+	0x74, 0x18, 0x0b, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65,
+	0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74,
+	0x61, 0x6d, 0x70, 0x52, 0x09, 0x75, 0x70, 0x64, 0x61, 0x74, 0x65, 0x64, 0x41, 0x74, 0x12, 0x42,
+	0x0a, 0x0b, 0x70, 0x72, 0x65, 0x73, 0x65, 0x74, 0x5f, 0x65, 0x6e, 0x75, 0x6d, 0x18, 0x0c, 0x20,
+	0x01, 0x28, 0x0e, 0x32, 0x1c, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x75, 0x73, 0x65, 0x72,
+	0x2e, 0x76, 0x31, 0x2e, 0x50, 0x72, 0x69, 0x76, 0x61, 0x63, 0x79, 0x50, 0x72, 0x65, 0x73, 0x65,
+	0x74, 0x48, 0x00, 0x52, 0x0a, 0x70, 0x72, 0x65, 0x73, 0x65, 0x74, 0x45, 0x6e, 0x75, 0x6d, 0x88,
+	0x01, 0x01, 0x12, 0x4c, 0x0a, 0x12, 0x61, 0x6c, 0x6c, 0x6f, 0x77, 0x5f, 0x70, 0x68, 0x6f, 0x6e,
+	0x65, 0x5f, 0x73, 0x65, 0x61, 0x72, 0x63, 0x68, 0x18, 0x0e, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1e,
+	0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x75, 0x73, 0x65, 0x72, 0x2e, 0x76, 0x31, 0x2e, 0x50,
+	0x72, 0x69, 0x76, 0x61, 0x63, 0x79, 0x41, 0x75, 0x64, 0x69, 0x65, 0x6e, 0x63, 0x65, 0x52, 0x10,
+	0x61, 0x6c, 0x6c, 0x6f, 0x77, 0x50, 0x68, 0x6f, 0x6e, 0x65, 0x53, 0x65, 0x61, 0x72, 0x63, 0x68,
+	0x12, 0x3f, 0x0a, 0x0b, 0x61, 0x6c, 0x6c, 0x6f, 0x77, 0x5f, 0x63, 0x61, 0x6c, 0x6c, 0x73, 0x18,
+	0x0f, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1e, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x75, 0x73,
+	0x65, 0x72, 0x2e, 0x76, 0x31, 0x2e, 0x50, 0x72, 0x69, 0x76, 0x61, 0x63, 0x79, 0x41, 0x75, 0x64,
+	0x69, 0x65, 0x6e, 0x63, 0x65, 0x52, 0x0a, 0x61, 0x6c, 0x6c, 0x6f, 0x77, 0x43, 0x61, 0x6c, 0x6c,
+	0x73, 0x12, 0x57, 0x0a, 0x18, 0x61, 0x6c, 0x6c, 0x6f, 0x77, 0x5f, 0x63, 0x68, 0x61, 0x74, 0x5f,
+	0x73, 0x70, 0x61, 0x63, 0x65, 0x5f, 0x69, 0x6e, 0x76, 0x69, 0x74, 0x65, 0x73, 0x18, 0x10, 0x20,
+	0x01, 0x28, 0x0b, 0x32, 0x1e, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x75, 0x73, 0x65, 0x72,
+	0x2e, 0x76, 0x31, 0x2e, 0x50, 0x72, 0x69, 0x76, 0x61, 0x63, 0x79, 0x41, 0x75, 0x64, 0x69, 0x65,
+	0x6e, 0x63, 0x65, 0x52, 0x15, 0x61, 0x6c, 0x6c, 0x6f, 0x77, 0x43, 0x68, 0x61, 0x74, 0x53, 0x70,
+	0x61, 0x63, 0x65, 0x49, 0x6e, 0x76, 0x69, 0x74, 0x65, 0x73, 0x12, 0x3f, 0x0a, 0x0b, 0x61, 0x6c,
+	0x6c, 0x6f, 0x77, 0x5f, 0x66, 0x69, 0x6c, 0x65, 0x73, 0x18, 0x11, 0x20, 0x01, 0x28, 0x0b, 0x32,
+	0x1e, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x75, 0x73, 0x65, 0x72, 0x2e, 0x76, 0x31, 0x2e,
+	0x50, 0x72, 0x69, 0x76, 0x61, 0x63, 0x79, 0x41, 0x75, 0x64, 0x69, 0x65, 0x6e, 0x63, 0x65, 0x52,
+	0x0a, 0x61, 0x6c, 0x6c, 0x6f, 0x77, 0x46, 0x69, 0x6c, 0x65, 0x73, 0x12, 0x50, 0x0a, 0x14, 0x61,
+	0x6c, 0x6c, 0x6f, 0x77, 0x5f, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x5f, 0x6d, 0x65, 0x73, 0x73, 0x61,
+	0x67, 0x65, 0x73, 0x18, 0x12, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1e, 0x2e, 0x76, 0x6f, 0x69, 0x63,
+	0x65, 0x2e, 0x75, 0x73, 0x65, 0x72, 0x2e, 0x76, 0x31, 0x2e, 0x50, 0x72, 0x69, 0x76, 0x61, 0x63,
+	0x79, 0x41, 0x75, 0x64, 0x69, 0x65, 0x6e, 0x63, 0x65, 0x52, 0x12, 0x61, 0x6c, 0x6c, 0x6f, 0x77,
+	0x56, 0x6f, 0x69, 0x63, 0x65, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x73, 0x42, 0x0e, 0x0a,
 	0x0c, 0x5f, 0x70, 0x72, 0x65, 0x73, 0x65, 0x74, 0x5f, 0x65, 0x6e, 0x75, 0x6d, 0x22, 0xb7, 0x02,
 	0x0a, 0x15, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x50, 0x72, 0x65, 0x73, 0x65, 0x6e, 0x63, 0x65,
 	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x16, 0x0a, 0x06, 0x73, 0x74, 0x61, 0x74, 0x75,
@@ -3907,7 +4074,7 @@ func file_voice_user_v1_user_proto_rawDescGZIP() []byte {
 }
 
 var file_voice_user_v1_user_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_voice_user_v1_user_proto_msgTypes = make([]protoimpl.MessageInfo, 59)
+var file_voice_user_v1_user_proto_msgTypes = make([]protoimpl.MessageInfo, 60)
 var file_voice_user_v1_user_proto_goTypes = []any{
 	(PresenceOnlineStatus)(0),                     // 0: voice.user.v1.PresenceOnlineStatus
 	(PrivacyPreset)(0),                            // 1: voice.user.v1.PrivacyPreset
@@ -3926,147 +4093,160 @@ var file_voice_user_v1_user_proto_goTypes = []any{
 	(*SearchProfilesResponse)(nil),                // 14: voice.user.v1.SearchProfilesResponse
 	(*GetPrivacySettingsRequest)(nil),             // 15: voice.user.v1.GetPrivacySettingsRequest
 	(*UpdatePrivacySettingsRequest)(nil),          // 16: voice.user.v1.UpdatePrivacySettingsRequest
-	(*PrivacySettings)(nil),                       // 17: voice.user.v1.PrivacySettings
-	(*UpdatePresenceRequest)(nil),                 // 18: voice.user.v1.UpdatePresenceRequest
-	(*GetPresenceRequest)(nil),                    // 19: voice.user.v1.GetPresenceRequest
-	(*PresenceStatus)(nil),                        // 20: voice.user.v1.PresenceStatus
-	(*GetBulkPresenceRequest)(nil),                // 21: voice.user.v1.GetBulkPresenceRequest
-	(*GetSettingsRequest)(nil),                    // 22: voice.user.v1.GetSettingsRequest
-	(*UpdateSettingsRequest)(nil),                 // 23: voice.user.v1.UpdateSettingsRequest
-	(*UserSettings)(nil),                          // 24: voice.user.v1.UserSettings
-	(*GetOnboardingStateRequest)(nil),             // 25: voice.user.v1.GetOnboardingStateRequest
-	(*CompleteOnboardingStepRequest)(nil),         // 26: voice.user.v1.CompleteOnboardingStepRequest
-	(*OnboardingState)(nil),                       // 27: voice.user.v1.OnboardingState
-	(*CreateAvatarPresignedUploadRequest)(nil),    // 28: voice.user.v1.CreateAvatarPresignedUploadRequest
-	(*CreateAvatarPresignedUploadResponse)(nil),   // 29: voice.user.v1.CreateAvatarPresignedUploadResponse
-	(*GetVerificationStatusRequest)(nil),          // 30: voice.user.v1.GetVerificationStatusRequest
-	(*VerificationStatus)(nil),                    // 31: voice.user.v1.VerificationStatus
-	(*GetProfileResponse)(nil),                    // 32: voice.user.v1.GetProfileResponse
-	(*GetProfilesResponse)(nil),                   // 33: voice.user.v1.GetProfilesResponse
-	(*UpdateProfileResponse)(nil),                 // 34: voice.user.v1.UpdateProfileResponse
-	(*CreateProfileResponse)(nil),                 // 35: voice.user.v1.CreateProfileResponse
-	(*DeleteProfileResponse)(nil),                 // 36: voice.user.v1.DeleteProfileResponse
-	(*SwitchProfileResponse)(nil),                 // 37: voice.user.v1.SwitchProfileResponse
-	(*ListMyProfilesResponse)(nil),                // 38: voice.user.v1.ListMyProfilesResponse
-	(*GetPrivacySettingsResponse)(nil),            // 39: voice.user.v1.GetPrivacySettingsResponse
-	(*UpdatePrivacySettingsResponse)(nil),         // 40: voice.user.v1.UpdatePrivacySettingsResponse
-	(*UpdatePresenceResponse)(nil),                // 41: voice.user.v1.UpdatePresenceResponse
-	(*GetPresenceResponse)(nil),                   // 42: voice.user.v1.GetPresenceResponse
-	(*GetBulkPresenceResponse)(nil),               // 43: voice.user.v1.GetBulkPresenceResponse
-	(*GetSettingsResponse)(nil),                   // 44: voice.user.v1.GetSettingsResponse
-	(*UpdateSettingsResponse)(nil),                // 45: voice.user.v1.UpdateSettingsResponse
-	(*GetOnboardingStateResponse)(nil),            // 46: voice.user.v1.GetOnboardingStateResponse
-	(*CompleteOnboardingStepResponse)(nil),        // 47: voice.user.v1.CompleteOnboardingStepResponse
-	(*GetVerificationStatusResponse)(nil),         // 48: voice.user.v1.GetVerificationStatusResponse
-	(*SetVerificationRequest)(nil),                // 49: voice.user.v1.SetVerificationRequest
-	(*SetVerificationResponse)(nil),               // 50: voice.user.v1.SetVerificationResponse
-	(*ClearVerificationRequest)(nil),              // 51: voice.user.v1.ClearVerificationRequest
-	(*ClearVerificationResponse)(nil),             // 52: voice.user.v1.ClearVerificationResponse
-	(*StartOrganizationVerificationRequest)(nil),  // 53: voice.user.v1.StartOrganizationVerificationRequest
-	(*StartOrganizationVerificationResponse)(nil), // 54: voice.user.v1.StartOrganizationVerificationResponse
-	(*CheckOrganizationVerificationRequest)(nil),  // 55: voice.user.v1.CheckOrganizationVerificationRequest
-	(*CheckOrganizationVerificationResponse)(nil), // 56: voice.user.v1.CheckOrganizationVerificationResponse
-	(*ApplyDowngradeProfilesRequest)(nil),         // 57: voice.user.v1.ApplyDowngradeProfilesRequest
-	(*ApplyDowngradeProfilesResponse)(nil),        // 58: voice.user.v1.ApplyDowngradeProfilesResponse
-	nil,                                           // 59: voice.user.v1.CreateAvatarPresignedUploadResponse.RequiredHeadersEntry
-	nil,                                           // 60: voice.user.v1.GetBulkPresenceResponse.ByProfileIdEntry
-	(*timestamppb.Timestamp)(nil),                 // 61: google.protobuf.Timestamp
-	(*v1.CursorPageRequest)(nil),                  // 62: voice.common.v1.CursorPageRequest
-	(*v1.CursorPageResponse)(nil),                 // 63: voice.common.v1.CursorPageResponse
+	(*PrivacyAudience)(nil),                       // 17: voice.user.v1.PrivacyAudience
+	(*PrivacySettings)(nil),                       // 18: voice.user.v1.PrivacySettings
+	(*UpdatePresenceRequest)(nil),                 // 19: voice.user.v1.UpdatePresenceRequest
+	(*GetPresenceRequest)(nil),                    // 20: voice.user.v1.GetPresenceRequest
+	(*PresenceStatus)(nil),                        // 21: voice.user.v1.PresenceStatus
+	(*GetBulkPresenceRequest)(nil),                // 22: voice.user.v1.GetBulkPresenceRequest
+	(*GetSettingsRequest)(nil),                    // 23: voice.user.v1.GetSettingsRequest
+	(*UpdateSettingsRequest)(nil),                 // 24: voice.user.v1.UpdateSettingsRequest
+	(*UserSettings)(nil),                          // 25: voice.user.v1.UserSettings
+	(*GetOnboardingStateRequest)(nil),             // 26: voice.user.v1.GetOnboardingStateRequest
+	(*CompleteOnboardingStepRequest)(nil),         // 27: voice.user.v1.CompleteOnboardingStepRequest
+	(*OnboardingState)(nil),                       // 28: voice.user.v1.OnboardingState
+	(*CreateAvatarPresignedUploadRequest)(nil),    // 29: voice.user.v1.CreateAvatarPresignedUploadRequest
+	(*CreateAvatarPresignedUploadResponse)(nil),   // 30: voice.user.v1.CreateAvatarPresignedUploadResponse
+	(*GetVerificationStatusRequest)(nil),          // 31: voice.user.v1.GetVerificationStatusRequest
+	(*VerificationStatus)(nil),                    // 32: voice.user.v1.VerificationStatus
+	(*GetProfileResponse)(nil),                    // 33: voice.user.v1.GetProfileResponse
+	(*GetProfilesResponse)(nil),                   // 34: voice.user.v1.GetProfilesResponse
+	(*UpdateProfileResponse)(nil),                 // 35: voice.user.v1.UpdateProfileResponse
+	(*CreateProfileResponse)(nil),                 // 36: voice.user.v1.CreateProfileResponse
+	(*DeleteProfileResponse)(nil),                 // 37: voice.user.v1.DeleteProfileResponse
+	(*SwitchProfileResponse)(nil),                 // 38: voice.user.v1.SwitchProfileResponse
+	(*ListMyProfilesResponse)(nil),                // 39: voice.user.v1.ListMyProfilesResponse
+	(*GetPrivacySettingsResponse)(nil),            // 40: voice.user.v1.GetPrivacySettingsResponse
+	(*UpdatePrivacySettingsResponse)(nil),         // 41: voice.user.v1.UpdatePrivacySettingsResponse
+	(*UpdatePresenceResponse)(nil),                // 42: voice.user.v1.UpdatePresenceResponse
+	(*GetPresenceResponse)(nil),                   // 43: voice.user.v1.GetPresenceResponse
+	(*GetBulkPresenceResponse)(nil),               // 44: voice.user.v1.GetBulkPresenceResponse
+	(*GetSettingsResponse)(nil),                   // 45: voice.user.v1.GetSettingsResponse
+	(*UpdateSettingsResponse)(nil),                // 46: voice.user.v1.UpdateSettingsResponse
+	(*GetOnboardingStateResponse)(nil),            // 47: voice.user.v1.GetOnboardingStateResponse
+	(*CompleteOnboardingStepResponse)(nil),        // 48: voice.user.v1.CompleteOnboardingStepResponse
+	(*GetVerificationStatusResponse)(nil),         // 49: voice.user.v1.GetVerificationStatusResponse
+	(*SetVerificationRequest)(nil),                // 50: voice.user.v1.SetVerificationRequest
+	(*SetVerificationResponse)(nil),               // 51: voice.user.v1.SetVerificationResponse
+	(*ClearVerificationRequest)(nil),              // 52: voice.user.v1.ClearVerificationRequest
+	(*ClearVerificationResponse)(nil),             // 53: voice.user.v1.ClearVerificationResponse
+	(*StartOrganizationVerificationRequest)(nil),  // 54: voice.user.v1.StartOrganizationVerificationRequest
+	(*StartOrganizationVerificationResponse)(nil), // 55: voice.user.v1.StartOrganizationVerificationResponse
+	(*CheckOrganizationVerificationRequest)(nil),  // 56: voice.user.v1.CheckOrganizationVerificationRequest
+	(*CheckOrganizationVerificationResponse)(nil), // 57: voice.user.v1.CheckOrganizationVerificationResponse
+	(*ApplyDowngradeProfilesRequest)(nil),         // 58: voice.user.v1.ApplyDowngradeProfilesRequest
+	(*ApplyDowngradeProfilesResponse)(nil),        // 59: voice.user.v1.ApplyDowngradeProfilesResponse
+	nil,                                           // 60: voice.user.v1.CreateAvatarPresignedUploadResponse.RequiredHeadersEntry
+	nil,                                           // 61: voice.user.v1.GetBulkPresenceResponse.ByProfileIdEntry
+	(*timestamppb.Timestamp)(nil),                 // 62: google.protobuf.Timestamp
+	(*v1.CursorPageRequest)(nil),                  // 63: voice.common.v1.CursorPageRequest
+	(*v1.CursorPageResponse)(nil),                 // 64: voice.common.v1.CursorPageResponse
 }
 var file_voice_user_v1_user_proto_depIdxs = []int32{
 	7,  // 0: voice.user.v1.EnsurePrimaryProfileResponse.profile:type_name -> voice.user.v1.Profile
 	7,  // 1: voice.user.v1.ProfileList.profiles:type_name -> voice.user.v1.Profile
-	61, // 2: voice.user.v1.Profile.created_at:type_name -> google.protobuf.Timestamp
-	61, // 3: voice.user.v1.Profile.updated_at:type_name -> google.protobuf.Timestamp
-	61, // 4: voice.user.v1.Profile.frozen_at:type_name -> google.protobuf.Timestamp
-	62, // 5: voice.user.v1.SearchProfilesRequest.page:type_name -> voice.common.v1.CursorPageRequest
+	62, // 2: voice.user.v1.Profile.created_at:type_name -> google.protobuf.Timestamp
+	62, // 3: voice.user.v1.Profile.updated_at:type_name -> google.protobuf.Timestamp
+	62, // 4: voice.user.v1.Profile.frozen_at:type_name -> google.protobuf.Timestamp
+	63, // 5: voice.user.v1.SearchProfilesRequest.page:type_name -> voice.common.v1.CursorPageRequest
 	6,  // 6: voice.user.v1.SearchProfilesResponse.profile_list:type_name -> voice.user.v1.ProfileList
-	63, // 7: voice.user.v1.SearchProfilesResponse.page:type_name -> voice.common.v1.CursorPageResponse
-	17, // 8: voice.user.v1.UpdatePrivacySettingsRequest.settings:type_name -> voice.user.v1.PrivacySettings
-	61, // 9: voice.user.v1.PrivacySettings.updated_at:type_name -> google.protobuf.Timestamp
-	1,  // 10: voice.user.v1.PrivacySettings.preset_enum:type_name -> voice.user.v1.PrivacyPreset
-	0,  // 11: voice.user.v1.UpdatePresenceRequest.status_enum:type_name -> voice.user.v1.PresenceOnlineStatus
-	61, // 12: voice.user.v1.PresenceStatus.last_seen:type_name -> google.protobuf.Timestamp
-	0,  // 13: voice.user.v1.PresenceStatus.status_enum:type_name -> voice.user.v1.PresenceOnlineStatus
-	24, // 14: voice.user.v1.UpdateSettingsRequest.settings:type_name -> voice.user.v1.UserSettings
-	61, // 15: voice.user.v1.OnboardingState.completed_at:type_name -> google.protobuf.Timestamp
-	59, // 16: voice.user.v1.CreateAvatarPresignedUploadResponse.required_headers:type_name -> voice.user.v1.CreateAvatarPresignedUploadResponse.RequiredHeadersEntry
-	61, // 17: voice.user.v1.CreateAvatarPresignedUploadResponse.expires_at:type_name -> google.protobuf.Timestamp
-	7,  // 18: voice.user.v1.GetProfileResponse.profile:type_name -> voice.user.v1.Profile
-	6,  // 19: voice.user.v1.GetProfilesResponse.profile_list:type_name -> voice.user.v1.ProfileList
-	7,  // 20: voice.user.v1.UpdateProfileResponse.profile:type_name -> voice.user.v1.Profile
-	7,  // 21: voice.user.v1.CreateProfileResponse.profile:type_name -> voice.user.v1.Profile
-	7,  // 22: voice.user.v1.SwitchProfileResponse.profile:type_name -> voice.user.v1.Profile
-	6,  // 23: voice.user.v1.ListMyProfilesResponse.profile_list:type_name -> voice.user.v1.ProfileList
-	17, // 24: voice.user.v1.GetPrivacySettingsResponse.privacy_settings:type_name -> voice.user.v1.PrivacySettings
-	17, // 25: voice.user.v1.UpdatePrivacySettingsResponse.privacy_settings:type_name -> voice.user.v1.PrivacySettings
-	20, // 26: voice.user.v1.GetPresenceResponse.presence_status:type_name -> voice.user.v1.PresenceStatus
-	60, // 27: voice.user.v1.GetBulkPresenceResponse.by_profile_id:type_name -> voice.user.v1.GetBulkPresenceResponse.ByProfileIdEntry
-	24, // 28: voice.user.v1.GetSettingsResponse.user_settings:type_name -> voice.user.v1.UserSettings
-	24, // 29: voice.user.v1.UpdateSettingsResponse.user_settings:type_name -> voice.user.v1.UserSettings
-	27, // 30: voice.user.v1.GetOnboardingStateResponse.onboarding_state:type_name -> voice.user.v1.OnboardingState
-	27, // 31: voice.user.v1.CompleteOnboardingStepResponse.onboarding_state:type_name -> voice.user.v1.OnboardingState
-	31, // 32: voice.user.v1.GetVerificationStatusResponse.verification_status:type_name -> voice.user.v1.VerificationStatus
-	31, // 33: voice.user.v1.SetVerificationResponse.verification_status:type_name -> voice.user.v1.VerificationStatus
-	31, // 34: voice.user.v1.ClearVerificationResponse.verification_status:type_name -> voice.user.v1.VerificationStatus
-	31, // 35: voice.user.v1.CheckOrganizationVerificationResponse.verification_status:type_name -> voice.user.v1.VerificationStatus
-	20, // 36: voice.user.v1.GetBulkPresenceResponse.ByProfileIdEntry.value:type_name -> voice.user.v1.PresenceStatus
-	2,  // 37: voice.user.v1.UserService.EnsurePrimaryProfile:input_type -> voice.user.v1.EnsurePrimaryProfileRequest
-	4,  // 38: voice.user.v1.UserService.GetProfile:input_type -> voice.user.v1.GetProfileRequest
-	5,  // 39: voice.user.v1.UserService.GetProfiles:input_type -> voice.user.v1.GetProfilesRequest
-	8,  // 40: voice.user.v1.UserService.UpdateProfile:input_type -> voice.user.v1.UpdateProfileRequest
-	9,  // 41: voice.user.v1.UserService.CreateProfile:input_type -> voice.user.v1.CreateProfileRequest
-	10, // 42: voice.user.v1.UserService.DeleteProfile:input_type -> voice.user.v1.DeleteProfileRequest
-	11, // 43: voice.user.v1.UserService.SwitchProfile:input_type -> voice.user.v1.SwitchProfileRequest
-	12, // 44: voice.user.v1.UserService.ListMyProfiles:input_type -> voice.user.v1.ListMyProfilesRequest
-	13, // 45: voice.user.v1.UserService.SearchProfiles:input_type -> voice.user.v1.SearchProfilesRequest
-	15, // 46: voice.user.v1.UserService.GetPrivacySettings:input_type -> voice.user.v1.GetPrivacySettingsRequest
-	16, // 47: voice.user.v1.UserService.UpdatePrivacySettings:input_type -> voice.user.v1.UpdatePrivacySettingsRequest
-	18, // 48: voice.user.v1.UserService.UpdatePresence:input_type -> voice.user.v1.UpdatePresenceRequest
-	19, // 49: voice.user.v1.UserService.GetPresence:input_type -> voice.user.v1.GetPresenceRequest
-	21, // 50: voice.user.v1.UserService.GetBulkPresence:input_type -> voice.user.v1.GetBulkPresenceRequest
-	22, // 51: voice.user.v1.UserService.GetSettings:input_type -> voice.user.v1.GetSettingsRequest
-	23, // 52: voice.user.v1.UserService.UpdateSettings:input_type -> voice.user.v1.UpdateSettingsRequest
-	25, // 53: voice.user.v1.UserService.GetOnboardingState:input_type -> voice.user.v1.GetOnboardingStateRequest
-	26, // 54: voice.user.v1.UserService.CompleteOnboardingStep:input_type -> voice.user.v1.CompleteOnboardingStepRequest
-	30, // 55: voice.user.v1.UserService.GetVerificationStatus:input_type -> voice.user.v1.GetVerificationStatusRequest
-	49, // 56: voice.user.v1.UserService.SetVerification:input_type -> voice.user.v1.SetVerificationRequest
-	51, // 57: voice.user.v1.UserService.ClearVerification:input_type -> voice.user.v1.ClearVerificationRequest
-	53, // 58: voice.user.v1.UserService.StartOrganizationVerification:input_type -> voice.user.v1.StartOrganizationVerificationRequest
-	55, // 59: voice.user.v1.UserService.CheckOrganizationVerification:input_type -> voice.user.v1.CheckOrganizationVerificationRequest
-	57, // 60: voice.user.v1.UserService.ApplyDowngradeProfiles:input_type -> voice.user.v1.ApplyDowngradeProfilesRequest
-	28, // 61: voice.user.v1.UserService.CreateAvatarPresignedUpload:input_type -> voice.user.v1.CreateAvatarPresignedUploadRequest
-	3,  // 62: voice.user.v1.UserService.EnsurePrimaryProfile:output_type -> voice.user.v1.EnsurePrimaryProfileResponse
-	32, // 63: voice.user.v1.UserService.GetProfile:output_type -> voice.user.v1.GetProfileResponse
-	33, // 64: voice.user.v1.UserService.GetProfiles:output_type -> voice.user.v1.GetProfilesResponse
-	34, // 65: voice.user.v1.UserService.UpdateProfile:output_type -> voice.user.v1.UpdateProfileResponse
-	35, // 66: voice.user.v1.UserService.CreateProfile:output_type -> voice.user.v1.CreateProfileResponse
-	36, // 67: voice.user.v1.UserService.DeleteProfile:output_type -> voice.user.v1.DeleteProfileResponse
-	37, // 68: voice.user.v1.UserService.SwitchProfile:output_type -> voice.user.v1.SwitchProfileResponse
-	38, // 69: voice.user.v1.UserService.ListMyProfiles:output_type -> voice.user.v1.ListMyProfilesResponse
-	14, // 70: voice.user.v1.UserService.SearchProfiles:output_type -> voice.user.v1.SearchProfilesResponse
-	39, // 71: voice.user.v1.UserService.GetPrivacySettings:output_type -> voice.user.v1.GetPrivacySettingsResponse
-	40, // 72: voice.user.v1.UserService.UpdatePrivacySettings:output_type -> voice.user.v1.UpdatePrivacySettingsResponse
-	41, // 73: voice.user.v1.UserService.UpdatePresence:output_type -> voice.user.v1.UpdatePresenceResponse
-	42, // 74: voice.user.v1.UserService.GetPresence:output_type -> voice.user.v1.GetPresenceResponse
-	43, // 75: voice.user.v1.UserService.GetBulkPresence:output_type -> voice.user.v1.GetBulkPresenceResponse
-	44, // 76: voice.user.v1.UserService.GetSettings:output_type -> voice.user.v1.GetSettingsResponse
-	45, // 77: voice.user.v1.UserService.UpdateSettings:output_type -> voice.user.v1.UpdateSettingsResponse
-	46, // 78: voice.user.v1.UserService.GetOnboardingState:output_type -> voice.user.v1.GetOnboardingStateResponse
-	47, // 79: voice.user.v1.UserService.CompleteOnboardingStep:output_type -> voice.user.v1.CompleteOnboardingStepResponse
-	48, // 80: voice.user.v1.UserService.GetVerificationStatus:output_type -> voice.user.v1.GetVerificationStatusResponse
-	50, // 81: voice.user.v1.UserService.SetVerification:output_type -> voice.user.v1.SetVerificationResponse
-	52, // 82: voice.user.v1.UserService.ClearVerification:output_type -> voice.user.v1.ClearVerificationResponse
-	54, // 83: voice.user.v1.UserService.StartOrganizationVerification:output_type -> voice.user.v1.StartOrganizationVerificationResponse
-	56, // 84: voice.user.v1.UserService.CheckOrganizationVerification:output_type -> voice.user.v1.CheckOrganizationVerificationResponse
-	58, // 85: voice.user.v1.UserService.ApplyDowngradeProfiles:output_type -> voice.user.v1.ApplyDowngradeProfilesResponse
-	29, // 86: voice.user.v1.UserService.CreateAvatarPresignedUpload:output_type -> voice.user.v1.CreateAvatarPresignedUploadResponse
-	62, // [62:87] is the sub-list for method output_type
-	37, // [37:62] is the sub-list for method input_type
-	37, // [37:37] is the sub-list for extension type_name
-	37, // [37:37] is the sub-list for extension extendee
-	0,  // [0:37] is the sub-list for field type_name
+	64, // 7: voice.user.v1.SearchProfilesResponse.page:type_name -> voice.common.v1.CursorPageResponse
+	18, // 8: voice.user.v1.UpdatePrivacySettingsRequest.settings:type_name -> voice.user.v1.PrivacySettings
+	17, // 9: voice.user.v1.PrivacySettings.show_online:type_name -> voice.user.v1.PrivacyAudience
+	17, // 10: voice.user.v1.PrivacySettings.show_game_status:type_name -> voice.user.v1.PrivacyAudience
+	17, // 11: voice.user.v1.PrivacySettings.show_mm_rating:type_name -> voice.user.v1.PrivacyAudience
+	17, // 12: voice.user.v1.PrivacySettings.show_phone:type_name -> voice.user.v1.PrivacyAudience
+	17, // 13: voice.user.v1.PrivacySettings.show_stories:type_name -> voice.user.v1.PrivacyAudience
+	17, // 14: voice.user.v1.PrivacySettings.allow_dm:type_name -> voice.user.v1.PrivacyAudience
+	17, // 15: voice.user.v1.PrivacySettings.allow_friend_requests:type_name -> voice.user.v1.PrivacyAudience
+	62, // 16: voice.user.v1.PrivacySettings.updated_at:type_name -> google.protobuf.Timestamp
+	1,  // 17: voice.user.v1.PrivacySettings.preset_enum:type_name -> voice.user.v1.PrivacyPreset
+	17, // 18: voice.user.v1.PrivacySettings.allow_phone_search:type_name -> voice.user.v1.PrivacyAudience
+	17, // 19: voice.user.v1.PrivacySettings.allow_calls:type_name -> voice.user.v1.PrivacyAudience
+	17, // 20: voice.user.v1.PrivacySettings.allow_chat_space_invites:type_name -> voice.user.v1.PrivacyAudience
+	17, // 21: voice.user.v1.PrivacySettings.allow_files:type_name -> voice.user.v1.PrivacyAudience
+	17, // 22: voice.user.v1.PrivacySettings.allow_voice_messages:type_name -> voice.user.v1.PrivacyAudience
+	0,  // 23: voice.user.v1.UpdatePresenceRequest.status_enum:type_name -> voice.user.v1.PresenceOnlineStatus
+	62, // 24: voice.user.v1.PresenceStatus.last_seen:type_name -> google.protobuf.Timestamp
+	0,  // 25: voice.user.v1.PresenceStatus.status_enum:type_name -> voice.user.v1.PresenceOnlineStatus
+	25, // 26: voice.user.v1.UpdateSettingsRequest.settings:type_name -> voice.user.v1.UserSettings
+	62, // 27: voice.user.v1.OnboardingState.completed_at:type_name -> google.protobuf.Timestamp
+	60, // 28: voice.user.v1.CreateAvatarPresignedUploadResponse.required_headers:type_name -> voice.user.v1.CreateAvatarPresignedUploadResponse.RequiredHeadersEntry
+	62, // 29: voice.user.v1.CreateAvatarPresignedUploadResponse.expires_at:type_name -> google.protobuf.Timestamp
+	7,  // 30: voice.user.v1.GetProfileResponse.profile:type_name -> voice.user.v1.Profile
+	6,  // 31: voice.user.v1.GetProfilesResponse.profile_list:type_name -> voice.user.v1.ProfileList
+	7,  // 32: voice.user.v1.UpdateProfileResponse.profile:type_name -> voice.user.v1.Profile
+	7,  // 33: voice.user.v1.CreateProfileResponse.profile:type_name -> voice.user.v1.Profile
+	7,  // 34: voice.user.v1.SwitchProfileResponse.profile:type_name -> voice.user.v1.Profile
+	6,  // 35: voice.user.v1.ListMyProfilesResponse.profile_list:type_name -> voice.user.v1.ProfileList
+	18, // 36: voice.user.v1.GetPrivacySettingsResponse.privacy_settings:type_name -> voice.user.v1.PrivacySettings
+	18, // 37: voice.user.v1.UpdatePrivacySettingsResponse.privacy_settings:type_name -> voice.user.v1.PrivacySettings
+	21, // 38: voice.user.v1.GetPresenceResponse.presence_status:type_name -> voice.user.v1.PresenceStatus
+	61, // 39: voice.user.v1.GetBulkPresenceResponse.by_profile_id:type_name -> voice.user.v1.GetBulkPresenceResponse.ByProfileIdEntry
+	25, // 40: voice.user.v1.GetSettingsResponse.user_settings:type_name -> voice.user.v1.UserSettings
+	25, // 41: voice.user.v1.UpdateSettingsResponse.user_settings:type_name -> voice.user.v1.UserSettings
+	28, // 42: voice.user.v1.GetOnboardingStateResponse.onboarding_state:type_name -> voice.user.v1.OnboardingState
+	28, // 43: voice.user.v1.CompleteOnboardingStepResponse.onboarding_state:type_name -> voice.user.v1.OnboardingState
+	32, // 44: voice.user.v1.GetVerificationStatusResponse.verification_status:type_name -> voice.user.v1.VerificationStatus
+	32, // 45: voice.user.v1.SetVerificationResponse.verification_status:type_name -> voice.user.v1.VerificationStatus
+	32, // 46: voice.user.v1.ClearVerificationResponse.verification_status:type_name -> voice.user.v1.VerificationStatus
+	32, // 47: voice.user.v1.CheckOrganizationVerificationResponse.verification_status:type_name -> voice.user.v1.VerificationStatus
+	21, // 48: voice.user.v1.GetBulkPresenceResponse.ByProfileIdEntry.value:type_name -> voice.user.v1.PresenceStatus
+	2,  // 49: voice.user.v1.UserService.EnsurePrimaryProfile:input_type -> voice.user.v1.EnsurePrimaryProfileRequest
+	4,  // 50: voice.user.v1.UserService.GetProfile:input_type -> voice.user.v1.GetProfileRequest
+	5,  // 51: voice.user.v1.UserService.GetProfiles:input_type -> voice.user.v1.GetProfilesRequest
+	8,  // 52: voice.user.v1.UserService.UpdateProfile:input_type -> voice.user.v1.UpdateProfileRequest
+	9,  // 53: voice.user.v1.UserService.CreateProfile:input_type -> voice.user.v1.CreateProfileRequest
+	10, // 54: voice.user.v1.UserService.DeleteProfile:input_type -> voice.user.v1.DeleteProfileRequest
+	11, // 55: voice.user.v1.UserService.SwitchProfile:input_type -> voice.user.v1.SwitchProfileRequest
+	12, // 56: voice.user.v1.UserService.ListMyProfiles:input_type -> voice.user.v1.ListMyProfilesRequest
+	13, // 57: voice.user.v1.UserService.SearchProfiles:input_type -> voice.user.v1.SearchProfilesRequest
+	15, // 58: voice.user.v1.UserService.GetPrivacySettings:input_type -> voice.user.v1.GetPrivacySettingsRequest
+	16, // 59: voice.user.v1.UserService.UpdatePrivacySettings:input_type -> voice.user.v1.UpdatePrivacySettingsRequest
+	19, // 60: voice.user.v1.UserService.UpdatePresence:input_type -> voice.user.v1.UpdatePresenceRequest
+	20, // 61: voice.user.v1.UserService.GetPresence:input_type -> voice.user.v1.GetPresenceRequest
+	22, // 62: voice.user.v1.UserService.GetBulkPresence:input_type -> voice.user.v1.GetBulkPresenceRequest
+	23, // 63: voice.user.v1.UserService.GetSettings:input_type -> voice.user.v1.GetSettingsRequest
+	24, // 64: voice.user.v1.UserService.UpdateSettings:input_type -> voice.user.v1.UpdateSettingsRequest
+	26, // 65: voice.user.v1.UserService.GetOnboardingState:input_type -> voice.user.v1.GetOnboardingStateRequest
+	27, // 66: voice.user.v1.UserService.CompleteOnboardingStep:input_type -> voice.user.v1.CompleteOnboardingStepRequest
+	31, // 67: voice.user.v1.UserService.GetVerificationStatus:input_type -> voice.user.v1.GetVerificationStatusRequest
+	50, // 68: voice.user.v1.UserService.SetVerification:input_type -> voice.user.v1.SetVerificationRequest
+	52, // 69: voice.user.v1.UserService.ClearVerification:input_type -> voice.user.v1.ClearVerificationRequest
+	54, // 70: voice.user.v1.UserService.StartOrganizationVerification:input_type -> voice.user.v1.StartOrganizationVerificationRequest
+	56, // 71: voice.user.v1.UserService.CheckOrganizationVerification:input_type -> voice.user.v1.CheckOrganizationVerificationRequest
+	58, // 72: voice.user.v1.UserService.ApplyDowngradeProfiles:input_type -> voice.user.v1.ApplyDowngradeProfilesRequest
+	29, // 73: voice.user.v1.UserService.CreateAvatarPresignedUpload:input_type -> voice.user.v1.CreateAvatarPresignedUploadRequest
+	3,  // 74: voice.user.v1.UserService.EnsurePrimaryProfile:output_type -> voice.user.v1.EnsurePrimaryProfileResponse
+	33, // 75: voice.user.v1.UserService.GetProfile:output_type -> voice.user.v1.GetProfileResponse
+	34, // 76: voice.user.v1.UserService.GetProfiles:output_type -> voice.user.v1.GetProfilesResponse
+	35, // 77: voice.user.v1.UserService.UpdateProfile:output_type -> voice.user.v1.UpdateProfileResponse
+	36, // 78: voice.user.v1.UserService.CreateProfile:output_type -> voice.user.v1.CreateProfileResponse
+	37, // 79: voice.user.v1.UserService.DeleteProfile:output_type -> voice.user.v1.DeleteProfileResponse
+	38, // 80: voice.user.v1.UserService.SwitchProfile:output_type -> voice.user.v1.SwitchProfileResponse
+	39, // 81: voice.user.v1.UserService.ListMyProfiles:output_type -> voice.user.v1.ListMyProfilesResponse
+	14, // 82: voice.user.v1.UserService.SearchProfiles:output_type -> voice.user.v1.SearchProfilesResponse
+	40, // 83: voice.user.v1.UserService.GetPrivacySettings:output_type -> voice.user.v1.GetPrivacySettingsResponse
+	41, // 84: voice.user.v1.UserService.UpdatePrivacySettings:output_type -> voice.user.v1.UpdatePrivacySettingsResponse
+	42, // 85: voice.user.v1.UserService.UpdatePresence:output_type -> voice.user.v1.UpdatePresenceResponse
+	43, // 86: voice.user.v1.UserService.GetPresence:output_type -> voice.user.v1.GetPresenceResponse
+	44, // 87: voice.user.v1.UserService.GetBulkPresence:output_type -> voice.user.v1.GetBulkPresenceResponse
+	45, // 88: voice.user.v1.UserService.GetSettings:output_type -> voice.user.v1.GetSettingsResponse
+	46, // 89: voice.user.v1.UserService.UpdateSettings:output_type -> voice.user.v1.UpdateSettingsResponse
+	47, // 90: voice.user.v1.UserService.GetOnboardingState:output_type -> voice.user.v1.GetOnboardingStateResponse
+	48, // 91: voice.user.v1.UserService.CompleteOnboardingStep:output_type -> voice.user.v1.CompleteOnboardingStepResponse
+	49, // 92: voice.user.v1.UserService.GetVerificationStatus:output_type -> voice.user.v1.GetVerificationStatusResponse
+	51, // 93: voice.user.v1.UserService.SetVerification:output_type -> voice.user.v1.SetVerificationResponse
+	53, // 94: voice.user.v1.UserService.ClearVerification:output_type -> voice.user.v1.ClearVerificationResponse
+	55, // 95: voice.user.v1.UserService.StartOrganizationVerification:output_type -> voice.user.v1.StartOrganizationVerificationResponse
+	57, // 96: voice.user.v1.UserService.CheckOrganizationVerification:output_type -> voice.user.v1.CheckOrganizationVerificationResponse
+	59, // 97: voice.user.v1.UserService.ApplyDowngradeProfiles:output_type -> voice.user.v1.ApplyDowngradeProfilesResponse
+	30, // 98: voice.user.v1.UserService.CreateAvatarPresignedUpload:output_type -> voice.user.v1.CreateAvatarPresignedUploadResponse
+	74, // [74:99] is the sub-list for method output_type
+	49, // [49:74] is the sub-list for method input_type
+	49, // [49:49] is the sub-list for extension type_name
+	49, // [49:49] is the sub-list for extension extendee
+	0,  // [0:49] is the sub-list for field type_name
 }
 
 func init() { file_voice_user_v1_user_proto_init() }
@@ -4082,19 +4262,19 @@ func file_voice_user_v1_user_proto_init() {
 	file_voice_user_v1_user_proto_msgTypes[5].OneofWrappers = []any{}
 	file_voice_user_v1_user_proto_msgTypes[6].OneofWrappers = []any{}
 	file_voice_user_v1_user_proto_msgTypes[7].OneofWrappers = []any{}
-	file_voice_user_v1_user_proto_msgTypes[15].OneofWrappers = []any{}
 	file_voice_user_v1_user_proto_msgTypes[16].OneofWrappers = []any{}
-	file_voice_user_v1_user_proto_msgTypes[18].OneofWrappers = []any{}
-	file_voice_user_v1_user_proto_msgTypes[25].OneofWrappers = []any{}
-	file_voice_user_v1_user_proto_msgTypes[29].OneofWrappers = []any{}
-	file_voice_user_v1_user_proto_msgTypes[47].OneofWrappers = []any{}
+	file_voice_user_v1_user_proto_msgTypes[17].OneofWrappers = []any{}
+	file_voice_user_v1_user_proto_msgTypes[19].OneofWrappers = []any{}
+	file_voice_user_v1_user_proto_msgTypes[26].OneofWrappers = []any{}
+	file_voice_user_v1_user_proto_msgTypes[30].OneofWrappers = []any{}
+	file_voice_user_v1_user_proto_msgTypes[48].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_voice_user_v1_user_proto_rawDesc), len(file_voice_user_v1_user_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   59,
+			NumMessages:   60,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

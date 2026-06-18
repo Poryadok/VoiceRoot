@@ -6,6 +6,8 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 
+	"voice/backend/pkg/privacy"
+
 	filev1 "voice.app/voice/file/v1"
 )
 
@@ -28,7 +30,12 @@ type AccountPairBlockChecker interface {
 
 // PrivacyChecker reads recipient DM privacy policy.
 type PrivacyChecker interface {
-	AllowDM(ctx context.Context, profileID uuid.UUID) (string, error)
+	AllowDMAudience(ctx context.Context, profileID uuid.UUID) (privacy.Audience, error)
+}
+
+// SpaceCoMembershipChecker checks shared space membership for privacy audiences.
+type SpaceCoMembershipChecker interface {
+	AreCoMembers(ctx context.Context, profileA, profileB uuid.UUID, spaceIDs []string) (bool, error)
 }
 
 // ProfileFriendChecker verifies if two profiles are friends or friends-of-friends.

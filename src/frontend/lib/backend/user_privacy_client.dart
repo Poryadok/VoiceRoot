@@ -25,6 +25,137 @@ final class UserPrivacyApiFailure extends UserPrivacyApiResult<Never> {
   final int? statusCode;
 }
 
+/// Multiselect audience union aligned with [user_pb.PrivacyAudience].
+class VoicePrivacyAudience {
+  const VoicePrivacyAudience({
+    this.friends = false,
+    this.friendsOfFriends = false,
+    this.spaceMembers = false,
+    this.spaceIds = const [],
+    this.includeGuests = false,
+  });
+
+  final bool friends;
+  final bool friendsOfFriends;
+  final bool spaceMembers;
+  final List<String> spaceIds;
+  final bool includeGuests;
+
+  static const nobody = VoicePrivacyAudience();
+
+  static const friendsOnly = VoicePrivacyAudience(friends: true);
+
+  static const friendsAndFoF = VoicePrivacyAudience(
+    friends: true,
+    friendsOfFriends: true,
+  );
+
+  static const spaceMembersOnly = VoicePrivacyAudience(spaceMembers: true);
+
+  static const spaceMembersAndFriends = VoicePrivacyAudience(
+    spaceMembers: true,
+    friends: true,
+  );
+
+  static const everyoneWithGuests = VoicePrivacyAudience(
+    friends: true,
+    friendsOfFriends: true,
+    spaceMembers: true,
+    includeGuests: true,
+  );
+
+  bool get isNobody =>
+      !friends &&
+      !friendsOfFriends &&
+      !spaceMembers &&
+      !includeGuests &&
+      spaceIds.isEmpty;
+
+  bool get isEveryoneShortcut =>
+      friends &&
+      friendsOfFriends &&
+      spaceMembers &&
+      includeGuests &&
+      spaceIds.isEmpty;
+
+  user_pb.PrivacyAudience toProto() {
+    return user_pb.PrivacyAudience(
+      friends: friends,
+      friendsOfFriends: friendsOfFriends,
+      spaceMembers: spaceMembers,
+      spaceIds: spaceIds,
+      includeGuests: includeGuests,
+    );
+  }
+
+  VoicePrivacyAudience copyWith({
+    bool? friends,
+    bool? friendsOfFriends,
+    bool? spaceMembers,
+    List<String>? spaceIds,
+    bool? includeGuests,
+  }) {
+    return VoicePrivacyAudience(
+      friends: friends ?? this.friends,
+      friendsOfFriends: friendsOfFriends ?? this.friendsOfFriends,
+      spaceMembers: spaceMembers ?? this.spaceMembers,
+      spaceIds: spaceIds ?? this.spaceIds,
+      includeGuests: includeGuests ?? this.includeGuests,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is VoicePrivacyAudience &&
+        other.friends == friends &&
+        other.friendsOfFriends == friendsOfFriends &&
+        other.spaceMembers == spaceMembers &&
+        _listEquals(other.spaceIds, spaceIds) &&
+        other.includeGuests == includeGuests;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    friends,
+    friendsOfFriends,
+    spaceMembers,
+    Object.hashAll(spaceIds),
+    includeGuests,
+  );
+}
+
+bool _listEquals(List<String> a, List<String> b) {
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
+}
+
+VoicePrivacyAudience voicePrivacyAudienceFromProto(user_pb.PrivacyAudience proto) {
+  return VoicePrivacyAudience(
+    friends: proto.friends,
+    friendsOfFriends: proto.friendsOfFriends,
+    spaceMembers: proto.spaceMembers,
+    spaceIds: List.unmodifiable(proto.spaceIds),
+    includeGuests: proto.includeGuests,
+  );
+}
+
+VoicePrivacyAudience voicePrivacyAudienceFromJson(Map<String, dynamic>? json) {
+  if (json == null) return VoicePrivacyAudience.nobody;
+  return VoicePrivacyAudience(
+    friends: json['friends'] == true,
+    friendsOfFriends: json['friends_of_friends'] == true,
+    spaceMembers: json['space_members'] == true,
+    spaceIds: (json['space_ids'] as List<dynamic>?)
+            ?.map((e) => e.toString())
+            .toList() ??
+        const [],
+    includeGuests: json['include_guests'] == true,
+  );
+}
+
 class VoicePrivacySettings {
   const VoicePrivacySettings({
     required this.profileId,
@@ -37,48 +168,64 @@ class VoicePrivacySettings {
     required this.allowDm,
     required this.allowFriendRequests,
     required this.allowGuestDm,
-    this.showOnlineIncludeGuests = false,
+    required this.allowPhoneSearch,
+    required this.allowCalls,
+    required this.allowChatSpaceInvites,
+    required this.allowFiles,
+    required this.allowVoiceMessages,
   });
 
   final String profileId;
   final String preset;
-  final String showOnline;
-  final String showGameStatus;
-  final String showMmRating;
-  final String showPhone;
-  final String showStories;
-  final String allowDm;
-  final String allowFriendRequests;
+  final VoicePrivacyAudience showOnline;
+  final VoicePrivacyAudience showGameStatus;
+  final VoicePrivacyAudience showMmRating;
+  final VoicePrivacyAudience showPhone;
+  final VoicePrivacyAudience showStories;
+  final VoicePrivacyAudience allowDm;
+  final VoicePrivacyAudience allowFriendRequests;
   final bool allowGuestDm;
-  final bool showOnlineIncludeGuests;
+  final VoicePrivacyAudience allowPhoneSearch;
+  final VoicePrivacyAudience allowCalls;
+  final VoicePrivacyAudience allowChatSpaceInvites;
+  final VoicePrivacyAudience allowFiles;
+  final VoicePrivacyAudience allowVoiceMessages;
 
   user_pb.PrivacySettings toProto() {
     return user_pb.PrivacySettings(
       profileId: profileId,
       preset: preset,
-      showOnline: showOnline,
-      showGameStatus: showGameStatus,
-      showMmRating: showMmRating,
-      showPhone: showPhone,
-      showStories: showStories,
-      allowDm: allowDm,
-      allowFriendRequests: allowFriendRequests,
+      showOnline: showOnline.toProto(),
+      showGameStatus: showGameStatus.toProto(),
+      showMmRating: showMmRating.toProto(),
+      showPhone: showPhone.toProto(),
+      showStories: showStories.toProto(),
+      allowDm: allowDm.toProto(),
+      allowFriendRequests: allowFriendRequests.toProto(),
       allowGuestDm: allowGuestDm,
-      showOnlineIncludeGuests: showOnlineIncludeGuests,
+      allowPhoneSearch: allowPhoneSearch.toProto(),
+      allowCalls: allowCalls.toProto(),
+      allowChatSpaceInvites: allowChatSpaceInvites.toProto(),
+      allowFiles: allowFiles.toProto(),
+      allowVoiceMessages: allowVoiceMessages.toProto(),
     );
   }
 
   VoicePrivacySettings copyWith({
     String? preset,
-    String? showOnline,
-    String? showGameStatus,
-    String? showMmRating,
-    String? showPhone,
-    String? showStories,
-    String? allowDm,
-    String? allowFriendRequests,
+    VoicePrivacyAudience? showOnline,
+    VoicePrivacyAudience? showGameStatus,
+    VoicePrivacyAudience? showMmRating,
+    VoicePrivacyAudience? showPhone,
+    VoicePrivacyAudience? showStories,
+    VoicePrivacyAudience? allowDm,
+    VoicePrivacyAudience? allowFriendRequests,
     bool? allowGuestDm,
-    bool? showOnlineIncludeGuests,
+    VoicePrivacyAudience? allowPhoneSearch,
+    VoicePrivacyAudience? allowCalls,
+    VoicePrivacyAudience? allowChatSpaceInvites,
+    VoicePrivacyAudience? allowFiles,
+    VoicePrivacyAudience? allowVoiceMessages,
   }) {
     return VoicePrivacySettings(
       profileId: profileId,
@@ -91,8 +238,12 @@ class VoicePrivacySettings {
       allowDm: allowDm ?? this.allowDm,
       allowFriendRequests: allowFriendRequests ?? this.allowFriendRequests,
       allowGuestDm: allowGuestDm ?? this.allowGuestDm,
-      showOnlineIncludeGuests:
-          showOnlineIncludeGuests ?? this.showOnlineIncludeGuests,
+      allowPhoneSearch: allowPhoneSearch ?? this.allowPhoneSearch,
+      allowCalls: allowCalls ?? this.allowCalls,
+      allowChatSpaceInvites:
+          allowChatSpaceInvites ?? this.allowChatSpaceInvites,
+      allowFiles: allowFiles ?? this.allowFiles,
+      allowVoiceMessages: allowVoiceMessages ?? this.allowVoiceMessages,
     );
   }
 }
@@ -101,15 +252,43 @@ VoicePrivacySettings voicePrivacyFromProto(user_pb.PrivacySettings proto) {
   return VoicePrivacySettings(
     profileId: proto.profileId,
     preset: proto.preset.isEmpty ? 'gaming' : proto.preset,
-    showOnline: proto.showOnline,
-    showGameStatus: proto.showGameStatus,
-    showMmRating: proto.showMmRating,
-    showPhone: proto.showPhone,
-    showStories: proto.showStories,
-    allowDm: proto.allowDm,
-    allowFriendRequests: proto.allowFriendRequests,
+    showOnline: proto.hasShowOnline()
+        ? voicePrivacyAudienceFromProto(proto.showOnline)
+        : VoicePrivacyAudience.nobody,
+    showGameStatus: proto.hasShowGameStatus()
+        ? voicePrivacyAudienceFromProto(proto.showGameStatus)
+        : VoicePrivacyAudience.nobody,
+    showMmRating: proto.hasShowMmRating()
+        ? voicePrivacyAudienceFromProto(proto.showMmRating)
+        : VoicePrivacyAudience.nobody,
+    showPhone: proto.hasShowPhone()
+        ? voicePrivacyAudienceFromProto(proto.showPhone)
+        : VoicePrivacyAudience.nobody,
+    showStories: proto.hasShowStories()
+        ? voicePrivacyAudienceFromProto(proto.showStories)
+        : VoicePrivacyAudience.nobody,
+    allowDm: proto.hasAllowDm()
+        ? voicePrivacyAudienceFromProto(proto.allowDm)
+        : VoicePrivacyAudience.nobody,
+    allowFriendRequests: proto.hasAllowFriendRequests()
+        ? voicePrivacyAudienceFromProto(proto.allowFriendRequests)
+        : VoicePrivacyAudience.nobody,
     allowGuestDm: proto.allowGuestDm,
-    showOnlineIncludeGuests: proto.showOnlineIncludeGuests,
+    allowPhoneSearch: proto.hasAllowPhoneSearch()
+        ? voicePrivacyAudienceFromProto(proto.allowPhoneSearch)
+        : VoicePrivacyAudience.nobody,
+    allowCalls: proto.hasAllowCalls()
+        ? voicePrivacyAudienceFromProto(proto.allowCalls)
+        : VoicePrivacyAudience.nobody,
+    allowChatSpaceInvites: proto.hasAllowChatSpaceInvites()
+        ? voicePrivacyAudienceFromProto(proto.allowChatSpaceInvites)
+        : VoicePrivacyAudience.nobody,
+    allowFiles: proto.hasAllowFiles()
+        ? voicePrivacyAudienceFromProto(proto.allowFiles)
+        : VoicePrivacyAudience.nobody,
+    allowVoiceMessages: proto.hasAllowVoiceMessages()
+        ? voicePrivacyAudienceFromProto(proto.allowVoiceMessages)
+        : VoicePrivacyAudience.nobody,
   );
 }
 

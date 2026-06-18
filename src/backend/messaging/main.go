@@ -120,6 +120,7 @@ func main() {
 
 		var blocks grpcsvc.AccountPairBlockChecker
 		var friends grpcsvc.ProfileFriendChecker
+		var spaceCoMembership grpcsvc.SpaceCoMembershipChecker
 		if socialAddr := strings.TrimSpace(os.Getenv("SOCIAL_GRPC_ADDR")); socialAddr != "" {
 			sconn, err := grpc.NewClient(grpcclient.DialTarget(socialAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
@@ -155,6 +156,20 @@ func main() {
 			profiles = &s2s.UserGRPCProfiles{Client: userCli}
 			privacy = &s2s.GRPCUserPrivacy{Client: userCli}
 			userPresence = &s2s.GRPCUserPresence{Client: userCli}
+		}
+		if spaceAddr := strings.TrimSpace(os.Getenv("SPACE_GRPC_ADDR")); spaceAddr != "" {
+			spconn, err := grpc.NewClient(grpcclient.DialTarget(spaceAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if err != nil {
+				log.Fatalf("space grpc: %v", err)
+			}
+			defer func() { _ = spconn.Close() }()
+			waitCtx, waitCancel := context.WithTimeout(context.Background(), grpcclient.DialTimeoutFromEnv())
+			if err := waitForGRPCReady(waitCtx, spconn); err != nil {
+				waitCancel()
+				log.Fatalf("space grpc dial: %v", err)
+			}
+			waitCancel()
+			spaceCoMembership = s2s.NewGRPCSpaceCoMembership(spconn)
 		}
 
 		var rolePerms *s2s.GRPCRolePermissions
@@ -239,7 +254,8 @@ func main() {
 			Blocks:        blocks,
 			UserProfiles:  profiles,
 			Privacy:       privacy,
-			Friends:       friends,
+			Friends:           friends,
+			SpaceCoMembership: spaceCoMembership,
 			Files:         files,
 			MessageEvents: msgEvents,
 			Moderation: &store.SQLModerationGuard{

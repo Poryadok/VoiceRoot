@@ -10,12 +10,16 @@ COPY user/go.mod ./user/
 COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
 COPY user/pb/voice/user/go.mod ./user/pb/voice/user/
 COPY user/pb/voice/social/go.mod ./user/pb/voice/social/
+COPY voice/pb/voice/space/go.mod ./voice/pb/voice/space/
+COPY chat/pb/voice/chat/go.mod ./chat/pb/voice/chat/
 COPY messaging/pb/voice/events/go.mod ./messaging/pb/voice/events/
 COPY social/go.mod ./social/
 RUN --mount=type=cache,target=/go/pkg/mod sh /usr/local/bin/docker-go-mod-download.sh user
 COPY pkg ./pkg
 COPY user/pb ./user/pb
 COPY messaging/pb/voice/events ./messaging/pb/voice/events
+COPY voice/pb/voice/space ./voice/pb/voice/space
+COPY chat/pb/voice/chat ./chat/pb/voice/chat
 COPY social ./social
 COPY user ./user
 WORKDIR /src/user

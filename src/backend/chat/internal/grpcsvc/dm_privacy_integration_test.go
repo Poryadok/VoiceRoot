@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	chatv1 "voice.app/voice/chat/v1"
+	"voice/backend/pkg/privacy"
 )
 
 type dmPrivacyStub struct {
@@ -17,14 +18,14 @@ type dmPrivacyStub struct {
 	fofOnly     map[uuid.UUID]bool
 }
 
-func (s dmPrivacyStub) AllowDM(_ context.Context, profileID uuid.UUID) (string, error) {
+func (s dmPrivacyStub) AllowDMAudience(_ context.Context, profileID uuid.UUID) (privacy.Audience, error) {
 	if s.fofOnly[profileID] {
-		return "friends_of_friends", nil
+		return privacy.FriendsAndFoF(), nil
 	}
 	if s.friendsOnly[profileID] {
-		return "friends", nil
+		return privacy.FriendsOnly(), nil
 	}
-	return "everyone", nil
+	return privacy.EveryoneWithGuests(), nil
 }
 
 type noFriendsStub struct{}

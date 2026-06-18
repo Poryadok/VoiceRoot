@@ -90,6 +90,7 @@ func main() {
 
 		var profiles grpcsvc.UserProfileLookup
 		var privacy grpcsvc.PrivacyChecker
+		var spaceCoMembership grpcsvc.SpaceCoMembershipChecker
 		if userAddr := strings.TrimSpace(os.Getenv("USER_GRPC_ADDR")); userAddr != "" {
 			uconn, err := grpc.NewClient(grpcclient.DialTarget(userAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
@@ -118,6 +119,14 @@ func main() {
 			userClient := userv1.NewUserServiceClient(uconn)
 			profiles = &grpcsvc.UserGRPCProfiles{Client: userClient}
 			privacy = &grpcsvc.UserGRPCPrivacy{Client: userClient}
+		}
+		if spaceAddr := strings.TrimSpace(os.Getenv("SPACE_GRPC_ADDR")); spaceAddr != "" {
+			spconn, err := grpc.NewClient(grpcclient.DialTarget(spaceAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if err != nil {
+				log.Fatalf("space grpc: %v", err)
+			}
+			defer func() { _ = spconn.Close() }()
+			spaceCoMembership = grpcsvc.NewSpaceGRPCCoMembership(spconn)
 		}
 
 		var roleClient rolev1.RoleServiceClient
@@ -181,8 +190,9 @@ func main() {
 			DM:            dmStore,
 			Profiles:      profiles,
 			Blocks:        blocks,
-			Privacy:       privacy,
-			Friends:       friends,
+			Privacy:           privacy,
+			Friends:           friends,
+			SpaceCoMembership: spaceCoMembership,
 			ListEnrich:    listEnrich,
 			E2EPreKeyGate: e2ePreKeyGate,
 			ChatEvents:    chatEvents,

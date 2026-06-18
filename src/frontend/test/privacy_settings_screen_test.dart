@@ -16,6 +16,20 @@ import 'support/auth_test_overrides.dart';
 import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
 
+Map<String, dynamic> _audience({
+  bool friends = false,
+  bool friendsOfFriends = false,
+  bool spaceMembers = false,
+  bool includeGuests = false,
+}) {
+  return {
+    'friends': friends,
+    'friends_of_friends': friendsOfFriends,
+    'space_members': spaceMembers,
+    'include_guests': includeGuests,
+  };
+}
+
 void main() {
   testWidgets('privacy preset selector applies gaming defaults', (tester) async {
     final client = MockClient((req) async {
@@ -25,14 +39,24 @@ void main() {
             'privacy_settings': {
               'profile_id': 'prof-test',
               'preset': 'personal',
-              'show_online': 'friends',
-              'show_game_status': 'friends',
-              'show_mm_rating': 'friends_of_friends',
-              'show_phone': 'nobody',
-              'show_stories': 'friends_of_friends',
-              'allow_dm': 'friends_of_friends',
-              'allow_friend_requests': 'everyone',
+              'show_online': _audience(friends: true),
+              'show_game_status': _audience(friends: true),
+              'show_mm_rating': _audience(friends: true, friendsOfFriends: true),
+              'show_phone': _audience(),
+              'show_stories': _audience(friends: true, friendsOfFriends: true),
+              'allow_dm': _audience(friends: true, friendsOfFriends: true),
+              'allow_friend_requests': _audience(
+                friends: true,
+                friendsOfFriends: true,
+                spaceMembers: true,
+                includeGuests: true,
+              ),
               'allow_guest_dm': false,
+              'allow_phone_search': _audience(friends: true),
+              'allow_calls': _audience(friends: true),
+              'allow_chat_space_invites': _audience(friends: true),
+              'allow_files': _audience(friends: true, friendsOfFriends: true),
+              'allow_voice_messages': _audience(friends: true),
             },
           }),
           200,

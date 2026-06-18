@@ -10,17 +10,18 @@ import (
 	"google.golang.org/grpc/status"
 
 	messagingv1 "voice.app/voice/messaging/v1"
+	"voice/backend/pkg/privacy"
 )
 
 type dmPrivacyStub struct {
 	friendsOnly map[uuid.UUID]bool
 }
 
-func (s dmPrivacyStub) AllowDM(_ context.Context, profileID uuid.UUID) (string, error) {
+func (s dmPrivacyStub) AllowDMAudience(_ context.Context, profileID uuid.UUID) (privacy.Audience, error) {
 	if s.friendsOnly[profileID] {
-		return "friends", nil
+		return privacy.FriendsOnly(), nil
 	}
-	return "everyone", nil
+	return privacy.EveryoneWithGuests(), nil
 }
 
 type noFriendsStub struct{}

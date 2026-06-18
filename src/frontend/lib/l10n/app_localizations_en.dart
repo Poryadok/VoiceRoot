@@ -1397,6 +1397,36 @@ class AppLocalizationsEn extends AppLocalizations {
   String get privacyAudienceNobody => 'Nobody';
 
   @override
+  String get privacyAudienceSpaceMembers => 'Space members';
+
+  @override
+  String get privacyAudienceIncludeGuests => 'Guest accounts';
+
+  @override
+  String get privacyAudienceSpacesTitle => 'Spaces';
+
+  @override
+  String get privacyAudienceSpacesEmpty => 'You are not a member of any spaces';
+
+  @override
+  String get privacyActionsTitle => 'Actions';
+
+  @override
+  String get privacyAllowPhoneSearch => 'Phone number search';
+
+  @override
+  String get privacyAllowCalls => 'Calls';
+
+  @override
+  String get privacyAllowChatSpaceInvites => 'Chat and space invites';
+
+  @override
+  String get privacyAllowFiles => 'File sharing';
+
+  @override
+  String get privacyAllowVoiceMessages => 'Voice messages';
+
+  @override
   String get reportAction => 'Report';
 
   @override

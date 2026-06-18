@@ -21,6 +21,7 @@ import (
 
 	"voice/backend/pkg/integrationtest"
 	"voice/backend/user/internal/authctx"
+	"voice/backend/pkg/privacy"
 	"voice/backend/user/internal/store"
 
 	userv1 "voice.app/voice/user/v1"
@@ -35,6 +36,7 @@ func applyUserPrivacyMigrations(t *testing.T, ctx context.Context, pool *pgxpool
 		"000003_profile_subscription.up.sql",
 		"000004_phase13_profiles_verification.up.sql",
 		"000005_privacy_guest_audience.up.sql",
+		"000006_privacy_audience.up.sql",
 	} {
 		path := filepath.Join(root, "src", "backend", "migrations", "user_db", name)
 		sqlBytes, err := os.ReadFile(path)
@@ -117,6 +119,28 @@ func (s stubProfileBlocks) AccountPairBlocked(_ context.Context, viewer, other u
 	return s.blocked[viewer.String()+":"+other.String()], nil
 }
 
+func seedPrivacyPreset(ctx context.Context, t *testing.T, ps *store.PrivacyStore, profileID uuid.UUID, preset string) {
+	t.Helper()
+	_, err := ps.Upsert(ctx, store.PrivacyRowFromSettings(profileID, privacy.SettingsForPreset(preset)))
+	require.NoError(t, err)
+}
+
+func privacySettingsProto(profileID uuid.UUID, preset string) *userv1.PrivacySettings {
+	row := store.PrivacyRowFromSettings(profileID, privacy.SettingsForPreset(preset))
+	return privacyRowToProto(&row)
+}
+
+type stubSpaceCoMembership struct {
+	co map[string]bool
+}
+
+func (s stubSpaceCoMembership) AreCoMembers(_ context.Context, a, b uuid.UUID, _ []string) (bool, error) {
+	if s.co == nil {
+		return false, nil
+	}
+	return s.co[privacyPairKey(a, b)], nil
+}
+
 func withUserAuthCtx(ctx context.Context, accountID, profileID uuid.UUID) context.Context {
 	ctx = metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountID.String())
 	return metadata.AppendToOutgoingContext(ctx, authctx.HeaderProfileID, profileID.String())
@@ -138,11 +162,7 @@ INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_
 VALUES ($1, $2, 'gamer', '4242', 'Gamer', true)`,
 		profileID, accountID)
 	require.NoError(t, err)
-	_, err = pool.Exec(ctx, `
-INSERT INTO privacy_settings (profile_id, preset, show_online, show_game_status, show_mm_rating, show_phone, show_stories, allow_dm, allow_friend_requests, allow_guest_dm)
-VALUES ($1, 'gaming', 'everyone', 'everyone', 'everyone', 'nobody', 'everyone', 'everyone', 'everyone', true)`,
-		profileID)
-	require.NoError(t, err)
+	seedPrivacyPreset(ctx, t, store.NewPrivacyStore(pool), profileID, "gaming")
 
 	mr := miniredis.RunT(t)
 	t.Cleanup(func() { mr.Close() })
@@ -157,9 +177,10 @@ VALUES ($1, 'gaming', 'everyone', 'everyone', 'everyone', 'nobody', 'everyone', 
 	require.NoError(t, err)
 	ps := resp.GetPrivacySettings()
 	require.Equal(t, "gaming", ps.GetPreset())
-	require.Equal(t, "everyone", ps.GetShowOnline())
-	require.Equal(t, "everyone", ps.GetAllowDm())
-	require.Equal(t, "nobody", ps.GetShowPhone())
+	require.True(t, ps.GetShowOnline().GetIncludeGuests())
+	require.True(t, ps.GetShowOnline().GetFriends())
+	require.True(t, ps.GetAllowDm().GetIncludeGuests())
+	require.False(t, ps.GetShowPhone().GetFriends())
 }
 
 // TestGetPrivacySettings_PersonalPresetDefaults documents personal preset DM audience defaults.
@@ -178,11 +199,7 @@ INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_
 VALUES ($1, $2, 'private', '1111', 'Private', true)`,
 		profileID, accountID)
 	require.NoError(t, err)
-	_, err = pool.Exec(ctx, `
-INSERT INTO privacy_settings (profile_id, preset, show_online, show_game_status, show_mm_rating, show_phone, show_stories, allow_dm, allow_friend_requests, allow_guest_dm)
-VALUES ($1, 'personal', 'friends', 'friends', 'friends_of_friends', 'nobody', 'friends_of_friends', 'friends_of_friends', 'everyone', false)`,
-		profileID)
-	require.NoError(t, err)
+	seedPrivacyPreset(ctx, t, store.NewPrivacyStore(pool), profileID, "personal")
 
 	mr := miniredis.RunT(t)
 	t.Cleanup(func() { mr.Close() })
@@ -197,8 +214,10 @@ VALUES ($1, 'personal', 'friends', 'friends', 'friends_of_friends', 'nobody', 'f
 	require.NoError(t, err)
 	ps := resp.GetPrivacySettings()
 	require.Equal(t, "personal", ps.GetPreset())
-	require.Equal(t, "friends", ps.GetShowOnline())
-	require.Equal(t, "friends_of_friends", ps.GetAllowDm())
+	require.True(t, ps.GetShowOnline().GetFriends())
+	require.False(t, ps.GetShowOnline().GetFriendsOfFriends())
+	require.True(t, ps.GetAllowDm().GetFriends())
+	require.True(t, ps.GetAllowDm().GetFriendsOfFriends())
 }
 
 // TestUpdatePrivacySettings_FriendsOnlyDM documents allow_dm=friends persists and round-trips.
@@ -230,22 +249,25 @@ VALUES ($1, $2, 'setter', '2222', 'Setter', true)`,
 		Settings: &userv1.PrivacySettings{
 			ProfileId:           profileID.String(),
 			Preset:              "personal",
-			ShowOnline:          "friends",
-			ShowGameStatus:      "friends",
-			ShowMmRating:        "friends",
-			ShowPhone:           "nobody",
-			ShowStories:         "friends",
-			AllowDm:             "friends",
-			AllowFriendRequests: "everyone",
+			ShowOnline:          privacy.ToProto(privacy.FriendsOnly()),
+			ShowGameStatus:      privacy.ToProto(privacy.FriendsOnly()),
+			ShowMmRating:        privacy.ToProto(privacy.FriendsOnly()),
+			ShowPhone:           privacy.ToProto(privacy.Nobody()),
+			ShowStories:         privacy.ToProto(privacy.FriendsOnly()),
+			AllowDm:             privacy.ToProto(privacy.FriendsOnly()),
+			AllowFriendRequests: privacy.ToProto(privacy.EveryoneWithGuests()),
 			AllowGuestDm:        false,
 		},
 	})
 	require.NoError(t, err)
 
-	var allowDM string
-	err = pool.QueryRow(ctx, `SELECT allow_dm FROM privacy_settings WHERE profile_id = $1`, profileID).Scan(&allowDM)
+	var allowDM []byte
+	err = pool.QueryRow(ctx, `SELECT allow_dm_audience FROM privacy_settings WHERE profile_id = $1`, profileID).Scan(&allowDM)
 	require.NoError(t, err)
-	require.Equal(t, "friends", allowDM)
+	aud, err := privacy.UnmarshalJSON(allowDM)
+	require.NoError(t, err)
+	require.True(t, aud.Friends)
+	require.False(t, aud.FriendsOfFriends)
 }
 
 func withGuestUserAuthCtx(ctx context.Context, accountID, profileID uuid.UUID) context.Context {
@@ -278,46 +300,28 @@ VALUES ($1, $2, 'privacy', '3333', 'Privacy', true)`,
 
 	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb)
 
-	_, err = pool.Exec(ctx, `
-ALTER TABLE privacy_settings
-  ADD COLUMN IF NOT EXISTS show_online_include_guests BOOLEAN NOT NULL DEFAULT false`)
-	require.NoError(t, err)
-
 	_, err = cli.UpdatePrivacySettings(withUserAuthCtx(ctx, accountID, profileID), &userv1.UpdatePrivacySettingsRequest{
 		ProfileId: profileID.String(),
 		Settings: &userv1.PrivacySettings{
 			ProfileId:           profileID.String(),
 			Preset:              "personal",
-			ShowOnline:          "friends",
-			ShowGameStatus:      "friends",
-			ShowMmRating:        "friends",
-			ShowPhone:           "nobody",
-			ShowStories:         "friends",
-			AllowDm:             "friends",
-			AllowFriendRequests: "everyone",
+			ShowOnline:          privacy.ToProto(privacy.Audience{Friends: true, IncludeGuests: true}),
+			ShowGameStatus:      privacy.ToProto(privacy.FriendsOnly()),
+			ShowMmRating:        privacy.ToProto(privacy.FriendsOnly()),
+			ShowPhone:           privacy.ToProto(privacy.Nobody()),
+			ShowStories:         privacy.ToProto(privacy.FriendsOnly()),
+			AllowDm:             privacy.ToProto(privacy.FriendsOnly()),
+			AllowFriendRequests: privacy.ToProto(privacy.EveryoneWithGuests()),
 			AllowGuestDm:        false,
 		},
 	})
 	require.NoError(t, err)
 
-	// Explicit guest-audience selection (multiselect) must round-trip once API lands.
-	_, err = pool.Exec(ctx, `
-UPDATE privacy_settings SET show_online_include_guests = true WHERE profile_id = $1`, profileID)
-	require.NoError(t, err)
-
-	var includeGuests bool
-	err = pool.QueryRow(ctx, `
-SELECT show_online_include_guests FROM privacy_settings WHERE profile_id = $1`, profileID).Scan(&includeGuests)
-	require.NoError(t, err)
-	require.True(t, includeGuests, "guest audience selection must persist for multiselect")
-
 	resp, err := cli.GetPrivacySettings(withUserAuthCtx(ctx, accountID, profileID), &userv1.GetPrivacySettingsRequest{
 		ProfileId: profileID.String(),
 	})
 	require.NoError(t, err)
-	field := resp.GetPrivacySettings().ProtoReflect().Descriptor().Fields().ByName("show_online_include_guests")
-	require.NotNil(t, field, "PrivacySettings proto must expose guest audience selection")
-	require.True(t, resp.GetPrivacySettings().ProtoReflect().Get(field).Bool())
+	require.True(t, resp.GetPrivacySettings().GetShowOnline().GetIncludeGuests())
 }
 
 // TestGetPresence_GuestViewer_HiddenWhenGuestAudienceExcluded documents privacy.md:
@@ -340,11 +344,7 @@ VALUES ($1, $2, 'owner', '4444', 'Owner', true),
        ($3, $4, 'guestview', '5555', 'Guest Viewer', true)`,
 		ownerProfile, ownerAccount, guestProfile, guestAccount)
 	require.NoError(t, err)
-	_, err = pool.Exec(ctx, `
-INSERT INTO privacy_settings (profile_id, preset, show_online, show_game_status, show_mm_rating, show_phone, show_stories, allow_dm, allow_friend_requests, allow_guest_dm)
-VALUES ($1, 'personal', 'friends', 'friends', 'friends', 'nobody', 'friends', 'friends', 'everyone', false)`,
-		ownerProfile)
-	require.NoError(t, err)
+	seedPrivacyPreset(ctx, t, store.NewPrivacyStore(pool), ownerProfile, "personal")
 
 	mr := miniredis.RunT(t)
 	t.Cleanup(func() { mr.Close() })
@@ -416,11 +416,7 @@ VALUES ($1, $2, 'owner', '4444', 'Owner', true),
        ($3, $4, 'stranger', '5555', 'Stranger', true)`,
 		ownerProfile, ownerAccount, strangerProfile, strangerAccount)
 	require.NoError(t, err)
-	_, err = pool.Exec(ctx, `
-INSERT INTO privacy_settings (profile_id, preset, show_online, show_game_status, show_mm_rating, show_phone, show_stories, allow_dm, allow_friend_requests, allow_guest_dm)
-VALUES ($1, 'personal', 'friends', 'friends', 'friends', 'nobody', 'friends', 'friends', 'everyone', false)`,
-		ownerProfile)
-	require.NoError(t, err)
+	seedPrivacyPreset(ctx, t, store.NewPrivacyStore(pool), ownerProfile, "personal")
 
 	mr := miniredis.RunT(t)
 	t.Cleanup(func() { mr.Close() })
@@ -462,10 +458,17 @@ VALUES ($1, $2, 'owner', '4444', 'Owner', true),
        ($3, $4, 'friend', '5555', 'Friend', true)`,
 		ownerProfile, ownerAccount, friendProfile, friendAccount)
 	require.NoError(t, err)
-	_, err = pool.Exec(ctx, `
-INSERT INTO privacy_settings (profile_id, preset, show_online, show_game_status, show_mm_rating, show_phone, show_stories, allow_dm, allow_friend_requests, allow_guest_dm)
-VALUES ($1, 'personal', 'everyone', 'friends', 'friends', 'nobody', 'friends', 'friends', 'everyone', false)`,
-		ownerProfile)
+	_, err = store.NewPrivacyStore(pool).Upsert(ctx, store.PrivacyRow{
+		ProfileID:           ownerProfile,
+		Preset:              "personal",
+		ShowOnline:          privacy.EveryoneWithGuests(),
+		ShowGameStatus:      privacy.FriendsOnly(),
+		ShowMmRating:        privacy.FriendsOnly(),
+		ShowPhone:           privacy.Nobody(),
+		ShowStories:         privacy.FriendsOnly(),
+		AllowDM:             privacy.FriendsOnly(),
+		AllowFriendRequests: privacy.EveryoneWithGuests(),
+	})
 	require.NoError(t, err)
 
 	mr := miniredis.RunT(t)
@@ -506,11 +509,7 @@ VALUES ($1, $2, 'owner', '4444', 'Owner', true),
        ($3, $4, 'friend', '5555', 'Friend', true)`,
 		ownerProfile, ownerAccount, friendProfile, friendAccount)
 	require.NoError(t, err)
-	_, err = pool.Exec(ctx, `
-INSERT INTO privacy_settings (profile_id, preset, show_online, show_game_status, show_mm_rating, show_phone, show_stories, allow_dm, allow_friend_requests, allow_guest_dm)
-VALUES ($1, 'personal', 'friends', 'friends', 'friends', 'nobody', 'friends', 'friends', 'everyone', false)`,
-		ownerProfile)
-	require.NoError(t, err)
+	seedPrivacyPreset(ctx, t, store.NewPrivacyStore(pool), ownerProfile, "personal")
 
 	mr := miniredis.RunT(t)
 	t.Cleanup(func() { mr.Close() })
@@ -552,11 +551,7 @@ VALUES ($1, $2, 'owner', '4444', 'Owner', true),
        ($3, $4, 'stranger', '5555', 'Stranger', true)`,
 		ownerProfile, ownerAccount, strangerProfile, strangerAccount)
 	require.NoError(t, err)
-	_, err = pool.Exec(ctx, `
-INSERT INTO privacy_settings (profile_id, preset, show_online, show_game_status, show_mm_rating, show_phone, show_stories, allow_dm, allow_friend_requests, allow_guest_dm)
-VALUES ($1, 'personal', 'friends', 'friends', 'friends', 'nobody', 'friends', 'friends', 'everyone', false)`,
-		ownerProfile)
-	require.NoError(t, err)
+	seedPrivacyPreset(ctx, t, store.NewPrivacyStore(pool), ownerProfile, "personal")
 
 	mr := miniredis.RunT(t)
 	t.Cleanup(func() { mr.Close() })

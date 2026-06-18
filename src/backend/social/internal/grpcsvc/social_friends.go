@@ -16,6 +16,7 @@ import (
 	"voice/backend/social/internal/authctx"
 	"voice/backend/social/internal/store"
 	"voice/backend/pkg/guestguard"
+	"voice/backend/pkg/privacy"
 
 	socialv1 "voice.app/voice/social/v1"
 )
@@ -30,6 +31,18 @@ type SocialGRPC struct {
 	socialv1.UnimplementedSocialServiceServer
 	Friends *store.FriendshipStore
 	Blocks  *store.BlockStore
+	Privacy FriendRequestPrivacyChecker
+	SpaceCoMembership SpaceCoMembershipChecker
+}
+
+// FriendRequestPrivacyChecker reads target profile friend-request audience.
+type FriendRequestPrivacyChecker interface {
+	AllowFriendRequestsAudience(ctx context.Context, profileID uuid.UUID) (privacy.Audience, error)
+}
+
+// SpaceCoMembershipChecker checks shared space membership for privacy audiences.
+type SpaceCoMembershipChecker interface {
+	AreCoMembers(ctx context.Context, profileA, profileB uuid.UUID, spaceIDs []string) (bool, error)
 }
 
 type friendsCursorPayload struct {
@@ -97,6 +110,9 @@ func (s *SocialGRPC) SendFriendInvitation(ctx context.Context, req *socialv1.Sen
 	}
 	if s.Friends == nil {
 		return nil, status.Error(codes.FailedPrecondition, "persistence not configured")
+	}
+	if err := s.ensureFriendRequestPrivacy(ctx, caller, target); err != nil {
+		return nil, err
 	}
 	err = s.Friends.SendInvitation(ctx, caller, target)
 	switch {
@@ -333,4 +349,26 @@ func (s *SocialGRPC) GetFriendsOfFriends(ctx context.Context, req *socialv1.GetF
 	return &socialv1.GetFriendsOfFriendsResponse{
 		ProfileIdList: &socialv1.ProfileIdList{ProfileIds: out},
 	}, nil
+}
+
+func (s *SocialGRPC) ensureFriendRequestPrivacy(ctx context.Context, caller, target uuid.UUID) error {
+	if s == nil || s.Privacy == nil {
+		return nil
+	}
+	audience, err := s.Privacy.AllowFriendRequestsAudience(ctx, target)
+	if err != nil {
+		return status.Error(codes.Internal, err.Error())
+	}
+	var graph privacy.SocialGraph
+	if s.Friends != nil {
+		graph = s.Friends
+	}
+	matcher := privacy.Matcher{Social: graph, Space: s.SpaceCoMembership}
+	if err := privacy.CheckAllowed(matcher, ctx, target, caller, audience, guestguard.IsGuest(ctx)); err != nil {
+		if errors.Is(err, privacy.ErrDenied) {
+			return status.Error(codes.PermissionDenied, "friend request blocked by privacy settings")
+		}
+		return status.Error(codes.Internal, err.Error())
+	}
+	return nil
 }

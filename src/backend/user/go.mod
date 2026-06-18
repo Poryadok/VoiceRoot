@@ -14,9 +14,11 @@ require (
 	github.com/stretchr/testify v1.10.0
 	google.golang.org/grpc v1.70.0
 	google.golang.org/protobuf v1.36.5
+	voice.app/voice/chat v0.0.0
 	voice.app/voice/common v0.0.0
 	voice.app/voice/events v0.0.0
 	voice.app/voice/social v0.0.0
+	voice.app/voice/space v0.0.0
 	voice.app/voice/user v0.0.0
 	voice/backend/pkg v0.0.0
 	voice/backend/social v0.0.0
@@ -98,9 +100,13 @@ replace voice/backend/pkg => ../pkg
 
 replace voice/backend/social => ../social
 
+replace voice.app/voice/chat => ../chat/pb/voice/chat
+
 replace voice.app/voice/common => ./pb/voice/common
 
 replace voice.app/voice/social => ./pb/voice/social
+
+replace voice.app/voice/space => ../voice/pb/voice/space
 
 replace voice.app/voice/user => ./pb/voice/user
 

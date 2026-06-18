@@ -1403,6 +1403,36 @@ class AppLocalizationsRu extends AppLocalizations {
   String get privacyAudienceNobody => 'Никто';
 
   @override
+  String get privacyAudienceSpaceMembers => 'Участники спейса';
+
+  @override
+  String get privacyAudienceIncludeGuests => 'Гостевые аккаунты';
+
+  @override
+  String get privacyAudienceSpacesTitle => 'Спейсы';
+
+  @override
+  String get privacyAudienceSpacesEmpty => 'Вы не состоите ни в одном спейсе';
+
+  @override
+  String get privacyActionsTitle => 'Действия';
+
+  @override
+  String get privacyAllowPhoneSearch => 'Поиск по номеру телефона';
+
+  @override
+  String get privacyAllowCalls => 'Звонки';
+
+  @override
+  String get privacyAllowChatSpaceInvites => 'Приглашения в чаты и спейсы';
+
+  @override
+  String get privacyAllowFiles => 'Отправка файлов';
+
+  @override
+  String get privacyAllowVoiceMessages => 'Голосовые сообщения';
+
+  @override
   String get reportAction => 'Пожаловаться';
 
   @override

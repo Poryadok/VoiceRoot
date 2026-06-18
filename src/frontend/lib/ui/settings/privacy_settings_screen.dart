@@ -7,6 +7,7 @@ import '../../state/auth_providers.dart';
 import '../../state/trust_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../core/voice_primary_button.dart';
+import 'privacy_audience_picker.dart';
 import 'privacy_presets.dart';
 
 /// Privacy presets and per-field visibility controls.
@@ -106,16 +107,6 @@ class _PrivacySettingsScreenState extends ConsumerState<PrivacySettingsScreen> {
     });
   }
 
-  String _audienceLabel(AppLocalizations l10n, String value) {
-    return switch (value) {
-      'everyone' => l10n.privacyAudienceEveryone,
-      'friends' => l10n.privacyAudienceFriends,
-      'friends_of_friends' => l10n.privacyAudienceFriendsOfFriends,
-      'nobody' => l10n.privacyAudienceNobody,
-      _ => value,
-    };
-  }
-
   String _presetLabel(AppLocalizations l10n, String preset) {
     return switch (preset) {
       'personal' => l10n.privacyPresetPersonal,
@@ -166,33 +157,18 @@ class _PrivacySettingsScreenState extends ConsumerState<PrivacySettingsScreen> {
                       onSelectionChanged: (next) => _applyPreset(next.single),
                     ),
                     const SizedBox(height: 24),
-                    _AudienceDropdown(
-                      key: PrivacySettingsScreen.allowDmKey,
-                      label: l10n.privacyAllowDm,
-                      value: settings.allowDm,
-                      values: kPrivacyAudienceValues,
-                      labelFor: (v) => _audienceLabel(l10n, v),
-                      onChanged: (v) => setState(
-                        () => _settings = settings.copyWith(allowDm: v),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
                     _VisibilitySection(
                       l10n: l10n,
                       voice: voice,
                       settings: settings,
-                      audienceLabel: _audienceLabel,
                       onChanged: (next) => setState(() => _settings = next),
                     ),
-                    SwitchListTile(
-                      key: const Key('privacy_show_online_include_guests'),
-                      title: Text(l10n.privacyShowOnlineIncludeGuests),
-                      value: settings.showOnlineIncludeGuests,
-                      onChanged: (v) => setState(
-                        () => _settings = settings.copyWith(
-                          showOnlineIncludeGuests: v,
-                        ),
-                      ),
+                    const SizedBox(height: 24),
+                    _ActionsSection(
+                      l10n: l10n,
+                      voice: voice,
+                      settings: settings,
+                      onChanged: (next) => setState(() => _settings = next),
                     ),
                     SwitchListTile(
                       title: Text(l10n.privacyAllowGuestDm),
@@ -230,14 +206,12 @@ class _VisibilitySection extends StatelessWidget {
     required this.l10n,
     required this.voice,
     required this.settings,
-    required this.audienceLabel,
     required this.onChanged,
   });
 
   final AppLocalizations l10n;
   final VoiceColors voice;
   final VoicePrivacySettings settings;
-  final String Function(AppLocalizations l10n, String value) audienceLabel;
   final ValueChanged<VoicePrivacySettings> onChanged;
 
   @override
@@ -249,52 +223,40 @@ class _VisibilitySection extends StatelessWidget {
           l10n.privacyVisibilityTitle,
           style: TextStyle(color: voice.textSecondary),
         ),
-        const SizedBox(height: 8),
-        _AudienceDropdown(
+        const SizedBox(height: 12),
+        PrivacyAudiencePicker(
           label: l10n.privacyShowOnline,
           value: settings.showOnline,
-          values: kPrivacyAudienceValues,
-          labelFor: (v) => audienceLabel(l10n, v),
           onChanged: (v) => onChanged(settings.copyWith(showOnline: v)),
         ),
-        const SizedBox(height: 12),
-        _AudienceDropdown(
+        const SizedBox(height: 16),
+        PrivacyAudiencePicker(
           label: l10n.privacyShowGameStatus,
           value: settings.showGameStatus,
-          values: kPrivacyAudienceValues,
-          labelFor: (v) => audienceLabel(l10n, v),
           onChanged: (v) => onChanged(settings.copyWith(showGameStatus: v)),
         ),
-        const SizedBox(height: 12),
-        _AudienceDropdown(
+        const SizedBox(height: 16),
+        PrivacyAudiencePicker(
           label: l10n.privacyShowMmRating,
           value: settings.showMmRating,
-          values: kPrivacyAudienceValues,
-          labelFor: (v) => audienceLabel(l10n, v),
           onChanged: (v) => onChanged(settings.copyWith(showMmRating: v)),
         ),
-        const SizedBox(height: 12),
-        _AudienceDropdown(
+        const SizedBox(height: 16),
+        PrivacyAudiencePicker(
           label: l10n.privacyShowPhone,
           value: settings.showPhone,
-          values: kPrivacyPhoneAudienceValues,
-          labelFor: (v) => audienceLabel(l10n, v),
           onChanged: (v) => onChanged(settings.copyWith(showPhone: v)),
         ),
-        const SizedBox(height: 12),
-        _AudienceDropdown(
+        const SizedBox(height: 16),
+        PrivacyAudiencePicker(
           label: l10n.privacyShowStories,
           value: settings.showStories,
-          values: kPrivacyAudienceValues,
-          labelFor: (v) => audienceLabel(l10n, v),
           onChanged: (v) => onChanged(settings.copyWith(showStories: v)),
         ),
-        const SizedBox(height: 12),
-        _AudienceDropdown(
+        const SizedBox(height: 16),
+        PrivacyAudiencePicker(
           label: l10n.privacyAllowFriendRequests,
           value: settings.allowFriendRequests,
-          values: kPrivacyFriendRequestAudienceValues,
-          labelFor: (v) => audienceLabel(l10n, v),
           onChanged: (v) =>
               onChanged(settings.copyWith(allowFriendRequests: v)),
         ),
@@ -303,34 +265,67 @@ class _VisibilitySection extends StatelessWidget {
   }
 }
 
-class _AudienceDropdown extends StatelessWidget {
-  const _AudienceDropdown({
-    super.key,
-    required this.label,
-    required this.value,
-    required this.values,
-    required this.labelFor,
+class _ActionsSection extends StatelessWidget {
+  const _ActionsSection({
+    required this.l10n,
+    required this.voice,
+    required this.settings,
     required this.onChanged,
   });
 
-  final String label;
-  final String value;
-  final List<String> values;
-  final String Function(String value) labelFor;
-  final ValueChanged<String> onChanged;
+  final AppLocalizations l10n;
+  final VoiceColors voice;
+  final VoicePrivacySettings settings;
+  final ValueChanged<VoicePrivacySettings> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    return DropdownButtonFormField<String>(
-      initialValue: values.contains(value) ? value : values.first,
-      decoration: InputDecoration(labelText: label),
-      items: [
-        for (final v in values)
-          DropdownMenuItem(value: v, child: Text(labelFor(v))),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          l10n.privacyActionsTitle,
+          style: TextStyle(color: voice.textSecondary),
+        ),
+        const SizedBox(height: 12),
+        PrivacyAudiencePicker(
+          key: PrivacySettingsScreen.allowDmKey,
+          label: l10n.privacyAllowDm,
+          value: settings.allowDm,
+          onChanged: (v) => onChanged(settings.copyWith(allowDm: v)),
+        ),
+        const SizedBox(height: 16),
+        PrivacyAudiencePicker(
+          label: l10n.privacyAllowPhoneSearch,
+          value: settings.allowPhoneSearch,
+          onChanged: (v) => onChanged(settings.copyWith(allowPhoneSearch: v)),
+        ),
+        const SizedBox(height: 16),
+        PrivacyAudiencePicker(
+          label: l10n.privacyAllowCalls,
+          value: settings.allowCalls,
+          onChanged: (v) => onChanged(settings.copyWith(allowCalls: v)),
+        ),
+        const SizedBox(height: 16),
+        PrivacyAudiencePicker(
+          label: l10n.privacyAllowChatSpaceInvites,
+          value: settings.allowChatSpaceInvites,
+          onChanged: (v) =>
+              onChanged(settings.copyWith(allowChatSpaceInvites: v)),
+        ),
+        const SizedBox(height: 16),
+        PrivacyAudiencePicker(
+          label: l10n.privacyAllowFiles,
+          value: settings.allowFiles,
+          onChanged: (v) => onChanged(settings.copyWith(allowFiles: v)),
+        ),
+        const SizedBox(height: 16),
+        PrivacyAudiencePicker(
+          label: l10n.privacyAllowVoiceMessages,
+          value: settings.allowVoiceMessages,
+          onChanged: (v) => onChanged(settings.copyWith(allowVoiceMessages: v)),
+        ),
       ],
-      onChanged: (v) {
-        if (v != null) onChanged(v);
-      },
     );
   }
 }

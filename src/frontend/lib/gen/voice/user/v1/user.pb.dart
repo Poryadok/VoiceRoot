@@ -1222,21 +1222,122 @@ class UpdatePrivacySettingsRequest extends $pb.GeneratedMessage {
   PrivacySettings ensureSettings() => $_ensure(1);
 }
 
+/// Multiselect audience union (privacy.md §«Контрол выбора аудитории»).
+class PrivacyAudience extends $pb.GeneratedMessage {
+  factory PrivacyAudience({
+    $core.bool? friends,
+    $core.bool? friendsOfFriends,
+    $core.bool? spaceMembers,
+    $core.Iterable<$core.String>? spaceIds,
+    $core.bool? includeGuests,
+  }) {
+    final result = create();
+    if (friends != null) result.friends = friends;
+    if (friendsOfFriends != null) result.friendsOfFriends = friendsOfFriends;
+    if (spaceMembers != null) result.spaceMembers = spaceMembers;
+    if (spaceIds != null) result.spaceIds.addAll(spaceIds);
+    if (includeGuests != null) result.includeGuests = includeGuests;
+    return result;
+  }
+
+  PrivacyAudience._();
+
+  factory PrivacyAudience.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory PrivacyAudience.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'PrivacyAudience',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..aOB(1, _omitFieldNames ? '' : 'friends')
+    ..aOB(2, _omitFieldNames ? '' : 'friendsOfFriends')
+    ..aOB(3, _omitFieldNames ? '' : 'spaceMembers')
+    ..pPS(4, _omitFieldNames ? '' : 'spaceIds')
+    ..aOB(5, _omitFieldNames ? '' : 'includeGuests')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  PrivacyAudience clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  PrivacyAudience copyWith(void Function(PrivacyAudience) updates) =>
+      super.copyWith((message) => updates(message as PrivacyAudience))
+          as PrivacyAudience;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static PrivacyAudience create() => PrivacyAudience._();
+  @$core.override
+  PrivacyAudience createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static PrivacyAudience getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<PrivacyAudience>(create);
+  static PrivacyAudience? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.bool get friends => $_getBF(0);
+  @$pb.TagNumber(1)
+  set friends($core.bool value) => $_setBool(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasFriends() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearFriends() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.bool get friendsOfFriends => $_getBF(1);
+  @$pb.TagNumber(2)
+  set friendsOfFriends($core.bool value) => $_setBool(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasFriendsOfFriends() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearFriendsOfFriends() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.bool get spaceMembers => $_getBF(2);
+  @$pb.TagNumber(3)
+  set spaceMembers($core.bool value) => $_setBool(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasSpaceMembers() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearSpaceMembers() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $pb.PbList<$core.String> get spaceIds => $_getList(3);
+
+  @$pb.TagNumber(5)
+  $core.bool get includeGuests => $_getBF(4);
+  @$pb.TagNumber(5)
+  set includeGuests($core.bool value) => $_setBool(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasIncludeGuests() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearIncludeGuests() => $_clearField(5);
+}
+
 class PrivacySettings extends $pb.GeneratedMessage {
   factory PrivacySettings({
     $core.String? profileId,
     $core.String? preset,
-    $core.String? showOnline,
-    $core.String? showGameStatus,
-    $core.String? showMmRating,
-    $core.String? showPhone,
-    $core.String? showStories,
-    $core.String? allowDm,
-    $core.String? allowFriendRequests,
+    PrivacyAudience? showOnline,
+    PrivacyAudience? showGameStatus,
+    PrivacyAudience? showMmRating,
+    PrivacyAudience? showPhone,
+    PrivacyAudience? showStories,
+    PrivacyAudience? allowDm,
+    PrivacyAudience? allowFriendRequests,
     $core.bool? allowGuestDm,
     $1.Timestamp? updatedAt,
     PrivacyPreset? presetEnum,
-    $core.bool? showOnlineIncludeGuests,
+    PrivacyAudience? allowPhoneSearch,
+    PrivacyAudience? allowCalls,
+    PrivacyAudience? allowChatSpaceInvites,
+    PrivacyAudience? allowFiles,
+    PrivacyAudience? allowVoiceMessages,
   }) {
     final result = create();
     if (profileId != null) result.profileId = profileId;
@@ -1252,8 +1353,13 @@ class PrivacySettings extends $pb.GeneratedMessage {
     if (allowGuestDm != null) result.allowGuestDm = allowGuestDm;
     if (updatedAt != null) result.updatedAt = updatedAt;
     if (presetEnum != null) result.presetEnum = presetEnum;
-    if (showOnlineIncludeGuests != null)
-      result.showOnlineIncludeGuests = showOnlineIncludeGuests;
+    if (allowPhoneSearch != null) result.allowPhoneSearch = allowPhoneSearch;
+    if (allowCalls != null) result.allowCalls = allowCalls;
+    if (allowChatSpaceInvites != null)
+      result.allowChatSpaceInvites = allowChatSpaceInvites;
+    if (allowFiles != null) result.allowFiles = allowFiles;
+    if (allowVoiceMessages != null)
+      result.allowVoiceMessages = allowVoiceMessages;
     return result;
   }
 
@@ -1272,19 +1378,35 @@ class PrivacySettings extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'profileId')
     ..aOS(2, _omitFieldNames ? '' : 'preset')
-    ..aOS(3, _omitFieldNames ? '' : 'showOnline')
-    ..aOS(4, _omitFieldNames ? '' : 'showGameStatus')
-    ..aOS(5, _omitFieldNames ? '' : 'showMmRating')
-    ..aOS(6, _omitFieldNames ? '' : 'showPhone')
-    ..aOS(7, _omitFieldNames ? '' : 'showStories')
-    ..aOS(8, _omitFieldNames ? '' : 'allowDm')
-    ..aOS(9, _omitFieldNames ? '' : 'allowFriendRequests')
+    ..aOM<PrivacyAudience>(3, _omitFieldNames ? '' : 'showOnline',
+        subBuilder: PrivacyAudience.create)
+    ..aOM<PrivacyAudience>(4, _omitFieldNames ? '' : 'showGameStatus',
+        subBuilder: PrivacyAudience.create)
+    ..aOM<PrivacyAudience>(5, _omitFieldNames ? '' : 'showMmRating',
+        subBuilder: PrivacyAudience.create)
+    ..aOM<PrivacyAudience>(6, _omitFieldNames ? '' : 'showPhone',
+        subBuilder: PrivacyAudience.create)
+    ..aOM<PrivacyAudience>(7, _omitFieldNames ? '' : 'showStories',
+        subBuilder: PrivacyAudience.create)
+    ..aOM<PrivacyAudience>(8, _omitFieldNames ? '' : 'allowDm',
+        subBuilder: PrivacyAudience.create)
+    ..aOM<PrivacyAudience>(9, _omitFieldNames ? '' : 'allowFriendRequests',
+        subBuilder: PrivacyAudience.create)
     ..aOB(10, _omitFieldNames ? '' : 'allowGuestDm')
     ..aOM<$1.Timestamp>(11, _omitFieldNames ? '' : 'updatedAt',
         subBuilder: $1.Timestamp.create)
     ..aE<PrivacyPreset>(12, _omitFieldNames ? '' : 'presetEnum',
         enumValues: PrivacyPreset.values)
-    ..aOB(13, _omitFieldNames ? '' : 'showOnlineIncludeGuests')
+    ..aOM<PrivacyAudience>(14, _omitFieldNames ? '' : 'allowPhoneSearch',
+        subBuilder: PrivacyAudience.create)
+    ..aOM<PrivacyAudience>(15, _omitFieldNames ? '' : 'allowCalls',
+        subBuilder: PrivacyAudience.create)
+    ..aOM<PrivacyAudience>(16, _omitFieldNames ? '' : 'allowChatSpaceInvites',
+        subBuilder: PrivacyAudience.create)
+    ..aOM<PrivacyAudience>(17, _omitFieldNames ? '' : 'allowFiles',
+        subBuilder: PrivacyAudience.create)
+    ..aOM<PrivacyAudience>(18, _omitFieldNames ? '' : 'allowVoiceMessages',
+        subBuilder: PrivacyAudience.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1325,67 +1447,81 @@ class PrivacySettings extends $pb.GeneratedMessage {
   void clearPreset() => $_clearField(2);
 
   @$pb.TagNumber(3)
-  $core.String get showOnline => $_getSZ(2);
+  PrivacyAudience get showOnline => $_getN(2);
   @$pb.TagNumber(3)
-  set showOnline($core.String value) => $_setString(2, value);
+  set showOnline(PrivacyAudience value) => $_setField(3, value);
   @$pb.TagNumber(3)
   $core.bool hasShowOnline() => $_has(2);
   @$pb.TagNumber(3)
   void clearShowOnline() => $_clearField(3);
+  @$pb.TagNumber(3)
+  PrivacyAudience ensureShowOnline() => $_ensure(2);
 
   @$pb.TagNumber(4)
-  $core.String get showGameStatus => $_getSZ(3);
+  PrivacyAudience get showGameStatus => $_getN(3);
   @$pb.TagNumber(4)
-  set showGameStatus($core.String value) => $_setString(3, value);
+  set showGameStatus(PrivacyAudience value) => $_setField(4, value);
   @$pb.TagNumber(4)
   $core.bool hasShowGameStatus() => $_has(3);
   @$pb.TagNumber(4)
   void clearShowGameStatus() => $_clearField(4);
+  @$pb.TagNumber(4)
+  PrivacyAudience ensureShowGameStatus() => $_ensure(3);
 
   @$pb.TagNumber(5)
-  $core.String get showMmRating => $_getSZ(4);
+  PrivacyAudience get showMmRating => $_getN(4);
   @$pb.TagNumber(5)
-  set showMmRating($core.String value) => $_setString(4, value);
+  set showMmRating(PrivacyAudience value) => $_setField(5, value);
   @$pb.TagNumber(5)
   $core.bool hasShowMmRating() => $_has(4);
   @$pb.TagNumber(5)
   void clearShowMmRating() => $_clearField(5);
+  @$pb.TagNumber(5)
+  PrivacyAudience ensureShowMmRating() => $_ensure(4);
 
   @$pb.TagNumber(6)
-  $core.String get showPhone => $_getSZ(5);
+  PrivacyAudience get showPhone => $_getN(5);
   @$pb.TagNumber(6)
-  set showPhone($core.String value) => $_setString(5, value);
+  set showPhone(PrivacyAudience value) => $_setField(6, value);
   @$pb.TagNumber(6)
   $core.bool hasShowPhone() => $_has(5);
   @$pb.TagNumber(6)
   void clearShowPhone() => $_clearField(6);
+  @$pb.TagNumber(6)
+  PrivacyAudience ensureShowPhone() => $_ensure(5);
 
   @$pb.TagNumber(7)
-  $core.String get showStories => $_getSZ(6);
+  PrivacyAudience get showStories => $_getN(6);
   @$pb.TagNumber(7)
-  set showStories($core.String value) => $_setString(6, value);
+  set showStories(PrivacyAudience value) => $_setField(7, value);
   @$pb.TagNumber(7)
   $core.bool hasShowStories() => $_has(6);
   @$pb.TagNumber(7)
   void clearShowStories() => $_clearField(7);
+  @$pb.TagNumber(7)
+  PrivacyAudience ensureShowStories() => $_ensure(6);
 
   @$pb.TagNumber(8)
-  $core.String get allowDm => $_getSZ(7);
+  PrivacyAudience get allowDm => $_getN(7);
   @$pb.TagNumber(8)
-  set allowDm($core.String value) => $_setString(7, value);
+  set allowDm(PrivacyAudience value) => $_setField(8, value);
   @$pb.TagNumber(8)
   $core.bool hasAllowDm() => $_has(7);
   @$pb.TagNumber(8)
   void clearAllowDm() => $_clearField(8);
+  @$pb.TagNumber(8)
+  PrivacyAudience ensureAllowDm() => $_ensure(7);
 
   @$pb.TagNumber(9)
-  $core.String get allowFriendRequests => $_getSZ(8);
+  PrivacyAudience get allowFriendRequests => $_getN(8);
   @$pb.TagNumber(9)
-  set allowFriendRequests($core.String value) => $_setString(8, value);
+  set allowFriendRequests(PrivacyAudience value) => $_setField(9, value);
   @$pb.TagNumber(9)
   $core.bool hasAllowFriendRequests() => $_has(8);
   @$pb.TagNumber(9)
   void clearAllowFriendRequests() => $_clearField(9);
+  @$pb.TagNumber(9)
+  PrivacyAudience ensureAllowFriendRequests() => $_ensure(8);
 
   @$pb.TagNumber(10)
   $core.bool get allowGuestDm => $_getBF(9);
@@ -1416,15 +1552,60 @@ class PrivacySettings extends $pb.GeneratedMessage {
   @$pb.TagNumber(12)
   void clearPresetEnum() => $_clearField(12);
 
-  /// Multiselect audience: guest accounts may see show_online (privacy.md).
-  @$pb.TagNumber(13)
-  $core.bool get showOnlineIncludeGuests => $_getBF(12);
-  @$pb.TagNumber(13)
-  set showOnlineIncludeGuests($core.bool value) => $_setBool(12, value);
-  @$pb.TagNumber(13)
-  $core.bool hasShowOnlineIncludeGuests() => $_has(12);
-  @$pb.TagNumber(13)
-  void clearShowOnlineIncludeGuests() => $_clearField(13);
+  @$pb.TagNumber(14)
+  PrivacyAudience get allowPhoneSearch => $_getN(12);
+  @$pb.TagNumber(14)
+  set allowPhoneSearch(PrivacyAudience value) => $_setField(14, value);
+  @$pb.TagNumber(14)
+  $core.bool hasAllowPhoneSearch() => $_has(12);
+  @$pb.TagNumber(14)
+  void clearAllowPhoneSearch() => $_clearField(14);
+  @$pb.TagNumber(14)
+  PrivacyAudience ensureAllowPhoneSearch() => $_ensure(12);
+
+  @$pb.TagNumber(15)
+  PrivacyAudience get allowCalls => $_getN(13);
+  @$pb.TagNumber(15)
+  set allowCalls(PrivacyAudience value) => $_setField(15, value);
+  @$pb.TagNumber(15)
+  $core.bool hasAllowCalls() => $_has(13);
+  @$pb.TagNumber(15)
+  void clearAllowCalls() => $_clearField(15);
+  @$pb.TagNumber(15)
+  PrivacyAudience ensureAllowCalls() => $_ensure(13);
+
+  @$pb.TagNumber(16)
+  PrivacyAudience get allowChatSpaceInvites => $_getN(14);
+  @$pb.TagNumber(16)
+  set allowChatSpaceInvites(PrivacyAudience value) => $_setField(16, value);
+  @$pb.TagNumber(16)
+  $core.bool hasAllowChatSpaceInvites() => $_has(14);
+  @$pb.TagNumber(16)
+  void clearAllowChatSpaceInvites() => $_clearField(16);
+  @$pb.TagNumber(16)
+  PrivacyAudience ensureAllowChatSpaceInvites() => $_ensure(14);
+
+  @$pb.TagNumber(17)
+  PrivacyAudience get allowFiles => $_getN(15);
+  @$pb.TagNumber(17)
+  set allowFiles(PrivacyAudience value) => $_setField(17, value);
+  @$pb.TagNumber(17)
+  $core.bool hasAllowFiles() => $_has(15);
+  @$pb.TagNumber(17)
+  void clearAllowFiles() => $_clearField(17);
+  @$pb.TagNumber(17)
+  PrivacyAudience ensureAllowFiles() => $_ensure(15);
+
+  @$pb.TagNumber(18)
+  PrivacyAudience get allowVoiceMessages => $_getN(16);
+  @$pb.TagNumber(18)
+  set allowVoiceMessages(PrivacyAudience value) => $_setField(18, value);
+  @$pb.TagNumber(18)
+  $core.bool hasAllowVoiceMessages() => $_has(16);
+  @$pb.TagNumber(18)
+  void clearAllowVoiceMessages() => $_clearField(18);
+  @$pb.TagNumber(18)
+  PrivacyAudience ensureAllowVoiceMessages() => $_ensure(16);
 }
 
 class UpdatePresenceRequest extends $pb.GeneratedMessage {

@@ -470,23 +470,91 @@ final $typed_data.Uint8List updatePrivacySettingsRequestDescriptor =
         'ZpbGVJZBI6CghzZXR0aW5ncxgCIAEoCzIeLnZvaWNlLnVzZXIudjEuUHJpdmFjeVNldHRpbmdz'
         'UghzZXR0aW5ncw==');
 
+@$core.Deprecated('Use privacyAudienceDescriptor instead')
+const PrivacyAudience$json = {
+  '1': 'PrivacyAudience',
+  '2': [
+    {'1': 'friends', '3': 1, '4': 1, '5': 8, '10': 'friends'},
+    {
+      '1': 'friends_of_friends',
+      '3': 2,
+      '4': 1,
+      '5': 8,
+      '10': 'friendsOfFriends'
+    },
+    {'1': 'space_members', '3': 3, '4': 1, '5': 8, '10': 'spaceMembers'},
+    {'1': 'space_ids', '3': 4, '4': 3, '5': 9, '10': 'spaceIds'},
+    {'1': 'include_guests', '3': 5, '4': 1, '5': 8, '10': 'includeGuests'},
+  ],
+};
+
+/// Descriptor for `PrivacyAudience`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List privacyAudienceDescriptor = $convert.base64Decode(
+    'Cg9Qcml2YWN5QXVkaWVuY2USGAoHZnJpZW5kcxgBIAEoCFIHZnJpZW5kcxIsChJmcmllbmRzX2'
+    '9mX2ZyaWVuZHMYAiABKAhSEGZyaWVuZHNPZkZyaWVuZHMSIwoNc3BhY2VfbWVtYmVycxgDIAEo'
+    'CFIMc3BhY2VNZW1iZXJzEhsKCXNwYWNlX2lkcxgEIAMoCVIIc3BhY2VJZHMSJQoOaW5jbHVkZV'
+    '9ndWVzdHMYBSABKAhSDWluY2x1ZGVHdWVzdHM=');
+
 @$core.Deprecated('Use privacySettingsDescriptor instead')
 const PrivacySettings$json = {
   '1': 'PrivacySettings',
   '2': [
     {'1': 'profile_id', '3': 1, '4': 1, '5': 9, '10': 'profileId'},
     {'1': 'preset', '3': 2, '4': 1, '5': 9, '10': 'preset'},
-    {'1': 'show_online', '3': 3, '4': 1, '5': 9, '10': 'showOnline'},
-    {'1': 'show_game_status', '3': 4, '4': 1, '5': 9, '10': 'showGameStatus'},
-    {'1': 'show_mm_rating', '3': 5, '4': 1, '5': 9, '10': 'showMmRating'},
-    {'1': 'show_phone', '3': 6, '4': 1, '5': 9, '10': 'showPhone'},
-    {'1': 'show_stories', '3': 7, '4': 1, '5': 9, '10': 'showStories'},
-    {'1': 'allow_dm', '3': 8, '4': 1, '5': 9, '10': 'allowDm'},
+    {
+      '1': 'show_online',
+      '3': 3,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.user.v1.PrivacyAudience',
+      '10': 'showOnline'
+    },
+    {
+      '1': 'show_game_status',
+      '3': 4,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.user.v1.PrivacyAudience',
+      '10': 'showGameStatus'
+    },
+    {
+      '1': 'show_mm_rating',
+      '3': 5,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.user.v1.PrivacyAudience',
+      '10': 'showMmRating'
+    },
+    {
+      '1': 'show_phone',
+      '3': 6,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.user.v1.PrivacyAudience',
+      '10': 'showPhone'
+    },
+    {
+      '1': 'show_stories',
+      '3': 7,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.user.v1.PrivacyAudience',
+      '10': 'showStories'
+    },
+    {
+      '1': 'allow_dm',
+      '3': 8,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.user.v1.PrivacyAudience',
+      '10': 'allowDm'
+    },
     {
       '1': 'allow_friend_requests',
       '3': 9,
       '4': 1,
-      '5': 9,
+      '5': 11,
+      '6': '.voice.user.v1.PrivacyAudience',
       '10': 'allowFriendRequests'
     },
     {'1': 'allow_guest_dm', '3': 10, '4': 1, '5': 8, '10': 'allowGuestDm'},
@@ -509,11 +577,44 @@ const PrivacySettings$json = {
       '17': true
     },
     {
-      '1': 'show_online_include_guests',
-      '3': 13,
+      '1': 'allow_phone_search',
+      '3': 14,
       '4': 1,
-      '5': 8,
-      '10': 'showOnlineIncludeGuests'
+      '5': 11,
+      '6': '.voice.user.v1.PrivacyAudience',
+      '10': 'allowPhoneSearch'
+    },
+    {
+      '1': 'allow_calls',
+      '3': 15,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.user.v1.PrivacyAudience',
+      '10': 'allowCalls'
+    },
+    {
+      '1': 'allow_chat_space_invites',
+      '3': 16,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.user.v1.PrivacyAudience',
+      '10': 'allowChatSpaceInvites'
+    },
+    {
+      '1': 'allow_files',
+      '3': 17,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.user.v1.PrivacyAudience',
+      '10': 'allowFiles'
+    },
+    {
+      '1': 'allow_voice_messages',
+      '3': 18,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.user.v1.PrivacyAudience',
+      '10': 'allowVoiceMessages'
     },
   ],
   '8': [
@@ -524,16 +625,26 @@ const PrivacySettings$json = {
 /// Descriptor for `PrivacySettings`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List privacySettingsDescriptor = $convert.base64Decode(
     'Cg9Qcml2YWN5U2V0dGluZ3MSHQoKcHJvZmlsZV9pZBgBIAEoCVIJcHJvZmlsZUlkEhYKBnByZX'
-    'NldBgCIAEoCVIGcHJlc2V0Eh8KC3Nob3dfb25saW5lGAMgASgJUgpzaG93T25saW5lEigKEHNo'
-    'b3dfZ2FtZV9zdGF0dXMYBCABKAlSDnNob3dHYW1lU3RhdHVzEiQKDnNob3dfbW1fcmF0aW5nGA'
-    'UgASgJUgxzaG93TW1SYXRpbmcSHQoKc2hvd19waG9uZRgGIAEoCVIJc2hvd1Bob25lEiEKDHNo'
-    'b3dfc3RvcmllcxgHIAEoCVILc2hvd1N0b3JpZXMSGQoIYWxsb3dfZG0YCCABKAlSB2FsbG93RG'
-    '0SMgoVYWxsb3dfZnJpZW5kX3JlcXVlc3RzGAkgASgJUhNhbGxvd0ZyaWVuZFJlcXVlc3RzEiQK'
-    'DmFsbG93X2d1ZXN0X2RtGAogASgIUgxhbGxvd0d1ZXN0RG0SOQoKdXBkYXRlZF9hdBgLIAEoCz'
-    'IaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBSCXVwZGF0ZWRBdBJCCgtwcmVzZXRfZW51bRgM'
-    'IAEoDjIcLnZvaWNlLnVzZXIudjEuUHJpdmFjeVByZXNldEgAUgpwcmVzZXRFbnVtiAEBEjsKGn'
-    'Nob3dfb25saW5lX2luY2x1ZGVfZ3Vlc3RzGA0gASgIUhdzaG93T25saW5lSW5jbHVkZUd1ZXN0'
-    'c0IOCgxfcHJlc2V0X2VudW0=');
+    'NldBgCIAEoCVIGcHJlc2V0Ej8KC3Nob3dfb25saW5lGAMgASgLMh4udm9pY2UudXNlci52MS5Q'
+    'cml2YWN5QXVkaWVuY2VSCnNob3dPbmxpbmUSSAoQc2hvd19nYW1lX3N0YXR1cxgEIAEoCzIeLn'
+    'ZvaWNlLnVzZXIudjEuUHJpdmFjeUF1ZGllbmNlUg5zaG93R2FtZVN0YXR1cxJECg5zaG93X21t'
+    'X3JhdGluZxgFIAEoCzIeLnZvaWNlLnVzZXIudjEuUHJpdmFjeUF1ZGllbmNlUgxzaG93TW1SYX'
+    'RpbmcSPQoKc2hvd19waG9uZRgGIAEoCzIeLnZvaWNlLnVzZXIudjEuUHJpdmFjeUF1ZGllbmNl'
+    'UglzaG93UGhvbmUSQQoMc2hvd19zdG9yaWVzGAcgASgLMh4udm9pY2UudXNlci52MS5Qcml2YW'
+    'N5QXVkaWVuY2VSC3Nob3dTdG9yaWVzEjkKCGFsbG93X2RtGAggASgLMh4udm9pY2UudXNlci52'
+    'MS5Qcml2YWN5QXVkaWVuY2VSB2FsbG93RG0SUgoVYWxsb3dfZnJpZW5kX3JlcXVlc3RzGAkgAS'
+    'gLMh4udm9pY2UudXNlci52MS5Qcml2YWN5QXVkaWVuY2VSE2FsbG93RnJpZW5kUmVxdWVzdHMS'
+    'JAoOYWxsb3dfZ3Vlc3RfZG0YCiABKAhSDGFsbG93R3Vlc3REbRI5Cgp1cGRhdGVkX2F0GAsgAS'
+    'gLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcFIJdXBkYXRlZEF0EkIKC3ByZXNldF9lbnVt'
+    'GAwgASgOMhwudm9pY2UudXNlci52MS5Qcml2YWN5UHJlc2V0SABSCnByZXNldEVudW2IAQESTA'
+    'oSYWxsb3dfcGhvbmVfc2VhcmNoGA4gASgLMh4udm9pY2UudXNlci52MS5Qcml2YWN5QXVkaWVu'
+    'Y2VSEGFsbG93UGhvbmVTZWFyY2gSPwoLYWxsb3dfY2FsbHMYDyABKAsyHi52b2ljZS51c2VyLn'
+    'YxLlByaXZhY3lBdWRpZW5jZVIKYWxsb3dDYWxscxJXChhhbGxvd19jaGF0X3NwYWNlX2ludml0'
+    'ZXMYECABKAsyHi52b2ljZS51c2VyLnYxLlByaXZhY3lBdWRpZW5jZVIVYWxsb3dDaGF0U3BhY2'
+    'VJbnZpdGVzEj8KC2FsbG93X2ZpbGVzGBEgASgLMh4udm9pY2UudXNlci52MS5Qcml2YWN5QXVk'
+    'aWVuY2VSCmFsbG93RmlsZXMSUAoUYWxsb3dfdm9pY2VfbWVzc2FnZXMYEiABKAsyHi52b2ljZS'
+    '51c2VyLnYxLlByaXZhY3lBdWRpZW5jZVISYWxsb3dWb2ljZU1lc3NhZ2VzQg4KDF9wcmVzZXRf'
+    'ZW51bQ==');
 
 @$core.Deprecated('Use updatePresenceRequestDescriptor instead')
 const UpdatePresenceRequest$json = {

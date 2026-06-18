@@ -8,6 +8,7 @@ import (
 
 	"voice/backend/chat/internal/chatevents"
 	"voice/backend/chat/internal/store"
+	"voice/backend/pkg/privacy"
 
 	rolev1 "voice.app/voice/role/v1"
 )
@@ -20,6 +21,7 @@ type ChatGRPC struct {
 	Blocks     AccountBlockChecker
 	Privacy    PrivacyChecker
 	Friends    ProfileFriendChecker
+	SpaceCoMembership SpaceCoMembershipChecker
 	ListEnrich ListChatsEnrichment // optional; Messaging S2S for preview + unread
 	E2EPreKeyGate E2EPreKeyGate     // optional; Messaging S2S pre-key check before EnableChatE2E
 	// ChatEvents is optional; when set, new DM creation publishes to NATS JetStream (stream chat_events, subjects chat.*).
@@ -32,7 +34,12 @@ type ChatGRPC struct {
 
 // PrivacyChecker reads recipient privacy policy for DM gate.
 type PrivacyChecker interface {
-	AllowDM(ctx context.Context, profileID uuid.UUID) (string, error)
+	AllowDMAudience(ctx context.Context, profileID uuid.UUID) (privacy.Audience, error)
+}
+
+// SpaceCoMembershipChecker checks shared space membership for privacy audiences.
+type SpaceCoMembershipChecker interface {
+	AreCoMembers(ctx context.Context, profileA, profileB uuid.UUID, spaceIDs []string) (bool, error)
 }
 
 // ProfileFriendChecker verifies if two profiles are friends or friends-of-friends.

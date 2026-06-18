@@ -58,6 +58,7 @@ func main() {
 	if pool != nil {
 		var blocks grpcsvc.AccountBlockChecker
 		var socialGraph grpcsvc.SocialGraphChecker
+		var spaceCoMembership grpcsvc.SpaceCoMembershipChecker
 		if socialAddr := strings.TrimSpace(os.Getenv("SOCIAL_GRPC_ADDR")); socialAddr != "" {
 			sconn, err := grpc.NewClient(grpcclient.DialTarget(socialAddr),
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -87,6 +88,35 @@ func main() {
 			defer func() { _ = sconn.Close() }()
 			blocks = grpcsvc.NewSocialGRPCBlocks(sconn)
 			socialGraph = grpcsvc.NewSocialGRPCGraph(sconn)
+		}
+		if spaceAddr := strings.TrimSpace(os.Getenv("SPACE_GRPC_ADDR")); spaceAddr != "" {
+			spconn, err := grpc.NewClient(grpcclient.DialTarget(spaceAddr),
+				grpc.WithTransportCredentials(insecure.NewCredentials()),
+			)
+			if err != nil {
+				log.Fatalf("space grpc: %v", err)
+			}
+			spconn.Connect()
+			waitCtx, waitCancel := context.WithTimeout(context.Background(), grpcclient.DialTimeoutFromEnv())
+			for {
+				st := spconn.GetState()
+				if st == connectivity.Ready {
+					break
+				}
+				if st == connectivity.Shutdown {
+					waitCancel()
+					_ = spconn.Close()
+					log.Fatalf("space grpc: unexpected shutdown")
+				}
+				if !spconn.WaitForStateChange(waitCtx, st) {
+					waitCancel()
+					_ = spconn.Close()
+					log.Fatalf("space grpc dial: %v", context.Cause(waitCtx))
+				}
+			}
+			waitCancel()
+			defer func() { _ = spconn.Close() }()
+			spaceCoMembership = grpcsvc.NewSpaceGRPCCoMembership(spconn)
 		}
 
 		var presence *store.PresenceStore
@@ -137,6 +167,7 @@ func main() {
 			Presence:            presence,
 			Blocks:              blocks,
 			SocialGraph:         socialGraph,
+			SpaceCoMembership:   spaceCoMembership,
 			AvatarPresigner:     avatarPresigner,
 			AvatarPublicBaseURL: avatarPublicBase,
 			Events:              events,

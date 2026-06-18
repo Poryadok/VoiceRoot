@@ -5803,6 +5803,132 @@ class GetAuditLogResponse extends $pb.GeneratedMessage {
   AuditLogList ensureAuditLogList() => $_ensure(0);
 }
 
+class AreCoMembersRequest extends $pb.GeneratedMessage {
+  factory AreCoMembersRequest({
+    $core.String? profileIdA,
+    $core.String? profileIdB,
+    $core.Iterable<$core.String>? spaceIds,
+  }) {
+    final result = create();
+    if (profileIdA != null) result.profileIdA = profileIdA;
+    if (profileIdB != null) result.profileIdB = profileIdB;
+    if (spaceIds != null) result.spaceIds.addAll(spaceIds);
+    return result;
+  }
+
+  AreCoMembersRequest._();
+
+  factory AreCoMembersRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory AreCoMembersRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'AreCoMembersRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'profileIdA')
+    ..aOS(2, _omitFieldNames ? '' : 'profileIdB')
+    ..pPS(3, _omitFieldNames ? '' : 'spaceIds')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AreCoMembersRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AreCoMembersRequest copyWith(void Function(AreCoMembersRequest) updates) =>
+      super.copyWith((message) => updates(message as AreCoMembersRequest))
+          as AreCoMembersRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static AreCoMembersRequest create() => AreCoMembersRequest._();
+  @$core.override
+  AreCoMembersRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static AreCoMembersRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<AreCoMembersRequest>(create);
+  static AreCoMembersRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get profileIdA => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set profileIdA($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProfileIdA() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProfileIdA() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get profileIdB => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set profileIdB($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasProfileIdB() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearProfileIdB() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $pb.PbList<$core.String> get spaceIds => $_getList(2);
+}
+
+class AreCoMembersResponse extends $pb.GeneratedMessage {
+  factory AreCoMembersResponse({
+    $core.bool? coMembers,
+  }) {
+    final result = create();
+    if (coMembers != null) result.coMembers = coMembers;
+    return result;
+  }
+
+  AreCoMembersResponse._();
+
+  factory AreCoMembersResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory AreCoMembersResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'AreCoMembersResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOB(1, _omitFieldNames ? '' : 'coMembers')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AreCoMembersResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AreCoMembersResponse copyWith(void Function(AreCoMembersResponse) updates) =>
+      super.copyWith((message) => updates(message as AreCoMembersResponse))
+          as AreCoMembersResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static AreCoMembersResponse create() => AreCoMembersResponse._();
+  @$core.override
+  AreCoMembersResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static AreCoMembersResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<AreCoMembersResponse>(create);
+  static AreCoMembersResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.bool get coMembers => $_getBF(0);
+  @$pb.TagNumber(1)
+  set coMembers($core.bool value) => $_setBool(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasCoMembers() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearCoMembers() => $_clearField(1);
+}
+
 const $core.bool _omitFieldNames =
     $core.bool.fromEnvironment('protobuf.omit_field_names');
 const $core.bool _omitMessageNames =

@@ -158,21 +158,33 @@ message UpdatePrivacySettingsRequest {
   PrivacySettings settings = 2;
 }
 
+// Multiselect audience union (privacy.md §«Контрол выбора аудитории»).
+message PrivacyAudience {
+  bool friends = 1;
+  bool friends_of_friends = 2;
+  bool space_members = 3;
+  repeated string space_ids = 4; // empty = all spaces of owner profile
+  bool include_guests = 5;
+}
+
 message PrivacySettings {
   string profile_id = 1;
   string preset = 2; // personal | gaming | work; prefer preset_enum when set
-  string show_online = 3;
-  string show_game_status = 4;
-  string show_mm_rating = 5;
-  string show_phone = 6;
-  string show_stories = 7;
-  string allow_dm = 8;
-  string allow_friend_requests = 9;
+  PrivacyAudience show_online = 3;
+  PrivacyAudience show_game_status = 4;
+  PrivacyAudience show_mm_rating = 5;
+  PrivacyAudience show_phone = 6;
+  PrivacyAudience show_stories = 7;
+  PrivacyAudience allow_dm = 8;
+  PrivacyAudience allow_friend_requests = 9;
   bool allow_guest_dm = 10;
   google.protobuf.Timestamp updated_at = 11;
   optional PrivacyPreset preset_enum = 12;
-  // Multiselect audience: guest accounts may see show_online (privacy.md).
-  bool show_online_include_guests = 13;
+  PrivacyAudience allow_phone_search = 14;
+  PrivacyAudience allow_calls = 15;
+  PrivacyAudience allow_chat_space_invites = 16;
+  PrivacyAudience allow_files = 17;
+  PrivacyAudience allow_voice_messages = 18;
 }
 
 message UpdatePresenceRequest {

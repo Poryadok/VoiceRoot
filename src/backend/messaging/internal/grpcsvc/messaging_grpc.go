@@ -18,7 +18,9 @@ import (
 	"voice/backend/messaging/internal/messageevents"
 	"voice/backend/messaging/internal/messageid"
 	"voice/backend/messaging/internal/store"
+	"voice/backend/pkg/guestguard"
 	"voice/backend/role/permissions"
+	"voice/backend/pkg/privacy"
 
 	chatv1 "voice.app/voice/chat/v1"
 	commonv1 "voice.app/voice/common/v1"
@@ -45,6 +47,7 @@ type MessagingGRPC struct {
 	UserProfiles ProfileAccountLookup
 	Privacy      PrivacyChecker
 	Friends      ProfileFriendChecker
+	SpaceCoMembership SpaceCoMembershipChecker
 	// Files is optional for text-only messages and required for non-empty attachments_json.
 	Files FileMetadataLookup
 	// MessageEvents is optional; when set, successful send/edit/delete publishes to NATS JetStream (stream message_events, subjects message.*).
@@ -390,44 +393,16 @@ func (s *MessagingGRPC) checkDMPrivacyForSend(ctx context.Context, chatID, sende
 		}
 		return status.Error(codes.Internal, err.Error())
 	}
-	allowDM, err := s.Privacy.AllowDM(ctx, recipientProfileID)
+	allowDMAudience, err := s.Privacy.AllowDMAudience(ctx, recipientProfileID)
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())
 	}
-	switch strings.ToLower(strings.TrimSpace(allowDM)) {
-	case "", "everyone":
-		return nil
-	case "nobody":
-		return status.Error(codes.PermissionDenied, "dm blocked by recipient privacy settings")
-	case "friends":
-		if s.Friends == nil {
+	matcher := privacy.Matcher{Social: s.Friends, Space: s.SpaceCoMembership}
+	if err := privacy.CheckAllowed(matcher, ctx, recipientProfileID, senderProfileID, allowDMAudience, guestguard.IsGuest(ctx)); err != nil {
+		if errors.Is(err, privacy.ErrDenied) {
 			return status.Error(codes.PermissionDenied, "dm blocked by recipient privacy settings")
 		}
-		friends, err := s.Friends.AreFriends(ctx, senderProfileID, recipientProfileID)
-		if err != nil {
-			return status.Error(codes.Internal, err.Error())
-		}
-		if !friends {
-			return status.Error(codes.PermissionDenied, "dm blocked by recipient privacy settings")
-		}
-	case "friends_of_friends":
-		if s.Friends == nil {
-			return status.Error(codes.PermissionDenied, "dm blocked by recipient privacy settings")
-		}
-		friends, err := s.Friends.AreFriends(ctx, senderProfileID, recipientProfileID)
-		if err != nil {
-			return status.Error(codes.Internal, err.Error())
-		}
-		if friends {
-			return nil
-		}
-		fof, err := s.Friends.AreFriendsOfFriends(ctx, senderProfileID, recipientProfileID)
-		if err != nil {
-			return status.Error(codes.Internal, err.Error())
-		}
-		if !fof {
-			return status.Error(codes.PermissionDenied, "dm blocked by recipient privacy settings")
-		}
+		return status.Error(codes.Internal, err.Error())
 	}
 	return nil
 }

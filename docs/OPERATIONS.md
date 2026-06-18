@@ -53,6 +53,7 @@
 | **Auth Service**: запись blacklist, OTP state | Logout / отзыв access может не сохраниться; OTP-throttle может «просесть» | Алерт; повтор операций пользователем; мониторинг аномалий по Auth. |
 | **Realtime**: Pub/Sub между инстансами | События live **не доходят** между узлами (фрагментированный fan-out) | Клиенты в одном инстансе видят обновления, в другом — нет. **Degraded UX**: баннер «обновите чат / переподключение»; после reconnect — догрузка истории через Messaging ([ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md)). |
 | **User Service**: presence (если в Redis) | Неточный или пустой presence | Некритично для доставки сообщений; показывать «статус неизвестен» или скрыть presence. |
+| **User Service**: `privacy_settings` отсутствует / Social или Space S2S недоступен | Неверная видимость онлайн или DM / friend-request gate | **Fail-closed**: без строки `privacy_settings` онлайн скрыт (кроме self-view); при недоступности Social/Space S2S проверки friends/FoF/space_members **отклоняют** доступ (не открывают всем). Алерт при длительном отказе S2S. |
 
 ### NATS JetStream (брокер недоступен, переполнение, долгий NAK)
 

@@ -53,6 +53,9 @@ service SpaceService {
   rpc CreateFromTemplate(CreateFromTemplateRequest) returns (CreateFromTemplateResponse);
 
   rpc GetAuditLog(GetAuditLogRequest) returns (GetAuditLogResponse);
+
+  // S2S: privacy audience "space members" — shared membership between two profiles.
+  rpc AreCoMembers(AreCoMembersRequest) returns (AreCoMembersResponse);
 }
 
 message Space {
@@ -440,4 +443,14 @@ message CreateFromTemplateResponse {
 }
 message GetAuditLogResponse {
   AuditLogList audit_log_list = 1;
+}
+
+message AreCoMembersRequest {
+  string profile_id_a = 1;
+  string profile_id_b = 2;
+  repeated string space_ids = 3; // optional filter; empty = any shared space
+}
+
+message AreCoMembersResponse {
+  bool co_members = 1;
 }

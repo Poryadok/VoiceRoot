@@ -75,45 +75,20 @@ func (s *UserGRPC) mayViewOnlineStatus(ctx context.Context, targetProfile uuid.U
 	}
 	privacyStore := s.privacyStore()
 	if privacyStore == nil {
-		return !guestguard.IsGuest(ctx)
+		return false
 	}
-	privacy, err := privacyStore.GetByProfileID(ctx, targetProfile)
+	row, err := privacyStore.GetByProfileID(ctx, targetProfile)
+	if err != nil || row == nil {
+		return false
+	}
+	if !hasViewer {
+		return false
+	}
+	ok, err := s.audienceMatcher().Allowed(ctx, targetProfile, viewerProfile, row.ShowOnline, guestguard.IsGuest(ctx))
 	if err != nil {
-		return !guestguard.IsGuest(ctx)
-	}
-	if privacy == nil {
-		return !guestguard.IsGuest(ctx)
-	}
-	showOnline := strings.ToLower(strings.TrimSpace(privacy.ShowOnline))
-	if guestguard.IsGuest(ctx) {
-		if showOnline == "everyone" {
-			return true
-		}
-		return privacy.ShowOnlineIncludeGuests
-	}
-	switch showOnline {
-	case "", "everyone":
-		return true
-	case "nobody":
-		return false
-	case "friends":
-		if !hasViewer || s.SocialGraph == nil {
-			return false
-		}
-		ok, err := s.SocialGraph.AreFriends(ctx, viewerProfile, targetProfile)
-		return err == nil && ok
-	case "friends_of_friends":
-		if !hasViewer || s.SocialGraph == nil {
-			return false
-		}
-		if ok, err := s.SocialGraph.AreFriends(ctx, viewerProfile, targetProfile); err == nil && ok {
-			return true
-		}
-		fof, err := s.SocialGraph.AreFriendsOfFriends(ctx, viewerProfile, targetProfile)
-		return err == nil && fof
-	default:
 		return false
 	}
+	return ok
 }
 
 func (s *UserGRPC) guestMayViewOnlineStatus(ctx context.Context, targetProfile uuid.UUID) bool {

@@ -19,11 +19,7 @@
 
 ### Секреты и внешние сервисы
 
-- [ ] **Developer Portal OAuth** — проверить OAuth/OIDC app: `client_id`, `client_secret`, redirect URI (`http://localhost:9082/callback` в dev), issuer в `.env` / compose secrets. Агент может доделать flow после ключей.
-result: address http://localhost:9082/callback?code=whWjBm-KaSI0y7Fg4aagdfbyiXDLjlsFn-pDbIZmyXU&state=0518b710-5f64-4b4a-8ec9-f2117951dace 
-request
-http://127.0.0.1:18080/api/v1/auth/oauth2/token
-{"error":"invalid_client"}
+- [x] **Developer Portal OAuth** — проверить OAuth/OIDC app: `client_id`, `client_secret`, redirect URI (`http://localhost:9082/callback` в dev), issuer в `.env` / compose secrets. Агент может доделать flow после ключей.
 
 ### Отложено (staging недоступен, локально — compose)
 
@@ -66,12 +62,15 @@ http://127.0.0.1:18080/api/v1/auth/oauth2/token
 
 ### Приватность
 
-- [ ] **Пресеты ≠ privacy.md** — work: `show_online` в коде `friends_of_friends`, в доке «УС»; нет audience `space_members` в proto/валидации.
-- [ ] **Мультиселект аудитории** — single-value dropdowns; нет «Все/Никто», per-space picker ([privacy.md](features/privacy.md) §«Контрол выбора аудитории»).
-- [ ] **Поля действий** — нет в модели/UI: phone search, calls, files, voice, chat/space invites; нет avatar/bio visibility (PLAN §11 упоминает avatar/bio/online).
-- [ ] **FoF live E2E** — unit/integration + FoF DM есть; нет compose/Flutter live «A—C—B, stranger denied / FoF allowed».
-- [ ] **Presence privacy без `privacy_settings`** — при отсутствии таблицы/строки `mayViewOnlineStatus` degrades open (legacy tests); зафиксировать в docs/OPERATIONS или fail-closed.
-- [ ] **ListFriendsOfFriends cap** — store обходит до 5000 друзей на hop; при росте графа нужен SQL FoF или pagination audit.
+- [x] **Пресеты ≠ privacy.md** — work `show_online` = УС (`space_members` only); gaming/personal/work в `pkg/privacy/presets.go` + Flutter `privacy_presets.dart`.
+- [x] **Мультиселект аудитории** — `PrivacyAudience` proto/JSONB, `PrivacyAudiencePicker`, Все/Никто, per-space picker.
+- [x] **Поля действий** — proto/UI: phone search, calls, files, voice, chat/space invites; enforcement: DM + friend requests + presence; **остаток:** `allow_phone_search` / `allow_calls` / `allow_files` / `allow_voice_messages` / `allow_chat_space_invites` — store+validate, полный gate в Voice/Space/Messaging attachments — см. audit ниже.
+- [ ] **show_avatar / show_bio** — не в [privacy.md](features/privacy.md); PLAN §11 упоминает — doc gap, отложено.
+- [x] **FoF live E2E** — `compose_phase11_privacy_fof_live_test.go` (opt-in) + `phase11_privacy_fof_e2e_live_test.dart` (opt-in Flutter).
+- [x] **Presence privacy без `privacy_settings`** — fail-closed в `user_presence.go`; строка в [OPERATIONS.md](OPERATIONS.md) §degraded UX.
+- [x] **ListFriendsOfFriends cap** — SQL one-hop в `social/internal/store/friendships.go` (без 5000 loop).
+
+**Audit (Phase 11 privacy batch):** `allow_calls` / invites — нет enforcement в Calls/Space invite RPC (сервисы частично stub). `allow_files` / `allow_voice_messages` — MIME guard в Messaging не подключён. Social/User Dockerfiles обновлены для `voice/pb/space` + chat transitive dep.
 
 **Промпт-якорь:** `Phase 11 Trust — privacy and reports parity from docs/TODO.md`.
 

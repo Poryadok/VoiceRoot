@@ -14,12 +14,14 @@ COPY user/pb/voice/social/go.mod ./user/pb/voice/social/
 COPY messaging/pb/voice/events/go.mod ./messaging/pb/voice/events/
 COPY messaging/pb/voice/messaging/go.mod ./messaging/pb/voice/messaging/
 COPY role/pb/voice/role/go.mod ./role/pb/voice/role/
+COPY voice/pb/voice/space/go.mod ./voice/pb/voice/space/
 RUN --mount=type=cache,target=/go/pkg/mod sh /usr/local/bin/docker-go-mod-download.sh chat
 COPY pkg ./pkg
 COPY user/pb ./user/pb
 COPY messaging/pb/voice/events ./messaging/pb/voice/events
 COPY messaging/pb/voice/messaging ./messaging/pb/voice/messaging
 COPY role/pb/voice/role ./role/pb/voice/role
+COPY voice/pb/voice/space ./voice/pb/voice/space
 COPY chat/pb ./chat/pb
 COPY chat ./chat
 WORKDIR /src/chat

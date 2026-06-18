@@ -26,13 +26,13 @@ func (s *recordingUserPrivacy) GetPrivacySettings(_ context.Context, req *userv1
 		PrivacySettings: &userv1.PrivacySettings{
 			ProfileId:           req.GetProfileId(),
 			Preset:              "gaming",
-			ShowOnline:          "everyone",
-			ShowGameStatus:      "everyone",
-			ShowMmRating:        "everyone",
-			ShowPhone:           "nobody",
-			ShowStories:         "everyone",
-			AllowDm:             "everyone",
-			AllowFriendRequests: "everyone",
+			ShowOnline:          &userv1.PrivacyAudience{Friends: true, FriendsOfFriends: true, SpaceMembers: true, IncludeGuests: true},
+			ShowGameStatus:      &userv1.PrivacyAudience{Friends: true, FriendsOfFriends: true, SpaceMembers: true, IncludeGuests: true},
+			ShowMmRating:        &userv1.PrivacyAudience{Friends: true, FriendsOfFriends: true, SpaceMembers: true, IncludeGuests: true},
+			ShowPhone:           &userv1.PrivacyAudience{},
+			ShowStories:         &userv1.PrivacyAudience{Friends: true, FriendsOfFriends: true, SpaceMembers: true, IncludeGuests: true},
+			AllowDm:             &userv1.PrivacyAudience{Friends: true, FriendsOfFriends: true, SpaceMembers: true, IncludeGuests: true},
+			AllowFriendRequests: &userv1.PrivacyAudience{Friends: true, FriendsOfFriends: true, SpaceMembers: true, IncludeGuests: true},
 		},
 	}, nil
 }
@@ -86,13 +86,13 @@ func TestTranscodeUsersPrivacy_GetMe(t *testing.T) {
 	require.Equal(t, "profile-1", rec.lastGet.GetProfileId())
 }
 
-// TestTranscodeUsersPrivacy_PatchMe documents PATCH /api/v1/users/me/privacy with preset + allow_dm.
+// TestTranscodeUsersPrivacy_PatchMe documents PATCH /api/v1/users/me/privacy with multiselect audiences.
 func TestTranscodeUsersPrivacy_PatchMe(t *testing.T) {
 	t.Parallel()
 	rec := &recordingUserPrivacy{}
 	h := newUserPrivacyContractGateway(t, rec)
 
-	body := `{"settings":{"preset":"personal","allow_dm":"friends","show_online":"friends","show_game_status":"friends","show_mm_rating":"friends","show_phone":"nobody","show_stories":"friends","allow_friend_requests":"everyone","allow_guest_dm":false}}`
+	body := `{"settings":{"preset":"personal","allow_dm":{"friends":true},"show_online":{"friends":true},"show_game_status":{"friends":true},"show_mm_rating":{"friends":true},"show_phone":{"friends":false,"friends_of_friends":false,"space_members":false,"include_guests":false},"show_stories":{"friends":true},"allow_friend_requests":{"friends":true,"friends_of_friends":true,"space_members":true,"include_guests":true},"allow_guest_dm":false}}`
 	resp := performRequest(h, http.MethodPatch, "/api/v1/users/me/privacy", body, map[string]string{
 		"Authorization": "Bearer valid-user-token",
 	})
@@ -100,5 +100,5 @@ func TestTranscodeUsersPrivacy_PatchMe(t *testing.T) {
 	require.NotNil(t, rec.lastUpdate)
 	require.Equal(t, "profile-1", rec.lastUpdate.GetProfileId())
 	require.Equal(t, "personal", rec.lastUpdate.GetSettings().GetPreset())
-	require.Equal(t, "friends", rec.lastUpdate.GetSettings().GetAllowDm())
+	require.True(t, rec.lastUpdate.GetSettings().GetAllowDm().GetFriends())
 }

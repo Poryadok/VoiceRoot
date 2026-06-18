@@ -2588,6 +2588,66 @@ abstract class AppLocalizations {
   /// **'Nobody'**
   String get privacyAudienceNobody;
 
+  /// No description provided for @privacyAudienceSpaceMembers.
+  ///
+  /// In en, this message translates to:
+  /// **'Space members'**
+  String get privacyAudienceSpaceMembers;
+
+  /// No description provided for @privacyAudienceIncludeGuests.
+  ///
+  /// In en, this message translates to:
+  /// **'Guest accounts'**
+  String get privacyAudienceIncludeGuests;
+
+  /// No description provided for @privacyAudienceSpacesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Spaces'**
+  String get privacyAudienceSpacesTitle;
+
+  /// No description provided for @privacyAudienceSpacesEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'You are not a member of any spaces'**
+  String get privacyAudienceSpacesEmpty;
+
+  /// No description provided for @privacyActionsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Actions'**
+  String get privacyActionsTitle;
+
+  /// No description provided for @privacyAllowPhoneSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Phone number search'**
+  String get privacyAllowPhoneSearch;
+
+  /// No description provided for @privacyAllowCalls.
+  ///
+  /// In en, this message translates to:
+  /// **'Calls'**
+  String get privacyAllowCalls;
+
+  /// No description provided for @privacyAllowChatSpaceInvites.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat and space invites'**
+  String get privacyAllowChatSpaceInvites;
+
+  /// No description provided for @privacyAllowFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'File sharing'**
+  String get privacyAllowFiles;
+
+  /// No description provided for @privacyAllowVoiceMessages.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice messages'**
+  String get privacyAllowVoiceMessages;
+
   /// No description provided for @reportAction.
   ///
   /// In en, this message translates to:

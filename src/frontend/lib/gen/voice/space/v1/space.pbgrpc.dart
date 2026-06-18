@@ -286,6 +286,14 @@ class SpaceServiceClient extends $grpc.Client {
     return $createUnaryCall(_$getAuditLog, request, options: options);
   }
 
+  /// S2S: privacy audience "space members" — shared membership between two profiles.
+  $grpc.ResponseFuture<$0.AreCoMembersResponse> areCoMembers(
+    $0.AreCoMembersRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$areCoMembers, request, options: options);
+  }
+
   // method descriptors
 
   static final _$createSpace =
@@ -468,6 +476,11 @@ class SpaceServiceClient extends $grpc.Client {
           '/voice.space.v1.SpaceService/GetAuditLog',
           ($0.GetAuditLogRequest value) => value.writeToBuffer(),
           $0.GetAuditLogResponse.fromBuffer);
+  static final _$areCoMembers =
+      $grpc.ClientMethod<$0.AreCoMembersRequest, $0.AreCoMembersResponse>(
+          '/voice.space.v1.SpaceService/AreCoMembers',
+          ($0.AreCoMembersRequest value) => value.writeToBuffer(),
+          $0.AreCoMembersResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.space.v1.SpaceService')
@@ -785,6 +798,15 @@ abstract class SpaceServiceBase extends $grpc.Service {
             ($core.List<$core.int> value) =>
                 $0.GetAuditLogRequest.fromBuffer(value),
             ($0.GetAuditLogResponse value) => value.writeToBuffer()));
+    $addMethod(
+        $grpc.ServiceMethod<$0.AreCoMembersRequest, $0.AreCoMembersResponse>(
+            'AreCoMembers',
+            areCoMembers_Pre,
+            false,
+            false,
+            ($core.List<$core.int> value) =>
+                $0.AreCoMembersRequest.fromBuffer(value),
+            ($0.AreCoMembersResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.CreateSpaceResponse> createSpace_Pre($grpc.ServiceCall $call,
@@ -1096,4 +1118,13 @@ abstract class SpaceServiceBase extends $grpc.Service {
 
   $async.Future<$0.GetAuditLogResponse> getAuditLog(
       $grpc.ServiceCall call, $0.GetAuditLogRequest request);
+
+  $async.Future<$0.AreCoMembersResponse> areCoMembers_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.AreCoMembersRequest> $request) async {
+    return areCoMembers($call, await $request);
+  }
+
+  $async.Future<$0.AreCoMembersResponse> areCoMembers(
+      $grpc.ServiceCall call, $0.AreCoMembersRequest request);
 }

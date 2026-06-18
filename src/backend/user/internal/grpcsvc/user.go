@@ -33,6 +33,8 @@ type UserGRPC struct {
 	Blocks AccountBlockChecker
 	// SocialGraph optional Social S2S checker for privacy presence enforcement.
 	SocialGraph SocialGraphChecker
+	// SpaceCoMembership optional Space S2S checker for space_members audience.
+	SpaceCoMembership SpaceCoMembershipChecker
 	// AvatarPresigner optional; nil → CreateAvatarPresignedUpload returns FailedPrecondition.
 	AvatarPresigner AvatarPresigner
 	// AvatarPublicBaseURL is used to build public_url and to validate UpdateProfile.avatar_url (empty skips validation).

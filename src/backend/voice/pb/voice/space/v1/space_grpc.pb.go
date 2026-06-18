@@ -55,6 +55,7 @@ const (
 	SpaceService_ListTemplates_FullMethodName       = "/voice.space.v1.SpaceService/ListTemplates"
 	SpaceService_CreateFromTemplate_FullMethodName  = "/voice.space.v1.SpaceService/CreateFromTemplate"
 	SpaceService_GetAuditLog_FullMethodName         = "/voice.space.v1.SpaceService/GetAuditLog"
+	SpaceService_AreCoMembers_FullMethodName        = "/voice.space.v1.SpaceService/AreCoMembers"
 )
 
 // SpaceServiceClient is the client API for SpaceService service.
@@ -100,6 +101,8 @@ type SpaceServiceClient interface {
 	ListTemplates(ctx context.Context, in *ListTemplatesRequest, opts ...grpc.CallOption) (*ListTemplatesResponse, error)
 	CreateFromTemplate(ctx context.Context, in *CreateFromTemplateRequest, opts ...grpc.CallOption) (*CreateFromTemplateResponse, error)
 	GetAuditLog(ctx context.Context, in *GetAuditLogRequest, opts ...grpc.CallOption) (*GetAuditLogResponse, error)
+	// S2S: privacy audience "space members" — shared membership between two profiles.
+	AreCoMembers(ctx context.Context, in *AreCoMembersRequest, opts ...grpc.CallOption) (*AreCoMembersResponse, error)
 }
 
 type spaceServiceClient struct {
@@ -470,6 +473,16 @@ func (c *spaceServiceClient) GetAuditLog(ctx context.Context, in *GetAuditLogReq
 	return out, nil
 }
 
+func (c *spaceServiceClient) AreCoMembers(ctx context.Context, in *AreCoMembersRequest, opts ...grpc.CallOption) (*AreCoMembersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AreCoMembersResponse)
+	err := c.cc.Invoke(ctx, SpaceService_AreCoMembers_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SpaceServiceServer is the server API for SpaceService service.
 // All implementations must embed UnimplementedSpaceServiceServer
 // for forward compatibility.
@@ -513,6 +526,8 @@ type SpaceServiceServer interface {
 	ListTemplates(context.Context, *ListTemplatesRequest) (*ListTemplatesResponse, error)
 	CreateFromTemplate(context.Context, *CreateFromTemplateRequest) (*CreateFromTemplateResponse, error)
 	GetAuditLog(context.Context, *GetAuditLogRequest) (*GetAuditLogResponse, error)
+	// S2S: privacy audience "space members" — shared membership between two profiles.
+	AreCoMembers(context.Context, *AreCoMembersRequest) (*AreCoMembersResponse, error)
 	mustEmbedUnimplementedSpaceServiceServer()
 }
 
@@ -630,6 +645,9 @@ func (UnimplementedSpaceServiceServer) CreateFromTemplate(context.Context, *Crea
 }
 func (UnimplementedSpaceServiceServer) GetAuditLog(context.Context, *GetAuditLogRequest) (*GetAuditLogResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetAuditLog not implemented")
+}
+func (UnimplementedSpaceServiceServer) AreCoMembers(context.Context, *AreCoMembersRequest) (*AreCoMembersResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AreCoMembers not implemented")
 }
 func (UnimplementedSpaceServiceServer) mustEmbedUnimplementedSpaceServiceServer() {}
 func (UnimplementedSpaceServiceServer) testEmbeddedByValue()                      {}
@@ -1300,6 +1318,24 @@ func _SpaceService_GetAuditLog_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SpaceService_AreCoMembers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AreCoMembersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).AreCoMembers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_AreCoMembers_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).AreCoMembers(ctx, req.(*AreCoMembersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SpaceService_ServiceDesc is the grpc.ServiceDesc for SpaceService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1450,6 +1486,10 @@ var SpaceService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetAuditLog",
 			Handler:    _SpaceService_GetAuditLog_Handler,
+		},
+		{
+			MethodName: "AreCoMembers",
+			Handler:    _SpaceService_AreCoMembers_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

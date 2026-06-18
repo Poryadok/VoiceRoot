@@ -1849,3 +1849,31 @@ const GetAuditLogResponse$json = {
 final $typed_data.Uint8List getAuditLogResponseDescriptor = $convert.base64Decode(
     'ChNHZXRBdWRpdExvZ1Jlc3BvbnNlEkIKDmF1ZGl0X2xvZ19saXN0GAEgASgLMhwudm9pY2Uuc3'
     'BhY2UudjEuQXVkaXRMb2dMaXN0UgxhdWRpdExvZ0xpc3Q=');
+
+@$core.Deprecated('Use areCoMembersRequestDescriptor instead')
+const AreCoMembersRequest$json = {
+  '1': 'AreCoMembersRequest',
+  '2': [
+    {'1': 'profile_id_a', '3': 1, '4': 1, '5': 9, '10': 'profileIdA'},
+    {'1': 'profile_id_b', '3': 2, '4': 1, '5': 9, '10': 'profileIdB'},
+    {'1': 'space_ids', '3': 3, '4': 3, '5': 9, '10': 'spaceIds'},
+  ],
+};
+
+/// Descriptor for `AreCoMembersRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List areCoMembersRequestDescriptor = $convert.base64Decode(
+    'ChNBcmVDb01lbWJlcnNSZXF1ZXN0EiAKDHByb2ZpbGVfaWRfYRgBIAEoCVIKcHJvZmlsZUlkQR'
+    'IgCgxwcm9maWxlX2lkX2IYAiABKAlSCnByb2ZpbGVJZEISGwoJc3BhY2VfaWRzGAMgAygJUghz'
+    'cGFjZUlkcw==');
+
+@$core.Deprecated('Use areCoMembersResponseDescriptor instead')
+const AreCoMembersResponse$json = {
+  '1': 'AreCoMembersResponse',
+  '2': [
+    {'1': 'co_members', '3': 1, '4': 1, '5': 8, '10': 'coMembers'},
+  ],
+};
+
+/// Descriptor for `AreCoMembersResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List areCoMembersResponseDescriptor = $convert.base64Decode(
+    'ChRBcmVDb01lbWJlcnNSZXNwb25zZRIdCgpjb19tZW1iZXJzGAEgASgIUgljb01lbWJlcnM=');

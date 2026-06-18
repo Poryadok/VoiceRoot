@@ -278,6 +278,16 @@ SELECT EXISTS(
 	return exists, nil
 }
 
+// AreFriends implements privacy.SocialGraph using accepted friendships.
+func (s *FriendshipStore) AreFriends(ctx context.Context, profileA, profileB uuid.UUID) (bool, error) {
+	return s.AreFriendsAccepted(ctx, profileA, profileB)
+}
+
+// AreFriendsOfFriends implements privacy.SocialGraph using one-hop FoF.
+func (s *FriendshipStore) AreFriendsOfFriends(ctx context.Context, profileA, profileB uuid.UUID) (bool, error) {
+	return s.AreFriendsOfFriendsAccepted(ctx, profileA, profileB)
+}
+
 // AreFriendsOfFriendsAccepted reports whether profileB is a one-hop friend-of-friend of profileA
 // (privacy.md: single level, not recursive). Direct friends return false.
 func (s *FriendshipStore) AreFriendsOfFriendsAccepted(ctx context.Context, profileA, profileB uuid.UUID) (bool, error) {
@@ -312,34 +322,51 @@ SELECT EXISTS (
 
 // ListFriendsOfFriends returns distinct profile IDs one friendship hop away from profileID (excluding self and direct friends).
 func (s *FriendshipStore) ListFriendsOfFriends(ctx context.Context, profileID uuid.UUID) ([]uuid.UUID, error) {
-	directRows, err := s.ListFriends(ctx, profileID, nil, 5000)
+	if s == nil || s.Pool == nil {
+		return nil, nil
+	}
+	rows, err := s.Pool.Query(ctx, `
+SELECT DISTINCT other_id FROM (
+  SELECT CASE
+    WHEN f1.requester_profile_id = $1 THEN f1.target_profile_id
+    ELSE f1.requester_profile_id
+  END AS friend_id
+  FROM friendships f1
+  WHERE f1.status = 'accepted'
+    AND (f1.requester_profile_id = $1 OR f1.target_profile_id = $1)
+) direct
+JOIN friendships f2 ON f2.status = 'accepted'
+  AND (
+    (f2.requester_profile_id = direct.friend_id)
+    OR (f2.target_profile_id = direct.friend_id)
+  )
+CROSS JOIN LATERAL (
+  SELECT CASE
+    WHEN f2.requester_profile_id = direct.friend_id THEN f2.target_profile_id
+    ELSE f2.requester_profile_id
+  END AS other_id
+) hop
+WHERE hop.other_id <> $1
+  AND hop.other_id NOT IN (
+    SELECT CASE
+      WHEN f3.requester_profile_id = $1 THEN f3.target_profile_id
+      ELSE f3.requester_profile_id
+    END
+    FROM friendships f3
+    WHERE f3.status = 'accepted'
+      AND (f3.requester_profile_id = $1 OR f3.target_profile_id = $1)
+  )`, profileID)
 	if err != nil {
 		return nil, err
 	}
-	direct := make(map[uuid.UUID]struct{}, len(directRows))
-	for _, row := range directRows {
-		direct[row.OtherProfileID] = struct{}{}
-	}
-	fof := make(map[uuid.UUID]struct{})
-	for friendID := range direct {
-		rows, err := s.ListFriends(ctx, friendID, nil, 5000)
-		if err != nil {
+	defer rows.Close()
+	var out []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
-		for _, row := range rows {
-			id := row.OtherProfileID
-			if id == profileID {
-				continue
-			}
-			if _, ok := direct[id]; ok {
-				continue
-			}
-			fof[id] = struct{}{}
-		}
-	}
-	out := make([]uuid.UUID, 0, len(fof))
-	for id := range fof {
 		out = append(out, id)
 	}
-	return out, nil
+	return out, rows.Err()
 }
