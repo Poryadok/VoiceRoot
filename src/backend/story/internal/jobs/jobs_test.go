@@ -30,6 +30,6 @@ func TestStartExpiryWorker_runs(t *testing.T) {
 	st := &store.StoryStore{}
 	// jobs expect *store.StoryStore - test wiring only starts goroutines without panic
 	jobs.StartExpiryWorker(context.Background(), st, nil)
-	jobs.StartArchivePurgeWorker(context.Background(), st, nil)
+	jobs.StartArchivePurgeWorker(context.Background(), st, nil, nil)
 	require.True(t, true)
 }

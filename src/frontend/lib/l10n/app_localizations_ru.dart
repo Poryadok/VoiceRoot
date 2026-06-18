@@ -1974,4 +1974,70 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get storyLfpGame => 'Игра';
+
+  @override
+  String get storyCreateVisibilityLabel => 'Кто видит сторис';
+
+  @override
+  String get storyCreateMentionLabel => 'Упомянуть друзей';
+
+  @override
+  String get storyCreateMentionHint => '@username';
+
+  @override
+  String get storyCreateGameTagLabel => 'Игра';
+
+  @override
+  String get storyCreateGameTagPick => 'Выбрать игру';
+
+  @override
+  String get storyCreateGameTagClear => 'Сбросить';
+
+  @override
+  String get storyCreateTextStyleLabel => 'Фон';
+
+  @override
+  String get storyVisibilityEveryone => 'Все';
+
+  @override
+  String get storyVisibilityFriends => 'Друзья';
+
+  @override
+  String get storyVisibilityCloseFriends => 'Близкие друзья';
+
+  @override
+  String get storyViewerReply => 'Ответить';
+
+  @override
+  String get storyViewerReplyHint => 'Приватный ответ';
+
+  @override
+  String get storyViewerReplySent => 'Ответ отправлен';
+
+  @override
+  String storyViewerViewCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count просмотров',
+      many: '$count просмотров',
+      few: '$count просмотра',
+      one: '$count просмотр',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String storyHighlightVisibility(String value) {
+    return 'Видимость: $value';
+  }
+
+  @override
+  String get storyLfpJoin => 'Присоединиться';
+
+  @override
+  String get storyLfpWrite => 'Написать';
+
+  @override
+  String get socialStoryCreate => 'Новая сторис';
 }

@@ -2,18 +2,24 @@ package grpcsvc
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"voice/backend/pkg/privacy"
 	"voice/backend/story/internal/authctx"
 	"voice/backend/story/internal/store"
+	"voice/backend/story/internal/storyevents"
 
+	chatv1 "voice.app/voice/chat/v1"
 	commonv1 "voice.app/voice/common/v1"
+	messagingv1 "voice.app/voice/messaging/v1"
 	storyv1 "voice.app/voice/story/v1"
 )
 
@@ -22,11 +28,36 @@ type FriendChecker interface {
 	IsFriend(ctx context.Context, viewerProfileID, authorProfileID uuid.UUID) (bool, error)
 }
 
+// SubscriptionChecker resolves Premium entitlement for anonymous story views.
+type SubscriptionChecker interface {
+	HasActivePremium(ctx context.Context, accountID uuid.UUID) (bool, error)
+}
+
+// StoryPrivacyChecker loads show_stories audience for LFP visibility floor.
+type StoryPrivacyChecker interface {
+	ShowStoriesAudience(ctx context.Context, profileID uuid.UUID) (privacy.Audience, error)
+}
+
+// ChatClient opens DM chats for private story replies.
+type ChatClient interface {
+	CreateDM(ctx context.Context, in *chatv1.CreateDMRequest) (*chatv1.CreateDMResponse, error)
+}
+
+// MessagingClient sends DM messages for private story replies.
+type MessagingClient interface {
+	SendMessage(ctx context.Context, in *messagingv1.SendMessageRequest) (*messagingv1.SendMessageResponse, error)
+}
+
 // StoryGRPC implements voice.story.v1.StoryService.
 type StoryGRPC struct {
 	storyv1.UnimplementedStoryServiceServer
-	Store   *store.StoryStore
-	Friends FriendChecker
+	Store         *store.StoryStore
+	Friends       FriendChecker
+	Subscriptions SubscriptionChecker
+	Privacy       StoryPrivacyChecker
+	Chat          ChatClient
+	Messaging     MessagingClient
+	Events        storyevents.Publisher
 }
 
 // NewStoryGRPC wires a StoryGRPC handler.
@@ -62,18 +93,26 @@ func (s *StoryGRPC) CreateStory(ctx context.Context, req *storyv1.CreateStoryReq
 		mediaID = &parsed
 	}
 	row, err := s.Store.CreateStory(ctx, store.CreateStoryInput{
-		AuthorProfileID: profileID,
+		AuthorProfileID:   profileID,
 		Type:            storyType,
 		MediaFileID:     mediaID,
 		TextContent:     req.TextContent,
 		TextStyleJSON:   req.TextStyleJson,
 		GameTag:         req.GameTag,
+		MentionProfileIDs: mentionIDsToJSON(req.GetMentionProfileIds()),
 		Visibility:      visibility,
 	})
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	return &storyv1.CreateStoryResponse{Story: rowToProto(row)}, nil
+	if s.Events != nil {
+		gameTag := ""
+		if req.GameTag != nil {
+			gameTag = *req.GameTag
+		}
+		_ = s.Events.PublishStoryCreated(ctx, row.ID.String(), profileID.String(), storyType, gameTag, req.GetMentionProfileIds())
+	}
+	return &storyv1.CreateStoryResponse{Story: rowToProtoForViewer(row, profileID)}, nil
 }
 
 func (s *StoryGRPC) DeleteStory(ctx context.Context, req *storyv1.DeleteStoryRequest) (*storyv1.DeleteStoryResponse, error) {
@@ -113,7 +152,7 @@ func (s *StoryGRPC) GetStory(ctx context.Context, req *storyv1.GetStoryRequest) 
 	if !s.canViewStory(ctx, viewerID, row) {
 		return nil, status.Error(codes.PermissionDenied, "story not visible")
 	}
-	return &storyv1.GetStoryResponse{Story: rowToProto(row)}, nil
+	return &storyv1.GetStoryResponse{Story: rowToProtoForViewer(row, viewerID)}, nil
 }
 
 func (s *StoryGRPC) GetStoryFeed(ctx context.Context, req *storyv1.GetStoryFeedRequest) (*storyv1.GetStoryFeedResponse, error) {
@@ -122,22 +161,31 @@ func (s *StoryGRPC) GetStoryFeed(ctx context.Context, req *storyv1.GetStoryFeedR
 		return nil, status.Error(codes.Unauthenticated, "profile required")
 	}
 	limit := int32(50)
-	if req.GetPage() != nil && req.GetPage().GetPageSize() > 0 {
-		limit = req.GetPage().GetPageSize()
+	cursor := ""
+	if req.GetPage() != nil {
+		if req.GetPage().GetPageSize() > 0 {
+			limit = req.GetPage().GetPageSize()
+		}
+		cursor = req.GetPage().GetCursor()
 	}
-	rows, err := s.Store.ListActiveStories(ctx, int(limit))
+	page, err := s.Store.ListActiveStoriesPaginated(ctx, int(limit), cursor)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	var visible []*storyv1.Story
-	for i := range rows {
-		if s.canViewStory(ctx, viewerID, &rows[i]) {
-			visible = append(visible, rowToProto(&rows[i]))
+	for i := range page.Rows {
+		if s.canViewStory(ctx, viewerID, &page.Rows[i]) {
+			visible = append(visible, rowToProtoForViewer(&page.Rows[i], viewerID))
 		}
 	}
 	return &storyv1.GetStoryFeedResponse{
-		Stories: visible,
-		Page:    &commonv1.CursorPageResponse{HasMore: false},
+		Stories:    visible,
+		NextCursor: page.NextCursor,
+		Page: &commonv1.CursorPageResponse{
+			NextCursor: page.NextCursor,
+			HasMore:    page.HasMore,
+		},
+		FeedGroups: groupStoriesByAuthor(visible),
 	}, nil
 }
 
@@ -157,7 +205,7 @@ func (s *StoryGRPC) GetProfileStories(ctx context.Context, req *storyv1.GetProfi
 	var visible []*storyv1.Story
 	for i := range rows {
 		if s.canViewStory(ctx, viewerID, &rows[i]) {
-			visible = append(visible, rowToProto(&rows[i]))
+			visible = append(visible, rowToProtoForViewer(&rows[i], viewerID))
 		}
 	}
 	return &storyv1.GetProfileStoriesResponse{
@@ -184,8 +232,27 @@ func (s *StoryGRPC) MarkViewed(ctx context.Context, req *storyv1.MarkViewedReque
 	if !s.canViewStory(ctx, viewerID, row) {
 		return nil, status.Error(codes.PermissionDenied, "story not visible")
 	}
+	if req.GetAnonymous() {
+		accountID, err := accountIDFromContext(ctx)
+		if err != nil {
+			return nil, status.Error(codes.Unauthenticated, "account required")
+		}
+		if s.Subscriptions == nil {
+			return nil, status.Error(codes.PermissionDenied, "premium subscription required")
+		}
+		ok, err := s.Subscriptions.HasActivePremium(ctx, accountID)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		if !ok {
+			return nil, status.Error(codes.PermissionDenied, "premium subscription required")
+		}
+	}
 	if err := s.Store.MarkViewed(ctx, storyID, viewerID, req.GetAnonymous()); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if s.Events != nil {
+		_ = s.Events.PublishStoryViewed(ctx, storyID.String(), viewerID.String())
 	}
 	return &storyv1.MarkViewedResponse{}, nil
 }
@@ -251,7 +318,89 @@ func (s *StoryGRPC) ReactToStory(ctx context.Context, req *storyv1.ReactToStoryR
 	if err := s.Store.ReactToStory(ctx, storyID, profileID, emoji); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+	if s.Events != nil {
+		_ = s.Events.PublishStoryReacted(ctx, storyID.String(), profileID.String(), emoji)
+	}
 	return &storyv1.ReactToStoryResponse{}, nil
+}
+
+func (s *StoryGRPC) GetStoryReactions(ctx context.Context, req *storyv1.GetStoryReactionsRequest) (*storyv1.GetStoryReactionsResponse, error) {
+	profileID, err := authctx.ProfileID(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "profile required")
+	}
+	storyID, err := uuid.Parse(strings.TrimSpace(req.GetStoryId()))
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid story_id")
+	}
+	row, err := s.Store.GetStory(ctx, storyID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, status.Error(codes.NotFound, "story not found")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if row.AuthorProfileID != profileID {
+		return nil, status.Error(codes.PermissionDenied, "only author can list reactions")
+	}
+	reactions, err := s.Store.ListStoryReactions(ctx, storyID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	out := make([]*storyv1.StoryReaction, 0, len(reactions))
+	for _, r := range reactions {
+		out = append(out, &storyv1.StoryReaction{
+			ReactorProfileId: r.ReactorProfileID.String(),
+			Emoji:            r.Emoji,
+		})
+	}
+	return &storyv1.GetStoryReactionsResponse{Reactions: out}, nil
+}
+
+func (s *StoryGRPC) ReplyToStory(ctx context.Context, req *storyv1.ReplyToStoryRequest) (*storyv1.ReplyToStoryResponse, error) {
+	profileID, err := authctx.ProfileID(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "profile required")
+	}
+	if s.Chat == nil || s.Messaging == nil {
+		return nil, status.Error(codes.FailedPrecondition, "reply not configured")
+	}
+	storyID, err := uuid.Parse(strings.TrimSpace(req.GetStoryId()))
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid story_id")
+	}
+	text := strings.TrimSpace(req.GetText())
+	if text == "" {
+		return nil, status.Error(codes.InvalidArgument, "text is required")
+	}
+	row, err := s.Store.GetStory(ctx, storyID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, status.Error(codes.NotFound, "story not found")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if !s.canViewStory(ctx, profileID, row) {
+		return nil, status.Error(codes.PermissionDenied, "story not visible")
+	}
+	if row.AuthorProfileID == profileID {
+		return nil, status.Error(codes.InvalidArgument, "cannot reply to own story")
+	}
+	dm, err := s.Chat.CreateDM(ctx, &chatv1.CreateDMRequest{OtherProfileId: row.AuthorProfileID.String()})
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	sent, err := s.Messaging.SendMessage(ctx, &messagingv1.SendMessageRequest{
+		Chat:    &chatv1.ChatRef{Id: dm.GetChat().GetId()},
+		Content: text,
+	})
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	return &storyv1.ReplyToStoryResponse{
+		ChatId:    dm.GetChat().GetId(),
+		MessageId: sent.GetMessage().GetId(),
+	}, nil
 }
 
 func (s *StoryGRPC) GetArchive(ctx context.Context, req *storyv1.GetArchiveRequest) (*storyv1.GetArchiveResponse, error) {
@@ -290,9 +439,12 @@ func (s *StoryGRPC) CreateHighlight(ctx context.Context, req *storyv1.CreateHigh
 	if name == "" {
 		return nil, status.Error(codes.InvalidArgument, "name is required")
 	}
-	row, err := s.Store.CreateHighlight(ctx, profileID, name)
+	row, err := s.Store.CreateHighlight(ctx, profileID, name, highlightVisibilityFromRequest(req.GetVisibility(), req.GetVisibilityEnum()))
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if s.Events != nil {
+		_ = s.Events.PublishStoryHighlightCreated(ctx, row.ID.String(), profileID.String())
 	}
 	return &storyv1.CreateHighlightResponse{Highlight: highlightToProto(row)}, nil
 }
@@ -307,10 +459,11 @@ func (s *StoryGRPC) UpdateHighlight(ctx context.Context, req *storyv1.UpdateHigh
 		return nil, status.Error(codes.InvalidArgument, "invalid highlight_id")
 	}
 	name := strings.TrimSpace(req.GetName())
-	if name == "" {
-		return nil, status.Error(codes.InvalidArgument, "name is required")
+	visibility := highlightVisibilityFromRequest(req.GetVisibility(), req.GetVisibilityEnum())
+	if name == "" && visibility == "" {
+		return nil, status.Error(codes.InvalidArgument, "name or visibility is required")
 	}
-	row, err := s.Store.UpdateHighlight(ctx, highlightID, profileID, name)
+	row, err := s.Store.UpdateHighlight(ctx, highlightID, profileID, name, visibility)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			return nil, status.Error(codes.NotFound, "highlight not found")
@@ -386,7 +539,8 @@ func (s *StoryGRPC) RemoveFromHighlight(ctx context.Context, req *storyv1.Remove
 }
 
 func (s *StoryGRPC) GetHighlights(ctx context.Context, req *storyv1.GetHighlightsRequest) (*storyv1.GetHighlightsResponse, error) {
-	if _, err := authctx.ProfileID(ctx); err != nil {
+	viewerID, err := authctx.ProfileID(ctx)
+	if err != nil {
 		return nil, status.Error(codes.Unauthenticated, "profile required")
 	}
 	profileID, err := uuid.Parse(strings.TrimSpace(req.GetProfileId()))
@@ -399,7 +553,9 @@ func (s *StoryGRPC) GetHighlights(ctx context.Context, req *storyv1.GetHighlight
 	}
 	highlights := make([]*storyv1.Highlight, 0, len(rows))
 	for i := range rows {
-		highlights = append(highlights, highlightToProto(&rows[i]))
+		if s.canViewHighlight(ctx, viewerID, &rows[i]) {
+			highlights = append(highlights, highlightToProto(&rows[i]))
+		}
 	}
 	return &storyv1.GetHighlightsResponse{
 		HighlightList: &storyv1.HighlightList{Highlights: highlights},
@@ -415,6 +571,14 @@ func (s *StoryGRPC) CreateLookingForParty(ctx context.Context, req *storyv1.Crea
 	if criteria == "" {
 		return nil, status.Error(codes.InvalidArgument, "criteria_json is required")
 	}
+	lfpVisibility, err := lfpVisibilityFromCriteria(criteria)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	floor := s.storyPrivacyFloor(ctx, profileID)
+	if visibilityRestrictiveness(lfpVisibility) > visibilityRestrictiveness(floor) {
+		return nil, status.Error(codes.InvalidArgument, "lfp visibility cannot be narrower than story privacy")
+	}
 	var mediaID *uuid.UUID
 	if req.MediaFileId != nil && strings.TrimSpace(*req.MediaFileId) != "" {
 		parsed, parseErr := uuid.Parse(strings.TrimSpace(*req.MediaFileId))
@@ -429,12 +593,15 @@ func (s *StoryGRPC) CreateLookingForParty(ctx context.Context, req *storyv1.Crea
 		MediaFileID:       mediaID,
 		IsLookingForParty: true,
 		LFPCriteriaJSON:   &criteria,
-		Visibility:        "everyone",
+		Visibility:        lfpVisibility,
 	})
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	return &storyv1.CreateLookingForPartyResponse{Story: rowToProto(row)}, nil
+	if s.Events != nil {
+		_ = s.Events.PublishStoryLfpCreated(ctx, row.ID.String(), profileID.String(), criteria)
+	}
+	return &storyv1.CreateLookingForPartyResponse{Story: rowToProtoForViewer(row, profileID)}, nil
 }
 
 func (s *StoryGRPC) canViewStory(ctx context.Context, viewerID uuid.UUID, row *store.StoryRow) bool {
@@ -456,6 +623,48 @@ func (s *StoryGRPC) canViewStory(ctx context.Context, viewerID uuid.UUID, row *s
 	default:
 		return false
 	}
+}
+
+func (s *StoryGRPC) canViewHighlight(ctx context.Context, viewerID uuid.UUID, row *store.HighlightRow) bool {
+	if row == nil {
+		return false
+	}
+	if viewerID == row.ProfileID {
+		return true
+	}
+	switch row.Visibility {
+	case "everyone":
+		return true
+	case "friends":
+		if s.Friends == nil {
+			return false
+		}
+		ok, err := s.Friends.IsFriend(ctx, viewerID, row.ProfileID)
+		return err == nil && ok
+	default:
+		return false
+	}
+}
+
+func (s *StoryGRPC) storyPrivacyFloor(ctx context.Context, profileID uuid.UUID) string {
+	if s.Privacy != nil {
+		audience, err := s.Privacy.ShowStoriesAudience(ctx, profileID)
+		if err == nil {
+			return audienceFloorVisibility(audience)
+		}
+	}
+	return audienceFloorVisibility(privacy.FriendsAndFoF())
+}
+
+func rowToProtoForViewer(row *store.StoryRow, viewerID uuid.UUID) *storyv1.Story {
+	out := rowToProto(row)
+	if out == nil {
+		return nil
+	}
+	if row.AuthorProfileID != viewerID {
+		out.ViewCount = 0
+	}
+	return out
 }
 
 func rowToProto(row *store.StoryRow) *storyv1.Story {
@@ -497,11 +706,108 @@ func highlightToProto(row *store.HighlightRow) *storyv1.Highlight {
 		ids = append(ids, id.String())
 	}
 	return &storyv1.Highlight{
-		Id:        row.ID.String(),
-		ProfileId: row.ProfileID.String(),
-		Name:      row.Name,
-		StoryIds:  ids,
+		Id:         row.ID.String(),
+		ProfileId:  row.ProfileID.String(),
+		Name:       row.Name,
+		StoryIds:   ids,
+		Visibility: row.Visibility,
 	}
+}
+
+func groupStoriesByAuthor(stories []*storyv1.Story) []*storyv1.StoryFeedGroup {
+	if len(stories) == 0 {
+		return nil
+	}
+	groups := make([]*storyv1.StoryFeedGroup, 0)
+	var current *storyv1.StoryFeedGroup
+	for _, st := range stories {
+		if current == nil || current.GetAuthorProfileId() != st.GetAuthorProfileId() {
+			current = &storyv1.StoryFeedGroup{AuthorProfileId: st.GetAuthorProfileId()}
+			groups = append(groups, current)
+		}
+		current.Stories = append(current.Stories, st)
+	}
+	return groups
+}
+
+func mentionIDsToJSON(ids []string) string {
+	valid := make([]string, 0, len(ids))
+	for _, raw := range ids {
+		id, err := uuid.Parse(strings.TrimSpace(raw))
+		if err != nil {
+			continue
+		}
+		valid = append(valid, id.String())
+	}
+	b, err := json.Marshal(valid)
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
+}
+
+func accountIDFromContext(ctx context.Context) (uuid.UUID, error) {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return uuid.Nil, authctx.ErrMissingAccount()
+	}
+	vals := md.Get(authctx.HeaderUserID)
+	if len(vals) == 0 || vals[0] == "" {
+		return uuid.Nil, authctx.ErrMissingAccount()
+	}
+	return uuid.Parse(vals[0])
+}
+
+type lfpCriteria struct {
+	Visibility string `json:"visibility"`
+}
+
+func lfpVisibilityFromCriteria(raw string) (string, error) {
+	var parsed lfpCriteria
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		return "", err
+	}
+	v := strings.TrimSpace(parsed.Visibility)
+	if v == "" {
+		return "everyone", nil
+	}
+	switch v {
+	case "everyone", "friends", "custom":
+		return v, nil
+	default:
+		return "", errors.New("invalid lfp visibility")
+	}
+}
+
+func audienceFloorVisibility(a privacy.Audience) string {
+	if a.IsEveryoneShortcut() {
+		return "everyone"
+	}
+	if a.IsNobody() {
+		return "custom"
+	}
+	return "friends"
+}
+
+func visibilityRestrictiveness(v string) int {
+	switch strings.TrimSpace(v) {
+	case "everyone":
+		return 0
+	case "friends":
+		return 1
+	default:
+		return 2
+	}
+}
+
+func highlightVisibilityFromRequest(visibility string, enum storyv1.StoryAudience) string {
+	if v := strings.TrimSpace(visibility); v != "" {
+		return v
+	}
+	if v := storyAudienceString(enum); v != "" {
+		return v
+	}
+	return ""
 }
 
 func storyMediaTypeString(v storyv1.StoryMediaType) string {

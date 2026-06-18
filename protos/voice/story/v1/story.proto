@@ -37,6 +37,8 @@ service StoryService {
   rpc GetViewers(GetViewersRequest) returns (GetViewersResponse);
 
   rpc ReactToStory(ReactToStoryRequest) returns (ReactToStoryResponse);
+  rpc GetStoryReactions(GetStoryReactionsRequest) returns (GetStoryReactionsResponse);
+  rpc ReplyToStory(ReplyToStoryRequest) returns (ReplyToStoryResponse);
 
   rpc GetArchive(GetArchiveRequest) returns (GetArchiveResponse);
 
@@ -71,6 +73,10 @@ message Story {
   optional StoryAudience visibility_enum = 18;
 }
 
+message StoryRef {
+  string story_id = 1;
+}
+
 message CreateStoryRequest {
   string type = 1; // prefer type_enum when set
   optional string media_file_id = 2;
@@ -80,6 +86,7 @@ message CreateStoryRequest {
   string visibility = 6; // prefer visibility_enum when set
   optional StoryMediaType type_enum = 7;
   optional StoryAudience visibility_enum = 8;
+  repeated string mention_profile_ids = 9;
 }
 
 message DeleteStoryRequest {
@@ -120,6 +127,20 @@ message ReactToStoryRequest {
   string emoji = 2;
 }
 
+message StoryReaction {
+  string reactor_profile_id = 1;
+  string emoji = 2;
+}
+
+message GetStoryReactionsRequest {
+  string story_id = 1;
+}
+
+message ReplyToStoryRequest {
+  string story_id = 1;
+  string text = 2;
+}
+
 message GetArchiveRequest {
   string profile_id = 1;
 }
@@ -129,15 +150,21 @@ message Highlight {
   string profile_id = 2;
   string name = 3;
   repeated string story_ids = 4;
+  string visibility = 5; // prefer visibility_enum when set
+  optional StoryAudience visibility_enum = 6;
 }
 
 message CreateHighlightRequest {
   string name = 1;
+  string visibility = 2; // prefer visibility_enum when set
+  optional StoryAudience visibility_enum = 3;
 }
 
 message UpdateHighlightRequest {
   string highlight_id = 1;
   optional string name = 2;
+  optional string visibility = 3; // prefer visibility_enum when set
+  optional StoryAudience visibility_enum = 4;
 }
 
 message DeleteHighlightRequest {
@@ -174,10 +201,16 @@ message DeleteStoryResponse {}
 message GetStoryResponse {
   Story story = 1;
 }
+message StoryFeedGroup {
+  string author_profile_id = 1;
+  repeated Story stories = 2;
+}
+
 message GetStoryFeedResponse {
   repeated Story stories = 1;
   string next_cursor = 2;
   optional voice.common.v1.CursorPageResponse page = 3;
+  repeated StoryFeedGroup feed_groups = 4;
 }
 message GetProfileStoriesResponse {
   StoryList story_list = 1;
@@ -187,6 +220,13 @@ message GetViewersResponse {
   ViewerList viewer_list = 1;
 }
 message ReactToStoryResponse {}
+message GetStoryReactionsResponse {
+  repeated StoryReaction reactions = 1;
+}
+message ReplyToStoryResponse {
+  string chat_id = 1;
+  string message_id = 2;
+}
 message GetArchiveResponse {
   StoryList story_list = 1;
 }

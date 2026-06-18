@@ -24,6 +24,7 @@ type recordingStoryGRPC struct {
 	lastReact    *storyv1.ReactToStoryRequest
 	lastHighlight *storyv1.GetHighlightsRequest
 	lastLFP      *storyv1.CreateLookingForPartyRequest
+	lastReply    *storyv1.ReplyToStoryRequest
 }
 
 func (s *recordingStoryGRPC) CreateStory(_ context.Context, req *storyv1.CreateStoryRequest) (*storyv1.CreateStoryResponse, error) {
@@ -81,6 +82,14 @@ func (s *recordingStoryGRPC) CreateLookingForParty(_ context.Context, req *story
 			IsLookingForParty: true,
 			LfpCriteriaJson:   &req.CriteriaJson,
 		},
+	}, nil
+}
+
+func (s *recordingStoryGRPC) ReplyToStory(_ context.Context, req *storyv1.ReplyToStoryRequest) (*storyv1.ReplyToStoryResponse, error) {
+	s.lastReply = req
+	return &storyv1.ReplyToStoryResponse{
+		ChatId:    "chat-1",
+		MessageId: "msg-1",
 	}, nil
 }
 

@@ -71,14 +71,40 @@ class StoryData {
   }
 }
 
+class StoryFeedGroup {
+  const StoryFeedGroup({
+    required this.authorProfileId,
+    this.stories = const [],
+  });
+
+  final String authorProfileId;
+  final List<StoryData> stories;
+
+  factory StoryFeedGroup.fromJson(Map<String, dynamic> json) {
+    final rawStories = json['stories'] as List<dynamic>? ?? const [];
+    return StoryFeedGroup(
+      authorProfileId: json['authorProfileId'] as String? ??
+          json['author_profile_id'] as String? ??
+          '',
+      stories: rawStories
+          .map((e) => StoryData.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+}
+
 class StoryFeedPage {
   const StoryFeedPage({
     required this.stories,
+    this.feedGroups = const [],
     this.nextCursor,
+    this.hasMore = false,
   });
 
   final List<StoryData> stories;
+  final List<StoryFeedGroup> feedGroups;
   final String? nextCursor;
+  final bool hasMore;
 }
 
 class HighlightData {
@@ -87,12 +113,14 @@ class HighlightData {
     required this.name,
     this.profileId,
     this.storyIds = const [],
+    this.visibility = 'everyone',
   });
 
   final String id;
   final String name;
   final String? profileId;
   final List<String> storyIds;
+  final String visibility;
 
   factory HighlightData.fromJson(Map<String, dynamic> json) {
     final rawIds = json['storyIds'] ?? json['story_ids'];
@@ -102,6 +130,41 @@ class HighlightData {
       profileId:
           json['profileId'] as String? ?? json['profile_id'] as String?,
       storyIds: rawIds is List ? rawIds.map((e) => '$e').toList() : const [],
+      visibility: json['visibility'] as String? ?? 'everyone',
+    );
+  }
+}
+
+class StoryReactionData {
+  const StoryReactionData({
+    required this.reactorProfileId,
+    required this.emoji,
+  });
+
+  final String reactorProfileId;
+  final String emoji;
+
+  factory StoryReactionData.fromJson(Map<String, dynamic> json) {
+    return StoryReactionData(
+      reactorProfileId: json['reactorProfileId'] as String? ??
+          json['reactor_profile_id'] as String? ??
+          '',
+      emoji: json['emoji'] as String? ?? '',
+    );
+  }
+}
+
+class StoryReplyResult {
+  const StoryReplyResult({required this.chatId, required this.messageId});
+
+  final String chatId;
+  final String messageId;
+
+  factory StoryReplyResult.fromJson(Map<String, dynamic> json) {
+    return StoryReplyResult(
+      chatId: json['chatId'] as String? ?? json['chat_id'] as String? ?? '',
+      messageId:
+          json['messageId'] as String? ?? json['message_id'] as String? ?? '',
     );
   }
 }
@@ -148,11 +211,23 @@ class VoiceStoriesClient {
         .toList();
   }
 
+  List<StoryFeedGroup> _parseFeedGroups(Map<String, dynamic> data) {
+    final raw = data['feedGroups'] as List<dynamic>? ??
+        data['feed_groups'] as List<dynamic>? ??
+        const [];
+    return raw
+        .map((e) => StoryFeedGroup.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
   Future<StoriesApiResult<StoryData>> createStory({
     required String authorization,
     required String type,
     String? textContent,
     String? mediaFileId,
+    String? textStyleJson,
+    String? gameTag,
+    List<String> mentionProfileIds = const [],
     String visibility = 'friends',
   }) async {
     final body = <String, dynamic>{
@@ -161,6 +236,11 @@ class VoiceStoriesClient {
     };
     if (textContent != null) body['text_content'] = textContent;
     if (mediaFileId != null) body['media_file_id'] = mediaFileId;
+    if (textStyleJson != null) body['text_style_json'] = textStyleJson;
+    if (gameTag != null && gameTag.isNotEmpty) body['game_tag'] = gameTag;
+    if (mentionProfileIds.isNotEmpty) {
+      body['mention_profile_ids'] = mentionProfileIds;
+    }
 
     final result = await _gateway.postJson(
       uri: _gateway.resolve('/api/v1/stories'),
@@ -176,12 +256,18 @@ class VoiceStoriesClient {
   Future<StoriesApiResult<StoryData>> createTextStory({
     required String authorization,
     required String text,
+    String? textStyleJson,
+    String? gameTag,
+    List<String> mentionProfileIds = const [],
     String visibility = 'friends',
   }) {
     return createStory(
       authorization: authorization,
       type: 'text',
       textContent: text,
+      textStyleJson: textStyleJson,
+      gameTag: gameTag,
+      mentionProfileIds: mentionProfileIds,
       visibility: visibility,
     );
   }
@@ -231,8 +317,14 @@ class VoiceStoriesClient {
       GatewayHttpOk(:final data) => StoriesApiOk(
           StoryFeedPage(
             stories: _parseStoriesList(data),
+            feedGroups: _parseFeedGroups(data),
             nextCursor: data['nextCursor'] as String? ??
                 data['next_cursor'] as String?,
+            hasMore: data['hasMore'] as bool? ??
+                data['has_more'] as bool? ??
+                (data['page'] as Map<String, dynamic>?)?['hasMore'] as bool? ??
+                (data['page'] as Map<String, dynamic>?)?['has_more'] as bool? ??
+                false,
           ),
         ),
       GatewayHttpFailure(:final error) => _failure(error),
@@ -289,6 +381,45 @@ class VoiceStoriesClient {
               .map((e) => '$e')
               .toList(),
         ),
+      GatewayHttpFailure(:final error) => _failure(error),
+    };
+  }
+
+  Future<StoriesApiResult<List<StoryReactionData>>> getStoryReactions({
+    required String authorization,
+    required String storyId,
+  }) async {
+    final result = await _gateway.getJson(
+      _gateway.resolve('/api/v1/stories/$storyId/reactions'),
+      authorization: authorization,
+    );
+    return switch (result) {
+      GatewayHttpOk(:final data) => StoriesApiOk(
+          ((data['reactions'] as List<dynamic>?) ??
+                  (data['storyReactions'] as Map<String, dynamic>?)?[
+                      'reactions'] as List<dynamic>? ??
+                  const [])
+              .map(
+                (e) => StoryReactionData.fromJson(e as Map<String, dynamic>),
+              )
+              .toList(),
+        ),
+      GatewayHttpFailure(:final error) => _failure(error),
+    };
+  }
+
+  Future<StoriesApiResult<StoryReplyResult>> replyToStory({
+    required String authorization,
+    required String storyId,
+    required String text,
+  }) async {
+    final result = await _gateway.postJson(
+      uri: _gateway.resolve('/api/v1/stories/$storyId/reply'),
+      authorization: authorization,
+      body: {'text': text},
+    );
+    return switch (result) {
+      GatewayHttpOk(:final data) => StoriesApiOk(StoryReplyResult.fromJson(data)),
       GatewayHttpFailure(:final error) => _failure(error),
     };
   }
@@ -350,11 +481,12 @@ class VoiceStoriesClient {
   Future<StoriesApiResult<HighlightData>> createHighlight({
     required String authorization,
     required String name,
+    String visibility = 'everyone',
   }) async {
     final result = await _gateway.postJson(
       uri: _gateway.resolve('/api/v1/stories/highlights'),
       authorization: authorization,
-      body: {'name': name},
+      body: {'name': name, 'visibility': visibility},
     );
     return switch (result) {
       GatewayHttpOk(:final data) => StoriesApiOk(
@@ -370,11 +502,14 @@ class VoiceStoriesClient {
     required String authorization,
     required String highlightId,
     required String name,
+    String? visibility,
   }) async {
+    final body = <String, dynamic>{'name': name};
+    if (visibility != null) body['visibility'] = visibility;
     final result = await _gateway.patchJson(
       uri: _gateway.resolve('/api/v1/stories/highlights/$highlightId'),
       authorization: authorization,
-      body: {'name': name},
+      body: body,
     );
     return switch (result) {
       GatewayHttpOk(:final data) => StoriesApiOk(

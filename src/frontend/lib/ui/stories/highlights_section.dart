@@ -45,7 +45,7 @@ class HighlightsSection extends ConsumerWidget {
               ),
             ),
             SizedBox(
-              height: 88,
+              height: 104,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -55,6 +55,7 @@ class HighlightsSection extends ConsumerWidget {
                   final highlight = highlights[index];
                   return _HighlightChip(
                     name: highlight.name,
+                    visibility: highlight.visibility,
                     onTap: () {
                       if (onHighlightTap != null) {
                         onHighlightTap!(
@@ -83,13 +84,19 @@ class HighlightsSection extends ConsumerWidget {
 }
 
 class _HighlightChip extends StatelessWidget {
-  const _HighlightChip({required this.name, required this.onTap});
+  const _HighlightChip({
+    required this.name,
+    required this.visibility,
+    required this.onTap,
+  });
 
   final String name;
+  final String visibility;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final voice = VoiceColors.of(context);
     return InkWell(
       onTap: onTap,
@@ -116,9 +123,29 @@ class _HighlightChip extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.labelSmall,
             ),
+            const SizedBox(height: 2),
+            Text(
+              key: const Key('highlight_visibility_badge'),
+              l10n.storyHighlightVisibility(_visibilityLabel(l10n, visibility)),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: voice.textSecondary,
+                    fontSize: 10,
+                  ),
+            ),
           ],
         ),
       ),
     );
+  }
+
+  static String _visibilityLabel(AppLocalizations l10n, String value) {
+    return switch (value) {
+      'friends' => l10n.storyVisibilityFriends,
+      'close_friends' => l10n.storyVisibilityCloseFriends,
+      'everyone' || 'public' => l10n.storyVisibilityEveryone,
+      _ => l10n.storyVisibilityEveryone,
+    };
   }
 }

@@ -3655,6 +3655,114 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Game'**
   String get storyLfpGame;
+
+  /// No description provided for @storyCreateVisibilityLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Who can see this story'**
+  String get storyCreateVisibilityLabel;
+
+  /// No description provided for @storyCreateMentionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Mention friends'**
+  String get storyCreateMentionLabel;
+
+  /// No description provided for @storyCreateMentionHint.
+  ///
+  /// In en, this message translates to:
+  /// **'@username'**
+  String get storyCreateMentionHint;
+
+  /// No description provided for @storyCreateGameTagLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Game tag'**
+  String get storyCreateGameTagLabel;
+
+  /// No description provided for @storyCreateGameTagPick.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose game'**
+  String get storyCreateGameTagPick;
+
+  /// No description provided for @storyCreateGameTagClear.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get storyCreateGameTagClear;
+
+  /// No description provided for @storyCreateTextStyleLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Background'**
+  String get storyCreateTextStyleLabel;
+
+  /// No description provided for @storyVisibilityEveryone.
+  ///
+  /// In en, this message translates to:
+  /// **'Everyone'**
+  String get storyVisibilityEveryone;
+
+  /// No description provided for @storyVisibilityFriends.
+  ///
+  /// In en, this message translates to:
+  /// **'Friends'**
+  String get storyVisibilityFriends;
+
+  /// No description provided for @storyVisibilityCloseFriends.
+  ///
+  /// In en, this message translates to:
+  /// **'Close friends'**
+  String get storyVisibilityCloseFriends;
+
+  /// No description provided for @storyViewerReply.
+  ///
+  /// In en, this message translates to:
+  /// **'Reply'**
+  String get storyViewerReply;
+
+  /// No description provided for @storyViewerReplyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Private reply'**
+  String get storyViewerReplyHint;
+
+  /// No description provided for @storyViewerReplySent.
+  ///
+  /// In en, this message translates to:
+  /// **'Reply sent'**
+  String get storyViewerReplySent;
+
+  /// No description provided for @storyViewerViewCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 view} other{{count} views}}'**
+  String storyViewerViewCount(int count);
+
+  /// No description provided for @storyHighlightVisibility.
+  ///
+  /// In en, this message translates to:
+  /// **'Visibility: {value}'**
+  String storyHighlightVisibility(String value);
+
+  /// No description provided for @storyLfpJoin.
+  ///
+  /// In en, this message translates to:
+  /// **'Join'**
+  String get storyLfpJoin;
+
+  /// No description provided for @storyLfpWrite.
+  ///
+  /// In en, this message translates to:
+  /// **'Write'**
+  String get storyLfpWrite;
+
+  /// No description provided for @socialStoryCreate.
+  ///
+  /// In en, this message translates to:
+  /// **'New story'**
+  String get socialStoryCreate;
 }
 
 class _AppLocalizationsDelegate

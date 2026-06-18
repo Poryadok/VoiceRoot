@@ -5,12 +5,19 @@ go 1.26
 require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.6
+	github.com/nats-io/nats.go v1.39.1
 	github.com/stretchr/testify v1.10.0
 	google.golang.org/grpc v1.70.0
 	google.golang.org/protobuf v1.36.5
+	voice.app/voice/chat v0.0.0
 	voice.app/voice/common v0.0.0
+	voice.app/voice/events v0.0.0
+	voice.app/voice/file v0.0.0
+	voice.app/voice/messaging v0.0.0
 	voice.app/voice/social v0.0.0
 	voice.app/voice/story v0.0.0
+	voice.app/voice/subscription v0.0.0
+	voice.app/voice/user v0.0.0
 	voice/backend/pkg v0.0.0
 )
 
@@ -45,6 +52,8 @@ require (
 	github.com/moby/sys/user v0.1.0 // indirect
 	github.com/moby/term v0.5.0 // indirect
 	github.com/morikuni/aec v1.0.0 // indirect
+	github.com/nats-io/nkeys v0.4.9 // indirect
+	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
@@ -69,6 +78,7 @@ require (
 	golang.org/x/text v0.24.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20241202173237-19429a94021a // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	voice.app/voice/space v0.0.0 // indirect
 )
 
 replace voice/backend/pkg => ../pkg
@@ -78,3 +88,17 @@ replace voice.app/voice/story => ../voice/pb/voice/story
 replace voice.app/voice/common => ../user/pb/voice/common
 
 replace voice.app/voice/social => ../user/pb/voice/social
+
+replace voice.app/voice/chat => ../chat/pb/voice/chat
+
+replace voice.app/voice/file => ../file/pb/voice/file
+
+replace voice.app/voice/messaging => ../messaging/pb/voice/messaging
+
+replace voice.app/voice/events => ../messaging/pb/voice/events
+
+replace voice.app/voice/subscription => ../voice/pb/voice/subscription
+
+replace voice.app/voice/space => ../voice/pb/voice/space
+
+replace voice.app/voice/user => ../user/pb/voice/user

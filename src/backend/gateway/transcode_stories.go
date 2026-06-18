@@ -182,6 +182,21 @@ func (t *transcoder) serveStories(w http.ResponseWriter, r *http.Request, rest s
 			}
 			w.WriteHeader(http.StatusNoContent)
 			return true
+
+		case len(parts) == 2 && parts[1] == "reply" && r.Method == http.MethodPost:
+			req := &storyv1.ReplyToStoryRequest{StoryId: storyID}
+			if err := readProtoJSON(r, req); err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			req.StoryId = storyID
+			resp, err := t.clients.story.ReplyToStory(ctx, req)
+			if err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			writeProtoJSON(w, http.StatusOK, resp)
+			return true
 		}
 	}
 	return false

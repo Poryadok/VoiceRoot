@@ -27,6 +27,8 @@ const (
 	StoryService_MarkViewed_FullMethodName            = "/voice.story.v1.StoryService/MarkViewed"
 	StoryService_GetViewers_FullMethodName            = "/voice.story.v1.StoryService/GetViewers"
 	StoryService_ReactToStory_FullMethodName          = "/voice.story.v1.StoryService/ReactToStory"
+	StoryService_GetStoryReactions_FullMethodName     = "/voice.story.v1.StoryService/GetStoryReactions"
+	StoryService_ReplyToStory_FullMethodName          = "/voice.story.v1.StoryService/ReplyToStory"
 	StoryService_GetArchive_FullMethodName            = "/voice.story.v1.StoryService/GetArchive"
 	StoryService_CreateHighlight_FullMethodName       = "/voice.story.v1.StoryService/CreateHighlight"
 	StoryService_UpdateHighlight_FullMethodName       = "/voice.story.v1.StoryService/UpdateHighlight"
@@ -51,6 +53,8 @@ type StoryServiceClient interface {
 	MarkViewed(ctx context.Context, in *MarkViewedRequest, opts ...grpc.CallOption) (*MarkViewedResponse, error)
 	GetViewers(ctx context.Context, in *GetViewersRequest, opts ...grpc.CallOption) (*GetViewersResponse, error)
 	ReactToStory(ctx context.Context, in *ReactToStoryRequest, opts ...grpc.CallOption) (*ReactToStoryResponse, error)
+	GetStoryReactions(ctx context.Context, in *GetStoryReactionsRequest, opts ...grpc.CallOption) (*GetStoryReactionsResponse, error)
+	ReplyToStory(ctx context.Context, in *ReplyToStoryRequest, opts ...grpc.CallOption) (*ReplyToStoryResponse, error)
 	GetArchive(ctx context.Context, in *GetArchiveRequest, opts ...grpc.CallOption) (*GetArchiveResponse, error)
 	CreateHighlight(ctx context.Context, in *CreateHighlightRequest, opts ...grpc.CallOption) (*CreateHighlightResponse, error)
 	UpdateHighlight(ctx context.Context, in *UpdateHighlightRequest, opts ...grpc.CallOption) (*UpdateHighlightResponse, error)
@@ -143,6 +147,26 @@ func (c *storyServiceClient) ReactToStory(ctx context.Context, in *ReactToStoryR
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ReactToStoryResponse)
 	err := c.cc.Invoke(ctx, StoryService_ReactToStory_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *storyServiceClient) GetStoryReactions(ctx context.Context, in *GetStoryReactionsRequest, opts ...grpc.CallOption) (*GetStoryReactionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetStoryReactionsResponse)
+	err := c.cc.Invoke(ctx, StoryService_GetStoryReactions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *storyServiceClient) ReplyToStory(ctx context.Context, in *ReplyToStoryRequest, opts ...grpc.CallOption) (*ReplyToStoryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReplyToStoryResponse)
+	err := c.cc.Invoke(ctx, StoryService_ReplyToStory_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -243,6 +267,8 @@ type StoryServiceServer interface {
 	MarkViewed(context.Context, *MarkViewedRequest) (*MarkViewedResponse, error)
 	GetViewers(context.Context, *GetViewersRequest) (*GetViewersResponse, error)
 	ReactToStory(context.Context, *ReactToStoryRequest) (*ReactToStoryResponse, error)
+	GetStoryReactions(context.Context, *GetStoryReactionsRequest) (*GetStoryReactionsResponse, error)
+	ReplyToStory(context.Context, *ReplyToStoryRequest) (*ReplyToStoryResponse, error)
 	GetArchive(context.Context, *GetArchiveRequest) (*GetArchiveResponse, error)
 	CreateHighlight(context.Context, *CreateHighlightRequest) (*CreateHighlightResponse, error)
 	UpdateHighlight(context.Context, *UpdateHighlightRequest) (*UpdateHighlightResponse, error)
@@ -284,6 +310,12 @@ func (UnimplementedStoryServiceServer) GetViewers(context.Context, *GetViewersRe
 }
 func (UnimplementedStoryServiceServer) ReactToStory(context.Context, *ReactToStoryRequest) (*ReactToStoryResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReactToStory not implemented")
+}
+func (UnimplementedStoryServiceServer) GetStoryReactions(context.Context, *GetStoryReactionsRequest) (*GetStoryReactionsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetStoryReactions not implemented")
+}
+func (UnimplementedStoryServiceServer) ReplyToStory(context.Context, *ReplyToStoryRequest) (*ReplyToStoryResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReplyToStory not implemented")
 }
 func (UnimplementedStoryServiceServer) GetArchive(context.Context, *GetArchiveRequest) (*GetArchiveResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetArchive not implemented")
@@ -474,6 +506,42 @@ func _StoryService_ReactToStory_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _StoryService_GetStoryReactions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetStoryReactionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(StoryServiceServer).GetStoryReactions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: StoryService_GetStoryReactions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(StoryServiceServer).GetStoryReactions(ctx, req.(*GetStoryReactionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _StoryService_ReplyToStory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReplyToStoryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(StoryServiceServer).ReplyToStory(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: StoryService_ReplyToStory_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(StoryServiceServer).ReplyToStory(ctx, req.(*ReplyToStoryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _StoryService_GetArchive_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetArchiveRequest)
 	if err := dec(in); err != nil {
@@ -656,6 +724,14 @@ var StoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReactToStory",
 			Handler:    _StoryService_ReactToStory_Handler,
+		},
+		{
+			MethodName: "GetStoryReactions",
+			Handler:    _StoryService_GetStoryReactions_Handler,
+		},
+		{
+			MethodName: "ReplyToStory",
+			Handler:    _StoryService_ReplyToStory_Handler,
 		},
 		{
 			MethodName: "GetArchive",

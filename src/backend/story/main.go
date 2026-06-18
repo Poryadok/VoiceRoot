@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc"
 
+	"voice/backend/story/internal/clients"
 	grpcsvc "voice/backend/story/internal/grpcsvc"
 	"voice/backend/story/internal/jobs"
 	"voice/backend/story/internal/privacy"
@@ -56,6 +57,7 @@ func main() {
 		st := &store.StoryStore{Pool: pool}
 		svc := grpcsvc.NewStoryGRPC(st)
 		svc.Friends = privacy.NewFriendChecker(logger)
+		fileDeleter := clients.WireGRPC(logger, svc)
 		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger)...)
 		storyv1.RegisterStoryServiceServer(grpcSrv, svc)
 		go func() {
@@ -66,7 +68,7 @@ func main() {
 		logger.Info("story grpc listening", slog.String("addr", grpcAddr))
 
 		jobs.StartExpiryWorker(context.Background(), st, logger)
-		jobs.StartArchivePurgeWorker(context.Background(), st, logger)
+		jobs.StartArchivePurgeWorker(context.Background(), st, fileDeleter, logger)
 	}
 
 	mux := healthHandler(serviceName)

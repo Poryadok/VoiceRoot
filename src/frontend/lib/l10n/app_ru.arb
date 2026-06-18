@@ -881,5 +881,37 @@
   "storyReactSent": "Реакция отправлена",
   "storyHighlightsTitle": "Избранное",
   "storyLfpTitle": "Ищу пати",
-  "storyLfpGame": "Игра"
+  "storyLfpGame": "Игра",
+  "storyCreateVisibilityLabel": "Кто видит сторис",
+  "storyCreateMentionLabel": "Упомянуть друзей",
+  "storyCreateMentionHint": "@username",
+  "storyCreateGameTagLabel": "Игра",
+  "storyCreateGameTagPick": "Выбрать игру",
+  "storyCreateGameTagClear": "Сбросить",
+  "storyCreateTextStyleLabel": "Фон",
+  "storyVisibilityEveryone": "Все",
+  "storyVisibilityFriends": "Друзья",
+  "storyVisibilityCloseFriends": "Близкие друзья",
+  "storyViewerReply": "Ответить",
+  "storyViewerReplyHint": "Приватный ответ",
+  "storyViewerReplySent": "Ответ отправлен",
+  "storyViewerViewCount": "{count, plural, one{{count} просмотр} few{{count} просмотра} many{{count} просмотров} other{{count} просмотров}}",
+  "@storyViewerViewCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "storyHighlightVisibility": "Видимость: {value}",
+  "@storyHighlightVisibility": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "storyLfpJoin": "Присоединиться",
+  "storyLfpWrite": "Написать",
+  "socialStoryCreate": "Новая сторис"
 }

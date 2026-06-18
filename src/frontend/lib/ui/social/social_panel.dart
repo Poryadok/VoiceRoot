@@ -86,61 +86,78 @@ class _SocialPanelState extends ConsumerState<SocialPanel>
     ref.watch(storyFeedProvider);
     final l10n = AppLocalizations.of(context)!;
 
-    return Column(
+    return Stack(
       key: SocialPanel.panelKey,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Align(
-          alignment: Alignment.centerLeft,
-          child: Wrap(
-            spacing: 4,
-            children: [
-              TextButton.icon(
-                key: const Key('social_game_catalog_entry'),
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const GameCatalogScreen(),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.sports_esports_outlined),
-                label: Text(l10n.gameCatalogEntry),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Wrap(
+                spacing: 4,
+                children: [
+                  TextButton.icon(
+                    key: const Key('social_game_catalog_entry'),
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const GameCatalogScreen(),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.sports_esports_outlined),
+                    label: Text(l10n.gameCatalogEntry),
+                  ),
+                  TextButton.icon(
+                    key: const Key('social_match_history_entry'),
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const MatchHistoryScreen(),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.history),
+                    label: Text(l10n.matchHistoryEntry),
+                  ),
+                ],
               ),
-              TextButton.icon(
-                key: const Key('social_match_history_entry'),
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const MatchHistoryScreen(),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.history),
-                label: Text(l10n.matchHistoryEntry),
+            ),
+            TabBar(
+              controller: _tabs,
+              tabs: [
+                Tab(key: SocialPanel.tabSearchKey, text: l10n.socialTabSearch),
+                Tab(key: SocialPanel.tabFriendsKey, text: l10n.socialTabFriends),
+                Tab(
+                  key: SocialPanel.tabRequestsKey,
+                  text: l10n.socialTabRequests,
+                ),
+              ],
+            ),
+            Expanded(
+              child: TabBarView(
+                controller: _tabs,
+                children: [
+                  _SearchTab(
+                    controller: _searchController,
+                    onOpenProfile: _openProfile,
+                  ),
+                  _FriendsTab(onOpenProfile: _openProfile),
+                  _RequestsTab(onOpenProfile: _openProfile),
+                ],
               ),
-            ],
-          ),
-        ),
-        TabBar(
-          controller: _tabs,
-          tabs: [
-            Tab(key: SocialPanel.tabSearchKey, text: l10n.socialTabSearch),
-            Tab(key: SocialPanel.tabFriendsKey, text: l10n.socialTabFriends),
-            Tab(key: SocialPanel.tabRequestsKey, text: l10n.socialTabRequests),
+            ),
           ],
         ),
-        Expanded(
-          child: TabBarView(
-            controller: _tabs,
-            children: [
-              _SearchTab(
-                controller: _searchController,
-                onOpenProfile: _openProfile,
-              ),
-              _FriendsTab(onOpenProfile: _openProfile),
-              _RequestsTab(onOpenProfile: _openProfile),
-            ],
+        Positioned(
+          right: 16,
+          bottom: 16,
+          child: FloatingActionButton.extended(
+            key: const Key('social_story_create_fab'),
+            onPressed: () => StoriesRoutes.openCreate(context),
+            icon: const Icon(Icons.add),
+            label: Text(l10n.socialStoryCreate),
           ),
         ),
       ],

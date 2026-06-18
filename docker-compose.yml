@@ -574,6 +574,10 @@ services:
       STORY_GRPC_LISTEN: :9090
       SOCIAL_GRPC_ADDR: social:9090
       USER_GRPC_ADDR: user:9090
+      CHAT_GRPC_ADDR: chat:9090
+      MESSAGING_GRPC_ADDR: messaging:9090
+      SUBSCRIPTION_GRPC_ADDR: subscription:9090
+      FILE_GRPC_ADDR: file:9090
       GRPC_DIAL_TIMEOUT: ${GRPC_DIAL_TIMEOUT:-15s}
       NATS_URL: nats://nats:4222
       STORY_TTL_DEV: ${STORY_TTL_DEV:-}

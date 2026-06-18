@@ -149,44 +149,65 @@
 
 ### Backend — events & integrations
 
-- [ ] **`story.events` NATS publisher** — JetStream stream per [story-service.md](microservices/story-service.md): create, view, react, expire, highlight create, LFP create.
-- [ ] **Mention notifications** — on story create with `mention_profile_ids` → Notification Service.
-- [ ] **Reply-to-story → DM** — gRPC + Gateway: private reply opens/sends DM thread ([stories.md](features/stories.md) §Ответы).
-- [ ] **Archive purge → File Service** — `PurgeArchivedStories` deletes orphaned `media_file_id` in R2.
+- [ ] **`story.events` NATS publisher** — JetStream stream per [story-service.md](microservices/story-service.md): create, view, react, expire, highlight create, LFP create. *Publisher wired when `NATS_URL` set; expiry worker still does not emit `story.expired`.*
+- [ ] **Mention notifications** — on story create with `mention_profile_ids` → Notification Service. *`StoryEventHandler` + unit tests only; no NATS consumer in `notification/main.go`.*
+- [x] **Reply-to-story → DM** — gRPC + Gateway: private reply opens/sends DM thread ([stories.md](features/stories.md) §Ответы).
+- [x] **Archive purge → File Service** — `PurgeArchivedStories` deletes orphaned `media_file_id` in R2.
 - [ ] **Story media upload context** — File `RequestUpload` purpose/lifecycle for story attachments.
 
 ### Backend — API & privacy
 
-- [ ] **Highlight privacy** — enforce `highlights.visibility` in `GetHighlights`; expose on proto + create/update.
+- [x] **Highlight privacy** — enforce `highlights.visibility` in `GetHighlights`; expose on proto + create/update.
 - [ ] **User privacy policy** — resolve story audience from User/Social privacy settings ([privacy.md](features/privacy.md)).
 - [ ] **`custom` / `close_friends` audiences** — proto enums exist; handler only supports `everyone`/`friends`.
-- [ ] **Author-only view stats** — hide `view_count` from non-authors; `GetStoryReactions` (author-only).
-- [ ] **Premium anonymous views** — gate `MarkViewed(anonymous=true)` via Subscription Service.
-- [ ] **Feed pagination** — cursor/`HasMore` in `GetStoryFeed`.
-- [ ] **Feed shape** — friends + space members grouped by author for ring UX.
-- [ ] **CreateStory: mentions & game_tag** — wire proto fields + validation.
-- [ ] **LFP visibility floor** — LFP visibility ≥ user story privacy setting.
+- [x] **Author-only view stats** — hide `view_count` from non-authors; `GetStoryReactions` (author-only).
+- [x] **Premium anonymous views** — gate `MarkViewed(anonymous=true)` via Subscription Service.
+- [x] **Feed pagination** — cursor/`HasMore` in `GetStoryFeed`.
+- [ ] **Feed shape** — friends + space members grouped by author for ring UX. *`FeedGroups` returned; feed query is global active scan + in-memory filter, no space members.*
+- [x] **CreateStory: mentions & game_tag** — wire proto fields + validation.
+- [x] **LFP visibility floor** — LFP visibility ≥ user story privacy setting.
 
 ### Frontend — UX & editor
 
-- [ ] **Story create entry point** — shell affordance calling `StoriesRoutes.openCreate` (route есть, нет кнопки в shell).
-- [ ] **Media picker** — `story_create_screen.dart`: `_pickMedia` только меняет тип, не вызывает `image_picker` / file upload.
-- [ ] **Video playback** — replace viewer placeholder with player (≤60s).
-- [ ] **Text story styling** — colored background / `text_style_json` minimal editor.
-- [ ] **Highlights on profile** — mount `HighlightsSection`; archive → add-to-highlight for owner.
-- [ ] **Profile story ring** — tap avatar on profile opens viewer.
-- [ ] **Author insights** — viewers list + view count UI for own active stories.
-- [ ] **Reply-to-story UI** — DM compose from viewer (depends on backend reply RPC).
-- [ ] **LFP actions** — Join / Write navigation stubs on `LfpStoryCard` per [matchmaking.md](features/matchmaking.md).
-- [ ] **Game tag on create** — catalog picker → `game_tag`.
+- [x] **Story create entry point** — shell affordance calling `StoriesRoutes.openCreate` (route есть, нет кнопки в shell).
+- [x] **Media picker** — `story_create_screen.dart`: `_pickMedia` только меняет тип, не вызывает `image_picker` / file upload.
+- [x] **Video playback** — replace viewer placeholder with player (≤60s).
+- [ ] **Text story styling** — colored background / `text_style_json` minimal editor. *Create picker stores `text_style_json`; viewer does not apply background.*
+- [ ] **Highlights on profile** — mount `HighlightsSection`; archive → add-to-highlight for owner. *`HighlightsSection` on profile; no archive or add-to-highlight UI.*
+- [x] **Profile story ring** — tap avatar on profile opens viewer.
+- [ ] **Author insights** — viewers list + view count UI for own active stories. *View count only; `getViewers` unused in viewer.*
+- [x] **Reply-to-story UI** — DM compose from viewer (depends on backend reply RPC).
+- [x] **LFP actions** — Join / Write navigation stubs on `LfpStoryCard` per [matchmaking.md](features/matchmaking.md).
+- [x] **Game tag on create** — catalog picker → `game_tag`.
 
 ### Tests, CI & docs
 
-- [ ] **Story `grpcsvc` coverage ≥80%** — jobs workers, `privacy.FriendChecker` with Social mock.
+- [x] **Story `grpcsvc` coverage ≥80%** — jobs workers, `privacy.FriendChecker` with Social mock.
 - [ ] **Expiry acceptance test** — publish → expire → archive → purge integration.
-- [ ] **Flutter widget tests** — viewer, create, highlights screens.
-- [ ] **`story-service.md` parity** — document REST map; note deferred LFP→Matchmaking NATS.
-- [ ] **`make compose-migrate-story` in CI** — `story_db` migrations on fresh compose volumes.
+- [x] **Flutter widget tests** — viewer, create, highlights screens.
+- [x] **`story-service.md` parity** — document REST map; note deferred LFP→Matchmaking NATS.
+- [x] **`make compose-migrate-story` in CI** — `story_db` migrations on fresh compose volumes.
+
+### Phase 17 — audit follow-ups (2026-06)
+
+*Gaps found comparing `src/backend/story`, Gateway `transcode_stories.go`, Flutter `lib/ui/stories`, and compose live tests vs docs.*
+
+- [ ] **Expiry worker → `story.expired` NATS** — `jobs.StartExpiryWorker` calls `MarkExpiredStories` only; must publish `story.expired` per expired row via `Events.PublishStoryExpired`.
+- [ ] **`story_events_consumer` in Notification `main.go`** — add JetStream subscribe on `story.created` (mirror `message_events_consumer.go`); wire `StoryEventHandler.HandleStoryCreated` → push/in-app for `TypeMention`.
+- [ ] **`story.lfp_created` → Matchmaking NATS consumer** — Story publishes event from `CreateLookingForParty`; Matchmaking Service has no subscriber (deferred in [story-service.md](microservices/story-service.md)).
+- [ ] **File `context_story` lifecycle** — `RequestUploadRequest.context_story` in proto; `file_grpc.go` ignores field; Flutter `files_client` omits on story upload; no story-scoped TTL/link in `file_db`.
+- [ ] **Feed friends/space prefilter** — replace global `ListActiveStoriesPaginated` scan with Social friends (+ space members per PLAN §17) before visibility filter; reduces feed perf cost at scale.
+- [ ] **`close_friends` visibility end-to-end** — `StoryAudiencePicker` sends `close_friends`; `canViewStory` / `canViewHighlight` deny unknown values; needs Social close-friends list or map to `friends`.
+- [ ] **CreateStory default visibility from User `show_stories`** — `CreateStory` defaults `friends`; should resolve audience from User Service privacy, not only LFP floor path.
+- [ ] **Owner archive screen** — `VoiceStoriesClient.getArchive` exists; no Flutter screen to browse 30-day archive.
+- [ ] **Add-to-highlight owner UI** — `addToHighlight` API + live test; no UI from archive or story viewer.
+- [ ] **Create/edit highlights UI** — owner cannot name collections or set highlight privacy from client (only read `HighlightsSection`).
+- [ ] **Author viewers list UI** — `getViewers` in client; `story_viewer_screen` shows view count chip only for active own stories.
+- [ ] **Text story style in viewer** — apply `text_style_json` background tokens from create screen.
+- [ ] **Game tag plashka in viewer** — non-LFP stories with `game_tag` should show catalog chip per [stories.md](features/stories.md) §Game tag.
+- [ ] **Video duration cap ≤60s** — validate on client pick and/or `CreateStory` / File upload for story video.
+- [ ] **Expiry E2E compose assertion** — extend `compose_phase17_stories_live_test` or dedicated job test: publish → worker expire → archive list → purge → File `DeleteFile`.
+- [ ] **Story editor v2 (post-MVP)** — stickers, doodle, filters, clip trim per [stories.md](features/stories.md) §Редактор / §Клип.
 
 **Промпт-якорь:** `Phase 17 Stories — follow-ups from docs/TODO.md`.
 

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -57,7 +58,25 @@ type HighlightRow struct {
 	UpdatedAt   time.Time
 }
 
-// CreateStoryInput is input for publishing a story.
+// StoryReactionRow is a persisted emoji reaction.
+type StoryReactionRow struct {
+	ReactorProfileID uuid.UUID
+	Emoji            string
+}
+
+// ArchivedStoryMedia is a story row eligible for archive purge with optional media.
+type ArchivedStoryMedia struct {
+	StoryID     uuid.UUID
+	MediaFileID *uuid.UUID
+}
+
+// PaginatedStories is the result of cursor-based active story listing.
+type PaginatedStories struct {
+	Rows       []StoryRow
+	NextCursor string
+	HasMore    bool
+}
+
 type CreateStoryInput struct {
 	AuthorProfileID   uuid.UUID
 	Type              string
@@ -263,6 +282,137 @@ ON CONFLICT (story_id, reactor_profile_id) DO UPDATE SET emoji = EXCLUDED.emoji,
 	return err
 }
 
+// ListActiveStoriesPaginated returns active stories using created_at|id cursor pagination.
+func (s *StoryStore) ListActiveStoriesPaginated(ctx context.Context, limit int, cursor string) (*PaginatedStories, error) {
+	if s == nil || s.Pool == nil {
+		return nil, ErrNotImplemented
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	fetch := limit + 1
+	cursorTime, cursorID, err := decodeStoryCursor(cursor)
+	if err != nil {
+		return nil, err
+	}
+
+	var rows pgx.Rows
+	if cursorTime == nil {
+		rows, err = s.Pool.Query(ctx, `
+SELECT id, author_profile_id, type, media_file_id, text_content,
+       text_style::text, game_tag, is_looking_for_party, lfp_criteria::text,
+       mention_profile_ids::text, view_count, visibility, expires_at, archived_until,
+       created_at, deleted_at, expired_at
+FROM stories
+WHERE deleted_at IS NULL AND expired_at IS NULL AND expires_at > now()
+ORDER BY created_at DESC, id DESC
+LIMIT $1`, fetch)
+	} else {
+		rows, err = s.Pool.Query(ctx, `
+SELECT id, author_profile_id, type, media_file_id, text_content,
+       text_style::text, game_tag, is_looking_for_party, lfp_criteria::text,
+       mention_profile_ids::text, view_count, visibility, expires_at, archived_until,
+       created_at, deleted_at, expired_at
+FROM stories
+WHERE deleted_at IS NULL AND expired_at IS NULL AND expires_at > now()
+  AND (created_at, id) < ($1, $2)
+ORDER BY created_at DESC, id DESC
+LIMIT $3`, *cursorTime, *cursorID, fetch)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	all, err := scanStoryRows(rows)
+	if err != nil {
+		return nil, err
+	}
+	out := &PaginatedStories{}
+	if len(all) > limit {
+		out.HasMore = true
+		all = all[:limit]
+	}
+	out.Rows = all
+	if out.HasMore && len(all) > 0 {
+		last := all[len(all)-1]
+		out.NextCursor = encodeStoryCursor(last.CreatedAt, last.ID)
+	}
+	return out, nil
+}
+
+func encodeStoryCursor(t time.Time, id uuid.UUID) string {
+	return fmt.Sprintf("%s|%s", t.UTC().Format(time.RFC3339Nano), id.String())
+}
+
+func decodeStoryCursor(cursor string) (*time.Time, *uuid.UUID, error) {
+	if strings.TrimSpace(cursor) == "" {
+		return nil, nil, nil
+	}
+	parts := strings.SplitN(cursor, "|", 2)
+	if len(parts) != 2 {
+		return nil, nil, fmt.Errorf("invalid cursor")
+	}
+	t, err := time.Parse(time.RFC3339Nano, parts[0])
+	if err != nil {
+		return nil, nil, fmt.Errorf("invalid cursor time")
+	}
+	id, err := uuid.Parse(parts[1])
+	if err != nil {
+		return nil, nil, fmt.Errorf("invalid cursor id")
+	}
+	return &t, &id, nil
+}
+
+// ListStoryReactions returns emoji reactions for a story.
+func (s *StoryStore) ListStoryReactions(ctx context.Context, storyID uuid.UUID) ([]StoryReactionRow, error) {
+	if s == nil || s.Pool == nil {
+		return nil, ErrNotImplemented
+	}
+	rows, err := s.Pool.Query(ctx, `
+SELECT reactor_profile_id, emoji
+FROM story_reactions
+WHERE story_id = $1
+ORDER BY created_at`, storyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []StoryReactionRow
+	for rows.Next() {
+		var row StoryReactionRow
+		if err := rows.Scan(&row.ReactorProfileID, &row.Emoji); err != nil {
+			return nil, err
+		}
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
+// ListArchivedStoriesForPurge returns expired stories past archived_until with media ids.
+func (s *StoryStore) ListArchivedStoriesForPurge(ctx context.Context, now time.Time) ([]ArchivedStoryMedia, error) {
+	if s == nil || s.Pool == nil {
+		return nil, ErrNotImplemented
+	}
+	rows, err := s.Pool.Query(ctx, `
+SELECT id, media_file_id
+FROM stories
+WHERE archived_until <= $1 AND expired_at IS NOT NULL`, now.UTC())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ArchivedStoryMedia
+	for rows.Next() {
+		var row ArchivedStoryMedia
+		if err := rows.Scan(&row.StoryID, &row.MediaFileID); err != nil {
+			return nil, err
+		}
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
 // ListActiveStories returns active (non-expired, non-deleted) stories for feed.
 func (s *StoryStore) ListActiveStories(ctx context.Context, limit int) ([]StoryRow, error) {
 	if s == nil || s.Pool == nil {
@@ -370,15 +520,18 @@ WHERE deleted_at IS NULL AND expired_at IS NULL AND expires_at <= $1`, now.UTC()
 }
 
 // CreateHighlight creates a named highlight for profileID.
-func (s *StoryStore) CreateHighlight(ctx context.Context, profileID uuid.UUID, name string) (*HighlightRow, error) {
+func (s *StoryStore) CreateHighlight(ctx context.Context, profileID uuid.UUID, name, visibility string) (*HighlightRow, error) {
 	if s == nil || s.Pool == nil {
 		return nil, ErrNotImplemented
+	}
+	if strings.TrimSpace(visibility) == "" {
+		visibility = "everyone"
 	}
 	id := uuid.New()
 	now := time.Now().UTC()
 	_, err := s.Pool.Exec(ctx, `
 INSERT INTO highlights (id, profile_id, name, sort_order, visibility, created_at, updated_at)
-VALUES ($1, $2, $3, 0, 'everyone', $4, $4)`, id, profileID, name, now)
+VALUES ($1, $2, $3, 0, $4, $5, $5)`, id, profileID, name, visibility, now)
 	if err != nil {
 		return nil, err
 	}
@@ -426,20 +579,47 @@ SELECT story_id FROM highlight_stories WHERE highlight_id = $1 ORDER BY sort_ord
 }
 
 // UpdateHighlight renames a highlight owned by profileID.
-func (s *StoryStore) UpdateHighlight(ctx context.Context, highlightID, profileID uuid.UUID, name string) (*HighlightRow, error) {
+func (s *StoryStore) UpdateHighlight(ctx context.Context, highlightID, profileID uuid.UUID, name, visibility string) (*HighlightRow, error) {
 	if s == nil || s.Pool == nil {
 		return nil, ErrNotImplemented
 	}
-	tag, err := s.Pool.Exec(ctx, `
+	if strings.TrimSpace(name) != "" && strings.TrimSpace(visibility) != "" {
+		tag, err := s.Pool.Exec(ctx, `
+UPDATE highlights SET name = $3, visibility = $4, updated_at = now()
+WHERE id = $1 AND profile_id = $2`, highlightID, profileID, name, visibility)
+		if err != nil {
+			return nil, err
+		}
+		if tag.RowsAffected() == 0 {
+			return nil, ErrNotFound
+		}
+		return s.getHighlight(ctx, highlightID, profileID)
+	}
+	if strings.TrimSpace(name) != "" {
+		tag, err := s.Pool.Exec(ctx, `
 UPDATE highlights SET name = $3, updated_at = now()
 WHERE id = $1 AND profile_id = $2`, highlightID, profileID, name)
-	if err != nil {
-		return nil, err
+		if err != nil {
+			return nil, err
+		}
+		if tag.RowsAffected() == 0 {
+			return nil, ErrNotFound
+		}
+		return s.getHighlight(ctx, highlightID, profileID)
 	}
-	if tag.RowsAffected() == 0 {
-		return nil, ErrNotFound
+	if strings.TrimSpace(visibility) != "" {
+		tag, err := s.Pool.Exec(ctx, `
+UPDATE highlights SET visibility = $3, updated_at = now()
+WHERE id = $1 AND profile_id = $2`, highlightID, profileID, visibility)
+		if err != nil {
+			return nil, err
+		}
+		if tag.RowsAffected() == 0 {
+			return nil, ErrNotFound
+		}
+		return s.getHighlight(ctx, highlightID, profileID)
 	}
-	return s.getHighlight(ctx, highlightID, profileID)
+	return nil, ErrNotFound
 }
 
 // DeleteHighlight removes a highlight owned by profileID.

@@ -273,3 +273,50 @@ jobs:
         run: make build-all
       - name: make flutter-ci
         run: make flutter-ci
+
+  compose-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare compose env
+        run: cp .env.example .env
+      - name: Start compose infra
+        run: docker compose up -d
+      - name: Migrate Go-owned databases
+        run: |
+          make compose-migrate-phase15
+          make compose-migrate-bot
+          make compose-migrate-story
+      - name: Start app stack
+        run: make compose-app-up
+      - name: Wait for gateway health
+        run: |
+          for i in $(seq 1 72); do
+            if curl -sf http://127.0.0.1:18080/health; then
+              exit 0
+            fi
+            sleep 5
+          done
+          docker compose ps
+          exit 1
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+      - name: Gateway Phase 17 compose tests
+        working-directory: src/backend/gateway
+        env:
+          VOICE_RUN_LIVE_COMPOSE: "true"
+          VOICE_API_BASE_URL: http://127.0.0.1:18080
+        run: go test -count=1 -parallel 1 -timeout 15m -run 'TestComposePhase17.*_live' ./...
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.41.7"
+          channel: stable
+          cache: true
+      - name: Flutter Phase 17 live test
+        working-directory: src/frontend
+        run: |
+          flutter pub get
+          flutter test test/phase17_stories_e2e_live_test.dart \
+            --dart-define=VOICE_RUN_LIVE_INTEGRATION=true \
+            --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080

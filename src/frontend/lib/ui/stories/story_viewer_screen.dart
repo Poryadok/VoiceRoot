@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:video_player/video_player.dart';
 
 import '../../backend/stories_client.dart';
 import '../../l10n/app_localizations.dart';
@@ -23,6 +24,8 @@ class StoryViewerScreen extends ConsumerStatefulWidget {
   static const Key screenKey = Key('story_viewer_screen');
   static const Key reportButtonKey = Key('story_viewer_report');
   static const Key reactButtonKey = Key('story_viewer_react');
+  static const Key replyButtonKey = Key('story_viewer_reply');
+  static const Key viewCountKey = Key('story_viewer_view_count');
 
   final List<String> storyIds;
   final int initialIndex;
@@ -34,7 +37,7 @@ class StoryViewerScreen extends ConsumerStatefulWidget {
 
 class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> {
   late int _index;
-  var _markedViewed = <String>{};
+  final _markedViewed = <String>{};
 
   @override
   void initState() {
@@ -90,6 +93,59 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> {
     );
   }
 
+  Future<void> _reply(StoryData story) async {
+    final auth = ref.read(authorizationHeaderProvider);
+    final storyId = story.id;
+    if (auth == null || storyId.isEmpty) return;
+
+    final l10n = AppLocalizations.of(context)!;
+    final controller = TextEditingController();
+    final text = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        final dialogL10n = AppLocalizations.of(ctx)!;
+        return AlertDialog(
+          title: Text(dialogL10n.storyViewerReply),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            maxLines: 3,
+            decoration: InputDecoration(hintText: dialogL10n.storyViewerReplyHint),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text(dialogL10n.commonCancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
+              child: Text(dialogL10n.storyViewerReply),
+            ),
+          ],
+        );
+      },
+    );
+    controller.dispose();
+    if (text == null || text.isEmpty || !mounted) return;
+
+    final result = await ref.read(voiceStoriesClientProvider).replyToStory(
+          authorization: auth,
+          storyId: storyId,
+          text: text,
+        );
+    if (!mounted) return;
+    switch (result) {
+      case StoriesApiOk():
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.storyViewerReplySent)),
+        );
+      case StoriesApiFailure(:final message):
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message)),
+        );
+    }
+  }
+
   void _report() {
     final storyId = _currentStoryId;
     if (storyId.isEmpty) return;
@@ -104,6 +160,7 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> {
     final l10n = AppLocalizations.of(context)!;
     final voice = VoiceColors.of(context);
     final storyId = _currentStoryId;
+    final activeProfileId = ref.watch(authControllerProvider).activeProfileId;
 
     if (storyId.isEmpty) {
       return Scaffold(
@@ -158,10 +215,15 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> {
                 icon: Icons.cloud_off_outlined,
               );
             }
+            final isAuthor = activeProfileId == story.authorProfileId;
             return _StoryContent(
               story: story,
+              isAuthor: isAuthor,
               onReact: _react,
+              onReply: () => _reply(story),
               reactButtonKey: StoryViewerScreen.reactButtonKey,
+              replyButtonKey: StoryViewerScreen.replyButtonKey,
+              viewCountKey: StoryViewerScreen.viewCountKey,
             );
           },
         ),
@@ -173,13 +235,21 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> {
 class _StoryContent extends ConsumerWidget {
   const _StoryContent({
     required this.story,
+    required this.isAuthor,
     required this.onReact,
+    required this.onReply,
     required this.reactButtonKey,
+    required this.replyButtonKey,
+    required this.viewCountKey,
   });
 
   final StoryData story;
+  final bool isAuthor;
   final VoidCallback onReact;
+  final VoidCallback onReply;
   final Key reactButtonKey;
+  final Key replyButtonKey;
+  final Key viewCountKey;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -216,18 +286,7 @@ class _StoryContent extends ConsumerWidget {
                 );
               }
               if (story.type == 'video') {
-                return Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.play_circle_outline,
-                        size: 64, color: voice.textSecondary),
-                    const SizedBox(height: 8),
-                    Text(
-                      l10n.storyViewerVideoPlaceholder,
-                      style: TextStyle(color: voice.textSecondary),
-                    ),
-                  ],
-                );
+                return _StoryVideoPlayer(url: url);
               }
               return Image.network(
                 url,
@@ -260,10 +319,22 @@ class _StoryContent extends ConsumerWidget {
         );
     }
 
+    final showViewCount = isAuthor;
+
     return Stack(
       fit: StackFit.expand,
       children: [
         ColoredBox(color: voice.elevated, child: Center(child: body)),
+        if (showViewCount)
+          Positioned(
+            top: 8,
+            left: 16,
+            child: Text(
+              key: viewCountKey,
+              l10n.storyViewerViewCount(story.viewCount),
+              style: TextStyle(color: voice.textSecondary),
+            ),
+          ),
         Positioned(
           left: 16,
           right: 16,
@@ -278,6 +349,13 @@ class _StoryContent extends ConsumerWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+              if (!isAuthor)
+                IconButton(
+                  key: replyButtonKey,
+                  tooltip: l10n.storyViewerReply,
+                  onPressed: onReply,
+                  icon: const Icon(Icons.reply_outlined),
+                ),
               IconButton(
                 key: reactButtonKey,
                 tooltip: l10n.storyReactTooltip,
@@ -288,6 +366,48 @@ class _StoryContent extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _StoryVideoPlayer extends StatefulWidget {
+  const _StoryVideoPlayer({required this.url});
+
+  final String url;
+
+  @override
+  State<_StoryVideoPlayer> createState() => _StoryVideoPlayerState();
+}
+
+class _StoryVideoPlayerState extends State<_StoryVideoPlayer> {
+  late final VideoPlayerController _controller;
+  var _initialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
+      ..initialize().then((_) {
+        if (!mounted) return;
+        setState(() => _initialized = true);
+        _controller.play();
+      });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_initialized) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return AspectRatio(
+      aspectRatio: _controller.value.aspectRatio,
+      child: VideoPlayer(_controller),
     );
   }
 }

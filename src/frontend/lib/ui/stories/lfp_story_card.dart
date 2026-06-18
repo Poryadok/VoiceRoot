@@ -1,18 +1,32 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../backend/stories_client.dart';
 import '../../l10n/app_localizations.dart';
+import '../../state/chat_providers.dart';
+import '../../state/matchmaking_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../matchmaking/game_catalog_screen.dart';
+import '../matchmaking/queue_search_screen.dart';
 
-/// Looking-for-party story card (display only — no join/invite actions).
+/// Looking-for-party story card with join/write actions.
 class LfpStoryCard extends StatelessWidget {
-  const LfpStoryCard({super.key, required this.story});
+  const LfpStoryCard({
+    super.key,
+    required this.story,
+    this.onJoin,
+    this.onWrite,
+  });
 
   static const Key cardKey = Key('lfp_story_card');
+  static const Key joinKey = Key('lfp_story_join');
+  static const Key writeKey = Key('lfp_story_write');
 
   final StoryData story;
+  final VoidCallback? onJoin;
+  final VoidCallback? onWrite;
 
   @override
   Widget build(BuildContext context) {
@@ -63,6 +77,26 @@ class LfpStoryCard extends StatelessWidget {
                 style: TextStyle(color: voice.textSecondary),
               ),
             ],
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton(
+                    key: LfpStoryCard.joinKey,
+                    onPressed: onJoin ?? () => LfpStoryActions.join(context, story),
+                    child: Text(l10n.storyLfpJoin),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton(
+                    key: LfpStoryCard.writeKey,
+                    onPressed: onWrite ?? () => LfpStoryActions.write(context, story),
+                    child: Text(l10n.storyLfpWrite),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -77,6 +111,81 @@ class LfpStoryCard extends StatelessWidget {
     } catch (_) {}
     return const {};
   }
+}
+
+/// Navigation stubs for LFP story actions (matchmaking + DM).
+abstract final class LfpStoryActions {
+  static Future<void> join(BuildContext context, StoryData story) async {
+    ProviderContainer? container;
+    try {
+      container = ProviderScope.containerOf(context, listen: false);
+    } catch (_) {
+      return;
+    }
+    final ref = _RefReader(container);
+    final gameId = story.gameTag;
+    if (gameId == null || gameId.isEmpty) {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => const GameCatalogScreen(selectMode: true),
+        ),
+      );
+      return;
+    }
+
+    final catalog = await ref.read(gameCatalogProvider.future);
+    final game = catalog.games.where((g) => g.id == gameId).firstOrNull;
+    final modes = game?.config.modes ?? const [];
+    if (game == null || modes.isEmpty) {
+      if (!context.mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => const GameCatalogScreen(selectMode: true),
+        ),
+      );
+      return;
+    }
+
+    if (!context.mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => QueueSearchScreen(
+          game: game,
+          mode: modes.first,
+        ),
+      ),
+    );
+  }
+
+  static Future<void> write(BuildContext context, StoryData story) async {
+    ProviderContainer? container;
+    try {
+      container = ProviderScope.containerOf(context, listen: false);
+    } catch (_) {
+      return;
+    }
+    final ref = _RefReader(container);
+    final authorId = story.authorProfileId;
+    if (authorId.isEmpty) return;
+    final err = await ref
+        .read(chatActionsProvider)
+        .openDmWithProfile(authorId);
+    if (!context.mounted) return;
+    if (err != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(err)),
+      );
+    }
+  }
+}
+
+/// Minimal ref-like reader for static navigation helpers.
+class _RefReader {
+  _RefReader(this._container);
+
+  final ProviderContainer _container;
+
+  T read<T>(ProviderListenable<T> provider) => _container.read(provider);
 }
 
 class _InfoRow extends StatelessWidget {

@@ -500,17 +500,45 @@ message StoryStreamEvent {
     StoryCreated story_created = 10;
     StoryViewed story_viewed = 11;
     HighlightAdded highlight_added = 12;
+    StoryReacted story_reacted = 13;
+    StoryExpired story_expired = 14;
+    StoryHighlightCreated story_highlight_created = 15;
+    StoryLfpCreated story_lfp_created = 16;
   }
 }
 
 message StoryCreated {
   string story_id = 1;
   string author_profile_id = 2;
+  string type = 3;
+  optional string game_tag = 4;
+  repeated string mention_profile_ids = 5;
 }
 
 message StoryViewed {
   string story_id = 1;
   string viewer_profile_id = 2;
+}
+
+message StoryReacted {
+  string story_id = 1;
+  string reactor_profile_id = 2;
+  string emoji = 3;
+}
+
+message StoryExpired {
+  string story_id = 1;
+}
+
+message StoryHighlightCreated {
+  string highlight_id = 1;
+  string profile_id = 2;
+}
+
+message StoryLfpCreated {
+  string story_id = 1;
+  string author_profile_id = 2;
+  string criteria_json = 3;
 }
 
 message HighlightAdded {

@@ -23,6 +23,30 @@
 - Анонимный просмотр (Premium)
 - Видимость по настройкам приватности (everyone / friends / nobody)
 
+## REST (через Gateway)
+
+Публичные маршруты: `/api/v1/stories/**` → Story Service gRPC ([api-gateway.md](api-gateway.md)).
+
+| Метод | Путь | gRPC | Примечание |
+|-------|------|------|------------|
+| `POST` | `/api/v1/stories` | `CreateStory` | `type`, `text_content`, `media_file_id`, `mention_profile_ids`, `visibility` |
+| `GET` | `/api/v1/stories/feed` | `GetStoryFeed` | `cursor`, `limit` |
+| `GET` | `/api/v1/stories/archive` | `GetArchive` | только свой архив; `profile_id` опционален |
+| `GET` | `/api/v1/stories/profiles/{profile_id}` | `GetProfileStories` | активные стори профиля |
+| `POST` | `/api/v1/stories/looking-for-party` | `CreateLookingForParty` | `criteria_json`, опц. `media_file_id` |
+| `GET` | `/api/v1/stories/{id}` | `GetStory` | — |
+| `DELETE` | `/api/v1/stories/{id}` | `DeleteStory` | `204` |
+| `POST` | `/api/v1/stories/{id}/views` | `MarkViewed` | `anonymous` (Premium) |
+| `GET` | `/api/v1/stories/{id}/viewers` | `GetViewers` | только автор |
+| `POST` | `/api/v1/stories/{id}/reactions` | `ReactToStory` | `emoji` |
+| `POST` | `/api/v1/stories/{id}/reply` | `ReplyToStory` | приватный ответ → DM (`chat_id`, `message_id`) |
+| `GET` | `/api/v1/stories/highlights` | `GetHighlights` | `profile_id`; фильтр по `visibility` хайлайта |
+| `POST` | `/api/v1/stories/highlights` | `CreateHighlight` | `name`, `visibility` |
+| `PATCH` | `/api/v1/stories/highlights/{id}` | `UpdateHighlight` | `name`, `visibility` |
+| `DELETE` | `/api/v1/stories/highlights/{id}` | `DeleteHighlight` | `204` |
+| `POST` | `/api/v1/stories/highlights/{id}/stories` | `AddToHighlight` | `story_id` |
+| `DELETE` | `/api/v1/stories/highlights/{id}/stories/{story_id}` | `RemoveFromHighlight` | `204` |
+
 ## API (gRPC)
 
 ```protobuf
@@ -115,7 +139,7 @@ highlight_stories
 
 - **Expiry worker**: каждую минуту — пометить expired stories (TTL 24h)
 - **Archive cleanup**: ежедневно — удалить stories старше 30 дней из архива
-- **LFP matcher**: при создании "ищу пати" → отправить event в Matchmaking Service
+- **LFP matcher**: при создании "ищу пати" Story Service публикует `story.lfp_created` в JetStream; **потребитель Matchmaking Service (авто-заявка из LFP-стори) отложен** — Matchmaking пока не подписан на этот subject
 
 ## Публикуемые события (→ NATS)
 
@@ -135,7 +159,7 @@ highlight_stories
 - **File Service** — хранение медиа сторис
 - **User Service** — настройки приватности (кто видит сторис)
 - **Social Service** — список друзей для фильтрации видимости
-- **Matchmaking Service** — (через NATS) автоматическая заявка "ищу пати"
+- **Matchmaking Service** — (через NATS, **deferred**) автоматическая заявка "ищу пати" из `story.lfp_created`
 - **Notification Service** — (через NATS) уведомления об упоминаниях
 - **Subscription Service** — проверка Premium (анонимный просмотр)
 

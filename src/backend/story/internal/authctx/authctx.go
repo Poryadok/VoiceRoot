@@ -31,6 +31,15 @@ func ProfileID(ctx context.Context) (uuid.UUID, error) {
 
 var errMissingProfile = &profileError{}
 
+// ErrMissingAccount reports absent account metadata.
+func ErrMissingAccount() error { return errMissingAccount }
+
+var errMissingAccount = &accountError{}
+
+type accountError struct{}
+
+func (e *accountError) Error() string { return "missing account" }
+
 type profileError struct{}
 
 func (e *profileError) Error() string { return "missing profile" }

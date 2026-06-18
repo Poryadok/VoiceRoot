@@ -944,5 +944,37 @@
   "storyReactSent": "Reaction sent",
   "storyHighlightsTitle": "Highlights",
   "storyLfpTitle": "Looking for party",
-  "storyLfpGame": "Game"
+  "storyLfpGame": "Game",
+  "storyCreateVisibilityLabel": "Who can see this story",
+  "storyCreateMentionLabel": "Mention friends",
+  "storyCreateMentionHint": "@username",
+  "storyCreateGameTagLabel": "Game tag",
+  "storyCreateGameTagPick": "Choose game",
+  "storyCreateGameTagClear": "Clear",
+  "storyCreateTextStyleLabel": "Background",
+  "storyVisibilityEveryone": "Everyone",
+  "storyVisibilityFriends": "Friends",
+  "storyVisibilityCloseFriends": "Close friends",
+  "storyViewerReply": "Reply",
+  "storyViewerReplyHint": "Private reply",
+  "storyViewerReplySent": "Reply sent",
+  "storyViewerViewCount": "{count, plural, =1{1 view} other{{count} views}}",
+  "@storyViewerViewCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "storyHighlightVisibility": "Visibility: {value}",
+  "@storyHighlightVisibility": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "storyLfpJoin": "Join",
+  "storyLfpWrite": "Write",
+  "socialStoryCreate": "New story"
 }

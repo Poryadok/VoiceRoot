@@ -1967,4 +1967,68 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get storyLfpGame => 'Game';
+
+  @override
+  String get storyCreateVisibilityLabel => 'Who can see this story';
+
+  @override
+  String get storyCreateMentionLabel => 'Mention friends';
+
+  @override
+  String get storyCreateMentionHint => '@username';
+
+  @override
+  String get storyCreateGameTagLabel => 'Game tag';
+
+  @override
+  String get storyCreateGameTagPick => 'Choose game';
+
+  @override
+  String get storyCreateGameTagClear => 'Clear';
+
+  @override
+  String get storyCreateTextStyleLabel => 'Background';
+
+  @override
+  String get storyVisibilityEveryone => 'Everyone';
+
+  @override
+  String get storyVisibilityFriends => 'Friends';
+
+  @override
+  String get storyVisibilityCloseFriends => 'Close friends';
+
+  @override
+  String get storyViewerReply => 'Reply';
+
+  @override
+  String get storyViewerReplyHint => 'Private reply';
+
+  @override
+  String get storyViewerReplySent => 'Reply sent';
+
+  @override
+  String storyViewerViewCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count views',
+      one: '1 view',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String storyHighlightVisibility(String value) {
+    return 'Visibility: $value';
+  }
+
+  @override
+  String get storyLfpJoin => 'Join';
+
+  @override
+  String get storyLfpWrite => 'Write';
+
+  @override
+  String get socialStoryCreate => 'New story';
 }

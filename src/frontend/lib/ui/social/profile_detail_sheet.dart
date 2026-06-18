@@ -10,8 +10,11 @@ import '../../state/chat_providers.dart';
 import '../../state/presence_providers.dart';
 import '../../state/matchmaking_providers.dart';
 import '../../state/social_providers.dart';
-import '../core/voice_avatar.dart';
+import '../../state/stories_providers.dart';
 import '../report/report_sheet.dart';
+import '../stories/highlights_section.dart';
+import '../stories/story_ring_avatar.dart';
+import '../../routing/stories_routes.dart';
 import 'presence_indicator.dart';
 
 String _mmEntryLabel(AsyncValue<GameListData> catalogAsync, PlayerGameEntry entry) {
@@ -67,6 +70,9 @@ class ProfileDetailSheet extends ConsumerWidget {
     final pendingOutgoing = outgoing.contains(profileId);
     final pendingIncoming = incoming.contains(profileId);
     final isFriend = ref.watch(isFriendProvider(profileId));
+    final activeAuthors = ref.watch(activeStoryAuthorIdsProvider);
+    final hasActiveStory = activeAuthors.contains(profileId);
+    final profileStoriesAsync = ref.watch(profileStoriesProvider(profileId));
 
     return SafeArea(
       child: Padding(
@@ -89,10 +95,23 @@ class ProfileDetailSheet extends ConsumerWidget {
               children: [
                 Row(
                   children: [
-                    VoiceAvatar(
+                    StoryRingAvatar(
+                      displayName: profile.displayName,
                       imageUrl: profile.avatarUrl,
-                      label: profile.displayName,
-                      radius: 28,
+                      hasActiveStory: hasActiveStory,
+                      size: 56,
+                      onTap: hasActiveStory
+                          ? () {
+                              final stories = profileStoriesAsync.valueOrNull;
+                              if (stories == null || stories.isEmpty) return;
+                              Navigator.of(context).pop();
+                              StoriesRoutes.openViewer(
+                                context,
+                                storyIds: stories.map((s) => s.id).toList(),
+                                profileId: profileId,
+                              );
+                            }
+                          : null,
                     ),
                     const SizedBox(width: 16),
                     Expanded(
@@ -140,6 +159,7 @@ class ProfileDetailSheet extends ConsumerWidget {
                   const SizedBox(height: 16),
                   Text(profile.bio!),
                 ],
+                HighlightsSection(profileId: profileId),
                 mmProfileAsync.when(
                   loading: () => const SizedBox.shrink(),
                   error: (error, stackTrace) => const SizedBox.shrink(),

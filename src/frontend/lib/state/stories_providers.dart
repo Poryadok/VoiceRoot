@@ -24,7 +24,12 @@ final storyFeedProvider = FutureProvider<StoryFeedPage>((ref) async {
 final activeStoryAuthorIdsProvider = Provider<Set<String>>((ref) {
   final feed = ref.watch(storyFeedProvider);
   return feed.when(
-    data: (page) => page.stories.map((s) => s.authorProfileId).toSet(),
+    data: (page) {
+      if (page.feedGroups.isNotEmpty) {
+        return page.feedGroups.map((g) => g.authorProfileId).toSet();
+      }
+      return page.stories.map((s) => s.authorProfileId).toSet();
+    },
     loading: () => const {},
     error: (_, _) => const {},
   );

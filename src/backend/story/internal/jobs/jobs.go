@@ -8,6 +8,32 @@ import (
 	"voice/backend/story/internal/store"
 )
 
+// FileDeleter removes story media from object storage (File Service).
+type FileDeleter interface {
+	DeleteFile(ctx context.Context, fileID string) error
+}
+
+// RunArchivePurgeOnce deletes R2 media for purged stories, then removes archived rows.
+func RunArchivePurgeOnce(ctx context.Context, st *store.StoryStore, deleter FileDeleter, now time.Time) (int64, error) {
+	if st == nil || st.Pool == nil {
+		return 0, nil
+	}
+	media, err := st.ListArchivedStoriesForPurge(ctx, now)
+	if err != nil {
+		return 0, err
+	}
+	if deleter != nil {
+		for _, row := range media {
+			if row.MediaFileID != nil {
+				if err := deleter.DeleteFile(ctx, row.MediaFileID.String()); err != nil {
+					return 0, err
+				}
+			}
+		}
+	}
+	return st.PurgeArchivedStories(ctx, now)
+}
+
 // StartExpiryWorker marks stories expired past TTL every minute.
 func StartExpiryWorker(ctx context.Context, st *store.StoryStore, logger *slog.Logger) {
 	if st == nil {
@@ -33,7 +59,7 @@ func StartExpiryWorker(ctx context.Context, st *store.StoryStore, logger *slog.L
 }
 
 // StartArchivePurgeWorker deletes archived stories past retention daily.
-func StartArchivePurgeWorker(ctx context.Context, st *store.StoryStore, logger *slog.Logger) {
+func StartArchivePurgeWorker(ctx context.Context, st *store.StoryStore, deleter FileDeleter, logger *slog.Logger) {
 	if st == nil {
 		return
 	}
@@ -45,7 +71,7 @@ func StartArchivePurgeWorker(ctx context.Context, st *store.StoryStore, logger *
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				n, err := st.PurgeArchivedStories(context.Background(), time.Now().UTC())
+				n, err := RunArchivePurgeOnce(context.Background(), st, deleter, time.Now().UTC())
 				if err != nil && logger != nil {
 					logger.Error("story archive purge", slog.String("error", err.Error()))
 				} else if n > 0 && logger != nil {

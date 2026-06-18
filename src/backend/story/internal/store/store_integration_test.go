@@ -142,11 +142,11 @@ func TestHighlights_CRUD(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	hl, err := st.CreateHighlight(ctx, profile, "Best plays")
+	hl, err := st.CreateHighlight(ctx, profile, "Best plays", "everyone")
 	require.NoError(t, err)
 	require.Equal(t, "Best plays", hl.Name)
 
-	updated, err := st.UpdateHighlight(ctx, hl.ID, profile, "Clutch moments")
+	updated, err := st.UpdateHighlight(ctx, hl.ID, profile, "Clutch moments", "")
 	require.NoError(t, err)
 	require.Equal(t, "Clutch moments", updated.Name)
 

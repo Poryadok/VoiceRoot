@@ -1,11 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voice_frontend/backend/messages_client.dart';
 import 'package:voice_frontend/backend/stories_client.dart';
 
 import 'support/live_gateway_harness.dart';
 
 void main() {
   test(
-    'phase17: friend sees story in feed after publish',
+    'phase17: mention, feed, reply→DM, highlight privacy',
     () async {
       final probe = await probeLiveGateway();
       expect(
@@ -17,12 +18,14 @@ void main() {
 
       final author = await ctx.registerUser('p17-story-author');
       final viewer = await ctx.registerUser('p17-story-viewer');
+      final stranger = await ctx.registerUser('p17-story-stranger');
       await ctx.inviteAndAcceptFriends(author, viewer);
 
       final stories = VoiceStoriesClient(gateway: ctx.gatewayHttp());
       final created = await stories.createTextStory(
         authorization: author.authorizationHeader,
-        text: 'Phase 17 live e2e',
+        text: 'Phase 17 live e2e @viewer',
+        mentionProfileIds: [viewer.activeProfileId],
       );
       expect(created, isA<StoriesApiOk<StoryData>>());
       final story = (created as StoriesApiOk<StoryData>).data;
@@ -43,11 +46,77 @@ void main() {
       );
       expect(viewed, isA<StoriesApiOk<void>>());
 
-      final highlights = await stories.getHighlights(
+      final reply = await stories.replyToStory(
+        authorization: viewer.authorizationHeader,
+        storyId: story.id,
+        text: 'phase17 private reply',
+      );
+      expect(reply, isA<StoriesApiOk<StoryReplyResult>>());
+      final replyData = (reply as StoriesApiOk<StoryReplyResult>).data;
+      expect(replyData.chatId, isNotEmpty);
+      expect(replyData.messageId, isNotEmpty);
+
+      final messages = ctx.messagesClient();
+      final dmHistory = await messages.getMessages(
+        authorization: author.authorizationHeader,
+        chatId: replyData.chatId,
+      );
+      expect(dmHistory, isA<MessagesApiOk<MessageListData>>());
+      final dmMsgs = (dmHistory as MessagesApiOk<MessageListData>).data.messages;
+      expect(
+        dmMsgs.any(
+          (m) =>
+              m.id == replyData.messageId &&
+              m.content == 'phase17 private reply',
+        ),
+        isTrue,
+        reason: 'story reply must land in private DM for author',
+      );
+
+      final highlight = await stories.createHighlight(
+        authorization: author.authorizationHeader,
+        name: 'Live wins',
+        visibility: 'friends',
+      );
+      expect(highlight, isA<StoriesApiOk<HighlightData>>());
+      final highlightId = (highlight as StoriesApiOk<HighlightData>).data.id;
+      expect(highlightId, isNotEmpty);
+
+      final added = await stories.addToHighlight(
+        authorization: author.authorizationHeader,
+        highlightId: highlightId,
+        storyId: story.id,
+      );
+      expect(added, isA<StoriesApiOk<void>>());
+
+      final friendHighlights = await stories.getHighlights(
         authorization: viewer.authorizationHeader,
         profileId: author.activeProfileId,
       );
-      expect(highlights, isA<StoriesApiOk<List<HighlightData>>>());
+      expect(friendHighlights, isA<StoriesApiOk<List<HighlightData>>>());
+      final friendIds =
+          (friendHighlights as StoriesApiOk<List<HighlightData>>)
+              .data
+              .map((h) => h.id)
+              .toList();
+      expect(friendIds, contains(highlightId),
+          reason: 'friend must see friends-only highlight');
+
+      final strangerHighlights = await stories.getHighlights(
+        authorization: stranger.authorizationHeader,
+        profileId: author.activeProfileId,
+      );
+      expect(strangerHighlights, isA<StoriesApiOk<List<HighlightData>>>());
+      final strangerIds =
+          (strangerHighlights as StoriesApiOk<List<HighlightData>>)
+              .data
+              .map((h) => h.id)
+              .toList();
+      expect(
+        strangerIds,
+        isNot(contains(highlightId)),
+        reason: 'stranger must not see friends-only highlight',
+      );
     },
     skip: runLiveIntegration
         ? null
