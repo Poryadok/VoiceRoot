@@ -11,6 +11,9 @@ import '../../theme/voice_colors.dart';
 import '../core/voice_state_panel.dart';
 import '../report/report_sheet.dart';
 import 'lfp_story_card.dart';
+import 'story_game_tag_chip.dart';
+import 'story_text_style.dart';
+import 'story_viewers_sheet.dart';
 
 /// Full-screen story viewer with reactions and report.
 class StoryViewerScreen extends ConsumerStatefulWidget {
@@ -218,6 +221,7 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> {
             final isAuthor = activeProfileId == story.authorProfileId;
             return _StoryContent(
               story: story,
+              storyId: storyId,
               isAuthor: isAuthor,
               onReact: _react,
               onReply: () => _reply(story),
@@ -235,6 +239,7 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> {
 class _StoryContent extends ConsumerWidget {
   const _StoryContent({
     required this.story,
+    required this.storyId,
     required this.isAuthor,
     required this.onReact,
     required this.onReply,
@@ -244,6 +249,7 @@ class _StoryContent extends ConsumerWidget {
   });
 
   final StoryData story;
+  final String storyId;
   final bool isAuthor;
   final VoidCallback onReact;
   final VoidCallback onReply;
@@ -305,6 +311,7 @@ class _StoryContent extends ConsumerWidget {
           );
         }
       default:
+        final bg = storyTextBackgroundColor(voice, story.textStyleJson);
         body = Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -317,56 +324,103 @@ class _StoryContent extends ConsumerWidget {
             ),
           ),
         );
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            ColoredBox(color: bg, child: Center(child: body)),
+            ..._overlayChildren(
+              context,
+              l10n,
+              voice,
+              showViewCount: isAuthor,
+            ),
+          ],
+        );
     }
-
-    final showViewCount = isAuthor;
 
     return Stack(
       fit: StackFit.expand,
       children: [
         ColoredBox(color: voice.elevated, child: Center(child: body)),
-        if (showViewCount)
-          Positioned(
-            top: 8,
-            left: 16,
-            child: Text(
-              key: viewCountKey,
-              l10n.storyViewerViewCount(story.viewCount),
-              style: TextStyle(color: voice.textSecondary),
-            ),
-          ),
-        Positioned(
-          left: 16,
-          right: 16,
-          bottom: 24,
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  story.textContent ?? '',
-                  style: TextStyle(color: voice.textPrimary),
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (!isAuthor)
-                IconButton(
-                  key: replyButtonKey,
-                  tooltip: l10n.storyViewerReply,
-                  onPressed: onReply,
-                  icon: const Icon(Icons.reply_outlined),
-                ),
-              IconButton(
-                key: reactButtonKey,
-                tooltip: l10n.storyReactTooltip,
-                onPressed: onReact,
-                icon: const Text('🔥', style: TextStyle(fontSize: 24)),
-              ),
-            ],
-          ),
+        ..._overlayChildren(
+          context,
+          l10n,
+          voice,
+          showViewCount: isAuthor,
         ),
       ],
     );
+  }
+
+  List<Widget> _overlayChildren(
+    BuildContext context,
+    AppLocalizations l10n,
+    VoiceColors voice, {
+    bool showViewCount = false,
+  }) {
+    final gameTag = story.gameTag;
+    return [
+      if (gameTag != null && gameTag.isNotEmpty)
+        Positioned(
+          top: 48,
+          left: 16,
+          right: 16,
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: StoryGameTagChip(gameTag: gameTag),
+          ),
+        ),
+      if (showViewCount)
+        Positioned(
+          top: 8,
+          left: 16,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              key: viewCountKey,
+              onTap: () => StoryViewersSheet.show(context, storyId: storyId),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                child: Text(
+                  l10n.storyViewerViewCount(story.viewCount),
+                  style: TextStyle(color: voice.textSecondary),
+                ),
+              ),
+            ),
+          ),
+        ),
+      Positioned(
+        left: 16,
+        right: 16,
+        bottom: 24,
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                story.textContent ?? '',
+                style: TextStyle(color: voice.textPrimary),
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (!isAuthor)
+              IconButton(
+                key: replyButtonKey,
+                tooltip: l10n.storyViewerReply,
+                onPressed: onReply,
+                icon: const Icon(Icons.reply_outlined),
+              ),
+            IconButton(
+              key: reactButtonKey,
+              tooltip: l10n.storyReactTooltip,
+              onPressed: onReact,
+              icon: const Text('🔥', style: TextStyle(fontSize: 24)),
+            ),
+          ],
+        ),
+      ),
+    ];
   }
 }
 

@@ -267,6 +267,33 @@ const TokenResponse$json = {
 final $typed_data.Uint8List tokenResponseDescriptor = $convert
     .base64Decode('Cg1Ub2tlblJlc3BvbnNlEhQKBXRva2VuGAEgASgJUgV0b2tlbg==');
 
+@$core.Deprecated('Use webhookSecretResponseDescriptor instead')
+const WebhookSecretResponse$json = {
+  '1': 'WebhookSecretResponse',
+  '2': [
+    {'1': 'webhook_secret', '3': 1, '4': 1, '5': 9, '10': 'webhookSecret'},
+  ],
+};
+
+/// Descriptor for `WebhookSecretResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List webhookSecretResponseDescriptor = $convert.base64Decode(
+    'ChVXZWJob29rU2VjcmV0UmVzcG9uc2USJQoOd2ViaG9va19zZWNyZXQYASABKAlSDXdlYmhvb2'
+    'tTZWNyZXQ=');
+
+@$core.Deprecated('Use regenerateWebhookSecretRequestDescriptor instead')
+const RegenerateWebhookSecretRequest$json = {
+  '1': 'RegenerateWebhookSecretRequest',
+  '2': [
+    {'1': 'bot_id', '3': 1, '4': 1, '5': 9, '10': 'botId'},
+  ],
+};
+
+/// Descriptor for `RegenerateWebhookSecretRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List regenerateWebhookSecretRequestDescriptor =
+    $convert.base64Decode(
+        'Ch5SZWdlbmVyYXRlV2ViaG9va1NlY3JldFJlcXVlc3QSFQoGYm90X2lkGAEgASgJUgVib3RJZA'
+        '==');
+
 @$core.Deprecated('Use registerCommandsRequestDescriptor instead')
 const RegisterCommandsRequest$json = {
   '1': 'RegisterCommandsRequest',
@@ -537,9 +564,20 @@ const RegisterBotResponse$json = {
       '10': 'tokenResponse',
       '17': true
     },
+    {
+      '1': 'webhook_secret_response',
+      '3': 3,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.bot.v1.WebhookSecretResponse',
+      '9': 1,
+      '10': 'webhookSecretResponse',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_token_response'},
+    {'1': '_webhook_secret_response'},
   ],
 };
 
@@ -547,7 +585,9 @@ const RegisterBotResponse$json = {
 final $typed_data.Uint8List registerBotResponseDescriptor = $convert.base64Decode(
     'ChNSZWdpc3RlckJvdFJlc3BvbnNlEiMKA2JvdBgBIAEoCzIRLnZvaWNlLmJvdC52MS5Cb3RSA2'
     'JvdBJHCg50b2tlbl9yZXNwb25zZRgCIAEoCzIbLnZvaWNlLmJvdC52MS5Ub2tlblJlc3BvbnNl'
-    'SABSDXRva2VuUmVzcG9uc2WIAQFCEQoPX3Rva2VuX3Jlc3BvbnNl');
+    'SABSDXRva2VuUmVzcG9uc2WIAQESYAoXd2ViaG9va19zZWNyZXRfcmVzcG9uc2UYAyABKAsyIy'
+    '52b2ljZS5ib3QudjEuV2ViaG9va1NlY3JldFJlc3BvbnNlSAFSFXdlYmhvb2tTZWNyZXRSZXNw'
+    'b25zZYgBAUIRCg9fdG9rZW5fcmVzcG9uc2VCGgoYX3dlYmhvb2tfc2VjcmV0X3Jlc3BvbnNl');
 
 @$core.Deprecated('Use updateBotResponseDescriptor instead')
 const UpdateBotResponse$json = {
@@ -637,6 +677,28 @@ final $typed_data.Uint8List regenerateTokenResponseDescriptor =
     $convert.base64Decode(
         'ChdSZWdlbmVyYXRlVG9rZW5SZXNwb25zZRJCCg50b2tlbl9yZXNwb25zZRgBIAEoCzIbLnZvaW'
         'NlLmJvdC52MS5Ub2tlblJlc3BvbnNlUg10b2tlblJlc3BvbnNl');
+
+@$core.Deprecated('Use regenerateWebhookSecretResponseDescriptor instead')
+const RegenerateWebhookSecretResponse$json = {
+  '1': 'RegenerateWebhookSecretResponse',
+  '2': [
+    {
+      '1': 'webhook_secret_response',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.bot.v1.WebhookSecretResponse',
+      '10': 'webhookSecretResponse'
+    },
+  ],
+};
+
+/// Descriptor for `RegenerateWebhookSecretResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List regenerateWebhookSecretResponseDescriptor =
+    $convert.base64Decode(
+        'Ch9SZWdlbmVyYXRlV2ViaG9va1NlY3JldFJlc3BvbnNlElsKF3dlYmhvb2tfc2VjcmV0X3Jlc3'
+        'BvbnNlGAEgASgLMiMudm9pY2UuYm90LnYxLldlYmhvb2tTZWNyZXRSZXNwb25zZVIVd2ViaG9v'
+        'a1NlY3JldFJlc3BvbnNl');
 
 @$core.Deprecated('Use registerCommandsResponseDescriptor instead')
 const RegisterCommandsResponse$json = {

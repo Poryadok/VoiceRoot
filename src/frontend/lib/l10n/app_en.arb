@@ -983,5 +983,34 @@
   },
   "storyLfpJoin": "Join",
   "storyLfpWrite": "Write",
-  "socialStoryCreate": "New story"
+  "socialStoryCreate": "New story",
+  "storyArchiveTitle": "Story archive",
+  "storyArchiveEmpty": "No archived stories",
+  "storyArchiveLoadError": "Could not load story archive",
+  "storyArchiveAddToHighlight": "Add to highlight",
+  "storyHighlightsManageTitle": "Manage highlights",
+  "storyHighlightsEmpty": "No highlights yet",
+  "storyHighlightCreate": "New highlight",
+  "storyHighlightEditTitle": "Edit highlight",
+  "storyHighlightDelete": "Delete",
+  "storyHighlightDeleteConfirm": "Delete this highlight?",
+  "storyHighlightNameHint": "Highlight name",
+  "storyHighlightSave": "Save",
+  "storyHighlightSaved": "Highlight saved",
+  "storyHighlightSelectHighlight": "Choose a highlight",
+  "storyHighlightAddStories": "Add stories",
+  "storyHighlightStoriesSection": "Stories",
+  "storyHighlightStoryCount": "{count, plural, =1{1 story} other{{count} stories}}",
+  "@storyHighlightStoryCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "storyViewersTitle": "Viewers",
+  "storyViewersEmpty": "No viewers yet",
+  "storyViewersLoadError": "Could not load viewers",
+  "storyCreateVideoTooLong": "Video must be 60 seconds or shorter",
+  "storyGameTagTapHint": "Open game page"
 }

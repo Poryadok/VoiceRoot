@@ -34,6 +34,18 @@ void main() {
 
       expect(proto.hasIsE2e(), isFalse);
     });
+
+    test('sets contextStory when storyId provided', () {
+      final proto = requestUploadToProto(
+        originalName: 'clip.mp4',
+        mimeType: 'video/mp4',
+        sizeBytes: 2048,
+        storyId: 'story-42',
+      );
+
+      expect(proto.hasContextStory(), isTrue);
+      expect(proto.contextStory.storyId, 'story-42');
+    });
   });
 
   group('fileMetadataFromProto', () {

@@ -82,6 +82,15 @@ class BotServiceClient extends $grpc.Client {
     return $createUnaryCall(_$regenerateToken, request, options: options);
   }
 
+  $grpc.ResponseFuture<$0.RegenerateWebhookSecretResponse>
+      regenerateWebhookSecret(
+    $0.RegenerateWebhookSecretRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$regenerateWebhookSecret, request,
+        options: options);
+  }
+
   $grpc.ResponseFuture<$0.RegisterCommandsResponse> registerCommands(
     $0.RegisterCommandsRequest request, {
     $grpc.CallOptions? options,
@@ -343,6 +352,12 @@ class BotServiceClient extends $grpc.Client {
           '/voice.bot.v1.BotService/RegenerateToken',
           ($0.RegenerateTokenRequest value) => value.writeToBuffer(),
           $0.RegenerateTokenResponse.fromBuffer);
+  static final _$regenerateWebhookSecret = $grpc.ClientMethod<
+          $0.RegenerateWebhookSecretRequest,
+          $0.RegenerateWebhookSecretResponse>(
+      '/voice.bot.v1.BotService/RegenerateWebhookSecret',
+      ($0.RegenerateWebhookSecretRequest value) => value.writeToBuffer(),
+      $0.RegenerateWebhookSecretResponse.fromBuffer);
   static final _$registerCommands = $grpc.ClientMethod<
           $0.RegisterCommandsRequest, $0.RegisterCommandsResponse>(
       '/voice.bot.v1.BotService/RegisterCommands',
@@ -557,6 +572,15 @@ abstract class BotServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.RegenerateTokenRequest.fromBuffer(value),
         ($0.RegenerateTokenResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.RegenerateWebhookSecretRequest,
+            $0.RegenerateWebhookSecretResponse>(
+        'RegenerateWebhookSecret',
+        regenerateWebhookSecret_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.RegenerateWebhookSecretRequest.fromBuffer(value),
+        ($0.RegenerateWebhookSecretResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.RegisterCommandsRequest,
             $0.RegisterCommandsResponse>(
         'RegisterCommands',
@@ -883,6 +907,15 @@ abstract class BotServiceBase extends $grpc.Service {
 
   $async.Future<$0.RegenerateTokenResponse> regenerateToken(
       $grpc.ServiceCall call, $0.RegenerateTokenRequest request);
+
+  $async.Future<$0.RegenerateWebhookSecretResponse> regenerateWebhookSecret_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.RegenerateWebhookSecretRequest> $request) async {
+    return regenerateWebhookSecret($call, await $request);
+  }
+
+  $async.Future<$0.RegenerateWebhookSecretResponse> regenerateWebhookSecret(
+      $grpc.ServiceCall call, $0.RegenerateWebhookSecretRequest request);
 
   $async.Future<$0.RegisterCommandsResponse> registerCommands_Pre(
       $grpc.ServiceCall $call,

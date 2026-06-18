@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../ui/stories/story_archive_screen.dart';
 import '../ui/stories/story_create_screen.dart';
+import '../ui/stories/story_highlights_screen.dart';
 import '../ui/stories/story_viewer_screen.dart';
 
 /// Route paths for story screens.
@@ -9,12 +11,27 @@ abstract final class VoiceAppRoutes {
   static const home = '/';
   static const storyCreate = '/stories/create';
   static const storyViewer = '/stories/viewer';
+  static const storyArchive = '/stories/archive';
+  static const storyHighlights = '/stories/highlights';
 }
 
 /// Navigation helpers for story flows (go_router).
 abstract final class StoriesRoutes {
   static void openCreate(BuildContext context) {
     context.push(VoiceAppRoutes.storyCreate);
+  }
+
+  static void openArchive(BuildContext context) {
+    context.push(VoiceAppRoutes.storyArchive);
+  }
+
+  static void openHighlights(BuildContext context, {required String profileId}) {
+    context.push(
+      Uri(
+        path: VoiceAppRoutes.storyHighlights,
+        queryParameters: {'profileId': profileId},
+      ).toString(),
+    );
   }
 
   static void openViewer(
@@ -74,6 +91,19 @@ abstract final class StoriesRoutes {
             initialIndex: index,
             profileId: profileId,
           );
+        },
+      ),
+      GoRoute(
+        path: VoiceAppRoutes.storyArchive,
+        parentNavigatorKey: rootKey,
+        builder: (context, state) => const StoryArchiveScreen(),
+      ),
+      GoRoute(
+        path: VoiceAppRoutes.storyHighlights,
+        parentNavigatorKey: rootKey,
+        builder: (context, state) {
+          final profileId = state.uri.queryParameters['profileId'] ?? '';
+          return StoryHighlightsScreen(profileId: profileId);
         },
       ),
     ];

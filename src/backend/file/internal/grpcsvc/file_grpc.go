@@ -21,6 +21,7 @@ import (
 	chatv1 "voice.app/voice/chat/v1"
 	commonv1 "voice.app/voice/common/v1"
 	filev1 "voice.app/voice/file/v1"
+	storyv1 "voice.app/voice/story/v1"
 )
 
 var sha256Re = regexp.MustCompile(`^[a-fA-F0-9]{64}$`)
@@ -134,6 +135,10 @@ func (s *FileGRPC) RequestUpload(ctx context.Context, req *filev1.RequestUploadR
 	if err != nil {
 		return nil, err
 	}
+	storyID, err := s.storyContext(req.GetContextStory())
+	if err != nil {
+		return nil, err
+	}
 
 	isE2E := req.IsE2E != nil && *req.IsE2E
 	if chatID != nil && s.chatGuard != nil {
@@ -182,6 +187,7 @@ func (s *FileGRPC) RequestUpload(ctx context.Context, req *filev1.RequestUploadR
 		FileType:          r2file.MediaCategory(mimeType),
 		ChatID:            chatID,
 		ChatType:          chatType,
+		StoryID:           storyID,
 		IsE2E:             isE2E,
 		ExpiresAt:         expiresAt,
 		ScanResult:        "pending",
@@ -488,6 +494,17 @@ func (s *FileGRPC) chatContext(ctx context.Context, ref *chatv1.ChatRef, profile
 		return nil, nil, status.Error(codes.InvalidArgument, "context_chat.type is required")
 	}
 	return &chatID, &typ, nil
+}
+
+func (s *FileGRPC) storyContext(ref *storyv1.StoryRef) (*uuid.UUID, error) {
+	if ref == nil || strings.TrimSpace(ref.GetStoryId()) == "" {
+		return nil, nil
+	}
+	storyID, err := parseUUID("context_story.story_id", ref.GetStoryId())
+	if err != nil {
+		return nil, err
+	}
+	return &storyID, nil
 }
 
 func (s *FileGRPC) fileOwnedByUploader(ctx context.Context, fileID, profileID uuid.UUID) (store.FileRow, error) {

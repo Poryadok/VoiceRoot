@@ -206,6 +206,18 @@ final $typed_data.Uint8List storyDescriptor = $convert.base64Decode(
     'bnRCEgoQX3RleHRfc3R5bGVfanNvbkILCglfZ2FtZV90YWdCFAoSX2xmcF9jcml0ZXJpYV9qc2'
     '9uQg0KC19kZWxldGVkX2F0QgwKCl90eXBlX2VudW1CEgoQX3Zpc2liaWxpdHlfZW51bQ==');
 
+@$core.Deprecated('Use storyRefDescriptor instead')
+const StoryRef$json = {
+  '1': 'StoryRef',
+  '2': [
+    {'1': 'story_id', '3': 1, '4': 1, '5': 9, '10': 'storyId'},
+  ],
+};
+
+/// Descriptor for `StoryRef`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List storyRefDescriptor = $convert
+    .base64Decode('CghTdG9yeVJlZhIZCghzdG9yeV9pZBgBIAEoCVIHc3RvcnlJZA==');
+
 @$core.Deprecated('Use createStoryRequestDescriptor instead')
 const CreateStoryRequest$json = {
   '1': 'CreateStoryRequest',
@@ -268,6 +280,13 @@ const CreateStoryRequest$json = {
       '10': 'visibilityEnum',
       '17': true
     },
+    {
+      '1': 'mention_profile_ids',
+      '3': 9,
+      '4': 3,
+      '5': 9,
+      '10': 'mentionProfileIds'
+    },
   ],
   '8': [
     {'1': '_media_file_id'},
@@ -287,9 +306,10 @@ final $typed_data.Uint8List createStoryRequestDescriptor = $convert.base64Decode
     'IeCghnYW1lX3RhZxgFIAEoCUgDUgdnYW1lVGFniAEBEh4KCnZpc2liaWxpdHkYBiABKAlSCnZp'
     'c2liaWxpdHkSQAoJdHlwZV9lbnVtGAcgASgOMh4udm9pY2Uuc3RvcnkudjEuU3RvcnlNZWRpYV'
     'R5cGVIBFIIdHlwZUVudW2IAQESSwoPdmlzaWJpbGl0eV9lbnVtGAggASgOMh0udm9pY2Uuc3Rv'
-    'cnkudjEuU3RvcnlBdWRpZW5jZUgFUg52aXNpYmlsaXR5RW51bYgBAUIQCg5fbWVkaWFfZmlsZV'
-    '9pZEIPCg1fdGV4dF9jb250ZW50QhIKEF90ZXh0X3N0eWxlX2pzb25CCwoJX2dhbWVfdGFnQgwK'
-    'Cl90eXBlX2VudW1CEgoQX3Zpc2liaWxpdHlfZW51bQ==');
+    'cnkudjEuU3RvcnlBdWRpZW5jZUgFUg52aXNpYmlsaXR5RW51bYgBARIuChNtZW50aW9uX3Byb2'
+    'ZpbGVfaWRzGAkgAygJUhFtZW50aW9uUHJvZmlsZUlkc0IQCg5fbWVkaWFfZmlsZV9pZEIPCg1f'
+    'dGV4dF9jb250ZW50QhIKEF90ZXh0X3N0eWxlX2pzb25CCwoJX2dhbWVfdGFnQgwKCl90eXBlX2'
+    'VudW1CEgoQX3Zpc2liaWxpdHlfZW51bQ==');
 
 @$core.Deprecated('Use deleteStoryRequestDescriptor instead')
 const DeleteStoryRequest$json = {
@@ -429,6 +449,53 @@ final $typed_data.Uint8List reactToStoryRequestDescriptor = $convert.base64Decod
     'ChNSZWFjdFRvU3RvcnlSZXF1ZXN0EhkKCHN0b3J5X2lkGAEgASgJUgdzdG9yeUlkEhQKBWVtb2'
     'ppGAIgASgJUgVlbW9qaQ==');
 
+@$core.Deprecated('Use storyReactionDescriptor instead')
+const StoryReaction$json = {
+  '1': 'StoryReaction',
+  '2': [
+    {
+      '1': 'reactor_profile_id',
+      '3': 1,
+      '4': 1,
+      '5': 9,
+      '10': 'reactorProfileId'
+    },
+    {'1': 'emoji', '3': 2, '4': 1, '5': 9, '10': 'emoji'},
+  ],
+};
+
+/// Descriptor for `StoryReaction`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List storyReactionDescriptor = $convert.base64Decode(
+    'Cg1TdG9yeVJlYWN0aW9uEiwKEnJlYWN0b3JfcHJvZmlsZV9pZBgBIAEoCVIQcmVhY3RvclByb2'
+    'ZpbGVJZBIUCgVlbW9qaRgCIAEoCVIFZW1vamk=');
+
+@$core.Deprecated('Use getStoryReactionsRequestDescriptor instead')
+const GetStoryReactionsRequest$json = {
+  '1': 'GetStoryReactionsRequest',
+  '2': [
+    {'1': 'story_id', '3': 1, '4': 1, '5': 9, '10': 'storyId'},
+  ],
+};
+
+/// Descriptor for `GetStoryReactionsRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getStoryReactionsRequestDescriptor =
+    $convert.base64Decode(
+        'ChhHZXRTdG9yeVJlYWN0aW9uc1JlcXVlc3QSGQoIc3RvcnlfaWQYASABKAlSB3N0b3J5SWQ=');
+
+@$core.Deprecated('Use replyToStoryRequestDescriptor instead')
+const ReplyToStoryRequest$json = {
+  '1': 'ReplyToStoryRequest',
+  '2': [
+    {'1': 'story_id', '3': 1, '4': 1, '5': 9, '10': 'storyId'},
+    {'1': 'text', '3': 2, '4': 1, '5': 9, '10': 'text'},
+  ],
+};
+
+/// Descriptor for `ReplyToStoryRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List replyToStoryRequestDescriptor = $convert.base64Decode(
+    'ChNSZXBseVRvU3RvcnlSZXF1ZXN0EhkKCHN0b3J5X2lkGAEgASgJUgdzdG9yeUlkEhIKBHRleH'
+    'QYAiABKAlSBHRleHQ=');
+
 @$core.Deprecated('Use getArchiveRequestDescriptor instead')
 const GetArchiveRequest$json = {
   '1': 'GetArchiveRequest',
@@ -449,26 +516,59 @@ const Highlight$json = {
     {'1': 'profile_id', '3': 2, '4': 1, '5': 9, '10': 'profileId'},
     {'1': 'name', '3': 3, '4': 1, '5': 9, '10': 'name'},
     {'1': 'story_ids', '3': 4, '4': 3, '5': 9, '10': 'storyIds'},
+    {'1': 'visibility', '3': 5, '4': 1, '5': 9, '10': 'visibility'},
+    {
+      '1': 'visibility_enum',
+      '3': 6,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.story.v1.StoryAudience',
+      '9': 0,
+      '10': 'visibilityEnum',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_visibility_enum'},
   ],
 };
 
 /// Descriptor for `Highlight`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List highlightDescriptor = $convert.base64Decode(
     'CglIaWdobGlnaHQSDgoCaWQYASABKAlSAmlkEh0KCnByb2ZpbGVfaWQYAiABKAlSCXByb2ZpbG'
-    'VJZBISCgRuYW1lGAMgASgJUgRuYW1lEhsKCXN0b3J5X2lkcxgEIAMoCVIIc3RvcnlJZHM=');
+    'VJZBISCgRuYW1lGAMgASgJUgRuYW1lEhsKCXN0b3J5X2lkcxgEIAMoCVIIc3RvcnlJZHMSHgoK'
+    'dmlzaWJpbGl0eRgFIAEoCVIKdmlzaWJpbGl0eRJLCg92aXNpYmlsaXR5X2VudW0YBiABKA4yHS'
+    '52b2ljZS5zdG9yeS52MS5TdG9yeUF1ZGllbmNlSABSDnZpc2liaWxpdHlFbnVtiAEBQhIKEF92'
+    'aXNpYmlsaXR5X2VudW0=');
 
 @$core.Deprecated('Use createHighlightRequestDescriptor instead')
 const CreateHighlightRequest$json = {
   '1': 'CreateHighlightRequest',
   '2': [
     {'1': 'name', '3': 1, '4': 1, '5': 9, '10': 'name'},
+    {'1': 'visibility', '3': 2, '4': 1, '5': 9, '10': 'visibility'},
+    {
+      '1': 'visibility_enum',
+      '3': 3,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.story.v1.StoryAudience',
+      '9': 0,
+      '10': 'visibilityEnum',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_visibility_enum'},
   ],
 };
 
 /// Descriptor for `CreateHighlightRequest`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List createHighlightRequestDescriptor =
-    $convert.base64Decode(
-        'ChZDcmVhdGVIaWdobGlnaHRSZXF1ZXN0EhIKBG5hbWUYASABKAlSBG5hbWU=');
+final $typed_data.Uint8List createHighlightRequestDescriptor = $convert.base64Decode(
+    'ChZDcmVhdGVIaWdobGlnaHRSZXF1ZXN0EhIKBG5hbWUYASABKAlSBG5hbWUSHgoKdmlzaWJpbG'
+    'l0eRgCIAEoCVIKdmlzaWJpbGl0eRJLCg92aXNpYmlsaXR5X2VudW0YAyABKA4yHS52b2ljZS5z'
+    'dG9yeS52MS5TdG9yeUF1ZGllbmNlSABSDnZpc2liaWxpdHlFbnVtiAEBQhIKEF92aXNpYmlsaX'
+    'R5X2VudW0=');
 
 @$core.Deprecated('Use updateHighlightRequestDescriptor instead')
 const UpdateHighlightRequest$json = {
@@ -476,17 +576,40 @@ const UpdateHighlightRequest$json = {
   '2': [
     {'1': 'highlight_id', '3': 1, '4': 1, '5': 9, '10': 'highlightId'},
     {'1': 'name', '3': 2, '4': 1, '5': 9, '9': 0, '10': 'name', '17': true},
+    {
+      '1': 'visibility',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '9': 1,
+      '10': 'visibility',
+      '17': true
+    },
+    {
+      '1': 'visibility_enum',
+      '3': 4,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.story.v1.StoryAudience',
+      '9': 2,
+      '10': 'visibilityEnum',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_name'},
+    {'1': '_visibility'},
+    {'1': '_visibility_enum'},
   ],
 };
 
 /// Descriptor for `UpdateHighlightRequest`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List updateHighlightRequestDescriptor =
-    $convert.base64Decode(
-        'ChZVcGRhdGVIaWdobGlnaHRSZXF1ZXN0EiEKDGhpZ2hsaWdodF9pZBgBIAEoCVILaGlnaGxpZ2'
-        'h0SWQSFwoEbmFtZRgCIAEoCUgAUgRuYW1liAEBQgcKBV9uYW1l');
+final $typed_data.Uint8List updateHighlightRequestDescriptor = $convert.base64Decode(
+    'ChZVcGRhdGVIaWdobGlnaHRSZXF1ZXN0EiEKDGhpZ2hsaWdodF9pZBgBIAEoCVILaGlnaGxpZ2'
+    'h0SWQSFwoEbmFtZRgCIAEoCUgAUgRuYW1liAEBEiMKCnZpc2liaWxpdHkYAyABKAlIAVIKdmlz'
+    'aWJpbGl0eYgBARJLCg92aXNpYmlsaXR5X2VudW0YBCABKA4yHS52b2ljZS5zdG9yeS52MS5TdG'
+    '9yeUF1ZGllbmNlSAJSDnZpc2liaWxpdHlFbnVtiAEBQgcKBV9uYW1lQg0KC192aXNpYmlsaXR5'
+    'QhIKEF92aXNpYmlsaXR5X2VudW0=');
 
 @$core.Deprecated('Use deleteHighlightRequestDescriptor instead')
 const DeleteHighlightRequest$json = {
@@ -639,6 +762,27 @@ final $typed_data.Uint8List getStoryResponseDescriptor = $convert.base64Decode(
     'ChBHZXRTdG9yeVJlc3BvbnNlEisKBXN0b3J5GAEgASgLMhUudm9pY2Uuc3RvcnkudjEuU3Rvcn'
     'lSBXN0b3J5');
 
+@$core.Deprecated('Use storyFeedGroupDescriptor instead')
+const StoryFeedGroup$json = {
+  '1': 'StoryFeedGroup',
+  '2': [
+    {'1': 'author_profile_id', '3': 1, '4': 1, '5': 9, '10': 'authorProfileId'},
+    {
+      '1': 'stories',
+      '3': 2,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.story.v1.Story',
+      '10': 'stories'
+    },
+  ],
+};
+
+/// Descriptor for `StoryFeedGroup`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List storyFeedGroupDescriptor = $convert.base64Decode(
+    'Cg5TdG9yeUZlZWRHcm91cBIqChFhdXRob3JfcHJvZmlsZV9pZBgBIAEoCVIPYXV0aG9yUHJvZm'
+    'lsZUlkEi8KB3N0b3JpZXMYAiADKAsyFS52b2ljZS5zdG9yeS52MS5TdG9yeVIHc3Rvcmllcw==');
+
 @$core.Deprecated('Use getStoryFeedResponseDescriptor instead')
 const GetStoryFeedResponse$json = {
   '1': 'GetStoryFeedResponse',
@@ -662,6 +806,14 @@ const GetStoryFeedResponse$json = {
       '10': 'page',
       '17': true
     },
+    {
+      '1': 'feed_groups',
+      '3': 4,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.story.v1.StoryFeedGroup',
+      '10': 'feedGroups'
+    },
   ],
   '8': [
     {'1': '_page'},
@@ -672,8 +824,9 @@ const GetStoryFeedResponse$json = {
 final $typed_data.Uint8List getStoryFeedResponseDescriptor = $convert.base64Decode(
     'ChRHZXRTdG9yeUZlZWRSZXNwb25zZRIvCgdzdG9yaWVzGAEgAygLMhUudm9pY2Uuc3Rvcnkudj'
     'EuU3RvcnlSB3N0b3JpZXMSHwoLbmV4dF9jdXJzb3IYAiABKAlSCm5leHRDdXJzb3ISPAoEcGFn'
-    'ZRgDIAEoCzIjLnZvaWNlLmNvbW1vbi52MS5DdXJzb3JQYWdlUmVzcG9uc2VIAFIEcGFnZYgBAU'
-    'IHCgVfcGFnZQ==');
+    'ZRgDIAEoCzIjLnZvaWNlLmNvbW1vbi52MS5DdXJzb3JQYWdlUmVzcG9uc2VIAFIEcGFnZYgBAR'
+    'I/CgtmZWVkX2dyb3VwcxgEIAMoCzIeLnZvaWNlLnN0b3J5LnYxLlN0b3J5RmVlZEdyb3VwUgpm'
+    'ZWVkR3JvdXBzQgcKBV9wYWdl');
 
 @$core.Deprecated('Use getProfileStoriesResponseDescriptor instead')
 const GetProfileStoriesResponse$json = {
@@ -733,6 +886,41 @@ const ReactToStoryResponse$json = {
 /// Descriptor for `ReactToStoryResponse`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List reactToStoryResponseDescriptor =
     $convert.base64Decode('ChRSZWFjdFRvU3RvcnlSZXNwb25zZQ==');
+
+@$core.Deprecated('Use getStoryReactionsResponseDescriptor instead')
+const GetStoryReactionsResponse$json = {
+  '1': 'GetStoryReactionsResponse',
+  '2': [
+    {
+      '1': 'reactions',
+      '3': 1,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.story.v1.StoryReaction',
+      '10': 'reactions'
+    },
+  ],
+};
+
+/// Descriptor for `GetStoryReactionsResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getStoryReactionsResponseDescriptor =
+    $convert.base64Decode(
+        'ChlHZXRTdG9yeVJlYWN0aW9uc1Jlc3BvbnNlEjsKCXJlYWN0aW9ucxgBIAMoCzIdLnZvaWNlLn'
+        'N0b3J5LnYxLlN0b3J5UmVhY3Rpb25SCXJlYWN0aW9ucw==');
+
+@$core.Deprecated('Use replyToStoryResponseDescriptor instead')
+const ReplyToStoryResponse$json = {
+  '1': 'ReplyToStoryResponse',
+  '2': [
+    {'1': 'chat_id', '3': 1, '4': 1, '5': 9, '10': 'chatId'},
+    {'1': 'message_id', '3': 2, '4': 1, '5': 9, '10': 'messageId'},
+  ],
+};
+
+/// Descriptor for `ReplyToStoryResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List replyToStoryResponseDescriptor = $convert.base64Decode(
+    'ChRSZXBseVRvU3RvcnlSZXNwb25zZRIXCgdjaGF0X2lkGAEgASgJUgZjaGF0SWQSHQoKbWVzc2'
+    'FnZV9pZBgCIAEoCVIJbWVzc2FnZUlk');
 
 @$core.Deprecated('Use getArchiveResponseDescriptor instead')
 const GetArchiveResponse$json = {

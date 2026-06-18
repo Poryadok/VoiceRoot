@@ -26,6 +26,7 @@ import (
 
 	chatv1 "voice.app/voice/chat/v1"
 	filev1 "voice.app/voice/file/v1"
+	storyv1 "voice.app/voice/story/v1"
 )
 
 const freeFileLimitBytes = 50 << 20
@@ -224,6 +225,26 @@ func TestRequestUploadWithChatContextAllowsMembersAndStoresChat(t *testing.T) {
 	_, err = client.GetFileURL(withFileProfile(ctx, uuid.New(), uuid.New()), &filev1.GetFileURLRequest{FileId: fileID})
 	require.Error(t, err)
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+func TestRequestUploadWithStoryContextStoresStoryID(t *testing.T) {
+	ctx := context.Background()
+	pool := startFilePostgres(t, ctx)
+	profileID := uuid.New()
+	storyID := uuid.New()
+	client := startFileGRPC(t, pool, &recordingPresigner{})
+	req := validUploadRequest()
+	req.ContextStory = &storyv1.StoryRef{StoryId: storyID.String()}
+
+	uploadResp, err := client.RequestUpload(withFileProfile(ctx, uuid.New(), profileID), req)
+	require.NoError(t, err)
+	fileID := uploadResp.GetUploadResponse().GetFileId()
+
+	var storedStoryID *uuid.UUID
+	err = pool.QueryRow(ctx, `SELECT story_id FROM files WHERE id = $1`, fileID).Scan(&storedStoryID)
+	require.NoError(t, err)
+	require.NotNil(t, storedStoryID)
+	require.Equal(t, storyID, *storedStoryID)
 }
 
 func TestGetFileURLUsesStoredR2KeyAndOneHourTTL(t *testing.T) {
@@ -432,6 +453,7 @@ func startFilePostgres(t *testing.T, ctx context.Context) *pgxpool.Pool {
 	pool := integrationtest.StartPostgres(t, ctx, "db", "")
 	applyFileSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000001_init.up.sql"))
 	applyFileSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000002_premium_upload_limit.up.sql"))
+	applyFileSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000003_story_context.up.sql"))
 	return pool
 }
 

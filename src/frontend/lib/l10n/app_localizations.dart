@@ -3805,6 +3805,138 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'New story'**
   String get socialStoryCreate;
+
+  /// No description provided for @storyArchiveTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Story archive'**
+  String get storyArchiveTitle;
+
+  /// No description provided for @storyArchiveEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No archived stories'**
+  String get storyArchiveEmpty;
+
+  /// No description provided for @storyArchiveLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load story archive'**
+  String get storyArchiveLoadError;
+
+  /// No description provided for @storyArchiveAddToHighlight.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to highlight'**
+  String get storyArchiveAddToHighlight;
+
+  /// No description provided for @storyHighlightsManageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage highlights'**
+  String get storyHighlightsManageTitle;
+
+  /// No description provided for @storyHighlightsEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No highlights yet'**
+  String get storyHighlightsEmpty;
+
+  /// No description provided for @storyHighlightCreate.
+  ///
+  /// In en, this message translates to:
+  /// **'New highlight'**
+  String get storyHighlightCreate;
+
+  /// No description provided for @storyHighlightEditTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit highlight'**
+  String get storyHighlightEditTitle;
+
+  /// No description provided for @storyHighlightDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get storyHighlightDelete;
+
+  /// No description provided for @storyHighlightDeleteConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete this highlight?'**
+  String get storyHighlightDeleteConfirm;
+
+  /// No description provided for @storyHighlightNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Highlight name'**
+  String get storyHighlightNameHint;
+
+  /// No description provided for @storyHighlightSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get storyHighlightSave;
+
+  /// No description provided for @storyHighlightSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Highlight saved'**
+  String get storyHighlightSaved;
+
+  /// No description provided for @storyHighlightSelectHighlight.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a highlight'**
+  String get storyHighlightSelectHighlight;
+
+  /// No description provided for @storyHighlightAddStories.
+  ///
+  /// In en, this message translates to:
+  /// **'Add stories'**
+  String get storyHighlightAddStories;
+
+  /// No description provided for @storyHighlightStoriesSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Stories'**
+  String get storyHighlightStoriesSection;
+
+  /// No description provided for @storyHighlightStoryCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 story} other{{count} stories}}'**
+  String storyHighlightStoryCount(int count);
+
+  /// No description provided for @storyViewersTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Viewers'**
+  String get storyViewersTitle;
+
+  /// No description provided for @storyViewersEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No viewers yet'**
+  String get storyViewersEmpty;
+
+  /// No description provided for @storyViewersLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load viewers'**
+  String get storyViewersLoadError;
+
+  /// No description provided for @storyCreateVideoTooLong.
+  ///
+  /// In en, this message translates to:
+  /// **'Video must be 60 seconds or shorter'**
+  String get storyCreateVideoTooLong;
+
+  /// No description provided for @storyGameTagTapHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Open game page'**
+  String get storyGameTagTapHint;
 }
 
 class _AppLocalizationsDelegate

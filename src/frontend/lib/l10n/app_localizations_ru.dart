@@ -2065,4 +2065,81 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get socialStoryCreate => 'Новая сторис';
+
+  @override
+  String get storyArchiveTitle => 'Архив сторис';
+
+  @override
+  String get storyArchiveEmpty => 'Нет архивных сторис';
+
+  @override
+  String get storyArchiveLoadError => 'Не удалось загрузить архив';
+
+  @override
+  String get storyArchiveAddToHighlight => 'В избранное';
+
+  @override
+  String get storyHighlightsManageTitle => 'Управление избранным';
+
+  @override
+  String get storyHighlightsEmpty => 'Пока нет избранного';
+
+  @override
+  String get storyHighlightCreate => 'Новое избранное';
+
+  @override
+  String get storyHighlightEditTitle => 'Редактировать избранное';
+
+  @override
+  String get storyHighlightDelete => 'Удалить';
+
+  @override
+  String get storyHighlightDeleteConfirm => 'Удалить это избранное?';
+
+  @override
+  String get storyHighlightNameHint => 'Название';
+
+  @override
+  String get storyHighlightSave => 'Сохранить';
+
+  @override
+  String get storyHighlightSaved => 'Избранное сохранено';
+
+  @override
+  String get storyHighlightSelectHighlight => 'Выберите избранное';
+
+  @override
+  String get storyHighlightAddStories => 'Добавить сторис';
+
+  @override
+  String get storyHighlightStoriesSection => 'Сторис';
+
+  @override
+  String storyHighlightStoryCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count сторис',
+      many: '$count сторис',
+      few: '$count сторис',
+      one: '$count сторис',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get storyViewersTitle => 'Зрители';
+
+  @override
+  String get storyViewersEmpty => 'Пока никто не смотрел';
+
+  @override
+  String get storyViewersLoadError => 'Не удалось загрузить зрителей';
+
+  @override
+  String get storyCreateVideoTooLong =>
+      'Видео должно быть не длиннее 60 секунд';
+
+  @override
+  String get storyGameTagTapHint => 'Открыть страницу игры';
 }

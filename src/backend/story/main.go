@@ -56,7 +56,10 @@ func main() {
 		}
 		st := &store.StoryStore{Pool: pool}
 		svc := grpcsvc.NewStoryGRPC(st)
-		svc.Friends = privacy.NewFriendChecker(logger)
+		friendChecker := privacy.NewFriendChecker(logger)
+		svc.Friends = friendChecker
+		svc.Audience = friendChecker
+		svc.FeedAuthors = friendChecker
 		fileDeleter := clients.WireGRPC(logger, svc)
 		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger)...)
 		storyv1.RegisterStoryServiceServer(grpcSrv, svc)
@@ -67,7 +70,7 @@ func main() {
 		}()
 		logger.Info("story grpc listening", slog.String("addr", grpcAddr))
 
-		jobs.StartExpiryWorker(context.Background(), st, logger)
+		jobs.StartExpiryWorker(context.Background(), st, svc.Events, logger)
 		jobs.StartArchivePurgeWorker(context.Background(), st, fileDeleter, logger)
 	}
 

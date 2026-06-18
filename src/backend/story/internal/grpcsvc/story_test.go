@@ -25,10 +25,12 @@ import (
 func migrationSQL(t *testing.T) string {
 	t.Helper()
 	_, file, _, _ := runtime.Caller(0)
-	root := filepath.Join(filepath.Dir(file), "..", "..", "..", "migrations", "story_db", "000001_init.up.sql")
-	b, err := os.ReadFile(root)
+	dir := filepath.Join(filepath.Dir(file), "..", "..", "..", "migrations", "story_db")
+	b1, err := os.ReadFile(filepath.Join(dir, "000001_init.up.sql"))
 	require.NoError(t, err)
-	return string(b)
+	b2, err := os.ReadFile(filepath.Join(dir, "000002_visibility_audience.up.sql"))
+	require.NoError(t, err)
+	return string(b1) + "\n" + string(b2)
 }
 
 func startStoryGRPC(t *testing.T) (storyv1.StoryServiceClient, *store.StoryStore, func()) {

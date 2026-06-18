@@ -2054,4 +2054,78 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get socialStoryCreate => 'New story';
+
+  @override
+  String get storyArchiveTitle => 'Story archive';
+
+  @override
+  String get storyArchiveEmpty => 'No archived stories';
+
+  @override
+  String get storyArchiveLoadError => 'Could not load story archive';
+
+  @override
+  String get storyArchiveAddToHighlight => 'Add to highlight';
+
+  @override
+  String get storyHighlightsManageTitle => 'Manage highlights';
+
+  @override
+  String get storyHighlightsEmpty => 'No highlights yet';
+
+  @override
+  String get storyHighlightCreate => 'New highlight';
+
+  @override
+  String get storyHighlightEditTitle => 'Edit highlight';
+
+  @override
+  String get storyHighlightDelete => 'Delete';
+
+  @override
+  String get storyHighlightDeleteConfirm => 'Delete this highlight?';
+
+  @override
+  String get storyHighlightNameHint => 'Highlight name';
+
+  @override
+  String get storyHighlightSave => 'Save';
+
+  @override
+  String get storyHighlightSaved => 'Highlight saved';
+
+  @override
+  String get storyHighlightSelectHighlight => 'Choose a highlight';
+
+  @override
+  String get storyHighlightAddStories => 'Add stories';
+
+  @override
+  String get storyHighlightStoriesSection => 'Stories';
+
+  @override
+  String storyHighlightStoryCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count stories',
+      one: '1 story',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get storyViewersTitle => 'Viewers';
+
+  @override
+  String get storyViewersEmpty => 'No viewers yet';
+
+  @override
+  String get storyViewersLoadError => 'Could not load viewers';
+
+  @override
+  String get storyCreateVideoTooLong => 'Video must be 60 seconds or shorter';
+
+  @override
+  String get storyGameTagTapHint => 'Open game page';
 }

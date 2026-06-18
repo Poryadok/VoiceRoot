@@ -1,22 +1,29 @@
 import 'dart:convert';
+import 'dart:io' show File;
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:video_player/video_player.dart';
 
 import '../../backend/files_client.dart';
 import '../../backend/matchmaking_client.dart';
 import '../../backend/stories_client.dart';
+import '../../backend/user_privacy_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/chat_providers.dart';
 import '../../state/social_providers.dart';
 import '../../state/stories_providers.dart';
+import '../../state/trust_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../core/voice_primary_button.dart';
 import '../matchmaking/game_catalog_screen.dart';
 import 'story_audience_picker.dart';
+import 'story_video_validation.dart';
+import 'story_visibility.dart';
 
 enum StoryCreateType { text, photo, video }
 
@@ -52,6 +59,43 @@ class _StoryCreateScreenState extends ConsumerState<StoryCreateScreen> {
   static const _backgroundOptions = ['accent', 'elevated', 'muted'];
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadPrivacyDefault());
+  }
+
+  Future<void> _loadPrivacyDefault() async {
+    final auth = ref.read(authorizationHeaderProvider);
+    if (auth == null) return;
+
+    final result =
+        await ref.read(voiceUserPrivacyClientProvider).getPrivacy(
+              authorization: auth,
+            );
+    if (!mounted) return;
+    if (result case UserPrivacyApiOk(:final data)) {
+      setState(() {
+        _visibility = storyVisibilityFromPrivacyAudience(data.showStories);
+      });
+    }
+  }
+
+  Future<Duration?> _readVideoDuration(XFile file) async {
+    late final VideoPlayerController controller;
+    if (kIsWeb) {
+      controller = VideoPlayerController.networkUrl(Uri.parse(file.path));
+    } else {
+      controller = VideoPlayerController.file(File(file.path));
+    }
+    try {
+      await controller.initialize();
+      return controller.value.duration;
+    } finally {
+      await controller.dispose();
+    }
+  }
+
+  @override
   void dispose() {
     _textController.dispose();
     _mentionQueryController.dispose();
@@ -72,6 +116,21 @@ class _StoryCreateScreenState extends ConsumerState<StoryCreateScreen> {
         ? await _imagePicker.pickVideo(source: ImageSource.gallery)
         : await _imagePicker.pickImage(source: ImageSource.gallery);
     if (file == null) return;
+
+    if (video) {
+      final duration = await _readVideoDuration(file);
+      if (!mounted) return;
+      if (duration == null || !isStoryVideoDurationValid(duration)) {
+        setState(() {
+          _pickedFileName = null;
+          _pickedBytes = null;
+          _pickedMime = null;
+          _error = AppLocalizations.of(context)!.storyCreateVideoTooLong;
+        });
+        return;
+      }
+    }
+
     final bytes = await file.readAsBytes();
     if (!mounted) return;
     setState(() {

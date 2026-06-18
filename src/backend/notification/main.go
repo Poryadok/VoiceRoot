@@ -135,9 +135,20 @@ func main() {
 			Grouping: groupingStore,
 			Presence: presenceChecker,
 		}
+		storyPusher := &dispatch.StoryPusher{
+			Tokens: tokenStore,
+			Pusher: pusher,
+		}
 
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
 			instanceID := strings.TrimSpace(os.Getenv("HOSTNAME"))
+			go func() {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				if err := runStoryEventsConsumer(ctx, natsURL, instanceID, tokenStore, storyPusher, logger); err != nil && logger != nil {
+					logger.Error("story.events consumer exited", slog.Any("error", err))
+				}
+			}()
 			go func() {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()

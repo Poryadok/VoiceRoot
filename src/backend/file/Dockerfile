@@ -9,11 +9,13 @@ COPY pkg/go.mod ./pkg/
 COPY file/go.mod ./file/
 COPY file/pb/voice/file/go.mod ./file/pb/voice/file/
 COPY chat/pb/voice/chat/go.mod ./chat/pb/voice/chat/
+COPY voice/pb/voice/story/go.mod ./voice/pb/voice/story/
 COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
 RUN --mount=type=cache,target=/go/pkg/mod sh /usr/local/bin/docker-go-mod-download.sh file
 COPY pkg ./pkg
 COPY file ./file
 COPY chat/pb ./chat/pb
+COPY voice/pb/voice/story ./voice/pb/voice/story
 COPY user/pb ./user/pb
 WORKDIR /src/file
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/service .

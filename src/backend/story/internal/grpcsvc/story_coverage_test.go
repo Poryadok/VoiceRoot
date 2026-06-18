@@ -51,7 +51,9 @@ func startStoryGRPCWithClients(t *testing.T) (storyv1.StoryServiceClient, func()
 
 	st := &store.StoryStore{Pool: pool}
 	svc := grpcsvc.NewStoryGRPC(st)
-	svc.Friends = mockFriendChecker{}
+	checker := mockFriendChecker{}
+	svc.Friends = checker
+	svc.Audience = checker
 	svc.Chat = mockChatClient{}
 	svc.Messaging = mockMessagingClient{}
 	svc.Subscriptions = mockPremiumChecker{}

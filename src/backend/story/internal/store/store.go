@@ -13,6 +13,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+const storySelectCols = `
+id, author_profile_id, type, media_file_id, text_content,
+text_style::text, game_tag, is_looking_for_party, lfp_criteria::text,
+mention_profile_ids::text, view_count, visibility, visibility_audience::text,
+expires_at, archived_until, created_at, deleted_at, expired_at`
+
 var (
 	ErrNotFound       = errors.New("not found")
 	ErrNotImplemented = errors.New("story store: not implemented")
@@ -36,9 +42,10 @@ type StoryRow struct {
 	IsLookingForParty bool
 	LFPCriteriaJSON   *string
 	MentionProfileIDs string
-	ViewCount         int
-	Visibility        string
-	ExpiresAt         time.Time
+	ViewCount              int
+	Visibility             string
+	VisibilityAudienceJSON *string
+	ExpiresAt              time.Time
 	ArchivedUntil     time.Time
 	CreatedAt         time.Time
 	DeletedAt         *time.Time
@@ -86,8 +93,9 @@ type CreateStoryInput struct {
 	GameTag           *string
 	IsLookingForParty bool
 	LFPCriteriaJSON   *string
-	MentionProfileIDs string
-	Visibility        string
+	MentionProfileIDs      string
+	Visibility             string
+	VisibilityAudienceJSON *string
 }
 
 func storyTTL() time.Duration {
@@ -122,14 +130,14 @@ func (s *StoryStore) CreateStory(ctx context.Context, in CreateStoryInput) (*Sto
 INSERT INTO stories (
   id, author_profile_id, type, media_file_id, text_content, text_style,
   game_tag, is_looking_for_party, lfp_criteria, mention_profile_ids,
-  visibility, expires_at, archived_until, created_at
+  visibility, visibility_audience, expires_at, archived_until, created_at
 ) VALUES (
   $1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9::jsonb, $10::jsonb,
-  $11, $12, $13, $14
+  $11, $12::jsonb, $13, $14, $15
 )`,
 		id, in.AuthorProfileID, in.Type, in.MediaFileID, in.TextContent, nullableJSON(in.TextStyleJSON),
 		in.GameTag, in.IsLookingForParty, nullableJSON(in.LFPCriteriaJSON), mentions,
-		in.Visibility, expiresAt, archivedUntil, now,
+		in.Visibility, nullableJSON(in.VisibilityAudienceJSON), expiresAt, archivedUntil, now,
 	)
 	if err != nil {
 		return nil, err
@@ -150,10 +158,7 @@ func (s *StoryStore) GetStory(ctx context.Context, storyID uuid.UUID) (*StoryRow
 		return nil, ErrNotImplemented
 	}
 	row := s.Pool.QueryRow(ctx, `
-SELECT id, author_profile_id, type, media_file_id, text_content,
-       text_style::text, game_tag, is_looking_for_party, lfp_criteria::text,
-       mention_profile_ids::text, view_count, visibility, expires_at, archived_until,
-       created_at, deleted_at, expired_at
+SELECT `+storySelectCols+`
 FROM stories
 WHERE id = $1 AND deleted_at IS NULL`, storyID)
 	out, err := scanStory(row)
@@ -166,11 +171,12 @@ WHERE id = $1 AND deleted_at IS NULL`, storyID)
 func scanStory(row pgx.Row) (*StoryRow, error) {
 	var out StoryRow
 	var mediaID *uuid.UUID
-	var textStyle, lfp, mentions *string
+	var textStyle, lfp, mentions, visAudience *string
 	err := row.Scan(
 		&out.ID, &out.AuthorProfileID, &out.Type, &mediaID, &out.TextContent,
 		&textStyle, &out.GameTag, &out.IsLookingForParty, &lfp,
-		&mentions, &out.ViewCount, &out.Visibility, &out.ExpiresAt, &out.ArchivedUntil,
+		&mentions, &out.ViewCount, &out.Visibility, &visAudience,
+		&out.ExpiresAt, &out.ArchivedUntil,
 		&out.CreatedAt, &out.DeletedAt, &out.ExpiredAt,
 	)
 	if err != nil {
@@ -179,6 +185,7 @@ func scanStory(row pgx.Row) (*StoryRow, error) {
 	out.MediaFileID = mediaID
 	out.TextStyleJSON = textStyle
 	out.LFPCriteriaJSON = lfp
+	out.VisibilityAudienceJSON = visAudience
 	if mentions != nil {
 		out.MentionProfileIDs = *mentions
 	} else {
@@ -299,20 +306,14 @@ func (s *StoryStore) ListActiveStoriesPaginated(ctx context.Context, limit int, 
 	var rows pgx.Rows
 	if cursorTime == nil {
 		rows, err = s.Pool.Query(ctx, `
-SELECT id, author_profile_id, type, media_file_id, text_content,
-       text_style::text, game_tag, is_looking_for_party, lfp_criteria::text,
-       mention_profile_ids::text, view_count, visibility, expires_at, archived_until,
-       created_at, deleted_at, expired_at
+SELECT `+storySelectCols+`
 FROM stories
 WHERE deleted_at IS NULL AND expired_at IS NULL AND expires_at > now()
 ORDER BY created_at DESC, id DESC
 LIMIT $1`, fetch)
 	} else {
 		rows, err = s.Pool.Query(ctx, `
-SELECT id, author_profile_id, type, media_file_id, text_content,
-       text_style::text, game_tag, is_looking_for_party, lfp_criteria::text,
-       mention_profile_ids::text, view_count, visibility, expires_at, archived_until,
-       created_at, deleted_at, expired_at
+SELECT `+storySelectCols+`
 FROM stories
 WHERE deleted_at IS NULL AND expired_at IS NULL AND expires_at > now()
   AND (created_at, id) < ($1, $2)
@@ -422,10 +423,7 @@ func (s *StoryStore) ListActiveStories(ctx context.Context, limit int) ([]StoryR
 		limit = 50
 	}
 	rows, err := s.Pool.Query(ctx, `
-SELECT id, author_profile_id, type, media_file_id, text_content,
-       text_style::text, game_tag, is_looking_for_party, lfp_criteria::text,
-       mention_profile_ids::text, view_count, visibility, expires_at, archived_until,
-       created_at, deleted_at, expired_at
+SELECT `+storySelectCols+`
 FROM stories
 WHERE deleted_at IS NULL AND expired_at IS NULL AND expires_at > now()
 ORDER BY created_at DESC
@@ -443,10 +441,7 @@ func (s *StoryStore) ListActiveStoriesByAuthor(ctx context.Context, authorID uui
 		return nil, ErrNotImplemented
 	}
 	rows, err := s.Pool.Query(ctx, `
-SELECT id, author_profile_id, type, media_file_id, text_content,
-       text_style::text, game_tag, is_looking_for_party, lfp_criteria::text,
-       mention_profile_ids::text, view_count, visibility, expires_at, archived_until,
-       created_at, deleted_at, expired_at
+SELECT `+storySelectCols+`
 FROM stories
 WHERE author_profile_id = $1 AND deleted_at IS NULL AND expired_at IS NULL AND expires_at > now()
 ORDER BY created_at DESC`, authorID)
@@ -462,11 +457,12 @@ func scanStoryRows(rows pgx.Rows) ([]StoryRow, error) {
 	for rows.Next() {
 		var row StoryRow
 		var mediaID *uuid.UUID
-		var textStyle, lfp, mentions *string
+		var textStyle, lfp, mentions, visAudience *string
 		if err := rows.Scan(
 			&row.ID, &row.AuthorProfileID, &row.Type, &mediaID, &row.TextContent,
 			&textStyle, &row.GameTag, &row.IsLookingForParty, &lfp,
-			&mentions, &row.ViewCount, &row.Visibility, &row.ExpiresAt, &row.ArchivedUntil,
+			&mentions, &row.ViewCount, &row.Visibility, &visAudience,
+			&row.ExpiresAt, &row.ArchivedUntil,
 			&row.CreatedAt, &row.DeletedAt, &row.ExpiredAt,
 		); err != nil {
 			return nil, err
@@ -474,6 +470,7 @@ func scanStoryRows(rows pgx.Rows) ([]StoryRow, error) {
 		row.MediaFileID = mediaID
 		row.TextStyleJSON = textStyle
 		row.LFPCriteriaJSON = lfp
+		row.VisibilityAudienceJSON = visAudience
 		if mentions != nil {
 			row.MentionProfileIDs = *mentions
 		} else {
@@ -490,10 +487,7 @@ func (s *StoryStore) ListArchive(ctx context.Context, profileID uuid.UUID) ([]St
 		return nil, ErrNotImplemented
 	}
 	rows, err := s.Pool.Query(ctx, `
-SELECT id, author_profile_id, type, media_file_id, text_content,
-       text_style::text, game_tag, is_looking_for_party, lfp_criteria::text,
-       mention_profile_ids::text, view_count, visibility, expires_at, archived_until,
-       created_at, deleted_at, expired_at
+SELECT `+storySelectCols+`
 FROM stories
 WHERE author_profile_id = $1 AND deleted_at IS NULL AND expired_at IS NOT NULL
   AND archived_until > now()
@@ -507,16 +501,93 @@ ORDER BY created_at DESC`, profileID)
 
 // MarkExpiredStories transitions active stories past expires_at to expired state.
 func (s *StoryStore) MarkExpiredStories(ctx context.Context, now time.Time) (int64, error) {
+	_, n, err := s.MarkExpiredStoriesReturning(ctx, now)
+	return n, err
+}
+
+// MarkExpiredStoriesReturning marks expired stories and returns their ids.
+func (s *StoryStore) MarkExpiredStoriesReturning(ctx context.Context, now time.Time) ([]uuid.UUID, int64, error) {
 	if s == nil || s.Pool == nil {
-		return 0, ErrNotImplemented
+		return nil, 0, ErrNotImplemented
 	}
-	tag, err := s.Pool.Exec(ctx, `
+	rows, err := s.Pool.Query(ctx, `
 UPDATE stories SET expired_at = $1
-WHERE deleted_at IS NULL AND expired_at IS NULL AND expires_at <= $1`, now.UTC())
+WHERE deleted_at IS NULL AND expired_at IS NULL AND expires_at <= $1
+RETURNING id`, now.UTC())
 	if err != nil {
-		return 0, err
+		return nil, 0, err
 	}
-	return tag.RowsAffected(), nil
+	defer rows.Close()
+	var ids []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, 0, err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	return ids, int64(len(ids)), nil
+}
+
+// ListActiveStoriesForAuthorsPaginated returns active stories limited to author IDs.
+func (s *StoryStore) ListActiveStoriesForAuthorsPaginated(ctx context.Context, authorIDs []uuid.UUID, limit int, cursor string) (*PaginatedStories, error) {
+	if s == nil || s.Pool == nil {
+		return nil, ErrNotImplemented
+	}
+	if len(authorIDs) == 0 {
+		return &PaginatedStories{}, nil
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	fetch := limit + 1
+	cursorTime, cursorID, err := decodeStoryCursor(cursor)
+	if err != nil {
+		return nil, err
+	}
+
+	var rows pgx.Rows
+	if cursorTime == nil {
+		rows, err = s.Pool.Query(ctx, `
+SELECT `+storySelectCols+`
+FROM stories
+WHERE author_profile_id = ANY($1)
+  AND deleted_at IS NULL AND expired_at IS NULL AND expires_at > now()
+ORDER BY created_at DESC, id DESC
+LIMIT $2`, authorIDs, fetch)
+	} else {
+		rows, err = s.Pool.Query(ctx, `
+SELECT `+storySelectCols+`
+FROM stories
+WHERE author_profile_id = ANY($1)
+  AND deleted_at IS NULL AND expired_at IS NULL AND expires_at > now()
+  AND (created_at, id) < ($2, $3)
+ORDER BY created_at DESC, id DESC
+LIMIT $4`, authorIDs, *cursorTime, *cursorID, fetch)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	all, err := scanStoryRows(rows)
+	if err != nil {
+		return nil, err
+	}
+	out := &PaginatedStories{}
+	if len(all) > limit {
+		out.HasMore = true
+		all = all[:limit]
+	}
+	out.Rows = all
+	if out.HasMore && len(all) > 0 {
+		last := all[len(all)-1]
+		out.NextCursor = encodeStoryCursor(last.CreatedAt, last.ID)
+	}
+	return out, nil
 }
 
 // CreateHighlight creates a named highlight for profileID.

@@ -43,6 +43,18 @@ func TestComposePhase17Stories_live(t *testing.T) {
 	feed := composeGetStoryFeed(t, client, base, sessB.AccessToken)
 	require.Contains(t, feed, storyID, "friend must see active story in feed")
 
+	feedGroups := composeGetStoryFeedGroups(t, client, base, sessB.AccessToken)
+	require.NotEmpty(t, feedGroups, "feed must include feed_groups for ring UX")
+	var foundGroup bool
+	for _, g := range feedGroups {
+		if g.AuthorID == sessA.ProfileID {
+			foundGroup = true
+			require.NotEmpty(t, g.StoryIDs, "author group must contain stories")
+			require.Contains(t, g.StoryIDs, storyID)
+		}
+	}
+	require.True(t, foundGroup, "feed_groups must include author's stories")
+
 	composeMarkStoryViewed(t, client, base, sessB.AccessToken, storyID)
 	composeReactToStory(t, client, base, sessB.AccessToken, storyID, "🔥")
 
@@ -141,6 +153,41 @@ func composeGetStoryFeed(t *testing.T, client *http.Client, base, token string) 
 		ids[i] = s.ID
 	}
 	return ids
+}
+
+type composeStoryFeedGroup struct {
+	AuthorID string
+	StoryIDs []string
+}
+
+func composeGetStoryFeedGroups(t *testing.T, client *http.Client, base, token string) []composeStoryFeedGroup {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, base+"/api/v1/stories/feed", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "feed body=%s", string(body))
+	var parsed struct {
+		FeedGroups []struct {
+			AuthorProfileID string `json:"author_profile_id"`
+			Stories         []struct {
+				ID string `json:"id"`
+			} `json:"stories"`
+		} `json:"feed_groups"`
+	}
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	out := make([]composeStoryFeedGroup, 0, len(parsed.FeedGroups))
+	for _, g := range parsed.FeedGroups {
+		grp := composeStoryFeedGroup{AuthorID: g.AuthorProfileID}
+		for _, s := range g.Stories {
+			grp.StoryIDs = append(grp.StoryIDs, s.ID)
+		}
+		out = append(out, grp)
+	}
+	return out
 }
 
 func composeMarkStoryViewed(t *testing.T, client *http.Client, base, token, storyID string) {

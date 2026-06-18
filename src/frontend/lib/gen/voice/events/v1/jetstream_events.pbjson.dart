@@ -1882,6 +1882,42 @@ const StoryStreamEvent$json = {
       '9': 0,
       '10': 'highlightAdded'
     },
+    {
+      '1': 'story_reacted',
+      '3': 13,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.StoryReacted',
+      '9': 0,
+      '10': 'storyReacted'
+    },
+    {
+      '1': 'story_expired',
+      '3': 14,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.StoryExpired',
+      '9': 0,
+      '10': 'storyExpired'
+    },
+    {
+      '1': 'story_highlight_created',
+      '3': 15,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.StoryHighlightCreated',
+      '9': 0,
+      '10': 'storyHighlightCreated'
+    },
+    {
+      '1': 'story_lfp_created',
+      '3': 16,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.StoryLfpCreated',
+      '9': 0,
+      '10': 'storyLfpCreated'
+    },
   ],
   '8': [
     {'1': 'payload'},
@@ -1895,7 +1931,13 @@ final $typed_data.Uint8List storyStreamEventDescriptor = $convert.base64Decode(
     'dG9yeV9jcmVhdGVkGAogASgLMh0udm9pY2UuZXZlbnRzLnYxLlN0b3J5Q3JlYXRlZEgAUgxzdG'
     '9yeUNyZWF0ZWQSQQoMc3Rvcnlfdmlld2VkGAsgASgLMhwudm9pY2UuZXZlbnRzLnYxLlN0b3J5'
     'Vmlld2VkSABSC3N0b3J5Vmlld2VkEkoKD2hpZ2hsaWdodF9hZGRlZBgMIAEoCzIfLnZvaWNlLm'
-    'V2ZW50cy52MS5IaWdobGlnaHRBZGRlZEgAUg5oaWdobGlnaHRBZGRlZEIJCgdwYXlsb2Fk');
+    'V2ZW50cy52MS5IaWdobGlnaHRBZGRlZEgAUg5oaWdobGlnaHRBZGRlZBJECg1zdG9yeV9yZWFj'
+    'dGVkGA0gASgLMh0udm9pY2UuZXZlbnRzLnYxLlN0b3J5UmVhY3RlZEgAUgxzdG9yeVJlYWN0ZW'
+    'QSRAoNc3RvcnlfZXhwaXJlZBgOIAEoCzIdLnZvaWNlLmV2ZW50cy52MS5TdG9yeUV4cGlyZWRI'
+    'AFIMc3RvcnlFeHBpcmVkEmAKF3N0b3J5X2hpZ2hsaWdodF9jcmVhdGVkGA8gASgLMiYudm9pY2'
+    'UuZXZlbnRzLnYxLlN0b3J5SGlnaGxpZ2h0Q3JlYXRlZEgAUhVzdG9yeUhpZ2hsaWdodENyZWF0'
+    'ZWQSTgoRc3RvcnlfbGZwX2NyZWF0ZWQYECABKAsyIC52b2ljZS5ldmVudHMudjEuU3RvcnlMZn'
+    'BDcmVhdGVkSABSD3N0b3J5TGZwQ3JlYXRlZEIJCgdwYXlsb2Fk');
 
 @$core.Deprecated('Use storyCreatedDescriptor instead')
 const StoryCreated$json = {
@@ -1903,13 +1945,35 @@ const StoryCreated$json = {
   '2': [
     {'1': 'story_id', '3': 1, '4': 1, '5': 9, '10': 'storyId'},
     {'1': 'author_profile_id', '3': 2, '4': 1, '5': 9, '10': 'authorProfileId'},
+    {'1': 'type', '3': 3, '4': 1, '5': 9, '10': 'type'},
+    {
+      '1': 'game_tag',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'gameTag',
+      '17': true
+    },
+    {
+      '1': 'mention_profile_ids',
+      '3': 5,
+      '4': 3,
+      '5': 9,
+      '10': 'mentionProfileIds'
+    },
+  ],
+  '8': [
+    {'1': '_game_tag'},
   ],
 };
 
 /// Descriptor for `StoryCreated`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List storyCreatedDescriptor = $convert.base64Decode(
     'CgxTdG9yeUNyZWF0ZWQSGQoIc3RvcnlfaWQYASABKAlSB3N0b3J5SWQSKgoRYXV0aG9yX3Byb2'
-    'ZpbGVfaWQYAiABKAlSD2F1dGhvclByb2ZpbGVJZA==');
+    'ZpbGVfaWQYAiABKAlSD2F1dGhvclByb2ZpbGVJZBISCgR0eXBlGAMgASgJUgR0eXBlEh4KCGdh'
+    'bWVfdGFnGAQgASgJSABSB2dhbWVUYWeIAQESLgoTbWVudGlvbl9wcm9maWxlX2lkcxgFIAMoCV'
+    'IRbWVudGlvblByb2ZpbGVJZHNCCwoJX2dhbWVfdGFn');
 
 @$core.Deprecated('Use storyViewedDescriptor instead')
 const StoryViewed$json = {
@@ -1924,6 +1988,69 @@ const StoryViewed$json = {
 final $typed_data.Uint8List storyViewedDescriptor = $convert.base64Decode(
     'CgtTdG9yeVZpZXdlZBIZCghzdG9yeV9pZBgBIAEoCVIHc3RvcnlJZBIqChF2aWV3ZXJfcHJvZm'
     'lsZV9pZBgCIAEoCVIPdmlld2VyUHJvZmlsZUlk');
+
+@$core.Deprecated('Use storyReactedDescriptor instead')
+const StoryReacted$json = {
+  '1': 'StoryReacted',
+  '2': [
+    {'1': 'story_id', '3': 1, '4': 1, '5': 9, '10': 'storyId'},
+    {
+      '1': 'reactor_profile_id',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '10': 'reactorProfileId'
+    },
+    {'1': 'emoji', '3': 3, '4': 1, '5': 9, '10': 'emoji'},
+  ],
+};
+
+/// Descriptor for `StoryReacted`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List storyReactedDescriptor = $convert.base64Decode(
+    'CgxTdG9yeVJlYWN0ZWQSGQoIc3RvcnlfaWQYASABKAlSB3N0b3J5SWQSLAoScmVhY3Rvcl9wcm'
+    '9maWxlX2lkGAIgASgJUhByZWFjdG9yUHJvZmlsZUlkEhQKBWVtb2ppGAMgASgJUgVlbW9qaQ==');
+
+@$core.Deprecated('Use storyExpiredDescriptor instead')
+const StoryExpired$json = {
+  '1': 'StoryExpired',
+  '2': [
+    {'1': 'story_id', '3': 1, '4': 1, '5': 9, '10': 'storyId'},
+  ],
+};
+
+/// Descriptor for `StoryExpired`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List storyExpiredDescriptor = $convert
+    .base64Decode('CgxTdG9yeUV4cGlyZWQSGQoIc3RvcnlfaWQYASABKAlSB3N0b3J5SWQ=');
+
+@$core.Deprecated('Use storyHighlightCreatedDescriptor instead')
+const StoryHighlightCreated$json = {
+  '1': 'StoryHighlightCreated',
+  '2': [
+    {'1': 'highlight_id', '3': 1, '4': 1, '5': 9, '10': 'highlightId'},
+    {'1': 'profile_id', '3': 2, '4': 1, '5': 9, '10': 'profileId'},
+  ],
+};
+
+/// Descriptor for `StoryHighlightCreated`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List storyHighlightCreatedDescriptor = $convert.base64Decode(
+    'ChVTdG9yeUhpZ2hsaWdodENyZWF0ZWQSIQoMaGlnaGxpZ2h0X2lkGAEgASgJUgtoaWdobGlnaH'
+    'RJZBIdCgpwcm9maWxlX2lkGAIgASgJUglwcm9maWxlSWQ=');
+
+@$core.Deprecated('Use storyLfpCreatedDescriptor instead')
+const StoryLfpCreated$json = {
+  '1': 'StoryLfpCreated',
+  '2': [
+    {'1': 'story_id', '3': 1, '4': 1, '5': 9, '10': 'storyId'},
+    {'1': 'author_profile_id', '3': 2, '4': 1, '5': 9, '10': 'authorProfileId'},
+    {'1': 'criteria_json', '3': 3, '4': 1, '5': 9, '10': 'criteriaJson'},
+  ],
+};
+
+/// Descriptor for `StoryLfpCreated`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List storyLfpCreatedDescriptor = $convert.base64Decode(
+    'Cg9TdG9yeUxmcENyZWF0ZWQSGQoIc3RvcnlfaWQYASABKAlSB3N0b3J5SWQSKgoRYXV0aG9yX3'
+    'Byb2ZpbGVfaWQYAiABKAlSD2F1dGhvclByb2ZpbGVJZBIjCg1jcml0ZXJpYV9qc29uGAMgASgJ'
+    'Ugxjcml0ZXJpYUpzb24=');
 
 @$core.Deprecated('Use highlightAddedDescriptor instead')
 const HighlightAdded$json = {

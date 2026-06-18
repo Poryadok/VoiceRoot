@@ -24,6 +24,18 @@ func (mockFriendChecker) IsFriend(context.Context, uuid.UUID, uuid.UUID) (bool, 
 	return true, nil
 }
 
+func (mockFriendChecker) AreFriends(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	return true, nil
+}
+
+func (mockFriendChecker) AreFriendsOfFriends(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	return false, nil
+}
+
+func (mockFriendChecker) AreCoMembers(context.Context, uuid.UUID, uuid.UUID, []string) (bool, error) {
+	return false, nil
+}
+
 func startStoryGRPCWithFriends(t *testing.T) (storyv1.StoryServiceClient, func()) {
 	t.Helper()
 	ctx := context.Background()
@@ -33,7 +45,9 @@ func startStoryGRPCWithFriends(t *testing.T) (storyv1.StoryServiceClient, func()
 
 	st := &store.StoryStore{Pool: pool}
 	svc := grpcsvc.NewStoryGRPC(st)
-	svc.Friends = mockFriendChecker{}
+	checker := mockFriendChecker{}
+	svc.Friends = checker
+	svc.Audience = checker
 
 	lis := bufconn.Listen(1024 * 1024)
 	s := grpc.NewServer()

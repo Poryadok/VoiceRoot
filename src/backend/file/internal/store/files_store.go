@@ -26,6 +26,7 @@ type FileRow struct {
 	ConvertedR2Key    *string
 	ChatID            *uuid.UUID
 	ChatType          *string
+	StoryID           *uuid.UUID
 	IsE2E             bool
 	ExpiresAt         *time.Time
 	ScanResult        string
@@ -54,16 +55,17 @@ INSERT INTO files (
   file_type,
   chat_id,
   chat_type,
+  story_id,
   is_e2e,
   expires_at,
   scan_result
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 RETURNING id, uploader_profile_id, original_name, mime_type, size_bytes, sha256_hash,
           r2_key, status, file_type, width, height, duration_seconds,
           thumbnail_r2_key, converted_r2_key, chat_id, chat_type, is_e2e, expires_at,
           scan_result, created_at, updated_at
 `, row.ID, row.UploaderProfileID, row.OriginalName, row.MimeType, row.SizeBytes, row.R2Key,
-		row.Status, row.FileType, row.ChatID, row.ChatType, row.IsE2E, row.ExpiresAt, row.ScanResult).Scan(
+		row.Status, row.FileType, row.ChatID, row.ChatType, row.StoryID, row.IsE2E, row.ExpiresAt, row.ScanResult).Scan(
 		&row.ID,
 		&row.UploaderProfileID,
 		&row.OriginalName,

@@ -74,7 +74,9 @@ func WireGRPC(logger *slog.Logger, svc *grpcsvc.StoryGRPC) jobs.FileDeleter {
 	var deleter jobs.FileDeleter
 	if addr := strings.TrimSpace(os.Getenv("FILE_GRPC_ADDR")); addr != "" {
 		if conn, err := dial(addr); err == nil {
-			deleter = &FileDeleter{client: filev1.NewFileServiceClient(conn)}
+			fileClient := filev1.NewFileServiceClient(conn)
+			deleter = &FileDeleter{client: fileClient}
+			svc.Files = &FileMetadataReader{client: fileClient}
 		} else if logger != nil {
 			logger.Error("story file dial failed", slog.String("error", err.Error()))
 		}
@@ -158,4 +160,24 @@ func (f *FileDeleter) DeleteFile(ctx context.Context, fileID string) error {
 	}
 	_, err := f.client.DeleteFile(ctx, &filev1.DeleteFileRequest{FileId: fileID})
 	return err
+}
+
+// FileMetadataReader loads file metadata for story validation.
+type FileMetadataReader struct {
+	client filev1.FileServiceClient
+}
+
+func (f *FileMetadataReader) GetFileDurationSeconds(ctx context.Context, fileID uuid.UUID) (int32, error) {
+	if f == nil || f.client == nil {
+		return 0, nil
+	}
+	resp, err := f.client.GetFileMetadata(ctx, &filev1.GetFileMetadataRequest{FileId: fileID.String()})
+	if err != nil {
+		return 0, err
+	}
+	meta := resp.GetFileMetadata()
+	if meta == nil || meta.DurationSeconds == nil {
+		return 0, nil
+	}
+	return meta.GetDurationSeconds(), nil
 }

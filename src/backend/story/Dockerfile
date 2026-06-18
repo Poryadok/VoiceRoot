@@ -10,11 +10,25 @@ COPY story/go.mod ./story/
 COPY voice/pb/voice/story/go.mod ./voice/pb/voice/story/
 COPY user/pb/voice/social/go.mod ./user/pb/voice/social/
 COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
+COPY user/pb/voice/user/go.mod ./user/pb/voice/user/
+COPY chat/pb/voice/chat/go.mod ./chat/pb/voice/chat/
+COPY file/pb/voice/file/go.mod ./file/pb/voice/file/
+COPY messaging/pb/voice/messaging/go.mod ./messaging/pb/voice/messaging/
+COPY messaging/pb/voice/events/go.mod ./messaging/pb/voice/events/
+COPY voice/pb/voice/subscription/go.mod ./voice/pb/voice/subscription/
+COPY voice/pb/voice/space/go.mod ./voice/pb/voice/space/
 RUN --mount=type=cache,target=/go/pkg/mod sh /usr/local/bin/docker-go-mod-download.sh story
 COPY pkg ./pkg
 COPY user/pb/voice/common ./user/pb/voice/common
-COPY voice/pb/voice/story ./voice/pb/voice/story
 COPY user/pb/voice/social ./user/pb/voice/social
+COPY user/pb/voice/user ./user/pb/voice/user
+COPY chat/pb/voice/chat ./chat/pb/voice/chat
+COPY file/pb/voice/file ./file/pb/voice/file
+COPY messaging/pb/voice/messaging ./messaging/pb/voice/messaging
+COPY messaging/pb/voice/events ./messaging/pb/voice/events
+COPY voice/pb/voice/story ./voice/pb/voice/story
+COPY voice/pb/voice/subscription ./voice/pb/voice/subscription
+COPY voice/pb/voice/space ./voice/pb/voice/space
 COPY story ./story
 COPY migrations/story_db ./migrations/story_db
 WORKDIR /src/story

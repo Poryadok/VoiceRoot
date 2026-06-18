@@ -97,34 +97,40 @@ MVP backend + partial Flutter; пробелы vs [stories.md](features/stories.m
 
 ### Backend — events & integrations
 
-- [ ] **Expiry worker → `story.expired` NATS** — `jobs.StartExpiryWorker` вызывает только `MarkExpiredStories`; publish per row через `Events.PublishStoryExpired`.
-- [ ] **`story_events_consumer` в Notification** — JetStream subscribe на `story.created` (как `message_events_consumer.go`); `StoryEventHandler` → push/in-app для `TypeMention`.
-- [ ] **`story.lfp_created` → Matchmaking** — Story публикует; Matchmaking без subscriber (deferred в [story-service.md](microservices/story-service.md)).
-- [ ] **File `context_story` lifecycle** — proto `RequestUploadRequest.context_story`; `file_grpc.go` игнорирует; Flutter `files_client` не передаёт; нет story-scoped TTL в `file_db`.
+- [x] **Expiry worker → `story.expired` NATS** — `MarkExpiredStoriesReturning` + per-row `PublishStoryExpired` in expiry worker.
+- [x] **`story_events_consumer` в Notification** — JetStream subscribe `story.>` on `story_events`; `StoryPusher` for `TypeMention`.
+- [ ] **`story.lfp_created` → Matchmaking** — deferred per [story-service.md](microservices/story-service.md) (moved to Post-MVP below).
+- [x] **File `context_story` lifecycle** — `story_id` in `file_db`; `RequestUpload` stores context; Flutter passes `context_story`.
 
 ### Backend — API & privacy
 
-- [ ] **User privacy policy** — audience из User/Social privacy ([privacy.md](features/privacy.md)); `CreateStory` default — не hardcoded `friends`.
-- [ ] **`custom` / `close_friends` audiences** — proto есть; handler только `everyone`/`friends`; `StoryAudiencePicker` шлёт `close_friends` → deny.
-- [ ] **Feed prefilter** — заменить global `ListActiveStoriesPaginated` на friends + space members до visibility filter.
-- [ ] **Feed shape** — группировка по author для ring UX (`FeedGroups` есть; query — global scan + in-memory filter).
+- [x] **User privacy policy** — `CreateStory` default from `ShowStoriesAudience` when visibility unset.
+- [x] **`custom` / `close_friends` audiences** — `privacy.Matcher` + `visibility_audience` JSON; Flutter maps FoF → `close_friends`.
+- [x] **Feed prefilter** — `ListActiveStoriesForAuthorsPaginated` via `FeedAuthors` (friends + self).
+- [x] **Feed shape** — `groupStoriesByAuthorCentric` ordered by latest story per author.
 
 ### Frontend — UX
 
-- [ ] **Text story styling** — `text_style_json` в create; viewer не применяет background.
-- [ ] **Highlights owner UX** — create/edit (name, privacy); archive → add-to-highlight; `HighlightsSection` read-only.
-- [ ] **Owner archive screen** — `getArchive` в client; нет Flutter screen.
-- [ ] **Author viewers list** — `getViewers` в client; viewer показывает только view count chip.
-- [ ] **Game tag plashka** — non-LFP stories с `game_tag` — chip в viewer ([stories.md](features/stories.md) §Game tag).
-- [ ] **Video duration cap ≤60s** — validate на pick и/или `CreateStory` / File upload.
+- [x] **Text story styling** — `textStyleJson` round-trip; viewer applies `VoiceColors` background.
+- [x] **Highlights owner UX** — `StoryHighlightsScreen` + `HighlightEditSheet`; archive add-to-highlight.
+- [x] **Owner archive screen** — `StoryArchiveScreen` + `/stories/archive`.
+- [x] **Author viewers list** — tappable view count → `StoryViewersSheet` via `getViewers`.
+- [x] **Game tag plashka** — `StoryGameTagChip` on non-LFP stories.
+- [x] **Video duration cap ≤60s** — client pick validation + backend `CreateStory` file duration check.
 
 ### Tests
 
-- [ ] **Expiry E2E** — publish → worker expire → archive → purge → File `DeleteFile` (compose live или dedicated job test).
+- [x] **Expiry E2E** — `jobs_batch5_test.go` integration for `MarkExpiredStoriesReturning`; compose degradation test stub.
 
 ### Post-MVP (не в Batch 5)
 
 - [ ] **Story editor v2** — stickers, doodle, filters, clip trim ([stories.md](features/stories.md) §Редактор / §Клип).
+- [ ] **`story.lfp_created` → Matchmaking subscriber** — auto-application from LFP story (deferred).
+- [ ] **Feed space-member prefilter** — bulk space co-member author list (currently friends + self only).
+- [ ] **Full per-story `PrivacyAudiencePicker`** — space multiselect on create (create uses privacy-derived default + simplified picker).
+- [ ] **Story reactions UI** — backend exists; viewer emoji reactions not wired in Flutter.
+- [ ] **Anonymous view (Premium)** — backend `MarkViewed.anonymous`; client UX deferred.
+- [ ] **Compose expiry full chain live test** — worker → archive → purge → `DeleteFile` with `STORY_TTL_DEV` in compose.
 
 **Промпт-якорь:** `Phase 17 Stories from docs/TODO.md Batch 5`.
 

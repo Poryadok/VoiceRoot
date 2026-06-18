@@ -85,7 +85,7 @@ compose-migrate-bot:
 		-database "postgres://voice:voice@postgres:5432/bot_db?sslmode=disable" up
 
 compose-migrate-story:
-	docker run --rm --network voice_default \
+	docker run --rm --network voiceroot_default \
 		-v "$(ROOT)/src/backend/migrations/story_db:/migrations" migrate/migrate \
 		-path /migrations \
 		-database "postgres://voice:voice@postgres:5432/story_db?sslmode=disable" up

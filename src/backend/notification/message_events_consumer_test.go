@@ -12,6 +12,7 @@ import (
 	"voice/backend/notification/internal/delivery"
 	"voice/backend/notification/internal/dispatch"
 	"voice/backend/notification/internal/grouping"
+	"voice/backend/notification/internal/pushenrich"
 	eventsv1 "voice.app/voice/events/v1"
 )
 
@@ -37,7 +38,7 @@ func TestRouteMessageNotification_MessageSent(t *testing.T) {
 			},
 		},
 	}
-	err := routeMessageNotification(context.Background(), handler, stubChatMembers{ids: []string{senderID, recipientID}}, pusher, env)
+	err := routeMessageNotification(context.Background(), handler, stubChatMembers{ids: []string{senderID, recipientID}}, pusher, pushenrich.NoopResolver{}, env)
 	require.NoError(t, err)
 }
 
@@ -56,11 +57,11 @@ func TestRouteMessageNotification_MentionAdded(t *testing.T) {
 			},
 		},
 	}
-	err := routeMessageNotification(context.Background(), handler, chatmembers.NoopLister{}, pusher, env)
+	err := routeMessageNotification(context.Background(), handler, chatmembers.NoopLister{}, pusher, pushenrich.NoopResolver{}, env)
 	require.NoError(t, err)
 }
 
 func TestRouteMessageNotification_UnknownPayload(t *testing.T) {
-	err := routeMessageNotification(context.Background(), nil, nil, nil, &eventsv1.MessageStreamEvent{})
+	err := routeMessageNotification(context.Background(), nil, nil, nil, pushenrich.NoopResolver{}, &eventsv1.MessageStreamEvent{})
 	require.NoError(t, err)
 }

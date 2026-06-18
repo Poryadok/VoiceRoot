@@ -764,6 +764,119 @@ class TokenResponse extends $pb.GeneratedMessage {
   void clearToken() => $_clearField(1);
 }
 
+class WebhookSecretResponse extends $pb.GeneratedMessage {
+  factory WebhookSecretResponse({
+    $core.String? webhookSecret,
+  }) {
+    final result = create();
+    if (webhookSecret != null) result.webhookSecret = webhookSecret;
+    return result;
+  }
+
+  WebhookSecretResponse._();
+
+  factory WebhookSecretResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory WebhookSecretResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'WebhookSecretResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.bot.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'webhookSecret')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  WebhookSecretResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  WebhookSecretResponse copyWith(
+          void Function(WebhookSecretResponse) updates) =>
+      super.copyWith((message) => updates(message as WebhookSecretResponse))
+          as WebhookSecretResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static WebhookSecretResponse create() => WebhookSecretResponse._();
+  @$core.override
+  WebhookSecretResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static WebhookSecretResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<WebhookSecretResponse>(create);
+  static WebhookSecretResponse? _defaultInstance;
+
+  /// One-shot HMAC key for webhook signature verification (docs/features/bots.md).
+  @$pb.TagNumber(1)
+  $core.String get webhookSecret => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set webhookSecret($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasWebhookSecret() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearWebhookSecret() => $_clearField(1);
+}
+
+class RegenerateWebhookSecretRequest extends $pb.GeneratedMessage {
+  factory RegenerateWebhookSecretRequest({
+    $core.String? botId,
+  }) {
+    final result = create();
+    if (botId != null) result.botId = botId;
+    return result;
+  }
+
+  RegenerateWebhookSecretRequest._();
+
+  factory RegenerateWebhookSecretRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory RegenerateWebhookSecretRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'RegenerateWebhookSecretRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.bot.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'botId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RegenerateWebhookSecretRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RegenerateWebhookSecretRequest copyWith(
+          void Function(RegenerateWebhookSecretRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as RegenerateWebhookSecretRequest))
+          as RegenerateWebhookSecretRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static RegenerateWebhookSecretRequest create() =>
+      RegenerateWebhookSecretRequest._();
+  @$core.override
+  RegenerateWebhookSecretRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static RegenerateWebhookSecretRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<RegenerateWebhookSecretRequest>(create);
+  static RegenerateWebhookSecretRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get botId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set botId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasBotId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearBotId() => $_clearField(1);
+}
+
 class RegisterCommandsRequest extends $pb.GeneratedMessage {
   factory RegisterCommandsRequest({
     $core.String? botId,
@@ -1682,10 +1795,13 @@ class RegisterBotResponse extends $pb.GeneratedMessage {
   factory RegisterBotResponse({
     Bot? bot,
     TokenResponse? tokenResponse,
+    WebhookSecretResponse? webhookSecretResponse,
   }) {
     final result = create();
     if (bot != null) result.bot = bot;
     if (tokenResponse != null) result.tokenResponse = tokenResponse;
+    if (webhookSecretResponse != null)
+      result.webhookSecretResponse = webhookSecretResponse;
     return result;
   }
 
@@ -1705,6 +1821,9 @@ class RegisterBotResponse extends $pb.GeneratedMessage {
     ..aOM<Bot>(1, _omitFieldNames ? '' : 'bot', subBuilder: Bot.create)
     ..aOM<TokenResponse>(2, _omitFieldNames ? '' : 'tokenResponse',
         subBuilder: TokenResponse.create)
+    ..aOM<WebhookSecretResponse>(
+        3, _omitFieldNames ? '' : 'webhookSecretResponse',
+        subBuilder: WebhookSecretResponse.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1748,6 +1867,19 @@ class RegisterBotResponse extends $pb.GeneratedMessage {
   void clearTokenResponse() => $_clearField(2);
   @$pb.TagNumber(2)
   TokenResponse ensureTokenResponse() => $_ensure(1);
+
+  /// One-shot webhook HMAC secret; same value as RegenerateWebhookSecret.
+  @$pb.TagNumber(3)
+  WebhookSecretResponse get webhookSecretResponse => $_getN(2);
+  @$pb.TagNumber(3)
+  set webhookSecretResponse(WebhookSecretResponse value) =>
+      $_setField(3, value);
+  @$pb.TagNumber(3)
+  $core.bool hasWebhookSecretResponse() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearWebhookSecretResponse() => $_clearField(3);
+  @$pb.TagNumber(3)
+  WebhookSecretResponse ensureWebhookSecretResponse() => $_ensure(2);
 }
 
 class UpdateBotResponse extends $pb.GeneratedMessage {
@@ -2013,6 +2145,70 @@ class RegenerateTokenResponse extends $pb.GeneratedMessage {
   void clearTokenResponse() => $_clearField(1);
   @$pb.TagNumber(1)
   TokenResponse ensureTokenResponse() => $_ensure(0);
+}
+
+class RegenerateWebhookSecretResponse extends $pb.GeneratedMessage {
+  factory RegenerateWebhookSecretResponse({
+    WebhookSecretResponse? webhookSecretResponse,
+  }) {
+    final result = create();
+    if (webhookSecretResponse != null)
+      result.webhookSecretResponse = webhookSecretResponse;
+    return result;
+  }
+
+  RegenerateWebhookSecretResponse._();
+
+  factory RegenerateWebhookSecretResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory RegenerateWebhookSecretResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'RegenerateWebhookSecretResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.bot.v1'),
+      createEmptyInstance: create)
+    ..aOM<WebhookSecretResponse>(
+        1, _omitFieldNames ? '' : 'webhookSecretResponse',
+        subBuilder: WebhookSecretResponse.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RegenerateWebhookSecretResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RegenerateWebhookSecretResponse copyWith(
+          void Function(RegenerateWebhookSecretResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as RegenerateWebhookSecretResponse))
+          as RegenerateWebhookSecretResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static RegenerateWebhookSecretResponse create() =>
+      RegenerateWebhookSecretResponse._();
+  @$core.override
+  RegenerateWebhookSecretResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static RegenerateWebhookSecretResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<RegenerateWebhookSecretResponse>(
+          create);
+  static RegenerateWebhookSecretResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  WebhookSecretResponse get webhookSecretResponse => $_getN(0);
+  @$pb.TagNumber(1)
+  set webhookSecretResponse(WebhookSecretResponse value) =>
+      $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasWebhookSecretResponse() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearWebhookSecretResponse() => $_clearField(1);
+  @$pb.TagNumber(1)
+  WebhookSecretResponse ensureWebhookSecretResponse() => $_ensure(0);
 }
 
 class RegisterCommandsResponse extends $pb.GeneratedMessage {

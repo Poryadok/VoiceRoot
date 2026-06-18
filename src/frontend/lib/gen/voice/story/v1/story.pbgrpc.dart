@@ -89,6 +89,20 @@ class StoryServiceClient extends $grpc.Client {
     return $createUnaryCall(_$reactToStory, request, options: options);
   }
 
+  $grpc.ResponseFuture<$0.GetStoryReactionsResponse> getStoryReactions(
+    $0.GetStoryReactionsRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getStoryReactions, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.ReplyToStoryResponse> replyToStory(
+    $0.ReplyToStoryRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$replyToStory, request, options: options);
+  }
+
   $grpc.ResponseFuture<$0.GetArchiveResponse> getArchive(
     $0.GetArchiveRequest request, {
     $grpc.CallOptions? options,
@@ -187,6 +201,16 @@ class StoryServiceClient extends $grpc.Client {
           '/voice.story.v1.StoryService/ReactToStory',
           ($0.ReactToStoryRequest value) => value.writeToBuffer(),
           $0.ReactToStoryResponse.fromBuffer);
+  static final _$getStoryReactions = $grpc.ClientMethod<
+          $0.GetStoryReactionsRequest, $0.GetStoryReactionsResponse>(
+      '/voice.story.v1.StoryService/GetStoryReactions',
+      ($0.GetStoryReactionsRequest value) => value.writeToBuffer(),
+      $0.GetStoryReactionsResponse.fromBuffer);
+  static final _$replyToStory =
+      $grpc.ClientMethod<$0.ReplyToStoryRequest, $0.ReplyToStoryResponse>(
+          '/voice.story.v1.StoryService/ReplyToStory',
+          ($0.ReplyToStoryRequest value) => value.writeToBuffer(),
+          $0.ReplyToStoryResponse.fromBuffer);
   static final _$getArchive =
       $grpc.ClientMethod<$0.GetArchiveRequest, $0.GetArchiveResponse>(
           '/voice.story.v1.StoryService/GetArchive',
@@ -300,6 +324,24 @@ abstract class StoryServiceBase extends $grpc.Service {
             ($core.List<$core.int> value) =>
                 $0.ReactToStoryRequest.fromBuffer(value),
             ($0.ReactToStoryResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.GetStoryReactionsRequest,
+            $0.GetStoryReactionsResponse>(
+        'GetStoryReactions',
+        getStoryReactions_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.GetStoryReactionsRequest.fromBuffer(value),
+        ($0.GetStoryReactionsResponse value) => value.writeToBuffer()));
+    $addMethod(
+        $grpc.ServiceMethod<$0.ReplyToStoryRequest, $0.ReplyToStoryResponse>(
+            'ReplyToStory',
+            replyToStory_Pre,
+            false,
+            false,
+            ($core.List<$core.int> value) =>
+                $0.ReplyToStoryRequest.fromBuffer(value),
+            ($0.ReplyToStoryResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.GetArchiveRequest, $0.GetArchiveResponse>(
         'GetArchive',
         getArchive_Pre,
@@ -438,6 +480,24 @@ abstract class StoryServiceBase extends $grpc.Service {
 
   $async.Future<$0.ReactToStoryResponse> reactToStory(
       $grpc.ServiceCall call, $0.ReactToStoryRequest request);
+
+  $async.Future<$0.GetStoryReactionsResponse> getStoryReactions_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.GetStoryReactionsRequest> $request) async {
+    return getStoryReactions($call, await $request);
+  }
+
+  $async.Future<$0.GetStoryReactionsResponse> getStoryReactions(
+      $grpc.ServiceCall call, $0.GetStoryReactionsRequest request);
+
+  $async.Future<$0.ReplyToStoryResponse> replyToStory_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.ReplyToStoryRequest> $request) async {
+    return replyToStory($call, await $request);
+  }
+
+  $async.Future<$0.ReplyToStoryResponse> replyToStory(
+      $grpc.ServiceCall call, $0.ReplyToStoryRequest request);
 
   $async.Future<$0.GetArchiveResponse> getArchive_Pre($grpc.ServiceCall $call,
       $async.Future<$0.GetArchiveRequest> $request) async {

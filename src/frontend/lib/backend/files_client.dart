@@ -77,6 +77,7 @@ class VoiceFilesClient {
     required int sizeBytes,
     String? chatId,
     String? chatType,
+    String? storyId,
     bool isE2e = false,
   }) async {
     final result = await _gateway.postProto(
@@ -88,6 +89,7 @@ class VoiceFilesClient {
         sizeBytes: sizeBytes,
         chatId: chatId,
         chatType: chatTypeFromWire(chatType),
+        storyId: storyId,
         isE2e: isE2e,
       ),
       createEmpty: file_pb.RequestUploadResponse.create,

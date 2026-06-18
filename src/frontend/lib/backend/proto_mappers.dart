@@ -13,6 +13,7 @@ import '../gen/voice/messaging/v1/messaging.pb.dart' as messaging_pb;
 import '../gen/voice/messaging/v1/messaging.pbenum.dart';
 import '../gen/voice/social/v1/social.pb.dart' as social_pb;
 import '../gen/voice/space/v1/space.pb.dart' as space_pb;
+import '../gen/voice/story/v1/story.pb.dart' as story_pb;
 import '../gen/voice/subscription/v1/subscription.pb.dart' as sub_pb;
 import '../gen/voice/user/v1/user.pb.dart' as user_pb;
 import 'chats_client.dart';
@@ -459,6 +460,10 @@ FileMetadataData fileMetadataFromProto(file_pb.FileMetadata meta) {
   );
 }
 
+story_pb.StoryRef storyRefToProto(String storyId) {
+  return story_pb.StoryRef(storyId: storyId);
+}
+
 file_pb.RequestUploadRequest requestUploadToProto({
   required String originalName,
   required String mimeType,
@@ -466,6 +471,7 @@ file_pb.RequestUploadRequest requestUploadToProto({
   String? chatId,
   ChatType chatType = ChatType.CHAT_TYPE_DM,
   bool isE2e = false,
+  String? storyId,
 }) {
   final request = file_pb.RequestUploadRequest(
     originalName: originalName,
@@ -477,6 +483,9 @@ file_pb.RequestUploadRequest requestUploadToProto({
   );
   if (isE2e) {
     request.isE2e = true;
+  }
+  if (storyId != null && storyId.isNotEmpty) {
+    request.contextStory = storyRefToProto(storyId);
   }
   return request;
 }

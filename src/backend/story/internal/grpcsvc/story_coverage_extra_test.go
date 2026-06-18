@@ -38,7 +38,9 @@ func startStoryGRPCWithPrivacy(t *testing.T, audience privacy.Audience) (storyv1
 
 	st := &store.StoryStore{Pool: pool}
 	svc := grpcsvc.NewStoryGRPC(st)
-	svc.Friends = mockFriendChecker{}
+	checker := mockFriendChecker{}
+	svc.Friends = checker
+	svc.Audience = checker
 	svc.Privacy = mockStoryPrivacy{audience: audience}
 
 	lis := bufconn.Listen(1024 * 1024)

@@ -74,3 +74,30 @@ final storyDetailProvider =
     StoriesApiFailure() => null,
   };
 });
+
+final storyArchiveProvider = FutureProvider<List<StoryData>>((ref) async {
+  final auth = ref.watch(authorizationHeaderProvider);
+  final profileId = ref.watch(authControllerProvider).activeProfileId;
+  if (auth == null || profileId == null) return const [];
+  final result = await ref.watch(voiceStoriesClientProvider).getArchive(
+        authorization: auth,
+        profileId: profileId,
+      );
+  return switch (result) {
+    StoriesApiOk(:final data) => data,
+    StoriesApiFailure() => const [],
+  };
+});
+
+final storyViewersProvider =
+    FutureProvider.family<List<String>, String>((ref, storyId) async {
+  final auth = ref.watch(authorizationHeaderProvider);
+  if (auth == null || storyId.isEmpty) return const [];
+  final result = await ref
+      .watch(voiceStoriesClientProvider)
+      .getViewers(authorization: auth, storyId: storyId);
+  return switch (result) {
+    StoriesApiOk(:final data) => data,
+    StoriesApiFailure() => const [],
+  };
+});

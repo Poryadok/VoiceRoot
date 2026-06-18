@@ -6,6 +6,8 @@ replace voice.app/voice/file => ./pb/voice/file
 
 replace voice.app/voice/chat => ../chat/pb/voice/chat
 
+replace voice.app/voice/story => ../voice/pb/voice/story
+
 replace voice.app/voice/common => ../user/pb/voice/common
 
 replace voice/backend/pkg => ../pkg
@@ -23,6 +25,7 @@ require (
 	voice.app/voice/chat v0.0.0
 	voice.app/voice/common v0.0.0
 	voice.app/voice/file v0.0.0
+	voice.app/voice/story v0.0.0
 	voice/backend/pkg v0.0.0
 )
 

@@ -32,6 +32,7 @@ class StoryData {
     this.mediaFileId,
     this.gameTag,
     this.lfpCriteriaJson,
+    this.textStyleJson,
     this.visibility = 'friends',
     this.viewCount = 0,
     this.isLookingForParty = false,
@@ -42,6 +43,7 @@ class StoryData {
   final String type;
   final String? textContent;
   final String? mediaFileId;
+  final String? textStyleJson;
   final String? gameTag;
   final String? lfpCriteriaJson;
   final String visibility;
@@ -59,6 +61,8 @@ class StoryData {
           json['textContent'] as String? ?? json['text_content'] as String?,
       mediaFileId:
           json['mediaFileId'] as String? ?? json['media_file_id'] as String?,
+      textStyleJson: json['textStyleJson'] as String? ??
+          json['text_style_json'] as String?,
       gameTag: json['gameTag'] as String? ?? json['game_tag'] as String?,
       lfpCriteriaJson: json['lfpCriteriaJson'] as String? ??
           json['lfp_criteria_json'] as String?,

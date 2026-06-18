@@ -94,10 +94,21 @@ const RequestUploadRequest$json = {
       '17': true
     },
     {'1': 'is_e2e', '3': 6, '4': 1, '5': 8, '9': 1, '10': 'isE2e', '17': true},
+    {
+      '1': 'context_story',
+      '3': 7,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.story.v1.StoryRef',
+      '9': 2,
+      '10': 'contextStory',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_context_chat'},
     {'1': '_is_e2e'},
+    {'1': '_context_story'},
   ],
   '9': [
     {'1': 5, '2': 6},
@@ -110,8 +121,10 @@ final $typed_data.Uint8List requestUploadRequestDescriptor = $convert.base64Deco
     'ChRSZXF1ZXN0VXBsb2FkUmVxdWVzdBIjCg1vcmlnaW5hbF9uYW1lGAEgASgJUgxvcmlnaW5hbE'
     '5hbWUSGwoJbWltZV90eXBlGAIgASgJUghtaW1lVHlwZRIdCgpzaXplX2J5dGVzGAMgASgDUglz'
     'aXplQnl0ZXMSPgoMY29udGV4dF9jaGF0GAQgASgLMhYudm9pY2UuY2hhdC52MS5DaGF0UmVmSA'
-    'BSC2NvbnRleHRDaGF0iAEBEhoKBmlzX2UyZRgGIAEoCEgBUgVpc0UyZYgBAUIPCg1fY29udGV4'
-    'dF9jaGF0QgkKB19pc19lMmVKBAgFEAZSCWNoYXRfdHlwZQ==');
+    'BSC2NvbnRleHRDaGF0iAEBEhoKBmlzX2UyZRgGIAEoCEgBUgVpc0UyZYgBARJCCg1jb250ZXh0'
+    'X3N0b3J5GAcgASgLMhgudm9pY2Uuc3RvcnkudjEuU3RvcnlSZWZIAlIMY29udGV4dFN0b3J5iA'
+    'EBQg8KDV9jb250ZXh0X2NoYXRCCQoHX2lzX2UyZUIQCg5fY29udGV4dF9zdG9yeUoECAUQBlIJ'
+    'Y2hhdF90eXBl');
 
 @$core.Deprecated('Use uploadResponseDescriptor instead')
 const UploadResponse$json = {

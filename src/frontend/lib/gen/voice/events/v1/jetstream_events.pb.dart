@@ -6275,6 +6275,10 @@ enum StoryStreamEvent_Payload {
   storyCreated,
   storyViewed,
   highlightAdded,
+  storyReacted,
+  storyExpired,
+  storyHighlightCreated,
+  storyLfpCreated,
   notSet
 }
 
@@ -6285,6 +6289,10 @@ class StoryStreamEvent extends $pb.GeneratedMessage {
     StoryCreated? storyCreated,
     StoryViewed? storyViewed,
     HighlightAdded? highlightAdded,
+    StoryReacted? storyReacted,
+    StoryExpired? storyExpired,
+    StoryHighlightCreated? storyHighlightCreated,
+    StoryLfpCreated? storyLfpCreated,
   }) {
     final result = create();
     if (eventId != null) result.eventId = eventId;
@@ -6292,6 +6300,11 @@ class StoryStreamEvent extends $pb.GeneratedMessage {
     if (storyCreated != null) result.storyCreated = storyCreated;
     if (storyViewed != null) result.storyViewed = storyViewed;
     if (highlightAdded != null) result.highlightAdded = highlightAdded;
+    if (storyReacted != null) result.storyReacted = storyReacted;
+    if (storyExpired != null) result.storyExpired = storyExpired;
+    if (storyHighlightCreated != null)
+      result.storyHighlightCreated = storyHighlightCreated;
+    if (storyLfpCreated != null) result.storyLfpCreated = storyLfpCreated;
     return result;
   }
 
@@ -6309,6 +6322,10 @@ class StoryStreamEvent extends $pb.GeneratedMessage {
     10: StoryStreamEvent_Payload.storyCreated,
     11: StoryStreamEvent_Payload.storyViewed,
     12: StoryStreamEvent_Payload.highlightAdded,
+    13: StoryStreamEvent_Payload.storyReacted,
+    14: StoryStreamEvent_Payload.storyExpired,
+    15: StoryStreamEvent_Payload.storyHighlightCreated,
+    16: StoryStreamEvent_Payload.storyLfpCreated,
     0: StoryStreamEvent_Payload.notSet
   };
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
@@ -6316,7 +6333,7 @@ class StoryStreamEvent extends $pb.GeneratedMessage {
       package:
           const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
       createEmptyInstance: create)
-    ..oo(0, [10, 11, 12])
+    ..oo(0, [10, 11, 12, 13, 14, 15, 16])
     ..aOS(1, _omitFieldNames ? '' : 'eventId')
     ..aOM<$0.Timestamp>(2, _omitFieldNames ? '' : 'occurredAt',
         subBuilder: $0.Timestamp.create)
@@ -6326,6 +6343,15 @@ class StoryStreamEvent extends $pb.GeneratedMessage {
         subBuilder: StoryViewed.create)
     ..aOM<HighlightAdded>(12, _omitFieldNames ? '' : 'highlightAdded',
         subBuilder: HighlightAdded.create)
+    ..aOM<StoryReacted>(13, _omitFieldNames ? '' : 'storyReacted',
+        subBuilder: StoryReacted.create)
+    ..aOM<StoryExpired>(14, _omitFieldNames ? '' : 'storyExpired',
+        subBuilder: StoryExpired.create)
+    ..aOM<StoryHighlightCreated>(
+        15, _omitFieldNames ? '' : 'storyHighlightCreated',
+        subBuilder: StoryHighlightCreated.create)
+    ..aOM<StoryLfpCreated>(16, _omitFieldNames ? '' : 'storyLfpCreated',
+        subBuilder: StoryLfpCreated.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -6350,11 +6376,19 @@ class StoryStreamEvent extends $pb.GeneratedMessage {
   @$pb.TagNumber(10)
   @$pb.TagNumber(11)
   @$pb.TagNumber(12)
+  @$pb.TagNumber(13)
+  @$pb.TagNumber(14)
+  @$pb.TagNumber(15)
+  @$pb.TagNumber(16)
   StoryStreamEvent_Payload whichPayload() =>
       _StoryStreamEvent_PayloadByTag[$_whichOneof(0)]!;
   @$pb.TagNumber(10)
   @$pb.TagNumber(11)
   @$pb.TagNumber(12)
+  @$pb.TagNumber(13)
+  @$pb.TagNumber(14)
+  @$pb.TagNumber(15)
+  @$pb.TagNumber(16)
   void clearPayload() => $_clearField($_whichOneof(0));
 
   @$pb.TagNumber(1)
@@ -6409,16 +6443,68 @@ class StoryStreamEvent extends $pb.GeneratedMessage {
   void clearHighlightAdded() => $_clearField(12);
   @$pb.TagNumber(12)
   HighlightAdded ensureHighlightAdded() => $_ensure(4);
+
+  @$pb.TagNumber(13)
+  StoryReacted get storyReacted => $_getN(5);
+  @$pb.TagNumber(13)
+  set storyReacted(StoryReacted value) => $_setField(13, value);
+  @$pb.TagNumber(13)
+  $core.bool hasStoryReacted() => $_has(5);
+  @$pb.TagNumber(13)
+  void clearStoryReacted() => $_clearField(13);
+  @$pb.TagNumber(13)
+  StoryReacted ensureStoryReacted() => $_ensure(5);
+
+  @$pb.TagNumber(14)
+  StoryExpired get storyExpired => $_getN(6);
+  @$pb.TagNumber(14)
+  set storyExpired(StoryExpired value) => $_setField(14, value);
+  @$pb.TagNumber(14)
+  $core.bool hasStoryExpired() => $_has(6);
+  @$pb.TagNumber(14)
+  void clearStoryExpired() => $_clearField(14);
+  @$pb.TagNumber(14)
+  StoryExpired ensureStoryExpired() => $_ensure(6);
+
+  @$pb.TagNumber(15)
+  StoryHighlightCreated get storyHighlightCreated => $_getN(7);
+  @$pb.TagNumber(15)
+  set storyHighlightCreated(StoryHighlightCreated value) =>
+      $_setField(15, value);
+  @$pb.TagNumber(15)
+  $core.bool hasStoryHighlightCreated() => $_has(7);
+  @$pb.TagNumber(15)
+  void clearStoryHighlightCreated() => $_clearField(15);
+  @$pb.TagNumber(15)
+  StoryHighlightCreated ensureStoryHighlightCreated() => $_ensure(7);
+
+  @$pb.TagNumber(16)
+  StoryLfpCreated get storyLfpCreated => $_getN(8);
+  @$pb.TagNumber(16)
+  set storyLfpCreated(StoryLfpCreated value) => $_setField(16, value);
+  @$pb.TagNumber(16)
+  $core.bool hasStoryLfpCreated() => $_has(8);
+  @$pb.TagNumber(16)
+  void clearStoryLfpCreated() => $_clearField(16);
+  @$pb.TagNumber(16)
+  StoryLfpCreated ensureStoryLfpCreated() => $_ensure(8);
 }
 
 class StoryCreated extends $pb.GeneratedMessage {
   factory StoryCreated({
     $core.String? storyId,
     $core.String? authorProfileId,
+    $core.String? type,
+    $core.String? gameTag,
+    $core.Iterable<$core.String>? mentionProfileIds,
   }) {
     final result = create();
     if (storyId != null) result.storyId = storyId;
     if (authorProfileId != null) result.authorProfileId = authorProfileId;
+    if (type != null) result.type = type;
+    if (gameTag != null) result.gameTag = gameTag;
+    if (mentionProfileIds != null)
+      result.mentionProfileIds.addAll(mentionProfileIds);
     return result;
   }
 
@@ -6438,6 +6524,9 @@ class StoryCreated extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'storyId')
     ..aOS(2, _omitFieldNames ? '' : 'authorProfileId')
+    ..aOS(3, _omitFieldNames ? '' : 'type')
+    ..aOS(4, _omitFieldNames ? '' : 'gameTag')
+    ..pPS(5, _omitFieldNames ? '' : 'mentionProfileIds')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -6476,6 +6565,27 @@ class StoryCreated extends $pb.GeneratedMessage {
   $core.bool hasAuthorProfileId() => $_has(1);
   @$pb.TagNumber(2)
   void clearAuthorProfileId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get type => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set type($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasType() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearType() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get gameTag => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set gameTag($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasGameTag() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearGameTag() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $pb.PbList<$core.String> get mentionProfileIds => $_getList(4);
 }
 
 class StoryViewed extends $pb.GeneratedMessage {
@@ -6543,6 +6653,287 @@ class StoryViewed extends $pb.GeneratedMessage {
   $core.bool hasViewerProfileId() => $_has(1);
   @$pb.TagNumber(2)
   void clearViewerProfileId() => $_clearField(2);
+}
+
+class StoryReacted extends $pb.GeneratedMessage {
+  factory StoryReacted({
+    $core.String? storyId,
+    $core.String? reactorProfileId,
+    $core.String? emoji,
+  }) {
+    final result = create();
+    if (storyId != null) result.storyId = storyId;
+    if (reactorProfileId != null) result.reactorProfileId = reactorProfileId;
+    if (emoji != null) result.emoji = emoji;
+    return result;
+  }
+
+  StoryReacted._();
+
+  factory StoryReacted.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory StoryReacted.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'StoryReacted',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'storyId')
+    ..aOS(2, _omitFieldNames ? '' : 'reactorProfileId')
+    ..aOS(3, _omitFieldNames ? '' : 'emoji')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  StoryReacted clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  StoryReacted copyWith(void Function(StoryReacted) updates) =>
+      super.copyWith((message) => updates(message as StoryReacted))
+          as StoryReacted;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static StoryReacted create() => StoryReacted._();
+  @$core.override
+  StoryReacted createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static StoryReacted getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<StoryReacted>(create);
+  static StoryReacted? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get storyId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set storyId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasStoryId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearStoryId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get reactorProfileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set reactorProfileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasReactorProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearReactorProfileId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get emoji => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set emoji($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasEmoji() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearEmoji() => $_clearField(3);
+}
+
+class StoryExpired extends $pb.GeneratedMessage {
+  factory StoryExpired({
+    $core.String? storyId,
+  }) {
+    final result = create();
+    if (storyId != null) result.storyId = storyId;
+    return result;
+  }
+
+  StoryExpired._();
+
+  factory StoryExpired.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory StoryExpired.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'StoryExpired',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'storyId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  StoryExpired clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  StoryExpired copyWith(void Function(StoryExpired) updates) =>
+      super.copyWith((message) => updates(message as StoryExpired))
+          as StoryExpired;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static StoryExpired create() => StoryExpired._();
+  @$core.override
+  StoryExpired createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static StoryExpired getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<StoryExpired>(create);
+  static StoryExpired? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get storyId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set storyId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasStoryId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearStoryId() => $_clearField(1);
+}
+
+class StoryHighlightCreated extends $pb.GeneratedMessage {
+  factory StoryHighlightCreated({
+    $core.String? highlightId,
+    $core.String? profileId,
+  }) {
+    final result = create();
+    if (highlightId != null) result.highlightId = highlightId;
+    if (profileId != null) result.profileId = profileId;
+    return result;
+  }
+
+  StoryHighlightCreated._();
+
+  factory StoryHighlightCreated.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory StoryHighlightCreated.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'StoryHighlightCreated',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'highlightId')
+    ..aOS(2, _omitFieldNames ? '' : 'profileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  StoryHighlightCreated clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  StoryHighlightCreated copyWith(
+          void Function(StoryHighlightCreated) updates) =>
+      super.copyWith((message) => updates(message as StoryHighlightCreated))
+          as StoryHighlightCreated;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static StoryHighlightCreated create() => StoryHighlightCreated._();
+  @$core.override
+  StoryHighlightCreated createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static StoryHighlightCreated getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<StoryHighlightCreated>(create);
+  static StoryHighlightCreated? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get highlightId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set highlightId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasHighlightId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearHighlightId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get profileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set profileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearProfileId() => $_clearField(2);
+}
+
+class StoryLfpCreated extends $pb.GeneratedMessage {
+  factory StoryLfpCreated({
+    $core.String? storyId,
+    $core.String? authorProfileId,
+    $core.String? criteriaJson,
+  }) {
+    final result = create();
+    if (storyId != null) result.storyId = storyId;
+    if (authorProfileId != null) result.authorProfileId = authorProfileId;
+    if (criteriaJson != null) result.criteriaJson = criteriaJson;
+    return result;
+  }
+
+  StoryLfpCreated._();
+
+  factory StoryLfpCreated.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory StoryLfpCreated.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'StoryLfpCreated',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'storyId')
+    ..aOS(2, _omitFieldNames ? '' : 'authorProfileId')
+    ..aOS(3, _omitFieldNames ? '' : 'criteriaJson')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  StoryLfpCreated clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  StoryLfpCreated copyWith(void Function(StoryLfpCreated) updates) =>
+      super.copyWith((message) => updates(message as StoryLfpCreated))
+          as StoryLfpCreated;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static StoryLfpCreated create() => StoryLfpCreated._();
+  @$core.override
+  StoryLfpCreated createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static StoryLfpCreated getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<StoryLfpCreated>(create);
+  static StoryLfpCreated? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get storyId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set storyId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasStoryId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearStoryId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get authorProfileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set authorProfileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasAuthorProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearAuthorProfileId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get criteriaJson => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set criteriaJson($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasCriteriaJson() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearCriteriaJson() => $_clearField(3);
 }
 
 class HighlightAdded extends $pb.GeneratedMessage {
