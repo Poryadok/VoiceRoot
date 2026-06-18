@@ -9,7 +9,6 @@ import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/guest_credentials_storage.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/bootstrap/voice_app_bootstrap.dart';
-import 'package:voice_frontend/state/guest_bootstrap_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/onboarding_controller.dart';
@@ -23,7 +22,7 @@ import 'support/voice_test_theme.dart';
 const _guestAccountId = guestBootstrapAccountId;
 
 void main() {
-  testWidgets('bootstrap auto-registers guest on web without manual tap', (
+  testWidgets('bootstrap shows auth screen on first visit', (
     tester,
   ) async {
     var guestRegisterCalls = 0;
@@ -34,20 +33,7 @@ void main() {
             onRequest: (request) async {
               if (request.url.path == '/api/v1/auth/register') {
                 guestRegisterCalls++;
-                final body = jsonDecode(request.body) as Map<String, dynamic>;
-                expect(body['guest'], isTrue);
-                return http.Response(
-                  jsonEncode({
-                    'session': {
-                      'access_token': 'guest-access',
-                      'refresh_token': 'guest-refresh',
-                      'expires_in_seconds': 900,
-                      'account_id': _guestAccountId,
-                      'profile_id': 'guest-prof',
-                    },
-                  }),
-                  200,
-                );
+                return http.Response('not found', 404);
               }
               if (request.url.path == '/health') {
                 return http.Response('ok', 200);
@@ -55,20 +41,15 @@ void main() {
               return http.Response('not found', 404);
             },
           ),
-          webGuestAutoRegisterEnabledProvider.overrideWithValue(true),
         ],
         child: const VoiceAppBootstrap(locale: Locale('en')),
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(
-      guestRegisterCalls,
-      1,
-      reason: 'web bootstrap must auto registerGuest when no session',
-    );
-    expect(find.byKey(AuthScreen.screenKey), findsNothing);
-    expect(find.byKey(const Key('guest_nickname_screen')), findsOneWidget);
+    expect(guestRegisterCalls, 0);
+    expect(find.byKey(AuthScreen.screenKey), findsOneWidget);
+    expect(find.byKey(const Key('guest_nickname_screen')), findsNothing);
   });
 
   testWidgets('continue as guest registers and shows nickname screen', (

@@ -6,7 +6,6 @@ import '../backend/guest_credentials_storage.dart';
 import '../backend/users_client.dart';
 import '../l10n/app_localizations.dart';
 import '../state/auth_providers.dart';
-import '../state/guest_bootstrap_providers.dart';
 import '../state/social_providers.dart';
 import '../theme/voice_theme_providers.dart';
 import '../ui/auth/guest_nickname_screen.dart';
@@ -33,11 +32,6 @@ class _VoiceAppBootstrapState extends ConsumerState<VoiceAppBootstrap> {
 
   Future<void> _restoreSession() async {
     await ref.read(authControllerProvider.notifier).restore();
-    final auth = ref.read(authControllerProvider);
-    if (!auth.isAuthenticated &&
-        ref.read(webGuestAutoRegisterEnabledProvider)) {
-      await ref.read(authControllerProvider.notifier).registerGuest();
-    }
     await _resolveGuestNicknameAfterRestore();
     if (mounted) {
       setState(() => _restoreComplete = true);

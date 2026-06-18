@@ -10,7 +10,6 @@ import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/state/onboarding_controller.dart';
-import 'package:voice_frontend/state/guest_bootstrap_providers.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 
 import 'test_voice_token_catalog.dart';
@@ -46,7 +45,6 @@ List<Override> guestBootstrapOverrides({
       () => _CompletedOnboardingController(),
     ),
     realtimeAutoConnectProvider.overrideWithValue(false),
-    webGuestAutoRegisterEnabledProvider.overrideWithValue(false),
     httpClientProvider.overrideWithValue(MockClient(onRequest)),
   ];
 }

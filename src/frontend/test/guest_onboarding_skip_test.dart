@@ -5,8 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:voice_frontend/bootstrap/voice_app_bootstrap.dart';
-import 'package:voice_frontend/state/guest_bootstrap_providers.dart';
 import 'package:voice_frontend/state/onboarding_controller.dart';
+import 'package:voice_frontend/ui/auth/auth_screen.dart';
 
 import 'support/guest_bootstrap_test_helpers.dart';
 
@@ -43,11 +43,16 @@ void main() {
           onboardingControllerProvider.overrideWith(
             () => OnboardingController(),
           ),
-          webGuestAutoRegisterEnabledProvider.overrideWithValue(true),
         ],
         child: const VoiceAppBootstrap(locale: Locale('en')),
       ),
     );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(AuthScreen.continueGuestButtonKey), findsOneWidget);
+    await tester.tap(find.byKey(AuthScreen.continueGuestButtonKey));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('guest_nickname_screen')), findsOneWidget);
