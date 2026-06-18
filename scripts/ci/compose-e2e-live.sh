@@ -75,6 +75,7 @@ flutter test --concurrency=1 \
   test/phase15_e2e_shared_media_live_test.dart \
   test/phase16_bots_slash_live_test.dart \
   test/phase16_bots_ephemeral_live_test.dart \
+  test/phase16_bots_botc_live_test.dart \
   test/phase17_stories_e2e_live_test.dart \
   test/phase18_deeplink_invite_e2e_live_test.dart \
   test/phase18_onboarding_e2e_live_test.dart \

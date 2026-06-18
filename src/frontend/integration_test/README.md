@@ -22,6 +22,9 @@ API-level live tests run on the VM with `flutter test` (not a browser driver).
 | [`test/phase8_mobile_layout_e2e_live_test.dart`](../test/phase8_mobile_layout_e2e_live_test.dart) | Phase-8 mobile layout: gateway health + narrow breakpoint contract |
 | [`test/phase8_windows_version_e2e_live_test.dart`](../test/phase8_windows_version_e2e_live_test.dart) | Windows desktop `/version` policy + dynamic 426 for outdated client |
 | [`test/phase11_trust_e2e_live_test.dart`](../test/phase11_trust_e2e_live_test.dart) | Phase 11: privacy DM block, report 202, 2FA enroll/verify/login gate |
+| [`test/phase16_bots_slash_live_test.dart`](../test/phase16_bots_slash_live_test.dart) | Phase 16: install polling bot, `/ping` → pong in history |
+| [`test/phase16_bots_ephemeral_live_test.dart`](../test/phase16_bots_ephemeral_live_test.dart) | Phase 16: ephemeral slash response (invoker-only) |
+| [`test/phase16_bots_botc_live_test.dart`](../test/phase16_bots_botc_live_test.dart) | Phase 16 BOT-C: presence heartbeat, space members, create chat |
 
 Go Gateway mirror tests: `src/backend/gateway/compose_*_live_test.go` — run via `make compose-e2e-live` (Go only) or **`make compose-e2e-full`** (Go + Flutter).
 

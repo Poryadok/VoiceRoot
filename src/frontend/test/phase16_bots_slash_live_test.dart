@@ -23,6 +23,7 @@ void main() {
 
       final poller = harness.startPollingBot(bot.botToken);
       addTearDown(poller.stop);
+      await harness.waitUntilBotOnline();
 
       final executed = await harness.executePing(bot.botId);
       expect(executed, isA<BotsApiOk<SlashInteractionOutcome>>());

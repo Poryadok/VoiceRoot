@@ -1,13 +1,13 @@
-# Staging full stack (phases 0–10)
+# Staging full stack (phases 0–10 + phase 16 bot)
 
 Kubernetes manifests for `voice-staging` namespace. Gateway-only deploy is legacy; use the full stack for product smoke.
 
 ## Prerequisites
 
 1. k3s cluster with kubectl access ([DEPLOYMENT.md](../../docs/DEPLOYMENT.md))
-2. GHCR images built by CI on `master` for: `auth`, `gateway`, `user`, `social`, `chat`, `messaging`, `realtime`, `file`, `voice`, `space`, `role`, `search`, `matchmaking`, `notification`
+2. GHCR images built by CI on `master` for: `auth`, `gateway`, `user`, `social`, `chat`, `messaging`, `realtime`, `file`, `voice`, `space`, `role`, `search`, `matchmaking`, `notification`, `bot`
 3. Secrets from [secret.example.yaml](secret.example.yaml) → `secret.yaml` (do not commit)
-4. Postgres init: on first boot run `docker/postgres` init against the cluster Postgres, or use `make compose-app-up` locally and migrate DB dump
+4. Postgres init: on first boot run `docker/postgres` init against the cluster Postgres (`bot_db` included in `01-init-databases.sh`), then run migrations — locally `make compose-migrate-bot`; on staging apply `src/backend/migrations/bot_db` against `bot_db`
 
 ## Apply
 

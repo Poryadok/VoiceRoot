@@ -52,7 +52,7 @@ class BotLiveHarness {
     final chatId = (groupResult as ChatsApiOk<VoiceChat>).data.id;
 
     final bots = VoiceBotsClient(gateway: ctx.gatewayHttp());
-    return BotLiveHarness(
+    final harness = BotLiveHarness(
       ctx: ctx,
       owner: owner,
       spaceId: spaceId,
@@ -60,6 +60,168 @@ class BotLiveHarness {
       bots: bots,
       httpClient: ctx.httpClient,
     );
+    await harness.ensureGroupReadyForBot();
+    return harness;
+  }
+
+  Future<({String botId, String botToken})> registerBotWithScopes({
+    required String name,
+    required List<String> scopes,
+  }) async {
+    final base = ctx.config.baseUrl;
+    final auth = owner.authorizationHeader;
+    final scopesJSON = jsonEncode(scopes);
+
+    final regResp = await httpClient.post(
+      Uri.parse('$base/api/v1/bots'),
+      headers: {
+        'Authorization': auth,
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'name': name,
+        'description': 'BOT-C bot',
+        'scopes_json': scopesJSON,
+      }),
+    );
+    expect(regResp.statusCode, 200, reason: regResp.body);
+    final regJson = jsonDecode(regResp.body) as Map<String, dynamic>;
+    final botId = (regJson['bot'] as Map<String, dynamic>)['id'] as String;
+
+    final scopesYAML = scopes.join(', ');
+    final manifest = '''
+name: $name
+description: BOT-C
+scopes: [$scopesYAML]
+commands:
+  - name: ping
+    description: ping
+''';
+    final manifestResp = await httpClient.post(
+      Uri.parse('$base/api/v1/bots/$botId/manifest'),
+      headers: {
+        'Authorization': auth,
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'manifest_yaml': manifest}),
+    );
+    expect(manifestResp.statusCode, 200, reason: manifestResp.body);
+
+    var botToken = (regJson['tokenResponse'] as Map<String, dynamic>?)?['token'] as String?;
+    if (botToken == null || botToken.trim().isEmpty) {
+      final tokenResp = await httpClient.post(
+        Uri.parse('$base/api/v1/bots/$botId/token/regenerate'),
+        headers: {'Authorization': auth},
+      );
+      expect(tokenResp.statusCode, 200, reason: tokenResp.body);
+      final tokenJson = jsonDecode(tokenResp.body) as Map<String, dynamic>;
+      botToken = (tokenJson['token_response'] as Map<String, dynamic>)['token'] as String;
+    }
+
+    return (botId: botId, botToken: botToken);
+  }
+
+  Future<void> ensureGroupReadyForBot() async {
+    final memberB = await ctx.registerUser('bot-member-b');
+    final memberC = await ctx.registerUser('bot-member-c');
+    final resp = await httpClient.post(
+      Uri.parse('${ctx.config.baseUrl}/api/v1/chats/$chatId/members'),
+      headers: {
+        'Authorization': owner.authorizationHeader,
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'profile_ids': [memberB.activeProfileId, memberC.activeProfileId],
+      }),
+    );
+    expect(resp.statusCode, 204, reason: resp.body);
+  }
+
+  Future<void> _installBotRaw(String botId) async {
+    final resp = await httpClient.post(
+      Uri.parse('${ctx.config.baseUrl}/api/v1/bots/$botId/spaces/$spaceId/install'),
+      headers: {
+        'Authorization': owner.authorizationHeader,
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'allowed_chats': [
+          {'id': chatId, 'type': 'CHAT_TYPE_GROUP'},
+        ],
+      }),
+    );
+    expect(resp.statusCode, 200, reason: resp.body);
+  }
+
+  Future<void> installBotWithScopes(String botId) async {
+    await _installBotRaw(botId);
+  }
+
+  Future<void> touchPresence(String botToken) async {
+    final resp = await httpClient.post(
+      Uri.parse('${ctx.config.baseUrl}/api/v1/bots/me/presence'),
+      headers: {'Authorization': 'Bot $botToken'},
+    );
+    expect(resp.statusCode, 204, reason: resp.body);
+  }
+
+  Future<List<String>> listSpaceMembersForBot(String botToken) async {
+    final resp = await httpClient.get(
+      Uri.parse('${ctx.config.baseUrl}/api/v1/bots/me/spaces/$spaceId/members'),
+      headers: {'Authorization': 'Bot $botToken'},
+    );
+    expect(resp.statusCode, 200, reason: resp.body);
+    final parsed = jsonDecode(resp.body) as Map<String, dynamic>;
+    return (parsed['profile_ids'] as List<dynamic>).cast<String>();
+  }
+
+  Future<String> createBotChat({
+    required String botToken,
+    required String name,
+    String chatType = 'channel',
+  }) async {
+    final resp = await httpClient.post(
+      Uri.parse('${ctx.config.baseUrl}/api/v1/bots/me/chats'),
+      headers: {
+        'Authorization': 'Bot $botToken',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'space_id': spaceId,
+        'name': name,
+        'chat_type': chatType,
+      }),
+    );
+    expect(resp.statusCode, 200, reason: resp.body);
+    final parsed = jsonDecode(resp.body) as Map<String, dynamic>;
+    final chat = parsed['chat'] as Map<String, dynamic>;
+    final id = chat['id'] as String;
+    expect(id, isNotEmpty);
+    return id;
+  }
+
+  Future<void> assertBotOnlineInSlashMenu() async {
+    final listed = await bots.listSlashCommandsForChat(
+      authorization: owner.authorizationHeader,
+      chatId: chatId,
+      chatType: 'CHAT_TYPE_GROUP',
+    );
+    expect(listed, isA<BotsApiOk<List<BotSlashCommand>>>(), reason: '$listed');
+    final commands = (listed as BotsApiOk<List<BotSlashCommand>>).data;
+    expect(commands, isNotEmpty);
+    expect(commands.first.online, isTrue, reason: 'slash menu must show bot online after heartbeat');
+  }
+
+  Future<void> assertBotOnlineInInstalledList(String botId) async {
+    final listed = await bots.listInstalledBots(
+      authorization: owner.authorizationHeader,
+      spaceId: spaceId,
+    );
+    expect(listed, isA<BotsApiOk<List<InstalledBotInfo>>>(), reason: '$listed');
+    final botsList = (listed as BotsApiOk<List<InstalledBotInfo>>).data;
+    final match = botsList.where((b) => b.bot.id == botId).toList();
+    expect(match, isNotEmpty);
+    expect(match.first.online, isTrue, reason: 'installed list must show bot online after heartbeat');
   }
 
   Future<({String botId, String botToken})> registerPollingBot(String name) async {
@@ -115,13 +277,25 @@ commands:
   }
 
   Future<void> installBot(String botId) async {
-    final result = await bots.installBotInSpace(
-      authorization: owner.authorizationHeader,
-      botId: botId,
-      spaceId: spaceId,
-      allowedChats: [(id: chatId, type: 'CHAT_TYPE_GROUP')],
-    );
-    expect(result, isA<BotsApiOk<String>>(), reason: '$result');
+    await _installBotRaw(botId);
+  }
+
+  Future<void> waitUntilBotOnline({Duration timeout = const Duration(seconds: 15)}) async {
+    final deadline = DateTime.now().add(timeout);
+    while (DateTime.now().isBefore(deadline)) {
+      final listed = await bots.listSlashCommandsForChat(
+        authorization: owner.authorizationHeader,
+        chatId: chatId,
+        chatType: 'CHAT_TYPE_GROUP',
+      );
+      if (listed is BotsApiOk<List<BotSlashCommand>> && listed.data.isNotEmpty) {
+        if (listed.data.first.online) {
+          return;
+        }
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    }
+    fail('timed out waiting for bot online presence');
   }
 
   PollingBotSession startPollingBot(String botToken) {

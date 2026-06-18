@@ -116,6 +116,39 @@ kubectl create secret tls voice-gateway-tls -n voice-staging --cert=tls.crt --ke
 - **Compose dev:** token registration E2E (`phase8_apns_e2e_live_test`, `phase8_voip_e2e_live_test`); alert delivery on device requires staging secrets above.
 - Live delivery tests: `src/frontend/test/phase8_apns_e2e_live_test.dart`, `phase8_voip_e2e_live_test.dart` (opt-in `VOICE_RUN_LIVE_INTEGRATION=true`).
 
+## Developer Portal — production OAuth (Phase 16)
+
+PKCE OAuth for the Developer Portal is enabled in local compose (`developer-portal` service, port `9082`). Production requires matching Auth and portal configuration.
+
+### Auth Service (Java)
+
+| Variable | Purpose |
+|----------|---------|
+| `AUTH_OAUTH_DEVELOPER_PORTAL_ENABLED` | `true` to enable OAuth for portal |
+| `AUTH_OAUTH_DEVELOPER_PORTAL_CLIENT_ID` | OAuth client id (default `voice-developer-portal`) |
+| `AUTH_OAUTH_DEVELOPER_PORTAL_CLIENT_SECRET` | Optional; PKCE public client may leave empty |
+| `AUTH_OAUTH_DEVELOPER_PORTAL_REDIRECT_URIS` | Comma-separated HTTPS callback URLs (e.g. `https://developers.voice.app/callback`) |
+| `AUTH_OAUTH_PUBLIC_API_BASE_URL` | Public Gateway URL used in authorize links |
+| `AUTH_OAUTH_AUTHORIZATION_CODE_TTL` | Authorization code lifetime (ISO-8601 duration, default `PT60S`) |
+
+Compose reference: [`docker-compose.yml`](../docker-compose.yml) `auth` service; template [`.env.example`](../.env.example) (`DEVELOPER_PORTAL_OAUTH_*`).
+
+### Developer Portal build
+
+| Build arg / env | Purpose |
+|-----------------|---------|
+| `VITE_VOICE_API_BASE` | Public Gateway URL (baked at build time) |
+| `VITE_OAUTH_CLIENT_ID` | Must match `AUTH_OAUTH_DEVELOPER_PORTAL_CLIENT_ID` |
+| `VITE_OAUTH_DISABLED` | `true` — paste-JWT fallback UI (dev only) |
+
+### Production checklist
+
+1. Register OAuth client in Auth with **HTTPS** redirect URIs only.
+2. Build and deploy portal static assets with matching `VITE_*` values.
+3. Ensure Gateway `GATEWAY_CORS_ALLOWED_ORIGINS` includes the portal origin.
+4. Verify PKCE flow: authorize → callback → `POST /api/v1/auth/oauth2/token` with `code_verifier`.
+5. Bot runtime (bot token, webhook) is independent of portal OAuth; portal OAuth is for **developer account** login only.
+
 ---
 
 ## Связанные документы

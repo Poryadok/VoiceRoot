@@ -528,6 +528,66 @@ func TestComposePhase16BotsBotCRoutes_live(t *testing.T) {
 	require.NotEmpty(t, createChatParsed.Chat.ID, "create chat must return linked chat id (BOT-C)")
 }
 
+// TestComposePhase16BotsDailyChatCreateLimit_live enforces 10 text chat creates per day per bot (bots.md).
+func TestComposePhase16BotsDailyChatCreateLimit_live(t *testing.T) {
+	if !liveComposeEnabled() {
+		t.Skip("set VOICE_RUN_LIVE_COMPOSE=true to run against local compose")
+	}
+	clearLiveComposeAuthRateLimit(t)
+
+	client := &http.Client{Timeout: 45 * time.Second}
+	base := liveGatewayBaseURL()
+	n := time.Now().UnixNano()
+
+	sess := registerComposeUser(t, client, base, formatComposeEmail("p16-chat-limit", n), "VoiceQaTest1!")
+	spaceID := createComposeSpace(t, client, base, sess.AccessToken, fmt.Sprintf("Bots ChatLimit %d", n), "phase16")
+	chatID := createComposeGroup(t, client, base, sess.AccessToken, fmt.Sprintf("bots-limit-%d", n))
+	ensureComposeGroupReadyForBot(t, client, base, sess.AccessToken, chatID, n)
+
+	botID, botToken := registerComposeBotWithScopes(t, client, base, sess.AccessToken,
+		fmt.Sprintf("ChatLimitBot-%d", n),
+		`["TEXT_CHAT_CREATE_IN_SPACE"]`)
+	applyComposeBotManifestPollingScopes(t, client, base, sess.AccessToken, botID, "TEXT_CHAT_CREATE_IN_SPACE")
+	installComposeBot(t, client, base, sess.AccessToken, botID, spaceID, chatID)
+
+	auth := "Bot " + botToken
+	for i := 0; i < 10; i++ {
+		payload, _ := json.Marshal(map[string]any{
+			"space_id":  spaceID,
+			"name":      fmt.Sprintf("bot-ch-%d-%d", n, i),
+			"chat_type": "channel",
+		})
+		req, err := http.NewRequest(http.MethodPost, base+"/api/v1/bots/me/chats", bytes.NewReader(payload))
+		require.NoError(t, err)
+		req.Header.Set("Authorization", auth)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		require.Equal(t, http.StatusOK, resp.StatusCode,
+			"create chat %d/10 body=%s", i+1, string(body))
+	}
+
+	payload, _ := json.Marshal(map[string]any{
+		"space_id":  spaceID,
+		"name":      fmt.Sprintf("bot-ch-over-%d", n),
+		"chat_type": "channel",
+	})
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/bots/me/chats", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", auth)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusTooManyRequests, resp.StatusCode,
+		"11th create must return 429, body=%s", string(body))
+	require.Contains(t, strings.ToLower(string(body)), "limit",
+		"429 body should mention limit, got=%s", string(body))
+}
+
 func registerComposeBotWithScopes(t *testing.T, client *http.Client, base, token, name, scopesJSON string) (botID, botToken string) {
 	t.Helper()
 	payload, _ := json.Marshal(map[string]string{

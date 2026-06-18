@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -875,6 +876,49 @@ func TestCreateBotChat_dailyLimitExceeded(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Equal(t, codes.ResourceExhausted, status.Code(err))
+}
+
+func TestCreateBotChat_concurrentDailyLimit(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	chatFake := &fakeChatClient{}
+	client, st, _, cleanup := startBotGRPCWithBotCDeps(t, &botCDeps{chat: chatFake})
+	defer cleanup()
+
+	_, _, botToken, _, spaceID := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_CREATE_IN_SPACE"]`)
+	botCtx := withBotToken(context.Background(), botToken)
+
+	const workers = 15
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var successes int
+	var exhausted int
+	wg.Add(workers)
+	for i := 0; i < workers; i++ {
+		go func(idx int) {
+			defer wg.Done()
+			_, err := client.CreateBotChat(botCtx, &botv1.CreateBotChatRequest{
+				SpaceId:  spaceID.String(),
+				Name:     fmt.Sprintf("concurrent-%d", idx),
+				ChatType: "channel",
+			})
+			mu.Lock()
+			defer mu.Unlock()
+			if err == nil {
+				successes++
+				return
+			}
+			if status.Code(err) == codes.ResourceExhausted {
+				exhausted++
+				return
+			}
+			t.Errorf("unexpected error: %v", err)
+		}(i)
+	}
+	wg.Wait()
+	require.Equal(t, 10, successes, "multi-replica race must allow at most 10 successful creates")
+	require.Equal(t, workers-10, exhausted)
 }
 
 func TestRegisterBot_rejectsInvalidScopesJSON(t *testing.T) {

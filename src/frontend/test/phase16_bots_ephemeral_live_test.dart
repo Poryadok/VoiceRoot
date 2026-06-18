@@ -19,11 +19,15 @@ void main() {
 
       final member = await ctx.registerUser('p16-eph-member');
       final harness = await BotLiveHarness.setup(ctx: ctx, prefix: 'p16-eph');
-      await ctx.chatsClient().addGroupMembers(
-        authorization: harness.owner.authorizationHeader,
-        chatId: harness.chatId,
-        profileIds: [member.activeProfileId],
+      final addMemberResp = await harness.httpClient.post(
+        Uri.parse('${ctx.config.baseUrl}/api/v1/chats/${harness.chatId}/members'),
+        headers: {
+          'Authorization': harness.owner.authorizationHeader,
+          'Content-Type': 'application/json',
+        },
+        body: '{"profile_ids":["${member.activeProfileId}"]}',
       );
+      expect(addMemberResp.statusCode, 204, reason: addMemberResp.body);
 
       final bot = await harness.registerPollingBot(
         'EphBot-${DateTime.now().microsecondsSinceEpoch}',
@@ -32,6 +36,7 @@ void main() {
 
       final poller = harness.startEphemeralPollingBot(bot.botToken);
       addTearDown(poller.stop);
+      await harness.waitUntilBotOnline();
 
       final executed = await harness.executePing(bot.botId);
       expect(executed, isA<BotsApiOk<SlashInteractionOutcome>>());
