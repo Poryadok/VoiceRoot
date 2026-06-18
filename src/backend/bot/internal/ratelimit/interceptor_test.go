@@ -26,7 +26,17 @@ func TestBotGRPCRateLimit_touchPresenceExhausted(t *testing.T) {
 
 func TestFromEnv_disabled(t *testing.T) {
 	t.Setenv("BOT_RATE_LIMIT_DISABLED", "true")
-	require.Nil(t, ratelimit.FromEnv())
+	lim := ratelimit.FromEnv()
+	interceptor := lim.UnaryServerInterceptor()
+	called := 0
+	handler := func(ctx context.Context, req any) (any, error) {
+		called++
+		return "ok", nil
+	}
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-voice-bot-token", "tok"))
+	_, err := interceptor(ctx, nil, &grpc.UnaryServerInfo{FullMethod: "/voice.bot.v1.BotService/SendBotMessage"}, handler)
+	require.NoError(t, err)
+	require.Equal(t, 1, called)
 }
 
 func TestBotGRPCRateLimit_interceptorResourceExhausted(t *testing.T) {

@@ -188,6 +188,13 @@
   "botInstallSelectSpace": "Choose a space",
   "botInstallNoSpaces": "Join or create a space to install this bot.",
   "botInstallConfirm": "Install bot",
+  "botScopeTextChatSendMessages": "Send messages in allowed text chats",
+  "botScopeDmSend": "Send direct messages (reply only)",
+  "botScopeSpaceViewMemberList": "View space member list",
+  "botScopeMemberAssignRoles": "Assign roles below the bot",
+  "botScopeTextChatCreateInSpace": "Create text chats in the space",
+  "botScopeTextChatReadHistory": "Read message history (privileged)",
+  "botScopeSpaceManageRoles": "Create and manage roles below the bot (privileged)",
   "slashOptionPickUser": "User: {name}",
   "@slashOptionPickUser": {
     "placeholders": {

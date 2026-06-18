@@ -1,0 +1,31 @@
+name: Compose E2E Live
+
+on:
+  workflow_dispatch:
+
+jobs:
+  compose-e2e-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: src/backend/gateway/go.mod
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.29.3'
+          channel: stable
+          cache: true
+          cache-key: flutter-${{ runner.os }}-${{ hashFiles('src/frontend/pubspec.lock') }}
+          cache-path: |
+            ~/.pub-cache
+            src/frontend/.dart_tool
+
+      - name: Compose app up
+        run: make compose-app-up
+
+      - name: Compose E2E live (opt-in)
+        run: make compose-e2e-live

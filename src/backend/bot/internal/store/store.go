@@ -213,6 +213,22 @@ func (s *BotStore) RegenerateToken(ctx context.Context, botID uuid.UUID) (string
 	return plain, nil
 }
 
+func (s *BotStore) RegenerateWebhookSecret(ctx context.Context, botID uuid.UUID) (string, error) {
+	secretBytes := make([]byte, 32)
+	if _, err := rand.Read(secretBytes); err != nil {
+		return "", err
+	}
+	secret := hex.EncodeToString(secretBytes)
+	tag, err := s.Pool.Exec(ctx, `UPDATE bots SET webhook_secret = $2, updated_at = now() WHERE id = $1`, botID, secret)
+	if err != nil {
+		return "", err
+	}
+	if tag.RowsAffected() == 0 {
+		return "", ErrNotFound
+	}
+	return secret, nil
+}
+
 func (s *BotStore) ApplyManifest(ctx context.Context, botID uuid.UUID, doc manifest.Document) error {
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {

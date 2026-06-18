@@ -79,7 +79,8 @@ func main() {
 		}
 		grpcSrv = grpc.NewServer(
 			grpc.ChainUnaryInterceptor(
-				ratelimit.FromEnv().UnaryServerInterceptor(),
+				ratelimit.GatewayAccessFromEnv(),
+				ratelimit.ServerLimiterFromEnv().UnaryServerInterceptor(),
 				grpcmw.UnaryRecovery(logger),
 				grpcmw.UnaryAccessLog(logger),
 			),

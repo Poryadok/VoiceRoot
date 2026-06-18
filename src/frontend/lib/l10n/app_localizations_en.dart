@@ -361,6 +361,29 @@ class AppLocalizationsEn extends AppLocalizations {
   String get botInstallConfirm => 'Install bot';
 
   @override
+  String get botScopeTextChatSendMessages =>
+      'Send messages in allowed text chats';
+
+  @override
+  String get botScopeDmSend => 'Send direct messages (reply only)';
+
+  @override
+  String get botScopeSpaceViewMemberList => 'View space member list';
+
+  @override
+  String get botScopeMemberAssignRoles => 'Assign roles below the bot';
+
+  @override
+  String get botScopeTextChatCreateInSpace => 'Create text chats in the space';
+
+  @override
+  String get botScopeTextChatReadHistory => 'Read message history (privileged)';
+
+  @override
+  String get botScopeSpaceManageRoles =>
+      'Create and manage roles below the bot (privileged)';
+
+  @override
   String slashOptionPickUser(String name) {
     return 'User: $name';
   }

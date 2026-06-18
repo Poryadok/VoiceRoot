@@ -238,7 +238,7 @@ func (t *transcoder) serveBots(w http.ResponseWriter, r *http.Request, rest stri
 		return false
 	}
 
-	ctx := withGRPCMetadata(r.Context(), r)
+	ctx := withBotServiceGRPCMetadata(r.Context(), r)
 
 	switch {
 	case r.Method == http.MethodPost && rest == "":
@@ -373,6 +373,17 @@ func (t *transcoder) serveBots(w http.ResponseWriter, r *http.Request, rest stri
 		botID := strings.TrimSuffix(rest, "/token/regenerate")
 		botID = strings.Trim(botID, "/")
 		resp, err := t.clients.bot.RegenerateToken(ctx, &botv1.RegenerateTokenRequest{BotId: botID})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodPost && strings.HasSuffix(rest, "/webhook-secret/regenerate"):
+		botID := strings.TrimSuffix(rest, "/webhook-secret/regenerate")
+		botID = strings.Trim(botID, "/")
+		resp, err := t.clients.bot.RegenerateWebhookSecret(ctx, &botv1.RegenerateWebhookSecretRequest{BotId: botID})
 		if err != nil {
 			writeGRPCError(w, err)
 			return true
@@ -540,13 +551,21 @@ func chatTypeToEnum(raw string) chatv1.ChatType {
 }
 
 func withBotGRPCMetadata(r *http.Request) context.Context {
-	ctx := r.Context()
+	ctx := withBotServiceGRPCMetadata(r.Context(), r)
 	token := botBearerToken(r)
 	if token != "" {
-		md := metadata.Pairs("x-voice-bot-token", token)
+		md, _ := metadata.FromOutgoingContext(ctx)
+		md = md.Copy()
+		md.Set("x-voice-bot-token", token)
 		ctx = metadata.NewOutgoingContext(ctx, md)
 	}
 	return ctx
+}
+
+func withBotServiceGRPCMetadata(ctx context.Context, r *http.Request) context.Context {
+	md := grpcMetadataFromRequest(r)
+	md.Set("x-voice-internal", "true")
+	return metadata.NewOutgoingContext(ctx, md)
 }
 
 func botBearerToken(r *http.Request) string {

@@ -405,7 +405,7 @@ class _ScopeList extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             for (final scope in scopes)
-              Text('• ${BotScopeLabels.labelFor(scope)}'),
+              Text('• ${BotScopeLabels.labelFor(context, scope)}'),
             if (hasPrivileged) ...[
               const SizedBox(height: 8),
               Text(

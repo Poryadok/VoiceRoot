@@ -101,33 +101,16 @@
 
 ## Phase 16 — Боты (остаток)
 
-*Критерии приёмки §16: `/ping`→pong, ephemeral, 3s timeout — **DONE** (opt-in live). Developer Portal `[x]` в PLAN завышен (webhook_secret).*
+*Критерии приёмки §16: `/ping`→pong, ephemeral, 3s timeout — **DONE** (opt-in live). Batch 2026-06-18: Redis gRPC rate limit, webhook_secret API/portal, ru scope l10n, compose webhook `extra_hosts`, opt-in GHA `compose-e2e-live`.*
 
-### Backend и Gateway
+**Аудит batch (2026-06-18, post-fix):**
 
-*Закрыто в Phase 16 backend batch (compose/Flutter live opt-in, gRPC rate limit, proto, docs).*
-
-**Аудит batch (2026-06-18):**
-
-- [ ] **Bot gRPC rate limit Redis** — лимитер in-process; для multi-replica Bot Service нужен Redis sliding-window (как Gateway), см. `internal/ratelimit`.
-- [ ] **Webhook compose Linux CI** — `TestComposePhase16BotsWebhook_live` зависит от `host.docker.internal`; на Linux runner может понадобиться `extra_hosts` или sidecar mock.
-- [ ] **Прямой gRPC Bot Service** — порт `:9090` в compose без network policy; prod должен принимать bot-runtime только от Gateway или mTLS.
-
-### Developer Portal
-
-*После ключей OAuth (секция «Только вы»).*
-
-- [ ] **Developer Portal auth** — login/OAuth flow, rotate `webhook_secret`, revoke token, list apps (minimal portal: paste JWT / PKCE; rotate webhook — stub в UI).
-- [ ] **Developer Portal webhook_secret rotate** — regenerate bot token есть; rotate `webhook_secret` / HMAC key — нет API в portal.
-- [ ] **Developer Portal production OAuth** — PKCE flow есть; production зависит от Auth OAuth client; dev — paste JWT (`oauthDisabled`).
-
-### Клиент и локализация
-
-- [ ] **ru l10n bot scopes** — `BotScopeLabels` в `bot_scopes.dart` только EN; arb-ключи для scope labels.
-
-### Тесты и покрытие
-
-- [ ] **BOT-C live tests in CI** — compose + Flutter live opt-in; не в default `make` / GitHub Actions matrix.
+- [ ] **Bot Service staging deploy** — сервис есть в compose, нет манифестов в `deploy/staging/`; prod rollout отдельно.
+- [ ] **Bot gRPC mTLS** — v1: `BOT_GRPC_GATEWAY_ONLY` + `x-voice-internal`; полный mTLS / k8s NetworkPolicy — prod hardening.
+- [ ] **PLAN.md §16 sync** — чекбокс Developer Portal `[x]` завышен до docs-sync batch; сводная строка фазы 16.
+- [ ] **Flutter BOT-C live** — Go `TestComposePhase16BotsBotCRoutes_live` есть; нет opt-in Flutter live для presence/members/create chat.
+- [ ] **TEXT_CHAT_CREATE_IN_SPACE 10/day** — лимит в bot-service.md; проверить enforcement + тест при multi-replica.
+- [ ] **Developer Portal production OAuth** — PKCE в compose; prod redirect URIs / Auth client в DEPLOYMENT (ключи в «Только вы» закрыты).
 
 **Промпт-якорь:** `Phase 16 bots — follow-ups from docs/TODO.md`.
 

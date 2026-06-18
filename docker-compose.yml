@@ -532,10 +532,13 @@ services:
     build:
       context: ./src/backend
       dockerfile: bot/Dockerfile
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/bot_db?sslmode=disable
       BOT_GRPC_LISTEN: :9090
+      BOT_REDIS_ADDR: redis:6379
       MESSAGING_GRPC_ADDR: messaging:9090
       CHAT_GRPC_ADDR: chat:9090
       ROLE_GRPC_ADDR: role:9090

@@ -26,6 +26,7 @@ service BotService {
   rpc GetBotBySlug(GetBotBySlugRequest) returns (GetBotResponse);
   rpc ListBots(ListBotsRequest) returns (ListBotsResponse);
   rpc RegenerateToken(RegenerateTokenRequest) returns (RegenerateTokenResponse);
+  rpc RegenerateWebhookSecret(RegenerateWebhookSecretRequest) returns (RegenerateWebhookSecretResponse);
 
   rpc RegisterCommands(RegisterCommandsRequest) returns (RegisterCommandsResponse);
   rpc GetCommands(GetCommandsRequest) returns (GetCommandsResponse);
@@ -128,6 +129,15 @@ message TokenResponse {
   string token = 1;
 }
 
+message WebhookSecretResponse {
+  // One-shot HMAC key for webhook signature verification (docs/features/bots.md).
+  string webhook_secret = 1;
+}
+
+message RegenerateWebhookSecretRequest {
+  string bot_id = 1;
+}
+
 message RegisterCommandsRequest {
   string bot_id = 1;
   string commands_json = 2;
@@ -201,6 +211,8 @@ message RegisterBotResponse {
   Bot bot = 1;
   // One-shot bot token; same value as RegenerateToken (shown once at registration).
   optional TokenResponse token_response = 2;
+  // One-shot webhook HMAC secret; same value as RegenerateWebhookSecret.
+  optional WebhookSecretResponse webhook_secret_response = 3;
 }
 message UpdateBotResponse {
   Bot bot = 1;
@@ -214,6 +226,9 @@ message ListBotsResponse {
 }
 message RegenerateTokenResponse {
   TokenResponse token_response = 1;
+}
+message RegenerateWebhookSecretResponse {
+  WebhookSecretResponse webhook_secret_response = 1;
 }
 message RegisterCommandsResponse {}
 message GetCommandsResponse {

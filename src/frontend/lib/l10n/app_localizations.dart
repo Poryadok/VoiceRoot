@@ -728,6 +728,48 @@ abstract class AppLocalizations {
   /// **'Install bot'**
   String get botInstallConfirm;
 
+  /// No description provided for @botScopeTextChatSendMessages.
+  ///
+  /// In en, this message translates to:
+  /// **'Send messages in allowed text chats'**
+  String get botScopeTextChatSendMessages;
+
+  /// No description provided for @botScopeDmSend.
+  ///
+  /// In en, this message translates to:
+  /// **'Send direct messages (reply only)'**
+  String get botScopeDmSend;
+
+  /// No description provided for @botScopeSpaceViewMemberList.
+  ///
+  /// In en, this message translates to:
+  /// **'View space member list'**
+  String get botScopeSpaceViewMemberList;
+
+  /// No description provided for @botScopeMemberAssignRoles.
+  ///
+  /// In en, this message translates to:
+  /// **'Assign roles below the bot'**
+  String get botScopeMemberAssignRoles;
+
+  /// No description provided for @botScopeTextChatCreateInSpace.
+  ///
+  /// In en, this message translates to:
+  /// **'Create text chats in the space'**
+  String get botScopeTextChatCreateInSpace;
+
+  /// No description provided for @botScopeTextChatReadHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'Read message history (privileged)'**
+  String get botScopeTextChatReadHistory;
+
+  /// No description provided for @botScopeSpaceManageRoles.
+  ///
+  /// In en, this message translates to:
+  /// **'Create and manage roles below the bot (privileged)'**
+  String get botScopeSpaceManageRoles;
+
   /// No description provided for @slashOptionPickUser.
   ///
   /// In en, this message translates to:

@@ -161,6 +161,23 @@ func (f *fakeBotClient) CompleteAutocomplete(ctx context.Context, in *botv1.Comp
 	return &botv1.CompleteAutocompleteResponse{}, nil
 }
 
+func (f *fakeBotClient) RegisterBot(ctx context.Context, in *botv1.RegisterBotRequest, _ ...grpc.CallOption) (*botv1.RegisterBotResponse, error) {
+	_ = ctx
+	_ = in
+	return &botv1.RegisterBotResponse{
+		Bot:                   &botv1.Bot{Id: "bot-new", Name: in.GetName()},
+		TokenResponse:         &botv1.TokenResponse{Token: "tok-plain"},
+		WebhookSecretResponse: &botv1.WebhookSecretResponse{WebhookSecret: "whsec-plain"},
+	}, nil
+}
+
+func (f *fakeBotClient) RegenerateWebhookSecret(ctx context.Context, in *botv1.RegenerateWebhookSecretRequest, _ ...grpc.CallOption) (*botv1.RegenerateWebhookSecretResponse, error) {
+	_ = ctx
+	return &botv1.RegenerateWebhookSecretResponse{
+		WebhookSecretResponse: &botv1.WebhookSecretResponse{WebhookSecret: "whsec-rotated"},
+	}, nil
+}
+
 func (f *fakeBotClient) EditBotMessage(ctx context.Context, in *botv1.EditBotMessageRequest, _ ...grpc.CallOption) (*botv1.EditBotMessageResponse, error) {
 	return &botv1.EditBotMessageResponse{}, nil
 }
@@ -441,4 +458,30 @@ func TestServeBots_getBotBySlugRouteRegistered(t *testing.T) {
 	require.True(t, ok, "GET /api/v1/bots/slug/{slug} must be registered (BOT-B)")
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Contains(t, rec.Body.String(), `"slug"`, "GetBotBySlug response must include slug field")
+}
+
+func TestServeBots_registerBot_returnsWebhookSecret(t *testing.T) {
+	tc := newTranscoder(&grpcClients{bot: &fakeBotClient{}})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/bots", strings.NewReader(`{"name":"DevBot","scopes_json":"[\"TEXT_CHAT_SEND_MESSAGES\"]"}`))
+	req.Header.Set("Authorization", "Bearer token")
+	req.Header.Set("X-Voice-User-Id", "00000000-0000-0000-0000-000000000001")
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	ok := tc.serveBots(rec, req, "")
+	require.True(t, ok)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "webhook_secret")
+	require.Contains(t, rec.Body.String(), "whsec-plain")
+}
+
+func TestServeBots_regenerateWebhookSecretRouteRegistered(t *testing.T) {
+	tc := newTranscoder(&grpcClients{bot: &fakeBotClient{}})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/bots/bot-1/webhook-secret/regenerate", http.NoBody)
+	req.Header.Set("Authorization", "Bearer token")
+	req.Header.Set("X-Voice-User-Id", "00000000-0000-0000-0000-000000000001")
+	rec := httptest.NewRecorder()
+	ok := tc.serveBots(rec, req, "bot-1/webhook-secret/regenerate")
+	require.True(t, ok, "POST /api/v1/bots/{id}/webhook-secret/regenerate must be registered")
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "whsec-rotated")
 }

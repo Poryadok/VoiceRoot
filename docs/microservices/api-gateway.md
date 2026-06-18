@@ -93,6 +93,7 @@
 | `DELETE` | `/api/v1/bots/{bot_id}` | `DeleteBot` | JWT | — |
 | `GET` | `/api/v1/bots/slug/{slug}` | `GetBotBySlug` | JWT | публичный lookup по `slug` (deep link `voice.gg` / `voice.app`) |
 | `POST` | `/api/v1/bots/{bot_id}/token/regenerate` | `RegenerateToken` | JWT | — |
+| `POST` | `/api/v1/bots/{bot_id}/webhook-secret/regenerate` | `RegenerateWebhookSecret` | JWT | one-shot `webhook_secret` |
 | `POST` | `/api/v1/bots/{bot_id}/manifest` | `ApplyManifest` | JWT | `manifest_yaml` |
 | `POST` | `/api/v1/bots/manifest/validate` | `ValidateManifest` | JWT | `manifest_yaml` |
 | `GET` | `/api/v1/bots/{bot_id}/webhook` | `GetWebhookURL` | JWT | — |

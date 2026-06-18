@@ -77,6 +77,39 @@ void main() {
     expect(find.byKey(const Key('bot_install_confirm')), findsOneWidget);
   });
 
+  testWidgets('BotInstallPage shows localized scope labels in Russian', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          profileAccentStorageProvider.overrideWithValue(
+            testProfileAccentStorage,
+          ),
+          authorizationHeaderProvider.overrideWithValue(auth),
+          botBySlugProvider(slug).overrideWith((ref) async => sampleBot),
+          mySpacesProvider.overrideWith(
+            (ref) async => const SpaceListData(spaces: []),
+          ),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('ru'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const BotInstallPage(slug: slug),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('• Отправка сообщений в разрешённых чатах'),
+      findsOneWidget,
+    );
+    expect(find.text('• Просмотр списка участников спейса'), findsOneWidget);
+    expect(find.text('• Send messages in allowed text chats'), findsNothing);
+  });
+
   testWidgets(
     'BotInstallPage requires privileged ack for SPACE_MANAGE_ROLES (BOT-C)',
     (tester) async {

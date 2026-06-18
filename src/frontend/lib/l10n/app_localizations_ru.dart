@@ -361,6 +361,31 @@ class AppLocalizationsRu extends AppLocalizations {
   String get botInstallConfirm => 'Установить бота';
 
   @override
+  String get botScopeTextChatSendMessages =>
+      'Отправка сообщений в разрешённых чатах';
+
+  @override
+  String get botScopeDmSend => 'Личные сообщения (только в ответ)';
+
+  @override
+  String get botScopeSpaceViewMemberList => 'Просмотр списка участников спейса';
+
+  @override
+  String get botScopeMemberAssignRoles => 'Выдача ролей ниже бота';
+
+  @override
+  String get botScopeTextChatCreateInSpace =>
+      'Создание текстовых чатов в спейсе';
+
+  @override
+  String get botScopeTextChatReadHistory =>
+      'Чтение истории сообщений (привилегия)';
+
+  @override
+  String get botScopeSpaceManageRoles =>
+      'Создание и управление ролями ниже бота (привилегия)';
+
+  @override
   String slashOptionPickUser(String name) {
     return 'Пользователь: $name';
   }

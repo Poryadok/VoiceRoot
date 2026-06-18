@@ -96,7 +96,7 @@ class _BotInstallPageState extends ConsumerState<BotInstallPage> {
               ),
               const SizedBox(height: 8),
               for (final scope in BotScopeLabels.parseScopesJson(bot.scopesJson))
-                Text('• ${BotScopeLabels.labelFor(scope)}'),
+                Text('• ${BotScopeLabels.labelFor(context, scope)}'),
               const SizedBox(height: 16),
               Text(
                 l10n.botInstallCommandsHeading,

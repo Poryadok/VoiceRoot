@@ -2,7 +2,6 @@ package ratelimit
 
 import (
 	"context"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -58,11 +57,8 @@ func NewGRPCLimiter(cfg Config) *GRPCLimiter {
 }
 
 // FromEnv returns a limiter with production defaults; nil when rate limiting is disabled.
-func FromEnv() *GRPCLimiter {
-	if strings.TrimSpace(os.Getenv("BOT_RATE_LIMIT_DISABLED")) == "true" {
-		return nil
-	}
-	return NewGRPCLimiter(defaultConfig())
+func FromEnv() ServerLimiter {
+	return ServerLimiterFromEnv()
 }
 
 func (l *GRPCLimiter) allow(group, key string) bool {
@@ -121,6 +117,7 @@ func isBotRuntimeMethod(fullMethod string) bool {
 		"/voice.bot.v1.BotService/GetBotBySlug",
 		"/voice.bot.v1.BotService/ListBots",
 		"/voice.bot.v1.BotService/RegenerateToken",
+		"/voice.bot.v1.BotService/RegenerateWebhookSecret",
 		"/voice.bot.v1.BotService/RegisterCommands",
 		"/voice.bot.v1.BotService/GetCommands",
 		"/voice.bot.v1.BotService/SetWebhookURL",

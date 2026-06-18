@@ -1,5 +1,9 @@
 import 'dart:convert' show JsonDecoder;
 
+import 'package:flutter/widgets.dart';
+
+import '../l10n/app_localizations.dart';
+
 /// Human-readable labels for bot manifest scopes — docs/features/bots.md.
 abstract final class BotScopeLabels {
   static const privilegedScopes = {
@@ -7,17 +11,19 @@ abstract final class BotScopeLabels {
     'SPACE_MANAGE_ROLES',
   };
 
-  static const _labels = <String, String>{
-    'TEXT_CHAT_SEND_MESSAGES': 'Send messages in allowed text chats',
-    'DM_SEND': 'Send direct messages (reply only)',
-    'SPACE_VIEW_MEMBER_LIST': 'View space member list',
-    'MEMBER_ASSIGN_ROLES': 'Assign roles below the bot',
-    'TEXT_CHAT_CREATE_IN_SPACE': 'Create text chats in the space',
-    'TEXT_CHAT_READ_HISTORY': 'Read message history (privileged)',
-    'SPACE_MANAGE_ROLES': 'Create and manage roles below the bot (privileged)',
-  };
-
-  static String labelFor(String scope) => _labels[scope] ?? scope;
+  static String labelFor(BuildContext context, String scope) {
+    final l10n = AppLocalizations.of(context)!;
+    return switch (scope) {
+      'TEXT_CHAT_SEND_MESSAGES' => l10n.botScopeTextChatSendMessages,
+      'DM_SEND' => l10n.botScopeDmSend,
+      'SPACE_VIEW_MEMBER_LIST' => l10n.botScopeSpaceViewMemberList,
+      'MEMBER_ASSIGN_ROLES' => l10n.botScopeMemberAssignRoles,
+      'TEXT_CHAT_CREATE_IN_SPACE' => l10n.botScopeTextChatCreateInSpace,
+      'TEXT_CHAT_READ_HISTORY' => l10n.botScopeTextChatReadHistory,
+      'SPACE_MANAGE_ROLES' => l10n.botScopeSpaceManageRoles,
+      _ => scope,
+    };
+  }
 
   static List<String> parseScopesJson(String scopesJson) {
     try {

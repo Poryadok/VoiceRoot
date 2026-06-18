@@ -26,6 +26,7 @@ function Portal() {
   const [bots, setBots] = useState<BotSummary[]>([]);
   const [selectedBotId, setSelectedBotId] = useState('');
   const [botToken, setBotToken] = useState('');
+  const [webhookSecret, setWebhookSecret] = useState('');
   const [status, setStatus] = useState('');
 
   const refreshBots = useCallback(async () => {
@@ -83,6 +84,7 @@ function Portal() {
     setLoggedIn(false);
     setBots([]);
     setBotToken('');
+    setWebhookSecret('');
     setStatus('Signed out');
   }
 
@@ -103,14 +105,13 @@ function Portal() {
     }
     const id = body.bot?.id ?? '';
     setSelectedBotId(id);
-    const regen = await apiFetch(`/api/v1/bots/${id}/token/regenerate`, { method: 'POST' });
-    const regenBody = await regen.json();
-    setBotToken(regenBody.token_response?.token ?? '');
+    setBotToken(body.token_response?.token ?? '');
+    setWebhookSecret(body.webhook_secret_response?.webhook_secret ?? '');
     setStatus(`Registered bot ${id}`);
     await refreshBots();
   }
 
-  async function regenerateBotToken() {
+  async function revokeAndRegenerateBotToken() {
     if (!selectedBotId) {
       setStatus('Select a bot first');
       return;
@@ -122,7 +123,22 @@ function Portal() {
       return;
     }
     setBotToken(body.token_response?.token ?? '');
-    setStatus('Bot token regenerated');
+    setStatus('Bot token revoked and regenerated');
+  }
+
+  async function rotateWebhookSecret() {
+    if (!selectedBotId) {
+      setStatus('Select a bot first');
+      return;
+    }
+    const res = await apiFetch(`/api/v1/bots/${selectedBotId}/webhook-secret/regenerate`, { method: 'POST' });
+    const body = await res.json();
+    if (!res.ok) {
+      setStatus(JSON.stringify(body));
+      return;
+    }
+    setWebhookSecret(body.webhook_secret_response?.webhook_secret ?? '');
+    setStatus('Webhook secret rotated');
   }
 
   async function validateManifest() {
@@ -197,11 +213,14 @@ function Portal() {
             {selectedBotId && (
               <p>Selected bot: <code>{selectedBotId}</code></p>
             )}
-            {botToken && <p>Bot token: <code>{botToken}</code></p>}
-            <button type="button" disabled={!selectedBotId} onClick={() => void regenerateBotToken()}>
-              Regenerate bot token
+            {botToken && <p>Bot token (shown once): <code>{botToken}</code></p>}
+            {webhookSecret && <p>Webhook secret (shown once): <code>{webhookSecret}</code></p>}
+            <button type="button" disabled={!selectedBotId} onClick={() => void revokeAndRegenerateBotToken()}>
+              Revoke &amp; regenerate bot token
             </button>
-            <p className="hint">Rotate webhook secret — TODO (API not exposed yet).</p>
+            <button type="button" disabled={!selectedBotId} onClick={() => void rotateWebhookSecret()}>
+              Rotate webhook secret
+            </button>
           </section>
 
           <label>

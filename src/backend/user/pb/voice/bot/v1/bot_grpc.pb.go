@@ -26,6 +26,7 @@ const (
 	BotService_GetBotBySlug_FullMethodName             = "/voice.bot.v1.BotService/GetBotBySlug"
 	BotService_ListBots_FullMethodName                 = "/voice.bot.v1.BotService/ListBots"
 	BotService_RegenerateToken_FullMethodName          = "/voice.bot.v1.BotService/RegenerateToken"
+	BotService_RegenerateWebhookSecret_FullMethodName  = "/voice.bot.v1.BotService/RegenerateWebhookSecret"
 	BotService_RegisterCommands_FullMethodName         = "/voice.bot.v1.BotService/RegisterCommands"
 	BotService_GetCommands_FullMethodName              = "/voice.bot.v1.BotService/GetCommands"
 	BotService_SetWebhookURL_FullMethodName            = "/voice.bot.v1.BotService/SetWebhookURL"
@@ -71,6 +72,7 @@ type BotServiceClient interface {
 	GetBotBySlug(ctx context.Context, in *GetBotBySlugRequest, opts ...grpc.CallOption) (*GetBotResponse, error)
 	ListBots(ctx context.Context, in *ListBotsRequest, opts ...grpc.CallOption) (*ListBotsResponse, error)
 	RegenerateToken(ctx context.Context, in *RegenerateTokenRequest, opts ...grpc.CallOption) (*RegenerateTokenResponse, error)
+	RegenerateWebhookSecret(ctx context.Context, in *RegenerateWebhookSecretRequest, opts ...grpc.CallOption) (*RegenerateWebhookSecretResponse, error)
 	RegisterCommands(ctx context.Context, in *RegisterCommandsRequest, opts ...grpc.CallOption) (*RegisterCommandsResponse, error)
 	GetCommands(ctx context.Context, in *GetCommandsRequest, opts ...grpc.CallOption) (*GetCommandsResponse, error)
 	SetWebhookURL(ctx context.Context, in *SetWebhookURLRequest, opts ...grpc.CallOption) (*SetWebhookURLResponse, error)
@@ -179,6 +181,16 @@ func (c *botServiceClient) RegenerateToken(ctx context.Context, in *RegenerateTo
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(RegenerateTokenResponse)
 	err := c.cc.Invoke(ctx, BotService_RegenerateToken_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *botServiceClient) RegenerateWebhookSecret(ctx context.Context, in *RegenerateWebhookSecretRequest, opts ...grpc.CallOption) (*RegenerateWebhookSecretResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RegenerateWebhookSecretResponse)
+	err := c.cc.Invoke(ctx, BotService_RegenerateWebhookSecret_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -507,6 +519,7 @@ type BotServiceServer interface {
 	GetBotBySlug(context.Context, *GetBotBySlugRequest) (*GetBotResponse, error)
 	ListBots(context.Context, *ListBotsRequest) (*ListBotsResponse, error)
 	RegenerateToken(context.Context, *RegenerateTokenRequest) (*RegenerateTokenResponse, error)
+	RegenerateWebhookSecret(context.Context, *RegenerateWebhookSecretRequest) (*RegenerateWebhookSecretResponse, error)
 	RegisterCommands(context.Context, *RegisterCommandsRequest) (*RegisterCommandsResponse, error)
 	GetCommands(context.Context, *GetCommandsRequest) (*GetCommandsResponse, error)
 	SetWebhookURL(context.Context, *SetWebhookURLRequest) (*SetWebhookURLResponse, error)
@@ -571,6 +584,9 @@ func (UnimplementedBotServiceServer) ListBots(context.Context, *ListBotsRequest)
 }
 func (UnimplementedBotServiceServer) RegenerateToken(context.Context, *RegenerateTokenRequest) (*RegenerateTokenResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RegenerateToken not implemented")
+}
+func (UnimplementedBotServiceServer) RegenerateWebhookSecret(context.Context, *RegenerateWebhookSecretRequest) (*RegenerateWebhookSecretResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RegenerateWebhookSecret not implemented")
 }
 func (UnimplementedBotServiceServer) RegisterCommands(context.Context, *RegisterCommandsRequest) (*RegisterCommandsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RegisterCommands not implemented")
@@ -805,6 +821,24 @@ func _BotService_RegenerateToken_Handler(srv interface{}, ctx context.Context, d
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(BotServiceServer).RegenerateToken(ctx, req.(*RegenerateTokenRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BotService_RegenerateWebhookSecret_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RegenerateWebhookSecretRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BotServiceServer).RegenerateWebhookSecret(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BotService_RegenerateWebhookSecret_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BotServiceServer).RegenerateWebhookSecret(ctx, req.(*RegenerateWebhookSecretRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1376,6 +1410,10 @@ var BotService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RegenerateToken",
 			Handler:    _BotService_RegenerateToken_Handler,
+		},
+		{
+			MethodName: "RegenerateWebhookSecret",
+			Handler:    _BotService_RegenerateWebhookSecret_Handler,
 		},
 		{
 			MethodName: "RegisterCommands",

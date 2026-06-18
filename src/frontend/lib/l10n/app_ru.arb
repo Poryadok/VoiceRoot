@@ -175,6 +175,13 @@
   "botInstallSelectSpace": "Выберите спейс",
   "botInstallNoSpaces": "Вступите или создайте спейс, чтобы установить бота.",
   "botInstallConfirm": "Установить бота",
+  "botScopeTextChatSendMessages": "Отправка сообщений в разрешённых чатах",
+  "botScopeDmSend": "Личные сообщения (только в ответ)",
+  "botScopeSpaceViewMemberList": "Просмотр списка участников спейса",
+  "botScopeMemberAssignRoles": "Выдача ролей ниже бота",
+  "botScopeTextChatCreateInSpace": "Создание текстовых чатов в спейсе",
+  "botScopeTextChatReadHistory": "Чтение истории сообщений (привилегия)",
+  "botScopeSpaceManageRoles": "Создание и управление ролями ниже бота (привилегия)",
   "slashOptionPickUser": "Пользователь: {name}",
   "@slashOptionPickUser": {
     "placeholders": {

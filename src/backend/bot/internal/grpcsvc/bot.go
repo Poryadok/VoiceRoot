@@ -78,6 +78,7 @@ func (s *BotGRPC) RegisterBot(ctx context.Context, req *botv1.RegisterBotRequest
 	resp := &botv1.RegisterBotResponse{
 		Bot: botToProto(row),
 		TokenResponse: &botv1.TokenResponse{Token: plain},
+		WebhookSecretResponse: &botv1.WebhookSecretResponse{WebhookSecret: row.WebhookSecret},
 	}
 	if s.Events != nil {
 		_ = s.Events.PublishBotRegistered(ctx, row.ID.String(), owner.String())
@@ -188,6 +189,23 @@ func (s *BotGRPC) RegenerateToken(ctx context.Context, req *botv1.RegenerateToke
 		return nil, mapStoreErr(err)
 	}
 	return &botv1.RegenerateTokenResponse{TokenResponse: &botv1.TokenResponse{Token: plain}}, nil
+}
+
+func (s *BotGRPC) RegenerateWebhookSecret(ctx context.Context, req *botv1.RegenerateWebhookSecretRequest) (*botv1.RegenerateWebhookSecretResponse, error) {
+	botID, err := parseUUID("bot_id", req.GetBotId())
+	if err != nil {
+		return nil, err
+	}
+	if err := s.ensureOwner(ctx, botID); err != nil {
+		return nil, err
+	}
+	plain, err := s.Store.RegenerateWebhookSecret(ctx, botID)
+	if err != nil {
+		return nil, mapStoreErr(err)
+	}
+	return &botv1.RegenerateWebhookSecretResponse{
+		WebhookSecretResponse: &botv1.WebhookSecretResponse{WebhookSecret: plain},
+	}, nil
 }
 
 func (s *BotGRPC) RegisterCommands(ctx context.Context, req *botv1.RegisterCommandsRequest) (*botv1.RegisterCommandsResponse, error) {
