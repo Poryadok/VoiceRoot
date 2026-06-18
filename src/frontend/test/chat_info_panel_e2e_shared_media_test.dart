@@ -97,6 +97,8 @@ void main() {
     required String kind,
     required String fileId,
     required Uint8List ciphertext,
+    String attachmentType = 'image',
+    String originalName = 'photo.png',
   }) {
     return MockClient((req) async {
       if (req.url.path.contains('/shared-media') &&
@@ -109,8 +111,8 @@ void main() {
                   'message_id': 'msg-shared-1',
                   'sender_profile_id': fixture.peerProfileId,
                   'file_id': fileId,
-                  'attachment_type': kind == 'media' ? 'image' : 'document',
-                  'original_name': kind == 'media' ? 'photo.png' : 'doc.pdf',
+                  'attachment_type': attachmentType,
+                  'original_name': originalName,
                   'sort_order': 0,
                   'e2eKeyWire': imageKeyWire,
                 },
@@ -167,6 +169,33 @@ void main() {
     expect(find.byType(Image), findsOneWidget);
   });
 
+  testWidgets('E2E shared media tab shows video affordance not image thumb spinner', (
+    tester,
+  ) async {
+    const videoFileId = 'file-shared-e2e-vid';
+    await tester.pumpWidget(
+      sharedMediaApp(
+        client: mockSharedMediaClient(
+          kind: 'media',
+          fileId: videoFileId,
+          ciphertext: imageCiphertext,
+          attachmentType: 'video',
+          originalName: 'clip.mp4',
+        ),
+      ),
+    );
+    await tester.pump();
+    for (var i = 0; i < 20; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    expect(find.byKey(ChatInfoPanel.e2eVideoTileKey), findsOneWidget);
+    expect(find.byIcon(Icons.videocam_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.lock_outline), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byType(Image), findsNothing);
+  });
+
   testWidgets('E2E shared files tab shows download affordance not lock icon', (
     tester,
   ) async {
@@ -177,6 +206,8 @@ void main() {
           kind: 'files',
           fileId: docFileId,
           ciphertext: imageCiphertext,
+          attachmentType: 'document',
+          originalName: 'doc.pdf',
         ),
       ),
     );

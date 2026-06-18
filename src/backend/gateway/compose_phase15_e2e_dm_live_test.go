@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +11,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"voice/backend/pkg/composefixture"
 )
 
 // TestComposePhase15E2EDM_live mirrors phase15_e2e_dm_live_test.dart on the Go/Gateway path.
@@ -27,19 +28,21 @@ func TestComposePhase15E2EDM_live(t *testing.T) {
 	n := time.Now().UnixNano()
 	sessA := registerComposeUser(t, client, base, formatComposeEmail("p15-a", n), "VoiceQaTest1!")
 	sessB := registerComposeUser(t, client, base, formatComposeEmail("p15-b", n), "VoiceQaTest1!")
-	chatID := createComposeDM(t, client, base, sessA.AccessToken, sessB.ProfileID)
+	chatID := createComposeDMBetween(t, client, base, sessA, sessB)
 
 	uploadComposePreKeyBundle(t, client, base, sessA.AccessToken, validComposePreKeyBundleB64())
-	uploadComposePreKeyBundle(t, client, base, sessB.AccessToken, validComposePreKeyBundleB64())
+	uploadComposePreKeyBundle(t, client, base, sessB.AccessToken, validComposePeerPreKeyBundleB64())
 	enableComposeChatE2E(t, client, base, sessA.AccessToken, chatID)
 	enableComposeChatE2E(t, client, base, sessB.AccessToken, chatID)
 
 	secret := fmt.Sprintf("phase15-compose-secret-%d", n)
-	ciphertext := base64.StdEncoding.EncodeToString([]byte("opaque-e2e-ciphertext-" + secret))
+	ciphertext := composefixture.LibsignalGoldenE2ECiphertextB64()
 	require.NotEqual(t, secret, ciphertext)
+	require.NotEqual(t, composefixture.E2ECiphertextGoldenPlaintext, ciphertext)
 
 	msgID := sendComposeE2EMessage(t, client, base, sessA.AccessToken, chatID, ciphertext)
 	require.NotEqual(t, secret, getComposeMessageContent(t, client, base, sessA.AccessToken, chatID, msgID))
+	require.NotEqual(t, composefixture.E2ECiphertextGoldenPlaintext, getComposeMessageContent(t, client, base, sessA.AccessToken, chatID, msgID))
 
 	globalURL := fmt.Sprintf("%s/api/v1/search/global?q=%s", base, url.QueryEscape(secret))
 	requireComposeSearchExcludesToken(t, client, sessA.AccessToken, globalURL, secret)
@@ -81,7 +84,7 @@ func TestComposePhase15E2E_EnableRejectedWhenPeerMissingPreKey_live(t *testing.T
 	n := time.Now().UnixNano()
 	sessA := registerComposeUser(t, client, base, formatComposeEmail("p15-gate-a", n), "VoiceQaTest1!")
 	sessB := registerComposeUser(t, client, base, formatComposeEmail("p15-gate-b", n), "VoiceQaTest1!")
-	chatID := createComposeDM(t, client, base, sessA.AccessToken, sessB.ProfileID)
+	chatID := createComposeDMBetween(t, client, base, sessA, sessB)
 
 	uploadComposePreKeyBundle(t, client, base, sessA.AccessToken, validComposePreKeyBundleB64())
 

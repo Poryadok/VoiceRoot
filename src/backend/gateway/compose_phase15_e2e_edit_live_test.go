@@ -23,10 +23,10 @@ func TestComposePhase15E2EEdit_live(t *testing.T) {
 	n := time.Now().UnixNano()
 	sessA := registerComposeUser(t, client, base, formatComposeEmail("p15-edit-a", n), "VoiceQaTest1!")
 	sessB := registerComposeUser(t, client, base, formatComposeEmail("p15-edit-b", n), "VoiceQaTest1!")
-	chatID := createComposeDM(t, client, base, sessA.AccessToken, sessB.ProfileID)
+	chatID := createComposeDMBetween(t, client, base, sessA, sessB)
 
 	uploadComposePreKeyBundle(t, client, base, sessA.AccessToken, validComposePreKeyBundleB64())
-	uploadComposePreKeyBundle(t, client, base, sessB.AccessToken, validComposePreKeyBundleB64())
+	uploadComposePreKeyBundle(t, client, base, sessB.AccessToken, validComposePeerPreKeyBundleB64())
 	enableComposeChatE2E(t, client, base, sessA.AccessToken, chatID)
 	enableComposeChatE2E(t, client, base, sessB.AccessToken, chatID)
 

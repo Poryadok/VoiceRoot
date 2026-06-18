@@ -25,7 +25,17 @@ void main() {
     await outFile!.parent.create(recursive: true);
     await outFile.writeAsString(wire);
 
+    final peerWire = await wireFromDeterministicSenderStore();
+    final peerFile = prekeyPeerGoldenFile();
+    final peerComposeFile = prekeyPeerGoldenComposeFile();
+    expect(peerFile, isNotNull);
+    expect(peerComposeFile, isNotNull);
+    await peerFile!.writeAsString(peerWire);
+    await peerComposeFile!.writeAsString(peerWire);
+
     // ignore: avoid_print
     print('Wrote libsignal pre-key golden to ${outFile.path}');
+    // ignore: avoid_print
+    print('Wrote libsignal peer pre-key golden to ${peerFile.path}');
   });
 }

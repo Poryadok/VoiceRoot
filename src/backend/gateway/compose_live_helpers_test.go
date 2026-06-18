@@ -595,6 +595,43 @@ func createComposeDM(t *testing.T, client *http.Client, base, accessToken, other
 	return parsed.Chat.ID
 }
 
+func setComposePrivacyAllowDmEveryone(t *testing.T, client *http.Client, base, accessToken string) {
+	t.Helper()
+	everyone := map[string]any{
+		"friends": true, "friends_of_friends": true, "space_members": true, "include_guests": true,
+	}
+	privacyBody, err := json.Marshal(map[string]any{
+		"settings": map[string]any{
+			"preset":                "gaming",
+			"allow_dm":              everyone,
+			"show_online":           everyone,
+			"show_game_status":      everyone,
+			"show_mm_rating":        everyone,
+			"show_phone":            map[string]any{"friends": false, "friends_of_friends": false, "space_members": false, "include_guests": false},
+			"show_stories":          everyone,
+			"allow_friend_requests": everyone,
+			"allow_guest_dm":        true,
+		},
+	})
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPatch, base+"/api/v1/users/me/privacy", bytes.NewReader(privacyBody))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "PATCH privacy body=%s", string(body))
+}
+
+func createComposeDMBetween(t *testing.T, client *http.Client, base string, initiator, peer authSessionResponse) string {
+	t.Helper()
+	setComposePrivacyAllowDmEveryone(t, client, base, peer.AccessToken)
+	setComposePrivacyAllowDmEveryone(t, client, base, initiator.AccessToken)
+	return createComposeDM(t, client, base, initiator.AccessToken, peer.ProfileID)
+}
+
 type composeCallSession struct {
 	RoomID             string `json:"room_id"`
 	LivekitRoomName    string `json:"livekit_room_name"`

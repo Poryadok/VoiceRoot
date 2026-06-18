@@ -30,8 +30,11 @@ func (m Matcher) Allowed(ctx context.Context, ownerProfile, viewerProfile uuid.U
 	if audience.IsNobody() {
 		return false, nil
 	}
+	if audience.IsEveryoneShortcut() {
+		return true, nil
+	}
 	if viewerIsGuest {
-		return audience.IncludeGuests || audience.IsEveryoneShortcut(), nil
+		return audience.IncludeGuests, nil
 	}
 	if audience.Friends && m.Social != nil {
 		ok, err := m.Social.AreFriends(ctx, viewerProfile, ownerProfile)

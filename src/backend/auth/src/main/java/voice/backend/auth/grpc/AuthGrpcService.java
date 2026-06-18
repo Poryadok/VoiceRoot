@@ -141,7 +141,7 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
       PutE2EKeyBackupRequest request, StreamObserver<PutE2EKeyBackupResponse> responseObserver) {
     run(responseObserver, () -> {
       authService.putE2EKeyBackup(
-          lastAccessToken(), request.getEncryptedBlob(), request.getPasswordHint());
+          resolveAccessToken(), request.getEncryptedBlob(), request.getPasswordHint());
       return PutE2EKeyBackupResponse.getDefaultInstance();
     });
   }
@@ -150,7 +150,7 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
   public void getE2EKeyBackup(
       GetE2EKeyBackupRequest request, StreamObserver<GetE2EKeyBackupResponse> responseObserver) {
     run(responseObserver, () -> {
-      var backup = authService.getE2EKeyBackup(lastAccessToken());
+      var backup = authService.getE2EKeyBackup(resolveAccessToken());
       var builder = GetE2EKeyBackupResponse.newBuilder().setEncryptedBlob(backup.encryptedBlob());
       if (backup.passwordHint() != null && !backup.passwordHint().isBlank()) {
         builder.setPasswordHint(backup.passwordHint());

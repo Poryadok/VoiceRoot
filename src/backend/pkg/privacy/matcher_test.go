@@ -66,6 +66,15 @@ func TestMatcher_NobodyDenied(t *testing.T) {
 	require.False(t, ok)
 }
 
+func TestMatcher_EveryoneShortcutAllowsStranger(t *testing.T) {
+	owner := uuid.New()
+	stranger := uuid.New()
+	m := Matcher{}
+	ok, err := m.Allowed(context.Background(), owner, stranger, EveryoneWithGuests(), false)
+	require.NoError(t, err)
+	require.True(t, ok)
+}
+
 func TestMatcher_GuestIncludeGuests(t *testing.T) {
 	owner := uuid.New()
 	guest := uuid.New()

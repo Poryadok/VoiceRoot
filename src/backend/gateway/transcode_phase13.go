@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -34,7 +35,8 @@ func (t *transcoder) serveAuthREST(w http.ResponseWriter, r *http.Request, rest 
 			writeGRPCError(w, err)
 			return true
 		}
-		_, err := t.clients.auth.PutE2EKeyBackup(ctx, req)
+		callCtx := authGRPCContext(ctx, r)
+		_, err := t.clients.auth.PutE2EKeyBackup(callCtx, req)
 		if err != nil {
 			writeGRPCError(w, err)
 			return true
@@ -47,7 +49,8 @@ func (t *transcoder) serveAuthREST(w http.ResponseWriter, r *http.Request, rest 
 			http.NotFound(w, r)
 			return true
 		}
-		resp, err := t.clients.auth.GetE2EKeyBackup(ctx, &authv1.GetE2EKeyBackupRequest{})
+		callCtx := authGRPCContext(ctx, r)
+		resp, err := t.clients.auth.GetE2EKeyBackup(callCtx, &authv1.GetE2EKeyBackupRequest{})
 		if err != nil {
 			writeGRPCError(w, err)
 			return true
@@ -104,6 +107,13 @@ func (t *transcoder) serveAuthREST(w http.ResponseWriter, r *http.Request, rest 
 	default:
 		return false
 	}
+}
+
+func authGRPCContext(ctx context.Context, r *http.Request) context.Context {
+	if authz := strings.TrimSpace(r.Header.Get("Authorization")); authz != "" {
+		return metadata.AppendToOutgoingContext(ctx, "authorization", authz)
+	}
+	return ctx
 }
 
 func (t *transcoder) serveUsersPhase13(w http.ResponseWriter, r *http.Request, rest string) bool {

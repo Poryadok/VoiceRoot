@@ -38,6 +38,7 @@ class ChatInfoPanel extends ConsumerStatefulWidget {
   static const Key filesTabKey = Key('chat_info_tab_files');
   static const Key linksTabKey = Key('chat_info_tab_links');
   static const Key voiceTabKey = Key('chat_info_tab_voice');
+  static const Key e2eVideoTileKey = Key('chat_info_e2e_video_tile');
 
   final String chatId;
   final String? groupName;
@@ -193,6 +194,18 @@ class _MediaTile extends ConsumerWidget {
     final fileId = item.fileId;
     if (fileId == null) return const SizedBox.shrink();
     if (item.isE2eEncrypted) {
+      if (item.isVideo) {
+        return InkWell(
+          key: ChatInfoPanel.e2eVideoTileKey,
+          onTap: () => _openMessage(context, ref, chatId, item.messageId),
+          child: ColoredBox(
+            color: voice.muted,
+            child: Center(
+              child: Icon(Icons.videocam_outlined, color: voice.textSecondary),
+            ),
+          ),
+        );
+      }
       final decryptRequest = E2eAttachmentDecryptRequest(
         fileId: fileId,
         e2eKeyWire: item.e2eKeyWire!,

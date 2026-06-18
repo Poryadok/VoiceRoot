@@ -281,6 +281,7 @@ class MessageAttachment {
   final String? e2eKeyWire;
 
   bool get isImage => type == 'image';
+  bool get isVideo => type == 'video';
   bool get isE2eEncrypted => e2eKeyWire != null && e2eKeyWire!.isNotEmpty;
 
   Map<String, dynamic> toJson() {
@@ -406,6 +407,7 @@ class SharedMediaItemData {
   final String? e2eKeyWire;
 
   bool get isLink => externalUrl != null && externalUrl!.isNotEmpty;
+  bool get isVideo => attachmentType == 'video';
   bool get isE2eEncrypted =>
       e2eKeyWire != null && e2eKeyWire!.isNotEmpty;
 }

@@ -37,7 +37,7 @@
 | Фаза | PLAN сейчас | Код vs критерии приёмки | Можно ставить `[x]` в PLAN? |
 |------|-------------|-------------------------|----------------------------|
 | **11** | `[ ]` | 3/3 критерия **DONE**; privacy **PARTIAL** vs [privacy.md](features/privacy.md) | Сводную строку — **да** (с остатком в «Phase 11» ниже); чеклисты §11 — после остатка privacy |
-| **15** | `[ ]` | 2/3 **DONE**, opt-out **PARTIAL** (UX есть, live нет); shared media video — нет | Строку фазы — **почти**; §15 backend `[ ]` — после opt-out live + video tab |
+| **15** | `[ ]` | 3/3 критерия **DONE** (opt-out live + video tab + libsignal pin); compose key-backup live | Сводную строку — **да**; §15 backend `[x]` после PLAN sync |
 | **16** | `[ ]` | Критерии 1–3 **DONE**; portal **PARTIAL** (webhook_secret); rate limits **PARTIAL** | Строку `[ ]` оставить до Phase 16 остатка; §16 `[x]` Developer Portal — **завышен** |
 | **18** | `[ ]` | §18 backend/client `[x]` — **PARTIAL** (onboarding/a11y не полные spec); приёмка 1/3 | Сводную `[ ]` оставить; §18 `[x]` — baseline, не полное закрытие [accessibility.md](features/accessibility.md) |
 
@@ -78,13 +78,22 @@
 
 ## Phase 15 — E2E (остаток)
 
-*Backend Signal/prekeys/ciphertext/search-skip и opt-in live в compose — **DONE**; PLAN §15 и сводная строка ещё `[ ]`.*
+*Batch закрыт 2026-06-18: opt-out/key-backup compose live, libsignal ciphertext golden, shared-media video E2E UI, libsignal pin в encryption.md.*
 
-- [ ] **Opt-out live test** — `DisableChatE2E` + `E2eDisableConfirmDialog` есть; нет compose/Flutter live «disable → send plaintext».
-- [ ] **Key backup compose live** — JDBC `Phase15E2EKeyBackupJdbcIntegrationTest`; нет gateway compose live для PUT/GET `/api/v1/auth/e2e-key-backup`.
-- [ ] **Compose Go DM test** — `compose_phase15_e2e_dm_live_test.go` шлёт synthetic base64, не libsignal round-trip (Flutter `phase15_e2e_dm_live_test.dart` сильнее).
-- [ ] **Shared media video tab** — E2E decrypt для video-вложений в shared media (widget-тесты есть для image/file; video — нет).
-- [ ] **libsignal version pin** — зафиксировать в [encryption.md](features/encryption.md) пару `libsignal_protocol_dart` (^0.8.0) + golden `prekey_libsignal_golden.b64` (подпись non-deterministic).
+- [x] **Opt-out live test** — `compose_phase15_e2e_optout_live_test.go` + `phase15_e2e_optout_live_test.dart` (plaintext API; search best-effort при деградации Search).
+- [x] **Key backup compose live** — `compose_phase15_e2e_key_backup_live_test.go`; gateway forwards `Authorization` → Auth gRPC; `resolveAccessToken()` в key-backup RPC.
+- [x] **Compose Go DM test** — `e2e_ciphertext_libsignal_golden.b64` + peer pre-key golden; не full decrypt в Go (by design).
+- [x] **Shared media video tab** — `_MediaTile` video affordance + `chat_info_panel_e2e_shared_media_test.dart`.
+- [x] **libsignal version pin** — секция в [encryption.md](features/encryption.md); drift/export tools.
+
+**Audit (Phase 15 batch):**
+
+- [ ] **PLAN.md §15 sync** — сводная строка фазы 15 + чеклист backend `[x]` (docs-only).
+- [ ] **DATA_STORES.md** — `e2e_key_backups` в инвентарь `auth_db` (см. также строку в «Доки» выше).
+- [ ] **Opt-out search hardening** — compose live не требует search hit (tier-2); при стабильном Search в CI усилить assert в opt-out live.
+- [ ] **Matcher `IncludeGuests` only** — без `IsEveryoneShortcut` гости видят поле, но не strangers; покрыто тестом shortcut, edge cases guests-only — отдельно.
+- [ ] **Key backup Flutter live** — REST покрыт compose; нет opt-in `phase15_e2e_key_backup_live_test.dart`.
+- [ ] **Multi-device E2E / safety number** — out of v1 per encryption.md; не в Phase 15.
 
 **Промпт-якорь:** `Phase 15 E2E — follow-ups from docs/TODO.md`.
 
