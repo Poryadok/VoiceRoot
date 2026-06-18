@@ -45,12 +45,12 @@
 
 ### Репорты
 
-- [ ] **API shape** — один gRPC `CreateReport` + `target_type` вместо отдельных `ReportUser` / `ReportMessage` / `ReportSpace` (функционально ок; синхронизация docs-only).
+- [x] **API shape** — один gRPC `CreateReport` + `target_type` вместо отдельных `ReportUser` / `ReportMessage` / `ReportSpace` (синхронизировано: [reports.md](features/reports.md), [PLAN.md](PLAN.md) §11, [moderation-service.md](microservices/moderation-service.md)).
 
 ### Приватность — enforcement
 
 - [ ] **`allow_phone_search` / `allow_calls` / `allow_files` / `allow_voice_messages` / `allow_chat_space_invites`** — store+validate есть; полный gate: Calls/Space invite RPC, Messaging attachments MIME guard.
-- [ ] **show_avatar / show_bio** — не в [privacy.md](features/privacy.md); PLAN §11 упоминает — doc gap.
+- [x] **show_avatar / show_bio** — в [privacy.md](features/privacy.md): пока без privacy-контролов, аватар и bio видны всем с доступом к профилю.
 
 **Промпт-якорь:** `Phase 11 Trust — privacy and reports from docs/TODO.md Batch 2`.
 

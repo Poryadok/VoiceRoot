@@ -20,6 +20,28 @@
 - **Читерство / Токсик в ММ** — специфичная для геймерской аудитории категория
 - **Другое** — произвольный комментарий (обязателен)
 
+## API
+
+Один endpoint на все типы объектов (не отдельные `ReportUser` / `ReportMessage` / `ReportSpace`):
+
+| Слой | Контракт |
+|------|----------|
+| HTTP (клиент) | `POST /api/v1/moderation/reports` → **202 Accepted** |
+| gRPC | `ModerationService.CreateReport(CreateReportRequest)` → `CreateReportResponse` |
+
+Тело запроса: `target_type`, `target_id`, `category`, опционально `description` (обязателен для `other`), `evidence_json`.
+
+| `target_type` | `target_id` |
+|---------------|-------------|
+| `user` | `profile_id` |
+| `message` | `message_id` |
+| `space` | `space_id` |
+| `story` | `story_id` |
+
+Категории: `spam`, `harassment`, `offensive`, `fake`, `cheating` (алиас `mm_toxic` на HTTP), `other`.
+
+Репортер не может пожаловаться на свой профиль (`target_type=user` + свой `profile_id`). Статус репорта репортеру не отдаётся.
+
 ## Флоу репорта
 
 1. Пользователь нажимает "Пожаловаться" (ПКМ на сообщении / пользователе / спейсе / стори)

@@ -22,10 +22,12 @@
 
 ## API (gRPC)
 
+Жалобы — **один** RPC `CreateReport` с полем `target_type` (`user` | `message` | `space` | `story`), не отдельные методы по типу объекта. Клиент: `POST /api/v1/moderation/reports` (202 Accepted). Категория `mm_toxic` на HTTP нормализуется в `cheating`.
+
 ```protobuf
 service ModerationService {
   // Жалобы
-  rpc CreateReport(CreateReportRequest) returns (Report);
+  rpc CreateReport(CreateReportRequest) returns (CreateReportResponse);
   rpc GetReport(GetReportRequest) returns (Report);
   rpc ListReports(ListReportsRequest) returns (ReportList); // admin
   rpc ResolveReport(ResolveReportRequest) returns (Report); // admin
@@ -56,7 +58,7 @@ service ModerationService {
 reports
 ├── id (UUID)
 ├── reporter_profile_id
-├── target_type (user | message | space)
+├── target_type (user | message | space | story)
 ├── target_id (UUID)
 ├── category (spam | harassment | offensive | fake | cheating | other)
 ├── description (text, nullable)

@@ -762,7 +762,7 @@ JWT + `user_db.profiles` — [EXEC_PLAN.md](EXEC_PLAN.md). Не заменяет
 ### Бэкенд
 
 - [ ] **Репорты** — [reports.md](features/reports.md)
-  - **API:** ReportUser, ReportMessage, ReportSpace (Story — stub OK until **17**).
+  - **API:** один gRPC `CreateReport` + `target_type` (`user` | `message` | `space` | `story`); HTTP `POST /api/v1/moderation/reports` → 202 Accepted (см. [reports.md](features/reports.md), [moderation-service.md](microservices/moderation-service.md)).
   - **Категории:** spam, harassment, offensive, fake, mm_toxic, other+comment.
   - **БД:** reports table, status enum, target reference.
   - **Не делать:** moderator UI, sanctions execution (**14**); auto-block may log only in **11**.
@@ -771,7 +771,7 @@ JWT + `user_db.profiles` — [EXEC_PLAN.md](EXEC_PLAN.md). Не заменяет
 
 - [ ] **2FA** — [auth-service.md](microservices/auth-service.md): TOTP secret, backup codes, require on login when enabled.
 
-- [ ] **Приватность** — [privacy.md](features/privacy.md): who can DM, who sees avatar/bio/online; presets friends-only etc.
+- [ ] **Приватность** — [privacy.md](features/privacy.md): who can DM, who sees online/game/MM/phone/stories; presets; avatar/bio пока без privacy-контролов (все видят).
 
 ### Клиент
 
