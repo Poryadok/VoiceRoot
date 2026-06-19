@@ -177,6 +177,9 @@ func (s *ChatGRPC) AddMembers(ctx context.Context, req *chatv1.AddMembersRequest
 				return nil, perr
 			}
 		}
+		if err := s.ensureInvitePrivacy(ctx, caller, pid); err != nil {
+			return nil, err
+		}
 		ids = append(ids, pid)
 	}
 

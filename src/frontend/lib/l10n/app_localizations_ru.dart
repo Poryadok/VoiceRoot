@@ -1458,6 +1458,25 @@ class AppLocalizationsRu extends AppLocalizations {
   String get privacyAllowVoiceMessages => 'Голосовые сообщения';
 
   @override
+  String get privacyDeniedCall =>
+      'Этот пользователь не принимает звонки от вас';
+
+  @override
+  String get privacyDeniedInvite =>
+      'Этот пользователь не принимает приглашения в чаты и спейсы';
+
+  @override
+  String get privacyDeniedFile => 'Этот пользователь не принимает файлы';
+
+  @override
+  String get privacyDeniedVoice =>
+      'Этот пользователь не принимает голосовые сообщения';
+
+  @override
+  String get privacyDeniedDm =>
+      'Этот пользователь не принимает сообщения от вас';
+
+  @override
   String get reportAction => 'Пожаловаться';
 
   @override

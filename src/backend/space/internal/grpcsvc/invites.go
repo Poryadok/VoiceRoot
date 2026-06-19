@@ -221,6 +221,22 @@ func (s *SpaceGRPC) JoinByInvite(ctx context.Context, req *spacev1.JoinByInviteR
 			return nil, status.Error(codes.PermissionDenied, "guests not allowed in this space")
 		}
 	}
+	inv, err := s.Store.GetInviteByCode(ctx, code)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if inv == nil || inv.RevokedAt != nil {
+		return nil, status.Error(codes.NotFound, "invite not found")
+	}
+	if inv.ExpiresAt != nil && !inv.ExpiresAt.After(time.Now().UTC()) {
+		return nil, status.Error(codes.FailedPrecondition, "invite expired")
+	}
+	if inv.MaxUses != nil && inv.UseCount >= *inv.MaxUses {
+		return nil, status.Error(codes.FailedPrecondition, "invite max uses reached")
+	}
+	if err := s.ensureJoinInvitePrivacy(ctx, profileID, inv.CreatorProfileID); err != nil {
+		return nil, err
+	}
 	member, err := s.Store.JoinByInvite(ctx, code, profileID, accountID)
 	if err != nil {
 		return nil, mapInviteStoreErr(err)

@@ -240,4 +240,12 @@ func TestValidateAttachments(t *testing.T) {
 	sDown := &MessagingGRPC{Files: stubFiles{err: errors.New("file svc")}}
 	_, err = sDown.validateAttachments(context.Background(), chatID, `[{"file_id":"`+fileID+`","type":"image"}]`)
 	require.Equal(t, codes.Internal, status.Code(err))
+
+	audioID := uuid.New().String()
+	sVoice := &MessagingGRPC{Files: stubFiles{byID: map[string]*filev1.FileMetadata{
+		audioID: {Id: audioID, Status: "ready", FileType: "audio", ScanResult: "clean", Chat: chatRef},
+	}}}
+	n, err = sVoice.validateAttachments(context.Background(), chatID, `[{"file_id":"`+audioID+`","type":"voice_message"}]`)
+	require.NoError(t, err)
+	require.Equal(t, 1, n)
 }

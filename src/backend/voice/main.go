@@ -27,6 +27,7 @@ import (
 
 	callsv1 "voice.app/voice/calls/v1"
 	chatv1 "voice.app/voice/chat/v1"
+	userv1 "voice.app/voice/user/v1"
 )
 
 const serviceName = "voice"
@@ -80,10 +81,41 @@ func main() {
 		chatMembers = s2s.NewGRPCChatMembership(chatv1.NewChatServiceClient(cconn))
 	}
 
+	var callPrivacy grpcsvc.CallPrivacyChecker
+	var callFriends grpcsvc.CallProfileFriendChecker
+	var callSpaceCoMembership grpcsvc.CallSpaceCoMembershipChecker
+	if userAddr := strings.TrimSpace(os.Getenv("USER_GRPC_ADDR")); userAddr != "" {
+		uconn, err := grpc.NewClient(grpcclient.DialTarget(userAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			log.Fatalf("user grpc: %v", err)
+		}
+		defer func() { _ = uconn.Close() }()
+		callPrivacy = &s2s.GRPCUserPrivacy{Client: userv1.NewUserServiceClient(uconn)}
+	}
+	if socialAddr := strings.TrimSpace(os.Getenv("SOCIAL_GRPC_ADDR")); socialAddr != "" {
+		sconn, err := grpc.NewClient(grpcclient.DialTarget(socialAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			log.Fatalf("social grpc: %v", err)
+		}
+		defer func() { _ = sconn.Close() }()
+		callFriends = s2s.NewGRPCSocialFriends(sconn)
+	}
+	if spaceAddr := strings.TrimSpace(os.Getenv("SPACE_GRPC_ADDR")); spaceAddr != "" {
+		spconn, err := grpc.NewClient(grpcclient.DialTarget(spaceAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			log.Fatalf("space grpc: %v", err)
+		}
+		defer func() { _ = spconn.Close() }()
+		callSpaceCoMembership = s2s.NewGRPCSpaceCoMembership(spconn)
+	}
+
 	tokenTTL := time.Hour
 	voiceSvc := &grpcsvc.VoiceGRPC{
-		Calls:       callStore,
-		ChatMembers: chatMembers,
+		Calls:             callStore,
+		ChatMembers:       chatMembers,
+		Privacy:           callPrivacy,
+		Friends:           callFriends,
+		SpaceCoMembership: callSpaceCoMembership,
 		Tokens: livekit.NewHS256TokenIssuer(
 			strings.TrimSpace(os.Getenv("LIVEKIT_API_KEY")),
 			strings.TrimSpace(os.Getenv("LIVEKIT_API_SECRET")),

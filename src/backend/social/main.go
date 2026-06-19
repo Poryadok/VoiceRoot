@@ -14,7 +14,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 
 	grpcsvc "voice/backend/social/internal/grpcsvc"
@@ -53,33 +52,22 @@ func main() {
 		defer pool.Close()
 
 		var privacy grpcsvc.FriendRequestPrivacyChecker
+		var phoneSearchPrivacy grpcsvc.PhoneSearchPrivacyChecker
+		var phoneHashes grpcsvc.PhoneHashLookup
 		var spaceCoMembership grpcsvc.SpaceCoMembershipChecker
 		if userAddr := strings.TrimSpace(os.Getenv("USER_GRPC_ADDR")); userAddr != "" {
 			uconn, err := grpc.NewClient(grpcclient.DialTarget(userAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
 				log.Fatalf("user grpc: %v", err)
 			}
-			uconn.Connect()
-			waitCtx, waitCancel := context.WithTimeout(context.Background(), grpcclient.DialTimeoutFromEnv())
-			for {
-				st := uconn.GetState()
-				if st == connectivity.Ready {
-					break
-				}
-				if st == connectivity.Shutdown {
-					waitCancel()
-					_ = uconn.Close()
-					log.Fatalf("user grpc: unexpected shutdown")
-				}
-				if !uconn.WaitForStateChange(waitCtx, st) {
-					waitCancel()
-					_ = uconn.Close()
-					log.Fatalf("user grpc dial: %v", context.Cause(waitCtx))
-				}
-			}
-			waitCancel()
 			defer func() { _ = uconn.Close() }()
-			privacy = &socials2s.GRPCUserPrivacy{Client: userv1.NewUserServiceClient(uconn)}
+			userPrivacy := &socials2s.GRPCUserPrivacy{Client: userv1.NewUserServiceClient(uconn)}
+			privacy = userPrivacy
+			phoneSearchPrivacy = userPrivacy
+		}
+		if authAddr := strings.TrimSpace(os.Getenv("AUTH_GRPC_ADDR")); authAddr != "" {
+			_ = authAddr
+			phoneHashes = socials2s.EmptyPhoneHashLookup{}
 		}
 		if spaceAddr := strings.TrimSpace(os.Getenv("SPACE_GRPC_ADDR")); spaceAddr != "" {
 			spconn, err := grpc.NewClient(grpcclient.DialTarget(spaceAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -96,10 +84,12 @@ func main() {
 		}
 		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger)...)
 		socialv1.RegisterSocialServiceServer(grpcSrv, &grpcsvc.SocialGRPC{
-			Friends:           &store.FriendshipStore{Pool: pool},
-			Blocks:            &store.BlockStore{Pool: pool},
-			Privacy:           privacy,
-			SpaceCoMembership: spaceCoMembership,
+			Friends:            &store.FriendshipStore{Pool: pool},
+			Blocks:             &store.BlockStore{Pool: pool},
+			Privacy:            privacy,
+			PhoneSearchPrivacy: phoneSearchPrivacy,
+			PhoneHashes:        phoneHashes,
+			SpaceCoMembership:  spaceCoMembership,
 		})
 		go func() {
 			logger.Info("gRPC listening", slog.String("addr", grpcListen))

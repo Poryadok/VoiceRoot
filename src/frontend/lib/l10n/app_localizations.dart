@@ -2690,6 +2690,36 @@ abstract class AppLocalizations {
   /// **'Voice messages'**
   String get privacyAllowVoiceMessages;
 
+  /// No description provided for @privacyDeniedCall.
+  ///
+  /// In en, this message translates to:
+  /// **'This person does not accept calls from you'**
+  String get privacyDeniedCall;
+
+  /// No description provided for @privacyDeniedInvite.
+  ///
+  /// In en, this message translates to:
+  /// **'This person does not accept chat or space invites'**
+  String get privacyDeniedInvite;
+
+  /// No description provided for @privacyDeniedFile.
+  ///
+  /// In en, this message translates to:
+  /// **'This person does not accept file attachments'**
+  String get privacyDeniedFile;
+
+  /// No description provided for @privacyDeniedVoice.
+  ///
+  /// In en, this message translates to:
+  /// **'This person does not accept voice messages'**
+  String get privacyDeniedVoice;
+
+  /// No description provided for @privacyDeniedDm.
+  ///
+  /// In en, this message translates to:
+  /// **'This person does not accept messages from you'**
+  String get privacyDeniedDm;
+
   /// No description provided for @reportAction.
   ///
   /// In en, this message translates to:

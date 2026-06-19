@@ -1221,6 +1221,79 @@ func composeUploadSmallTextFile(
 	return fileID, fileType
 }
 
+func composeUploadSmallAudioFile(
+	t *testing.T,
+	client *http.Client,
+	base, accessToken, chatID string,
+) (fileID, fileType string) {
+	t.Helper()
+	const content = "fake-ogg"
+	payload, err := json.Marshal(map[string]any{
+		"original_name": "note.ogg",
+		"mime_type":     "audio/ogg",
+		"size_bytes":    len(content),
+		"context_chat": map[string]string{
+			"id":   chatID,
+			"type": "CHAT_TYPE_DM",
+		},
+	})
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/files/upload", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "upload request body=%s", string(body))
+
+	var parsed struct {
+		UploadResponse struct {
+			FileID          string `json:"file_id"`
+			PresignedPutURL string `json:"presigned_put_url"`
+		} `json:"upload_response"`
+	}
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	fileID = parsed.UploadResponse.FileID
+	putURL := parsed.UploadResponse.PresignedPutURL
+	require.NotEmpty(t, fileID)
+	require.NotEmpty(t, putURL)
+
+	putReq, err := http.NewRequest(http.MethodPut, putURL, strings.NewReader(content))
+	require.NoError(t, err)
+	putReq.Header.Set("Content-Type", "audio/ogg")
+	putResp, err := client.Do(putReq)
+	require.NoError(t, err)
+	defer putResp.Body.Close()
+	require.True(t, putResp.StatusCode >= 200 && putResp.StatusCode < 300, "PUT presigned status=%d", putResp.StatusCode)
+
+	hash := sha256Hex([]byte(content))
+	confirmPayload, err := json.Marshal(map[string]string{"sha256_hash": hash})
+	require.NoError(t, err)
+	confirmURL := base + "/api/v1/files/" + fileID + "/confirm"
+	confirmReq, err := http.NewRequest(http.MethodPost, confirmURL, bytes.NewReader(confirmPayload))
+	require.NoError(t, err)
+	confirmReq.Header.Set("Authorization", "Bearer "+accessToken)
+	confirmReq.Header.Set("Content-Type", "application/json")
+	confirmResp, err := client.Do(confirmReq)
+	require.NoError(t, err)
+	defer confirmResp.Body.Close()
+	confirmBody, _ := io.ReadAll(confirmResp.Body)
+	require.Equal(t, http.StatusOK, confirmResp.StatusCode, "confirm body=%s", string(confirmBody))
+	var confirmed struct {
+		FileMetadata struct {
+			FileType string `json:"file_type"`
+		} `json:"file_metadata"`
+	}
+	require.NoError(t, json.Unmarshal(confirmBody, &confirmed))
+	fileType = strings.TrimSpace(confirmed.FileMetadata.FileType)
+	if fileType == "" {
+		fileType = "audio"
+	}
+	return fileID, fileType
+}
+
 func sha256Hex(b []byte) string {
 	sum := sha256.Sum256(b)
 	return fmt.Sprintf("%x", sum[:])

@@ -49,7 +49,9 @@
 
 ### Приватность — enforcement
 
-- [ ] **`allow_phone_search` / `allow_calls` / `allow_files` / `allow_voice_messages` / `allow_chat_space_invites`** — store+validate есть; полный gate: Calls/Space invite RPC, Messaging attachments MIME guard.
+- [x] **`allow_phone_search` / `allow_calls` / `allow_files` / `allow_voice_messages` / `allow_chat_space_invites`** — runtime gates: Voice `StartCall` (DM), Chat `AddMembers`, Space `JoinByInvite`, Messaging attachments (DM), Social `SyncPhoneContacts` (privacy filter). Compose: `USER_GRPC_ADDR` / `SOCIAL_GRPC_ADDR` / `SPACE_GRPC_ADDR` on voice+space; live `compose_phase11_privacy_actions_live_test.go` + `phase11_privacy_actions_e2e_live_test.dart`.
+- [ ] **`SyncPhoneContacts` phone-hash lookup** — Social uses `EmptyPhoneHashLookup` until Auth S2S resolve-hashes RPC exists; compose live does not assert phone sync yet.
+- [ ] **Group attachment privacy** — `allow_files` / `allow_voice_messages` enforced DM-only (group policy undefined in [privacy.md](features/privacy.md)).
 - [x] **show_avatar / show_bio** — в [privacy.md](features/privacy.md): пока без privacy-контролов, аватар и bio видны всем с доступом к профилю.
 
 **Промпт-якорь:** `Phase 11 Trust — privacy and reports from docs/TODO.md Batch 2`.

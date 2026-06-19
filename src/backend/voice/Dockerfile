@@ -8,6 +8,8 @@ COPY scripts/docker-go-mod-download.sh /usr/local/bin/docker-go-mod-download.sh
 COPY pkg/go.mod ./pkg/
 COPY chat/pb/voice/chat/go.mod ./chat/pb/voice/chat/
 COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
+COPY user/pb/voice/user/go.mod ./user/pb/voice/user/
+COPY user/pb/voice/social/go.mod ./user/pb/voice/social/
 COPY messaging/pb/voice/events/go.mod ./messaging/pb/voice/events/
 COPY messaging/pb/voice/messaging/go.mod ./messaging/pb/voice/messaging/
 COPY voice/pb/voice/calls/go.mod ./voice/pb/voice/calls/

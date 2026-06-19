@@ -28,9 +28,11 @@ type AccountPairBlockChecker interface {
 	AccountPairBlocked(ctx context.Context, viewerAccountID, otherAccountID uuid.UUID) (bool, error)
 }
 
-// PrivacyChecker reads recipient DM privacy policy.
+// PrivacyChecker reads recipient privacy policy for DM and attachment gates.
 type PrivacyChecker interface {
 	AllowDMAudience(ctx context.Context, profileID uuid.UUID) (privacy.Audience, error)
+	AllowFilesAudience(ctx context.Context, profileID uuid.UUID) (privacy.Audience, error)
+	AllowVoiceMessagesAudience(ctx context.Context, profileID uuid.UUID) (privacy.Audience, error)
 }
 
 // SpaceCoMembershipChecker checks shared space membership for privacy audiences.

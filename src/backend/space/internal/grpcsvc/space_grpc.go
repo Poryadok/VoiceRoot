@@ -16,6 +16,9 @@ type SpaceGRPC struct {
 	Roles           rolev1.RoleServiceClient
 	ProfileAccounts ProfileAccountLookup // optional; resolves profile_id → account_id for bans
 	Chats           ChatLookup           // optional; enriches text_chat nodes in ListSpaceTree
+	Privacy         InvitePrivacyChecker
+	Friends         InviteProfileFriendChecker
+	SpaceCoMembership InviteSpaceCoMembershipChecker
 
 	// Test hooks for subscription entitlement integration tests.
 	SeedSpaceProActive bool

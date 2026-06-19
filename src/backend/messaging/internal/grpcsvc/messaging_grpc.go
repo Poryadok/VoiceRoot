@@ -151,6 +151,9 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 	if err != nil {
 		return nil, err
 	}
+	if err := s.checkAttachmentPrivacyForSend(ctx, chatID, profileID, attachments); err != nil {
+		return nil, err
+	}
 	content := strings.TrimSpace(req.GetContent())
 	if content == "" && attachmentCount == 0 {
 		return nil, status.Error(codes.InvalidArgument, "content or attachments is required")
@@ -291,6 +294,19 @@ type messageAttachment struct {
 	PreviewURL string `json:"preview_url,omitempty"`
 }
 
+// attachmentTypeMatchesFileMeta allows voice_message attachments to reference audio file metadata.
+func attachmentTypeMatchesFileMeta(attType, fileType string) bool {
+	attType = strings.TrimSpace(attType)
+	fileType = strings.TrimSpace(fileType)
+	if fileType == "" {
+		return true
+	}
+	if attType == fileType {
+		return true
+	}
+	return attType == "voice_message" && fileType == "audio"
+}
+
 func (s *MessagingGRPC) validateAttachments(ctx context.Context, chatID uuid.UUID, raw string) (int, error) {
 	var attachments []messageAttachment
 	if err := json.Unmarshal([]byte(raw), &attachments); err != nil {
@@ -334,7 +350,7 @@ func (s *MessagingGRPC) validateAttachments(ctx context.Context, chatID uuid.UUI
 		default:
 			return 0, status.Error(codes.FailedPrecondition, "attachment file is not clean")
 		}
-		if ft := strings.TrimSpace(meta.GetFileType()); ft != "" && ft != strings.TrimSpace(att.Type) {
+		if !attachmentTypeMatchesFileMeta(strings.TrimSpace(att.Type), meta.GetFileType()) {
 			return 0, status.Error(codes.InvalidArgument, "attachments.type does not match file metadata")
 		}
 	}

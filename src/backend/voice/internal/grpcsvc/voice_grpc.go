@@ -36,6 +36,9 @@ type VoiceGRPC struct {
 	SpaceMembers SpaceMembership
 	SpacePro     SpaceProLookup
 	Roles        RolePermissionChecker
+	Privacy      CallPrivacyChecker
+	Friends      CallProfileFriendChecker
+	SpaceCoMembership CallSpaceCoMembershipChecker
 	Tokens       livekit.TokenIssuer
 	Events       voiceevents.Publisher
 	Now          func() time.Time
@@ -73,6 +76,9 @@ func (s *VoiceGRPC) StartCall(ctx context.Context, req *callsv1.StartCallRequest
 	}
 	if media != callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO && media != callsv1.CallMediaKind_CALL_MEDIA_KIND_VIDEO {
 		return nil, status.Error(codes.InvalidArgument, "unsupported media_kind")
+	}
+	if err := s.ensureCallPrivacy(ctx, profileID, calleeID); err != nil {
+		return nil, err
 	}
 
 	now := s.now()

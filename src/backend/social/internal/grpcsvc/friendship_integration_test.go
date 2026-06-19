@@ -26,6 +26,16 @@ import (
 	socialv1 "voice.app/voice/social/v1"
 )
 
+type socialServerOption func(*SocialGRPC)
+
+func withPhoneSearchPrivacy(p PhoneSearchPrivacyChecker) socialServerOption {
+	return func(s *SocialGRPC) { s.PhoneSearchPrivacy = p }
+}
+
+func withPhoneHashLookup(l PhoneHashLookup) socialServerOption {
+	return func(s *SocialGRPC) { s.PhoneHashes = l }
+}
+
 func repoRoot(t *testing.T) string {
 	t.Helper()
 	_, file, _, ok := runtime.Caller(0)
@@ -33,15 +43,19 @@ func repoRoot(t *testing.T) string {
 	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", "..", ".."))
 }
 
-func startSocialGRPCTestServer(t *testing.T, pool *pgxpool.Pool) (socialv1.SocialServiceClient, func()) {
+func startSocialGRPCTestServer(t *testing.T, pool *pgxpool.Pool, opts ...socialServerOption) (socialv1.SocialServiceClient, func()) {
 	t.Helper()
 	const bufSize = 1 << 20
 	lis := bufconn.Listen(bufSize)
 	srv := grpc.NewServer()
-	socialv1.RegisterSocialServiceServer(srv, &SocialGRPC{
+	svc := &SocialGRPC{
 		Friends: &store.FriendshipStore{Pool: pool},
 		Blocks:  &store.BlockStore{Pool: pool},
-	})
+	}
+	for _, o := range opts {
+		o(svc)
+	}
+	socialv1.RegisterSocialServiceServer(srv, svc)
 	go func() {
 		if err := srv.Serve(lis); err != nil {
 			t.Logf("grpc serve: %v", err)

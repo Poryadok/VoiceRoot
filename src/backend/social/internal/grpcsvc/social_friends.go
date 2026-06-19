@@ -32,6 +32,8 @@ type SocialGRPC struct {
 	Friends *store.FriendshipStore
 	Blocks  *store.BlockStore
 	Privacy FriendRequestPrivacyChecker
+	PhoneSearchPrivacy PhoneSearchPrivacyChecker
+	PhoneHashes        PhoneHashLookup
 	SpaceCoMembership SpaceCoMembershipChecker
 }
 

@@ -22,7 +22,7 @@ import '../../state/connectivity_providers.dart';
 import '../../state/gateway_providers.dart';
 import '../../state/presence_providers.dart';
 import '../../state/social_providers.dart';
-import '../../state/space_providers.dart';
+import '../privacy/privacy_action_errors.dart';
 import '../../state/subscription_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../core/chat_author_label.dart';
@@ -135,6 +135,10 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     _scrollController.dispose();
     _inChatSearchController.dispose();
     super.dispose();
+  }
+
+  String _roomErrorText(AppLocalizations l10n, String raw) {
+    return l10n.chatRoomError(privacyActionErrorMessage(l10n, raw));
   }
 
   void _refocusComposer() {
@@ -544,7 +548,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                       !room.isLoading
                   ? room.errorMessage != null
                         ? VoiceStatePanel(
-                            title: l10n.chatRoomError(room.errorMessage!),
+                            title: _roomErrorText(l10n, room.errorMessage!),
                             icon: Icons.cloud_off_outlined,
                             actionLabel: l10n.commonRetry,
                             onAction: () => ref
@@ -601,7 +605,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Text(
-              l10n.chatRoomError(room.errorMessage!),
+              _roomErrorText(l10n, room.errorMessage!),
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
           ),

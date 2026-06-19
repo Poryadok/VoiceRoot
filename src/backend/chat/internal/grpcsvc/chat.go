@@ -32,9 +32,10 @@ type ChatGRPC struct {
 	SpaceMembers *store.SpaceMembersStore
 }
 
-// PrivacyChecker reads recipient privacy policy for DM gate.
+// PrivacyChecker reads recipient privacy policy for DM and invite gates.
 type PrivacyChecker interface {
 	AllowDMAudience(ctx context.Context, profileID uuid.UUID) (privacy.Audience, error)
+	AllowChatSpaceInvitesAudience(ctx context.Context, profileID uuid.UUID) (privacy.Audience, error)
 }
 
 // SpaceCoMembershipChecker checks shared space membership for privacy audiences.

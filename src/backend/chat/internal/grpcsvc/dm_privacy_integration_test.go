@@ -28,6 +28,10 @@ func (s dmPrivacyStub) AllowDMAudience(_ context.Context, profileID uuid.UUID) (
 	return privacy.EveryoneWithGuests(), nil
 }
 
+func (s dmPrivacyStub) AllowChatSpaceInvitesAudience(_ context.Context, _ uuid.UUID) (privacy.Audience, error) {
+	return privacy.EveryoneWithGuests(), nil
+}
+
 type noFriendsStub struct{}
 
 func (noFriendsStub) AreFriends(context.Context, uuid.UUID, uuid.UUID) (bool, error) {

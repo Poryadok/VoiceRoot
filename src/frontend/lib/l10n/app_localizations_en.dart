@@ -1450,6 +1450,23 @@ class AppLocalizationsEn extends AppLocalizations {
   String get privacyAllowVoiceMessages => 'Voice messages';
 
   @override
+  String get privacyDeniedCall => 'This person does not accept calls from you';
+
+  @override
+  String get privacyDeniedInvite =>
+      'This person does not accept chat or space invites';
+
+  @override
+  String get privacyDeniedFile =>
+      'This person does not accept file attachments';
+
+  @override
+  String get privacyDeniedVoice => 'This person does not accept voice messages';
+
+  @override
+  String get privacyDeniedDm => 'This person does not accept messages from you';
+
+  @override
   String get reportAction => 'Report';
 
   @override

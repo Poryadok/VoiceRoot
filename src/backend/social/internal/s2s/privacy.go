@@ -29,6 +29,19 @@ func (u *GRPCUserPrivacy) AllowFriendRequestsAudience(ctx context.Context, profi
 	return privacy.FromProto(resp.GetPrivacySettings().GetAllowFriendRequests()), nil
 }
 
+func (u *GRPCUserPrivacy) AllowPhoneSearchAudience(ctx context.Context, profileID uuid.UUID) (privacy.Audience, error) {
+	if u == nil || u.Client == nil {
+		return privacy.EveryoneWithGuests(), nil
+	}
+	resp, err := u.Client.GetPrivacySettings(ctx, &userv1.GetPrivacySettingsRequest{
+		ProfileId: profileID.String(),
+	})
+	if err != nil {
+		return privacy.Audience{}, err
+	}
+	return privacy.FromProto(resp.GetPrivacySettings().GetAllowPhoneSearch()), nil
+}
+
 type GRPCSpaceCoMembership struct {
 	Client spacev1.SpaceServiceClient
 }

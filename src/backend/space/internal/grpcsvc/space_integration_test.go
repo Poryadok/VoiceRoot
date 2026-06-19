@@ -138,6 +138,18 @@ func withSpaceChatLookup(l ChatLookup) spaceServerOption {
 	return func(s *SpaceGRPC) { s.Chats = l }
 }
 
+func withInvitePrivacy(p InvitePrivacyChecker) spaceServerOption {
+	return func(s *SpaceGRPC) { s.Privacy = p }
+}
+
+func withInviteFriends(f InviteProfileFriendChecker) spaceServerOption {
+	return func(s *SpaceGRPC) { s.Friends = f }
+}
+
+func withInviteSpaceCoMembership(c InviteSpaceCoMembershipChecker) spaceServerOption {
+	return func(s *SpaceGRPC) { s.SpaceCoMembership = c }
+}
+
 func startSpaceGRPCTestServer(t *testing.T, pool *pgxpool.Pool, opts ...spaceServerOption) (spacev1.SpaceServiceClient, func()) {
 	t.Helper()
 	const bufSize = 1 << 20

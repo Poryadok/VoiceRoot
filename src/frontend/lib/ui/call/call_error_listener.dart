@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../state/call_providers.dart';
+import '../privacy/privacy_action_errors.dart';
 
 class CallErrorListener extends ConsumerWidget {
   const CallErrorListener({super.key, required this.child});
@@ -37,6 +38,8 @@ class CallErrorListener extends ConsumerWidget {
   }
 
   String _callErrorMessage(AppLocalizations l10n, String errorMessage) {
+    final privacy = privacyActionErrorMessage(l10n, errorMessage);
+    if (privacy != errorMessage) return privacy;
     return switch (errorMessage) {
       'livekit_connect_failed' => l10n.callLivekitConnectFailed,
       'livekit_url_missing' => l10n.callLivekitConnectFailed,

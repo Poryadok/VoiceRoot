@@ -103,7 +103,7 @@ func (s *ChatGRPC) ensureDMPrivacy(ctx context.Context, callerProfile, recipient
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())
 	}
-	return ensureAudienceAllowed(ctx, recipientProfile, callerProfile, audience, s.Friends, s.SpaceCoMembership)
+	return ensureAudienceAllowed(ctx, recipientProfile, callerProfile, audience, s.Friends, s.SpaceCoMembership, "dm blocked by recipient privacy settings")
 }
 
 func chatRowToProto(r *store.ChatRow) *chatv1.Chat {
