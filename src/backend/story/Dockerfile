@@ -17,7 +17,7 @@ COPY messaging/pb/voice/messaging/go.mod ./messaging/pb/voice/messaging/
 COPY messaging/pb/voice/events/go.mod ./messaging/pb/voice/events/
 COPY voice/pb/voice/subscription/go.mod ./voice/pb/voice/subscription/
 COPY voice/pb/voice/space/go.mod ./voice/pb/voice/space/
-RUN --mount=type=cache,target=/go/pkg/mod sh /usr/local/bin/docker-go-mod-download.sh story
+RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked sh /usr/local/bin/docker-go-mod-download.sh story
 COPY pkg ./pkg
 COPY user/pb/voice/common ./user/pb/voice/common
 COPY user/pb/voice/social ./user/pb/voice/social
@@ -32,7 +32,7 @@ COPY voice/pb/voice/space ./voice/pb/voice/space
 COPY story ./story
 COPY migrations/story_db ./migrations/story_db
 WORKDIR /src/story
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/service .
+RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked --mount=type=cache,target=/root/.cache/go-build,id=voice-gobuild,sharing=locked CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/service .
 
 FROM alpine:3.20
 RUN apk add --no-cache wget

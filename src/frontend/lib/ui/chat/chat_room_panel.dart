@@ -46,6 +46,7 @@ import '../space/space_chat_slow_mode_sheet.dart';
 import '../search/in_chat_search.dart';
 import '../../state/shell_providers.dart';
 import '../../state/shared_media_providers.dart';
+import '../../state/space_providers.dart';
 import '../../e2e/e2e_identity_trust.dart';
 import '../../e2e/e2e_store_factory.dart';
 import '../../e2e/e2e_verification_code.dart';

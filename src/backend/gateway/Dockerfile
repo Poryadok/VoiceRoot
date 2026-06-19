@@ -25,7 +25,7 @@ COPY voice/pb/voice/auth/go.mod ./voice/pb/voice/auth/
 COPY voice/pb/voice/bot/go.mod ./voice/pb/voice/bot/
 COPY voice/pb/voice/story/go.mod ./voice/pb/voice/story/
 COPY gateway/go.mod ./gateway/
-RUN --mount=type=cache,target=/go/pkg/mod sh /usr/local/bin/docker-go-mod-download.sh gateway
+RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked sh /usr/local/bin/docker-go-mod-download.sh gateway
 COPY pkg ./pkg
 COPY user/pb ./user/pb
 COPY chat/pb ./chat/pb
@@ -36,7 +36,7 @@ COPY voice/pb ./voice/pb
 COPY role/pb ./role/pb
 COPY gateway ./gateway
 WORKDIR /src/gateway
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/gateway .
+RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked --mount=type=cache,target=/root/.cache/go-build,id=voice-gobuild,sharing=locked CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/gateway .
 
 FROM alpine:3.20
 RUN adduser -D -H -u 65532 nonroot
