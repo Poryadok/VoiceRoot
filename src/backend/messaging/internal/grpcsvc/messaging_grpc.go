@@ -420,6 +420,15 @@ func (s *MessagingGRPC) checkDMPrivacyForSend(ctx context.Context, chatID, sende
 		}
 		return status.Error(codes.Internal, err.Error())
 	}
+	if guestguard.IsGuest(ctx) {
+		allowed, err := s.Privacy.AllowGuestDM(ctx, recipientProfileID)
+		if err != nil {
+			return status.Error(codes.Internal, err.Error())
+		}
+		if !allowed {
+			return status.Error(codes.PermissionDenied, "guest dm blocked by recipient privacy settings")
+		}
+	}
 	return nil
 }
 

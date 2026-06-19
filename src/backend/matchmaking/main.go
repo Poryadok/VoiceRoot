@@ -24,6 +24,7 @@ import (
 	"voice/backend/matchmaking/internal/mmevents"
 	"voice/backend/matchmaking/internal/queue"
 	"voice/backend/matchmaking/internal/runtimeconfig"
+	"voice/backend/matchmaking/internal/s2s"
 	"voice/backend/matchmaking/internal/squad"
 	"voice/backend/matchmaking/internal/store"
 	"voice/backend/matchmaking/internal/timeout"
@@ -34,6 +35,7 @@ import (
 	callsv1 "voice.app/voice/calls/v1"
 	chatv1 "voice.app/voice/chat/v1"
 	matchmakingv1 "voice.app/voice/matchmaking/v1"
+	userv1 "voice.app/voice/user/v1"
 )
 
 const serviceName = "matchmaking"
@@ -139,18 +141,67 @@ func main() {
 			logger.Warn("squad provisioning disabled: set both CHAT_GRPC_ADDR and VOICE_GRPC_ADDR")
 		}
 
+		var ratingPrivacy grpcsvc.MmRatingPrivacyChecker
+		var ratingFriends grpcsvc.MmRatingProfileFriendChecker
+		var ratingSpaceCoMembership grpcsvc.MmRatingSpaceCoMembershipChecker
+		if userAddr := strings.TrimSpace(os.Getenv("USER_GRPC_ADDR")); userAddr != "" {
+			uconn, err := grpc.NewClient(grpcclient.DialTarget(userAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if err != nil {
+				log.Fatalf("user grpc: %v", err)
+			}
+			defer func() { _ = uconn.Close() }()
+			waitCtx, waitCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			if err := waitForGRPCReady(waitCtx, uconn); err != nil {
+				waitCancel()
+				log.Fatalf("user grpc dial: %v", err)
+			}
+			waitCancel()
+			ratingPrivacy = &s2s.GRPCUserPrivacy{Client: userv1.NewUserServiceClient(uconn)}
+		}
+		if socialAddr := strings.TrimSpace(os.Getenv("SOCIAL_GRPC_ADDR")); socialAddr != "" {
+			sconn, err := grpc.NewClient(grpcclient.DialTarget(socialAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if err != nil {
+				log.Fatalf("social grpc: %v", err)
+			}
+			defer func() { _ = sconn.Close() }()
+			waitCtx, waitCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			if err := waitForGRPCReady(waitCtx, sconn); err != nil {
+				waitCancel()
+				log.Fatalf("social grpc dial: %v", err)
+			}
+			waitCancel()
+			ratingFriends = s2s.NewGRPCSocialFriends(sconn)
+		}
+		if spaceAddr := strings.TrimSpace(os.Getenv("SPACE_GRPC_ADDR")); spaceAddr != "" {
+			spconn, err := grpc.NewClient(grpcclient.DialTarget(spaceAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if err != nil {
+				log.Fatalf("space grpc: %v", err)
+			}
+			defer func() { _ = spconn.Close() }()
+			waitCtx, waitCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			if err := waitForGRPCReady(waitCtx, spconn); err != nil {
+				waitCancel()
+				log.Fatalf("space grpc dial: %v", err)
+			}
+			waitCancel()
+			ratingSpaceCoMembership = s2s.NewGRPCSpaceCoMembership(spconn)
+		}
+
 		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger)...)
 		mmSvc := &grpcsvc.MatchmakingGRPC{
-			Games:        gameStore,
-			ProfileGames: profileStore,
-			Sessions:     sessionStore,
-			Matches:      matchStore,
-			Ratings:      ratingStore,
-			Bans:         banStore,
-			Queue:        redisQueue,
-			Events:       events,
-			Squad:        squadProvisioner,
-			Logger:       logger,
+			Games:                   gameStore,
+			ProfileGames:            profileStore,
+			Sessions:                sessionStore,
+			Matches:                 matchStore,
+			Ratings:                 ratingStore,
+			Bans:                    banStore,
+			Queue:                   redisQueue,
+			Events:                  events,
+			Squad:                   squadProvisioner,
+			Logger:                  logger,
+			RatingPrivacy:           ratingPrivacy,
+			RatingFriends:           ratingFriends,
+			RatingSpaceCoMembership: ratingSpaceCoMembership,
 		}
 		matchmakingv1.RegisterMatchmakingServiceServer(grpcSrv, mmSvc)
 

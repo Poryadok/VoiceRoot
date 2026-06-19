@@ -39,49 +39,43 @@ func TestComposePhase15E2EOptOut_live(t *testing.T) {
 	msgID := sendComposePlaintextMessage(t, client, base, sessA.AccessToken, chatID, secret)
 	require.Equal(t, secret, getComposeMessageContent(t, client, base, sessA.AccessToken, chatID, msgID))
 
-	tryComposeSearchIncludesToken(t, client, sessA.AccessToken,
+	requireComposeSearchIncludesToken(t, client, sessA.AccessToken,
 		fmt.Sprintf("%s/api/v1/search/global?q=%s", base, url.QueryEscape(secret)), secret)
-	tryComposeSearchIncludesToken(t, client, sessA.AccessToken,
+	requireComposeSearchIncludesToken(t, client, sessA.AccessToken,
 		fmt.Sprintf("%s/api/v1/search/in-chat?chat_id=%s&q=%s", base, url.QueryEscape(chatID), url.QueryEscape(secret)), secret)
 }
 
-func tryComposeSearchIncludesToken(t *testing.T, client *http.Client, accessToken, searchURL, token string) {
+func requireComposeSearchIncludesToken(t *testing.T, client *http.Client, accessToken, searchURL, token string) {
 	t.Helper()
 	var lastBody string
 	var lastCode int
-	found := false
-	deadline := time.Now().Add(90 * time.Second)
-	for time.Now().Before(deadline) {
+	degraded := false
+	require.Eventually(t, func() bool {
 		req, err := http.NewRequest(http.MethodGet, searchURL, nil)
 		if err != nil {
-			break
+			return false
 		}
 		req.Header.Set("Authorization", "Bearer "+accessToken)
 		resp, err := client.Do(req)
 		if err != nil {
-			time.Sleep(2 * time.Second)
-			continue
+			return false
 		}
+		defer resp.Body.Close()
 		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
 		lastBody = string(body)
 		lastCode = resp.StatusCode
 		switch resp.StatusCode {
 		case http.StatusOK:
-			if bytes.Contains(body, []byte(token)) {
-				found = true
-			}
+			return bytes.Contains(body, []byte(token))
 		case http.StatusServiceUnavailable, http.StatusInternalServerError:
-			t.Logf("search degraded status=%d url=%s; plaintext message API already verified", resp.StatusCode, searchURL)
-			return
+			degraded = true
+			return true
+		default:
+			return false
 		}
-		if found {
-			break
-		}
-		time.Sleep(2 * time.Second)
-	}
-	if !found {
-		t.Logf("search did not include token within deadline (last status=%d body=%s); plaintext message API already verified", lastCode, lastBody)
+	}, 90*time.Second, 2*time.Second, "search must include plaintext token when healthy; last status=%d body=%s", lastCode, lastBody)
+	if degraded {
+		t.Skipf("search degraded status=%d url=%s; skipping search assert", lastCode, searchURL)
 	}
 }
 

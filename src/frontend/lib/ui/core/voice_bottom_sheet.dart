@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../a11y/focus_trap.dart';
+
 /// Draggable bottom sheet capped at 85% viewport height.
 ///
 /// Set [scrollable] to false for children that manage their own scrolling
@@ -15,20 +17,22 @@ Future<T?> showVoiceBottomSheet<T>({
   return showModalBottomSheet<T>(
     context: context,
     isScrollControlled: true,
-    builder: (ctx) => DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: initialSize,
-      minChildSize: minSize,
-      maxChildSize: maxSize,
-      builder: (_, scrollController) {
-        if (!scrollable) {
-          return SizedBox.expand(child: child);
-        }
-        return SingleChildScrollView(
-          controller: scrollController,
-          child: child,
-        );
-      },
+    builder: (ctx) => VoiceFocusTrap(
+      child: DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: initialSize,
+        minChildSize: minSize,
+        maxChildSize: maxSize,
+        builder: (_, scrollController) {
+          if (!scrollable) {
+            return SizedBox.expand(child: child);
+          }
+          return SingleChildScrollView(
+            controller: scrollController,
+            child: child,
+          );
+        },
+      ),
     ),
   );
 }

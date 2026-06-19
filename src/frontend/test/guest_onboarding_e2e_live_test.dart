@@ -29,6 +29,16 @@ void main() {
     final data = (state as OnboardingApiOk<OnboardingState>).data;
     expect(data.completed, isFalse);
     expect(data.completedSteps, isEmpty);
+
+    final afterChats = await onboarding.completeStep(
+      authorization: session.authorizationHeader,
+      stepId: 'chats_nav',
+    );
+    expect(afterChats, isA<OnboardingApiOk<OnboardingState>>());
+    expect(
+      (afterChats as OnboardingApiOk<OnboardingState>).data.completedSteps,
+      contains('chats_nav'),
+    );
   }, skip: runLiveIntegration
       ? null
       : 'Opt in with --dart-define=VOICE_RUN_LIVE_INTEGRATION=true');

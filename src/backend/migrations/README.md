@@ -33,7 +33,15 @@ Example with [migrate](https://github.com/golang-migrate/migrate) CLI for a Go-o
 migrate -path src/backend/migrations/user_db -database "postgres://voice:voice@localhost:5432/user_db?sslmode=disable" up
 ```
 
-Repeat for `social_db`, `chat_db`, `messaging_db`, `file_db`, `bot_db`.
+Repeat for `social_db`, `chat_db`, `messaging_db`, `file_db`, `bot_db`, and other Go-owned folders under `src/backend/migrations/` (see table in [DATA_STORES.md](../../../docs/DATA_STORES.md)).
+
+**Compose (all Go-owned DBs):** from repo root after `docker compose up -d`:
+
+```bash
+make compose-migrate-all
+```
+
+Runs `scripts/dev/compose-migrate-all.sh`: `chat_db` + `messaging_db` (Phase 15), `bot_db`, `story_db`, then `user_db`, `social_db`, `file_db`, `space_db`, `role_db`, `notification_db`, `matchmaking_db`, `search_db`, `moderation_db`, `gateway_db`, `subscription_db`. **`auth_db`** — Path A (default): Flyway on Auth boot; golang-migrate only with `VOICE_MIGRATE_AUTH_DB=1` (Path B, then `AUTH_FLYWAY_ENABLED=false`). Granular: `make compose-migrate-phase15`, `compose-migrate-bot`, `compose-migrate-story`.
 
 **Phase 15 E2E (compose Path A):** `e2e_key_backups` via Auth Flyway `V4__e2e_key_backups.sql` on boot. `chat_db` / `messaging_db` DDL (`e2e_enabled`, `is_e2e`, `e2e_prekey_bundles`) via idempotent `docker/postgres/incremental_*.sql.snippet`, or `make compose-migrate-phase15` for golang-migrate on Go-owned DBs.
 

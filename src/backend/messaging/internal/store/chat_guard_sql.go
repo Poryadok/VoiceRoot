@@ -73,3 +73,29 @@ LIMIT 1
 	}
 	return other, nil
 }
+
+func (g *SQLChatGuard) OtherMemberProfileIDs(ctx context.Context, chatID, profileID uuid.UUID) ([]uuid.UUID, error) {
+	if g == nil || g.Pool == nil {
+		return nil, errors.New("chat guard: pool not configured")
+	}
+	if err := g.EnsureMember(ctx, chatID, profileID); err != nil {
+		return nil, err
+	}
+	rows, err := g.Pool.Query(ctx, `
+SELECT profile_id FROM chat_members
+WHERE chat_id = $1 AND profile_id <> $2
+`, chatID, profileID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []uuid.UUID
+	for rows.Next() {
+		var pid uuid.UUID
+		if err := rows.Scan(&pid); err != nil {
+			return nil, err
+		}
+		out = append(out, pid)
+	}
+	return out, rows.Err()
+}

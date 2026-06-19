@@ -621,6 +621,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get commonCancel => 'Отмена';
 
   @override
+  String get shareLinkAction => 'Копировать ссылку';
+
+  @override
+  String get shareLinkCopied => 'Ссылка скопирована';
+
+  @override
   String get commonEdit => 'Изменить';
 
   @override

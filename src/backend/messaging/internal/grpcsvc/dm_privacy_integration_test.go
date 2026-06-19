@@ -14,7 +14,8 @@ import (
 )
 
 type dmPrivacyStub struct {
-	friendsOnly map[uuid.UUID]bool
+	friendsOnly  map[uuid.UUID]bool
+	allowGuestDM map[uuid.UUID]bool
 }
 
 func (s dmPrivacyStub) AllowDMAudience(_ context.Context, profileID uuid.UUID) (privacy.Audience, error) {
@@ -22,6 +23,15 @@ func (s dmPrivacyStub) AllowDMAudience(_ context.Context, profileID uuid.UUID) (
 		return privacy.FriendsOnly(), nil
 	}
 	return privacy.EveryoneWithGuests(), nil
+}
+
+func (s dmPrivacyStub) AllowGuestDM(_ context.Context, profileID uuid.UUID) (bool, error) {
+	if s.allowGuestDM != nil {
+		if allowed, ok := s.allowGuestDM[profileID]; ok {
+			return allowed, nil
+		}
+	}
+	return true, nil
 }
 
 func (s dmPrivacyStub) AllowFilesAudience(_ context.Context, _ uuid.UUID) (privacy.Audience, error) {

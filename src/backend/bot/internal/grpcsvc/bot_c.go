@@ -166,11 +166,11 @@ func (s *BotGRPC) CreateBotChat(ctx context.Context, req *botv1.CreateBotChatReq
 	if s.Chat == nil {
 		return nil, status.Error(codes.FailedPrecondition, "chat client not configured")
 	}
-	count, err := s.Store.IncrementDailyChatCreates(ctx, botRow.ID)
+	current, err := s.Store.DailyChatCreateCount(ctx, botRow.ID)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	if count > 10 {
+	if current >= 10 {
 		return nil, status.Error(codes.ResourceExhausted, "daily chat create limit exceeded")
 	}
 	spaceID := strings.TrimSpace(req.GetSpaceId())
@@ -194,6 +194,13 @@ func (s *BotGRPC) CreateBotChat(ctx context.Context, req *botv1.CreateBotChatReq
 	chat := createResp.GetChat()
 	if chat == nil {
 		return nil, status.Error(codes.Internal, "empty chat response")
+	}
+	count, err := s.Store.IncrementDailyChatCreates(ctx, botRow.ID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if count > 10 {
+		return nil, status.Error(codes.ResourceExhausted, "daily chat create limit exceeded")
 	}
 	ref := &chatv1.ChatRef{Id: chat.GetId(), Type: &chatType}
 	return &botv1.CreateBotChatResponse{Chat: ref}, nil

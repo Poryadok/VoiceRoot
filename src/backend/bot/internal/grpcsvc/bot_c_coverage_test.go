@@ -329,6 +329,33 @@ func TestListSpaceMembersForBot_returnsProfileIDs(t *testing.T) {
 	require.Len(t, resp.GetProfileIds(), 1)
 }
 
+func TestCreateBotChat_failedCreateDoesNotConsumeQuota(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	chatFake := &fakeChatClient{createErr: status.Error(codes.Internal, "chat service down")}
+	client, st, _, cleanup := startBotGRPCWithBotCDeps(t, &botCDeps{chat: chatFake})
+	defer cleanup()
+
+	ctx, botID, botToken, _, spaceID := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_CREATE_IN_SPACE"]`)
+	botUUID, err := uuid.Parse(botID)
+	require.NoError(t, err)
+	botCtx := withBotToken(context.Background(), botToken)
+
+	_, err = client.CreateBotChat(botCtx, &botv1.CreateBotChatRequest{
+		SpaceId:  spaceID.String(),
+		Name:     "should-fail",
+		ChatType: "channel",
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.Internal, status.Code(err))
+	require.Equal(t, 1, chatFake.createChatCalls)
+
+	count, err := st.DailyChatCreateCount(ctx, botUUID)
+	require.NoError(t, err)
+	require.Equal(t, 0, count, "failed CreateChat must not consume daily quota")
+}
+
 func TestCreateBotChat_createsChannelInSpace(t *testing.T) {
 	if testing.Short() {
 		t.Skip()

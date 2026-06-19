@@ -29,7 +29,7 @@ GO_TEST_TARGETS := $(GO_SERVICES:%=go-test-%)
 GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
 
 .PHONY: buf-lint buf-format buf-breaking buf-generate buf-generate-dart buf-dart-check compose-up compose-app-up compose-down compose-logs-collect \
-	compose-migrate-phase15 compose-migrate-bot compose-migrate-story compose-e2e-live compose-e2e-full compose-e2e-voice-live \
+	compose-migrate-all compose-migrate-phase15 compose-migrate-bot compose-migrate-story compose-e2e-live compose-e2e-full compose-e2e-voice-live \
 	build-all build-all-breaking check-toolchain compose-config-ci buf-ci backend-test-ci backend-image-ci \
 	gateway-test-ci gateway-image-ci go-test-pkg auth-test-ci auth-image-ci buf-breaking-ci \
 	golangci-ci gateway-test-race-ci design-tokens-check flutter-ui-color-gate flutter-ci prekey-golden-check coverage-report testcontainers-prune buf-generate-ci-local-template-check
@@ -44,19 +44,19 @@ buf-format:
 buf-breaking:
 	buf breaking protos --against ".git#branch=master,subdir=protos"
 
-# Emits Go stubs under gen/go (local plugins). Sync committed stubs under src/backend/*/pb as needed.
+# Go: scratch output under gen/ (gitignored). Copy/sync into src/backend/*/pb before commit — see docs/REPOSITORIES.md.
 buf-generate:
 	buf generate --template buf.gen.local-go.yaml
 
-# Remote BSR plugins (requires network).
+# Remote BSR plugins (requires network). Output: gen/go (gitignored).
 buf-generate-bsr:
 	buf generate
 
-# Committed Dart stubs for Flutter; uses local protoc-gen-dart (see scripts/ci/buf-generate-dart.sh).
+# Dart: committed stubs under src/frontend/lib/gen (scripts/ci/buf-generate-dart.sh).
 buf-generate-dart:
 	$(BASH) "$(ROOT)/scripts/ci/buf-generate-dart.sh"
 
-# Fails if lib/gen is out of date vs protos (CI / pre-PR).
+# CI / pre-PR: regenerate Dart stubs and fail if src/frontend/lib/gen drifts from protos/.
 buf-dart-check:
 	$(BASH) "$(ROOT)/scripts/ci/buf-generate-dart.sh"
 	@git diff --exit-code -- src/frontend/lib/gen || (echo "Run make buf-generate-dart and commit src/frontend/lib/gen" >&2; exit 1)
@@ -67,28 +67,18 @@ compose-up:
 compose-app-up:
 	COMPOSE_PARALLEL_LIMIT=4 docker compose --profile app up -d --build
 
-# Phase 15 E2E DDL for Go-owned DBs (auth_db uses Flyway Path A on Auth boot).
+# golang-migrate on Compose Postgres (network auto-detected). auth_db: Flyway on Auth boot by default — see migrations README.
+compose-migrate-all:
+	$(BASH) "$(ROOT)/scripts/dev/compose-migrate-all.sh" all
+
 compose-migrate-phase15:
-	docker run --rm --network voice_default \
-		-v "$(ROOT)/src/backend/migrations/chat_db:/migrations" migrate/migrate \
-		-path /migrations \
-		-database "postgres://voice:voice@postgres:5432/chat_db?sslmode=disable" up
-	docker run --rm --network voice_default \
-		-v "$(ROOT)/src/backend/migrations/messaging_db:/migrations" migrate/migrate \
-		-path /migrations \
-		-database "postgres://voice:voice@postgres:5432/messaging_db?sslmode=disable" up
+	$(BASH) "$(ROOT)/scripts/dev/compose-migrate-all.sh" phase15
 
 compose-migrate-bot:
-	docker run --rm --network voice_default \
-		-v "$(ROOT)/src/backend/migrations/bot_db:/migrations" migrate/migrate \
-		-path /migrations \
-		-database "postgres://voice:voice@postgres:5432/bot_db?sslmode=disable" up
+	$(BASH) "$(ROOT)/scripts/dev/compose-migrate-all.sh" bot
 
 compose-migrate-story:
-	docker run --rm --network voiceroot_default \
-		-v "$(ROOT)/src/backend/migrations/story_db:/migrations" migrate/migrate \
-		-path /migrations \
-		-database "postgres://voice:voice@postgres:5432/story_db?sslmode=disable" up
+	$(BASH) "$(ROOT)/scripts/dev/compose-migrate-all.sh" story
 
 compose-down:
 	docker compose down
@@ -166,6 +156,9 @@ build-all: check-toolchain compose-config-ci buf-ci backend-test-ci golangci-ci 
 design-tokens-check:
 	$(BASH) "$(ROOT)/scripts/design/design-tokens-check.sh"
 
+contrast-tokens-check:
+	$(BASH) "$(ROOT)/scripts/design/contrast-tokens-check.sh"
+
 flutter-ui-color-gate:
 	$(BASH) "$(ROOT)/scripts/design/flutter-ui-color-gate.sh"
 
@@ -173,7 +166,7 @@ flutter-ui-color-gate:
 prekey-golden-check:
 	cd $(ROOT)/src/frontend && flutter test test/tools/prekey_golden_drift_test.dart
 
-flutter-ci: design-tokens-check flutter-ui-color-gate buf-dart-check prekey-golden-check
+flutter-ci: design-tokens-check contrast-tokens-check flutter-ui-color-gate buf-dart-check prekey-golden-check
 	cd $(ROOT)/src/frontend && flutter pub get && flutter analyze && flutter test
 
 # Go (-coverprofile), Auth (JaCoCo), Flutter (lcov). Writes .local/coverage/summary.txt
@@ -185,6 +178,7 @@ buf-breaking-ci:
 		-c "buf breaking protos --against '.git#branch=master,subdir=protos'"
 
 buf-generate-ci:
+	# Smoke: buf generate to gen/go (gitignored); no committed pb drift check.
 	docker run --rm --entrypoint sh -v "$(ROOT):/workspace" -w /workspace $(BUF_IMAGE) \
 		-c "buf generate --template buf.gen.local-go.yaml"
 

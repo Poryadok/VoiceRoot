@@ -8,6 +8,7 @@ import '../../state/presence_providers.dart';
 import '../../state/social_providers.dart';
 import '../../state/stories_providers.dart';
 import '../core/voice_state_panel.dart';
+import '../onboarding/onboarding_anchor_keys.dart';
 import '../matchmaking/game_catalog_screen.dart';
 import '../matchmaking/match_history_screen.dart';
 import '../stories/story_ring_avatar.dart';
@@ -98,7 +99,7 @@ class _SocialPanelState extends ConsumerState<SocialPanel>
                 spacing: 4,
                 children: [
                   TextButton.icon(
-                    key: const Key('social_game_catalog_entry'),
+                    key: OnboardingAnchorKeys.matchmaking,
                     onPressed: () {
                       Navigator.of(context).push(
                         MaterialPageRoute<void>(

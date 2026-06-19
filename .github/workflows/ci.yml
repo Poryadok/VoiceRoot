@@ -283,10 +283,7 @@ jobs:
       - name: Start compose infra
         run: docker compose up -d
       - name: Migrate Go-owned databases
-        run: |
-          make compose-migrate-phase15
-          make compose-migrate-bot
-          make compose-migrate-story
+        run: make compose-migrate-all
       - name: Start app stack
         run: make compose-app-up
       - name: Wait for gateway health

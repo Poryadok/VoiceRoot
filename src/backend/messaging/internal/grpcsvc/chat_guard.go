@@ -16,6 +16,7 @@ import (
 type ChatGuard interface {
 	EnsureMember(ctx context.Context, chatID, profileID uuid.UUID) error
 	DMOtherProfileID(ctx context.Context, chatID, profileID uuid.UUID) (uuid.UUID, error)
+	OtherMemberProfileIDs(ctx context.Context, chatID, profileID uuid.UUID) ([]uuid.UUID, error)
 }
 
 // ProfileAccountLookup resolves profile_id → account_id (User Service).
@@ -31,6 +32,7 @@ type AccountPairBlockChecker interface {
 // PrivacyChecker reads recipient privacy policy for DM and attachment gates.
 type PrivacyChecker interface {
 	AllowDMAudience(ctx context.Context, profileID uuid.UUID) (privacy.Audience, error)
+	AllowGuestDM(ctx context.Context, profileID uuid.UUID) (bool, error)
 	AllowFilesAudience(ctx context.Context, profileID uuid.UUID) (privacy.Audience, error)
 	AllowVoiceMessagesAudience(ctx context.Context, profileID uuid.UUID) (privacy.Audience, error)
 }

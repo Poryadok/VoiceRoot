@@ -18,7 +18,7 @@
 - Bot presence (`bot_presence`, `TouchPresence`); `online` в `ListSlashCommandsForChat` и `ListInstalledBots`
 - Scopes: `TEXT_CHAT_SEND_MESSAGES`, `DM_SEND`, `SPACE_VIEW_MEMBER_LIST`, `MEMBER_ASSIGN_ROLES`, `TEXT_CHAT_CREATE_IN_SPACE`, `SPACE_MANAGE_ROLES` (privileged), `TEXT_CHAT_READ_HISTORY` (privileged); строки совпадают с [role-service.md](role-service.md)
 - Rate limits: 5000 API req/min и 100 role ops/min — Gateway REST (`BotAPI`, `BotRoleOps`, `429` + `Retry-After`); 10 созданий текстовых чатов / день — Bot Service (`bot_daily_chat_creates`, `CreateBotChat`); прямой gRPC обходит Gateway limiter — см. [api-gateway.md](api-gateway.md)
-- **gRPC access (v1):** `BOT_GRPC_GATEWAY_ONLY=true` отклоняет прямой gRPC без `x-voice-internal: true` (Gateway) или bot token / account context. Полный mTLS между сервисами и k8s NetworkPolicy — prod hardening (см. `docs/TODO.md`).
+- **gRPC access (v1):** `BOT_GRPC_GATEWAY_ONLY=true` отклоняет прямой gRPC без `x-voice-internal: true` (Gateway) или bot token / account context. Prod NetworkPolicy — [`deploy/templates/network-policy-voice-bot.yaml`](../../../deploy/templates/network-policy-voice-bot.yaml); mTLS — [`DEPLOYMENT.md`](../../DEPLOYMENT.md).
 - Bot token: перманентный, ручной отзыв (`RegenerateToken`)
 - Bot DM: только в ответ на сообщение пользователя (v1)
 - Ephemeral и deferred responses; hub deferred tokens (`MarkEventDeferred`, `RehydrateDeferred`)

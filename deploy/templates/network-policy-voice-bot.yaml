@@ -1,0 +1,36 @@
+# Restrict inbound gRPC on Bot Service to API Gateway only (port 9090).
+# Complements BOT_GRPC_GATEWAY_ONLY=true (application-layer check via x-voice-internal).
+#
+# Apply after voice-bot and voice-gateway Deployments exist in the target namespace.
+# Substitute __K_NAMESPACE__ (e.g. voice-prod) before kubectl apply — see docs/DEPLOYMENT.md.
+#
+# Outbound from voice-bot (Messaging, Chat, Role, User, Space gRPC) is not restricted here;
+# add egress policies separately if your cluster uses default-deny egress.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: voice-bot-grpc-gateway-only
+  namespace: __K_NAMESPACE__
+  labels:
+    app.kubernetes.io/name: voice-bot
+    app.kubernetes.io/component: network-policy
+spec:
+  podSelector:
+    matchLabels:
+      app: voice-bot
+  policyTypes:
+    - Ingress
+  ingress:
+    # Gateway REST → bots upstream (gRPC)
+    - from:
+        - podSelector:
+            matchLabels:
+              app: voice-gateway
+      ports:
+        - protocol: TCP
+          port: 9090
+    # Bot HTTP health/readiness (cluster probes and in-mesh diagnostics)
+    - ports:
+        - protocol: TCP
+          port: 8080

@@ -2,17 +2,29 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../backend/deep_links_client.dart';
+import '../backend/users_client.dart';
 import '../routing/app_router.dart';
 import '../routing/deep_link_parser.dart';
+import '../routing/deep_link_urls.dart';
 import '../ui/bots/bot_install_page.dart';
+import '../ui/social/profile_detail_sheet.dart';
 import 'auth_providers.dart';
 import 'chat_providers.dart';
+import 'shared_media_providers.dart';
 import 'shell_providers.dart';
+import 'social_providers.dart';
 import 'space_providers.dart';
 
 final voiceDeepLinksClientProvider = Provider<VoiceDeepLinksClient>((ref) {
   return VoiceDeepLinksClient(gateway: ref.watch(gatewayHttpClientProvider));
 });
+
+void _scrollToMessage(WidgetRef ref, String chatId, String messageId) {
+  ref.read(pendingChatMessageScrollProvider(chatId).notifier).state =
+      messageId;
+  ref.read(pendingChatMessageHighlightProvider(chatId).notifier).state =
+      messageId;
+}
 
 /// Applies resolved deep link targets to shell navigation.
 Future<void> applyDeepLinkNavigation(
@@ -39,11 +51,19 @@ Future<void> applyDeepLinkNavigation(
       if (chatId != null) {
         ref.read(chatActionsProvider).selectChat(chatId);
       }
+      final messageId = target.messageId;
+      if (messageId != null && chatId != null) {
+        _scrollToMessage(ref, chatId, messageId);
+      }
     case DeepLinkKind.chat:
     case DeepLinkKind.chatMessage:
       final chatId = target.chatId;
       if (chatId != null) {
         ref.read(chatActionsProvider).selectChat(chatId);
+      }
+      final messageId = target.messageId;
+      if (messageId != null && chatId != null) {
+        _scrollToMessage(ref, chatId, messageId);
       }
     case DeepLinkKind.voiceRoom:
       final spaceId = target.spaceId;
@@ -61,9 +81,54 @@ Future<void> applyDeepLinkNavigation(
         ),
       );
     case DeepLinkKind.profile:
+      await _openProfileDeepLink(ref, target);
     case DeepLinkKind.dm:
-      break;
+      await _openDmDeepLink(ref, target);
   }
+}
+
+Future<void> _openDmDeepLink(WidgetRef ref, DeepLinkTarget target) async {
+  final userId = target.userId;
+  if (userId == null || userId.isEmpty) return;
+  ref.read(navigationSectionProvider.notifier).state = NavigationSection.chats;
+  await ref.read(chatActionsProvider).openDmWithProfile(userId);
+}
+
+Future<void> _openProfileDeepLink(WidgetRef ref, DeepLinkTarget target) async {
+  final username = target.username?.trim();
+  if (username == null || username.isEmpty) return;
+  final auth = ref.read(authControllerProvider);
+  if (!auth.isAuthenticated || auth.session == null) return;
+
+  final client = ref.read(voiceUsersClientProvider);
+  final result = await client.searchProfiles(
+    authorization: 'Bearer ${auth.session!.accessToken}',
+    query: username,
+    pageSize: 8,
+  );
+  String? profileId;
+  if (result case UsersApiOk(:final data)) {
+    for (final profile in data.profiles) {
+      if (profile.username.toLowerCase() == username.toLowerCase()) {
+        profileId = profile.id;
+        break;
+      }
+    }
+    profileId ??= data.profiles.firstOrNull?.id;
+  }
+  if (profileId == null) return;
+
+  ref.read(navigationSectionProvider.notifier).state = NavigationSection.social;
+  final ctx = rootNavigatorKey.currentContext;
+  if (ctx == null || !ctx.mounted) return;
+  await showModalBottomSheet<void>(
+    context: ctx,
+    isScrollControlled: true,
+    builder: (sheetContext) => UncontrolledProviderScope(
+      container: ProviderScope.containerOf(ctx),
+      child: ProfileDetailSheet(profileId: profileId!),
+    ),
+  );
 }
 
 /// Resolves authenticated deep link via Gateway API when possible.
@@ -104,4 +169,26 @@ Future<void> resolveAndNavigateDeepLink(
     }
   }
   await applyDeepLinkNavigation(ref, target);
+}
+
+/// Builds a share URL for the current chat/message context.
+String? shareUrlForChat({
+  required String chatId,
+  String? spaceId,
+  String? messageId,
+}) {
+  if (messageId != null && messageId.isNotEmpty) {
+    if (spaceId != null && spaceId.isNotEmpty) {
+      return spaceMessageShareUrl(
+        spaceId: spaceId,
+        chatId: chatId,
+        messageId: messageId,
+      );
+    }
+    return chatMessageShareUrl(chatId: chatId, messageId: messageId);
+  }
+  if (spaceId != null && spaceId.isNotEmpty) {
+    return spaceChatShareUrl(spaceId: spaceId, chatId: chatId);
+  }
+  return chatShareUrl(chatId);
 }

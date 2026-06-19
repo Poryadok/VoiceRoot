@@ -10,6 +10,7 @@ import '../backend/guest_credentials_storage.dart';
 import '../backend/jwt_claims.dart';
 import '../backend/gateway_http.dart';
 import '../ui/auth/auth_errors.dart';
+import '../routing/deep_link_controller.dart';
 import 'gateway_providers.dart';
 import 'version_policy_providers.dart';
 
@@ -96,6 +97,7 @@ class AuthController extends StateNotifier<AuthState> {
     required VoiceAuthClient authClient,
     required AuthSessionStorage storage,
     required GuestCredentialsStorage guestCredentialsStorage,
+    this.onAuthenticated,
   }) : _authClient = authClient,
        _storage = storage,
        _guestCredentialsStorage = guestCredentialsStorage,
@@ -106,6 +108,7 @@ class AuthController extends StateNotifier<AuthState> {
   final VoiceAuthClient _authClient;
   final AuthSessionStorage _storage;
   final GuestCredentialsStorage _guestCredentialsStorage;
+  final Future<void> Function()? onAuthenticated;
   Timer? _refreshTimer;
   static final _random = Random.secure();
 
@@ -135,6 +138,9 @@ class AuthController extends StateNotifier<AuthState> {
           isGuest: isGuest,
           needsGuestNickname: needsGuestNickname,
         );
+        if (!needsGuestNickname) {
+          await _notifyAuthenticated();
+        }
       case AuthSessionFailure():
         await _storage.clear();
         state = state.copyWith(
@@ -194,6 +200,7 @@ class AuthController extends StateNotifier<AuthState> {
     if (accountId == null) return;
     await _guestCredentialsStorage.markNicknameCompleted(accountId);
     state = state.copyWith(clearGuestNickname: true);
+    await _notifyAuthenticated();
   }
 
   Future<String?> convertGuest({
@@ -293,6 +300,7 @@ class AuthController extends StateNotifier<AuthState> {
           pendingDiscoverHint: true,
           isGuest: await _resolveIsGuest(session),
         );
+        await _notifyAuthenticated();
       case AuthSessionFailure(
         :final message,
         :final errorCode,
@@ -318,6 +326,12 @@ class AuthController extends StateNotifier<AuthState> {
   Future<void> _persist(AuthSession session) async {
     await _storage.write(session);
     _scheduleProactiveRefresh();
+  }
+
+  Future<void> _notifyAuthenticated() async {
+    final callback = onAuthenticated;
+    if (callback == null) return;
+    await callback();
   }
 
   /// Called by [GatewayHttpClient] on 401; returns true when session was refreshed.
@@ -393,6 +407,9 @@ final StateNotifierProvider<AuthController, AuthState> authControllerProvider =
         authClient: ref.watch(voiceAuthClientProvider),
         storage: ref.watch(authSessionStorageProvider),
         guestCredentialsStorage: ref.watch(guestCredentialsStorageProvider),
+        onAuthenticated: () async {
+          await ref.read(deepLinkControllerProvider.notifier).flushPendingAfterAuth();
+        },
       );
     });
 

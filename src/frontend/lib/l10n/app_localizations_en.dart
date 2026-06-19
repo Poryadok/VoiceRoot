@@ -618,6 +618,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get commonCancel => 'Cancel';
 
   @override
+  String get shareLinkAction => 'Copy link';
+
+  @override
+  String get shareLinkCopied => 'Link copied to clipboard';
+
+  @override
   String get commonEdit => 'Edit';
 
   @override

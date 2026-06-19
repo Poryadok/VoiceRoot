@@ -4,5 +4,11 @@
 <dict>
 	<key>aps-environment</key>
 	<string>development</string>
+	<!-- DEPLOYMENT: replace TEAMID with Apple Developer Team ID and enable Associated Domains capability in Xcode before prod universal links. See docs/DEPLOYMENT.md. -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:voice.gg</string>
+		<string>applinks:www.voice.gg</string>
+	</array>
 </dict>
 </plist>

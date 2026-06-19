@@ -24,6 +24,7 @@ import '../social/presence_indicator.dart';
 import '../space/create_space_sheet.dart';
 import '../space/join_space_invite_sheet.dart';
 import '../chat/create_group_sheet.dart';
+import '../onboarding/onboarding_anchor_keys.dart';
 
 /// Reusable chat list content for navigation column and legacy middle column.
 class ChatListBody extends ConsumerWidget {
@@ -66,7 +67,9 @@ class ChatListBody extends ConsumerWidget {
       }
     }
 
-    return Column(
+    return KeyedSubtree(
+      key: OnboardingAnchorKeys.chatsNav,
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (showHeader)
@@ -279,6 +282,7 @@ class ChatListBody extends ConsumerWidget {
           ),
         ),
       ],
+    ),
     );
   }
 }

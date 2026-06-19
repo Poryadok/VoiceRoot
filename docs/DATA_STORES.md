@@ -35,6 +35,17 @@
 
 Для `API Gateway` канонично **нет service-owned PostgreSQL**. Политика версий клиента (`/api/v1/version`) может храниться либо в managed config store, либо в отдельной control-plane БД/таблице (`client_versions`) под владением Gateway как edge-политики; это не означает появление отдельной доменной БД Gateway в inventory.
 
+### `auth_db` (Auth Service)
+
+Инвентарь таблиц — [auth-service.md](microservices/auth-service.md); миграции Flyway в `src/backend/auth/src/main/resources/db/migration/`.
+
+| Таблица | Примечание |
+|---------|------------|
+| `accounts` | учётная запись, 2FA, soft delete |
+| `refresh_tokens` | opaque refresh, rotation |
+| `otp_codes` | email verify / password reset |
+| `e2e_key_backups` | Phase 15 — client-encrypted key backup blob (`V4__e2e_key_backups.sql`) |
+
 ---
 
 ## Клиенты и админка

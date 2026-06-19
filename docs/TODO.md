@@ -24,47 +24,17 @@
 
 ---
 
-## Batch 1 — Docs sync (PLAN + DATA_STORES)
-
-Сверка PLAN §11–§18 и `DATA_STORES.md` с кодом (аудит 2026-06-17). Не менять границы фаз.
-
-- [ ] **PLAN.md** — сводная таблица и §11–§18 чеклисты:
-  - **11** — строку фазы можно `[x]`; §11 чеклисты — после остатка privacy (см. Batch 2).
-  - **15** — строку фазы и §15 backend `[x]` (критерии приёмки закрыты в коде).
-  - **16** — строку `[ ]` до остатка ботов; §16 Developer Portal `[x]` завышен.
-  - **18** — сводную `[ ]`; §18 `[x]` — baseline, не полное [accessibility.md](features/accessibility.md).
-- [ ] **DATA_STORES.md** — добавить `e2e_key_backups` в инвентарь `auth_db` (Flyway `V4__e2e_key_backups.sql`, [auth-service.md](microservices/auth-service.md)).
-
-**Промпт-якорь:** `Docs sync — PLAN.md and DATA_STORES from docs/TODO.md Batch 1`.
-
----
-
-## Batch 2 — Phase 11 Trust (остаток)
-
-Расхождения с [reports.md](features/reports.md), [privacy.md](features/privacy.md).
-
-### Репорты
-
-- [x] **API shape** — один gRPC `CreateReport` + `target_type` вместо отдельных `ReportUser` / `ReportMessage` / `ReportSpace` (синхронизировано: [reports.md](features/reports.md), [PLAN.md](PLAN.md) §11, [moderation-service.md](microservices/moderation-service.md)).
-
-### Приватность — enforcement
-
-- [x] **`allow_phone_search` / `allow_calls` / `allow_files` / `allow_voice_messages` / `allow_chat_space_invites`** — runtime gates: Voice `StartCall` (DM), Chat `AddMembers`, Space `JoinByInvite`, Messaging attachments (DM), Social `SyncPhoneContacts` (privacy filter). Compose: `USER_GRPC_ADDR` / `SOCIAL_GRPC_ADDR` / `SPACE_GRPC_ADDR` on voice+space; live `compose_phase11_privacy_actions_live_test.go` + `phase11_privacy_actions_e2e_live_test.dart`.
-- [ ] **`SyncPhoneContacts` phone-hash lookup** — Social uses `EmptyPhoneHashLookup` until Auth S2S resolve-hashes RPC exists; compose live does not assert phone sync yet.
-- [ ] **Group attachment privacy** — `allow_files` / `allow_voice_messages` enforced DM-only (group policy undefined in [privacy.md](features/privacy.md)).
-- [x] **show_avatar / show_bio** — в [privacy.md](features/privacy.md): пока без privacy-контролов, аватар и bio видны всем с доступом к профилю.
-
-**Промпт-якорь:** `Phase 11 Trust — privacy and reports from docs/TODO.md Batch 2`.
-
----
-
 ## Batch 3 — Phase 15 E2E (хвосты)
 
 Критерии приёмки §15 закрыты; ниже — усиления и тесты.
 
-- [ ] **Opt-out search hardening** — compose live не требует search hit (tier-2); при стабильном Search в CI усилить assert.
-- [ ] **Matcher `IncludeGuests` only** — без `IsEveryoneShortcut` гости видят поле, но не strangers; edge cases guests-only.
-- [ ] **Key backup Flutter live** — REST покрыт compose; нет opt-in `phase15_e2e_key_backup_live_test.dart`.
+- [x] **Opt-out search hardening** — compose live + Flutter require search hit when Search healthy; skip on 503/500 degradation.
+- [x] **Matcher `IncludeGuests` only** — stranger/friend denied, guest allow/deny tests in `matcher_test.go` + `TestGetPresence_IncludeGuestsOnly_GuestVisibleOthersDenied`.
+- [x] **Key backup Flutter live** — `phase15_e2e_key_backup_live_test.dart` + `compose-e2e-live.sh`.
+
+### Audit 2026-06-19 (verification)
+
+- [ ] **Compose live not re-run locally** — gateway phase15 optout/key-backup and Flutter `phase15_e2e_*_live_test` require `make compose-e2e-live`; run before merge when stack available.
 
 **Промпт-якорь:** `Phase 15 E2E follow-ups from docs/TODO.md Batch 3`.
 
@@ -82,12 +52,16 @@
 
 ### Phase 16 — остаток после Batch 4
 
-- [ ] **Bot gRPC mTLS (prod)** — TLS между сервисами, k8s NetworkPolicy для `voice-bot:9090`.
-- [ ] **Bot Service prod rollout** — образ + миграции `bot_db` в prod namespace; smoke webhook E2E на staging.
-- [ ] **Developer Portal staging/prod k8s** — Deployment/Ingress для portal; Auth OAuth env на staging `voice-auth`.
-- [ ] **Daily chat limit: increment-after-success** — счётчик растёт до `CreateChat`; failed create всё равно съедает квоту ([`bot_c.go`](../src/backend/bot/internal/grpcsvc/bot_c.go)).
-- [ ] **Stale `src/backend/bot/README.md`** — всё ещё «scaffold only»; обновить или удалить.
-- [ ] **Webhook E2E on staging** — polling-only в compose; production webhook path на staging не покрыт live-тестом.
+- [x] **Bot gRPC mTLS (prod)** — NetworkPolicy template [`deploy/templates/network-policy-voice-bot.yaml`](../deploy/templates/network-policy-voice-bot.yaml) + TLS/mTLS notes in [`DEPLOYMENT.md`](DEPLOYMENT.md). **Staging-blocked:** apply policy + service-mesh mTLS on prod cluster when CNI/mesh ready.
+- [x] **Bot Service prod rollout** — skeleton [`deploy/prod/services.yaml`](../deploy/prod/services.yaml) + `bot_db` migrate Job template/doc in [`DEPLOYMENT.md`](DEPLOYMENT.md). **Staging-blocked:** first prod cutover (namespace secrets, GHCR `bot` image, run migrate Job on cluster).
+- [x] **Developer Portal staging k8s** — [`deploy/staging/developer-portal.yaml`](../deploy/staging/developer-portal.yaml), Auth OAuth env on staging `voice-auth` (ConfigMap + services.yaml), doc in [`DEPLOYMENT.md`](DEPLOYMENT.md). **Staging-blocked:** DNS `developers.tastytest.online`, portal image in GHCR, manual apply until next deploy.
+- [x] **Daily chat limit: increment-after-success** — `IncrementDailyChatCreates` after successful `CreateChat`; `TestCreateBotChat_failedCreateDoesNotConsumeQuota`.
+- [x] **Stale `src/backend/bot/README.md`** — updated; points to `docs/microservices/bot-service.md`.
+- [x] **Webhook E2E on staging** — opt-in `TestStagingPhase16BotsWebhook_live` (`VOICE_STAGING_API_URL`, `VOICE_STAGING_WEBHOOK_PING_URL`) in gateway. **Staging-blocked:** run against live staging with a public webhook echo URL reachable from Bot pod.
+
+### Audit 2026-06-19 (verification)
+
+- [ ] **Bot grpcsvc test duration** — `go test ./...` in `bot/internal/grpcsvc` ~336s on Windows host; watch CI wall time / consider `-short` split if job regresses.
 
 **Промпт-якорь:** `Phase 16 bots from docs/TODO.md Batch 4`.
 
@@ -144,32 +118,24 @@ PLAN §18 client/backend `[x]` — baseline; остаток vs [deep-links.md](f
 
 ### PLAN baseline vs spec
 
-- [ ] **Onboarding one-liner** — PLAN: register → space → first message; код: 5 modal hints ([onboarding.md](features/onboarding.md)).
-- [ ] **Приёмка #1 invite→join** — backend HTML+resolve OK; `DeepLinkListener` только в authed shell; `flushPendingAfterAuth()` не из auth flow; iOS без associated domains; prod AASA placeholders.
-- [ ] **Приёмка #2 keyboard nav** — только Ctrl+K / Ctrl+,; нет Alt+↑/↓, Escape→composer, message keys.
+- [ ] **Onboarding one-liner** — PLAN: register → space → first message; код: coach-mark flow ([onboarding.md](features/onboarding.md)).
+- [ ] **Приёмка #1 invite→join** — prod AASA/`assetlinks.json` на `voice.gg` (Gateway — dev placeholders); iOS associated-domains entitlement — placeholder в Runner, TEAMID перед prod.
 
 ### Deep links
 
 - [ ] **Prod universal links** — real `voice.gg` AASA + `assetlinks.json` (Gateway — dev placeholders).
-- [ ] **Share buttons** — copy `https://voice.gg/...` из space, chat, message, profile (сейчас только invite).
-- [ ] **Push payload migration** — FCM/APNs canonical `deep_link` вместо raw `chat_id`.
-- [ ] **Message anchor scroll/highlight** — `/m/{messageId}`.
-- [ ] **DM / profile deep link UI** — `/dm/`, `/u/`.
 - [ ] **Mobile device E2E** — App Links / custom scheme Android/iOS.
+
+### Audit 2026-06-19 (verification)
+
+- [ ] **Well-known placeholders** — Gateway serves AASA `TEAMID.gg.voice.app` and assetlinks `PLACEHOLDER` SHA-256; iOS `Runner.entitlements` has associated-domains but needs real Team ID before prod ([`DEPLOYMENT.md`](DEPLOYMENT.md)).
+- [ ] **Deep link test depth** — `phase18_deeplink_web_test.dart` is parser smoke only; no `integration_test` web driver or on-device App Links in CI.
+- [ ] **Push → navigation** — `push_notification_handler_test.dart` covers `deep_link` parsing; no FCM/APNs device E2E to chat/message route.
+- [ ] **A11y shortcuts** — `voice_shortcuts_test.dart` asserts focus-request providers only; Semantics / keyboard traversal still manual ([`accessibility.md`](features/accessibility.md)).
 
 ### Onboarding & a11y
 
-- [ ] **Coach-mark anchors** — steps 2–4 pinned к nav/search/MM (сейчас modals).
-- [ ] **Message list keyboard nav** — `↑/↓`, `R`, `E`.
-- [ ] **Focus trap in all modals** — bottom sheets audit.
-- [ ] **aria-live for new messages** — Flutter web semantics.
 - [ ] **Manual TalkBack / VoiceOver** — pre-release checklist.
-- [ ] **Axe / contrast CI** — token pairs.
-
-### Tests
-
-- [ ] **User store onboarding coverage** — `onboarding_test.go` в CI с testcontainers.
-- [ ] **Web driver E2E** — `integration_test/phase18_deeplink_web_test.dart`.
 
 **Промпт-якорь:** `Phase 18 Growth/A11y from docs/TODO.md Batch 6`.
 
@@ -179,27 +145,26 @@ PLAN §18 client/backend `[x]` — baseline; остаток vs [deep-links.md](f
 
 Baseline закрыт (2026-06): register guest, JWT, guards, convert-guest, TTL, Flutter auto-guest/convert. См. [auth-and-contacts.md](features/auth-and-contacts.md).
 
-- [ ] **Messaging `allow_guest_dm`** — guest reply/send в существующем DM: проверять `allow_guest_dm` у получателя; Messaging не читает `account_type`.
-- [ ] **Guest audience (остальные поля)** — v1 `show_online_include_guests` есть; нет multiselect «Гостевые аккаунты» для `show_game_status` / `show_mm_rating` / `show_stories` и enforcement.
-- [ ] **Onboarding coach-marks E2E** — widget-тест якорей после guest nickname; API live: `guest_onboarding_e2e_live_test`.
+- [x] **Messaging `allow_guest_dm`** — guest reply в существующем DM: `messaging_grpc.go` + `dm_guest_privacy_integration_test.go`; Flutter live `guest_restrictions_e2e_live_test.dart`.
+- [ ] **Guest audience (Flutter settings UX)** — backend enforcement для `show_game_status` / `show_mm_rating` / `show_stories` через `IncludeGuests` (User presence, Matchmaking `rating_privacy`, Story guest test); в Flutter нет отдельного multiselect «Гостевые аккаунты» на каждое поле (только общий `include_guests` в `PrivacyAudiencePicker`).
+- [ ] **Onboarding coach-marks E2E** — [x] widget якорей: `guest_onboarding_anchor_keys_test.dart`; [ ] полный tour step-through + live API `guest_onboarding_e2e_live_test` (compose).
+
+### Audit 2026-06-19 (verification)
+
+- [ ] **Auth phone-hash S2S** — `ResolvePhoneHashes` gRPC + Social `auth_phone_hash.go` unit-tested; staging phone-sync live (`compose_phase11_phone_sync_live_test`) not re-run locally.
+- [ ] **Guest restrictions live** — `guest_restrictions_e2e_live_test.dart` not re-run (compose); run in `compose-e2e-live` before release.
 
 **Промпт-якорь:** `Guest accounts from docs/TODO.md Batch 7`.
 
 ---
 
-## Batch 8 — Infra & repo hygiene
-
-- [ ] **Политика `protos/` и генерации** — [REPOSITORIES.md](REPOSITORIES.md) + Makefile/CI: что коммитим (Go `*.pb.go`, Dart gen), что генерим в CI.
-- [ ] **Скрипт стенд + миграции** — Makefile/scripts поверх [migrations README](../src/backend/migrations/README.md).
-- [ ] **Аудит консистентности доков** — [DOCS_CONSISTENCY_AUDIT.md](DOCS_CONSISTENCY_AUDIT.md) после крупного контрактного PR.
-
-**Промпт-якорь:** `Infra batch from docs/TODO.md Batch 8`.
-
----
-
 ## Batch 9 — QA polish
 
-- [ ] **Bundle emoji font for web** — Noto Color Emoji для reaction/emoji picker; убрать runtime Noto fallback warning.
+- [x] **Bundle emoji font for web** — Noto Color Emoji in `assets/fonts/NotoColorEmoji.ttf`; `VoiceEmojiStyle` on reactions/picker; `test/voice_emoji_style_test.dart`.
+
+### Audit 2026-06-19 (verification)
+
+- [ ] **Flutter analyze** — `flutter analyze` reports 35 info/warnings (unused imports in `guest_entry_test.dart`, deprecated form/Radio APIs); not merge-blocking but clean up before release polish.
 
 **Промпт-якорь:** `QA polish from docs/TODO.md Batch 9`.
 
@@ -209,14 +174,11 @@ Baseline закрыт (2026-06): register guest, JWT, guards, convert-guest, TTL
 
 | Приоритет / готовность | Batch |
 |------------------------|-------|
-| Синхронизировать план с кодом | **Batch 1 — Docs sync** |
-| Trust privacy/reports | **Batch 2 — Phase 11** |
 | E2E хвосты | **Batch 3 — Phase 15** |
 | Боты: deploy, hardening, live tests | **Batch 4 — Phase 16** |
 | Сторис | **Batch 5 — Phase 17** |
 | Deep links, onboarding, a11y | **Batch 6 — Phase 18** |
 | Гостевые ограничения + UX | **Batch 7 — Guest accounts** |
-| Репо / protos / миграции | **Batch 8 — Infra** |
 | Web emoji font | **Batch 9 — QA** |
 
 Фазовые критерии «готово» — [PLAN.md](PLAN.md) §11–18, [encryption.md](features/encryption.md), [bots.md](features/bots.md).

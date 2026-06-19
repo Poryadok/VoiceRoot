@@ -8,6 +8,7 @@ import '../../theme/voice_colors.dart';
 import '../social/social_panel.dart';
 import '../space/space_rail.dart';
 import '../search/global_search_panel.dart';
+import '../onboarding/onboarding_anchor_keys.dart';
 import 'chat_list_body.dart';
 
 /// Left navigation column: chats, spaces, and inline social.
@@ -98,7 +99,9 @@ class _ExpandedNavigationState extends ConsumerState<_ExpandedNavigation> {
 
     return ColoredBox(
       color: voice.muted,
-      child: Column(
+      child: KeyedSubtree(
+        key: OnboardingAnchorKeys.spaces,
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const GlobalSearchPanel(compact: true),
@@ -145,6 +148,7 @@ class _ExpandedNavigationState extends ConsumerState<_ExpandedNavigation> {
                 : const SocialPanel(),
           ),
         ],
+      ),
       ),
     );
   }

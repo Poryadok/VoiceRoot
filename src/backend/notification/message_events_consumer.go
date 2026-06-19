@@ -127,6 +127,7 @@ func routeMessageNotification(
 		senderID, _ := uuid.Parse(ev.GetSenderProfileId())
 		decisions := enrichDecisions(ctx, pusher, raw, senderID, ev.GetChatId(), delivery.TypeNewMessage)
 		preview, senderLabel := pushCopyFields(ctx, enrich, ev.GetMessageId(), ev.GetSenderProfileId())
+		deepLink := messagePushDeepLink(ev.GetChatId(), ev.GetMessageId())
 		payload := push.Payload{
 			Title: pushcopy.TitleForSender(senderLabel, "New message"),
 			Body:  pushcopy.MessageBody(preview),
@@ -135,6 +136,7 @@ func routeMessageNotification(
 				"chat_id":           ev.GetChatId(),
 				"message_id":        ev.GetMessageId(),
 				"sender_profile_id": ev.GetSenderProfileId(),
+				"deep_link":         deepLink,
 			},
 		}
 		return pusher.SendPush(ctx, decisions, delivery.DeliveryInput{
@@ -151,6 +153,7 @@ func routeMessageNotification(
 		senderID, _ := uuid.Parse(ev.GetSenderProfileId())
 		decisions := enrichDecisions(ctx, pusher, raw, senderID, ev.GetChatId(), delivery.TypeMention)
 		preview, senderLabel := pushCopyFields(ctx, enrich, ev.GetMessageId(), ev.GetSenderProfileId())
+		deepLink := messagePushDeepLink(ev.GetChatId(), ev.GetMessageId())
 		payload := push.Payload{
 			Title: pushcopy.TitleForSender(senderLabel, "Mention"),
 			Body:  pushcopy.MentionBody(preview),
@@ -159,6 +162,7 @@ func routeMessageNotification(
 				"chat_id":           ev.GetChatId(),
 				"message_id":        ev.GetMessageId(),
 				"sender_profile_id": ev.GetSenderProfileId(),
+				"deep_link":         deepLink,
 			},
 		}
 		return pusher.SendPush(ctx, decisions, delivery.DeliveryInput{
@@ -208,4 +212,11 @@ func pushCopyFields(
 	preview, _ = enrich.MessagePreview(ctx, messageID)
 	senderLabel, _ = enrich.SenderLabel(ctx, senderProfileID)
 	return preview, senderLabel
+}
+
+func messagePushDeepLink(chatID, messageID string) string {
+	if strings.TrimSpace(messageID) != "" {
+		return fmt.Sprintf("https://voice.gg/ch/%s/m/%s", chatID, messageID)
+	}
+	return fmt.Sprintf("https://voice.gg/ch/%s", chatID)
 }

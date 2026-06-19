@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"voice/backend/pkg/guestguard"
 	"voice/backend/pkg/privacy"
 	"voice/backend/story/internal/authctx"
 	"voice/backend/story/internal/s2s"
@@ -662,14 +663,14 @@ func (s *StoryGRPC) canViewStory(ctx context.Context, viewerID uuid.UUID, row *s
 		floor, err := s.Privacy.ShowStoriesAudience(ctx, row.AuthorProfileID)
 		if err == nil && !floor.IsNobody() {
 			matcher := s.privacyMatcher()
-			ok, matchErr := matcher.Allowed(ctx, row.AuthorProfileID, viewerID, floor, false)
+			ok, matchErr := matcher.Allowed(ctx, row.AuthorProfileID, viewerID, floor, guestguard.IsGuest(ctx))
 			if matchErr != nil || !ok {
 				return false
 			}
 		}
 	}
 	matcher := s.privacyMatcher()
-	ok, err := matcher.Allowed(ctx, row.AuthorProfileID, viewerID, storyAudience, false)
+	ok, err := matcher.Allowed(ctx, row.AuthorProfileID, viewerID, storyAudience, guestguard.IsGuest(ctx))
 	return err == nil && ok
 }
 
@@ -699,7 +700,7 @@ func (s *StoryGRPC) canViewHighlight(ctx context.Context, viewerID uuid.UUID, ro
 	}
 	hlAudience := audienceFromStoryRow(row.Visibility, nil)
 	matcher := s.privacyMatcher()
-	ok, err := matcher.Allowed(ctx, row.ProfileID, viewerID, hlAudience, false)
+	ok, err := matcher.Allowed(ctx, row.ProfileID, viewerID, hlAudience, guestguard.IsGuest(ctx))
 	return err == nil && ok
 }
 

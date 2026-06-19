@@ -18,6 +18,12 @@ final navigationSectionProvider = StateProvider<NavigationSection>(
 /// Emoji picked in side panel; consumed by [ChatRoomPanel] composer.
 final pendingComposerEmojiProvider = StateProvider<String?>((ref) => null);
 
+/// Bumped to request global search field focus (Ctrl+K).
+final globalSearchFocusRequestProvider = StateProvider<int>((ref) => 0);
+
+/// Bumped to request composer focus (Escape).
+final composerFocusRequestProvider = StateProvider<int>((ref) => 0);
+
 /// Coordinates shell column visibility and selection consistency.
 class ShellNavigation {
   ShellNavigation(this._ref);

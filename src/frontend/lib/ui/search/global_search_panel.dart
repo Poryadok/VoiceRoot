@@ -30,6 +30,7 @@ class GlobalSearchPanel extends ConsumerStatefulWidget {
 
 class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
   final _controller = TextEditingController();
+  final _focusNode = FocusNode();
   SearchQueryDebouncer? _debouncer;
   GlobalSearchData? _results;
   final Map<String, VoiceProfile> _profiles = {};
@@ -46,6 +47,7 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
   void dispose() {
     _debouncer?.dispose();
     _controller.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -104,6 +106,12 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final voice = VoiceColors.of(context);
+
+    ref.listen(globalSearchFocusRequestProvider, (prev, next) {
+      if (next != (prev ?? 0)) {
+        _focusNode.requestFocus();
+      }
+    });
 
     final showResults = _loading || _results != null;
 
@@ -196,6 +204,7 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
           child: TextField(
             key: GlobalSearchPanel.searchFieldKey,
             controller: _controller,
+            focusNode: _focusNode,
             decoration: InputDecoration(
               hintText: l10n.globalSearchHint,
               prefixIcon: const Icon(Icons.search),

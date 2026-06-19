@@ -149,6 +149,94 @@ Compose reference: [`docker-compose.yml`](../docker-compose.yml) `auth` service;
 4. Verify PKCE flow: authorize → callback → `POST /api/v1/auth/oauth2/token` with `code_verifier`.
 5. Bot runtime (bot token, webhook) is independent of portal OAuth; portal OAuth is for **developer account** login only.
 
+### Staging Kubernetes (voice-auth + portal)
+
+Staging manifests wire Developer Portal OAuth on **voice-auth** via ConfigMap `voice-app-config` ([`deploy/staging/configmap-app.yaml`](../deploy/staging/configmap-app.yaml)) and env on the Auth Deployment ([`deploy/staging/services.yaml`](../deploy/staging/services.yaml)):
+
+| ConfigMap key / Auth env | Purpose |
+|--------------------------|---------|
+| `AUTH_OAUTH_PUBLIC_API_BASE_URL` | Public Gateway URL in authorize links (staging: `https://voice.tastytest.online`) |
+| `AUTH_OAUTH_DEVELOPER_PORTAL_ENABLED` | `true` on staging |
+| `AUTH_OAUTH_DEVELOPER_PORTAL_CLIENT_ID` | OAuth client id (`voice-developer-portal`) |
+| `AUTH_OAUTH_DEVELOPER_PORTAL_REDIRECT_URIS` | HTTPS callback(s), e.g. `https://developers.tastytest.online/callback` |
+| `AUTH_OAUTH_DEVELOPER_PORTAL_CLIENT_SECRET` | Optional Secret override (PKCE public client may omit) |
+
+Portal Deployment + Ingress: [`deploy/staging/developer-portal.yaml`](../deploy/staging/developer-portal.yaml). Build the image with the same public API base and client id:
+
+```bash
+docker build -f src/developer-portal/Dockerfile src/developer-portal \
+  --build-arg VITE_VOICE_API_BASE=https://voice.tastytest.online \
+  --build-arg VITE_OAUTH_CLIENT_ID=voice-developer-portal
+```
+
+`scripts/staging/render-and-apply.sh` applies the portal manifest when present; override ingress host with `VOICE_DEVELOPER_PORTAL_INGRESS_HOST` (default `developers.tastytest.online`). Add DNS **A/AAAA** for that host to the staging ingress node. **Prod** portal Ingress is not in-repo yet — reuse the staging template with `voice-prod` namespace and production FQDNs.
+
+---
+
+## Bot Service — production rollout (Phase 16)
+
+### Skeleton manifests
+
+| Path | Purpose |
+|------|---------|
+| [`deploy/prod/namespace.yaml`](../deploy/prod/namespace.yaml) | `voice-prod` namespace |
+| [`deploy/prod/services.yaml`](../deploy/prod/services.yaml) | `voice-bot` Deployment + Service (2 replicas); extend before full prod cutover |
+| [`deploy/templates/network-policy-voice-bot.yaml`](../deploy/templates/network-policy-voice-bot.yaml) | Ingress NetworkPolicy: gRPC **9090** only from `voice-gateway` |
+| [`deploy/templates/migrate-bot-db-job.yaml`](../deploy/templates/migrate-bot-db-job.yaml) | One-shot golang-migrate Job for `bot_db` |
+
+Ensure `voice-app-secrets` includes `BOT_DATABASE_URL` (`postgres://…/bot_db`) and Gateway ConfigMap upstreams include `"bots":"voice-bot:9090"` (staging reference: [`deploy/staging/configmap-app.yaml`](../deploy/staging/configmap-app.yaml)).
+
+### `bot_db` migrations (staging / prod)
+
+1. Create database `bot_db` on cluster Postgres (init script [`docker/postgres/01-init-databases.sh`](../docker/postgres/01-init-databases.sh) includes it).
+2. Apply SQL from [`src/backend/migrations/bot_db/`](../src/backend/migrations/bot_db/) **before** scaling `voice-bot` (or on first deploy):
+
+**Local compose:** `make compose-migrate-bot`
+
+**Kubernetes Job (template):**
+
+```bash
+# From repo root; namespace voice-prod or voice-staging
+NS=voice-prod
+kubectl create configmap voice-bot-db-migrations -n "$NS" \
+  --from-file=src/backend/migrations/bot_db \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+sed -e "s|__K_NAMESPACE__|${NS}|g" \
+    -e "s|__MIGRATE_IMAGE_TAG__|v4.18.1|g" \
+    deploy/templates/migrate-bot-db-job.yaml | kubectl apply -f -
+
+kubectl wait --for=condition=complete job/voice-migrate-bot-db -n "$NS" --timeout=120s
+```
+
+Re-run only when new migration files ship; use a new Job name or delete the completed Job before re-apply.
+
+### gRPC mTLS and NetworkPolicy (prod hardening)
+
+**v1 (current):** `BOT_GRPC_GATEWAY_ONLY=true` — Bot rejects gRPC without Gateway metadata (`x-voice-internal`) or bot-token context. Staging and compose use plaintext gRPC on port **9090** inside the cluster.
+
+**Prod hardening (incremental):**
+
+1. **NetworkPolicy** — apply [`deploy/templates/network-policy-voice-bot.yaml`](../deploy/templates/network-policy-voice-bot.yaml) with `__K_NAMESPACE__=voice-prod` so only `voice-gateway` pods may connect to `voice-bot:9090`. Requires a CNI that enforces NetworkPolicy (Calico, Cilium, etc.).
+2. **mTLS between services** — not wired in application code yet; options: service mesh (Linkerd/Istio), or gRPC server TLS on Bot with Gateway as client. Until then, rely on NetworkPolicy + `BOT_GRPC_GATEWAY_ONLY`. Document chosen CA/cert rotation in infra repo when enabled.
+
+```bash
+sed "s|__K_NAMESPACE__|voice-prod|g" deploy/templates/network-policy-voice-bot.yaml | kubectl apply -f -
+```
+
+### Staging webhook E2E (opt-in)
+
+Compose covers webhook delivery via `host.docker.internal` ([`compose_phase16_bots_slash_live_test.go`](../src/backend/gateway/compose_phase16_bots_slash_live_test.go)). For **staging**, run the gateway opt-in test (not in default CI):
+
+```bash
+cd src/backend/gateway
+VOICE_STAGING_API_URL=https://voice.tastytest.online \
+VOICE_STAGING_WEBHOOK_PING_URL=https://<public-echo>/ping \
+go test -run TestStagingPhase16BotsWebhook_live -count=1 .
+```
+
+`VOICE_STAGING_WEBHOOK_PING_URL` must be reachable **from the staging Bot pod** (tunnel, echo service, or request bin) and return `{"content":"pong"}` to the Bot webhook POST. Localhost URLs will fail.
+
 ---
 
 ## Связанные документы

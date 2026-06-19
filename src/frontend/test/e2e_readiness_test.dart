@@ -59,6 +59,7 @@ void main() {
     'test/phase11_privacy_actions_e2e_live_test.dart',
     'test/phase15_e2e_dm_live_test.dart',
     'test/phase15_e2e_optout_live_test.dart',
+    'test/phase15_e2e_key_backup_live_test.dart',
     'test/phase15_e2e_edit_live_test.dart',
     'test/phase15_e2e_file_live_test.dart',
     'test/phase15_e2e_shared_media_live_test.dart',

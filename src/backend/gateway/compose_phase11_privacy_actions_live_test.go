@@ -84,6 +84,20 @@ func TestComposePhase11PrivacyActions_live(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Equal(t, http.StatusForbidden, sendComposeMessageWithAttachmentsStatus(t, client, base, stranger.AccessToken, chatID, string(voiceAttachments)))
+
+		patchComposePrivacy(t, client, base, groupMember.AccessToken, map[string]any{
+			"preset":               "personal",
+			"allow_files":          friendsOnly,
+			"allow_voice_messages": friendsOnly,
+		})
+		if composeFileUploadAvailable(t, client, base, groupFiller.AccessToken) {
+			groupFileID, groupFileType := composeUploadSmallTextFile(t, client, base, groupFiller.AccessToken, groupID)
+			groupAttachments, err := json.Marshal([]map[string]string{
+				{"file_id": groupFileID, "type": groupFileType},
+			})
+			require.NoError(t, err)
+			require.Equal(t, http.StatusForbidden, sendComposeMessageWithAttachmentsStatus(t, client, base, groupFiller.AccessToken, groupID, string(groupAttachments)))
+		}
 	}
 }
 

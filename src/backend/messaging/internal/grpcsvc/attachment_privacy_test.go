@@ -30,8 +30,9 @@ func TestAttachmentTypeMatchesFileMeta(t *testing.T) {
 }
 
 type dmOtherProfileGuard struct {
-	other uuid.UUID
-	err   error
+	other  uuid.UUID
+	others []uuid.UUID
+	err    error
 }
 
 func (g dmOtherProfileGuard) EnsureMember(context.Context, uuid.UUID, uuid.UUID) error {
@@ -45,23 +46,38 @@ func (g dmOtherProfileGuard) DMOtherProfileID(context.Context, uuid.UUID, uuid.U
 	return g.other, nil
 }
 
+func (g dmOtherProfileGuard) OtherMemberProfileIDs(_ context.Context, _ uuid.UUID, _ uuid.UUID) ([]uuid.UUID, error) {
+	if g.err != nil {
+		return nil, g.err
+	}
+	if len(g.others) > 0 {
+		return g.others, nil
+	}
+	if g.other == uuid.Nil {
+		return nil, nil
+	}
+	return []uuid.UUID{g.other}, nil
+}
+
 func TestCheckAttachmentPrivacyForSend_NilPrivacySkips(t *testing.T) {
 	t.Parallel()
 	s := &MessagingGRPC{Privacy: nil, ChatGuard: dmOtherProfileGuard{other: uuid.New()}}
 	require.NoError(t, s.checkAttachmentPrivacyForSend(context.Background(), uuid.New(), uuid.New(), `[{"type":"image"}]`))
 }
 
-func TestCheckAttachmentPrivacyForSend_GroupChatSkips(t *testing.T) {
+func TestCheckAttachmentPrivacyForSend_GroupChatDenied(t *testing.T) {
 	t.Parallel()
 	recipient := uuid.New()
 	s := &MessagingGRPC{
 		Privacy: attachmentPrivacyStub{friendsOnlyFiles: map[uuid.UUID]bool{recipient: true}},
 		Friends: noFriendsStub{},
 		ChatGuard: dmOtherProfileGuard{
-			err: status.Error(codes.FailedPrecondition, "not a dm chat"),
+			others: []uuid.UUID{recipient, uuid.New()},
 		},
 	}
-	require.NoError(t, s.checkAttachmentPrivacyForSend(context.Background(), uuid.New(), uuid.New(), `[{"type":"image"}]`))
+	err := s.checkAttachmentPrivacyForSend(context.Background(), uuid.New(), uuid.New(), `[{"type":"image"}]`)
+	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
 func TestCheckAttachmentPrivacyForSend_VoiceDenied(t *testing.T) {
@@ -110,6 +126,10 @@ type failingAttachmentPrivacy struct{}
 
 func (failingAttachmentPrivacy) AllowDMAudience(context.Context, uuid.UUID) (privacy.Audience, error) {
 	return privacy.EveryoneWithGuests(), nil
+}
+
+func (failingAttachmentPrivacy) AllowGuestDM(context.Context, uuid.UUID) (bool, error) {
+	return true, nil
 }
 
 func (failingAttachmentPrivacy) AllowFilesAudience(context.Context, uuid.UUID) (privacy.Audience, error) {

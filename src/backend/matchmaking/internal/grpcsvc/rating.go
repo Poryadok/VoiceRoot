@@ -154,6 +154,9 @@ func (s *MatchmakingGRPC) GetPlayerRating(ctx context.Context, req *matchmakingv
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid game_id")
 	}
+	if err := s.ensureMmRatingVisible(ctx, profileID); err != nil {
+		return nil, err
+	}
 	pr, err := s.Ratings.GetPlayerRating(ctx, profileID, gameID)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "get player rating: %v", err)

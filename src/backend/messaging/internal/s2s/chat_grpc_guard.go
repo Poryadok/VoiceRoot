@@ -81,6 +81,30 @@ func (g *GRPCChatGuard) DMOtherProfileID(ctx context.Context, chatID, profileID 
 	return peer, nil
 }
 
+func (g *GRPCChatGuard) OtherMemberProfileIDs(ctx context.Context, chatID, profileID uuid.UUID) ([]uuid.UUID, error) {
+	members, err := g.dmMembers(ctx, chatID)
+	if err != nil {
+		return nil, grpcMemberErr(err)
+	}
+	var out []uuid.UUID
+	seenSelf := false
+	for _, m := range members {
+		pid, perr := uuid.Parse(strings.TrimSpace(m.GetProfileId()))
+		if perr != nil {
+			return nil, status.Error(codes.Internal, "invalid profile_id on chat member")
+		}
+		if pid == profileID {
+			seenSelf = true
+			continue
+		}
+		out = append(out, pid)
+	}
+	if !seenSelf {
+		return nil, store.ErrNotChatMember
+	}
+	return out, nil
+}
+
 func grpcMemberErr(err error) error {
 	st, ok := status.FromError(err)
 	if !ok {

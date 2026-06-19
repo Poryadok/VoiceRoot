@@ -65,7 +65,7 @@ func (s *UserGRPC) GetPresence(ctx context.Context, req *userv1.GetPresenceReque
 	if snap != nil && snap.Live && !s.mayViewOnlineStatus(ctx, profileID) {
 		return &userv1.GetPresenceResponse{PresenceStatus: presenceSnapshotToProto(profileID, nil)}, nil
 	}
-	return &userv1.GetPresenceResponse{PresenceStatus: presenceSnapshotToProto(profileID, snap)}, nil
+	return &userv1.GetPresenceResponse{PresenceStatus: s.presenceForViewer(ctx, profileID, snap)}, nil
 }
 
 func (s *UserGRPC) mayViewOnlineStatus(ctx context.Context, targetProfile uuid.UUID) bool {
@@ -89,6 +89,37 @@ func (s *UserGRPC) mayViewOnlineStatus(ctx context.Context, targetProfile uuid.U
 		return false
 	}
 	return ok
+}
+
+func (s *UserGRPC) mayViewGameStatus(ctx context.Context, targetProfile uuid.UUID) bool {
+	viewerProfile, hasViewer := authctx.ProfileID(ctx)
+	if hasViewer && viewerProfile == targetProfile {
+		return true
+	}
+	privacyStore := s.privacyStore()
+	if privacyStore == nil {
+		return false
+	}
+	row, err := privacyStore.GetByProfileID(ctx, targetProfile)
+	if err != nil || row == nil {
+		return false
+	}
+	if !hasViewer {
+		return false
+	}
+	ok, err := s.audienceMatcher().Allowed(ctx, targetProfile, viewerProfile, row.ShowGameStatus, guestguard.IsGuest(ctx))
+	if err != nil {
+		return false
+	}
+	return ok
+}
+
+func (s *UserGRPC) presenceForViewer(ctx context.Context, profileID uuid.UUID, snap *store.PresenceSnapshot) *userv1.PresenceStatus {
+	out := presenceSnapshotToProto(profileID, snap)
+	if snap != nil && snap.Live && snap.GameTitle != "" && !s.mayViewGameStatus(ctx, profileID) {
+		out.GameTitle = nil
+	}
+	return out
 }
 
 func (s *UserGRPC) guestMayViewOnlineStatus(ctx context.Context, targetProfile uuid.UUID) bool {
@@ -121,7 +152,7 @@ func (s *UserGRPC) GetBulkPresence(ctx context.Context, req *userv1.GetBulkPrese
 			out[id.String()] = presenceSnapshotToProto(id, nil)
 			continue
 		}
-		out[id.String()] = presenceSnapshotToProto(id, snap)
+		out[id.String()] = s.presenceForViewer(ctx, id, snap)
 	}
 	return &userv1.GetBulkPresenceResponse{ByProfileId: out}, nil
 }

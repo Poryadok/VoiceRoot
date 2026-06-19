@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	"voice/backend/pkg/integrationtest"
@@ -107,5 +108,11 @@ func TestOnboardingStore_postgres(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, first.CompletedSteps, second.CompletedSteps)
 		require.Len(t, second.CompletedSteps, 1)
+	})
+
+	t.Run("GetOrCreateOnboardingState wrong account rejected", func(t *testing.T) {
+		otherAccount := uuid.New()
+		_, err := st.GetOrCreateOnboardingState(ctx, otherAccount, &profileID)
+		require.ErrorIs(t, err, pgx.ErrNoRows)
 	})
 }

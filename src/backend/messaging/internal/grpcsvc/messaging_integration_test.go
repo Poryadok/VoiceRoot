@@ -59,6 +59,11 @@ func withProfileCtx(ctx context.Context, accountID, profileID uuid.UUID) context
 	return metadata.AppendToOutgoingContext(ctx, authctx.HeaderProfileID, profileID.String())
 }
 
+func withGuestProfileCtx(ctx context.Context, accountID, profileID uuid.UUID) context.Context {
+	ctx = withProfileCtx(ctx, accountID, profileID)
+	return metadata.AppendToOutgoingContext(ctx, "x-voice-account-type", "guest")
+}
+
 func incomingProfileCtx(ctx context.Context, accountID, profileID uuid.UUID) context.Context {
 	return metadata.NewIncomingContext(ctx, metadata.Pairs(
 		authctx.HeaderUserID, accountID.String(),

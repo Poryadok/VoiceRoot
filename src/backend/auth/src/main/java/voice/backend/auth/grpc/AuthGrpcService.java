@@ -4,6 +4,9 @@ import app.voice.auth.v1.ConvertGuestRequest;
 import app.voice.auth.v1.ConvertGuestResponse;
 import app.voice.auth.v1.GetE2EKeyBackupRequest;
 import app.voice.auth.v1.GetE2EKeyBackupResponse;
+import app.voice.auth.v1.ResolvePhoneHashesRequest;
+import app.voice.auth.v1.ResolvePhoneHashesResponse;
+import app.voice.auth.v1.PhoneHashProfileMatch;
 import app.voice.auth.v1.PutE2EKeyBackupRequest;
 import app.voice.auth.v1.PutE2EKeyBackupResponse;
 import app.voice.auth.v1.SetAccountStatusRequest;
@@ -134,6 +137,24 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
   @Override
   public void getJWKS(GetJWKSRequest request, StreamObserver<GetJWKSResponse> responseObserver) {
     run(responseObserver, () -> GetJWKSResponse.newBuilder().setKeysJson(authService.jwksJson()).build());
+  }
+
+  @Override
+  public void resolvePhoneHashes(
+      ResolvePhoneHashesRequest request, StreamObserver<ResolvePhoneHashesResponse> responseObserver) {
+    run(responseObserver, () -> {
+      ResolvePhoneHashesResponse.Builder builder = ResolvePhoneHashesResponse.newBuilder();
+      authService
+          .resolvePhoneHashes(request.getPhoneHashesList())
+          .forEach(
+              (hash, profileId) ->
+                  builder.addMatches(
+                      PhoneHashProfileMatch.newBuilder()
+                          .setPhoneHash(hash)
+                          .setProfileId(profileId)
+                          .build()));
+      return builder.build();
+    });
   }
 
   @Override

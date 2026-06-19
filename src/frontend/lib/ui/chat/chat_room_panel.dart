@@ -25,12 +25,15 @@ import '../../state/social_providers.dart';
 import '../privacy/privacy_action_errors.dart';
 import '../../state/subscription_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../../theme/voice_emoji_style.dart';
 import '../core/chat_author_label.dart';
 import '../core/voice_avatar.dart';
 import '../core/voice_compact_banner.dart';
 import '../core/voice_state_panel.dart';
 import '../core/voice_chat_bubble.dart';
+import '../core/voice_share_link.dart';
 import '../core/voice_send_button.dart';
+import '../a11y/voice_shortcuts.dart';
 import '../social/presence_indicator.dart';
 import '../report/report_sheet.dart';
 import 'chat_info_panel.dart';
@@ -45,6 +48,7 @@ import '../shell/side_panel.dart';
 import '../space/space_chat_slow_mode_sheet.dart';
 import '../search/in_chat_search.dart';
 import '../../state/shell_providers.dart';
+import '../../state/deep_link_navigation.dart';
 import '../../state/shared_media_providers.dart';
 import '../../state/space_providers.dart';
 import '../../e2e/e2e_identity_trust.dart';
@@ -121,6 +125,8 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   var _slashMenuOpen = false;
   var _executingSlash = false;
   var _inChatSearchOpen = false;
+  var _highlightedMessageId = null as String?;
+  var _liveMessageAnnouncement = '';
   final _inChatSearchController = TextEditingController();
 
   @override
@@ -288,10 +294,52 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       }
     });
 
+    ref.listen(pendingChatMessageHighlightProvider(widget.chatId), (prev, next) {
+      if (next != null && next.isNotEmpty) {
+        setState(() => _highlightedMessageId = next);
+        Future<void>.delayed(const Duration(seconds: 2), () {
+          if (mounted && _highlightedMessageId == next) {
+            setState(() => _highlightedMessageId = null);
+          }
+        });
+        ref
+            .read(pendingChatMessageHighlightProvider(widget.chatId).notifier)
+            .state = null;
+      }
+    });
+
+    ref.listen(composerFocusRequestProvider, (prev, next) {
+      if (next != (prev ?? 0)) {
+        _refocusComposer();
+      }
+    });
+
+    ref.listen(chatMessageReactionRequestProvider(widget.chatId), (prev, next) {
+      if (next == null || next.isEmpty) return;
+      final messages = ref.read(chatRoomControllerProvider(widget.chatId)).messages;
+      VoiceMessage? message;
+      for (final item in messages) {
+        if (item.id == next) {
+          message = item;
+          break;
+        }
+      }
+      ref.read(chatMessageReactionRequestProvider(widget.chatId).notifier).state =
+          null;
+      if (message != null) {
+        unawaited(_showMessageActions(message, message.senderProfileId == activeId));
+      }
+    });
+
     ref.listen(chatRoomControllerProvider(widget.chatId), (prev, next) {
       final prevLen = prev?.messages.length ?? 0;
       if (next.messages.length > prevLen) {
         final added = next.messages.length - prevLen;
+        final latest = next.messages.last;
+        setState(() {
+          _liveMessageAnnouncement =
+              '${latest.senderProfileId}: ${latest.content}';
+        });
         if (_wasNearBottom) {
           _scrollToBottom();
         } else {
@@ -317,6 +365,11 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       key: ChatRoomPanel.panelKey,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Semantics(
+          liveRegion: true,
+          label: _liveMessageAnnouncement,
+          child: const SizedBox.shrink(),
+        ),
         Material(
           color: voice.surface,
           elevation: 0,
@@ -408,6 +461,18 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   ),
                   icon: const Icon(Icons.info_outline),
                 ),
+                if (shareUrlForChat(
+                      chatId: widget.chatId,
+                      spaceId: spaceId,
+                    ) !=
+                    null)
+                  VoiceShareLinkButton(
+                    link: shareUrlForChat(
+                      chatId: widget.chatId,
+                      spaceId: spaceId,
+                    )!,
+                    tooltip: l10n.shareLinkAction,
+                  ),
                 if (isGroup) ...[
                   if (canCall && !inThisGroupVoice)
                     _GroupVoiceHeaderButton(
@@ -576,6 +641,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                       isGroup: isGroup,
                       l10n: l10n,
                       initialUnreadCount: _initialUnreadCount,
+                      highlightedMessageId: _highlightedMessageId,
+                      keyboardSelectedMessageId:
+                          ref.watch(chatMessageKeyboardProvider),
                       onLongPress: (msg, isMine) =>
                           _showMessageActions(msg, isMine),
                     ),
@@ -964,6 +1032,13 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   }
 
   Future<void> _showMessageActions(VoiceMessage message, bool isMine) async {
+    String? spaceId;
+    for (final item in ref.read(chatListControllerProvider).items) {
+      if (item.chatId == widget.chatId) {
+        spaceId = item.chat.spaceId;
+        break;
+      }
+    }
     final action = await showModalBottomSheet<String>(
       context: context,
       builder: (context) {
@@ -988,6 +1063,11 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   leading: const Icon(Icons.forward_outlined),
                   title: Text(sheetL10n.chatMessageForward),
                   onTap: () => Navigator.of(context).pop('forward'),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.link),
+                  title: Text(sheetL10n.shareLinkAction),
+                  onTap: () => Navigator.of(context).pop('share'),
                 ),
                 ListTile(
                   leading: Icon(
@@ -1058,6 +1138,15 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         sourceMessage: message,
         sourceChatId: widget.chatId,
       );
+    } else if (action == 'share') {
+      final link = shareUrlForChat(
+        chatId: widget.chatId,
+        spaceId: spaceId,
+        messageId: message.id,
+      );
+      if (link != null) {
+        await copyVoiceShareLink(context, link);
+      }
     } else if (action == 'edit') {
       final edited = await _promptEdit(message.content);
       if (edited != null) {
@@ -1093,7 +1182,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
               for (final emoji in choices)
                 IconButton(
                   onPressed: () => Navigator.of(context).pop(emoji),
-                  icon: Text(emoji, style: const TextStyle(fontSize: 28)),
+                  icon: Text(emoji, style: VoiceEmojiStyle.textStyle(fontSize: 28)),
                 ),
             ],
           ),
@@ -1229,6 +1318,8 @@ class _MessageListView extends ConsumerWidget {
     required this.isGroup,
     required this.l10n,
     required this.initialUnreadCount,
+    this.highlightedMessageId,
+    this.keyboardSelectedMessageId,
     required this.onLongPress,
   });
 
@@ -1241,6 +1332,8 @@ class _MessageListView extends ConsumerWidget {
   final bool isGroup;
   final AppLocalizations l10n;
   final int initialUnreadCount;
+  final String? highlightedMessageId;
+  final String? keyboardSelectedMessageId;
   final void Function(VoiceMessage message, bool isMine) onLongPress;
 
   @override
@@ -1292,13 +1385,25 @@ class _MessageListView extends ConsumerWidget {
         final row = rows[rowIndex];
         final msg = row.message;
         final isMine = msg.senderProfileId == activeId;
+        final isHighlighted = highlightedMessageId == msg.id;
+        final isKeyboardSelected = keyboardSelectedMessageId == msg.id;
         return Column(
           children: [
             if (row.unreadSeparator)
               ChatUnreadSeparator(label: l10n.chatUnreadSeparator),
             if (isGroup && !isMine && row.showTimestamp)
               _MessageAuthorHeader(senderProfileId: msg.senderProfileId),
-            GestureDetector(
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              decoration: isHighlighted || isKeyboardSelected
+                  ? BoxDecoration(
+                      color: VoiceColors.of(context).profileAccent.withValues(
+                        alpha: isHighlighted ? 0.25 : 0.12,
+                      ),
+                      borderRadius: BorderRadius.circular(8),
+                    )
+                  : null,
+              child: GestureDetector(
               onLongPress: () => onLongPress(msg, isMine),
               child: ChatMessageBubbleTile(
                 message: msg,
@@ -1314,6 +1419,7 @@ class _MessageListView extends ConsumerWidget {
                     : null,
                 content: _MessageBubbleContent(message: msg, l10n: l10n),
               ),
+            ),
             ),
             MessageReactionsRow(
               message: msg,

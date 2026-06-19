@@ -1,0 +1,43 @@
+# One-shot golang-migrate Job for bot_db. Run before or during Bot Service rollout.
+# Substitute __K_NAMESPACE__, __POSTGRES_HOST__, __MIGRATE_IMAGE_TAG__ (default migrate/migrate:v4.18.1).
+# DATABASE_URL must match voice-app-secrets key BOT_DATABASE_URL (postgres://…/bot_db).
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: voice-migrate-bot-db
+  namespace: __K_NAMESPACE__
+  labels:
+    app.kubernetes.io/name: voice-migrate-bot-db
+    app.kubernetes.io/component: migration
+spec:
+  ttlSecondsAfterFinished: 86400
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: voice-migrate-bot-db
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: migrate/migrate:__MIGRATE_IMAGE_TAG__
+          args:
+            - -path=/migrations
+            - -database=$(DATABASE_URL)
+            - up
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: voice-app-secrets
+                  key: BOT_DATABASE_URL
+          volumeMounts:
+            - name: migrations
+              mountPath: /migrations
+              readOnly: true
+      volumes:
+        - name: migrations
+          configMap:
+            name: voice-bot-db-migrations
+            optional: false

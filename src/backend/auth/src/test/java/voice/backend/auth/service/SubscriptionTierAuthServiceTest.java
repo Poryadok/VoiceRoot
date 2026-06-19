@@ -42,8 +42,10 @@ class SubscriptionTierAuthServiceTest {
   private static AuthService service(Clock clock, SubscriptionTierResolver tierResolver) {
     JwtService jwt =
         JwtService.forTests("voice-auth", "voice-client", "test-key", Duration.ofMinutes(15), clock);
+    var accounts = new InMemoryAccountRepository();
+    var profiles = new voice.backend.auth.userdb.InMemoryPrimaryProfileProvisioner();
     return new AuthService(
-        new InMemoryAccountRepository(),
+        accounts,
         new InMemoryRefreshTokenRepository(),
         new RefreshTokenCodec(),
         new BCryptPasswordHasher(),
@@ -53,7 +55,8 @@ class SubscriptionTierAuthServiceTest {
         new BackupCodeService(new InMemoryBackupCodeRepository()),
         clock,
         Duration.ofDays(30),
-        new voice.backend.auth.userdb.InMemoryPrimaryProfileProvisioner(),
+        profiles,
+        new voice.backend.auth.userdb.InMemoryPhoneHashResolver(accounts, profiles),
         tierResolver,
         new voice.backend.auth.userdb.NoOpProfileSwitchValidator(),
         new voice.backend.auth.repository.InMemoryE2EKeyBackupRepository(),

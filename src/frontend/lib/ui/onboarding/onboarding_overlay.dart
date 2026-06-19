@@ -3,8 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../state/auth_providers.dart';
 import '../../state/onboarding_controller.dart';
+import '../../state/shell_providers.dart';
 import '../../state/social_providers.dart';
 import '../profile/profile_edit_sheet.dart';
+import 'onboarding_anchor_keys.dart';
+import 'onboarding_coach_mark.dart';
 
 /// Contextual onboarding hints (docs/features/onboarding.md).
 class OnboardingOverlay extends ConsumerStatefulWidget {
@@ -18,11 +21,18 @@ class OnboardingOverlay extends ConsumerStatefulWidget {
 
 class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
   var _loaded = false;
+  OverlayEntry? _coachMark;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadOnboarding());
+  }
+
+  @override
+  void dispose() {
+    _coachMark?.remove();
+    super.dispose();
   }
 
   Future<void> _loadOnboarding() async {
@@ -31,6 +41,11 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
     await ref.read(onboardingControllerProvider.notifier).load();
     if (!mounted) return;
     _maybeShowStep();
+  }
+
+  void _clearCoachMark() {
+    _coachMark?.remove();
+    _coachMark = null;
   }
 
   void _maybeShowStep() {
@@ -49,31 +64,85 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
       case OnboardingStep.saveAccount:
         _showSaveAccountModal();
       case OnboardingStep.chatsNav:
-        _showHintDialog(
+        _showCoachMark(
+          anchorKey: OnboardingAnchorKeys.chatsNav,
           title: 'Chats and navigation',
-          body: 'All your chats live here — DMs, groups, channels, and spaces.',
-          onContinue: () => ref.read(onboardingControllerProvider.notifier).completeCurrentStep(),
+          body:
+              'All your chats live here — DMs, groups, channels, and spaces.',
+          onContinue: () =>
+              ref.read(onboardingControllerProvider.notifier).completeCurrentStep(),
         );
       case OnboardingStep.spaces:
-        _showHintDialog(
+        _showCoachMark(
+          anchorKey: OnboardingAnchorKeys.spaces,
           title: 'Spaces',
-          body: 'Spaces are communities with channels and voice rooms. Find one for your game or create your own.',
-          onContinue: () => ref.read(onboardingControllerProvider.notifier).completeCurrentStep(),
+          body:
+              'Spaces are communities with channels and voice rooms. Find one for your game or create your own.',
+          secondaryLabel: 'Find a space',
+          onSecondary: () {
+            ref.read(shellNavigationProvider).setNavigationSection(
+              NavigationSection.chats,
+            );
+            ref.read(onboardingControllerProvider.notifier).completeCurrentStep();
+          },
+          onContinue: () =>
+              ref.read(onboardingControllerProvider.notifier).completeCurrentStep(),
         );
       case OnboardingStep.matchmaking:
-        _showHintDialog(
-          title: 'Matchmaking',
-          body: 'Looking for a squad? We match you with people who fit your criteria.',
-          onContinue: () => ref.read(onboardingControllerProvider.notifier).completeCurrentStep(),
+        ref.read(shellNavigationProvider).setNavigationSection(
+          NavigationSection.social,
         );
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _showCoachMark(
+            anchorKey: OnboardingAnchorKeys.matchmaking,
+            title: 'Matchmaking',
+            body:
+                'Looking for a squad? We match you with people who fit your criteria.',
+            secondaryLabel: 'Try it',
+            onSecondary: () {
+              ref.read(onboardingControllerProvider.notifier).completeCurrentStep();
+            },
+            onContinue: () =>
+                ref.read(onboardingControllerProvider.notifier).completeCurrentStep(),
+          );
+        });
       case OnboardingStep.wrapUp:
         _showHintDialog(
           title: 'You are all set',
           body: 'You know the basics! Help is always available in Settings.',
-          onContinue: () => ref.read(onboardingControllerProvider.notifier).completeCurrentStep(),
+          onContinue: () =>
+              ref.read(onboardingControllerProvider.notifier).completeCurrentStep(),
           continueLabel: 'Start',
         );
     }
+  }
+
+  void _showCoachMark({
+    required GlobalKey anchorKey,
+    required String title,
+    required String body,
+    required VoidCallback onContinue,
+    String? secondaryLabel,
+    VoidCallback? onSecondary,
+  }) {
+    _clearCoachMark();
+    if (!mounted) return;
+    _coachMark = OnboardingCoachMark.show(
+      context: context,
+      anchorKey: anchorKey,
+      title: title,
+      body: body,
+      onContinue: () {
+        onContinue();
+        _maybeShowStep();
+      },
+      onSkip: () async {
+        await ref.read(onboardingControllerProvider.notifier).dismiss();
+      },
+      secondaryLabel: secondaryLabel,
+      onSecondary: onSecondary,
+    );
   }
 
   Future<void> _showSaveAccountModal() async {

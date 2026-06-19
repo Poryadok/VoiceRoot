@@ -1,0 +1,44 @@
+# Production skeleton — Bot Service (Phase 16). Extend with full stack before first prod cutover.
+# Image placeholders substituted by render script or sed — mirror deploy/staging/services.yaml voice-bot block.
+# Namespace: voice-prod. Requires voice-app-config / voice-app-secrets in the same namespace.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-bot
+  namespace: voice-prod
+  labels: {app: voice-bot}
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: voice-bot}
+  template:
+    metadata:
+      labels: {app: voice-bot}
+    spec:
+      containers:
+        - name: bot
+          image: __IMAGE_REGISTRY__/bot:__IMAGE_TAG__
+          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          env:
+            - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: BOT_DATABASE_URL}}}
+            - {name: BOT_GRPC_LISTEN, value: ":9090"}
+            - {name: BOT_GRPC_GATEWAY_ONLY, value: "true"}
+            - {name: BOT_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
+            - {name: MESSAGING_GRPC_ADDR, value: "voice-messaging:9090"}
+            - {name: CHAT_GRPC_ADDR, value: "voice-chat:9090"}
+            - {name: ROLE_GRPC_ADDR, value: "voice-role:9090"}
+            - {name: USER_GRPC_ADDR, value: "voice-user:9090"}
+            - {name: SPACE_GRPC_ADDR, value: "voice-space:9090"}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+          livenessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 15}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-bot
+  namespace: voice-prod
+spec:
+  selector: {app: voice-bot}
+  ports: [{port: 8080}, {port: 9090}]

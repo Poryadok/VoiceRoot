@@ -89,6 +89,7 @@ type fakeChatClient struct {
 	chatv1.UnimplementedChatServiceServer
 	addMembersCalls int
 	createChatCalls int
+	createErr       error
 }
 
 func (f *fakeChatClient) AddMembers(_ context.Context, req *chatv1.AddMembersRequest) (*chatv1.AddMembersResponse, error) {
@@ -98,6 +99,9 @@ func (f *fakeChatClient) AddMembers(_ context.Context, req *chatv1.AddMembersReq
 
 func (f *fakeChatClient) CreateChat(_ context.Context, req *chatv1.CreateChatRequest) (*chatv1.CreateChatResponse, error) {
 	f.createChatCalls++
+	if f.createErr != nil {
+		return nil, f.createErr
+	}
 	chatType := chatv1.ChatType_CHAT_TYPE_CHANNEL
 	if req.GetType() == chatv1.ChatType_CHAT_TYPE_GROUP {
 		chatType = chatv1.ChatType_CHAT_TYPE_GROUP

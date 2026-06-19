@@ -1184,6 +1184,18 @@ abstract class AppLocalizations {
   /// **'Cancel'**
   String get commonCancel;
 
+  /// No description provided for @shareLinkAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy link'**
+  String get shareLinkAction;
+
+  /// No description provided for @shareLinkCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Link copied to clipboard'**
+  String get shareLinkCopied;
+
   /// No description provided for @commonEdit.
   ///
   /// In en, this message translates to:

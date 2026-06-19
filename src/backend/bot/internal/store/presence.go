@@ -2,9 +2,11 @@ package store
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 const DefaultPresenceTTL = 90 * time.Second
@@ -28,6 +30,21 @@ func (s *BotStore) IsBotOnline(ctx context.Context, botID uuid.UUID, ttl time.Du
 		return false, nil
 	}
 	return time.Since(last) <= ttl, nil
+}
+
+// DailyChatCreateCount returns today's create count for the bot (0 if none).
+func (s *BotStore) DailyChatCreateCount(ctx context.Context, botID uuid.UUID) (int, error) {
+	var count int
+	err := s.Pool.QueryRow(ctx, `
+SELECT COALESCE(count, 0) FROM bot_daily_chat_creates
+WHERE bot_id = $1 AND day = CURRENT_DATE`, botID).Scan(&count)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	return count, nil
 }
 
 // IncrementDailyChatCreates returns the new count for today; enforces platform limit externally.

@@ -11,6 +11,8 @@ import '../../state/presence_providers.dart';
 import '../../state/matchmaking_providers.dart';
 import '../../state/social_providers.dart';
 import '../../state/stories_providers.dart';
+import '../../routing/deep_link_urls.dart';
+import '../core/voice_share_link.dart';
 import '../report/report_sheet.dart';
 import '../stories/highlights_section.dart';
 import '../stories/story_ring_avatar.dart';
@@ -153,6 +155,13 @@ class ProfileDetailSheet extends ConsumerWidget {
                         ],
                       ),
                     ),
+                    if (!isGuest &&
+                        profile.username.isNotEmpty &&
+                        !isSelf)
+                      VoiceShareLinkButton(
+                        link: profileShareUrl(profile.username),
+                        tooltip: l10n.shareLinkAction,
+                      ),
                   ],
                 ),
                 if (profile.bio != null && profile.bio!.isNotEmpty) ...[

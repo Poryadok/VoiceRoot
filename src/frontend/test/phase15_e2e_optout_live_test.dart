@@ -108,57 +108,53 @@ void main() {
           .firstWhere((m) => m.id == sent.id);
       expect(stored.content, equals(secretPhrase));
 
-      Future<void> trySearchIncludesPhrase(
-        SearchApiResult<dynamic> result,
+      Future<void> requireSearchIncludesPhrase(
+        Future<SearchApiResult<dynamic>> Function() searchFn,
         String phrase,
       ) async {
-        switch (result) {
-          case SearchApiOk(:final data):
-            final hits = switch (data) {
-              GlobalSearchData(:final messages) => messages,
-              InChatSearchData(:final hits) => hits,
-              _ => const <SearchHit>[],
-            };
-            if (hits.any((h) => h.snippet.contains(phrase))) {
-              return;
-            }
-          case SearchApiErr(:final error):
-            if (error.statusCode == 503 || error.statusCode == 500) {
-              return;
-            }
+        for (var attempt = 0; attempt < 45; attempt++) {
+          final result = await searchFn();
+          switch (result) {
+            case SearchApiOk(:final data):
+              final hits = switch (data) {
+                GlobalSearchData(:final messages) => messages,
+                InChatSearchData(:final hits) => hits,
+                _ => const <SearchHit>[],
+              };
+              if (hits.any((h) => h.snippet.contains(phrase))) {
+                return;
+              }
+            case SearchApiErr(:final error):
+              if (error.statusCode == 503 || error.statusCode == 500) {
+                return;
+              }
+              fail(
+                'search must return 200 with hits when healthy; got ${error.statusCode}',
+              );
+          }
+          await Future<void>.delayed(const Duration(seconds: 2));
         }
+        fail(
+          'search did not include plaintext token within deadline',
+        );
       }
 
-      SearchApiResult<dynamic>? globalResult;
-      for (var attempt = 0; attempt < 30; attempt++) {
-        globalResult = await search.searchGlobal(
+      await requireSearchIncludesPhrase(
+        () => search.searchGlobal(
           authorization: sessionA.authorizationHeader,
           query: secretPhrase,
-        );
-        if (globalResult is SearchApiOk<GlobalSearchData> &&
-            globalResult.data.messages
-                .any((h) => h.snippet.contains(secretPhrase))) {
-          break;
-        }
-        await trySearchIncludesPhrase(globalResult!, secretPhrase);
-        await Future<void>.delayed(const Duration(seconds: 2));
-      }
+        ),
+        secretPhrase,
+      );
 
-      SearchApiResult<dynamic>? inChatResult;
-      for (var attempt = 0; attempt < 30; attempt++) {
-        inChatResult = await search.searchInChat(
+      await requireSearchIncludesPhrase(
+        () => search.searchInChat(
           authorization: sessionA.authorizationHeader,
           chatId: chatId,
           query: secretPhrase,
-        );
-        if (inChatResult is SearchApiOk<InChatSearchData> &&
-            inChatResult.data.hits
-                .any((h) => h.snippet.contains(secretPhrase))) {
-          break;
-        }
-        await trySearchIncludesPhrase(inChatResult!, secretPhrase);
-        await Future<void>.delayed(const Duration(seconds: 2));
-      }
+        ),
+        secretPhrase,
+      );
     },
     skip: runLiveIntegration
         ? null

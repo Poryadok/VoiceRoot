@@ -66,3 +66,7 @@ class SharedMediaListController
 /// Request [ChatRoomPanel] to scroll to a message (consumed after handling).
 final pendingChatMessageScrollProvider =
     StateProvider.family<String?, String>((ref, chatId) => null);
+
+/// Highlights a message briefly after deep-link scroll (consumed after animation).
+final pendingChatMessageHighlightProvider =
+    StateProvider.family<String?, String>((ref, chatId) => null);

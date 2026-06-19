@@ -12,6 +12,8 @@ import 'space_bots_sheet.dart';
 import 'space_members_sheet.dart';
 import 'space_roles_sheet.dart';
 import 'space_tree_panel.dart';
+import '../../routing/deep_link_urls.dart';
+import '../core/voice_share_link.dart';
 import '../report/report_sheet.dart';
 
 /// Middle column: space tree with header actions (members, invites).
@@ -104,6 +106,10 @@ class SpaceTreeColumn extends ConsumerWidget {
                   tooltip: l10n.spaceInvitesTooltip,
                   onPressed: () =>
                       SpaceInvitesSheet.show(context, spaceId: spaceId),
+                ),
+                VoiceShareLinkButton(
+                  link: spaceShareUrl(spaceId),
+                  tooltip: l10n.shareLinkAction,
                 ),
                 IconButton(
                   key: const Key('space_report_action'),

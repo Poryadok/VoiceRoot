@@ -328,6 +328,8 @@
     }
   },
   "commonCancel": "Отмена",
+  "shareLinkAction": "Копировать ссылку",
+  "shareLinkCopied": "Ссылка скопирована",
   "commonEdit": "Изменить",
   "commonDelete": "Удалить",
   "commonSave": "Сохранить",

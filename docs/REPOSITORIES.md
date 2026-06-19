@@ -22,9 +22,23 @@
 
 ## Protobuf
 
-- Все `.proto` — в **этом же** репозитории, единый корень контрактов: `protos/` или `api/` (один вариант на весь репо).
-- В CI: линт и формат контрактов (**buf** или эквивалент); при изменении публичных API — проверка обратной совместимости. **Breaking change** допускается только с явным описанием в PR и согласованным порядком выката потребителей.
-- Сгенерированный код (Go/Java): коммит в git **или** генерация при сборке — один способ выбирает команда и фиксирует в Makefile / доке сборки.
+- Все `.proto` — в **этом же** репозитории, единый корень контрактов: `protos/` ([`protos/buf.yaml`](../protos/buf.yaml), [`buf.work.yaml`](../buf.work.yaml)).
+- В CI: линт и формат контрактов (**buf**); при изменении публичных API — проверка обратной совместимости. **Breaking change** допускается только с явным описанием в PR и согласованным порядком выката потребителей.
+- Сгенерированный код: политика ниже (один источник истины — `protos/`; артефакты в git или при сборке).
+
+### Политика codegen (что коммитим, что генерим)
+
+| Артефакт | Путь | В git | Как обновить локально | Проверка в CI |
+|----------|------|-------|------------------------|---------------|
+| Исходники контрактов | `protos/**/*.proto` | да | правка вручную | job `protobuf`: `buf lint`, `buf format -d`, `buf breaking` (PR vs base) |
+| Go `*.pb.go` / gRPC | `src/backend/*/pb/voice/**` (вложенные `go.mod` у потребителей) | **да** | `make buf-generate` → `gen/go` (gitignored), затем синхронизировать нужные деревья `pb/`; альтернатива для voice: `buf generate --template buf.gen.local.yaml` | нет drift-check; компиляция `go test` / образов |
+| Go scratch | `gen/go/` | **нет** (`.gitignore`) | `make buf-generate` или `make buf-generate-ci` (Docker) | `buf-generate-ci` — smoke генерации, без diff |
+| Dart / Flutter | `src/frontend/lib/gen/` | **да** | `make buf-generate-dart` (`buf.gen.dart.yaml`, `protoc-gen-dart`) | job `flutter`: **`make buf-dart-check`** (реген + `git diff --exit-code`) |
+| Java (Auth) | `src/backend/auth/target/generated-sources/` | **нет** | `mvn compile` / `mvn test` из `src/backend/auth` (proto-копия в `src/main/proto/`) | job `build-all` → `auth-test-ci` |
+
+**Сборка Docker-образов Go-сервисов** использует **закоммиченные** `pb/`; `gen/go` в образ не копируется. После изменения `protos/` в PR: обновить затронутые `src/backend/*/pb/` и `src/frontend/lib/gen/`, прогнать `make buf-dart-check` и релевантные `go test`.
+
+Команды Makefile (корень репо): `buf-lint`, `buf-format`, `buf-breaking`, `buf-generate`, `buf-generate-dart`, `buf-dart-check`, `buf-ci`, `buf-breaking-ci`, `buf-generate-ci`. Паритет с [`.github/workflows/ci.yml`](../.github/workflows/ci.yml): protobuf job + `buf-dart-check` в `flutter` / `make flutter-ci`.
 
 ### Идентификаторы в телах сообщений (`account_id` / `profile_id` / `user_id`)
 

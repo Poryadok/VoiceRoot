@@ -29,6 +29,12 @@ render "${ROOT}/deploy/staging/infra.yaml" | kubectl apply -f -
 render "${ROOT}/deploy/staging/services.yaml" | kubectl apply -f -
 render "${ROOT}/deploy/staging/gateway-deployment.yaml" | kubectl apply -f -
 
+if [ -f "${ROOT}/deploy/staging/developer-portal.yaml" ]; then
+  render "${ROOT}/deploy/staging/developer-portal.yaml" | \
+    sed -e "s|__DEVELOPER_PORTAL_INGRESS_HOST__|${VOICE_DEVELOPER_PORTAL_INGRESS_HOST:-developers.tastytest.online}|g" | \
+    kubectl apply -f -
+fi
+
 echo "Waiting for gateway rollout..."
 kubectl rollout status "deployment/voice-gateway" -n "${NS}" --timeout=300s
 

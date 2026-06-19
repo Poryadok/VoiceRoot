@@ -67,14 +67,14 @@
 | - [x]  | 8    | Мобильные клиенты, APNs/VoIP prod creds, Win, кэш | Все                   |
 | - [x]  | 9    | Поиск                                              | Все                   |
 | - [x]  | 10   | Треды, шаринг экрана, shared media, кастомные роли | Все                   |
-| - [ ]  | 11   | Репорты (без панели), 2FA, приватность             | Все                   |
+| - [x]  | 11   | Репорты (без панели), 2FA, приватность             | Все                   |
 | - [ ]  | 12   | Подписки и платежи                                 | Все                   |
 | - [ ]  | 13   | Мульти-профиль, верификация                        | Все                   |
 | - [ ]  | 14   | Авто-мод, панель модераторов                       | Все                   |
-| - [ ]  | 15   | E2E DM (opt-in)                                    | Все                   |
-| - [ ]  | 16   | Боты + Developer Portal                            | Все                   |
+| - [x]  | 15   | E2E DM (opt-in)                                    | Все                   |
+| - [ ]  | 16   | Боты + Developer Portal (staging OK; prod partial) | Все                   |
 | - [ ]  | 17   | Сторис                                             | Все                   |
-| - [ ]  | 18   | Deep links, онбординг, a11y                        | Все                   |
+| - [ ]  | 18   | Deep links, онбординг, a11y (baseline)             | Все                   |
 | - [ ]  | 19   | Федерация, self-hosting                            | Все                   |
 
 ---
@@ -761,7 +761,7 @@ JWT + `user_db.profiles` — [EXEC_PLAN.md](EXEC_PLAN.md). Не заменяет
 
 ### Бэкенд
 
-- [ ] **Репорты** — [reports.md](features/reports.md)
+- [x] **Репорты** — [reports.md](features/reports.md)
   - **API:** один gRPC `CreateReport` + `target_type` (`user` | `message` | `space` | `story`); HTTP `POST /api/v1/moderation/reports` → 202 Accepted (см. [reports.md](features/reports.md), [moderation-service.md](microservices/moderation-service.md)).
   - **Категории:** spam, harassment, offensive, fake, mm_toxic, other+comment.
   - **БД:** reports table, status enum, target reference.
@@ -769,15 +769,15 @@ JWT + `user_db.profiles` — [EXEC_PLAN.md](EXEC_PLAN.md). Не заменяет
   - **Готово когда:** user submits → 202 + «принята»; row in DB; no status updates to reporter.
   - **Тесты:** submit integration; authz (cannot report self).
 
-- [ ] **2FA** — [auth-service.md](microservices/auth-service.md): TOTP secret, backup codes, require on login when enabled.
+- [x] **2FA** — [auth-service.md](microservices/auth-service.md): TOTP secret, backup codes, require on login when enabled.
 
-- [ ] **Приватность** — [privacy.md](features/privacy.md): who can DM, who sees online/game/MM/phone/stories; presets; avatar/bio пока без privacy-контролов (все видят).
+- [x] **Приватность** — [privacy.md](features/privacy.md): who can DM, who sees online/game/MM/phone/stories; presets; avatar/bio пока без privacy-контролов (все видят); runtime gates incl. phone-hash sync (Auth S2S) и group attachment policy.
 
 ### Клиент
 
-- [ ] Report flow from message context menu, profile, space.
-- [ ] Security settings: enable 2FA, show QR.
-- [ ] Privacy settings screen.
+- [x] Report flow from message context menu, profile, space.
+- [x] Security settings: enable 2FA, show QR.
+- [x] Privacy settings screen.
 
 ### Критерии приёмки
 
@@ -930,7 +930,7 @@ JWT + `user_db.profiles` — [EXEC_PLAN.md](EXEC_PLAN.md). Не заменяет
 
 ### Бэкенд
 
-- [ ] **Signal Protocol** — [encryption.md](features/encryption.md): pair-wise sessions; disable server search index for E2E messages.
+- [x] **Signal Protocol** — [encryption.md](features/encryption.md): pair-wise sessions; disable server search index for E2E messages; key backup in Auth (`e2e_key_backups`).
 
 ### Критерии приёмки
 
@@ -974,7 +974,7 @@ JWT + `user_db.profiles` — [EXEC_PLAN.md](EXEC_PLAN.md). Не заменяет
 2. Ephemeral response visible only to caller.
 3. 3s timeout shows user-friendly error.
 
-**Результат:** сторонние интеграции в спейсах.
+**Результат:** сторонние интеграции в спейсах на compose/staging; prod — `voice-bot` manifest и gateway upstream есть, rollout/mTLS/webhook E2E и k8s Developer Portal — частично ([DEPLOYMENT.md](DEPLOYMENT.md), [TODO.md](TODO.md) Batch 4).
 
 ---
 
@@ -1035,15 +1035,15 @@ JWT + `user_db.profiles` — [EXEC_PLAN.md](EXEC_PLAN.md). Не заменяет
 ### Клиент
 
 - [x] **Онбординг** — [onboarding.md](features/onboarding.md): register → create/join space → first message; contextual hints.
-- [x] **A11y** — [accessibility.md](features/accessibility.md): focus order, Semantics labels, contrast tokens, reduced motion.
+- [x] **A11y (baseline)** — focus order, Semantics labels, contrast tokens, reduced motion на основных потоках; полный чеклист [accessibility.md](features/accessibility.md) (TalkBack/VO, prod universal links) — [TODO.md](TODO.md) Batch 6.
 
 ### Критерии приёмки
 
-1. Click invite link on mobile → app opens join flow.
+1. Click invite link on mobile → app opens join flow (prod AASA/`assetlinks.json` — Batch 6).
 2. Main navigation operable keyboard-only.
 3. `flutter test` semantics tests for login + chat shell.
 
-**Результат:** меньше трения для новичков и a11y пользователей.
+**Результат:** меньше трения для новичков; a11y — baseline, не полное закрытие accessibility.md.
 
 ---
 

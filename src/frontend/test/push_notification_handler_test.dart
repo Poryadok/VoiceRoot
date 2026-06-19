@@ -1,54 +1,41 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voice_frontend/routing/deep_link_parser.dart';
 import 'package:voice_frontend/state/push_notification_handler.dart';
 
 void main() {
-  group('handlePushPayloadMap', () {
-    test('invokes callback for valid notification data', () {
-      Map<String, dynamic>? captured;
-      handlePushPayloadMap(
-        {'type': 'mention', 'chat_id': 'c1'},
-        (data) => captured = data,
-      );
-      expect(captured?['type'], 'mention');
-      expect(captured?['chat_id'], 'c1');
+  group('pushDataToDeepLinkTarget', () {
+    test('prefers canonical deep_link', () {
+      final target = pushDataToDeepLinkTarget({
+        'deep_link': 'https://voice.gg/u/vanya',
+        'chat_id': 'legacy-chat',
+      });
+      expect(target?.kind, DeepLinkKind.profile);
+      expect(target?.username, 'vanya');
     });
 
-    test('ignores payload without type', () {
-      var called = false;
-      handlePushPayloadMap({'chat_id': 'c1'}, (_) => called = true);
-      expect(called, isFalse);
-    });
-  });
-
-  group('fcmDataToRealtimeNotification extended types', () {
-    test('maps reply payload', () {
-      final frame = fcmDataToRealtimeNotification({
-        'type': 'reply',
+    test('falls back to chat_id and message_id', () {
+      final target = pushDataToDeepLinkTarget({
         'chat_id': 'chat-1',
         'message_id': 'msg-1',
       });
-      expect(frame?.data?['type'], 'reply');
+      expect(target?.kind, DeepLinkKind.chatMessage);
+      expect(target?.chatId, 'chat-1');
+      expect(target?.messageId, 'msg-1');
     });
 
-    test('maps friend_request payload', () {
-      final frame = fcmDataToRealtimeNotification({
-        'type': 'friend_request',
-        'friend_request_id': 'fr-1',
-      });
-      expect(frame?.data?['friend_request_id'], 'fr-1');
+    test('falls back to chat only', () {
+      final target = pushDataToDeepLinkTarget({'chat_id': 'chat-1'});
+      expect(target?.kind, DeepLinkKind.chat);
+      expect(target?.chatId, 'chat-1');
     });
+  });
 
-    test('maps search_nudge payload', () {
-      final frame = fcmDataToRealtimeNotification({
-        'type': 'search_nudge',
-        'session_id': 'sess-1',
-      });
-      expect(frame?.data?['session_id'], 'sess-1');
+  test('fcmDataToRealtimeNotification includes deep_link', () {
+    final frame = fcmDataToRealtimeNotification({
+      'type': 'new_message',
+      'deep_link': 'https://voice.gg/ch/c1',
+      'chat_id': 'c1',
     });
-
-    test('maps system payload', () {
-      final frame = fcmDataToRealtimeNotification({'type': 'system'});
-      expect(frame?.data?['type'], 'system');
-    });
+    expect(frame?.data?['deep_link'], 'https://voice.gg/ch/c1');
   });
 }

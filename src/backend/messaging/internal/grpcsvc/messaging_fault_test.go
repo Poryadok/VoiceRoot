@@ -35,6 +35,16 @@ func (g faultGuard) DMOtherProfileID(context.Context, uuid.UUID, uuid.UUID) (uui
 	return g.peer, nil
 }
 
+func (g faultGuard) OtherMemberProfileIDs(context.Context, uuid.UUID, uuid.UUID) ([]uuid.UUID, error) {
+	if g.peerErr != nil {
+		return nil, g.peerErr
+	}
+	if g.peer == uuid.Nil {
+		return nil, nil
+	}
+	return []uuid.UUID{g.peer}, nil
+}
+
 func closedPoolSvc(t *testing.T) (*MessagingGRPC, context.Context, uuid.UUID, uuid.UUID) {
 	t.Helper()
 	ctx := context.Background()

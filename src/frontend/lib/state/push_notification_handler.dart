@@ -1,4 +1,5 @@
 import '../backend/realtime_client.dart';
+import '../routing/deep_link_parser.dart';
 
 /// Maps an FCM/APNs data payload to the canonical realtime `notification` frame model.
 RealtimeFrame? fcmDataToRealtimeNotification(Map<String, String> data) {
@@ -18,6 +19,7 @@ RealtimeFrame? fcmDataToRealtimeNotification(Map<String, String> data) {
     'friend_request_id',
     'game_id',
     'mode',
+    'deep_link',
   ]) {
     final value = data[key];
     if (value != null && value.isNotEmpty) {
@@ -25,6 +27,34 @@ RealtimeFrame? fcmDataToRealtimeNotification(Map<String, String> data) {
     }
   }
   return RealtimeFrame(op: 'notification', data: frameData);
+}
+
+/// Parses optional canonical [deep_link] from push data; falls back to chat_id.
+DeepLinkTarget? pushDataToDeepLinkTarget(Map<String, String> data) {
+  final deepLink = data['deep_link']?.trim();
+  if (deepLink != null && deepLink.isNotEmpty) {
+    try {
+      return parseDeepLinkUrl(deepLink);
+    } catch (_) {
+      // Fall through to legacy chat_id payload.
+    }
+  }
+  final chatId = data['chat_id']?.trim();
+  if (chatId == null || chatId.isEmpty) return null;
+  final messageId = data['message_id']?.trim();
+  if (messageId != null && messageId.isNotEmpty) {
+    return DeepLinkTarget(
+      kind: DeepLinkKind.chatMessage,
+      chatId: chatId,
+      messageId: messageId,
+      rawUrl: 'https://voice.gg/ch/$chatId/m/$messageId',
+    );
+  }
+  return DeepLinkTarget(
+    kind: DeepLinkKind.chat,
+    chatId: chatId,
+    rawUrl: 'https://voice.gg/ch/$chatId',
+  );
 }
 
 /// Processes a push payload map (foreground, background resume, or notification tap).

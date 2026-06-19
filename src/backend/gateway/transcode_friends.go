@@ -130,6 +130,20 @@ func (t *transcoder) serveFriends(w http.ResponseWriter, r *http.Request, rest s
 		writeProtoJSON(w, http.StatusOK, resp)
 		return true
 
+	case r.Method == http.MethodPost && rest == "contacts/sync":
+		req := &socialv1.SyncPhoneContactsRequest{}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.social.SyncPhoneContacts(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
 	default:
 		return false
 	}

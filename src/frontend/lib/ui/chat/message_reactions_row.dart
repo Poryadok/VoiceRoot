@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../backend/messages_client.dart';
 import '../../theme/voice_colors.dart';
+import '../../theme/voice_emoji_style.dart';
 
 class MessageReactionsRow extends StatelessWidget {
   const MessageReactionsRow({
@@ -78,7 +79,7 @@ class _ReactionChip extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(emoji, style: const TextStyle(fontSize: 14)),
+              Text(emoji, style: VoiceEmojiStyle.textStyle(fontSize: 14)),
               if (count > 1) ...[
                 const SizedBox(width: 4),
                 Text(

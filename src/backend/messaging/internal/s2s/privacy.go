@@ -28,6 +28,20 @@ func (u *GRPCUserPrivacy) AllowDMAudience(ctx context.Context, profileID uuid.UU
 	return privacy.FromProto(resp.GetPrivacySettings().GetAllowDm()), nil
 }
 
+func (u *GRPCUserPrivacy) AllowGuestDM(ctx context.Context, profileID uuid.UUID) (bool, error) {
+	if u == nil || u.Client == nil {
+		return true, nil
+	}
+	ctx = ForwardIncomingMetadata(ctx)
+	resp, err := u.Client.GetPrivacySettings(ctx, &userv1.GetPrivacySettingsRequest{
+		ProfileId: profileID.String(),
+	})
+	if err != nil {
+		return false, err
+	}
+	return resp.GetPrivacySettings().GetAllowGuestDm(), nil
+}
+
 func (u *GRPCUserPrivacy) AllowFilesAudience(ctx context.Context, profileID uuid.UUID) (privacy.Audience, error) {
 	if u == nil || u.Client == nil {
 		return privacy.EveryoneWithGuests(), nil

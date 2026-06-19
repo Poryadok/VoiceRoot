@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/proto"
 
 	"voice/backend/pkg/integrationtest"
 	"voice/backend/user/internal/authctx"
@@ -364,6 +365,138 @@ VALUES ($1, $2, 'owner', '4444', 'Owner', true),
 	require.NoError(t, err)
 	require.Empty(t, resp.GetPresenceStatus().GetStatus(),
 		"guest viewer must not see online status when guest audience is excluded")
+}
+
+// TestGetPresence_GuestViewer_GameStatusHiddenWhenGuestAudienceExcluded documents privacy.md:
+// guests do not see game status unless include_guests is in show_game_status audience.
+func TestGetPresence_GuestViewer_GameStatusHiddenWhenGuestAudienceExcluded(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "userdb", "")
+	applyUserPrivacyMigrations(t, ctx, pool)
+
+	ownerAccount := uuid.New()
+	ownerProfile := uuid.New()
+	guestAccount := uuid.New()
+	guestProfile := uuid.New()
+	_, err := pool.Exec(ctx, `
+INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+VALUES ($1, $2, 'owner', '4444', 'Owner', true),
+       ($3, $4, 'guestview', '5555', 'Guest Viewer', true)`,
+		ownerProfile, ownerAccount, guestProfile, guestAccount)
+	require.NoError(t, err)
+	seedPrivacyPreset(ctx, t, store.NewPrivacyStore(pool), ownerProfile, "personal")
+
+	mr := miniredis.RunT(t)
+	t.Cleanup(func() { mr.Close() })
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb)
+
+	_, err = cli.UpdatePrivacySettings(withUserAuthCtx(ctx, ownerAccount, ownerProfile), &userv1.UpdatePrivacySettingsRequest{
+		ProfileId: ownerProfile.String(),
+		Settings: &userv1.PrivacySettings{
+			ProfileId:  ownerProfile.String(),
+			Preset:     "personal",
+			ShowOnline: privacy.ToProto(privacy.Audience{Friends: true, IncludeGuests: true}),
+		},
+	})
+	require.NoError(t, err)
+
+	_, err = cli.UpdatePresence(withUserAuthCtx(ctx, ownerAccount, ownerProfile), &userv1.UpdatePresenceRequest{
+		Status:    "online",
+		GameTitle: proto.String("Dota 2"),
+	})
+	require.NoError(t, err)
+
+	resp, err := cli.GetPresence(withGuestUserAuthCtx(ctx, guestAccount, guestProfile), &userv1.GetPresenceRequest{
+		ProfileId: ownerProfile.String(),
+	})
+	require.NoError(t, err)
+	require.Equal(t, "online", resp.GetPresenceStatus().GetStatus())
+	require.Empty(t, resp.GetPresenceStatus().GetGameTitle(),
+		"guest viewer must not see game status when guest audience is excluded")
+}
+
+// TestGetPresence_IncludeGuestsOnly_GuestVisibleOthersDenied documents guests-only audience:
+// only guest viewers see online status; strangers and friends are denied.
+func TestGetPresence_IncludeGuestsOnly_GuestVisibleOthersDenied(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "userdb", "")
+	applyUserPrivacyMigrations(t, ctx, pool)
+
+	ownerAccount := uuid.New()
+	ownerProfile := uuid.New()
+	guestAccount := uuid.New()
+	guestProfile := uuid.New()
+	strangerAccount := uuid.New()
+	strangerProfile := uuid.New()
+	friendAccount := uuid.New()
+	friendProfile := uuid.New()
+	_, err := pool.Exec(ctx, `
+INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+VALUES ($1, $2, 'owner', '4444', 'Owner', true),
+       ($3, $4, 'guestview', '5555', 'Guest Viewer', true),
+       ($5, $6, 'stranger', '6666', 'Stranger', true),
+       ($7, $8, 'friend', '7777', 'Friend', true)`,
+		ownerProfile, ownerAccount,
+		guestProfile, guestAccount,
+		strangerProfile, strangerAccount,
+		friendProfile, friendAccount)
+	require.NoError(t, err)
+	_, err = store.NewPrivacyStore(pool).Upsert(ctx, store.PrivacyRow{
+		ProfileID:           ownerProfile,
+		Preset:              "personal",
+		ShowOnline:          privacy.Audience{IncludeGuests: true},
+		ShowGameStatus:      privacy.FriendsOnly(),
+		ShowMmRating:        privacy.FriendsOnly(),
+		ShowPhone:           privacy.Nobody(),
+		ShowStories:         privacy.FriendsOnly(),
+		AllowDM:             privacy.FriendsOnly(),
+		AllowFriendRequests: privacy.EveryoneWithGuests(),
+	})
+	require.NoError(t, err)
+
+	mr := miniredis.RunT(t)
+	t.Cleanup(func() { mr.Close() })
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb,
+		func(s *UserGRPC) { s.SocialGraph = alwaysFriendsGraph{} },
+	)
+
+	_, err = cli.UpdatePresence(withUserAuthCtx(ctx, ownerAccount, ownerProfile), &userv1.UpdatePresenceRequest{
+		Status: "online",
+	})
+	require.NoError(t, err)
+
+	guestResp, err := cli.GetPresence(withGuestUserAuthCtx(ctx, guestAccount, guestProfile), &userv1.GetPresenceRequest{
+		ProfileId: ownerProfile.String(),
+	})
+	require.NoError(t, err)
+	require.Equal(t, "online", guestResp.GetPresenceStatus().GetStatus(),
+		"guest viewer must see online when show_online includes guests only")
+
+	strangerResp, err := cli.GetPresence(withUserAuthCtx(ctx, strangerAccount, strangerProfile), &userv1.GetPresenceRequest{
+		ProfileId: ownerProfile.String(),
+	})
+	require.NoError(t, err)
+	require.Empty(t, strangerResp.GetPresenceStatus().GetStatus(),
+		"stranger must not see online when show_online is guests-only")
+
+	friendResp, err := cli.GetPresence(withUserAuthCtx(ctx, friendAccount, friendProfile), &userv1.GetPresenceRequest{
+		ProfileId: ownerProfile.String(),
+	})
+	require.NoError(t, err)
+	require.Empty(t, friendResp.GetPresenceStatus().GetStatus(),
+		"friend must not see online when show_online is guests-only")
 }
 
 // TestGetPrivacySettings_NewProfile_BootstrapPreset documents primary profile gets default preset row on first read.

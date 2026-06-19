@@ -32,6 +32,16 @@ func (s stubChatGuard) DMOtherProfileID(context.Context, uuid.UUID, uuid.UUID) (
 	return s.peer, nil
 }
 
+func (s stubChatGuard) OtherMemberProfileIDs(context.Context, uuid.UUID, uuid.UUID) ([]uuid.UUID, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	if s.peer == uuid.Nil {
+		return nil, nil
+	}
+	return []uuid.UUID{s.peer}, nil
+}
+
 type stubProfiles struct {
 	acct uuid.UUID
 	err  error

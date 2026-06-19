@@ -27,6 +27,8 @@ service AuthService {
   rpc SetAccountStatus(SetAccountStatusRequest) returns (SetAccountStatusResponse);
   rpc PutE2EKeyBackup(PutE2EKeyBackupRequest) returns (PutE2EKeyBackupResponse);
   rpc GetE2EKeyBackup(GetE2EKeyBackupRequest) returns (GetE2EKeyBackupResponse);
+  // Internal — Social SyncPhoneContacts: hashed phone → primary profile_id (accounts.phone).
+  rpc ResolvePhoneHashes(ResolvePhoneHashesRequest) returns (ResolvePhoneHashesResponse);
 }
 
 message RegisterRequest {
@@ -185,4 +187,17 @@ message GetE2EKeyBackupRequest {}
 message GetE2EKeyBackupResponse {
   string encrypted_blob = 1;
   optional string password_hint = 2;
+}
+
+message ResolvePhoneHashesRequest {
+  repeated string phone_hashes = 1;
+}
+
+message PhoneHashProfileMatch {
+  string phone_hash = 1;
+  string profile_id = 2;
+}
+
+message ResolvePhoneHashesResponse {
+  repeated PhoneHashProfileMatch matches = 1;
 }

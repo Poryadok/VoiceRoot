@@ -84,6 +84,33 @@ func TestMatcher_GuestIncludeGuests(t *testing.T) {
 	require.True(t, ok)
 }
 
+func TestMatcher_IncludeGuestsOnly_StrangerDenied(t *testing.T) {
+	owner := uuid.New()
+	stranger := uuid.New()
+	m := Matcher{}
+	ok, err := m.Allowed(context.Background(), owner, stranger, Audience{IncludeGuests: true}, false)
+	require.NoError(t, err)
+	require.False(t, ok)
+}
+
+func TestMatcher_IncludeGuestsOnly_FriendDenied(t *testing.T) {
+	owner := uuid.New()
+	friend := uuid.New()
+	m := Matcher{Social: stubSocial{friends: map[string]bool{pairKey(friend, owner): true}}}
+	ok, err := m.Allowed(context.Background(), owner, friend, Audience{IncludeGuests: true}, false)
+	require.NoError(t, err)
+	require.False(t, ok)
+}
+
+func TestMatcher_GuestDeniedWhenIncludeGuestsFalse(t *testing.T) {
+	owner := uuid.New()
+	guest := uuid.New()
+	m := Matcher{}
+	ok, err := m.Allowed(context.Background(), owner, guest, FriendsOnly(), true)
+	require.NoError(t, err)
+	require.False(t, ok)
+}
+
 func TestMatcher_SpaceMembers(t *testing.T) {
 	owner := uuid.New()
 	viewer := uuid.New()

@@ -6,6 +6,7 @@ import '../../state/chat_providers.dart';
 import '../../state/shell_providers.dart';
 import '../../state/space_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../../theme/voice_emoji_style.dart';
 import '../../theme/voice_layout.dart';
 import '../chat/chat_info_panel.dart';
 import '../chat/group_members_sheet.dart';
@@ -176,7 +177,7 @@ class _EmojiPickerBody extends StatelessWidget {
           InkWell(
             onTap: () => onSelected?.call(emoji),
             child: Center(
-              child: Text(emoji, style: const TextStyle(fontSize: 28)),
+              child: Text(emoji, style: VoiceEmojiStyle.textStyle(fontSize: 28)),
             ),
           ),
       ],

@@ -3,8 +3,11 @@ package voice.backend.auth.service;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import voice.backend.auth.userdb.PhoneHashResolver;
 import voice.backend.auth.userdb.PrimaryProfileProvisioner;
 import voice.backend.auth.userdb.ProfileSwitchValidator;
 import voice.backend.auth.repository.Account;
@@ -34,6 +37,7 @@ public class AuthService {
   private final Clock clock;
   private final Duration refreshTtl;
   private final PrimaryProfileProvisioner primaryProfileProvisioner;
+  private final PhoneHashResolver phoneHashResolver;
   private final SubscriptionTierResolver subscriptionTierResolver;
   private final ProfileSwitchValidator profileSwitchValidator;
   private final E2EKeyBackupRepository e2eKeyBackups;
@@ -51,6 +55,7 @@ public class AuthService {
       Clock clock,
       Duration refreshTtl,
       PrimaryProfileProvisioner primaryProfileProvisioner,
+      PhoneHashResolver phoneHashResolver,
       SubscriptionTierResolver subscriptionTierResolver,
       ProfileSwitchValidator profileSwitchValidator,
       E2EKeyBackupRepository e2eKeyBackups,
@@ -66,6 +71,7 @@ public class AuthService {
     this.clock = clock;
     this.refreshTtl = refreshTtl;
     this.primaryProfileProvisioner = primaryProfileProvisioner;
+    this.phoneHashResolver = phoneHashResolver;
     this.subscriptionTierResolver = subscriptionTierResolver;
     this.profileSwitchValidator = profileSwitchValidator;
     this.e2eKeyBackups = e2eKeyBackups;
@@ -85,6 +91,7 @@ public class AuthService {
         newClock,
         refreshTtl,
         primaryProfileProvisioner,
+        phoneHashResolver,
         subscriptionTierResolver,
         profileSwitchValidator,
         e2eKeyBackups,
@@ -190,6 +197,14 @@ public class AuthService {
     UUID id = UUID.fromString(accountId);
     accounts.findById(accountId).orElseThrow(() -> new AuthException("invalid_account"));
     accounts.setStatus(id, status);
+  }
+
+  /** Internal S2S: map stored phone hashes to primary profile IDs. */
+  public Map<String, String> resolvePhoneHashes(Collection<String> phoneHashes) {
+    if (phoneHashResolver == null) {
+      return Map.of();
+    }
+    return phoneHashResolver.resolvePrimaryProfileIdsByPhoneHashes(phoneHashes);
   }
 
   public TotpEnrollment enable2FA(String accessToken, String password) {

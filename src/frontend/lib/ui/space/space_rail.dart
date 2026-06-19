@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../backend/spaces_client.dart';
 import '../../state/space_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../onboarding/onboarding_anchor_keys.dart';
 import '../core/voice_avatar.dart';
 /// Left rail: vertical list of joined spaces (Discord-style server icons).
 class SpaceRail extends ConsumerWidget {
@@ -20,7 +21,9 @@ class SpaceRail extends ConsumerWidget {
     final spacesAsync = ref.watch(mySpacesProvider);
     final selectedSpaceId = ref.watch(selectedSpaceIdProvider);
 
-    return ColoredBox(
+    return KeyedSubtree(
+      key: OnboardingAnchorKeys.spaces,
+      child: ColoredBox(
       color: voice.muted,
       child: spacesAsync.when(
         loading: () => const Center(
@@ -57,6 +60,7 @@ class SpaceRail extends ConsumerWidget {
           ],
         ),
       ),
+    ),
     );
   }
 }

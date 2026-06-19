@@ -35,6 +35,7 @@ const (
 	AuthService_SetAccountStatus_FullMethodName    = "/voice.auth.v1.AuthService/SetAccountStatus"
 	AuthService_PutE2EKeyBackup_FullMethodName     = "/voice.auth.v1.AuthService/PutE2EKeyBackup"
 	AuthService_GetE2EKeyBackup_FullMethodName     = "/voice.auth.v1.AuthService/GetE2EKeyBackup"
+	AuthService_ResolvePhoneHashes_FullMethodName  = "/voice.auth.v1.AuthService/ResolvePhoneHashes"
 )
 
 // AuthServiceClient is the client API for AuthService service.
@@ -64,6 +65,8 @@ type AuthServiceClient interface {
 	// Phase 15: encrypted key backup (opaque blob; docs/features/encryption.md).
 	PutE2EKeyBackup(ctx context.Context, in *PutE2EKeyBackupRequest, opts ...grpc.CallOption) (*PutE2EKeyBackupResponse, error)
 	GetE2EKeyBackup(ctx context.Context, in *GetE2EKeyBackupRequest, opts ...grpc.CallOption) (*GetE2EKeyBackupResponse, error)
+	// Internal — Social SyncPhoneContacts: hashed phone → primary profile_id (accounts.phone).
+	ResolvePhoneHashes(ctx context.Context, in *ResolvePhoneHashesRequest, opts ...grpc.CallOption) (*ResolvePhoneHashesResponse, error)
 }
 
 type authServiceClient struct {
@@ -234,6 +237,16 @@ func (c *authServiceClient) GetE2EKeyBackup(ctx context.Context, in *GetE2EKeyBa
 	return out, nil
 }
 
+func (c *authServiceClient) ResolvePhoneHashes(ctx context.Context, in *ResolvePhoneHashesRequest, opts ...grpc.CallOption) (*ResolvePhoneHashesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResolvePhoneHashesResponse)
+	err := c.cc.Invoke(ctx, AuthService_ResolvePhoneHashes_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AuthServiceServer is the server API for AuthService service.
 // All implementations must embed UnimplementedAuthServiceServer
 // for forward compatibility.
@@ -261,6 +274,8 @@ type AuthServiceServer interface {
 	// Phase 15: encrypted key backup (opaque blob; docs/features/encryption.md).
 	PutE2EKeyBackup(context.Context, *PutE2EKeyBackupRequest) (*PutE2EKeyBackupResponse, error)
 	GetE2EKeyBackup(context.Context, *GetE2EKeyBackupRequest) (*GetE2EKeyBackupResponse, error)
+	// Internal — Social SyncPhoneContacts: hashed phone → primary profile_id (accounts.phone).
+	ResolvePhoneHashes(context.Context, *ResolvePhoneHashesRequest) (*ResolvePhoneHashesResponse, error)
 	mustEmbedUnimplementedAuthServiceServer()
 }
 
@@ -318,6 +333,9 @@ func (UnimplementedAuthServiceServer) PutE2EKeyBackup(context.Context, *PutE2EKe
 }
 func (UnimplementedAuthServiceServer) GetE2EKeyBackup(context.Context, *GetE2EKeyBackupRequest) (*GetE2EKeyBackupResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetE2EKeyBackup not implemented")
+}
+func (UnimplementedAuthServiceServer) ResolvePhoneHashes(context.Context, *ResolvePhoneHashesRequest) (*ResolvePhoneHashesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ResolvePhoneHashes not implemented")
 }
 func (UnimplementedAuthServiceServer) mustEmbedUnimplementedAuthServiceServer() {}
 func (UnimplementedAuthServiceServer) testEmbeddedByValue()                     {}
@@ -628,6 +646,24 @@ func _AuthService_GetE2EKeyBackup_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthService_ResolvePhoneHashes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResolvePhoneHashesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).ResolvePhoneHashes(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_ResolvePhoneHashes_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).ResolvePhoneHashes(ctx, req.(*ResolvePhoneHashesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AuthService_ServiceDesc is the grpc.ServiceDesc for AuthService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -698,6 +734,10 @@ var AuthService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetE2EKeyBackup",
 			Handler:    _AuthService_GetE2EKeyBackup_Handler,
+		},
+		{
+			MethodName: "ResolvePhoneHashes",
+			Handler:    _AuthService_ResolvePhoneHashes_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

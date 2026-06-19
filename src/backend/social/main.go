@@ -66,8 +66,12 @@ func main() {
 			phoneSearchPrivacy = userPrivacy
 		}
 		if authAddr := strings.TrimSpace(os.Getenv("AUTH_GRPC_ADDR")); authAddr != "" {
-			_ = authAddr
-			phoneHashes = socials2s.EmptyPhoneHashLookup{}
+			aconn, err := grpc.NewClient(grpcclient.DialTarget(authAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if err != nil {
+				log.Fatalf("auth grpc: %v", err)
+			}
+			defer func() { _ = aconn.Close() }()
+			phoneHashes = socials2s.NewGRPCAuthPhoneHashLookup(aconn)
 		}
 		if spaceAddr := strings.TrimSpace(os.Getenv("SPACE_GRPC_ADDR")); spaceAddr != "" {
 			spconn, err := grpc.NewClient(grpcclient.DialTarget(spaceAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))

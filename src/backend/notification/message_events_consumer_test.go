@@ -65,3 +65,8 @@ func TestRouteMessageNotification_UnknownPayload(t *testing.T) {
 	err := routeMessageNotification(context.Background(), nil, nil, nil, pushenrich.NoopResolver{}, &eventsv1.MessageStreamEvent{})
 	require.NoError(t, err)
 }
+
+func TestMessagePushDeepLink(t *testing.T) {
+	require.Equal(t, "https://voice.gg/ch/c1/m/m1", messagePushDeepLink("c1", "m1"))
+	require.Equal(t, "https://voice.gg/ch/c1", messagePushDeepLink("c1", ""))
+}
