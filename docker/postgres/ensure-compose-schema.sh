@@ -18,15 +18,35 @@ apply_incremental() {
   psql -v ON_ERROR_STOP=1 --dbname "$db" -f "${SCHEMA_DIR}/${file}"
 }
 
-ensure_database search_db
-ensure_database gateway_db
-ensure_database matchmaking_db
+for db in auth_db user_db social_db chat_db messaging_db file_db space_db role_db \
+  notification_db matchmaking_db gateway_db search_db subscription_db moderation_db bot_db story_db; do
+  ensure_database "$db"
+done
+
+matchmaking_ready="$(psql -v ON_ERROR_STOP=1 -tAc "SELECT to_regclass('public.games') IS NOT NULL" --dbname matchmaking_db)"
+if [ "$matchmaking_ready" != "t" ]; then
+  psql -v ON_ERROR_STOP=1 --dbname matchmaking_db -f "${SCHEMA_DIR}/matchmaking_db_init.sql.snippet"
+  psql -v ON_ERROR_STOP=1 --dbname matchmaking_db -f "${SCHEMA_DIR}/matchmaking_db_search_sessions.sql.snippet"
+  psql -v ON_ERROR_STOP=1 --dbname matchmaking_db -f "${SCHEMA_DIR}/matchmaking_db_matches.sql.snippet"
+  psql -v ON_ERROR_STOP=1 --dbname matchmaking_db -f "${SCHEMA_DIR}/matchmaking_db_ratings.sql.snippet"
+  psql -v ON_ERROR_STOP=1 --dbname matchmaking_db -f "${SCHEMA_DIR}/matchmaking_db_search_nudge.sql.snippet"
+fi
 
 apply_incremental chat_db incremental_chat_db.sql.snippet
 apply_incremental matchmaking_db incremental_matchmaking_db.sql.snippet
 apply_incremental messaging_db incremental_messaging_db.sql.snippet
 apply_incremental user_db incremental_user_db.sql.snippet
+
+role_ready="$(psql -v ON_ERROR_STOP=1 -tAc "SELECT to_regclass('public.roles') IS NOT NULL" --dbname role_db)"
+if [ "$role_ready" != "t" ]; then
+  psql -v ON_ERROR_STOP=1 --dbname role_db -f "${SCHEMA_DIR}/role_db_init.sql.snippet"
+fi
 apply_incremental role_db incremental_role_db.sql.snippet
+
+file_ready="$(psql -v ON_ERROR_STOP=1 -tAc "SELECT to_regclass('public.files') IS NOT NULL" --dbname file_db)"
+if [ "$file_ready" != "t" ]; then
+  psql -v ON_ERROR_STOP=1 --dbname file_db -f "${SCHEMA_DIR}/file_db_init.sql.snippet"
+fi
 apply_incremental file_db file_db_premium_upload.sql.snippet
 
 search_ready="$(psql -v ON_ERROR_STOP=1 -tAc "SELECT to_regclass('public.message_search_documents') IS NOT NULL" --dbname search_db)"

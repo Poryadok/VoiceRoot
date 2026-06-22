@@ -3,8 +3,9 @@
 FROM node:22-alpine AS build
 
 WORKDIR /app
-COPY package.json ./
-RUN npm install
+COPY package.json package-lock.json* ./
+# Dev deps (vite, typescript) are required for `npm run build`.
+RUN if [ -f package-lock.json ]; then npm ci; else npm install --include=dev; fi
 COPY . .
 
 # Baked into the bundle; browser on the host calls the published gateway port.

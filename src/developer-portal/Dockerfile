@@ -2,8 +2,8 @@
 
 FROM node:22-alpine AS build
 WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm install
+COPY package.json package-lock.json ./
+RUN npm ci
 COPY . .
 
 ARG VITE_VOICE_API_BASE=http://127.0.0.1:18080
