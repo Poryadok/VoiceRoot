@@ -1,8 +1,12 @@
-#!/usr/bin/env sh
-# Idempotent schema bootstrap for compose volumes created before newer migrations.
+#!/bin/sh
+# Idempotent schema bootstrap for compose on every `docker compose up`.
+# 1) ensure databases exist
+# 2) apply idempotent legacy SQL patches (old volumes / partial entrypoint init)
+# 3) golang-migrate up for all Go-owned DBs (canonical: src/backend/migrations/*)
 set -eu
 
 SCHEMA_DIR="${SCHEMA_DIR:-/schema}"
+MIGRATIONS_DIR="${MIGRATIONS_DIR:-/migrations}"
 
 ensure_database() {
   db="$1"
@@ -12,10 +16,13 @@ ensure_database() {
   fi
 }
 
-apply_incremental() {
+apply_if_exists() {
   db="$1"
   file="$2"
-  psql -v ON_ERROR_STOP=1 --dbname "$db" -f "${SCHEMA_DIR}/${file}"
+  if [ -f "${SCHEMA_DIR}/${file}" ]; then
+    echo "==> legacy patch ${db} <- ${file}"
+    psql -v ON_ERROR_STOP=1 --dbname "$db" -f "${SCHEMA_DIR}/${file}"
+  fi
 }
 
 for db in auth_db user_db social_db chat_db messaging_db file_db space_db role_db \
@@ -23,39 +30,19 @@ for db in auth_db user_db social_db chat_db messaging_db file_db space_db role_d
   ensure_database "$db"
 done
 
-matchmaking_ready="$(psql -v ON_ERROR_STOP=1 -tAc "SELECT to_regclass('public.games') IS NOT NULL" --dbname matchmaking_db)"
-if [ "$matchmaking_ready" != "t" ]; then
-  psql -v ON_ERROR_STOP=1 --dbname matchmaking_db -f "${SCHEMA_DIR}/matchmaking_db_init.sql.snippet"
-  psql -v ON_ERROR_STOP=1 --dbname matchmaking_db -f "${SCHEMA_DIR}/matchmaking_db_search_sessions.sql.snippet"
-  psql -v ON_ERROR_STOP=1 --dbname matchmaking_db -f "${SCHEMA_DIR}/matchmaking_db_matches.sql.snippet"
-  psql -v ON_ERROR_STOP=1 --dbname matchmaking_db -f "${SCHEMA_DIR}/matchmaking_db_ratings.sql.snippet"
-  psql -v ON_ERROR_STOP=1 --dbname matchmaking_db -f "${SCHEMA_DIR}/matchmaking_db_search_nudge.sql.snippet"
-fi
+# Idempotent deltas for volumes created before golang-migrate tracking.
+apply_if_exists chat_db incremental_chat_db.sql.snippet
+apply_if_exists messaging_db incremental_messaging_db.sql.snippet
+apply_if_exists user_db incremental_user_db.sql.snippet
+apply_if_exists role_db incremental_role_db.sql.snippet
+apply_if_exists matchmaking_db incremental_matchmaking_db.sql.snippet
+apply_if_exists space_db incremental_space_db.sql.snippet
+apply_if_exists story_db incremental_story_db.sql.snippet
+apply_if_exists file_db incremental_file_db.sql.snippet
+apply_if_exists file_db file_db_premium_upload.sql.snippet
+apply_if_exists bot_db incremental_bot_db.sql.snippet
+apply_if_exists moderation_db incremental_moderation_db.sql.snippet
+apply_if_exists search_db search_db_phase13_verification.sql.snippet
 
-apply_incremental chat_db incremental_chat_db.sql.snippet
-apply_incremental matchmaking_db incremental_matchmaking_db.sql.snippet
-apply_incremental messaging_db incremental_messaging_db.sql.snippet
-apply_incremental user_db incremental_user_db.sql.snippet
-
-role_ready="$(psql -v ON_ERROR_STOP=1 -tAc "SELECT to_regclass('public.roles') IS NOT NULL" --dbname role_db)"
-if [ "$role_ready" != "t" ]; then
-  psql -v ON_ERROR_STOP=1 --dbname role_db -f "${SCHEMA_DIR}/role_db_init.sql.snippet"
-fi
-apply_incremental role_db incremental_role_db.sql.snippet
-
-file_ready="$(psql -v ON_ERROR_STOP=1 -tAc "SELECT to_regclass('public.files') IS NOT NULL" --dbname file_db)"
-if [ "$file_ready" != "t" ]; then
-  psql -v ON_ERROR_STOP=1 --dbname file_db -f "${SCHEMA_DIR}/file_db_init.sql.snippet"
-fi
-apply_incremental file_db file_db_premium_upload.sql.snippet
-
-search_ready="$(psql -v ON_ERROR_STOP=1 -tAc "SELECT to_regclass('public.message_search_documents') IS NOT NULL" --dbname search_db)"
-if [ "$search_ready" != "t" ]; then
-  psql -v ON_ERROR_STOP=1 --dbname search_db -f "${SCHEMA_DIR}/search_db_init.sql.snippet"
-fi
-psql -v ON_ERROR_STOP=1 --dbname search_db -f "${SCHEMA_DIR}/search_db_phase13_verification.sql.snippet"
-
-gateway_ready="$(psql -v ON_ERROR_STOP=1 -tAc "SELECT to_regclass('public.client_versions') IS NOT NULL" --dbname gateway_db)"
-if [ "$gateway_ready" != "t" ]; then
-  psql -v ON_ERROR_STOP=1 --dbname gateway_db -f "${SCHEMA_DIR}/gateway_db_init.sql.snippet"
-fi
+export MIGRATIONS_DIR
+sh /usr/local/bin/compose-migrate-dbs.sh

@@ -1,6 +1,17 @@
 -- Idempotent deltas for chat_db on volumes created before newer migrations.
--- Keep in sync with src/backend/migrations/chat_db/000004_slow_mode.up.sql,
--- 000005_thread_settings.up.sql
+-- Keep in sync with src/backend/migrations/chat_db/
+
+-- 000002_dm_requests.up.sql
+ALTER TABLE chat_members
+    ADD COLUMN IF NOT EXISTS inbox_bucket VARCHAR(16) NOT NULL DEFAULT 'main'
+    CHECK (inbox_bucket IN ('main', 'requests', 'declined'));
+
+CREATE INDEX IF NOT EXISTS chat_members_profile_inbox_idx
+    ON chat_members (profile_id, inbox_bucket);
+
+-- 000003_groups.up.sql
+ALTER TABLE chats DROP CONSTRAINT IF EXISTS chats_type_check;
+ALTER TABLE chats ADD CONSTRAINT chats_type_check CHECK (type IN ('dm', 'group', 'channel'));
 
 ALTER TABLE chats DROP CONSTRAINT IF EXISTS chats_slow_mode_seconds_check;
 ALTER TABLE chats ADD CONSTRAINT chats_slow_mode_seconds_check
@@ -18,3 +29,7 @@ WHERE type = 'channel'
 -- Phase 15 E2E (keep in sync with src/backend/migrations/chat_db/000006_e2e_enabled.up.sql)
 ALTER TABLE chats
     ADD COLUMN IF NOT EXISTS e2e_enabled BOOLEAN NOT NULL DEFAULT false;
+
+-- 000007_allow_guests.up.sql
+ALTER TABLE chats
+    ADD COLUMN IF NOT EXISTS allow_guests BOOLEAN NOT NULL DEFAULT true;

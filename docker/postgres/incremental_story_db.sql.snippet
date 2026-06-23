@@ -1,0 +1,9 @@
+-- Idempotent deltas for story_db on volumes created before golang-migrate tracking.
+-- Keep in sync with src/backend/migrations/story_db/000002_visibility_audience.up.sql
+
+ALTER TABLE stories
+    ADD COLUMN IF NOT EXISTS visibility_audience JSONB;
+
+ALTER TABLE stories DROP CONSTRAINT IF EXISTS stories_visibility_check;
+ALTER TABLE stories ADD CONSTRAINT stories_visibility_check
+    CHECK (visibility IN ('everyone', 'friends', 'close_friends', 'custom'));

@@ -1,0 +1,8 @@
+-- Idempotent deltas for file_db on volumes created before golang-migrate tracking.
+-- Keep in sync with src/backend/migrations/file_db/000003_story_context.up.sql
+
+ALTER TABLE files ADD COLUMN IF NOT EXISTS story_id UUID NULL;
+
+CREATE INDEX IF NOT EXISTS files_story_id_idx
+    ON files (story_id)
+    WHERE story_id IS NOT NULL;

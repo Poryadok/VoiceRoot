@@ -161,6 +161,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      compose-db-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
       interval: 5s
@@ -207,17 +209,19 @@ services:
 
   compose-db-init:
     profiles: ["app"]
-    image: postgres:16-alpine
+    build:
+      context: ./docker/postgres
+      dockerfile: Dockerfile.compose-db-init
     restart: "no"
     environment:
       PGHOST: postgres
       PGUSER: ${POSTGRES_USER:-voice}
       PGPASSWORD: ${POSTGRES_PASSWORD:-voice}
       SCHEMA_DIR: /schema
+      MIGRATIONS_DIR: /migrations
     volumes:
-      - ./docker/postgres/ensure-compose-schema.sh:/ensure.sh:ro
       - ./docker/postgres:/schema:ro
-    entrypoint: ["/bin/sh", "/ensure.sh"]
+      - ./src/backend/migrations:/migrations:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -320,6 +324,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      compose-db-init:
+        condition: service_completed_successfully
       chat:
         condition: service_healthy
       clamav:
@@ -351,6 +357,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      compose-db-init:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
       chat:
@@ -385,6 +393,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      compose-db-init:
+        condition: service_completed_successfully
       nats:
         condition: service_started
       messaging:
@@ -418,6 +428,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      compose-db-init:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
       nats:
@@ -448,28 +460,14 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      compose-db-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
       interval: 5s
       timeout: 3s
       retries: 10
       start_period: 10s
-
-  moderation-db-init:
-    profiles: ["app"]
-    image: postgres:16-alpine
-    restart: "no"
-    environment:
-      PGHOST: postgres
-      PGUSER: ${POSTGRES_USER:-voice}
-      PGPASSWORD: ${POSTGRES_PASSWORD:-voice}
-    volumes:
-      - ./docker/postgres/ensure-moderation-db.sh:/ensure.sh:ro
-      - ./docker/postgres/moderation_db_init.sql.snippet:/schema/moderation_db_init.sql.snippet:ro
-    entrypoint: ["/bin/sh", "/ensure.sh"]
-    depends_on:
-      postgres:
-        condition: service_healthy
 
   moderation:
     profiles: ["app"]
@@ -486,7 +484,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      moderation-db-init:
+      compose-db-init:
         condition: service_completed_successfully
       user:
         condition: service_healthy
@@ -496,38 +494,6 @@ services:
       timeout: 3s
       retries: 10
       start_period: 10s
-
-  bot-db-init:
-    profiles: ["app"]
-    image: postgres:16-alpine
-    restart: "no"
-    environment:
-      PGHOST: postgres
-      PGUSER: ${POSTGRES_USER:-voice}
-      PGPASSWORD: ${POSTGRES_PASSWORD:-voice}
-    volumes:
-      - ./docker/postgres/ensure-bot-db.sh:/ensure.sh:ro
-      - ./docker/postgres/bot_db_init.sql.snippet:/schema/bot_db_init.sql.snippet:ro
-    entrypoint: ["/bin/sh", "/ensure.sh"]
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  story-db-init:
-    profiles: ["app"]
-    image: postgres:16-alpine
-    restart: "no"
-    environment:
-      PGHOST: postgres
-      PGUSER: ${POSTGRES_USER:-voice}
-      PGPASSWORD: ${POSTGRES_PASSWORD:-voice}
-    volumes:
-      - ./docker/postgres/ensure-story-db.sh:/ensure.sh:ro
-      - ./docker/postgres/story_db_init.sql.snippet:/schema/story_db_init.sql.snippet:ro
-    entrypoint: ["/bin/sh", "/ensure.sh"]
-    depends_on:
-      postgres:
-        condition: service_healthy
 
   bot:
     profiles: ["app"]
@@ -552,7 +518,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      bot-db-init:
+      compose-db-init:
         condition: service_completed_successfully
       messaging:
         condition: service_healthy
@@ -590,7 +556,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      story-db-init:
+      compose-db-init:
         condition: service_completed_successfully
       social:
         condition: service_healthy
@@ -653,6 +619,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      compose-db-init:
+        condition: service_completed_successfully
       nats:
         condition: service_healthy
       role:

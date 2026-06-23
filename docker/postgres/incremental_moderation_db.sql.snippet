@@ -1,0 +1,7 @@
+-- Idempotent deltas for moderation_db on volumes created before golang-migrate tracking.
+-- Keep in sync with src/backend/migrations/moderation_db/
+
+-- 000003_story_reports.up.sql
+ALTER TABLE reports DROP CONSTRAINT IF EXISTS reports_target_type_check;
+ALTER TABLE reports ADD CONSTRAINT reports_target_type_check
+    CHECK (target_type IN ('user', 'message', 'space', 'story'));

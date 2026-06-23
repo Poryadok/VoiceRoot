@@ -31,3 +31,8 @@ CREATE TABLE IF NOT EXISTS organization_verification_requests (
 
 CREATE INDEX IF NOT EXISTS organization_verification_profile_idx
     ON organization_verification_requests (profile_id, created_at DESC);
+
+-- 000005_privacy_guest_audience.up.sql
+ALTER TABLE privacy_settings
+    ADD COLUMN IF NOT EXISTS show_online_include_guests BOOLEAN NOT NULL DEFAULT false;
+

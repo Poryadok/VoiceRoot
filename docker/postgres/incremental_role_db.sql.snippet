@@ -64,3 +64,20 @@ WHERE
 
 UPDATE roles SET is_default_join = true, updated_at = now()
 WHERE is_system = true AND name = 'Member' AND is_default_join IS DISTINCT FROM true;
+
+-- 000007_created_by_profile.up.sql
+ALTER TABLE roles ADD COLUMN IF NOT EXISTS created_by_profile_id UUID NULL;
+
+CREATE INDEX IF NOT EXISTS roles_space_created_by_profile_idx
+    ON roles (space_id, created_by_profile_id)
+    WHERE created_by_profile_id IS NOT NULL;
+
+-- 000008_member_thread_permissions.up.sql (idempotent OR)
+UPDATE roles
+SET
+    permissions = permissions | ((1::bigint << 32) | (1::bigint << 33)),
+    updated_at = now()
+WHERE
+    is_system = true
+    AND name = 'Member'
+    AND (permissions & ((1::bigint << 32) | (1::bigint << 33))) = 0;

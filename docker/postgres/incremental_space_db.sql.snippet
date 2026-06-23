@@ -1,0 +1,149 @@
+-- Idempotent deltas for space_db on volumes created before golang-migrate tracking.
+-- Keep in sync with src/backend/migrations/space_db/
+
+-- Bootstrap when database exists but schema was never applied (empty public).
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+CREATE TABLE IF NOT EXISTS spaces (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    icon_url TEXT NULL,
+    banner_url TEXT NULL,
+    visibility VARCHAR(16) NOT NULL DEFAULT 'private' CHECK (visibility IN ('public', 'invite_only', 'private')),
+    owner_profile_id UUID NOT NULL,
+    member_count INTEGER NOT NULL DEFAULT 1 CHECK (member_count >= 0),
+    is_verified BOOLEAN NOT NULL DEFAULT false,
+    verification_type VARCHAR(16) NOT NULL DEFAULT 'none' CHECK (verification_type IN ('none', 'personal', 'organization')),
+    entry_requirement VARCHAR(16) NOT NULL DEFAULT 'none' CHECK (entry_requirement IN ('none', 'phone', 'captcha', 'questions', 'manual')),
+    entry_questions JSONB NULL,
+    mm_config JSONB NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS spaces_owner_profile_id_idx ON spaces (owner_profile_id);
+CREATE INDEX IF NOT EXISTS spaces_public_name_idx ON spaces (name) WHERE visibility = 'public';
+
+CREATE TABLE IF NOT EXISTS space_members (
+    space_id UUID NOT NULL REFERENCES spaces (id) ON DELETE CASCADE,
+    profile_id UUID NOT NULL,
+    joined_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    nickname TEXT NULL,
+    PRIMARY KEY (space_id, profile_id)
+);
+
+CREATE INDEX IF NOT EXISTS space_members_profile_id_idx ON space_members (profile_id, joined_at DESC);
+
+CREATE TABLE IF NOT EXISTS categories (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    space_id UUID NOT NULL REFERENCES spaces (id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS categories_space_id_sort_idx ON categories (space_id, sort_order);
+
+CREATE TABLE IF NOT EXISTS voice_rooms (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    space_id UUID NOT NULL REFERENCES spaces (id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS voice_rooms_space_id_idx ON voice_rooms (space_id);
+
+CREATE TABLE IF NOT EXISTS space_tree_nodes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    space_id UUID NOT NULL REFERENCES spaces (id) ON DELETE CASCADE,
+    category_id UUID NULL REFERENCES categories (id) ON DELETE SET NULL,
+    kind VARCHAR(16) NOT NULL CHECK (kind IN ('text_chat', 'voice_room')),
+    chat_id UUID NULL,
+    voice_room_id UUID NULL REFERENCES voice_rooms (id) ON DELETE CASCADE,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    is_system BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT space_tree_nodes_kind_ref_check CHECK (
+        (kind = 'text_chat' AND chat_id IS NOT NULL AND voice_room_id IS NULL)
+        OR (kind = 'voice_room' AND voice_room_id IS NOT NULL AND chat_id IS NULL)
+    )
+);
+
+CREATE INDEX IF NOT EXISTS space_tree_nodes_space_sort_idx ON space_tree_nodes (space_id, category_id, sort_order);
+CREATE UNIQUE INDEX IF NOT EXISTS space_tree_nodes_voice_room_uidx ON space_tree_nodes (voice_room_id) WHERE voice_room_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS space_tree_nodes_chat_uidx ON space_tree_nodes (chat_id) WHERE chat_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS invites (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    space_id UUID NOT NULL REFERENCES spaces (id) ON DELETE CASCADE,
+    code VARCHAR(32) NOT NULL UNIQUE,
+    creator_profile_id UUID NOT NULL,
+    max_uses INTEGER NULL,
+    use_count INTEGER NOT NULL DEFAULT 0,
+    expires_at TIMESTAMPTZ NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    revoked_at TIMESTAMPTZ NULL
+);
+
+CREATE INDEX IF NOT EXISTS invites_space_id_idx ON invites (space_id);
+CREATE INDEX IF NOT EXISTS invites_code_idx ON invites (code);
+
+-- 000004_moderation.up.sql
+CREATE TABLE IF NOT EXISTS space_bans (
+    space_id UUID NOT NULL REFERENCES spaces (id) ON DELETE CASCADE,
+    account_id UUID NOT NULL,
+    banned_by_profile_id UUID NOT NULL,
+    reason TEXT NULL,
+    banned_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (space_id, account_id)
+);
+
+CREATE INDEX IF NOT EXISTS space_bans_space_id_idx ON space_bans (space_id, banned_at DESC);
+
+CREATE TABLE IF NOT EXISTS space_member_timeouts (
+    space_id UUID NOT NULL REFERENCES spaces (id) ON DELETE CASCADE,
+    profile_id UUID NOT NULL,
+    timed_out_until TIMESTAMPTZ NOT NULL,
+    timed_out_by_profile_id UUID NOT NULL,
+    reason TEXT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (space_id, profile_id)
+);
+
+CREATE TABLE IF NOT EXISTS audit_log (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    space_id UUID NOT NULL REFERENCES spaces (id) ON DELETE CASCADE,
+    actor_profile_id UUID NOT NULL,
+    action TEXT NOT NULL,
+    target_type TEXT NOT NULL,
+    target_id UUID NOT NULL,
+    details JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS audit_log_space_created_idx ON audit_log (space_id, created_at DESC);
+
+-- 000005_space_subscriptions.up.sql
+CREATE TABLE IF NOT EXISTS space_subscriptions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    space_id UUID NOT NULL,
+    purchaser_account_id UUID NOT NULL,
+    plan TEXT NOT NULL DEFAULT 'space_pro',
+    status TEXT NOT NULL,
+    provider TEXT NOT NULL DEFAULT 'paddle',
+    provider_subscription_id TEXT NOT NULL DEFAULT '',
+    current_period_start TIMESTAMPTZ NOT NULL DEFAULT now(),
+    current_period_end TIMESTAMPTZ NOT NULL DEFAULT now(),
+    grace_period_end TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS space_subscriptions_space_id_idx ON space_subscriptions (space_id);
+
+-- 000006_allow_guests.up.sql
+ALTER TABLE spaces
+    ADD COLUMN IF NOT EXISTS allow_guests BOOLEAN NOT NULL DEFAULT true;
