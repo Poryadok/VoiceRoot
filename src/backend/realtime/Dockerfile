@@ -1,5 +1,4 @@
-# syntax=docker/dockerfile:1
-# Build context must be `src/backend` (includes ../pkg replace in go.mod).
+﻿# Build context must be `src/backend` (includes ../pkg replace in go.mod).
 
 FROM golang:1.26-alpine AS build
 WORKDIR /src

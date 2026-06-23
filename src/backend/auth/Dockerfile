@@ -1,5 +1,4 @@
-# syntax=docker/dockerfile:1
-
+﻿
 FROM maven:3.9.11-eclipse-temurin-25 AS build
 WORKDIR /src
 COPY pom.xml ./

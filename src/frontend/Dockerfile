@@ -1,5 +1,4 @@
-# syntax=docker/dockerfile:1
-
+﻿
 # Match toolchain in repo README / CI Flutter job.
 ARG FLUTTER_IMAGE=ghcr.io/cirruslabs/flutter:3.41.7
 FROM ${FLUTTER_IMAGE} AS build

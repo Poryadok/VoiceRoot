@@ -1,5 +1,4 @@
-# syntax=docker/dockerfile:1
-# Build context must be `src/backend` (local pb, user pb, messaging events replace).
+﻿# Build context must be `src/backend` (local pb, user pb, messaging events replace).
 
 FROM golang:1.26-alpine AS build
 WORKDIR /src
