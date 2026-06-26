@@ -1,6 +1,8 @@
 package grpcsvc
 
 import (
+	"log/slog"
+
 	"voice/backend/space/internal/spaceevents"
 	"voice/backend/space/internal/store"
 
@@ -19,6 +21,9 @@ type SpaceGRPC struct {
 	Privacy         InvitePrivacyChecker
 	Friends         InviteProfileFriendChecker
 	SpaceCoMembership InviteSpaceCoMembershipChecker
+
+	// Logger emits structured nats_publish errors when JetStream publish fails after a successful RPC.
+	Logger *slog.Logger
 
 	// Test hooks for subscription entitlement integration tests.
 	SeedSpaceProActive bool

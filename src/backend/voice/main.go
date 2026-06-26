@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -20,6 +21,7 @@ import (
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
+	voiceprom "voice/backend/pkg/promhttp"
 	"voice/backend/voice/internal/livekit"
 	"voice/backend/voice/internal/s2s"
 	voicestore "voice/backend/voice/internal/store"
@@ -34,6 +36,7 @@ const serviceName = "voice"
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	metricsReg := prometheus.NewRegistry()
 	addr := ":8080"
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
 		addr = v
@@ -124,12 +127,13 @@ func main() {
 		),
 		Events:      events,
 		RingTimeout: 30 * time.Second,
+		Logger:      logger,
 	}
 	lis, err := net.Listen("tcp", grpcListen)
 	if err != nil {
 		log.Fatalf("grpc listen: %v", err)
 	}
-	grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger)...)
+	grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))...)
 	callsv1.RegisterVoiceServiceServer(grpcSrv, voiceSvc)
 	go func() {
 		logger.Info("gRPC listening", slog.String("addr", grpcListen))
@@ -137,11 +141,11 @@ func main() {
 			log.Fatalf("grpc serve: %v", err)
 		}
 	}()
-	go runMissedCallSweeper(runCtx, voiceSvc)
+	go runMissedCallSweeper(runCtx, voiceSvc, logger)
 
 	server := &http.Server{
 		Addr:              addr,
-		Handler:           httpserver.Wrap(healthHandler(serviceName), logger),
+		Handler:           httpserver.Wrap(voiceprom.MountMetricsOnHealth(healthHandler(serviceName), metricsReg), logger),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,
@@ -174,7 +178,7 @@ func main() {
 	}
 }
 
-func runMissedCallSweeper(ctx context.Context, svc *grpcsvc.VoiceGRPC) {
+func runMissedCallSweeper(ctx context.Context, svc *grpcsvc.VoiceGRPC, logger *slog.Logger) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
@@ -183,7 +187,7 @@ func runMissedCallSweeper(ctx context.Context, svc *grpcsvc.VoiceGRPC) {
 			return
 		case <-ticker.C:
 			if _, err := svc.MarkExpiredCallsMissed(ctx); err != nil {
-				log.Printf("voice missed-call sweeper: %v", err)
+				logger.Error("voice missed-call sweeper", slog.String("error", err.Error()))
 			}
 		}
 	}

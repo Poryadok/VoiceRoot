@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"log"
+	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
@@ -379,7 +379,10 @@ func (s *SpaceGRPC) publishTreeUpserted(ctx context.Context, spaceID uuid.UUID, 
 		voiceRoomID = node.VoiceRoomID.String()
 	}
 	if err := s.SpaceEvents.PublishTreeNodeUpserted(ctx, spaceID.String(), node.ID.String(), node.Kind, chatID, voiceRoomID); err != nil {
-		log.Printf("space: publish tree_node_upserted: %v", err)
+		s.logPublishError(ctx, "space.tree_changed", err,
+			slog.String("space_id", spaceID.String()),
+			slog.String("node_id", node.ID.String()),
+		)
 	}
 }
 
@@ -388,7 +391,10 @@ func (s *SpaceGRPC) publishTreeRemoved(ctx context.Context, spaceID, nodeID uuid
 		return
 	}
 	if err := s.SpaceEvents.PublishTreeNodeRemoved(ctx, spaceID.String(), nodeID.String()); err != nil {
-		log.Printf("space: publish tree_node_removed: %v", err)
+		s.logPublishError(ctx, "space.tree_changed", err,
+			slog.String("space_id", spaceID.String()),
+			slog.String("node_id", nodeID.String()),
+		)
 	}
 }
 
@@ -435,7 +441,9 @@ func (s *SpaceGRPC) lookupChatInfo(ctx context.Context, nodes []*store.TreeNodeR
 	}
 	info, err := s.Chats.GetChatNames(ctx, ids)
 	if err != nil {
-		log.Printf("space: chat lookup for tree: %v", err)
+		if s.Logger != nil {
+			s.Logger.Warn("space chat lookup for tree", slog.String("error", err.Error()))
+		}
 		return nil
 	}
 	return info

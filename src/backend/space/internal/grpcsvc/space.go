@@ -3,7 +3,7 @@ package grpcsvc
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"strings"
 
 	"google.golang.org/grpc/codes"
@@ -44,7 +44,7 @@ func (s *SpaceGRPC) CreateSpace(ctx context.Context, req *spacev1.CreateSpaceReq
 	}
 	if s.SpaceEvents != nil {
 		if err := s.SpaceEvents.PublishSpaceCreated(ctx, row.ID.String(), row.OwnerProfileID.String()); err != nil {
-			log.Printf("space: publish space.created: %v", err)
+			s.logPublishError(ctx, "space.created", err, slog.String("space_id", row.ID.String()))
 		}
 	}
 	return &spacev1.CreateSpaceResponse{Space: spaceRowToProto(row)}, nil

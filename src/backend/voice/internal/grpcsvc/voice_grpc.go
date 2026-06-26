@@ -3,7 +3,7 @@ package grpcsvc
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -43,6 +43,8 @@ type VoiceGRPC struct {
 	Events       voiceevents.Publisher
 	Now          func() time.Time
 	RingTimeout  time.Duration
+	// Logger emits structured nats_publish errors when JetStream publish fails after a successful RPC.
+	Logger *slog.Logger
 }
 
 func (s *VoiceGRPC) StartCall(ctx context.Context, req *callsv1.StartCallRequest) (*callsv1.StartCallResponse, error) {
@@ -513,7 +515,7 @@ func (s *VoiceGRPC) publishIncoming(ctx context.Context, call voicestore.Call) {
 		LivekitRoomName:    call.LivekitRoomName,
 		ExpiresAt:          timestamppb.New(call.ExpiresAt),
 	}); err != nil {
-		log.Printf("voice: publish call_incoming: %v", err)
+		s.logPublishError(ctx, "voice.call_incoming", err, slog.String("room_id", call.RoomID))
 	}
 }
 
@@ -529,7 +531,7 @@ func (s *VoiceGRPC) publishAccepted(ctx context.Context, call voicestore.Call, b
 		MediaKind:           mediaKindString(call.MediaKind),
 		LivekitRoomName:     call.LivekitRoomName,
 	}); err != nil {
-		log.Printf("voice: publish call_accepted: %v", err)
+		s.logPublishError(ctx, "voice.call_accepted", err, slog.String("room_id", call.RoomID))
 	}
 }
 
@@ -543,7 +545,7 @@ func (s *VoiceGRPC) publishDeclined(ctx context.Context, call voicestore.Call, b
 		DeclinedByProfileId: by,
 		ProfileIds:          call.ProfileIDs(),
 	}); err != nil {
-		log.Printf("voice: publish call_declined: %v", err)
+		s.logPublishError(ctx, "voice.call_declined", err, slog.String("room_id", call.RoomID))
 	}
 }
 
@@ -557,7 +559,7 @@ func (s *VoiceGRPC) publishMissed(ctx context.Context, call voicestore.Call) {
 		InitiatorProfileId: call.InitiatorProfileID,
 		CalleeProfileId:    call.CalleeProfileID,
 	}); err != nil {
-		log.Printf("voice: publish call_missed: %v", err)
+		s.logPublishError(ctx, "voice.call_missed", err, slog.String("room_id", call.RoomID))
 	}
 }
 
@@ -576,7 +578,7 @@ func (s *VoiceGRPC) publishEnded(ctx context.Context, call voicestore.Call, reas
 		Reason:           reason,
 		EndedByProfileId: by,
 	}); err != nil {
-		log.Printf("voice: publish call_ended: %v", err)
+		s.logPublishError(ctx, "voice.call_ended", err, slog.String("room_id", call.RoomID))
 	}
 }
 
@@ -592,7 +594,7 @@ func (s *VoiceGRPC) publishState(ctx context.Context, call voicestore.Call, stat
 		IsVideoOn:  &state.IsVideoOn,
 		ProfileIds: call.ProfileIDs(),
 	}); err != nil {
-		log.Printf("voice: publish state_changed: %v", err)
+		s.logPublishError(ctx, "voice.state_changed", err, slog.String("room_id", call.RoomID))
 	}
 }
 
