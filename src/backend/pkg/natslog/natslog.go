@@ -51,6 +51,15 @@ func LogPublish(logger *slog.Logger, subject, requestID, msg string, attrs ...sl
 	logger.LogAttrs(context.Background(), slog.LevelInfo, msg, all...)
 }
 
+// LogPublishError writes a structured publish failure log line (event=nats_publish, level=error).
+func LogPublishError(logger *slog.Logger, subject, requestID string, publishErr error, attrs ...slog.Attr) {
+	if logger == nil || publishErr == nil {
+		return
+	}
+	all := PublishAttrs(subject, requestID, append(attrs, slog.String("error", publishErr.Error()))...)
+	logger.LogAttrs(context.Background(), slog.LevelError, "nats publish failed", all...)
+}
+
 // LogConsume writes a structured consume log line.
 func LogConsume(logger *slog.Logger, msg *nats.Msg, level slog.Level, text string, attrs ...slog.Attr) {
 	if logger == nil {

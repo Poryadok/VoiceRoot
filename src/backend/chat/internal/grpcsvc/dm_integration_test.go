@@ -2,6 +2,7 @@ package grpcsvc
 
 import (
 	"context"
+	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
@@ -99,6 +100,10 @@ func WithPrivacyChecker(p PrivacyChecker) chatServerOption {
 
 func WithFriendChecker(f ProfileFriendChecker) chatServerOption {
 	return func(c *ChatGRPC) { c.Friends = f }
+}
+
+func WithLogger(l *slog.Logger) chatServerOption {
+	return func(c *ChatGRPC) { c.Logger = l }
 }
 
 func startChatGRPCTestServer(t *testing.T, pool *pgxpool.Pool, profiles UserProfileLookup, blocks AccountBlockChecker, enrich ListChatsEnrichment, opts ...chatServerOption) (chatv1.ChatServiceClient, func()) {

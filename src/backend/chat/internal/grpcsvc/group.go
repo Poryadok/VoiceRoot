@@ -3,7 +3,7 @@ package grpcsvc
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
@@ -64,11 +64,11 @@ func (s *ChatGRPC) CreateChat(ctx context.Context, req *chatv1.CreateChatRequest
 			eventType = "channel"
 		}
 		if err := s.ChatEvents.PublishChatCreated(ctx, row.ID.String(), eventType); err != nil {
-			log.Printf("chat: publish chat.created: %v", err)
+			s.logPublishError(ctx, "chat.created", err, slog.String("chat_id", row.ID.String()))
 		}
 		if row.Type == "group" && row.SpaceID == nil {
 			if err := s.ChatEvents.PublishChatMemberChanged(ctx, row.ID.String(), caller.String(), "joined"); err != nil {
-				log.Printf("chat: publish chat.member_changed: %v", err)
+				s.logPublishError(ctx, "chat.member_changed", err, slog.String("chat_id", row.ID.String()), slog.String("profile_id", caller.String()))
 			}
 		}
 	}
@@ -199,7 +199,7 @@ func (s *ChatGRPC) AddMembers(ctx context.Context, req *chatv1.AddMembersRequest
 	if s.ChatEvents != nil {
 		for _, pid := range added {
 			if err := s.ChatEvents.PublishChatMemberChanged(ctx, chatID.String(), pid.String(), "joined"); err != nil {
-				log.Printf("chat: publish chat.member_changed: %v", err)
+				s.logPublishError(ctx, "chat.member_changed", err, slog.String("chat_id", chatID.String()), slog.String("profile_id", pid.String()))
 			}
 		}
 	}
@@ -250,7 +250,7 @@ func (s *ChatGRPC) RemoveMember(ctx context.Context, req *chatv1.RemoveMemberReq
 	}
 	if s.ChatEvents != nil {
 		if err := s.ChatEvents.PublishChatMemberChanged(ctx, chatID.String(), targetID.String(), "removed"); err != nil {
-			log.Printf("chat: publish chat.member_changed: %v", err)
+			s.logPublishError(ctx, "chat.member_changed", err, slog.String("chat_id", chatID.String()), slog.String("profile_id", targetID.String()))
 		}
 	}
 	return &chatv1.RemoveMemberResponse{}, nil
@@ -289,7 +289,7 @@ func (s *ChatGRPC) LeaveChat(ctx context.Context, req *chatv1.LeaveChatRequest) 
 	}
 	if s.ChatEvents != nil {
 		if err := s.ChatEvents.PublishChatMemberChanged(ctx, chatID.String(), caller.String(), "left"); err != nil {
-			log.Printf("chat: publish chat.member_changed: %v", err)
+			s.logPublishError(ctx, "chat.member_changed", err, slog.String("chat_id", chatID.String()), slog.String("profile_id", caller.String()))
 		}
 	}
 	return &chatv1.LeaveChatResponse{}, nil
@@ -332,7 +332,7 @@ func (s *ChatGRPC) TransferGroupOwnership(ctx context.Context, req *chatv1.Trans
 	}
 	if s.ChatEvents != nil {
 		if err := s.ChatEvents.PublishChatMemberChanged(ctx, chatID.String(), newOwner.String(), "owner_transferred"); err != nil {
-			log.Printf("chat: publish chat.member_changed: %v", err)
+			s.logPublishError(ctx, "chat.member_changed", err, slog.String("chat_id", chatID.String()), slog.String("profile_id", newOwner.String()))
 		}
 	}
 	return &chatv1.TransferGroupOwnershipResponse{}, nil

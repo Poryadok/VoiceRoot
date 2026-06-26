@@ -2,6 +2,7 @@ package grpcsvc
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/google/uuid"
 	chatv1 "voice.app/voice/chat/v1"
@@ -30,6 +31,8 @@ type ChatGRPC struct {
 	Roles rolev1.RoleServiceClient
 	// SpaceMembers resolves space_db.space_members for chats with space_id (optional).
 	SpaceMembers *store.SpaceMembersStore
+	// Logger emits structured nats_publish errors when JetStream publish fails after a successful RPC.
+	Logger *slog.Logger
 }
 
 // PrivacyChecker reads recipient privacy policy for DM and invite gates.

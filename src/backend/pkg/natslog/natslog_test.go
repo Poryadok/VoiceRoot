@@ -3,6 +3,7 @@ package natslog
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"testing"
 
@@ -45,5 +46,22 @@ func TestLogPublishAndConsume(t *testing.T) {
 	var rec map[string]any
 	require.NoError(t, json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &rec))
 	require.Equal(t, "nats_consume", rec["event"])
+}
+
+func TestLogPublishError(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
+
+	LogPublishError(logger, "message.sent", "req-err", errors.New("jetstream unavailable"))
+	require.Contains(t, buf.String(), "nats_publish")
+	require.Contains(t, buf.String(), "req-err")
+	require.Contains(t, buf.String(), "jetstream unavailable")
+
+	var rec map[string]any
+	require.NoError(t, json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &rec))
+	require.Equal(t, "nats_publish", rec["event"])
+	require.Equal(t, "message.sent", rec["subject"])
+	require.Equal(t, "req-err", rec["request_id"])
+	require.Equal(t, "jetstream unavailable", rec["error"])
 }
 

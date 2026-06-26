@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
+	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
@@ -68,6 +68,8 @@ type MessagingGRPC struct {
 	PlatformMod PlatformModerationChecker
 	// PreKeyBundles optional Signal pre-key directory (Phase 15 E2E).
 	PreKeyBundles *store.E2EPreKeyStore
+	// Logger emits structured nats_publish errors when JetStream publish fails after a successful RPC.
+	Logger *slog.Logger
 }
 
 // ChatRolePermissions checks permissions scoped to a text chat in a space.
@@ -265,7 +267,7 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 			threadParentID = saved.ThreadParentID.String()
 		}
 		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), hasMentions, threadParentID, saved.IsE2E); err != nil {
-			log.Printf("messaging: publish message.sent: %v", err)
+			s.logPublishError(ctx, "message.sent", err, slog.String("message_id", saved.ID.String()), slog.String("chat_id", saved.ChatID.String()))
 		}
 		if hasMentions {
 			ids := make([]string, 0, len(mentionTargets))
@@ -273,7 +275,7 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 				ids = append(ids, pid.String())
 			}
 			if err := s.MessageEvents.PublishMentionAdded(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), ids); err != nil {
-				log.Printf("messaging: publish message.mention_added: %v", err)
+				s.logPublishError(ctx, "message.mention_added", err, slog.String("message_id", saved.ID.String()), slog.String("chat_id", saved.ChatID.String()))
 			}
 		}
 	}
@@ -506,7 +508,7 @@ func (s *MessagingGRPC) EditMessage(ctx context.Context, req *messagingv1.EditMe
 	}
 	if s.MessageEvents != nil {
 		if err := s.MessageEvents.PublishMessageEdited(ctx, updated.ID.String(), updated.ChatID.String(), updated.IsE2E); err != nil {
-			log.Printf("messaging: publish message.edited: %v", err)
+			s.logPublishError(ctx, "message.edited", err, slog.String("message_id", updated.ID.String()), slog.String("chat_id", updated.ChatID.String()))
 		}
 		if len(mentionTargets) > 0 && mentionsJSON != row.MentionsJSON {
 			ids := make([]string, 0, len(mentionTargets))
@@ -514,7 +516,7 @@ func (s *MessagingGRPC) EditMessage(ctx context.Context, req *messagingv1.EditMe
 				ids = append(ids, pid.String())
 			}
 			if err := s.MessageEvents.PublishMentionAdded(ctx, updated.ID.String(), updated.ChatID.String(), updated.SenderProfileID.String(), ids); err != nil {
-				log.Printf("messaging: publish message.mention_added: %v", err)
+				s.logPublishError(ctx, "message.mention_added", err, slog.String("message_id", updated.ID.String()), slog.String("chat_id", updated.ChatID.String()))
 			}
 		}
 	}
@@ -572,7 +574,7 @@ func (s *MessagingGRPC) DeleteMessage(ctx context.Context, req *messagingv1.Dele
 	}
 	if s.MessageEvents != nil {
 		if err := s.MessageEvents.PublishMessageDeleted(ctx, msgID.String(), row.ChatID.String()); err != nil {
-			log.Printf("messaging: publish message.deleted: %v", err)
+			s.logPublishError(ctx, "message.deleted", err, slog.String("message_id", msgID.String()), slog.String("chat_id", row.ChatID.String()))
 		}
 	}
 	return &messagingv1.DeleteMessageResponse{}, nil
@@ -975,7 +977,7 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 	}
 	if s.MessageEvents != nil {
 		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), false, "", saved.IsE2E); err != nil {
-			log.Printf("messaging: publish message.sent: %v", err)
+			s.logPublishError(ctx, "message.sent", err, slog.String("message_id", saved.ID.String()), slog.String("chat_id", saved.ChatID.String()))
 		}
 	}
 	kind := messagingv1.MessageKind_MESSAGE_KIND_FORWARD
@@ -1042,7 +1044,7 @@ func (s *MessagingGRPC) mutateReaction(ctx context.Context, messageIDStr, emoji 
 		}
 		if s.MessageEvents != nil {
 			if err := s.MessageEvents.PublishReactionAdded(ctx, messageID.String(), msg.ChatID.String(), profileID.String(), msg.SenderProfileID.String(), emoji); err != nil {
-				log.Printf("messaging: publish reaction.added: %v", err)
+				s.logPublishError(ctx, "reaction.added", err, slog.String("message_id", messageID.String()), slog.String("chat_id", msg.ChatID.String()))
 			}
 		}
 	} else {
@@ -1051,7 +1053,7 @@ func (s *MessagingGRPC) mutateReaction(ctx context.Context, messageIDStr, emoji 
 		}
 		if s.MessageEvents != nil {
 			if err := s.MessageEvents.PublishReactionRemoved(ctx, messageID.String(), msg.ChatID.String(), profileID.String(), emoji); err != nil {
-				log.Printf("messaging: publish reaction.removed: %v", err)
+				s.logPublishError(ctx, "reaction.removed", err, slog.String("message_id", messageID.String()), slog.String("chat_id", msg.ChatID.String()))
 			}
 		}
 	}
@@ -1175,7 +1177,7 @@ func (s *MessagingGRPC) mutatePin(ctx context.Context, chatRef *chatv1.ChatRef, 
 		}
 		if s.MessageEvents != nil {
 			if err := s.MessageEvents.PublishMessagePinned(ctx, messageID.String(), chatID.String(), profileID.String()); err != nil {
-				log.Printf("messaging: publish message.pinned: %v", err)
+				s.logPublishError(ctx, "message.pinned", err, slog.String("message_id", messageID.String()), slog.String("chat_id", chatID.String()))
 			}
 		}
 	} else {
@@ -1184,7 +1186,7 @@ func (s *MessagingGRPC) mutatePin(ctx context.Context, chatRef *chatv1.ChatRef, 
 		}
 		if s.MessageEvents != nil {
 			if err := s.MessageEvents.PublishMessageUnpinned(ctx, messageID.String(), chatID.String(), profileID.String()); err != nil {
-				log.Printf("messaging: publish message.unpinned: %v", err)
+				s.logPublishError(ctx, "message.unpinned", err, slog.String("message_id", messageID.String()), slog.String("chat_id", chatID.String()))
 			}
 		}
 	}
@@ -1265,7 +1267,7 @@ func (s *MessagingGRPC) MarkRead(ctx context.Context, req *messagingv1.MarkReadR
 	}
 	if s.MessageEvents != nil {
 		if err := s.MessageEvents.PublishMessageRead(ctx, lastRead.String(), chatID.String(), profileID.String()); err != nil {
-			log.Printf("messaging: publish message.read chat=%s profile=%s: %v", chatID, profileID, err)
+			s.logPublishError(ctx, "message.read", err, slog.String("message_id", lastRead.String()), slog.String("chat_id", chatID.String()), slog.String("profile_id", profileID.String()))
 		}
 	}
 	return &messagingv1.MarkReadResponse{}, nil

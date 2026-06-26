@@ -2,7 +2,7 @@ package grpcsvc
 
 import (
 	"context"
-	"log"
+	"log/slog"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
@@ -83,13 +83,13 @@ func (s *ChatGRPC) ensureDM(ctx context.Context, otherProfileRaw string) (*store
 	}
 	if created && s.ChatEvents != nil {
 		if err := s.ChatEvents.PublishChatCreated(ctx, row.ID.String(), "dm"); err != nil {
-			log.Printf("chat: publish chat.created: %v", err)
+			s.logPublishError(ctx, "chat.created", err, slog.String("chat_id", row.ID.String()))
 		}
 		if err := s.ChatEvents.PublishChatMemberChanged(ctx, row.ID.String(), callerProfile.String(), "joined"); err != nil {
-			log.Printf("chat: publish chat.member_changed: %v", err)
+			s.logPublishError(ctx, "chat.member_changed", err, slog.String("chat_id", row.ID.String()), slog.String("profile_id", callerProfile.String()))
 		}
 		if err := s.ChatEvents.PublishChatMemberChanged(ctx, row.ID.String(), otherProfile.String(), "joined"); err != nil {
-			log.Printf("chat: publish chat.member_changed: %v", err)
+			s.logPublishError(ctx, "chat.member_changed", err, slog.String("chat_id", row.ID.String()), slog.String("profile_id", otherProfile.String()))
 		}
 	}
 	return row, nil

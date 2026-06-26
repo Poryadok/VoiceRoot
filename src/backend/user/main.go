@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
@@ -23,6 +24,7 @@ import (
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
+	voiceprom "voice/backend/pkg/promhttp"
 	"voice/backend/user/internal/r2avatar"
 	"voice/backend/user/internal/store"
 
@@ -33,6 +35,7 @@ const serviceName = "user"
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	metricsReg := prometheus.NewRegistry()
 	httpAddr := ":8080"
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
 		httpAddr = v
@@ -138,7 +141,7 @@ func main() {
 		if r2cfg.Endpoint != "" {
 			p, err := r2avatar.NewS3R2PutPresigner(r2cfg)
 			if err != nil {
-				log.Printf("user: USER_R2_* set but presigner init failed (avatar upload disabled): %v", err)
+				logger.Warn("USER_R2_* set but presigner init failed (avatar upload disabled)", slog.String("error", err.Error()))
 			} else {
 				avatarPresigner = p
 				avatarPublicBase = strings.TrimSpace(r2cfg.PublicBaseURL)
@@ -160,7 +163,7 @@ func main() {
 			events = pub
 		}
 
-		srv := grpc.NewServer(grpcmw.ServerOptions(logger)...)
+		srv := grpc.NewServer(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))...)
 		userv1.RegisterUserServiceServer(srv, &grpcsvc.UserGRPC{
 			Profiles:            store.NewProfileStore(pool),
 			Privacy:             store.NewPrivacyStore(pool),
@@ -184,7 +187,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              httpAddr,
-		Handler:           httpserver.Wrap(healthHandler(serviceName), logger),
+		Handler:           httpserver.Wrap(voiceprom.MountMetricsOnHealth(healthHandler(serviceName), metricsReg), logger),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,

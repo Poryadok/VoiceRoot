@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net"
 	"path/filepath"
 	"runtime"
@@ -123,6 +124,7 @@ func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire
 		ChatThreadPolicy: &store.SQLChatThreadPolicy{Pool: pool},
 		PlatformMod:      w.PlatformMod,
 		PreKeyBundles:    &store.E2EPreKeyStore{Pool: pool},
+		Logger:           w.Logger,
 	})
 	go func() {
 		if err := srv.Serve(lis); err != nil {
@@ -152,6 +154,7 @@ type messagingWire struct {
 	RolePermissions mentions.RolePermissionChecker
 	UserPresence    mentions.OnlinePresenceLookup
 	PlatformMod     PlatformModerationChecker
+	Logger          *slog.Logger
 }
 
 func startMessagingServer(t *testing.T, pool *pgxpool.Pool) (messagingv1.MessagingServiceClient, func()) {
