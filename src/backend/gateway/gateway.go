@@ -75,6 +75,9 @@ func newGateway(config gatewayConfig) http.Handler {
 	if config.metrics == nil {
 		config.metrics = newGatewayMetrics()
 	}
+	if config.realtimeUpstream != nil {
+		config.realtimeUpstream = config.metrics.wrapRealtimeProxy(config.realtimeUpstream)
+	}
 	if config.slogLogger == nil {
 		config.slogLogger = voicelog.NewJSONLogger(voicelog.LevelFromEnv(), slog.String("service", "gateway"))
 	}

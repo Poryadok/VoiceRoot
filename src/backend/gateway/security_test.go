@@ -113,7 +113,7 @@ func TestMetricsEndpointAndRateLimitHit(t *testing.T) {
 		t.Fatalf("metrics status = %d", rec.Code)
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "gateway_request_count") || !strings.Contains(body, "gateway_ratelimit_hit{group=\"AuthLogin\"} 1") {
+	if !strings.Contains(body, "gateway_http_requests_total") || !strings.Contains(body, `gateway_ratelimit_hits_total{group="AuthLogin"} 1`) {
 		t.Fatalf("metrics body = %q", body)
 	}
 }

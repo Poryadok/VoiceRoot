@@ -230,7 +230,7 @@ func TestRateLimitGroup_e2eKeyBackupAndPreKeys(t *testing.T) {
 
 func TestRateLimitRulesFromEnv_authAliasDisablesBoth(t *testing.T) {
 	t.Setenv("GATEWAY_RATE_LIMIT_RULES_JSON", `{"Auth":{"limit":0,"window":"15m"}}`)
-	rules := rateLimitRulesFromEnv()
+	rules := rateLimitRulesFromEnv(nil)
 	if rules["AuthLogin"].Limit != 0 || rules["AuthRegister"].Limit != 0 {
 		t.Fatalf("Auth alias: AuthLogin=%#v AuthRegister=%#v, want limit 0 for both", rules["AuthLogin"], rules["AuthRegister"])
 	}
@@ -238,7 +238,7 @@ func TestRateLimitRulesFromEnv_authAliasDisablesBoth(t *testing.T) {
 
 func TestRateLimitRulesFromEnv_overrideSingleGroup(t *testing.T) {
 	t.Setenv("GATEWAY_RATE_LIMIT_RULES_JSON", `{"AuthLogin":{"limit":1,"window":"1h"},"MessagesSend":{"limit":99,"window":"1s"}}`)
-	rules := rateLimitRulesFromEnv()
+	rules := rateLimitRulesFromEnv(nil)
 	if rules["AuthLogin"].Limit != 1 || rules["AuthLogin"].Window != time.Hour {
 		t.Fatalf("AuthLogin=%#v", rules["AuthLogin"])
 	}
@@ -252,7 +252,7 @@ func TestRateLimitRulesFromEnv_overrideSingleGroup(t *testing.T) {
 
 func TestGateway_authLoginManyAttempts_no429WhenAuthDisabled(t *testing.T) {
 	t.Setenv("GATEWAY_RATE_LIMIT_RULES_JSON", `{"Auth":{"limit":0,"window":"15m"}}`)
-	limiter := newSlidingWindowLimiter(rateLimitRulesFromEnv())
+	limiter := newSlidingWindowLimiter(rateLimitRulesFromEnv(nil))
 	h := newGatewayForContract(t, gatewayTestOptions{
 		rateLimiter: limiter,
 		restUpstreams: map[string]http.Handler{

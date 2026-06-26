@@ -1,100 +1,134 @@
 package main
 
 import (
-	"fmt"
+	"bufio"
 	"log/slog"
+	"net"
 	"net/http"
-	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	grpcmw "voice/backend/pkg/grpcmw"
 )
 
 type gatewayMetrics struct {
-	mu                 sync.Mutex
-	requestCount       map[string]int64
-	requestLatencyMS   map[string]float64
-	rateLimitHits      map[string]int64
-	forceUpdateBlocks  map[string]int64
+	registry          *prometheus.Registry
+	httpRequests      *prometheus.CounterVec
+	httpDuration      *prometheus.HistogramVec
+	rateLimitHits     *prometheus.CounterVec
+	forceUpdateBlocks *prometheus.CounterVec
+	wsProxyActive     prometheus.Gauge
 }
 
 func newGatewayMetrics() *gatewayMetrics {
-	return &gatewayMetrics{
-		requestCount:      map[string]int64{},
-		requestLatencyMS:  map[string]float64{},
-		rateLimitHits:     map[string]int64{},
-		forceUpdateBlocks: map[string]int64{},
+	reg := prometheus.NewRegistry()
+	m := &gatewayMetrics{
+		registry: reg,
+		httpRequests: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "gateway_http_requests_total",
+			Help: "Total HTTP requests handled by the gateway.",
+		}, []string{"route_group", "method", "status"}),
+		httpDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "gateway_http_request_duration_seconds",
+			Help:    "HTTP request latency in seconds.",
+			Buckets: grpcmw.DefaultHistogramBuckets,
+		}, []string{"route_group", "method"}),
+		rateLimitHits: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "gateway_ratelimit_hits_total",
+			Help: "Total requests blocked by gateway rate limits.",
+		}, []string{"group"}),
+		forceUpdateBlocks: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "gateway_force_update_blocks_total",
+			Help: "Total requests blocked by force-update policy.",
+		}, []string{"platform"}),
+		wsProxyActive: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "gateway_ws_proxy_active",
+			Help: "Active WebSocket connections proxied to realtime upstream.",
+		}),
 	}
+	reg.MustRegister(
+		m.httpRequests,
+		m.httpDuration,
+		m.rateLimitHits,
+		m.forceUpdateBlocks,
+		m.wsProxyActive,
+	)
+	return m
 }
 
 func (m *gatewayMetrics) ObserveForceUpdateBlock(platform string) {
 	if platform == "" {
 		platform = "unknown"
 	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.forceUpdateBlocks[platform]++
+	m.forceUpdateBlocks.WithLabelValues(platform).Inc()
 }
 
 func (m *gatewayMetrics) ObserveRequest(group, method string, status int, duration time.Duration) {
-	key := metricKey(group, method, fmt.Sprintf("%d", status))
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.requestCount[key]++
-	m.requestLatencyMS[key] += float64(duration.Milliseconds())
+	statusStr := strconv.Itoa(status)
+	m.httpRequests.WithLabelValues(group, method, statusStr).Inc()
+	m.httpDuration.WithLabelValues(group, method).Observe(duration.Seconds())
 }
 
 func (m *gatewayMetrics) ObserveRateLimitHit(group string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.rateLimitHits[group]++
+	m.rateLimitHits.WithLabelValues(group).Inc()
 }
 
-func (m *gatewayMetrics) WritePrometheus(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	_, _ = fmt.Fprintln(w, "# TYPE gateway_request_count counter")
-	writeMetricMap(w, "gateway_request_count", m.requestCount)
-	_, _ = fmt.Fprintln(w, "# TYPE gateway_request_latency_ms_sum counter")
-	writeMetricMap(w, "gateway_request_latency_ms_sum", m.requestLatencyMS)
-	_, _ = fmt.Fprintln(w, "# TYPE gateway_ratelimit_hit counter")
-	groups := make([]string, 0, len(m.rateLimitHits))
-	for group := range m.rateLimitHits {
-		groups = append(groups, group)
+func (m *gatewayMetrics) wrapRealtimeProxy(upstream http.Handler) http.Handler {
+	if upstream == nil {
+		return nil
 	}
-	sort.Strings(groups)
-	for _, group := range groups {
-		_, _ = fmt.Fprintf(w, "gateway_ratelimit_hit{group=%q} %d\n", group, m.rateLimitHits[group])
-	}
-	_, _ = fmt.Fprintln(w, "# TYPE gateway_force_update_blocks counter")
-	platforms := make([]string, 0, len(m.forceUpdateBlocks))
-	for platform := range m.forceUpdateBlocks {
-		platforms = append(platforms, platform)
-	}
-	sort.Strings(platforms)
-	for _, platform := range platforms {
-		_, _ = fmt.Fprintf(w, "gateway_force_update_blocks{platform=%q} %d\n", platform, m.forceUpdateBlocks[platform])
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstream.ServeHTTP(&wsProxyResponseWriter{
+			ResponseWriter: w,
+			onHijack:       m.trackWSProxyConn,
+		}, r)
+	})
+}
+
+func (m *gatewayMetrics) trackWSProxyConn(conn net.Conn) net.Conn {
+	m.wsProxyActive.Inc()
+	return &closeNotifyConn{
+		Conn: conn,
+		onClose: func() {
+			m.wsProxyActive.Dec()
+		},
 	}
 }
 
-func writeMetricMap[T int64 | float64](w http.ResponseWriter, name string, values map[string]T) {
-	keys := make([]string, 0, len(values))
-	for key := range values {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		parts := strings.Split(key, "\x00")
-		if len(parts) != 3 {
-			continue
-		}
-		_, _ = fmt.Fprintf(w, "%s{route_group=%q,method=%q,status=%q} %v\n", name, parts[0], parts[1], parts[2], values[key])
-	}
+type wsProxyResponseWriter struct {
+	http.ResponseWriter
+	onHijack func(net.Conn) net.Conn
 }
 
-func metricKey(parts ...string) string {
-	return strings.Join(parts, "\x00")
+func (w *wsProxyResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	h, ok := w.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, http.ErrNotSupported
+	}
+	conn, rw, err := h.Hijack()
+	if err != nil {
+		return conn, rw, err
+	}
+	if w.onHijack != nil {
+		conn = w.onHijack(conn)
+	}
+	return conn, rw, nil
+}
+
+type closeNotifyConn struct {
+	net.Conn
+	onClose func()
+	once    sync.Once
+}
+
+func (c *closeNotifyConn) Close() error {
+	err := c.Conn.Close()
+	c.once.Do(c.onClose)
+	return err
 }
 
 func (g *gateway) handleMetrics(w http.ResponseWriter, r *http.Request) {
@@ -102,7 +136,7 @@ func (g *gateway) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method_not_allowed"})
 		return
 	}
-	g.metrics.WritePrometheus(w)
+	promhttp.HandlerFor(g.metrics.registry, promhttp.HandlerOpts{}).ServeHTTP(w, r)
 }
 
 func (g *gateway) observeRequestMetrics(r *http.Request, status int, start time.Time) {

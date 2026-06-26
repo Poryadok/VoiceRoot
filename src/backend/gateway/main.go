@@ -2,15 +2,19 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	voicelog "voice/backend/pkg/logging"
 )
 
 func main() {
+	logger := voicelog.NewJSONLogger(voicelog.LevelFromEnv(), slog.String("service", "gateway"))
+
 	addr := ":8080"
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
 		addr = v
@@ -24,7 +28,7 @@ func main() {
 		IdleTimeout:       120 * time.Second,
 	}
 	errCh := make(chan error, 1)
-	log.Printf("listening on %s", addr)
+	logger.Info("listening", slog.String("addr", addr))
 	go func() {
 		errCh <- server.ListenAndServe()
 	}()
@@ -34,13 +38,15 @@ func main() {
 	select {
 	case err := <-errCh:
 		if err != nil && err != http.ErrServerClosed {
-			log.Fatal(err)
+			logger.Error("server failed", slog.Any("error", err))
+			os.Exit(1)
 		}
 	case <-stop:
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := server.Shutdown(ctx); err != nil {
-			log.Fatal(err)
+			logger.Error("shutdown failed", slog.Any("error", err))
+			os.Exit(1)
 		}
 	}
 }

@@ -46,8 +46,8 @@ func TestForceUpdateBlockIncrementsGatewayMetric(t *testing.T) {
 		t.Fatalf("metrics status = %d, want %d", rec.Code, http.StatusOK)
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "gateway_force_update_blocks") {
-		t.Fatalf("metrics body missing gateway_force_update_blocks:\n%s", body)
+	if !strings.Contains(body, "gateway_force_update_blocks_total") {
+		t.Fatalf("metrics body missing gateway_force_update_blocks_total:\n%s", body)
 	}
 	if !strings.Contains(body, `platform="windows"`) {
 		t.Fatalf("metrics body missing windows platform label:\n%s", body)

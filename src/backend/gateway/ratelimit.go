@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -92,7 +92,7 @@ type rateLimitRuleSpec struct {
 	Window string `json:"window"`
 }
 
-func rateLimitRulesFromEnv() map[string]rateLimitRule {
+func rateLimitRulesFromEnv(logger *slog.Logger) map[string]rateLimitRule {
 	rules := copyRateLimitRules(defaultRateLimitRules())
 	var overrides map[string]rateLimitRuleSpec
 	raw := strings.TrimSpace(os.Getenv("GATEWAY_RATE_LIMIT_RULES_JSON"))
@@ -100,7 +100,9 @@ func rateLimitRulesFromEnv() map[string]rateLimitRule {
 		return rules
 	}
 	if err := json.Unmarshal([]byte(raw), &overrides); err != nil {
-		log.Printf("invalid GATEWAY_RATE_LIMIT_RULES_JSON: %v", err)
+		if logger != nil {
+			logger.Warn("invalid GATEWAY_RATE_LIMIT_RULES_JSON", slog.Any("error", err))
+		}
 		return rules
 	}
 	applyRateLimitRuleOverrides(rules, overrides)

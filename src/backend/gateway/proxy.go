@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -13,18 +13,20 @@ import (
 	"time"
 )
 
-func proxyFromEnv(name string) http.Handler {
-	return reverseProxy(os.Getenv(name))
+func proxyFromEnv(name string, logger *slog.Logger) http.Handler {
+	return reverseProxy(os.Getenv(name), logger)
 }
 
-func reverseProxy(rawURL string) http.Handler {
+func reverseProxy(rawURL string, logger *slog.Logger) http.Handler {
 	rawURL = strings.TrimSpace(rawURL)
 	if rawURL == "" {
 		return nil
 	}
 	target, err := url.Parse(rawURL)
 	if err != nil || target.Scheme == "" || target.Host == "" {
-		log.Printf("invalid upstream URL %q: %v", rawURL, err)
+		if logger != nil {
+			logger.Warn("invalid upstream URL", slog.String("url", rawURL), slog.Any("error", err))
+		}
 		return nil
 	}
 	proxy := httputil.NewSingleHostReverseProxy(target)
