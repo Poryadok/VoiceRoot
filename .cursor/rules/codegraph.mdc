@@ -1,0 +1,46 @@
+---
+description: CodeGraph MCP — как запрашивать индекс Voice (query tips, шум generated)
+alwaysApply: true
+---
+
+# CodeGraph (Voice monorepo)
+
+Индекс: `.codegraph/` (локально, **не коммитить** БД — только `.codegraph/.gitignore` в git).
+MCP tool: **`codegraph_explore`** — предпочитать для структуры кода, callers/callees, blast radius **до** grep/read.
+
+Продуктовые требования — по-прежнему `docs/` и `voice-project.mdc`; CodeGraph не заменяет спеки.
+
+## Как формулировать query
+
+Широкие NL-запросы («who calls Messaging», «chat service grpc») тянут **generated protobuf** — шум:
+
+- `**/pb/**/*.pb.go`, `*_grpc.pb.go`
+- `lib/gen/**/*.pb.dart`, `*.pbgrpc.dart`
+
+**Предпочитать конкретику:**
+
+| Задача | Пример query |
+|--------|----------------|
+| Handler / flow в сервисе | `chat/internal/grpcsvc/list_chats.go EnrichListChats ListChats` |
+| S2S между сервисами | `ListChatsEnrichment EnrichListChats messaging/internal/s2s` |
+| Gateway transcoding | `gateway/transcode_phase1 SendMessage` |
+| Realtime / NATS | `realtime nats chat.events fanout` |
+
+Правила:
+
+- Указывать **путь каталога сервиса** (`src/backend/chat/internal/...`) и **имена символов**.
+- Для flow — **оба конца** цепочки в одном query, не общие слова (`Message`, `Chat`).
+- Если первый explore ушёл в `*.pb.*` — **второй вызов** сузить по `internal/` или по файлу.
+- `maxFiles: 6–8` для точечных задач; не раздувать без нужды.
+- После explore **не re-read** файлы, уже показанные в ответе; Read — только для строк вне explore или при ⚠️ staleness banner.
+
+## Voice: где искать по доменам
+
+| Область | Якорь в query |
+|---------|----------------|
+| REST edge | `src/backend/gateway/transcode` |
+| WS / resume | `src/backend/realtime` |
+| DM / список чатов | `src/backend/chat/internal/grpcsvc` |
+| Сообщения / cursor | `src/backend/messaging/internal` |
+| Auth / JWT | `src/backend/auth/src/main/java` |
+| Flutter client | `src/frontend/lib/` (не `lib/gen/` без необходимости) |

@@ -26,6 +26,7 @@ alwaysApply: true
 | Что уже есть в коде vs план | `docs/PLAN.md` |
 | Пробелы в доках | `docs/TODO.md` |
 | Design tokens (required), Figma, brand | `docs/design/`, `design/tokens/` |
+| CodeGraph MCP — query tips для Voice | `.cursor/rules/codegraph.mdc` |
 
 ## TDD и источники истины при генерации кода
 

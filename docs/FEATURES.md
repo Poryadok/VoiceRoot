@@ -71,6 +71,7 @@
 | Уведомления          | [notifications.md](features/notifications.md) | Типы уведомлений, пуши, звуки, гранулярные настройки per-chat                         |
 | Подписка             | [subscription.md](features/subscription.md)   | Премиум профиль ($5/мес) и буст спейса, косметика и расширенные лимиты                |
 | Хранение файлов      | [file-storage.md](features/file-storage.md)   | Cloudflare R2, лимиты, сжатие медиа, дедупликация, retention                          |
+| Наблюдаемость        | [observability.md](features/observability.md) | Логи (Loki), метрики (Prometheus), Grafana, алерты — soft launch без сюрпризов        |
 | Федерация            | [federation.md](features/federation.md)       | Self-hosted ноды: спейсы на своём железе, авторизация через master                    |
 
 
