@@ -1,5 +1,6 @@
 package voice.backend.auth.service;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -42,6 +43,7 @@ public class AuthService {
   private final ProfileSwitchValidator profileSwitchValidator;
   private final E2EKeyBackupRepository e2eKeyBackups;
   private final AuthEventPublisher authEventPublisher;
+  private final MeterRegistry meterRegistry;
 
   public AuthService(
       AccountRepository accounts,
@@ -59,7 +61,8 @@ public class AuthService {
       SubscriptionTierResolver subscriptionTierResolver,
       ProfileSwitchValidator profileSwitchValidator,
       E2EKeyBackupRepository e2eKeyBackups,
-      AuthEventPublisher authEventPublisher) {
+      AuthEventPublisher authEventPublisher,
+      MeterRegistry meterRegistry) {
     this.accounts = accounts;
     this.refreshTokens = refreshTokens;
     this.refreshTokenCodec = refreshTokenCodec;
@@ -76,6 +79,7 @@ public class AuthService {
     this.profileSwitchValidator = profileSwitchValidator;
     this.e2eKeyBackups = e2eKeyBackups;
     this.authEventPublisher = authEventPublisher;
+    this.meterRegistry = meterRegistry;
   }
 
   public AuthService withClock(Clock newClock) {
@@ -95,7 +99,8 @@ public class AuthService {
         subscriptionTierResolver,
         profileSwitchValidator,
         e2eKeyBackups,
-        authEventPublisher);
+        authEventPublisher,
+        meterRegistry);
   }
 
   public AuthSession register(RegisterCommand command) {
@@ -118,34 +123,48 @@ public class AuthService {
   }
 
   public AuthSession login(LoginCommand command) {
-    Account account = findLoginAccount(command.email(), command.phone());
-    if (!passwordHasher.matches(command.password(), account.passwordHash())) {
-      throw new AuthException("invalid_credentials");
-    }
-    ensureActive(account);
-    if (account.totpEnabled()) {
-      String code = command.totpCode();
-      if (code == null || code.isBlank()) {
-        throw new AuthException("totp_required");
+    try {
+      Account account = findLoginAccount(command.email(), command.phone());
+      if (!passwordHasher.matches(command.password(), account.passwordHash())) {
+        throw new AuthException("invalid_credentials");
       }
-      boolean validTotp = account.totpSecret() != null && totpService.verifyEncrypted(account.totpSecret(), code.trim());
-      if (!validTotp && !backupCodeService.consume(account.id(), code.trim())) {
-        throw new AuthException("invalid_totp");
+      ensureActive(account);
+      if (account.totpEnabled()) {
+        String code = command.totpCode();
+        if (code == null || code.isBlank()) {
+          throw new AuthException("totp_required");
+        }
+        boolean validTotp = account.totpSecret() != null && totpService.verifyEncrypted(account.totpSecret(), code.trim());
+        if (!validTotp && !backupCodeService.consume(account.id(), code.trim())) {
+          throw new AuthException("invalid_totp");
+        }
       }
+      touchLastOnline(account);
+      AuthSession session = issueSession(account, command.deviceInfoJson());
+      recordAuthLoginMetric(true);
+      return session;
+    } catch (RuntimeException ex) {
+      recordAuthLoginMetric(false);
+      throw ex;
     }
-    touchLastOnline(account);
-    return issueSession(account, command.deviceInfoJson());
   }
 
   public synchronized AuthSession refresh(RefreshCommand command) {
-    RefreshTokenRecord current = refreshRecord(command.refreshToken());
-    ensureUsableRefresh(current);
-    refreshTokens.revoke(current.tokenHash(), Instant.now(clock));
-    Account account = accounts.findById(current.accountId().toString()).orElseThrow(() -> new AuthException("invalid_token"));
-    ensureActive(account);
-    tokenBlacklist.revoke(current.accessJti(), jwtService.accessTtl());
-    touchLastOnline(account);
-    return issueSession(account, command.deviceInfoJson());
+    try {
+      RefreshTokenRecord current = refreshRecord(command.refreshToken());
+      ensureUsableRefresh(current);
+      refreshTokens.revoke(current.tokenHash(), Instant.now(clock));
+      Account account = accounts.findById(current.accountId().toString()).orElseThrow(() -> new AuthException("invalid_token"));
+      ensureActive(account);
+      tokenBlacklist.revoke(current.accessJti(), jwtService.accessTtl());
+      touchLastOnline(account);
+      AuthSession session = issueSession(account, command.deviceInfoJson());
+      recordAuthLoginMetric(true);
+      return session;
+    } catch (RuntimeException ex) {
+      recordAuthLoginMetric(false);
+      throw ex;
+    }
   }
 
   public void logout(LogoutCommand command) {
@@ -396,5 +415,11 @@ public class AuthService {
       return token.substring("Bearer ".length());
     }
     return token;
+  }
+
+  private void recordAuthLoginMetric(boolean success) {
+    meterRegistry
+        .counter("auth_login_total", "result", success ? "success" : "failure")
+        .increment();
   }
 }

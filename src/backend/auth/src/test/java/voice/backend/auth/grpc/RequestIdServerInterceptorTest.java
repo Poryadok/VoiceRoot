@@ -12,8 +12,10 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
+import io.grpc.Status;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
 
@@ -38,10 +40,15 @@ class RequestIdServerInterceptorTest {
           "test-req-id");
 
       RequestIdServerInterceptor interceptor = new RequestIdServerInterceptor();
+      AtomicReference<ServerCall<byte[], byte[]>> wrappedCall = new AtomicReference<>();
       ServerCallHandler<byte[], byte[]> next =
-          (ignoredCall, ignoredHeaders) -> new ServerCall.Listener<byte[]>() {};
+          (serverCall, ignoredHeaders) -> {
+            wrappedCall.set(serverCall);
+            return new ServerCall.Listener<byte[]>() {};
+          };
       ServerCall.Listener<byte[]> listener = interceptor.interceptCall(call, headers, next);
       listener.onComplete();
+      wrappedCall.get().close(Status.OK, new Metadata());
 
       assertThat(appender.list).hasSize(1);
       ILoggingEvent event = appender.list.get(0);
@@ -51,6 +58,45 @@ class RequestIdServerInterceptorTest {
       assertThat(event.getMDCPropertyMap()).containsEntry("grpc_code", "OK");
       assertThat(event.getMDCPropertyMap()).containsKey("duration_ms");
       assertThat(event.getMDCPropertyMap()).containsEntry("request_id", "test-req-id");
+    } finally {
+      interceptorLogger.detachAppender(appender);
+    }
+  }
+
+  @Test
+  void logsFailedRpcWithGrpcCodeAndError() {
+    Logger interceptorLogger =
+        (Logger) LoggerFactory.getLogger(RequestIdServerInterceptor.class);
+    ListAppender<ILoggingEvent> appender = new ListAppender<>();
+    appender.start();
+    interceptorLogger.addAppender(appender);
+    interceptorLogger.setLevel(Level.INFO);
+
+    try {
+      @SuppressWarnings("unchecked")
+      ServerCall<byte[], byte[]> call = mock(ServerCall.class);
+      when(call.getMethodDescriptor()).thenReturn(pingMethod());
+
+      Metadata headers = new Metadata();
+      RequestIdServerInterceptor interceptor = new RequestIdServerInterceptor();
+      ServerCallHandler<byte[], byte[]> next =
+          (serverCall, ignoredHeaders) ->
+              new ServerCall.Listener<byte[]>() {
+                @Override
+                public void onHalfClose() {
+                  serverCall.close(
+                      Status.UNAUTHENTICATED.withDescription("invalid_credentials"),
+                      new Metadata());
+                }
+              };
+      ServerCall.Listener<byte[]> listener = interceptor.interceptCall(call, headers, next);
+      listener.onHalfClose();
+
+      assertThat(appender.list).hasSize(1);
+      ILoggingEvent event = appender.list.get(0);
+      assertThat(event.getMDCPropertyMap()).containsEntry("event", "grpc_call");
+      assertThat(event.getMDCPropertyMap()).containsEntry("grpc_code", "UNAUTHENTICATED");
+      assertThat(event.getMDCPropertyMap()).containsEntry("error", "invalid_credentials");
     } finally {
       interceptorLogger.detachAppender(appender);
     }

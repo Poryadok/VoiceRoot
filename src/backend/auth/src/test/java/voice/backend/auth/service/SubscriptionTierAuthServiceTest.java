@@ -8,6 +8,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.UUID;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import voice.backend.auth.events.NoopAuthEventPublisher;
 import voice.backend.auth.repository.InMemoryAccountRepository;
@@ -60,6 +61,7 @@ class SubscriptionTierAuthServiceTest {
         tierResolver,
         new voice.backend.auth.userdb.NoOpProfileSwitchValidator(),
         new voice.backend.auth.repository.InMemoryE2EKeyBackupRepository(),
-        new NoopAuthEventPublisher());
+        new NoopAuthEventPublisher(),
+        new SimpleMeterRegistry());
   }
 }

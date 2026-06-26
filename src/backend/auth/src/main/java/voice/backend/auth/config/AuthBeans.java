@@ -1,5 +1,6 @@
 package voice.backend.auth.config;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -70,7 +71,8 @@ public class AuthBeans {
       SubscriptionTierResolver subscriptionTierResolver,
       voice.backend.auth.userdb.ProfileSwitchValidator profileSwitchValidator,
       E2EKeyBackupRepository e2eKeyBackupRepository,
-      AuthEventPublisher authEventPublisher) {
+      AuthEventPublisher authEventPublisher,
+      MeterRegistry meterRegistry) {
     return new AuthService(
         accounts,
         refreshTokens,
@@ -87,7 +89,8 @@ public class AuthBeans {
         subscriptionTierResolver,
         profileSwitchValidator,
         e2eKeyBackupRepository,
-        authEventPublisher);
+        authEventPublisher,
+        meterRegistry);
   }
 
   @Bean
