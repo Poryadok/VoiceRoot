@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nats-io/nats.go"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -19,6 +21,7 @@ import (
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/httpserver"
 	voicejwt "voice/backend/pkg/jwt"
+	voiceprom "voice/backend/pkg/promhttp"
 )
 
 const serviceName = "realtime"
@@ -76,7 +79,30 @@ func main() {
 		}()
 	}
 
+	metricsReg := prometheus.NewRegistry()
+	initRealtimeMetrics(metricsReg)
+
 	if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
+		go func() {
+			nc, err := nats.Connect(natsURL,
+				nats.Name("voice-realtime-nats-lag"),
+				nats.Timeout(10*time.Second),
+				nats.RetryOnFailedConnect(true),
+				nats.MaxReconnects(-1),
+				nats.ReconnectWait(time.Second),
+			)
+			if err != nil {
+				logger.Warn("nats lag poller connect failed", slog.String("error", err.Error()))
+				return
+			}
+			defer func() { _ = nc.Drain() }()
+			js, err := nc.JetStream()
+			if err != nil {
+				logger.Warn("nats lag poller jetstream failed", slog.String("error", err.Error()))
+				return
+			}
+			runNatsConsumeLagPoller(ctx, js, instanceID)
+		}()
 		go func() {
 			err := runMessageEventsConsumer(ctx, hub, natsURL, instanceID, logger)
 			if err != nil && err != context.Canceled {
@@ -109,9 +135,13 @@ func main() {
 		}()
 	}
 
+	handler := voiceprom.MountMetricsOnHealth(
+		newServiceHandlerWithPresence(serviceName, tv, dmLister, hub, rf, instanceID, presenceUpdater),
+		metricsReg,
+	)
 	server := &http.Server{
 		Addr:              addr,
-		Handler:           httpserver.Wrap(newServiceHandlerWithPresence(serviceName, tv, dmLister, hub, rf, instanceID, presenceUpdater), logger),
+		Handler:           httpserver.Wrap(handler, logger),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       0,
 		WriteTimeout:      0,

@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"strings"
 
 	"github.com/redis/go-redis/v9"
@@ -179,7 +179,9 @@ func (f *redisFanout) runSubscriber(ctx context.Context) error {
 			}
 			var p redisFanoutPayload
 			if err := json.Unmarshal([]byte(msg.Payload), &p); err != nil {
-				log.Printf("realtime redis fanout: bad payload: %v", err)
+				svcLogger.Warn("realtime redis fanout: bad payload",
+					slog.String("error", err.Error()),
+				)
 				continue
 			}
 			switch p.T {

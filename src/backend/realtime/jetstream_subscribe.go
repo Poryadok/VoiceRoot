@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -34,7 +34,11 @@ func subscribeJetStreamWithRetry(
 		if !isJetStreamNotFound(err) {
 			return nil, err
 		}
-		log.Printf("%s: jetstream stream not ready, retry in %s: %v", logPrefix, delay, err)
+		svcLogger.Info("jetstream stream not ready, retrying",
+			slog.String("component", logPrefix),
+			slog.Duration("retry_in", delay),
+			slog.String("error", err.Error()),
+		)
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()

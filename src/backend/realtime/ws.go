@@ -44,33 +44,40 @@ func newServiceHandlerWithPresence(service string, tv tokenValidator, lister dmC
 func newWSHandler(tv tokenValidator, lister dmChatLister, hub *wsHub, rf *redisFanout, instanceID string, presence presenceUpdater) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if tv == nil {
+			observeWSConnectFail()
 			writeJSONError(w, http.StatusServiceUnavailable, "realtime_auth_unconfigured")
 			return
 		}
 		if r.Method != http.MethodGet {
+			observeWSConnectFail()
 			w.Header().Set("Allow", http.MethodGet)
 			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 			return
 		}
 		if !isWebSocketUpgrade(r) {
+			observeWSConnectFail()
 			writeJSONError(w, http.StatusBadRequest, "websocket_upgrade_required")
 			return
 		}
 		claims, code := tv.Validate(r)
 		if code != "" {
+			observeWSConnectFail()
 			writeJSONError(w, http.StatusUnauthorized, "invalid_token")
 			return
 		}
 		if claims.ProfileID == "" {
+			observeWSConnectFail()
 			writeJSONError(w, http.StatusUnauthorized, "invalid_token")
 			return
 		}
 		profileID, ok := pickActiveProfileID(r)
 		if !ok || profileID == "" {
+			observeWSConnectFail()
 			writeJSONError(w, http.StatusUnauthorized, "invalid_token")
 			return
 		}
 		if profileID != claims.ProfileID {
+			observeWSConnectFail()
 			writeJSONError(w, http.StatusUnauthorized, "invalid_token")
 			return
 		}
@@ -85,11 +92,13 @@ func newWSHandler(tv tokenValidator, lister dmChatLister, hub *wsHub, rf *redisF
 		}
 		conn, err := up.Upgrade(w, r, nil)
 		if err != nil {
+			observeWSConnectFail()
 			svcLogger.Warn("ws upgrade failed", slog.String("error", err.Error()))
 			return
 		}
 		requestID := strings.TrimSpace(r.Header.Get("X-Request-Id"))
-		go runWSConn(conn, claims, lister, hub, rf, instanceID, presence, requestID)
+		upgradeAt := time.Now()
+		go runWSConn(conn, claims, lister, hub, rf, instanceID, presence, requestID, upgradeAt)
 	})
 }
 
@@ -167,8 +176,9 @@ type readResult struct {
 	err error
 }
 
-func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, hub *wsHub, rf *redisFanout, instanceID string, presence presenceUpdater, requestID string) {
+func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, hub *wsHub, rf *redisFanout, instanceID string, presence presenceUpdater, requestID string, upgradeAt time.Time) {
 	connID := uuid.NewString()
+	observeWSConnectSuccess()
 	svcLogger.Info("ws connected",
 		slog.String("event", "ws_connect"),
 		slog.String("conn_id", connID),
@@ -181,6 +191,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, h
 	typingTimers := make(map[string]*time.Timer)
 
 	defer func() {
+		observeWSDisconnect()
 		svcLogger.Info("ws disconnected",
 			slog.String("event", "ws_disconnect"),
 			slog.String("conn_id", connID),
@@ -228,6 +239,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, h
 	if err := write("hello", helloD); err != nil {
 		return
 	}
+	observeWSHelloDuration(upgradeAt)
 	updatePresence(context.Background(), presence, claims, "online", "")
 
 	if lister != nil {
