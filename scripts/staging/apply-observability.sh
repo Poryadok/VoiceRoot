@@ -27,7 +27,9 @@ trap 'rm -rf "${TMP}"' EXIT
 echo "Voice observability: profile=${PROFILE} namespace=${NS}"
 
 # --- Prometheus config (base + scrape jobs) ---
-cat "${OBS_DIR}/config/prometheus-base.yml" "${OBS_DIR}/prometheus/scrape/voice-apps.yaml" \
+cat "${OBS_DIR}/config/prometheus-base.yml" \
+  "${OBS_DIR}/prometheus/scrape/voice-apps.yaml" \
+  "${OBS_DIR}/prometheus/scrape/infra-exporters.yaml" \
   > "${TMP}/prometheus.yml"
 
 kubectl apply -f "${PROFILE_DIR}/namespace.yaml"
@@ -86,6 +88,15 @@ kubectl -n "${NS}" create secret generic grafana-admin \
   --from-literal=admin-user=admin \
   --from-literal=admin-password="${GRAFANA_PASS}" \
   --dry-run=client -o yaml | kubectl apply -f -
+
+# --- Infra exporters in voice-staging (Postgres, Redis, NATS) ---
+if ! kubectl get namespace voice-staging >/dev/null 2>&1; then
+  echo "WARN: namespace voice-staging missing — skip exporters (apply staging stack first)"
+else
+  for manifest in "${OBS_DIR}/exporters/"*.yaml; do
+    kubectl apply -f "${manifest}"
+  done
+fi
 
 # --- Workloads (order: storage backends first, then collectors, then UI) ---
 for manifest in prometheus.yaml loki.yaml alertmanager.yaml promtail.yaml grafana.yaml; do

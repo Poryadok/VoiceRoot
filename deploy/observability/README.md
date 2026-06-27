@@ -24,7 +24,8 @@ Do **not** apply both profiles to the same namespace.
 | Loki | 256 Mi | 512 Mi | 30 Gi |
 | Promtail (×1 on single node) | 64 Mi | 128 Mi | — |
 | Alertmanager | 64 Mi | 128 Mi | — |
-| **Total (requests)** | **~768 Mi** | **~1.5 Gi** | **55 Gi** |
+| Exporters (voice-staging) | ~96 Mi | ~192 Mi | — |
+| **Total (requests)** | **~864 Mi** | **~1.7 Gi** | **55 Gi** |
 
 After apply, check actual usage:
 
@@ -86,8 +87,10 @@ deploy/observability/
     config-notifications.yaml
     secret.example.yaml
     templates/
+  exporters/               # Postgres, Redis, NATS (voice-staging namespace)
   prometheus/
     scrape/voice-apps.yaml
+    scrape/infra-exporters.yaml
     rules/                 # recording + P1/P2 alerts
   grafana/
     provisioning/
@@ -96,7 +99,7 @@ deploy/observability/
 
 ## Scrape wiring
 
-App pods in `voice-staging` are discovered via `prometheus.io/scrape` pod annotations (Chunk 9.1). Exporters for Postgres/Redis/NATS are static targets (Chunk 8.1).
+App pods in `voice-staging` are discovered via `prometheus.io/scrape` pod annotations (Chunk 9.1). Exporters for Postgres/Redis/NATS/LiveKit are static targets in `prometheus/scrape/infra-exporters.yaml`; manifests in `exporters/` (see [exporters/README.md](exporters/README.md) for expected metric names).
 
 Promtail collects stdout from namespaces `voice-staging` and `voice-observability`. LogQL example:
 

@@ -1,0 +1,35 @@
+# Static scrape jobs for voice-staging infrastructure exporters (Chunk 8.1).
+# Targets use cluster DNS; Prometheus runs in voice-observability.
+
+- job_name: voice-postgres
+  static_configs:
+    - targets: ["postgres-exporter.voice-staging.svc.cluster.local:9187"]
+      labels:
+        component: postgres
+
+- job_name: voice-redis
+  static_configs:
+    - targets: ["redis-exporter.voice-staging.svc.cluster.local:9121"]
+      labels:
+        component: redis
+
+- job_name: voice-nats-exporter
+  static_configs:
+    - targets: ["nats-exporter.voice-staging.svc.cluster.local:7777"]
+      labels:
+        component: nats
+
+- job_name: voice-livekit
+  metrics_path: /metrics
+  static_configs:
+    - targets: ["voice-livekit.voice-staging.svc.cluster.local:6789"]
+      labels:
+        component: livekit
+
+# Optional Tier-1 ingress metrics (Traefik Helm in traefik namespace, metrics on :9100).
+# Disable by removing this job if Traefik metrics are not enabled on the cluster.
+- job_name: traefik
+  static_configs:
+    - targets: ["traefik.traefik.svc.cluster.local:9100"]
+      labels:
+        component: traefik

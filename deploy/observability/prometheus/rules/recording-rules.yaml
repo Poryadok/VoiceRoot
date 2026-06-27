@@ -26,3 +26,22 @@ groups:
           sum by (route_group) (rate(gateway_http_requests_total[5m]))
         labels:
           cluster: voice-staging
+
+  - name: voice_infra_recording
+    interval: 30s
+    rules:
+      # Aligns with NATSDown alert (prometheus-nats-exporter has no native nats_up gauge).
+      - record: nats_up
+        expr: up{job="voice-nats-exporter"}
+        labels:
+          cluster: voice-staging
+
+      # Sum consumer pending per JetStream stream for JetStreamLag alert.
+      - record: nats_jetstream_stream_messages_pending
+        expr: |
+          label_replace(
+            sum by (stream_name) (nats_jetstream_consumer_num_pending),
+            "stream", "$1", "stream_name", "(.*)"
+          )
+        labels:
+          cluster: voice-staging

@@ -161,6 +161,9 @@ spec:
       port: 7882
       targetPort: 7882
       protocol: UDP
+    - name: metrics
+      port: 6789
+      targetPort: 6789
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -186,6 +189,8 @@ spec:
             - containerPort: 7881
             - containerPort: 7882
               protocol: UDP
+            - containerPort: 6789
+              name: metrics
           volumeMounts:
             - name: livekit-config
               mountPath: /etc/livekit.yaml
@@ -207,6 +212,8 @@ data:
     rtc:
       tcp_port: 7881
       udp_port: 7882
+    prometheus:
+      port: 6789
     keys:
       devkey: secret
 ---

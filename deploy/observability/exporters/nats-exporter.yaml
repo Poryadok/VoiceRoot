@@ -1,0 +1,59 @@
+# NATS JetStream metrics via prometheus-nats-exporter (scrapes voice-nats :8222 JSON monitor API).
+# Prefix "nats" aligns with alert/recording rule metric names (nats_jetstream_*).
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats-exporter
+  namespace: voice-staging
+  labels:
+    app: nats-exporter
+spec:
+  selector:
+    app: nats-exporter
+  ports:
+    - name: metrics
+      port: 7777
+      targetPort: 7777
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nats-exporter
+  namespace: voice-staging
+  labels:
+    app: nats-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nats-exporter
+  template:
+    metadata:
+      labels:
+        app: nats-exporter
+    spec:
+      containers:
+        - name: nats-exporter
+          image: natsio/prometheus-nats-exporter:0.15.0
+          args:
+            - "-varz"
+            - "-connz"
+            - "-jsz=all"
+            - "-prefix=nats"
+            - "http://voice-nats:8222"
+          ports:
+            - containerPort: 7777
+              name: metrics
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 10

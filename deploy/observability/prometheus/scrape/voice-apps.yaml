@@ -2,7 +2,7 @@
 # App pods: rely on prometheus.io/scrape annotations on Deployments in voice-staging
 # (see deploy/staging/README.md — scrape wiring in Chunk 9.1).
 #
-# Exporters (postgres, redis, nats, livekit): static targets added in Chunk 8.1.
+# Exporters (postgres, redis, nats, livekit): static targets in infra-exporters.yaml.
 
 - job_name: kubernetes-pods-voice
   kubernetes_sd_configs:
