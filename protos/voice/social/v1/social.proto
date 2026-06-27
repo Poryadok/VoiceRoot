@@ -30,7 +30,7 @@ service SocialService {
   rpc IsBlocked(IsBlockedRequest) returns (IsBlockedResponse);
 
   rpc AreFriends(AreFriendsRequest) returns (AreFriendsResponse);
-  rpc AreFriendsOfFriends(AreFriendsRequest) returns (AreFriendsResponse);
+  rpc AreFriendsOfFriends(AreFriendsOfFriendsRequest) returns (AreFriendsOfFriendsResponse);
   rpc GetFriendsOfFriends(GetFriendsOfFriendsRequest) returns (GetFriendsOfFriendsResponse);
 }
 
@@ -153,6 +153,15 @@ message AreFriendsRequest {
 }
 
 message AreFriendsResponse {
+  bool friends = 1;
+}
+
+message AreFriendsOfFriendsRequest {
+  string profile_id_a = 1;
+  string profile_id_b = 2;
+}
+
+message AreFriendsOfFriendsResponse {
   bool friends = 1;
 }
 

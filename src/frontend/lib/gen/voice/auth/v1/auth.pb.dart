@@ -2142,6 +2142,173 @@ class GetE2EKeyBackupResponse extends $pb.GeneratedMessage {
   void clearPasswordHint() => $_clearField(2);
 }
 
+class ResolvePhoneHashesRequest extends $pb.GeneratedMessage {
+  factory ResolvePhoneHashesRequest({
+    $core.Iterable<$core.String>? phoneHashes,
+  }) {
+    final result = create();
+    if (phoneHashes != null) result.phoneHashes.addAll(phoneHashes);
+    return result;
+  }
+
+  ResolvePhoneHashesRequest._();
+
+  factory ResolvePhoneHashesRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ResolvePhoneHashesRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ResolvePhoneHashesRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..pPS(1, _omitFieldNames ? '' : 'phoneHashes')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolvePhoneHashesRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolvePhoneHashesRequest copyWith(
+          void Function(ResolvePhoneHashesRequest) updates) =>
+      super.copyWith((message) => updates(message as ResolvePhoneHashesRequest))
+          as ResolvePhoneHashesRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ResolvePhoneHashesRequest create() => ResolvePhoneHashesRequest._();
+  @$core.override
+  ResolvePhoneHashesRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ResolvePhoneHashesRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ResolvePhoneHashesRequest>(create);
+  static ResolvePhoneHashesRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $pb.PbList<$core.String> get phoneHashes => $_getList(0);
+}
+
+class PhoneHashProfileMatch extends $pb.GeneratedMessage {
+  factory PhoneHashProfileMatch({
+    $core.String? phoneHash,
+    $core.String? profileId,
+  }) {
+    final result = create();
+    if (phoneHash != null) result.phoneHash = phoneHash;
+    if (profileId != null) result.profileId = profileId;
+    return result;
+  }
+
+  PhoneHashProfileMatch._();
+
+  factory PhoneHashProfileMatch.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory PhoneHashProfileMatch.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'PhoneHashProfileMatch',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'phoneHash')
+    ..aOS(2, _omitFieldNames ? '' : 'profileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  PhoneHashProfileMatch clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  PhoneHashProfileMatch copyWith(
+          void Function(PhoneHashProfileMatch) updates) =>
+      super.copyWith((message) => updates(message as PhoneHashProfileMatch))
+          as PhoneHashProfileMatch;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static PhoneHashProfileMatch create() => PhoneHashProfileMatch._();
+  @$core.override
+  PhoneHashProfileMatch createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static PhoneHashProfileMatch getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<PhoneHashProfileMatch>(create);
+  static PhoneHashProfileMatch? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get phoneHash => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set phoneHash($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasPhoneHash() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearPhoneHash() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get profileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set profileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearProfileId() => $_clearField(2);
+}
+
+class ResolvePhoneHashesResponse extends $pb.GeneratedMessage {
+  factory ResolvePhoneHashesResponse({
+    $core.Iterable<PhoneHashProfileMatch>? matches,
+  }) {
+    final result = create();
+    if (matches != null) result.matches.addAll(matches);
+    return result;
+  }
+
+  ResolvePhoneHashesResponse._();
+
+  factory ResolvePhoneHashesResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ResolvePhoneHashesResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ResolvePhoneHashesResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..pPM<PhoneHashProfileMatch>(1, _omitFieldNames ? '' : 'matches',
+        subBuilder: PhoneHashProfileMatch.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolvePhoneHashesResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolvePhoneHashesResponse copyWith(
+          void Function(ResolvePhoneHashesResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as ResolvePhoneHashesResponse))
+          as ResolvePhoneHashesResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ResolvePhoneHashesResponse create() => ResolvePhoneHashesResponse._();
+  @$core.override
+  ResolvePhoneHashesResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ResolvePhoneHashesResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ResolvePhoneHashesResponse>(create);
+  static ResolvePhoneHashesResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $pb.PbList<PhoneHashProfileMatch> get matches => $_getList(0);
+}
+
 const $core.bool _omitFieldNames =
     $core.bool.fromEnvironment('protobuf.omit_field_names');
 const $core.bool _omitMessageNames =

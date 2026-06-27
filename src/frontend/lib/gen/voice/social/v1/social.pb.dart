@@ -1680,6 +1680,133 @@ class AreFriendsResponse extends $pb.GeneratedMessage {
   void clearFriends() => $_clearField(1);
 }
 
+class AreFriendsOfFriendsRequest extends $pb.GeneratedMessage {
+  factory AreFriendsOfFriendsRequest({
+    $core.String? profileIdA,
+    $core.String? profileIdB,
+  }) {
+    final result = create();
+    if (profileIdA != null) result.profileIdA = profileIdA;
+    if (profileIdB != null) result.profileIdB = profileIdB;
+    return result;
+  }
+
+  AreFriendsOfFriendsRequest._();
+
+  factory AreFriendsOfFriendsRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory AreFriendsOfFriendsRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'AreFriendsOfFriendsRequest',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.social.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'profileIdA')
+    ..aOS(2, _omitFieldNames ? '' : 'profileIdB')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AreFriendsOfFriendsRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AreFriendsOfFriendsRequest copyWith(
+          void Function(AreFriendsOfFriendsRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as AreFriendsOfFriendsRequest))
+          as AreFriendsOfFriendsRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static AreFriendsOfFriendsRequest create() => AreFriendsOfFriendsRequest._();
+  @$core.override
+  AreFriendsOfFriendsRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static AreFriendsOfFriendsRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<AreFriendsOfFriendsRequest>(create);
+  static AreFriendsOfFriendsRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get profileIdA => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set profileIdA($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProfileIdA() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProfileIdA() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get profileIdB => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set profileIdB($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasProfileIdB() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearProfileIdB() => $_clearField(2);
+}
+
+class AreFriendsOfFriendsResponse extends $pb.GeneratedMessage {
+  factory AreFriendsOfFriendsResponse({
+    $core.bool? friends,
+  }) {
+    final result = create();
+    if (friends != null) result.friends = friends;
+    return result;
+  }
+
+  AreFriendsOfFriendsResponse._();
+
+  factory AreFriendsOfFriendsResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory AreFriendsOfFriendsResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'AreFriendsOfFriendsResponse',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.social.v1'),
+      createEmptyInstance: create)
+    ..aOB(1, _omitFieldNames ? '' : 'friends')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AreFriendsOfFriendsResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AreFriendsOfFriendsResponse copyWith(
+          void Function(AreFriendsOfFriendsResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as AreFriendsOfFriendsResponse))
+          as AreFriendsOfFriendsResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static AreFriendsOfFriendsResponse create() =>
+      AreFriendsOfFriendsResponse._();
+  @$core.override
+  AreFriendsOfFriendsResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static AreFriendsOfFriendsResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<AreFriendsOfFriendsResponse>(create);
+  static AreFriendsOfFriendsResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.bool get friends => $_getBF(0);
+  @$pb.TagNumber(1)
+  set friends($core.bool value) => $_setBool(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasFriends() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearFriends() => $_clearField(1);
+}
+
 class GetFriendsOfFriendsRequest extends $pb.GeneratedMessage {
   factory GetFriendsOfFriendsRequest({
     $core.String? profileId,

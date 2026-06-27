@@ -62,7 +62,7 @@ func (s *GRPCSocialFriends) AreFriendsOfFriends(ctx context.Context, profileA, p
 		return false, nil
 	}
 	ctx = ForwardIncomingMetadata(ctx)
-	resp, err := s.Client.AreFriendsOfFriends(ctx, &socialv1.AreFriendsRequest{
+	resp, err := s.Client.AreFriendsOfFriends(ctx, &socialv1.AreFriendsOfFriendsRequest{
 		ProfileIdA: profileA.String(),
 		ProfileIdB: profileB.String(),
 	})

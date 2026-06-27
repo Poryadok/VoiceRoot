@@ -624,3 +624,52 @@ final $typed_data.Uint8List getE2EKeyBackupResponseDescriptor = $convert.base64D
     'ChdHZXRFMkVLZXlCYWNrdXBSZXNwb25zZRIlCg5lbmNyeXB0ZWRfYmxvYhgBIAEoCVINZW5jcn'
     'lwdGVkQmxvYhIoCg1wYXNzd29yZF9oaW50GAIgASgJSABSDHBhc3N3b3JkSGludIgBAUIQCg5f'
     'cGFzc3dvcmRfaGludA==');
+
+@$core.Deprecated('Use resolvePhoneHashesRequestDescriptor instead')
+const ResolvePhoneHashesRequest$json = {
+  '1': 'ResolvePhoneHashesRequest',
+  '2': [
+    {'1': 'phone_hashes', '3': 1, '4': 3, '5': 9, '10': 'phoneHashes'},
+  ],
+};
+
+/// Descriptor for `ResolvePhoneHashesRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List resolvePhoneHashesRequestDescriptor =
+    $convert.base64Decode(
+        'ChlSZXNvbHZlUGhvbmVIYXNoZXNSZXF1ZXN0EiEKDHBob25lX2hhc2hlcxgBIAMoCVILcGhvbm'
+        'VIYXNoZXM=');
+
+@$core.Deprecated('Use phoneHashProfileMatchDescriptor instead')
+const PhoneHashProfileMatch$json = {
+  '1': 'PhoneHashProfileMatch',
+  '2': [
+    {'1': 'phone_hash', '3': 1, '4': 1, '5': 9, '10': 'phoneHash'},
+    {'1': 'profile_id', '3': 2, '4': 1, '5': 9, '10': 'profileId'},
+  ],
+};
+
+/// Descriptor for `PhoneHashProfileMatch`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List phoneHashProfileMatchDescriptor = $convert.base64Decode(
+    'ChVQaG9uZUhhc2hQcm9maWxlTWF0Y2gSHQoKcGhvbmVfaGFzaBgBIAEoCVIJcGhvbmVIYXNoEh'
+    '0KCnByb2ZpbGVfaWQYAiABKAlSCXByb2ZpbGVJZA==');
+
+@$core.Deprecated('Use resolvePhoneHashesResponseDescriptor instead')
+const ResolvePhoneHashesResponse$json = {
+  '1': 'ResolvePhoneHashesResponse',
+  '2': [
+    {
+      '1': 'matches',
+      '3': 1,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.auth.v1.PhoneHashProfileMatch',
+      '10': 'matches'
+    },
+  ],
+};
+
+/// Descriptor for `ResolvePhoneHashesResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List resolvePhoneHashesResponseDescriptor =
+    $convert.base64Decode(
+        'ChpSZXNvbHZlUGhvbmVIYXNoZXNSZXNwb25zZRI+CgdtYXRjaGVzGAEgAygLMiQudm9pY2UuYX'
+        'V0aC52MS5QaG9uZUhhc2hQcm9maWxlTWF0Y2hSB21hdGNoZXM=');

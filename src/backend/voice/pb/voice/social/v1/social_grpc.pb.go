@@ -63,7 +63,7 @@ type SocialServiceClient interface {
 	ListBlocked(ctx context.Context, in *ListBlockedRequest, opts ...grpc.CallOption) (*ListBlockedResponse, error)
 	IsBlocked(ctx context.Context, in *IsBlockedRequest, opts ...grpc.CallOption) (*IsBlockedResponse, error)
 	AreFriends(ctx context.Context, in *AreFriendsRequest, opts ...grpc.CallOption) (*AreFriendsResponse, error)
-	AreFriendsOfFriends(ctx context.Context, in *AreFriendsRequest, opts ...grpc.CallOption) (*AreFriendsResponse, error)
+	AreFriendsOfFriends(ctx context.Context, in *AreFriendsOfFriendsRequest, opts ...grpc.CallOption) (*AreFriendsOfFriendsResponse, error)
 	GetFriendsOfFriends(ctx context.Context, in *GetFriendsOfFriendsRequest, opts ...grpc.CallOption) (*GetFriendsOfFriendsResponse, error)
 }
 
@@ -245,9 +245,9 @@ func (c *socialServiceClient) AreFriends(ctx context.Context, in *AreFriendsRequ
 	return out, nil
 }
 
-func (c *socialServiceClient) AreFriendsOfFriends(ctx context.Context, in *AreFriendsRequest, opts ...grpc.CallOption) (*AreFriendsResponse, error) {
+func (c *socialServiceClient) AreFriendsOfFriends(ctx context.Context, in *AreFriendsOfFriendsRequest, opts ...grpc.CallOption) (*AreFriendsOfFriendsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(AreFriendsResponse)
+	out := new(AreFriendsOfFriendsResponse)
 	err := c.cc.Invoke(ctx, SocialService_AreFriendsOfFriends_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -288,7 +288,7 @@ type SocialServiceServer interface {
 	ListBlocked(context.Context, *ListBlockedRequest) (*ListBlockedResponse, error)
 	IsBlocked(context.Context, *IsBlockedRequest) (*IsBlockedResponse, error)
 	AreFriends(context.Context, *AreFriendsRequest) (*AreFriendsResponse, error)
-	AreFriendsOfFriends(context.Context, *AreFriendsRequest) (*AreFriendsResponse, error)
+	AreFriendsOfFriends(context.Context, *AreFriendsOfFriendsRequest) (*AreFriendsOfFriendsResponse, error)
 	GetFriendsOfFriends(context.Context, *GetFriendsOfFriendsRequest) (*GetFriendsOfFriendsResponse, error)
 	mustEmbedUnimplementedSocialServiceServer()
 }
@@ -351,7 +351,7 @@ func (UnimplementedSocialServiceServer) IsBlocked(context.Context, *IsBlockedReq
 func (UnimplementedSocialServiceServer) AreFriends(context.Context, *AreFriendsRequest) (*AreFriendsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AreFriends not implemented")
 }
-func (UnimplementedSocialServiceServer) AreFriendsOfFriends(context.Context, *AreFriendsRequest) (*AreFriendsResponse, error) {
+func (UnimplementedSocialServiceServer) AreFriendsOfFriends(context.Context, *AreFriendsOfFriendsRequest) (*AreFriendsOfFriendsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AreFriendsOfFriends not implemented")
 }
 func (UnimplementedSocialServiceServer) GetFriendsOfFriends(context.Context, *GetFriendsOfFriendsRequest) (*GetFriendsOfFriendsResponse, error) {
@@ -685,7 +685,7 @@ func _SocialService_AreFriends_Handler(srv interface{}, ctx context.Context, dec
 }
 
 func _SocialService_AreFriendsOfFriends_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AreFriendsRequest)
+	in := new(AreFriendsOfFriendsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -697,7 +697,7 @@ func _SocialService_AreFriendsOfFriends_Handler(srv interface{}, ctx context.Con
 		FullMethod: SocialService_AreFriendsOfFriends_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SocialServiceServer).AreFriendsOfFriends(ctx, req.(*AreFriendsRequest))
+		return srv.(SocialServiceServer).AreFriendsOfFriends(ctx, req.(*AreFriendsOfFriendsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }

@@ -91,7 +91,7 @@ jobs:
           flutter pub get
           flutter analyze
           flutter test
-          flutter build windows --release --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080 --dart-define=VOICE_APP_VERSION=1.0.0
+          flutter build windows --release --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080 --dart-define=VOICE_APP_VERSION=1.0.0 -- --cmake-args=-DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
   golangci:
     runs-on: ubuntu-latest
@@ -282,6 +282,16 @@ jobs:
         run: cp .env.example .env
       - name: Start compose infra
         run: docker compose up -d
+      - name: Wait for postgres
+        run: |
+          for i in $(seq 1 30); do
+            if docker compose exec -T postgres pg_isready -U voice -d voice; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose ps
+          exit 1
       - name: Migrate Go-owned databases
         run: make compose-migrate-all
       - name: Start app stack

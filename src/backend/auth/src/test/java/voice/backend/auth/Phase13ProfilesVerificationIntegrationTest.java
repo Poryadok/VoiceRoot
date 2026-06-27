@@ -122,11 +122,12 @@ class Phase13ProfilesVerificationIntegrationTest {
     assertThat(body.get("profile_id").asText()).isEqualTo(altProfileId.toString());
     var jwt = SignedJWT.parse(body.get("access_token").asText()).getJWTClaimsSet();
     assertThat(jwt.getStringClaim("profile_id")).isEqualTo(altProfileId.toString());
+    String switchedAccess = body.get("access_token").asText();
 
     mockMvc
         .perform(
             post("/api/v1/auth/switch-profile")
-                .header("Authorization", "Bearer " + access)
+                .header("Authorization", "Bearer " + switchedAccess)
                 .contentType("application/json")
                 .content("{\"profile_id\":\"" + foreignProfileId + "\"}"))
         .andExpect(status().isForbidden());
@@ -134,7 +135,7 @@ class Phase13ProfilesVerificationIntegrationTest {
     mockMvc
         .perform(
             post("/api/v1/auth/switch-profile")
-                .header("Authorization", "Bearer " + access)
+                .header("Authorization", "Bearer " + switchedAccess)
                 .contentType("application/json")
                 .content("{\"profile_id\":\"" + frozenProfileId + "\"}"))
         .andExpect(status().isPreconditionFailed());

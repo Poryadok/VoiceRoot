@@ -1,6 +1,6 @@
 package privacy
 
-// Preset defaults aligned with docs/features/privacy.md table.
+// PresetSettings returns default privacy audiences for personal, work, or gaming presets (docs/features/privacy.md).
 func PresetSettings(preset string) (showOnline, showGameStatus, showMmRating, showPhone, showStories,
 	allowPhoneSearch, allowDM, allowCalls, allowInvites, allowFiles, allowVoice, allowFriendRequests Audience) {
 	switch preset {

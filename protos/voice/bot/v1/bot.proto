@@ -23,7 +23,7 @@ service BotService {
   rpc UpdateBot(UpdateBotRequest) returns (UpdateBotResponse);
   rpc DeleteBot(DeleteBotRequest) returns (DeleteBotResponse);
   rpc GetBot(GetBotRequest) returns (GetBotResponse);
-  rpc GetBotBySlug(GetBotBySlugRequest) returns (GetBotResponse);
+  rpc GetBotBySlug(GetBotBySlugRequest) returns (GetBotBySlugResponse);
   rpc ListBots(ListBotsRequest) returns (ListBotsResponse);
   rpc RegenerateToken(RegenerateTokenRequest) returns (RegenerateTokenResponse);
   rpc RegenerateWebhookSecret(RegenerateWebhookSecretRequest) returns (RegenerateWebhookSecretResponse);
@@ -219,6 +219,9 @@ message UpdateBotResponse {
 }
 message DeleteBotResponse {}
 message GetBotResponse {
+  Bot bot = 1;
+}
+message GetBotBySlugResponse {
   Bot bot = 1;
 }
 message ListBotsResponse {

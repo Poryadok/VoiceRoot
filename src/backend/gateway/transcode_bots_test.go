@@ -57,9 +57,9 @@ func (f *fakeBotClient) GetBot(ctx context.Context, in *botv1.GetBotRequest, _ .
 	return &botv1.GetBotResponse{Bot: &botv1.Bot{Id: in.GetBotId(), Name: "TestBot"}}, nil
 }
 
-func (f *fakeBotClient) GetBotBySlug(ctx context.Context, in *botv1.GetBotBySlugRequest, _ ...grpc.CallOption) (*botv1.GetBotResponse, error) {
+func (f *fakeBotClient) GetBotBySlug(ctx context.Context, in *botv1.GetBotBySlugRequest, _ ...grpc.CallOption) (*botv1.GetBotBySlugResponse, error) {
 	slug := in.GetSlug()
-	return &botv1.GetBotResponse{Bot: &botv1.Bot{Id: "bot-1", Name: "TestBot", Slug: &slug}}, nil
+	return &botv1.GetBotBySlugResponse{Bot: &botv1.Bot{Id: "bot-1", Name: "TestBot", Slug: &slug}}, nil
 }
 
 func (f *fakeBotClient) UpdateBot(ctx context.Context, in *botv1.UpdateBotRequest, _ ...grpc.CallOption) (*botv1.UpdateBotResponse, error) {

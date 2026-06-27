@@ -156,8 +156,8 @@ class SocialServiceClient extends $grpc.Client {
     return $createUnaryCall(_$areFriends, request, options: options);
   }
 
-  $grpc.ResponseFuture<$0.AreFriendsResponse> areFriendsOfFriends(
-    $0.AreFriendsRequest request, {
+  $grpc.ResponseFuture<$0.AreFriendsOfFriendsResponse> areFriendsOfFriends(
+    $0.AreFriendsOfFriendsRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$areFriendsOfFriends, request, options: options);
@@ -258,11 +258,11 @@ class SocialServiceClient extends $grpc.Client {
           '/voice.social.v1.SocialService/AreFriends',
           ($0.AreFriendsRequest value) => value.writeToBuffer(),
           $0.AreFriendsResponse.fromBuffer);
-  static final _$areFriendsOfFriends =
-      $grpc.ClientMethod<$0.AreFriendsRequest, $0.AreFriendsResponse>(
-          '/voice.social.v1.SocialService/AreFriendsOfFriends',
-          ($0.AreFriendsRequest value) => value.writeToBuffer(),
-          $0.AreFriendsResponse.fromBuffer);
+  static final _$areFriendsOfFriends = $grpc.ClientMethod<
+          $0.AreFriendsOfFriendsRequest, $0.AreFriendsOfFriendsResponse>(
+      '/voice.social.v1.SocialService/AreFriendsOfFriends',
+      ($0.AreFriendsOfFriendsRequest value) => value.writeToBuffer(),
+      $0.AreFriendsOfFriendsResponse.fromBuffer);
   static final _$getFriendsOfFriends = $grpc.ClientMethod<
           $0.GetFriendsOfFriendsRequest, $0.GetFriendsOfFriendsResponse>(
       '/voice.social.v1.SocialService/GetFriendsOfFriends',
@@ -422,13 +422,15 @@ abstract class SocialServiceBase extends $grpc.Service {
         false,
         ($core.List<$core.int> value) => $0.AreFriendsRequest.fromBuffer(value),
         ($0.AreFriendsResponse value) => value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.AreFriendsRequest, $0.AreFriendsResponse>(
+    $addMethod($grpc.ServiceMethod<$0.AreFriendsOfFriendsRequest,
+            $0.AreFriendsOfFriendsResponse>(
         'AreFriendsOfFriends',
         areFriendsOfFriends_Pre,
         false,
         false,
-        ($core.List<$core.int> value) => $0.AreFriendsRequest.fromBuffer(value),
-        ($0.AreFriendsResponse value) => value.writeToBuffer()));
+        ($core.List<$core.int> value) =>
+            $0.AreFriendsOfFriendsRequest.fromBuffer(value),
+        ($0.AreFriendsOfFriendsResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.GetFriendsOfFriendsRequest,
             $0.GetFriendsOfFriendsResponse>(
         'GetFriendsOfFriends',
@@ -587,14 +589,14 @@ abstract class SocialServiceBase extends $grpc.Service {
   $async.Future<$0.AreFriendsResponse> areFriends(
       $grpc.ServiceCall call, $0.AreFriendsRequest request);
 
-  $async.Future<$0.AreFriendsResponse> areFriendsOfFriends_Pre(
+  $async.Future<$0.AreFriendsOfFriendsResponse> areFriendsOfFriends_Pre(
       $grpc.ServiceCall $call,
-      $async.Future<$0.AreFriendsRequest> $request) async {
+      $async.Future<$0.AreFriendsOfFriendsRequest> $request) async {
     return areFriendsOfFriends($call, await $request);
   }
 
-  $async.Future<$0.AreFriendsResponse> areFriendsOfFriends(
-      $grpc.ServiceCall call, $0.AreFriendsRequest request);
+  $async.Future<$0.AreFriendsOfFriendsResponse> areFriendsOfFriends(
+      $grpc.ServiceCall call, $0.AreFriendsOfFriendsRequest request);
 
   $async.Future<$0.GetFriendsOfFriendsResponse> getFriendsOfFriends_Pre(
       $grpc.ServiceCall $call,

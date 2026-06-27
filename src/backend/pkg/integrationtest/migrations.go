@@ -14,8 +14,8 @@ import (
 // MigrationSuffixMatches reports whether relPath ends with suffix after normalizing
 // to forward slashes (Windows-safe migration chain detection).
 func MigrationSuffixMatches(relPath, suffix string) bool {
-	norm := filepath.ToSlash(relPath)
-	want := filepath.ToSlash(suffix)
+	norm := strings.ReplaceAll(relPath, `\`, "/")
+	want := strings.ReplaceAll(suffix, `\`, "/")
 	return strings.HasSuffix(norm, want)
 }
 

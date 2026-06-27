@@ -637,6 +637,26 @@ const GetBotResponse$json = {
 final $typed_data.Uint8List getBotResponseDescriptor = $convert.base64Decode(
     'Cg5HZXRCb3RSZXNwb25zZRIjCgNib3QYASABKAsyES52b2ljZS5ib3QudjEuQm90UgNib3Q=');
 
+@$core.Deprecated('Use getBotBySlugResponseDescriptor instead')
+const GetBotBySlugResponse$json = {
+  '1': 'GetBotBySlugResponse',
+  '2': [
+    {
+      '1': 'bot',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.bot.v1.Bot',
+      '10': 'bot'
+    },
+  ],
+};
+
+/// Descriptor for `GetBotBySlugResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getBotBySlugResponseDescriptor = $convert.base64Decode(
+    'ChRHZXRCb3RCeVNsdWdSZXNwb25zZRIjCgNib3QYASABKAsyES52b2ljZS5ib3QudjEuQm90Ug'
+    'Nib3Q=');
+
 @$core.Deprecated('Use listBotsResponseDescriptor instead')
 const ListBotsResponse$json = {
   '1': 'ListBotsResponse',

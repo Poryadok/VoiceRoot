@@ -36,7 +36,7 @@ func (s *SocialGRPCFriends) AreFriendsOfFriends(ctx context.Context, profileA, p
 	if s == nil || s.Client == nil {
 		return false, nil
 	}
-	resp, err := s.Client.AreFriendsOfFriends(ctx, &socialv1.AreFriendsRequest{
+	resp, err := s.Client.AreFriendsOfFriends(ctx, &socialv1.AreFriendsOfFriendsRequest{
 		ProfileIdA: profileA.String(),
 		ProfileIdB: profileB.String(),
 	})

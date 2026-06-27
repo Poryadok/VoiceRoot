@@ -69,7 +69,7 @@ type BotServiceClient interface {
 	UpdateBot(ctx context.Context, in *UpdateBotRequest, opts ...grpc.CallOption) (*UpdateBotResponse, error)
 	DeleteBot(ctx context.Context, in *DeleteBotRequest, opts ...grpc.CallOption) (*DeleteBotResponse, error)
 	GetBot(ctx context.Context, in *GetBotRequest, opts ...grpc.CallOption) (*GetBotResponse, error)
-	GetBotBySlug(ctx context.Context, in *GetBotBySlugRequest, opts ...grpc.CallOption) (*GetBotResponse, error)
+	GetBotBySlug(ctx context.Context, in *GetBotBySlugRequest, opts ...grpc.CallOption) (*GetBotBySlugResponse, error)
 	ListBots(ctx context.Context, in *ListBotsRequest, opts ...grpc.CallOption) (*ListBotsResponse, error)
 	RegenerateToken(ctx context.Context, in *RegenerateTokenRequest, opts ...grpc.CallOption) (*RegenerateTokenResponse, error)
 	RegenerateWebhookSecret(ctx context.Context, in *RegenerateWebhookSecretRequest, opts ...grpc.CallOption) (*RegenerateWebhookSecretResponse, error)
@@ -157,9 +157,9 @@ func (c *botServiceClient) GetBot(ctx context.Context, in *GetBotRequest, opts .
 	return out, nil
 }
 
-func (c *botServiceClient) GetBotBySlug(ctx context.Context, in *GetBotBySlugRequest, opts ...grpc.CallOption) (*GetBotResponse, error) {
+func (c *botServiceClient) GetBotBySlug(ctx context.Context, in *GetBotBySlugRequest, opts ...grpc.CallOption) (*GetBotBySlugResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GetBotResponse)
+	out := new(GetBotBySlugResponse)
 	err := c.cc.Invoke(ctx, BotService_GetBotBySlug_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -516,7 +516,7 @@ type BotServiceServer interface {
 	UpdateBot(context.Context, *UpdateBotRequest) (*UpdateBotResponse, error)
 	DeleteBot(context.Context, *DeleteBotRequest) (*DeleteBotResponse, error)
 	GetBot(context.Context, *GetBotRequest) (*GetBotResponse, error)
-	GetBotBySlug(context.Context, *GetBotBySlugRequest) (*GetBotResponse, error)
+	GetBotBySlug(context.Context, *GetBotBySlugRequest) (*GetBotBySlugResponse, error)
 	ListBots(context.Context, *ListBotsRequest) (*ListBotsResponse, error)
 	RegenerateToken(context.Context, *RegenerateTokenRequest) (*RegenerateTokenResponse, error)
 	RegenerateWebhookSecret(context.Context, *RegenerateWebhookSecretRequest) (*RegenerateWebhookSecretResponse, error)
@@ -576,7 +576,7 @@ func (UnimplementedBotServiceServer) DeleteBot(context.Context, *DeleteBotReques
 func (UnimplementedBotServiceServer) GetBot(context.Context, *GetBotRequest) (*GetBotResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetBot not implemented")
 }
-func (UnimplementedBotServiceServer) GetBotBySlug(context.Context, *GetBotBySlugRequest) (*GetBotResponse, error) {
+func (UnimplementedBotServiceServer) GetBotBySlug(context.Context, *GetBotBySlugRequest) (*GetBotBySlugResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetBotBySlug not implemented")
 }
 func (UnimplementedBotServiceServer) ListBots(context.Context, *ListBotsRequest) (*ListBotsResponse, error) {

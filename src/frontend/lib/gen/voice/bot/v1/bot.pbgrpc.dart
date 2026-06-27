@@ -61,7 +61,7 @@ class BotServiceClient extends $grpc.Client {
     return $createUnaryCall(_$getBot, request, options: options);
   }
 
-  $grpc.ResponseFuture<$0.GetBotResponse> getBotBySlug(
+  $grpc.ResponseFuture<$0.GetBotBySlugResponse> getBotBySlug(
     $0.GetBotBySlugRequest request, {
     $grpc.CallOptions? options,
   }) {
@@ -338,10 +338,10 @@ class BotServiceClient extends $grpc.Client {
           ($0.GetBotRequest value) => value.writeToBuffer(),
           $0.GetBotResponse.fromBuffer);
   static final _$getBotBySlug =
-      $grpc.ClientMethod<$0.GetBotBySlugRequest, $0.GetBotResponse>(
+      $grpc.ClientMethod<$0.GetBotBySlugRequest, $0.GetBotBySlugResponse>(
           '/voice.bot.v1.BotService/GetBotBySlug',
           ($0.GetBotBySlugRequest value) => value.writeToBuffer(),
-          $0.GetBotResponse.fromBuffer);
+          $0.GetBotBySlugResponse.fromBuffer);
   static final _$listBots =
       $grpc.ClientMethod<$0.ListBotsRequest, $0.ListBotsResponse>(
           '/voice.bot.v1.BotService/ListBots',
@@ -548,14 +548,15 @@ abstract class BotServiceBase extends $grpc.Service {
         false,
         ($core.List<$core.int> value) => $0.GetBotRequest.fromBuffer(value),
         ($0.GetBotResponse value) => value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.GetBotBySlugRequest, $0.GetBotResponse>(
-        'GetBotBySlug',
-        getBotBySlug_Pre,
-        false,
-        false,
-        ($core.List<$core.int> value) =>
-            $0.GetBotBySlugRequest.fromBuffer(value),
-        ($0.GetBotResponse value) => value.writeToBuffer()));
+    $addMethod(
+        $grpc.ServiceMethod<$0.GetBotBySlugRequest, $0.GetBotBySlugResponse>(
+            'GetBotBySlug',
+            getBotBySlug_Pre,
+            false,
+            false,
+            ($core.List<$core.int> value) =>
+                $0.GetBotBySlugRequest.fromBuffer(value),
+            ($0.GetBotBySlugResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.ListBotsRequest, $0.ListBotsResponse>(
         'ListBots',
         listBots_Pre,
@@ -883,12 +884,13 @@ abstract class BotServiceBase extends $grpc.Service {
   $async.Future<$0.GetBotResponse> getBot(
       $grpc.ServiceCall call, $0.GetBotRequest request);
 
-  $async.Future<$0.GetBotResponse> getBotBySlug_Pre($grpc.ServiceCall $call,
+  $async.Future<$0.GetBotBySlugResponse> getBotBySlug_Pre(
+      $grpc.ServiceCall $call,
       $async.Future<$0.GetBotBySlugRequest> $request) async {
     return getBotBySlug($call, await $request);
   }
 
-  $async.Future<$0.GetBotResponse> getBotBySlug(
+  $async.Future<$0.GetBotBySlugResponse> getBotBySlug(
       $grpc.ServiceCall call, $0.GetBotBySlugRequest request);
 
   $async.Future<$0.ListBotsResponse> listBots_Pre($grpc.ServiceCall $call,

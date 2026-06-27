@@ -510,6 +510,35 @@ final $typed_data.Uint8List areFriendsResponseDescriptor =
     $convert.base64Decode(
         'ChJBcmVGcmllbmRzUmVzcG9uc2USGAoHZnJpZW5kcxgBIAEoCFIHZnJpZW5kcw==');
 
+@$core.Deprecated('Use areFriendsOfFriendsRequestDescriptor instead')
+const AreFriendsOfFriendsRequest$json = {
+  '1': 'AreFriendsOfFriendsRequest',
+  '2': [
+    {'1': 'profile_id_a', '3': 1, '4': 1, '5': 9, '10': 'profileIdA'},
+    {'1': 'profile_id_b', '3': 2, '4': 1, '5': 9, '10': 'profileIdB'},
+  ],
+};
+
+/// Descriptor for `AreFriendsOfFriendsRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List areFriendsOfFriendsRequestDescriptor =
+    $convert.base64Decode(
+        'ChpBcmVGcmllbmRzT2ZGcmllbmRzUmVxdWVzdBIgCgxwcm9maWxlX2lkX2EYASABKAlSCnByb2'
+        'ZpbGVJZEESIAoMcHJvZmlsZV9pZF9iGAIgASgJUgpwcm9maWxlSWRC');
+
+@$core.Deprecated('Use areFriendsOfFriendsResponseDescriptor instead')
+const AreFriendsOfFriendsResponse$json = {
+  '1': 'AreFriendsOfFriendsResponse',
+  '2': [
+    {'1': 'friends', '3': 1, '4': 1, '5': 8, '10': 'friends'},
+  ],
+};
+
+/// Descriptor for `AreFriendsOfFriendsResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List areFriendsOfFriendsResponseDescriptor =
+    $convert.base64Decode(
+        'ChtBcmVGcmllbmRzT2ZGcmllbmRzUmVzcG9uc2USGAoHZnJpZW5kcxgBIAEoCFIHZnJpZW5kcw'
+        '==');
+
 @$core.Deprecated('Use getFriendsOfFriendsRequestDescriptor instead')
 const GetFriendsOfFriendsRequest$json = {
   '1': 'GetFriendsOfFriendsRequest',

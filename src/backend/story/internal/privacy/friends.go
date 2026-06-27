@@ -78,7 +78,7 @@ func (f *FriendChecker) AreFriendsOfFriends(ctx context.Context, profileA, profi
 	if f == nil || f.client == nil {
 		return false, nil
 	}
-	resp, err := f.client.AreFriendsOfFriends(ctx, &socialv1.AreFriendsRequest{
+	resp, err := f.client.AreFriendsOfFriends(ctx, &socialv1.AreFriendsOfFriendsRequest{
 		ProfileIdA: profileA.String(),
 		ProfileIdB: profileB.String(),
 	})

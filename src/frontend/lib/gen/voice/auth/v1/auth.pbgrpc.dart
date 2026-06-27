@@ -150,6 +150,14 @@ class AuthServiceClient extends $grpc.Client {
     return $createUnaryCall(_$getE2EKeyBackup, request, options: options);
   }
 
+  /// Internal — Social SyncPhoneContacts: hashed phone → primary profile_id (accounts.phone).
+  $grpc.ResponseFuture<$0.ResolvePhoneHashesResponse> resolvePhoneHashes(
+    $0.ResolvePhoneHashesRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$resolvePhoneHashes, request, options: options);
+  }
+
   // method descriptors
 
   static final _$register =
@@ -231,6 +239,11 @@ class AuthServiceClient extends $grpc.Client {
           '/voice.auth.v1.AuthService/GetE2EKeyBackup',
           ($0.GetE2EKeyBackupRequest value) => value.writeToBuffer(),
           $0.GetE2EKeyBackupResponse.fromBuffer);
+  static final _$resolvePhoneHashes = $grpc.ClientMethod<
+          $0.ResolvePhoneHashesRequest, $0.ResolvePhoneHashesResponse>(
+      '/voice.auth.v1.AuthService/ResolvePhoneHashes',
+      ($0.ResolvePhoneHashesRequest value) => value.writeToBuffer(),
+      $0.ResolvePhoneHashesResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.auth.v1.AuthService')
@@ -368,6 +381,15 @@ abstract class AuthServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.GetE2EKeyBackupRequest.fromBuffer(value),
         ($0.GetE2EKeyBackupResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ResolvePhoneHashesRequest,
+            $0.ResolvePhoneHashesResponse>(
+        'ResolvePhoneHashes',
+        resolvePhoneHashes_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ResolvePhoneHashesRequest.fromBuffer(value),
+        ($0.ResolvePhoneHashesResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.RegisterResponse> register_Pre($grpc.ServiceCall $call,
@@ -506,4 +528,13 @@ abstract class AuthServiceBase extends $grpc.Service {
 
   $async.Future<$0.GetE2EKeyBackupResponse> getE2EKeyBackup(
       $grpc.ServiceCall call, $0.GetE2EKeyBackupRequest request);
+
+  $async.Future<$0.ResolvePhoneHashesResponse> resolvePhoneHashes_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.ResolvePhoneHashesRequest> $request) async {
+    return resolvePhoneHashes($call, await $request);
+  }
+
+  $async.Future<$0.ResolvePhoneHashesResponse> resolvePhoneHashes(
+      $grpc.ServiceCall call, $0.ResolvePhoneHashesRequest request);
 }

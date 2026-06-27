@@ -147,7 +147,7 @@ func (s *BotGRPC) GetBot(ctx context.Context, req *botv1.GetBotRequest) (*botv1.
 	return &botv1.GetBotResponse{Bot: botToProto(*row)}, nil
 }
 
-func (s *BotGRPC) GetBotBySlug(ctx context.Context, req *botv1.GetBotBySlugRequest) (*botv1.GetBotResponse, error) {
+func (s *BotGRPC) GetBotBySlug(ctx context.Context, req *botv1.GetBotBySlugRequest) (*botv1.GetBotBySlugResponse, error) {
 	slug := strings.TrimSpace(req.GetSlug())
 	if slug == "" {
 		return nil, status.Error(codes.InvalidArgument, "slug required")
@@ -156,7 +156,7 @@ func (s *BotGRPC) GetBotBySlug(ctx context.Context, req *botv1.GetBotBySlugReque
 	if err != nil {
 		return nil, mapStoreErr(err)
 	}
-	return &botv1.GetBotResponse{Bot: botToProto(*row)}, nil
+	return &botv1.GetBotBySlugResponse{Bot: botToProto(*row)}, nil
 }
 
 func (s *BotGRPC) ListBots(ctx context.Context, _ *botv1.ListBotsRequest) (*botv1.ListBotsResponse, error) {

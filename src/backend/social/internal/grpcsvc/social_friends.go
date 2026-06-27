@@ -312,7 +312,7 @@ func (s *SocialGRPC) AreFriends(ctx context.Context, req *socialv1.AreFriendsReq
 }
 
 // AreFriendsOfFriends implements voice.social.v1.SocialService (internal S2S: Chat/Messaging/User).
-func (s *SocialGRPC) AreFriendsOfFriends(ctx context.Context, req *socialv1.AreFriendsRequest) (*socialv1.AreFriendsResponse, error) {
+func (s *SocialGRPC) AreFriendsOfFriends(ctx context.Context, req *socialv1.AreFriendsOfFriendsRequest) (*socialv1.AreFriendsOfFriendsResponse, error) {
 	a, err := parseUUIDField("profile_id_a", req.GetProfileIdA())
 	if err != nil {
 		return nil, err
@@ -328,7 +328,7 @@ func (s *SocialGRPC) AreFriendsOfFriends(ctx context.Context, req *socialv1.AreF
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	return &socialv1.AreFriendsResponse{Friends: ok}, nil
+	return &socialv1.AreFriendsOfFriendsResponse{Friends: ok}, nil
 }
 
 // GetFriendsOfFriends implements voice.social.v1.SocialService.

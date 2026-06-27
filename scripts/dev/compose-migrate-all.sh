@@ -14,7 +14,7 @@ compose_network() {
     echo "postgres container not running; start: docker compose up -d" >&2
     exit 1
   fi
-  docker inspect "${cid}" --format '{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{end}}'
+  docker inspect "${cid}" --format '{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{break}}{{end}}'
 }
 
 migrate_db() {

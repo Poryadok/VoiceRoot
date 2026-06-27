@@ -2032,6 +2032,62 @@ class GetBotResponse extends $pb.GeneratedMessage {
   Bot ensureBot() => $_ensure(0);
 }
 
+class GetBotBySlugResponse extends $pb.GeneratedMessage {
+  factory GetBotBySlugResponse({
+    Bot? bot,
+  }) {
+    final result = create();
+    if (bot != null) result.bot = bot;
+    return result;
+  }
+
+  GetBotBySlugResponse._();
+
+  factory GetBotBySlugResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetBotBySlugResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetBotBySlugResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.bot.v1'),
+      createEmptyInstance: create)
+    ..aOM<Bot>(1, _omitFieldNames ? '' : 'bot', subBuilder: Bot.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetBotBySlugResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetBotBySlugResponse copyWith(void Function(GetBotBySlugResponse) updates) =>
+      super.copyWith((message) => updates(message as GetBotBySlugResponse))
+          as GetBotBySlugResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetBotBySlugResponse create() => GetBotBySlugResponse._();
+  @$core.override
+  GetBotBySlugResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetBotBySlugResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetBotBySlugResponse>(create);
+  static GetBotBySlugResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  Bot get bot => $_getN(0);
+  @$pb.TagNumber(1)
+  set bot(Bot value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasBot() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearBot() => $_clearField(1);
+  @$pb.TagNumber(1)
+  Bot ensureBot() => $_ensure(0);
+}
+
 class ListBotsResponse extends $pb.GeneratedMessage {
   factory ListBotsResponse({
     BotList? botList,

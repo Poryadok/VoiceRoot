@@ -42,7 +42,7 @@ func TestAreFriendsOfFriends_OneHop(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, direct.GetFriends())
 
-	fof, err := client.AreFriendsOfFriends(ctx, &socialv1.AreFriendsRequest{
+	fof, err := client.AreFriendsOfFriends(ctx, &socialv1.AreFriendsOfFriendsRequest{
 		ProfileIdA: a.String(),
 		ProfileIdB: b.String(),
 	})
