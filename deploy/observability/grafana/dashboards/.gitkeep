@@ -1,2 +1,0 @@
-# Placeholder — dashboards added in Phase 3 (Chunk 10.1).
-# JSON files from deploy/observability/grafana/dashboards/ mount here via future ConfigMap.

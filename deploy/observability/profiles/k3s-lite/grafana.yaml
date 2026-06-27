@@ -83,6 +83,8 @@ spec:
               mountPath: /etc/grafana/provisioning/datasources
             - name: provisioning-dashboards
               mountPath: /etc/grafana/provisioning/dashboards
+            - name: dashboards
+              mountPath: /var/lib/grafana/dashboards/voice
           readinessProbe:
             httpGet:
               path: /api/health
@@ -105,3 +107,6 @@ spec:
         - name: provisioning-dashboards
           configMap:
             name: grafana-dashboards-provisioning
+        - name: dashboards
+          configMap:
+            name: grafana-dashboards

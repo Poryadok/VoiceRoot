@@ -90,6 +90,10 @@ kubectl -n "${NS}" create configmap grafana-dashboards-provisioning \
   --from-file=dashboards.yaml="${OBS_DIR}/grafana/provisioning/dashboards.yaml" \
   --dry-run=client -o yaml | kubectl apply -f -
 
+kubectl -n "${NS}" create configmap grafana-dashboards \
+  --from-file="${OBS_DIR}/grafana/dashboards/" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
 # --- Grafana admin secret (override with GRAFANA_ADMIN_PASSWORD) ---
 GRAFANA_PASS="${GRAFANA_ADMIN_PASSWORD:-changeme-voice-observability}"
 kubectl -n "${NS}" create secret generic grafana-admin \

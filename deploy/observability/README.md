@@ -50,7 +50,7 @@ GRAFANA_ADMIN_PASSWORD='your-secret' scripts/staging/apply-observability.sh
 The script:
 
 1. Creates namespace `voice-observability`
-2. Builds ConfigMaps from `config/`, `prometheus/`, `alertmanager/`, `grafana/provisioning/`
+2. Builds ConfigMaps from `config/`, `prometheus/`, `alertmanager/`, `grafana/provisioning/`, and `grafana/dashboards/` (JSON)
 3. Applies Deployments/DaemonSet from `profiles/k3s-lite/`
 
 **Optional notifications** (Telegram + email):
@@ -147,7 +147,7 @@ PostgresDown inhibition: derivative alerts (`Tier0High5xx`, `GatewayLatencyHigh`
 ## Smoke after deploy
 
 1. `kubectl get pods -n voice-observability` — all Running
-2. Port-forward Grafana → check Prometheus/Loki datasources
+2. Port-forward Grafana → check Prometheus/Loki datasources and **Voice** folder dashboards (Overview, Tier-0 Paths, Infrastructure, Logs, LiveKit)
 3. Prometheus targets: `kubectl port-forward -n voice-observability svc/prometheus 9090:9090` → `/targets`
 4. Send a staging DM → find `request_id` in Loki
 5. Optional: `amtool` alert test when notifications Secret is configured
