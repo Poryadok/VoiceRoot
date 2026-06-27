@@ -7,23 +7,24 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT}"
 
-compose_network() {
+postgres_container_id() {
   local cid
   cid="$(docker compose ps -q postgres 2>/dev/null || true)"
   if [[ -z "${cid}" ]]; then
     echo "postgres container not running; start: docker compose up -d" >&2
     exit 1
   fi
-  docker inspect "${cid}" --format '{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{break}}{{end}}'
+  echo "${cid}"
 }
 
 migrate_db() {
   local db="$1"
   echo "==> golang-migrate up: ${db}"
-  docker run --rm --network "${NETWORK}" \
+  # Share postgres network namespace — avoids compose DNS flakiness on CI runners.
+  docker run --rm --network "container:${POSTGRES_CID}" \
     -v "${ROOT}/src/backend/migrations/${db}:/migrations" migrate/migrate \
     -path /migrations \
-    -database "postgres://voice:voice@postgres:5432/${db}?sslmode=disable" up
+    -database "postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@127.0.0.1:5432/${db}?sslmode=disable" up
 }
 
 run_phase15() {
@@ -68,7 +69,7 @@ run_all() {
   run_auth_optional
 }
 
-NETWORK="$(compose_network)"
+POSTGRES_CID="$(postgres_container_id)"
 MODE="${1:-all}"
 
 case "${MODE}" in
