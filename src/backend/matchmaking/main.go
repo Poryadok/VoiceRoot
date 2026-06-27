@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
@@ -31,6 +32,7 @@ import (
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
+	voiceprom "voice/backend/pkg/promhttp"
 
 	callsv1 "voice.app/voice/calls/v1"
 	chatv1 "voice.app/voice/chat/v1"
@@ -58,6 +60,7 @@ func waitForGRPCReady(ctx context.Context, conn *grpc.ClientConn) error {
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	metricsReg := prometheus.NewRegistry()
 	httpAddr := ":8080"
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
 		httpAddr = v
@@ -92,6 +95,7 @@ func main() {
 			if err != nil {
 				logger.Warn("NATS publisher disabled", slog.Any("error", err))
 			} else {
+				pub.Logger = logger
 				events = pub
 				defer func() { _ = pub.Close() }()
 			}
@@ -187,7 +191,7 @@ func main() {
 			ratingSpaceCoMembership = s2s.NewGRPCSpaceCoMembership(spconn)
 		}
 
-		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger)...)
+		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))...)
 		mmSvc := &grpcsvc.MatchmakingGRPC{
 			Games:                   gameStore,
 			ProfileGames:            profileStore,
@@ -259,7 +263,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              httpAddr,
-		Handler:           httpserver.Wrap(health, logger),
+		Handler:           httpserver.Wrap(voiceprom.MountMetricsOnHealth(health, metricsReg), logger),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,

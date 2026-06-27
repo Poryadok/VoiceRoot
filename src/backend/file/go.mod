@@ -18,6 +18,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.103.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.9.2
+	github.com/prometheus/client_golang v1.20.5
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/image v0.34.0
 	google.golang.org/grpc v1.81.1

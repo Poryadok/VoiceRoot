@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -24,6 +25,7 @@ import (
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
+	voiceprom "voice/backend/pkg/promhttp"
 
 	botv1 "voice.app/voice/bot/v1"
 	chatv1 "voice.app/voice/chat/v1"
@@ -37,6 +39,7 @@ const serviceName = "bot"
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	metricsReg := prometheus.NewRegistry()
 	addr := ":8080"
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
 		addr = v
@@ -82,6 +85,7 @@ func main() {
 				ratelimit.GatewayAccessFromEnv(),
 				ratelimit.ServerLimiterFromEnv().UnaryServerInterceptor(),
 				grpcmw.UnaryRecovery(logger),
+				grpcmw.UnaryMetricsForRegistry(metricsReg),
 				grpcmw.UnaryAccessLog(logger),
 			),
 		)
@@ -98,7 +102,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              addr,
-		Handler:           httpserver.Wrap(healthHandler(serviceName), logger),
+		Handler:           httpserver.Wrap(voiceprom.MountMetricsOnHealth(healthHandler(serviceName), metricsReg), logger),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,

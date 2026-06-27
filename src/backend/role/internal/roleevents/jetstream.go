@@ -4,10 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/nats-io/nats.go"
+
+	"voice/backend/pkg/correlation"
+	"voice/backend/pkg/natslog"
 )
 
 const (
@@ -34,6 +38,8 @@ type roleEventPayload struct {
 type JetStreamPublisher struct {
 	nc *nats.Conn
 	js nats.JetStreamContext
+	// Logger emits structured nats_publish lines; optional.
+	Logger *slog.Logger
 
 	ensureOnce sync.Once
 	ensureErr  error
@@ -108,7 +114,7 @@ func (p *JetStreamPublisher) Close() error {
 	return p.nc.Drain()
 }
 
-func (p *JetStreamPublisher) publish(subject string, payload roleEventPayload) error {
+func (p *JetStreamPublisher) publish(ctx context.Context, subject string, payload roleEventPayload) error {
 	if err := p.ensureStream(); err != nil {
 		return err
 	}
@@ -116,46 +122,46 @@ func (p *JetStreamPublisher) publish(subject string, payload roleEventPayload) e
 	if err != nil {
 		return err
 	}
-	if _, err := p.js.Publish(subject, b); err != nil {
+	requestID := correlation.FromGRPC(ctx)
+	msg := &nats.Msg{Subject: subject, Data: b, Header: nats.Header{}}
+	natslog.SetRequestIDHeader(msg.Header, requestID)
+	if _, err := p.js.PublishMsg(msg); err != nil {
 		return fmt.Errorf("jetstream publish %s: %w", subject, err)
 	}
+	natslog.LogPublish(p.Logger, subject, requestID, "role event published",
+		slog.String("role_id", payload.RoleID),
+		slog.String("space_id", payload.SpaceID),
+	)
 	return nil
 }
 
 func (p *JetStreamPublisher) PublishRoleCreated(ctx context.Context, spaceID, roleID, name string) error {
-	_ = ctx
-	return p.publish(subjectRoleCreated, roleEventPayload{SpaceID: spaceID, RoleID: roleID, Name: name})
+	return p.publish(ctx, subjectRoleCreated, roleEventPayload{SpaceID: spaceID, RoleID: roleID, Name: name})
 }
 
 func (p *JetStreamPublisher) PublishRoleAssigned(ctx context.Context, spaceID, profileID, roleID string) error {
-	_ = ctx
-	return p.publish(subjectRoleAssigned, roleEventPayload{SpaceID: spaceID, ProfileID: profileID, RoleID: roleID})
+	return p.publish(ctx, subjectRoleAssigned, roleEventPayload{SpaceID: spaceID, ProfileID: profileID, RoleID: roleID})
 }
 
 func (p *JetStreamPublisher) PublishRoleUpdated(ctx context.Context, spaceID, roleID string, changedFields []string) error {
-	_ = ctx
 	_ = changedFields
-	return p.publish(subjectRoleUpdated, roleEventPayload{SpaceID: spaceID, RoleID: roleID})
+	return p.publish(ctx, subjectRoleUpdated, roleEventPayload{SpaceID: spaceID, RoleID: roleID})
 }
 
 func (p *JetStreamPublisher) PublishRoleDeleted(ctx context.Context, spaceID, roleID string) error {
-	_ = ctx
-	return p.publish(subjectRoleDeleted, roleEventPayload{SpaceID: spaceID, RoleID: roleID})
+	return p.publish(ctx, subjectRoleDeleted, roleEventPayload{SpaceID: spaceID, RoleID: roleID})
 }
 
 func (p *JetStreamPublisher) PublishRoleRevoked(ctx context.Context, spaceID, profileID, roleID string) error {
-	_ = ctx
-	return p.publish(subjectRoleRevoked, roleEventPayload{SpaceID: spaceID, ProfileID: profileID, RoleID: roleID})
+	return p.publish(ctx, subjectRoleRevoked, roleEventPayload{SpaceID: spaceID, ProfileID: profileID, RoleID: roleID})
 }
 
 func (p *JetStreamPublisher) PublishChatOverrideSet(ctx context.Context, chatID, roleID string) error {
-	_ = ctx
-	return p.publish(subjectChatOverride, roleEventPayload{ChatID: chatID, RoleID: roleID})
+	return p.publish(ctx, subjectChatOverride, roleEventPayload{ChatID: chatID, RoleID: roleID})
 }
 
 func (p *JetStreamPublisher) PublishVoiceOverrideSet(ctx context.Context, voiceRoomID, roleID string) error {
-	_ = ctx
-	return p.publish(subjectVoiceOverride, roleEventPayload{VoiceRoomID: voiceRoomID, RoleID: roleID})
+	return p.publish(ctx, subjectVoiceOverride, roleEventPayload{VoiceRoomID: voiceRoomID, RoleID: roleID})
 }
 
 func streamHasSubject(info *nats.StreamInfo, subject string) bool {

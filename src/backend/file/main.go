@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
@@ -21,6 +22,7 @@ import (
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
+	voiceprom "voice/backend/pkg/promhttp"
 	grpcsvc "voice/backend/file/internal/grpcsvc"
 	"voice/backend/file/internal/imgproc"
 	"voice/backend/file/internal/r2file"
@@ -51,6 +53,7 @@ func waitForGRPCReady(ctx context.Context, conn *grpc.ClientConn) error {
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	metricsReg := prometheus.NewRegistry()
 	addr := ":8080"
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
 		addr = v
@@ -105,7 +108,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("grpc listen: %v", err)
 		}
-		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger)...)
+		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))...)
 		filev1.RegisterFileServiceServer(grpcSrv, grpcsvc.New(grpcsvc.Deps{
 			Files:     store.NewFilesStore(pool),
 			Presigner: presigner,
@@ -126,7 +129,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              addr,
-		Handler:           httpserver.Wrap(healthHandler(serviceName), logger),
+		Handler:           httpserver.Wrap(voiceprom.MountMetricsOnHealth(healthHandler(serviceName), metricsReg), logger),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,

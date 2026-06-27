@@ -43,6 +43,12 @@ func splitFullMethod(fullMethod string) (service, method string) {
 	return "unknown", fullMethod
 }
 
+// UnaryMetricsForRegistry registers grpc_server_* on reg and returns the interceptor.
+// Use when building a custom grpc.ChainUnaryInterceptor (e.g. bot service rate limits).
+func UnaryMetricsForRegistry(reg prometheus.Registerer) grpc.UnaryServerInterceptor {
+	return UnaryMetrics(newMetricsCollector(reg))
+}
+
 // UnaryMetrics records grpc_server_* Prometheus metrics per unary RPC.
 func UnaryMetrics(collector *metricsCollector) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {

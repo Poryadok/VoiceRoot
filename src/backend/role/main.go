@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc"
 
 	grpcsvc "voice/backend/role/internal/grpcsvc"
@@ -20,6 +21,7 @@ import (
 	"voice/backend/role/internal/store"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
+	voiceprom "voice/backend/pkg/promhttp"
 
 	rolev1 "voice.app/voice/role/v1"
 )
@@ -28,6 +30,7 @@ const serviceName = "role"
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	metricsReg := prometheus.NewRegistry()
 	httpAddr := ":8080"
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
 		httpAddr = v
@@ -56,6 +59,7 @@ func main() {
 				log.Fatalf("nats jetstream publisher: %v", err)
 			}
 			defer func() { _ = jsPub.Close() }()
+			jsPub.Logger = logger
 			events = jsPub
 		}
 
@@ -63,7 +67,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("grpc listen: %v", err)
 		}
-		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger)...)
+		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))...)
 		rolev1.RegisterRoleServiceServer(grpcSrv, &grpcsvc.RoleGRPC{
 			Store:  roleStore,
 			Events: events,
@@ -78,11 +82,9 @@ func main() {
 		logger.Warn("DATABASE_URL not set; gRPC disabled (health only)")
 	}
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/health", healthHandler(serviceName).ServeHTTP)
 	server := &http.Server{
 		Addr:              httpAddr,
-		Handler:           mux,
+		Handler:           httpserver.Wrap(voiceprom.MountMetricsOnHealth(healthHandler(serviceName), metricsReg), logger),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,

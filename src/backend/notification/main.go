@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 
@@ -27,6 +28,7 @@ import (
 	"voice/backend/notification/internal/store"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
+	voiceprom "voice/backend/pkg/promhttp"
 
 	notificationv1 "voice.app/voice/notification/v1"
 )
@@ -35,6 +37,7 @@ const serviceName = "notification"
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	metricsReg := prometheus.NewRegistry()
 	httpAddr := ":8080"
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
 		httpAddr = v
@@ -176,7 +179,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("grpc listen: %v", err)
 		}
-		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger)...)
+		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))...)
 		notificationv1.RegisterNotificationServiceServer(grpcSrv, &grpcsvc.NotificationGRPC{
 			Tokens: tokenStore,
 			Pusher: pusher,
@@ -193,7 +196,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              httpAddr,
-		Handler:           httpserver.Wrap(notificationHTTPHandler(serviceName), logger),
+		Handler:           httpserver.Wrap(voiceprom.MountMetricsOnHealth(notificationHTTPHandler(serviceName), metricsReg), logger),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,
