@@ -115,6 +115,72 @@ rg "chat_id.*<uuid>" .local/dev.ndjson
 
 ---
 
+## Debug by `request_id` on staging
+
+После деплоя observability-стека ([deploy/observability/README.md](../deploy/observability/README.md)) и приложения в `voice-staging` — сквозная отладка одного пользовательского действия по correlation id. Спека: [features/observability.md](features/observability.md).
+
+### Prerequisites
+
+1. Observability в кластере: `kubectl get pods -n voice-observability` — все `Running` (см. `scripts/staging/apply-observability.sh`).
+2. Grafana (ClusterIP): `kubectl port-forward -n voice-observability svc/grafana 3000:80` → http://localhost:3000 (admin из Secret `grafana-admin`).
+3. Два тестовых аккаунта на staging, Realtime/WS доступен (клиент или curl + wscat).
+
+### E2E сценарий: отправка DM
+
+1. **Войти** (REST login через Gateway) и сохранить access token.
+2. **Открыть WS** к Realtime (`/ws` через Gateway) с тем же JWT — иначе `ws_fanout` не появится у получателя.
+3. **Отправить DM** — `POST /api/v1/messages` (или эквивалентный маршрут send message) с телом `chat_id` + текст.
+4. **Скопировать `request_id`** из заголовка ответа **`X-Request-Id`** (клиент Flutter тоже может слать свой id; на WS upgrade id выдаёт Gateway).
+5. **Проверить цепочку в Loki** — по возрастанию `time` ожидаются события:
+
+| Порядок | `event` | Типичный `service` |
+|---------|---------|-------------------|
+| 1 | `http_access` | `gateway` |
+| 2 | `grpc_call` | `messaging` (или `chat`) |
+| 3 | `nats_publish` | `messaging` |
+| 4 | `nats_consume` | `realtime` |
+| 5 | `ws_fanout` | `realtime` |
+
+На пути также допустимы `grpc_call` в других Tier-0 сервисах и поля `chat_id`, `message_id`, `event_id` в JSON.
+
+### LogQL (Explore или Grafana)
+
+Promtail ставит label **`namespace`** из pod metadata; **`request_id`** — только в JSON тела строки (не label). Запрос:
+
+```logql
+{namespace="voice-staging"} | json | request_id="<paste-id-here>"
+```
+
+Узкий фильтр по типу события:
+
+```logql
+{namespace="voice-staging"} | json | request_id="<id>" | event="ws_fanout"
+```
+
+Локальный паритет (без Loki): `rg "request_id.*<id>" .local/dev.ndjson` после `make compose-logs-collect` — см. раздел выше.
+
+### Grafana dashboard
+
+Дашборд **Voice Logs — Request ID** (`uid`: `logs-request-id`) в папке **Voice**:
+
+- URL после port-forward: http://localhost:3000/d/logs-request-id/voice-logs-request-id
+- Вставить `request_id` в переменную панели → логи + timeline по `event`.
+
+Связанные дашборды: **Voice Overview** (RPS, 5xx), **Tier-0 Paths** (SLO). Provisioning: `deploy/observability/grafana/`.
+
+### Если цепочка обрывается
+
+| Симптом | Куда смотреть |
+|---------|----------------|
+| Нет `http_access` | Gateway pod logs / ingress; проверить `X-Request-Id` в ответе |
+| Нет `grpc_call` | Messaging/Chat pod, Prometheus `grpc_server_handled_total` |
+| Нет `nats_publish` / `nats_consume` | NATS JetStream, Infra dashboard, `nats_jetstream_stream_messages_pending` |
+| Нет `ws_fanout` | Realtime WS подписка на `chat_id`, `realtime_ws_connections_active` |
+
+Полный smoke-чеклист после деплоя observability — [deploy/observability/README.md](../deploy/observability/README.md#smoke-after-deploy).
+
+---
+
 ## Что запускать локально перед PR
 
 Минимум для затронутого кода:

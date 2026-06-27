@@ -310,45 +310,47 @@ Recording rules в Prometheus (примеры):
 
 ## Критерии готовности (Definition of Done)
 
-Фича считается **готовой к soft launch**, когда выполнено всё ниже на **staging**:
+Фича считается **готовой к soft launch**, когда выполнено всё ниже на **staging**. Пункты с **[code]** — реализованы в репозитории (инструментация, манифесты, provisioning); **[staging]** — проверка на живом кластере после `apply-observability.sh`.
 
 ### Логи
 
-- [ ] Все поды приложения и infra пишут в Loki
-- [ ] Поиск по `request_id` от Gateway до `ws_fanout` работает на E2E сценарии (отправка DM-сообщения)
-- [ ] Auth REST пишет `http_access` в том же контракте, что Go
-- [ ] Нет неструктурированного `log.Printf` на горячих путях Tier 0
+- [ ] **[staging]** Все поды приложения и infra пишут в Loki
+- [ ] **[staging]** Поиск по `request_id` от Gateway до `ws_fanout` работает на E2E сценарии (отправка DM-сообщения); runbook: [TESTING.md § Debug by request_id](../TESTING.md)
+- [x] **[code]** Auth REST пишет `http_access` в том же контракте, что Go (`HttpAccessLogFilter`, тесты)
+- [x] **[code]** Нет неструктурированного `log.Printf` на горячих путях Tier 0 (Messaging send, Chat DM/group, Realtime fanout)
 
 ### Метрики
 
-- [ ] Gateway `/metrics` на client_golang + histogram
-- [ ] Tier 0 сервисы отдают gRPC + process metrics
-- [ ] Auth `/actuator/prometheus` в scrape
-- [ ] Redis, Postgres, NATS exporters в scrape и на дашборде Infra
-- [ ] Recording rules для SLO-путей созданы
+- [x] **[code]** Gateway `/metrics` на `client_golang` + histogram (`gateway_http_requests_total`, `gateway_http_request_duration_seconds`)
+- [x] **[code]** Tier 0 сервисы отдают gRPC + process metrics (`pkg/grpcmw`, `pkg/promhttp` во всех staging Go `main.go`)
+- [x] **[code]** Auth `/actuator/prometheus` в scrape (аннотации `deploy/staging/`, Micrometer + `auth_login_total`)
+- [x] **[code]** Redis, Postgres, NATS exporters в scrape и на дашборде Infra (`deploy/observability/exporters/`, `infrastructure.json`)
+- [x] **[code]** Recording rules для SLO-путей созданы (`prometheus/rules/recording-rules.yaml`)
 
 ### Grafana
 
-- [ ] 4 обязательных дашборда (Overview, Tier-0, Infra, Logs) импортированы из git
-- [ ] Datasource Prometheus + Loki настроены
+- [x] **[code]** 4 обязательных дашборда (Overview, Tier-0, Infra, Logs) + Tier-1 LiveKit импортированы из git (`grafana/dashboards/`, provisioning ConfigMap)
+- [x] **[code]** Datasource Prometheus + Loki настроены (`grafana/provisioning/datasources.yaml`)
 
 ### Алерты
 
-- [ ] P1 правила активны, тестовый firing → сообщение в канал
-- [ ] Inhibition для infra cascade
+- [ ] **[staging]** P1 правила активны, тестовый firing → сообщение в канал (нужен Secret уведомлений; без него — null receiver, см. README)
+- [x] **[code]** Inhibition для infra cascade (`PostgresDown` → производные алерты; `alertmanager/config.yaml`)
 
 ### Документация и процесс
 
-- [ ] Краткий runbook «как дебажить по request_id» в [TESTING.md](../TESTING.md) или README staging
-- [ ] `make compose-logs-collect` остаётся для local; не конфликтует с Loki profile
+- [x] **[code]** Краткий runbook «как дебажить по request_id» в [TESTING.md](../TESTING.md); smoke — [deploy/observability/README.md](../../deploy/observability/README.md)
+- [x] **[code]** `make compose-logs-collect` остаётся для local; не конфликтует с Loki profile (`compose-observability-up`, [local/README.md](../../deploy/observability/local/README.md))
 
 ### Smoke после деплоя observability
+
+Чеклист для **[staging]** — детали в [deploy/observability/README.md § Smoke after deploy](../../deploy/observability/README.md#smoke-after-deploy):
 
 1. `kubectl get pods -n voice-observability` — все Running
 2. Grafana → Overview — видны targets UP
 3. Отправить сообщение на staging → найти `request_id` в Gateway → цепочка в Loki
 4. Prometheus → `gateway_http_requests_total` растёт
-5. Synthetic alert test (Alertmanager amtool)
+5. Synthetic alert test (Alertmanager `amtool`, optional)
 
 ---
 

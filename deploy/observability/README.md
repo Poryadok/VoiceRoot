@@ -146,11 +146,57 @@ PostgresDown inhibition: derivative alerts (`Tier0High5xx`, `GatewayLatencyHigh`
 
 ## Smoke after deploy
 
-1. `kubectl get pods -n voice-observability` — all Running
-2. Port-forward Grafana → check Prometheus/Loki datasources and **Voice** folder dashboards (Overview, Tier-0 Paths, Infrastructure, Logs, LiveKit)
-3. Prometheus targets: `kubectl port-forward -n voice-observability svc/prometheus 9090:9090` → `/targets`
-4. Send a staging DM → find `request_id` in Loki
-5. Optional: `amtool` alert test when notifications Secret is configured
+Минимальный чеклист soft launch (см. также [observability.md § Smoke](../../docs/features/observability.md) и runbook [TESTING.md § Debug by request_id](../../docs/TESTING.md)):
+
+### 1. Observability pods healthy
+
+```bash
+kubectl get pods -n voice-observability
+```
+
+Все поды `Running` / `Completed` (Promtail DaemonSet). При `CrashLoopBackOff` — `kubectl describe pod` и `kubectl top pods -n voice-observability` (RAM на k3s-lite).
+
+### 2. Grafana — targets UP
+
+```bash
+kubectl port-forward -n voice-observability svc/grafana 3000:80
+```
+
+- **Connections → Data sources**: Prometheus и Loki — зелёные.
+- **Dashboards → Voice**: Overview, Tier-0 Paths, Infrastructure, Logs — Request ID, Voice & LiveKit.
+- **Explore → Prometheus**: запрос `up{namespace="voice-staging"}` — цели приложений и exporters в состоянии `1`.
+
+### 3. E2E logs — DM и `request_id`
+
+1. На staging: login → WS к Realtime → отправить DM (два аккаунта).
+2. Скопировать **`X-Request-Id`** из ответа Gateway.
+3. **Explore → Loki**:
+
+```logql
+{namespace="voice-staging"} | json | request_id="<id>"
+```
+
+Ожидаемая цепочка: `http_access` → `grpc_call` → `nats_publish` → `nats_consume` → `ws_fanout`. Или дашборд http://localhost:3000/d/logs-request-id/voice-logs-request-id .
+
+### 4. Prometheus — Gateway traffic
+
+```bash
+kubectl port-forward -n voice-observability svc/prometheus 9090:9090
+```
+
+В UI или Explore: `increase(gateway_http_requests_total[5m])` — ненулевой рост после REST/WS на staging. `/targets` — job `kubernetes-pods-voice` и infra exporters **UP**.
+
+### 5. Synthetic alert test (optional)
+
+Только если настроен Secret уведомлений (`NOTIFICATIONS_ENABLED=true`, см. выше):
+
+```bash
+kubectl port-forward -n voice-observability svc/alertmanager 9093:9093
+# amtool из tarball Prometheus:
+amtool alert add test_voice_observability severity=critical --alertmanager.url=http://127.0.0.1:9093
+```
+
+Проверить доставку в Telegram/email; без Secret Alertmanager использует **null** receiver — правила в Prometheus считаются, уведомления не уходят (ожидаемо для первого apply).
 
 ## Local compose parity
 
