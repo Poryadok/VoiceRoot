@@ -1,0 +1,126 @@
+# kube-prometheus-stack values for clusters with ≥8 GB free RAM (not k3s-lite default).
+# Install only when OBSERVABILITY_PROFILE=full and Helm is available.
+#
+#   helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+#   helm repo update
+#   helm upgrade --install kube-prometheus prometheus-community/kube-prometheus-stack \
+#     -n voice-observability --create-namespace \
+#     -f deploy/observability/profiles/full/values-kube-prometheus.yaml
+#
+# Do NOT run alongside k3s-lite manifests — pick one profile.
+
+fullnameOverride: voice-observability
+
+defaultRules:
+  create: true
+  rules:
+    alertmanager: true
+    etcd: false
+    configReloaders: true
+    general: true
+    k8s: true
+    kubeApiserverAvailability: true
+    kubeApiserverSlos: false
+    kubelet: true
+    kubeProxy: false
+    kubePrometheusGeneral: true
+    kubePrometheusNodeRecording: true
+    kubernetesApps: true
+    kubernetesResources: true
+    kubernetesStorage: true
+    kubernetesSystem: true
+    kubeScheduler: false
+    kubeStateMetrics: true
+    network: true
+    node: true
+    nodeExporterAlerting: true
+    nodeExporterRecording: true
+    prometheus: true
+    prometheusOperator: true
+
+alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      receiver: "null"
+    receivers:
+      - name: "null"
+
+grafana:
+  enabled: true
+  adminPassword: changeme
+  service:
+    type: ClusterIP
+  persistence:
+    enabled: true
+    size: 5Gi
+    storageClassName: local-path
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+prometheus:
+  enabled: true
+  prometheusSpec:
+    retention: 15d
+    replicas: 1
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 20Gi
+    additionalScrapeConfigsSecret:
+      enabled: false
+    # ServiceMonitors for app scrape — enable in profiles/full/ after Chunk 9.1
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelector: {}
+    podMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelector: {}
+    ruleSelectorNilUsesHelmValues: false
+    ruleSelector:
+      matchLabels:
+        voice.dev/prometheus-rules: "true"
+
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+kubeStateMetrics:
+  enabled: true
+
+nodeExporter:
+  enabled: true
+
+# Loki/Promtail: install separately via grafana/loki chart (not bundled in kube-prometheus-stack).
+# See deploy/observability/README.md — full profile may add:
+#   helm upgrade --install loki grafana/loki -f profiles/full/values-loki.yaml

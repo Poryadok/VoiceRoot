@@ -1,0 +1,28 @@
+groups:
+  - name: voice_slo_recording
+    interval: 30s
+    rules:
+      - record: slo:gateway:availability:5m
+        expr: |
+          sum by (route_group) (rate(gateway_http_requests_total{status=~"2.."}[5m]))
+          /
+          sum by (route_group) (rate(gateway_http_requests_total[5m]))
+        labels:
+          cluster: voice-staging
+
+      - record: slo:gateway:latency:p95:5m
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (route_group, le) (rate(gateway_http_request_duration_seconds_bucket[5m]))
+          )
+        labels:
+          cluster: voice-staging
+
+      - record: slo:gateway:5xx_rate:5m
+        expr: |
+          sum by (route_group) (rate(gateway_http_requests_total{status=~"5.."}[5m]))
+          /
+          sum by (route_group) (rate(gateway_http_requests_total[5m]))
+        labels:
+          cluster: voice-staging

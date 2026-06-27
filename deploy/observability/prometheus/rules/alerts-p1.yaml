@@ -1,0 +1,64 @@
+groups:
+  - name: voice_alerts_p1
+    rules:
+      - alert: GatewayDown
+        expr: up{job="kubernetes-pods-voice", pod=~"voice-gateway.*"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          cluster: voice-staging
+        annotations:
+          summary: Gateway pod is not scrapeable
+          description: voice-gateway metrics target is down for more than 2 minutes.
+          runbook_url: https://github.com/voiceroot/Voice/blob/master/docs/OPERATIONS.md
+
+      - alert: Tier0High5xx
+        expr: |
+          slo:gateway:5xx_rate:5m{route_group=~"auth|messages|chats|ws"} > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          cluster: voice-staging
+        annotations:
+          summary: High 5xx rate on Tier-0 route {{ $labels.route_group }}
+          description: 5xx rate above 5% for 5m on route_group {{ $labels.route_group }}.
+
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          cluster: voice-staging
+        annotations:
+          summary: Redis exporter reports down
+          description: redis_up == 0 for 1m. Rate limit, blacklist, and WS fan-out may degrade.
+
+      - alert: NATSDown
+        expr: nats_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          cluster: voice-staging
+        annotations:
+          summary: NATS is not reachable
+          description: NATS metrics target down for 1m. Live message delivery degraded.
+
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          cluster: voice-staging
+        annotations:
+          summary: Postgres primary is down
+          description: pg_up == 0 for 1m. Full application unavailability likely.
+
+      - alert: PodCrashLooping
+        expr: increase(kube_pod_container_status_restarts_total[15m]) > 3
+        for: 0m
+        labels:
+          severity: critical
+          cluster: voice-staging
+        annotations:
+          summary: Pod {{ $labels.namespace }}/{{ $labels.pod }} is crash looping
+          description: More than 3 restarts in 15 minutes.

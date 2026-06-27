@@ -1,0 +1,71 @@
+groups:
+  - name: voice_alerts_p2
+    rules:
+      # SLO p95 targets (OPERATIONS.md): auth 800ms, messages 400ms, ws 500ms, chats 600ms.
+      # P2 threshold = SLO × 1.5 for 15m.
+      - alert: GatewayLatencyHigh
+        expr: |
+          (
+            slo:gateway:latency:p95:5m{route_group="auth"} > 1.2
+          )
+          or
+          (
+            slo:gateway:latency:p95:5m{route_group="messages"} > 0.6
+          )
+          or
+          (
+            slo:gateway:latency:p95:5m{route_group="chats"} > 0.9
+          )
+          or
+          (
+            slo:gateway:latency:p95:5m{route_group="ws"} > 0.75
+          )
+        for: 15m
+        labels:
+          severity: warning
+          cluster: voice-staging
+        annotations:
+          summary: Gateway p95 latency above SLO×1.5 on {{ $labels.route_group }}
+          description: route_group {{ $labels.route_group }} p95 exceeded threshold for 15m.
+
+      - alert: JetStreamLag
+        expr: nats_jetstream_stream_messages_pending > 1000
+        for: 10m
+        labels:
+          severity: warning
+          cluster: voice-staging
+        annotations:
+          summary: JetStream pending messages high on {{ $labels.stream }}
+          description: Stream {{ $labels.stream }} has >1000 pending messages for 10m.
+
+      - alert: DiskSpaceLow
+        expr: |
+          (
+            kubelet_volume_stats_available_bytes{namespace="voice-staging", persistentvolumeclaim=~".*postgres.*"}
+            /
+            kubelet_volume_stats_capacity_bytes{namespace="voice-staging", persistentvolumeclaim=~".*postgres.*"}
+          ) < 0.15
+          or
+          (
+            kubelet_volume_stats_available_bytes{namespace="voice-observability", persistentvolumeclaim=~".*loki.*"}
+            /
+            kubelet_volume_stats_capacity_bytes{namespace="voice-observability", persistentvolumeclaim=~".*loki.*"}
+          ) < 0.15
+        for: 15m
+        labels:
+          severity: warning
+          cluster: voice-staging
+        annotations:
+          summary: PVC disk space below 15%
+          description: Postgres or Loki PVC has less than 15% free space.
+
+      - alert: RateLimitSpike
+        expr: |
+          sum(rate(gateway_ratelimit_hits_total[5m])) > 10
+        for: 10m
+        labels:
+          severity: warning
+          cluster: voice-staging
+        annotations:
+          summary: Elevated gateway rate-limit hits
+          description: gateway_ratelimit_hits_total rate above 10/s for 10m — possible abuse or misconfig.

@@ -1,0 +1,49 @@
+# Reference scrape jobs for Voice staging (embedded in k3s-lite prometheus ConfigMap).
+# App pods: rely on prometheus.io/scrape annotations on Deployments in voice-staging
+# (see deploy/staging/README.md — scrape wiring in Chunk 9.1).
+#
+# Exporters (postgres, redis, nats, livekit): static targets added in Chunk 8.1.
+
+- job_name: kubernetes-pods-voice
+  kubernetes_sd_configs:
+    - role: pod
+      namespaces:
+        names:
+          - voice-staging
+          - voice-observability
+  relabel_configs:
+    - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+      action: keep
+      regex: "true"
+    - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+      action: replace
+      target_label: __metrics_path__
+      regex: (.+)
+    - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+      action: replace
+      regex: ([^:]+)(?::\d+)?;(\d+)
+      replacement: $1:$2
+      target_label: __address__
+    - action: labelmap
+      regex: __meta_kubernetes_pod_label_(.+)
+    - source_labels: [__meta_kubernetes_namespace]
+      action: replace
+      target_label: namespace
+    - source_labels: [__meta_kubernetes_pod_name]
+      action: replace
+      target_label: pod
+    - source_labels: [__meta_kubernetes_pod_container_name]
+      action: replace
+      target_label: container
+
+- job_name: prometheus
+  static_configs:
+    - targets: ["localhost:9090"]
+
+- job_name: alertmanager
+  static_configs:
+    - targets: ["alertmanager:9093"]
+
+- job_name: loki
+  static_configs:
+    - targets: ["loki:3100"]
