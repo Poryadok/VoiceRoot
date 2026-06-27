@@ -16,7 +16,7 @@ import (
 
 func TestHealthHandler_MetricsExposesGRPCServer(t *testing.T) {
 	reg := prometheus.NewRegistry()
-	_ = grpcmw.UnaryMetricsForRegistry(reg)
+	grpcmw.PrimeMetricsRegistry(reg)
 
 	h := voiceprom.MountMetricsOnHealth(healthHandler(serviceName), reg)
 	rec := httptest.NewRecorder()

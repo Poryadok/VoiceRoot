@@ -1,6 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_frontend/theme/voice_colors.dart';
 import 'package:voice_frontend/theme/voice_metrics.dart';
+
+/// Taller viewport for widget tests that render full-screen forms or sheets.
+void bindLargeTestViewport(WidgetTester tester) {
+  tester.view.physicalSize = const Size(800, 1200);
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+}
 
 /// Minimal [VoiceColors] for widget tests without loading token assets.
 ThemeData voiceTestTheme() {

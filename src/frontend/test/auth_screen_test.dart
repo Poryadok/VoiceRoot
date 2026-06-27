@@ -17,6 +17,7 @@ import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/auth/auth_screen.dart';
 
 import 'support/auth_test_overrides.dart';
+import 'support/voice_test_theme.dart';
 
 void main() {
   testWidgets('login shows @handle and discover hint snackbar', (tester) async {
@@ -126,6 +127,7 @@ void main() {
   testWidgets('register shows localized validation_failed from API', (
     tester,
   ) async {
+    bindLargeTestViewport(tester);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -187,6 +189,7 @@ void main() {
   });
 
   testWidgets('login shows localized invalid_credentials', (tester) async {
+    bindLargeTestViewport(tester);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -231,6 +234,7 @@ void main() {
   });
 
   testWidgets('login shows localized rate_limited on 429', (tester) async {
+    bindLargeTestViewport(tester);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [

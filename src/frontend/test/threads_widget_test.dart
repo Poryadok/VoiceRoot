@@ -49,6 +49,7 @@ void main() {
   }
 
   testWidgets('Reply action appears in message context menu', (tester) async {
+    bindLargeTestViewport(tester);
     await tester.pumpWidget(
       threadTestApp(
         client: MockClient((req) async {

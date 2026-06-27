@@ -254,6 +254,7 @@ func startFileGatePostgres(t *testing.T, ctx context.Context) *pgxpool.Pool {
 	pool := integrationtest.StartPostgres(t, ctx, "file_e2e_gate", "")
 	applyFileGateSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000001_init.up.sql"))
 	applyFileGateSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000002_premium_upload_limit.up.sql"))
+	applyFileGateSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000003_story_context.up.sql"))
 	return pool
 }
 

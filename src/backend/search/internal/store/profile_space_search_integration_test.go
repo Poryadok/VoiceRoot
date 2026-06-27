@@ -18,6 +18,7 @@ func TestProfileSpaceSearchStore_ProfileILIKE_postgres(t *testing.T) {
 	ctx := context.Background()
 	migrationPath := filepath.Join(searchModuleRepoRoot(t), "src", "backend", "migrations", "search_db", "000001_init.up.sql")
 	pool := integrationtest.StartPostgres(t, ctx, "searchdb", migrationPath)
+	integrationtest.ApplySQLFile(t, ctx, pool, searchModuleRepoRoot(t), filepath.Join("src", "backend", "migrations", "search_db", "000002_phase13_verification_type.up.sql"))
 
 	viewer := uuid.New()
 	pidCarol := uuid.New()
@@ -61,6 +62,7 @@ func TestProfileSpaceSearchStore_ExcludesBlockedProfiles_postgres(t *testing.T) 
 	ctx := context.Background()
 	migrationPath := filepath.Join(searchModuleRepoRoot(t), "src", "backend", "migrations", "search_db", "000001_init.up.sql")
 	pool := integrationtest.StartPostgres(t, ctx, "searchdb", migrationPath)
+	integrationtest.ApplySQLFile(t, ctx, pool, searchModuleRepoRoot(t), filepath.Join("src", "backend", "migrations", "search_db", "000002_phase13_verification_type.up.sql"))
 
 	viewer := uuid.New()
 	blockedAccount := uuid.New()

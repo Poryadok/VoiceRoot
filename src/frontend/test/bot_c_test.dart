@@ -155,7 +155,7 @@ void main() {
     expect(gameField, findsOneWidget);
     await tester.enterText(gameField, 'cs');
     await tester.pump(const Duration(milliseconds: 300));
-    await tester.pump();
+    await tester.pump(const Duration(seconds: 3));
 
     expect(
       find.text('bot unavailable'),

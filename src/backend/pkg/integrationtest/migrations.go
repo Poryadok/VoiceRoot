@@ -33,7 +33,7 @@ func ApplySQLFile(t *testing.T, ctx context.Context, pool *pgxpool.Pool, repoRoo
 		ApplySQLFile(t, ctx, pool, repoRoot, filepath.Join("src", "backend", "migrations", "messaging_db", "000003_attachment_only_messages.up.sql"))
 		ApplySQLFile(t, ctx, pool, repoRoot, filepath.Join("src", "backend", "migrations", "messaging_db", "000004_delete_for_me.up.sql"))
 		ApplySQLFile(t, ctx, pool, repoRoot, filepath.Join("src", "backend", "migrations", "messaging_db", "000005_reactions.up.sql"))
-		ApplySQLFile(t, ctx, pool, repoRoot, filepath.Join("src", "backend", "migrations", "messaging_db", "000006_ghost_only.up.sql"))
+		ApplySQLFile(t, ctx, pool, repoRoot, filepath.Join("src", "backend", "migrations", "messaging_db", "000010_ghost_only.up.sql"))
 		ApplySQLFile(t, ctx, pool, repoRoot, filepath.Join("src", "backend", "migrations", "messaging_db", "000006_pins.up.sql"))
 		ApplySQLFile(t, ctx, pool, repoRoot, filepath.Join("src", "backend", "migrations", "messaging_db", "000007_thread_index.up.sql"))
 		ApplySQLFile(t, ctx, pool, repoRoot, filepath.Join("src", "backend", "migrations", "messaging_db", "000008_shared_media_indexes.up.sql"))

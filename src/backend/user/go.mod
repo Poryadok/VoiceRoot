@@ -112,3 +112,9 @@ replace voice.app/voice/space => ../voice/pb/voice/space
 replace voice.app/voice/user => ./pb/voice/user
 
 replace voice.app/voice/events => ../messaging/pb/voice/events
+
+replace voice.app/voice/messaging => ../messaging/pb/voice/messaging
+
+replace voice.app/voice/role => ../role/pb/voice/role
+
+replace voice.app/voice/story => ../voice/pb/voice/story

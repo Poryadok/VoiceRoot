@@ -43,6 +43,14 @@ func splitFullMethod(fullMethod string) (service, method string) {
 	return "unknown", fullMethod
 }
 
+// PrimeMetricsRegistry registers grpc_server_* on reg and records one probe RPC so
+// /metrics exposition includes the series (counters with zero observations are omitted).
+func PrimeMetricsRegistry(reg prometheus.Registerer) {
+	interceptor := UnaryMetricsForRegistry(reg)
+	handler := func(context.Context, any) (any, error) { return nil, nil }
+	_, _ = interceptor(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: "/test.Service/Probe"}, handler)
+}
+
 // UnaryMetricsForRegistry registers grpc_server_* on reg and returns the interceptor.
 // Use when building a custom grpc.ChainUnaryInterceptor (e.g. bot service rate limits).
 func UnaryMetricsForRegistry(reg prometheus.Registerer) grpc.UnaryServerInterceptor {
