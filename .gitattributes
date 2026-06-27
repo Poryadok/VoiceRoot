@@ -1,1 +1,2 @@
 docker/postgres/*.sh text eol=lf
+docker/postgres/initdb.d/*.sh text eol=lf

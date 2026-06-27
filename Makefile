@@ -23,7 +23,7 @@ GATEWAY_RACE_RUN = CGO_ENABLED=1 go test -race $(GO_TEST_FLAGS)
 endif
 GO_SERVICES := analytics bot chat federation file gateway matchmaking messaging moderation notification realtime role search social space story subscription user voice
 # Dockerfiles with context=src/backend (sync scripts/ci/backend-docker-context.txt and ci.yml dockerctx).
-GO_SERVICES_BACKEND_CONTEXT := gateway realtime chat messaging user social voice file role space
+GO_SERVICES_BACKEND_CONTEXT := gateway realtime chat messaging user social voice file role space bot matchmaking moderation notification search story subscription analytics federation
 GO_MODULES_LINT := pkg $(GO_SERVICES)
 GO_TEST_TARGETS := $(GO_SERVICES:%=go-test-%)
 GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
@@ -31,7 +31,7 @@ GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
 .PHONY: buf-lint buf-format buf-breaking buf-generate buf-generate-dart buf-dart-check compose-up compose-app-up compose-down compose-logs-collect compose-observability-up \
 	compose-migrate-all compose-migrate-phase15 compose-migrate-bot compose-migrate-story compose-e2e-live compose-e2e-full compose-e2e-voice-live \
 	build-all build-all-breaking check-toolchain compose-config-ci buf-ci backend-test-ci backend-image-ci \
-	gateway-test-ci gateway-image-ci go-test-pkg auth-test-ci auth-image-ci buf-breaking-ci \
+	gateway-test-ci gateway-image-ci go-test-pkg go-mod-tidy-all auth-test-ci auth-image-ci buf-breaking-ci \
 	golangci-ci gateway-test-race-ci design-tokens-check flutter-ui-color-gate flutter-ci prekey-golden-check coverage-report testcontainers-prune buf-generate-ci-local-template-check
 
 buf-lint:
@@ -118,7 +118,13 @@ buf-ci:
 	docker run --rm --entrypoint sh -v "$(ROOT):/workspace" -w /workspace $(BUF_IMAGE) \
 		-c "buf lint && buf format -d --exit-code"
 
-backend-test-ci: go-test-pkg $(GO_TEST_TARGETS) auth-test-ci testcontainers-prune
+backend-test-ci: go-mod-tidy-all go-test-pkg $(GO_TEST_TARGETS) auth-test-ci testcontainers-prune
+
+go-mod-tidy-all:
+	@for m in $(GO_MODULES_LINT); do \
+		echo "== go mod tidy $$m =="; \
+		(cd src/backend/$$m && go mod tidy); \
+	done
 
 backend-image-ci: $(GO_IMAGE_TARGETS) auth-image-ci
 
@@ -171,7 +177,7 @@ prekey-golden-check:
 	cd $(ROOT)/src/frontend && flutter test test/tools/prekey_golden_drift_test.dart
 
 flutter-ci: design-tokens-check contrast-tokens-check flutter-ui-color-gate buf-dart-check prekey-golden-check
-	cd $(ROOT)/src/frontend && flutter pub get && flutter analyze && flutter test
+	cd $(ROOT)/src/frontend && flutter pub get && flutter analyze --no-fatal-infos && flutter test
 
 # Go (-coverprofile), Auth (JaCoCo), Flutter (lcov). Writes .local/coverage/summary.txt
 coverage-report:

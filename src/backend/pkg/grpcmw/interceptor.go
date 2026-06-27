@@ -34,7 +34,7 @@ func ServerOptions(logger *slog.Logger, opts ...ServerOption) []grpc.ServerOptio
 	for _, o := range opts {
 		o(&cfg)
 	}
-	var reg prometheus.Registerer = prometheus.DefaultRegisterer
+	var reg = prometheus.DefaultRegisterer
 	if cfg.registry != nil {
 		reg = cfg.registry
 	}

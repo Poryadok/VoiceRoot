@@ -12,7 +12,6 @@ import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/state/onboarding_controller.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 
-import 'test_voice_token_catalog.dart';
 import 'auth_test_overrides.dart';
 import 'voice_test_theme.dart';
 

@@ -4,20 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
-import 'package:voice_frontend/backend/auth_session_storage.dart';
-import 'package:voice_frontend/backend/guest_credentials_storage.dart';
-import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/bootstrap/voice_app_bootstrap.dart';
-import 'package:voice_frontend/state/gateway_providers.dart';
-import 'package:voice_frontend/state/chat_providers.dart';
-import 'package:voice_frontend/state/onboarding_controller.dart';
-import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/auth/auth_screen.dart';
 
 import 'support/guest_bootstrap_test_helpers.dart';
-import 'support/test_voice_token_catalog.dart';
-import 'support/voice_test_theme.dart';
 
 const _guestAccountId = guestBootstrapAccountId;
 
