@@ -14,6 +14,10 @@ spec:
   template:
     metadata:
       labels: {app: voice-auth}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/actuator/prometheus"
     spec:
       containers:
         - name: auth
@@ -62,6 +66,10 @@ spec:
   template:
     metadata:
       labels: {app: voice-social}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: social
@@ -80,7 +88,7 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-social}
-  ports: [{port: 8080}, {port: 9090}]
+  ports: [{name: http, port: 8080}, {port: 9090}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -95,6 +103,10 @@ spec:
   template:
     metadata:
       labels: {app: voice-user}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: user
@@ -119,7 +131,7 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-user}
-  ports: [{port: 8080}, {port: 9090}]
+  ports: [{name: http, port: 8080}, {port: 9090}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -134,6 +146,10 @@ spec:
   template:
     metadata:
       labels: {app: voice-role}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: role
@@ -152,7 +168,7 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-role}
-  ports: [{port: 8080}, {port: 9090}]
+  ports: [{name: http, port: 8080}, {port: 9090}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -167,6 +183,10 @@ spec:
   template:
     metadata:
       labels: {app: voice-space}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: space
@@ -185,7 +205,7 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-space}
-  ports: [{port: 8080}, {port: 9090}]
+  ports: [{name: http, port: 8080}, {port: 9090}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -200,6 +220,10 @@ spec:
   template:
     metadata:
       labels: {app: voice-chat}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: chat
@@ -219,7 +243,7 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-chat}
-  ports: [{port: 8080}, {port: 9090}]
+  ports: [{name: http, port: 8080}, {port: 9090}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -234,6 +258,10 @@ spec:
   template:
     metadata:
       labels: {app: voice-file}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: file
@@ -256,7 +284,7 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-file}
-  ports: [{port: 8080}, {port: 9090}]
+  ports: [{name: http, port: 8080}, {port: 9090}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -271,6 +299,10 @@ spec:
   template:
     metadata:
       labels: {app: voice-messaging}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: messaging
@@ -291,7 +323,7 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-messaging}
-  ports: [{port: 8080}, {port: 9090}]
+  ports: [{name: http, port: 8080}, {port: 9090}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -306,6 +338,10 @@ spec:
   template:
     metadata:
       labels: {app: voice-voice}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: voice
@@ -327,7 +363,7 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-voice}
-  ports: [{port: 8080}, {port: 9090}]
+  ports: [{name: http, port: 8080}, {port: 9090}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -342,6 +378,10 @@ spec:
   template:
     metadata:
       labels: {app: voice-matchmaking}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: matchmaking
@@ -361,7 +401,7 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-matchmaking}
-  ports: [{port: 8080}, {port: 9090}]
+  ports: [{name: http, port: 8080}, {port: 9090}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -376,6 +416,10 @@ spec:
   template:
     metadata:
       labels: {app: voice-search}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: search
@@ -394,7 +438,7 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-search}
-  ports: [{port: 8080}, {port: 9090}]
+  ports: [{name: http, port: 8080}, {port: 9090}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -409,6 +453,10 @@ spec:
   template:
     metadata:
       labels: {app: voice-notification}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: notification
@@ -430,7 +478,7 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-notification}
-  ports: [{port: 8080}, {port: 9090}]
+  ports: [{name: http, port: 8080}, {port: 9090}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -445,6 +493,10 @@ spec:
   template:
     metadata:
       labels: {app: voice-realtime}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: realtime
@@ -462,7 +514,7 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-realtime}
-  ports: [{port: 8080}]
+  ports: [{name: http, port: 8080}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -477,6 +529,10 @@ spec:
   template:
     metadata:
       labels: {app: voice-bot}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: bot
@@ -502,4 +558,4 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-bot}
-  ports: [{port: 8080}, {port: 9090}]
+  ports: [{name: http, port: 8080}, {port: 9090}]

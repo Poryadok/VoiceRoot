@@ -2,7 +2,7 @@ groups:
   - name: voice_alerts_p1
     rules:
       - alert: GatewayDown
-        expr: up{job="kubernetes-pods-voice", pod=~"voice-gateway.*"} == 0
+        expr: up{namespace="voice-staging", pod=~"voice-gateway.*"} == 0
         for: 2m
         labels:
           severity: critical

@@ -96,7 +96,9 @@ prometheus:
               storage: 20Gi
     additionalScrapeConfigsSecret:
       enabled: false
-    # ServiceMonitors for app scrape — enable in profiles/full/ after Chunk 9.1
+    # ServiceMonitors + PrometheusRules — apply after Helm install:
+    #   kubectl apply -f deploy/observability/profiles/full/service-monitors.yaml
+    #   kubectl apply -f deploy/observability/profiles/full/prometheus-rules.yaml
     serviceMonitorSelectorNilUsesHelmValues: false
     serviceMonitorSelector: {}
     podMonitorSelectorNilUsesHelmValues: false

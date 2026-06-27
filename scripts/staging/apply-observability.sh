@@ -26,6 +26,14 @@ trap 'rm -rf "${TMP}"' EXIT
 
 echo "Voice observability: profile=${PROFILE} namespace=${NS}"
 
+# --- Validate Prometheus rules (optional; skip if promtool not installed) ---
+if command -v promtool >/dev/null 2>&1; then
+  echo "Validating Prometheus rules..."
+  promtool check rules "${OBS_DIR}/prometheus/rules/"*.yaml
+else
+  echo "WARN: promtool not found — skip rule validation (install from prometheus release tarball)"
+fi
+
 # --- Prometheus config (base + scrape jobs) ---
 cat "${OBS_DIR}/config/prometheus-base.yml" \
   "${OBS_DIR}/prometheus/scrape/voice-apps.yaml" \
@@ -115,3 +123,7 @@ echo "Observability apply complete."
 echo "  kubectl get pods -n ${NS}"
 echo "  kubectl top pods -n ${NS}"
 echo "  kubectl port-forward -n ${NS} svc/grafana 3000:80"
+echo ""
+echo "App scrape: ensure voice-staging Deployments have prometheus.io/scrape annotations"
+echo "  (deploy/staging/services.yaml, gateway-deployment.yaml) and pods are restarted."
+echo "  Verify targets: kubectl port-forward -n ${NS} svc/prometheus 9090:9090 → /targets"

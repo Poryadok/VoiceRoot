@@ -81,7 +81,7 @@ deploy/observability/
   config/                  # Loki, Promtail, Prometheus base (built by apply script)
   profiles/
     k3s-lite/              # DEFAULT — namespace, Deployments, DaemonSet
-    full/                  # Helm values for kube-prometheus-stack
+    full/                  # Helm values + ServiceMonitors + PrometheusRule CRs
   alertmanager/
     config.yaml            # null receiver (default)
     config-notifications.yaml
@@ -99,7 +99,26 @@ deploy/observability/
 
 ## Scrape wiring
 
-App pods in `voice-staging` are discovered via `prometheus.io/scrape` pod annotations (Chunk 9.1). Exporters for Postgres/Redis/NATS/LiveKit are static targets in `prometheus/scrape/infra-exporters.yaml`; manifests in `exporters/` (see [exporters/README.md](exporters/README.md) for expected metric names).
+App pods in `voice-staging` are discovered via `prometheus.io/scrape` pod annotations (k3s-lite default). Exporters for Postgres/Redis/NATS/LiveKit are static targets in `prometheus/scrape/infra-exporters.yaml`; manifests in `exporters/` (see [exporters/README.md](exporters/README.md) for expected metric names).
+
+### App scrape matrix (staging)
+
+| Deployment | HTTP port | Metrics path |
+|------------|-----------|--------------|
+| voice-gateway | 8080 | `/metrics` |
+| voice-auth | 8080 | `/actuator/prometheus` |
+| voice-messaging, chat, user, social, space, role, voice, file, matchmaking, search, notification, realtime, bot | 8080 | `/metrics` |
+
+Annotations live on pod templates in `deploy/staging/services.yaml` and `deploy/staging/gateway-deployment.yaml`. Re-apply staging after changes so pods pick up new metadata.
+
+### Profiles
+
+| Profile | App scrape mechanism | Rules |
+|---------|---------------------|-------|
+| **k3s-lite** (default) | Pod annotations + `kubernetes-pods-voice` job | ConfigMap from `prometheus/rules/` |
+| **full** | `profiles/full/service-monitors.yaml` | `profiles/full/prometheus-rules.yaml` (PrometheusRule CR) |
+
+Recording rules use post-migration Gateway metrics only: `gateway_http_requests_total`, `gateway_http_request_duration_seconds` (not legacy `gateway_request_count`).
 
 Promtail collects stdout from namespaces `voice-staging` and `voice-observability`. LogQL example:
 

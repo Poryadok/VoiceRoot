@@ -39,6 +39,32 @@ scripts/staging/smoke-staging.sh
 | `gateway-deployment.yaml` | API Gateway + Service |
 | `developer-portal.yaml` | Developer Portal static site + Ingress (OAuth callback host) |
 
+## Prometheus scrape (observability)
+
+Every app Deployment pod template has `prometheus.io/scrape` annotations. k3s-lite Prometheus discovers them via `kubernetes_sd_configs` (see `deploy/observability/prometheus/scrape/voice-apps.yaml`).
+
+| Deployment | HTTP port | Metrics path |
+|------------|-----------|--------------|
+| voice-gateway | 8080 | `/metrics` |
+| voice-auth | 8080 | `/actuator/prometheus` |
+| voice-messaging, chat, user, social, space, role, voice, file, matchmaking, search, notification, realtime, bot | 8080 | `/metrics` |
+
+After changing annotations, re-apply staging and roll out pods:
+
+```bash
+scripts/staging/render-and-apply.sh
+kubectl rollout restart deployment -n voice-staging -l 'app in (voice-gateway,voice-auth,voice-messaging,voice-chat,voice-user,voice-social,voice-space,voice-role,voice-voice,voice-file,voice-matchmaking,voice-search,voice-notification,voice-realtime,voice-bot)'
+```
+
+For **kube-prometheus-stack** (`OBSERVABILITY_PROFILE=full`), use ServiceMonitors instead of pod annotations:
+
+```bash
+kubectl apply -f deploy/observability/profiles/full/service-monitors.yaml
+kubectl apply -f deploy/observability/profiles/full/prometheus-rules.yaml
+```
+
+See [deploy/observability/README.md](../observability/README.md) for the observability stack apply order.
+
 ## CI
 
 Workflow [Staging deploy](../../.github/workflows/staging-deploy.yml) applies namespace, configmap, infra, services, and gateway when `STAGING_DEPLOY_FULL_STACK=true`.

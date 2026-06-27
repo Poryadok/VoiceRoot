@@ -1,0 +1,247 @@
+# ServiceMonitors for kube-prometheus-stack (OBSERVABILITY_PROFILE=full only).
+# Do NOT apply alongside k3s-lite — k3s-lite uses prometheus.io/scrape pod annotations.
+#
+# Apply after Helm install:
+#   kubectl apply -f deploy/observability/profiles/full/service-monitors.yaml
+#
+# Requires named Service port "http" on each voice-staging Service (see deploy/staging/services.yaml).
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: voice-gateway
+  namespace: voice-staging
+  labels:
+    app: voice-gateway
+spec:
+  selector:
+    matchLabels:
+      app: voice-gateway
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: voice-auth
+  namespace: voice-staging
+  labels:
+    app: voice-auth
+spec:
+  selector:
+    matchLabels:
+      app: voice-auth
+  endpoints:
+    - port: http
+      path: /actuator/prometheus
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: voice-messaging
+  namespace: voice-staging
+  labels:
+    app: voice-messaging
+spec:
+  selector:
+    matchLabels:
+      app: voice-messaging
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: voice-chat
+  namespace: voice-staging
+  labels:
+    app: voice-chat
+spec:
+  selector:
+    matchLabels:
+      app: voice-chat
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: voice-user
+  namespace: voice-staging
+  labels:
+    app: voice-user
+spec:
+  selector:
+    matchLabels:
+      app: voice-user
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: voice-social
+  namespace: voice-staging
+  labels:
+    app: voice-social
+spec:
+  selector:
+    matchLabels:
+      app: voice-social
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: voice-space
+  namespace: voice-staging
+  labels:
+    app: voice-space
+spec:
+  selector:
+    matchLabels:
+      app: voice-space
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: voice-role
+  namespace: voice-staging
+  labels:
+    app: voice-role
+spec:
+  selector:
+    matchLabels:
+      app: voice-role
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: voice-voice
+  namespace: voice-staging
+  labels:
+    app: voice-voice
+spec:
+  selector:
+    matchLabels:
+      app: voice-voice
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: voice-file
+  namespace: voice-staging
+  labels:
+    app: voice-file
+spec:
+  selector:
+    matchLabels:
+      app: voice-file
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: voice-matchmaking
+  namespace: voice-staging
+  labels:
+    app: voice-matchmaking
+spec:
+  selector:
+    matchLabels:
+      app: voice-matchmaking
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: voice-search
+  namespace: voice-staging
+  labels:
+    app: voice-search
+spec:
+  selector:
+    matchLabels:
+      app: voice-search
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: voice-notification
+  namespace: voice-staging
+  labels:
+    app: voice-notification
+spec:
+  selector:
+    matchLabels:
+      app: voice-notification
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: voice-realtime
+  namespace: voice-staging
+  labels:
+    app: voice-realtime
+spec:
+  selector:
+    matchLabels:
+      app: voice-realtime
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: voice-bot
+  namespace: voice-staging
+  labels:
+    app: voice-bot
+spec:
+  selector:
+    matchLabels:
+      app: voice-bot
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
