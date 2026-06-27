@@ -154,7 +154,17 @@ PostgresDown inhibition: derivative alerts (`Tier0High5xx`, `GatewayLatencyHigh`
 
 ## Local compose parity
 
-Compose profile `observability` is added in Phase 4 (`deploy/observability/local/`). `make compose-logs-collect` remains independent.
+Profile `observability` in [docker-compose.yml](../../docker-compose.yml) runs Prometheus, Grafana, Loki, and Promtail from [local/](local/).
+
+```bash
+make compose-observability-up
+# Grafana http://localhost:3000 — admin / changeme-voice-local (override GRAFANA_ADMIN_PASSWORD)
+# Prometheus http://localhost:9090
+```
+
+`make compose-logs-collect` is unchanged: it writes an offline `.local/dev.ndjson` snapshot and does not conflict with Loki. Both can be used together — see [local/README.md](local/README.md).
+
+Validate: `docker compose --profile observability config`
 
 ## Security
 

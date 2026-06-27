@@ -829,8 +829,84 @@ services:
       retries: 3
       start_period: 10s
 
+  # Observability stack (Prometheus, Grafana, Loki, Promtail). Opt-in: --profile observability
+  # Coexists with make compose-logs-collect (offline NDJSON); see deploy/observability/local/README.md
+  prometheus:
+    profiles: ["observability"]
+    image: prom/prometheus:v2.54.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --web.enable-lifecycle
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./deploy/observability/local/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - voice_obs_prometheus:/prometheus
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9090/-/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  loki:
+    profiles: ["observability"]
+    image: grafana/loki:3.2.1
+    command: ["-config.file=/etc/loki/loki.yaml", "-target=all"]
+    volumes:
+      - ./deploy/observability/config/loki.yaml:/etc/loki/loki.yaml:ro
+      - voice_obs_loki:/loki
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3100/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+
+  promtail:
+    profiles: ["observability"]
+    image: grafana/promtail:3.2.1
+    command: ["-config.file=/etc/promtail/config.yml"]
+    volumes:
+      - ./deploy/observability/local/promtail-config.yml:/etc/promtail/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      loki:
+        condition: service_healthy
+
+  grafana:
+    profiles: ["observability"]
+    image: grafana/grafana:11.2.2
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-changeme-voice-local}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - voice_obs_grafana:/var/lib/grafana
+      - ./deploy/observability/grafana/provisioning/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
+      - ./deploy/observability/grafana/provisioning/dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
+      - ./deploy/observability/grafana/dashboards:/var/lib/grafana/dashboards/voice:ro
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
 volumes:
   voice_pgdata:
   voice_redis:
   voice_nats_js:
   voice_minio:
+  voice_obs_prometheus:
+  voice_obs_loki:
+  voice_obs_grafana:

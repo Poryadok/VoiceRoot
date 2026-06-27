@@ -28,7 +28,7 @@ GO_MODULES_LINT := pkg $(GO_SERVICES)
 GO_TEST_TARGETS := $(GO_SERVICES:%=go-test-%)
 GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
 
-.PHONY: buf-lint buf-format buf-breaking buf-generate buf-generate-dart buf-dart-check compose-up compose-app-up compose-down compose-logs-collect \
+.PHONY: buf-lint buf-format buf-breaking buf-generate buf-generate-dart buf-dart-check compose-up compose-app-up compose-down compose-logs-collect compose-observability-up \
 	compose-migrate-all compose-migrate-phase15 compose-migrate-bot compose-migrate-story compose-e2e-live compose-e2e-full compose-e2e-voice-live \
 	build-all build-all-breaking check-toolchain compose-config-ci buf-ci backend-test-ci backend-image-ci \
 	gateway-test-ci gateway-image-ci go-test-pkg auth-test-ci auth-image-ci buf-breaking-ci \
@@ -91,6 +91,10 @@ endif
 
 compose-logs-collect:
 	$(COMPOSE_LOGS_COLLECT)
+
+# App stack + observability profile (Prometheus, Grafana, Loki, Promtail). Independent of compose-logs-collect.
+compose-observability-up:
+	COMPOSE_PARALLEL_LIMIT=4 docker compose --profile app --profile observability up -d --build
 
 # Opt-in compose E2E (Phase-1 DM realtime, friends, auth, voice; media audio on Linux only).
 # Override: VOICE_API_BASE_URL=http://127.0.0.1:18080 VOICE_LIVEKIT_PUBLIC_URL=ws://127.0.0.1:7880

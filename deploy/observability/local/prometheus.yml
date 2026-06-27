@@ -1,0 +1,50 @@
+# Prometheus scrape config for docker compose (profile observability).
+# Targets use Compose service DNS on the default network; app services need --profile app.
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  external_labels:
+    cluster: voice-local
+    environment: compose
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: voice-gateway
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["gateway:8080"]
+        labels:
+          service: gateway
+
+  - job_name: voice-auth
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["auth:8080"]
+        labels:
+          service: auth
+
+  - job_name: voice-go-services
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - social:8080
+          - user:8080
+          - chat:8080
+          - messaging:8080
+          - file:8080
+          - matchmaking:8080
+          - search:8080
+          - notification:8080
+          - subscription:8080
+          - moderation:8080
+          - bot:8080
+          - story:8080
+          - realtime:8080
+          - space:8080
+          - role:8080
+          - voice:8080
+        labels:
+          tier: app
