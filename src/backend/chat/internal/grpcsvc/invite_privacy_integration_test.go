@@ -19,6 +19,8 @@ type invitePrivacyChecker interface {
 	AllowChatSpaceInvitesAudience(ctx context.Context, profileID uuid.UUID) (privacy.Audience, error)
 }
 
+var _ invitePrivacyChecker = invitePrivacyStub{}
+
 type invitePrivacyStub struct {
 	friendsOnly map[uuid.UUID]bool
 }

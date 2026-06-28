@@ -90,24 +90,47 @@ fi
 echo "Starting postgres and redis..."
 docker compose up -d postgres redis
 
-echo "Waiting for postgres and redis..."
-for _ in $(seq 1 180); do
-  if ! docker compose ps -q postgres 2>/dev/null | grep -q .; then
-    sleep 1
-    continue
-  fi
-  if docker compose exec -T postgres pg_isready -U voice -d voice >/dev/null 2>&1 \
-    && docker compose exec -T postgres psql -U voice -d voice -tAc \
-      "SELECT 1 FROM pg_database WHERE datname='chat_db'" 2>/dev/null | grep -q 1 \
-    && docker compose exec -T redis redis-cli ping 2>/dev/null | grep -q PONG; then
+echo "Waiting for postgres..."
+for _ in $(seq 1 60); do
+  if docker compose exec -T postgres pg_isready -U voice -d voice >/dev/null 2>&1; then
     break
   fi
-  sleep 1
+  sleep 2
 done
 if ! docker compose exec -T postgres pg_isready -U voice -d voice >/dev/null 2>&1; then
   echo "Postgres not ready" >&2
   docker compose ps
   docker compose logs postgres --tail 80 >&2 || true
+  exit 1
+fi
+
+echo "Waiting for postgres init (chat_db)..."
+for _ in $(seq 1 60); do
+  if docker compose exec -T postgres psql -U voice -d voice -tAc \
+    "SELECT 1 FROM pg_database WHERE datname='chat_db'" 2>/dev/null | grep -q 1; then
+    break
+  fi
+  sleep 2
+done
+if ! docker compose exec -T postgres psql -U voice -d voice -tAc \
+  "SELECT 1 FROM pg_database WHERE datname='chat_db'" 2>/dev/null | grep -q 1; then
+  echo "chat_db not ready" >&2
+  docker compose ps
+  docker compose logs postgres --tail 80 >&2 || true
+  exit 1
+fi
+
+echo "Waiting for redis..."
+for _ in $(seq 1 30); do
+  if docker compose exec -T redis redis-cli ping 2>/dev/null | grep -q PONG; then
+    break
+  fi
+  sleep 1
+done
+if ! docker compose exec -T redis redis-cli ping 2>/dev/null | grep -q PONG; then
+  echo "Redis not ready" >&2
+  docker compose ps
+  docker compose logs redis --tail 40 >&2 || true
   exit 1
 fi
 

@@ -410,11 +410,6 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 
 	t.Run("ListMyProfiles", func(t *testing.T) {
 		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
-		_, err := cli.CreateProfile(mdCtx, &userv1.CreateProfileRequest{
-			DisplayName: "Alt for list",
-			Username:    proto.String("altlist"),
-		})
-		require.NoError(t, err)
 
 		resp, err := cli.ListMyProfiles(mdCtx, &userv1.ListMyProfilesRequest{})
 		require.NoError(t, err)

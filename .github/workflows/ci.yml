@@ -108,8 +108,14 @@ jobs:
           flutter-version: "3.41.7"
           channel: stable
           cache: true
+      - name: Enable Windows symlink support (flutter_webrtc)
+        shell: pwsh
+        run: |
+          reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" /t REG_DWORD /f /v AllowDevelopmentWithoutDevLicense /d 1
       - name: Flutter Windows analyze, test, build
         working-directory: src/frontend
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
         run: |
           flutter pub get
           flutter analyze --no-fatal-infos

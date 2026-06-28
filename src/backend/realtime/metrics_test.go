@@ -23,8 +23,6 @@ func testRealtimeHandlerWithMetrics(tv tokenValidator, lister dmChatLister, reg 
 }
 
 func TestMetricsEndpointExposesRealtimeWSMetrics(t *testing.T) {
-	t.Parallel()
-
 	reg := prometheus.NewRegistry()
 	h := testRealtimeHandlerWithMetrics(staticTokenValidator{"tok": {UserID: "a", ProfileID: "p"}}, nil, reg)
 
@@ -51,8 +49,6 @@ func TestMetricsEndpointExposesRealtimeWSMetrics(t *testing.T) {
 }
 
 func TestWSMetricsConnectSuccessAndHelloDuration(t *testing.T) {
-	t.Parallel()
-
 	reg := prometheus.NewRegistry()
 	h := testRealtimeHandlerWithMetrics(staticTokenValidator{"tok": {UserID: "a", ProfileID: "p"}}, nil, reg)
 	srv := httptest.NewServer(h)
@@ -76,8 +72,6 @@ func TestWSMetricsConnectSuccessAndHelloDuration(t *testing.T) {
 }
 
 func TestWSMetricsConnectFail(t *testing.T) {
-	t.Parallel()
-
 	reg := prometheus.NewRegistry()
 	h := testRealtimeHandlerWithMetrics(staticTokenValidator{"tok": {UserID: "a", ProfileID: "p"}}, nil, reg)
 	srv := httptest.NewServer(h)
@@ -94,8 +88,6 @@ func TestWSMetricsConnectFail(t *testing.T) {
 }
 
 func TestWSMetricsActiveConnectionsDecrementOnClose(t *testing.T) {
-	t.Parallel()
-
 	reg := prometheus.NewRegistry()
 	h := testRealtimeHandlerWithMetrics(staticTokenValidator{"tok": {UserID: "a", ProfileID: "p"}}, nil, reg)
 	srv := httptest.NewServer(h)
