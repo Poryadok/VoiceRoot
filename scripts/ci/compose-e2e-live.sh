@@ -8,8 +8,14 @@ export VOICE_RUN_LIVE_COMPOSE="${VOICE_RUN_LIVE_COMPOSE:-true}"
 export VOICE_API_BASE_URL="${VOICE_API_BASE_URL:-http://127.0.0.1:18080}"
 export VOICE_LIVEKIT_PUBLIC_URL="${VOICE_LIVEKIT_PUBLIC_URL:-ws://127.0.0.1:7880}"
 
+if [ "$(uname -s)" = "Linux" ] && ! pkg-config --exists opus 2>/dev/null; then
+  echo "Installing LiveKit CGO deps for gateway voice media live tests..."
+  sudo apt-get update -qq
+  DEBIAN_FRONTEND=noninteractive sudo apt-get install -y -qq libopus-dev libopusfile-dev libsoxr-dev pkg-config
+fi
+
 cd "$ROOT/src/backend/gateway"
-go test -count=1 -parallel 1 -timeout 20m -run 'TestCompose.*_live' ./...
+go test -count=1 -parallel 1 -timeout 20m -tags live -run 'TestCompose.*_live' ./...
 
 cd "$ROOT/src/frontend"
 flutter test --concurrency=1 \

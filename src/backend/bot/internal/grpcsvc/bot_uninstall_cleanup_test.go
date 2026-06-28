@@ -154,11 +154,3 @@ func TestUninstallBotFromSpace_invokesRoleDeleteAndMessagingUnpin(t *testing.T) 
 	require.NotEmpty(t, msgSpy.preservedBodies,
 		"uninstall cleanup must not delete message bodies (BOT-B)")
 }
-
-// mustProtoMessage is used by future tests once BOT-B proto fields land.
-func mustProtoMessage(t *testing.T, fullName protoreflect.FullName) proto.Message {
-	t.Helper()
-	mt, err := protoregistry.GlobalTypes.FindMessageByName(fullName)
-	require.NoError(t, err, "%s not in generated proto yet (BOT-B audit)", fullName)
-	return mt.New().Interface().(proto.Message)
-}

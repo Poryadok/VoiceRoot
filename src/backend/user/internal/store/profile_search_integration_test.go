@@ -26,8 +26,8 @@ func TestProfileStore_SearchProfilesAfter_postgres(t *testing.T) {
 		t.Skip()
 	}
 	ctx := context.Background()
-	migrationPath := filepath.Join(userModuleRepoRoot(t), "src", "backend", "migrations", "user_db", "000001_init.up.sql")
-	pool := integrationtest.StartPostgres(t, ctx, "userdb", migrationPath)
+	pool := integrationtest.StartPostgres(t, ctx, "userdb", "")
+	integrationtest.ApplyUserDBMigrations(t, ctx, pool, userModuleRepoRoot(t))
 
 	viewerAcc := uuid.New()
 	otherAcc := uuid.New()

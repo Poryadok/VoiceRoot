@@ -123,3 +123,15 @@ Baseline закрыт (2026-06): register guest, JWT, guards, convert-guest, TTL
 | Flutter analyze cleanup | **Batch 9 — QA** |
 
 Фазовые критерии «готово» — [PLAN.md](PLAN.md) §11–18, [encryption.md](features/encryption.md), [bots.md](features/bots.md).
+
+
+- [ ] во многих сервисах таймаут указан хардкодом, вот 
+                например: context.WithTimeout(context.Background(), 15*time.Second),
+                или вот:
+                ReadHeaderTimeout: 5 * time.Second,
+		        ReadTimeout:       30 * time.Second,
+		        WriteTimeout:      60 * time.Second,
+		        IdleTimeout:       120 * time.Second,
+        надо 
+        1) везде таймауты перенести в конфиги, 
+        2) пробежаться по всему проекту и поискать магические цифры. часть из них перенести в переменные, а настройки вынести в конфиги.

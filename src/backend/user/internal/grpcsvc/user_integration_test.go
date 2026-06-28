@@ -3,7 +3,6 @@ package grpcsvc
 import (
 	"context"
 	"net"
-	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -23,6 +22,7 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/proto"
 	"voice/backend/pkg/integrationtest"
+	"voice/backend/pkg/privacy"
 
 	"voice/backend/user/internal/authctx"
 	"voice/backend/user/internal/r2avatar"
@@ -72,17 +72,13 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 		t.Skip()
 	}
 	ctx := context.Background()
-	migrationPath := filepath.Join(repoRoot(t), "src", "backend", "migrations", "user_db", "000001_init.up.sql")
-	pool := integrationtest.StartPostgres(t, ctx, "userdb", migrationPath)
-	subMigration, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "user_db", "000003_profile_subscription.up.sql"))
-	require.NoError(t, err)
-	_, err = pool.Exec(ctx, string(subMigration))
-	require.NoError(t, err)
+	pool := integrationtest.StartPostgres(t, ctx, "userdb", "")
+	integrationtest.ApplyUserDBMigrations(t, ctx, pool, repoRoot(t))
 
 	accountA := uuid.New()
 	accountB := uuid.New()
 	pid := uuid.New()
-	_, err = pool.Exec(ctx, `
+	_, err := pool.Exec(ctx, `
 		INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
 		VALUES ($1, $2, 'alice', '0001', 'Alice', true)`,
 		pid, accountA)
@@ -96,9 +92,11 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 	lis := bufconn.Listen(1024 * 1024)
 	t.Cleanup(func() { _ = lis.Close() })
 	blocker := &testBlockChecker{}
+	privacyStore := store.NewPrivacyStore(pool)
 	srv := grpc.NewServer()
 	userv1.RegisterUserServiceServer(srv, &UserGRPC{
 		Profiles:            store.NewProfileStore(pool),
+		Privacy:             privacyStore,
 		Presence:            store.NewPresenceStore(rdb),
 		Blocks:              blocker,
 		AvatarPresigner:     stubAvatarPresigner{},
@@ -162,8 +160,8 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 		pid2 := uuid.New()
 		_, err := pool.Exec(ctx, `
 			INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
-			VALUES ($1, $2, 'bob', '0002', 'Bob', false)`,
-			pid2, accountA)
+		VALUES ($1, $2, 'bob', '0002', 'Bob', false)`,
+			pid2, accountB)
 		require.NoError(t, err)
 
 		resp, err := cli.GetProfiles(ctx, &userv1.GetProfilesRequest{
@@ -278,7 +276,7 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
 		_, err := cli.CreateAvatarPresignedUpload(mdCtx, &userv1.CreateAvatarPresignedUploadRequest{
 			ProfileId:     pid.String(),
-			ContentType:   "image/gif",
+			ContentType:   "image/png",
 			ContentLength: -10,
 		})
 		require.Error(t, err)
@@ -534,6 +532,19 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 	})
 
 	t.Run("UpdatePresence GetPresence GetBulkPresence", func(t *testing.T) {
+		_, err := privacyStore.Upsert(ctx, store.PrivacyRow{
+			ProfileID:           pid,
+			Preset:              "personal",
+			ShowOnline:          privacy.EveryoneWithGuests(),
+			ShowGameStatus:      privacy.FriendsOnly(),
+			ShowMmRating:        privacy.FriendsOnly(),
+			ShowPhone:           privacy.Nobody(),
+			ShowStories:         privacy.FriendsOnly(),
+			AllowDM:             privacy.FriendsOnly(),
+			AllowFriendRequests: privacy.EveryoneWithGuests(),
+		})
+		require.NoError(t, err)
+
 		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String(), authctx.HeaderProfileID, pid.String())
 		_, err := cli.UpdatePresence(mdCtx, &userv1.UpdatePresenceRequest{
 			Status:       "online",
@@ -541,7 +552,8 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		g1, err := cli.GetPresence(ctx, &userv1.GetPresenceRequest{ProfileId: pid.String()})
+		viewCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String(), authctx.HeaderProfileID, pid.String())
+		g1, err := cli.GetPresence(viewCtx, &userv1.GetPresenceRequest{ProfileId: pid.String()})
 		require.NoError(t, err)
 		ps := g1.GetPresenceStatus()
 		require.Equal(t, "online", ps.GetStatus())
@@ -554,11 +566,23 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 			VALUES ($1, $2, 'eve', '0005', 'Eve', false)`,
 			pid2, accountA)
 		require.NoError(t, err)
+		_, err = privacyStore.Upsert(ctx, store.PrivacyRow{
+			ProfileID:           pid2,
+			Preset:              "personal",
+			ShowOnline:          privacy.EveryoneWithGuests(),
+			ShowGameStatus:      privacy.FriendsOnly(),
+			ShowMmRating:        privacy.FriendsOnly(),
+			ShowPhone:           privacy.Nobody(),
+			ShowStories:         privacy.FriendsOnly(),
+			AllowDM:             privacy.FriendsOnly(),
+			AllowFriendRequests: privacy.EveryoneWithGuests(),
+		})
+		require.NoError(t, err)
 		md2 := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String(), authctx.HeaderProfileID, pid2.String())
 		_, err = cli.UpdatePresence(md2, &userv1.UpdatePresenceRequest{StatusEnum: userv1.PresenceOnlineStatus_PRESENCE_ONLINE_STATUS_DND.Enum()})
 		require.NoError(t, err)
 
-		gb, err := cli.GetBulkPresence(ctx, &userv1.GetBulkPresenceRequest{ProfileIds: []string{pid.String(), pid2.String()}})
+		gb, err := cli.GetBulkPresence(viewCtx, &userv1.GetBulkPresenceRequest{ProfileIds: []string{pid.String(), pid2.String()}})
 		require.NoError(t, err)
 		m := gb.GetByProfileId()
 		require.Equal(t, "online", m[pid.String()].GetStatus())

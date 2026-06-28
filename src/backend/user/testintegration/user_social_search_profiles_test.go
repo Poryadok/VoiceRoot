@@ -72,16 +72,7 @@ func TestSearchProfiles_UserSocialIntegration(t *testing.T) {
 	ctx := context.Background()
 
 	userPool := startPostgresPool(t, ctx, "userdb")
-	userMigration := filepath.Join(repoRoot(t), "src", "backend", "migrations", "user_db", "000001_init.up.sql")
-	sqlUser, err := os.ReadFile(userMigration)
-	require.NoError(t, err)
-	_, err = userPool.Exec(ctx, string(sqlUser))
-	require.NoError(t, err)
-	subMigration := filepath.Join(repoRoot(t), "src", "backend", "migrations", "user_db", "000003_profile_subscription.up.sql")
-	sqlSub, err := os.ReadFile(subMigration)
-	require.NoError(t, err)
-	_, err = userPool.Exec(ctx, string(sqlSub))
-	require.NoError(t, err)
+	integrationtest.ApplyUserDBMigrations(t, ctx, userPool, repoRoot(t))
 
 	socialPool := startPostgresPool(t, ctx, "socialdb")
 	socialMigration := filepath.Join(repoRoot(t), "src", "backend", "migrations", "social_db", "000001_init.up.sql")

@@ -617,11 +617,6 @@ func (s *BotGRPC) SendBotMessage(ctx context.Context, req *botv1.SendBotMessageR
 	return &botv1.SendBotMessageResponse{Message: msg}, nil
 }
 
-func (s *BotGRPC) lookupInteractionMeta(ctx context.Context, botID uuid.UUID, token string) (uuid.UUID, *chatv1.ChatRef, error) {
-	_, invoker, ref, err := s.lookupInteraction(ctx, botID, token)
-	return invoker, ref, err
-}
-
 func (s *BotGRPC) SendEphemeral(ctx context.Context, req *botv1.SendEphemeralRequest) (*botv1.SendEphemeralResponse, error) {
 	botRow, err := s.botFromToken(ctx)
 	if err != nil {

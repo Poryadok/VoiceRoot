@@ -19,7 +19,7 @@ const (
 // Sign produces v1 HMAC-SHA256 signature for outbound webhook payloads.
 func Sign(secret string, timestamp int64, body []byte) string {
 	mac := hmac.New(sha256.New, []byte(secret))
-	_, _ = mac.Write([]byte(fmt.Sprintf("%d.", timestamp)))
+	_, _ = fmt.Fprintf(mac, "%d.", timestamp)
 	_, _ = mac.Write(body)
 	return "v1=" + hex.EncodeToString(mac.Sum(nil))
 }
@@ -40,7 +40,7 @@ func Verify(secret, signatureHeader, timestampHeader string, body []byte, now ti
 		return false
 	}
 	mac := hmac.New(sha256.New, []byte(secret))
-	_, _ = mac.Write([]byte(fmt.Sprintf("%d.", ts)))
+	_, _ = fmt.Fprintf(mac, "%d.", ts)
 	_, _ = mac.Write(body)
 	expected := hex.EncodeToString(mac.Sum(nil))
 	return hmac.Equal([]byte(gotHex), []byte(expected))

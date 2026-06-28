@@ -20,8 +20,16 @@ func TestScanner_ScanBytes_cleanAndInfected(t *testing.T) {
 			return
 		}
 		defer func() { _ = conn.Close() }()
-		buf := make([]byte, 64)
-		_, _ = conn.Read(buf)
+		buf := make([]byte, 4096)
+		for {
+			n, readErr := conn.Read(buf)
+			if readErr != nil || n == 0 {
+				break
+			}
+			if n >= 4 && buf[n-4] == 0 && buf[n-3] == 0 && buf[n-2] == 0 && buf[n-1] == 0 {
+				break
+			}
+		}
 		_, _ = conn.Write([]byte("stream: OK\n"))
 	}()
 

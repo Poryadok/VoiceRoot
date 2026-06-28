@@ -73,7 +73,7 @@ func TestWSMetricsConnectSuccessAndHelloDuration(t *testing.T) {
 	require.Equal(t, float64(1), testutil.ToFloat64(rtMetrics.connectTotal.WithLabelValues("success")))
 	require.Equal(t, float64(0), testutil.ToFloat64(rtMetrics.connectTotal.WithLabelValues("fail")))
 	require.Equal(t, float64(1), testutil.ToFloat64(rtMetrics.connectionsActive))
-	require.Equal(t, uint64(1), testutil.CollectAndCount(rtMetrics.helloDuration))
+	require.Equal(t, 1, testutil.CollectAndCount(rtMetrics.helloDuration))
 }
 
 func TestWSMetricsConnectFail(t *testing.T) {

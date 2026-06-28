@@ -21,7 +21,6 @@ func TestPlatformModeration_ShadowBannedSenderMessageHiddenFromPeer(t *testing.T
 	applySQLFile(t, ctx, pool, "src/backend/migrations/chat_db/000001_init.up.sql")
 	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000001_init.up.sql")
 	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000002_client_message_id.up.sql")
-	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000006_ghost_only.up.sql")
 
 	profA, acctA := uuid.New(), uuid.New()
 	profB, acctB := uuid.New(), uuid.New()

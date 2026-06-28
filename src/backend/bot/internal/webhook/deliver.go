@@ -137,7 +137,7 @@ func deliverAutocompleteOnce(ctx context.Context, client *http.Client, url, secr
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		return nil, err
@@ -170,7 +170,7 @@ func deliverOnce(ctx context.Context, client *http.Client, url, secret string, t
 	if err != nil {
 		return InteractionResponse{}, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		return InteractionResponse{}, err

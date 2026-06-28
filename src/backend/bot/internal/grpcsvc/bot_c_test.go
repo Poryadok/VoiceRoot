@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"io"
 	"net"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -18,7 +17,6 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/reflect/protoregistry"
 
 	"voice/backend/bot/internal/dispatch"
 	grpcsvc "voice/backend/bot/internal/grpcsvc"
@@ -254,43 +252,6 @@ func manifestYAMLForBotC(scopesJSON string) string {
     description: Ping
 `)
 	return b.String()
-}
-
-func botCProtoMessage(t *testing.T, name string) proto.Message {
-	t.Helper()
-	mt, err := protoregistry.GlobalTypes.FindMessageByName(protoreflect.FullName("voice.bot.v1." + name))
-	if err != nil {
-		t.Skipf("voice.bot.v1.%s not in generated proto yet (BOT-C)", name)
-	}
-	return mt.New().Interface().(proto.Message)
-}
-
-func setProtoStringField(t *testing.T, msg proto.Message, field, value string) {
-	t.Helper()
-	pr := msg.ProtoReflect()
-	fd := pr.Descriptor().Fields().ByName(protoreflect.Name(field))
-	if fd == nil {
-		t.Fatalf("field %q missing on %s (BOT-C proto drift)", field, pr.Descriptor().FullName())
-	}
-	pr.Set(fd, protoreflect.ValueOfString(value))
-}
-
-func invokeBotClientMethod(t *testing.T, client botv1.BotServiceClient, method string, req proto.Message) error {
-	t.Helper()
-	clientVal := reflect.ValueOf(client)
-	m := clientVal.MethodByName(method)
-	if !m.IsValid() {
-		t.Skipf("BotServiceClient.%s not generated yet (BOT-C)", method)
-	}
-	ctx := context.Background()
-	out := m.Call([]reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(req)})
-	if len(out) != 2 {
-		t.Fatalf("unexpected %s signature", method)
-	}
-	if errVal := out[1]; !errVal.IsNil() {
-		return errVal.Interface().(error)
-	}
-	return nil
 }
 
 func TestListSlashCommandsForChat_offlineWithoutPresence(t *testing.T) {
