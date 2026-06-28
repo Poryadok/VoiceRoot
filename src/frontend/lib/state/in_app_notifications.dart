@@ -3,14 +3,12 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../backend/realtime_client.dart';
-import '../routing/deep_link_parser.dart';
+import 'deep_link_navigation.dart';
 import 'auth_providers.dart';
 import 'chat_providers.dart';
 import 'matchmaking_match_controller.dart';
 import 'matchmaking_search_controller.dart';
 import 'push_notification_handler.dart';
-import 'shared_media_providers.dart';
-import 'shell_providers.dart';
 
 /// Plays short in-app notification sounds (no FCM).
 abstract class NotificationSoundPlayer {
@@ -95,7 +93,7 @@ class InAppNotificationController {
       );
       final deepLink = pushDataToDeepLinkTarget(normalized);
       if (deepLink != null) {
-        unawaited(_navigatePushDeepLink(deepLink));
+        unawaited(_ref.read(deepLinkNavigatorProvider).apply(deepLink));
       }
     }
 
@@ -123,36 +121,6 @@ class InAppNotificationController {
           playNewMessageSound: false,
           playMentionSound: true,
         );
-      default:
-        break;
-    }
-  }
-
-  Future<void> _navigatePushDeepLink(DeepLinkTarget target) async {
-    _ref.read(navigationSectionProvider.notifier).state = NavigationSection.chats;
-    switch (target.kind) {
-      case DeepLinkKind.chat:
-      case DeepLinkKind.chatMessage:
-      case DeepLinkKind.spaceChat:
-      case DeepLinkKind.spaceMessage:
-        final chatId = target.chatId;
-        if (chatId == null) return;
-        if (target.spaceId != null) {
-          _ref.read(shellNavigationProvider).selectSpace(target.spaceId!);
-        }
-        _ref.read(chatActionsProvider).selectChat(chatId);
-        final messageId = target.messageId;
-        if (messageId != null && messageId.isNotEmpty) {
-          _ref.read(pendingChatMessageScrollProvider(chatId).notifier).state =
-              messageId;
-          _ref.read(pendingChatMessageHighlightProvider(chatId).notifier).state =
-              messageId;
-        }
-      case DeepLinkKind.dm:
-        final userId = target.userId;
-        if (userId != null) {
-          unawaited(_ref.read(chatActionsProvider).openDmWithProfile(userId));
-        }
       default:
         break;
     }

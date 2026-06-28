@@ -1,24 +1,58 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:integration_test/integration_test.dart';
+import 'package:http/testing.dart';
+import 'package:voice_frontend/app.dart';
 import 'package:voice_frontend/routing/deep_link_parser.dart';
+import 'package:voice_frontend/shell/three_column_shell.dart';
+import 'package:voice_frontend/state/chat_providers.dart';
+import 'package:voice_frontend/state/deep_link_navigation.dart';
+import 'package:voice_frontend/state/shared_media_providers.dart';
 
+import '../test/support/auth_test_overrides.dart';
+
+/// Phase 18: Chrome/web integration — deep link navigates to conversation.
 void main() {
-  testWidgets('web deep link parser accepts voice.gg paths', (tester) async {
+  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('deep link navigation opens conversation region', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    late ProviderContainer container;
+
     await tester.pumpWidget(
-      const MaterialApp(home: Scaffold(body: Text('deeplink'))),
+      UncontrolledProviderScope(
+        container: container = ProviderContainer(
+          overrides: [
+            ...guestShellTestOverrides(
+              client: MockClient((_) async => throw UnimplementedError()),
+            ),
+          ],
+        ),
+        child: Consumer(
+          builder: (context, ref, _) {
+            WidgetsBinding.instance.addPostFrameCallback((_) async {
+              final target = parseDeepLinkUrl(
+                'https://voice.gg/ch/integration-chat/m/integration-msg',
+              );
+              await ref.read(deepLinkNavigatorProvider).apply(target);
+            });
+            return const VoiceApp(locale: Locale('en'));
+          },
+        ),
+      ),
     );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
-    const cases = [
-      ('https://voice.gg/invite/demo', DeepLinkKind.invite),
-      ('https://voice.gg/s/space-1', DeepLinkKind.space),
-      ('https://voice.gg/ch/chat-1/m/msg-1', DeepLinkKind.chatMessage),
-      ('https://voice.gg/u/alice', DeepLinkKind.profile),
-      ('https://voice.gg/dm/user-1', DeepLinkKind.dm),
-    ];
-
-    for (final entry in cases) {
-      final target = parseDeepLinkUrl(entry.$1);
-      expect(target.kind, entry.$2, reason: entry.$1);
-    }
+    expect(container.read(selectedChatIdProvider), 'integration-chat');
+    expect(
+      container.read(pendingChatMessageScrollProvider('integration-chat')),
+      'integration-msg',
+    );
+    expect(find.bySemanticsLabel('Conversation'), findsOneWidget);
+    expect(find.byKey(ThreeColumnShell.navOpenChat), findsOneWidget);
   });
 }

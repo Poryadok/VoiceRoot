@@ -331,6 +331,23 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       }
     });
 
+    ref.listen(chatMessageContextMenuRequestProvider(widget.chatId), (prev, next) {
+      if (next == null || next.isEmpty) return;
+      final messages = ref.read(chatRoomControllerProvider(widget.chatId)).messages;
+      VoiceMessage? message;
+      for (final item in messages) {
+        if (item.id == next) {
+          message = item;
+          break;
+        }
+      }
+      ref.read(chatMessageContextMenuRequestProvider(widget.chatId).notifier).state =
+          null;
+      if (message != null) {
+        unawaited(_showMessageActions(message, message.senderProfileId == activeId));
+      }
+    });
+
     ref.listen(chatRoomControllerProvider(widget.chatId), (prev, next) {
       final prevLen = prev?.messages.length ?? 0;
       if (next.messages.length > prevLen) {

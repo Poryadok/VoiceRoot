@@ -26,6 +26,7 @@ class VoiceShortcuts extends ConsumerWidget {
         SingleActivator(LogicalKeyboardKey.arrowUp): _PrevMessageIntent(),
         SingleActivator(LogicalKeyboardKey.keyR): _ReplyMessageIntent(),
         SingleActivator(LogicalKeyboardKey.keyE): _ReactMessageIntent(),
+        SingleActivator(LogicalKeyboardKey.enter): _OpenMessageMenuIntent(),
       },
       child: Actions(
         actions: {
@@ -85,6 +86,14 @@ class VoiceShortcuts extends ConsumerWidget {
               return null;
             },
           ),
+          _OpenMessageMenuIntent: CallbackAction<_OpenMessageMenuIntent>(
+            onInvoke: (_) {
+              ref
+                  .read(chatMessageKeyboardProvider.notifier)
+                  .openContextMenuOnSelected();
+              return null;
+            },
+          ),
         },
         child: Focus(autofocus: true, child: child),
       ),
@@ -126,6 +135,10 @@ class _ReplyMessageIntent extends Intent {
 
 class _ReactMessageIntent extends Intent {
   const _ReactMessageIntent();
+}
+
+class _OpenMessageMenuIntent extends Intent {
+  const _OpenMessageMenuIntent();
 }
 
 /// Signals [VoiceApp] to open settings (Ctrl+,).
@@ -213,8 +226,20 @@ class ChatMessageKeyboard extends Notifier<String?> {
     ref.read(chatMessageReactionRequestProvider(chatId).notifier).state =
         messageId;
   }
+
+  void openContextMenuOnSelected() {
+    final chatId = ref.read(selectedChatIdProvider);
+    final messageId = state;
+    if (chatId == null || messageId == null) return;
+    ref.read(chatMessageContextMenuRequestProvider(chatId).notifier).state =
+        messageId;
+  }
 }
 
 /// Triggers reaction picker for keyboard-selected message.
 final chatMessageReactionRequestProvider =
+    StateProvider.family<String?, String>((ref, chatId) => null);
+
+/// Triggers context menu for keyboard-selected message (Enter).
+final chatMessageContextMenuRequestProvider =
     StateProvider.family<String?, String>((ref, chatId) => null);

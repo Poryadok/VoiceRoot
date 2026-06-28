@@ -89,11 +89,11 @@
 
 PLAN §18 baseline `[x]`; остаток vs [deep-links.md](features/deep-links.md), [onboarding.md](features/onboarding.md), [accessibility.md](features/accessibility.md).
 
-- [ ] **Onboarding one-liner** — PLAN: register → space → first message; код: coach-mark flow ([onboarding.md](features/onboarding.md)).
-- [ ] **Push → navigation** — `push_notification_handler_test.dart` парсит `deep_link`; нет FCM/APNs device E2E до chat/message route.
-- [ ] **Deep link test depth** — нет `integration_test` web driver или on-device App Links в CI.
-- [ ] **A11y shortcuts** — `voice_shortcuts_test.dart` только focus-request providers; Semantics / keyboard traversal — вручную.
-- [ ] **Manual TalkBack / VoiceOver** — pre-release checklist ([accessibility.md](features/accessibility.md)).
+- [x] **Onboarding one-liner** — канон: 5 coach-mark шагов [onboarding.md](features/onboarding.md); PLAN one-liner сведён к onboarding.md; step 3 «Find a space» → global search (`onboarding_overlay_test.dart`).
+- [x] **Push → navigation** — `push_deep_link_navigation_test.dart`: tap payload `navigateToChat` → chat/message via `applyDeepLinkNavigation`; FCM/APNs on-device E2E — вне CI.
+- [x] **Deep link test depth** — `integration_test/phase18_deeplink_web_test.dart` + CI job `flutter-web-integration` (Chrome); prod App Links / AASA → Batch 6.
+- [x] **A11y shortcuts** — `voice_shortcuts_keyboard_test.dart`: Ctrl+K, Escape, Alt+↑/↓, Enter → context menu; PTT configurable key — v1 gap.
+- [x] **Manual TalkBack / VoiceOver** — pre-release checklist в [accessibility.md](features/accessibility.md) §Testing.
 
 **Промпт-якорь:** `Phase 18 Growth/A11y from docs/TODO.md Common Batch 5`.
 

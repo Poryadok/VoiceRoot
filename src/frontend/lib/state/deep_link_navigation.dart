@@ -19,82 +19,111 @@ final voiceDeepLinksClientProvider = Provider<VoiceDeepLinksClient>((ref) {
   return VoiceDeepLinksClient(gateway: ref.watch(gatewayHttpClientProvider));
 });
 
-void _scrollToMessage(WidgetRef ref, String chatId, String messageId) {
+void _scrollToMessage(Ref ref, String chatId, String messageId) {
   ref.read(pendingChatMessageScrollProvider(chatId).notifier).state =
       messageId;
   ref.read(pendingChatMessageHighlightProvider(chatId).notifier).state =
       messageId;
 }
 
-/// Applies resolved deep link targets to shell navigation.
-Future<void> applyDeepLinkNavigation(
-  WidgetRef ref,
-  DeepLinkTarget target,
-) async {
-  switch (target.kind) {
-    case DeepLinkKind.invite:
-      final code = target.inviteCode;
-      if (code == null) return;
-      await ref.read(spaceInviteActionsProvider).joinByInvite(code: code);
-    case DeepLinkKind.space:
-      final spaceId = target.spaceId;
-      if (spaceId != null) {
-        ref.read(shellNavigationProvider).selectSpace(spaceId);
-      }
-    case DeepLinkKind.spaceChat:
-    case DeepLinkKind.spaceMessage:
-      final spaceId = target.spaceId;
-      final chatId = target.chatId;
-      if (spaceId != null) {
-        ref.read(shellNavigationProvider).selectSpace(spaceId);
-      }
-      if (chatId != null) {
-        ref.read(chatActionsProvider).selectChat(chatId);
-      }
-      final messageId = target.messageId;
-      if (messageId != null && chatId != null) {
-        _scrollToMessage(ref, chatId, messageId);
-      }
+void _ensureChatsSectionForPush(Ref ref, DeepLinkKind kind) {
+  switch (kind) {
     case DeepLinkKind.chat:
     case DeepLinkKind.chatMessage:
-      final chatId = target.chatId;
-      if (chatId != null) {
-        ref.read(chatActionsProvider).selectChat(chatId);
-      }
-      final messageId = target.messageId;
-      if (messageId != null && chatId != null) {
-        _scrollToMessage(ref, chatId, messageId);
-      }
-    case DeepLinkKind.voiceRoom:
-      final spaceId = target.spaceId;
-      if (spaceId != null) {
-        ref.read(shellNavigationProvider).selectSpace(spaceId);
-      }
-    case DeepLinkKind.bot:
-      final slug = target.botSlug;
-      if (slug == null || slug.isEmpty) return;
-      final ctx = rootNavigatorKey.currentContext;
-      if (ctx == null || !ctx.mounted) return;
-      await Navigator.of(ctx).push<void>(
-        MaterialPageRoute<void>(
-          builder: (context) => BotInstallPage(slug: slug),
-        ),
-      );
-    case DeepLinkKind.profile:
-      await _openProfileDeepLink(ref, target);
+    case DeepLinkKind.spaceChat:
+    case DeepLinkKind.spaceMessage:
     case DeepLinkKind.dm:
-      await _openDmDeepLink(ref, target);
+      ref.read(navigationSectionProvider.notifier).state =
+          NavigationSection.chats;
+    default:
+      break;
   }
 }
 
-Future<void> _openDmDeepLink(WidgetRef ref, DeepLinkTarget target) async {
+/// Applies resolved deep link targets to shell navigation (Ref-safe for push/WS).
+class DeepLinkNavigator {
+  DeepLinkNavigator(this._ref);
+
+  final Ref _ref;
+
+  Future<void> apply(DeepLinkTarget target) async {
+    _ensureChatsSectionForPush(_ref, target.kind);
+    switch (target.kind) {
+      case DeepLinkKind.invite:
+        final code = target.inviteCode;
+        if (code == null) return;
+        await _ref.read(spaceInviteActionsProvider).joinByInvite(code: code);
+      case DeepLinkKind.space:
+        final spaceId = target.spaceId;
+        if (spaceId != null) {
+          _ref.read(shellNavigationProvider).selectSpace(spaceId);
+        }
+      case DeepLinkKind.spaceChat:
+      case DeepLinkKind.spaceMessage:
+        final spaceId = target.spaceId;
+        final chatId = target.chatId;
+        if (spaceId != null) {
+          _ref.read(shellNavigationProvider).selectSpace(spaceId);
+        }
+        if (chatId != null) {
+          _ref.read(chatActionsProvider).selectChat(chatId);
+        }
+        final messageId = target.messageId;
+        if (messageId != null && chatId != null) {
+          _scrollToMessage(_ref, chatId, messageId);
+        }
+      case DeepLinkKind.chat:
+      case DeepLinkKind.chatMessage:
+        final chatId = target.chatId;
+        if (chatId != null) {
+          _ref.read(chatActionsProvider).selectChat(chatId);
+        }
+        final messageId = target.messageId;
+        if (messageId != null && chatId != null) {
+          _scrollToMessage(_ref, chatId, messageId);
+        }
+      case DeepLinkKind.voiceRoom:
+        final spaceId = target.spaceId;
+        if (spaceId != null) {
+          _ref.read(shellNavigationProvider).selectSpace(spaceId);
+        }
+      case DeepLinkKind.bot:
+        final slug = target.botSlug;
+        if (slug == null || slug.isEmpty) return;
+        final ctx = rootNavigatorKey.currentContext;
+        if (ctx == null || !ctx.mounted) return;
+        await Navigator.of(ctx).push<void>(
+          MaterialPageRoute<void>(
+            builder: (context) => BotInstallPage(slug: slug),
+          ),
+        );
+      case DeepLinkKind.profile:
+        await _openProfileDeepLink(_ref, target);
+      case DeepLinkKind.dm:
+        await _openDmDeepLink(_ref, target);
+    }
+  }
+}
+
+final deepLinkNavigatorProvider = Provider<DeepLinkNavigator>(
+  (ref) => DeepLinkNavigator(ref),
+);
+
+/// Widget-tree entry point for deep link navigation.
+Future<void> applyDeepLinkNavigation(
+  WidgetRef ref,
+  DeepLinkTarget target,
+) =>
+    ref.read(deepLinkNavigatorProvider).apply(target);
+
+Future<void> _openDmDeepLink(Ref ref, DeepLinkTarget target) async {
   final userId = target.userId;
   if (userId == null || userId.isEmpty) return;
   ref.read(navigationSectionProvider.notifier).state = NavigationSection.chats;
   await ref.read(chatActionsProvider).openDmWithProfile(userId);
 }
 
-Future<void> _openProfileDeepLink(WidgetRef ref, DeepLinkTarget target) async {
+Future<void> _openProfileDeepLink(Ref ref, DeepLinkTarget target) async {
   final username = target.username?.trim();
   if (username == null || username.isEmpty) return;
   final auth = ref.read(authControllerProvider);
@@ -144,10 +173,10 @@ Future<void> resolveAndNavigateDeepLink(
     authorization: 'Bearer ${auth.session!.accessToken}',
     url: target.rawUrl,
   );
+  final navigator = ref.read(deepLinkNavigatorProvider);
   if (result case DeepLinksApiOk(:final data)) {
     if (data.kind == 'invite' && data.inviteCode != null) {
-      await applyDeepLinkNavigation(
-        ref,
+      await navigator.apply(
         DeepLinkTarget(
           kind: DeepLinkKind.invite,
           inviteCode: data.inviteCode,
@@ -157,8 +186,7 @@ Future<void> resolveAndNavigateDeepLink(
       return;
     }
     if (data.spaceId != null && data.kind == 'space') {
-      await applyDeepLinkNavigation(
-        ref,
+      await navigator.apply(
         DeepLinkTarget(
           kind: DeepLinkKind.space,
           spaceId: data.spaceId,
@@ -168,7 +196,7 @@ Future<void> resolveAndNavigateDeepLink(
       return;
     }
   }
-  await applyDeepLinkNavigation(ref, target);
+  await navigator.apply(target);
 }
 
 /// Builds a share URL for the current chat/message context.

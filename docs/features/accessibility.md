@@ -91,7 +91,21 @@
 ## Тестирование
 
 - Автоматические lint-проверки: `flutter analyze` с включённым `avoid_print` и accessibility-правилами
-- Ручное тестирование с TalkBack и VoiceOver перед каждым релизом
+- Widget-тесты клавиатурных шорткатов: `test/voice_shortcuts_keyboard_test.dart`
+- Chrome integration deep link: `integration_test/phase18_deeplink_web_test.dart` (CI job `flutter-web-integration`)
+- Ручное тестирование с TalkBack и VoiceOver перед каждым релизом — чеклист ниже
 - Axe DevTools (или аналог) для веб-версии как часть CI
+
+### Pre-release screen reader checklist (TalkBack / VoiceOver)
+
+Перед релизом мобильного клиента пройти на **одной** Android (TalkBack) и **одной** iOS (VoiceOver) сборке:
+
+1. **Login / register** — поля и кнопки озвучиваются; ошибки auth читаются вслух.
+2. **Chat list** — регион списка чатов (`Chat list`) доступен; непрочитанные отличимы от текста.
+3. **Open chat + send message** — composer фокусируется; отправка озвучивается; новое сообщение не перебивает чтение (`liveRegion: polite`).
+4. **Navigation rail** — переключение Chats / Friends озвучивается.
+5. **Settings** — открытие из меню; основные пункты доступны.
+6. **Onboarding coach-mark** — Skip и primary CTA доступны; overlay не ловит фокус навсегда.
+7. **Deep link (manual)** — push / ссылка открывает нужный чат (без prod universal links — см. Batch 6).
 
 

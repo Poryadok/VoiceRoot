@@ -83,6 +83,7 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
             ref.read(shellNavigationProvider).setNavigationSection(
               NavigationSection.chats,
             );
+            ref.read(globalSearchFocusRequestProvider.notifier).state++;
             ref.read(onboardingControllerProvider.notifier).completeCurrentStep();
           },
           onContinue: () =>

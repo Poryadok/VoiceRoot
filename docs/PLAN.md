@@ -1034,7 +1034,7 @@ JWT + `user_db.profiles` — [EXEC_PLAN.md](EXEC_PLAN.md). Не заменяет
 
 ### Клиент
 
-- [x] **Онбординг** — [onboarding.md](features/onboarding.md): register → create/join space → first message; contextual hints.
+- [x] **Онбординг** — [onboarding.md](features/onboarding.md): 5 contextual coach-mark шагов (save account → chats → spaces → MM → wrap-up); канон vs PLAN one-liner — см. [TODO.md](TODO.md) Batch 5.
 - [x] **A11y (baseline)** — focus order, Semantics labels, contrast tokens, reduced motion на основных потоках; полный чеклист [accessibility.md](features/accessibility.md) (TalkBack/VO, prod universal links) — [TODO.md](TODO.md) Batch 6.
 
 ### Критерии приёмки

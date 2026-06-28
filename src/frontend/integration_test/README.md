@@ -98,6 +98,23 @@ flutter test test/gateway_dm_ws_live_integration_test.dart `
 
 See `docs/TESTING.md` and the `flutter-web-client-testing` skill.
 
-## Future: `integration_test` + web driver
+## Chrome integration_test (Phase 18 deep links)
 
-UI-driven `integration_test/` targets (Chrome / device) can be added when CI wires ChromeDriver; API-level checks above do not require it.
+UI-driven navigation in Chrome (no live API required — ProviderScope overrides):
+
+| Test | Scope |
+|------|--------|
+| [`integration_test/phase18_deeplink_web_test.dart`](phase18_deeplink_web_test.dart) | `applyDeepLinkNavigation` → selected chat + conversation semantics |
+
+**CI:** job `flutter-web-integration` in [`.github/workflows/ci.yml`](../../../.github/workflows/ci.yml).
+
+**Local (PowerShell):**
+
+```powershell
+cd src/frontend
+flutter test integration_test/phase18_deeplink_web_test.dart -d chrome `
+  --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080 `
+  --web-browser-flag=--disable-gpu
+```
+
+Prod App Links / on-device AASA — [TODO.md](../../../docs/TODO.md) Batch 6.
