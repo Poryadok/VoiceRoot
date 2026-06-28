@@ -121,6 +121,7 @@ jobs:
         working-directory: src/frontend
         run: |
           flutter pub get
+          bash ../../scripts/ci/patch-livekit-webrtc-podspec.sh ../..
           flutter build ios --release --no-codesign --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080
 
   flutter-windows:

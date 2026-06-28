@@ -220,7 +220,7 @@ func (s *StoryStore) MarkViewed(ctx context.Context, storyID, viewerProfileID uu
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	var exists bool
 	err = tx.QueryRow(ctx, `

@@ -41,7 +41,7 @@ dependencies:
   shared_preferences: ^2.5.3
   web_socket_channel: ^3.0.2
   file_selector: ^1.1.0
-  livekit_client: ^2.7.0
+  livekit_client: ^2.8.1
   crypto: ^3.0.7
   pointycastle: ^4.0.0
   protobuf: ^6.0.0
@@ -85,6 +85,8 @@ dev_dependencies:
 
 # livekit_client pins flutter_webrtc 1.4.0; 1.5.2+ fixes Windows CMake libwebrtc
 # extraction through Flutter .plugin_symlinks (GHA windows-latest, CMake >= 3.31).
+# iOS/macOS: run scripts/ci/patch-livekit-webrtc-podspec.sh after pub get until livekit
+# stable podspec aligns WebRTC-SDK 144.7559.09 with flutter_webrtc 1.5.2.
 dependency_overrides:
   flutter_webrtc: ^1.5.2
 

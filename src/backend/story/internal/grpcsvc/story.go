@@ -808,10 +808,6 @@ func groupStoriesByAuthorCentric(stories []*storyv1.Story) []*storyv1.StoryFeedG
 	return groups
 }
 
-func groupStoriesByAuthor(stories []*storyv1.Story) []*storyv1.StoryFeedGroup {
-	return groupStoriesByAuthorCentric(stories)
-}
-
 func mentionIDsToJSON(ids []string) string {
 	valid := make([]string, 0, len(ids))
 	for _, raw := range ids {
