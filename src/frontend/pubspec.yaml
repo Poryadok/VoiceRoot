@@ -81,6 +81,11 @@ dev_dependencies:
   drift_dev: ^2.34.0
   build_runner: ^2.5.4
 
+# livekit_client pins flutter_webrtc 1.4.0; 1.5.2+ fixes Windows CMake libwebrtc
+# extraction through Flutter .plugin_symlinks (GHA windows-latest, CMake >= 3.31).
+dependency_overrides:
+  flutter_webrtc: ^1.5.2
+
 # SQLite3MultipleCiphers for encrypted offline message cache (docs/features/encryption.md).
 hooks:
   user_defines:
