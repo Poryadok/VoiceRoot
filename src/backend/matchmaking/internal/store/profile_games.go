@@ -107,5 +107,5 @@ func trimOptional(s *string) *string {
 
 // IsForeignKeyViolation reports FK errors from profile_game_entries.game_id.
 func IsForeignKeyViolation(err error) bool {
-	return errors.Is(err, pgx.ErrNoRows) == false && strings.Contains(err.Error(), "foreign key")
+	return !errors.Is(err, pgx.ErrNoRows) && strings.Contains(err.Error(), "foreign key")
 }

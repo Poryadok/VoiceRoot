@@ -60,7 +60,8 @@ dependencies:
   flutter_secure_storage: ^9.2.4
   path_provider: ^2.1.5
   path: ^1.9.1
-  connectivity_plus: ^7.2.0
+  # 7.1+ uses NWPath.isUltraConstrained without #available; breaks iOS compile on GHA Xcode SDK.
+  connectivity_plus: '>=7.0.0 <7.1.0'
   qr_flutter: ^4.1.0
   libsignal_protocol_dart: ^0.8.0
   go_router: ^15.1.2

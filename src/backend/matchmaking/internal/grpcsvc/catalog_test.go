@@ -2,8 +2,6 @@ package grpcsvc
 
 import (
 	"context"
-	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/google/uuid"
@@ -19,13 +17,6 @@ import (
 
 	matchmakingv1 "voice.app/voice/matchmaking/v1"
 )
-
-func repoRoot(t *testing.T) string {
-	t.Helper()
-	_, file, _, ok := runtime.Caller(0)
-	require.True(t, ok)
-	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", "..", ".."))
-}
 
 func startDB(t *testing.T, ctx context.Context) *pgxpool.Pool {
 	t.Helper()
