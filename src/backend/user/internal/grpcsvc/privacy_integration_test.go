@@ -126,11 +126,6 @@ func seedPrivacyPreset(ctx context.Context, t *testing.T, ps *store.PrivacyStore
 	require.NoError(t, err)
 }
 
-func privacySettingsProto(profileID uuid.UUID, preset string) *userv1.PrivacySettings {
-	row := store.PrivacyRowFromSettings(profileID, privacy.SettingsForPreset(preset))
-	return privacyRowToProto(&row)
-}
-
 type stubSpaceCoMembership struct {
 	co map[string]bool
 }

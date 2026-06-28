@@ -122,10 +122,6 @@ func (s *UserGRPC) presenceForViewer(ctx context.Context, profileID uuid.UUID, s
 	return out
 }
 
-func (s *UserGRPC) guestMayViewOnlineStatus(ctx context.Context, targetProfile uuid.UUID) bool {
-	return s.mayViewOnlineStatus(ctx, targetProfile)
-}
-
 func (s *UserGRPC) GetBulkPresence(ctx context.Context, req *userv1.GetBulkPresenceRequest) (*userv1.GetBulkPresenceResponse, error) {
 	if s.Presence == nil {
 		return nil, status.Error(codes.Unavailable, "presence store not configured")
