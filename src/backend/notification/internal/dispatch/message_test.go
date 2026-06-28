@@ -21,13 +21,7 @@ type recordingFCM struct {
 }
 
 func (r *recordingFCM) Send(_ context.Context, _ uuid.UUID, _ store.DeviceToken, payload fcm.PushPayload) error {
-	r.sent = append(r.sent, push.Payload{
-		Title:       payload.Title,
-		Body:        payload.Body,
-		CollapseTag: payload.CollapseTag,
-		Counter:     payload.Counter,
-		Data:        payload.Data,
-	})
+	r.sent = append(r.sent, push.Payload(payload))
 	return nil
 }
 

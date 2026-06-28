@@ -24,13 +24,7 @@ func (d *PushDispatcher) Send(ctx context.Context, profileID uuid.UUID, token st
 	if d == nil {
 		return fmt.Errorf("push dispatcher unavailable")
 	}
-	fcmPayload := fcm.PushPayload{
-		Title:       payload.Title,
-		Body:        payload.Body,
-		CollapseTag: payload.CollapseTag,
-		Counter:     payload.Counter,
-		Data:        payload.Data,
-	}
+	fcmPayload := fcm.PushPayload(payload)
 	switch token.PushService {
 	case "apns":
 		if d.APNs == nil {

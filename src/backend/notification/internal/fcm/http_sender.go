@@ -30,7 +30,7 @@ func NewHTTPSenderForTest(client messagingClient) *HTTPSender {
 
 // NewHTTPSender builds an FCM sender from service account credentials.
 func NewHTTPSender(cfg Config) (*HTTPSender, error) {
-	app, err := firebase.NewApp(context.Background(), nil, option.WithCredentialsJSON(cfg.CredentialsJSON))
+	app, err := firebase.NewApp(context.Background(), nil, option.WithAuthCredentialsJSON(option.ServiceAccount, cfg.CredentialsJSON))
 	if err != nil {
 		return nil, fmt.Errorf("fcm firebase app: %w", err)
 	}
@@ -64,7 +64,7 @@ func isInvalidFCMToken(err error) bool {
 	if err == nil {
 		return false
 	}
-	if messaging.IsRegistrationTokenNotRegistered(err) {
+	if messaging.IsUnregistered(err) {
 		return true
 	}
 	if messaging.IsInvalidArgument(err) {
