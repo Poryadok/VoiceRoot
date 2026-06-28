@@ -546,7 +546,7 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 		require.NoError(t, err)
 
 		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String(), authctx.HeaderProfileID, pid.String())
-		_, err := cli.UpdatePresence(mdCtx, &userv1.UpdatePresenceRequest{
+		_, err = cli.UpdatePresence(mdCtx, &userv1.UpdatePresenceRequest{
 			Status:       "online",
 			CustomStatus: proto.String("coding"),
 		})

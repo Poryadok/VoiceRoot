@@ -22,7 +22,7 @@
 | Область | Что входит |
 |---------|------------|
 | **Окружения** | **staging** (обязательно до soft launch), **local** compose (желательно, паритет с staging) |
-| **Сервисы** | Весь стек из [`deploy/staging/`](../deploy/staging/README.md): Gateway, Auth, User, Social, Chat, Messaging, Realtime, Space, Role, Voice, File, Search, Matchmaking, Notification + Postgres, Redis, NATS, LiveKit |
+| **Сервисы** | Весь стек из [`deploy/staging/`](../../deploy/staging/README.md): Gateway, Auth, User, Social, Chat, Messaging, Realtime, Space, Role, Voice, File, Search, Matchmaking, Notification + Postgres, Redis, NATS, LiveKit |
 | **Логи** | Сбор stdout всех подов в Loki; единый контракт полей; поиск по `request_id` |
 | **Метрики** | RED на Gateway и Tier 0; gRPC server metrics на всех Go/Java gRPC-сервисах; exporters для Postgres, Redis, NATS; базовые k8s/node метрики |
 | **Визуализация** | Grafana: Overview, Tier-0 paths, Logs explorer, Infra |

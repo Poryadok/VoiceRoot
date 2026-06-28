@@ -75,6 +75,10 @@ import UIKit
     }
   }
 
+  func providerDidReset(_ provider: CXProvider) {
+    pendingCalls.removeAll()
+  }
+
   func provider(_ provider: CXProvider, perform action: CXAnswerCallAction) {
     if let data = pendingCalls[action.callUUID] {
       voipChannel?.invokeMethod("onCallAccepted", arguments: data)

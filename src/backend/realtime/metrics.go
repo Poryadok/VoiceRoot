@@ -44,6 +44,9 @@ func initRealtimeMetrics(reg *prometheus.Registry) *realtimeMetrics {
 		m.helloDuration,
 		m.natsConsumeLag,
 	)
+	// CounterVec/GaugeVec children are omitted from /metrics until label sets exist.
+	m.connectTotal.WithLabelValues("success")
+	m.connectTotal.WithLabelValues("fail")
 	rtMetrics = m
 	return m
 }

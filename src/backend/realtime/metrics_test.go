@@ -44,7 +44,6 @@ func TestMetricsEndpointExposesRealtimeWSMetrics(t *testing.T) {
 		"realtime_ws_hello_duration_seconds_bucket",
 		"realtime_ws_hello_duration_seconds_sum",
 		"realtime_ws_hello_duration_seconds_count",
-		"# TYPE realtime_nats_consume_lag gauge",
 	} {
 		require.Contains(t, text, want)
 	}
