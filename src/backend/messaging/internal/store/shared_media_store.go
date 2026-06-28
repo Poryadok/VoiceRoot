@@ -203,7 +203,6 @@ WHERE chat_id = $1
 			return nil, "", false, err
 		}
 
-		var batchIDs []uuid.UUID
 		type msgRow struct {
 			id        uuid.UUID
 			sender    uuid.UUID
@@ -218,7 +217,6 @@ WHERE chat_id = $1
 				return nil, "", false, err
 			}
 			batch = append(batch, m)
-			batchIDs = append(batchIDs, m.id)
 		}
 		rows.Close()
 		if err := rows.Err(); err != nil {

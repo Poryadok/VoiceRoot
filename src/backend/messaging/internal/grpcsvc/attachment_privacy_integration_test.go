@@ -22,6 +22,8 @@ type attachmentPrivacyChecker interface {
 	AllowVoiceMessagesAudience(ctx context.Context, profileID uuid.UUID) (privacy.Audience, error)
 }
 
+var _ attachmentPrivacyChecker = attachmentPrivacyStub{}
+
 type attachmentPrivacyStub struct {
 	friendsOnlyFiles map[uuid.UUID]bool
 	friendsOnlyVoice map[uuid.UUID]bool

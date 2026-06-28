@@ -188,7 +188,7 @@ Ensure `voice-app-secrets` includes `BOT_DATABASE_URL` (`postgres://…/bot_db`)
 
 ### `bot_db` migrations (staging / prod)
 
-1. Create database `bot_db` on cluster Postgres (init script [`docker/postgres/01-init-databases.sh`](../docker/postgres/01-init-databases.sh) includes it).
+1. Create database `bot_db` on cluster Postgres (init script [`docker/postgres/initdb.d/01-init-databases.sh`](../docker/postgres/initdb.d/01-init-databases.sh) includes it).
 2. Apply SQL from [`src/backend/migrations/bot_db/`](../src/backend/migrations/bot_db/) **before** scaling `voice-bot` (or on first deploy):
 
 **Local compose:** `make compose-migrate-bot`
