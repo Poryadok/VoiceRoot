@@ -57,13 +57,13 @@
 
 - Фреймворк: стандартный пакет **`testing`**, табличные тесты где уместно.
 - Утверждения: **`github.com/stretchr/testify`** (`require` / `assert`) — единый стиль по репозиторию для читаемости.
-- Интеграционные тесты с PostgreSQL/Redis: **testcontainers-go** (обёртки в [`src/backend/pkg/integrationtest/`](../src/backend/pkg/integrationtest/)). Запускать **`go test` на хосте** при работающем Docker daemon (сокет доступен процессу теста). Не запускать Go-тесты внутри `docker run` без проброса сокета — testcontainers не поднимутся. На Windows Ryuk отключён в `integrationtest.ConfigureDockerTesting()`; после прогона — **`make testcontainers-prune`** (входит в `make build-all` / `backend-test-ci`).
+- Интеграционные тесты с PostgreSQL/Redis: **testcontainers-go** (обёртки в [`src/backend/pkg/integrationtest/`](../src/backend/pkg/integrationtest/postgres.go)). Запускать **`go test` на хосте** при работающем Docker daemon (сокет доступен процессу теста). Не запускать Go-тесты внутри `docker run` без проброса сокета — testcontainers не поднимутся. На Windows Ryuk отключён в `integrationtest.ConfigureDockerTesting()`; после прогона — **`make testcontainers-prune`** (входит в `make build-all` / `backend-test-ci`).
 - HTTP: `httptest` для хендлеров Gateway без поднятия сети.
 - gRPC: in-process server или клиент в тесте — как в уже существующем сервисе с тестами.
 
 ### API Gateway
 
-- Локально: из [`src/backend/gateway/`](../src/backend/gateway/) запускать `go test ./...`; для race-проверки на хосте с CGO — `CGO_ENABLED=1 go test -race ./...`.
+- Локально: из [`src/backend/gateway/`](../src/backend/gateway/main.go) запускать `go test ./...`; для race-проверки на хосте с CGO — `CGO_ENABLED=1 go test -race ./...`.
 - Обязательные contract tests: REST namespaces, `/ws`, JWT/JWKS, Redis blacklist, rate limit groups, trusted proxy `X-Forwarded-For`, CORS preflight, request id/claims propagation, `/api/v1/version`, `/metrics`.
 - Production env для auth: `GATEWAY_AUTH_MODE=static` допускается только для dev/tests; рабочий режим задаётся через `GATEWAY_JWKS_URL`, `GATEWAY_JWT_ISSUER`, `GATEWAY_JWT_AUDIENCE`.
 - Redis-проверки: `GATEWAY_REDIS_ADDR` включает sliding-window rate limiter и blacklist чтение; blacklist key prefix по умолчанию `jwt:blacklist:`, override — `GATEWAY_JWT_BLACKLIST_PREFIX`.
@@ -98,8 +98,8 @@ make compose-logs-collect
 
 Результат (в `.gitignore`):
 
-- [`.local/compose.log`](../.local/compose.log) — сырой вывод `docker compose logs` (с префиксом контейнера).
-- [`.local/dev.ndjson`](../.local/dev.ndjson) — только JSON-строки приложений (для `jq`, парсеров и агента).
+- `.local/compose.log` — сырой вывод `docker compose logs` (с префиксом контейнера).
+- `.local/dev.ndjson` — только JSON-строки приложений (для `jq`, парсеров и агента).
 
 Примеры поиска:
 
@@ -188,7 +188,7 @@ Promtail ставит label **`namespace`** из pod metadata; **`request_id`** 
 | Изменения в | Локально                                                          |
 |-------------|-------------------------------------------------------------------|
 | Репозиторий целиком (паритет CI, хост + Docker) | из корня: **`make check-toolchain`** (Go **1.26**, Docker daemon, **Maven/Java** на PATH), затем **`make build-all`** — в Docker только compose config и **buf** (lint + format check); на **хосте**: `go test ./...` по всем Go-модулям и `pkg`, **golangci-lint** по каждому модулю ([`.golangci.yml`](../.golangci.yml); при отсутствии бинарника — `go install` как в CI), **`go test -race`** только для Gateway, **`mvn -B test`** для Auth, сборка образов `voice-<service>:local`, **`make testcontainers-prune`** после backend-тестов ([Makefile](../Makefile)). **Flutter** не входит — **`make flutter-ci`**. Полный sign-off как job **`local-ci-parity`**: `make build-all` + `make flutter-ci` |
-| Flutter (как в CI, на хосте с SDK) | из корня: **`make flutter-ci`** — `flutter pub get`, `flutter analyze`, `flutter test` в `src/frontend/` (в т.ч. якорный `test/e2e_readiness_test.dart`). Каталог [`integration_test/`](../src/frontend/integration_test/) — под будущие device/e2e сценарии, см. README там и скилл `flutter-web-client-testing` |
+| Flutter (как в CI, на хосте с SDK) | из корня: **`make flutter-ci`** — `flutter pub get`, `flutter analyze`, `flutter test` в `src/frontend/` (в т.ч. якорный `test/e2e_readiness_test.dart`). Каталог [`integration_test/`](../src/frontend/integration_test/README.md) — под будущие device/e2e сценарии, см. README там и скилл `flutter-web-client-testing` |
 | Go-сервис   | `cd src/backend/<service> && CGO_ENABLED=0 go test ./...`; общий прогон — **`make golangci-ci`** из корня или `golangci-lint run ./...` в каталоге модуля; для Gateway дополнительно `CGO_ENABLED=1 go test -race ./...` (цель **`gateway-test-race-ci`**, входит в `build-all`) |
 | Auth (Java) | `cd src/backend/auth && mvn -B test` (как **`make auth-test-ci`** / CI); образ и smoke — Docker, см. CI ниже |
 
@@ -207,7 +207,7 @@ Promtail ставит label **`namespace`** из pod metadata; **`request_id`** 
 3. **Backend Go matrix**: `go test ./...` и Docker build для каждого Go-сервиса в `src/backend/<service>/`; для **gateway** дополнительно `CGO_ENABLED=1 go test -race ./...`; **push в GHCR** только при **push** в `master` (теги `:latest` и `:<git_sha>`). Для PR — только сборка без push.
 4. **golangci** (отдельный job): `go install golangci-lint` (v2, см. workflow) и прогон по всем модулям `src/backend/pkg` и `src/backend/<service>/` с [`.golangci.yml`](../.golangci.yml) в корне.
 5. **Auth (Java)**: Maven test; Docker build с загрузкой образа в локальный engine (`voice-auth:ci`); **smoke запущенного контейнера** против Postgres+Redis из [`docker-compose.yml`](../docker-compose.yml) — [`GET /health`](../src/backend/auth/src/main/java/voice/backend/auth/HealthController.java), JWKS по REST, gRPC `GetJWKS` (скрипт [`scripts/ci/auth-container-smoke.sh`](../scripts/ci/auth-container-smoke.sh)); push образа в GHCR только при push в `master` после успешного smoke.
-6. **Flutter** ([`src/frontend/`](../src/frontend/)): `flutter pub get`, `flutter analyze`, `flutter test` — job `flutter` в [.github/workflows/ci.yml](../.github/workflows/ci.yml). Локально не входит в **`make build-all`**; использовать **`make flutter-ci`** или команды из таблицы выше. Расширенные сценарии с реальным API и `integration_test` + драйвер — по мере появления (см. [`src/frontend/integration_test/README.md`](../src/frontend/integration_test/README.md), скилл `flutter-web-client-testing`).
+6. **Flutter** ([`src/frontend/`](../src/frontend/pubspec.yaml)): `flutter pub get`, `flutter analyze`, `flutter test` — job `flutter` в [.github/workflows/ci.yml](../.github/workflows/ci.yml). Локально не входит в **`make build-all`**; использовать **`make flutter-ci`** или команды из таблицы выше. Расширенные сценарии с реальным API и `integration_test` + драйвер — по мере появления (см. [`src/frontend/integration_test/README.md`](../src/frontend/integration_test/README.md), скилл `flutter-web-client-testing`).
 7. **Local CI parity** (job `local-ci-parity`): один runner с Go 1.26, Java 25, Flutter и golangci-lint — **`make build-all`** затем **`make flutter-ci`**. Матрица `backend-go` на PR сохраняется для быстрой обратной связи по сервисам.
 8. Проверка относительных ссылок в `docs/` при изменениях в документации — `.github/workflows/docs-link-check.yml`, конфиг `.markdown-link-check.json` в корне.
 

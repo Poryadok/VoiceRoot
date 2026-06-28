@@ -45,9 +45,7 @@ func TestTranscodeModerationAdmin_staffRequired(t *testing.T) {
 	}
 }
 
-type recordingModerationAdmin struct {
-	listQueueFilter string
-}
+type recordingModerationAdmin struct{}
 
 func newModerationAdminContractGateway(t *testing.T, rec *recordingModerationAdmin) http.Handler {
 	t.Helper()

@@ -96,11 +96,6 @@ func (g *gateway) loadClientVersion(ctx context.Context, platform string) (clien
 	return clientVersionRecord{}, errUnknownPlatform
 }
 
-func (g *gateway) isForceUpdateBlocked(r *http.Request) bool {
-	blocked, _ := g.forceUpdateDecision(r)
-	return blocked
-}
-
 func (g *gateway) forceUpdateDecision(r *http.Request) (bool, string) {
 	platform := r.Header.Get("X-Voice-Client-Platform")
 	version := r.Header.Get("X-Voice-Client-Version")

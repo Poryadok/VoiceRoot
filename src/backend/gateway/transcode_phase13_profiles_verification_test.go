@@ -121,16 +121,6 @@ func newPhase13SubscriptionGateway(t *testing.T, sub subscriptionv1.Subscription
 	})
 }
 
-func newPhase13AuthRESTGateway(t *testing.T, auth http.Handler) http.Handler {
-	t.Helper()
-	return newGatewayForContract(t, gatewayTestOptions{
-		tokenClaims: map[string]tokenClaims{
-			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
-		},
-		restUpstreams: map[string]http.Handler{"auth": auth},
-	})
-}
-
 // TestTranscodePhase13_CreateProfile documents POST /api/v1/users/profiles → User.CreateProfile.
 func TestTranscodePhase13_CreateProfile(t *testing.T) {
 	t.Parallel()

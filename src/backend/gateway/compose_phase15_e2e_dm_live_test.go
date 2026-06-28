@@ -183,28 +183,6 @@ func getComposeMessageContent(t *testing.T, client *http.Client, base, accessTok
 	return ""
 }
 
-func assertComposeSearchExcludesToken(t *testing.T, client *http.Client, accessToken, searchURL, token string) {
-	t.Helper()
-	req, err := http.NewRequest(http.MethodGet, searchURL, nil)
-	require.NoError(t, err)
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	resp, err := client.Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	switch resp.StatusCode {
-	case http.StatusOK:
-		require.NotContains(t, string(body), token, "search must not surface E2E plaintext")
-	case http.StatusServiceUnavailable:
-		// Tier-2 degradation: search unavailable still satisfies E2E exclusion.
-	case http.StatusInternalServerError:
-		// Compose may return 500 when search upstream lacks viewer metadata; still no indexed E2E body.
-		require.NotContains(t, string(body), token)
-	default:
-		t.Fatalf("unexpected search status=%d body=%s", resp.StatusCode, string(body))
-	}
-}
-
 func requireComposeSearchExcludesToken(t *testing.T, client *http.Client, accessToken, searchURL, token string) {
 	t.Helper()
 	var lastBody string

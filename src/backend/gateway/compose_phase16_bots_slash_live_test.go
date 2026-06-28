@@ -661,33 +661,6 @@ func registerComposePrivilegedBot(t *testing.T, client *http.Client, base, token
 	return parsed.Bot.ID
 }
 
-func createComposeSpaceChatLinkedID(t *testing.T, client *http.Client, base, accessToken, spaceID, name string) string {
-	t.Helper()
-	payload, err := json.Marshal(map[string]string{
-		"type": "CHAT_TYPE_GROUP",
-		"name": name,
-	})
-	require.NoError(t, err)
-	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/spaces/"+spaceID+"/chats", bytes.NewReader(payload))
-	require.NoError(t, err)
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := client.Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	require.Equal(t, http.StatusOK, resp.StatusCode, "POST space chat body=%s", string(body))
-	var parsed struct {
-		SpaceTreeNode struct {
-			LinkedChat struct {
-				ID string `json:"id"`
-			} `json:"linked_chat"`
-		} `json:"space_tree_node"`
-	}
-	require.NoError(t, json.Unmarshal(body, &parsed))
-	return parsed.SpaceTreeNode.LinkedChat.ID
-}
-
 func registerComposeBot(t *testing.T, client *http.Client, base, token, name string) (botID, botToken string) {
 	t.Helper()
 	payload, _ := json.Marshal(map[string]string{
