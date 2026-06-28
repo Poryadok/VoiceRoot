@@ -66,7 +66,7 @@ func main() {
 			if err != nil {
 				log.Fatalf("user grpc: %v", err)
 			}
-			defer conn.Close()
+			defer func() { _ = conn.Close() }()
 			svc.UserProfiles = &grpcsvc.UserGRPCProfileDowngrade{Client: userv1.NewUserServiceClient(conn)}
 			logger.Info("user profile downgrade client enabled", slog.String("addr", userAddr))
 		}

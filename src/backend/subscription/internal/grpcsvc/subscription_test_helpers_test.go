@@ -8,8 +8,6 @@ import (
 	"encoding/json"
 	"net"
 	"os"
-	"path/filepath"
-	"runtime"
 	"strconv"
 	"testing"
 	"time"
@@ -75,13 +73,6 @@ CREATE TABLE IF NOT EXISTS billing_events (
 	UNIQUE (provider, provider_event_id)
 );
 `
-
-func repoRoot(t *testing.T) string {
-	t.Helper()
-	_, file, _, ok := runtime.Caller(0)
-	require.True(t, ok)
-	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", "..", ".."))
-}
 
 func startSubscriptionPostgres(t *testing.T, ctx context.Context) *pgxpool.Pool {
 	t.Helper()
