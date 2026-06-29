@@ -20,6 +20,13 @@ class _OnboardingAtSpacesStep extends OnboardingController {
 
   @override
   Future<void> load() async {}
+
+  @override
+  Future<void> completeStep(String stepId) async {
+    state = OnboardingUiState(
+      completedSteps: [...state.completedSteps, stepId],
+    );
+  }
 }
 
 class _RecordingOnboardingController extends OnboardingController {
@@ -93,8 +100,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.text('Spaces'), findsOneWidget);
-    await tester.tap(find.text('Find a space'));
+    await tester.tap(find.widgetWithText(TextButton, 'Find a space'));
     await tester.pump();
+    await pumpEventQueue();
 
     final overlayElement = tester.element(find.byType(OnboardingOverlay));
     final container = ProviderScope.containerOf(overlayElement);

@@ -31,21 +31,23 @@ void main() {
             ),
           ],
         ),
-        child: Consumer(
-          builder: (context, ref, _) {
-            WidgetsBinding.instance.addPostFrameCallback((_) async {
-              final target = parseDeepLinkUrl(
-                'https://voice.gg/ch/integration-chat/m/integration-msg',
-              );
-              await ref.read(deepLinkNavigatorProvider).apply(target);
-            });
-            return const VoiceApp(locale: Locale('en'));
-          },
-        ),
+        child: const VoiceApp(locale: Locale('en')),
       ),
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
+
+    container.read(chatListControllerProvider);
+    await pumpEventQueue();
+
+    await container.read(deepLinkNavigatorProvider).apply(
+      parseDeepLinkUrl(
+        'https://voice.gg/ch/integration-chat/m/integration-msg',
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await pumpEventQueue();
 
     expect(container.read(selectedChatIdProvider), 'integration-chat');
     expect(

@@ -64,7 +64,9 @@ jobs:
           channel: stable
           cache: true
       - name: Install protoc_plugin
-        run: dart pub global activate protoc_plugin
+        run: |
+          dart pub global activate protoc_plugin
+          echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
       - name: Check Dart protobuf codegen
         run: make buf-dart-check
       - name: Flutter analyze and test
@@ -322,12 +324,16 @@ jobs:
           flutter-version: "3.41.7"
           channel: stable
           cache: true
-      - name: Install golangci-lint
-        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1
+      - name: Install buf CLI and golangci-lint
+        run: |
+          go install github.com/bufbuild/buf/cmd/buf@v1.50.0
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1
       - name: Add GOBIN to PATH
         run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Install protoc_plugin
-        run: dart pub global activate protoc_plugin
+        run: |
+          dart pub global activate protoc_plugin
+          echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
       - name: Go mod tidy (all Go modules)
         run: |
           set -e

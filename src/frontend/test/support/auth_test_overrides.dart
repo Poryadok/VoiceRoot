@@ -18,6 +18,7 @@ import 'package:voice_frontend/state/space_providers.dart';
 import 'package:voice_frontend/theme/profile_accent_storage.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 
+import 'fake_voice_api_clients.dart';
 import 'test_voice_token_catalog.dart';
 
 final testDiscoverHintStorage = InMemoryDiscoverHintStorage();
@@ -37,6 +38,8 @@ List<Override> voiceAppTestOverrides({required http.Client client}) => [
     const GatewayConfig(baseUrl: 'http://localhost:9999'),
   ),
   httpClientProvider.overrideWithValue(client),
+  voiceChatsClientProvider.overrideWithValue(FakeVoiceChatsClient()),
+  voiceMessagesClientProvider.overrideWithValue(FakeVoiceMessagesClient()),
   realtimeAutoConnectProvider.overrideWithValue(false),
   realtimeHubProvider.overrideWithValue(_testRealtimeHub),
   messageCacheStoreProvider.overrideWithValue(InMemoryMessageCacheStore()),
