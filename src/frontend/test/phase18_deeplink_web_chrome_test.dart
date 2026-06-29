@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:integration_test/integration_test.dart';
 import 'package:http/testing.dart';
 import 'package:voice_frontend/app.dart';
 import 'package:voice_frontend/routing/deep_link_parser.dart';
@@ -10,15 +9,13 @@ import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/deep_link_navigation.dart';
 import 'package:voice_frontend/state/shared_media_providers.dart';
 
-import '../test/support/auth_test_overrides.dart';
+import 'support/auth_test_overrides.dart';
 
-/// Phase 18: Chrome/web integration — deep link navigates to conversation.
+/// Phase 18: Chrome/web widget test — deep link navigates to conversation.
 ///
-/// Web CI runs [`test/phase18_deeplink_web_chrome_test.dart`](../test/phase18_deeplink_web_chrome_test.dart)
-/// with `-d chrome` (`flutter test` does not support `integration_test` on web).
+/// CI job `flutter-web-integration` runs this with `-d chrome` (integration_test
+/// package cannot target web via `flutter test`; see integration_test/README.md).
 void main() {
-  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
-
   testWidgets('deep link navigation opens conversation region', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1280, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));

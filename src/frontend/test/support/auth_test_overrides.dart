@@ -22,6 +22,7 @@ import 'test_voice_token_catalog.dart';
 
 final testDiscoverHintStorage = InMemoryDiscoverHintStorage();
 final testProfileAccentStorage = InMemoryProfileAccentStorage();
+final _testRealtimeHub = _NoopRealtimeHub();
 
 List<Override> voiceAppTestOverrides({required http.Client client}) => [
   ...voiceThemeTestOverrides(),
@@ -37,6 +38,7 @@ List<Override> voiceAppTestOverrides({required http.Client client}) => [
   ),
   httpClientProvider.overrideWithValue(client),
   realtimeAutoConnectProvider.overrideWithValue(false),
+  realtimeHubProvider.overrideWithValue(_testRealtimeHub),
   messageCacheStoreProvider.overrideWithValue(InMemoryMessageCacheStore()),
   isDeviceOfflineProvider.overrideWith((ref) => false),
   mySpacesProvider.overrideWith((_) async => const SpaceListData(spaces: [])),
@@ -71,4 +73,19 @@ AuthController authenticatedAuthController(Ref ref) {
     ),
   );
   return controller;
+}
+
+class _NoopRealtimeHub extends RealtimeHub {
+  _NoopRealtimeHub() : super(_UnwiredRef());
+
+  @override
+  Future<void> ensureConnected() async {}
+
+  @override
+  void ensureSubscribed(String chatId) {}
+}
+
+class _UnwiredRef implements Ref {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
 }

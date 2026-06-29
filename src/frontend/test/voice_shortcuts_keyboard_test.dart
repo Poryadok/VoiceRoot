@@ -1,12 +1,9 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
-import 'package:voice_frontend/backend/realtime_client.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/shell_providers.dart';
 import 'package:voice_frontend/ui/a11y/voice_shortcuts.dart';
@@ -122,8 +119,6 @@ Future<ProviderContainer> _pumpShortcuts(
           ...voiceAppTestOverrides(
             client: MockClient((_) async => throw UnimplementedError()),
           ),
-          realtimeAutoConnectProvider.overrideWithValue(false),
-          realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
         ],
       ),
       child: MaterialApp(
@@ -138,16 +133,6 @@ Future<ProviderContainer> _pumpShortcuts(
     items: seedChatList,
   );
   return container;
-}
-
-class _NoopRealtimeHub extends RealtimeHub {
-  _NoopRealtimeHub(super.ref);
-
-  @override
-  Future<void> ensureConnected() async {}
-
-  @override
-  void ensureSubscribed(String chatId) {}
 }
 
 Future<void> _sendShortcut(WidgetTester tester, SingleActivator activator) async {

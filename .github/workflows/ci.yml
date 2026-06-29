@@ -93,11 +93,11 @@ jobs:
           flutter-version: "3.41.7"
           channel: stable
           cache: true
-      - name: Chrome deep link integration tests
+      - name: Chrome deep link web tests
         working-directory: src/frontend
         run: |
           flutter pub get
-          flutter test integration_test/phase18_deeplink_web_test.dart -d chrome \
+          flutter test test/phase18_deeplink_web_chrome_test.dart -d chrome \
             --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080
 
   flutter-ios:
@@ -326,6 +326,8 @@ jobs:
         run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1
       - name: Add GOBIN to PATH
         run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Install protoc_plugin
+        run: dart pub global activate protoc_plugin
       - name: Go mod tidy (all Go modules)
         run: |
           set -e
