@@ -37,13 +37,6 @@ jobs:
       - name: Buf breaking (PR vs base)
         if: github.event_name == 'pull_request'
         run: buf breaking protos --against ".git#branch=${{ github.base_ref }},subdir=protos"
-      # BSR push from GHA only (buf.build may be unreachable locally in some regions).
-      # Requires repository secret BUF_TOKEN and protos/buf.yaml name: buf.build/voiceorg/voice.
-      - name: Buf push to BSR
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-        env:
-          BUF_TOKEN: ${{ secrets.BUF_TOKEN }}
-        run: buf push protos
 
   compose-config:
     runs-on: ubuntu-latest

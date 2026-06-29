@@ -32,7 +32,6 @@
 
 - [ ] **Секреты staging k8s** — `voice-app-secrets` по [`deploy/staging/secret.example.yaml`](../deploy/staging/secret.example.yaml): JWT, Postgres URLs, R2 (`FILE_R2_*`, `USER_R2_*`), FCM/APNs для Notification ([`DEPLOYMENT.md`](DEPLOYMENT.md)).
 - [ ] **Observability: канал алертов** — Secret уведомлений (Telegram bot или email) для Alertmanager; без него P1-алерты уходят в null receiver ([`deploy/observability/README.md`](../deploy/observability/README.md)).
-- [x] **Buf Schema Registry** — модуль `buf.build/voiceorg/voice`, `BUF_TOKEN` в GHA secrets; `buf push` на push в `master` ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)). Локальный `buf registry login` из РФ недоступен — публикация только через CI. PR breaking остаётся git-based.
 
 ### Batch 1 — Observability staging
 
@@ -148,7 +147,7 @@ MVP backend + partial Flutter; AR, algorithmic feed, post-match auto-story, mone
 
 | Приоритет | Batch | Тема |
 |-----------|-------|------|
-| **Critical** | Только вы | Секреты staging, алерты, BSR |
+| **Critical** | Только вы | Секреты staging, алерты |
 | **Critical** | Batch 1 | Observability staging |
 | **Critical** | Batch 2 | Compose / staging E2E перед релизом |
 | **High** | Только вы | Prod links, iOS Team ID, FCM prod |

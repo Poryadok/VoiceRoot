@@ -35,3 +35,4 @@ gen/
 /src/backend/subscription/subscription
 /src/backend/user/user
 /src/backend/voice/voice
+jobs.json
