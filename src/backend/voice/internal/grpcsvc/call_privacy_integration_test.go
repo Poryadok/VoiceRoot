@@ -21,6 +21,8 @@ type callPrivacyChecker interface {
 	AllowCallsAudience(ctx context.Context, profileID uuid.UUID) (privacy.Audience, error)
 }
 
+var _ callPrivacyChecker = callPrivacyStub{}
+
 type callPrivacyStub struct {
 	friendsOnly map[uuid.UUID]bool
 }

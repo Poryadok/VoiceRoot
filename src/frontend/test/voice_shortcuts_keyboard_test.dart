@@ -1,10 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
-import 'package:voice_frontend/backend/messages_client.dart';
+import 'package:voice_frontend/backend/realtime_client.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/shell_providers.dart';
 import 'package:voice_frontend/ui/a11y/voice_shortcuts.dart';
@@ -70,6 +72,7 @@ void main() {
       const SingleActivator(LogicalKeyboardKey.arrowDown, alt: true),
     );
     await tester.pump();
+    await pumpEventQueue();
 
     expect(container.read(selectedChatIdProvider), 'chat-b');
   });
@@ -77,21 +80,12 @@ void main() {
   testWidgets('Enter opens context menu request for selected message', (
     tester,
   ) async {
-    final container = await _pumpShortcuts(
-      tester,
-      messages: const [
-        VoiceMessage(
-          id: 'msg-1',
-          chatId: 'chat-a',
-          senderProfileId: 'peer-a',
-          content: 'hello',
-        ),
-      ],
-    );
+    final container = await _pumpShortcuts(tester);
     addTearDown(container.dispose);
 
     container.read(selectedChatIdProvider.notifier).state = 'chat-a';
     container.read(chatMessageKeyboardProvider.notifier).state = 'msg-1';
+    await tester.pump();
 
     await _sendShortcut(
       tester,
@@ -118,7 +112,6 @@ Future<ProviderContainer> _pumpShortcuts(
       unreadCount: 1,
     ),
   ],
-  List<VoiceMessage> messages = const [],
 }) async {
   late ProviderContainer container;
 
@@ -130,6 +123,7 @@ Future<ProviderContainer> _pumpShortcuts(
             client: MockClient((_) async => throw UnimplementedError()),
           ),
           realtimeAutoConnectProvider.overrideWithValue(false),
+          realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
         ],
       ),
       child: MaterialApp(
@@ -143,11 +137,17 @@ Future<ProviderContainer> _pumpShortcuts(
   container.read(chatListControllerProvider.notifier).state = ChatListState(
     items: seedChatList,
   );
-  if (messages.isNotEmpty) {
-    container.read(chatRoomControllerProvider('chat-a').notifier).state =
-        ChatRoomState(messages: messages);
-  }
   return container;
+}
+
+class _NoopRealtimeHub extends RealtimeHub {
+  _NoopRealtimeHub(super.ref);
+
+  @override
+  Future<void> ensureConnected() async {}
+
+  @override
+  void ensureSubscribed(String chatId) {}
 }
 
 Future<void> _sendShortcut(WidgetTester tester, SingleActivator activator) async {

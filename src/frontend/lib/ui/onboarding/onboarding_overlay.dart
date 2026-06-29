@@ -44,8 +44,9 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
   }
 
   void _clearCoachMark() {
-    _coachMark?.remove();
+    final entry = _coachMark;
     _coachMark = null;
+    entry?.remove();
   }
 
   void _maybeShowStep() {
@@ -135,10 +136,12 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
       title: title,
       body: body,
       onContinue: () {
+        _coachMark = null;
         onContinue();
         _maybeShowStep();
       },
       onSkip: () async {
+        _coachMark = null;
         await ref.read(onboardingControllerProvider.notifier).dismiss();
       },
       secondaryLabel: secondaryLabel,

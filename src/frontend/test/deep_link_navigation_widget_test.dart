@@ -30,6 +30,7 @@ void main() {
     final container = ProviderScope.containerOf(
       tester.element(find.byType(_DeepLinkHarness)),
     );
+    await pumpEventQueue();
 
     expect(container.read(selectedChatIdProvider), 'chat-1');
     expect(container.read(pendingChatMessageScrollProvider('chat-1')), 'msg-1');
@@ -53,6 +54,7 @@ void main() {
     final container = ProviderScope.containerOf(
       tester.element(find.byType(_DeepLinkHarness)),
     );
+    await pumpEventQueue();
 
     expect(container.read(selectedSpaceIdProvider), 'space-1');
     expect(container.read(selectedChatIdProvider), 'chat-2');

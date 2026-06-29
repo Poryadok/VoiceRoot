@@ -50,15 +50,14 @@ func (s *VoiceGRPC) StopScreenShare(ctx context.Context, req *callsv1.StopScreen
 		return nil, status.Error(codes.FailedPrecondition, "voice persistence not configured")
 	}
 	roomID := req.GetRoomId()
-	call, err := s.requireActiveCall(ctx, roomID, profileID)
-	if err != nil {
+	if _, err := s.requireActiveCall(ctx, roomID, profileID); err != nil {
 		return nil, err
 	}
 	streamID := ""
 	if req.StreamId != nil {
 		streamID = req.GetStreamId()
 	}
-	call, err = s.Calls.StopScreenShare(ctx, roomID, profileID, streamID)
+	call, err := s.Calls.StopScreenShare(ctx, roomID, profileID, streamID)
 	if err != nil {
 		return nil, storeErr(err)
 	}

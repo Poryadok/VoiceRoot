@@ -66,7 +66,7 @@ class DeepLinkNavigator {
           _ref.read(shellNavigationProvider).selectSpace(spaceId);
         }
         if (chatId != null) {
-          _ref.read(chatActionsProvider).selectChat(chatId);
+          _ref.read(shellNavigationProvider).selectChatInSpace(chatId);
         }
         final messageId = target.messageId;
         if (messageId != null && chatId != null) {

@@ -112,16 +112,17 @@ class OnboardingCoachMark extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(body, style: Theme.of(context).textTheme.bodyMedium),
                   const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
+                  Wrap(
+                    alignment: WrapAlignment.end,
+                    spacing: 4,
+                    runSpacing: 4,
                     children: [
                       TextButton(onPressed: onSkip, child: const Text('Skip')),
-                      if (secondaryLabel != null && onSecondary != null) ...[
+                      if (secondaryLabel != null && onSecondary != null)
                         TextButton(
                           onPressed: onSecondary,
                           child: Text(secondaryLabel!),
                         ),
-                      ],
                       FilledButton(
                         onPressed: onContinue,
                         child: Text(continueLabel),
