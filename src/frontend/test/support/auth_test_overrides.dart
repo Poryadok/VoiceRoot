@@ -15,8 +15,11 @@ import 'package:voice_frontend/state/message_cache_providers.dart';
 import 'package:voice_frontend/state/onboarding_controller.dart';
 import 'package:voice_frontend/state/guest_save_account_reminder.dart';
 import 'package:voice_frontend/state/space_providers.dart';
+import 'package:voice_frontend/state/social_providers.dart';
 import 'package:voice_frontend/theme/profile_accent_storage.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
+import 'package:voice_frontend/backend/users_client.dart';
+import 'package:voice_frontend/routing/deep_link_listener.dart';
 
 import 'fake_voice_api_clients.dart';
 import 'test_voice_token_catalog.dart';
@@ -57,6 +60,8 @@ List<Override> guestShellTestOverrides({required http.Client client}) => [
   ...voiceAppTestOverrides(client: client),
   onboardingControllerProvider.overrideWith(TestCompletedOnboardingController.new),
   guestSaveAccountReminderVisibleProvider.overrideWith((ref) async => true),
+  deepLinkListenerProvider.overrideWith(_NoopDeepLinkListener.new),
+  activeProfileProvider.overrideWith((ref) async => _testActiveProfile),
 ];
 
 /// Pre-authenticated [AuthController] for widget tests of the main shell.
@@ -76,6 +81,22 @@ AuthController authenticatedAuthController(Ref ref) {
     ),
   );
   return controller;
+}
+
+const _testActiveProfile = VoiceProfile(
+  id: 'prof-test',
+  accountId: 'acc-test',
+  username: 'voiceuser',
+  discriminator: '4242',
+  displayName: 'Voice User',
+  isPrimary: true,
+);
+
+class _NoopDeepLinkListener extends DeepLinkListener {
+  _NoopDeepLinkListener(super.ref);
+
+  @override
+  Future<void> start() async {}
 }
 
 class _NoopRealtimeHub extends RealtimeHub {

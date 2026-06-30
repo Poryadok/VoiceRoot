@@ -11,6 +11,14 @@ void bindLargeTestViewport(WidgetTester tester) {
   addTearDown(tester.view.resetDevicePixelRatio);
 }
 
+/// Desktop viewport for shell tests; works on web/Chrome (unlike [WidgetTester.binding.setSurfaceSize]).
+void bindDesktopTestViewport(WidgetTester tester) {
+  tester.view.physicalSize = const Size(1280, 800);
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+}
+
 /// Minimal [VoiceColors] for widget tests without loading token assets.
 ThemeData voiceTestTheme() {
   const voice = VoiceColors(

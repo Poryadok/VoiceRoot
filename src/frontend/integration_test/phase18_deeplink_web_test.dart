@@ -11,6 +11,7 @@ import 'package:voice_frontend/state/deep_link_navigation.dart';
 import 'package:voice_frontend/state/shared_media_providers.dart';
 
 import '../test/support/auth_test_overrides.dart';
+import '../test/support/voice_test_theme.dart';
 
 /// Phase 18: Chrome/web integration — deep link navigates to conversation.
 ///
@@ -20,8 +21,7 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('deep link navigation opens conversation region', (tester) async {
-    await tester.binding.setSurfaceSize(const Size(1280, 800));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    bindDesktopTestViewport(tester);
 
     late ProviderContainer container;
 
@@ -37,23 +37,34 @@ void main() {
         child: const VoiceApp(locale: Locale('en')),
       ),
     );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle(
+      const Duration(milliseconds: 100),
+      EnginePhase.sendSemanticsUpdate,
+      const Duration(seconds: 5),
+    );
 
     await container.read(deepLinkNavigatorProvider).apply(
       parseDeepLinkUrl(
         'https://voice.gg/ch/integration-chat/m/integration-msg',
       ),
     );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle(
+      const Duration(milliseconds: 100),
+      EnginePhase.sendSemanticsUpdate,
+      const Duration(seconds: 5),
+    );
 
     expect(container.read(selectedChatIdProvider), 'integration-chat');
     expect(
       container.read(pendingChatMessageScrollProvider('integration-chat')),
       'integration-msg',
     );
-    expect(find.bySemanticsLabel('Conversation'), findsOneWidget);
+
+    final semantics = tester.ensureSemantics();
+    addTearDown(semantics.dispose);
+    await tester.pump();
+
     expect(find.byKey(ThreeColumnShell.navOpenChat), findsOneWidget);
+    expect(find.bySemanticsLabel('Conversation'), findsOneWidget);
   });
 }

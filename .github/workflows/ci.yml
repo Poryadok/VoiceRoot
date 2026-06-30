@@ -100,7 +100,8 @@ jobs:
         run: |
           flutter pub get
           flutter test test/phase18_deeplink_web_chrome_test.dart -d chrome \
-            --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080
+            --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080 \
+            --web-browser-flag=--disable-gpu
 
   flutter-ios:
     runs-on: macos-latest
