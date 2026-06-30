@@ -1,0 +1,11 @@
+﻿gh : Get "https://productionresultssa15.blob.core.windows.net/actions-results/9cb91eba-e841-41a1-a50f-2d47233ff04a/work
+flow-job-run-994be899-5483-576e-a6e5-9652606b90b1/logs/job/job-logs.txt?rsct=text%2Fplain&se=2026-06-30T11%3A35%3A03Z&s
+ig=HIyP4vwVGZGsUUgT0qvpc55GprX02jkybdRyb2BuEpU%3D&ske=2026-06-30T12%3A59%3A26Z&skoid=ca7593d4-ee42-46cd-af88-8b886a2f84
+eb&sks=b&skt=2026-06-30T08%3A59%3A26Z&sktid=398a6654-997b-47e9-b12b-9515b896b4de&skv=2025-11-05&sp=r&spr=https&sr=b&st=
+2026-06-30T11%3A24%3A58Z&sv=2025-11-05": EOF
+At C:\Users\Sergey\AppData\Local\Temp\ps-script-d46cd481-4963-4b47-ae4c-36db1cdbb900.ps1:131 char:18
++ ... \Git\Voice; gh api "repos/Poryadok/VoiceRoot/actions/jobs/84272792740 ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Get "https://pr...025-11-05": EOF:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 

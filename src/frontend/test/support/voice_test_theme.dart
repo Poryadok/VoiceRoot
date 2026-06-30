@@ -11,13 +11,17 @@ void bindLargeTestViewport(WidgetTester tester) {
   addTearDown(tester.view.resetDevicePixelRatio);
 }
 
-/// Desktop viewport for shell tests; works on web/Chrome (unlike [WidgetTester.binding.setSurfaceSize]).
-void bindDesktopTestViewport(WidgetTester tester) {
+/// Desktop viewport for shell tests (VM + web/Chrome).
+Future<void> bindDesktopTestViewport(WidgetTester tester) async {
   tester.view.physicalSize = const Size(1280, 800);
   tester.view.devicePixelRatio = 1.0;
   tester.binding.handleMetricsChanged();
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
+
+  // Helps LayoutBuilder on the VM test binding; harmless on web when ignored.
+  addTearDown(() => tester.binding.setSurfaceSize(null));
+  await tester.binding.setSurfaceSize(const Size(1280, 800));
 }
 
 /// Minimal [VoiceColors] for widget tests without loading token assets.

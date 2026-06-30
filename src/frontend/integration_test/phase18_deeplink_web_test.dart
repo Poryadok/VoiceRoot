@@ -21,7 +21,7 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('deep link navigation opens conversation region', (tester) async {
-    bindDesktopTestViewport(tester);
+    await bindDesktopTestViewport(tester);
 
     late ProviderContainer container;
 
@@ -57,7 +57,13 @@ void main() {
     await tester.pump();
 
     expect(find.byKey(ThreeColumnShell.navOpenChat), findsOneWidget);
-    expect(find.bySemanticsLabel('Conversation'), findsOneWidget);
+    expect(
+      find.ancestor(
+        of: find.byKey(ThreeColumnShell.navOpenChat),
+        matching: find.bySemanticsLabel('Conversation'),
+      ),
+      findsOneWidget,
+    );
   });
 }
 

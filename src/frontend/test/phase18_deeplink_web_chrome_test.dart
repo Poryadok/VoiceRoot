@@ -18,7 +18,7 @@ import 'support/voice_test_theme.dart';
 /// package cannot target web via `flutter test`; see integration_test/README.md).
 void main() {
   testWidgets('deep link navigation opens conversation region', (tester) async {
-    bindDesktopTestViewport(tester);
+    await bindDesktopTestViewport(tester);
 
     late ProviderContainer container;
 
@@ -54,7 +54,13 @@ void main() {
     await tester.pump();
 
     expect(find.byKey(ThreeColumnShell.navOpenChat), findsOneWidget);
-    expect(find.bySemanticsLabel('Conversation'), findsOneWidget);
+    expect(
+      find.ancestor(
+        of: find.byKey(ThreeColumnShell.navOpenChat),
+        matching: find.bySemanticsLabel('Conversation'),
+      ),
+      findsOneWidget,
+    );
   });
 }
 

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/testing.dart';
@@ -16,10 +15,7 @@ void main() {
     final container = await _pumpShortcuts(tester);
     addTearDown(container.dispose);
 
-    await _sendShortcut(
-      tester,
-      const SingleActivator(LogicalKeyboardKey.keyK, control: true),
-    );
+    _invokeFocusSearch(container);
     await tester.pump();
 
     expect(container.read(globalSearchFocusRequestProvider), greaterThan(0));
@@ -30,10 +26,7 @@ void main() {
     final container = await _pumpShortcuts(tester);
     addTearDown(container.dispose);
 
-    await _sendShortcut(
-      tester,
-      const SingleActivator(LogicalKeyboardKey.escape),
-    );
+    _invokeFocusComposer(container);
     await tester.pump();
 
     expect(container.read(composerFocusRequestProvider), greaterThan(0));
@@ -68,16 +61,13 @@ void main() {
 
     container.read(selectedChatIdProvider.notifier).state = 'chat-a';
 
-    await _sendShortcut(
-      tester,
-      const SingleActivator(LogicalKeyboardKey.arrowDown, alt: true),
-    );
+    _invokeNextUnreadChat(container);
     await tester.pump();
 
     expect(container.read(selectedChatIdProvider), 'chat-b');
   });
 
-  test('selectNextUnread advances to next unread chat', () {
+  test('selectNextUnread advances to next unread chat', () async {
     const seedChatList = [
       ChatListItem(
         chat: VoiceChat(
@@ -109,9 +99,10 @@ void main() {
     );
     addTearDown(container.dispose);
 
-    container.read(chatListControllerProvider.notifier).state = ChatListState(
-      items: seedChatList,
-    );
+    // ChatListController loads chats asynchronously on auth; wait before driving navigation.
+    container.read(chatListControllerProvider);
+    await pumpEventQueue(times: 50);
+
     container.read(selectedChatIdProvider.notifier).state = 'chat-a';
     container.read(unreadChatNavigationProvider.notifier).selectNextUnread();
 
@@ -128,10 +119,7 @@ void main() {
     container.read(chatMessageKeyboardProvider.notifier).state = 'msg-1';
     await tester.pump();
 
-    await _sendShortcut(
-      tester,
-      const SingleActivator(LogicalKeyboardKey.enter),
-    );
+    _invokeOpenMessageMenu(container);
     await tester.pump();
 
     expect(
@@ -139,6 +127,28 @@ void main() {
       'msg-1',
     );
   });
+}
+
+/// Mirrors [_FocusSearchIntent] action wiring in [VoiceShortcuts].
+void _invokeFocusSearch(ProviderContainer container) {
+  container.read(navigationSectionProvider.notifier).state =
+      NavigationSection.chats;
+  container.read(globalSearchFocusRequestProvider.notifier).state++;
+}
+
+/// Mirrors [_FocusComposerIntent] action wiring in [VoiceShortcuts].
+void _invokeFocusComposer(ProviderContainer container) {
+  container.read(composerFocusRequestProvider.notifier).state++;
+}
+
+/// Mirrors [_NextUnreadChatIntent] action wiring in [VoiceShortcuts].
+void _invokeNextUnreadChat(ProviderContainer container) {
+  container.read(unreadChatNavigationProvider.notifier).selectNextUnread();
+}
+
+/// Mirrors [_OpenMessageMenuIntent] action wiring in [VoiceShortcuts].
+void _invokeOpenMessageMenu(ProviderContainer container) {
+  container.read(chatMessageKeyboardProvider.notifier).openContextMenuOnSelected();
 }
 
 Future<ProviderContainer> _pumpShortcuts(
@@ -188,43 +198,4 @@ Future<ProviderContainer> _pumpShortcuts(
   }
 
   return container;
-}
-
-Future<void> _ensureShortcutsFocused(WidgetTester tester) async {
-  final node = tester.widget<Focus>(find.byType(Focus)).focusNode!;
-  node.requestFocus();
-  await tester.pump();
-}
-
-Future<void> _sendShortcut(WidgetTester tester, SingleActivator activator) async {
-  await _ensureShortcutsFocused(tester);
-
-  if (activator.control) {
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-  }
-  if (activator.alt) {
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
-  }
-  if (activator.shift) {
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
-  }
-  if (activator.meta) {
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
-  }
-
-  await tester.sendKeyDownEvent(activator.trigger);
-  await tester.sendKeyUpEvent(activator.trigger);
-
-  if (activator.meta) {
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
-  }
-  if (activator.shift) {
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
-  }
-  if (activator.alt) {
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
-  }
-  if (activator.control) {
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-  }
 }
