@@ -15,6 +15,7 @@ void bindLargeTestViewport(WidgetTester tester) {
 void bindDesktopTestViewport(WidgetTester tester) {
   tester.view.physicalSize = const Size(1280, 800);
   tester.view.devicePixelRatio = 1.0;
+  tester.binding.handleMetricsChanged();
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
 }

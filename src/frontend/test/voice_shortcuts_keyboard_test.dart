@@ -62,12 +62,10 @@ void main() {
     final container = await _pumpShortcuts(
       tester,
       seedChatList: seedChatList,
+      prepareChatList: true,
     );
     addTearDown(container.dispose);
 
-    container.read(chatListControllerProvider.notifier).state = ChatListState(
-      items: seedChatList,
-    );
     container.read(selectedChatIdProvider.notifier).state = 'chat-a';
 
     await _sendShortcut(
@@ -111,7 +109,9 @@ void main() {
     );
     addTearDown(container.dispose);
 
-    container.read(chatListControllerProvider);
+    container.read(chatListControllerProvider.notifier).state = ChatListState(
+      items: seedChatList,
+    );
     container.read(selectedChatIdProvider.notifier).state = 'chat-a';
     container.read(unreadChatNavigationProvider.notifier).selectNextUnread();
 
@@ -153,6 +153,7 @@ Future<ProviderContainer> _pumpShortcuts(
       unreadCount: 1,
     ),
   ],
+  bool prepareChatList = false,
 }) async {
   late ProviderContainer container;
 
@@ -176,23 +177,54 @@ Future<ProviderContainer> _pumpShortcuts(
     ),
   );
   await tester.pump();
-  container.read(chatListControllerProvider);
-  await pumpEventQueue(times: 50);
+
+  if (prepareChatList) {
+    container.read(chatListControllerProvider);
+    await pumpEventQueue(times: 50);
+    container.read(chatListControllerProvider.notifier).state = ChatListState(
+      items: seedChatList,
+    );
+    await tester.pump();
+  }
+
   return container;
 }
 
-Future<void> _sendShortcut(WidgetTester tester, SingleActivator activator) async {
-  final keys = <LogicalKeyboardKey>[];
-  if (activator.control) keys.add(LogicalKeyboardKey.controlLeft);
-  if (activator.alt) keys.add(LogicalKeyboardKey.altLeft);
-  if (activator.shift) keys.add(LogicalKeyboardKey.shiftLeft);
-  if (activator.meta) keys.add(LogicalKeyboardKey.metaLeft);
-  keys.add(activator.trigger);
+Future<void> _ensureShortcutsFocused(WidgetTester tester) async {
+  final node = tester.widget<Focus>(find.byType(Focus)).focusNode!;
+  node.requestFocus();
+  await tester.pump();
+}
 
-  for (final key in keys) {
-    await tester.sendKeyDownEvent(key);
+Future<void> _sendShortcut(WidgetTester tester, SingleActivator activator) async {
+  await _ensureShortcutsFocused(tester);
+
+  if (activator.control) {
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
   }
-  for (final key in keys.reversed) {
-    await tester.sendKeyUpEvent(key);
+  if (activator.alt) {
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+  }
+  if (activator.shift) {
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+  }
+  if (activator.meta) {
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+  }
+
+  await tester.sendKeyDownEvent(activator.trigger);
+  await tester.sendKeyUpEvent(activator.trigger);
+
+  if (activator.meta) {
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+  }
+  if (activator.shift) {
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+  }
+  if (activator.alt) {
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+  }
+  if (activator.control) {
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
   }
 }

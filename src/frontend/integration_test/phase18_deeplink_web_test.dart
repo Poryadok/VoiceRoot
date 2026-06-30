@@ -37,22 +37,14 @@ void main() {
         child: const VoiceApp(locale: Locale('en')),
       ),
     );
-    await tester.pumpAndSettle(
-      const Duration(milliseconds: 100),
-      EnginePhase.sendSemanticsUpdate,
-      const Duration(seconds: 5),
-    );
+    await _pumpShellReady(tester);
 
     await container.read(deepLinkNavigatorProvider).apply(
       parseDeepLinkUrl(
         'https://voice.gg/ch/integration-chat/m/integration-msg',
       ),
     );
-    await tester.pumpAndSettle(
-      const Duration(milliseconds: 100),
-      EnginePhase.sendSemanticsUpdate,
-      const Duration(seconds: 5),
-    );
+    await _pumpShellReady(tester);
 
     expect(container.read(selectedChatIdProvider), 'integration-chat');
     expect(
@@ -67,4 +59,10 @@ void main() {
     expect(find.byKey(ThreeColumnShell.navOpenChat), findsOneWidget);
     expect(find.bySemanticsLabel('Conversation'), findsOneWidget);
   });
+}
+
+Future<void> _pumpShellReady(WidgetTester tester) async {
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 100));
+  await tester.pump(const Duration(milliseconds: 400));
 }

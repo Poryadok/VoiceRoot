@@ -181,7 +181,17 @@ class ThreeColumnShell extends StatelessWidget {
                 height: 48,
                 child: mobileRailChild ?? navigationColumn(),
               ),
-              Expanded(key: navOpenChat, child: mainContent()),
+              Expanded(
+                child: Semantics(
+                  label: 'Conversation',
+                  container: true,
+                  child: ColoredBox(
+                    key: navOpenChat,
+                    color: voice.canvas,
+                    child: mainContent(),
+                  ),
+                ),
+              ),
             ],
           );
         }
@@ -207,7 +217,17 @@ class ThreeColumnShell extends StatelessWidget {
             Expanded(key: navActiveRail, child: navigationChild!),
             if (mainChild != null && showMainOnlyOnNarrow) ...[
               Divider(height: 1, color: voice.borderDefault),
-              Expanded(key: navOpenChat, child: mainContent()),
+              Expanded(
+                child: Semantics(
+                  label: 'Conversation',
+                  container: true,
+                  child: ColoredBox(
+                    key: navOpenChat,
+                    color: voice.canvas,
+                    child: mainContent(),
+                  ),
+                ),
+              ),
             ],
           ],
         );
@@ -223,7 +243,17 @@ class ThreeColumnShell extends StatelessWidget {
                   height: 48,
                   child: mobileRailChild ?? legacyRail(),
                 ),
-                Expanded(key: navOpenChat, child: mainContent()),
+                Expanded(
+                  child: Semantics(
+                    label: 'Conversation',
+                    container: true,
+                    child: ColoredBox(
+                      key: navOpenChat,
+                      color: voice.canvas,
+                      child: mainContent(),
+                    ),
+                  ),
+                ),
               ]
             : [
                 SizedBox(
