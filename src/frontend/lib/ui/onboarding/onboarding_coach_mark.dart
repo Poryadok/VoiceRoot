@@ -46,17 +46,14 @@ class OnboardingCoachMark extends StatelessWidget {
         continueLabel: continueLabel,
         secondaryLabel: secondaryLabel,
         onContinue: () {
-          entry.remove();
           onContinue();
         },
         onSkip: () {
-          entry.remove();
           onSkip();
         },
         onSecondary: secondaryLabel == null
             ? null
             : () {
-                entry.remove();
                 onSecondary?.call();
               },
       ),

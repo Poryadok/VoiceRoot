@@ -6,7 +6,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/app.dart';
+import 'package:voice_frontend/backend/chats_client.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
+import 'package:voice_frontend/state/auth_providers.dart';
+import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 
 import 'support/auth_test_overrides.dart';
@@ -98,17 +101,24 @@ void main() {
   testWidgets('chat list shows backend unavailable on 503', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
-        overrides: voiceAppTestOverrides(
-          client: MockClient((request) async {
-            if (request.url.path == '/health') {
-              return http.Response('OK', 200);
-            }
-            if (request.url.path == '/api/v1/chats') {
-              return http.Response('unavailable', 503);
-            }
-            return http.Response('Not Found', 404);
-          }),
-        ),
+        overrides: [
+          ...voiceAppTestOverrides(
+            client: MockClient((request) async {
+              if (request.url.path == '/health') {
+                return http.Response('OK', 200);
+              }
+              if (request.url.path == '/api/v1/chats') {
+                return http.Response('unavailable', 503);
+              }
+              return http.Response('Not Found', 404);
+            }),
+          ),
+          voiceChatsClientProvider.overrideWith(
+            (ref) => VoiceChatsClient(
+              gateway: ref.watch(gatewayHttpClientProvider),
+            ),
+          ),
+        ],
         child: const VoiceApp(locale: Locale('en')),
       ),
     );

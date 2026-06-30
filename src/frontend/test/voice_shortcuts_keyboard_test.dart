@@ -69,7 +69,6 @@ void main() {
       const SingleActivator(LogicalKeyboardKey.arrowDown, alt: true),
     );
     await tester.pump();
-    await pumpEventQueue();
 
     expect(container.read(selectedChatIdProvider), 'chat-b');
   });

@@ -31,7 +31,7 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
 
   @override
   void dispose() {
-    _coachMark?.remove();
+    _clearCoachMark();
     super.dispose();
   }
 
@@ -46,7 +46,9 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
   void _clearCoachMark() {
     final entry = _coachMark;
     _coachMark = null;
-    entry?.remove();
+    if (entry != null && entry.mounted) {
+      entry.remove();
+    }
   }
 
   void _maybeShowStep() {
@@ -136,16 +138,21 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
       title: title,
       body: body,
       onContinue: () {
-        _coachMark = null;
+        _clearCoachMark();
         onContinue();
         _maybeShowStep();
       },
       onSkip: () async {
-        _coachMark = null;
+        _clearCoachMark();
         await ref.read(onboardingControllerProvider.notifier).dismiss();
       },
       secondaryLabel: secondaryLabel,
-      onSecondary: onSecondary,
+      onSecondary: onSecondary == null
+          ? null
+          : () {
+              _clearCoachMark();
+              onSecondary();
+            },
     );
   }
 

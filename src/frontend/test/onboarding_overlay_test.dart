@@ -102,7 +102,6 @@ void main() {
     expect(find.text('Spaces'), findsOneWidget);
     await tester.tap(find.widgetWithText(TextButton, 'Find a space'));
     await tester.pump();
-    await pumpEventQueue();
 
     final overlayElement = tester.element(find.byType(OnboardingOverlay));
     final container = ProviderScope.containerOf(overlayElement);
@@ -144,6 +143,7 @@ void main() {
 
     await tester.tap(find.text('Skip'));
     await tester.pump();
+    await pumpEventQueue(times: 100);
 
     expect(recording.completedSteps, contains('dismiss'));
     expect(recording.state.completed, isTrue);

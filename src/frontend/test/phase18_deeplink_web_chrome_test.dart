@@ -37,9 +37,6 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    container.read(chatListControllerProvider);
-    await pumpEventQueue();
-
     await container.read(deepLinkNavigatorProvider).apply(
       parseDeepLinkUrl(
         'https://voice.gg/ch/integration-chat/m/integration-msg',
@@ -47,7 +44,6 @@ void main() {
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
-    await pumpEventQueue();
 
     expect(container.read(selectedChatIdProvider), 'integration-chat');
     expect(
