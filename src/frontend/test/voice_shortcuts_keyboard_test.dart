@@ -9,6 +9,7 @@ import 'package:voice_frontend/state/shell_providers.dart';
 import 'package:voice_frontend/ui/a11y/voice_shortcuts.dart';
 
 import 'support/auth_test_overrides.dart';
+import 'support/fake_voice_api_clients.dart';
 
 void main() {
   testWidgets('Ctrl+K focuses global search', (tester) async {
@@ -39,29 +40,34 @@ void main() {
   });
 
   testWidgets('Alt+Down selects next unread chat', (tester) async {
+    const seedChatList = [
+      ChatListItem(
+        chat: VoiceChat(
+          id: 'chat-a',
+          type: 'CHAT_TYPE_DM',
+          creatorProfileId: 'peer-a',
+        ),
+        unreadCount: 2,
+      ),
+      ChatListItem(
+        chat: VoiceChat(
+          id: 'chat-b',
+          type: 'CHAT_TYPE_DM',
+          creatorProfileId: 'peer-b',
+        ),
+        unreadCount: 1,
+      ),
+    ];
+
     final container = await _pumpShortcuts(
       tester,
-      seedChatList: const [
-        ChatListItem(
-          chat: VoiceChat(
-            id: 'chat-a',
-            type: 'CHAT_TYPE_DM',
-            creatorProfileId: 'peer-a',
-          ),
-          unreadCount: 2,
-        ),
-        ChatListItem(
-          chat: VoiceChat(
-            id: 'chat-b',
-            type: 'CHAT_TYPE_DM',
-            creatorProfileId: 'peer-b',
-          ),
-          unreadCount: 1,
-        ),
-      ],
+      seedChatList: seedChatList,
     );
     addTearDown(container.dispose);
 
+    container.read(chatListControllerProvider.notifier).state = ChatListState(
+      items: seedChatList,
+    );
     container.read(selectedChatIdProvider.notifier).state = 'chat-a';
 
     await _sendShortcut(
@@ -69,6 +75,45 @@ void main() {
       const SingleActivator(LogicalKeyboardKey.arrowDown, alt: true),
     );
     await tester.pump();
+
+    expect(container.read(selectedChatIdProvider), 'chat-b');
+  });
+
+  test('selectNextUnread advances to next unread chat', () {
+    const seedChatList = [
+      ChatListItem(
+        chat: VoiceChat(
+          id: 'chat-a',
+          type: 'CHAT_TYPE_DM',
+          creatorProfileId: 'peer-a',
+        ),
+        unreadCount: 2,
+      ),
+      ChatListItem(
+        chat: VoiceChat(
+          id: 'chat-b',
+          type: 'CHAT_TYPE_DM',
+          creatorProfileId: 'peer-b',
+        ),
+        unreadCount: 1,
+      ),
+    ];
+
+    final container = ProviderContainer(
+      overrides: [
+        ...voiceAppTestOverrides(
+          client: MockClient((_) async => throw UnimplementedError()),
+        ),
+        voiceChatsClientProvider.overrideWithValue(
+          FakeVoiceChatsClient(pages: [ChatListData(items: seedChatList)]),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    container.read(chatListControllerProvider);
+    container.read(selectedChatIdProvider.notifier).state = 'chat-a';
+    container.read(unreadChatNavigationProvider.notifier).selectNextUnread();
 
     expect(container.read(selectedChatIdProvider), 'chat-b');
   });
@@ -118,6 +163,9 @@ Future<ProviderContainer> _pumpShortcuts(
           ...voiceAppTestOverrides(
             client: MockClient((_) async => throw UnimplementedError()),
           ),
+          voiceChatsClientProvider.overrideWithValue(
+            FakeVoiceChatsClient(pages: [ChatListData(items: seedChatList)]),
+          ),
         ],
       ),
       child: MaterialApp(
@@ -128,18 +176,17 @@ Future<ProviderContainer> _pumpShortcuts(
     ),
   );
   await tester.pump();
-  container.read(chatListControllerProvider.notifier).state = ChatListState(
-    items: seedChatList,
-  );
+  container.read(chatListControllerProvider);
+  await pumpEventQueue(times: 50);
   return container;
 }
 
 Future<void> _sendShortcut(WidgetTester tester, SingleActivator activator) async {
   final keys = <LogicalKeyboardKey>[];
-  if (activator.control) keys.add(LogicalKeyboardKey.control);
-  if (activator.alt) keys.add(LogicalKeyboardKey.alt);
-  if (activator.shift) keys.add(LogicalKeyboardKey.shift);
-  if (activator.meta) keys.add(LogicalKeyboardKey.meta);
+  if (activator.control) keys.add(LogicalKeyboardKey.controlLeft);
+  if (activator.alt) keys.add(LogicalKeyboardKey.altLeft);
+  if (activator.shift) keys.add(LogicalKeyboardKey.shiftLeft);
+  if (activator.meta) keys.add(LogicalKeyboardKey.metaLeft);
   keys.add(activator.trigger);
 
   for (final key in keys) {

@@ -100,8 +100,7 @@ jobs:
         run: |
           flutter pub get
           flutter test test/phase18_deeplink_web_chrome_test.dart -d chrome \
-            --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080 \
-            --web-browser-flag=--disable-gpu
+            --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080
 
   flutter-ios:
     runs-on: macos-latest
@@ -128,12 +127,18 @@ jobs:
           flutter-version: "3.41.7"
           channel: stable
           cache: true
+      - uses: actions/cache@v4
+        with:
+          path: src/frontend/.dart_tool/hooks_runner
+          key: flutter-sqlite3-hooks-windows-${{ hashFiles('src/frontend/pubspec.lock') }}
+      - name: Prefetch sqlite3mc native asset
+        shell: pwsh
+        run: ./scripts/ci/flutter-windows-prefetch-sqlite3.ps1
       - name: Flutter Windows analyze, test, build
         working-directory: src/frontend
         env:
           CMAKE_POLICY_VERSION_MINIMUM: "3.5"
         run: |
-          flutter pub get
           flutter analyze --no-fatal-infos
           flutter test
           flutter build windows --release --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080 --dart-define=VOICE_APP_VERSION=1.0.0

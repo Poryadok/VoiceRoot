@@ -142,9 +142,9 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
         onContinue();
         _maybeShowStep();
       },
-      onSkip: () async {
+      onSkip: () {
         _clearCoachMark();
-        await ref.read(onboardingControllerProvider.notifier).dismiss();
+        ref.read(onboardingControllerProvider.notifier).dismiss();
       },
       secondaryLabel: secondaryLabel,
       onSecondary: onSecondary == null

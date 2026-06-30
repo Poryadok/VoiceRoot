@@ -11,6 +11,7 @@ import 'package:voice_frontend/ui/onboarding/onboarding_anchor_keys.dart';
 import 'package:voice_frontend/ui/onboarding/onboarding_overlay.dart';
 
 import 'support/auth_test_overrides.dart';
+import 'support/voice_test_theme.dart';
 
 class _OnboardingAtSpacesStep extends OnboardingController {
   @override
@@ -41,6 +42,9 @@ class _RecordingOnboardingController extends OnboardingController {
   Future<void> load() async {}
 
   @override
+  Future<void> dismiss() => completeStep('dismiss');
+
+  @override
   Future<void> completeStep(String stepId) async {
     completedSteps.add(stepId);
     if (stepId == 'dismiss') {
@@ -53,6 +57,19 @@ class _RecordingOnboardingController extends OnboardingController {
   }
 }
 
+Widget _onboardingTestApp({
+  required List<Override> overrides,
+  required Widget child,
+}) {
+  return ProviderScope(
+    overrides: overrides,
+    child: MaterialApp(
+      theme: voiceTestTheme(),
+      home: OnboardingOverlay(child: child),
+    ),
+  );
+}
+
 void main() {
   testWidgets('spaces step Find a space opens global search catalog', (
     tester,
@@ -61,7 +78,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await tester.pumpWidget(
-      ProviderScope(
+      _onboardingTestApp(
         overrides: [
           ...voiceAppTestOverrides(
             client: MockClient((request) async {
@@ -81,16 +98,12 @@ void main() {
           ),
           onboardingControllerProvider.overrideWith(_OnboardingAtSpacesStep.new),
         ],
-        child: MaterialApp(
-          home: OnboardingOverlay(
-            child: Scaffold(
-              body: Center(
-                child: SizedBox(
-                  key: OnboardingAnchorKeys.spaces,
-                  width: 48,
-                  height: 48,
-                ),
-              ),
+        child: Scaffold(
+          body: Center(
+            child: SizedBox(
+              key: OnboardingAnchorKeys.spaces,
+              width: 48,
+              height: 48,
             ),
           ),
         ),
@@ -116,23 +129,19 @@ void main() {
     final recording = _RecordingOnboardingController();
 
     await tester.pumpWidget(
-      ProviderScope(
+      _onboardingTestApp(
         overrides: [
           ...voiceAppTestOverrides(
             client: MockClient((_) async => http.Response('{}', 404)),
           ),
           onboardingControllerProvider.overrideWith(() => recording),
         ],
-        child: MaterialApp(
-          home: OnboardingOverlay(
-            child: Scaffold(
-              body: Center(
-                child: SizedBox(
-                  key: OnboardingAnchorKeys.spaces,
-                  width: 48,
-                  height: 48,
-                ),
-              ),
+        child: Scaffold(
+          body: Center(
+            child: SizedBox(
+              key: OnboardingAnchorKeys.spaces,
+              width: 48,
+              height: 48,
             ),
           ),
         ),
@@ -141,9 +150,13 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    await tester.tap(find.text('Skip'));
-    await tester.pump();
-    await pumpEventQueue(times: 100);
+    expect(find.widgetWithText(TextButton, 'Skip'), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, 'Skip'));
+    await tester.pumpAndSettle(
+      const Duration(milliseconds: 100),
+      EnginePhase.sendSemanticsUpdate,
+      const Duration(seconds: 2),
+    );
 
     expect(recording.completedSteps, contains('dismiss'));
     expect(recording.state.completed, isTrue);
