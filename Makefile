@@ -32,7 +32,7 @@ GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
 	compose-migrate-all compose-migrate-phase15 compose-migrate-bot compose-migrate-story compose-e2e-live compose-e2e-full compose-e2e-voice-live \
 	build-all build-all-breaking check-toolchain compose-config-ci buf-ci backend-test-ci backend-image-ci \
 	gateway-test-ci gateway-image-ci go-test-pkg go-mod-tidy-all auth-test-ci auth-image-ci buf-breaking-ci \
-	golangci-ci gateway-test-race-ci design-tokens-check flutter-ui-color-gate flutter-ci prekey-golden-check coverage-report testcontainers-prune buf-generate-ci-local-template-check
+	golangci-ci gateway-test-race-ci design-tokens-check flutter-ui-color-gate flutter-ci flutter-windows-prefetch-sqlite3 flutter-linux-prefetch-sqlite3 prekey-golden-check coverage-report testcontainers-prune buf-generate-ci-local-template-check
 
 buf-lint:
 	buf lint
@@ -173,7 +173,21 @@ flutter-ui-color-gate:
 	$(BASH) "$(ROOT)/scripts/design/flutter-ui-color-gate.sh"
 
 # Host Flutter SDK (parity with job `flutter` in .github/workflows/ci.yml).
-prekey-golden-check:
+ifeq ($(OS),Windows_NT)
+flutter-windows-prefetch-sqlite3:
+	powershell -NoProfile -ExecutionPolicy Bypass -File "$(ROOT)/scripts/ci/flutter-windows-prefetch-sqlite3.ps1"
+flutter-linux-prefetch-sqlite3:
+	@true
+FLUTTER_SQLITE_PREFETCH := flutter-windows-prefetch-sqlite3
+else
+flutter-windows-prefetch-sqlite3:
+	@true
+flutter-linux-prefetch-sqlite3:
+	$(BASH) "$(ROOT)/scripts/ci/flutter-linux-prefetch-sqlite3.sh"
+FLUTTER_SQLITE_PREFETCH := flutter-linux-prefetch-sqlite3
+endif
+
+prekey-golden-check: $(FLUTTER_SQLITE_PREFETCH)
 	cd $(ROOT)/src/frontend && flutter test test/tools/prekey_golden_drift_test.dart
 
 flutter-ci: design-tokens-check contrast-tokens-check flutter-ui-color-gate buf-dart-check prekey-golden-check

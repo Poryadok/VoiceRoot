@@ -91,10 +91,12 @@ dependency_overrides:
   flutter_webrtc: ^1.5.2
 
 # SQLite3MultipleCiphers for encrypted offline message cache (docs/features/encryption.md).
+# Native assets prefetched by scripts/ci/flutter-*-prefetch-sqlite3.* into src/frontend/.
 hooks:
   user_defines:
     sqlite3:
-      source: sqlite3mc
+      source: test-sqlite3mc
+      directory: .
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

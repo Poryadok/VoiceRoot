@@ -93,7 +93,7 @@ void main() {
           client: MockClient((_) async => throw UnimplementedError()),
         ),
         voiceChatsClientProvider.overrideWithValue(
-          FakeVoiceChatsClient(pages: [ChatListData(items: seedChatList)]),
+          _chatsClientFor(seedChatList),
         ),
       ],
     );
@@ -101,7 +101,7 @@ void main() {
 
     // ChatListController loads chats asynchronously on auth; wait before driving navigation.
     container.read(chatListControllerProvider);
-    await pumpEventQueue(times: 50);
+    await _waitForChatListItems(container, minCount: seedChatList.length);
 
     container.read(selectedChatIdProvider.notifier).state = 'chat-a';
     container.read(unreadChatNavigationProvider.notifier).selectNextUnread();
@@ -175,7 +175,7 @@ Future<ProviderContainer> _pumpShortcuts(
             client: MockClient((_) async => throw UnimplementedError()),
           ),
           voiceChatsClientProvider.overrideWithValue(
-            FakeVoiceChatsClient(pages: [ChatListData(items: seedChatList)]),
+            _chatsClientFor(seedChatList),
           ),
         ],
       ),
@@ -190,12 +190,38 @@ Future<ProviderContainer> _pumpShortcuts(
 
   if (prepareChatList) {
     container.read(chatListControllerProvider);
-    await pumpEventQueue(times: 50);
-    container.read(chatListControllerProvider.notifier).state = ChatListState(
-      items: seedChatList,
-    );
+    await _waitForChatListItems(container, minCount: seedChatList.length);
+    _pinChatList(container, seedChatList);
+    await tester.pump();
+    // Late auth-triggered loadInitial must not leave the list empty.
+    _pinChatList(container, seedChatList);
     await tester.pump();
   }
 
   return container;
+}
+
+/// [FakeVoiceChatsClient] consumes pages; duplicate seed so concurrent loads
+/// cannot empty the list before shortcuts read it.
+FakeVoiceChatsClient _chatsClientFor(List<ChatListItem> items) {
+  final page = ChatListData(items: items);
+  return FakeVoiceChatsClient(pages: [page, page]);
+}
+
+Future<void> _waitForChatListItems(
+  ProviderContainer container, {
+  required int minCount,
+}) async {
+  for (var i = 0; i < 100; i++) {
+    if (container.read(chatListControllerProvider).items.length >= minCount) {
+      return;
+    }
+    await pumpEventQueue();
+  }
+}
+
+void _pinChatList(ProviderContainer container, List<ChatListItem> items) {
+  container.read(chatListControllerProvider.notifier).state = ChatListState(
+    items: items,
+  );
 }
