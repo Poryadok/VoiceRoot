@@ -69,8 +69,8 @@ jobs:
           echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
       - name: Check Dart protobuf codegen
         run: make buf-dart-check
-      - name: Prefetch sqlite3mc native asset
-        run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh
+      - name: Prefetch sqlite3mc native assets
+        run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host android
       - name: Flutter analyze and test
         working-directory: src/frontend
         run: |
@@ -97,6 +97,8 @@ jobs:
           flutter-version: "3.41.7"
           channel: stable
           cache: true
+      - name: Prefetch sqlite3mc native assets
+        run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
       - name: Chrome deep link web tests
         working-directory: src/frontend
         run: |
@@ -113,12 +115,13 @@ jobs:
           flutter-version: "3.41.7"
           channel: stable
           cache: true
-      - name: Flutter iOS release smoke (no codesign)
+      - name: Prefetch sqlite3mc native assets
+        run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host ios-sim
+      - name: Flutter iOS simulator release smoke (no codesign)
         working-directory: src/frontend
         run: |
-          flutter pub get
           bash ../../scripts/ci/patch-livekit-webrtc-podspec.sh ../..
-          flutter build ios --release --no-codesign --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080
+          flutter build ios --simulator --release --no-codesign --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080
 
   flutter-windows:
     runs-on: windows-latest
@@ -348,6 +351,8 @@ jobs:
           for m in pkg analytics bot chat federation file gateway matchmaking messaging moderation notification realtime role search social space story subscription user voice; do
             (cd "src/backend/$m" && go mod tidy)
           done
+      - name: Prefetch sqlite3mc native assets
+        run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
       - name: make build-all
         run: make build-all
       - name: make flutter-ci
@@ -407,10 +412,11 @@ jobs:
           flutter-version: "3.41.7"
           channel: stable
           cache: true
+      - name: Prefetch sqlite3mc native assets
+        run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
       - name: Flutter Phase 17 live test
         working-directory: src/frontend
         run: |
-          flutter pub get
           flutter test test/phase17_stories_e2e_live_test.dart \
             --dart-define=VOICE_RUN_LIVE_INTEGRATION=true \
             --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080
