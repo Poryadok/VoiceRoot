@@ -52,11 +52,8 @@ void main() {
       'integration-msg',
     );
 
-    final semantics = tester.ensureSemantics();
-    addTearDown(semantics.dispose);
-    await tester.pump();
-
     expect(find.byKey(ThreeColumnShell.navOpenChat), findsOneWidget);
+    expect(find.bySemanticsLabel('Conversation'), findsOneWidget);
     expect(
       find.ancestor(
         of: find.byKey(ThreeColumnShell.navOpenChat),

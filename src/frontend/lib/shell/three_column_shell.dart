@@ -80,6 +80,7 @@ class ThreeColumnShell extends StatelessWidget {
       return Semantics(
         label: 'Navigation',
         container: true,
+        explicitChildNodes: true,
         child: SizedBox(
           key: navActiveRail,
           width: width,
@@ -93,6 +94,7 @@ class ThreeColumnShell extends StatelessWidget {
       child: Semantics(
         label: 'Chat list',
         container: true,
+        explicitChildNodes: true,
         child: ColoredBox(
           key: navSpaceTree,
           color: voice.surface,
@@ -106,6 +108,7 @@ class ThreeColumnShell extends StatelessWidget {
       child: Semantics(
         label: 'Chat list',
         container: true,
+        explicitChildNodes: true,
         child: ColoredBox(
           key: navChatList,
           color: voice.surface,
@@ -119,6 +122,7 @@ class ThreeColumnShell extends StatelessWidget {
       child: Semantics(
         label: 'Conversation',
         container: true,
+        explicitChildNodes: true,
         child: ColoredBox(
           key: navOpenChat,
           color: voice.canvas,
@@ -185,6 +189,7 @@ class ThreeColumnShell extends StatelessWidget {
                 child: Semantics(
                   label: 'Conversation',
                   container: true,
+                  explicitChildNodes: true,
                   child: ColoredBox(
                     key: navOpenChat,
                     color: voice.canvas,
@@ -221,6 +226,7 @@ class ThreeColumnShell extends StatelessWidget {
                 child: Semantics(
                   label: 'Conversation',
                   container: true,
+                  explicitChildNodes: true,
                   child: ColoredBox(
                     key: navOpenChat,
                     color: voice.canvas,
@@ -247,6 +253,7 @@ class ThreeColumnShell extends StatelessWidget {
                   child: Semantics(
                     label: 'Conversation',
                     container: true,
+                    explicitChildNodes: true,
                     child: ColoredBox(
                       key: navOpenChat,
                       color: voice.canvas,

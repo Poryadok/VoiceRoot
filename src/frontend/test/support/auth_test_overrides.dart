@@ -19,6 +19,7 @@ import 'package:voice_frontend/state/social_providers.dart';
 import 'package:voice_frontend/theme/profile_accent_storage.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/backend/users_client.dart';
+import 'package:voice_frontend/state/version_policy_providers.dart';
 import 'package:voice_frontend/routing/deep_link_listener.dart';
 
 import 'fake_voice_api_clients.dart';
@@ -48,6 +49,9 @@ List<Override> voiceAppTestOverrides({required http.Client client}) => [
   messageCacheStoreProvider.overrideWithValue(InMemoryMessageCacheStore()),
   isDeviceOfflineProvider.overrideWith((ref) => false),
   mySpacesProvider.overrideWith((_) async => const SpaceListData(spaces: [])),
+  versionPolicyProvider.overrideWith(
+    (ref) => VersionPolicyController(ref, enablePolling: false),
+  ),
 ];
 
 /// Onboarding already completed — avoids overlay dialogs in shell widget tests.

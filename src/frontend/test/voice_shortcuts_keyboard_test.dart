@@ -52,17 +52,35 @@ void main() {
       ),
     ];
 
-    final container = await _pumpShortcuts(
-      tester,
-      seedChatList: seedChatList,
-      prepareChatList: true,
+    late ProviderContainer container;
+
+    container = ProviderContainer(
+      overrides: [
+        ...voiceAppTestOverrides(
+          client: MockClient((_) async => throw UnimplementedError()),
+        ),
+        voiceChatsClientProvider.overrideWithValue(
+          _chatsClientFor(seedChatList),
+        ),
+      ],
     );
     addTearDown(container.dispose);
+    _pinChatList(container, seedChatList);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          home: VoiceShortcuts(
+            child: const SizedBox.expand(),
+          ),
+        ),
+      ),
+    );
 
     container.read(selectedChatIdProvider.notifier).state = 'chat-a';
 
     _invokeNextUnreadChat(container);
-    await tester.pump();
 
     expect(container.read(selectedChatIdProvider), 'chat-b');
   });
@@ -163,7 +181,6 @@ Future<ProviderContainer> _pumpShortcuts(
       unreadCount: 1,
     ),
   ],
-  bool prepareChatList = false,
 }) async {
   late ProviderContainer container;
 
@@ -188,16 +205,6 @@ Future<ProviderContainer> _pumpShortcuts(
   );
   await tester.pump();
 
-  if (prepareChatList) {
-    container.read(chatListControllerProvider);
-    await _waitForChatListItems(container, minCount: seedChatList.length);
-    _pinChatList(container, seedChatList);
-    await tester.pump();
-    // Late auth-triggered loadInitial must not leave the list empty.
-    _pinChatList(container, seedChatList);
-    await tester.pump();
-  }
-
   return container;
 }
 
@@ -216,7 +223,9 @@ Future<void> _waitForChatListItems(
     if (container.read(chatListControllerProvider).items.length >= minCount) {
       return;
     }
-    await pumpEventQueue();
+    // Avoid pumpEventQueue() while a WidgetTester tree is mounted — it can
+    // never drain when the binding keeps scheduling work.
+    await Future<void>.delayed(const Duration(milliseconds: 5));
   }
 }
 
