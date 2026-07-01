@@ -117,11 +117,11 @@ jobs:
           cache: true
       - name: Prefetch sqlite3mc native assets
         run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host ios-sim
-      - name: Flutter iOS simulator release smoke (no codesign)
+      - name: Flutter iOS simulator debug smoke (no codesign)
         working-directory: src/frontend
         run: |
           bash ../../scripts/ci/patch-livekit-webrtc-podspec.sh ../..
-          flutter build ios --simulator --release --no-codesign --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080
+          flutter build ios --simulator --debug --no-codesign --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080
 
   flutter-windows:
     runs-on: windows-latest

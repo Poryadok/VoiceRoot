@@ -65,14 +65,15 @@ download_asset() {
   }
   url="https://github.com/simolus3/sqlite3.dart/releases/download/${RELEASE_TAG}/${asset_name}"
   dest="$FRONTEND/$asset_name"
-  tmp="$(mktemp)"
-  trap 'rm -f "$tmp"' RETURN
 
   mkdir -p "$FRONTEND"
   if [[ -f "$dest" ]] && [[ "$(sha256_file "$dest")" == "$expected" ]]; then
     echo "sqlite3 prefetch cache hit: $dest"
     return 0
   fi
+
+  tmp="$(mktemp)"
+  trap 'rm -f "$tmp"' RETURN
 
   for i in 1 2 3 4 5; do
     echo "Downloading sqlite3mc ($i/5): $url"
