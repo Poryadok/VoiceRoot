@@ -70,7 +70,7 @@ jobs:
       - name: Check Dart protobuf codegen
         run: make buf-dart-check
       - name: Prefetch sqlite3mc native asset
-        run: ./scripts/ci/flutter-linux-prefetch-sqlite3.sh
+        run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh
       - name: Flutter analyze and test
         working-directory: src/frontend
         run: |
