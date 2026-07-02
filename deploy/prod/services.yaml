@@ -41,4 +41,4 @@ metadata:
   namespace: voice-prod
 spec:
   selector: {app: voice-bot}
-  ports: [{port: 8080}, {port: 9090}]
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]

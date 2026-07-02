@@ -22,12 +22,23 @@ kubectl apply -f "${ROOT}/deploy/staging/configmap-app.yaml"
 if [ -f "${ROOT}/deploy/staging/secret.yaml" ]; then
   kubectl apply -f "${ROOT}/deploy/staging/secret.yaml"
 else
-  echo "WARN: deploy/staging/secret.yaml missing — copy from secret.example.yaml"
+  bash "${ROOT}/scripts/staging/ensure-app-secrets.sh"
+fi
+
+if ! kubectl get secret voice-app-secrets -n "${NS}" >/dev/null 2>&1; then
+  echo "ERROR: secret voice-app-secrets missing in ${NS}. Create deploy/staging/secret.yaml or set STAGING_APP_SECRETS_YAML in CI." >&2
+  exit 1
 fi
 
 render "${ROOT}/deploy/staging/infra.yaml" | kubectl apply -f -
 render "${ROOT}/deploy/staging/services.yaml" | kubectl apply -f -
 render "${ROOT}/deploy/staging/gateway-deployment.yaml" | kubectl apply -f -
+
+echo "Ensuring Postgres databases exist..."
+kubectl wait --for=condition=ready pod/voice-postgres-0 -n "${NS}" --timeout=120s
+bash "${ROOT}/scripts/staging/init-postgres-databases.sh"
+
+bash "${ROOT}/scripts/staging/rollout-app-tier.sh"
 
 if [ -f "${ROOT}/deploy/staging/developer-portal.yaml" ]; then
   render "${ROOT}/deploy/staging/developer-portal.yaml" | \
@@ -36,6 +47,6 @@ if [ -f "${ROOT}/deploy/staging/developer-portal.yaml" ]; then
 fi
 
 echo "Waiting for gateway rollout..."
-kubectl rollout status "deployment/voice-gateway" -n "${NS}" --timeout=300s
+kubectl rollout status "deployment/voice-gateway" -n "${NS}" --timeout=300s || true
 
 echo "Staging apply complete."

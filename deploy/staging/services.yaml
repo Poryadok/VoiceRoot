@@ -88,7 +88,7 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-social}
-  ports: [{name: http, port: 8080}, {port: 9090}]
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -131,7 +131,7 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-user}
-  ports: [{name: http, port: 8080}, {port: 9090}]
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -168,7 +168,7 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-role}
-  ports: [{name: http, port: 8080}, {port: 9090}]
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -205,7 +205,7 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-space}
-  ports: [{name: http, port: 8080}, {port: 9090}]
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -243,7 +243,7 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-chat}
-  ports: [{name: http, port: 8080}, {port: 9090}]
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -284,7 +284,7 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-file}
-  ports: [{name: http, port: 8080}, {port: 9090}]
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -323,7 +323,7 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-messaging}
-  ports: [{name: http, port: 8080}, {port: 9090}]
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -363,7 +363,7 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-voice}
-  ports: [{name: http, port: 8080}, {port: 9090}]
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -401,7 +401,7 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-matchmaking}
-  ports: [{name: http, port: 8080}, {port: 9090}]
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -438,7 +438,7 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-search}
-  ports: [{name: http, port: 8080}, {port: 9090}]
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -478,7 +478,7 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-notification}
-  ports: [{name: http, port: 8080}, {port: 9090}]
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -558,4 +558,4 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-bot}
-  ports: [{name: http, port: 8080}, {port: 9090}]
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]

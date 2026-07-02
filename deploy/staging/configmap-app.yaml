@@ -7,6 +7,7 @@ metadata:
   namespace: voice-staging
 data:
   LOG_LEVEL: "info"
+  GRPC_DIAL_TIMEOUT: "120s"
   POSTGRES_USER: "voice"
   POSTGRES_HOST: "voice-postgres"
   POSTGRES_PORT: "5432"
