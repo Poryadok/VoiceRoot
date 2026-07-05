@@ -67,6 +67,7 @@ jobs:
       - name: Apply staging manifests
         env:
           STAGING_APP_SECRETS_YAML_B64: ${{ secrets.STAGING_APP_SECRETS_YAML }}
+          VOICE_DEVELOPER_PORTAL_INGRESS_HOST: ${{ vars.VOICE_DEVELOPER_PORTAL_INGRESS_HOST }}
         run: |
           set -eux
           REGISTRY="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"

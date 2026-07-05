@@ -42,7 +42,7 @@ bash "${ROOT}/scripts/staging/rollout-app-tier.sh"
 
 if [ -f "${ROOT}/deploy/staging/developer-portal.yaml" ]; then
   render "${ROOT}/deploy/staging/developer-portal.yaml" | \
-    sed -e "s|__DEVELOPER_PORTAL_INGRESS_HOST__|${VOICE_DEVELOPER_PORTAL_INGRESS_HOST:-developers.tastytest.online}|g" | \
+    sed -e "s|__DEVELOPER_PORTAL_INGRESS_HOST__|${VOICE_DEVELOPER_PORTAL_INGRESS_HOST:-developers.comrade.click}|g" | \
     kubectl apply -f -
 fi
 
