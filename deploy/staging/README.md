@@ -23,7 +23,7 @@ scripts/staging/render-and-apply.sh
 Optional smoke after deploy:
 
 ```bash
-export VOICE_STAGING_URL=https://voice.tastytest.online
+export VOICE_STAGING_URL=https://<VOICE_GATEWAY_INGRESS_HOST>
 scripts/staging/smoke-staging.sh
 ```
 
@@ -67,4 +67,6 @@ See [deploy/observability/README.md](../observability/README.md) for the observa
 
 ## CI
 
-Workflow [Staging deploy](../../.github/workflows/staging-deploy.yml) applies namespace, configmap, infra, services, and gateway when `STAGING_DEPLOY_FULL_STACK=true`.
+Workflow [CI](../../.github/workflows/ci.yml) job **`developer-portal`** runs `npm ci`, `npm test`, and `npm run build` on every PR and push to `master`. On push to `master` it also builds and pushes `ghcr.io/<owner>/<repo>/developer-portal:<git-sha>` and `:latest` to GHCR. Staging build-args (`VITE_VOICE_API_BASE`, OAuth client id) come from GitHub Variables — see [DEPLOYMENT.md](../../docs/DEPLOYMENT.md).
+
+Workflow [Staging deploy](../../.github/workflows/staging-deploy.yml) applies the full stack (infra, services, gateway, developer-portal) via `scripts/staging/render-and-apply.sh` when **`STAGING_DEPLOY_ENABLED=true`** after successful CI on `master`, or manually via **`workflow_dispatch`** (optional image tag, default `latest`).

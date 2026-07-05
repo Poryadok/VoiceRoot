@@ -30,7 +30,7 @@
         → прод: тег релиза + workflow с approval (или ручной выкат) → production
 ```
 
-- **Staging**: образ **API Gateway** (минимальный каркас в [`src/backend/gateway/`](../src/backend/gateway/)) собирается и пушится в **GHCR** при каждом push в `master` (workflow [`CI`](../.github/workflows/ci.yml), job `gateway-image`). Деплой в namespace `voice-staging` выполняет workflow **[`Staging deploy`](../.github/workflows/staging-deploy.yml)** (`kubectl apply` к манифестам в [`deploy/staging/`](../deploy/staging/)): **ручной** запуск (`workflow_dispatch`, ввод тега образа, по умолчанию `latest`); **авто** после успешного `CI` на push в `master` — только при `STAGING_DEPLOY_ENABLED` = `true` (см. раздел ниже). Пока кластер или kubeconfig не готовы — только ручной выкат или отключённый автодеплой.
+- **Staging**: образы микросервисов (Go matrix + Auth + **Developer Portal** в [`ci.yml`](../.github/workflows/ci.yml)) пушатся в **GHCR** при каждом push в `master` (теги `:<git_sha>` и `:latest`). Деплой в namespace `voice-staging` выполняет workflow **[`Staging deploy`](../.github/workflows/staging-deploy.yml)** (`kubectl apply` к манифестам в [`deploy/staging/`](../deploy/staging/)): **ручной** запуск (`workflow_dispatch`, ввод тега образа, по умолчанию `latest`); **авто** после успешного `CI` на push в `master` — только при `STAGING_DEPLOY_ENABLED` = `true` (см. раздел ниже). Пока кластер или kubeconfig не готовы — только ручной выкат или отключённый автодеплой.
 - **Ограничение staging (историческое):** ранее выкатывался только Gateway. **Текущее:** workflow **Staging deploy** применяет полный стек [`deploy/staging/`](../deploy/staging/) через `scripts/staging/render-and-apply.sh` (все сервисы фаз 0–10 + ConfigMap upstreams). Требуются `voice-app-secrets` (см. `secret.example.yaml`) и образы всех сервисов в GHCR. Опционально: `STAGING_SMOKE_ENABLED=true` → `scripts/staging/smoke-staging.sh`.
 - **Production**: деплой только с **явным шагом** (approval в GitHub Environments, ручной запуск job или утверждённый релизный тег) — без автоматического «всё, что в master, сразу в prod».
 
@@ -46,6 +46,8 @@
 |-----|----------------|------------|
 | `GITHUB_TOKEN` | встроенный | Push образов в GHCR из job `gateway-image` (в `CI` выдано `packages: write`). |
 | Образ gateway | GHCR | `ghcr.io/<owner_lowercase>/<repo_lowercase>/gateway:<git_sha>` и тег `latest` (см. `ci.yml`). |
+| Образ developer-portal | GHCR | `ghcr.io/<owner_lowercase>/<repo_lowercase>/developer-portal:<git_sha>` и тег `latest` (job `developer-portal` в `ci.yml`; build-args из `VOICE_GATEWAY_INGRESS_HOST`). |
+| Variable **`VOICE_DEVELOPER_PORTAL_INGRESS_HOST`** | Settings → Secrets and variables → **Actions** → Variables | FQDN Developer Portal (Ingress host, OAuth callback origin). Подставляется в [`deploy/staging/developer-portal.yaml`](../deploy/staging/developer-portal.yaml) при деплое. По умолчанию в `render-and-apply.sh` — `developers.comrade.click` если переменная пуста. |
 | Environment **`staging`** | Settings → Environments | Окружение для job деплоя; при необходимости включить required reviewers / wait timer. |
 | Secret **`STAGING_KUBECONFIG`** | Environment **staging** → Environment secrets | Kubeconfig для staging **k3s**, целиком в **base64** (одна строка: `base64 -w0 kubeconfig` на Linux или эквивалент на macOS/Windows). Workflow декодирует в `~/.kube/config`. В поле **`clusters[].cluster.server`** должен быть URL API, **доступный из интернета** (например `https://95.31.10.177:6443`), не `127.0.0.1` и не `https://0.0.0.0:6443` — иначе `kubectl` на GitHub runner не подключится. Подготовка одной строки для секрета: [`scripts/staging/prepare-kubeconfig-secret.sh`](../scripts/staging/prepare-kubeconfig-secret.sh) или [`prepare-kubeconfig-secret.ps1`](../scripts/staging/prepare-kubeconfig-secret.ps1). Локальная проверка шагов workflow без записи в кластер: [`scripts/staging/kubectl-apply-dry-run.sh`](../scripts/staging/kubectl-apply-dry-run.sh) (нужны `kubectl` и рабочий kubeconfig). |
 | Variable **`STAGING_DEPLOY_ENABLED`** | Settings → Secrets and variables → **Actions** → Variables | Ровно `true` — разрешить **автоматический** деплой после успешного `CI` на push в `master` (событие `workflow_run`). Пока переменная не задана или не равна `true`, автодеплой не запускается; остаётся **`workflow_dispatch`** в `Staging deploy`. |
@@ -155,21 +157,23 @@ Staging manifests wire Developer Portal OAuth on **voice-auth** via ConfigMap `v
 
 | ConfigMap key / Auth env | Purpose |
 |--------------------------|---------|
-| `AUTH_OAUTH_PUBLIC_API_BASE_URL` | Public Gateway URL in authorize links (staging: `https://voice.tastytest.online`) |
+| `AUTH_OAUTH_PUBLIC_API_BASE_URL` | Public Gateway URL in authorize links (must match `https://${VOICE_GATEWAY_INGRESS_HOST}`) |
 | `AUTH_OAUTH_DEVELOPER_PORTAL_ENABLED` | `true` on staging |
 | `AUTH_OAUTH_DEVELOPER_PORTAL_CLIENT_ID` | OAuth client id (`voice-developer-portal`) |
-| `AUTH_OAUTH_DEVELOPER_PORTAL_REDIRECT_URIS` | HTTPS callback(s), e.g. `https://developers.tastytest.online/callback` |
+| `AUTH_OAUTH_DEVELOPER_PORTAL_REDIRECT_URIS` | HTTPS callback(s), e.g. `https://${VOICE_DEVELOPER_PORTAL_INGRESS_HOST}/callback` |
 | `AUTH_OAUTH_DEVELOPER_PORTAL_CLIENT_SECRET` | Optional Secret override (PKCE public client may omit) |
 
-Portal Deployment + Ingress: [`deploy/staging/developer-portal.yaml`](../deploy/staging/developer-portal.yaml). Build the image with the same public API base and client id:
+Portal Deployment + Ingress: [`deploy/staging/developer-portal.yaml`](../deploy/staging/developer-portal.yaml). **CI** (job `developer-portal` in [`ci.yml`](../.github/workflows/ci.yml)) builds and pushes the image on every push to `master` with `VITE_VOICE_API_BASE=https://${VOICE_GATEWAY_INGRESS_HOST}` and `VITE_OAUTH_CLIENT_ID=voice-developer-portal`. **Staging deploy** applies the portal manifest with the same image tag (`git SHA`) as other services.
+
+Manual build (local or one-off):
 
 ```bash
 docker build -f src/developer-portal/Dockerfile src/developer-portal \
-  --build-arg VITE_VOICE_API_BASE=https://voice.tastytest.online \
+  --build-arg VITE_VOICE_API_BASE=https://<VOICE_GATEWAY_INGRESS_HOST> \
   --build-arg VITE_OAUTH_CLIENT_ID=voice-developer-portal
 ```
 
-`scripts/staging/render-and-apply.sh` applies the portal manifest when present; override ingress host with `VOICE_DEVELOPER_PORTAL_INGRESS_HOST` (default `developers.tastytest.online`). Add DNS **A/AAAA** for that host to the staging ingress node. **Prod** portal Ingress is not in-repo yet — reuse the staging template with `voice-prod` namespace and production FQDNs.
+`scripts/staging/render-and-apply.sh` applies the portal manifest when present; ingress host from `VOICE_DEVELOPER_PORTAL_INGRESS_HOST` (repo Variable, passed through staging-deploy workflow). Add DNS **A/AAAA** for that host to the staging ingress node. **Prod** portal Ingress is not in-repo yet — reuse the staging template with `voice-prod` namespace and production FQDNs.
 
 ---
 

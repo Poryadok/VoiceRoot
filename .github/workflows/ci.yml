@@ -315,6 +315,72 @@ jobs:
           docker push "${{ steps.image.outputs.base }}/auth:${{ github.sha }}"
           docker push "${{ steps.image.outputs.base }}/auth:latest"
 
+  developer-portal:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve VITE_VOICE_API_BASE
+        id: vite
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/master" ]; then
+            HOST="${{ vars.VOICE_GATEWAY_INGRESS_HOST }}"
+            if [ -z "${HOST}" ]; then
+              echo "VOICE_GATEWAY_INGRESS_HOST must be set for developer-portal image push on master." >&2
+              exit 1
+            fi
+            echo "api_base=https://${HOST}" >> "$GITHUB_OUTPUT"
+          else
+            echo "api_base=http://127.0.0.1:18080" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: src/developer-portal/package-lock.json
+      - name: npm ci, test, build
+        working-directory: src/developer-portal
+        env:
+          VITE_VOICE_API_BASE: ${{ steps.vite.outputs.api_base }}
+          VITE_OAUTH_CLIENT_ID: voice-developer-portal
+          VITE_OAUTH_DISABLED: "false"
+        run: |
+          npm ci
+          npm test
+          npm run build
+      - uses: docker/setup-buildx-action@v3
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+      - name: Log in to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Image base (lowercase)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        id: image
+        run: echo "base=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+      - name: Build and push developer-portal image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./src/developer-portal
+          file: ./src/developer-portal/Dockerfile
+          push: true
+          build-args: |
+            VITE_VOICE_API_BASE=${{ steps.vite.outputs.api_base }}
+            VITE_OAUTH_CLIENT_ID=voice-developer-portal
+            VITE_OAUTH_DISABLED=false
+          tags: |
+            ${{ steps.image.outputs.base }}/developer-portal:${{ github.sha }}
+            ${{ steps.image.outputs.base }}/developer-portal:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   # Single-host parity with local `make build-all` + `make flutter-ci` (see Makefile).
   # Matrix jobs above stay for faster per-service feedback on PRs.
   local-ci-parity:
