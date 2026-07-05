@@ -93,8 +93,10 @@ With the flag set, tests **fail** if the stack is down or gateway returns errors
 ```powershell
 flutter test test/gateway_dm_ws_live_integration_test.dart `
   --dart-define=VOICE_RUN_LIVE_INTEGRATION=true `
-  --dart-define=VOICE_API_BASE_URL=https://voice.tastytest.online
+  --dart-define=VOICE_API_BASE_URL=https://voice.comrade.click
 ```
+
+Default staging hostnames live in [`deploy/staging/domains.defaults`](../../../deploy/staging/domains.defaults).
 
 See `docs/TESTING.md` and the `flutter-web-client-testing` skill.
 

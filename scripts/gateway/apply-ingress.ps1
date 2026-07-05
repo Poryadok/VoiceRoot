@@ -2,7 +2,8 @@
 # Requires: kubectl configured for the target cluster.
 #
 # Usage:
-#   .\scripts\gateway\apply-ingress.ps1 -IngressHost 'voice.tastytest.online' [-Namespace voice-staging] [-TlsSecretName voice-gateway-tls]
+#   .\scripts\gateway\apply-ingress.ps1 -IngressHost 'voice.comrade.click' [-Namespace voice-staging] [-TlsSecretName voice-gateway-tls]
+#   # Current default host: deploy/staging/domains.defaults → VOICE_GATEWAY_INGRESS_HOST
 #
 param(
     [Parameter(Mandatory = $true)]

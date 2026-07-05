@@ -27,7 +27,7 @@
 | `src/backend/migrations/` | SQL v1 + init в compose для локального dev |
 | Docker Compose | Infra: Postgres (5 БД), Redis, NATS (JetStream). **`--profile app`:** Phase-1 app stack — [README.md](../README.md), `make compose-app-up` |
 | Локальные проверки | **`make build-all`** + **`make flutter-ci`**; opt-in live: gateway compose tests, Flutter `VOICE_RUN_LIVE_INTEGRATION` — [TESTING.md](TESTING.md) |
-| CI / staging | [ci.yml](../.github/workflows/ci.yml), [staging-deploy.yml](../.github/workflows/staging-deploy.yml); staging FQDN `voice.tastytest.online` — пока в основном gateway |
+| CI / staging | [ci.yml](../.github/workflows/ci.yml), [staging-deploy.yml](../.github/workflows/staging-deploy.yml); staging FQDN — [`deploy/staging/domains.defaults`](../deploy/staging/domains.defaults) (gateway + developer portal) |
 
 Целевые сервисы и БД по-прежнему описаны в [MICROSERVICES.md](MICROSERVICES.md) и `docs/microservices/*`; ниже — **куда класть код** при появлении реализации.
 

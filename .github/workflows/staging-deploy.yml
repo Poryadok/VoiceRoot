@@ -68,8 +68,11 @@ jobs:
         env:
           STAGING_APP_SECRETS_YAML_B64: ${{ secrets.STAGING_APP_SECRETS_YAML }}
           VOICE_DEVELOPER_PORTAL_INGRESS_HOST: ${{ vars.VOICE_DEVELOPER_PORTAL_INGRESS_HOST }}
+          VOICE_GATEWAY_INGRESS_HOST: ${{ vars.VOICE_GATEWAY_INGRESS_HOST }}
         run: |
           set -eux
+          # shellcheck disable=SC1091
+          source scripts/staging/load-staging-domains.sh
           REGISTRY="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
           TAG="${{ steps.tag_dispatch.outputs.tag }}"
           if [ -z "${TAG}" ]; then
@@ -86,18 +89,26 @@ jobs:
       - name: Staging smoke (optional)
         if: vars.STAGING_SMOKE_ENABLED == 'true'
         env:
-          VOICE_STAGING_URL: https://${{ vars.VOICE_GATEWAY_INGRESS_HOST }}
-        run: bash scripts/staging/smoke-staging.sh
+          VOICE_GATEWAY_INGRESS_HOST: ${{ vars.VOICE_GATEWAY_INGRESS_HOST }}
+        run: |
+          set -eux
+          # shellcheck disable=SC1091
+          source scripts/staging/load-staging-domains.sh
+          export VOICE_STAGING_URL="https://${VOICE_GATEWAY_INGRESS_HOST}"
+          bash scripts/staging/smoke-staging.sh
 
       - name: Apply gateway Ingress (optional)
         env:
-          INGRESS_HOST: ${{ vars.VOICE_GATEWAY_INGRESS_HOST }}
+          VOICE_GATEWAY_INGRESS_HOST: ${{ vars.VOICE_GATEWAY_INGRESS_HOST }}
           TLS_SECRET: ${{ vars.VOICE_GATEWAY_TLS_SECRET }}
           KUBE_NS: ${{ vars.VOICE_K8S_NAMESPACE }}
         run: |
           set -eux
+          # shellcheck disable=SC1091
+          source scripts/staging/load-staging-domains.sh
+          INGRESS_HOST="${VOICE_GATEWAY_INGRESS_HOST}"
           if [ -z "${INGRESS_HOST:-}" ]; then
-            echo "VOICE_GATEWAY_INGRESS_HOST not set — skip Ingress (set repo Variable to enable)."
+            echo "VOICE_GATEWAY_INGRESS_HOST not set — skip Ingress (set repo Variable or domains.defaults to enable)."
             exit 0
           fi
           NS="${KUBE_NS:-voice-staging}"

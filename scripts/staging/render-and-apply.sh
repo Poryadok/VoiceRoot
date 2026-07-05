@@ -3,6 +3,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+# shellcheck source=scripts/staging/load-staging-domains.sh
+source "${ROOT}/scripts/staging/load-staging-domains.sh"
 REGISTRY="${VOICE_IMAGE_REGISTRY:-ghcr.io/voiceroot/voiceroot}"
 TAG="${VOICE_IMAGE_TAG:-latest}"
 NS="${VOICE_K8S_NAMESPACE:-voice-staging}"
@@ -17,7 +19,9 @@ render() {
 echo "Applying Voice staging stack: ${REGISTRY} tag ${TAG} namespace ${NS}"
 
 kubectl apply -f "${ROOT}/deploy/staging/namespace.yaml"
-kubectl apply -f "${ROOT}/deploy/staging/configmap-app.yaml"
+sed -e "s|__GATEWAY_INGRESS_HOST__|${VOICE_GATEWAY_INGRESS_HOST}|g" \
+    -e "s|__DEVELOPER_PORTAL_INGRESS_HOST__|${VOICE_DEVELOPER_PORTAL_INGRESS_HOST}|g" \
+  "${ROOT}/deploy/staging/configmap-app.yaml" | kubectl apply -f -
 
 if [ -f "${ROOT}/deploy/staging/secret.yaml" ]; then
   kubectl apply -f "${ROOT}/deploy/staging/secret.yaml"
@@ -42,7 +46,7 @@ bash "${ROOT}/scripts/staging/rollout-app-tier.sh"
 
 if [ -f "${ROOT}/deploy/staging/developer-portal.yaml" ]; then
   render "${ROOT}/deploy/staging/developer-portal.yaml" | \
-    sed -e "s|__DEVELOPER_PORTAL_INGRESS_HOST__|${VOICE_DEVELOPER_PORTAL_INGRESS_HOST:-developers.comrade.click}|g" | \
+    sed -e "s|__DEVELOPER_PORTAL_INGRESS_HOST__|${VOICE_DEVELOPER_PORTAL_INGRESS_HOST}|g" | \
     kubectl apply -f -
 fi
 

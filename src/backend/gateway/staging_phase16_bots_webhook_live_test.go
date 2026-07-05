@@ -16,7 +16,7 @@ import (
 //
 // Opt-in:
 //
-//	VOICE_STAGING_API_URL=https://voice.tastytest.online \
+//	VOICE_STAGING_API_URL=https://voice.comrade.click \
 //	VOICE_STAGING_WEBHOOK_PING_URL=https://<reachable-echo>/ping \
 //	go test -run TestStagingPhase16BotsWebhook_live -count=1 ./...
 //
@@ -24,7 +24,7 @@ import (
 // The endpoint should respond to Bot webhook POST with JSON body {"content":"pong"}.
 func TestStagingPhase16BotsWebhook_live(t *testing.T) {
 	if !liveStagingEnabled() {
-		t.Skip("set VOICE_STAGING_API_URL to run against staging (e.g. https://voice.tastytest.online)")
+		t.Skip("set VOICE_STAGING_API_URL to run against staging (default host: deploy/staging/domains.defaults)")
 	}
 
 	client := &http.Client{Timeout: 60 * time.Second}

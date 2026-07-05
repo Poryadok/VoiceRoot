@@ -3,7 +3,7 @@
 #
 # Placeholders (replaced by workflow or sed):
 #   __K_NAMESPACE__     — namespace of Service voice-gateway (e.g. voice-staging, voice-prod)
-#   __INGRESS_HOST__    — public FQDN (staging: voice.tastytest.online; DNS → node/LB in front of Traefik NodePorts)
+#   __INGRESS_HOST__    — public FQDN (default staging: see deploy/staging/domains.defaults)
 #   __TLS_SECRET_NAME__ — kubernetes.io/tls secret in that namespace (for HTTPS Ingress; optional if TLS terminates only outside the cluster)
 #
 apiVersion: networking.k8s.io/v1

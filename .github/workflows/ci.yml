@@ -326,10 +326,15 @@ jobs:
         id: vite
         shell: bash
         run: |
+          HOST="${{ vars.VOICE_GATEWAY_INGRESS_HOST }}"
+          if [ -z "${HOST}" ]; then
+            # shellcheck disable=SC1091
+            source deploy/staging/domains.defaults
+            HOST="${VOICE_GATEWAY_INGRESS_HOST}"
+          fi
           if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/master" ]; then
-            HOST="${{ vars.VOICE_GATEWAY_INGRESS_HOST }}"
             if [ -z "${HOST}" ]; then
-              echo "VOICE_GATEWAY_INGRESS_HOST must be set for developer-portal image push on master." >&2
+              echo "VOICE_GATEWAY_INGRESS_HOST must be set (or deploy/staging/domains.defaults) for developer-portal image push on master." >&2
               exit 1
             fi
             echo "api_base=https://${HOST}" >> "$GITHUB_OUTPUT"

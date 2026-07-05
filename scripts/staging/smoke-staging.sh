@@ -2,7 +2,11 @@
 # Post-deploy smoke for staging (health + minimal API).
 set -euo pipefail
 
-BASE="${VOICE_STAGING_URL:-https://voice.tastytest.online}"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+# shellcheck source=scripts/staging/load-staging-domains.sh
+source "${ROOT}/scripts/staging/load-staging-domains.sh"
+
+BASE="${VOICE_STAGING_URL:-https://${VOICE_GATEWAY_INGRESS_HOST}}"
 BASE="${BASE%/}"
 
 echo "Smoke: GET ${BASE}/health"

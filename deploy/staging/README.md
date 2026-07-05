@@ -32,7 +32,8 @@ scripts/staging/smoke-staging.sh
 | File | Purpose |
 |------|---------|
 | `namespace.yaml` | `voice-staging` namespace |
-| `configmap-app.yaml` | Shared env (GRPC upstreams, NATS, Redis) |
+| `domains.defaults` | Staging public FQDNs (single file to edit on domain rotation) |
+| `configmap-app.yaml` | Shared env (GRPC upstreams, NATS, Redis); OAuth URLs templated at apply |
 | `secret.example.yaml` | Template for R2, JWT, FCM, APNs |
 | `infra.yaml` | Postgres, Redis, NATS, LiveKit, ClamAV |
 | `services.yaml` | All application microservices |
