@@ -51,13 +51,19 @@
 
 - [ ] **Phase 15 E2E live** — gateway phase15 optout/key-backup; Flutter `phase15_e2e_*_live_test`.
 - [ ] **Guest restrictions live** — `guest_restrictions_e2e_live_test.dart` в `compose-e2e-live`.
-- [ ] **Staging deploy smoke** — при доступном кластере: `STAGING_SMOKE_ENABLED=true` → `scripts/staging/smoke-staging.sh` после деплоя ([`DEPLOYMENT.md`](DEPLOYMENT.md)).
+- [ ] **Staging deploy smoke** — при доступном кластере: `STAGING_SMOKE_ENABLED=true` → `scripts/staging/smoke-staging.sh` после деплоя ([`DEPLOYMENT.md`](DEPLOYMENT.md)); расширить smoke проверкой Developer Portal (`https://${VOICE_DEVELOPER_PORTAL_INGRESS_HOST}/`) — см. Batch 11.
 
 **Промпт-якорь:** `Pre-release compose/staging E2E from docs/TODO.md Critical Batch 2`.
 
 ---
 
 ## High
+
+### Только вы — CI / deploy (если в scope софт-ланча)
+
+- [x] **Variable `STAGING_SMOKE_ENABLED`** — `true` в Settings → Actions → Variables (сейчас не задана; post-deploy smoke в [`staging-deploy.yml`](../.github/workflows/staging-deploy.yml) не запускается).
+- [ ] **Environment `staging` secrets** — `STAGING_KUBECONFIG`, `STAGING_APP_SECRETS_YAML` (base64 Secret manifest); без них CI-деплой не поднимет полный стек.
+- [ ] **GHCR pull в k8s** — если пакеты приватные: `imagePullSecrets` в namespace `voice-staging` (в манифестах пока нет — см. Batch 11).
 
 ### Только вы — prod / mobile (если в scope софт-ланча)
 
@@ -97,6 +103,24 @@ Baseline закрыт (2026-06): register guest, JWT, guards, convert-guest, TTL
 - [ ] **Guest audience (Flutter settings UX)** — backend enforcement для `show_game_status` / `show_mm_rating` / `show_stories` через `IncludeGuests`; в Flutter нет отдельного multiselect «Гостевые аккаунты» на каждое поле (только общий `include_guests` в `PrivacyAudiencePicker`).
 
 **Промпт-якорь:** `Guest accounts UX from docs/TODO.md Common Batch 6`.
+
+### Batch 11 — CI/CD и deploy automation
+
+Аудит 2026-07: [`ci.yml`](../.github/workflows/ci.yml), [`staging-deploy.yml`](../.github/workflows/staging-deploy.yml), [`compose-e2e-live.yml`](../.github/workflows/compose-e2e-live.yml), [`DEPLOYMENT.md`](DEPLOYMENT.md). Developer Portal **собирается в CI** (job `developer-portal`, push в GHCR на `master`); ручная сборка на staging — из‑за того, что **автодеплой не доезжал** (последний успешный Staging deploy ~2026-07-02; недавние push отменяли CI / deploy skipped).
+
+- [ ] **Developer Portal на staging из CI** — после зелёного CI на `master`: дождаться auto `Staging deploy` (`STAGING_DEPLOY_ENABLED=true`) или `workflow_dispatch` с тегом **git SHA** (не только `latest`). Убедиться, что `scripts/staging/render-and-apply.sh` применил `developer-portal.yaml` и pod тянет `ghcr.io/.../developer-portal:<sha>`.
+- [ ] **Rollout wait portal** — в `render-and-apply.sh` добавить `kubectl rollout status deployment/voice-developer-portal` (сейчас ждёт только gateway, с `|| true`).
+- [ ] **Prod deploy workflow** — нет `.github/workflows/prod-deploy.yml`; в репо только skeleton [`deploy/prod/`](../deploy/prod/) (bot). Нужны: environment `production` + approval, variables prod FQDN, `render-and-apply-prod.sh` по аналогии со staging.
+- [ ] **Миграции БД в staging deploy** — `render-and-apply.sh` не запускает migrate Jobs (`bot_db`, `story_db`, …); шаблоны в [`deploy/templates/`](../deploy/templates/) — встроить idempotent apply перед rollout app tier.
+- [ ] **compose-e2e-live Flutter drift** — [`compose-e2e-live.yml`](../.github/workflows/compose-e2e-live.yml) pin **3.29.3**, [`ci.yml`](../.github/workflows/ci.yml) — **3.41.7**; выровнять (общий env или reusable workflow).
+- [ ] **compose-e2e coverage в default CI** — job `compose-e2e` в `ci.yml` гоняет только Phase 17; полный `make compose-e2e-live` (phases 1–18) — только ручной workflow. Решить: nightly / required check / оставить opt-in (связано с Critical Batch 2).
+- [ ] **Staging k8s vs CI image matrix** — в GHCR пушатся `story`, `subscription`, `moderation`, `analytics`, `federation`, но в [`deploy/staging/`](../deploy/staging/) нет Deployment'ов и нет upstream'ов в `GATEWAY_GRPC_UPSTREAMS_JSON` (в compose есть). Либо добавить в staging stack, либо зафиксировать «не на staging до фазы N».
+- [ ] **imagePullSecrets в манифестах** — template + apply в `render-and-apply.sh`, если GHCR private ([`DEPLOYMENT.md`](DEPLOYMENT.md) § Pull из GHCR).
+- [ ] **Observability не в deploy pipeline** — [`deploy/observability/`](../deploy/observability/) применяется вручную; опциональный шаг в staging-deploy или отдельный workflow после app deploy.
+- [ ] **Единый pin Flutter/Go/Java в workflows** — версии SDK дублируются по jobs; вынести в `env` workflow или composite action (снижение drift).
+- [ ] **Ручной deploy tag `latest`** — `workflow_dispatch` default `latest`, auto deploy — SHA; документировать риск рассинхрона при partial failed matrix push.
+
+**Промпт-якорь:** `CI/CD deploy automation from docs/TODO.md Common Batch 11`.
 
 ---
 
@@ -149,6 +173,7 @@ MVP backend + partial Flutter; AR, algorithmic feed, post-match auto-story, mone
 | **High** | Batch 4 | Guest / phone live verification |
 | **Common** | Batch 5 | Growth, push, a11y |
 | **Common** | Batch 6 | Guest UX |
+| **Common** | Batch 11 | CI/CD, staging/prod deploy |
 | **Low** | Batch 7 | Stories post-MVP |
 | **Low** | Batch 8 | Bots CI time |
 | **Low** | Batch 9 | Flutter analyze |
