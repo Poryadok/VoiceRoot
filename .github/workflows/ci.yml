@@ -502,7 +502,7 @@ jobs:
         run: |
           ready=0
           for i in $(seq 1 30); do
-            if docker compose exec -T postgres pg_isready -U voice -d voice; then
+            if docker compose exec -T postgres pg_isready -h 127.0.0.1 -p 5432 -U voice -d voice; then
               ready=1
               break
             fi

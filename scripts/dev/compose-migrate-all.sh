@@ -7,7 +7,21 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT}"
 
-postgres_container_id() {
+if [[ -f .env ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source .env
+  set +a
+fi
+
+POSTGRES_USER="${POSTGRES_USER:-voice}"
+POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-voice}"
+POSTGRES_PORT="${POSTGRES_PORT:-5432}"
+# Compose publishes Postgres to the host; reach it from one-off migrate containers.
+MIGRATE_PG_HOST="${VOICE_MIGRATE_PG_HOST:-host.docker.internal}"
+MIGRATE_DOCKER_HOST_ARGS=(--add-host=host.docker.internal:host-gateway)
+
+postgres_container_running() {
   local cid
   cid="$(docker compose ps -q postgres 2>/dev/null || true)"
   if [[ -z "${cid}" ]]; then
@@ -22,19 +36,19 @@ postgres_container_id() {
     docker compose logs postgres --tail 80 || true
     exit 1
   fi
-  echo "${cid}"
 }
 
 wait_postgres_tcp() {
   local i
   for i in $(seq 1 30); do
-    if docker run --rm --network "container:${POSTGRES_CID}" \
-      postgres:16-alpine pg_isready -h 127.0.0.1 -p 5432 -U "${POSTGRES_USER:-voice}" >/dev/null 2>&1; then
+    if docker run --rm "${MIGRATE_DOCKER_HOST_ARGS[@]}" \
+      postgres:16-alpine pg_isready -h "${MIGRATE_PG_HOST}" -p "${POSTGRES_PORT}" -U "${POSTGRES_USER}" >/dev/null 2>&1; then
       return 0
     fi
     sleep 2
   done
-  echo "postgres TCP not ready on 127.0.0.1:5432" >&2
+  echo "postgres TCP not ready on ${MIGRATE_PG_HOST}:${POSTGRES_PORT}" >&2
+  docker compose ps postgres || true
   docker compose logs postgres --tail 80 || true
   exit 1
 }
@@ -42,11 +56,12 @@ wait_postgres_tcp() {
 migrate_db() {
   local db="$1"
   echo "==> golang-migrate up: ${db}"
-  # Share postgres network namespace — avoids compose DNS flakiness on CI runners.
-  docker run --rm --network "container:${POSTGRES_CID}" \
+  local dsn
+  dsn="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${MIGRATE_PG_HOST}:${POSTGRES_PORT}/${db}?sslmode=disable"
+  docker run --rm "${MIGRATE_DOCKER_HOST_ARGS[@]}" \
     -v "${ROOT}/src/backend/migrations/${db}:/migrations" migrate/migrate \
     -path /migrations \
-    -database "postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@127.0.0.1:5432/${db}?sslmode=disable" up
+    -database "${dsn}" up
 }
 
 run_phase15() {
@@ -91,7 +106,7 @@ run_all() {
   run_auth_optional
 }
 
-POSTGRES_CID="$(postgres_container_id)"
+postgres_container_running
 wait_postgres_tcp
 MODE="${1:-all}"
 
