@@ -41,6 +41,7 @@ render "${ROOT}/deploy/staging/gateway-deployment.yaml" | kubectl apply -f -
 echo "Ensuring Postgres databases exist..."
 kubectl wait --for=condition=ready pod/voice-postgres-0 -n "${NS}" --timeout=120s
 bash "${ROOT}/scripts/staging/init-postgres-databases.sh"
+bash "${ROOT}/scripts/staging/ensure-gateway-schema.sh"
 
 bash "${ROOT}/scripts/staging/rollout-app-tier.sh"
 

@@ -1,0 +1,104 @@
+# Path filters for CI tier 1 (PR / push). Sync service paths with Makefile GO_SERVICES.
+# Global / shared paths widen blast radius (run all Go services, full flutter, etc.).
+
+global:
+  - Makefile
+  - .golangci.yml
+  - .github/workflows/ci.yml
+  - .github/ci/**
+  - scripts/ci/**
+  - docker-compose.yml
+  - docker-compose*.yml
+  - .env.example
+  - deploy/**
+  - buf.yaml
+  - buf.lock
+  - buf.gen*.yaml
+
+protos:
+  - protos/**
+
+pkg:
+  - src/backend/pkg/**
+
+frontend:
+  - src/frontend/**
+  - design/**
+  - scripts/design/**
+
+auth:
+  - src/backend/auth/**
+
+developer-portal:
+  - src/developer-portal/**
+
+compose:
+  - docker-compose.yml
+  - docker-compose*.yml
+  - deploy/**
+  - scripts/dev/compose-migrate-all.sh
+  - scripts/ci/compose*
+
+svc_analytics:
+  - src/backend/analytics/**
+
+svc_bot:
+  - src/backend/bot/**
+
+svc_chat:
+  - src/backend/chat/**
+
+svc_federation:
+  - src/backend/federation/**
+
+svc_file:
+  - src/backend/file/**
+
+svc_gateway:
+  - src/backend/gateway/**
+
+svc_matchmaking:
+  - src/backend/matchmaking/**
+
+svc_messaging:
+  - src/backend/messaging/**
+
+svc_moderation:
+  - src/backend/moderation/**
+
+svc_notification:
+  - src/backend/notification/**
+
+svc_realtime:
+  - src/backend/realtime/**
+
+svc_role:
+  - src/backend/role/**
+
+svc_search:
+  - src/backend/search/**
+
+svc_social:
+  - src/backend/social/**
+
+svc_space:
+  - src/backend/space/**
+
+svc_story:
+  - src/backend/story/**
+
+svc_subscription:
+  - src/backend/subscription/**
+
+svc_user:
+  - src/backend/user/**
+
+svc_voice:
+  - src/backend/voice/**
+
+# Any matched code path (excludes docs-only PRs).
+code:
+  - '**'
+  - '!docs/**'
+  - '!.github/workflows/docs-link-check.yml'
+  - '!.markdown-link-check.json'

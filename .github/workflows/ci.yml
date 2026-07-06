@@ -8,6 +8,18 @@ on:
   schedule:
     - cron: "0 2 * * *"
   workflow_dispatch:
+    inputs:
+      profile:
+        description: >-
+          auto = path-filtered tier 1 (PR/push) or tier 2 on master push;
+          tier3-only = nightly parity (make build-all + integration);
+          full = all tiers, all services
+        type: choice
+        options:
+          - auto
+          - tier3-only
+          - full
+        default: auto
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -16,9 +28,66 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  GO_VERSION: "1.26"
+  FLUTTER_VERSION: "3.41.7"
+  BUF_VERSION: v1.50.0
+  GOLANGCI_LINT_MOD: github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1
+
 jobs:
+  # --- Path detection (tier 1 / 2); skipped on nightly schedule and tier3-only dispatch ---
+  changes:
+    if: >-
+      github.event_name == 'pull_request' ||
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' && inputs.profile != 'tier3-only')
+    runs-on: ubuntu-latest
+    outputs:
+      global: ${{ steps.filter.outputs.global }}
+      protos: ${{ steps.filter.outputs.protos }}
+      pkg: ${{ steps.filter.outputs.pkg }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      auth: ${{ steps.filter.outputs.auth }}
+      developer-portal: ${{ steps.filter.outputs.developer-portal }}
+      compose: ${{ steps.filter.outputs.compose }}
+      code: ${{ steps.filter.outputs.code }}
+      go_services: ${{ steps.gomatrix.outputs.go_services }}
+      run_pkg: ${{ steps.gomatrix.outputs.run_pkg }}
+      run_go: ${{ steps.gomatrix.outputs.run_go }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: .github/ci/path-filters.yml
+      - name: Resolve Go service matrix
+        id: gomatrix
+        env:
+          FILTER_JSON: ${{ toJson(steps.filter.outputs) }}
+          FORCE_FULL: ${{ github.event_name == 'workflow_dispatch' && inputs.profile == 'full' }}
+        run: bash scripts/ci/resolve-go-matrix.sh
+
+  ci-skip-gate:
+    needs: changes
+    if: >-
+      github.event_name == 'pull_request' &&
+      needs.changes.outputs.code != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Docs-only or non-code change; tier-1 CI skipped (see docs-link-check for docs)."
+
+  # --- Tier 1: fast, path-filtered (PR + push) ---
   protobuf:
-    if: github.event_name != 'schedule'
+    needs: changes
+    if: >-
+      always() &&
+      needs.changes.result == 'success' &&
+      needs.changes.outputs.code == 'true' &&
+      (needs.changes.outputs.protos == 'true' ||
+       needs.changes.outputs.global == 'true' ||
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,10 +95,10 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.26"
+          go-version: ${{ env.GO_VERSION }}
       - name: Install buf CLI
         run: |
-          go install github.com/bufbuild/buf/cmd/buf@v1.50.0
+          go install github.com/bufbuild/buf/cmd/buf@${{ env.BUF_VERSION }}
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Fetch base ref for buf breaking
         if: github.event_name == 'pull_request'
@@ -43,7 +112,14 @@ jobs:
         run: buf breaking protos --against ".git#branch=${{ github.base_ref }},subdir=protos"
 
   compose-config:
-    if: github.event_name != 'schedule'
+    needs: changes
+    if: >-
+      always() &&
+      needs.changes.result == 'success' &&
+      needs.changes.outputs.code == 'true' &&
+      (needs.changes.outputs.compose == 'true' ||
+       needs.changes.outputs.global == 'true' ||
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -53,20 +129,28 @@ jobs:
         run: bash scripts/ci/compose-nats-jetstream-check.sh
 
   flutter:
-    if: github.event_name != 'schedule'
+    needs: changes
+    if: >-
+      always() &&
+      needs.changes.result == 'success' &&
+      needs.changes.outputs.code == 'true' &&
+      (needs.changes.outputs.frontend == 'true' ||
+       needs.changes.outputs.protos == 'true' ||
+       needs.changes.outputs.global == 'true' ||
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.26"
+          go-version: ${{ env.GO_VERSION }}
       - name: Install buf CLI
         run: |
-          go install github.com/bufbuild/buf/cmd/buf@v1.50.0
+          go install github.com/bufbuild/buf/cmd/buf@${{ env.BUF_VERSION }}
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.41.7"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
       - name: Install protoc_plugin
@@ -75,124 +159,69 @@ jobs:
           echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
       - name: Check Dart protobuf codegen
         run: make buf-dart-check
-      - name: Prefetch sqlite3mc native assets
-        run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host android
+      - name: Prefetch sqlite3mc native assets (host)
+        run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
       - name: Flutter analyze and test
         working-directory: src/frontend
         run: |
           flutter pub get
           flutter analyze --no-fatal-infos
           flutter test
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-      - name: Flutter Android release APK smoke
-        working-directory: src/frontend
-        run: |
-          flutter build apk --release --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080
-
-  flutter-web-integration:
-    if: github.event_name != 'schedule'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: "3.41.7"
-          channel: stable
-          cache: true
-      - name: Prefetch sqlite3mc native assets
-        run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
-      - name: Chrome deep link web tests
-        working-directory: src/frontend
-        run: |
-          flutter pub get
-          flutter test test/phase18_deeplink_web_chrome_test.dart -d chrome \
-            --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080
-
-  flutter-ios:
-    if: github.event_name != 'schedule'
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: "3.41.7"
-          channel: stable
-          cache: true
-      - name: Prefetch sqlite3mc native assets
-        run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host ios-sim
-      - name: Flutter iOS simulator debug smoke (no codesign)
-        working-directory: src/frontend
-        run: |
-          bash ../../scripts/ci/patch-livekit-webrtc-podspec.sh ../..
-          flutter build ios --simulator --debug --no-codesign --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080
-
-  flutter-windows:
-    if: github.event_name != 'schedule'
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: "3.41.7"
-          channel: stable
-          cache: true
-      - uses: actions/cache@v4
-        with:
-          path: src/frontend/.dart_tool/hooks_runner
-          key: flutter-sqlite3-hooks-windows-${{ hashFiles('src/frontend/pubspec.lock') }}
-      - name: Prefetch sqlite3mc native asset
-        shell: pwsh
-        run: ./scripts/ci/flutter-windows-prefetch-sqlite3.ps1
-      - name: Flutter Windows analyze, test, build
-        working-directory: src/frontend
-        env:
-          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
-        run: |
-          flutter analyze --no-fatal-infos
-          flutter test
-          flutter build windows --release --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080 --dart-define=VOICE_APP_VERSION=1.0.0
 
   golangci:
-    if: github.event_name != 'schedule'
+    needs: changes
+    if: >-
+      always() &&
+      needs.changes.result == 'success' &&
+      needs.changes.outputs.run_go == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.26"
+          go-version: ${{ env.GO_VERSION }}
           cache: true
       - name: Install golangci-lint
-        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1
+        run: go install ${{ env.GOLANGCI_LINT_MOD }}
       - name: Add GOBIN to PATH
         run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-      - name: Go mod tidy (all Go modules)
+      - name: Go mod tidy (affected modules)
         run: |
           set -e
-          for m in pkg analytics bot chat federation file gateway matchmaking messaging moderation notification realtime role search social space story subscription user voice; do
-            echo "== tidy $m =="
-            (cd "src/backend/$m" && go mod tidy)
+          mapfile -t modules < <(echo '${{ needs.changes.outputs.go_services }}' | jq -r '.[]')
+          modules=("pkg" "${modules[@]}")
+          declare -A seen=()
+          for m in "${modules[@]}"; do
+            [[ -n "${m}" && -z "${seen[$m]:-}" ]] || continue
+            seen[$m]=1
+            echo "== tidy ${m} =="
+            (cd "src/backend/${m}" && go mod tidy)
           done
-      - name: Lint all Go modules
+      - name: Lint affected Go modules
         run: |
           set -e
-          for m in pkg analytics bot chat federation file gateway matchmaking messaging moderation notification realtime role search social space story subscription user voice; do
-            echo "== $m =="
-            (cd "src/backend/$m" && golangci-lint run ./...)
+          mapfile -t modules < <(echo '${{ needs.changes.outputs.go_services }}' | jq -r '.[]')
+          modules=("pkg" "${modules[@]}")
+          declare -A seen=()
+          for m in "${modules[@]}"; do
+            [[ -n "${m}" && -z "${seen[$m]:-}" ]] || continue
+            seen[$m]=1
+            echo "== ${m} =="
+            (cd "src/backend/${m}" && golangci-lint run ./...)
           done
 
   backend-go-pkg:
-    if: github.event_name != 'schedule'
+    needs: changes
+    if: >-
+      always() &&
+      needs.changes.result == 'success' &&
+      needs.changes.outputs.run_pkg == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.26"
+          go-version: ${{ env.GO_VERSION }}
       - name: Go mod tidy (pkg)
         working-directory: src/backend/pkg
         run: go mod tidy
@@ -201,8 +230,13 @@ jobs:
         run: go test ./...
 
   backend-go:
-    if: github.event_name != 'schedule'
-    needs: backend-go-pkg
+    needs: [changes, backend-go-pkg]
+    if: >-
+      always() &&
+      needs.changes.result == 'success' &&
+      needs.backend-go-pkg.result != 'failure' &&
+      needs.backend-go-pkg.result != 'cancelled' &&
+      needs.changes.outputs.run_go == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -210,31 +244,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service:
-          - analytics
-          - bot
-          - chat
-          - federation
-          - file
-          - gateway
-          - matchmaking
-          - messaging
-          - moderation
-          - notification
-          - realtime
-          - role
-          - search
-          - social
-          - space
-          - story
-          - subscription
-          - user
-          - voice
+        service: ${{ fromJSON(needs.changes.outputs.go_services) }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.26"
+          go-version: ${{ env.GO_VERSION }}
       - name: Go mod tidy (${{ matrix.service }})
         working-directory: src/backend/${{ matrix.service }}
         run: go mod tidy
@@ -248,6 +263,7 @@ jobs:
         working-directory: src/backend/gateway
         run: CGO_ENABLED=1 go test -race ./...
       - name: Docker build context and Dockerfile
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         id: dockerctx
         shell: bash
         run: |
@@ -259,6 +275,7 @@ jobs:
           fi
           echo "file=./src/backend/$S/Dockerfile" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@v3
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
       - name: Log in to GHCR
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: docker/login-action@v3
@@ -267,67 +284,31 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Image base (lowercase)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         id: image
         run: echo "base=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
       - name: Build and push ${{ matrix.service }} image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: docker/build-push-action@v6
         with:
           context: ${{ steps.dockerctx.outputs.context }}
           file: ${{ steps.dockerctx.outputs.file }}
-          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+          push: true
           tags: |
             ${{ steps.image.outputs.base }}/${{ matrix.service }}:${{ github.sha }}
             ${{ steps.image.outputs.base }}/${{ matrix.service }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  backend-go-integration:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        service:
-          - analytics
-          - bot
-          - chat
-          - federation
-          - file
-          - gateway
-          - matchmaking
-          - messaging
-          - moderation
-          - notification
-          - realtime
-          - role
-          - search
-          - social
-          - space
-          - story
-          - subscription
-          - user
-          - voice
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.26"
-      - name: Go mod tidy (${{ matrix.service }})
-        working-directory: src/backend/${{ matrix.service }}
-        run: go mod tidy
-      - name: Go integration test (${{ matrix.service }})
-        working-directory: src/backend/${{ matrix.service }}
-        env:
-          CGO_ENABLED: "0"
-        run: go test ./...
-      - name: Gateway race detector
-        if: matrix.service == 'gateway'
-        working-directory: src/backend/gateway
-        run: CGO_ENABLED=1 go test -race ./...
-
   backend-auth:
-    if: github.event_name != 'schedule'
+    needs: changes
+    if: >-
+      always() &&
+      needs.changes.result == 'success' &&
+      needs.changes.outputs.code == 'true' &&
+      (needs.changes.outputs.auth == 'true' ||
+       needs.changes.outputs.global == 'true' ||
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -343,6 +324,7 @@ jobs:
         working-directory: src/backend/auth
         run: mvn -B test
       - uses: docker/setup-buildx-action@v3
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
       - name: Log in to GHCR
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: docker/login-action@v3
@@ -351,9 +333,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Image base (lowercase)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         id: image
         run: echo "base=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
       - name: Build auth image (load)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: docker/build-push-action@v6
         with:
           context: ./src/backend/auth
@@ -364,6 +348,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Auth container smoke
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         run: bash scripts/ci/auth-container-smoke.sh "$GITHUB_WORKSPACE"
       - name: Push auth image to GHCR
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
@@ -374,7 +359,14 @@ jobs:
           docker push "${{ steps.image.outputs.base }}/auth:latest"
 
   developer-portal:
-    if: github.event_name != 'schedule'
+    needs: changes
+    if: >-
+      always() &&
+      needs.changes.result == 'success' &&
+      needs.changes.outputs.code == 'true' &&
+      (needs.changes.outputs.developer-portal == 'true' ||
+       needs.changes.outputs.global == 'true' ||
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -445,52 +437,153 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # Single-host parity with local `make build-all` + `make flutter-ci` (see Makefile).
-  # Matrix jobs above stay for faster per-service feedback on PRs.
-  local-ci-parity:
-    if: github.event_name != 'schedule'
+  # --- Tier 2: platform smoke + compose E2E (push master, or workflow_dispatch full) ---
+  flutter-android-smoke:
+    needs: changes
+    if: >-
+      always() &&
+      needs.changes.result == 'success' &&
+      (github.event_name == 'push' && github.ref == 'refs/heads/master' ||
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) &&
+      needs.changes.outputs.code == 'true' &&
+      (needs.changes.outputs.frontend == 'true' ||
+       needs.changes.outputs.protos == 'true' ||
+       needs.changes.outputs.global == 'true' ||
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: subosito/flutter-action@v2
         with:
-          go-version: "1.26"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
           cache: true
+      - name: Prefetch sqlite3mc native assets
+        run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host android
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "25"
-          cache: maven
+          java-version: "17"
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Flutter Android release APK smoke
+        working-directory: src/frontend
+        run: |
+          flutter pub get
+          flutter build apk --release --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080
+
+  flutter-web-integration:
+    needs: changes
+    if: >-
+      always() &&
+      needs.changes.result == 'success' &&
+      (github.event_name == 'push' && github.ref == 'refs/heads/master' ||
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) &&
+      needs.changes.outputs.code == 'true' &&
+      (needs.changes.outputs.frontend == 'true' ||
+       needs.changes.outputs.global == 'true' ||
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.41.7"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
-      - name: Install buf CLI and golangci-lint
-        run: |
-          go install github.com/bufbuild/buf/cmd/buf@v1.50.0
-          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1
-      - name: Add GOBIN to PATH
-        run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-      - name: Install protoc_plugin
-        run: |
-          dart pub global activate protoc_plugin
-          echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
-      - name: Go mod tidy (all Go modules)
-        run: |
-          set -e
-          for m in pkg analytics bot chat federation file gateway matchmaking messaging moderation notification realtime role search social space story subscription user voice; do
-            (cd "src/backend/$m" && go mod tidy)
-          done
       - name: Prefetch sqlite3mc native assets
         run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
-      - name: make build-all
-        run: make build-all
-      - name: make flutter-ci
-        run: make flutter-ci
+      - name: Chrome deep link web tests
+        working-directory: src/frontend
+        run: |
+          flutter pub get
+          flutter test test/phase18_deeplink_web_chrome_test.dart -d chrome \
+            --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080
+
+  flutter-ios:
+    needs: changes
+    if: >-
+      always() &&
+      needs.changes.result == 'success' &&
+      (github.event_name == 'push' && github.ref == 'refs/heads/master' ||
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) &&
+      needs.changes.outputs.code == 'true' &&
+      (needs.changes.outputs.frontend == 'true' ||
+       needs.changes.outputs.global == 'true' ||
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Prefetch sqlite3mc native assets
+        run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host ios-sim
+      - name: Flutter iOS simulator debug smoke (no codesign)
+        working-directory: src/frontend
+        run: |
+          bash ../../scripts/ci/patch-livekit-webrtc-podspec.sh ../..
+          flutter build ios --simulator --debug --no-codesign --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080
+
+  flutter-windows:
+    needs: changes
+    if: >-
+      always() &&
+      needs.changes.result == 'success' &&
+      (github.event_name == 'push' && github.ref == 'refs/heads/master' ||
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) &&
+      needs.changes.outputs.code == 'true' &&
+      (needs.changes.outputs.frontend == 'true' ||
+       needs.changes.outputs.global == 'true' ||
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - uses: actions/cache@v4
+        with:
+          path: src/frontend/.dart_tool/hooks_runner
+          key: flutter-sqlite3-hooks-windows-${{ hashFiles('src/frontend/pubspec.lock') }}
+      - name: Prefetch sqlite3mc native asset
+        shell: pwsh
+        run: ./scripts/ci/flutter-windows-prefetch-sqlite3.ps1
+      - name: Flutter Windows analyze, test, build
+        working-directory: src/frontend
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+        run: |
+          flutter pub get
+          flutter analyze --no-fatal-infos
+          flutter test
+          flutter build windows --release --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080 --dart-define=VOICE_APP_VERSION=1.0.0
 
   compose-e2e:
-    if: github.event_name != 'schedule'
+    needs: changes
+    if: >-
+      always() &&
+      (
+        github.event_name == 'schedule' ||
+        (github.event_name == 'workflow_dispatch' && inputs.profile != 'auto') ||
+        (
+          github.event_name == 'push' &&
+          github.ref == 'refs/heads/master' &&
+          needs.changes.result == 'success' &&
+          needs.changes.outputs.code == 'true' &&
+          (
+            needs.changes.outputs.compose == 'true' ||
+            needs.changes.outputs.frontend == 'true' ||
+            needs.changes.outputs.global == 'true' ||
+            needs.changes.outputs.run_go == 'true'
+          )
+        )
+      ) &&
+      (needs.changes.result == 'success' || needs.changes.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -539,7 +632,7 @@ jobs:
           exit 1
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.26"
+          go-version: ${{ env.GO_VERSION }}
       - name: Gateway Phase 17 compose tests
         working-directory: src/backend/gateway
         env:
@@ -548,7 +641,7 @@ jobs:
         run: go test -count=1 -parallel 1 -timeout 15m -run 'TestComposePhase17.*_live' ./...
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.41.7"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
       - name: Prefetch sqlite3mc native assets
@@ -559,3 +652,96 @@ jobs:
           flutter test test/phase17_stories_e2e_live_test.dart \
             --dart-define=VOICE_RUN_LIVE_INTEGRATION=true \
             --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080
+
+  # --- Tier 3: nightly / manual full parity ---
+  backend-go-integration:
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && inputs.profile != 'auto')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - analytics
+          - bot
+          - chat
+          - federation
+          - file
+          - gateway
+          - matchmaking
+          - messaging
+          - moderation
+          - notification
+          - realtime
+          - role
+          - search
+          - social
+          - space
+          - story
+          - subscription
+          - user
+          - voice
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Go mod tidy (${{ matrix.service }})
+        working-directory: src/backend/${{ matrix.service }}
+        run: go mod tidy
+      - name: Go integration test (${{ matrix.service }})
+        working-directory: src/backend/${{ matrix.service }}
+        env:
+          CGO_ENABLED: "0"
+        run: go test ./...
+      - name: Gateway race detector
+        if: matrix.service == 'gateway'
+        working-directory: src/backend/gateway
+        run: CGO_ENABLED=1 go test -race ./...
+
+  local-ci-parity:
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && inputs.profile != 'auto')
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Install buf CLI and golangci-lint
+        run: |
+          go install github.com/bufbuild/buf/cmd/buf@${{ env.BUF_VERSION }}
+          go install ${{ env.GOLANGCI_LINT_MOD }}
+      - name: Add GOBIN to PATH
+        run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Install protoc_plugin
+        run: |
+          dart pub global activate protoc_plugin
+          echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
+      - name: Go mod tidy (all Go modules)
+        run: |
+          set -e
+          for m in pkg analytics bot chat federation file gateway matchmaking messaging moderation notification realtime role search social space story subscription user voice; do
+            (cd "src/backend/$m" && go mod tidy)
+          done
+      - name: Prefetch sqlite3mc native assets
+        run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
+      - name: make build-all
+        run: make build-all
+      - name: make flutter-ci
+        run: make flutter-ci

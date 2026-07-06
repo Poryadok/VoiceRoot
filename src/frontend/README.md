@@ -22,7 +22,7 @@ flutter test
 
 Из корня репозитория (нужен Flutter на `PATH`): **`make flutter-ci`** — те же шаги ([Makefile](../../Makefile)).
 
-CI: [.github/workflows/ci.yml](../../.github/workflows/ci.yml) jobs `flutter` and `flutter-windows`. Цель **`make build-all`** Flutter не запускает — см. [docs/TESTING.md](../../docs/TESTING.md).
+CI: [.github/workflows/ci.yml](../../.github/workflows/ci.yml) — tier 1 job `flutter` (analyze+test); tier 2 on `master` push: `flutter-windows`, Android/iOS smoke. Цель **`make build-all`** Flutter не запускает — см. [docs/TESTING.md](../../docs/TESTING.md).
 
 ## Windows desktop release
 

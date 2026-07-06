@@ -188,7 +188,7 @@ Promtail ставит label **`namespace`** из pod metadata; **`request_id`** 
 
 | Изменения в | Локально                                                          |
 |-------------|-------------------------------------------------------------------|
-| Репозиторий целиком (паритет CI, хост + Docker) | из корня: **`make check-toolchain`** (Go **1.26**, Docker daemon, **Maven/Java** на PATH), затем **`make build-all`** — в Docker только compose config и **buf** (lint + format check); на **хосте**: `go test ./...` по всем Go-модулям и `pkg`, **golangci-lint** по каждому модулю ([`.golangci.yml`](../.golangci.yml); при отсутствии бинарника — `go install` как в CI), **`go test -race`** только для Gateway, **`mvn -B test`** для Auth, сборка образов `voice-<service>:local`, **`make testcontainers-prune`** после backend-тестов ([Makefile](../Makefile)). **Flutter** не входит — **`make flutter-ci`**. Полный sign-off как job **`local-ci-parity`**: `make build-all` + `make flutter-ci` |
+| Репозиторий целиком (sign-off / tier 3) | **`make build-all`** + **`make flutter-ci`** — как nightly **`local-ci-parity`**; на каждый коммит не обязательно |
 | Flutter (как в CI, на хосте с SDK) | из корня: **`make flutter-ci`** — `flutter pub get`, `flutter analyze`, `flutter test` в `src/frontend/` (в т.ч. якорный `test/e2e_readiness_test.dart`). Каталог [`integration_test/`](../src/frontend/integration_test/README.md) — под будущие device/e2e сценарии, см. README там и скилл `flutter-web-client-testing` |
 | Go-сервис   | `cd src/backend/<service> && CGO_ENABLED=0 go test ./...`; общий прогон — **`make golangci-ci`** из корня или `golangci-lint run ./...` в каталоге модуля; для Gateway дополнительно `CGO_ENABLED=1 go test -race ./...` (цель **`gateway-test-race-ci`**, входит в `build-all`) |
 | Auth (Java) | `cd src/backend/auth && mvn -B test` (как **`make auth-test-ci`** / CI); образ и smoke — Docker, см. CI ниже |
@@ -200,19 +200,30 @@ Promtail ставит label **`namespace`** из pod metadata; **`request_id`** 
 
 ## CI (GitHub Actions)
 
-Файлы workflow лежат в репозитории; **они начинают выполняться только после** публикации репозитория на GitHub и включения Actions (ветки, secrets для GHCR/staging — [DEPLOYMENT.md](DEPLOYMENT.md)). До этого локальная проверка в духе CI — **`make build-all`** (Go, Docker, Maven на хосте) и **`make flutter-ci`** (Flutter SDK на хосте); то же делает job **`local-ci-parity`** в [.github/workflows/ci.yml](../.github/workflows/ci.yml).
+Файлы workflow лежат в репозитории; **они начинают выполняться только после** публикации репозитория на GitHub и включения Actions (ветки, secrets для GHCR/staging — [DEPLOYMENT.md](DEPLOYMENT.md)). Локально перед PR — минимум по затронутому коду (таблица выше); полный sign-off: **`make build-all`** + **`make flutter-ci`** (как nightly job **`local-ci-parity`**).
 
-Состав для PR в `master` (фаза 0 в [PLAN.md](PLAN.md)), как задумано в [.github/workflows/ci.yml](../.github/workflows/ci.yml):
+### Тиры CI
 
-1. **Protobuf**: `buf lint`, `buf format`, на PR — `buf breaking` относительно базовой ветки.
-2. **Compose**: `docker compose config` (валидация файла); затем проверка, что в конфиге есть сервис **`nats`** с JetStream (флаг **`-js`** в `command`) — [`scripts/ci/compose-nats-jetstream-check.sh`](../scripts/ci/compose-nats-jetstream-check.sh) и фильтр [`scripts/ci/compose-nats-jetstream.jq`](../scripts/ci/compose-nats-jetstream.jq) (нужен `jq` на runner). Локально без `jq` на хосте: то же через образ `ghcr.io/jqlang/jq:1.7`, см. цель **`compose-config-ci`** в [Makefile](../Makefile).
-3. **Backend Go matrix**: `go test ./...` и Docker build для каждого Go-сервиса в `src/backend/<service>/`; для **gateway** дополнительно `CGO_ENABLED=1 go test -race ./...`; **push в GHCR** только при **push** в `master` (теги `:latest` и `:<git_sha>`). Для PR — только сборка без push.
-4. **golangci** (отдельный job): `go install golangci-lint` (v2, см. workflow) и прогон по всем модулям `src/backend/pkg` и `src/backend/<service>/` с [`.golangci.yml`](../.golangci.yml) в корне.
-5. **Auth (Java)**: Maven test; Docker build с загрузкой образа в локальный engine (`voice-auth:ci`); **smoke запущенного контейнера** против Postgres+Redis из [`docker-compose.yml`](../docker-compose.yml) — [`GET /health`](../src/backend/auth/src/main/java/voice/backend/auth/HealthController.java), JWKS по REST, gRPC `GetJWKS` (скрипт [`scripts/ci/auth-container-smoke.sh`](../scripts/ci/auth-container-smoke.sh)); push образа в GHCR только при push в `master` после успешного smoke.
-6. **Flutter** ([`src/frontend/`](../src/frontend/pubspec.yaml)): `flutter pub get`, `flutter analyze`, `flutter test` — job `flutter` в [.github/workflows/ci.yml](../.github/workflows/ci.yml). Локально не входит в **`make build-all`**; использовать **`make flutter-ci`** или команды из таблицы выше. Расширенные сценарии с реальным API и `integration_test` + драйвер — по мере появления (см. [`src/frontend/integration_test/README.md`](../src/frontend/integration_test/README.md), скилл `flutter-web-client-testing`).
-7. **Developer Portal** ([`src/developer-portal/`](../src/developer-portal/)): `npm ci`, `npm test`, `npm run build` (job `developer-portal`); Docker build + push в GHCR только при push в `master` (теги `:<git_sha>` и `:latest`). Build-args staging (`VITE_VOICE_API_BASE` и др.) — из Variable `VOICE_GATEWAY_INGRESS_HOST`, см. [DEPLOYMENT.md](DEPLOYMENT.md).
-8. **Local CI parity** (job `local-ci-parity`): один runner с Go 1.26, Java 25, Flutter и golangci-lint — **`make build-all`** затем **`make flutter-ci`**. Матрица `backend-go` на PR сохраняется для быстрой обратной связи по сервисам.
-9. Проверка относительных ссылок в `docs/` при изменениях в документации — `.github/workflows/docs-link-check.yml`, конфиг `.markdown-link-check.json` в корне.
+Правила путей: [`.github/ci/path-filters.yml`](../.github/ci/path-filters.yml) (job **`changes`**, [`dorny/paths-filter`](https://github.com/dorny/paths-filter)). Глобальные пути (`Makefile`, `scripts/ci/**`, `protos/**`, `src/backend/pkg/**`, compose и т.д.) расширяют blast radius. PR только с `docs/**` — job **`ci-skip-gate`** (tier 1 пропускается; ссылки — **`docs-link-check`**).
+
+| Tier | Когда | Что |
+|------|--------|-----|
+| **1 — fast** | каждый PR; push в `master` | path-filtered: protobuf, compose-config, `flutter` (analyze+test), golangci и `backend-go` matrix **только затронутые** сервисы (`go test -short`), auth/devportal по путям. Docker image build/smoke — **нет** на PR. |
+| **2 — platform / E2E** | push в `master` (и `workflow_dispatch` → `full`) | `flutter-android-smoke`, `flutter-windows`, `flutter-ios`, `flutter-web-integration`; Docker build+push Go/auth/devportal; **`compose-e2e`** при изменениях backend/frontend/compose. |
+| **3 — parity** | cron 02:00 UTC; `workflow_dispatch` → `tier3-only` или `full` | **`local-ci-parity`** (`make build-all` + `make flutter-ci`), **`backend-go-integration`** (полный `go test` без `-short`), **`compose-e2e`** на schedule. |
+
+Ручной запуск CI: **Actions → CI → Run workflow** — профиль `auto` (как PR по diff), `tier3-only` (ночной набор), `full` (все тиры).
+
+Состав tier 1 (детали) в [.github/workflows/ci.yml](../.github/workflows/ci.yml):
+
+1. **Protobuf** (если `protos/` или global): `buf lint`, `buf format`, на PR — `buf breaking` относительно базовой ветки.
+2. **Compose** (если compose/deploy/global): `docker compose config`; NATS JetStream — [`scripts/ci/compose-nats-jetstream-check.sh`](../scripts/ci/compose-nats-jetstream-check.sh).
+3. **Backend Go matrix** (затронутые сервисы): `go test -short ./...`; для **gateway** — `go test -race`; **Docker build+push в GHCR** только tier 2 (push в `master`).
+4. **golangci** — только затронутые модули (`pkg` + сервисы из matrix).
+5. **Auth** — Maven test на tier 1; Docker smoke + push — tier 2 (`master`).
+6. **Flutter** — tier 1: `buf-dart-check`, analyze, test; tier 2: APK / Windows / iOS / Chrome deep-link smoke.
+7. **Developer Portal** — `npm ci`, test, build; Docker push — tier 2 (`master`).
+8. Проверка ссылок в `docs/` — [`.github/workflows/docs-link-check.yml`](../.github/workflows/docs-link-check.yml).
 
 **Деплой на staging** вынесен в отдельный workflow [.github/workflows/staging-deploy.yml](../.github/workflows/staging-deploy.yml): триггер `workflow_dispatch` (ручной запуск с тегом образа) и, при переменной `STAGING_DEPLOY_ENABLED=true`, автозапуск после успешного `CI` на push в `master`. Секреты, GHCR и namespace — [DEPLOYMENT.md](DEPLOYMENT.md).
 

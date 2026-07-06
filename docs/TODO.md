@@ -102,6 +102,21 @@ Baseline закрыт (2026-06): register guest, JWT, guards, convert-guest, TTL
 
 Аудит 2026-07: [`ci.yml`](../.github/workflows/ci.yml), [`staging-deploy.yml`](../.github/workflows/staging-deploy.yml), [`compose-e2e-live.yml`](../.github/workflows/compose-e2e-live.yml), [`DEPLOYMENT.md`](DEPLOYMENT.md). Developer Portal **собирается в CI** (job `developer-portal`, push в GHCR на `master`); ручная сборка на staging — из‑за того, что **автодеплой не доезжал** (последний успешный Staging deploy ~2026-07-02; недавние push отменяли CI / deploy skipped).
 
+#### Path-filter CI refactor (аудит 2026-07-06; WIP в working tree, не в git)
+
+Рефакторинг: job `changes`, [`.github/ci/path-filters.yml`](../.github/ci/path-filters.yml), [`scripts/ci/resolve-go-matrix.sh`](../scripts/ci/resolve-go-matrix.sh), тиры 1/2/3, `local-ci-parity` только nightly. В `master` уже есть **`aa76cd4`** (compose migrate через `host.docker.internal`).
+
+- [ ] **Закоммитить CI WIP одним PR** — вместе: `.github/workflows/ci.yml`, `.github/ci/path-filters.yml`, `scripts/ci/resolve-go-matrix.sh`, правки `docs/TESTING.md` / `Makefile` / `src/frontend/README.md` по тирам. Без `path-filters.yml` и `resolve-go-matrix.sh` job `changes` падает сразу.
+- [ ] **path-filters: SQL migrations** — добавить `src/backend/migrations/**` в `compose` (или `global`). Иначе PR только с миграциями: `code=true`, но tier 1 skipped и `compose-e2e` на `master` не идёт.
+- [ ] **path-filters: postgres init** — добавить `docker/postgres/**` в `compose` / `global` (init DDL, `ensure-compose-schema.sh`).
+- [ ] **path-filters: все workflows** — `.github/workflows/**` в `global` (сейчас только `ci.yml`). Иначе правки `staging-deploy.yml` / `compose-e2e-live.yml` не расширяют blast radius tier 1.
+- [ ] **Docker build на PR** — в WIP образы только tier 2 (`push` в `master`). Раньше на PR был `docker build` с `push: false`. Рассмотреть `docker build` без push для затронутого сервиса на PR — иначе сломанный `Dockerfile` всплывёт только после merge.
+- [ ] **Path-filter blast radius: кросс-сервис** — изменение одного `svc_*` не гоняет зависимые сервисы (напр. `messaging` → `chat`). Осознанный trade-off; при необходимости — deps map в `resolve-go-matrix.sh` или расширить `global` для S2S контрактов.
+- [ ] **Branch protection: required checks** — обновить список в GitHub после тиров: `local-ci-parity` только tier 3 (cron / `workflow_dispatch`), новые job names (`flutter-android-smoke`, `ci-skip-gate`, …). Skipped jobs обычно не блокируют merge — проверить настройки репо.
+- [ ] **staging-deploy vs path filters** — auto deploy (`workflow_run: CI success`) может сработать при minimal green CI без пересборки образов. Документировать или триггерить deploy только если в run были docker push jobs / явный SHA.
+- [ ] **Sanity после merge path-filter CI** — один `workflow_dispatch` → profile `full` (все тиры, все сервисы).
+- [ ] **compose-migrate-all: локальный :5432** — `aa76cd4` использует `host.docker.internal`; при конфликте порта на хосте — `VOICE_MIGRATE_PG_HOST` / `POSTGRES_PORT` (кратко в [`TESTING.md`](TESTING.md) § compose-e2e).
+
 - [ ] **Developer Portal на staging из CI** — после зелёного CI на `master`: дождаться auto `Staging deploy` (`STAGING_DEPLOY_ENABLED=true`) или `workflow_dispatch` с тегом **git SHA** (не только `latest`). Убедиться, что `scripts/staging/render-and-apply.sh` применил `developer-portal.yaml` и pod тянет `ghcr.io/.../developer-portal:<sha>`.
 - [ ] **Rollout wait portal** — в `render-and-apply.sh` добавить `kubectl rollout status deployment/voice-developer-portal` (сейчас ждёт только gateway, с `|| true`).
 - [ ] **Prod deploy workflow** — нет `.github/workflows/prod-deploy.yml`; в репо только skeleton [`deploy/prod/`](../deploy/prod/) (bot). Нужны: environment `production` + approval, variables prod FQDN, `render-and-apply-prod.sh` по аналогии со staging.
@@ -111,7 +126,7 @@ Baseline закрыт (2026-06): register guest, JWT, guards, convert-guest, TTL
 - [ ] **Staging k8s vs CI image matrix** — в GHCR пушатся `story`, `subscription`, `moderation`, `analytics`, `federation`, но в [`deploy/staging/`](../deploy/staging/) нет Deployment'ов и нет upstream'ов в `GATEWAY_GRPC_UPSTREAMS_JSON` (в compose есть). Либо добавить в staging stack, либо зафиксировать «не на staging до фазы N».
 - [ ] **imagePullSecrets в манифестах** — template + apply в `render-and-apply.sh`, если GHCR private ([`DEPLOYMENT.md`](DEPLOYMENT.md) § Pull из GHCR).
 - [ ] **Observability не в deploy pipeline** — [`deploy/observability/`](../deploy/observability/) применяется вручную; опциональный шаг в staging-deploy или отдельный workflow после app deploy.
-- [ ] **Единый pin Flutter/Go/Java в workflows** — версии SDK дублируются по jobs; вынести в `env` workflow или composite action (снижение drift).
+- [ ] **Единый pin Flutter/Go/Java в workflows** — в WIP `ci.yml` уже `env:` (`GO_VERSION`, `FLUTTER_VERSION`, …); закоммитить с path-filter refactor и выровнять `compose-e2e-live.yml` (см. drift ниже). Опционально: composite action.
 - [ ] **Ручной deploy tag `latest`** — `workflow_dispatch` default `latest`, auto deploy — SHA; документировать риск рассинхрона при partial failed matrix push.
 
 **Промпт-якорь:** `CI/CD deploy automation from docs/TODO.md Common Batch 11`.

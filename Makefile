@@ -1,6 +1,6 @@
 # Container images (pin for CI-like reproducibility; bump with README toolchain table)
 # Keep GOLANGCI_LINT_MOD in sync with go install version in .github/workflows/ci.yml (job golangci).
-# Sync host test targets with .github/workflows/ci.yml (job local-ci-parity).
+# Sync host test targets with .github/workflows/ci.yml (job local-ci-parity, tier 3).
 BUF_IMAGE ?= bufbuild/buf:1.50.0
 GO_IMAGE ?= golang:1.26-bookworm
 MAVEN_IMAGE ?= maven:3.9.11-eclipse-temurin-25

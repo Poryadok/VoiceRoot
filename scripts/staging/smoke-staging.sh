@@ -29,8 +29,16 @@ if [ "${health_ok}" != "true" ]; then
   exit 1
 fi
 
-echo "Smoke: GET ${BASE}/api/v1/version"
-curl -sf "${BASE}/api/v1/version" | grep -q '"windows"' || { echo "version failed"; exit 1; }
+echo "Smoke: GET ${BASE}/api/v1/version?platform=windows&version=1.0.0"
+version_tmp="$(mktemp)"
+version_code="$(curl -sS -o "${version_tmp}" -w "%{http_code}" \
+  "${BASE}/api/v1/version?platform=windows&version=1.0.0" || echo "000")"
+version_body="$(tr -d '\r' < "${version_tmp}")"
+rm -f "${version_tmp}"
+if [ "${version_code}" != "200" ] || ! echo "${version_body}" | grep -q '"latest_version"'; then
+  echo "version failed: HTTP ${version_code} body=${version_body}"
+  exit 1
+fi
 
 # Auth register requires body — 400/422 without body is OK (proves route exists).
 code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${BASE}/api/v1/auth/register" \
