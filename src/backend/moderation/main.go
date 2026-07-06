@@ -22,6 +22,7 @@ import (
 	"voice/backend/moderation/internal/userclient"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
+	"voice/backend/pkg/runtimeconfig"
 
 	moderationv1 "voice.app/voice/moderation/v1"
 )
@@ -51,7 +52,7 @@ func main() {
 	var grpcSrv *grpc.Server
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	if dbURL != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
 		pool, err := pgxpool.New(ctx, dbURL)
 		cancel()
 		if err != nil {
@@ -98,13 +99,10 @@ func main() {
 	}
 
 	server := &http.Server{
-		Addr:              addr,
-		Handler:           httpserver.Wrap(healthHandler(serviceName), logger),
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      60 * time.Second,
-		IdleTimeout:       120 * time.Second,
+		Addr:    addr,
+		Handler: httpserver.Wrap(healthHandler(serviceName), logger),
 	}
+	httpserver.ApplyHTTPServerTimeouts(server)
 	errCh := make(chan error, 1)
 	logger.Info("listening", slog.String("addr", addr))
 	go func() {
@@ -119,7 +117,7 @@ func main() {
 			log.Fatal(err)
 		}
 	case <-stop:
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.ShutdownTimeoutFromEnv())
 		defer cancel()
 		if grpcSrv != nil {
 			grpcSrv.GracefulStop()

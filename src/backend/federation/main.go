@@ -7,7 +7,9 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
+
+	"voice/backend/pkg/httpserver"
+	"voice/backend/pkg/runtimeconfig"
 )
 
 const serviceName = "federation"
@@ -18,13 +20,10 @@ func main() {
 		addr = v
 	}
 	server := &http.Server{
-		Addr:              addr,
-		Handler:           healthHandler(serviceName),
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      60 * time.Second,
-		IdleTimeout:       120 * time.Second,
+		Addr:    addr,
+		Handler: healthHandler(serviceName),
 	}
+	httpserver.ApplyHTTPServerTimeouts(server)
 	errCh := make(chan error, 1)
 	log.Printf("%s listening on %s", serviceName, addr)
 	go func() {
@@ -39,7 +38,7 @@ func main() {
 			log.Fatal(err)
 		}
 	case <-stop:
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.ShutdownTimeoutFromEnv())
 		defer cancel()
 		if err := server.Shutdown(ctx); err != nil {
 			log.Fatal(err)

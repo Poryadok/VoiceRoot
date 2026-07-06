@@ -32,6 +32,7 @@ import (
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
+	"voice/backend/pkg/runtimeconfig"
 	voiceprom "voice/backend/pkg/promhttp"
 
 	callsv1 "voice.app/voice/calls/v1"
@@ -74,7 +75,7 @@ func main() {
 	var grpcSrv *grpc.Server
 	var redisQueue *queue.RedisQueue
 	if dbURL != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
 		pool, err := pgxpool.New(ctx, dbURL)
 		cancel()
 		if err != nil {
@@ -127,7 +128,7 @@ func main() {
 				log.Fatalf("voice grpc: %v", err)
 			}
 			defer func() { _ = vconn.Close() }()
-			waitCtx, waitCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			waitCtx, waitCancel := context.WithTimeout(context.Background(), grpcclient.DialTimeoutFromEnv())
 			if err := waitForGRPCReady(waitCtx, cconn); err != nil {
 				waitCancel()
 				log.Fatalf("chat grpc dial: %v", err)
@@ -154,7 +155,7 @@ func main() {
 				log.Fatalf("user grpc: %v", err)
 			}
 			defer func() { _ = uconn.Close() }()
-			waitCtx, waitCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			waitCtx, waitCancel := context.WithTimeout(context.Background(), grpcclient.DialTimeoutFromEnv())
 			if err := waitForGRPCReady(waitCtx, uconn); err != nil {
 				waitCancel()
 				log.Fatalf("user grpc dial: %v", err)
@@ -168,7 +169,7 @@ func main() {
 				log.Fatalf("social grpc: %v", err)
 			}
 			defer func() { _ = sconn.Close() }()
-			waitCtx, waitCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			waitCtx, waitCancel := context.WithTimeout(context.Background(), grpcclient.DialTimeoutFromEnv())
 			if err := waitForGRPCReady(waitCtx, sconn); err != nil {
 				waitCancel()
 				log.Fatalf("social grpc dial: %v", err)
@@ -182,7 +183,7 @@ func main() {
 				log.Fatalf("space grpc: %v", err)
 			}
 			defer func() { _ = spconn.Close() }()
-			waitCtx, waitCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			waitCtx, waitCancel := context.WithTimeout(context.Background(), grpcclient.DialTimeoutFromEnv())
 			if err := waitForGRPCReady(waitCtx, spconn); err != nil {
 				waitCancel()
 				log.Fatalf("space grpc dial: %v", err)
@@ -262,13 +263,10 @@ func main() {
 	}
 
 	server := &http.Server{
-		Addr:              httpAddr,
-		Handler:           httpserver.Wrap(voiceprom.MountMetricsOnHealth(health, metricsReg), logger),
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      60 * time.Second,
-		IdleTimeout:       120 * time.Second,
+		Addr:    httpAddr,
+		Handler: httpserver.Wrap(voiceprom.MountMetricsOnHealth(health, metricsReg), logger),
 	}
+	httpserver.ApplyHTTPServerTimeouts(server)
 	errCh := make(chan error, 1)
 	logger.Info("listening", slog.String("addr", httpAddr))
 	go func() {
@@ -283,7 +281,7 @@ func main() {
 			log.Fatal(err)
 		}
 	case <-stop:
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.ShutdownTimeoutFromEnv())
 		defer cancel()
 		if grpcSrv != nil {
 			grpcSrv.GracefulStop()

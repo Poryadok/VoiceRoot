@@ -24,6 +24,7 @@ import (
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
+	"voice/backend/pkg/runtimeconfig"
 	voiceprom "voice/backend/pkg/promhttp"
 	"voice/backend/user/internal/r2avatar"
 	"voice/backend/user/internal/store"
@@ -48,7 +49,7 @@ func main() {
 	dbURL := os.Getenv("DATABASE_URL")
 	var pool *pgxpool.Pool
 	if dbURL != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
 		p, err := pgxpool.New(ctx, dbURL)
 		cancel()
 		if err != nil {
@@ -186,13 +187,10 @@ func main() {
 	}
 
 	server := &http.Server{
-		Addr:              httpAddr,
-		Handler:           httpserver.Wrap(voiceprom.MountMetricsOnHealth(healthHandler(serviceName), metricsReg), logger),
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      60 * time.Second,
-		IdleTimeout:       120 * time.Second,
+		Addr:    httpAddr,
+		Handler: httpserver.Wrap(voiceprom.MountMetricsOnHealth(healthHandler(serviceName), metricsReg), logger),
 	}
+	httpserver.ApplyHTTPServerTimeouts(server)
 	errCh := make(chan error, 1)
 	logger.Info("listening", slog.String("addr", httpAddr))
 	go func() {
@@ -207,7 +205,7 @@ func main() {
 			log.Fatal(err)
 		}
 	case <-stop:
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.ShutdownTimeoutFromEnv())
 		defer cancel()
 		if err := server.Shutdown(ctx); err != nil {
 			log.Fatal(err)

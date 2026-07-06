@@ -5,6 +5,9 @@ on:
     branches: [master]
   push:
     branches: [master]
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -15,6 +18,7 @@ permissions:
 
 jobs:
   protobuf:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -39,6 +43,7 @@ jobs:
         run: buf breaking protos --against ".git#branch=${{ github.base_ref }},subdir=protos"
 
   compose-config:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -48,6 +53,7 @@ jobs:
         run: bash scripts/ci/compose-nats-jetstream-check.sh
 
   flutter:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -89,6 +95,7 @@ jobs:
           flutter build apk --release --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080
 
   flutter-web-integration:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -107,6 +114,7 @@ jobs:
             --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080
 
   flutter-ios:
+    if: github.event_name != 'schedule'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -124,6 +132,7 @@ jobs:
           flutter build ios --simulator --debug --no-codesign --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080
 
   flutter-windows:
+    if: github.event_name != 'schedule'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -149,6 +158,7 @@ jobs:
           flutter build windows --release --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080 --dart-define=VOICE_APP_VERSION=1.0.0
 
   golangci:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -176,6 +186,7 @@ jobs:
           done
 
   backend-go-pkg:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -190,6 +201,7 @@ jobs:
         run: go test ./...
 
   backend-go:
+    if: github.event_name != 'schedule'
     needs: backend-go-pkg
     runs-on: ubuntu-latest
     permissions:
@@ -230,7 +242,7 @@ jobs:
         working-directory: src/backend/${{ matrix.service }}
         env:
           CGO_ENABLED: "0"
-        run: go test ./...
+        run: go test -short ./...
       - name: Gateway race detector
         if: matrix.service == 'gateway'
         working-directory: src/backend/gateway
@@ -269,7 +281,53 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  backend-go-integration:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - analytics
+          - bot
+          - chat
+          - federation
+          - file
+          - gateway
+          - matchmaking
+          - messaging
+          - moderation
+          - notification
+          - realtime
+          - role
+          - search
+          - social
+          - space
+          - story
+          - subscription
+          - user
+          - voice
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+      - name: Go mod tidy (${{ matrix.service }})
+        working-directory: src/backend/${{ matrix.service }}
+        run: go mod tidy
+      - name: Go integration test (${{ matrix.service }})
+        working-directory: src/backend/${{ matrix.service }}
+        env:
+          CGO_ENABLED: "0"
+        run: go test ./...
+      - name: Gateway race detector
+        if: matrix.service == 'gateway'
+        working-directory: src/backend/gateway
+        run: CGO_ENABLED=1 go test -race ./...
+
   backend-auth:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -316,6 +374,7 @@ jobs:
           docker push "${{ steps.image.outputs.base }}/auth:latest"
 
   developer-portal:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -389,6 +448,7 @@ jobs:
   # Single-host parity with local `make build-all` + `make flutter-ci` (see Makefile).
   # Matrix jobs above stay for faster per-service feedback on PRs.
   local-ci-parity:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -430,6 +490,7 @@ jobs:
         run: make flutter-ci
 
   compose-e2e:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

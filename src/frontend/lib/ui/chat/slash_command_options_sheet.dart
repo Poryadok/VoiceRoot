@@ -353,7 +353,7 @@ class _UserOptionPicker extends ConsumerWidget {
       ),
       data: (members) {
         return DropdownButtonFormField<String>(
-          value: value,
+          initialValue: value,
           decoration: InputDecoration(
             labelText: l10n.slashOptionPickUser(option.name),
           ),
@@ -419,7 +419,7 @@ class _ChannelOptionPicker extends ConsumerWidget {
             .where((n) => n.isTextChat && n.linkedChatId != null)
             .toList();
         return DropdownButtonFormField<String>(
-          value: value,
+          initialValue: value,
           decoration: InputDecoration(
             labelText: l10n.slashOptionPickChannel(option.name),
           ),
@@ -482,7 +482,7 @@ class _RoleOptionPicker extends ConsumerWidget {
       ),
       data: (roles) {
         return DropdownButtonFormField<String>(
-          value: value,
+          initialValue: value,
           decoration: InputDecoration(
             labelText: l10n.slashOptionPickRole(option.name),
           ),

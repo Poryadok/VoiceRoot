@@ -191,7 +191,7 @@ class _BotInstallPageState extends ConsumerState<BotInstallPage> {
       allowedChats: allowedChats,
       acknowledgePrivilegedScopes: _privilegedAcknowledged,
     );
-    if (!mounted) return;
+    if (!context.mounted) return;
     setState(() => _busy = false);
 
     switch (result) {
@@ -252,7 +252,7 @@ class _SpaceInstallSection extends ConsumerWidget {
             }
             return DropdownButtonFormField<String>(
               key: const Key('bot_install_space_picker'),
-              value: selectedSpaceId,
+              initialValue: selectedSpaceId,
               decoration: InputDecoration(
                 labelText: l10n.botInstallSelectSpace,
               ),

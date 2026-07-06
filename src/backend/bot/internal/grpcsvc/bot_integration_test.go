@@ -126,9 +126,8 @@ func TestExecuteSlashInteraction_webhookPong(t *testing.T) {
 }
 
 func TestValidateManifest_ping(t *testing.T) {
-	client, _, cleanup := startBotGRPC(t)
-	defer cleanup()
-	resp, err := client.ValidateManifest(context.Background(), &botv1.ValidateManifestRequest{
+	svc := &grpcsvc.BotGRPC{}
+	resp, err := svc.ValidateManifest(context.Background(), &botv1.ValidateManifestRequest{
 		ManifestYaml: `name: PingBot
 description: pong
 scopes: [TEXT_CHAT_SEND_MESSAGES]

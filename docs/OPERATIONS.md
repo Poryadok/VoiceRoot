@@ -91,6 +91,24 @@
 
 ---
 
+## Runtime configuration (env)
+
+Shared timeouts for Go HTTP services and Postgres bootstrap. Values are Go `time.ParseDuration` strings (e.g. `30s`, `2m`). Invalid or empty values fall back to the default.
+
+| Переменная | Default | Назначение |
+|------------|---------|------------|
+| `HTTP_READ_HEADER_TIMEOUT` | `5s` | `net/http.Server.ReadHeaderTimeout` |
+| `HTTP_READ_TIMEOUT` | `30s` | `ReadTimeout` (`0` disables; Realtime defaults to `0`) |
+| `HTTP_WRITE_TIMEOUT` | `60s` | `WriteTimeout` (`0` disables; Realtime defaults to `0`) |
+| `HTTP_IDLE_TIMEOUT` | `120s` | `IdleTimeout` |
+| `HTTP_SHUTDOWN_TIMEOUT` | `10s` | Graceful HTTP shutdown deadline |
+| `POSTGRES_CONNECT_TIMEOUT` | `15s` | `pgxpool.New` connect context |
+| `GRPC_DIAL_TIMEOUT` | `15s` | Upstream gRPC ready wait at startup |
+
+Staging overrides — `deploy/staging/configmap-app.yaml` (`GRPC_DIAL_TIMEOUT` is set; HTTP/Postgres keys are commented for optional tuning).
+
+---
+
 ## Bot Service (env)
 
 | Переменная | Назначение |

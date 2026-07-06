@@ -257,22 +257,24 @@ class _ReportSheetState extends ConsumerState<ReportSheet> {
               style: TextStyle(color: voice.textSecondary),
             ),
             const SizedBox(height: 16),
-            ListView(
-              key: ReportSheet.categoryListKey,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              children: [
+            RadioGroup<String>(
+              groupValue: _category,
+              onChanged: _submitting
+                  ? (_) {}
+                  : (value) => setState(() => _category = value),
+              child: ListView(
+                key: ReportSheet.categoryListKey,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                children: [
                   for (final category in ReportCategories.all)
                     RadioListTile<String>(
                       value: category,
-                      groupValue: _category,
                       title: Text(_categoryLabel(l10n, category)),
-                      onChanged: _submitting
-                          ? null
-                          : (value) => setState(() => _category = value),
                     ),
                 ],
               ),
+            ),
             if (_category == ReportCategories.other) ...[
               const SizedBox(height: 8),
               TextFormField(

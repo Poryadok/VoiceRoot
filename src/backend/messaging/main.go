@@ -26,6 +26,7 @@ import (
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
+	"voice/backend/pkg/runtimeconfig"
 	voiceprom "voice/backend/pkg/promhttp"
 
 	chatv1 "voice.app/voice/chat/v1"
@@ -69,7 +70,7 @@ func main() {
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	var grpcSrv *grpc.Server
 	if dbURL != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
 		pool, err := pgxpool.New(ctx, dbURL)
 		cancel()
 		if err != nil {
@@ -79,7 +80,7 @@ func main() {
 
 		var chatMetaPool *pgxpool.Pool
 		if chatDB := strings.TrimSpace(os.Getenv("CHAT_DATABASE_URL")); chatDB != "" {
-			cctx, ccancel := context.WithTimeout(context.Background(), 15*time.Second)
+			cctx, ccancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
 			cp, err := pgxpool.New(cctx, chatDB)
 			ccancel()
 			if err != nil {
@@ -91,7 +92,7 @@ func main() {
 
 		var spaceMetaPool *pgxpool.Pool
 		if spaceDB := strings.TrimSpace(os.Getenv("SPACE_DATABASE_URL")); spaceDB != "" {
-			sctx, scancel := context.WithTimeout(context.Background(), 15*time.Second)
+			sctx, scancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
 			sp, err := pgxpool.New(sctx, spaceDB)
 			scancel()
 			if err != nil {
@@ -292,13 +293,10 @@ func main() {
 	}
 
 	server := &http.Server{
-		Addr:              httpAddr,
-		Handler:           httpserver.Wrap(voiceprom.MountMetricsOnHealth(healthHandler(serviceName), metricsReg), logger),
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      60 * time.Second,
-		IdleTimeout:       120 * time.Second,
+		Addr:    httpAddr,
+		Handler: httpserver.Wrap(voiceprom.MountMetricsOnHealth(healthHandler(serviceName), metricsReg), logger),
 	}
+	httpserver.ApplyHTTPServerTimeouts(server)
 	errCh := make(chan error, 1)
 	logger.Info("listening", slog.String("addr", httpAddr))
 	go func() {
@@ -313,7 +311,7 @@ func main() {
 			log.Fatal(err)
 		}
 	case <-stop:
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.ShutdownTimeoutFromEnv())
 		defer cancel()
 		if grpcSrv != nil {
 			grpcSrv.GracefulStop()

@@ -62,8 +62,8 @@
 ### Только вы — CI / deploy (если в scope софт-ланча)
 
 - [x] **Variable `STAGING_SMOKE_ENABLED`** — `true` в Settings → Actions → Variables (сейчас не задана; post-deploy smoke в [`staging-deploy.yml`](../.github/workflows/staging-deploy.yml) не запускается).
-- [ ] **Environment `staging` secrets** — `STAGING_KUBECONFIG`, `STAGING_APP_SECRETS_YAML` (base64 Secret manifest); без них CI-деплой не поднимет полный стек.
-- [ ] **GHCR pull в k8s** — если пакеты приватные: `imagePullSecrets` в namespace `voice-staging` (в манифестах пока нет — см. Batch 11).
+- [x] **Environment `staging` secrets** — `STAGING_KUBECONFIG`, `STAGING_APP_SECRETS_YAML` (base64 Secret manifest); без них CI-деплой не поднимет полный стек.
+- [x] **GHCR pull в k8s** — если пакеты приватные: `imagePullSecrets` в namespace `voice-staging` (в манифестах пока нет — см. Batch 11).
 
 ### Только вы — prod / mobile (если в scope софт-ланча)
 
@@ -140,24 +140,31 @@ MVP backend + partial Flutter; AR, algorithmic feed, post-match auto-story, mone
 
 **Промпт-якорь:** `Phase 17 Stories post-MVP from docs/TODO.md Low Batch 7`.
 
-### Batch 8 — Phase 16 Bots (CI)
+### Batch 8 — Phase 16 Bots (CI) — done
 
-- [ ] **Bot grpcsvc test duration** — `go test ./...` в `bot/internal/grpcsvc` ~336s на Windows host; следить за wall time в CI / `-short` split при регрессии.
+- [x] **Bot grpcsvc CI `-short` split** — PR/push job `backend-go`: `go test -short ./...`; nightly `backend-go-integration` (cron + `workflow_dispatch`) — полная матрица; локально `make backend-test-ci-short` / `make backend-test-ci`. См. [`TESTING.md`](TESTING.md) §`-short` vs полный прогон.
+- [x] **`TestValidateManifest_ping` без DB** — unit-тест без testcontainers; bot `-short` ожидаемо &lt;10s wall time vs ~336s полный `grpcsvc` на Windows host.
 
-**Промпт-якорь:** `Phase 16 bots CI from docs/TODO.md Low Batch 8`.
+**Промпт-якорь:** done (регрессия wall time — снова Batch 8).
 
-### Batch 9 — QA polish
+### Batch 9 — QA polish — done
 
-- [ ] **Flutter analyze** — ~35 info/warnings (unused imports в `guest_entry_test.dart`, deprecated form/Radio APIs); не merge-blocking, убрать перед release polish.
+- [x] **Flutter analyze** — `flutter analyze --no-fatal-infos`: 0 issues; `flutter test`: 666 passed.
 
-**Промпт-якорь:** `QA polish from docs/TODO.md Low Batch 9`.
+**Промпт-якорь:** done.
 
-### Batch 10 — Ops tech debt
+### Batch 10 — Ops tech debt (timeouts done)
 
-- [ ] **Таймауты в конфиг** — хардкод вроде `context.WithTimeout(..., 15*time.Second)` и HTTP `ReadTimeout`/`WriteTimeout` в `main.go` сервисов: вынести в env/ConfigMap, единый стиль с [`OPERATIONS.md`](OPERATIONS.md).
-- [ ] **Магические числа** — пройти backend/frontend: константы в коде vs настраиваемые лимиты (rate limit, pool size, retry backoff) — часть в конфиги.
+- [x] **Таймауты в конфиг** — `pkg/runtimeconfig` + `pkg/httpserver`; все 19 `main.go` wired; matchmaking `DialTimeoutFromEnv`; таблица в [`OPERATIONS.md`](OPERATIONS.md) §Runtime configuration; `deploy/staging/configmap-app.yaml` + `.env.example`.
 
-**Промпт-якорь:** `Timeouts and config cleanup from docs/TODO.md Low Batch 10`.
+### Batch 10b — Ops tech debt (magic numbers)
+
+- [ ] **BOT_WEBHOOK_* retry/backoff** — hardcoded retry/backoff webhook delivery → env.
+- [ ] **NATS_* connect/reconnect** — Realtime: connect/reconnect timeouts в конфиг.
+- [ ] **pgxpool max conns** — лимиты пула Postgres → env/ConfigMap.
+- [ ] **BOT_RATE_LIMIT_* / Gateway rate-limit JSON** — staging defaults в ConfigMap (сейчас только dev bypass).
+
+**Промпт-якорь:** `Magic numbers config from docs/TODO.md Low Batch 10b`.
 
 ---
 
@@ -175,6 +182,7 @@ MVP backend + partial Flutter; AR, algorithmic feed, post-match auto-story, mone
 | **Common** | Batch 6 | Guest UX |
 | **Common** | Batch 11 | CI/CD, staging/prod deploy |
 | **Low** | Batch 7 | Stories post-MVP |
-| **Low** | Batch 8 | Bots CI time |
-| **Low** | Batch 9 | Flutter analyze |
-| **Low** | Batch 10 | Таймауты и magic numbers |
+| **Low** | Batch 8 | Bots CI (`-short` + nightly) — done |
+| **Low** | Batch 9 | Flutter analyze — done |
+| **Low** | Batch 10 | Runtime timeouts — done |
+| **Low** | Batch 10b | Magic numbers → env/ConfigMap |

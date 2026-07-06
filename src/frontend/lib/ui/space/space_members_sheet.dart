@@ -415,6 +415,8 @@ class _MemberTile extends ConsumerWidget {
       RolesApiFailure() => <String>{},
     };
 
+    if (!context.mounted) return;
+
     final action = await showDialog<({String roleId, bool revoke})>(
       context: context,
       builder: (ctx) {

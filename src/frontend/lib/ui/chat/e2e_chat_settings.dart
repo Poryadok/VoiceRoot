@@ -305,7 +305,9 @@ class _DmE2eSettingsSectionState extends ConsumerState<DmE2eSettingsSection> {
             passwordHint: hint,
           );
           if (result is E2eApiFailure) throw StateError(result.message);
-          if (context.mounted) Navigator.of(context).pop();
+          if (mounted) {
+            Navigator.of(context).pop();
+          }
         },
         onRestore: (password) async {
           final result = await e2e.restoreKeyBackup(
@@ -313,7 +315,9 @@ class _DmE2eSettingsSectionState extends ConsumerState<DmE2eSettingsSection> {
             password: password,
           );
           if (result is E2eApiFailure) throw StateError(result.message);
-          if (context.mounted) Navigator.of(context).pop();
+          if (mounted) {
+            Navigator.of(context).pop();
+          }
         },
       ),
     );
@@ -433,10 +437,12 @@ class _EncryptionCodeBlockState extends ConsumerState<_EncryptionCodeBlock> {
         localProfileId: localId,
         remoteProfileId: peerId,
       );
-      if (mounted) setState(() {
-        _code = code;
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _code = code;
+          _loading = false;
+        });
+      }
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }

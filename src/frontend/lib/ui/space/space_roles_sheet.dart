@@ -68,7 +68,7 @@ class SpaceRolesSheet extends ConsumerWidget {
             ),
             defaultJoinAsync.when(
               loading: () => const SizedBox.shrink(),
-              error: (_, __) => const SizedBox.shrink(),
+              error: (_, _) => const SizedBox.shrink(),
               data: (role) {
                 if (role == null) return const SizedBox.shrink();
                 return Padding(

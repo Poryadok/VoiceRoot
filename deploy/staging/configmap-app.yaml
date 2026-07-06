@@ -8,6 +8,13 @@ metadata:
 data:
   LOG_LEVEL: "info"
   GRPC_DIAL_TIMEOUT: "120s"
+  # HTTP server timeouts (Go services; realtime may set HTTP_READ_TIMEOUT/HTTP_WRITE_TIMEOUT=0)
+  # HTTP_READ_HEADER_TIMEOUT: "5s"
+  # HTTP_READ_TIMEOUT: "30s"
+  # HTTP_WRITE_TIMEOUT: "60s"
+  # HTTP_IDLE_TIMEOUT: "120s"
+  # HTTP_SHUTDOWN_TIMEOUT: "10s"
+  # POSTGRES_CONNECT_TIMEOUT: "15s"
   POSTGRES_USER: "voice"
   POSTGRES_HOST: "voice-postgres"
   POSTGRES_PORT: "5432"

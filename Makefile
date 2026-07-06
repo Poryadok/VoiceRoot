@@ -7,18 +7,21 @@ MAVEN_IMAGE ?= maven:3.9.11-eclipse-temurin-25
 GOLANGCI_LINT_MOD ?= github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1
 GOLANGCI_LINT ?= golangci-lint
 GO_TEST_FLAGS ?= ./...
+GO_TEST_SHORT_FLAGS ?= -short ./...
 export PATH := $(shell go env GOPATH)/bin:$(PATH)
 ROOT := $(CURDIR)
 
 ifeq ($(OS),Windows_NT)
 BASH ?= "C:/Program Files/Git/bin/bash.exe"
 GO_TEST_RUN = set CGO_ENABLED=0&& go test $(GO_TEST_FLAGS)
+GO_TEST_SHORT_RUN = set CGO_ENABLED=0&& go test $(GO_TEST_SHORT_FLAGS)
 # Host gcc is often missing on Windows; run -race in Docker (parity with Linux CI).
 GATEWAY_RACE_RUN = docker run --rm -v "$(ROOT):/workspace" -w /workspace/src/backend/gateway $(GO_IMAGE) \
 	bash -c "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq libopus-dev libopusfile-dev libsoxr-dev pkg-config >/dev/null 2>&1 && CGO_ENABLED=1 go test -race $(GO_TEST_FLAGS)"
 else
 BASH ?= bash
 GO_TEST_RUN = CGO_ENABLED=0 go test $(GO_TEST_FLAGS)
+GO_TEST_SHORT_RUN = CGO_ENABLED=0 go test $(GO_TEST_SHORT_FLAGS)
 GATEWAY_RACE_RUN = CGO_ENABLED=1 go test -race $(GO_TEST_FLAGS)
 endif
 GO_SERVICES := analytics bot chat federation file gateway matchmaking messaging moderation notification realtime role search social space story subscription user voice
@@ -26,11 +29,12 @@ GO_SERVICES := analytics bot chat federation file gateway matchmaking messaging 
 GO_SERVICES_BACKEND_CONTEXT := gateway realtime chat messaging user social voice file role space bot matchmaking moderation notification search story subscription analytics federation
 GO_MODULES_LINT := pkg $(GO_SERVICES)
 GO_TEST_TARGETS := $(GO_SERVICES:%=go-test-%)
+GO_TEST_SHORT_TARGETS := $(GO_SERVICES:%=go-test-short-%)
 GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
 
 .PHONY: buf-lint buf-format buf-breaking buf-generate buf-generate-dart buf-dart-check compose-up compose-app-up compose-down compose-logs-collect compose-observability-up \
 	compose-migrate-all compose-migrate-phase15 compose-migrate-bot compose-migrate-story compose-e2e-live compose-e2e-full compose-e2e-voice-live \
-	build-all build-all-breaking check-toolchain compose-config-ci buf-ci backend-test-ci backend-image-ci \
+	build-all build-all-breaking check-toolchain compose-config-ci buf-ci backend-test-ci backend-test-ci-short backend-image-ci \
 	gateway-test-ci gateway-image-ci go-test-pkg go-mod-tidy-all auth-test-ci auth-image-ci buf-breaking-ci \
 	golangci-ci gateway-test-race-ci design-tokens-check flutter-ui-color-gate flutter-ci flutter-windows-prefetch-sqlite3 flutter-linux-prefetch-sqlite3 prekey-golden-check coverage-report testcontainers-prune buf-generate-ci-local-template-check
 
@@ -120,6 +124,8 @@ buf-ci:
 
 backend-test-ci: go-mod-tidy-all go-test-pkg $(GO_TEST_TARGETS) auth-test-ci testcontainers-prune
 
+backend-test-ci-short: go-mod-tidy-all go-test-pkg $(GO_TEST_SHORT_TARGETS) auth-test-ci testcontainers-prune
+
 go-mod-tidy-all:
 	@for m in $(GO_MODULES_LINT); do \
 		echo "== go mod tidy $$m =="; \
@@ -137,6 +143,9 @@ go-test-pkg:
 
 go-test-%:
 	cd "$(ROOT)/src/backend/$*" && $(GO_TEST_RUN)
+
+go-test-short-%:
+	cd "$(ROOT)/src/backend/$*" && $(GO_TEST_SHORT_RUN)
 
 go-image-%:
 	docker build -f src/backend/$*/Dockerfile -t voice-$*:local $(if $(filter $*,$(GO_SERVICES_BACKEND_CONTEXT)),src/backend,src/backend/$*)

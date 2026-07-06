@@ -94,7 +94,7 @@ class _SpaceBotsSheetState extends ConsumerState<SpaceBotsSheet> {
                   }
                   return DropdownButtonFormField<String>(
                     key: const Key('space_bots_install_picker'),
-                    value: _selectedBotId,
+                    initialValue: _selectedBotId,
                     decoration: InputDecoration(
                       labelText: l10n.spaceBotsInstall,
                     ),
@@ -266,7 +266,7 @@ class _SpaceBotsSheetState extends ConsumerState<SpaceBotsSheet> {
       allowedChats: allowedChats,
       acknowledgePrivilegedScopes: _privilegedAcknowledged,
     );
-    if (!mounted) return;
+    if (!context.mounted) return;
     setState(() => _busy = false);
 
     switch (result) {
@@ -298,7 +298,7 @@ class _SpaceBotsSheetState extends ConsumerState<SpaceBotsSheet> {
       botId: botId,
       spaceId: widget.spaceId,
     );
-    if (!mounted) return;
+    if (!context.mounted) return;
     setState(() => _busy = false);
 
     switch (result) {

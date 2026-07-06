@@ -7,9 +7,10 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
+	"voice/backend/pkg/httpserver"
 	voicelog "voice/backend/pkg/logging"
+	"voice/backend/pkg/runtimeconfig"
 )
 
 func main() {
@@ -20,13 +21,10 @@ func main() {
 		addr = v
 	}
 	server := &http.Server{
-		Addr:              addr,
-		Handler:           handler(),
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      60 * time.Second,
-		IdleTimeout:       120 * time.Second,
+		Addr:    addr,
+		Handler: handler(),
 	}
+	httpserver.ApplyHTTPServerTimeouts(server)
 	errCh := make(chan error, 1)
 	logger.Info("listening", slog.String("addr", addr))
 	go func() {
@@ -42,7 +40,7 @@ func main() {
 			os.Exit(1)
 		}
 	case <-stop:
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.ShutdownTimeoutFromEnv())
 		defer cancel()
 		if err := server.Shutdown(ctx); err != nil {
 			logger.Error("shutdown failed", slog.Any("error", err))

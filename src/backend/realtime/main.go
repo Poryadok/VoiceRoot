@@ -20,6 +20,7 @@ import (
 
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/httpserver"
+	"voice/backend/pkg/runtimeconfig"
 	voicejwt "voice/backend/pkg/jwt"
 	voiceprom "voice/backend/pkg/promhttp"
 )
@@ -140,13 +141,12 @@ func main() {
 		metricsReg,
 	)
 	server := &http.Server{
-		Addr:              addr,
-		Handler:           httpserver.Wrap(handler, logger),
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       0,
-		WriteTimeout:      0,
-		IdleTimeout:       120 * time.Second,
+		Addr:    addr,
+		Handler: httpserver.Wrap(handler, logger),
 	}
+	httpserver.ApplyHTTPServerTimeouts(server)
+	server.ReadTimeout = runtimeconfig.DurationFromEnv("HTTP_READ_TIMEOUT", 0)
+	server.WriteTimeout = runtimeconfig.DurationFromEnv("HTTP_WRITE_TIMEOUT", 0)
 	errCh := make(chan error, 1)
 	logger.Info("listening", slog.String("addr", addr))
 	go func() {
@@ -163,7 +163,7 @@ func main() {
 		}
 	case <-stop:
 		cancel()
-		shutCtx, shutCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		shutCtx, shutCancel := context.WithTimeout(context.Background(), runtimeconfig.ShutdownTimeoutFromEnv())
 		defer shutCancel()
 		if err := server.Shutdown(shutCtx); err != nil {
 			log.Fatal(err)

@@ -8,7 +8,7 @@ import 'package:voice_frontend/e2e/e2e_image_thumb.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  Future<Uint8List> _solidPng(int width, int height) async {
+  Future<Uint8List> solidPng(int width, int height) async {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
     canvas.drawRect(
@@ -22,7 +22,7 @@ void main() {
     return byteData!.buffer.asUint8List();
   }
 
-  Future<ui.Image> _decodeImage(Uint8List bytes) async {
+  Future<ui.Image> decodeImage(Uint8List bytes) async {
     final codec = await ui.instantiateImageCodec(bytes);
     final frame = await codec.getNextFrame();
     return frame.image;
@@ -31,11 +31,11 @@ void main() {
   testWidgets('resizeImageBytesForThumb downscales large images', (tester) async {
     late Uint8List thumbBytes;
     await tester.runAsync(() async {
-      final source = await _solidPng(640, 480);
+      final source = await solidPng(640, 480);
       thumbBytes = (await resizeImageBytesForThumb(source))!;
     });
     await tester.runAsync(() async {
-      final thumb = await _decodeImage(thumbBytes);
+      final thumb = await decodeImage(thumbBytes);
       expect(thumb.width, lessThanOrEqualTo(kE2eImageThumbMaxWidth));
       expect(thumb.height, lessThanOrEqualTo(kE2eImageThumbMaxHeight));
       thumb.dispose();
@@ -45,11 +45,11 @@ void main() {
   testWidgets('resizeImageBytesForThumb preserves small images', (tester) async {
     late Uint8List thumbBytes;
     await tester.runAsync(() async {
-      final source = await _solidPng(80, 60);
+      final source = await solidPng(80, 60);
       thumbBytes = (await resizeImageBytesForThumb(source))!;
     });
     await tester.runAsync(() async {
-      final thumb = await _decodeImage(thumbBytes);
+      final thumb = await decodeImage(thumbBytes);
       expect(thumb.width, 80);
       expect(thumb.height, 60);
       thumb.dispose();
