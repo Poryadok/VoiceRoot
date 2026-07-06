@@ -32,7 +32,7 @@ import (
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
-	"voice/backend/pkg/runtimeconfig"
+	pkgruntimeconfig "voice/backend/pkg/runtimeconfig"
 	voiceprom "voice/backend/pkg/promhttp"
 
 	callsv1 "voice.app/voice/calls/v1"
@@ -75,7 +75,7 @@ func main() {
 	var grpcSrv *grpc.Server
 	var redisQueue *queue.RedisQueue
 	if dbURL != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
+		ctx, cancel := context.WithTimeout(context.Background(), pkgruntimeconfig.PostgresConnectTimeoutFromEnv())
 		pool, err := pgxpool.New(ctx, dbURL)
 		cancel()
 		if err != nil {
@@ -281,7 +281,7 @@ func main() {
 			log.Fatal(err)
 		}
 	case <-stop:
-		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.ShutdownTimeoutFromEnv())
+		ctx, cancel := context.WithTimeout(context.Background(), pkgruntimeconfig.ShutdownTimeoutFromEnv())
 		defer cancel()
 		if grpcSrv != nil {
 			grpcSrv.GracefulStop()
