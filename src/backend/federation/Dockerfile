@@ -5,8 +5,12 @@ FROM golang:1.26-alpine AS build
 WORKDIR /src
 ENV GOPROXY=https://proxy.golang.org,direct
 COPY scripts/docker-go-mod-download.sh /usr/local/bin/docker-go-mod-download.sh
+COPY pkg/go.mod ./pkg/
+COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
+COPY user/pb/voice/user/go.mod ./user/pb/voice/user/
 COPY federation/go.mod ./federation/
 RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked sh /usr/local/bin/docker-go-mod-download.sh federation
+COPY pkg ./pkg
 COPY federation ./federation
 WORKDIR /src/federation
 RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked --mount=type=cache,target=/root/.cache/go-build,id=voice-gobuild,sharing=locked CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/service .

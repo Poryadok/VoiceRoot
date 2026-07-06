@@ -500,12 +500,19 @@ jobs:
         run: docker compose up -d
       - name: Wait for postgres
         run: |
+          ready=0
           for i in $(seq 1 30); do
             if docker compose exec -T postgres pg_isready -U voice -d voice; then
+              ready=1
               break
             fi
             sleep 2
           done
+          if [ "$ready" -ne 1 ]; then
+            docker compose ps
+            docker compose logs postgres --tail 80
+            exit 1
+          fi
           for i in $(seq 1 30); do
             if docker compose exec -T postgres psql -U voice -d voice -tAc \
               "SELECT 1 FROM pg_database WHERE datname='chat_db'" | grep -q 1; then

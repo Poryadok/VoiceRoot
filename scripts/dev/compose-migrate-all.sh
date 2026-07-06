@@ -14,7 +14,29 @@ postgres_container_id() {
     echo "postgres container not running; start: docker compose up -d" >&2
     exit 1
   fi
+  local running
+  running="$(docker inspect -f '{{.State.Running}}' "${cid}" 2>/dev/null || echo false)"
+  if [[ "${running}" != "true" ]]; then
+    echo "postgres container is not running (id=${cid})" >&2
+    docker compose ps postgres || true
+    docker compose logs postgres --tail 80 || true
+    exit 1
+  fi
   echo "${cid}"
+}
+
+wait_postgres_tcp() {
+  local i
+  for i in $(seq 1 30); do
+    if docker run --rm --network "container:${POSTGRES_CID}" \
+      postgres:16-alpine pg_isready -h 127.0.0.1 -p 5432 -U "${POSTGRES_USER:-voice}" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 2
+  done
+  echo "postgres TCP not ready on 127.0.0.1:5432" >&2
+  docker compose logs postgres --tail 80 || true
+  exit 1
 }
 
 migrate_db() {
@@ -70,6 +92,7 @@ run_all() {
 }
 
 POSTGRES_CID="$(postgres_container_id)"
+wait_postgres_tcp
 MODE="${1:-all}"
 
 case "${MODE}" in
