@@ -59,12 +59,6 @@
 
 ## High
 
-### Только вы — CI / deploy (если в scope софт-ланча)
-
-- [x] **Variable `STAGING_SMOKE_ENABLED`** — `true` в Settings → Actions → Variables (сейчас не задана; post-deploy smoke в [`staging-deploy.yml`](../.github/workflows/staging-deploy.yml) не запускается).
-- [x] **Environment `staging` secrets** — `STAGING_KUBECONFIG`, `STAGING_APP_SECRETS_YAML` (base64 Secret manifest); без них CI-деплой не поднимет полный стек.
-- [x] **GHCR pull в k8s** — если пакеты приватные: `imagePullSecrets` в namespace `voice-staging` (в манифестах пока нет — см. Batch 11).
-
 ### Только вы — prod / mobile (если в scope софт-ланча)
 
 - [ ] **Prod universal links** — реальные AASA + `assetlinks.json` на `voice.gg` (сейчас Gateway — dev placeholders).
@@ -139,23 +133,6 @@ MVP backend + partial Flutter; AR, algorithmic feed, post-match auto-story, mone
 - [ ] **Compose expiry full chain live test** — worker → archive → purge → `DeleteFile` с `STORY_TTL_DEV` в compose.
 
 **Промпт-якорь:** `Phase 17 Stories post-MVP from docs/TODO.md Low Batch 7`.
-
-### Batch 8 — Phase 16 Bots (CI) — done
-
-- [x] **Bot grpcsvc CI `-short` split** — PR/push job `backend-go`: `go test -short ./...`; nightly `backend-go-integration` (cron + `workflow_dispatch`) — полная матрица; локально `make backend-test-ci-short` / `make backend-test-ci`. См. [`TESTING.md`](TESTING.md) §`-short` vs полный прогон.
-- [x] **`TestValidateManifest_ping` без DB** — unit-тест без testcontainers; bot `-short` ожидаемо &lt;10s wall time vs ~336s полный `grpcsvc` на Windows host.
-
-**Промпт-якорь:** done (регрессия wall time — снова Batch 8).
-
-### Batch 9 — QA polish — done
-
-- [x] **Flutter analyze** — `flutter analyze --no-fatal-infos`: 0 issues; `flutter test`: 666 passed.
-
-**Промпт-якорь:** done.
-
-### Batch 10 — Ops tech debt (timeouts done)
-
-- [x] **Таймауты в конфиг** — `pkg/runtimeconfig` + `pkg/httpserver`; все 19 `main.go` wired; matchmaking `DialTimeoutFromEnv`; таблица в [`OPERATIONS.md`](OPERATIONS.md) §Runtime configuration; `deploy/staging/configmap-app.yaml` + `.env.example`.
 
 ### Batch 10b — Ops tech debt (magic numbers)
 

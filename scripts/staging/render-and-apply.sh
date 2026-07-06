@@ -53,4 +53,6 @@ fi
 echo "Waiting for gateway rollout..."
 kubectl rollout status "deployment/voice-gateway" -n "${NS}" --timeout=300s || true
 
+bash "${ROOT}/scripts/staging/apply-gateway-ingress.sh"
+
 echo "Staging apply complete."
