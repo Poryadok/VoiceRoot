@@ -19,10 +19,19 @@ ensure_database() {
 apply_if_exists() {
   db="$1"
   file="$2"
-  if [ -f "${SCHEMA_DIR}/${file}" ]; then
-    echo "==> legacy patch ${db} <- ${file}"
-    psql -v ON_ERROR_STOP=1 --dbname "$db" -f "${SCHEMA_DIR}/${file}"
+  if [ ! -f "${SCHEMA_DIR}/${file}" ]; then
+    return 0
   fi
+  has_sm="$(psql -v ON_ERROR_STOP=1 -tAc "SELECT to_regclass('public.schema_migrations') IS NOT NULL" --dbname "$db")"
+  if [ "$has_sm" = "t" ]; then
+    return 0
+  fi
+  tables="$(psql -v ON_ERROR_STOP=1 -tAc "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE'" --dbname "$db")"
+  if [ "$tables" -eq 0 ]; then
+    return 0
+  fi
+  echo "==> legacy patch ${db} <- ${file}"
+  psql -v ON_ERROR_STOP=1 --dbname "$db" -f "${SCHEMA_DIR}/${file}"
 }
 
 for db in auth_db user_db social_db chat_db messaging_db file_db space_db role_db \

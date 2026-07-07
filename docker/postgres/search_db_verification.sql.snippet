@@ -1,4 +1,4 @@
--- Keep in sync with src/backend/migrations/search_db/000002_phase13_verification_type.up.sql
+-- Keep in sync with src/backend/migrations/search_db/000002_verification_type.up.sql
 
 ALTER TABLE profile_search_documents
     ADD COLUMN IF NOT EXISTS verification_type TEXT NOT NULL DEFAULT 'none';

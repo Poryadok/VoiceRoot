@@ -1,6 +1,6 @@
 # SQL migrations (DATA_SCOPE v1)
 
-Per-database folders for the first migration wave ([docs/DATA_SCOPE_V1.md](../../../docs/DATA_SCOPE_V1.md)). Filenames follow [golang-migrate](https://github.com/golang-migrate/migrate) (`NNNNNN_name.up.sql` / `.down.sql`). Historical filenames may contain legacy `phaseNN` suffixes — do not rename applied migrations.
+Per-database folders for the first migration wave ([docs/DATA_SCOPE_V1.md](../../../docs/DATA_SCOPE_V1.md)). Filenames follow [golang-migrate](https://github.com/golang-migrate/migrate) (`NNNNNN_name.up.sql` / `.down.sql`); use domain-based names, not phase numbers.
 
 | Directory | Database | Owner (typical) |
 |-----------|----------|-----------------|

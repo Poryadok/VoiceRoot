@@ -198,7 +198,7 @@ func TestCreateReport_Threshold_WritesAutoModLog(t *testing.T) {
 	ctx := context.Background()
 	root := repoRoot(t)
 	pool := integrationtest.StartPostgres(t, ctx, "moderationdb", filepath.Join(root, "src", "backend", "migrations", "moderation_db", "000001_reports.up.sql"))
-	integrationtestApplySQL(t, ctx, pool, filepath.Join(root, "src", "backend", "migrations", "moderation_db", "000002_phase14_sanctions.up.sql"))
+	integrationtestApplySQL(t, ctx, pool, filepath.Join(root, "src", "backend", "migrations", "moderation_db", "000002_sanctions.up.sql"))
 	client, cleanup := startModerationGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 

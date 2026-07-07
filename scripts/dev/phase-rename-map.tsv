@@ -1,4 +1,8 @@
-# old_path	new_path	action
+src/backend/migrations/user_db/000004_phase13_profiles_verification.up.sql	src/backend/migrations/user_db/000004_profiles_verification.up.sql	RENAME
+src/backend/migrations/user_db/000004_phase13_profiles_verification.down.sql	src/backend/migrations/user_db/000004_profiles_verification.down.sql	RENAME
+src/backend/migrations/moderation_db/000002_phase14_sanctions.up.sql	src/backend/migrations/moderation_db/000002_sanctions.up.sql	RENAME
+src/backend/migrations/search_db/000002_phase13_verification_type.up.sql	src/backend/migrations/search_db/000002_verification_type.up.sql	RENAME
+src/backend/migrations/search_db/000002_phase13_verification_type.down.sql	src/backend/migrations/search_db/000002_verification_type.down.sql	RENAME
 .agent/execplans/flutter-phase0-skeleton.md		DELETE
 src/frontend/test/phase17_stories_e2e_live_test.dart		DELETE
 src/backend/gateway/compose_phase17_stories_live_test.go		DELETE

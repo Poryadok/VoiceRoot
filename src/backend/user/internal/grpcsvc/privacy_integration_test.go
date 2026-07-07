@@ -35,7 +35,7 @@ func applyUserPrivacyMigrations(t *testing.T, ctx context.Context, pool *pgxpool
 		"000001_init.up.sql",
 		"000002_privacy_settings.up.sql",
 		"000003_profile_subscription.up.sql",
-		"000004_phase13_profiles_verification.up.sql",
+		"000004_profiles_verification.up.sql",
 		"000005_privacy_guest_audience.up.sql",
 		"000006_privacy_audience.up.sql",
 	} {

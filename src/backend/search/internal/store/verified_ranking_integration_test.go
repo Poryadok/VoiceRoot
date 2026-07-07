@@ -21,10 +21,10 @@ func TestSearchUsers_VerifiedProfilesRankedHigher_postgres(t *testing.T) {
 	migrationPath := filepath.Join(searchModuleRepoRoot(t), "src", "backend", "migrations", "search_db", "000001_init.up.sql")
 	pool := integrationtest.StartPostgres(t, ctx, "searchdb", migrationPath)
 
-	phase13Path := filepath.Join(searchModuleRepoRoot(t), "src", "backend", "migrations", "search_db", "000002_phase13_verification_type.up.sql")
-	phase13SQL, err := os.ReadFile(phase13Path)
+	verificationPath := filepath.Join(searchModuleRepoRoot(t), "src", "backend", "migrations", "search_db", "000002_verification_type.up.sql")
+	verificationSQL, err := os.ReadFile(verificationPath)
 	require.NoError(t, err)
-	_, err = pool.Exec(ctx, string(phase13SQL))
+	_, err = pool.Exec(ctx, string(verificationSQL))
 	require.NoError(t, err)
 
 	viewer := uuid.New()
