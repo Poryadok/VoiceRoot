@@ -34,7 +34,7 @@ class UserServiceClient extends $grpc.Client {
   UserServiceClient(super.channel, {super.options, super.interceptors});
 
   /// S2S bootstrap from Auth: ensure one primary profile per account before JWT is issued.
-  /// Target: called only from trusted Auth; not exposed via public Gateway REST in Phase 1.
+  /// Target: called only from trusted Auth; not exposed via public Gateway REST in v1 DM scope.
   $grpc.ResponseFuture<$0.EnsurePrimaryProfileResponse> ensurePrimaryProfile(
     $0.EnsurePrimaryProfileRequest request, {
     $grpc.CallOptions? options,
@@ -92,7 +92,7 @@ class UserServiceClient extends $grpc.Client {
   }
 
   /// Discover profiles by query (username / display_name) for friend requests and DM addressing.
-  /// Phase 1 (PLAN): reads user_db; privacy + blocks enforced server-side. Not Search Service (Фаза 9).
+  /// Friend/DM profile discovery — user_db; privacy + blocks enforced. Global search: docs/features/search.md.
   $grpc.ResponseFuture<$0.SearchProfilesResponse> searchProfiles(
     $0.SearchProfilesRequest request, {
     $grpc.CallOptions? options,
@@ -214,7 +214,7 @@ class UserServiceClient extends $grpc.Client {
         options: options);
   }
 
-  /// Phase 1 (PLAN § R2): presigned PUT to Cloudflare R2 for static profile avatar (no File Service).
+  /// Presigned PUT to Cloudflare R2 for static profile avatar (docs/features/user-profile.md).
   $grpc.ResponseFuture<$0.CreateAvatarPresignedUploadResponse>
       createAvatarPresignedUpload(
     $0.CreateAvatarPresignedUploadRequest request, {

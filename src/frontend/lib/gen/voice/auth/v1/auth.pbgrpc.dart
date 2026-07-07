@@ -119,7 +119,7 @@ class AuthServiceClient extends $grpc.Client {
     return $createUnaryCall(_$getJWKS, request, options: options);
   }
 
-  /// Phase 13: switch active profile claim in next access JWT (primary-profile-bootstrap.md).
+  /// See docs/features/multi-profile.md — switch active profile claim in next access JWT.
   $grpc.ResponseFuture<$0.SwitchActiveProfileResponse> switchActiveProfile(
     $0.SwitchActiveProfileRequest request, {
     $grpc.CallOptions? options,
@@ -127,7 +127,7 @@ class AuthServiceClient extends $grpc.Client {
     return $createUnaryCall(_$switchActiveProfile, request, options: options);
   }
 
-  /// Phase 14: internal — platform moderation suspends account (docs/PLAN.md phase 14).
+  /// Internal — platform moderation suspends account (docs/features/reports.md).
   $grpc.ResponseFuture<$0.SetAccountStatusResponse> setAccountStatus(
     $0.SetAccountStatusRequest request, {
     $grpc.CallOptions? options,
@@ -135,7 +135,7 @@ class AuthServiceClient extends $grpc.Client {
     return $createUnaryCall(_$setAccountStatus, request, options: options);
   }
 
-  /// Phase 15: encrypted key backup (opaque blob; docs/features/encryption.md).
+  /// See docs/features/encryption.md — encrypted key backup (opaque blob).
   $grpc.ResponseFuture<$0.PutE2EKeyBackupResponse> putE2EKeyBackup(
     $0.PutE2EKeyBackupRequest request, {
     $grpc.CallOptions? options,

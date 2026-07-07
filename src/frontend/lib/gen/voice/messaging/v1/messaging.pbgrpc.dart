@@ -173,7 +173,7 @@ class MessagingServiceClient extends $grpc.Client {
     return $createUnaryCall(_$listSharedMedia, request, options: options);
   }
 
-  /// Phase 15: Signal pre-key directory for DM E2E (docs/features/encryption.md).
+  /// Signal pre-key directory for DM E2E — docs/features/encryption.md.
   $grpc.ResponseFuture<$0.UploadPreKeyBundleResponse> uploadPreKeyBundle(
     $0.UploadPreKeyBundleRequest request, {
     $grpc.CallOptions? options,

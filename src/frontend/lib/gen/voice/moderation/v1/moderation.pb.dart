@@ -445,7 +445,7 @@ class ListReportsRequest extends $pb.GeneratedMessage {
   @$pb.TagNumber(2)
   $2.CursorPageRequest ensurePage() => $_ensure(1);
 
-  /// Phase 14: "content" (user/message) vs "spaces" queues — docs/features/reports.md.
+  /// "content" (user/message) vs "spaces" queues — docs/features/reports.md.
   @$pb.TagNumber(3)
   $core.String get queueFilter => $_getSZ(2);
   @$pb.TagNumber(3)

@@ -175,7 +175,7 @@ class ChatServiceClient extends $grpc.Client {
     return $createUnaryCall(_$archiveChat, request, options: options);
   }
 
-  /// Phase 15: DM-only opt-in E2E encryption (docs/features/encryption.md).
+  /// DM-only opt-in E2E encryption — docs/features/encryption.md.
   $grpc.ResponseFuture<$0.EnableChatE2EResponse> enableChatE2E(
     $0.EnableChatE2ERequest request, {
     $grpc.CallOptions? options,

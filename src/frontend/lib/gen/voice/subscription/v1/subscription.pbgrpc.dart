@@ -114,7 +114,7 @@ class SubscriptionServiceClient extends $grpc.Client {
     return $createUnaryCall(_$getBillingHistory, request, options: options);
   }
 
-  /// Phase 13: keep selected profiles when downgrading from premium (multi-profile.md).
+  /// See docs/features/multi-profile.md — keep selected profiles when downgrading from premium.
   $grpc.ResponseFuture<$0.ApplyDowngradeProfilesResponse>
       applyDowngradeProfiles(
     $0.ApplyDowngradeProfilesRequest request, {
