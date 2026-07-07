@@ -26,8 +26,8 @@ data:
   GATEWAY_JWT_ISSUER: "voice-auth"
   GATEWAY_JWT_AUDIENCE: "voice-client"
   GATEWAY_JWKS_URL: "http://voice-auth:8080/api/v1/auth/.well-known/jwks.json"
-  GATEWAY_REST_UPSTREAMS_JSON: '{"auth":"http://voice-auth:8080"}'
-  GATEWAY_GRPC_UPSTREAMS_JSON: '{"users":"voice-user:9090","friends":"voice-social:9090","chats":"voice-chat:9090","messages":"voice-messaging:9090","spaces":"voice-space:9090","roles":"voice-role:9090","voice":"voice-voice:9090","files":"voice-file:9090","notifications":"voice-notification:9090","matchmaking":"voice-matchmaking:9090","search":"voice-search:9090","bots":"voice-bot:9090"}'
+  GATEWAY_REST_UPSTREAMS_JSON: '{"auth":"http://voice-auth:8080","analytics":"http://voice-analytics:8080"}'
+  GATEWAY_GRPC_UPSTREAMS_JSON: '{"users":"voice-user:9090","friends":"voice-social:9090","chats":"voice-chat:9090","messages":"voice-messaging:9090","spaces":"voice-space:9090","roles":"voice-role:9090","voice":"voice-voice:9090","files":"voice-file:9090","notifications":"voice-notification:9090","matchmaking":"voice-matchmaking:9090","search":"voice-search:9090","bots":"voice-bot:9090","moderation":"voice-moderation:9090","subscription":"voice-subscription:9090","stories":"voice-story:9090"}'
   GATEWAY_REALTIME_UPSTREAM_URL: "http://voice-realtime:8080"
   GATEWAY_CORS_ALLOWED_ORIGINS: "*"
   # Fallback when gateway_db.client_versions is empty; see docker-compose.yml.

@@ -11,9 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestComposePhase17Stories_live registers two users, friends them, then exercises
+// TestComposeStories_live registers two users, friends them, then exercises
 // story create (with @mention) → feed → view → react → reply→DM → highlight privacy → report flows over Gateway REST.
-func TestComposePhase17Stories_live(t *testing.T) {
+func TestComposeStories_live(t *testing.T) {
 	if !liveComposeEnabled() {
 		t.Skip("set VOICE_RUN_LIVE_COMPOSE=true to run against local compose")
 	}

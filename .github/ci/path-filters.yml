@@ -4,7 +4,7 @@
 global:
   - Makefile
   - .golangci.yml
-  - .github/workflows/ci.yml
+  - .github/workflows/**
   - .github/ci/**
   - scripts/ci/**
   - docker-compose.yml
@@ -36,6 +36,8 @@ compose:
   - docker-compose.yml
   - docker-compose*.yml
   - deploy/**
+  - docker/postgres/**
+  - src/backend/migrations/**
   - scripts/dev/compose-migrate-all.sh
   - scripts/ci/compose*
 

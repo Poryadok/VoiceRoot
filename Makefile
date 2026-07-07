@@ -33,7 +33,7 @@ GO_TEST_SHORT_TARGETS := $(GO_SERVICES:%=go-test-short-%)
 GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
 
 .PHONY: buf-lint buf-format buf-breaking buf-generate buf-generate-dart buf-dart-check compose-up compose-app-up compose-down compose-logs-collect compose-observability-up \
-	compose-migrate-all compose-migrate-phase15 compose-migrate-bot compose-migrate-story compose-e2e-live compose-e2e-full compose-e2e-voice-live \
+	compose-migrate-all compose-migrate-phase15 compose-migrate-bot compose-migrate-story compose-e2e-smoke compose-e2e-live compose-e2e-full compose-e2e-voice-live \
 	build-all build-all-breaking check-toolchain compose-config-ci buf-ci backend-test-ci backend-test-ci-short backend-image-ci \
 	gateway-test-ci gateway-image-ci go-test-pkg go-mod-tidy-all auth-test-ci auth-image-ci buf-breaking-ci \
 	golangci-ci gateway-test-race-ci design-tokens-check flutter-ui-color-gate flutter-ci flutter-windows-prefetch-sqlite3 flutter-linux-prefetch-sqlite3 prekey-golden-check coverage-report testcontainers-prune buf-generate-ci-local-template-check
@@ -100,8 +100,11 @@ compose-logs-collect:
 compose-observability-up:
 	COMPOSE_PARALLEL_LIMIT=4 docker compose --profile app --profile observability up -d --build
 
-# Opt-in compose E2E (Phase-1 DM realtime, friends, auth, voice; media audio on Linux only).
-# Override: VOICE_API_BASE_URL=http://127.0.0.1:18080 VOICE_LIVEKIT_PUBLIC_URL=ws://127.0.0.1:7880
+# Feature smoke E2E (one test per product area; same as CI compose-e2e on master).
+compose-e2e-smoke:
+	$(BASH) "$(ROOT)/scripts/ci/compose-e2e-smoke.sh"
+
+# Opt-in compose E2E full coverage (all live tests; see .github/ci/e2e-features.yml).
 compose-e2e-live:
 	$(BASH) "$(ROOT)/scripts/ci/compose-e2e-live.sh"
 

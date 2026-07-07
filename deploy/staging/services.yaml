@@ -559,3 +559,186 @@ metadata:
 spec:
   selector: {app: voice-bot}
   ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-subscription
+  namespace: voice-staging
+  labels: {app: voice-subscription}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-subscription}
+  template:
+    metadata:
+      labels: {app: voice-subscription}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: subscription
+          image: __IMAGE_REGISTRY__/subscription:__IMAGE_TAG__
+          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          env:
+            - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: SUBSCRIPTION_DATABASE_URL}}}
+            - {name: SUBSCRIPTION_GRPC_LISTEN, value: ":9090"}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-subscription
+  namespace: voice-staging
+spec:
+  selector: {app: voice-subscription}
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-moderation
+  namespace: voice-staging
+  labels: {app: voice-moderation}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-moderation}
+  template:
+    metadata:
+      labels: {app: voice-moderation}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: moderation
+          image: __IMAGE_REGISTRY__/moderation:__IMAGE_TAG__
+          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          env:
+            - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: MODERATION_DATABASE_URL}}}
+            - {name: MODERATION_GRPC_LISTEN, value: ":9090"}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-moderation
+  namespace: voice-staging
+spec:
+  selector: {app: voice-moderation}
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-story
+  namespace: voice-staging
+  labels: {app: voice-story}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-story}
+  template:
+    metadata:
+      labels: {app: voice-story}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: story
+          image: __IMAGE_REGISTRY__/story:__IMAGE_TAG__
+          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          env:
+            - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: STORY_DATABASE_URL}}}
+            - {name: STORY_GRPC_LISTEN, value: ":9090"}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-story
+  namespace: voice-staging
+spec:
+  selector: {app: voice-story}
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-analytics
+  namespace: voice-staging
+  labels: {app: voice-analytics}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-analytics}
+  template:
+    metadata:
+      labels: {app: voice-analytics}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: analytics
+          image: __IMAGE_REGISTRY__/analytics:__IMAGE_TAG__
+          ports: [{containerPort: 8080}]
+          env:
+            - {name: LISTEN_ADDR, value: ":8080"}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-analytics
+  namespace: voice-staging
+spec:
+  selector: {app: voice-analytics}
+  ports: [{name: http, port: 8080}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-federation
+  namespace: voice-staging
+  labels: {app: voice-federation}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-federation}
+  template:
+    metadata:
+      labels: {app: voice-federation}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: federation
+          image: __IMAGE_REGISTRY__/federation:__IMAGE_TAG__
+          ports: [{containerPort: 8080}]
+          env:
+            - {name: LISTEN_ADDR, value: ":8080"}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-federation
+  namespace: voice-staging
+spec:
+  selector: {app: voice-federation}
+  ports: [{name: http, port: 8080}]

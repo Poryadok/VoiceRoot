@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Resolve backend Go CI matrix from paths-filter JSON (FILTER_JSON) and FORCE_FULL.
 # Writes go_services (JSON array), run_pkg, run_go to GITHUB_OUTPUT.
+#
+# S2S dependency map (blast radius): when a service changes, also test dependents that
+# call it over gRPC — messaging<->chat, user<->social/space, space<->user/role.
 set -euo pipefail
 
 GO_SERVICES=(
@@ -22,6 +25,31 @@ truthy() {
   [[ "${1:-}" == "true" ]]
 }
 
+add_unique() {
+  local svc="$1"
+  local s
+  for s in "${services[@]:-}"; do
+    [[ "$s" == "$svc" ]] && return 0
+  done
+  services+=("$svc")
+}
+
+expand_s2s_deps() {
+  local seed=("$@")
+  local svc
+  for svc in "${seed[@]}"; do
+    add_unique "$svc"
+    case "$svc" in
+      messaging) add_unique chat ;;
+      chat) add_unique messaging ;;
+      user) add_unique social; add_unique space ;;
+      social) add_unique user ;;
+      space) add_unique user; add_unique role ;;
+      role) add_unique space ;;
+    esac
+  done
+}
+
 services=()
 run_pkg=false
 
@@ -29,11 +57,15 @@ if truthy "${FORCE_FULL:-}" || filter_val global || filter_val protos || filter_
   services=("${GO_SERVICES[@]}")
   run_pkg=true
 else
+  seed=()
   for svc in "${GO_SERVICES[@]}"; do
     if filter_val "svc_${svc}"; then
-      services+=("$svc")
+      seed+=("$svc")
     fi
   done
+  if ((${#seed[@]} > 0)); then
+    expand_s2s_deps "${seed[@]}"
+  fi
   if ((${#services[@]} > 0)) || filter_val pkg; then
     run_pkg=true
   fi

@@ -263,7 +263,6 @@ jobs:
         working-directory: src/backend/gateway
         run: CGO_ENABLED=1 go test -race ./...
       - name: Docker build context and Dockerfile
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         id: dockerctx
         shell: bash
         run: |
@@ -275,7 +274,6 @@ jobs:
           fi
           echo "file=./src/backend/$S/Dockerfile" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@v3
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
       - name: Log in to GHCR
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: docker/login-action@v3
@@ -287,6 +285,15 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         id: image
         run: echo "base=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+      - name: Build ${{ matrix.service }} image (PR verify)
+        if: github.event_name == 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ steps.dockerctx.outputs.context }}
+          file: ${{ steps.dockerctx.outputs.file }}
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
       - name: Build and push ${{ matrix.service }} image
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: docker/build-push-action@v6
@@ -324,7 +331,6 @@ jobs:
         working-directory: src/backend/auth
         run: mvn -B test
       - uses: docker/setup-buildx-action@v3
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
       - name: Log in to GHCR
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: docker/login-action@v3
@@ -336,6 +342,15 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         id: image
         run: echo "base=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+      - name: Build auth image (PR verify)
+        if: github.event_name == 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./src/backend/auth
+          file: ./src/backend/auth/Dockerfile
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
       - name: Build auth image (load)
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: docker/build-push-action@v6
@@ -408,7 +423,6 @@ jobs:
           npm test
           npm run build
       - uses: docker/setup-buildx-action@v3
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
       - name: Log in to GHCR
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: docker/login-action@v3
@@ -420,6 +434,19 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         id: image
         run: echo "base=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+      - name: Build developer-portal image (PR verify)
+        if: github.event_name == 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./src/developer-portal
+          file: ./src/developer-portal/Dockerfile
+          push: false
+          build-args: |
+            VITE_VOICE_API_BASE=${{ steps.vite.outputs.api_base }}
+            VITE_OAUTH_CLIENT_ID=voice-developer-portal
+            VITE_OAUTH_DISABLED=false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
       - name: Build and push developer-portal image
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: docker/build-push-action@v6
@@ -633,12 +660,6 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-      - name: Gateway Phase 17 compose tests
-        working-directory: src/backend/gateway
-        env:
-          VOICE_RUN_LIVE_COMPOSE: "true"
-          VOICE_API_BASE_URL: http://127.0.0.1:18080
-        run: go test -count=1 -parallel 1 -timeout 15m -run 'TestComposePhase17.*_live' ./...
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
@@ -646,12 +667,11 @@ jobs:
           cache: true
       - name: Prefetch sqlite3mc native assets
         run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
-      - name: Flutter Phase 17 live test
-        working-directory: src/frontend
-        run: |
-          flutter test test/phase17_stories_e2e_live_test.dart \
-            --dart-define=VOICE_RUN_LIVE_INTEGRATION=true \
-            --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080
+      - name: Compose E2E smoke (all features)
+        env:
+          VOICE_RUN_LIVE_COMPOSE: "true"
+          VOICE_API_BASE_URL: http://127.0.0.1:18080
+        run: bash scripts/ci/compose-e2e-smoke.sh
 
   # --- Tier 3: nightly / manual full parity ---
   backend-go-integration:

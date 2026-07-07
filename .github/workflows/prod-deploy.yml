@@ -1,0 +1,75 @@
+name: Production deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag (git SHA or semver release tag; required)"
+        required: true
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve image tag
+        id: tag
+        run: |
+          set -eux
+          TAG="${{ inputs.image_tag }}"
+          if [ -z "${TAG}" ]; then
+            echo "image_tag is required (no default latest on production)." >&2
+            exit 1
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve gateway image
+        id: image
+        run: |
+          set -eux
+          BASE="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+          TAG="${{ steps.tag.outputs.tag }}"
+          echo "full=${BASE}/gateway:${TAG}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: azure/setup-kubectl@v4
+
+      - name: Configure kubeconfig
+        run: |
+          set -eux
+          mkdir -p ~/.kube
+          echo "${{ secrets.PROD_KUBECONFIG }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Verify gateway image exists in GHCR
+        run: |
+          set -eux
+          BASE="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+          REF="${BASE}/gateway:${{ steps.tag.outputs.tag }}"
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          if ! docker manifest inspect "${REF}" >/dev/null 2>&1; then
+            echo "ERROR: Gateway image not found: ${REF}" >&2
+            exit 1
+          fi
+
+      - name: Apply production manifests
+        env:
+          VOICE_DEVELOPER_PORTAL_INGRESS_HOST: ${{ vars.VOICE_PROD_DEVELOPER_PORTAL_INGRESS_HOST }}
+          VOICE_GATEWAY_INGRESS_HOST: ${{ vars.VOICE_PROD_GATEWAY_INGRESS_HOST }}
+          VOICE_GATEWAY_TLS_SECRET: ${{ vars.VOICE_PROD_GATEWAY_TLS_SECRET }}
+          VOICE_K8S_NAMESPACE: ${{ vars.VOICE_PROD_K8S_NAMESPACE }}
+          VOICE_IMAGE_PULL_SECRET: ${{ vars.VOICE_PROD_IMAGE_PULL_SECRET }}
+        run: |
+          set -eux
+          REGISTRY="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+          export VOICE_IMAGE_REGISTRY="${REGISTRY}"
+          export VOICE_IMAGE_TAG="${{ steps.tag.outputs.tag }}"
+          export VOICE_K8S_NAMESPACE="${{ vars.VOICE_PROD_K8S_NAMESPACE }}"
+          bash scripts/prod/render-and-apply-prod.sh

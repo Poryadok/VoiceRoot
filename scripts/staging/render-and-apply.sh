@@ -16,6 +16,19 @@ render() {
       "$1"
 }
 
+patch_image_pull_secrets() {
+  local secret_name="${VOICE_IMAGE_PULL_SECRET:-}"
+  if [ -z "${secret_name}" ]; then
+    return 0
+  fi
+  echo "Patching imagePullSecrets=${secret_name} on app deployments"
+  for dep in $(kubectl get deployment -n "${NS}" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}'); do
+    kubectl patch deployment "${dep}" -n "${NS}" --type=json \
+      -p="[{\"op\":\"add\",\"path\":\"/spec/template/spec/imagePullSecrets\",\"value\":[{\"name\":\"${secret_name}\"}]}]" \
+      2>/dev/null || true
+  done
+}
+
 echo "Applying Voice staging stack: ${REGISTRY} tag ${TAG} namespace ${NS}"
 
 kubectl apply -f "${ROOT}/deploy/staging/namespace.yaml"
@@ -38,10 +51,13 @@ render "${ROOT}/deploy/staging/infra.yaml" | kubectl apply -f -
 render "${ROOT}/deploy/staging/services.yaml" | kubectl apply -f -
 render "${ROOT}/deploy/staging/gateway-deployment.yaml" | kubectl apply -f -
 
+patch_image_pull_secrets
+
 echo "Ensuring Postgres databases exist..."
 kubectl wait --for=condition=ready pod/voice-postgres-0 -n "${NS}" --timeout=120s
 bash "${ROOT}/scripts/staging/init-postgres-databases.sh"
 bash "${ROOT}/scripts/staging/ensure-gateway-schema.sh"
+bash "${ROOT}/scripts/staging/apply-migrate-jobs.sh"
 
 bash "${ROOT}/scripts/staging/rollout-app-tier.sh"
 
@@ -49,11 +65,22 @@ if [ -f "${ROOT}/deploy/staging/developer-portal.yaml" ]; then
   render "${ROOT}/deploy/staging/developer-portal.yaml" | \
     sed -e "s|__DEVELOPER_PORTAL_INGRESS_HOST__|${VOICE_DEVELOPER_PORTAL_INGRESS_HOST}|g" | \
     kubectl apply -f -
+  patch_image_pull_secrets
 fi
 
 echo "Waiting for gateway rollout..."
-kubectl rollout status "deployment/voice-gateway" -n "${NS}" --timeout=300s || true
+kubectl rollout status "deployment/voice-gateway" -n "${NS}" --timeout=300s
+
+if kubectl get deployment voice-developer-portal -n "${NS}" >/dev/null 2>&1; then
+  echo "Waiting for developer-portal rollout..."
+  kubectl rollout status "deployment/voice-developer-portal" -n "${NS}" --timeout=300s
+fi
 
 bash "${ROOT}/scripts/staging/apply-gateway-ingress.sh"
 
-echo "Staging apply complete."
+if [ "${VOICE_APPLY_OBSERVABILITY:-}" = "true" ]; then
+  echo "Applying observability stack (VOICE_APPLY_OBSERVABILITY=true)..."
+  kubectl apply -f "${ROOT}/deploy/observability/" || echo "WARN: observability apply failed; check deploy/observability/README.md"
+fi
+
+echo "Staging apply complete. Image tag: ${TAG}"

@@ -5,9 +5,17 @@ Kubernetes manifests for `voice-staging` namespace. Gateway-only deploy is legac
 ## Prerequisites
 
 1. k3s cluster with kubectl access ([DEPLOYMENT.md](../../docs/DEPLOYMENT.md))
-2. GHCR images built by CI on `master` for: `auth`, `gateway`, `user`, `social`, `chat`, `messaging`, `realtime`, `file`, `voice`, `space`, `role`, `search`, `matchmaking`, `notification`, `bot`, `developer-portal`
+2. GHCR images built by CI on `master` for all Go services, `auth`, `developer-portal` (tag `:<git_sha>` and `:latest`)
 3. Secrets from [secret.example.yaml](secret.example.yaml) → `secret.yaml` (do not commit)
-4. Postgres init: on first boot run `docker/postgres` init against the cluster Postgres (`bot_db` included in `01-init-databases.sh`), then run migrations — locally `make compose-migrate-bot`; on staging apply `src/backend/migrations/bot_db` against `bot_db`
+4. Postgres init + golang-migrate Jobs (`scripts/staging/apply-migrate-jobs.sh` for `bot_db`, `story_db`, `moderation_db`, `subscription_db`)
+
+## Image tag and GHCR pull
+
+Auto **Staging deploy** uses CI **`head_sha`**. Manual dispatch defaults to `latest` — prefer explicit SHA from a green CI run.
+
+If GHCR packages are private, create a `docker-registry` secret in `voice-staging` and set `VOICE_IMAGE_PULL_SECRET` when running `render-and-apply.sh` (patches all Deployments).
+
+Optional: `VOICE_APPLY_OBSERVABILITY=true` applies `deploy/observability/` after app tier.
 
 ## Apply
 

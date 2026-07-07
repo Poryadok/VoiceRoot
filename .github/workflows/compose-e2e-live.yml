@@ -3,6 +3,10 @@ name: Compose E2E Live
 on:
   workflow_dispatch:
 
+env:
+  GO_VERSION: "1.26"
+  FLUTTER_VERSION: "3.41.7"
+
 jobs:
   compose-e2e-live:
     runs-on: ubuntu-latest
@@ -12,11 +16,11 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: src/backend/gateway/go.mod
+          go-version: ${{ env.GO_VERSION }}
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.29.3'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
           cache-key: flutter-${{ runner.os }}-${{ hashFiles('src/frontend/pubspec.lock') }}
@@ -27,5 +31,5 @@ jobs:
       - name: Compose app up
         run: make compose-app-up
 
-      - name: Compose E2E live (opt-in)
+      - name: Compose E2E live (full feature coverage)
         run: make compose-e2e-live

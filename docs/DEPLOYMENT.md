@@ -32,7 +32,7 @@
 
 - **Staging**: образы микросервисов (Go matrix + Auth + **Developer Portal** в [`ci.yml`](../.github/workflows/ci.yml)) пушатся в **GHCR** при каждом push в `master` (теги `:<git_sha>` и `:latest`). Деплой в namespace `voice-staging` выполняет workflow **[`Staging deploy`](../.github/workflows/staging-deploy.yml)** (`kubectl apply` к манифестам в [`deploy/staging/`](../deploy/staging/)): **ручной** запуск (`workflow_dispatch`, ввод тега образа, по умолчанию `latest`); **авто** после успешного `CI` на push в `master` — только при `STAGING_DEPLOY_ENABLED` = `true` (см. раздел ниже). Пока кластер или kubeconfig не готовы — только ручной выкат или отключённый автодеплой.
 - **Ограничение staging (историческое):** ранее выкатывался только Gateway. **Текущее:** workflow **Staging deploy** применяет полный стек [`deploy/staging/`](../deploy/staging/) через `scripts/staging/render-and-apply.sh` (все сервисы фаз 0–10 + ConfigMap upstreams). Требуются `voice-app-secrets` (см. `secret.example.yaml`) и образы всех сервисов в GHCR. Опционально: `STAGING_SMOKE_ENABLED=true` → `scripts/staging/smoke-staging.sh`.
-- **Production**: деплой только с **явным шагом** (approval в GitHub Environments, ручной запуск job или утверждённый релизный тег) — без автоматического «всё, что в master, сразу в prod».
+- **Production**: деплой только с **явным шагом** (approval в GitHub Environments, ручной запуск job или утверждённый релизный тег) — без автоматического «всё, что в master, сразу в prod». Workflow **[`Production deploy`](../.github/workflows/prod-deploy.yml)** — только `workflow_dispatch`, environment **`production`** (approval), обязательный **`image_tag`** (git SHA или semver; **без** default `latest`). Скрипт [`scripts/prod/render-and-apply-prod.sh`](../scripts/prod/render-and-apply-prod.sh); манифесты — [`deploy/prod/`](../deploy/prod/) (сейчас skeleton, расширять по мере cutover).
 
 Версионирование образов: тег по **git SHA** `master` для непрерывного staging; для prod — тег **semver** (`v1.2.3`) или тот же SHA, зафиксированный в релизном манифесте.
 
@@ -82,9 +82,15 @@ kubectl create secret tls voice-gateway-tls -n voice-staging --cert=tls.crt --ke
 
 **Ручное применение Ingress** (без ожидания CI): [`scripts/gateway/apply-ingress.ps1`](../scripts/gateway/apply-ingress.ps1) с `-IngressHost` из [`deploy/staging/domains.defaults`](../deploy/staging/domains.defaults) или подстановка плейсхолдеров в YAML и `kubectl apply -f -`.
 
-**Pull из GHCR в кластере:** если пакет/образ приватный, в namespace `voice-staging` создайте `docker-registry` secret (учёт GitHub с `read:packages`) и добавьте `imagePullSecrets` в Pod template Deployment (в репозитории при необходимости расширить [`deploy/staging/gateway-deployment.yaml`](../deploy/staging/gateway-deployment.yaml)).
+**Pull из GHCR в кластере:** если пакет/образ приватный, в namespace `voice-staging` создайте `docker-registry` secret (учёт GitHub с `read:packages`) и задайте **`VOICE_IMAGE_PULL_SECRET`** при `scripts/staging/render-and-apply.sh` — скрипт пропатчит `imagePullSecrets` на Deployments. Или добавьте вручную в Pod template ([`deploy/staging/gateway-deployment.yaml`](../deploy/staging/gateway-deployment.yaml) и др.).
+
+**Developer Portal на staging:** CI пушит `developer-portal:<git_sha>`; auto-deploy подставляет тот же SHA. После deploy проверьте `kubectl get deployment voice-developer-portal -o jsonpath='{.spec.template.spec.containers[0].image}'`.
 
 **Проверка деплоя из GitHub после настройки секрета:** в репозитории **Actions** → workflow **Staging deploy** → **Run workflow** (при необходимости укажите тег образа; по умолчанию для ручного запуска — `latest`). Убедитесь, что job завершает шаг **Apply staging manifests** без ошибок `kubectl`.
+
+**Теги образов и автодеплой:** auto-deploy после CI на `master` использует **`head_sha`** CI run. Ручной `workflow_dispatch` по умолчанию — **`latest`**, что может рассинхрониться при partial failed docker matrix push; предпочитайте **git SHA** из зелёного CI. Workflow проверяет наличие `gateway:<tag>` в GHCR перед apply.
+
+**Sanity после изменений CI:** один раз **Actions → CI → Run workflow** → profile **`full`** (все тиры, все сервисы). Список required checks для branch protection — [`.github/ci/branch-protection-checklist.md`](../.github/ci/branch-protection-checklist.md).
 
 ---
 
