@@ -81,4 +81,12 @@
 | `federation.events`    | Federation        | Analytics, Role, Moderation |
 | `bot.events`           | Bot               | Analytics, Messaging |
 
+### Analytics telemetry (`analytics_events` stream)
+
+| Stream              | Publishers                                      | Subscribers   |
+|---------------------|-------------------------------------------------|---------------|
+| `analytics_events`  | Notification, Search, Gateway, Subscription, Moderation (direct `analytics.*`) | Analytics |
+
+Domain JetStream streams (`message_events`, `user_events`, …) are also consumed by **Analytics** via stream adapters (dual ingest). Subject pattern: `analytics.{service}.{event}`.
+
 Продуктовая аналитика дополнительно консьюмит subject’ы вида `analytics.*` (см. раздел «Аналитика» в [MICROSERVICES.md](MICROSERVICES.md)).

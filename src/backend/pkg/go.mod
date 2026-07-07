@@ -12,6 +12,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.35.0
 	google.golang.org/grpc v1.70.0
 	voice.app/voice/user v0.0.0
+	voice.app/voice/analytics v0.0.0
 )
 
 require (
@@ -82,3 +83,5 @@ require (
 replace voice.app/voice/user => ../user/pb/voice/user
 
 replace voice.app/voice/common => ../user/pb/voice/common
+
+replace voice.app/voice/analytics => ../analytics/pb/voice/analytics

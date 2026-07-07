@@ -26,6 +26,7 @@ import (
 	"voice/backend/notification/internal/pushenrich"
 	"voice/backend/notification/internal/store"
 	"voice/backend/pkg/grpcmw"
+	"voice/backend/pkg/analyticsevents"
 	"voice/backend/pkg/httpserver"
 	"voice/backend/pkg/runtimeconfig"
 	voiceprom "voice/backend/pkg/promhttp"
@@ -180,10 +181,19 @@ func main() {
 			log.Fatalf("grpc listen: %v", err)
 		}
 		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))...)
-		notificationv1.RegisterNotificationServiceServer(grpcSrv, &grpcsvc.NotificationGRPC{
+		notifySvc := &grpcsvc.NotificationGRPC{
 			Tokens: tokenStore,
 			Pusher: pusher,
-		})
+		}
+		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
+			if pub, err := analyticsevents.NewJetStreamPublisher(natsURL); err == nil {
+				notifySvc.Analytics = pub
+				logger.Info("analytics telemetry publisher enabled")
+			} else {
+				logger.Warn("analytics publisher unavailable", slog.Any("error", err))
+			}
+		}
+		notificationv1.RegisterNotificationServiceServer(grpcSrv, notifySvc)
 		go func() {
 			logger.Info("gRPC listening", slog.String("addr", grpcListen))
 			if err := grpcSrv.Serve(lis); err != nil {

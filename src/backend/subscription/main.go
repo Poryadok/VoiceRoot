@@ -19,6 +19,7 @@ import (
 
 	grpcsvc "voice/backend/subscription/internal/grpcsvc"
 	"voice/backend/subscription/internal/store"
+	"voice/backend/pkg/analyticsevents"
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
@@ -62,6 +63,14 @@ func main() {
 		}
 		st := &store.SubscriptionStore{Pool: pool}
 		svc := grpcsvc.NewSubscriptionGRPC(st)
+		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
+			if pub, err := analyticsevents.NewJetStreamPublisher(natsURL); err == nil {
+				svc.Analytics = pub
+				logger.Info("analytics telemetry publisher enabled")
+			} else {
+				logger.Warn("analytics publisher unavailable", slog.Any("error", err))
+			}
+		}
 		if userAddr := grpcclient.DialTarget(strings.TrimSpace(os.Getenv("USER_GRPC_ADDR"))); userAddr != "" {
 			conn, err := grpc.NewClient(userAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {

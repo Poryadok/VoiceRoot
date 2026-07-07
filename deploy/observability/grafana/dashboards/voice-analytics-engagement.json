@@ -1,0 +1,57 @@
+{
+  "uid": "voice-analytics-engagement",
+  "title": "Voice Analytics — Engagement",
+  "tags": ["voice", "analytics", "engagement"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": { "from": "now-7d", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Messages sent / day",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT date, sum(event_count) AS messages FROM voice.events_by_type_mv WHERE event_type = 'message_sent' GROUP BY date ORDER BY date",
+          "format": 1
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Voice calls started / day",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT date, sum(event_count) AS calls FROM voice.events_by_type_mv WHERE event_type = 'call_started' GROUP BY date ORDER BY date",
+          "format": 1
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Matchmaking searches / day",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT date, sum(event_count) AS searches FROM voice.events_by_type_mv WHERE event_type = 'mm_search_started' GROUP BY date ORDER BY date",
+          "format": 1
+        }
+      ]
+    }
+  ]
+}

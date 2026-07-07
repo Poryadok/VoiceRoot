@@ -24,6 +24,7 @@ import (
 	rolev1 "voice.app/voice/role/v1"
 	searchv1 "voice.app/voice/search/v1"
 	subscriptionv1 "voice.app/voice/subscription/v1"
+	analyticsv1 "voice.app/voice/analytics/v1"
 	botv1 "voice.app/voice/bot/v1"
 	storyv1 "voice.app/voice/story/v1"
 	spacev1 "voice.app/voice/space/v1"
@@ -48,6 +49,7 @@ type grpcClients struct {
 	story        storyv1.StoryServiceClient
 	search       searchv1.SearchServiceClient
 	auth         authv1.AuthServiceClient
+	analytics    analyticsv1.AnalyticsQueryServiceClient
 }
 
 type transcoder struct {
@@ -154,7 +156,12 @@ func grpcClientsFromEnv(logger *slog.Logger) *grpcClients {
 	} else if conn != nil {
 		clients.auth = authv1.NewAuthServiceClient(conn)
 	}
-	if clients.user == nil && clients.social == nil && clients.chat == nil && clients.messaging == nil && clients.voice == nil && clients.file == nil && clients.space == nil && clients.role == nil && clients.notification == nil && clients.matchmaking == nil && clients.search == nil && clients.moderation == nil && clients.subscription == nil && clients.bot == nil && clients.story == nil {
+	if conn, err := dial(addrFor("analytics")); err != nil {
+		logGRPCDialError(logger, "analytics", err)
+	} else if conn != nil {
+		clients.analytics = analyticsv1.NewAnalyticsQueryServiceClient(conn)
+	}
+	if clients.user == nil && clients.social == nil && clients.chat == nil && clients.messaging == nil && clients.voice == nil && clients.file == nil && clients.space == nil && clients.role == nil && clients.notification == nil && clients.matchmaking == nil && clients.search == nil && clients.moderation == nil && clients.subscription == nil && clients.bot == nil && clients.story == nil && clients.analytics == nil {
 		return nil
 	}
 	return clients
@@ -262,6 +269,11 @@ func (t *transcoder) serveNamespace(w http.ResponseWriter, r *http.Request, name
 		return t.serveStories(w, r, rest)
 	case "links":
 		return t.serveLinks(w, r, rest)
+	case "analytics":
+		if t.clients.analytics == nil {
+			return false
+		}
+		return t.serveAnalytics(w, r, rest)
 	default:
 		return false
 	}

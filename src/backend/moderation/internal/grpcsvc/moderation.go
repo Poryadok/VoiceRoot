@@ -21,6 +21,9 @@ type ModerationGRPC struct {
 	PlatformAudienceSize int64
 	Auth                 AccountStatusClient
 	Users                ProfileAccountLookup
+	Analytics            interface {
+		Publish(ctx context.Context, subject, sourceService, eventType string, props map[string]any) error
+	}
 }
 
 // ProfileAccountLookup resolves profile_id to account_id (User Service).

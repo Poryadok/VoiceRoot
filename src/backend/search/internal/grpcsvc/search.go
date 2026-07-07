@@ -76,6 +76,9 @@ type SearchGRPC struct {
 	Roles    RoleChecker
 	Blocks   BlockList
 	Reindex  ChatReindexer
+	Analytics interface {
+		Publish(ctx context.Context, subject, sourceService, eventType string, props map[string]any) error
+	}
 }
 
 func pageSize(page *commonv1.CursorPageRequest) int {
@@ -237,6 +240,12 @@ func (s *SearchGRPC) SearchGlobal(ctx context.Context, req *searchv1.SearchGloba
 		}
 		msgHits = toProtoHits(hits)
 		next = cursor
+	}
+
+	if s.Analytics != nil {
+		_ = s.Analytics.Publish(ctx, "analytics.search.query", "search", "query_executed", map[string]any{
+			"query_len": len(q), "message_hits": len(msgHits),
+		})
 	}
 
 	return &searchv1.SearchGlobalResponse{

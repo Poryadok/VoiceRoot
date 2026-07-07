@@ -141,7 +141,9 @@ func (g *gateway) handleMetrics(w http.ResponseWriter, r *http.Request) {
 
 func (g *gateway) observeRequestMetrics(r *http.Request, status int, start time.Time) {
 	group := routeGroup(r)
-	g.metrics.ObserveRequest(group, r.Method, status, time.Since(start))
+	duration := time.Since(start)
+	g.metrics.ObserveRequest(group, r.Method, status, duration)
+	g.config.analyticsTelemetry.maybePublish(r, group, status, duration)
 }
 
 func gatewayAccessLogExtras(r *http.Request) []slog.Attr {

@@ -1,0 +1,57 @@
+{
+  "uid": "voice-analytics-product",
+  "title": "Voice Analytics — Product",
+  "tags": ["voice", "analytics", "product"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": { "from": "now-7d", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "DAU (unique users / day)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT date, uniqMerge(unique_users) AS dau FROM voice.dau_mv GROUP BY date ORDER BY date",
+          "format": 1
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Events per type (daily)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT date, event_type, sum(event_count) AS cnt FROM voice.events_by_type_mv GROUP BY date, event_type ORDER BY date",
+          "format": 1
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Registrations (profile_created / day)",
+      "gridPos": { "h": 4, "w": 8, "x": 0, "y": 8 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT sum(event_count) FROM voice.events_by_type_mv WHERE event_type = 'profile_created' AND date = today()",
+          "format": 1
+        }
+      ]
+    }
+  ]
+}

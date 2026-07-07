@@ -16,6 +16,8 @@ smoke_gateway:
   - TestComposeStories_live
   - TestComposeBotsSlash_live
   - TestComposeDeepLinks_live
+  - TestComposeAnalytics_live
+  - TestComposeAnalyticsExport_live
   - TestComposeGuestRestrictions_live
   - TestComposeE2EKeyBackup_live
 

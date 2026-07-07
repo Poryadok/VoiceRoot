@@ -253,6 +253,9 @@ Promtail ставит label **`namespace`** из pod metadata; **`request_id`** 
 | Bots | `TestComposeBotsSlash_live` | `bots_slash_e2e_live_test` |
 | Deep links | `TestComposeDeepLinks_live` | `deeplink_invite_e2e_live_test` |
 | E2E encryption | `TestComposeE2EKeyBackup_live` | `e2e_key_backup_live_test` |
+| Analytics (staff) | `TestComposeAnalytics_live`, `TestComposeAnalyticsExport_live` | — (admin web only) |
+
+Opt-in: `VOICE_RUN_LIVE_COMPOSE=true` в `src/backend/gateway` для analytics live tests; требуется compose app stack с ClickHouse + staff token.
 
 ---
 

@@ -52,6 +52,25 @@ services:
       retries: 10
       start_period: 3s
 
+  clickhouse:
+    profiles: ["app"]
+    image: clickhouse/clickhouse-server:24.8-alpine
+    ports:
+      - "${CLICKHOUSE_HTTP_PORT:-8123}:8123"
+    volumes:
+      - voice_clickhouse:/var/lib/clickhouse
+      - ./docker/clickhouse/init:/docker-entrypoint-initdb.d:ro
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8123/ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+      start_period: 10s
+
   livekit:
     profiles: ["app"]
     image: livekit/livekit-server:latest
@@ -457,11 +476,14 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/subscription_db?sslmode=disable
       SUBSCRIPTION_GRPC_LISTEN: :9090
       PADDLE_WEBHOOK_SECRET: ${PADDLE_WEBHOOK_SECRET:-test-webhook-secret}
+      NATS_URL: nats://nats:4222
     depends_on:
       postgres:
         condition: service_healthy
       compose-db-init:
         condition: service_completed_successfully
+      nats:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
       interval: 5s
@@ -481,6 +503,7 @@ services:
       AUTH_GRPC_ADDR: auth:9090
       USER_GRPC_ADDR: user:9090
       MODERATION_PLATFORM_AUDIENCE_SIZE: "1000"
+      NATS_URL: nats://nats:4222
     depends_on:
       postgres:
         condition: service_healthy
@@ -488,12 +511,38 @@ services:
         condition: service_completed_successfully
       user:
         condition: service_healthy
+      nats:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
       interval: 5s
       timeout: 3s
       retries: 10
       start_period: 10s
+
+  analytics:
+    profiles: ["app"]
+    build:
+      context: ./src/backend
+      dockerfile: analytics/Dockerfile
+    environment:
+      LOG_LEVEL: debug
+      CLICKHOUSE_DSN: clickhouse://default@clickhouse:9000/voice
+      NATS_URL: nats://nats:4222
+      ANALYTICS_ID_HASH_KEY: ${ANALYTICS_ID_HASH_KEY:-compose-dev-analytics-hash-key}
+      ANALYTICS_BATCH_MAX_EVENTS: "1000"
+      ANALYTICS_BATCH_FLUSH_INTERVAL: 5s
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
 
   bot:
     profiles: ["app"]
@@ -711,7 +760,7 @@ services:
       LISTEN_ADDR: ":8080"
       GATEWAY_REDIS_ADDR: redis:6379
       GATEWAY_REST_UPSTREAMS_JSON: '{"auth":"http://auth:8080"}'
-      GATEWAY_GRPC_UPSTREAMS_JSON: '{"auth":"auth:9090","users":"user:9090","friends":"social:9090","chats":"chat:9090","messages":"messaging:9090","spaces":"space:9090","roles":"role:9090","voice":"voice:9090","files":"file:9090","notifications":"notification:9090","matchmaking":"matchmaking:9090","search":"search:9090","moderation":"moderation:9090","subscription":"subscription:9090","bots":"bot:9090","stories":"story:9090"}'
+      GATEWAY_GRPC_UPSTREAMS_JSON: '{"auth":"auth:9090","users":"user:9090","friends":"social:9090","chats":"chat:9090","messages":"messaging:9090","spaces":"space:9090","roles":"role:9090","voice":"voice:9090","files":"file:9090","notifications":"notification:9090","matchmaking":"matchmaking:9090","search":"search:9090","moderation":"moderation:9090","subscription":"subscription:9090","bots":"bot:9090","stories":"story:9090","analytics":"analytics:9090"}'
       GATEWAY_REALTIME_UPSTREAM_URL: http://realtime:8080
       GATEWAY_JWKS_URL: http://auth:8080/api/v1/auth/.well-known/jwks.json
       GATEWAY_JWT_ISSUER: voice-auth
@@ -724,8 +773,12 @@ services:
       GATEWAY_VERSION_CONFIGS_JSON: '{"windows":{"min_supported_version":"1.0.0","latest_version":"1.0.0","update_url":"https://updates.voice.example/windows/appcast.xml","release_notes":"Compose dev"},"android":{"min_supported_version":"1.0.0","latest_version":"1.0.0","update_url":"https://play.google.com/store/apps/details?id=voice.app.voice_frontend","release_notes":"","shorebird_patch":0}}'
       # Compose dev: static staff token for moderation admin (checked before JWKS).
       GATEWAY_STATIC_TOKENS_JSON: '{"compose-staff-token":{"user_id":"00000000-0000-0000-0000-000000000099","profile_id":"00000000-0000-0000-0000-000000000199","roles":["staff"]}}'
+      NATS_URL: nats://nats:4222
+      GATEWAY_ANALYTICS_SAMPLE_RATE: "0.05"
     depends_on:
       redis:
+        condition: service_healthy
+      nats:
         condition: service_healthy
       auth:
         condition: service_healthy
@@ -760,6 +813,8 @@ services:
       bot:
         condition: service_healthy
       story:
+        condition: service_healthy
+      analytics:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
@@ -885,6 +940,7 @@ services:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-changeme-voice-local}
       GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
     volumes:
       - voice_obs_grafana:/var/lib/grafana
       - ./deploy/observability/grafana/provisioning/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
@@ -906,6 +962,7 @@ volumes:
   voice_pgdata:
   voice_redis:
   voice_nats_js:
+  voice_clickhouse:
   voice_minio:
   voice_obs_prometheus:
   voice_obs_loki:

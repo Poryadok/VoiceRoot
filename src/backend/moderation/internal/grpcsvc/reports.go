@@ -91,6 +91,12 @@ func (s *ModerationGRPC) CreateReport(ctx context.Context, req *moderationv1.Cre
 		}
 	}
 
+	if s.Analytics != nil {
+		_ = s.Analytics.Publish(ctx, "analytics.moderation.report_created", "moderation", "report_created", map[string]any{
+			"target_type": targetType, "category": category,
+		})
+	}
+
 	return &moderationv1.CreateReportResponse{
 		Report: reportRowToProto(row),
 	}, nil

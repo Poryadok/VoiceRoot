@@ -118,6 +118,28 @@ kubectl create secret tls voice-gateway-tls -n voice-staging --cert=tls.crt --ke
 - Dev: `src/frontend/lib/firebase_options.dart` — placeholder; override via `--dart-define` or regenerate with FlutterFire CLI.
 - Staging/prod: store `google-services.json` (Android) and Firebase web config in CI secrets; set `FCM_*` env on Notification service (see `src/backend/notification/internal/fcm/`).
 
+### Product analytics (ClickHouse + Analytics service)
+
+| Переменная | Где | Назначение |
+|------------|-----|------------|
+| `CLICKHOUSE_DSN` | `voice-analytics` | Native DSN (`clickhouse://user:pass@host:9000/voice`) |
+| `ANALYTICS_ID_HASH_KEY` | `voice-analytics` | HMAC-соль для хеширования account/profile ID (Secret, не коммитить) |
+| `NATS_URL` | `voice-analytics`, telemetry publishers | JetStream ingest |
+| `GATEWAY_ANALYTICS_SAMPLE_RATE` | Gateway (optional) | Доля REST-запросов для `analytics.gateway.request` (default `0` = off) |
+
+**Compose dev:** `make compose-app-up` поднимает `clickhouse` + `analytics` + `admin` (порт `ADMIN_PORT`, default **9081**). Staff token: `GATEWAY_STATIC_TOKENS_JSON` → `compose-staff-token`. Smoke: `VOICE_RUN_LIVE_COMPOSE=true go test ./... -run TestComposeAnalytics_live` в `src/backend/gateway`.
+
+**Staging rollout:**
+
+1. Применить [`deploy/staging/infra.yaml`](../deploy/staging/infra.yaml) (StatefulSet `voice-clickhouse`) или указать managed ClickHouse в `CLICKHOUSE_DSN`.
+2. Применить DDL из [`docker/clickhouse/init/001_events.sql`](../docker/clickhouse/init/001_events.sql) (idempotent).
+3. Заполнить `CLICKHOUSE_DSN` и `ANALYTICS_ID_HASH_KEY` в `voice-app-secrets` ([`secret.example.yaml`](../deploy/staging/secret.example.yaml)).
+4. Деплой `voice-analytics`; Gateway upstreams уже включают `analytics` в [`configmap-app.yaml`](../deploy/staging/configmap-app.yaml).
+5. Grafana: datasource ClickHouse + dashboards `voice-analytics-*.json` ([`deploy/observability/grafana/`](../deploy/observability/grafana/)); plugin `grafana-clickhouse-datasource`.
+6. **Backfill** (опционально): replay JetStream с `DeliverAll` за N дней — только по runbook, с лимитом объёма; иначе старт с нуля.
+
+**Admin UI:** `src/admin` — `/analytics/product`, `/analytics/funnels`, `/analytics/export` (staff JWT).
+
 ### APNs / VoIP (iOS)
 
 - Notification service reads APNs credentials from env (`APNS_*` — see `src/backend/notification/internal/apns/config.go`).

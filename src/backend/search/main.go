@@ -25,6 +25,7 @@ import (
 	"voice/backend/pkg/httpserver"
 	"voice/backend/pkg/runtimeconfig"
 	voiceprom "voice/backend/pkg/promhttp"
+	"voice/backend/pkg/analyticsevents"
 
 	chatv1 "voice.app/voice/chat/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
@@ -81,6 +82,13 @@ func main() {
 		}
 
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
+			if pub, err := analyticsevents.NewJetStreamPublisher(natsURL); err == nil {
+				_ = pub.EnsureStream()
+				svc.Analytics = pub
+				defer pub.Close()
+			} else {
+				logger.Warn("analytics publisher disabled", slog.Any("error", err))
+			}
 			instanceID := strings.TrimSpace(os.Getenv("SEARCH_INSTANCE_ID"))
 			var messaging indexer.MessagingClient
 			if conn, err := dialOptional(os.Getenv("MESSAGING_GRPC_ADDR")); err == nil && conn != nil {

@@ -19,8 +19,11 @@ import (
 // NotificationGRPC implements NotificationService (Phase-6 stub).
 type NotificationGRPC struct {
 	notificationv1.UnimplementedNotificationServiceServer
-	Tokens *store.DeviceTokenStore
-	Pusher *dispatch.PushDispatcher
+	Tokens    *store.DeviceTokenStore
+	Pusher    *dispatch.PushDispatcher
+	Analytics interface {
+		Publish(ctx context.Context, subject, sourceService, eventType string, props map[string]any) error
+	}
 }
 
 func shouldDeliverPushToToken(notificationType, pushService string) bool {
@@ -127,6 +130,13 @@ func (s *NotificationGRPC) SendNotification(ctx context.Context, req *notificati
 			}
 			return nil, status.Errorf(codes.Internal, "send push: %v", err)
 		}
+	}
+	if s.Analytics != nil {
+		_ = s.Analytics.Publish(ctx, "analytics.notification.push_sent", "notification", "push_sent", map[string]any{
+			"profile_id":        profileID.String(),
+			"notification_type": req.GetNotificationType(),
+			"token_count":       len(tokens),
+		})
 	}
 	return &notificationv1.SendNotificationResponse{}, nil
 }

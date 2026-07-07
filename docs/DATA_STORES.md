@@ -29,9 +29,29 @@
 | Bot Service          | `bot_db`          | —                         | —                                |
 | Federation Service   | `federation_db`   | —                         | —                                |
 | Story Service        | `story_db`        | —                         | медиа через File, R2             |
-| Analytics Service    | —                 | буфер батчей              | ClickHouse                       |
+| Analytics Service    | —                 | in-memory batch buffer      | ClickHouse (`voice` DB)          |
 
 Разделение Redis между Gateway и Auth: [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md) («Redis: API Gateway и Auth Service»).
+
+### ClickHouse (Analytics Service)
+
+| Компонент | Compose (`--profile app`) | Staging |
+|-----------|---------------------------|---------|
+| Сервис | `clickhouse` (`clickhouse/clickhouse-server:24.8`) | `voice-clickhouse` StatefulSet или managed endpoint |
+| Init DDL | `docker/clickhouse/init/001_events.sql` | тот же SQL (job / idempotent apply) |
+| HTTP / native | `8123` / `9000` | из Secret `CLICKHOUSE_DSN` |
+
+Переменные окружения **Analytics** (`voice-analytics`):
+
+| Переменная | Назначение |
+|------------|------------|
+| `CLICKHOUSE_DSN` | DSN для `clickhouse-go` (например `clickhouse://default@clickhouse:9000/voice`) |
+| `NATS_URL` | JetStream consumers (domain streams + `analytics_events`) |
+| `ANALYTICS_ID_HASH_KEY` | HMAC-соль для `account_id` / `profile_id` (не коммитить) |
+| `ANALYTICS_BATCH_MAX_EVENTS` | Размер батча (default 1000) |
+| `ANALYTICS_BATCH_FLUSH_INTERVAL` | Интервал flush (default `5s`) |
+
+Для локального compose задайте `ANALYTICS_ID_HASH_KEY` в `.env` или используйте dev default из `docker-compose.yml`.
 
 Для `API Gateway` канонично **нет service-owned PostgreSQL**. Политика версий клиента (`/api/v1/version`) может храниться либо в managed config store, либо в отдельной control-plane БД/таблице (`client_versions`) под владением Gateway как edge-политики; это не означает появление отдельной доменной БД Gateway в inventory.
 

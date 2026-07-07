@@ -37,3 +37,14 @@ export async function apiJson<T>(
   }
   return (await response.json()) as T;
 }
+
+export const apiGet = apiJson;
+
+export async function apiGetBlob(path: string): Promise<Blob> {
+  const response = await apiFetch(path);
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || response.statusText);
+  }
+  return response.blob();
+}

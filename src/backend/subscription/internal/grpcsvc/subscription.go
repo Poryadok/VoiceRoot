@@ -28,6 +28,9 @@ type SubscriptionGRPC struct {
 	Catalog *catalog.ProductCatalog
 	// UserProfiles optional; when set, downgrade delegates profile freeze to User service.
 	UserProfiles UserProfileDowngradeClient
+	Analytics    interface {
+		Publish(ctx context.Context, subject, sourceService, eventType string, props map[string]any) error
+	}
 }
 
 // UserProfileDowngradeClient applies profile selection on subscription downgrade.
@@ -176,6 +179,7 @@ func (s *SubscriptionGRPC) HandlePaddleWebhook(ctx context.Context, req *subscri
 				}
 				return nil, status.Error(codes.Internal, err.Error())
 			}
+			s.publishPaymentEvent(ctx, "analytics.subscription.payment_success", "payment_success", accountID.String(), plan, ev.EventID)
 		case "space_pro":
 			spaceID, purchaserID, err := billing.SpaceProFromCustomData(ev.Data.CustomData)
 			if err != nil {
@@ -187,6 +191,7 @@ func (s *SubscriptionGRPC) HandlePaddleWebhook(ctx context.Context, req *subscri
 				}
 				return nil, status.Error(codes.Internal, err.Error())
 			}
+			s.publishPaymentEvent(ctx, "analytics.subscription.payment_success", "payment_success", purchaserID.String(), plan, ev.EventID)
 		default:
 			return nil, status.Error(codes.InvalidArgument, "unknown plan in custom_data")
 		}
@@ -204,10 +209,25 @@ func (s *SubscriptionGRPC) HandlePaddleWebhook(ctx context.Context, req *subscri
 			}
 			return nil, status.Error(codes.Internal, err.Error())
 		}
+		s.publishPaymentEvent(ctx, "analytics.subscription.payment_failed", "payment_failed", accountID.String(), "", ev.EventID)
 	default:
 		return &subscriptionv1.HandlePaddleWebhookResponse{}, nil
 	}
 	return &subscriptionv1.HandlePaddleWebhookResponse{}, nil
+}
+
+func (s *SubscriptionGRPC) publishPaymentEvent(ctx context.Context, subject, eventType, accountID, plan, providerEventID string) {
+	if s == nil || s.Analytics == nil {
+		return
+	}
+	props := map[string]any{
+		"account_id":        accountID,
+		"provider_event_id": providerEventID,
+	}
+	if plan != "" {
+		props["plan"] = plan
+	}
+	_ = s.Analytics.Publish(ctx, subject, "subscription", eventType, props)
 }
 
 func (s *SubscriptionGRPC) HandleCloudPaymentsWebhook(ctx context.Context, req *subscriptionv1.HandleCloudPaymentsWebhookRequest) (*subscriptionv1.HandleCloudPaymentsWebhookResponse, error) {

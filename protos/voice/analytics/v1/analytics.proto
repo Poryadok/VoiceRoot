@@ -7,10 +7,18 @@ import "google/protobuf/timestamp.proto";
 option go_package = "voice.app/voice/analytics/v1;analyticsv1";
 
 // Internal ingest (NATS consumer / rare gRPC). Admin REST via Gateway: /api/v1/analytics/**.
-// Name matches docs concept "AnalyticsIngest" via RPC prefix Ingest*.
 service AnalyticsIngestService {
   rpc IngestEvent(IngestEventRequest) returns (IngestEventResponse);
   rpc IngestBatch(IngestBatchRequest) returns (IngestBatchResponse);
+}
+
+// Staff-only query API (Gateway transcoding).
+service AnalyticsQueryService {
+  rpc GetDashboard(GetDashboardRequest) returns (GetDashboardResponse);
+  rpc GetMetrics(GetMetricsRequest) returns (GetMetricsResponse);
+  rpc GetFunnel(GetFunnelRequest) returns (GetFunnelResponse);
+  rpc GetRetention(GetRetentionRequest) returns (GetRetentionResponse);
+  rpc ExportData(ExportDataRequest) returns (ExportDataResponse);
 }
 
 message IngestEventRequest {
@@ -37,4 +45,77 @@ message AnalyticsEvent {
   optional string region = 9;
   optional string user_id_hashed = 10;
   optional string profile_id_hashed = 11;
+}
+
+message MetricPoint {
+  string name = 1;
+  double value = 2;
+  optional string label = 3;
+}
+
+message GetDashboardRequest {
+  string dashboard_type = 1; // product, engagement, revenue, health, moderation
+  optional google.protobuf.Timestamp from = 2;
+  optional google.protobuf.Timestamp to = 3;
+}
+
+message GetDashboardResponse {
+  string dashboard_type = 1;
+  repeated MetricPoint metrics = 2;
+}
+
+message GetMetricsRequest {
+  string metric = 1;
+  optional google.protobuf.Timestamp from = 2;
+  optional google.protobuf.Timestamp to = 3;
+  map<string, string> filters = 4;
+}
+
+message GetMetricsResponse {
+  repeated MetricPoint points = 1;
+}
+
+message GetFunnelRequest {
+  string funnel_name = 1; // registration, onboarding
+  optional google.protobuf.Timestamp from = 2;
+  optional google.protobuf.Timestamp to = 3;
+}
+
+message FunnelStep {
+  string step = 1;
+  int64 count = 2;
+}
+
+message GetFunnelResponse {
+  string funnel_name = 1;
+  repeated FunnelStep steps = 2;
+}
+
+message GetRetentionRequest {
+  optional google.protobuf.Timestamp cohort_from = 1;
+  optional google.protobuf.Timestamp cohort_to = 2;
+}
+
+message RetentionCohort {
+  string cohort_date = 1;
+  int64 cohort_size = 2;
+  double d1 = 3;
+  double d7 = 4;
+  double d30 = 5;
+}
+
+message GetRetentionResponse {
+  repeated RetentionCohort cohorts = 1;
+}
+
+message ExportDataRequest {
+  optional google.protobuf.Timestamp from = 1;
+  optional google.protobuf.Timestamp to = 2;
+  optional string event_type = 3;
+  string format = 4; // csv, json
+}
+
+message ExportDataResponse {
+  string content_type = 1;
+  bytes body = 2;
 }

@@ -16,3 +16,14 @@ datasources:
     editable: false
     jsonData:
       maxLines: 1000
+  - name: ClickHouse
+    type: grafana-clickhouse-datasource
+    uid: clickhouse
+    access: proxy
+    url: http://clickhouse:8123
+    editable: false
+    jsonData:
+      defaultDatabase: voice
+      protocol: http
+      port: 8123
+      server: clickhouse

@@ -60,6 +60,7 @@ func loadGatewayConfigFromEnv() gatewayConfig {
 		AllowedHeaders: voicecfg.SplitCSV(os.Getenv("GATEWAY_CORS_ALLOWED_HEADERS")),
 		AllowedMethods: voicecfg.SplitCSV(os.Getenv("GATEWAY_CORS_ALLOWED_METHODS")),
 	}
+	config.analyticsTelemetry = gatewayAnalyticsFromEnv()
 	return config
 }
 

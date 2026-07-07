@@ -692,9 +692,13 @@ spec:
       containers:
         - name: analytics
           image: __IMAGE_REGISTRY__/analytics:__IMAGE_TAG__
-          ports: [{containerPort: 8080}]
+          ports: [{containerPort: 8080}, {containerPort: 9090}]
           env:
             - {name: LISTEN_ADDR, value: ":8080"}
+            - {name: ANALYTICS_GRPC_LISTEN, value: ":9090"}
+            - {name: NATS_URL, value: "nats://voice-nats:4222"}
+            - {name: CLICKHOUSE_DSN, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: CLICKHOUSE_DSN, optional: true}}}
+            - {name: ANALYTICS_ID_HASH_KEY, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: ANALYTICS_ID_HASH_KEY, optional: true}}}
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
 ---
@@ -705,7 +709,7 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-analytics}
-  ports: [{name: http, port: 8080}]
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
 ---
 apiVersion: apps/v1
 kind: Deployment

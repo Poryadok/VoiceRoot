@@ -28,7 +28,6 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
 // Internal ingest (NATS consumer / rare gRPC). Admin REST via Gateway: /api/v1/analytics/**.
-// Name matches docs concept "AnalyticsIngest" via RPC prefix Ingest*.
 type AnalyticsIngestServiceClient interface {
 	IngestEvent(ctx context.Context, in *IngestEventRequest, opts ...grpc.CallOption) (*IngestEventResponse, error)
 	IngestBatch(ctx context.Context, in *IngestBatchRequest, opts ...grpc.CallOption) (*IngestBatchResponse, error)
@@ -67,7 +66,6 @@ func (c *analyticsIngestServiceClient) IngestBatch(ctx context.Context, in *Inge
 // for forward compatibility.
 //
 // Internal ingest (NATS consumer / rare gRPC). Admin REST via Gateway: /api/v1/analytics/**.
-// Name matches docs concept "AnalyticsIngest" via RPC prefix Ingest*.
 type AnalyticsIngestServiceServer interface {
 	IngestEvent(context.Context, *IngestEventRequest) (*IngestEventResponse, error)
 	IngestBatch(context.Context, *IngestBatchRequest) (*IngestBatchResponse, error)
@@ -159,6 +157,264 @@ var AnalyticsIngestService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "IngestBatch",
 			Handler:    _AnalyticsIngestService_IngestBatch_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "voice/analytics/v1/analytics.proto",
+}
+
+const (
+	AnalyticsQueryService_GetDashboard_FullMethodName = "/voice.analytics.v1.AnalyticsQueryService/GetDashboard"
+	AnalyticsQueryService_GetMetrics_FullMethodName   = "/voice.analytics.v1.AnalyticsQueryService/GetMetrics"
+	AnalyticsQueryService_GetFunnel_FullMethodName    = "/voice.analytics.v1.AnalyticsQueryService/GetFunnel"
+	AnalyticsQueryService_GetRetention_FullMethodName = "/voice.analytics.v1.AnalyticsQueryService/GetRetention"
+	AnalyticsQueryService_ExportData_FullMethodName   = "/voice.analytics.v1.AnalyticsQueryService/ExportData"
+)
+
+// AnalyticsQueryServiceClient is the client API for AnalyticsQueryService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// Staff-only query API (Gateway transcoding).
+type AnalyticsQueryServiceClient interface {
+	GetDashboard(ctx context.Context, in *GetDashboardRequest, opts ...grpc.CallOption) (*GetDashboardResponse, error)
+	GetMetrics(ctx context.Context, in *GetMetricsRequest, opts ...grpc.CallOption) (*GetMetricsResponse, error)
+	GetFunnel(ctx context.Context, in *GetFunnelRequest, opts ...grpc.CallOption) (*GetFunnelResponse, error)
+	GetRetention(ctx context.Context, in *GetRetentionRequest, opts ...grpc.CallOption) (*GetRetentionResponse, error)
+	ExportData(ctx context.Context, in *ExportDataRequest, opts ...grpc.CallOption) (*ExportDataResponse, error)
+}
+
+type analyticsQueryServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewAnalyticsQueryServiceClient(cc grpc.ClientConnInterface) AnalyticsQueryServiceClient {
+	return &analyticsQueryServiceClient{cc}
+}
+
+func (c *analyticsQueryServiceClient) GetDashboard(ctx context.Context, in *GetDashboardRequest, opts ...grpc.CallOption) (*GetDashboardResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetDashboardResponse)
+	err := c.cc.Invoke(ctx, AnalyticsQueryService_GetDashboard_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *analyticsQueryServiceClient) GetMetrics(ctx context.Context, in *GetMetricsRequest, opts ...grpc.CallOption) (*GetMetricsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetMetricsResponse)
+	err := c.cc.Invoke(ctx, AnalyticsQueryService_GetMetrics_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *analyticsQueryServiceClient) GetFunnel(ctx context.Context, in *GetFunnelRequest, opts ...grpc.CallOption) (*GetFunnelResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetFunnelResponse)
+	err := c.cc.Invoke(ctx, AnalyticsQueryService_GetFunnel_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *analyticsQueryServiceClient) GetRetention(ctx context.Context, in *GetRetentionRequest, opts ...grpc.CallOption) (*GetRetentionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetRetentionResponse)
+	err := c.cc.Invoke(ctx, AnalyticsQueryService_GetRetention_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *analyticsQueryServiceClient) ExportData(ctx context.Context, in *ExportDataRequest, opts ...grpc.CallOption) (*ExportDataResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ExportDataResponse)
+	err := c.cc.Invoke(ctx, AnalyticsQueryService_ExportData_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// AnalyticsQueryServiceServer is the server API for AnalyticsQueryService service.
+// All implementations must embed UnimplementedAnalyticsQueryServiceServer
+// for forward compatibility.
+//
+// Staff-only query API (Gateway transcoding).
+type AnalyticsQueryServiceServer interface {
+	GetDashboard(context.Context, *GetDashboardRequest) (*GetDashboardResponse, error)
+	GetMetrics(context.Context, *GetMetricsRequest) (*GetMetricsResponse, error)
+	GetFunnel(context.Context, *GetFunnelRequest) (*GetFunnelResponse, error)
+	GetRetention(context.Context, *GetRetentionRequest) (*GetRetentionResponse, error)
+	ExportData(context.Context, *ExportDataRequest) (*ExportDataResponse, error)
+	mustEmbedUnimplementedAnalyticsQueryServiceServer()
+}
+
+// UnimplementedAnalyticsQueryServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedAnalyticsQueryServiceServer struct{}
+
+func (UnimplementedAnalyticsQueryServiceServer) GetDashboard(context.Context, *GetDashboardRequest) (*GetDashboardResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetDashboard not implemented")
+}
+func (UnimplementedAnalyticsQueryServiceServer) GetMetrics(context.Context, *GetMetricsRequest) (*GetMetricsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetMetrics not implemented")
+}
+func (UnimplementedAnalyticsQueryServiceServer) GetFunnel(context.Context, *GetFunnelRequest) (*GetFunnelResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetFunnel not implemented")
+}
+func (UnimplementedAnalyticsQueryServiceServer) GetRetention(context.Context, *GetRetentionRequest) (*GetRetentionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetRetention not implemented")
+}
+func (UnimplementedAnalyticsQueryServiceServer) ExportData(context.Context, *ExportDataRequest) (*ExportDataResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ExportData not implemented")
+}
+func (UnimplementedAnalyticsQueryServiceServer) mustEmbedUnimplementedAnalyticsQueryServiceServer() {}
+func (UnimplementedAnalyticsQueryServiceServer) testEmbeddedByValue()                               {}
+
+// UnsafeAnalyticsQueryServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to AnalyticsQueryServiceServer will
+// result in compilation errors.
+type UnsafeAnalyticsQueryServiceServer interface {
+	mustEmbedUnimplementedAnalyticsQueryServiceServer()
+}
+
+func RegisterAnalyticsQueryServiceServer(s grpc.ServiceRegistrar, srv AnalyticsQueryServiceServer) {
+	// If the following call pancis, it indicates UnimplementedAnalyticsQueryServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&AnalyticsQueryService_ServiceDesc, srv)
+}
+
+func _AnalyticsQueryService_GetDashboard_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetDashboardRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AnalyticsQueryServiceServer).GetDashboard(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AnalyticsQueryService_GetDashboard_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AnalyticsQueryServiceServer).GetDashboard(ctx, req.(*GetDashboardRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AnalyticsQueryService_GetMetrics_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetMetricsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AnalyticsQueryServiceServer).GetMetrics(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AnalyticsQueryService_GetMetrics_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AnalyticsQueryServiceServer).GetMetrics(ctx, req.(*GetMetricsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AnalyticsQueryService_GetFunnel_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetFunnelRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AnalyticsQueryServiceServer).GetFunnel(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AnalyticsQueryService_GetFunnel_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AnalyticsQueryServiceServer).GetFunnel(ctx, req.(*GetFunnelRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AnalyticsQueryService_GetRetention_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetRetentionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AnalyticsQueryServiceServer).GetRetention(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AnalyticsQueryService_GetRetention_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AnalyticsQueryServiceServer).GetRetention(ctx, req.(*GetRetentionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AnalyticsQueryService_ExportData_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ExportDataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AnalyticsQueryServiceServer).ExportData(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AnalyticsQueryService_ExportData_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AnalyticsQueryServiceServer).ExportData(ctx, req.(*ExportDataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// AnalyticsQueryService_ServiceDesc is the grpc.ServiceDesc for AnalyticsQueryService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var AnalyticsQueryService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "voice.analytics.v1.AnalyticsQueryService",
+	HandlerType: (*AnalyticsQueryServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "GetDashboard",
+			Handler:    _AnalyticsQueryService_GetDashboard_Handler,
+		},
+		{
+			MethodName: "GetMetrics",
+			Handler:    _AnalyticsQueryService_GetMetrics_Handler,
+		},
+		{
+			MethodName: "GetFunnel",
+			Handler:    _AnalyticsQueryService_GetFunnel_Handler,
+		},
+		{
+			MethodName: "GetRetention",
+			Handler:    _AnalyticsQueryService_GetRetention_Handler,
+		},
+		{
+			MethodName: "ExportData",
+			Handler:    _AnalyticsQueryService_ExportData_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

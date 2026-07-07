@@ -78,6 +78,13 @@ func (s *ModerationGRPC) ApplySanction(ctx context.Context, req *moderationv1.Ap
 			return nil, status.Error(codes.Internal, fmt.Sprintf("auth sync: %v", err))
 		}
 	}
+	if s.Analytics != nil {
+		_ = s.Analytics.Publish(ctx, "analytics.moderation.sanction_applied", "moderation", "sanction_applied", map[string]any{
+			"sanction_id":       row.ID.String(),
+			"target_account_id": targetAccount.String(),
+			"type":              sanctionType,
+		})
+	}
 	return &moderationv1.ApplySanctionResponse{Sanction: sanctionRowToProto(row)}, nil
 }
 

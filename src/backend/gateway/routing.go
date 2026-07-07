@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -45,6 +46,9 @@ func (g *gateway) handleREST(w http.ResponseWriter, r *http.Request) {
 			if namespace == "analytics" && !hasRole(claims, "staff") {
 				writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 				return
+			}
+			if namespace == "analytics" && (strings.HasSuffix(r.URL.Path, "/export") || strings.HasSuffix(r.URL.Path, "/metrics")) {
+				g.logAnalyticsAudit(r, claims)
 			}
 			applyClaims(r, claims)
 		}
@@ -129,3 +133,16 @@ func isBotTokenRESTRoute(path string) bool {
 func publicRESTNamespaces() []string {
 	return []string{"auth", "users", "friends", "chats", "messages", "spaces", "invites", "roles", "voice", "files", "notifications", "search", "matchmaking", "moderation", "subscription", "bots", "stories", "analytics", "links"}
 }
+
+func (g *gateway) logAnalyticsAudit(r *http.Request, claims tokenClaims) {
+	if g == nil || g.config.slogLogger == nil {
+		return
+	}
+	g.config.slogLogger.Info("analytics_audit",
+		slog.String("route", r.URL.Path),
+		slog.String("method", r.Method),
+		slog.String("profile_id", claims.ProfileID),
+		slog.String("user_id", claims.UserID),
+	)
+}
+

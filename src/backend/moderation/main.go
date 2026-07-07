@@ -19,6 +19,7 @@ import (
 	"voice/backend/moderation/internal/authclient"
 	"voice/backend/moderation/internal/store"
 	"voice/backend/moderation/internal/userclient"
+	"voice/backend/pkg/analyticsevents"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
 	"voice/backend/pkg/runtimeconfig"
@@ -84,6 +85,15 @@ func main() {
 				log.Fatalf("user grpc: %v", err)
 			} else {
 				svc.Users = userClient
+			}
+		}
+		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
+			if pub, err := analyticsevents.NewJetStreamPublisher(natsURL); err == nil {
+				_ = pub.EnsureStream()
+				svc.Analytics = pub
+				defer pub.Close()
+			} else {
+				logger.Warn("analytics publisher disabled", slog.Any("error", err))
 			}
 		}
 		moderationv1.RegisterModerationServiceServer(grpcSrv, svc)

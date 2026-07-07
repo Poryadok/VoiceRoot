@@ -30,6 +30,7 @@ type gatewayConfig struct {
 	trustedProxyCIDRs  []string
 	cors               corsConfig
 	metrics            *gatewayMetrics
+	analyticsTelemetry gatewayAnalyticsTelemetry
 	slogLogger         *slog.Logger
 }
 
