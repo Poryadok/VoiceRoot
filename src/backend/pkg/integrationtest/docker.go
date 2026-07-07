@@ -20,5 +20,10 @@ func ConfigureDockerTesting() {
 	// and in CI when pulling testcontainers/ryuk from Docker Hub fails (rate limits, network).
 	if runtime.GOOS == "windows" || os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") == "true" {
 		_ = os.Setenv("TESTCONTAINERS_RYUK_DISABLED", "true")
+		return
+	}
+	// Nested `docker run` with mounted socket: Ryuk health checks often fail on Docker Desktop.
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		_ = os.Setenv("TESTCONTAINERS_RYUK_DISABLED", "true")
 	}
 }

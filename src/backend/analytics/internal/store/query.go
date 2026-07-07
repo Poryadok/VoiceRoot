@@ -151,7 +151,7 @@ LIMIT 30`, from, to)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []RetentionRow
 	for rows.Next() {
 		var r RetentionRow
@@ -192,7 +192,7 @@ func (s *CHStore) ExportEvents(ctx context.Context, from, to time.Time, eventTyp
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []EventRow
 	for rows.Next() {
 		var r EventRow

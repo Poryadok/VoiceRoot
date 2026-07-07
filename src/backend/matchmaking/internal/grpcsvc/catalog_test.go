@@ -129,11 +129,9 @@ func TestCreateGame_Unauthenticated(t *testing.T) {
 
 func TestGetGame_InvalidID(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
-	pool := startDB(t, ctx)
-	srv := &MatchmakingGRPC{Games: &store.GameStore{Pool: pool}}
+	srv := &MatchmakingGRPC{Games: &store.GameStore{}}
 
-	_, err := srv.GetGame(ctx, &matchmakingv1.GetGameRequest{GameId: "not-a-uuid"})
+	_, err := srv.GetGame(context.Background(), &matchmakingv1.GetGameRequest{GameId: "not-a-uuid"})
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 

@@ -35,7 +35,7 @@ func TestComposeVoiceCall1to1_live(t *testing.T) {
 	sessA := registerComposeUser(t, client, base, formatComposeEmail("call-a", n), "VoiceQaTest1!")
 	sessB := registerComposeUser(t, client, base, formatComposeEmail("call-b", n), "VoiceQaTest1!")
 
-	chatID := createComposeDM(t, client, base, sessA.AccessToken, sessB.ProfileID)
+	chatID := createComposeDMBetween(t, client, base, sessA, sessB)
 
 	wsB := dialComposeRealtimeWS(t, base, sessB.AccessToken)
 	waitComposeWSHello(t, wsB)

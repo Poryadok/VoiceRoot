@@ -5,12 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	analyticsv1 "voice.app/voice/analytics/v1"
 )
-
-type stubAnalyticsQuery struct {
-	analyticsv1.UnimplementedAnalyticsQueryServiceServer
-}
 
 func TestAnalyticsStaffGateAndTranscode(t *testing.T) {
 	clients := grpcClientsFromEnv(nil)

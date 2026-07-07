@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -15,9 +16,7 @@ func TestComposeWiring_yaml(t *testing.T) {
 	t.Parallel()
 
 	root := repoRootFromTest(t)
-	raw, err := os.ReadFile(filepath.Join(root, "docker-compose.yml"))
-	require.NoError(t, err)
-	yml := string(raw)
+	yml := readComposeYAML(t, root)
 
 	require.Contains(t, yml, "GATEWAY_GRPC_UPSTREAMS_JSON:")
 	require.Contains(t, yml, `"users":"user:9090"`)
@@ -65,4 +64,11 @@ func repoRootFromTest(t *testing.T) string {
 	require.True(t, ok)
 	// src/backend/gateway → repo root
 	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", ".."))
+}
+
+func readComposeYAML(t *testing.T, root string) string {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(root, "docker-compose.yml"))
+	require.NoError(t, err)
+	return strings.ReplaceAll(string(raw), "\r\n", "\n")
 }

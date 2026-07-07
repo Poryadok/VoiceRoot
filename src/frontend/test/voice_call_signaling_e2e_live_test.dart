@@ -4,6 +4,10 @@ import 'support/live_gateway_harness.dart';
 
 void main() {
   group('voice signaling', () {
+    tearDown(() async {
+      await Future<void>.delayed(const Duration(seconds: 3));
+    });
+
     test(
       'start, incoming WS, accept, join token',
       () async {
@@ -14,6 +18,7 @@ void main() {
           reason: probe is LiveGatewayUnavailable ? probe.reason : null,
         );
         final ctx = (probe as LiveGatewayReady).context;
+        await Future<void>.delayed(const Duration(seconds: 2));
 
         final sessionA = await ctx.registerUser('call-a');
         final sessionB = await ctx.registerUser('call-b');
@@ -62,6 +67,7 @@ void main() {
           roomId: call.roomId,
         );
         await realtimeB.dispose();
+        await Future<void>.delayed(const Duration(seconds: 2));
       },
       skip: runLiveIntegration
           ? null

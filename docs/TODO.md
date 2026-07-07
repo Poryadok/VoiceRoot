@@ -266,7 +266,7 @@ Baseline закрыт (2026-06): register guest, JWT, guards, convert-guest, TTL
 
 Реализация по [PLAN.md](PLAN.md) §Фаза 20; спека — [analytics-service.md](microservices/analytics-service.md). Код в `master`; ниже — хвосты, из‑за которых может упасть compose, CI tier 3 или staging smoke.
 
-- [ ] **Синхронизация `analytics/go.sum`** — при смене `analytics/go.mod` обязателен `go mod tidy` и коммит `go.sum`; иначе падают `docker build analytics` и `go test` (`missing go.sum entry`). На Windows при TLS к `proxy.golang.org` — `docker run … golang:1.26-alpine sh -c 'go mod tidy'` в `src/backend/analytics`.
+- [ ] **Синхронизация `analytics/go.sum`** — при смене `analytics/go.mod` обязателен `go mod tidy` и коммит `go.sum`. На Windows — см. [TESTING.md](TESTING.md) § «Локальные грабли» (TLS к `proxy.golang.org`).
 - [ ] **path-filters: ClickHouse init** — добавить `docker/clickhouse/**` в `compose` в [`.github/ci/path-filters.yml`](../.github/ci/path-filters.yml). Иначе PR только с DDL/MV не триггерит `compose-e2e` smoke (`TestComposeAnalytics_*`).
 - [ ] **Prometheus scrape: analytics** — в [`deploy/observability/local/prometheus.yml`](../deploy/observability/local/prometheus.yml) нет `analytics:8080`; дашборд `voice-analytics-ingest` в локальной Grafana без метрик ingest/lag/buffer.
 - [ ] **Compose: Grafana + ClickHouse** — CH на `--profile app`, Grafana на `--profile observability`; datasource `http://clickhouse:8123` работает только при **обоих** профилях на одной сети (`docker compose --profile app --profile observability up`). Иначе панели product/engagement в Grafana — No data.
@@ -354,9 +354,9 @@ MVP backend + partial Flutter; AR, algorithmic feed, post-match auto-story, mone
 #### Batch 12 — follow-up (после merge / перед CI)
 
 - [ ] **Закоммитить diff Batch 12** — ~120 файлов: `docs/**`, `src/backend/*/pb/**/*.pb.go`, `src/frontend/lib/gen/**`, deploy/staging, правки `src/`. Без коммита job **`flutter`** упадёт на **`make buf-dart-check`** (drift `lib/gen` vs proto-комментарии).
-- [ ] **`buf-ci` / line endings `protos/`** — `make build-all` локально упал на `buf format -d --exit-code` (CRLF на Windows vs LF в Docker/Linux CI). Проверить: `buf format -w protos/`; при необходимости `*.proto text eol=lf` в `.gitattributes` и re-normalize. Иначе job **`protobuf`** / `buf-ci` может краснеть после push с Windows.
+- [ ] **`buf-ci` / line endings `protos/`** — см. таблицу «Локальные грабли» в [TESTING.md](TESTING.md) (CRLF vs LF).
 - [ ] **Sync Go `pb/` после `make buf-generate`** — таргета в Makefile нет; копирование `gen/go/voice/**` → `src/backend/*/pb/voice/**` вручную (в сессии — 92 файла). Добавить `scripts/dev/sync-pb-from-gen.sh` + упоминание в [REPOSITORIES.md](REPOSITORIES.md) / Makefile, чтобы не забыть при следующем proto-change.
-- [ ] **Локальная верификация (ещё не зелёная)** — `make compose-e2e-smoke` не гоняли; `go test` gateway на хосте — TLS к `proxy.golang.org` (среда, не код). Перед merge: CI или Linux/WSL + compose smoke.
+- [ ] **Локальная верификация (ещё не зелёная)** — чеклист и обходы Windows: [TESTING.md](TESTING.md) § «Локальные грабли»; скилл `voice-project-full-verification`.
 - [ ] **`app stackN` / `Phase N` в `src/**` (вне gen)** — `rg 'app stack\d'` ~100+ (комментарии тестов, UI, service README): [integration_test/README.md](../src/frontend/integration_test/README.md), [matchmaking/README.md](../src/backend/matchmaking/README.md), [role/README.md](../src/backend/role/README.md), [admin/README.md](../src/admin/README.md), [ping-bot/README.md](../scripts/dev/ping-bot/README.md), [deploy/prod/README.md](../deploy/prod/README.md), `pubspec.yaml`, `firebase-messaging-sw.js`, dart clients (`notifications_client`, `roles_client`, …). Дочистить → ссылки на `docs/features/*.md` (как в Batch 12 для доков).
 - [x] **Имена golang-migrate файлов** — переименованы: `000002_sanctions`, `000004_profiles_verification`, `000002_verification_type`; ссылки в тестах и snippet обновлены.
 

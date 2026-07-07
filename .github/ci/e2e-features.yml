@@ -6,7 +6,7 @@ smoke_gateway:
   - TestComposeDMRealtime_live
   - TestComposeFriends_live
   - TestComposeChatMessagingDM_live
-  - TestComposeVoiceCall_live
+  - TestComposeVoiceCall1to1_live
   - TestComposeGroups_live
   - TestComposeSpaces_live
   - TestComposeMatchmakingSearch_live

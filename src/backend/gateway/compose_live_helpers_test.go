@@ -453,22 +453,8 @@ func createComposeGroup(t *testing.T, client *http.Client, base, accessToken, na
 
 func allowComposeChatSpaceInvitesEveryone(t *testing.T, client *http.Client, base string, accessTokens ...string) {
 	t.Helper()
-	everyone := map[string]any{
-		"friends": true, "friends_of_friends": true, "space_members": true, "include_guests": true,
-	}
 	body, err := json.Marshal(map[string]any{
-		"settings": map[string]any{
-			"preset":                   "gaming",
-			"allow_dm":                 everyone,
-			"show_online":              everyone,
-			"show_game_status":         everyone,
-			"show_mm_rating":           everyone,
-			"show_phone":               map[string]any{"friends": false, "friends_of_friends": false, "space_members": false, "include_guests": false},
-			"show_stories":             everyone,
-			"allow_friend_requests":    everyone,
-			"allow_guest_dm":           true,
-			"allow_chat_space_invites": everyone,
-		},
+		"settings": composeGamingOpenPrivacySettings(),
 	})
 	require.NoError(t, err)
 	for _, token := range accessTokens {
@@ -640,23 +626,41 @@ func createComposeDM(t *testing.T, client *http.Client, base, accessToken, other
 	return parsed.Chat.ID
 }
 
-func setComposePrivacyAllowDmEveryone(t *testing.T, client *http.Client, base, accessToken string) {
-	t.Helper()
+func composeGamingOpenPrivacySettings() map[string]any {
 	everyone := map[string]any{
 		"friends": true, "friends_of_friends": true, "space_members": true, "include_guests": true,
 	}
+	friendsAndFoF := map[string]any{
+		"friends": true, "friends_of_friends": true, "space_members": false, "include_guests": false,
+	}
+	friendsOnly := map[string]any{
+		"friends": true, "friends_of_friends": false, "space_members": false, "include_guests": false,
+	}
+	nobody := map[string]any{
+		"friends": false, "friends_of_friends": false, "space_members": false, "include_guests": false,
+	}
+	return map[string]any{
+		"preset":                   "gaming",
+		"allow_dm":                 everyone,
+		"show_online":              everyone,
+		"show_game_status":         everyone,
+		"show_mm_rating":           everyone,
+		"show_phone":               nobody,
+		"show_stories":             everyone,
+		"allow_friend_requests":    everyone,
+		"allow_guest_dm":           true,
+		"allow_phone_search":       friendsOnly,
+		"allow_calls":              everyone,
+		"allow_chat_space_invites": everyone,
+		"allow_files":              friendsAndFoF,
+		"allow_voice_messages":     friendsAndFoF,
+	}
+}
+
+func setComposePrivacyAllowDmEveryone(t *testing.T, client *http.Client, base, accessToken string) {
+	t.Helper()
 	privacyBody, err := json.Marshal(map[string]any{
-		"settings": map[string]any{
-			"preset":                "gaming",
-			"allow_dm":              everyone,
-			"show_online":           everyone,
-			"show_game_status":      everyone,
-			"show_mm_rating":        everyone,
-			"show_phone":            map[string]any{"friends": false, "friends_of_friends": false, "space_members": false, "include_guests": false},
-			"show_stories":          everyone,
-			"allow_friend_requests": everyone,
-			"allow_guest_dm":        true,
-		},
+		"settings": composeGamingOpenPrivacySettings(),
 	})
 	require.NoError(t, err)
 	req, err := http.NewRequest(http.MethodPatch, base+"/api/v1/users/me/privacy", bytes.NewReader(privacyBody))

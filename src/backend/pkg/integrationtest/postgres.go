@@ -24,6 +24,9 @@ const (
 // migrationSQLPath is empty to skip migration.
 func StartPostgres(t *testing.T, ctx context.Context, dbName, migrationSQLPath string) *pgxpool.Pool {
 	t.Helper()
+	if testing.Short() {
+		t.Skip("integration test skipped in -short mode")
+	}
 
 	pgC, err := postgres.Run(ctx, PostgresImage,
 		postgres.BasicWaitStrategies(),

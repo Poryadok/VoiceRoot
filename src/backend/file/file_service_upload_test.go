@@ -450,6 +450,9 @@ func withFileProfile(ctx context.Context, accountID, profileID uuid.UUID) contex
 
 func startFilePostgres(t *testing.T, ctx context.Context) *pgxpool.Pool {
 	t.Helper()
+	if testing.Short() {
+		t.Skip("integration test skipped in -short mode")
+	}
 	pool := integrationtest.StartPostgres(t, ctx, "db", "")
 	applyFileSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000001_init.up.sql"))
 	applyFileSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000002_premium_upload_limit.up.sql"))

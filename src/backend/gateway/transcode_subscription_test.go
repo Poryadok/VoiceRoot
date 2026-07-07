@@ -1,8 +1,6 @@
 package main
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -13,9 +11,7 @@ func TestComposeSubscriptionWiring_yaml(t *testing.T) {
 	t.Parallel()
 
 	root := repoRootFromTest(t)
-	raw, err := os.ReadFile(filepath.Join(root, "docker-compose.yml"))
-	require.NoError(t, err)
-	yml := string(raw)
+	yml := readComposeYAML(t, root)
 
 	require.Contains(t, yml, "\n  subscription:\n")
 	require.Contains(t, yml, "SUBSCRIPTION_GRPC_LISTEN: :9090")

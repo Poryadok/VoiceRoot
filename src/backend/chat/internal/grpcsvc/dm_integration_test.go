@@ -176,6 +176,9 @@ func TestCreateDM_GetDM_NoFriendshipRequired(t *testing.T) {
 }
 
 func TestDMRequestsInboxAcceptDecline(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
 	ctx := context.Background()
 	pool := startChatPostgresForTest(t, ctx)
 	applyChatMigration(t, ctx, pool)

@@ -42,6 +42,12 @@ func TestConfigureDockerTesting_disablesRyukOnWindowsAndCI(t *testing.T) {
 			}
 			return
 		}
+		if _, err := os.Stat("/.dockerenv"); err == nil {
+			if os.Getenv(key) != "true" {
+				t.Fatalf("expected %s=true inside container, got %q", key, os.Getenv(key))
+			}
+			return
+		}
 		if os.Getenv(key) != "" {
 			t.Fatalf("expected %s unset on local %s, got %q", key, runtime.GOOS, os.Getenv(key))
 		}
