@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../backend/users_client.dart';
 import '../../theme/voice_colors.dart';
 
-/// Online-status dot for a profile presence (Phase 1).
+/// Online-status dot for a profile presence (app stack).
 class PresenceIndicator extends StatelessWidget {
   const PresenceIndicator({
     super.key,

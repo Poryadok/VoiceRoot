@@ -8,7 +8,7 @@ import '../../state/auth_providers.dart';
 import '../../state/space_providers.dart';
 import '../core/voice_bottom_sheet.dart';
 
-/// Per-chat role deny overrides (Phase 10 custom roles).
+/// Per-chat role deny overrides (app stack0 custom roles).
 class SpaceChatOverrideSheet extends ConsumerStatefulWidget {
   const SpaceChatOverrideSheet({
     super.key,

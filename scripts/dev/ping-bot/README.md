@@ -1,6 +1,6 @@
 # Ping bot (local dev)
 
-Minimal Phase 16 sample bot for slash `/ping` → `pong`.
+Minimal app stack6 sample bot for slash `/ping` → `pong`.
 
 ## Polling mode (no public URL)
 

@@ -181,7 +181,7 @@ read_receipts
 
 При >100M сообщений — шардинг PostgreSQL по `chat_id` (consistent hashing). Каждый шард содержит все сообщения одного чата → локальные запросы без cross-shard joins.
 
-## E2E / pre-keys / edit policy (Phase 15)
+## E2E / pre-keys / edit policy (app stack5)
 
 Нормативное поведение: [encryption.md](../features/encryption.md). Поиск по E2E-телу на сервере не индексируется ([search-service.md](search-service.md)).
 

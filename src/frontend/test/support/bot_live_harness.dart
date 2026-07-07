@@ -11,7 +11,7 @@ import 'package:voice_frontend/backend/spaces_client.dart';
 
 import 'live_gateway_harness.dart';
 
-/// Live bot test helpers mirroring compose_phase16_bots_slash_live_test.go.
+/// Live bot test helpers mirroring compose_bots_slash_live_test.go.
 class BotLiveHarness {
   BotLiveHarness({
     required this.ctx,

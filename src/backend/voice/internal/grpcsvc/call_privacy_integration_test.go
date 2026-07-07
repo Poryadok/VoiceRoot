@@ -16,7 +16,7 @@ import (
 	chatv1 "voice.app/voice/chat/v1"
 )
 
-// callPrivacyChecker documents Phase 11 VoiceGRPC.Privacy wiring (privacy.md: allow_calls).
+// callPrivacyChecker documents app stack1 VoiceGRPC.Privacy wiring (privacy.md: allow_calls).
 type callPrivacyChecker interface {
 	AllowCallsAudience(ctx context.Context, profileID uuid.UUID) (privacy.Audience, error)
 }

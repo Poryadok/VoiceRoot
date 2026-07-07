@@ -1,4 +1,4 @@
--- Phase 11: TOTP backup codes — aligned with src/backend/migrations/auth_db/000003_backup_codes.up.sql
+-- app stack1: TOTP backup codes — aligned with src/backend/migrations/auth_db/000003_backup_codes.up.sql
 CREATE TABLE backup_codes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     account_id UUID NOT NULL,

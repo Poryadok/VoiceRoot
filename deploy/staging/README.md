@@ -1,4 +1,4 @@
-# Staging full stack (phases 0–10 + phase 16 bot)
+# Staging full stack (core services + bots)
 
 Kubernetes manifests for `voice-staging` namespace. Gateway-only deploy is legacy; use the full stack for product smoke.
 

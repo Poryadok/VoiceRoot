@@ -15,7 +15,7 @@ import (
 	"voice/backend/pkg/privacy"
 )
 
-// attachmentPrivacyChecker documents Phase 11 MessagingGRPC.Privacy extension (privacy.md: allow_files / allow_voice_messages).
+// attachmentPrivacyChecker documents app stack1 MessagingGRPC.Privacy extension (privacy.md: allow_files / allow_voice_messages).
 type attachmentPrivacyChecker interface {
 	PrivacyChecker
 	AllowFilesAudience(ctx context.Context, profileID uuid.UUID) (privacy.Audience, error)

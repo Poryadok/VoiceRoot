@@ -234,6 +234,26 @@ Promtail ставит label **`namespace`** из pod metadata; **`request_id`** 
 - **Full:** `make compose-e2e-live` или workflow [compose-e2e-live.yml](../.github/workflows/compose-e2e-live.yml).
 - Манифест фич: [`.github/ci/e2e-features.yml`](../.github/ci/e2e-features.yml).
 
+### E2E по фичам
+
+Краткий каталог smoke-тестов (полный список — в манифесте выше).
+
+| Фича | Gateway (`TestCompose*`) | Flutter live |
+|------|--------------------------|--------------|
+| Auth | `TestComposeAuthLifecycle_live` | `auth_logout_e2e_live_test` |
+| Friends / DM | `TestComposeFriends_live`, `TestComposeDMRealtime_live` | `friends_e2e_live_test`, `dm_two_users_e2e_live_test` |
+| Voice 1:1 | `TestComposeVoiceCall_live` | `voice_call_signaling_e2e_live_test` |
+| Groups | `TestComposeGroups_live` | `groups_e2e_live_test` |
+| Spaces | `TestComposeSpaces_live` | `spaces_creation_e2e_live_test` |
+| Matchmaking | `TestComposeMatchmakingSearch_live` | `matchmaking_e2e_live_test` |
+| Search | `TestComposeSearch_live` | `search_e2e_live_test` |
+| Moderation | `TestComposeModeration_live` | `moderation_e2e_live_test` |
+| Billing | `TestComposeBilling_live` | `billing_e2e_live_test` |
+| Stories | `TestComposeStories_live` | `stories_e2e_live_test` |
+| Bots | `TestComposeBotsSlash_live` | `bots_slash_e2e_live_test` |
+| Deep links | `TestComposeDeepLinks_live` | `deeplink_invite_e2e_live_test` |
+| E2E encryption | `TestComposeE2EKeyBackup_live` | `e2e_key_backup_live_test` |
+
 ---
 
 ## Покрытие и качество

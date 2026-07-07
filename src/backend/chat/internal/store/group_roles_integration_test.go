@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestRemoveGroupMember_OwnerForbidden documents PLAN Phase 4 simple roles: owner cannot be kicked.
+// TestRemoveGroupMember_OwnerForbidden documents text-chat.md simple roles: owner cannot be kicked.
 func TestRemoveGroupMember_OwnerForbidden(t *testing.T) {
 	if testing.Short() {
 		t.Skip()

@@ -11,7 +11,7 @@ import (
 	messagingv1 "voice.app/voice/messaging/v1"
 )
 
-// TestTranscodeMessagesGetThreadMessages documents Phase 10:
+// TestTranscodeMessagesGetThreadMessages documents app stack0:
 // GET /api/v1/messages/thread → MessagingService.GetThreadMessages.
 func TestTranscodeMessagesGetThreadMessages(t *testing.T) {
 	t.Parallel()

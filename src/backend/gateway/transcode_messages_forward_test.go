@@ -10,7 +10,7 @@ import (
 	messagingv1 "voice.app/voice/messaging/v1"
 )
 
-// TestTranscodeMessagesForward documents PLAN Phase 4 / forward-messages.md:
+// TestTranscodeMessagesForward documents forward-messages.md:
 // POST /api/v1/messages/forward → MessagingService.ForwardMessage.
 func TestTranscodeMessagesForward(t *testing.T) {
 	t.Parallel()

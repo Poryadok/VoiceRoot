@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestComposeChatMessagingDM_live exercises Phase-1 DM + message send through Gateway
+// TestComposeChatMessagingDM_live exercises core DM + message send through Gateway
 // with Chat and Messaging gRPC upstreams (docker compose --profile app).
 //
 // Opt-in: VOICE_RUN_LIVE_COMPOSE=true VOICE_API_BASE_URL=http://127.0.0.1:18080

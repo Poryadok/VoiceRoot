@@ -24,11 +24,11 @@ service AuthService {
   rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse);
   // Public JWKS for JWT verification.
   rpc GetJWKS(GetJWKSRequest) returns (GetJWKSResponse);
-  // Phase 13: switch active profile claim in next access JWT (primary-profile-bootstrap.md).
+  // See docs/features/multi-profile.md — switch active profile claim in next access JWT.
   rpc SwitchActiveProfile(SwitchActiveProfileRequest) returns (SwitchActiveProfileResponse);
-  // Phase 14: internal — platform moderation suspends account (docs/PLAN.md phase 14).
+  // Internal — platform moderation suspends account (docs/features/reports.md).
   rpc SetAccountStatus(SetAccountStatusRequest) returns (SetAccountStatusResponse);
-  // Phase 15: encrypted key backup (opaque blob; docs/features/encryption.md).
+  // See docs/features/encryption.md — encrypted key backup (opaque blob).
   rpc PutE2EKeyBackup(PutE2EKeyBackupRequest) returns (PutE2EKeyBackupResponse);
   rpc GetE2EKeyBackup(GetE2EKeyBackupRequest) returns (GetE2EKeyBackupResponse);
   // Internal — Social SyncPhoneContacts: hashed phone → primary profile_id (accounts.phone).

@@ -27,7 +27,7 @@ func startSharedRoleClient(t *testing.T) (rolev1.RoleServiceClient, func()) {
 	return roletest.StartRoleGRPC(t, pool)
 }
 
-// TestCreateSpace_BootstrapSystemRoles documents PLAN Phase 5: CreateSpace seeds role hierarchy via Role Service.
+// TestCreateSpace_BootstrapSystemRoles documents spaces.md: CreateSpace seeds role hierarchy via Role Service.
 func TestCreateSpace_BootstrapSystemRoles(t *testing.T) {
 	if testing.Short() {
 		t.Skip()

@@ -1,6 +1,6 @@
 # SQL migrations (DATA_SCOPE v1)
 
-Per-database folders for Phase 0–1 ([docs/DATA_SCOPE_V1.md](../../../docs/DATA_SCOPE_V1.md)). Filenames follow [golang-migrate](https://github.com/golang-migrate/migrate) (`NNNNNN_name.up.sql` / `.down.sql`).
+Per-database folders for the first migration wave ([docs/DATA_SCOPE_V1.md](../../../docs/DATA_SCOPE_V1.md)). Filenames follow [golang-migrate](https://github.com/golang-migrate/migrate) (`NNNNNN_name.up.sql` / `.down.sql`). Historical filenames may contain legacy `phaseNN` suffixes — do not rename applied migrations.
 
 | Directory | Database | Owner (typical) |
 |-----------|----------|-----------------|
@@ -41,9 +41,9 @@ Repeat for `social_db`, `chat_db`, `messaging_db`, `file_db`, `bot_db`, and othe
 make compose-migrate-all
 ```
 
-Runs `scripts/dev/compose-migrate-all.sh`: `chat_db` + `messaging_db` (Phase 15), `bot_db`, `story_db`, then `user_db`, `social_db`, `file_db`, `space_db`, `role_db`, `notification_db`, `matchmaking_db`, `search_db`, `moderation_db`, `gateway_db`, `subscription_db`. **`auth_db`** — Path A (default): Flyway on Auth boot; golang-migrate only with `VOICE_MIGRATE_AUTH_DB=1` (Path B, then `AUTH_FLYWAY_ENABLED=false`). Granular: `make compose-migrate-phase15`, `compose-migrate-bot`, `compose-migrate-story`.
+Runs `scripts/dev/compose-migrate-all.sh`: `chat_db` + `messaging_db` (E2E encryption DDL), `bot_db`, `story_db`, then `user_db`, `social_db`, `file_db`, `space_db`, `role_db`, `notification_db`, `matchmaking_db`, `search_db`, `moderation_db`, `gateway_db`, `subscription_db`. **`auth_db`** — Path A (default): Flyway on Auth boot; golang-migrate only with `VOICE_MIGRATE_AUTH_DB=1` (Path B, then `AUTH_FLYWAY_ENABLED=false`). Granular: `make compose-migrate-e2e`, `compose-migrate-bot`, `compose-migrate-story`.
 
-**Phase 15 E2E (compose Path A):** `e2e_key_backups` via Auth Flyway `V4__e2e_key_backups.sql` on boot. `chat_db` / `messaging_db` DDL (`e2e_enabled`, `is_e2e`, `e2e_prekey_bundles`) via idempotent `docker/postgres/incremental_*.sql.snippet`, or `make compose-migrate-phase15` for golang-migrate on Go-owned DBs.
+**E2E encryption (compose Path A):** `e2e_key_backups` via Auth Flyway `V4__e2e_key_backups.sql` on boot. `chat_db` / `messaging_db` DDL (`e2e_enabled`, `is_e2e`, `e2e_prekey_bundles`) via idempotent `docker/postgres/incremental_*.sql.snippet`, or `make compose-migrate-e2e` for golang-migrate on Go-owned DBs.
 
 Path B for `auth_db` only (then set `AUTH_FLYWAY_ENABLED=false` for Auth):
 

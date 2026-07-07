@@ -37,7 +37,7 @@ func integrationtestApplySQL(t *testing.T, ctx context.Context, pool *pgxpool.Po
 	require.NoError(t, err)
 }
 
-func startModerationPostgresPhase14(t *testing.T, ctx context.Context) *pgxpool.Pool {
+func startModerationPostgresPlatform(t *testing.T, ctx context.Context) *pgxpool.Pool {
 	t.Helper()
 	root := repoRoot(t)
 	pool := integrationtest.StartPostgres(t, ctx, "moderationdb", filepath.Join(root, "src", "backend", "migrations", "moderation_db", "000001_reports.up.sql"))

@@ -31,7 +31,7 @@ func TestComposeStories_live(t *testing.T) {
 
 	story := composeCreateStory(t, client, base, sessA.AccessToken, map[string]any{
 		"type":                 "text",
-		"text_content":         "Phase 17 live story @friend",
+		"text_content":         "app stack7 live story @friend",
 		"visibility":           "friends",
 		"mention_profile_ids":  []string{sessB.ProfileID},
 	})

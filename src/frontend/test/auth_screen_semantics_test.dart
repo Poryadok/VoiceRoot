@@ -14,7 +14,7 @@ import 'package:voice_frontend/ui/auth/auth_screen.dart';
 import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
 
-/// Phase 18 a11y: explicit Semantics labels on login controls (docs/features/accessibility.md).
+/// app stack8 a11y: explicit Semantics labels on login controls (docs/features/accessibility.md).
 void main() {
   testWidgets('login form exposes screen reader labels', (tester) async {
     await tester.pumpWidget(

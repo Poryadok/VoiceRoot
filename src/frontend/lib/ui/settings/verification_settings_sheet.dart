@@ -7,7 +7,7 @@ import '../../state/auth_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../core/voice_primary_button.dart';
 
-/// Stub: linked accounts and verification entry points (Phase 13).
+/// Stub: linked accounts and verification entry points (app stack3).
 class VerificationSettingsSheet extends ConsumerStatefulWidget {
   const VerificationSettingsSheet({super.key});
 

@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestComposePhase12SubscriptionWiring_yaml documents subscription gRPC upstream in compose.
-func TestComposePhase12SubscriptionWiring_yaml(t *testing.T) {
+// TestComposeSubscriptionWiring_yaml documents subscription gRPC upstream in compose.
+func TestComposeSubscriptionWiring_yaml(t *testing.T) {
 	t.Parallel()
 
 	root := repoRootFromTest(t)

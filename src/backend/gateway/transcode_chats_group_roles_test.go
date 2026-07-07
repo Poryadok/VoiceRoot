@@ -46,7 +46,7 @@ func (s *recordingChatsLeaveChat) LeaveChat(_ context.Context, req *chatv1.Leave
 	return &chatv1.LeaveChatResponse{}, nil
 }
 
-// TestTranscodeChatsListMembers documents PLAN Phase 4 roles: GET /api/v1/chats/{chatId}/members exposes role.
+// TestTranscodeChatsListMembers documents roles.md: GET /api/v1/chats/{chatId}/members exposes role.
 func TestTranscodeChatsListMembers(t *testing.T) {
 	t.Parallel()
 

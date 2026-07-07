@@ -106,7 +106,7 @@ func TestGetChatMessagesForBot_returnsMessageBodies(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, resp.GetMessages(), 2)
-	require.NotEmpty(t, resp.GetMessages()[0].GetContent(), "messages[] must include content bodies (Phase 16)")
+	require.NotEmpty(t, resp.GetMessages()[0].GetContent(), "messages[] must include content bodies (app stack6)")
 }
 
 func TestAutocompleteSlashOption_pollingBotReturnsPending(t *testing.T) {

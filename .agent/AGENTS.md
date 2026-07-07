@@ -18,7 +18,7 @@ Voice is a Discord-like messenger with voice chat and built-in matchmaking. Prod
 | Tests, local checks, CI composition | `docs/TESTING.md` |
 | Git, branches, PR, process | `docs/CONTRIBUTING.md` |
 | Repositories, monorepo, protos | `docs/REPOSITORIES.md` |
-| Existing code vs planned work | `docs/PLAN.md` |
+| Existing code vs planned work | `docs/PLAN.md` (implementation status) |
 | Documentation gaps | `docs/TODO.md` |
 
 ## File Reading

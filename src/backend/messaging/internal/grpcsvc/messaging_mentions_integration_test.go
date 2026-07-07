@@ -36,7 +36,7 @@ func (t testPresence) FilterOnlineProfileIDs(context.Context, []uuid.UUID) ([]uu
 	return append([]uuid.UUID(nil), t.online...), nil
 }
 
-// TestMessagingSendMessage_dmUserMention documents PLAN Phase 6 / text-chat.md @user in DM.
+// TestMessagingSendMessage_dmUserMention documents text-chat.md / text-chat.md @user in DM.
 func TestMessagingSendMessage_dmUserMention(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgresForTest(t, ctx)

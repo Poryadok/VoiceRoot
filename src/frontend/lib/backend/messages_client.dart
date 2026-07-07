@@ -76,7 +76,7 @@ class MessageMention {
   }
 }
 
-/// Aggregated emoji reaction on a message (PLAN Phase 4 / text-chat.md).
+/// Aggregated emoji reaction on a message (text-chat.md / text-chat.md).
 class MessageReaction {
   const MessageReaction({
     required this.emoji,
@@ -353,7 +353,7 @@ class MessageListData {
   }
 }
 
-/// Shared media tab kind (Phase 10 — docs/features/search.md).
+/// Shared media tab kind (app stack0 — docs/features/search.md).
 enum SharedMediaTabKind { media, files, links, voice }
 
 extension SharedMediaTabKindWire on SharedMediaTabKind {
@@ -600,7 +600,7 @@ class VoiceMessagesClient {
     return _mapEmpty(result);
   }
 
-  /// Phase 4 emoji reaction — docs/features/text-chat.md.
+  /// emoji reaction — docs/features/text-chat.md.
   Future<MessagesApiResult<void>> addReaction({
     required String authorization,
     required String messageId,
@@ -616,7 +616,7 @@ class VoiceMessagesClient {
     return _mapEmpty(result);
   }
 
-  /// Phase 4 emoji reaction toggle-off.
+  /// emoji reaction toggle-off.
   Future<MessagesApiResult<void>> removeReaction({
     required String authorization,
     required String messageId,
@@ -633,7 +633,7 @@ class VoiceMessagesClient {
     return _mapEmpty(result);
   }
 
-  /// Phase 6 pin message — docs/microservices/messaging-service.md.
+  /// pin message — docs/microservices/messaging-service.md.
   Future<MessagesApiResult<void>> pinMessage({
     required String authorization,
     required String messageId,
@@ -649,7 +649,7 @@ class VoiceMessagesClient {
     return _mapEmpty(result);
   }
 
-  /// Phase 6 unpin message.
+  /// unpin message.
   Future<MessagesApiResult<void>> unpinMessage({
     required String authorization,
     required String messageId,
@@ -666,7 +666,7 @@ class VoiceMessagesClient {
     return _mapEmpty(result);
   }
 
-  /// Phase 6 list pinned messages for a chat.
+  /// list pinned messages for a chat.
   Future<MessagesApiResult<MessageListData>> getPinnedMessages({
     required String authorization,
     required String chatId,
@@ -686,7 +686,7 @@ class VoiceMessagesClient {
     );
   }
 
-  /// Phase 4 forward with attribution — docs/features/forward-messages.md.
+  /// forward with attribution — docs/features/forward-messages.md.
   Future<MessagesApiResult<VoiceMessage>> forwardMessage({
     required String authorization,
     required String sourceMessageId,
@@ -706,7 +706,7 @@ class VoiceMessagesClient {
     return _map(result, (data) => voiceMessageFromProto(data.message));
   }
 
-  /// Phase 10 shared media tab listing.
+  /// app stack0 shared media tab listing.
   Future<MessagesApiResult<SharedMediaListData>> listSharedMedia({
     required String authorization,
     required String chatId,

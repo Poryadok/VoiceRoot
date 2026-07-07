@@ -13,7 +13,7 @@ import (
 	commonv1 "voice.app/voice/common/v1"
 )
 
-// TestGroupRoles_RemoveOwner_Forbidden documents PLAN Phase 4 simple roles: owner cannot be kicked.
+// TestGroupRoles_RemoveOwner_Forbidden documents text-chat.md simple roles: owner cannot be kicked.
 func TestGroupRoles_RemoveOwner_Forbidden(t *testing.T) {
 	if testing.Short() {
 		t.Skip()

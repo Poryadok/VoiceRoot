@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestComposeRealtimeGateway_live exercises Phase-1 REST (chats, friends, users/search)
+// TestComposeRealtimeGateway_live exercises core REST (chats, friends, users/search)
 // and /ws → Realtime through Gateway (docker compose --profile app).
 //
 // Opt-in: VOICE_RUN_LIVE_COMPOSE=true VOICE_API_BASE_URL=http://127.0.0.1:18080

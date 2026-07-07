@@ -10,7 +10,7 @@ import 'social_providers.dart';
 
 /// REST snapshot + live `presence_update` over WS; REST polling when WS is down.
 ///
-/// See [docs/PLAN.md] (Phase 1 presence), [docs/ARCHITECTURE_REQUIREMENTS.md]
+/// See [docs/PLAN.md] (app stack presence), [docs/ARCHITECTURE_REQUIREMENTS.md]
 /// (ephemeral presence — no WS catch-up; refresh via User API after reconnect).
 class PresenceController extends StateNotifier<Map<String, VoicePresence>> {
   PresenceController(this._ref) : super({}) {

@@ -12,7 +12,7 @@ import (
 	eventsv1 "voice.app/voice/events/v1"
 )
 
-// TestMessageEventBytesToFanout_SentIncludesThreadParentID documents Phase 10:
+// TestMessageEventBytesToFanout_SentIncludesThreadParentID documents app stack0:
 // message_create fan-out must expose thread_parent_id when MessageSent carries it.
 func TestMessageEventBytesToFanout_SentIncludesThreadParentID(t *testing.T) {
 	chatID := uuid.NewString()

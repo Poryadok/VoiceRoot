@@ -44,7 +44,7 @@
 | `accounts` | учётная запись, 2FA, soft delete |
 | `refresh_tokens` | opaque refresh, rotation |
 | `otp_codes` | email verify / password reset |
-| `e2e_key_backups` | Phase 15 — client-encrypted key backup blob (`V4__e2e_key_backups.sql`) |
+| `e2e_key_backups` | app stack5 — client-encrypted key backup blob (`V4__e2e_key_backups.sql`) |
 
 ---
 

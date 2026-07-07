@@ -16,7 +16,7 @@ import '../../routing/stories_routes.dart';
 import 'presence_indicator.dart';
 import 'profile_detail_sheet.dart';
 
-/// Friends, search, and friend-requests UI (Phase 1 social column).
+/// Friends, search, and friend-requests UI (app stack social column).
 class SocialPanel extends ConsumerStatefulWidget {
   const SocialPanel({super.key, this.initialTabIndex = 0});
 

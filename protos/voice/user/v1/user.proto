@@ -27,7 +27,7 @@ enum PrivacyPreset {
 // User Service — profiles, privacy, presence. HTTP: /api/v1/users/**.
 service UserService {
   // S2S bootstrap from Auth: ensure one primary profile per account before JWT is issued.
-  // Target: called only from trusted Auth; not exposed via public Gateway REST in Phase 1.
+  // Target: called only from trusted Auth; not exposed via public Gateway REST in v1 DM scope.
   rpc EnsurePrimaryProfile(EnsurePrimaryProfileRequest) returns (EnsurePrimaryProfileResponse);
 
   rpc GetProfile(GetProfileRequest) returns (GetProfileResponse);
@@ -38,7 +38,7 @@ service UserService {
   rpc SwitchProfile(SwitchProfileRequest) returns (SwitchProfileResponse);
   rpc ListMyProfiles(ListMyProfilesRequest) returns (ListMyProfilesResponse);
   // Discover profiles by query (username / display_name) for friend requests and DM addressing.
-  // Phase 1 (PLAN): reads user_db; privacy + blocks enforced server-side. Not Search Service (Фаза 9).
+  // Friend/DM profile discovery — user_db; privacy + blocks enforced. Global search: docs/features/search.md.
   rpc SearchProfiles(SearchProfilesRequest) returns (SearchProfilesResponse);
 
   rpc GetPrivacySettings(GetPrivacySettingsRequest) returns (GetPrivacySettingsResponse);
@@ -62,7 +62,7 @@ service UserService {
   rpc CheckOrganizationVerification(CheckOrganizationVerificationRequest) returns (CheckOrganizationVerificationResponse);
   rpc ApplyDowngradeProfiles(ApplyDowngradeProfilesRequest) returns (ApplyDowngradeProfilesResponse);
 
-  // Phase 1 (PLAN § R2): presigned PUT to Cloudflare R2 for static profile avatar (no File Service).
+  // Presigned PUT to Cloudflare R2 for static profile avatar (docs/features/user-profile.md).
   rpc CreateAvatarPresignedUpload(CreateAvatarPresignedUploadRequest) returns (CreateAvatarPresignedUploadResponse);
 }
 

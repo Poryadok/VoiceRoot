@@ -20,7 +20,7 @@ import 'support/markdown_test_helpers.dart';
 import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
 
-/// Widget tests for PLAN Phase 4 reactions — emoji chips with counters.
+/// Widget tests for text-chat.md reactions — emoji chips with counters.
 void main() {
   Widget reactionsTestApp({
     required http.Client client,

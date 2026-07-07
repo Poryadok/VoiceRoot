@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestSpaceModeration_PermissionBits documents PLAN Phase 5 moderation permission names from role-service.md.
+// TestSpaceModeration_PermissionBits documents spaces.md moderation permission names from role-service.md.
 func TestSpaceModeration_PermissionBits(t *testing.T) {
 	t.Parallel()
 	for _, name := range []string{

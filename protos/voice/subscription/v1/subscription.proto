@@ -26,7 +26,7 @@ service SubscriptionService {
 
   rpc GetBillingHistory(GetBillingHistoryRequest) returns (GetBillingHistoryResponse);
 
-  // Phase 13: keep selected profiles when downgrading from premium (multi-profile.md).
+  // See docs/features/multi-profile.md — keep selected profiles when downgrading from premium.
   rpc ApplyDowngradeProfiles(ApplyDowngradeProfilesRequest) returns (ApplyDowngradeProfilesResponse);
 }
 

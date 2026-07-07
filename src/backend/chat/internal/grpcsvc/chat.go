@@ -14,7 +14,7 @@ import (
 	rolev1 "voice.app/voice/role/v1"
 )
 
-// ChatGRPC implements ChatService RPCs backed by chat_db (Phase 1: DM).
+// ChatGRPC implements ChatService RPCs backed by chat_db (app stack: DM).
 type ChatGRPC struct {
 	chatv1.UnimplementedChatServiceServer
 	DM         DMStore

@@ -8,7 +8,7 @@
 
 | Окружение      | Назначение                     | Инфраструктура                                                                                                                                               |
 |----------------|--------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **local**      | Разработка одного разработчика | Docker Compose: infra (Postgres, Redis, NATS JetStream) или **полный Phase-1 стенд** — `make compose-app-up` / `--profile app` ([README.md](../README.md), [PLAN.md](PLAN.md)). Порты: `GATEWAY_PORT` (рекомендуется **18080**), `WEB_PORT` (**9080**), `POSTGRES_PORT`, `REDIS_PORT`, `NATS_PORT`, `NATS_HTTP_PORT`. Object storage: **MinIO** (compose, `--profile app`) или Cloudflare R2 через `*_R2_*` в `.env`; staging/prod — только R2. |
+| **local**      | Разработка одного разработчика | Docker Compose: infra (Postgres, Redis, NATS JetStream) или **полный core стенд** — `make compose-app-up` / `--profile app` ([README.md](../README.md), [PLAN.md](PLAN.md)). Порты: `GATEWAY_PORT` (рекомендуется **18080**), `WEB_PORT` (**9080**), `POSTGRES_PORT`, `REDIS_PORT`, `NATS_PORT`, `NATS_HTTP_PORT`. Object storage: **MinIO** (compose, `--profile app`) или Cloudflare R2 через `*_R2_*` в `.env`; staging/prod — только R2. |
 | **staging**    | Интеграция, регрессия, демо    | **k3s** (лёгкий Kubernetes), версии близки к prod.                                                                                                           |
 | **production** | Пользователи                   | **Kubernetes** 1.35 (self-managed или managed: Yandex Managed Kubernetes, Hetzner и т.д.).                                                                   |
 
@@ -31,7 +31,7 @@
 ```
 
 - **Staging**: образы микросервисов (Go matrix + Auth + **Developer Portal** в [`ci.yml`](../.github/workflows/ci.yml)) пушатся в **GHCR** при каждом push в `master` (теги `:<git_sha>` и `:latest`). Деплой в namespace `voice-staging` выполняет workflow **[`Staging deploy`](../.github/workflows/staging-deploy.yml)** (`kubectl apply` к манифестам в [`deploy/staging/`](../deploy/staging/)): **ручной** запуск (`workflow_dispatch`, ввод тега образа, по умолчанию `latest`); **авто** после успешного `CI` на push в `master` — только при `STAGING_DEPLOY_ENABLED` = `true` (см. раздел ниже). Пока кластер или kubeconfig не готовы — только ручной выкат или отключённый автодеплой.
-- **Ограничение staging (историческое):** ранее выкатывался только Gateway. **Текущее:** workflow **Staging deploy** применяет полный стек [`deploy/staging/`](../deploy/staging/) через `scripts/staging/render-and-apply.sh` (все сервисы фаз 0–10 + ConfigMap upstreams). Требуются `voice-app-secrets` (см. `secret.example.yaml`) и образы всех сервисов в GHCR. Опционально: `STAGING_SMOKE_ENABLED=true` → `scripts/staging/smoke-staging.sh`.
+- **Ограничение staging (историческое):** ранее выкатывался только Gateway. **Текущее:** workflow **Staging deploy** применяет полный app stack [`deploy/staging/`](../deploy/staging/) через `scripts/staging/render-and-apply.sh` (все сервисы + ConfigMap upstreams). Требуются `voice-app-secrets` (см. `secret.example.yaml`) и образы всех сервисов в GHCR. Опционально: `STAGING_SMOKE_ENABLED=true` → `scripts/staging/smoke-staging.sh`.
 - **Production**: деплой только с **явным шагом** (approval в GitHub Environments, ручной запуск job или утверждённый релизный тег) — без автоматического «всё, что в master, сразу в prod». Workflow **[`Production deploy`](../.github/workflows/prod-deploy.yml)** — только `workflow_dispatch`, environment **`production`** (approval), обязательный **`image_tag`** (git SHA или semver; **без** default `latest`). Скрипт [`scripts/prod/render-and-apply-prod.sh`](../scripts/prod/render-and-apply-prod.sh); манифесты — [`deploy/prod/`](../deploy/prod/) (сейчас skeleton, расширять по мере cutover).
 
 Версионирование образов: тег по **git SHA** `master` для непрерывного staging; для prod — тег **semver** (`v1.2.3`) или тот же SHA, зафиксированный в релизном манифесте.
@@ -123,10 +123,10 @@ kubectl create secret tls voice-gateway-tls -n voice-staging --cert=tls.crt --ke
 - Notification service reads APNs credentials from env (`APNS_*` — see `src/backend/notification/internal/apns/config.go`).
 - **Staging:** copy [`deploy/staging/secret.example.yaml`](../deploy/staging/secret.example.yaml) → `secret.yaml`; set `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_PRIVATE_KEY` (Auth Key .p8 PEM), `APNS_BUNDLE_ID`, `APNS_VOIP_TOPIC`, `APNS_PRODUCTION=false` for sandbox devices.
 - **Production:** `APNS_PRODUCTION=true`, separate VoIP topic/key if required; enable Push Notifications + Background Modes (remote notifications, VoIP) in Xcode.
-- **Compose dev:** token registration E2E (`phase8_apns_e2e_live_test`, `phase8_voip_e2e_live_test`); alert delivery on device requires staging secrets above.
-- Live delivery tests: `src/frontend/test/phase8_apns_e2e_live_test.dart`, `phase8_voip_e2e_live_test.dart` (opt-in `VOICE_RUN_LIVE_INTEGRATION=true`).
+- **Compose dev:** token registration E2E (`apns_e2e_live_test`, `voip_e2e_live_test`); alert delivery on device requires staging secrets above.
+- Live delivery tests: `src/frontend/test/apns_e2e_live_test.dart`, `voip_e2e_live_test.dart` (opt-in `VOICE_RUN_LIVE_INTEGRATION=true`).
 
-## Developer Portal — production OAuth (Phase 16)
+## Developer Portal — production OAuth (bots)
 
 PKCE OAuth for the Developer Portal is enabled in local compose (`developer-portal` service, port `9082`). Production requires matching Auth and portal configuration.
 
@@ -185,7 +185,7 @@ docker build -f src/developer-portal/Dockerfile src/developer-portal \
 
 ---
 
-## Bot Service — production rollout (Phase 16)
+## Bot Service — production rollout (bots)
 
 ### Skeleton manifests
 
@@ -238,13 +238,13 @@ sed "s|__K_NAMESPACE__|voice-prod|g" deploy/templates/network-policy-voice-bot.y
 
 ### Staging webhook E2E (opt-in)
 
-Compose covers webhook delivery via `host.docker.internal` ([`compose_phase16_bots_slash_live_test.go`](../src/backend/gateway/compose_phase16_bots_slash_live_test.go)). For **staging**, run the gateway opt-in test (not in default CI):
+Compose covers webhook delivery via `host.docker.internal` ([`compose_bots_slash_live_test.go`](../src/backend/gateway/compose_bots_slash_live_test.go)). For **staging**, run the gateway opt-in test (not in default CI):
 
 ```bash
 cd src/backend/gateway
 VOICE_STAGING_API_URL=https://voice.comrade.click \
 VOICE_STAGING_WEBHOOK_PING_URL=https://<public-echo>/ping \
-go test -run TestStagingPhase16BotsWebhook_live -count=1 .
+go test -run TestStagingBotsWebhook_live -count=1 .
 ```
 
 `VOICE_STAGING_WEBHOOK_PING_URL` must be reachable **from the staging Bot pod** (tunnel, echo service, or request bin) and return `{"content":"pong"}` to the Bot webhook POST. Localhost URLs will fail.

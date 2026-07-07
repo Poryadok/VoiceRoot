@@ -4,7 +4,7 @@ final _userMentionUuid = RegExp(
   r'@([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})',
 );
 
-/// Builds server-side [mentions_json] from compose text (PLAN Phase 6).
+/// Builds server-side [mentions_json] from compose text (text-chat.md).
 List<MessageMention> parseMentionsFromContent(
   String content, {
   Iterable<String> memberProfileIds = const [],

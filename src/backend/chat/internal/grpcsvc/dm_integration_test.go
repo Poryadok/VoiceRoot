@@ -140,7 +140,7 @@ func startChatGRPCTestServer(t *testing.T, pool *pgxpool.Pool, profiles UserProf
 	return chatv1.NewChatServiceClient(conn), cleanup
 }
 
-// TestCreateDM_GetDM_NoFriendshipRequired documents PLAN Phase 1: DM without friendship; only blocks gate.
+// TestCreateDM_GetDM_NoFriendshipRequired documents PLAN app stack: DM without friendship; only blocks gate.
 func TestCreateDM_GetDM_NoFriendshipRequired(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
@@ -305,7 +305,7 @@ func TestGetDM_Idempotent_RepeatedCallsSameChat(t *testing.T) {
 	require.NotEmpty(t, firstID)
 }
 
-// TestGetDM_Stranger_OpensDialogWithoutCreateDM documents PLAN Phase 1: no friendship required; either side may resolve the DM via GetDM alone.
+// TestGetDM_Stranger_OpensDialogWithoutCreateDM documents PLAN app stack: no friendship required; either side may resolve the DM via GetDM alone.
 func TestGetDM_Stranger_OpensDialogWithoutCreateDM(t *testing.T) {
 	if testing.Short() {
 		t.Skip()

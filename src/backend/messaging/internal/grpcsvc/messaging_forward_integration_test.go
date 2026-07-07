@@ -15,7 +15,7 @@ import (
 	messagingv1 "voice.app/voice/messaging/v1"
 )
 
-// TestMessagingForwardMessage_preservesAttribution documents PLAN Phase 4 / forward-messages.md:
+// TestMessagingForwardMessage_preservesAttribution documents text-chat.md / forward-messages.md:
 // forwarded message keeps original content and "Forwarded from [name]" metadata.
 func TestMessagingForwardMessage_preservesAttribution(t *testing.T) {
 	ctx := context.Background()

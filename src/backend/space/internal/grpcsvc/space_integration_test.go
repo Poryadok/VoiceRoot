@@ -193,7 +193,7 @@ SELECT COUNT(*) FROM space_members WHERE space_id = $1 AND profile_id = $2
 	return n
 }
 
-// TestCreateSpace_OwnerGetsSpaceWithDefaults documents PLAN Phase 5 / spaces.md:
+// TestCreateSpace_OwnerGetsSpaceWithDefaults documents spaces.md / spaces.md:
 // registered user creates space with name + description; default visibility private.
 func TestCreateSpace_OwnerGetsSpaceWithDefaults(t *testing.T) {
 	if testing.Short() {

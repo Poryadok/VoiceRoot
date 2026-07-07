@@ -9,7 +9,7 @@ import 'package:voice_frontend/ui/space/space_rail.dart';
 import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
 
-/// Widget tests for PLAN Phase 5 space rail (sidebar icons, selected space).
+/// Widget tests for spaces.md space rail (sidebar icons, selected space).
 void main() {
   testWidgets('space icons render and tap sets selectedSpaceIdProvider', (
     tester,

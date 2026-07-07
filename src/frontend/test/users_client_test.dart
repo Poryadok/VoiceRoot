@@ -207,7 +207,7 @@ void main() {
       expect(presign.publicUrl, 'https://cdn.example/avatars/p-1/a.png');
     });
 
-    test('rejects gif before calling gateway in Phase 1', () async {
+    test('rejects gif before calling gateway in app stack', () async {
       var called = false;
       final client = VoiceUsersClient(
         gateway: gatewayHttpForTest(

@@ -10,7 +10,7 @@ import (
 	chatv1 "voice.app/voice/chat/v1"
 )
 
-// TestSpaceSlowMode_SetTenSecondsOnSpaceChannel documents PLAN Phase 5: slow mode on space text chat (group|channel).
+// TestSpaceSlowMode_SetTenSecondsOnSpaceChannel documents spaces.md: slow mode on space text chat (group|channel).
 func TestSpaceSlowMode_SetTenSecondsOnSpaceChannel(t *testing.T) {
 	if testing.Short() {
 		t.Skip()

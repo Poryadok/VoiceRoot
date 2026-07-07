@@ -30,7 +30,7 @@ type ChatRow struct {
 	E2EEnabled        bool
 }
 
-// DMStore persists DM chats and membership (Phase 1).
+// DMStore persists DM chats and membership (app stack).
 type DMStore struct {
 	Pool *pgxpool.Pool
 }

@@ -37,7 +37,7 @@ SpaceTreeData _treeWithVoiceRoom() {
   );
 }
 
-/// PLAN Phase 5: voice room tap joins room and shows connected participants.
+/// spaces.md: voice room tap joins room and shows connected participants.
 void main() {
   testWidgets('voice node tap joins room and shows participants', (
     tester,

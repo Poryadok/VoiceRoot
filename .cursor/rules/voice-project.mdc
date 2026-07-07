@@ -23,7 +23,7 @@ alwaysApply: true
 | Тесты, локальные проверки, состав CI | `docs/TESTING.md` |
 | Git, ветки, PR, процесс | `docs/CONTRIBUTING.md` |
 | Репозитории, монорепо, protos | `docs/REPOSITORIES.md` |
-| Что уже есть в коде vs план | `docs/PLAN.md` |
+| Что уже есть в коде vs план | `docs/PLAN.md` (статус реализации) |
 | Пробелы в доках | `docs/TODO.md` |
 | Design tokens (required), Figma, brand | `docs/design/`, `design/tokens/` |
 | CodeGraph MCP — query tips для Voice | `.cursor/rules/codegraph.mdc` |

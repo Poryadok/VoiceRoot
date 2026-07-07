@@ -32,7 +32,7 @@ func (s *ChatGRPC) GetDM(ctx context.Context, req *chatv1.GetDMRequest) (*chatv1
 	return &chatv1.GetDMResponse{Chat: chatRowToProto(c)}, nil
 }
 
-// ensureDM applies PLAN Phase 1: DM without friendship; blocks via Social (both directions).
+// ensureDM applies PLAN app stack: DM without friendship; blocks via Social (both directions).
 func (s *ChatGRPC) ensureDM(ctx context.Context, otherProfileRaw string) (*store.ChatRow, error) {
 	if s == nil || s.DM == nil {
 		return nil, status.Error(codes.FailedPrecondition, "chat persistence not configured")

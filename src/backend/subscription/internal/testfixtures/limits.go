@@ -1,4 +1,4 @@
-// Package testfixtures holds Phase 12 billing limit constants for red-phase tests.
+// Package testfixtures holds app stack2 billing limit constants for red-phase tests.
 package testfixtures
 
 const (

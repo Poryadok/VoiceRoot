@@ -9,7 +9,7 @@ import (
 )
 
 func (t *transcoder) serveSubscription(w http.ResponseWriter, r *http.Request, rest string) bool {
-	if t.serveSubscriptionPhase13(w, r, rest) {
+	if t.serveSubscriptionProfilesVerification(w, r, rest) {
 		return true
 	}
 	if t.clients.subscription == nil {

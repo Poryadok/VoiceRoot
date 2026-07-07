@@ -11,7 +11,7 @@ import (
 
 var ErrPreKeyBundleNotFound = errors.New("pre-key bundle not found")
 
-// E2EPreKeyStore persists Signal pre-key bundles per profile (Phase 15).
+// E2EPreKeyStore persists Signal pre-key bundles per profile (app stack5).
 type E2EPreKeyStore struct {
 	Pool *pgxpool.Pool
 }

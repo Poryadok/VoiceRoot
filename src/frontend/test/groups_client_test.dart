@@ -8,7 +8,7 @@ import 'package:voice_frontend/backend/gateway_config.dart';
 
 import 'support/gateway_test_client.dart';
 
-/// HTTP contract tests for PLAN Phase 4 groups (invite/kick/avatar).
+/// HTTP contract tests for text-chat.md groups (invite/kick/avatar).
 /// VoiceChatsClient group methods are added with implementation; until then these
 /// tests document expected Gateway routes via the same client surface.
 void main() {

@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestComposeThreadsDMReply_live exercises Phase 10 DM reply + thread fetch through Gateway.
+// TestComposeThreadsDMReply_live exercises app stack0 DM reply + thread fetch through Gateway.
 //
 // Opt-in: VOICE_RUN_LIVE_COMPOSE=true VOICE_API_BASE_URL=http://127.0.0.1:18080
 func TestComposeThreadsDMReply_live(t *testing.T) {

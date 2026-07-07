@@ -70,7 +70,7 @@ func (s *recordingChatsUpdateGroup) UpdateChat(_ context.Context, req *chatv1.Up
 	}, nil
 }
 
-// TestTranscodeChatsCreateGroup documents PLAN Phase 4 REST: POST /api/v1/chats with type=group.
+// TestTranscodeChatsCreateGroup documents spaces.md groups: POST /api/v1/chats with type=group.
 func TestTranscodeChatsCreateGroup(t *testing.T) {
 	t.Parallel()
 

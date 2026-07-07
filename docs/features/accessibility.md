@@ -92,7 +92,7 @@
 
 - Автоматические lint-проверки: `flutter analyze` с включённым `avoid_print` и accessibility-правилами
 - Widget-тесты клавиатурных шорткатов: `test/voice_shortcuts_keyboard_test.dart`
-- Chrome integration deep link: `integration_test/phase18_deeplink_web_test.dart` (CI job `flutter-web-integration`)
+- Chrome integration deep link: `integration_test/deeplink_web_test.dart` (CI job `flutter-web-integration`)
 - Ручное тестирование с TalkBack и VoiceOver перед каждым релизом — чеклист ниже
 - Axe DevTools (или аналог) для веб-версии как часть CI
 

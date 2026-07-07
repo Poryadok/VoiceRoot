@@ -9,7 +9,7 @@ import (
 )
 
 func (t *transcoder) serveUsers(w http.ResponseWriter, r *http.Request, rest string) bool {
-	if t.serveUsersPhase13(w, r, rest) {
+	if t.serveUsersProfilesVerification(w, r, rest) {
 		return true
 	}
 	ctx := withGRPCMetadata(r.Context(), r)

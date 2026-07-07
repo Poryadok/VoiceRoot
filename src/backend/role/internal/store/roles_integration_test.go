@@ -10,7 +10,7 @@ import (
 	"voice/backend/role/permissions"
 )
 
-// TestBootstrapSystemRoles_SeedsHierarchy documents PLAN Phase 5 / role-service.md:
+// TestBootstrapSystemRoles_SeedsHierarchy documents spaces.md / role-service.md:
 // Owner → Admin → Moderator → Member → Guest with descending position priority.
 func TestBootstrapSystemRoles_SeedsHierarchy(t *testing.T) {
 	if testing.Short() {

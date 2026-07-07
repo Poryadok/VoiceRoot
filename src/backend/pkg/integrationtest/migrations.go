@@ -20,7 +20,7 @@ func MigrationSuffixMatches(relPath, suffix string) bool {
 }
 
 // ApplySQLFile executes a migration SQL file relative to repoRoot and applies
-// follow-on migrations when known anchor files are used (Phase 15 E2E chains).
+// follow-on migrations when known anchor files are used (app stack5 E2E chains).
 func ApplySQLFile(t *testing.T, ctx context.Context, pool *pgxpool.Pool, repoRoot, relPath string) {
 	t.Helper()
 	p := filepath.Join(repoRoot, relPath)

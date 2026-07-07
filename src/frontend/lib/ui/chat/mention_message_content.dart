@@ -8,7 +8,7 @@ import '../social/profile_detail_sheet.dart';
 import 'markdown_inline.dart';
 import 'markdown_message_content.dart';
 
-/// Message body with @mention tokens highlighted (PLAN Phase 6).
+/// Message body with @mention tokens highlighted (text-chat.md).
 class MentionMessageContent extends ConsumerWidget {
   const MentionMessageContent({
     super.key,

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Apply golang-migrate SQL for Go-owned Postgres DBs on the local Compose network.
 # auth_db (Path A): Flyway on Auth boot — not migrated here unless VOICE_MIGRATE_AUTH_DB=1.
-# Usage: compose-migrate-all.sh [all|phase15|bot|story]
+# Usage: compose-migrate-all.sh [all|e2e|bot|story]
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -64,7 +64,7 @@ migrate_db() {
     -database "${dsn}" up
 }
 
-run_phase15() {
+run_e2e() {
   migrate_db chat_db
   migrate_db messaging_db
 }
@@ -99,7 +99,7 @@ run_auth_optional() {
 }
 
 run_all() {
-  run_phase15
+  run_e2e
   run_bot
   run_story
   run_other_go_owned
@@ -112,11 +112,11 @@ MODE="${1:-all}"
 
 case "${MODE}" in
   all) run_all ;;
-  phase15) run_phase15 ;;
+  e2e) run_e2e ;;
   bot) run_bot ;;
   story) run_story ;;
   *)
-    echo "usage: $0 [all|phase15|bot|story]" >&2
+    echo "usage: $0 [all|e2e|bot|story]" >&2
     exit 1
     ;;
 esac

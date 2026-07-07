@@ -158,7 +158,7 @@ func TestMessageEventBytesToFanout_MentionAddedNoChatBroadcast(t *testing.T) {
 	}
 }
 
-// TestMessageEventBytesToFanout_MessagePinned documents PLAN Phase 6 pins WS fan-out.
+// TestMessageEventBytesToFanout_MessagePinned documents text-chat.md pins WS fan-out.
 func TestMessageEventBytesToFanout_MessagePinned(t *testing.T) {
 	chatID := uuid.NewString()
 	msgID := uuid.NewString()
@@ -191,7 +191,7 @@ func TestMessageEventBytesToFanout_MessagePinned(t *testing.T) {
 	}
 }
 
-// TestMessageEventBytesToFanout_MessageUnpinned documents PLAN Phase 6 unpin WS fan-out.
+// TestMessageEventBytesToFanout_MessageUnpinned documents text-chat.md unpin WS fan-out.
 func TestMessageEventBytesToFanout_MessageUnpinned(t *testing.T) {
 	chatID := uuid.NewString()
 	msgID := uuid.NewString()
@@ -217,7 +217,7 @@ func TestMessageEventBytesToFanout_MessageUnpinned(t *testing.T) {
 	}
 }
 
-// TestMessageEventBytesToFanout_ReactionAdd documents PLAN Phase 4 / realtime-service.md:
+// TestMessageEventBytesToFanout_ReactionAdd documents text-chat.md / realtime-service.md:
 // message.reaction_added → WebSocket reaction_add for live counter updates.
 func TestMessageEventBytesToFanout_ReactionAdd(t *testing.T) {
 	chatID := uuid.NewString()
@@ -436,7 +436,7 @@ func TestRunMessageEventsConsumer_JetStreamToHub(t *testing.T) {
 	}
 }
 
-// TestRunMessageEventsConsumer_InAppNotificationOnMessageSent documents PLAN Phase 4:
+// TestRunMessageEventsConsumer_InAppNotificationOnMessageSent documents text-chat.md:
 // MessageSent → message_create to chat subscribers AND personal notification (new_message)
 // to every subscribed profile except the sender.
 func TestRunMessageEventsConsumer_InAppNotificationOnMessageSent(t *testing.T) {
@@ -550,7 +550,7 @@ func TestRunMessageEventsConsumer_InAppNotificationOnMessageSent(t *testing.T) {
 	}
 }
 
-// TestRunMessageEventsConsumer_MessageReadNoInAppNotification documents PLAN Phase 4:
+// TestRunMessageEventsConsumer_MessageReadNoInAppNotification documents text-chat.md:
 // MessageRead (mark_read sync) fans out message_read only — no personal notification op.
 func TestRunMessageEventsConsumer_MessageReadNoInAppNotification(t *testing.T) {
 	s := startRealtimeJSTestServer(t)
@@ -639,7 +639,7 @@ func TestRunMessageEventsConsumer_MessageReadNoInAppNotification(t *testing.T) {
 	}
 }
 
-// TestRunMessageEventsConsumer_InAppNotificationOnReactionAdded documents PLAN Phase 4:
+// TestRunMessageEventsConsumer_InAppNotificationOnReactionAdded documents text-chat.md:
 // ReactionAdded → reaction_add to chat AND personal notification (reaction) to message author.
 func TestRunMessageEventsConsumer_InAppNotificationOnReactionAdded(t *testing.T) {
 	s := startRealtimeJSTestServer(t)
@@ -739,7 +739,7 @@ func TestRunMessageEventsConsumer_InAppNotificationOnReactionAdded(t *testing.T)
 	}
 }
 
-// TestRunMessageEventsConsumer_MentionAdded documents PLAN Phase 6:
+// TestRunMessageEventsConsumer_MentionAdded documents text-chat.md:
 // MentionAdded → personal mention op and notification to mentioned profile.
 func TestRunMessageEventsConsumer_MentionAdded(t *testing.T) {
 	s := startRealtimeJSTestServer(t)

@@ -47,12 +47,12 @@ service AuthService {
   rpc RestoreAccount(RestoreAccountRequest) returns (RestoreAccountResponse);
   rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse); // internal
   rpc GetJWKS(GetJWKSRequest) returns (GetJWKSResponse); // public
-  rpc PutE2EKeyBackup(PutE2EKeyBackupRequest) returns (PutE2EKeyBackupResponse); // Phase 15
+  rpc PutE2EKeyBackup(PutE2EKeyBackupRequest) returns (PutE2EKeyBackupResponse); // app stack5
   rpc GetE2EKeyBackup(GetE2EKeyBackupRequest) returns (GetE2EKeyBackupResponse);
 }
 ```
 
-### Phase 15 — E2E key backup (REST via Gateway)
+### app stack5 — E2E key backup (REST via Gateway)
 
 Клиент хранит парольно-зашифрованный бэкап ключей Signal на сервере; сервер видит только opaque blob ([encryption.md](../features/encryption.md)).
 
@@ -99,7 +99,7 @@ otp_codes
 ├── used_at (nullable)
 └── created_at
 
-e2e_key_backups (Phase 15)
+e2e_key_backups (app stack5)
 ├── account_id (UUID, PK, logical ref → accounts.id)
 ├── encrypted_blob (TEXT, client-encrypted opaque payload)
 ├── password_hint (nullable)
@@ -140,7 +140,7 @@ otp_codes
 ├── used_at TIMESTAMPTZ NULL
 └── created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 
-e2e_key_backups (Phase 15, Flyway V4__e2e_key_backups.sql)
+e2e_key_backups (app stack5, Flyway V4__e2e_key_backups.sql)
 ├── account_id UUID PRIMARY KEY -- logical ref → accounts.id
 ├── encrypted_blob TEXT NOT NULL
 ├── password_hint TEXT NULL

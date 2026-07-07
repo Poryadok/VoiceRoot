@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# Idempotent moderation_db bootstrap for compose volumes created before Phase 14.
+# Idempotent moderation_db bootstrap for compose volumes created before app stack4.
 set -eu
 
 exists="$(psql -v ON_ERROR_STOP=1 -tAc "SELECT 1 FROM pg_database WHERE datname = 'moderation_db'")"

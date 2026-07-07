@@ -6,13 +6,13 @@ Discord-like messenger with voice and matchmaking. Product and architecture live
 
 | Path | Purpose |
 |------|---------|
-| [`docs/`](docs/) | Specifications, glossary, phased plan |
+| [`docs/`](docs/) | Specifications, glossary, implementation status |
 | [`protos/`](protos/) | gRPC / Protobuf (`buf.work.yaml` + [`protos/buf.yaml`](protos/buf.yaml); codegen: [`buf.gen.yaml`](buf.gen.yaml) → `make buf-generate`; S2S: [`protos/voice/s2s/v1/s2s.proto`](protos/voice/s2s/v1/s2s.proto)) |
-| [`src/frontend/`](src/frontend/) | Flutter client (Phase 1 in progress; see `src/frontend/README.md`) |
+| [`src/frontend/`](src/frontend/) | Flutter client (see `src/frontend/README.md`) |
 | [`src/backend/`](src/backend/) | Go services, gateway, shared libs; SQL migrations under `migrations/` |
 | [`src/admin/`](src/admin/) | Admin web (placeholder) |
 
-Monorepo conventions: [docs/REPOSITORIES.md](docs/REPOSITORIES.md). Roadmap: [docs/PLAN.md](docs/PLAN.md).
+Monorepo conventions: [docs/REPOSITORIES.md](docs/REPOSITORIES.md). Implementation status: [docs/PLAN.md](docs/PLAN.md).
 
 ## Toolchain (reference)
 
@@ -39,9 +39,9 @@ docker compose up -d
 
 PostgreSQL exposes five logical databases (`auth_db`, `user_db`, `social_db`, `chat_db`, `messaging_db`) plus Redis and NATS. Init scripts under [`docker/postgres/`](docker/postgres/) apply the first-wave SQL from [`src/backend/migrations/`](src/backend/migrations/) on a **new** volume. Without `--profile app`, compose starts **infra only** (Postgres, Redis, NATS) — no app containers.
 
-### Phase 1 full stack (`--profile app`)
+### Full app stack (`--profile app`)
 
-**`make compose-app-up`** (same as `docker compose --profile app up -d --build`) starts the local **Phase 1** stand from [docs/PLAN.md](docs/PLAN.md) § «Фаза 1 — MVP: личные сообщения»:
+**`make compose-app-up`** (same as `docker compose --profile app up -d --build`) starts the local **full app stack** ([docs/PLAN.md](docs/PLAN.md)):
 
 | Service | Role |
 |---------|------|

@@ -8,7 +8,7 @@ import 'package:voice_frontend/backend/voice_client.dart';
 
 import 'support/gateway_test_client.dart';
 
-/// HTTP contract tests for PLAN Phase 5 space voice rooms.
+/// HTTP contract tests for spaces.md space voice rooms.
 void main() {
   const config = GatewayConfig(baseUrl: 'http://api.test');
   const auth = 'Bearer access-token';

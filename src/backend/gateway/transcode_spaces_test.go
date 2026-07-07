@@ -81,7 +81,7 @@ func startBufconnSpaceConn(t *testing.T, impl spacev1.SpaceServiceServer) (grpc.
 	}
 }
 
-// TestTranscodeSpacesCreate documents PLAN Phase 5 REST: POST /api/v1/spaces with name + description.
+// TestTranscodeSpacesCreate documents spaces.md: POST /api/v1/spaces with name + description.
 func TestTranscodeSpacesCreate(t *testing.T) {
 	t.Parallel()
 

@@ -33,7 +33,7 @@ GO_TEST_SHORT_TARGETS := $(GO_SERVICES:%=go-test-short-%)
 GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
 
 .PHONY: buf-lint buf-format buf-breaking buf-generate buf-generate-dart buf-dart-check compose-up compose-app-up compose-down compose-logs-collect compose-observability-up \
-	compose-migrate-all compose-migrate-phase15 compose-migrate-bot compose-migrate-story compose-e2e-smoke compose-e2e-live compose-e2e-full compose-e2e-voice-live \
+	compose-migrate-all compose-migrate-e2e compose-migrate-bot compose-migrate-story compose-e2e-smoke compose-e2e-live compose-e2e-full compose-e2e-voice-live \
 	build-all build-all-breaking check-toolchain compose-config-ci buf-ci backend-test-ci backend-test-ci-short backend-image-ci \
 	gateway-test-ci gateway-image-ci go-test-pkg go-mod-tidy-all auth-test-ci auth-image-ci buf-breaking-ci \
 	golangci-ci gateway-test-race-ci design-tokens-check flutter-ui-color-gate flutter-ci flutter-windows-prefetch-sqlite3 flutter-linux-prefetch-sqlite3 prekey-golden-check coverage-report testcontainers-prune buf-generate-ci-local-template-check
@@ -75,8 +75,8 @@ compose-app-up:
 compose-migrate-all:
 	$(BASH) "$(ROOT)/scripts/dev/compose-migrate-all.sh" all
 
-compose-migrate-phase15:
-	$(BASH) "$(ROOT)/scripts/dev/compose-migrate-all.sh" phase15
+compose-migrate-e2e:
+	$(BASH) "$(ROOT)/scripts/dev/compose-migrate-all.sh" e2e
 
 compose-migrate-bot:
 	$(BASH) "$(ROOT)/scripts/dev/compose-migrate-all.sh" bot

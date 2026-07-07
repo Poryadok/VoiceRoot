@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// EnvConfigFromOSEnv loads USER_R2_* variables used by User Service for Phase 1 avatar uploads.
+// EnvConfigFromOSEnv loads USER_R2_* variables used by User Service for app stack avatar uploads.
 // Returns zero S3R2Config if any required value is missing (caller treats as disabled).
 func EnvConfigFromOSEnv() S3R2Config {
 	return S3R2Config{

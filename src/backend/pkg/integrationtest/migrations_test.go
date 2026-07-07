@@ -28,7 +28,7 @@ func TestMigrationSuffixMatches_NormalizesBackslashes(t *testing.T) {
 	require.True(t, MigrationSuffixMatches(mixed, "chat_db/000006_e2e_enabled.up.sql"))
 }
 
-// Phase 15 E2E-B red: incremental migration chains must include Phase 15 DDL snippets.
+// app stack5 E2E-B red: incremental migration chains must include app stack5 DDL snippets.
 func TestPhase15IncrementalSnippets_IncludeE2EDDL(t *testing.T) {
 	root := migrationsTestRepoRoot(t)
 	cases := []struct {
@@ -61,7 +61,7 @@ func TestPhase15IncrementalSnippets_IncludeE2EDDL(t *testing.T) {
 	}
 }
 
-// Phase 15 E2E-B red: Auth Flyway V4 must mirror golang-migrate auth_db/000005.
+// app stack5 E2E-B red: Auth Flyway V4 must mirror golang-migrate auth_db/000005.
 func TestPhase15AuthFlywayV4_ParityWithGolangMigrate(t *testing.T) {
 	root := migrationsTestRepoRoot(t)
 	flywayPath := filepath.Join(

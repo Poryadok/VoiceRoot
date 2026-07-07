@@ -7,10 +7,10 @@
 
 | Screen ID | Figma frame URL | Flutter / spec | Notes |
 |-----------|-----------------|----------------|-------|
-| `Screen/Auth/Login` | — | [auth_screen.dart](../../src/frontend/lib/ui/auth/auth_screen.dart) | Phase 1 |
+| `Screen/Auth/Login` | — | [auth_screen.dart](../../src/frontend/lib/ui/auth/auth_screen.dart) | app stack |
 | `Screen/Shell/Desktop` | — | [three_column_shell.dart](../../src/frontend/lib/shell/three_column_shell.dart) | [navigation.md](../features/navigation.md) |
-| `Screen/Chat/List` | — | [chat_list_panel.dart](../../src/frontend/lib/ui/chat/chat_list_panel.dart) | Phase 1 |
-| `Screen/Chat/Room` | — | [chat_room_panel.dart](../../src/frontend/lib/ui/chat/chat_room_panel.dart) | Phase 1 |
+| `Screen/Chat/List` | — | [chat_list_panel.dart](../../src/frontend/lib/ui/chat/chat_list_panel.dart) | app stack |
+| `Screen/Chat/Room` | — | [chat_room_panel.dart](../../src/frontend/lib/ui/chat/chat_room_panel.dart) | app stack |
 | `Screen/Social/Panel` | — | [social_panel.dart](../../src/frontend/lib/ui/social/social_panel.dart) | Bottom sheet |
 
 ## Figma pages

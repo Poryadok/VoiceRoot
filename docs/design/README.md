@@ -10,7 +10,7 @@
 |--|--|
 | **File** | [Voice](https://www.figma.com/design/tIkNxn3e7vcp3APJ8I6bKi/Voice) |
 | **fileKey** | `tIkNxn3e7vcp3APJ8I6bKi` |
-| **Референс Discord** | MainPage / «Discord 19» — только `00_References`, не Phase-1 target |
+| **Референс Discord** | MainPage / «Discord 19» — только `00_References`, не core target |
 
 Структура файла: `00_References`, `01_Foundation`, `10_Screens_Desktop`, `11_Screens_Mobile`, `12_States`. Экран = **фрейм** `Screen/...`; в задачи агенту — URL с **node-id фрейма**, не canvas `0-1`.
 

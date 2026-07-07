@@ -11,7 +11,7 @@
 
 | Page | node-id | Canvas URL | Purpose |
 |------|---------|------------|---------|
-| `00_References` | `0:1` | https://www.figma.com/design/tIkNxn3e7vcp3APJ8I6bKi/Voice?node-id=0-1 | «Discord 19» import; не Phase-1 target |
+| `00_References` | `0:1` | https://www.figma.com/design/tIkNxn3e7vcp3APJ8I6bKi/Voice?node-id=0-1 | «Discord 19» import; не core target |
 | `01_Foundation` | `40:531` | https://www.figma.com/design/tIkNxn3e7vcp3APJ8I6bKi/Voice?node-id=40-531 | Variables = [voice.tokens.json](../../design/tokens/voice.tokens.json) |
 | `10_Screens_Desktop` | `40:532` | https://www.figma.com/design/tIkNxn3e7vcp3APJ8I6bKi/Voice?node-id=40-532 | Frames 1280×800, names `Screen/...` |
 | `11_Screens_Mobile` | `47:533` | https://www.figma.com/design/tIkNxn3e7vcp3APJ8I6bKi/Voice?node-id=47-533 | Frames 390×844 |

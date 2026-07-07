@@ -21,9 +21,9 @@ service AuthService {
   rpc RestoreAccount(RestoreAccountRequest) returns (RestoreAccountResponse);
   rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse);
   rpc GetJWKS(GetJWKSRequest) returns (GetJWKSResponse);
-  // Phase 13: switch active profile claim in next access JWT (primary-profile-bootstrap.md).
+  // app stack3: switch active profile claim in next access JWT (primary-profile-bootstrap.md).
   rpc SwitchActiveProfile(SwitchActiveProfileRequest) returns (SwitchActiveProfileResponse);
-  // Phase 14: internal — platform moderation suspends account (docs/PLAN.md phase 14).
+  // app stack4: internal — platform moderation suspends account (docs/PLAN.md phase 14).
   rpc SetAccountStatus(SetAccountStatusRequest) returns (SetAccountStatusResponse);
   rpc PutE2EKeyBackup(PutE2EKeyBackupRequest) returns (PutE2EKeyBackupResponse);
   rpc GetE2EKeyBackup(GetE2EKeyBackupRequest) returns (GetE2EKeyBackupResponse);

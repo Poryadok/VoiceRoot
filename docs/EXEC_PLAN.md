@@ -1,6 +1,6 @@
-# Exec plan — приёмка вертикального среза (после Фазы 0)
+# Exec plan — приёмка вертикального среза (Auth + primary profile)
 
-Связано с [PLAN.md](PLAN.md) («Первый вертикальный срез») и [DEPLOYMENT.md](DEPLOYMENT.md).
+Связано с [PLAN.md](PLAN.md) и [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Цель
 

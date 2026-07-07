@@ -4,7 +4,7 @@ import 'package:voice_frontend/backend/proto_mappers.dart';
 import 'package:voice_frontend/gen/voice/chat/v1/chat.pbenum.dart';
 import 'package:voice_frontend/gen/voice/file/v1/file.pb.dart' as file_pb;
 
-/// Phase 15 E2E-B red tests: encrypted file upload wire mapping (docs/features/encryption.md).
+/// app stack5 E2E-B red tests: encrypted file upload wire mapping (docs/features/encryption.md).
 void main() {
   group('requestUploadToProto', () {
     test('sets isE2e when requested for E2E DM attachment', () {

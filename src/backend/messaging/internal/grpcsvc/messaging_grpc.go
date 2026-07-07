@@ -34,7 +34,7 @@ const (
 	fallbackSize    = 50
 )
 
-// MessagingGRPC implements MessagingService (Phase 1: DM send, history, read receipts).
+// MessagingGRPC implements MessagingService (app stack: DM send, history, read receipts).
 type MessagingGRPC struct {
 	messagingv1.UnimplementedMessagingServiceServer
 	Messages    *store.MessagesStore
@@ -60,13 +60,13 @@ type MessagingGRPC struct {
 	RolePermissions mentions.RolePermissionChecker
 	// UserPresence resolves online members for @here.
 	UserPresence mentions.OnlinePresenceLookup
-	// ChatThreadPolicy loads thread settings from chat_db (Phase 10).
+	// ChatThreadPolicy loads thread settings from chat_db (app stack0).
 	ChatThreadPolicy *store.SQLChatThreadPolicy
 	// ChatRolePermissions checks TEXT_CHAT_*_THREADS in space chats.
 	ChatRolePermissions ChatRolePermissions
 	// PlatformMod optional platform moderation (shadow ban, spam mute).
 	PlatformMod PlatformModerationChecker
-	// PreKeyBundles optional Signal pre-key directory (Phase 15 E2E).
+	// PreKeyBundles optional Signal pre-key directory (app stack5 E2E).
 	PreKeyBundles *store.E2EPreKeyStore
 	// Logger emits structured nats_publish errors when JetStream publish fails after a successful RPC.
 	Logger *slog.Logger

@@ -23,7 +23,7 @@ MCP tool: **`codegraph_explore`** — предпочитать для струк
 |--------|----------------|
 | Handler / flow в сервисе | `chat/internal/grpcsvc/list_chats.go EnrichListChats ListChats` |
 | S2S между сервисами | `ListChatsEnrichment EnrichListChats messaging/internal/s2s` |
-| Gateway transcoding | `gateway/transcode_phase1 SendMessage` |
+| Gateway transcoding | `gateway/transcode SendMessage` |
 | Realtime / NATS | `realtime nats chat.events fanout` |
 
 Правила:

@@ -1,4 +1,4 @@
-# Voice Developer Portal (Phase 16)
+# Voice Developer Portal (app stack6)
 
 Minimal Vite app for bot registration, manifest validate/apply, and token display.
 

@@ -6,7 +6,7 @@ import 'support/live_gateway_harness.dart';
 
 void main() {
   test(
-    'phase17: mention, feed, reply→DM, highlight privacy',
+    'stories: mention, feed, reply→DM, highlight privacy',
     () async {
       final probe = await probeLiveGateway();
       expect(
@@ -24,7 +24,7 @@ void main() {
       final stories = VoiceStoriesClient(gateway: ctx.gatewayHttp());
       final created = await stories.createTextStory(
         authorization: author.authorizationHeader,
-        text: 'Phase 17 live e2e @viewer',
+        text: 'app stack7 live e2e @viewer',
         mentionProfileIds: [viewer.activeProfileId],
       );
       expect(created, isA<StoriesApiOk<StoryData>>());

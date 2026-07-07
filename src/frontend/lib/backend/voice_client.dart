@@ -163,7 +163,7 @@ class VoiceCallsClient {
     );
   }
 
-  /// Phase 4 group voice — temporary room bound to a group chat (no callee).
+  /// group voice — temporary room bound to a group chat (no callee).
   Future<VoiceApiResult<VoiceCallSession>> startGroupVoice({
     required String authorization,
     required String groupChatId,

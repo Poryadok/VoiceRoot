@@ -1,4 +1,4 @@
-// Ping-bot is a minimal polling-mode dev bot for Phase 16 local smoke.
+// Ping-bot is a minimal polling-mode dev bot for app stack6 local smoke.
 //
 // Usage:
 //

@@ -13,7 +13,7 @@ import (
 	chatv1 "voice.app/voice/chat/v1"
 )
 
-// TestTranscodeVoiceStartGroupVoice documents PLAN Phase 4: POST /api/v1/voice/calls with group_voice.
+// TestTranscodeVoiceStartGroupVoice documents voice-chat.md: POST /api/v1/voice/calls with group_voice.
 func TestTranscodeVoiceStartGroupVoice(t *testing.T) {
 	t.Parallel()
 
@@ -48,7 +48,7 @@ func TestTranscodeVoiceStartGroupVoice(t *testing.T) {
 	require.Empty(t, grpcRec.start.GetCalleeProfileId())
 }
 
-// TestTranscodeVoiceJoinGroupCall documents PLAN Phase 4: POST /api/v1/voice/calls/{room_id}/join.
+// TestTranscodeVoiceJoinGroupCall documents voice-chat.md: POST /api/v1/voice/calls/{room_id}/join.
 func TestTranscodeVoiceJoinGroupCall(t *testing.T) {
 	t.Parallel()
 

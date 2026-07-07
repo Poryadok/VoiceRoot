@@ -35,7 +35,7 @@ service ChatService {
   rpc MuteChat(MuteChatRequest) returns (MuteChatResponse);
   rpc ArchiveChat(ArchiveChatRequest) returns (ArchiveChatResponse);
 
-  // Phase 15: DM-only opt-in E2E encryption (docs/features/encryption.md).
+  // DM-only opt-in E2E encryption — docs/features/encryption.md.
   rpc EnableChatE2E(EnableChatE2ERequest) returns (EnableChatE2EResponse);
   rpc DisableChatE2E(DisableChatE2ERequest) returns (DisableChatE2EResponse);
 }

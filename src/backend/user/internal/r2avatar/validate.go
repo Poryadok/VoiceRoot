@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// MaxAvatarBytes is the Phase 1 upper bound from PLAN.md § R2 / аватар (ориентир 2–5 MB).
+// MaxAvatarBytes is the app stack upper bound from PLAN.md § R2 / аватар (ориентир 2–5 MB).
 const MaxAvatarBytes = 5 * 1024 * 1024
 
 var allowedExtByMIME = map[string]string{
@@ -16,7 +16,7 @@ var allowedExtByMIME = map[string]string{
 	"image/webp": ".webp",
 }
 
-// ValidateUploadParams enforces PLAN Phase 1 avatar presign limits (whitelist MIME, max size).
+// ValidateUploadParams enforces PLAN app stack avatar presign limits (whitelist MIME, max size).
 func ValidateUploadParams(contentType string, contentLength int64) error {
 	ct := strings.TrimSpace(strings.ToLower(contentType))
 	if _, ok := allowedExtByMIME[ct]; !ok {

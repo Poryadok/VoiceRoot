@@ -18,7 +18,7 @@ import (
 	messagingv1 "voice.app/voice/messaging/v1"
 )
 
-// Phase 15 red tests: DM-only opt-in E2E flag on ChatService (docs/PLAN.md, docs/features/encryption.md).
+// app stack5 red tests: DM-only opt-in E2E flag on ChatService (docs/PLAN.md, docs/features/encryption.md).
 
 func createDMForE2E(
 	t *testing.T,
@@ -36,7 +36,7 @@ func createDMForE2E(
 	return chat
 }
 
-// TestEnableChatE2E_DM_Succeeds documents Phase 15: both DM members may enable E2E per chat.
+// TestEnableChatE2E_DM_Succeeds documents app stack5: both DM members may enable E2E per chat.
 func TestEnableChatE2E_DM_Succeeds(t *testing.T) {
 	if testing.Short() {
 		t.Skip()

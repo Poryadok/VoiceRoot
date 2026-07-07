@@ -31,7 +31,7 @@ import org.testcontainers.utility.DockerImageName;
 import voice.backend.auth.grpc.AuthGrpcService;
 
 /**
- * Phase 14 red test: SetAccountStatus suspends account; subsequent login is rejected.
+ * app stack4 red test: SetAccountStatus suspends account; subsequent login is rejected.
  */
 @SpringBootTest
 @AutoConfigureMockMvc

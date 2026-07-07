@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestComposeSpaceModeration_live documents PLAN Phase 5 moderation via Gateway REST:
+// TestComposeSpaceModeration_live documents spaces moderation via Gateway REST:
 // kick, ban/unban, timeout (slow mode covered in chat/messaging tests).
 func TestComposeSpaceModeration_live(t *testing.T) {
 	if !liveComposeEnabled() {

@@ -18,7 +18,7 @@ SpaceTreeData _emptyTree() {
   );
 }
 
-/// PLAN Phase 5: authenticated shell shows space tree in list column when a space is selected.
+/// spaces.md: authenticated shell shows space tree in list column when a space is selected.
 void main() {
   testWidgets('selected space shows SpaceTreePanel in list column', (
     tester,

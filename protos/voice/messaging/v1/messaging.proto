@@ -54,7 +54,7 @@ service MessagingService {
   rpc GetChatListMetadata(GetChatListMetadataRequest) returns (GetChatListMetadataResponse);
   rpc ListSharedMedia(ListSharedMediaRequest) returns (ListSharedMediaResponse);
 
-  // Phase 15: Signal pre-key directory for DM E2E (docs/features/encryption.md).
+  // Signal pre-key directory for DM E2E — docs/features/encryption.md.
   rpc UploadPreKeyBundle(UploadPreKeyBundleRequest) returns (UploadPreKeyBundleResponse);
   rpc GetPreKeyBundle(GetPreKeyBundleRequest) returns (GetPreKeyBundleResponse);
 }

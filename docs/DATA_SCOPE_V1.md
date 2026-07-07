@@ -1,35 +1,35 @@
 # Скоуп данных v1 (перед проектированием таблиц)
 
-Документ фиксирует **первую осмысленную итерацию** персистентной модели: что входит в объём схемы БД до детальных таблиц в [microservices/](microservices/) (секция «Модель данных») и миграций. Источник фаз продукта: [PLAN.md](PLAN.md). Общие правила ID, ссылок между БД и полей: [DATA_MODEL.md](DATA_MODEL.md). Инвентарь БД: [DATA_STORES.md](DATA_STORES.md).
+Документ фиксирует **первую осмысленную итерацию** персистентной модели: что входит в объём схемы БД до детальных таблиц в [microservices/](microservices/) (секция «Модель данных») и миграций. Каталог фич: [FEATURES.md](FEATURES.md), статус реализации — [PLAN.md](PLAN.md). Общие правила ID, ссылок между БД и полей: [DATA_MODEL.md](DATA_MODEL.md). Инвентарь БД: [DATA_STORES.md](DATA_STORES.md).
 
 ---
 
 ## 1. Определение «данные v1»
 
-**Данные v1** = всё, что нужно для **Фазы 0 (фундамент)** и **Фазы 1 (MVP: личные сообщения)** из [PLAN.md](PLAN.md): регистрация/логин, один активный профиль на аккаунт (без полноценного мульти-профиля как продукта), друзья и блокировки, DM-чаты, сообщения с **базовым** edit/delete на бэкенде (одна политика; разветвление UX «для всех/себя» и метка «(ред.)» — Фаза 3), отметка прочитанного, базовое presence, профиль с полем аватара (URL объекта в R2 — см. PLAN Фаза 1), Realtime без собственной PostgreSQL.
+**Данные v1** = инфраструктурный фундамент + **MVP личных сообщений** ([auth-and-contacts.md](features/auth-and-contacts.md), [friends.md](features/friends.md), [text-chat.md](features/text-chat.md)): регистрация/логин, один активный профиль на аккаунт (без полноценного мульти-профиля как продукта), друзья и блокировки, DM-чаты, сообщения с **базовым** edit/delete на бэкенде (разветвление UX «для всех/себя» — позже в text-chat), отметка прочитанного, базовое presence, профиль с полем аватара (URL в R2 — [user-profile.md](features/user-profile.md)), Realtime без собственной PostgreSQL.
 
-В этом документе `v1` = **первая волна миграций Фазы 0–1**, а не «целевое состояние сервиса». Поэтому упоминания `*_db` в [MICROSERVICES.md](MICROSERVICES.md) и `docs/microservices/*.md` трактуются как target-state и могут быть частично вне первой волны.
+В этом документе `v1` = **первая волна миграций**, а не «целевое состояние сервиса». Поэтому упоминания `*_db` в [MICROSERVICES.md](MICROSERVICES.md) и `docs/microservices/*.md` трактуются как target-state и могут быть частично вне первой волны.
 
-Цель v1 по данным: пользователь с аккаунтом и профилем может состоять в дружбе, иметь DM, отправлять и читать сообщения, видеть список диалогов с превью и непрочитанным — в соответствии с границами «Не входит в Фазу 1» в [PLAN.md](PLAN.md).
+Цель v1 по данным: пользователь с аккаунтом и профилем может состоять в дружбе, иметь DM, отправлять и читать сообщения, видеть список диалогов с превью и непрочитанным.
 
 ---
 
 ## 2. Что сознательно не входит в данные v1
 
-Ниже — **не проектируем отдельные таблицы / не разворачиваем отдельные БД** в первой волне миграций (позже — по фазам PLAN и [MICROSERVICES.md](MICROSERVICES.md)):
+Ниже — **не проектируем отдельные таблицы / не разворачиваем отдельные БД** в первой волне миграций (позже — по [FEATURES.md](FEATURES.md) и [MICROSERVICES.md](MICROSERVICES.md)):
 
 | Область                                                            | Отложено до (ориентир)                                                                                      |
 |--------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------|
-| Групповые чаты, спейсы, каналы, роли в спейсах                     | Фазы 4–5                                                                                                    |
-| Реакции, треды, пины, пересылка, Markdown, вложения                | Фазы 3–6+ (вложения/typing — 3; реакции/forward — 4; Markdown/пины — 6; треды — 10; см. [PLAN.md](PLAN.md)) |
-| Typing indicator                                                   | Фаза 3 (эфемерно в Realtime; отдельная БД не требуется)                                                     |
-| Push, Notification Service                                         | FCM Web/Android — [PLAN.md](PLAN.md) Фаза 6; APNs / VoIP / доработка — Фаза 8                               |
-| Голос/видео, полноценный File Service, вложения в чате             | Фазы 2–3+ (**аватар профиля в R2** — уже Фаза 1; `file_db` и таблицы вложений — позже)                      |
-| Matchmaking, Search (отдельная `search_db`), Analytics, ClickHouse | Фазы 7, 9+                                                                                                  |
-| Базовые репорты, 2FA, гранулярная приватность профиля              | Фаза 11                                                                                                     |
-| Subscription                                                       | Фаза 12                                                                                                     |
-| Мульти-профиль (продукт), верификация значков                      | Фаза 13                                                                                                     |
-| Авто-мод, панель модераторов, E2E (DM), боты, федерация, сторис    | Фазы 14–19+                                                                                                 |
+| Групповые чаты, спейсы, каналы, роли в спейсах                     | [spaces.md](features/spaces.md), [roles.md](features/roles.md)                                              |
+| Реакции, треды, пины, пересылка, Markdown, вложения                | [text-chat.md](features/text-chat.md), [forward-messages.md](features/forward-messages.md)                  |
+| Typing indicator                                                   | text-chat (эфемерно в Realtime)                                                                             |
+| Push, Notification Service                                         | [notifications.md](features/notifications.md)                                                               |
+| Голос/видео, полноценный File Service, вложения в чате             | [voice-chat.md](features/voice-chat.md), [file-storage.md](features/file-storage.md) (аватар — уже в v1)   |
+| Matchmaking, Search (отдельная `search_db`), Analytics, ClickHouse | [matchmaking.md](features/matchmaking.md), [search.md](features/search.md)                                  |
+| Базовые репорты, 2FA, гранулярная приватность профиля              | [reports.md](features/reports.md), [privacy.md](features/privacy.md)                                        |
+| Subscription                                                       | [subscription.md](features/subscription.md)                                                                 |
+| Мульти-профиль (продукт), верификация значков                      | [multi-profile.md](features/multi-profile.md), [verification.md](features/verification.md)                  |
+| Авто-мод, E2E (DM), боты, сторис; федерация — deferred             | [encryption.md](features/encryption.md), [bots.md](features/bots.md), [stories.md](features/stories.md), [federation.md](features/federation.md) |
 
 Для **Messaging** в v1 достаточно ядра «сообщение в чате» + **read receipts** (или эквивалент для `mark_read` и счётчика непрочитанных). Таблицы `reactions`, `pins`, полноценные треды и вложения — вне v1.
 

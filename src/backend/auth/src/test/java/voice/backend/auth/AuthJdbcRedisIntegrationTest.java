@@ -192,7 +192,7 @@ class AuthJdbcRedisIntegrationTest {
   }
 
   /**
-   * Phase 1 invariant (primary-profile-bootstrap): access JWT must include {@code profile_id}; validation rejects
+   * app stack invariant (primary-profile-bootstrap): access JWT must include {@code profile_id}; validation rejects
    * otherwise-well-signed tokens without it (same checks as {@link JwtService#validate}).
    */
   @Test

@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestComposeSpaceRoles_live documents PLAN Phase 5 space roles via Gateway REST:
+// TestComposeSpaceRoles_live documents space roles via Gateway REST:
 // bootstrap hierarchy, join assigns Member, permission gates for invites.
 func TestComposeSpaceRoles_live(t *testing.T) {
 	if !liveComposeEnabled() {

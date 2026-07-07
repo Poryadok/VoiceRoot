@@ -1,4 +1,4 @@
-# Voice application services (phases 0–10). Image placeholders substituted by render-and-apply.sh.
+# Voice application services (full app stack). Image placeholders substituted by render-and-apply.sh.
 # Services: auth, social, user, chat, messaging, file, matchmaking, search, notification, realtime, space, role, voice, gateway
 ---
 apiVersion: apps/v1

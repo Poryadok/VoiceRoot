@@ -155,7 +155,7 @@ func rateLimitGroup(method, path string) string {
 	case method == http.MethodPost && path == "/api/v1/files/upload":
 		return "FileUpload"
 	case method == http.MethodPost && path == "/api/v1/users/me/avatar/presigned-upload":
-		// Phase 1 avatar: mint presigned PUT (same abuse class as file upload); see api-gateway.md rate limits.
+		// app stack avatar: mint presigned PUT (same abuse class as file upload); see api-gateway.md rate limits.
 		return "FileUpload"
 	case method == http.MethodPost && path == "/api/v1/spaces":
 		return "SpaceCreation"

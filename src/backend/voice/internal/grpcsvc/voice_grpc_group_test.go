@@ -13,7 +13,7 @@ import (
 	chatv1 "voice.app/voice/chat/v1"
 )
 
-// TestVoiceGRPCStartGroupVoice_createsActiveSession documents PLAN Phase 4 / voice-chat.md:
+// TestVoiceGRPCStartGroupVoice_createsActiveSession documents text-chat.md / voice-chat.md:
 // group voice in a text group starts an active temporary room (no DM callee / ringing).
 func TestVoiceGRPCStartGroupVoice_createsActiveSession(t *testing.T) {
 	events := &recordingEvents{}
@@ -36,7 +36,7 @@ func TestVoiceGRPCStartGroupVoice_createsActiveSession(t *testing.T) {
 	require.Empty(t, call.GetCalleeProfileId())
 }
 
-// TestVoiceGRPCGroupVoice_memberJoinsActiveCall documents PLAN Phase 4: members join an active group call.
+// TestVoiceGRPCGroupVoice_memberJoinsActiveCall documents text-chat.md: members join an active group call.
 func TestVoiceGRPCGroupVoice_memberJoinsActiveCall(t *testing.T) {
 	events := &recordingEvents{}
 	svc := newTestGroupVoiceService(time.Unix(1700000000, 0).UTC(), events)

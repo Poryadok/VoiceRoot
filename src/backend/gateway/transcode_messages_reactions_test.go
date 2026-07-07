@@ -10,7 +10,7 @@ import (
 	messagingv1 "voice.app/voice/messaging/v1"
 )
 
-// TestTranscodeMessagesAddReaction documents PLAN Phase 4 / text-chat.md:
+// TestTranscodeMessagesAddReaction documents text-chat.md reactions:
 // POST /api/v1/messages/{message_id}/reactions → MessagingService.AddReaction.
 func TestTranscodeMessagesAddReaction(t *testing.T) {
 	t.Parallel()
@@ -44,7 +44,7 @@ func TestTranscodeMessagesAddReaction(t *testing.T) {
 	require.Equal(t, "👍", grpcRec.lastAdd.GetEmoji())
 }
 
-// TestTranscodeMessagesRemoveReaction documents PLAN Phase 4:
+// TestTranscodeMessagesRemoveReaction documents text-chat.md reactions:
 // DELETE /api/v1/messages/{message_id}/reactions?emoji=… → MessagingService.RemoveReaction.
 func TestTranscodeMessagesRemoveReaction(t *testing.T) {
 	t.Parallel()

@@ -18,7 +18,7 @@ flutter analyze
 flutter test
 ```
 
-**Live API (Gateway + full Phase-1 stack):** see [`integration_test/README.md`](integration_test/README.md) — `gateway_dm_ws_live_integration_test.dart` (smoke) and `phase1_two_users_e2e_live_test.dart` (two users, refresh, mark read) with `VOICE_RUN_LIVE_INTEGRATION=true`.
+**Live API (Gateway + full core stack):** see [`integration_test/README.md`](integration_test/README.md) — `gateway_dm_ws_live_integration_test.dart` (smoke) and `dm_two_users_e2e_live_test.dart` (two users, refresh, mark read) with `VOICE_RUN_LIVE_INTEGRATION=true`.
 
 Из корня репозитория (нужен Flutter на `PATH`): **`make flutter-ci`** — те же шаги ([Makefile](../../Makefile)).
 
@@ -33,7 +33,7 @@ CI: [.github/workflows/ci.yml](../../.github/workflows/ci.yml) — tier 1 job `f
 - Build uses `auto_updater` (WinSparkle) for signed delta updates; publish `appcast.xml` from [`scripts/release/appcast-template.xml`](../../scripts/release/appcast-template.xml) to CDN/R2.
 - Gateway serves `/api/v1/version?platform=windows` and returns `426` when `X-Voice-Client-Version` is below `min_supported_version` ([docs/features/updates.md](../../docs/features/updates.md)).
 
-## Docker (Phase 1 stack)
+## Docker (app stack stack)
 
 Из корня репозитория:
 

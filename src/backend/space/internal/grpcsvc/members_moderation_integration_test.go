@@ -110,7 +110,7 @@ func accountFromCtx(ctx context.Context) uuid.UUID {
 	return accountID
 }
 
-// TestSpaceModeration_KickMember_ModeratorCanKick documents PLAN Phase 5: moderator with MEMBER_KICK removes member.
+// TestSpaceModeration_KickMember_ModeratorCanKick documents spaces.md: moderator with MEMBER_KICK removes member.
 func TestSpaceModeration_KickMember_ModeratorCanKick(t *testing.T) {
 	if testing.Short() {
 		t.Skip()

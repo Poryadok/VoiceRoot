@@ -8,7 +8,7 @@ import 'package:voice_frontend/backend/voice_client.dart';
 
 import 'support/gateway_test_client.dart';
 
-/// HTTP contract tests for PLAN Phase 4 group voice (до 32, join active call).
+/// HTTP contract tests for text-chat.md group voice (до 32, join active call).
 void main() {
   const config = GatewayConfig(baseUrl: 'http://api.test');
   const auth = 'Bearer access-token';

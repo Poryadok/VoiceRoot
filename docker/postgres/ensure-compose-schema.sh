@@ -42,7 +42,7 @@ apply_if_exists file_db incremental_file_db.sql.snippet
 apply_if_exists file_db file_db_premium_upload.sql.snippet
 apply_if_exists bot_db incremental_bot_db.sql.snippet
 apply_if_exists moderation_db incremental_moderation_db.sql.snippet
-apply_if_exists search_db search_db_phase13_verification.sql.snippet
+apply_if_exists search_db search_db_verification.sql.snippet
 
 export MIGRATIONS_DIR
 sh /usr/local/bin/compose-migrate-dbs.sh

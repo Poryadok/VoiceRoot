@@ -107,7 +107,7 @@ func newRolesContractGateway(t *testing.T, rec *recordingRoleService) http.Handl
 	})
 }
 
-// TestTranscodeRolesList documents PLAN Phase 5 REST: GET /api/v1/roles?space_id=.
+// TestTranscodeRolesList documents roles.md: GET /api/v1/roles?space_id=.
 func TestTranscodeRolesList(t *testing.T) {
 	t.Parallel()
 	rec := &recordingRoleService{}

@@ -1,4 +1,4 @@
--- auth_db v3 — Phase 13: OAuth linked platform identities (see migrations/auth_db/000004_linked_identities.up.sql)
+-- auth_db v3 — app stack3: OAuth linked platform identities (see migrations/auth_db/000004_linked_identities.up.sql)
 
 CREATE TABLE IF NOT EXISTS linked_identities (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

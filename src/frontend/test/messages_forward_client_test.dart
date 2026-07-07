@@ -8,7 +8,7 @@ import 'package:voice_frontend/backend/messages_client.dart';
 
 import 'support/gateway_test_client.dart';
 
-/// HTTP contract tests for PLAN Phase 4 forward with attribution.
+/// HTTP contract tests for text-chat.md forward with attribution.
 void main() {
   const config = GatewayConfig(baseUrl: 'http://api.test');
   const auth = 'Bearer access-token';

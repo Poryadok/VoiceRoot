@@ -41,7 +41,7 @@ description: >-
 | Compose | входит в цель ниже |
 | Полный backend + образы + buf lint/format | **`make build-all`** → `compose-config-ci`, `buf-ci`, `go test` в `src/backend/pkg` и всех Go-сервисах из `Makefile`, **`golangci-ci`** (линтер по каждому модулю), **`gateway-test-race-ci`**, `auth-test-ci` (Maven), сборка Docker-образов `voice-*:local` |
 
-Требует **Docker**. Зафиксировать OK/FAIL по каждой фазе (compose, buf, какой сервис упал).
+Требует **Docker**. Зафиксировать OK/FAIL по каждому слою (compose, buf, какой сервис упал).
 
 ### 1.2 Совместимость protobuf с базой (как на PR в CI)
 
@@ -135,7 +135,7 @@ description: >-
 | Тема | Файл |
 |------|------|
 | Локальные команды, CI-состав | `docs/TESTING.md` |
-| План и фазы | `docs/PLAN.md` |
+| Статус реализации | `docs/PLAN.md` |
 | Сервисы и границы | `docs/MICROSERVICES.md` |
 | Архитектурные инварианты | `docs/ARCHITECTURE_REQUIREMENTS.md` |
 

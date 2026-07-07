@@ -63,7 +63,7 @@ func collectProfileIDs(ps []*userv1.Profile) []string {
 	return out
 }
 
-// TestSearchProfiles_UserSocialIntegration verifies PLAN Phase 1: UserService.SearchProfiles
+// TestSearchProfiles_UserSocialIntegration verifies PLAN app stack: UserService.SearchProfiles
 // with real Social IsBlocked S2S — blocked accounts are omitted from discovery (both directions).
 func TestSearchProfiles_UserSocialIntegration(t *testing.T) {
 	if testing.Short() {

@@ -8,7 +8,7 @@ import 'support/live_gateway_harness.dart';
 
 /// Live stack check: Flutter HTTP/WS clients ↔ API Gateway (REST auth, DM, Realtime).
 ///
-/// Run when Phase-1 backends are wired to Gateway (staging or full local stack):
+/// Run when core backends are wired to Gateway (staging or full local stack):
 /// ```text
 /// flutter test test/gateway_dm_ws_live_integration_test.dart ^
 ///   --dart-define=VOICE_RUN_LIVE_INTEGRATION=true ^

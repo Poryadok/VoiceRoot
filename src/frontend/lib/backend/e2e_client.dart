@@ -41,7 +41,7 @@ class E2eKeyBackupData {
   final String? passwordHint;
 }
 
-/// REST client for Phase 15 E2E (pre-keys, chat opt-in, key backup).
+/// REST client for app stack5 E2E (pre-keys, chat opt-in, key backup).
 class VoiceE2eClient {
   VoiceE2eClient({
     required GatewayHttpClient gateway,

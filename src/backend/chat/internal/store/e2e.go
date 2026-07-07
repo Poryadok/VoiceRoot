@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// SetChatE2EEnabled toggles DM opt-in E2E encryption for a chat (Phase 15).
+// SetChatE2EEnabled toggles DM opt-in E2E encryption for a chat (app stack5).
 func (s *DMStore) SetChatE2EEnabled(ctx context.Context, chatID uuid.UUID, enabled bool) error {
 	if s == nil || s.Pool == nil {
 		return errors.New("dm store: pool not configured")

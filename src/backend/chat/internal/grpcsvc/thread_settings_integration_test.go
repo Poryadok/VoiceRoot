@@ -44,7 +44,7 @@ func TestCreateChat_groupThreadDefaults(t *testing.T) {
 	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil)
 	t.Cleanup(cleanup)
 
-	group := createStandaloneGroup(t, client, profiles, owner, "Phase 10 group", inviteeA, inviteeB)
+	group := createStandaloneGroup(t, client, profiles, owner, "app stack0 group", inviteeA, inviteeB)
 	settings := readChatThreadSettings(t, context.Background(), pool, group.GetId())
 
 	require.False(t, settings.ThreadsEnabled, "group threads_enabled default")

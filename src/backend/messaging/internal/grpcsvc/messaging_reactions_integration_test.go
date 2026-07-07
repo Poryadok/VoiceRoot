@@ -13,7 +13,7 @@ import (
 	messagingv1 "voice.app/voice/messaging/v1"
 )
 
-// TestMessagingAddReaction_persistsEmoji documents PLAN Phase 4 / text-chat.md:
+// TestMessagingAddReaction_persistsEmoji documents text-chat.md / text-chat.md:
 // users can add Unicode emoji reactions to messages in chats they belong to.
 func TestMessagingAddReaction_persistsEmoji(t *testing.T) {
 	ctx := context.Background()

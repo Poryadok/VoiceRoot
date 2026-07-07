@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// SQLChatGuard checks chat_db.chat_members (Phase 1: DM). Pool must point at DB where chat tables exist.
+// SQLChatGuard checks chat_db.chat_members (app stack: DM). Pool must point at DB where chat tables exist.
 type SQLChatGuard struct {
 	Pool      *pgxpool.Pool
 	SpacePool *pgxpool.Pool // optional space_db for chats with space_id

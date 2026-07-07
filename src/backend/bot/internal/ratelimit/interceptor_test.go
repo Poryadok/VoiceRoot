@@ -21,7 +21,7 @@ func TestBotGRPCRateLimit_touchPresenceExhausted(t *testing.T) {
 	require.True(t, lim.AllowTouchPresence(botID))
 	require.True(t, lim.AllowTouchPresence(botID))
 	require.False(t, lim.AllowTouchPresence(botID),
-		"TouchPresence must be rate limited on direct Bot gRPC after quota (Phase 16)")
+		"TouchPresence must be rate limited on direct Bot gRPC after quota (app stack6)")
 }
 
 func TestFromEnv_disabled(t *testing.T) {

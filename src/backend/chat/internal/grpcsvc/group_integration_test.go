@@ -96,7 +96,7 @@ VALUES ($1, $2, 'member')
 	}
 }
 
-// TestCreateGroup_StandaloneMinimumThreeMembers documents PLAN Phase 4 / text-chat.md:
+// TestCreateGroup_StandaloneMinimumThreeMembers documents text-chat.md / text-chat.md:
 // standalone group (no space_id), creator is owner, at least three members total.
 func TestCreateGroup_StandaloneMinimumThreeMembers(t *testing.T) {
 	if testing.Short() {
@@ -165,7 +165,7 @@ func TestCreateGroup_TwoMembersOnly_InvalidArgument(t *testing.T) {
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
-// TestCreateGroup_AddMembers_Invite documents PLAN Phase 4 invite: members can join via AddMembers.
+// TestCreateGroup_AddMembers_Invite documents text-chat.md invite: members can join via AddMembers.
 func TestCreateGroup_AddMembers_Invite(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
@@ -209,7 +209,7 @@ func TestCreateGroup_AddMembers_Invite(t *testing.T) {
 	require.True(t, found, "invited member must see group in ListChats")
 }
 
-// TestCreateGroup_RemoveMember_Kick documents PLAN Phase 4 kick via RemoveMember.
+// TestCreateGroup_RemoveMember_Kick documents text-chat.md kick via RemoveMember.
 func TestCreateGroup_RemoveMember_Kick(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
@@ -274,7 +274,7 @@ func TestCreateGroup_RemoveMember_NonOwnerForbidden(t *testing.T) {
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
-// TestCreateGroup_UpdateChat_Avatar documents PLAN Phase 4 group avatar via UpdateChat.avatar_url.
+// TestCreateGroup_UpdateChat_Avatar documents text-chat.md group avatar via UpdateChat.avatar_url.
 func TestCreateGroup_UpdateChat_Avatar(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
