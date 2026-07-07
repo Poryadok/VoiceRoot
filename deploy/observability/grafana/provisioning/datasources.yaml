@@ -21,9 +21,12 @@ datasources:
     uid: clickhouse
     access: proxy
     url: http://clickhouse:8123
+    user: default
     editable: false
     jsonData:
       defaultDatabase: voice
       protocol: http
       port: 8123
       server: clickhouse
+    secureJsonData:
+      password: voice-clickhouse-dev

@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS voice.events (
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(timestamp)
 ORDER BY (event_type, timestamp)
-TTL timestamp + INTERVAL 90 DAY;
+TTL toDateTime(timestamp) + INTERVAL 90 DAY;
 
 CREATE TABLE IF NOT EXISTS voice.dau_mv (
   date Date,

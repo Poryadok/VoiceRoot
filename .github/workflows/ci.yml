@@ -617,22 +617,9 @@ jobs:
       - name: Prepare compose env
         run: cp .env.example .env
       - name: Start compose infra
-        run: docker compose up -d
+        run: docker compose up -d --wait postgres redis nats
       - name: Wait for postgres
         run: |
-          ready=0
-          for i in $(seq 1 30); do
-            if docker compose exec -T postgres pg_isready -h 127.0.0.1 -p 5432 -U voice -d voice; then
-              ready=1
-              break
-            fi
-            sleep 2
-          done
-          if [ "$ready" -ne 1 ]; then
-            docker compose ps
-            docker compose logs postgres --tail 80
-            exit 1
-          fi
           for i in $(seq 1 30); do
             if docker compose exec -T postgres psql -U voice -d voice -tAc \
               "SELECT 1 FROM pg_database WHERE datname='chat_db'" | grep -q 1; then
@@ -730,6 +717,10 @@ jobs:
     services:
       clickhouse:
         image: clickhouse/clickhouse-server:24.8-alpine
+        env:
+          CLICKHOUSE_USER: default
+          CLICKHOUSE_PASSWORD: voice-clickhouse-ci
+          CLICKHOUSE_DB: voice
         ports:
           - 8123:8123
           - 9000:9000
@@ -742,13 +733,16 @@ jobs:
         run: |
           sleep 5
           for i in 1 2 3 4 5 6 7 8 9 10; do
-            curl -fsS 'http://localhost:8123/' --data-binary @docker/clickhouse/init/001_events.sql && break
+            docker run --rm --network host \
+              -v "$PWD/docker/clickhouse/init:/init:ro" \
+              clickhouse/clickhouse-server:24.8-alpine \
+              /bin/sh -c 'clickhouse-client --host 127.0.0.1 --user default --password voice-clickhouse-ci --multiquery < /init/001_events.sql' && break
             sleep 3
           done
       - name: Analytics ClickHouse integration tests
         working-directory: src/backend/analytics
         env:
-          CLICKHOUSE_DSN: clickhouse://default@localhost:9000/voice
+          CLICKHOUSE_DSN: clickhouse://default:voice-clickhouse-ci@localhost:9000/voice
           CGO_ENABLED: "0"
         run: go test -tags=integration ./internal/store/...
 

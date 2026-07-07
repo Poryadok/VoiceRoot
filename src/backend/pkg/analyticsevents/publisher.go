@@ -112,14 +112,13 @@ func (p *JetStreamPublisher) Publish(ctx context.Context, subject, sourceService
 	if err != nil {
 		return err
 	}
-	msg := &nats.Msg{Subject: subject, Data: data}
-	if rid := correlation.FromGRPC(ctx); rid != "" {
-		natslog.SetRequestIDHeader(msg, rid)
-	}
+	msg := &nats.Msg{Subject: subject, Data: data, Header: nats.Header{}}
+	requestID := correlation.FromGRPC(ctx)
+	natslog.SetRequestIDHeader(msg.Header, requestID)
 	if _, err := p.js.PublishMsg(msg); err != nil {
-		natslog.LogPublishError(p.Logger, msg, err)
+		natslog.LogPublishError(p.Logger, subject, requestID, err)
 		return err
 	}
-	natslog.LogPublish(p.Logger, msg)
+	natslog.LogPublish(p.Logger, subject, requestID, "analytics event published")
 	return nil
 }

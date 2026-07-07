@@ -91,3 +91,5 @@ replace voice.app/voice/space => ../voice/pb/voice/space
 replace voice.app/voice/chat => ../chat/pb/voice/chat
 
 replace voice.app/voice/user => ../user/pb/voice/user
+
+replace voice.app/voice/analytics => ../analytics/pb/voice/analytics
