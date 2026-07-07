@@ -84,6 +84,7 @@ require (
 	golang.org/x/text v0.24.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20241202173237-19429a94021a // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	voice.app/voice/analytics v0.0.0 // indirect
 )
 
 replace voice/backend/pkg => ../pkg

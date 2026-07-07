@@ -458,6 +458,15 @@ func allowComposeChatSpaceInvitesEveryone(t *testing.T, client *http.Client, bas
 	}
 	body, err := json.Marshal(map[string]any{
 		"settings": map[string]any{
+			"preset":                   "gaming",
+			"allow_dm":                 everyone,
+			"show_online":              everyone,
+			"show_game_status":         everyone,
+			"show_mm_rating":           everyone,
+			"show_phone":               map[string]any{"friends": false, "friends_of_friends": false, "space_members": false, "include_guests": false},
+			"show_stories":             everyone,
+			"allow_friend_requests":    everyone,
+			"allow_guest_dm":           true,
 			"allow_chat_space_invites": everyone,
 		},
 	})

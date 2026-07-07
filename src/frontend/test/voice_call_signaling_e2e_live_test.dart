@@ -1,7 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:voice_frontend/backend/chats_client.dart';
 import 'package:voice_frontend/backend/voice_client.dart';
-
 import 'support/live_gateway_harness.dart';
 
 void main() {
@@ -20,18 +18,18 @@ void main() {
         final sessionA = await ctx.registerUser('call-a');
         final sessionB = await ctx.registerUser('call-b');
 
-        final dm = await ctx.chatsClient().createDm(
-          authorization: sessionA.authorizationHeader,
-          otherProfileId: sessionB.activeProfileId,
-        );
-        expect(dm, isA<ChatsApiOk<VoiceChat>>());
-        final chatId = (dm as ChatsApiOk<VoiceChat>).data.id;
+        final chat = await ctx.createDmBetween(sessionA, sessionB);
+        final chatId = chat.id;
 
         final voice = VoiceCallsClient(gateway: ctx.gatewayHttp());
         final realtimeB = await ctx.connectSubscribed(sessionB, chatId);
         addTearDown(realtimeB.dispose);
 
-        final incomingFuture = waitForOp(realtimeB.events, 'call_incoming');
+        final incomingFuture = waitForOp(
+          realtimeB.events,
+          'call_incoming',
+          timeout: const Duration(seconds: 20),
+        );
         final startFuture = voice.startCall(
           authorization: sessionA.authorizationHeader,
           chatId: chatId,
@@ -63,6 +61,7 @@ void main() {
           authorization: sessionA.authorizationHeader,
           roomId: call.roomId,
         );
+        await realtimeB.dispose();
       },
       skip: runLiveIntegration
           ? null
@@ -79,15 +78,13 @@ void main() {
           reason: probe is LiveGatewayUnavailable ? probe.reason : null,
         );
         final ctx = (probe as LiveGatewayReady).context;
+        await Future<void>.delayed(const Duration(seconds: 2));
 
         final sessionA = await ctx.registerUser('call-decline-a');
         final sessionB = await ctx.registerUser('call-decline-b');
 
-        final dm = await ctx.chatsClient().createDm(
-          authorization: sessionA.authorizationHeader,
-          otherProfileId: sessionB.activeProfileId,
-        );
-        final chatId = (dm as ChatsApiOk<VoiceChat>).data.id;
+        final chat = await ctx.createDmBetween(sessionA, sessionB);
+        final chatId = chat.id;
 
         final voice = VoiceCallsClient(gateway: ctx.gatewayHttp());
         final realtimeA = await ctx.connectSubscribed(sessionA, chatId);
@@ -95,15 +92,24 @@ void main() {
         final realtimeB = await ctx.connectSubscribed(sessionB, chatId);
         addTearDown(realtimeB.dispose);
 
-        final declinedFuture = waitForOp(realtimeA.events, 'call_declined');
+        final declinedFuture = waitForOp(
+          realtimeA.events,
+          'call_declined',
+          timeout: const Duration(seconds: 20),
+        );
         final start = await voice.startCall(
           authorization: sessionA.authorizationHeader,
           chatId: chatId,
           calleeProfileId: sessionB.activeProfileId,
         );
+        expect(start, isA<VoiceApiOk<VoiceCallSession>>());
         final call = (start as VoiceApiOk<VoiceCallSession>).data;
 
-        await waitForOp(realtimeB.events, 'call_incoming');
+        await waitForOp(
+          realtimeB.events,
+          'call_incoming',
+          timeout: const Duration(seconds: 20),
+        );
         await voice.declineCall(
           authorization: sessionB.authorizationHeader,
           roomId: call.roomId,
@@ -111,6 +117,8 @@ void main() {
 
         final declined = await declinedFuture;
         expect(declined.data?['room_id'], call.roomId);
+        await realtimeA.dispose();
+        await realtimeB.dispose();
       },
       skip: runLiveIntegration
           ? null

@@ -67,3 +67,38 @@ func TestAddMembers_FriendsOnlyInvitePrivacy_StrangerDenied(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }
+
+// TestAddMembers_SameAccountInvitePrivacy_Allowed documents bot actor / alt profiles on one account.
+func TestAddMembers_SameAccountInvitePrivacy_Allowed(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	sharedAccount := uuid.New()
+	owner := uuid.New()
+	botActor := uuid.New()
+	memberA, memberB := uuid.New(), uuid.New()
+	profiles := mapProfileAccounts{
+		owner:    sharedAccount,
+		botActor: sharedAccount,
+		memberA:  uuid.New(),
+		memberB:  uuid.New(),
+	}
+
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil,
+		WithPrivacyChecker(invitePrivacyStub{friendsOnly: map[uuid.UUID]bool{botActor: true}}),
+		WithFriendChecker(noFriendsStub{}),
+	)
+	t.Cleanup(cleanup)
+
+	chat := createStandaloneGroup(t, client, profiles, owner, "Bot actor invite", memberA, memberB)
+
+	_, err := client.AddMembers(ctxFor(t, profiles, owner), &chatv1.AddMembersRequest{
+		ChatId:     chat.GetId(),
+		ProfileIds: []string{botActor.String()},
+	})
+	require.NoError(t, err)
+}

@@ -65,10 +65,11 @@ func (t *transcoder) serveAnalytics(w http.ResponseWriter, r *http.Request, rest
 			format = "csv"
 		}
 		eventType := strings.TrimSpace(r.URL.Query().Get("event_type"))
-		resp, err := t.clients.analytics.ExportData(ctx, &analyticsv1.ExportDataRequest{
-			Format:    format,
-			EventType: eventType,
-		})
+		req := &analyticsv1.ExportDataRequest{Format: format}
+		if eventType != "" {
+			req.EventType = &eventType
+		}
+		resp, err := t.clients.analytics.ExportData(ctx, req)
 		if err != nil {
 			writeGRPCError(w, err)
 			return true

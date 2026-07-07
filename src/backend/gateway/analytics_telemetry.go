@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"math/rand/v2"
 	"net/http"
 	"os"

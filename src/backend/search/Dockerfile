@@ -6,6 +6,7 @@ ENV GOPROXY=https://proxy.golang.org,direct
 COPY scripts/docker-go-mod-download.sh /usr/local/bin/docker-go-mod-download.sh
 COPY pkg/go.mod pkg/go.sum ./pkg/
 COPY search/go.mod search/go.sum ./search/
+COPY analytics/pb/voice/analytics/go.mod ./analytics/pb/voice/analytics/
 COPY voice/pb/voice/search/go.mod ./voice/pb/voice/search/
 COPY voice/pb/voice/space/go.mod ./voice/pb/voice/space/
 COPY chat/pb/voice/chat/go.mod ./chat/pb/voice/chat/
@@ -17,6 +18,7 @@ COPY user/pb/voice/user/go.mod ./user/pb/voice/user/
 COPY user/pb/voice/common/go.mod user/pb/voice/common/go.sum ./user/pb/voice/common/
 RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked sh /usr/local/bin/docker-go-mod-download.sh search
 COPY pkg ./pkg
+COPY analytics/pb/voice/analytics ./analytics/pb/voice/analytics
 COPY voice/pb ./voice/pb
 COPY chat/pb/voice/chat ./chat/pb/voice/chat
 COPY messaging/pb/voice/messaging ./messaging/pb/voice/messaging

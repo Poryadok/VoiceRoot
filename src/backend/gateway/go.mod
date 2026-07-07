@@ -15,6 +15,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	google.golang.org/grpc v1.80.0
 	google.golang.org/protobuf v1.36.11
+	voice.app/voice/analytics v0.0.0
 	voice.app/voice/auth v0.0.0
 	voice.app/voice/bot v0.0.0
 	voice.app/voice/calls v0.0.0
@@ -32,7 +33,6 @@ require (
 	voice.app/voice/story v0.0.0
 	voice.app/voice/subscription v0.0.0
 	voice.app/voice/user v0.0.0
-	voice.app/voice/analytics v0.0.0
 	voice/backend/pkg v0.0.0
 )
 

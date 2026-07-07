@@ -46,13 +46,16 @@ class VoiceE2eClient {
   VoiceE2eClient({
     required GatewayHttpClient gateway,
     E2eCryptoAdapter? adapter,
+    SecureSignalStorage? backupStorage,
   }) : _gateway = gateway,
-       _adapter = adapter ?? E2eCryptoAdapter() {
+       _adapter = adapter ?? E2eCryptoAdapter(),
+       _backupStorage = backupStorage {
     _preKeys = E2ePreKeySync(sessionManager: _adapter.sessionManager);
   }
 
   final GatewayHttpClient _gateway;
   final E2eCryptoAdapter _adapter;
+  final SecureSignalStorage? _backupStorage;
   late final E2ePreKeySync _preKeys;
 
   E2eCryptoAdapter get cryptoAdapter => _adapter;
@@ -203,7 +206,10 @@ class VoiceE2eClient {
   }) async {
     final profileId = _requireProfileId(authorization);
     final codec = E2eKeyBackupCodecV2();
-    final exported = await SecureSignalStore.exportForBackup(profileId);
+    final exported = await SecureSignalStore.exportForBackup(
+      profileId,
+      storage: _backupStorage,
+    );
     final blob = await codec.encryptPayload(
       password: password,
       passwordHint: passwordHint,

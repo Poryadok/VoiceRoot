@@ -83,6 +83,19 @@ func (s *ChatGRPC) ensureInvitePrivacy(ctx context.Context, inviter, invitee uui
 	if s == nil || s.Privacy == nil {
 		return nil
 	}
+	if s.Profiles != nil {
+		inviterAccount, err := s.Profiles.AccountIDByProfileID(ctx, inviter)
+		if err != nil {
+			return err
+		}
+		inviteeAccount, err := s.Profiles.AccountIDByProfileID(ctx, invitee)
+		if err != nil {
+			return err
+		}
+		if inviterAccount != uuid.Nil && inviterAccount == inviteeAccount {
+			return nil
+		}
+	}
 	audience, err := s.Privacy.AllowChatSpaceInvitesAudience(ctx, invitee)
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())

@@ -15,6 +15,7 @@ import 'package:voice_frontend/backend/messages_client.dart';
 import 'package:voice_frontend/backend/realtime_client.dart';
 import 'package:voice_frontend/backend/roles_client.dart';
 import 'package:voice_frontend/backend/spaces_client.dart';
+import 'package:voice_frontend/backend/user_privacy_client.dart';
 
 /// Compile-time API base (`--dart-define=VOICE_API_BASE_URL=...`).
 String liveGatewayBaseUrl() {
@@ -266,6 +267,55 @@ class LiveGatewayContext {
       VoiceMessagesClient(gateway: gatewayHttp());
 
   VoiceFilesClient filesClient() => VoiceFilesClient(gateway: gatewayHttp());
+
+  VoiceUserPrivacyClient privacyClient() =>
+      VoiceUserPrivacyClient(gateway: gatewayHttp());
+
+  VoicePrivacySettings gamingOpenE2ePrivacy(String profileId) =>
+      VoicePrivacySettings(
+        profileId: profileId,
+        preset: 'gaming',
+        showOnline: VoicePrivacyAudience.everyoneWithGuests,
+        showGameStatus: VoicePrivacyAudience.everyoneWithGuests,
+        showMmRating: VoicePrivacyAudience.everyoneWithGuests,
+        showPhone: VoicePrivacyAudience.nobody,
+        showStories: VoicePrivacyAudience.everyoneWithGuests,
+        allowDm: VoicePrivacyAudience.everyoneWithGuests,
+        allowFriendRequests: VoicePrivacyAudience.everyoneWithGuests,
+        allowGuestDm: true,
+        allowPhoneSearch: VoicePrivacyAudience.friendsOnly,
+        allowCalls: VoicePrivacyAudience.everyoneWithGuests,
+        allowChatSpaceInvites: VoicePrivacyAudience.everyoneWithGuests,
+        allowFiles: VoicePrivacyAudience.friendsAndFoF,
+        allowVoiceMessages: VoicePrivacyAudience.friendsAndFoF,
+      );
+
+  Future<void> allowOpenGamingPrivacy(AuthSession session) async {
+    final result = await privacyClient().updatePrivacy(
+      authorization: session.authorizationHeader,
+      settings: gamingOpenE2ePrivacy(session.activeProfileId),
+    );
+    expect(result, isA<UserPrivacyApiOk<VoicePrivacySettings>>());
+  }
+
+  Future<void> allowOpenGamingPrivacyMany(Iterable<AuthSession> sessions) async {
+    for (final session in sessions) {
+      await allowOpenGamingPrivacy(session);
+    }
+  }
+
+  Future<VoiceChat> createDmBetween(
+    AuthSession initiator,
+    AuthSession peer,
+  ) async {
+    await allowOpenGamingPrivacyMany([initiator, peer]);
+    final dm = await chatsClient().createDm(
+      authorization: initiator.authorizationHeader,
+      otherProfileId: peer.activeProfileId,
+    );
+    expect(dm, isA<ChatsApiOk<VoiceChat>>());
+    return (dm as ChatsApiOk<VoiceChat>).data;
+  }
 
   Future<bool> probeFileStorageAvailable(AuthSession session) async {
     final result = await filesClient().requestUpload(

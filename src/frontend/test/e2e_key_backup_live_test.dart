@@ -3,6 +3,7 @@ import 'package:voice_frontend/backend/e2e_client.dart';
 import 'package:voice_frontend/backend/gateway_http.dart';
 import 'package:voice_frontend/e2e/e2e_crypto_adapter.dart';
 
+import 'support/in_memory_secure_signal_storage.dart';
 import 'support/live_gateway_harness.dart';
 
 /// app stack5 live E2E key backup: PUT/GET roundtrip via [VoiceE2eClient].
@@ -34,6 +35,7 @@ void main() {
       final e2e = VoiceE2eClient(
         gateway: gateway,
         adapter: E2eCryptoAdapter.inMemoryForTest(),
+        backupStorage: InMemorySecureSignalStorage(),
       );
 
       const password = 'VoiceQaBackup1!';

@@ -25,6 +25,7 @@ void main() {
       final owner = await ctx.registerUser('group-owner');
       final memberB = await ctx.registerUser('group-b');
       final memberC = await ctx.registerUser('group-c');
+      await ctx.allowOpenGamingPrivacyMany([memberB, memberC]);
 
       final chats = ctx.chatsClient();
       final created = await chats.createGroup(

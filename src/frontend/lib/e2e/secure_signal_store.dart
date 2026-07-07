@@ -62,8 +62,11 @@ class SecureSignalStore implements SignalProtocolStore {
       '${address.getName()}:${address.getDeviceId()}';
 
   /// Exports full cryptographic state for password-wrapped cloud backup.
-  static Future<Map<String, dynamic>> exportForBackup(String profileId) async {
-    final store = await open(profileId: profileId);
+  static Future<Map<String, dynamic>> exportForBackup(
+    String profileId, {
+    SecureSignalStorage? storage,
+  }) async {
+    final store = await open(profileId: profileId, storage: storage);
     try {
       final raw = await store._storage.read(key: _stateKey);
       if (raw == null || raw.isEmpty) {

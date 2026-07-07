@@ -124,6 +124,7 @@ commands:
   Future<void> ensureGroupReadyForBot() async {
     final memberB = await ctx.registerUser('bot-member-b');
     final memberC = await ctx.registerUser('bot-member-c');
+    await ctx.allowOpenGamingPrivacyMany([memberB, memberC]);
     final resp = await httpClient.post(
       Uri.parse('${ctx.config.baseUrl}/api/v1/chats/$chatId/members'),
       headers: {
