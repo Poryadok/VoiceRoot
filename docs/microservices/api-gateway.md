@@ -32,7 +32,7 @@
 | Space creation        | 5 пространств | 1 день |
 | Bot API               | 5000 запросов | 1 мин  |
 
-В реализации Gateway группа **File upload** также покрывает `POST /api/v1/users/me/avatar/presigned-upload` (выдача presigned PUT для статичного аватара Фазы 1; см. ниже).
+В реализации Gateway группа **File upload** также покрывает `POST /api/v1/users/me/avatar/presigned-upload` (выдача presigned PUT для статичного аватара — [user-profile.md](../features/user-profile.md); см. ниже).
 
 Реализация: Redis sliding window counter. Для публичных маршрутов ключ строится по IP; `X-Forwarded-For` учитывается только от доверенных proxy из `GATEWAY_TRUSTED_PROXY_CIDRS`. Для защищённых маршрутов ключ строится по `user_id`.
 
@@ -60,9 +60,9 @@
 /ws                      → Realtime Service (WebSocket upgrade)
 ```
 
-**Фаза 1 — presigned аватар (R2, User Service, без File Service):** `POST /api/v1/users/me/avatar/presigned-upload` (JWT). Тело JSON: `content_type`, `content_length`; `profile_id` опционален (по умолчанию активный профиль из JWT → `X-Voice-Profile-Id`). Ответ — поля `upload_url`, `http_method`, `required_headers`, `expires_at`, `public_url` / `object_key` для последующего `PUT` в R2 и сохранения URL через `PATCH /api/v1/users/me` (`UpdateProfile.avatar_url`). Обход REST: тот же контракт по **gRPC** `UserService.CreateAvatarPresignedUpload` на User Service (внутренний ingress, непубличные клиенты), если edge Gateway недоступен.
+**[user-profile.md](../features/user-profile.md) — presigned аватар (R2, User Service, без File Service):** `POST /api/v1/users/me/avatar/presigned-upload` (JWT). Тело JSON: `content_type`, `content_length`; `profile_id` опционален (по умолчанию активный профиль из JWT → `X-Voice-Profile-Id`). Ответ — поля `upload_url`, `http_method`, `required_headers`, `expires_at`, `public_url` / `object_key` для последующего `PUT` в R2 и сохранения URL через `PATCH /api/v1/users/me` (`UpdateProfile.avatar_url`). Обход REST: тот же контракт по **gRPC** `UserService.CreateAvatarPresignedUpload` на User Service (внутренний ingress, непубличные клиенты), если edge Gateway недоступен.
 
-**Фаза 2 — DM-звонки через Voice Service + LiveKit:** namespace `POST/GET /api/v1/voice/**` транскодится в `VoiceService` ([voice-service.md](voice-service.md)). Клиент не отправляет WebRTC `offer/answer/ICE` в Gateway: media signaling идёт внутри LiveKit SDK; Gateway управляет только lifecycle и выдачей токена. Минимальные публичные маршруты:
+**[voice-chat.md](../features/voice-chat.md) — DM-звонки через Voice Service + LiveKit:** namespace `POST/GET /api/v1/voice/**` транскодится в `VoiceService` ([voice-service.md](voice-service.md)). Клиент не отправляет WebRTC `offer/answer/ICE` в Gateway: media signaling идёт внутри LiveKit SDK; Gateway управляет только lifecycle и выдачей токена. Минимальные публичные маршруты:
 
 | Method | Route | gRPC | Тело / параметры |
 |--------|-------|------|------------------|
@@ -79,7 +79,7 @@
 
 **Не через этот REST-префикс:** [Federation Service](federation-service.md) (S2S gRPC, отдельный ingress / mTLS). Публичные Flutter-клиенты не вызывают Analytics.
 
-**Фаза 16 — Bot API:** namespace `GET/POST/PATCH/DELETE /api/v1/bots/**` транскодится в `BotService` ([bot-service.md](bot-service.md)). Реализация: `transcode_bots.go`. Два режима auth:
+**[bots.md](../features/bots.md) — Bot API:** namespace `GET/POST/PATCH/DELETE /api/v1/bots/**` транскодится в `BotService` ([bot-service.md](bot-service.md)). Реализация: `transcode_bots.go`. Два режима auth:
 
 - **JWT** (`Authorization: Bearer …`) — портал, клиент, install/uninstall, slash autocomplete/interactions.
 - **Bot token** (`Authorization: Bot <token>`) — маршруты `…/bots/me/**` (polling, defer/complete interaction, send/edit message).

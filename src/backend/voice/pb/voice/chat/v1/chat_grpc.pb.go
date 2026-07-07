@@ -69,7 +69,7 @@ type ChatServiceClient interface {
 	DeclineDMRequest(ctx context.Context, in *DeclineDMRequestRequest, opts ...grpc.CallOption) (*DeclineDMRequestResponse, error)
 	MuteChat(ctx context.Context, in *MuteChatRequest, opts ...grpc.CallOption) (*MuteChatResponse, error)
 	ArchiveChat(ctx context.Context, in *ArchiveChatRequest, opts ...grpc.CallOption) (*ArchiveChatResponse, error)
-	// Phase 15: DM-only opt-in E2E encryption (docs/features/encryption.md).
+	// DM-only opt-in E2E encryption — docs/features/encryption.md.
 	EnableChatE2E(ctx context.Context, in *EnableChatE2ERequest, opts ...grpc.CallOption) (*EnableChatE2EResponse, error)
 	DisableChatE2E(ctx context.Context, in *DisableChatE2ERequest, opts ...grpc.CallOption) (*DisableChatE2EResponse, error)
 }
@@ -328,7 +328,7 @@ type ChatServiceServer interface {
 	DeclineDMRequest(context.Context, *DeclineDMRequestRequest) (*DeclineDMRequestResponse, error)
 	MuteChat(context.Context, *MuteChatRequest) (*MuteChatResponse, error)
 	ArchiveChat(context.Context, *ArchiveChatRequest) (*ArchiveChatResponse, error)
-	// Phase 15: DM-only opt-in E2E encryption (docs/features/encryption.md).
+	// DM-only opt-in E2E encryption — docs/features/encryption.md.
 	EnableChatE2E(context.Context, *EnableChatE2ERequest) (*EnableChatE2EResponse, error)
 	DisableChatE2E(context.Context, *DisableChatE2ERequest) (*DisableChatE2EResponse, error)
 	mustEmbedUnimplementedChatServiceServer()

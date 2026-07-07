@@ -17,7 +17,7 @@ import 'package:voice_frontend/state/in_app_notifications.dart';
 import 'support/auth_test_overrides.dart';
 import 'support/gateway_test_client.dart';
 
-/// Unit tests for Phase 4 in-app notifications (sound + badge, no FCM).
+/// Unit tests for in-app notifications (sound + badge, no FCM).
 ///
 /// Production: [InAppNotificationController] in `lib/state/in_app_notifications.dart`.
 void main() {

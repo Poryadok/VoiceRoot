@@ -108,7 +108,7 @@ read_receipts
 └── UNIQUE(chat_id, profile_id)
 ```
 
-### V1 (Фаза 0-1) — детальный профиль для DDL
+### V1 (core DM scope) — детальный профиль для DDL
 
 В первой волне миграций используются только `messages` и `read_receipts`.
 `reactions`, `pins`, `thread_parent_id`, `forward_*`, `message_attachments` — target-state и внедряются позже.
@@ -181,7 +181,7 @@ read_receipts
 
 При >100M сообщений — шардинг PostgreSQL по `chat_id` (consistent hashing). Каждый шард содержит все сообщения одного чата → локальные запросы без cross-shard joins.
 
-## E2E / pre-keys / edit policy (app stack5)
+## E2E / pre-keys / edit policy ([encryption.md](../features/encryption.md))
 
 Нормативное поведение: [encryption.md](../features/encryption.md). Поиск по E2E-телу на сервере не индексируется ([search-service.md](search-service.md)).
 

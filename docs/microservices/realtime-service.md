@@ -119,7 +119,7 @@ Realtime Instance A ──Redis Pub/Sub──► Realtime Instance B
 - Presence друзей
 - Персональные уведомления
 
-### DM (Фаза 1): список из Chat vs lazy `subscribe`
+### DM ([text-chat.md](../features/text-chat.md)): список из Chat vs lazy `subscribe`
 
 Требование выше («все активные чаты») для **DM** в реализации app stack разбивается так:
 

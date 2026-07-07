@@ -58,11 +58,11 @@ type AuthServiceClient interface {
 	ValidateToken(ctx context.Context, in *ValidateTokenRequest, opts ...grpc.CallOption) (*ValidateTokenResponse, error)
 	// Public JWKS for JWT verification.
 	GetJWKS(ctx context.Context, in *GetJWKSRequest, opts ...grpc.CallOption) (*GetJWKSResponse, error)
-	// Phase 13: switch active profile claim in next access JWT (primary-profile-bootstrap.md).
+	// See docs/features/multi-profile.md — switch active profile claim in next access JWT.
 	SwitchActiveProfile(ctx context.Context, in *SwitchActiveProfileRequest, opts ...grpc.CallOption) (*SwitchActiveProfileResponse, error)
-	// Phase 14: internal — platform moderation suspends account (docs/PLAN.md phase 14).
+	// Internal — platform moderation suspends account (docs/features/reports.md).
 	SetAccountStatus(ctx context.Context, in *SetAccountStatusRequest, opts ...grpc.CallOption) (*SetAccountStatusResponse, error)
-	// Phase 15: encrypted key backup (opaque blob; docs/features/encryption.md).
+	// See docs/features/encryption.md — encrypted key backup (opaque blob).
 	PutE2EKeyBackup(ctx context.Context, in *PutE2EKeyBackupRequest, opts ...grpc.CallOption) (*PutE2EKeyBackupResponse, error)
 	GetE2EKeyBackup(ctx context.Context, in *GetE2EKeyBackupRequest, opts ...grpc.CallOption) (*GetE2EKeyBackupResponse, error)
 	// Internal — Social SyncPhoneContacts: hashed phone → primary profile_id (accounts.phone).
@@ -267,11 +267,11 @@ type AuthServiceServer interface {
 	ValidateToken(context.Context, *ValidateTokenRequest) (*ValidateTokenResponse, error)
 	// Public JWKS for JWT verification.
 	GetJWKS(context.Context, *GetJWKSRequest) (*GetJWKSResponse, error)
-	// Phase 13: switch active profile claim in next access JWT (primary-profile-bootstrap.md).
+	// See docs/features/multi-profile.md — switch active profile claim in next access JWT.
 	SwitchActiveProfile(context.Context, *SwitchActiveProfileRequest) (*SwitchActiveProfileResponse, error)
-	// Phase 14: internal — platform moderation suspends account (docs/PLAN.md phase 14).
+	// Internal — platform moderation suspends account (docs/features/reports.md).
 	SetAccountStatus(context.Context, *SetAccountStatusRequest) (*SetAccountStatusResponse, error)
-	// Phase 15: encrypted key backup (opaque blob; docs/features/encryption.md).
+	// See docs/features/encryption.md — encrypted key backup (opaque blob).
 	PutE2EKeyBackup(context.Context, *PutE2EKeyBackupRequest) (*PutE2EKeyBackupResponse, error)
 	GetE2EKeyBackup(context.Context, *GetE2EKeyBackupRequest) (*GetE2EKeyBackupResponse, error)
 	// Internal — Social SyncPhoneContacts: hashed phone → primary profile_id (accounts.phone).

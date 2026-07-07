@@ -9,4 +9,4 @@ Backend services live under this tree as separate projects. `gateway/` is the im
 
 From the repository root, **`make build-all`** mirrors backend CI on the host: `check-toolchain` (Go 1.26, Docker daemon, Maven/Java), compose + buf in Docker, then host `go test`, `golangci-lint`, Gateway race tests, Auth `mvn test`, local images `voice-<service>:local`, and `testcontainers-prune`. Integration tests need Docker on the host (see [`pkg/integrationtest/`](pkg/integrationtest/) and [docs/TESTING.md](../../docs/TESTING.md)). Flutter is separate: **`make flutter-ci`**.
 
-SQL migrations for Phase 0–1 databases ([docs/DATA_SCOPE_V1.md](../../docs/DATA_SCOPE_V1.md)) are currently in [`migrations/`](migrations/). Ownership and tools: [docs/OPERATIONS.md](../../docs/OPERATIONS.md) (Flyway for Auth Java, golang-migrate for Go).
+SQL migrations for v1 core DM scope databases ([docs/DATA_SCOPE_V1.md](../../docs/DATA_SCOPE_V1.md)) are currently in [`migrations/`](migrations/). Ownership and tools: [docs/OPERATIONS.md](../../docs/OPERATIONS.md) (Flyway for Auth Java, golang-migrate for Go).

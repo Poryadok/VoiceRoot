@@ -4,7 +4,7 @@ import 'package:voice_frontend/backend/notifications_client.dart';
 import 'support/live_gateway_harness.dart';
 
 /// Verifies match_found push path is wired (token registration + match flow smoke).
-/// Full FCM delivery proof mirrors phase6_fcm_delivery against notification debug URL.
+/// Full FCM delivery proof mirrors fcm_delivery_e2e_live_test against notification debug URL.
 void main() {
   test('matchmaking user can register device for match_found push', () async {
     final probe = await probeLiveGateway();

@@ -72,7 +72,7 @@ type MessagingServiceClient interface {
 	GetBulkReadState(ctx context.Context, in *GetBulkReadStateRequest, opts ...grpc.CallOption) (*GetBulkReadStateResponse, error)
 	GetChatListMetadata(ctx context.Context, in *GetChatListMetadataRequest, opts ...grpc.CallOption) (*GetChatListMetadataResponse, error)
 	ListSharedMedia(ctx context.Context, in *ListSharedMediaRequest, opts ...grpc.CallOption) (*ListSharedMediaResponse, error)
-	// Phase 15: Signal pre-key directory for DM E2E (docs/features/encryption.md).
+	// Signal pre-key directory for DM E2E — docs/features/encryption.md.
 	UploadPreKeyBundle(ctx context.Context, in *UploadPreKeyBundleRequest, opts ...grpc.CallOption) (*UploadPreKeyBundleResponse, error)
 	GetPreKeyBundle(ctx context.Context, in *GetPreKeyBundleRequest, opts ...grpc.CallOption) (*GetPreKeyBundleResponse, error)
 }
@@ -325,7 +325,7 @@ type MessagingServiceServer interface {
 	GetBulkReadState(context.Context, *GetBulkReadStateRequest) (*GetBulkReadStateResponse, error)
 	GetChatListMetadata(context.Context, *GetChatListMetadataRequest) (*GetChatListMetadataResponse, error)
 	ListSharedMedia(context.Context, *ListSharedMediaRequest) (*ListSharedMediaResponse, error)
-	// Phase 15: Signal pre-key directory for DM E2E (docs/features/encryption.md).
+	// Signal pre-key directory for DM E2E — docs/features/encryption.md.
 	UploadPreKeyBundle(context.Context, *UploadPreKeyBundleRequest) (*UploadPreKeyBundleResponse, error)
 	GetPreKeyBundle(context.Context, *GetPreKeyBundleRequest) (*GetPreKeyBundleResponse, error)
 	mustEmbedUnimplementedMessagingServiceServer()

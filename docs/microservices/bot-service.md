@@ -77,7 +77,7 @@ service BotService {
   rpc CompleteInteraction(CompleteInteractionRequest) returns (CompleteInteractionResponse);
   rpc AutocompleteSlashOption(AutocompleteSlashOptionRequest) returns (AutocompleteSlashOptionResponse);
 
-  // Presence & scopes runtime (REST via Gateway — api-gateway.md §Фаза 16)
+  // Presence & scopes runtime (REST via Gateway — api-gateway.md §bots)
   rpc TouchPresence(TouchPresenceRequest) returns (TouchPresenceResponse);
   rpc AssignBotRole(AssignBotRoleRequest) returns (AssignBotRoleResponse);
   rpc RevokeBotRole(RevokeBotRoleRequest) returns (RevokeBotRoleResponse);

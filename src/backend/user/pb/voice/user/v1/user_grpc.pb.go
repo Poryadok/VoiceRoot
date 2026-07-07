@@ -53,7 +53,7 @@ const (
 // User Service — profiles, privacy, presence. HTTP: /api/v1/users/**.
 type UserServiceClient interface {
 	// S2S bootstrap from Auth: ensure one primary profile per account before JWT is issued.
-	// Target: called only from trusted Auth; not exposed via public Gateway REST in Phase 1.
+	// Target: called only from trusted Auth; not exposed via public Gateway REST in v1 DM scope.
 	EnsurePrimaryProfile(ctx context.Context, in *EnsurePrimaryProfileRequest, opts ...grpc.CallOption) (*EnsurePrimaryProfileResponse, error)
 	GetProfile(ctx context.Context, in *GetProfileRequest, opts ...grpc.CallOption) (*GetProfileResponse, error)
 	GetProfiles(ctx context.Context, in *GetProfilesRequest, opts ...grpc.CallOption) (*GetProfilesResponse, error)
@@ -63,7 +63,7 @@ type UserServiceClient interface {
 	SwitchProfile(ctx context.Context, in *SwitchProfileRequest, opts ...grpc.CallOption) (*SwitchProfileResponse, error)
 	ListMyProfiles(ctx context.Context, in *ListMyProfilesRequest, opts ...grpc.CallOption) (*ListMyProfilesResponse, error)
 	// Discover profiles by query (username / display_name) for friend requests and DM addressing.
-	// Phase 1 (PLAN): reads user_db; privacy + blocks enforced server-side. Not Search Service (Фаза 9).
+	// Friend/DM profile discovery — user_db; privacy + blocks enforced. Global search: docs/features/search.md.
 	SearchProfiles(ctx context.Context, in *SearchProfilesRequest, opts ...grpc.CallOption) (*SearchProfilesResponse, error)
 	GetPrivacySettings(ctx context.Context, in *GetPrivacySettingsRequest, opts ...grpc.CallOption) (*GetPrivacySettingsResponse, error)
 	UpdatePrivacySettings(ctx context.Context, in *UpdatePrivacySettingsRequest, opts ...grpc.CallOption) (*UpdatePrivacySettingsResponse, error)
@@ -81,7 +81,7 @@ type UserServiceClient interface {
 	StartOrganizationVerification(ctx context.Context, in *StartOrganizationVerificationRequest, opts ...grpc.CallOption) (*StartOrganizationVerificationResponse, error)
 	CheckOrganizationVerification(ctx context.Context, in *CheckOrganizationVerificationRequest, opts ...grpc.CallOption) (*CheckOrganizationVerificationResponse, error)
 	ApplyDowngradeProfiles(ctx context.Context, in *ApplyDowngradeProfilesRequest, opts ...grpc.CallOption) (*ApplyDowngradeProfilesResponse, error)
-	// Phase 1 (PLAN § R2): presigned PUT to Cloudflare R2 for static profile avatar (no File Service).
+	// Presigned PUT to Cloudflare R2 for static profile avatar (docs/features/user-profile.md).
 	CreateAvatarPresignedUpload(ctx context.Context, in *CreateAvatarPresignedUploadRequest, opts ...grpc.CallOption) (*CreateAvatarPresignedUploadResponse, error)
 }
 
@@ -350,7 +350,7 @@ func (c *userServiceClient) CreateAvatarPresignedUpload(ctx context.Context, in 
 // User Service — profiles, privacy, presence. HTTP: /api/v1/users/**.
 type UserServiceServer interface {
 	// S2S bootstrap from Auth: ensure one primary profile per account before JWT is issued.
-	// Target: called only from trusted Auth; not exposed via public Gateway REST in Phase 1.
+	// Target: called only from trusted Auth; not exposed via public Gateway REST in v1 DM scope.
 	EnsurePrimaryProfile(context.Context, *EnsurePrimaryProfileRequest) (*EnsurePrimaryProfileResponse, error)
 	GetProfile(context.Context, *GetProfileRequest) (*GetProfileResponse, error)
 	GetProfiles(context.Context, *GetProfilesRequest) (*GetProfilesResponse, error)
@@ -360,7 +360,7 @@ type UserServiceServer interface {
 	SwitchProfile(context.Context, *SwitchProfileRequest) (*SwitchProfileResponse, error)
 	ListMyProfiles(context.Context, *ListMyProfilesRequest) (*ListMyProfilesResponse, error)
 	// Discover profiles by query (username / display_name) for friend requests and DM addressing.
-	// Phase 1 (PLAN): reads user_db; privacy + blocks enforced server-side. Not Search Service (Фаза 9).
+	// Friend/DM profile discovery — user_db; privacy + blocks enforced. Global search: docs/features/search.md.
 	SearchProfiles(context.Context, *SearchProfilesRequest) (*SearchProfilesResponse, error)
 	GetPrivacySettings(context.Context, *GetPrivacySettingsRequest) (*GetPrivacySettingsResponse, error)
 	UpdatePrivacySettings(context.Context, *UpdatePrivacySettingsRequest) (*UpdatePrivacySettingsResponse, error)
@@ -378,7 +378,7 @@ type UserServiceServer interface {
 	StartOrganizationVerification(context.Context, *StartOrganizationVerificationRequest) (*StartOrganizationVerificationResponse, error)
 	CheckOrganizationVerification(context.Context, *CheckOrganizationVerificationRequest) (*CheckOrganizationVerificationResponse, error)
 	ApplyDowngradeProfiles(context.Context, *ApplyDowngradeProfilesRequest) (*ApplyDowngradeProfilesResponse, error)
-	// Phase 1 (PLAN § R2): presigned PUT to Cloudflare R2 for static profile avatar (no File Service).
+	// Presigned PUT to Cloudflare R2 for static profile avatar (docs/features/user-profile.md).
 	CreateAvatarPresignedUpload(context.Context, *CreateAvatarPresignedUploadRequest) (*CreateAvatarPresignedUploadResponse, error)
 	mustEmbedUnimplementedUserServiceServer()
 }

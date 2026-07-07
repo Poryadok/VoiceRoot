@@ -12,7 +12,7 @@ void main() {
   const config = GatewayConfig(baseUrl: 'http://api.test');
   const auth = 'Bearer access-token';
 
-  test('startCall posts Phase 2 voice call payload', () async {
+  test('startCall posts voice call payload', () async {
     String? capturedBody;
     final mock = MockClient((req) async {
       expect(req.method, 'POST');

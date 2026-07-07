@@ -13,7 +13,7 @@
 | HTTP prefix (`/api/v1/...`) | Целевой сервис        | Примечание |
 |----------------------------|------------------------|------------|
 | `auth/**`                  | Auth Service           | Публичные login/register — без JWT (см. api-gateway) |
-| `users/**`                 | User Service           | Фаза 1: `POST …/users/me/avatar/presigned-upload` → `CreateAvatarPresignedUpload` (см. [api-gateway.md](microservices/api-gateway.md)) |
+| `users/**`                 | User Service           | [user-profile.md](features/user-profile.md): `POST …/users/me/avatar/presigned-upload` → `CreateAvatarPresignedUpload` (см. [api-gateway.md](microservices/api-gateway.md)) |
 | `friends/**`               | Social Service         | |
 | `chats/**`                 | Chat Service           | |
 | `messages/**`              | Messaging Service      | |
@@ -45,7 +45,7 @@
 
 Типичные **синхронные** gRPC между сервисами (не через Gateway) и async-паттерн для ядра чата — таблица «Tier 0: типичные связи» в [MICROSERVICES.md](MICROSERVICES.md).
 
-### Bot Service → S2S (примеры, Фаза 16)
+### Bot Service → S2S (примеры, [bots.md](features/bots.md))
 
 | Caller | Callee | RPC | Триггер |
 |--------|--------|-----|---------|

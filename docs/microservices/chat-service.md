@@ -92,7 +92,7 @@ folder_chats (для custom folders)
 └── added_at
 ```
 
-### V1 (Фаза 0-1) — детальный профиль для DDL
+### V1 (core DM scope) — детальный профиль для DDL
 
 В первой волне миграций Chat ограничен DM-сценарием:
 - `chats` с `type = dm`

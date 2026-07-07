@@ -50,7 +50,7 @@ type SubscriptionServiceClient interface {
 	HandlePaddleWebhook(ctx context.Context, in *HandlePaddleWebhookRequest, opts ...grpc.CallOption) (*HandlePaddleWebhookResponse, error)
 	HandleCloudPaymentsWebhook(ctx context.Context, in *HandleCloudPaymentsWebhookRequest, opts ...grpc.CallOption) (*HandleCloudPaymentsWebhookResponse, error)
 	GetBillingHistory(ctx context.Context, in *GetBillingHistoryRequest, opts ...grpc.CallOption) (*GetBillingHistoryResponse, error)
-	// Phase 13: keep selected profiles when downgrading from premium (multi-profile.md).
+	// See docs/features/multi-profile.md — keep selected profiles when downgrading from premium.
 	ApplyDowngradeProfiles(ctx context.Context, in *ApplyDowngradeProfilesRequest, opts ...grpc.CallOption) (*ApplyDowngradeProfilesResponse, error)
 }
 
@@ -199,7 +199,7 @@ type SubscriptionServiceServer interface {
 	HandlePaddleWebhook(context.Context, *HandlePaddleWebhookRequest) (*HandlePaddleWebhookResponse, error)
 	HandleCloudPaymentsWebhook(context.Context, *HandleCloudPaymentsWebhookRequest) (*HandleCloudPaymentsWebhookResponse, error)
 	GetBillingHistory(context.Context, *GetBillingHistoryRequest) (*GetBillingHistoryResponse, error)
-	// Phase 13: keep selected profiles when downgrading from premium (multi-profile.md).
+	// See docs/features/multi-profile.md — keep selected profiles when downgrading from premium.
 	ApplyDowngradeProfiles(context.Context, *ApplyDowngradeProfilesRequest) (*ApplyDowngradeProfilesResponse, error)
 	mustEmbedUnimplementedSubscriptionServiceServer()
 }

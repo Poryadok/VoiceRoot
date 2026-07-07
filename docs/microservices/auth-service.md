@@ -20,7 +20,7 @@
 - Конвертация гостевого аккаунта в полноценный
 - Soft delete аккаунта (30-дневный grace period)
 - JWKS endpoint для публичных ключей (используется Gateway и другими сервисами)
-- **Фаза 1:** перед выдачей access JWT обеспечивается первичный профиль в `user_db` (claim `profile_id` = `profiles.id`); см. [primary-profile-bootstrap.md](primary-profile-bootstrap.md), [EXEC_PLAN.md](../EXEC_PLAN.md).
+- **[auth-and-contacts](../features/auth-and-contacts.md):** перед выдачей access JWT обеспечивается первичный профиль в `user_db` (claim `profile_id` = `profiles.id`); см. [primary-profile-bootstrap.md](primary-profile-bootstrap.md), [EXEC_PLAN.md](../EXEC_PLAN.md).
 - OTP генерация и валидация (email)
 
 ### PR и ревью (bootstrap JWT ↔ User)
@@ -47,12 +47,12 @@ service AuthService {
   rpc RestoreAccount(RestoreAccountRequest) returns (RestoreAccountResponse);
   rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse); // internal
   rpc GetJWKS(GetJWKSRequest) returns (GetJWKSResponse); // public
-  rpc PutE2EKeyBackup(PutE2EKeyBackupRequest) returns (PutE2EKeyBackupResponse); // app stack5
+  rpc PutE2EKeyBackup(PutE2EKeyBackupRequest) returns (PutE2EKeyBackupResponse); // encryption.md
   rpc GetE2EKeyBackup(GetE2EKeyBackupRequest) returns (GetE2EKeyBackupResponse);
 }
 ```
 
-### app stack5 — E2E key backup (REST via Gateway)
+### E2E key backup ([encryption.md](../features/encryption.md), REST via Gateway)
 
 Клиент хранит парольно-зашифрованный бэкап ключей Signal на сервере; сервер видит только opaque blob ([encryption.md](../features/encryption.md)).
 
@@ -99,14 +99,14 @@ otp_codes
 ├── used_at (nullable)
 └── created_at
 
-e2e_key_backups (app stack5)
+e2e_key_backups ([encryption.md](../features/encryption.md))
 ├── account_id (UUID, PK, logical ref → accounts.id)
 ├── encrypted_blob (TEXT, client-encrypted opaque payload)
 ├── password_hint (nullable)
 └── updated_at
 ```
 
-### V1 (Фаза 0-1) — детальный профиль для DDL
+### V1 (core DM scope) — детальный профиль для DDL
 
 ```
 accounts
@@ -140,7 +140,7 @@ otp_codes
 ├── used_at TIMESTAMPTZ NULL
 └── created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 
-e2e_key_backups (app stack5, Flyway V4__e2e_key_backups.sql)
+e2e_key_backups ([encryption.md](../features/encryption.md), Flyway V4__e2e_key_backups.sql)
 ├── account_id UUID PRIMARY KEY -- logical ref → accounts.id
 ├── encrypted_blob TEXT NOT NULL
 ├── password_hint TEXT NULL

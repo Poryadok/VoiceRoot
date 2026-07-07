@@ -38,7 +38,7 @@ Schema for `auth_db` is defined in two places; apply it with **one** tool per da
 - `AUTH_JWT_PRIVATE_KEY_PEM` or `AUTH_JWT_PRIVATE_KEY_LOCATION`
 - `AUTH_FLYWAY_ENABLED` (default `true`) — set `false` for Path B (schema applied only via golang-migrate).
 
-## User DB (`user_db`) — первичный профиль (Фаза 1)
+## User DB (`user_db`) — первичный профиль ([auth-and-contacts.md](../../../docs/features/auth-and-contacts.md))
 
 При `auth.persistence=jdbc` нужен второй JDBC URL к **`user_db`**, чтобы перед выдачей access JWT создавалась строка в `profiles` (см. [EXEC_PLAN.md](../../../docs/EXEC_PLAN.md), [primary-profile-bootstrap.md](../../../docs/microservices/primary-profile-bootstrap.md)):
 

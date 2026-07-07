@@ -3,7 +3,7 @@ import 'package:voice_frontend/l10n/app_localizations_en.dart';
 import 'package:voice_frontend/l10n/app_localizations_ru.dart';
 
 void main() {
-  test('Phase 2 call strings exist in EN and RU', () {
+  test('voice call strings exist in EN and RU', () {
     final en = AppLocalizationsEn();
     final ru = AppLocalizationsRu();
 

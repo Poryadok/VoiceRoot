@@ -32,7 +32,7 @@ data:
   GATEWAY_CORS_ALLOWED_ORIGINS: "*"
   # Fallback when gateway_db.client_versions is empty; see docker-compose.yml.
   GATEWAY_VERSION_CONFIGS_JSON: '{"windows":{"min_supported_version":"1.0.0","latest_version":"1.0.0","update_url":"https://updates.voice.example/windows/appcast.xml","release_notes":"Staging"},"android":{"min_supported_version":"1.0.0","latest_version":"1.0.0","update_url":"https://play.google.com/store/apps/details?id=voice.app.voice_frontend","release_notes":"","shorebird_patch":0}}'
-  # Developer Portal OAuth (app stack6) — substituted by render-and-apply.sh from domains.defaults
+  # Developer Portal OAuth ([bots.md](../../docs/features/bots.md)) — substituted by render-and-apply.sh from domains.defaults
   AUTH_OAUTH_PUBLIC_API_BASE_URL: "https://__GATEWAY_INGRESS_HOST__"
   AUTH_OAUTH_DEVELOPER_PORTAL_ENABLED: "true"
   AUTH_OAUTH_DEVELOPER_PORTAL_CLIENT_ID: "voice-developer-portal"

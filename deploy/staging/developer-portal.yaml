@@ -1,4 +1,4 @@
-# Developer Portal static site (app stack6). Build image with VITE_VOICE_API_BASE + VITE_OAUTH_CLIENT_ID
+# Developer Portal static site ([bots.md](../../docs/features/bots.md)). Build image with VITE_VOICE_API_BASE + VITE_OAUTH_CLIENT_ID
 # matching voice-auth OAuth env — see docs/DEPLOYMENT.md.
 # Substitute __IMAGE_REGISTRY__ / __IMAGE_TAG__ / __DEVELOPER_PORTAL_INGRESS_HOST__ before apply.
 ---

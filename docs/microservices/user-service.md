@@ -20,16 +20,16 @@
 - Last seen timestamp
 - Onboarding state (шаги туториала)
 - Управление настройками (язык, тема, уведомления)
-- **Поиск профилей для добавления в друзья / открытия DM (Фаза 1)** — запрос к `user_db` (не Search Service и не `search_db`; см. [DATA_SCOPE_V1.md](../DATA_SCOPE_V1.md), таблица фич)
+- **Поиск профилей для добавления в друзья / открытия DM** ([friends.md](../features/friends.md), v1) — запрос к `user_db` (не Search Service и не `search_db`; см. [DATA_SCOPE_V1.md](../DATA_SCOPE_V1.md), таблица фич)
 
 ## Поиск профилей vs Search Service
 
 | Канал | RPC | Когда |
 |-------|-----|--------|
-| **User Service** | `SearchProfiles` | PLAN Фаза 1: подбор по нику/отображаемому имени из канонических данных профиля; учёт приватности и блокировок (совместно с Social при необходимости). |
-| **Search Service** | `SearchUsers` / `SearchGlobal` | Фаза 9+: полнотекст и глобальный поиск по проекциям в `search_db` / внешнем движке — [search-service.md](search-service.md). |
+| **User Service** | `SearchProfiles` | [friends.md](../features/friends.md), v1: подбор по нику/отображаемому имени из канонических данных профиля; учёт приватности и блокировок (совместно с Social при необходимости). |
+| **Search Service** | `SearchUsers` / `SearchGlobal` | [search.md](../features/search.md): полнотекст и глобальный поиск по проекциям в `search_db` / внешнем движке — [search-service.md](search-service.md). |
 
-Клиент Фазы 1 для чеклиста «Поиск пользователей» в [PLAN.md](../PLAN.md) опирается на **`UserService.SearchProfiles`** (HTTP-префикс того же сервиса: `/api/v1/users/**` — [api-gateway.md](api-gateway.md), в т.ч. **presigned аватар:** `POST /api/v1/users/me/avatar/presigned-upload` → `CreateAvatarPresignedUpload`).
+Клиент v1 для чеклиста «Поиск пользователей» в [PLAN.md](../PLAN.md) опирается на **`UserService.SearchProfiles`** (HTTP-префикс того же сервиса: `/api/v1/users/**` — [api-gateway.md](api-gateway.md), в т.ч. **presigned аватар:** `POST /api/v1/users/me/avatar/presigned-upload` → `CreateAvatarPresignedUpload`).
 
 ## API (gRPC)
 
@@ -108,7 +108,7 @@ presence (Redis Hash)
 ├── profile_id → { status, game, custom_status, last_seen, call_info }
 ```
 
-### V1 (Фаза 0-1) — детальный профиль для DDL
+### V1 (core DM scope) — детальный профиль для DDL
 
 В первой волне миграций используются только `profiles` и `onboarding_state`.
 `privacy_settings` и расширенные Premium-поля остаются target-state и добавляются отдельной волной.
@@ -167,6 +167,6 @@ onboarding_state
 - **Auth Service** — account_id валидация
 - **Subscription Service** — проверка лимитов (мульти-профили, кастомный статус)
 - **Redis** — presence кэш (TTL 5 мин, heartbeat)
-- **File Service** — загрузка аватара/баннера (целевой контур); **Фаза 1:** минимальный R2/presigned для статичного аватара может жить в User без отдельного File Service — [PLAN.md](../PLAN.md)
+- **File Service** — загрузка аватара/баннера (целевой контур); **[user-profile.md](../features/user-profile.md), v1:** минимальный R2/presigned для статичного аватара может жить в User без отдельного File Service — [PLAN.md](../PLAN.md)
 
 

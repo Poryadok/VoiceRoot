@@ -7,7 +7,7 @@ import '../../state/matchmaking_providers.dart';
 import '../core/voice_state_panel.dart';
 import 'game_detail_screen.dart';
 
-/// Browse matchmaking game catalog (Phase 7).
+/// Browse matchmaking game catalog (docs/features/game-catalog.md).
 class GameCatalogScreen extends ConsumerStatefulWidget {
   const GameCatalogScreen({super.key, this.selectMode = false});
 

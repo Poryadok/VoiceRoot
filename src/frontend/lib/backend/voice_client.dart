@@ -180,7 +180,7 @@ class VoiceCallsClient {
     );
   }
 
-  /// Join an active group voice call (Phase 4).
+  /// Join an active group voice call (docs/features/voice-chat.md).
   Future<VoiceApiResult<VoiceCallSession>> joinCall({
     required String authorization,
     required String roomId,
@@ -243,7 +243,7 @@ class VoiceCallsClient {
     );
   }
 
-  /// Phase 5 space voice room — join persistent room in a space.
+  /// Space voice room — join persistent room in a space (docs/features/spaces.md).
   Future<VoiceApiResult<VoiceRoomSession>> joinVoiceRoom({
     required String authorization,
     required String voiceRoomId,

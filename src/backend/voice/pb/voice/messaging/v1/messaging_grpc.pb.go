@@ -19,26 +19,27 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	MessagingService_SendMessage_FullMethodName         = "/voice.messaging.v1.MessagingService/SendMessage"
-	MessagingService_EditMessage_FullMethodName         = "/voice.messaging.v1.MessagingService/EditMessage"
-	MessagingService_DeleteMessage_FullMethodName       = "/voice.messaging.v1.MessagingService/DeleteMessage"
-	MessagingService_GetMessages_FullMethodName         = "/voice.messaging.v1.MessagingService/GetMessages"
-	MessagingService_GetMessage_FullMethodName          = "/voice.messaging.v1.MessagingService/GetMessage"
-	MessagingService_GetThreadMessages_FullMethodName   = "/voice.messaging.v1.MessagingService/GetThreadMessages"
-	MessagingService_ListThreads_FullMethodName         = "/voice.messaging.v1.MessagingService/ListThreads"
-	MessagingService_AddReaction_FullMethodName         = "/voice.messaging.v1.MessagingService/AddReaction"
-	MessagingService_RemoveReaction_FullMethodName      = "/voice.messaging.v1.MessagingService/RemoveReaction"
-	MessagingService_PinMessage_FullMethodName          = "/voice.messaging.v1.MessagingService/PinMessage"
-	MessagingService_UnpinMessage_FullMethodName        = "/voice.messaging.v1.MessagingService/UnpinMessage"
-	MessagingService_GetPinnedMessages_FullMethodName   = "/voice.messaging.v1.MessagingService/GetPinnedMessages"
-	MessagingService_ForwardMessage_FullMethodName      = "/voice.messaging.v1.MessagingService/ForwardMessage"
-	MessagingService_MarkRead_FullMethodName            = "/voice.messaging.v1.MessagingService/MarkRead"
-	MessagingService_GetReadState_FullMethodName        = "/voice.messaging.v1.MessagingService/GetReadState"
-	MessagingService_GetBulkReadState_FullMethodName    = "/voice.messaging.v1.MessagingService/GetBulkReadState"
-	MessagingService_GetChatListMetadata_FullMethodName = "/voice.messaging.v1.MessagingService/GetChatListMetadata"
-	MessagingService_ListSharedMedia_FullMethodName     = "/voice.messaging.v1.MessagingService/ListSharedMedia"
-	MessagingService_UploadPreKeyBundle_FullMethodName  = "/voice.messaging.v1.MessagingService/UploadPreKeyBundle"
-	MessagingService_GetPreKeyBundle_FullMethodName     = "/voice.messaging.v1.MessagingService/GetPreKeyBundle"
+	MessagingService_SendMessage_FullMethodName                  = "/voice.messaging.v1.MessagingService/SendMessage"
+	MessagingService_EditMessage_FullMethodName                  = "/voice.messaging.v1.MessagingService/EditMessage"
+	MessagingService_DeleteMessage_FullMethodName                = "/voice.messaging.v1.MessagingService/DeleteMessage"
+	MessagingService_GetMessages_FullMethodName                  = "/voice.messaging.v1.MessagingService/GetMessages"
+	MessagingService_GetMessage_FullMethodName                   = "/voice.messaging.v1.MessagingService/GetMessage"
+	MessagingService_GetThreadMessages_FullMethodName            = "/voice.messaging.v1.MessagingService/GetThreadMessages"
+	MessagingService_ListThreads_FullMethodName                  = "/voice.messaging.v1.MessagingService/ListThreads"
+	MessagingService_AddReaction_FullMethodName                  = "/voice.messaging.v1.MessagingService/AddReaction"
+	MessagingService_RemoveReaction_FullMethodName               = "/voice.messaging.v1.MessagingService/RemoveReaction"
+	MessagingService_PinMessage_FullMethodName                   = "/voice.messaging.v1.MessagingService/PinMessage"
+	MessagingService_UnpinMessage_FullMethodName                 = "/voice.messaging.v1.MessagingService/UnpinMessage"
+	MessagingService_GetPinnedMessages_FullMethodName            = "/voice.messaging.v1.MessagingService/GetPinnedMessages"
+	MessagingService_UnpinMessagesBySenderInChats_FullMethodName = "/voice.messaging.v1.MessagingService/UnpinMessagesBySenderInChats"
+	MessagingService_ForwardMessage_FullMethodName               = "/voice.messaging.v1.MessagingService/ForwardMessage"
+	MessagingService_MarkRead_FullMethodName                     = "/voice.messaging.v1.MessagingService/MarkRead"
+	MessagingService_GetReadState_FullMethodName                 = "/voice.messaging.v1.MessagingService/GetReadState"
+	MessagingService_GetBulkReadState_FullMethodName             = "/voice.messaging.v1.MessagingService/GetBulkReadState"
+	MessagingService_GetChatListMetadata_FullMethodName          = "/voice.messaging.v1.MessagingService/GetChatListMetadata"
+	MessagingService_ListSharedMedia_FullMethodName              = "/voice.messaging.v1.MessagingService/ListSharedMedia"
+	MessagingService_UploadPreKeyBundle_FullMethodName           = "/voice.messaging.v1.MessagingService/UploadPreKeyBundle"
+	MessagingService_GetPreKeyBundle_FullMethodName              = "/voice.messaging.v1.MessagingService/GetPreKeyBundle"
 )
 
 // MessagingServiceClient is the client API for MessagingService service.
@@ -63,13 +64,15 @@ type MessagingServiceClient interface {
 	PinMessage(ctx context.Context, in *PinMessageRequest, opts ...grpc.CallOption) (*PinMessageResponse, error)
 	UnpinMessage(ctx context.Context, in *UnpinMessageRequest, opts ...grpc.CallOption) (*UnpinMessageResponse, error)
 	GetPinnedMessages(ctx context.Context, in *GetPinnedMessagesRequest, opts ...grpc.CallOption) (*GetPinnedMessagesResponse, error)
+	// BOT-B: bulk unpin for bot uninstall cleanup (sender_profile_id + chat_ids).
+	UnpinMessagesBySenderInChats(ctx context.Context, in *UnpinMessagesBySenderInChatsRequest, opts ...grpc.CallOption) (*UnpinMessagesBySenderInChatsResponse, error)
 	ForwardMessage(ctx context.Context, in *ForwardMessageRequest, opts ...grpc.CallOption) (*ForwardMessageResponse, error)
 	MarkRead(ctx context.Context, in *MarkReadRequest, opts ...grpc.CallOption) (*MarkReadResponse, error)
 	GetReadState(ctx context.Context, in *GetReadStateRequest, opts ...grpc.CallOption) (*GetReadStateResponse, error)
 	GetBulkReadState(ctx context.Context, in *GetBulkReadStateRequest, opts ...grpc.CallOption) (*GetBulkReadStateResponse, error)
 	GetChatListMetadata(ctx context.Context, in *GetChatListMetadataRequest, opts ...grpc.CallOption) (*GetChatListMetadataResponse, error)
 	ListSharedMedia(ctx context.Context, in *ListSharedMediaRequest, opts ...grpc.CallOption) (*ListSharedMediaResponse, error)
-	// Phase 15: Signal pre-key directory for DM E2E (docs/features/encryption.md).
+	// Signal pre-key directory for DM E2E — docs/features/encryption.md.
 	UploadPreKeyBundle(ctx context.Context, in *UploadPreKeyBundleRequest, opts ...grpc.CallOption) (*UploadPreKeyBundleResponse, error)
 	GetPreKeyBundle(ctx context.Context, in *GetPreKeyBundleRequest, opts ...grpc.CallOption) (*GetPreKeyBundleResponse, error)
 }
@@ -202,6 +205,16 @@ func (c *messagingServiceClient) GetPinnedMessages(ctx context.Context, in *GetP
 	return out, nil
 }
 
+func (c *messagingServiceClient) UnpinMessagesBySenderInChats(ctx context.Context, in *UnpinMessagesBySenderInChatsRequest, opts ...grpc.CallOption) (*UnpinMessagesBySenderInChatsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UnpinMessagesBySenderInChatsResponse)
+	err := c.cc.Invoke(ctx, MessagingService_UnpinMessagesBySenderInChats_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *messagingServiceClient) ForwardMessage(ctx context.Context, in *ForwardMessageRequest, opts ...grpc.CallOption) (*ForwardMessageResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ForwardMessageResponse)
@@ -304,13 +317,15 @@ type MessagingServiceServer interface {
 	PinMessage(context.Context, *PinMessageRequest) (*PinMessageResponse, error)
 	UnpinMessage(context.Context, *UnpinMessageRequest) (*UnpinMessageResponse, error)
 	GetPinnedMessages(context.Context, *GetPinnedMessagesRequest) (*GetPinnedMessagesResponse, error)
+	// BOT-B: bulk unpin for bot uninstall cleanup (sender_profile_id + chat_ids).
+	UnpinMessagesBySenderInChats(context.Context, *UnpinMessagesBySenderInChatsRequest) (*UnpinMessagesBySenderInChatsResponse, error)
 	ForwardMessage(context.Context, *ForwardMessageRequest) (*ForwardMessageResponse, error)
 	MarkRead(context.Context, *MarkReadRequest) (*MarkReadResponse, error)
 	GetReadState(context.Context, *GetReadStateRequest) (*GetReadStateResponse, error)
 	GetBulkReadState(context.Context, *GetBulkReadStateRequest) (*GetBulkReadStateResponse, error)
 	GetChatListMetadata(context.Context, *GetChatListMetadataRequest) (*GetChatListMetadataResponse, error)
 	ListSharedMedia(context.Context, *ListSharedMediaRequest) (*ListSharedMediaResponse, error)
-	// Phase 15: Signal pre-key directory for DM E2E (docs/features/encryption.md).
+	// Signal pre-key directory for DM E2E — docs/features/encryption.md.
 	UploadPreKeyBundle(context.Context, *UploadPreKeyBundleRequest) (*UploadPreKeyBundleResponse, error)
 	GetPreKeyBundle(context.Context, *GetPreKeyBundleRequest) (*GetPreKeyBundleResponse, error)
 	mustEmbedUnimplementedMessagingServiceServer()
@@ -358,6 +373,9 @@ func (UnimplementedMessagingServiceServer) UnpinMessage(context.Context, *UnpinM
 }
 func (UnimplementedMessagingServiceServer) GetPinnedMessages(context.Context, *GetPinnedMessagesRequest) (*GetPinnedMessagesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetPinnedMessages not implemented")
+}
+func (UnimplementedMessagingServiceServer) UnpinMessagesBySenderInChats(context.Context, *UnpinMessagesBySenderInChatsRequest) (*UnpinMessagesBySenderInChatsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UnpinMessagesBySenderInChats not implemented")
 }
 func (UnimplementedMessagingServiceServer) ForwardMessage(context.Context, *ForwardMessageRequest) (*ForwardMessageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ForwardMessage not implemented")
@@ -620,6 +638,24 @@ func _MessagingService_GetPinnedMessages_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MessagingService_UnpinMessagesBySenderInChats_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnpinMessagesBySenderInChatsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServiceServer).UnpinMessagesBySenderInChats(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessagingService_UnpinMessagesBySenderInChats_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServiceServer).UnpinMessagesBySenderInChats(ctx, req.(*UnpinMessagesBySenderInChatsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _MessagingService_ForwardMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ForwardMessageRequest)
 	if err := dec(in); err != nil {
@@ -818,6 +854,10 @@ var MessagingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetPinnedMessages",
 			Handler:    _MessagingService_GetPinnedMessages_Handler,
+		},
+		{
+			MethodName: "UnpinMessagesBySenderInChats",
+			Handler:    _MessagingService_UnpinMessagesBySenderInChats_Handler,
 		},
 		{
 			MethodName: "ForwardMessage",

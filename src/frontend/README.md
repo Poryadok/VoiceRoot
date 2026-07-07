@@ -1,10 +1,10 @@
 # Frontend (Flutter)
 
-Voice client (Flutter Web/Desktop/Mobile). Phases 0–10 UI on local `make compose-app-up` — см. [docs/PLAN.md](../../docs/PLAN.md).
+Voice client (Flutter Web/Desktop/Mobile). Full app stack UI on local `make compose-app-up` — см. [docs/PLAN.md](../../docs/PLAN.md).
 
 ## Client
 
-- Three-column shell ([docs/features/navigation.md](../../docs/features/navigation.md)); mobile strip + responsive layout (Phase 8).
+- Three-column shell ([docs/features/navigation.md](../../docs/features/navigation.md)); mobile strip + responsive layout ([platforms.md](../../docs/features/platforms.md)).
 - Auth, social, DM/groups/spaces, matchmaking, search, voice, push hooks — чеклисты в [docs/PLAN.md](../../docs/PLAN.md).
 - API base URL: `--dart-define=VOICE_API_BASE_URL=https://your-gateway` (empty = offline / tests inject via Riverpod).
 - Riverpod + Gateway/Auth/Users/Social/Chat/Messaging/Realtime clients.
@@ -33,7 +33,7 @@ CI: [.github/workflows/ci.yml](../../.github/workflows/ci.yml) — tier 1 job `f
 - Build uses `auto_updater` (WinSparkle) for signed delta updates; publish `appcast.xml` from [`scripts/release/appcast-template.xml`](../../scripts/release/appcast-template.xml) to CDN/R2.
 - Gateway serves `/api/v1/version?platform=windows` and returns `426` when `X-Voice-Client-Version` is below `min_supported_version` ([docs/features/updates.md](../../docs/features/updates.md)).
 
-## Docker (app stack stack)
+## Docker (full app stack)
 
 Из корня репозитория:
 

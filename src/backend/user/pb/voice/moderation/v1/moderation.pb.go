@@ -280,7 +280,7 @@ type ListReportsRequest struct {
 	state        protoimpl.MessageState `protogen:"open.v1"`
 	StatusFilter string                 `protobuf:"bytes,1,opt,name=status_filter,json=statusFilter,proto3" json:"status_filter,omitempty"`
 	Page         *v1.CursorPageRequest  `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
-	// Phase 14: "content" (user/message) vs "spaces" queues — docs/features/reports.md.
+	// "content" (user/message) vs "spaces" queues — docs/features/reports.md.
 	QueueFilter   string `protobuf:"bytes,3,opt,name=queue_filter,json=queueFilter,proto3" json:"queue_filter,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

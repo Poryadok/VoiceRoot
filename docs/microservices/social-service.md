@@ -81,7 +81,7 @@ blocks
 └── UNIQUE(blocker_account_id, blocked_account_id)
 ```
 
-### V1 (Фаза 0-1) — детальный профиль для DDL
+### V1 (core DM scope) — детальный профиль для DDL
 
 В первой волне миграций используются `friendships` и `blocks`.
 `contacts` откладывается отдельной миграцией после ядра DM/friends.

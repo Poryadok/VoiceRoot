@@ -1,5 +1,5 @@
 # Image is substituted in CI (sed) before kubectl apply — see docs/DEPLOYMENT.md.
-# Full phases 0–10 upstreams: voice-app-config ConfigMap + voice-app-secrets Secret.
+# Full app stack upstreams: voice-app-config ConfigMap + voice-app-secrets Secret.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
