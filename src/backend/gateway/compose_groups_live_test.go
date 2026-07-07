@@ -25,7 +25,7 @@ func TestComposeGroups_live(t *testing.T) {
 	sessC := registerComposeUser(t, client, base, formatComposeEmail("group-member-c", n), "VoiceQaTest1!")
 
 	chatID := createComposeGroup(t, client, base, sessA.AccessToken, "Friday squad")
-	addComposeGroupMembers(t, client, base, sessA.AccessToken, chatID, sessB.ProfileID, sessC.ProfileID)
+	addComposeGroupMembersForInvitees(t, client, base, sessA.AccessToken, chatID, sessB, sessC)
 
 	listB := listComposeChats(t, client, base, sessB.AccessToken, "main")
 	require.True(t, slices.ContainsFunc(listB, func(item composeChatListItem) bool {

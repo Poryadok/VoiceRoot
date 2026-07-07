@@ -31,7 +31,7 @@ func TestComposePhase16BotsSlash_live(t *testing.T) {
 	sess := registerComposeUser(t, client, base, formatComposeEmail("p16-owner", n), "VoiceQaTest1!")
 	spaceID := createComposeSpace(t, client, base, sess.AccessToken, fmt.Sprintf("Bots E2E %d", n), "phase16")
 	chatID := createComposeGroup(t, client, base, sess.AccessToken, fmt.Sprintf("bots-%d", n))
-	addComposeGroupMembers(t, client, base, sess.AccessToken, chatID, sessB.ProfileID, sessC.ProfileID)
+	addComposeGroupMembersForInvitees(t, client, base, sess.AccessToken, chatID, sessB, sessC)
 	require.NotEmpty(t, chatID, "expected group chat id")
 
 	botID, botToken := registerComposeBot(t, client, base, sess.AccessToken, fmt.Sprintf("PingBot-%d", n))
@@ -88,7 +88,7 @@ func TestComposePhase16BotsEphemeral_live(t *testing.T) {
 	sess := registerComposeUser(t, client, base, formatComposeEmail("p16-eph-a", n), "VoiceQaTest1!")
 	spaceID := createComposeSpace(t, client, base, sess.AccessToken, fmt.Sprintf("Bots Ephemeral %d", n), "phase16")
 	chatID := createComposeGroup(t, client, base, sess.AccessToken, fmt.Sprintf("bots-eph-%d", n))
-	addComposeGroupMembers(t, client, base, sess.AccessToken, chatID, sessB.ProfileID, sessC.ProfileID)
+	addComposeGroupMembersForInvitees(t, client, base, sess.AccessToken, chatID, sessB, sessC)
 
 	botID, botToken := registerComposeBot(t, client, base, sess.AccessToken, fmt.Sprintf("EphBot-%d", n))
 	applyComposeBotManifestPolling(t, client, base, sess.AccessToken, botID)
@@ -281,7 +281,7 @@ func TestComposePhase16BotsSlashDeferred_live(t *testing.T) {
 	sess := registerComposeUser(t, client, base, formatComposeEmail("p16-defer", n), "VoiceQaTest1!")
 	spaceID := createComposeSpace(t, client, base, sess.AccessToken, fmt.Sprintf("Bots Defer %d", n), "phase16")
 	chatID := createComposeGroup(t, client, base, sess.AccessToken, fmt.Sprintf("bots-defer-%d", n))
-	addComposeGroupMembers(t, client, base, sess.AccessToken, chatID, sessB.ProfileID, sessC.ProfileID)
+	addComposeGroupMembersForInvitees(t, client, base, sess.AccessToken, chatID, sessB, sessC)
 
 	botID, botToken := registerComposeBot(t, client, base, sess.AccessToken, fmt.Sprintf("DeferBot-%d", n))
 	applyComposeBotManifestPolling(t, client, base, sess.AccessToken, botID)

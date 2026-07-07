@@ -90,17 +90,19 @@ func composeStaffToken(t *testing.T, client *http.Client, base string) string {
 	t.Helper()
 	// Try well-known static staff token from dev compose if configured.
 	for _, token := range []string{"staff-token", "compose-staff-token"} {
-		req, err := http.NewRequest(http.MethodGet, base+"/api/v1/admin/moderation/reports?status=pending&queue=content", nil)
+		req, err := http.NewRequest(http.MethodPost, base+"/api/v1/admin/moderation/sanctions", bytes.NewReader([]byte(`{}`)))
 		if err != nil {
 			continue
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
 		resp, err := client.Do(req)
 		if err != nil {
 			continue
 		}
 		resp.Body.Close()
-		if resp.StatusCode == http.StatusOK {
+		// 400 means gateway+moderation accepted staff auth (missing fields); 401 means missing profile_id on static token.
+		if resp.StatusCode == http.StatusBadRequest {
 			return token
 		}
 	}

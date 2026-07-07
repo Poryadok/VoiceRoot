@@ -66,7 +66,7 @@ func TestGatewayConfigFromEnvSelectsRedisLimiter(t *testing.T) {
 
 func TestGatewayConfigFromEnvSelectsAuthMode(t *testing.T) {
 	t.Setenv("GATEWAY_AUTH_MODE", "static")
-	t.Setenv("GATEWAY_STATIC_TOKENS_JSON", `{"dev-token":{"UserID":"account-1"}}`)
+	t.Setenv("GATEWAY_STATIC_TOKENS_JSON", `{"dev-token":{"user_id":"account-1"}}`)
 	staticConfig := loadGatewayConfigFromEnv()
 	if _, ok := staticConfig.tokenValidator.(staticTokenValidator); !ok {
 		t.Fatalf("static tokenValidator = %T, want staticTokenValidator", staticConfig.tokenValidator)
@@ -80,10 +80,14 @@ func TestGatewayConfigFromEnvSelectsAuthMode(t *testing.T) {
 		t.Fatalf("jwks tokenValidator = %T, want *voicejwt.Validator", jwksConfig.tokenValidator)
 	}
 
-	t.Setenv("GATEWAY_STATIC_TOKENS_JSON", `{"staff-token":{"UserID":"staff","Roles":["staff"]}}`)
+	t.Setenv("GATEWAY_STATIC_TOKENS_JSON", `{"staff-token":{"user_id":"staff","profile_id":"staff-profile","roles":["staff"]}}`)
 	chainedConfig := loadGatewayConfigFromEnv()
 	if _, ok := chainedConfig.tokenValidator.(chainedTokenValidator); !ok {
 		t.Fatalf("jwks+static tokenValidator = %T, want chainedTokenValidator", chainedConfig.tokenValidator)
+	}
+	claims := chainedConfig.tokenClaims["staff-token"]
+	if claims.UserID != "staff" || claims.ProfileID != "staff-profile" || len(claims.Roles) != 1 || claims.Roles[0] != "staff" {
+		t.Fatalf("static staff claims = %+v, want user_id/profile_id/roles from snake_case JSON", claims)
 	}
 }
 

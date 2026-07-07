@@ -451,6 +451,42 @@ func createComposeGroup(t *testing.T, client *http.Client, base, accessToken, na
 	return parsed.Chat.ID
 }
 
+func allowComposeChatSpaceInvitesEveryone(t *testing.T, client *http.Client, base string, accessTokens ...string) {
+	t.Helper()
+	everyone := map[string]any{
+		"friends": true, "friends_of_friends": true, "space_members": true, "include_guests": true,
+	}
+	body, err := json.Marshal(map[string]any{
+		"settings": map[string]any{
+			"allow_chat_space_invites": everyone,
+		},
+	})
+	require.NoError(t, err)
+	for _, token := range accessTokens {
+		req, err := http.NewRequest(http.MethodPatch, base+"/api/v1/users/me/privacy", bytes.NewReader(body))
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		respBody, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		require.Equal(t, http.StatusOK, resp.StatusCode, "PATCH privacy body=%s", string(respBody))
+	}
+}
+
+func addComposeGroupMembersForInvitees(t *testing.T, client *http.Client, base, ownerToken, chatID string, invitees ...authSessionResponse) {
+	t.Helper()
+	tokens := make([]string, 0, len(invitees))
+	profileIDs := make([]string, 0, len(invitees))
+	for _, inv := range invitees {
+		tokens = append(tokens, inv.AccessToken)
+		profileIDs = append(profileIDs, inv.ProfileID)
+	}
+	allowComposeChatSpaceInvitesEveryone(t, client, base, tokens...)
+	addComposeGroupMembers(t, client, base, ownerToken, chatID, profileIDs...)
+}
+
 func addComposeGroupMembers(t *testing.T, client *http.Client, base, accessToken, chatID string, profileIDs ...string) {
 	t.Helper()
 	payload, err := json.Marshal(map[string]any{"profile_ids": profileIDs})
@@ -472,7 +508,7 @@ func ensureComposeGroupReadyForBot(t *testing.T, client *http.Client, base, owne
 	t.Helper()
 	sessB := registerComposeUser(t, client, base, formatComposeEmail("p16-bot-member-b", n), "VoiceQaTest1!")
 	sessC := registerComposeUser(t, client, base, formatComposeEmail("p16-bot-member-c", n), "VoiceQaTest1!")
-	addComposeGroupMembers(t, client, base, ownerToken, chatID, sessB.ProfileID, sessC.ProfileID)
+	addComposeGroupMembersForInvitees(t, client, base, ownerToken, chatID, sessB, sessC)
 }
 
 func removeComposeGroupMember(t *testing.T, client *http.Client, base, accessToken, chatID, profileID string) {

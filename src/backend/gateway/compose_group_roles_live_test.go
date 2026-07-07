@@ -25,7 +25,7 @@ func TestComposeGroupRoles_live(t *testing.T) {
 	sessLeaver := registerComposeUser(t, client, base, formatComposeEmail("roles-leaver", n), "VoiceQaTest1!")
 
 	chatID := createComposeGroup(t, client, base, sessOwner.AccessToken, "Roles squad")
-	addComposeGroupMembers(t, client, base, sessOwner.AccessToken, chatID, sessB.ProfileID, sessC.ProfileID, sessLeaver.ProfileID)
+	addComposeGroupMembersForInvitees(t, client, base, sessOwner.AccessToken, chatID, sessB, sessC, sessLeaver)
 
 	members := listComposeGroupMembers(t, client, base, sessOwner.AccessToken, chatID)
 	roles := map[string]string{}
