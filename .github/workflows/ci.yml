@@ -615,7 +615,15 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Prepare compose env
-        run: cp .env.example .env
+        run: |
+          cp .env.example .env
+          cat >> .env <<'EOF'
+          FILE_R2_ENDPOINT=http://host.docker.internal:9000
+          FILE_R2_REGION=us-east-1
+          FILE_R2_ACCESS_KEY_ID=voice-minio
+          FILE_R2_SECRET_ACCESS_KEY=voice-minio-dev
+          FILE_R2_BUCKET=voice-dev-files
+          EOF
       - name: Start compose infra
         run: docker compose up -d --wait postgres redis nats
       - name: Wait for postgres

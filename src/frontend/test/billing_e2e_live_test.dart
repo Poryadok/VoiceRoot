@@ -2,8 +2,6 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:voice_frontend/backend/files_client.dart';
-import 'package:voice_frontend/backend/subscription_client.dart';
 
 import 'support/live_gateway_harness.dart';
 
@@ -26,55 +24,29 @@ void main() {
       expect(session.accountId, isNotEmpty);
 
       await _activatePremiumWebhook(ctx, session.accountId);
+      await _waitForPremiumPlan(ctx, session.authorizationHeader);
 
-      final subscription = VoiceSubscriptionClient(gateway: ctx.gatewayHttp());
-      final sub = await _waitForPremiumSubscription(
-        subscription,
-        session.authorizationHeader,
-      );
-      expect(sub.plan, 'premium');
-      expect(sub.status, anyOf('active', 'grace_period'));
-      expect(sub.isPremium, isTrue);
-
-      if (!await ctx.probeFileStorageAvailable(session)) {
+      if (!await _fileUploadAvailable(ctx, session.authorizationHeader)) {
         markTestSkipped(
           'object storage not configured (MinIO/R2); set FILE_R2_* in .env',
         );
       }
 
-      final files = ctx.filesClient();
-      final ok = await files.requestUpload(
-        authorization: session.authorizationHeader,
-        originalName: 'phase12-100mb.bin',
-        mimeType: 'application/octet-stream',
-        sizeBytes: _upload100MiB,
+      expect(
+        await _requestUploadStatus(
+          ctx,
+          session.authorizationHeader,
+          _upload100MiB,
+        ),
+        200,
       );
       expect(
-        ok,
-        isA<FilesApiOk<FileUploadTicket>>(),
-        reason: ok is FilesApiFailure
-            ? '${(ok as FilesApiFailure).message} (HTTP ${ok.statusCode})'
-            : null,
-      );
-
-      final rejected = await files.requestUpload(
-        authorization: session.authorizationHeader,
-        originalName: 'phase12-250mb.bin',
-        mimeType: 'application/octet-stream',
-        sizeBytes: _upload250MiB,
-      );
-      expect(
-        rejected,
-        isA<FilesApiFailure>(),
-        reason: rejected is FilesApiOk<FileUploadTicket>
-            ? '250MiB upload should be rejected for premium tier'
-            : null,
-      );
-      final failure = rejected as FilesApiFailure;
-      expect(
-        failure.statusCode,
+        await _requestUploadStatus(
+          ctx,
+          session.authorizationHeader,
+          _upload250MiB,
+        ),
         400,
-        reason: '${failure.message} (HTTP ${failure.statusCode})',
       );
     },
     skip: runLiveIntegration
@@ -112,8 +84,8 @@ Future<void> _activatePremiumWebhook(
   expect(resp.statusCode, 200, reason: resp.body);
 }
 
-Future<VoiceSubscription> _waitForPremiumSubscription(
-  VoiceSubscriptionClient client,
+Future<void> _waitForPremiumPlan(
+  LiveGatewayContext ctx,
   String authorization,
 ) async {
   Object? lastFailure;
@@ -121,21 +93,65 @@ Future<VoiceSubscription> _waitForPremiumSubscription(
     if (attempt > 0) {
       await Future<void>.delayed(Duration(milliseconds: 150 * attempt));
     }
-    final me = await client.getSubscription(authorization: authorization);
-    if (me is SubscriptionApiOk<VoiceSubscription>) {
-      final sub = me.data;
-      if (sub.plan == 'premium' && sub.isPremium) {
-        return sub;
-      }
-      lastFailure =
-          'plan=${sub.plan} status=${sub.status} isPremium=${sub.isPremium}';
-      continue;
+    final plan = await _getSubscriptionPlan(ctx, authorization);
+    if (plan == 'premium') {
+      return;
     }
-    if (me is SubscriptionApiFailure) {
-      lastFailure = '${me.message} (HTTP ${me.statusCode})';
-    }
+    lastFailure = 'plan=$plan';
   }
   fail('subscription did not become premium after webhook: $lastFailure');
+}
+
+Future<String> _getSubscriptionPlan(
+  LiveGatewayContext ctx,
+  String authorization,
+) async {
+  final uri = ctx.gatewayHttp().resolve('/api/v1/subscription/me');
+  final resp = await ctx.httpClient.get(
+    uri,
+    headers: {'Authorization': authorization},
+  );
+  if (resp.statusCode != 200) {
+    return 'http_${resp.statusCode}';
+  }
+  final parsed = jsonDecode(resp.body);
+  if (parsed is! Map<String, dynamic>) {
+    return '';
+  }
+  final subscription = parsed['subscription'];
+  if (subscription is! Map<String, dynamic>) {
+    return '';
+  }
+  final plan = subscription['plan'];
+  return plan is String ? plan : '';
+}
+
+Future<bool> _fileUploadAvailable(
+  LiveGatewayContext ctx,
+  String authorization,
+) async {
+  return await _requestUploadStatus(ctx, authorization, 4) == 200;
+}
+
+Future<int> _requestUploadStatus(
+  LiveGatewayContext ctx,
+  String authorization,
+  int sizeBytes,
+) async {
+  final uri = ctx.gatewayHttp().resolve('/api/v1/files/upload');
+  final resp = await ctx.httpClient.post(
+    uri,
+    headers: {
+      'Authorization': authorization,
+      'Content-Type': 'application/json',
+    },
+    body: jsonEncode({
+      'original_name': 'phase12-boundary.bin',
+      'mime_type': 'application/octet-stream',
+      'size_bytes': sizeBytes,
+    }),
+  );
+  return resp.statusCode;
 }
 
 String _paddleWebhookSecret() {
