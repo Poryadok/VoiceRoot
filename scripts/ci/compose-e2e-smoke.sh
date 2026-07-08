@@ -28,6 +28,22 @@ echo "Smoke gateway tests (${#GATEWAY_TESTS[@]}): ${GATEWAY_RUN}"
 cd "${ROOT}/src/backend/gateway"
 go test -count=1 -parallel 1 -timeout 20m -run "${GATEWAY_RUN}" ./...
 
+echo "Clearing compose Redis rate limits before Flutter smoke..."
+for pattern in \
+  "ratelimit:AuthLogin:*" \
+  "ratelimit:AuthRegister:*" \
+  "ratelimit:Auth:*" \
+  "ratelimit:FileUpload:*"; do
+  mapfile -t _rl_keys < <(
+    docker compose -f "${ROOT}/docker-compose.yml" exec -T redis redis-cli --scan --pattern "${pattern}" 2>/dev/null || true
+  )
+  for key in "${_rl_keys[@]}"; do
+    if [ -n "${key}" ]; then
+      docker compose -f "${ROOT}/docker-compose.yml" exec -T redis redis-cli DEL "${key}" >/dev/null 2>&1 || true
+    fi
+  done
+done
+
 cd "${ROOT}/src/frontend"
 ARGS=()
 for f in "${FLUTTER_TESTS[@]}"; do

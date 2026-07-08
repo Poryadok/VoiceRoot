@@ -47,7 +47,10 @@ class VoiceSubscription {
   final String? providerSubscriptionId;
   final DateTime? currentPeriodEnd;
 
-  bool get isPremium => plan == 'premium' && status != 'cancelled';
+  /// Matches gateway upload entitlements (`effectiveSubscriptionTierForFiles`).
+  bool get isPremium =>
+      plan == 'premium' &&
+      (status == 'active' || status == 'grace_period');
 }
 
 class VoiceCheckoutSession {

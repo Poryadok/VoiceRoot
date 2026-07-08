@@ -35,7 +35,7 @@ func clearLiveComposeAuthRateLimit(t *testing.T) {
 		return
 	}
 	root := repoRootFromTest(t)
-	for _, pattern := range []string{"ratelimit:AuthLogin:*", "ratelimit:AuthRegister:*", "ratelimit:Auth:*"} {
+	for _, pattern := range []string{"ratelimit:AuthLogin:*", "ratelimit:AuthRegister:*", "ratelimit:Auth:*", "ratelimit:FileUpload:*"} {
 		cmd := exec.Command("docker", "compose", "exec", "-T", "redis", "redis-cli", "--scan", "--pattern", pattern)
 		cmd.Dir = root
 		out, err := cmd.Output()

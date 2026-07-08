@@ -337,7 +337,9 @@ VoiceSubscription voiceSubscriptionFromProto(sub_pb.Subscription subscription) {
     billingPeriod: subscription.billingPeriod.isNotEmpty
         ? subscription.billingPeriod
         : 'monthly',
-    status: subscription.status.isNotEmpty ? subscription.status : 'cancelled',
+    status: subscription.status.isNotEmpty
+        ? subscription.status
+        : (subscription.plan == 'premium' ? 'active' : 'cancelled'),
     provider: emptyToNull(subscription.provider),
     providerSubscriptionId: emptyToNull(subscription.providerSubscriptionId),
     currentPeriodEnd: protoTimestampToDateTime(

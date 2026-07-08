@@ -85,6 +85,7 @@ Future<void> clearLiveAuthRateLimit() async {
     'ratelimit:AuthLogin:*',
     'ratelimit:AuthRegister:*',
     'ratelimit:Auth:*',
+    'ratelimit:FileUpload:*',
   ];
   for (final pattern in patterns) {
     try {

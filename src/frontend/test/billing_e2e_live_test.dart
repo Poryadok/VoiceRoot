@@ -28,12 +28,12 @@ void main() {
       await _activatePremiumWebhook(ctx, session.accountId);
 
       final subscription = VoiceSubscriptionClient(gateway: ctx.gatewayHttp());
-      final me = await subscription.getSubscription(
-        authorization: session.authorizationHeader,
+      final sub = await _waitForPremiumSubscription(
+        subscription,
+        session.authorizationHeader,
       );
-      expect(me, isA<SubscriptionApiOk<VoiceSubscription>>());
-      final sub = (me as SubscriptionApiOk<VoiceSubscription>).data;
       expect(sub.plan, 'premium');
+      expect(sub.status, anyOf('active', 'grace_period'));
       expect(sub.isPremium, isTrue);
 
       if (!await ctx.probeFileStorageAvailable(session)) {
@@ -49,7 +49,13 @@ void main() {
         mimeType: 'application/octet-stream',
         sizeBytes: _upload100MiB,
       );
-      expect(ok, isA<FilesApiOk<FileUploadTicket>>());
+      expect(
+        ok,
+        isA<FilesApiOk<FileUploadTicket>>(),
+        reason: ok is FilesApiFailure
+            ? '${(ok as FilesApiFailure).message} (HTTP ${ok.statusCode})'
+            : null,
+      );
 
       final rejected = await files.requestUpload(
         authorization: session.authorizationHeader,
@@ -57,10 +63,18 @@ void main() {
         mimeType: 'application/octet-stream',
         sizeBytes: _upload250MiB,
       );
-      expect(rejected, isA<FilesApiFailure>());
       expect(
-        (rejected as FilesApiFailure).statusCode,
+        rejected,
+        isA<FilesApiFailure>(),
+        reason: rejected is FilesApiOk<FileUploadTicket>
+            ? '250MiB upload should be rejected for premium tier'
+            : null,
+      );
+      final failure = rejected as FilesApiFailure;
+      expect(
+        failure.statusCode,
         400,
+        reason: '${failure.message} (HTTP ${failure.statusCode})',
       );
     },
     skip: runLiveIntegration
@@ -98,13 +112,40 @@ Future<void> _activatePremiumWebhook(
   expect(resp.statusCode, 200, reason: resp.body);
 }
 
+Future<VoiceSubscription> _waitForPremiumSubscription(
+  VoiceSubscriptionClient client,
+  String authorization,
+) async {
+  Object? lastFailure;
+  for (var attempt = 0; attempt < 8; attempt++) {
+    if (attempt > 0) {
+      await Future<void>.delayed(Duration(milliseconds: 150 * attempt));
+    }
+    final me = await client.getSubscription(authorization: authorization);
+    if (me is SubscriptionApiOk<VoiceSubscription>) {
+      final sub = me.data;
+      if (sub.plan == 'premium' && sub.isPremium) {
+        return sub;
+      }
+      lastFailure =
+          'plan=${sub.plan} status=${sub.status} isPremium=${sub.isPremium}';
+      continue;
+    }
+    if (me is SubscriptionApiFailure) {
+      lastFailure = '${me.message} (HTTP ${me.statusCode})';
+    }
+  }
+  fail('subscription did not become premium after webhook: $lastFailure');
+}
+
+String _paddleWebhookSecret() {
+  const secret = String.fromEnvironment('PADDLE_WEBHOOK_SECRET', defaultValue: '');
+  return secret.isEmpty ? 'test-webhook-secret' : secret;
+}
+
 String _signPaddleWebhook(String body) {
-  const secret = String.fromEnvironment(
-    'PADDLE_WEBHOOK_SECRET',
-    defaultValue: 'test-webhook-secret',
-  );
   const ts = '1700000000';
-  final digest = crypto.Hmac(crypto.sha256, utf8.encode(secret))
+  final digest = crypto.Hmac(crypto.sha256, utf8.encode(_paddleWebhookSecret()))
       .convert(utf8.encode('$ts:$body'))
       .toString();
   return 'ts=$ts,h1=$digest';
