@@ -103,6 +103,11 @@ void main() {
           'call_declined',
           timeout: const Duration(seconds: 20),
         );
+        final incomingFuture = waitForOp(
+          realtimeB.events,
+          'call_incoming',
+          timeout: const Duration(seconds: 20),
+        );
         final start = await voice.startCall(
           authorization: sessionA.authorizationHeader,
           chatId: chatId,
@@ -111,11 +116,7 @@ void main() {
         expect(start, isA<VoiceApiOk<VoiceCallSession>>());
         final call = (start as VoiceApiOk<VoiceCallSession>).data;
 
-        await waitForOp(
-          realtimeB.events,
-          'call_incoming',
-          timeout: const Duration(seconds: 20),
-        );
+        await incomingFuture;
         await voice.declineCall(
           authorization: sessionB.authorizationHeader,
           roomId: call.roomId,

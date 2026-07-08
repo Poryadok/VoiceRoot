@@ -35,7 +35,7 @@
 | [text-chat](features/text-chat.md) (DM) | shipped | Chat, Messaging, Realtime | `TestComposeDMRealtime_live`, `dm_two_users_e2e_live_test` |
 | [presence](features/presence.md) | shipped | User, Realtime | `presence_e2e_live_test`, `ws_resume_e2e_live_test` |
 | [user-profile](features/user-profile.md) | shipped | User, File (R2) | `avatar_e2e_live_test` |
-| [voice-chat](features/voice-chat.md) (1:1, group, space) | shipped | Voice | `TestComposeVoiceCall_live`, `voice_call_signaling_e2e_live_test` |
+| [voice-chat](features/voice-chat.md) (1:1, group, space) | shipped | Voice | `TestComposeVoiceCall1to1_live`, `voice_call_signaling_e2e_live_test` |
 | [file-storage](features/file-storage.md) | shipped | File | `file_attachment_e2e_live_test`, `TestComposeFileAttachment_live` |
 | [forward-messages](features/forward-messages.md) | shipped | Messaging | `forward_messages_e2e_live_test` |
 | Групповые чаты | shipped | Chat, Role | `TestComposeGroups_live`, `groups_e2e_live_test` |

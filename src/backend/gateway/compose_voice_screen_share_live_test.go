@@ -27,7 +27,7 @@ func TestComposeVoiceScreenShare_live(t *testing.T) {
 	n := time.Now().UnixNano()
 	sessA := registerComposeUser(t, client, base, formatComposeEmail("ss-a", n), "VoiceQaTest1!")
 	sessB := registerComposeUser(t, client, base, formatComposeEmail("ss-b", n), "VoiceQaTest1!")
-	chatID := createComposeDM(t, client, base, sessA.AccessToken, sessB.ProfileID)
+	chatID := createComposeDMBetween(t, client, base, sessA, sessB)
 
 	wsB := dialComposeRealtimeWS(t, base, sessB.AccessToken)
 	waitComposeWSHello(t, wsB)
