@@ -4,6 +4,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 COMPOSE=(docker compose -f "${ROOT}/docker-compose.yml")
+COMPOSE_PROFILES=(--profile app --profile observability)
 
 GRAFANA_USER="${GRAFANA_ADMIN_USER:-admin}"
 GRAFANA_PASS="${GRAFANA_ADMIN_PASSWORD:-changeme-voice-local}"
@@ -76,12 +77,33 @@ assert_clickhouse_query() {
   echo "clickhouse query ok"
 }
 
+wait_clickhouse_init() {
+  echo "Waiting for clickhouse-init to finish..."
+  for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+    state="$("${COMPOSE[@]}" "${COMPOSE_PROFILES[@]}" ps -a clickhouse-init --format '{{.State}}' 2>/dev/null | head -1 || true)"
+    exit_code="$("${COMPOSE[@]}" "${COMPOSE_PROFILES[@]}" ps -a clickhouse-init --format '{{.ExitCode}}' 2>/dev/null | head -1 || true)"
+    if [ "${state}" = "exited" ]; then
+      if [ "${exit_code}" = "0" ]; then
+        echo "clickhouse-init ok"
+        return 0
+      fi
+      echo "clickhouse-init failed (exit ${exit_code})" >&2
+      "${COMPOSE[@]}" "${COMPOSE_PROFILES[@]}" logs clickhouse-init
+      exit 1
+    fi
+    echo "clickhouse-init attempt ${attempt}/15: state=${state:-unknown}"
+    sleep 2
+  done
+  echo "clickhouse-init did not finish in time" >&2
+  "${COMPOSE[@]}" "${COMPOSE_PROFILES[@]}" ps -a clickhouse-init || true
+  exit 1
+}
+
 echo "Starting observability + ClickHouse + analytics for Grafana smoke..."
-"${COMPOSE[@]}" --profile app --profile observability up -d \
+"${COMPOSE[@]}" "${COMPOSE_PROFILES[@]}" up -d \
   clickhouse clickhouse-init prometheus loki grafana analytics
 
-echo "Waiting for clickhouse-init to finish..."
-"${COMPOSE[@]}" wait clickhouse-init
+wait_clickhouse_init
 
 wait_grafana
 
