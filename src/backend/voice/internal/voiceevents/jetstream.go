@@ -115,6 +115,12 @@ func (p *JetStreamPublisher) PublishScreenShareStopped(ctx context.Context, ev *
 	})
 }
 
+// EnsureStream creates the voice_events JetStream stream if it does not exist yet.
+// Call at service startup so Realtime voice consumers can subscribe before the first call.
+func (p *JetStreamPublisher) EnsureStream() error {
+	return p.ensureStream()
+}
+
 func (p *JetStreamPublisher) publish(ctx context.Context, subject string, env *eventsv1.VoiceStreamEvent) error {
 	if err := p.ensureStream(); err != nil {
 		return err

@@ -39,6 +39,8 @@ func TestComposeVoiceCall1to1_live(t *testing.T) {
 
 	wsB := dialComposeRealtimeWS(t, base, sessB.AccessToken)
 	waitComposeWSHello(t, wsB)
+	// Realtime auto-subscribes DMs after hello; drain so call_incoming is not blocked behind sync frames.
+	_ = waitComposeWSOp(t, wsB, "subscription_sync", 10*time.Second, nil)
 
 	incomingCh := make(chan composeWSFrame, 1)
 	go func() {

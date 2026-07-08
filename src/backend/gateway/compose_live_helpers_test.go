@@ -6,8 +6,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -91,6 +93,10 @@ func waitComposeWSOp(
 		var frame composeWSFrame
 		err := conn.ReadJSON(&frame)
 		if err != nil {
+			var netErr net.Error
+			if errors.As(err, &netErr) && netErr.Timeout() {
+				continue
+			}
 			t.Fatalf("read WS while waiting for op=%s: %v", wantOp, err)
 		}
 		if frame.Op != wantOp {

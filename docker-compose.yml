@@ -658,6 +658,7 @@ services:
       LOG_LEVEL: debug
       REALTIME_REDIS_ADDR: redis:6379
       NATS_URL: nats://nats:4222
+      REALTIME_INSTANCE_ID: ${REALTIME_INSTANCE_ID:-compose-local}
       REALTIME_JWKS_URL: http://auth:8080/api/v1/auth/.well-known/jwks.json
       REALTIME_JWT_ISSUER: voice-auth
       REALTIME_JWT_AUDIENCE: voice-client

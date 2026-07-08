@@ -99,7 +99,9 @@ func (s *VoiceGRPC) StartCall(ctx context.Context, req *callsv1.StartCallRequest
 	if err != nil {
 		return nil, storeErr(err)
 	}
-	s.publishIncoming(ctx, call)
+	if err := s.publishIncoming(ctx, call); err != nil {
+		return nil, status.Errorf(codes.Unavailable, "call signaling unavailable: %v", err)
+	}
 	return &callsv1.StartCallResponse{CallSession: callToProto(call)}, nil
 }
 
@@ -502,9 +504,9 @@ func callToProto(call voicestore.Call) *callsv1.CallSession {
 	return out
 }
 
-func (s *VoiceGRPC) publishIncoming(ctx context.Context, call voicestore.Call) {
+func (s *VoiceGRPC) publishIncoming(ctx context.Context, call voicestore.Call) error {
 	if s.Events == nil {
-		return
+		return nil
 	}
 	if err := s.Events.PublishCallIncoming(ctx, &eventsv1.CallIncoming{
 		RoomId:             call.RoomID,
@@ -516,7 +518,9 @@ func (s *VoiceGRPC) publishIncoming(ctx context.Context, call voicestore.Call) {
 		ExpiresAt:          timestamppb.New(call.ExpiresAt),
 	}); err != nil {
 		s.logPublishError(ctx, "voice.call_incoming", err, slog.String("room_id", call.RoomID))
+		return err
 	}
+	return nil
 }
 
 func (s *VoiceGRPC) publishAccepted(ctx context.Context, call voicestore.Call, by string) {
