@@ -8,10 +8,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc"
@@ -52,10 +50,6 @@ func main() {
 			log.Fatalf("postgres: %v", err)
 		}
 		defer pool.Close()
-
-		if err := runMigrations(pool); err != nil {
-			log.Fatalf("migrate: %v", err)
-		}
 
 		lis, err := net.Listen("tcp", grpcAddr)
 		if err != nil {
@@ -120,19 +114,4 @@ func main() {
 			log.Fatal(err)
 		}
 	}
-}
-
-func runMigrations(pool *pgxpool.Pool) error {
-	migrationPath := os.Getenv("SUBSCRIPTION_MIGRATION_PATH")
-	if migrationPath == "" {
-		migrationPath = filepath.Join("migrations", "subscription_db", "000001_init.up.sql")
-	}
-	sqlBytes, err := os.ReadFile(migrationPath)
-	if err != nil {
-		return err
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	_, err = pool.Exec(ctx, string(sqlBytes))
-	return err
 }

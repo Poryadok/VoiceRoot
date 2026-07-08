@@ -21,9 +21,7 @@ COPY chat/pb/voice/chat ./chat/pb/voice/chat
 COPY voice/pb/voice/space ./voice/pb/voice/space
 COPY voice/pb/voice/subscription ./voice/pb/voice/subscription
 COPY subscription ./subscription
-COPY migrations/subscription_db ./migrations/subscription_db
 WORKDIR /src/subscription
-ENV SUBSCRIPTION_MIGRATION_PATH=/src/migrations/subscription_db/000001_init.up.sql
 RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked --mount=type=cache,target=/root/.cache/go-build,id=voice-gobuild,sharing=locked CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/service .
 
 FROM alpine:3.20
@@ -31,8 +29,6 @@ RUN adduser -D -H -u 65532 nonroot
 USER nonroot:nonroot
 WORKDIR /
 COPY --from=build /out/service /service
-COPY --from=build /src/migrations/subscription_db /migrations/subscription_db
-ENV SUBSCRIPTION_MIGRATION_PATH=/migrations/subscription_db/000001_init.up.sql
 EXPOSE 8080
 ENV LISTEN_ADDR=:8080
 ENTRYPOINT ["/service"]

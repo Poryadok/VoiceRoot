@@ -6,8 +6,20 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 NS="${VOICE_K8S_NAMESPACE:-voice-staging}"
 PATCH_FILE="${ROOT}/.local/patch-user-space-addr.json"
 
+describe_deploy_failure() {
+  local dep="$1"
+  echo "ERROR: deployment/${dep} rollout failed; diagnostics:" >&2
+  kubectl get pods -n "$NS" -l "app=${dep}" -o wide >&2 || true
+  kubectl describe pods -n "$NS" -l "app=${dep}" 2>&1 | tail -100 >&2 || true
+  kubectl logs -n "$NS" -l "app=${dep}" --tail=80 --all-containers=true 2>&1 | tail -80 >&2 || true
+}
+
 wait_deploy() {
-  kubectl rollout status "deployment/$1" -n "$NS" --timeout=300s
+  if kubectl rollout status "deployment/$1" -n "$NS" --timeout=300s; then
+    return 0
+  fi
+  describe_deploy_failure "$1"
+  return 1
 }
 
 patch_user_skip_space() {
@@ -39,7 +51,7 @@ for d in voice-social voice-role voice-search voice-notification voice-bot voice
   kubectl rollout restart "deployment/${d}" -n "$NS" || true
 done
 for d in voice-social voice-role voice-search voice-notification voice-bot voice-voice voice-realtime voice-subscription voice-analytics voice-federation; do
-  wait_deploy "$d" || true
+  wait_deploy "$d"
 done
 
 echo "Tier 2: user before space (break user<->space dial deadlock)"

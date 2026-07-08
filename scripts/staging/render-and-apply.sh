@@ -23,8 +23,8 @@ patch_image_pull_secrets() {
   fi
   echo "Patching imagePullSecrets=${secret_name} on app deployments"
   for dep in $(kubectl get deployment -n "${NS}" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}'); do
-    kubectl patch deployment "${dep}" -n "${NS}" --type=json \
-      -p="[{\"op\":\"add\",\"path\":\"/spec/template/spec/imagePullSecrets\",\"value\":[{\"name\":\"${secret_name}\"}]}]" \
+    kubectl patch deployment "${dep}" -n "${NS}" --type=strategic \
+      -p="{\"spec\":{\"template\":{\"spec\":{\"imagePullSecrets\":[{\"name\":\"${secret_name}\"}]}}}}" \
       2>/dev/null || true
   done
 }
@@ -36,10 +36,10 @@ sed -e "s|__GATEWAY_INGRESS_HOST__|${VOICE_GATEWAY_INGRESS_HOST}|g" \
     -e "s|__DEVELOPER_PORTAL_INGRESS_HOST__|${VOICE_DEVELOPER_PORTAL_INGRESS_HOST}|g" \
   "${ROOT}/deploy/staging/configmap-app.yaml" | kubectl apply -f -
 
-if [ -f "${ROOT}/deploy/staging/secret.yaml" ]; then
-  kubectl apply -f "${ROOT}/deploy/staging/secret.yaml"
-else
+if [ -n "${STAGING_APP_SECRETS_YAML_B64:-}" ] || [ ! -f "${ROOT}/deploy/staging/secret.yaml" ]; then
   bash "${ROOT}/scripts/staging/ensure-app-secrets.sh"
+elif [ -f "${ROOT}/deploy/staging/secret.yaml" ]; then
+  kubectl apply -f "${ROOT}/deploy/staging/secret.yaml"
 fi
 
 if ! kubectl get secret voice-app-secrets -n "${NS}" >/dev/null 2>&1; then
