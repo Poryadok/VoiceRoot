@@ -291,11 +291,19 @@ spec:
           volumeMounts:
             - name: chdata
               mountPath: /var/lib/clickhouse
+          startupProbe:
+            exec:
+              command: ["clickhouse-client", "--query", "SELECT 1"]
+            initialDelaySeconds: 5
+            periodSeconds: 3
+            timeoutSeconds: 3
+            failureThreshold: 40
           readinessProbe:
-            httpGet:
-              path: /ping
-              port: 8123
+            exec:
+              command: ["clickhouse-client", "--query", "SELECT 1"]
             periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 6
   volumeClaimTemplates:
     - metadata:
         name: chdata

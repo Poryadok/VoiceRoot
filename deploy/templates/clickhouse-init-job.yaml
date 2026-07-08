@@ -11,7 +11,8 @@ metadata:
     app.kubernetes.io/component: migration
 spec:
   ttlSecondsAfterFinished: 86400
-  backoffLimit: 2
+  backoffLimit: 1
+  activeDeadlineSeconds: 180
   template:
     metadata:
       labels:
@@ -23,7 +24,19 @@ spec:
           image: clickhouse/clickhouse-server:24.8-alpine
           command: ["/bin/sh", "-c"]
           args:
-            - clickhouse-client --host voice-clickhouse --multiquery < /init/001_events.sql
+            - |
+              set -eux
+              for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+                if clickhouse-client --host voice-clickhouse --query 'SELECT 1' >/dev/null 2>&1; then
+                  echo "clickhouse reachable (attempt ${i})"
+                  break
+                fi
+                echo "waiting for clickhouse (${i}/15)..."
+                sleep 2
+              done
+              clickhouse-client --host voice-clickhouse --query 'SELECT 1'
+              clickhouse-client --host voice-clickhouse --multiquery < /init/001_events.sql
+              echo "clickhouse init SQL applied"
           volumeMounts:
             - name: init
               mountPath: /init
