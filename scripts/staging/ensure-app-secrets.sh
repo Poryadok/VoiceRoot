@@ -33,6 +33,7 @@ if kubectl get secret "$SECRET_NAME" -n "$NS" >/dev/null 2>&1; then
 fi
 
 PG_PASS="${VOICE_STAGING_POSTGRES_PASSWORD:-voice}"
+CH_PASS="${VOICE_STAGING_CLICKHOUSE_PASSWORD:-voice-clickhouse-staging}"
 JWT_FILE="${AUTH_JWT_PRIVATE_KEY_FILE:-${ROOT}/src/backend/auth/src/test/resources/jwt-test-private.pem}"
 
 if [ ! -f "$JWT_FILE" ]; then
@@ -74,7 +75,8 @@ kubectl create secret generic "$SECRET_NAME" \
   --from-literal=MODERATION_DATABASE_URL="$(pg_url moderation_db)" \
   --from-literal=SUBSCRIPTION_DATABASE_URL="$(pg_url subscription_db)" \
   --from-literal=GATEWAY_DATABASE_URL="$(pg_url gateway_db)" \
-  --from-literal=CLICKHOUSE_DSN="clickhouse://default@voice-clickhouse:9000/voice" \
+  --from-literal=CLICKHOUSE_PASSWORD="$CH_PASS" \
+  --from-literal=CLICKHOUSE_DSN="clickhouse://default:${CH_PASS}@voice-clickhouse:9000/voice" \
   --from-literal=ANALYTICS_ID_HASH_KEY="change-me-staging-analytics-hash" \
   --from-file=AUTH_JWT_PRIVATE_KEY="$JWT_FILE" \
   --from-literal=USER_R2_ENDPOINT="$USER_R2_ENDPOINT" \

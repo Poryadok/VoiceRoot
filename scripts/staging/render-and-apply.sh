@@ -61,6 +61,7 @@ bash "${ROOT}/scripts/staging/init-postgres-databases.sh"
 bash "${ROOT}/scripts/staging/ensure-gateway-schema.sh"
 
 echo "Ensuring ClickHouse schema..."
+kubectl rollout status statefulset/voice-clickhouse -n "${NS}" --timeout=180s
 kubectl wait --for=condition=ready pod/voice-clickhouse-0 -n "${NS}" --timeout=120s
 bash "${ROOT}/scripts/staging/apply-clickhouse-init.sh"
 

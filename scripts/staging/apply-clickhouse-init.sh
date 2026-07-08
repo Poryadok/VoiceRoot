@@ -28,6 +28,44 @@ wait_clickhouse_native() {
   return 1
 }
 
+wait_clickhouse_remote_auth() {
+  echo "Waiting for ClickHouse remote auth on voice-clickhouse:9000..."
+  local i
+  for i in $(seq 1 30); do
+    if clickhouse_remote_auth_ok; then
+      echo "ClickHouse remote auth ready (attempt ${i})"
+      return 0
+    fi
+    sleep 2
+  done
+
+  echo "Remote auth still failing; syncing default user password from voice-app-secrets..."
+  if sync_clickhouse_password_from_secret; then
+    for i in $(seq 1 15); do
+      if clickhouse_remote_auth_ok; then
+        echo "ClickHouse remote auth ready after password sync (attempt ${i})"
+        return 0
+      fi
+      sleep 2
+    done
+  fi
+
+  echo "ERROR: ClickHouse remote auth failed after 60s (check CLICKHOUSE_PASSWORD and StatefulSet env)" >&2
+  kubectl logs -n "${NS}" voice-clickhouse-0 --tail=80 >&2 || true
+  return 1
+}
+
+clickhouse_remote_auth_ok() {
+  kubectl exec -n "${NS}" voice-clickhouse-0 -- \
+    sh -c 'clickhouse-client --host voice-clickhouse --user "${CLICKHOUSE_USER}" --password "${CLICKHOUSE_PASSWORD}" --query "SELECT 1"' \
+    >/dev/null 2>&1
+}
+
+sync_clickhouse_password_from_secret() {
+  kubectl exec -n "${NS}" voice-clickhouse-0 -- \
+    sh -c 'test -n "${CLICKHOUSE_PASSWORD}" && clickhouse-client --query "ALTER USER default IDENTIFIED BY '"'"'"${CLICKHOUSE_PASSWORD}"'"'"'"'
+}
+
 dump_clickhouse_init_job_logs() {
   echo "clickhouse init job status:" >&2
   kubectl get job "${JOB_NAME}" -n "${NS}" -o wide >&2 || true
@@ -57,6 +95,7 @@ if kubectl get job "${JOB_NAME}" -n "${NS}" >/dev/null 2>&1; then
 fi
 
 wait_clickhouse_native
+wait_clickhouse_remote_auth
 
 echo "Applying clickhouse init job ${JOB_NAME}"
 substitute < "${TEMPLATE}" | kubectl apply -f -

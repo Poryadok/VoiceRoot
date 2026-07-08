@@ -285,6 +285,16 @@ spec:
       containers:
         - name: clickhouse
           image: clickhouse/clickhouse-server:24.8-alpine
+          env:
+            - name: CLICKHOUSE_USER
+              value: default
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: voice-app-secrets
+                  key: CLICKHOUSE_PASSWORD
+            - name: CLICKHOUSE_DB
+              value: voice
           ports:
             - containerPort: 8123
             - containerPort: 9000

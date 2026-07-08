@@ -35,11 +35,37 @@ add_if_missing() {
   args+=(--from-literal="${key}=${value}")
 }
 
+DEFAULT_CH_PASS="${VOICE_STAGING_CLICKHOUSE_PASSWORD:-voice-clickhouse-staging}"
+CH_PASS="$(secret_data_key CLICKHOUSE_PASSWORD | base64 -d 2>/dev/null || true)"
+if [ -z "${CH_PASS}" ]; then
+  current_ch_dsn_for_pass="$(secret_data_key CLICKHOUSE_DSN | base64 -d 2>/dev/null || true)"
+  if [[ "${current_ch_dsn_for_pass}" =~ ^clickhouse://[^:]*:([^@]+)@ ]]; then
+    CH_PASS="${BASH_REMATCH[1]}"
+  else
+    CH_PASS="${DEFAULT_CH_PASS}"
+  fi
+  echo "Patching ${SECRET_NAME}: add CLICKHOUSE_PASSWORD"
+  args+=(--from-literal="CLICKHOUSE_PASSWORD=${CH_PASS}")
+fi
+
+ch_dsn() {
+  printf 'clickhouse://default:%s@voice-clickhouse:9000/voice' "$CH_PASS"
+}
+
 add_if_missing STORY_DATABASE_URL "$(pg_url story_db)"
 add_if_missing MODERATION_DATABASE_URL "$(pg_url moderation_db)"
 add_if_missing SUBSCRIPTION_DATABASE_URL "$(pg_url subscription_db)"
-add_if_missing CLICKHOUSE_DSN "clickhouse://default@voice-clickhouse:9000/voice"
 add_if_missing ANALYTICS_ID_HASH_KEY "change-me-staging-analytics-hash"
+
+current_ch_dsn="$(secret_data_key CLICKHOUSE_DSN | base64 -d 2>/dev/null || true)"
+expected_ch_dsn="$(ch_dsn)"
+if [ -z "${current_ch_dsn}" ]; then
+  echo "Patching ${SECRET_NAME}: add CLICKHOUSE_DSN"
+  args+=(--from-literal="CLICKHOUSE_DSN=${expected_ch_dsn}")
+elif [ "${current_ch_dsn}" != "${expected_ch_dsn}" ]; then
+  echo "Patching ${SECRET_NAME}: update CLICKHOUSE_DSN (sync password)"
+  args+=(--from-literal="CLICKHOUSE_DSN=${expected_ch_dsn}")
+fi
 
 if ((${#args[@]} == 0)); then
   echo "${SECRET_NAME} database URL keys complete"
