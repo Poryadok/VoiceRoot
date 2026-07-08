@@ -49,7 +49,9 @@ jobs:
       frontend: ${{ steps.filter.outputs.frontend }}
       auth: ${{ steps.filter.outputs.auth }}
       developer-portal: ${{ steps.filter.outputs.developer-portal }}
+      admin: ${{ steps.filter.outputs.admin }}
       compose: ${{ steps.filter.outputs.compose }}
+      svc_analytics: ${{ steps.filter.outputs.svc_analytics }}
       code: ${{ steps.filter.outputs.code }}
       go_services: ${{ steps.gomatrix.outputs.go_services }}
       run_pkg: ${{ steps.gomatrix.outputs.run_pkg }}
@@ -464,6 +466,33 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  admin:
+    needs: changes
+    if: >-
+      always() &&
+      needs.changes.result == 'success' &&
+      needs.changes.outputs.code == 'true' &&
+      (needs.changes.outputs.admin == 'true' ||
+       needs.changes.outputs.global == 'true' ||
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: src/admin/package-lock.json
+      - name: npm ci, test, build
+        working-directory: src/admin
+        env:
+          VITE_VOICE_API_BASE: http://127.0.0.1:18080
+          VITE_STAFF_TOKEN: ""
+        run: |
+          npm ci
+          npm test
+          npm run build
+
   # --- Tier 2: platform smoke + compose E2E (push master, or workflow_dispatch full) ---
   flutter-android-smoke:
     needs: changes
@@ -717,9 +746,17 @@ jobs:
         run: CGO_ENABLED=1 go test -race ./...
 
   analytics-clickhouse-integration:
+    needs: changes
     if: >-
       github.event_name == 'schedule' ||
-      (github.event_name == 'workflow_dispatch' && inputs.profile != 'auto')
+      (github.event_name == 'workflow_dispatch' && inputs.profile != 'auto') ||
+      (
+        github.event_name == 'push' &&
+        github.ref == 'refs/heads/master' &&
+        needs.changes.result == 'success' &&
+        (needs.changes.outputs.svc_analytics == 'true' ||
+         needs.changes.outputs.compose == 'true')
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
@@ -753,6 +790,24 @@ jobs:
           CLICKHOUSE_DSN: clickhouse://default:voice-clickhouse-ci@localhost:9000/voice
           CGO_ENABLED: "0"
         run: go test -tags=integration ./internal/store/...
+
+  grafana-analytics-smoke:
+    needs: changes
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && inputs.profile != 'auto') ||
+      (
+        github.event_name == 'push' &&
+        github.ref == 'refs/heads/master' &&
+        needs.changes.result == 'success' &&
+        needs.changes.outputs.compose == 'true'
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - name: Grafana analytics dashboard smoke
+        run: bash scripts/ci/grafana-analytics-dashboard-smoke.sh
 
   local-ci-parity:
     if: >-

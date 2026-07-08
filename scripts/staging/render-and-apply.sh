@@ -47,6 +47,8 @@ if ! kubectl get secret voice-app-secrets -n "${NS}" >/dev/null 2>&1; then
   exit 1
 fi
 
+bash "${ROOT}/scripts/staging/patch-app-secrets-database-urls.sh"
+
 render "${ROOT}/deploy/staging/infra.yaml" | kubectl apply -f -
 render "${ROOT}/deploy/staging/services.yaml" | kubectl apply -f -
 render "${ROOT}/deploy/staging/gateway-deployment.yaml" | kubectl apply -f -
@@ -57,6 +59,11 @@ echo "Ensuring Postgres databases exist..."
 kubectl wait --for=condition=ready pod/voice-postgres-0 -n "${NS}" --timeout=120s
 bash "${ROOT}/scripts/staging/init-postgres-databases.sh"
 bash "${ROOT}/scripts/staging/ensure-gateway-schema.sh"
+
+echo "Ensuring ClickHouse schema..."
+kubectl wait --for=condition=ready pod/voice-clickhouse-0 -n "${NS}" --timeout=120s
+bash "${ROOT}/scripts/staging/apply-clickhouse-init.sh"
+
 bash "${ROOT}/scripts/staging/apply-migrate-jobs.sh"
 
 bash "${ROOT}/scripts/staging/rollout-app-tier.sh"

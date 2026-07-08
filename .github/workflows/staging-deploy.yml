@@ -121,6 +121,7 @@ jobs:
         if: vars.STAGING_SMOKE_ENABLED == 'true'
         env:
           VOICE_GATEWAY_INGRESS_HOST: ${{ vars.VOICE_GATEWAY_INGRESS_HOST }}
+          STAGING_STAFF_TOKEN: ${{ secrets.STAGING_STAFF_TOKEN }}
         run: |
           set -eux
           # shellcheck disable=SC1091

@@ -15,20 +15,20 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 NS="${VOICE_K8S_NAMESPACE:-voice-staging}"
 SECRET_NAME="voice-app-secrets"
 
-if kubectl get secret "$SECRET_NAME" -n "$NS" >/dev/null 2>&1; then
-  echo "Secret ${SECRET_NAME} already exists in ${NS} — skip bootstrap"
-  exit 0
-fi
-
 if [ -n "${STAGING_APP_SECRETS_YAML_B64:-}" ]; then
-  echo "Applying ${SECRET_NAME} from STAGING_APP_SECRETS_YAML_B64"
+  echo "Applying ${SECRET_NAME} from STAGING_APP_SECRETS_YAML_B64 (merge)"
   echo "${STAGING_APP_SECRETS_YAML_B64}" | base64 -d | kubectl apply -f -
   exit 0
 fi
 
 if [ -n "${STAGING_APP_SECRETS_YAML:-}" ] && [ -f "${STAGING_APP_SECRETS_YAML}" ]; then
-  echo "Applying ${SECRET_NAME} from ${STAGING_APP_SECRETS_YAML}"
+  echo "Applying ${SECRET_NAME} from ${STAGING_APP_SECRETS_YAML} (merge)"
   kubectl apply -f "${STAGING_APP_SECRETS_YAML}"
+  exit 0
+fi
+
+if kubectl get secret "$SECRET_NAME" -n "$NS" >/dev/null 2>&1; then
+  echo "Secret ${SECRET_NAME} already exists in ${NS} — skip bootstrap"
   exit 0
 fi
 
@@ -70,7 +70,12 @@ kubectl create secret generic "$SECRET_NAME" \
   --from-literal=SEARCH_DATABASE_URL="$(pg_url search_db)" \
   --from-literal=NOTIFICATION_DATABASE_URL="$(pg_url notification_db)" \
   --from-literal=BOT_DATABASE_URL="$(pg_url bot_db)" \
+  --from-literal=STORY_DATABASE_URL="$(pg_url story_db)" \
+  --from-literal=MODERATION_DATABASE_URL="$(pg_url moderation_db)" \
+  --from-literal=SUBSCRIPTION_DATABASE_URL="$(pg_url subscription_db)" \
   --from-literal=GATEWAY_DATABASE_URL="$(pg_url gateway_db)" \
+  --from-literal=CLICKHOUSE_DSN="clickhouse://default@voice-clickhouse:9000/voice" \
+  --from-literal=ANALYTICS_ID_HASH_KEY="change-me-staging-analytics-hash" \
   --from-file=AUTH_JWT_PRIVATE_KEY="$JWT_FILE" \
   --from-literal=USER_R2_ENDPOINT="$USER_R2_ENDPOINT" \
   --from-literal=USER_R2_ACCESS_KEY_ID="$USER_R2_ACCESS_KEY_ID" \

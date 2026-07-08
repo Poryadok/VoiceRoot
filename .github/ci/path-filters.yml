@@ -32,11 +32,15 @@ auth:
 developer-portal:
   - src/developer-portal/**
 
+admin:
+  - src/admin/**
+
 compose:
   - docker-compose.yml
   - docker-compose*.yml
   - deploy/**
   - docker/postgres/**
+  - docker/clickhouse/**
   - src/backend/migrations/**
   - scripts/dev/compose-migrate-all.sh
   - scripts/ci/compose*

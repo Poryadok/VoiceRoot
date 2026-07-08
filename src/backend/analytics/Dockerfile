@@ -1,4 +1,4 @@
-﻿
+
 # Build context must be `src/backend`.
 
 FROM golang:1.26-alpine AS build
@@ -8,7 +8,7 @@ COPY scripts/docker-go-mod-download.sh /usr/local/bin/docker-go-mod-download.sh
 COPY pkg/go.mod ./pkg/
 COPY messaging/pb/voice/events/go.mod ./messaging/pb/voice/events/
 COPY analytics/pb/voice/analytics/go.mod ./analytics/pb/voice/analytics/
-COPY analytics/go.mod ./analytics/
+COPY analytics/go.mod analytics/go.sum ./analytics/
 RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked sh /usr/local/bin/docker-go-mod-download.sh analytics
 COPY pkg ./pkg
 COPY messaging/pb/voice/events ./messaging/pb/voice/events

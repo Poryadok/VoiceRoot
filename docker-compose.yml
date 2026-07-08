@@ -53,7 +53,7 @@ services:
       start_period: 3s
 
   clickhouse:
-    profiles: ["app"]
+    profiles: ["app", "observability"]
     image: clickhouse/clickhouse-server:24.8-alpine
     environment:
       CLICKHOUSE_USER: default
@@ -76,7 +76,7 @@ services:
       start_period: 10s
 
   clickhouse-init:
-    profiles: ["app"]
+    profiles: ["app", "observability"]
     image: clickhouse/clickhouse-server:24.8-alpine
     restart: "no"
     environment:

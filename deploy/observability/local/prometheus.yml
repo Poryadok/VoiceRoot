@@ -46,5 +46,6 @@ scrape_configs:
           - space:8080
           - role:8080
           - voice:8080
+          - analytics:8080
         labels:
           tier: app

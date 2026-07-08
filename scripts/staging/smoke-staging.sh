@@ -49,4 +49,26 @@ if [ "$code" = "000" ]; then
 fi
 echo "Smoke: POST /api/v1/auth/register -> HTTP ${code} (upstream wired)"
 
+if [ -n "${STAGING_STAFF_TOKEN:-}" ]; then
+  echo "Smoke: GET ${BASE}/api/v1/analytics/dashboard/product (staff)"
+  dash_code="$(curl -sS -o /dev/null -w "%{http_code}" \
+    -H "Authorization: Bearer ${STAGING_STAFF_TOKEN}" \
+    "${BASE}/api/v1/analytics/dashboard/product" || echo "000")"
+  if [ "${dash_code}" != "200" ]; then
+    echo "analytics dashboard failed: HTTP ${dash_code}"
+    exit 1
+  fi
+
+  echo "Smoke: GET ${BASE}/api/v1/analytics/export?format=csv (staff)"
+  export_code="$(curl -sS -o /dev/null -w "%{http_code}" \
+    -H "Authorization: Bearer ${STAGING_STAFF_TOKEN}" \
+    "${BASE}/api/v1/analytics/export?format=csv" || echo "000")"
+  if [ "${export_code}" != "200" ]; then
+    echo "analytics export failed: HTTP ${export_code}"
+    exit 1
+  fi
+else
+  echo "Smoke: skipping analytics checks (STAGING_STAFF_TOKEN not set)"
+fi
+
 echo "Staging smoke passed."

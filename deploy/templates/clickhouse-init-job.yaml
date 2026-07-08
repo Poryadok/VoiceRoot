@@ -1,0 +1,35 @@
+# One-shot ClickHouse DDL Job. Run after voice-clickhouse StatefulSet is ready.
+# Substitute __K_NAMESPACE__. ConfigMap voice-clickhouse-init must contain 001_events.sql.
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: voice-clickhouse-init
+  namespace: __K_NAMESPACE__
+  labels:
+    app.kubernetes.io/name: voice-clickhouse-init
+    app.kubernetes.io/component: migration
+spec:
+  ttlSecondsAfterFinished: 86400
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: voice-clickhouse-init
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: clickhouse-init
+          image: clickhouse/clickhouse-server:24.8-alpine
+          command: ["/bin/sh", "-c"]
+          args:
+            - clickhouse-client --host voice-clickhouse --multiquery < /init/001_events.sql
+          volumeMounts:
+            - name: init
+              mountPath: /init
+              readOnly: true
+      volumes:
+        - name: init
+          configMap:
+            name: voice-clickhouse-init
+            optional: false

@@ -264,18 +264,20 @@ Baseline закрыт (2026-06): register guest, JWT, guards, convert-guest, TTL
 
 ### Batch 13 — Product Analytics (compose / CI / staging)
 
-Реализация по [PLAN.md](PLAN.md) §Фаза 20; спека — [analytics-service.md](microservices/analytics-service.md). Код в `master`; ниже — хвосты, из‑за которых может упасть compose, CI tier 3 или staging smoke.
+Реализация по [PLAN.md](PLAN.md) §Фаза 20; спека — [analytics-service.md](microservices/analytics-service.md). Код и инфра Batch 13 в рабочем дереве; остаётся ops-секрет `STAGING_STAFF_TOKEN`.
 
-- [ ] **Синхронизация `analytics/go.sum`** — при смене `analytics/go.mod` обязателен `go mod tidy` и коммит `go.sum`. На Windows — см. [TESTING.md](TESTING.md) § «Локальные грабли» (TLS к `proxy.golang.org`).
-- [ ] **path-filters: ClickHouse init** — добавить `docker/clickhouse/**` в `compose` в [`.github/ci/path-filters.yml`](../.github/ci/path-filters.yml). Иначе PR только с DDL/MV не триггерит `compose-e2e` smoke (`TestComposeAnalytics_*`).
-- [ ] **Prometheus scrape: analytics** — в [`deploy/observability/local/prometheus.yml`](../deploy/observability/local/prometheus.yml) нет `analytics:8080`; дашборд `voice-analytics-ingest` в локальной Grafana без метрик ingest/lag/buffer.
-- [ ] **Compose: Grafana + ClickHouse** — CH на `--profile app`, Grafana на `--profile observability`; datasource `http://clickhouse:8123` работает только при **обоих** профилях на одной сети (`docker compose --profile app --profile observability up`). Иначе панели product/engagement в Grafana — No data.
-- [ ] **Grafana dashboards smoke** — JSON `voice-analytics-*.json` не проверялись на живом Grafana + `grafana-clickhouse-datasource`; возможны правки `rawSql` / panel schema под версию плагина.
-- [ ] **Staging: ClickHouse DDL** — [`deploy/staging/infra.yaml`](../deploy/staging/infra.yaml) поднимает `voice-clickhouse`, но **не** применяет [`docker/clickhouse/init/001_events.sql`](../docker/clickhouse/init/001_events.sql). Нужен one-off Job / idempotent apply в `render-and-apply.sh` до rollout `voice-analytics`, иначе ingest OK, query/export — ошибки схемы.
-- [ ] **Staging smoke: analytics** — расширить `scripts/staging/smoke-staging.sh`: staff JWT → `GET /api/v1/analytics/dashboard/product` (200), опционально export; после DDL + secrets.
-- [ ] **CI: ClickHouse integration на PR** — job `analytics-clickhouse-integration` только tier 3 (`schedule` / `workflow_dispatch`); на обычном push в `master` не гоняется. Либо принять opt-in, либо добавить в tier 2 при изменении `svc_analytics` / `docker/clickhouse/**`.
-- [ ] **Admin Vitest** — [`src/admin/src/test/analytics.test.ts`](../src/admin/src/test/analytics.test.ts) не в CI matrix; добавить job или шаг в существующий frontend/admin pipeline.
-- [ ] **Analytics Dockerfile: go.sum в cache layer** — сейчас `COPY analytics/go.mod` без `go.sum` перед `go mod download`; при рассинхроне mod/sum сборка падает на `go build`. Копировать `go.sum` рядом с `go.mod` (как в других сервисах).
+- [x] **Синхронизация `analytics/go.sum`** — `go.sum` в репо, синхронен с `go.mod` (коммит `9983494`); локальный `go mod verify` на Windows может падать по TLS — см. [TESTING.md](TESTING.md) § «Локальные грабли».
+- [x] **path-filters: ClickHouse init** — `docker/clickhouse/**` в `compose` ([`.github/ci/path-filters.yml`](../.github/ci/path-filters.yml)); добавлен фильтр `admin` для admin CI.
+- [x] **Prometheus scrape: analytics** — `analytics:8080` в job `voice-go-services` ([`deploy/observability/local/prometheus.yml`](../deploy/observability/local/prometheus.yml)).
+- [x] **Compose: Grafana + ClickHouse** — `clickhouse` / `clickhouse-init` на профилях `app` и `observability`; Product/Engagement дашборды работают с `--profile observability` без полного app-стека ([`docker-compose.yml`](../docker-compose.yml), [`deploy/observability/local/README.md`](../deploy/observability/local/README.md)).
+- [x] **Grafana dashboards smoke** — job `grafana-analytics-smoke` + [`scripts/ci/grafana-analytics-dashboard-smoke.sh`](../scripts/ci/grafana-analytics-dashboard-smoke.sh) (UID + ClickHouse `rawSql` через `/api/ds/query`).
+- [x] **Staging: ClickHouse DDL** — `render-and-apply.sh` вызывает [`apply-clickhouse-init.sh`](../scripts/staging/apply-clickhouse-init.sh) + Job из [`deploy/templates/clickhouse-init-job.yaml`](../deploy/templates/clickhouse-init-job.yaml) до migrate/rollout.
+- [x] **Staging smoke: analytics** — `smoke-staging.sh`: dashboard + export при `STAGING_STAFF_TOKEN`; secret пробрасывается из [`staging-deploy.yml`](../.github/workflows/staging-deploy.yml). Bootstrap/patch secrets: `CLICKHOUSE_DSN` в [`ensure-app-secrets.sh`](../scripts/staging/ensure-app-secrets.sh) + [`patch-app-secrets-database-urls.sh`](../scripts/staging/patch-app-secrets-database-urls.sh).
+- [x] **CI: ClickHouse integration tier 2** — `analytics-clickhouse-integration` на push `master` при `svc_analytics` или `compose` (не только schedule/dispatch); на PR по-прежнему tier 1 unit-тесты analytics.
+- [x] **Admin Vitest** — job `admin` в CI (`npm ci` + vitest + build); [`src/admin/package-lock.json`](../src/admin/package-lock.json) для воспроизводимости.
+- [x] **Analytics Dockerfile: go.sum в cache layer** — `COPY analytics/go.mod analytics/go.sum` перед `go mod download` ([`src/backend/analytics/Dockerfile`](../src/backend/analytics/Dockerfile)).
+
+- [ ] **Ops: `STAGING_STAFF_TOKEN`** — задать GitHub Actions repository secret (см. комментарий в [`deploy/staging/secret.example.yaml`](../deploy/staging/secret.example.yaml)); без него staging smoke пропускает analytics-проверки (код готов).
 
 **Промпт-якорь:** `Analytics compose/CI/staging gaps from docs/TODO.md Batch 13`.
 
