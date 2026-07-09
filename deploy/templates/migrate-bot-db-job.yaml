@@ -1,6 +1,6 @@
 # One-shot golang-migrate Job for bot_db. Run before or during Bot Service rollout.
 # Substitute __K_NAMESPACE__, __POSTGRES_HOST__, __MIGRATE_IMAGE_TAG__ (default migrate/migrate:v4.18.1).
-# DATABASE_URL must match voice-app-secrets key BOT_DATABASE_URL (postgres://…/bot_db).
+# Substitute __DATABASE_URL__ (built from POSTGRES_PASSWORD in apply-migrate-jobs.sh).
 ---
 apiVersion: batch/v1
 kind: Job
@@ -13,6 +13,7 @@ metadata:
 spec:
   ttlSecondsAfterFinished: 86400
   backoffLimit: 2
+  activeDeadlineSeconds: 180
   template:
     metadata:
       labels:
@@ -24,14 +25,8 @@ spec:
           image: migrate/migrate:__MIGRATE_IMAGE_TAG__
           args:
             - -path=/migrations
-            - -database=$(DATABASE_URL)
+            - -database=__DATABASE_URL__
             - up
-          env:
-            - name: DATABASE_URL
-              valueFrom:
-                secretKeyRef:
-                  name: voice-app-secrets
-                  key: BOT_DATABASE_URL
           volumeMounts:
             - name: migrations
               mountPath: /migrations

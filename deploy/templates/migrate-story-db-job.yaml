@@ -12,6 +12,7 @@ metadata:
 spec:
   ttlSecondsAfterFinished: 86400
   backoffLimit: 2
+  activeDeadlineSeconds: 180
   template:
     metadata:
       labels:
@@ -23,14 +24,8 @@ spec:
           image: migrate/migrate:__MIGRATE_IMAGE_TAG__
           args:
             - -path=/migrations
-            - -database=$(DATABASE_URL)
+            - -database=__DATABASE_URL__
             - up
-          env:
-            - name: DATABASE_URL
-              valueFrom:
-                secretKeyRef:
-                  name: voice-app-secrets
-                  key: STORY_DATABASE_URL
           volumeMounts:
             - name: migrations
               mountPath: /migrations

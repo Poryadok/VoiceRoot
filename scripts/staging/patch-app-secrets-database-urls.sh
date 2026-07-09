@@ -64,9 +64,24 @@ else
     printf 'postgres://voice:%s@voice-postgres:5432/%s?sslmode=disable' "$PG_PASS" "$1"
   }
 
-  add_if_missing STORY_DATABASE_URL "$(pg_url story_db)"
-  add_if_missing MODERATION_DATABASE_URL "$(pg_url moderation_db)"
-  add_if_missing SUBSCRIPTION_DATABASE_URL "$(pg_url subscription_db)"
+  sync_pg_url_if_needed() {
+    local key="$1"
+    local db="$2"
+    local expected current
+    expected="$(pg_url "${db}")"
+    current="$(secret_data_key "${key}" | base64 -d 2>/dev/null || true)"
+    if [ -z "${current}" ]; then
+      add_if_missing "${key}" "${expected}"
+    elif [ "${current}" != "${expected}" ]; then
+      echo "Patching ${SECRET_NAME}: update ${key} (sync password)"
+      args+=(--from-literal="${key}=${expected}")
+    fi
+  }
+
+  sync_pg_url_if_needed BOT_DATABASE_URL bot_db
+  sync_pg_url_if_needed STORY_DATABASE_URL story_db
+  sync_pg_url_if_needed MODERATION_DATABASE_URL moderation_db
+  sync_pg_url_if_needed SUBSCRIPTION_DATABASE_URL subscription_db
 fi
 
 if ((${#args[@]} == 0)); then

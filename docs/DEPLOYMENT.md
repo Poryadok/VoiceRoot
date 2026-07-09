@@ -237,8 +237,11 @@ kubectl create configmap voice-bot-db-migrations -n "$NS" \
   --from-file=src/backend/migrations/bot_db \
   --dry-run=client -o yaml | kubectl apply -f -
 
+PG_PASS="$(kubectl get secret voice-app-secrets -n "$NS" -o jsonpath='{.data.POSTGRES_PASSWORD}' | base64 -d)"
+DSN="postgres://voice:${PG_PASS}@voice-postgres:5432/bot_db?sslmode=disable"
 sed -e "s|__K_NAMESPACE__|${NS}|g" \
     -e "s|__MIGRATE_IMAGE_TAG__|v4.18.1|g" \
+    -e "s|__DATABASE_URL__|${DSN}|g" \
     deploy/templates/migrate-bot-db-job.yaml | kubectl apply -f -
 
 kubectl wait --for=condition=complete job/voice-migrate-bot-db -n "$NS" --timeout=120s
