@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Add missing Postgres/ClickHouse URL keys to an existing voice-app-secrets (idempotent).
-# Old bootstrap secrets predate story/subscription/moderation/analytics staging services.
+# Old bootstrap secrets predate social/story/subscription/moderation/analytics staging services.
 set -euo pipefail
 
 NS="${VOICE_K8S_NAMESPACE:-voice-staging}"
@@ -78,6 +78,7 @@ else
     fi
   }
 
+  sync_pg_url_if_needed SOCIAL_DATABASE_URL social_db
   sync_pg_url_if_needed BOT_DATABASE_URL bot_db
   sync_pg_url_if_needed STORY_DATABASE_URL story_db
   sync_pg_url_if_needed MODERATION_DATABASE_URL moderation_db
