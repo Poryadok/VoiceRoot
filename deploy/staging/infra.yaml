@@ -293,6 +293,7 @@ spec:
                 secretKeyRef:
                   name: voice-app-secrets
                   key: CLICKHOUSE_PASSWORD
+                  optional: true
             - name: CLICKHOUSE_DB
               value: voice
           ports:
@@ -302,15 +303,17 @@ spec:
             - name: chdata
               mountPath: /var/lib/clickhouse
           startupProbe:
-            exec:
-              command: ["clickhouse-client", "--query", "SELECT 1"]
+            httpGet:
+              path: /ping
+              port: 8123
             initialDelaySeconds: 5
             periodSeconds: 3
             timeoutSeconds: 3
             failureThreshold: 40
           readinessProbe:
-            exec:
-              command: ["clickhouse-client", "--query", "SELECT 1"]
+            httpGet:
+              path: /ping
+              port: 8123
             periodSeconds: 5
             timeoutSeconds: 3
             failureThreshold: 6

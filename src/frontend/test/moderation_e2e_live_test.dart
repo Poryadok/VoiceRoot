@@ -5,7 +5,7 @@ import 'support/live_gateway_harness.dart';
 
 void main() {
   test(
-    'phase 14 moderation: report submit accepted',
+    'moderation moderation: report submit accepted',
     () async {
       final probe = await probeLiveGateway();
       expect(

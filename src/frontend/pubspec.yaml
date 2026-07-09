@@ -1,5 +1,5 @@
 name: voice_frontend
-description: Voice Flutter client (Phase 0 shell). See ../../docs/PLAN.md.
+description: Voice Flutter client (platforms (docs/PLAN.md) shell). See ../../docs/PLAN.md.
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev

@@ -1,4 +1,4 @@
-// Ping-bot is a minimal polling-mode dev bot for app stack6 local smoke.
+// Ping-bot is a minimal polling-mode dev bot for bots (docs/features/bots.md) local smoke.
 //
 // Usage:
 //

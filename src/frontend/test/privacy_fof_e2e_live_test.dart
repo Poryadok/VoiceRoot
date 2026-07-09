@@ -8,7 +8,7 @@ import 'support/live_gateway_harness.dart';
 
 void main() {
   test(
-    'phase 11 privacy fof: stranger denied, friend-of-friend allowed',
+    'privacy privacy fof: stranger denied, friend-of-friend allowed',
     () async {
       final probe = await probeLiveGateway();
       expect(

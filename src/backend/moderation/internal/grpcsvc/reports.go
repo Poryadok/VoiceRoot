@@ -289,6 +289,6 @@ func (s *ModerationGRPC) maybeAutoShadowBan(ctx context.Context, targetProfileID
 	if err := s.Reports.InsertAutoModLog(ctx, targetProfileID, "report_threshold", "shadow_ban", details); err != nil {
 		return err
 	}
-	_ = targetAccountID // app stack4 applies sanctions; app stack1 logs only (PLAN §11).
+	_ = targetAccountID // moderation (docs/features/reports.md) applies sanctions; privacy/trust (docs/features/privacy.md) logs only (PLAN §11).
 	return nil
 }

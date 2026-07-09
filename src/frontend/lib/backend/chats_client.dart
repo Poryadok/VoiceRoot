@@ -103,7 +103,7 @@ class ChatListData {
   final String? nextCursor;
 }
 
-/// Simple group roles (Phase 4): creator is [kChatRoleOwner], invitees [kChatRoleMember].
+/// Simple group roles (groups (docs/features/text-chat.md)): creator is [kChatRoleOwner], invitees [kChatRoleMember].
 const String kChatRoleOwner = 'owner';
 const String kChatRoleMember = 'member';
 

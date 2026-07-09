@@ -120,6 +120,7 @@ kubectl create secret tls voice-gateway-tls -n voice-staging --cert=tls.crt --ke
 
 ### Product analytics (ClickHouse + Analytics service)
 
+Спека фичи: [features/analytics.md](features/analytics.md).
 | Переменная | Где | Назначение |
 |------------|-----|------------|
 | `CLICKHOUSE_DSN` | `voice-analytics` | Native DSN (`clickhouse://user:pass@host:9000/voice`) |

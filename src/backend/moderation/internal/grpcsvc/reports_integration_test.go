@@ -21,7 +21,7 @@ var validReportCategories = []string{
 	"spam", "harassment", "offensive", "fake", "cheating", "other",
 }
 
-// TestCreateReport_ValidCategories documents PLAN app stack1 report categories.
+// TestCreateReport_ValidCategories documents PLAN privacy/trust (docs/features/privacy.md) report categories.
 func TestCreateReport_ValidCategories(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
@@ -234,7 +234,7 @@ WHERE target_profile_id = $1 AND trigger = 'report_threshold' AND action = 'shad
 	var sanctionCount int
 	err = pool.QueryRow(ctx, `SELECT COUNT(*) FROM sanctions WHERE target_account_id = $1`, targetProfile).Scan(&sanctionCount)
 	require.NoError(t, err)
-	require.Equal(t, 0, sanctionCount, "app stack1 must not insert sanctions on report threshold")
+	require.Equal(t, 0, sanctionCount, "privacy/trust (docs/features/privacy.md) must not insert sanctions on report threshold")
 }
 
 // TestListReports_InternalOnly documents queue listing is not a public reporter API.

@@ -9,7 +9,7 @@ import (
 	userv1 "voice.app/voice/user/v1"
 )
 
-// app stack3 contract tests — fail until protos and codegen include the fields/RPCs.
+// multi-profile/verification (docs/features/multi-profile.md) contract tests — fail until protos and codegen include the fields/RPCs.
 
 func TestPhase13_ProfileProto_HasFrozenAtField(t *testing.T) {
 	t.Parallel()

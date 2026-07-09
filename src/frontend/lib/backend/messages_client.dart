@@ -353,7 +353,7 @@ class MessageListData {
   }
 }
 
-/// Shared media tab kind (app stack0 — docs/features/search.md).
+/// Shared media tab kind (roles/threads (docs/features/roles.md) — docs/features/search.md).
 enum SharedMediaTabKind { media, files, links, voice }
 
 extension SharedMediaTabKindWire on SharedMediaTabKind {
@@ -706,7 +706,7 @@ class VoiceMessagesClient {
     return _map(result, (data) => voiceMessageFromProto(data.message));
   }
 
-  /// app stack0 shared media tab listing.
+  /// roles/threads (docs/features/roles.md) shared media tab listing.
   Future<MessagesApiResult<SharedMediaListData>> listSharedMedia({
     required String authorization,
     required String chatId,

@@ -7,7 +7,7 @@ import 'package:voice_frontend/ui/chat/e2e_chat_settings.dart';
 import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
 
-/// app stack5 red tests: E2E opt-in/opt-out confirmation dialogs (docs/features/encryption.md).
+/// encryption (docs/features/encryption.md) red tests: E2E opt-in/opt-out confirmation dialogs (docs/features/encryption.md).
 void main() {
   Widget e2eDialogTestApp({required Widget child}) {
     return ProviderScope(

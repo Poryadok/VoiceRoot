@@ -36,7 +36,7 @@ func migrationSQL(t *testing.T) string {
 	return string(b1) + "\n" + string(b2)
 }
 
-// TestArchivePurgeWorker_invokesFileDeleter documents app stack7 archive cleanup:
+// TestArchivePurgeWorker_invokesFileDeleter documents stories (docs/features/stories.md) archive cleanup:
 // purge worker must call FileDeleter.DeleteFile for each purged story media_file_id.
 func TestArchivePurgeWorker_invokesFileDeleter(t *testing.T) {
 	if testing.Short() {

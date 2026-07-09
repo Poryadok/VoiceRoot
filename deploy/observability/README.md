@@ -94,7 +94,7 @@ deploy/observability/
     rules/                 # recording + P1/P2 alerts
   grafana/
     provisioning/
-    dashboards/            # JSON dashboards (Phase 3)
+    dashboards/            # JSON dashboards (file-storage (docs/features/file-storage.md))
 ```
 
 ## Scrape wiring

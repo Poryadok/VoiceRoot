@@ -5,7 +5,7 @@ Mirror [`deploy/staging/`](../staging/) when ready for first production cutover.
 | File | Status |
 |------|--------|
 | `namespace.yaml` | `voice-prod` |
-| `services.yaml` | Bot service only (app stack6 skeleton) |
+| `services.yaml` | Bot service only (bots (docs/features/bots.md) skeleton) |
 | `configmap-app.yaml` | Not yet — copy from staging + prod FQDNs |
 | `gateway-deployment.yaml` | Not yet |
 | `infra.yaml` | Not yet |

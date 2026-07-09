@@ -10,7 +10,7 @@ class _FixedReducedMotionNotifier extends ReducedMotionNotifier {
   bool build() => value;
 }
 
-/// app stack8 a11y: reduced motion setting short-circuits panel animations.
+/// deep-links/platforms (docs/features/deep-links.md) a11y: reduced motion setting short-circuits panel animations.
 void main() {
   testWidgets('reduced motion uses instant transitions', (tester) async {
     await tester.pumpWidget(

@@ -125,7 +125,7 @@ Future<void> clearLiveAuthRateLimit() async {
   }
 }
 
-/// Reads `messages.content` from compose `messaging_db` (app stack5 ciphertext-at-rest).
+/// Reads `messages.content` from compose `messaging_db` (encryption (docs/features/encryption.md) ciphertext-at-rest).
 ///
 /// Returns null when compose/postgres is unavailable; live tests should treat that
 /// as a soft skip for the DB assertion only.

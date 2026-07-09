@@ -7,7 +7,7 @@ type ProductCatalog struct {
 	skus map[string]int
 }
 
-// Default returns the product catalog for checkout (app stack2).
+// Default returns the product catalog for checkout (subscription (docs/features/subscription.md)).
 func Default() *ProductCatalog {
 	monthly := testfixtures.PremiumMonthlyPriceCents
 	yearly := int(float64(monthly*12) * (1 - float64(testfixtures.YearlyDiscountPercent)/100))

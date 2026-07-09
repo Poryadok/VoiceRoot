@@ -60,13 +60,13 @@ type MessagingGRPC struct {
 	RolePermissions mentions.RolePermissionChecker
 	// UserPresence resolves online members for @here.
 	UserPresence mentions.OnlinePresenceLookup
-	// ChatThreadPolicy loads thread settings from chat_db (app stack0).
+	// ChatThreadPolicy loads thread settings from chat_db (roles/threads (docs/features/roles.md)).
 	ChatThreadPolicy *store.SQLChatThreadPolicy
 	// ChatRolePermissions checks TEXT_CHAT_*_THREADS in space chats.
 	ChatRolePermissions ChatRolePermissions
 	// PlatformMod optional platform moderation (shadow ban, spam mute).
 	PlatformMod PlatformModerationChecker
-	// PreKeyBundles optional Signal pre-key directory (app stack5 E2E).
+	// PreKeyBundles optional Signal pre-key directory (encryption (docs/features/encryption.md) E2E).
 	PreKeyBundles *store.E2EPreKeyStore
 	// Logger emits structured nats_publish errors when JetStream publish fails after a successful RPC.
 	Logger *slog.Logger

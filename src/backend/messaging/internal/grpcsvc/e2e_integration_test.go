@@ -18,7 +18,7 @@ import (
 	messagingv1 "voice.app/voice/messaging/v1"
 )
 
-// app stack5 red tests: Signal pre-key exchange + ciphertext-only storage (docs/PLAN.md).
+// encryption (docs/features/encryption.md) red tests: Signal pre-key exchange + ciphertext-only storage (docs/PLAN.md).
 
 func seedE2EEnabledDM(t *testing.T, ctx context.Context, pool *pgxpool.Pool, chatID uuid.UUID) {
 	t.Helper()

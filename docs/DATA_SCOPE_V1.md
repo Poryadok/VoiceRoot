@@ -25,7 +25,7 @@
 | Typing indicator                                                   | text-chat (эфемерно в Realtime)                                                                             |
 | Push, Notification Service                                         | [notifications.md](features/notifications.md)                                                               |
 | Голос/видео, полноценный File Service, вложения в чате             | [voice-chat.md](features/voice-chat.md), [file-storage.md](features/file-storage.md) (аватар — уже в v1)   |
-| Matchmaking, Search (отдельная `search_db`), Analytics, ClickHouse | [matchmaking.md](features/matchmaking.md), [search.md](features/search.md)                                  |
+| Matchmaking, Search (отдельная `search_db`), Analytics, ClickHouse | [matchmaking.md](features/matchmaking.md), [search.md](features/search.md), [analytics.md](features/analytics.md) |
 | Базовые репорты, 2FA, гранулярная приватность профиля              | [reports.md](features/reports.md), [privacy.md](features/privacy.md)                                        |
 | Subscription                                                       | [subscription.md](features/subscription.md)                                                                 |
 | Мульти-профиль (продукт), верификация значков                      | [multi-profile.md](features/multi-profile.md), [verification.md](features/verification.md)                  |

@@ -1,4 +1,4 @@
-# Voice Developer Portal (app stack6)
+# Voice Developer Portal (bots (docs/features/bots.md))
 
 Minimal Vite app for bot registration, manifest validate/apply, and token display.
 

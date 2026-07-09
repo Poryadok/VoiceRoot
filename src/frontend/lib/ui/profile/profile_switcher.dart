@@ -8,7 +8,7 @@ import '../../state/subscription_providers.dart';
 import '../../state/social_providers.dart';
 import '../../theme/voice_colors.dart';
 
-/// Desktop dropdown to switch the active profile (app stack3).
+/// Desktop dropdown to switch the active profile (multi-profile/verification (docs/features/multi-profile.md)).
 class ProfileSwitcher extends ConsumerWidget {
   const ProfileSwitcher({super.key});
 

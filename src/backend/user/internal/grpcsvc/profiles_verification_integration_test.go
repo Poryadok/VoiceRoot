@@ -26,7 +26,7 @@ import (
 	userv1 "voice.app/voice/user/v1"
 )
 
-func startUserGRPCForPhase13(t *testing.T, profiles *store.ProfileStore, events *phase13EventsRecorder) (userv1.UserServiceClient, func()) {
+func startUserGRPCForPhase13(t *testing.T, profiles *store.ProfileStore, events *profilesVerificationEventsRecorder) (userv1.UserServiceClient, func()) {
 	t.Helper()
 	mr := miniredis.RunT(t)
 	t.Cleanup(mr.Close)
@@ -76,7 +76,7 @@ func TestSwitchProfile_PublishesProfileSwitchedEvent(t *testing.T) {
 	ctx := context.Background()
 	pool := startUserPostgresForSubscriptionTests(t, ctx)
 	profiles := store.NewProfileStore(pool)
-	events := &phase13EventsRecorder{}
+	events := &profilesVerificationEventsRecorder{}
 	cli, _ := startUserGRPCForPhase13(t, profiles, events)
 
 	accountID := uuid.New()

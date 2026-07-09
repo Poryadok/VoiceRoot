@@ -3,7 +3,7 @@ import 'package:voice_frontend/backend/notifications_client.dart';
 
 import 'support/live_gateway_harness.dart';
 
-/// Phase-8 FCM Android E2E: device token registration via Gateway (compose stack).
+/// platforms (docs/features/platforms.md) FCM Android E2E: device token registration via Gateway (compose stack).
 ///
 /// ```text
 /// flutter test test/fcm_android_e2e_live_test.dart ^

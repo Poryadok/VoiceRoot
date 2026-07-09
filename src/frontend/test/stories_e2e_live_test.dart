@@ -24,7 +24,7 @@ void main() {
       final stories = VoiceStoriesClient(gateway: ctx.gatewayHttp());
       final created = await stories.createTextStory(
         authorization: author.authorizationHeader,
-        text: 'app stack7 live e2e @viewer',
+        text: 'stories (docs/features/stories.md) live e2e @viewer',
         mentionProfileIds: [viewer.activeProfileId],
       );
       expect(created, isA<StoriesApiOk<StoryData>>());

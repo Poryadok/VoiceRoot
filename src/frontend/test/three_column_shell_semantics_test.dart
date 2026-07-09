@@ -5,7 +5,7 @@ import 'package:voice_frontend/shell/three_column_shell.dart';
 
 import 'support/voice_test_theme.dart';
 
-/// app stack8 a11y: navigation and chat regions labeled for screen readers.
+/// deep-links/platforms (docs/features/deep-links.md) a11y: navigation and chat regions labeled for screen readers.
 void main() {
   testWidgets('three column shell exposes nav and chat semantics', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1280, 800));

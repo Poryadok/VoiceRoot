@@ -9,7 +9,7 @@ import 'package:voice_frontend/ui/core/verified_badge.dart';
 import 'support/voice_test_theme.dart';
 
 void main() {
-  test('VerifiedBadge widget file exists for app stack3', () {
+  test('VerifiedBadge widget file exists for multi-profile/verification (docs/features/multi-profile.md)', () {
     expect(
       File('lib/ui/core/verified_badge.dart').existsSync(),
       isTrue,

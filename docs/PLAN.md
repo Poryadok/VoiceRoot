@@ -61,17 +61,7 @@
 | [platforms](features/platforms.md) | partial | Flutter | `mobile_layout_e2e_live_test`, `windows_version_e2e_live_test` |
 | [i18n](features/i18n.md) | shipped | Flutter | `i18n_baseline_test` |
 | [federation](features/federation.md) | **deferred** | Federation (scaffold) | — |
-| Product analytics | partial | Analytics, ClickHouse | `TestComposeAnalytics_live`, `TestComposeAnalyticsExport_live` |
-
-### Фаза 20 — Analytics (критерии приёмки)
-
-1. Событие `message.sent` в compose → строка в ClickHouse &lt; 60s; product dashboard отражает активность.
-2. Staff JWT → `GET /api/v1/analytics/dashboard/product` **200**; обычный user → **403**.
-3. Export CSV (`/api/v1/analytics/export`) пишет audit log на Gateway.
-4. Метрика `analytics_ingest_lag_seconds` на `/metrics` analytics + Grafana ingest dashboard.
-5. Telemetry Notification/Search/Gateway/Subscription/Moderation в CH без дублирования domain events.
-6. `make build-all` + unit/integration tests analytics green; opt-in live tests — [TESTING.md](TESTING.md).
-7. Staging: CH + `voice-analytics` + Grafana datasource; admin deploy documented.
+| [analytics](features/analytics.md) | partial | Analytics, ClickHouse | `TestComposeAnalytics_live`, `TestComposeAnalyticsExport_live` |
 
 **Scaffold** (health + CI matrix, без продуктовой логики): Federation (до запроса рынка).
 

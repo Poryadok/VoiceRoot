@@ -34,7 +34,7 @@ import org.testcontainers.utility.DockerImageName;
 import voice.backend.auth.service.LinkedAccountsService;
 
 /**
- * app stack3 red tests: active profile switch, OAuth link with mocked Twitch/YouTube, unlink clears verification.
+ * multi-profile/verification (docs/features/multi-profile.md) red tests: active profile switch, OAuth link with mocked Twitch/YouTube, unlink clears verification.
  */
 @SpringBootTest
 @AutoConfigureMockMvc

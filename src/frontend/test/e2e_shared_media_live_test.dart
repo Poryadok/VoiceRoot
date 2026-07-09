@@ -12,7 +12,7 @@ import 'package:voice_frontend/e2e/e2e_message_service.dart';
 
 import 'support/live_gateway_harness.dart';
 
-/// app stack5 live E2E shared media: ListSharedMedia returns `e2e_key_wire` for
+/// encryption (docs/features/encryption.md) live E2E shared media: ListSharedMedia returns `e2e_key_wire` for
 /// encrypted attachments in an E2E-enabled DM.
 ///
 /// Run when full compose stack is up:

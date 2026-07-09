@@ -1,4 +1,4 @@
-# Production skeleton — Bot Service (app stack6). Extend with full stack before first prod cutover.
+# Production skeleton — Bot Service (bots (docs/features/bots.md)). Extend with full stack before first prod cutover.
 # Image placeholders substituted by render script or sed — mirror deploy/staging/services.yaml voice-bot block.
 # Namespace: voice-prod. Requires voice-app-config / voice-app-secrets in the same namespace.
 ---

@@ -1,8 +1,10 @@
 # Analytics Service
 
+> Продуктовая фича (scope, DoD, staff UI): [features/analytics.md](../features/analytics.md). Operational monitoring — [features/observability.md](../features/observability.md).
+
 ## Обзор
 
-Сбор, хранение и визуализация аналитических данных со всех микросервисов.
+Сбор, хранение и query API для **продуктовой** аналитики со всех микросервисов (ingest → ClickHouse → staff REST).
 
 **Язык**: Go
 **OLAP БД**: ClickHouse

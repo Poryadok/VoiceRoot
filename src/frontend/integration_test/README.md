@@ -19,12 +19,12 @@ API-level live tests run on the VM with `flutter test` (not a browser driver).
 | [`test/message_delivery_e2e_live_test.dart`](../test/message_delivery_e2e_live_test.dart) | `delivery_ack` → sender `message_delivered` |
 | [`test/dm_requests_e2e_live_test.dart`](../test/dm_requests_e2e_live_test.dart) | Stranger DM → `requests` inbox → accept → `main` |
 | [`test/file_attachment_e2e_live_test.dart`](../test/file_attachment_e2e_live_test.dart) | File upload + attachment message (skips without MinIO/R2) |
-| [`test/mobile_layout_e2e_live_test.dart`](../test/mobile_layout_e2e_live_test.dart) | Phase-8 mobile layout: gateway health + narrow breakpoint contract |
+| [`test/mobile_layout_e2e_live_test.dart`](../test/mobile_layout_e2e_live_test.dart) | platforms (docs/features/platforms.md) mobile layout: gateway health + narrow breakpoint contract |
 | [`test/windows_version_e2e_live_test.dart`](../test/windows_version_e2e_live_test.dart) | Windows desktop `/version` policy + dynamic 426 for outdated client |
-| [`test/trust_e2e_live_test.dart`](../test/trust_e2e_live_test.dart) | app stack1: privacy DM block, report 202, 2FA enroll/verify/login gate |
-| [`test/bots_slash_e2e_live_test.dart`](../test/bots_slash_e2e_live_test.dart) | app stack6: install polling bot, `/ping` → pong in history |
-| [`test/bots_ephemeral_live_test.dart`](../test/bots_ephemeral_live_test.dart) | app stack6: ephemeral slash response (invoker-only) |
-| [`test/bots_botc_live_test.dart`](../test/bots_botc_live_test.dart) | app stack6 BOT-C: presence heartbeat, space members, create chat |
+| [`test/trust_e2e_live_test.dart`](../test/trust_e2e_live_test.dart) | privacy/trust (docs/features/privacy.md): privacy DM block, report 202, 2FA enroll/verify/login gate |
+| [`test/bots_slash_e2e_live_test.dart`](../test/bots_slash_e2e_live_test.dart) | bots (docs/features/bots.md): install polling bot, `/ping` → pong in history |
+| [`test/bots_ephemeral_live_test.dart`](../test/bots_ephemeral_live_test.dart) | bots (docs/features/bots.md): ephemeral slash response (invoker-only) |
+| [`test/bots_botc_live_test.dart`](../test/bots_botc_live_test.dart) | bots (docs/features/bots.md) BOT-C: presence heartbeat, space members, create chat |
 
 Go Gateway mirror tests: `src/backend/gateway/compose_*_live_test.go` — run via `make compose-e2e-live` (Go only) or **`make compose-e2e-full`** (Go + Flutter).
 
@@ -100,7 +100,7 @@ Default staging hostnames live in [`deploy/staging/domains.defaults`](../../../d
 
 See `docs/TESTING.md` and the `flutter-web-client-testing` skill.
 
-## Chrome integration_test (app stack8 deep links)
+## Chrome integration_test (deep-links/platforms (docs/features/deep-links.md) deep links)
 
 UI-driven navigation in Chrome (no live API required — ProviderScope overrides):
 

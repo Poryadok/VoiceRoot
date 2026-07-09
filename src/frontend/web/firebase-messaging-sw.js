@@ -1,4 +1,4 @@
-// Firebase Cloud Messaging service worker (Phase 6).
+// Firebase Cloud Messaging service worker (notifications (docs/features/notifications.md)).
 // Replace firebaseConfig with project values from Firebase console / dart-define.
 importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js');

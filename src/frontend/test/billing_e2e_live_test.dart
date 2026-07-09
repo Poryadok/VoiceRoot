@@ -10,7 +10,7 @@ const _upload250MiB = 250 << 20;
 
 void main() {
   test(
-    'phase 12 billing: webhook premium, subscription me, upload boundaries',
+    'subscription billing: webhook premium, subscription me, upload boundaries',
     () async {
       final probe = await probeLiveGateway();
       expect(

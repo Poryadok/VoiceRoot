@@ -373,7 +373,7 @@ class RespondToMatchData {
   }
 }
 
-/// Gateway client for /api/v1/matchmaking/games/** (Phase 7 catalog).
+/// Gateway client for /api/v1/matchmaking/games/** (matchmaking (docs/features/matchmaking.md) catalog).
 class VoiceMatchmakingClient {
   VoiceMatchmakingClient({required GatewayHttpClient gateway}) : _gateway = gateway;
 

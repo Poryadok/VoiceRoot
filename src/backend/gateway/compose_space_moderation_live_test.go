@@ -26,7 +26,7 @@ func TestComposeSpaceModeration_live(t *testing.T) {
 	sessMod := registerComposeUser(t, client, base, formatComposeEmail("space-mod-mod", n), "VoiceQaTest1!")
 	sessMember := registerComposeUser(t, client, base, formatComposeEmail("space-mod-member", n), "VoiceQaTest1!")
 
-	spaceID := createComposeSpace(t, client, base, sessOwner.AccessToken, "Moderation QA", "phase 5")
+	spaceID := createComposeSpace(t, client, base, sessOwner.AccessToken, "Moderation QA", "roles/spaces")
 
 	invite := createComposeSpaceInvite(t, client, base, sessOwner.AccessToken, spaceID)
 	joinComposeSpaceByInvite(t, client, base, sessMod.AccessToken, invite.Code)

@@ -5,7 +5,7 @@ import 'package:voice_frontend/backend/messages_client.dart';
 
 import 'support/live_gateway_harness.dart';
 
-/// app stack0 threads E2E (API-level): DM reply excluded from main feed, visible in thread.
+/// roles/threads (docs/features/roles.md) threads E2E (API-level): DM reply excluded from main feed, visible in thread.
 ///
 /// ```text
 /// flutter test test/threads_e2e_live_test.dart ^

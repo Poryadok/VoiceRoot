@@ -23,7 +23,7 @@ func TestComposeDeepLinks_live(t *testing.T) {
 	n := time.Now().UnixNano()
 
 	ownerSess := registerComposeUser(t, client, base, formatComposeEmail("p18-deeplink-owner", n), "VoiceQaTest1!")
-	spaceID := createComposeSpace(t, client, base, ownerSess.AccessToken, "Deep Link QA", "phase 18")
+	spaceID := createComposeSpace(t, client, base, ownerSess.AccessToken, "Deep Link QA", "deep-links")
 	inv := createComposeSpaceInvite(t, client, base, ownerSess.AccessToken, spaceID)
 	require.NotEmpty(t, inv.Code)
 

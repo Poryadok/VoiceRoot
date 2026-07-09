@@ -3,9 +3,9 @@ import 'package:voice_frontend/backend/onboarding_client.dart';
 
 import 'support/live_gateway_harness.dart';
 
-/// app stack8 onboarding E2E (API-level): backend state persists across fetch.
+/// deep-links/platforms (docs/features/deep-links.md) onboarding E2E (API-level): backend state persists across fetch.
 void main() {
-  test('phase 18 onboarding: steps persist on server', () async {
+  test('deep-links onboarding: steps persist on server', () async {
     final probe = await probeLiveGateway();
     expect(
       probe,

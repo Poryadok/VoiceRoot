@@ -34,7 +34,7 @@
 |---------|-----------------|
 | **Distributed tracing** (OTel + Jaeger/Tempo) | Correlation по `request_id` в логах достаточен для v1; трейсы — отдельная фаза |
 | **Клиентские RUM-метрики** (Flutter → backend) | SLO измеряются серверно; клиент — позже |
-| **Analytics Service / ClickHouse** | Продуктовая аналитика ≠ operational monitoring |
+| **Analytics Service / ClickHouse** | Продуктовая аналитика ≠ operational monitoring — см. [analytics.md](analytics.md) |
 | **Полные runbooks и chaos-тесты** | [OPERATIONS.md](../OPERATIONS.md) — вне scope до стабильных прод-метрик |
 | **Log-based alerting на каждую ошибку** | Шум; алерты на метрики + узкий набор log patterns (panic, JetStream stalled) |
 | **Production HA** для Prometheus/Loki | Soft launch: single replica + PVC достаточно; HA — при росте нагрузки |

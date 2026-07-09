@@ -13,7 +13,7 @@ import 'package:voice_frontend/e2e/e2e_message_service.dart';
 
 import 'support/live_gateway_harness.dart';
 
-/// app stack5 live E2E file: encrypted upload in E2E-enabled DM skips server image processing.
+/// encryption (docs/features/encryption.md) live E2E file: encrypted upload in E2E-enabled DM skips server image processing.
 ///
 /// Run when full compose stack is up:
 /// ```text

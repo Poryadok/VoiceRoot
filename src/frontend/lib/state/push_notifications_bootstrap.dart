@@ -1,6 +1,6 @@
 import '../backend/notifications_client.dart';
 
-/// Wires FCM token refresh to Gateway device registration (Phase 6).
+/// Wires FCM token refresh to Gateway device registration (notifications (docs/features/notifications.md)).
 class PushNotificationsBootstrap {
   const PushNotificationsBootstrap();
 

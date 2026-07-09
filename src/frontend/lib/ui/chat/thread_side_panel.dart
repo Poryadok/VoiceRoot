@@ -8,7 +8,7 @@ import '../../state/chat_providers.dart';
 import '../../theme/voice_colors.dart';
 import 'mention_message_content.dart';
 
-/// Thread replies for a root message (app stack0).
+/// Thread replies for a root message (roles/threads (docs/features/roles.md)).
 class ThreadSidePanel extends ConsumerStatefulWidget {
   const ThreadSidePanel({
     super.key,

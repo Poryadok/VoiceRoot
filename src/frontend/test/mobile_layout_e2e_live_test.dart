@@ -3,7 +3,7 @@ import 'package:voice_frontend/theme/voice_layout.dart';
 
 import 'support/live_gateway_harness.dart';
 
-/// Phase-8 mobile layout live check: API stack reachable + narrow breakpoint contract.
+/// platforms (docs/features/platforms.md) mobile layout live check: API stack reachable + narrow breakpoint contract.
 ///
 /// ```text
 /// flutter test test/mobile_layout_e2e_live_test.dart ^

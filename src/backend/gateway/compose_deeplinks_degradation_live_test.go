@@ -25,7 +25,7 @@ func TestComposeDeepLinksResolveWhenSearchDown_live(t *testing.T) {
 	n := time.Now().UnixNano()
 
 	ownerSess := registerComposeUser(t, client, base, formatComposeEmail("p18-deg-owner", n), "VoiceQaTest1!")
-	spaceID := createComposeSpace(t, client, base, ownerSess.AccessToken, "Deg Link QA", "phase 18 deg")
+	spaceID := createComposeSpace(t, client, base, ownerSess.AccessToken, "Deg Link QA", "deep-links deg")
 	inv := createComposeSpaceInvite(t, client, base, ownerSess.AccessToken, spaceID)
 
 	resolveURL := base + "/api/v1/links/resolve?url=" + url.QueryEscape("https://voice.gg/invite/"+inv.Code)

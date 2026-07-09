@@ -1,4 +1,4 @@
-// Package testfixtures holds app stack2 billing limit constants for red-phase tests.
+// Package testfixtures holds subscription (docs/features/subscription.md) billing limit constants for red-phase tests.
 package testfixtures
 
 const (

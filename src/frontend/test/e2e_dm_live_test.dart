@@ -8,7 +8,7 @@ import 'package:voice_frontend/e2e/e2e_crypto_adapter.dart';
 
 import 'support/live_gateway_harness.dart';
 
-/// app stack5 live E2E DM: two users opt in, send ciphertext, server search excludes body.
+/// encryption (docs/features/encryption.md) live E2E DM: two users opt in, send ciphertext, server search excludes body.
 ///
 /// Run when full compose stack is up:
 /// ```text

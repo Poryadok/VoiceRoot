@@ -4,7 +4,7 @@ import 'package:voice_frontend/backend/voice_client.dart';
 
 import 'support/live_gateway_harness.dart';
 
-/// app stack0 screen share signaling E2E (REST + optional WS).
+/// roles/threads (docs/features/roles.md) screen share signaling E2E (REST + optional WS).
 void main() {
   test(
     'active DM call: start and stop screen share',

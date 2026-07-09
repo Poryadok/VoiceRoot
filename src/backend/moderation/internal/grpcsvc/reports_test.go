@@ -13,7 +13,7 @@ import (
 	moderationv1 "voice.app/voice/moderation/v1"
 )
 
-// TestCreateReport_StoryTarget_Accepted documents app stack7 story reports (stories.md → Moderation).
+// TestCreateReport_StoryTarget_Accepted documents stories (docs/features/stories.md) story reports (stories.md → Moderation).
 func TestCreateReport_StoryTarget_Accepted(t *testing.T) {
 	if testing.Short() {
 		t.Skip()

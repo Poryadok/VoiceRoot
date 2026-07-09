@@ -6,7 +6,7 @@ import '../../state/stories_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../../routing/stories_routes.dart';
 
-/// Profile highlights row (app stack7).
+/// Profile highlights row (stories (docs/features/stories.md)).
 class HighlightsSection extends ConsumerWidget {
   const HighlightsSection({
     super.key,

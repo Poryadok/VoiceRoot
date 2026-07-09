@@ -3,7 +3,7 @@ import 'gateway_http.dart';
 
 const String kRolesMissingBaseUrlDetail = 'missing base URL';
 
-/// System role names returned by Role Service (Phase 5).
+/// System role names returned by Role Service (roles/spaces (docs/features/roles.md)).
 const String kSpaceRoleOwner = 'Owner';
 const String kSpaceRoleAdmin = 'Admin';
 

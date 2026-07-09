@@ -27,7 +27,7 @@ import 'story_visibility.dart';
 
 enum StoryCreateType { text, photo, video }
 
-/// Create a text, photo, or video story (app stack7 basics).
+/// Create a text, photo, or video story (stories (docs/features/stories.md) basics).
 class StoryCreateScreen extends ConsumerStatefulWidget {
   const StoryCreateScreen({super.key});
 

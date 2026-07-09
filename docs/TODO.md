@@ -264,7 +264,7 @@ Baseline закрыт (2026-06): register guest, JWT, guards, convert-guest, TTL
 
 ### Batch 13 — Product Analytics (compose / CI / staging)
 
-Реализация по [PLAN.md](PLAN.md) §Фаза 20; спека — [analytics-service.md](microservices/analytics-service.md). Код и инфра Batch 13 в рабочем дереве; остаётся ops-секрет `STAGING_STAFF_TOKEN`.
+Реализация по [analytics.md](features/analytics.md); сервис — [analytics-service.md](microservices/analytics-service.md). Код и инфра Batch 13 в рабочем дереве; остаётся ops-секрет `STAGING_STAFF_TOKEN`.
 
 - [x] **Синхронизация `analytics/go.sum`** — `go.sum` в репо, синхронен с `go.mod` (коммит `9983494`); локальный `go mod verify` на Windows может падать по TLS — см. [TESTING.md](TESTING.md) § «Локальные грабли».
 - [x] **path-filters: ClickHouse init** — `docker/clickhouse/**` в `compose` ([`.github/ci/path-filters.yml`](../.github/ci/path-filters.yml)); добавлен фильтр `admin` для admin CI.
@@ -277,7 +277,7 @@ Baseline закрыт (2026-06): register guest, JWT, guards, convert-guest, TTL
 - [x] **Admin Vitest** — job `admin` в CI (`npm ci` + vitest + build); [`src/admin/package-lock.json`](../src/admin/package-lock.json) для воспроизводимости.
 - [x] **Analytics Dockerfile: go.sum в cache layer** — `COPY analytics/go.mod analytics/go.sum` перед `go mod download` ([`src/backend/analytics/Dockerfile`](../src/backend/analytics/Dockerfile)).
 
-- [ ] **Ops: `STAGING_STAFF_TOKEN`** — задать GitHub Actions repository secret (см. комментарий в [`deploy/staging/secret.example.yaml`](../deploy/staging/secret.example.yaml)); без него staging smoke пропускает analytics-проверки (код готов).
+- [x] **Ops: `STAGING_STAFF_TOKEN`** — GitHub Actions repository secret + `GATEWAY_STATIC_TOKENS_JSON` в `voice-app-secrets` (patch [`patch-gateway-staff-token.sh`](../scripts/staging/patch-gateway-staff-token.sh) на deploy).
 
 **Промпт-якорь:** `Analytics compose/CI/staging gaps from docs/TODO.md Batch 13`.
 
@@ -337,30 +337,11 @@ MVP backend + partial Flutter; AR, algorithmic feed, post-match auto-story, mone
 
 
 
-### Batch 12 — Phase→features: хвосты миграции (2026-07)
+### Batch 12 — Phase→features (2026-07)
 
-После переименования тестов и slim [PLAN.md](PLAN.md) остались ссылки на «фазы» и артефакты bulk-replace.
+Миграция завершена: доки, тесты/имена CI, `lib/gen`/`pb`, `src/**` (вне gen/pb/migrations), `sync-pb-from-gen.sh`, `*.proto eol=lf` в `.gitattributes`. Инструмент: [`apply-phase-text-replacements.ps1`](../scripts/dev/apply-phase-text-replacements.ps1).
 
-- [x] **Доки microservices/features** — убрать «Фаза N» / `app stackN` → ссылки на `docs/features/*.md`: [api-gateway.md](microservices/api-gateway.md), [auth-service.md](microservices/auth-service.md), [user-service.md](microservices/user-service.md), [chat-service.md](microservices/chat-service.md), [messaging-service.md](microservices/messaging-service.md), [realtime-service.md](microservices/realtime-service.md), [file-service.md](microservices/file-service.md), [bot-service.md](microservices/bot-service.md), [primary-profile-bootstrap.md](microservices/primary-profile-bootstrap.md), [friends.md](features/friends.md), [privacy.md](features/privacy.md), [encryption.md](features/encryption.md), [CONTRACT_MATRIX.md](CONTRACT_MATRIX.md), [OPERATIONS.md](OPERATIONS.md), [PROJECT.md](PROJECT.md), [design/brand.md](design/brand.md).
-- [x] **DATA_SCOPE_V1.md §3–4** — дочистить таблицы/абзацы с «Фаза 1/3/9/12/13», «PLAN Фаза 0» (§1–2 уже на фичах).
-- [x] **DATA_STORES.md, backend README** — «Phase 0–1» / `app stack5` → feature names.
-- [x] **deploy/staging** — комментарии в [secret.example.yaml](../deploy/staging/secret.example.yaml), [gateway-deployment.yaml](../deploy/staging/gateway-deployment.yaml) (`phases 0–10` → full app stack).
-- [x] **src/frontend/README.md** — «Phases 0–10», «Phase 8» → [PLAN.md](PLAN.md) / [platforms.md](features/platforms.md).
-- [x] **Комментарии в src/** — остатки `Phase N` в [voice_client.dart](../src/frontend/lib/backend/voice_client.dart), [game_catalog_screen.dart](../src/frontend/lib/ui/matchmaking/game_catalog_screen.dart), doc-комментарии в live-тестах (`/// flutter test test/phase…`).
-- [x] **Сгенерированные stubs** — после финальной правки `protos/`: `make buf-generate` + `make buf-generate-dart` (или `make buf-dart-check`); сейчас в `lib/gen/**` и части `*/pb/**` ещё старые `// Phase N:` из proto.
-- [x] **Проверка CI-имен** — `rg 'phase\d+_|compose_phase|TestComposePhase'` по репо (исключая `migrations/`, `CallPhase`, `*.pbxproj`); убедиться, что [e2e-features.yml](../.github/ci/e2e-features.yml) и все README со скриптами ссылаются только на новые пути.
-- [x] **Локальная верификация** — `make compose-e2e-smoke`, `make build-all` (в сессии миграции `go test` gateway падал на TLS к proxy.golang.org, не на код).
-
-**Промпт-якорь:** `Phase→features tail cleanup from docs/TODO.md Batch 12`.
-
-#### Batch 12 — follow-up (после merge / перед CI)
-
-- [ ] **Закоммитить diff Batch 12** — ~120 файлов: `docs/**`, `src/backend/*/pb/**/*.pb.go`, `src/frontend/lib/gen/**`, deploy/staging, правки `src/`. Без коммита job **`flutter`** упадёт на **`make buf-dart-check`** (drift `lib/gen` vs proto-комментарии).
-- [ ] **`buf-ci` / line endings `protos/`** — см. таблицу «Локальные грабли» в [TESTING.md](TESTING.md) (CRLF vs LF).
-- [ ] **Sync Go `pb/` после `make buf-generate`** — таргета в Makefile нет; копирование `gen/go/voice/**` → `src/backend/*/pb/voice/**` вручную (в сессии — 92 файла). Добавить `scripts/dev/sync-pb-from-gen.sh` + упоминание в [REPOSITORIES.md](REPOSITORIES.md) / Makefile, чтобы не забыть при следующем proto-change.
-- [ ] **Локальная верификация (ещё не зелёная)** — чеклист и обходы Windows: [TESTING.md](TESTING.md) § «Локальные грабли»; скилл `voice-project-full-verification`.
-- [ ] **`app stackN` / `Phase N` в `src/**` (вне gen)** — `rg 'app stack\d'` ~100+ (комментарии тестов, UI, service README): [integration_test/README.md](../src/frontend/integration_test/README.md), [matchmaking/README.md](../src/backend/matchmaking/README.md), [role/README.md](../src/backend/role/README.md), [admin/README.md](../src/admin/README.md), [ping-bot/README.md](../scripts/dev/ping-bot/README.md), [deploy/prod/README.md](../deploy/prod/README.md), `pubspec.yaml`, `firebase-messaging-sw.js`, dart clients (`notifications_client`, `roles_client`, …). Дочистить → ссылки на `docs/features/*.md` (как в Batch 12 для доков).
-- [x] **Имена golang-migrate файлов** — переименованы: `000002_sanctions`, `000004_profiles_verification`, `000002_verification_type`; ссылки в тестах и snippet обновлены.
+- [ ] **Windows sign-off** — скилл `voice-project-full-verification`: `compose-config-ci`, `buf-ci`, `flutter-ci` — OK; `backend-test-ci-short` в Docker — FAIL `messaging/internal/messageevents` `TestJetStreamPublisher_MessageEditedAndDeleted` (nats timeout). Compose smoke E2E не гонялся. См. [TESTING.md](TESTING.md) § «Локальные грабли».
 
 **Промпт-якорь:** `Batch 12 follow-up from docs/TODO.md`.
 
@@ -408,5 +389,5 @@ MVP backend + partial Flutter; AR, algorithmic feed, post-match auto-story, mone
 
 | **Low** | Batch 10b | Magic numbers → env/ConfigMap |
 
-| **Common** | Batch 12 | Phase→features: хвосты миграции (доки, gen, rg) — done; follow-up: commit, buf-ci CRLF, src app stack |
+| **Common** | Batch 12 | Phase→features — done; хвост: Windows sign-off |
 

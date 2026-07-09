@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestThreadPermissionBits_32Through34 documents app stack0 thread permission bit positions.
+// TestThreadPermissionBits_32Through34 documents roles/threads (docs/features/roles.md) thread permission bit positions.
 func TestThreadPermissionBits_32Through34(t *testing.T) {
 	t.Parallel()
 

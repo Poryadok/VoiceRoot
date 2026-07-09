@@ -3,7 +3,7 @@ import 'package:voice_frontend/backend/notifications_client.dart';
 
 import 'support/live_gateway_harness.dart';
 
-/// Phase-8 APNs E2E: iOS-style device token registration via Gateway (compose stack).
+/// platforms (docs/features/platforms.md) APNs E2E: iOS-style device token registration via Gateway (compose stack).
 ///
 /// ```text
 /// flutter test test/apns_e2e_live_test.dart ^

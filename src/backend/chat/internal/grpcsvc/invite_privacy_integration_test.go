@@ -13,7 +13,7 @@ import (
 	"voice/backend/pkg/privacy"
 )
 
-// invitePrivacyChecker documents app stack1 ChatGRPC.Privacy extension (privacy.md: allow_chat_space_invites).
+// invitePrivacyChecker documents privacy/trust (docs/features/privacy.md) ChatGRPC.Privacy extension (privacy.md: allow_chat_space_invites).
 type invitePrivacyChecker interface {
 	PrivacyChecker
 	AllowChatSpaceInvitesAudience(ctx context.Context, profileID uuid.UUID) (privacy.Audience, error)

@@ -40,6 +40,12 @@ spec:
                 secretKeyRef:
                   name: voice-app-secrets
                   key: GATEWAY_DATABASE_URL
+            - name: GATEWAY_STATIC_TOKENS_JSON
+              valueFrom:
+                secretKeyRef:
+                  name: voice-app-secrets
+                  key: GATEWAY_STATIC_TOKENS_JSON
+                  optional: true
           envFrom:
             - configMapRef:
                 name: voice-app-config

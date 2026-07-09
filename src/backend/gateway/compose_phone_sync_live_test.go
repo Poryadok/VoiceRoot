@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestComposePhoneSync_live documents app stack1 SyncPhoneContacts with Auth phone-hash lookup and allow_phone_search filter.
+// TestComposePhoneSync_live documents privacy/trust (docs/features/privacy.md) SyncPhoneContacts with Auth phone-hash lookup and allow_phone_search filter.
 func TestComposePhoneSync_live(t *testing.T) {
 	if !liveComposeEnabled() {
 		t.Skip("set VOICE_RUN_LIVE_COMPOSE=true to run against local compose")

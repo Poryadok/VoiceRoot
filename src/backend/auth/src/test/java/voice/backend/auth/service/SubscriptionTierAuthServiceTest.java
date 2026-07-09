@@ -31,7 +31,7 @@ class SubscriptionTierAuthServiceTest {
             new RegisterCommand("premium@example.com", null, "Correct horse battery staple", false, "{}"));
     tierStore.setTier(UUID.fromString(registered.accountId()), "premium");
 
-    // app stack2: simulate subscription.plan_started for this account before login.
+    // subscription (docs/features/subscription.md): simulate subscription.plan_started for this account before login.
     AuthSession login =
         service.login(
             new LoginCommand("premium@example.com", null, "Correct horse battery staple", null, "{}"));

@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestAllPermissionNames_Count42 documents app stack0 canonical permission set.
+// TestAllPermissionNames_Count42 documents roles/threads (docs/features/roles.md) canonical permission set.
 func TestAllPermissionNames_Count42(t *testing.T) {
 	t.Parallel()
 	all, err := AllMask()

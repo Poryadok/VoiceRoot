@@ -141,7 +141,7 @@ func TestMessageIndexer_MessageDeleted_RemovesDocument(t *testing.T) {
 	require.Equal(t, []uuid.UUID{msgID}, rec.deletes)
 }
 
-// TestMessageIndexer_MessageSent_E2E_SkipsUpsert documents app stack5: E2E ciphertext is not indexed.
+// TestMessageIndexer_MessageSent_E2E_SkipsUpsert documents encryption (docs/features/encryption.md): E2E ciphertext is not indexed.
 func TestMessageIndexer_MessageSent_E2E_SkipsUpsert(t *testing.T) {
 	t.Parallel()
 	rec := &recordingMessageStore{}
@@ -173,7 +173,7 @@ func TestMessageIndexer_MessageSent_NonE2E_StillUpserts(t *testing.T) {
 	require.Equal(t, "indexed plaintext", rec.upserts[0].Body)
 }
 
-// TestMessageIndexer_MessageEdited_E2E_SkipsUpsert documents app stack5: edited E2E ciphertext is not indexed.
+// TestMessageIndexer_MessageEdited_E2E_SkipsUpsert documents encryption (docs/features/encryption.md): edited E2E ciphertext is not indexed.
 func TestMessageIndexer_MessageEdited_E2E_SkipsUpsert(t *testing.T) {
 	t.Parallel()
 	rec := &recordingMessageStore{}

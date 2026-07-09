@@ -6,7 +6,7 @@ import 'support/live_gateway_harness.dart';
 
 void main() {
   test(
-    'phase 13 profiles + verification: multi-profile switch and verified search boost',
+    'verification profiles + verification: multi-profile switch and verified search boost',
     () async {
       final probe = await probeLiveGateway();
       expect(

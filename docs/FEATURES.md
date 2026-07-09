@@ -72,6 +72,7 @@
 | Подписка             | [subscription.md](features/subscription.md)   | Премиум профиль ($5/мес) и буст спейса, косметика и расширенные лимиты                |
 | Хранение файлов      | [file-storage.md](features/file-storage.md)   | Cloudflare R2, лимиты, сжатие медиа, дедупликация, retention                          |
 | Наблюдаемость        | [observability.md](features/observability.md) | Логи (Loki), метрики (Prometheus), Grafana, алерты — soft launch без сюрпризов        |
+| Продуктовая аналитика | [analytics.md](features/analytics.md)     | ClickHouse, NATS ingest, staff dashboards, воронки/retention, export с audit log      |
 | Федерация            | [federation.md](features/federation.md)       | Self-hosted ноды — **deferred** (по запросу рынка); спека и scaffold в репозитории |
 
 

@@ -20,7 +20,7 @@ import voice.backend.auth.grpc.AuthGrpcService;
 import voice.backend.auth.service.AuthService;
 
 /**
- * app stack5 red tests: encrypted key backup roundtrip (docs/features/encryption.md).
+ * encryption (docs/features/encryption.md) red tests: encrypted key backup roundtrip (docs/features/encryption.md).
  * Server stores opaque blob only; decryption key stays client-side.
  */
 @SpringBootTest

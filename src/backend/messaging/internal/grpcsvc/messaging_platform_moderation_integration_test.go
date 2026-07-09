@@ -10,7 +10,7 @@ import (
 	messagingv1 "voice.app/voice/messaging/v1"
 )
 
-// TestPlatformModeration_ShadowBannedSenderMessageHiddenFromPeer documents app stack4 shadow ban:
+// TestPlatformModeration_ShadowBannedSenderMessageHiddenFromPeer documents moderation (docs/features/reports.md) shadow ban:
 // sender still sends successfully; peer must not see the message in GetMessages.
 func TestPlatformModeration_ShadowBannedSenderMessageHiddenFromPeer(t *testing.T) {
 	if testing.Short() {

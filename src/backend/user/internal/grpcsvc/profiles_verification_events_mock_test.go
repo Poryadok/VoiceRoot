@@ -2,8 +2,8 @@ package grpcsvc
 
 import "context"
 
-// phase13EventsRecorder captures user.events payloads for app stack3 profile lifecycle tests.
-type phase13EventsRecorder struct {
+// profilesVerificationEventsRecorder captures user.events payloads for multi-profile/verification (docs/features/multi-profile.md) profile lifecycle tests.
+type profilesVerificationEventsRecorder struct {
 	profileCreated  int
 	profileSwitched []profileSwitchedEvent
 }
@@ -14,16 +14,16 @@ type profileSwitchedEvent struct {
 	newProfileID  string
 }
 
-func (r *phase13EventsRecorder) PublishProfileCreated(_ context.Context, _, _ string) error {
+func (r *profilesVerificationEventsRecorder) PublishProfileCreated(_ context.Context, _, _ string) error {
 	r.profileCreated++
 	return nil
 }
 
-func (r *phase13EventsRecorder) PublishProfileUpdated(_ context.Context, _, _, _ string) error {
+func (r *profilesVerificationEventsRecorder) PublishProfileUpdated(_ context.Context, _, _, _ string) error {
 	return nil
 }
 
-func (r *phase13EventsRecorder) PublishProfileSwitched(_ context.Context, accountID, oldProfileID, newProfileID string) error {
+func (r *profilesVerificationEventsRecorder) PublishProfileSwitched(_ context.Context, accountID, oldProfileID, newProfileID string) error {
 	r.profileSwitched = append(r.profileSwitched, profileSwitchedEvent{
 		accountID:    accountID,
 		oldProfileID: oldProfileID,
@@ -32,6 +32,6 @@ func (r *phase13EventsRecorder) PublishProfileSwitched(_ context.Context, accoun
 	return nil
 }
 
-func (r *phase13EventsRecorder) PublishVerified(_ context.Context, _, _, _ string) error {
+func (r *profilesVerificationEventsRecorder) PublishVerified(_ context.Context, _, _, _ string) error {
 	return nil
 }

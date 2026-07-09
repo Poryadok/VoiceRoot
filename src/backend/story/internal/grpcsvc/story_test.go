@@ -77,7 +77,7 @@ func TestCreateStory_text(t *testing.T) {
 
 	profile := uuid.New()
 	ctx := withProfile(context.Background(), uuid.New(), profile)
-	text := "phase 17"
+	text := "stories live"
 	resp, err := client.CreateStory(ctx, &storyv1.CreateStoryRequest{
 		Type:        "text",
 		TextContent: &text,

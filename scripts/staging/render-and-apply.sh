@@ -48,6 +48,7 @@ if ! kubectl get secret voice-app-secrets -n "${NS}" >/dev/null 2>&1; then
 fi
 
 bash "${ROOT}/scripts/staging/patch-app-secrets-database-urls.sh"
+bash "${ROOT}/scripts/staging/patch-gateway-staff-token.sh"
 
 render "${ROOT}/deploy/staging/infra.yaml" | kubectl apply -f -
 render "${ROOT}/deploy/staging/services.yaml" | kubectl apply -f -
@@ -61,8 +62,13 @@ bash "${ROOT}/scripts/staging/init-postgres-databases.sh"
 bash "${ROOT}/scripts/staging/ensure-gateway-schema.sh"
 
 echo "Ensuring ClickHouse schema..."
-kubectl rollout status statefulset/voice-clickhouse -n "${NS}" --timeout=180s
-kubectl wait --for=condition=ready pod/voice-clickhouse-0 -n "${NS}" --timeout=120s
+if ! kubectl rollout status statefulset/voice-clickhouse -n "${NS}" --timeout=180s; then
+  echo "ERROR: voice-clickhouse rollout failed" >&2
+  kubectl get pods -n "${NS}" -l app=voice-clickhouse -o wide >&2 || true
+  kubectl describe pod voice-clickhouse-0 -n "${NS}" >&2 || true
+  kubectl logs voice-clickhouse-0 -n "${NS}" --tail=80 >&2 || true
+  exit 1
+fi
 bash "${ROOT}/scripts/staging/apply-clickhouse-init.sh"
 
 bash "${ROOT}/scripts/staging/apply-migrate-jobs.sh"

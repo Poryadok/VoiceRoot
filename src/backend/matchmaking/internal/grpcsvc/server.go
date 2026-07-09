@@ -20,7 +20,7 @@ import (
 	matchmakingv1 "voice.app/voice/matchmaking/v1"
 )
 
-// MatchmakingGRPC implements catalog and search RPCs for Phase 7.
+// MatchmakingGRPC implements catalog and search RPCs for matchmaking (docs/features/matchmaking.md).
 type MatchmakingGRPC struct {
 	matchmakingv1.UnimplementedMatchmakingServiceServer
 	Games                 *store.GameStore

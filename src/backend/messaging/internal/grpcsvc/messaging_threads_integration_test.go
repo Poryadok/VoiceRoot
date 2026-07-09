@@ -16,7 +16,7 @@ import (
 	messagingv1 "voice.app/voice/messaging/v1"
 )
 
-// applyThreadMessagingMigrations applies chat + messaging schemas used by app stack0 thread tests.
+// applyThreadMessagingMigrations applies chat + messaging schemas used by roles/threads (docs/features/roles.md) thread tests.
 func applyThreadMessagingMigrations(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))

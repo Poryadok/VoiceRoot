@@ -56,9 +56,9 @@ jobs:
           fi
           echo "full=${BASE}/gateway:${TAG}" >> "$GITHUB_OUTPUT"
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
-      - uses: azure/setup-kubectl@v4
+      - uses: azure/setup-kubectl@v5
 
       - name: Configure kubeconfig
         run: |
@@ -96,6 +96,7 @@ jobs:
       - name: Apply staging manifests
         env:
           STAGING_APP_SECRETS_YAML_B64: ${{ secrets.STAGING_APP_SECRETS_YAML }}
+          STAGING_STAFF_TOKEN: ${{ secrets.STAGING_STAFF_TOKEN }}
           VOICE_DEVELOPER_PORTAL_INGRESS_HOST: ${{ vars.VOICE_DEVELOPER_PORTAL_INGRESS_HOST }}
           VOICE_GATEWAY_INGRESS_HOST: ${{ vars.VOICE_GATEWAY_INGRESS_HOST }}
           VOICE_GATEWAY_TLS_SECRET: ${{ vars.VOICE_GATEWAY_TLS_SECRET }}

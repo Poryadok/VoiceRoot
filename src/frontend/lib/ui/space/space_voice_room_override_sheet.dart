@@ -8,7 +8,7 @@ import '../../state/auth_providers.dart';
 import '../../state/space_providers.dart';
 import '../core/voice_bottom_sheet.dart';
 
-/// Per-voice-room role deny overrides (app stack0 custom roles).
+/// Per-voice-room role deny overrides (roles/threads (docs/features/roles.md) custom roles).
 class SpaceVoiceRoomOverrideSheet extends ConsumerStatefulWidget {
   const SpaceVoiceRoomOverrideSheet({
     super.key,

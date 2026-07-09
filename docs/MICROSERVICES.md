@@ -168,6 +168,8 @@ Federation ──gRPC bidirectional stream──► External Node
 
 ## Аналитика
 
+Продуктовая фича: [features/analytics.md](features/analytics.md). Сервис: [microservices/analytics-service.md](microservices/analytics-service.md).
+
 ### Источники данных
 
 Каждый микросервис публикует события в `NATS → analytics.*` subject. Analytics Service консьюмит все потоки и записывает в ClickHouse.

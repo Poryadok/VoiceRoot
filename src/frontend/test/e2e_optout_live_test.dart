@@ -8,7 +8,7 @@ import 'package:voice_frontend/e2e/e2e_crypto_adapter.dart';
 
 import 'support/live_gateway_harness.dart';
 
-/// app stack5 live E2E opt-out: disable E2E → send plaintext → search includes body.
+/// encryption (docs/features/encryption.md) live E2E opt-out: disable E2E → send plaintext → search includes body.
 ///
 /// Run when full compose stack is up:
 /// ```text

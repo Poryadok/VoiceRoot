@@ -28,7 +28,7 @@ type ObjectReader interface {
 }
 
 // Processor reads the original image and writes optimized full + thumbnail objects.
-// Encodes as JPEG (pure Go, no CGO) with .webp key suffix for API compatibility with Phase 3 paths.
+// Encodes as JPEG (pure Go, no CGO) with .webp key suffix for API compatibility with file-storage (docs/features/file-storage.md) paths.
 type Processor struct {
 	Reader ObjectReader
 	Writer ObjectWriter

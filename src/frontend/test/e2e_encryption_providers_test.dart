@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_frontend/e2e/e2e_crypto_adapter.dart';
 import 'package:voice_frontend/e2e/e2e_store_factory.dart';
 
-/// app stack5 red tests: client-side Signal encrypt/decrypt adapter (lib/e2e).
+/// encryption (docs/features/encryption.md) red tests: client-side Signal encrypt/decrypt adapter (lib/e2e).
 void main() {
   group('E2eCryptoAdapter', () {
     late E2eCryptoAdapter adapter;

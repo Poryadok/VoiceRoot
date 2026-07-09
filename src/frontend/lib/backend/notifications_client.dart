@@ -21,7 +21,7 @@ final class NotificationsApiFailure extends NotificationsApiResult<Never> {
   final int? statusCode;
 }
 
-/// Gateway client for /api/v1/notifications/** (Phase 6 FCM).
+/// Gateway client for /api/v1/notifications/** (notifications (docs/features/notifications.md) FCM).
 class VoiceNotificationsClient {
   VoiceNotificationsClient({required GatewayHttpClient gateway}) : _gateway = gateway;
 

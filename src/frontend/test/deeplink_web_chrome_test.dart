@@ -12,7 +12,7 @@ import 'package:voice_frontend/state/shared_media_providers.dart';
 import 'support/auth_test_overrides.dart';
 import 'support/voice_test_theme.dart';
 
-/// app stack8: Chrome/web widget test — deep link navigates to conversation.
+/// deep-links/platforms (docs/features/deep-links.md): Chrome/web widget test — deep link navigates to conversation.
 ///
 /// CI job `flutter-web-integration` runs this with `-d chrome` (integration_test
 /// package cannot target web via `flutter test`; see integration_test/README.md).

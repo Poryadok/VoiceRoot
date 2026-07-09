@@ -14,7 +14,7 @@ import 'support/live_gateway_harness.dart';
 
 void main() {
   test(
-    'phase 11 privacy actions: calls, invites, attachments blocked for strangers',
+    'privacy privacy actions: calls, invites, attachments blocked for strangers',
     () async {
       final probe = await probeLiveGateway();
       expect(
@@ -121,7 +121,7 @@ void main() {
       final space = await spaces.createSpace(
         authorization: spaceOwner.authorizationHeader,
         name: 'Privacy actions QA',
-        description: 'phase 11 live',
+        description: 'privacy live',
       );
       expect(space, isA<SpacesApiOk<VoiceSpace>>());
       final spaceId = (space as SpacesApiOk<VoiceSpace>).data.id;

@@ -32,7 +32,7 @@ GO_TEST_TARGETS := $(GO_SERVICES:%=go-test-%)
 GO_TEST_SHORT_TARGETS := $(GO_SERVICES:%=go-test-short-%)
 GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
 
-.PHONY: buf-lint buf-format buf-breaking buf-generate buf-generate-dart buf-dart-check compose-up compose-app-up compose-down compose-logs-collect compose-observability-up \
+.PHONY: buf-lint buf-format buf-breaking buf-generate buf-generate-dart buf-dart-check sync-pb-from-gen buf-generate-all compose-up compose-app-up compose-down compose-logs-collect compose-observability-up \
 	compose-migrate-all compose-migrate-e2e compose-migrate-bot compose-migrate-story compose-e2e-smoke compose-e2e-live compose-e2e-full compose-e2e-voice-live \
 	build-all build-all-breaking check-toolchain compose-config-ci buf-ci backend-test-ci backend-test-ci-short backend-image-ci \
 	gateway-test-ci gateway-image-ci go-test-pkg go-mod-tidy-all auth-test-ci auth-image-ci buf-breaking-ci \
@@ -48,9 +48,15 @@ buf-format:
 buf-breaking:
 	buf breaking protos --against ".git#branch=master,subdir=protos"
 
-# Go: scratch output under gen/ (gitignored). Copy/sync into src/backend/*/pb before commit — see docs/REPOSITORIES.md.
+# Go: scratch output under gen/ (gitignored). Sync into src/backend/*/pb: make sync-pb-from-gen — see docs/REPOSITORIES.md.
 buf-generate:
 	buf generate --template buf.gen.local-go.yaml
+
+sync-pb-from-gen:
+	$(BASH) "$(ROOT)/scripts/dev/sync-pb-from-gen.sh"
+
+# buf-generate + sync committed pb/ trees (proto-change workflow).
+buf-generate-all: buf-generate sync-pb-from-gen
 
 # Remote BSR plugins (requires network). Output: gen/go (gitignored).
 buf-generate-bsr:

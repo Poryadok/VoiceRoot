@@ -24,7 +24,7 @@ func TestComposeSpaceRoles_live(t *testing.T) {
 	sessDelegate := registerComposeUser(t, client, base, formatComposeEmail("space-roles-delegate", n), "VoiceQaTest1!")
 	sessJoiner := registerComposeUser(t, client, base, formatComposeEmail("space-roles-joiner", n), "VoiceQaTest1!")
 
-	spaceID := createComposeSpace(t, client, base, sessOwner.AccessToken, "Roles QA", "phase 5")
+	spaceID := createComposeSpace(t, client, base, sessOwner.AccessToken, "Roles QA", "roles/spaces")
 
 	roles := listComposeSpaceRoles(t, client, base, sessOwner.AccessToken, spaceID)
 	roleNames := map[string]bool{}

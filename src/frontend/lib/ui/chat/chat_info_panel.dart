@@ -23,7 +23,7 @@ import '../../state/space_providers.dart';
 import 'e2e_attachment_actions.dart';
 import 'e2e_chat_settings.dart';
 
-/// Chat info with shared media tabs (app stack0).
+/// Chat info with shared media tabs (roles/threads (docs/features/roles.md)).
 class ChatInfoPanel extends ConsumerStatefulWidget {
   const ChatInfoPanel({
     super.key,

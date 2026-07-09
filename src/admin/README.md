@@ -1,4 +1,4 @@
-# Voice Moderation Admin (app stack4)
+# Voice Moderation Admin (moderation (docs/features/reports.md))
 
 Internal React admin for platform moderators. Calls Gateway staff routes under `/api/v1/admin/moderation/**`.
 

@@ -1,115 +1,95 @@
 # Bulk text replacements after phase→feature rename.
+# Usage: .\scripts\dev\apply-phase-text-replacements.ps1 [-Paths 'src','scripts/dev/ping-bot','deploy/prod']
+param(
+    [string[]]$Paths = @('src', 'scripts/dev/ping-bot', 'deploy/prod', 'deploy/observability')
+)
+
 $ErrorActionPreference = 'Stop'
-Set-Location (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent)
+$RepoRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+Set-Location $RepoRoot
 
-$excludeDirs = @('\.git', '\\gen\\', '\\pb\\', 'node_modules', '\.dart_tool', 'migrations\\')
-$extensions = @('*.go', '*.dart', '*.md', '*.yml', '*.yaml', '*.sh', '*.ps1', '*.java', '*.proto', '*.sql', '*.json', 'Makefile', '*.mdc', 'SKILL.md')
+$extensions = @('*.go', '*.dart', '*.md', '*.yml', '*.yaml', '*.sh', '*.ps1', '*.java', '*.proto', '*.sql', '*.json', 'Makefile', '*.mdc', 'SKILL.md', '*.js')
 
+# Longer keys first (ordered hashtable insertion order matters for .NET Replace chain).
 $replacements = [ordered]@{
-    'TestComposeBotsDailyChatCreateLimit_live' = 'TestComposeBotsDailyChatCreateLimit_live'
-    'TestComposeBotsPrivilegedInstall_live' = 'TestComposeBotsPrivilegedInstall_live'
-    'TestComposeBotsSlashWhenSearchDown_live' = 'TestComposeBotsSlashWhenSearchDown_live'
-    'TestComposeBotsBotCWhenBotDown_live' = 'TestComposeBotsBotCWhenBotDown_live'
-    'TestComposeBotsUninstallCleanup_live' = 'TestComposeBotsUninstallCleanup_live'
-    'TestComposeBotsPerChatToggle_live' = 'TestComposeBotsPerChatToggle_live'
-    'TestComposeBotsOfflineGreyout_live' = 'TestComposeBotsOfflineGreyout_live'
-    'TestComposeBotsSlashDeferred_live' = 'TestComposeBotsSlashDeferred_live'
-    'TestComposeBotsBotCRoutes_live' = 'TestComposeBotsBotCRoutes_live'
-    'TestComposeBotsWebhook_live' = 'TestComposeBotsWebhook_live'
-    'TestComposeBotsTimeout_live' = 'TestComposeBotsTimeout_live'
-    'TestComposeBotsEphemeral_live' = 'TestComposeBotsEphemeral_live'
-    'TestComposeBotsSlash_live' = 'TestComposeBotsSlash_live'
-    'TestComposeStoriesExpiryArchive_live' = 'TestComposeStoriesExpiryArchive_live'
-    'TestComposeStoriesWhenSocialDown_live' = 'TestComposeStoriesWhenSocialDown_live'
-    'TestComposeStories_live' = 'TestComposeStories_live'
-    'TestComposeDeepLinksResolveWhenSearchDown_live' = 'TestComposeDeepLinksResolveWhenSearchDown_live'
-    'TestComposeDeepLinks_live' = 'TestComposeDeepLinks_live'
-    'TestComposeE2E_EnableRejectedWhenPeerMissingPreKey_live' = 'TestComposeE2E_EnableRejectedWhenPeerMissingPreKey_live'
-    'TestComposeE2E_GroupEnableRejected_live' = 'TestComposeE2E_GroupEnableRejected_live'
-    'TestComposeE2EKeyBackup_OversizedRejected_live' = 'TestComposeE2EKeyBackup_OversizedRejected_live'
-    'TestComposeE2EKeyBackup_live' = 'TestComposeE2EKeyBackup_live'
-    'TestComposeE2EOptOut_live' = 'TestComposeE2EOptOut_live'
-    'TestComposeE2EEdit_live' = 'TestComposeE2EEdit_live'
-    'TestComposeE2EDM_live' = 'TestComposeE2EDM_live'
-    'TestComposeModeration_live' = 'TestComposeModeration_live'
-    'TestComposeProfileFriendIsolation_live' = 'TestComposeProfileFriendIsolation_live'
-    'TestComposeSubscriptionWiring_yaml' = 'TestComposeSubscriptionWiring_yaml'
-    'TestComposeBilling_live' = 'TestComposeBilling_live'
-    'TestComposePrivacyActions_live' = 'TestComposePrivacyActions_live'
-    'TestComposePrivacyFoF_live' = 'TestComposePrivacyFoF_live'
-    'TestComposePhoneSync_live' = 'TestComposePhoneSync_live'
-    'TestComposeTrust_live' = 'TestComposeTrust_live'
-    'TestComposeDMRealtime_live' = 'TestComposeDMRealtime_live'
-    'TestComposeWiring_yaml' = 'TestComposeWiring_yaml'
-    'TestStagingBotsWebhook_live' = 'TestStagingBotsWebhook_live'
-    'E2EKeyBackupJdbcIntegrationTest' = 'E2EKeyBackupJdbcIntegrationTest'
-    'E2EKeyBackupIntegrationTest' = 'E2EKeyBackupIntegrationTest'
-    'ProfilesVerificationIntegrationTest' = 'ProfilesVerificationIntegrationTest'
-    'compose-migrate-e2e' = 'compose-migrate-e2e'
-    'compose-migrate-all.sh e2e' = 'compose-migrate-all.sh e2e'
-    'manual-dm-check.ps1' = 'manual-dm-check.ps1'
-    'search_db_verification.sql.snippet' = 'search_db_verification.sql.snippet'
-    'transcode_profiles_verification_test.go' = 'transcode_profiles_verification_test.go'
-    'transcode_profiles_verification.go' = 'transcode_profiles_verification.go'
-    'rest_transcoding_integration_test.go' = 'rest_transcoding_integration_test.go'
-    'compose_bots_slash_live_test.go' = 'compose_bots_slash_live_test.go'
-    'staging_bots_webhook_live_test.go' = 'staging_bots_webhook_live_test.go'
-    'compose_moderation_live_test.go' = 'compose_moderation_live_test.go'
-    'compose_deeplinks_live_test.go' = 'compose_deeplinks_live_test.go'
-    'compose_phone_sync_live_test.go' = 'compose_phone_sync_live_test.go'
-    'deeplink_web_chrome_test.dart' = 'deeplink_web_chrome_test.dart'
-    'deeplink_web_test.dart' = 'deeplink_web_test.dart'
-    'deeplink_invite_e2e_live_test.dart' = 'deeplink_invite_e2e_live_test.dart'
-    'bots_slash_e2e_live_test.dart' = 'bots_slash_e2e_live_test.dart'
-    'e2e_key_backup_live_test.dart' = 'e2e_key_backup_live_test.dart'
-    'moderation_e2e_live_test.dart' = 'moderation_e2e_live_test.dart'
-    'billing_e2e_live_test.dart' = 'billing_e2e_live_test.dart'
-    'search_e2e_live_test.dart' = 'search_e2e_live_test.dart'
-    'matchmaking_e2e_live_test.dart' = 'matchmaking_e2e_live_test.dart'
-    'spaces_creation_e2e_live_test.dart' = 'spaces_creation_e2e_live_test.dart'
-    'groups_e2e_live_test.dart' = 'groups_e2e_live_test.dart'
-    'voice_call_signaling_e2e_live_test.dart' = 'voice_call_signaling_e2e_live_test.dart'
-    'friends_e2e_live_test.dart' = 'friends_e2e_live_test.dart'
-    'auth_logout_e2e_live_test.dart' = 'auth_logout_e2e_live_test.dart'
-    'dm_two_users_e2e_live_test.dart' = 'dm_two_users_e2e_live_test.dart'
-    'apns_e2e_live_test.dart' = 'apns_e2e_live_test.dart'
-    'voip_e2e_live_test.dart' = 'voip_e2e_live_test.dart'
-    'core gRPC' = 'core gRPC'
-    'Full app stack' = 'Full app stack'
-    'app stack' = 'app stack'
-    'core' = 'core'
-    'phases 0–10' = 'full app stack'
-    'full app stack' = 'full app stack'
-    'bots' = 'bots'
-    'app stack6' = 'Bots'
-    'phase 6–8' = 'push notifications'
-    'push notifications' = 'push notifications'
+    'app stack–3' = 'early stack (auth, DM, voice) — docs/PLAN.md'
+    'app stack6' = 'bots (docs/features/bots.md)'
+    'app stack7' = 'stories (docs/features/stories.md)'
+    'app stack8' = 'deep-links/platforms (docs/features/deep-links.md)'
+    'app stack5' = 'encryption (docs/features/encryption.md)'
+    'app stack4' = 'moderation (docs/features/reports.md)'
+    'app stack3' = 'multi-profile/verification (docs/features/multi-profile.md)'
+    'app stack2' = 'subscription (docs/features/subscription.md)'
+    'app stack1' = 'privacy/trust (docs/features/privacy.md)'
+    'app stack0' = 'roles/threads (docs/features/roles.md)'
+    'Phase 18' = 'deep-links (docs/features/deep-links.md)'
+    'Phase 17' = 'stories (docs/features/stories.md)'
+    'Phase 16' = 'bots (docs/features/bots.md)'
+    'Phase 15' = 'encryption (docs/features/encryption.md)'
+    'Phase 14' = 'moderation (docs/features/reports.md)'
+    'Phase 13' = 'verification (docs/features/verification.md)'
+    'Phase 12' = 'subscription (docs/features/subscription.md)'
+    'Phase 11' = 'privacy (docs/features/privacy.md)'
+    'Phase 10' = 'threads/roles (docs/features/roles.md)'
+    'Phase 9' = 'search (docs/features/search.md)'
+    'Phase 8' = 'platforms (docs/features/platforms.md)'
+    'Phase-8' = 'platforms (docs/features/platforms.md)'
+    'Phase 7' = 'matchmaking (docs/features/matchmaking.md)'
+    'Phase 6' = 'notifications (docs/features/notifications.md)'
+    'Phase 5' = 'roles/spaces (docs/features/roles.md)'
+    'Phase 4' = 'groups (docs/features/text-chat.md)'
+    'Phase 3' = 'file-storage (docs/features/file-storage.md)'
+    'Phase 0' = 'platforms (docs/PLAN.md)'
+    'PLAN.md phase 14' = 'docs/features/reports.md'
+    'phase13EventsRecorder' = 'profilesVerificationEventsRecorder'
 }
 
-# Path renames from TSV
+# Lowercase "phase N" in test names/fixtures (PowerShell hashtables are case-insensitive — separate list).
+$lowercasePhaseReplacements = @(
+    @('phase 18 deg', 'deep-links deg'),
+    @('phase 18', 'deep-links'),
+    @('phase 17 ', 'stories '),
+    @('phase 14 ', 'moderation '),
+    @('phase 13 ', 'verification '),
+    @('phase 12 ', 'subscription '),
+    @('phase 11 live', 'privacy live'),
+    @('phase 11 ', 'privacy '),
+    @('phase 5', 'roles/spaces'),
+    @('"phase 17"', '"stories live"')
+)
+
+# Path renames from TSV (legacy batch — idempotent if already renamed).
 $mapFile = Join-Path $PSScriptRoot 'phase-rename-map.tsv'
-Get-Content $mapFile -Encoding UTF8 | ForEach-Object {
-    if ($_ -match '^#' -or -not $_) { return }
-    $p = $_ -split "`t"
-    if ($p.Count -ge 3 -and $p[2] -eq 'RENAME' -and $p[0] -and $p[1]) {
-        $replacements[$p[0].Replace('\', '/')] = $p[1].Replace('\', '/')
-        $oldBase = [System.IO.Path]::GetFileName($p[0])
-        $newBase = [System.IO.Path]::GetFileName($p[1])
-        if ($oldBase -ne $newBase) { $replacements[$oldBase] = $newBase }
+if (Test-Path $mapFile) {
+    Get-Content $mapFile -Encoding UTF8 | ForEach-Object {
+        if ($_ -match '^#' -or -not $_) { return }
+        $p = $_ -split "`t"
+        if ($p.Count -ge 3 -and $p[2] -eq 'RENAME' -and $p[0] -and $p[1]) {
+            $replacements[$p[0].Replace('\', '/')] = $p[1].Replace('\', '/')
+            $oldBase = [System.IO.Path]::GetFileName($p[0])
+            $newBase = [System.IO.Path]::GetFileName($p[1])
+            if ($oldBase -ne $newBase) { $replacements[$oldBase] = $newBase }
+        }
     }
 }
 
 function Should-Skip($path) {
-    foreach ($ex in $excludeDirs) {
-        if ($path -match $ex) { return $true }
-    }
+    if ($path -match '\\pb\\') { return $true }
     if ($path -match '\\lib\\gen\\') { return $true }
     if ($path -match '\.pb\.go$') { return $true }
     if ($path -match 'project\.pbxproj$') { return $true }
+    if ($path -match '\\migrations\\') { return $true }
     return $false
 }
 
-$files = Get-ChildItem -Recurse -File -Include $extensions | Where-Object { -not (Should-Skip $_.FullName) }
+$files = @()
+foreach ($rel in $Paths) {
+    $abs = Join-Path $RepoRoot $rel
+    if (-not (Test-Path $abs)) { continue }
+    $files += Get-ChildItem -Path $abs -Recurse -File -Include $extensions -ErrorAction SilentlyContinue |
+        Where-Object { -not (Should-Skip $_.FullName) }
+}
+
 $changed = 0
 foreach ($file in $files) {
     $content = [System.IO.File]::ReadAllText($file.FullName)
@@ -117,9 +97,13 @@ foreach ($file in $files) {
     foreach ($kv in $replacements.GetEnumerator()) {
         $content = $content.Replace($kv.Key, $kv.Value)
     }
+    foreach ($pair in $lowercasePhaseReplacements) {
+        $content = $content.Replace($pair[0], $pair[1])
+    }
     if ($content -ne $original) {
         [System.IO.File]::WriteAllText($file.FullName, $content)
         $changed++
+        Write-Host "updated $($file.FullName.Substring($RepoRoot.Length + 1))"
     }
 }
 Write-Host "Updated $changed files"

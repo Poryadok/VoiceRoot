@@ -5,7 +5,7 @@ import 'package:voice_frontend/gen/voice/chat/v1/chat.pbenum.dart';
 
 import 'support/live_gateway_harness.dart';
 
-/// app stack0: custom role lifecycle via gateway (create → assign → chat override deny).
+/// roles/threads (docs/features/roles.md): custom role lifecycle via gateway (create → assign → chat override deny).
 void main() {
   test('custom role: create, assign, chat override deny blocks send permission', () async {
     final probe = await probeLiveGateway();

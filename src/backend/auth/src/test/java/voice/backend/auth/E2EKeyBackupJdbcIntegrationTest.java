@@ -30,7 +30,7 @@ import voice.backend.auth.grpc.AuthGrpcService;
 import voice.backend.auth.service.AuthService;
 
 /**
- * app stack5 E2E-B red tests: encrypted key backup persisted via JDBC + Flyway V4
+ * encryption (docs/features/encryption.md) E2E-B red tests: encrypted key backup persisted via JDBC + Flyway V4
  * {@code e2e_key_backups} (docs/features/encryption.md). Not in-memory.
  */
 @SpringBootTest

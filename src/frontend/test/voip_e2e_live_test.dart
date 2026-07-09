@@ -3,7 +3,7 @@ import 'package:voice_frontend/backend/notifications_client.dart';
 
 import 'support/live_gateway_harness.dart';
 
-/// Phase-8 VoIP E2E: iOS-style VoIP device token registration via Gateway (compose stack).
+/// platforms (docs/features/platforms.md) VoIP E2E: iOS-style VoIP device token registration via Gateway (compose stack).
 ///
 /// ```text
 /// flutter test test/voip_e2e_live_test.dart ^

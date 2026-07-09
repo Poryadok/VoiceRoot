@@ -20,7 +20,7 @@ import (
 type fakeBotClient struct {
 	botv1.BotServiceClient
 	lastInstallReq      *botv1.InstallBotInSpaceRequest
-	chatMessageBodies   map[string]string // msg id -> content; app stack6 maps to response messages[]
+	chatMessageBodies   map[string]string // msg id -> content; bots (docs/features/bots.md) maps to response messages[]
 }
 
 func (f *fakeBotClient) InstallBotInSpace(ctx context.Context, in *botv1.InstallBotInSpaceRequest, _ ...grpc.CallOption) (*botv1.InstallBotInSpaceResponse, error) {
@@ -407,7 +407,7 @@ func TestServeBots_getChatMessagesForBotRouteRegistered(t *testing.T) {
 	ok := tc.serveBots(rec, req, "me/chats/chat-1/messages")
 	require.True(t, ok, "GET /api/v1/bots/me/chats/{chat_id}/messages must be registered (BOT-C)")
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Contains(t, rec.Body.String(), `"messages"`, "history response must include message bodies (app stack6)")
+	require.Contains(t, rec.Body.String(), `"messages"`, "history response must include message bodies (bots (docs/features/bots.md))")
 	require.Contains(t, rec.Body.String(), `"content":"hello"`)
 }
 
@@ -419,7 +419,7 @@ func TestServeBots_sendEphemeralRouteRegistered(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	ok := tc.serveBots(rec, req, "me/messages/ephemeral")
-	require.True(t, ok, "POST /api/v1/bots/me/messages/ephemeral must be registered (app stack6)")
+	require.True(t, ok, "POST /api/v1/bots/me/messages/ephemeral must be registered (bots (docs/features/bots.md))")
 	require.Equal(t, http.StatusNoContent, rec.Code)
 }
 

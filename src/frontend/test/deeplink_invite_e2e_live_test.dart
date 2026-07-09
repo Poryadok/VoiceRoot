@@ -4,9 +4,9 @@ import 'package:voice_frontend/backend/spaces_client.dart';
 
 import 'support/live_gateway_harness.dart';
 
-/// app stack8 deep link invite E2E (API-level): universal link resolve after compose up.
+/// deep-links/platforms (docs/features/deep-links.md) deep link invite E2E (API-level): universal link resolve after compose up.
 void main() {
-  test('phase 18 deeplink invite: HTML redirect and resolve kind=invite', () async {
+  test('deep-links deeplink invite: HTML redirect and resolve kind=invite', () async {
     final probe = await probeLiveGateway();
     expect(
       probe,

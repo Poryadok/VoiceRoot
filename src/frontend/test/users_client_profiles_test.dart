@@ -12,14 +12,14 @@ void main() {
   const config = GatewayConfig(baseUrl: 'http://api.test');
   const auth = 'Bearer access-token';
 
-  group('app stack3 VoiceUsersClient.listMyProfiles', () {
+  group('multi-profile/verification (docs/features/multi-profile.md) VoiceUsersClient.listMyProfiles', () {
     test('GET /api/v1/users/profiles (not /users/me/profiles)', () async {
       final mock = MockClient((req) async {
         expect(req.method, 'GET');
         expect(
           req.url.path,
           '/api/v1/users/profiles',
-          reason: 'listMyProfiles must use canonical app stack3 path',
+          reason: 'listMyProfiles must use canonical multi-profile/verification (docs/features/multi-profile.md) path',
         );
         return http.Response(
           jsonEncode({

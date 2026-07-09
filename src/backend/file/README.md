@@ -1,6 +1,6 @@
 # File Service
 
-Go service for chat attachments (Phase 3+) and avatar-adjacent uploads via R2/MinIO.
+Go service for chat attachments (file-storage (docs/features/file-storage.md)+) and avatar-adjacent uploads via R2/MinIO.
 
 Current public surface:
 

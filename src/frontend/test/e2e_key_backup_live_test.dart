@@ -6,7 +6,7 @@ import 'package:voice_frontend/e2e/e2e_crypto_adapter.dart';
 import 'support/in_memory_secure_signal_storage.dart';
 import 'support/live_gateway_harness.dart';
 
-/// app stack5 live E2E key backup: PUT/GET roundtrip via [VoiceE2eClient].
+/// encryption (docs/features/encryption.md) live E2E key backup: PUT/GET roundtrip via [VoiceE2eClient].
 ///
 /// Run when full compose stack is up:
 /// ```text

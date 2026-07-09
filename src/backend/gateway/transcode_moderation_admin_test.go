@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestTranscodeModerationAdmin_staffRequired documents app stack4 moderator admin REST is staff-only.
+// TestTranscodeModerationAdmin_staffRequired documents moderation (docs/features/reports.md) moderator admin REST is staff-only.
 func TestTranscodeModerationAdmin_staffRequired(t *testing.T) {
 	t.Parallel()
 

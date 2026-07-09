@@ -1,6 +1,6 @@
 # Ping bot (local dev)
 
-Minimal app stack6 sample bot for slash `/ping` → `pong`.
+Minimal bots (docs/features/bots.md) sample bot for slash `/ping` → `pong`.
 
 ## Polling mode (no public URL)
 

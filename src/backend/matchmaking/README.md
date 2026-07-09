@@ -1,6 +1,6 @@
 # Matchmaking Service
 
-Phase 7: game catalog, player profile, solo search queue, match squad provisioning, ratings, and history.
+matchmaking (docs/features/matchmaking.md): game catalog, player profile, solo search queue, match squad provisioning, ratings, and history.
 
 ## Endpoints
 

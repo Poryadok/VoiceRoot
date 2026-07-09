@@ -8,7 +8,7 @@ import 'support/live_gateway_harness.dart';
 
 void main() {
   test(
-    'phase 11 trust: privacy DM block, report accepted, 2FA login gate',
+    'privacy trust: privacy DM block, report accepted, 2FA login gate',
     () async {
       final probe = await probeLiveGateway();
       expect(

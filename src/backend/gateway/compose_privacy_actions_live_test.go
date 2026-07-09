@@ -66,7 +66,7 @@ func TestComposePrivacyActions_live(t *testing.T) {
 	addComposeGroupMembers(t, client, base, groupOwner.AccessToken, groupID, groupMember.ProfileID, groupFiller.ProfileID)
 	require.Equal(t, http.StatusForbidden, addComposeGroupMembersStatus(t, client, base, groupMember.AccessToken, groupID, target.ProfileID))
 
-	spaceID := createComposeSpace(t, client, base, spaceOwner.AccessToken, "Privacy actions QA", "phase 11 live")
+	spaceID := createComposeSpace(t, client, base, spaceOwner.AccessToken, "Privacy actions QA", "privacy live")
 	invite := createComposeSpaceInvite(t, client, base, spaceOwner.AccessToken, spaceID)
 	require.Equal(t, http.StatusForbidden, joinComposeSpaceByInviteStatus(t, client, base, target.AccessToken, invite.Code))
 

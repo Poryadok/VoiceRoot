@@ -37,9 +37,9 @@ jobs:
           TAG="${{ steps.tag.outputs.tag }}"
           echo "full=${BASE}/gateway:${TAG}" >> "$GITHUB_OUTPUT"
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
-      - uses: azure/setup-kubectl@v4
+      - uses: azure/setup-kubectl@v5
 
       - name: Configure kubeconfig
         run: |
