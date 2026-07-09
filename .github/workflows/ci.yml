@@ -241,6 +241,7 @@ jobs:
       needs.changes.outputs.run_go == 'true'
     runs-on: ubuntu-latest
     permissions:
+      actions: write
       contents: read
       packages: write
     strategy:
@@ -294,8 +295,8 @@ jobs:
           context: ${{ steps.dockerctx.outputs.context }}
           file: ${{ steps.dockerctx.outputs.file }}
           push: false
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=backend-${{ matrix.service }}
+          cache-to: type=gha,scope=backend-${{ matrix.service }},mode=max,ignore-error=true
       - name: Build and push ${{ matrix.service }} image
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: docker/build-push-action@v6
@@ -306,8 +307,8 @@ jobs:
           tags: |
             ${{ steps.image.outputs.base }}/${{ matrix.service }}:${{ github.sha }}
             ${{ steps.image.outputs.base }}/${{ matrix.service }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=backend-${{ matrix.service }}
+          cache-to: type=gha,scope=backend-${{ matrix.service }},mode=max,ignore-error=true
 
   backend-auth:
     needs: changes
@@ -320,6 +321,7 @@ jobs:
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     permissions:
+      actions: write
       contents: read
       packages: write
     steps:
@@ -351,8 +353,8 @@ jobs:
           context: ./src/backend/auth
           file: ./src/backend/auth/Dockerfile
           push: false
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=backend-auth
+          cache-to: type=gha,scope=backend-auth,mode=max,ignore-error=true
       - name: Build auth image (load)
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: docker/build-push-action@v6
@@ -362,8 +364,8 @@ jobs:
           push: false
           load: true
           tags: voice-auth:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=backend-auth
+          cache-to: type=gha,scope=backend-auth,mode=max,ignore-error=true
       - name: Auth container smoke
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         run: bash scripts/ci/auth-container-smoke.sh "$GITHUB_WORKSPACE"
@@ -386,6 +388,7 @@ jobs:
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     permissions:
+      actions: write
       contents: read
       packages: write
     steps:
@@ -447,8 +450,8 @@ jobs:
             VITE_VOICE_API_BASE=${{ steps.vite.outputs.api_base }}
             VITE_OAUTH_CLIENT_ID=voice-developer-portal
             VITE_OAUTH_DISABLED=false
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=developer-portal
+          cache-to: type=gha,scope=developer-portal,mode=max,ignore-error=true
       - name: Build and push developer-portal image
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: docker/build-push-action@v6
@@ -463,8 +466,8 @@ jobs:
           tags: |
             ${{ steps.image.outputs.base }}/developer-portal:${{ github.sha }}
             ${{ steps.image.outputs.base }}/developer-portal:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=developer-portal
+          cache-to: type=gha,scope=developer-portal,mode=max,ignore-error=true
 
   admin:
     needs: changes
