@@ -136,10 +136,10 @@ backend-test-ci: go-mod-tidy-all go-test-pkg $(GO_TEST_TARGETS) auth-test-ci tes
 backend-test-ci-short: go-mod-tidy-all go-test-pkg $(GO_TEST_SHORT_TARGETS) auth-test-ci testcontainers-prune
 
 go-mod-tidy-all:
-	@for m in $(GO_MODULES_LINT); do \
+	$(BASH) -c 'for m in $(GO_MODULES_LINT); do \
 		echo "== go mod tidy $$m =="; \
 		(cd src/backend/$$m && go mod tidy); \
-	done
+	done'
 
 backend-image-ci: $(GO_IMAGE_TARGETS) auth-image-ci
 
