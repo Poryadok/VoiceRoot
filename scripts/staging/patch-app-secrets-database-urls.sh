@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Add missing Postgres/ClickHouse URL keys to an existing voice-app-secrets (idempotent).
-# Old bootstrap secrets predate social/story/subscription/moderation/analytics staging services.
+# CI STAGING_APP_SECRETS_YAML and older cluster secrets may lack keys for newer services.
 set -euo pipefail
 
 NS="${VOICE_K8S_NAMESPACE:-voice-staging}"
@@ -78,11 +78,27 @@ else
     fi
   }
 
-  sync_pg_url_if_needed SOCIAL_DATABASE_URL social_db
-  sync_pg_url_if_needed BOT_DATABASE_URL bot_db
-  sync_pg_url_if_needed STORY_DATABASE_URL story_db
-  sync_pg_url_if_needed MODERATION_DATABASE_URL moderation_db
-  sync_pg_url_if_needed SUBSCRIPTION_DATABASE_URL subscription_db
+  # All *_DATABASE_URL keys referenced by deploy/staging/services.yaml (+ gateway).
+  pg_url_keys=(
+    SOCIAL_DATABASE_URL:social_db
+    USER_DATABASE_URL:user_db
+    CHAT_DATABASE_URL:chat_db
+    SPACE_DATABASE_URL:space_db
+    MESSAGING_DATABASE_URL:messaging_db
+    FILE_DATABASE_URL:file_db
+    ROLE_DATABASE_URL:role_db
+    MATCHMAKING_DATABASE_URL:matchmaking_db
+    SEARCH_DATABASE_URL:search_db
+    NOTIFICATION_DATABASE_URL:notification_db
+    BOT_DATABASE_URL:bot_db
+    STORY_DATABASE_URL:story_db
+    MODERATION_DATABASE_URL:moderation_db
+    SUBSCRIPTION_DATABASE_URL:subscription_db
+    GATEWAY_DATABASE_URL:gateway_db
+  )
+  for entry in "${pg_url_keys[@]}"; do
+    sync_pg_url_if_needed "${entry%%:*}" "${entry#*:}"
+  done
 fi
 
 if ((${#args[@]} == 0)); then
