@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Add missing Postgres/ClickHouse URL keys to an existing voice-app-secrets (idempotent).
-# CI STAGING_APP_SECRETS_YAML and older cluster secrets may lack keys for newer services.
+# Add missing keys to an existing voice-app-secrets (idempotent).
+# CI STAGING_APP_SECRETS_YAML and older cluster secrets may lack keys for newer services
+# (database URLs, R2 object storage, ClickHouse).
 set -euo pipefail
 
 NS="${VOICE_K8S_NAMESPACE:-voice-staging}"
@@ -101,8 +102,19 @@ else
   done
 fi
 
+# R2 keys for user/file services (empty credentials = pods start, uploads may fail).
+add_if_missing USER_R2_ENDPOINT "${USER_R2_ENDPOINT:-}"
+add_if_missing USER_R2_ACCESS_KEY_ID "${USER_R2_ACCESS_KEY_ID:-}"
+add_if_missing USER_R2_SECRET_ACCESS_KEY "${USER_R2_SECRET_ACCESS_KEY:-}"
+add_if_missing USER_R2_BUCKET "${USER_R2_BUCKET:-voice-staging-avatars}"
+add_if_missing USER_R2_PUBLIC_BASE_URL "${USER_R2_PUBLIC_BASE_URL:-}"
+add_if_missing FILE_R2_ENDPOINT "${FILE_R2_ENDPOINT:-}"
+add_if_missing FILE_R2_ACCESS_KEY_ID "${FILE_R2_ACCESS_KEY_ID:-}"
+add_if_missing FILE_R2_SECRET_ACCESS_KEY "${FILE_R2_SECRET_ACCESS_KEY:-}"
+add_if_missing FILE_R2_BUCKET "${FILE_R2_BUCKET:-voice-staging-files}"
+
 if ((${#args[@]} == 0)); then
-  echo "${SECRET_NAME} database URL keys complete"
+  echo "${SECRET_NAME} keys complete"
   exit 0
 fi
 
