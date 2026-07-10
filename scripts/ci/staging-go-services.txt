@@ -1,0 +1,20 @@
+# Go services referenced by deploy/staging/services.yaml (one name per line).
+analytics
+bot
+chat
+federation
+file
+gateway
+matchmaking
+messaging
+moderation
+notification
+realtime
+role
+search
+social
+space
+story
+subscription
+user
+voice

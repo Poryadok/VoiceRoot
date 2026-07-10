@@ -277,17 +277,6 @@ jobs:
           fi
           echo "file=./src/backend/$S/Dockerfile" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@v3
-      - name: Log in to GHCR
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Image base (lowercase)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-        id: image
-        run: echo "base=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
       - name: Build ${{ matrix.service }} image (PR verify)
         if: github.event_name == 'pull_request'
         uses: docker/build-push-action@v6
@@ -297,8 +286,67 @@ jobs:
           push: false
           cache-from: type=gha,scope=backend-${{ matrix.service }}
           cache-to: type=gha,scope=backend-${{ matrix.service }},mode=max,ignore-error=true
+
+  staging-image-matrix:
+    needs: changes
+    if: >-
+      always() &&
+      needs.changes.result == 'success' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/master' &&
+      needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.list.outputs.services }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: List staging Go services
+        id: list
+        run: |
+          services="$(grep -v '^#' scripts/ci/staging-go-services.txt | grep -v '^[[:space:]]*$' | jq -R -s -c 'split("\n") | map(select(length > 0))')"
+          echo "services=${services}" >> "$GITHUB_OUTPUT"
+
+  staging-images-push:
+    needs: [changes, staging-image-matrix]
+    if: >-
+      always() &&
+      needs.staging-image-matrix.result == 'success' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/master' &&
+      needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJSON(needs.staging-image-matrix.outputs.services) }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Docker build context and Dockerfile
+        id: dockerctx
+        shell: bash
+        run: |
+          S="${{ matrix.service }}"
+          if grep -qx "$S" scripts/ci/backend-docker-context.txt; then
+            echo "context=./src/backend" >> "$GITHUB_OUTPUT"
+          else
+            echo "context=./src/backend/$S" >> "$GITHUB_OUTPUT"
+          fi
+          echo "file=./src/backend/$S/Dockerfile" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Image base (lowercase)
+        id: image
+        run: echo "base=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
       - name: Build and push ${{ matrix.service }} image
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: docker/build-push-action@v6
         with:
           context: ${{ steps.dockerctx.outputs.context }}
@@ -318,7 +366,8 @@ jobs:
       needs.changes.outputs.code == 'true' &&
       (needs.changes.outputs.auth == 'true' ||
        needs.changes.outputs.global == 'true' ||
-       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full') ||
+       (github.event_name == 'push' && github.ref == 'refs/heads/master'))
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -385,7 +434,8 @@ jobs:
       needs.changes.outputs.code == 'true' &&
       (needs.changes.outputs.developer-portal == 'true' ||
        needs.changes.outputs.global == 'true' ||
-       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full') ||
+       (github.event_name == 'push' && github.ref == 'refs/heads/master'))
     runs-on: ubuntu-latest
     permissions:
       actions: write

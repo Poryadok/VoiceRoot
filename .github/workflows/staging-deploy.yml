@@ -54,6 +54,10 @@ jobs:
           else
             TAG="${{ steps.tag_run.outputs.tag }}"
           fi
+          if [ -z "${TAG}" ]; then
+            TAG="latest"
+          fi
+          echo "requested_tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "full=${BASE}/gateway:${TAG}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@v4
@@ -68,30 +72,36 @@ jobs:
           chmod 600 ~/.kube/config
 
       - name: Verify gateway image exists in GHCR
+        id: verify_image
         env:
           IMAGE_FULL: ${{ steps.image.outputs.full }}
         run: |
           set -eux
-          TAG="${{ steps.tag_dispatch.outputs.tag }}"
-          if [ -z "${TAG}" ]; then
-            TAG="${{ steps.tag_run.outputs.tag }}"
-          fi
-          if [ -z "${TAG}" ]; then
-            TAG="latest"
-          fi
           BASE="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+          TAG="${{ steps.image.outputs.requested_tag }}"
           REF="${BASE}/gateway:${TAG}"
           echo "Checking manifest: ${REF}"
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-          if ! docker manifest inspect "${REF}" >/dev/null 2>&1; then
-            echo "ERROR: Gateway image not found in GHCR: ${REF}" >&2
-            if [ "${{ github.event_name }}" = "workflow_run" ]; then
-              echo "Auto-deploy after minimal CI may skip docker push jobs. Re-run CI with profile full or push code that triggers image build." >&2
-            else
-              echo "For manual deploy use the git SHA from a green CI run on master, not stale latest." >&2
-            fi
-            exit 1
+          if docker manifest inspect "${REF}" >/dev/null 2>&1; then
+            echo "deploy_tag=${TAG}" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          if [ "${{ github.event_name }}" = "workflow_run" ] && [ "${TAG}" != "latest" ]; then
+            FALLBACK="${BASE}/gateway:latest"
+            echo "Gateway image not found for CI SHA (${REF}); trying ${FALLBACK}" >&2
+            if docker manifest inspect "${FALLBACK}" >/dev/null 2>&1; then
+              echo "deploy_tag=latest" >> "$GITHUB_OUTPUT"
+              echo "Used latest image tag because CI did not publish gateway:${TAG} (path-filtered or deploy-only change)." >&2
+              exit 0
+            fi
+          fi
+          echo "ERROR: Gateway image not found in GHCR: ${REF}" >&2
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "Auto-deploy after minimal CI may skip docker push jobs. Re-run CI with profile full or push code that triggers image build." >&2
+          else
+            echo "For manual deploy use the git SHA from a green CI run on master, not stale latest." >&2
+          fi
+          exit 1
 
       - name: Apply staging manifests
         env:
@@ -107,9 +117,9 @@ jobs:
           # shellcheck disable=SC1091
           source scripts/staging/load-staging-domains.sh
           REGISTRY="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
-          TAG="${{ steps.tag_dispatch.outputs.tag }}"
+          TAG="${{ steps.verify_image.outputs.deploy_tag }}"
           if [ -z "${TAG}" ]; then
-            TAG="${{ steps.tag_run.outputs.tag }}"
+            TAG="${{ steps.image.outputs.requested_tag }}"
           fi
           if [ -z "${TAG}" ]; then
             TAG="latest"
