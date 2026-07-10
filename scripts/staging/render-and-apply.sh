@@ -54,6 +54,14 @@ render "${ROOT}/deploy/staging/infra.yaml" | kubectl apply -f -
 render "${ROOT}/deploy/staging/services.yaml" | kubectl apply -f -
 render "${ROOT}/deploy/staging/gateway-deployment.yaml" | kubectl apply -f -
 
+# JVM auth: defer pod start until rollout-app-tier (single-node cannot pull/start
+# auth while tier 1–4 restarts every other service).
+if kubectl get deployment voice-auth -n "${NS}" >/dev/null 2>&1; then
+  echo "Deferring voice-auth pod until ordered rollout..."
+  kubectl scale deployment/voice-auth -n "${NS}" --replicas=0
+  kubectl wait --for=delete pod -l app=voice-auth -n "${NS}" --timeout=120s 2>/dev/null || true
+fi
+
 patch_image_pull_secrets
 
 echo "Ensuring Postgres databases exist..."

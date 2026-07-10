@@ -9,6 +9,9 @@ metadata:
   labels: {app: voice-auth}
 spec:
   replicas: 1
+  # Single-node staging: avoid two JVM pods during rollout (old + pulling new).
+  strategy:
+    type: Recreate
   selector:
     matchLabels: {app: voice-auth}
   template:
