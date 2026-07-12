@@ -13,7 +13,7 @@ if (("$#" == 0)); then
 fi
 
 if [[ "${BASE_TAG}" == "${HEAD_TAG}" ]]; then
-  echo "ERROR: BASE_TAG equals HEAD_TAG (${HEAD_TAG}) but ${#} image(s) requested to promote" >&2
+  echo "ERROR: BASE_TAG equals HEAD_TAG (${HEAD_TAG}) but $# image(s) requested to promote" >&2
   exit 1
 fi
 
