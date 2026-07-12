@@ -37,7 +37,7 @@ Debian + **k3s** на одной ноде: интеграционный стен
 | Типичное значение `server:` в k3s.yaml | `https://0.0.0.0:6443` или `127.0.0.1` — **в секрет `STAGING_KUBECONFIG` подставлять** публичный endpoint, напр. **`https://95.31.10.177:6443`** |
 | Ответ API по публичному IP с ноды | `curl -sk https://95.31.10.177:6443/` → **401** без учётных данных (ожидаемо) |
 
-**Доступ к API из GitHub Actions:** секрет `STAGING_KUBECONFIG` в репозитории должен указывать на endpoint, **доступный бегунку** GitHub. Если API Kubernetes доступен только из LAN, облачный CI до него не дойдёт — нужны self-hosted runner, VPN/Tailscale до раннера, либо контролируемый публичный endpoint (TLS, ограничение по IP и т.д.).
+**Доступ к API из GitHub Actions:** облачный runner **не достигает** публичного `6443` на этом хосте (таймаут). Workflow **Staging deploy** поднимает **SSH-туннель** (`scripts/staging/configure-kubectl-ci.sh`): в Environment **staging** нужен секрет **`STAGING_SSH_PRIVATE_KEY`** (ключ для `pmd@95.31.10.177`). `STAGING_KUBECONFIG` — с `server: https://127.0.0.1:6443` (как в `k3s.yaml`). Опционально Variables: `STAGING_SSH_HOST`, `STAGING_SSH_USER`, `STAGING_DEPLOY_VIA_SSH=true`. Альтернатива: self-hosted runner на ноде или открытый API с ограничением по IP.
 
 ---
 

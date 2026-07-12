@@ -64,12 +64,15 @@ jobs:
 
       - uses: azure/setup-kubectl@v5
 
-      - name: Configure kubeconfig
-        run: |
-          set -eux
-          mkdir -p ~/.kube
-          echo "${{ secrets.STAGING_KUBECONFIG }}" | base64 -d > ~/.kube/config
-          chmod 600 ~/.kube/config
+      - name: Configure kubectl (direct or SSH tunnel)
+        env:
+          STAGING_KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG }}
+          STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          STAGING_SSH_HOST: ${{ vars.STAGING_SSH_HOST }}
+          STAGING_SSH_USER: ${{ vars.STAGING_SSH_USER }}
+          STAGING_SSH_PORT: ${{ vars.STAGING_SSH_PORT }}
+          STAGING_DEPLOY_VIA_SSH: ${{ vars.STAGING_DEPLOY_VIA_SSH }}
+        run: bash scripts/staging/configure-kubectl-ci.sh
 
       - name: Verify gateway image exists in GHCR
         id: verify_image

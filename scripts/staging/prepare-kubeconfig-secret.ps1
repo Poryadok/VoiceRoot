@@ -1,14 +1,16 @@
 # Build base64 for GitHub secret STAGING_KUBECONFIG (Environment: staging).
-# Replaces cluster server URL so a GitHub-hosted runner can reach k3s (not 127.0.0.1 / 0.0.0.0).
+# For GitHub Actions with SSH tunnel (recommended), keep server https://127.0.0.1:6443.
 #
 # Usage:
+#   .\scripts\staging\prepare-kubeconfig-secret.ps1 $env:USERPROFILE\.kube\config
+# Direct API (only if 6443 is public):
 #   $env:STAGING_KUBE_API_SERVER = 'https://95.31.10.177:6443'
 #   .\scripts\staging\prepare-kubeconfig-secret.ps1 $env:USERPROFILE\.kube\staging-config
 #
 param(
     [Parameter(Mandatory = $true)]
     [string] $KubeconfigPath,
-    [string] $StagingKubeApiServer = $(if ($env:STAGING_KUBE_API_SERVER) { $env:STAGING_KUBE_API_SERVER } else { 'https://95.31.10.177:6443' })
+    [string] $StagingKubeApiServer = $(if ($env:STAGING_KUBE_API_SERVER) { $env:STAGING_KUBE_API_SERVER } else { 'https://127.0.0.1:6443' })
 )
 $ErrorActionPreference = 'Stop'
 $lines = Get-Content -LiteralPath $KubeconfigPath

@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # Build base64 for GitHub secret STAGING_KUBECONFIG (Environment: staging).
-# Replaces cluster server URL so a GitHub-hosted runner can reach k3s (not 127.0.0.1 / 0.0.0.0).
 #
-# Usage:
+# Recommended (SSH tunnel from GitHub Actions — see configure-kubectl-ci.sh):
+#   ./scripts/staging/prepare-kubeconfig-secret.sh ~/.kube/config
+#   (keep server https://127.0.0.1:6443 from k3s.yaml; add STAGING_SSH_PRIVATE_KEY in GitHub)
+#
+# Direct API from runner (only if TCP 6443 is reachable from the internet):
 #   STAGING_KUBE_API_SERVER=https://95.31.10.177:6443 \
 #     ./scripts/staging/prepare-kubeconfig-secret.sh ~/.kube/staging-config
 #
@@ -11,7 +14,7 @@
 #
 set -euo pipefail
 KCFG="${1:?path to kubeconfig file}"
-SERVER="${STAGING_KUBE_API_SERVER:-https://95.31.10.177:6443}"
+SERVER="${STAGING_KUBE_API_SERVER:-https://127.0.0.1:6443}"
 TMP="$(mktemp)"
 trap 'rm -f "$TMP"' EXIT
 awk -v srv="$SERVER" '
