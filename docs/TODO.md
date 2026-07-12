@@ -333,6 +333,43 @@ Baseline закрыт (2026-06): register guest, JWT, guards, convert-guest, TTL
 
 
 
+#### Post-commit audit c3598f3 (2026-07-12) — хвосты после `still working on CI`
+
+Коммит **`c3598f3`**: promote без ожидания frontend jobs, `ci-gate`+`web`, path-filter `deploy/**`→`compose`, `rollout-user-space-tier.sh`, stack-lock drift check, prod smoke, `VOICE_IMAGE_TAG` required, `verify-*-images` через catalog, `compose-e2e` без `run_go`, fix `jetstream_test.go`.
+
+**Баги / пробелы (исправить):**
+
+- [ ] **path-filters: `scripts/staging/**`, `scripts/prod/**`** — не в `global` / `compose` / `staging_infra` ([`path-filters.yml`](../.github/ci/path-filters.yml)); PR только с deploy-скриптами → `code=true`, но tier-1 jobs skipped, **`ci-gate` проходит без проверок**; push в `master` → promote all + deploy с пустым `CHANGED_SERVICES` (rollout фактически no-op).
+- [ ] **`staging-stack-lock` не требует success `staging-images-push` / `staging-images-promote`** — `if: always()` + `changes.success`; при partial failed promote lock artifact и deploy всё равно стартуют (verify на deploy ловит missing, но run красный поздно).
+- [ ] **`deploy-staging` не гейтит failed image jobs** — `if` проверяет только `staging-stack-lock.result == 'success'`; failed `backend-auth` / `web` / promote не блокируют workflow_call явно (частично спасает `needs:` + verify).
+- [ ] **`rollout-user-space-tier`: JSON patch `add` `SPACE_GRPC_ADDR`** — повторный rollout может упасть, если env уже в pod template ([`rollout-user-space-tier.sh`](../scripts/staging/rollout-user-space-tier.sh)); idempotent patch или `set env` + restart.
+- [ ] **Migrate Jobs: skip после первого success** — новые SQL в `src/backend/migrations/**` не применятся без ручного `kubectl delete job voice-migrate-*` ([`apply-migrate-jobs.sh`](../scripts/staging/apply-migrate-jobs.sh)); стратегия version/bump или force re-run.
+- [ ] **Drift check только `staging-go-services.txt`** — в `staging-stack-lock` нет проверки [`staging-image-catalog.json`](../scripts/ci/staging-image-catalog.json) vs `deploy/staging/` / CI jobs.
+- [ ] **Док-дрифт `compose-e2e` триггера** — [`TESTING.md`](TESTING.md) tier 2: «backend/frontend/compose»; в [`ci.yml`](../.github/workflows/ci.yml) убран `run_go` — Go-only push на `master` **не** гоняет `compose-e2e` (только `compose` / `frontend` / `global`).
+
+**Осознанный техдолг / trade-off (зафиксировать):**
+
+- [ ] **`compose-e2e` без Go-only триггера** — ускорение master CI; cross-service регрессии только nightly / `full` / compose-path changes (связано с Tier 2 не блокирует PR).
+- [ ] **`staging-stack-lock` параллельно с auth/web/admin/portal** — lock пишется до push frontend-образов; auto-deploy ждёт эти jobs + verify — ок для happy path, не для отладки artifact mid-pipeline.
+- [ ] **`rollout-user-space-tier` downtime `voice-space`** — scale 0→1 на каждый user/space deploy; альтернатива — полный `rollout-app-tier` (осознанно убрали в `c3598f3`).
+- [ ] **`VOICE_IMAGE_TAG` required** — убран fallback `:latest` в [`render-and-apply.sh`](../scripts/staging/render-and-apply.sh) / prod; локальный apply без TAG падает (документировать в DEPLOYMENT или env example).
+- [ ] **Prod smoke = alias staging** — [`smoke-prod.sh`](../scripts/prod/smoke-prod.sh) → [`smoke-staging.sh`](../scripts/staging/smoke-staging.sh), `STAGING_STAFF_TOKEN` из `PROD_STAFF_TOKEN`; нет отдельных prod acceptance checks.
+- [ ] **Prod deploy без selective / stack.lock** — [`prod-deploy.yml`](../.github/workflows/prod-deploy.yml): нет `changed_services`, `needs_user_space_rollout`, artifact lock; `verify-prod-images` требует **все** образы catalog на TAG; `images-only` → `deploy-changed.sh` без `CHANGED_SERVICES` = no-op.
+- [ ] **Prod `full` mode всегда `rollout-app-tier.sh`** — нет user/space subset rollout как на staging; single-node Recreate strategy остаётся.
+- [ ] **S2S deps one-hop в `resolve-go-matrix.sh`** — e.g. `file` change не тянет `story` (story→file); для CI tests ок, для promote/build — только прямой path + gateway ([`resolve-go-matrix.sh`](../scripts/ci/resolve-go-matrix.sh)).
+- [ ] **`e2e-manifest.sh` / smoke runtime** — awk-парсер YAML хрупкий; 16+ gateway + 15 flutter smoke на master — риск >15 min / flake ([`.github/ci/batch11-audit.md`](../.github/ci/batch11-audit.md)).
+- [ ] **Flutter `phase*` live test filenames** — rename на feature names не завершён (batch11-audit §Low).
+- [ ] **`.github/ci/batch11-audit.md` устарел** — статусы 2026-07-07, не отражает selective CI 2026-07-12; обновить или удалить после сверки с этой секцией.
+
+**Ops / настройка (человек):**
+
+- [ ] **Первый selective promote после `c3598f3`** — проверить GHCR bootstrap (см. Promote bootstrap выше); `workflow_dispatch` CI → `full` + при необходимости `STAGING_FORCE_FULL_ROLLOUT=true`.
+- [ ] **`PROD_SMOKE_ENABLED` / `PROD_STAFF_TOKEN`** — GitHub Variables/Secrets для prod smoke (аналог staging Batch 13).
+
+**Промпт-якорь:** `Post-commit CI audit c3598f3 from docs/TODO.md Batch 11`.
+
+
+
 **Промпт-якорь:** `CI/CD deploy automation from docs/TODO.md Common Batch 11`.
 
 
@@ -416,7 +453,7 @@ MVP backend + partial Flutter; AR, algorithmic feed, post-match auto-story, mone
 
 Миграция завершена: доки, тесты/имена CI, `lib/gen`/`pb`, `src/**` (вне gen/pb/migrations), `sync-pb-from-gen.sh`, `*.proto eol=lf` в `.gitattributes`. Инструмент: [`apply-phase-text-replacements.ps1`](../scripts/dev/apply-phase-text-replacements.ps1).
 
-- [ ] **Windows sign-off** — скилл `voice-project-full-verification`: `compose-config-ci`, `buf-ci`, `flutter-ci` — OK; `backend-test-ci-short` в Docker — FAIL `messaging/internal/messageevents` `TestJetStreamPublisher_MessageEditedAndDeleted` (nats timeout). Compose smoke E2E не гонялся. См. [TESTING.md](TESTING.md) § «Локальные грабли».
+- [ ] **Windows sign-off** — скилл `voice-project-full-verification`: `compose-config-ci`, `buf-ci`, `flutter-ci` — OK; `backend-test-ci-short` — после `c3598f3` fix [`jetstream_test.go`](../src/backend/messaging/internal/messageevents/jetstream_test.go) (Flush + EnsureStream) **перепроверить на Windows/Docker**; compose smoke E2E не гонялся. См. [TESTING.md](TESTING.md) § «Локальные грабли».
 
 **Промпт-якорь:** `Batch 12 follow-up from docs/TODO.md`.
 
