@@ -17,7 +17,7 @@ import 'support/live_gateway_harness.dart';
 ///
 /// Run when full compose stack is up:
 /// ```text
-/// flutter test test/e2e_file_live_test.dart ^
+/// flutter test test/encryption_file_e2e_live_test.dart ^
 ///   --dart-define=VOICE_RUN_LIVE_INTEGRATION=true ^
 ///   --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080
 /// ```
