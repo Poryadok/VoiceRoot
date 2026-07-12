@@ -210,7 +210,7 @@ Baseline закрыт (2026-06): register guest, JWT, guards, convert-guest, TTL
 
 
 
-Рефакторинг: job `changes`, [`.github/ci/path-filters.yml`](../.github/ci/path-filters.yml), [`scripts/ci/resolve-go-matrix.sh`](../.github/ci/resolve-go-matrix.sh), тиры 1/2/3, `local-ci-parity` только nightly. В `master` уже есть **`aa76cd4`** (compose migrate через `host.docker.internal`).
+Рефакторинг: job `changes`, [`.github/ci/path-filters.yml`](../.github/ci/path-filters.yml), [`scripts/ci/resolve-go-matrix.sh`](../scripts/ci/resolve-go-matrix.sh), тиры 1/2/3, `local-ci-parity` только nightly. В `master` уже есть **`aa76cd4`** (compose migrate через `host.docker.internal`).
 
 
 
