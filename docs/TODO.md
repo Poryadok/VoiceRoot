@@ -325,7 +325,7 @@ Baseline закрыт (2026-06): register guest, JWT, guards, convert-guest, TTL
 
 **Ops / настройка GitHub (человек):**
 
-- [ ] **Branch protection: включить `ci-gate`** — Settings → master → required check **`ci-gate`** ([`branch-protection-checklist.md`](../.github/ci/branch-protection-checklist.md)); без этого skipped jobs формально не блокируют merge.
+- [x] **Branch protection: включить `ci-gate`** — Settings → master → required check **`ci-gate`** ([`branch-protection-checklist.md`](../.github/ci/branch-protection-checklist.md)); без этого skipped jobs формально не блокируют merge.
 - [ ] **Sanity после selective CI** — один `workflow_dispatch` CI → `full`; первый master push с selective promote — проверить GHCR bootstrap; при необходимости `STAGING_FORCE_FULL_ROLLOUT=true` + manual deploy `deploy_mode=full`.
 - [ ] **DNS staging FQDNs** — см. пункт выше в Batch 11 (ещё открыт).
 
