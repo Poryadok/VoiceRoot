@@ -392,10 +392,11 @@ jobs:
           cache-to: type=gha,scope=backend-${{ matrix.service }},mode=max,ignore-error=true
 
   staging-images-promote:
-    needs: [changes, staging-images-push, backend-auth, web, developer-portal, admin]
+    needs: [changes, staging-images-push]
     if: >-
       always() &&
       needs.changes.result == 'success' &&
+      needs.staging-images-push.result != 'failure' &&
       github.event_name == 'push' &&
       github.ref == 'refs/heads/master' &&
       needs.changes.outputs.code == 'true' &&
@@ -433,7 +434,7 @@ jobs:
           bash scripts/ci/promote-ghcr-images.sh "${{ matrix.service }}"
 
   staging-stack-lock:
-    needs: [changes, staging-images-push, staging-images-promote, backend-auth, web, developer-portal, admin]
+    needs: [changes, staging-images-push, staging-images-promote]
     if: >-
       always() &&
       needs.changes.result == 'success' &&
@@ -443,6 +444,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - name: Check staging-go-services.txt drift
+        run: |
+          set -eux
+          bash scripts/ci/generate-staging-go-services.sh
+          git diff --exit-code scripts/ci/staging-go-services.txt
       - name: Render stack lock
         env:
           BUILT_SERVICES: ${{ needs.changes.outputs.build_services }}
@@ -957,6 +963,7 @@ jobs:
       - protobuf
       - compose-config
       - flutter
+      - web
       - golangci
       - backend-go-pkg
       - backend-go
@@ -977,14 +984,19 @@ jobs:
           RUN_PKG: ${{ needs.changes.outputs.run_pkg }}
           RUN_AUTH: ${{ needs.changes.outputs.run_auth }}
           RUN_FLUTTER: ${{ needs.changes.outputs.frontend }}
+          RUN_WEB: ${{ needs.changes.outputs.run_web }}
           RUN_ADMIN: ${{ needs.changes.outputs.run_admin }}
           RUN_PORTAL: ${{ needs.changes.outputs.run_developer_portal }}
+          FILTER_AUTH: ${{ needs.changes.outputs.auth }}
+          FILTER_ADMIN: ${{ needs.changes.outputs.admin }}
+          FILTER_PORTAL: ${{ needs.changes.outputs.developer-portal }}
           PROTOS: ${{ needs.changes.outputs.protos }}
           COMPOSE: ${{ needs.changes.outputs.compose }}
           GLOBAL: ${{ needs.changes.outputs.global }}
           JOB_PROTOBUF: ${{ needs.protobuf.result }}
           JOB_COMPOSE_CONFIG: ${{ needs.compose-config.result }}
           JOB_FLUTTER: ${{ needs.flutter.result }}
+          JOB_WEB: ${{ needs.web.result }}
           JOB_GOLANGCI: ${{ needs.golangci.result }}
           JOB_BACKEND_GO_PKG: ${{ needs.backend-go-pkg.result }}
           JOB_BACKEND_GO: ${{ needs.backend-go.result }}
@@ -1009,8 +1021,7 @@ jobs:
           (
             needs.changes.outputs.compose == 'true' ||
             needs.changes.outputs.frontend == 'true' ||
-            needs.changes.outputs.global == 'true' ||
-            needs.changes.outputs.run_go == 'true'
+            needs.changes.outputs.global == 'true'
           )
         )
       ) &&

@@ -25,6 +25,7 @@ case "${MODE}" in
     bash "${ROOT}/scripts/prod/apply-livekit-ingress.sh"
     ;;
   app-only)
+    bash "${ROOT}/scripts/staging/apply-migrate-jobs.sh"
     bash "${ROOT}/scripts/prod/apply-app-manifests.sh"
     bash "${ROOT}/scripts/staging/rollout-subset.sh"
     bash "${ROOT}/scripts/prod/apply-gateway-ingress.sh"

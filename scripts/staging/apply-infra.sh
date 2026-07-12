@@ -6,7 +6,7 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 # shellcheck source=scripts/staging/load-staging-domains.sh
 source "${ROOT}/scripts/staging/load-staging-domains.sh"
 REGISTRY="${VOICE_IMAGE_REGISTRY:-ghcr.io/voiceroot/voiceroot}"
-TAG="${VOICE_IMAGE_TAG:-latest}"
+TAG="${VOICE_IMAGE_TAG:?VOICE_IMAGE_TAG required}"
 NS="${VOICE_K8S_NAMESPACE:-voice-staging}"
 
 render() {

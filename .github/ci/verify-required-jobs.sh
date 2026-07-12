@@ -57,8 +57,12 @@ RUN_GO="${RUN_GO:-false}"
 RUN_PKG="${RUN_PKG:-false}"
 RUN_AUTH="${RUN_AUTH:-false}"
 RUN_FLUTTER="${RUN_FLUTTER:-false}"
+RUN_WEB="${RUN_WEB:-false}"
 RUN_ADMIN="${RUN_ADMIN:-false}"
 RUN_PORTAL="${RUN_PORTAL:-false}"
+FILTER_AUTH="${FILTER_AUTH:-false}"
+FILTER_ADMIN="${FILTER_ADMIN:-false}"
+FILTER_PORTAL="${FILTER_PORTAL:-false}"
 PROTOS="${PROTOS:-false}"
 COMPOSE="${COMPOSE:-false}"
 GLOBAL="${GLOBAL:-false}"
@@ -68,17 +72,19 @@ if [[ "${PROFILE}" == "full" ]]; then
   RUN_PKG=true
   RUN_AUTH=true
   RUN_FLUTTER=true
+  RUN_WEB=true
 fi
 
 check_if "$(or_true "${PROTOS}" "${GLOBAL}")" protobuf
 check_if "$(or_true "${COMPOSE}" "${GLOBAL}")" compose-config
 check_if "$(or_true "${RUN_FLUTTER}" "${PROTOS}" "${GLOBAL}")" flutter
+check_if "$(or_true "${RUN_WEB}" "${RUN_FLUTTER}" "${GLOBAL}")" web
 check_if "${RUN_GO}" golangci
 check_if "${RUN_PKG}" backend-go-pkg
 check_if "${RUN_GO}" backend-go
 check_if "${RUN_GO}" backend-go-integration-pr
-check_if "$(or_true "${RUN_AUTH}" "${GLOBAL}")" backend-auth
-check_if "$(or_true "${RUN_PORTAL}" "${GLOBAL}")" developer-portal
-check_if "$(or_true "${RUN_ADMIN}" "${GLOBAL}")" admin
+check_if "$(or_true "${RUN_AUTH}" "${FILTER_AUTH}" "${GLOBAL}")" backend-auth
+check_if "$(or_true "${RUN_PORTAL}" "${FILTER_PORTAL}" "${GLOBAL}")" developer-portal
+check_if "$(or_true "${RUN_ADMIN}" "${FILTER_ADMIN}" "${GLOBAL}")" admin
 
 echo "ci-gate: all required jobs present"

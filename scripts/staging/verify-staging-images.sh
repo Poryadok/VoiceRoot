@@ -46,15 +46,12 @@ if [ -n "${LOCK_FILE}" ] && [ -f "${LOCK_FILE}" ]; then
   done < <(grep -E '^  [a-z].*:' "${LOCK_FILE}" || true)
 elif [ -n "${TAG}" ]; then
   echo "Verifying staging images: ${REGISTRY} tag ${TAG}"
-  while IFS= read -r svc || [ -n "${svc}" ]; do
-    svc="${svc%%#*}"
-    svc="$(echo "${svc}" | tr -d '[:space:]')"
-    [ -z "${svc}" ] && continue
-    check_image "${svc}" "${REGISTRY}/${svc}:${TAG}" || true
-  done <"${ROOT}/scripts/ci/staging-go-services.txt"
-  for img in auth web developer-portal admin; do
-    check_image "${img}" "${REGISTRY}/${img}:${TAG}" || true
-  done
+  while IFS= read -r name || [ -n "${name}" ]; do
+    name="${name%%#*}"
+    name="$(echo "${name}" | tr -d '[:space:]')"
+    [ -z "${name}" ] && continue
+    check_image "${name}" "${REGISTRY}/${name}:${TAG}" || true
+  done < <(jq -r '.images[].name' "${ROOT}/scripts/ci/staging-image-catalog.json")
 else
   echo "ERROR: set STACK_LOCK_FILE or VOICE_IMAGE_TAG" >&2
   exit 1

@@ -10,6 +10,7 @@ Update **Settings → Branches → master → Branch protection → Require stat
 | Protobuf | `protobuf` | Skipped when protos unchanged |
 | Compose config | `compose-config` | Skipped when compose paths unchanged |
 | Flutter | `flutter` | Skipped when frontend unchanged |
+| Web (Flutter SPA Docker) | `web` | Skipped when frontend unchanged |
 | golangci | `golangci` | Skipped when no Go services in matrix |
 | Backend Go | `backend-go` | Matrix; `-short` tests |
 | Backend Go integration (PR) | `backend-go-integration-pr` | Full `go test` for matrix services |
@@ -23,7 +24,7 @@ Require **`ci-gate`** on all PRs with code changes. Path-filtered jobs may still
 
 ## Tier 2 — master push (not PR merge gates)
 
-`staging-images-push`, `staging-images-promote`, `staging-stack-lock`, `deploy-staging`, `flutter-android-smoke`, `flutter-windows`, `flutter-ios`, `flutter-web-integration`, `compose-e2e` — run on push to `master` after merge.
+`staging-images-push` (may be **skipped** when no Go services changed), `staging-images-promote`, `staging-stack-lock`, `deploy-staging`, `flutter-android-smoke`, `flutter-windows`, `flutter-ios`, `flutter-web-integration`, `compose-e2e` — run on push to `master` after merge.
 
 ## Tier 3 — do NOT require on PR / master
 

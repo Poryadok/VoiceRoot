@@ -7,7 +7,7 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 # shellcheck source=scripts/staging/load-staging-domains.sh
 source "${ROOT}/scripts/staging/load-staging-domains.sh"
 REGISTRY="${VOICE_IMAGE_REGISTRY:-ghcr.io/voiceroot/voiceroot}"
-TAG="${VOICE_IMAGE_TAG:-latest}"
+TAG="${VOICE_IMAGE_TAG:?VOICE_IMAGE_TAG required}"
 NS="${VOICE_K8S_NAMESPACE:-voice-staging}"
 MODE="${DEPLOY_MODE:-full}"
 
@@ -24,6 +24,7 @@ case "${MODE}" in
     bash "${ROOT}/scripts/staging/apply-livekit-ingress.sh"
     ;;
   app-only)
+    bash "${ROOT}/scripts/staging/apply-migrate-jobs.sh"
     bash "${ROOT}/scripts/staging/apply-app-manifests.sh"
     bash "${ROOT}/scripts/staging/rollout-subset.sh"
     bash "${ROOT}/scripts/staging/apply-gateway-ingress.sh"

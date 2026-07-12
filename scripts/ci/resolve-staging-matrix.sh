@@ -162,7 +162,7 @@ build_go_json="$(json_array ${build_go[@]+"${build_go[@]}"})"
 
 base_sha="${BASE_SHA:-}"
 if [[ -z "${base_sha}" || "${base_sha}" == "0000000000000000000000000000000000000000" ]]; then
-  base_sha="${HEAD_SHA:-}"
+  base_sha="$(git -C "${ROOT}" rev-parse HEAD^ 2>/dev/null || true)"
 fi
 
 {

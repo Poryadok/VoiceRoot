@@ -44,10 +44,10 @@
 | Что | Где в GitHub | Назначение |
 |-----|----------------|------------|
 | `GITHUB_TOKEN` | встроенный | Push образов в GHCR из job `gateway-image` (в `CI` выдано `packages: write`). |
-| Образ gateway | GHCR | `ghcr.io/<owner_lowercase>/<repo_lowercase>/gateway:<git_sha>` и тег `latest` (см. `ci.yml`). |
-| Образ developer-portal | GHCR | `ghcr.io/<owner_lowercase>/<repo_lowercase>/developer-portal:<git_sha>` и тег `latest` (job `developer-portal` в `ci.yml`; build-args из `VOICE_GATEWAY_INGRESS_HOST`). |
-| Образ web (Flutter SPA) | GHCR | `ghcr.io/<owner_lowercase>/<repo_lowercase>/web:<git_sha>` и тег `latest` (job `web` в `ci.yml`; build-args `VOICE_API_BASE_URL`, `VOICE_LIVEKIT_URL`). |
-| Образ admin | GHCR | `ghcr.io/<owner_lowercase>/<repo_lowercase>/admin:<git_sha>` и тег `latest` (job `admin` в `ci.yml`; PKCE OAuth `voice-admin`, без staff token в bundle). |
+| Образ gateway | GHCR | `ghcr.io/<owner_lowercase>/<repo_lowercase>/gateway:<git_sha>` (selective push на `master`; unchanged — promote с предыдущего SHA). |
+| Образ developer-portal | GHCR | `ghcr.io/<owner_lowercase>/<repo_lowercase>/developer-portal:<git_sha>` (job `developer-portal`; build-args из `VOICE_GATEWAY_INGRESS_HOST`). |
+| Образ web (Flutter SPA) | GHCR | `ghcr.io/<owner_lowercase>/<repo_lowercase>/web:<git_sha>` (job `web`; build-args `VOICE_API_BASE_URL`, `VOICE_LIVEKIT_URL`). |
+| Образ admin | GHCR | `ghcr.io/<owner_lowercase>/<repo_lowercase>/admin:<git_sha>` (job `admin`; PKCE OAuth `voice-admin`, без staff token в bundle). |
 | Variable **`VOICE_DEVELOPER_PORTAL_INGRESS_HOST`** | Settings → Secrets and variables → **Actions** → Variables | FQDN Developer Portal (Ingress host, OAuth callback origin). Подставляется в [`deploy/staging/developer-portal.yaml`](../deploy/staging/developer-portal.yaml) при деплое. По умолчанию — из [`deploy/staging/domains.defaults`](../deploy/staging/domains.defaults) (`scripts/staging/load-staging-domains.sh`). |
 | Variable **`VOICE_WEB_INGRESS_HOST`** | Settings → Secrets and variables → **Actions** → Variables | FQDN Flutter web SPA (Ingress host). Подставляется в [`deploy/staging/flutter-web.yaml`](../deploy/staging/flutter-web.yaml) при деплое. По умолчанию — `app.comrade.click` из [`deploy/staging/domains.defaults`](../deploy/staging/domains.defaults). |
 | Variable **`VOICE_ADMIN_INGRESS_HOST`** | optional | FQDN Moderation Admin (`admin.comrade.click` в `domains.defaults`). Ingress + OAuth redirect в [`deploy/staging/admin.yaml`](../deploy/staging/admin.yaml). |
@@ -97,9 +97,9 @@ kubectl create secret tls voice-gateway-tls -n voice-staging --cert=tls.crt --ke
 
 **Developer Portal на staging:** CI пушит `developer-portal:<git_sha>`; auto-deploy подставляет тот же SHA. После deploy проверьте `kubectl get deployment voice-developer-portal -o jsonpath='{.spec.template.spec.containers[0].image}'`.
 
-**Проверка деплоя из GitHub после настройки секрета:** в репозитории **Actions** → workflow **Staging deploy** → **Run workflow** (при необходимости укажите тег образа; по умолчанию для ручного запуска — `latest`). Убедитесь, что job завершает шаг **Apply staging manifests** без ошибок `kubectl`.
+**Проверка деплоя из GitHub после настройки секрета:** в репозитории **Actions** → workflow **Staging deploy** → **Run workflow** (обязательно укажите тег образа — git SHA из зелёного CI run; default `latest` убран). Убедитесь, что job завершает шаг **Apply staging manifests** без ошибок `kubectl`.
 
-**Теги образов и автодеплой:** auto-deploy после CI на `master` использует **`head_sha`** CI run и требует успешный job **`staging-images-push`**. `scripts/staging/verify-staging-images.sh` проверяет все образы стека в GHCR (без fallback на `:latest` при auto-deploy).
+**Теги образов и автодеплой:** auto-deploy после CI на `master` использует **`head_sha`** CI run. Job **`staging-stack-lock`** публикует `stack.lock.yaml` (built vs promoted per image); **Staging deploy** скачивает lock при `workflow_call` и `verify-staging-images.sh` проверяет манифесты из lock или полного [`staging-image-catalog.json`](../scripts/ci/staging-image-catalog.json). Job **`staging-images-push`** может быть **skipped** при frontend-only change — достаточно **`staging-images-promote`** + frontend jobs. `scripts/staging/verify-staging-images.sh` не использует `:latest`.
 
 **Sanity после изменений CI:** один раз **Actions → CI → Run workflow** → profile **`full`** (все тиры, все сервисы). Список required checks для branch protection — [`.github/ci/branch-protection-checklist.md`](../.github/ci/branch-protection-checklist.md).
 
@@ -219,7 +219,7 @@ docker build -f src/developer-portal/Dockerfile src/developer-portal \
 
 ### Flutter web staging
 
-Deployment + Ingress: [`deploy/staging/flutter-web.yaml`](../deploy/staging/flutter-web.yaml). **CI** (job `web` in [`ci.yml`](../.github/workflows/ci.yml)) builds and pushes `ghcr.io/<owner>/<repo>/web:<git_sha>` and `:latest` on every push to `master` with build-args:
+Deployment + Ingress: [`deploy/staging/flutter-web.yaml`](../deploy/staging/flutter-web.yaml). **CI** (job `web` in [`ci.yml`](../.github/workflows/ci.yml)) builds and pushes `ghcr.io/<owner>/<repo>/web:<git_sha>` on push to `master` with build-args:
 
 | Build arg | Purpose |
 |-----------|---------|

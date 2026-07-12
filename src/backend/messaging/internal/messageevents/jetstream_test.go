@@ -94,6 +94,7 @@ func TestJetStreamPublisher_RequestIDHeader(t *testing.T) {
 }
 
 func TestJetStreamPublisher_MessageEditedAndDeleted(t *testing.T) {
+	const msgWait = 10 * time.Second
 	ctx := context.Background()
 	s := startJSTestServer(t)
 	url := s.ClientURL()
@@ -112,12 +113,15 @@ func TestJetStreamPublisher_MessageEditedAndDeleted(t *testing.T) {
 	pub, err := NewJetStreamPublisher(url)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = pub.Close() })
+	require.NoError(t, pub.EnsureStream())
 
 	const mid, cid = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
 	require.NoError(t, pub.PublishMessageEdited(ctx, mid, cid, false))
+	require.NoError(t, nc.Flush())
 	require.NoError(t, pub.PublishMessageDeleted(ctx, mid, cid))
+	require.NoError(t, nc.Flush())
 
-	em, err := subEd.NextMsg(3 * time.Second)
+	em, err := subEd.NextMsg(msgWait)
 	require.NoError(t, err)
 	var edited eventsv1.MessageStreamEvent
 	require.NoError(t, proto.Unmarshal(em.Data, &edited))
@@ -126,13 +130,14 @@ func TestJetStreamPublisher_MessageEditedAndDeleted(t *testing.T) {
 	require.False(t, edited.GetMessageEdited().GetIsE2E())
 
 	require.NoError(t, pub.PublishMessageEdited(ctx, mid, cid, true))
-	emE2E, err := subEd.NextMsg(3 * time.Second)
+	require.NoError(t, nc.Flush())
+	emE2E, err := subEd.NextMsg(msgWait)
 	require.NoError(t, err)
 	var editedE2E eventsv1.MessageStreamEvent
 	require.NoError(t, proto.Unmarshal(emE2E.Data, &editedE2E))
 	require.True(t, editedE2E.GetMessageEdited().GetIsE2E())
 
-	dm, err := subDel.NextMsg(3 * time.Second)
+	dm, err := subDel.NextMsg(msgWait)
 	require.NoError(t, err)
 	var deleted eventsv1.MessageStreamEvent
 	require.NoError(t, proto.Unmarshal(dm.Data, &deleted))

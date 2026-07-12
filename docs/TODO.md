@@ -308,6 +308,31 @@ Baseline закрыт (2026-06): register guest, JWT, guards, convert-guest, TTL
 
 
 
+#### Post-commit audit 6498c89 (2026-07-12) — хвосты после `ci improvements`
+
+Коммит **`6498c89`**: selective build/promote, `ci-gate`, `workflow_call` deploy, prod stack, `staging-image-catalog.json`. Закрыто в follow-up (ci-gate/web, stack.lock deploy, catalog verify, path-filters, promote BASE_SHA, user/space subset rollout, docs). Ниже — оставшийся техдолг и ops.
+
+**Осознанный техдолг / trade-off (зафиксировать, не забыть):**
+
+- [ ] **Promote bootstrap** — первый push в пустой GHCR, force-push, squash-merge → `BASE_TAG` без образов, CI падает на promote (нужен bootstrap full build или `STAGING_FORCE_FULL_ROLLOUT=true`).
+- [ ] **`apply-app-manifests` всегда scale auth 0→1** — даже selective deploy; downtime Auth на каждый app apply ([`apply-app-manifests.sh`](../scripts/staging/apply-app-manifests.sh)).
+- [ ] **Tier 2 не блокирует PR** — `compose-e2e`, platform Flutter smokes только master / `full`; регрессии после merge ([`branch-protection-checklist.md`](../.github/ci/branch-protection-checklist.md)).
+- [ ] **Двойная сборка Flutter web на master** — tier 1 `flutter` (analyze+test) + job `web` (`flutter build web` + Docker); дедуп только для `flutter-windows` ([`ci.yml`](../.github/workflows/ci.yml)).
+- [ ] **Дедуп frontend Docker build** — отложено (admin/developer-portal: npm build + docker build).
+- [ ] **Helm/Kustomize + GitOps** — отложено; ordered rollout остаётся в bash на runner.
+- [ ] **Prod reuse staging ops scripts** — [`render-and-apply-prod.sh`](../scripts/prod/render-and-apply-prod.sh) → `rollout-app-tier.sh`, `deploy-changed.sh`, `apply-observability.sh`, `ensure-app-secrets.sh` (алиасы `PROD_*` → `STAGING_*`).
+- [ ] **Prod placeholders** — [`deploy/prod/domains.defaults`](../deploy/prod/domains.defaults) `*.voice.example.com`; secrets checklist только в README, не в ops TODO Critical.
+
+**Ops / настройка GitHub (человек):**
+
+- [ ] **Branch protection: включить `ci-gate`** — Settings → master → required check **`ci-gate`** ([`branch-protection-checklist.md`](../.github/ci/branch-protection-checklist.md)); без этого skipped jobs формально не блокируют merge.
+- [ ] **Sanity после selective CI** — один `workflow_dispatch` CI → `full`; первый master push с selective promote — проверить GHCR bootstrap; при необходимости `STAGING_FORCE_FULL_ROLLOUT=true` + manual deploy `deploy_mode=full`.
+- [ ] **DNS staging FQDNs** — см. пункт выше в Batch 11 (ещё открыт).
+
+**Промпт-якорь:** `Post-commit CI audit 6498c89 from docs/TODO.md Batch 11`.
+
+
+
 **Промпт-якорь:** `CI/CD deploy automation from docs/TODO.md Common Batch 11`.
 
 

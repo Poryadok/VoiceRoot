@@ -36,6 +36,7 @@ run_matrix() {
   promote_services="$(grep '^promote_services=' "${out}" | head -1 | cut -d= -f2-)"
   needs_full_rollout="$(grep '^needs_full_rollout=' "${out}" | head -1 | cut -d= -f2-)"
   needs_user_space_rollout="$(grep '^needs_user_space_rollout=' "${out}" | head -1 | cut -d= -f2-)"
+  promote_from_sha="$(grep '^promote_from_sha=' "${out}" | head -1 | cut -d= -f2-)"
   rm -f "${out}"
 }
 
@@ -69,5 +70,16 @@ count="$(echo "${build_services}" | jq 'length')"
 echo "== staging_infra sets needs_full_rollout =="
 FILTER_JSON='{"code":"true","staging_infra":"true"}' GO_SERVICES_JSON='[]' run_matrix
 [[ "${needs_full_rollout}" == "true" ]] || fail "expected needs_full_rollout for staging_infra"
+
+echo "== BASE_SHA zero uses HEAD^ not HEAD_SHA =="
+FILTER_JSON='{"code":"true","svc_chat":"true"}' GO_SERVICES_JSON='["chat","messaging"]' \
+  BASE_SHA=0000000000000000000000000000000000000000 HEAD_SHA=deadbeefcafebabe run_matrix
+parent="$(git -C "${ROOT}" rev-parse HEAD^)"
+[[ "${promote_from_sha}" == "${parent}" ]] || fail "expected promote_from_sha=${parent}, got ${promote_from_sha}"
+
+echo "== compose only (no global) sets needs_full_rollout, empty build =="
+FILTER_JSON='{"code":"true","compose":"true"}' GO_SERVICES_JSON='[]' run_matrix
+[[ "${needs_full_rollout}" == "true" ]] || fail "expected needs_full_rollout for compose-only"
+[[ "${build_services}" == "[]" ]] || fail "expected empty build for compose-only without go services"
 
 echo "All resolve-staging-matrix tests passed."

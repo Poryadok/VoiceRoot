@@ -15,8 +15,7 @@ fi
 
 if [ "${NEEDS_USER_SPACE_ROLLOUT:-false}" = "true" ]; then
   echo "User/space ordered rollout"
-  # Tier 2-3 only from rollout-app-tier — invoke full script (safest for deadlock).
-  bash "${ROOT}/scripts/staging/rollout-app-tier.sh"
+  bash "${ROOT}/scripts/staging/rollout-user-space-tier.sh"
   exit 0
 fi
 

@@ -84,3 +84,17 @@ jobs:
           export VOICE_IMAGE_TAG="${TAG}"
           export VOICE_K8S_NAMESPACE="${{ vars.VOICE_PROD_K8S_NAMESPACE }}"
           bash scripts/prod/render-and-apply-prod.sh
+
+      - name: Production smoke (optional)
+        if: vars.PROD_SMOKE_ENABLED == 'true'
+        env:
+          VOICE_GATEWAY_INGRESS_HOST: ${{ vars.VOICE_PROD_GATEWAY_INGRESS_HOST }}
+          VOICE_WEB_INGRESS_HOST: ${{ vars.VOICE_PROD_WEB_INGRESS_HOST }}
+          VOICE_DEVELOPER_PORTAL_INGRESS_HOST: ${{ vars.VOICE_PROD_DEVELOPER_PORTAL_INGRESS_HOST }}
+          VOICE_ADMIN_INGRESS_HOST: ${{ vars.VOICE_PROD_ADMIN_INGRESS_HOST }}
+          VOICE_LIVEKIT_INGRESS_HOST: ${{ vars.VOICE_PROD_LIVEKIT_INGRESS_HOST }}
+          PROD_STAFF_TOKEN: ${{ secrets.PROD_STAFF_TOKEN }}
+        run: |
+          set -eux
+          export STAGING_STAFF_TOKEN="${PROD_STAFF_TOKEN:-}"
+          bash scripts/prod/smoke-prod.sh

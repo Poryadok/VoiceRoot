@@ -5,13 +5,15 @@ Kubernetes manifests for `voice-staging` namespace. Gateway-only deploy is legac
 ## Prerequisites
 
 1. k3s cluster with kubectl access ([DEPLOYMENT.md](../../docs/DEPLOYMENT.md))
-2. GHCR images built by CI on `master` for all Go services, `auth`, `developer-portal`, `web`, `admin` (tag `:<git_sha>` and `:latest`)
+2. GHCR images built by CI on `master` for changed services; unchanged images promoted from previous SHA (tag `:<git_sha>` only — no `:latest` in CI)
 3. Secrets from [secret.example.yaml](secret.example.yaml) → `secret.yaml` (do not commit)
 4. Postgres init + golang-migrate Jobs (`scripts/staging/apply-migrate-jobs.sh` for `bot_db`, `story_db`, `moderation_db`, `subscription_db`)
 
 ## Image tag and GHCR pull
 
-Auto **Staging deploy** uses CI **`head_sha`**. Manual dispatch defaults to `latest` — prefer explicit SHA from a green CI run.
+Auto **Staging deploy** uses CI **`head_sha`** and optional **`stack.lock.yaml`** artifact (per-image built vs promoted). Manual **`workflow_dispatch`** requires explicit **`image_tag`** (git SHA). Optional: `changed_services`, `needs_full_rollout`, `needs_user_space_rollout` for subset rollout.
+
+**`DEPLOY_MODE`:** `full` (infra + migrations + ordered rollout) | `app-only` (migrations + app manifests + subset rollout) | `images-only` (selective image update only).
 
 If GHCR packages are private, create a `docker-registry` secret in `voice-staging` and set `VOICE_IMAGE_PULL_SECRET` when running `render-and-apply.sh` (patches all Deployments).
 
@@ -22,7 +24,7 @@ Optional: `VOICE_APPLY_OBSERVABILITY=true` runs [`scripts/staging/apply-observab
 ```bash
 # From repo root (bash):
 export VOICE_IMAGE_REGISTRY=ghcr.io/your-org/voiceroot
-export VOICE_IMAGE_TAG=<git-sha>
+export VOICE_IMAGE_TAG=<git-sha>   # required
 export STAGING_KUBECONFIG=~/.kube/config   # or use CI secret
 
 scripts/staging/render-and-apply.sh
@@ -78,8 +80,8 @@ See [deploy/observability/README.md](../observability/README.md) for the observa
 
 ## CI
 
-Workflow [CI](../../.github/workflows/ci.yml) job **`developer-portal`** runs `npm ci`, `npm test`, and `npm run build` on every PR and push to `master`. On push to `master` it also builds and pushes `ghcr.io/<owner>/<repo>/developer-portal:<git-sha>` and `:latest` to GHCR. Staging build-args (`VITE_VOICE_API_BASE`, OAuth client id) come from GitHub Variables — see [DEPLOYMENT.md](../../docs/DEPLOYMENT.md).
+Workflow [CI](../../.github/workflows/ci.yml) on push to `master`: path-filtered **selective build** (`staging-images-push`) + **promote** unchanged images (`staging-images-promote` from `github.event.before` / `HEAD^`) → **`staging-stack-lock`** artifact.
 
-Job **`web`** runs `flutter build web` on PR/push; on push to `master` it builds and pushes `ghcr.io/<owner>/<repo>/web:<git-sha>` and `:latest` with `VOICE_API_BASE_URL` and `VOICE_LIVEKIT_URL` build-args.
+Jobs **`developer-portal`**, **`web`**, **`admin`**, **`backend-auth`** run on PR (verify) and push to `master` only when paths change (`run_*` flags from `resolve-staging-matrix.sh`).
 
-Workflow [Staging deploy](../../.github/workflows/staging-deploy.yml) applies the full stack (infra, services, gateway, developer-portal, flutter-web) via `scripts/staging/render-and-apply.sh` when **`STAGING_DEPLOY_ENABLED=true`** after successful CI on `master`, or manually via **`workflow_dispatch`** (optional image tag, default `latest`).
+Workflow [Staging deploy](../../.github/workflows/staging-deploy.yml) applies manifests via `scripts/staging/render-and-apply.sh` when **`STAGING_DEPLOY_ENABLED=true`** after successful CI on `master`, or manually via **`workflow_dispatch`** (required `image_tag`).

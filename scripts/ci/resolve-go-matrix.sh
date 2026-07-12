@@ -3,7 +3,9 @@
 # Writes go_services (JSON array), run_pkg, run_go to GITHUB_OUTPUT.
 #
 # S2S dependency map (blast radius): when a service changes, also test dependents that
-# call it over gRPC — messaging<->chat, user<->social/space, space<->user/role.
+# call it over gRPC — messaging<->chat/file/realtime, user<->social/space/notification,
+# space<->user/role, voice<->realtime; any Go service change also runs gateway tests.
+# Trade-off: wider CI than minimal path filter; narrower than global.
 set -euo pipefail
 
 GO_SERVICES=(
@@ -37,17 +39,26 @@ add_unique() {
 expand_s2s_deps() {
   local seed=("$@")
   local svc
+  local had_seed=false
   for svc in "${seed[@]}"; do
+    had_seed=true
     add_unique "$svc"
     case "$svc" in
-      messaging) add_unique chat ;;
+      messaging) add_unique chat; add_unique file; add_unique realtime ;;
       chat) add_unique messaging ;;
-      user) add_unique social; add_unique space ;;
+      file) add_unique messaging ;;
+      realtime) add_unique messaging; add_unique voice ;;
+      voice) add_unique realtime ;;
+      notification) add_unique user ;;
+      user) add_unique social; add_unique space; add_unique notification ;;
       social) add_unique user ;;
       space) add_unique user; add_unique role ;;
       role) add_unique space ;;
     esac
   done
+  if [[ "${had_seed}" == true ]]; then
+    add_unique gateway
+  fi
 }
 
 services=()

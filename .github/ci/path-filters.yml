@@ -10,21 +10,9 @@ global:
   - docker-compose.yml
   - docker-compose*.yml
   - .env.example
-  - deploy/staging/**
-  - deploy/prod/**
-  - deploy/templates/**
-  - deploy/gateway/**
-  - deploy/observability/**
   - buf.yaml
   - buf.lock
   - buf.gen*.yaml
-
-repo_meta:
-  - README*
-  - .cursor/**
-  - .claude/**
-  - .codegraph/**
-  - '*.md'
 
 staging_infra:
   - deploy/staging/infra.yaml
@@ -60,6 +48,8 @@ compose:
   - deploy/staging/**
   - deploy/prod/**
   - deploy/templates/**
+  - deploy/gateway/**
+  - deploy/observability/**
   - docker/postgres/**
   - docker/clickhouse/**
   - src/backend/migrations/**
@@ -123,7 +113,7 @@ svc_user:
 svc_voice:
   - src/backend/voice/**
 
-# Application code changes (excludes docs-only and repo meta).
+# Application code changes (excludes docs-only and repo meta: docs/**, README*, .cursor/**, *.md).
 code:
   - '**'
   - '!docs/**'

@@ -7,7 +7,7 @@ MANIFEST_DIR="${PROD_MANIFEST_DIR:-${ROOT}/deploy/prod}"
 # shellcheck source=scripts/prod/load-prod-domains.sh
 source "${ROOT}/scripts/prod/load-prod-domains.sh"
 REGISTRY="${VOICE_IMAGE_REGISTRY:-ghcr.io/voiceroot/voiceroot}"
-TAG="${VOICE_IMAGE_TAG:-latest}"
+TAG="${VOICE_IMAGE_TAG:?VOICE_IMAGE_TAG required for production}"
 NS="${VOICE_K8S_NAMESPACE:-voice-prod}"
 
 render() {
