@@ -57,12 +57,12 @@ void main() {
     'test/search_e2e_live_test.dart',
     'test/trust_e2e_live_test.dart',
     'test/privacy_actions_e2e_live_test.dart',
-    'test/e2e_dm_live_test.dart',
-    'test/e2e_optout_live_test.dart',
-    'test/e2e_key_backup_live_test.dart',
-    'test/e2e_edit_live_test.dart',
-    'test/e2e_file_live_test.dart',
-    'test/e2e_shared_media_live_test.dart',
+    'test/encryption_dm_e2e_live_test.dart',
+    'test/encryption_optout_e2e_live_test.dart',
+    'test/encryption_key_backup_e2e_live_test.dart',
+    'test/encryption_edit_e2e_live_test.dart',
+    'test/encryption_file_e2e_live_test.dart',
+    'test/encryption_shared_media_e2e_live_test.dart',
     'test/bots_slash_e2e_live_test.dart',
   ];
 

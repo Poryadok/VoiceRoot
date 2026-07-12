@@ -100,7 +100,7 @@
 
 
 
-- [ ] **E2E encryption live** — gateway `compose_e2e_optout` / `compose_e2e_key_backup`; Flutter `e2e_*_live_test`.
+- [ ] **E2E encryption live** — gateway `compose_e2e_optout` / `compose_e2e_key_backup`; Flutter `encryption_*_e2e_live_test`.
 
 - [ ] **Guest restrictions live** — `guest_restrictions_e2e_live_test.dart` в `compose-e2e-live`.
 
@@ -358,7 +358,7 @@ Baseline закрыт (2026-06): register guest, JWT, guards, convert-guest, TTL
 - [ ] **Prod `full` mode всегда `rollout-app-tier.sh`** — нет user/space subset rollout как на staging; single-node Recreate strategy остаётся.
 - [ ] **S2S deps one-hop в `resolve-go-matrix.sh`** — e.g. `file` change не тянет `story` (story→file); для CI tests ок, для promote/build — только прямой path + gateway ([`resolve-go-matrix.sh`](../scripts/ci/resolve-go-matrix.sh)).
 - [ ] **`e2e-manifest.sh` / smoke runtime** — awk-парсер YAML хрупкий; 16+ gateway + 15 flutter smoke на master — риск >15 min / flake ([`.github/ci/batch11-audit.md`](../.github/ci/batch11-audit.md)).
-- [ ] **Flutter `phase*` live test filenames** — rename на feature names не завершён (batch11-audit §Low).
+- [x] **Flutter `phase*` live test filenames** — rename на feature names завершён (`encryption_*_e2e_live_test`).
 - [ ] **`.github/ci/batch11-audit.md` устарел** — статусы 2026-07-07, не отражает selective CI 2026-07-12; обновить или удалить после сверки с этой секцией.
 
 **Ops / настройка (человек):**

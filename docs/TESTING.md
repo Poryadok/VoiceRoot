@@ -208,7 +208,7 @@ Promtail ставит label **`namespace`** из pod metadata; **`request_id`** 
 | PATCH `/api/v1/users/me/privacy` → 400 `preset is invalid` | `UpdatePrivacySettings` требует валидный `preset` (`personal` / `gaming` / `work`) при любом PATCH | В E2E-хелперах слать полный gaming preset, не только одно поле; см. `setComposePrivacyAllowDmEveryone` в [`compose_live_helpers_test.go`](../src/backend/gateway/compose_live_helpers_test.go), `allowOpenGamingPrivacy` в [`live_gateway_harness.dart`](../src/frontend/test/support/live_gateway_harness.dart) |
 | AddMembers / install bot → 403 `invite blocked by recipient privacy settings` | Игровой preset: `allow_chat_space_invites` = друзья+ДД; бот-актор на том же аккаунте не друг | Chat: bypass для профилей **одного account_id** ([`privacy_audience.go`](../src/backend/chat/internal/grpcsvc/privacy_audience.go)); в тестах — `allowOpenGamingPrivacy` у invitee перед инвайтом |
 | `docker build` subscription/moderation/… → `analytics/pb` / `pkg/analyticsevents` | `pkg` тянет `voice.app/voice/analytics`; в Dockerfile не было `COPY analytics/pb` | В Dockerfile сервиса с `../pkg`: копировать `analytics/pb/voice/analytics` на этапах mod download и build; `go mod tidy` в модуле |
-| Flutter `e2e_key_backup_live_test` → `Binding has not yet been initialized` или HTTP 400 на probe | `TestWidgetsFlutterBinding` подменяет сеть; `putKeyBackup` идёт в `FlutterSecureStorage` | Не вызывать `TestWidgetsFlutterBinding` в API live-тесте; передать `backupStorage: InMemorySecureSignalStorage()` в [`VoiceE2eClient`](../src/frontend/lib/backend/e2e_client.dart) |
+| Flutter `encryption_key_backup_e2e_live_test` → `Binding has not yet been initialized` или HTTP 400 на probe | `TestWidgetsFlutterBinding` подменяет сеть; `putKeyBackup` идёт в `FlutterSecureStorage` | Не вызывать `TestWidgetsFlutterBinding` в API live-тесте; передать `backupStorage: InMemorySecureSignalStorage()` в [`VoiceE2eClient`](../src/frontend/lib/backend/e2e_client.dart) |
 | Voice Flutter: второй тест в файле таймаутит WS | LiveKit/voice cleanup между сценариями | Явный `dispose` WS, пауза ~2s между тестами, таймаут `waitForOp` 20s — [`voice_call_signaling_e2e_live_test.dart`](../src/frontend/test/voice_call_signaling_e2e_live_test.dart) |
 | Gateway smoke «Voice» не бежит | В манифесте имя теста не совпадает с кодом | Код: `TestComposeVoiceCall1to1_live` ([`compose_voice_call_live_test.go`](../src/backend/gateway/compose_voice_call_live_test.go)); манифест [`.github/ci/e2e-features.yml`](../.github/ci/e2e-features.yml) |
 | Analytics gateway live skip | Разные env-флаги | Go: `VOICE_RUN_LIVE_COMPOSE=true`; Flutter live: `VOICE_RUN_LIVE_INTEGRATION=true` |
@@ -272,7 +272,7 @@ Promtail ставит label **`namespace`** из pod metadata; **`request_id`** 
 | Stories | `TestComposeStories_live` | `stories_e2e_live_test` |
 | Bots | `TestComposeBotsSlash_live` | `bots_slash_e2e_live_test` |
 | Deep links | `TestComposeDeepLinks_live` | `deeplink_invite_e2e_live_test` |
-| E2E encryption | `TestComposeE2EKeyBackup_live` | `e2e_key_backup_live_test` |
+| E2E encryption | `TestComposeE2EKeyBackup_live` | `encryption_key_backup_e2e_live_test` |
 | Analytics (staff) | `TestComposeAnalytics_live`, `TestComposeAnalyticsExport_live` | — (admin web only) |
 
 Opt-in: `VOICE_RUN_LIVE_COMPOSE=true` в `src/backend/gateway` для analytics live tests; требуется compose app stack с ClickHouse + staff token.

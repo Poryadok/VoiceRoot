@@ -52,7 +52,7 @@
 | [privacy](features/privacy.md) | shipped | User, Social | `privacy_actions_e2e_live_test` |
 | [subscription](features/subscription.md) | partial | Subscription | `TestComposeBilling_live`, `billing_e2e_live_test` |
 | [multi-profile](features/multi-profile.md), [verification](features/verification.md) | partial | User, Auth | `profiles_verification_e2e_live_test`, `TestComposeProfileFriendIsolation_live` |
-| [encryption](features/encryption.md) (E2E DM) | shipped (opt-in) | Messaging, Chat, Auth | `TestComposeE2EDM_live`, `e2e_dm_live_test` |
+| [encryption](features/encryption.md) (E2E DM) | shipped (opt-in) | Messaging, Chat, Auth | `TestComposeE2EDM_live`, `encryption_dm_e2e_live_test` |
 | [bots](features/bots.md) | partial | Bot, Gateway | `TestComposeBotsSlash_live`, `bots_slash_e2e_live_test` |
 | [stories](features/stories.md) | partial | Story | `TestComposeStories_live`, `stories_e2e_live_test` |
 | [deep-links](features/deep-links.md) | shipped | Gateway | `TestComposeDeepLinks_live`, `deeplink_invite_e2e_live_test` |

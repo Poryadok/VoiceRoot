@@ -15,7 +15,7 @@ import (
 	"voice/backend/pkg/composefixture"
 )
 
-// TestComposeE2EDM_live mirrors e2e_dm_live_test.dart on the Go/Gateway path.
+// TestComposeE2EDM_live mirrors encryption_dm_e2e_live_test.dart on the Go/Gateway path.
 func TestComposeE2EDM_live(t *testing.T) {
 	if !liveComposeEnabled() {
 		t.Skip("set VOICE_RUN_LIVE_COMPOSE=true to run against local compose")
