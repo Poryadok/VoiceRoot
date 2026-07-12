@@ -62,6 +62,8 @@ spec:
             - name: secrets
               mountPath: /etc/alertmanager/secrets
               readOnly: true
+            - name: storage
+              mountPath: /alertmanager
           readinessProbe:
             httpGet:
               path: /-/ready
@@ -85,3 +87,5 @@ spec:
           secret:
             secretName: alertmanager-notifications
             optional: true
+        - name: storage
+          emptyDir: {}
