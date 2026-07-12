@@ -1,0 +1,50 @@
+# One-shot Flyway repair for auth_db before Auth pod start.
+# Reconciles flyway_schema_history checksums when V2+ SQL was edited after apply (staging).
+# Substitute __K_NAMESPACE__, __FLYWAY_IMAGE_TAG__ (default flyway/flyway:11.3.0).
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: voice-repair-auth-flyway
+  namespace: __K_NAMESPACE__
+  labels:
+    app.kubernetes.io/name: voice-repair-auth-flyway
+    app.kubernetes.io/component: migration
+spec:
+  ttlSecondsAfterFinished: 86400
+  backoffLimit: 2
+  activeDeadlineSeconds: 180
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: voice-repair-auth-flyway
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: flyway
+          image: __FLYWAY_IMAGE_TAG__
+          args: ["repair"]
+          env:
+            - name: FLYWAY_URL
+              value: "jdbc:postgresql://voice-postgres:5432/auth_db"
+            - name: FLYWAY_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: voice-app-config
+                  key: POSTGRES_USER
+            - name: FLYWAY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: voice-app-secrets
+                  key: POSTGRES_PASSWORD
+            - name: FLYWAY_LOCATIONS
+              value: "filesystem:/flyway/sql"
+          volumeMounts:
+            - name: migrations
+              mountPath: /flyway/sql
+              readOnly: true
+      volumes:
+        - name: migrations
+          configMap:
+            name: voice-auth-flyway-migrations
+            optional: false

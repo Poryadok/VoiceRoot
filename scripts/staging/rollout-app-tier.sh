@@ -17,8 +17,13 @@ describe_deploy_failure() {
   pod="$(kubectl get pods -n "$NS" -l "app=${dep}" \
     -o jsonpath='{.items[?(@.status.containerStatuses[0].state.running)].metadata.name}' 2>/dev/null \
     | awk 'NR==1{print; exit}')"
+  if [ -z "${pod}" ]; then
+    pod="$(kubectl get pods -n "$NS" -l "app=${dep}" \
+      -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+  fi
   if [ -n "${pod}" ]; then
     kubectl logs -n "$NS" "$pod" --tail=80 --all-containers=true 2>&1 | tail -80 >&2 || true
+    kubectl logs -n "$NS" "$pod" --previous --tail=80 --all-containers=true 2>&1 | tail -80 >&2 || true
   fi
 }
 
@@ -95,6 +100,7 @@ for d in voice-chat voice-file voice-matchmaking voice-messaging voice-moderatio
   wait_deploy "$d"
 done
 
+bash "${ROOT}/scripts/staging/repair-auth-flyway.sh"
 recreate_deploy voice-auth 600s
 
 echo "Ordered rollout complete."
