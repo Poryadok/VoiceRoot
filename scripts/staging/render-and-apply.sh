@@ -90,12 +90,24 @@ if [ -f "${ROOT}/deploy/staging/developer-portal.yaml" ]; then
   patch_image_pull_secrets
 fi
 
+if [ -f "${ROOT}/deploy/staging/flutter-web.yaml" ]; then
+  render "${ROOT}/deploy/staging/flutter-web.yaml" | \
+    sed -e "s|__WEB_INGRESS_HOST__|${VOICE_WEB_INGRESS_HOST}|g" | \
+    kubectl apply -f -
+  patch_image_pull_secrets
+fi
+
 echo "Waiting for gateway rollout..."
 kubectl rollout status "deployment/voice-gateway" -n "${NS}" --timeout=300s
 
 if kubectl get deployment voice-developer-portal -n "${NS}" >/dev/null 2>&1; then
   echo "Waiting for developer-portal rollout..."
   kubectl rollout status "deployment/voice-developer-portal" -n "${NS}" --timeout=300s
+fi
+
+if kubectl get deployment voice-web -n "${NS}" >/dev/null 2>&1; then
+  echo "Waiting for voice-web rollout..."
+  kubectl rollout status "deployment/voice-web" -n "${NS}" --timeout=300s
 fi
 
 bash "${ROOT}/scripts/staging/apply-gateway-ingress.sh"

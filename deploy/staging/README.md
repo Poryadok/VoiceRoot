@@ -5,7 +5,7 @@ Kubernetes manifests for `voice-staging` namespace. Gateway-only deploy is legac
 ## Prerequisites
 
 1. k3s cluster with kubectl access ([DEPLOYMENT.md](../../docs/DEPLOYMENT.md))
-2. GHCR images built by CI on `master` for all Go services, `auth`, `developer-portal` (tag `:<git_sha>` and `:latest`)
+2. GHCR images built by CI on `master` for all Go services, `auth`, `developer-portal`, `web` (tag `:<git_sha>` and `:latest`)
 3. Secrets from [secret.example.yaml](secret.example.yaml) → `secret.yaml` (do not commit)
 4. Postgres init + golang-migrate Jobs (`scripts/staging/apply-migrate-jobs.sh` for `bot_db`, `story_db`, `moderation_db`, `subscription_db`)
 
@@ -47,6 +47,7 @@ scripts/staging/smoke-staging.sh
 | `services.yaml` | All application microservices |
 | `gateway-deployment.yaml` | API Gateway + Service |
 | `developer-portal.yaml` | Developer Portal static site + Ingress (OAuth callback host) |
+| `flutter-web.yaml` | Flutter web SPA + Ingress (`VOICE_WEB_INGRESS_HOST`) |
 
 ## Prometheus scrape (observability)
 
@@ -78,4 +79,6 @@ See [deploy/observability/README.md](../observability/README.md) for the observa
 
 Workflow [CI](../../.github/workflows/ci.yml) job **`developer-portal`** runs `npm ci`, `npm test`, and `npm run build` on every PR and push to `master`. On push to `master` it also builds and pushes `ghcr.io/<owner>/<repo>/developer-portal:<git-sha>` and `:latest` to GHCR. Staging build-args (`VITE_VOICE_API_BASE`, OAuth client id) come from GitHub Variables — see [DEPLOYMENT.md](../../docs/DEPLOYMENT.md).
 
-Workflow [Staging deploy](../../.github/workflows/staging-deploy.yml) applies the full stack (infra, services, gateway, developer-portal) via `scripts/staging/render-and-apply.sh` when **`STAGING_DEPLOY_ENABLED=true`** after successful CI on `master`, or manually via **`workflow_dispatch`** (optional image tag, default `latest`).
+Job **`web`** runs `flutter build web` on PR/push; on push to `master` it builds and pushes `ghcr.io/<owner>/<repo>/web:<git-sha>` and `:latest` with `VOICE_API_BASE_URL` and `VOICE_LIVEKIT_URL` build-args.
+
+Workflow [Staging deploy](../../.github/workflows/staging-deploy.yml) applies the full stack (infra, services, gateway, developer-portal, flutter-web) via `scripts/staging/render-and-apply.sh` when **`STAGING_DEPLOY_ENABLED=true`** after successful CI on `master`, or manually via **`workflow_dispatch`** (optional image tag, default `latest`).

@@ -256,6 +256,14 @@ Baseline закрыт (2026-06): register guest, JWT, guards, convert-guest, TTL
 
 - [x] **Ручной deploy tag `latest`** — `workflow_dispatch` default `latest`, auto deploy — SHA; документировать риск рассинхрона при partial failed matrix push.
 
+- [ ] **Flutter web staging — закоммитить stack** — в HEAD (`9210e84`) только auth Flyway repair; WIP в рабочем дереве: job `web` в [`ci.yml`](../.github/workflows/ci.yml), [`deploy/staging/flutter-web.yaml`](../deploy/staging/flutter-web.yaml) (сейчас untracked), правки `render-and-apply.sh` / `smoke-staging.sh` / `domains.defaults` / `staging-deploy.yml`. Без коммита CI не пушит `ghcr.io/.../web` и deploy не применяет `voice-web`.
+
+- [ ] **DNS `app.comrade.click`** — A/AAAA в Cloudflare на IP ingress-ноды (как `voice` / `developers`); default `VOICE_WEB_INGRESS_HOST` в [`domains.defaults`](../deploy/staging/domains.defaults). Без DNS pod и Ingress поднимутся, снаружи — недоступно.
+
+- [ ] **staging-deploy: verify `web` image in GHCR** — шаг «Verify gateway image» не проверяет `ghcr.io/.../web:<tag>`; при skipped/failed job `web` (или первый deploy до push образа) `voice-web` уйдёт в `ImagePullBackOff`. Добавить manifest check / fallback по аналогии с gateway.
+
+- [ ] **Public LiveKit ingress** — задать `VOICE_LIVEKIT_INGRESS_HOST` + DNS/Ingress для `wss://` с клиента; без этого voice в Flutter web на staging не работает (сейчас LiveKit только внутри кластера; CI уже bake-in `wss://livekit.<base-domain>`).
+
 
 
 **Промпт-якорь:** `CI/CD deploy automation from docs/TODO.md Common Batch 11`.

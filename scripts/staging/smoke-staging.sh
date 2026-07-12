@@ -71,4 +71,44 @@ else
   echo "Smoke: skipping analytics checks (STAGING_STAFF_TOKEN not set)"
 fi
 
+if [ -n "${VOICE_WEB_INGRESS_HOST:-}" ]; then
+  WEB_URL="https://${VOICE_WEB_INGRESS_HOST}"
+  WEB_URL="${WEB_URL%/}"
+
+  echo "Smoke: GET ${WEB_URL}/health (Flutter web)"
+  web_health_tmp="$(mktemp)"
+  web_health_ok=false
+  for attempt in 1 2 3 4 5 6; do
+    web_health_code="$(curl -sS -o "${web_health_tmp}" -w "%{http_code}" "${WEB_URL}/health" || echo "000")"
+    web_health_body="$(tr -d '\r' < "${web_health_tmp}")"
+    if [ "${web_health_code}" = "200" ] && [ "${web_health_body}" = "ok" ]; then
+      web_health_ok=true
+      break
+    fi
+    echo "web health attempt ${attempt}/6: HTTP ${web_health_code} body=${web_health_body}"
+    sleep 5
+  done
+  rm -f "${web_health_tmp}"
+  if [ "${web_health_ok}" != "true" ]; then
+    echo "Flutter web health failed: expected HTTP 200 body ok; check Ingress and DNS for ${VOICE_WEB_INGRESS_HOST}"
+    exit 1
+  fi
+
+  echo "Smoke: GET ${WEB_URL}/ (Flutter web)"
+  web_root_tmp="$(mktemp)"
+  web_root_code="$(curl -sS -o "${web_root_tmp}" -w "%{http_code}" "${WEB_URL}/" || echo "000")"
+  web_root_body="$(tr -d '\r' < "${web_root_tmp}")"
+  rm -f "${web_root_tmp}"
+  if [ "${web_root_code}" != "200" ]; then
+    echo "Flutter web root failed: HTTP ${web_root_code}"
+    exit 1
+  fi
+  if ! echo "${web_root_body}" | grep -qF '<!DOCTYPE html' && ! echo "${web_root_body}" | grep -qF 'flutter_bootstrap'; then
+    echo "Flutter web root failed: body missing <!DOCTYPE html or flutter_bootstrap"
+    exit 1
+  fi
+else
+  echo "Smoke: skipping Flutter web checks (VOICE_WEB_INGRESS_HOST not set)"
+fi
+
 echo "Staging smoke passed."

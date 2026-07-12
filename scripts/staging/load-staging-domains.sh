@@ -7,6 +7,7 @@ _defaults="${_root}/deploy/staging/domains.defaults"
 
 _saved_gw="${VOICE_GATEWAY_INGRESS_HOST:-}"
 _saved_dp="${VOICE_DEVELOPER_PORTAL_INGRESS_HOST:-}"
+_saved_web="${VOICE_WEB_INGRESS_HOST:-}"
 _saved_base="${VOICE_STAGING_BASE_DOMAIN:-}"
 
 if [ -f "${_defaults}" ]; then
@@ -18,6 +19,7 @@ fi
 
 [ -n "${_saved_gw}" ] && VOICE_GATEWAY_INGRESS_HOST="${_saved_gw}"
 [ -n "${_saved_dp}" ] && VOICE_DEVELOPER_PORTAL_INGRESS_HOST="${_saved_dp}"
+[ -n "${_saved_web}" ] && VOICE_WEB_INGRESS_HOST="${_saved_web}"
 [ -n "${_saved_base}" ] && VOICE_STAGING_BASE_DOMAIN="${_saved_base}"
 
-export VOICE_STAGING_BASE_DOMAIN VOICE_GATEWAY_INGRESS_HOST VOICE_DEVELOPER_PORTAL_INGRESS_HOST
+export VOICE_STAGING_BASE_DOMAIN VOICE_GATEWAY_INGRESS_HOST VOICE_DEVELOPER_PORTAL_INGRESS_HOST VOICE_WEB_INGRESS_HOST

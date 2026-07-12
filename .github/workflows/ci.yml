@@ -519,6 +519,106 @@ jobs:
           cache-from: type=gha,scope=developer-portal
           cache-to: type=gha,scope=developer-portal,mode=max,ignore-error=true
 
+  web:
+    needs: changes
+    if: >-
+      always() &&
+      needs.changes.result == 'success' &&
+      needs.changes.outputs.code == 'true' &&
+      (needs.changes.outputs.frontend == 'true' ||
+       needs.changes.outputs.global == 'true' ||
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full') ||
+       (github.event_name == 'push' && github.ref == 'refs/heads/master'))
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+      - name: Resolve build args
+        id: buildargs
+        shell: bash
+        run: |
+          HOST="${{ vars.VOICE_GATEWAY_INGRESS_HOST }}"
+          if [ -z "${HOST}" ]; then
+            # shellcheck disable=SC1091
+            source deploy/staging/domains.defaults
+            HOST="${VOICE_GATEWAY_INGRESS_HOST}"
+          fi
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/master" ]; then
+            if [ -z "${HOST}" ]; then
+              echo "VOICE_GATEWAY_INGRESS_HOST must be set (or deploy/staging/domains.defaults) for web image push on master." >&2
+              exit 1
+            fi
+            echo "api_base_url=https://${HOST}" >> "$GITHUB_OUTPUT"
+          else
+            echo "api_base_url=http://127.0.0.1:18080" >> "$GITHUB_OUTPUT"
+          fi
+          LIVEKIT_HOST="${{ vars.VOICE_LIVEKIT_INGRESS_HOST }}"
+          if [ -z "${LIVEKIT_HOST}" ]; then
+            # shellcheck disable=SC1091
+            source deploy/staging/domains.defaults
+            LIVEKIT_HOST="livekit.${VOICE_STAGING_BASE_DOMAIN}"
+          fi
+          echo "livekit_url=wss://${LIVEKIT_HOST}" >> "$GITHUB_OUTPUT"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Prefetch sqlite3mc native assets
+        run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
+      - name: Flutter web release build
+        working-directory: src/frontend
+        env:
+          VOICE_API_BASE_URL: ${{ steps.buildargs.outputs.api_base_url }}
+          VOICE_LIVEKIT_URL: ${{ steps.buildargs.outputs.livekit_url }}
+        run: |
+          flutter pub get
+          flutter build web --release \
+            --dart-define=VOICE_API_BASE_URL="${VOICE_API_BASE_URL}" \
+            --dart-define=VOICE_LIVEKIT_URL="${VOICE_LIVEKIT_URL}"
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Image base (lowercase)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        id: image
+        run: echo "base=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+      - name: Build web image (PR verify)
+        if: github.event_name == 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./src/frontend
+          file: ./src/frontend/Dockerfile
+          push: false
+          build-args: |
+            VOICE_API_BASE_URL=${{ steps.buildargs.outputs.api_base_url }}
+            VOICE_LIVEKIT_URL=${{ steps.buildargs.outputs.livekit_url }}
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max,ignore-error=true
+      - name: Build and push web image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./src/frontend
+          file: ./src/frontend/Dockerfile
+          push: true
+          build-args: |
+            VOICE_API_BASE_URL=${{ steps.buildargs.outputs.api_base_url }}
+            VOICE_LIVEKIT_URL=${{ steps.buildargs.outputs.livekit_url }}
+          tags: |
+            ${{ steps.image.outputs.base }}/web:${{ github.sha }}
+            ${{ steps.image.outputs.base }}/web:latest
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max,ignore-error=true
+
   admin:
     needs: changes
     if: >-
