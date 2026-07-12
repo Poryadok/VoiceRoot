@@ -709,17 +709,7 @@ jobs:
       - name: Start compose infra
         run: docker compose up -d --wait postgres redis nats
       - name: Wait for postgres
-        run: |
-          for i in $(seq 1 30); do
-            if docker compose exec -T postgres psql -U voice -d voice -tAc \
-              "SELECT 1 FROM pg_database WHERE datname='chat_db'" | grep -q 1; then
-              exit 0
-            fi
-            sleep 2
-          done
-          docker compose ps
-          docker compose logs postgres --tail 80
-          exit 1
+        run: bash scripts/ci/wait-postgres-steady.sh "$GITHUB_WORKSPACE"
       - name: Migrate Go-owned databases
         run: make compose-migrate-all
       - name: Start app stack

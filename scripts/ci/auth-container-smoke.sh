@@ -88,37 +88,12 @@ if [[ ! -f "$ROOT/protos/voice/auth/v1/auth.proto" ]]; then
 fi
 
 echo "Starting postgres and redis..."
-docker compose up -d postgres redis
+docker compose up -d --wait postgres redis
 
-echo "Waiting for postgres..."
-for _ in $(seq 1 60); do
-  if docker compose exec -T postgres pg_isready -U voice -d voice >/dev/null 2>&1; then
-    break
-  fi
-  sleep 2
-done
-if ! docker compose exec -T postgres pg_isready -U voice -d voice >/dev/null 2>&1; then
-  echo "Postgres not ready" >&2
-  docker compose ps
-  docker compose logs postgres --tail 80 >&2 || true
-  exit 1
-fi
-
-echo "Waiting for postgres init (chat_db)..."
-for _ in $(seq 1 60); do
-  if docker compose exec -T postgres psql -U voice -d voice -tAc \
-    "SELECT 1 FROM pg_database WHERE datname='chat_db'" 2>/dev/null | grep -q 1; then
-    break
-  fi
-  sleep 2
-done
-if ! docker compose exec -T postgres psql -U voice -d voice -tAc \
-  "SELECT 1 FROM pg_database WHERE datname='chat_db'" 2>/dev/null | grep -q 1; then
-  echo "chat_db not ready" >&2
-  docker compose ps
-  docker compose logs postgres --tail 80 >&2 || true
-  exit 1
-fi
+# Fresh volumes: init scripts create DBs while Postgres is up, then the entrypoint
+# stops and restarts the server. See scripts/ci/wait-postgres-steady.sh.
+echo "Waiting for postgres (steady after init)..."
+bash "$ROOT/scripts/ci/wait-postgres-steady.sh" "$ROOT"
 
 echo "Waiting for redis..."
 for _ in $(seq 1 30); do
@@ -136,7 +111,20 @@ fi
 
 if ! docker compose exec -T postgres psql -U voice -d user_db -tAc "SELECT to_regclass('public.profiles')" | grep -q profiles; then
   echo "Applying user_db schema for smoke..."
-  cat "$ROOT/docker/postgres/user_db_init.sql.snippet" | docker compose exec -T postgres psql -U voice -d user_db -v ON_ERROR_STOP=1 -f -
+  applied=0
+  for _ in $(seq 1 10); do
+    if cat "$ROOT/docker/postgres/user_db_init.sql.snippet" \
+      | docker compose exec -T postgres psql -U voice -d user_db -v ON_ERROR_STOP=1 -f -; then
+      applied=1
+      break
+    fi
+    sleep 3
+  done
+  if [[ "$applied" -ne 1 ]]; then
+    echo "Failed to apply user_db schema" >&2
+    docker compose logs postgres --tail 80 >&2 || true
+    exit 1
+  fi
 fi
 
 POSTGRES_CID=$(docker compose ps -q postgres)
