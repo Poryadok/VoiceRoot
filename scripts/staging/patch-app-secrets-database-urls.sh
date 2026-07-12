@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Add missing keys to an existing voice-app-secrets (idempotent).
 # CI STAGING_APP_SECRETS_YAML and older cluster secrets may lack keys for newer services
-# (database URLs, R2 object storage, ClickHouse).
+# (database URLs, R2 object storage, ClickHouse, auth JWT mount).
 set -euo pipefail
 
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 NS="${VOICE_K8S_NAMESPACE:-voice-staging}"
 SECRET_NAME="voice-app-secrets"
 
@@ -113,7 +114,12 @@ add_if_missing FILE_R2_ACCESS_KEY_ID "${FILE_R2_ACCESS_KEY_ID:-}"
 add_if_missing FILE_R2_SECRET_ACCESS_KEY "${FILE_R2_SECRET_ACCESS_KEY:-}"
 add_if_missing FILE_R2_BUCKET "${FILE_R2_BUCKET:-voice-staging-files}"
 
-if ((${#args[@]} == 0)); then
+needs_jwt_patch=false
+if [ -z "$(secret_data_key AUTH_JWT_PRIVATE_KEY)" ]; then
+  needs_jwt_patch=true
+fi
+
+if ((${#args[@]} == 0)) && [ "${needs_jwt_patch}" = false ]; then
   echo "${SECRET_NAME} keys complete"
   exit 0
 fi
@@ -124,6 +130,16 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 
 string_data="{}"
+if [ "${needs_jwt_patch}" = true ]; then
+  JWT_FILE="${AUTH_JWT_PRIVATE_KEY_FILE:-${ROOT}/src/backend/auth/src/test/resources/jwt-test-private.pem}"
+  if [ ! -f "${JWT_FILE}" ]; then
+    echo "ERROR: AUTH_JWT_PRIVATE_KEY missing and JWT file not found at ${JWT_FILE}" >&2
+    exit 1
+  fi
+  echo "Patching ${SECRET_NAME}: add AUTH_JWT_PRIVATE_KEY"
+  jwt_pem="$(cat "${JWT_FILE}")"
+  string_data="$(jq -nc --arg jwt "${jwt_pem}" '{AUTH_JWT_PRIVATE_KEY: $jwt}')"
+fi
 for arg in "${args[@]}"; do
   case "${arg}" in
     --from-literal=*)
