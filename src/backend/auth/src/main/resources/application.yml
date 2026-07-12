@@ -42,6 +42,12 @@ auth:
       client-secret: "${AUTH_OAUTH_DEVELOPER_PORTAL_CLIENT_SECRET:}"
       redirect-uris: "${AUTH_OAUTH_DEVELOPER_PORTAL_REDIRECT_URIS:}"
       authorization-code-ttl: ${AUTH_OAUTH_AUTHORIZATION_CODE_TTL:PT60S}
+    admin:
+      enabled: ${AUTH_OAUTH_ADMIN_ENABLED:false}
+      client-id: "${AUTH_OAUTH_ADMIN_CLIENT_ID:}"
+      client-secret: "${AUTH_OAUTH_ADMIN_CLIENT_SECRET:}"
+      redirect-uris: "${AUTH_OAUTH_ADMIN_REDIRECT_URIS:}"
+      authorization-code-ttl: ${AUTH_OAUTH_AUTHORIZATION_CODE_TTL:PT60S}
 
 server:
   port: ${SERVER_PORT:8080}

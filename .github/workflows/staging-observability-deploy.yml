@@ -1,0 +1,39 @@
+name: Staging observability deploy
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  observability:
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: azure/setup-kubectl@v5
+
+      - name: Configure kubectl (direct or SSH tunnel)
+        env:
+          STAGING_KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG }}
+          STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          STAGING_SSH_HOST: ${{ vars.STAGING_SSH_HOST }}
+          STAGING_SSH_USER: ${{ vars.STAGING_SSH_USER }}
+          STAGING_SSH_PORT: ${{ vars.STAGING_SSH_PORT }}
+          STAGING_DEPLOY_VIA_SSH: ${{ vars.STAGING_DEPLOY_VIA_SSH }}
+        run: bash scripts/staging/configure-kubectl-ci.sh
+
+      - name: Apply observability stack
+        env:
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          NOTIFICATIONS_ENABLED: ${{ vars.STAGING_ALERTMANAGER_NOTIFICATIONS_ENABLED }}
+        run: bash scripts/staging/apply-observability.sh
+
+      - name: Observability smoke
+        if: vars.STAGING_OBSERVABILITY_SMOKE_ENABLED == 'true'
+        env:
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+        run: bash scripts/staging/smoke-observability.sh

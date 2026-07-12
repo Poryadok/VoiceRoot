@@ -5,7 +5,7 @@ Kubernetes manifests for `voice-staging` namespace. Gateway-only deploy is legac
 ## Prerequisites
 
 1. k3s cluster with kubectl access ([DEPLOYMENT.md](../../docs/DEPLOYMENT.md))
-2. GHCR images built by CI on `master` for all Go services, `auth`, `developer-portal`, `web` (tag `:<git_sha>` and `:latest`)
+2. GHCR images built by CI on `master` for all Go services, `auth`, `developer-portal`, `web`, `admin` (tag `:<git_sha>` and `:latest`)
 3. Secrets from [secret.example.yaml](secret.example.yaml) → `secret.yaml` (do not commit)
 4. Postgres init + golang-migrate Jobs (`scripts/staging/apply-migrate-jobs.sh` for `bot_db`, `story_db`, `moderation_db`, `subscription_db`)
 
@@ -15,7 +15,7 @@ Auto **Staging deploy** uses CI **`head_sha`**. Manual dispatch defaults to `lat
 
 If GHCR packages are private, create a `docker-registry` secret in `voice-staging` and set `VOICE_IMAGE_PULL_SECRET` when running `render-and-apply.sh` (patches all Deployments).
 
-Optional: `VOICE_APPLY_OBSERVABILITY=true` applies `deploy/observability/` after app tier.
+Optional: `VOICE_APPLY_OBSERVABILITY=true` runs [`scripts/staging/apply-observability.sh`](../scripts/staging/apply-observability.sh) after app tier (not raw `kubectl apply -f deploy/observability/`). Standalone workflow: [`.github/workflows/staging-observability-deploy.yml`](../.github/workflows/staging-observability-deploy.yml).
 
 ## Apply
 
@@ -48,6 +48,7 @@ scripts/staging/smoke-staging.sh
 | `gateway-deployment.yaml` | API Gateway + Service |
 | `developer-portal.yaml` | Developer Portal static site + Ingress (OAuth callback host) |
 | `flutter-web.yaml` | Flutter web SPA + Ingress (`VOICE_WEB_INGRESS_HOST`) |
+| `admin.yaml` | Moderation Admin + Ingress (`VOICE_ADMIN_INGRESS_HOST`, OAuth `voice-admin`) |
 
 ## Prometheus scrape (observability)
 

@@ -76,6 +76,7 @@ public class AuthProperties {
     private String twitchApiBaseUrl = "https://api.twitch.tv";
     private String publicApiBaseUrl = "http://127.0.0.1:18080";
     private final DeveloperPortalOAuth developerPortal = new DeveloperPortalOAuth();
+    private final AdminOAuth admin = new AdminOAuth();
 
     public String getTwitchApiBaseUrl() {
       return twitchApiBaseUrl;
@@ -96,10 +97,14 @@ public class AuthProperties {
     public DeveloperPortalOAuth getDeveloperPortal() {
       return developerPortal;
     }
+
+    public AdminOAuth getAdmin() {
+      return admin;
+    }
   }
 
-  public static class DeveloperPortalOAuth {
-    private boolean enabled = true;
+  public static class OAuthClientSettings {
+    private boolean enabled = false;
     private String clientId = "";
     private String clientSecret = "";
     private java.util.List<String> redirectUris = java.util.List.of();
@@ -145,6 +150,10 @@ public class AuthProperties {
       this.authorizationCodeTtl = authorizationCodeTtl;
     }
   }
+
+  public static class DeveloperPortalOAuth extends OAuthClientSettings {}
+
+  public static class AdminOAuth extends OAuthClientSettings {}
 
   public static class Jwt {
     private String issuer = "voice-auth";

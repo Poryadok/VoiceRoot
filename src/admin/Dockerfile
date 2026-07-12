@@ -3,18 +3,19 @@ FROM node:22-alpine AS build
 
 WORKDIR /app
 COPY package.json package-lock.json* ./
-# Dev deps (vite, typescript) are required for `npm run build`.
 RUN if [ -f package-lock.json ]; then npm ci; else npm install --include=dev; fi
 COPY . .
 
-# Baked into the bundle; browser on the host calls the published gateway port.
 ARG VITE_VOICE_API_BASE=http://127.0.0.1:8080
-ARG VITE_STAFF_TOKEN=compose-staff-token
+ARG VITE_OAUTH_CLIENT_ID=voice-admin
+ARG VITE_OAUTH_DISABLED=false
 ENV VITE_VOICE_API_BASE=${VITE_VOICE_API_BASE}
-ENV VITE_STAFF_TOKEN=${VITE_STAFF_TOKEN}
+ENV VITE_OAUTH_CLIENT_ID=${VITE_OAUTH_CLIENT_ID}
+ENV VITE_OAUTH_DISABLED=${VITE_OAUTH_DISABLED}
 RUN npm run build
 
 FROM nginx:1.27-alpine
 COPY docker/nginx-default.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
+HEALTHCHECK CMD wget -qO- http://127.0.0.1/health || exit 1
 EXPOSE 80

@@ -148,6 +148,7 @@ metadata:
   name: voice-livekit
   namespace: voice-staging
 spec:
+  type: NodePort
   selector:
     app: voice-livekit
   ports:
@@ -157,10 +158,12 @@ spec:
     - name: rtc-tcp
       port: 7881
       targetPort: 7881
+      nodePort: 30881
     - name: rtc-udp
       port: 7882
       targetPort: 7882
       protocol: UDP
+      nodePort: 30882
     - name: metrics
       port: 6789
       targetPort: 6789
@@ -182,7 +185,7 @@ spec:
     spec:
       containers:
         - name: livekit
-          image: livekit/livekit-server:latest
+          image: livekit/livekit-server:v1.8.4
           args: ["--config", "/etc/livekit.yaml", "--bind", "0.0.0.0"]
           ports:
             - containerPort: 7880
@@ -212,10 +215,11 @@ data:
     rtc:
       tcp_port: 7881
       udp_port: 7882
+      use_external_ip: true
     prometheus:
       port: 6789
     keys:
-      devkey: secret
+      __LIVEKIT_API_KEY__: __LIVEKIT_API_SECRET__
 ---
 apiVersion: v1
 kind: Service

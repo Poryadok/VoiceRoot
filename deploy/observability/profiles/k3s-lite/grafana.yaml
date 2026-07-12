@@ -69,6 +69,8 @@ spec:
               value: "%(protocol)s://%(domain)s:%(http_port)s/"
             - name: GF_USERS_ALLOW_SIGN_UP
               value: "false"
+            - name: GF_INSTALL_PLUGINS
+              value: grafana-clickhouse-datasource
           resources:
             requests:
               cpu: 50m

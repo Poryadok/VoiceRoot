@@ -3,9 +3,10 @@ import { NavLink } from "react-router-dom";
 
 interface LayoutProps {
   children: ReactNode;
+  onSignOut?: () => void;
 }
 
-export function Layout({ children }: LayoutProps) {
+export function Layout({ children, onSignOut }: LayoutProps) {
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -41,6 +42,11 @@ export function Layout({ children }: LayoutProps) {
           >
             Audit log
           </NavLink>
+          {onSignOut ? (
+            <button type="button" className="nav-signout" onClick={onSignOut}>
+              Sign out
+            </button>
+          ) : null}
         </nav>
       </header>
       <main className="app-main">{children}</main>

@@ -34,6 +34,8 @@ echo "Applying Voice staging stack: ${REGISTRY} tag ${TAG} namespace ${NS}"
 kubectl apply -f "${ROOT}/deploy/staging/namespace.yaml"
 sed -e "s|__GATEWAY_INGRESS_HOST__|${VOICE_GATEWAY_INGRESS_HOST}|g" \
     -e "s|__DEVELOPER_PORTAL_INGRESS_HOST__|${VOICE_DEVELOPER_PORTAL_INGRESS_HOST}|g" \
+    -e "s|__ADMIN_INGRESS_HOST__|${VOICE_ADMIN_INGRESS_HOST}|g" \
+    -e "s|__LIVEKIT_INGRESS_HOST__|${VOICE_LIVEKIT_INGRESS_HOST}|g" \
   "${ROOT}/deploy/staging/configmap-app.yaml" | kubectl apply -f -
 
 if [ -n "${STAGING_APP_SECRETS_YAML_B64:-}" ] || [ ! -f "${ROOT}/deploy/staging/secret.yaml" ]; then
@@ -50,7 +52,17 @@ fi
 bash "${ROOT}/scripts/staging/patch-app-secrets-database-urls.sh"
 bash "${ROOT}/scripts/staging/patch-gateway-staff-token.sh"
 
-render "${ROOT}/deploy/staging/infra.yaml" | kubectl apply -f -
+LIVEKIT_API_KEY="$(kubectl get secret voice-app-secrets -n "${NS}" -o jsonpath='{.data.LIVEKIT_API_KEY}' 2>/dev/null | base64 -d 2>/dev/null || true)"
+LIVEKIT_API_SECRET="$(kubectl get secret voice-app-secrets -n "${NS}" -o jsonpath='{.data.LIVEKIT_API_SECRET}' 2>/dev/null | base64 -d 2>/dev/null || true)"
+if [ -z "${LIVEKIT_API_KEY}" ] || [ -z "${LIVEKIT_API_SECRET}" ]; then
+  echo "ERROR: LIVEKIT_API_KEY and LIVEKIT_API_SECRET must be set in voice-app-secrets" >&2
+  exit 1
+fi
+
+render "${ROOT}/deploy/staging/infra.yaml" | \
+  sed -e "s|__LIVEKIT_API_KEY__|${LIVEKIT_API_KEY}|g" \
+      -e "s|__LIVEKIT_API_SECRET__|${LIVEKIT_API_SECRET}|g" | \
+  kubectl apply -f -
 render "${ROOT}/deploy/staging/services.yaml" | kubectl apply -f -
 render "${ROOT}/deploy/staging/gateway-deployment.yaml" | kubectl apply -f -
 
@@ -97,6 +109,13 @@ if [ -f "${ROOT}/deploy/staging/flutter-web.yaml" ]; then
   patch_image_pull_secrets
 fi
 
+if [ -f "${ROOT}/deploy/staging/admin.yaml" ]; then
+  render "${ROOT}/deploy/staging/admin.yaml" | \
+    sed -e "s|__ADMIN_INGRESS_HOST__|${VOICE_ADMIN_INGRESS_HOST}|g" | \
+    kubectl apply -f -
+  patch_image_pull_secrets
+fi
+
 echo "Waiting for gateway rollout..."
 kubectl rollout status "deployment/voice-gateway" -n "${NS}" --timeout=300s
 
@@ -110,11 +129,20 @@ if kubectl get deployment voice-web -n "${NS}" >/dev/null 2>&1; then
   kubectl rollout status "deployment/voice-web" -n "${NS}" --timeout=300s
 fi
 
+if kubectl get deployment voice-admin -n "${NS}" >/dev/null 2>&1; then
+  echo "Waiting for voice-admin rollout..."
+  kubectl rollout status "deployment/voice-admin" -n "${NS}" --timeout=300s
+fi
+
 bash "${ROOT}/scripts/staging/apply-gateway-ingress.sh"
+bash "${ROOT}/scripts/staging/apply-livekit-ingress.sh"
 
 if [ "${VOICE_APPLY_OBSERVABILITY:-}" = "true" ]; then
   echo "Applying observability stack (VOICE_APPLY_OBSERVABILITY=true)..."
-  kubectl apply -f "${ROOT}/deploy/observability/" || echo "WARN: observability apply failed; check deploy/observability/README.md"
+  GRAFANA_ADMIN_PASSWORD="${GRAFANA_ADMIN_PASSWORD:-}" \
+  NOTIFICATIONS_ENABLED="${NOTIFICATIONS_ENABLED:-false}" \
+  STAGING_CLICKHOUSE_PASSWORD="${STAGING_CLICKHOUSE_PASSWORD:-}" \
+  bash "${ROOT}/scripts/staging/apply-observability.sh"
 fi
 
 echo "Staging apply complete. Image tag: ${TAG}"

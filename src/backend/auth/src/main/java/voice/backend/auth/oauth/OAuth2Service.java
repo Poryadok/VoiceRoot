@@ -5,7 +5,6 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.Clock;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
@@ -35,7 +34,7 @@ public class OAuth2Service {
   }
 
   public boolean isEnabled() {
-    return developerPortal().isEnabled();
+    return OAuthClients.anyEnabled(properties);
   }
 
   public void ensureEnabled() {
@@ -49,8 +48,8 @@ public class OAuth2Service {
     if (!"code".equals(request.responseType())) {
       throw new OAuthException("unsupported_response_type", 400);
     }
-    validateClient(request.clientId());
-    validateRedirectUri(request.redirectUri());
+    resolveClient(request.clientId());
+    validateRedirectUri(request.clientId(), request.redirectUri());
     if (request.codeChallenge() == null || request.codeChallenge().isBlank()) {
       throw new OAuthException("invalid_request", 400);
     }
@@ -93,6 +92,7 @@ public class OAuth2Service {
 
   public URI completeAuthorizeAfterLogin(OAuthAuthorizeRequest request, LoginCommand login) {
     validateAuthorizeRequest(request);
+    var client = resolveClient(request.clientId());
     AuthSession session;
     try {
       session = authService.login(login);
@@ -100,7 +100,7 @@ public class OAuth2Service {
       throw new OAuthException(ex.getMessage(), 401);
     }
     String code = randomCode();
-    Instant expiresAt = Instant.now(clock).plus(developerPortal().getAuthorizationCodeTtl());
+    Instant expiresAt = Instant.now(clock).plus(client.authorizationCodeTtl());
     OAuthAuthorizationCode record =
         new OAuthAuthorizationCode(
             code,
@@ -111,7 +111,7 @@ public class OAuth2Service {
             request.codeChallenge(),
             request.codeChallengeMethod(),
             expiresAt);
-    codeStore.save(record, developerPortal().getAuthorizationCodeTtl());
+    codeStore.save(record, client.authorizationCodeTtl());
     return buildRedirect(request.redirectUri(), code, request.state());
   }
 
@@ -120,8 +120,8 @@ public class OAuth2Service {
     if (!"authorization_code".equals(request.grantType())) {
       throw new OAuthException("unsupported_grant_type", 400);
     }
-    validateClient(request.clientId());
-    validateClientSecret(request.clientId(), request.clientSecret());
+    var client = resolveClient(request.clientId());
+    validateClientSecret(client, request.clientSecret());
     OAuthAuthorizationCode record =
         codeStore
             .consume(request.code())
@@ -153,28 +153,22 @@ public class OAuth2Service {
         base + "/api/v1/auth/.well-known/jwks.json");
   }
 
-  private AuthProperties.DeveloperPortalOAuth developerPortal() {
-    return properties.getOauth().getDeveloperPortal();
+  private OAuthClients.Resolved resolveClient(String clientId) {
+    return OAuthClients.resolve(properties, clientId);
   }
 
-  private void validateClient(String clientId) {
-    if (clientId == null || !clientId.equals(developerPortal().getClientId())) {
-      throw new OAuthException("invalid_client", 401);
-    }
-  }
-
-  private void validateRedirectUri(String redirectUri) {
+  private void validateRedirectUri(String clientId, String redirectUri) {
     if (redirectUri == null || redirectUri.isBlank()) {
       throw new OAuthException("invalid_redirect_uri", 400);
     }
-    List<String> allowed = developerPortal().getRedirectUris();
+    List<String> allowed = resolveClient(clientId).redirectUris();
     if (allowed == null || allowed.stream().noneMatch(redirectUri::equals)) {
       throw new OAuthException("invalid_redirect_uri", 400);
     }
   }
 
-  private void validateClientSecret(String clientId, String clientSecret) {
-    String configured = developerPortal().getClientSecret();
+  private void validateClientSecret(OAuthClients.Resolved client, String clientSecret) {
+    String configured = client.clientSecret();
     if (configured == null || configured.isBlank()) {
       return;
     }

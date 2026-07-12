@@ -1,0 +1,55 @@
+# Moderation Admin static site. Build with VITE_VOICE_API_BASE + VITE_OAUTH_CLIENT_ID=voice-admin.
+# Substitute __IMAGE_REGISTRY__ / __IMAGE_TAG__ / __ADMIN_INGRESS_HOST__ before apply.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-admin
+  namespace: voice-staging
+  labels: {app: voice-admin}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-admin}
+  template:
+    metadata:
+      labels: {app: voice-admin}
+    spec:
+      containers:
+        - name: admin
+          image: __IMAGE_REGISTRY__/admin:__IMAGE_TAG__
+          ports: [{containerPort: 80, name: http}]
+          readinessProbe: {httpGet: {path: /health, port: http}, periodSeconds: 5}
+          livenessProbe: {httpGet: {path: /health, port: http}, periodSeconds: 15}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-admin
+  namespace: voice-staging
+spec:
+  selector: {app: voice-admin}
+  ports: [{name: http, port: 80, targetPort: http}]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: voice-admin-http
+  namespace: voice-staging
+  labels:
+    app.kubernetes.io/name: voice-admin
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: __ADMIN_INGRESS_HOST__
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: voice-admin
+                port:
+                  number: 80

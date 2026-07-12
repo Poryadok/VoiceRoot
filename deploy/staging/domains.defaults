@@ -1,9 +1,9 @@
 # Staging public hostnames — edit this file when rotating temporary domains.
 # Scripts source it via scripts/staging/load-staging-domains.sh.
-# GitHub Actions Variables VOICE_GATEWAY_INGRESS_HOST,
-# VOICE_DEVELOPER_PORTAL_INGRESS_HOST, and VOICE_WEB_INGRESS_HOST override these
-# in CI; keep in sync on rotation.
+# GitHub Actions Variables VOICE_*_INGRESS_HOST override these in CI; keep in sync on rotation.
 VOICE_STAGING_BASE_DOMAIN=comrade.click
 VOICE_GATEWAY_INGRESS_HOST=voice.comrade.click
 VOICE_DEVELOPER_PORTAL_INGRESS_HOST=developers.comrade.click
 VOICE_WEB_INGRESS_HOST=app.comrade.click
+VOICE_ADMIN_INGRESS_HOST=admin.comrade.click
+VOICE_LIVEKIT_INGRESS_HOST=livekit.comrade.click

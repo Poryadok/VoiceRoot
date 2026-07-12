@@ -71,6 +71,44 @@ else
   echo "Smoke: skipping analytics checks (STAGING_STAFF_TOKEN not set)"
 fi
 
+if [ -n "${VOICE_DEVELOPER_PORTAL_INGRESS_HOST:-}" ]; then
+  PORTAL_URL="https://${VOICE_DEVELOPER_PORTAL_INGRESS_HOST}"
+  PORTAL_URL="${PORTAL_URL%/}"
+  echo "Smoke: GET ${PORTAL_URL}/ (developer portal)"
+  portal_code="$(curl -sS -o /dev/null -w "%{http_code}" "${PORTAL_URL}/" || echo "000")"
+  if [ "${portal_code}" != "200" ]; then
+    echo "developer portal failed: HTTP ${portal_code}"
+    exit 1
+  fi
+else
+  echo "Smoke: skipping developer portal checks (VOICE_DEVELOPER_PORTAL_INGRESS_HOST not set)"
+fi
+
+if [ -n "${VOICE_ADMIN_INGRESS_HOST:-}" ]; then
+  ADMIN_URL="https://${VOICE_ADMIN_INGRESS_HOST}"
+  ADMIN_URL="${ADMIN_URL%/}"
+  echo "Smoke: GET ${ADMIN_URL}/health (admin)"
+  admin_health_tmp="$(mktemp)"
+  admin_health_ok=false
+  for attempt in 1 2 3 4 5 6; do
+    admin_health_code="$(curl -sS -o "${admin_health_tmp}" -w "%{http_code}" "${ADMIN_URL}/health" || echo "000")"
+    admin_health_body="$(tr -d '\r' < "${admin_health_tmp}")"
+    if [ "${admin_health_code}" = "200" ] && [ "${admin_health_body}" = "ok" ]; then
+      admin_health_ok=true
+      break
+    fi
+    echo "admin health attempt ${attempt}/6: HTTP ${admin_health_code} body=${admin_health_body}"
+    sleep 5
+  done
+  rm -f "${admin_health_tmp}"
+  if [ "${admin_health_ok}" != "true" ]; then
+    echo "admin health failed: expected HTTP 200 body ok; check Ingress and DNS for ${VOICE_ADMIN_INGRESS_HOST}"
+    exit 1
+  fi
+else
+  echo "Smoke: skipping admin checks (VOICE_ADMIN_INGRESS_HOST not set)"
+fi
+
 if [ -n "${VOICE_WEB_INGRESS_HOST:-}" ]; then
   WEB_URL="https://${VOICE_WEB_INGRESS_HOST}"
   WEB_URL="${WEB_URL%/}"
@@ -109,6 +147,28 @@ if [ -n "${VOICE_WEB_INGRESS_HOST:-}" ]; then
   fi
 else
   echo "Smoke: skipping Flutter web checks (VOICE_WEB_INGRESS_HOST not set)"
+fi
+
+if [ -n "${VOICE_LIVEKIT_INGRESS_HOST:-}" ]; then
+  LIVEKIT_WS="wss://${VOICE_LIVEKIT_INGRESS_HOST}"
+  echo "Smoke: LiveKit signaling probe ${LIVEKIT_WS}"
+  if command -v websocat >/dev/null 2>&1; then
+    if ! timeout 10 websocat -n1 "${LIVEKIT_WS}" </dev/null 2>/dev/null; then
+      echo "LiveKit WebSocket probe failed for ${LIVEKIT_WS}"
+      exit 1
+    fi
+  else
+    lk_code="$(curl -sS -o /dev/null -w "%{http_code}" \
+      -H "Connection: Upgrade" -H "Upgrade: websocket" \
+      -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" \
+      "https://${VOICE_LIVEKIT_INGRESS_HOST}/" || echo "000")"
+    if [ "${lk_code}" != "101" ] && [ "${lk_code}" != "200" ] && [ "${lk_code}" != "400" ]; then
+      echo "LiveKit signaling probe failed: HTTP ${lk_code} (expected 101/200/400)"
+      exit 1
+    fi
+  fi
+else
+  echo "Smoke: skipping LiveKit checks (VOICE_LIVEKIT_INGRESS_HOST not set)"
 fi
 
 echo "Staging smoke passed."

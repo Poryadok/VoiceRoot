@@ -1,9 +1,11 @@
-const apiBase = () => import.meta.env.VITE_VOICE_API_BASE?.replace(/\/$/, "") ?? "";
+import { apiBaseUrl, isOauthDisabled } from "../oauth/api";
+import { getAccessToken } from "../oauth/session";
 
-const staffToken = () => import.meta.env.VITE_STAFF_TOKEN ?? "";
+const staffToken = () =>
+  isOauthDisabled() ? (import.meta.env.VITE_STAFF_TOKEN ?? "") : "";
 
 export function apiUrl(path: string): string {
-  const base = apiBase();
+  const base = apiBaseUrl().replace(/\/$/, "");
   const normalized = path.startsWith("/") ? path : `/${path}`;
   return `${base}${normalized}`;
 }
@@ -13,7 +15,7 @@ export async function apiFetch(
   init: RequestInit = {},
 ): Promise<Response> {
   const headers = new Headers(init.headers);
-  const token = staffToken();
+  const token = getAccessToken() || staffToken();
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }

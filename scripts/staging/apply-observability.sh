@@ -82,8 +82,20 @@ kubectl -n "${NS}" create configmap alertmanager-templates \
   --dry-run=client -o yaml | kubectl apply -f -
 
 # --- Grafana provisioning ---
+CH_PASSWORD="${STAGING_CLICKHOUSE_PASSWORD:-}"
+if [ -z "${CH_PASSWORD}" ] && kubectl get secret voice-app-secrets -n voice-staging >/dev/null 2>&1; then
+  CH_PASSWORD="$(kubectl get secret voice-app-secrets -n voice-staging -o jsonpath='{.data.CLICKHOUSE_PASSWORD}' 2>/dev/null | base64 -d 2>/dev/null || true)"
+fi
+if [ -z "${CH_PASSWORD}" ]; then
+  CH_PASSWORD="voice-clickhouse-dev"
+fi
+
+sed -e "s|http://clickhouse:8123|http://voice-clickhouse.voice-staging.svc.cluster.local:8123|g" \
+    -e "s|voice-clickhouse-dev|${CH_PASSWORD}|g" \
+  "${OBS_DIR}/grafana/provisioning/datasources.yaml" > "${TMP}/datasources.yaml"
+
 kubectl -n "${NS}" create configmap grafana-datasources \
-  --from-file=datasources.yaml="${OBS_DIR}/grafana/provisioning/datasources.yaml" \
+  --from-file=datasources.yaml="${TMP}/datasources.yaml" \
   --dry-run=client -o yaml | kubectl apply -f -
 
 kubectl -n "${NS}" create configmap grafana-dashboards-provisioning \

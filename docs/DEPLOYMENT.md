@@ -48,9 +48,15 @@
 | Образ gateway | GHCR | `ghcr.io/<owner_lowercase>/<repo_lowercase>/gateway:<git_sha>` и тег `latest` (см. `ci.yml`). |
 | Образ developer-portal | GHCR | `ghcr.io/<owner_lowercase>/<repo_lowercase>/developer-portal:<git_sha>` и тег `latest` (job `developer-portal` в `ci.yml`; build-args из `VOICE_GATEWAY_INGRESS_HOST`). |
 | Образ web (Flutter SPA) | GHCR | `ghcr.io/<owner_lowercase>/<repo_lowercase>/web:<git_sha>` и тег `latest` (job `web` в `ci.yml`; build-args `VOICE_API_BASE_URL`, `VOICE_LIVEKIT_URL`). |
+| Образ admin | GHCR | `ghcr.io/<owner_lowercase>/<repo_lowercase>/admin:<git_sha>` и тег `latest` (job `admin` в `ci.yml`; PKCE OAuth `voice-admin`, без staff token в bundle). |
 | Variable **`VOICE_DEVELOPER_PORTAL_INGRESS_HOST`** | Settings → Secrets and variables → **Actions** → Variables | FQDN Developer Portal (Ingress host, OAuth callback origin). Подставляется в [`deploy/staging/developer-portal.yaml`](../deploy/staging/developer-portal.yaml) при деплое. По умолчанию — из [`deploy/staging/domains.defaults`](../deploy/staging/domains.defaults) (`scripts/staging/load-staging-domains.sh`). |
 | Variable **`VOICE_WEB_INGRESS_HOST`** | Settings → Secrets and variables → **Actions** → Variables | FQDN Flutter web SPA (Ingress host). Подставляется в [`deploy/staging/flutter-web.yaml`](../deploy/staging/flutter-web.yaml) при деплое. По умолчанию — `app.comrade.click` из [`deploy/staging/domains.defaults`](../deploy/staging/domains.defaults). |
-| Variable **`VOICE_LIVEKIT_INGRESS_HOST`** | optional | Публичный FQDN LiveKit для `wss://` в Flutter web build (`VOICE_LIVEKIT_URL`). Пока не задан — CI берёт `livekit.<VOICE_STAGING_BASE_DOMAIN>` из `domains.defaults`; публичный ingress LiveKit — отдельная задача (см. [TODO.md](TODO.md)). |
+| Variable **`VOICE_ADMIN_INGRESS_HOST`** | optional | FQDN Moderation Admin (`admin.comrade.click` в `domains.defaults`). Ingress + OAuth redirect в [`deploy/staging/admin.yaml`](../deploy/staging/admin.yaml). |
+| Variable **`VOICE_LIVEKIT_INGRESS_HOST`** | optional | Публичный FQDN LiveKit (`livekit.comrade.click`); signaling Ingress + NodePort RTC 30881/30882. Flutter web build: `VOICE_LIVEKIT_URL=wss://…`. |
+| Variable **`VOICE_APPLY_OBSERVABILITY`** | optional | `true` — после app tier вызвать [`scripts/staging/apply-observability.sh`](../scripts/staging/apply-observability.sh) в **Staging deploy**. |
+| Variable **`STAGING_OBSERVABILITY_SMOKE_ENABLED`** | optional | `true` — `scripts/staging/smoke-observability.sh` после деплоя. |
+| Variable **`STAGING_ALERTMANAGER_NOTIFICATIONS_ENABLED`** | optional | `true` — Alertmanager с Telegram/email (нужен Secret `alertmanager-notifications` в `voice-observability`). |
+| Secret **`GRAFANA_ADMIN_PASSWORD`** | Environment **staging** | Пароль Grafana admin (не дефолт `changeme-voice-observability`). |
 | Environment **`staging`** | Settings → Environments | Окружение для job деплоя; при необходимости включить required reviewers / wait timer. |
 | Secret **`STAGING_KUBECONFIG`** | Environment **staging** → Environment secrets | Kubeconfig для staging **k3s**, целиком в **base64** (одна строка: `base64 -w0 kubeconfig` на Linux или эквивалент на macOS/Windows). Workflow декодирует в `~/.kube/config`. Для **SSH-туннеля** (рекомендуется для текущего стенда) в `server:` оставьте **`https://127.0.0.1:6443`** из `k3s.yaml`. Подготовка: [`scripts/staging/prepare-kubeconfig-secret.sh`](../scripts/staging/prepare-kubeconfig-secret.sh) или [`prepare-kubeconfig-secret.ps1`](../scripts/staging/prepare-kubeconfig-secret.ps1). Локальная проверка: [`scripts/staging/kubectl-apply-dry-run.sh`](../scripts/staging/kubectl-apply-dry-run.sh). |
 | Secret **`STAGING_SSH_PRIVATE_KEY`** | Environment **staging** → Environment secrets | PEM **приватный ключ** для SSH на staging-хост (`pmd@95.31.10.177` по умолчанию). Workflow [`configure-kubectl-ci.sh`](../scripts/staging/configure-kubectl-ci.sh) поднимает туннель `localhost:6443` → `127.0.0.1:6443` на сервере — обход недоступного с интернета TCP 6443. |
@@ -59,13 +65,13 @@
 | Variable **`STAGING_DEPLOY_ENABLED`** | Settings → Secrets and variables → **Actions** → Variables | Ровно `true` — разрешить **автоматический** деплой после успешного `CI` на push в `master` (событие `workflow_run`). Пока переменная не задана или не равна `true`, автодеплой не запускается; остаётся **`workflow_dispatch`** в `Staging deploy`. |
 | Variable **`VOICE_GATEWAY_INGRESS_HOST`** | Settings → Secrets and variables → **Actions** → Variables | Публичный **FQDN** для маршрутизации к Gateway. **Текущий стенд:** `voice.comrade.click` (см. [`deploy/staging/domains.defaults`](../deploy/staging/domains.defaults); в CI задаётся этой переменной). Манифест [`deploy/gateway/ingress.yaml`](../deploy/gateway/ingress.yaml): `Ingress` с `ingressClassName: traefik`, два ресурса — HTTP (`entrypoints: web`) и HTTPS (`websecure` + `tls`). На проде — другой FQDN, **тот же файл**, другие переменные. Пока переменная **пустая**, шаг **Apply gateway Ingress** в workflow пропускается (локальные скрипты берут default из `domains.defaults`). |
 
-**Смена временного домена staging:** отредактируйте [`deploy/staging/domains.defaults`](../deploy/staging/domains.defaults) (строки `VOICE_*`), синхронно обновите GitHub Variables `VOICE_GATEWAY_INGRESS_HOST`, `VOICE_DEVELOPER_PORTAL_INGRESS_HOST` и `VOICE_WEB_INGRESS_HOST`, DNS в Cloudflare, затем `render-and-apply.sh` + Ingress (или Staging deploy workflow).
+**Смена временного домена staging:** отредактируйте [`deploy/staging/domains.defaults`](../deploy/staging/domains.defaults) (строки `VOICE_*`), синхронно обновите GitHub Variables и DNS в Cloudflare (`voice`, `developers`, `app`, `admin`, `livekit`), затем `render-and-apply.sh` + Ingress (или Staging deploy workflow).
 | Variable **`VOICE_GATEWAY_TLS_SECRET`** | optional | Имя Secret типа `kubernetes.io/tls` в namespace приложения для блока `tls` у HTTPS-Ingress (по умолчанию `voice-gateway-tls`). Создайте Secret на кластере **до** включения HTTPS-Ingress (см. ниже). |
 | Variable **`VOICE_K8S_NAMESPACE`** | optional | Namespace, где лежат `Service`/`Deployment` `voice-gateway` (по умолчанию `voice-staging`). Для прод-выката — например `voice-prod`, без смены шаблона Ingress. |
 
 **Маршрутизация Gateway (Traefik):** манифесты без привязки к имени стенда: [`deploy/gateway/ingress.yaml`](../deploy/gateway/ingress.yaml) — два `Ingress` (`voice-gateway-http`, `voice-gateway-https`), бэкенд — `Service` `voice-gateway`, порт **8080**. Traefik маршрутизирует по **имени хоста** (`spec.rules[].host`): на одной ноде может быть много приложений с разными FQDN, если DNS указывает на тот же вход (IP ноды / балансера перед Traefik, обычно те же NodePort **HTTP/HTTPS**, что выдаёт Helm-релиз Traefik в кластере).
 
-**DNS:** запись **A** или **AAAA** на публичный адрес входа к кластеру (для текущего стенда зона **comrade.click** в Cloudflare: поддомены **`voice`**, **`developers`** и **`app`** → тот же IP ноды, что и у остального трафика на этот k3s, см. [STAGING_SERVER.md](STAGING_SERVER.md)).
+**DNS:** запись **A** или **AAAA** на публичный адрес входа к кластеру (для текущего стенда зона **comrade.click** в Cloudflare: поддомены **`voice`**, **`developers`**, **`app`**, **`admin`**, **`livekit`** → тот же IP ноды; для **`livekit`** предпочтителен **DNS only** (grey cloud) из‑за WebRTC UDP).
 
 **Cloudflare и TLS:** для **`voice.comrade.click`** используется режим **Flexible SSL** (HTTPS между клиентом и Cloudflare, **HTTP** между Cloudflare и origin). Публичный HTTPS к API обеспечивает Cloudflare; на стороне кластера достаточно маршрута на entrypoint **`web`** (HTTP до NodePort Traefik). Secret и Ingress `websecure` на origin **не обязательны** для такой схемы; их имеет смысл добавлять при переходе на **Full** / **Full (strict)** или прямой HTTPS до ноды.
 
@@ -94,7 +100,7 @@ kubectl create secret tls voice-gateway-tls -n voice-staging --cert=tls.crt --ke
 
 **Проверка деплоя из GitHub после настройки секрета:** в репозитории **Actions** → workflow **Staging deploy** → **Run workflow** (при необходимости укажите тег образа; по умолчанию для ручного запуска — `latest`). Убедитесь, что job завершает шаг **Apply staging manifests** без ошибок `kubectl`.
 
-**Теги образов и автодеплой:** auto-deploy после CI на `master` использует **`head_sha`** CI run. Ручной `workflow_dispatch` по умолчанию — **`latest`**, что может рассинхрониться при partial failed docker matrix push; предпочитайте **git SHA** из зелёного CI. Workflow проверяет наличие `gateway:<tag>` в GHCR перед apply.
+**Теги образов и автодеплой:** auto-deploy после CI на `master` использует **`head_sha`** CI run и требует успешный job **`staging-images-push`**. `scripts/staging/verify-staging-images.sh` проверяет все образы стека в GHCR (без fallback на `:latest` при auto-deploy).
 
 **Sanity после изменений CI:** один раз **Actions → CI → Run workflow** → profile **`full`** (все тиры, все сервисы). Список required checks для branch protection — [`.github/ci/branch-protection-checklist.md`](../.github/ci/branch-protection-checklist.md).
 
@@ -231,7 +237,11 @@ docker build -f src/frontend/Dockerfile src/frontend \
   --build-arg VOICE_LIVEKIT_URL=wss://<VOICE_LIVEKIT_INGRESS_HOST>
 ```
 
-Voice calls on staging require a **public** LiveKit ingress (`VOICE_LIVEKIT_INGRESS_HOST`) — not wired yet; see [TODO.md](TODO.md).
+Voice calls on staging: Traefik Ingress for signaling (`deploy/livekit/ingress.yaml`) + NodePort **30881/TCP** and **30882/UDP** on `voice-livekit`; `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` in `voice-app-secrets`; `LIVEKIT_URL=wss://<VOICE_LIVEKIT_INGRESS_HOST>` in ConfigMap.
+
+### Moderation Admin staging
+
+Deployment + Ingress: [`deploy/staging/admin.yaml`](../deploy/staging/admin.yaml). **CI** job `admin` pushes `ghcr.io/.../admin:<git_sha>`. Auth OAuth client `voice-admin` (PKCE); **не** вшивать `STAGING_STAFF_TOKEN` в образ. Local compose: `VITE_OAUTH_DISABLED=true` + `ADMIN_STAFF_TOKEN`. DNS **A** for **`admin`** → staging node IP.
 
 ---
 
