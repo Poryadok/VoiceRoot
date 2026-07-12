@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Configure kubectl for GitHub Actions staging deploy.
 #
-# Direct mode: STAGING_KUBECONFIG must point at an API server reachable from the runner.
-# SSH tunnel mode (recommended for home/single-node k3s): set STAGING_SSH_PRIVATE_KEY;
-# kubectl traffic goes through SSH to 127.0.0.1:6443 on the staging host.
+# Modes (pick one for your network):
+#   1. Self-hosted runner on the k3s node (recommended for home staging) — local API, no inbound SSH/6443.
+#   2. SSH tunnel from github-hosted runner — needs inbound SSH from the internet (or GitHub IP allowlist).
+#   3. Direct API — only if kube-apiserver is reachable from the runner (datacenter / allowlisted IPs).
 #
 # Env:
 #   STAGING_KUBECONFIG_B64   (required) base64 kubeconfig
@@ -24,19 +25,49 @@ chmod 600 ~/.kube/config
 CLUSTER_NAME="$(kubectl config view -o jsonpath='{.clusters[0].name}')"
 API_SERVER="$(kubectl config view -o jsonpath="{.clusters[?(@.name==\"${CLUSTER_NAME}\")].cluster.server}")"
 
+is_local_api_server() {
+  case "${API_SERVER}" in
+    *127.0.0.1*|*localhost*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+is_github_hosted_runner() {
+  [ "${RUNNER_ENVIRONMENT:-}" = "github-hosted" ]
+}
+
 ssh_tunnel_enabled() {
   local mode="${STAGING_DEPLOY_VIA_SSH:-auto}"
   case "${mode}" in
     true|yes|1) return 0 ;;
     false|no|0) return 1 ;;
     auto)
-      [ -n "${STAGING_SSH_PRIVATE_KEY:-}" ]
+      if is_github_hosted_runner && is_local_api_server; then
+        # github-hosted cannot reach 127.0.0.1 on the staging node; need SSH if key present.
+        [ -n "${STAGING_SSH_PRIVATE_KEY:-}" ]
+      else
+        return 1
+      fi
       ;;
     *)
       echo "WARN: unknown STAGING_DEPLOY_VIA_SSH=${mode}; treating as auto" >&2
-      [ -n "${STAGING_SSH_PRIVATE_KEY:-}" ]
+      if is_github_hosted_runner && is_local_api_server; then
+        [ -n "${STAGING_SSH_PRIVATE_KEY:-}" ]
+      else
+        return 1
+      fi
       ;;
   esac
+}
+
+import_local_k3s_kubeconfig() {
+  local src="${STAGING_K3S_KUBECONFIG:-/etc/rancher/k3s/k3s.yaml}"
+  [ -r "${src}" ] || return 1
+  cp "${src}" ~/.kube/config
+  chmod 600 ~/.kube/config
+  CLUSTER_NAME="$(kubectl config view -o jsonpath='{.clusters[0].name}')"
+  kubectl config set-cluster "${CLUSTER_NAME}" --server="https://127.0.0.1:6443" >/dev/null
+  API_SERVER="https://127.0.0.1:6443"
 }
 
 start_ssh_tunnel() {
@@ -54,17 +85,22 @@ start_ssh_tunnel() {
   ssh-keyscan -p "${port}" -H "${host}" >> ~/.ssh/known_hosts 2>/dev/null || true
 
   echo "Starting SSH tunnel to ${user}@${host}:${port} -> 127.0.0.1:6443"
-  ssh -i "${key_file}" \
+  if ! ssh -i "${key_file}" \
     -p "${port}" \
     -o BatchMode=yes \
+    -o ConnectTimeout=20 \
     -o ExitOnForwardFailure=yes \
     -o ServerAliveInterval=30 \
     -o StrictHostKeyChecking=accept-new \
     -f -N \
     -L "127.0.0.1:6443:127.0.0.1:6443" \
-    "${user}@${host}"
+    "${user}@${host}"; then
+    print_ssh_tunnel_help "${host}" "${port}"
+    return 1
+  fi
 
   kubectl config set-cluster "${CLUSTER_NAME}" --server="https://127.0.0.1:6443"
+  API_SERVER="https://127.0.0.1:6443"
 }
 
 wait_for_api() {
@@ -78,26 +114,89 @@ wait_for_api() {
   return 1
 }
 
+print_ssh_tunnel_help() {
+  local host="${1:-95.31.10.177}"
+  local port="${2:-22}"
+  cat >&2 <<EOF
+ERROR: SSH tunnel to ${host}:${port} failed.
+
+Typical causes on a home staging host:
+  - UFW allows SSH only from LAN (e.g. 22/tcp ALLOW 192.168.0.0/24)
+  - Router forwards SSH but the host firewall still blocks WAN SSH
+
+Opening SSH or kube-apiserver (6443) to the whole internet is usually a bad idea.
+
+Recommended: run deploy jobs on a self-hosted GitHub Actions runner on the staging node
+(no inbound admin ports). See scripts/staging/setup-github-runner.sh and docs/STAGING_SERVER.md
+
+Set GitHub Variable STAGING_RUNNER_LABELS to:
+  ["self-hosted", "Linux", "X64", "voice-staging"]
+
+Use STAGING_KUBECONFIG with server https://127.0.0.1:6443 and STAGING_DEPLOY_VIA_SSH=false.
+EOF
+}
+
 print_connectivity_help() {
   cat >&2 <<EOF
 ERROR: Cannot reach Kubernetes API (${API_SERVER}) from this runner.
 
 If the staging API is not exposed on the public internet (typical for k3s on a home router),
-use SSH tunnel mode:
+use a self-hosted runner on the staging node (recommended) or SSH tunnel mode.
 
-  1. Add Environment secret STAGING_SSH_PRIVATE_KEY (PEM key for SSH user on staging host).
-  2. Optional Variables: STAGING_SSH_HOST (default 95.31.10.177), STAGING_SSH_USER (default pmd).
-  3. Set STAGING_DEPLOY_VIA_SSH=true (or leave auto when the SSH key secret is set).
+Self-hosted runner (recommended):
+  1. scripts/staging/setup-github-runner.sh on the staging host
+  2. GitHub Variable STAGING_RUNNER_LABELS=["self-hosted","Linux","X64","voice-staging"]
+  3. STAGING_KUBECONFIG with server https://127.0.0.1:6443
+  4. STAGING_DEPLOY_VIA_SSH=false
 
-STAGING_KUBECONFIG can use server https://127.0.0.1:6443 (from /etc/rancher/k3s/k3s.yaml).
+SSH tunnel (github-hosted runner only, needs inbound SSH):
+  1. Environment secret STAGING_SSH_PRIVATE_KEY
+  2. Allow SSH from GitHub Actions IP ranges (not 0.0.0.0/0) or use a bastion
+  3. STAGING_DEPLOY_VIA_SSH=true
 
-Alternative: open TCP 6443 to GitHub Actions IP ranges or run a self-hosted runner on the staging node.
 See docs/STAGING_SERVER.md and docs/DEPLOYMENT.md.
 EOF
 }
 
+reject_public_api_from_github_hosted() {
+  if ! is_github_hosted_runner; then
+    return 0
+  fi
+  if is_local_api_server; then
+    return 0
+  fi
+  cat >&2 <<EOF
+ERROR: STAGING_KUBECONFIG points at ${API_SERVER}, but this is a github-hosted runner.
+
+Cloud runners cannot reach a home staging kube-apiserver on a public IP reliably, and exposing
+6443 to the internet is discouraged. Use a self-hosted runner on the staging node instead.
+
+Fix:
+  - STAGING_KUBECONFIG server: https://127.0.0.1:6443 (prepare-kubeconfig-secret.sh)
+  - STAGING_RUNNER_LABELS=["self-hosted","Linux","X64","voice-staging"]
+  - scripts/staging/setup-github-runner.sh on pmdebook
+EOF
+  return 1
+}
+
+# Self-hosted runner on the k3s node: local API, no tunnel.
+if ! is_github_hosted_runner; then
+  if is_local_api_server && wait_for_api; then
+    echo "Kubernetes API reachable locally (cluster: ${CLUSTER_NAME}, server: ${API_SERVER})"
+    kubectl cluster-info --request-timeout=15s
+    exit 0
+  fi
+  if import_local_k3s_kubeconfig && wait_for_api; then
+    echo "Kubernetes API reachable via local k3s.yaml (cluster: ${CLUSTER_NAME}, server: ${API_SERVER})"
+    kubectl cluster-info --request-timeout=15s
+    exit 0
+  fi
+fi
+
+reject_public_api_from_github_hosted
+
 if ssh_tunnel_enabled; then
-  : "${STAGING_SSH_PRIVATE_KEY:?STAGING_DEPLOY_VIA_SSH requires STAGING_SSH_PRIVATE_KEY}"
+  : "${STAGING_SSH_PRIVATE_KEY:?STAGING_SSH_PRIVATE_KEY is required for SSH tunnel mode}"
   start_ssh_tunnel
   if ! wait_for_api; then
     echo "ERROR: SSH tunnel up but Kubernetes API did not respond on 127.0.0.1:6443" >&2
@@ -105,7 +204,7 @@ if ssh_tunnel_enabled; then
   fi
 else
   if ! wait_for_api; then
-    if [ -n "${STAGING_SSH_PRIVATE_KEY:-}" ]; then
+    if [ -n "${STAGING_SSH_PRIVATE_KEY:-}" ] && is_github_hosted_runner; then
       echo "Direct API unreachable; retrying via SSH tunnel..."
       start_ssh_tunnel
       if ! wait_for_api; then

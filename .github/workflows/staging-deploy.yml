@@ -51,7 +51,9 @@ permissions:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    # Home staging: set STAGING_RUNNER_LABELS=["self-hosted","Linux","X64","voice-staging"]
+    # and install the runner on the k3s node (scripts/staging/setup-github-runner.sh).
+    runs-on: ${{ vars.STAGING_RUNNER_LABELS != '' && fromJson(vars.STAGING_RUNNER_LABELS) || 'ubuntu-latest' }}
     environment: staging
     steps:
       - uses: actions/checkout@v5

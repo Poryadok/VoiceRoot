@@ -34,10 +34,14 @@ Debian + **k3s** на одной ноде: интеграционный стен
 | Kubeconfig на сервере | `/etc/rancher/k3s/k3s.yaml` |
 | kubectl | Обычно `sudo kubectl` |
 | Прослушивание kube-apiserver | `*:6443` (все интерфейсы; без sudo: `ss -lntp`, затем отбор `6443`) |
-| Типичное значение `server:` в k3s.yaml | `https://0.0.0.0:6443` или `127.0.0.1` — **в секрет `STAGING_KUBECONFIG` подставлять** публичный endpoint, напр. **`https://95.31.10.177:6443`** |
+| Типичное значение `server:` в k3s.yaml | `https://127.0.0.1:6443` — **в секрет `STAGING_KUBECONFIG` всегда** `https://127.0.0.1:6443` (self-hosted runner или SSH-туннель). Публичный `https://95.31.10.177:6443` — только для kubectl с вашей машины в LAN, **не** для github-hosted CI. |
 | Ответ API по публичному IP с ноды | `curl -sk https://95.31.10.177:6443/` → **401** без учётных данных (ожидаемо) |
 
-**Доступ к API из GitHub Actions:** облачный runner **не достигает** публичного `6443` на этом хосте (таймаут). Workflow **Staging deploy** поднимает **SSH-туннель** (`scripts/staging/configure-kubectl-ci.sh`): в Environment **staging** нужен секрет **`STAGING_SSH_PRIVATE_KEY`** (ключ для `pmd@95.31.10.177`). `STAGING_KUBECONFIG` — с `server: https://127.0.0.1:6443` (как в `k3s.yaml`). Опционально Variables: `STAGING_SSH_HOST`, `STAGING_SSH_USER`, `STAGING_DEPLOY_VIA_SSH=true`. Альтернатива: self-hosted runner на ноде или открытый API с ограничением по IP.
+**Доступ к API из GitHub Actions:** для домашнего стенда **рекомендуется self-hosted runner** на этой ноде — исходящий polling GitHub, `kubectl` к `127.0.0.1:6443`, **без** открытия SSH/6443 в интернет. Установка: [`scripts/staging/setup-github-runner.sh`](../scripts/staging/setup-github-runner.sh); в Environment **staging** Variable **`STAGING_RUNNER_LABELS`** = `["self-hosted","Linux","X64","voice-staging"]`, **`STAGING_DEPLOY_VIA_SSH`** = `false`, **`STAGING_KUBECONFIG`** с `server: https://127.0.0.1:6443`.
+
+Альтернатива (хуже для home LAN): **SSH-туннель** с github-hosted runner ([`configure-kubectl-ci.sh`](../scripts/staging/configure-kubectl-ci.sh)) — нужен **входящий SSH** с интернета (или allowlist IP GitHub Actions, не `0.0.0.0/0`). Секрет **`STAGING_SSH_PRIVATE_KEY`**. UFW сейчас: `22/tcp ALLOW 192.168.0.0/24` — с облачного runner SSH **не пройдёт** (это нормально).
+
+**Не открывайте** kube-apiserver (6443) и SSH (22) на весь интернет без жёсткого allowlist — для CI достаточно self-hosted runner.
 
 ---
 

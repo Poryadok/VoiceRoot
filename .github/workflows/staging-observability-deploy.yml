@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   observability:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.STAGING_RUNNER_LABELS != '' && fromJson(vars.STAGING_RUNNER_LABELS) || 'ubuntu-latest' }}
     environment: staging
     steps:
       - uses: actions/checkout@v5

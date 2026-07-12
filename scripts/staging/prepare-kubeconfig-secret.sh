@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # Build base64 for GitHub secret STAGING_KUBECONFIG (Environment: staging).
 #
-# Recommended (SSH tunnel from GitHub Actions — see configure-kubectl-ci.sh):
+# Recommended: self-hosted runner on the staging k3s node (no inbound SSH/6443):
 #   ./scripts/staging/prepare-kubeconfig-secret.sh ~/.kube/config
-#   (keep server https://127.0.0.1:6443 from k3s.yaml; add STAGING_SSH_PRIVATE_KEY in GitHub)
+#   (server https://127.0.0.1:6443; STAGING_RUNNER_LABELS + setup-github-runner.sh)
 #
-# Direct API from runner (only if TCP 6443 is reachable from the internet):
+# SSH tunnel from github-hosted runner (needs inbound SSH from the internet):
+#   same kubeconfig + STAGING_SSH_PRIVATE_KEY
+#
+# Direct API from github-hosted (datacenter only — not home staging):
 #   STAGING_KUBE_API_SERVER=https://95.31.10.177:6443 \
 #     ./scripts/staging/prepare-kubeconfig-secret.sh ~/.kube/staging-config
 #

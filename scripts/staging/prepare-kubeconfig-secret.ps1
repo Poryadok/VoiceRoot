@@ -1,9 +1,9 @@
 # Build base64 for GitHub secret STAGING_KUBECONFIG (Environment: staging).
-# For GitHub Actions with SSH tunnel (recommended), keep server https://127.0.0.1:6443.
+# Recommended: self-hosted runner on staging node — server https://127.0.0.1:6443
 #
 # Usage:
 #   .\scripts\staging\prepare-kubeconfig-secret.ps1 $env:USERPROFILE\.kube\config
-# Direct API (only if 6443 is public):
+# Local kubectl from LAN only (not github-hosted CI):
 #   $env:STAGING_KUBE_API_SERVER = 'https://95.31.10.177:6443'
 #   .\scripts\staging\prepare-kubeconfig-secret.ps1 $env:USERPROFILE\.kube\staging-config
 #
