@@ -84,7 +84,7 @@
 
 - [ ] **P1 алерты** — правила активны; тестовый firing → сообщение в канал (не null receiver).
 
-- [ ] **Prometheus scrape** — `gateway_http_requests_total` растёт при трафике на staging.
+- [ ] **Prometheus scrape** — `gateway_http_requests_total` растёт при трафике на staging. 
 
 
 
