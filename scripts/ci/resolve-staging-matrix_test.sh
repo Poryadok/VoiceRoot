@@ -82,4 +82,17 @@ FILTER_JSON='{"code":"true","compose":"true"}' GO_SERVICES_JSON='[]' run_matrix
 [[ "${needs_full_rollout}" == "true" ]] || fail "expected needs_full_rollout for compose-only"
 [[ "${build_services}" == "[]" ]] || fail "expected empty build for compose-only without go services"
 
+echo "== manifest check moves missing non-go promote targets to build =="
+promote_out="$(mktemp)"
+FILTER_JSON='{"code":"true","svc_chat":"true"}' GO_SERVICES_JSON='["chat","messaging"]' \
+  MANIFEST_CHECK=true VOICE_IMAGE_REGISTRY=ghcr.io/example/voice BASE_SHA=deadbeef \
+  GITHUB_OUTPUT="${promote_out}" bash "${SCRIPT}" >/dev/null
+promote_services="$(grep '^promote_services=' "${promote_out}" | head -1 | cut -d= -f2-)"
+build_services="$(grep '^build_services=' "${promote_out}" | head -1 | cut -d= -f2-)"
+run_admin="$(grep '^run_admin=' "${promote_out}" | head -1 | cut -d= -f2-)"
+assert_not_contains "${promote_services}" admin
+assert_contains "${build_services}" admin
+[[ "${run_admin}" == "true" ]] || fail "expected run_admin after missing manifest"
+rm -f "${promote_out}"
+
 echo "All resolve-staging-matrix tests passed."

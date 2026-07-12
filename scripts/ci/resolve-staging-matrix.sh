@@ -47,6 +47,46 @@ add_unique() {
   build+=("${name}")
 }
 
+enable_dedicated_build() {
+  local name="$1"
+  add_unique "${name}"
+  case "${name}" in
+    auth) run_auth=true ;;
+    web)
+      run_web=true
+      run_flutter_tier2=true
+      ;;
+    admin) run_admin=true ;;
+    developer-portal) run_developer_portal=true ;;
+  esac
+}
+
+# Non-Go images are built in dedicated CI jobs. Promote only works when BASE_TAG
+# already exists in GHCR; otherwise schedule a fresh build instead of failing promote.
+adjust_promote_for_missing_manifests() {
+  local registry_lc name lang src new_promote=()
+  registry_lc="$(echo "${VOICE_IMAGE_REGISTRY}" | tr '[:upper:]' '[:lower:]')"
+  for name in "${promote[@]:-}"; do
+    lang="$(jq -r --arg n "${name}" '.images[] | select(.name == $n) | .language' "${CATALOG}")"
+    if [[ "${lang}" == "go" || -z "${lang}" || "${lang}" == "null" ]]; then
+      new_promote+=("${name}")
+      continue
+    fi
+    src="${registry_lc}/${name}:${base_sha}"
+    if docker manifest inspect "${src}" >/dev/null 2>&1; then
+      new_promote+=("${name}")
+      continue
+    fi
+    echo "adjust-promote: ${name} missing at ${src}; scheduling dedicated build" >&2
+    enable_dedicated_build "${name}"
+  done
+  if ((${#new_promote[@]} > 0)); then
+    promote=("${new_promote[@]}")
+  else
+    promote=()
+  fi
+}
+
 mapfile -t ALL_NAMES < <(jq -r '.images[].name' "${CATALOG}")
 mapfile -t GO_NAMES < <(jq -r '.images[] | select(.language == "go") | .name' "${CATALOG}")
 
@@ -139,6 +179,15 @@ for name in "${ALL_NAMES[@]}"; do
   fi
 done
 
+base_sha="${BASE_SHA:-}"
+if [[ -z "${base_sha}" || "${base_sha}" == "0000000000000000000000000000000000000000" ]]; then
+  base_sha="$(git -C "${ROOT}" rev-parse HEAD^ 2>/dev/null || true)"
+fi
+
+if truthy "${MANIFEST_CHECK:-}" && [[ -n "${VOICE_IMAGE_REGISTRY:-}" && -n "${base_sha}" ]]; then
+  adjust_promote_for_missing_manifests
+fi
+
 # No code changes -> empty build (caller should skip image jobs).
 if ! truthy "${FORCE_FULL:-}" && [[ "${FILTER_CODE:-true}" == "false" ]]; then
   build=()
@@ -159,11 +208,6 @@ for name in "${build[@]:-}"; do
   done
 done
 build_go_json="$(json_array ${build_go[@]+"${build_go[@]}"})"
-
-base_sha="${BASE_SHA:-}"
-if [[ -z "${base_sha}" || "${base_sha}" == "0000000000000000000000000000000000000000" ]]; then
-  base_sha="$(git -C "${ROOT}" rev-parse HEAD^ 2>/dev/null || true)"
-fi
 
 {
   echo "build_services=${build_json}"
