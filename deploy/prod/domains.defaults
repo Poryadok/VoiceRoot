@@ -1,0 +1,9 @@
+# Production public hostnames — edit this file for your prod FQDNs.
+# Scripts source it via scripts/prod/load-prod-domains.sh.
+# GitHub Actions Variables VOICE_PROD_*_INGRESS_HOST override these in CI; keep in sync on rotation.
+VOICE_PROD_BASE_DOMAIN=voice.example.com
+VOICE_GATEWAY_INGRESS_HOST=api.voice.example.com
+VOICE_DEVELOPER_PORTAL_INGRESS_HOST=developers.voice.example.com
+VOICE_WEB_INGRESS_HOST=app.voice.example.com
+VOICE_ADMIN_INGRESS_HOST=admin.voice.example.com
+VOICE_LIVEKIT_INGRESS_HOST=livekit.voice.example.com

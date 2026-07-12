@@ -1,56 +1,55 @@
 #!/usr/bin/env bash
 # Render production manifests with image registry/tag and apply to cluster.
-# Full stack mirrors staging when deploy/prod/ is extended; skeleton applies bot + namespace.
+# DEPLOY_MODE: full (default) | app-only | images-only
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+# shellcheck source=scripts/prod/load-prod-domains.sh
+source "${ROOT}/scripts/prod/load-prod-domains.sh"
 REGISTRY="${VOICE_IMAGE_REGISTRY:-ghcr.io/voiceroot/voiceroot}"
 TAG="${VOICE_IMAGE_TAG:?VOICE_IMAGE_TAG required for production}"
 NS="${VOICE_K8S_NAMESPACE:-voice-prod}"
+MODE="${DEPLOY_MODE:-full}"
 
-render() {
-  sed -e "s|__IMAGE_REGISTRY__|${REGISTRY}|g" \
-      -e "s|__IMAGE_TAG__|${TAG}|g" \
-      "$1"
-}
+export VOICE_IMAGE_REGISTRY="${REGISTRY}"
+export VOICE_IMAGE_TAG="${TAG}"
+export VOICE_K8S_NAMESPACE="${NS}"
+export PROD_MANIFEST_DIR="${PROD_MANIFEST_DIR:-${ROOT}/deploy/prod}"
 
-patch_image_pull_secrets() {
-  local secret_name="${VOICE_IMAGE_PULL_SECRET:-}"
-  if [ -z "${secret_name}" ]; then
-    return 0
-  fi
-  for dep in $(kubectl get deployment -n "${NS}" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true); do
-    kubectl patch deployment "${dep}" -n "${NS}" --type=json \
-      -p="[{\"op\":\"add\",\"path\":\"/spec/template/spec/imagePullSecrets\",\"value\":[{\"name\":\"${secret_name}\"}]}]" \
-      2>/dev/null || true
-  done
-}
+echo "Applying Voice production: ${REGISTRY} tag ${TAG} namespace ${NS} mode=${MODE}"
 
-echo "Applying Voice production stack: ${REGISTRY} tag ${TAG} namespace ${NS}"
+case "${MODE}" in
+  images-only)
+    bash "${ROOT}/scripts/staging/deploy-changed.sh"
+    bash "${ROOT}/scripts/prod/apply-gateway-ingress.sh"
+    bash "${ROOT}/scripts/prod/apply-livekit-ingress.sh"
+    ;;
+  app-only)
+    bash "${ROOT}/scripts/prod/apply-app-manifests.sh"
+    bash "${ROOT}/scripts/staging/rollout-subset.sh"
+    bash "${ROOT}/scripts/prod/apply-gateway-ingress.sh"
+    bash "${ROOT}/scripts/prod/apply-livekit-ingress.sh"
+    kubectl rollout status "deployment/voice-gateway" -n "${NS}" --timeout=300s
+    ;;
+  full|*)
+    bash "${ROOT}/scripts/prod/apply-infra.sh"
+    bash "${ROOT}/scripts/prod/apply-app-manifests.sh"
+    bash "${ROOT}/scripts/staging/rollout-app-tier.sh"
+    bash "${ROOT}/scripts/prod/apply-gateway-ingress.sh"
+    bash "${ROOT}/scripts/prod/apply-livekit-ingress.sh"
+    kubectl rollout status "deployment/voice-gateway" -n "${NS}" --timeout=300s
+    for dep in voice-developer-portal voice-web voice-admin; do
+      if kubectl get deployment "${dep}" -n "${NS}" >/dev/null 2>&1; then
+        kubectl rollout status "deployment/${dep}" -n "${NS}" --timeout=300s
+      fi
+    done
+    ;;
+esac
 
-kubectl apply -f "${ROOT}/deploy/prod/namespace.yaml"
-
-if [ -f "${ROOT}/deploy/prod/configmap-app.yaml" ]; then
-  kubectl apply -f "${ROOT}/deploy/prod/configmap-app.yaml"
-fi
-
-if [ -f "${ROOT}/deploy/prod/secret.yaml" ]; then
-  kubectl apply -f "${ROOT}/deploy/prod/secret.yaml"
-fi
-
-if [ -f "${ROOT}/deploy/prod/infra.yaml" ]; then
-  render "${ROOT}/deploy/prod/infra.yaml" | kubectl apply -f -
-fi
-
-if [ -f "${ROOT}/deploy/prod/services.yaml" ]; then
-  render "${ROOT}/deploy/prod/services.yaml" | kubectl apply -f -
-  patch_image_pull_secrets
-fi
-
-if [ -f "${ROOT}/deploy/prod/gateway-deployment.yaml" ]; then
-  render "${ROOT}/deploy/prod/gateway-deployment.yaml" | kubectl apply -f -
-  patch_image_pull_secrets
-  kubectl rollout status "deployment/voice-gateway" -n "${NS}" --timeout=300s
+if [ "${VOICE_APPLY_OBSERVABILITY:-}" = "true" ]; then
+  GRAFANA_ADMIN_PASSWORD="${GRAFANA_ADMIN_PASSWORD:-}" \
+  NOTIFICATIONS_ENABLED="${NOTIFICATIONS_ENABLED:-false}" \
+  bash "${ROOT}/scripts/staging/apply-observability.sh"
 fi
 
 echo "Production apply complete. Image tag: ${TAG}"

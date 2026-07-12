@@ -1,6 +1,526 @@
-# Production skeleton — Bot Service (bots (docs/features/bots.md)). Extend with full stack before first prod cutover.
-# Image placeholders substituted by render script or sed — mirror deploy/staging/services.yaml voice-bot block.
-# Namespace: voice-prod. Requires voice-app-config / voice-app-secrets in the same namespace.
+# Voice application services (full app stack). Image placeholders substituted by render-and-apply.sh.
+# Services: auth, social, user, chat, messaging, file, matchmaking, search, notification, realtime, space, role, voice, gateway
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-auth
+  namespace: voice-prod
+  labels: {app: voice-auth}
+spec:
+  replicas: 1
+  # Single-node prod: avoid two JVM pods during rollout (old + pulling new).
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: {app: voice-auth}
+  template:
+    metadata:
+      labels: {app: voice-auth}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/actuator/prometheus"
+    spec:
+      containers:
+        - name: auth
+          image: __IMAGE_REGISTRY__/auth:__IMAGE_TAG__
+          ports: [{containerPort: 8080, name: http}, {containerPort: 9090, name: grpc}]
+          env:
+            - {name: SPRING_DATASOURCE_URL, value: "jdbc:postgresql://voice-postgres:5432/auth_db"}
+            - {name: SPRING_DATASOURCE_USERNAME, valueFrom: {configMapKeyRef: {name: voice-app-config, key: POSTGRES_USER}}}
+            - {name: SPRING_DATASOURCE_PASSWORD, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: POSTGRES_PASSWORD}}}
+            - {name: AUTH_USER_DB_JDBC_URL, value: "jdbc:postgresql://voice-postgres:5432/user_db"}
+            - {name: AUTH_USER_DB_USERNAME, valueFrom: {configMapKeyRef: {name: voice-app-config, key: POSTGRES_USER}}}
+            - {name: AUTH_USER_DB_PASSWORD, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: POSTGRES_PASSWORD}}}
+            - {name: SPRING_DATA_REDIS_HOST, value: voice-redis}
+            - {name: SPRING_DATA_REDIS_PORT, value: "6379"}
+            - {name: AUTH_JWT_PRIVATE_KEY_LOCATION, value: "file:/run/jwt.pem"}
+            - {name: AUTH_OAUTH_PUBLIC_API_BASE_URL, valueFrom: {configMapKeyRef: {name: voice-app-config, key: AUTH_OAUTH_PUBLIC_API_BASE_URL}}}
+            - {name: AUTH_OAUTH_DEVELOPER_PORTAL_ENABLED, valueFrom: {configMapKeyRef: {name: voice-app-config, key: AUTH_OAUTH_DEVELOPER_PORTAL_ENABLED}}}
+            - {name: AUTH_OAUTH_DEVELOPER_PORTAL_CLIENT_ID, valueFrom: {configMapKeyRef: {name: voice-app-config, key: AUTH_OAUTH_DEVELOPER_PORTAL_CLIENT_ID}}}
+            - {name: AUTH_OAUTH_DEVELOPER_PORTAL_REDIRECT_URIS, valueFrom: {configMapKeyRef: {name: voice-app-config, key: AUTH_OAUTH_DEVELOPER_PORTAL_REDIRECT_URIS}}}
+            - {name: AUTH_OAUTH_ADMIN_ENABLED, valueFrom: {configMapKeyRef: {name: voice-app-config, key: AUTH_OAUTH_ADMIN_ENABLED}}}
+            - {name: AUTH_OAUTH_ADMIN_CLIENT_ID, valueFrom: {configMapKeyRef: {name: voice-app-config, key: AUTH_OAUTH_ADMIN_CLIENT_ID}}}
+            - {name: AUTH_OAUTH_ADMIN_REDIRECT_URIS, valueFrom: {configMapKeyRef: {name: voice-app-config, key: AUTH_OAUTH_ADMIN_REDIRECT_URIS}}}
+          volumeMounts:
+            - {name: jwt-key, mountPath: /run/jwt.pem, subPath: jwt.pem, readOnly: true}
+          readinessProbe: {httpGet: {path: /health, port: http}, initialDelaySeconds: 30, periodSeconds: 5}
+      volumes:
+        - name: jwt-key
+          secret: {secretName: voice-app-secrets, items: [{key: AUTH_JWT_PRIVATE_KEY, path: jwt.pem}]}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-auth
+  namespace: voice-prod
+spec:
+  selector: {app: voice-auth}
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-social
+  namespace: voice-prod
+  labels: {app: voice-social}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-social}
+  template:
+    metadata:
+      labels: {app: voice-social}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: social
+          image: __IMAGE_REGISTRY__/social:__IMAGE_TAG__
+          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          env:
+            - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: SOCIAL_DATABASE_URL}}}
+            - {name: SOCIAL_GRPC_LISTEN, value: ":9090"}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-social
+  namespace: voice-prod
+spec:
+  selector: {app: voice-social}
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-user
+  namespace: voice-prod
+  labels: {app: voice-user}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-user}
+  template:
+    metadata:
+      labels: {app: voice-user}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: user
+          image: __IMAGE_REGISTRY__/user:__IMAGE_TAG__
+          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          env:
+            - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: USER_DATABASE_URL}}}
+            - {name: USER_GRPC_ADDR, value: ":9090"}
+            - {name: USER_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
+            - {name: USER_R2_ENDPOINT, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: USER_R2_ENDPOINT}}}
+            - {name: USER_R2_ACCESS_KEY_ID, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: USER_R2_ACCESS_KEY_ID}}}
+            - {name: USER_R2_SECRET_ACCESS_KEY, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: USER_R2_SECRET_ACCESS_KEY}}}
+            - {name: USER_R2_BUCKET, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: USER_R2_BUCKET}}}
+            - {name: USER_R2_PUBLIC_BASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: USER_R2_PUBLIC_BASE_URL}}}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-user
+  namespace: voice-prod
+spec:
+  selector: {app: voice-user}
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-role
+  namespace: voice-prod
+  labels: {app: voice-role}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-role}
+  template:
+    metadata:
+      labels: {app: voice-role}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: role
+          image: __IMAGE_REGISTRY__/role:__IMAGE_TAG__
+          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          env:
+            - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: ROLE_DATABASE_URL}}}
+            - {name: ROLE_GRPC_LISTEN, value: ":9090"}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-role
+  namespace: voice-prod
+spec:
+  selector: {app: voice-role}
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-space
+  namespace: voice-prod
+  labels: {app: voice-space}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-space}
+  template:
+    metadata:
+      labels: {app: voice-space}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: space
+          image: __IMAGE_REGISTRY__/space:__IMAGE_TAG__
+          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          env:
+            - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: SPACE_DATABASE_URL}}}
+            - {name: SPACE_GRPC_LISTEN, value: ":9090"}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-space
+  namespace: voice-prod
+spec:
+  selector: {app: voice-space}
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-chat
+  namespace: voice-prod
+  labels: {app: voice-chat}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-chat}
+  template:
+    metadata:
+      labels: {app: voice-chat}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: chat
+          image: __IMAGE_REGISTRY__/chat:__IMAGE_TAG__
+          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          env:
+            - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: CHAT_DATABASE_URL}}}
+            - {name: SPACE_DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: SPACE_DATABASE_URL}}}
+            - {name: CHAT_GRPC_LISTEN, value: ":9090"}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-chat
+  namespace: voice-prod
+spec:
+  selector: {app: voice-chat}
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-file
+  namespace: voice-prod
+  labels: {app: voice-file}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-file}
+  template:
+    metadata:
+      labels: {app: voice-file}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: file
+          image: __IMAGE_REGISTRY__/file:__IMAGE_TAG__
+          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          env:
+            - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: FILE_DATABASE_URL}}}
+            - {name: FILE_GRPC_LISTEN, value: ":9090"}
+            - {name: FILE_R2_ENDPOINT, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: FILE_R2_ENDPOINT}}}
+            - {name: FILE_R2_ACCESS_KEY_ID, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: FILE_R2_ACCESS_KEY_ID}}}
+            - {name: FILE_R2_SECRET_ACCESS_KEY, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: FILE_R2_SECRET_ACCESS_KEY}}}
+            - {name: FILE_R2_BUCKET, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: FILE_R2_BUCKET}}}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-file
+  namespace: voice-prod
+spec:
+  selector: {app: voice-file}
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-messaging
+  namespace: voice-prod
+  labels: {app: voice-messaging}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-messaging}
+  template:
+    metadata:
+      labels: {app: voice-messaging}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: messaging
+          image: __IMAGE_REGISTRY__/messaging:__IMAGE_TAG__
+          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          env:
+            - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: MESSAGING_DATABASE_URL}}}
+            - {name: CHAT_DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: CHAT_DATABASE_URL}}}
+            - {name: SPACE_DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: SPACE_DATABASE_URL}}}
+            - {name: MESSAGING_GRPC_LISTEN, value: ":9090"}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-messaging
+  namespace: voice-prod
+spec:
+  selector: {app: voice-messaging}
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-voice
+  namespace: voice-prod
+  labels: {app: voice-voice}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-voice}
+  template:
+    metadata:
+      labels: {app: voice-voice}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: voice
+          image: __IMAGE_REGISTRY__/voice:__IMAGE_TAG__
+          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          env:
+            - {name: VOICE_GRPC_LISTEN, value: ":9090"}
+            - {name: VOICE_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
+            - {name: LIVEKIT_URL, valueFrom: {configMapKeyRef: {name: voice-app-config, key: LIVEKIT_URL}}}
+            - {name: LIVEKIT_API_KEY, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: LIVEKIT_API_KEY}}}
+            - {name: LIVEKIT_API_SECRET, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: LIVEKIT_API_SECRET}}}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-voice
+  namespace: voice-prod
+spec:
+  selector: {app: voice-voice}
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-matchmaking
+  namespace: voice-prod
+  labels: {app: voice-matchmaking}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-matchmaking}
+  template:
+    metadata:
+      labels: {app: voice-matchmaking}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: matchmaking
+          image: __IMAGE_REGISTRY__/matchmaking:__IMAGE_TAG__
+          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          env:
+            - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: MATCHMAKING_DATABASE_URL}}}
+            - {name: MATCHMAKING_GRPC_LISTEN, value: ":9090"}
+            - {name: MATCHMAKING_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-matchmaking
+  namespace: voice-prod
+spec:
+  selector: {app: voice-matchmaking}
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-search
+  namespace: voice-prod
+  labels: {app: voice-search}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-search}
+  template:
+    metadata:
+      labels: {app: voice-search}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: search
+          image: __IMAGE_REGISTRY__/search:__IMAGE_TAG__
+          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          env:
+            - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: SEARCH_DATABASE_URL}}}
+            - {name: SEARCH_GRPC_LISTEN, value: ":9090"}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-search
+  namespace: voice-prod
+spec:
+  selector: {app: voice-search}
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-notification
+  namespace: voice-prod
+  labels: {app: voice-notification}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-notification}
+  template:
+    metadata:
+      labels: {app: voice-notification}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: notification
+          image: __IMAGE_REGISTRY__/notification:__IMAGE_TAG__
+          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          env:
+            - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: NOTIFICATION_DATABASE_URL}}}
+            - {name: NOTIFICATION_GRPC_LISTEN, value: ":9090"}
+            - {name: NOTIFICATION_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
+            - {name: FCM_PROJECT_ID, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: FCM_PROJECT_ID, optional: true}}}
+            - {name: FCM_SERVICE_ACCOUNT_JSON, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: FCM_SERVICE_ACCOUNT_JSON, optional: true}}}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-notification
+  namespace: voice-prod
+spec:
+  selector: {app: voice-notification}
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-realtime
+  namespace: voice-prod
+  labels: {app: voice-realtime}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-realtime}
+  template:
+    metadata:
+      labels: {app: voice-realtime}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: realtime
+          image: __IMAGE_REGISTRY__/realtime:__IMAGE_TAG__
+          ports: [{containerPort: 8080}]
+          env:
+            - {name: REALTIME_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-realtime
+  namespace: voice-prod
+spec:
+  selector: {app: voice-realtime}
+  ports: [{name: http, port: 8080}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -9,12 +529,16 @@ metadata:
   namespace: voice-prod
   labels: {app: voice-bot}
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels: {app: voice-bot}
   template:
     metadata:
       labels: {app: voice-bot}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: bot
@@ -32,7 +556,6 @@ spec:
             - {name: SPACE_GRPC_ADDR, value: "voice-space:9090"}
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
-          livenessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 15}
 ---
 apiVersion: v1
 kind: Service
@@ -42,3 +565,190 @@ metadata:
 spec:
   selector: {app: voice-bot}
   ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-subscription
+  namespace: voice-prod
+  labels: {app: voice-subscription}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-subscription}
+  template:
+    metadata:
+      labels: {app: voice-subscription}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: subscription
+          image: __IMAGE_REGISTRY__/subscription:__IMAGE_TAG__
+          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          env:
+            - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: SUBSCRIPTION_DATABASE_URL}}}
+            - {name: SUBSCRIPTION_GRPC_LISTEN, value: ":9090"}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-subscription
+  namespace: voice-prod
+spec:
+  selector: {app: voice-subscription}
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-moderation
+  namespace: voice-prod
+  labels: {app: voice-moderation}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-moderation}
+  template:
+    metadata:
+      labels: {app: voice-moderation}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: moderation
+          image: __IMAGE_REGISTRY__/moderation:__IMAGE_TAG__
+          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          env:
+            - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: MODERATION_DATABASE_URL}}}
+            - {name: MODERATION_GRPC_LISTEN, value: ":9090"}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-moderation
+  namespace: voice-prod
+spec:
+  selector: {app: voice-moderation}
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-story
+  namespace: voice-prod
+  labels: {app: voice-story}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-story}
+  template:
+    metadata:
+      labels: {app: voice-story}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: story
+          image: __IMAGE_REGISTRY__/story:__IMAGE_TAG__
+          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          env:
+            - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: STORY_DATABASE_URL}}}
+            - {name: STORY_GRPC_LISTEN, value: ":9090"}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-story
+  namespace: voice-prod
+spec:
+  selector: {app: voice-story}
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-analytics
+  namespace: voice-prod
+  labels: {app: voice-analytics}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-analytics}
+  template:
+    metadata:
+      labels: {app: voice-analytics}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: analytics
+          image: __IMAGE_REGISTRY__/analytics:__IMAGE_TAG__
+          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          env:
+            - {name: LISTEN_ADDR, value: ":8080"}
+            - {name: ANALYTICS_GRPC_LISTEN, value: ":9090"}
+            - {name: NATS_URL, value: "nats://voice-nats:4222"}
+            - {name: CLICKHOUSE_DSN, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: CLICKHOUSE_DSN, optional: true}}}
+            - {name: ANALYTICS_ID_HASH_KEY, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: ANALYTICS_ID_HASH_KEY, optional: true}}}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-analytics
+  namespace: voice-prod
+spec:
+  selector: {app: voice-analytics}
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-federation
+  namespace: voice-prod
+  labels: {app: voice-federation}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-federation}
+  template:
+    metadata:
+      labels: {app: voice-federation}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: federation
+          image: __IMAGE_REGISTRY__/federation:__IMAGE_TAG__
+          ports: [{containerPort: 8080}]
+          env:
+            - {name: LISTEN_ADDR, value: ":8080"}
+          envFrom: [{configMapRef: {name: voice-app-config}}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-federation
+  namespace: voice-prod
+spec:
+  selector: {app: voice-federation}
+  ports: [{name: http, port: 8080}]

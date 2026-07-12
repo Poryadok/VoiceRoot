@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Verify GHCR image manifests exist before staging deploy (stack lock or single tag).
+# Verify GHCR image manifests exist before production deploy (stack lock or single tag).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -45,7 +45,7 @@ if [ -n "${LOCK_FILE}" ] && [ -f "${LOCK_FILE}" ]; then
     check_image "${name}" "${REGISTRY}/${name}:${img_tag}" || true
   done < <(grep -E '^  [a-z].*:' "${LOCK_FILE}" || true)
 elif [ -n "${TAG}" ]; then
-  echo "Verifying staging images: ${REGISTRY} tag ${TAG}"
+  echo "Verifying production images: ${REGISTRY} tag ${TAG}"
   while IFS= read -r svc || [ -n "${svc}" ]; do
     svc="${svc%%#*}"
     svc="$(echo "${svc}" | tr -d '[:space:]')"
@@ -62,7 +62,7 @@ fi
 
 if [ "${#MISSING[@]}" -eq 0 ]; then
   set_output "deploy_tag" "${TAG}"
-  echo "All staging images present for tag ${TAG}"
+  echo "All production images present for tag ${TAG}"
   exit 0
 fi
 

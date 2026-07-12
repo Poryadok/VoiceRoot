@@ -36,7 +36,8 @@ GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
 	compose-migrate-all compose-migrate-e2e compose-migrate-bot compose-migrate-story compose-e2e-smoke compose-e2e-live compose-e2e-full compose-e2e-voice-live \
 	build-all build-all-breaking check-toolchain compose-config-ci buf-ci backend-test-ci backend-test-ci-short backend-image-ci \
 	gateway-test-ci gateway-image-ci go-test-pkg go-mod-tidy-all auth-test-ci auth-image-ci buf-breaking-ci \
-	golangci-ci gateway-test-race-ci design-tokens-check flutter-ui-color-gate flutter-ci flutter-windows-prefetch-sqlite3 flutter-linux-prefetch-sqlite3 prekey-golden-check coverage-report testcontainers-prune buf-generate-ci-local-template-check
+	golangci-ci gateway-test-race-ci design-tokens-check flutter-ui-color-gate flutter-ci flutter-windows-prefetch-sqlite3 flutter-linux-prefetch-sqlite3 prekey-golden-check coverage-report testcontainers-prune buf-generate-ci-local-template-check \
+	staging-matrix-test generate-staging-services
 
 buf-lint:
 	buf lint
@@ -226,6 +227,12 @@ buf-generate-ci:
 
 buf-generate-ci-local-template-check:
 	$(BASH) "$(ROOT)/scripts/ci/buf-generate-ci-local-template_test.sh"
+
+staging-matrix-test:
+	$(BASH) "$(ROOT)/scripts/ci/resolve-staging-matrix_test.sh"
+
+generate-staging-services:
+	$(BASH) "$(ROOT)/scripts/ci/generate-staging-go-services.sh"
 
 # Same as build-all plus protobuf compatibility vs master (fails if master ref missing)
 build-all-breaking: build-all buf-breaking-ci

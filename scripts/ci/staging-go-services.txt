@@ -1,4 +1,3 @@
-# Go services referenced by deploy/staging/services.yaml (one name per line).
 analytics
 bot
 chat

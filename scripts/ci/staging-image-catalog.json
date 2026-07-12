@@ -1,0 +1,189 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "name": "analytics",
+      "deployment": "voice-analytics",
+      "k8s_manifest": "deploy/staging/services.yaml",
+      "language": "go",
+      "build_context": "./src/backend",
+      "dockerfile": "./src/backend/analytics/Dockerfile"
+    },
+    {
+      "name": "bot",
+      "deployment": "voice-bot",
+      "k8s_manifest": "deploy/staging/services.yaml",
+      "language": "go",
+      "build_context": "./src/backend",
+      "dockerfile": "./src/backend/bot/Dockerfile"
+    },
+    {
+      "name": "chat",
+      "deployment": "voice-chat",
+      "k8s_manifest": "deploy/staging/services.yaml",
+      "language": "go",
+      "build_context": "./src/backend",
+      "dockerfile": "./src/backend/chat/Dockerfile"
+    },
+    {
+      "name": "federation",
+      "deployment": "voice-federation",
+      "k8s_manifest": "deploy/staging/services.yaml",
+      "language": "go",
+      "build_context": "./src/backend",
+      "dockerfile": "./src/backend/federation/Dockerfile"
+    },
+    {
+      "name": "file",
+      "deployment": "voice-file",
+      "k8s_manifest": "deploy/staging/services.yaml",
+      "language": "go",
+      "build_context": "./src/backend",
+      "dockerfile": "./src/backend/file/Dockerfile"
+    },
+    {
+      "name": "gateway",
+      "deployment": "voice-gateway",
+      "k8s_manifest": "deploy/staging/gateway-deployment.yaml",
+      "language": "go",
+      "build_context": "./src/backend",
+      "dockerfile": "./src/backend/gateway/Dockerfile"
+    },
+    {
+      "name": "matchmaking",
+      "deployment": "voice-matchmaking",
+      "k8s_manifest": "deploy/staging/services.yaml",
+      "language": "go",
+      "build_context": "./src/backend",
+      "dockerfile": "./src/backend/matchmaking/Dockerfile"
+    },
+    {
+      "name": "messaging",
+      "deployment": "voice-messaging",
+      "k8s_manifest": "deploy/staging/services.yaml",
+      "language": "go",
+      "build_context": "./src/backend",
+      "dockerfile": "./src/backend/messaging/Dockerfile"
+    },
+    {
+      "name": "moderation",
+      "deployment": "voice-moderation",
+      "k8s_manifest": "deploy/staging/services.yaml",
+      "language": "go",
+      "build_context": "./src/backend",
+      "dockerfile": "./src/backend/moderation/Dockerfile"
+    },
+    {
+      "name": "notification",
+      "deployment": "voice-notification",
+      "k8s_manifest": "deploy/staging/services.yaml",
+      "language": "go",
+      "build_context": "./src/backend",
+      "dockerfile": "./src/backend/notification/Dockerfile"
+    },
+    {
+      "name": "realtime",
+      "deployment": "voice-realtime",
+      "k8s_manifest": "deploy/staging/services.yaml",
+      "language": "go",
+      "build_context": "./src/backend",
+      "dockerfile": "./src/backend/realtime/Dockerfile"
+    },
+    {
+      "name": "role",
+      "deployment": "voice-role",
+      "k8s_manifest": "deploy/staging/services.yaml",
+      "language": "go",
+      "build_context": "./src/backend",
+      "dockerfile": "./src/backend/role/Dockerfile"
+    },
+    {
+      "name": "search",
+      "deployment": "voice-search",
+      "k8s_manifest": "deploy/staging/services.yaml",
+      "language": "go",
+      "build_context": "./src/backend",
+      "dockerfile": "./src/backend/search/Dockerfile"
+    },
+    {
+      "name": "social",
+      "deployment": "voice-social",
+      "k8s_manifest": "deploy/staging/services.yaml",
+      "language": "go",
+      "build_context": "./src/backend",
+      "dockerfile": "./src/backend/social/Dockerfile"
+    },
+    {
+      "name": "space",
+      "deployment": "voice-space",
+      "k8s_manifest": "deploy/staging/services.yaml",
+      "language": "go",
+      "build_context": "./src/backend",
+      "dockerfile": "./src/backend/space/Dockerfile"
+    },
+    {
+      "name": "story",
+      "deployment": "voice-story",
+      "k8s_manifest": "deploy/staging/services.yaml",
+      "language": "go",
+      "build_context": "./src/backend",
+      "dockerfile": "./src/backend/story/Dockerfile"
+    },
+    {
+      "name": "subscription",
+      "deployment": "voice-subscription",
+      "k8s_manifest": "deploy/staging/services.yaml",
+      "language": "go",
+      "build_context": "./src/backend",
+      "dockerfile": "./src/backend/subscription/Dockerfile"
+    },
+    {
+      "name": "user",
+      "deployment": "voice-user",
+      "k8s_manifest": "deploy/staging/services.yaml",
+      "language": "go",
+      "build_context": "./src/backend",
+      "dockerfile": "./src/backend/user/Dockerfile"
+    },
+    {
+      "name": "voice",
+      "deployment": "voice-voice",
+      "k8s_manifest": "deploy/staging/services.yaml",
+      "language": "go",
+      "build_context": "./src/backend",
+      "dockerfile": "./src/backend/voice/Dockerfile"
+    },
+    {
+      "name": "auth",
+      "deployment": "voice-auth",
+      "k8s_manifest": "deploy/staging/services.yaml",
+      "language": "java",
+      "build_context": "./src/backend/auth",
+      "dockerfile": "./src/backend/auth/Dockerfile"
+    },
+    {
+      "name": "web",
+      "deployment": "voice-web",
+      "k8s_manifest": "deploy/staging/flutter-web.yaml",
+      "language": "flutter",
+      "build_context": "./src/frontend",
+      "dockerfile": "./src/frontend/Dockerfile"
+    },
+    {
+      "name": "developer-portal",
+      "deployment": "voice-developer-portal",
+      "k8s_manifest": "deploy/staging/developer-portal.yaml",
+      "language": "node",
+      "build_context": "./src/developer-portal",
+      "dockerfile": "./src/developer-portal/Dockerfile"
+    },
+    {
+      "name": "admin",
+      "deployment": "voice-admin",
+      "k8s_manifest": "deploy/staging/admin.yaml",
+      "language": "node",
+      "build_context": "./src/admin",
+      "dockerfile": "./src/admin/Dockerfile"
+    }
+  ]
+}

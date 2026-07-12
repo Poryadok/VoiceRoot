@@ -51,11 +51,24 @@ jobs:
       developer-portal: ${{ steps.filter.outputs.developer-portal }}
       admin: ${{ steps.filter.outputs.admin }}
       compose: ${{ steps.filter.outputs.compose }}
+      staging_infra: ${{ steps.filter.outputs.staging_infra }}
       svc_analytics: ${{ steps.filter.outputs.svc_analytics }}
       code: ${{ steps.filter.outputs.code }}
       go_services: ${{ steps.gomatrix.outputs.go_services }}
       run_pkg: ${{ steps.gomatrix.outputs.run_pkg }}
       run_go: ${{ steps.gomatrix.outputs.run_go }}
+      build_services: ${{ steps.stagingmatrix.outputs.build_services }}
+      build_go_services: ${{ steps.stagingmatrix.outputs.build_go_services }}
+      promote_services: ${{ steps.stagingmatrix.outputs.promote_services }}
+      all_services: ${{ steps.stagingmatrix.outputs.all_services }}
+      needs_full_rollout: ${{ steps.stagingmatrix.outputs.needs_full_rollout }}
+      needs_user_space_rollout: ${{ steps.stagingmatrix.outputs.needs_user_space_rollout }}
+      run_auth: ${{ steps.stagingmatrix.outputs.run_auth }}
+      run_web: ${{ steps.stagingmatrix.outputs.run_web }}
+      run_admin: ${{ steps.stagingmatrix.outputs.run_admin }}
+      run_developer_portal: ${{ steps.stagingmatrix.outputs.run_developer_portal }}
+      run_flutter_tier2: ${{ steps.stagingmatrix.outputs.run_flutter_tier2 }}
+      promote_from_sha: ${{ steps.stagingmatrix.outputs.promote_from_sha }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -70,6 +83,17 @@ jobs:
           FILTER_JSON: ${{ toJson(steps.filter.outputs) }}
           FORCE_FULL: ${{ github.event_name == 'workflow_dispatch' && inputs.profile == 'full' }}
         run: bash scripts/ci/resolve-go-matrix.sh
+      - name: Resolve staging image matrix
+        id: stagingmatrix
+        env:
+          FILTER_JSON: ${{ toJson(steps.filter.outputs) }}
+          GO_SERVICES_JSON: ${{ steps.gomatrix.outputs.go_services }}
+          FORCE_FULL: ${{ github.event_name == 'workflow_dispatch' && inputs.profile == 'full' }}
+          FILTER_CODE: ${{ steps.filter.outputs.code }}
+          BASE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+          STAGING_FORCE_FULL_ROLLOUT: ${{ vars.STAGING_FORCE_FULL_ROLLOUT }}
+        run: bash scripts/ci/resolve-staging-matrix.sh
 
   ci-skip-gate:
     needs: changes
@@ -287,33 +311,44 @@ jobs:
           cache-from: type=gha,scope=backend-${{ matrix.service }}
           cache-to: type=gha,scope=backend-${{ matrix.service }},mode=max,ignore-error=true
 
-  staging-image-matrix:
+  backend-go-integration-pr:
+    needs: [changes, backend-go-pkg]
+    if: >-
+      always() &&
+      github.event_name == 'pull_request' &&
+      needs.changes.result == 'success' &&
+      needs.backend-go-pkg.result != 'failure' &&
+      needs.backend-go-pkg.result != 'cancelled' &&
+      needs.changes.outputs.run_go == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJSON(needs.changes.outputs.go_services) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Go mod tidy (${{ matrix.service }})
+        working-directory: src/backend/${{ matrix.service }}
+        run: go mod tidy
+      - name: Go integration test (${{ matrix.service }})
+        working-directory: src/backend/${{ matrix.service }}
+        env:
+          CGO_ENABLED: "0"
+        run: go test ./...
+
+  staging-images-push:
     needs: changes
     if: >-
       always() &&
       needs.changes.result == 'success' &&
       github.event_name == 'push' &&
       github.ref == 'refs/heads/master' &&
-      needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
-    outputs:
-      services: ${{ steps.list.outputs.services }}
-    steps:
-      - uses: actions/checkout@v5
-      - name: List staging Go services
-        id: list
-        run: |
-          services="$(grep -v '^#' scripts/ci/staging-go-services.txt | grep -v '^[[:space:]]*$' | jq -R -s -c 'split("\n") | map(select(length > 0))')"
-          echo "services=${services}" >> "$GITHUB_OUTPUT"
-
-  staging-images-push:
-    needs: [changes, staging-image-matrix]
-    if: >-
-      always() &&
-      needs.staging-image-matrix.result == 'success' &&
-      github.event_name == 'push' &&
-      github.ref == 'refs/heads/master' &&
-      needs.changes.outputs.code == 'true'
+      needs.changes.outputs.code == 'true' &&
+      needs.changes.outputs.build_go_services != '[]'
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -322,7 +357,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: ${{ fromJSON(needs.staging-image-matrix.outputs.services) }}
+        service: ${{ fromJSON(needs.changes.outputs.build_go_services) }}
     steps:
       - uses: actions/checkout@v5
       - name: Docker build context and Dockerfile
@@ -352,11 +387,79 @@ jobs:
           context: ${{ steps.dockerctx.outputs.context }}
           file: ${{ steps.dockerctx.outputs.file }}
           push: true
-          tags: |
-            ${{ steps.image.outputs.base }}/${{ matrix.service }}:${{ github.sha }}
-            ${{ steps.image.outputs.base }}/${{ matrix.service }}:latest
+          tags: ${{ steps.image.outputs.base }}/${{ matrix.service }}:${{ github.sha }}
           cache-from: type=gha,scope=backend-${{ matrix.service }}
           cache-to: type=gha,scope=backend-${{ matrix.service }},mode=max,ignore-error=true
+
+  staging-images-promote:
+    needs: [changes, staging-images-push, backend-auth, web, developer-portal, admin]
+    if: >-
+      always() &&
+      needs.changes.result == 'success' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/master' &&
+      needs.changes.outputs.code == 'true' &&
+      needs.changes.outputs.promote_services != '[]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJSON(needs.changes.outputs.promote_services) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Promote ${{ matrix.service }}
+        env:
+          VOICE_IMAGE_REGISTRY: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}
+        run: |
+          set -eux
+          REGISTRY="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+          BASE="${{ needs.changes.outputs.promote_from_sha }}"
+          if [ -z "${BASE}" ] || [ "${BASE}" = "0000000000000000000000000000000000000000" ]; then
+            BASE="$(git rev-parse HEAD^)"
+          fi
+          export VOICE_IMAGE_REGISTRY="${REGISTRY}"
+          export VOICE_IMAGE_BASE_TAG="${BASE}"
+          export VOICE_IMAGE_HEAD_TAG="${{ github.sha }}"
+          bash scripts/ci/promote-ghcr-images.sh "${{ matrix.service }}"
+
+  staging-stack-lock:
+    needs: [changes, staging-images-push, staging-images-promote, backend-auth, web, developer-portal, admin]
+    if: >-
+      always() &&
+      needs.changes.result == 'success' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/master' &&
+      needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Render stack lock
+        env:
+          BUILT_SERVICES: ${{ needs.changes.outputs.build_services }}
+          PROMOTED_SERVICES: ${{ needs.changes.outputs.promote_services }}
+          VOICE_IMAGE_REGISTRY: ghcr.io/${{ github.repository }}
+          VOICE_IMAGE_HEAD_TAG: ${{ github.sha }}
+        run: |
+          set -eux
+          REGISTRY="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+          export VOICE_IMAGE_REGISTRY="${REGISTRY}"
+          export VOICE_IMAGE_HEAD_TAG="${{ github.sha }}"
+          bash scripts/ci/render-stack-lock.sh stack.lock.yaml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: staging-stack-lock
+          path: stack.lock.yaml
+          retention-days: 14
 
   backend-auth:
     needs: changes
@@ -364,10 +467,10 @@ jobs:
       always() &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.code == 'true' &&
-      (needs.changes.outputs.auth == 'true' ||
+      (needs.changes.outputs.run_auth == 'true' ||
+       needs.changes.outputs.auth == 'true' ||
        needs.changes.outputs.global == 'true' ||
-       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full') ||
-       (github.event_name == 'push' && github.ref == 'refs/heads/master'))
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -385,14 +488,18 @@ jobs:
         run: mvn -B test
       - uses: docker/setup-buildx-action@v3
       - name: Log in to GHCR
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/master' &&
+          needs.changes.outputs.run_auth == 'true'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Image base (lowercase)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/master' &&
+          needs.changes.outputs.run_auth == 'true'
         id: image
         run: echo "base=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
       - name: Build auth image (PR verify)
@@ -405,7 +512,9 @@ jobs:
           cache-from: type=gha,scope=backend-auth
           cache-to: type=gha,scope=backend-auth,mode=max,ignore-error=true
       - name: Build auth image (load)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/master' &&
+          needs.changes.outputs.run_auth == 'true'
         uses: docker/build-push-action@v6
         with:
           context: ./src/backend/auth
@@ -416,15 +525,17 @@ jobs:
           cache-from: type=gha,scope=backend-auth
           cache-to: type=gha,scope=backend-auth,mode=max,ignore-error=true
       - name: Auth container smoke
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/master' &&
+          needs.changes.outputs.run_auth == 'true'
         run: bash scripts/ci/auth-container-smoke.sh "$GITHUB_WORKSPACE"
       - name: Push auth image to GHCR
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/master' &&
+          needs.changes.outputs.run_auth == 'true'
         run: |
           docker tag voice-auth:ci "${{ steps.image.outputs.base }}/auth:${{ github.sha }}"
-          docker tag voice-auth:ci "${{ steps.image.outputs.base }}/auth:latest"
           docker push "${{ steps.image.outputs.base }}/auth:${{ github.sha }}"
-          docker push "${{ steps.image.outputs.base }}/auth:latest"
 
   developer-portal:
     needs: changes
@@ -432,10 +543,10 @@ jobs:
       always() &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.code == 'true' &&
-      (needs.changes.outputs.developer-portal == 'true' ||
+      (needs.changes.outputs.run_developer_portal == 'true' ||
+       needs.changes.outputs.developer-portal == 'true' ||
        needs.changes.outputs.global == 'true' ||
-       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full') ||
-       (github.event_name == 'push' && github.ref == 'refs/heads/master'))
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -479,14 +590,18 @@ jobs:
           npm run build
       - uses: docker/setup-buildx-action@v3
       - name: Log in to GHCR
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/master' &&
+          needs.changes.outputs.run_developer_portal == 'true'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Image base (lowercase)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/master' &&
+          needs.changes.outputs.run_developer_portal == 'true'
         id: image
         run: echo "base=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
       - name: Build developer-portal image (PR verify)
@@ -503,7 +618,9 @@ jobs:
           cache-from: type=gha,scope=developer-portal
           cache-to: type=gha,scope=developer-portal,mode=max,ignore-error=true
       - name: Build and push developer-portal image
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/master' &&
+          needs.changes.outputs.run_developer_portal == 'true'
         uses: docker/build-push-action@v6
         with:
           context: ./src/developer-portal
@@ -513,9 +630,7 @@ jobs:
             VITE_VOICE_API_BASE=${{ steps.vite.outputs.api_base }}
             VITE_OAUTH_CLIENT_ID=voice-developer-portal
             VITE_OAUTH_DISABLED=false
-          tags: |
-            ${{ steps.image.outputs.base }}/developer-portal:${{ github.sha }}
-            ${{ steps.image.outputs.base }}/developer-portal:latest
+          tags: ${{ steps.image.outputs.base }}/developer-portal:${{ github.sha }}
           cache-from: type=gha,scope=developer-portal
           cache-to: type=gha,scope=developer-portal,mode=max,ignore-error=true
 
@@ -525,10 +640,10 @@ jobs:
       always() &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.code == 'true' &&
-      (needs.changes.outputs.frontend == 'true' ||
+      (needs.changes.outputs.run_web == 'true' ||
+       needs.changes.outputs.frontend == 'true' ||
        needs.changes.outputs.global == 'true' ||
-       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full') ||
-       (github.event_name == 'push' && github.ref == 'refs/heads/master'))
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -581,14 +696,18 @@ jobs:
             --dart-define=VOICE_LIVEKIT_URL="${VOICE_LIVEKIT_URL}"
       - uses: docker/setup-buildx-action@v3
       - name: Log in to GHCR
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/master' &&
+          needs.changes.outputs.run_web == 'true'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Image base (lowercase)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/master' &&
+          needs.changes.outputs.run_web == 'true'
         id: image
         run: echo "base=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
       - name: Build web image (PR verify)
@@ -604,7 +723,9 @@ jobs:
           cache-from: type=gha,scope=web
           cache-to: type=gha,scope=web,mode=max,ignore-error=true
       - name: Build and push web image
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/master' &&
+          needs.changes.outputs.run_web == 'true'
         uses: docker/build-push-action@v6
         with:
           context: ./src/frontend
@@ -613,9 +734,7 @@ jobs:
           build-args: |
             VOICE_API_BASE_URL=${{ steps.buildargs.outputs.api_base_url }}
             VOICE_LIVEKIT_URL=${{ steps.buildargs.outputs.livekit_url }}
-          tags: |
-            ${{ steps.image.outputs.base }}/web:${{ github.sha }}
-            ${{ steps.image.outputs.base }}/web:latest
+          tags: ${{ steps.image.outputs.base }}/web:${{ github.sha }}
           cache-from: type=gha,scope=web
           cache-to: type=gha,scope=web,mode=max,ignore-error=true
 
@@ -625,10 +744,10 @@ jobs:
       always() &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.code == 'true' &&
-      (needs.changes.outputs.admin == 'true' ||
+      (needs.changes.outputs.run_admin == 'true' ||
+       needs.changes.outputs.admin == 'true' ||
        needs.changes.outputs.global == 'true' ||
-       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full') ||
-       (github.event_name == 'push' && github.ref == 'refs/heads/master'))
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -672,14 +791,18 @@ jobs:
           npm run build
       - uses: docker/setup-buildx-action@v3
       - name: Log in to GHCR
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/master' &&
+          needs.changes.outputs.run_admin == 'true'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Image base (lowercase)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/master' &&
+          needs.changes.outputs.run_admin == 'true'
         id: image
         run: echo "base=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
       - name: Build admin image (PR verify)
@@ -696,7 +819,9 @@ jobs:
           cache-from: type=gha,scope=admin
           cache-to: type=gha,scope=admin,mode=max,ignore-error=true
       - name: Build and push admin image
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/master' &&
+          needs.changes.outputs.run_admin == 'true'
         uses: docker/build-push-action@v6
         with:
           context: ./src/admin
@@ -706,9 +831,7 @@ jobs:
             VITE_VOICE_API_BASE=${{ steps.vite.outputs.api_base }}
             VITE_OAUTH_CLIENT_ID=voice-admin
             VITE_OAUTH_DISABLED=false
-          tags: |
-            ${{ steps.image.outputs.base }}/admin:${{ github.sha }}
-            ${{ steps.image.outputs.base }}/admin:latest
+          tags: ${{ steps.image.outputs.base }}/admin:${{ github.sha }}
           cache-from: type=gha,scope=admin
           cache-to: type=gha,scope=admin,mode=max,ignore-error=true
 
@@ -721,10 +844,7 @@ jobs:
       (github.event_name == 'push' && github.ref == 'refs/heads/master' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) &&
       needs.changes.outputs.code == 'true' &&
-      (needs.changes.outputs.frontend == 'true' ||
-       needs.changes.outputs.protos == 'true' ||
-       needs.changes.outputs.global == 'true' ||
-       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+      needs.changes.outputs.run_flutter_tier2 == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -755,9 +875,7 @@ jobs:
       (github.event_name == 'push' && github.ref == 'refs/heads/master' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) &&
       needs.changes.outputs.code == 'true' &&
-      (needs.changes.outputs.frontend == 'true' ||
-       needs.changes.outputs.global == 'true' ||
-       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+      needs.changes.outputs.run_flutter_tier2 == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -783,9 +901,7 @@ jobs:
       (github.event_name == 'push' && github.ref == 'refs/heads/master' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) &&
       needs.changes.outputs.code == 'true' &&
-      (needs.changes.outputs.frontend == 'true' ||
-       needs.changes.outputs.global == 'true' ||
-       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+      needs.changes.outputs.run_flutter_tier2 == 'true'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v5
@@ -803,16 +919,14 @@ jobs:
           flutter build ios --simulator --debug --no-codesign --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080
 
   flutter-windows:
-    needs: changes
+    needs: [changes, flutter]
     if: >-
       always() &&
       needs.changes.result == 'success' &&
       (github.event_name == 'push' && github.ref == 'refs/heads/master' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) &&
       needs.changes.outputs.code == 'true' &&
-      (needs.changes.outputs.frontend == 'true' ||
-       needs.changes.outputs.global == 'true' ||
-       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+      needs.changes.outputs.run_flutter_tier2 == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
@@ -828,15 +942,57 @@ jobs:
       - name: Prefetch sqlite3mc native asset
         shell: pwsh
         run: ./scripts/ci/flutter-windows-prefetch-sqlite3.ps1
-      - name: Flutter Windows analyze, test, build
+      - name: Flutter Windows release build smoke
         working-directory: src/frontend
         env:
           CMAKE_POLICY_VERSION_MINIMUM: "3.5"
         run: |
           flutter pub get
-          flutter analyze --no-fatal-infos
-          flutter test
           flutter build windows --release --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080 --dart-define=VOICE_APP_VERSION=1.0.0
+
+  ci-gate:
+    needs:
+      - changes
+      - ci-skip-gate
+      - protobuf
+      - compose-config
+      - flutter
+      - golangci
+      - backend-go-pkg
+      - backend-go
+      - backend-go-integration-pr
+      - backend-auth
+      - developer-portal
+      - admin
+    if: >-
+      always() &&
+      github.event_name == 'pull_request' &&
+      needs.changes.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify required jobs ran
+        env:
+          RUN_GO: ${{ needs.changes.outputs.run_go }}
+          RUN_PKG: ${{ needs.changes.outputs.run_pkg }}
+          RUN_AUTH: ${{ needs.changes.outputs.run_auth }}
+          RUN_FLUTTER: ${{ needs.changes.outputs.frontend }}
+          RUN_ADMIN: ${{ needs.changes.outputs.run_admin }}
+          RUN_PORTAL: ${{ needs.changes.outputs.run_developer_portal }}
+          PROTOS: ${{ needs.changes.outputs.protos }}
+          COMPOSE: ${{ needs.changes.outputs.compose }}
+          GLOBAL: ${{ needs.changes.outputs.global }}
+          JOB_PROTOBUF: ${{ needs.protobuf.result }}
+          JOB_COMPOSE_CONFIG: ${{ needs.compose-config.result }}
+          JOB_FLUTTER: ${{ needs.flutter.result }}
+          JOB_GOLANGCI: ${{ needs.golangci.result }}
+          JOB_BACKEND_GO_PKG: ${{ needs.backend-go-pkg.result }}
+          JOB_BACKEND_GO: ${{ needs.backend-go.result }}
+          JOB_BACKEND_GO_INTEGRATION_PR: ${{ needs.backend-go-integration-pr.result }}
+          JOB_BACKEND_AUTH: ${{ needs.backend-auth.result }}
+          JOB_DEVELOPER_PORTAL: ${{ needs.developer-portal.result }}
+          JOB_ADMIN: ${{ needs.admin.result }}
+        run: bash .github/ci/verify-required-jobs.sh pull_request "${{ needs.changes.outputs.code }}" auto
 
   compose-e2e:
     needs: changes
@@ -1062,3 +1218,33 @@ jobs:
         run: make build-all
       - name: make flutter-ci
         run: make flutter-ci
+
+  deploy-staging:
+    needs:
+      - changes
+      - staging-stack-lock
+      - staging-images-push
+      - staging-images-promote
+      - backend-auth
+      - web
+      - developer-portal
+      - admin
+    if: >-
+      always() &&
+      needs.changes.result == 'success' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/master' &&
+      needs.changes.outputs.code == 'true' &&
+      vars.STAGING_DEPLOY_ENABLED == 'true' &&
+      needs.staging-stack-lock.result == 'success'
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/staging-deploy.yml
+    with:
+      image_tag: ${{ github.sha }}
+      deploy_mode: ${{ needs.changes.outputs.needs_full_rollout == 'true' && 'full' || 'app-only' }}
+      changed_services: ${{ needs.changes.outputs.build_services }}
+      needs_full_rollout: ${{ needs.changes.outputs.needs_full_rollout }}
+      needs_user_space_rollout: ${{ needs.changes.outputs.needs_user_space_rollout }}
+    secrets: inherit

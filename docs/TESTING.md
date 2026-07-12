@@ -228,8 +228,8 @@ Promtail ставит label **`namespace`** из pod metadata; **`request_id`** 
 
 | Tier | Когда | Что |
 |------|--------|-----|
-| **1 — fast** | каждый PR; push в `master` | path-filtered: protobuf, compose-config, `flutter` (analyze+test), golangci и `backend-go` matrix **только затронутые** сервисы (`go test -short`), auth/devportal по путям. **Docker build verify** (`push: false`) на PR для затронутых образов; push в GHCR — tier 2 (`master`). |
-| **2 — platform / E2E** | push в `master` (и `workflow_dispatch` → `full`) | `flutter-android-smoke`, `flutter-windows`, `flutter-ios`, `flutter-web-integration`; Docker build+push Go/auth/devportal; **`compose-e2e`** smoke (все фичи) при изменениях backend/frontend/compose. |
+| **1 — fast** | каждый PR; push в `master` | path-filtered: protobuf, compose-config, `flutter` (analyze+test), golangci и `backend-go` matrix **только затронутые** сервисы (`go test -short`), **`backend-go-integration-pr`** (полный `go test` по matrix на PR), job **`ci-gate`**. Docker build verify на PR; push в GHCR — только изменённые образы на `master` + **promote** остальных с `github.event.before`. |
+| **2 — platform / E2E** | push в `master` (и `workflow_dispatch` → `full`) | selective **build** + **promote** + artifact `stack.lock.yaml`; job **`deploy-staging`** (`workflow_call`) при `STAGING_DEPLOY_ENABLED=true`; Flutter platform smokes (`run_flutter_tier2`); **`compose-e2e`** при изменениях backend/frontend/compose. |
 | **3 — parity** | cron 02:00 UTC; `workflow_dispatch` → `tier3-only` или `full` | **`local-ci-parity`** (`make build-all` + `make flutter-ci`), **`backend-go-integration`** (полный `go test` без `-short`), **`compose-e2e`** на schedule. |
 
 Ручной запуск CI: **Actions → CI → Run workflow** — профиль `auto` (как PR по diff), `tier3-only` (ночной набор), `full` (все тиры).
@@ -245,7 +245,7 @@ Promtail ставит label **`namespace`** из pod metadata; **`request_id`** 
 7. **Developer Portal** — `npm ci`, test, build; Docker push — tier 2 (`master`).
 8. Проверка ссылок в `docs/` — [`.github/workflows/docs-link-check.yml`](../.github/workflows/docs-link-check.yml).
 
-**Деплой на staging** вынесен в отдельный workflow [.github/workflows/staging-deploy.yml](../.github/workflows/staging-deploy.yml): триггер `workflow_dispatch` (ручной запуск с тегом образа) и, при переменной `STAGING_DEPLOY_ENABLED=true`, автозапуск после успешного `CI` на push в `master`. Перед apply проверяется наличие образа `gateway:<tag>` в GHCR. Секреты, GHCR и namespace — [DEPLOYMENT.md](DEPLOYMENT.md). Branch protection — [`.github/ci/branch-protection-checklist.md`](../.github/ci/branch-protection-checklist.md).
+**Деплой на staging** — job **`deploy-staging`** в [`ci.yml`](../.github/workflows/ci.yml) вызывает [`staging-deploy.yml`](../.github/workflows/staging-deploy.yml) (`workflow_call`) после `staging-stack-lock`; ручной запуск — **Actions → Staging deploy** с обязательным git SHA. См. [DEPLOYMENT.md](DEPLOYMENT.md). Branch protection: job **`ci-gate`** + [`.github/ci/branch-protection-checklist.md`](../.github/ci/branch-protection-checklist.md).
 
 ### Compose E2E (локально и CI)
 

@@ -1,0 +1,333 @@
+# Production infrastructure: Postgres, Redis, NATS JetStream, LiveKit, ClamAV, ClickHouse.
+# DB schemas: run migrations via compose on first boot or external managed Postgres.
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-postgres
+  namespace: voice-prod
+spec:
+  selector:
+    app: voice-postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: voice-postgres
+  namespace: voice-prod
+spec:
+  serviceName: voice-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: voice-postgres
+  template:
+    metadata:
+      labels:
+        app: voice-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: voice-app-config
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: voice-app-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              value: voice
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "voice", "-d", "voice"]
+            periodSeconds: 5
+  volumeClaimTemplates:
+    - metadata:
+        name: pgdata
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 20Gi
+  # Init scripts ConfigMap must be created separately (see deploy/prod/README.md).
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-redis
+  namespace: voice-prod
+spec:
+  selector:
+    app: voice-redis
+  ports:
+    - port: 6379
+      targetPort: 6379
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-redis
+  namespace: voice-prod
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: voice-redis
+  template:
+    metadata:
+      labels:
+        app: voice-redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          args: ["redis-server", "--appendonly", "yes"]
+          ports:
+            - containerPort: 6379
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-nats
+  namespace: voice-prod
+spec:
+  selector:
+    app: voice-nats
+  ports:
+    - name: client
+      port: 4222
+      targetPort: 4222
+    - name: monitor
+      port: 8222
+      targetPort: 8222
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-nats
+  namespace: voice-prod
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: voice-nats
+  template:
+    metadata:
+      labels:
+        app: voice-nats
+    spec:
+      containers:
+        - name: nats
+          image: nats:2.12-alpine
+          args: ["-js", "-sd", "/data", "-m", "8222", "-n", "voice-prod"]
+          ports:
+            - containerPort: 4222
+            - containerPort: 8222
+          volumeMounts:
+            - name: jsdata
+              mountPath: /data
+      volumes:
+        - name: jsdata
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-livekit
+  namespace: voice-prod
+spec:
+  type: NodePort
+  selector:
+    app: voice-livekit
+  ports:
+    - name: signal
+      port: 7880
+      targetPort: 7880
+    - name: rtc-tcp
+      port: 7881
+      targetPort: 7881
+      nodePort: 30881
+    - name: rtc-udp
+      port: 7882
+      targetPort: 7882
+      protocol: UDP
+      nodePort: 30882
+    - name: metrics
+      port: 6789
+      targetPort: 6789
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-livekit
+  namespace: voice-prod
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: voice-livekit
+  template:
+    metadata:
+      labels:
+        app: voice-livekit
+    spec:
+      containers:
+        - name: livekit
+          image: livekit/livekit-server:v1.8.4
+          args: ["--config", "/etc/livekit.yaml", "--bind", "0.0.0.0"]
+          ports:
+            - containerPort: 7880
+            - containerPort: 7881
+            - containerPort: 7882
+              protocol: UDP
+            - containerPort: 6789
+              name: metrics
+          volumeMounts:
+            - name: livekit-config
+              mountPath: /etc/livekit.yaml
+              subPath: livekit.yaml
+              readOnly: true
+      volumes:
+        - name: livekit-config
+          configMap:
+            name: voice-livekit-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: voice-livekit-config
+  namespace: voice-prod
+data:
+  livekit.yaml: |
+    port: 7880
+    rtc:
+      tcp_port: 7881
+      udp_port: 7882
+      use_external_ip: true
+    prometheus:
+      port: 6789
+    keys:
+      __LIVEKIT_API_KEY__: __LIVEKIT_API_SECRET__
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-clamav
+  namespace: voice-prod
+spec:
+  selector:
+    app: voice-clamav
+  ports:
+    - port: 3310
+      targetPort: 3310
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-clamav
+  namespace: voice-prod
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: voice-clamav
+  template:
+    metadata:
+      labels:
+        app: voice-clamav
+    spec:
+      containers:
+        - name: clamav
+          image: clamav/clamav:stable
+          ports:
+            - containerPort: 3310
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-clickhouse
+  namespace: voice-prod
+spec:
+  selector:
+    app: voice-clickhouse
+  ports:
+    - name: http
+      port: 8123
+      targetPort: 8123
+    - name: native
+      port: 9000
+      targetPort: 9000
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: voice-clickhouse
+  namespace: voice-prod
+spec:
+  serviceName: voice-clickhouse
+  replicas: 1
+  selector:
+    matchLabels:
+      app: voice-clickhouse
+  template:
+    metadata:
+      labels:
+        app: voice-clickhouse
+    spec:
+      containers:
+        - name: clickhouse
+          image: clickhouse/clickhouse-server:24.8-alpine
+          env:
+            - name: CLICKHOUSE_USER
+              value: default
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: voice-app-secrets
+                  key: CLICKHOUSE_PASSWORD
+                  optional: true
+            - name: CLICKHOUSE_DB
+              value: voice
+          ports:
+            - containerPort: 8123
+            - containerPort: 9000
+          volumeMounts:
+            - name: chdata
+              mountPath: /var/lib/clickhouse
+          startupProbe:
+            httpGet:
+              path: /ping
+              port: 8123
+            initialDelaySeconds: 5
+            periodSeconds: 3
+            timeoutSeconds: 3
+            failureThreshold: 40
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: 8123
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 6
+  volumeClaimTemplates:
+    - metadata:
+        name: chdata
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 20Gi
+  # Apply DDL: kubectl create configmap voice-clickhouse-init --from-file=001_events.sql=docker/clickhouse/init/001_events.sql -n voice-prod
+  # then run one-off Job or clickhouse-client against voice-clickhouse:9000

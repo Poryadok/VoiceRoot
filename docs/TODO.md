@@ -276,33 +276,33 @@ Baseline закрыт (2026-06): register guest, JWT, guards, convert-guest, TTL
 
 **P0 — selective build/deploy (высокий эффект):**
 
-- [ ] **Selective image push на master** — передать `go_services` + frontend flags из job `changes` в matrix `staging-images-push`; неизменённые образы — retag/copy с предыдущего SHA (`crane copy` / manifest promote), не полный rebuild 19 сервисов.
-- [ ] **Selective staging deploy** — `kubectl set image` только для изменённых deployment'ов; не вызывать [`rollout-app-tier.sh`](../scripts/staging/rollout-app-tier.sh) целиком без необходимости (cold start / user↔space deadlock — только при затронутых сервисах).
-- [ ] **Сузить path-filter `code`** — исключить `README*`, `.cursor/**`, корневые `*.md` вне `src/`; или разделить `app_code` vs `repo_meta`, чтобы meta-правки не триггерили image push и deploy.
-- [ ] **Убрать `push && master` bypass** — jobs `backend-auth`, `web`, `admin`, `developer-portal` на master только при срабатывании path filter (как на PR); полный rebuild фронтов — nightly / `workflow_dispatch` → `full`.
+- [x] **Selective image push на master** — `build_go_services` / `staging-images-push` + `staging-images-promote`.
+- [x] **Selective staging deploy** — `DEPLOY_MODE`, `deploy-changed.sh`, `rollout-subset.sh`.
+- [x] **Сузить path-filter `code`** — `repo_meta`; `deploy/**` убран из `global`.
+- [x] **Убрать `push && master` bypass** — `run_auth` / `run_web` / `run_admin` / `run_developer_portal`.
 
 **P1 — качество gate и связность workflows:**
 
-- [ ] **Integration tests на PR для changed services** — `go test ./...` (без `-short`) по matrix из `changes`, не только nightly `backend-go-integration`.
-- [ ] **Meta-job `ci-required` или ruleset** — skipped path-filtered jobs не блокируют merge ([`.github/ci/branch-protection-checklist.md`](../.github/ci/branch-protection-checklist.md)); явный always-run gate или агрегатор статусов.
-- [ ] **`workflow_call` вместо `workflow_run`** — staging deploy из CI с `needs: [staging-images-push]`, outputs `head_sha` + `changed_services` JSON; убрать race и неявную связь через `workflow_run`.
-- [ ] **Дедуп Flutter на master** — tier 1 уже `flutter test`; tier 2 `flutter-windows` повторяет analyze+test; `web` job — отдельный `flutter build web`. Свести к одному test-run + platform-only build smokes.
-- [ ] **Дедуп frontend Docker build** — `npm test && npm run build` в job, затем `docker build` с теми же build-args (admin, developer-portal); передавать артефакт или multi-stage без двойной сборки.
+- [x] **Integration tests на PR для changed services** — `backend-go-integration-pr`.
+- [x] **Meta-job `ci-gate`** — `verify-required-jobs.sh`.
+- [x] **`workflow_call` вместо `workflow_run`** — `deploy-staging` в `ci.yml`.
+- [x] **Дедуп Flutter на master** — `flutter-windows` только build; `run_flutter_tier2`.
+- [ ] **Дедуп frontend Docker build** — отложено.
 
 **P2 — архитектура deploy:**
 
-- [ ] **Stack manifest / lockfile** — `deploy/staging/stack.lock.yaml`: per-service image digest; CI обновляет только изменённые записи; deploy читает lock.
-- [ ] **Разделить infra deploy и app deploy** — Postgres/Redis/NATS/ClickHouse/LiveKit в [`render-and-apply.sh`](../scripts/staging/render-and-apply.sh) — редко; app tier — часто. Сейчас один скрипт на всё.
-- [ ] **Убрать mutable `:latest`** — только immutable SHA/digest; `workflow_dispatch` без fallback на `:latest` (риск partial matrix — см. [x] выше, но не закрыт selective promote).
-- [ ] **Helm/Kustomize + GitOps (Argo CD / Flux)** — diff-based sync, rollback; снять кастомный ordered rollout с CI runner (долгосрочно).
-- [ ] **Prod deploy: полный стек** — [`prod-deploy.yml`](../.github/workflows/prod-deploy.yml) сейчас skeleton (gateway only); выровнять со staging по мере cutover.
+- [x] **Stack manifest / lockfile** — `stack.lock.yaml` artifact + `staging-image-catalog.json`.
+- [x] **Разделить infra deploy и app deploy** — `apply-infra.sh`, `apply-app-manifests.sh`.
+- [x] **Убрать mutable `:latest`** — только SHA в CI.
+- [ ] **Helm/Kustomize + GitOps** — отложено.
+- [x] **Prod deploy: полный стек** — `deploy/prod/` + `prod-deploy.yml`.
 
 **P3 — документация и план:**
 
-- [ ] **TESTING.md tier 2** — честно: на master push идут **все** образы в GHCR, не «затронутые»; или исправить реализацию под текущий текст.
-- [ ] **DEPLOYMENT.md** — trade-off «все образы на один SHA» vs стоимость CI; selective promote как целевое состояние; оценка runner-minutes (~25–30+ на code-push в master).
-- [ ] **Пересмотреть цель continuous full-stack deploy** — для монорепо 20+ сервисов на single-node staging: deploy only changed + manifest lock vs «каждый merge = полный redeploy» ([`DEPLOYMENT.md`](DEPLOYMENT.md) § поток артефактов).
-- [ ] **Синхронизация staging-go-services.txt** — автоген из `deploy/staging/services.yaml` или единый источник, чтобы CI push и k8s не расходились.
+- [x] **TESTING.md tier 2** — selective build/promote, `ci-gate`.
+- [x] **DEPLOYMENT.md** — stack lockfile, deploy modes.
+- [ ] **Пересмотреть цель continuous full-stack deploy** — частично (selective deploy); GitOps позже.
+- [x] **Синхронизация staging-go-services.txt** — `generate-staging-go-services.sh`.
 
 **Промпт-якорь:** `CI/CD selective build deploy from docs/TODO.md Batch 11 audit 2026-07-12`.
 

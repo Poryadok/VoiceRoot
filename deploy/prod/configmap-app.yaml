@@ -1,0 +1,59 @@
+# Shared non-secret configuration for Voice production (full app stack).
+# Apply with scripts/prod/render-and-apply-prod.sh after substituting image registry/tag.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: voice-app-config
+  namespace: voice-prod
+data:
+  LOG_LEVEL: "info"
+  GRPC_DIAL_TIMEOUT: "120s"
+  # HTTP server timeouts (Go services; realtime may set HTTP_READ_TIMEOUT/HTTP_WRITE_TIMEOUT=0)
+  # HTTP_READ_HEADER_TIMEOUT: "5s"
+  # HTTP_READ_TIMEOUT: "30s"
+  # HTTP_WRITE_TIMEOUT: "60s"
+  # HTTP_IDLE_TIMEOUT: "120s"
+  # HTTP_SHUTDOWN_TIMEOUT: "10s"
+  # POSTGRES_CONNECT_TIMEOUT: "15s"
+  POSTGRES_USER: "voice"
+  POSTGRES_HOST: "voice-postgres"
+  POSTGRES_PORT: "5432"
+  REDIS_ADDR: "voice-redis:6379"
+  NATS_URL: "nats://voice-nats:4222"
+  LIVEKIT_URL: "wss://__LIVEKIT_INGRESS_HOST__"
+  GATEWAY_JWT_ISSUER: "voice-auth"
+  GATEWAY_JWT_AUDIENCE: "voice-client"
+  GATEWAY_JWKS_URL: "http://voice-auth:8080/api/v1/auth/.well-known/jwks.json"
+  GATEWAY_REST_UPSTREAMS_JSON: '{"auth":"http://voice-auth:8080","analytics":"http://voice-analytics:8080"}'
+  GATEWAY_GRPC_UPSTREAMS_JSON: '{"users":"voice-user:9090","friends":"voice-social:9090","chats":"voice-chat:9090","messages":"voice-messaging:9090","spaces":"voice-space:9090","roles":"voice-role:9090","voice":"voice-voice:9090","files":"voice-file:9090","notifications":"voice-notification:9090","matchmaking":"voice-matchmaking:9090","search":"voice-search:9090","bots":"voice-bot:9090","moderation":"voice-moderation:9090","subscription":"voice-subscription:9090","stories":"voice-story:9090","analytics":"voice-analytics:9090"}'
+  GATEWAY_REALTIME_UPSTREAM_URL: "http://voice-realtime:8080"
+  GATEWAY_CORS_ALLOWED_ORIGINS: "*"
+  # Fallback when gateway_db.client_versions is empty; see docker-compose.yml.
+  GATEWAY_VERSION_CONFIGS_JSON: '{"windows":{"min_supported_version":"1.0.0","latest_version":"1.0.0","update_url":"https://updates.voice.example/windows/appcast.xml","release_notes":"Production"},"android":{"min_supported_version":"1.0.0","latest_version":"1.0.0","update_url":"https://play.google.com/store/apps/details?id=voice.app.voice_frontend","release_notes":"","shorebird_patch":0}}'
+  # Developer Portal OAuth ([bots.md](../../docs/features/bots.md)) — substituted by render-and-apply.sh from domains.defaults
+  AUTH_OAUTH_PUBLIC_API_BASE_URL: "https://__GATEWAY_INGRESS_HOST__"
+  AUTH_OAUTH_DEVELOPER_PORTAL_ENABLED: "true"
+  AUTH_OAUTH_DEVELOPER_PORTAL_CLIENT_ID: "voice-developer-portal"
+  AUTH_OAUTH_DEVELOPER_PORTAL_REDIRECT_URIS: "https://__DEVELOPER_PORTAL_INGRESS_HOST__/callback"
+  DEVELOPER_PORTAL_INGRESS_HOST: "__DEVELOPER_PORTAL_INGRESS_HOST__"
+  AUTH_OAUTH_ADMIN_ENABLED: "true"
+  AUTH_OAUTH_ADMIN_CLIENT_ID: "voice-admin"
+  AUTH_OAUTH_ADMIN_REDIRECT_URIS: "https://__ADMIN_INGRESS_HOST__/callback"
+  ADMIN_INGRESS_HOST: "__ADMIN_INGRESS_HOST__"
+  REALTIME_JWKS_URL: "http://voice-auth:8080/api/v1/auth/.well-known/jwks.json"
+  REALTIME_JWT_ISSUER: "voice-auth"
+  REALTIME_JWT_AUDIENCE: "voice-client"
+  REALTIME_CHAT_GRPC_ADDR: "voice-chat:9090"
+  REALTIME_USER_GRPC_ADDR: "voice-user:9090"
+  SOCIAL_GRPC_ADDR: "voice-social:9090"
+  USER_GRPC_ADDR: "voice-user:9090"
+  CHAT_GRPC_ADDR: "voice-chat:9090"
+  MESSAGING_GRPC_ADDR: "voice-messaging:9090"
+  FILE_GRPC_ADDR: "voice-file:9090"
+  ROLE_GRPC_ADDR: "voice-role:9090"
+  SPACE_GRPC_ADDR: "voice-space:9090"
+  VOICE_GRPC_ADDR: "voice-voice:9090"
+  CLAMAV_ADDR: "voice-clamav:3310"
+  MATCHMAKING_SEARCH_NUDGE_AFTER: "15m"
+  MATCHMAKING_SEARCH_TIMEOUT: "30m"
+  NOTIFICATION_RECORD_PUSHES: "true"

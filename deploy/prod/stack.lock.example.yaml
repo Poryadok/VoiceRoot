@@ -1,0 +1,29 @@
+# Example stack lock produced by CI (production-stack-lock job).
+# All images share the same immutable git SHA tag after build + promote.
+version: 1
+registry: ghcr.io/owner/repo
+tag: abc123def456789
+images:
+  analytics: abc123def456789
+  admin: abc123def456789
+  auth: abc123def456789
+  bot: abc123def456789
+  chat: abc123def456789
+  developer-portal: abc123def456789
+  federation: abc123def456789
+  file: abc123def456789
+  gateway: abc123def456789
+  matchmaking: abc123def456789
+  messaging: abc123def456789
+  moderation: abc123def456789
+  notification: abc123def456789
+  realtime: abc123def456789
+  role: abc123def456789
+  search: abc123def456789
+  social: abc123def456789
+  space: abc123def456789
+  story: abc123def456789
+  subscription: abc123def456789
+  user: abc123def456789
+  voice: abc123def456789
+  web: abc123def456789

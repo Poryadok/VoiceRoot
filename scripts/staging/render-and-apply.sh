@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Render staging manifests with image registry/tag and apply to cluster.
+# DEPLOY_MODE: full (default) | app-only | images-only
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -8,140 +9,45 @@ source "${ROOT}/scripts/staging/load-staging-domains.sh"
 REGISTRY="${VOICE_IMAGE_REGISTRY:-ghcr.io/voiceroot/voiceroot}"
 TAG="${VOICE_IMAGE_TAG:-latest}"
 NS="${VOICE_K8S_NAMESPACE:-voice-staging}"
+MODE="${DEPLOY_MODE:-full}"
 
-render() {
-  sed -e "s|__IMAGE_REGISTRY__|${REGISTRY}|g" \
-      -e "s|__IMAGE_TAG__|${TAG}|g" \
-      -e "s|IMAGE_PLACEHOLDER|${REGISTRY}/gateway:${TAG}|g" \
-      "$1"
-}
+export VOICE_IMAGE_REGISTRY="${REGISTRY}"
+export VOICE_IMAGE_TAG="${TAG}"
+export VOICE_K8S_NAMESPACE="${NS}"
 
-patch_image_pull_secrets() {
-  local secret_name="${VOICE_IMAGE_PULL_SECRET:-}"
-  if [ -z "${secret_name}" ]; then
-    return 0
-  fi
-  echo "Patching imagePullSecrets=${secret_name} on app deployments"
-  for dep in $(kubectl get deployment -n "${NS}" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}'); do
-    kubectl patch deployment "${dep}" -n "${NS}" --type=strategic \
-      -p="{\"spec\":{\"template\":{\"spec\":{\"imagePullSecrets\":[{\"name\":\"${secret_name}\"}]}}}}" \
-      2>/dev/null || true
-  done
-}
+echo "Applying Voice staging: ${REGISTRY} tag ${TAG} namespace ${NS} mode=${MODE}"
 
-echo "Applying Voice staging stack: ${REGISTRY} tag ${TAG} namespace ${NS}"
-
-kubectl apply -f "${ROOT}/deploy/staging/namespace.yaml"
-sed -e "s|__GATEWAY_INGRESS_HOST__|${VOICE_GATEWAY_INGRESS_HOST}|g" \
-    -e "s|__DEVELOPER_PORTAL_INGRESS_HOST__|${VOICE_DEVELOPER_PORTAL_INGRESS_HOST}|g" \
-    -e "s|__ADMIN_INGRESS_HOST__|${VOICE_ADMIN_INGRESS_HOST}|g" \
-    -e "s|__LIVEKIT_INGRESS_HOST__|${VOICE_LIVEKIT_INGRESS_HOST}|g" \
-  "${ROOT}/deploy/staging/configmap-app.yaml" | kubectl apply -f -
-
-if [ -n "${STAGING_APP_SECRETS_YAML_B64:-}" ] || [ ! -f "${ROOT}/deploy/staging/secret.yaml" ]; then
-  bash "${ROOT}/scripts/staging/ensure-app-secrets.sh"
-elif [ -f "${ROOT}/deploy/staging/secret.yaml" ]; then
-  kubectl apply -f "${ROOT}/deploy/staging/secret.yaml"
-fi
-
-if ! kubectl get secret voice-app-secrets -n "${NS}" >/dev/null 2>&1; then
-  echo "ERROR: secret voice-app-secrets missing in ${NS}. Create deploy/staging/secret.yaml or set STAGING_APP_SECRETS_YAML in CI." >&2
-  exit 1
-fi
-
-bash "${ROOT}/scripts/staging/patch-app-secrets-database-urls.sh"
-bash "${ROOT}/scripts/staging/patch-gateway-staff-token.sh"
-
-LIVEKIT_API_KEY="$(kubectl get secret voice-app-secrets -n "${NS}" -o jsonpath='{.data.LIVEKIT_API_KEY}' 2>/dev/null | base64 -d 2>/dev/null || true)"
-LIVEKIT_API_SECRET="$(kubectl get secret voice-app-secrets -n "${NS}" -o jsonpath='{.data.LIVEKIT_API_SECRET}' 2>/dev/null | base64 -d 2>/dev/null || true)"
-if [ -z "${LIVEKIT_API_KEY}" ] || [ -z "${LIVEKIT_API_SECRET}" ]; then
-  echo "ERROR: LIVEKIT_API_KEY and LIVEKIT_API_SECRET must be set in voice-app-secrets" >&2
-  exit 1
-fi
-
-render "${ROOT}/deploy/staging/infra.yaml" | \
-  sed -e "s|__LIVEKIT_API_KEY__|${LIVEKIT_API_KEY}|g" \
-      -e "s|__LIVEKIT_API_SECRET__|${LIVEKIT_API_SECRET}|g" | \
-  kubectl apply -f -
-render "${ROOT}/deploy/staging/services.yaml" | kubectl apply -f -
-render "${ROOT}/deploy/staging/gateway-deployment.yaml" | kubectl apply -f -
-
-# JVM auth: defer pod start until rollout-app-tier (single-node cannot pull/start
-# auth while tier 1–4 restarts every other service).
-if kubectl get deployment voice-auth -n "${NS}" >/dev/null 2>&1; then
-  echo "Deferring voice-auth pod until ordered rollout..."
-  kubectl scale deployment/voice-auth -n "${NS}" --replicas=0
-  kubectl wait --for=delete pod -l app=voice-auth -n "${NS}" --timeout=120s 2>/dev/null || true
-fi
-
-patch_image_pull_secrets
-
-echo "Ensuring Postgres databases exist..."
-kubectl wait --for=condition=ready pod/voice-postgres-0 -n "${NS}" --timeout=120s
-bash "${ROOT}/scripts/staging/init-postgres-databases.sh"
-bash "${ROOT}/scripts/staging/ensure-gateway-schema.sh"
-
-echo "Ensuring ClickHouse schema..."
-if ! kubectl rollout status statefulset/voice-clickhouse -n "${NS}" --timeout=180s; then
-  echo "ERROR: voice-clickhouse rollout failed" >&2
-  kubectl get pods -n "${NS}" -l app=voice-clickhouse -o wide >&2 || true
-  kubectl describe pod voice-clickhouse-0 -n "${NS}" >&2 || true
-  kubectl logs voice-clickhouse-0 -n "${NS}" --tail=80 >&2 || true
-  exit 1
-fi
-bash "${ROOT}/scripts/staging/apply-clickhouse-init.sh"
-
-bash "${ROOT}/scripts/staging/apply-migrate-jobs.sh"
-
-bash "${ROOT}/scripts/staging/rollout-app-tier.sh"
-
-if [ -f "${ROOT}/deploy/staging/developer-portal.yaml" ]; then
-  render "${ROOT}/deploy/staging/developer-portal.yaml" | \
-    sed -e "s|__DEVELOPER_PORTAL_INGRESS_HOST__|${VOICE_DEVELOPER_PORTAL_INGRESS_HOST}|g" | \
-    kubectl apply -f -
-  patch_image_pull_secrets
-fi
-
-if [ -f "${ROOT}/deploy/staging/flutter-web.yaml" ]; then
-  render "${ROOT}/deploy/staging/flutter-web.yaml" | \
-    sed -e "s|__WEB_INGRESS_HOST__|${VOICE_WEB_INGRESS_HOST}|g" | \
-    kubectl apply -f -
-  patch_image_pull_secrets
-fi
-
-if [ -f "${ROOT}/deploy/staging/admin.yaml" ]; then
-  render "${ROOT}/deploy/staging/admin.yaml" | \
-    sed -e "s|__ADMIN_INGRESS_HOST__|${VOICE_ADMIN_INGRESS_HOST}|g" | \
-    kubectl apply -f -
-  patch_image_pull_secrets
-fi
-
-echo "Waiting for gateway rollout..."
-kubectl rollout status "deployment/voice-gateway" -n "${NS}" --timeout=300s
-
-if kubectl get deployment voice-developer-portal -n "${NS}" >/dev/null 2>&1; then
-  echo "Waiting for developer-portal rollout..."
-  kubectl rollout status "deployment/voice-developer-portal" -n "${NS}" --timeout=300s
-fi
-
-if kubectl get deployment voice-web -n "${NS}" >/dev/null 2>&1; then
-  echo "Waiting for voice-web rollout..."
-  kubectl rollout status "deployment/voice-web" -n "${NS}" --timeout=300s
-fi
-
-if kubectl get deployment voice-admin -n "${NS}" >/dev/null 2>&1; then
-  echo "Waiting for voice-admin rollout..."
-  kubectl rollout status "deployment/voice-admin" -n "${NS}" --timeout=300s
-fi
-
-bash "${ROOT}/scripts/staging/apply-gateway-ingress.sh"
-bash "${ROOT}/scripts/staging/apply-livekit-ingress.sh"
+case "${MODE}" in
+  images-only)
+    bash "${ROOT}/scripts/staging/deploy-changed.sh"
+    bash "${ROOT}/scripts/staging/apply-gateway-ingress.sh"
+    bash "${ROOT}/scripts/staging/apply-livekit-ingress.sh"
+    ;;
+  app-only)
+    bash "${ROOT}/scripts/staging/apply-app-manifests.sh"
+    bash "${ROOT}/scripts/staging/rollout-subset.sh"
+    bash "${ROOT}/scripts/staging/apply-gateway-ingress.sh"
+    bash "${ROOT}/scripts/staging/apply-livekit-ingress.sh"
+    kubectl rollout status "deployment/voice-gateway" -n "${NS}" --timeout=300s
+    ;;
+  full|*)
+    bash "${ROOT}/scripts/staging/apply-infra.sh"
+    bash "${ROOT}/scripts/staging/apply-app-manifests.sh"
+    bash "${ROOT}/scripts/staging/rollout-app-tier.sh"
+    bash "${ROOT}/scripts/staging/apply-gateway-ingress.sh"
+    bash "${ROOT}/scripts/staging/apply-livekit-ingress.sh"
+    kubectl rollout status "deployment/voice-gateway" -n "${NS}" --timeout=300s
+    for dep in voice-developer-portal voice-web voice-admin; do
+      if kubectl get deployment "${dep}" -n "${NS}" >/dev/null 2>&1; then
+        kubectl rollout status "deployment/${dep}" -n "${NS}" --timeout=300s
+      fi
+    done
+    ;;
+esac
 
 if [ "${VOICE_APPLY_OBSERVABILITY:-}" = "true" ]; then
-  echo "Applying observability stack (VOICE_APPLY_OBSERVABILITY=true)..."
   GRAFANA_ADMIN_PASSWORD="${GRAFANA_ADMIN_PASSWORD:-}" \
   NOTIFICATIONS_ENABLED="${NOTIFICATIONS_ENABLED:-false}" \
-  STAGING_CLICKHOUSE_PASSWORD="${STAGING_CLICKHOUSE_PASSWORD:-}" \
   bash "${ROOT}/scripts/staging/apply-observability.sh"
 fi
 
