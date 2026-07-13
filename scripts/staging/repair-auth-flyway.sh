@@ -33,6 +33,8 @@ if ! kubectl get secret voice-app-secrets -n "${NS}" >/dev/null 2>&1; then
   exit 1
 fi
 
+bash "${ROOT}/scripts/staging/sync-postgres-password.sh"
+
 echo "Applying Flyway migrations ConfigMap ${CM_NAME} from ${MIGRATIONS_DIR}"
 kubectl create configmap "${CM_NAME}" -n "${NS}" \
   --from-file="${MIGRATIONS_DIR}" \

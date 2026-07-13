@@ -62,6 +62,7 @@ render "${MANIFEST_DIR}/infra.yaml" | \
 
 kubectl wait --for=condition=ready pod/voice-postgres-0 -n "${NS}" --timeout=120s
 bash "${ROOT}/scripts/staging/init-postgres-databases.sh"
+bash "${ROOT}/scripts/staging/sync-postgres-password.sh"
 bash "${ROOT}/scripts/staging/ensure-gateway-schema.sh"
 
 if ! kubectl rollout status statefulset/voice-clickhouse -n "${NS}" --timeout=180s; then

@@ -82,6 +82,8 @@ if ! kubectl get secret voice-app-secrets -n "${NS}" >/dev/null 2>&1; then
   exit 1
 fi
 
+bash "${ROOT}/scripts/staging/sync-postgres-password.sh"
+
 PG_PASS="$(kubectl get secret voice-app-secrets -n "${NS}" -o jsonpath='{.data.POSTGRES_PASSWORD}' | base64 -d)"
 if [ -z "${PG_PASS}" ]; then
   echo "ERROR: voice-app-secrets has no POSTGRES_PASSWORD in ${NS}" >&2
