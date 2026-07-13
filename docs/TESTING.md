@@ -222,6 +222,21 @@ Promtail ставит label **`namespace`** из pod metadata; **`request_id`** 
 
 Файлы workflow лежат в репозитории; **они начинают выполняться только после** публикации репозитория на GitHub и включения Actions (ветки, secrets для GHCR/staging — [DEPLOYMENT.md](DEPLOYMENT.md)). Локально перед PR — минимум по затронутому коду (таблица выше); полный sign-off: **`make build-all`** + **`make flutter-ci`** (как nightly job **`local-ci-parity`**).
 
+### Node.js в workflow и фронтовых пакетах
+
+На GitHub-hosted runners **Node.js 20 deprecated** (см. [changelog](https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/)): actions с `runs.using: node20` дают warning и принудительно выполняются на Node 24.
+
+**Не использовать Node.js 20** нигде в репозитории — ни в `actions/setup-node`, ни в Docker (`node:20`), ни в `engines` в `package.json`, ни в major-версиях GitHub Actions на node20 runtime (например `actions/upload-artifact@v4`).
+
+| Слой | Канон |
+|------|--------|
+| `actions/setup-node` | `node-version: '24'` |
+| Admin / Developer Portal `package.json` | `"engines": { "node": ">=24.0.0" }` |
+| Docker build (admin, portal) | `FROM node:24-alpine` |
+| Артефакты CI | `actions/upload-artifact@v6`, `actions/download-artifact@v6` (node24) |
+
+Self-hosted runner на staging: версия runner **≥ 2.327.1** для node24 actions ([setup-github-runner.sh](../scripts/staging/setup-github-runner.sh)).
+
 ### Тиры CI
 
 Правила путей: [`.github/ci/path-filters.yml`](../.github/ci/path-filters.yml) (job **`changes`**, [`dorny/paths-filter`](https://github.com/dorny/paths-filter)). Глобальные пути (`Makefile`, `scripts/ci/**`, `protos/**`, `src/backend/pkg/**`, compose и т.д.) расширяют blast radius. PR только с `docs/**` — job **`ci-skip-gate`** (tier 1 пропускается; ссылки — **`docs-link-check`**).

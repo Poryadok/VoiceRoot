@@ -472,7 +472,7 @@ jobs:
           export VOICE_IMAGE_REGISTRY="${REGISTRY}"
           export VOICE_IMAGE_HEAD_TAG="${{ github.sha }}"
           bash scripts/ci/render-stack-lock.sh stack.lock.yaml
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: staging-stack-lock
           path: stack.lock.yaml

@@ -5,6 +5,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+# shellcheck source=scripts/staging/lib/jwt-pem.sh
+source "${ROOT}/scripts/staging/lib/jwt-pem.sh"
 NS="${VOICE_K8S_NAMESPACE:-voice-staging}"
 SECRET_NAME="voice-app-secrets"
 
@@ -115,8 +117,20 @@ add_if_missing FILE_R2_SECRET_ACCESS_KEY "${FILE_R2_SECRET_ACCESS_KEY:-}"
 add_if_missing FILE_R2_BUCKET "${FILE_R2_BUCKET:-voice-staging-files}"
 
 needs_jwt_patch=false
-if [ -z "$(secret_data_key AUTH_JWT_PRIVATE_KEY)" ]; then
+jwt_patch_reason=""
+current_jwt="$(secret_data_key AUTH_JWT_PRIVATE_KEY | base64 -d 2>/dev/null || true)"
+if [ -z "${current_jwt}" ]; then
   needs_jwt_patch=true
+  jwt_patch_reason="add"
+elif ! jwt_pem_is_valid "${current_jwt}"; then
+  if [ "${NS}" = "voice-staging" ]; then
+    needs_jwt_patch=true
+    jwt_patch_reason="replace invalid placeholder"
+    echo "WARN: AUTH_JWT_PRIVATE_KEY in ${SECRET_NAME} is missing or not valid PKCS#8 PEM; using repo test key for staging" >&2
+  else
+    echo "ERROR: AUTH_JWT_PRIVATE_KEY in ${SECRET_NAME} is not valid PKCS#8 PEM (check PROD_APP_SECRETS_YAML / secret.example.yaml placeholders)" >&2
+    exit 1
+  fi
 fi
 
 if ((${#args[@]} == 0)) && [ "${needs_jwt_patch}" = false ]; then
@@ -136,8 +150,12 @@ if [ "${needs_jwt_patch}" = true ]; then
     echo "ERROR: AUTH_JWT_PRIVATE_KEY missing and JWT file not found at ${JWT_FILE}" >&2
     exit 1
   fi
-  echo "Patching ${SECRET_NAME}: add AUTH_JWT_PRIVATE_KEY"
+  echo "Patching ${SECRET_NAME}: ${jwt_patch_reason:-add} AUTH_JWT_PRIVATE_KEY"
   jwt_pem="$(cat "${JWT_FILE}")"
+  if ! jwt_pem_is_valid "${jwt_pem}"; then
+    echo "ERROR: bootstrap JWT file at ${JWT_FILE} is not valid PKCS#8 PEM" >&2
+    exit 1
+  fi
   string_data="$(jq -nc --arg jwt "${jwt_pem}" '{AUTH_JWT_PRIVATE_KEY: $jwt}')"
 fi
 for arg in "${args[@]}"; do
