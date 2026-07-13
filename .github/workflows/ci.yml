@@ -86,11 +86,9 @@ jobs:
           FILTER_JSON: ${{ toJson(steps.filter.outputs) }}
           FORCE_FULL: ${{ github.event_name == 'workflow_dispatch' && inputs.profile == 'full' }}
         run: bash scripts/ci/resolve-go-matrix.sh
-      - uses: docker/setup-buildx-action@v3
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
       - name: Log in to GHCR (promote manifest check)
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -314,7 +312,7 @@ jobs:
             echo "context=./src/backend/$S" >> "$GITHUB_OUTPUT"
           fi
           echo "file=./src/backend/$S/Dockerfile" >> "$GITHUB_OUTPUT"
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
       - name: Build ${{ matrix.service }} image (PR verify)
         if: github.event_name == 'pull_request'
         uses: docker/build-push-action@v6
@@ -385,9 +383,9 @@ jobs:
             echo "context=./src/backend/$S" >> "$GITHUB_OUTPUT"
           fi
           echo "file=./src/backend/$S/Dockerfile" >> "$GITHUB_OUTPUT"
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -425,9 +423,8 @@ jobs:
         service: ${{ fromJSON(needs.changes.outputs.promote_services) }}
     steps:
       - uses: actions/checkout@v5
-      - uses: docker/setup-buildx-action@v3
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -506,12 +503,12 @@ jobs:
       - name: Maven test (auth)
         working-directory: src/backend/auth
         run: mvn -B test
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
       - name: Log in to GHCR
         if: >-
           github.event_name == 'push' && github.ref == 'refs/heads/master' &&
           needs.changes.outputs.run_auth == 'true'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -608,12 +605,12 @@ jobs:
           npm ci
           npm test
           npm run build
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
       - name: Log in to GHCR
         if: >-
           github.event_name == 'push' && github.ref == 'refs/heads/master' &&
           needs.changes.outputs.run_developer_portal == 'true'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -714,12 +711,12 @@ jobs:
           flutter build web --release \
             --dart-define=VOICE_API_BASE_URL="${VOICE_API_BASE_URL}" \
             --dart-define=VOICE_LIVEKIT_URL="${VOICE_LIVEKIT_URL}"
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
       - name: Log in to GHCR
         if: >-
           github.event_name == 'push' && github.ref == 'refs/heads/master' &&
           needs.changes.outputs.run_web == 'true'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -809,12 +806,12 @@ jobs:
           npm ci
           npm test
           npm run build
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
       - name: Log in to GHCR
         if: >-
           github.event_name == 'push' && github.ref == 'refs/heads/master' &&
           needs.changes.outputs.run_admin == 'true'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
