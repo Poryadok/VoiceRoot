@@ -28,4 +28,36 @@ void main() {
     expect(capturedRequestId, isNotNull);
     expect(capturedRequestId, matches(RegExp(r'^[0-9a-f]{32}$')));
   });
+
+  test('postJson to switch-profile retries after 401 refresh', () async {
+    var switchAttempts = 0;
+    final mock = MockClient((req) async {
+      if (req.url.path == '/api/v1/auth/switch-profile') {
+        switchAttempts++;
+        if (switchAttempts == 1) {
+          return http.Response('{"error":"invalid_token"}', 401);
+        }
+        return http.Response(
+          '{"session":{"access_token":"access-refreshed","refresh_token":"refresh","expires_in_seconds":900,"account_id":"acc-1","profile_id":"prof-2"}}',
+          200,
+        );
+      }
+      return http.Response('not found', 404);
+    });
+    final client = GatewayHttpClient(
+      httpClient: mock,
+      config: const GatewayConfig(baseUrl: 'http://api.test'),
+      onUnauthorized: () async => true,
+      authorizationProvider: () => 'Bearer access-refreshed',
+    );
+
+    final result = await client.postJson(
+      uri: Uri.parse('http://api.test/api/v1/auth/switch-profile'),
+      authorization: 'Bearer expired',
+      body: {'profile_id': 'prof-2', 'device_info_json': '{}'},
+    );
+
+    expect(switchAttempts, 2);
+    expect(result, isA<GatewayHttpOk<Map<String, dynamic>>>());
+  });
 }

@@ -1623,7 +1623,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get guestConvertSubtitle =>
-      'Add email and password to keep your chats and profile.';
+      'Add your email to keep your chats and profile.';
 
   @override
   String get guestConvertSubmit => 'Create account';

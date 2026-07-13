@@ -3017,7 +3017,7 @@ abstract class AppLocalizations {
   /// No description provided for @guestConvertSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Add email and password to keep your chats and profile.'**
+  /// **'Add your email to keep your chats and profile.'**
   String get guestConvertSubtitle;
 
   /// No description provided for @guestConvertSubmit.

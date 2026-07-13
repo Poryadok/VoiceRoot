@@ -11,8 +11,6 @@ class GuestConvertSheet extends ConsumerStatefulWidget {
 
   static const Key modalKey = Key('guest_convert_modal');
   static const Key emailFieldKey = Key('guest_convert_email');
-  static const Key passwordFieldKey = Key('guest_convert_password');
-
   static Future<void> show(BuildContext context) {
     return showModalBottomSheet<void>(
       context: context,
@@ -28,21 +26,18 @@ class GuestConvertSheet extends ConsumerStatefulWidget {
 
 class _GuestConvertSheetState extends ConsumerState<GuestConvertSheet> {
   final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
   var _submitting = false;
   String? _error;
 
   @override
   void dispose() {
     _emailController.dispose();
-    _passwordController.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
     final email = _emailController.text.trim();
-    final password = _passwordController.text;
-    if (email.isEmpty || password.length < 8) {
+    if (email.isEmpty) {
       setState(() => _error = 'validation_failed');
       return;
     }
@@ -52,7 +47,6 @@ class _GuestConvertSheetState extends ConsumerState<GuestConvertSheet> {
     });
     final err = await ref.read(authControllerProvider.notifier).convertGuest(
       email: email,
-      password: password,
     );
     if (!mounted) return;
     if (err == null) {
@@ -90,14 +84,6 @@ class _GuestConvertSheetState extends ConsumerState<GuestConvertSheet> {
             keyboardType: TextInputType.emailAddress,
             autofillHints: const [AutofillHints.email],
             decoration: InputDecoration(labelText: l10n.authEmailLabel),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            key: GuestConvertSheet.passwordFieldKey,
-            controller: _passwordController,
-            obscureText: true,
-            autofillHints: const [AutofillHints.newPassword],
-            decoration: InputDecoration(labelText: l10n.authPasswordLabel),
           ),
           if (_error != null) ...[
             const SizedBox(height: 8),

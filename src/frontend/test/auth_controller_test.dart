@@ -134,6 +134,54 @@ void main() {
     expect(container.read(authControllerProvider).errorKey, 'rate_limited');
   });
 
+  test('convertGuest sends stored guest password', () async {
+    const guestPassword = 'guest-auto-password-1';
+    String? convertBody;
+    final guestStorage = InMemoryGuestCredentialsStorage();
+    await guestStorage.writePassword(guestPassword);
+    final mock = MockClient((req) async {
+      if (req.url.path == '/api/v1/auth/convert-guest') {
+        convertBody = req.body;
+        return http.Response(
+          jsonEncode({
+            'session': {
+              ...(sessionJson()['session'] as Map<String, dynamic>),
+              'access_token': 'access-converted',
+            },
+          }),
+          200,
+        );
+      }
+      return http.Response('not found', 404);
+    });
+    final container = ProviderContainer(
+      overrides: [
+        gatewayConfigProvider.overrideWithValue(config),
+        httpClientProvider.overrideWithValue(mock),
+        authSessionStorageProvider.overrideWithValue(InMemoryAuthSessionStorage()),
+        guestCredentialsStorageProvider.overrideWithValue(guestStorage),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final controller = container.read(authControllerProvider.notifier);
+    controller.state = const AuthState(
+      session: AuthSession(
+        accessToken: 'access',
+        refreshToken: 'refresh',
+        accountId: 'acc-1',
+        activeProfileId: 'prof-1',
+        expiresInSeconds: 900,
+      ),
+      isGuest: true,
+    );
+
+    final err = await controller.convertGuest(email: 'guest@example.com');
+    expect(err, isNull);
+    expect(convertBody, isNotNull);
+    expect(convertBody, contains(guestPassword));
+  });
+
   test('logout clears session', () async {
     final mock = MockClient((req) async {
       if (req.url.path == '/api/v1/auth/logout') {

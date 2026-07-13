@@ -761,7 +761,7 @@
   "guestNicknameHint": "Как вас увидят другие",
   "guestNicknameContinue": "Продолжить",
   "guestConvertTitle": "Создайте аккаунт",
-  "guestConvertSubtitle": "Укажите email и пароль, чтобы сохранить чаты и профиль.",
+  "guestConvertSubtitle": "Укажите email, чтобы сохранить чаты и профиль.",
   "guestConvertSubmit": "Создать аккаунт",
   "guestSaveAccountReminder": "Зарегистрируйте аккаунт, чтобы не потерять доступ.",
   "guestSaveAccountReminderCta": "Зарегистрироваться",

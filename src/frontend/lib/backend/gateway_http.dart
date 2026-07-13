@@ -469,7 +469,23 @@ class GatewayHttpClient {
     };
   }
 
-  bool _isAuthRoute(Uri uri) => uri.path.contains('/api/v1/auth/');
+  bool _isAuthRoute(Uri uri) {
+    final path = uri.path;
+    if (!path.startsWith('/api/v1/auth/')) return false;
+    // Session-bearing auth endpoints should refresh the access token on 401.
+    const sessionRoutes = <String>[
+      '/api/v1/auth/convert-guest',
+      '/api/v1/auth/switch-profile',
+      '/api/v1/auth/logout',
+      '/api/v1/auth/e2e-key-backup',
+      '/api/v1/auth/2fa/enable',
+      '/api/v1/auth/2fa/verify',
+      '/api/v1/auth/2fa/disable',
+    ];
+    if (sessionRoutes.contains(path)) return false;
+    if (path.startsWith('/api/v1/auth/linked-accounts')) return false;
+    return true;
+  }
 
   static String _responseBodyUtf8(http.Response response) {
     if (response.bodyBytes.isEmpty) return '';
