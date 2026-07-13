@@ -61,24 +61,69 @@ enable_dedicated_build() {
   esac
 }
 
-# Non-Go images are built in dedicated CI jobs. Promote only works when BASE_TAG
-# already exists in GHCR; otherwise schedule a fresh build instead of failing promote.
-adjust_promote_for_missing_manifests() {
-  local registry_lc name lang src new_promote=()
-  registry_lc="$(echo "${VOICE_IMAGE_REGISTRY}" | tr '[:upper:]' '[:lower:]')"
+registry_lc() {
+  echo "${VOICE_IMAGE_REGISTRY}" | tr '[:upper:]' '[:lower:]'
+}
+
+promote_manifest_exists() {
+  local name="$1"
+  local tag="$2"
+  docker manifest inspect "$(registry_lc)/${name}:${tag}" >/dev/null 2>&1
+}
+
+all_promote_manifests_exist() {
+  local tag="$1"
+  local name
   for name in "${promote[@]:-}"; do
+    promote_manifest_exists "${name}" "${tag}" || return 1
+  done
+  return 0
+}
+
+# Skip SHAs where CI did not publish images (e.g. docs-only pushes).
+find_promote_base_sha() {
+  local sha="$1"
+  local max_depth="${PROMOTE_BASE_MAX_DEPTH:-20}"
+  local depth=0
+  local candidate="${sha}"
+
+  if ((${#promote[@]} == 0)); then
+    echo "${sha}"
+    return 0
+  fi
+
+  while [[ -n "${candidate}" && ${depth} -lt ${max_depth} ]]; do
+    if all_promote_manifests_exist "${candidate}"; then
+      if [[ "${candidate}" != "${sha}" ]]; then
+        echo "resolve-staging-matrix: promote base ${sha} -> ${candidate} (manifest walk-back)" >&2
+      fi
+      echo "${candidate}"
+      return 0
+    fi
+    candidate="$(git -C "${ROOT}" rev-parse "${candidate}^" 2>/dev/null || true)"
+    depth=$((depth + 1))
+  done
+
+  echo "${sha}"
+  return 1
+}
+
+# Promote only works when BASE_TAG already exists in GHCR; otherwise schedule a build.
+adjust_promote_for_missing_manifests() {
+  local name lang src new_promote=()
+  for name in "${promote[@]:-}"; do
+    src="$(registry_lc)/${name}:${base_sha}"
+    if promote_manifest_exists "${name}" "${base_sha}"; then
+      new_promote+=("${name}")
+      continue
+    fi
+    echo "adjust-promote: ${name} missing at ${src}; scheduling build" >&2
     lang="$(jq -r --arg n "${name}" '.images[] | select(.name == $n) | .language' "${CATALOG}")"
-    if [[ "${lang}" == "go" || -z "${lang}" || "${lang}" == "null" ]]; then
-      new_promote+=("${name}")
-      continue
+    if [[ "${lang}" == "go" ]]; then
+      add_unique "${name}"
+    else
+      enable_dedicated_build "${name}"
     fi
-    src="${registry_lc}/${name}:${base_sha}"
-    if docker manifest inspect "${src}" >/dev/null 2>&1; then
-      new_promote+=("${name}")
-      continue
-    fi
-    echo "adjust-promote: ${name} missing at ${src}; scheduling dedicated build" >&2
-    enable_dedicated_build "${name}"
   done
   if ((${#new_promote[@]} > 0)); then
     promote=("${new_promote[@]}")
@@ -185,6 +230,9 @@ if [[ -z "${base_sha}" || "${base_sha}" == "000000000000000000000000000000000000
 fi
 
 if truthy "${MANIFEST_CHECK:-}" && [[ -n "${VOICE_IMAGE_REGISTRY:-}" && -n "${base_sha}" ]]; then
+  if ((${#promote[@]} > 0)); then
+    base_sha="$(find_promote_base_sha "${base_sha}")"
+  fi
   adjust_promote_for_missing_manifests
 fi
 

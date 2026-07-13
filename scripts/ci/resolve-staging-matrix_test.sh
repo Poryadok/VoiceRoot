@@ -95,4 +95,15 @@ assert_contains "${build_services}" admin
 [[ "${run_admin}" == "true" ]] || fail "expected run_admin after missing manifest"
 rm -f "${promote_out}"
 
+echo "== manifest check moves missing go promote targets to build =="
+promote_out="$(mktemp)"
+FILTER_JSON='{"code":"true","compose":"true"}' GO_SERVICES_JSON='[]' \
+  MANIFEST_CHECK=true VOICE_IMAGE_REGISTRY=ghcr.io/example/voice BASE_SHA=deadbeef \
+  GITHUB_OUTPUT="${promote_out}" bash "${SCRIPT}" >/dev/null
+promote_services="$(grep '^promote_services=' "${promote_out}" | head -1 | cut -d= -f2-)"
+build_services="$(grep '^build_services=' "${promote_out}" | head -1 | cut -d= -f2-)"
+assert_not_contains "${promote_services}" gateway
+assert_contains "${build_services}" gateway
+rm -f "${promote_out}"
+
 echo "All resolve-staging-matrix tests passed."
