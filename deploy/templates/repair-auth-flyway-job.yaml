@@ -1,5 +1,6 @@
-# One-shot Flyway repair for auth_db before Auth pod start.
+# One-shot Flyway repair+migrate for auth_db before Auth pod start.
 # Reconciles flyway_schema_history checksums when V2+ SQL was edited after apply (staging).
+# Auth Deployment sets AUTH_FLYWAY_ENABLED=false so schema is applied only here.
 # Substitute __K_NAMESPACE__, __FLYWAY_IMAGE_TAG__ (default flyway/flyway:11.3.0).
 ---
 apiVersion: batch/v1
@@ -23,7 +24,7 @@ spec:
       containers:
         - name: flyway
           image: __FLYWAY_IMAGE_TAG__
-          args: ["repair"]
+          args: ["repair", "migrate"]
           env:
             - name: FLYWAY_URL
               value: "jdbc:postgresql://voice-postgres:5432/auth_db"

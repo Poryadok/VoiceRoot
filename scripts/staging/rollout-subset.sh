@@ -6,6 +6,8 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 NS="${VOICE_K8S_NAMESPACE:-voice-staging}"
+# shellcheck source=scripts/staging/rollout-helpers.sh
+source "${ROOT}/scripts/staging/rollout-helpers.sh"
 
 if [ "${NEEDS_FULL_ROLLOUT:-false}" = "true" ]; then
   echo "Full ordered rollout (NEEDS_FULL_ROLLOUT)"
@@ -20,8 +22,5 @@ if [ "${NEEDS_USER_SPACE_ROLLOUT:-false}" = "true" ]; then
 fi
 
 bash "${ROOT}/scripts/staging/deploy-changed.sh"
-bash "${ROOT}/scripts/staging/repair-auth-flyway.sh" 2>/dev/null || true
-if kubectl get deployment voice-auth -n "${NS}" >/dev/null 2>&1; then
-  kubectl scale deployment/voice-auth -n "${NS}" --replicas=1
-  kubectl rollout status deployment/voice-auth -n "${NS}" --timeout=600s
-fi
+bash "${ROOT}/scripts/staging/repair-auth-flyway.sh"
+recreate_deploy voice-auth 900s

@@ -52,4 +52,4 @@ if ! kubectl wait --for=condition=complete "job/${JOB_NAME}" -n "${NS}" --timeou
   exit 1
 fi
 
-echo "Auth Flyway repair complete."
+echo "Auth Flyway repair+migrate complete."

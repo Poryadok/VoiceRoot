@@ -29,6 +29,11 @@ patch_image_pull_secrets() {
   done
 }
 
+if kubectl get deployment voice-auth -n "${NS}" >/dev/null 2>&1; then
+  kubectl scale deployment/voice-auth -n "${NS}" --replicas=0
+  kubectl wait --for=delete pod -l app=voice-auth -n "${NS}" --timeout=180s 2>/dev/null || true
+fi
+
 render "${MANIFEST_DIR}/services.yaml" | kubectl apply -f -
 render "${MANIFEST_DIR}/gateway-deployment.yaml" | kubectl apply -f -
 
