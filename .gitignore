@@ -36,3 +36,4 @@ gen/
 /src/backend/user/user
 /src/backend/voice/voice
 jobs.json
+staging-secret.yaml
