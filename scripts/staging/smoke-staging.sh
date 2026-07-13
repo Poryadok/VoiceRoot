@@ -149,20 +149,39 @@ else
   echo "Smoke: skipping Flutter web checks (VOICE_WEB_INGRESS_HOST not set)"
 fi
 
+livekit_signaling_ok() {
+  case "$1" in
+    101|200|400) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 if [ -n "${VOICE_LIVEKIT_INGRESS_HOST:-}" ]; then
   LIVEKIT_WS="wss://${VOICE_LIVEKIT_INGRESS_HOST}"
   echo "Smoke: LiveKit signaling probe ${LIVEKIT_WS}"
   if command -v websocat >/dev/null 2>&1; then
-    if ! timeout 10 websocat -n1 "${LIVEKIT_WS}" </dev/null 2>/dev/null; then
+    if ! timeout 10 websocat -k -n1 "${LIVEKIT_WS}" </dev/null 2>/dev/null; then
       echo "LiveKit WebSocket probe failed for ${LIVEKIT_WS}"
       exit 1
     fi
   else
+    # Ingress is Traefik `web` (HTTP). DNS-only livekit (grey cloud) also exposes origin TLS
+    # with a self-signed cert — skip verification for the HTTPS probe.
+    lk_ws_headers=(
+      -H "Connection: Upgrade"
+      -H "Upgrade: websocket"
+      -H "Sec-WebSocket-Version: 13"
+      -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ=="
+    )
     lk_code="$(curl -sS -o /dev/null -w "%{http_code}" \
-      -H "Connection: Upgrade" -H "Upgrade: websocket" \
-      -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" \
-      "https://${VOICE_LIVEKIT_INGRESS_HOST}/" || echo "000")"
-    if [ "${lk_code}" != "101" ] && [ "${lk_code}" != "200" ] && [ "${lk_code}" != "400" ]; then
+      "${lk_ws_headers[@]}" \
+      "http://${VOICE_LIVEKIT_INGRESS_HOST}/" 2>/dev/null || echo "000")"
+    if ! livekit_signaling_ok "${lk_code}"; then
+      lk_code="$(curl -sk -o /dev/null -w "%{http_code}" \
+        "${lk_ws_headers[@]}" \
+        "https://${VOICE_LIVEKIT_INGRESS_HOST}/" 2>/dev/null || echo "000")"
+    fi
+    if ! livekit_signaling_ok "${lk_code}"; then
       echo "LiveKit signaling probe failed: HTTP ${lk_code} (expected 101/200/400)"
       exit 1
     fi
