@@ -75,6 +75,59 @@ func waitComposeWSHello(t *testing.T, conn *websocket.Conn) {
 	require.Greater(t, frame.S, int64(0))
 }
 
+// startComposeWSFramePump reads WS frames on a single goroutine (Flutter parity: one consumer).
+func startComposeWSFramePump(t *testing.T, conn *websocket.Conn) <-chan composeWSFrame {
+	t.Helper()
+	ch := make(chan composeWSFrame, 32)
+	go func() {
+		for {
+			var frame composeWSFrame
+			if err := conn.ReadJSON(&frame); err != nil {
+				return
+			}
+			select {
+			case ch <- frame:
+			default:
+				t.Errorf("compose WS frame pump overflow on op=%s", frame.Op)
+				return
+			}
+		}
+	}()
+	return ch
+}
+
+func waitComposeWSFrameFromPump(
+	t *testing.T,
+	frames <-chan composeWSFrame,
+	wantOp string,
+	timeout time.Duration,
+	match func(map[string]any) bool,
+) composeWSFrame {
+	t.Helper()
+	deadline := time.After(timeout)
+	for {
+		select {
+		case frame := <-frames:
+			if frame.Op != wantOp {
+				continue
+			}
+			if match == nil {
+				return frame
+			}
+			var data map[string]any
+			if len(frame.D) > 0 {
+				require.NoError(t, json.Unmarshal(frame.D, &data))
+			}
+			if match(data) {
+				return frame
+			}
+		case <-deadline:
+			t.Fatalf("timeout waiting for WS op=%s", wantOp)
+			return composeWSFrame{}
+		}
+	}
+}
+
 func waitComposeWSOp(
 	t *testing.T,
 	conn *websocket.Conn,

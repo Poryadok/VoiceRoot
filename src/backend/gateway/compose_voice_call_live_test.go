@@ -37,14 +37,12 @@ func TestComposeVoiceCall1to1_live(t *testing.T) {
 
 	chatID := createComposeDMBetween(t, client, base, sessA, sessB)
 
-	wsB := dialComposeRealtimeWS(t, base, sessB.AccessToken)
-	waitComposeWSHello(t, wsB)
-	// Realtime auto-subscribes DMs after hello; drain so call_incoming is not blocked behind sync frames.
-	_ = waitComposeWSOp(t, wsB, "subscription_sync", 10*time.Second, nil)
+	wsB := connectComposeWSSubscribed(t, base, sessB.AccessToken, chatID)
+	frames := startComposeWSFramePump(t, wsB)
 
 	incomingCh := make(chan composeWSFrame, 1)
 	go func() {
-		frame := waitComposeWSOp(t, wsB, "call_incoming", 20*time.Second, func(d map[string]any) bool {
+		frame := waitComposeWSFrameFromPump(t, frames, "call_incoming", 25*time.Second, func(d map[string]any) bool {
 			return d["callee_profile_id"] == sessB.ProfileID
 		})
 		incomingCh <- frame
@@ -65,7 +63,7 @@ func TestComposeVoiceCall1to1_live(t *testing.T) {
 	var incomingFrame composeWSFrame
 	select {
 	case incomingFrame = <-incomingCh:
-	case <-time.After(25 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("timeout waiting for WS call_incoming on callee")
 	}
 	var incoming map[string]any
@@ -75,9 +73,9 @@ func TestComposeVoiceCall1to1_live(t *testing.T) {
 	require.Equal(t, sessA.ProfileID, incoming["initiator_profile_id"])
 	require.Equal(t, call.LivekitRoomName, incoming["livekit_room_name"])
 
-	acceptedCh := make(chan composeWSFrame, 2)
+	acceptedCh := make(chan composeWSFrame, 1)
 	go func() {
-		frame := waitComposeWSOp(t, wsB, "call_accepted", 20*time.Second, func(d map[string]any) bool {
+		frame := waitComposeWSFrameFromPump(t, frames, "call_accepted", 25*time.Second, func(d map[string]any) bool {
 			return d["room_id"] == call.RoomID
 		})
 		acceptedCh <- frame
@@ -89,7 +87,7 @@ func TestComposeVoiceCall1to1_live(t *testing.T) {
 	var acceptedFrame composeWSFrame
 	select {
 	case acceptedFrame = <-acceptedCh:
-	case <-time.After(25 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("timeout waiting for WS call_accepted")
 	}
 	var acceptedData map[string]any
@@ -102,9 +100,9 @@ func TestComposeVoiceCall1to1_live(t *testing.T) {
 	require.NotEmpty(t, tokenA.LivekitURL)
 	require.NotEmpty(t, tokenB.JWT)
 
-	endedCh := make(chan composeWSFrame, 2)
+	endedCh := make(chan composeWSFrame, 1)
 	go func() {
-		frame := waitComposeWSOp(t, wsB, "call_ended", 20*time.Second, func(d map[string]any) bool {
+		frame := waitComposeWSFrameFromPump(t, frames, "call_ended", 25*time.Second, func(d map[string]any) bool {
 			return d["room_id"] == call.RoomID
 		})
 		endedCh <- frame
@@ -114,7 +112,7 @@ func TestComposeVoiceCall1to1_live(t *testing.T) {
 
 	select {
 	case <-endedCh:
-	case <-time.After(25 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("timeout waiting for WS call_ended")
 	}
 
@@ -136,20 +134,20 @@ func TestComposeVoiceCallDecline_live(t *testing.T) {
 	sessB := registerComposeUser(t, client, base, formatComposeEmail("call-decline-b", n), "VoiceQaTest1!")
 	chatID := createComposeDMBetween(t, client, base, sessA, sessB)
 
-	wsA := dialComposeRealtimeWS(t, base, sessA.AccessToken)
-	waitComposeWSHello(t, wsA)
+	wsA := connectComposeWSSubscribed(t, base, sessA.AccessToken, chatID)
+	frames := startComposeWSFramePump(t, wsA)
 
 	call := startComposeCall(t, client, base, sessA.AccessToken, chatID, sessB.ProfileID)
 	_ = declineComposeCall(t, client, base, sessB.AccessToken, call.RoomID)
 
-	declinedFrame := waitComposeWSOp(t, wsA, "call_declined", 20*time.Second, func(d map[string]any) bool {
+	declinedFrame := waitComposeWSFrameFromPump(t, frames, "call_declined", 25*time.Second, func(d map[string]any) bool {
 		return d["room_id"] == call.RoomID
 	})
 	var declinedData map[string]any
 	require.NoError(t, json.Unmarshal(declinedFrame.D, &declinedData))
 	require.Equal(t, call.RoomID, declinedData["room_id"])
 
-	endedFrame := waitComposeWSOp(t, wsA, "call_ended", 20*time.Second, func(d map[string]any) bool {
+	endedFrame := waitComposeWSFrameFromPump(t, frames, "call_ended", 25*time.Second, func(d map[string]any) bool {
 		return d["room_id"] == call.RoomID
 	})
 	var endedData map[string]any

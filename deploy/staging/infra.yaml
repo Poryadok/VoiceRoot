@@ -297,7 +297,6 @@ spec:
                 secretKeyRef:
                   name: voice-app-secrets
                   key: CLICKHOUSE_PASSWORD
-                  optional: true
             - name: CLICKHOUSE_DB
               value: voice
           ports:

@@ -298,6 +298,16 @@ func (h *wsHub) broadcastToChat(chatID string, env fanoutEnvelope, logger *slog.
 	}
 }
 
+func profileFanoutBlocks(op string) bool {
+	switch op {
+	case "call_incoming", "call_accepted", "call_declined", "call_missed", "call_ended",
+		"screen_share_started", "screen_share_stopped":
+		return true
+	default:
+		return false
+	}
+}
+
 // broadcastToProfile delivers a fan-out envelope to every connection for profileID (local hub only).
 func (h *wsHub) broadcastToProfile(profileID string, env fanoutEnvelope, logger *slog.Logger, requestID string) {
 	if profileID == "" {
@@ -314,10 +324,14 @@ func (h *wsHub) broadcastToProfile(profileID string, env fanoutEnvelope, logger 
 		logger.LogAttrs(context.Background(), slog.LevelDebug, "ws fanout", fanoutLogAttrs("", profileID, env.Op, requestID, targets)...)
 	}
 	for _, reg := range targets {
+		if profileFanoutBlocks(env.Op) {
+			reg.fanout <- env
+			continue
+		}
 		select {
 		case reg.fanout <- env:
 		default:
-			// Call signaling is ephemeral; clients reconcile through Voice REST.
+			// Ephemeral fan-out; clients reconcile through REST.
 		}
 	}
 }

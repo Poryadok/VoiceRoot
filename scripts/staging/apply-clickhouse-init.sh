@@ -7,10 +7,10 @@ NS="${VOICE_K8S_NAMESPACE:-voice-staging}"
 SQL_FILE="${ROOT}/docker/clickhouse/init/001_events.sql"
 JOB_NAME="voice-clickhouse-init"
 CM_NAME="voice-clickhouse-init"
-TEMPLATE="${ROOT}/deploy/templates/clickhouse-init-job.yaml"
 
-substitute() {
-  sed -e "s|__K_NAMESPACE__|${NS}|g"
+clickhouse_secret_password() {
+  kubectl get secret voice-app-secrets -n "${NS}" -o jsonpath='{.data.CLICKHOUSE_PASSWORD}' 2>/dev/null \
+    | base64 -d 2>/dev/null || true
 }
 
 wait_clickhouse_native() {
@@ -28,10 +28,33 @@ wait_clickhouse_native() {
   return 1
 }
 
+sync_clickhouse_password_from_secret() {
+  local pass
+  pass="$(clickhouse_secret_password)"
+  if [ -z "${pass}" ]; then
+    echo "WARN: CLICKHOUSE_PASSWORD missing in voice-app-secrets; skip password sync" >&2
+    return 1
+  fi
+  echo "Syncing ClickHouse default user password from voice-app-secrets..."
+  kubectl exec -n "${NS}" voice-clickhouse-0 -- env CLICKHOUSE_PASSWORD="${pass}" \
+    sh -c 'clickhouse-client --query "ALTER USER default IDENTIFIED BY '"'"'"${CLICKHOUSE_PASSWORD}"'"'"'"'
+}
+
+clickhouse_remote_auth_ok() {
+  local pass
+  pass="$(clickhouse_secret_password)"
+  if [ -z "${pass}" ]; then
+    return 1
+  fi
+  kubectl exec -n "${NS}" voice-clickhouse-0 -- env CLICKHOUSE_PASSWORD="${pass}" \
+    sh -c 'clickhouse-client --host voice-clickhouse --user default --password "${CLICKHOUSE_PASSWORD}" --query "SELECT 1"' \
+    >/dev/null 2>&1
+}
+
 wait_clickhouse_remote_auth() {
   echo "Waiting for ClickHouse remote auth on voice-clickhouse:9000..."
   local i
-  for i in $(seq 1 30); do
+  for i in $(seq 1 15); do
     if clickhouse_remote_auth_ok; then
       echo "ClickHouse remote auth ready (attempt ${i})"
       return 0
@@ -50,28 +73,19 @@ wait_clickhouse_remote_auth() {
     done
   fi
 
-  echo "ERROR: ClickHouse remote auth failed after 60s (check CLICKHOUSE_PASSWORD and StatefulSet env)" >&2
+  echo "ERROR: ClickHouse remote auth failed after password sync (check CLICKHOUSE_PASSWORD and StatefulSet env)" >&2
   kubectl logs -n "${NS}" voice-clickhouse-0 --tail=80 >&2 || true
   return 1
 }
 
-clickhouse_remote_auth_ok() {
+clickhouse_schema_ready() {
   kubectl exec -n "${NS}" voice-clickhouse-0 -- \
-    sh -c 'clickhouse-client --host voice-clickhouse --user "${CLICKHOUSE_USER}" --password "${CLICKHOUSE_PASSWORD}" --query "SELECT 1"' \
-    >/dev/null 2>&1
+    clickhouse-client --query "EXISTS TABLE voice.events" 2>/dev/null | grep -qx '1'
 }
 
-sync_clickhouse_password_from_secret() {
-  kubectl exec -n "${NS}" voice-clickhouse-0 -- \
-    sh -c 'test -n "${CLICKHOUSE_PASSWORD}" && clickhouse-client --query "ALTER USER default IDENTIFIED BY '"'"'"${CLICKHOUSE_PASSWORD}"'"'"'"'
-}
-
-dump_clickhouse_init_job_logs() {
-  echo "clickhouse init job status:" >&2
-  kubectl get job "${JOB_NAME}" -n "${NS}" -o wide >&2 || true
-  kubectl describe job "${JOB_NAME}" -n "${NS}" >&2 || true
-  echo "clickhouse init pod logs:" >&2
-  kubectl logs -n "${NS}" -l "app.kubernetes.io/name=${JOB_NAME}" --tail=200 >&2 || true
+apply_clickhouse_init_sql() {
+  echo "Applying ClickHouse init SQL via voice-clickhouse-0 (local client)..."
+  kubectl exec -i -n "${NS}" voice-clickhouse-0 -- clickhouse-client --multiquery < "${SQL_FILE}"
 }
 
 if [ ! -f "${SQL_FILE}" ]; then
@@ -84,23 +98,24 @@ kubectl create configmap "${CM_NAME}" -n "${NS}" \
   --from-file=001_events.sql="${SQL_FILE}" \
   --dry-run=client -o yaml | kubectl apply -f -
 
+if clickhouse_schema_ready; then
+  echo "ClickHouse schema already present (voice.events); skipping DDL"
+  kubectl delete job "${JOB_NAME}" -n "${NS}" --ignore-not-found >/dev/null 2>&1 || true
+  exit 0
+fi
+
 if kubectl get job "${JOB_NAME}" -n "${NS}" >/dev/null 2>&1; then
-  succeeded="$(kubectl get job "${JOB_NAME}" -n "${NS}" -o jsonpath='{.status.succeeded}' 2>/dev/null || echo 0)"
-  if [ "${succeeded:-0}" = "1" ]; then
-    echo "clickhouse init job ${JOB_NAME} already succeeded; skipping"
-    exit 0
-  fi
-  echo "deleting incomplete job ${JOB_NAME}"
+  echo "deleting stale job ${JOB_NAME}"
   kubectl delete job "${JOB_NAME}" -n "${NS}" --ignore-not-found
 fi
 
 wait_clickhouse_native
+sync_clickhouse_password_from_secret || true
 wait_clickhouse_remote_auth
+apply_clickhouse_init_sql
 
-echo "Applying clickhouse init job ${JOB_NAME}"
-substitute < "${TEMPLATE}" | kubectl apply -f -
-if ! kubectl wait --for=condition=complete "job/${JOB_NAME}" -n "${NS}" --timeout=300s; then
-  dump_clickhouse_init_job_logs
+if ! clickhouse_schema_ready; then
+  echo "ERROR: ClickHouse init SQL applied but voice.events is missing" >&2
   exit 1
 fi
 
