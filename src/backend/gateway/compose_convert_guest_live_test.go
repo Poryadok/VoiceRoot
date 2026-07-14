@@ -24,13 +24,14 @@ func TestComposeConvertGuest_live(t *testing.T) {
 	base := liveGatewayBaseURL()
 
 	const guestPassword = "VoiceQaTest1!"
+	const newPassword = "VoiceQaNewPass1!"
 	guestSess := registerComposeGuest(t, client, base, guestPassword)
 	require.Equal(t, http.StatusOK, composeProtectedRouteStatus(t, client, base, guestSess.AccessToken))
 
 	email := formatComposeEmail("guest-convert", time.Now().UnixNano())
 	convertBody, err := json.Marshal(map[string]string{
 		"email":    email,
-		"password": guestPassword,
+		"password": newPassword,
 	})
 	require.NoError(t, err)
 	convertReq, err := http.NewRequest(http.MethodPost, base+"/api/v1/auth/convert-guest", bytes.NewReader(convertBody))
@@ -52,6 +53,21 @@ func TestComposeConvertGuest_live(t *testing.T) {
 	require.NotEqual(t, guestSess.AccessToken, converted.AccessToken)
 
 	require.Equal(t, http.StatusOK, composeProtectedRouteStatus(t, client, base, converted.AccessToken))
+
+	loginPayload, err := json.Marshal(map[string]any{
+		"email":            email,
+		"password":         newPassword,
+		"device_info_json": `{"platform":"go-live-test"}`,
+	})
+	require.NoError(t, err)
+	loginResp, err := client.Post(base+"/api/v1/auth/login", "application/json", bytes.NewReader(loginPayload))
+	require.NoError(t, err)
+	defer loginResp.Body.Close()
+	loginRaw, _ := io.ReadAll(loginResp.Body)
+	require.Equal(t, http.StatusOK, loginResp.StatusCode, "login body=%s", string(loginRaw))
+	var loginEnvelope authSessionEnvelope
+	require.NoError(t, json.Unmarshal(loginRaw, &loginEnvelope))
+	require.Equal(t, guestSess.AccountID, loginEnvelope.Session.AccountID)
 }
 
 func registerComposeGuest(t *testing.T, client *http.Client, base, password string) authSessionResponse {

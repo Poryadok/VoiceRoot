@@ -188,6 +188,14 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](PLAN.md); остаток vs [d
 
 Baseline закрыт (2026-06): register guest, JWT, guards, convert-guest, TTL, Flutter auto-guest/convert. См. [auth-and-contacts.md](features/auth-and-contacts.md).
 
+- [ ] **Convert-guest: recovery для аккаунтов после бага transport-пароля** — аккаунты, сконвертированные до фикса (2026-07), остались с неизвестным паролем; нужен self-service reset password или support-runbook.
+- [ ] **Convert-guest: док auth-service.md** — явно описать, что `password` в `ConvertGuest` = новый пароль regular-аккаунта (JWT гостя достаточен), не проверка transport-пароля.
+- [ ] **Convert-guest live в compose-e2e** — `TestComposeConvertGuest_live` (новый пароль + login) в CI workflow; сейчас только opt-in локально.
+- [ ] **Convert-guest: localized errors в GuestConvertSheet** — client validation и API (`validation_failed`, `invalid_credentials`, `rate_limited`) через `authErrorMessage`; `convertGuest` в контроллере — `resolveAuthErrorKey` по `errorCode`, как в `_authenticate`.
+- [ ] **Convert-guest: negative Auth integration tests** — duplicate email, password <8, non-guest token, missing email/phone; дополнить `ConvertGuestIntegrationTest`.
+- [ ] **Convert-guest: NATS `user.guest_converted`** — довести `GuestConvertNatsEventIntegrationTest`: REST convert + assert publish (сейчас stub).
+- [ ] **Guest save-account reminder: server last-shown** — в спеке «локальный или серверный timestamp»; сейчас только `SharedPreferences` (кросс-устройство не синхронизируется).
+
 
 
 - [ ] **Guest audience (Flutter settings UX)** — backend enforcement для `show_game_status` / `show_mm_rating` / `show_stories` через `IncludeGuests`; в Flutter нет отдельного multiselect «Гостевые аккаунты» на каждое поле (только общий `include_guests` в `PrivacyAudiencePicker`).

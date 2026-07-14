@@ -1633,7 +1633,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get guestConvertSubtitle =>
-      'Укажите email, чтобы сохранить чаты и профиль.';
+      'Укажите email и пароль, чтобы сохранить чаты и профиль.';
 
   @override
   String get guestConvertSubmit => 'Создать аккаунт';

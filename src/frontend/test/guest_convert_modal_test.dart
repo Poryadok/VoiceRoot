@@ -32,5 +32,6 @@ void main() {
 
     expect(find.byKey(const Key('guest_convert_modal')), findsOneWidget);
     expect(find.byKey(const Key('guest_convert_email')), findsOneWidget);
+    expect(find.byKey(const Key('guest_convert_password')), findsOneWidget);
   });
 }

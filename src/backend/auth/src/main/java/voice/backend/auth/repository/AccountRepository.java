@@ -19,7 +19,7 @@ public interface AccountRepository {
 
   void setStatus(UUID accountId, String status);
 
-  Account convertGuest(UUID accountId, String email, String phone);
+  Account convertGuest(UUID accountId, String email, String phone, String passwordHash);
 
   void touchLastOnlineAt(UUID accountId, Instant at);
 

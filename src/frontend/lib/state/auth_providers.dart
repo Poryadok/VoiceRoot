@@ -203,17 +203,16 @@ class AuthController extends StateNotifier<AuthState> {
     await _notifyAuthenticated();
   }
 
-  Future<String?> convertGuest({required String email}) async {
+  Future<String?> convertGuest({
+    required String email,
+    required String password,
+  }) async {
     final current = state.session;
     if (current == null) return 'not_authenticated';
-    final guestPassword = await _guestCredentialsStorage.readPassword();
-    if (guestPassword == null || guestPassword.isEmpty) {
-      return 'guest_credentials_missing';
-    }
     final result = await _authClient.convertGuest(
       session: current,
       email: email,
-      password: guestPassword,
+      password: password,
     );
     switch (result) {
       case AuthSessionOk(:final session):

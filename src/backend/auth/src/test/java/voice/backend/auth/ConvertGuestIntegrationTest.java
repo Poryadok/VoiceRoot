@@ -39,7 +39,7 @@ class ConvertGuestIntegrationTest {
   }
 
   @Test
-  void convertGuestToRegularKeepsAccountId() throws Exception {
+  void convertGuestToRegularKeepsAccountIdAndSetsNewPassword() throws Exception {
     JsonNode guest =
         session(
             postJson(
@@ -47,6 +47,7 @@ class ConvertGuestIntegrationTest {
                 "{\"password\":\"Correct horse battery staple\",\"guest\":true,\"device_info_json\":\"{}\"}"));
     String guestAccountId = guest.get("account_id").asText();
     String accessToken = guest.get("access_token").asText();
+    String newPassword = "New account password 1";
 
     String response =
         mockMvc
@@ -55,7 +56,7 @@ class ConvertGuestIntegrationTest {
                     .header("Authorization", "Bearer " + accessToken)
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(
-                        "{\"email\":\"guest-convert@example.com\",\"password\":\"Correct horse battery staple\"}"))
+                        "{\"email\":\"guest-convert@example.com\",\"password\":\"" + newPassword + "\"}"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.session.account_id", is(guestAccountId)))
             .andReturn()
@@ -65,6 +66,15 @@ class ConvertGuestIntegrationTest {
     JsonNode converted = objectMapper.readTree(response).get("session");
     assertThat(converted.get("account_id").asText()).isEqualTo(guestAccountId);
     assertThat(converted.get("profile_id").asText()).isEqualTo(guest.get("profile_id").asText());
+
+    mockMvc
+        .perform(
+            post("/api/v1/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"email\":\"guest-convert@example.com\",\"password\":\"" + newPassword + "\",\"device_info_json\":\"{}\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.session.account_id", is(guestAccountId)));
   }
 
   private JsonNode postJson(String path, String body) throws Exception {

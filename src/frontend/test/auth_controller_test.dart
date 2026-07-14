@@ -134,8 +134,9 @@ void main() {
     expect(container.read(authControllerProvider).errorKey, 'rate_limited');
   });
 
-  test('convertGuest sends stored guest password', () async {
+  test('convertGuest sends user-entered password', () async {
     const guestPassword = 'guest-auto-password-1';
+    const userPassword = 'user-chosen-password1';
     String? convertBody;
     final guestStorage = InMemoryGuestCredentialsStorage();
     await guestStorage.writePassword(guestPassword);
@@ -176,10 +177,14 @@ void main() {
       isGuest: true,
     );
 
-    final err = await controller.convertGuest(email: 'guest@example.com');
+    final err = await controller.convertGuest(
+      email: 'guest@example.com',
+      password: userPassword,
+    );
     expect(err, isNull);
     expect(convertBody, isNotNull);
-    expect(convertBody, contains(guestPassword));
+    expect(convertBody, contains(userPassword));
+    expect(convertBody, isNot(contains(guestPassword)));
   });
 
   test('logout clears session', () async {

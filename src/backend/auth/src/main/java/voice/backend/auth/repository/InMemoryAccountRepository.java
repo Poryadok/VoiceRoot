@@ -106,7 +106,7 @@ public class InMemoryAccountRepository implements AccountRepository {
   }
 
   @Override
-  public synchronized Account convertGuest(UUID accountId, String email, String phone) {
+  public synchronized Account convertGuest(UUID accountId, String email, String phone, String passwordHash) {
     Account existing = byId.get(accountId);
     if (existing == null || !"guest".equals(existing.type())) {
       throw new IllegalArgumentException("not a guest account");
@@ -127,7 +127,7 @@ public class InMemoryAccountRepository implements AccountRepository {
         existing.id(),
         email,
         phone,
-        existing.passwordHash(),
+        passwordHash,
         "regular",
         existing.status(),
         existing.totpSecret(),

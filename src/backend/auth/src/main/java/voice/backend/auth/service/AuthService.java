@@ -282,9 +282,7 @@ public class AuthService {
     if (command.password() == null || command.password().length() < 8) {
       throw new AuthException("validation_failed");
     }
-    if (!passwordHasher.matches(command.password(), account.passwordHash())) {
-      throw new AuthException("invalid_credentials");
-    }
+    String passwordHash = passwordHasher.hash(command.password());
     String email = normalize(command.email());
     String phone = normalize(command.phone());
     if (email == null && phone == null) {
@@ -308,7 +306,7 @@ public class AuthService {
     }
     Account converted;
     try {
-      converted = accounts.convertGuest(account.id(), email, phone);
+      converted = accounts.convertGuest(account.id(), email, phone, passwordHash);
     } catch (IllegalArgumentException ex) {
       throw new AuthException("invalid_credentials");
     }

@@ -141,17 +141,18 @@ public class JdbcAccountRepository implements AccountRepository {
   }
 
   @Override
-  public Account convertGuest(UUID accountId, String email, String phone) {
+  public Account convertGuest(UUID accountId, String email, String phone, String passwordHash) {
     MapSqlParameterSource params =
         new MapSqlParameterSource()
             .addValue("id", accountId)
             .addValue("email", email)
-            .addValue("phone", phone);
+            .addValue("phone", phone)
+            .addValue("passwordHash", passwordHash);
     try {
       return jdbc.queryForObject(
           """
           UPDATE accounts
-          SET email = :email, phone = :phone, type = 'regular', updated_at = now()
+          SET email = :email, phone = :phone, password_hash = :passwordHash, type = 'regular', updated_at = now()
           WHERE id = :id AND type = 'guest'
           RETURNING id, email, phone, password_hash, type, status, totp_secret, totp_enabled, created_at
           """,
