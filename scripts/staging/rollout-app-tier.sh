@@ -4,25 +4,11 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 NS="${VOICE_K8S_NAMESPACE:-voice-staging}"
-PATCH_FILE="${ROOT}/.local/patch-user-space-addr.json"
 # shellcheck source=scripts/staging/rollout-helpers.sh
 source "${ROOT}/scripts/staging/rollout-helpers.sh"
 
 patch_user_skip_space() {
-  mkdir -p "${ROOT}/.local"
-  cat >"${PATCH_FILE}" <<'EOF'
-[
-  {
-    "op": "add",
-    "path": "/spec/template/spec/containers/0/env/-",
-    "value": {
-      "name": "SPACE_GRPC_ADDR",
-      "value": ""
-    }
-  }
-]
-EOF
-  kubectl patch deployment voice-user -n "$NS" --type=json --patch-file "${PATCH_FILE}"
+  kubectl set env deployment/voice-user -n "$NS" SPACE_GRPC_ADDR=""
 }
 
 restore_user_space_addr() {
