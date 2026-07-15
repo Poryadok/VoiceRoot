@@ -14,12 +14,13 @@ MODE="${DEPLOY_MODE:-full}"
 export VOICE_IMAGE_REGISTRY="${REGISTRY}"
 export VOICE_IMAGE_TAG="${TAG}"
 export VOICE_K8S_NAMESPACE="${NS}"
+export DEPLOY_MODE="${MODE}"
 
 echo "Applying Voice staging: ${REGISTRY} tag ${TAG} namespace ${NS} mode=${MODE}"
 
 case "${MODE}" in
   images-only)
-    bash "${ROOT}/scripts/staging/deploy-changed.sh"
+    bash "${ROOT}/scripts/staging/rollout-subset.sh"
     bash "${ROOT}/scripts/staging/apply-gateway-ingress.sh"
     bash "${ROOT}/scripts/staging/apply-livekit-ingress.sh"
     ;;

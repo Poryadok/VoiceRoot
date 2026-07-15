@@ -126,8 +126,17 @@ jobs:
           export VOICE_IMAGE_REGISTRY="${REGISTRY}"
           export VOICE_IMAGE_TAG="${TAG}"
           export VOICE_K8S_NAMESPACE="${{ vars.VOICE_K8S_NAMESPACE }}"
+          export DEPLOY_MODE="${{ inputs.deploy_mode }}"
           CHANGED_JSON='${{ inputs.changed_services }}'
           export CHANGED_SERVICES="$(echo "${CHANGED_JSON}" | jq -r 'join(",")')"
+          # Ordered user/space tier: always for app-only/full; for images-only when user or space changed.
+          if [ "${NEEDS_USER_SPACE_ROLLOUT:-false}" != "true" ]; then
+            if [ "${DEPLOY_MODE}" != "images-only" ]; then
+              export NEEDS_USER_SPACE_ROLLOUT=true
+            elif echo ",${CHANGED_SERVICES}," | grep -qE ',user,|,space,'; then
+              export NEEDS_USER_SPACE_ROLLOUT=true
+            fi
+          fi
           bash scripts/staging/render-and-apply.sh
 
       - name: Staging smoke (optional)

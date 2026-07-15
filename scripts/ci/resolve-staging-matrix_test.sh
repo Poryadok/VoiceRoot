@@ -44,6 +44,7 @@ echo "== docs-only (code=false) =="
 FILTER_JSON='{"code":"false"}' GO_SERVICES_JSON='[]' FILTER_CODE=false run_matrix
 [[ "${build_services}" == "[]" ]] || fail "build should be empty for docs-only"
 [[ "${promote_services}" == "[]" ]] || fail "promote should be empty for docs-only"
+[[ "${needs_user_space_rollout}" == "false" ]] || fail "docs-only should not set needs_user_space_rollout"
 
 echo "== messaging change expands to chat + gateway =="
 FILTER_JSON='{"code":"true","svc_messaging":"true"}' GO_SERVICES_JSON='["messaging","chat"]' run_matrix
@@ -56,6 +57,11 @@ echo "== user change sets needs_user_space_rollout =="
 FILTER_JSON='{"code":"true","svc_user":"true"}' GO_SERVICES_JSON='["user","social","space"]' run_matrix
 assert_contains "${build_services}" user
 [[ "${needs_user_space_rollout}" == "true" ]] || fail "expected needs_user_space_rollout"
+
+echo "== messaging-only change also sets needs_user_space_rollout =="
+FILTER_JSON='{"code":"true","svc_messaging":"true"}' GO_SERVICES_JSON='["messaging","chat"]' run_matrix
+assert_contains "${build_services}" messaging
+[[ "${needs_user_space_rollout}" == "true" ]] || fail "expected needs_user_space_rollout for any code deploy"
 
 echo "== auth path only =="
 FILTER_JSON='{"code":"true","auth":"true"}' GO_SERVICES_JSON='[]' run_matrix

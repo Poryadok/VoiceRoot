@@ -1,13 +1,28 @@
 #!/usr/bin/env bash
 # Ordered rollout for a subset or full app tier (user/space deadlock aware).
-# NEEDS_USER_SPACE_ROLLOUT=true runs tiers 2-3 from rollout-app-tier.sh.
-# Otherwise restarts only deployments mapped from CHANGED_SERVICES.
+# User/space ordered tier runs automatically when apply-app-manifests ran (app-only/full)
+# or when user/space images change (images-only). Manual NEEDS_USER_SPACE_ROLLOUT is optional.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 NS="${VOICE_K8S_NAMESPACE:-voice-staging}"
+MODE="${DEPLOY_MODE:-app-only}"
 # shellcheck source=scripts/staging/rollout-helpers.sh
 source "${ROOT}/scripts/staging/rollout-helpers.sh"
+
+needs_user_space_rollout() {
+  if [ "${NEEDS_USER_SPACE_ROLLOUT:-false}" = "true" ]; then
+    return 0
+  fi
+  # apply-app-manifests rewrites every deployment image; user must not dial space mid-rollout.
+  if [ "${MODE}" != "images-only" ]; then
+    return 0
+  fi
+  case ",${CHANGED_SERVICES}," in
+    *,user,*|*,space,*) return 0 ;;
+  esac
+  return 1
+}
 
 if [ "${NEEDS_FULL_ROLLOUT:-false}" = "true" ]; then
   echo "Full ordered rollout (NEEDS_FULL_ROLLOUT)"
@@ -15,8 +30,8 @@ if [ "${NEEDS_FULL_ROLLOUT:-false}" = "true" ]; then
   exit 0
 fi
 
-if [ "${NEEDS_USER_SPACE_ROLLOUT:-false}" = "true" ]; then
-  echo "User/space ordered rollout"
+if needs_user_space_rollout; then
+  echo "User/space ordered rollout (mode=${MODE})"
   bash "${ROOT}/scripts/staging/rollout-user-space-tier.sh"
   exit 0
 fi

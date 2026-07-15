@@ -209,14 +209,6 @@ else
   fi
 fi
 
-# User/space rollout when those images change.
-for dep in user space; do
-  if contains "${dep}" "${build[@]:-}"; then
-    needs_user_space_rollout=true
-    break
-  fi
-done
-
 promote=()
 for name in "${ALL_NAMES[@]}"; do
   if ! contains "${name}" "${build[@]:-}"; then
@@ -240,6 +232,11 @@ fi
 if ! truthy "${FORCE_FULL:-}" && [[ "${FILTER_CODE:-true}" == "false" ]]; then
   build=()
   promote=()
+fi
+
+# apply-app-manifests rewrites every deployment image tag on each code deploy.
+if [[ "${FILTER_CODE:-true}" == "true" ]]; then
+  needs_user_space_rollout=true
 fi
 
 build_json="$(json_array ${build[@]+"${build[@]}"})"
