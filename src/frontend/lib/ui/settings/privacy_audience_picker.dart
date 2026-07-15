@@ -14,11 +14,19 @@ class PrivacyAudiencePicker extends ConsumerWidget {
     required this.label,
     required this.value,
     required this.onChanged,
+    this.showIncludeGuests = false,
+    this.includeGuestsLabel,
   });
 
   final String label;
   final VoicePrivacyAudience value;
   final ValueChanged<VoicePrivacyAudience> onChanged;
+
+  /// When true, shows the guest-accounts multiselect chip for this field.
+  final bool showIncludeGuests;
+
+  /// Optional override for the guest-accounts chip label.
+  final String? includeGuestsLabel;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -70,12 +78,15 @@ class PrivacyAudiencePicker extends ConsumerWidget {
                 ),
               ),
             ),
-            FilterChip(
-              label: Text(l10n.privacyAudienceIncludeGuests),
-              selected: value.includeGuests,
-              onSelected: (selected) =>
-                  onChanged(value.copyWith(includeGuests: selected)),
-            ),
+            if (showIncludeGuests)
+              FilterChip(
+                label: Text(
+                  includeGuestsLabel ?? l10n.privacyAudienceIncludeGuests,
+                ),
+                selected: value.includeGuests,
+                onSelected: (selected) =>
+                    onChanged(value.copyWith(includeGuests: selected)),
+              ),
           ],
         ),
         if (value.spaceMembers) ...[

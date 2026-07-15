@@ -27,7 +27,7 @@ import '../chat/create_group_sheet.dart';
 import '../onboarding/onboarding_anchor_keys.dart';
 
 /// Reusable chat list content for navigation column and legacy middle column.
-class ChatListBody extends ConsumerWidget {
+class ChatListBody extends ConsumerStatefulWidget {
   const ChatListBody({
     super.key,
     this.showHeader = true,
@@ -49,7 +49,46 @@ class ChatListBody extends ConsumerWidget {
   final void Function(String chatId)? onChatSelected;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ChatListBody> createState() => _ChatListBodyState();
+}
+
+class _ChatListBodyState extends ConsumerState<ChatListBody> {
+  late final ScrollController _scrollController;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController()..addListener(_persistScrollOffset);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_persistScrollOffset);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _persistScrollOffset() {
+    if (!_scrollController.hasClients) return;
+    ref.read(chatListScrollOffsetProvider.notifier).state =
+        _scrollController.offset;
+  }
+
+  void _restoreScrollOffset() {
+    final offset = ref.read(chatListScrollOffsetProvider);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      final maxExtent = _scrollController.position.maxScrollExtent;
+      _scrollController.jumpTo(offset.clamp(0, maxExtent));
+      ref.read(chatListScrollRestoreProvider.notifier).state = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.listen<bool>(chatListScrollRestoreProvider, (previous, next) {
+      if (next) _restoreScrollOffset();
+    });
     ref.watch(inAppNotificationControllerProvider);
     final l10n = AppLocalizations.of(context)!;
     final chats = ref.watch(chatListControllerProvider);
@@ -60,8 +99,8 @@ class ChatListBody extends ConsumerWidget {
     final shellNav = ref.read(shellNavigationProvider);
 
     void selectChat(String chatId) {
-      if (onChatSelected != null) {
-        onChatSelected!(chatId);
+      if (widget.onChatSelected != null) {
+        widget.onChatSelected!(chatId);
       } else {
         shellNav.selectChatFromHome(chatId);
       }
@@ -72,7 +111,7 @@ class ChatListBody extends ConsumerWidget {
       child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (showHeader)
+        if (widget.showHeader)
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
             child: Row(
@@ -87,19 +126,19 @@ class ChatListBody extends ConsumerWidget {
                   ),
                 ),
                 IconButton(
-                  key: createSpaceKey,
+                  key: ChatListBody.createSpaceKey,
                   icon: const Icon(Icons.hub_outlined),
                   tooltip: l10n.spaceCreateTooltip,
                   onPressed: () => CreateSpaceSheet.show(context),
                 ),
                 IconButton(
-                  key: joinSpaceInviteKey,
+                  key: ChatListBody.joinSpaceInviteKey,
                   icon: const Icon(Icons.link),
                   tooltip: l10n.spaceInviteJoinTooltip,
                   onPressed: () => JoinSpaceInviteSheet.show(context),
                 ),
                 IconButton(
-                  key: createGroupKey,
+                  key: ChatListBody.createGroupKey,
                   icon: const Icon(Icons.group_add_outlined),
                   tooltip: l10n.chatCreateGroupTooltip,
                   onPressed: () => CreateGroupSheet.show(context),
@@ -137,7 +176,7 @@ class ChatListBody extends ConsumerWidget {
                     ? const BackendUnavailableException()
                     : Exception(chats.errorMessage);
                 return KeyedSubtree(
-                  key: unavailableKey,
+                  key: ChatListBody.unavailableKey,
                   child: VoiceStatePanel(
                     title: l10n.chatListLoadError,
                     message: chatListErrorMessage(l10n, error),
@@ -158,7 +197,8 @@ class ChatListBody extends ConsumerWidget {
               }
               final hasFooter = chats.hasMore || chats.isLoadingMore;
               return ListView.builder(
-                key: listKey,
+                key: ChatListBody.listKey,
+                controller: _scrollController,
                 itemCount: items.length + (hasFooter ? 1 : 0),
                 itemBuilder: (context, index) {
                   if (index == items.length) {
@@ -175,7 +215,7 @@ class ChatListBody extends ConsumerWidget {
                               ),
                             )
                           : TextButton.icon(
-                              key: loadMoreKey,
+                              key: ChatListBody.loadMoreKey,
                               icon: const Icon(Icons.expand_more),
                               label: Text(l10n.chatListLoadMore),
                               onPressed: () => ref
@@ -206,7 +246,7 @@ class ChatListBody extends ConsumerWidget {
                       ? ref.watch(presenceProvider(peerId))
                       : null;
                   return Column(
-                    key: tileKey(item.chatId),
+                    key: ChatListBody.tileKey(item.chatId),
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       VoiceListRow(
@@ -240,7 +280,9 @@ class ChatListBody extends ConsumerWidget {
                                 ),
                                 presence: presence != null
                                     ? PresenceIndicator(
-                                        key: presenceIndicatorKey(item.chatId),
+                                        key: ChatListBody.presenceIndicatorKey(
+                                          item.chatId,
+                                        ),
                                         presence: presence,
                                         semanticLabel: _presenceLabel(
                                           l10n,

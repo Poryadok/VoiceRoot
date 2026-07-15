@@ -5,6 +5,7 @@ import '../../l10n/app_localizations.dart';
 import '../../state/stories_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../../routing/stories_routes.dart';
+import '../core/voice_skeleton.dart';
 
 /// Profile highlights row (stories (docs/features/stories.md)).
 class HighlightsSection extends ConsumerWidget {
@@ -28,7 +29,7 @@ class HighlightsSection extends ConsumerWidget {
     return highlightsAsync.when(
       loading: () => const SizedBox(
         height: 88,
-        child: Center(child: CircularProgressIndicator()),
+        child: VoiceListSkeleton(rowCount: 1),
       ),
       error: (_, _) => const SizedBox.shrink(),
       data: (highlights) {

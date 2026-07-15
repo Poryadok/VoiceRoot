@@ -22,6 +22,7 @@ import '../../state/bot_providers.dart';
 import '../../state/space_providers.dart';
 import 'e2e_attachment_actions.dart';
 import 'e2e_chat_settings.dart';
+import '../settings/notification_settings_screen.dart';
 
 /// Chat info with shared media tabs (roles/threads (docs/features/roles.md)).
 class ChatInfoPanel extends ConsumerStatefulWidget {
@@ -93,6 +94,7 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
             spaceId: spaceId,
           ),
         if (!widget.isGroup) DmE2eSettingsSection(chatId: widget.chatId),
+        ChatNotificationOverridesSection(chatId: widget.chatId),
         TabBar(
           controller: _tabs,
           isScrollable: true,
@@ -489,6 +491,44 @@ String? _spaceIdForChat(WidgetRef ref, String chatId) {
     if (item.chatId == chatId) return item.chat.spaceId;
   }
   return null;
+}
+
+/// Per-chat notification overrides — docs/features/notifications.md.
+class ChatNotificationOverridesSection extends ConsumerWidget {
+  const ChatNotificationOverridesSection({super.key, required this.chatId});
+
+  static const Key sectionKey = Key('chat_info_notification_overrides');
+
+  final String chatId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context)!;
+    final voice = VoiceColors.of(context);
+
+    return Column(
+      key: sectionKey,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Divider(height: 1, color: voice.borderDefault),
+        ListTile(
+          key: const Key('chat_info_notification_settings'),
+          dense: true,
+          visualDensity: VisualDensity.compact,
+          title: Text(l10n.notificationChatOverridesTitle),
+          subtitle: Text(l10n.notificationChatOverridesHint),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => NotificationSettingsScreen(chatId: chatId),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
 }
 
 /// Per-chat bot enable toggles — docs/features/bots.md.

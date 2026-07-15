@@ -6,7 +6,9 @@ import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/stories_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../api_error_messages.dart';
 import '../core/voice_state_panel.dart';
+import '../core/voice_skeleton.dart';
 import 'highlight_edit_sheet.dart';
 
 /// Owner highlights management (create / edit / delete).
@@ -32,10 +34,14 @@ class StoryHighlightsScreen extends ConsumerWidget {
         label: Text(l10n.storyHighlightCreate),
       ),
       body: highlightsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, _) => VoiceStatePanel(
+        loading: () => const VoiceListSkeleton(),
+        error: (error, _) => VoiceStatePanel(
           title: l10n.storyArchiveLoadError,
+          message: storyArchiveErrorMessage(l10n, error),
           icon: Icons.cloud_off_outlined,
+          actionLabel: l10n.commonRetry,
+          onAction: () =>
+              ref.invalidate(profileHighlightsProvider(profileId)),
         ),
         data: (highlights) {
           if (highlights.isEmpty) {

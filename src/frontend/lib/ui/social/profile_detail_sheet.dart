@@ -12,7 +12,10 @@ import '../../state/matchmaking_providers.dart';
 import '../../state/social_providers.dart';
 import '../../state/stories_providers.dart';
 import '../../routing/deep_link_urls.dart';
+import '../api_error_messages.dart';
 import '../core/voice_share_link.dart';
+import '../core/voice_skeleton.dart';
+import '../core/voice_state_panel.dart';
 import '../report/report_sheet.dart';
 import '../stories/highlights_section.dart';
 import '../stories/story_ring_avatar.dart';
@@ -81,15 +84,28 @@ class ProfileDetailSheet extends ConsumerWidget {
         key: sheetKey,
         padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
         child: profileAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, st) => Text(
-            e is ProfileUnavailableException
-                ? l10n.socialProfileUnavailable
-                : l10n.socialProfileLoadError,
-          ),
+          loading: () => const VoiceListSkeleton(rowCount: 3),
+          error: (e, st) {
+            if (e is ProfileUnavailableException) {
+              return VoiceStatePanel(
+                title: l10n.socialProfileUnavailable,
+                icon: Icons.person_off_outlined,
+              );
+            }
+            return VoiceStatePanel(
+              title: l10n.socialProfileLoadError,
+              message: socialProfileErrorMessage(l10n, e),
+              icon: Icons.person_off_outlined,
+              actionLabel: l10n.commonRetry,
+              onAction: () => ref.invalidate(profileProvider(profileId)),
+            );
+          },
           data: (profile) {
             if (profile == null) {
-              return Text(l10n.socialProfileLoadError);
+              return VoiceStatePanel(
+                title: l10n.socialProfileUnavailable,
+                icon: Icons.person_off_outlined,
+              );
             }
             return Column(
               mainAxisSize: MainAxisSize.min,

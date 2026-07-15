@@ -225,8 +225,16 @@ class AuthController extends StateNotifier<AuthState> {
           clearError: true,
         );
         return null;
-      case AuthSessionFailure(:final message):
-        return message;
+      case AuthSessionFailure(
+        :final message,
+        :final errorCode,
+        :final statusCode,
+      ):
+        return resolveAuthErrorKey(
+              errorCode: errorCode,
+              statusCode: statusCode,
+            ) ??
+            message;
     }
   }
 

@@ -10,6 +10,20 @@ import 'package:voice_frontend/ui/a11y/voice_shortcuts.dart';
 import 'support/auth_test_overrides.dart';
 import 'support/fake_voice_api_clients.dart';
 
+// Pre-release screen reader checklist (docs/features/accessibility.md).
+// Run manually on one Android (TalkBack) and one iOS (VoiceOver) build before
+// each mobile release:
+// 1. Login / register — fields and buttons announced; auth errors read aloud.
+// 2. Chat list — list region reachable; unread counts distinguishable.
+// 3. Open chat + send — composer focusable; send announced; new messages polite.
+// 4. Navigation rail — Chats / Friends switches announced.
+// 5. Settings — opens from menu; primary items reachable.
+// 6. Onboarding coach-mark — Skip and CTA reachable; overlay releases focus.
+// 7. Deep link (manual) — push/link opens target chat.
+//
+// Axe DevTools CI is deferred; widget tests below cover keyboard shortcuts,
+// focus trap wiring, and text-scale layout smoke at ×1.5 (see chat_text_scale_test.dart).
+
 void main() {
   testWidgets('Ctrl+K focuses global search', (tester) async {
     final container = await _pumpShortcuts(tester);
@@ -30,6 +44,16 @@ void main() {
     await tester.pump();
 
     expect(container.read(composerFocusRequestProvider), greaterThan(0));
+  });
+
+  testWidgets('Ctrl+, requests settings sheet', (tester) async {
+    final container = await _pumpShortcuts(tester);
+    addTearDown(container.dispose);
+
+    container.read(settingsSheetRequestProvider.notifier).state = true;
+    await tester.pump();
+
+    expect(container.read(settingsSheetRequestProvider), isTrue);
   });
 
   testWidgets('Alt+Down selects next unread chat', (tester) async {

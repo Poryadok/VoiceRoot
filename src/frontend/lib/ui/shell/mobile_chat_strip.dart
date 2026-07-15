@@ -6,7 +6,9 @@ import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/chat_providers.dart';
 import '../../state/shell_providers.dart';
+import '../../state/space_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../../theme/voice_layout.dart';
 import '../core/voice_avatar.dart';
 import '../core/voice_badge.dart';
 
@@ -25,11 +27,18 @@ class MobileChatStrip extends ConsumerWidget {
     final chats = ref.watch(chatListControllerProvider);
     final inbox = ref.watch(chatInboxProvider);
     final selectedId = ref.watch(selectedChatIdProvider);
+    final selectedSpaceId = ref.watch(selectedSpaceIdProvider);
     final activeProfileId = ref.watch(authControllerProvider).activeProfileId;
     final shellNav = ref.read(shellNavigationProvider);
+    final inSpace = selectedSpaceId != null;
 
     final items = chats.items
-        .where((item) => (item.inbox ?? 'main') == inbox)
+        .where((item) {
+          if (inSpace) {
+            return item.chat.spaceId == selectedSpaceId;
+          }
+          return (item.inbox ?? 'main') == inbox;
+        })
         .take(30)
         .toList();
 
@@ -64,7 +73,10 @@ class MobileChatStrip extends ConsumerWidget {
               item: item,
               title: title,
               selected: selected,
-              onTap: () => shellNav.selectChatFromHome(item.chatId),
+              onTap: () => shellNav.selectStripChat(
+                item.chatId,
+                inSpace: inSpace,
+              ),
               activeProfileId: activeProfileId,
             ),
           );
@@ -102,14 +114,15 @@ class _StripChatIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final voice = VoiceColors.of(context);
+    final touchSize = VoiceLayout.minTouchTarget;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: InkWell(
         onTap: onTap,
         customBorder: const CircleBorder(),
         child: SizedBox(
-          width: 44,
-          height: 40,
+          width: touchSize,
+          height: touchSize,
           child: Stack(
             clipBehavior: Clip.none,
             alignment: Alignment.center,

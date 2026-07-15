@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../backend/matchmaking_client.dart';
 import '../../l10n/app_localizations.dart';
+import '../../state/matchmaking_search_controller.dart';
 
 class RatedTeammate {
   const RatedTeammate({
@@ -11,6 +12,64 @@ class RatedTeammate {
 
   final String profileId;
   final String displayName;
+}
+
+/// Explains why matchmaking stopped or changed and offers a recovery action.
+class MatchmakingRecoveryCard extends StatelessWidget {
+  const MatchmakingRecoveryCard({
+    super.key,
+    required this.reason,
+    required this.onAction,
+  });
+
+  static const Key cardKey = Key('queue_search_recovery');
+  static const Key actionButtonKey = Key('queue_search_recovery_action');
+  static const Key timeoutStateKey = Key('queue_search_timeout');
+  static const Key declinedStateKey = Key('queue_search_declined');
+
+  final SearchRecoveryReason reason;
+  final VoidCallback onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+    final (title, body, actionLabel) = switch (reason) {
+      SearchRecoveryReason.timeout => (
+          l10n.queueSearchTimeoutTitle,
+          l10n.queueSearchTimeoutBody,
+          l10n.queueSearchRecoveryReturnToQueue,
+        ),
+      SearchRecoveryReason.declined => (
+          l10n.queueSearchDeclinedTitle,
+          l10n.queueSearchDeclinedBody,
+          l10n.queueSearchRecoveryContinueSearch,
+        ),
+    };
+
+    return Card(
+      key: reason == SearchRecoveryReason.timeout
+          ? MatchmakingRecoveryCard.timeoutStateKey
+          : MatchmakingRecoveryCard.declinedStateKey,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(title, style: theme.textTheme.titleSmall),
+            const SizedBox(height: 8),
+            Text(body),
+            const SizedBox(height: 12),
+            FilledButton(
+              key: MatchmakingRecoveryCard.actionButtonKey,
+              onPressed: onAction,
+              child: Text(actionLabel),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// Post-match teammate rating sheet (1–5 stars per participant).

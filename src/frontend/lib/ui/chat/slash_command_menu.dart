@@ -16,6 +16,9 @@ class SlashCommandMenuSheet extends ConsumerWidget {
   });
 
   static const Key sheetKey = Key('slash_command_menu_sheet');
+  static const Key emptyStateKey = Key('slash_commands_empty_panel');
+  static const Key noMatchStateKey = Key('slash_commands_no_match_panel');
+  static const Key helpFooterKey = Key('slash_commands_help_footer');
 
   final String chatId;
   final ValueChanged<BotSlashCommand> onSelected;
@@ -26,6 +29,7 @@ class SlashCommandMenuSheet extends ConsumerWidget {
     final l10n = AppLocalizations.of(context)!;
     final voice = VoiceColors.of(context);
     final commandsAsync = ref.watch(slashCommandsForChatProvider(chatId));
+    final spaceId = ref.watch(spaceIdForChatProvider(chatId));
     final normalizedFilter = filter.trim().toLowerCase();
 
     return SafeArea(
@@ -72,68 +76,98 @@ class SlashCommandMenuSheet extends ConsumerWidget {
                         )
                         .toList(growable: false);
               if (filtered.isEmpty) {
+                final isFilterMiss =
+                    normalizedFilter.isNotEmpty && commands.isNotEmpty;
                 return VoiceStatePanel(
-                  title: l10n.slashCommandsTitle,
-                  message: l10n.slashCommandsEmpty,
-                  icon: Icons.smart_toy_outlined,
+                  key: isFilterMiss ? noMatchStateKey : emptyStateKey,
+                  title: isFilterMiss
+                      ? l10n.slashCommandsNoMatch
+                      : l10n.slashCommandsEmpty,
+                  message: isFilterMiss
+                      ? l10n.slashCommandsNoMatchHint
+                      : _emptyHint(l10n, spaceId),
+                  icon: isFilterMiss
+                      ? Icons.search_off_outlined
+                      : Icons.smart_toy_outlined,
                 );
               }
               final grouped = _groupCommands(filtered);
-              return ListView.builder(
-                shrinkWrap: true,
-                itemCount: grouped.length,
-                itemBuilder: (context, index) {
-                  final entry = grouped[index];
-                  if (entry is _SlashMenuHeader) {
-                    return Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                      child: Text(
-                        entry.label,
-                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: grouped.length,
+                    itemBuilder: (context, index) {
+                      final entry = grouped[index];
+                      if (entry is _SlashMenuHeader) {
+                        return Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                          child: Text(
+                            entry.label,
+                            style: Theme.of(context).textTheme.labelLarge
+                                ?.copyWith(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        );
+                      }
+                      final cmd = (entry as _SlashMenuItem).command;
+                      final offline = !cmd.online;
+                      return Tooltip(
+                        message: offline ? l10n.botUnavailableTooltip : '',
+                        child: ListTile(
+                          key: ValueKey(
+                            'slash_command_${cmd.botId}_${cmd.fullCommandName}',
+                          ),
+                          enabled: !offline,
+                          leading: Icon(
+                            Icons.terminal,
+                            color: offline
+                                ? voice.textDisabled
+                                : voice.profileAccent,
+                          ),
+                          title: Text(
+                            cmd.displayName,
+                            style: offline
+                                ? TextStyle(color: voice.textDisabled)
+                                : null,
+                          ),
+                          subtitle: Text(
+                            cmd.description.isEmpty
+                                ? cmd.botName
+                                : cmd.description,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: offline
+                                ? TextStyle(color: voice.textDisabled)
+                                : null,
+                          ),
+                          onTap: offline ? null : () => onSelected(cmd),
                         ),
-                      ),
-                    );
-                  }
-                  final cmd = (entry as _SlashMenuItem).command;
-                  final offline = !cmd.online;
-                  return Tooltip(
-                    message: offline ? l10n.botUnavailableTooltip : '',
-                    child: ListTile(
-                      key: ValueKey(
-                        'slash_command_${cmd.botId}_${cmd.fullCommandName}',
-                      ),
-                      enabled: !offline,
-                      leading: Icon(
-                        Icons.terminal,
-                        color: offline
-                            ? voice.textDisabled
-                            : voice.profileAccent,
-                      ),
-                      title: Text(
-                        cmd.displayName,
-                        style: offline
-                            ? TextStyle(color: voice.textDisabled)
-                            : null,
-                      ),
-                      subtitle: Text(
-                        cmd.description.isEmpty ? cmd.botName : cmd.description,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: offline
-                            ? TextStyle(color: voice.textDisabled)
-                            : null,
-                      ),
-                      onTap: offline ? null : () => onSelected(cmd),
-                    ),
-                  );
-                },
+                      );
+                    },
+                  ),
+                  const Divider(height: 1),
+                  _SlashCommandsHelpFooter(
+                    key: helpFooterKey,
+                    message: l10n.slashCommandsHelp,
+                  ),
+                ],
               );
             },
           ),
         ],
       ),
     );
+  }
+
+  String _emptyHint(AppLocalizations l10n, String? spaceId) {
+    final inSpace = spaceId != null && spaceId.isNotEmpty;
+    return inSpace ? l10n.slashCommandsEmptyHint : l10n.slashCommandsDmEmptyHint;
   }
 
   List<_SlashMenuEntry> _groupCommands(List<BotSlashCommand> commands) {
@@ -171,6 +205,27 @@ class _SlashMenuHeader extends _SlashMenuEntry {
 class _SlashMenuItem extends _SlashMenuEntry {
   _SlashMenuItem(this.command);
   final BotSlashCommand command;
+}
+
+class _SlashCommandsHelpFooter extends StatelessWidget {
+  const _SlashCommandsHelpFooter({super.key, required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final voice = VoiceColors.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+      child: Text(
+        message,
+        textAlign: TextAlign.center,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: voice.textSecondary,
+        ),
+      ),
+    );
+  }
 }
 
 Future<void> showSlashCommandMenu({

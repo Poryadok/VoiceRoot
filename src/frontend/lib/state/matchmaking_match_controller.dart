@@ -10,6 +10,7 @@ import 'auth_providers.dart';
 import 'chat_providers.dart';
 import 'matchmaking_providers.dart';
 import 'matchmaking_rating_controller.dart';
+import 'matchmaking_search_controller.dart';
 
 class PendingMatchState {
   const PendingMatchState({this.match});
@@ -110,6 +111,9 @@ class MatchmakingMatchController extends Notifier<PendingMatchState> {
     if (!accept) {
       clear();
       ref.read(activeSearchSessionProvider.notifier).state = data.searchSession;
+      ref
+          .read(matchmakingSearchControllerProvider.notifier)
+          .showDeclinedRecovery();
       return data;
     }
     if (data.match.status == 'active' &&

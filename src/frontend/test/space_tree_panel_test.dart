@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voice_frontend/backend/space_permissions.dart';
 import 'package:voice_frontend/backend/spaces_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/space_providers.dart';
+import 'package:voice_frontend/state/voice_room_providers.dart';
 import 'package:voice_frontend/ui/space/space_tree_panel.dart';
 
 import 'support/test_voice_token_catalog.dart';
@@ -136,6 +138,173 @@ void main() {
     await tester.tap(find.text('HIDDEN'));
     await tester.pumpAndSettle();
     expect(find.text('hidden-channel'), findsOneWidget);
+  });
+
+  testWidgets('shows empty state when tree has no nodes', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          spaceTreeProvider('space-1').overrideWith(
+            (_) async => const SpaceTreeData(
+              categories: [],
+              nodes: [],
+              voiceRooms: [],
+            ),
+          ),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(
+            body: SpaceTreePanel(
+              spaceId: 'space-1',
+              onTextChatSelected: _noop,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(SpaceTreePanel.emptyKey), findsOneWidget);
+    expect(find.text('No channels yet'), findsOneWidget);
+  });
+
+  testWidgets('shows error state with retry when tree load fails', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          spaceTreeProvider('space-1').overrideWith((_) async {
+            throw Exception('tree failed');
+          }),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(
+            body: SpaceTreePanel(
+              spaceId: 'space-1',
+              onTextChatSelected: _noop,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(SpaceTreePanel.errorKey), findsOneWidget);
+    expect(find.text('Try again'), findsOneWidget);
+  });
+
+  testWidgets('shows voice join denial reason when join is not allowed', (tester) async {
+    var joinCalled = false;
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          spaceTreeProvider('space-1').overrideWith((_) async => _sampleTree()),
+          spacePermissionProvider.overrideWith((ref, query) async {
+            if (query.permission == SpacePermissions.voiceJoin) {
+              return false;
+            }
+            return true;
+          }),
+          joinVoiceRoomActionProvider.overrideWith(
+            (ref) => ({required voiceRoomId, required spaceId}) async {
+              joinCalled = true;
+            },
+          ),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(
+            body: SpaceTreePanel(
+              spaceId: 'space-1',
+              onTextChatSelected: _noop,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('You need permission to join this voice room'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Lobby'));
+    await tester.pumpAndSettle();
+    expect(joinCalled, isFalse);
+  });
+
+  testWidgets('shows channel post denial reason for channel chats', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          spaceTreeProvider('space-1').overrideWith(
+            (_) async => const SpaceTreeData(
+              categories: [
+                SpaceCategory(
+                  id: 'cat-1',
+                  spaceId: 'space-1',
+                  name: 'General',
+                  sortOrder: 0,
+                ),
+              ],
+              nodes: [
+                SpaceTreeNodeData(
+                  id: 'node-channel',
+                  spaceId: 'space-1',
+                  categoryId: 'cat-1',
+                  kind: 'text_chat',
+                  chatType: 'CHAT_TYPE_CHANNEL',
+                  linkedChatId: 'chat-channel',
+                  sortOrder: 0,
+                  displayName: 'news',
+                ),
+              ],
+              voiceRooms: [],
+            ),
+          ),
+          spacePermissionProvider.overrideWith((ref, query) async {
+            if (query.permission == SpacePermissions.textChatSendMessages) {
+              return false;
+            }
+            return true;
+          }),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(
+            body: SpaceTreePanel(
+              spaceId: 'space-1',
+              onTextChatSelected: _noop,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('You need permission to post in this channel'),
+      findsOneWidget,
+    );
   });
 }
 

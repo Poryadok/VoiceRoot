@@ -6,6 +6,9 @@ import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/chat_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../api_error_messages.dart';
+import '../core/voice_skeleton.dart';
+import '../core/voice_state_panel.dart';
 import 'mention_message_content.dart';
 
 /// Thread replies for a root message (roles/threads (docs/features/roles.md)).
@@ -127,11 +130,20 @@ class _ThreadSidePanelState extends ConsumerState<ThreadSidePanel> {
           const Divider(height: 1),
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator())
+                ? const VoiceListSkeleton()
                 : _error != null
-                ? Center(child: Text(_error!))
+                ? VoiceStatePanel(
+                    title: l10n.chatThreadLoadError,
+                    message: chatThreadErrorMessage(l10n, _error!),
+                    icon: Icons.cloud_off_outlined,
+                    actionLabel: l10n.commonRetry,
+                    onAction: _load,
+                  )
                 : _replies.isEmpty
-                ? Center(child: Text(l10n.chatThreadEmpty))
+                ? VoiceStatePanel(
+                    title: l10n.chatThreadEmpty,
+                    icon: Icons.forum_outlined,
+                  )
                 : ListView.builder(
                     padding: const EdgeInsets.all(12),
                     itemCount: _replies.length,

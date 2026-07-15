@@ -46,6 +46,7 @@ void main() {
       ProviderScope(
         overrides: [
           ...voiceThemeTestOverrides(),
+          spacePermissionProvider.overrideWith((ref, query) async => true),
           spaceTreeProvider('space-1').overrideWith((_) async {
             return _treeWithVoiceRoom();
           }),

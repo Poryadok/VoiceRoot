@@ -101,3 +101,34 @@ final storyViewersProvider =
     StoriesApiFailure() => const [],
   };
 });
+
+/// Emoji reactions on a story (author-only per docs/features/stories.md).
+final storyReactionsProvider =
+    FutureProvider.family<List<StoryReactionData>, String>((ref, storyId) async {
+  final auth = ref.watch(authorizationHeaderProvider);
+  if (auth == null || storyId.isEmpty) return const [];
+  final result = await ref
+      .watch(voiceStoriesClientProvider)
+      .getStoryReactions(authorization: auth, storyId: storyId);
+  return switch (result) {
+    StoriesApiOk(:final data) => data,
+    StoriesApiFailure() => const [],
+  };
+});
+
+/// Aggregated emoji counts for author-facing reaction chips.
+List<({String emoji, int count})> aggregateStoryReactions(
+  List<StoryReactionData> reactions,
+) {
+  final counts = <String, int>{};
+  for (final reaction in reactions) {
+    final emoji = reaction.emoji;
+    if (emoji.isEmpty) continue;
+    counts[emoji] = (counts[emoji] ?? 0) + 1;
+  }
+  final entries = counts.entries
+      .map((e) => (emoji: e.key, count: e.value))
+      .toList();
+  entries.sort((a, b) => b.count.compareTo(a.count));
+  return entries;
+}

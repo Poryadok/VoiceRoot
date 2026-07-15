@@ -18,7 +18,7 @@ final subscriptionProvider = FutureProvider<VoiceSubscription?>((ref) async {
       .getSubscription(authorization: auth);
   return switch (result) {
     SubscriptionApiOk(:final data) => data,
-    SubscriptionApiFailure() => null,
+    SubscriptionApiFailure(:final message) => throw StateError(message),
   };
 });
 

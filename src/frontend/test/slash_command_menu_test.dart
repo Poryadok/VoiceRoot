@@ -132,4 +132,104 @@ void main() {
     final tile = tester.widget<ListTile>(slowTile);
     expect(tile.enabled, isFalse);
   });
+
+  testWidgets('SlashCommandMenuSheet shows help footer when commands exist', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      slashMenuApp(
+        overrides: [
+          slashCommandsForChatProvider('chat-1').overrideWith(
+            (ref) async => _commands,
+          ),
+        ],
+        onSelected: (_) {},
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(SlashCommandMenuSheet.helpFooterKey), findsOneWidget);
+    expect(
+      find.text(
+        'Type / in the message box to open this menu. Greyed-out commands mean the bot is offline.',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('SlashCommandMenuSheet empty state explains next step in space chat', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      slashMenuApp(
+        overrides: [
+          slashCommandsForChatProvider('chat-1').overrideWith(
+            (ref) async => const [],
+          ),
+          spaceIdForChatProvider('chat-1').overrideWith((ref) => 'space-1'),
+        ],
+        onSelected: (_) {},
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(SlashCommandMenuSheet.emptyStateKey), findsOneWidget);
+    expect(find.text('No bot commands in this chat.'), findsOneWidget);
+    expect(
+      find.text(
+        'Install bots in Space settings, or enable them for this chat in Chat info.',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('SlashCommandMenuSheet empty state explains DM limitation', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      slashMenuApp(
+        overrides: [
+          slashCommandsForChatProvider('chat-1').overrideWith(
+            (ref) async => const [],
+          ),
+          spaceIdForChatProvider('chat-1').overrideWith((ref) => null),
+        ],
+        onSelected: (_) {},
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(SlashCommandMenuSheet.emptyStateKey), findsOneWidget);
+    expect(
+      find.text('Bot slash commands are available only in space text chats.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('SlashCommandMenuSheet filter miss shows search empty state', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      slashMenuApp(
+        overrides: [
+          slashCommandsForChatProvider('chat-1').overrideWith(
+            (ref) async => _commands,
+          ),
+        ],
+        onSelected: (_) {},
+        filter: 'missing',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(SlashCommandMenuSheet.noMatchStateKey), findsOneWidget);
+    expect(find.text('No matching commands'), findsOneWidget);
+    expect(
+      find.text(
+        'Keep typing after / or try another command or bot name.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.byKey(SlashCommandMenuSheet.helpFooterKey), findsNothing);
+  });
 }

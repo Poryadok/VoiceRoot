@@ -6,6 +6,8 @@ import '../../backend/space_permissions.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/space_providers.dart';
 import '../core/voice_bottom_sheet.dart';
+import '../core/voice_compact_banner.dart';
+import '../core/voice_disabled_action.dart';
 
 class SpaceRoleEditorSheet extends ConsumerStatefulWidget {
   const SpaceRoleEditorSheet({
@@ -59,6 +61,19 @@ class _SpaceRoleEditorSheetState extends ConsumerState<SpaceRoleEditorSheet> {
     final l10n = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
     final isEdit = widget.role != null;
+    final manageRoles = resolveSpacePermission(
+      l10n,
+      ref.watch(
+        spacePermissionProvider((
+          spaceId: widget.spaceId,
+          permission: SpacePermissions.spaceManageRoles,
+          chatId: null,
+          voiceRoomId: null,
+        )),
+      ),
+      SpacePermissions.spaceManageRoles,
+    );
+    final canEdit = manageRoles.allowed;
 
     return SafeArea(
       child: Padding(
@@ -70,9 +85,19 @@ class _SpaceRoleEditorSheetState extends ConsumerState<SpaceRoleEditorSheet> {
               isEdit ? l10n.spaceRoleEditTitle : l10n.spaceRoleCreateTitle,
               style: theme.textTheme.titleMedium,
             ),
+            if (manageRoles.deniedReason != null) ...[
+              const SizedBox(height: 8),
+              VoiceCompactBanner(
+                key: const Key('space_role_editor_denied'),
+                message: manageRoles.deniedReason!,
+                icon: Icons.lock_outline,
+                tone: VoiceBannerTone.warning,
+              ),
+            ],
             const SizedBox(height: 12),
             TextField(
               controller: _nameController,
+              readOnly: !canEdit,
               decoration: InputDecoration(labelText: l10n.spaceRoleNameLabel),
             ),
             const SizedBox(height: 12),
@@ -82,29 +107,37 @@ class _SpaceRoleEditorSheetState extends ConsumerState<SpaceRoleEditorSheet> {
                   for (final entry in SpacePermissions.editableGroups.entries) ...[
                     Text(entry.key, style: theme.textTheme.titleSmall),
                     for (final perm in entry.value)
-                      CheckboxListTile(
-                        value: SpacePermissions.hasPermission(_mask, perm),
-                        onChanged: (value) {
-                          setState(() {
-                            _mask = SpacePermissions.setPermission(
-                              _mask,
-                              perm,
-                              value ?? false,
-                            );
-                          });
-                        },
-                        title: Text(perm, style: theme.textTheme.bodySmall),
-                        dense: true,
-                        controlAffinity: ListTileControlAffinity.leading,
+                      VoiceDisabledAction(
+                        disabledReason: manageRoles.deniedReason,
+                        child: CheckboxListTile(
+                          value: SpacePermissions.hasPermission(_mask, perm),
+                          onChanged: canEdit
+                              ? (value) {
+                                  setState(() {
+                                    _mask = SpacePermissions.setPermission(
+                                      _mask,
+                                      perm,
+                                      value ?? false,
+                                    );
+                                  });
+                                }
+                              : null,
+                          title: Text(perm, style: theme.textTheme.bodySmall),
+                          dense: true,
+                          controlAffinity: ListTileControlAffinity.leading,
+                        ),
                       ),
                     const SizedBox(height: 8),
                   ],
                 ],
               ),
             ),
-            FilledButton(
-              onPressed: _saving ? null : _save,
-              child: Text(l10n.commonSave),
+            VoiceDisabledAction(
+              disabledReason: manageRoles.deniedReason,
+              child: FilledButton(
+                onPressed: _saving || !canEdit ? null : _save,
+                child: Text(l10n.commonSave),
+              ),
             ),
           ],
         ),

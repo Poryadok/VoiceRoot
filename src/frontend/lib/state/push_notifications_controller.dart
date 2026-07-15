@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../backend/notifications_client.dart';
@@ -14,6 +15,13 @@ import 'push_notifications_bootstrap.dart';
 import 'push_platform.dart';
 
 export 'push_background_handler.dart' show firebaseMessagingBackgroundHandler;
+
+enum PushPermissionStatus {
+  granted,
+  denied,
+  notDetermined,
+  unsupported,
+}
 
 final voiceNotificationsClientProvider = Provider<VoiceNotificationsClient>((ref) {
   return VoiceNotificationsClient(gateway: ref.watch(gatewayHttpClientProvider));
@@ -97,7 +105,10 @@ class PushNotificationsController {
 
     final messaging = FirebaseMessaging.instance;
     try {
-      await messaging.requestPermission();
+      final permission = await getPermissionStatus();
+      if (permission != PushPermissionStatus.granted) {
+        return;
+      }
       FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
       final platform = pushPlatformForTarget();
@@ -144,6 +155,40 @@ class PushNotificationsController {
     } catch (_) {
       // FCM unavailable (misconfigured project, blocked network, etc.).
     }
+  }
+
+  Future<PushPermissionStatus> getPermissionStatus() async {
+    if (kIsWeb && DefaultFirebaseOptions.usesDevPlaceholder) {
+      return PushPermissionStatus.unsupported;
+    }
+    try {
+      await _ensureFirebase();
+    } catch (_) {
+      return PushPermissionStatus.unsupported;
+    }
+    final settings = await FirebaseMessaging.instance.getNotificationSettings();
+    return switch (settings.authorizationStatus) {
+      AuthorizationStatus.authorized ||
+      AuthorizationStatus.provisional => PushPermissionStatus.granted,
+      AuthorizationStatus.denied => PushPermissionStatus.denied,
+      AuthorizationStatus.notDetermined => PushPermissionStatus.notDetermined,
+    };
+  }
+
+  /// Shows the OS permission prompt after the in-app explainer, then registers FCM.
+  Future<PushPermissionStatus> requestPermissionAndRegister() async {
+    if (DefaultFirebaseOptions.usesDevPlaceholder) {
+      return PushPermissionStatus.unsupported;
+    }
+    try {
+      await _ensureFirebase();
+    } catch (_) {
+      return PushPermissionStatus.unsupported;
+    }
+    final messaging = FirebaseMessaging.instance;
+    await messaging.requestPermission();
+    await _syncToken();
+    return getPermissionStatus();
   }
 
   void _onForegroundMessage(RemoteMessage message) {

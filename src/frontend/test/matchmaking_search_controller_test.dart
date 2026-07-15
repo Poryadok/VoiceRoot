@@ -41,6 +41,7 @@ void main() {
     expect(container.read(activeSearchSessionProvider), isNull);
     final state = container.read(matchmakingSearchControllerProvider);
     expect(state.timedOut, isTrue);
+    expect(state.recoveryReason, SearchRecoveryReason.timeout);
     expect(state.nudgeVisible, isFalse);
   });
 }

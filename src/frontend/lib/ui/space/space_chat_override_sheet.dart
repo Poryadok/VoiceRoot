@@ -6,7 +6,10 @@ import '../../backend/space_permissions.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/space_providers.dart';
+import '../api_error_messages.dart';
 import '../core/voice_bottom_sheet.dart';
+import '../core/voice_skeleton.dart';
+import '../core/voice_state_panel.dart';
 
 /// Per-chat role deny overrides (roles/threads (docs/features/roles.md) custom roles).
 class SpaceChatOverrideSheet extends ConsumerStatefulWidget {
@@ -67,8 +70,15 @@ class _SpaceChatOverrideSheetState extends ConsumerState<SpaceChatOverrideSheet>
             const SizedBox(height: 12),
             Flexible(
               child: rolesAsync.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) => Text('$e'),
+                loading: () => const VoiceListSkeleton(rowCount: 4),
+                error: (e, _) => VoiceStatePanel(
+                  title: l10n.spaceRolesLoadError,
+                  message: spaceRolesErrorMessage(l10n, e),
+                  icon: Icons.badge_outlined,
+                  actionLabel: l10n.commonRetry,
+                  onAction: () =>
+                      ref.invalidate(spaceRolesProvider(widget.spaceId)),
+                ),
                 data: (roles) => ListView(
                   shrinkWrap: true,
                   children: [

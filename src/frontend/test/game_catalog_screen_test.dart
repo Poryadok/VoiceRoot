@@ -84,4 +84,39 @@ void main() {
     expect(find.text('Carry'), findsOneWidget);
     expect(find.textContaining('Ancient'), findsOneWidget);
   });
+
+  testWidgets('shows empty state when catalog has no games', (tester) async {
+    await tester.pumpWidget(
+      _wrap(
+        const GameCatalogScreen(),
+        [
+          gameCatalogSearchProvider.overrideWith(
+            (ref) async => const GameListData(games: []),
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('No games found'), findsOneWidget);
+  });
+
+  testWidgets('shows error state with retry when catalog load fails', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _wrap(
+        const GameCatalogScreen(),
+        [
+          gameCatalogSearchProvider.overrideWith((ref) async {
+            throw Exception('catalog failed');
+          }),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Could not load game catalog'), findsWidgets);
+    expect(find.text('Try again'), findsOneWidget);
+  });
 }

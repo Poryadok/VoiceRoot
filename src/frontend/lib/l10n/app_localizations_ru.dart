@@ -323,6 +323,25 @@ class AppLocalizationsRu extends AppLocalizations {
   String get slashCommandsEmpty => 'В этом чате нет команд ботов.';
 
   @override
+  String get slashCommandsEmptyHint =>
+      'Установите ботов в настройках спейса или включите их для чата в разделе «Информация о чате».';
+
+  @override
+  String get slashCommandsDmEmptyHint =>
+      'Slash-команды ботов доступны только в текстовых чатах спейса.';
+
+  @override
+  String get slashCommandsNoMatch => 'Команды не найдены';
+
+  @override
+  String get slashCommandsNoMatchHint =>
+      'Продолжайте ввод после / или попробуйте другое имя команды или бота.';
+
+  @override
+  String get slashCommandsHelp =>
+      'Введите / в поле сообщения, чтобы открыть это меню. Серые команды означают, что бот офлайн.';
+
+  @override
   String get botUnavailableTooltip => 'Бот недоступен';
 
   @override
@@ -674,6 +693,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatThreadEmpty => 'Пока нет ответов';
 
   @override
+  String get chatThreadLoadError => 'Не удалось загрузить тред';
+
+  @override
   String get chatChannelMainFeedBlocked => 'Пишите в тред или от имени канала';
 
   @override
@@ -1003,6 +1025,26 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get spacePermissionDeniedManageRoles => 'Нет права управлять ролями';
+
+  @override
+  String get spacePermissionDeniedSetSlowMode =>
+      'Нет права менять медленный режим';
+
+  @override
+  String get spacePermissionDeniedVoiceJoin =>
+      'Нет права входить в эту голосовую комнату';
+
+  @override
+  String get spacePermissionDeniedSendMessages =>
+      'Нет права писать в этот канал';
+
+  @override
+  String spacePermissionDeniedGeneric(String permission) {
+    return 'Нет права: $permission';
+  }
+
+  @override
   String get spaceSlowMode => 'Медленный режим';
 
   @override
@@ -1293,6 +1335,57 @@ class AppLocalizationsRu extends AppLocalizations {
   String get subscriptionCancel => 'Отменить подписку';
 
   @override
+  String get subscriptionStatusGracePeriod => 'Премиум — проблема с оплатой';
+
+  @override
+  String subscriptionStatusPremiumUntil(String date) {
+    return 'Премиум до $date';
+  }
+
+  @override
+  String get subscriptionGracePeriodHint =>
+      'Обновите способ оплаты, чтобы сохранить бонусы Премиума.';
+
+  @override
+  String get subscriptionPremiumUntilHint =>
+      'Бонусы Премиума действуют до этой даты.';
+
+  @override
+  String get subscriptionLoadError => 'Не удалось загрузить подписку';
+
+  @override
+  String get subscriptionRetry => 'Повторить';
+
+  @override
+  String get subscriptionFreeTierNote =>
+      'Сообщения и чаты остаются бесплатными на плане «Бесплатный».';
+
+  @override
+  String get subscriptionUpgradeSubtitle =>
+      'Косметика, большие загрузки и больше профилей — без потери доступа к сообщениям.';
+
+  @override
+  String get subscriptionBenefitBadge => 'Значок Премиум ★ в чатах';
+
+  @override
+  String get subscriptionBenefitUploads => 'Загрузка файлов до 200 МБ';
+
+  @override
+  String get subscriptionBenefitProfiles => 'До 5 профилей';
+
+  @override
+  String get subscriptionBillingPeriodMonthly => 'Помесячно';
+
+  @override
+  String get subscriptionBillingPeriodYearly => 'Годовой';
+
+  @override
+  String get subscriptionCheckoutLaunchFailed => 'Не удалось открыть оплату';
+
+  @override
+  String get subscriptionInvalidCheckoutUrl => 'Некорректная ссылка на оплату';
+
+  @override
   String get subscriptionProfilesLoadError => 'Не удалось загрузить профили';
 
   @override
@@ -1375,6 +1468,119 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get privacySettingsTitle => 'Приватность';
+
+  @override
+  String get notificationSettingsTitle => 'Уведомления';
+
+  @override
+  String get notificationChatSettingsTitle => 'Уведомления чата';
+
+  @override
+  String get notificationChatOverridesTitle => 'Переопределение уведомлений';
+
+  @override
+  String get notificationChatOverridesHint =>
+      'Настроить оповещения для этого чата';
+
+  @override
+  String get notificationLoadError =>
+      'Не удалось загрузить настройки уведомлений';
+
+  @override
+  String get notificationSettingsSaved => 'Настройки уведомлений сохранены';
+
+  @override
+  String get notificationSettingsSavedQuietHoursFailed =>
+      'Настройки сохранены, но тихие часы не синхронизированы';
+
+  @override
+  String get notificationGlobalEnabled => 'Уведомления включены';
+
+  @override
+  String get notificationChatEnabled => 'Уведомления для этого чата';
+
+  @override
+  String get notificationEventTypesTitle => 'Типы событий';
+
+  @override
+  String get notificationTypeNewMessage => 'Личные сообщения';
+
+  @override
+  String get notificationTypeMention => 'Упоминания';
+
+  @override
+  String get notificationTypeReply => 'Ответы';
+
+  @override
+  String get notificationTypeReaction => 'Реакции';
+
+  @override
+  String get notificationTypeFriendRequest => 'Заявки в друзья';
+
+  @override
+  String get notificationTypeMatchFound => 'Матч найден';
+
+  @override
+  String get notificationTypeSystem => 'Системные';
+
+  @override
+  String get notificationQuietHoursTitle => 'Тихие часы';
+
+  @override
+  String get notificationQuietHoursEnabled => 'Включить тихие часы';
+
+  @override
+  String get notificationQuietHoursStart => 'Начало';
+
+  @override
+  String get notificationQuietHoursEnd => 'Конец';
+
+  @override
+  String get notificationQuietHoursOverrideMentions =>
+      'Разрешить упоминания в тихие часы';
+
+  @override
+  String get notificationQuietHoursOverrideMentionsHint =>
+      'При включении @упоминания всё равно приходят';
+
+  @override
+  String get notificationPushSectionTitle => 'Уведомления на устройстве';
+
+  @override
+  String get notificationPushEnableTitle => 'Включить push-уведомления';
+
+  @override
+  String get notificationPushExplainerTitle => 'Будьте в курсе';
+
+  @override
+  String get notificationPushExplainerBody =>
+      'Voice может отправлять push о сообщениях, упоминаниях, заявках в друзья и матчмейкинге — даже когда приложение в фоне.';
+
+  @override
+  String get notificationPushExplainerContinue => 'Продолжить';
+
+  @override
+  String get notificationPushStatusGranted => 'Включено на этом устройстве';
+
+  @override
+  String get notificationPushStatusDenied =>
+      'Заблокировано — включите в настройках системы';
+
+  @override
+  String get notificationPushStatusNotDetermined => 'Ещё не включено';
+
+  @override
+  String get notificationPushStatusUnsupported =>
+      'Недоступно на этом устройстве';
+
+  @override
+  String get notificationPushEnabled => 'Push-уведомления включены';
+
+  @override
+  String get notificationPushDenied => 'Разрешение на push отклонено';
+
+  @override
+  String get notificationPushUnsupported => 'Push недоступен в этой сборке';
 
   @override
   String get privacyLoadError => 'Не удалось загрузить настройки приватности';
@@ -1608,6 +1814,14 @@ class AppLocalizationsRu extends AppLocalizations {
   String get screenShareWaitingForVideo => 'Ожидание видео…';
 
   @override
+  String get platformWebSystemAudioUnavailable =>
+      'Шаринг системного аудио недоступен в браузере';
+
+  @override
+  String get platformWebGlobalPttUnavailable =>
+      'Глобальные горячие клавиши push-to-talk недоступны вне вкладки браузера';
+
+  @override
   String get themeLoadError => 'Не удалось загрузить тему';
 
   @override
@@ -1748,6 +1962,19 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get queueSearchTimeoutBody => 'Найти не удалось, попробуйте снова.';
+
+  @override
+  String get queueSearchRecoveryReturnToQueue => 'Вернуться в очередь';
+
+  @override
+  String get queueSearchDeclinedTitle => 'Матч отклонён';
+
+  @override
+  String get queueSearchDeclinedBody =>
+      'Матч отклонён. Поиск продолжается с текущими параметрами.';
+
+  @override
+  String get queueSearchRecoveryContinueSearch => 'Продолжить поиск';
 
   @override
   String get matchFoundTitle => 'Матч найден';
@@ -2167,4 +2394,57 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get storyGameTagTapHint => 'Открыть страницу игры';
+
+  @override
+  String get onboardingSkip => 'Пропустить';
+
+  @override
+  String get onboardingGotIt => 'Понятно';
+
+  @override
+  String get onboardingLater => 'Позже';
+
+  @override
+  String get onboardingSaveAccountTitle => 'Сохрани аккаунт';
+
+  @override
+  String get onboardingSaveAccountBody =>
+      'Укажи ник, добавь email — сохрани аккаунт, чтобы не потерять доступ.';
+
+  @override
+  String get onboardingChatsNavTitle => 'Чаты и навигация';
+
+  @override
+  String get onboardingChatsNavBody =>
+      'Здесь все твои чаты. ЛС, группы, каналы и спейсы — каждый в своей папке.';
+
+  @override
+  String get onboardingSpacesTitle => 'Спейсы';
+
+  @override
+  String get onboardingSpacesBody =>
+      'Спейсы — это сообщества с каналами и войс-чатами. Найди спейс по своей игре или создай свой.';
+
+  @override
+  String get onboardingSpacesFind => 'Найти спейс';
+
+  @override
+  String get onboardingMatchmakingTitle => 'Матчмейкинг';
+
+  @override
+  String get onboardingMatchmakingBody =>
+      'Ищешь команду? Мы подберём людей под твои критерии.';
+
+  @override
+  String get onboardingMatchmakingTry => 'Попробовать';
+
+  @override
+  String get onboardingWrapUpTitle => 'Готово!';
+
+  @override
+  String get onboardingWrapUpBody =>
+      'Ты разобрался с основами! Если что-то непонятно — раздел помощи всегда в настройках.';
+
+  @override
+  String get onboardingWrapUpStart => 'Начать';
 }

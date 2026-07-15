@@ -4,19 +4,28 @@ import '../backend/realtime_client.dart';
 import 'chat_providers.dart';
 import 'matchmaking_providers.dart';
 
+enum SearchRecoveryReason { timeout, declined }
+
 class MatchmakingSearchState {
   const MatchmakingSearchState({
     this.nudgeVisible = false,
-    this.timedOut = false,
+    this.recoveryReason,
   });
 
   final bool nudgeVisible;
-  final bool timedOut;
+  final SearchRecoveryReason? recoveryReason;
 
-  MatchmakingSearchState copyWith({bool? nudgeVisible, bool? timedOut}) {
+  bool get timedOut => recoveryReason == SearchRecoveryReason.timeout;
+
+  MatchmakingSearchState copyWith({
+    bool? nudgeVisible,
+    SearchRecoveryReason? recoveryReason,
+    bool clearRecoveryReason = false,
+  }) {
     return MatchmakingSearchState(
       nudgeVisible: nudgeVisible ?? this.nudgeVisible,
-      timedOut: timedOut ?? this.timedOut,
+      recoveryReason:
+          clearRecoveryReason ? null : (recoveryReason ?? this.recoveryReason),
     );
   }
 }
@@ -44,8 +53,17 @@ class MatchmakingSearchController extends Notifier<MatchmakingSearchState> {
     state = state.copyWith(nudgeVisible: false);
   }
 
-  void clearTimedOut() {
-    state = state.copyWith(timedOut: false);
+  void clearRecovery() {
+    state = state.copyWith(clearRecoveryReason: true);
+  }
+
+  void clearTimedOut() => clearRecovery();
+
+  void showDeclinedRecovery() {
+    state = state.copyWith(
+      nudgeVisible: false,
+      recoveryReason: SearchRecoveryReason.declined,
+    );
   }
 
   void _onFrame(RealtimeFrame frame) {
@@ -63,12 +81,18 @@ class MatchmakingSearchController extends Notifier<MatchmakingSearchState> {
 
   void _handleSearchEvent(String? type, Map<String, dynamic>? data) {
     if (type == 'search_nudge') {
-      state = state.copyWith(nudgeVisible: true, timedOut: false);
+      state = state.copyWith(
+        nudgeVisible: true,
+        clearRecoveryReason: true,
+      );
       return;
     }
     if (type == 'search_timeout') {
       ref.read(activeSearchSessionProvider.notifier).state = null;
-      state = state.copyWith(nudgeVisible: false, timedOut: true);
+      state = state.copyWith(
+        nudgeVisible: false,
+        recoveryReason: SearchRecoveryReason.timeout,
+      );
     }
   }
 }

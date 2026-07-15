@@ -7,6 +7,7 @@ import '../api_error_messages.dart';
 import '../../state/presence_providers.dart';
 import '../../state/social_providers.dart';
 import '../../state/stories_providers.dart';
+import '../core/voice_skeleton.dart';
 import '../core/voice_state_panel.dart';
 import '../onboarding/onboarding_anchor_keys.dart';
 import '../matchmaking/game_catalog_screen.dart';
@@ -229,19 +230,7 @@ class _SearchResults extends ConsumerWidget {
     if (state.isLoading) {
       return KeyedSubtree(
         key: SocialPanel.searchLoadingKey,
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const CircularProgressIndicator(),
-              const SizedBox(height: 16),
-              Text(
-                l10n.socialSearchLoading,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-            ],
-          ),
-        ),
+        child: const VoiceListSkeleton(rowCount: 4),
       );
     }
     if (state.errorMessage != null) {
@@ -306,7 +295,7 @@ class _FriendsTab extends ConsumerWidget {
     final friendsAsync = ref.watch(friendsListProvider);
 
     return friendsAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const VoiceListSkeleton(),
       error: (e, st) => Center(
         child: VoiceStatePanel(
           key: SocialPanel.friendsUnavailableKey,
@@ -351,7 +340,7 @@ class _RequestsTab extends ConsumerWidget {
     final actions = ref.read(socialActionsProvider);
 
     return requestsAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const VoiceListSkeleton(),
       error: (e, st) => Center(
         child: VoiceStatePanel(
           key: SocialPanel.requestsUnavailableKey,

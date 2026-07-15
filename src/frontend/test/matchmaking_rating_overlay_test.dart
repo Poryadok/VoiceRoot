@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_frontend/backend/matchmaking_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
+import 'package:voice_frontend/state/matchmaking_search_controller.dart';
 import 'package:voice_frontend/ui/matchmaking/match_rating_overlay.dart';
 
 import 'support/voice_test_theme.dart';
@@ -108,5 +109,45 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(bannedProfileId, 'p2');
+  });
+
+  testWidgets('recovery card shows timeout copy and return action', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: voiceTestTheme(),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: MatchmakingRecoveryCard(
+            reason: SearchRecoveryReason.timeout,
+            onAction: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(MatchmakingRecoveryCard.timeoutStateKey), findsOneWidget);
+    expect(find.text('Return to queue'), findsOneWidget);
+  });
+
+  testWidgets('recovery card shows decline copy and continue action', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: voiceTestTheme(),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: MatchmakingRecoveryCard(
+            reason: SearchRecoveryReason.declined,
+            onAction: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(MatchmakingRecoveryCard.declinedStateKey), findsOneWidget);
+    expect(find.text('Continue searching'), findsOneWidget);
   });
 }

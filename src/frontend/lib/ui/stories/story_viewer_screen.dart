@@ -8,7 +8,10 @@ import '../../state/auth_providers.dart';
 import '../../state/chat_providers.dart';
 import '../../state/stories_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../../theme/voice_emoji_style.dart';
+import '../api_error_messages.dart';
 import '../core/voice_state_panel.dart';
+import '../core/voice_skeleton.dart';
 import '../report/report_sheet.dart';
 import 'lfp_story_card.dart';
 import 'story_game_tag_chip.dart';
@@ -27,6 +30,8 @@ class StoryViewerScreen extends ConsumerStatefulWidget {
   static const Key screenKey = Key('story_viewer_screen');
   static const Key reportButtonKey = Key('story_viewer_report');
   static const Key reactButtonKey = Key('story_viewer_react');
+  static const Key reactPickerKey = Key('story_viewer_react_picker');
+  static const Key reactionsRowKey = Key('story_viewer_reactions_row');
   static const Key replyButtonKey = Key('story_viewer_reply');
   static const Key viewCountKey = Key('story_viewer_view_count');
 
@@ -85,14 +90,56 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> {
     final auth = ref.read(authorizationHeaderProvider);
     final storyId = _currentStoryId;
     if (auth == null || storyId.isEmpty) return;
-    await ref.read(voiceStoriesClientProvider).reactToStory(
+
+    final emoji = await _pickReactionEmoji();
+    if (emoji == null || !mounted) return;
+
+    final result = await ref.read(voiceStoriesClientProvider).reactToStory(
           authorization: auth,
           storyId: storyId,
-          emoji: '🔥',
+          emoji: emoji,
         );
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(AppLocalizations.of(context)!.storyReactSent)),
+    final l10n = AppLocalizations.of(context)!;
+    switch (result) {
+      case StoriesApiOk():
+        ref.invalidate(storyReactionsProvider(storyId));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.storyReactSent)),
+        );
+      case StoriesApiFailure(:final message):
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message)),
+        );
+    }
+  }
+
+  Future<String?> _pickReactionEmoji() {
+    const choices = ['👍', '❤️', '🔥', '😂', '🎉'];
+    return showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        key: StoryViewerScreen.reactPickerKey,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+          child: Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              for (final emoji in choices)
+                IconButton(
+                  key: Key('story_viewer_react_emoji_$emoji'),
+                  onPressed: () => Navigator.of(context).pop(emoji),
+                  icon: Text(
+                    emoji,
+                    style: VoiceEmojiStyle.textStyle(fontSize: 28),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -206,10 +253,13 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> {
           }
         },
         child: storyAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (_, _) => VoiceStatePanel(
+          loading: () => const VoiceListSkeleton(rowCount: 4),
+          error: (error, _) => VoiceStatePanel(
             title: l10n.storyViewerLoadError,
+            message: storyViewerErrorMessage(l10n, error),
             icon: Icons.cloud_off_outlined,
+            actionLabel: l10n.commonRetry,
+            onAction: () => ref.invalidate(storyDetailProvider(storyId)),
           ),
           data: (story) {
             if (story == null) {
@@ -261,6 +311,15 @@ class _StoryContent extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     final voice = VoiceColors.of(context);
+    final reactionsAsync =
+        isAuthor ? ref.watch(storyReactionsProvider(storyId)) : null;
+    final reactionAggregates = reactionsAsync == null
+        ? const <({String emoji, int count})>[]
+        : reactionsAsync.when(
+            data: aggregateStoryReactions,
+            loading: () => const <({String emoji, int count})>[],
+            error: (_, _) => const <({String emoji, int count})>[],
+          );
 
     if (story.isLookingForParty) {
       return Center(
@@ -333,6 +392,7 @@ class _StoryContent extends ConsumerWidget {
               l10n,
               voice,
               showViewCount: isAuthor,
+              reactionAggregates: reactionAggregates,
             ),
           ],
         );
@@ -347,6 +407,7 @@ class _StoryContent extends ConsumerWidget {
           l10n,
           voice,
           showViewCount: isAuthor,
+          reactionAggregates: reactionAggregates,
         ),
       ],
     );
@@ -357,6 +418,7 @@ class _StoryContent extends ConsumerWidget {
     AppLocalizations l10n,
     VoiceColors voice, {
     bool showViewCount = false,
+    List<({String emoji, int count})> reactionAggregates = const [],
   }) {
     final gameTag = story.gameTag;
     return [
@@ -390,6 +452,25 @@ class _StoryContent extends ConsumerWidget {
             ),
           ),
         ),
+      if (showViewCount && reactionAggregates.isNotEmpty)
+        Positioned(
+          left: 16,
+          right: 16,
+          bottom: 72,
+          child: Wrap(
+            key: StoryViewerScreen.reactionsRowKey,
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final reaction in reactionAggregates)
+                _StoryReactionChip(
+                  emoji: reaction.emoji,
+                  count: reaction.count,
+                  voice: voice,
+                ),
+            ],
+          ),
+        ),
       Positioned(
         left: 16,
         right: 16,
@@ -415,12 +496,51 @@ class _StoryContent extends ConsumerWidget {
               key: reactButtonKey,
               tooltip: l10n.storyReactTooltip,
               onPressed: onReact,
-              icon: const Text('🔥', style: TextStyle(fontSize: 24)),
+              icon: const Icon(Icons.add_reaction_outlined),
             ),
           ],
         ),
       ),
     ];
+  }
+}
+
+class _StoryReactionChip extends StatelessWidget {
+  const _StoryReactionChip({
+    required this.emoji,
+    required this.count,
+    required this.voice,
+  });
+
+  final String emoji;
+  final int count;
+  final VoiceColors voice;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: voice.elevated,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(emoji, style: VoiceEmojiStyle.textStyle(fontSize: 14)),
+            if (count > 1) ...[
+              const SizedBox(width: 4),
+              Text(
+                '$count',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: voice.textSecondary,
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 }
 

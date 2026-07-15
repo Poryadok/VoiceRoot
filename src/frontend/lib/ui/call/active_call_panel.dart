@@ -8,6 +8,7 @@ import '../../state/call_providers.dart';
 import '../../state/gateway_providers.dart';
 import '../../state/screen_share_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../core/platform_capability_hints.dart';
 import 'screen_share_panel.dart';
 
 class ActiveCallPanel extends ConsumerStatefulWidget {
@@ -295,6 +296,7 @@ class _CallControlsRow extends ConsumerWidget {
             call.isVideoEnabled ? Icons.videocam : Icons.videocam_off,
           ),
         ),
+        const PlatformWebVoiceLimitationsButton(),
         const ScreenShareCallButton(),
         const ScreenSharePauseButton(),
         if (showMinimize && onMinimize != null) ...[

@@ -24,6 +24,12 @@ final globalSearchFocusRequestProvider = StateProvider<int>((ref) => 0);
 /// Bumped to request composer focus (Escape).
 final composerFocusRequestProvider = StateProvider<int>((ref) => 0);
 
+/// Last scroll offset of the home/space chat list (mobile back restores this).
+final chatListScrollOffsetProvider = StateProvider<double>((ref) => 0);
+
+/// When true, [ChatListBody] restores [chatListScrollOffsetProvider] on next frame.
+final chatListScrollRestoreProvider = StateProvider<bool>((ref) => false);
+
 /// Coordinates shell column visibility and selection consistency.
 class ShellNavigation {
   ShellNavigation(this._ref);
@@ -57,6 +63,21 @@ class ShellNavigation {
     _ref.read(realtimeHubProvider).ensureSubscribed(chatId);
     _ref.read(chatActionsProvider).rememberDmPeerForChat(chatId);
     _ref.read(shellSidePanelProvider.notifier).state = ShellSidePanel.none;
+  }
+
+  /// Mobile back: close open chat and restore chat-list scroll position.
+  void backToChatList() {
+    _ref.read(shellSidePanelProvider.notifier).state = ShellSidePanel.none;
+    _ref.read(chatListScrollRestoreProvider.notifier).state = true;
+    _ref.read(selectedChatIdProvider.notifier).state = null;
+  }
+
+  void selectStripChat(String chatId, {required bool inSpace}) {
+    if (inSpace) {
+      selectChatInSpace(chatId);
+    } else {
+      selectChatFromHome(chatId);
+    }
   }
 
   void toggleSidePanel(ShellSidePanel panel) {

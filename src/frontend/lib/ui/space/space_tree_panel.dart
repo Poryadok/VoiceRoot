@@ -8,7 +8,8 @@ import '../../backend/space_permissions.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/space_providers.dart';
 import '../../state/voice_room_providers.dart';
-import '../core/voice_list_row.dart';
+import '../api_error_messages.dart';
+import '../core/voice_disabled_action.dart';
 import '../core/voice_skeleton.dart';
 import '../core/voice_state_panel.dart';
 import 'space_voice_room_override_sheet.dart';
@@ -23,6 +24,8 @@ class SpaceTreePanel extends ConsumerWidget {
   });
 
   static const Key panelKey = Key('space_tree_panel');
+  static const Key emptyKey = Key('space_tree_empty');
+  static const Key errorKey = Key('space_tree_error');
   static Key categoryKey(String id) => Key('space_tree_category_$id');
   static Key nodeKey(String id) => Key('space_tree_node_$id');
 
@@ -40,8 +43,9 @@ class SpaceTreePanel extends ConsumerWidget {
       child: treeAsync.when(
         loading: () => const VoiceListSkeleton(),
         error: (e, _) => VoiceStatePanel(
+          key: errorKey,
           title: l10n.spaceTreeLoadError,
-          message: e.toString(),
+          message: spaceTreeErrorMessage(l10n, e),
           icon: Icons.account_tree_outlined,
           actionLabel: l10n.commonRetry,
           onAction: () => ref.invalidate(spaceTreeProvider(spaceId)),
@@ -49,6 +53,7 @@ class SpaceTreePanel extends ConsumerWidget {
         data: (tree) {
           if (tree.nodes.isEmpty && tree.categories.isEmpty) {
             return VoiceStatePanel(
+              key: emptyKey,
               title: l10n.spaceTreeEmpty,
               icon: Icons.account_tree_outlined,
             );
@@ -197,35 +202,75 @@ class _TreeNodeTile extends ConsumerWidget {
         node.isVoiceRoom && voiceRoomId != null && selectedVoiceRoomId == voiceRoomId;
     final textSelected =
         node.isTextChat && node.linkedChatId == selectedChatId;
-    final canManageRoles = ref
-            .watch(
-              spacePermissionProvider((
-                spaceId: node.spaceId,
-                permission: SpacePermissions.spaceManageRoles,
-                chatId: null,
-                voiceRoomId: null,
-              )),
-            )
-            .valueOrNull ??
-        false;
+    final manageRoles = resolveSpacePermission(
+      l10n,
+      ref.watch(
+        spacePermissionProvider((
+          spaceId: node.spaceId,
+          permission: SpacePermissions.spaceManageRoles,
+          chatId: null,
+          voiceRoomId: null,
+        )),
+      ),
+      SpacePermissions.spaceManageRoles,
+    );
+    final ({bool allowed, String? deniedReason}) voiceJoin;
+    if (voiceRoomId == null) {
+      voiceJoin = (allowed: true, deniedReason: null);
+    } else {
+      voiceJoin = resolveSpacePermission(
+        l10n,
+        ref.watch(
+          spacePermissionProvider((
+            spaceId: node.spaceId,
+            permission: SpacePermissions.voiceJoin,
+            chatId: null,
+            voiceRoomId: voiceRoomId,
+          )),
+        ),
+        SpacePermissions.voiceJoin,
+      );
+    }
+    final ({bool allowed, String? deniedReason}) channelPost;
+    if (!node.isChannelChat || node.linkedChatId == null) {
+      channelPost = (allowed: true, deniedReason: null);
+    } else {
+      channelPost = resolveSpacePermission(
+        l10n,
+        ref.watch(
+          spacePermissionProvider((
+            spaceId: node.spaceId,
+            permission: SpacePermissions.textChatSendMessages,
+            chatId: node.linkedChatId,
+            voiceRoomId: null,
+          )),
+        ),
+        SpacePermissions.textChatSendMessages,
+      );
+    }
+    final disabledReason = node.isVoiceRoom
+        ? voiceJoin.deniedReason
+        : channelPost.deniedReason;
+    final baseSubtitle = node.isVoiceRoom
+        ? l10n.spaceTreeVoiceRoom
+        : l10n.spaceTreeTextChat;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        VoiceListRow(
+        VoicePermissionListRow(
           selected: textSelected || isVoiceSelected,
           title: node.displayName,
-          subtitle: node.isVoiceRoom
-              ? l10n.spaceTreeVoiceRoom
-              : l10n.spaceTreeTextChat,
+          baseSubtitle: baseSubtitle,
+          disabledReason: disabledReason,
           leading: Icon(_nodeIcon(node), size: 20),
-          trailing: node.isVoiceRoom &&
-                  voiceRoomId != null &&
-                  canManageRoles
-              ? IconButton(
+          trailing: node.isVoiceRoom && voiceRoomId != null
+              ? VoiceDisabledIconButton(
                   key: Key('voice_room_overrides_$voiceRoomId'),
                   icon: const Icon(Icons.admin_panel_settings_outlined, size: 18),
+                  iconSize: 18,
                   tooltip: l10n.spaceVoiceOverrideTitle,
+                  disabledReason: manageRoles.deniedReason,
                   onPressed: () => SpaceVoiceRoomOverrideSheet.show(
                     context,
                     spaceId: node.spaceId,
@@ -233,7 +278,7 @@ class _TreeNodeTile extends ConsumerWidget {
                   ),
                 )
               : null,
-          onTap: () => _onTap(ref),
+          onTap: () => _onTap(ref, voiceJoinAllowed: voiceJoin.allowed),
         ),
         if (isVoiceSelected)
           _VoiceRoomParticipants(voiceRoomId: voiceRoomId),
@@ -247,13 +292,13 @@ class _TreeNodeTile extends ConsumerWidget {
     return Icons.forum_outlined;
   }
 
-  void _onTap(WidgetRef ref) {
+  void _onTap(WidgetRef ref, {required bool voiceJoinAllowed}) {
     if (node.isTextChat && node.linkedChatId != null) {
       onTextChatSelected(node.linkedChatId!);
       return;
     }
     final voiceRoomId = node.voiceRoomId;
-    if (!node.isVoiceRoom || voiceRoomId == null) return;
+    if (!node.isVoiceRoom || voiceRoomId == null || !voiceJoinAllowed) return;
     ref.read(selectedVoiceRoomIdProvider.notifier).state = voiceRoomId;
     unawaited(
       ref.read(joinVoiceRoomActionProvider)(

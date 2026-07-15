@@ -145,6 +145,29 @@ void main() {
     expect(find.bySemanticsLabel(RegExp('3 unread')), findsOneWidget);
   });
 
+  testWidgets('strip chat tiles meet minimum touch target', (tester) async {
+    final container = ProviderContainer(overrides: _stripOverrides());
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: MobileChatStrip()),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final tile = tester.getSize(find.byKey(MobileChatStrip.tileKey('chat-a')));
+    expect(tile.width, greaterThanOrEqualTo(44));
+    expect(tile.height, greaterThanOrEqualTo(44));
+  });
+
   testWidgets('tapping strip icon selects chat', (tester) async {
     final container = ProviderContainer(overrides: _stripOverrides());
     addTearDown(container.dispose);

@@ -8,6 +8,7 @@ import '../../state/matchmaking_providers.dart';
 import '../../state/matchmaking_search_controller.dart';
 import '../../theme/voice_colors.dart';
 import '../core/voice_compact_banner.dart';
+import 'match_rating_overlay.dart';
 
 /// Solo queue search: criteria form, searching state, cancel.
 class QueueSearchScreen extends ConsumerStatefulWidget {
@@ -22,7 +23,8 @@ class QueueSearchScreen extends ConsumerStatefulWidget {
   static const Key cancelButtonKey = Key('queue_search_cancel');
   static const Key searchingStateKey = Key('queue_search_searching');
   static const Key nudgeBannerKey = Key('queue_search_nudge');
-  static const Key timeoutStateKey = Key('queue_search_timeout');
+  static const Key timeoutStateKey = MatchmakingRecoveryCard.timeoutStateKey;
+  static const Key declinedStateKey = MatchmakingRecoveryCard.declinedStateKey;
 
   final CatalogGame game;
   final GameMode mode;
@@ -93,7 +95,11 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
     final searchState = ref.watch(matchmakingSearchControllerProvider);
     final session = _session ?? globalSession;
     final searching = session != null && session.status == 'searching';
-    final timedOut = searchState.timedOut && !searching;
+    final recoveryReason = searchState.recoveryReason;
+    final showTimeoutRecovery =
+        recoveryReason == SearchRecoveryReason.timeout && !searching;
+    final showDeclinedRecovery =
+        recoveryReason == SearchRecoveryReason.declined && searching;
 
     ref.listen<SearchSessionData?>(activeSearchSessionProvider, (prev, next) {
       if (next == null && prev != null && mounted) {
@@ -105,7 +111,7 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
 
     ref.listen<MatchmakingSearchState>(matchmakingSearchControllerProvider,
         (prev, next) {
-      if (next.timedOut && mounted) {
+      if (next.recoveryReason == SearchRecoveryReason.timeout && mounted) {
         setState(() => _session = null);
       }
     });
@@ -120,35 +126,30 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
           const SizedBox(height: 4),
           Text(widget.mode.name, style: Theme.of(context).textTheme.bodyMedium),
           const SizedBox(height: 16),
-          if (timedOut) ...[
-            Card(
-              key: QueueSearchScreen.timeoutStateKey,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      l10n.queueSearchTimeoutTitle,
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(l10n.queueSearchTimeoutBody),
-                    const SizedBox(height: 12),
-                    FilledButton(
-                      onPressed: () {
-                        ref
-                            .read(matchmakingSearchControllerProvider.notifier)
-                            .clearTimedOut();
-                        setState(() {});
-                      },
-                      child: Text(l10n.queueSearchStart),
-                    ),
-                  ],
+          if (showTimeoutRecovery)
+            MatchmakingRecoveryCard(
+              reason: SearchRecoveryReason.timeout,
+              onAction: () {
+                ref
+                    .read(matchmakingSearchControllerProvider.notifier)
+                    .clearRecovery();
+                setState(() {});
+              },
+            )
+          else if (searching) ...[
+            if (showDeclinedRecovery)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: MatchmakingRecoveryCard(
+                  reason: SearchRecoveryReason.declined,
+                  onAction: () {
+                    ref
+                        .read(matchmakingSearchControllerProvider.notifier)
+                        .clearRecovery();
+                    setState(() {});
+                  },
                 ),
               ),
-            ),
-          ] else if (searching) ...[
             if (searchState.nudgeVisible)
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),

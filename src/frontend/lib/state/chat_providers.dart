@@ -1387,6 +1387,96 @@ final realtimeLinkStatusProvider = StateProvider<RealtimeLinkStatus>(
   (ref) => RealtimeLinkStatus.disconnected,
 );
 
+/// Debounced reconnect banner per [ARCHITECTURE_REQUIREMENTS.md]:
+/// show 2s after disconnect, hide 1s after successful reconnect.
+const reconnectBannerShowDelay = Duration(seconds: 2);
+const reconnectBannerHideDelay = Duration(seconds: 1);
+
+class ReconnectBannerController extends Notifier<bool> {
+  Timer? _showTimer;
+  Timer? _hideTimer;
+  var _wasConnected = false;
+  var _disposed = false;
+
+  @override
+  bool build() {
+    ref.onDispose(() {
+      _disposed = true;
+      _cancelTimers();
+    });
+    ref.listen<RealtimeLinkStatus>(realtimeLinkStatusProvider, (prev, next) {
+      _onLinkStatusChanged(prev, next);
+    }, fireImmediately: true);
+    return false;
+  }
+
+  void _cancelTimers() {
+    _showTimer?.cancel();
+    _showTimer = null;
+    _hideTimer?.cancel();
+    _hideTimer = null;
+  }
+
+  bool _isUnhealthy(RealtimeLinkStatus status) {
+    return status == RealtimeLinkStatus.reconnecting ||
+        (status == RealtimeLinkStatus.connecting && _wasConnected);
+  }
+
+  void _scheduleShow() {
+    _showTimer?.cancel();
+    _showTimer = Timer(reconnectBannerShowDelay, () {
+      _showTimer = null;
+      if (_disposed) return;
+      if (_isUnhealthy(ref.read(realtimeLinkStatusProvider))) {
+        state = true;
+      }
+    });
+  }
+
+  void _onLinkStatusChanged(RealtimeLinkStatus? prev, RealtimeLinkStatus next) {
+    if (next == RealtimeLinkStatus.connected) {
+      _wasConnected = true;
+      _showTimer?.cancel();
+      _showTimer = null;
+      if (state) {
+        _hideTimer?.cancel();
+        _hideTimer = Timer(reconnectBannerHideDelay, () {
+          _hideTimer = null;
+          if (_disposed) return;
+          state = false;
+        });
+      } else {
+        _hideTimer?.cancel();
+        _hideTimer = null;
+      }
+      return;
+    }
+
+    if (next == RealtimeLinkStatus.disconnected) {
+      _cancelTimers();
+      _wasConnected = false;
+      state = false;
+      return;
+    }
+
+    if (next == RealtimeLinkStatus.connecting && !_wasConnected) {
+      return;
+    }
+
+    final lostConnection = prev == RealtimeLinkStatus.connected;
+    if (_isUnhealthy(next) && (lostConnection || (!state && _showTimer == null))) {
+      _hideTimer?.cancel();
+      _hideTimer = null;
+      _scheduleShow();
+    }
+  }
+}
+
+final reconnectBannerVisibleProvider =
+    NotifierProvider<ReconnectBannerController, bool>(
+  ReconnectBannerController.new,
+);
+
 final realtimeEventProvider = StreamProvider<RealtimeFrame>((ref) {
   final hub = ref.watch(realtimeHubProvider);
   return hub.events;

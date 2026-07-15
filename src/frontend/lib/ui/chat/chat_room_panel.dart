@@ -83,6 +83,7 @@ class ChatRoomPanel extends ConsumerStatefulWidget {
   static const Key slashCommandsKey = Key('chat_room_slash_commands');
   static const Key emojiPickerKey = Key('chat_room_emoji_picker');
   static const Key offlineBannerKey = Key('chat_room_offline_banner');
+  static const Key reconnectBannerKey = Key('chat_room_reconnect_banner');
   static const Key spaceSlowModeKey = Key('chat_room_space_slow_mode');
   static const Key inChatSearchKey = Key('chat_room_in_chat_search');
   static const Key chatInfoKey = Key('chat_room_chat_info');
@@ -556,8 +557,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
           ),
         ),
         if (room.isLoading) const LinearProgressIndicator(minHeight: 2),
-        if (room.realtimeStatus == RealtimeLinkStatus.reconnecting)
+        if (ref.watch(reconnectBannerVisibleProvider))
           VoiceCompactBanner(
+            key: ChatRoomPanel.reconnectBannerKey,
             message: l10n.chatRealtimeReconnecting,
             icon: Icons.sync_problem,
             tone: VoiceBannerTone.warning,

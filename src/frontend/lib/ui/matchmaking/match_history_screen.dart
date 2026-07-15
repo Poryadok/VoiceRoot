@@ -8,6 +8,7 @@ import '../../state/auth_providers.dart';
 import '../../state/matchmaking_providers.dart';
 import '../../state/social_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../core/voice_skeleton.dart';
 import '../core/voice_state_panel.dart';
 import '../social/profile_detail_sheet.dart';
 import 'game_detail_screen.dart';
@@ -169,7 +170,7 @@ class _MatchHistoryScreenState extends ConsumerState<MatchHistoryScreen> {
       key: MatchHistoryScreen.screenKey,
       appBar: AppBar(title: Text(l10n.matchHistoryTitle)),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const VoiceListSkeleton()
           : _error != null && _matches.isEmpty
               ? VoiceStatePanel(
                   key: MatchHistoryScreen.errorKey,

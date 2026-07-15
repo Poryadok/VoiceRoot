@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/onboarding_controller.dart';
 import '../../state/shell_providers.dart';
@@ -57,6 +58,8 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
     final step = onboarding.currentStep;
     if (step == null) return;
 
+    final l10n = AppLocalizations.of(context)!;
+
     if (step == OnboardingStep.saveAccount &&
         ref.read(authControllerProvider).isGuest) {
       ref.read(onboardingControllerProvider.notifier).completeCurrentStep();
@@ -65,23 +68,23 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
 
     switch (step) {
       case OnboardingStep.saveAccount:
-        _showSaveAccountModal();
+        _showSaveAccountModal(l10n);
       case OnboardingStep.chatsNav:
         _showCoachMark(
           anchorKey: OnboardingAnchorKeys.chatsNav,
-          title: 'Chats and navigation',
-          body:
-              'All your chats live here — DMs, groups, channels, and spaces.',
+          title: l10n.onboardingChatsNavTitle,
+          body: l10n.onboardingChatsNavBody,
+          continueLabel: l10n.onboardingGotIt,
           onContinue: () =>
               ref.read(onboardingControllerProvider.notifier).completeCurrentStep(),
         );
       case OnboardingStep.spaces:
         _showCoachMark(
           anchorKey: OnboardingAnchorKeys.spaces,
-          title: 'Spaces',
-          body:
-              'Spaces are communities with channels and voice rooms. Find one for your game or create your own.',
-          secondaryLabel: 'Find a space',
+          title: l10n.onboardingSpacesTitle,
+          body: l10n.onboardingSpacesBody,
+          continueLabel: l10n.onboardingLater,
+          secondaryLabel: l10n.onboardingSpacesFind,
           onSecondary: () {
             ref.read(shellNavigationProvider).setNavigationSection(
               NavigationSection.chats,
@@ -100,10 +103,10 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
           if (!mounted) return;
           _showCoachMark(
             anchorKey: OnboardingAnchorKeys.matchmaking,
-            title: 'Matchmaking',
-            body:
-                'Looking for a squad? We match you with people who fit your criteria.',
-            secondaryLabel: 'Try it',
+            title: l10n.onboardingMatchmakingTitle,
+            body: l10n.onboardingMatchmakingBody,
+            continueLabel: l10n.onboardingLater,
+            secondaryLabel: l10n.onboardingMatchmakingTry,
             onSecondary: () {
               ref.read(onboardingControllerProvider.notifier).completeCurrentStep();
             },
@@ -113,11 +116,11 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
         });
       case OnboardingStep.wrapUp:
         _showHintDialog(
-          title: 'You are all set',
-          body: 'You know the basics! Help is always available in Settings.',
+          title: l10n.onboardingWrapUpTitle,
+          body: l10n.onboardingWrapUpBody,
           onContinue: () =>
               ref.read(onboardingControllerProvider.notifier).completeCurrentStep(),
-          continueLabel: 'Start',
+          continueLabel: l10n.onboardingWrapUpStart,
         );
     }
   }
@@ -127,9 +130,11 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
     required String title,
     required String body,
     required VoidCallback onContinue,
+    String? continueLabel,
     String? secondaryLabel,
     VoidCallback? onSecondary,
   }) {
+    final l10n = AppLocalizations.of(context)!;
     _clearCoachMark();
     if (!mounted) return;
     _coachMark = OnboardingCoachMark.show(
@@ -146,6 +151,8 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
         _clearCoachMark();
         ref.read(onboardingControllerProvider.notifier).dismiss();
       },
+      continueLabel: continueLabel ?? l10n.onboardingGotIt,
+      skipLabel: l10n.onboardingSkip,
       secondaryLabel: secondaryLabel,
       onSecondary: onSecondary == null
           ? null
@@ -156,7 +163,7 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
     );
   }
 
-  Future<void> _showSaveAccountModal() async {
+  Future<void> _showSaveAccountModal(AppLocalizations l10n) async {
     final profile = ref.read(activeProfileProvider).valueOrNull;
     if (profile == null) return;
     if (!mounted) return;
@@ -164,17 +171,15 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        title: const Text('Save your account'),
-        content: const Text(
-          'Set a username and optional email so you do not lose access.',
-        ),
+        title: Text(l10n.onboardingSaveAccountTitle),
+        content: Text(l10n.onboardingSaveAccountBody),
         actions: [
           TextButton(
             onPressed: () async {
               await ref.read(onboardingControllerProvider.notifier).dismiss();
               if (ctx.mounted) Navigator.of(ctx).pop();
             },
-            child: const Text('Skip'),
+            child: Text(l10n.onboardingSkip),
           ),
           FilledButton(
             onPressed: () async {
@@ -188,7 +193,7 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
               await ref.read(onboardingControllerProvider.notifier).completeCurrentStep();
               _maybeShowStep();
             },
-            child: const Text('Save'),
+            child: Text(l10n.commonSave),
           ),
         ],
       ),
@@ -200,8 +205,9 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
     required String title,
     required String body,
     required VoidCallback onContinue,
-    String continueLabel = 'Got it',
+    required String continueLabel,
   }) async {
+    final l10n = AppLocalizations.of(context)!;
     if (!mounted) return;
     await showDialog<void>(
       context: context,
@@ -214,7 +220,7 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
               await ref.read(onboardingControllerProvider.notifier).dismiss();
               if (ctx.mounted) Navigator.of(ctx).pop();
             },
-            child: const Text('Skip'),
+            child: Text(l10n.onboardingSkip),
           ),
           FilledButton(
             onPressed: () {

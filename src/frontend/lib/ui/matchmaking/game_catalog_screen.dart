@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../backend/matchmaking_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/matchmaking_providers.dart';
+import '../api_error_messages.dart';
+import '../core/voice_skeleton.dart';
 import '../core/voice_state_panel.dart';
 import 'game_detail_screen.dart';
 
@@ -76,11 +78,13 @@ class _GameCatalogScreenState extends ConsumerState<GameCatalogScreen> {
                   );
                 },
               ),
-              loading: () => const Center(child: CircularProgressIndicator()),
+              loading: () => const VoiceListSkeleton(),
               error: (error, _) => VoiceStatePanel(
                 icon: Icons.videogame_asset_off_outlined,
                 title: l10n.gameCatalogLoadError,
-                message: error.toString(),
+                message: gameCatalogErrorMessage(l10n, error),
+                actionLabel: l10n.commonRetry,
+                onAction: () => ref.invalidate(gameCatalogSearchProvider),
               ),
             ),
           ),

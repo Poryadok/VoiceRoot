@@ -656,6 +656,36 @@ abstract class AppLocalizations {
   /// **'No bot commands in this chat.'**
   String get slashCommandsEmpty;
 
+  /// No description provided for @slashCommandsEmptyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Install bots in Space settings, or enable them for this chat in Chat info.'**
+  String get slashCommandsEmptyHint;
+
+  /// No description provided for @slashCommandsDmEmptyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Bot slash commands are available only in space text chats.'**
+  String get slashCommandsDmEmptyHint;
+
+  /// No description provided for @slashCommandsNoMatch.
+  ///
+  /// In en, this message translates to:
+  /// **'No matching commands'**
+  String get slashCommandsNoMatch;
+
+  /// No description provided for @slashCommandsNoMatchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep typing after / or try another command or bot name.'**
+  String get slashCommandsNoMatchHint;
+
+  /// No description provided for @slashCommandsHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Type / in the message box to open this menu. Greyed-out commands mean the bot is offline.'**
+  String get slashCommandsHelp;
+
   /// No description provided for @botUnavailableTooltip.
   ///
   /// In en, this message translates to:
@@ -1286,6 +1316,12 @@ abstract class AppLocalizations {
   /// **'No replies yet'**
   String get chatThreadEmpty;
 
+  /// No description provided for @chatThreadLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load thread'**
+  String get chatThreadLoadError;
+
   /// No description provided for @chatChannelMainFeedBlocked.
   ///
   /// In en, this message translates to:
@@ -1850,6 +1886,36 @@ abstract class AppLocalizations {
   /// **'Could not timeout member: {message}'**
   String spaceTimeoutError(String message);
 
+  /// No description provided for @spacePermissionDeniedManageRoles.
+  ///
+  /// In en, this message translates to:
+  /// **'You need permission to manage roles'**
+  String get spacePermissionDeniedManageRoles;
+
+  /// No description provided for @spacePermissionDeniedSetSlowMode.
+  ///
+  /// In en, this message translates to:
+  /// **'You need permission to change slow mode'**
+  String get spacePermissionDeniedSetSlowMode;
+
+  /// No description provided for @spacePermissionDeniedVoiceJoin.
+  ///
+  /// In en, this message translates to:
+  /// **'You need permission to join this voice room'**
+  String get spacePermissionDeniedVoiceJoin;
+
+  /// No description provided for @spacePermissionDeniedSendMessages.
+  ///
+  /// In en, this message translates to:
+  /// **'You need permission to post in this channel'**
+  String get spacePermissionDeniedSendMessages;
+
+  /// No description provided for @spacePermissionDeniedGeneric.
+  ///
+  /// In en, this message translates to:
+  /// **'Missing permission: {permission}'**
+  String spacePermissionDeniedGeneric(String permission);
+
   /// No description provided for @spaceSlowMode.
   ///
   /// In en, this message translates to:
@@ -2372,6 +2438,96 @@ abstract class AppLocalizations {
   /// **'Cancel subscription'**
   String get subscriptionCancel;
 
+  /// No description provided for @subscriptionStatusGracePeriod.
+  ///
+  /// In en, this message translates to:
+  /// **'Premium — payment issue'**
+  String get subscriptionStatusGracePeriod;
+
+  /// No description provided for @subscriptionStatusPremiumUntil.
+  ///
+  /// In en, this message translates to:
+  /// **'Premium until {date}'**
+  String subscriptionStatusPremiumUntil(String date);
+
+  /// No description provided for @subscriptionGracePeriodHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Update your payment method to keep Premium benefits.'**
+  String get subscriptionGracePeriodHint;
+
+  /// No description provided for @subscriptionPremiumUntilHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Premium features stay active until this date.'**
+  String get subscriptionPremiumUntilHint;
+
+  /// No description provided for @subscriptionLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load subscription'**
+  String get subscriptionLoadError;
+
+  /// No description provided for @subscriptionRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get subscriptionRetry;
+
+  /// No description provided for @subscriptionFreeTierNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Messages and chats stay free on the Free plan.'**
+  String get subscriptionFreeTierNote;
+
+  /// No description provided for @subscriptionUpgradeSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlock cosmetics, larger uploads, and more profiles — without losing access to messages.'**
+  String get subscriptionUpgradeSubtitle;
+
+  /// No description provided for @subscriptionBenefitBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'Premium ★ badge in chats'**
+  String get subscriptionBenefitBadge;
+
+  /// No description provided for @subscriptionBenefitUploads.
+  ///
+  /// In en, this message translates to:
+  /// **'200 MB file uploads'**
+  String get subscriptionBenefitUploads;
+
+  /// No description provided for @subscriptionBenefitProfiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Up to 5 profiles'**
+  String get subscriptionBenefitProfiles;
+
+  /// No description provided for @subscriptionBillingPeriodMonthly.
+  ///
+  /// In en, this message translates to:
+  /// **'Monthly'**
+  String get subscriptionBillingPeriodMonthly;
+
+  /// No description provided for @subscriptionBillingPeriodYearly.
+  ///
+  /// In en, this message translates to:
+  /// **'Yearly'**
+  String get subscriptionBillingPeriodYearly;
+
+  /// No description provided for @subscriptionCheckoutLaunchFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open checkout'**
+  String get subscriptionCheckoutLaunchFailed;
+
+  /// No description provided for @subscriptionInvalidCheckoutUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Checkout link is invalid'**
+  String get subscriptionInvalidCheckoutUrl;
+
   /// No description provided for @subscriptionProfilesLoadError.
   ///
   /// In en, this message translates to:
@@ -2527,6 +2683,216 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Privacy'**
   String get privacySettingsTitle;
+
+  /// No description provided for @notificationSettingsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications'**
+  String get notificationSettingsTitle;
+
+  /// No description provided for @notificationChatSettingsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat notifications'**
+  String get notificationChatSettingsTitle;
+
+  /// No description provided for @notificationChatOverridesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Notification overrides'**
+  String get notificationChatOverridesTitle;
+
+  /// No description provided for @notificationChatOverridesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Customize alerts for this chat'**
+  String get notificationChatOverridesHint;
+
+  /// No description provided for @notificationLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load notification settings'**
+  String get notificationLoadError;
+
+  /// No description provided for @notificationSettingsSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Notification settings saved'**
+  String get notificationSettingsSaved;
+
+  /// No description provided for @notificationSettingsSavedQuietHoursFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings saved, but quiet hours could not sync'**
+  String get notificationSettingsSavedQuietHoursFailed;
+
+  /// No description provided for @notificationGlobalEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications enabled'**
+  String get notificationGlobalEnabled;
+
+  /// No description provided for @notificationChatEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications for this chat'**
+  String get notificationChatEnabled;
+
+  /// No description provided for @notificationEventTypesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Event types'**
+  String get notificationEventTypesTitle;
+
+  /// No description provided for @notificationTypeNewMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Direct messages'**
+  String get notificationTypeNewMessage;
+
+  /// No description provided for @notificationTypeMention.
+  ///
+  /// In en, this message translates to:
+  /// **'Mentions'**
+  String get notificationTypeMention;
+
+  /// No description provided for @notificationTypeReply.
+  ///
+  /// In en, this message translates to:
+  /// **'Replies'**
+  String get notificationTypeReply;
+
+  /// No description provided for @notificationTypeReaction.
+  ///
+  /// In en, this message translates to:
+  /// **'Reactions'**
+  String get notificationTypeReaction;
+
+  /// No description provided for @notificationTypeFriendRequest.
+  ///
+  /// In en, this message translates to:
+  /// **'Friend requests'**
+  String get notificationTypeFriendRequest;
+
+  /// No description provided for @notificationTypeMatchFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Match found'**
+  String get notificationTypeMatchFound;
+
+  /// No description provided for @notificationTypeSystem.
+  ///
+  /// In en, this message translates to:
+  /// **'System'**
+  String get notificationTypeSystem;
+
+  /// No description provided for @notificationQuietHoursTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Quiet hours'**
+  String get notificationQuietHoursTitle;
+
+  /// No description provided for @notificationQuietHoursEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable quiet hours'**
+  String get notificationQuietHoursEnabled;
+
+  /// No description provided for @notificationQuietHoursStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Start'**
+  String get notificationQuietHoursStart;
+
+  /// No description provided for @notificationQuietHoursEnd.
+  ///
+  /// In en, this message translates to:
+  /// **'End'**
+  String get notificationQuietHoursEnd;
+
+  /// No description provided for @notificationQuietHoursOverrideMentions.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow mentions during quiet hours'**
+  String get notificationQuietHoursOverrideMentions;
+
+  /// No description provided for @notificationQuietHoursOverrideMentionsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'When enabled, @mentions still notify you'**
+  String get notificationQuietHoursOverrideMentionsHint;
+
+  /// No description provided for @notificationPushSectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Device notifications'**
+  String get notificationPushSectionTitle;
+
+  /// No description provided for @notificationPushEnableTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable push notifications'**
+  String get notificationPushEnableTitle;
+
+  /// No description provided for @notificationPushExplainerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Stay in the loop'**
+  String get notificationPushExplainerTitle;
+
+  /// No description provided for @notificationPushExplainerBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice can send push notifications for messages, mentions, friend requests, and matchmaking — even when the app is in the background.'**
+  String get notificationPushExplainerBody;
+
+  /// No description provided for @notificationPushExplainerContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get notificationPushExplainerContinue;
+
+  /// No description provided for @notificationPushStatusGranted.
+  ///
+  /// In en, this message translates to:
+  /// **'Enabled on this device'**
+  String get notificationPushStatusGranted;
+
+  /// No description provided for @notificationPushStatusDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Blocked — enable in system settings'**
+  String get notificationPushStatusDenied;
+
+  /// No description provided for @notificationPushStatusNotDetermined.
+  ///
+  /// In en, this message translates to:
+  /// **'Not enabled yet'**
+  String get notificationPushStatusNotDetermined;
+
+  /// No description provided for @notificationPushStatusUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'Not available on this device'**
+  String get notificationPushStatusUnsupported;
+
+  /// No description provided for @notificationPushEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Push notifications enabled'**
+  String get notificationPushEnabled;
+
+  /// No description provided for @notificationPushDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Push permission was denied'**
+  String get notificationPushDenied;
+
+  /// No description provided for @notificationPushUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'Push is not available in this build'**
+  String get notificationPushUnsupported;
 
   /// No description provided for @privacyLoadError.
   ///
@@ -2966,6 +3332,18 @@ abstract class AppLocalizations {
   /// **'Waiting for screen video…'**
   String get screenShareWaitingForVideo;
 
+  /// No description provided for @platformWebSystemAudioUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'System audio sharing is not available in the browser'**
+  String get platformWebSystemAudioUnavailable;
+
+  /// No description provided for @platformWebGlobalPttUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Global push-to-talk hotkeys are not available outside this browser tab'**
+  String get platformWebGlobalPttUnavailable;
+
   /// No description provided for @themeLoadError.
   ///
   /// In en, this message translates to:
@@ -3017,7 +3395,7 @@ abstract class AppLocalizations {
   /// No description provided for @guestConvertSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Add your email to keep your chats and profile.'**
+  /// **'Add email and password to keep your chats and profile.'**
   String get guestConvertSubtitle;
 
   /// No description provided for @guestConvertSubmit.
@@ -3235,6 +3613,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'We couldn\'t find teammates this time. Please try again.'**
   String get queueSearchTimeoutBody;
+
+  /// No description provided for @queueSearchRecoveryReturnToQueue.
+  ///
+  /// In en, this message translates to:
+  /// **'Return to queue'**
+  String get queueSearchRecoveryReturnToQueue;
+
+  /// No description provided for @queueSearchDeclinedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Match declined'**
+  String get queueSearchDeclinedTitle;
+
+  /// No description provided for @queueSearchDeclinedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The match was declined. Search continues with your current parameters.'**
+  String get queueSearchDeclinedBody;
+
+  /// No description provided for @queueSearchRecoveryContinueSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue searching'**
+  String get queueSearchRecoveryContinueSearch;
 
   /// No description provided for @matchFoundTitle.
   ///
@@ -3979,6 +4381,102 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open game page'**
   String get storyGameTagTapHint;
+
+  /// No description provided for @onboardingSkip.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip'**
+  String get onboardingSkip;
+
+  /// No description provided for @onboardingGotIt.
+  ///
+  /// In en, this message translates to:
+  /// **'Got it'**
+  String get onboardingGotIt;
+
+  /// No description provided for @onboardingLater.
+  ///
+  /// In en, this message translates to:
+  /// **'Later'**
+  String get onboardingLater;
+
+  /// No description provided for @onboardingSaveAccountTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Save your account'**
+  String get onboardingSaveAccountTitle;
+
+  /// No description provided for @onboardingSaveAccountBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Set a nickname and add email — save your account so you do not lose access.'**
+  String get onboardingSaveAccountBody;
+
+  /// No description provided for @onboardingChatsNavTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Chats and navigation'**
+  String get onboardingChatsNavTitle;
+
+  /// No description provided for @onboardingChatsNavBody.
+  ///
+  /// In en, this message translates to:
+  /// **'All your chats live here — DMs, groups, channels, and spaces, each in its own folder.'**
+  String get onboardingChatsNavBody;
+
+  /// No description provided for @onboardingSpacesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Spaces'**
+  String get onboardingSpacesTitle;
+
+  /// No description provided for @onboardingSpacesBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Spaces are communities with channels and voice rooms. Find one for your game or create your own.'**
+  String get onboardingSpacesBody;
+
+  /// No description provided for @onboardingSpacesFind.
+  ///
+  /// In en, this message translates to:
+  /// **'Find a space'**
+  String get onboardingSpacesFind;
+
+  /// No description provided for @onboardingMatchmakingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Matchmaking'**
+  String get onboardingMatchmakingTitle;
+
+  /// No description provided for @onboardingMatchmakingBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Looking for a squad? We match you with people who fit your criteria.'**
+  String get onboardingMatchmakingBody;
+
+  /// No description provided for @onboardingMatchmakingTry.
+  ///
+  /// In en, this message translates to:
+  /// **'Try it'**
+  String get onboardingMatchmakingTry;
+
+  /// No description provided for @onboardingWrapUpTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'You are all set'**
+  String get onboardingWrapUpTitle;
+
+  /// No description provided for @onboardingWrapUpBody.
+  ///
+  /// In en, this message translates to:
+  /// **'You know the basics! If something is unclear — Help is always available in Settings.'**
+  String get onboardingWrapUpBody;
+
+  /// No description provided for @onboardingWrapUpStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Start'**
+  String get onboardingWrapUpStart;
 }
 
 class _AppLocalizationsDelegate

@@ -14,6 +14,7 @@ import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/core/voice_bottom_sheet.dart';
+import 'package:voice_frontend/ui/core/voice_skeleton.dart';
 import 'package:voice_frontend/ui/social/profile_detail_sheet.dart';
 import 'package:voice_frontend/ui/social/social_panel.dart';
 
@@ -168,7 +169,7 @@ void main() {
     expect(find.textContaining('@carol'), findsOneWidget);
   });
 
-  testWidgets('search shows loading indicator while request is in flight', (
+  testWidgets('search shows loading skeleton while request is in flight', (
     tester,
   ) async {
     final completer = Completer<http.Response>();
@@ -196,8 +197,7 @@ void main() {
     await tester.pump();
 
     expect(find.byKey(SocialPanel.searchLoadingKey), findsOneWidget);
-    expect(find.text('Searching…'), findsOneWidget);
-    expect(find.byType(CircularProgressIndicator), findsWidgets);
+    expect(find.byType(VoiceListSkeleton), findsOneWidget);
 
     completer.complete(
       http.Response(
@@ -213,7 +213,7 @@ void main() {
     expect(find.byKey(SocialPanel.searchLoadingKey), findsNothing);
   });
 
-  testWidgets('profile search shows only one loading spinner', (tester) async {
+  testWidgets('profile search shows only one loading skeleton', (tester) async {
     final completer = Completer<http.Response>();
     addTearDown(() {
       if (!completer.isCompleted) {
@@ -238,7 +238,7 @@ void main() {
     await tester.tap(find.byKey(SocialPanel.searchSubmitKey));
     await tester.pump();
 
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(VoiceListSkeleton), findsOneWidget);
   });
 
   testWidgets('search shows a no-results state after an empty result', (
@@ -427,6 +427,50 @@ void main() {
 
     expect(find.text('Erin'), findsOneWidget);
     expect(find.textContaining('Last seen'), findsOneWidget);
+  });
+
+  testWidgets('friends tab shows empty state when no friends', (tester) async {
+    await tester.pumpWidget(
+      socialTestApp(
+        home: const SocialPanel(initialTabIndex: 1),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/friends') {
+            return http.Response(
+              jsonEncode({'friend_list': {'friends': []}}),
+              200,
+            );
+          }
+          return http.Response('{}', 200);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('No friends yet'), findsOneWidget);
+    expect(find.byKey(SocialPanel.friendsUnavailableKey), findsNothing);
+  });
+
+  testWidgets('requests tab shows empty state when no requests', (tester) async {
+    await tester.pumpWidget(
+      socialTestApp(
+        home: const SocialPanel(initialTabIndex: 2),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/friends/requests') {
+            return http.Response(
+              jsonEncode({
+                'friend_request_list': {'incoming': [], 'outgoing': []},
+              }),
+              200,
+            );
+          }
+          return http.Response('{}', 200);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('No friend requests'), findsOneWidget);
+    expect(find.byKey(SocialPanel.requestsUnavailableKey), findsNothing);
   });
 
   testWidgets('friends tab shows backend unavailable on 503', (tester) async {

@@ -182,7 +182,7 @@ class ThreeColumnShell extends StatelessWidget {
             children: [
               SizedBox(
                 key: navMobileStrip,
-                height: 48,
+                height: VoiceLayout.mobileStripHeight,
                 child: mobileRailChild ?? navigationColumn(),
               ),
               Expanded(
@@ -207,7 +207,7 @@ class ThreeColumnShell extends StatelessWidget {
             children: [
               SizedBox(
                 key: navMobileStrip,
-                height: 48,
+                height: VoiceLayout.mobileStripHeight,
                 child: mobileRailChild ?? navigationColumn(),
               ),
               Divider(height: 1, color: voice.borderDefault),
@@ -246,7 +246,7 @@ class ThreeColumnShell extends StatelessWidget {
             ? [
                 SizedBox(
                   key: navMobileStrip,
-                  height: 48,
+                  height: VoiceLayout.mobileStripHeight,
                   child: mobileRailChild ?? legacyRail(),
                 ),
                 Expanded(
@@ -265,7 +265,7 @@ class ThreeColumnShell extends StatelessWidget {
             : [
                 SizedBox(
                   key: navActiveRail,
-                  height: 48,
+                  height: VoiceLayout.mobileStripHeight,
                   child: mobileRailChild ?? legacyRail(),
                 ),
                 Divider(height: 1, color: voice.borderDefault),

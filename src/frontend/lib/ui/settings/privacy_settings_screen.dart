@@ -233,12 +233,14 @@ class _VisibilitySection extends StatelessWidget {
         PrivacyAudiencePicker(
           label: l10n.privacyShowGameStatus,
           value: settings.showGameStatus,
+          showIncludeGuests: true,
           onChanged: (v) => onChanged(settings.copyWith(showGameStatus: v)),
         ),
         const SizedBox(height: 16),
         PrivacyAudiencePicker(
           label: l10n.privacyShowMmRating,
           value: settings.showMmRating,
+          showIncludeGuests: true,
           onChanged: (v) => onChanged(settings.copyWith(showMmRating: v)),
         ),
         const SizedBox(height: 16),
@@ -251,6 +253,7 @@ class _VisibilitySection extends StatelessWidget {
         PrivacyAudiencePicker(
           label: l10n.privacyShowStories,
           value: settings.showStories,
+          showIncludeGuests: true,
           onChanged: (v) => onChanged(settings.copyWith(showStories: v)),
         ),
         const SizedBox(height: 16),

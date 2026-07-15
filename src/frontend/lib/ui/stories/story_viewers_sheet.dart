@@ -5,7 +5,9 @@ import '../../l10n/app_localizations.dart';
 import '../../state/social_providers.dart';
 import '../../state/stories_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../api_error_messages.dart';
 import '../core/voice_bottom_sheet.dart';
+import '../core/voice_skeleton.dart';
 import '../core/voice_state_panel.dart';
 
 /// Bottom sheet listing story viewers (author-only).
@@ -49,13 +51,16 @@ class StoryViewersSheet extends ConsumerWidget {
             ),
             const SizedBox(height: 12),
             viewersAsync.when(
-              loading: () => const Padding(
-                padding: EdgeInsets.all(24),
-                child: Center(child: CircularProgressIndicator()),
+              loading: () => const SizedBox(
+                height: 240,
+                child: VoiceListSkeleton(rowCount: 4),
               ),
-              error: (_, _) => VoiceStatePanel(
+              error: (error, _) => VoiceStatePanel(
                 title: l10n.storyViewersLoadError,
+                message: storyViewersErrorMessage(l10n, error),
                 icon: Icons.cloud_off_outlined,
+                actionLabel: l10n.commonRetry,
+                onAction: () => ref.invalidate(storyViewersProvider(storyId)),
               ),
               data: (viewerIds) {
                 if (viewerIds.isEmpty) {

@@ -43,6 +43,7 @@ import 'ui/onboarding/onboarding_overlay.dart';
 import 'ui/chat/chat_room_panel.dart';
 import 'ui/core/profile_accent_dot.dart';
 import 'ui/core/voice_bottom_sheet.dart';
+import 'ui/core/voice_compact_banner.dart';
 import 'ui/core/voice_state_panel.dart';
 import 'ui/profile/profile_switcher.dart';
 import 'ui/profile/profile_edit_sheet.dart';
@@ -292,6 +293,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
     final voice = VoiceColors.of(context);
     final shellNav = ref.read(shellNavigationProvider);
     final inSpace = selectedSpaceId != null;
+    final reconnectBannerVisible = ref.watch(reconnectBannerVisibleProvider);
 
     final sessionLabel = profileAsync.when(
       data: (profile) => profile != null
@@ -321,9 +323,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
                     final narrow = VoiceLayout.isNarrow(constraints.maxWidth);
                     final onBackToChats = selectedChatId == null
                         ? null
-                        : () =>
-                              ref.read(selectedChatIdProvider.notifier).state =
-                                  null;
+                        : shellNav.backToChatList;
 
                     final sidePanelChild = sidePanel != ShellSidePanel.none &&
                             !narrow
@@ -347,7 +347,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
                               onBack: narrow ? onBackToChats : null,
                             ),
                       sidePanelChild: sidePanelChild,
-                      showMainOnlyOnNarrow: selectedChatId != null,
+                      showMainOnlyOnNarrow: narrow && selectedChatId != null,
                       mobileRailChild: narrow && selectedChatId != null
                           ? const MobileChatStrip()
                           : null,
@@ -356,6 +356,13 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
                         children: [
                           const GuestSaveAccountReminderBanner(),
                           const GuestRestrictedActions(),
+                          if (reconnectBannerVisible && selectedChatId == null)
+                            VoiceCompactBanner(
+                              key: const Key('global_reconnect_banner'),
+                              message: l10n.chatRealtimeReconnecting,
+                              icon: Icons.sync_problem,
+                              tone: VoiceBannerTone.warning,
+                            ),
                           _SessionBar(
                             useProfileSwitcher: !narrow,
                             onLogout: () => ref

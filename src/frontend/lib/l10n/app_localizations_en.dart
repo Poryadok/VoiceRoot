@@ -323,6 +323,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get slashCommandsEmpty => 'No bot commands in this chat.';
 
   @override
+  String get slashCommandsEmptyHint =>
+      'Install bots in Space settings, or enable them for this chat in Chat info.';
+
+  @override
+  String get slashCommandsDmEmptyHint =>
+      'Bot slash commands are available only in space text chats.';
+
+  @override
+  String get slashCommandsNoMatch => 'No matching commands';
+
+  @override
+  String get slashCommandsNoMatchHint =>
+      'Keep typing after / or try another command or bot name.';
+
+  @override
+  String get slashCommandsHelp =>
+      'Type / in the message box to open this menu. Greyed-out commands mean the bot is offline.';
+
+  @override
   String get botUnavailableTooltip => 'Bot unavailable';
 
   @override
@@ -671,6 +690,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatThreadEmpty => 'No replies yet';
 
   @override
+  String get chatThreadLoadError => 'Could not load thread';
+
+  @override
   String get chatChannelMainFeedBlocked => 'Post in a thread or as the channel';
 
   @override
@@ -997,6 +1019,27 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get spacePermissionDeniedManageRoles =>
+      'You need permission to manage roles';
+
+  @override
+  String get spacePermissionDeniedSetSlowMode =>
+      'You need permission to change slow mode';
+
+  @override
+  String get spacePermissionDeniedVoiceJoin =>
+      'You need permission to join this voice room';
+
+  @override
+  String get spacePermissionDeniedSendMessages =>
+      'You need permission to post in this channel';
+
+  @override
+  String spacePermissionDeniedGeneric(String permission) {
+    return 'Missing permission: $permission';
+  }
+
+  @override
   String get spaceSlowMode => 'Slow mode';
 
   @override
@@ -1287,6 +1330,57 @@ class AppLocalizationsEn extends AppLocalizations {
   String get subscriptionCancel => 'Cancel subscription';
 
   @override
+  String get subscriptionStatusGracePeriod => 'Premium — payment issue';
+
+  @override
+  String subscriptionStatusPremiumUntil(String date) {
+    return 'Premium until $date';
+  }
+
+  @override
+  String get subscriptionGracePeriodHint =>
+      'Update your payment method to keep Premium benefits.';
+
+  @override
+  String get subscriptionPremiumUntilHint =>
+      'Premium features stay active until this date.';
+
+  @override
+  String get subscriptionLoadError => 'Could not load subscription';
+
+  @override
+  String get subscriptionRetry => 'Retry';
+
+  @override
+  String get subscriptionFreeTierNote =>
+      'Messages and chats stay free on the Free plan.';
+
+  @override
+  String get subscriptionUpgradeSubtitle =>
+      'Unlock cosmetics, larger uploads, and more profiles — without losing access to messages.';
+
+  @override
+  String get subscriptionBenefitBadge => 'Premium ★ badge in chats';
+
+  @override
+  String get subscriptionBenefitUploads => '200 MB file uploads';
+
+  @override
+  String get subscriptionBenefitProfiles => 'Up to 5 profiles';
+
+  @override
+  String get subscriptionBillingPeriodMonthly => 'Monthly';
+
+  @override
+  String get subscriptionBillingPeriodYearly => 'Yearly';
+
+  @override
+  String get subscriptionCheckoutLaunchFailed => 'Could not open checkout';
+
+  @override
+  String get subscriptionInvalidCheckoutUrl => 'Checkout link is invalid';
+
+  @override
   String get subscriptionProfilesLoadError => 'Could not load profiles';
 
   @override
@@ -1367,6 +1461,118 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get privacySettingsTitle => 'Privacy';
+
+  @override
+  String get notificationSettingsTitle => 'Notifications';
+
+  @override
+  String get notificationChatSettingsTitle => 'Chat notifications';
+
+  @override
+  String get notificationChatOverridesTitle => 'Notification overrides';
+
+  @override
+  String get notificationChatOverridesHint => 'Customize alerts for this chat';
+
+  @override
+  String get notificationLoadError => 'Could not load notification settings';
+
+  @override
+  String get notificationSettingsSaved => 'Notification settings saved';
+
+  @override
+  String get notificationSettingsSavedQuietHoursFailed =>
+      'Settings saved, but quiet hours could not sync';
+
+  @override
+  String get notificationGlobalEnabled => 'Notifications enabled';
+
+  @override
+  String get notificationChatEnabled => 'Notifications for this chat';
+
+  @override
+  String get notificationEventTypesTitle => 'Event types';
+
+  @override
+  String get notificationTypeNewMessage => 'Direct messages';
+
+  @override
+  String get notificationTypeMention => 'Mentions';
+
+  @override
+  String get notificationTypeReply => 'Replies';
+
+  @override
+  String get notificationTypeReaction => 'Reactions';
+
+  @override
+  String get notificationTypeFriendRequest => 'Friend requests';
+
+  @override
+  String get notificationTypeMatchFound => 'Match found';
+
+  @override
+  String get notificationTypeSystem => 'System';
+
+  @override
+  String get notificationQuietHoursTitle => 'Quiet hours';
+
+  @override
+  String get notificationQuietHoursEnabled => 'Enable quiet hours';
+
+  @override
+  String get notificationQuietHoursStart => 'Start';
+
+  @override
+  String get notificationQuietHoursEnd => 'End';
+
+  @override
+  String get notificationQuietHoursOverrideMentions =>
+      'Allow mentions during quiet hours';
+
+  @override
+  String get notificationQuietHoursOverrideMentionsHint =>
+      'When enabled, @mentions still notify you';
+
+  @override
+  String get notificationPushSectionTitle => 'Device notifications';
+
+  @override
+  String get notificationPushEnableTitle => 'Enable push notifications';
+
+  @override
+  String get notificationPushExplainerTitle => 'Stay in the loop';
+
+  @override
+  String get notificationPushExplainerBody =>
+      'Voice can send push notifications for messages, mentions, friend requests, and matchmaking — even when the app is in the background.';
+
+  @override
+  String get notificationPushExplainerContinue => 'Continue';
+
+  @override
+  String get notificationPushStatusGranted => 'Enabled on this device';
+
+  @override
+  String get notificationPushStatusDenied =>
+      'Blocked — enable in system settings';
+
+  @override
+  String get notificationPushStatusNotDetermined => 'Not enabled yet';
+
+  @override
+  String get notificationPushStatusUnsupported =>
+      'Not available on this device';
+
+  @override
+  String get notificationPushEnabled => 'Push notifications enabled';
+
+  @override
+  String get notificationPushDenied => 'Push permission was denied';
+
+  @override
+  String get notificationPushUnsupported =>
+      'Push is not available in this build';
 
   @override
   String get privacyLoadError => 'Could not load privacy settings';
@@ -1597,6 +1803,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get screenShareWaitingForVideo => 'Waiting for screen video…';
 
   @override
+  String get platformWebSystemAudioUnavailable =>
+      'System audio sharing is not available in the browser';
+
+  @override
+  String get platformWebGlobalPttUnavailable =>
+      'Global push-to-talk hotkeys are not available outside this browser tab';
+
+  @override
   String get themeLoadError => 'Could not load theme';
 
   @override
@@ -1740,6 +1954,19 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get queueSearchTimeoutBody =>
       'We couldn\'t find teammates this time. Please try again.';
+
+  @override
+  String get queueSearchRecoveryReturnToQueue => 'Return to queue';
+
+  @override
+  String get queueSearchDeclinedTitle => 'Match declined';
+
+  @override
+  String get queueSearchDeclinedBody =>
+      'The match was declined. Search continues with your current parameters.';
+
+  @override
+  String get queueSearchRecoveryContinueSearch => 'Continue searching';
 
   @override
   String get matchFoundTitle => 'Match found';
@@ -2151,4 +2378,57 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get storyGameTagTapHint => 'Open game page';
+
+  @override
+  String get onboardingSkip => 'Skip';
+
+  @override
+  String get onboardingGotIt => 'Got it';
+
+  @override
+  String get onboardingLater => 'Later';
+
+  @override
+  String get onboardingSaveAccountTitle => 'Save your account';
+
+  @override
+  String get onboardingSaveAccountBody =>
+      'Set a nickname and add email — save your account so you do not lose access.';
+
+  @override
+  String get onboardingChatsNavTitle => 'Chats and navigation';
+
+  @override
+  String get onboardingChatsNavBody =>
+      'All your chats live here — DMs, groups, channels, and spaces, each in its own folder.';
+
+  @override
+  String get onboardingSpacesTitle => 'Spaces';
+
+  @override
+  String get onboardingSpacesBody =>
+      'Spaces are communities with channels and voice rooms. Find one for your game or create your own.';
+
+  @override
+  String get onboardingSpacesFind => 'Find a space';
+
+  @override
+  String get onboardingMatchmakingTitle => 'Matchmaking';
+
+  @override
+  String get onboardingMatchmakingBody =>
+      'Looking for a squad? We match you with people who fit your criteria.';
+
+  @override
+  String get onboardingMatchmakingTry => 'Try it';
+
+  @override
+  String get onboardingWrapUpTitle => 'You are all set';
+
+  @override
+  String get onboardingWrapUpBody =>
+      'You know the basics! If something is unclear — Help is always available in Settings.';
+
+  @override
+  String get onboardingWrapUpStart => 'Start';
 }

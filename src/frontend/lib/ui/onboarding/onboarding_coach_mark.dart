@@ -11,7 +11,8 @@ class OnboardingCoachMark extends StatelessWidget {
     required this.body,
     required this.onContinue,
     required this.onSkip,
-    this.continueLabel = 'Got it',
+    required this.continueLabel,
+    required this.skipLabel,
     this.secondaryLabel,
     this.onSecondary,
   });
@@ -22,6 +23,7 @@ class OnboardingCoachMark extends StatelessWidget {
   final VoidCallback onContinue;
   final VoidCallback onSkip;
   final String continueLabel;
+  final String skipLabel;
   final String? secondaryLabel;
   final VoidCallback? onSecondary;
 
@@ -32,7 +34,8 @@ class OnboardingCoachMark extends StatelessWidget {
     required String body,
     required VoidCallback onContinue,
     required VoidCallback onSkip,
-    String continueLabel = 'Got it',
+    required String continueLabel,
+    required String skipLabel,
     String? secondaryLabel,
     VoidCallback? onSecondary,
   }) {
@@ -44,6 +47,7 @@ class OnboardingCoachMark extends StatelessWidget {
         title: title,
         body: body,
         continueLabel: continueLabel,
+        skipLabel: skipLabel,
         secondaryLabel: secondaryLabel,
         onContinue: () {
           onContinue();
@@ -88,7 +92,7 @@ class OnboardingCoachMark extends StatelessWidget {
     return Stack(
       children: [
         ModalBarrier(
-          color: Colors.black.withValues(alpha: 0.35),
+          color: voice.canvas.withValues(alpha: 0.35),
           dismissible: false,
         ),
         Positioned(
@@ -114,7 +118,7 @@ class OnboardingCoachMark extends StatelessWidget {
                     spacing: 4,
                     runSpacing: 4,
                     children: [
-                      TextButton(onPressed: onSkip, child: const Text('Skip')),
+                      TextButton(onPressed: onSkip, child: Text(skipLabel)),
                       if (secondaryLabel != null && onSecondary != null)
                         TextButton(
                           onPressed: onSecondary,

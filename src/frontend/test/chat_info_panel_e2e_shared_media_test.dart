@@ -84,7 +84,7 @@ void main() {
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: SizedBox(
-            height: 600,
+            height: 720,
             width: 400,
             child: ChatInfoPanel(chatId: chatId, isGroup: false),
           ),

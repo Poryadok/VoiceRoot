@@ -241,9 +241,47 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(QueueSearchScreen.timeoutStateKey), findsOneWidget);
-    await tester.tap(find.text('Start queue'));
+    await tester.tap(find.text('Return to queue'));
     await tester.pump();
     expect(find.byKey(QueueSearchScreen.startButtonKey), findsOneWidget);
+  });
+
+  testWidgets('queue search shows declined recovery while searching', (tester) async {
+    final game = _valorantGame();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          ..._queueSearchRealtimeOverrides(),
+          authControllerProvider.overrideWith(authenticatedAuthController),
+          activeSearchSessionProvider.overrideWith((ref) => SearchSessionData(
+                id: 'sess-1',
+                profileId: 'p1',
+                gameId: game.id,
+                mode: game.config.modes.first.name,
+                criteriaJson: '{}',
+                status: 'searching',
+              )),
+          matchmakingSearchControllerProvider.overrideWith(
+            () => _DeclinedRecoverySearchController(),
+          ),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: QueueSearchScreen(game: game, mode: game.config.modes.first),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(QueueSearchScreen.declinedStateKey), findsOneWidget);
+    expect(find.byKey(QueueSearchScreen.searchingStateKey), findsOneWidget);
+    await tester.tap(find.text('Continue searching'));
+    await tester.pump();
+    expect(find.byKey(QueueSearchScreen.declinedStateKey), findsNothing);
+    expect(find.byKey(QueueSearchScreen.searchingStateKey), findsOneWidget);
   });
 }
 
@@ -259,10 +297,18 @@ class _NoopRealtimeHub extends RealtimeHub {
 
 class _TimedOutSearchController extends MatchmakingSearchController {
   @override
-  MatchmakingSearchState build() => const MatchmakingSearchState(timedOut: true);
+  MatchmakingSearchState build() =>
+      const MatchmakingSearchState(recoveryReason: SearchRecoveryReason.timeout);
 }
 
 class _NudgeSearchController extends MatchmakingSearchController {
   @override
   MatchmakingSearchState build() => const MatchmakingSearchState(nudgeVisible: true);
+}
+
+class _DeclinedRecoverySearchController extends MatchmakingSearchController {
+  @override
+  MatchmakingSearchState build() => const MatchmakingSearchState(
+        recoveryReason: SearchRecoveryReason.declined,
+      );
 }

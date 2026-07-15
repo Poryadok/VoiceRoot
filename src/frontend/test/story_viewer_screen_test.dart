@@ -1,11 +1,16 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/stories_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
+import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
+import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/state/matchmaking_providers.dart';
 import 'package:voice_frontend/backend/matchmaking_client.dart';
 import 'package:voice_frontend/state/stories_providers.dart';
@@ -14,6 +19,7 @@ import 'package:voice_frontend/ui/stories/story_viewer_screen.dart';
 import 'package:voice_frontend/ui/stories/story_viewers_sheet.dart';
 
 import 'support/auth_test_overrides.dart';
+import 'support/gateway_test_client.dart';
 import 'support/voice_test_theme.dart';
 
 void main() {
@@ -222,6 +228,9 @@ void main() {
           storyViewersProvider('story-1').overrideWith(
             (ref) async => const ['viewer-1'],
           ),
+          storyReactionsProvider('story-1').overrideWith(
+            (ref) async => const [],
+          ),
         ],
         child: MaterialApp(
           theme: voiceTestTheme(),
@@ -235,8 +244,113 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('story_viewer_view_count')));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
 
     expect(find.byKey(StoryViewersSheet.sheetKey), findsOneWidget);
+  });
+
+  testWidgets('StoryViewerScreen react picker sends emoji to backend',
+      (tester) async {
+    String? reactedEmoji;
+    final mock = MockClient((req) async {
+      if (req.method == 'POST' && req.url.path.endsWith('/views')) {
+        return http.Response('', 204);
+      }
+      if (req.method == 'POST' && req.url.path.endsWith('/reactions')) {
+        final body = jsonDecode(req.body) as Map<String, dynamic>;
+        reactedEmoji = body['emoji'] as String?;
+        return http.Response('', 204);
+      }
+      return http.Response('not found', 404);
+    });
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceAppTestOverrides(client: mock),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://localhost:9999'),
+          ),
+          voiceStoriesClientProvider.overrideWith(
+            (ref) => VoiceStoriesClient(
+              gateway: gatewayHttpForTest(
+                mock,
+                config: const GatewayConfig(baseUrl: 'http://localhost:9999'),
+              ),
+            ),
+          ),
+          storyDetailProvider('story-1').overrideWith((ref) async => story),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const StoryViewerScreen(storyIds: ['story-1']),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('story_viewer_react')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(StoryViewerScreen.reactPickerKey), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('story_viewer_react_emoji_❤️')));
+    await tester.pumpAndSettle();
+
+    expect(reactedEmoji, '❤️');
+    expect(find.text('Reaction sent'), findsOneWidget);
+  });
+
+  testWidgets('StoryViewerScreen shows author-only reaction chips', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceAppTestOverrides(
+            client: MockClient((_) async => throw UnimplementedError()),
+          ),
+          authControllerProvider.overrideWith((ref) {
+            final controller = AuthController(
+              authClient: ref.watch(voiceAuthClientProvider),
+              storage: ref.watch(authSessionStorageProvider),
+              guestCredentialsStorage:
+                  ref.watch(guestCredentialsStorageProvider),
+            );
+            controller.state = AuthState(
+              session: AuthSession(
+                accessToken: 'test-access',
+                refreshToken: 'test-refresh',
+                accountId: 'acc-test',
+                activeProfileId: 'author-1',
+                expiresInSeconds: 900,
+              ),
+            );
+            return controller;
+          }),
+          storyDetailProvider('story-1').overrideWith((ref) async => story),
+          storyReactionsProvider('story-1').overrideWith(
+            (ref) async => const [
+              StoryReactionData(reactorProfileId: 'viewer-1', emoji: '🔥'),
+              StoryReactionData(reactorProfileId: 'viewer-2', emoji: '🔥'),
+              StoryReactionData(reactorProfileId: 'viewer-3', emoji: '❤️'),
+            ],
+          ),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const StoryViewerScreen(storyIds: ['story-1']),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(StoryViewerScreen.reactionsRowKey), findsOneWidget);
+    expect(find.text('2'), findsOneWidget);
   });
 }

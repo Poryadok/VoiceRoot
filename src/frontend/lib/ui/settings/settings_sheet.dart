@@ -6,7 +6,9 @@ import '../../state/auth_providers.dart';
 import '../../state/subscription_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../../theme/voice_theme_providers.dart';
+import '../core/voice_bottom_sheet.dart';
 import 'privacy_settings_screen.dart';
+import 'notification_settings_screen.dart';
 import 'security_settings_screen.dart';
 import 'subscription_settings_screen.dart';
 import '../../settings/reduced_motion.dart';
@@ -69,10 +71,9 @@ class SettingsSheet extends ConsumerWidget {
               trailing: const Icon(Icons.chevron_right),
               onTap: () {
                 Navigator.of(context).pop();
-                showModalBottomSheet<void>(
+                showVoiceBottomSheet<void>(
                   context: context,
-                  isScrollControlled: true,
-                  builder: (_) => const VerificationSettingsSheet(),
+                  child: const VerificationSettingsSheet(),
                 );
               },
             ),
@@ -90,13 +91,27 @@ class SettingsSheet extends ConsumerWidget {
                 );
               },
             ),
+            ListTile(
+              key: const Key('settings_notifications'),
+              contentPadding: EdgeInsets.zero,
+              title: Text(l10n.notificationSettingsTitle),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const NotificationSettingsScreen(),
+                  ),
+                );
+              },
+            ),
             const SizedBox(height: 16),
             ListTile(
               key: const Key('settings_subscription'),
               contentPadding: EdgeInsets.zero,
               title: Text(l10n.subscriptionSettingsTitle),
               subtitle: subscription != null
-                  ? Text(subscription.plan)
+                  ? Text(subscriptionPlanLabel(l10n, subscription))
                   : null,
               trailing: const Icon(Icons.chevron_right),
               onTap: () {

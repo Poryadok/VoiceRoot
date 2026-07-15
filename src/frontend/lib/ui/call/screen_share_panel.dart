@@ -8,6 +8,7 @@ import '../../state/auth_providers.dart';
 import '../../state/call_providers.dart';
 import '../../state/screen_share_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../core/platform_capability_hints.dart';
 
 class ScreenSharePanel extends ConsumerWidget {
   const ScreenSharePanel({super.key});
@@ -145,12 +146,14 @@ class ScreenSharePanel extends ConsumerWidget {
 
 Future<double?> showScreenShareQualityDialog(BuildContext context) {
   final l10n = AppLocalizations.of(context)!;
+  final webHint = platformWebVoiceLimitationsTooltip(l10n);
   return showDialog<double>(
     context: context,
     builder: (context) => AlertDialog(
       title: Text(l10n.screenShareQualityTitle),
       content: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           ListTile(
             title: Text(l10n.screenShareQuality720p15),
@@ -160,6 +163,13 @@ Future<double?> showScreenShareQualityDialog(BuildContext context) {
             title: Text(l10n.screenShareQuality720p30),
             onTap: () => Navigator.pop(context, 30.0),
           ),
+          if (webHint != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              webHint,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
         ],
       ),
     ),
@@ -182,7 +192,7 @@ class ScreenShareCallButton extends ConsumerWidget {
       key: ScreenSharePanel.shareButtonKey,
       tooltip: share.isSharing
           ? l10n.screenShareStop
-          : l10n.screenShareStart,
+          : _screenShareStartTooltip(l10n),
       onPressed: () async {
         if (share.isSharing) {
           await notifier.stopScreenShare();
@@ -217,4 +227,9 @@ class ScreenSharePauseButton extends ConsumerWidget {
       icon: Icon(share.isPaused ? Icons.play_arrow : Icons.pause),
     );
   }
+}
+
+String _screenShareStartTooltip(AppLocalizations l10n) {
+  if (canCaptureSystemAudioWithScreenShare) return l10n.screenShareStart;
+  return '${l10n.screenShareStart} — ${l10n.platformWebSystemAudioUnavailable}';
 }
