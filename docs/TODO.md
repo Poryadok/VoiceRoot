@@ -176,6 +176,40 @@
 
 Baseline onboarding/deep-links/a11y — [PLAN.md](PLAN.md); остаток vs [deep-links.md](features/deep-links.md), [onboarding.md](features/onboarding.md), [accessibility.md](features/accessibility.md).
 
+**Аудит Flutter client UX polish (waves A–J, 2026-07-15):** `flutter analyze` OK, `flutter test` 706 passed / 74 skipped (live E2E), `make design-tokens-check` OK. Реализация в незакоммиченной рабочей копии (`src/frontend/lib/**`, `test/**`, l10n).
+
+Закрыто волнами (не дублировать пунктами): A — `VoiceListSkeleton` / `VoiceStatePanel` + `api_error_messages` в space/social/mm/stories/thread; B — `reconnectBannerVisibleProvider` (2s/1s) + banner в `app.dart` / `chat_room_panel`; C — `NotificationSettingsScreen`, quiet hours (local), pre-permission explainer, per-chat override в `chat_info_panel`; D — `GuestConvertSheet` + `authErrorMessage` / `resolveAuthErrorKey`, per-field guest audience в privacy; E — onboarding l10n EN/RU + widget-тесты tour/skip; F — `VoiceFocusTrap`, text-scale ×1.5 (chat), TalkBack/VoiceOver checklist в `accessibility.md`; G — `MobileChatStrip`, back + scroll restore, 44dp targets, `platform_capability_hints`; H — `voice_disabled_action` в space tree / roles / slow mode; I — story reactions UI, MM recovery card, slash help/empty, subscription upsell; J — design tokens audit OK; пост-merge — `profile_detail_sheet` 404, `space_tree_voice_test` provider override, compact notification tile.
+
+
+
+- [ ] **Commit waves A–J (Flutter client)** — один PR: state/ui/l10n/tests из аудита 2026-07-15; после merge — `make flutter-ci` на CI.
+
+- [ ] **Notification settings: серверная персистентность** — Flutter UI готов (`NotificationSettingsScreen`, per-chat override, quiet hours в `SharedPreferences`); backend `GetNotificationSettings` / `UpdateNotificationSettings` / `SetQuietHours` не пишут в БД → mute/DND не влияют на push. См. Batch 14 §Notification — Critical/High.
+
+- [ ] **Quiet hours: sync client ↔ Notification service** — после backend persist: читать/писать `SetQuietHours` вместо только `notification_quiet_hours_storage.dart`; иначе DND на втором устройстве не синхронизируется.
+
+- [ ] **A11y: message list keyboard nav** — [accessibility.md](features/accessibility.md) §«Навигация по списку сообщений»: `↑`/`↓`, `R`, `E` в `chat_room_panel` — не реализовано.
+
+- [ ] **A11y: text-scale ×1.5 — расширить smoke** — сейчас только chat list/room (`chat_text_scale_test.dart`); добавить settings, matchmaking, stories, notification settings.
+
+- [ ] **A11y: focus return после modal** — `VoiceFocusTrap` ловит фокус; проверить возврат на trigger при закрытии `showVoiceBottomSheet`, coach-marks, call overlay.
+
+- [ ] **A11y: pre-release TalkBack / VoiceOver** — чеклист в [accessibility.md](features/accessibility.md) §Pre-release; ручная приёмка перед mobile release (**Вы**).
+
+- [ ] **A11y: Axe / web accessibility CI** — [accessibility.md](features/accessibility.md) §Тестирование: Axe DevTools (или аналог) для Flutter web — не в CI.
+
+- [ ] **VoiceListSkeleton / VoiceStatePanel — остаточные loaders** — wave A не покрыла: `chat_room_panel` (pagination), space members/bots/invites, `player_profile_sheet`, `story_viewer_screen` — всё ещё `CircularProgressIndicator` вместо skeleton/state panel.
+
+- [ ] **VoiceListSkeleton + VoiceStatePanel widget tests** — dedicated tests отсутствуют (reconnect/onboarding/focus trap покрыты).
+
+- [ ] **api_error_messages — расширить покрытие** — helpers есть для wave A доменов; `chat_room_panel`, search, subscription/billing, settings screens могут показывать сырые API strings / hardcoded `not authenticated`.
+
+- [ ] **VoiceDisabledAction — расширить покрытие** — wave H: space tree / roles / slow mode; остальные permission-gated действия (chat moderation, voice room create, MM guest restrictions) без reason tooltip.
+
+- [ ] **MobileChatStrip — scope на full-screen фичах** — strip только при `narrow && selectedChatId != null` в `app.dart`; matchmaking full-screen (`queue_search_screen`, `game_catalog_screen`) и settings sub-routes без strip — сверить с [platforms.md](features/platforms.md) / navigation.
+
+- [ ] **chat_info_panel notification tile — narrow E2E** — compact layout; overflow поправлен в widget-тестах; live/compose E2E на узкой ширине (связано с Critical Batch 2 при наличии стека).
+
 
 
 **Промпт-якорь:** `Growth/A11y from docs/TODO.md Common Batch 5`.
@@ -191,14 +225,9 @@ Baseline закрыт (2026-06): register guest, JWT, guards, convert-guest, TTL
 - [ ] **Convert-guest: recovery для аккаунтов после бага transport-пароля** — аккаунты, сконвертированные до фикса (2026-07), остались с неизвестным паролем; нужен self-service reset password или support-runbook.
 - [ ] **Convert-guest: док auth-service.md** — явно описать, что `password` в `ConvertGuest` = новый пароль regular-аккаунта (JWT гостя достаточен), не проверка transport-пароля.
 - [ ] **Convert-guest live в compose-e2e** — `TestComposeConvertGuest_live` (новый пароль + login) в CI workflow; сейчас только opt-in локально.
-- [ ] **Convert-guest: localized errors в GuestConvertSheet** — client validation и API (`validation_failed`, `invalid_credentials`, `rate_limited`) через `authErrorMessage`; `convertGuest` в контроллере — `resolveAuthErrorKey` по `errorCode`, как в `_authenticate`.
 - [ ] **Convert-guest: negative Auth integration tests** — duplicate email, password <8, non-guest token, missing email/phone; дополнить `ConvertGuestIntegrationTest`.
 - [ ] **Convert-guest: NATS `user.guest_converted`** — довести `GuestConvertNatsEventIntegrationTest`: REST convert + assert publish (сейчас stub).
 - [ ] **Guest save-account reminder: server last-shown** — в спеке «локальный или серверный timestamp»; сейчас только `SharedPreferences` (кросс-устройство не синхронизируется).
-
-
-
-- [ ] **Guest audience (Flutter settings UX)** — backend enforcement для `show_game_status` / `show_mm_rating` / `show_stories` через `IncludeGuests`; в Flutter нет отдельного multiselect «Гостевые аккаунты» на каждое поле (только общий `include_guests` в `PrivacyAudiencePicker`).
 
 
 
@@ -648,7 +677,7 @@ Baseline закрыт (2026-06): register guest, JWT, guards, convert-guest, TTL
 
 #### User — Low
 
-- [ ] **[User] Guest audience in User service is implemented for presence** — `show_online` / `show_game_status` + `include_guests` tested (`src/backend/user/internal/grpcsvc/privacy_integration_test.go`); `show_mm_rating` / `show_stories` enforced in Matchmaking/Story, not User (by design per `docs/features/privacy.md` enforcement path). TODO Flutter multiselect is out of User scope.
+- [ ] **[User] Guest audience in User service is implemented for presence** — `show_online` / `show_game_status` + `include_guests` tested (`src/backend/user/internal/grpcsvc/privacy_integration_test.go`); `show_mm_rating` / `show_stories` enforced in Matchmaking/Story, not User (by design per `docs/features/privacy.md` enforcement path). Flutter per-field `include_guests` — waves A–J (2026-07-15).
 - [ ] **[User] `SwitchProfile` is stateless** — returns profile + NATS event only; JWT switch is Auth (`src/backend/gateway/transcode_profiles_verification.go` → `/api/v1/auth/switch-profile`); expected split, but User RPC name is misleading vs actual session switch.
 
 #### Analytics — Critical
@@ -994,22 +1023,22 @@ Baseline закрыт (2026-06): register guest, JWT, guards, convert-guest, TTL
 #### Story — High
 
 - [ ] **[Story] `show_stories = Nobody` global privacy bypass** — `canViewStory` skips the User privacy floor when `floor.IsNobody()`; `CreateStory` allows explicit `visibility: everyone` without capping to global setting. Path: `src/backend/story/internal/grpcsvc/story.go` (`canViewStory`, `CreateStory`, `storyPrivacyFloor`).
-- [ ] **[Story] Anonymous view leaks viewer in NATS** — `MarkViewed` always calls `PublishStoryViewed` with `viewer_profile_id` even when `anonymous=true`; contradicts [docs/features/stories.md](docs/features/stories.md) §Анонимный просмотр. Paths: `src/backend/story/internal/grpcsvc/story.go`, `src/backend/story/internal/storyevents/jetstream.go`.
+- [ ] **[Story] Anonymous view leaks viewer in NATS** — `MarkViewed` always calls `PublishStoryViewed` with `viewer_profile_id` even when `anonymous=true`; contradicts [stories.md](features/stories.md) §Анонимный просмотр. Paths: `src/backend/story/internal/grpcsvc/story.go`, `src/backend/story/internal/storyevents/jetstream.go`.
 - [ ] **[Story] No `media_file_id` ownership / story-context validation** — any UUID accepted; video duration checked only when File client is wired. Path: `src/backend/story/internal/grpcsvc/story.go` (`CreateStory`, `CreateLookingForParty`); File story context exists in `src/backend/file/internal/grpcsvc/file_grpc.go` but Story does not enforce it.
 - [ ] **[Story] Feed degrades to global scan when Social fails** — `GetStoryFeed` falls back to `ListActiveStoriesPaginated` (all active rows) if `ListFeedAuthorIDs` errors; only post-filtered by `canViewStory`. Path: `src/backend/story/internal/grpcsvc/story.go` (`GetStoryFeed`); related: `src/backend/story/internal/privacy/friends.go`, `src/backend/gateway/compose_stories_degradation_live_test.go` (checks liveness only).
 - [ ] **[Story] `DeleteStory` orphans R2 media** — soft-delete only; purge worker targets `expired_at IS NOT NULL`, so early-deleted stories never reach `RunArchivePurgeOnce` / `FileDeleter`. Paths: `src/backend/story/internal/store/store.go` (`DeleteStory`), `src/backend/story/internal/jobs/jobs.go`.
-- [ ] **[Story] Moderation cannot hide stories from feeds** — reports accepted (`target_type: story` in Moderation/Gateway), but Story has no moderation flag/consumer; [docs/features/stories.md](docs/features/stories.md) §Модерация expects hide/remove. Paths: `src/backend/story/` (no integration); `src/backend/moderation/internal/grpcsvc/reports.go`.
+- [ ] **[Story] Moderation cannot hide stories from feeds** — reports accepted (`target_type: story` in Moderation/Gateway), but Story has no moderation flag/consumer; [stories.md](features/stories.md) §Модерация expects hide/remove. Paths: `src/backend/story/` (no integration); `src/backend/moderation/internal/grpcsvc/reports.go`.
 - [ ] **[Story] GET reactions REST missing** — gRPC `GetStoryReactions` exists; Gateway only maps `POST …/reactions`. Flutter `getStoryReactions` GET will 404. Paths: `src/backend/gateway/transcode_stories.go`; `src/frontend/lib/backend/stories_client.dart`.
 
 #### Story — Common
 
 - [ ] **[Story] `visibility_audience` not writable via API** — DB column + read path exist; `CreateStoryRequest` has no audience JSON; `visibilityFromRequest("custom")` stores `privacy.Nobody()`. Blocks real space/custom per-story audience (Batch 7 covers Flutter picker; backend contract gap). Paths: `protos/voice/story/v1/story.proto`, `src/backend/story/internal/grpcsvc/audience.go`, `src/backend/migrations/story_db/000002_visibility_audience.up.sql`.
-- [ ] **[Story] Highlights lack `visibility_audience` JSONB** — only coarse `visibility` TEXT; no space multiselect per [docs/features/stories.md](docs/features/stories.md) §Highlights. Paths: `src/backend/migrations/story_db/000001_init.up.sql`, `src/backend/story/internal/grpcsvc/story.go` (`canViewHighlight`).
+- [ ] **[Story] Highlights lack `visibility_audience` JSONB** — only coarse `visibility` TEXT; no space multiselect per [stories.md](features/stories.md) §Highlights. Paths: `src/backend/migrations/story_db/000001_init.up.sql`, `src/backend/story/internal/grpcsvc/story.go` (`canViewHighlight`).
 - [ ] **[Story] `AddToHighlight` allows active stories** — spec says “from archive”; store only checks author ownership, not `expired_at`. Path: `src/backend/story/internal/store/store.go` (`AddToHighlight`).
 - [ ] **[Story] Archive purge worker delayed first run** — 24h ticker, no startup `RunArchivePurgeOnce`. Path: `src/backend/story/internal/jobs/jobs.go` (`StartArchivePurgeWorker`).
 - [ ] **[Story] Weak content validation** — no required `text_content` for `text`, no required `media_file_id` for `photo`/`video`. Path: `src/backend/story/internal/grpcsvc/story.go` (`CreateStory`).
 - [ ] **[Story] `game_tag` unvalidated** — free string, no Matchmaking catalog lookup. Path: `src/backend/story/internal/grpcsvc/story.go`.
-- [ ] **[Story] No compose/live E2E for LFP** — Gateway unit test only. Paths: `src/backend/gateway/transcode_stories_test.go`; no `compose_*lfp*` / Flutter LFP create flow in CI ([`.github/ci/e2e-features.yml`](.github/ci/e2e-features.yml)).
+- [ ] **[Story] No compose/live E2E for LFP** — Gateway unit test only. Paths: `src/backend/gateway/transcode_stories_test.go`; no `compose_*lfp*` / Flutter LFP create flow in CI ([`.github/ci/e2e-features.yml`](../.github/ci/e2e-features.yml)).
 - [ ] **[Story] Stale service README** — still says “scaffold”. Path: `src/backend/story/README.md`.
 
 #### Voice — Critical
@@ -1132,8 +1161,6 @@ MVP backend + partial Flutter; AR, algorithmic feed, post-match auto-story, mone
 - [ ] **Feed space-member prefilter** — bulk space co-member author list (сейчас friends + self only).
 
 - [ ] **Full per-story `PrivacyAudiencePicker`** — space multiselect on create.
-
-- [ ] **Story reactions UI** — backend есть; emoji reactions в Flutter viewer не подключены.
 
 - [ ] **Anonymous view (Premium)** — backend `MarkViewed.anonymous`; client UX отложен.
 
