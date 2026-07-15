@@ -658,8 +658,6 @@ Baseline закрыт (2026-06): register guest, JWT, guards, convert-guest, TTL
 - [ ] **[User] `GetSettings` / `UpdateSettings` unimplemented** — proto + gateway surface exist; handler missing (`src/backend/user/pb/voice/user/v1/user_grpc.pb.go`, no impl in `src/backend/user/internal/grpcsvc/`).
 - [ ] **[User] Premium animated GIF avatar is a dead path** — premium gate in `src/backend/user/internal/grpcsvc/user_avatar.go` but `image/gif` rejected by `src/backend/user/internal/r2avatar/validate.go` + `validate_test.go` (`TestValidateUploadParams_rejectsGifInPhase1`); conflicts with `docs/features/user-profile.md` and PLAN **shipped** user-profile.
 - [ ] **[User] `banner_url` persisted but not exposed** — DB + `UpdateProfile` write (`src/backend/user/internal/store/profile.go`, `user.go`) but `rowToProto` omits `BannerUrl` (`src/backend/user/internal/grpcsvc/user.go`); proto has field (`protos/voice/user/v1/user.proto`).
-- [ ] **[User] Soft-deleted profiles still count toward limit** — `CountByAccountID` has no `deleted_at IS NULL` filter (`src/backend/user/internal/store/profile.go`); blocks re-create after delete per `docs/features/multi-profile.md` archive semantics.
-- [ ] **[User] No privacy preset on profile creation** — `CreateProfileRequest` has no preset (`protos/voice/user/v1/user.proto`); `CreateProfile` doesn't seed `privacy_settings` (`src/backend/user/internal/grpcsvc/user.go`); multi-profile spec requires preset at create (`docs/features/multi-profile.md`).
 - [ ] **[User] Verification V1 incomplete (Auth + User boundary)** — Twitch only in `LinkedAccountsService` (`src/backend/auth/src/main/java/voice/backend/auth/service/LinkedAccountsService.java`); YouTube in DB schema only (`src/backend/auth/src/main/resources/db/migration/V3__linked_identities.sql`); no partner-status recheck cron (`docs/features/verification.md`).
 - [ ] **[User] NATS contract gaps** — missing `user.presence_changed`, `user.game_detected`, `user.settings_changed` (`docs/microservices/user-service.md`); `PublishProfileUpdated` / `PublishVerified` emit stub `ProfileCreated` without `changed_fields` / `verification_type`; `PublishProfileSwitched` drops `old_profile_id` (`src/backend/user/internal/userevents/jetstream.go`).
 - [ ] **[User] Homoglyph-normalized search not implemented** — anti-spoof on create only (`src/backend/user/internal/store/verification.go`); `SearchProfilesAfter` uses raw `ILIKE` (`src/backend/user/internal/store/profile_search.go`); spec requires normalized lookup (`docs/features/verification.md`).
@@ -669,8 +667,6 @@ Baseline закрыт (2026-06): register guest, JWT, guards, convert-guest, TTL
 #### User — Common
 
 - [ ] **[User] `SearchProfiles` ignores discoverability privacy** — no `allow_friend_requests` / phone-search enforcement (`src/backend/user/internal/grpcsvc/user_search.go`); comment still references pre-privacy DDL.
-- [ ] **[User] No create/delete profile rate limits** — anti-abuse spec in `docs/features/multi-profile.md`; no throttling in `CreateProfile` / `DeleteProfile` (`src/backend/user/internal/grpcsvc/user.go`).
-- [ ] **[User] Premium vanity `@username` (no `#1234`) not implemented** — all profiles get 4-digit discriminator (`src/backend/user/internal/store/profile.go`); `docs/features/multi-profile.md` monetization.
 - [ ] **[User] `UpdateProfile.custom_status` ignored** — comment "not persisted in v1 DDL" (`src/backend/user/internal/grpcsvc/user.go`); only Redis presence path works.
 - [ ] **[User] Org DNS verification lifecycle thin** — unlimited pending rows, no expiry/TTL (`src/backend/user/internal/store/verification.go`).
 - [ ] **[User] `README.md` stale** — claims "other RPCs still unimplemented" (`src/backend/user/README.md`).
@@ -678,7 +674,45 @@ Baseline закрыт (2026-06): register guest, JWT, guards, convert-guest, TTL
 #### User — Low
 
 - [ ] **[User] Guest audience in User service is implemented for presence** — `show_online` / `show_game_status` + `include_guests` tested (`src/backend/user/internal/grpcsvc/privacy_integration_test.go`); `show_mm_rating` / `show_stories` enforced in Matchmaking/Story, not User (by design per `docs/features/privacy.md` enforcement path). Flutter per-field `include_guests` — waves A–J (2026-07-15).
-- [ ] **[User] `SwitchProfile` is stateless** — returns profile + NATS event only; JWT switch is Auth (`src/backend/gateway/transcode_profiles_verification.go` → `/api/v1/auth/switch-profile`); expected split, but User RPC name is misleading vs actual session switch.
+
+#### Multi-Profile — audit (2026-07-15)
+
+Спека: [multi-profile.md](features/multi-profile.md). PLAN: **partial** (User, Auth). Аудит кода + сверка с TODO — ниже только открытое.
+
+**Связанные пункты в других секциях (не дублировать):** [Subscription] JWT `subscription_tier` stuck `free` (лимит 5 профилей); Downgrade lifecycle + `ProfileDowngradePickerScreen`; [User] `EnsurePrimaryProfile` gRPC; NATS `user.profile_switched` gaps; [Search] `ProfileSwitched` not indexed; [Cross-cutting] premium → 3rd profile E2E; [Social] Contacts RPCs / phone-sync.
+
+**Уже в коде (не заводить повторно):** `CreateProfile` + preset + `accent_color` + privacy seed; `ListMyProfiles` / `GET /api/v1/users/profiles`; `POST /api/v1/auth/switch-profile`; soft-delete `DeleteProfile` (gRPC); `ApplyDowngradeProfiles` + `frozen_at`; desktop `ProfileSwitcher` + mobile `ProfileAvatarSwitcher`; `profile_context_controller` (WS reconnect, MM cancel, space exit); accent theme + migration; voice `voiceBindingProfileId` + conflict dialog; account-level blocks; friend/chat isolation live tests (`compose_profile_isolation_live_test`, `profiles_verification_e2e_live_test`).
+
+##### Multi-Profile — High
+
+- [ ] **[Multi-Profile] Soft-deleted profiles still count toward limit** — `CountByAccountID` has no `deleted_at IS NULL` filter (`src/backend/user/internal/store/profile.go`); blocks re-create after delete per archive semantics in `docs/features/multi-profile.md`.
+- [ ] **[Multi-Profile] DeleteProfile has no Gateway REST** — gRPC + `SoftDeleteProfile` implemented (`user_verification.go`); no `DELETE /api/v1/users/profiles/{id}` in `src/backend/gateway/transcode_users.go`; Flutter `users_client.dart` has no `deleteProfile`.
+- [ ] **[Multi-Profile] No delete-profile UI** — settings exposes create only (`settings_sheet.dart` → `CreateProfileSheet`); no manage-profiles screen to remove secondary profiles.
+- [ ] **[Multi-Profile] Auth `switch-profile` bypasses User service** — `AuthService.switchActiveProfile` reissues JWT via `JdbcProfileSwitchValidator` only; does not call `User.SwitchProfile` → no `user.profile_switched` NATS on client path (downstream Search/analytics; см. [User] NATS gaps, [Search] ProfileSwitched).
+- [ ] **[Multi-Profile] Frozen profiles invisible in switcher UI** — backend blocks switch (`frozen_at`, `JdbcProfileSwitchValidator`); `VoiceProfile` / `proto_mappers.dart` omit `frozenAt`; `ProfileSwitcher` / `ProfileAvatarSwitcher` list all profiles with no disabled state or copy.
+- [ ] **[Multi-Profile] `ProfileDowngradePickerScreen` unreachable** — screen + `submitDowngradeProfiles` exist; never routed from subscription expiry/cancel (см. [Subscription] Downgrade lifecycle).
+- [ ] **[Multi-Profile] Premium profile limit unreliable** — `CreateProfile` gates on JWT `subscription_tier` (`user.go`); tier stuck at `free` until Auth↔Subscription wired (см. [Subscription] JWT tier).
+
+##### Multi-Profile — Common
+
+- [ ] **[Multi-Profile] No create/delete profile rate limits** — anti-abuse spec in `docs/features/multi-profile.md`; no throttling in `CreateProfile` / `DeleteProfile` (`src/backend/user/internal/grpcsvc/user.go`).
+- [ ] **[Multi-Profile] Premium vanity `@username` (no `#1234`) not implemented** — all profiles get 4-digit discriminator (`src/backend/user/internal/store/profile.go`); monetization in `docs/features/multi-profile.md`.
+- [ ] **[Multi-Profile] Create flow missing avatar** — spec §создание: «ник, аватар»; `CreateProfileSheet` only `display_name` + privacy preset; no presigned upload on create.
+- [ ] **[Multi-Profile] Additional phone per profile not implemented** — spec: доп. номер на профиль (не основной); only account `accounts.phone` → primary profile (`PhoneHashResolver`, `auth.proto` S2S).
+- [ ] **[Multi-Profile] Transfer contact between profiles not implemented** — spec §контакты: перевести контакт в нужный профиль после phone-add; depends on Contacts RPCs ([Social] Contacts RPCs).
+- [ ] **[Multi-Profile] Change primary profile API/UI missing** — `is_primary` set at bootstrap only; no way to reassign which profile phone search returns.
+- [ ] **[Multi-Profile] Accent color not choosable on create** — backend `CreateProfileRequest.accent_color` + palette default (`profileaccent`); `CreateProfileSheet` does not expose picker (only post-create in settings `_AccentPicker`).
+- [ ] **[Multi-Profile] `profile_accent_storage` legacy dual-write** — stale comment «until User Service exposes accent_color» (`profile_accent_storage.dart`); settings picker still writes local index while server has `profiles.accent_color`.
+- [ ] **[Multi-Profile] Per-profile notification policy incomplete** — push tokens per `profile_id` (`notification/.../device_tokens.go`); `PermissivePolicyLoader` default-open; inactive-profile DND not enforced end-to-end (`multi-profile.md` §статусы и уведомления).
+- [ ] **[Multi-Profile] Guest + multi-profile product rule undocumented** — no `CreateProfile` tier/guest guard; settings create action visible for guests; clarify in `multi-profile.md` or gate in UI/API.
+
+##### Multi-Profile — Low
+
+- [ ] **[Multi-Profile] `SwitchProfile` User RPC vs Auth session split** — User RPC returns profile + optional NATS; real session switch is Auth only; naming/docs drift (`transcode_profiles_verification.go`).
+- [ ] **[Multi-Profile] Dual space membership same account not E2E-tested** — `space_members.profile_id` supports two profiles in one space; no compose/live test (friend/chat isolation covered).
+- [ ] **[Multi-Profile] Voice-on-switch not E2E-tested** — `voiceBindingProfileId` + `call_error_listener` conflict dialog implemented; no live test for switch during active voice (`multi-profile.md` §войс).
+- [ ] **[Multi-Profile] `profile_context_controller` untested** — MM cancel, space exit, WS reconnect on `activeProfileId` change; widget tests cover switcher only (`profile_switcher_test.dart`, `create_profile_sheet_test.dart`).
+- [ ] **[Multi-Profile] E2E scope narrow** — `profiles_verification_e2e_live_test` covers create+switch only; missing delete, frozen switch denial, downgrade picker, premium 3rd profile (см. [Cross-cutting] partial-feature E2E).
 
 #### Analytics — Critical
 

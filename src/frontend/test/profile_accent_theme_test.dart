@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voice_frontend/state/social_providers.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 
 import 'support/auth_test_overrides.dart';
@@ -13,6 +14,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         ...voiceThemeTestOverrides(),
+        profileProvider('prof-b').overrideWith((ref) async => null),
         profileAccentStorageProvider.overrideWithValue(
           testProfileAccentStorage,
         ),
@@ -32,6 +34,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         ...voiceThemeTestOverrides(),
+        profileProvider('prof-c').overrideWith((ref) async => null),
         profileAccentStorageProvider.overrideWithValue(
           testProfileAccentStorage,
         ),
