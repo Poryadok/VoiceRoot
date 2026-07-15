@@ -39,6 +39,32 @@ class ConvertGuestIntegrationTest {
   }
 
   @Test
+  void convertGuestRejectsDuplicateEmail() throws Exception {
+    JsonNode existing =
+        session(
+            postJson(
+                "/api/v1/auth/register",
+                "{\"email\":\"taken@example.com\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"{}\"}"));
+    assertThat(existing.get("account_id").asText()).isNotBlank();
+
+    JsonNode guest =
+        session(
+            postJson(
+                "/api/v1/auth/register",
+                "{\"password\":\"Correct horse battery staple\",\"guest\":true,\"device_info_json\":\"{}\"}"));
+
+    mockMvc
+        .perform(
+            post("/api/v1/auth/convert-guest")
+                .header("Authorization", "Bearer " + guest.get("access_token").asText())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"email\":\"taken@example.com\",\"password\":\"New account password 1\"}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.error", is("registration_conflict")));
+  }
+
+  @Test
   void convertGuestToRegularKeepsAccountIdAndSetsNewPassword() throws Exception {
     JsonNode guest =
         session(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../backend/users_client.dart';
+import '../../backend/users_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/subscription_providers.dart';
@@ -35,32 +36,48 @@ class ProfileSwitcher extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     final voice = VoiceColors.of(context);
-    final activeId = ref.watch(authControllerProvider).activeProfileId;
+    final auth = ref.watch(authControllerProvider);
+    final activeId = auth.activeProfileId;
+    final isGuest = auth.isGuest;
     final profilesAsync = ref.watch(myProfilesProvider);
+    final activeProfileAsync = ref.watch(activeProfileProvider);
+    final activeProfile = activeProfileAsync.valueOrNull;
     final switching = ref.watch(profileSwitchInProgressProvider);
 
+    Widget sessionText(String label) {
+      return Text(
+        label,
+        key: const Key('auth_session_profile'),
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(color: voice.textPrimary),
+      );
+    }
+
+    String fallbackLabel() => l10n.authSessionProfile(activeId ?? '…');
+
+    String resolvedLabel(List<VoiceProfile> profiles) =>
+        _labelFor(profiles, activeId, l10n, activeProfile, isGuest);
+
     return profilesAsync.when(
-      loading: () => Text(
-        l10n.authSessionProfile(activeId ?? '…'),
-        key: const Key('auth_session_profile'),
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(color: voice.textPrimary),
-      ),
-      error: (_, _) => Text(
-        l10n.authSessionProfile(activeId ?? '…'),
-        key: const Key('auth_session_profile'),
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(color: voice.textPrimary),
-      ),
+      loading: () {
+        if (activeProfile != null && activeProfile.id == activeId) {
+          return sessionText(
+            profileSessionBarLabel(activeProfile, isGuest: isGuest),
+          );
+        }
+        return sessionText(fallbackLabel());
+      },
+      error: (_, _) {
+        if (activeProfile != null && activeProfile.id == activeId) {
+          return sessionText(
+            profileSessionBarLabel(activeProfile, isGuest: isGuest),
+          );
+        }
+        return sessionText(fallbackLabel());
+      },
       data: (profiles) {
         if (profiles.length <= 1 || activeId == null) {
-          final label = _labelFor(profiles, activeId, l10n);
-          return Text(
-            label,
-            key: const Key('auth_session_profile'),
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: voice.textPrimary),
-          );
+          return sessionText(resolvedLabel(profiles));
         }
         return DropdownButtonHideUnderline(
           child: DropdownButton<String>(
@@ -100,10 +117,25 @@ class ProfileSwitcher extends ConsumerWidget {
     List<VoiceProfile> profiles,
     String? activeId,
     AppLocalizations l10n,
+    VoiceProfile? activeProfile,
+    bool isGuest,
   ) {
     if (activeId == null) return l10n.authSessionProfile('…');
-    for (final profile in profiles) {
-      if (profile.id == activeId) return profile.handle;
+
+    VoiceProfile? resolved;
+    if (activeProfile != null && activeProfile.id == activeId) {
+      resolved = activeProfile;
+    } else {
+      for (final profile in profiles) {
+        if (profile.id == activeId) {
+          resolved = profile;
+          break;
+        }
+      }
+    }
+
+    if (resolved != null) {
+      return profileSessionBarLabel(resolved, isGuest: isGuest);
     }
     return l10n.authSessionProfile(activeId);
   }

@@ -116,7 +116,7 @@ public class AuthService {
     try {
       account = accounts.create(email, phone, passwordHasher.hash(command.password()), command.guest() ? "guest" : "regular");
     } catch (IllegalArgumentException ex) {
-      throw new AuthException("invalid_credentials");
+      throw new AuthException("registration_conflict");
     }
     touchLastOnline(account);
     return issueSession(account, command.deviceInfoJson());
@@ -293,7 +293,7 @@ public class AuthService {
           .findByEmail(email)
           .filter(existing -> !existing.id().equals(account.id()))
           .ifPresent(ignored -> {
-            throw new AuthException("invalid_credentials");
+            throw new AuthException("registration_conflict");
           });
     }
     if (phone != null) {
@@ -301,14 +301,14 @@ public class AuthService {
           .findByPhone(phone)
           .filter(existing -> !existing.id().equals(account.id()))
           .ifPresent(ignored -> {
-            throw new AuthException("invalid_credentials");
+            throw new AuthException("registration_conflict");
           });
     }
     Account converted;
     try {
       converted = accounts.convertGuest(account.id(), email, phone, passwordHash);
     } catch (IllegalArgumentException ex) {
-      throw new AuthException("invalid_credentials");
+      throw new AuthException("registration_conflict");
     }
     tokenBlacklist.revoke(claims.jti(), jwtService.ttl(claims));
     authEventPublisher.publishGuestConverted(converted.id());

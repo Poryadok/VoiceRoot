@@ -188,6 +188,12 @@ abstract class AppLocalizations {
   /// **'Incorrect email or password.'**
   String get authErrorInvalidCredentials;
 
+  /// No description provided for @authErrorRegistrationConflict.
+  ///
+  /// In en, this message translates to:
+  /// **'This email can\'t be used. Try another one or sign in if you already have an account.'**
+  String get authErrorRegistrationConflict;
+
   /// No description provided for @authLogin.
   ///
   /// In en, this message translates to:

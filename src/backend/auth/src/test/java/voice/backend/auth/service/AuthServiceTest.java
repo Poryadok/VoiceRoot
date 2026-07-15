@@ -90,6 +90,19 @@ class AuthServiceTest {
   }
 
   @Test
+  void registerRejectsDuplicateEmailWithoutRevealingExistence() {
+    AuthService service = service(CLOCK);
+    service.register(
+        new RegisterCommand("dup@example.com", null, "Correct horse battery staple", false, "{}"));
+
+    assertThatThrownBy(
+            () -> service.register(
+                new RegisterCommand("dup@example.com", null, "Correct horse battery staple", false, "{}")))
+        .isInstanceOf(AuthException.class)
+        .hasMessage("registration_conflict");
+  }
+
+  @Test
   void registerGuestWithoutEmailOrPhoneSucceeds() {
     AuthService service = service(CLOCK);
     AuthSession guest =

@@ -29,6 +29,7 @@
   "authErrorValidationFailed": "Укажите корректный email и пароль не короче 8 символов.",
   "authErrorRateLimited": "Слишком много попыток. Подождите и попробуйте снова.",
   "authErrorInvalidCredentials": "Неверный email или пароль.",
+  "authErrorRegistrationConflict": "Этот email использовать нельзя. Укажите другой или войдите, если аккаунт уже есть.",
   "authLogin": "Войти",
   "authRegister": "Регистрация",
   "authContinueGuest": "Продолжить как гость",

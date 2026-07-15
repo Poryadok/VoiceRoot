@@ -184,6 +184,7 @@ class AuthController extends StateNotifier<AuthState> {
               resolveAuthErrorKey(
                 errorCode: errorCode,
                 statusCode: statusCode,
+                message: message,
               ) ??
               message,
         );
@@ -233,6 +234,7 @@ class AuthController extends StateNotifier<AuthState> {
         return resolveAuthErrorKey(
               errorCode: errorCode,
               statusCode: statusCode,
+              message: message,
             ) ??
             message;
     }
@@ -320,6 +322,7 @@ class AuthController extends StateNotifier<AuthState> {
               resolveAuthErrorKey(
                 errorCode: errorCode,
                 statusCode: statusCode,
+                message: message,
               ) ??
               message,
         );

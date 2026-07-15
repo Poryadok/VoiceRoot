@@ -61,6 +61,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get authErrorInvalidCredentials => 'Incorrect email or password.';
 
   @override
+  String get authErrorRegistrationConflict =>
+      'This email can\'t be used. Try another one or sign in if you already have an account.';
+
+  @override
   String get authLogin => 'Log in';
 
   @override

@@ -23,6 +23,15 @@ void main() {
       expect(err.message, 'not allowed');
     });
 
+    test('parses gRPC transcode domain code in message', () {
+      final err = GatewayApiError.fromStatusAndBody(
+        400,
+        '{"error_code":"registration_conflict","message":"registration_conflict"}',
+      );
+      expect(err.errorCode, 'registration_conflict');
+      expect(err.message, 'registration_conflict');
+    });
+
     test('parses 426 client_outdated with update_url', () {
       final err = GatewayApiError.fromStatusAndBody(
         426,

@@ -61,6 +61,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get authErrorInvalidCredentials => 'Неверный email или пароль.';
 
   @override
+  String get authErrorRegistrationConflict =>
+      'Этот email использовать нельзя. Укажите другой или войдите, если аккаунт уже есть.';
+
+  @override
   String get authLogin => 'Войти';
 
   @override

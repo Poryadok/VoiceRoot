@@ -149,7 +149,7 @@ public class AuthRestController {
   @ExceptionHandler(AuthException.class)
   public ResponseEntity<Map<String, String>> authError(AuthException ex) {
     HttpStatus status = switch (ex.getMessage()) {
-      case "validation_failed" -> HttpStatus.BAD_REQUEST;
+      case "validation_failed", "registration_conflict" -> HttpStatus.BAD_REQUEST;
       case "auth_unavailable" -> HttpStatus.SERVICE_UNAVAILABLE;
       default -> HttpStatus.UNAUTHORIZED;
     };

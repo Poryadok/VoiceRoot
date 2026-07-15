@@ -104,7 +104,11 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
         setState(() {
           _busy = false;
           _error =
-              resolveAuthErrorKey(errorCode: errorCode, statusCode: statusCode) ??
+              resolveAuthErrorKey(
+                errorCode: errorCode,
+                statusCode: statusCode,
+                message: message,
+              ) ??
               message;
         });
     }

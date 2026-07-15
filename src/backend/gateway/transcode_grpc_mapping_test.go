@@ -1,12 +1,14 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func TestGRPCCodeToHTTP(t *testing.T) {
@@ -37,6 +39,25 @@ func TestGRPCCodeToHTTP(t *testing.T) {
 				t.Fatalf("grpcCodeToHTTP(%v) = %d, want %d", tc.code, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestWriteGRPCError_UsesDomainErrorCodeFromMessage(t *testing.T) {
+	t.Parallel()
+	rec := httptest.NewRecorder()
+	writeGRPCError(rec, status.Error(codes.FailedPrecondition, "registration_conflict"))
+	if rec.Code != http.StatusPreconditionFailed {
+		t.Fatalf("status = %d, want 412", rec.Code)
+	}
+	var body map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body["error_code"] != "registration_conflict" {
+		t.Fatalf("error_code = %q, want registration_conflict", body["error_code"])
+	}
+	if body["message"] != "registration_conflict" {
+		t.Fatalf("message = %q", body["message"])
 	}
 }
 

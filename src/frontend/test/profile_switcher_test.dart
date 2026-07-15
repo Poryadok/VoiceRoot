@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
+import 'package:voice_frontend/backend/guest_credentials_storage.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
@@ -219,6 +220,86 @@ void main() {
       container.read(authControllerProvider).activeProfileId,
       'profile-alt',
     );
+    container.dispose();
+  });
+
+  testWidgets('ProfileSwitcher shows guest nickname when profile list is empty',
+      (tester) async {
+    const guestProfileId = '7ff61e3a-27d9-44be-a636-a3e94f2a5265';
+    final mock = MockClient((req) async {
+      if (req.url.path == '/api/v1/users/profiles') {
+        return http.Response('unavailable', 503);
+      }
+      if (req.url.path == '/api/v1/users/profiles/$guestProfileId') {
+        return http.Response(
+          jsonEncode({
+            'profile': {
+              'id': guestProfileId,
+              'account_id': 'guest-acc',
+              'username': 'playerone',
+              'discriminator': '0042',
+              'display_name': 'PlayerOne',
+              'locale': 'en',
+              'theme': 'dark',
+              'is_primary': true,
+              'verification_type': 'none',
+            },
+          }),
+          200,
+        );
+      }
+      return http.Response('not found', 404);
+    });
+
+    late AuthController authController;
+    final container = ProviderContainer(
+      overrides: [
+        gatewayConfigProvider.overrideWithValue(
+          const GatewayConfig(baseUrl: 'http://api.test'),
+        ),
+        httpClientProvider.overrideWithValue(mock),
+        authSessionStorageProvider.overrideWithValue(_MemoryAuthStorage()),
+        guestCredentialsStorageProvider.overrideWithValue(
+          InMemoryGuestCredentialsStorage(),
+        ),
+        authControllerProvider.overrideWith((ref) {
+          authController = AuthController(
+            authClient: ref.watch(voiceAuthClientProvider),
+            storage: ref.watch(authSessionStorageProvider),
+            guestCredentialsStorage: ref.watch(guestCredentialsStorageProvider),
+          );
+          authController.state = const AuthState(
+            session: AuthSession(
+              accessToken: 'guest-access',
+              refreshToken: 'guest-refresh',
+              accountId: 'guest-acc',
+              activeProfileId: guestProfileId,
+              expiresInSeconds: 900,
+            ),
+            isGuest: true,
+          );
+          return authController;
+        }),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: ProfileSwitcher()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('PlayerOne'), findsOneWidget);
+    expect(find.textContaining('Profile:'), findsNothing);
     container.dispose();
   });
 }

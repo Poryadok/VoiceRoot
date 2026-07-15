@@ -210,8 +210,18 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
       observer.onNext(call.execute());
       observer.onCompleted();
     } catch (AuthException ex) {
-      observer.onError(Status.UNAUTHENTICATED.withDescription(ex.getMessage()).asRuntimeException());
+      observer.onError(toGrpcStatus(ex).asRuntimeException());
     }
+  }
+
+  private static Status toGrpcStatus(AuthException ex) {
+    return switch (ex.getMessage()) {
+      case "validation_failed" -> Status.INVALID_ARGUMENT.withDescription(ex.getMessage());
+      case "registration_conflict" -> Status.FAILED_PRECONDITION.withDescription(ex.getMessage());
+      case "auth_unavailable" -> Status.UNAVAILABLE.withDescription(ex.getMessage());
+      case "not_found" -> Status.NOT_FOUND.withDescription(ex.getMessage());
+      default -> Status.UNAUTHENTICATED.withDescription(ex.getMessage());
+    };
   }
 
   private AuthSession toProto(voice.backend.auth.service.AuthSession session) {

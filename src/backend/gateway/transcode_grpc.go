@@ -84,11 +84,37 @@ func writeGRPCError(w http.ResponseWriter, err error) {
 		})
 		return
 	}
+	errorCode := grpcCodeToErrorCode(st.Code())
+	if domain := grpcStatusDomainErrorCode(st); domain != "" {
+		errorCode = domain
+	}
 	w.Header().Set("X-Voice-GRPC-Code", st.Code().String())
 	writeJSON(w, grpcCodeToHTTP(st.Code()), map[string]string{
-		"error_code": grpcCodeToErrorCode(st.Code()),
+		"error_code": errorCode,
 		"message":    st.Message(),
 	})
+}
+
+// grpcStatusDomainErrorCode returns app error keys carried in gRPC status messages
+// (e.g. AuthException codes), so Gateway clients see registration_conflict instead of unauthenticated.
+func grpcStatusDomainErrorCode(st *status.Status) string {
+	msg := strings.TrimSpace(st.Message())
+	if msg == "" {
+		return ""
+	}
+	for i, r := range msg {
+		if i == 0 {
+			if r < 'a' || r > 'z' {
+				return ""
+			}
+			continue
+		}
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' {
+			continue
+		}
+		return ""
+	}
+	return msg
 }
 
 func grpcCodeToHTTP(code codes.Code) int {

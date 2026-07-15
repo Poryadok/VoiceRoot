@@ -295,9 +295,10 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
     final inSpace = selectedSpaceId != null;
     final reconnectBannerVisible = ref.watch(reconnectBannerVisibleProvider);
 
+    final isGuest = ref.watch(authControllerProvider).isGuest;
     final sessionLabel = profileAsync.when(
       data: (profile) => profile != null
-          ? l10n.authSessionHandle(profile.handle)
+          ? profileSessionBarLabel(profile, isGuest: isGuest)
           : l10n.authSessionProfile(
               ref.watch(authControllerProvider).activeProfileId!,
             ),

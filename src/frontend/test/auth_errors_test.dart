@@ -19,6 +19,28 @@ void main() {
         'invalid_credentials',
       );
     });
+
+    test('maps grpc unauthenticated to message domain code', () {
+      expect(
+        resolveAuthErrorKey(
+          errorCode: 'unauthenticated',
+          statusCode: 401,
+          message: 'invalid_credentials',
+        ),
+        'invalid_credentials',
+      );
+    });
+
+    test('maps registration_conflict from grpc transcode', () {
+      expect(
+        resolveAuthErrorKey(
+          errorCode: 'registration_conflict',
+          statusCode: 400,
+          message: 'registration_conflict',
+        ),
+        'registration_conflict',
+      );
+    });
   });
 
   group('authErrorMessage', () {
@@ -40,6 +62,13 @@ void main() {
       expect(
         authErrorMessage(l10n, AuthErrorKeys.invalidCredentials),
         l10n.authErrorInvalidCredentials,
+      );
+    });
+
+    test('registration_conflict', () {
+      expect(
+        authErrorMessage(l10n, AuthErrorKeys.registrationConflict),
+        l10n.authErrorRegistrationConflict,
       );
     });
 

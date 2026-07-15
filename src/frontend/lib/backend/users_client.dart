@@ -67,6 +67,17 @@ class VoiceProfile {
   String get handle => '@$username#$discriminator';
 }
 
+/// Session bar label: guest accounts show the chosen nickname; others show @handle.
+String profileSessionBarLabel(
+  VoiceProfile profile, {
+  required bool isGuest,
+}) {
+  if (isGuest && profile.displayName.isNotEmpty) {
+    return profile.displayName;
+  }
+  return profile.handle;
+}
+
 class VoicePresence {
   const VoicePresence({
     required this.profileId,
