@@ -78,6 +78,72 @@ void main() {
       expect(chats.calls, hasLength(1));
     });
 
+    test('reloads chats when session access token changes', () async {
+      final chats = _FakeChatsClient(
+        pages: [
+          const ChatListData(items: []),
+          const ChatListData(
+            items: [
+              ChatListItem(
+                chat: VoiceChat(
+                  id: 'chat-after-convert',
+                  type: 'CHAT_TYPE_DM',
+                  creatorProfileId: 'peer-1',
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+      final storage = InMemoryAuthSessionStorage();
+      final container = ProviderContainer(
+        overrides: [
+          authSessionStorageProvider.overrideWithValue(storage),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          httpClientProvider.overrideWithValue(
+            MockClient((_) async => http.Response('{}', 404)),
+          ),
+          voiceChatsClientProvider.overrideWithValue(chats),
+          voiceMessagesClientProvider.overrideWithValue(_FakeMessagesClient()),
+          realtimeHubProvider.overrideWith(_FakeRealtimeHub.new),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      const guestSession = AuthSession(
+        accessToken: 'guest-access',
+        refreshToken: 'guest-refresh',
+        accountId: 'acc-1',
+        activeProfileId: 'prof-1',
+        expiresInSeconds: 900,
+        accountType: 'guest',
+      );
+      container.read(authControllerProvider.notifier).state = const AuthState(
+        session: guestSession,
+      );
+      container.read(chatListControllerProvider);
+      await pumpEventQueue();
+      expect(chats.calls, hasLength(1));
+
+      container.read(authControllerProvider.notifier).state = const AuthState(
+        session: AuthSession(
+          accessToken: 'regular-access',
+          refreshToken: 'regular-refresh',
+          accountId: 'acc-1',
+          activeProfileId: 'prof-1',
+          expiresInSeconds: 900,
+          accountType: 'regular',
+        ),
+      );
+      await pumpEventQueue();
+
+      final state = container.read(chatListControllerProvider);
+      expect(state.items.map((item) => item.chatId), ['chat-after-convert']);
+      expect(chats.calls, hasLength(2));
+    });
+
     test('loads the next chat page and keeps existing rows', () async {
       final chats = _FakeChatsClient(
         pages: [

@@ -272,7 +272,11 @@ class ChatListController extends StateNotifier<ChatListState> {
         next.isAuthenticated && !(previous?.isAuthenticated ?? false);
     final restoreFinished =
         (previous?.isRestoring ?? false) && !next.isRestoring;
-    if (becameAuthenticated || restoreFinished) {
+    final sessionTokenChanged =
+        (previous?.isAuthenticated ?? false) &&
+        next.session != null &&
+        previous?.session?.accessToken != next.session?.accessToken;
+    if (becameAuthenticated || restoreFinished || sessionTokenChanged) {
       unawaited(loadInitial());
     }
   }

@@ -51,7 +51,22 @@ func (s *recordingPhase13SubscriptionGRPC) GetLimits(_ context.Context, req *sub
 
 type recordingPhase13AuthGRPC struct {
 	authv1.UnimplementedAuthServiceServer
-	lastSwitch *authv1.SwitchActiveProfileRequest
+	lastSwitch  *authv1.SwitchActiveProfileRequest
+	lastConvert *authv1.ConvertGuestRequest
+}
+
+func (s *recordingPhase13AuthGRPC) ConvertGuest(_ context.Context, req *authv1.ConvertGuestRequest) (*authv1.ConvertGuestResponse, error) {
+	s.lastConvert = req
+	return &authv1.ConvertGuestResponse{
+		Session: &authv1.AuthSession{
+			AccessToken:      "converted-access",
+			RefreshToken:     "converted-refresh",
+			AccountId:        "account-guest",
+			ProfileId:        "profile-guest",
+			ExpiresInSeconds: 900,
+			AccountType:      "regular",
+		},
+	}, nil
 }
 
 func (s *recordingPhase13AuthGRPC) SwitchActiveProfile(_ context.Context, req *authv1.SwitchActiveProfileRequest) (*authv1.SwitchActiveProfileResponse, error) {
@@ -160,6 +175,33 @@ func TestTranscodePhase13_SwitchProfile(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.Code, "body=%s", resp.Body.String())
 	require.NotNil(t, rec.lastSwitch)
 	require.Equal(t, "profile-alt-2", rec.lastSwitch.GetProfileId())
+}
+
+// TestTranscodePhase13_ConvertGuest documents POST /api/v1/auth/convert-guest → Auth.ConvertGuest
+// with proto-JSON response (snake_case) for Flutter decodeGatewayProto.
+func TestTranscodePhase13_ConvertGuest(t *testing.T) {
+	t.Parallel()
+
+	rec := &recordingPhase13AuthGRPC{}
+	conn, cleanup := startBufconnAuthConn(t, rec)
+	t.Cleanup(cleanup)
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"guest-token": {UserID: "account-guest", ProfileID: "profile-guest", AccountType: "guest"},
+		},
+		transcoder: &transcoder{clients: grpcClients{auth: authv1.NewAuthServiceClient(conn)}},
+	})
+
+	resp := performRequest(h, http.MethodPost, "/api/v1/auth/convert-guest",
+		`{"email":"guest@example.com","password":"new-password-1"}`, map[string]string{
+			"Authorization": "Bearer guest-token",
+		})
+	require.Equal(t, http.StatusOK, resp.Code, "body=%s", resp.Body.String())
+	require.NotNil(t, rec.lastConvert)
+	require.Equal(t, "guest@example.com", rec.lastConvert.GetEmail())
+	require.Contains(t, resp.Body.String(), `"access_token":"converted-access"`)
+	require.Contains(t, resp.Body.String(), `"refresh_token":"converted-refresh"`)
+	require.Contains(t, resp.Body.String(), `"account_type":"regular"`)
 }
 
 // TestTranscodePhase13_SubscriptionLimits documents GET /api/v1/subscription/limits → Subscription.GetLimits.

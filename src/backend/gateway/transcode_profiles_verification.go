@@ -101,7 +101,7 @@ func (t *transcoder) serveAuthREST(w http.ResponseWriter, r *http.Request, rest 
 			writeGRPCError(w, err)
 			return true
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"session": resp.GetSession()})
+		writeProtoJSON(w, http.StatusOK, resp)
 		return true
 
 	default:

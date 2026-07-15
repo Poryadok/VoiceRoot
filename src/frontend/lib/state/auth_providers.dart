@@ -217,6 +217,9 @@ class AuthController extends StateNotifier<AuthState> {
     );
     switch (result) {
       case AuthSessionOk(:final session):
+        if (session.accessToken.isEmpty || session.refreshToken.isEmpty) {
+          return AuthErrorKeys.validationFailed;
+        }
         await _guestCredentialsStorage.clear();
         await _persist(session);
         state = state.copyWith(
@@ -225,6 +228,7 @@ class AuthController extends StateNotifier<AuthState> {
           clearGuestNickname: true,
           clearError: true,
         );
+        await _notifyAuthenticated();
         return null;
       case AuthSessionFailure(
         :final message,
