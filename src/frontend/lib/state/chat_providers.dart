@@ -1352,6 +1352,15 @@ class RealtimeHub {
     _setStatus(RealtimeLinkStatus.disconnected);
   }
 
+  /// Reconnect WebSocket after profile switch (new JWT, same subscriptions).
+  Future<void> reconnectWithNewSession() async {
+    if (_disposed) return;
+    _reconnectTimer?.cancel();
+    _reconnectAttempt = 0;
+    await _tearDownConnection();
+    await ensureConnected();
+  }
+
   void _setStatus(RealtimeLinkStatus next) {
     if (_disposed) return;
     _status = next;

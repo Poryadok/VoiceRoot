@@ -22,7 +22,7 @@ const (
 )
 
 const profileSelectCols = `id, account_id, username, discriminator, display_name, avatar_url, banner_url, bio,
-		locale, theme, is_primary, verification_type, verification_badge, frozen_at, created_at, updated_at`
+		locale, theme, is_primary, verification_type, verification_badge, frozen_at, accent_color, created_at, updated_at`
 
 // MaxDisplayNameRunes is the maximum length of profile display_name (aligned with Discord).
 const MaxDisplayNameRunes = 32
@@ -42,6 +42,7 @@ type ProfileRow struct {
 	IsPrimary         bool
 	VerificationType  string
 	VerificationBadge *string
+	AccentColor       *string
 	FrozenAt          *time.Time
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
@@ -87,7 +88,7 @@ func scanProfile(row pgx.Row) (*ProfileRow, error) {
 	err := row.Scan(
 		&p.ID, &p.AccountID, &p.Username, &p.Discriminator, &p.DisplayName,
 		&p.AvatarURL, &p.BannerURL, &p.Bio, &p.Locale, &p.Theme, &p.IsPrimary,
-		&p.VerificationType, &p.VerificationBadge, &p.FrozenAt, &p.CreatedAt, &p.UpdatedAt,
+		&p.VerificationType, &p.VerificationBadge, &p.FrozenAt, &p.AccentColor, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -161,6 +162,7 @@ type UpdateProfileInput struct {
 	Bio         *string
 	Locale      *string
 	Theme       *string
+	AccentColor *string
 }
 
 func (s *ProfileStore) UpdateOwnedProfile(ctx context.Context, accountID, profileID uuid.UUID, in UpdateProfileInput) (*ProfileRow, error) {
@@ -198,6 +200,11 @@ func (s *ProfileStore) UpdateOwnedProfile(ctx context.Context, accountID, profil
 		args = append(args, *in.Theme)
 		n++
 	}
+	if in.AccentColor != nil {
+		set = append(set, fmt.Sprintf("accent_color = $%d", n))
+		args = append(args, *in.AccentColor)
+		n++
+	}
 	if len(set) == 0 {
 		return s.scanOne(ctx, `SELECT `+profileSelectCols+` FROM profiles WHERE id = $1 AND account_id = $2`, profileID, accountID)
 	}
@@ -220,7 +227,7 @@ func (s *ProfileStore) UpdateOwnedProfile(ctx context.Context, accountID, profil
 }
 
 // CreateSecondaryProfile inserts a non-primary profile for the account (multi-profile row).
-func (s *ProfileStore) CreateSecondaryProfile(ctx context.Context, accountID uuid.UUID, displayName string, usernameHint *string) (*ProfileRow, error) {
+func (s *ProfileStore) CreateSecondaryProfile(ctx context.Context, accountID uuid.UUID, displayName string, usernameHint *string, accentColor *string) (*ProfileRow, error) {
 	dn := truncate(strings.TrimSpace(displayName), MaxDisplayNameRunes)
 	if dn == "" {
 		return nil, fmt.Errorf("display_name required")
@@ -236,10 +243,10 @@ func (s *ProfileStore) CreateSecondaryProfile(ctx context.Context, accountID uui
 		disc := randomDiscriminator()
 		id := uuid.New()
 		row := s.pool.QueryRow(ctx, `
-			INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary, locale, theme, verification_type)
-			VALUES ($1, $2, $3, $4, $5, false, 'ru', 'dark', 'none')
+			INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary, locale, theme, verification_type, accent_color)
+			VALUES ($1, $2, $3, $4, $5, false, 'ru', 'dark', 'none', $6)
 			RETURNING `+profileSelectCols,
-			id, accountID, base, disc, dn,
+			id, accountID, base, disc, dn, accentColor,
 		)
 		p, err := scanProfile(row)
 		if err == nil {

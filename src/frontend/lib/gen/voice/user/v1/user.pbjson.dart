@@ -231,6 +231,15 @@ const Profile$json = {
       '10': 'frozenAt',
       '17': true
     },
+    {
+      '1': 'accent_color',
+      '3': 18,
+      '4': 1,
+      '5': 9,
+      '9': 6,
+      '10': 'accentColor',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_avatar_url'},
@@ -239,6 +248,7 @@ const Profile$json = {
     {'1': '_custom_status'},
     {'1': '_verification_badge'},
     {'1': '_frozen_at'},
+    {'1': '_accent_color'},
   ],
 };
 
@@ -255,9 +265,10 @@ final $typed_data.Uint8List profileDescriptor = $convert.base64Decode(
     'SARSEXZlcmlmaWNhdGlvbkJhZGdliAEBEjkKCmNyZWF0ZWRfYXQYDyABKAsyGi5nb29nbGUucH'
     'JvdG9idWYuVGltZXN0YW1wUgljcmVhdGVkQXQSOQoKdXBkYXRlZF9hdBgQIAEoCzIaLmdvb2ds'
     'ZS5wcm90b2J1Zi5UaW1lc3RhbXBSCXVwZGF0ZWRBdBI8Cglmcm96ZW5fYXQYESABKAsyGi5nb2'
-    '9nbGUucHJvdG9idWYuVGltZXN0YW1wSAVSCGZyb3plbkF0iAEBQg0KC19hdmF0YXJfdXJsQg0K'
-    'C19iYW5uZXJfdXJsQgYKBF9iaW9CEAoOX2N1c3RvbV9zdGF0dXNCFQoTX3ZlcmlmaWNhdGlvbl'
-    '9iYWRnZUIMCgpfZnJvemVuX2F0');
+    '9nbGUucHJvdG9idWYuVGltZXN0YW1wSAVSCGZyb3plbkF0iAEBEiYKDGFjY2VudF9jb2xvchgS'
+    'IAEoCUgGUgthY2NlbnRDb2xvcogBAUINCgtfYXZhdGFyX3VybEINCgtfYmFubmVyX3VybEIGCg'
+    'RfYmlvQhAKDl9jdXN0b21fc3RhdHVzQhUKE192ZXJpZmljYXRpb25fYmFkZ2VCDAoKX2Zyb3pl'
+    'bl9hdEIPCg1fYWNjZW50X2NvbG9y');
 
 @$core.Deprecated('Use updateProfileRequestDescriptor instead')
 const UpdateProfileRequest$json = {
@@ -303,6 +314,15 @@ const UpdateProfileRequest$json = {
     },
     {'1': 'locale', '3': 7, '4': 1, '5': 9, '9': 5, '10': 'locale', '17': true},
     {'1': 'theme', '3': 8, '4': 1, '5': 9, '9': 6, '10': 'theme', '17': true},
+    {
+      '1': 'accent_color',
+      '3': 9,
+      '4': 1,
+      '5': 9,
+      '9': 7,
+      '10': 'accentColor',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_display_name'},
@@ -312,6 +332,7 @@ const UpdateProfileRequest$json = {
     {'1': '_custom_status'},
     {'1': '_locale'},
     {'1': '_theme'},
+    {'1': '_accent_color'},
   ],
 };
 
@@ -322,8 +343,9 @@ final $typed_data.Uint8List updateProfileRequestDescriptor = $convert.base64Deco
     'KAlIAVIJYXZhdGFyVXJsiAEBEiIKCmJhbm5lcl91cmwYBCABKAlIAlIJYmFubmVyVXJsiAEBEh'
     'UKA2JpbxgFIAEoCUgDUgNiaW+IAQESKAoNY3VzdG9tX3N0YXR1cxgGIAEoCUgEUgxjdXN0b21T'
     'dGF0dXOIAQESGwoGbG9jYWxlGAcgASgJSAVSBmxvY2FsZYgBARIZCgV0aGVtZRgIIAEoCUgGUg'
-    'V0aGVtZYgBAUIPCg1fZGlzcGxheV9uYW1lQg0KC19hdmF0YXJfdXJsQg0KC19iYW5uZXJfdXJs'
-    'QgYKBF9iaW9CEAoOX2N1c3RvbV9zdGF0dXNCCQoHX2xvY2FsZUIICgZfdGhlbWU=');
+    'V0aGVtZYgBARImCgxhY2NlbnRfY29sb3IYCSABKAlIB1ILYWNjZW50Q29sb3KIAQFCDwoNX2Rp'
+    'c3BsYXlfbmFtZUINCgtfYXZhdGFyX3VybEINCgtfYmFubmVyX3VybEIGCgRfYmlvQhAKDl9jdX'
+    'N0b21fc3RhdHVzQgkKB19sb2NhbGVCCAoGX3RoZW1lQg8KDV9hY2NlbnRfY29sb3I=');
 
 @$core.Deprecated('Use createProfileRequestDescriptor instead')
 const CreateProfileRequest$json = {
@@ -339,16 +361,30 @@ const CreateProfileRequest$json = {
       '10': 'username',
       '17': true
     },
+    {'1': 'preset', '3': 3, '4': 1, '5': 9, '9': 1, '10': 'preset', '17': true},
+    {
+      '1': 'accent_color',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '9': 2,
+      '10': 'accentColor',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_username'},
+    {'1': '_preset'},
+    {'1': '_accent_color'},
   ],
 };
 
 /// Descriptor for `CreateProfileRequest`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List createProfileRequestDescriptor = $convert.base64Decode(
     'ChRDcmVhdGVQcm9maWxlUmVxdWVzdBIhCgxkaXNwbGF5X25hbWUYASABKAlSC2Rpc3BsYXlOYW'
-    '1lEh8KCHVzZXJuYW1lGAIgASgJSABSCHVzZXJuYW1liAEBQgsKCV91c2VybmFtZQ==');
+    '1lEh8KCHVzZXJuYW1lGAIgASgJSABSCHVzZXJuYW1liAEBEhsKBnByZXNldBgDIAEoCUgBUgZw'
+    'cmVzZXSIAQESJgoMYWNjZW50X2NvbG9yGAQgASgJSAJSC2FjY2VudENvbG9yiAEBQgsKCV91c2'
+    'VybmFtZUIJCgdfcHJlc2V0Qg8KDV9hY2NlbnRfY29sb3I=');
 
 @$core.Deprecated('Use deleteProfileRequestDescriptor instead')
 const DeleteProfileRequest$json = {

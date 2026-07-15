@@ -15,6 +15,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"voice/backend/user/internal/authctx"
+	"voice/backend/user/internal/profileaccent"
 	"voice/backend/user/internal/r2avatar"
 	"voice/backend/user/internal/store"
 
@@ -175,6 +176,13 @@ func (s *UserGRPC) UpdateProfile(ctx context.Context, req *userv1.UpdateProfileR
 		}
 		in.Theme = &t
 	}
+	if req.AccentColor != nil {
+		accent, err := profileaccent.Normalize(*req.AccentColor)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
+		in.AccentColor = &accent
+	}
 	// custom_status not persisted in v1 DDL.
 
 	row, err := s.Profiles.UpdateOwnedProfile(ctx, accountID, profileID, in)
@@ -203,6 +211,9 @@ func (s *UserGRPC) UpdateProfile(ctx context.Context, req *userv1.UpdateProfileR
 		}
 		if in.Theme != nil {
 			changed = append(changed, "theme")
+		}
+		if in.AccentColor != nil {
+			changed = append(changed, "accent_color")
 		}
 		fieldsJSON, _ := json.Marshal(changed)
 		_ = s.Events.PublishProfileUpdated(ctx, row.ID.String(), row.AccountID.String(), string(fieldsJSON))
@@ -243,9 +254,32 @@ func (s *UserGRPC) CreateProfile(ctx context.Context, req *userv1.CreateProfileR
 		}
 		usernameHint = &u
 	}
-	row, err := s.Profiles.CreateSecondaryProfile(ctx, accountID, dn, usernameHint)
+	preset := strings.TrimSpace(req.GetPreset())
+	if preset == "" {
+		preset = "personal"
+	}
+	if err := oneOfPreset(preset); err != nil {
+		return nil, err
+	}
+	var accentColor *string
+	if req.AccentColor != nil {
+		accent, err := profileaccent.Normalize(*req.AccentColor)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
+		accentColor = &accent
+	} else {
+		defaultAccent := profileaccent.At(count)
+		accentColor = &defaultAccent
+	}
+	row, err := s.Profiles.CreateSecondaryProfile(ctx, accountID, dn, usernameHint, accentColor)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if privacyStore := s.privacyStore(); privacyStore != nil {
+		if _, err := privacyStore.CreateForPreset(ctx, row.ID, preset); err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
 	}
 	if s.Events != nil {
 		_ = s.Events.PublishProfileCreated(ctx, row.ID.String(), row.AccountID.String())
@@ -361,6 +395,9 @@ func rowToProto(p *store.ProfileRow) *userv1.Profile {
 	}
 	if p.FrozenAt != nil {
 		out.FrozenAt = timestamppb.New(*p.FrozenAt)
+	}
+	if p.AccentColor != nil {
+		out.AccentColor = proto.String(*p.AccentColor)
 	}
 	return out
 }

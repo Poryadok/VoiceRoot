@@ -500,4 +500,50 @@ void main() {
     expect(call.session?.isGroupVoice, isTrue);
     expect(call.isOutgoing, isFalse);
   });
+
+  test('active call keeps voiceBindingProfileId after profile switch', () async {
+    final realtime = StreamController<RealtimeFrame>.broadcast();
+    final container = _callTestContainer(
+      client: MockClient((_) async => http.Response('{}', 404)),
+      realtime: realtime,
+      fakeRoom: _FakeLiveKitRoom(),
+      activeProfileId: 'profile-a',
+    );
+    addTearDown(container.dispose);
+    addTearDown(realtime.close);
+
+    final session = VoiceCallSession(
+      roomId: 'room-1',
+      livekitRoomName: 'lk',
+      chatId: 'chat-1',
+      initiatorProfileId: 'profile-a',
+      calleeProfileId: 'profile-b',
+      mediaKind: VoiceCallMediaKind.audio,
+      status: VoiceCallStatus.active,
+    );
+
+    container.read(callControllerProvider.notifier).state = CallState(
+      phase: CallPhase.active,
+      session: session,
+      voiceBindingProfileId: 'profile-a',
+    );
+
+    final auth = container.read(authControllerProvider.notifier);
+    final prev = auth.state.session!;
+    auth.state = auth.state.copyWith(
+      session: AuthSession(
+        accessToken: prev.accessToken,
+        refreshToken: prev.refreshToken,
+        accountId: prev.accountId,
+        activeProfileId: 'profile-b',
+        expiresInSeconds: prev.expiresInSeconds,
+        accountType: prev.accountType,
+      ),
+    );
+
+    final call = container.read(callControllerProvider);
+    expect(call.phase, CallPhase.active);
+    expect(call.voiceBindingProfileId, 'profile-a');
+    expect(call.session?.roomId, 'room-1');
+  });
 }

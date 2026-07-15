@@ -52,6 +52,7 @@ class CallState {
   const CallState({
     this.phase = CallPhase.idle,
     this.session,
+    this.voiceBindingProfileId,
     this.outgoingChatId,
     this.outgoingCalleeProfileId,
     this.isMuted = false,
@@ -64,6 +65,7 @@ class CallState {
 
   final CallPhase phase;
   final VoiceCallSession? session;
+  final String? voiceBindingProfileId;
   final String? outgoingChatId;
   final String? outgoingCalleeProfileId;
   final bool isMuted;
@@ -72,6 +74,24 @@ class CallState {
   final bool needsAudioPlaybackUnlock;
   final int mediaTracksVersion;
   final String? errorMessage;
+
+  bool get hasBoundVoiceSession =>
+      hasCall &&
+      phase != CallPhase.ended &&
+      phase != CallPhase.failed &&
+      (phase == CallPhase.active ||
+          phase == CallPhase.connecting ||
+          phase == CallPhase.incoming ||
+          phase == CallPhase.outgoing);
+
+  bool blocksAnotherVoiceEntry({String? chatId, String? roomId}) {
+    if (!hasBoundVoiceSession) return false;
+    final current = session;
+    if (current == null) return true;
+    if (chatId != null && current.chatId == chatId) return false;
+    if (roomId != null && current.roomId == roomId) return false;
+    return true;
+  }
 
   bool get hasCall => session != null && phase != CallPhase.idle;
   bool get isIncoming => phase == CallPhase.incoming;
@@ -82,6 +102,8 @@ class CallState {
   CallState copyWith({
     CallPhase? phase,
     VoiceCallSession? session,
+    String? voiceBindingProfileId,
+    bool clearVoiceBindingProfileId = false,
     bool clearSession = false,
     String? outgoingChatId,
     String? outgoingCalleeProfileId,
@@ -97,6 +119,9 @@ class CallState {
     return CallState(
       phase: phase ?? this.phase,
       session: clearSession ? null : (session ?? this.session),
+      voiceBindingProfileId: clearVoiceBindingProfileId
+          ? null
+          : (voiceBindingProfileId ?? this.voiceBindingProfileId),
       outgoingChatId: clearOutgoingTarget
           ? null
           : (outgoingChatId ?? this.outgoingChatId),
@@ -132,6 +157,7 @@ class CallController extends StateNotifier<CallState> {
   StreamSubscription<RealtimeFrame>? _eventsSub;
   ProviderSubscription<RealtimeLinkStatus>? _linkSub;
   VoiceLiveKitRoom? _room;
+  Future<void> Function()? _pendingVoiceRetry;
 
   @override
   set state(CallState value) {
@@ -159,9 +185,23 @@ class CallController extends StateNotifier<CallState> {
     required String chatId,
     required String calleeProfileId,
     VoiceCallMediaKind mediaKind = VoiceCallMediaKind.audio,
+    bool forceLeaveActive = false,
   }) async {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return;
+    if (state.blocksAnotherVoiceEntry(chatId: chatId) && !forceLeaveActive) {
+      _pendingVoiceRetry = () => startCall(
+        chatId: chatId,
+        calleeProfileId: calleeProfileId,
+        mediaKind: mediaKind,
+        forceLeaveActive: true,
+      );
+      state = state.copyWith(errorMessage: 'voice_session_conflict');
+      return;
+    }
+    if (forceLeaveActive && state.hasBoundVoiceSession) {
+      await hangUp();
+    }
     if (_startCallInFlight) return;
     final current = state.session;
     if (state.phase == CallPhase.outgoing &&
@@ -210,6 +250,25 @@ class CallController extends StateNotifier<CallState> {
   void dismissFailure() {
     if (state.phase == CallPhase.failed) {
       state = const CallState();
+    }
+  }
+
+  void dismissVoiceConflict() {
+    _pendingVoiceRetry = null;
+    if (state.errorMessage == 'voice_session_conflict') {
+      state = state.copyWith(clearError: true);
+    }
+  }
+
+  Future<void> confirmLeaveCurrentVoiceAndRetry() async {
+    final retry = _pendingVoiceRetry;
+    _pendingVoiceRetry = null;
+    state = state.copyWith(clearError: true);
+    if (state.hasBoundVoiceSession) {
+      await hangUp();
+    }
+    if (retry != null) {
+      await retry();
     }
   }
 
@@ -275,9 +334,22 @@ class CallController extends StateNotifier<CallState> {
   Future<void> joinVoiceRoom({
     required String voiceRoomId,
     required String spaceId,
+    bool forceLeaveActive = false,
   }) async {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return;
+    if (state.hasBoundVoiceSession && !forceLeaveActive) {
+      _pendingVoiceRetry = () => joinVoiceRoom(
+        voiceRoomId: voiceRoomId,
+        spaceId: spaceId,
+        forceLeaveActive: true,
+      );
+      state = state.copyWith(errorMessage: 'voice_session_conflict');
+      return;
+    }
+    if (forceLeaveActive && state.hasBoundVoiceSession) {
+      await hangUp();
+    }
     if (_voiceRoomInFlight) return;
     _voiceRoomInFlight = true;
     state = state.copyWith(phase: CallPhase.connecting, clearError: true);
@@ -377,6 +449,7 @@ class CallController extends StateNotifier<CallState> {
   }
 
   Future<void> hangUp() async {
+    _pendingVoiceRetry = null;
     final auth = _ref.read(authorizationHeaderProvider);
     final current = state.session;
     await _room?.disconnect();
@@ -391,6 +464,14 @@ class CallController extends StateNotifier<CallState> {
       _ref.read(screenShareControllerProvider.notifier).clearForRoomEnd();
       _refreshGroupActiveCalls();
     }
+  }
+
+  String? _resolveVoiceBindingProfileId(VoiceCallSession session) {
+    final activeId = _ref.read(authControllerProvider).activeProfileId;
+    if (activeId == null) return state.voiceBindingProfileId;
+    if (session.initiatorProfileId == activeId) return activeId;
+    if (session.calleeProfileId == activeId) return activeId;
+    return state.voiceBindingProfileId ?? activeId;
   }
 
   Future<void> unlockAudioPlayback() async {
@@ -580,6 +661,9 @@ class CallController extends StateNotifier<CallState> {
           }
           state = state.copyWith(
             phase: CallPhase.active,
+            voiceBindingProfileId:
+                state.voiceBindingProfileId ??
+                _resolveVoiceBindingProfileId(session),
             isVideoEnabled: session.mediaKind == VoiceCallMediaKind.video,
             clearOutgoingTarget: true,
           );
@@ -679,6 +763,7 @@ class CallController extends StateNotifier<CallState> {
     state = CallState(
       phase: phase,
       session: session,
+      voiceBindingProfileId: _resolveVoiceBindingProfileId(session),
       isVideoEnabled: session.mediaKind == VoiceCallMediaKind.video,
     );
   }
@@ -691,6 +776,7 @@ class CallController extends StateNotifier<CallState> {
   }
 
   Future<bool> _tryRecoverActiveCall(String auth) async {
+    if (state.hasBoundVoiceSession) return false;
     final activeProfileId = _ref.read(authControllerProvider).activeProfileId;
     if (activeProfileId == null) return false;
 

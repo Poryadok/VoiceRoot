@@ -1214,6 +1214,66 @@ abstract class AppLocalizations {
   /// **'Could not save profile: {message}'**
   String profileEditSaveError(String message);
 
+  /// No description provided for @createProfileTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add profile'**
+  String get createProfileTitle;
+
+  /// No description provided for @createProfileSubmit.
+  ///
+  /// In en, this message translates to:
+  /// **'Create profile'**
+  String get createProfileSubmit;
+
+  /// No description provided for @createProfilePresetHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy preset'**
+  String get createProfilePresetHint;
+
+  /// No description provided for @createProfileLimitReached.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile limit reached. Premium allows up to 5 profiles.'**
+  String get createProfileLimitReached;
+
+  /// No description provided for @createProfileOpenSubscription.
+  ///
+  /// In en, this message translates to:
+  /// **'View Premium'**
+  String get createProfileOpenSubscription;
+
+  /// No description provided for @createProfileAddAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Add profile'**
+  String get createProfileAddAction;
+
+  /// No description provided for @profileSwitchVoiceBound.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice: {profileName}'**
+  String profileSwitchVoiceBound(String profileName);
+
+  /// No description provided for @voiceLeaveCurrentDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave current voice?'**
+  String get voiceLeaveCurrentDialogTitle;
+
+  /// No description provided for @voiceLeaveCurrentDialogMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'You are in a voice chat ({profileName}). Leave it and join here?'**
+  String voiceLeaveCurrentDialogMessage(String profileName);
+
+  /// No description provided for @voiceLeaveCurrentDialogConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave and join'**
+  String get voiceLeaveCurrentDialogConfirm;
+
   /// No description provided for @commonCancel.
   ///
   /// In en, this message translates to:

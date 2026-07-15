@@ -333,6 +333,30 @@
       }
     }
   },
+  "createProfileTitle": "Добавить профиль",
+  "createProfileSubmit": "Создать профиль",
+  "createProfilePresetHint": "Пресет приватности",
+  "createProfileLimitReached": "Лимит профилей исчерпан. Premium — до 5 профилей.",
+  "createProfileOpenSubscription": "Открыть Premium",
+  "createProfileAddAction": "Добавить профиль",
+  "profileSwitchVoiceBound": "Войс: {profileName}",
+  "@profileSwitchVoiceBound": {
+    "placeholders": {
+      "profileName": {
+        "type": "String"
+      }
+    }
+  },
+  "voiceLeaveCurrentDialogTitle": "Выйти из текущего войса?",
+  "voiceLeaveCurrentDialogMessage": "Вы в войс-чате ({profileName}). Выйти и войти сюда?",
+  "@voiceLeaveCurrentDialogMessage": {
+    "placeholders": {
+      "profileName": {
+        "type": "String"
+      }
+    }
+  },
+  "voiceLeaveCurrentDialogConfirm": "Выйти и войти",
   "commonCancel": "Отмена",
   "shareLinkAction": "Копировать ссылку",
   "shareLinkCopied": "Ссылка скопирована",

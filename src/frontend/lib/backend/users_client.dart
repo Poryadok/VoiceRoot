@@ -50,6 +50,7 @@ class VoiceProfile {
     this.isPrimary = false,
     this.verificationType = 'none',
     this.verificationBadge,
+    this.accentColor,
   });
 
   final String id;
@@ -63,6 +64,7 @@ class VoiceProfile {
   final bool isPrimary;
   final String verificationType;
   final String? verificationBadge;
+  final String? accentColor;
 
   String get handle => '@$username#$discriminator';
 }
@@ -154,10 +156,16 @@ class VoiceUsersClient {
     required String authorization,
     required String displayName,
     String? username,
+    String preset = 'personal',
+    String? accentColor,
   }) async {
-    final body = user_pb.CreateProfileRequest(displayName: displayName);
+    final body = user_pb.CreateProfileRequest(displayName: displayName)
+      ..preset = preset;
     if (username != null && username.isNotEmpty) {
       body.username = username;
+    }
+    if (accentColor != null && accentColor.isNotEmpty) {
+      body.accentColor = accentColor;
     }
     final result = await _gateway.postProto(
       uri: _gateway.resolve('/api/v1/users/profiles'),
@@ -235,6 +243,7 @@ class VoiceUsersClient {
     String? displayName,
     String? bio,
     String? avatarUrl,
+    String? accentColor,
   }) async {
     final result = await _gateway.patchProto(
       uri: _gateway.resolve('/api/v1/users/me'),
@@ -243,6 +252,7 @@ class VoiceUsersClient {
         displayName: displayName,
         bio: bio,
         avatarUrl: avatarUrl,
+        accentColor: accentColor,
       ),
       createEmpty: user_pb.UpdateProfileResponse.create,
     );

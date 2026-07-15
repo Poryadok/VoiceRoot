@@ -322,6 +322,8 @@ VoiceProfile voiceProfileFromProto(user_pb.Profile profile) {
     verificationBadge: profile.hasVerificationBadge()
         ? emptyToNull(profile.verificationBadge)
         : null,
+    accentColor:
+        profile.hasAccentColor() ? emptyToNull(profile.accentColor) : null,
   );
 }
 
@@ -419,11 +421,13 @@ user_pb.UpdateProfileRequest updateProfileRequestToProto({
   String? displayName,
   String? bio,
   String? avatarUrl,
+  String? accentColor,
 }) {
   return user_pb.UpdateProfileRequest(
     displayName: displayName,
     bio: bio,
     avatarUrl: avatarUrl,
+    accentColor: accentColor,
   );
 }
 

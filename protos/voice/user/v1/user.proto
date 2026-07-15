@@ -111,6 +111,7 @@ message Profile {
   google.protobuf.Timestamp created_at = 15;
   google.protobuf.Timestamp updated_at = 16;
   optional google.protobuf.Timestamp frozen_at = 17;
+  optional string accent_color = 18; // "#RRGGBB" from design tokens
 }
 
 message UpdateProfileRequest {
@@ -122,11 +123,14 @@ message UpdateProfileRequest {
   optional string custom_status = 6;
   optional string locale = 7;
   optional string theme = 8;
+  optional string accent_color = 9;
 }
 
 message CreateProfileRequest {
   string display_name = 1;
   optional string username = 2;
+  optional string preset = 3; // personal | gaming | work
+  optional string accent_color = 4; // optional override; default from token palette
 }
 
 message DeleteProfileRequest {

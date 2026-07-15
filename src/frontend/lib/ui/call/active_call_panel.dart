@@ -4,9 +4,11 @@ import 'package:livekit_client/livekit_client.dart' as livekit;
 
 import '../../backend/voice_client.dart';
 import '../../l10n/app_localizations.dart';
+import '../../state/auth_providers.dart';
 import '../../state/call_providers.dart';
 import '../../state/gateway_providers.dart';
 import '../../state/screen_share_providers.dart';
+import '../../state/social_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../core/platform_capability_hints.dart';
 import 'screen_share_panel.dart';
@@ -43,6 +45,16 @@ class _ActiveCallPanelState extends ConsumerState<ActiveCallPanel> {
       return const SizedBox.shrink();
     }
 
+    final activeProfileId = ref.watch(authControllerProvider).activeProfileId;
+    final voiceBindingId = call.voiceBindingProfileId;
+    final showVoiceProfileBadge =
+        voiceBindingId != null &&
+        activeProfileId != null &&
+        voiceBindingId != activeProfileId;
+    final boundProfileAsync = showVoiceProfileBadge
+        ? ref.watch(profileProvider(voiceBindingId))
+        : null;
+
     final l10n = AppLocalizations.of(context)!;
     final voice = VoiceColors.of(context);
     final connecting = call.phase == CallPhase.connecting;
@@ -59,6 +71,16 @@ class _ActiveCallPanelState extends ConsumerState<ActiveCallPanel> {
       l10n: l10n,
       session: session,
       call: call,
+      voiceProfileBadge: showVoiceProfileBadge
+          ? boundProfileAsync?.maybeWhen(
+              data: (profile) => l10n.profileSwitchVoiceBound(
+                profile?.displayName.isNotEmpty == true
+                    ? profile!.displayName
+                    : l10n.callActive,
+              ),
+              orElse: () => null,
+            )
+          : null,
       showMinimize: useExpandedMedia && !_minimized,
       onMinimize: useExpandedMedia ? () => setState(() => _minimized = true) : null,
       onExpand: useExpandedMedia && _minimized
@@ -222,6 +244,7 @@ class _CallControlsRow extends ConsumerWidget {
     required this.l10n,
     required this.session,
     required this.call,
+    this.voiceProfileBadge,
     this.showMinimize = false,
     this.onMinimize,
     this.onExpand,
@@ -231,12 +254,14 @@ class _CallControlsRow extends ConsumerWidget {
   final AppLocalizations l10n;
   final VoiceCallSession session;
   final CallState call;
+  final String? voiceProfileBadge;
   final bool showMinimize;
   final VoidCallback? onMinimize;
   final VoidCallback? onExpand;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final voice = VoiceColors.of(context);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -245,6 +270,24 @@ class _CallControlsRow extends ConsumerWidget {
             width: 16,
             height: 16,
             child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          const SizedBox(width: 8),
+        ],
+        if (voiceProfileBadge != null) ...[
+          Container(
+            key: const Key('active_call_voice_profile_badge'),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: voice.muted,
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: voice.borderDefault),
+            ),
+            child: Text(
+              voiceProfileBadge!,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: voice.textSecondary,
+              ),
+            ),
           ),
           const SizedBox(width: 8),
         ],

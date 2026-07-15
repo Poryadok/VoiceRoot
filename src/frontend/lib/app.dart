@@ -15,6 +15,7 @@ import 'state/message_cache_providers.dart';
 import 'state/e2e_providers.dart';
 import 'state/push_notifications_controller.dart';
 import 'state/voip_push_controller.dart';
+import 'state/profile_context_controller.dart';
 import 'state/shell_providers.dart';
 import 'state/social_providers.dart';
 import 'state/space_providers.dart';
@@ -45,6 +46,7 @@ import 'ui/core/profile_accent_dot.dart';
 import 'ui/core/voice_bottom_sheet.dart';
 import 'ui/core/voice_compact_banner.dart';
 import 'ui/core/voice_state_panel.dart';
+import 'ui/profile/profile_avatar_switcher.dart';
 import 'ui/profile/profile_switcher.dart';
 import 'ui/profile/profile_edit_sheet.dart';
 import 'ui/settings/settings_sheet.dart';
@@ -73,6 +75,7 @@ class VoiceApp extends ConsumerWidget {
     ref.watch(connectivityWatcherProvider);
     ref.watch(messageCacheLifecycleProvider);
     ref.watch(e2eBootstrapLifecycleProvider);
+    ref.watch(profileContextCoordinatorProvider);
     final themeAsync = ref.watch(voiceMaterialThemeProvider);
     final auth = ref.watch(authControllerProvider);
     final localePref = ref.watch(appLocalePreferenceProvider);
@@ -442,12 +445,7 @@ class _SessionBar extends StatelessWidget {
               Expanded(
                 child: useProfileSwitcher
                     ? const ProfileSwitcher()
-                    : Text(
-                        sessionLabel,
-                        key: const Key('auth_session_profile'),
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: voice.textPrimary),
-                      ),
+                    : ProfileAvatarSwitcher(sessionLabel: sessionLabel),
               ),
               IconButton(
                 key: const Key('settings_open'),

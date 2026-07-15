@@ -12,8 +12,10 @@ import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
+import 'package:voice_frontend/ui/profile/profile_avatar_switcher.dart';
 import 'package:voice_frontend/ui/profile/profile_switcher.dart';
 
+import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
 
 class _MemoryAuthStorage implements AuthSessionStorage {
@@ -300,6 +302,116 @@ void main() {
 
     expect(find.text('PlayerOne'), findsOneWidget);
     expect(find.textContaining('Profile:'), findsNothing);
+    container.dispose();
+  });
+
+  testWidgets('ProfileAvatarSwitcher swipe cycles profiles', (tester) async {
+    final storage = _MemoryAuthStorage();
+    await storage.write(
+      const AuthSession(
+        accessToken: 'before',
+        refreshToken: 'refresh',
+        expiresInSeconds: 900,
+        accountId: 'account-1',
+        activeProfileId: 'profile-primary',
+      ),
+    );
+
+    final mock = MockClient((req) async {
+      if (req.url.path == '/api/v1/auth/switch-profile') {
+        return http.Response(
+          jsonEncode({
+            'access_token': 'after',
+            'refresh_token': 'refresh',
+            'expires_in_seconds': 900,
+            'account_id': 'account-1',
+            'profile_id': 'profile-alt',
+          }),
+          200,
+        );
+      }
+      if (req.url.path == '/api/v1/users/profiles') {
+        return http.Response(
+          jsonEncode({
+            'profile_list': {
+              'profiles': [
+                {
+                  'id': 'profile-primary',
+                  'account_id': 'account-1',
+                  'username': 'main',
+                  'discriminator': '0001',
+                  'display_name': 'Main',
+                  'is_primary': true,
+                },
+                {
+                  'id': 'profile-alt',
+                  'account_id': 'account-1',
+                  'username': 'alt',
+                  'discriminator': '0002',
+                  'display_name': 'Alt',
+                  'is_primary': false,
+                },
+              ],
+            },
+          }),
+          200,
+        );
+      }
+      return http.Response('not found', 404);
+    });
+
+    final container = ProviderContainer(
+      overrides: [
+        ...voiceThemeTestOverrides(),
+        authSessionStorageProvider.overrideWithValue(storage),
+        guestCredentialsStorageProvider.overrideWithValue(
+          InMemoryGuestCredentialsStorage(),
+        ),
+        gatewayConfigProvider.overrideWithValue(
+          const GatewayConfig(baseUrl: 'http://api.test'),
+        ),
+        httpClientProvider.overrideWithValue(mock),
+      ],
+    );
+    addTearDown(container.dispose);
+    await container.read(authControllerProvider.notifier).applySession(
+      const AuthSession(
+        accessToken: 'before',
+        refreshToken: 'refresh',
+        expiresInSeconds: 900,
+        accountId: 'account-1',
+        activeProfileId: 'profile-primary',
+      ),
+    );
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(
+            body: ProfileAvatarSwitcher(sessionLabel: 'Main'),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(ProfileAvatarSwitcher.switcherKey), findsOneWidget);
+    await tester.fling(
+      find.byKey(ProfileAvatarSwitcher.switcherKey),
+      const Offset(-200, 0),
+      1000,
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      container.read(authControllerProvider).activeProfileId,
+      'profile-alt',
+    );
     container.dispose();
   });
 }

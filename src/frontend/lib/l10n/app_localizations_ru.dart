@@ -641,6 +641,41 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get createProfileTitle => 'Добавить профиль';
+
+  @override
+  String get createProfileSubmit => 'Создать профиль';
+
+  @override
+  String get createProfilePresetHint => 'Пресет приватности';
+
+  @override
+  String get createProfileLimitReached =>
+      'Лимит профилей исчерпан. Premium — до 5 профилей.';
+
+  @override
+  String get createProfileOpenSubscription => 'Открыть Premium';
+
+  @override
+  String get createProfileAddAction => 'Добавить профиль';
+
+  @override
+  String profileSwitchVoiceBound(String profileName) {
+    return 'Войс: $profileName';
+  }
+
+  @override
+  String get voiceLeaveCurrentDialogTitle => 'Выйти из текущего войса?';
+
+  @override
+  String voiceLeaveCurrentDialogMessage(String profileName) {
+    return 'Вы в войс-чате ($profileName). Выйти и войти сюда?';
+  }
+
+  @override
+  String get voiceLeaveCurrentDialogConfirm => 'Выйти и войти';
+
+  @override
   String get commonCancel => 'Отмена';
 
   @override

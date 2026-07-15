@@ -638,6 +638,41 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get createProfileTitle => 'Add profile';
+
+  @override
+  String get createProfileSubmit => 'Create profile';
+
+  @override
+  String get createProfilePresetHint => 'Privacy preset';
+
+  @override
+  String get createProfileLimitReached =>
+      'Profile limit reached. Premium allows up to 5 profiles.';
+
+  @override
+  String get createProfileOpenSubscription => 'View Premium';
+
+  @override
+  String get createProfileAddAction => 'Add profile';
+
+  @override
+  String profileSwitchVoiceBound(String profileName) {
+    return 'Voice: $profileName';
+  }
+
+  @override
+  String get voiceLeaveCurrentDialogTitle => 'Leave current voice?';
+
+  @override
+  String voiceLeaveCurrentDialogMessage(String profileName) {
+    return 'You are in a voice chat ($profileName). Leave it and join here?';
+  }
+
+  @override
+  String get voiceLeaveCurrentDialogConfirm => 'Leave and join';
+
+  @override
   String get commonCancel => 'Cancel';
 
   @override

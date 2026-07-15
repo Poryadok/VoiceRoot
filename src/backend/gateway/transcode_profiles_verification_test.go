@@ -154,6 +154,25 @@ func TestTranscodePhase13_CreateProfile(t *testing.T) {
 	require.Equal(t, "Gaming Alt", rec.lastCreate.GetDisplayName())
 }
 
+// TestTranscodePhase13_CreateProfilePresetAccent documents preset and accent_color pass through to User.CreateProfile.
+func TestTranscodePhase13_CreateProfilePresetAccent(t *testing.T) {
+	t.Parallel()
+
+	rec := &recordingPhase13UserGRPC{}
+	conn, cleanup := startBufconnUserConn(t, rec)
+	t.Cleanup(cleanup)
+	h := newPhase13UsersGateway(t, userv1.NewUserServiceClient(conn))
+
+	resp := performRequest(h, http.MethodPost, "/api/v1/users/profiles",
+		`{"display_name":"Work Alt","preset":"work","accent_color":"#AABBCC"}`, map[string]string{
+			"Authorization": "Bearer valid-user-token",
+		})
+	require.Equal(t, http.StatusOK, resp.Code, "body=%s", resp.Body.String())
+	require.NotNil(t, rec.lastCreate)
+	require.Equal(t, "work", rec.lastCreate.GetPreset())
+	require.Equal(t, "#AABBCC", rec.lastCreate.GetAccentColor())
+}
+
 // TestTranscodePhase13_SwitchProfile documents POST /api/v1/auth/switch-profile → Auth session with new profile_id.
 func TestTranscodePhase13_SwitchProfile(t *testing.T) {
 	t.Parallel()

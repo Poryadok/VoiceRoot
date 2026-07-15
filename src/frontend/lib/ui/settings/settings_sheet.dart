@@ -3,10 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
+import '../../state/auth_providers.dart';
+import '../../state/social_providers.dart';
 import '../../state/subscription_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../../theme/voice_theme_providers.dart';
 import '../core/voice_bottom_sheet.dart';
+import '../profile/create_profile_sheet.dart';
 import 'privacy_settings_screen.dart';
 import 'notification_settings_screen.dart';
 import 'security_settings_screen.dart';
@@ -75,6 +78,16 @@ class SettingsSheet extends ConsumerWidget {
                   context: context,
                   child: const VerificationSettingsSheet(),
                 );
+              },
+            ),
+            ListTile(
+              key: const Key('settings_create_profile'),
+              contentPadding: EdgeInsets.zero,
+              title: Text(l10n.createProfileAddAction),
+              trailing: const Icon(Icons.add),
+              onTap: () async {
+                Navigator.of(context).pop();
+                await showCreateProfileSheet(context);
               },
             ),
             ListTile(
@@ -252,6 +265,16 @@ class _AccentPickerState extends ConsumerState<_AccentPicker> {
 
   Future<void> _select(int index) async {
     final storage = ref.read(profileAccentStorageProvider);
+    final hex =
+        '#${(widget.swatches[index].toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}';
+    final auth = ref.read(authorizationHeaderProvider);
+    if (auth != null) {
+      await ref.read(voiceUsersClientProvider).updateProfile(
+        authorization: auth,
+        accentColor: hex,
+      );
+      ref.invalidate(profileProvider(widget.profileId));
+    }
     await storage.writeProfileIndex(widget.profileId, index);
     await storage.clearOverride(widget.profileId);
     ref.invalidate(profileAccentColorProvider(widget.profileId));

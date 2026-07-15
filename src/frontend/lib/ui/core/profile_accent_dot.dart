@@ -4,9 +4,10 @@ import '../../theme/voice_colors.dart';
 
 /// Small indicator of the active profile accent color.
 class ProfileAccentDot extends StatelessWidget {
-  const ProfileAccentDot({super.key, this.size = 10});
+  const ProfileAccentDot({super.key, this.size = 10, this.color});
 
   final double size;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
@@ -14,7 +15,7 @@ class ProfileAccentDot extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: VoiceColors.of(context).profileAccent,
+        color: color ?? VoiceColors.of(context).profileAccent,
         shape: BoxShape.circle,
         border: Border.all(color: VoiceColors.of(context).borderDefault),
       ),

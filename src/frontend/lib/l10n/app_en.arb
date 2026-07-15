@@ -346,6 +346,30 @@
       }
     }
   },
+  "createProfileTitle": "Add profile",
+  "createProfileSubmit": "Create profile",
+  "createProfilePresetHint": "Privacy preset",
+  "createProfileLimitReached": "Profile limit reached. Premium allows up to 5 profiles.",
+  "createProfileOpenSubscription": "View Premium",
+  "createProfileAddAction": "Add profile",
+  "profileSwitchVoiceBound": "Voice: {profileName}",
+  "@profileSwitchVoiceBound": {
+    "placeholders": {
+      "profileName": {
+        "type": "String"
+      }
+    }
+  },
+  "voiceLeaveCurrentDialogTitle": "Leave current voice?",
+  "voiceLeaveCurrentDialogMessage": "You are in a voice chat ({profileName}). Leave it and join here?",
+  "@voiceLeaveCurrentDialogMessage": {
+    "placeholders": {
+      "profileName": {
+        "type": "String"
+      }
+    }
+  },
+  "voiceLeaveCurrentDialogConfirm": "Leave and join",
   "commonCancel": "Cancel",
   "shareLinkAction": "Copy link",
   "shareLinkCopied": "Link copied to clipboard",

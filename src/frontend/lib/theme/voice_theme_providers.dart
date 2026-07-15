@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../state/auth_providers.dart';
+import '../state/social_providers.dart';
 import 'profile_accent_storage.dart';
 import 'voice_theme.dart';
 import 'voice_token_catalog.dart';
@@ -16,12 +17,17 @@ final voiceTokenCatalogProvider = FutureProvider<VoiceTokenCatalog>((ref) {
   return VoiceTokenCatalog.load();
 });
 
-/// Resolved accent [Color] for [profileId] (override or default by index).
+/// Resolved accent [Color] for [profileId] (server accent, then local override, then palette).
 final profileAccentColorProvider = FutureProvider.family<Color, String>((
   ref,
   profileId,
 ) async {
   final catalog = await ref.watch(voiceTokenCatalogProvider.future);
+  final profile = await ref.watch(profileProvider(profileId).future);
+  final serverAccent = profile?.accentColor;
+  if (serverAccent != null && serverAccent.isNotEmpty) {
+    return VoiceTokenCatalog.colorFromHex(serverAccent);
+  }
   final storage = ref.watch(profileAccentStorageProvider);
   final override = await storage.readOverride(profileId);
   if (override != null && override.isNotEmpty) {

@@ -366,6 +366,7 @@ class Profile extends $pb.GeneratedMessage {
     $1.Timestamp? createdAt,
     $1.Timestamp? updatedAt,
     $1.Timestamp? frozenAt,
+    $core.String? accentColor,
   }) {
     final result = create();
     if (id != null) result.id = id;
@@ -385,6 +386,7 @@ class Profile extends $pb.GeneratedMessage {
     if (createdAt != null) result.createdAt = createdAt;
     if (updatedAt != null) result.updatedAt = updatedAt;
     if (frozenAt != null) result.frozenAt = frozenAt;
+    if (accentColor != null) result.accentColor = accentColor;
     return result;
   }
 
@@ -421,6 +423,7 @@ class Profile extends $pb.GeneratedMessage {
         subBuilder: $1.Timestamp.create)
     ..aOM<$1.Timestamp>(17, _omitFieldNames ? '' : 'frozenAt',
         subBuilder: $1.Timestamp.create)
+    ..aOS(18, _omitFieldNames ? '' : 'accentColor')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -599,6 +602,15 @@ class Profile extends $pb.GeneratedMessage {
   void clearFrozenAt() => $_clearField(17);
   @$pb.TagNumber(17)
   $1.Timestamp ensureFrozenAt() => $_ensure(16);
+
+  @$pb.TagNumber(18)
+  $core.String get accentColor => $_getSZ(17);
+  @$pb.TagNumber(18)
+  set accentColor($core.String value) => $_setString(17, value);
+  @$pb.TagNumber(18)
+  $core.bool hasAccentColor() => $_has(17);
+  @$pb.TagNumber(18)
+  void clearAccentColor() => $_clearField(18);
 }
 
 class UpdateProfileRequest extends $pb.GeneratedMessage {
@@ -611,6 +623,7 @@ class UpdateProfileRequest extends $pb.GeneratedMessage {
     $core.String? customStatus,
     $core.String? locale,
     $core.String? theme,
+    $core.String? accentColor,
   }) {
     final result = create();
     if (profileId != null) result.profileId = profileId;
@@ -621,6 +634,7 @@ class UpdateProfileRequest extends $pb.GeneratedMessage {
     if (customStatus != null) result.customStatus = customStatus;
     if (locale != null) result.locale = locale;
     if (theme != null) result.theme = theme;
+    if (accentColor != null) result.accentColor = accentColor;
     return result;
   }
 
@@ -645,6 +659,7 @@ class UpdateProfileRequest extends $pb.GeneratedMessage {
     ..aOS(6, _omitFieldNames ? '' : 'customStatus')
     ..aOS(7, _omitFieldNames ? '' : 'locale')
     ..aOS(8, _omitFieldNames ? '' : 'theme')
+    ..aOS(9, _omitFieldNames ? '' : 'accentColor')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -737,16 +752,29 @@ class UpdateProfileRequest extends $pb.GeneratedMessage {
   $core.bool hasTheme() => $_has(7);
   @$pb.TagNumber(8)
   void clearTheme() => $_clearField(8);
+
+  @$pb.TagNumber(9)
+  $core.String get accentColor => $_getSZ(8);
+  @$pb.TagNumber(9)
+  set accentColor($core.String value) => $_setString(8, value);
+  @$pb.TagNumber(9)
+  $core.bool hasAccentColor() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearAccentColor() => $_clearField(9);
 }
 
 class CreateProfileRequest extends $pb.GeneratedMessage {
   factory CreateProfileRequest({
     $core.String? displayName,
     $core.String? username,
+    $core.String? preset,
+    $core.String? accentColor,
   }) {
     final result = create();
     if (displayName != null) result.displayName = displayName;
     if (username != null) result.username = username;
+    if (preset != null) result.preset = preset;
+    if (accentColor != null) result.accentColor = accentColor;
     return result;
   }
 
@@ -765,6 +793,8 @@ class CreateProfileRequest extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'displayName')
     ..aOS(2, _omitFieldNames ? '' : 'username')
+    ..aOS(3, _omitFieldNames ? '' : 'preset')
+    ..aOS(4, _omitFieldNames ? '' : 'accentColor')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -803,6 +833,24 @@ class CreateProfileRequest extends $pb.GeneratedMessage {
   $core.bool hasUsername() => $_has(1);
   @$pb.TagNumber(2)
   void clearUsername() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get preset => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set preset($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasPreset() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearPreset() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get accentColor => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set accentColor($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasAccentColor() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearAccentColor() => $_clearField(4);
 }
 
 class DeleteProfileRequest extends $pb.GeneratedMessage {

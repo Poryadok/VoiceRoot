@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../backend/users_client.dart';
-import '../../backend/users_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
-import '../../state/subscription_providers.dart';
 import '../../state/social_providers.dart';
+import '../../state/subscription_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../../theme/voice_theme_providers.dart';
+import '../core/profile_accent_dot.dart';
 
 /// Desktop dropdown to switch the active profile (multi-profile/verification (docs/features/multi-profile.md)).
 class ProfileSwitcher extends ConsumerWidget {
@@ -95,9 +96,17 @@ class ProfileSwitcher extends ConsumerWidget {
               for (final profile in profiles)
                 DropdownMenuItem<String>(
                   value: profile.id,
-                  child: Text(
-                    _profileMenuLabel(profile, l10n),
-                    overflow: TextOverflow.ellipsis,
+                  child: Row(
+                    children: [
+                      _ProfileAccentFor(profile),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _profileMenuLabel(profile, l10n),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
             ],
@@ -145,5 +154,21 @@ class ProfileSwitcher extends ConsumerWidget {
       return '${profile.displayName} (${l10n.downgradeProfilePrimary})';
     }
     return profile.displayName;
+  }
+}
+
+class _ProfileAccentFor extends ConsumerWidget {
+  const _ProfileAccentFor(this.profile);
+
+  final VoiceProfile profile;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final accentAsync = ref.watch(profileAccentColorProvider(profile.id));
+    return accentAsync.when(
+      data: (color) => ProfileAccentDot(size: 10, color: color),
+      loading: () => const ProfileAccentDot(size: 10),
+      error: (_, _) => const ProfileAccentDot(size: 10),
+    );
   }
 }
