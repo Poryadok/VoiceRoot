@@ -18,16 +18,18 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"voice/backend/file/internal/clamav"
-	"voice/backend/pkg/grpcclient"
-	"voice/backend/pkg/grpcmw"
-	"voice/backend/pkg/httpserver"
-	"voice/backend/pkg/runtimeconfig"
-	voiceprom "voice/backend/pkg/promhttp"
+	"voice/backend/file/internal/fileevents"
+	"voice/backend/file/internal/jobs"
 	grpcsvc "voice/backend/file/internal/grpcsvc"
 	"voice/backend/file/internal/imgproc"
 	"voice/backend/file/internal/r2file"
 	"voice/backend/file/internal/s2s"
 	"voice/backend/file/internal/store"
+	"voice/backend/pkg/grpcclient"
+	"voice/backend/pkg/grpcmw"
+	"voice/backend/pkg/httpserver"
+	"voice/backend/pkg/runtimeconfig"
+	voiceprom "voice/backend/pkg/promhttp"
 
 	chatv1 "voice.app/voice/chat/v1"
 	filev1 "voice.app/voice/file/v1"
@@ -100,18 +102,32 @@ func main() {
 		}
 		var reader grpcsvc.ObjectReader
 		var processor grpcsvc.ImageProcessor
+		var deleter r2file.ObjectDeleter
 		if presigner != nil {
 			reader = presigner
 			processor = imgproc.Processor{Reader: presigner, Writer: presigner}
+			deleter = presigner
 		}
+		var eventPub fileevents.Publisher = fileevents.NoopPublisher{}
+		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
+			pub, err := fileevents.NewJetStreamPublisher(natsURL)
+			if err != nil {
+				log.Fatalf("nats: %v", err)
+			}
+			defer func() { _ = pub.Close() }()
+			eventPub = pub
+		}
+		filesStore := store.NewFilesStore(pool)
+		jobs.StartExpiryWorker(context.Background(), filesStore, deleter, eventPub, logger)
 		lis, err := net.Listen("tcp", grpcListen)
 		if err != nil {
 			log.Fatalf("grpc listen: %v", err)
 		}
 		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))...)
 		filev1.RegisterFileServiceServer(grpcSrv, grpcsvc.New(grpcsvc.Deps{
-			Files:     store.NewFilesStore(pool),
+			Files:     filesStore,
 			Presigner: presigner,
+			Deleter:   deleter,
 			ChatGuard: chatGuard,
 			Reader:    reader,
 			Processor: processor,

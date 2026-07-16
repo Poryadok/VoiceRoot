@@ -411,6 +411,7 @@ message FileStreamEvent {
   oneof payload {
     FileUploaded file_uploaded = 10;
     FileScanResult file_scan_result = 11;
+    FileExpired file_expired = 12;
   }
 }
 
@@ -422,6 +423,11 @@ message FileUploaded {
 message FileScanResult {
   string file_id = 1;
   string result = 2;
+}
+
+message FileExpired {
+  string file_id = 1;
+  optional string chat_id = 2;
 }
 
 // --- matchmaking.events ---

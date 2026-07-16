@@ -2,6 +2,8 @@ package grpcsvc
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"net"
 	"testing"
@@ -29,9 +31,19 @@ func (s *recordingScanner) ScanBytes(context.Context, []byte) (string, error) {
 
 type gateObjectReader map[string][]byte
 
+var gateUploadBytes = []byte("e2e-ciphertext-blob")
+
+func gateUploadHash(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
+}
+
 func (r gateObjectReader) ReadObject(_ context.Context, key string, _ int64) ([]byte, error) {
 	if b, ok := r[key]; ok {
 		return b, nil
+	}
+	if len(r) == 0 {
+		return gateUploadBytes, nil
 	}
 	return nil, errors.New("object not found")
 }
@@ -65,13 +77,14 @@ func TestConfirmUpload_E2E_SkipsClamAVScan(t *testing.T) {
 	})
 	require.NoError(t, err)
 	r2Key := uploadResp.GetUploadResponse().GetR2Key()
+	encrypted := []byte("PK\x03\x04encrypted")
 	client = startFileGateGRPCWithScan(t, pool, guard, presigner, scanner, gateObjectReader{
-		r2Key: []byte("PK\x03\x04encrypted"),
+		r2Key: encrypted,
 	})
 
 	confirmed, err := client.ConfirmUpload(fileGateCtx(ctx, acct, prof), &filev1.ConfirmUploadRequest{
 		FileId:     uploadResp.GetUploadResponse().GetFileId(),
-		Sha256Hash: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+		Sha256Hash: gateUploadHash(encrypted),
 	})
 	require.NoError(t, err)
 	meta := confirmed.GetFileMetadata()

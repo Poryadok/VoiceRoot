@@ -2,8 +2,12 @@ package grpcsvc
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,6 +19,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"voice/backend/file/internal/authctx"
+	"voice/backend/file/internal/jobs"
 	"voice/backend/file/internal/r2file"
 	"voice/backend/file/internal/store"
 
@@ -25,6 +30,8 @@ import (
 )
 
 var sha256Re = regexp.MustCompile(`^[a-fA-F0-9]{64}$`)
+
+const defaultRetentionDays = 90
 
 var ErrNotChatMember = errors.New("not a chat member")
 
@@ -75,6 +82,7 @@ func (realClock) Now() time.Time {
 type Deps struct {
 	Files     *store.FilesStore
 	Presigner r2file.Presigner
+	Deleter   r2file.ObjectDeleter
 	Clock     Clock
 	ChatGuard ChatGuard
 	Processor ImageProcessor
@@ -86,6 +94,7 @@ type FileGRPC struct {
 	filev1.UnimplementedFileServiceServer
 	files     *store.FilesStore
 	presigner r2file.Presigner
+	deleter   r2file.ObjectDeleter
 	clock     Clock
 	chatGuard ChatGuard
 	processor ImageProcessor
@@ -105,6 +114,7 @@ func New(deps Deps) *FileGRPC {
 	return &FileGRPC{
 		files:     deps.Files,
 		presigner: deps.Presigner,
+		deleter:   deps.Deleter,
 		clock:     clock,
 		chatGuard: deps.ChatGuard,
 		processor: processor,
@@ -160,11 +170,7 @@ func (s *FileGRPC) RequestUpload(ctx context.Context, req *filev1.RequestUploadR
 
 	fileID := uuid.New()
 	r2Key := r2file.ObjectKey(fileID, originalName)
-	var expiresAt *time.Time
-	if isE2E {
-		t := time.Now().UTC().Add(90 * 24 * time.Hour)
-		expiresAt = &t
-	}
+	expiresAt := retentionExpiresAt(s.clock, ctx, isE2E)
 	putURL, err := s.presigner.PresignPut(ctx, r2file.PutPresignInput{
 		Key:           r2Key,
 		ContentType:   mimeType,
@@ -234,7 +240,7 @@ func (s *FileGRPC) GetFileURL(ctx context.Context, req *filev1.GetFileURLRequest
 		return nil, status.Error(codes.FailedPrecondition, "file is not ready")
 	}
 	ttl := r2file.DefaultURLTTL
-	getURL, err := s.presigner.PresignGet(ctx, r2file.GetPresignInput{Key: row.R2Key, TTL: ttl})
+	getURL, err := s.presigner.PresignGet(ctx, r2file.GetPresignInput{Key: downloadKey(row), TTL: ttl})
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -264,17 +270,25 @@ func (s *FileGRPC) ConfirmUpload(ctx context.Context, req *filev1.ConfirmUploadR
 	if row.Status != "pending_upload" {
 		return nil, status.Error(codes.FailedPrecondition, "file upload is already confirmed")
 	}
+	uploaded, err := s.readUploadBytes(ctx, row)
+	if err != nil {
+		return nil, err
+	}
+	if err := verifySHA256(uploaded, sha); err != nil {
+		return nil, err
+	}
 	row, err = s.files.ConfirmUpload(ctx, fileID, strings.ToLower(sha))
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	row, err = s.scanConfirmedFile(ctx, row)
+	row, err = s.scanConfirmedFile(ctx, row, uploaded)
 	if err != nil {
 		return nil, err
 	}
 	if row.Status != "ready" {
 		return &filev1.ConfirmUploadResponse{FileMetadata: fileRowToProto(row)}, nil
 	}
+	originalKey := row.R2Key
 	if row.FileType == "image" && !row.IsE2E && s.processor != nil {
 		processed, err := s.processor.ProcessImage(ctx, row)
 		if err != nil {
@@ -284,11 +298,16 @@ func (s *FileGRPC) ConfirmUpload(ctx context.Context, req *filev1.ConfirmUploadR
 		if err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
+		if s.deleter != nil {
+			if err := s.deleter.DeleteObject(ctx, originalKey); err != nil {
+				return nil, status.Error(codes.Internal, err.Error())
+			}
+		}
 	}
 	return &filev1.ConfirmUploadResponse{FileMetadata: fileRowToProto(row)}, nil
 }
 
-func (s *FileGRPC) scanConfirmedFile(ctx context.Context, row store.FileRow) (store.FileRow, error) {
+func (s *FileGRPC) scanConfirmedFile(ctx context.Context, row store.FileRow, uploaded []byte) (store.FileRow, error) {
 	if row.IsE2E {
 		updated, err := s.files.ApplyScanResult(ctx, row.ID, "ready", "skipped")
 		if err != nil {
@@ -306,13 +325,17 @@ func (s *FileGRPC) scanConfirmedFile(ctx context.Context, row store.FileRow) (st
 		}
 		return updated, nil
 	}
-	bytes, err := s.reader.ReadObject(ctx, row.R2Key, row.SizeBytes)
-	if err != nil {
-		updated, uerr := s.files.ApplyScanResult(ctx, row.ID, "failed", "error")
-		if uerr != nil {
-			return store.FileRow{}, status.Error(codes.Internal, uerr.Error())
+	bytes := uploaded
+	if bytes == nil {
+		var readErr error
+		bytes, readErr = s.reader.ReadObject(ctx, row.R2Key, row.SizeBytes)
+		if readErr != nil {
+			updated, uerr := s.files.ApplyScanResult(ctx, row.ID, "failed", "error")
+			if uerr != nil {
+				return store.FileRow{}, status.Error(codes.Internal, uerr.Error())
+			}
+			return updated, status.Error(codes.Internal, readErr.Error())
 		}
-		return updated, status.Error(codes.Internal, err.Error())
 	}
 	outcome, err := s.scanner.ScanBytes(ctx, bytes)
 	if err != nil {
@@ -390,6 +413,18 @@ func (s *FileGRPC) DeleteFile(ctx context.Context, req *filev1.DeleteFileRequest
 	}
 	if _, err := s.fileOwnedByUploader(ctx, fileID, profileID); err != nil {
 		return nil, err
+	}
+	row, err := s.files.GetFileByID(ctx, fileID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, status.Error(codes.NotFound, "file not found")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if s.deleter != nil {
+		if err := r2file.DeleteKeys(ctx, s.deleter, jobs.FileStorageKeys(row)...); err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
 	}
 	if err := s.files.MarkDeleted(ctx, fileID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -583,6 +618,54 @@ func subscriptionTier(ctx context.Context) (string, bool) {
 		return "", false
 	}
 	return tier, true
+}
+
+func retentionDuration() time.Duration {
+	if raw := strings.TrimSpace(os.Getenv("FILE_RETENTION_DEV")); raw != "" {
+		if secs, err := strconv.Atoi(raw); err == nil && secs > 0 {
+			return time.Duration(secs) * time.Second
+		}
+	}
+	return defaultRetentionDays * 24 * time.Hour
+}
+
+func retentionExpiresAt(clock Clock, ctx context.Context, isE2E bool) *time.Time {
+	if !isE2E {
+		if tier, ok := subscriptionTier(ctx); ok && tier == "premium" {
+			return nil
+		}
+	}
+	t := clock.Now().UTC().Add(retentionDuration())
+	return &t
+}
+
+func downloadKey(row store.FileRow) string {
+	if row.ConvertedR2Key != nil {
+		if key := strings.TrimSpace(*row.ConvertedR2Key); key != "" {
+			return key
+		}
+	}
+	return row.R2Key
+}
+
+func (s *FileGRPC) readUploadBytes(ctx context.Context, row store.FileRow) ([]byte, error) {
+	if s.reader == nil {
+		return nil, status.Error(codes.FailedPrecondition, "upload verification not configured")
+	}
+	bytes, err := s.reader.ReadObject(ctx, row.R2Key, row.SizeBytes)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	return bytes, nil
+}
+
+func verifySHA256(data []byte, claimed string) error {
+	sum := sha256.Sum256(data)
+	got := hex.EncodeToString(sum[:])
+	if !strings.EqualFold(got, strings.TrimSpace(claimed)) {
+		return status.Error(codes.FailedPrecondition, "sha256_hash mismatch")
+	}
+	return nil
 }
 
 func shouldScan(originalName, mimeType string) bool {

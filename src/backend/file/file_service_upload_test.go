@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"net"
 	"os"
 	"path/filepath"
@@ -20,6 +22,7 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 
 	"voice/backend/file/internal/grpcsvc"
+	"voice/backend/file/internal/jobs"
 	"voice/backend/file/internal/r2file"
 	"voice/backend/file/internal/store"
 	"voice/backend/pkg/integrationtest"
@@ -30,6 +33,15 @@ import (
 )
 
 const freeFileLimitBytes = 50 << 20
+
+var defaultUploadBytes = []byte("voice-file-upload")
+
+func sha256Hex(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
+}
+
+var defaultUploadHash = sha256Hex(defaultUploadBytes)
 
 var fixedNow = time.Date(2026, time.June, 3, 12, 0, 0, 0, time.UTC)
 
@@ -46,6 +58,15 @@ func (p *recordingPresigner) PresignPut(_ context.Context, in r2file.PutPresignI
 func (p *recordingPresigner) PresignGet(_ context.Context, in r2file.GetPresignInput) (string, error) {
 	p.getCalls = append(p.getCalls, in)
 	return "https://r2.example/download/" + in.Key, nil
+}
+
+type recordingDeleter struct {
+	deleted []string
+}
+
+func (d *recordingDeleter) DeleteObject(_ context.Context, key string) error {
+	d.deleted = append(d.deleted, key)
+	return nil
 }
 
 type fixedClock struct{}
@@ -68,7 +89,10 @@ func (fakeImageProcessor) ProcessImage(_ context.Context, row store.FileRow) (gr
 type fakeObjectReader map[string][]byte
 
 func (r fakeObjectReader) ReadObject(_ context.Context, key string, _ int64) ([]byte, error) {
-	return r[key], nil
+	if data, ok := r[key]; ok {
+		return data, nil
+	}
+	return defaultUploadBytes, nil
 }
 
 type fakeScanner string
@@ -211,7 +235,7 @@ func TestRequestUploadWithChatContextAllowsMembersAndStoresChat(t *testing.T) {
 	fileID := uploadResp.GetUploadResponse().GetFileId()
 	_, err = client.ConfirmUpload(withFileProfile(ctx, uuid.New(), ownerID), &filev1.ConfirmUploadRequest{
 		FileId:     fileID,
-		Sha256Hash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		Sha256Hash: defaultUploadHash,
 	})
 	require.NoError(t, err)
 
@@ -247,7 +271,33 @@ func TestRequestUploadWithStoryContextStoresStoryID(t *testing.T) {
 	require.Equal(t, storyID, *storedStoryID)
 }
 
-func TestGetFileURLUsesStoredR2KeyAndOneHourTTL(t *testing.T) {
+func TestGetFileURLUsesConvertedKeyWhenPresent(t *testing.T) {
+	ctx := context.Background()
+	pool := startFilePostgres(t, ctx)
+	presigner := &recordingPresigner{}
+	client := startFileGRPC(t, pool, presigner)
+	fileID := uuid.New()
+	profileID := uuid.New()
+	originalKey := "attachments/" + fileID.String() + "/report.pdf"
+	convertedKey := "processed/" + fileID.String() + "/full.webp"
+	_, err := pool.Exec(ctx, `
+INSERT INTO files (
+	id, uploader_profile_id, original_name, mime_type, size_bytes, r2_key,
+	status, file_type, converted_r2_key, scan_result
+) VALUES ($1, $2, 'report.pdf', 'application/pdf', 4096, $3, 'ready', 'document', $4, 'clean')
+`, fileID, profileID, originalKey, convertedKey)
+	require.NoError(t, err)
+
+	resp, err := client.GetFileURL(withFileProfile(ctx, uuid.New(), profileID), &filev1.GetFileURLRequest{
+		FileId: fileID.String(),
+	})
+	require.NoError(t, err)
+	require.Equal(t, "https://r2.example/download/"+convertedKey, resp.GetPresignedGetUrl())
+	require.Len(t, presigner.getCalls, 1)
+	require.Equal(t, convertedKey, presigner.getCalls[0].Key)
+}
+
+func TestGetFileURLFallsBackToOriginalWithoutConvertedKey(t *testing.T) {
 	ctx := context.Background()
 	pool := startFilePostgres(t, ctx)
 	presigner := &recordingPresigner{}
@@ -305,7 +355,7 @@ func TestConfirmUploadMetadataListQuotaAndDelete(t *testing.T) {
 
 	confirmed, err := client.ConfirmUpload(authed, &filev1.ConfirmUploadRequest{
 		FileId:     fileID,
-		Sha256Hash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		Sha256Hash: defaultUploadHash,
 	})
 	require.NoError(t, err)
 	meta := confirmed.GetFileMetadata()
@@ -345,7 +395,13 @@ func TestConfirmUploadMetadataListQuotaAndDelete(t *testing.T) {
 func TestConfirmUploadProcessesImageMetadata(t *testing.T) {
 	ctx := context.Background()
 	pool := startFilePostgres(t, ctx)
-	client := startFileGRPCWired(t, pool, &recordingPresigner{}, nil, fakeImageProcessor{})
+	deleter := &recordingDeleter{}
+	client := startFileGRPCFull(t, pool, grpcsvc.Deps{
+		Presigner: &recordingPresigner{},
+		Processor: fakeImageProcessor{},
+		Reader:    fakeObjectReader{},
+		Deleter:   deleter,
+	})
 	profileID := uuid.New()
 	authed := withFileProfile(ctx, uuid.New(), profileID)
 	uploadResp, err := client.RequestUpload(authed, &filev1.RequestUploadRequest{
@@ -357,7 +413,7 @@ func TestConfirmUploadProcessesImageMetadata(t *testing.T) {
 
 	confirmed, err := client.ConfirmUpload(authed, &filev1.ConfirmUploadRequest{
 		FileId:     uploadResp.GetUploadResponse().GetFileId(),
-		Sha256Hash: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		Sha256Hash: defaultUploadHash,
 	})
 	require.NoError(t, err)
 	meta := confirmed.GetFileMetadata()
@@ -366,6 +422,32 @@ func TestConfirmUploadProcessesImageMetadata(t *testing.T) {
 	require.Equal(t, "processed/"+meta.GetId()+"/thumb.webp", meta.GetThumbnailR2Key())
 	require.Equal(t, int32(640), meta.GetWidth())
 	require.Equal(t, int32(480), meta.GetHeight())
+	require.Contains(t, deleter.deleted, uploadResp.GetUploadResponse().GetR2Key())
+}
+
+func TestConfirmUploadRejectsHashMismatch(t *testing.T) {
+	ctx := context.Background()
+	pool := startFilePostgres(t, ctx)
+	client := startFileGRPCFull(t, pool, grpcsvc.Deps{
+		Presigner: &recordingPresigner{},
+		Reader:    fakeObjectReader{},
+	})
+	ownerID := uuid.New()
+	uploadResp, err := client.RequestUpload(withFileProfile(ctx, uuid.New(), ownerID), validUploadRequest())
+	require.NoError(t, err)
+	fileID := uploadResp.GetUploadResponse().GetFileId()
+
+	_, err = client.ConfirmUpload(withFileProfile(ctx, uuid.New(), ownerID), &filev1.ConfirmUploadRequest{
+		FileId:     fileID,
+		Sha256Hash: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+
+	var statusValue string
+	err = pool.QueryRow(ctx, `SELECT status FROM files WHERE id = $1`, fileID).Scan(&statusValue)
+	require.NoError(t, err)
+	require.Equal(t, "pending_upload", statusValue)
 }
 
 func TestConfirmUploadRejectsWrongOwnerAndInvalidHash(t *testing.T) {
@@ -379,7 +461,7 @@ func TestConfirmUploadRejectsWrongOwnerAndInvalidHash(t *testing.T) {
 
 	_, err = client.ConfirmUpload(withFileProfile(ctx, uuid.New(), uuid.New()), &filev1.ConfirmUploadRequest{
 		FileId:     fileID,
-		Sha256Hash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		Sha256Hash: defaultUploadHash,
 	})
 	require.Error(t, err)
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
@@ -419,7 +501,7 @@ func TestConfirmUploadScansRiskyFilesAndBlocksInfectedDownload(t *testing.T) {
 
 	confirmed, err := client.ConfirmUpload(authed, &filev1.ConfirmUploadRequest{
 		FileId:     fileID,
-		Sha256Hash: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+		Sha256Hash: sha256Hex([]byte("zip")),
 	})
 	require.NoError(t, err)
 	require.Equal(t, "failed", confirmed.GetFileMetadata().GetStatus())
@@ -429,6 +511,103 @@ func TestConfirmUploadScansRiskyFilesAndBlocksInfectedDownload(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, codes.FailedPrecondition, status.Code(err))
 }
+
+func TestDeleteFilePurgesR2Keys(t *testing.T) {
+	ctx := context.Background()
+	pool := startFilePostgres(t, ctx)
+	deleter := &recordingDeleter{}
+	client := startFileGRPCFull(t, pool, grpcsvc.Deps{
+		Presigner: &recordingPresigner{},
+		Reader:    fakeObjectReader{},
+		Deleter:   deleter,
+	})
+	profileID := uuid.New()
+	authed := withFileProfile(ctx, uuid.New(), profileID)
+	uploadResp, err := client.RequestUpload(authed, validUploadRequest())
+	require.NoError(t, err)
+	fileID := uploadResp.GetUploadResponse().GetFileId()
+	originalKey := uploadResp.GetUploadResponse().GetR2Key()
+	_, err = client.ConfirmUpload(authed, &filev1.ConfirmUploadRequest{
+		FileId:     fileID,
+		Sha256Hash: defaultUploadHash,
+	})
+	require.NoError(t, err)
+
+	_, err = client.DeleteFile(authed, &filev1.DeleteFileRequest{FileId: fileID})
+	require.NoError(t, err)
+	require.Contains(t, deleter.deleted, originalKey)
+}
+
+func TestRequestUploadSetsExpiresAtFreeTier(t *testing.T) {
+	ctx := context.Background()
+	pool := startFilePostgres(t, ctx)
+	client := startFileGRPC(t, pool, &recordingPresigner{})
+	profileID := uuid.New()
+	authed := withFileProfile(ctx, uuid.New(), profileID)
+
+	uploadResp, err := client.RequestUpload(authed, validUploadRequest())
+	require.NoError(t, err)
+	var expiresAt time.Time
+	err = pool.QueryRow(ctx, `SELECT expires_at FROM files WHERE id = $1`, uploadResp.GetUploadResponse().GetFileId()).Scan(&expiresAt)
+	require.NoError(t, err)
+	require.WithinDuration(t, fixedNow.Add(90*24*time.Hour), expiresAt, time.Minute)
+}
+
+func TestRequestUploadPremiumSkipsExpiresAt(t *testing.T) {
+	ctx := context.Background()
+	pool := startFilePostgres(t, ctx)
+	client := startFileGRPC(t, pool, &recordingPresigner{})
+	profileID := uuid.New()
+	authed := withFileProfileAndTier(ctx, uuid.New(), profileID, "premium")
+
+	uploadResp, err := client.RequestUpload(authed, validUploadRequest())
+	require.NoError(t, err)
+	var expiresAt *time.Time
+	err = pool.QueryRow(ctx, `SELECT expires_at FROM files WHERE id = $1`, uploadResp.GetUploadResponse().GetFileId()).Scan(&expiresAt)
+	require.NoError(t, err)
+	require.Nil(t, expiresAt)
+}
+
+func TestRunExpiryPurgeOnceMarksExpiredAndDeletesR2(t *testing.T) {
+	ctx := context.Background()
+	pool := startFilePostgres(t, ctx)
+	files := store.NewFilesStore(pool)
+	deleter := &recordingDeleter{}
+	pub := &recordingFilePublisher{}
+	fileID := uuid.New()
+	profileID := uuid.New()
+	originalKey := "attachments/" + fileID.String() + "/old.png"
+	convertedKey := "processed/" + fileID.String() + "/full.webp"
+	_, err := pool.Exec(ctx, `
+INSERT INTO files (
+	id, uploader_profile_id, original_name, mime_type, size_bytes, r2_key,
+	status, file_type, converted_r2_key, scan_result, expires_at
+) VALUES ($1, $2, 'old.png', 'image/png', 1024, $3, 'ready', 'image', $4, 'clean', $5)
+`, fileID, profileID, originalKey, convertedKey, fixedNow.Add(-time.Hour))
+	require.NoError(t, err)
+
+	n, err := jobs.RunExpiryPurgeOnce(ctx, files, deleter, pub, fixedNow)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), n)
+	require.ElementsMatch(t, []string{originalKey, convertedKey}, deleter.deleted)
+	require.Equal(t, []string{fileID.String()}, pub.fileIDs)
+
+	var statusValue string
+	err = pool.QueryRow(ctx, `SELECT status FROM files WHERE id = $1`, fileID).Scan(&statusValue)
+	require.NoError(t, err)
+	require.Equal(t, "expired", statusValue)
+}
+
+type recordingFilePublisher struct {
+	fileIDs []string
+}
+
+func (p *recordingFilePublisher) PublishFileExpired(_ context.Context, fileID string, _ *string) error {
+	p.fileIDs = append(p.fileIDs, fileID)
+	return nil
+}
+
+func (p *recordingFilePublisher) Close() error { return nil }
 
 func validUploadRequest() *filev1.RequestUploadRequest {
 	return &filev1.RequestUploadRequest{
@@ -448,7 +627,7 @@ func withFileProfile(ctx context.Context, accountID, profileID uuid.UUID) contex
 	return metadata.AppendToOutgoingContext(ctx, "x-voice-profile-id", profileID.String())
 }
 
-func startFilePostgres(t *testing.T, ctx context.Context) *pgxpool.Pool {
+func withFileProfile(ctx context.Context, accountID, profileID uuid.UUID) context.Context {
 	t.Helper()
 	if testing.Short() {
 		t.Skip("integration test skipped in -short mode")
@@ -495,9 +674,16 @@ func startFileGRPCFull(t *testing.T, pool *pgxpool.Pool, deps grpcsvc.Deps) file
 	srv := grpc.NewServer()
 	deps.Files = store.NewFilesStore(pool)
 	deps.Clock = fixedClock{}
+	if deps.Reader == nil {
+		deps.Reader = fakeObjectReader{}
+	}
+	if deps.Deleter == nil {
+		deps.Deleter = &recordingDeleter{}
+	}
 	filev1.RegisterFileServiceServer(srv, grpcsvc.New(grpcsvc.Deps{
 		Files:     deps.Files,
 		Presigner: deps.Presigner,
+		Deleter:   deps.Deleter,
 		Clock:     deps.Clock,
 		ChatGuard: deps.ChatGuard,
 		Processor: deps.Processor,

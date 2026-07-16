@@ -190,7 +190,7 @@ func TestConfirmUpload_E2E_SkipsImageProcessing(t *testing.T) {
 
 	confirmed, err := client.ConfirmUpload(fileGateCtx(ctx, acct, prof), &filev1.ConfirmUploadRequest{
 		FileId:     uploadResp.GetUploadResponse().GetFileId(),
-		Sha256Hash: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		Sha256Hash: gateUploadHash(gateUploadBytes),
 	})
 	require.NoError(t, err)
 	meta := confirmed.GetFileMetadata()
@@ -234,6 +234,7 @@ func startFileGateGRPCWithProcessor(
 		Presigner: gatePresigner{},
 		ChatGuard: guard,
 		Processor: processor,
+		Reader:    gateObjectReader{},
 	}))
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(func() {

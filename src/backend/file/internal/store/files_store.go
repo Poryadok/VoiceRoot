@@ -359,6 +359,76 @@ WHERE id = $1
 	return nil
 }
 
+func (s *FilesStore) MarkExpired(ctx context.Context, id uuid.UUID) error {
+	tag, err := s.Pool.Exec(ctx, `
+UPDATE files
+SET status = 'expired',
+    updated_at = now()
+WHERE id = $1
+  AND status = 'ready'
+`, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	return nil
+}
+
+func (s *FilesStore) ListExpiredReadyFiles(ctx context.Context, now time.Time, limit int) ([]FileRow, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := s.Pool.Query(ctx, `
+SELECT id, uploader_profile_id, original_name, mime_type, size_bytes, sha256_hash,
+       r2_key, status, file_type, width, height, duration_seconds,
+       thumbnail_r2_key, converted_r2_key, chat_id, chat_type, is_e2e, expires_at,
+       scan_result, created_at, updated_at
+FROM files
+WHERE status = 'ready'
+  AND expires_at IS NOT NULL
+  AND expires_at <= $1
+ORDER BY expires_at ASC
+LIMIT $2
+`, now.UTC(), limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []FileRow
+	for rows.Next() {
+		var row FileRow
+		if err := rows.Scan(
+			&row.ID,
+			&row.UploaderProfileID,
+			&row.OriginalName,
+			&row.MimeType,
+			&row.SizeBytes,
+			&row.SHA256Hash,
+			&row.R2Key,
+			&row.Status,
+			&row.FileType,
+			&row.Width,
+			&row.Height,
+			&row.DurationSeconds,
+			&row.ThumbnailR2Key,
+			&row.ConvertedR2Key,
+			&row.ChatID,
+			&row.ChatType,
+			&row.IsE2E,
+			&row.ExpiresAt,
+			&row.ScanResult,
+			&row.CreatedAt,
+			&row.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
 func (s *FilesStore) BytesUsedByProfile(ctx context.Context, profileID uuid.UUID) (int64, error) {
 	var used int64
 	err := s.Pool.QueryRow(ctx, `

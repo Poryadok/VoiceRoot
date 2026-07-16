@@ -8,6 +8,8 @@ replace voice.app/voice/chat => ../chat/pb/voice/chat
 
 replace voice.app/voice/story => ../voice/pb/voice/story
 
+replace voice.app/voice/events => ../messaging/pb/voice/events
+
 replace voice.app/voice/common => ../user/pb/voice/common
 
 replace voice/backend/pkg => ../pkg
@@ -18,6 +20,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.103.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.9.2
+	github.com/nats-io/nats.go v1.39.1
 	github.com/prometheus/client_golang v1.20.5
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/image v0.34.0
@@ -25,6 +28,7 @@ require (
 	google.golang.org/protobuf v1.36.11
 	voice.app/voice/chat v0.0.0
 	voice.app/voice/common v0.0.0
+	voice.app/voice/events v0.0.0
 	voice.app/voice/file v0.0.0
 	voice.app/voice/story v0.0.0
 	voice/backend/pkg v0.0.0

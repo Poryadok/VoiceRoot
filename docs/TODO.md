@@ -75,22 +75,6 @@
 **Промпт-якорь:** `Observability staging smoke from docs/TODO.md Critical Batch 1`.
 
 
-### Batch 2 — E2E verification перед релизом
-
-
-Требует `make compose-e2e-live` или эквивалентный живой стек ([`TESTING.md`](TESTING.md)).
-
-
-- [ ] **E2E encryption live** — gateway `compose_e2e_optout` / `compose_e2e_key_backup`; Flutter `encryption_*_e2e_live_test`.
-
-- [ ] **Guest restrictions live** — `guest_restrictions_e2e_live_test.dart` в `compose-e2e-live`.
-
-- [ ] **Staging deploy smoke** — при доступном кластере: `STAGING_SMOKE_ENABLED=true` → `scripts/staging/smoke-staging.sh` после деплоя ([`DEPLOYMENT.md`](DEPLOYMENT.md)); расширить smoke проверкой Developer Portal (`https://${VOICE_DEVELOPER_PORTAL_INGRESS_HOST}/`) — см. Batch 11.
-
-
-**Промпт-якорь:** `Pre-release compose/staging E2E from docs/TODO.md Critical Batch 2`.
-
-
 ---
 
 
@@ -356,17 +340,17 @@ Selective build/deploy в `master` ([`ci.yml`](../.github/workflows/ci.yml), [`s
 
 #### File — Critical
 
-- [ ] **[File] No server-side SHA-256 verification** — `ConfirmUpload` stores client hash without reading R2 and recomputing; upload integrity is trust-on-client (`d:\Git\Voice\src\backend\file\internal\grpcsvc\file_grpc.go`, `d:\Git\Voice\src\backend\file\internal\store\files_store.go`).
-- [ ] **[File] Retention not enforced** — spec: 90d free / forever paid; only E2E uploads get `expires_at` (`d:\Git\Voice\src\backend\file\internal\grpcsvc\file_grpc.go` L163–167). No cron/worker, no `MarkExpired`, no R2 purge, no expired placeholder path (`d:\Git\Voice\src\backend\file\internal\store\files_store.go` has no expiry ops).
-- [ ] **[File] `DeleteFile` is DB-only** — marks `deleted`, never deletes R2 objects (original, `converted_r2_key`, `thumbnail_r2_key`) (`d:\Git\Voice\src\backend\file\internal\grpcsvc\file_grpc.go` L382–400; `d:\Git\Voice\src\backend\file\internal\r2file\r2file.go` has no `DeleteObject`).
-- [ ] **[File] Download serves original, not processed asset** — `GetFileURL` always presigns `row.R2Key`, ignoring `converted_r2_key` despite spec “original not stored; user downloads processed version” (`d:\Git\Voice\src\backend\file\internal\grpcsvc\file_grpc.go` L236–237; `d:\Git\Voice\docs\features\file-storage.md`).
+- [x] **[File] No server-side SHA-256 verification** — `ConfirmUpload` stores client hash without reading R2 and recomputing; upload integrity is trust-on-client (`d:\Git\Voice\src\backend\file\internal\grpcsvc\file_grpc.go`, `d:\Git\Voice\src\backend\file\internal\store\files_store.go`).
+- [x] **[File] Retention not enforced** — spec: 90d free / forever paid; only E2E uploads get `expires_at` (`d:\Git\Voice\src\backend\file\internal\grpcsvc\file_grpc.go` L163–167). No cron/worker, no `MarkExpired`, no R2 purge, no expired placeholder path (`d:\Git\Voice\src\backend\file\internal\store\files_store.go` has no expiry ops).
+- [x] **[File] `DeleteFile` is DB-only** — marks `deleted`, never deletes R2 objects (original, `converted_r2_key`, `thumbnail_r2_key`) (`d:\Git\Voice\src\backend\file\internal\grpcsvc\file_grpc.go` L382–400; `d:\Git\Voice\src\backend\file\internal\r2file\r2file.go` has no `DeleteObject`).
+- [x] **[File] Download serves original, not processed asset** — `GetFileURL` always presigns `row.R2Key`, ignoring `converted_r2_key` despite spec “original not stored; user downloads processed version” (`d:\Git\Voice\src\backend\file\internal\grpcsvc\file_grpc.go` L236–237; `d:\Git\Voice\docs\features\file-storage.md`).
 
 #### File — High
 
 - [ ] **[File] SHA-256 deduplication missing** — no hash lookup, no reuse of existing R2 key; `file_references` table absent (spec model in `d:\Git\Voice\docs\microservices\file-service.md`; only `files` in `d:\Git\Voice\src\backend\migrations\file_db\000001_init.up.sql`). Acknowledged in `d:\Git\Voice\src\backend\file\README.md`.
-- [ ] **[File] NATS `file.events` not implemented** — no publisher for `file.uploaded`, `file.processed`, `file.scan_infected`, `file.expired`, `file.downloaded` (`d:\Git\Voice\src\backend\file\`; contract in `d:\Git\Voice\docs\CONTRACT_MATRIX.md`, `d:\Git\Voice\docs\microservices\file-service.md`). Blocks Messaging “preview update after conversion”.
+- [ ] **[File] NATS `file.events` not implemented** — no publisher for `file.uploaded`, `file.processed`, `file.scan_infected`, `file.downloaded` (`d:\Git\Voice\src\backend\file\`; contract in `d:\Git\Voice\docs\CONTRACT_MATRIX.md`, `d:\Git\Voice\docs\microservices\file-service.md`). `file.expired` implemented in `internal/fileevents`. Blocks Messaging “preview update after conversion”.
 - [ ] **[File] No async worker / `processing` status** — conversion runs inline in `ConfirmUpload`; `processing` never set (`d:\Git\Voice\src\backend\file\internal\grpcsvc\file_grpc.go`; `d:\Git\Voice\docs\microservices\file-service.md` pipeline).
-- [ ] **[File] Originals kept after image processing** — processed keys written, source `r2_key` not removed (`d:\Git\Voice\src\backend\file\internal\imgproc\webp.go`; contradicts `d:\Git\Voice\docs\features\file-storage.md`).
+- [x] **[File] Originals kept after image processing** — processed keys written, source `r2_key` not removed (`d:\Git\Voice\src\backend\file\internal\imgproc\webp.go`; contradicts `d:\Git\Voice\docs\features\file-storage.md`).
 - [ ] **[File] `CheckQuota` ignores premium** — always returns `r2file.MaxFreeFileBytes` as limit (`d:\Git\Voice\src\backend\file\internal\grpcsvc\file_grpc.go` L449–454); README says subscription quotas beyond free tier are out of scope.
 - [ ] **[File] Gateway REST gaps** — no transcoding for `ListFiles` / `CheckQuota` (`d:\Git\Voice\src\backend\gateway\transcode_files.go`); proto RPCs exist but no HTTP surface.
 - [ ] **[File] Infected-file notification missing** — scan marks `failed`/`infected` but no NATS/Notification fan-out (`d:\Git\Voice\docs\microservices\file-service.md`).
@@ -379,7 +363,7 @@ Selective build/deploy в `master` ([`ci.yml`](../.github/workflows/ci.yml), [`s
 - [ ] **[File] Conflicting live test** — `file_image_thumb_e2e_live_test.dart` expects `previewUrl` non-empty (`d:\Git\Voice\src\frontend\test\file_image_thumb_e2e_live_test.dart` L55) while mapper never sets it.
 - [ ] **[File] ClamAV E2E likely ineffective** — live test uses `eicar.com` + `text/plain` (`d:\Git\Voice\src\frontend\test\file_clamav_infected_e2e_live_test.dart`); `shouldScan` only matches `.exe`/`.zip`/`.bat` + zip/exe MIME (`d:\Git\Voice\src\backend\file\internal\grpcsvc\file_grpc.go` L588–596) — scan skipped, confirm may succeed.
 - [ ] **[File] `ListFiles` chat filter unimplemented** — `filter_chat` → `FailedPrecondition` (`d:\Git\Voice\src\backend\file\internal\grpcsvc\file_grpc.go` L408–410).
-- [ ] **[File] Free-tier `expires_at` not set** — non-E2E free uploads have `expires_at = NULL`; retention cron has nothing to query (`d:\Git\Voice\src\backend\file\internal\grpcsvc\file_grpc.go` L163–167).
+- [x] **[File] Free-tier `expires_at` not set** — non-E2E free uploads have `expires_at = NULL`; retention cron has nothing to query (`d:\Git\Voice\src\backend\file\internal\grpcsvc\file_grpc.go` L163–167).
 - [ ] **[File] No thumb URL presign helper** — clients get R2 keys in metadata but no `GetThumbnailURL` / presign for `thumbnail_r2_key`.
 - [ ] **[File] Attachment lifecycle partial** — Messaging validates `ready` + chat link + scan (`d:\Git\Voice\src\backend\messaging\internal\grpcsvc\messaging_grpc.go` L312–359), but no `file_references`, no expiry placeholder UX (`d:\Git\Voice\docs\features\file-storage.md` “кучка костей”), no message preview refresh on `file.processed`.
 
