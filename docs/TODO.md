@@ -67,9 +67,9 @@
 
 - [ ] **Grafana smoke** — Overview: targets UP; дашборды Overview / Tier-0 / Infra / Logs открываются.
 
-- [ ] **P1 алерты** — правила активны; тестовый firing → сообщение в канал (не null receiver).
-
 - [ ] **Prometheus scrape** — `gateway_http_requests_total` растёт при трафике на staging. 
+
+- [ ] **P1 алерты** — правила активны; тестовый firing → сообщение в канал (не null receiver).
 
 
 **Промпт-якорь:** `Observability staging smoke from docs/TODO.md Critical Batch 1`.

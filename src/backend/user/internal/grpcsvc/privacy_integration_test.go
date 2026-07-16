@@ -3,8 +3,6 @@ package grpcsvc
 import (
 	"context"
 	"net"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
@@ -30,21 +28,7 @@ import (
 
 func applyUserPrivacyMigrations(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
-	root := repoRoot(t)
-	for _, name := range []string{
-		"000001_init.up.sql",
-		"000002_privacy_settings.up.sql",
-		"000003_profile_subscription.up.sql",
-		"000004_profiles_verification.up.sql",
-		"000005_privacy_guest_audience.up.sql",
-		"000006_privacy_audience.up.sql",
-	} {
-		path := filepath.Join(root, "src", "backend", "migrations", "user_db", name)
-		sqlBytes, err := os.ReadFile(path)
-		require.NoError(t, err)
-		_, err = pool.Exec(ctx, string(sqlBytes))
-		require.NoError(t, err)
-	}
+	integrationtest.ApplyUserDBMigrations(t, ctx, pool, repoRoot(t))
 }
 
 func startUserPrivacyTestServer(t *testing.T, pool *store.ProfileStore, privacy *store.PrivacyStore, rdb *redis.Client, opts ...func(*UserGRPC)) userv1.UserServiceClient {
