@@ -54,5 +54,6 @@
 - [PLAN.md](PLAN.md) — соответствие кода плану
 - [TODO.md](TODO.md) — известные пробелы в спецификациях
 - [design/penpot-setup.md](design/penpot-setup.md) — Penpot + MCP для UI-макетов (ключи не коммитить)
+- [design/penpot-workflow.md](design/penpot-workflow.md) — раскладка фреймов (канон ↓, варианты →), clip/контейнеры, placeholder content
 
 

@@ -9,8 +9,9 @@
 | **Hosting** | [design.penpot.app](https://design.penpot.app) |
 | **File ID** | `20d3f736-cc1b-8043-8008-561cb65228ef` |
 | **Setup** | [penpot-setup.md](penpot-setup.md) |
+| **Workflow** | [penpot-workflow.md](penpot-workflow.md) — канон ↓ / варианты →, clip, placeholder content |
 
-Структура файла: `00_References`, `01_Foundation`, `10_Screens_Desktop`, `11_Screens_Mobile`, `12_States`. Экран = **фрейм** `Screen/...`; в задачи — share URL фрейма из [screens.md](screens.md).
+Структура файла: `00_References`, `01_Foundation`, `10_Screens_Desktop`, `11_Screens_Mobile`, `12_States`, `13_Panels_Desktop`, `14_Panels_Mobile`, `15_Overlays`. Экран = **фрейм** `Screen/...`, `Panel/...` или `Overlay/...`; в задачи — share URL фрейма из [screens.md](screens.md).
 
 Инвентарь фреймов: [screens.md](screens.md).
 
