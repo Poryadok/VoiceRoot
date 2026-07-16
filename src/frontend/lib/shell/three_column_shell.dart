@@ -21,9 +21,9 @@ class ThreeColumnShell extends StatelessWidget {
     this.navigationCollapsed = false,
     this.middleChild,
     this.sidePanelChild,
-    this.navigationExpandedWidth = 320,
+    this.navigationExpandedWidth = VoiceLayout.desktopNavigationWidth,
     this.navigationCollapsedWidth = 72,
-    this.sidePanelWidth = 300,
+    this.sidePanelWidth = VoiceLayout.desktopSidePanelWidth,
   });
 
   final Widget? header;

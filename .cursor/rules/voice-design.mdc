@@ -1,5 +1,5 @@
 ---
-description: Voice Flutter UI — design tokens, Figma, core widgets
+description: Voice Flutter UI — design tokens, Penpot, core widgets
 globs: src/frontend/lib/**
 alwaysApply: false
 ---
@@ -13,4 +13,4 @@ Before editing UI under `src/frontend/lib/ui/` or `lib/shell/`:
 3. **MUST NOT** add `ColorScheme.fromSeed`, `Colors.indigo`, or `Color(0x…)` in `lib/ui/**` or `lib/shell/**` (only `lib/theme/` may define resolved colors).
 4. Visual constant changes **MUST** update `design/tokens/voice.tokens.json` and `src/frontend/assets/design/voice.tokens.json` in the same PR (`make design-tokens-check`).
 5. **Profile accent** is per active profile (`profileAccent.defaults` + optional override); primary CTA and send use accent; lists/rail stay neutral.
-6. Figma MCP read is optional and rate-limited; do not invent hex — use tokens. Frame URLs: [docs/design/screens.md](docs/design/screens.md).
+6. Penpot MCP read is optional; do not invent hex — use tokens. Frame IDs/URLs: [docs/design/screens.md](docs/design/screens.md). Setup: [docs/design/penpot-setup.md](docs/design/penpot-setup.md).

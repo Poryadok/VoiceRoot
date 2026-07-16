@@ -29,43 +29,52 @@ class VoiceListRow extends StatelessWidget {
     final voice = VoiceColors.of(context);
     final padH = context.voiceMetrics.spacing('12', fallback: 12);
     final padV = context.voiceMetrics.spacing('8', fallback: 8);
+    final barWidth = context.voiceMetrics.spacing('4', fallback: 3);
     return Material(
-      color: selected
-          ? voice.profileAccent.withValues(alpha: 0.12)
-          : Colors.transparent,
+      color: selected ? voice.elevated : Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: padH, vertical: padV),
-          child: Row(
-            children: [
-              if (leading != null) ...[leading!, SizedBox(width: padH)],
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
+          children: [
+            if (selected)
+              Container(width: barWidth, color: voice.profileAccent),
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: padH, vertical: padV),
+                child: Row(
                   children: [
-                    titleWidget ??
-                        Text(
-                          title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodyLarge,
-                        ),
-                    if (subtitle != null && subtitle!.isNotEmpty)
-                      Text(
-                        subtitle!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: voice.textSecondary,
-                        ),
+                    if (leading != null) ...[leading!, SizedBox(width: padH)],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          titleWidget ??
+                              Text(
+                                title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodyLarge,
+                              ),
+                          if (subtitle != null && subtitle!.isNotEmpty)
+                            Text(
+                              subtitle!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: voice.textSecondary),
+                            ),
+                        ],
                       ),
+                    ),
+                    if (trailing != null) ...[
+                      SizedBox(width: padH / 2),
+                      trailing!,
+                    ],
                   ],
                 ),
               ),
-              if (trailing != null) ...[SizedBox(width: padH / 2), trailing!],
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

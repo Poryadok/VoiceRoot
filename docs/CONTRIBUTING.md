@@ -53,5 +53,6 @@
 - [DEPLOYMENT.md](DEPLOYMENT.md) — окружения и выкат
 - [PLAN.md](PLAN.md) — соответствие кода плану
 - [TODO.md](TODO.md) — известные пробелы в спецификациях
+- [design/penpot-setup.md](design/penpot-setup.md) — Penpot + MCP для UI-макетов (ключи не коммитить)
 
 

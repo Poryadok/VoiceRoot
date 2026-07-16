@@ -49,4 +49,4 @@ Accent применяется к: `ColorScheme.primary`, primary `FilledButton`,
 - `VoiceColors` — `ThemeExtension`, neutral + `profileAccent`
 - `VoiceTheme.light/dark/highContrast(profileAccent: Color)`
 
-Имена в Figma Variables должны совпадать с путями (`color/background/canvas` ↔ `color.background.canvas`).
+Имена в Penpot tokens (и legacy Figma Variables) совпадают с путями в JSON: `color.background.canvas` (точки в имени токена).

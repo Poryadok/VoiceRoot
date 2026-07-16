@@ -1,26 +1,24 @@
 # Design system (Voice client)
 
-Источник визуала для Flutter: **design tokens в git** + макеты в Figma. UX-канон и визуальные принципы — [brand.md](brand.md); продуктовое поведение — в `docs/features/` (например [navigation.md](../features/navigation.md)).
+Источник визуала для Flutter: **design tokens в git** + макеты в **Penpot**. UX-канон — [brand.md](brand.md); продуктовое поведение — в `docs/features/` (например [navigation.md](../features/navigation.md)).
 
-> **Temporary status:** Figma сейчас недоступна. До восстановления доступа UI-работы ведём без Figma/MCP: источники истины — `docs/design/brand.md`, `docs/design/tokens.md`, `design/tokens/voice.tokens.json`, `docs/features/` и текущий Flutter UI.
-
-## Figma
+## Penpot
 
 | | |
 |--|--|
-| **File** | [Voice](https://www.figma.com/design/tIkNxn3e7vcp3APJ8I6bKi/Voice) |
-| **fileKey** | `tIkNxn3e7vcp3APJ8I6bKi` |
-| **Референс Discord** | MainPage / «Discord 19» — только `00_References`, не core target |
+| **Hosting** | [design.penpot.app](https://design.penpot.app) |
+| **File ID** | `20d3f736-cc1b-8043-8008-561cb65228ef` |
+| **Setup** | [penpot-setup.md](penpot-setup.md) |
 
-Структура файла: `00_References`, `01_Foundation`, `10_Screens_Desktop`, `11_Screens_Mobile`, `12_States`. Экран = **фрейм** `Screen/...`; в задачи агенту — URL с **node-id фрейма**, не canvas `0-1`.
+Структура файла: `00_References`, `01_Foundation`, `10_Screens_Desktop`, `11_Screens_Mobile`, `12_States`. Экран = **фрейм** `Screen/...`; в задачи — share URL фрейма из [screens.md](screens.md).
 
-Инвентарь фреймов: [screens.md](screens.md). Настройка страниц Figma: [figma-setup.md](figma-setup.md).
+Инвентарь фреймов: [screens.md](screens.md).
 
-## Cursor + Figma MCP
+## Cursor + Penpot MCP
 
-- Плагин Figma в Cursor; авторизация — **OAuth Connect** (Settings → MCP → Figma → Connect). **Personal access token в MCP не нужен.**
-- PAT только для опциональных REST-скриптов (`FIGMA_ACCESS_TOKEN` в локальном `.env`, не коммитить).
-- На плане **Starter** лимитированы read-вызовы (`get_design_context`, `get_metadata`). **Канон цветов — `design/tokens/voice.tokens.json`**, не подбор hex из MCP.
+- MCP server в Cursor (см. [penpot-setup.md](penpot-setup.md)); ключ — **Integrations** в Penpot, не коммитить.
+- Файл Voice открыт в браузере, **File → MCP Server → Connect**.
+- **Канон цветов — `design/tokens/voice.tokens.json`**, не подбор hex из MCP.
 
 ## Design tokens (обязательно)
 
@@ -31,25 +29,25 @@
 | [tokens.md](tokens.md) | Семантика |
 | [brand.md](brand.md) | Стиль и UX-референсы |
 
-Синхронизация: `make design-tokens-check` (сравнение canonical ↔ asset).
+Синхронизация: `make design-tokens-check` (canonical ↔ asset). Penpot — зеркало: `make penpot-tokens-export`.
 
-Правило PR: смена визуальных констант → diff в `voice.tokens.json` (+ asset); правки hex в `lib/ui/**` без JSON — блокер.
+Правило PR: смена визуальных констант → diff в `voice.tokens.json` (+ asset) + re-sync Penpot; правки hex в `lib/ui/**` без JSON — блокер.
 
 ## UX baseline
 
-- Базовые messaging-сценарии проектируем ближе к Telegram: быстро, спокойно, без лишних окон.
-- Спейсы, голосовые комнаты, роли и community-flow проектируем ближе к Discord, но без копирования его визуального шума.
-- Новые Voice-only фичи, включая матчмейкинг, должны иметь короткий happy path, явное состояние процесса и понятный cancel/retry.
-- Визуально держим flat style: нейтральные поверхности, точечный accent, умеренные скругления, без "вырвиглаз" цветов.
+- Базовые messaging-сценарии — ближе к Telegram: быстро, спокойно, без лишних окон.
+- Спейсы, голос, роли — ближе к Discord по логике, без визуального шума.
+- Voice-only фичи (матчмейкинг) — короткий happy path, явное состояние, cancel/retry.
+- Flat style: нейтральные поверхности, точечный accent, умеренные скругления.
 
 ## Шаблон задачи (UI)
 
 ```text
-Figma frame: unavailable while Figma access is down
+Penpot frame: <URL or frame ID from docs/design/screens.md>
 Tokens: design/tokens/voice.tokens.json
 UX: docs/design/brand.md
 Spec: docs/features/...
-Use lib/ui/core/* and VoiceTheme only. Do not depend on Figma/MCP until access is restored.
+Use lib/ui/core/* and VoiceTheme only. Penpot MCP: file open + Connect.
 ```
 
 ## Flutter
@@ -57,3 +55,7 @@ Use lib/ui/core/* and VoiceTheme only. Do not depend on Figma/MCP until access i
 - [src/frontend/lib/theme/](../../src/frontend/lib/theme/) — `VoiceTheme`, `VoiceColors`
 - [src/frontend/lib/ui/core/](../../src/frontend/lib/ui/core/) — кнопки, поля (без сырых `Color(0x…)` в feature UI)
 - Правило Cursor: `.cursor/rules/voice-design.mdc`
+
+## Legacy Figma
+
+Архив: [figma-setup.md](figma-setup.md) (не использовать для новых задач).

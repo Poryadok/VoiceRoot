@@ -120,6 +120,20 @@
 
 ## Common
 
+### Batch — Design (Penpot)
+
+Penpot = active design tool ([penpot-setup.md](design/penpot-setup.md)); Figma — legacy ([figma-setup.md](design/figma-setup.md)). Runtime tokens stay in git.
+
+- [x] **Penpot docs + cursor rules** — `docs/design/penpot-setup.md`, README/screens/tokens/brand, `.cursor/rules/voice-design.mdc`, Figma plugin disabled.
+- [x] **Token export script** — `scripts/design/voice-tokens-to-penpot.py`, `make penpot-tokens-export`, `make penpot-tokens-export-check`.
+- [ ] **Penpot file rename** — UI name `Voice` (file ID `20d3f736-cc1b-8043-8008-561cb65228ef`).
+- [x] **Foundation swatches** — `01_Foundation` visual token board + component sheet.
+- [x] **Penpot component library** — 9 library components on `01_Foundation`.
+- [x] **Desktop priority frames** — Auth, Shell, Chat/List, Chat/Room, Social/Panel on `10_Screens_Desktop`.
+- [x] **Mobile + States frames** — `11_Screens_Mobile`, `12_States`; frame IDs in [screens.md](design/screens.md).
+- [x] **Flutter shell polish** — `VoiceLayout` widths, `VoiceListRow` selected bar, auth card radius.
+- [ ] **Flutter chat/auth polish** — further list/room density vs Penpot (optional follow-up).
+
 
 ### Batch 5 — Growth & Accessibility
 

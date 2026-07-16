@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../../theme/voice_layout.dart';
 import '../core/voice_primary_button.dart';
 import '../core/voice_secondary_button.dart';
 import 'auth_errors.dart';
@@ -107,13 +108,13 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           container: true,
           child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
+            constraints: const BoxConstraints(maxWidth: VoiceLayout.authFormMaxWidth),
             child: Padding(
               padding: const EdgeInsets.all(24),
               child: Material(
                 color: voice.surface,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(8),
                   side: BorderSide(color: voice.borderDefault),
                 ),
                 child: Padding(

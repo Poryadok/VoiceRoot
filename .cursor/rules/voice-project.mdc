@@ -25,7 +25,7 @@ alwaysApply: true
 | Репозитории, монорепо, protos | `docs/REPOSITORIES.md` |
 | Что уже есть в коде vs план | `docs/PLAN.md` (статус реализации) |
 | Пробелы в доках | `docs/TODO.md` |
-| Design tokens (required), Figma, brand | `docs/design/`, `design/tokens/` |
+| Design tokens (required), Penpot, brand | `docs/design/`, `design/tokens/` |
 | CodeGraph MCP — query tips для Voice | `.cursor/rules/codegraph.mdc` |
 
 ## TDD и источники истины при генерации кода
