@@ -26,12 +26,36 @@ def color_token(name: str, value: str) -> dict:
     }
 
 
-def spacing_token(value: int) -> dict:
+def spacing_token(value: int | float) -> dict:
     return {"$type": "spacing", "$value": str(value), "$description": ""}
 
 
-def radius_token(value: int) -> dict:
+def radius_token(value: int | float) -> dict:
     return {"$type": "borderRadius", "$value": str(value), "$description": ""}
+
+
+def sizing_token(value: int | float) -> dict:
+    return {"$type": "sizing", "$value": str(value), "$description": ""}
+
+
+def border_width_token(value: int | float) -> dict:
+    return {"$type": "borderWidth", "$value": str(value), "$description": ""}
+
+
+def font_size_token(value: int | float) -> dict:
+    return {"$type": "fontSizes", "$value": str(value), "$description": ""}
+
+
+def font_weight_token(value: int | float) -> dict:
+    return {"$type": "fontWeights", "$value": str(value), "$description": ""}
+
+
+def line_height_token(value: int | float) -> dict:
+    return {"$type": "lineHeights", "$value": str(value), "$description": ""}
+
+
+def letter_spacing_token(value: int | float) -> dict:
+    return {"$type": "letterSpacing", "$value": str(value), "$description": ""}
 
 
 def build(data: dict) -> dict:
@@ -40,6 +64,18 @@ def build(data: dict) -> dict:
         layout[f"space.{key}"] = spacing_token(val)
     for key, val in data["radius"].items():
         layout[f"radius.{key}"] = radius_token(val)
+    for key, val in data.get("layout", {}).items():
+        layout[f"layout.{key}"] = sizing_token(val)
+    for key, val in data.get("stroke", {}).items():
+        layout[f"stroke.{key}"] = border_width_token(val)
+    for key, style in data.get("type", {}).items():
+        layout[f"type.{key}.size"] = font_size_token(style["size"])
+        layout[f"type.{key}.weight"] = font_weight_token(style["weight"])
+        layout[f"type.{key}.lineHeight"] = line_height_token(style["lineHeight"])
+        if "letterSpacing" in style:
+            layout[f"type.{key}.letterSpacing"] = letter_spacing_token(
+                style["letterSpacing"]
+            )
 
     accent: dict = {}
     for i, hex_val in enumerate(data["profileAccent"]["defaults"]):

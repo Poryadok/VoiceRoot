@@ -31,6 +31,16 @@ class PenpotTokenExportTest(unittest.TestCase):
             self.assertIn(f"space.{key}", layout)
         for key in canon["radius"]:
             self.assertIn(f"radius.{key}", layout)
+        for key in canon.get("layout", {}):
+            self.assertIn(f"layout.{key}", layout)
+        for key in canon.get("stroke", {}):
+            self.assertIn(f"stroke.{key}", layout)
+        for key, style in canon.get("type", {}).items():
+            self.assertIn(f"type.{key}.size", layout)
+            self.assertIn(f"type.{key}.weight", layout)
+            self.assertIn(f"type.{key}.lineHeight", layout)
+            if "letterSpacing" in style:
+                self.assertIn(f"type.{key}.letterSpacing", layout)
 
         accent = export["Foundation/Accent"]
         self.assertEqual(len(accent), len(canon["profileAccent"]["defaults"]))

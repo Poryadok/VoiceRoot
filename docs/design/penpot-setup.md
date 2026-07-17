@@ -33,7 +33,7 @@ Penpot token sets (mirror only — **do not** treat Penpot export as runtime sou
 
 | Set | Contents |
 |-----|----------|
-| `Foundation/Layout` | `space.*`, `radius.*` |
+| `Foundation/Layout` | `space.*`, `radius.*`, `layout.*`, `type.*.*`, `stroke.*` |
 | `Foundation/Accent` | `profileAccent.0` … `profileAccent.6` |
 | `Theme/Light` | semantic colors for light mode |
 | `Theme/Dark` | semantic colors for dark mode |

@@ -22,7 +22,7 @@ List<Override> voiceThemeTestOverrides() => [
 // Mirrors design/tokens/voice.tokens.json
 const _kVoiceTokensJson = '''
 {
-  "dsVersion": "0.1.0",
+  "dsVersion": "0.2.0",
   "profileAccent": {
     "defaults": [
       "#7EC8E3",
@@ -34,8 +34,61 @@ const _kVoiceTokensJson = '''
       "#FFB3E6"
     ]
   },
-  "space": { "4": 4, "8": 8, "12": 12, "16": 16, "24": 24, "32": 32 },
-  "radius": { "sm": 4, "md": 6, "lg": 8 },
+  "space": {
+    "2": 2,
+    "4": 4,
+    "6": 6,
+    "8": 8,
+    "12": 12,
+    "16": 16,
+    "20": 20,
+    "24": 24,
+    "32": 32,
+    "40": 40
+  },
+  "radius": {
+    "sm": 4,
+    "md": 6,
+    "lg": 8,
+    "xl": 12,
+    "bubble": 16,
+    "pill": 999
+  },
+  "layout": {
+    "railWidth": 56,
+    "listWidth": 320,
+    "panelWidth": 320,
+    "headerHeight": 56,
+    "composerMinHeight": 52,
+    "listRowHeight": 64,
+    "channelRowHeight": 34,
+    "avatarSm": 32,
+    "avatarMd": 40,
+    "avatarLg": 80,
+    "iconSm": 16,
+    "iconMd": 20,
+    "messageGutter": 48,
+    "bubbleMaxWidthFraction": 0.72
+  },
+  "type": {
+    "display": { "size": 20, "weight": 600, "lineHeight": 28 },
+    "title": { "size": 16, "weight": 600, "lineHeight": 22 },
+    "body": { "size": 15, "weight": 400, "lineHeight": 22 },
+    "bodyStrong": { "size": 15, "weight": 500, "lineHeight": 22 },
+    "label": { "size": 14, "weight": 500, "lineHeight": 20 },
+    "subtitle": { "size": 13, "weight": 400, "lineHeight": 18 },
+    "caption": { "size": 12, "weight": 400, "lineHeight": 16 },
+    "overline": {
+      "size": 11,
+      "weight": 500,
+      "lineHeight": 14,
+      "letterSpacing": 0.6
+    }
+  },
+  "stroke": {
+    "hairline": 1,
+    "strong": 2
+  },
   "themes": {
     "light": {
       "color.background.canvas": "#FFFFFF",

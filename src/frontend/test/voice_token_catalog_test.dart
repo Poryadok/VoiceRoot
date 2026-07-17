@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_frontend/theme/voice_token_catalog.dart';
 
+import 'support/test_voice_token_catalog.dart';
+
 void main() {
   test('parseJson loads profile accent defaults and themes', () {
     const json = '''
@@ -26,6 +28,25 @@ void main() {
       catalog.colorsFor('light')['color.background.canvas'],
       const Color(0xFFFFFFFF),
     );
+    expect(catalog.layout, isEmpty);
+    expect(catalog.type, isEmpty);
+  });
+
+  test('canonical fixture exposes layout type stroke radius scale', () {
+    final catalog = testVoiceTokenCatalog;
+    expect(catalog.dsVersion, '0.2.0');
+    expect(catalog.radius['bubble'], 16);
+    expect(catalog.radius['pill'], 999);
+    expect(catalog.layout['railWidth'], 56);
+    expect(catalog.layout['listRowHeight'], 64);
+    expect(catalog.stroke['hairline'], 1);
+    final body = catalog.typeStyle('body');
+    expect(body, isNotNull);
+    expect(body!.size, 15);
+    expect(body.weight, 400);
+    expect(body.lineHeight, 22);
+    final overline = catalog.typeStyle('overline');
+    expect(overline!.letterSpacing, 0.6);
   });
 
   test('colorFromHex parses six-digit hex', () {

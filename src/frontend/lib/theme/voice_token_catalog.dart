@@ -3,6 +3,39 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+/// Typographic style from design tokens (`type.*` in voice.tokens.json).
+class VoiceTypeToken {
+  const VoiceTypeToken({
+    required this.size,
+    required this.weight,
+    required this.lineHeight,
+    this.letterSpacing,
+  });
+
+  final double size;
+  final int weight;
+  final double lineHeight;
+  final double? letterSpacing;
+
+  FontWeight get fontWeight {
+    if (weight >= 700) return FontWeight.w700;
+    if (weight >= 600) return FontWeight.w600;
+    if (weight >= 500) return FontWeight.w500;
+    if (weight >= 400) return FontWeight.w400;
+    return FontWeight.w300;
+  }
+
+  TextStyle toTextStyle({Color? color}) {
+    return TextStyle(
+      fontSize: size,
+      fontWeight: fontWeight,
+      height: lineHeight / size,
+      letterSpacing: letterSpacing,
+      color: color,
+    );
+  }
+}
+
 /// Loaded from [kVoiceTokensAssetPath] (synced with design/tokens/voice.tokens.json).
 class VoiceTokenCatalog {
   VoiceTokenCatalog._({
@@ -10,6 +43,9 @@ class VoiceTokenCatalog {
     required this.profileAccentDefaults,
     required this.space,
     required this.radius,
+    required this.layout,
+    required this.type,
+    required this.stroke,
     required this.themes,
   });
 
@@ -19,6 +55,9 @@ class VoiceTokenCatalog {
   final List<Color> profileAccentDefaults;
   final Map<String, double> space;
   final Map<String, double> radius;
+  final Map<String, double> layout;
+  final Map<String, VoiceTypeToken> type;
+  final Map<String, double> stroke;
   final Map<String, Map<String, Color>> themes;
 
   static VoiceTokenCatalog? _cached;
@@ -42,6 +81,12 @@ class VoiceTokenCatalog {
             as List<dynamic>;
     final spaceRaw = root['space'] as Map<String, dynamic>;
     final radiusRaw = root['radius'] as Map<String, dynamic>;
+    final layoutRaw =
+        root['layout'] as Map<String, dynamic>? ?? const <String, dynamic>{};
+    final typeRaw =
+        root['type'] as Map<String, dynamic>? ?? const <String, dynamic>{};
+    final strokeRaw =
+        root['stroke'] as Map<String, dynamic>? ?? const <String, dynamic>{};
     final themesRaw = root['themes'] as Map<String, dynamic>;
 
     return VoiceTokenCatalog._(
@@ -51,6 +96,20 @@ class VoiceTokenCatalog {
           .toList(growable: false),
       space: spaceRaw.map((k, v) => MapEntry(k, (v as num).toDouble())),
       radius: radiusRaw.map((k, v) => MapEntry(k, (v as num).toDouble())),
+      layout: layoutRaw.map((k, v) => MapEntry(k, (v as num).toDouble())),
+      type: typeRaw.map((k, v) {
+        final m = v as Map<String, dynamic>;
+        return MapEntry(
+          k,
+          VoiceTypeToken(
+            size: (m['size'] as num).toDouble(),
+            weight: (m['weight'] as num).toInt(),
+            lineHeight: (m['lineHeight'] as num).toDouble(),
+            letterSpacing: (m['letterSpacing'] as num?)?.toDouble(),
+          ),
+        );
+      }),
+      stroke: strokeRaw.map((k, v) => MapEntry(k, (v as num).toDouble())),
       themes: themesRaw.map((mode, colors) {
         final map = colors as Map<String, dynamic>;
         return MapEntry(
@@ -75,6 +134,8 @@ class VoiceTokenCatalog {
     }
     return profileAccentDefaults[index % profileAccentDefaults.length];
   }
+
+  VoiceTypeToken? typeStyle(String key) => type[key];
 
   static Color colorFromHex(String hex) => _parseColor(hex);
 

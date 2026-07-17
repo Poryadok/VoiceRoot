@@ -16,7 +16,15 @@
 ## Naming
 
 - Theme colors: `color.background.canvas` (dots in JSON keys)
-- Penpot tokens: `color.background.canvas` (dots) — same semantics as JSON keys
+- Layout / type / stroke: `layout.railWidth`, `type.body.size`, `stroke.hairline`
+- Penpot tokens use the same paths — see [docs/design/tokens.md](../../docs/design/tokens.md)
+
+## Style blocks (0.2.0+)
+
+- `space`, `radius` — spacing scale + corners (`bubble`, `pill`, …)
+- `layout` — shell widths, row heights, avatars, icons
+- `type` — size / weight / lineHeight (+ optional letterSpacing)
+- `stroke` — hairline / strong
 
 ## Profile accent
 

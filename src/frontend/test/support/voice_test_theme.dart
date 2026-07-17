@@ -42,7 +42,10 @@ ThemeData voiceTestTheme() {
   );
   const metrics = VoiceMetrics(
     space: {'4': 4, '8': 8, '12': 12},
-    radius: {'sm': 4, 'md': 6, 'lg': 8},
+    radius: {'sm': 4, 'md': 6, 'lg': 8, 'bubble': 16, 'pill': 999},
+    layout: {'railWidth': 56, 'listWidth': 320},
+    stroke: {'hairline': 1, 'strong': 2},
+    type: {},
   );
   return ThemeData(
     useMaterial3: true,
