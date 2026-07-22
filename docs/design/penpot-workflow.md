@@ -83,6 +83,59 @@ y=900:   [ Chat/Room — as shipped ]  [ Chat/Room — composer v2 ]
 
 ---
 
+## 1.5. Отступы от края экрана и рамок (запрет нулевых inset)
+
+Контент **не должен лизать** край screen/panel frame и внутренние рамки колонок. Это касается и заголовков (`Header`, section overline), и текста, и контролов — «это же title» не отменяет gutter.
+
+### Минимум
+
+| Что | Минимум | Токен |
+|-----|--------:|-------|
+| Отступ текста/контролов от левого и правого края колонки / frame | **≥ 16 px** | `space.16` |
+| Отступ от верхнего/нижнего края content-зоны (не считая системный status area) | **≥ 16 px**, если нет отдельного chrome-header | `space.16` |
+
+Предпочтительно задавать gutter через **flex `padding` контейнера** (`leftPadding` / `rightPadding` ≥ 16), а не надеяться только на `layoutChild.leftMargin` у `Text` с `horizontalSizing = fill` — в Penpot margin у fill-текста **не сдвигает** глифы (`parentX` остаётся 0 при `leftMargin = 16`).
+
+Надёжный паттерн, если родитель колонки должен оставаться `leftPadding = 0` (ради `AccentBar` flush left, §3.5):
+
+```text
+Inset / Header          (flex, leftPadding=16, rightPadding=16, fill × auto)
+└── Header              (text)
+Inset / Overline / …    (flex, leftPadding=16, rightPadding=16; topMargin на wrap)
+└── Overline / …
+Nav / …                 (full width, AccentWrap @ 0, Label leftMargin=16)
+```
+
+Имя wrap: `Inset / …` — чтобы в Layers было видно, что это gutter, а не контент.
+
+### Канон для колонок (nav / list / panel)
+
+```text
+Column (flex column, leftPadding=0, rightPadding=0)   ← full-bleed фон/AccentBar OK
+├── Header / Overline     → leftMargin≥16 + horizontalSizing auto|fix
+│                           ИЛИ обёртка с horizontalPadding≥16
+├── Nav/List row (full width, leftPadding=0)
+│   ├── AccentWrap @ 0    ← flush к краю строки (§3.5)
+│   └── Label leftMargin=16
+└── …
+```
+
+Полоска активного пункта (§3.5) по-прежнему **flush left у строки**. Gutter 16 — у **текста и иконок**, не у `AccentBar`.
+
+### Нельзя
+
+- `Header` / overline / title с `parentX = 0` и без padding родителя ≥ 16.
+- Нулевой горизонтальный padding у контейнера, если прямые текстовые дети без рабочего inset.
+- Считать full-bleed фон или `AccentBar` оправданием для текста на краю.
+
+### Исключения (осознанный full-bleed)
+
+- Фоновые `Board` / scrim на весь frame.
+- `AccentBar` / разделители на всю ширину.
+- Медиа edge-to-edge (story viewer, image lightbox), где продукт явно full-bleed — но chrome (close, caption) всё равно с inset ≥ 16.
+
+---
+
 ## 2. Clip content и размеры контейнеров (типовые «пустые» экраны)
 
 Симптом: фрейм выглядит **пустым серым прямоугольником**, контент виден только при **hover** (outline/selection на обрезанных дочерних слоях).
@@ -162,13 +215,51 @@ y=900:   [ Chat/Room — as shipped ]  [ Chat/Room — composer v2 ]
 
 ---
 
+## 3.5. Выделение активного пункта (AccentWrap)
+
+Активный пункт списка / nav (Settings sidebar, tree row и т.п.) — **один** визуальный маркер: `AccentWrap` → `AccentBar` (3 px, `profileAccent.*`).
+
+### Канон
+
+| Правило | Значение |
+|---------|----------|
+| Полоска | `AccentWrap` → `AccentBar` (3 px) **у левого края** строки: `layoutChild.absolute = true`, `parentX = 0`; не в gutter контента |
+| Контент | `Label` стартует на **той же X**, что невыбранные строки (`parentX = 16`): `leftMargin = 16` у `Label`, пока бар absolute |
+| Невыбранные | flex `padding` L/R **16**; без `AccentWrap` |
+| Chevron | `rightPadding = 16` на всех строках |
+
+### Структура выбранной строки
+
+```text
+Nav / … (flex row, leftPadding=0, rightPadding=16, justify=start)
+├── AccentWrap (absolute, 0×0, 3×44) → AccentBar
+├── Label (fill, leftMargin=16)
+└── Chevron (fix)
+```
+
+Полоска **не** участвует во flex-flow — иначе окажется на `parentX = 16` («висит в воздухе» между краем и текстом).
+
+### Нельзя (двойное выделение)
+
+- `AccentWrap` **и** горизонтальный `padding` родителя, который сдвигает полоску внутрь.
+- `AccentWrap` **и** muted fill (`color.background.muted`) на той же строке.
+- Inset-padding как «стягивание» выделения вместо полоски — выбрать **один** способ.
+
+### Flex на выбранной строке
+
+- `justifyContent = start`.
+- `AccentWrap`: `absolute = true`, flush left.
+- `Label`: `horizontalSizing = fill`, `leftMargin = 16`; `Chevron` — `fix`.
+
+---
+
 ## 4. Workflow: новый или обновлённый макет
 
 1. **Spec** — `docs/features/`, [brand.md](brand.md).
 2. **Shipped snapshot** — только `make penpot-tokens-export` + заливка в Penpot (§1); дизайнер **не** трогает `x≈0`.
 3. **Дизайн** — duplicate канона → вариант справа (`· v2` / `· draft`); правки только там.
 4. **Размещение** — §1: канон ↓, варианты →, без overlap.
-5. **Сборка варианта** — §2 clip; §3 placeholder.
+5. **Сборка варианта** — §1.5 inset ≥ 16; §2 clip; §3 placeholder; §3.5 AccentWrap (один маркер выделения).
 6. **Инвентарь** — frame ID канона в [screens.md](screens.md) (без `·`).
 7. **PR** — ссылка на **вариант** для review; после ship в app — snapshot обновит скрипт.
 
@@ -185,6 +276,8 @@ y=900:   [ Chat/Room — as shipped ]  [ Chat/Room — composer v2 ]
 - [ ] Есть примеры текста, авatars, timestamps (не пустые блоки)
 - [ ] Viewer URL добавлен/актуален в `screens.md`
 - [ ] Цвета из tokens, не случайный hex
+- [ ] Активный nav/list row: только `AccentWrap` flush left; нет dual padding + muted fill (§3.5)
+- [ ] Нет нулевых inset: текст/контролы ≥ 16 px от края frame/колонки; Header и overline не на `parentX = 0` без padding (§1.5)
 
 ---
 
