@@ -66,6 +66,18 @@ y=900:   [ Chat/Room — as shipped ]  [ Chat/Room — composer v2 ]
 
 Между фреймами по **Y**: gap **≥ 100 px**. Между каноном и вариантом по **X**: gap **≥ 80 px**.
 
+### Mobile chrome (высоты панелей)
+
+На phone-фреймах **390×844** chrome фиксирован токенами — не «угадывать» и не оставлять default board 100×100:
+
+| Зона | Высота | Токен |
+|------|-------:|-------|
+| AppBar / top header | **56** | `layout.headerHeight` |
+| Search row (shell) | **44** | `layout.searchRowHeight` |
+| BottomNav / composer chrome | **64** | `layout.bottomNavHeight` |
+
+Content (`ChatList` / `Messages` / `Body`) — `verticalSizing = fill`, сумма chrome + content = **844**. `Inset / AppBar` — только горизонтальный gutter ≥16; высота inset = `headerHeight`, не auto/100.
+
 ### Как ставить новый фрейм
 
 1. **Zoom out** — увидеть строки канон + варианты.
@@ -272,6 +284,7 @@ Nav / … (flex row, leftPadding=0, rightPadding=16, justify=start)
 - [ ] Канон слева; варианты справа; нет overlap; новый сценарий — строкой ниже
 - [ ] Имя `Screen/...` / `Panel/...` / `Overlay/...` по конвенции
 - [ ] Контент-контейнеры = ширина frame; нет clip с overflow > 5 px
+- [ ] Mobile chrome: AppBar=`headerHeight` (56), BottomNav/composer=`bottomNavHeight` (64); content fill до 844
 - [ ] Строки списка 56 px; text-wrapper не 100 px
 - [ ] Есть примеры текста, авatars, timestamps (не пустые блоки)
 - [ ] Viewer URL добавлен/актуален в `screens.md`

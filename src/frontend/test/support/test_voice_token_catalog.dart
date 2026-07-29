@@ -22,7 +22,7 @@ List<Override> voiceThemeTestOverrides() => [
 // Mirrors design/tokens/voice.tokens.json
 const _kVoiceTokensJson = '''
 {
-  "dsVersion": "0.2.0",
+  "dsVersion": "0.2.1",
   "profileAccent": {
     "defaults": [
       "#7EC8E3",
@@ -59,7 +59,12 @@ const _kVoiceTokensJson = '''
     "listWidth": 320,
     "panelWidth": 320,
     "headerHeight": 56,
+    "bottomNavHeight": 64,
+    "searchRowHeight": 44,
     "composerMinHeight": 52,
+    "composerActionSize": 36,
+    "callBarHeight": 48,
+    "badgeSize": 20,
     "listRowHeight": 64,
     "channelRowHeight": 34,
     "avatarSm": 32,
@@ -101,6 +106,15 @@ const _kVoiceTokensJson = '''
       "color.border.default": "#E0E0E0",
       "color.border.strong": "#1A1A1A",
       "color.semantic.error": "#C62828",
+      "color.semantic.success": "#2E7D32",
+      "color.semantic.warning": "#F9A825",
+      "color.semantic.info": "#1565C0",
+      "color.semantic.badge": "#E53935",
+      "color.presence.online": "#43A047",
+      "color.presence.idle": "#FBC02D",
+      "color.presence.dnd": "#E53935",
+      "color.presence.offline": "#9E9E9E",
+      "color.background.overlay": "rgba(0,0,0,0.45)",
       "color.focus.ring": "#7EC8E3"
     },
     "dark": {
@@ -114,6 +128,15 @@ const _kVoiceTokensJson = '''
       "color.border.default": "#3D3D3D",
       "color.border.strong": "#F0F0F0",
       "color.semantic.error": "#EF9A9A",
+      "color.semantic.success": "#81C784",
+      "color.semantic.warning": "#FFD54F",
+      "color.semantic.info": "#64B5F6",
+      "color.semantic.badge": "#EF5350",
+      "color.presence.online": "#66BB6A",
+      "color.presence.idle": "#FFCA28",
+      "color.presence.dnd": "#EF5350",
+      "color.presence.offline": "#6E6E6E",
+      "color.background.overlay": "rgba(0,0,0,0.55)",
       "color.focus.ring": "#7EC8E3"
     },
     "highContrast": {
@@ -127,6 +150,15 @@ const _kVoiceTokensJson = '''
       "color.border.default": "#FFFFFF",
       "color.border.strong": "#FFFFFF",
       "color.semantic.error": "#FF6B6B",
+      "color.semantic.success": "#69F0AE",
+      "color.semantic.warning": "#FFE082",
+      "color.semantic.info": "#82B1FF",
+      "color.semantic.badge": "#FF5252",
+      "color.presence.online": "#69F0AE",
+      "color.presence.idle": "#FFE082",
+      "color.presence.dnd": "#FF5252",
+      "color.presence.offline": "#9E9E9E",
+      "color.background.overlay": "rgba(0,0,0,0.65)",
       "color.focus.ring": "#FFFFFF"
     }
   }

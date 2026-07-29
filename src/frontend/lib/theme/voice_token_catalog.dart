@@ -139,8 +139,16 @@ class VoiceTokenCatalog {
 
   static Color colorFromHex(String hex) => _parseColor(hex);
 
-  static Color _parseColor(String hex) {
-    var value = hex.replaceFirst('#', '');
+  static Color _parseColor(String raw) {
+    final rgbaMatch = RegExp(r'rgba?\((\d+),\s*(\d+),\s*(\d+),?\s*([\d.]*)\)').firstMatch(raw);
+    if (rgbaMatch != null) {
+      final r = int.parse(rgbaMatch.group(1)!);
+      final g = int.parse(rgbaMatch.group(2)!);
+      final b = int.parse(rgbaMatch.group(3)!);
+      final a = rgbaMatch.group(4)!.isEmpty ? 1.0 : double.parse(rgbaMatch.group(4)!);
+      return Color.fromRGBO(r, g, b, a);
+    }
+    var value = raw.replaceFirst('#', '');
     if (value.length == 6) {
       value = 'FF$value';
     }

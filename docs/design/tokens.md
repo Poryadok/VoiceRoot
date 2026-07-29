@@ -1,6 +1,6 @@
 # Design tokens semantics
 
-Канон: [design/tokens/voice.tokens.json](../../design/tokens/voice.tokens.json) (`dsVersion` 0.2.0). Runtime: [src/frontend/assets/design/voice.tokens.json](../../src/frontend/assets/design/voice.tokens.json).
+Канон: [design/tokens/voice.tokens.json](../../design/tokens/voice.tokens.json) (`dsVersion` 0.2.1). Runtime: [src/frontend/assets/design/voice.tokens.json](../../src/frontend/assets/design/voice.tokens.json).
 
 **Стиль:** messaging surface ближе к Telegram / soft messenger (bubbles, pill search, тонкий app rail); **функция** shell для spaces — Discord-like (tree, members, voice), но без визуального шума. См. [brand.md](brand.md).
 
@@ -26,6 +26,15 @@
 | `color.border.default` | Разделители |
 | `color.border.strong` | Акцентные границы (high contrast) |
 | `color.semantic.error` | Ошибки |
+| `color.semantic.success` | Успех, подтверждение доставки |
+| `color.semantic.warning` | Предупреждения, DND, slow mode |
+| `color.semantic.info` | Информационные подсказки, pinned messages |
+| `color.semantic.badge` | Фон unread badge |
+| `color.presence.online` | Presence: онлайн |
+| `color.presence.idle` | Presence: неактивен |
+| `color.presence.dnd` | Presence: не беспокоить |
+| `color.presence.offline` | Presence: оффлайн/невидимка |
+| `color.background.overlay` | Scrim/dim под модалками и оверлеями |
 | `color.focus.ring` | Focus indicator |
 
 ## Profile accent (not per mode)
@@ -66,8 +75,13 @@ Avatars — круг (`BorderRadius.circular(size/2)`), не отдельный 
 | `layout.railWidth` | 56 | app rail (не Discord guild rail 72) |
 | `layout.listWidth` | 320 | DM list / space tree |
 | `layout.panelWidth` | 320 | members / info / stickers panel |
-| `layout.headerHeight` | 56 | column headers |
-| `layout.composerMinHeight` | 52 | composer bar |
+| `layout.headerHeight` | 56 | column headers / mobile AppBar |
+| `layout.bottomNavHeight` | 64 | mobile bottom tab bar (и composer chrome на phone) |
+| `layout.searchRowHeight` | 44 | mobile shell search row |
+| `layout.composerMinHeight` | 52 | composer bar (desktop min; phone chrome = `bottomNavHeight`) |
+| `layout.composerActionSize` | 36 | action buttons в composer (emoji/attach/send/mic) |
+| `layout.callBarHeight` | 48 | voice/video call chrome bar |
+| `layout.badgeSize` | 20 | unread badge dot/counter |
 | `layout.listRowHeight` | 64 | DM chat list row |
 | `layout.channelRowHeight` | 34 | space channel tree row |
 | `layout.avatarSm` / `Md` / `Lg` | 32 / 40 / 80 | list / message / profile |

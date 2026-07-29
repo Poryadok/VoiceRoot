@@ -34,11 +34,14 @@ void main() {
 
   test('canonical fixture exposes layout type stroke radius scale', () {
     final catalog = testVoiceTokenCatalog;
-    expect(catalog.dsVersion, '0.2.0');
+    expect(catalog.dsVersion, '0.2.1');
     expect(catalog.radius['bubble'], 16);
     expect(catalog.radius['pill'], 999);
     expect(catalog.layout['railWidth'], 56);
     expect(catalog.layout['listRowHeight'], 64);
+    expect(catalog.layout['bottomNavHeight'], 64);
+    expect(catalog.layout['searchRowHeight'], 44);
+    expect(catalog.layout['headerHeight'], 56);
     expect(catalog.stroke['hairline'], 1);
     final body = catalog.typeStyle('body');
     expect(body, isNotNull);

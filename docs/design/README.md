@@ -14,6 +14,7 @@
 Структура файла: `00_References`, `01_Foundation`, `10_Screens_Desktop`, `11_Screens_Mobile`, `12_States`, `13_Panels_Desktop`, `14_Panels_Mobile`, `15_Overlays`. Экран = **фрейм** `Screen/...`, `Panel/...` или `Overlay/...`; в задачи — share URL фрейма из [screens.md](screens.md).
 
 Инвентарь фреймов: [screens.md](screens.md).
+Кнопки и контролы по экранам: [screen-controls.md](screen-controls.md) — H/V layout, видимость, действие.
 
 ## Cursor + Penpot MCP
 
