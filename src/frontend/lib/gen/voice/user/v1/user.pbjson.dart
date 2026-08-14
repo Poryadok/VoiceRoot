@@ -100,6 +100,34 @@ final $typed_data.Uint8List ensurePrimaryProfileResponseDescriptor =
         'ChxFbnN1cmVQcmltYXJ5UHJvZmlsZVJlc3BvbnNlEjAKB3Byb2ZpbGUYASABKAsyFi52b2ljZS'
         '51c2VyLnYxLlByb2ZpbGVSB3Byb2ZpbGU=');
 
+@$core.Deprecated('Use listProfileIDsForAccountRequestDescriptor instead')
+const ListProfileIDsForAccountRequest$json = {
+  '1': 'ListProfileIDsForAccountRequest',
+  '2': [
+    {'1': 'account_id', '3': 1, '4': 1, '5': 9, '10': 'accountId'},
+  ],
+};
+
+/// Descriptor for `ListProfileIDsForAccountRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List listProfileIDsForAccountRequestDescriptor =
+    $convert.base64Decode(
+        'Ch9MaXN0UHJvZmlsZUlEc0ZvckFjY291bnRSZXF1ZXN0Eh0KCmFjY291bnRfaWQYASABKAlSCW'
+        'FjY291bnRJZA==');
+
+@$core.Deprecated('Use listProfileIDsForAccountResponseDescriptor instead')
+const ListProfileIDsForAccountResponse$json = {
+  '1': 'ListProfileIDsForAccountResponse',
+  '2': [
+    {'1': 'profile_ids', '3': 1, '4': 3, '5': 9, '10': 'profileIds'},
+  ],
+};
+
+/// Descriptor for `ListProfileIDsForAccountResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List listProfileIDsForAccountResponseDescriptor =
+    $convert.base64Decode(
+        'CiBMaXN0UHJvZmlsZUlEc0ZvckFjY291bnRSZXNwb25zZRIfCgtwcm9maWxlX2lkcxgBIAMoCV'
+        'IKcHJvZmlsZUlkcw==');
+
 @$core.Deprecated('Use getProfileRequestDescriptor instead')
 const GetProfileRequest$json = {
   '1': 'GetProfileRequest',

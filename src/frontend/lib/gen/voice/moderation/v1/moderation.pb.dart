@@ -1793,6 +1793,116 @@ class IsShadowBannedResponse extends $pb.GeneratedMessage {
   void clearShadowBanned() => $_clearField(1);
 }
 
+class IsMMBannedRequest extends $pb.GeneratedMessage {
+  factory IsMMBannedRequest({
+    $core.String? accountId,
+  }) {
+    final result = create();
+    if (accountId != null) result.accountId = accountId;
+    return result;
+  }
+
+  IsMMBannedRequest._();
+
+  factory IsMMBannedRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory IsMMBannedRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'IsMMBannedRequest',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.moderation.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'accountId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  IsMMBannedRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  IsMMBannedRequest copyWith(void Function(IsMMBannedRequest) updates) =>
+      super.copyWith((message) => updates(message as IsMMBannedRequest))
+          as IsMMBannedRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static IsMMBannedRequest create() => IsMMBannedRequest._();
+  @$core.override
+  IsMMBannedRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static IsMMBannedRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<IsMMBannedRequest>(create);
+  static IsMMBannedRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get accountId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set accountId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAccountId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAccountId() => $_clearField(1);
+}
+
+class IsMMBannedResponse extends $pb.GeneratedMessage {
+  factory IsMMBannedResponse({
+    $core.bool? mmBanned,
+  }) {
+    final result = create();
+    if (mmBanned != null) result.mmBanned = mmBanned;
+    return result;
+  }
+
+  IsMMBannedResponse._();
+
+  factory IsMMBannedResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory IsMMBannedResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'IsMMBannedResponse',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.moderation.v1'),
+      createEmptyInstance: create)
+    ..aOB(1, _omitFieldNames ? '' : 'mmBanned')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  IsMMBannedResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  IsMMBannedResponse copyWith(void Function(IsMMBannedResponse) updates) =>
+      super.copyWith((message) => updates(message as IsMMBannedResponse))
+          as IsMMBannedResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static IsMMBannedResponse create() => IsMMBannedResponse._();
+  @$core.override
+  IsMMBannedResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static IsMMBannedResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<IsMMBannedResponse>(create);
+  static IsMMBannedResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.bool get mmBanned => $_getBF(0);
+  @$pb.TagNumber(1)
+  set mmBanned($core.bool value) => $_setBool(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasMmBanned() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearMmBanned() => $_clearField(1);
+}
+
 class AuditLogEntry extends $pb.GeneratedMessage {
   factory AuditLogEntry({
     $core.String? id,

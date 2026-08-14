@@ -575,6 +575,31 @@ final $typed_data.Uint8List isShadowBannedResponseDescriptor =
         'ChZJc1NoYWRvd0Jhbm5lZFJlc3BvbnNlEiMKDXNoYWRvd19iYW5uZWQYASABKAhSDHNoYWRvd0'
         'Jhbm5lZA==');
 
+@$core.Deprecated('Use isMMBannedRequestDescriptor instead')
+const IsMMBannedRequest$json = {
+  '1': 'IsMMBannedRequest',
+  '2': [
+    {'1': 'account_id', '3': 1, '4': 1, '5': 9, '10': 'accountId'},
+  ],
+};
+
+/// Descriptor for `IsMMBannedRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List isMMBannedRequestDescriptor = $convert.base64Decode(
+    'ChFJc01NQmFubmVkUmVxdWVzdBIdCgphY2NvdW50X2lkGAEgASgJUglhY2NvdW50SWQ=');
+
+@$core.Deprecated('Use isMMBannedResponseDescriptor instead')
+const IsMMBannedResponse$json = {
+  '1': 'IsMMBannedResponse',
+  '2': [
+    {'1': 'mm_banned', '3': 1, '4': 1, '5': 8, '10': 'mmBanned'},
+  ],
+};
+
+/// Descriptor for `IsMMBannedResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List isMMBannedResponseDescriptor =
+    $convert.base64Decode(
+        'ChJJc01NQmFubmVkUmVzcG9uc2USGwoJbW1fYmFubmVkGAEgASgIUghtbUJhbm5lZA==');
+
 @$core.Deprecated('Use auditLogEntryDescriptor instead')
 const AuditLogEntry$json = {
   '1': 'AuditLogEntry',

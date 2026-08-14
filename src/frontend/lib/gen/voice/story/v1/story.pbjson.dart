@@ -713,6 +713,30 @@ final $typed_data.Uint8List createLookingForPartyRequestDescriptor =
         'NyaXRlcmlhSnNvbhInCg1tZWRpYV9maWxlX2lkGAIgASgJSABSC21lZGlhRmlsZUlkiAEBQhAK'
         'Dl9tZWRpYV9maWxlX2lk');
 
+@$core.Deprecated('Use respondToLfpStoryRequestDescriptor instead')
+const RespondToLfpStoryRequest$json = {
+  '1': 'RespondToLfpStoryRequest',
+  '2': [
+    {'1': 'story_id', '3': 1, '4': 1, '5': 9, '10': 'storyId'},
+    {'1': 'response_type', '3': 2, '4': 1, '5': 9, '10': 'responseType'},
+  ],
+};
+
+/// Descriptor for `RespondToLfpStoryRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List respondToLfpStoryRequestDescriptor =
+    $convert.base64Decode(
+        'ChhSZXNwb25kVG9MZnBTdG9yeVJlcXVlc3QSGQoIc3RvcnlfaWQYASABKAlSB3N0b3J5SWQSIw'
+        'oNcmVzcG9uc2VfdHlwZRgCIAEoCVIMcmVzcG9uc2VUeXBl');
+
+@$core.Deprecated('Use respondToLfpStoryResponseDescriptor instead')
+const RespondToLfpStoryResponse$json = {
+  '1': 'RespondToLfpStoryResponse',
+};
+
+/// Descriptor for `RespondToLfpStoryResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List respondToLfpStoryResponseDescriptor =
+    $convert.base64Decode('ChlSZXNwb25kVG9MZnBTdG9yeVJlc3BvbnNl');
+
 @$core.Deprecated('Use createStoryResponseDescriptor instead')
 const CreateStoryResponse$json = {
   '1': 'CreateStoryResponse',

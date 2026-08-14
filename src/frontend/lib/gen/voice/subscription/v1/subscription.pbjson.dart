@@ -308,13 +308,28 @@ const CheckLimitRequest$json = {
     {'1': 'account_id', '3': 1, '4': 1, '5': 9, '10': 'accountId'},
     {'1': 'limit_name', '3': 2, '4': 1, '5': 9, '10': 'limitName'},
     {'1': 'delta', '3': 3, '4': 1, '5': 3, '10': 'delta'},
+    {
+      '1': 'scope_space',
+      '3': 4,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.space.v1.SpaceRef',
+      '9': 0,
+      '10': 'scopeSpace',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_scope_space'},
   ],
 };
 
 /// Descriptor for `CheckLimitRequest`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List checkLimitRequestDescriptor = $convert.base64Decode(
     'ChFDaGVja0xpbWl0UmVxdWVzdBIdCgphY2NvdW50X2lkGAEgASgJUglhY2NvdW50SWQSHQoKbG'
-    'ltaXRfbmFtZRgCIAEoCVIJbGltaXROYW1lEhQKBWRlbHRhGAMgASgDUgVkZWx0YQ==');
+    'ltaXRfbmFtZRgCIAEoCVIJbGltaXROYW1lEhQKBWRlbHRhGAMgASgDUgVkZWx0YRI+CgtzY29w'
+    'ZV9zcGFjZRgEIAEoCzIYLnZvaWNlLnNwYWNlLnYxLlNwYWNlUmVmSABSCnNjb3BlU3BhY2WIAQ'
+    'FCDgoMX3Njb3BlX3NwYWNl');
 
 @$core.Deprecated('Use checkLimitResponseDescriptor instead')
 const CheckLimitResponse$json = {

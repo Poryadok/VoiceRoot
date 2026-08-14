@@ -131,6 +131,13 @@ class ModerationServiceClient extends $grpc.Client {
     return $createUnaryCall(_$isShadowBanned, request, options: options);
   }
 
+  $grpc.ResponseFuture<$0.IsMMBannedResponse> isMMBanned(
+    $0.IsMMBannedRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$isMMBanned, request, options: options);
+  }
+
   /// Staff-only audit export for Admin moderation panel.
   $grpc.ResponseFuture<$0.ExportAuditLogResponse> exportAuditLog(
     $0.ExportAuditLogRequest request, {
@@ -211,6 +218,11 @@ class ModerationServiceClient extends $grpc.Client {
           '/voice.moderation.v1.ModerationService/IsShadowBanned',
           ($0.IsShadowBannedRequest value) => value.writeToBuffer(),
           $0.IsShadowBannedResponse.fromBuffer);
+  static final _$isMMBanned =
+      $grpc.ClientMethod<$0.IsMMBannedRequest, $0.IsMMBannedResponse>(
+          '/voice.moderation.v1.ModerationService/IsMMBanned',
+          ($0.IsMMBannedRequest value) => value.writeToBuffer(),
+          $0.IsMMBannedResponse.fromBuffer);
   static final _$exportAuditLog =
       $grpc.ClientMethod<$0.ExportAuditLogRequest, $0.ExportAuditLogResponse>(
           '/voice.moderation.v1.ModerationService/ExportAuditLog',
@@ -345,6 +357,13 @@ abstract class ModerationServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.IsShadowBannedRequest.fromBuffer(value),
         ($0.IsShadowBannedResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.IsMMBannedRequest, $0.IsMMBannedResponse>(
+        'IsMMBanned',
+        isMMBanned_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) => $0.IsMMBannedRequest.fromBuffer(value),
+        ($0.IsMMBannedResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.ExportAuditLogRequest,
             $0.ExportAuditLogResponse>(
         'ExportAuditLog',
@@ -478,6 +497,14 @@ abstract class ModerationServiceBase extends $grpc.Service {
 
   $async.Future<$0.IsShadowBannedResponse> isShadowBanned(
       $grpc.ServiceCall call, $0.IsShadowBannedRequest request);
+
+  $async.Future<$0.IsMMBannedResponse> isMMBanned_Pre($grpc.ServiceCall $call,
+      $async.Future<$0.IsMMBannedRequest> $request) async {
+    return isMMBanned($call, await $request);
+  }
+
+  $async.Future<$0.IsMMBannedResponse> isMMBanned(
+      $grpc.ServiceCall call, $0.IsMMBannedRequest request);
 
   $async.Future<$0.ExportAuditLogResponse> exportAuditLog_Pre(
       $grpc.ServiceCall $call,
