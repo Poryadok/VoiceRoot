@@ -59,8 +59,8 @@ func TestWSTypingCrossInstancesViaRedis(t *testing.T) {
 	go func() { _ = rf2.runSubscriber(ctx) }()
 	time.Sleep(100 * time.Millisecond)
 
-	srv1 := httptest.NewServer(newServiceHandler(serviceName, v, nil, hub1, rf1, "i1"))
-	srv2 := httptest.NewServer(newServiceHandler(serviceName, v, nil, hub2, rf2, "i2"))
+	srv1 := httptest.NewServer(newServiceHandler(serviceName, v, nil, hub1, rf1, "i1", readinessDeps{}))
+	srv2 := httptest.NewServer(newServiceHandler(serviceName, v, nil, hub2, rf2, "i2", readinessDeps{}))
 	t.Cleanup(srv1.Close)
 	t.Cleanup(srv2.Close)
 
@@ -196,8 +196,8 @@ func TestWSMarkReadCrossInstancesViaRedis(t *testing.T) {
 	go func() { _ = rf2.runSubscriber(ctx) }()
 	time.Sleep(100 * time.Millisecond)
 
-	srv1 := httptest.NewServer(newServiceHandler(serviceName, v, nil, hub1, rf1, "mr-i1"))
-	srv2 := httptest.NewServer(newServiceHandler(serviceName, v, nil, hub2, rf2, "mr-i2"))
+	srv1 := httptest.NewServer(newServiceHandler(serviceName, v, nil, hub1, rf1, "mr-i1", readinessDeps{}))
+	srv2 := httptest.NewServer(newServiceHandler(serviceName, v, nil, hub2, rf2, "mr-i2", readinessDeps{}))
 	t.Cleanup(srv1.Close)
 	t.Cleanup(srv2.Close)
 
@@ -317,8 +317,8 @@ func TestWSProfilePresenceCrossInstancesViaRedis(t *testing.T) {
 	go func() { _ = rf2.runSubscriber(ctx) }()
 	time.Sleep(100 * time.Millisecond)
 
-	srv1 := httptest.NewServer(newServiceHandler(serviceName, v, nil, hub1, rf1, "pr-i1"))
-	srv2 := httptest.NewServer(newServiceHandler(serviceName, v, nil, hub2, rf2, "pr-i2"))
+	srv1 := httptest.NewServer(newServiceHandler(serviceName, v, nil, hub1, rf1, "pr-i1", readinessDeps{}))
+	srv2 := httptest.NewServer(newServiceHandler(serviceName, v, nil, hub2, rf2, "pr-i2", readinessDeps{}))
 	t.Cleanup(srv1.Close)
 	t.Cleanup(srv2.Close)
 

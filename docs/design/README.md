@@ -21,6 +21,7 @@
 - MCP server в Cursor (см. [penpot-setup.md](penpot-setup.md)); ключ — **Integrations** в Penpot, не коммитить.
 - Файл Voice открыт в браузере, **File → MCP Server → Connect**.
 - **Канон цветов — `design/tokens/voice.tokens.json`**, не подбор hex из MCP.
+- Агент: [`.cursor/agents/voice-designer.md`](../../.cursor/agents/voice-designer.md). Скилл MCP: [`.cursor/skills/penpot-voice/SKILL.md`](../../.cursor/skills/penpot-voice/SKILL.md).
 
 ## Design tokens (обязательно)
 

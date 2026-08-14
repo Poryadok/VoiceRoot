@@ -31,6 +31,10 @@ service MatchmakingService {
   rpc UnbanFromMM(UnbanFromMMRequest) returns (UnbanFromMMResponse);
   rpc GetMMBanStatus(GetMMBanStatusRequest) returns (GetMMBanStatusResponse);
 
+  // Moderation S2S — platform MM ban (mm_ban sanction).
+  rpc ApplyPlatformMMBan(ApplyPlatformMMBanRequest) returns (ApplyPlatformMMBanResponse);
+  rpc RevokePlatformMMBan(RevokePlatformMMBanRequest) returns (RevokePlatformMMBanResponse);
+
   // Player profile (per-game MM settings)
   rpc GetMyPlayerProfile(GetMyPlayerProfileRequest) returns (GetMyPlayerProfileResponse);
   rpc GetPlayerProfile(GetPlayerProfileRequest) returns (GetPlayerProfileResponse);
@@ -262,3 +266,18 @@ message DeletePlayerGameEntryRequest {
 }
 
 message DeletePlayerGameEntryResponse {}
+
+message ApplyPlatformMMBanRequest {
+  string target_account_id = 1;
+  string reason = 2;
+  optional google.protobuf.Timestamp expires_at = 3;
+  string banned_by_profile_id = 4;
+}
+
+message ApplyPlatformMMBanResponse {}
+
+message RevokePlatformMMBanRequest {
+  string target_account_id = 1;
+}
+
+message RevokePlatformMMBanResponse {}

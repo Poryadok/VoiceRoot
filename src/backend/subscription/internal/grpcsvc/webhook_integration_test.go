@@ -12,6 +12,7 @@ import (
 	"voice/backend/subscription/internal/testfixtures"
 
 	subscriptionv1 "voice.app/voice/subscription/v1"
+	spacev1 "voice.app/voice/space/v1"
 )
 
 // TestHandlePaddleWebhook_IdempotentDuplicateProviderEvent documents duplicate provider_event_id is no-op.
@@ -147,6 +148,7 @@ func TestSpaceProWebhook_CheckLimitMemberCap5000(t *testing.T) {
 	resp, err := client.CheckLimit(ctx, &subscriptionv1.CheckLimitRequest{
 		AccountId: purchaserID.String(),
 		LimitName: "space_member_count",
+		ScopeSpace: &spacev1.SpaceRef{Id: spaceID.String()},
 		Delta:     1,
 	})
 	require.NoError(t, err)

@@ -1,9 +1,3 @@
 # Chat Service
 
-Go scaffold for the Voice chat service.
-
-Current public surface:
-
-- GET /health returns {"service":"chat","status":"ok"}.
-
-Domain behavior, gRPC handlers, database repositories, and migrations are intentionally out of scope for this initialization step.
+Go microservice: DM/group chats, threads, folders, gRPC `ChatService`. PostgreSQL `chat_db`. NATS `chat.events` publisher. Gateway REST `/api/v1/chats/**`. See `docs/microservices/chat-service.md`.

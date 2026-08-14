@@ -14,6 +14,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	analyticsv1 "voice.app/voice/analytics/v1"
+	"voice/backend/pkg/analyticshash"
 	"voice/backend/pkg/correlation"
 	"voice/backend/pkg/natslog"
 )
@@ -25,11 +26,18 @@ type Publisher interface {
 	Publish(ctx context.Context, subject, sourceService, eventType string, props map[string]any) error
 }
 
+// IdentityPublisher can hash account/profile IDs into analytics event fields (no PII in properties).
+type IdentityPublisher interface {
+	Publisher
+	PublishWithAccount(ctx context.Context, subject, sourceService, eventType, accountID string, props map[string]any) error
+}
+
 // JetStreamPublisher implements Publisher via JetStream.
 type JetStreamPublisher struct {
-	nc     *nats.Conn
-	js     nats.JetStreamContext
-	Logger *slog.Logger
+	nc      *nats.Conn
+	js      nats.JetStreamContext
+	Logger  *slog.Logger
+	HashKey string
 
 	ensureOnce sync.Once
 	ensureErr  error
@@ -39,6 +47,10 @@ type JetStreamPublisher struct {
 type NoopPublisher struct{}
 
 func (NoopPublisher) Publish(context.Context, string, string, string, map[string]any) error {
+	return nil
+}
+
+func (NoopPublisher) PublishWithAccount(context.Context, string, string, string, string, map[string]any) error {
 	return nil
 }
 
@@ -89,6 +101,14 @@ func (p *JetStreamPublisher) EnsureStream() error {
 }
 
 func (p *JetStreamPublisher) Publish(ctx context.Context, subject, sourceService, eventType string, props map[string]any) error {
+	return p.publishEvent(ctx, subject, sourceService, eventType, "", "", props)
+}
+
+func (p *JetStreamPublisher) PublishWithAccount(ctx context.Context, subject, sourceService, eventType, accountID string, props map[string]any) error {
+	return p.publishEvent(ctx, subject, sourceService, eventType, accountID, "", props)
+}
+
+func (p *JetStreamPublisher) publishEvent(ctx context.Context, subject, sourceService, eventType, accountID, profileID string, props map[string]any) error {
 	if p == nil || p.js == nil {
 		return nil
 	}
@@ -107,6 +127,12 @@ func (p *JetStreamPublisher) Publish(ctx context.Context, subject, sourceService
 		SourceService:  sourceService,
 		Timestamp:      timestamppb.Now(),
 		PropertiesJson: propsJSON,
+	}
+	if h := analyticshash.ID(p.HashKey, accountID); h != "" {
+		ev.UserIdHashed = &h
+	}
+	if h := analyticshash.ID(p.HashKey, profileID); h != "" {
+		ev.ProfileIdHashed = &h
 	}
 	data, err := protojson.Marshal(ev)
 	if err != nil {

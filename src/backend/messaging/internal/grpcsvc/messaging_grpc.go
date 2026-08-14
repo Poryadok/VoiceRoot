@@ -114,6 +114,9 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 	if err := s.checkDMPrivacyForSend(ctx, chatID, profileID); err != nil {
 		return nil, err
 	}
+	if err := s.checkSpaceSendPermission(ctx, chatID, profileID); err != nil {
+		return nil, err
+	}
 
 	isE2E := req.IsE2E != nil && *req.IsE2E
 	if err := s.validateE2ESend(ctx, chatID, isE2E); err != nil {
@@ -390,6 +393,37 @@ func (s *MessagingGRPC) checkDMBlocksForSend(ctx context.Context, chatID, profil
 	}
 	if blocked {
 		return status.Error(codes.PermissionDenied, "cannot send messages between blocked accounts")
+	}
+	return nil
+}
+
+func (s *MessagingGRPC) checkSpaceSendPermission(ctx context.Context, chatID, profileID uuid.UUID) error {
+	if s.RolePermissions == nil || s.ChatThreadPolicy == nil {
+		return nil
+	}
+	pol, err := s.ChatThreadPolicy.Load(ctx, chatID)
+	if errors.Is(err, store.ErrChatNotFound) {
+		return status.Error(codes.NotFound, "chat not found")
+	}
+	if err != nil {
+		return status.Error(codes.Internal, err.Error())
+	}
+	if pol == nil || pol.SpaceID == nil {
+		return nil
+	}
+	chatType := strings.TrimSpace(pol.ChatType)
+	if chatType != "channel" && chatType != "group" {
+		return nil
+	}
+	allowed, err := s.RolePermissions.HasChatPermission(ctx, *pol.SpaceID, profileID, chatID, permissions.TextChatSendMessages)
+	if err != nil {
+		if st, ok := status.FromError(err); ok && st.Code() == codes.Unavailable {
+			return status.Error(codes.Unavailable, "role service unavailable")
+		}
+		return status.Error(codes.Internal, err.Error())
+	}
+	if !allowed {
+		return status.Error(codes.PermissionDenied, "send messages not permitted in this chat")
 	}
 	return nil
 }
@@ -754,6 +788,44 @@ func (s *MessagingGRPC) GetMessages(ctx context.Context, req *messagingv1.GetMes
 	return &messagingv1.GetMessagesResponse{MessageList: ml}, nil
 }
 
+func (s *MessagingGRPC) GetMessage(ctx context.Context, req *messagingv1.GetMessageRequest) (*messagingv1.GetMessageResponse, error) {
+	if s == nil || s.Messages == nil {
+		return nil, status.Error(codes.FailedPrecondition, "messaging persistence not configured")
+	}
+	msgID, err := parseUUIDField("message_id", req.GetMessageId())
+	if err != nil {
+		return nil, err
+	}
+	row, err := s.Messages.GetMessageByID(ctx, msgID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, status.Error(codes.NotFound, "message not found")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if row.DeletedAt != nil {
+		return nil, status.Error(codes.NotFound, "message not found")
+	}
+	if profileID, ok := authctx.ProfileID(ctx); ok {
+		if s.ChatGuard != nil {
+			if err := s.ChatGuard.EnsureMember(ctx, row.ChatID, profileID); err != nil {
+				if errors.Is(err, store.ErrNotChatMember) {
+					return nil, status.Error(codes.PermissionDenied, "not a chat member")
+				}
+				return nil, status.Error(codes.Internal, err.Error())
+			}
+		}
+		if row.GhostOnly && row.SenderProfileID != profileID {
+			return nil, status.Error(codes.NotFound, "message not found")
+		}
+	}
+	kind := messagingv1.MessageKind_MESSAGE_KIND_UNSPECIFIED
+	if row.Type == "forward" {
+		kind = messagingv1.MessageKind_MESSAGE_KIND_FORWARD
+	}
+	return &messagingv1.GetMessageResponse{Message: messageRowToProto(row, kind, "", false)}, nil
+}
+
 func (s *MessagingGRPC) GetThreadMessages(ctx context.Context, req *messagingv1.GetThreadMessagesRequest) (*messagingv1.GetThreadMessagesResponse, error) {
 	if s == nil || s.Messages == nil {
 		return nil, status.Error(codes.FailedPrecondition, "messaging persistence not configured")
@@ -947,6 +1019,9 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 	if source.DeletedAt != nil {
 		return nil, status.Error(codes.NotFound, "message not found")
 	}
+	if source.GhostOnly {
+		return nil, status.Error(codes.PermissionDenied, "cannot forward shadow-banned messages")
+	}
 	if s.ChatGuard != nil {
 		if err := s.ChatGuard.EnsureMember(ctx, source.ChatID, profileID); err != nil {
 			if errors.Is(err, store.ErrNotChatMember) {
@@ -956,21 +1031,103 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 		}
 	}
 
+	if err := s.checkDMBlocksForSend(ctx, targetChatID, profileID); err != nil {
+		return nil, err
+	}
+	if err := s.checkDMPrivacyForSend(ctx, targetChatID, profileID); err != nil {
+		return nil, err
+	}
+	if err := s.validateE2ESend(ctx, targetChatID, source.IsE2E); err != nil {
+		return nil, err
+	}
+
+	chatType := "dm"
+	postedAsChat := false
+	if s.ChatThreadPolicy != nil {
+		pol, perr := s.ChatThreadPolicy.Load(ctx, targetChatID)
+		if errors.Is(perr, store.ErrChatNotFound) {
+			return nil, status.Error(codes.NotFound, "chat not found")
+		}
+		if perr != nil {
+			return nil, status.Error(codes.Internal, perr.Error())
+		}
+		if pol != nil {
+			chatType = pol.ChatType
+			if pol.ChatType == "channel" && !pol.AllowUserMainFeed {
+				postedAsChat = true
+			}
+		}
+	}
+	if err := s.threadPolicyDeps().validateSend(ctx, targetChatID, profileID, nil, postedAsChat); err != nil {
+		return nil, err
+	}
+	if s.Moderation != nil {
+		if err := s.Moderation.EnsureCanSend(ctx, targetChatID, profileID); err != nil {
+			if errors.Is(err, store.ErrMemberTimedOut) {
+				return nil, status.Error(codes.PermissionDenied, "member is timed out in this space")
+			}
+			if errors.Is(err, store.ErrSlowModeActive) {
+				return nil, status.Error(codes.ResourceExhausted, "slow mode is active")
+			}
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+	}
+	attachments := strings.TrimSpace(source.AttachmentsJSON)
+	if attachments == "" {
+		attachments = "[]"
+	}
+	if attachments != "[]" {
+		if err := s.checkAttachmentPrivacyForSend(ctx, targetChatID, profileID, attachments); err != nil {
+			return nil, err
+		}
+	}
+	if s.PlatformMod != nil {
+		_, acctOK := authctx.AccountID(ctx)
+		if !acctOK && s.UserProfiles != nil {
+			_, lookupErr := s.UserProfiles.AccountIDByProfileID(ctx, profileID)
+			acctOK = lookupErr == nil
+		}
+		if acctOK {
+			if err := s.PlatformMod.CheckMessageAllowed(ctx, profileID, targetChatID, source.Content); err != nil {
+				return nil, status.Error(codes.PermissionDenied, err.Error())
+			}
+		}
+	}
+
+	commentary := strings.TrimSpace(req.GetCommentary())
+	if commentary != "" {
+		if len(commentary) > 4000 {
+			return nil, status.Error(codes.InvalidArgument, "commentary exceeds 4000 characters")
+		}
+		if err := s.insertForwardCommentary(ctx, targetChatID, profileID, chatType, commentary); err != nil {
+			return nil, err
+		}
+	}
+
 	originID, originSender := forwardAttribution(source)
 	msgID, err := messageid.NewMessageID()
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+	var displayChatID *uuid.UUID
+	if postedAsChat {
+		cid := targetChatID
+		displayChatID = &cid
+	}
 	saved, err := s.Messages.InsertMessage(ctx, store.MessageRow{
 		ID:                msgID,
 		ChatID:            targetChatID,
+		ChatType:          chatType,
 		SenderProfileID:   profileID,
+		PostedAsChat:      postedAsChat,
+		DisplayChatID:     displayChatID,
 		Content:           source.Content,
 		Type:              "forward",
 		ForwardFromID:     &originID,
 		ForwardFromSender: originSender,
-		AttachmentsJSON:   source.AttachmentsJSON,
+		AttachmentsJSON:   attachments,
 		MentionsJSON:      "[]",
+		IsE2E:             source.IsE2E,
 	})
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -979,9 +1136,38 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), false, "", saved.IsE2E); err != nil {
 			s.logPublishError(ctx, "message.sent", err, slog.String("message_id", saved.ID.String()), slog.String("chat_id", saved.ChatID.String()))
 		}
+		if err := s.MessageEvents.PublishMessageForwarded(ctx, saved.ID.String(), source.ChatID.String(), saved.ChatID.String(), profileID.String()); err != nil {
+			s.logPublishError(ctx, "message.forwarded", err, slog.String("message_id", saved.ID.String()), slog.String("chat_id", saved.ChatID.String()))
+		}
 	}
 	kind := messagingv1.MessageKind_MESSAGE_KIND_FORWARD
 	return &messagingv1.ForwardMessageResponse{Message: messageRowToProto(saved, kind, "", false)}, nil
+}
+
+func (s *MessagingGRPC) insertForwardCommentary(ctx context.Context, chatID, profileID uuid.UUID, chatType, content string) error {
+	msgID, err := messageid.NewMessageID()
+	if err != nil {
+		return status.Error(codes.Internal, err.Error())
+	}
+	saved, err := s.Messages.InsertMessage(ctx, store.MessageRow{
+		ID:              msgID,
+		ChatID:          chatID,
+		ChatType:        chatType,
+		SenderProfileID: profileID,
+		Content:         content,
+		Type:            "regular",
+		AttachmentsJSON: "[]",
+		MentionsJSON:    "[]",
+	})
+	if err != nil {
+		return status.Error(codes.Internal, err.Error())
+	}
+	if s.MessageEvents != nil {
+		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), false, "", false); err != nil {
+			s.logPublishError(ctx, "message.sent", err, slog.String("message_id", saved.ID.String()), slog.String("chat_id", saved.ChatID.String()))
+		}
+	}
+	return nil
 }
 
 func (s *MessagingGRPC) AddReaction(ctx context.Context, req *messagingv1.AddReactionRequest) (*messagingv1.AddReactionResponse, error) {
@@ -1240,7 +1426,7 @@ func (s *MessagingGRPC) MarkRead(ctx context.Context, req *messagingv1.MarkReadR
 	if err != nil {
 		return nil, err
 	}
-	if err := validateChatRefDM(req.GetChat()); err != nil {
+	if err := validateChatRefMessaging(req.GetChat()); err != nil {
 		return nil, err
 	}
 	if s.ChatGuard != nil {
@@ -1285,7 +1471,7 @@ func (s *MessagingGRPC) GetReadState(ctx context.Context, req *messagingv1.GetRe
 	if err != nil {
 		return nil, err
 	}
-	if err := validateChatRefDM(req.GetChat()); err != nil {
+	if err := validateChatRefMessaging(req.GetChat()); err != nil {
 		return nil, err
 	}
 	if s.ChatGuard != nil {
@@ -1321,7 +1507,7 @@ func (s *MessagingGRPC) GetBulkReadState(ctx context.Context, req *messagingv1.G
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing profile")
 	}
-	chatIDs, err := s.authorizedChatIDs(ctx, profileID, req.GetChats())
+	chatIDs, refByID, err := s.authorizedChatRefs(ctx, profileID, req.GetChats())
 	if err != nil {
 		return nil, err
 	}
@@ -1334,9 +1520,12 @@ func (s *MessagingGRPC) GetBulkReadState(ctx context.Context, req *messagingv1.G
 		if lid == nil {
 			continue
 		}
-		dm := chatv1.ChatType_CHAT_TYPE_DM
+		ref := refByID[chatID]
+		if ref == nil {
+			ref = chatRefFromID(chatID, "dm")
+		}
 		out[chatID.String()] = &messagingv1.ReadState{
-			Chat:              &chatv1.ChatRef{Id: chatID.String(), Type: &dm},
+			Chat:              ref,
 			ProfileId:         profileID.String(),
 			LastReadMessageId: lid.String(),
 			UpdatedAt:         timestamppb.New(*upd),
@@ -1353,7 +1542,7 @@ func (s *MessagingGRPC) GetChatListMetadata(ctx context.Context, req *messagingv
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing profile")
 	}
-	chatIDs, err := s.authorizedChatIDs(ctx, profileID, req.GetChats())
+	chatIDs, refByID, err := s.authorizedChatRefs(ctx, profileID, req.GetChats())
 	if err != nil {
 		return nil, err
 	}
@@ -1364,9 +1553,12 @@ func (s *MessagingGRPC) GetChatListMetadata(ctx context.Context, req *messagingv
 	out := make(map[string]*messagingv1.ChatListMetadata, len(rows))
 	for _, chatID := range chatIDs {
 		row := rows[chatID]
-		dm := chatv1.ChatType_CHAT_TYPE_DM
+		ref := refByID[chatID]
+		if ref == nil {
+			ref = chatRefFromID(chatID, "dm")
+		}
 		item := &messagingv1.ChatListMetadata{
-			Chat:        &chatv1.ChatRef{Id: chatID.String(), Type: &dm},
+			Chat:        ref,
 			UnreadCount: row.UnreadCount,
 		}
 		if row.LastMessagePreview != "" {
@@ -1381,16 +1573,17 @@ func (s *MessagingGRPC) GetChatListMetadata(ctx context.Context, req *messagingv
 	return &messagingv1.GetChatListMetadataResponse{ByChatId: out}, nil
 }
 
-func (s *MessagingGRPC) authorizedChatIDs(ctx context.Context, profileID uuid.UUID, refs []*chatv1.ChatRef) ([]uuid.UUID, error) {
+func (s *MessagingGRPC) authorizedChatRefs(ctx context.Context, profileID uuid.UUID, refs []*chatv1.ChatRef) ([]uuid.UUID, map[uuid.UUID]*chatv1.ChatRef, error) {
 	seen := make(map[uuid.UUID]struct{}, len(refs))
+	refByID := make(map[uuid.UUID]*chatv1.ChatRef, len(refs))
 	out := make([]uuid.UUID, 0, len(refs))
 	for _, ref := range refs {
-		if err := validateChatRefDM(ref); err != nil {
-			return nil, err
+		if err := validateChatRefMessaging(ref); err != nil {
+			return nil, nil, err
 		}
 		chatID, err := parseUUIDField("chat.id", ref.GetId())
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if _, ok := seen[chatID]; ok {
 			continue
@@ -1398,15 +1591,32 @@ func (s *MessagingGRPC) authorizedChatIDs(ctx context.Context, profileID uuid.UU
 		if s.ChatGuard != nil {
 			if err := s.ChatGuard.EnsureMember(ctx, chatID, profileID); err != nil {
 				if errors.Is(err, store.ErrNotChatMember) {
-					return nil, status.Error(codes.PermissionDenied, "not a chat member")
+					return nil, nil, status.Error(codes.PermissionDenied, "not a chat member")
 				}
-				return nil, status.Error(codes.Internal, err.Error())
+				return nil, nil, status.Error(codes.Internal, err.Error())
 			}
 		}
 		seen[chatID] = struct{}{}
+		refByID[chatID] = ref
 		out = append(out, chatID)
 	}
-	return out, nil
+	return out, refByID, nil
+}
+
+func chatRefFromID(chatID uuid.UUID, chatType string) *chatv1.ChatRef {
+	ref := &chatv1.ChatRef{Id: chatID.String()}
+	switch chatType {
+	case "group":
+		t := chatv1.ChatType_CHAT_TYPE_GROUP
+		ref.Type = &t
+	case "channel":
+		t := chatv1.ChatType_CHAT_TYPE_CHANNEL
+		ref.Type = &t
+	default:
+		t := chatv1.ChatType_CHAT_TYPE_DM
+		ref.Type = &t
+	}
+	return ref
 }
 
 func validateChatRefDM(ref *chatv1.ChatRef) error {

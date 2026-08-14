@@ -36,6 +36,7 @@ type ProfileDocument struct {
 // ProfileHit is a profile search result row.
 type ProfileHit struct {
 	ProfileID uuid.UUID
+	AccountID uuid.UUID
 }
 
 // SpaceDocument is a projection row for public space catalog search.

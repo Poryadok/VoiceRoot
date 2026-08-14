@@ -1734,6 +1734,7 @@ enum MessageStreamEvent_Payload {
   mentionAdded,
   messagePinned,
   messageUnpinned,
+  messageForwarded,
   notSet
 }
 
@@ -1750,6 +1751,7 @@ class MessageStreamEvent extends $pb.GeneratedMessage {
     MentionAdded? mentionAdded,
     MessagePinned? messagePinned,
     MessageUnpinned? messageUnpinned,
+    MessageForwarded? messageForwarded,
   }) {
     final result = create();
     if (eventId != null) result.eventId = eventId;
@@ -1763,6 +1765,7 @@ class MessageStreamEvent extends $pb.GeneratedMessage {
     if (mentionAdded != null) result.mentionAdded = mentionAdded;
     if (messagePinned != null) result.messagePinned = messagePinned;
     if (messageUnpinned != null) result.messageUnpinned = messageUnpinned;
+    if (messageForwarded != null) result.messageForwarded = messageForwarded;
     return result;
   }
 
@@ -1786,6 +1789,7 @@ class MessageStreamEvent extends $pb.GeneratedMessage {
     16: MessageStreamEvent_Payload.mentionAdded,
     17: MessageStreamEvent_Payload.messagePinned,
     18: MessageStreamEvent_Payload.messageUnpinned,
+    19: MessageStreamEvent_Payload.messageForwarded,
     0: MessageStreamEvent_Payload.notSet
   };
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
@@ -1793,7 +1797,7 @@ class MessageStreamEvent extends $pb.GeneratedMessage {
       package:
           const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
       createEmptyInstance: create)
-    ..oo(0, [10, 11, 12, 13, 14, 15, 16, 17, 18])
+    ..oo(0, [10, 11, 12, 13, 14, 15, 16, 17, 18, 19])
     ..aOS(1, _omitFieldNames ? '' : 'eventId')
     ..aOM<$0.Timestamp>(2, _omitFieldNames ? '' : 'occurredAt',
         subBuilder: $0.Timestamp.create)
@@ -1815,6 +1819,8 @@ class MessageStreamEvent extends $pb.GeneratedMessage {
         subBuilder: MessagePinned.create)
     ..aOM<MessageUnpinned>(18, _omitFieldNames ? '' : 'messageUnpinned',
         subBuilder: MessageUnpinned.create)
+    ..aOM<MessageForwarded>(19, _omitFieldNames ? '' : 'messageForwarded',
+        subBuilder: MessageForwarded.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1845,6 +1851,7 @@ class MessageStreamEvent extends $pb.GeneratedMessage {
   @$pb.TagNumber(16)
   @$pb.TagNumber(17)
   @$pb.TagNumber(18)
+  @$pb.TagNumber(19)
   MessageStreamEvent_Payload whichPayload() =>
       _MessageStreamEvent_PayloadByTag[$_whichOneof(0)]!;
   @$pb.TagNumber(10)
@@ -1856,6 +1863,7 @@ class MessageStreamEvent extends $pb.GeneratedMessage {
   @$pb.TagNumber(16)
   @$pb.TagNumber(17)
   @$pb.TagNumber(18)
+  @$pb.TagNumber(19)
   void clearPayload() => $_clearField($_whichOneof(0));
 
   @$pb.TagNumber(1)
@@ -1976,6 +1984,17 @@ class MessageStreamEvent extends $pb.GeneratedMessage {
   void clearMessageUnpinned() => $_clearField(18);
   @$pb.TagNumber(18)
   MessageUnpinned ensureMessageUnpinned() => $_ensure(10);
+
+  @$pb.TagNumber(19)
+  MessageForwarded get messageForwarded => $_getN(11);
+  @$pb.TagNumber(19)
+  set messageForwarded(MessageForwarded value) => $_setField(19, value);
+  @$pb.TagNumber(19)
+  $core.bool hasMessageForwarded() => $_has(11);
+  @$pb.TagNumber(19)
+  void clearMessageForwarded() => $_clearField(19);
+  @$pb.TagNumber(19)
+  MessageForwarded ensureMessageForwarded() => $_ensure(11);
 }
 
 class MessageSent extends $pb.GeneratedMessage {
@@ -2757,11 +2776,104 @@ class MessageUnpinned extends $pb.GeneratedMessage {
   void clearUnpinnedBy() => $_clearField(3);
 }
 
+class MessageForwarded extends $pb.GeneratedMessage {
+  factory MessageForwarded({
+    $core.String? messageId,
+    $core.String? sourceChatId,
+    $core.String? targetChatId,
+    $core.String? forwarderProfileId,
+  }) {
+    final result = create();
+    if (messageId != null) result.messageId = messageId;
+    if (sourceChatId != null) result.sourceChatId = sourceChatId;
+    if (targetChatId != null) result.targetChatId = targetChatId;
+    if (forwarderProfileId != null)
+      result.forwarderProfileId = forwarderProfileId;
+    return result;
+  }
+
+  MessageForwarded._();
+
+  factory MessageForwarded.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory MessageForwarded.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'MessageForwarded',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'messageId')
+    ..aOS(2, _omitFieldNames ? '' : 'sourceChatId')
+    ..aOS(3, _omitFieldNames ? '' : 'targetChatId')
+    ..aOS(4, _omitFieldNames ? '' : 'forwarderProfileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  MessageForwarded clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  MessageForwarded copyWith(void Function(MessageForwarded) updates) =>
+      super.copyWith((message) => updates(message as MessageForwarded))
+          as MessageForwarded;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static MessageForwarded create() => MessageForwarded._();
+  @$core.override
+  MessageForwarded createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static MessageForwarded getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<MessageForwarded>(create);
+  static MessageForwarded? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get messageId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set messageId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasMessageId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearMessageId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get sourceChatId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set sourceChatId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasSourceChatId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearSourceChatId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get targetChatId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set targetChatId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasTargetChatId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearTargetChatId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get forwarderProfileId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set forwarderProfileId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasForwarderProfileId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearForwarderProfileId() => $_clearField(4);
+}
+
 enum ChatStreamEvent_Payload {
   chatCreated,
   chatMemberChanged,
   spaceTreeChanged,
   spaceCreated,
+  spaceInviteCreated,
   notSet
 }
 
@@ -2773,6 +2885,7 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
     ChatMemberChanged? chatMemberChanged,
     SpaceTreeChanged? spaceTreeChanged,
     SpaceCreated? spaceCreated,
+    SpaceInviteCreated? spaceInviteCreated,
   }) {
     final result = create();
     if (eventId != null) result.eventId = eventId;
@@ -2781,6 +2894,8 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
     if (chatMemberChanged != null) result.chatMemberChanged = chatMemberChanged;
     if (spaceTreeChanged != null) result.spaceTreeChanged = spaceTreeChanged;
     if (spaceCreated != null) result.spaceCreated = spaceCreated;
+    if (spaceInviteCreated != null)
+      result.spaceInviteCreated = spaceInviteCreated;
     return result;
   }
 
@@ -2799,6 +2914,7 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
     11: ChatStreamEvent_Payload.chatMemberChanged,
     12: ChatStreamEvent_Payload.spaceTreeChanged,
     13: ChatStreamEvent_Payload.spaceCreated,
+    14: ChatStreamEvent_Payload.spaceInviteCreated,
     0: ChatStreamEvent_Payload.notSet
   };
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
@@ -2806,7 +2922,7 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
       package:
           const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
       createEmptyInstance: create)
-    ..oo(0, [10, 11, 12, 13])
+    ..oo(0, [10, 11, 12, 13, 14])
     ..aOS(1, _omitFieldNames ? '' : 'eventId')
     ..aOM<$0.Timestamp>(2, _omitFieldNames ? '' : 'occurredAt',
         subBuilder: $0.Timestamp.create)
@@ -2818,6 +2934,8 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
         subBuilder: SpaceTreeChanged.create)
     ..aOM<SpaceCreated>(13, _omitFieldNames ? '' : 'spaceCreated',
         subBuilder: SpaceCreated.create)
+    ..aOM<SpaceInviteCreated>(14, _omitFieldNames ? '' : 'spaceInviteCreated',
+        subBuilder: SpaceInviteCreated.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2843,12 +2961,14 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
   @$pb.TagNumber(11)
   @$pb.TagNumber(12)
   @$pb.TagNumber(13)
+  @$pb.TagNumber(14)
   ChatStreamEvent_Payload whichPayload() =>
       _ChatStreamEvent_PayloadByTag[$_whichOneof(0)]!;
   @$pb.TagNumber(10)
   @$pb.TagNumber(11)
   @$pb.TagNumber(12)
   @$pb.TagNumber(13)
+  @$pb.TagNumber(14)
   void clearPayload() => $_clearField($_whichOneof(0));
 
   @$pb.TagNumber(1)
@@ -2914,6 +3034,17 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
   void clearSpaceCreated() => $_clearField(13);
   @$pb.TagNumber(13)
   SpaceCreated ensureSpaceCreated() => $_ensure(5);
+
+  @$pb.TagNumber(14)
+  SpaceInviteCreated get spaceInviteCreated => $_getN(6);
+  @$pb.TagNumber(14)
+  set spaceInviteCreated(SpaceInviteCreated value) => $_setField(14, value);
+  @$pb.TagNumber(14)
+  $core.bool hasSpaceInviteCreated() => $_has(6);
+  @$pb.TagNumber(14)
+  void clearSpaceInviteCreated() => $_clearField(14);
+  @$pb.TagNumber(14)
+  SpaceInviteCreated ensureSpaceInviteCreated() => $_ensure(6);
 }
 
 class ChatCreated extends $pb.GeneratedMessage {
@@ -3206,6 +3337,73 @@ class SpaceCreated extends $pb.GeneratedMessage {
   $core.bool hasOwnerProfileId() => $_has(1);
   @$pb.TagNumber(2)
   void clearOwnerProfileId() => $_clearField(2);
+}
+
+class SpaceInviteCreated extends $pb.GeneratedMessage {
+  factory SpaceInviteCreated({
+    $core.String? spaceId,
+    $core.String? inviteCode,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (inviteCode != null) result.inviteCode = inviteCode;
+    return result;
+  }
+
+  SpaceInviteCreated._();
+
+  factory SpaceInviteCreated.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SpaceInviteCreated.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SpaceInviteCreated',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'inviteCode')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SpaceInviteCreated clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SpaceInviteCreated copyWith(void Function(SpaceInviteCreated) updates) =>
+      super.copyWith((message) => updates(message as SpaceInviteCreated))
+          as SpaceInviteCreated;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SpaceInviteCreated create() => SpaceInviteCreated._();
+  @$core.override
+  SpaceInviteCreated createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SpaceInviteCreated getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SpaceInviteCreated>(create);
+  static SpaceInviteCreated? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get inviteCode => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set inviteCode($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasInviteCode() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearInviteCode() => $_clearField(2);
 }
 
 enum VoiceStreamEvent_Payload {
@@ -5161,7 +5359,13 @@ class PaymentFailed extends $pb.GeneratedMessage {
   void clearProvider() => $_clearField(2);
 }
 
-enum FileStreamEvent_Payload { fileUploaded, fileScanResult, notSet }
+enum FileStreamEvent_Payload {
+  fileUploaded,
+  fileScanResult,
+  fileExpired,
+  fileProcessed,
+  notSet
+}
 
 class FileStreamEvent extends $pb.GeneratedMessage {
   factory FileStreamEvent({
@@ -5169,12 +5373,16 @@ class FileStreamEvent extends $pb.GeneratedMessage {
     $0.Timestamp? occurredAt,
     FileUploaded? fileUploaded,
     FileScanResult? fileScanResult,
+    FileExpired? fileExpired,
+    FileProcessed? fileProcessed,
   }) {
     final result = create();
     if (eventId != null) result.eventId = eventId;
     if (occurredAt != null) result.occurredAt = occurredAt;
     if (fileUploaded != null) result.fileUploaded = fileUploaded;
     if (fileScanResult != null) result.fileScanResult = fileScanResult;
+    if (fileExpired != null) result.fileExpired = fileExpired;
+    if (fileProcessed != null) result.fileProcessed = fileProcessed;
     return result;
   }
 
@@ -5191,6 +5399,8 @@ class FileStreamEvent extends $pb.GeneratedMessage {
       _FileStreamEvent_PayloadByTag = {
     10: FileStreamEvent_Payload.fileUploaded,
     11: FileStreamEvent_Payload.fileScanResult,
+    12: FileStreamEvent_Payload.fileExpired,
+    13: FileStreamEvent_Payload.fileProcessed,
     0: FileStreamEvent_Payload.notSet
   };
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
@@ -5198,7 +5408,7 @@ class FileStreamEvent extends $pb.GeneratedMessage {
       package:
           const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
       createEmptyInstance: create)
-    ..oo(0, [10, 11])
+    ..oo(0, [10, 11, 12, 13])
     ..aOS(1, _omitFieldNames ? '' : 'eventId')
     ..aOM<$0.Timestamp>(2, _omitFieldNames ? '' : 'occurredAt',
         subBuilder: $0.Timestamp.create)
@@ -5206,6 +5416,10 @@ class FileStreamEvent extends $pb.GeneratedMessage {
         subBuilder: FileUploaded.create)
     ..aOM<FileScanResult>(11, _omitFieldNames ? '' : 'fileScanResult',
         subBuilder: FileScanResult.create)
+    ..aOM<FileExpired>(12, _omitFieldNames ? '' : 'fileExpired',
+        subBuilder: FileExpired.create)
+    ..aOM<FileProcessed>(13, _omitFieldNames ? '' : 'fileProcessed',
+        subBuilder: FileProcessed.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -5229,10 +5443,14 @@ class FileStreamEvent extends $pb.GeneratedMessage {
 
   @$pb.TagNumber(10)
   @$pb.TagNumber(11)
+  @$pb.TagNumber(12)
+  @$pb.TagNumber(13)
   FileStreamEvent_Payload whichPayload() =>
       _FileStreamEvent_PayloadByTag[$_whichOneof(0)]!;
   @$pb.TagNumber(10)
   @$pb.TagNumber(11)
+  @$pb.TagNumber(12)
+  @$pb.TagNumber(13)
   void clearPayload() => $_clearField($_whichOneof(0));
 
   @$pb.TagNumber(1)
@@ -5276,6 +5494,28 @@ class FileStreamEvent extends $pb.GeneratedMessage {
   void clearFileScanResult() => $_clearField(11);
   @$pb.TagNumber(11)
   FileScanResult ensureFileScanResult() => $_ensure(3);
+
+  @$pb.TagNumber(12)
+  FileExpired get fileExpired => $_getN(4);
+  @$pb.TagNumber(12)
+  set fileExpired(FileExpired value) => $_setField(12, value);
+  @$pb.TagNumber(12)
+  $core.bool hasFileExpired() => $_has(4);
+  @$pb.TagNumber(12)
+  void clearFileExpired() => $_clearField(12);
+  @$pb.TagNumber(12)
+  FileExpired ensureFileExpired() => $_ensure(4);
+
+  @$pb.TagNumber(13)
+  FileProcessed get fileProcessed => $_getN(5);
+  @$pb.TagNumber(13)
+  set fileProcessed(FileProcessed value) => $_setField(13, value);
+  @$pb.TagNumber(13)
+  $core.bool hasFileProcessed() => $_has(5);
+  @$pb.TagNumber(13)
+  void clearFileProcessed() => $_clearField(13);
+  @$pb.TagNumber(13)
+  FileProcessed ensureFileProcessed() => $_ensure(5);
 }
 
 class FileUploaded extends $pb.GeneratedMessage {
@@ -5349,10 +5589,13 @@ class FileScanResult extends $pb.GeneratedMessage {
   factory FileScanResult({
     $core.String? fileId,
     $core.String? result,
+    $core.String? uploaderProfileId,
   }) {
     final result$ = create();
     if (fileId != null) result$.fileId = fileId;
     if (result != null) result$.result = result;
+    if (uploaderProfileId != null)
+      result$.uploaderProfileId = uploaderProfileId;
     return result$;
   }
 
@@ -5372,6 +5615,7 @@ class FileScanResult extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'fileId')
     ..aOS(2, _omitFieldNames ? '' : 'result')
+    ..aOS(3, _omitFieldNames ? '' : 'uploaderProfileId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -5410,6 +5654,173 @@ class FileScanResult extends $pb.GeneratedMessage {
   $core.bool hasResult() => $_has(1);
   @$pb.TagNumber(2)
   void clearResult() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get uploaderProfileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set uploaderProfileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasUploaderProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearUploaderProfileId() => $_clearField(3);
+}
+
+class FileProcessed extends $pb.GeneratedMessage {
+  factory FileProcessed({
+    $core.String? fileId,
+    $core.String? status,
+    $core.String? convertedR2Key,
+    $core.String? thumbnailR2Key,
+  }) {
+    final result = create();
+    if (fileId != null) result.fileId = fileId;
+    if (status != null) result.status = status;
+    if (convertedR2Key != null) result.convertedR2Key = convertedR2Key;
+    if (thumbnailR2Key != null) result.thumbnailR2Key = thumbnailR2Key;
+    return result;
+  }
+
+  FileProcessed._();
+
+  factory FileProcessed.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory FileProcessed.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'FileProcessed',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'fileId')
+    ..aOS(2, _omitFieldNames ? '' : 'status')
+    ..aOS(3, _omitFieldNames ? '' : 'convertedR2Key')
+    ..aOS(4, _omitFieldNames ? '' : 'thumbnailR2Key')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  FileProcessed clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  FileProcessed copyWith(void Function(FileProcessed) updates) =>
+      super.copyWith((message) => updates(message as FileProcessed))
+          as FileProcessed;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static FileProcessed create() => FileProcessed._();
+  @$core.override
+  FileProcessed createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static FileProcessed getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<FileProcessed>(create);
+  static FileProcessed? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get fileId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set fileId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasFileId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearFileId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get status => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set status($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasStatus() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearStatus() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get convertedR2Key => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set convertedR2Key($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasConvertedR2Key() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearConvertedR2Key() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get thumbnailR2Key => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set thumbnailR2Key($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasThumbnailR2Key() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearThumbnailR2Key() => $_clearField(4);
+}
+
+class FileExpired extends $pb.GeneratedMessage {
+  factory FileExpired({
+    $core.String? fileId,
+    $core.String? chatId,
+  }) {
+    final result = create();
+    if (fileId != null) result.fileId = fileId;
+    if (chatId != null) result.chatId = chatId;
+    return result;
+  }
+
+  FileExpired._();
+
+  factory FileExpired.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory FileExpired.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'FileExpired',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'fileId')
+    ..aOS(2, _omitFieldNames ? '' : 'chatId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  FileExpired clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  FileExpired copyWith(void Function(FileExpired) updates) =>
+      super.copyWith((message) => updates(message as FileExpired))
+          as FileExpired;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static FileExpired create() => FileExpired._();
+  @$core.override
+  FileExpired createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static FileExpired getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<FileExpired>(create);
+  static FileExpired? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get fileId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set fileId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasFileId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearFileId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get chatId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set chatId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasChatId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearChatId() => $_clearField(2);
 }
 
 enum MatchmakingStreamEvent_Payload {

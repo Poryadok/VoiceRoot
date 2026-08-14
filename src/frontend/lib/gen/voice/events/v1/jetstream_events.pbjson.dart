@@ -613,6 +613,15 @@ const MessageStreamEvent$json = {
       '9': 0,
       '10': 'messageUnpinned'
     },
+    {
+      '1': 'message_forwarded',
+      '3': 19,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.MessageForwarded',
+      '9': 0,
+      '10': 'messageForwarded'
+    },
   ],
   '8': [
     {'1': 'payload'},
@@ -634,7 +643,9 @@ final $typed_data.Uint8List messageStreamEventDescriptor = $convert.base64Decode
     'YWRkZWQYECABKAsyHS52b2ljZS5ldmVudHMudjEuTWVudGlvbkFkZGVkSABSDG1lbnRpb25BZG'
     'RlZBJHCg5tZXNzYWdlX3Bpbm5lZBgRIAEoCzIeLnZvaWNlLmV2ZW50cy52MS5NZXNzYWdlUGlu'
     'bmVkSABSDW1lc3NhZ2VQaW5uZWQSTQoQbWVzc2FnZV91bnBpbm5lZBgSIAEoCzIgLnZvaWNlLm'
-    'V2ZW50cy52MS5NZXNzYWdlVW5waW5uZWRIAFIPbWVzc2FnZVVucGlubmVkQgkKB3BheWxvYWQ=');
+    'V2ZW50cy52MS5NZXNzYWdlVW5waW5uZWRIAFIPbWVzc2FnZVVucGlubmVkElAKEW1lc3NhZ2Vf'
+    'Zm9yd2FyZGVkGBMgASgLMiEudm9pY2UuZXZlbnRzLnYxLk1lc3NhZ2VGb3J3YXJkZWRIAFIQbW'
+    'Vzc2FnZUZvcndhcmRlZEIJCgdwYXlsb2Fk');
 
 @$core.Deprecated('Use messageSentDescriptor instead')
 const MessageSent$json = {
@@ -808,6 +819,30 @@ final $typed_data.Uint8List messageUnpinnedDescriptor = $convert.base64Decode(
     'Cg9NZXNzYWdlVW5waW5uZWQSHQoKbWVzc2FnZV9pZBgBIAEoCVIJbWVzc2FnZUlkEhcKB2NoYX'
     'RfaWQYAiABKAlSBmNoYXRJZBIfCgt1bnBpbm5lZF9ieRgDIAEoCVIKdW5waW5uZWRCeQ==');
 
+@$core.Deprecated('Use messageForwardedDescriptor instead')
+const MessageForwarded$json = {
+  '1': 'MessageForwarded',
+  '2': [
+    {'1': 'message_id', '3': 1, '4': 1, '5': 9, '10': 'messageId'},
+    {'1': 'source_chat_id', '3': 2, '4': 1, '5': 9, '10': 'sourceChatId'},
+    {'1': 'target_chat_id', '3': 3, '4': 1, '5': 9, '10': 'targetChatId'},
+    {
+      '1': 'forwarder_profile_id',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '10': 'forwarderProfileId'
+    },
+  ],
+};
+
+/// Descriptor for `MessageForwarded`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List messageForwardedDescriptor = $convert.base64Decode(
+    'ChBNZXNzYWdlRm9yd2FyZGVkEh0KCm1lc3NhZ2VfaWQYASABKAlSCW1lc3NhZ2VJZBIkCg5zb3'
+    'VyY2VfY2hhdF9pZBgCIAEoCVIMc291cmNlQ2hhdElkEiQKDnRhcmdldF9jaGF0X2lkGAMgASgJ'
+    'Ugx0YXJnZXRDaGF0SWQSMAoUZm9yd2FyZGVyX3Byb2ZpbGVfaWQYBCABKAlSEmZvcndhcmRlcl'
+    'Byb2ZpbGVJZA==');
+
 @$core.Deprecated('Use chatStreamEventDescriptor instead')
 const ChatStreamEvent$json = {
   '1': 'ChatStreamEvent',
@@ -857,6 +892,15 @@ const ChatStreamEvent$json = {
       '9': 0,
       '10': 'spaceCreated'
     },
+    {
+      '1': 'space_invite_created',
+      '3': 14,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.SpaceInviteCreated',
+      '9': 0,
+      '10': 'spaceInviteCreated'
+    },
   ],
   '8': [
     {'1': 'payload'},
@@ -872,7 +916,9 @@ final $typed_data.Uint8List chatStreamEventDescriptor = $convert.base64Decode(
     'YXRNZW1iZXJDaGFuZ2VkSABSEWNoYXRNZW1iZXJDaGFuZ2VkElEKEnNwYWNlX3RyZWVfY2hhbm'
     'dlZBgMIAEoCzIhLnZvaWNlLmV2ZW50cy52MS5TcGFjZVRyZWVDaGFuZ2VkSABSEHNwYWNlVHJl'
     'ZUNoYW5nZWQSRAoNc3BhY2VfY3JlYXRlZBgNIAEoCzIdLnZvaWNlLmV2ZW50cy52MS5TcGFjZU'
-    'NyZWF0ZWRIAFIMc3BhY2VDcmVhdGVkQgkKB3BheWxvYWQ=');
+    'NyZWF0ZWRIAFIMc3BhY2VDcmVhdGVkElcKFHNwYWNlX2ludml0ZV9jcmVhdGVkGA4gASgLMiMu'
+    'dm9pY2UuZXZlbnRzLnYxLlNwYWNlSW52aXRlQ3JlYXRlZEgAUhJzcGFjZUludml0ZUNyZWF0ZW'
+    'RCCQoHcGF5bG9hZA==');
 
 @$core.Deprecated('Use chatCreatedDescriptor instead')
 const ChatCreated$json = {
@@ -931,6 +977,20 @@ const SpaceCreated$json = {
 final $typed_data.Uint8List spaceCreatedDescriptor = $convert.base64Decode(
     'CgxTcGFjZUNyZWF0ZWQSGQoIc3BhY2VfaWQYASABKAlSB3NwYWNlSWQSKAoQb3duZXJfcHJvZm'
     'lsZV9pZBgCIAEoCVIOb3duZXJQcm9maWxlSWQ=');
+
+@$core.Deprecated('Use spaceInviteCreatedDescriptor instead')
+const SpaceInviteCreated$json = {
+  '1': 'SpaceInviteCreated',
+  '2': [
+    {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'invite_code', '3': 2, '4': 1, '5': 9, '10': 'inviteCode'},
+  ],
+};
+
+/// Descriptor for `SpaceInviteCreated`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List spaceInviteCreatedDescriptor = $convert.base64Decode(
+    'ChJTcGFjZUludml0ZUNyZWF0ZWQSGQoIc3BhY2VfaWQYASABKAlSB3NwYWNlSWQSHwoLaW52aX'
+    'RlX2NvZGUYAiABKAlSCmludml0ZUNvZGU=');
 
 @$core.Deprecated('Use voiceStreamEventDescriptor instead')
 const VoiceStreamEvent$json = {
@@ -1555,6 +1615,24 @@ const FileStreamEvent$json = {
       '9': 0,
       '10': 'fileScanResult'
     },
+    {
+      '1': 'file_expired',
+      '3': 12,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.FileExpired',
+      '9': 0,
+      '10': 'fileExpired'
+    },
+    {
+      '1': 'file_processed',
+      '3': 13,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.FileProcessed',
+      '9': 0,
+      '10': 'fileProcessed'
+    },
   ],
   '8': [
     {'1': 'payload'},
@@ -1567,7 +1645,10 @@ final $typed_data.Uint8List fileStreamEventDescriptor = $convert.base64Decode(
     'RfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wUgpvY2N1cnJlZEF0EkQKDWZp'
     'bGVfdXBsb2FkZWQYCiABKAsyHS52b2ljZS5ldmVudHMudjEuRmlsZVVwbG9hZGVkSABSDGZpbG'
     'VVcGxvYWRlZBJLChBmaWxlX3NjYW5fcmVzdWx0GAsgASgLMh8udm9pY2UuZXZlbnRzLnYxLkZp'
-    'bGVTY2FuUmVzdWx0SABSDmZpbGVTY2FuUmVzdWx0QgkKB3BheWxvYWQ=');
+    'bGVTY2FuUmVzdWx0SABSDmZpbGVTY2FuUmVzdWx0EkEKDGZpbGVfZXhwaXJlZBgMIAEoCzIcLn'
+    'ZvaWNlLmV2ZW50cy52MS5GaWxlRXhwaXJlZEgAUgtmaWxlRXhwaXJlZBJHCg5maWxlX3Byb2Nl'
+    'c3NlZBgNIAEoCzIeLnZvaWNlLmV2ZW50cy52MS5GaWxlUHJvY2Vzc2VkSABSDWZpbGVQcm9jZX'
+    'NzZWRCCQoHcGF5bG9hZA==');
 
 @$core.Deprecated('Use fileUploadedDescriptor instead')
 const FileUploaded$json = {
@@ -1595,13 +1676,89 @@ const FileScanResult$json = {
   '2': [
     {'1': 'file_id', '3': 1, '4': 1, '5': 9, '10': 'fileId'},
     {'1': 'result', '3': 2, '4': 1, '5': 9, '10': 'result'},
+    {
+      '1': 'uploader_profile_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'uploaderProfileId',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_uploader_profile_id'},
   ],
 };
 
 /// Descriptor for `FileScanResult`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List fileScanResultDescriptor = $convert.base64Decode(
     'Cg5GaWxlU2NhblJlc3VsdBIXCgdmaWxlX2lkGAEgASgJUgZmaWxlSWQSFgoGcmVzdWx0GAIgAS'
-    'gJUgZyZXN1bHQ=');
+    'gJUgZyZXN1bHQSMwoTdXBsb2FkZXJfcHJvZmlsZV9pZBgDIAEoCUgAUhF1cGxvYWRlclByb2Zp'
+    'bGVJZIgBAUIWChRfdXBsb2FkZXJfcHJvZmlsZV9pZA==');
+
+@$core.Deprecated('Use fileProcessedDescriptor instead')
+const FileProcessed$json = {
+  '1': 'FileProcessed',
+  '2': [
+    {'1': 'file_id', '3': 1, '4': 1, '5': 9, '10': 'fileId'},
+    {'1': 'status', '3': 2, '4': 1, '5': 9, '10': 'status'},
+    {
+      '1': 'converted_r2_key',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'convertedR2Key',
+      '17': true
+    },
+    {
+      '1': 'thumbnail_r2_key',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '9': 1,
+      '10': 'thumbnailR2Key',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_converted_r2_key'},
+    {'1': '_thumbnail_r2_key'},
+  ],
+};
+
+/// Descriptor for `FileProcessed`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List fileProcessedDescriptor = $convert.base64Decode(
+    'Cg1GaWxlUHJvY2Vzc2VkEhcKB2ZpbGVfaWQYASABKAlSBmZpbGVJZBIWCgZzdGF0dXMYAiABKA'
+    'lSBnN0YXR1cxItChBjb252ZXJ0ZWRfcjJfa2V5GAMgASgJSABSDmNvbnZlcnRlZFIyS2V5iAEB'
+    'Ei0KEHRodW1ibmFpbF9yMl9rZXkYBCABKAlIAVIOdGh1bWJuYWlsUjJLZXmIAQFCEwoRX2Nvbn'
+    'ZlcnRlZF9yMl9rZXlCEwoRX3RodW1ibmFpbF9yMl9rZXk=');
+
+@$core.Deprecated('Use fileExpiredDescriptor instead')
+const FileExpired$json = {
+  '1': 'FileExpired',
+  '2': [
+    {'1': 'file_id', '3': 1, '4': 1, '5': 9, '10': 'fileId'},
+    {
+      '1': 'chat_id',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'chatId',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_chat_id'},
+  ],
+};
+
+/// Descriptor for `FileExpired`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List fileExpiredDescriptor = $convert.base64Decode(
+    'CgtGaWxlRXhwaXJlZBIXCgdmaWxlX2lkGAEgASgJUgZmaWxlSWQSHAoHY2hhdF9pZBgCIAEoCU'
+    'gAUgZjaGF0SWSIAQFCCgoIX2NoYXRfaWQ=');
 
 @$core.Deprecated('Use matchmakingStreamEventDescriptor instead')
 const MatchmakingStreamEvent$json = {

@@ -38,6 +38,8 @@ type ParticipantState struct {
 	IsDeafened      bool   `json:"is_deafened"`
 	IsVideoOn       bool   `json:"is_video_on"`
 	IsScreenSharing bool   `json:"is_screen_sharing"`
+	IsCommander     bool   `json:"is_commander"`
+	HandRaised      bool   `json:"hand_raised"`
 }
 
 type Call struct {
@@ -103,9 +105,11 @@ func (c Call) IsActiveForProfile(profileID string) bool {
 }
 
 type VoiceStatePatch struct {
-	IsMuted    *bool
-	IsDeafened *bool
-	IsVideoOn  *bool
+	IsMuted     *bool
+	IsDeafened  *bool
+	IsVideoOn   *bool
+	IsCommander *bool
+	HandRaised  *bool
 }
 
 type CallStore interface {
@@ -291,6 +295,12 @@ func (s *MemoryCallStore) UpdateVoiceState(_ context.Context, roomID, profileID 
 	}
 	if patch.IsVideoOn != nil {
 		state.IsVideoOn = *patch.IsVideoOn
+	}
+	if patch.IsCommander != nil {
+		state.IsCommander = *patch.IsCommander
+	}
+	if patch.HandRaised != nil {
+		state.HandRaised = *patch.HandRaised
 	}
 	call.States[profileID] = state
 	s.calls[roomID] = call

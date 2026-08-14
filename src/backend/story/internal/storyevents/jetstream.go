@@ -26,6 +26,7 @@ const (
 	subjectStoryExpired         = "story.expired"
 	subjectStoryHighlightCreated = "story.highlight_created"
 	subjectStoryLfpCreated      = "story.lfp_created"
+	subjectStoryLfpResponse     = "story.lfp_response"
 )
 
 // JetStreamPublisher publishes StoryStreamEvent payloads to NATS JetStream.
@@ -80,6 +81,7 @@ func (p *JetStreamPublisher) ensureStream() error {
 				subjectStoryExpired,
 				subjectStoryHighlightCreated,
 				subjectStoryLfpCreated,
+				subjectStoryLfpResponse,
 			},
 			Retention: nats.LimitsPolicy,
 			MaxAge:    7 * 24 * time.Hour,
@@ -194,6 +196,20 @@ func (p *JetStreamPublisher) PublishStoryLfpCreated(ctx context.Context, storyID
 		},
 	}
 	return p.publishProto(ctx, subjectStoryLfpCreated, env)
+}
+
+// PublishStoryLfpResponse implements Publisher.
+func (p *JetStreamPublisher) PublishStoryLfpResponse(ctx context.Context, storyID, authorProfileID, responderProfileID, responseType string) error {
+	env := newStoryEvent()
+	env.Payload = &eventsv1.StoryStreamEvent_StoryLfpResponse{
+		StoryLfpResponse: &eventsv1.StoryLfpResponse{
+			StoryId:            storyID,
+			AuthorProfileId:    authorProfileID,
+			ResponderProfileId: responderProfileID,
+			ResponseType:       responseType,
+		},
+	}
+	return p.publishProto(ctx, subjectStoryLfpResponse, env)
 }
 
 // Close drains the underlying NATS connection.

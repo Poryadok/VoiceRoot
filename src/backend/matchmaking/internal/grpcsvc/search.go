@@ -57,6 +57,17 @@ func (s *MatchmakingGRPC) StartSearch(ctx context.Context, req *matchmakingv1.St
 	if err := deps.Queue.Ping(ctx); err != nil {
 		return nil, status.Error(codes.Unavailable, "queue unavailable")
 	}
+	if s.Bans != nil {
+		if accountID, ok := authctx.AccountID(ctx); ok {
+			banned, err := s.Bans.IsPlatformBanned(ctx, accountID)
+			if err != nil {
+				return nil, status.Errorf(codes.Internal, "mm ban check: %v", err)
+			}
+			if banned {
+				return nil, status.Error(codes.PermissionDenied, "matchmaking banned")
+			}
+		}
+	}
 
 	gameID, err := uuid.Parse(strings.TrimSpace(req.GetGameId()))
 	if err != nil {

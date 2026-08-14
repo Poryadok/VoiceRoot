@@ -10,4 +10,6 @@ public interface RefreshTokenRepository {
   Optional<RefreshTokenRecord> findByHash(String tokenHash);
 
   RefreshTokenRecord revoke(String tokenHash, Instant now);
+
+  void revokeAllForAccount(UUID accountId, Instant now);
 }

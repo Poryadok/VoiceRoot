@@ -19,6 +19,7 @@ import (
 const (
 	defaultPageSize = 20
 	maxPageSize     = 50
+	maxQueryLen     = 128
 )
 
 // MessageHit is a ranked message search result.
@@ -35,9 +36,15 @@ type MessageSearcher interface {
 	SearchGlobalMessages(ctx context.Context, viewer uuid.UUID, query string, cursor *string, limit int, accessibleChatIDs []uuid.UUID) ([]MessageHit, string, error)
 }
 
+// ProfileSearchHit is a profile discovery search result.
+type ProfileSearchHit struct {
+	ProfileID uuid.UUID
+	AccountID uuid.UUID
+}
+
 // ProfileSearcher queries indexed profiles.
 type ProfileSearcher interface {
-	SearchProfiles(ctx context.Context, viewer uuid.UUID, query string, excludeBlocked []uuid.UUID, limit int) ([]uuid.UUID, error)
+	SearchProfiles(ctx context.Context, viewer uuid.UUID, query string, excludeBlocked []uuid.UUID, limit int) ([]ProfileSearchHit, error)
 }
 
 // SpaceSearcher queries indexed public spaces.
@@ -50,9 +57,10 @@ type RoleChecker interface {
 	CanReadMessages(ctx context.Context, viewer, chatID uuid.UUID) (bool, error)
 }
 
-// BlockList returns account IDs blocked by the viewer.
+// BlockList returns account IDs blocked by the viewer and checks bidirectional blocks.
 type BlockList interface {
 	BlockedAccountIDs(ctx context.Context) ([]uuid.UUID, error)
+	AccountPairBlocked(ctx context.Context, viewerAccount, otherAccount uuid.UUID) (bool, error)
 }
 
 // ChatAccess lists and searches chats visible to the viewer.
@@ -115,7 +123,48 @@ func requireQuery(q string) (string, error) {
 	if q == "" {
 		return "", status.Error(codes.InvalidArgument, "query required")
 	}
+	if len(q) > maxQueryLen {
+		return "", status.Error(codes.InvalidArgument, "query too long")
+	}
 	return q, nil
+}
+
+func filterProfileHits(ctx context.Context, blocks BlockList, hits []ProfileSearchHit) ([]string, error) {
+	out := make([]string, 0, len(hits))
+	for _, hit := range hits {
+		if blocks != nil {
+			viewerAccount, ok := authctx.AccountID(ctx)
+			if ok {
+				blocked, err := blocks.AccountPairBlocked(ctx, viewerAccount, hit.AccountID)
+				if err != nil {
+					return nil, err
+				}
+				if blocked {
+					continue
+				}
+			}
+		}
+		out = append(out, hit.ProfileID.String())
+	}
+	return out, nil
+}
+
+func intersectAccessibleChats(accessible, candidates []uuid.UUID) []*chatv1.ChatRef {
+	if len(candidates) == 0 {
+		return nil
+	}
+	allowed := make(map[uuid.UUID]struct{}, len(accessible))
+	for _, id := range accessible {
+		allowed[id] = struct{}{}
+	}
+	out := make([]*chatv1.ChatRef, 0, len(candidates))
+	for _, id := range candidates {
+		if _, ok := allowed[id]; !ok {
+			continue
+		}
+		out = append(out, &chatv1.ChatRef{Id: id.String()})
+	}
+	return out
 }
 
 func toProtoHits(hits []MessageHit) []*searchv1.SearchHit {
@@ -193,13 +242,13 @@ func (s *SearchGRPC) SearchGlobal(ctx context.Context, req *searchv1.SearchGloba
 
 	var profileIDs []string
 	if s.Profiles != nil {
-		ids, err := s.Profiles.SearchProfiles(ctx, viewer, q, blockedAccounts, limit)
+		hits, err := s.Profiles.SearchProfiles(ctx, viewer, q, blockedAccounts, limit)
 		if err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
-		profileIDs = make([]string, 0, len(ids))
-		for _, id := range ids {
-			profileIDs = append(profileIDs, id.String())
+		profileIDs, err = filterProfileHits(ctx, s.Blocks, hits)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
 		}
 	}
 
@@ -226,9 +275,7 @@ func (s *SearchGRPC) SearchGlobal(ctx context.Context, req *searchv1.SearchGloba
 		if err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
-		for _, id := range chatIDs {
-			matchedChats = append(matchedChats, &chatv1.ChatRef{Id: id.String()})
-		}
+		matchedChats = intersectAccessibleChats(accessible, chatIDs)
 	}
 
 	var msgHits []*searchv1.SearchHit
@@ -286,9 +333,9 @@ func (s *SearchGRPC) SearchUsers(ctx context.Context, req *searchv1.SearchUsersR
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	out := make([]string, 0, len(ids))
-	for _, id := range ids {
-		out = append(out, id.String())
+	out, err := filterProfileHits(ctx, s.Blocks, ids)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	return &searchv1.SearchUsersResponse{
 		UserSearchResults: &searchv1.UserSearchResults{ProfileIds: out},

@@ -7,12 +7,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 	"google.golang.org/protobuf/proto"
 
 	"voice/backend/notification/internal/consumer"
 	"voice/backend/notification/internal/delivery"
 	"voice/backend/notification/internal/dispatch"
+	"voice/backend/notification/internal/presence"
 	"voice/backend/notification/internal/push"
 	"voice/backend/notification/internal/store"
 	"voice/backend/pkg/natslog"
@@ -21,19 +23,13 @@ import (
 
 const jsStreamMatchmakingEvents = "matchmaking_events"
 
-func notificationMatchmakingDurable(instanceID string) string {
-	id := strings.TrimSpace(instanceID)
-	if id == "" {
-		id = "unknown"
-	}
-	return "notif_" + strings.ReplaceAll(id, "-", "") + "_mm"
-}
-
 func runMatchmakingEventsConsumer(
 	ctx context.Context,
-	natsURL, instanceID string,
+	natsURL string,
 	tokens *store.DeviceTokenStore,
 	pusher *dispatch.PushDispatcher,
+	presenceChecker presence.Checker,
+	policy delivery.DeliveryPolicyLoader,
 	logger *slog.Logger,
 ) error {
 	if tokens == nil || pusher == nil || strings.TrimSpace(natsURL) == "" {
@@ -58,20 +54,29 @@ func runMatchmakingEventsConsumer(
 
 	handler := &consumer.MatchmakingEventHandler{Router: delivery.DecideRouting}
 	mmPusher := &dispatch.MatchmakingPusher{Tokens: tokens, Pusher: pusher}
-	durable := notificationMatchmakingDurable(instanceID)
+	durable := consumer.SharedDurable("matchmaking")
 
 	msgHandler := func(msg *nats.Msg) {
 		var env eventsv1.MatchmakingStreamEvent
 		if err := proto.Unmarshal(msg.Data, &env); err != nil {
 			natslog.LogConsume(logger, msg, slog.LevelWarn, "matchmaking event unmarshal failed")
+			consumer.JetStreamTermAck(msg)
 			return
 		}
-		decisions, payload, ok := routeMatchmakingNotification(handler, &env)
+		decisions, payload, typ, ok := routeMatchmakingNotification(handler, &env)
 		if !ok {
+			consumer.JetStreamConsumeAck(msg, nil)
+			return
+		}
+		enriched, err := dispatch.EnrichDecisions(ctx, presenceChecker, policy, decisions, uuid.Nil, "", typ)
+		if err != nil {
+			consumer.JetStreamConsumeAck(msg, err)
 			return
 		}
 		natslog.LogConsume(logger, msg, slog.LevelInfo, "matchmaking notification event consumed")
-		if err := mmPusher.SendPush(context.Background(), decisions, payload); err != nil && logger != nil {
+		err = mmPusher.SendPush(context.Background(), enriched, payload)
+		consumer.JetStreamConsumeAck(msg, err)
+		if err != nil && logger != nil {
 			logger.Warn("matchmaking push failed", slog.Any("error", err))
 		}
 	}
@@ -79,10 +84,10 @@ func runMatchmakingEventsConsumer(
 	sub, err := js.Subscribe("mm.>", msgHandler,
 		nats.Durable(durable),
 		nats.BindStream(jsStreamMatchmakingEvents),
-		nats.DeliverNew(),
+		nats.ManualAck(),
 	)
 	if err != nil {
-		sub, err = js.Subscribe("", msgHandler, nats.Bind(jsStreamMatchmakingEvents, durable))
+		sub, err = js.Subscribe("", msgHandler, nats.Bind(jsStreamMatchmakingEvents, durable), nats.ManualAck())
 		if err != nil {
 			return fmt.Errorf("jetstream subscribe matchmaking.events: %w", err)
 		}
@@ -97,9 +102,9 @@ func runMatchmakingEventsConsumer(
 	return ctx.Err()
 }
 
-func routeMatchmakingNotification(h *consumer.MatchmakingEventHandler, env *eventsv1.MatchmakingStreamEvent) (map[string]delivery.DeliveryDecision, push.Payload, bool) {
+func routeMatchmakingNotification(h *consumer.MatchmakingEventHandler, env *eventsv1.MatchmakingStreamEvent) (map[string]delivery.DeliveryDecision, push.Payload, delivery.NotificationType, bool) {
 	if h == nil || env == nil {
-		return nil, push.Payload{}, false
+		return nil, push.Payload{}, "", false
 	}
 	switch p := env.GetPayload().(type) {
 	case *eventsv1.MatchmakingStreamEvent_MatchFound:
@@ -113,7 +118,7 @@ func routeMatchmakingNotification(h *consumer.MatchmakingEventHandler, env *even
 				"game_id":  ev.GetGameId(),
 				"mode":     ev.GetMode(),
 			},
-		}, true
+		}, delivery.TypeMatchFound, true
 	case *eventsv1.MatchmakingStreamEvent_SearchNudge:
 		ev := p.SearchNudge
 		return h.HandleSearchNudge(context.Background(), ev), push.Payload{
@@ -125,7 +130,7 @@ func routeMatchmakingNotification(h *consumer.MatchmakingEventHandler, env *even
 				"game_id":    ev.GetGameId(),
 				"mode":       ev.GetMode(),
 			},
-		}, true
+		}, delivery.TypeSearchNudge, true
 	case *eventsv1.MatchmakingStreamEvent_MatchTimeout:
 		ev := p.MatchTimeout
 		return h.HandleSearchTimeout(context.Background(), ev), push.Payload{
@@ -137,8 +142,8 @@ func routeMatchmakingNotification(h *consumer.MatchmakingEventHandler, env *even
 				"game_id":    ev.GetGameId(),
 				"mode":       ev.GetMode(),
 			},
-		}, true
+		}, delivery.TypeSearchTimeout, true
 	default:
-		return nil, push.Payload{}, false
+		return nil, push.Payload{}, "", false
 	}
 }

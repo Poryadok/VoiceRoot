@@ -26,6 +26,7 @@ alwaysApply: true
 | Что уже есть в коде vs план | `docs/PLAN.md` (статус реализации) |
 | Пробелы в доках | `docs/TODO.md` → `docs/todo/` |
 | Design tokens (required), Penpot, brand | `docs/design/`, `design/tokens/` |
+| Designer agent / Penpot skill | `.cursor/agents/voice-designer.md`, `.cursor/skills/penpot-voice/` |
 | CodeGraph MCP — query tips для Voice | `.cursor/rules/codegraph.mdc` |
 
 ## TDD и источники истины при генерации кода

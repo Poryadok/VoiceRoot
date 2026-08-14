@@ -237,15 +237,21 @@ func (s *SpaceGRPC) JoinByInvite(ctx context.Context, req *spacev1.JoinByInviteR
 	if err := s.ensureJoinInvitePrivacy(ctx, profileID, inv.CreatorProfileID); err != nil {
 		return nil, err
 	}
+	if err := s.ensureJoinNotBlocked(ctx, accountID, inv.CreatorProfileID); err != nil {
+		return nil, err
+	}
+	wasMember, err := s.Store.IsSpaceMember(ctx, inv.SpaceID, profileID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
 	member, err := s.Store.JoinByInvite(ctx, code, profileID, accountID)
 	if err != nil {
 		return nil, mapInviteStoreErr(err)
 	}
-	if err := s.assignDefaultMemberRole(ctx, member.SpaceID, profileID); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+	protoMember, err := s.finalizeMembership(ctx, member, !wasMember)
+	if err != nil {
+		return nil, err
 	}
-	protoMember := membershipRowToProto(member)
-	protoMember.RoleNames = s.memberRoleNames(ctx, member.SpaceID, profileID)
 	return &spacev1.JoinByInviteResponse{SpaceMembership: protoMember}, nil
 }
 

@@ -8,6 +8,9 @@ import (
 	"github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
+
+	eventsv1 "voice.app/voice/events/v1"
 )
 
 func TestNewJetStreamPublisher_EmptyURL(t *testing.T) {
@@ -74,8 +77,14 @@ func TestJetStreamPublisher_SpaceCreatedRoundTrip(t *testing.T) {
 
 	msg, err := sub.NextMsg(3 * time.Second)
 	require.NoError(t, err)
-	require.NotEmpty(t, msg.Data)
-	// Full ChatStreamEvent.space_created round-trip requires SpaceCreated in jetstream_events.proto (green phase).
+	var env eventsv1.ChatStreamEvent
+	require.NoError(t, proto.Unmarshal(msg.Data, &env))
+	require.NotEmpty(t, env.GetEventId())
+	require.NotNil(t, env.GetOccurredAt())
+	created := env.GetSpaceCreated()
+	require.NotNil(t, created)
+	require.Equal(t, spaceID, created.GetSpaceId())
+	require.Equal(t, ownerID, created.GetOwnerProfileId())
 }
 
 func TestJetStreamPublisher_InviteCreatedRoundTrip(t *testing.T) {
@@ -101,7 +110,15 @@ func TestJetStreamPublisher_InviteCreatedRoundTrip(t *testing.T) {
 
 	msg, err := sub.NextMsg(3 * time.Second)
 	require.NoError(t, err)
-	require.NotEmpty(t, msg.Data)
+	var env eventsv1.ChatStreamEvent
+	require.NoError(t, proto.Unmarshal(msg.Data, &env))
+	require.NotEmpty(t, env.GetEventId())
+	require.NotNil(t, env.GetOccurredAt())
+	invite := env.GetSpaceInviteCreated()
+	require.NotNil(t, invite, "space.invite_created must use SpaceInviteCreated payload, not SpaceCreated")
+	require.Equal(t, spaceID, invite.GetSpaceId())
+	require.Equal(t, inviteCode, invite.GetInviteCode())
+	require.Nil(t, env.GetSpaceCreated(), "invite_code must not be written into owner_profile_id")
 }
 
 // TestJetStreamPublisher_EnsureStreamUpdatesExisting documents stream subject migration when chat_events exists without space.created.

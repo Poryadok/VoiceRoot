@@ -1,9 +1,3 @@
 # Subscription Service
 
-Go scaffold for the Voice subscription service.
-
-Current public surface:
-
-- GET /health returns {"service":"subscription","status":"ok"}.
-
-Domain behavior, gRPC handlers, database repositories, and migrations are intentionally out of scope for this initialization step.
+Go microservice: plans, entitlements, Paddle/CloudPayments webhooks (test fixtures in CI). gRPC `SubscriptionService`. PostgreSQL `subscription_db`. NATS `subscription.events`. Gateway `/api/v1/subscription/**`. See `docs/microservices/subscription-service.md`.

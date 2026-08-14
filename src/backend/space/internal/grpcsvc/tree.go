@@ -13,6 +13,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"voice/backend/role/permissions"
 	"voice/backend/space/internal/authctx"
 	"voice/backend/space/internal/store"
 
@@ -35,22 +36,8 @@ func (s *SpaceGRPC) requireSpaceMember(ctx context.Context, spaceID uuid.UUID) e
 	return nil
 }
 
-func (s *SpaceGRPC) requireSpaceOwner(ctx context.Context, spaceID uuid.UUID) error {
-	caller, ok := authctx.ProfileID(ctx)
-	if !ok {
-		return status.Error(codes.Unauthenticated, "missing profile")
-	}
-	row, err := s.Store.GetSpace(ctx, spaceID)
-	if err != nil {
-		return status.Error(codes.Internal, err.Error())
-	}
-	if row == nil {
-		return status.Error(codes.NotFound, "space not found")
-	}
-	if row.OwnerProfileID != caller {
-		return status.Error(codes.PermissionDenied, "only the space owner can modify the tree")
-	}
-	return nil
+func (s *SpaceGRPC) requireSpaceTreeManage(ctx context.Context, spaceID uuid.UUID) error {
+	return s.requireSpacePermission(ctx, spaceID, permissions.TextChatCreateInSpace)
 }
 
 func (s *SpaceGRPC) ListSpaceTree(ctx context.Context, req *spacev1.ListSpaceTreeRequest) (*spacev1.ListSpaceTreeResponse, error) {
@@ -79,7 +66,7 @@ func (s *SpaceGRPC) CreateCategory(ctx context.Context, req *spacev1.CreateCateg
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireSpaceOwner(ctx, spaceID); err != nil {
+	if err := s.requireSpaceTreeManage(ctx, spaceID); err != nil {
 		return nil, err
 	}
 	row, err := s.Store.CreateCategory(ctx, spaceID, req.GetName(), req.GetSortOrder())
@@ -101,7 +88,7 @@ func (s *SpaceGRPC) UpdateCategory(ctx context.Context, req *spacev1.UpdateCateg
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireSpaceOwner(ctx, spaceID); err != nil {
+	if err := s.requireSpaceTreeManage(ctx, spaceID); err != nil {
 		return nil, err
 	}
 	row, err := s.Store.UpdateCategory(ctx, categoryID, req.Name, req.SortOrder)
@@ -127,7 +114,7 @@ func (s *SpaceGRPC) DeleteCategory(ctx context.Context, req *spacev1.DeleteCateg
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireSpaceOwner(ctx, spaceID); err != nil {
+	if err := s.requireSpaceTreeManage(ctx, spaceID); err != nil {
 		return nil, err
 	}
 	if err := s.Store.DeleteCategory(ctx, categoryID); err != nil {
@@ -159,7 +146,7 @@ func (s *SpaceGRPC) CreateVoiceRoom(ctx context.Context, req *spacev1.CreateVoic
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireSpaceOwner(ctx, spaceID); err != nil {
+	if err := s.requireSpaceTreeManage(ctx, spaceID); err != nil {
 		return nil, err
 	}
 	room, node, err := s.Store.CreateVoiceRoom(ctx, spaceID, req.GetName(), nil)
@@ -189,7 +176,7 @@ func (s *SpaceGRPC) UpdateVoiceRoom(ctx context.Context, req *spacev1.UpdateVoic
 	if err != nil {
 		return nil, status.Error(codes.NotFound, "voice room not found")
 	}
-	if err := s.requireSpaceOwner(ctx, spaceID); err != nil {
+	if err := s.requireSpaceTreeManage(ctx, spaceID); err != nil {
 		return nil, err
 	}
 	name := strings.TrimSpace(req.GetName())
@@ -227,7 +214,7 @@ WHERE vr.id = $1
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	if err := s.requireSpaceOwner(ctx, spaceID); err != nil {
+	if err := s.requireSpaceTreeManage(ctx, spaceID); err != nil {
 		return nil, err
 	}
 	if err := s.Store.DeleteVoiceRoom(ctx, voiceRoomID); err != nil {
@@ -255,7 +242,7 @@ func (s *SpaceGRPC) UpsertTreeNode(ctx context.Context, req *spacev1.UpsertTreeN
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireSpaceOwner(ctx, spaceID); err != nil {
+	if err := s.requireSpaceTreeManage(ctx, spaceID); err != nil {
 		return nil, err
 	}
 
@@ -326,7 +313,7 @@ func (s *SpaceGRPC) RemoveTreeNode(ctx context.Context, req *spacev1.RemoveTreeN
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireSpaceOwner(ctx, spaceID); err != nil {
+	if err := s.requireSpaceTreeManage(ctx, spaceID); err != nil {
 		return nil, err
 	}
 	if err := s.Store.RemoveTreeNode(ctx, spaceID, nodeID); err != nil {
@@ -347,7 +334,7 @@ func (s *SpaceGRPC) ReorderSpaceTree(ctx context.Context, req *spacev1.ReorderSp
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireSpaceOwner(ctx, spaceID); err != nil {
+	if err := s.requireSpaceTreeManage(ctx, spaceID); err != nil {
 		return nil, err
 	}
 	ids := make([]uuid.UUID, 0, len(req.GetOrderedNodeIds()))

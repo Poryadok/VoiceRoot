@@ -74,3 +74,23 @@ func TestPostgresConnectTimeoutFromEnv_custom(t *testing.T) {
 	t.Setenv("POSTGRES_CONNECT_TIMEOUT", "30s")
 	require.Equal(t, 30*time.Second, runtimeconfig.PostgresConnectTimeoutFromEnv())
 }
+
+func TestPostgresMaxConnsFromEnv_default(t *testing.T) {
+	t.Setenv("POSTGRES_MAX_CONNS", "")
+	require.Equal(t, int32(10), runtimeconfig.PostgresMaxConnsFromEnv())
+}
+
+func TestPostgresMaxConnsFromEnv_custom(t *testing.T) {
+	t.Setenv("POSTGRES_MAX_CONNS", "25")
+	require.Equal(t, int32(25), runtimeconfig.PostgresMaxConnsFromEnv())
+}
+
+func TestNATSConnectTimeoutFromEnv_default(t *testing.T) {
+	t.Setenv("NATS_CONNECT_TIMEOUT", "")
+	require.Equal(t, 10*time.Second, runtimeconfig.NATSConnectTimeoutFromEnv())
+}
+
+func TestNATSReconnectWaitFromEnv_custom(t *testing.T) {
+	t.Setenv("NATS_RECONNECT_WAIT", "2s")
+	require.Equal(t, 2*time.Second, runtimeconfig.NATSReconnectWaitFromEnv())
+}

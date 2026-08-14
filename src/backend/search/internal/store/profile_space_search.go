@@ -71,7 +71,7 @@ func (s *ProfileSpaceSearchStore) SearchProfiles(ctx context.Context, _ uuid.UUI
 	}
 	args = append(args, limit)
 	sql := fmt.Sprintf(`
-		SELECT profile_id
+		SELECT profile_id, account_id
 		FROM profile_search_documents
 		WHERE (username ILIKE $1 ESCAPE '\' OR display_name ILIKE $1 ESCAPE '\')
 		%s
@@ -88,7 +88,7 @@ func (s *ProfileSpaceSearchStore) SearchProfiles(ctx context.Context, _ uuid.UUI
 	out := make([]ProfileHit, 0, limit)
 	for rows.Next() {
 		var hit ProfileHit
-		if err := rows.Scan(&hit.ProfileID); err != nil {
+		if err := rows.Scan(&hit.ProfileID, &hit.AccountID); err != nil {
 			return nil, err
 		}
 		out = append(out, hit)

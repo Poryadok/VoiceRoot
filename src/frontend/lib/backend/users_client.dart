@@ -152,6 +152,17 @@ class VoiceUsersClient {
     );
   }
 
+  Future<UsersApiResult<void>> deleteProfile({
+    required String authorization,
+    required String profileId,
+  }) async {
+    final result = await _gateway.deleteEmpty(
+      uri: _gateway.resolve('/api/v1/users/profiles/$profileId'),
+      authorization: authorization,
+    );
+    return _mapEmpty(result);
+  }
+
   Future<UsersApiResult<VoiceProfile>> createProfile({
     required String authorization,
     required String displayName,

@@ -18,8 +18,11 @@ import (
 )
 
 const (
-	streamName         = "file_events"
-	subjectFileExpired = "file.expired"
+	streamName            = "file_events"
+	subjectFileUploaded   = "file.uploaded"
+	subjectFileProcessed  = "file.processed"
+	subjectFileScanInfected = "file.scan_infected"
+	subjectFileExpired    = "file.expired"
 )
 
 // JetStreamPublisher publishes FileStreamEvent payloads to NATS JetStream.
@@ -56,21 +59,49 @@ func NewJetStreamPublisher(natsURL string) (*JetStreamPublisher, error) {
 	return &JetStreamPublisher{nc: nc, js: js}, nil
 }
 
+func fileEventStreamSubjects() []string {
+	return []string{
+		subjectFileUploaded,
+		subjectFileProcessed,
+		subjectFileScanInfected,
+		subjectFileExpired,
+	}
+}
+
 func (p *JetStreamPublisher) ensureStream() error {
 	if p == nil || p.js == nil {
 		return fmt.Errorf("jetstream publisher not initialized")
 	}
 	p.ensureOnce.Do(func() {
-		if _, err := p.js.StreamInfo(streamName); err == nil {
+		desired := fileEventStreamSubjects()
+		info, err := p.js.StreamInfo(streamName)
+		if err != nil {
+			_, p.ensureErr = p.js.AddStream(&nats.StreamConfig{
+				Name:      streamName,
+				Subjects:  desired,
+				Retention: nats.LimitsPolicy,
+				MaxAge:    7 * 24 * time.Hour,
+				Storage:   nats.FileStorage,
+			})
 			return
 		}
-		_, p.ensureErr = p.js.AddStream(&nats.StreamConfig{
-			Name:      streamName,
-			Subjects:  []string{subjectFileExpired},
-			Retention: nats.LimitsPolicy,
-			MaxAge:    7 * 24 * time.Hour,
-			Storage:   nats.FileStorage,
-		})
+		existing := make(map[string]struct{}, len(info.Config.Subjects))
+		for _, subject := range info.Config.Subjects {
+			existing[subject] = struct{}{}
+		}
+		merged := append([]string(nil), info.Config.Subjects...)
+		for _, subject := range desired {
+			if _, ok := existing[subject]; ok {
+				continue
+			}
+			merged = append(merged, subject)
+		}
+		if len(merged) == len(info.Config.Subjects) {
+			return
+		}
+		cfg := info.Config
+		cfg.Subjects = merged
+		_, p.ensureErr = p.js.UpdateStream(&cfg)
 	})
 	return p.ensureErr
 }
@@ -90,6 +121,15 @@ func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, e
 		return fmt.Errorf("jetstream publish %s: %w", subject, err)
 	}
 	attrs := []slog.Attr{slog.String("event_id", env.GetEventId())}
+	if uploaded := env.GetFileUploaded(); uploaded != nil {
+		attrs = append(attrs, slog.String("file_id", uploaded.GetFileId()))
+	}
+	if processed := env.GetFileProcessed(); processed != nil {
+		attrs = append(attrs, slog.String("file_id", processed.GetFileId()))
+	}
+	if scan := env.GetFileScanResult(); scan != nil {
+		attrs = append(attrs, slog.String("file_id", scan.GetFileId()))
+	}
 	if expired := env.GetFileExpired(); expired != nil {
 		attrs = append(attrs, slog.String("file_id", expired.GetFileId()))
 	}
@@ -102,6 +142,49 @@ func newFileEvent() *eventsv1.FileStreamEvent {
 		EventId:    uuid.NewString(),
 		OccurredAt: timestamppb.New(time.Now().UTC()),
 	}
+}
+
+// PublishFileUploaded implements Publisher.
+func (p *JetStreamPublisher) PublishFileUploaded(ctx context.Context, fileID, uploaderProfileID string) error {
+	env := newFileEvent()
+	env.Payload = &eventsv1.FileStreamEvent_FileUploaded{
+		FileUploaded: &eventsv1.FileUploaded{
+			FileId:             fileID,
+			UploaderProfileId: uploaderProfileID,
+		},
+	}
+	return p.publishProto(ctx, subjectFileUploaded, env)
+}
+
+// PublishFileProcessed implements Publisher.
+func (p *JetStreamPublisher) PublishFileProcessed(ctx context.Context, fileID, status, convertedR2Key, thumbnailR2Key string) error {
+	processed := &eventsv1.FileProcessed{
+		FileId: fileID,
+		Status: status,
+	}
+	if convertedR2Key != "" {
+		processed.ConvertedR2Key = &convertedR2Key
+	}
+	if thumbnailR2Key != "" {
+		processed.ThumbnailR2Key = &thumbnailR2Key
+	}
+	env := newFileEvent()
+	env.Payload = &eventsv1.FileStreamEvent_FileProcessed{FileProcessed: processed}
+	return p.publishProto(ctx, subjectFileProcessed, env)
+}
+
+// PublishFileScanInfected implements Publisher.
+func (p *JetStreamPublisher) PublishFileScanInfected(ctx context.Context, fileID, uploaderProfileID string) error {
+	uploader := uploaderProfileID
+	env := newFileEvent()
+	env.Payload = &eventsv1.FileStreamEvent_FileScanResult{
+		FileScanResult: &eventsv1.FileScanResult{
+			FileId:             fileID,
+			Result:             "infected",
+			UploaderProfileId: &uploader,
+		},
+	}
+	return p.publishProto(ctx, subjectFileScanInfected, env)
 }
 
 // PublishFileExpired implements Publisher.

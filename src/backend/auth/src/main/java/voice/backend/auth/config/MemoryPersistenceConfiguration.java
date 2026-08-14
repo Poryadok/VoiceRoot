@@ -10,6 +10,8 @@ import voice.backend.auth.repository.E2EKeyBackupRepository;
 import voice.backend.auth.repository.InMemoryAccountRepository;
 import voice.backend.auth.repository.InMemoryBackupCodeRepository;
 import voice.backend.auth.repository.InMemoryE2EKeyBackupRepository;
+import voice.backend.auth.repository.InMemoryOtpCodeRepository;
+import voice.backend.auth.repository.OtpCodeRepository;
 import voice.backend.auth.repository.InMemoryRefreshTokenRepository;
 import voice.backend.auth.repository.RefreshTokenRepository;
 import voice.backend.auth.oauth.InMemoryOAuthAuthorizationCodeStore;
@@ -39,6 +41,11 @@ public class MemoryPersistenceConfiguration {
   @Bean
   E2EKeyBackupRepository e2eKeyBackupRepository() {
     return new InMemoryE2EKeyBackupRepository();
+  }
+
+  @Bean
+  OtpCodeRepository otpCodeRepository() {
+    return new InMemoryOtpCodeRepository();
   }
 
   @Bean

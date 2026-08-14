@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"strconv"
 	"testing"
 	"time"
 
@@ -19,13 +20,15 @@ import (
 
 type recordingFileGRPC struct {
 	filev1.UnimplementedFileServiceServer
-	lastMD   metadata.MD
-	upload   *filev1.RequestUploadRequest
-	confirm  *filev1.ConfirmUploadRequest
-	getURL   *filev1.GetFileURLRequest
-	getMeta  *filev1.GetFileMetadataRequest
-	bulkMeta *filev1.GetBulkMetadataRequest
-	deleted  *filev1.DeleteFileRequest
+	lastMD    metadata.MD
+	upload    *filev1.RequestUploadRequest
+	confirm   *filev1.ConfirmUploadRequest
+	getURL    *filev1.GetFileURLRequest
+	getMeta   *filev1.GetFileMetadataRequest
+	bulkMeta  *filev1.GetBulkMetadataRequest
+	deleted   *filev1.DeleteFileRequest
+	listFiles *filev1.ListFilesRequest
+	checkQuota *filev1.CheckQuotaRequest
 }
 
 func (s *recordingFileGRPC) RequestUpload(ctx context.Context, req *filev1.RequestUploadRequest) (*filev1.RequestUploadResponse, error) {
@@ -94,6 +97,22 @@ func (s *recordingFileGRPC) DeleteFile(ctx context.Context, req *filev1.DeleteFi
 	s.lastMD = md
 	s.deleted = req
 	return &filev1.DeleteFileResponse{}, nil
+}
+
+func (s *recordingFileGRPC) ListFiles(ctx context.Context, req *filev1.ListFilesRequest) (*filev1.ListFilesResponse, error) {
+	md, _ := metadata.FromIncomingContext(ctx)
+	s.lastMD = md
+	s.listFiles = req
+	return &filev1.ListFilesResponse{FileList: &filev1.FileList{}}, nil
+}
+
+func (s *recordingFileGRPC) CheckQuota(ctx context.Context, req *filev1.CheckQuotaRequest) (*filev1.CheckQuotaResponse, error) {
+	md, _ := metadata.FromIncomingContext(ctx)
+	s.lastMD = md
+	s.checkQuota = req
+	return &filev1.CheckQuotaResponse{
+		QuotaResponse: &filev1.QuotaResponse{BytesUsed: 1024, BytesLimit: 50 << 20},
+	}, nil
 }
 
 func TestTranscodeFilesUploadPrecedenceOverRESTProxy(t *testing.T) {
@@ -227,6 +246,45 @@ func TestTranscodeFilesConfirmMetadataAndDelete(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, resp.Code, "body=%s", resp.Body.String())
 	require.NotNil(t, grpcRec.deleted)
 	require.Equal(t, fileID, grpcRec.deleted.GetFileId())
+}
+
+func TestTranscodeFilesListAndQuota(t *testing.T) {
+	t.Parallel()
+
+	grpcRec := &recordingFileGRPC{}
+	conn, cleanup := startBufconnFileConn(t, grpcRec)
+	t.Cleanup(cleanup)
+
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+		},
+		transcoder: &transcoder{clients: grpcClients{file: filev1.NewFileServiceClient(conn)}},
+	})
+
+	resp := performRequest(h, http.MethodGet, "/api/v1/files?chat_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&chat_type=dm&page_size=25", "", map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	require.Equal(t, http.StatusOK, resp.Code, "body=%s", resp.Body.String())
+	require.NotNil(t, grpcRec.listFiles)
+	require.Equal(t, int32(25), grpcRec.listFiles.GetPage().GetPageSize())
+	require.Equal(t, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", grpcRec.listFiles.GetFilterChat().GetId())
+
+	resp = performRequest(h, http.MethodGet, "/api/v1/files/quota", "", map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	require.Equal(t, http.StatusOK, resp.Code, "body=%s", resp.Body.String())
+	require.NotNil(t, grpcRec.checkQuota)
+
+	var out struct {
+		QuotaResponse struct {
+			BytesUsed  string `json:"bytes_used"`
+			BytesLimit string `json:"bytes_limit"`
+		} `json:"quota_response"`
+	}
+	decodeJSON(t, resp.Body, &out)
+	require.Equal(t, "1024", out.QuotaResponse.BytesUsed)
+	require.Equal(t, strconv.FormatInt(50<<20, 10), out.QuotaResponse.BytesLimit)
 }
 
 func startBufconnFileConn(t *testing.T, impl filev1.FileServiceServer) (grpc.ClientConnInterface, func()) {

@@ -19,6 +19,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"voice/backend/file/internal/authctx"
+	"voice/backend/file/internal/fileevents"
 	"voice/backend/file/internal/jobs"
 	"voice/backend/file/internal/r2file"
 	"voice/backend/file/internal/store"
@@ -88,6 +89,7 @@ type Deps struct {
 	Processor ImageProcessor
 	Reader    ObjectReader
 	Scanner   Scanner
+	Events    fileevents.Publisher
 }
 
 type FileGRPC struct {
@@ -100,6 +102,7 @@ type FileGRPC struct {
 	processor ImageProcessor
 	reader    ObjectReader
 	scanner   Scanner
+	events    fileevents.Publisher
 }
 
 func New(deps Deps) *FileGRPC {
@@ -111,6 +114,10 @@ func New(deps Deps) *FileGRPC {
 	if processor == nil {
 		processor = keyDerivingImageProcessor{}
 	}
+	events := deps.Events
+	if events == nil {
+		events = fileevents.NoopPublisher{}
+	}
 	return &FileGRPC{
 		files:     deps.Files,
 		presigner: deps.Presigner,
@@ -120,6 +127,7 @@ func New(deps Deps) *FileGRPC {
 		processor: processor,
 		reader:    deps.Reader,
 		scanner:   deps.Scanner,
+		events:    events,
 	}
 }
 
@@ -285,9 +293,14 @@ func (s *FileGRPC) ConfirmUpload(ctx context.Context, req *filev1.ConfirmUploadR
 	if err != nil {
 		return nil, err
 	}
+	if row.ScanResult == "infected" {
+		_ = s.events.PublishFileScanInfected(ctx, row.ID.String(), row.UploaderProfileID.String())
+		return &filev1.ConfirmUploadResponse{FileMetadata: fileRowToProto(row)}, nil
+	}
 	if row.Status != "ready" {
 		return &filev1.ConfirmUploadResponse{FileMetadata: fileRowToProto(row)}, nil
 	}
+	_ = s.events.PublishFileUploaded(ctx, row.ID.String(), row.UploaderProfileID.String())
 	originalKey := row.R2Key
 	if row.FileType == "image" && !row.IsE2E && s.processor != nil {
 		processed, err := s.processor.ProcessImage(ctx, row)
@@ -298,6 +311,7 @@ func (s *FileGRPC) ConfirmUpload(ctx context.Context, req *filev1.ConfirmUploadR
 		if err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
+		_ = s.events.PublishFileProcessed(ctx, row.ID.String(), row.Status, processed.ConvertedR2Key, processed.ThumbnailR2Key)
 		if s.deleter != nil {
 			if err := s.deleter.DeleteObject(ctx, originalKey); err != nil {
 				return nil, status.Error(codes.Internal, err.Error())
@@ -441,7 +455,37 @@ func (s *FileGRPC) ListFiles(ctx context.Context, req *filev1.ListFilesRequest) 
 		return nil, err
 	}
 	if req.GetFilterChat() != nil {
-		return nil, status.Error(codes.FailedPrecondition, "chat-scoped file listing requires chat access guard")
+		if s.chatGuard == nil {
+			return nil, status.Error(codes.FailedPrecondition, "chat access guard is not configured")
+		}
+		chatID, err := parseUUID("filter_chat.id", req.GetFilterChat().GetId())
+		if err != nil {
+			return nil, err
+		}
+		if err := s.chatGuard.EnsureMember(ctx, chatID, profileID); err != nil {
+			if errors.Is(err, ErrNotChatMember) {
+				return nil, status.Error(codes.PermissionDenied, "not a chat member")
+			}
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		pageSize := int32(50)
+		if req.GetPage() != nil && req.GetPage().GetPageSize() > 0 {
+			pageSize = req.GetPage().GetPageSize()
+		}
+		rows, err := s.files.ListFilesForChat(ctx, chatID, pageSize)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		files := make([]*filev1.FileMetadata, 0, len(rows))
+		for _, row := range rows {
+			files = append(files, fileRowToProto(row))
+		}
+		return &filev1.ListFilesResponse{
+			FileList: &filev1.FileList{
+				Files: files,
+				Page:  &commonv1.CursorPageResponse{},
+			},
+		}, nil
 	}
 	pageSize := int32(50)
 	if req.GetPage() != nil && req.GetPage().GetPageSize() > 0 {
@@ -484,7 +528,7 @@ func (s *FileGRPC) CheckQuota(ctx context.Context, req *filev1.CheckQuotaRequest
 	return &filev1.CheckQuotaResponse{
 		QuotaResponse: &filev1.QuotaResponse{
 			BytesUsed:  used,
-			BytesLimit: r2file.MaxFreeFileBytes,
+			BytesLimit: quotaMaxBytes(ctx),
 		},
 	}, nil
 }
@@ -598,6 +642,10 @@ func parseUUID(field, value string) (uuid.UUID, error) {
 }
 
 func uploadMaxBytes(ctx context.Context) int64 {
+	return quotaMaxBytes(ctx)
+}
+
+func quotaMaxBytes(ctx context.Context) int64 {
 	if tier, ok := subscriptionTier(ctx); ok && tier == "premium" {
 		return r2file.MaxPremiumFileBytes
 	}

@@ -83,4 +83,16 @@ public class JdbcRefreshTokenRepository implements RefreshTokenRepository {
     }
     return findByHash(tokenHash).orElse(null);
   }
+
+  @Override
+  public void revokeAllForAccount(UUID accountId, Instant now) {
+    jdbc.update(
+        """
+        UPDATE refresh_tokens SET revoked_at = :now
+        WHERE account_id = :accountId AND revoked_at IS NULL
+        """,
+        new MapSqlParameterSource()
+            .addValue("now", Timestamp.from(now))
+            .addValue("accountId", accountId));
+  }
 }

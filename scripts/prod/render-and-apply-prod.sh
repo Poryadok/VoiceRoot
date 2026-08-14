@@ -6,6 +6,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 # shellcheck source=scripts/prod/load-prod-domains.sh
 source "${ROOT}/scripts/prod/load-prod-domains.sh"
+# shellcheck source=scripts/prod/map-prod-env.sh
+source "${ROOT}/scripts/prod/map-prod-env.sh"
 REGISTRY="${VOICE_IMAGE_REGISTRY:-ghcr.io/voiceroot/voiceroot}"
 TAG="${VOICE_IMAGE_TAG:?VOICE_IMAGE_TAG required for production}"
 NS="${VOICE_K8S_NAMESPACE:-voice-prod}"

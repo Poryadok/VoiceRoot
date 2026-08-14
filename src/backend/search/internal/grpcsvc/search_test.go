@@ -3,6 +3,7 @@ package grpcsvc
 import (
 	"context"
 	"net"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -22,6 +23,13 @@ import (
 
 func ctxWithProfile(profileID uuid.UUID) context.Context {
 	return metadata.NewOutgoingContext(context.Background(), metadata.Pairs("x-voice-profile-id", profileID.String()))
+}
+
+func ctxWithProfileAndAccount(profileID, accountID uuid.UUID) context.Context {
+	return metadata.NewOutgoingContext(context.Background(), metadata.Pairs(
+		"x-voice-profile-id", profileID.String(),
+		"x-voice-user-id", accountID.String(),
+	))
 }
 
 type stubMessageSearch struct {
@@ -53,15 +61,15 @@ func (s *stubMessageSearch) SearchGlobalMessages(_ context.Context, _ uuid.UUID,
 }
 
 type stubProfileSearch struct {
-	lastQuery            string
-	lastExcludeAccounts  []uuid.UUID
-	profileIDs           []uuid.UUID
+	lastQuery           string
+	lastExcludeAccounts []uuid.UUID
+	hits                []ProfileSearchHit
 }
 
-func (s *stubProfileSearch) SearchProfiles(_ context.Context, _ uuid.UUID, query string, exclude []uuid.UUID, _ int) ([]uuid.UUID, error) {
+func (s *stubProfileSearch) SearchProfiles(_ context.Context, _ uuid.UUID, query string, exclude []uuid.UUID, _ int) ([]ProfileSearchHit, error) {
 	s.lastQuery = query
 	s.lastExcludeAccounts = exclude
-	return s.profileIDs, nil
+	return s.hits, nil
 }
 
 type stubSpaceSearch struct {
@@ -86,14 +94,23 @@ func (s *stubRoleChecker) CanReadMessages(_ context.Context, _ uuid.UUID, chatID
 
 type stubBlockList struct {
 	blockedAccounts []uuid.UUID
+	pairBlocked     map[uuid.UUID]bool
 }
 
 func (s *stubBlockList) BlockedAccountIDs(_ context.Context) ([]uuid.UUID, error) {
 	return s.blockedAccounts, nil
 }
 
+func (s *stubBlockList) AccountPairBlocked(_ context.Context, _, other uuid.UUID) (bool, error) {
+	if s.pairBlocked == nil {
+		return false, nil
+	}
+	return s.pairBlocked[other], nil
+}
+
 type stubChatAccess struct {
-	accessible []uuid.UUID
+	accessible  []uuid.UUID
+	searchChats []uuid.UUID
 }
 
 func (s *stubChatAccess) AccessibleChatIDs(_ context.Context, _ uuid.UUID) ([]uuid.UUID, error) {
@@ -101,6 +118,9 @@ func (s *stubChatAccess) AccessibleChatIDs(_ context.Context, _ uuid.UUID) ([]uu
 }
 
 func (s *stubChatAccess) SearchChats(_ context.Context, _ string, _ int) ([]uuid.UUID, error) {
+	if s.searchChats != nil {
+		return s.searchChats, nil
+	}
 	return s.accessible, nil
 }
 
@@ -173,7 +193,7 @@ func TestSearchGlobal_ExcludesBlockedUsers(t *testing.T) {
 	t.Parallel()
 	blockedAccount := uuid.New()
 	visibleProfile := uuid.New()
-	profiles := &stubProfileSearch{profileIDs: []uuid.UUID{visibleProfile}}
+	profiles := &stubProfileSearch{hits: []ProfileSearchHit{{ProfileID: visibleProfile, AccountID: uuid.New()}}}
 	client := startSearchGRPCTestServer(t, &SearchGRPC{
 		Messages: &stubMessageSearch{},
 		Profiles: profiles,
@@ -245,6 +265,63 @@ func TestSearchGlobal_ReturnsMessageHitsForAccessibleChats(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, resp.GetGlobalSearchResults().GetMessages(), 1)
 	require.Equal(t, msgID.String(), resp.GetGlobalSearchResults().GetMessages()[0].GetMessageId())
+}
+
+func TestSearchGlobal_MatchedChatsIntersectAccessible(t *testing.T) {
+	t.Parallel()
+	accessibleChat := uuid.New()
+	leakedChat := uuid.New()
+	client := startSearchGRPCTestServer(t, &SearchGRPC{
+		Chats: &stubChatAccess{
+			accessible:  []uuid.UUID{accessibleChat},
+			searchChats: []uuid.UUID{accessibleChat, leakedChat},
+		},
+	})
+	resp, err := client.SearchGlobal(ctxWithProfile(uuid.New()), &searchv1.SearchGlobalRequest{
+		Query: "secret",
+		Page:  &commonv1.CursorPageRequest{PageSize: 20},
+	})
+	require.NoError(t, err)
+	matched := resp.GetGlobalSearchResults().GetMatchedChats()
+	require.Len(t, matched, 1)
+	require.Equal(t, accessibleChat.String(), matched[0].GetId())
+}
+
+func TestSearchGlobal_ExcludesReverseBlockedUsers(t *testing.T) {
+	t.Parallel()
+	viewerAccount := uuid.New()
+	blockerAccount := uuid.New()
+	visibleProfile := uuid.New()
+	visibleAccount := uuid.New()
+	blockedProfile := uuid.New()
+	profiles := &stubProfileSearch{
+		hits: []ProfileSearchHit{
+			{ProfileID: visibleProfile, AccountID: visibleAccount},
+			{ProfileID: blockedProfile, AccountID: blockerAccount},
+		},
+	}
+	client := startSearchGRPCTestServer(t, &SearchGRPC{
+		Profiles: profiles,
+		Blocks: &stubBlockList{
+			pairBlocked: map[uuid.UUID]bool{blockerAccount: true},
+		},
+	})
+	resp, err := client.SearchGlobal(ctxWithProfileAndAccount(uuid.New(), viewerAccount), &searchv1.SearchGlobalRequest{
+		Query: "user",
+		Page:  &commonv1.CursorPageRequest{PageSize: 20},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{visibleProfile.String()}, resp.GetGlobalSearchResults().GetProfileIds())
+}
+
+func TestSearchGlobal_QueryTooLong_InvalidArgument(t *testing.T) {
+	t.Parallel()
+	client := startSearchGRPCTestServer(t, &SearchGRPC{Messages: &stubMessageSearch{}})
+	longQuery := strings.Repeat("a", maxQueryLen+1)
+	_, err := client.SearchGlobal(ctxWithProfile(uuid.New()), &searchv1.SearchGlobalRequest{
+		Query: longQuery,
+	})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
 func TestSearchInChat_Unauthenticated(t *testing.T) {

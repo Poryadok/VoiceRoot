@@ -45,6 +45,7 @@ func (s *SocialGRPC) SyncPhoneContacts(ctx context.Context, req *socialv1.SyncPh
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	matched := make([]string, 0, len(byHash))
+	added := 0
 	for _, profileID := range byHash {
 		if err := s.ensurePhoneSearchPrivacy(ctx, caller, profileID); err != nil {
 			if status.Code(err) == codes.PermissionDenied {
@@ -52,14 +53,22 @@ func (s *SocialGRPC) SyncPhoneContacts(ctx context.Context, req *socialv1.SyncPh
 			}
 			return nil, err
 		}
+		if s.Contacts != nil {
+			if err := s.Contacts.UpsertContact(ctx, caller, profileID, "phone_sync", false); err == nil {
+				added++
+			}
+		}
 		matched = append(matched, profileID.String())
+	}
+	if s.Events != nil && added > 0 {
+		_ = s.Events.PublishContactsSynced(ctx, caller.String(), int32(added))
 	}
 	return &socialv1.SyncPhoneContactsResponse{MatchedProfileIds: matched}, nil
 }
 
 func (s *SocialGRPC) ensurePhoneSearchPrivacy(ctx context.Context, searcher, owner uuid.UUID) error {
 	if s == nil || s.PhoneSearchPrivacy == nil {
-		return nil
+		return status.Error(codes.FailedPrecondition, "privacy enforcement unavailable")
 	}
 	audience, err := s.PhoneSearchPrivacy.AllowPhoneSearchAudience(ctx, owner)
 	if err != nil {

@@ -160,3 +160,52 @@ func TestRedisFanoutPublishRoundTrip(t *testing.T) {
 	case <-time.After(200 * time.Millisecond):
 	}
 }
+
+func TestRedisDeliveryAckFanoutCrossInstance(t *testing.T) {
+	t.Parallel()
+	s := miniredis.RunT(t)
+	t.Cleanup(s.Close)
+
+	addr := s.Addr()
+	pub := redis.NewClient(&redis.Options{Addr: addr})
+	sub := redis.NewClient(&redis.Options{Addr: addr})
+	t.Cleanup(func() { _ = pub.Close(); _ = sub.Close() })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	hub := newWSHub()
+	senderConn := hub.attachConn("inst-b", "sender-conn", "sender-profile", 8)
+
+	rf := newRedisFanout(redisFanoutConfig{
+		Client:        sub,
+		Hub:           hub,
+		InstanceID:    "inst-b",
+		KeyPrefix:     "voice:rt:test:prof:",
+		FanoutChannel: "voice:rt:test:fanout:delivery",
+	})
+	go func() { _ = rf.runSubscriber(ctx) }()
+	time.Sleep(50 * time.Millisecond)
+
+	pubRF := newRedisFanout(redisFanoutConfig{
+		Client:        pub,
+		Hub:           hub,
+		InstanceID:    "inst-a",
+		KeyPrefix:     "voice:rt:test:prof:",
+		FanoutChannel: "voice:rt:test:fanout:delivery",
+	})
+	chatID := "33333333-3333-3333-3333-333333333333"
+	msgID := "44444444-4444-4444-4444-444444444444"
+	if err := pubRF.PublishDeliveryAck(context.Background(), "sender-profile", chatID, msgID, "recipient-profile", "conn-a"); err != nil {
+		t.Fatalf("PublishDeliveryAck: %v", err)
+	}
+
+	select {
+	case env := <-senderConn.fanout:
+		if env.Op != "message_delivered" {
+			t.Fatalf("op = %q, want message_delivered", env.Op)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for delivery ack fanout")
+	}
+}

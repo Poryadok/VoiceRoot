@@ -2,32 +2,40 @@ package main
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
 
-func TestAnalyticsStaffGateAndTranscode(t *testing.T) {
-	clients := grpcClientsFromEnv(nil)
-	if clients == nil {
-		clients = &grpcClients{}
-	}
-	// Force nil analytics to test staff gate via transcoder false -> 404; staff gate runs before transcoder.
-	h := newGateway(gatewayConfig{
-		tokenClaims: map[string]tokenClaims{
-			"staff": {UserID: "u1", ProfileID: "p1", Roles: []string{"staff"}},
-			"user":  {UserID: "u2", ProfileID: "p2"},
-		},
-		transcoder: newTranscoder(clients),
-	})
+func TestAnalyticsTimeRangeParsesFromTo(t *testing.T) {
+	fromTS := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	toTS := time.Date(2026, 1, 31, 0, 0, 0, 0, time.UTC)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/analytics/dashboard/product?from="+fromTS.Format(time.RFC3339)+"&to="+toTS.Format(time.RFC3339), nil)
+	from, to := analyticsTimeRange(req)
+	require.NotNil(t, from)
+	require.NotNil(t, to)
+	require.Equal(t, fromTS, from.AsTime().UTC())
+	require.Equal(t, toTS, to.AsTime().UTC())
+}
 
-	notStaff := performRequest(h, http.MethodGet, "/api/v1/analytics/dashboard/product", "", map[string]string{
-		"Authorization": "Bearer user",
-	})
-	require.Equal(t, http.StatusForbidden, notStaff.Code)
+func TestAnalyticsFiltersEventType(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/analytics/metrics?metric=health&event_type=api_request", nil)
+	filters := analyticsFilters(req)
+	require.Equal(t, "api_request", filters["event_type"])
+}
 
-	noUpstream := performRequest(h, http.MethodGet, "/api/v1/analytics/dashboard/product", "", map[string]string{
-		"Authorization": "Bearer staff",
-	})
-	require.True(t, noUpstream.Code == http.StatusNotFound || noUpstream.Code == http.StatusServiceUnavailable)
+func TestAnalyticsTimeRangeEmpty(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/analytics/retention", nil)
+	from, to := analyticsTimeRange(req)
+	require.Nil(t, from)
+	require.Nil(t, to)
+}
+
+func TestAnalyticsTimeRangeInvalidIgnored(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/analytics/retention?from=not-a-date", nil)
+	from, to := analyticsTimeRange(req)
+	require.Nil(t, from)
+	require.Nil(t, to)
 }

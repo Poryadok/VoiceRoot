@@ -162,6 +162,56 @@ func FlattenCommands(commands []Command) []FlatCommand {
 	return out
 }
 
+// ToYAML serializes a manifest document as YAML for export.
+func ToYAML(doc Document) (string, error) {
+	b, err := yaml.Marshal(doc)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+// CommandsFromStoredRows rebuilds manifest commands from flattened DB rows.
+func CommandsFromStoredRows(rows []StoredCommandRow) []Command {
+	groups := map[string][]Subcommand{}
+	var singles []Command
+	for _, row := range rows {
+		name := strings.TrimSpace(row.Name)
+		if name == "" {
+			continue
+		}
+		parts := strings.SplitN(name, " ", 2)
+		if len(parts) == 2 {
+			group, sub := parts[0], parts[1]
+			groups[group] = append(groups[group], Subcommand{
+				Name:        sub,
+				Description: strings.TrimSpace(row.Description),
+			})
+			continue
+		}
+		var opts []Option
+		if strings.TrimSpace(row.Parameters) != "" && row.Parameters != "null" {
+			_ = json.Unmarshal([]byte(row.Parameters), &opts)
+		}
+		singles = append(singles, Command{
+			Name:        name,
+			Description: strings.TrimSpace(row.Description),
+			Options:     opts,
+		})
+	}
+	for group, subs := range groups {
+		singles = append(singles, Command{Name: group, Subcommands: subs})
+	}
+	return singles
+}
+
+// StoredCommandRow is a slash command row from persistence (name may be grouped).
+type StoredCommandRow struct {
+	Name        string
+	Description string
+	Parameters  string
+}
+
 // ToJSON returns normalized manifest JSON for storage.
 func ToJSON(doc Document) (string, error) {
 	b, err := json.Marshal(doc)

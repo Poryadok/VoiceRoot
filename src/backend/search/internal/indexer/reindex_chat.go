@@ -28,6 +28,9 @@ func ReindexChat(ctx context.Context, chatID uuid.UUID, messages ChatMessageList
 			return err
 		}
 		for _, row := range rows {
+			if row.IsE2E {
+				continue
+			}
 			if err := msgStore.Upsert(ctx, storepkg.MessageDocument{
 				MessageID:       row.ID,
 				ChatID:          chatID,

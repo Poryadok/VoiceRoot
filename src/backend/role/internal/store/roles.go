@@ -179,11 +179,6 @@ func (s *RoleStore) GetEffectiveMask(ctx context.Context, spaceID, profileID uui
 			return all, nil
 		}
 	}
-	for _, r := range roles {
-		if r.Name == permissions.RoleAdmin {
-			return all, nil
-		}
-	}
 	var mask uint64
 	if defaultRole, err := s.GetDefaultJoinRole(ctx, spaceID); err != nil {
 		return 0, err

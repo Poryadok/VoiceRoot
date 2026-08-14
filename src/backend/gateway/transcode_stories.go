@@ -183,6 +183,30 @@ func (t *transcoder) serveStories(w http.ResponseWriter, r *http.Request, rest s
 			w.WriteHeader(http.StatusNoContent)
 			return true
 
+		case len(parts) == 2 && parts[1] == "reactions" && r.Method == http.MethodGet:
+			resp, err := t.clients.story.GetStoryReactions(ctx, &storyv1.GetStoryReactionsRequest{StoryId: storyID})
+			if err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			writeProtoJSON(w, http.StatusOK, resp)
+			return true
+
+		case len(parts) == 2 && parts[1] == "lfp-response" && r.Method == http.MethodPost:
+			req := &storyv1.RespondToLfpStoryRequest{StoryId: storyID}
+			if err := readProtoJSON(r, req); err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			req.StoryId = storyID
+			_, err := t.clients.story.RespondToLfpStory(ctx, req)
+			if err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return true
+
 		case len(parts) == 2 && parts[1] == "reply" && r.Method == http.MethodPost:
 			req := &storyv1.ReplyToStoryRequest{StoryId: storyID}
 			if err := readProtoJSON(r, req); err != nil {

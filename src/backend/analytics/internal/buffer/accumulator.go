@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nats-io/nats.go"
+
 	analyticsv1 "voice.app/voice/analytics/v1"
 	"voice/backend/analytics/internal/store"
 )
@@ -13,16 +15,27 @@ import (
 // Flusher persists a batch of events.
 type Flusher func(ctx context.Context, rows []store.EventRow) error
 
+// MsgAck supports deferred JetStream ack/nak after durable ClickHouse write.
+type MsgAck interface {
+	Ack(...nats.AckOpt) error
+	Nak(...nats.AckOpt) error
+}
+
+type pendingEntry struct {
+	row  store.EventRow
+	acks []MsgAck
+}
+
 // Accumulator batches analytics events and flushes on size or interval.
 type Accumulator struct {
-	mu        sync.Mutex
-	pending   []store.EventRow
-	maxEvents int
+	mu         sync.Mutex
+	pending    []pendingEntry
+	maxEvents  int
 	flushEvery time.Duration
-	flusher   Flusher
-	logger    *slog.Logger
-	stopCh    chan struct{}
-	doneCh    chan struct{}
+	flusher    Flusher
+	logger     *slog.Logger
+	stopCh     chan struct{}
+	doneCh     chan struct{}
 }
 
 func New(maxEvents int, flushEvery time.Duration, flusher Flusher, logger *slog.Logger) *Accumulator {
@@ -68,11 +81,22 @@ func (a *Accumulator) Stop() {
 }
 
 func (a *Accumulator) AppendProto(ev *analyticsv1.AnalyticsEvent) {
+	a.AppendWithAck(ev, nil)
+}
+
+func (a *Accumulator) AppendWithAck(ev *analyticsv1.AnalyticsEvent, msg MsgAck) {
 	if a == nil || ev == nil {
+		if msg != nil {
+			_ = msg.Ack()
+		}
 		return
 	}
+	entry := pendingEntry{row: store.RowFromProto(ev)}
+	if msg != nil {
+		entry.acks = []MsgAck{msg}
+	}
 	a.mu.Lock()
-	a.pending = append(a.pending, store.RowFromProto(ev))
+	a.pending = append(a.pending, entry)
 	shouldFlush := len(a.pending) >= a.maxEvents
 	a.mu.Unlock()
 	if shouldFlush {
@@ -95,17 +119,36 @@ func (a *Accumulator) Flush(ctx context.Context) error {
 	batch := a.pending
 	a.pending = nil
 	a.mu.Unlock()
+
+	rows := make([]store.EventRow, len(batch))
+	var acks []MsgAck
+	for i, e := range batch {
+		rows[i] = e.row
+		acks = append(acks, e.acks...)
+	}
+
 	if a.flusher == nil {
+		for _, ack := range acks {
+			_ = ack.Ack()
+		}
 		return nil
 	}
-	if err := a.flusher(ctx, batch); err != nil {
+	if err := a.flusher(ctx, rows); err != nil {
 		if a.logger != nil {
 			a.logger.Warn("analytics flush failed", slog.Any("error", err), slog.Int("batch_size", len(batch)))
 		}
-		a.mu.Lock()
-		a.pending = append(batch, a.pending...)
-		a.mu.Unlock()
+		for _, ack := range acks {
+			_ = ack.Nak()
+		}
+		if len(acks) == 0 {
+			a.mu.Lock()
+			a.pending = append(batch, a.pending...)
+			a.mu.Unlock()
+		}
 		return err
+	}
+	for _, ack := range acks {
+		_ = ack.Ack()
 	}
 	return nil
 }

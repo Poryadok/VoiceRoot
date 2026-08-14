@@ -13,7 +13,7 @@ Open the file from your Penpot team/project dashboard. For share links to a **fr
 | Page | Page ID | Purpose |
 |------|---------|---------|
 | `00_References` | `20d3f736-cc1b-8043-8008-561cb65228f0` | Discord / external refs; not core target |
-| `01_Foundation` | `6d4c4410-c47e-8083-8008-561ce95f11e2` | Design tokens + swatches (`Foundation/Swatches`) + components (`Foundation/Components`) |
+| `01_Foundation` | `6d4c4410-c47e-8083-8008-561ce95f11e2` | Tokens, swatches, **вся** library (mains + typographies + showcase). См. [penpot-workflow.md](penpot-workflow.md) §3.6 |
 | `10_Screens_Desktop` | `6d4c4410-c47e-8083-8008-561cf0765607` | Frames **1280×800**, names `Screen/...` |
 | `11_Screens_Mobile` | `6d4c4410-c47e-8083-8008-561cf5662204` | Frames **390×844** |
 | `12_States` | `6d4c4410-c47e-8083-8008-561cfaa8677c` | empty / error / offline |
@@ -24,6 +24,17 @@ Open the file from your Penpot team/project dashboard. For share links to a **fr
 In tasks and PRs — link to the **frame** (`Screen/...`, `Panel/...`, `Overlay/...`), not the page canvas. Frame inventory: [screens.md](screens.md).
 
 Penpot may display `/` in frame names as spaces (e.g. `Screen / Shell / Desktop`). Inventory IDs use `Screen/...`; match by name in the UI.
+
+## Foundation page boards (`01_Foundation`)
+
+| Board | Role |
+|-------|------|
+| `Foundation / Swatches` | Color swatches |
+| `Foundation / Component Mains` | **All** library component main instances (definitions) |
+| `Foundation / Components` | Legacy shipped snapshot (instances only) |
+| `Foundation / Components v2` | Showcase: `type.*` typographies + component instances |
+
+Component library rules (naming, instances vs drawing, no mains on screen pages): [penpot-workflow.md](penpot-workflow.md) §3.6.
 
 ## Design tokens (01_Foundation)
 

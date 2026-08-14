@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -42,10 +44,32 @@ type InteractionResponse struct {
 	Deferred  bool   `json:"deferred"`
 }
 
-const maxDeliveryAttempts = 3
+func deliveryAttemptsFromEnv() int {
+	raw := strings.TrimSpace(os.Getenv("BOT_WEBHOOK_DELIVERY_ATTEMPTS"))
+	if raw == "" {
+		return 3
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		return 3
+	}
+	return n
+}
+
+func retryBackoffFromEnv() time.Duration {
+	raw := strings.TrimSpace(os.Getenv("BOT_WEBHOOK_RETRY_BACKOFF_MS"))
+	if raw == "" {
+		return 100 * time.Millisecond
+	}
+	ms, err := strconv.Atoi(raw)
+	if err != nil || ms <= 0 {
+		return 100 * time.Millisecond
+	}
+	return time.Duration(ms) * time.Millisecond
+}
 
 // DeliverPOST sends signed interaction to webhook and parses sync response.
-// Retries up to maxDeliveryAttempts with exponential backoff on transport errors and 5xx.
+// Retries with exponential backoff on transport errors and 5xx (BOT_WEBHOOK_* env).
 func DeliverPOST(ctx context.Context, client *http.Client, url, secret string, payload InteractionPayload, timeout time.Duration) (InteractionResponse, error) {
 	if client == nil {
 		client = http.DefaultClient
@@ -60,9 +84,11 @@ func DeliverPOST(ctx context.Context, client *http.Client, url, secret string, p
 	ts := time.Now().Unix()
 
 	var lastErr error
-	for attempt := 0; attempt < maxDeliveryAttempts; attempt++ {
+	maxAttempts := deliveryAttemptsFromEnv()
+	backoffBase := retryBackoffFromEnv()
+	for attempt := 0; attempt < maxAttempts; attempt++ {
 		if attempt > 0 {
-			backoff := time.Duration(1<<uint(attempt-1)) * 100 * time.Millisecond
+			backoff := time.Duration(1<<uint(attempt-1)) * backoffBase
 			select {
 			case <-ctx.Done():
 				return InteractionResponse{}, ctx.Err()
@@ -99,9 +125,11 @@ func DeliverAutocompletePOST(ctx context.Context, client *http.Client, url, secr
 	ts := time.Now().Unix()
 
 	var lastErr error
-	for attempt := 0; attempt < maxDeliveryAttempts; attempt++ {
+	maxAttempts := deliveryAttemptsFromEnv()
+	backoffBase := retryBackoffFromEnv()
+	for attempt := 0; attempt < maxAttempts; attempt++ {
 		if attempt > 0 {
-			backoff := time.Duration(1<<uint(attempt-1)) * 100 * time.Millisecond
+			backoff := time.Duration(1<<uint(attempt-1)) * backoffBase
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()

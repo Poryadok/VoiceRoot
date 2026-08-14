@@ -22,8 +22,9 @@ type gatewayConfig struct {
 	rateLimitedGroups  map[string]bool
 	restUpstreams      map[string]http.Handler
 	transcoder         *transcoder
-	realtimeUpstream   http.Handler
-	requestIDGenerator func() string
+		realtimeUpstream   http.Handler
+		wsTicketStore      wsTicketStore
+		requestIDGenerator func() string
 	tokenValidator     tokenValidator
 	tokenBlacklist     tokenBlacklist
 	rateLimiter        rateLimiter
@@ -113,9 +114,11 @@ func (g *gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		g.handleHealth(rec, r)
 	case r.URL.Path == "/metrics":
 		g.handleMetrics(rec, r)
-	case r.URL.Path == "/ws":
-		g.handleWebSocket(rec, r)
-	case r.URL.Path == "/api/v1/version":
+		case r.URL.Path == "/ws":
+			g.handleWebSocket(rec, r)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/realtime/ws-ticket":
+			g.handleRealtimeWsTicket(rec, r)
+		case r.URL.Path == "/api/v1/version":
 		g.handleVersion(rec, r)
 	case strings.HasPrefix(r.URL.Path, "/api/v1/admin/client-versions"):
 		g.handleAdminClientVersions(rec, r)

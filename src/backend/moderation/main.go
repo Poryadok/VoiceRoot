@@ -17,6 +17,8 @@ import (
 
 	grpcsvc "voice/backend/moderation/internal/grpcsvc"
 	"voice/backend/moderation/internal/authclient"
+	"voice/backend/moderation/internal/mmclient"
+	"voice/backend/moderation/internal/moderationevents"
 	"voice/backend/moderation/internal/store"
 	"voice/backend/moderation/internal/userclient"
 	"voice/backend/pkg/analyticsevents"
@@ -87,6 +89,13 @@ func main() {
 				svc.Users = userClient
 			}
 		}
+		if mmAddr := strings.TrimSpace(os.Getenv("MATCHMAKING_GRPC_ADDR")); mmAddr != "" {
+			if mmClient, err := mmclient.Dial(mmAddr); err != nil {
+				log.Fatalf("matchmaking grpc: %v", err)
+			} else {
+				svc.Matchmaking = mmClient
+			}
+		}
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
 			if pub, err := analyticsevents.NewJetStreamPublisher(natsURL); err == nil {
 				_ = pub.EnsureStream()
@@ -95,8 +104,16 @@ func main() {
 			} else {
 				logger.Warn("analytics publisher disabled", slog.Any("error", err))
 			}
+			if domainPub, err := moderationevents.NewJetStreamPublisher(natsURL); err == nil {
+				svc.DomainEvents = domainPub
+				defer func() { _ = domainPub.Close() }()
+				logger.Info("moderation.events publisher enabled")
+			} else {
+				logger.Warn("moderation.events publisher unavailable", slog.Any("error", err))
+			}
 		}
 		moderationv1.RegisterModerationServiceServer(grpcSrv, svc)
+		go grpcsvc.RunTempBanExpirySweeper(context.Background(), svc, logger)
 		go func() {
 			logger.Info("gRPC listening", slog.String("addr", grpcAddr))
 			if err := grpcSrv.Serve(lis); err != nil {

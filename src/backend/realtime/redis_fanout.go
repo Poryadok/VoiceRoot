@@ -13,8 +13,9 @@ const (
 	defaultRedisProfilePrefix = "voice:rt:prof:"
 	defaultRedisFanoutChannel = "voice:rt:fanout"
 
-	fanoutMsgMarkRead = "mark_read"
-	fanoutMsgPresence = "presence"
+	fanoutMsgMarkRead      = "mark_read"
+	fanoutMsgPresence      = "presence"
+	fanoutMsgDeliveryAck   = "delivery_ack"
 )
 
 type redisFanoutPayload struct {
@@ -22,6 +23,7 @@ type redisFanoutPayload struct {
 	ChatID       string `json:"chat_id,omitempty"`
 	MessageID    string `json:"message_id,omitempty"`
 	ProfileID    string `json:"profile_id,omitempty"`
+	SenderID     string `json:"sender_id,omitempty"`
 	Status       string `json:"status,omitempty"`
 	CustomStatus string `json:"custom_status,omitempty"`
 	Kind         string `json:"kind,omitempty"`
@@ -109,6 +111,26 @@ func (f *redisFanout) PublishMarkRead(ctx context.Context, profileID, chatID, me
 		ChatID:      chatID,
 		MessageID:   messageID,
 		ProfileID:   profileID,
+		SrcInstance: f.instanceID,
+		SrcConn:     srcConn,
+	}
+	b, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	return f.rdb.Publish(ctx, f.fanoutChannel, string(b)).Err()
+}
+
+func (f *redisFanout) PublishDeliveryAck(ctx context.Context, senderProfileID, chatID, messageID, recipientProfileID, srcConn string) error {
+	if f == nil || f.rdb == nil {
+		return nil
+	}
+	msg := redisFanoutPayload{
+		T:           fanoutMsgDeliveryAck,
+		ChatID:      chatID,
+		MessageID:   messageID,
+		ProfileID:   recipientProfileID,
+		SenderID:    senderProfileID,
 		SrcInstance: f.instanceID,
 		SrcConn:     srcConn,
 	}
@@ -218,6 +240,19 @@ func (f *redisFanout) runSubscriber(ctx context.Context) error {
 					}
 					f.hub.broadcastPresenceSameProfileExcept(p.ProfileID, p.SrcInstance, p.SrcConn, d)
 				}
+			case fanoutMsgDeliveryAck:
+				if p.SenderID == "" {
+					continue
+				}
+				d, err := json.Marshal(map[string]any{
+					"chat_id":              p.ChatID,
+					"message_id":           p.MessageID,
+					"recipient_profile_id": p.ProfileID,
+				})
+				if err != nil {
+					continue
+				}
+				f.hub.broadcastToProfile(p.SenderID, fanoutEnvelope{Op: "message_delivered", D: d}, svcLogger, "")
 			default:
 				d, err := json.Marshal(map[string]any{
 					"chat_id":    p.ChatID,

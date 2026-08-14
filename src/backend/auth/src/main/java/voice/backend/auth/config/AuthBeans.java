@@ -17,9 +17,12 @@ import voice.backend.auth.security.TokenBlacklist;
 import voice.backend.auth.service.AuthService;
 import voice.backend.auth.service.BackupCodeService;
 import voice.backend.auth.service.InMemorySubscriptionTierStore;
+import voice.backend.auth.service.NatsSubscriptionTierStore;
 import voice.backend.auth.service.SubscriptionTierResolver;
 import voice.backend.auth.oauth.OAuth2Service;
 import voice.backend.auth.oauth.OAuthAuthorizationCodeStore;
+import voice.backend.auth.mail.MailSender;
+import voice.backend.auth.service.AccountRestoreTokenStore;
 import voice.backend.auth.service.TotpService;
 
 @Configuration
@@ -41,6 +44,15 @@ public class AuthBeans {
 
   @Bean
   TotpService totpService(AuthProperties properties) {
+    if (properties.getPersistence() == AuthProperties.PersistenceMode.JDBC
+        && !properties.getTotp().isTestBypass()) {
+      String key = properties.getTotp().getEncryptionKey();
+      if (key == null || key.isBlank()) {
+        throw new IllegalStateException(
+            "TOTP encryption key is required when auth.persistence=jdbc and auth.totp.test-bypass=false:"
+                + " set AUTH_TOTP_ENCRYPTION_KEY");
+      }
+    }
     return new TotpService(properties);
   }
 
@@ -50,7 +62,11 @@ public class AuthBeans {
   }
 
   @Bean
-  SubscriptionTierResolver subscriptionTierResolver() {
+  SubscriptionTierResolver subscriptionTierResolver(AuthProperties properties) {
+    String natsUrl = properties.getNats().getUrl();
+    if (natsUrl != null && !natsUrl.isBlank()) {
+      return new NatsSubscriptionTierStore(natsUrl);
+    }
     return new InMemorySubscriptionTierStore();
   }
 
@@ -72,7 +88,9 @@ public class AuthBeans {
       voice.backend.auth.userdb.ProfileSwitchValidator profileSwitchValidator,
       E2EKeyBackupRepository e2eKeyBackupRepository,
       AuthEventPublisher authEventPublisher,
-      MeterRegistry meterRegistry) {
+      MeterRegistry meterRegistry,
+      AccountRestoreTokenStore restoreTokenStore,
+      MailSender mailSender) {
     return new AuthService(
         accounts,
         refreshTokens,
@@ -90,7 +108,9 @@ public class AuthBeans {
         profileSwitchValidator,
         e2eKeyBackupRepository,
         authEventPublisher,
-        meterRegistry);
+        meterRegistry,
+        restoreTokenStore,
+        mailSender);
   }
 
   @Bean

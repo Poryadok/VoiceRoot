@@ -45,18 +45,22 @@ func startModerationPostgresPlatform(t *testing.T, ctx context.Context) *pgxpool
 	return pool
 }
 
-func startModerationGRPCTestServer(t *testing.T, pool *pgxpool.Pool) (moderationv1.ModerationServiceClient, func()) {
+func startModerationGRPCTestServer(t *testing.T, pool *pgxpool.Pool, opts ...func(*ModerationGRPC)) (moderationv1.ModerationServiceClient, func()) {
 	t.Helper()
 	const bufSize = 1 << 20
 	lis := bufconn.Listen(bufSize)
 	srv := grpc.NewServer()
-	moderationv1.RegisterModerationServiceServer(srv, &ModerationGRPC{
+	svc := &ModerationGRPC{
 		Reports:   &store.ReportStore{Pool: pool},
 		Sanctions: &store.SanctionStore{Pool: pool},
 		Appeals:   &store.AppealStore{Pool: pool},
 		AuditLog:  &store.AuditLogStore{Pool: pool},
 		AutoMod:   &store.AutoModStore{Pool: pool},
-	})
+	}
+	for _, o := range opts {
+		o(svc)
+	}
+	moderationv1.RegisterModerationServiceServer(srv, svc)
 	go func() {
 		if err := srv.Serve(lis); err != nil {
 			t.Logf("grpc serve: %v", err)

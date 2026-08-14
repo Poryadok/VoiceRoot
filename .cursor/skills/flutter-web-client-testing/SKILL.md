@@ -153,6 +153,7 @@ description: >-
 ## Связь с другими скиллами
 
 - **`tdd-code-workflow`** — если пользователь явно требует полный TDD-канон.
+- **`penpot-voice`** / агент `voice-designer` — макеты и tokens; UI-parity только после канона в Penpot/`voice.tokens.json`.
 - **`go-microservice-task-evaluation`** / **`java-microservice-task-evaluation`** — если задача сквозная (API + клиент): сначала контракт бэкенда, потом клиент.
 
 ---

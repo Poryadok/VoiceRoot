@@ -16,10 +16,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/grpc"
 
-	grpcsvc "voice/backend/analytics/internal/grpcsvc"
 	"voice/backend/analytics/internal/adapters"
 	"voice/backend/analytics/internal/buffer"
+	anconfig "voice/backend/analytics/internal/config"
 	"voice/backend/analytics/internal/consumer"
+	grpcsvc "voice/backend/analytics/internal/grpcsvc"
 	"voice/backend/analytics/internal/metrics"
 	"voice/backend/analytics/internal/store"
 	"voice/backend/pkg/grpcmw"
@@ -39,23 +40,18 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	hashKey := anconfig.ResolveHashKey(logger)
+
 	var chStore *store.CHStore
 	var acc *buffer.Accumulator
-	hashKey := strings.TrimSpace(os.Getenv("ANALYTICS_ID_HASH_KEY"))
-	if hashKey == "" {
-		hashKey = "compose-dev-analytics-hash-key"
-		logger.Warn("ANALYTICS_ID_HASH_KEY not set; using dev default")
-	}
 
-	if dsn := strings.TrimSpace(os.Getenv("CLICKHOUSE_DSN")); dsn != "" {
+	if dsn := anconfig.ResolveClickHouseDSN(logger); dsn != "" {
 		var err error
 		chStore, err = store.Open(ctx, dsn)
 		if err != nil {
 			log.Fatalf("clickhouse: %v", err)
 		}
 		defer func() { _ = chStore.Close() }()
-	} else {
-		logger.Warn("CLICKHOUSE_DSN not set; ingest will buffer but not persist")
 	}
 
 	flusher := func(flushCtx context.Context, rows []store.EventRow) error {

@@ -28,6 +28,10 @@ service ModerationService {
   rpc GetAutoModStats(GetAutoModStatsRequest) returns (GetAutoModStatsResponse);
 
   rpc IsShadowBanned(IsShadowBannedRequest) returns (IsShadowBannedResponse);
+  rpc IsMMBanned(IsMMBannedRequest) returns (IsMMBannedResponse);
+
+  // Staff-only audit export for Admin moderation panel.
+  rpc ExportAuditLog(ExportAuditLogRequest) returns (ExportAuditLogResponse);
 }
 
 message Report {
@@ -161,6 +165,34 @@ message IsShadowBannedRequest {
 
 message IsShadowBannedResponse {
   bool shadow_banned = 1;
+}
+
+message IsMMBannedRequest {
+  string account_id = 1;
+}
+
+message IsMMBannedResponse {
+  bool mm_banned = 1;
+}
+
+message AuditLogEntry {
+  string id = 1;
+  string actor_profile_id = 2;
+  string action = 3;
+  string target_type = 4;
+  string target_id = 5;
+  string details = 6;
+  google.protobuf.Timestamp created_at = 7;
+}
+
+message AuditLogExport {
+  repeated AuditLogEntry entries = 1;
+}
+
+message ExportAuditLogRequest {}
+
+message ExportAuditLogResponse {
+  AuditLogExport audit_log_export = 1;
 }
 
 message CreateReportResponse {

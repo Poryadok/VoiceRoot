@@ -1,9 +1,10 @@
 ﻿
 FROM maven:3.9.11-eclipse-temurin-25 AS build
 WORKDIR /src
-COPY pom.xml ./
+COPY src/backend/auth/pom.xml ./
 RUN mvn -B dependency:go-offline
-COPY src ./src
+COPY protos /protos
+COPY src/backend/auth/src ./src
 RUN mvn -B package -DskipTests
 
 FROM eclipse-temurin:25-jre

@@ -36,12 +36,23 @@ func rangeFromReq(from, to *timestamppb.Timestamp) (time.Time, time.Time) {
 	return start, end
 }
 
+func filtersFromReq(filters map[string]string) store.QueryFilters {
+	out := store.QueryFilters{}
+	if filters == nil {
+		return out
+	}
+	if v := strings.TrimSpace(filters["event_type"]); v != "" {
+		out.EventType = v
+	}
+	return out
+}
+
 func (s *QueryGRPC) GetDashboard(ctx context.Context, req *analyticsv1.GetDashboardRequest) (*analyticsv1.GetDashboardResponse, error) {
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.Unavailable, "analytics store unavailable")
 	}
 	from, to := rangeFromReq(req.GetFrom(), req.GetTo())
-	metrics, err := s.Store.DashboardMetrics(ctx, req.GetDashboardType(), from, to)
+	metrics, err := s.Store.DashboardMetrics(ctx, req.GetDashboardType(), from, to, store.QueryFilters{})
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -62,7 +73,7 @@ func (s *QueryGRPC) GetMetrics(ctx context.Context, req *analyticsv1.GetMetricsR
 	if dt == "" {
 		return nil, status.Error(codes.InvalidArgument, "metric required")
 	}
-	m, err := s.Store.DashboardMetrics(ctx, dt, from, to)
+	m, err := s.Store.DashboardMetrics(ctx, dt, from, to, filtersFromReq(req.GetFilters()))
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}

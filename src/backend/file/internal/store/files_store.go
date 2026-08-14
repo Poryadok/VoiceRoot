@@ -290,6 +290,59 @@ WHERE id = ANY($1)
 	return out, rows.Err()
 }
 
+func (s *FilesStore) ListFilesForChat(ctx context.Context, chatID uuid.UUID, limit int32) ([]FileRow, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	rows, err := s.Pool.Query(ctx, `
+SELECT id, uploader_profile_id, original_name, mime_type, size_bytes, sha256_hash,
+       r2_key, status, file_type, width, height, duration_seconds,
+       thumbnail_r2_key, converted_r2_key, chat_id, chat_type, is_e2e, expires_at,
+       scan_result, created_at, updated_at
+FROM files
+WHERE chat_id = $1
+  AND status <> 'deleted'
+ORDER BY created_at DESC, id DESC
+LIMIT $2
+`, chatID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []FileRow
+	for rows.Next() {
+		var row FileRow
+		if err := rows.Scan(
+			&row.ID,
+			&row.UploaderProfileID,
+			&row.OriginalName,
+			&row.MimeType,
+			&row.SizeBytes,
+			&row.SHA256Hash,
+			&row.R2Key,
+			&row.Status,
+			&row.FileType,
+			&row.Width,
+			&row.Height,
+			&row.DurationSeconds,
+			&row.ThumbnailR2Key,
+			&row.ConvertedR2Key,
+			&row.ChatID,
+			&row.ChatType,
+			&row.IsE2E,
+			&row.ExpiresAt,
+			&row.ScanResult,
+			&row.CreatedAt,
+			&row.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
 func (s *FilesStore) ListFilesForProfile(ctx context.Context, profileID uuid.UUID, limit int32) ([]FileRow, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 50

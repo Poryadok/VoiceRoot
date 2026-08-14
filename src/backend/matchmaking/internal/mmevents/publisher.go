@@ -54,6 +54,13 @@ type RatingSubmittedEvent struct {
 	Stars          int32
 }
 
+// PlayerBannedEvent is emitted when a peer MM ban is created.
+type PlayerBannedEvent struct {
+	BannerProfileID string
+	TargetProfileID string
+	Reason          string
+}
+
 // Publisher publishes matchmaking domain events.
 type Publisher interface {
 	PublishSearchStarted(ctx context.Context, sessionID, profileID, gameID, mode, region string) error
@@ -61,6 +68,7 @@ type Publisher interface {
 	PublishMatchFound(ctx context.Context, ev MatchFoundEvent) error
 	PublishMatchCompleted(ctx context.Context, ev MatchCompletedEvent) error
 	PublishRatingSubmitted(ctx context.Context, ev RatingSubmittedEvent) error
+	PublishPlayerBanned(ctx context.Context, ev PlayerBannedEvent) error
 	PublishSearchNudge(ctx context.Context, sessionID, profileID, gameID, mode string) error
 	PublishSearchTimeout(ctx context.Context, sessionID, profileID, gameID, mode string) error
 	Close() error
@@ -76,6 +84,7 @@ func (NoopPublisher) PublishSearchCancelled(context.Context, string, string) err
 func (NoopPublisher) PublishMatchFound(context.Context, MatchFoundEvent) error      { return nil }
 func (NoopPublisher) PublishMatchCompleted(context.Context, MatchCompletedEvent) error { return nil }
 func (NoopPublisher) PublishRatingSubmitted(context.Context, RatingSubmittedEvent) error { return nil }
+func (NoopPublisher) PublishPlayerBanned(context.Context, PlayerBannedEvent) error     { return nil }
 func (NoopPublisher) PublishSearchNudge(context.Context, string, string, string, string) error {
 	return nil
 }
@@ -300,6 +309,11 @@ func (p *JetStreamPublisher) PublishSearchCancelled(ctx context.Context, session
 		SessionID: sessionID,
 		ProfileID: profileID,
 	})
+}
+
+// PublishPlayerBanned implements Publisher.
+func (p *JetStreamPublisher) PublishPlayerBanned(ctx context.Context, ev PlayerBannedEvent) error {
+	return p.publishJSON(ctx, "mm.player_banned", ev)
 }
 
 // Close drains the NATS connection.

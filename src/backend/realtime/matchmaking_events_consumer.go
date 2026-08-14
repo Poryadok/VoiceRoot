@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/nats-io/nats.go"
 
@@ -54,13 +53,7 @@ func runMatchmakingEventsConsumer(ctx context.Context, hub *wsHub, natsURL, inst
 	if hub == nil || strings.TrimSpace(natsURL) == "" {
 		return fmt.Errorf("matchmaking events consumer: missing hub or NATS URL")
 	}
-	nc, err := nats.Connect(natsURL,
-		nats.Name("voice-realtime-matchmaking"),
-		nats.Timeout(10*time.Second),
-		nats.RetryOnFailedConnect(true),
-		nats.MaxReconnects(-1),
-		nats.ReconnectWait(time.Second),
-	)
+	nc, err := nats.Connect(natsURL, natsConnectOptions("voice-realtime-matchmaking")...)
 	if err != nil {
 		return fmt.Errorf("nats connect: %w", err)
 	}

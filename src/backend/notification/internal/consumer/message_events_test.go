@@ -12,6 +12,21 @@ import (
 	eventsv1 "voice.app/voice/events/v1"
 )
 
+func TestHandleMessageSent_SkipsThreadReplies(t *testing.T) {
+	senderID := uuid.NewString()
+	recipientID := uuid.NewString()
+	parentID := uuid.NewString()
+	h := &consumer.MessageEventHandler{Router: delivery.DecideRouting}
+	ev := &eventsv1.MessageSent{
+		MessageId:       uuid.NewString(),
+		ChatId:          uuid.NewString(),
+		SenderProfileId: senderID,
+		ThreadParentId:  &parentID,
+	}
+	decisions := h.HandleMessageSent(context.Background(), ev, []string{recipientID})
+	require.Empty(t, decisions)
+}
+
 func TestHandleMessageSent_UsesDefaultRouter(t *testing.T) {
 	senderID := uuid.NewString()
 	recipientID := uuid.NewString()

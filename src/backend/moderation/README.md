@@ -1,9 +1,3 @@
 # Moderation Service
 
-Go scaffold for the Voice moderation service.
-
-Current public surface:
-
-- GET /health returns {"service":"moderation","status":"ok"}.
-
-Domain behavior, gRPC handlers, database repositories, and migrations are intentionally out of scope for this initialization step.
+Go microservice: reports, sanctions, appeals, shadow bans. gRPC `ModerationService`. PostgreSQL `moderation_db`. NATS `moderation.events`. Gateway `/api/v1/moderation/**` and admin routes. See `docs/microservices/moderation-service.md`.

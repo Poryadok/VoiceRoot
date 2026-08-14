@@ -16,9 +16,9 @@ import (
 	voiceprom "voice/backend/pkg/promhttp"
 )
 
-func testRealtimeHandlerWithMetrics(tv tokenValidator, lister dmChatLister, reg *prometheus.Registry) http.Handler {
+func testRealtimeHandlerWithMetrics(tv tokenValidator, lister chatBootstrapLister, reg *prometheus.Registry) http.Handler {
 	initRealtimeMetrics(reg)
-	base := newServiceHandler(serviceName, tv, lister, newWSHub(), nil, "test-instance")
+	base := newServiceHandler(serviceName, tv, lister, newWSHub(), nil, "test-instance", readinessDeps{})
 	return voiceprom.MountMetricsOnHealth(base, reg)
 }
 

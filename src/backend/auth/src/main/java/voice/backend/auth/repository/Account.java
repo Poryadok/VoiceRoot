@@ -12,4 +12,5 @@ public record Account(
     String status,
     byte[] totpSecret,
     boolean totpEnabled,
-    Instant createdAt) {}
+    Instant createdAt,
+    Instant deletedAt) {}

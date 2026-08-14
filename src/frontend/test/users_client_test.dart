@@ -94,6 +94,20 @@ void main() {
     });
   });
 
+  group('VoiceUsersClient.deleteProfile', () {
+    test('DELETE /api/v1/users/profiles/{id}', () async {
+      final mock = MockClient((req) async {
+        expect(req.method, 'DELETE');
+        expect(req.url.path, '/api/v1/users/profiles/p-del');
+        expect(req.headers['Authorization'], auth);
+        return http.Response('', 204);
+      });
+      final client = VoiceUsersClient(gateway: gatewayHttpForTest(mock, config: config));
+      final r = await client.deleteProfile(authorization: auth, profileId: 'p-del');
+      expect(r, isA<UsersApiOk<void>>());
+    });
+  });
+
   group('VoiceUsersClient.getMe', () {
     test('GET /api/v1/users/me with Authorization', () async {
       final mock = MockClient((req) async {

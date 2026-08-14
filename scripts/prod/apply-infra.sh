@@ -6,6 +6,8 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 MANIFEST_DIR="${PROD_MANIFEST_DIR:-${ROOT}/deploy/prod}"
 # shellcheck source=scripts/prod/load-prod-domains.sh
 source "${ROOT}/scripts/prod/load-prod-domains.sh"
+# shellcheck source=scripts/prod/map-prod-env.sh
+source "${ROOT}/scripts/prod/map-prod-env.sh"
 REGISTRY="${VOICE_IMAGE_REGISTRY:-ghcr.io/voiceroot/voiceroot}"
 TAG="${VOICE_IMAGE_TAG:?VOICE_IMAGE_TAG required for production}"
 NS="${VOICE_K8S_NAMESPACE:-voice-prod}"
@@ -24,13 +26,6 @@ sed -e "s|__GATEWAY_INGRESS_HOST__|${VOICE_GATEWAY_INGRESS_HOST}|g" \
     -e "s|__LIVEKIT_INGRESS_HOST__|${VOICE_LIVEKIT_INGRESS_HOST}|g" \
   "${MANIFEST_DIR}/configmap-app.yaml" | kubectl apply -f -
 
-if [ -n "${PROD_APP_SECRETS_YAML_B64:-}" ]; then
-  export STAGING_APP_SECRETS_YAML_B64="${PROD_APP_SECRETS_YAML_B64}"
-fi
-if [ -n "${PROD_APP_SECRETS_YAML:-}" ]; then
-  export STAGING_APP_SECRETS_YAML="${PROD_APP_SECRETS_YAML}"
-fi
-
 if [ -n "${PROD_APP_SECRETS_YAML_B64:-}" ] || [ ! -f "${MANIFEST_DIR}/secret.yaml" ]; then
   bash "${ROOT}/scripts/staging/ensure-app-secrets.sh"
 elif [ -f "${MANIFEST_DIR}/secret.yaml" ]; then
@@ -43,8 +38,7 @@ if ! kubectl get secret voice-app-secrets -n "${NS}" >/dev/null 2>&1; then
 fi
 
 bash "${ROOT}/scripts/staging/patch-app-secrets-database-urls.sh"
-if [ -n "${PROD_STAFF_TOKEN:-}" ]; then
-  export STAGING_STAFF_TOKEN="${PROD_STAFF_TOKEN}"
+if [ -n "${STAGING_STAFF_TOKEN:-}" ]; then
   bash "${ROOT}/scripts/staging/patch-gateway-staff-token.sh"
 fi
 
@@ -69,7 +63,7 @@ if ! kubectl rollout status statefulset/voice-clickhouse -n "${NS}" --timeout=18
   echo "ERROR: voice-clickhouse rollout failed" >&2
   exit 1
 fi
-bash "${ROOT}/scripts/staging/apply-clickhouse-init.sh"
+bash "${ROOT}/scripts/prod/apply-clickhouse-init.sh"
 bash "${ROOT}/scripts/staging/apply-migrate-jobs.sh"
 
 echo "Production infra apply complete."

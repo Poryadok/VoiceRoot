@@ -21,6 +21,19 @@ func (s *UserGRPC) GetPrivacySettings(ctx context.Context, req *userv1.GetPrivac
 	if err != nil {
 		return nil, err
 	}
+	if accountID, ok := authctx.AccountID(ctx); ok {
+		if s.Profiles != nil {
+			row, err := s.Profiles.GetOwnedProfile(ctx, accountID, profileID)
+			if err != nil {
+				return nil, status.Error(codes.Internal, err.Error())
+			}
+			if row == nil {
+				return nil, status.Error(codes.PermissionDenied, "cannot read another profile")
+			}
+		}
+	} else if !authctx.IsInternalService(ctx) {
+		return nil, status.Error(codes.Unauthenticated, "missing credentials")
+	}
 	privacyStore := s.privacyStore()
 	if privacyStore == nil {
 		return nil, status.Error(codes.FailedPrecondition, "privacy store not configured")

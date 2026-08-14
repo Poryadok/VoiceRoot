@@ -106,6 +106,19 @@ func (t *transcoder) serveUsers(w http.ResponseWriter, r *http.Request, rest str
 		writeProtoJSON(w, http.StatusOK, resp)
 		return true
 
+	case r.Method == http.MethodDelete && strings.HasPrefix(rest, "profiles/"):
+		target := strings.TrimPrefix(rest, "profiles/")
+		if target == "" || strings.Contains(target, "/") {
+			return false
+		}
+		_, err := t.clients.user.DeleteProfile(ctx, &userv1.DeleteProfileRequest{ProfileId: target})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return true
+
 	case r.Method == http.MethodGet && strings.HasPrefix(rest, "profiles/") && strings.HasSuffix(rest, "/presence"):
 		target := strings.TrimSuffix(strings.TrimPrefix(rest, "profiles/"), "/presence")
 		resp, err := t.clients.user.GetPresence(ctx, &userv1.GetPresenceRequest{ProfileId: target})

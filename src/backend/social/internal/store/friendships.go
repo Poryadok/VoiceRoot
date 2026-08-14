@@ -370,3 +370,21 @@ WHERE hop.other_id <> $1
 	}
 	return out, rows.Err()
 }
+
+// RemoveFriendshipsBetweenProfileSets deletes any friendship row connecting a profile from setA to setB.
+func (s *FriendshipStore) RemoveFriendshipsBetweenProfileSets(ctx context.Context, setA, setB []uuid.UUID) error {
+	if s == nil || s.Pool == nil {
+		return errors.New("friendship store unavailable")
+	}
+	if len(setA) == 0 || len(setB) == 0 {
+		return nil
+	}
+	_, err := s.Pool.Exec(ctx, `
+DELETE FROM friendships
+WHERE (
+  requester_profile_id = ANY($1::uuid[]) AND target_profile_id = ANY($2::uuid[])
+) OR (
+  requester_profile_id = ANY($2::uuid[]) AND target_profile_id = ANY($1::uuid[])
+)`, setA, setB)
+	return err
+}

@@ -115,6 +115,22 @@ func (p *JetStreamPublisher) PublishScreenShareStopped(ctx context.Context, ev *
 	})
 }
 
+func (p *JetStreamPublisher) PublishCallStarted(ctx context.Context, ev *eventsv1.CallStarted) error {
+	return p.publish(ctx, "voice.call_started", &eventsv1.VoiceStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.Now(),
+		Payload:    &eventsv1.VoiceStreamEvent_CallStarted{CallStarted: ev},
+	})
+}
+
+func (p *JetStreamPublisher) PublishVoiceMemberJoined(ctx context.Context, ev *eventsv1.VoiceMemberJoined) error {
+	return p.publish(ctx, "voice.member_joined", &eventsv1.VoiceStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.Now(),
+		Payload:    &eventsv1.VoiceStreamEvent_VoiceMemberJoined{VoiceMemberJoined: ev},
+	})
+}
+
 // EnsureStream creates the voice_events JetStream stream if it does not exist yet.
 // Call at service startup so Realtime voice consumers can subscribe before the first call.
 func (p *JetStreamPublisher) EnsureStream() error {

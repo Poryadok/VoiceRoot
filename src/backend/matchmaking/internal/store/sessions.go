@@ -252,6 +252,49 @@ func (s *SessionStore) ListSearchingExpired(ctx context.Context, now time.Time, 
 	return scanSessionRows(rows)
 }
 
+// ListPendingAcceptExpired returns pending_accept sessions past matched_at cutoff.
+func (s *SessionStore) ListPendingAcceptExpired(ctx context.Context, matchedBefore time.Time, limit int) ([]SearchSession, error) {
+	if s == nil || s.Pool == nil {
+		return nil, errors.New("session store unavailable")
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := s.Pool.Query(ctx, `
+		SELECT id, profile_id, party_id, game_id, mode, criteria::text, status,
+		       timeout_at, nudged_at, matched_at, match_id, created_at, updated_at
+		FROM search_sessions
+		WHERE status = $1 AND matched_at IS NOT NULL AND matched_at <= $2
+		ORDER BY matched_at ASC
+		LIMIT $3
+	`, SessionStatusPendingAccept, matchedBefore, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanSessionRows(rows)
+}
+
+// ExpirePendingAccept cancels a pending_accept session (accept popup timeout).
+func (s *SessionStore) ExpirePendingAccept(ctx context.Context, id uuid.UUID) (SearchSession, error) {
+	if s == nil || s.Pool == nil {
+		return SearchSession{}, errors.New("session store unavailable")
+	}
+	now := time.Now().UTC()
+	row := s.Pool.QueryRow(ctx, `
+		UPDATE search_sessions
+		SET status = $2, updated_at = $3
+		WHERE id = $1 AND status = $4
+		RETURNING id, profile_id, party_id, game_id, mode, criteria::text, status,
+		          timeout_at, nudged_at, matched_at, match_id, created_at, updated_at
+	`, id, SessionStatusCancelled, now, SessionStatusPendingAccept)
+	sess, err := scanSession(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return SearchSession{}, ErrSessionNotSearchable
+	}
+	return sess, err
+}
+
 // ExpireSearching moves a searching session to timeout status.
 func (s *SessionStore) ExpireSearching(ctx context.Context, id uuid.UUID) (SearchSession, error) {
 	if s == nil || s.Pool == nil {

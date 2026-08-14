@@ -958,6 +958,32 @@ final $typed_data.Uint8List applyManifestResponseDescriptor = $convert.base64Dec
     'ChVBcHBseU1hbmlmZXN0UmVzcG9uc2USIwoDYm90GAEgASgLMhEudm9pY2UuYm90LnYxLkJvdF'
     'IDYm90');
 
+@$core.Deprecated('Use getManifestRequestDescriptor instead')
+const GetManifestRequest$json = {
+  '1': 'GetManifestRequest',
+  '2': [
+    {'1': 'bot_id', '3': 1, '4': 1, '5': 9, '10': 'botId'},
+  ],
+};
+
+/// Descriptor for `GetManifestRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getManifestRequestDescriptor =
+    $convert.base64Decode(
+        'ChJHZXRNYW5pZmVzdFJlcXVlc3QSFQoGYm90X2lkGAEgASgJUgVib3RJZA==');
+
+@$core.Deprecated('Use getManifestResponseDescriptor instead')
+const GetManifestResponse$json = {
+  '1': 'GetManifestResponse',
+  '2': [
+    {'1': 'manifest_yaml', '3': 1, '4': 1, '5': 9, '10': 'manifestYaml'},
+  ],
+};
+
+/// Descriptor for `GetManifestResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getManifestResponseDescriptor = $convert.base64Decode(
+    'ChNHZXRNYW5pZmVzdFJlc3BvbnNlEiMKDW1hbmlmZXN0X3lhbWwYASABKAlSDG1hbmlmZXN0WW'
+    'FtbA==');
+
 @$core.Deprecated('Use installBotInSpaceRequestDescriptor instead')
 const InstallBotInSpaceRequest$json = {
   '1': 'InstallBotInSpaceRequest',

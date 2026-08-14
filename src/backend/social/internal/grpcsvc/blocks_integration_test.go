@@ -32,11 +32,14 @@ func startSocialPostgresForTest(t *testing.T, ctx context.Context) *pgxpool.Pool
 
 func applySocialMigration(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
-	migrationPath := filepath.Join(repoRoot(t), "src", "backend", "migrations", "social_db", "000001_init.up.sql")
-	sqlBytes, err := os.ReadFile(migrationPath)
-	require.NoError(t, err)
-	_, err = pool.Exec(ctx, string(sqlBytes))
-	require.NoError(t, err)
+	root := repoRoot(t)
+	for _, name := range []string{"000001_init.up.sql", "000002_contacts.up.sql"} {
+		migrationPath := filepath.Join(root, "src", "backend", "migrations", "social_db", name)
+		sqlBytes, err := os.ReadFile(migrationPath)
+		require.NoError(t, err)
+		_, err = pool.Exec(ctx, string(sqlBytes))
+		require.NoError(t, err)
+	}
 }
 
 func TestBlockFlow_Integration(t *testing.T) {

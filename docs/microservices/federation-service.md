@@ -5,7 +5,7 @@
 S2S-федерация: подключение внешних нод, синхронизация событий, маршрутизация уведомлений. Master ↔ Node архитектура.
 
 **Язык**: Go
-**БД**: PostgreSQL `federation_db`
+**БД**: PostgreSQL `federation_db` (целевая; **не провижинится** в compose/staging/prod, пока федерация deferred — см. [PLAN.md](../PLAN.md))
 **Протокол**: gRPC bidirectional stream (см. `protos/voice/s2s/v1/s2s.proto`)
 
 ## Ответственность

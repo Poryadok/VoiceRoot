@@ -185,6 +185,13 @@ class BotServiceClient extends $grpc.Client {
     return $createUnaryCall(_$applyManifest, request, options: options);
   }
 
+  $grpc.ResponseFuture<$0.GetManifestResponse> getManifest(
+    $0.GetManifestRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getManifest, request, options: options);
+  }
+
   /// Space lifecycle.
   $grpc.ResponseFuture<$0.InstallBotInSpaceResponse> installBotInSpace(
     $0.InstallBotInSpaceRequest request, {
@@ -423,6 +430,11 @@ class BotServiceClient extends $grpc.Client {
           '/voice.bot.v1.BotService/ApplyManifest',
           ($0.ApplyManifestRequest value) => value.writeToBuffer(),
           $0.ApplyManifestResponse.fromBuffer);
+  static final _$getManifest =
+      $grpc.ClientMethod<$0.GetManifestRequest, $0.GetManifestResponse>(
+          '/voice.bot.v1.BotService/GetManifest',
+          ($0.GetManifestRequest value) => value.writeToBuffer(),
+          $0.GetManifestResponse.fromBuffer);
   static final _$installBotInSpace = $grpc.ClientMethod<
           $0.InstallBotInSpaceRequest, $0.InstallBotInSpaceResponse>(
       '/voice.bot.v1.BotService/InstallBotInSpace',
@@ -697,6 +709,15 @@ abstract class BotServiceBase extends $grpc.Service {
             ($core.List<$core.int> value) =>
                 $0.ApplyManifestRequest.fromBuffer(value),
             ($0.ApplyManifestResponse value) => value.writeToBuffer()));
+    $addMethod(
+        $grpc.ServiceMethod<$0.GetManifestRequest, $0.GetManifestResponse>(
+            'GetManifest',
+            getManifest_Pre,
+            false,
+            false,
+            ($core.List<$core.int> value) =>
+                $0.GetManifestRequest.fromBuffer(value),
+            ($0.GetManifestResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.InstallBotInSpaceRequest,
             $0.InstallBotInSpaceResponse>(
         'InstallBotInSpace',
@@ -1033,6 +1054,14 @@ abstract class BotServiceBase extends $grpc.Service {
 
   $async.Future<$0.ApplyManifestResponse> applyManifest(
       $grpc.ServiceCall call, $0.ApplyManifestRequest request);
+
+  $async.Future<$0.GetManifestResponse> getManifest_Pre($grpc.ServiceCall $call,
+      $async.Future<$0.GetManifestRequest> $request) async {
+    return getManifest($call, await $request);
+  }
+
+  $async.Future<$0.GetManifestResponse> getManifest(
+      $grpc.ServiceCall call, $0.GetManifestRequest request);
 
   $async.Future<$0.InstallBotInSpaceResponse> installBotInSpace_Pre(
       $grpc.ServiceCall $call,

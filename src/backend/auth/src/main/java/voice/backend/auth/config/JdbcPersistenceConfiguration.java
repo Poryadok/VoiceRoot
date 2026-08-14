@@ -11,6 +11,8 @@ import voice.backend.auth.repository.E2EKeyBackupRepository;
 import voice.backend.auth.repository.JdbcAccountRepository;
 import voice.backend.auth.repository.JdbcBackupCodeRepository;
 import voice.backend.auth.repository.JdbcE2EKeyBackupRepository;
+import voice.backend.auth.repository.JdbcOtpCodeRepository;
+import voice.backend.auth.repository.OtpCodeRepository;
 import voice.backend.auth.repository.JdbcRefreshTokenRepository;
 import voice.backend.auth.repository.RefreshTokenRepository;
 import voice.backend.auth.oauth.OAuthAuthorizationCodeCodec;
@@ -40,6 +42,11 @@ public class JdbcPersistenceConfiguration {
   @Bean
   E2EKeyBackupRepository e2eKeyBackupRepository(NamedParameterJdbcTemplate jdbc) {
     return new JdbcE2EKeyBackupRepository(jdbc);
+  }
+
+  @Bean
+  OtpCodeRepository otpCodeRepository(NamedParameterJdbcTemplate jdbc) {
+    return new JdbcOtpCodeRepository(jdbc);
   }
 
   @Bean

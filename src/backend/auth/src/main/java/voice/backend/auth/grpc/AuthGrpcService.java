@@ -1,5 +1,11 @@
 package voice.backend.auth.grpc;
 
+import app.voice.auth.v1.DeleteAccountRequest;
+import app.voice.auth.v1.DeleteAccountResponse;
+import app.voice.auth.v1.RestoreAccountRequest;
+import app.voice.auth.v1.RestoreAccountResponse;
+import app.voice.auth.v1.VerifyOTPRequest;
+import app.voice.auth.v1.VerifyOTPResponse;
 import app.voice.auth.v1.ConvertGuestRequest;
 import app.voice.auth.v1.ConvertGuestResponse;
 import app.voice.auth.v1.GetE2EKeyBackupRequest;
@@ -44,14 +50,18 @@ import voice.backend.auth.service.LoginCommand;
 import voice.backend.auth.service.LogoutCommand;
 import voice.backend.auth.service.RefreshCommand;
 import voice.backend.auth.service.RegisterCommand;
+import voice.backend.auth.service.OtpService;
+import voice.backend.auth.service.VerifyOtpCommand;
 
 @Component
 public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
   private final AuthService authService;
+  private final OtpService otpService;
   private final AtomicReference<String> lastAccessToken = new AtomicReference<>("");
 
-  public AuthGrpcService(AuthService authService) {
+  public AuthGrpcService(AuthService authService, OtpService otpService) {
     this.authService = authService;
+    this.otpService = otpService;
   }
 
   @Override
@@ -103,6 +113,38 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
       voice.backend.auth.service.AuthSession session = authService.verify2FA(lastAccessToken(), request.getTotpCode());
       rememberAccess(session.accessToken());
       return Verify2FAResponse.newBuilder().setSession(toProto(session)).build();
+    });
+  }
+
+  @Override
+  public void verifyOTP(VerifyOTPRequest request, StreamObserver<VerifyOTPResponse> responseObserver) {
+    run(responseObserver, () -> {
+      otpService.verifyOtp(
+          new VerifyOtpCommand(
+              null,
+              null,
+              request.getCode(),
+              request.getOtpType(),
+              resolveAccessToken()),
+          authService);
+      return VerifyOTPResponse.getDefaultInstance();
+    });
+  }
+
+  @Override
+  public void deleteAccount(DeleteAccountRequest request, StreamObserver<DeleteAccountResponse> responseObserver) {
+    run(responseObserver, () -> {
+      authService.deleteAccount(lastAccessToken(), request.getPassword());
+      return DeleteAccountResponse.getDefaultInstance();
+    });
+  }
+
+  @Override
+  public void restoreAccount(
+      RestoreAccountRequest request, StreamObserver<RestoreAccountResponse> responseObserver) {
+    run(responseObserver, () -> {
+      voice.backend.auth.service.AuthSession session = authService.restoreAccount(request.getToken());
+      return RestoreAccountResponse.newBuilder().setSession(toProto(session)).build();
     });
   }
 

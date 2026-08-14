@@ -278,6 +278,34 @@ func (t *transcoder) serveBots(w http.ResponseWriter, r *http.Request, rest stri
 		writeProtoJSON(w, http.StatusOK, resp)
 		return true
 
+	case r.Method == http.MethodGet && strings.HasSuffix(rest, "/commands"):
+		botID := strings.TrimSuffix(rest, "/commands")
+		botID = strings.Trim(botID, "/")
+		if botID == "" || strings.Contains(botID, "/") {
+			return false
+		}
+		resp, err := t.clients.bot.GetCommands(ctx, &botv1.GetCommandsRequest{BotId: botID})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodGet && strings.HasSuffix(rest, "/manifest"):
+		botID := strings.TrimSuffix(rest, "/manifest")
+		botID = strings.Trim(botID, "/")
+		if botID == "" || strings.Contains(botID, "/") {
+			return false
+		}
+		resp, err := t.clients.bot.GetManifest(ctx, &botv1.GetManifestRequest{BotId: botID})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
 	case r.Method == http.MethodPost && rest == "interactions":
 		req := &botv1.ExecuteSlashInteractionRequest{}
 		if err := readProtoJSON(r, req); err != nil {

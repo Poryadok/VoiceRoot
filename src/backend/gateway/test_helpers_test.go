@@ -21,6 +21,7 @@ type gatewayTestOptions struct {
 	restUpstreams      map[string]http.Handler
 	transcoder         *transcoder
 	realtimeUpstream   http.Handler
+	wsTicketStore      wsTicketStore
 	requestIDGenerator func() string
 	tokenValidator     tokenValidator
 	tokenBlacklist     tokenBlacklist
@@ -36,6 +37,9 @@ func newGatewayForContract(_ *testing.T, options gatewayTestOptions) http.Handle
 	if log == nil {
 		log = slog.New(slog.NewJSONHandler(io.Discard, &slog.HandlerOptions{}))
 	}
+	if options.wsTicketStore == nil {
+		options.wsTicketStore = newMemoryWsTicketStore()
+	}
 	return newGateway(gatewayConfig{
 		versionConfigs:     options.versionConfigs,
 		versionStore:       options.versionStore,
@@ -46,6 +50,7 @@ func newGatewayForContract(_ *testing.T, options gatewayTestOptions) http.Handle
 		restUpstreams:      options.restUpstreams,
 		transcoder:         options.transcoder,
 		realtimeUpstream:   options.realtimeUpstream,
+		wsTicketStore:      options.wsTicketStore,
 		requestIDGenerator: options.requestIDGenerator,
 		tokenValidator:     options.tokenValidator,
 		tokenBlacklist:     options.tokenBlacklist,

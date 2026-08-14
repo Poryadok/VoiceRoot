@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/nats-io/nats.go"
 
@@ -114,13 +113,7 @@ func runRoleEventsConsumer(ctx context.Context, hub *wsHub, natsURL, instanceID 
 	if hub == nil || strings.TrimSpace(natsURL) == "" {
 		return fmt.Errorf("role events consumer: missing hub or NATS URL")
 	}
-	nc, err := nats.Connect(natsURL,
-		nats.Name("voice-realtime-role"),
-		nats.Timeout(10*time.Second),
-		nats.RetryOnFailedConnect(true),
-		nats.MaxReconnects(-1),
-		nats.ReconnectWait(time.Second),
-	)
+	nc, err := nats.Connect(natsURL, natsConnectOptions("voice-realtime-role")...)
 	if err != nil {
 		return fmt.Errorf("nats connect: %w", err)
 	}
@@ -129,7 +122,9 @@ func runRoleEventsConsumer(ctx context.Context, hub *wsHub, natsURL, instanceID 
 	if err != nil {
 		return fmt.Errorf("jetstream: %w", err)
 	}
-	sub, err := subscribeRoleEvents(js, hub, instanceID, logger)
+	sub, err := subscribeJetStreamWithRetry(ctx, "realtime role.events", func() (*nats.Subscription, error) {
+		return subscribeRoleEvents(js, hub, instanceID, logger)
+	})
 	if err != nil {
 		return err
 	}

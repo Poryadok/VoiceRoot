@@ -29,6 +29,7 @@ import (
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
 	"voice/backend/pkg/runtimeconfig"
+	"voice/backend/pkg/subscriptionconsume"
 	voiceprom "voice/backend/pkg/promhttp"
 
 	chatv1 "voice.app/voice/chat/v1"
@@ -119,6 +120,14 @@ func main() {
 		}
 		filesStore := store.NewFilesStore(pool)
 		jobs.StartExpiryWorker(context.Background(), filesStore, deleter, eventPub, logger)
+		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
+			tierCache := subscriptionconsume.NewTierCache()
+			go func() {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				_ = subscriptionconsume.Run(ctx, natsURL, "file_subscription_tier", tierCache)
+			}()
+		}
 		lis, err := net.Listen("tcp", grpcListen)
 		if err != nil {
 			log.Fatalf("grpc listen: %v", err)
@@ -132,6 +141,7 @@ func main() {
 			Reader:    reader,
 			Processor: processor,
 			Scanner:   scanner,
+			Events:    eventPub,
 		}))
 		go func() {
 			logger.Info("gRPC listening", slog.String("addr", grpcListen))

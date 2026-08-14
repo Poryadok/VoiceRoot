@@ -191,6 +191,34 @@
               <goal>compile-custom</goal>
             </goals>
           </execution>
+          <execution>
+            <id>compile-jetstream-events</id>
+            <goals>
+              <goal>compile</goal>
+            </goals>
+            <configuration>
+              <clearOutputDirectory>false</clearOutputDirectory>
+              <protoSourceRoot>${project.basedir}/../../../protos</protoSourceRoot>
+              <includes>
+                <include>voice/events/v1/jetstream_events.proto</include>
+              </includes>
+            </configuration>
+          </execution>
+          <execution>
+            <id>compile-user-service</id>
+            <goals>
+              <goal>compile</goal>
+              <goal>compile-custom</goal>
+            </goals>
+            <configuration>
+              <clearOutputDirectory>false</clearOutputDirectory>
+              <protoSourceRoot>${project.basedir}/../../../protos</protoSourceRoot>
+              <includes>
+                <include>voice/common/v1/common.proto</include>
+                <include>voice/user/v1/user.proto</include>
+              </includes>
+            </configuration>
+          </execution>
         </executions>
       </plugin>
       <plugin>

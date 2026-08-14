@@ -33,6 +33,8 @@ const (
 	ModerationService_CheckMessage_FullMethodName        = "/voice.moderation.v1.ModerationService/CheckMessage"
 	ModerationService_GetAutoModStats_FullMethodName     = "/voice.moderation.v1.ModerationService/GetAutoModStats"
 	ModerationService_IsShadowBanned_FullMethodName      = "/voice.moderation.v1.ModerationService/IsShadowBanned"
+	ModerationService_IsMMBanned_FullMethodName          = "/voice.moderation.v1.ModerationService/IsMMBanned"
+	ModerationService_ExportAuditLog_FullMethodName      = "/voice.moderation.v1.ModerationService/ExportAuditLog"
 )
 
 // ModerationServiceClient is the client API for ModerationService service.
@@ -55,6 +57,9 @@ type ModerationServiceClient interface {
 	CheckMessage(ctx context.Context, in *CheckMessageRequest, opts ...grpc.CallOption) (*CheckMessageResponse, error)
 	GetAutoModStats(ctx context.Context, in *GetAutoModStatsRequest, opts ...grpc.CallOption) (*GetAutoModStatsResponse, error)
 	IsShadowBanned(ctx context.Context, in *IsShadowBannedRequest, opts ...grpc.CallOption) (*IsShadowBannedResponse, error)
+	IsMMBanned(ctx context.Context, in *IsMMBannedRequest, opts ...grpc.CallOption) (*IsMMBannedResponse, error)
+	// Staff-only audit export for Admin moderation panel.
+	ExportAuditLog(ctx context.Context, in *ExportAuditLogRequest, opts ...grpc.CallOption) (*ExportAuditLogResponse, error)
 }
 
 type moderationServiceClient struct {
@@ -205,6 +210,26 @@ func (c *moderationServiceClient) IsShadowBanned(ctx context.Context, in *IsShad
 	return out, nil
 }
 
+func (c *moderationServiceClient) IsMMBanned(ctx context.Context, in *IsMMBannedRequest, opts ...grpc.CallOption) (*IsMMBannedResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(IsMMBannedResponse)
+	err := c.cc.Invoke(ctx, ModerationService_IsMMBanned_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *moderationServiceClient) ExportAuditLog(ctx context.Context, in *ExportAuditLogRequest, opts ...grpc.CallOption) (*ExportAuditLogResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ExportAuditLogResponse)
+	err := c.cc.Invoke(ctx, ModerationService_ExportAuditLog_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ModerationServiceServer is the server API for ModerationService service.
 // All implementations must embed UnimplementedModerationServiceServer
 // for forward compatibility.
@@ -225,6 +250,9 @@ type ModerationServiceServer interface {
 	CheckMessage(context.Context, *CheckMessageRequest) (*CheckMessageResponse, error)
 	GetAutoModStats(context.Context, *GetAutoModStatsRequest) (*GetAutoModStatsResponse, error)
 	IsShadowBanned(context.Context, *IsShadowBannedRequest) (*IsShadowBannedResponse, error)
+	IsMMBanned(context.Context, *IsMMBannedRequest) (*IsMMBannedResponse, error)
+	// Staff-only audit export for Admin moderation panel.
+	ExportAuditLog(context.Context, *ExportAuditLogRequest) (*ExportAuditLogResponse, error)
 	mustEmbedUnimplementedModerationServiceServer()
 }
 
@@ -276,6 +304,12 @@ func (UnimplementedModerationServiceServer) GetAutoModStats(context.Context, *Ge
 }
 func (UnimplementedModerationServiceServer) IsShadowBanned(context.Context, *IsShadowBannedRequest) (*IsShadowBannedResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method IsShadowBanned not implemented")
+}
+func (UnimplementedModerationServiceServer) IsMMBanned(context.Context, *IsMMBannedRequest) (*IsMMBannedResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method IsMMBanned not implemented")
+}
+func (UnimplementedModerationServiceServer) ExportAuditLog(context.Context, *ExportAuditLogRequest) (*ExportAuditLogResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ExportAuditLog not implemented")
 }
 func (UnimplementedModerationServiceServer) mustEmbedUnimplementedModerationServiceServer() {}
 func (UnimplementedModerationServiceServer) testEmbeddedByValue()                           {}
@@ -550,6 +584,42 @@ func _ModerationService_IsShadowBanned_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ModerationService_IsMMBanned_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(IsMMBannedRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ModerationServiceServer).IsMMBanned(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ModerationService_IsMMBanned_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ModerationServiceServer).IsMMBanned(ctx, req.(*IsMMBannedRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ModerationService_ExportAuditLog_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ExportAuditLogRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ModerationServiceServer).ExportAuditLog(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ModerationService_ExportAuditLog_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ModerationServiceServer).ExportAuditLog(ctx, req.(*ExportAuditLogRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ModerationService_ServiceDesc is the grpc.ServiceDesc for ModerationService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -612,6 +682,14 @@ var ModerationService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "IsShadowBanned",
 			Handler:    _ModerationService_IsShadowBanned_Handler,
+		},
+		{
+			MethodName: "IsMMBanned",
+			Handler:    _ModerationService_IsMMBanned_Handler,
+		},
+		{
+			MethodName: "ExportAuditLog",
+			Handler:    _ModerationService_ExportAuditLog_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

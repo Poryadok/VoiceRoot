@@ -31,5 +31,11 @@ func spaceRowToProto(r *store.SpaceRow) *spacev1.Space {
 	if r.BannerURL != nil {
 		out.BannerUrl = r.BannerURL
 	}
+	if r.EntryQuestionsJSON != nil {
+		out.EntryQuestionsJson = *r.EntryQuestionsJSON
+	}
+	if r.MMConfigJSON != nil {
+		out.MmConfigJson = *r.MMConfigJSON
+	}
 	return out
 }

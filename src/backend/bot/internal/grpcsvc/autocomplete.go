@@ -112,7 +112,7 @@ func (s *BotGRPC) AutocompleteSlashOption(ctx context.Context, req *botv1.Autoco
 		ChatType:         req.GetChat().GetType().String(),
 		InvokerProfileID: invoker.String(),
 	}
-	choices, err := webhook.DeliverAutocompletePOST(ctx, s.HTTPClient, strings.TrimSpace(*botRow.WebhookURL), botRow.WebhookSecret, payload, dispatch.DefaultTimeout)
+	choices, err := webhook.DeliverAutocompletePOST(ctx, s.HTTPClient, strings.TrimSpace(*botRow.WebhookURL), botRow.WebhookSecret, payload, dispatch.DefaultTimeout())
 	if err != nil {
 		if s.Events != nil {
 			_ = s.Events.PublishWebhookFailed(ctx, botID.String(), "autocomplete", err.Error())

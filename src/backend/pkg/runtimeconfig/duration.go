@@ -2,6 +2,7 @@ package runtimeconfig
 
 import (
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -55,4 +56,27 @@ func ShutdownTimeoutFromEnv() time.Duration {
 // PostgresConnectTimeoutFromEnv returns POSTGRES_CONNECT_TIMEOUT or 15s default.
 func PostgresConnectTimeoutFromEnv() time.Duration {
 	return durationFromEnvPositive("POSTGRES_CONNECT_TIMEOUT", 15*time.Second)
+}
+
+// PostgresMaxConnsFromEnv returns POSTGRES_MAX_CONNS or 10 default.
+func PostgresMaxConnsFromEnv() int32 {
+	raw := strings.TrimSpace(os.Getenv("POSTGRES_MAX_CONNS"))
+	if raw == "" {
+		return 10
+	}
+	n, err := strconv.ParseInt(raw, 10, 32)
+	if err != nil || n <= 0 {
+		return 10
+	}
+	return int32(n)
+}
+
+// NATSConnectTimeoutFromEnv returns NATS_CONNECT_TIMEOUT or 10s default.
+func NATSConnectTimeoutFromEnv() time.Duration {
+	return durationFromEnvPositive("NATS_CONNECT_TIMEOUT", 10*time.Second)
+}
+
+// NATSReconnectWaitFromEnv returns NATS_RECONNECT_WAIT or 1s default.
+func NATSReconnectWaitFromEnv() time.Duration {
+	return durationFromEnvPositive("NATS_RECONNECT_WAIT", time.Second)
 }

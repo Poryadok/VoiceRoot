@@ -7,21 +7,24 @@ import (
 )
 
 const (
-	defaultNudgeAfter = 15 * time.Minute
-	defaultTimeout    = 30 * time.Minute
+	defaultNudgeAfter    = 15 * time.Minute
+	defaultTimeout       = 30 * time.Minute
+	defaultAcceptTimeout = 3 * time.Minute
 )
 
 // SearchTiming holds runtime search timeout configuration.
 type SearchTiming struct {
-	NudgeAfter time.Duration
-	Timeout    time.Duration
+	NudgeAfter    time.Duration
+	Timeout       time.Duration
+	AcceptTimeout time.Duration
 }
 
-// LoadSearchTiming reads MATCHMAKING_SEARCH_NUDGE_AFTER and MATCHMAKING_SEARCH_TIMEOUT.
+// LoadSearchTiming reads MATCHMAKING_SEARCH_NUDGE_AFTER, MATCHMAKING_SEARCH_TIMEOUT, MATCHMAKING_ACCEPT_TIMEOUT.
 func LoadSearchTiming() SearchTiming {
 	return SearchTiming{
-		NudgeAfter: parseDurationEnv("MATCHMAKING_SEARCH_NUDGE_AFTER", defaultNudgeAfter),
-		Timeout:    parseDurationEnv("MATCHMAKING_SEARCH_TIMEOUT", defaultTimeout),
+		NudgeAfter:    parseDurationEnv("MATCHMAKING_SEARCH_NUDGE_AFTER", defaultNudgeAfter),
+		Timeout:       parseDurationEnv("MATCHMAKING_SEARCH_TIMEOUT", defaultTimeout),
+		AcceptTimeout: parseDurationEnv("MATCHMAKING_ACCEPT_TIMEOUT", defaultAcceptTimeout),
 	}
 }
 

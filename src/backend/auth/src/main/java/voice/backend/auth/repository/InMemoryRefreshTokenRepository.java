@@ -44,4 +44,23 @@ public class InMemoryRefreshTokenRepository implements RefreshTokenRepository {
     byHash.put(tokenHash, revoked);
     return revoked;
   }
+
+  @Override
+  public synchronized void revokeAllForAccount(UUID accountId, Instant now) {
+    byHash.replaceAll(
+        (hash, record) -> {
+          if (!record.accountId().equals(accountId) || record.revoked()) {
+            return record;
+          }
+          return new RefreshTokenRecord(
+              record.id(),
+              record.accountId(),
+              record.tokenHash(),
+              record.deviceInfoJson(),
+              record.accessJti(),
+              record.expiresAt(),
+              record.createdAt(),
+              now);
+        });
+  }
 }

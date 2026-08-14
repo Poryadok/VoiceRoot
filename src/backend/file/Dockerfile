@@ -5,13 +5,15 @@ WORKDIR /src
 ENV GOPROXY=https://proxy.golang.org,direct
 COPY scripts/docker-go-mod-download.sh /usr/local/bin/docker-go-mod-download.sh
 COPY pkg/go.mod ./pkg/
-COPY file/go.mod ./file/
+COPY file/go.mod file/go.sum ./file/
 COPY file/pb/voice/file/go.mod ./file/pb/voice/file/
 COPY chat/pb/voice/chat/go.mod ./chat/pb/voice/chat/
 COPY voice/pb/voice/story/go.mod ./voice/pb/voice/story/
 COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
+COPY messaging/pb/voice/events/go.mod ./messaging/pb/voice/events/
 RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked sh /usr/local/bin/docker-go-mod-download.sh file
 COPY pkg ./pkg
+COPY messaging/pb/voice/events ./messaging/pb/voice/events
 COPY file ./file
 COPY chat/pb ./chat/pb
 COPY voice/pb/voice/story ./voice/pb/voice/story

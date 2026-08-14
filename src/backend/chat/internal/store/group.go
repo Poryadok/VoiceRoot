@@ -318,6 +318,13 @@ func (s *DMStore) RemoveGroupMember(ctx context.Context, chatID, profileID uuid.
 	if role == "owner" {
 		return ErrCannotRemoveOwner
 	}
+	count, err := s.CountChatMembers(ctx, chatID)
+	if err != nil {
+		return err
+	}
+	if count-1 < MinGroupMembers {
+		return ErrGroupTooFewMembers
+	}
 	ct, err := s.Pool.Exec(ctx, `
 DELETE FROM chat_members m
 USING chats c
@@ -347,6 +354,13 @@ func (s *DMStore) LeaveGroupChat(ctx context.Context, chatID, profileID uuid.UUI
 	}
 	if role == "owner" {
 		return ErrOwnerMustTransfer
+	}
+	count, err := s.CountChatMembers(ctx, chatID)
+	if err != nil {
+		return err
+	}
+	if count-1 < MinGroupMembers {
+		return ErrGroupTooFewMembers
 	}
 	ct, err := s.Pool.Exec(ctx, `
 DELETE FROM chat_members m

@@ -50,6 +50,7 @@ service StoryService {
   rpc GetHighlights(GetHighlightsRequest) returns (GetHighlightsResponse);
 
   rpc CreateLookingForParty(CreateLookingForPartyRequest) returns (CreateLookingForPartyResponse);
+  rpc RespondToLfpStory(RespondToLfpStoryRequest) returns (RespondToLfpStoryResponse);
 }
 
 message Story {
@@ -193,6 +194,14 @@ message CreateLookingForPartyRequest {
   string criteria_json = 1;
   optional string media_file_id = 2;
 }
+
+message RespondToLfpStoryRequest {
+  string story_id = 1;
+  // JOIN — viewer wants to join author's party; INVITE — viewer invites author.
+  string response_type = 2;
+}
+
+message RespondToLfpStoryResponse {}
 
 message CreateStoryResponse {
   Story story = 1;

@@ -21,6 +21,7 @@ type SpaceGRPC struct {
 	Privacy         InvitePrivacyChecker
 	Friends         InviteProfileFriendChecker
 	SpaceCoMembership InviteSpaceCoMembershipChecker
+	Blocks          JoinAccountBlockChecker
 
 	// Logger emits structured nats_publish errors when JetStream publish fails after a successful RPC.
 	Logger *slog.Logger

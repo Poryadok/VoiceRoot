@@ -14,6 +14,9 @@ COPY messaging/pb/voice/messaging/go.mod ./messaging/pb/voice/messaging/
 COPY voice/pb/voice/calls/go.mod ./voice/pb/voice/calls/
 COPY voice/pb/voice/space/go.mod ./voice/pb/voice/space/
 COPY voice/pb/voice/story/go.mod ./voice/pb/voice/story/
+COPY voice/pb/voice/subscription/go.mod ./voice/pb/voice/subscription/
+COPY role/pb/voice/role/go.mod ./role/pb/voice/role/
+COPY file/pb/voice/file/go.mod ./file/pb/voice/file/
 COPY voice/go.mod voice/go.sum ./voice/
 RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked sh /usr/local/bin/docker-go-mod-download.sh voice
 COPY pkg ./pkg
@@ -21,6 +24,8 @@ COPY chat/pb ./chat/pb
 COPY user/pb ./user/pb
 COPY messaging/pb/voice/events ./messaging/pb/voice/events
 COPY messaging/pb/voice/messaging ./messaging/pb/voice/messaging
+COPY role/pb/voice/role ./role/pb/voice/role
+COPY file/pb/voice/file ./file/pb/voice/file
 COPY voice ./voice
 WORKDIR /src/voice
 RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked --mount=type=cache,target=/root/.cache/go-build,id=voice-gobuild,sharing=locked CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/service .

@@ -76,6 +76,11 @@ func (r *Runner) Start(ctx context.Context, natsURL, instanceID string) error {
 		{"voice_events", "voice.>", "voice", r.wrapProto(r.handleVoiceProto)},
 		{"story_events", "story.>", "story", r.wrapProto(r.handleStoryProto)},
 		{"bot_events", "bot.>", "bot", r.wrapProto(r.handleBotProto)},
+		{"social_events", "social.>", "social", r.wrapProto(r.handleSocialProto)},
+		{"role_events", "role.>", "role", r.handleRoleMsg},
+		{"file_events", "file.>", "file", r.wrapProto(r.handleFileProto)},
+		{"subscription_events", "subscription.>", "subscription", r.wrapProto(r.handleSubscriptionProto)},
+		{"moderation_events", "moderation.>", "moderation", r.wrapProto(r.handleModerationProto)},
 		{"analytics_events", "analytics.>", "telemetry", r.handleAnalyticsMsg},
 	}
 
@@ -83,16 +88,24 @@ func (r *Runner) Start(ctx context.Context, natsURL, instanceID string) error {
 		spec := spec
 		durable := "analytics_" + spec.name + "_" + inst
 		handler := func(msg *nats.Msg) {
-			if err := spec.handler(msg); err != nil && r.Logger != nil {
-				r.Logger.Warn("analytics consume failed", slog.String("stream", spec.stream), slog.Any("error", err))
-				natslog.LogConsume(r.Logger, msg, slog.LevelWarn, "analytics consume error")
+			if err := spec.handler(msg); err != nil {
+				jetStreamConsumeAck(msg, err)
+				if r.Logger != nil {
+					r.Logger.Warn("analytics consume failed", slog.String("stream", spec.stream), slog.Any("error", err))
+					natslog.LogConsume(r.Logger, msg, slog.LevelWarn, "analytics consume error")
+				}
 				return
 			}
 			natslog.LogConsume(r.Logger, msg, slog.LevelInfo, "analytics event consumed")
 		}
-		sub, err := js.Subscribe(spec.subject, handler, nats.Durable(durable), nats.BindStream(spec.stream), nats.DeliverNew())
+		sub, err := js.Subscribe(spec.subject, handler,
+			nats.Durable(durable),
+			nats.BindStream(spec.stream),
+			nats.DeliverNew(),
+			nats.ManualAck(),
+		)
 		if err != nil {
-			sub, err = js.Subscribe("", handler, nats.Bind(spec.stream, durable))
+			sub, err = js.Subscribe("", handler, nats.Bind(spec.stream, durable), nats.ManualAck())
 			if err != nil {
 				return fmt.Errorf("subscribe %s: %w", spec.stream, err)
 			}
@@ -119,17 +132,24 @@ func ensureAnalyticsStream(js nats.JetStreamContext) error {
 	return err
 }
 
-func (r *Runner) wrapProto(fn func([]byte) error) func(*nats.Msg) error {
+func (r *Runner) wrapProto(fn func([]byte, *nats.Msg) error) func(*nats.Msg) error {
 	return func(msg *nats.Msg) error {
-		return fn(msg.Data)
+		return fn(msg.Data, msg)
 	}
 }
 
-func (r *Runner) append(ev *analyticsv1.AnalyticsEvent) {
+func (r *Runner) appendWithAck(ev *analyticsv1.AnalyticsEvent, msg *nats.Msg) {
 	if ev == nil || ev.GetEventId() == "" {
+		if msg != nil {
+			_ = msg.Ack()
+		}
 		return
 	}
-	r.Buffer.AppendProto(ev)
+	var ack buffer.MsgAck
+	if msg != nil {
+		ack = msg
+	}
+	r.Buffer.AppendWithAck(ev, ack)
 	metrics.EventsIngested.Inc()
 	if ev.GetTimestamp() != nil {
 		lag := time.Since(ev.GetTimestamp().AsTime()).Seconds()
@@ -140,66 +160,107 @@ func (r *Runner) append(ev *analyticsv1.AnalyticsEvent) {
 	metrics.BufferDepth.Set(float64(r.Buffer.PendingCount()))
 }
 
-func (r *Runner) handleUserProto(data []byte) error {
+func (r *Runner) handleUserProto(data []byte, msg *nats.Msg) error {
 	var env eventsv1.UserStreamEvent
 	if err := proto.Unmarshal(data, &env); err != nil {
 		return err
 	}
-	r.append(r.Mapper.FromUser(&env))
+	r.appendWithAck(r.Mapper.FromUser(&env), msg)
 	return nil
 }
 
-func (r *Runner) handleMessageProto(data []byte) error {
+func (r *Runner) handleMessageProto(data []byte, msg *nats.Msg) error {
 	var env eventsv1.MessageStreamEvent
 	if err := proto.Unmarshal(data, &env); err != nil {
 		return err
 	}
-	r.append(r.Mapper.FromMessage(&env))
+	r.appendWithAck(r.Mapper.FromMessage(&env), msg)
 	return nil
 }
 
-func (r *Runner) handleChatProto(data []byte) error {
+func (r *Runner) handleChatProto(data []byte, msg *nats.Msg) error {
 	var env eventsv1.ChatStreamEvent
 	if err := proto.Unmarshal(data, &env); err != nil {
 		return err
 	}
-	r.append(r.Mapper.FromChat(&env))
+	r.appendWithAck(r.Mapper.FromChat(&env), msg)
 	return nil
 }
 
-func (r *Runner) handleMatchmakingProto(data []byte) error {
+func (r *Runner) handleMatchmakingProto(data []byte, msg *nats.Msg) error {
 	var env eventsv1.MatchmakingStreamEvent
 	if err := proto.Unmarshal(data, &env); err != nil {
 		return err
 	}
-	r.append(r.Mapper.FromMatchmaking(&env))
+	r.appendWithAck(r.Mapper.FromMatchmaking(&env), msg)
 	return nil
 }
 
-func (r *Runner) handleVoiceProto(data []byte) error {
+func (r *Runner) handleVoiceProto(data []byte, msg *nats.Msg) error {
 	var env eventsv1.VoiceStreamEvent
 	if err := proto.Unmarshal(data, &env); err != nil {
 		return err
 	}
-	r.append(r.Mapper.FromVoice(&env))
+	r.appendWithAck(r.Mapper.FromVoice(&env), msg)
 	return nil
 }
 
-func (r *Runner) handleStoryProto(data []byte) error {
+func (r *Runner) handleStoryProto(data []byte, msg *nats.Msg) error {
 	var env eventsv1.StoryStreamEvent
 	if err := proto.Unmarshal(data, &env); err != nil {
 		return err
 	}
-	r.append(r.Mapper.FromStory(&env))
+	r.appendWithAck(r.Mapper.FromStory(&env), msg)
 	return nil
 }
 
-func (r *Runner) handleBotProto(data []byte) error {
+func (r *Runner) handleBotProto(data []byte, msg *nats.Msg) error {
 	var env eventsv1.BotStreamEvent
 	if err := proto.Unmarshal(data, &env); err != nil {
 		return err
 	}
-	r.append(r.Mapper.FromBot(&env))
+	r.appendWithAck(r.Mapper.FromBot(&env), msg)
+	return nil
+}
+
+func (r *Runner) handleSocialProto(data []byte, msg *nats.Msg) error {
+	var env eventsv1.SocialStreamEvent
+	if err := proto.Unmarshal(data, &env); err != nil {
+		return err
+	}
+	r.appendWithAck(r.Mapper.FromSocial(&env), msg)
+	return nil
+}
+
+func (r *Runner) handleFileProto(data []byte, msg *nats.Msg) error {
+	var env eventsv1.FileStreamEvent
+	if err := proto.Unmarshal(data, &env); err != nil {
+		return err
+	}
+	r.appendWithAck(r.Mapper.FromFile(&env), msg)
+	return nil
+}
+
+func (r *Runner) handleSubscriptionProto(data []byte, msg *nats.Msg) error {
+	var env eventsv1.SubscriptionStreamEvent
+	if err := proto.Unmarshal(data, &env); err != nil {
+		return err
+	}
+	r.appendWithAck(r.Mapper.FromSubscription(&env), msg)
+	return nil
+}
+
+func (r *Runner) handleModerationProto(data []byte, msg *nats.Msg) error {
+	var env eventsv1.ModerationStreamEvent
+	if err := proto.Unmarshal(data, &env); err != nil {
+		return err
+	}
+	r.appendWithAck(r.Mapper.FromModeration(&env), msg)
+	return nil
+}
+
+func (r *Runner) handleRoleMsg(msg *nats.Msg) error {
+	r.appendWithAck(r.Mapper.FromRoleSubject(msg.Subject, msg.Data), msg)
 	return nil
 }
 
@@ -214,6 +275,6 @@ func (r *Runner) handleAnalyticsMsg(msg *nats.Msg) error {
 		}
 		ev = &parsed
 	}
-	r.append(ev)
+	r.appendWithAck(ev, msg)
 	return nil
 }

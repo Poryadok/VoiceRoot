@@ -16,6 +16,8 @@ gen/
 /src/backend/*/*.test
 /src/backend/*/coverage.out
 /src/backend/*/coverage.html
+/src/backend/*/$prof
+/src/backend/*/coverage
 /src/backend/analytics/analytics
 /src/backend/bot/bot
 /src/backend/chat/chat

@@ -31,13 +31,19 @@ func TestRouteVoiceNotification_CallIncomingOffline(t *testing.T) {
 		},
 	}
 	handler := &consumer.VoiceEventHandler{Router: delivery.DecideRouting}
-	decisions, payload, ok := routeVoiceNotification(handler, env, false)
-	require.True(t, ok)
-	require.True(t, decisions[callee].Push)
-	require.Equal(t, string(delivery.TypeIncomingCall), payload.Data["type"])
-	require.Equal(t, roomID, payload.Data["room_id"])
-	require.Equal(t, initiator, payload.Data["initiator_profile_id"])
-	require.Equal(t, "audio", payload.Data["media_kind"])
+	route, err := routeVoiceNotification(
+		t.Context(),
+		handler,
+		nil,
+		delivery.PermissivePolicyLoader{},
+		env,
+		func(string) bool { return false },
+	)
+	require.NoError(t, err)
+	require.NotNil(t, route)
+	require.True(t, route.decisions[callee].Push)
+	require.Equal(t, string(delivery.TypeIncomingCall), route.payload.Data["type"])
+	require.Equal(t, roomID, route.payload.Data["room_id"])
 }
 
 func TestRouteVoiceNotification_CallIncomingOnlineNoPush(t *testing.T) {
@@ -52,9 +58,46 @@ func TestRouteVoiceNotification_CallIncomingOnlineNoPush(t *testing.T) {
 		},
 	}
 	handler := &consumer.VoiceEventHandler{Router: delivery.DecideRouting}
-	decisions, _, ok := routeVoiceNotification(handler, env, true)
-	require.True(t, ok)
-	require.False(t, decisions[callee].Push)
+	route, err := routeVoiceNotification(
+		t.Context(),
+		handler,
+		nil,
+		delivery.PermissivePolicyLoader{},
+		env,
+		func(profileID string) bool { return profileID == callee },
+	)
+	require.NoError(t, err)
+	require.NotNil(t, route)
+	require.False(t, route.decisions[callee].Push)
+}
+
+func TestRouteVoiceNotification_VoiceMemberJoined(t *testing.T) {
+	notifyID := uuid.NewString()
+	joinedID := uuid.NewString()
+	env := &eventsv1.VoiceStreamEvent{
+		Payload: &eventsv1.VoiceStreamEvent_VoiceMemberJoined{
+			VoiceMemberJoined: &eventsv1.VoiceMemberJoined{
+				RoomId:           uuid.NewString(),
+				VoiceRoomId:      uuid.NewString(),
+				SpaceId:          uuid.NewString(),
+				JoinedProfileId:  joinedID,
+				NotifyProfileIds: []string{notifyID},
+			},
+		},
+	}
+	handler := &consumer.VoiceEventHandler{Router: delivery.DecideRouting}
+	route, err := routeVoiceNotification(
+		t.Context(),
+		handler,
+		nil,
+		delivery.PermissivePolicyLoader{},
+		env,
+		func(string) bool { return false },
+	)
+	require.NoError(t, err)
+	require.NotNil(t, route)
+	require.True(t, route.decisions[notifyID].Push)
+	require.Equal(t, string(delivery.TypeVoiceMemberJoined), route.payload.Data["type"])
 }
 
 func TestRouteVoiceNotification_IgnoresOtherEvents(t *testing.T) {
@@ -64,6 +107,14 @@ func TestRouteVoiceNotification_IgnoresOtherEvents(t *testing.T) {
 		},
 	}
 	handler := &consumer.VoiceEventHandler{Router: delivery.DecideRouting}
-	_, _, ok := routeVoiceNotification(handler, env, false)
-	require.False(t, ok)
+	route, err := routeVoiceNotification(
+		t.Context(),
+		handler,
+		nil,
+		delivery.PermissivePolicyLoader{},
+		env,
+		func(string) bool { return false },
+	)
+	require.NoError(t, err)
+	require.Nil(t, route)
 }

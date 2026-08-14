@@ -223,6 +223,52 @@ func (x *PageResponse) GetTotalCount() int32 {
 	return 0
 }
 
+// Client-supplied idempotency key for mutating RPCs (docs/ARCHITECTURE_REQUIREMENTS.md).
+// Scope is RPC-specific (e.g. SendMessage: unique per chat + sender_profile_id).
+type ClientIdempotencyKey struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"` // opaque UUID or stable client-generated string
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClientIdempotencyKey) Reset() {
+	*x = ClientIdempotencyKey{}
+	mi := &file_voice_common_v1_common_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClientIdempotencyKey) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClientIdempotencyKey) ProtoMessage() {}
+
+func (x *ClientIdempotencyKey) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_common_v1_common_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClientIdempotencyKey.ProtoReflect.Descriptor instead.
+func (*ClientIdempotencyKey) Descriptor() ([]byte, []int) {
+	return file_voice_common_v1_common_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ClientIdempotencyKey) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
 var File_voice_common_v1_common_proto protoreflect.FileDescriptor
 
 var file_voice_common_v1_common_proto_rawDesc = string([]byte{
@@ -245,10 +291,14 @@ var file_voice_common_v1_common_proto_rawDesc = string([]byte{
 	0x05, 0x52, 0x05, 0x6c, 0x69, 0x6d, 0x69, 0x74, 0x22, 0x2f, 0x0a, 0x0c, 0x50, 0x61, 0x67, 0x65,
 	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x1f, 0x0a, 0x0b, 0x74, 0x6f, 0x74, 0x61,
 	0x6c, 0x5f, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x05, 0x52, 0x0a, 0x74,
-	0x6f, 0x74, 0x61, 0x6c, 0x43, 0x6f, 0x75, 0x6e, 0x74, 0x42, 0x24, 0x5a, 0x22, 0x76, 0x6f, 0x69,
-	0x63, 0x65, 0x2e, 0x61, 0x70, 0x70, 0x2f, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2f, 0x63, 0x6f, 0x6d,
-	0x6d, 0x6f, 0x6e, 0x2f, 0x76, 0x31, 0x3b, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x76, 0x31, 0x62,
-	0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x6f, 0x74, 0x61, 0x6c, 0x43, 0x6f, 0x75, 0x6e, 0x74, 0x22, 0x28, 0x0a, 0x14, 0x43, 0x6c, 0x69,
+	0x65, 0x6e, 0x74, 0x49, 0x64, 0x65, 0x6d, 0x70, 0x6f, 0x74, 0x65, 0x6e, 0x63, 0x79, 0x4b, 0x65,
+	0x79, 0x12, 0x10, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03,
+	0x6b, 0x65, 0x79, 0x42, 0x3b, 0x0a, 0x13, 0x61, 0x70, 0x70, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65,
+	0x2e, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2e, 0x76, 0x31, 0x50, 0x01, 0x5a, 0x22, 0x76, 0x6f,
+	0x69, 0x63, 0x65, 0x2e, 0x61, 0x70, 0x70, 0x2f, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2f, 0x63, 0x6f,
+	0x6d, 0x6d, 0x6f, 0x6e, 0x2f, 0x76, 0x31, 0x3b, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x76, 0x31,
+	0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 })
 
 var (
@@ -263,12 +313,13 @@ func file_voice_common_v1_common_proto_rawDescGZIP() []byte {
 	return file_voice_common_v1_common_proto_rawDescData
 }
 
-var file_voice_common_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_voice_common_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_voice_common_v1_common_proto_goTypes = []any{
-	(*CursorPageRequest)(nil),  // 0: voice.common.v1.CursorPageRequest
-	(*CursorPageResponse)(nil), // 1: voice.common.v1.CursorPageResponse
-	(*PageRequest)(nil),        // 2: voice.common.v1.PageRequest
-	(*PageResponse)(nil),       // 3: voice.common.v1.PageResponse
+	(*CursorPageRequest)(nil),    // 0: voice.common.v1.CursorPageRequest
+	(*CursorPageResponse)(nil),   // 1: voice.common.v1.CursorPageResponse
+	(*PageRequest)(nil),          // 2: voice.common.v1.PageRequest
+	(*PageResponse)(nil),         // 3: voice.common.v1.PageResponse
+	(*ClientIdempotencyKey)(nil), // 4: voice.common.v1.ClientIdempotencyKey
 }
 var file_voice_common_v1_common_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
@@ -289,7 +340,7 @@ func file_voice_common_v1_common_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_voice_common_v1_common_proto_rawDesc), len(file_voice_common_v1_common_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -54,6 +54,7 @@ type MessageRow struct {
 	SenderProfileID uuid.UUID
 	Body            string
 	CreatedAt       time.Time
+	IsE2E           bool
 }
 
 // ListChatMessages pages messages in a chat for reindex.
@@ -94,6 +95,7 @@ func (m *MessagingFetcher) ListChatMessages(ctx context.Context, chatID uuid.UUI
 			SenderProfileID: sender,
 			Body:            msg.GetContent(),
 			CreatedAt:       msg.GetCreatedAt().AsTime(),
+			IsE2E:           msg.GetIsE2E(),
 		})
 	}
 	return out, strings.TrimSpace(list.GetNextCursor()), nil
@@ -169,6 +171,35 @@ func (s *SocialBlocks) BlockedAccountIDs(ctx context.Context) ([]uuid.UUID, erro
 		}
 	}
 	return out, nil
+}
+
+// AccountPairBlocked reports whether viewerAccount and otherAccount must not see each other in discovery.
+func (s *SocialBlocks) AccountPairBlocked(ctx context.Context, viewerAccountID, otherAccountID uuid.UUID) (bool, error) {
+	if s == nil || s.Client == nil {
+		return false, nil
+	}
+	if viewerAccountID == otherAccountID {
+		return false, nil
+	}
+	ctx = s2s.ForwardIncomingMetadata(ctx)
+	r1, err := s.Client.IsBlocked(ctx, &socialv1.IsBlockedRequest{
+		AccountIdA: viewerAccountID.String(),
+		AccountIdB: otherAccountID.String(),
+	})
+	if err != nil {
+		return false, err
+	}
+	if r1.GetBlocked() {
+		return true, nil
+	}
+	r2, err := s.Client.IsBlocked(ctx, &socialv1.IsBlockedRequest{
+		AccountIdA: otherAccountID.String(),
+		AccountIdB: viewerAccountID.String(),
+	})
+	if err != nil {
+		return false, err
+	}
+	return r2.GetBlocked(), nil
 }
 
 // ChatMembership resolves chats visible to a profile via Chat Service.

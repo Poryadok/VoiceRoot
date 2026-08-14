@@ -12,12 +12,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
 	"voice/backend/bot/internal/botevents"
+	"voice/backend/bot/internal/consumer"
 	"voice/backend/bot/internal/dispatch"
 	grpcsvc "voice/backend/bot/internal/grpcsvc"
 	"voice/backend/bot/internal/ratelimit"
@@ -25,6 +25,7 @@ import (
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
+	"voice/backend/pkg/postgres"
 	"voice/backend/pkg/runtimeconfig"
 	voiceprom "voice/backend/pkg/promhttp"
 
@@ -54,7 +55,7 @@ func main() {
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	if dbURL != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
-		pool, err := pgxpool.New(ctx, dbURL)
+		pool, err := postgres.NewPool(ctx, dbURL)
 		cancel()
 		if err != nil {
 			log.Fatalf("postgres: %v", err)
@@ -80,6 +81,14 @@ func main() {
 			svc.Events = pub
 			defer pub.Close()
 			logger.Info("bot.events publisher enabled")
+
+			msgHandler := &consumer.MessageHandler{Store: st, Client: http.DefaultClient}
+			go func() {
+				if err := consumer.RunMessageEventsConsumer(context.Background(), msgHandler, natsURL, logger); err != nil && logger != nil {
+					logger.Warn("bot message consumer stopped", slog.String("error", err.Error()))
+				}
+			}()
+			logger.Info("bot message consumer enabled")
 		}
 		grpcSrv = grpc.NewServer(
 			grpc.ChainUnaryInterceptor(

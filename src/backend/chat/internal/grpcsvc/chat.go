@@ -24,7 +24,7 @@ type ChatGRPC struct {
 	Friends    ProfileFriendChecker
 	SpaceCoMembership SpaceCoMembershipChecker
 	ListEnrich ListChatsEnrichment // optional; Messaging S2S for preview + unread
-	E2EPreKeyGate E2EPreKeyGate     // optional; Messaging S2S pre-key check before EnableChatE2E
+	E2EPreKeyGate E2EPreKeyGate     // required for EnableChatE2E; Messaging S2S pre-key check (fail-closed)
 	// ChatEvents is optional; when set, new DM creation publishes to NATS JetStream (stream chat_events, subjects chat.*).
 	ChatEvents chatevents.Publisher
 	// Roles is optional; space channel slow mode checks TEXT_CHAT_SET_SLOW_MODE when set.

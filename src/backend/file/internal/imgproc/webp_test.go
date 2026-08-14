@@ -15,7 +15,8 @@ import (
 )
 
 type memObjectStore struct {
-	objects map[string][]byte
+	objects      map[string][]byte
+	contentTypes map[string]string
 }
 
 func (m *memObjectStore) ReadObject(_ context.Context, key string, _ int64) ([]byte, error) {
@@ -26,11 +27,15 @@ func (m *memObjectStore) ReadObject(_ context.Context, key string, _ int64) ([]b
 	return data, nil
 }
 
-func (m *memObjectStore) PutObject(_ context.Context, key, _ string, data []byte) error {
+func (m *memObjectStore) PutObject(_ context.Context, key, contentType string, data []byte) error {
 	if m.objects == nil {
 		m.objects = make(map[string][]byte)
 	}
+	if m.contentTypes == nil {
+		m.contentTypes = make(map[string]string)
+	}
 	m.objects[key] = append([]byte(nil), data...)
+	m.contentTypes[key] = contentType
 	return nil
 }
 
@@ -59,6 +64,11 @@ func TestProcessor_ProcessImage(t *testing.T) {
 	require.Contains(t, out.ThumbnailR2Key, "thumb.webp")
 	require.NotEmpty(t, mem.objects[out.ConvertedR2Key])
 	require.NotEmpty(t, mem.objects[out.ThumbnailR2Key])
+	require.Equal(t, "image/webp", mem.contentTypes[out.ConvertedR2Key])
+	require.Equal(t, "image/webp", mem.contentTypes[out.ThumbnailR2Key])
+	require.True(t, isWebP(mem.objects[out.ConvertedR2Key]))
+	require.True(t, isWebP(mem.objects[out.ThumbnailR2Key]))
+	require.LessOrEqual(t, len(mem.objects[out.ConvertedR2Key]), maxProcessedImageBytes)
 }
 
 func TestProcessor_ProcessImage_requiresReaderAndWriter(t *testing.T) {
@@ -85,4 +95,8 @@ func TestProcessor_ProcessImage_smallImageKeepsThumbDimensions(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int32(64), out.Width)
 	require.Equal(t, int32(48), out.Height)
+}
+
+func isWebP(data []byte) bool {
+	return len(data) >= 12 && string(data[0:4]) == "RIFF" && string(data[8:12]) == "WEBP"
 }

@@ -243,6 +243,9 @@ func (s *ChatGRPC) RemoveMember(ctx context.Context, req *chatv1.RemoveMemberReq
 		if errors.Is(err, store.ErrCannotRemoveOwner) {
 			return nil, status.Error(codes.FailedPrecondition, err.Error())
 		}
+		if errors.Is(err, store.ErrGroupTooFewMembers) {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, status.Error(codes.NotFound, "member not found")
 		}
@@ -281,6 +284,9 @@ func (s *ChatGRPC) LeaveChat(ctx context.Context, req *chatv1.LeaveChatRequest) 
 	if err := s.DM.LeaveGroupChat(ctx, chatID, caller); err != nil {
 		if errors.Is(err, store.ErrOwnerMustTransfer) {
 			return nil, status.Error(codes.FailedPrecondition, err.Error())
+		}
+		if errors.Is(err, store.ErrGroupTooFewMembers) {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, status.Error(codes.NotFound, "not a group member")

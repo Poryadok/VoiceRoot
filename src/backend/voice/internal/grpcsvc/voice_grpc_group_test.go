@@ -121,3 +121,29 @@ func TestVoiceGRPCGroupVoice_joinTokenAfterJoin(t *testing.T) {
 	require.NotEmpty(t, token.GetJwt())
 	require.Equal(t, "ws://livekit:7880", token.GetLivekitUrl())
 }
+
+// TestVoiceGRPCGroupVoice_leaveCallRemovesParticipantOnly documents group voice: one leaver must not end the call for everyone.
+func TestVoiceGRPCGroupVoice_leaveCallRemovesParticipantOnly(t *testing.T) {
+	events := &recordingEvents{}
+	svc := newTestGroupVoiceService(time.Unix(1700000000, 0).UTC(), events)
+	group := chatv1.ChatType_CHAT_TYPE_GROUP
+
+	start, err := svc.StartCall(voiceTestCtx("profile-owner"), &callsv1.StartCallRequest{
+		RoomTypeEnum: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE.Enum(),
+		LinkedChat:   &chatv1.ChatRef{Id: "group-chat-1", Type: &group},
+		MediaKind:    mediaPtr(callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO),
+	})
+	require.NoError(t, err)
+	roomID := start.GetCallSession().GetRoomId()
+
+	_, err = svc.JoinCall(voiceTestCtx("profile-member"), &callsv1.JoinCallRequest{RoomId: roomID})
+	require.NoError(t, err)
+
+	_, err = svc.LeaveCall(voiceTestCtx("profile-member"), &callsv1.LeaveCallRequest{RoomId: roomID})
+	require.NoError(t, err)
+	require.Empty(t, events.ended)
+
+	active, err := svc.GetActiveCall(voiceTestCtx("profile-owner"), &callsv1.GetActiveCallRequest{})
+	require.NoError(t, err)
+	require.Equal(t, roomID, active.GetCallSession().GetRoomId())
+}

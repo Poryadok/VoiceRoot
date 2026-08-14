@@ -55,7 +55,10 @@ func (s *ChatGRPC) setChatE2E(ctx context.Context, chatRaw string, enabled bool)
 	if !member {
 		return status.Error(codes.PermissionDenied, "not a chat member")
 	}
-	if enabled && s.E2EPreKeyGate != nil {
+	if enabled {
+		if s.E2EPreKeyGate == nil {
+			return status.Error(codes.FailedPrecondition, "e2e pre-key verification is not configured")
+		}
 		members, err := s.DM.ListChatMembers(ctx, chatID)
 		if err != nil {
 			return status.Error(codes.Internal, err.Error())

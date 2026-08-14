@@ -27,7 +27,7 @@
 | Moderation Service   | `moderation_db`   | —                         | —                                |
 | Subscription Service | `subscription_db` | —                         | Paddle, CloudPayments            |
 | Bot Service          | `bot_db`          | —                         | —                                |
-| Federation Service   | `federation_db`   | —                         | —                                |
+| Federation Service   | `federation_db` (planned, **not provisioned**) | —                         | —                                |
 | Story Service        | `story_db`        | —                         | медиа через File, R2             |
 | Analytics Service    | —                 | in-memory batch buffer      | ClickHouse (`voice` DB)          |
 
@@ -79,7 +79,7 @@
 
 ## Подсчёт логических PostgreSQL БД
 
-**16** БД: `auth_db`, `user_db`, `social_db`, `chat_db`, `messaging_db`, `space_db`, `role_db`, `file_db`, `notification_db`, `search_db`, `matchmaking_db`, `moderation_db`, `subscription_db`, `bot_db`, `federation_db`, `story_db`.
+**16** planned PostgreSQL databases (see table above). **`federation_db`** is documented for the deferred Federation Service but is **not** created in `docker/postgres/initdb.d/`, `deploy/templates/`, or migrate jobs until federation implementation starts ([PLAN.md](PLAN.md)).
 
 ---
 

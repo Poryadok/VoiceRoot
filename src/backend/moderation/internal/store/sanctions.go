@@ -164,3 +164,59 @@ LIMIT 1`, accountID).Scan(&one)
 	}
 	return true, nil
 }
+
+func (s *SanctionStore) IsMMBanned(ctx context.Context, accountID uuid.UUID) (bool, error) {
+	if s == nil || s.Pool == nil {
+		return false, errStoreNotConfigured
+	}
+	var one int
+	err := s.Pool.QueryRow(ctx, `
+SELECT 1 FROM sanctions
+WHERE target_account_id = $1
+  AND type = 'mm_ban'
+  AND revoked_at IS NULL
+  AND (expires_at IS NULL OR expires_at > now())
+LIMIT 1`, accountID).Scan(&one)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// ListExpiredActiveTempBans returns temp_ban rows past expires_at that are not revoked.
+func (s *SanctionStore) ListExpiredActiveTempBans(ctx context.Context, limit int) ([]SanctionRow, error) {
+	if s == nil || s.Pool == nil {
+		return nil, errStoreNotConfigured
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := s.Pool.Query(ctx, `
+SELECT id, target_account_id, type, reason, report_id, issued_by, expires_at, revoked_at, revoked_by, created_at
+FROM sanctions
+WHERE type = 'temp_ban'
+  AND revoked_at IS NULL
+  AND expires_at IS NOT NULL
+  AND expires_at <= now()
+ORDER BY expires_at ASC
+LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]SanctionRow, 0, 8)
+	for rows.Next() {
+		var r SanctionRow
+		if err := rows.Scan(
+			&r.ID, &r.TargetAccountID, &r.Type, &r.Reason, &r.ReportID,
+			&r.IssuedBy, &r.ExpiresAt, &r.RevokedAt, &r.RevokedBy, &r.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}

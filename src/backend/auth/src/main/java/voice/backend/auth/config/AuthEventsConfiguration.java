@@ -1,7 +1,7 @@
 package voice.backend.auth.config;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
@@ -14,7 +14,7 @@ import voice.backend.auth.support.RecordingAuthEventPublisher;
 @Configuration
 public class AuthEventsConfiguration {
   @Bean
-  @ConditionalOnProperty(prefix = "auth.nats", name = "url")
+  @ConditionalOnExpression("!'${auth.nats.url:}'.isBlank()")
   AuthEventPublisher natsAuthEventPublisher(AuthProperties properties) {
     return new NatsAuthEventPublisher(properties.getNats().getUrl());
   }

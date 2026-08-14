@@ -244,7 +244,7 @@ Self-hosted runner на staging: версия runner **≥ 2.327.1** для node
 | Tier | Когда | Что |
 |------|--------|-----|
 | **1 — fast** | каждый PR; push в `master` | path-filtered: protobuf, compose-config, `flutter` (analyze+test), golangci и `backend-go` matrix **только затронутые** сервисы (`go test -short`), **`backend-go-integration-pr`** (полный `go test` по matrix на PR), job **`ci-gate`**. Docker build verify на PR; push в GHCR — только изменённые образы на `master` + **promote** остальных с `github.event.before`. |
-| **2 — platform / E2E** | push в `master` (и `workflow_dispatch` → `full`) | selective **build** + **promote** + artifact `stack.lock.yaml`; job **`deploy-staging`** (`workflow_call`) при `STAGING_DEPLOY_ENABLED=true`; Flutter platform smokes (`run_flutter_tier2`); **`compose-e2e`** при изменениях backend/frontend/compose. |
+| **2 — platform / E2E** | push в `master` (и `workflow_dispatch` → `full`) | selective **build** + **promote** + artifact `stack.lock.yaml`; job **`deploy-staging`** (`workflow_call`) при `STAGING_DEPLOY_ENABLED=true`; Flutter platform smokes (`run_flutter_tier2`); **`compose-e2e`** при изменениях backend (`run_go`), frontend, compose или global. |
 | **3 — parity** | cron 02:00 UTC; `workflow_dispatch` → `tier3-only` или `full` | **`local-ci-parity`** (`make build-all` + `make flutter-ci`), **`backend-go-integration`** (полный `go test` без `-short`), **`compose-e2e`** на schedule. |
 
 Ручной запуск CI: **Actions → CI → Run workflow** — профиль `auto` (как PR по diff), `tier3-only` (ночной набор), `full` (все тиры).

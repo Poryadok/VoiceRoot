@@ -14,4 +14,5 @@ type MessageEventsPublisher interface {
 	PublishReactionRemoved(ctx context.Context, messageID, chatID, profileID, emoji string) error
 	PublishMessagePinned(ctx context.Context, messageID, chatID, pinnedBy string) error
 	PublishMessageUnpinned(ctx context.Context, messageID, chatID, unpinnedBy string) error
+	PublishMessageForwarded(ctx context.Context, messageID, sourceChatID, targetChatID, forwarderProfileID string) error
 }

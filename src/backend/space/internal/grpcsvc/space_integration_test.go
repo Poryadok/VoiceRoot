@@ -94,6 +94,14 @@ func (*spySpaceEvents) PublishVoiceRoomDeleted(context.Context, string, string) 
 
 func (*spySpaceEvents) PublishInviteCreated(context.Context, string, string) error { return nil }
 
+func (*spySpaceEvents) PublishMemberJoined(context.Context, string, string) error { return nil }
+
+func (*spySpaceEvents) PublishMemberLeft(context.Context, string, string) error { return nil }
+
+func (*spySpaceEvents) PublishSpaceUpdated(context.Context, string) error { return nil }
+
+func (*spySpaceEvents) PublishSpaceDeleted(context.Context, string) error { return nil }
+
 func (s *spySpaceEvents) snapshot() [][2]string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -119,6 +127,16 @@ func (errSpaceEvents) PublishVoiceRoomDeleted(context.Context, string, string) e
 func (errSpaceEvents) PublishInviteCreated(context.Context, string, string) error {
 	return errors.New("nats unavailable")
 }
+
+func (errSpaceEvents) PublishMemberJoined(context.Context, string, string) error {
+	return errors.New("nats unavailable")
+}
+
+func (errSpaceEvents) PublishMemberLeft(context.Context, string, string) error { return nil }
+
+func (errSpaceEvents) PublishSpaceUpdated(context.Context, string) error { return nil }
+
+func (errSpaceEvents) PublishSpaceDeleted(context.Context, string) error { return nil }
 
 type spaceServerOption func(*SpaceGRPC)
 

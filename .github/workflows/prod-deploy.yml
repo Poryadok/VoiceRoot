@@ -10,6 +10,18 @@ on:
         description: full | app-only | images-only
         required: false
         default: full
+      changed_services:
+        description: JSON array of changed image names (selective / images-only)
+        required: false
+        default: "[]"
+      needs_full_rollout:
+        description: Run full ordered rollout-app-tier (vs selective)
+        required: false
+        default: "false"
+      needs_user_space_rollout:
+        description: Run user/space ordered tier rollout
+        required: false
+        default: "false"
 
 permissions:
   contents: read
@@ -54,6 +66,9 @@ jobs:
           REGISTRY="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
           export VOICE_IMAGE_REGISTRY="${REGISTRY}"
           export VOICE_IMAGE_TAG="${{ steps.tag.outputs.tag }}"
+          if [ -f "${GITHUB_WORKSPACE}/deploy/prod/stack.lock.yaml" ]; then
+            export STACK_LOCK_FILE="${GITHUB_WORKSPACE}/deploy/prod/stack.lock.yaml"
+          fi
           bash scripts/prod/verify-prod-images.sh
 
       - name: Apply production manifests
@@ -72,9 +87,12 @@ jobs:
           GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
           NOTIFICATIONS_ENABLED: ${{ vars.PROD_ALERTMANAGER_NOTIFICATIONS_ENABLED }}
           DEPLOY_MODE: ${{ inputs.deploy_mode }}
+          NEEDS_FULL_ROLLOUT: ${{ inputs.needs_full_rollout }}
+          NEEDS_USER_SPACE_ROLLOUT: ${{ inputs.needs_user_space_rollout }}
         run: |
           set -eux
           source scripts/prod/load-prod-domains.sh
+          source scripts/prod/map-prod-env.sh
           REGISTRY="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
           TAG="${{ steps.verify_image.outputs.deploy_tag }}"
           if [ -z "${TAG}" ]; then
@@ -83,6 +101,9 @@ jobs:
           export VOICE_IMAGE_REGISTRY="${REGISTRY}"
           export VOICE_IMAGE_TAG="${TAG}"
           export VOICE_K8S_NAMESPACE="${{ vars.VOICE_PROD_K8S_NAMESPACE }}"
+          export DEPLOY_MODE="${{ inputs.deploy_mode }}"
+          CHANGED_JSON='${{ inputs.changed_services }}'
+          export CHANGED_SERVICES="$(echo "${CHANGED_JSON}" | jq -r 'join(",")')"
           bash scripts/prod/render-and-apply-prod.sh
 
       - name: Production smoke (optional)
@@ -96,5 +117,5 @@ jobs:
           PROD_STAFF_TOKEN: ${{ secrets.PROD_STAFF_TOKEN }}
         run: |
           set -eux
-          export STAGING_STAFF_TOKEN="${PROD_STAFF_TOKEN:-}"
+          source scripts/prod/map-prod-env.sh
           bash scripts/prod/smoke-prod.sh

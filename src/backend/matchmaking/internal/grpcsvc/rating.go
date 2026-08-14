@@ -198,6 +198,13 @@ func (s *MatchmakingGRPC) BanFromMM(ctx context.Context, req *matchmakingv1.BanF
 	}); err != nil {
 		return nil, status.Errorf(codes.Internal, "ban: %v", err)
 	}
+	if s.Events != nil {
+		_ = s.Events.PublishPlayerBanned(ctx, mmevents.PlayerBannedEvent{
+			BannerProfileID: bannerID.String(),
+			TargetProfileID: targetID.String(),
+			Reason:          reason,
+		})
+	}
 	return &matchmakingv1.BanFromMMResponse{}, nil
 }
 

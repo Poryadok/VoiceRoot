@@ -39,6 +39,9 @@ func (s *VoiceGRPC) JoinVoiceRoom(ctx context.Context, req *callsv1.JoinVoiceRoo
 	if err := s.ensureSpaceMember(ctx, spaceID, profileID); err != nil {
 		return nil, err
 	}
+	if err := s.ensureVoiceJoinPermission(ctx, spaceID, profileID, voiceRoomID); err != nil {
+		return nil, err
+	}
 
 	call, err := s.Calls.GetCallByVoiceRoomID(ctx, voiceRoomID)
 	if errors.Is(err, voicestore.ErrNotFound) {
@@ -58,6 +61,8 @@ func (s *VoiceGRPC) JoinVoiceRoom(ctx context.Context, req *callsv1.JoinVoiceRoo
 		if err != nil {
 			return nil, storeErr(err)
 		}
+		s.publishCallStarted(ctx, call)
+		s.publishVoiceMemberJoined(ctx, call, profileID)
 	} else if err != nil {
 		return nil, storeErr(err)
 	}
@@ -73,6 +78,7 @@ func (s *VoiceGRPC) JoinVoiceRoom(ctx context.Context, req *callsv1.JoinVoiceRoo
 		if err != nil {
 			return nil, storeErr(err)
 		}
+		s.publishVoiceMemberJoined(ctx, call, profileID)
 	}
 
 	return &callsv1.JoinVoiceRoomResponse{VoiceSession: voiceSessionToProto(call)}, nil
@@ -106,9 +112,8 @@ func (s *VoiceGRPC) LeaveVoiceRoom(ctx context.Context, req *callsv1.LeaveVoiceR
 	if !call.IsParticipant(profileID) {
 		return &callsv1.LeaveVoiceRoomResponse{}, nil
 	}
-	s.clearScreenShareForProfile(ctx, call, profileID)
-	if _, err := s.Calls.RemoveParticipant(ctx, call.RoomID, profileID); err != nil {
-		return nil, storeErr(err)
+	if _, err := s.leaveOpenVoiceSession(ctx, call, profileID); err != nil {
+		return nil, err
 	}
 	return &callsv1.LeaveVoiceRoomResponse{}, nil
 }
@@ -122,6 +127,19 @@ func (s *VoiceGRPC) ensureSpaceMember(ctx context.Context, spaceID, profileID st
 			return status.Error(codes.PermissionDenied, "not a space member")
 		}
 		return status.Error(codes.Internal, err.Error())
+	}
+	return nil
+}
+
+func (s *VoiceGRPC) ensureVoiceJoinPermission(ctx context.Context, spaceID, profileID, voiceRoomID string) error {
+	if s.Roles == nil {
+		return nil
+	}
+	if err := s.Roles.EnsureVoiceJoin(ctx, spaceID, profileID, voiceRoomID); err != nil {
+		if errors.Is(err, ErrVoiceJoinDenied) {
+			return status.Error(codes.PermissionDenied, "voice join not permitted")
+		}
+		return status.Error(codes.PermissionDenied, "voice join permission check unavailable")
 	}
 	return nil
 }

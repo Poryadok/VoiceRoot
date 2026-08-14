@@ -17,6 +17,7 @@ const (
 	TreeKindTextChat  = "text_chat"
 	TreeKindVoiceRoom = "voice_room"
 	MaxTreeNodes      = 50
+	MaxTreeNodesPro   = 500
 )
 
 var (
@@ -66,6 +67,33 @@ type SpaceTreeData struct {
 	Categories  []*CategoryRow
 	Nodes       []*TreeNodeRow
 	VoiceRooms  []*VoiceRoomRow
+}
+
+func (s *SpaceStore) treeNodeCap(ctx context.Context, spaceID uuid.UUID) (int, error) {
+	hasPro, err := s.HasActiveSpacePro(ctx, spaceID)
+	if err != nil {
+		return 0, err
+	}
+	if hasPro {
+		return MaxTreeNodesPro, nil
+	}
+	return MaxTreeNodes, nil
+}
+
+func (s *SpaceStore) treeNodeCapTx(ctx context.Context, tx pgx.Tx, spaceID uuid.UUID) (int, error) {
+	var exists bool
+	err := tx.QueryRow(ctx, `
+SELECT EXISTS (
+	SELECT 1 FROM space_subscriptions
+	WHERE space_id = $1 AND status IN ('active', 'grace_period')
+)`, spaceID).Scan(&exists)
+	if err != nil {
+		return 0, err
+	}
+	if exists {
+		return MaxTreeNodesPro, nil
+	}
+	return MaxTreeNodes, nil
 }
 
 func (s *SpaceStore) nextTreeSortOrder(ctx context.Context, tx pgx.Tx, spaceID uuid.UUID, categoryID *uuid.UUID) (int32, error) {
@@ -211,7 +239,11 @@ func (s *SpaceStore) CreateVoiceRoom(ctx context.Context, spaceID uuid.UUID, nam
 	if err != nil {
 		return nil, nil, err
 	}
-	if n >= MaxTreeNodes {
+	cap, err := s.treeNodeCapTx(ctx, tx, spaceID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if n >= cap {
 		return nil, nil, ErrTreeNodeLimit
 	}
 
@@ -323,7 +355,11 @@ func (s *SpaceStore) insertTreeNode(ctx context.Context, in UpsertTreeNodeInput)
 	if err != nil {
 		return nil, err
 	}
-	if n >= MaxTreeNodes {
+	cap, err := s.treeNodeCapTx(ctx, tx, in.SpaceID)
+	if err != nil {
+		return nil, err
+	}
+	if n >= cap {
 		return nil, ErrTreeNodeLimit
 	}
 

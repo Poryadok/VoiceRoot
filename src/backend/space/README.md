@@ -1,9 +1,3 @@
 # Space Service
 
-Go scaffold for the Voice space service.
-
-Current public surface:
-
-- GET /health returns {"service":"space","status":"ok"}.
-
-Domain behavior, gRPC handlers, database repositories, and migrations are intentionally out of scope for this initialization step.
+Go microservice: spaces, membership, invites, tree, NATS `space.events`. gRPC `SpaceService` + HTTP `/health`. PostgreSQL `space_db`. See `docs/microservices/space-service.md` and `docs/PLAN.md`.

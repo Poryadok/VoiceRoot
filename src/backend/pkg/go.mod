@@ -13,6 +13,7 @@ require (
 	google.golang.org/grpc v1.70.0
 	google.golang.org/protobuf v1.36.5
 	voice.app/voice/analytics v0.0.0
+	voice.app/voice/events v0.0.0
 	voice.app/voice/user v0.0.0
 )
 
@@ -85,3 +86,5 @@ replace voice.app/voice/user => ../user/pb/voice/user
 replace voice.app/voice/common => ../user/pb/voice/common
 
 replace voice.app/voice/analytics => ../analytics/pb/voice/analytics
+
+replace voice.app/voice/events => ../messaging/pb/voice/events

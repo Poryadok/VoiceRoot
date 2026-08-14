@@ -17,8 +17,8 @@ import (
 	voicejwt "voice/backend/pkg/jwt"
 )
 
-func testRealtimeHandler(tv tokenValidator, lister dmChatLister) http.Handler {
-	return newServiceHandler(serviceName, tv, lister, newWSHub(), nil, "test-instance")
+func testRealtimeHandler(tv tokenValidator, lister chatBootstrapLister) http.Handler {
+	return newServiceHandler(serviceName, tv, lister, newWSHub(), nil, "test-instance", readinessDeps{})
 }
 
 func wsEndpoint(t *testing.T, srv *httptest.Server) string {
@@ -247,7 +247,7 @@ type stubDMChatLister struct {
 	err error
 }
 
-func (s stubDMChatLister) ListDMChatIDs(ctx context.Context, _, _ string) ([]string, error) {
+func (s stubDMChatLister) ListChatIDs(ctx context.Context, _, _ string) ([]string, error) {
 	if s.err != nil {
 		return nil, s.err
 	}
@@ -260,7 +260,7 @@ type captureDMChatLister struct {
 	ret        []string
 }
 
-func (c *captureDMChatLister) ListDMChatIDs(ctx context.Context, accountID, profileID string) ([]string, error) {
+func (c *captureDMChatLister) ListChatIDs(ctx context.Context, accountID, profileID string) ([]string, error) {
 	c.gotAccount = accountID
 	c.gotProfile = profileID
 	return append([]string(nil), c.ret...), nil
@@ -316,7 +316,7 @@ func TestWSSendsDMSubscriptionSyncFromChatLister(t *testing.T) {
 	if err := json.Unmarshal(sync.D, &body); err != nil {
 		t.Fatalf("subscription_sync d: %v", err)
 	}
-	if body.Scope != "dm" || body.Source != "chat" || body.Degraded {
+	if body.Scope != "all" || body.Source != "chat" || body.Degraded {
 		t.Fatalf("unexpected body: %+v", body)
 	}
 	want := []string{
@@ -524,7 +524,7 @@ func TestWSTypingFanoutTwoConnections(t *testing.T) {
 		"t1": {UserID: "a", ProfileID: "p1"},
 		"t2": {UserID: "b", ProfileID: "p2"},
 	}
-	srv := httptest.NewServer(newServiceHandler(serviceName, v, nil, hub, nil, "test-instance"))
+	srv := httptest.NewServer(newServiceHandler(serviceName, v, nil, hub, nil, "test-instance", readinessDeps{}))
 	t.Cleanup(srv.Close)
 
 	chatID := "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"

@@ -28,6 +28,8 @@ type recordingEvents struct {
 	states   []*eventsv1.VoiceStateChanged
 	started  []*eventsv1.ScreenShareStarted
 	stopped  []*eventsv1.ScreenShareStopped
+	startedCall []*eventsv1.CallStarted
+	memberJoined []*eventsv1.VoiceMemberJoined
 }
 
 func (r *recordingEvents) PublishCallIncoming(_ context.Context, ev *eventsv1.CallIncoming) error {
@@ -67,6 +69,16 @@ func (r *recordingEvents) PublishScreenShareStarted(_ context.Context, ev *event
 
 func (r *recordingEvents) PublishScreenShareStopped(_ context.Context, ev *eventsv1.ScreenShareStopped) error {
 	r.stopped = append(r.stopped, ev)
+	return nil
+}
+
+func (r *recordingEvents) PublishCallStarted(_ context.Context, ev *eventsv1.CallStarted) error {
+	r.startedCall = append(r.startedCall, ev)
+	return nil
+}
+
+func (r *recordingEvents) PublishVoiceMemberJoined(_ context.Context, ev *eventsv1.VoiceMemberJoined) error {
+	r.memberJoined = append(r.memberJoined, ev)
 	return nil
 }
 

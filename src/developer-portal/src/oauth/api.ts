@@ -1,4 +1,4 @@
-import { getAccessToken } from './session';
+import { getAccessToken, clearSession } from './session';
 
 export const apiBase = import.meta.env.VITE_VOICE_API_BASE ?? 'http://127.0.0.1:18080';
 export const oauthClientId = import.meta.env.VITE_OAUTH_CLIENT_ID ?? 'voice-developer-portal';
@@ -13,7 +13,11 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   if (!headers.has('Content-Type') && init.body) {
     headers.set('Content-Type', 'application/json');
   }
-  return fetch(`${apiBase.replace(/\/$/, '')}${path}`, { ...init, headers });
+  const res = await fetch(`${apiBase.replace(/\/$/, '')}${path}`, { ...init, headers });
+  if (res.status === 401) {
+    clearSession();
+  }
+  return res;
 }
 
 export async function exchangeAuthorizationCode(params: {

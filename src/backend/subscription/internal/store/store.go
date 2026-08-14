@@ -96,16 +96,19 @@ func (s *SubscriptionStore) ActivatePremium(ctx context.Context, accountID uuid.
 	if err != nil {
 		return nil, err
 	}
-	_, err = tx.Exec(ctx, `DELETE FROM subscriptions WHERE account_id = $1`, accountID)
-	if err != nil {
-		return nil, err
-	}
 	_, err = tx.Exec(ctx, `
 INSERT INTO subscriptions (
 	id, account_id, plan, billing_period, status, provider, provider_subscription_id,
 	current_period_start, current_period_end
 ) VALUES ($1, $2, 'premium', 'monthly', 'active', 'paddle', $3, $4, $5)`,
 		subID, accountID, providerSubID, now, periodEnd)
+	if err != nil {
+		return nil, err
+	}
+	_, err = tx.Exec(ctx, `
+UPDATE billing_events
+SET subscription_id = $1
+WHERE provider = 'paddle' AND provider_event_id = $2`, subID, providerEventID)
 	if err != nil {
 		return nil, err
 	}
@@ -190,6 +193,13 @@ INSERT INTO space_subscriptions (
 	current_period_start, current_period_end
 ) VALUES ($1, $2, $3, 'space_pro', 'monthly', 'active', 'paddle', $4, $5, $6)`,
 		subID, spaceID, purchaserID, providerSubID, now, periodEnd)
+	if err != nil {
+		return nil, err
+	}
+	_, err = tx.Exec(ctx, `
+UPDATE billing_events
+SET space_subscription_id = $1
+WHERE provider = 'paddle' AND provider_event_id = $2`, subID, providerEventID)
 	if err != nil {
 		return nil, err
 	}

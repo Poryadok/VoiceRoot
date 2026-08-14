@@ -148,6 +148,10 @@ jobs:
       - name: Buf breaking (PR vs base)
         if: github.event_name == 'pull_request'
         run: buf breaking protos --against ".git#branch=${{ github.base_ref }},subdir=protos"
+      - name: Check Auth proto copy sync
+        run: bash scripts/ci/check-auth-proto-sync.sh
+      - name: Check Go pb codegen drift
+        run: bash scripts/ci/buf-go-pb-check.sh
 
   compose-config:
     needs: changes
@@ -449,6 +453,10 @@ jobs:
     if: >-
       always() &&
       needs.changes.result == 'success' &&
+      needs.staging-images-push.result != 'failure' &&
+      needs.staging-images-push.result != 'cancelled' &&
+      needs.staging-images-promote.result != 'failure' &&
+      needs.staging-images-promote.result != 'cancelled' &&
       github.event_name == 'push' &&
       github.ref == 'refs/heads/master' &&
       needs.changes.outputs.code == 'true'
@@ -460,6 +468,8 @@ jobs:
           set -eux
           bash scripts/ci/generate-staging-go-services.sh
           git diff --exit-code scripts/ci/staging-go-services.txt
+      - name: Check staging-image-catalog drift
+        run: bash scripts/ci/check-image-catalog-drift.sh
       - name: Render stack lock
         env:
           BUILT_SERVICES: ${{ needs.changes.outputs.build_services }}
@@ -523,7 +533,7 @@ jobs:
         if: github.event_name == 'pull_request'
         uses: docker/build-push-action@v6
         with:
-          context: ./src/backend/auth
+          context: .
           file: ./src/backend/auth/Dockerfile
           push: false
           cache-from: type=gha,scope=backend-auth
@@ -534,7 +544,7 @@ jobs:
           needs.changes.outputs.run_auth == 'true'
         uses: docker/build-push-action@v6
         with:
-          context: ./src/backend/auth
+          context: .
           file: ./src/backend/auth/Dockerfile
           push: false
           load: true
@@ -701,16 +711,6 @@ jobs:
           cache: true
       - name: Prefetch sqlite3mc native assets
         run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
-      - name: Flutter web release build
-        working-directory: src/frontend
-        env:
-          VOICE_API_BASE_URL: ${{ steps.buildargs.outputs.api_base_url }}
-          VOICE_LIVEKIT_URL: ${{ steps.buildargs.outputs.livekit_url }}
-        run: |
-          flutter pub get
-          flutter build web --release \
-            --dart-define=VOICE_API_BASE_URL="${VOICE_API_BASE_URL}" \
-            --dart-define=VOICE_LIVEKIT_URL="${VOICE_LIVEKIT_URL}"
       - uses: docker/setup-buildx-action@v4
       - name: Log in to GHCR
         if: >-
@@ -1032,7 +1032,8 @@ jobs:
           (
             needs.changes.outputs.compose == 'true' ||
             needs.changes.outputs.frontend == 'true' ||
-            needs.changes.outputs.global == 'true'
+            needs.changes.outputs.global == 'true' ||
+            needs.changes.outputs.run_go == 'true'
           )
         )
       ) &&
@@ -1254,6 +1255,18 @@ jobs:
     if: >-
       always() &&
       needs.changes.result == 'success' &&
+      needs.staging-images-push.result != 'failure' &&
+      needs.staging-images-push.result != 'cancelled' &&
+      needs.staging-images-promote.result != 'failure' &&
+      needs.staging-images-promote.result != 'cancelled' &&
+      needs.backend-auth.result != 'failure' &&
+      needs.backend-auth.result != 'cancelled' &&
+      needs.web.result != 'failure' &&
+      needs.web.result != 'cancelled' &&
+      needs.developer-portal.result != 'failure' &&
+      needs.developer-portal.result != 'cancelled' &&
+      needs.admin.result != 'failure' &&
+      needs.admin.result != 'cancelled' &&
       github.event_name == 'push' &&
       github.ref == 'refs/heads/master' &&
       needs.changes.outputs.code == 'true' &&

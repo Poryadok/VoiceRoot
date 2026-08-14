@@ -46,7 +46,7 @@ expand_s2s_deps() {
     case "$svc" in
       messaging) add_unique chat; add_unique file; add_unique realtime ;;
       chat) add_unique messaging ;;
-      file) add_unique messaging ;;
+      file) add_unique messaging; add_unique story ;;
       realtime) add_unique messaging; add_unique voice ;;
       voice) add_unique realtime ;;
       notification) add_unique user ;;

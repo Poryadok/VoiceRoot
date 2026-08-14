@@ -35,6 +35,10 @@ func (r *recordingPublisher) PublishStoryLfpCreated(context.Context, string, str
 	r.events = append(r.events, "StoryLfpCreated")
 	return nil
 }
+func (r *recordingPublisher) PublishStoryLfpResponse(context.Context, string, string, string, string) error {
+	r.events = append(r.events, "StoryLfpResponse")
+	return nil
+}
 func (r *recordingPublisher) Close() error { return nil }
 
 func TestRecordingPublisher_emitsAllStoryEventTypes(t *testing.T) {

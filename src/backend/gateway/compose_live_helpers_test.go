@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"testing"
@@ -1640,4 +1641,169 @@ func composeRequestUploadStatus(
 	})
 	require.NoError(t, err)
 	return composePostStatus(t, client, base, accessToken, "/api/v1/files/upload", payload)
+}
+
+func liveAdminBaseURL() string {
+	port := strings.TrimSpace(os.Getenv("ADMIN_PORT"))
+	if port == "" {
+		port = "9081"
+	}
+	return "http://127.0.0.1:" + port
+}
+
+func liveDeveloperPortalBaseURL() string {
+	port := strings.TrimSpace(os.Getenv("DEVELOPER_PORTAL_PORT"))
+	if port == "" {
+		port = "9082"
+	}
+	return "http://127.0.0.1:" + port
+}
+
+func composeSpaceProWebhookBody(t *testing.T, spaceID, purchaserAccountID string) string {
+	t.Helper()
+	body, err := json.Marshal(map[string]any{
+		"event_id":   fmt.Sprintf("evt_space_%d", time.Now().UnixNano()),
+		"event_type": "subscription.activated",
+		"data": map[string]any{
+			"custom_data": map[string]string{
+				"space_id":     spaceID,
+				"purchaser_id": purchaserAccountID,
+				"plan":         "space_pro",
+			},
+			"status": "active",
+		},
+	})
+	require.NoError(t, err)
+	return string(body)
+}
+
+func composeActivateSpaceProWebhook(t *testing.T, client *http.Client, base, spaceID, purchaserAccountID string) {
+	t.Helper()
+	body := composeSpaceProWebhookBody(t, spaceID, purchaserAccountID)
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/subscription/webhooks/paddle", bytes.NewReader([]byte(body)))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Paddle-Signature", composeSignPaddleWebhook(t, body))
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "space_pro webhook body=%s", string(raw))
+}
+
+func composeQueryPostgres(t *testing.T, database, query string) string {
+	t.Helper()
+	root := repoRootFromTest(t)
+	cmd := exec.Command(
+		"docker", "compose", "exec", "-T", "postgres",
+		"psql", "-U", "voice", "-d", database, "-t", "-A", "-c", query,
+	)
+	cmd.Dir = root
+	out, err := cmd.Output()
+	if err != nil {
+		t.Skipf("postgres query unavailable (database=%s): %v", database, err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func composeListProfileIDs(t *testing.T, client *http.Client, base, accessToken string) []string {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, base+"/api/v1/users/profiles", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "GET profiles body=%s", string(body))
+	var parsed struct {
+		ProfileList struct {
+			Profiles []struct {
+				ID string `json:"id"`
+			} `json:"profiles"`
+		} `json:"profile_list"`
+	}
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	out := make([]string, 0, len(parsed.ProfileList.Profiles))
+	for _, p := range parsed.ProfileList.Profiles {
+		if p.ID != "" {
+			out = append(out, p.ID)
+		}
+	}
+	return out
+}
+
+func composeDeleteProfileStatus(t *testing.T, client *http.Client, base, accessToken, profileID string) int {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodDelete, base+"/api/v1/users/profiles/"+profileID, nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	return resp.StatusCode
+}
+
+func composeSwitchProfileStatus(t *testing.T, client *http.Client, base, accessToken, profileID string) int {
+	t.Helper()
+	switchResp := composePostJSON(t, client, base+"/api/v1/auth/switch-profile", accessToken,
+		`{"profile_id":"`+profileID+`"}`)
+	defer switchResp.Body.Close()
+	return switchResp.StatusCode
+}
+
+func composePostDowngradeProfiles(t *testing.T, client *http.Client, base, accessToken string, kept []string) int {
+	t.Helper()
+	payload, err := json.Marshal(map[string]any{"kept_profile_ids": kept})
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/subscription/downgrade/profiles", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	return resp.StatusCode
+}
+
+func composeMessageContentsInChat(t *testing.T, client *http.Client, base, accessToken, chatID string) []string {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, base+"/api/v1/messages?chat_id="+chatID, nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "GET messages body=%s", string(body))
+	var hist struct {
+		MessageList struct {
+			Messages []struct {
+				Content string `json:"content"`
+			} `json:"messages"`
+		} `json:"message_list"`
+	}
+	require.NoError(t, json.Unmarshal(body, &hist))
+	out := make([]string, 0, len(hist.MessageList.Messages))
+	for _, m := range hist.MessageList.Messages {
+		out = append(out, m.Content)
+	}
+	return out
+}
+
+func createComposeSpaceChatStatus(t *testing.T, client *http.Client, base, accessToken, spaceID, name string) int {
+	t.Helper()
+	payload, err := json.Marshal(map[string]string{
+		"type": "CHAT_TYPE_GROUP",
+		"name": name,
+	})
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/spaces/"+spaceID+"/chats", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	return resp.StatusCode
 }

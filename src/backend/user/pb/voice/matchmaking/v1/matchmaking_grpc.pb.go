@@ -36,6 +36,8 @@ const (
 	MatchmakingService_BanFromMM_FullMethodName             = "/voice.matchmaking.v1.MatchmakingService/BanFromMM"
 	MatchmakingService_UnbanFromMM_FullMethodName           = "/voice.matchmaking.v1.MatchmakingService/UnbanFromMM"
 	MatchmakingService_GetMMBanStatus_FullMethodName        = "/voice.matchmaking.v1.MatchmakingService/GetMMBanStatus"
+	MatchmakingService_ApplyPlatformMMBan_FullMethodName    = "/voice.matchmaking.v1.MatchmakingService/ApplyPlatformMMBan"
+	MatchmakingService_RevokePlatformMMBan_FullMethodName   = "/voice.matchmaking.v1.MatchmakingService/RevokePlatformMMBan"
 	MatchmakingService_GetMyPlayerProfile_FullMethodName    = "/voice.matchmaking.v1.MatchmakingService/GetMyPlayerProfile"
 	MatchmakingService_GetPlayerProfile_FullMethodName      = "/voice.matchmaking.v1.MatchmakingService/GetPlayerProfile"
 	MatchmakingService_UpsertPlayerGameEntry_FullMethodName = "/voice.matchmaking.v1.MatchmakingService/UpsertPlayerGameEntry"
@@ -65,6 +67,9 @@ type MatchmakingServiceClient interface {
 	BanFromMM(ctx context.Context, in *BanFromMMRequest, opts ...grpc.CallOption) (*BanFromMMResponse, error)
 	UnbanFromMM(ctx context.Context, in *UnbanFromMMRequest, opts ...grpc.CallOption) (*UnbanFromMMResponse, error)
 	GetMMBanStatus(ctx context.Context, in *GetMMBanStatusRequest, opts ...grpc.CallOption) (*GetMMBanStatusResponse, error)
+	// Moderation S2S — platform MM ban (mm_ban sanction).
+	ApplyPlatformMMBan(ctx context.Context, in *ApplyPlatformMMBanRequest, opts ...grpc.CallOption) (*ApplyPlatformMMBanResponse, error)
+	RevokePlatformMMBan(ctx context.Context, in *RevokePlatformMMBanRequest, opts ...grpc.CallOption) (*RevokePlatformMMBanResponse, error)
 	// Player profile (per-game MM settings)
 	GetMyPlayerProfile(ctx context.Context, in *GetMyPlayerProfileRequest, opts ...grpc.CallOption) (*GetMyPlayerProfileResponse, error)
 	GetPlayerProfile(ctx context.Context, in *GetPlayerProfileRequest, opts ...grpc.CallOption) (*GetPlayerProfileResponse, error)
@@ -250,6 +255,26 @@ func (c *matchmakingServiceClient) GetMMBanStatus(ctx context.Context, in *GetMM
 	return out, nil
 }
 
+func (c *matchmakingServiceClient) ApplyPlatformMMBan(ctx context.Context, in *ApplyPlatformMMBanRequest, opts ...grpc.CallOption) (*ApplyPlatformMMBanResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApplyPlatformMMBanResponse)
+	err := c.cc.Invoke(ctx, MatchmakingService_ApplyPlatformMMBan_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchmakingServiceClient) RevokePlatformMMBan(ctx context.Context, in *RevokePlatformMMBanRequest, opts ...grpc.CallOption) (*RevokePlatformMMBanResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RevokePlatformMMBanResponse)
+	err := c.cc.Invoke(ctx, MatchmakingService_RevokePlatformMMBan_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *matchmakingServiceClient) GetMyPlayerProfile(ctx context.Context, in *GetMyPlayerProfileRequest, opts ...grpc.CallOption) (*GetMyPlayerProfileResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetMyPlayerProfileResponse)
@@ -313,6 +338,9 @@ type MatchmakingServiceServer interface {
 	BanFromMM(context.Context, *BanFromMMRequest) (*BanFromMMResponse, error)
 	UnbanFromMM(context.Context, *UnbanFromMMRequest) (*UnbanFromMMResponse, error)
 	GetMMBanStatus(context.Context, *GetMMBanStatusRequest) (*GetMMBanStatusResponse, error)
+	// Moderation S2S — platform MM ban (mm_ban sanction).
+	ApplyPlatformMMBan(context.Context, *ApplyPlatformMMBanRequest) (*ApplyPlatformMMBanResponse, error)
+	RevokePlatformMMBan(context.Context, *RevokePlatformMMBanRequest) (*RevokePlatformMMBanResponse, error)
 	// Player profile (per-game MM settings)
 	GetMyPlayerProfile(context.Context, *GetMyPlayerProfileRequest) (*GetMyPlayerProfileResponse, error)
 	GetPlayerProfile(context.Context, *GetPlayerProfileRequest) (*GetPlayerProfileResponse, error)
@@ -378,6 +406,12 @@ func (UnimplementedMatchmakingServiceServer) UnbanFromMM(context.Context, *Unban
 }
 func (UnimplementedMatchmakingServiceServer) GetMMBanStatus(context.Context, *GetMMBanStatusRequest) (*GetMMBanStatusResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetMMBanStatus not implemented")
+}
+func (UnimplementedMatchmakingServiceServer) ApplyPlatformMMBan(context.Context, *ApplyPlatformMMBanRequest) (*ApplyPlatformMMBanResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ApplyPlatformMMBan not implemented")
+}
+func (UnimplementedMatchmakingServiceServer) RevokePlatformMMBan(context.Context, *RevokePlatformMMBanRequest) (*RevokePlatformMMBanResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RevokePlatformMMBan not implemented")
 }
 func (UnimplementedMatchmakingServiceServer) GetMyPlayerProfile(context.Context, *GetMyPlayerProfileRequest) (*GetMyPlayerProfileResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetMyPlayerProfile not implemented")
@@ -718,6 +752,42 @@ func _MatchmakingService_GetMMBanStatus_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MatchmakingService_ApplyPlatformMMBan_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplyPlatformMMBanRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchmakingServiceServer).ApplyPlatformMMBan(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchmakingService_ApplyPlatformMMBan_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchmakingServiceServer).ApplyPlatformMMBan(ctx, req.(*ApplyPlatformMMBanRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchmakingService_RevokePlatformMMBan_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RevokePlatformMMBanRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchmakingServiceServer).RevokePlatformMMBan(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchmakingService_RevokePlatformMMBan_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchmakingServiceServer).RevokePlatformMMBan(ctx, req.(*RevokePlatformMMBanRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _MatchmakingService_GetMyPlayerProfile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetMyPlayerProfileRequest)
 	if err := dec(in); err != nil {
@@ -864,6 +934,14 @@ var MatchmakingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetMMBanStatus",
 			Handler:    _MatchmakingService_GetMMBanStatus_Handler,
+		},
+		{
+			MethodName: "ApplyPlatformMMBan",
+			Handler:    _MatchmakingService_ApplyPlatformMMBan_Handler,
+		},
+		{
+			MethodName: "RevokePlatformMMBan",
+			Handler:    _MatchmakingService_RevokePlatformMMBan_Handler,
 		},
 		{
 			MethodName: "GetMyPlayerProfile",

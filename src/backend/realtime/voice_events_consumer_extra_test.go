@@ -89,3 +89,55 @@ func TestVoiceEventBytesToFanout_InvalidPayload(t *testing.T) {
 		t.Fatal("expected invalid protobuf to be dropped")
 	}
 }
+
+func TestVoiceEventBytesToFanout_CallStartedAndMemberJoined(t *testing.T) {
+	roomID := uuid.NewString()
+	chatID := uuid.NewString()
+	owner := uuid.NewString()
+	member := uuid.NewString()
+
+	started := &eventsv1.VoiceStreamEvent{
+		EventId:    "voice-started",
+		OccurredAt: timestamppb.Now(),
+		Payload: &eventsv1.VoiceStreamEvent_CallStarted{
+			CallStarted: &eventsv1.CallStarted{
+				RoomId:             roomID,
+				ChatId:             chatID,
+				InitiatorProfileId: owner,
+				ProfileIds:         []string{owner},
+				MediaKind:          "audio",
+				LivekitRoomName:    "voice-group-" + roomID,
+			},
+		},
+	}
+	b, err := proto.Marshal(started)
+	if err != nil {
+		t.Fatal(err)
+	}
+	profiles, fe, ok := voiceEventBytesToFanout(b)
+	if !ok || fe.Op != "call_started" || len(profiles) != 1 {
+		t.Fatalf("started ok=%v op=%q profiles=%v", ok, fe.Op, profiles)
+	}
+
+	joined := &eventsv1.VoiceStreamEvent{
+		EventId:    "voice-joined",
+		OccurredAt: timestamppb.Now(),
+		Payload: &eventsv1.VoiceStreamEvent_VoiceMemberJoined{
+			VoiceMemberJoined: &eventsv1.VoiceMemberJoined{
+				RoomId:            roomID,
+				VoiceRoomId:       uuid.NewString(),
+				SpaceId:           uuid.NewString(),
+				JoinedProfileId:   member,
+				NotifyProfileIds:  []string{owner},
+			},
+		},
+	}
+	b, err = proto.Marshal(joined)
+	if err != nil {
+		t.Fatal(err)
+	}
+	profiles, fe, ok = voiceEventBytesToFanout(b)
+	if !ok || fe.Op != "voice_member_joined" || len(profiles) != 1 || profiles[0] != owner {
+		t.Fatalf("joined ok=%v op=%q profiles=%v", ok, fe.Op, profiles)
+	}
+}

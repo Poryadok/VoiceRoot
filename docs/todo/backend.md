@@ -87,7 +87,7 @@
 - [ ] **[Cross-cutting] JWT `subscription_tier` never syncs from billing — production Auth bean is `InMemorySubscriptionTierStore` (comment: “optional NATS-backed sync” but no consumer). After Paddle webhook, `/subscription/me` and Gateway file path see premium, but JWT still `free` until re-login — and re-login still won’t update tier. Breaks `DATA_MODEL.md` (“source of truth — Subscription”).** — `src/backend/auth/src/main/java/voice/backend/auth/config/AuthBeans.java`, `.../InMemorySubscriptionTierStore.java`, `.../AuthService.java`; consumers: `src/backend/user/internal/grpcsvc/user.go`, `src/backend/gateway/auth.go`
 - [ ] **[Cross-cutting] Space Pro entitlement duplicated, not synced — webhook writes `subscription_db.space_subscriptions` (`subscription/internal/grpcsvc/subscription.go`); Space enforces caps from `space_db.space_subscriptions` (`space/internal/store/entitlement.go`). No S2S/event sync on `subscription.activated` / `space_pro`. Live Space Pro billing does not raise member cap.** — `src/backend/migrations/subscription_db/000001_init.up.sql`, `src/backend/migrations/space_db/000005_space_subscriptions.up.sql`, `src/backend/space/internal/store/entitlement.go`
 - [ ] **[Cross-cutting] `subscription.events` bus missing — `docs/CONTRACT_MATRIX.md` / `docs/MICROSERVICES.md` list stream with subscribers Analytics, User, Space, File; code only publishes `analytics.subscription.*` from Subscription. Blocks cross-service tier/limit propagation.** — `src/backend/subscription/internal/grpcsvc/subscription.go` (`publishPaymentEvent`), `docs/CONTRACT_MATRIX.md`
-- [ ] **[Cross-cutting] Web JWT in WS query string (no ticket) — documented security follow-up not implemented; access tokens can hit proxy/CDN logs on web reconnect.** — `docs/ARCHITECTURE_REQUIREMENTS.md` (§ WS auth), `src/frontend/lib/backend/realtime_client.dart`, Gateway WS proxy
+- [x] **[Cross-cutting] Web JWT in WS query string** — web uses `POST /api/v1/realtime/ws-ticket` + `/ws?ticket=`; legacy `access_token` query retained for compat. — `docs/ARCHITECTURE_REQUIREMENTS.md`, Gateway, Flutter `RealtimeHub`
 
 ### Messaging
 
@@ -258,7 +258,7 @@
 - [ ] **[Cross-cutting] No E2E for Space Pro billing path — smoke/full cover personal premium + file limits (`compose_billing_live_test.go`, `billing_e2e_live_test.dart`); zero `space_pro` webhook → invite/member-cap tests.** — `src/backend/gateway/compose_billing_live_test.go`, `.github/ci/e2e-features.yml`
 - [ ] **[Cross-cutting] E2E smoke skips core messaging cross-cut — tier-2 smoke omits `ws_resume`, `message_delivery`, `in_app_notifications` (full/nightly only). Two-layer delivery not gated on every master push.** — `.github/ci/e2e-features.yml`, `docs/TESTING.md`
 - [ ] **[Cross-cutting] No device `integration_test` driver suite — live coverage is host `flutter test`; `src/frontend/integration_test/` remains aspirational. Mobile push/VoIP/deep-link acceptance not automatable as documented.** — `src/frontend/integration_test/README.md`, `docs/TESTING.md`
-- [ ] **[Cross-cutting] Federation: staging/CI vs local compose — Federation scaffold in CI/staging (`deploy/staging/services.yaml`, `Makefile` `GO_SERVICES`); not in `docker-compose.yml` app profile. Deferred product but deployable — env parity gap.** — `deploy/staging/services.yaml`, `docker-compose.yml`, `src/backend/federation/main.go`
+- [x] **[Cross-cutting] Federation: staging/CI vs local compose** — `federation` added to `docker-compose.yml` app profile (health/metrics scaffold); still omitted from `GATEWAY_GRPC_UPSTREAMS_JSON` by design (S2S-only).
 - [ ] **[Cross-cutting] Admin vs PLAN — `PLAN.md` lists Admin as “зарезервировано”; `src/admin/` ships moderation queue + product analytics pages with CI job. Cross-cutting staff product surface undocumented in PLAN.** — `docs/PLAN.md`, `src/admin/`
 
 ### Messaging
@@ -308,8 +308,8 @@
 
 
 - [ ] **[Federation] Hollow pod on every staging/prod deploy** — `voice-federation` is Tier-1 restart in `scripts/staging/rollout-app-tier.sh`; image built/pushed on every `master` push via `.github/workflows/ci.yml` (`staging-images-push`) and `scripts/ci/staging-image-catalog.json`. Burns CI/CD + cluster resources with no product surface.
-- [ ] **[Federation] `federation_db` documented but never provisioned** — `docs/DATA_STORES.md`, `docs/microservices/federation-service.md` declare `federation_db`; absent from `docker/postgres/initdb.d/01-init-databases.sh`, `scripts/dev/compose-migrate-all.sh`, `src/backend/migrations/`, `deploy/templates/`.
-- [ ] **[Federation] Prometheus scrape misconfigured** — `deploy/staging/services.yaml` / `deploy/prod/services.yaml` annotate `prometheus.io/path: "/metrics"` on `voice-federation`, but `src/backend/federation/health.go` exposes only `/health` → scrape 404s / noisy alerts.
+- [x] **[Federation] `federation_db` documented but never provisioned** — `docs/DATA_STORES.md`, `docs/microservices/federation-service.md` now mark `federation_db` as planned/deferred; still absent from `docker/postgres/initdb.d/`, `scripts/dev/compose-migrate-all.sh`, `src/backend/migrations/`, `deploy/templates/` until implementation.
+- [x] **[Federation] Prometheus scrape misconfigured** — federation scaffold now exposes GET `/metrics` via `pkg/promhttp`; k8s annotations unchanged.
 - [ ] **[Federation] Spec ↔ proto drift (implementation trap)** — when work starts, docs and contracts disagree:
 - [ ] **[Federation] `federation.events` contract is dead** — `docs/CONTRACT_MATRIX.md` lists Federation → Analytics/Role/Moderation; zero publishers/consumers in `src/backend/analytics/`, `src/backend/role/`, `src/backend/moderation/`, `src/backend/federation/`.
 
@@ -508,7 +508,7 @@
 - [ ] **[Cross-cutting] Partial-feature integration E2E missing — no cross-smoke for: premium → profile banner/GIF/3rd profile; premium → Story anonymous view; subscription grace → push/email; bot slash → in-app notification (only isolated feature tests).** — `.github/ci/e2e-features.yml`, `src/frontend/test/`
 - [ ] **[Cross-cutting] `profiles_verification` / `encryption_dm` not in smoke — PLAN partial/shipped-opt-in; smoke has `encryption_key_backup` only, not DM encryption or verification flows.** — `.github/ci/e2e-features.yml`, `docs/PLAN.md`
 - [ ] **[Cross-cutting] gRPC mTLS not wired — admitted in `docs/DEPLOYMENT.md`; `MICROSERVICES.md` security section still states mTLS between services. Staging relies on NetworkPolicy + `BOT_GRPC_GATEWAY_ONLY`.** — `docs/DEPLOYMENT.md`, `deploy/templates/network-policy-voice-bot.yaml`
-- [ ] **[Cross-cutting] Distributed tracing absent — `MICROSERVICES.md` stack lists OTel+Jaeger; `docs/features/observability.md` defers tracing (v1 = `request_id` in Loki). Implementation gap between architecture table and v1 observability spec — staging debug relies on logs only.** — `docs/features/observability.md`, `deploy/observability/` (no Jaeger/OTel)
+- [ ] **[Cross-cutting] Distributed tracing absent** — v1 uses `request_id` in logs; deferred per [ADR 003](adr/003-distributed-tracing-deferred.md). — `docs/features/observability.md`, `deploy/observability/`
 
 ### Messaging
 
@@ -553,12 +553,12 @@
 ### Federation
 
 
-- [ ] **[Federation] Not in local compose stack** — `docker-compose.yml` has no `federation` service; `GATEWAY_GRPC_UPSTREAMS_JSON` omits it (lines ~793). Contrast: `analytics` is wired. `Makefile` still lists `federation` in `GO_SERVICES` — builds locally but no runtime wiring.
+- [x] **[Federation] Not in local compose stack** — `docker-compose.yml` now has `federation` (health/metrics scaffold); `GATEWAY_GRPC_UPSTREAMS_JSON` still omits it by design (S2S-only).
 - [ ] **[Federation] No k8s migrate job** — unlike shipped services, no `federation_db` template in `deploy/templates/`; first real impl needs DB bootstrap path.
 - [ ] **[Federation] No downstream product hooks** — federated spaces/auth/search/moderation described in `docs/features/federation.md`, `docs/features/search.md` §owners — no `federat*` code in `src/backend/space/`, `src/backend/search/`, `src/backend/auth/`, `src/backend/notification/`.
 - [ ] **[Federation] No control-plane surface** — `FederationManagementService` in `protos/voice/s2s/v1/federation_management.proto` (mTLS, admin ops) — no server, no `src/admin/` UI.
-- [ ] **[Federation] K8s manifest lacks gRPC port** — `deploy/staging/services.yaml` `voice-federation` Service exposes only `:8080`; spec requires gRPC S2S (`docs/microservices/federation-service.md`). Scaffold-consistent today, but manifest won't work when gRPC lands without edit.
-- [ ] **[Federation] `docs/todo/backend.md` L257 partially stale** — claims no staging Deployment; `deploy/staging/services.yaml` now has `voice-federation`. Still correct that `deploy/staging/configmap-app.yaml` / `deploy/prod/configmap-app.yaml` omit federation from `GATEWAY_GRPC_UPSTREAMS_JSON`.
+- [x] **[Federation] K8s manifest lacks gRPC port** — `voice-federation` Deployment/Service now expose `:9090` with `FEDERATION_GRPC_LISTEN`; gRPC server still unimplemented in scaffold.
+- [ ] **[Federation] Gateway upstream omission** — `deploy/staging/configmap-app.yaml` / `deploy/prod/configmap-app.yaml` omit federation from `GATEWAY_GRPC_UPSTREAMS_JSON` (correct for S2S-only; document when gRPC lands).
 
 ### Story
 
@@ -720,7 +720,7 @@
 
 - [ ] **[Federation] Accidental Gateway REST proxy** — `src/backend/gateway/config_test.go` allows `federation` in `GATEWAY_REST_UPSTREAMS_JSON`, but `routing_test.go` blocks public paths; low risk unless someone adds transcoding routes without review.
 - [ ] **[Federation] Generated-only Flutter surface** — `src/frontend/lib/gen/voice/s2s/v1/*`; no `lib/` product code for federation.
-- [ ] **[Federation] Repo junk in service dir** — `src/backend/federation/$prof`, `src/backend/federation/coverage` (not source; shouldn't ship).
+- [x] **[Federation] Repo junk in service dir** — removed `$prof` and `coverage` from git; added to `.gitignore`.
 - [ ] **[Federation] No buf/gateway public API** — S2S protos correctly isolated under `protos/voice/s2s/v1/`; no accidental client exposure via REST transcoding.
 
 ### Voice

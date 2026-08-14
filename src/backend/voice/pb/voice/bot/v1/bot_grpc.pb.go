@@ -40,6 +40,7 @@ const (
 	BotService_PollEvents_FullMethodName               = "/voice.bot.v1.BotService/PollEvents"
 	BotService_ValidateManifest_FullMethodName         = "/voice.bot.v1.BotService/ValidateManifest"
 	BotService_ApplyManifest_FullMethodName            = "/voice.bot.v1.BotService/ApplyManifest"
+	BotService_GetManifest_FullMethodName              = "/voice.bot.v1.BotService/GetManifest"
 	BotService_InstallBotInSpace_FullMethodName        = "/voice.bot.v1.BotService/InstallBotInSpace"
 	BotService_UninstallBotFromSpace_FullMethodName    = "/voice.bot.v1.BotService/UninstallBotFromSpace"
 	BotService_ListInstalledBots_FullMethodName        = "/voice.bot.v1.BotService/ListInstalledBots"
@@ -87,6 +88,7 @@ type BotServiceClient interface {
 	// Manifest (Developer Portal).
 	ValidateManifest(ctx context.Context, in *ValidateManifestRequest, opts ...grpc.CallOption) (*ValidateManifestResponse, error)
 	ApplyManifest(ctx context.Context, in *ApplyManifestRequest, opts ...grpc.CallOption) (*ApplyManifestResponse, error)
+	GetManifest(ctx context.Context, in *GetManifestRequest, opts ...grpc.CallOption) (*GetManifestResponse, error)
 	// Space lifecycle.
 	InstallBotInSpace(ctx context.Context, in *InstallBotInSpaceRequest, opts ...grpc.CallOption) (*InstallBotInSpaceResponse, error)
 	UninstallBotFromSpace(ctx context.Context, in *UninstallBotFromSpaceRequest, opts ...grpc.CallOption) (*UninstallBotFromSpaceResponse, error)
@@ -336,6 +338,16 @@ func (c *botServiceClient) ApplyManifest(ctx context.Context, in *ApplyManifestR
 	return out, nil
 }
 
+func (c *botServiceClient) GetManifest(ctx context.Context, in *GetManifestRequest, opts ...grpc.CallOption) (*GetManifestResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetManifestResponse)
+	err := c.cc.Invoke(ctx, BotService_GetManifest_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *botServiceClient) InstallBotInSpace(ctx context.Context, in *InstallBotInSpaceRequest, opts ...grpc.CallOption) (*InstallBotInSpaceResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(InstallBotInSpaceResponse)
@@ -534,6 +546,7 @@ type BotServiceServer interface {
 	// Manifest (Developer Portal).
 	ValidateManifest(context.Context, *ValidateManifestRequest) (*ValidateManifestResponse, error)
 	ApplyManifest(context.Context, *ApplyManifestRequest) (*ApplyManifestResponse, error)
+	GetManifest(context.Context, *GetManifestRequest) (*GetManifestResponse, error)
 	// Space lifecycle.
 	InstallBotInSpace(context.Context, *InstallBotInSpaceRequest) (*InstallBotInSpaceResponse, error)
 	UninstallBotFromSpace(context.Context, *UninstallBotFromSpaceRequest) (*UninstallBotFromSpaceResponse, error)
@@ -626,6 +639,9 @@ func (UnimplementedBotServiceServer) ValidateManifest(context.Context, *Validate
 }
 func (UnimplementedBotServiceServer) ApplyManifest(context.Context, *ApplyManifestRequest) (*ApplyManifestResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ApplyManifest not implemented")
+}
+func (UnimplementedBotServiceServer) GetManifest(context.Context, *GetManifestRequest) (*GetManifestResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetManifest not implemented")
 }
 func (UnimplementedBotServiceServer) InstallBotInSpace(context.Context, *InstallBotInSpaceRequest) (*InstallBotInSpaceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method InstallBotInSpace not implemented")
@@ -1070,6 +1086,24 @@ func _BotService_ApplyManifest_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BotService_GetManifest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetManifestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BotServiceServer).GetManifest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BotService_GetManifest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BotServiceServer).GetManifest(ctx, req.(*GetManifestRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _BotService_InstallBotInSpace_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(InstallBotInSpaceRequest)
 	if err := dec(in); err != nil {
@@ -1462,6 +1496,10 @@ var BotService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ApplyManifest",
 			Handler:    _BotService_ApplyManifest_Handler,
+		},
+		{
+			MethodName: "GetManifest",
+			Handler:    _BotService_GetManifest_Handler,
 		},
 		{
 			MethodName: "InstallBotInSpace",

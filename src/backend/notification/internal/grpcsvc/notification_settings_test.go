@@ -25,8 +25,15 @@ func incomingProfileCtx(profileID uuid.UUID) context.Context {
 }
 
 func TestGetNotificationSettings_DefaultScope(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startNotificationPostgresForTest(t, ctx)
+	applyNotificationMigration(t, ctx, pool)
+
 	profileID := uuid.New()
-	svc := &NotificationGRPC{}
+	svc := &NotificationGRPC{Settings: &store.SettingsStore{Pool: pool}}
 
 	resp, err := svc.GetNotificationSettings(incomingProfileCtx(profileID), &notificationv1.GetNotificationSettingsRequest{})
 	require.NoError(t, err)
@@ -37,9 +44,16 @@ func TestGetNotificationSettings_DefaultScope(t *testing.T) {
 }
 
 func TestGetNotificationSettings_CustomScope(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startNotificationPostgresForTest(t, ctx)
+	applyNotificationMigration(t, ctx, pool)
+
 	profileID := uuid.New()
 	chatID := uuid.NewString()
-	svc := &NotificationGRPC{}
+	svc := &NotificationGRPC{Settings: &store.SettingsStore{Pool: pool}}
 
 	scope := "chat"
 	resp, err := svc.GetNotificationSettings(incomingProfileCtx(profileID), &notificationv1.GetNotificationSettingsRequest{
@@ -52,47 +66,70 @@ func TestGetNotificationSettings_CustomScope(t *testing.T) {
 }
 
 func TestGetNotificationSettings_Unauthenticated(t *testing.T) {
-	svc := &NotificationGRPC{}
+	svc := &NotificationGRPC{Settings: &store.SettingsStore{}}
 	_, err := svc.GetNotificationSettings(context.Background(), &notificationv1.GetNotificationSettingsRequest{})
 	require.Error(t, err)
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
 }
 
 func TestSetQuietHours_Success(t *testing.T) {
-	svc := &NotificationGRPC{}
-	_, err := svc.SetQuietHours(incomingProfileCtx(uuid.New()), &notificationv1.SetQuietHoursRequest{
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startNotificationPostgresForTest(t, ctx)
+	applyNotificationMigration(t, ctx, pool)
+
+	profileID := uuid.New()
+	svc := &NotificationGRPC{Settings: &store.SettingsStore{Pool: pool}}
+	_, err := svc.SetQuietHours(incomingProfileCtx(profileID), &notificationv1.SetQuietHoursRequest{
 		Enabled:   true,
 		StartTime: "23:00",
 		EndTime:   "08:00",
 		Timezone:  "UTC",
 	})
 	require.NoError(t, err)
+
+	got, err := svc.Settings.GetQuietHours(ctx, profileID)
+	require.NoError(t, err)
+	require.True(t, got.Enabled)
 }
 
 func TestSetQuietHours_Unauthenticated(t *testing.T) {
-	svc := &NotificationGRPC{}
+	svc := &NotificationGRPC{Settings: &store.SettingsStore{}}
 	_, err := svc.SetQuietHours(context.Background(), &notificationv1.SetQuietHoursRequest{})
 	require.Error(t, err)
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
 }
 
-func TestUpdateNotificationSettings_Success(t *testing.T) {
-	svc := &NotificationGRPC{}
+func TestUpdateNotificationSettings_Persists(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startNotificationPostgresForTest(t, ctx)
+	applyNotificationMigration(t, ctx, pool)
+
+	profileID := uuid.New()
+	svc := &NotificationGRPC{Settings: &store.SettingsStore{Pool: pool}}
 	settings := &notificationv1.NotificationSettings{
-		ProfileId: uuid.NewString(),
 		ScopeType: "global",
 		Enabled:   false,
 	}
-	resp, err := svc.UpdateNotificationSettings(context.Background(), &notificationv1.UpdateNotificationSettingsRequest{
+	resp, err := svc.UpdateNotificationSettings(incomingProfileCtx(profileID), &notificationv1.UpdateNotificationSettingsRequest{
 		Settings: settings,
 	})
 	require.NoError(t, err)
-	require.Equal(t, settings, resp.GetNotificationSettings())
+	require.False(t, resp.GetNotificationSettings().GetEnabled())
+
+	got, err := svc.Settings.GetSettings(ctx, profileID, "global", nil)
+	require.NoError(t, err)
+	require.False(t, got.Enabled)
 }
 
 func TestUpdateNotificationSettings_MissingSettings(t *testing.T) {
-	svc := &NotificationGRPC{}
-	_, err := svc.UpdateNotificationSettings(context.Background(), &notificationv1.UpdateNotificationSettingsRequest{})
+	svc := &NotificationGRPC{Settings: &store.SettingsStore{}}
+	_, err := svc.UpdateNotificationSettings(incomingProfileCtx(uuid.New()), &notificationv1.UpdateNotificationSettingsRequest{})
 	require.Error(t, err)
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }
@@ -126,7 +163,7 @@ func TestSendNotification_NoopFCMDoesNotFail(t *testing.T) {
 	}
 	_, err := svc.SendNotification(context.Background(), &notificationv1.SendNotificationRequest{
 		ProfileId:        uuid.NewString(),
-		NotificationType: "new_message",
+		NotificationType: "system",
 		Title:            "Hi",
 		Body:             "Hello",
 	})

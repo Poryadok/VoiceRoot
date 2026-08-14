@@ -14,6 +14,10 @@
 
 Облачный **dev**-кластер не используем. При необходимости общего dev-окружения — кластер по тому же шаблону, что staging.
 
+### Postgres / Redis versions (compose ↔ k8s)
+
+Compose (`docker-compose.yml`) and in-cluster infra (`deploy/staging/infra.yaml`, `deploy/prod/infra.yaml`) both use **PostgreSQL 16** and **Redis 7**. Decision and upgrade policy: [ADR 001](adr/001-compose-postgres-redis-versions.md).
+
 **Namespace** в Kubernetes: по умолчанию `voice-staging`, `voice-prod`; иные имена — только если зафиксированы в репозитории инфраструктуры или Helm-чартах.
 
 ---
@@ -31,7 +35,27 @@
 ```
 
 - **Staging**: на push в `master` CI **собирает только изменённые** образы (`build_services` из path filter), **promote** остальных с предыдущего SHA (`promote-ghcr-images.sh`), публикует immutable тег `:<git_sha>` (без `:latest`). Артефакт **`stack.lock.yaml`** фиксирует теги всех 23 образов. Деплой: job **`deploy-staging`** в CI (`workflow_call` → [`staging-deploy.yml`](../.github/workflows/staging-deploy.yml)) при `STAGING_DEPLOY_ENABLED=true`; режимы `DEPLOY_MODE=full|app-only|images-only` в [`render-and-apply.sh`](../scripts/staging/render-and-apply.sh). Ручной выкат — **Staging deploy** с обязательным git SHA.
-- **Production**: workflow **[`Production deploy`](../.github/workflows/prod-deploy.yml)** — `workflow_dispatch`, environment **`production`**, обязательный **`image_tag`**, полный стек [`deploy/prod/`](../deploy/prod/) через [`render-and-apply-prod.sh`](../scripts/prod/render-and-apply-prod.sh).
+- **Production**: workflow **[`Production deploy`](../.github/workflows/prod-deploy.yml)** — `workflow_dispatch`, environment **`production`**, обязательный **`image_tag`**, selective inputs `changed_services` / `needs_full_rollout`, optional [`deploy/prod/stack.lock.yaml`](../deploy/prod/stack.lock.example.yaml) для verify; полный стек [`deploy/prod/`](../deploy/prod/) через [`render-and-apply-prod.sh`](../scripts/prod/render-and-apply-prod.sh).
+
+### `VOICE_IMAGE_TAG` (required)
+
+Локальный и CI apply **не используют `:latest`**. Перед `scripts/staging/render-and-apply.sh` или `scripts/prod/render-and-apply-prod.sh` задайте:
+
+```bash
+export VOICE_IMAGE_TAG=<git-sha>   # тот же SHA, что в GHCR после зелёного CI
+export VOICE_IMAGE_REGISTRY=ghcr.io/<owner>/<repo>
+```
+
+Без `VOICE_IMAGE_TAG` скрипты завершаются с ошибкой.
+
+### Promote bootstrap (пустой GHCR / первый selective push)
+
+Если в registry ещё нет образов с `BASE_TAG` (первый push в `master`, squash-merge, force-push), **promote** не найдёт манифесты и CI упадёт на `staging-images-promote` / `staging-stack-lock`. Варианты:
+
+1. **Actions → CI → Run workflow** → profile **`full`** (собрать все образы на `master`).
+2. GitHub Variable **`STAGING_FORCE_FULL_ROLLOUT=true`** + ручной **Staging deploy** с `deploy_mode=full` после одного успешного full build.
+
+После bootstrap selective promote на `master` работает штатно.
 
 Версионирование образов: тег по **git SHA** `master` для непрерывного staging; для prod — тег **semver** (`v1.2.3`) или тот же SHA, зафиксированный в релизном манифесте.
 
@@ -287,6 +311,8 @@ kubectl wait --for=condition=complete job/voice-migrate-bot-db -n "$NS" --timeou
 Re-run only when new migration files ship; use a new Job name or delete the completed Job before re-apply.
 
 ### gRPC mTLS and NetworkPolicy (prod hardening)
+
+See also [ADR 002: gRPC mTLS scope](adr/002-grpc-mtls-scope.md).
 
 **v1 (current):** `BOT_GRPC_GATEWAY_ONLY=true` — Bot rejects gRPC without Gateway metadata (`x-voice-internal`) or bot-token context. Staging and compose use plaintext gRPC on port **9090** inside the cluster.
 

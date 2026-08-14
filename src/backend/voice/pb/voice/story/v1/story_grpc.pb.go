@@ -37,6 +37,7 @@ const (
 	StoryService_RemoveFromHighlight_FullMethodName   = "/voice.story.v1.StoryService/RemoveFromHighlight"
 	StoryService_GetHighlights_FullMethodName         = "/voice.story.v1.StoryService/GetHighlights"
 	StoryService_CreateLookingForParty_FullMethodName = "/voice.story.v1.StoryService/CreateLookingForParty"
+	StoryService_RespondToLfpStory_FullMethodName     = "/voice.story.v1.StoryService/RespondToLfpStory"
 )
 
 // StoryServiceClient is the client API for StoryService service.
@@ -63,6 +64,7 @@ type StoryServiceClient interface {
 	RemoveFromHighlight(ctx context.Context, in *RemoveFromHighlightRequest, opts ...grpc.CallOption) (*RemoveFromHighlightResponse, error)
 	GetHighlights(ctx context.Context, in *GetHighlightsRequest, opts ...grpc.CallOption) (*GetHighlightsResponse, error)
 	CreateLookingForParty(ctx context.Context, in *CreateLookingForPartyRequest, opts ...grpc.CallOption) (*CreateLookingForPartyResponse, error)
+	RespondToLfpStory(ctx context.Context, in *RespondToLfpStoryRequest, opts ...grpc.CallOption) (*RespondToLfpStoryResponse, error)
 }
 
 type storyServiceClient struct {
@@ -253,6 +255,16 @@ func (c *storyServiceClient) CreateLookingForParty(ctx context.Context, in *Crea
 	return out, nil
 }
 
+func (c *storyServiceClient) RespondToLfpStory(ctx context.Context, in *RespondToLfpStoryRequest, opts ...grpc.CallOption) (*RespondToLfpStoryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RespondToLfpStoryResponse)
+	err := c.cc.Invoke(ctx, StoryService_RespondToLfpStory_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // StoryServiceServer is the server API for StoryService service.
 // All implementations must embed UnimplementedStoryServiceServer
 // for forward compatibility.
@@ -277,6 +289,7 @@ type StoryServiceServer interface {
 	RemoveFromHighlight(context.Context, *RemoveFromHighlightRequest) (*RemoveFromHighlightResponse, error)
 	GetHighlights(context.Context, *GetHighlightsRequest) (*GetHighlightsResponse, error)
 	CreateLookingForParty(context.Context, *CreateLookingForPartyRequest) (*CreateLookingForPartyResponse, error)
+	RespondToLfpStory(context.Context, *RespondToLfpStoryRequest) (*RespondToLfpStoryResponse, error)
 	mustEmbedUnimplementedStoryServiceServer()
 }
 
@@ -340,6 +353,9 @@ func (UnimplementedStoryServiceServer) GetHighlights(context.Context, *GetHighli
 }
 func (UnimplementedStoryServiceServer) CreateLookingForParty(context.Context, *CreateLookingForPartyRequest) (*CreateLookingForPartyResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateLookingForParty not implemented")
+}
+func (UnimplementedStoryServiceServer) RespondToLfpStory(context.Context, *RespondToLfpStoryRequest) (*RespondToLfpStoryResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RespondToLfpStory not implemented")
 }
 func (UnimplementedStoryServiceServer) mustEmbedUnimplementedStoryServiceServer() {}
 func (UnimplementedStoryServiceServer) testEmbeddedByValue()                      {}
@@ -686,6 +702,24 @@ func _StoryService_CreateLookingForParty_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _StoryService_RespondToLfpStory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RespondToLfpStoryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(StoryServiceServer).RespondToLfpStory(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: StoryService_RespondToLfpStory_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(StoryServiceServer).RespondToLfpStory(ctx, req.(*RespondToLfpStoryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // StoryService_ServiceDesc is the grpc.ServiceDesc for StoryService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -764,6 +798,10 @@ var StoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CreateLookingForParty",
 			Handler:    _StoryService_CreateLookingForParty_Handler,
+		},
+		{
+			MethodName: "RespondToLfpStory",
+			Handler:    _StoryService_RespondToLfpStory_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -256,6 +256,53 @@ func (s *BotGRPC) GetCommands(ctx context.Context, req *botv1.GetCommandsRequest
 	return &botv1.GetCommandsResponse{CommandList: &botv1.CommandList{CommandsJson: store.FormatCommandListJSON(commands)}}, nil
 }
 
+func (s *BotGRPC) GetManifest(ctx context.Context, req *botv1.GetManifestRequest) (*botv1.GetManifestResponse, error) {
+	botID, err := parseUUID("bot_id", req.GetBotId())
+	if err != nil {
+		return nil, err
+	}
+	if err := s.ensureOwner(ctx, botID); err != nil {
+		return nil, err
+	}
+	row, err := s.Store.GetBotByID(ctx, botID)
+	if err != nil {
+		return nil, mapStoreErr(err)
+	}
+	commands, err := s.Store.ListCommands(ctx, botID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	stored := make([]manifest.StoredCommandRow, 0, len(commands))
+	for _, c := range commands {
+		stored = append(stored, manifest.StoredCommandRow{
+			Name:        c.Name,
+			Description: c.Description,
+			Parameters:  c.Parameters,
+		})
+	}
+	var scopes []string
+	if err := json.Unmarshal([]byte(row.ScopesJSON), &scopes); err != nil {
+		scopes = []string{}
+	}
+	doc := manifest.Document{
+		Name:        row.Name,
+		Description: row.Description,
+		Scopes:      scopes,
+		Commands:    manifest.CommandsFromStoredRows(stored),
+	}
+	if row.AvatarURL != nil {
+		doc.IconURL = strings.TrimSpace(*row.AvatarURL)
+	}
+	if row.WebhookURL != nil {
+		doc.WebhookURL = strings.TrimSpace(*row.WebhookURL)
+	}
+	yamlOut, err := manifest.ToYAML(doc)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	return &botv1.GetManifestResponse{ManifestYaml: yamlOut}, nil
+}
+
 func (s *BotGRPC) ValidateManifest(_ context.Context, req *botv1.ValidateManifestRequest) (*botv1.ValidateManifestResponse, error) {
 	doc, errs, err := manifest.ParseYAML(req.GetManifestYaml())
 	if err != nil && len(errs) == 0 {

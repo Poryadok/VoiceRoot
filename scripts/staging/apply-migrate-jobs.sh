@@ -38,6 +38,14 @@ dump_migrate_job_logs() {
   fi
 }
 
+migration_content_hash() {
+  local dir="$1"
+  if [ ! -d "${dir}" ]; then
+    return 1
+  fi
+  find "${dir}" -type f -name '*.sql' -print0 | sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}'
+}
+
 apply_migrate() {
   local db_key="$1"
   local migrations_dir="$2"
@@ -51,18 +59,26 @@ apply_migrate() {
   fi
 
   echo "Applying migrations ConfigMap ${cm_name} from ${migrations_dir}"
+  local content_hash
+  content_hash="$(migration_content_hash "${migrations_dir}")"
   kubectl create configmap "${cm_name}" -n "${NS}" \
     --from-file="${migrations_dir}" \
     --dry-run=client -o yaml | kubectl apply -f -
+  kubectl annotate configmap "${cm_name}" -n "${NS}" \
+    "voice.io/migration-content-hash=${content_hash}" --overwrite
 
   if kubectl get job "${job_name}" -n "${NS}" >/dev/null 2>&1; then
-    local succeeded
+    local succeeded stored_hash
     succeeded="$(kubectl get job "${job_name}" -n "${NS}" -o jsonpath='{.status.succeeded}' 2>/dev/null || echo 0)"
-    if [ "${succeeded:-0}" = "1" ]; then
-      echo "migrate job ${job_name} already succeeded; skipping"
+    stored_hash="$(kubectl get configmap "${cm_name}" -n "${NS}" -o jsonpath='{.metadata.annotations.voice\.io/migration-content-hash}' 2>/dev/null || true)"
+    if [ "${succeeded:-0}" = "1" ] && [ "${stored_hash}" = "${content_hash}" ]; then
+      echo "migrate job ${job_name} already succeeded for current migrations; skipping"
       return 0
     fi
-    echo "deleting incomplete job ${job_name}"
+    if [ "${succeeded:-0}" = "1" ] && [ -n "${stored_hash}" ] && [ "${stored_hash}" != "${content_hash}" ]; then
+      echo "migrate job ${job_name} succeeded but migrations changed (${stored_hash} -> ${content_hash}); re-running"
+    fi
+    echo "deleting incomplete or stale job ${job_name}"
     kubectl delete job "${job_name}" -n "${NS}" --ignore-not-found
   fi
 
