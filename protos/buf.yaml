@@ -8,3 +8,8 @@ lint:
 breaking:
   use:
     - FILE
+  # java_package / java_multiple_files are Java codegen metadata only; wire/JSON stays compatible.
+  # Added so Auth (Java) can generate stubs from shared user/common protos.
+  except:
+    - FILE_SAME_JAVA_PACKAGE
+    - FILE_SAME_JAVA_MULTIPLE_FILES

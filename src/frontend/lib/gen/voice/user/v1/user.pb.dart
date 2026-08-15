@@ -29,11 +29,13 @@ class EnsurePrimaryProfileRequest extends $pb.GeneratedMessage {
     $core.String? accountId,
     $core.String? profileId,
     $core.String? displayHint,
+    $core.bool? isGuestAccount,
   }) {
     final result = create();
     if (accountId != null) result.accountId = accountId;
     if (profileId != null) result.profileId = profileId;
     if (displayHint != null) result.displayHint = displayHint;
+    if (isGuestAccount != null) result.isGuestAccount = isGuestAccount;
     return result;
   }
 
@@ -53,6 +55,7 @@ class EnsurePrimaryProfileRequest extends $pb.GeneratedMessage {
     ..aOS(1, _omitFieldNames ? '' : 'accountId')
     ..aOS(2, _omitFieldNames ? '' : 'profileId')
     ..aOS(3, _omitFieldNames ? '' : 'displayHint')
+    ..aOB(4, _omitFieldNames ? '' : 'isGuestAccount')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -105,6 +108,15 @@ class EnsurePrimaryProfileRequest extends $pb.GeneratedMessage {
   $core.bool hasDisplayHint() => $_has(2);
   @$pb.TagNumber(3)
   void clearDisplayHint() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.bool get isGuestAccount => $_getBF(3);
+  @$pb.TagNumber(4)
+  set isGuestAccount($core.bool value) => $_setBool(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasIsGuestAccount() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearIsGuestAccount() => $_clearField(4);
 }
 
 class EnsurePrimaryProfileResponse extends $pb.GeneratedMessage {
@@ -478,6 +490,7 @@ class Profile extends $pb.GeneratedMessage {
     $1.Timestamp? updatedAt,
     $1.Timestamp? frozenAt,
     $core.String? accentColor,
+    $core.bool? isGuestAccount,
   }) {
     final result = create();
     if (id != null) result.id = id;
@@ -498,6 +511,7 @@ class Profile extends $pb.GeneratedMessage {
     if (updatedAt != null) result.updatedAt = updatedAt;
     if (frozenAt != null) result.frozenAt = frozenAt;
     if (accentColor != null) result.accentColor = accentColor;
+    if (isGuestAccount != null) result.isGuestAccount = isGuestAccount;
     return result;
   }
 
@@ -535,6 +549,7 @@ class Profile extends $pb.GeneratedMessage {
     ..aOM<$1.Timestamp>(17, _omitFieldNames ? '' : 'frozenAt',
         subBuilder: $1.Timestamp.create)
     ..aOS(18, _omitFieldNames ? '' : 'accentColor')
+    ..aOB(19, _omitFieldNames ? '' : 'isGuestAccount')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -722,6 +737,16 @@ class Profile extends $pb.GeneratedMessage {
   $core.bool hasAccentColor() => $_has(17);
   @$pb.TagNumber(18)
   void clearAccentColor() => $_clearField(18);
+
+  /// True while account type is guest (auth accounts.type); cleared on convert-guest.
+  @$pb.TagNumber(19)
+  $core.bool get isGuestAccount => $_getBF(18);
+  @$pb.TagNumber(19)
+  set isGuestAccount($core.bool value) => $_setBool(18, value);
+  @$pb.TagNumber(19)
+  $core.bool hasIsGuestAccount() => $_has(18);
+  @$pb.TagNumber(19)
+  void clearIsGuestAccount() => $_clearField(19);
 }
 
 class UpdateProfileRequest extends $pb.GeneratedMessage {

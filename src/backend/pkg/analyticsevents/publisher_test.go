@@ -13,10 +13,9 @@ func TestAnalyticsEventFromAccountNoPIIInProps(t *testing.T) {
 		"provider_event_id": "evt-1",
 		"plan":              "premium",
 	}
-	propsJSON := "{}"
 	b, err := json.Marshal(props)
 	require.NoError(t, err)
-	propsJSON = string(b)
+	propsJSON := string(b)
 
 	accountID := "11111111-1111-1111-1111-111111111111"
 	require.NotContains(t, propsJSON, accountID)

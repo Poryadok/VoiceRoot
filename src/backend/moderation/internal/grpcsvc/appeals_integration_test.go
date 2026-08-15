@@ -115,5 +115,5 @@ WHERE id = $1`, applied.GetSanction().GetId())
 }
 
 func withAccountCtx(ctx context.Context, accountID uuid.UUID) context.Context {
-	return metadata.NewIncomingContext(ctx, metadata.Pairs("x-voice-user-id", accountID.String()))
+	return metadata.AppendToOutgoingContext(ctx, "x-voice-user-id", accountID.String())
 }

@@ -508,7 +508,7 @@
 - [ ] **[Cross-cutting] Partial-feature integration E2E missing — no cross-smoke for: premium → profile banner/GIF/3rd profile; premium → Story anonymous view; subscription grace → push/email; bot slash → in-app notification (only isolated feature tests).** — `.github/ci/e2e-features.yml`, `src/frontend/test/`
 - [ ] **[Cross-cutting] `profiles_verification` / `encryption_dm` not in smoke — PLAN partial/shipped-opt-in; smoke has `encryption_key_backup` only, not DM encryption or verification flows.** — `.github/ci/e2e-features.yml`, `docs/PLAN.md`
 - [ ] **[Cross-cutting] gRPC mTLS not wired — admitted in `docs/DEPLOYMENT.md`; `MICROSERVICES.md` security section still states mTLS between services. Staging relies on NetworkPolicy + `BOT_GRPC_GATEWAY_ONLY`.** — `docs/DEPLOYMENT.md`, `deploy/templates/network-policy-voice-bot.yaml`
-- [ ] **[Cross-cutting] Distributed tracing absent** — v1 uses `request_id` in logs; deferred per [ADR 003](adr/003-distributed-tracing-deferred.md). — `docs/features/observability.md`, `deploy/observability/`
+- [ ] **[Cross-cutting] Distributed tracing absent** — v1 uses `request_id` in logs; deferred per [ADR 003](../adr/003-distributed-tracing-deferred.md). — `docs/features/observability.md`, `deploy/observability/`
 
 ### Messaging
 

@@ -46,6 +46,8 @@ func TestHandleMessageSent_EnqueuesForPollingBot(t *testing.T) {
 
 	chatID := uuid.New()
 	spaceID := uuid.New()
+	_, err = st.InstallInSpace(ctx, botRow.ID, spaceID, owner, nil)
+	require.NoError(t, err)
 	require.NoError(t, st.SetChatEnabled(ctx, botRow.ID, chatID, spaceID, owner, true))
 
 	sender := uuid.New()

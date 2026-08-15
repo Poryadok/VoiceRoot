@@ -14,7 +14,7 @@ Accepted (2026-08-13)
 
 - `X-Request-Id` / `request_id` in Gateway access logs → service logs → NATS/WS fanout events
 - Prometheus metrics at Gateway and services
-- `make compose-logs-collect` locally ([debug-backend-logs rule](../.cursor/rules/debug-backend-logs.mdc))
+- `make compose-logs-collect` locally ([debug-backend-logs rule](../../.cursor/rules/debug-backend-logs.mdc))
 
 Tracing (OTel Collector → Tempo/Jaeger) is a **separate phase** after log/metrics SLOs are stable on staging.
 

@@ -66,6 +66,7 @@ const EnsurePrimaryProfileRequest$json = {
       '17': true
     },
     {'1': 'display_hint', '3': 3, '4': 1, '5': 9, '10': 'displayHint'},
+    {'1': 'is_guest_account', '3': 4, '4': 1, '5': 8, '10': 'isGuestAccount'},
   ],
   '8': [
     {'1': '_profile_id'},
@@ -73,11 +74,11 @@ const EnsurePrimaryProfileRequest$json = {
 };
 
 /// Descriptor for `EnsurePrimaryProfileRequest`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List ensurePrimaryProfileRequestDescriptor =
-    $convert.base64Decode(
-        'ChtFbnN1cmVQcmltYXJ5UHJvZmlsZVJlcXVlc3QSHQoKYWNjb3VudF9pZBgBIAEoCVIJYWNjb3'
-        'VudElkEiIKCnByb2ZpbGVfaWQYAiABKAlIAFIJcHJvZmlsZUlkiAEBEiEKDGRpc3BsYXlfaGlu'
-        'dBgDIAEoCVILZGlzcGxheUhpbnRCDQoLX3Byb2ZpbGVfaWQ=');
+final $typed_data.Uint8List ensurePrimaryProfileRequestDescriptor = $convert.base64Decode(
+    'ChtFbnN1cmVQcmltYXJ5UHJvZmlsZVJlcXVlc3QSHQoKYWNjb3VudF9pZBgBIAEoCVIJYWNjb3'
+    'VudElkEiIKCnByb2ZpbGVfaWQYAiABKAlIAFIJcHJvZmlsZUlkiAEBEiEKDGRpc3BsYXlfaGlu'
+    'dBgDIAEoCVILZGlzcGxheUhpbnQSKAoQaXNfZ3Vlc3RfYWNjb3VudBgEIAEoCFIOaXNHdWVzdE'
+    'FjY291bnRCDQoLX3Byb2ZpbGVfaWQ=');
 
 @$core.Deprecated('Use ensurePrimaryProfileResponseDescriptor instead')
 const EnsurePrimaryProfileResponse$json = {
@@ -268,6 +269,7 @@ const Profile$json = {
       '10': 'accentColor',
       '17': true
     },
+    {'1': 'is_guest_account', '3': 19, '4': 1, '5': 8, '10': 'isGuestAccount'},
   ],
   '8': [
     {'1': '_avatar_url'},
@@ -294,9 +296,10 @@ final $typed_data.Uint8List profileDescriptor = $convert.base64Decode(
     'JvdG9idWYuVGltZXN0YW1wUgljcmVhdGVkQXQSOQoKdXBkYXRlZF9hdBgQIAEoCzIaLmdvb2ds'
     'ZS5wcm90b2J1Zi5UaW1lc3RhbXBSCXVwZGF0ZWRBdBI8Cglmcm96ZW5fYXQYESABKAsyGi5nb2'
     '9nbGUucHJvdG9idWYuVGltZXN0YW1wSAVSCGZyb3plbkF0iAEBEiYKDGFjY2VudF9jb2xvchgS'
-    'IAEoCUgGUgthY2NlbnRDb2xvcogBAUINCgtfYXZhdGFyX3VybEINCgtfYmFubmVyX3VybEIGCg'
-    'RfYmlvQhAKDl9jdXN0b21fc3RhdHVzQhUKE192ZXJpZmljYXRpb25fYmFkZ2VCDAoKX2Zyb3pl'
-    'bl9hdEIPCg1fYWNjZW50X2NvbG9y');
+    'IAEoCUgGUgthY2NlbnRDb2xvcogBARIoChBpc19ndWVzdF9hY2NvdW50GBMgASgIUg5pc0d1ZX'
+    'N0QWNjb3VudEINCgtfYXZhdGFyX3VybEINCgtfYmFubmVyX3VybEIGCgRfYmlvQhAKDl9jdXN0'
+    'b21fc3RhdHVzQhUKE192ZXJpZmljYXRpb25fYmFkZ2VCDAoKX2Zyb3plbl9hdEIPCg1fYWNjZW'
+    '50X2NvbG9y');
 
 @$core.Deprecated('Use updateProfileRequestDescriptor instead')
 const UpdateProfileRequest$json = {

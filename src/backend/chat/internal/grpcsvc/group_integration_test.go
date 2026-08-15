@@ -214,19 +214,20 @@ func TestCreateGroup_RemoveMember_Kick(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
-	profiles := profileMap(uuid.New(), uuid.New(), uuid.New())
-	ids := make([]uuid.UUID, 0, 3)
+	profiles := profileMap(uuid.New(), uuid.New(), uuid.New(), uuid.New())
+	ids := make([]uuid.UUID, 0, 4)
 	for id := range profiles {
 		ids = append(ids, id)
 	}
-	owner, inviteeA, inviteeB := ids[0], ids[1], ids[2]
+	owner, inviteeA, inviteeB, inviteeC := ids[0], ids[1], ids[2], ids[3]
 
 	pool := startChatPostgresForTest(t, context.Background())
 	applyChatMigration(t, context.Background(), pool)
 	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil)
 	t.Cleanup(cleanup)
 
-	chat := createStandaloneGroup(t, client, profiles, owner, "Kick test", inviteeA, inviteeB)
+	// Four members so kick leaves the documented minimum of three.
+	chat := createStandaloneGroup(t, client, profiles, owner, "Kick test", inviteeA, inviteeB, inviteeC)
 
 	_, err := client.RemoveMember(ctxFor(t, profiles, owner), &chatv1.RemoveMemberRequest{
 		ChatId:    chat.GetId(),

@@ -92,6 +92,14 @@ func (s *SubscriptionStore) ActivatePremium(ctx context.Context, accountID uuid.
 		return nil, ErrDuplicateBillingEvent
 	}
 
+	// Detach history before replacing the row (billing_events.subscription_id FK).
+	_, err = tx.Exec(ctx, `
+UPDATE billing_events
+SET subscription_id = NULL
+WHERE subscription_id IN (SELECT id FROM subscriptions WHERE account_id = $1)`, accountID)
+	if err != nil {
+		return nil, err
+	}
 	_, err = tx.Exec(ctx, `DELETE FROM subscriptions WHERE account_id = $1`, accountID)
 	if err != nil {
 		return nil, err
@@ -183,6 +191,13 @@ func (s *SubscriptionStore) ActivateSpacePro(ctx context.Context, spaceID, purch
 		return nil, ErrDuplicateBillingEvent
 	}
 
+	_, err = tx.Exec(ctx, `
+UPDATE billing_events
+SET space_subscription_id = NULL
+WHERE space_subscription_id IN (SELECT id FROM space_subscriptions WHERE space_id = $1)`, spaceID)
+	if err != nil {
+		return nil, err
+	}
 	_, err = tx.Exec(ctx, `DELETE FROM space_subscriptions WHERE space_id = $1`, spaceID)
 	if err != nil {
 		return nil, err

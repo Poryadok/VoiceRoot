@@ -38,7 +38,7 @@ func TestCancelSubscription_setsCancelledAt(t *testing.T) {
 	require.NoError(t, err)
 	subID := sub.GetSubscription().GetId()
 
-	mdCtx := metadata.NewIncomingContext(ctx, metadata.Pairs("x-voice-user-id", accountID.String()))
+	mdCtx := metadata.AppendToOutgoingContext(ctx, "x-voice-user-id", accountID.String())
 	resp, err := client.CancelSubscription(mdCtx, &subscriptionv1.CancelSubscriptionRequest{SubscriptionId: subID})
 	require.NoError(t, err)
 	require.NotNil(t, resp.GetSubscription().GetCancelledAt())
@@ -65,7 +65,7 @@ func TestResumeSubscription_clearsCancelledAt(t *testing.T) {
 	require.NoError(t, err)
 	subID := sub.GetSubscription().GetId()
 
-	mdCtx := metadata.NewIncomingContext(ctx, metadata.Pairs("x-voice-user-id", accountID.String()))
+	mdCtx := metadata.AppendToOutgoingContext(ctx, "x-voice-user-id", accountID.String())
 	_, err = client.CancelSubscription(mdCtx, &subscriptionv1.CancelSubscriptionRequest{SubscriptionId: subID})
 	require.NoError(t, err)
 
