@@ -11,7 +11,7 @@ if ! command -v buf >/dev/null 2>&1; then
 fi
 
 buf generate --template buf.gen.local-go.yaml
-"${ROOT}/scripts/dev/sync-pb-from-gen.sh"
+bash "${ROOT}/scripts/dev/sync-pb-from-gen.sh"
 
 if git diff --exit-code -- 'src/backend/*/pb/' >/dev/null 2>&1; then
   echo "Go pb/ trees in sync with protos/"
