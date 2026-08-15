@@ -249,7 +249,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | SP-08 | Space roles hierarchy / invite perm | `[exists]` | Gateway: `TestComposeSpaceRoles_live`; Flutter: `spaces_roles_e2e_live_test` |
 | SP-09 | Space catalog discovery | `[missing]` | — |
 | SP-10 | Tree update/delete/category/voice RPCs deep IT | `[partial]` | Space IT exists; todo notes thin coverage |
-| SP-11 | Space Pro member-cap after billing | `[partial]` | Gateway: `TestComposeSpaceProBilling_live` (seed/stub path; prod sync gap per todo) |
+| SP-11 | Space Pro member-cap after billing | `[partial]` | Sync S2S+NATS+compose `SPACE_GRPC_ADDR` (`feature/space-pro-sync-grace`); Gateway live still seed — WT-INTEGRATION |
 
 ---
 
@@ -444,8 +444,8 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 |----|------|--------|-----|
 | SUB-01 | Personal premium webhook + upload boundaries | `[exists]` | Gateway: `TestComposeBilling_live`; Flutter: `billing_e2e_live_test` |
 | SUB-02 | Downgrade file limits | `[exists]` | Gateway: `TestComposeSubscriptionDowngradeFileLimits_live` |
-| SUB-03 | Space Pro billing compose | `[partial]` | `TestComposeSpaceProBilling_live` — seed path; todo: no true webhook→cap E2E |
-| SUB-04 | Grace-period notifications D1/D3/D7 | `[missing]` | todo |
+| SUB-03 | Space Pro billing compose | `[partial]` | webhook→`SyncSpaceProSubscription` + NATS consumer; compose join-51st live → WT-INTEGRATION |
+| SUB-04 | Grace-period notifications D1/D3/D7 | `[partial]` | `subscription.grace_reminder` + Notification stub consumer; compose live assert → WT-INTEGRATION |
 | SUB-05 | Real Paddle checkout | `[missing]` | stub URLs (todo Critical) |
 | SUB-06 | Premium cosmetics (banner/GIF/3rd profile) cross-smoke | `[missing]` | todo cross-cutting |
 
