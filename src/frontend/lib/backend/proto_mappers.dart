@@ -460,6 +460,14 @@ FileMetadataData fileMetadataFromProto(file_pb.FileMetadata meta) {
     status: meta.status,
     originalName: meta.originalName,
     // HTTP URLs come from GET /files/{id}/url, not R2 keys in metadata.
+    thumbnailR2Key:
+        meta.hasThumbnailR2Key() && meta.thumbnailR2Key.isNotEmpty
+            ? meta.thumbnailR2Key
+            : null,
+    convertedR2Key:
+        meta.hasConvertedR2Key() && meta.convertedR2Key.isNotEmpty
+            ? meta.convertedR2Key
+            : null,
     sizeBytes: meta.hasSizeBytes() ? meta.sizeBytes.toInt() : null,
     isE2e: meta.isE2e,
     expiresAt: meta.hasExpiresAt() ? meta.expiresAt.toDateTime() : null,

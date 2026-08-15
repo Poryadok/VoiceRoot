@@ -133,21 +133,39 @@ func (t *transcoder) serveMatchmakingPlayers(w http.ResponseWriter, r *http.Requ
 
 func (t *transcoder) serveMatchmakingBans(w http.ResponseWriter, r *http.Request, rest string) bool {
 	ctx := withGRPCMetadata(r.Context(), r)
-	if r.Method != http.MethodPost || rest != "bans" {
+	switch {
+	case r.Method == http.MethodPost && rest == "bans":
+		req := &matchmakingv1.BanFromMMRequest{}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.matchmaking.BanFromMM(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodGet && strings.HasPrefix(rest, "bans/"):
+		target := strings.TrimPrefix(rest, "bans/")
+		if target == "" || strings.Contains(target, "/") {
+			return false
+		}
+		resp, err := t.clients.matchmaking.GetMMBanStatus(ctx, &matchmakingv1.GetMMBanStatusRequest{
+			TargetProfileId: target,
+		})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	default:
 		return false
 	}
-	req := &matchmakingv1.BanFromMMRequest{}
-	if err := readProtoJSON(r, req); err != nil {
-		writeGRPCError(w, err)
-		return true
-	}
-	resp, err := t.clients.matchmaking.BanFromMM(ctx, req)
-	if err != nil {
-		writeGRPCError(w, err)
-		return true
-	}
-	writeProtoJSON(w, http.StatusOK, resp)
-	return true
 }
 
 func (t *transcoder) serveMatchmakingSearch(w http.ResponseWriter, r *http.Request, rest string) bool {

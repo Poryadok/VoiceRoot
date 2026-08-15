@@ -52,6 +52,10 @@ void main() {
     );
     expect(confirm, isA<FilesApiOk<FileMetadataData>>());
     final meta = (confirm as FilesApiOk<FileMetadataData>).data;
-    expect(meta.previewUrl, isNotEmpty);
+    expect(meta.fileType, 'image');
+    expect(meta.thumbnailR2Key, isNotEmpty,
+        reason: 'confirm must return thumbnail_r2_key after image processing');
+    // previewUrl stays null: clients fetch HTTP URLs via GET /files/{id}/url.
+    expect(meta.previewUrl, isNull);
   }, skip: runLiveIntegration ? null : 'opt-in live');
 }

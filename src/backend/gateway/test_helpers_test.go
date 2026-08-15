@@ -30,6 +30,7 @@ type gatewayTestOptions struct {
 	cors               corsConfig
 	metrics            *gatewayMetrics
 	slogLogger         *slog.Logger
+	analyticsAudit     analyticsAuditStore
 }
 
 func newGatewayForContract(_ *testing.T, options gatewayTestOptions) http.Handler {
@@ -59,6 +60,7 @@ func newGatewayForContract(_ *testing.T, options gatewayTestOptions) http.Handle
 		cors:               options.cors,
 		metrics:            options.metrics,
 		slogLogger:         log,
+		analyticsAudit:     options.analyticsAudit,
 	})
 }
 

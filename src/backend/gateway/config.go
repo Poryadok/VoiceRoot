@@ -53,6 +53,7 @@ func loadGatewayConfigFromEnv() gatewayConfig {
 		config.tokenBlacklist = newRedisTokenBlacklist(redisAddr, password, os.Getenv("GATEWAY_JWT_BLACKLIST_PREFIX"))
 		ticketPrefix := strings.TrimSpace(os.Getenv("GATEWAY_WS_TICKET_PREFIX"))
 		config.wsTicketStore = newRedisWsTicketStore(redisAddr, password, ticketPrefix)
+		config.analyticsAudit = newRedisAnalyticsAuditStore(redisAddr, password)
 	} else if strings.EqualFold(os.Getenv("GATEWAY_IN_MEMORY_RATE_LIMITS"), "true") {
 		config.rateLimiter = newSlidingWindowLimiter(rateLimitRulesFromEnv(logger))
 	}

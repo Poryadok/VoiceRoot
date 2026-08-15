@@ -32,6 +32,7 @@ type gatewayConfig struct {
 	cors               corsConfig
 	metrics            *gatewayMetrics
 	analyticsTelemetry gatewayAnalyticsTelemetry
+	analyticsAudit     analyticsAuditStore
 	slogLogger         *slog.Logger
 }
 
@@ -82,6 +83,9 @@ func newGateway(config gatewayConfig) http.Handler {
 	}
 	if config.slogLogger == nil {
 		config.slogLogger = voicelog.NewJSONLogger(voicelog.LevelFromEnv(), slog.String("service", "gateway"))
+	}
+	if config.analyticsAudit == nil {
+		config.analyticsAudit = newMemoryAnalyticsAuditStore(100)
 	}
 	if config.versionStore == nil {
 		config.versionStore = versionStoreFromEnv(config.versionConfigs, nil)

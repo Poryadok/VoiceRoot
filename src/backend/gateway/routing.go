@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func (g *gateway) handleREST(w http.ResponseWriter, r *http.Request) {
@@ -135,14 +136,26 @@ func publicRESTNamespaces() []string {
 }
 
 func (g *gateway) logAnalyticsAudit(r *http.Request, claims tokenClaims) {
-	if g == nil || g.config.slogLogger == nil {
+	if g == nil {
 		return
 	}
-	g.config.slogLogger.Info("analytics_audit",
-		slog.String("route", r.URL.Path),
-		slog.String("method", r.Method),
-		slog.String("profile_id", claims.ProfileID),
-		slog.String("user_id", claims.UserID),
-	)
+	entry := analyticsAuditEntry{
+		At:        time.Now().UTC(),
+		Route:     r.URL.Path,
+		Method:    r.Method,
+		ProfileID: claims.ProfileID,
+		UserID:    claims.UserID,
+	}
+	if g.config.analyticsAudit != nil {
+		_ = g.config.analyticsAudit.Append(r.Context(), entry)
+	}
+	if g.config.slogLogger != nil {
+		g.config.slogLogger.Info("analytics_audit",
+			slog.String("route", entry.Route),
+			slog.String("method", entry.Method),
+			slog.String("profile_id", entry.ProfileID),
+			slog.String("user_id", entry.UserID),
+		)
+	}
 }
 
