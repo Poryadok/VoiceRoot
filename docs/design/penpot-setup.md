@@ -16,10 +16,12 @@ Open the file from your Penpot team/project dashboard. For share links to a **fr
 | `01_Foundation` | `6d4c4410-c47e-8083-8008-561ce95f11e2` | Tokens, swatches, **вся** library (mains + typographies + showcase). См. [penpot-workflow.md](penpot-workflow.md) §3.6 |
 | `10_Screens_Desktop` | `6d4c4410-c47e-8083-8008-561cf0765607` | Frames **1280×800**, names `Screen/...` |
 | `11_Screens_Mobile` | `6d4c4410-c47e-8083-8008-561cf5662204` | Frames **390×844** |
-| `12_States` | `6d4c4410-c47e-8083-8008-561cfaa8677c` | empty / error / offline |
+| `12_States_Desktop` | `6d4c4410-c47e-8083-8008-561cfaa8677c` | empty / error / offline (**desktop** context) |
 | `13_Panels_Desktop` | `6d4c4410-c47e-8083-8008-564229c3b00f` | `Panel/...` sheets and side panels over desktop shell (**1280×800** context) |
 | `14_Panels_Mobile` | `6d4c4410-c47e-8083-8008-564229f6af85` | `Panel/...` as mobile bottom sheets (**390×844** context) |
-| `15_Overlays` | `6d4c4410-c47e-8083-8008-56422a11288b` | `Overlay/...` call, matchmaking, onboarding, force-update |
+| `15_Overlays_Desktop` | `6d4c4410-c47e-8083-8008-56422a11288b` | `Overlay/...` call, matchmaking, onboarding, force-update (**1280×800**) |
+| `16_Overlays_Mobile` | `2cb6024f-0ca3-802b-8008-7c9c44b68151` | `Overlay/...` same scenarios (**390×844**) |
+| `17_States_Mobile` | `2cb6024f-0ca3-802b-8008-7c9c44bb9638` | empty / error / offline (**mobile**; page reserved) |
 
 In tasks and PRs — link to the **frame** (`Screen/...`, `Panel/...`, `Overlay/...`), not the page canvas. Frame inventory: [screens.md](screens.md).
 

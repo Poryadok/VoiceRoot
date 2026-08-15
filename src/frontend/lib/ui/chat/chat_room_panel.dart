@@ -43,6 +43,7 @@ import 'forward_message_sheet.dart';
 import 'mention_message_content.dart';
 import 'e2e_attachment_actions.dart';
 import 'e2e_chat_settings.dart';
+import 'e2e_identity_change_banner.dart';
 import 'chat_composer_text_field.dart';
 import '../shell/side_panel.dart';
 import '../space/space_chat_slow_mode_sheet.dart';

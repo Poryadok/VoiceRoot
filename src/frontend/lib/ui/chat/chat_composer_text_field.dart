@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 /// Multiline chat composer: Enter sends, Ctrl/Shift+Enter inserts newline.
-class ChatComposerTextField extends StatelessWidget {
+class ChatComposerTextField extends StatefulWidget {
   const ChatComposerTextField({
     super.key,
     required this.controller,
@@ -22,8 +22,34 @@ class ChatComposerTextField extends StatelessWidget {
   final bool readOnly;
   final int maxLines;
 
+  @override
+  State<ChatComposerTextField> createState() => _ChatComposerTextFieldState();
+}
+
+class _ChatComposerTextFieldState extends State<ChatComposerTextField> {
+  @override
+  void initState() {
+    super.initState();
+    widget.focusNode.onKeyEvent = _onKey;
+  }
+
+  @override
+  void didUpdateWidget(covariant ChatComposerTextField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.focusNode != widget.focusNode) {
+      oldWidget.focusNode.onKeyEvent = null;
+      widget.focusNode.onKeyEvent = _onKey;
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.focusNode.onKeyEvent = null;
+    super.dispose();
+  }
+
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
-    if (readOnly || onSend == null) {
+    if (widget.readOnly || widget.onSend == null) {
       return KeyEventResult.ignored;
     }
     if (event is! KeyDownEvent) {
@@ -37,36 +63,35 @@ class ChatComposerTextField extends StatelessWidget {
         keyboard.isShiftPressed ||
         keyboard.isAltPressed ||
         keyboard.isMetaPressed) {
-      final value = controller.value;
+      final value = widget.controller.value;
       final selection = value.selection;
       final text = value.text;
       final start = selection.start >= 0 ? selection.start : text.length;
       final end = selection.end >= 0 ? selection.end : text.length;
       final newText = text.replaceRange(start, end, '\n');
-      controller.value = value.copyWith(
+      widget.controller.value = value.copyWith(
         text: newText,
         selection: TextSelection.collapsed(offset: start + 1),
         composing: TextRange.empty,
       );
       return KeyEventResult.handled;
     }
-    onSend!();
+    widget.onSend!();
     return KeyEventResult.handled;
   }
 
   @override
   Widget build(BuildContext context) {
     return TextField(
-      controller: controller,
-      focusNode: focusNode,
-      decoration: decoration,
-      readOnly: readOnly,
+      controller: widget.controller,
+      focusNode: widget.focusNode,
+      decoration: widget.decoration,
+      readOnly: widget.readOnly,
       minLines: 1,
-      maxLines: maxLines,
+      maxLines: widget.maxLines,
       keyboardType: TextInputType.multiline,
       textInputAction: TextInputAction.newline,
-      onChanged: onChanged,
-      onKeyEvent: _onKey,
+      onChanged: widget.onChanged,
     );
   }
 }

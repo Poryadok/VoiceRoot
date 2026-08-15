@@ -29,10 +29,12 @@ PowerShell: chain with `;`, not `&&`.
 | `01_Foundation` | `6d4c4410-c47e-8083-8008-561ce95f11e2` | tokens, **all** component mains, showcase |
 | `10_Screens_Desktop` | `6d4c4410-c47e-8083-8008-561cf0765607` | 1280×800 `Screen/...` |
 | `11_Screens_Mobile` | `6d4c4410-c47e-8083-8008-561cf5662204` | 390×844 `Screen/...` |
-| `12_States` | `6d4c4410-c47e-8083-8008-561cfaa8677c` | empty/error/offline |
+| `12_States_Desktop` | `6d4c4410-c47e-8083-8008-561cfaa8677c` | empty/error/offline desktop |
 | `13_Panels_Desktop` | `6d4c4410-c47e-8083-8008-564229c3b00f` | 1280×800 `Panel/...` |
 | `14_Panels_Mobile` | `6d4c4410-c47e-8083-8008-564229f6af85` | 390×844 `Panel/...` |
-| `15_Overlays` | `6d4c4410-c47e-8083-8008-56422a11288b` | `Overlay/...` |
+| `15_Overlays_Desktop` | `6d4c4410-c47e-8083-8008-56422a11288b` | 1280×800 `Overlay/...` |
+| `16_Overlays_Mobile` | `2cb6024f-0ca3-802b-8008-7c9c44b68151` | 390×844 `Overlay/...` |
+| `17_States_Mobile` | `2cb6024f-0ca3-802b-8008-7c9c44bb9638` | empty/error/offline mobile |
 
 Inventory (canons only): `docs/design/screens.md`. Viewer: `https://design.penpot.app/#/viewer/{fileId}/{pageId}/{frameId}`.
 
