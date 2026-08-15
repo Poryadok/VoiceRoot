@@ -28,6 +28,27 @@ func (t testRolePerms) HasChatPermission(context.Context, uuid.UUID, uuid.UUID, 
 	return t.allowed, nil
 }
 
+// selectiveRolePerms allows all permissions except those listed in deny (or only those in allow when set).
+type selectiveRolePerms struct {
+	deny  map[string]bool
+	allow map[string]bool
+}
+
+func (s selectiveRolePerms) HasSpacePermission(_ context.Context, _, _ uuid.UUID, permission string) (bool, error) {
+	return s.check(permission), nil
+}
+
+func (s selectiveRolePerms) HasChatPermission(_ context.Context, _, _, _ uuid.UUID, permission string) (bool, error) {
+	return s.check(permission), nil
+}
+
+func (s selectiveRolePerms) check(permission string) bool {
+	if s.allow != nil {
+		return s.allow[permission]
+	}
+	return !s.deny[permission]
+}
+
 type testPresence struct {
 	online []uuid.UUID
 }
@@ -114,7 +135,14 @@ func TestMessagingSendMessage_everyoneInSpaceRequiresPermission(t *testing.T) {
 	_, err := pool.Exec(ctx, `UPDATE chats SET space_id = $2 WHERE id = $1`, chatID, spaceID)
 	require.NoError(t, err)
 
-	client, _ := startMessagingServerWired(t, pool, messagingWire{RolePermissions: testRolePerms{allowed: false}})
+	client, _ := startMessagingServerWired(t, pool, messagingWire{
+		RolePermissions: selectiveRolePerms{
+			allow: map[string]bool{
+				permissions.TextChatSendMessages:     true,
+				permissions.TextChatMentionAllInChat: false,
+			},
+		},
+	})
 	_, err = client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
 		Chat:            chatGroupRef(chatID),
 		Content:         "@everyone hi",
@@ -145,8 +173,11 @@ func TestMessagingSendMessage_everyoneInSpaceAllowed(t *testing.T) {
 
 	spy := &spyMessageEvents{}
 	client, _ := startMessagingServerWired(t, pool, messagingWire{
-		MessageEvents:   spy,
-		RolePermissions: testRolePerms{allowed: true},
+		MessageEvents: spy,
+		RolePermissions: selectiveRolePerms{allow: map[string]bool{
+			permissions.TextChatSendMessages:     true,
+			permissions.TextChatMentionAllInChat: true,
+		}},
 	})
 	sent, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
 		Chat:            chatGroupRef(chatID),
@@ -163,7 +194,6 @@ func TestMessagingSendMessage_everyoneInSpaceAllowed(t *testing.T) {
 	_, mentionEv, _, _, _ := spy.snapshot()
 	require.Len(t, mentionEv, 1)
 	require.Contains(t, mentionEv[0][3], profB.String())
-	_ = permissions.TextChatMentionAllInChat
 }
 
 // TestMessagingSendMessage_hereUsesPresence documents @here online filter.
@@ -193,9 +223,12 @@ VALUES ($1, 'group', $2, 0, $3)
 
 	spy := &spyMessageEvents{}
 	client, _ := startMessagingServerWired(t, pool, messagingWire{
-		MessageEvents:   spy,
-		RolePermissions: testRolePerms{allowed: true},
-		UserPresence:    testPresence{online: []uuid.UUID{profC}},
+		MessageEvents: spy,
+		RolePermissions: selectiveRolePerms{allow: map[string]bool{
+			permissions.TextChatSendMessages:      true,
+			permissions.TextChatMentionAllOnline: true,
+		}},
+		UserPresence: testPresence{online: []uuid.UUID{profC}},
 	})
 	_, err = client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
 		Chat:            chatGroupRef(chatID),
@@ -208,4 +241,81 @@ VALUES ($1, 'group', $2, 0, $3)
 	_, mentionEv, _, _, _ := spy.snapshot()
 	require.Len(t, mentionEv, 1)
 	require.Equal(t, profC.String(), mentionEv[0][3])
+}
+
+// TestMessagingSendMessage_bareEveryoneFromContent documents TC-MSG-03:
+// bare @everyone in content without mentions_json is parsed and permission-gated.
+func TestMessagingSendMessage_bareEveryoneFromContent(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	chatID := uuid.New()
+	spaceID := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	acctA := uuid.New()
+	seedGroupChat(t, ctx, pool, chatID, profA, profB)
+	applyModerationSchemasForMessagingTest(t, ctx, pool)
+	_, err := pool.Exec(ctx, `UPDATE chats SET space_id = $2 WHERE id = $1`, chatID, spaceID)
+	require.NoError(t, err)
+
+	spy := &spyMessageEvents{}
+	client, _ := startMessagingServerWired(t, pool, messagingWire{
+		MessageEvents: spy,
+		RolePermissions: selectiveRolePerms{allow: map[string]bool{
+			permissions.TextChatSendMessages:     true,
+			permissions.TextChatMentionAllInChat: true,
+		}},
+	})
+	sent, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+		Chat:            chatGroupRef(chatID),
+		Content:         "ping @everyone now",
+		AttachmentsJson: "[]",
+		MentionsJson:    "[]",
+	})
+	require.NoError(t, err)
+	var stored []map[string]string
+	require.NoError(t, json.Unmarshal([]byte(sent.GetMessage().GetMentionsJson()), &stored))
+	require.Len(t, stored, 1)
+	require.Equal(t, "everyone", stored[0]["type"])
+
+	_, mentionEv, _, _, _ := spy.snapshot()
+	require.Len(t, mentionEv, 1)
+	require.Contains(t, mentionEv[0][3], profB.String())
+}
+
+// TestMessagingSendMessage_bareEveryoneDeniedWithoutPermission gates content-parsed @everyone.
+func TestMessagingSendMessage_bareEveryoneDeniedWithoutPermission(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	chatID := uuid.New()
+	spaceID := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	acctA := uuid.New()
+	seedGroupChat(t, ctx, pool, chatID, profA, profB)
+	applyModerationSchemasForMessagingTest(t, ctx, pool)
+	_, err := pool.Exec(ctx, `UPDATE chats SET space_id = $2 WHERE id = $1`, chatID, spaceID)
+	require.NoError(t, err)
+
+	client, _ := startMessagingServerWired(t, pool, messagingWire{
+		RolePermissions: selectiveRolePerms{allow: map[string]bool{
+			permissions.TextChatSendMessages:     true,
+			permissions.TextChatMentionAllInChat: false,
+		}},
+	})
+	_, err = client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+		Chat:            chatGroupRef(chatID),
+		Content:         "@everyone hi",
+		AttachmentsJson: "[]",
+		MentionsJson:    "",
+	})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }
