@@ -69,18 +69,7 @@ type SpaceTreeData struct {
 	VoiceRooms  []*VoiceRoomRow
 }
 
-func (s *SpaceStore) treeNodeCap(ctx context.Context, spaceID uuid.UUID) (int, error) {
-	hasPro, err := s.HasActiveSpacePro(ctx, spaceID)
-	if err != nil {
-		return 0, err
-	}
-	if hasPro {
-		return MaxTreeNodesPro, nil
-	}
-	return MaxTreeNodes, nil
-}
-
-func (s *SpaceStore) treeNodeCapTx(ctx context.Context, tx pgx.Tx, spaceID uuid.UUID) (int, error) {
+	func (s *SpaceStore) treeNodeCapTx(ctx context.Context, tx pgx.Tx, spaceID uuid.UUID) (int, error) {
 	var exists bool
 	err := tx.QueryRow(ctx, `
 SELECT EXISTS (

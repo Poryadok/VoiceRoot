@@ -873,7 +873,8 @@ Entry: after initiator starts DM voice/video (or group temp voice) and before ca
 | 2 | Call type label (voice / video) | H+V | Always | — (display) |
 | 3 | Ringing / connecting status | H+V | Always | — (display; timeout per voice-chat.md: 30s → missed call for callee) |
 | 4 | Cancel / Hang up | H+V | Always | Abort outgoing call |
-| 5 | Mute mic (optional pre-connect) | H+V | Always | Toggle mic before connect (**TODO:** confirm in voice-chat.md whether pre-connect mute is required — keep if Flutter shows it) |
+| 5 | Mute mic | H+V | Always | Toggle mic **before** connect — **required** (Discord DM outgoing/ringing UI exposes mute while waiting for answer; see [aurascience Discord mobile call guide](https://aurascience.blog/how-to-ring-someone-discord-mobile-new-update)) |
+| 6 | Camera on / off | H+V | Video outgoing | Toggle camera before connect — **required on video** (same Discord reference; omit on pure voice outgoing) |
 
 #### 10.2b Active / Incoming / MiniBar (shared in-call controls)
 
@@ -920,9 +921,9 @@ Entry: after initiator starts DM voice/video (or group temp voice) and before ca
 | 4 | Stream picker (thumbnails) | H+V | >1 active share in call | Switch which remote stream to watch (also §34) |
 | 5 | Waiting for video | H+V | Share started, track not yet received | — (display placeholder) |
 | 6 | Stream limit reached | H+V | Already 3 active streams | — (display limit; cannot start another) |
-| 7 | Quality dialog (FPS / resolution) | H | Starting share (desktop) | Pick quality tier before start (360p free / 720p ★ — screen-share.md); may open from call button before Overlay picker lands |
+| 7 | Quality dialog (FPS / resolution) | H | Starting share (desktop) | Prefer opening via Overlay picker (§33); Panel may still surface quality when picker is not yet framed |
 
-**Open question for product/design:** keep both Penpot frames (Panel viewer + Overlay picker), or treat Panel quality dialog as interim until Overlay/ScreenSharePicker exists?
+**Product decision (v1 inventory):** keep **both** frames — `Panel / Call / ScreenShare` (viewer/manage) **and** `Overlay / Call / ScreenSharePicker` (start picker). Picker remains in the design system even if implementation lands later; do not collapse picker into Panel-only.
 
 ### 10.3 Space tree & admin (Panel / Space / *)
 
@@ -1499,8 +1500,8 @@ Entry: from story viewer #15 (own story, viewers count tap).
 
 ## 33. Screen Share Picker (Overlay / Call / ScreenSharePicker)
 
-**Penpot:** `Overlay / Call / ScreenSharePicker` (start picker; may still be missing in screens.md — track as v1 gap)  
-**Related (not alias):** `Panel / Call / ScreenShare` = in-call viewer / manage panel (§10.2c). Do not rename one into the other.
+**Penpot:** `Overlay / Call / ScreenSharePicker` (start picker — **required v1 inventory**; may still be missing as shipped canon in screens.md — track as mockup gap)  
+**Related (not alias):** `Panel / Call / ScreenShare` = in-call viewer / manage panel (§10.2c). **Keep both** — picker (start) ≠ panel (viewer/manage). Do not rename one into the other or drop either from the design system.
 **Feature docs:** [screen-share.md](../features/screen-share.md)
 
 Entry: from call controls #4 (screen share).
@@ -1886,11 +1887,14 @@ Not full product screens — reusable state chrome used inside Shell / Chat list
 
 ### 54.1 State / Chat / Empty
 
+**Product decision:** messenger-first. Primary empty CTA is **chat/compose-oriented** (start DM / browse chats / invite) — match neighboring shell/list controls (§1 compose, invite patterns). Matchmaking / Space Catalog CTAs are **secondary only**, never the default empty-chat primary.
+
 | # | Control | Layout | Visible when | Tap action |
 |---|---------|--------|-------------|------------|
 | 1 | Empty illustration / icon | H+V | Folder or chat list has zero items | — (visual; keep minimal per brand.md) |
 | 2 | Short reason copy | H+V | Always | — (display; e.g. no chats in folder) |
-| 3 | Primary CTA (compose / find space / start MM) | H+V | Always | One next step — open compose menu, Space Catalog, or MM (**TODO:** confirm which CTA per context in product copy) |
+| 3 | Primary CTA (compose / start DM / invite) | H+V | Always | Open compose / start DM / invite — same affordance family as shell list empty (§1) |
+| 4 | Secondary CTA (optional) | H+V | When product copy offers alternate | Space Catalog / Matchmaking — secondary only; not the default empty primary |
 
 ### 54.2 State / Chat / Error
 
@@ -1903,14 +1907,15 @@ Not full product screens — reusable state chrome used inside Shell / Chat list
 
 ### 54.3 State / Network / Offline
 
-**Penpot:** `State / Network / Offline` (often a compact banner, not a full-screen replacement)
+**Penpot:** `State / Network / Offline` (compact banner over shell — **not** a modal or blocking full-screen)  
+**Product decision:** **dismissible**, Telegram-like, non-blocking. Not sticky until online — user can hide the banner; reconnect may continue in background; banner may reappear on a later failure.
 
 | # | Control | Layout | Visible when | Tap action |
 |---|---------|--------|-------------|------------|
-| 1 | Offline / reconnecting banner | H+V | No network or Realtime disconnected | — (display: offline / reconnecting) |
+| 1 | Offline / reconnecting banner | H+V | No network or Realtime disconnected | — (display: offline / reconnecting; non-blocking chrome) |
 | 2 | Status detail | H+V | Always | — (display: drafts kept locally / send pending — brand.md) |
 | 3 | Retry / Reconnect CTA | H+V | When manual retry is useful | Trigger reconnect + Messaging catch-up |
-| 4 | Dismiss (non-blocking banner only) | H+V | Soft banner mode | Hide banner until next failure (**TODO:** confirm if dismissible or sticky until online) |
+| 4 | Dismiss | H+V | Always (soft banner) | Hide banner without waiting for online; may re-show on next disconnect / failure |
 
 ---
 

@@ -138,6 +138,10 @@ jobs:
         run: |
           go install github.com/bufbuild/buf/cmd/buf@${{ env.BUF_VERSION }}
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Install Go protoc plugins
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.5
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
       - name: Fetch base ref for buf breaking
         if: github.event_name == 'pull_request'
         run: git fetch --no-tags origin ${{ github.base_ref }}:${{ github.base_ref }}
