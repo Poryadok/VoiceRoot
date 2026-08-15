@@ -795,6 +795,8 @@ services:
         condition: service_healthy
       chat:
         condition: service_healthy
+      role:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
       interval: 5s
