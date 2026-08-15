@@ -14,6 +14,8 @@ import (
 	chatv1 "voice.app/voice/chat/v1"
 	commonv1 "voice.app/voice/common/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
+
+	"voice/backend/role/permissions"
 )
 
 // TestMessagingForwardMessage_preservesAttribution documents text-chat.md / forward-messages.md:
@@ -239,4 +241,164 @@ func TestMessagingForwardMessage_commentaryInsertsSeparateMessage(t *testing.T) 
 	require.Len(t, msgs, 2)
 	require.Equal(t, commentary, msgs[1].GetContent())
 	require.Equal(t, messagingv1.MessageKind_MESSAGE_KIND_FORWARD, msgs[0].GetMessageKind())
+}
+
+// TestMessagingForwardMessage_toChannelSetsPostedAsChat documents FW-02 / forward-messages.md:
+// channel without allow_user_main_feed stores the forward as posted_as_chat.
+func TestMessagingForwardMessage_toChannelSetsPostedAsChat(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applyThreadMessagingMigrations(t, ctx, pool)
+
+	sourceChat := uuid.New()
+	targetChannel := uuid.New()
+	spaceID := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	acctA := uuid.New()
+	seedDMChat(t, ctx, pool, sourceChat, profA, profB)
+	seedChannelChat(t, ctx, pool, targetChannel, profA)
+	applyModerationSchemasForMessagingTest(t, ctx, pool)
+	_, err := pool.Exec(ctx, `UPDATE chats SET space_id = $2 WHERE id = $1`, targetChannel, spaceID)
+	require.NoError(t, err)
+
+	client, _ := startMessagingServerWired(t, pool, messagingWire{
+		RolePermissions: selectiveRolePerms{allow: map[string]bool{
+			permissions.TextChatSendMessages: true,
+		}},
+	})
+
+	original, err := client.SendMessage(withProfileCtx(ctx, acctA, profB), &messagingv1.SendMessageRequest{
+		Chat: chatDMRef(sourceChat), Content: "channel-bound", AttachmentsJson: "[]", MentionsJson: "[]",
+	})
+	require.NoError(t, err)
+
+	commentary := "heads up"
+	fwd, err := client.ForwardMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.ForwardMessageRequest{
+		SourceMessageId: original.GetMessage().GetId(),
+		TargetChat:      chatChannelRef(targetChannel),
+		Commentary:      &commentary,
+	})
+	require.NoError(t, err)
+	msg := fwd.GetMessage()
+	require.Equal(t, messagingv1.MessageKind_MESSAGE_KIND_FORWARD, msg.GetMessageKind())
+	require.True(t, msg.GetPostedAsChat(), "channel forward must set posted_as_chat when main-feed is restricted")
+	require.Equal(t, "channel-bound", msg.GetContent())
+
+	history, err := client.GetMessages(withProfileCtx(ctx, acctA, profA), &messagingv1.GetMessagesRequest{
+		Chat: chatChannelRef(targetChannel),
+		Page: &commonv1.CursorPageRequest{PageSize: 10},
+	})
+	require.NoError(t, err)
+	msgs := history.GetMessageList().GetMessages()
+	require.Len(t, msgs, 2)
+	require.Equal(t, commentary, msgs[1].GetContent())
+	require.True(t, msgs[0].GetPostedAsChat())
+}
+
+// TestMessagingForwardMessage_channelSendPermissionDenied documents Forward send-perm hole fix (P1.5).
+func TestMessagingForwardMessage_channelSendPermissionDenied(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applyThreadMessagingMigrations(t, ctx, pool)
+
+	sourceChat := uuid.New()
+	targetChannel := uuid.New()
+	spaceID := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	acctA := uuid.New()
+	seedDMChat(t, ctx, pool, sourceChat, profA, profB)
+	seedChannelChat(t, ctx, pool, targetChannel, profA)
+	applyModerationSchemasForMessagingTest(t, ctx, pool)
+	_, err := pool.Exec(ctx, `UPDATE chats SET space_id = $2 WHERE id = $1`, targetChannel, spaceID)
+	require.NoError(t, err)
+
+	client, _ := startMessagingServerWired(t, pool, messagingWire{
+		RolePermissions: selectiveRolePerms{deny: map[string]bool{
+			permissions.TextChatSendMessages: true,
+		}},
+	})
+
+	original, err := client.SendMessage(withProfileCtx(ctx, acctA, profB), &messagingv1.SendMessageRequest{
+		Chat: chatDMRef(sourceChat), Content: "blocked-fwd", AttachmentsJson: "[]", MentionsJson: "[]",
+	})
+	require.NoError(t, err)
+
+	_, err = client.ForwardMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.ForwardMessageRequest{
+		SourceMessageId: original.GetMessage().GetId(),
+		TargetChat:      chatChannelRef(targetChannel),
+	})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+// TestMessagingForwardMessage_e2eToPlainDenied documents FW-06: E2E ciphertext must not land in plain DM.
+func TestMessagingForwardMessage_e2eToPlainDenied(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000006_e2e_enabled.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	sourceChat := uuid.New()
+	targetChat := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	profC := uuid.New()
+	acctA := uuid.New()
+	seedDMChat(t, ctx, pool, sourceChat, profA, profB)
+	seedDMChat(t, ctx, pool, targetChat, profA, profC)
+	seedE2EEnabledDM(t, ctx, pool, sourceChat)
+
+	client, _ := startMessagingServer(t, pool)
+	isE2E := true
+	original, err := client.SendMessage(withProfileCtx(ctx, acctA, profB), &messagingv1.SendMessageRequest{
+		Chat: chatDMRef(sourceChat), Content: "opaque-cipher", IsE2E: &isE2E, AttachmentsJson: "[]", MentionsJson: "[]",
+	})
+	require.NoError(t, err)
+	require.True(t, original.GetMessage().GetIsE2E())
+
+	_, err = client.ForwardMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.ForwardMessageRequest{
+		SourceMessageId: original.GetMessage().GetId(),
+		TargetChat:      chatDMRef(targetChat),
+	})
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+}
+
+// TestMessagingForwardMessage_e2eToE2EDMPreservesFlag documents FW-06: E2E→E2E DM keeps is_e2e.
+func TestMessagingForwardMessage_e2eToE2EDMPreservesFlag(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000006_e2e_enabled.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	sourceChat := uuid.New()
+	targetChat := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	profC := uuid.New()
+	acctA := uuid.New()
+	seedDMChat(t, ctx, pool, sourceChat, profA, profB)
+	seedDMChat(t, ctx, pool, targetChat, profA, profC)
+	seedE2EEnabledDM(t, ctx, pool, sourceChat)
+	seedE2EEnabledDM(t, ctx, pool, targetChat)
+
+	client, _ := startMessagingServer(t, pool)
+	isE2E := true
+	cipher := "opaque-e2e-forward-payload"
+	original, err := client.SendMessage(withProfileCtx(ctx, acctA, profB), &messagingv1.SendMessageRequest{
+		Chat: chatDMRef(sourceChat), Content: cipher, IsE2E: &isE2E, AttachmentsJson: "[]", MentionsJson: "[]",
+	})
+	require.NoError(t, err)
+
+	fwd, err := client.ForwardMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.ForwardMessageRequest{
+		SourceMessageId: original.GetMessage().GetId(),
+		TargetChat:      chatDMRef(targetChat),
+	})
+	require.NoError(t, err)
+	require.True(t, fwd.GetMessage().GetIsE2E())
+	require.Equal(t, cipher, fwd.GetMessage().GetContent())
 }

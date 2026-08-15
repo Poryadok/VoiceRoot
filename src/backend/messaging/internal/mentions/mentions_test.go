@@ -14,19 +14,31 @@ import (
 )
 
 type stubRoles struct {
-	allowed map[string]bool
-	err     error
+	allowed        map[string]bool
+	err            error
+	chatCalls      int
+	spaceCalls     int
+	lastChatID     uuid.UUID
+	lastPermission string
 }
 
-func (s stubRoles) HasSpacePermission(_ context.Context, _, _ uuid.UUID, permission string) (bool, error) {
+func (s *stubRoles) HasSpacePermission(_ context.Context, _, _ uuid.UUID, permission string) (bool, error) {
+	s.spaceCalls++
+	s.lastPermission = permission
 	if s.err != nil {
 		return false, s.err
 	}
 	return s.allowed[permission], nil
 }
 
-func (s stubRoles) HasChatPermission(_ context.Context, _, _ uuid.UUID, _ uuid.UUID, permission string) (bool, error) {
-	return s.HasSpacePermission(context.Background(), uuid.Nil, uuid.Nil, permission)
+func (s *stubRoles) HasChatPermission(_ context.Context, _, _ uuid.UUID, chatID uuid.UUID, permission string) (bool, error) {
+	s.chatCalls++
+	s.lastChatID = chatID
+	s.lastPermission = permission
+	if s.err != nil {
+		return false, s.err
+	}
+	return s.allowed[permission], nil
 }
 
 type stubPresence struct {
@@ -67,7 +79,7 @@ func TestProcess_everyoneDeniedWithoutPermission(t *testing.T) {
 		SpaceID:  &spaceID,
 		Members:  []uuid.UUID{profA, profB},
 	}
-	_, _, err := mentions.Process(ctx, meta, profA, `[{"type":"everyone"}]`, stubRoles{allowed: map[string]bool{}}, nil)
+	_, _, err := mentions.Process(ctx, meta, profA, `[{"type":"everyone"}]`, &stubRoles{allowed: map[string]bool{}}, nil)
 	require.Error(t, err)
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }
@@ -83,11 +95,14 @@ func TestProcess_everyoneExpandsWithPermission(t *testing.T) {
 		SpaceID:  &spaceID,
 		Members:  []uuid.UUID{profA, profB},
 	}
-	roles := stubRoles{allowed: map[string]bool{permissions.TextChatMentionAllInChat: true}}
+	roles := &stubRoles{allowed: map[string]bool{permissions.TextChatMentionAllInChat: true}}
 	normalized, targets, err := mentions.Process(ctx, meta, profA, `[{"type":"everyone"}]`, roles, nil)
 	require.NoError(t, err)
 	require.JSONEq(t, `[{"type":"everyone"}]`, normalized)
 	require.ElementsMatch(t, []uuid.UUID{profB}, targets)
+	require.Equal(t, 1, roles.chatCalls)
+	require.Equal(t, 0, roles.spaceCalls)
+	require.Equal(t, meta.ChatID, roles.lastChatID)
 }
 
 func TestProcess_hereUsesOnlinePresence(t *testing.T) {
@@ -102,11 +117,12 @@ func TestProcess_hereUsesOnlinePresence(t *testing.T) {
 		SpaceID:  &spaceID,
 		Members:  []uuid.UUID{profA, profB, profC},
 	}
-	roles := stubRoles{allowed: map[string]bool{permissions.TextChatMentionAllOnline: true}}
+	roles := &stubRoles{allowed: map[string]bool{permissions.TextChatMentionAllOnline: true}}
 	presence := stubPresence{online: []uuid.UUID{profB}}
 	_, targets, err := mentions.Process(ctx, meta, profA, `[{"type":"here"}]`, roles, presence)
 	require.NoError(t, err)
 	require.Equal(t, []uuid.UUID{profB}, targets)
+	require.Equal(t, 1, roles.chatCalls)
 }
 
 func TestProcess_invalidJSON(t *testing.T) {
@@ -132,7 +148,7 @@ func TestProcess_roleUnavailable(t *testing.T) {
 	meta := mentions.ChatMeta{
 		ChatID: uuid.New(), ChatType: "group", SpaceID: &spaceID, Members: []uuid.UUID{uuid.New()},
 	}
-	_, _, err := mentions.Process(ctx, meta, uuid.New(), `[{"type":"everyone"}]`, stubRoles{err: status.Error(codes.Unavailable, "down")}, nil)
+	_, _, err := mentions.Process(ctx, meta, uuid.New(), `[{"type":"everyone"}]`, &stubRoles{err: status.Error(codes.Unavailable, "down")}, nil)
 	require.Error(t, err)
 	require.Equal(t, codes.Unavailable, status.Code(err))
 }
@@ -144,7 +160,7 @@ func TestProcess_hereRequiresPresence(t *testing.T) {
 	meta := mentions.ChatMeta{
 		ChatID: uuid.New(), ChatType: "group", SpaceID: &spaceID, Members: []uuid.UUID{profA},
 	}
-	roles := stubRoles{allowed: map[string]bool{permissions.TextChatMentionAllOnline: true}}
+	roles := &stubRoles{allowed: map[string]bool{permissions.TextChatMentionAllOnline: true}}
 	_, _, err := mentions.Process(ctx, meta, profA, `[{"type":"here"}]`, roles, nil)
 	require.Error(t, err)
 	require.Equal(t, codes.Unavailable, status.Code(err))
@@ -159,7 +175,7 @@ func TestProcess_broadcastForbiddenInDM(t *testing.T) {
 		ChatType: "dm",
 		Members:  []uuid.UUID{profA, profB},
 	}
-	_, _, err := mentions.Process(ctx, meta, profA, `[{"type":"everyone"}]`, stubRoles{allowed: map[string]bool{permissions.TextChatMentionAllInChat: true}}, nil)
+	_, _, err := mentions.Process(ctx, meta, profA, `[{"type":"everyone"}]`, &stubRoles{allowed: map[string]bool{permissions.TextChatMentionAllInChat: true}}, nil)
 	require.Error(t, err)
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }
