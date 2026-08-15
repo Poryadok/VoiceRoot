@@ -11,6 +11,7 @@ public class InMemoryAccountRepository implements AccountRepository {
   private final Map<UUID, Account> byId = new ConcurrentHashMap<>();
   private final Map<String, UUID> byEmail = new ConcurrentHashMap<>();
   private final Map<String, UUID> byPhone = new ConcurrentHashMap<>();
+  private final Map<UUID, Instant> guestReminderShownAt = new ConcurrentHashMap<>();
 
   @Override
   public synchronized Account create(String email, String phone, String passwordHash, String type) {
@@ -157,6 +158,18 @@ public class InMemoryAccountRepository implements AccountRepository {
       return;
     }
     byId.put(accountId, copy(existing, "active", existing.totpSecret(), existing.totpEnabled(), null));
+  }
+
+  @Override
+  public synchronized Optional<Instant> getGuestReminderLastShownAt(UUID accountId) {
+    return Optional.ofNullable(guestReminderShownAt.get(accountId));
+  }
+
+  @Override
+  public synchronized void markGuestReminderShown(UUID accountId, Instant shownAt) {
+    if (byId.containsKey(accountId)) {
+      guestReminderShownAt.put(accountId, shownAt);
+    }
   }
 
   private static Account copy(

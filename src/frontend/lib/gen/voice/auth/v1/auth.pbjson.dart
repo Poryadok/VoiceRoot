@@ -673,3 +673,152 @@ final $typed_data.Uint8List resolvePhoneHashesResponseDescriptor =
     $convert.base64Decode(
         'ChpSZXNvbHZlUGhvbmVIYXNoZXNSZXNwb25zZRI+CgdtYXRjaGVzGAEgAygLMiQudm9pY2UuYX'
         'V0aC52MS5QaG9uZUhhc2hQcm9maWxlTWF0Y2hSB21hdGNoZXM=');
+
+@$core.Deprecated('Use getGuestReminderRequestDescriptor instead')
+const GetGuestReminderRequest$json = {
+  '1': 'GetGuestReminderRequest',
+};
+
+/// Descriptor for `GetGuestReminderRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getGuestReminderRequestDescriptor =
+    $convert.base64Decode('ChdHZXRHdWVzdFJlbWluZGVyUmVxdWVzdA==');
+
+@$core.Deprecated('Use getGuestReminderResponseDescriptor instead')
+const GetGuestReminderResponse$json = {
+  '1': 'GetGuestReminderResponse',
+  '2': [
+    {
+      '1': 'last_shown_at',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '9': 0,
+      '10': 'lastShownAt',
+      '17': true
+    },
+    {'1': 'should_show', '3': 2, '4': 1, '5': 8, '10': 'shouldShow'},
+  ],
+  '8': [
+    {'1': '_last_shown_at'},
+  ],
+};
+
+/// Descriptor for `GetGuestReminderResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getGuestReminderResponseDescriptor = $convert.base64Decode(
+    'ChhHZXRHdWVzdFJlbWluZGVyUmVzcG9uc2USQwoNbGFzdF9zaG93bl9hdBgBIAEoCzIaLmdvb2'
+    'dsZS5wcm90b2J1Zi5UaW1lc3RhbXBIAFILbGFzdFNob3duQXSIAQESHwoLc2hvdWxkX3Nob3cY'
+    'AiABKAhSCnNob3VsZFNob3dCEAoOX2xhc3Rfc2hvd25fYXQ=');
+
+@$core.Deprecated('Use markGuestReminderShownRequestDescriptor instead')
+const MarkGuestReminderShownRequest$json = {
+  '1': 'MarkGuestReminderShownRequest',
+};
+
+/// Descriptor for `MarkGuestReminderShownRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List markGuestReminderShownRequestDescriptor =
+    $convert.base64Decode('Ch1NYXJrR3Vlc3RSZW1pbmRlclNob3duUmVxdWVzdA==');
+
+@$core.Deprecated('Use markGuestReminderShownResponseDescriptor instead')
+const MarkGuestReminderShownResponse$json = {
+  '1': 'MarkGuestReminderShownResponse',
+  '2': [
+    {
+      '1': 'last_shown_at',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'lastShownAt'
+    },
+  ],
+};
+
+/// Descriptor for `MarkGuestReminderShownResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List markGuestReminderShownResponseDescriptor =
+    $convert.base64Decode(
+        'Ch5NYXJrR3Vlc3RSZW1pbmRlclNob3duUmVzcG9uc2USPgoNbGFzdF9zaG93bl9hdBgBIAEoCz'
+        'IaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBSC2xhc3RTaG93bkF0');
+
+@$core.Deprecated('Use listSessionsRequestDescriptor instead')
+const ListSessionsRequest$json = {
+  '1': 'ListSessionsRequest',
+};
+
+/// Descriptor for `ListSessionsRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List listSessionsRequestDescriptor =
+    $convert.base64Decode('ChNMaXN0U2Vzc2lvbnNSZXF1ZXN0');
+
+@$core.Deprecated('Use sessionInfoDescriptor instead')
+const SessionInfo$json = {
+  '1': 'SessionInfo',
+  '2': [
+    {'1': 'id', '3': 1, '4': 1, '5': 9, '10': 'id'},
+    {'1': 'device_info_json', '3': 2, '4': 1, '5': 9, '10': 'deviceInfoJson'},
+    {
+      '1': 'created_at',
+      '3': 3,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'createdAt'
+    },
+    {
+      '1': 'expires_at',
+      '3': 4,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'expiresAt'
+    },
+    {'1': 'current', '3': 5, '4': 1, '5': 8, '10': 'current'},
+  ],
+};
+
+/// Descriptor for `SessionInfo`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List sessionInfoDescriptor = $convert.base64Decode(
+    'CgtTZXNzaW9uSW5mbxIOCgJpZBgBIAEoCVICaWQSKAoQZGV2aWNlX2luZm9fanNvbhgCIAEoCV'
+    'IOZGV2aWNlSW5mb0pzb24SOQoKY3JlYXRlZF9hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5U'
+    'aW1lc3RhbXBSCWNyZWF0ZWRBdBI5CgpleHBpcmVzX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYn'
+    'VmLlRpbWVzdGFtcFIJZXhwaXJlc0F0EhgKB2N1cnJlbnQYBSABKAhSB2N1cnJlbnQ=');
+
+@$core.Deprecated('Use listSessionsResponseDescriptor instead')
+const ListSessionsResponse$json = {
+  '1': 'ListSessionsResponse',
+  '2': [
+    {
+      '1': 'sessions',
+      '3': 1,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.auth.v1.SessionInfo',
+      '10': 'sessions'
+    },
+  ],
+};
+
+/// Descriptor for `ListSessionsResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List listSessionsResponseDescriptor = $convert.base64Decode(
+    'ChRMaXN0U2Vzc2lvbnNSZXNwb25zZRI2CghzZXNzaW9ucxgBIAMoCzIaLnZvaWNlLmF1dGgudj'
+    'EuU2Vzc2lvbkluZm9SCHNlc3Npb25z');
+
+@$core.Deprecated('Use revokeSessionRequestDescriptor instead')
+const RevokeSessionRequest$json = {
+  '1': 'RevokeSessionRequest',
+  '2': [
+    {'1': 'session_id', '3': 1, '4': 1, '5': 9, '10': 'sessionId'},
+  ],
+};
+
+/// Descriptor for `RevokeSessionRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List revokeSessionRequestDescriptor = $convert.base64Decode(
+    'ChRSZXZva2VTZXNzaW9uUmVxdWVzdBIdCgpzZXNzaW9uX2lkGAEgASgJUglzZXNzaW9uSWQ=');
+
+@$core.Deprecated('Use revokeSessionResponseDescriptor instead')
+const RevokeSessionResponse$json = {
+  '1': 'RevokeSessionResponse',
+};
+
+/// Descriptor for `RevokeSessionResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List revokeSessionResponseDescriptor =
+    $convert.base64Decode('ChVSZXZva2VTZXNzaW9uUmVzcG9uc2U=');

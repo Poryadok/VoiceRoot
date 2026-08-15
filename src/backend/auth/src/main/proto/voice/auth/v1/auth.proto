@@ -8,6 +8,7 @@ option go_package = "voice.app/voice/auth/v1;authv1";
 option java_multiple_files = true;
 option java_package = "app.voice.auth.v1";
 
+// Auth Service — registration, sessions, JWT, 2FA (Java). HTTP prefix: /api/v1/auth/** → Gateway.
 service AuthService {
   rpc Register(RegisterRequest) returns (RegisterResponse);
   rpc Login(LoginRequest) returns (LoginResponse);
@@ -19,16 +20,25 @@ service AuthService {
   rpc ConvertGuest(ConvertGuestRequest) returns (ConvertGuestResponse);
   rpc DeleteAccount(DeleteAccountRequest) returns (DeleteAccountResponse);
   rpc RestoreAccount(RestoreAccountRequest) returns (RestoreAccountResponse);
+  // Internal — other services / Gateway token introspection.
   rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse);
+  // Public JWKS for JWT verification.
   rpc GetJWKS(GetJWKSRequest) returns (GetJWKSResponse);
-  // multi-profile/verification (docs/features/multi-profile.md): switch active profile claim in next access JWT (primary-profile-bootstrap.md).
+  // See docs/features/multi-profile.md — switch active profile claim in next access JWT.
   rpc SwitchActiveProfile(SwitchActiveProfileRequest) returns (SwitchActiveProfileResponse);
-  // moderation (docs/features/reports.md): internal — platform moderation suspends account.
+  // Internal — platform moderation suspends account (docs/features/reports.md).
   rpc SetAccountStatus(SetAccountStatusRequest) returns (SetAccountStatusResponse);
+  // See docs/features/encryption.md — encrypted key backup (opaque blob).
   rpc PutE2EKeyBackup(PutE2EKeyBackupRequest) returns (PutE2EKeyBackupResponse);
   rpc GetE2EKeyBackup(GetE2EKeyBackupRequest) returns (GetE2EKeyBackupResponse);
   // Internal — Social SyncPhoneContacts: hashed phone → primary profile_id (accounts.phone).
   rpc ResolvePhoneHashes(ResolvePhoneHashesRequest) returns (ResolvePhoneHashesResponse);
+  // Guest save-account reminder cadence (docs/features/auth-and-contacts.md).
+  rpc GetGuestReminder(GetGuestReminderRequest) returns (GetGuestReminderResponse);
+  rpc MarkGuestReminderShown(MarkGuestReminderShownRequest) returns (MarkGuestReminderShownResponse);
+  // Active devices / sessions (docs/features/auth-and-contacts.md).
+  rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
+  rpc RevokeSession(RevokeSessionRequest) returns (RevokeSessionResponse);
 }
 
 message RegisterRequest {
@@ -62,6 +72,7 @@ message Enable2FARequest {
 message Enable2FAResponse {
   string totp_uri = 1;
   string secret_backup_hint = 2;
+  // One-time plaintext backup codes; shown only at enrollment (docs/features/auth-and-contacts.md).
   repeated string backup_codes = 3;
 }
 
@@ -71,10 +82,11 @@ message Verify2FARequest {
 
 message VerifyOTPRequest {
   string code = 1;
-  string otp_type = 2;
-  optional OtpType otp_type_enum = 3;
+  string otp_type = 2; // email_verify | password_reset — see enum OtpType for canonical values
+  optional OtpType otp_type_enum = 3; // prefer when set (docs/REPOSITORIES.md)
 }
 
+// Canonical values for VerifyOTPRequest.otp_type (string).
 enum OtpType {
   OTP_TYPE_UNSPECIFIED = 0;
   OTP_TYPE_EMAIL_VERIFY = 1;
@@ -99,12 +111,14 @@ message ValidateTokenRequest {
   string access_token = 1;
 }
 
+// Issued session (access + refresh + account id + active profile).
 message AuthSession {
   string access_token = 1;
   string refresh_token = 2;
   int64 expires_in_seconds = 3;
   string account_id = 4;
   string profile_id = 5;
+  // regular | guest — mirrors JWT account_type claim.
   string account_type = 6;
 }
 
@@ -145,15 +159,16 @@ message ValidateTokenResponse {
 message GetJWKSRequest {}
 
 message GetJWKSResponse {
-  string keys_json = 1;
+  string keys_json = 1; // JWKS document as JSON string
 }
 
 message TokenClaims {
-  string user_id = 1;
+  string user_id = 1; // account_id (JWT claim name per docs)
   string profile_id = 2;
   repeated string roles = 3;
   string subscription_tier = 4;
   google.protobuf.Timestamp expires_at = 5;
+  // regular | guest — mirrors JWT account_type claim.
   string account_type = 6;
 }
 
@@ -201,3 +216,39 @@ message PhoneHashProfileMatch {
 message ResolvePhoneHashesResponse {
   repeated PhoneHashProfileMatch matches = 1;
 }
+
+message GetGuestReminderRequest {}
+
+message GetGuestReminderResponse {
+  // Empty when never shown on server.
+  optional google.protobuf.Timestamp last_shown_at = 1;
+  // True when guest may show reminder (null last_shown or older than 24h). Client still gates first entry.
+  bool should_show = 2;
+}
+
+message MarkGuestReminderShownRequest {}
+
+message MarkGuestReminderShownResponse {
+  google.protobuf.Timestamp last_shown_at = 1;
+}
+
+message ListSessionsRequest {}
+
+message SessionInfo {
+  string id = 1;
+  string device_info_json = 2;
+  google.protobuf.Timestamp created_at = 3;
+  google.protobuf.Timestamp expires_at = 4;
+  // True when this refresh row matches the caller's current access jti.
+  bool current = 5;
+}
+
+message ListSessionsResponse {
+  repeated SessionInfo sessions = 1;
+}
+
+message RevokeSessionRequest {
+  string session_id = 1;
+}
+
+message RevokeSessionResponse {}

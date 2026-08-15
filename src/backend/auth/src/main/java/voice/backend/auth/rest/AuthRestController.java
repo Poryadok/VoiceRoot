@@ -9,15 +9,18 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import voice.backend.auth.service.ActiveSession;
 import voice.backend.auth.service.AuthException;
 import voice.backend.auth.service.AuthService;
 import voice.backend.auth.service.AuthSession;
 import voice.backend.auth.service.ConvertGuestCommand;
+import voice.backend.auth.service.GuestReminderState;
 import voice.backend.auth.service.LinkedAccountsService;
 import voice.backend.auth.service.LoginCommand;
 import voice.backend.auth.service.LogoutCommand;
@@ -141,6 +144,34 @@ public class AuthRestController {
             authorization, new ConvertGuestCommand(request.email(), request.phone(), request.password())));
   }
 
+  @GetMapping("/guest-reminder")
+  public GuestReminderResponse getGuestReminder(
+      @RequestHeader(name = "Authorization", required = false) String authorization) {
+    return GuestReminderResponse.from(authService.getGuestReminder(authorization));
+  }
+
+  @PostMapping("/guest-reminder/mark")
+  public GuestReminderResponse markGuestReminder(
+      @RequestHeader(name = "Authorization", required = false) String authorization) {
+    return GuestReminderResponse.from(authService.markGuestReminderShown(authorization));
+  }
+
+  @GetMapping("/sessions")
+  public Map<String, Object> listSessions(
+      @RequestHeader(name = "Authorization", required = false) String authorization) {
+    List<Map<String, Object>> sessions =
+        authService.listSessions(authorization).stream().map(ActiveSessionResponse::from).toList();
+    return Map.of("sessions", sessions);
+  }
+
+  @PostMapping("/sessions/{sessionId}/revoke")
+  public ResponseEntity<Void> revokeSession(
+      @RequestHeader(name = "Authorization", required = false) String authorization,
+      @PathVariable("sessionId") String sessionId) {
+    authService.revokeSession(authorization, sessionId);
+    return ResponseEntity.noContent().build();
+  }
+
   @GetMapping("/linked-accounts")
   public Map<String, Object> listLinkedAccounts() {
     return Map.of("linked_accounts", List.of());
@@ -192,6 +223,7 @@ public class AuthRestController {
       case "validation_failed", "registration_conflict" -> HttpStatus.BAD_REQUEST;
       case "otp_rate_limited" -> HttpStatus.TOO_MANY_REQUESTS;
       case "auth_unavailable" -> HttpStatus.SERVICE_UNAVAILABLE;
+      case "not_found" -> HttpStatus.NOT_FOUND;
       default -> HttpStatus.UNAUTHORIZED;
     };
     return ResponseEntity.status(status).body(Map.of("error", ex.getMessage()));
@@ -295,6 +327,31 @@ public class AuthRestController {
       @JsonProperty("backup_codes") List<String> backupCodes) {
     public static Enable2FAResponse from(TotpEnrollment enrollment) {
       return new Enable2FAResponse(enrollment.totpUri(), enrollment.secretBackupHint(), enrollment.backupCodes());
+    }
+  }
+
+  public record GuestReminderResponse(
+      @JsonProperty("last_shown_at") String lastShownAt,
+      @JsonProperty("should_show") boolean shouldShow) {
+    public static GuestReminderResponse from(GuestReminderState state) {
+      return new GuestReminderResponse(
+          state.lastShownAt() == null ? null : state.lastShownAt().toString(), state.shouldShow());
+    }
+  }
+
+  public record ActiveSessionResponse(
+      String id,
+      @JsonProperty("device_info_json") String deviceInfoJson,
+      @JsonProperty("created_at") String createdAt,
+      @JsonProperty("expires_at") String expiresAt,
+      boolean current) {
+    public static Map<String, Object> from(ActiveSession session) {
+      return Map.of(
+          "id", session.id(),
+          "device_info_json", session.deviceInfoJson() == null ? "{}" : session.deviceInfoJson(),
+          "created_at", session.createdAt().toString(),
+          "expires_at", session.expiresAt().toString(),
+          "current", session.current());
     }
   }
 }

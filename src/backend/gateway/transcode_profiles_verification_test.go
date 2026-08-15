@@ -59,6 +59,7 @@ type recordingPhase13AuthGRPC struct {
 	authv1.UnimplementedAuthServiceServer
 	lastSwitch  *authv1.SwitchActiveProfileRequest
 	lastConvert *authv1.ConvertGuestRequest
+	lastRevoke  *authv1.RevokeSessionRequest
 }
 
 func (s *recordingPhase13AuthGRPC) ConvertGuest(_ context.Context, req *authv1.ConvertGuestRequest) (*authv1.ConvertGuestResponse, error) {
@@ -85,6 +86,28 @@ func (s *recordingPhase13AuthGRPC) SwitchActiveProfile(_ context.Context, req *a
 			ExpiresInSeconds:  900,
 		},
 	}, nil
+}
+
+func (s *recordingPhase13AuthGRPC) GetGuestReminder(_ context.Context, _ *authv1.GetGuestReminderRequest) (*authv1.GetGuestReminderResponse, error) {
+	return &authv1.GetGuestReminderResponse{ShouldShow: true}, nil
+}
+
+func (s *recordingPhase13AuthGRPC) MarkGuestReminderShown(_ context.Context, _ *authv1.MarkGuestReminderShownRequest) (*authv1.MarkGuestReminderShownResponse, error) {
+	return &authv1.MarkGuestReminderShownResponse{}, nil
+}
+
+func (s *recordingPhase13AuthGRPC) ListSessions(_ context.Context, _ *authv1.ListSessionsRequest) (*authv1.ListSessionsResponse, error) {
+	return &authv1.ListSessionsResponse{
+		Sessions: []*authv1.SessionInfo{
+			{Id: "sess-1", DeviceInfoJson: `{"device":"a"}`, Current: true},
+			{Id: "sess-2", DeviceInfoJson: `{"device":"b"}`, Current: false},
+		},
+	}, nil
+}
+
+func (s *recordingPhase13AuthGRPC) RevokeSession(_ context.Context, req *authv1.RevokeSessionRequest) (*authv1.RevokeSessionResponse, error) {
+	s.lastRevoke = req
+	return &authv1.RevokeSessionResponse{}, nil
 }
 
 func startBufconnAuthConn(t *testing.T, impl authv1.AuthServiceServer) (*grpc.ClientConn, func()) {

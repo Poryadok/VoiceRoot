@@ -193,6 +193,8 @@ services:
         condition: service_healthy
       user:
         condition: service_healthy
+      nats:
+        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8080/health >/dev/null"]
       interval: 5s

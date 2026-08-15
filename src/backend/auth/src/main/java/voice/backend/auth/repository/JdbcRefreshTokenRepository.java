@@ -68,6 +68,32 @@ public class JdbcRefreshTokenRepository implements RefreshTokenRepository {
   }
 
   @Override
+  public Optional<RefreshTokenRecord> findById(UUID id) {
+    return jdbc.query(
+            """
+            SELECT id, account_id, token_hash, device_info::text AS device_info_json, access_jti, expires_at, created_at, revoked_at
+            FROM refresh_tokens WHERE id = :id LIMIT 1
+            """,
+            new MapSqlParameterSource("id", id),
+            ROW_MAPPER)
+        .stream()
+        .findFirst();
+  }
+
+  @Override
+  public java.util.List<RefreshTokenRecord> listActiveByAccount(UUID accountId) {
+    return jdbc.query(
+        """
+        SELECT id, account_id, token_hash, device_info::text AS device_info_json, access_jti, expires_at, created_at, revoked_at
+        FROM refresh_tokens
+        WHERE account_id = :accountId AND revoked_at IS NULL AND expires_at > now()
+        ORDER BY created_at DESC
+        """,
+        new MapSqlParameterSource("accountId", accountId),
+        ROW_MAPPER);
+  }
+
+  @Override
   public RefreshTokenRecord revoke(String tokenHash, Instant now) {
     int updated =
         jdbc.update(
@@ -82,6 +108,21 @@ public class JdbcRefreshTokenRepository implements RefreshTokenRepository {
       return findByHash(tokenHash).orElse(null);
     }
     return findByHash(tokenHash).orElse(null);
+  }
+
+  @Override
+  public RefreshTokenRecord revokeById(UUID id, Instant now) {
+    int updated =
+        jdbc.update(
+            """
+            UPDATE refresh_tokens SET revoked_at = :now
+            WHERE id = :id AND revoked_at IS NULL
+            """,
+            new MapSqlParameterSource().addValue("now", Timestamp.from(now)).addValue("id", id));
+    if (updated == 0) {
+      return findById(id).orElse(null);
+    }
+    return findById(id).orElse(null);
   }
 
   @Override

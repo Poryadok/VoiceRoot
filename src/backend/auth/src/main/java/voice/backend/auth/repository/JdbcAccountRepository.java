@@ -216,4 +216,35 @@ public class JdbcAccountRepository implements AccountRepository {
         """,
         new MapSqlParameterSource("id", accountId));
   }
+
+  @Override
+  public Optional<Instant> getGuestReminderLastShownAt(UUID accountId) {
+    return jdbc
+        .query(
+            """
+            SELECT guest_reminder_last_shown_at
+            FROM accounts WHERE id = :id LIMIT 1
+            """,
+            new MapSqlParameterSource("id", accountId),
+            (rs, rowNum) -> {
+              java.sql.Timestamp ts = rs.getTimestamp("guest_reminder_last_shown_at");
+              return ts == null ? null : ts.toInstant();
+            })
+        .stream()
+        .findFirst()
+        .flatMap(instant -> Optional.ofNullable(instant));
+  }
+
+  @Override
+  public void markGuestReminderShown(UUID accountId, Instant shownAt) {
+    jdbc.update(
+        """
+        UPDATE accounts
+        SET guest_reminder_last_shown_at = :shownAt, updated_at = now()
+        WHERE id = :id
+        """,
+        new MapSqlParameterSource()
+            .addValue("id", accountId)
+            .addValue("shownAt", java.sql.Timestamp.from(shownAt)));
+  }
 }

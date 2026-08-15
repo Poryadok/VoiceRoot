@@ -2309,6 +2309,507 @@ class ResolvePhoneHashesResponse extends $pb.GeneratedMessage {
   $pb.PbList<PhoneHashProfileMatch> get matches => $_getList(0);
 }
 
+class GetGuestReminderRequest extends $pb.GeneratedMessage {
+  factory GetGuestReminderRequest() => create();
+
+  GetGuestReminderRequest._();
+
+  factory GetGuestReminderRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetGuestReminderRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetGuestReminderRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetGuestReminderRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetGuestReminderRequest copyWith(
+          void Function(GetGuestReminderRequest) updates) =>
+      super.copyWith((message) => updates(message as GetGuestReminderRequest))
+          as GetGuestReminderRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetGuestReminderRequest create() => GetGuestReminderRequest._();
+  @$core.override
+  GetGuestReminderRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetGuestReminderRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetGuestReminderRequest>(create);
+  static GetGuestReminderRequest? _defaultInstance;
+}
+
+class GetGuestReminderResponse extends $pb.GeneratedMessage {
+  factory GetGuestReminderResponse({
+    $1.Timestamp? lastShownAt,
+    $core.bool? shouldShow,
+  }) {
+    final result = create();
+    if (lastShownAt != null) result.lastShownAt = lastShownAt;
+    if (shouldShow != null) result.shouldShow = shouldShow;
+    return result;
+  }
+
+  GetGuestReminderResponse._();
+
+  factory GetGuestReminderResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetGuestReminderResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetGuestReminderResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..aOM<$1.Timestamp>(1, _omitFieldNames ? '' : 'lastShownAt',
+        subBuilder: $1.Timestamp.create)
+    ..aOB(2, _omitFieldNames ? '' : 'shouldShow')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetGuestReminderResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetGuestReminderResponse copyWith(
+          void Function(GetGuestReminderResponse) updates) =>
+      super.copyWith((message) => updates(message as GetGuestReminderResponse))
+          as GetGuestReminderResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetGuestReminderResponse create() => GetGuestReminderResponse._();
+  @$core.override
+  GetGuestReminderResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetGuestReminderResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetGuestReminderResponse>(create);
+  static GetGuestReminderResponse? _defaultInstance;
+
+  /// Empty when never shown on server.
+  @$pb.TagNumber(1)
+  $1.Timestamp get lastShownAt => $_getN(0);
+  @$pb.TagNumber(1)
+  set lastShownAt($1.Timestamp value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasLastShownAt() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearLastShownAt() => $_clearField(1);
+  @$pb.TagNumber(1)
+  $1.Timestamp ensureLastShownAt() => $_ensure(0);
+
+  /// True when guest may show reminder (null last_shown or older than 24h). Client still gates first entry.
+  @$pb.TagNumber(2)
+  $core.bool get shouldShow => $_getBF(1);
+  @$pb.TagNumber(2)
+  set shouldShow($core.bool value) => $_setBool(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasShouldShow() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearShouldShow() => $_clearField(2);
+}
+
+class MarkGuestReminderShownRequest extends $pb.GeneratedMessage {
+  factory MarkGuestReminderShownRequest() => create();
+
+  MarkGuestReminderShownRequest._();
+
+  factory MarkGuestReminderShownRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory MarkGuestReminderShownRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'MarkGuestReminderShownRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  MarkGuestReminderShownRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  MarkGuestReminderShownRequest copyWith(
+          void Function(MarkGuestReminderShownRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as MarkGuestReminderShownRequest))
+          as MarkGuestReminderShownRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static MarkGuestReminderShownRequest create() =>
+      MarkGuestReminderShownRequest._();
+  @$core.override
+  MarkGuestReminderShownRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static MarkGuestReminderShownRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<MarkGuestReminderShownRequest>(create);
+  static MarkGuestReminderShownRequest? _defaultInstance;
+}
+
+class MarkGuestReminderShownResponse extends $pb.GeneratedMessage {
+  factory MarkGuestReminderShownResponse({
+    $1.Timestamp? lastShownAt,
+  }) {
+    final result = create();
+    if (lastShownAt != null) result.lastShownAt = lastShownAt;
+    return result;
+  }
+
+  MarkGuestReminderShownResponse._();
+
+  factory MarkGuestReminderShownResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory MarkGuestReminderShownResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'MarkGuestReminderShownResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..aOM<$1.Timestamp>(1, _omitFieldNames ? '' : 'lastShownAt',
+        subBuilder: $1.Timestamp.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  MarkGuestReminderShownResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  MarkGuestReminderShownResponse copyWith(
+          void Function(MarkGuestReminderShownResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as MarkGuestReminderShownResponse))
+          as MarkGuestReminderShownResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static MarkGuestReminderShownResponse create() =>
+      MarkGuestReminderShownResponse._();
+  @$core.override
+  MarkGuestReminderShownResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static MarkGuestReminderShownResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<MarkGuestReminderShownResponse>(create);
+  static MarkGuestReminderShownResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $1.Timestamp get lastShownAt => $_getN(0);
+  @$pb.TagNumber(1)
+  set lastShownAt($1.Timestamp value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasLastShownAt() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearLastShownAt() => $_clearField(1);
+  @$pb.TagNumber(1)
+  $1.Timestamp ensureLastShownAt() => $_ensure(0);
+}
+
+class ListSessionsRequest extends $pb.GeneratedMessage {
+  factory ListSessionsRequest() => create();
+
+  ListSessionsRequest._();
+
+  factory ListSessionsRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ListSessionsRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ListSessionsRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListSessionsRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListSessionsRequest copyWith(void Function(ListSessionsRequest) updates) =>
+      super.copyWith((message) => updates(message as ListSessionsRequest))
+          as ListSessionsRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ListSessionsRequest create() => ListSessionsRequest._();
+  @$core.override
+  ListSessionsRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ListSessionsRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ListSessionsRequest>(create);
+  static ListSessionsRequest? _defaultInstance;
+}
+
+class SessionInfo extends $pb.GeneratedMessage {
+  factory SessionInfo({
+    $core.String? id,
+    $core.String? deviceInfoJson,
+    $1.Timestamp? createdAt,
+    $1.Timestamp? expiresAt,
+    $core.bool? current,
+  }) {
+    final result = create();
+    if (id != null) result.id = id;
+    if (deviceInfoJson != null) result.deviceInfoJson = deviceInfoJson;
+    if (createdAt != null) result.createdAt = createdAt;
+    if (expiresAt != null) result.expiresAt = expiresAt;
+    if (current != null) result.current = current;
+    return result;
+  }
+
+  SessionInfo._();
+
+  factory SessionInfo.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SessionInfo.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SessionInfo',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'id')
+    ..aOS(2, _omitFieldNames ? '' : 'deviceInfoJson')
+    ..aOM<$1.Timestamp>(3, _omitFieldNames ? '' : 'createdAt',
+        subBuilder: $1.Timestamp.create)
+    ..aOM<$1.Timestamp>(4, _omitFieldNames ? '' : 'expiresAt',
+        subBuilder: $1.Timestamp.create)
+    ..aOB(5, _omitFieldNames ? '' : 'current')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SessionInfo clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SessionInfo copyWith(void Function(SessionInfo) updates) =>
+      super.copyWith((message) => updates(message as SessionInfo))
+          as SessionInfo;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SessionInfo create() => SessionInfo._();
+  @$core.override
+  SessionInfo createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SessionInfo getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SessionInfo>(create);
+  static SessionInfo? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get id => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set id($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get deviceInfoJson => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set deviceInfoJson($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasDeviceInfoJson() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearDeviceInfoJson() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $1.Timestamp get createdAt => $_getN(2);
+  @$pb.TagNumber(3)
+  set createdAt($1.Timestamp value) => $_setField(3, value);
+  @$pb.TagNumber(3)
+  $core.bool hasCreatedAt() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearCreatedAt() => $_clearField(3);
+  @$pb.TagNumber(3)
+  $1.Timestamp ensureCreatedAt() => $_ensure(2);
+
+  @$pb.TagNumber(4)
+  $1.Timestamp get expiresAt => $_getN(3);
+  @$pb.TagNumber(4)
+  set expiresAt($1.Timestamp value) => $_setField(4, value);
+  @$pb.TagNumber(4)
+  $core.bool hasExpiresAt() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearExpiresAt() => $_clearField(4);
+  @$pb.TagNumber(4)
+  $1.Timestamp ensureExpiresAt() => $_ensure(3);
+
+  /// True when this refresh row matches the caller's current access jti.
+  @$pb.TagNumber(5)
+  $core.bool get current => $_getBF(4);
+  @$pb.TagNumber(5)
+  set current($core.bool value) => $_setBool(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasCurrent() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearCurrent() => $_clearField(5);
+}
+
+class ListSessionsResponse extends $pb.GeneratedMessage {
+  factory ListSessionsResponse({
+    $core.Iterable<SessionInfo>? sessions,
+  }) {
+    final result = create();
+    if (sessions != null) result.sessions.addAll(sessions);
+    return result;
+  }
+
+  ListSessionsResponse._();
+
+  factory ListSessionsResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ListSessionsResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ListSessionsResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..pPM<SessionInfo>(1, _omitFieldNames ? '' : 'sessions',
+        subBuilder: SessionInfo.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListSessionsResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListSessionsResponse copyWith(void Function(ListSessionsResponse) updates) =>
+      super.copyWith((message) => updates(message as ListSessionsResponse))
+          as ListSessionsResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ListSessionsResponse create() => ListSessionsResponse._();
+  @$core.override
+  ListSessionsResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ListSessionsResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ListSessionsResponse>(create);
+  static ListSessionsResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $pb.PbList<SessionInfo> get sessions => $_getList(0);
+}
+
+class RevokeSessionRequest extends $pb.GeneratedMessage {
+  factory RevokeSessionRequest({
+    $core.String? sessionId,
+  }) {
+    final result = create();
+    if (sessionId != null) result.sessionId = sessionId;
+    return result;
+  }
+
+  RevokeSessionRequest._();
+
+  factory RevokeSessionRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory RevokeSessionRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'RevokeSessionRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'sessionId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RevokeSessionRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RevokeSessionRequest copyWith(void Function(RevokeSessionRequest) updates) =>
+      super.copyWith((message) => updates(message as RevokeSessionRequest))
+          as RevokeSessionRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static RevokeSessionRequest create() => RevokeSessionRequest._();
+  @$core.override
+  RevokeSessionRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static RevokeSessionRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<RevokeSessionRequest>(create);
+  static RevokeSessionRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get sessionId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set sessionId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSessionId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSessionId() => $_clearField(1);
+}
+
+class RevokeSessionResponse extends $pb.GeneratedMessage {
+  factory RevokeSessionResponse() => create();
+
+  RevokeSessionResponse._();
+
+  factory RevokeSessionResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory RevokeSessionResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'RevokeSessionResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RevokeSessionResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RevokeSessionResponse copyWith(
+          void Function(RevokeSessionResponse) updates) =>
+      super.copyWith((message) => updates(message as RevokeSessionResponse))
+          as RevokeSessionResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static RevokeSessionResponse create() => RevokeSessionResponse._();
+  @$core.override
+  RevokeSessionResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static RevokeSessionResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<RevokeSessionResponse>(create);
+  static RevokeSessionResponse? _defaultInstance;
+}
+
 const $core.bool _omitFieldNames =
     $core.bool.fromEnvironment('protobuf.omit_field_names');
 const $core.bool _omitMessageNames =

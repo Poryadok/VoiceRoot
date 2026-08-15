@@ -19,23 +19,27 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AuthService_Register_FullMethodName            = "/voice.auth.v1.AuthService/Register"
-	AuthService_Login_FullMethodName               = "/voice.auth.v1.AuthService/Login"
-	AuthService_Logout_FullMethodName              = "/voice.auth.v1.AuthService/Logout"
-	AuthService_RefreshToken_FullMethodName        = "/voice.auth.v1.AuthService/RefreshToken"
-	AuthService_Enable2FA_FullMethodName           = "/voice.auth.v1.AuthService/Enable2FA"
-	AuthService_Verify2FA_FullMethodName           = "/voice.auth.v1.AuthService/Verify2FA"
-	AuthService_VerifyOTP_FullMethodName           = "/voice.auth.v1.AuthService/VerifyOTP"
-	AuthService_ConvertGuest_FullMethodName        = "/voice.auth.v1.AuthService/ConvertGuest"
-	AuthService_DeleteAccount_FullMethodName       = "/voice.auth.v1.AuthService/DeleteAccount"
-	AuthService_RestoreAccount_FullMethodName      = "/voice.auth.v1.AuthService/RestoreAccount"
-	AuthService_ValidateToken_FullMethodName       = "/voice.auth.v1.AuthService/ValidateToken"
-	AuthService_GetJWKS_FullMethodName             = "/voice.auth.v1.AuthService/GetJWKS"
-	AuthService_SwitchActiveProfile_FullMethodName = "/voice.auth.v1.AuthService/SwitchActiveProfile"
-	AuthService_SetAccountStatus_FullMethodName    = "/voice.auth.v1.AuthService/SetAccountStatus"
-	AuthService_PutE2EKeyBackup_FullMethodName     = "/voice.auth.v1.AuthService/PutE2EKeyBackup"
-	AuthService_GetE2EKeyBackup_FullMethodName     = "/voice.auth.v1.AuthService/GetE2EKeyBackup"
-	AuthService_ResolvePhoneHashes_FullMethodName  = "/voice.auth.v1.AuthService/ResolvePhoneHashes"
+	AuthService_Register_FullMethodName               = "/voice.auth.v1.AuthService/Register"
+	AuthService_Login_FullMethodName                  = "/voice.auth.v1.AuthService/Login"
+	AuthService_Logout_FullMethodName                 = "/voice.auth.v1.AuthService/Logout"
+	AuthService_RefreshToken_FullMethodName           = "/voice.auth.v1.AuthService/RefreshToken"
+	AuthService_Enable2FA_FullMethodName              = "/voice.auth.v1.AuthService/Enable2FA"
+	AuthService_Verify2FA_FullMethodName              = "/voice.auth.v1.AuthService/Verify2FA"
+	AuthService_VerifyOTP_FullMethodName              = "/voice.auth.v1.AuthService/VerifyOTP"
+	AuthService_ConvertGuest_FullMethodName           = "/voice.auth.v1.AuthService/ConvertGuest"
+	AuthService_DeleteAccount_FullMethodName          = "/voice.auth.v1.AuthService/DeleteAccount"
+	AuthService_RestoreAccount_FullMethodName         = "/voice.auth.v1.AuthService/RestoreAccount"
+	AuthService_ValidateToken_FullMethodName          = "/voice.auth.v1.AuthService/ValidateToken"
+	AuthService_GetJWKS_FullMethodName                = "/voice.auth.v1.AuthService/GetJWKS"
+	AuthService_SwitchActiveProfile_FullMethodName    = "/voice.auth.v1.AuthService/SwitchActiveProfile"
+	AuthService_SetAccountStatus_FullMethodName       = "/voice.auth.v1.AuthService/SetAccountStatus"
+	AuthService_PutE2EKeyBackup_FullMethodName        = "/voice.auth.v1.AuthService/PutE2EKeyBackup"
+	AuthService_GetE2EKeyBackup_FullMethodName        = "/voice.auth.v1.AuthService/GetE2EKeyBackup"
+	AuthService_ResolvePhoneHashes_FullMethodName     = "/voice.auth.v1.AuthService/ResolvePhoneHashes"
+	AuthService_GetGuestReminder_FullMethodName       = "/voice.auth.v1.AuthService/GetGuestReminder"
+	AuthService_MarkGuestReminderShown_FullMethodName = "/voice.auth.v1.AuthService/MarkGuestReminderShown"
+	AuthService_ListSessions_FullMethodName           = "/voice.auth.v1.AuthService/ListSessions"
+	AuthService_RevokeSession_FullMethodName          = "/voice.auth.v1.AuthService/RevokeSession"
 )
 
 // AuthServiceClient is the client API for AuthService service.
@@ -67,6 +71,12 @@ type AuthServiceClient interface {
 	GetE2EKeyBackup(ctx context.Context, in *GetE2EKeyBackupRequest, opts ...grpc.CallOption) (*GetE2EKeyBackupResponse, error)
 	// Internal — Social SyncPhoneContacts: hashed phone → primary profile_id (accounts.phone).
 	ResolvePhoneHashes(ctx context.Context, in *ResolvePhoneHashesRequest, opts ...grpc.CallOption) (*ResolvePhoneHashesResponse, error)
+	// Guest save-account reminder cadence (docs/features/auth-and-contacts.md).
+	GetGuestReminder(ctx context.Context, in *GetGuestReminderRequest, opts ...grpc.CallOption) (*GetGuestReminderResponse, error)
+	MarkGuestReminderShown(ctx context.Context, in *MarkGuestReminderShownRequest, opts ...grpc.CallOption) (*MarkGuestReminderShownResponse, error)
+	// Active devices / sessions (docs/features/auth-and-contacts.md).
+	ListSessions(ctx context.Context, in *ListSessionsRequest, opts ...grpc.CallOption) (*ListSessionsResponse, error)
+	RevokeSession(ctx context.Context, in *RevokeSessionRequest, opts ...grpc.CallOption) (*RevokeSessionResponse, error)
 }
 
 type authServiceClient struct {
@@ -247,6 +257,46 @@ func (c *authServiceClient) ResolvePhoneHashes(ctx context.Context, in *ResolveP
 	return out, nil
 }
 
+func (c *authServiceClient) GetGuestReminder(ctx context.Context, in *GetGuestReminderRequest, opts ...grpc.CallOption) (*GetGuestReminderResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetGuestReminderResponse)
+	err := c.cc.Invoke(ctx, AuthService_GetGuestReminder_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) MarkGuestReminderShown(ctx context.Context, in *MarkGuestReminderShownRequest, opts ...grpc.CallOption) (*MarkGuestReminderShownResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MarkGuestReminderShownResponse)
+	err := c.cc.Invoke(ctx, AuthService_MarkGuestReminderShown_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) ListSessions(ctx context.Context, in *ListSessionsRequest, opts ...grpc.CallOption) (*ListSessionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListSessionsResponse)
+	err := c.cc.Invoke(ctx, AuthService_ListSessions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) RevokeSession(ctx context.Context, in *RevokeSessionRequest, opts ...grpc.CallOption) (*RevokeSessionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RevokeSessionResponse)
+	err := c.cc.Invoke(ctx, AuthService_RevokeSession_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AuthServiceServer is the server API for AuthService service.
 // All implementations must embed UnimplementedAuthServiceServer
 // for forward compatibility.
@@ -276,6 +326,12 @@ type AuthServiceServer interface {
 	GetE2EKeyBackup(context.Context, *GetE2EKeyBackupRequest) (*GetE2EKeyBackupResponse, error)
 	// Internal — Social SyncPhoneContacts: hashed phone → primary profile_id (accounts.phone).
 	ResolvePhoneHashes(context.Context, *ResolvePhoneHashesRequest) (*ResolvePhoneHashesResponse, error)
+	// Guest save-account reminder cadence (docs/features/auth-and-contacts.md).
+	GetGuestReminder(context.Context, *GetGuestReminderRequest) (*GetGuestReminderResponse, error)
+	MarkGuestReminderShown(context.Context, *MarkGuestReminderShownRequest) (*MarkGuestReminderShownResponse, error)
+	// Active devices / sessions (docs/features/auth-and-contacts.md).
+	ListSessions(context.Context, *ListSessionsRequest) (*ListSessionsResponse, error)
+	RevokeSession(context.Context, *RevokeSessionRequest) (*RevokeSessionResponse, error)
 	mustEmbedUnimplementedAuthServiceServer()
 }
 
@@ -336,6 +392,18 @@ func (UnimplementedAuthServiceServer) GetE2EKeyBackup(context.Context, *GetE2EKe
 }
 func (UnimplementedAuthServiceServer) ResolvePhoneHashes(context.Context, *ResolvePhoneHashesRequest) (*ResolvePhoneHashesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResolvePhoneHashes not implemented")
+}
+func (UnimplementedAuthServiceServer) GetGuestReminder(context.Context, *GetGuestReminderRequest) (*GetGuestReminderResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetGuestReminder not implemented")
+}
+func (UnimplementedAuthServiceServer) MarkGuestReminderShown(context.Context, *MarkGuestReminderShownRequest) (*MarkGuestReminderShownResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method MarkGuestReminderShown not implemented")
+}
+func (UnimplementedAuthServiceServer) ListSessions(context.Context, *ListSessionsRequest) (*ListSessionsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListSessions not implemented")
+}
+func (UnimplementedAuthServiceServer) RevokeSession(context.Context, *RevokeSessionRequest) (*RevokeSessionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RevokeSession not implemented")
 }
 func (UnimplementedAuthServiceServer) mustEmbedUnimplementedAuthServiceServer() {}
 func (UnimplementedAuthServiceServer) testEmbeddedByValue()                     {}
@@ -664,6 +732,78 @@ func _AuthService_ResolvePhoneHashes_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthService_GetGuestReminder_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetGuestReminderRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).GetGuestReminder(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_GetGuestReminder_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).GetGuestReminder(ctx, req.(*GetGuestReminderRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_MarkGuestReminderShown_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MarkGuestReminderShownRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).MarkGuestReminderShown(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_MarkGuestReminderShown_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).MarkGuestReminderShown(ctx, req.(*MarkGuestReminderShownRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_ListSessions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListSessionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).ListSessions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_ListSessions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).ListSessions(ctx, req.(*ListSessionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_RevokeSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RevokeSessionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).RevokeSession(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_RevokeSession_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).RevokeSession(ctx, req.(*RevokeSessionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AuthService_ServiceDesc is the grpc.ServiceDesc for AuthService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -738,6 +878,22 @@ var AuthService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ResolvePhoneHashes",
 			Handler:    _AuthService_ResolvePhoneHashes_Handler,
+		},
+		{
+			MethodName: "GetGuestReminder",
+			Handler:    _AuthService_GetGuestReminder_Handler,
+		},
+		{
+			MethodName: "MarkGuestReminderShown",
+			Handler:    _AuthService_MarkGuestReminderShown_Handler,
+		},
+		{
+			MethodName: "ListSessions",
+			Handler:    _AuthService_ListSessions_Handler,
+		},
+		{
+			MethodName: "RevokeSession",
+			Handler:    _AuthService_RevokeSession_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
