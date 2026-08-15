@@ -31,7 +31,9 @@
 | P1.17 | **done** | Redis/memory analytics audit store + live Redis assert |
 | P1.18 | **done** | map `thumbnailR2Key`/`convertedR2Key`; live asserts key not HTTP previewUrl |
 | P1.19 | **done** | ClamAV live uses `.exe` + `application/x-msdownload` |
-| P1.1–3, P1.5–11, P1.14–15 | **blocked** | product deps (see inventory / todo/backend) |
+| P1.1–3, P1.5–11 | **blocked** | product deps (see inventory / todo/backend) |
+| P1.14 | **product done** | compose `SPACE_GRPC_ADDR` + S2S/NATS Space Pro sync; member-cap without Seed; compose live join-51st → WT-INTEGRATION |
+| P1.15 | **product done** | `subscription.grace_reminder` D1/D3/D7 + Notification consumer stub; compose assert → WT-INTEGRATION |
 | P2.* / P3.* | **deferred** | roadmap / soft-launch+ |
 
 ---
@@ -100,8 +102,8 @@ Effort: **S** ≤0.5d · **M** 1–2d · **L** 3–5d · **XL** >1w (инфра/
 
 | # | Кейс | Слой | IDs | Effort | Notes |
 |---|------|------|-----|--------|-------|
-| P1.14 | Space Pro webhook → invite/member-cap | B | SP-11, SUB-03 | L | нужен sync Subscription→Space (todo Critical) |
-| P1.15 | Grace notifications stubs (event emitted) | B | SUB-04 | M | после Notification wiring |
+| P1.14 | Space Pro webhook → invite/member-cap | B | SP-11, SUB-03 | L | **product done** (sync+compose addr); compose join live → WT-INTEGRATION |
+| P1.15 | Grace notifications stubs (event emitted) | B | SUB-04 | M | **product done** (event+notif stub); compose live → WT-INTEGRATION |
 
 ### 1.5 Analytics DoD
 
