@@ -160,3 +160,29 @@ func TestGetPrivacySettings_RejectsForeignProfile(t *testing.T) {
 	require.NotEmpty(t, resp.GetPrivacySettings().GetPreset())
 	_ = otherProfile
 }
+
+func TestGetPrivacySettings_InternalCaller_ReadsForeignProfile(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startUserPostgresForSubscriptionTests(t, ctx)
+	profiles := store.NewProfileStore(pool)
+	privacy := store.NewPrivacyStore(pool)
+	cli := startUserSettingsTestServer(t, profiles, privacy)
+
+	ownerAccount := uuid.New()
+	internal := withInternalUserCtx(ctx)
+	ownerProfile, err := cli.EnsurePrimaryProfile(internal, &userv1.EnsurePrimaryProfileRequest{
+		AccountId: ownerAccount.String(),
+	})
+	require.NoError(t, err)
+
+	// Social/Chat S2S must read target privacy without owning the profile.
+	s2s := metadata.AppendToOutgoingContext(ctx, authctx.HeaderInternalCaller, "social")
+	resp, err := cli.GetPrivacySettings(s2s, &userv1.GetPrivacySettingsRequest{
+		ProfileId: ownerProfile.GetProfile().GetId(),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp.GetPrivacySettings())
+}

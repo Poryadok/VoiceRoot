@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 
 	"voice/backend/pkg/privacy"
 
@@ -21,7 +22,7 @@ func (u *GRPCUserPrivacy) ShowMmRatingAudience(ctx context.Context, profileID uu
 	if u == nil || u.Client == nil {
 		return privacy.EveryoneWithGuests(), nil
 	}
-	ctx = ForwardIncomingMetadata(ctx)
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs("x-voice-internal-caller", "matchmaking"))
 	resp, err := u.Client.GetPrivacySettings(ctx, &userv1.GetPrivacySettingsRequest{
 		ProfileId: profileID.String(),
 	})

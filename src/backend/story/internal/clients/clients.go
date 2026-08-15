@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/privacy"
@@ -113,6 +114,7 @@ func (u *UserStoryPrivacy) ShowStoriesAudience(ctx context.Context, profileID uu
 	if u == nil || u.client == nil {
 		return privacy.FriendsAndFoF(), nil
 	}
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs("x-voice-internal-caller", "story"))
 	resp, err := u.client.GetPrivacySettings(ctx, &userv1.GetPrivacySettingsRequest{
 		ProfileId: profileID.String(),
 	})

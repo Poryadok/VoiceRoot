@@ -104,8 +104,14 @@ func TestWSMetricsActiveConnectionsDecrementOnClose(t *testing.T) {
 	require.Equal(t, "hello", frame.Op)
 	require.Equal(t, float64(1), testutil.ToFloat64(rtMetrics.connectionsActive))
 
+	// Graceful close so the server read loop unblocks promptly (bare Close can race under load).
+	_ = conn.WriteControl(
+		websocket.CloseMessage,
+		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""),
+		time.Now().Add(time.Second),
+	)
 	require.NoError(t, conn.Close())
 	require.Eventually(t, func() bool {
 		return testutil.ToFloat64(rtMetrics.connectionsActive) == 0
-	}, 2*time.Second, 20*time.Millisecond)
+	}, 5*time.Second, 20*time.Millisecond)
 }

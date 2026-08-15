@@ -21,7 +21,13 @@ func (s *UserGRPC) GetPrivacySettings(ctx context.Context, req *userv1.GetPrivac
 	if err != nil {
 		return nil, err
 	}
-	if accountID, ok := authctx.AccountID(ctx); ok {
+	// S2S peers (Social/Chat/…) read any profile for audience enforcement.
+	// End-user callers may only read profiles they own.
+	if !authctx.IsInternalService(ctx) {
+		accountID, ok := authctx.AccountID(ctx)
+		if !ok {
+			return nil, status.Error(codes.Unauthenticated, "missing credentials")
+		}
 		if s.Profiles != nil {
 			row, err := s.Profiles.GetOwnedProfile(ctx, accountID, profileID)
 			if err != nil {
@@ -31,8 +37,6 @@ func (s *UserGRPC) GetPrivacySettings(ctx context.Context, req *userv1.GetPrivac
 				return nil, status.Error(codes.PermissionDenied, "cannot read another profile")
 			}
 		}
-	} else if !authctx.IsInternalService(ctx) {
-		return nil, status.Error(codes.Unauthenticated, "missing credentials")
 	}
 	privacyStore := s.privacyStore()
 	if privacyStore == nil {

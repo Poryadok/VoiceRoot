@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 
 	"voice/backend/pkg/privacy"
 
@@ -17,11 +18,15 @@ type GRPCUserPrivacy struct {
 	Client userv1.UserServiceClient
 }
 
+func privacyS2SContext(ctx context.Context) context.Context {
+	return metadata.NewOutgoingContext(ctx, metadata.Pairs("x-voice-internal-caller", "space"))
+}
+
 func (u *GRPCUserPrivacy) AllowChatSpaceInvitesAudience(ctx context.Context, profileID uuid.UUID) (privacy.Audience, error) {
 	if u == nil || u.Client == nil {
 		return privacy.EveryoneWithGuests(), nil
 	}
-	resp, err := u.Client.GetPrivacySettings(ctx, &userv1.GetPrivacySettingsRequest{
+	resp, err := u.Client.GetPrivacySettings(privacyS2SContext(ctx), &userv1.GetPrivacySettingsRequest{
 		ProfileId: profileID.String(),
 	})
 	if err != nil {

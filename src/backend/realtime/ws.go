@@ -277,11 +277,9 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 			_ = c.SetReadDeadline(time.Now().Add(90 * time.Second))
 			var in wsInbound
 			err := c.ReadJSON(&in)
-			select {
-			case readCh <- readResult{in: in, err: err}:
-			default:
-				return
-			}
+			// Always deliver to the main loop (blocking). A non-blocking send would
+			// drop disconnect errors when the buffer is full and leave the conn hung.
+			readCh <- readResult{in: in, err: err}
 			if err != nil {
 				return
 			}
