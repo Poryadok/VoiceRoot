@@ -11,6 +11,26 @@ func ForAccount(tier string) string {
 	return buildJSON(accountLimits(tier))
 }
 
+// ForSpace returns entitlement limits JSON for a space subscription tier.
+func ForSpace(hasSpacePro bool) string {
+	return buildJSON(spaceLimits(hasSpacePro))
+}
+
+func spaceLimits(hasSpacePro bool) map[string]int64 {
+	return map[string]int64{
+		"space_member_count":      SpaceMemberCap(hasSpacePro),
+		"voice_room_participants": int64(VoiceRoomCap(hasSpacePro)),
+		"space_tree_nodes":        spaceTreeNodes(hasSpacePro),
+	}
+}
+
+func spaceTreeNodes(hasSpacePro bool) int64 {
+	if hasSpacePro {
+		return testfixtures.SpaceTreeNodesSpacePro
+	}
+	return testfixtures.SpaceTreeNodesFree
+}
+
 func accountLimits(tier string) map[string]int64 {
 	if tier == "premium" || tier == "grace_period" {
 		return map[string]int64{

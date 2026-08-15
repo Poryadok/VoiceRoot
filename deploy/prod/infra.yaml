@@ -328,5 +328,4 @@ spec:
         resources:
           requests:
             storage: 20Gi
-  # Apply DDL: kubectl create configmap voice-clickhouse-init --from-file=001_events.sql=docker/clickhouse/init/001_events.sql -n voice-prod
-  # then run one-off Job or clickhouse-client against voice-clickhouse:9000
+  # Apply DDL: scripts/prod/apply-clickhouse-init.sh (wraps scripts/staging/apply-clickhouse-init.sh)

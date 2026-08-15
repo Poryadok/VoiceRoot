@@ -25,9 +25,14 @@ var _ callPrivacyChecker = callPrivacyStub{}
 
 type callPrivacyStub struct {
 	friendsOnly map[uuid.UUID]bool
+	guestCallee map[uuid.UUID]bool
+	dmEveryone  map[uuid.UUID]bool
 }
 
 func (s callPrivacyStub) AllowCallsAudience(_ context.Context, profileID uuid.UUID) (privacy.Audience, error) {
+	if s.guestCallee[profileID] && s.dmEveryone[profileID] {
+		return privacy.EveryoneWithGuests(), nil
+	}
 	if s.friendsOnly[profileID] {
 		return privacy.FriendsOnly(), nil
 	}

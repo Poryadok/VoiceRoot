@@ -29,6 +29,7 @@ const (
 	subjectMentionAdded      = "message.mention_added"
 	subjectMessagePinned     = "message.pinned"
 	subjectMessageUnpinned   = "message.unpinned"
+	subjectMessageForwarded  = "message.forwarded"
 	natsHeaderThreadParentID = "X-Voice-Thread-Parent-Id"
 )
 
@@ -83,6 +84,7 @@ func messageEventStreamSubjects() []string {
 		subjectMentionAdded,
 		subjectMessagePinned,
 		subjectMessageUnpinned,
+		subjectMessageForwarded,
 	}
 }
 
@@ -192,6 +194,10 @@ func messageEventLogAttrs(env *eventsv1.MessageStreamEvent) []slog.Attr {
 	case *eventsv1.MessageStreamEvent_MessageUnpinned:
 		if m := p.MessageUnpinned; m != nil {
 			attrs = append(attrs, slog.String("message_id", m.GetMessageId()), slog.String("chat_id", m.GetChatId()))
+		}
+	case *eventsv1.MessageStreamEvent_MessageForwarded:
+		if m := p.MessageForwarded; m != nil {
+			attrs = append(attrs, slog.String("message_id", m.GetMessageId()), slog.String("source_chat_id", m.GetSourceChatId()), slog.String("target_chat_id", m.GetTargetChatId()))
 		}
 	}
 	return attrs
@@ -362,6 +368,23 @@ func (p *JetStreamPublisher) PublishMessageUnpinned(ctx context.Context, message
 		},
 	}
 	return p.publishProto(ctx, subjectMessageUnpinned, env)
+}
+
+// PublishMessageForwarded implements MessageEventsPublisher.
+func (p *JetStreamPublisher) PublishMessageForwarded(ctx context.Context, messageID, sourceChatID, targetChatID, forwarderProfileID string) error {
+	env := &eventsv1.MessageStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.New(time.Now().UTC()),
+		Payload: &eventsv1.MessageStreamEvent_MessageForwarded{
+			MessageForwarded: &eventsv1.MessageForwarded{
+				MessageId:          messageID,
+				SourceChatId:       sourceChatID,
+				TargetChatId:       targetChatID,
+				ForwarderProfileId: forwarderProfileID,
+			},
+		},
+	}
+	return p.publishProto(ctx, subjectMessageForwarded, env)
 }
 
 // Close drains the underlying NATS connection.

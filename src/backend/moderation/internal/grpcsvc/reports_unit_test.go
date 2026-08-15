@@ -36,6 +36,15 @@ func TestProfileIDFromMetadata_OK(t *testing.T) {
 	require.Equal(t, id, got)
 }
 
+func TestAccountIDFromMetadata_OK(t *testing.T) {
+	id := uuid.New()
+	md := metadata.Pairs("x-voice-user-id", id.String())
+	ctx := metadata.NewIncomingContext(context.Background(), md)
+	got, err := accountIDFromMetadata(ctx)
+	require.NoError(t, err)
+	require.Equal(t, id, got)
+}
+
 func TestIsInternalRequest(t *testing.T) {
 	require.False(t, isInternalRequest(context.Background()))
 	md := metadata.Pairs("x-voice-internal", "true")

@@ -21,11 +21,13 @@ import voice.backend.auth.security.BCryptPasswordHasher;
 import voice.backend.auth.security.JwtService;
 import voice.backend.auth.security.RefreshTokenCodec;
 import voice.backend.auth.events.AuthEventPublisher;
+import voice.backend.auth.mail.MailSender;
 import voice.backend.auth.security.TokenBlacklist;
 
 public class AuthService {
   /** Max opaque encrypted blob size for E2E key backup (512 KiB). */
   public static final int E2E_KEY_BACKUP_MAX_BLOB_BYTES = 512 * 1024;
+  static final Duration ACCOUNT_RESTORE_GRACE = Duration.ofDays(30);
 
   private final AccountRepository accounts;
   private final RefreshTokenRepository refreshTokens;
@@ -44,6 +46,8 @@ public class AuthService {
   private final E2EKeyBackupRepository e2eKeyBackups;
   private final AuthEventPublisher authEventPublisher;
   private final MeterRegistry meterRegistry;
+  private final AccountRestoreTokenStore restoreTokenStore;
+  private final MailSender mailSender;
 
   public AuthService(
       AccountRepository accounts,
@@ -62,7 +66,9 @@ public class AuthService {
       ProfileSwitchValidator profileSwitchValidator,
       E2EKeyBackupRepository e2eKeyBackups,
       AuthEventPublisher authEventPublisher,
-      MeterRegistry meterRegistry) {
+      MeterRegistry meterRegistry,
+      AccountRestoreTokenStore restoreTokenStore,
+      MailSender mailSender) {
     this.accounts = accounts;
     this.refreshTokens = refreshTokens;
     this.refreshTokenCodec = refreshTokenCodec;
@@ -80,6 +86,8 @@ public class AuthService {
     this.e2eKeyBackups = e2eKeyBackups;
     this.authEventPublisher = authEventPublisher;
     this.meterRegistry = meterRegistry;
+    this.restoreTokenStore = restoreTokenStore;
+    this.mailSender = mailSender;
   }
 
   public AuthService withClock(Clock newClock) {
@@ -100,7 +108,9 @@ public class AuthService {
         profileSwitchValidator,
         e2eKeyBackups,
         authEventPublisher,
-        meterRegistry);
+        meterRegistry,
+        restoreTokenStore,
+        mailSender);
   }
 
   public AuthSession register(RegisterCommand command) {
@@ -311,8 +321,55 @@ public class AuthService {
       throw new AuthException("registration_conflict");
     }
     tokenBlacklist.revoke(claims.jti(), jwtService.ttl(claims));
+    primaryProfileProvisioner.clearGuestAccountFlag(converted.id());
     authEventPublisher.publishGuestConverted(converted.id());
     return issueSession(converted, "{}");
+  }
+
+  public DeleteAccountResult deleteAccount(String accessToken, String password) {
+    TokenClaims claims = validate(accessToken);
+    Account account = accounts.findById(claims.userId()).orElseThrow(() -> new AuthException("invalid_token"));
+    if (!passwordHasher.matches(password, account.passwordHash())) {
+      throw new AuthException("invalid_credentials");
+    }
+    if ("deleted".equals(account.status())) {
+      throw new AuthException("account_inactive");
+    }
+    Instant now = Instant.now(clock);
+    accounts.markDeleted(account.id(), now);
+    refreshTokens.revokeAllForAccount(account.id(), now);
+    tokenBlacklist.revoke(claims.jti(), jwtService.ttl(claims));
+    String restoreToken = refreshTokenCodec.generate();
+    restoreTokenStore.store(restoreToken, account.id(), AccountRestoreTokenStore.RESTORE_TTL);
+    if (account.email() != null && !account.email().isBlank()) {
+      mailSender.sendOtpEmail(
+          account.email(),
+          "Restore your Voice account",
+          "Your account was scheduled for deletion. Restore within 30 days using token: " + restoreToken);
+    }
+    authEventPublisher.publishAccountDeleted(account.id());
+    return new DeleteAccountResult(restoreToken);
+  }
+
+  public AuthSession restoreAccount(String restoreToken) {
+    if (restoreToken == null || restoreToken.isBlank()) {
+      throw new AuthException("invalid_token");
+    }
+    UUID accountId =
+        restoreTokenStore
+            .consume(restoreToken.trim())
+            .orElseThrow(() -> new AuthException("invalid_token"));
+    Account account = accounts.findById(accountId.toString()).orElseThrow(() -> new AuthException("invalid_token"));
+    if (!"deleted".equals(account.status()) || account.deletedAt() == null) {
+      throw new AuthException("validation_failed");
+    }
+    if (account.deletedAt().plus(ACCOUNT_RESTORE_GRACE).isBefore(Instant.now(clock))) {
+      throw new AuthException("account_inactive");
+    }
+    accounts.restoreDeleted(account.id());
+    Account restored = accounts.findById(account.id().toString()).orElse(account);
+    authEventPublisher.publishAccountRestored(restored.id());
+    return issueSession(restored, "{}");
   }
 
   public void putE2EKeyBackup(String accessToken, String encryptedBlob, String passwordHint) {
@@ -334,7 +391,8 @@ public class AuthService {
   }
 
   private AuthSession issueSession(Account account, String deviceInfoJson) {
-    String profileId = primaryProfileProvisioner.ensurePrimaryProfile(account.id(), displayHint(account));
+    String profileId = primaryProfileProvisioner.ensurePrimaryProfile(
+        account.id(), displayHint(account), "guest".equals(account.type()));
     return issueSessionForProfile(account, profileId, deviceInfoJson);
   }
 

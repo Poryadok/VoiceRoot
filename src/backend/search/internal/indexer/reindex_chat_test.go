@@ -49,6 +49,30 @@ func (s *recordingMessageStore) Delete(_ context.Context, _ uuid.UUID) error {
 	return nil
 }
 
+func TestReindexChat_SkipsE2EMessages(t *testing.T) {
+	chatID := uuid.New()
+	plainID := uuid.New()
+	e2eID := uuid.New()
+	sender := uuid.New()
+	created := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+
+	lister := &stubMessageLister{
+		pages: [][]deps.MessageRow{
+			{
+				{ID: plainID, SenderProfileID: sender, Body: "hello", CreatedAt: created, IsE2E: false},
+				{ID: e2eID, SenderProfileID: sender, Body: "ciphertext", CreatedAt: created, IsE2E: true},
+			},
+		},
+	}
+	store := &recordingMessageStore{}
+
+	err := indexer.ReindexChat(context.Background(), chatID, lister, store)
+	require.NoError(t, err)
+	require.Len(t, store.docs, 1)
+	require.Equal(t, plainID, store.docs[0].MessageID)
+	require.Equal(t, "hello", store.docs[0].Body)
+}
+
 func TestReindexChat_PagesAndUpserts(t *testing.T) {
 	chatID := uuid.New()
 	msg1 := uuid.New()

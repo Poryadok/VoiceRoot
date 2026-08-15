@@ -18,6 +18,7 @@ import (
 
 	grpcsvc "voice/backend/social/internal/grpcsvc"
 	socials2s "voice/backend/social/internal/s2s"
+	"voice/backend/social/internal/socialevents"
 	"voice/backend/social/internal/store"
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
@@ -58,15 +59,18 @@ func main() {
 		var phoneSearchPrivacy grpcsvc.PhoneSearchPrivacyChecker
 		var phoneHashes grpcsvc.PhoneHashLookup
 		var spaceCoMembership grpcsvc.SpaceCoMembershipChecker
+		var accountProfiles grpcsvc.AccountProfilesResolver
 		if userAddr := strings.TrimSpace(os.Getenv("USER_GRPC_ADDR")); userAddr != "" {
 			uconn, err := grpc.NewClient(grpcclient.DialTarget(userAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
 				log.Fatalf("user grpc: %v", err)
 			}
 			defer func() { _ = uconn.Close() }()
-			userPrivacy := &socials2s.GRPCUserPrivacy{Client: userv1.NewUserServiceClient(uconn)}
+			userClient := userv1.NewUserServiceClient(uconn)
+			userPrivacy := &socials2s.GRPCUserPrivacy{Client: userClient}
 			privacy = userPrivacy
 			phoneSearchPrivacy = userPrivacy
+			accountProfiles = socials2s.NewGRPCAccountProfiles(uconn)
 		}
 		if authAddr := strings.TrimSpace(os.Getenv("AUTH_GRPC_ADDR")); authAddr != "" {
 			aconn, err := grpc.NewClient(grpcclient.DialTarget(authAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -90,14 +94,26 @@ func main() {
 			log.Fatalf("grpc listen: %v", err)
 		}
 		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))...)
-		socialv1.RegisterSocialServiceServer(grpcSrv, &grpcsvc.SocialGRPC{
+		socialSvc := &grpcsvc.SocialGRPC{
 			Friends:            &store.FriendshipStore{Pool: pool},
 			Blocks:             &store.BlockStore{Pool: pool},
+			Contacts:           &store.ContactStore{Pool: pool},
 			Privacy:            privacy,
 			PhoneSearchPrivacy: phoneSearchPrivacy,
 			PhoneHashes:        phoneHashes,
 			SpaceCoMembership:  spaceCoMembership,
-		})
+			AccountProfiles:    accountProfiles,
+		}
+		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
+			if pub, err := socialevents.NewJetStreamPublisher(natsURL); err == nil {
+				socialSvc.Events = pub
+				defer func() { _ = pub.Close() }()
+				logger.Info("social.events publisher enabled")
+			} else {
+				logger.Warn("social.events publisher unavailable", slog.Any("error", err))
+			}
+		}
+		socialv1.RegisterSocialServiceServer(grpcSrv, socialSvc)
 		go func() {
 			logger.Info("gRPC listening", slog.String("addr", grpcListen))
 			if err := grpcSrv.Serve(lis); err != nil {

@@ -48,7 +48,7 @@ func TestWSReceivesMessageSentUpdateDeleteFromJetStreamNATS(t *testing.T) {
 	wsInst := "nats-ws-inst"
 	jsInst := "nats-js-consumer"
 	v := staticTokenValidator{"tok": {UserID: "user-1", ProfileID: "profile-1"}}
-	srv := httptest.NewServer(newServiceHandler(serviceName, v, nil, hub, nil, wsInst))
+	srv := httptest.NewServer(newServiceHandler(serviceName, v, nil, hub, nil, wsInst, readinessDeps{}))
 	t.Cleanup(srv.Close)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -191,7 +191,7 @@ func TestWSNoMessageCreateFromNATSWhenNotSubscribedToChat(t *testing.T) {
 
 	hub := newWSHub()
 	v := staticTokenValidator{"tok": {UserID: "u1", ProfileID: "p1"}}
-	srv := httptest.NewServer(newServiceHandler(serviceName, v, nil, hub, nil, "ws-only"))
+	srv := httptest.NewServer(newServiceHandler(serviceName, v, nil, hub, nil, "ws-only", readinessDeps{}))
 	t.Cleanup(srv.Close)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -317,7 +317,7 @@ func TestWSMessageCreateTwoClientsNATSWithRedis(t *testing.T) {
 		"tok-a": {UserID: "user-a", ProfileID: profA},
 		"tok-b": {UserID: "user-b", ProfileID: profB},
 	}
-	srv := httptest.NewServer(newServiceHandler(serviceName, v, nil, hub, rf, inst))
+	srv := httptest.NewServer(newServiceHandler(serviceName, v, nil, hub, rf, inst, readinessDeps{}))
 	t.Cleanup(srv.Close)
 
 	dialWS := func(token, profileID string) *websocket.Conn {

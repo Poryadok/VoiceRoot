@@ -78,6 +78,18 @@ func (s *SocialGRPC) BlockAccount(ctx context.Context, req *socialv1.BlockAccoun
 	err = s.Blocks.BlockAccount(ctx, blocker, blocked)
 	switch {
 	case err == nil:
+		if s.Friends != nil && s.AccountProfiles != nil {
+			blockerProfiles, berr := s.AccountProfiles.ProfileIDsForAccount(ctx, blocker)
+			if berr == nil {
+				blockedProfiles, berr2 := s.AccountProfiles.ProfileIDsForAccount(ctx, blocked)
+				if berr2 == nil {
+					_ = s.Friends.RemoveFriendshipsBetweenProfileSets(ctx, blockerProfiles, blockedProfiles)
+				}
+			}
+		}
+		if s.Events != nil {
+			_ = s.Events.PublishUserBlocked(ctx, blocker.String(), blocked.String())
+		}
 		return &socialv1.BlockAccountResponse{}, nil
 	case errors.Is(err, store.ErrSelfBlock):
 		return nil, status.Error(codes.InvalidArgument, err.Error())

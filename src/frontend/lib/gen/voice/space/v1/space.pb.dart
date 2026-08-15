@@ -5929,6 +5929,132 @@ class AreCoMembersResponse extends $pb.GeneratedMessage {
   void clearCoMembers() => $_clearField(1);
 }
 
+class SyncSpaceProSubscriptionRequest extends $pb.GeneratedMessage {
+  factory SyncSpaceProSubscriptionRequest({
+    $core.String? spaceId,
+    $core.String? purchaserAccountId,
+    $core.String? status,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (purchaserAccountId != null)
+      result.purchaserAccountId = purchaserAccountId;
+    if (status != null) result.status = status;
+    return result;
+  }
+
+  SyncSpaceProSubscriptionRequest._();
+
+  factory SyncSpaceProSubscriptionRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SyncSpaceProSubscriptionRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SyncSpaceProSubscriptionRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'purchaserAccountId')
+    ..aOS(3, _omitFieldNames ? '' : 'status')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SyncSpaceProSubscriptionRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SyncSpaceProSubscriptionRequest copyWith(
+          void Function(SyncSpaceProSubscriptionRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as SyncSpaceProSubscriptionRequest))
+          as SyncSpaceProSubscriptionRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SyncSpaceProSubscriptionRequest create() =>
+      SyncSpaceProSubscriptionRequest._();
+  @$core.override
+  SyncSpaceProSubscriptionRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SyncSpaceProSubscriptionRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SyncSpaceProSubscriptionRequest>(
+          create);
+  static SyncSpaceProSubscriptionRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get purchaserAccountId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set purchaserAccountId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasPurchaserAccountId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearPurchaserAccountId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get status => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set status($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasStatus() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearStatus() => $_clearField(3);
+}
+
+class SyncSpaceProSubscriptionResponse extends $pb.GeneratedMessage {
+  factory SyncSpaceProSubscriptionResponse() => create();
+
+  SyncSpaceProSubscriptionResponse._();
+
+  factory SyncSpaceProSubscriptionResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SyncSpaceProSubscriptionResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SyncSpaceProSubscriptionResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SyncSpaceProSubscriptionResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SyncSpaceProSubscriptionResponse copyWith(
+          void Function(SyncSpaceProSubscriptionResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as SyncSpaceProSubscriptionResponse))
+          as SyncSpaceProSubscriptionResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SyncSpaceProSubscriptionResponse create() =>
+      SyncSpaceProSubscriptionResponse._();
+  @$core.override
+  SyncSpaceProSubscriptionResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SyncSpaceProSubscriptionResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SyncSpaceProSubscriptionResponse>(
+          create);
+  static SyncSpaceProSubscriptionResponse? _defaultInstance;
+}
+
 const $core.bool _omitFieldNames =
     $core.bool.fromEnvironment('protobuf.omit_field_names');
 const $core.bool _omitMessageNames =

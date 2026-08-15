@@ -41,14 +41,17 @@ type ProfileStoreAdapter struct {
 	*store.ProfileSpaceSearchStore
 }
 
-func (a *ProfileStoreAdapter) SearchProfiles(ctx context.Context, viewer uuid.UUID, query string, excludeBlocked []uuid.UUID, limit int) ([]uuid.UUID, error) {
+func (a *ProfileStoreAdapter) SearchProfiles(ctx context.Context, viewer uuid.UUID, query string, excludeBlocked []uuid.UUID, limit int) ([]ProfileSearchHit, error) {
 	hits, err := a.ProfileSpaceSearchStore.SearchProfiles(ctx, viewer, query, excludeBlocked, limit)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]uuid.UUID, 0, len(hits))
+	out := make([]ProfileSearchHit, 0, len(hits))
 	for _, h := range hits {
-		out = append(out, h.ProfileID)
+		out = append(out, ProfileSearchHit{
+			ProfileID: h.ProfileID,
+			AccountID: h.AccountID,
+		})
 	}
 	return out, nil
 }

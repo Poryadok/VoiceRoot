@@ -3,7 +3,7 @@ import { OAuthCallback } from './OAuthCallback';
 import { apiFetch, apiBase, oauthClientId, oauthDisabled } from './oauth/api';
 import { callbackRedirectUri } from './oauth/callback';
 import { buildAuthorizeUrl, randomCodeVerifier, s256Challenge } from './oauth/pkce';
-import { clearSession, getAccessToken, isLoggedIn, setAccessToken, setPkceVerifier } from './oauth/session';
+import { clearSession, getAccessToken, isLoggedIn, setAccessToken, setPkceVerifier, setOAuthState } from './oauth/session';
 import { defaultManifest } from './manifestDefaults';
 
 type BotSummary = {
@@ -57,6 +57,7 @@ function Portal() {
     const challenge = await s256Challenge(verifier);
     setPkceVerifier(verifier);
     const state = crypto.randomUUID();
+    setOAuthState(state);
     const redirectUri = callbackRedirectUri(window.location.origin);
     const url = buildAuthorizeUrl({
       apiBase,
@@ -201,7 +202,14 @@ function Portal() {
                     <button
                       type="button"
                       className={bot.id === selectedBotId ? 'selected' : ''}
-                      onClick={() => bot.id && setSelectedBotId(bot.id)}
+                      onClick={() => {
+                        if (!bot.id) {
+                          return;
+                        }
+                        setSelectedBotId(bot.id);
+                        setBotToken('');
+                        setWebhookSecret('');
+                      }}
                     >
                       {bot.name ?? bot.id}
                     </button>

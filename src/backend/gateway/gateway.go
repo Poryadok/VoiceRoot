@@ -22,8 +22,9 @@ type gatewayConfig struct {
 	rateLimitedGroups  map[string]bool
 	restUpstreams      map[string]http.Handler
 	transcoder         *transcoder
-	realtimeUpstream   http.Handler
-	requestIDGenerator func() string
+		realtimeUpstream   http.Handler
+		wsTicketStore      wsTicketStore
+		requestIDGenerator func() string
 	tokenValidator     tokenValidator
 	tokenBlacklist     tokenBlacklist
 	rateLimiter        rateLimiter
@@ -31,6 +32,7 @@ type gatewayConfig struct {
 	cors               corsConfig
 	metrics            *gatewayMetrics
 	analyticsTelemetry gatewayAnalyticsTelemetry
+	analyticsAudit     analyticsAuditStore
 	slogLogger         *slog.Logger
 }
 
@@ -82,6 +84,9 @@ func newGateway(config gatewayConfig) http.Handler {
 	if config.slogLogger == nil {
 		config.slogLogger = voicelog.NewJSONLogger(voicelog.LevelFromEnv(), slog.String("service", "gateway"))
 	}
+	if config.analyticsAudit == nil {
+		config.analyticsAudit = newMemoryAnalyticsAuditStore(100)
+	}
 	if config.versionStore == nil {
 		config.versionStore = versionStoreFromEnv(config.versionConfigs, nil)
 	}
@@ -113,9 +118,11 @@ func (g *gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		g.handleHealth(rec, r)
 	case r.URL.Path == "/metrics":
 		g.handleMetrics(rec, r)
-	case r.URL.Path == "/ws":
-		g.handleWebSocket(rec, r)
-	case r.URL.Path == "/api/v1/version":
+		case r.URL.Path == "/ws":
+			g.handleWebSocket(rec, r)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/realtime/ws-ticket":
+			g.handleRealtimeWsTicket(rec, r)
+		case r.URL.Path == "/api/v1/version":
 		g.handleVersion(rec, r)
 	case strings.HasPrefix(r.URL.Path, "/api/v1/admin/client-versions"):
 		g.handleAdminClientVersions(rec, r)

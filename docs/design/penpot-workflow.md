@@ -220,10 +220,7 @@ Column (flex column, leftPadding=0, rightPadding=0)   ← full-bleed фон/Acce
 
 ### Компоненты Foundation
 
-На `01_Foundation` → `Foundation/Components` — референс для **вариантов** (например `List/Row`).
-
-- Правки компонента и placeholder — в draft-фреймах или копиях; **не** в shipped snapshot (`x≈0`).
-- После принятия варианта в код — snapshot обновит **скрипт**, не ручной merge в левый фрейм.
+См. **§3.6** — полные правила библиотеки, типографики и showcase. Кратко: все **main instances** и typographies живут **только** на `01_Foundation`; в макетах экранов — **instances**, не перерисовка.
 
 ---
 
@@ -265,13 +262,116 @@ Nav / … (flex row, leftPadding=0, rightPadding=16, justify=start)
 
 ---
 
+## 3.6. Библиотека компонентов и типографика (Assets)
+
+Единый источник UI-паттернов для макетов и `lib/ui/core/*`. Нарушения (mains на страницах экранов, дубли `Member`, orphaned `Text/*` components) ломают Assets panel и массовые правки.
+
+### Где что живёт (только `01_Foundation`)
+
+| Board на `01_Foundation` | Содержимое | Кто правит |
+|---------------------------|------------|------------|
+| `Foundation / Swatches` | цветовые swatches | токены + дизайнер |
+| `Foundation / Component Mains` | **все main instances** библиотеки (определения компонентов) | дизайнер / агент при новом компоненте |
+| `Foundation / Components` | shipped snapshot — **instances** legacy набора (визуальный канон v1) | только скрипт заливки; не трогать mains здесь |
+| `Foundation / Components v2` | showcase: typographies `type.*` + instances всех компонентов | дизайнер / агент |
+
+> **Все компоненты библиотеки — только на `01_Foundation`.** Main instance компонента **не** создавать и **не** оставлять на `10_Screens_*`, `13_Panels_*`, `Root Frame` других страниц. На страницах экранов — **только instances** внутри `Screen/...` / `Panel/...` / `Overlay/...`.
+
+Если main оказался не на `01_Foundation` (типично после duplicate или MCP без переноса страницы) — **перенести в UI** в `Foundation / Component Mains` на `01_Foundation`. MCP cross-page `appendChild` для mains **не работает** — перенос в Penpot UI или процедура **recreate** ниже.
+
+### Перенос mains на `01_Foundation` (MCP recreate)
+
+Когда main застрял на `10_Screens_Desktop` / `13_Panels_Desktop` (`Component Mains (library)` @ x≈12800):
+
+1. На странице с main: `generateMarkup([main], { type: 'svg' })`.
+2. На `01_Foundation`: `createShapeFromSvg` → `appendChild` в `Foundation / Component Mains`.
+3. `library.createComponent([imported])`, выставить `path` / `name` как у старого.
+4. На **всех** страницах: `swapComponent(newComp)` только для `isComponentCopyInstance() && isComponentHead()` (не вложенные части).
+5. На **странице старого main**: `remove()` старого main (страница должна быть **active**).
+6. Удалить пустой `Component Mains (library)` на экранных страницах.
+
+`swapComponent` / `remove` — только при **active** странице, где лежит shape. Не гонять batch на все компоненты — Penpot cloud даёт 504; **один компонент = один `execute_code`**.
+
+После переноса: все mains в `Foundation / Component Mains`; на `10_*` / `13_*` нет `Component Mains (library)` и нет mains на `Root Frame`.
+
+### Именование в Assets
+
+Конвенция **path / name** (Penpot Assets показывает как `Category/Variant`):
+
+| Поле | Пример | Зачем |
+|------|--------|-------|
+| `path` | `Button`, `List`, `Row`, `ChatBubble` | группа в Assets |
+| `name` | `Primary`, `Row`, `in`, `Setting` | вариант внутри группы |
+
+- Имя main instance на canvas: `Category / Variant` (пробелы в UI: `Button / Primary`).
+- **Запрещено** несколько разных компонентов с одним leaf `name` без `path` (исторические шесть `Default` — только с разными `path`: `TabBar`, `Composer`, `Divider`, …).
+- **Запрещено** дублировать существующий паттерн новым компонентом (`Member` вместо `List/Row`) — расширять или reuse.
+
+### Типографика (не Text-компоненты)
+
+Стили текста — **Library → Typography**, зеркало [voice.tokens.json](../../design/tokens/voice.tokens.json) `type.*`:
+
+| Typography | Токен |
+|------------|-------|
+| `type/display` | `type.display` |
+| `type/title` | `type.title` |
+| `type/body` | `type.body` |
+| `type/bodyStrong` | `type.bodyStrong` |
+| `type/label` | `type.label` |
+| `type/labelStrong` | label 600 |
+| `type/subtitle` | `type.subtitle` |
+| `type/caption` | `type.caption` |
+| `type/overline` | `type.overline` |
+
+- В макетах: `applyTypography` / стиль из Assets → Typography.
+- **Не** создавать `Text / Placeholder`, `Text / Title` и т.п. как **library components** — это orphaned refs, не попадают в Assets.
+- Placeholder в input/composer — стиль `type/subtitle` или `type/caption` + цвет `color.text.disabled`, не отдельный компонент.
+
+### Сборка макетов (instances, не рисование)
+
+| Ситуация | Делать | Не делать |
+|----------|--------|-----------|
+| Кнопка, row, bubble, input | instance из Assets | новый `Board` + `Rectangle` |
+| Строка списка / чата | `List/Row` + внутри `Avatar/40` | клон row с raw `Ellipse` |
+| Nav / settings row | `Nav/Item` или `Row/Setting` | duplicate layout вручную |
+| Имя, дата, статус в header | raw `Text` + typography | component instance |
+| Layout-обёртка колонки | raw `Board` + flex | — |
+
+Повторяющийся UI без instance в Layers → ошибка сборки; перед PR заменить на component.
+
+### Канонические компоненты (ориентир)
+
+UI widgets (library components): `Button/*`, `Avatar/40`, `List/Row`, `ChatBubble/in|out`, `Nav/Item`, `Row/Friend|Game|Setting|Bot`, `Composer/Default`, `Input/Field`, `SearchBar/Default`, `AppBar/Default`, `TabBar/Default`, `Divider/Default`, `AccentWrap/Default`, `State/Empty`, `Banner/Offline`.
+
+Связки:
+
+- `List/Row` → child instance `Avatar/40`, не raw ellipse.
+- Списки чатов / members в v2-макетах → `List/Row`, не отдельный `Member`.
+
+### Новый компонент
+
+1. Создать main на `01_Foundation` → внутри `Foundation / Component Mains` (flex column, gap ≥ 16).
+2. `path` + `name` по таблице выше; placeholder по §3.
+3. Добавить instance в `Foundation / Components v2` (showcase) — label + instance в двухколоночной сетке showcase.
+4. В draft-макетах — только **instances**; main не копировать на страницы экранов.
+5. Flutter parity — `lib/ui/core/*` + токены.
+
+### Showcase `Foundation / Components v2`
+
+- Секция **Typography** — samples с `type.*` typographies.
+- Секция **Components** — label (`Category/Variant`) + instance; все компоненты из Assets, без broken refs.
+- Дети showcase — **instances**, не mains; mains только в `Component Mains`.
+- После правок layout: absolute позиции в столбик (label слева, component справа), gap 16 px, padding 24 px; board height по контенту.
+
+---
+
 ## 4. Workflow: новый или обновлённый макет
 
 1. **Spec** — `docs/features/`, [brand.md](brand.md).
 2. **Shipped snapshot** — только `make penpot-tokens-export` + заливка в Penpot (§1); дизайнер **не** трогает `x≈0`.
 3. **Дизайн** — duplicate канона → вариант справа (`· v2` / `· draft`); правки только там.
 4. **Размещение** — §1: канон ↓, варианты →, без overlap.
-5. **Сборка варианта** — §1.5 inset ≥ 16; §2 clip; §3 placeholder; §3.5 AccentWrap (один маркер выделения).
+5. **Сборка варианта** — §1.5 inset ≥ 16; §2 clip; §3 placeholder; §3.5 AccentWrap; §3.6 instances из Assets.
 6. **Инвентарь** — frame ID канона в [screens.md](screens.md) (без `·`).
 7. **PR** — ссылка на **вариант** для review; после ship в app — snapshot обновит скрипт.
 
@@ -291,12 +391,16 @@ Nav / … (flex row, leftPadding=0, rightPadding=16, justify=start)
 - [ ] Цвета из tokens, не случайный hex
 - [ ] Активный nav/list row: только `AccentWrap` flush left; нет dual padding + muted fill (§3.5)
 - [ ] Нет нулевых inset: текст/контролы ≥ 16 px от края frame/колонки; Header и overline не на `parentX = 0` без padding (§1.5)
+- [ ] Все library mains на `01_Foundation` → `Foundation / Component Mains`; на страницах экранов нет main instances на `Root Frame` (§3.6)
+- [ ] Повторяющийный UI — component instances; typographies `type.*`, не `Text/*` library components (§3.6)
+- [ ] Списки — `List/Row` + `Avatar/40`; нет дублей (`Member` и т.п.) (§3.6)
 
 ---
 
 ## 6. MCP / агент
 
 - **Не** править shipped snapshot (`x≈0`) через MCP — только скрипт заливки токенов (§1).
+- **Не** создавать component mains вне `01_Foundation` (§3.6); cross-page перенос mains через MCP не поддерживается — перенос в Penpot UI.
 - Варианты и массовые шаблоны — через MCP (`execute_code`):
 
 - явно задавать `resize(width, height)` контейнерам после `appendChild`;

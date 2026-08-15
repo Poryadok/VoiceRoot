@@ -39,6 +39,27 @@ func (s *SpaceGRPC) requireSpacePermission(ctx context.Context, spaceID uuid.UUI
 	return nil
 }
 
+func (s *SpaceGRPC) requireSpaceOwner(ctx context.Context, spaceID uuid.UUID) error {
+	caller, ok := authctx.ProfileID(ctx)
+	if !ok {
+		return status.Error(codes.Unauthenticated, "missing profile")
+	}
+	if s == nil || s.Store == nil {
+		return status.Error(codes.FailedPrecondition, "space persistence not configured")
+	}
+	row, err := s.Store.GetSpace(ctx, spaceID)
+	if err != nil {
+		return status.Error(codes.Internal, err.Error())
+	}
+	if row == nil {
+		return status.Error(codes.NotFound, "space not found")
+	}
+	if row.OwnerProfileID != caller {
+		return status.Error(codes.PermissionDenied, "space owner required")
+	}
+	return nil
+}
+
 func (s *SpaceGRPC) bootstrapSpaceRoles(ctx context.Context, spaceID, ownerProfileID uuid.UUID) error {
 	if s.Roles == nil {
 		return nil

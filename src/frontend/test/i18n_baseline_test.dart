@@ -171,7 +171,10 @@ void main() {
 
       expect(find.text('Сообщений пока нет'), findsOneWidget);
       final field = tester.widget<TextField>(
-        find.byKey(ChatRoomPanel.inputKey),
+        find.descendant(
+          of: find.byKey(ChatRoomPanel.inputKey),
+          matching: find.byType(TextField),
+        ),
       );
       expect(field.decoration?.hintText, 'Сообщение');
     });

@@ -13,10 +13,12 @@ import (
 
 type recordingMatchmakingRatingGRPC struct {
 	recordingMatchmakingMatchGRPC
-	lastComplete      *matchmakingv1.CompleteMatchRequest
-	lastRate          *matchmakingv1.RateMatchRequest
-	lastPlayerRating  *matchmakingv1.GetPlayerRatingRequest
-	lastBan           *matchmakingv1.BanFromMMRequest
+	lastComplete     *matchmakingv1.CompleteMatchRequest
+	lastRate         *matchmakingv1.RateMatchRequest
+	lastPlayerRating *matchmakingv1.GetPlayerRatingRequest
+	lastBan          *matchmakingv1.BanFromMMRequest
+	lastBanStatus    *matchmakingv1.GetMMBanStatusRequest
+	banStatusBanned  bool
 }
 
 func (s *recordingMatchmakingRatingGRPC) CompleteMatch(_ context.Context, req *matchmakingv1.CompleteMatchRequest) (*matchmakingv1.CompleteMatchResponse, error) {
@@ -53,7 +55,15 @@ func (s *recordingMatchmakingRatingGRPC) GetPlayerRating(_ context.Context, req 
 
 func (s *recordingMatchmakingRatingGRPC) BanFromMM(_ context.Context, req *matchmakingv1.BanFromMMRequest) (*matchmakingv1.BanFromMMResponse, error) {
 	s.lastBan = req
+	s.banStatusBanned = true
 	return &matchmakingv1.BanFromMMResponse{}, nil
+}
+
+func (s *recordingMatchmakingRatingGRPC) GetMMBanStatus(_ context.Context, req *matchmakingv1.GetMMBanStatusRequest) (*matchmakingv1.GetMMBanStatusResponse, error) {
+	s.lastBanStatus = req
+	return &matchmakingv1.GetMMBanStatusResponse{
+		MmBanStatus: &matchmakingv1.MMBanStatus{Banned: s.banStatusBanned},
+	}, nil
 }
 
 func TestTranscodeMatchmakingCompleteMatch(t *testing.T) {
@@ -143,4 +153,12 @@ func TestTranscodeMatchmakingBanFromMM(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.NotNil(t, grpcRec.lastBan)
 	require.Equal(t, "profile-2", grpcRec.lastBan.GetTargetProfileId())
+
+	statusRec := performRequest(h, http.MethodGet, "/api/v1/matchmaking/bans/profile-2", "", map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	require.Equal(t, http.StatusOK, statusRec.Code)
+	require.NotNil(t, grpcRec.lastBanStatus)
+	require.Equal(t, "profile-2", grpcRec.lastBanStatus.GetTargetProfileId())
+	require.Contains(t, statusRec.Body.String(), `"banned":true`)
 }

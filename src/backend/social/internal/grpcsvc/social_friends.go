@@ -31,10 +31,24 @@ type SocialGRPC struct {
 	socialv1.UnimplementedSocialServiceServer
 	Friends *store.FriendshipStore
 	Blocks  *store.BlockStore
+	Contacts *store.ContactStore
 	Privacy FriendRequestPrivacyChecker
 	PhoneSearchPrivacy PhoneSearchPrivacyChecker
 	PhoneHashes        PhoneHashLookup
 	SpaceCoMembership SpaceCoMembershipChecker
+	AccountProfiles AccountProfilesResolver
+	Events interface {
+		PublishFriendRequest(ctx context.Context, requestID, requesterProfileID, targetProfileID string) error
+		PublishFriendAccepted(ctx context.Context, requesterProfileID, targetProfileID string) error
+		PublishFriendRemoved(ctx context.Context, profileA, profileB string) error
+		PublishUserBlocked(ctx context.Context, blockerAccountID, blockedAccountID string) error
+		PublishContactsSynced(ctx context.Context, ownerProfileID string, count int32) error
+	}
+}
+
+// AccountProfilesResolver lists profile ids owned by an account (User S2S).
+type AccountProfilesResolver interface {
+	ProfileIDsForAccount(ctx context.Context, accountID uuid.UUID) ([]uuid.UUID, error)
 }
 
 // FriendRequestPrivacyChecker reads target profile friend-request audience.
@@ -119,6 +133,9 @@ func (s *SocialGRPC) SendFriendInvitation(ctx context.Context, req *socialv1.Sen
 	err = s.Friends.SendInvitation(ctx, caller, target)
 	switch {
 	case err == nil:
+		if s.Events != nil {
+			_ = s.Events.PublishFriendRequest(ctx, "", caller.String(), target.String())
+		}
 		return &socialv1.SendFriendInvitationResponse{}, nil
 	case errors.Is(err, store.ErrSelfInvitation):
 		return nil, status.Error(codes.InvalidArgument, err.Error())
@@ -150,6 +167,9 @@ func (s *SocialGRPC) AcceptFriendInvitation(ctx context.Context, req *socialv1.A
 			return nil, status.Error(codes.NotFound, "pending friend request not found")
 		}
 		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if s.Events != nil {
+		_ = s.Events.PublishFriendAccepted(ctx, requester.String(), caller.String())
 	}
 	return &socialv1.AcceptFriendInvitationResponse{}, nil
 }
@@ -196,6 +216,9 @@ func (s *SocialGRPC) RemoveFriend(ctx context.Context, req *socialv1.RemoveFrien
 			return nil, status.Error(codes.NotFound, "friendship not found")
 		}
 		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if s.Events != nil {
+		_ = s.Events.PublishFriendRemoved(ctx, caller.String(), friend.String())
 	}
 	return &socialv1.RemoveFriendResponse{}, nil
 }
@@ -355,7 +378,7 @@ func (s *SocialGRPC) GetFriendsOfFriends(ctx context.Context, req *socialv1.GetF
 
 func (s *SocialGRPC) ensureFriendRequestPrivacy(ctx context.Context, caller, target uuid.UUID) error {
 	if s == nil || s.Privacy == nil {
-		return nil
+		return status.Error(codes.FailedPrecondition, "privacy enforcement unavailable")
 	}
 	audience, err := s.Privacy.AllowFriendRequestsAudience(ctx, target)
 	if err != nil {

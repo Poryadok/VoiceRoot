@@ -68,3 +68,15 @@ const PageResponse$json = {
 /// Descriptor for `PageResponse`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List pageResponseDescriptor = $convert.base64Decode(
     'CgxQYWdlUmVzcG9uc2USHwoLdG90YWxfY291bnQYASABKAVSCnRvdGFsQ291bnQ=');
+
+@$core.Deprecated('Use clientIdempotencyKeyDescriptor instead')
+const ClientIdempotencyKey$json = {
+  '1': 'ClientIdempotencyKey',
+  '2': [
+    {'1': 'key', '3': 1, '4': 1, '5': 9, '10': 'key'},
+  ],
+};
+
+/// Descriptor for `ClientIdempotencyKey`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List clientIdempotencyKeyDescriptor = $convert
+    .base64Decode('ChRDbGllbnRJZGVtcG90ZW5jeUtleRIQCgNrZXkYASABKAlSA2tleQ==');

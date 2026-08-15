@@ -28,8 +28,8 @@ func newGRPCDMChatLister(cc *grpc.ClientConn) *grpcDMChatLister {
 	return &grpcDMChatLister{client: chatv1.NewChatServiceClient(cc)}
 }
 
-// ListDMChatIDs pages Chat.ListChats and collects chats with type DM.
-func (g *grpcDMChatLister) ListDMChatIDs(ctx context.Context, accountID, profileID string) ([]string, error) {
+// ListChatIDs pages Chat.ListChats and collects all chat IDs visible to the profile.
+func (g *grpcDMChatLister) ListChatIDs(ctx context.Context, accountID, profileID string) ([]string, error) {
 	if g == nil || g.client == nil {
 		return nil, fmt.Errorf("chat client not configured")
 	}
@@ -54,7 +54,7 @@ func (g *grpcDMChatLister) ListDMChatIDs(ctx context.Context, accountID, profile
 			if ch == nil {
 				continue
 			}
-			if ch.GetType() == chatv1.ChatType_CHAT_TYPE_DM && ch.GetId() != "" {
+			if ch.GetId() != "" {
 				out = append(out, ch.GetId())
 			}
 		}

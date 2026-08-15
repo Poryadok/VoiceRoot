@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"voice/backend/role/permissions"
 	"voice/backend/space/internal/authctx"
 	"voice/backend/space/internal/store"
 	"voice/backend/pkg/guestguard"
@@ -54,48 +55,58 @@ func (s *SpaceGRPC) UpdateSpace(ctx context.Context, req *spacev1.UpdateSpaceReq
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "space persistence not configured")
 	}
-	caller, ok := authctx.ProfileID(ctx)
-	if !ok {
-		return nil, status.Error(codes.Unauthenticated, "missing profile")
-	}
 	spaceID, err := parseUUIDField("space_id", req.GetSpaceId())
 	if err != nil {
 		return nil, err
 	}
-	row, err := s.Store.GetSpace(ctx, spaceID)
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-	if row == nil {
-		return nil, status.Error(codes.NotFound, "space not found")
-	}
-	if row.OwnerProfileID != caller {
-		return nil, status.Error(codes.PermissionDenied, "only the space owner can update the space")
+	if err := s.requireSpacePermission(ctx, spaceID, permissions.SpaceManageSettings); err != nil {
+		return nil, err
 	}
 
-	var name, description, iconURL, bannerURL *string
+	var in store.UpdateSpaceInput
 	if req.Name != nil {
 		n := strings.TrimSpace(req.GetName())
-		name = &n
+		in.Name = &n
 	}
 	if req.Description != nil {
 		d := req.GetDescription()
-		description = &d
+		in.Description = &d
 	}
 	if req.IconUrl != nil {
 		i := req.GetIconUrl()
-		iconURL = &i
+		in.IconURL = &i
 	}
 	if req.BannerUrl != nil {
 		b := req.GetBannerUrl()
-		bannerURL = &b
+		in.BannerURL = &b
 	}
-	updated, err := s.Store.UpdateSpace(ctx, spaceID, name, description, iconURL, bannerURL)
+	if req.Visibility != nil {
+		v := req.GetVisibility()
+		in.Visibility = &v
+	}
+	if req.EntryRequirement != nil {
+		e := req.GetEntryRequirement()
+		in.EntryRequirement = &e
+	}
+	if req.EntryQuestionsJson != nil {
+		q := req.GetEntryQuestionsJson()
+		in.EntryQuestionsJSON = &q
+	}
+	if req.MmConfigJson != nil {
+		m := req.GetMmConfigJson()
+		in.MMConfigJSON = &m
+	}
+	updated, err := s.Store.UpdateSpace(ctx, spaceID, in)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	if updated == nil {
 		return nil, status.Error(codes.NotFound, "space not found")
+	}
+	if s.SpaceEvents != nil {
+		if pubErr := s.SpaceEvents.PublishSpaceUpdated(ctx, spaceID.String()); pubErr != nil {
+			s.logPublishError(ctx, "space.updated", pubErr, slog.String("space_id", spaceID.String()))
+		}
 	}
 	return &spacev1.UpdateSpaceResponse{Space: spaceRowToProto(updated)}, nil
 }

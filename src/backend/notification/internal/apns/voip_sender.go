@@ -3,6 +3,7 @@ package apns
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/sideshow/apns2"
@@ -43,7 +44,14 @@ func NewHTTPVoIPSender(cfg Config) (*HTTPVoIPSender, error) {
 	if !cfg.Production {
 		client = client.Development()
 	}
-	return &HTTPVoIPSender{client: client, bundleID: cfg.BundleID}, nil
+	return &HTTPVoIPSender{client: client, bundleID: voipBundleID(cfg)}, nil
+}
+
+func voipBundleID(cfg Config) string {
+	if topic := strings.TrimSpace(cfg.VoIPTopic); topic != "" {
+		return topic
+	}
+	return cfg.BundleID
 }
 
 func (s *HTTPVoIPSender) Send(ctx context.Context, profileID uuid.UUID, device store.DeviceToken, p push.Payload) error {

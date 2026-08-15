@@ -1,5 +1,5 @@
 import { apiBaseUrl, isOauthDisabled } from "../oauth/api";
-import { getAccessToken } from "../oauth/session";
+import { clearSession, getAccessToken } from "../oauth/session";
 
 const staffToken = () =>
   isOauthDisabled() ? (import.meta.env.VITE_STAFF_TOKEN ?? "") : "";
@@ -22,7 +22,11 @@ export async function apiFetch(
   if (init.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  return fetch(apiUrl(path), { ...init, headers });
+  const response = await fetch(apiUrl(path), { ...init, headers });
+  if (response.status === 401) {
+    clearSession();
+  }
+  return response;
 }
 
 export async function apiJson<T>(

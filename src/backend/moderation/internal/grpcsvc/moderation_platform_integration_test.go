@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -322,5 +323,5 @@ WHERE actor_profile_id = $1
 }
 
 func metadataWithAccount(ctx context.Context, accountID uuid.UUID) context.Context {
-	return withReporterProfile(ctx, accountID)
+	return metadata.AppendToOutgoingContext(ctx, "x-voice-user-id", accountID.String())
 }

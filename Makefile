@@ -32,7 +32,7 @@ GO_TEST_TARGETS := $(GO_SERVICES:%=go-test-%)
 GO_TEST_SHORT_TARGETS := $(GO_SERVICES:%=go-test-short-%)
 GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
 
-.PHONY: buf-lint buf-format buf-breaking buf-generate buf-generate-dart buf-dart-check sync-pb-from-gen buf-generate-all compose-up compose-app-up compose-down compose-logs-collect compose-observability-up \
+.PHONY: buf-lint buf-format buf-breaking buf-generate buf-generate-dart buf-dart-check buf-go-pb-check check-auth-proto-sync sync-pb-from-gen buf-generate-all compose-up compose-app-up compose-down compose-logs-collect compose-observability-up \
 	compose-migrate-all compose-migrate-e2e compose-migrate-bot compose-migrate-story compose-e2e-smoke compose-e2e-live compose-e2e-full compose-e2e-voice-live \
 	build-all build-all-breaking check-toolchain compose-config-ci buf-ci backend-test-ci backend-test-ci-short backend-image-ci \
 	gateway-test-ci gateway-image-ci go-test-pkg go-mod-tidy-all auth-test-ci auth-image-ci buf-breaking-ci \
@@ -71,6 +71,14 @@ buf-generate-dart:
 buf-dart-check:
 	$(BASH) "$(ROOT)/scripts/ci/buf-generate-dart.sh"
 	@git diff --exit-code -- src/frontend/lib/gen || (echo "Run make buf-generate-dart and commit src/frontend/lib/gen" >&2; exit 1)
+
+# CI / pre-PR: regenerate Go pb/ trees and fail if src/backend/*/pb drifts from protos/.
+buf-go-pb-check:
+	$(BASH) "$(ROOT)/scripts/ci/buf-go-pb-check.sh"
+
+# CI: Auth Maven proto copy must stay wire-equivalent to protos/voice/auth/v1/auth.proto.
+check-auth-proto-sync:
+	$(BASH) "$(ROOT)/scripts/ci/check-auth-proto-sync.sh"
 
 compose-up:
 	docker compose up -d
@@ -169,7 +177,7 @@ auth-test-ci:
 	cd "$(ROOT)/src/backend/auth" && mvn -B test
 
 auth-image-ci:
-	docker build -f src/backend/auth/Dockerfile -t voice-auth:local src/backend/auth
+	docker build -f src/backend/auth/Dockerfile -t voice-auth:local .
 
 golangci-ci:
 	$(BASH) "$(ROOT)/scripts/ci/golangci-ci.sh" "$(ROOT)"

@@ -24,6 +24,9 @@ import voice.backend.auth.service.LogoutCommand;
 import voice.backend.auth.service.ProfileSwitchException;
 import voice.backend.auth.service.RefreshCommand;
 import voice.backend.auth.service.RegisterCommand;
+import voice.backend.auth.service.OtpService;
+import voice.backend.auth.service.SendOtpCommand;
+import voice.backend.auth.service.VerifyOtpCommand;
 import voice.backend.auth.service.TokenClaims;
 import voice.backend.auth.service.TotpEnrollment;
 
@@ -32,10 +35,13 @@ import voice.backend.auth.service.TotpEnrollment;
 public class AuthRestController {
   private final AuthService authService;
   private final LinkedAccountsService linkedAccountsService;
+  private final OtpService otpService;
 
-  public AuthRestController(AuthService authService, LinkedAccountsService linkedAccountsService) {
+  public AuthRestController(
+      AuthService authService, LinkedAccountsService linkedAccountsService, OtpService otpService) {
     this.authService = authService;
     this.linkedAccountsService = linkedAccountsService;
+    this.otpService = otpService;
   }
 
   @PostMapping("/register")
@@ -90,6 +96,40 @@ public class AuthRestController {
     AuthSession session =
         authService.switchActiveProfile(authorization, request.profileId(), "{}");
     return SessionBody.from(session);
+  }
+
+  @PostMapping("/otp/send")
+  public ResponseEntity<Void> sendOtp(
+      @RequestHeader(name = "Authorization", required = false) String authorization,
+      @Valid @RequestBody SendOtpRequest request) {
+    otpService.sendOtp(
+        new SendOtpCommand(request.email(), request.phone(), request.otpType(), authorization),
+        authService);
+    return ResponseEntity.noContent().build();
+  }
+
+  @PostMapping("/otp/verify")
+  public ResponseEntity<Void> verifyOtp(
+      @RequestHeader(name = "Authorization", required = false) String authorization,
+      @Valid @RequestBody VerifyOtpRequest request) {
+    otpService.verifyOtp(
+        new VerifyOtpCommand(
+            request.email(), request.phone(), request.code(), request.otpType(), authorization),
+        authService);
+    return ResponseEntity.noContent().build();
+  }
+
+  @PostMapping("/delete-account")
+  public ResponseEntity<Void> deleteAccount(
+      @RequestHeader(name = "Authorization", required = false) String authorization,
+      @Valid @RequestBody DeleteAccountRequest request) {
+    authService.deleteAccount(authorization, request.password());
+    return ResponseEntity.noContent().build();
+  }
+
+  @PostMapping("/restore-account")
+  public SessionEnvelope restoreAccount(@Valid @RequestBody RestoreAccountRequest request) {
+    return SessionEnvelope.from(authService.restoreAccount(request.token()));
   }
 
   @PostMapping("/convert-guest")
@@ -150,6 +190,7 @@ public class AuthRestController {
   public ResponseEntity<Map<String, String>> authError(AuthException ex) {
     HttpStatus status = switch (ex.getMessage()) {
       case "validation_failed", "registration_conflict" -> HttpStatus.BAD_REQUEST;
+      case "otp_rate_limited" -> HttpStatus.TOO_MANY_REQUESTS;
       case "auth_unavailable" -> HttpStatus.SERVICE_UNAVAILABLE;
       default -> HttpStatus.UNAUTHORIZED;
     };
@@ -184,6 +225,19 @@ public class AuthRestController {
 
   public record ConvertGuestRequest(
       String email, String phone, @NotBlank String password) {}
+
+  public record SendOtpRequest(
+      String email, String phone, @JsonProperty("otp_type") @NotBlank String otpType) {}
+
+  public record VerifyOtpRequest(
+      String email,
+      String phone,
+      @NotBlank String code,
+      @JsonProperty("otp_type") @NotBlank String otpType) {}
+
+  public record DeleteAccountRequest(@NotBlank String password) {}
+
+  public record RestoreAccountRequest(@NotBlank String token) {}
 
   public record OAuthCallbackRequest(
       @NotBlank String code, @JsonProperty("redirect_uri") String redirectUri) {}

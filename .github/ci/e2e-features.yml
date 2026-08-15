@@ -4,22 +4,34 @@
 smoke_gateway:
   - TestComposeAuthLifecycle_live
   - TestComposeDMRealtime_live
-  - TestComposeFriends_live
+  - TestComposeFriendsInvitation_live
   - TestComposeChatMessagingDM_live
   - TestComposeVoiceCall1to1_live
   - TestComposeGroups_live
   - TestComposeSpaces_live
   - TestComposeMatchmakingSearch_live
-  - TestComposeSearch_live
+  - TestComposeSearchInChat_live
   - TestComposeModeration_live
+  - TestComposeModerationShadowBan_live
   - TestComposeBilling_live
+  - TestComposeSpaceProBilling_live
   - TestComposeStories_live
   - TestComposeBotsSlash_live
   - TestComposeDeepLinks_live
   - TestComposeAnalytics_live
-  - TestComposeAnalyticsExport_live
+  - TestComposeAnalyticsIngest_live
   - TestComposeGuestRestrictions_live
+  - TestComposeConvertGuest_live
+  - TestComposePhoneSync_live
   - TestComposeE2EKeyBackup_live
+  - TestComposeE2EDM_live
+  - TestComposeWSResume_live
+  - TestComposeDeliveryReceipts_live
+  - TestComposeInAppNotifications_live
+  - TestComposeAdminAPI_live
+  - TestComposeDeveloperPortal_live
+  - TestComposeMultiProfileDelete_live
+  - TestComposeMultiProfileDowngrade_live
 
 smoke_flutter:
   - test/gateway_dm_ws_live_integration_test.dart
@@ -37,6 +49,10 @@ smoke_flutter:
   - test/deeplink_invite_e2e_live_test.dart
   - test/guest_restrictions_e2e_live_test.dart
   - test/encryption_key_backup_e2e_live_test.dart
+  - test/encryption_dm_e2e_live_test.dart
+  - test/ws_resume_e2e_live_test.dart
+  - test/message_delivery_e2e_live_test.dart
+  - test/in_app_notifications_e2e_live_test.dart
 
 full_gateway_run: 'TestCompose.*_live'
 
@@ -44,6 +60,7 @@ full_flutter:
   - test/gateway_dm_ws_live_integration_test.dart
   - test/dm_two_users_e2e_live_test.dart
   - test/friends_e2e_live_test.dart
+  - test/friends_privacy_e2e_live_test.dart
   - test/auth_logout_e2e_live_test.dart
   - test/ws_resume_e2e_live_test.dart
   - test/avatar_e2e_live_test.dart
@@ -78,6 +95,7 @@ full_flutter:
   - test/fcm_delivery_e2e_live_test.dart
   - test/matchmaking_queue_e2e_live_test.dart
   - test/matchmaking_e2e_live_test.dart
+  - test/matchmaking_rating_e2e_live_test.dart
   - test/matchmaking_history_e2e_live_test.dart
   - test/game_catalog_e2e_live_test.dart
   - test/matchmaking_fcm_e2e_live_test.dart

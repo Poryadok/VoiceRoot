@@ -6,16 +6,21 @@ import (
 	"image"
 	_ "image/gif"
 	_ "image/png"
-	"image/jpeg"
 	"math"
 
+	"github.com/mayahiro/go-webp"
 	"golang.org/x/image/draw"
 
 	grpcsvc "voice/backend/file/internal/grpcsvc"
 	"voice/backend/file/internal/store"
 )
 
-const thumbMaxEdge = 320
+const (
+	thumbMaxEdge            = 320
+	maxProcessedImageBytes  = 5 * 1024 * 1024
+	defaultFullWebPQuality  = 85
+	defaultThumbWebPQuality = 80
+)
 
 // ObjectWriter uploads processed bytes to object storage.
 type ObjectWriter interface {
@@ -27,8 +32,7 @@ type ObjectReader interface {
 	ReadObject(ctx context.Context, key string, maxBytes int64) ([]byte, error)
 }
 
-// Processor reads the original image and writes optimized full + thumbnail objects.
-// Encodes as JPEG (pure Go, no CGO) with .webp key suffix for API compatibility with file-storage (docs/features/file-storage.md) paths.
+// Processor reads the original image and writes optimized full + thumbnail WebP objects.
 type Processor struct {
 	Reader ObjectReader
 	Writer ObjectWriter
@@ -54,20 +58,20 @@ func (p Processor) ProcessImage(ctx context.Context, row store.FileRow) (grpcsvc
 	fullKey := prefix + "/full.webp"
 	thumbKey := prefix + "/thumb.webp"
 
-	fullBytes, err := encodeJPEG(src, 85)
+	fullBytes, err := encodeWebPWithinCap(src, defaultFullWebPQuality, maxProcessedImageBytes)
 	if err != nil {
 		return grpcsvc.ImageProcessingResult{}, err
 	}
-	if err := p.Writer.PutObject(ctx, fullKey, "image/jpeg", fullBytes); err != nil {
+	if err := p.Writer.PutObject(ctx, fullKey, "image/webp", fullBytes); err != nil {
 		return grpcsvc.ImageProcessingResult{}, err
 	}
 
 	thumb := resizeThumb(src, thumbMaxEdge)
-	thumbBytes, err := encodeJPEG(thumb, 80)
+	thumbBytes, err := encodeWebPWithinCap(thumb, defaultThumbWebPQuality, maxProcessedImageBytes)
 	if err != nil {
 		return grpcsvc.ImageProcessingResult{}, err
 	}
-	if err := p.Writer.PutObject(ctx, thumbKey, "image/jpeg", thumbBytes); err != nil {
+	if err := p.Writer.PutObject(ctx, thumbKey, "image/webp", thumbBytes); err != nil {
 		return grpcsvc.ImageProcessingResult{}, err
 	}
 
@@ -79,9 +83,27 @@ func (p Processor) ProcessImage(ctx context.Context, row store.FileRow) (grpcsvc
 	}, nil
 }
 
-func encodeJPEG(img image.Image, quality int) ([]byte, error) {
+func encodeWebPWithinCap(img image.Image, startQuality float32, maxBytes int) ([]byte, error) {
+	quality := startQuality
+	for quality >= 40 {
+		data, err := encodeWebP(img, quality)
+		if err != nil {
+			return nil, err
+		}
+		if len(data) <= maxBytes {
+			return data, nil
+		}
+		quality -= 10
+	}
+	return nil, errProcessedImageTooLarge
+}
+
+func encodeWebP(img image.Image, quality float32) ([]byte, error) {
 	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: quality}); err != nil {
+	if err := webp.Encode(&buf, img, &webp.Options{
+		Compression: webp.CompressionLossy,
+		Quality:     int(quality),
+	}); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil
@@ -101,7 +123,10 @@ func resizeThumb(src image.Image, maxEdge int) image.Image {
 	return dst
 }
 
-var errNotConfigured = errString("image processor: reader and writer required")
+var (
+	errNotConfigured         = errString("image processor: reader and writer required")
+	errProcessedImageTooLarge = errString("processed image exceeds storage cap")
+)
 
 type errString string
 

@@ -353,6 +353,15 @@ const SocialStreamEvent$json = {
       '9': 0,
       '10': 'userBlocked'
     },
+    {
+      '1': 'friend_request',
+      '3': 14,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.FriendRequest',
+      '9': 0,
+      '10': 'friendRequest'
+    },
   ],
   '8': [
     {'1': 'payload'},
@@ -367,8 +376,31 @@ final $typed_data.Uint8List socialStreamEventDescriptor = $convert.base64Decode(
     'VuZEFkZGVkEkcKDmZyaWVuZF9yZW1vdmVkGAsgASgLMh4udm9pY2UuZXZlbnRzLnYxLkZyaWVu'
     'ZFJlbW92ZWRIAFINZnJpZW5kUmVtb3ZlZBJHCg5jb250YWN0X3N5bmNlZBgMIAEoCzIeLnZvaW'
     'NlLmV2ZW50cy52MS5Db250YWN0U3luY2VkSABSDWNvbnRhY3RTeW5jZWQSQQoMdXNlcl9ibG9j'
-    'a2VkGA0gASgLMhwudm9pY2UuZXZlbnRzLnYxLlVzZXJCbG9ja2VkSABSC3VzZXJCbG9ja2VkQg'
-    'kKB3BheWxvYWQ=');
+    'a2VkGA0gASgLMhwudm9pY2UuZXZlbnRzLnYxLlVzZXJCbG9ja2VkSABSC3VzZXJCbG9ja2VkEk'
+    'cKDmZyaWVuZF9yZXF1ZXN0GA4gASgLMh4udm9pY2UuZXZlbnRzLnYxLkZyaWVuZFJlcXVlc3RI'
+    'AFINZnJpZW5kUmVxdWVzdEIJCgdwYXlsb2Fk');
+
+@$core.Deprecated('Use friendRequestDescriptor instead')
+const FriendRequest$json = {
+  '1': 'FriendRequest',
+  '2': [
+    {'1': 'request_id', '3': 1, '4': 1, '5': 9, '10': 'requestId'},
+    {
+      '1': 'requester_profile_id',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '10': 'requesterProfileId'
+    },
+    {'1': 'target_profile_id', '3': 3, '4': 1, '5': 9, '10': 'targetProfileId'},
+  ],
+};
+
+/// Descriptor for `FriendRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List friendRequestDescriptor = $convert.base64Decode(
+    'Cg1GcmllbmRSZXF1ZXN0Eh0KCnJlcXVlc3RfaWQYASABKAlSCXJlcXVlc3RJZBIwChRyZXF1ZX'
+    'N0ZXJfcHJvZmlsZV9pZBgCIAEoCVIScmVxdWVzdGVyUHJvZmlsZUlkEioKEXRhcmdldF9wcm9m'
+    'aWxlX2lkGAMgASgJUg90YXJnZXRQcm9maWxlSWQ=');
 
 @$core.Deprecated('Use friendAddedDescriptor instead')
 const FriendAdded$json = {
@@ -613,6 +645,15 @@ const MessageStreamEvent$json = {
       '9': 0,
       '10': 'messageUnpinned'
     },
+    {
+      '1': 'message_forwarded',
+      '3': 19,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.MessageForwarded',
+      '9': 0,
+      '10': 'messageForwarded'
+    },
   ],
   '8': [
     {'1': 'payload'},
@@ -634,7 +675,9 @@ final $typed_data.Uint8List messageStreamEventDescriptor = $convert.base64Decode
     'YWRkZWQYECABKAsyHS52b2ljZS5ldmVudHMudjEuTWVudGlvbkFkZGVkSABSDG1lbnRpb25BZG'
     'RlZBJHCg5tZXNzYWdlX3Bpbm5lZBgRIAEoCzIeLnZvaWNlLmV2ZW50cy52MS5NZXNzYWdlUGlu'
     'bmVkSABSDW1lc3NhZ2VQaW5uZWQSTQoQbWVzc2FnZV91bnBpbm5lZBgSIAEoCzIgLnZvaWNlLm'
-    'V2ZW50cy52MS5NZXNzYWdlVW5waW5uZWRIAFIPbWVzc2FnZVVucGlubmVkQgkKB3BheWxvYWQ=');
+    'V2ZW50cy52MS5NZXNzYWdlVW5waW5uZWRIAFIPbWVzc2FnZVVucGlubmVkElAKEW1lc3NhZ2Vf'
+    'Zm9yd2FyZGVkGBMgASgLMiEudm9pY2UuZXZlbnRzLnYxLk1lc3NhZ2VGb3J3YXJkZWRIAFIQbW'
+    'Vzc2FnZUZvcndhcmRlZEIJCgdwYXlsb2Fk');
 
 @$core.Deprecated('Use messageSentDescriptor instead')
 const MessageSent$json = {
@@ -808,6 +851,30 @@ final $typed_data.Uint8List messageUnpinnedDescriptor = $convert.base64Decode(
     'Cg9NZXNzYWdlVW5waW5uZWQSHQoKbWVzc2FnZV9pZBgBIAEoCVIJbWVzc2FnZUlkEhcKB2NoYX'
     'RfaWQYAiABKAlSBmNoYXRJZBIfCgt1bnBpbm5lZF9ieRgDIAEoCVIKdW5waW5uZWRCeQ==');
 
+@$core.Deprecated('Use messageForwardedDescriptor instead')
+const MessageForwarded$json = {
+  '1': 'MessageForwarded',
+  '2': [
+    {'1': 'message_id', '3': 1, '4': 1, '5': 9, '10': 'messageId'},
+    {'1': 'source_chat_id', '3': 2, '4': 1, '5': 9, '10': 'sourceChatId'},
+    {'1': 'target_chat_id', '3': 3, '4': 1, '5': 9, '10': 'targetChatId'},
+    {
+      '1': 'forwarder_profile_id',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '10': 'forwarderProfileId'
+    },
+  ],
+};
+
+/// Descriptor for `MessageForwarded`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List messageForwardedDescriptor = $convert.base64Decode(
+    'ChBNZXNzYWdlRm9yd2FyZGVkEh0KCm1lc3NhZ2VfaWQYASABKAlSCW1lc3NhZ2VJZBIkCg5zb3'
+    'VyY2VfY2hhdF9pZBgCIAEoCVIMc291cmNlQ2hhdElkEiQKDnRhcmdldF9jaGF0X2lkGAMgASgJ'
+    'Ugx0YXJnZXRDaGF0SWQSMAoUZm9yd2FyZGVyX3Byb2ZpbGVfaWQYBCABKAlSEmZvcndhcmRlcl'
+    'Byb2ZpbGVJZA==');
+
 @$core.Deprecated('Use chatStreamEventDescriptor instead')
 const ChatStreamEvent$json = {
   '1': 'ChatStreamEvent',
@@ -857,6 +924,51 @@ const ChatStreamEvent$json = {
       '9': 0,
       '10': 'spaceCreated'
     },
+    {
+      '1': 'space_invite_created',
+      '3': 14,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.SpaceInviteCreated',
+      '9': 0,
+      '10': 'spaceInviteCreated'
+    },
+    {
+      '1': 'space_member_joined',
+      '3': 15,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.SpaceMemberJoined',
+      '9': 0,
+      '10': 'spaceMemberJoined'
+    },
+    {
+      '1': 'space_member_left',
+      '3': 16,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.SpaceMemberLeft',
+      '9': 0,
+      '10': 'spaceMemberLeft'
+    },
+    {
+      '1': 'space_updated',
+      '3': 17,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.SpaceUpdated',
+      '9': 0,
+      '10': 'spaceUpdated'
+    },
+    {
+      '1': 'space_deleted',
+      '3': 18,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.SpaceDeleted',
+      '9': 0,
+      '10': 'spaceDeleted'
+    },
   ],
   '8': [
     {'1': 'payload'},
@@ -872,7 +984,14 @@ final $typed_data.Uint8List chatStreamEventDescriptor = $convert.base64Decode(
     'YXRNZW1iZXJDaGFuZ2VkSABSEWNoYXRNZW1iZXJDaGFuZ2VkElEKEnNwYWNlX3RyZWVfY2hhbm'
     'dlZBgMIAEoCzIhLnZvaWNlLmV2ZW50cy52MS5TcGFjZVRyZWVDaGFuZ2VkSABSEHNwYWNlVHJl'
     'ZUNoYW5nZWQSRAoNc3BhY2VfY3JlYXRlZBgNIAEoCzIdLnZvaWNlLmV2ZW50cy52MS5TcGFjZU'
-    'NyZWF0ZWRIAFIMc3BhY2VDcmVhdGVkQgkKB3BheWxvYWQ=');
+    'NyZWF0ZWRIAFIMc3BhY2VDcmVhdGVkElcKFHNwYWNlX2ludml0ZV9jcmVhdGVkGA4gASgLMiMu'
+    'dm9pY2UuZXZlbnRzLnYxLlNwYWNlSW52aXRlQ3JlYXRlZEgAUhJzcGFjZUludml0ZUNyZWF0ZW'
+    'QSVAoTc3BhY2VfbWVtYmVyX2pvaW5lZBgPIAEoCzIiLnZvaWNlLmV2ZW50cy52MS5TcGFjZU1l'
+    'bWJlckpvaW5lZEgAUhFzcGFjZU1lbWJlckpvaW5lZBJOChFzcGFjZV9tZW1iZXJfbGVmdBgQIA'
+    'EoCzIgLnZvaWNlLmV2ZW50cy52MS5TcGFjZU1lbWJlckxlZnRIAFIPc3BhY2VNZW1iZXJMZWZ0'
+    'EkQKDXNwYWNlX3VwZGF0ZWQYESABKAsyHS52b2ljZS5ldmVudHMudjEuU3BhY2VVcGRhdGVkSA'
+    'BSDHNwYWNlVXBkYXRlZBJECg1zcGFjZV9kZWxldGVkGBIgASgLMh0udm9pY2UuZXZlbnRzLnYx'
+    'LlNwYWNlRGVsZXRlZEgAUgxzcGFjZURlbGV0ZWRCCQoHcGF5bG9hZA==');
 
 @$core.Deprecated('Use chatCreatedDescriptor instead')
 const ChatCreated$json = {
@@ -931,6 +1050,72 @@ const SpaceCreated$json = {
 final $typed_data.Uint8List spaceCreatedDescriptor = $convert.base64Decode(
     'CgxTcGFjZUNyZWF0ZWQSGQoIc3BhY2VfaWQYASABKAlSB3NwYWNlSWQSKAoQb3duZXJfcHJvZm'
     'lsZV9pZBgCIAEoCVIOb3duZXJQcm9maWxlSWQ=');
+
+@$core.Deprecated('Use spaceInviteCreatedDescriptor instead')
+const SpaceInviteCreated$json = {
+  '1': 'SpaceInviteCreated',
+  '2': [
+    {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'invite_code', '3': 2, '4': 1, '5': 9, '10': 'inviteCode'},
+  ],
+};
+
+/// Descriptor for `SpaceInviteCreated`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List spaceInviteCreatedDescriptor = $convert.base64Decode(
+    'ChJTcGFjZUludml0ZUNyZWF0ZWQSGQoIc3BhY2VfaWQYASABKAlSB3NwYWNlSWQSHwoLaW52aX'
+    'RlX2NvZGUYAiABKAlSCmludml0ZUNvZGU=');
+
+@$core.Deprecated('Use spaceMemberJoinedDescriptor instead')
+const SpaceMemberJoined$json = {
+  '1': 'SpaceMemberJoined',
+  '2': [
+    {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'profile_id', '3': 2, '4': 1, '5': 9, '10': 'profileId'},
+  ],
+};
+
+/// Descriptor for `SpaceMemberJoined`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List spaceMemberJoinedDescriptor = $convert.base64Decode(
+    'ChFTcGFjZU1lbWJlckpvaW5lZBIZCghzcGFjZV9pZBgBIAEoCVIHc3BhY2VJZBIdCgpwcm9maW'
+    'xlX2lkGAIgASgJUglwcm9maWxlSWQ=');
+
+@$core.Deprecated('Use spaceMemberLeftDescriptor instead')
+const SpaceMemberLeft$json = {
+  '1': 'SpaceMemberLeft',
+  '2': [
+    {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'profile_id', '3': 2, '4': 1, '5': 9, '10': 'profileId'},
+  ],
+};
+
+/// Descriptor for `SpaceMemberLeft`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List spaceMemberLeftDescriptor = $convert.base64Decode(
+    'Cg9TcGFjZU1lbWJlckxlZnQSGQoIc3BhY2VfaWQYASABKAlSB3NwYWNlSWQSHQoKcHJvZmlsZV'
+    '9pZBgCIAEoCVIJcHJvZmlsZUlk');
+
+@$core.Deprecated('Use spaceUpdatedDescriptor instead')
+const SpaceUpdated$json = {
+  '1': 'SpaceUpdated',
+  '2': [
+    {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+  ],
+};
+
+/// Descriptor for `SpaceUpdated`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List spaceUpdatedDescriptor = $convert
+    .base64Decode('CgxTcGFjZVVwZGF0ZWQSGQoIc3BhY2VfaWQYASABKAlSB3NwYWNlSWQ=');
+
+@$core.Deprecated('Use spaceDeletedDescriptor instead')
+const SpaceDeleted$json = {
+  '1': 'SpaceDeleted',
+  '2': [
+    {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+  ],
+};
+
+/// Descriptor for `SpaceDeleted`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List spaceDeletedDescriptor = $convert
+    .base64Decode('CgxTcGFjZURlbGV0ZWQSGQoIc3BhY2VfaWQYASABKAlSB3NwYWNlSWQ=');
 
 @$core.Deprecated('Use voiceStreamEventDescriptor instead')
 const VoiceStreamEvent$json = {
@@ -1026,6 +1211,15 @@ const VoiceStreamEvent$json = {
       '9': 0,
       '10': 'screenShareStopped'
     },
+    {
+      '1': 'voice_member_joined',
+      '3': 19,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.VoiceMemberJoined',
+      '9': 0,
+      '10': 'voiceMemberJoined'
+    },
   ],
   '8': [
     {'1': 'payload'},
@@ -1047,8 +1241,34 @@ final $typed_data.Uint8List voiceStreamEventDescriptor = $convert.base64Decode(
     'Gy52b2ljZS5ldmVudHMudjEuQ2FsbE1pc3NlZEgAUgpjYWxsTWlzc2VkElQKE3ZvaWNlX3N0YX'
     'RlX2NoYW5nZWQYESABKAsyIi52b2ljZS5ldmVudHMudjEuVm9pY2VTdGF0ZUNoYW5nZWRIAFIR'
     'dm9pY2VTdGF0ZUNoYW5nZWQSVwoUc2NyZWVuX3NoYXJlX3N0b3BwZWQYEiABKAsyIy52b2ljZS'
-    '5ldmVudHMudjEuU2NyZWVuU2hhcmVTdG9wcGVkSABSEnNjcmVlblNoYXJlU3RvcHBlZEIJCgdw'
-    'YXlsb2Fk');
+    '5ldmVudHMudjEuU2NyZWVuU2hhcmVTdG9wcGVkSABSEnNjcmVlblNoYXJlU3RvcHBlZBJUChN2'
+    'b2ljZV9tZW1iZXJfam9pbmVkGBMgASgLMiIudm9pY2UuZXZlbnRzLnYxLlZvaWNlTWVtYmVySm'
+    '9pbmVkSABSEXZvaWNlTWVtYmVySm9pbmVkQgkKB3BheWxvYWQ=');
+
+@$core.Deprecated('Use voiceMemberJoinedDescriptor instead')
+const VoiceMemberJoined$json = {
+  '1': 'VoiceMemberJoined',
+  '2': [
+    {'1': 'room_id', '3': 1, '4': 1, '5': 9, '10': 'roomId'},
+    {'1': 'voice_room_id', '3': 2, '4': 1, '5': 9, '10': 'voiceRoomId'},
+    {'1': 'space_id', '3': 3, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'joined_profile_id', '3': 4, '4': 1, '5': 9, '10': 'joinedProfileId'},
+    {
+      '1': 'notify_profile_ids',
+      '3': 5,
+      '4': 3,
+      '5': 9,
+      '10': 'notifyProfileIds'
+    },
+  ],
+};
+
+/// Descriptor for `VoiceMemberJoined`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List voiceMemberJoinedDescriptor = $convert.base64Decode(
+    'ChFWb2ljZU1lbWJlckpvaW5lZBIXCgdyb29tX2lkGAEgASgJUgZyb29tSWQSIgoNdm9pY2Vfcm'
+    '9vbV9pZBgCIAEoCVILdm9pY2VSb29tSWQSGQoIc3BhY2VfaWQYAyABKAlSB3NwYWNlSWQSKgoR'
+    'am9pbmVkX3Byb2ZpbGVfaWQYBCABKAlSD2pvaW5lZFByb2ZpbGVJZBIsChJub3RpZnlfcHJvZm'
+    'lsZV9pZHMYBSADKAlSEG5vdGlmeVByb2ZpbGVJZHM=');
 
 @$core.Deprecated('Use callStartedDescriptor instead')
 const CallStarted$json = {
@@ -1451,6 +1671,42 @@ const SubscriptionStreamEvent$json = {
       '9': 0,
       '10': 'paymentFailed'
     },
+    {
+      '1': 'plan_expired',
+      '3': 14,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.PlanExpired',
+      '9': 0,
+      '10': 'planExpired'
+    },
+    {
+      '1': 'downgrade',
+      '3': 15,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.Downgrade',
+      '9': 0,
+      '10': 'downgrade'
+    },
+    {
+      '1': 'space_pro_started',
+      '3': 16,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.SpaceProStarted',
+      '9': 0,
+      '10': 'spaceProStarted'
+    },
+    {
+      '1': 'space_pro_expired',
+      '3': 17,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.SpaceProExpired',
+      '9': 0,
+      '10': 'spaceProExpired'
+    },
   ],
   '8': [
     {'1': 'payload'},
@@ -1466,7 +1722,12 @@ final $typed_data.Uint8List subscriptionStreamEventDescriptor = $convert.base64D
     'LlBsYW5DYW5jZWxsZWRIAFINcGxhbkNhbmNlbGxlZBJKCg9wYXltZW50X3N1Y2Nlc3MYDCABKA'
     'syHy52b2ljZS5ldmVudHMudjEuUGF5bWVudFN1Y2Nlc3NIAFIOcGF5bWVudFN1Y2Nlc3MSRwoO'
     'cGF5bWVudF9mYWlsZWQYDSABKAsyHi52b2ljZS5ldmVudHMudjEuUGF5bWVudEZhaWxlZEgAUg'
-    '1wYXltZW50RmFpbGVkQgkKB3BheWxvYWQ=');
+    '1wYXltZW50RmFpbGVkEkEKDHBsYW5fZXhwaXJlZBgOIAEoCzIcLnZvaWNlLmV2ZW50cy52MS5Q'
+    'bGFuRXhwaXJlZEgAUgtwbGFuRXhwaXJlZBI6Cglkb3duZ3JhZGUYDyABKAsyGi52b2ljZS5ldm'
+    'VudHMudjEuRG93bmdyYWRlSABSCWRvd25ncmFkZRJOChFzcGFjZV9wcm9fc3RhcnRlZBgQIAEo'
+    'CzIgLnZvaWNlLmV2ZW50cy52MS5TcGFjZVByb1N0YXJ0ZWRIAFIPc3BhY2VQcm9TdGFydGVkEk'
+    '4KEXNwYWNlX3Byb19leHBpcmVkGBEgASgLMiAudm9pY2UuZXZlbnRzLnYxLlNwYWNlUHJvRXhw'
+    'aXJlZEgAUg9zcGFjZVByb0V4cGlyZWRCCQoHcGF5bG9hZA==');
 
 @$core.Deprecated('Use planStartedDescriptor instead')
 const PlanStarted$json = {
@@ -1474,13 +1735,25 @@ const PlanStarted$json = {
   '2': [
     {'1': 'account_id', '3': 1, '4': 1, '5': 9, '10': 'accountId'},
     {'1': 'plan', '3': 2, '4': 1, '5': 9, '10': 'plan'},
+    {
+      '1': 'space_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'spaceId',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_space_id'},
   ],
 };
 
 /// Descriptor for `PlanStarted`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List planStartedDescriptor = $convert.base64Decode(
     'CgtQbGFuU3RhcnRlZBIdCgphY2NvdW50X2lkGAEgASgJUglhY2NvdW50SWQSEgoEcGxhbhgCIA'
-    'EoCVIEcGxhbg==');
+    'EoCVIEcGxhbhIeCghzcGFjZV9pZBgDIAEoCUgAUgdzcGFjZUlkiAEBQgsKCV9zcGFjZV9pZA==');
 
 @$core.Deprecated('Use planCancelledDescriptor instead')
 const PlanCancelled$json = {
@@ -1524,6 +1797,66 @@ final $typed_data.Uint8List paymentFailedDescriptor = $convert.base64Decode(
     'Cg1QYXltZW50RmFpbGVkEh0KCmFjY291bnRfaWQYASABKAlSCWFjY291bnRJZBIaCghwcm92aW'
     'RlchgCIAEoCVIIcHJvdmlkZXI=');
 
+@$core.Deprecated('Use planExpiredDescriptor instead')
+const PlanExpired$json = {
+  '1': 'PlanExpired',
+  '2': [
+    {'1': 'account_id', '3': 1, '4': 1, '5': 9, '10': 'accountId'},
+    {'1': 'plan', '3': 2, '4': 1, '5': 9, '10': 'plan'},
+  ],
+};
+
+/// Descriptor for `PlanExpired`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List planExpiredDescriptor = $convert.base64Decode(
+    'CgtQbGFuRXhwaXJlZBIdCgphY2NvdW50X2lkGAEgASgJUglhY2NvdW50SWQSEgoEcGxhbhgCIA'
+    'EoCVIEcGxhbg==');
+
+@$core.Deprecated('Use downgradeDescriptor instead')
+const Downgrade$json = {
+  '1': 'Downgrade',
+  '2': [
+    {'1': 'account_id', '3': 1, '4': 1, '5': 9, '10': 'accountId'},
+    {'1': 'plan', '3': 2, '4': 1, '5': 9, '10': 'plan'},
+  ],
+};
+
+/// Descriptor for `Downgrade`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List downgradeDescriptor = $convert.base64Decode(
+    'CglEb3duZ3JhZGUSHQoKYWNjb3VudF9pZBgBIAEoCVIJYWNjb3VudElkEhIKBHBsYW4YAiABKA'
+    'lSBHBsYW4=');
+
+@$core.Deprecated('Use spaceProStartedDescriptor instead')
+const SpaceProStarted$json = {
+  '1': 'SpaceProStarted',
+  '2': [
+    {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'purchaser_account_id',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '10': 'purchaserAccountId'
+    },
+  ],
+};
+
+/// Descriptor for `SpaceProStarted`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List spaceProStartedDescriptor = $convert.base64Decode(
+    'Cg9TcGFjZVByb1N0YXJ0ZWQSGQoIc3BhY2VfaWQYASABKAlSB3NwYWNlSWQSMAoUcHVyY2hhc2'
+    'VyX2FjY291bnRfaWQYAiABKAlSEnB1cmNoYXNlckFjY291bnRJZA==');
+
+@$core.Deprecated('Use spaceProExpiredDescriptor instead')
+const SpaceProExpired$json = {
+  '1': 'SpaceProExpired',
+  '2': [
+    {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+  ],
+};
+
+/// Descriptor for `SpaceProExpired`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List spaceProExpiredDescriptor = $convert.base64Decode(
+    'Cg9TcGFjZVByb0V4cGlyZWQSGQoIc3BhY2VfaWQYASABKAlSB3NwYWNlSWQ=');
+
 @$core.Deprecated('Use fileStreamEventDescriptor instead')
 const FileStreamEvent$json = {
   '1': 'FileStreamEvent',
@@ -1555,6 +1888,24 @@ const FileStreamEvent$json = {
       '9': 0,
       '10': 'fileScanResult'
     },
+    {
+      '1': 'file_expired',
+      '3': 12,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.FileExpired',
+      '9': 0,
+      '10': 'fileExpired'
+    },
+    {
+      '1': 'file_processed',
+      '3': 13,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.FileProcessed',
+      '9': 0,
+      '10': 'fileProcessed'
+    },
   ],
   '8': [
     {'1': 'payload'},
@@ -1567,7 +1918,10 @@ final $typed_data.Uint8List fileStreamEventDescriptor = $convert.base64Decode(
     'RfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wUgpvY2N1cnJlZEF0EkQKDWZp'
     'bGVfdXBsb2FkZWQYCiABKAsyHS52b2ljZS5ldmVudHMudjEuRmlsZVVwbG9hZGVkSABSDGZpbG'
     'VVcGxvYWRlZBJLChBmaWxlX3NjYW5fcmVzdWx0GAsgASgLMh8udm9pY2UuZXZlbnRzLnYxLkZp'
-    'bGVTY2FuUmVzdWx0SABSDmZpbGVTY2FuUmVzdWx0QgkKB3BheWxvYWQ=');
+    'bGVTY2FuUmVzdWx0SABSDmZpbGVTY2FuUmVzdWx0EkEKDGZpbGVfZXhwaXJlZBgMIAEoCzIcLn'
+    'ZvaWNlLmV2ZW50cy52MS5GaWxlRXhwaXJlZEgAUgtmaWxlRXhwaXJlZBJHCg5maWxlX3Byb2Nl'
+    'c3NlZBgNIAEoCzIeLnZvaWNlLmV2ZW50cy52MS5GaWxlUHJvY2Vzc2VkSABSDWZpbGVQcm9jZX'
+    'NzZWRCCQoHcGF5bG9hZA==');
 
 @$core.Deprecated('Use fileUploadedDescriptor instead')
 const FileUploaded$json = {
@@ -1595,13 +1949,89 @@ const FileScanResult$json = {
   '2': [
     {'1': 'file_id', '3': 1, '4': 1, '5': 9, '10': 'fileId'},
     {'1': 'result', '3': 2, '4': 1, '5': 9, '10': 'result'},
+    {
+      '1': 'uploader_profile_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'uploaderProfileId',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_uploader_profile_id'},
   ],
 };
 
 /// Descriptor for `FileScanResult`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List fileScanResultDescriptor = $convert.base64Decode(
     'Cg5GaWxlU2NhblJlc3VsdBIXCgdmaWxlX2lkGAEgASgJUgZmaWxlSWQSFgoGcmVzdWx0GAIgAS'
-    'gJUgZyZXN1bHQ=');
+    'gJUgZyZXN1bHQSMwoTdXBsb2FkZXJfcHJvZmlsZV9pZBgDIAEoCUgAUhF1cGxvYWRlclByb2Zp'
+    'bGVJZIgBAUIWChRfdXBsb2FkZXJfcHJvZmlsZV9pZA==');
+
+@$core.Deprecated('Use fileProcessedDescriptor instead')
+const FileProcessed$json = {
+  '1': 'FileProcessed',
+  '2': [
+    {'1': 'file_id', '3': 1, '4': 1, '5': 9, '10': 'fileId'},
+    {'1': 'status', '3': 2, '4': 1, '5': 9, '10': 'status'},
+    {
+      '1': 'converted_r2_key',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'convertedR2Key',
+      '17': true
+    },
+    {
+      '1': 'thumbnail_r2_key',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '9': 1,
+      '10': 'thumbnailR2Key',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_converted_r2_key'},
+    {'1': '_thumbnail_r2_key'},
+  ],
+};
+
+/// Descriptor for `FileProcessed`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List fileProcessedDescriptor = $convert.base64Decode(
+    'Cg1GaWxlUHJvY2Vzc2VkEhcKB2ZpbGVfaWQYASABKAlSBmZpbGVJZBIWCgZzdGF0dXMYAiABKA'
+    'lSBnN0YXR1cxItChBjb252ZXJ0ZWRfcjJfa2V5GAMgASgJSABSDmNvbnZlcnRlZFIyS2V5iAEB'
+    'Ei0KEHRodW1ibmFpbF9yMl9rZXkYBCABKAlIAVIOdGh1bWJuYWlsUjJLZXmIAQFCEwoRX2Nvbn'
+    'ZlcnRlZF9yMl9rZXlCEwoRX3RodW1ibmFpbF9yMl9rZXk=');
+
+@$core.Deprecated('Use fileExpiredDescriptor instead')
+const FileExpired$json = {
+  '1': 'FileExpired',
+  '2': [
+    {'1': 'file_id', '3': 1, '4': 1, '5': 9, '10': 'fileId'},
+    {
+      '1': 'chat_id',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'chatId',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_chat_id'},
+  ],
+};
+
+/// Descriptor for `FileExpired`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List fileExpiredDescriptor = $convert.base64Decode(
+    'CgtGaWxlRXhwaXJlZBIXCgdmaWxlX2lkGAEgASgJUgZmaWxlSWQSHAoHY2hhdF9pZBgCIAEoCU'
+    'gAUgZjaGF0SWSIAQFCCgoIX2NoYXRfaWQ=');
 
 @$core.Deprecated('Use matchmakingStreamEventDescriptor instead')
 const MatchmakingStreamEvent$json = {
@@ -1918,6 +2348,15 @@ const StoryStreamEvent$json = {
       '9': 0,
       '10': 'storyLfpCreated'
     },
+    {
+      '1': 'story_lfp_response',
+      '3': 17,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.StoryLfpResponse',
+      '9': 0,
+      '10': 'storyLfpResponse'
+    },
   ],
   '8': [
     {'1': 'payload'},
@@ -1937,7 +2376,9 @@ final $typed_data.Uint8List storyStreamEventDescriptor = $convert.base64Decode(
     'AFIMc3RvcnlFeHBpcmVkEmAKF3N0b3J5X2hpZ2hsaWdodF9jcmVhdGVkGA8gASgLMiYudm9pY2'
     'UuZXZlbnRzLnYxLlN0b3J5SGlnaGxpZ2h0Q3JlYXRlZEgAUhVzdG9yeUhpZ2hsaWdodENyZWF0'
     'ZWQSTgoRc3RvcnlfbGZwX2NyZWF0ZWQYECABKAsyIC52b2ljZS5ldmVudHMudjEuU3RvcnlMZn'
-    'BDcmVhdGVkSABSD3N0b3J5TGZwQ3JlYXRlZEIJCgdwYXlsb2Fk');
+    'BDcmVhdGVkSABSD3N0b3J5TGZwQ3JlYXRlZBJRChJzdG9yeV9sZnBfcmVzcG9uc2UYESABKAsy'
+    'IS52b2ljZS5ldmVudHMudjEuU3RvcnlMZnBSZXNwb25zZUgAUhBzdG9yeUxmcFJlc3BvbnNlQg'
+    'kKB3BheWxvYWQ=');
 
 @$core.Deprecated('Use storyCreatedDescriptor instead')
 const StoryCreated$json = {
@@ -2051,6 +2492,30 @@ final $typed_data.Uint8List storyLfpCreatedDescriptor = $convert.base64Decode(
     'Cg9TdG9yeUxmcENyZWF0ZWQSGQoIc3RvcnlfaWQYASABKAlSB3N0b3J5SWQSKgoRYXV0aG9yX3'
     'Byb2ZpbGVfaWQYAiABKAlSD2F1dGhvclByb2ZpbGVJZBIjCg1jcml0ZXJpYV9qc29uGAMgASgJ'
     'Ugxjcml0ZXJpYUpzb24=');
+
+@$core.Deprecated('Use storyLfpResponseDescriptor instead')
+const StoryLfpResponse$json = {
+  '1': 'StoryLfpResponse',
+  '2': [
+    {'1': 'story_id', '3': 1, '4': 1, '5': 9, '10': 'storyId'},
+    {'1': 'author_profile_id', '3': 2, '4': 1, '5': 9, '10': 'authorProfileId'},
+    {
+      '1': 'responder_profile_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '10': 'responderProfileId'
+    },
+    {'1': 'response_type', '3': 4, '4': 1, '5': 9, '10': 'responseType'},
+  ],
+};
+
+/// Descriptor for `StoryLfpResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List storyLfpResponseDescriptor = $convert.base64Decode(
+    'ChBTdG9yeUxmcFJlc3BvbnNlEhkKCHN0b3J5X2lkGAEgASgJUgdzdG9yeUlkEioKEWF1dGhvcl'
+    '9wcm9maWxlX2lkGAIgASgJUg9hdXRob3JQcm9maWxlSWQSMAoUcmVzcG9uZGVyX3Byb2ZpbGVf'
+    'aWQYAyABKAlSEnJlc3BvbmRlclByb2ZpbGVJZBIjCg1yZXNwb25zZV90eXBlGAQgASgJUgxyZX'
+    'Nwb25zZVR5cGU=');
 
 @$core.Deprecated('Use highlightAddedDescriptor instead')
 const HighlightAdded$json = {

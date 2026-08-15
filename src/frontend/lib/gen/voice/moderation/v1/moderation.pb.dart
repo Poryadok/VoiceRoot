@@ -1793,6 +1793,395 @@ class IsShadowBannedResponse extends $pb.GeneratedMessage {
   void clearShadowBanned() => $_clearField(1);
 }
 
+class IsMMBannedRequest extends $pb.GeneratedMessage {
+  factory IsMMBannedRequest({
+    $core.String? accountId,
+  }) {
+    final result = create();
+    if (accountId != null) result.accountId = accountId;
+    return result;
+  }
+
+  IsMMBannedRequest._();
+
+  factory IsMMBannedRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory IsMMBannedRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'IsMMBannedRequest',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.moderation.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'accountId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  IsMMBannedRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  IsMMBannedRequest copyWith(void Function(IsMMBannedRequest) updates) =>
+      super.copyWith((message) => updates(message as IsMMBannedRequest))
+          as IsMMBannedRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static IsMMBannedRequest create() => IsMMBannedRequest._();
+  @$core.override
+  IsMMBannedRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static IsMMBannedRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<IsMMBannedRequest>(create);
+  static IsMMBannedRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get accountId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set accountId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAccountId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAccountId() => $_clearField(1);
+}
+
+class IsMMBannedResponse extends $pb.GeneratedMessage {
+  factory IsMMBannedResponse({
+    $core.bool? mmBanned,
+  }) {
+    final result = create();
+    if (mmBanned != null) result.mmBanned = mmBanned;
+    return result;
+  }
+
+  IsMMBannedResponse._();
+
+  factory IsMMBannedResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory IsMMBannedResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'IsMMBannedResponse',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.moderation.v1'),
+      createEmptyInstance: create)
+    ..aOB(1, _omitFieldNames ? '' : 'mmBanned')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  IsMMBannedResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  IsMMBannedResponse copyWith(void Function(IsMMBannedResponse) updates) =>
+      super.copyWith((message) => updates(message as IsMMBannedResponse))
+          as IsMMBannedResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static IsMMBannedResponse create() => IsMMBannedResponse._();
+  @$core.override
+  IsMMBannedResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static IsMMBannedResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<IsMMBannedResponse>(create);
+  static IsMMBannedResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.bool get mmBanned => $_getBF(0);
+  @$pb.TagNumber(1)
+  set mmBanned($core.bool value) => $_setBool(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasMmBanned() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearMmBanned() => $_clearField(1);
+}
+
+class AuditLogEntry extends $pb.GeneratedMessage {
+  factory AuditLogEntry({
+    $core.String? id,
+    $core.String? actorProfileId,
+    $core.String? action,
+    $core.String? targetType,
+    $core.String? targetId,
+    $core.String? details,
+    $1.Timestamp? createdAt,
+  }) {
+    final result = create();
+    if (id != null) result.id = id;
+    if (actorProfileId != null) result.actorProfileId = actorProfileId;
+    if (action != null) result.action = action;
+    if (targetType != null) result.targetType = targetType;
+    if (targetId != null) result.targetId = targetId;
+    if (details != null) result.details = details;
+    if (createdAt != null) result.createdAt = createdAt;
+    return result;
+  }
+
+  AuditLogEntry._();
+
+  factory AuditLogEntry.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory AuditLogEntry.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'AuditLogEntry',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.moderation.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'id')
+    ..aOS(2, _omitFieldNames ? '' : 'actorProfileId')
+    ..aOS(3, _omitFieldNames ? '' : 'action')
+    ..aOS(4, _omitFieldNames ? '' : 'targetType')
+    ..aOS(5, _omitFieldNames ? '' : 'targetId')
+    ..aOS(6, _omitFieldNames ? '' : 'details')
+    ..aOM<$1.Timestamp>(7, _omitFieldNames ? '' : 'createdAt',
+        subBuilder: $1.Timestamp.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AuditLogEntry clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AuditLogEntry copyWith(void Function(AuditLogEntry) updates) =>
+      super.copyWith((message) => updates(message as AuditLogEntry))
+          as AuditLogEntry;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static AuditLogEntry create() => AuditLogEntry._();
+  @$core.override
+  AuditLogEntry createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static AuditLogEntry getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<AuditLogEntry>(create);
+  static AuditLogEntry? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get id => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set id($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get actorProfileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set actorProfileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasActorProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearActorProfileId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get action => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set action($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasAction() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearAction() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get targetType => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set targetType($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasTargetType() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearTargetType() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get targetId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set targetId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasTargetId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearTargetId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get details => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set details($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasDetails() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearDetails() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $1.Timestamp get createdAt => $_getN(6);
+  @$pb.TagNumber(7)
+  set createdAt($1.Timestamp value) => $_setField(7, value);
+  @$pb.TagNumber(7)
+  $core.bool hasCreatedAt() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearCreatedAt() => $_clearField(7);
+  @$pb.TagNumber(7)
+  $1.Timestamp ensureCreatedAt() => $_ensure(6);
+}
+
+class AuditLogExport extends $pb.GeneratedMessage {
+  factory AuditLogExport({
+    $core.Iterable<AuditLogEntry>? entries,
+  }) {
+    final result = create();
+    if (entries != null) result.entries.addAll(entries);
+    return result;
+  }
+
+  AuditLogExport._();
+
+  factory AuditLogExport.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory AuditLogExport.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'AuditLogExport',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.moderation.v1'),
+      createEmptyInstance: create)
+    ..pPM<AuditLogEntry>(1, _omitFieldNames ? '' : 'entries',
+        subBuilder: AuditLogEntry.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AuditLogExport clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AuditLogExport copyWith(void Function(AuditLogExport) updates) =>
+      super.copyWith((message) => updates(message as AuditLogExport))
+          as AuditLogExport;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static AuditLogExport create() => AuditLogExport._();
+  @$core.override
+  AuditLogExport createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static AuditLogExport getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<AuditLogExport>(create);
+  static AuditLogExport? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $pb.PbList<AuditLogEntry> get entries => $_getList(0);
+}
+
+class ExportAuditLogRequest extends $pb.GeneratedMessage {
+  factory ExportAuditLogRequest() => create();
+
+  ExportAuditLogRequest._();
+
+  factory ExportAuditLogRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ExportAuditLogRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ExportAuditLogRequest',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.moderation.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ExportAuditLogRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ExportAuditLogRequest copyWith(
+          void Function(ExportAuditLogRequest) updates) =>
+      super.copyWith((message) => updates(message as ExportAuditLogRequest))
+          as ExportAuditLogRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ExportAuditLogRequest create() => ExportAuditLogRequest._();
+  @$core.override
+  ExportAuditLogRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ExportAuditLogRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ExportAuditLogRequest>(create);
+  static ExportAuditLogRequest? _defaultInstance;
+}
+
+class ExportAuditLogResponse extends $pb.GeneratedMessage {
+  factory ExportAuditLogResponse({
+    AuditLogExport? auditLogExport,
+  }) {
+    final result = create();
+    if (auditLogExport != null) result.auditLogExport = auditLogExport;
+    return result;
+  }
+
+  ExportAuditLogResponse._();
+
+  factory ExportAuditLogResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ExportAuditLogResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ExportAuditLogResponse',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.moderation.v1'),
+      createEmptyInstance: create)
+    ..aOM<AuditLogExport>(1, _omitFieldNames ? '' : 'auditLogExport',
+        subBuilder: AuditLogExport.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ExportAuditLogResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ExportAuditLogResponse copyWith(
+          void Function(ExportAuditLogResponse) updates) =>
+      super.copyWith((message) => updates(message as ExportAuditLogResponse))
+          as ExportAuditLogResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ExportAuditLogResponse create() => ExportAuditLogResponse._();
+  @$core.override
+  ExportAuditLogResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ExportAuditLogResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ExportAuditLogResponse>(create);
+  static ExportAuditLogResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  AuditLogExport get auditLogExport => $_getN(0);
+  @$pb.TagNumber(1)
+  set auditLogExport(AuditLogExport value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAuditLogExport() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAuditLogExport() => $_clearField(1);
+  @$pb.TagNumber(1)
+  AuditLogExport ensureAuditLogExport() => $_ensure(0);
+}
+
 class CreateReportResponse extends $pb.GeneratedMessage {
   factory CreateReportResponse({
     Report? report,

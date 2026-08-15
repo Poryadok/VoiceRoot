@@ -19,6 +19,7 @@ import (
 
 	grpcsvc "voice/backend/space/internal/grpcsvc"
 	"voice/backend/space/internal/spaceevents"
+	"voice/backend/space/internal/subscriptionconsume"
 	"voice/backend/space/internal/s2s"
 	"voice/backend/space/internal/store"
 	"voice/backend/pkg/grpcclient"
@@ -37,6 +38,8 @@ const serviceName = "space"
 func main() {
 	logger := httpserver.NewLogger(serviceName)
 	metricsReg := prometheus.NewRegistry()
+	runCtx, runCancel := context.WithCancel(context.Background())
+	defer runCancel()
 	httpAddr := ":8080"
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
 		httpAddr = v
@@ -117,7 +120,9 @@ func main() {
 			}
 			waitCancel()
 			defer func() { _ = uconn.Close() }()
-			spaceSvc.Privacy = &s2s.GRPCUserPrivacy{Client: userv1.NewUserServiceClient(uconn)}
+			userClient := userv1.NewUserServiceClient(uconn)
+			spaceSvc.Privacy = &s2s.GRPCUserPrivacy{Client: userClient}
+			spaceSvc.ProfileAccounts = s2s.NewGRPCUserProfiles(uconn)
 		}
 		if socialAddr := strings.TrimSpace(os.Getenv("SOCIAL_GRPC_ADDR")); socialAddr != "" {
 			sconn, err := grpc.NewClient(grpcclient.DialTarget(socialAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -126,6 +131,16 @@ func main() {
 			}
 			defer func() { _ = sconn.Close() }()
 			spaceSvc.Friends = s2s.NewGRPCSocialFriends(sconn)
+			spaceSvc.Blocks = s2s.NewGRPCSocialBlocks(sconn)
+		}
+		if natsURL != "" {
+			entitlements := &subscriptionconsume.SpaceStoreEntitlement{Store: spaceStore}
+			go func() {
+				if err := subscriptionconsume.Run(runCtx, natsURL, "space_subscription_entitlement", entitlements); err != nil && runCtx.Err() == nil {
+					logger.Error("space subscription consumer stopped", slog.String("error", err.Error()))
+				}
+			}()
+			logger.Info("space subscription entitlement consumer enabled")
 		}
 		spacev1.RegisterSpaceServiceServer(grpcSrv, spaceSvc)
 		go func() {
@@ -153,10 +168,12 @@ func main() {
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	select {
 	case err := <-errCh:
+		runCancel()
 		if err != nil && err != http.ErrServerClosed {
 			log.Fatal(err)
 		}
 	case <-stop:
+		runCancel()
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.ShutdownTimeoutFromEnv())
 		defer cancel()
 		if grpcSrv != nil {

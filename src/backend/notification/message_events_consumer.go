@@ -25,17 +25,9 @@ import (
 
 const jsStreamMessageEvents = "message_events"
 
-func notificationMessageDurable(instanceID string) string {
-	id := strings.TrimSpace(instanceID)
-	if id == "" {
-		id = "unknown"
-	}
-	return "notif_" + strings.ReplaceAll(id, "-", "") + "_msg"
-}
-
 func runMessageEventsConsumer(
 	ctx context.Context,
-	natsURL, instanceID string,
+	natsURL string,
 	tokens *store.DeviceTokenStore,
 	members chatmembers.Lister,
 	pusher *dispatch.MessagePusher,
@@ -63,28 +55,31 @@ func runMessageEventsConsumer(
 	}
 
 	handler := &consumer.MessageEventHandler{Router: delivery.DecideRouting}
-	durable := notificationMessageDurable(instanceID)
+	durable := consumer.SharedDurable("message")
 
 	msgHandler := func(msg *nats.Msg) {
 		var env eventsv1.MessageStreamEvent
 		if err := proto.Unmarshal(msg.Data, &env); err != nil {
 			natslog.LogConsume(logger, msg, slog.LevelWarn, "message event unmarshal failed")
+			consumer.JetStreamTermAck(msg)
 			return
 		}
-		if err := routeMessageNotification(ctx, handler, members, pusher, enrich, &env); err != nil && logger != nil {
+		err := routeMessageNotification(ctx, handler, members, pusher, enrich, &env)
+		if err != nil && logger != nil {
 			logger.Warn("message push failed", slog.Any("error", err))
-		} else {
+		} else if err == nil {
 			natslog.LogConsume(logger, msg, slog.LevelInfo, "message notification event consumed")
 		}
+		consumer.JetStreamConsumeAck(msg, err)
 	}
 
 	sub, err := js.Subscribe("msg.>", msgHandler,
 		nats.Durable(durable),
 		nats.BindStream(jsStreamMessageEvents),
-		nats.DeliverNew(),
+		nats.ManualAck(),
 	)
 	if err != nil {
-		sub, err = js.Subscribe("", msgHandler, nats.Bind(jsStreamMessageEvents, durable))
+		sub, err = js.Subscribe("", msgHandler, nats.Bind(jsStreamMessageEvents, durable), nats.ManualAck())
 		if err != nil {
 			return fmt.Errorf("jetstream subscribe message.events: %w", err)
 		}
@@ -116,6 +111,33 @@ func routeMessageNotification(
 		if ev == nil {
 			return nil
 		}
+		senderID, _ := uuid.Parse(ev.GetSenderProfileId())
+		if ev.GetThreadParentId() != "" {
+			parentAuthor, err := parentMessageAuthor(ctx, enrich, ev.GetThreadParentId())
+			if err != nil {
+				return err
+			}
+			raw := handler.HandleMessageReply(ctx, ev, parentAuthor)
+			decisions := enrichDecisions(ctx, pusher, raw, senderID, ev.GetChatId(), delivery.TypeReply)
+			preview, senderLabel := pushCopyFields(ctx, enrich, ev.GetMessageId(), ev.GetSenderProfileId())
+			deepLink := messagePushDeepLink(ev.GetChatId(), ev.GetMessageId())
+			payload := push.Payload{
+				Title: pushcopy.TitleForSender(senderLabel, "Reply"),
+				Body:  pushcopy.MessageBody(preview),
+				Data: map[string]string{
+					"type":              string(delivery.TypeReply),
+					"chat_id":           ev.GetChatId(),
+					"message_id":        ev.GetMessageId(),
+					"sender_profile_id": ev.GetSenderProfileId(),
+					"deep_link":         deepLink,
+				},
+			}
+			return pusher.SendPush(ctx, decisions, delivery.DeliveryInput{
+				SenderProfileID: senderID,
+				ChatID:          ev.GetChatId(),
+				Type:            delivery.TypeReply,
+			}, payload, payload.Body)
+		}
 		memberIDs, err := listChatMembers(ctx, members, ev.GetChatId())
 		if err != nil {
 			return err
@@ -124,7 +146,6 @@ func routeMessageNotification(
 			return nil
 		}
 		raw := handler.HandleMessageSent(ctx, ev, memberIDs)
-		senderID, _ := uuid.Parse(ev.GetSenderProfileId())
 		decisions := enrichDecisions(ctx, pusher, raw, senderID, ev.GetChatId(), delivery.TypeNewMessage)
 		preview, senderLabel := pushCopyFields(ctx, enrich, ev.GetMessageId(), ev.GetSenderProfileId())
 		deepLink := messagePushDeepLink(ev.GetChatId(), ev.GetMessageId())
@@ -219,4 +240,11 @@ func messagePushDeepLink(chatID, messageID string) string {
 		return fmt.Sprintf("https://voice.gg/ch/%s/m/%s", chatID, messageID)
 	}
 	return fmt.Sprintf("https://voice.gg/ch/%s", chatID)
+}
+
+func parentMessageAuthor(ctx context.Context, enrich pushenrich.Resolver, parentMessageID string) (string, error) {
+	if enrich == nil {
+		return "", nil
+	}
+	return enrich.MessageAuthorProfileID(ctx, parentMessageID)
 }

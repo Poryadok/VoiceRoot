@@ -35,11 +35,31 @@ public class NatsAuthEventPublisher implements AuthEventPublisher {
     if (accountId == null) {
       return;
     }
+    publish(SUBJECT_GUEST_CONVERTED, accountId);
+  }
+
+  @Override
+  public void publishAccountDeleted(UUID accountId) {
+    if (accountId == null) {
+      return;
+    }
+    publish(SUBJECT_ACCOUNT_DELETED, accountId);
+  }
+
+  @Override
+  public void publishAccountRestored(UUID accountId) {
+    if (accountId == null) {
+      return;
+    }
+    publish(SUBJECT_ACCOUNT_RESTORED, accountId);
+  }
+
+  private void publish(String subject, UUID accountId) {
     String payload = "{\"account_id\":\"" + accountId + "\"}";
     try {
-      connection.publish(SUBJECT_GUEST_CONVERTED, payload.getBytes(StandardCharsets.UTF_8));
+      connection.publish(subject, payload.getBytes(StandardCharsets.UTF_8));
     } catch (Exception ex) {
-      log.warn("publish {} failed: {}", SUBJECT_GUEST_CONVERTED, ex.getMessage());
+      log.warn("publish {} failed: {}", subject, ex.getMessage());
     }
   }
 }

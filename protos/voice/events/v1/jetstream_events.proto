@@ -8,6 +8,15 @@ option go_package = "voice.app/voice/events/v1;eventsv1";
 
 // JetStream domain payloads (NATS). Stream names match CONTRACT_MATRIX / MICROSERVICES.md.
 // Publishers own schema evolution; treat unknown oneof arms as forward-compatible.
+//
+// Wire format (subject → envelope):
+// - Each JetStream stream binds NATS subjects to one protobuf envelope type (e.g. chat.events → ChatStreamEvent).
+// - Subject is the routing key; consumers select the envelope oneof arm from the decoded message, not from subject alone.
+// - Interim divergences (migrate to proto fields; do not add new JSON publishers):
+//   • message.sent: optional thread_parent_id may also appear in NATS header X-Voice-Thread-Parent-Id (Messaging).
+//   • matchmaking.search_cancelled: JSON body until SearchCancelled proto is wired in publisher.
+// - Wave 2 gaps (proto arms / publishers not yet wired): space.updated/deleted/member_*,
+//   voice_room_created/deleted payloads, subscription.space_pro_* arms.
 
 // --- user.events (Auth, User) ---
 
@@ -92,7 +101,14 @@ message SocialStreamEvent {
     FriendRemoved friend_removed = 11;
     ContactSynced contact_synced = 12;
     UserBlocked user_blocked = 13;
+    FriendRequest friend_request = 14;
   }
+}
+
+message FriendRequest {
+  string request_id = 1;
+  string requester_profile_id = 2;
+  string target_profile_id = 3;
 }
 
 message FriendAdded {
@@ -152,6 +168,7 @@ message MessageStreamEvent {
     MentionAdded mention_added = 16;
     MessagePinned message_pinned = 17;
     MessageUnpinned message_unpinned = 18;
+    MessageForwarded message_forwarded = 19;
   }
 }
 
@@ -215,6 +232,13 @@ message MessageUnpinned {
   string unpinned_by = 3;
 }
 
+message MessageForwarded {
+  string message_id = 1;
+  string source_chat_id = 2;
+  string target_chat_id = 3;
+  string forwarder_profile_id = 4;
+}
+
 // --- chat.events (Chat, Space) ---
 
 message ChatStreamEvent {
@@ -225,6 +249,11 @@ message ChatStreamEvent {
     ChatMemberChanged chat_member_changed = 11;
     SpaceTreeChanged space_tree_changed = 12;
     SpaceCreated space_created = 13;
+    SpaceInviteCreated space_invite_created = 14;
+    SpaceMemberJoined space_member_joined = 15;
+    SpaceMemberLeft space_member_left = 16;
+    SpaceUpdated space_updated = 17;
+    SpaceDeleted space_deleted = 18;
   }
 }
 
@@ -250,6 +279,29 @@ message SpaceCreated {
   string owner_profile_id = 2;
 }
 
+message SpaceInviteCreated {
+  string space_id = 1;
+  string invite_code = 2;
+}
+
+message SpaceMemberJoined {
+  string space_id = 1;
+  string profile_id = 2;
+}
+
+message SpaceMemberLeft {
+  string space_id = 1;
+  string profile_id = 2;
+}
+
+message SpaceUpdated {
+  string space_id = 1;
+}
+
+message SpaceDeleted {
+  string space_id = 1;
+}
+
 // --- voice.events ---
 
 message VoiceStreamEvent {
@@ -265,7 +317,16 @@ message VoiceStreamEvent {
     CallMissed call_missed = 16;
     VoiceStateChanged voice_state_changed = 17;
     ScreenShareStopped screen_share_stopped = 18;
+    VoiceMemberJoined voice_member_joined = 19;
   }
+}
+
+message VoiceMemberJoined {
+  string room_id = 1;
+  string voice_room_id = 2;
+  string space_id = 3;
+  string joined_profile_id = 4;
+  repeated string notify_profile_ids = 5;
 }
 
 message CallStarted {
@@ -380,12 +441,17 @@ message SubscriptionStreamEvent {
     PlanCancelled plan_cancelled = 11;
     PaymentSuccess payment_success = 12;
     PaymentFailed payment_failed = 13;
+    PlanExpired plan_expired = 14;
+    Downgrade downgrade = 15;
+    SpaceProStarted space_pro_started = 16;
+    SpaceProExpired space_pro_expired = 17;
   }
 }
 
 message PlanStarted {
   string account_id = 1;
   string plan = 2;
+  optional string space_id = 3; // space_pro: entitled space
 }
 
 message PlanCancelled {
@@ -403,6 +469,25 @@ message PaymentFailed {
   string provider = 2;
 }
 
+message PlanExpired {
+  string account_id = 1;
+  string plan = 2;
+}
+
+message Downgrade {
+  string account_id = 1;
+  string plan = 2;
+}
+
+message SpaceProStarted {
+  string space_id = 1;
+  string purchaser_account_id = 2;
+}
+
+message SpaceProExpired {
+  string space_id = 1;
+}
+
 // --- file.events ---
 
 message FileStreamEvent {
@@ -412,6 +497,7 @@ message FileStreamEvent {
     FileUploaded file_uploaded = 10;
     FileScanResult file_scan_result = 11;
     FileExpired file_expired = 12;
+    FileProcessed file_processed = 13;
   }
 }
 
@@ -423,6 +509,14 @@ message FileUploaded {
 message FileScanResult {
   string file_id = 1;
   string result = 2;
+  optional string uploader_profile_id = 3;
+}
+
+message FileProcessed {
+  string file_id = 1;
+  string status = 2;
+  optional string converted_r2_key = 3;
+  optional string thumbnail_r2_key = 4;
 }
 
 message FileExpired {
@@ -510,6 +604,7 @@ message StoryStreamEvent {
     StoryExpired story_expired = 14;
     StoryHighlightCreated story_highlight_created = 15;
     StoryLfpCreated story_lfp_created = 16;
+    StoryLfpResponse story_lfp_response = 17;
   }
 }
 
@@ -545,6 +640,13 @@ message StoryLfpCreated {
   string story_id = 1;
   string author_profile_id = 2;
   string criteria_json = 3;
+}
+
+message StoryLfpResponse {
+  string story_id = 1;
+  string author_profile_id = 2;
+  string responder_profile_id = 3;
+  string response_type = 4; // JOIN | INVITE
 }
 
 message HighlightAdded {

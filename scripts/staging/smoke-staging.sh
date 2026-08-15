@@ -67,8 +67,32 @@ if [ -n "${STAGING_STAFF_TOKEN:-}" ]; then
     echo "analytics export failed: HTTP ${export_code}"
     exit 1
   fi
+
+  echo "Smoke: GET ${BASE}/api/v1/admin/moderation/reports?status=pending&queue=content (staff)"
+  mod_reports_tmp="$(mktemp)"
+  mod_reports_code="$(curl -sS -o "${mod_reports_tmp}" -w "%{http_code}" \
+    -H "Authorization: Bearer ${STAGING_STAFF_TOKEN}" \
+    "${BASE}/api/v1/admin/moderation/reports?status=pending&queue=content" || echo "000")"
+  mod_reports_body="$(tr -d '\r' < "${mod_reports_tmp}")"
+  rm -f "${mod_reports_tmp}"
+  if [ "${mod_reports_code}" != "200" ]; then
+    echo "admin moderation reports failed: HTTP ${mod_reports_code} body=${mod_reports_body}"
+    exit 1
+  fi
+
+  echo "Smoke: GET ${BASE}/api/v1/admin/moderation/audit/export (staff)"
+  mod_audit_tmp="$(mktemp)"
+  mod_audit_code="$(curl -sS -o "${mod_audit_tmp}" -w "%{http_code}" \
+    -H "Authorization: Bearer ${STAGING_STAFF_TOKEN}" \
+    "${BASE}/api/v1/admin/moderation/audit/export" || echo "000")"
+  mod_audit_body="$(tr -d '\r' < "${mod_audit_tmp}")"
+  rm -f "${mod_audit_tmp}"
+  if [ "${mod_audit_code}" != "200" ] || ! echo "${mod_audit_body}" | grep -q '"entries"'; then
+    echo "admin moderation audit export failed: HTTP ${mod_audit_code} body=${mod_audit_body}"
+    exit 1
+  fi
 else
-  echo "Smoke: skipping analytics checks (STAGING_STAFF_TOKEN not set)"
+  echo "Smoke: skipping analytics and admin moderation checks (STAGING_STAFF_TOKEN not set)"
 fi
 
 if [ -n "${VOICE_DEVELOPER_PORTAL_INGRESS_HOST:-}" ]; then
@@ -78,6 +102,13 @@ if [ -n "${VOICE_DEVELOPER_PORTAL_INGRESS_HOST:-}" ]; then
   portal_code="$(curl -sS -o /dev/null -w "%{http_code}" "${PORTAL_URL}/" || echo "000")"
   if [ "${portal_code}" != "200" ]; then
     echo "developer portal failed: HTTP ${portal_code}"
+    exit 1
+  fi
+
+  echo "Smoke: GET ${PORTAL_URL}/callback (developer portal SPA route)"
+  portal_cb_code="$(curl -sS -o /dev/null -w "%{http_code}" "${PORTAL_URL}/callback" || echo "000")"
+  if [ "${portal_cb_code}" != "200" ]; then
+    echo "developer portal callback route failed: HTTP ${portal_cb_code}"
     exit 1
   fi
 else

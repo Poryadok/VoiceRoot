@@ -57,8 +57,12 @@
 /api/v1/stories/**       → Story Service
 /api/v1/analytics/**     → Analytics Service (только персонал; см. раздел ниже)
 /api/v1/version          → Локальный конфиг (version check)
-/ws                      → Realtime Service (WebSocket upgrade)
+POST /api/v1/realtime/ws-ticket → Gateway (short-lived WS ticket; JWT в заголовке)
+/ws                      → Realtime Service (WebSocket upgrade; `Authorization` или `?ticket=`)
 ```
+
+**WebSocket auth:** нативные клиенты — `Authorization: Bearer` на upgrade. Браузер — `POST /api/v1/realtime/ws-ticket` (JWT только в REST), затем `/ws?ticket=…` (opaque, single-use, Redis TTL ~60s). Legacy `?access_token=` на `/ws` поддерживается для совместимости; web-клиент не использует. См. [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md).
+
 
 **[user-profile.md](../features/user-profile.md) — presigned аватар (R2, User Service, без File Service):** `POST /api/v1/users/me/avatar/presigned-upload` (JWT). Тело JSON: `content_type`, `content_length`; `profile_id` опционален (по умолчанию активный профиль из JWT → `X-Voice-Profile-Id`). Ответ — поля `upload_url`, `http_method`, `required_headers`, `expires_at`, `public_url` / `object_key` для последующего `PUT` в R2 и сохранения URL через `PATCH /api/v1/users/me` (`UpdateProfile.avatar_url`). Обход REST: тот же контракт по **gRPC** `UserService.CreateAvatarPresignedUpload` на User Service (внутренний ingress, непубличные клиенты), если edge Gateway недоступен.
 

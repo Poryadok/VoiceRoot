@@ -1,9 +1,3 @@
 # Story Service
 
-Go scaffold for the Voice story service.
-
-Current public surface:
-
-- GET /health returns {"service":"story","status":"ok"}.
-
-Domain behavior, gRPC handlers, database repositories, and migrations are intentionally out of scope for this initialization step.
+Go microservice: stories, highlights, LFP, reactions. gRPC `StoryService`. PostgreSQL `story_db`. NATS `story.events`. Gateway `/api/v1/stories/**`. See `docs/microservices/story-service.md`.

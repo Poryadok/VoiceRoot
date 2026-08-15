@@ -10,6 +10,7 @@ type Publisher interface {
 	PublishStoryExpired(ctx context.Context, storyID string) error
 	PublishStoryHighlightCreated(ctx context.Context, highlightID, profileID string) error
 	PublishStoryLfpCreated(ctx context.Context, storyID, authorProfileID, criteriaJSON string) error
+	PublishStoryLfpResponse(ctx context.Context, storyID, authorProfileID, responderProfileID, responseType string) error
 	Close() error
 }
 
@@ -28,6 +29,9 @@ func (NoopPublisher) PublishStoryHighlightCreated(context.Context, string, strin
 	return nil
 }
 func (NoopPublisher) PublishStoryLfpCreated(context.Context, string, string, string) error {
+	return nil
+}
+func (NoopPublisher) PublishStoryLfpResponse(context.Context, string, string, string, string) error {
 	return nil
 }
 func (NoopPublisher) Close() error { return nil }

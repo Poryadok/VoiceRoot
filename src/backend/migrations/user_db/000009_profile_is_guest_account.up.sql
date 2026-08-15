@@ -1,0 +1,2 @@
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS is_guest_account BOOLEAN NOT NULL DEFAULT false;

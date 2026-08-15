@@ -16,6 +16,7 @@ CREATE TABLE profiles (
     verification_badge VARCHAR(32) NULL,
     frozen_at TIMESTAMPTZ NULL,
     deleted_at TIMESTAMPTZ NULL,
+    is_guest_account BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

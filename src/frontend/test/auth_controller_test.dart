@@ -187,6 +187,118 @@ void main() {
     expect(convertBody, isNot(contains(guestPassword)));
   });
 
+  test('restore keeps session on network_error refresh failure', () async {
+    final mock = MockClient((req) async {
+      if (req.url.path == '/api/v1/auth/refresh') {
+        return http.Response('gateway unavailable', 503);
+      }
+      return http.Response('not found', 404);
+    });
+    final storage = InMemoryAuthSessionStorage();
+    const saved = AuthSession(
+      accessToken: 'old-access',
+      refreshToken: 'refresh',
+      accountId: 'acc-1',
+      activeProfileId: 'prof-1',
+      expiresInSeconds: 900,
+    );
+    await storage.write(saved);
+    final container = buildContainer(mock: mock, storage: storage);
+    addTearDown(container.dispose);
+
+    await container.read(authControllerProvider.notifier).restore();
+    final state = container.read(authControllerProvider);
+    expect(state.isRestoring, isFalse);
+    expect(state.session?.accessToken, 'old-access');
+    expect(await storage.read(), saved);
+  });
+
+  test('restore clears session on invalid_token refresh failure', () async {
+    final mock = MockClient((req) async {
+      if (req.url.path == '/api/v1/auth/refresh') {
+        return http.Response(jsonEncode({'error': 'invalid_token'}), 401);
+      }
+      return http.Response('not found', 404);
+    });
+    final storage = InMemoryAuthSessionStorage();
+    await storage.write(
+      const AuthSession(
+        accessToken: 'old-access',
+        refreshToken: 'refresh',
+        accountId: 'acc-1',
+        activeProfileId: 'prof-1',
+        expiresInSeconds: 900,
+      ),
+    );
+    final container = buildContainer(mock: mock, storage: storage);
+    addTearDown(container.dispose);
+
+    await container.read(authControllerProvider.notifier).restore();
+    expect(container.read(authControllerProvider).session, isNull);
+    expect(await storage.read(), isNull);
+  });
+
+  test('convertGuest updates session before parallel refresh failure clears it', () async {
+    var refreshCalls = 0;
+    final guestStorage = InMemoryGuestCredentialsStorage();
+    final storage = InMemoryAuthSessionStorage();
+    final mock = MockClient((req) async {
+      if (req.url.path == '/api/v1/auth/convert-guest') {
+        return http.Response(
+          jsonEncode({
+            'session': {
+              ...(sessionJson()['session'] as Map<String, dynamic>),
+              'access_token': 'access-converted',
+              'refresh_token': 'refresh-converted',
+            },
+          }),
+          200,
+        );
+      }
+      if (req.url.path == '/api/v1/auth/refresh') {
+        refreshCalls++;
+        return http.Response(jsonEncode({'error': 'invalid_token'}), 401);
+      }
+      return http.Response('not found', 404);
+    });
+    final container = ProviderContainer(
+      overrides: [
+        gatewayConfigProvider.overrideWithValue(config),
+        httpClientProvider.overrideWithValue(mock),
+        authSessionStorageProvider.overrideWithValue(storage),
+        guestCredentialsStorageProvider.overrideWithValue(guestStorage),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final controller = container.read(authControllerProvider.notifier);
+    controller.state = const AuthState(
+      session: AuthSession(
+        accessToken: 'access',
+        refreshToken: 'refresh',
+        accountId: 'acc-1',
+        activeProfileId: 'prof-1',
+        expiresInSeconds: 900,
+      ),
+      isGuest: true,
+    );
+
+    final convertFuture = controller.convertGuest(
+      email: 'guest@example.com',
+      password: 'user-password1',
+    );
+    await controller.refreshOn401();
+    final err = await convertFuture;
+
+    expect(err, isNull);
+    expect(refreshCalls, greaterThan(0));
+    expect(
+      container.read(authControllerProvider).session?.accessToken,
+      'access-converted',
+    );
+    expect((await storage.read())?.accessToken, 'access-converted');
+  });
+
   test('logout clears session', () async {
     final mock = MockClient((req) async {
       if (req.url.path == '/api/v1/auth/logout') {

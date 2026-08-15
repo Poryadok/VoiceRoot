@@ -1,31 +1,72 @@
 package voice.backend.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.is;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.web.servlet.MockMvc;
 import voice.backend.auth.support.RecordingAuthEventPublisher;
 
 @SpringBootTest
+@AutoConfigureMockMvc
 @ActiveProfiles("test")
 class GuestConvertNatsEventIntegrationTest {
+  @Autowired MockMvc mockMvc;
+  @Autowired ObjectMapper objectMapper;
   @Autowired ApplicationContext applicationContext;
 
   @Test
-  void convertGuestPublishesUserGuestConvertedEvent() {
+  void convertGuestPublishesUserGuestConvertedEvent() throws Exception {
     RecordingAuthEventPublisher events = findRecordingPublisher(applicationContext);
-    assertThat(events)
-        .as("AuthEventPublisher bean for user.events (mock/recording in test profile)")
-        .isNotNull();
+    assertThat(events).isNotNull();
     events.clear();
 
-    // Exercise convert-guest via REST in a follow-up once publisher is wired; for now assert contract.
+    JsonNode guest =
+        session(
+            postJson(
+                "/api/v1/auth/register",
+                "{\"password\":\"Correct horse battery staple\",\"guest\":true,\"device_info_json\":\"{}\"}"));
+
+    mockMvc
+        .perform(
+            post("/api/v1/auth/convert-guest")
+                .header("Authorization", "Bearer " + guest.get("access_token").asText())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"email\":\"nats-guest@example.com\",\"password\":\"New account password 1\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.session.account_id", is(guest.get("account_id").asText())));
+
     assertThat(events.publishedSubjects())
         .as("convert-guest must publish user.guest_converted to NATS")
         .contains("user.guest_converted");
+  }
+
+  private JsonNode postJson(String path, String body) throws Exception {
+    String response =
+        mockMvc
+            .perform(post(path).contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    return objectMapper.readTree(response);
+  }
+
+  private static JsonNode session(JsonNode envelope) {
+    assertThat(envelope.has("session")).isTrue();
+    return envelope.get("session");
   }
 
   private static RecordingAuthEventPublisher findRecordingPublisher(ApplicationContext ctx) {

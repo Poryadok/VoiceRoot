@@ -28,8 +28,8 @@ void main() {
     final files = ctx.filesClient();
     final ticketResult = await files.requestUpload(
       authorization: a.authorizationHeader,
-      originalName: 'eicar.com',
-      mimeType: 'text/plain',
+      originalName: 'eicar.exe',
+      mimeType: 'application/x-msdownload',
       sizeBytes: eicar.length,
       chatId: chatId,
       chatType: 'CHAT_TYPE_DM',
@@ -39,7 +39,7 @@ void main() {
     await files.putBytes(
       uploadUrl: ticket.presignedPutUrl,
       bytes: eicar,
-      mimeType: 'text/plain',
+      mimeType: 'application/x-msdownload',
     );
     final confirm = await files.confirmUpload(
       authorization: a.authorizationHeader,

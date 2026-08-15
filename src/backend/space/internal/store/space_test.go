@@ -103,7 +103,7 @@ func TestSpaceStore_UpdateSpace_DescriptionOnly(t *testing.T) {
 	require.NoError(t, err)
 
 	desc := "After"
-	updated, err := st.UpdateSpace(ctx, row.ID, nil, &desc, nil, nil)
+	updated, err := st.UpdateSpace(ctx, row.ID, UpdateSpaceInput{Description: &desc})
 	require.NoError(t, err)
 	require.Equal(t, "After", updated.Description)
 	require.Equal(t, "Store space", updated.Name)
@@ -184,7 +184,7 @@ func TestSpaceStore_UpdateSpace_NoFields(t *testing.T) {
 	row, err := st.CreateSpace(ctx, owner, "No-op", "Before", "private")
 	require.NoError(t, err)
 
-	updated, err := st.UpdateSpace(ctx, row.ID, nil, nil, nil, nil)
+	updated, err := st.UpdateSpace(ctx, row.ID, UpdateSpaceInput{})
 	require.NoError(t, err)
 	require.Equal(t, "No-op", updated.Name)
 	require.Equal(t, "Before", updated.Description)
@@ -205,7 +205,7 @@ func TestSpaceStore_UpdateSpace_IconAndBanner(t *testing.T) {
 
 	icon := "https://cdn.voice.gg/spaces/icon.webp"
 	banner := "https://cdn.voice.gg/spaces/banner.webp"
-	updated, err := st.UpdateSpace(ctx, row.ID, nil, nil, &icon, &banner)
+	updated, err := st.UpdateSpace(ctx, row.ID, UpdateSpaceInput{IconURL: &icon, BannerURL: &banner})
 	require.NoError(t, err)
 	require.NotNil(t, updated.IconURL)
 	require.NotNil(t, updated.BannerURL)

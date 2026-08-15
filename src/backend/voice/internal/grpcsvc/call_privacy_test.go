@@ -45,6 +45,20 @@ func TestEnsureCallPrivacy_FriendsAllowed(t *testing.T) {
 	require.NoError(t, s.ensureCallPrivacy(context.Background(), caller.String(), callee.String()))
 }
 
+func TestEnsureCallPrivacy_GuestCalleeAllowedWithOpenDM(t *testing.T) {
+	t.Parallel()
+	callee := uuid.New()
+	s := &VoiceGRPC{
+		Privacy: callPrivacyStub{
+			friendsOnly: map[uuid.UUID]bool{callee: true},
+			guestCallee: map[uuid.UUID]bool{callee: true},
+			dmEveryone:  map[uuid.UUID]bool{callee: true},
+		},
+		Friends: callNoFriendsStub{},
+	}
+	require.NoError(t, s.ensureCallPrivacy(context.Background(), uuid.NewString(), callee.String()))
+}
+
 func TestEnsureCallPrivacy_PrivacyDepsUnavailable(t *testing.T) {
 	t.Parallel()
 	s := &VoiceGRPC{Privacy: failingCallPrivacyStub{}}

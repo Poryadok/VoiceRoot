@@ -54,6 +54,20 @@ func TestSpaceProFromCustomData(t *testing.T) {
 	require.Equal(t, purchaserID, gotPurchaser)
 }
 
+func TestValidateWebhookSecretConfig_rejectsDefaultInProduction(t *testing.T) {
+	t.Setenv("VOICE_ENV", "production")
+	t.Setenv("PADDLE_WEBHOOK_SECRET", "")
+	t.Setenv("SUBSCRIPTION_ALLOW_TEST_WEBHOOK_SECRET", "")
+	require.Error(t, ValidateWebhookSecretConfig())
+}
+
+func TestValidateWebhookSecretConfig_allowsExplicitTestOverride(t *testing.T) {
+	t.Setenv("VOICE_ENV", "production")
+	t.Setenv("PADDLE_WEBHOOK_SECRET", defaultWebhookSecret)
+	t.Setenv("SUBSCRIPTION_ALLOW_TEST_WEBHOOK_SECRET", "true")
+	require.NoError(t, ValidateWebhookSecretConfig())
+}
+
 func TestSignWebhookForTest_roundTrip(t *testing.T) {
 	payload, err := json.Marshal(map[string]string{"event_id": "evt_round"})
 	require.NoError(t, err)

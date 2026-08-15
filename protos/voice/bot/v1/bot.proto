@@ -47,6 +47,7 @@ service BotService {
   // Manifest (Developer Portal).
   rpc ValidateManifest(ValidateManifestRequest) returns (ValidateManifestResponse);
   rpc ApplyManifest(ApplyManifestRequest) returns (ApplyManifestResponse);
+  rpc GetManifest(GetManifestRequest) returns (GetManifestResponse);
 
   // Space lifecycle.
   rpc InstallBotInSpace(InstallBotInSpaceRequest) returns (InstallBotInSpaceResponse);
@@ -274,6 +275,14 @@ message ApplyManifestRequest {
 
 message ApplyManifestResponse {
   Bot bot = 1;
+}
+
+message GetManifestRequest {
+  string bot_id = 1;
+}
+
+message GetManifestResponse {
+  string manifest_yaml = 1;
 }
 
 message InstallBotInSpaceRequest {

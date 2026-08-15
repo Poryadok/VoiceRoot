@@ -3049,6 +3049,114 @@ class ApplyManifestResponse extends $pb.GeneratedMessage {
   Bot ensureBot() => $_ensure(0);
 }
 
+class GetManifestRequest extends $pb.GeneratedMessage {
+  factory GetManifestRequest({
+    $core.String? botId,
+  }) {
+    final result = create();
+    if (botId != null) result.botId = botId;
+    return result;
+  }
+
+  GetManifestRequest._();
+
+  factory GetManifestRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetManifestRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetManifestRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.bot.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'botId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetManifestRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetManifestRequest copyWith(void Function(GetManifestRequest) updates) =>
+      super.copyWith((message) => updates(message as GetManifestRequest))
+          as GetManifestRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetManifestRequest create() => GetManifestRequest._();
+  @$core.override
+  GetManifestRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetManifestRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetManifestRequest>(create);
+  static GetManifestRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get botId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set botId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasBotId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearBotId() => $_clearField(1);
+}
+
+class GetManifestResponse extends $pb.GeneratedMessage {
+  factory GetManifestResponse({
+    $core.String? manifestYaml,
+  }) {
+    final result = create();
+    if (manifestYaml != null) result.manifestYaml = manifestYaml;
+    return result;
+  }
+
+  GetManifestResponse._();
+
+  factory GetManifestResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetManifestResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetManifestResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.bot.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'manifestYaml')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetManifestResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetManifestResponse copyWith(void Function(GetManifestResponse) updates) =>
+      super.copyWith((message) => updates(message as GetManifestResponse))
+          as GetManifestResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetManifestResponse create() => GetManifestResponse._();
+  @$core.override
+  GetManifestResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetManifestResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetManifestResponse>(create);
+  static GetManifestResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get manifestYaml => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set manifestYaml($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasManifestYaml() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearManifestYaml() => $_clearField(1);
+}
+
 class InstallBotInSpaceRequest extends $pb.GeneratedMessage {
   factory InstallBotInSpaceRequest({
     $core.String? botId,

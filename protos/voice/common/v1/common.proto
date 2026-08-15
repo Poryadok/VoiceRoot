@@ -3,6 +3,8 @@ syntax = "proto3";
 package voice.common.v1;
 
 option go_package = "voice.app/voice/common/v1;commonv1";
+option java_multiple_files = true;
+option java_package = "app.voice.common.v1";
 
 // Repository-wide API conventions:
 // - DATA_MODEL.md — UUID, account vs profile, soft delete, DB naming.
@@ -34,4 +36,10 @@ message PageRequest {
 
 message PageResponse {
   int32 total_count = 1; // optional; -1 if unknown
+}
+
+// Client-supplied idempotency key for mutating RPCs (docs/ARCHITECTURE_REQUIREMENTS.md).
+// Scope is RPC-specific (e.g. SendMessage: unique per chat + sender_profile_id).
+message ClientIdempotencyKey {
+  string key = 1; // opaque UUID or stable client-generated string
 }

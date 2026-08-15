@@ -24,4 +24,8 @@ public interface AccountRepository {
   void touchLastOnlineAt(UUID accountId, Instant at);
 
   int deactivateExpiredGuests(Instant lastOnlineBefore);
+
+  void markDeleted(UUID accountId, Instant deletedAt);
+
+  void restoreDeleted(UUID accountId);
 }

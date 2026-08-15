@@ -21,17 +21,9 @@ import (
 
 const jsStreamStoryEvents = "story_events"
 
-func notificationStoryDurable(instanceID string) string {
-	id := strings.TrimSpace(instanceID)
-	if id == "" {
-		id = "unknown"
-	}
-	return "notif_" + strings.ReplaceAll(id, "-", "") + "_story"
-}
-
 func runStoryEventsConsumer(
 	ctx context.Context,
-	natsURL, instanceID string,
+	natsURL string,
 	tokens *store.DeviceTokenStore,
 	pusher *dispatch.StoryPusher,
 	logger *slog.Logger,
@@ -57,28 +49,31 @@ func runStoryEventsConsumer(
 	}
 
 	handler := &consumer.StoryEventHandler{Router: delivery.DecideRouting}
-	durable := notificationStoryDurable(instanceID)
+	durable := consumer.SharedDurable("story")
 
 	msgHandler := func(msg *nats.Msg) {
 		var env eventsv1.StoryStreamEvent
 		if err := proto.Unmarshal(msg.Data, &env); err != nil {
 			natslog.LogConsume(logger, msg, slog.LevelWarn, "story event unmarshal failed")
+			consumer.JetStreamTermAck(msg)
 			return
 		}
-		if err := routeStoryNotification(handler, pusher, &env); err != nil && logger != nil {
+		err := routeStoryNotification(handler, pusher, &env)
+		if err != nil && logger != nil {
 			logger.Warn("story push failed", slog.Any("error", err))
-		} else {
+		} else if err == nil {
 			natslog.LogConsume(logger, msg, slog.LevelInfo, "story notification event consumed")
 		}
+		consumer.JetStreamConsumeAck(msg, err)
 	}
 
 	sub, err := js.Subscribe("story.>", msgHandler,
 		nats.Durable(durable),
 		nats.BindStream(jsStreamStoryEvents),
-		nats.DeliverNew(),
+		nats.ManualAck(),
 	)
 	if err != nil {
-		sub, err = js.Subscribe("", msgHandler, nats.Bind(jsStreamStoryEvents, durable))
+		sub, err = js.Subscribe("", msgHandler, nats.Bind(jsStreamStoryEvents, durable), nats.ManualAck())
 		if err != nil {
 			return fmt.Errorf("jetstream subscribe story.events: %w", err)
 		}

@@ -140,6 +140,42 @@ func TestDeleteProfile_SoftArchivesAndBlocksSwitch(t *testing.T) {
 	require.Equal(t, codes.FailedPrecondition, status.Code(err))
 }
 
+// TestCreateProfile_AfterSoftDelete_AllowsRecreation documents soft-deleted profiles do not count toward limit.
+func TestCreateProfile_AfterSoftDelete_AllowsRecreation(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startUserPostgresForSubscriptionTests(t, ctx)
+	profiles := store.NewProfileStore(pool)
+	cli, _ := startUserGRPCForPhase13(t, profiles, nil)
+
+	accountID := uuid.New()
+	primaryID := uuid.New()
+	_, err := pool.Exec(ctx, `
+		INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+		VALUES ($1, $2, 'recpri', '0001', 'Primary', true)`,
+		primaryID, accountID)
+	require.NoError(t, err)
+
+	authed := withAccountTier(ctx, accountID, "free")
+	secondary, err := cli.CreateProfile(authed, &userv1.CreateProfileRequest{DisplayName: "Alt One"})
+	require.NoError(t, err)
+	secondaryID := secondary.GetProfile().GetId()
+
+	_, err = cli.CreateProfile(authed, &userv1.CreateProfileRequest{DisplayName: "Alt Two"})
+	require.Error(t, err)
+	require.Equal(t, codes.ResourceExhausted, status.Code(err))
+
+	_, err = cli.DeleteProfile(authed, &userv1.DeleteProfileRequest{ProfileId: secondaryID})
+	require.NoError(t, err)
+
+	recreated, err := cli.CreateProfile(authed, &userv1.CreateProfileRequest{DisplayName: "Alt Again"})
+	require.NoError(t, err)
+	require.NotEqual(t, secondaryID, recreated.GetProfile().GetId())
+	require.Equal(t, "Alt Again", recreated.GetProfile().GetDisplayName())
+}
+
 // TestGetVerificationStatus_ReturnsBadgeState documents verification badge read API.
 func TestGetVerificationStatus_ReturnsBadgeState(t *testing.T) {
 	if testing.Short() {

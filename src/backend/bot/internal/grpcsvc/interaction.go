@@ -437,7 +437,7 @@ func (s *BotGRPC) ExecuteSlashInteraction(ctx context.Context, req *botv1.Execut
 	} else {
 		url := strings.TrimSpace(*botRow.WebhookURL)
 		go func() {
-			resp, err := webhook.DeliverPOST(context.Background(), s.HTTPClient, url, botRow.WebhookSecret, payload, dispatch.DefaultTimeout)
+			resp, err := webhook.DeliverPOST(context.Background(), s.HTTPClient, url, botRow.WebhookSecret, payload, dispatch.DefaultTimeout())
 			if err != nil {
 				_ = s.Store.MarkEventFailed(context.Background(), botID, token)
 				if s.Events != nil {
@@ -459,7 +459,7 @@ func (s *BotGRPC) ExecuteSlashInteraction(ctx context.Context, req *botv1.Execut
 		}()
 	}
 
-	reply, ok := s.Hub.Wait(ch, dispatch.DefaultTimeout)
+	reply, ok := s.Hub.Wait(ch, dispatch.DefaultTimeout())
 	if !ok || reply.Err == dispatch.ErrTimeout {
 		s.Hub.Cancel(token)
 		_ = s.Store.MarkEventTimeout(ctx, botID, token)

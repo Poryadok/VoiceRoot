@@ -20,9 +20,17 @@ CREATE TABLE notification_settings (
     scope_id UUID,
     enabled BOOLEAN NOT NULL DEFAULT true,
     mute_until TIMESTAMPTZ,
-    suppress_types JSONB NOT NULL DEFAULT '[]'::jsonb,
-    PRIMARY KEY (profile_id, scope_type, scope_id)
+    suppress_types JSONB NOT NULL DEFAULT '[]'::jsonb
 );
+
+-- PRIMARY KEY cannot include nullable scope_id (Postgres forces NOT NULL on PK cols).
+-- Global rows use scope_id IS NULL; scoped rows use (profile_id, scope_type, scope_id).
+CREATE UNIQUE INDEX notification_settings_global_uq
+  ON notification_settings (profile_id, scope_type)
+  WHERE scope_id IS NULL;
+CREATE UNIQUE INDEX notification_settings_scoped_uq
+  ON notification_settings (profile_id, scope_type, scope_id)
+  WHERE scope_id IS NOT NULL;
 
 CREATE TABLE quiet_hours (
     profile_id UUID PRIMARY KEY,

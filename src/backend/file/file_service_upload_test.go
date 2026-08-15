@@ -607,6 +607,12 @@ func (p *recordingFilePublisher) PublishFileExpired(_ context.Context, fileID st
 	return nil
 }
 
+func (p *recordingFilePublisher) PublishFileUploaded(context.Context, string, string) error { return nil }
+func (p *recordingFilePublisher) PublishFileProcessed(context.Context, string, string, string, string) error {
+	return nil
+}
+func (p *recordingFilePublisher) PublishFileScanInfected(context.Context, string, string) error { return nil }
+
 func (p *recordingFilePublisher) Close() error { return nil }
 
 func validUploadRequest() *filev1.RequestUploadRequest {
@@ -627,7 +633,7 @@ func withFileProfile(ctx context.Context, accountID, profileID uuid.UUID) contex
 	return metadata.AppendToOutgoingContext(ctx, "x-voice-profile-id", profileID.String())
 }
 
-func withFileProfile(ctx context.Context, accountID, profileID uuid.UUID) context.Context {
+func startFilePostgres(t *testing.T, ctx context.Context) *pgxpool.Pool {
 	t.Helper()
 	if testing.Short() {
 		t.Skip("integration test skipped in -short mode")

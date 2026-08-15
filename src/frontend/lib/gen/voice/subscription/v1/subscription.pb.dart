@@ -979,11 +979,13 @@ class CheckLimitRequest extends $pb.GeneratedMessage {
     $core.String? accountId,
     $core.String? limitName,
     $fixnum.Int64? delta,
+    $2.SpaceRef? scopeSpace,
   }) {
     final result = create();
     if (accountId != null) result.accountId = accountId;
     if (limitName != null) result.limitName = limitName;
     if (delta != null) result.delta = delta;
+    if (scopeSpace != null) result.scopeSpace = scopeSpace;
     return result;
   }
 
@@ -1004,6 +1006,8 @@ class CheckLimitRequest extends $pb.GeneratedMessage {
     ..aOS(1, _omitFieldNames ? '' : 'accountId')
     ..aOS(2, _omitFieldNames ? '' : 'limitName')
     ..aInt64(3, _omitFieldNames ? '' : 'delta')
+    ..aOM<$2.SpaceRef>(4, _omitFieldNames ? '' : 'scopeSpace',
+        subBuilder: $2.SpaceRef.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1051,6 +1055,17 @@ class CheckLimitRequest extends $pb.GeneratedMessage {
   $core.bool hasDelta() => $_has(2);
   @$pb.TagNumber(3)
   void clearDelta() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $2.SpaceRef get scopeSpace => $_getN(3);
+  @$pb.TagNumber(4)
+  set scopeSpace($2.SpaceRef value) => $_setField(4, value);
+  @$pb.TagNumber(4)
+  $core.bool hasScopeSpace() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearScopeSpace() => $_clearField(4);
+  @$pb.TagNumber(4)
+  $2.SpaceRef ensureScopeSpace() => $_ensure(3);
 }
 
 class CheckLimitResponse extends $pb.GeneratedMessage {

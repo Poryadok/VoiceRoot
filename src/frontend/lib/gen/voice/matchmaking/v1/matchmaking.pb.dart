@@ -3346,6 +3346,241 @@ class DeletePlayerGameEntryResponse extends $pb.GeneratedMessage {
   static DeletePlayerGameEntryResponse? _defaultInstance;
 }
 
+class ApplyPlatformMMBanRequest extends $pb.GeneratedMessage {
+  factory ApplyPlatformMMBanRequest({
+    $core.String? targetAccountId,
+    $core.String? reason,
+    $1.Timestamp? expiresAt,
+    $core.String? bannedByProfileId,
+  }) {
+    final result = create();
+    if (targetAccountId != null) result.targetAccountId = targetAccountId;
+    if (reason != null) result.reason = reason;
+    if (expiresAt != null) result.expiresAt = expiresAt;
+    if (bannedByProfileId != null) result.bannedByProfileId = bannedByProfileId;
+    return result;
+  }
+
+  ApplyPlatformMMBanRequest._();
+
+  factory ApplyPlatformMMBanRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ApplyPlatformMMBanRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ApplyPlatformMMBanRequest',
+      package: const $pb.PackageName(
+          _omitMessageNames ? '' : 'voice.matchmaking.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'targetAccountId')
+    ..aOS(2, _omitFieldNames ? '' : 'reason')
+    ..aOM<$1.Timestamp>(3, _omitFieldNames ? '' : 'expiresAt',
+        subBuilder: $1.Timestamp.create)
+    ..aOS(4, _omitFieldNames ? '' : 'bannedByProfileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplyPlatformMMBanRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplyPlatformMMBanRequest copyWith(
+          void Function(ApplyPlatformMMBanRequest) updates) =>
+      super.copyWith((message) => updates(message as ApplyPlatformMMBanRequest))
+          as ApplyPlatformMMBanRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ApplyPlatformMMBanRequest create() => ApplyPlatformMMBanRequest._();
+  @$core.override
+  ApplyPlatformMMBanRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ApplyPlatformMMBanRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ApplyPlatformMMBanRequest>(create);
+  static ApplyPlatformMMBanRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get targetAccountId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set targetAccountId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasTargetAccountId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearTargetAccountId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get reason => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set reason($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasReason() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearReason() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $1.Timestamp get expiresAt => $_getN(2);
+  @$pb.TagNumber(3)
+  set expiresAt($1.Timestamp value) => $_setField(3, value);
+  @$pb.TagNumber(3)
+  $core.bool hasExpiresAt() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearExpiresAt() => $_clearField(3);
+  @$pb.TagNumber(3)
+  $1.Timestamp ensureExpiresAt() => $_ensure(2);
+
+  @$pb.TagNumber(4)
+  $core.String get bannedByProfileId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set bannedByProfileId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasBannedByProfileId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearBannedByProfileId() => $_clearField(4);
+}
+
+class ApplyPlatformMMBanResponse extends $pb.GeneratedMessage {
+  factory ApplyPlatformMMBanResponse() => create();
+
+  ApplyPlatformMMBanResponse._();
+
+  factory ApplyPlatformMMBanResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ApplyPlatformMMBanResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ApplyPlatformMMBanResponse',
+      package: const $pb.PackageName(
+          _omitMessageNames ? '' : 'voice.matchmaking.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplyPlatformMMBanResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplyPlatformMMBanResponse copyWith(
+          void Function(ApplyPlatformMMBanResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as ApplyPlatformMMBanResponse))
+          as ApplyPlatformMMBanResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ApplyPlatformMMBanResponse create() => ApplyPlatformMMBanResponse._();
+  @$core.override
+  ApplyPlatformMMBanResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ApplyPlatformMMBanResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ApplyPlatformMMBanResponse>(create);
+  static ApplyPlatformMMBanResponse? _defaultInstance;
+}
+
+class RevokePlatformMMBanRequest extends $pb.GeneratedMessage {
+  factory RevokePlatformMMBanRequest({
+    $core.String? targetAccountId,
+  }) {
+    final result = create();
+    if (targetAccountId != null) result.targetAccountId = targetAccountId;
+    return result;
+  }
+
+  RevokePlatformMMBanRequest._();
+
+  factory RevokePlatformMMBanRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory RevokePlatformMMBanRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'RevokePlatformMMBanRequest',
+      package: const $pb.PackageName(
+          _omitMessageNames ? '' : 'voice.matchmaking.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'targetAccountId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RevokePlatformMMBanRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RevokePlatformMMBanRequest copyWith(
+          void Function(RevokePlatformMMBanRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as RevokePlatformMMBanRequest))
+          as RevokePlatformMMBanRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static RevokePlatformMMBanRequest create() => RevokePlatformMMBanRequest._();
+  @$core.override
+  RevokePlatformMMBanRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static RevokePlatformMMBanRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<RevokePlatformMMBanRequest>(create);
+  static RevokePlatformMMBanRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get targetAccountId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set targetAccountId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasTargetAccountId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearTargetAccountId() => $_clearField(1);
+}
+
+class RevokePlatformMMBanResponse extends $pb.GeneratedMessage {
+  factory RevokePlatformMMBanResponse() => create();
+
+  RevokePlatformMMBanResponse._();
+
+  factory RevokePlatformMMBanResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory RevokePlatformMMBanResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'RevokePlatformMMBanResponse',
+      package: const $pb.PackageName(
+          _omitMessageNames ? '' : 'voice.matchmaking.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RevokePlatformMMBanResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RevokePlatformMMBanResponse copyWith(
+          void Function(RevokePlatformMMBanResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as RevokePlatformMMBanResponse))
+          as RevokePlatformMMBanResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static RevokePlatformMMBanResponse create() =>
+      RevokePlatformMMBanResponse._();
+  @$core.override
+  RevokePlatformMMBanResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static RevokePlatformMMBanResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<RevokePlatformMMBanResponse>(create);
+  static RevokePlatformMMBanResponse? _defaultInstance;
+}
+
 const $core.bool _omitFieldNames =
     $core.bool.fromEnvironment('protobuf.omit_field_names');
 const $core.bool _omitMessageNames =

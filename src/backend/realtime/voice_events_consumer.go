@@ -166,6 +166,44 @@ func voiceEventBytesToFanout(data []byte) (profileIDs []string, env fanoutEnvelo
 			return nil, fanoutEnvelope{}, false
 		}
 		return profileIDs, fanoutEnvelope{Op: "screen_share_stopped", D: d}, true
+	case *eventsv1.VoiceStreamEvent_CallStarted:
+		ev := p.CallStarted
+		if ev == nil || ev.GetRoomId() == "" || len(ev.GetProfileIds()) == 0 {
+			return nil, fanoutEnvelope{}, false
+		}
+		d, err := json.Marshal(map[string]any{
+			"room_id":              ev.GetRoomId(),
+			"chat_id":              ev.GetChatId(),
+			"initiator_profile_id": ev.GetInitiatorProfileId(),
+			"callee_profile_id":    ev.GetCalleeProfileId(),
+			"profile_ids":          ev.GetProfileIds(),
+			"media_kind":           ev.GetMediaKind(),
+			"livekit_room_name":    ev.GetLivekitRoomName(),
+		})
+		if err != nil {
+			return nil, fanoutEnvelope{}, false
+		}
+		return ev.GetProfileIds(), fanoutEnvelope{Op: "call_started", D: d}, true
+	case *eventsv1.VoiceStreamEvent_VoiceMemberJoined:
+		ev := p.VoiceMemberJoined
+		if ev == nil || ev.GetRoomId() == "" || ev.GetJoinedProfileId() == "" {
+			return nil, fanoutEnvelope{}, false
+		}
+		notify := ev.GetNotifyProfileIds()
+		if len(notify) == 0 {
+			return nil, fanoutEnvelope{}, false
+		}
+		d, err := json.Marshal(map[string]any{
+			"room_id":           ev.GetRoomId(),
+			"voice_room_id":     ev.GetVoiceRoomId(),
+			"space_id":          ev.GetSpaceId(),
+			"joined_profile_id": ev.GetJoinedProfileId(),
+			"profile_ids":       append(notify, ev.GetJoinedProfileId()),
+		})
+		if err != nil {
+			return nil, fanoutEnvelope{}, false
+		}
+		return notify, fanoutEnvelope{Op: "voice_member_joined", D: d}, true
 	default:
 		return nil, fanoutEnvelope{}, false
 	}
@@ -227,13 +265,7 @@ func runVoiceEventsConsumer(ctx context.Context, hub *wsHub, natsURL, instanceID
 	if hub == nil || strings.TrimSpace(natsURL) == "" {
 		return fmt.Errorf("voice events consumer: missing hub or NATS URL")
 	}
-	nc, err := nats.Connect(natsURL,
-		nats.Name("voice-realtime-voice-events"),
-		nats.Timeout(10*time.Second),
-		nats.RetryOnFailedConnect(true),
-		nats.MaxReconnects(-1),
-		nats.ReconnectWait(time.Second),
-	)
+	nc, err := nats.Connect(natsURL, natsConnectOptions("voice-realtime-voice-events")...)
 	if err != nil {
 		return fmt.Errorf("nats connect: %w", err)
 	}

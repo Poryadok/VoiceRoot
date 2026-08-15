@@ -10,6 +10,7 @@ public class AuthProperties {
   private final Redis redis = new Redis();
   private final Grpc grpc = new Grpc();
   private final UserDb userDb = new UserDb();
+  private final UserGrpc userGrpc = new UserGrpc();
   private final Totp totp = new Totp();
   private final OAuth oauth = new OAuth();
   private final Nats nats = new Nats();
@@ -17,6 +18,10 @@ public class AuthProperties {
 
   public UserDb getUserDb() {
     return userDb;
+  }
+
+  public UserGrpc getUserGrpc() {
+    return userGrpc;
   }
 
   public PersistenceMode getPersistence() {
@@ -287,6 +292,22 @@ public class AuthProperties {
 
     public String resolvePassword() {
       return password == null ? "" : password;
+    }
+  }
+
+  public static class UserGrpc {
+    private String addr = "";
+
+    public boolean isConfigured() {
+      return addr != null && !addr.isBlank();
+    }
+
+    public String getAddr() {
+      return addr;
+    }
+
+    public void setAddr(String addr) {
+      this.addr = addr;
     }
   }
 

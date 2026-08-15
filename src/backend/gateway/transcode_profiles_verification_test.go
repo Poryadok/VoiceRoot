@@ -19,6 +19,7 @@ import (
 type recordingPhase13UserGRPC struct {
 	userv1.UnimplementedUserServiceServer
 	lastCreate *userv1.CreateProfileRequest
+	lastDelete *userv1.DeleteProfileRequest
 }
 
 func (s *recordingPhase13UserGRPC) CreateProfile(_ context.Context, req *userv1.CreateProfileRequest) (*userv1.CreateProfileResponse, error) {
@@ -31,6 +32,11 @@ func (s *recordingPhase13UserGRPC) CreateProfile(_ context.Context, req *userv1.
 			IsPrimary:   false,
 		},
 	}, nil
+}
+
+func (s *recordingPhase13UserGRPC) DeleteProfile(_ context.Context, req *userv1.DeleteProfileRequest) (*userv1.DeleteProfileResponse, error) {
+	s.lastDelete = req
+	return &userv1.DeleteProfileResponse{}, nil
 }
 
 type recordingPhase13SubscriptionGRPC struct {
@@ -171,6 +177,23 @@ func TestTranscodePhase13_CreateProfilePresetAccent(t *testing.T) {
 	require.NotNil(t, rec.lastCreate)
 	require.Equal(t, "work", rec.lastCreate.GetPreset())
 	require.Equal(t, "#AABBCC", rec.lastCreate.GetAccentColor())
+}
+
+// TestTranscodePhase13_DeleteProfile documents DELETE /api/v1/users/profiles/{id} → User.DeleteProfile.
+func TestTranscodePhase13_DeleteProfile(t *testing.T) {
+	t.Parallel()
+
+	rec := &recordingPhase13UserGRPC{}
+	conn, cleanup := startBufconnUserConn(t, rec)
+	t.Cleanup(cleanup)
+	h := newPhase13UsersGateway(t, userv1.NewUserServiceClient(conn))
+
+	resp := performRequest(h, http.MethodDelete, "/api/v1/users/profiles/profile-alt-2", "", map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	require.Equal(t, http.StatusNoContent, resp.Code, "body=%s", resp.Body.String())
+	require.NotNil(t, rec.lastDelete)
+	require.Equal(t, "profile-alt-2", rec.lastDelete.GetProfileId())
 }
 
 // TestTranscodePhase13_SwitchProfile documents POST /api/v1/auth/switch-profile → Auth session with new profile_id.

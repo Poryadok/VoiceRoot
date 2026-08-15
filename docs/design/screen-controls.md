@@ -24,8 +24,20 @@
 
 ## 1. Shell — основная оболочка
 
-**Penpot:** `Screen / Shell / Desktop`, `Screen / Shell / Mobile`
+**Penpot:** `Screen / Shell / Desktop`, `Screen / Shell / Mobile`, `Screen / Shell / MobileChatOpen`, `Screen / Chat / List`; chrome panels `Panel / Shell / Navigation`, `Panel / Shell / SideHost`
 **Feature docs:** [navigation.md](../features/navigation.md), [multi-profile.md](../features/multi-profile.md), [presence.md](../features/presence.md), [stories.md](../features/stories.md), [search.md](../features/search.md)
+
+### 1.0 Screen / Chat / List
+
+**Penpot:** `Screen / Chat / List`  
+Dedicated frame for the chat-list column (desktop middle column / mobile full list). Same controls as §1.2–1.4; not a separate product surface from Shell.
+
+| # | Control | Layout | Visible when | Tap action |
+|---|---------|--------|-------------|------------|
+| 1 | Header: search + compose | H+V | Always | See §1.2 |
+| 2 | Folder tabs | H+V | Always | See §1.3 |
+| 3 | Chat list rows | H+V | Always | See §1.4 |
+| 4 | Empty list state | H+V | No chats in current folder filter | Show empty copy + compose CTA (→ §54 `State / Chat / Empty` pattern) |
 
 ### 1.1 Rail / Tab bar
 
@@ -120,6 +132,46 @@
 | 2 | Unread badge on icon | V | Chat has unread | — (visual indicator) |
 | 3 | Scroll left/right | V | > visible width | Scroll strip |
 | 4 | Active-chats limit reached | V | User already has 100 active chats | — (display feedback: cannot add more to strip; limit 100) |
+
+### 1.7 Screen / Shell / MobileChatOpen
+
+**Penpot:** `Screen / Shell / MobileChatOpen`  
+**Alias / relation:** mobile variant of Shell with a chat room pushed open (navigation.md: list collapses to horizontal strip). Not a separate Screen ID family from `Screen / Shell / Mobile`.
+
+| # | Control | Layout | Visible when | Tap action |
+|---|---------|--------|-------------|------------|
+| 1 | Active chats strip | V | Chat room open | See §1.6 |
+| 2 | Chat room body | V | Chat selected | Same as §3 Chat Room (header / timeline / composer) |
+| 3 | Back to list | V | Always | Pop room → `Screen / Shell / Mobile` list |
+| 4 | Bottom tab bar | V | Always | Same as §1.1 (may hide while keyboard open — platform chrome) |
+
+### 1.8 Panel / Shell / Navigation
+
+**Penpot:** `Panel / Shell / Navigation`  
+Rail / nav chrome extracted as a panel frame for Penpot (desktop). Controls mirror §1.1; space-tree entry when inside a space.
+
+| # | Control | Layout | Visible when | Tap action |
+|---|---------|--------|-------------|------------|
+| 1 | Chats toggle | H | Always | Show chat list column |
+| 2 | Social / Friends toggle | H | Always | Show social panel |
+| 3 | Matchmaking entry | H | Always | Open MM catalog |
+| 4 | Settings entry | H | Always | Open `Panel / Settings / Sheet` (§5.0) |
+| 5 | Profile avatar | H | Always | Open profile switcher (§1.1 menu) |
+| 6 | Home / exit space | H | Inside space tree context | Exit space → chat list |
+| 7 | Space tree (embedded) | H | Space active | Navigate channels/rooms (see §10.3) |
+
+### 1.9 Panel / Shell / SideHost
+
+**Penpot:** `Panel / Shell / SideHost`  
+Chrome host for right-side content (desktop). Not a product feature by itself — wraps one of: members, chat info, emoji/reaction picker, etc.
+
+| # | Control | Layout | Visible when | Tap action |
+|---|---------|--------|-------------|------------|
+| 1 | Host title | H | Side panel open | — (display: context title, e.g. members / chat info) |
+| 2 | Close | H | Always | Close side panel → return focus to room |
+| 3 | Body: Group / Space members | H | Members mode | Embed `Panel / Chat / GroupMembers` or `Panel / Space / Members` content |
+| 4 | Body: Chat info | H | Info mode | Embed `Panel / Chat / Info` |
+| 5 | Body: Emoji / reaction picker | H | Reaction mode | Pick emoji → apply reaction / insert |
 
 ---
 
@@ -366,25 +418,29 @@ Entry: from guest convert reminder CTA (#1 in §2.3).
 
 ## 5. Settings
 
-**Penpot:** `Screen / Settings / Privacy`, `Security`, `Notifications`, `Subscription`
+**Penpot:** `Panel / Settings / Sheet` (nav hub); detail screens `Screen / Settings / Privacy`, `Security`, `Notifications`, `Subscription` (abbreviated Penpot labels `Privacy` / `Security` / `Notifications` / `Subscription` are the same Screen IDs)
 **Feature docs:** [privacy.md](../features/privacy.md), [auth-and-contacts.md](../features/auth-and-contacts.md), [notifications.md](../features/notifications.md), [subscription.md](../features/subscription.md), [encryption.md](../features/encryption.md), [verification.md](../features/verification.md)
 
-### 5.0 Settings sheet / nav
+### 5.0 Panel / Settings / Sheet (settings nav hub)
+
+**Penpot:** `Panel / Settings / Sheet`  
+Entry: Shell Settings tab (§1.1 #4 / §1.8 #4). H: sidebar + detail; V: list → push detail screens.
 
 | # | Control | Layout | Visible when | Tap action |
 |---|---------|--------|-------------|------------|
-| 1 | Nav: Security | H — sidebar; V — list row | Always | Open Security screen |
-| 2 | Nav: Privacy | H — sidebar; V — list row | Always | Open Privacy screen |
-| 3 | Nav: Notifications | H — sidebar; V — list row | Always | Open Notifications screen |
-| 4 | Nav: Subscription | H — sidebar; V — list row | Always | Open Subscription screen |
-| 5 | Nav: Linked accounts & verification | H — sidebar; V — list row | Always | Open linked accounts and verification status |
-| 6 | Nav: Help | H — sidebar; V — list row | Always | Open Panel / Settings / Help |
-| 7 | Nav: Appearance | H — sidebar; V — list row | Always | Open Panel / Settings / Appearance (theme, language, Chat Themes ★, App Icon ★) |
-| 8 | Nav: Accessibility | H — sidebar; V — list row | Always | Reduced motion toggle, font scale, PTT keybind |
-| 9 | Nav: Appeal | H — sidebar; V — list row | Has active sanction (ban/warning) | Open Panel / Settings / Appeal |
-| 10 | Nav: Sticker management | H — sidebar; V — list row | Always | Open Panel / Settings / Stickers |
+| 1 | Nav: Security | H — sidebar; V — list row | Always | Open `Screen / Settings / Security` |
+| 2 | Nav: Privacy | H — sidebar; V — list row | Always | Open `Screen / Settings / Privacy` |
+| 3 | Nav: Notifications | H — sidebar; V — list row | Always | Open `Screen / Settings / Notifications` |
+| 4 | Nav: Subscription | H — sidebar; V — list row | Always | Open `Screen / Settings / Subscription` |
+| 5 | Nav: Linked accounts & verification | H — sidebar; V — list row | Always | Open linked accounts and verification status (`Panel / Settings / LinkedAccounts` / `Verification`) |
+| 6 | Nav: Help | H — sidebar; V — list row | Always | Open `Panel / Settings / Help` |
+| 7 | Nav: Appearance | H — sidebar; V — list row | Always | Open `Panel / Settings / Appearance` (theme, language, Chat Themes ★, App Icon ★) |
+| 8 | Nav: Accessibility | H — sidebar; V — list row | Always | Open `Panel / Settings / Accessibility` (reduced motion, font scale, PTT keybind) |
+| 9 | Nav: Appeal | H — sidebar; V — list row | Has active sanction (ban/warning) | Open `Panel / Settings / Appeal` |
+| 10 | Nav: Sticker management | H — sidebar; V — list row | Always | Open `Panel / Settings / Stickers` |
 | 11 | Log out | H+V | Always | Log out (confirm) |
 | 12 | Email-only account badge | H+V | Own account has email but no phone | — (visual: "без телефона" badge on account/settings header) |
+| 13 | Close / Back | H — close sheet; V — back | Always | Dismiss settings hub |
 
 ### 5.1 Privacy
 
@@ -462,7 +518,7 @@ Entry: from guest convert reminder CTA (#1 in §2.3).
 
 ## 6. Matchmaking
 
-**Penpot:** `Screen / Matchmaking / GameCatalog`, `GameDetail`, `QueueSearch`, `MatchSquad`, `PartyLobby`, `MatchHistory`; overlays `Overlay / Matchmaking / MatchFound`, `MatchRating`, `StorySuggestion`
+**Penpot:** `Screen / Matchmaking / GameCatalog`, `GameDetail`, `QueueSearch`, `MatchSquad`, `PartyLobby`, `MatchHistory`; overlays `Overlay / Matchmaking / MatchFound`, `MatchRating` (**Penpot frame alias:** `Overlay / Matchmaking / Rating` — same surface), `StorySuggestion`
 **Feature docs:** [matchmaking.md](../features/matchmaking.md), [game-catalog.md](../features/game-catalog.md)
 
 ### 6.1 GameCatalog
@@ -550,6 +606,9 @@ Post-accept **матч-отряд**: voice + text after all parties accepted (no
 | 5 | Leave squad | H+V | Always | Leave матч-отряд → may open MatchRating |
 
 ### 6.6 MatchRating (Overlay / Matchmaking / MatchRating)
+
+**Penpot (canon Screen ID in screens.md):** `Overlay / Matchmaking / Rating`  
+**screen-controls alias:** `Overlay / Matchmaking / MatchRating` — same surface; prefer `Rating` when naming Penpot frames / Screen IDs.
 
 Entry: shown when user leaves match squad.
 
@@ -718,7 +777,7 @@ Entry: shown after match completion.
 
 ## 10. Chat Info / Panels (side panels or sheets)
 
-**Penpot:** `Panel / Chat / Info`, `Panel / Space / *`, `Overlay / Call / *`
+**Penpot:** `Panel / Chat / Info`, `Panel / Chat / GroupMembers`, `Panel / Space / *`, `Overlay / Call / *`, `Panel / Call / ScreenShare`
 **Entry points from screens above already listed; this section covers internal controls.**
 
 ### 10.1 Panel / Chat / Info
@@ -735,7 +794,7 @@ Entry: shown after match completion.
 | 7a | Copy encryption code | H+V | DM with E2E enabled | Copy code to clipboard |
 | 7b | Compare help text | H+V | DM with E2E enabled | — (display: compare with contact in voice/person; codes must match — encryption.md) |
 | 8 | Shared media tabs (Media/Files/Links/Voice) | H+V | Always | Show shared content |
-| 9 | Members list | H+V | GRP / CH | Show members (tap → profile) |
+| 9 | Members list | H+V | GRP / CH | Show members → `Panel / Chat / GroupMembers` (tap member → profile) |
 | 10 | Add members | H+V | GRP (permission); disabled at 500/500 with tooltip "Группа заполнена (500/500). Для больших сообществ создайте спейс." | Open contact picker |
 | 11 | Pinned messages | H+V | Has pins | Open pinned messages list |
 | 12 | Leave group / channel | H+V | GRP / CH | Leave (confirm) |
@@ -749,6 +808,22 @@ Entry: shown after match completion.
 | 20 | Channel settings | H+V | CH, has manage rights | Open Panel / Chat / ChannelSettings |
 | 21 | Group settings | H+V | GRP, owner/admin | Open Panel / Chat / GroupSettings |
 | 22 | Chat theme ★ | H+V | Plus subscriber | Open Panel / Settings / ChatThemes for this chat |
+
+### 10.1a Panel / Chat / GroupMembers
+
+**Penpot:** `Panel / Chat / GroupMembers`  
+**Feature docs:** [text-chat.md](../features/text-chat.md), [spaces.md](../features/spaces.md) (space members use `Panel / Space / Members`)
+
+Entry: from Chat Info #9 (GRP) or SideHost members mode for a group chat. Distinct from CreateGroup (§20) and Space Members (§24).
+
+| # | Control | Layout | Visible when | Tap action |
+|---|---------|--------|-------------|------------|
+| 1 | Close / Back | H+V | Always | Close panel |
+| 2 | Member row (avatar + name + role/owner badge) | H+V | Always (per member) | Open `Panel / Social / ProfileDetail` |
+| 3 | Kick member | H+V | Admin/owner; not self | Kick (confirm) |
+| 4 | Transfer ownership | H+V | Owner; on another member | Transfer group ownership (confirm) |
+| 5 | Leave group | H+V | Always (member); owner needs transfer first | Leave group (confirm); owner sees hint if transfer required |
+| 6 | Add members | H+V | Has add-members right; under 500 cap | Open contact picker (same as Chat Info #10) |
 
 ### 10.1b Panel / Chat / ChannelSettings
 
@@ -783,16 +858,32 @@ Entry: from Chat Info #21.
 
 ### 10.2 Call controls (Overlay / Call / *)
 
-**Penpot:** `Overlay / Call / Active`, `Incoming`, `MiniBar`
+**Penpot:** `Overlay / Call / Active`, `Incoming`, `Outgoing`, `MiniBar` (`MiniBar` — required in controls; mockup may still be missing — see audit)
 Entry: voice/video call from chat header or friend row.
 Note: iOS CallKit / PushKit incoming UI is platform chrome (native), not duplicated as Flutter/Penpot controls.
+
+#### 10.2a Outgoing call (Overlay / Call / Outgoing)
+
+**Penpot:** `Overlay / Call / Outgoing`  
+Entry: after initiator starts DM voice/video (or group temp voice) and before callee accepts. Distinct from `Active` (connected) and `Incoming` (callee side).
+
+| # | Control | Layout | Visible when | Tap action |
+|---|---------|--------|-------------|------------|
+| 1 | Callee avatar + display name | H+V | Always | — (display) |
+| 2 | Call type label (voice / video) | H+V | Always | — (display) |
+| 3 | Ringing / connecting status | H+V | Always | — (display; timeout per voice-chat.md: 30s → missed call for callee) |
+| 4 | Cancel / Hang up | H+V | Always | Abort outgoing call |
+| 5 | Mute mic | H+V | Always | Toggle mic **before** connect — **required** (Discord DM outgoing/ringing UI exposes mute while waiting for answer; see [aurascience Discord mobile call guide](https://aurascience.blog/how-to-ring-someone-discord-mobile-new-update)) |
+| 6 | Camera on / off | H+V | Video outgoing | Toggle camera before connect — **required on video** (same Discord reference; omit on pure voice outgoing) |
+
+#### 10.2b Active / Incoming / MiniBar (shared in-call controls)
 
 | # | Control | Layout | Visible when | Tap action |
 |---|---------|--------|-------------|------------|
 | 1 | Mute / Unmute mic | H+V | In call | Toggle microphone |
 | 2 | Deafen / Undeafen | H+V | In call | Toggle all audio |
 | 3 | Camera on / off | H+V | In call (video call or voice room) | Toggle camera |
-| 4 | Screen share | H only | In call (desktop) | Open screen/window picker → share |
+| 4 | Screen share | H only | In call (desktop) | Open screen/window picker → share (see §33 Overlay picker; in-call viewer panel §10.2c) |
 | 5 | Screen share pause | H only | Sharing screen | Pause stream |
 | 6 | Disconnect / Hang up | H+V | In call | Leave call |
 | 7 | PTT (Push-to-Talk) | H+V | In call, PTT mode enabled (settings §30 + in-call #8) | Hold configured key / button to talk |
@@ -808,12 +899,31 @@ Note: iOS CallKit / PushKit incoming UI is platform chrome (native), not duplica
 | 16a | Speaking indicator (per participant) | H+V | In call, participant speaking | — (visual: avatar highlight / glow animation) |
 | 17 | Accept call (incoming) | H+V | Incoming call overlay | Accept |
 | 18 | Decline call (incoming) | H+V | Incoming call overlay | Decline → "missed call" in DM |
-| 19 | Mini call bar (persistent) | H+V | In call, navigated away from call screen | Floating bar: avatar(s) + duration + mute + hang up; tap → return to call |
+| 19 | Mini call bar (persistent) | H+V | In call, navigated away from call screen | Floating bar: avatar(s) + duration + mute + hang up; tap → return to call (`Overlay / Call / MiniBar`) |
 | 20 | Hand-raise request list (organizer) | H+V | Organizer in raise-hand-enabled room | List of raised hands; per-row: Grant word / Deny |
 | 21 | Voice session conflict dialog | H+V | Switching profiles while in voice call | — (display: "Ты сейчас в войс-чате (Профиль A). Выйти из него и войти сюда?"); [Выйти и переключить] / [Отмена] |
 | 22 | In-call notification overlay | H+V | Notification arrives during voice chat | Inline overlay banner; tap opens related chat/thread without dropping voice |
 | 23 | Voice room full | H+V | Room at capacity (32 free / 128 Space Pro) | Join disabled + tooltip / error "Комната заполнена" |
 | 24 | Multi-device voice handoff | H+V | Same account joins voice from another device while already in voice | Explicit handoff UI: move session to this device or cancel (one active voice session) |
+
+#### 10.2c Panel / Call / ScreenShare (in-call share viewer)
+
+**Penpot:** `Panel / Call / ScreenShare`  
+**Not the same as** `Overlay / Call / ScreenSharePicker` (§33).  
+- **Picker (Overlay):** choose what to share (screen / window / tab + quality) before start — desktop start flow.  
+- **Panel:** in-call UI while sharing or watching: local preview, remote stream switcher, pause/stop, limit feedback.
+
+| # | Control | Layout | Visible when | Tap action |
+|---|---------|--------|-------------|------------|
+| 1 | Local preview | H | Self is sharing | — (display own share preview) |
+| 2 | Stop share | H | Self is sharing | Stop screen share |
+| 3 | Pause / Resume share | H | Self is sharing | Pause or resume stream (frozen last frame for viewers) |
+| 4 | Stream picker (thumbnails) | H+V | >1 active share in call | Switch which remote stream to watch (also §34) |
+| 5 | Waiting for video | H+V | Share started, track not yet received | — (display placeholder) |
+| 6 | Stream limit reached | H+V | Already 3 active streams | — (display limit; cannot start another) |
+| 7 | Quality dialog (FPS / resolution) | H | Starting share (desktop) | Prefer opening via Overlay picker (§33); Panel may still surface quality when picker is not yet framed |
+
+**Product decision (v1 inventory):** keep **both** frames — `Panel / Call / ScreenShare` (viewer/manage) **and** `Overlay / Call / ScreenSharePicker` (start picker). Picker remains in the design system even if implementation lands later; do not collapse picker into Panel-only.
 
 ### 10.3 Space tree & admin (Panel / Space / *)
 
@@ -1153,7 +1263,7 @@ Entry: from chat list header #1 search field.
 
 ## 23. Role Management (Panel / Space / Roles)
 
-**Penpot:** `Panel / Space / Roles`
+**Penpot:** `Panel / Space / Roles` (list); detail editor `Panel / Space / RoleEditor` (§23.1)
 **Feature docs:** [roles.md](../features/roles.md)
 
 Entry: from space admin #9.
@@ -1162,15 +1272,25 @@ Entry: from space admin #9.
 |---|---------|--------|-------------|------------|
 | 1 | Close / Back | H+V | Always | Close panel |
 | 2 | Role list (drag-reorderable) | H+V | Always | Reorder priority |
-| 3 | Role row tap | H+V | Always | Open role detail / edit |
-| 4 | Create role | H+V | Has SPACE_MANAGE_ROLES | Create new role |
-| 5 | Role name field | H+V | Inside role detail | Edit name |
-| 6 | Permissions checkboxes | H+V | Inside role detail | Toggle individual permissions |
-| 7 | Chat overrides section | H+V | Inside role detail | Set allow/deny per text chat |
-| 8 | Voice room overrides section | H+V | Inside role detail | Set allow/deny per voice room |
-| 9 | Delete role | H+V | Inside role detail, not built-in role | Delete (confirm) |
-| 10 | Save | H+V | Changes made | Save role |
-| 11 | Configure default member role | H+V | Owner; editing built-in «Участник» / default role | Configure permissions of default member role |
+| 3 | Role row tap | H+V | Always | Open `Panel / Space / RoleEditor` |
+| 4 | Create role | H+V | Has SPACE_MANAGE_ROLES | Open RoleEditor for new role |
+| 5 | Configure default member role | H+V | Owner; on built-in «Участник» row | Open RoleEditor for default member role |
+
+### 23.1 Role Editor (Panel / Space / RoleEditor)
+
+**Penpot:** `Panel / Space / RoleEditor`  
+Entry: from Roles list #3–5. Nested surface of Roles — separate Penpot frame.
+
+| # | Control | Layout | Visible when | Tap action |
+|---|---------|--------|-------------|------------|
+| 1 | Close / Back | H+V | Always | Close editor → Roles list |
+| 2 | Role name field | H+V | Always | Edit name |
+| 3 | Permissions checkboxes | H+V | Always | Toggle individual permissions (roles.md / role-service) |
+| 4 | Chat overrides section | H+V | Always | Set allow/deny per text chat → may open `Panel / Space / ChatOverride` |
+| 5 | Voice room overrides section | H+V | Always | Set allow/deny per voice room → may open `Panel / Space / VoiceRoomOverride` |
+| 6 | Delete role | H+V | Existing custom role (not built-in) | Delete (confirm) |
+| 7 | Save | H+V | Changes made / create | Save role |
+| 8 | Denied / no-permission state | H+V | Lacks SPACE_MANAGE_ROLES | — (display; editor read-only or blocked) |
 
 ---
 
@@ -1380,7 +1500,8 @@ Entry: from story viewer #15 (own story, viewers count tap).
 
 ## 33. Screen Share Picker (Overlay / Call / ScreenSharePicker)
 
-**Penpot:** `Overlay / Call / ScreenSharePicker`
+**Penpot:** `Overlay / Call / ScreenSharePicker` (start picker — **required v1 inventory**; may still be missing as shipped canon in screens.md — track as mockup gap)  
+**Related (not alias):** `Panel / Call / ScreenShare` = in-call viewer / manage panel (§10.2c). **Keep both** — picker (start) ≠ panel (viewer/manage). Do not rename one into the other or drop either from the design system.
 **Feature docs:** [screen-share.md](../features/screen-share.md)
 
 Entry: from call controls #4 (screen share).
@@ -1416,7 +1537,7 @@ When multiple participants share screen simultaneously (up to 3).
 
 ## 35. Slash Command Menu (Panel / Chat / SlashCommandMenu)
 
-**Penpot:** `Panel / Chat / SlashCommandMenu`
+**Penpot:** `Panel / Chat / SlashCommandMenu`; parameter form `Panel / Chat / SlashCommandOptions` (§35.1)
 **Feature docs:** [bots.md](../features/bots.md)
 
 Entry: from composer #10 (typing `/` in space context).
@@ -1425,10 +1546,28 @@ Entry: from composer #10 (typing `/` in space context).
 |---|---------|--------|-------------|------------|
 | 1 | Command search field | H+V | Always | Filter commands |
 | 2 | Bot group header | H+V | Always (per bot) | — (display bot name + icon) |
-| 3 | Command row (name + description) | H+V | Bot online and enabled in chat | Select command |
+| 3 | Command row (name + description) | H+V | Bot online and enabled in chat | Select command → if has options, open §35.1; else invoke |
 | 4 | Grayed-out command | H+V | Bot offline | — (display with "Bot unavailable" tooltip) |
-| 5 | Parameter input fields | H+V | Command selected, has options | Fill command options (per type: string/int/bool/user/channel/role/attachment) |
-| 6 | Autocomplete suggestions | H+V | Typing in autocomplete-enabled param | Select suggestion |
+
+### 35.1 Slash Command Options (Panel / Chat / SlashCommandOptions)
+
+**Penpot:** `Panel / Chat / SlashCommandOptions`  
+Entry: after selecting a command that has options (bots.md parameter types).
+
+| # | Control | Layout | Visible when | Tap action |
+|---|---------|--------|-------------|------------|
+| 1 | Close / Back | H+V | Always | Cancel → return to menu or composer |
+| 2 | Command title | H+V | Always | — (display selected command name) |
+| 3 | String / integer field | H+V | Option type string/integer | Input value |
+| 4 | Boolean toggle | H+V | Option type boolean | Toggle yes/no |
+| 5 | User picker | H+V | Option type user | Pick space member |
+| 6 | Channel picker | H+V | Option type channel | Pick text chat (`group` \| `channel`) |
+| 7 | Role picker | H+V | Option type role | Pick role |
+| 8 | Attachment picker | H+V | Option type attachment | OS file picker → upload |
+| 9 | Autocomplete suggestions | H+V | String option with `autocomplete: true` | Select suggestion (bots.md, ≤25) |
+| 10 | Required marker | H+V | Option required | — (visual `*` on label) |
+| 11 | Submit / Run | H+V | All required options filled | Invoke slash command |
+| 12 | Cancel | H+V | Always | Dismiss without invoke |
 
 ---
 
@@ -1739,6 +1878,47 @@ Entry: from chat info #18 for a space text chat.
 
 ---
 
+## 54. Empty / Error / Offline states
+
+**Penpot:** `State / Chat / Empty`, `State / Chat / Error`, `State / Network / Offline` (desktop page `12_States_Desktop`; mobile twins on `17_States_Mobile` — page reserved, canons TBD)
+**Feature / UX refs:** [brand.md](brand.md) (empty / offline guidance), [text-chat.md](../features/text-chat.md) (reconnect), [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) (WS resume + Messaging catch-up)
+
+Not full product screens — reusable state chrome used inside Shell / Chat list / Chat room.
+
+### 54.1 State / Chat / Empty
+
+**Product decision:** messenger-first. Primary empty CTA is **chat/compose-oriented** (start DM / browse chats / invite) — match neighboring shell/list controls (§1 compose, invite patterns). Matchmaking / Space Catalog CTAs are **secondary only**, never the default empty-chat primary.
+
+| # | Control | Layout | Visible when | Tap action |
+|---|---------|--------|-------------|------------|
+| 1 | Empty illustration / icon | H+V | Folder or chat list has zero items | — (visual; keep minimal per brand.md) |
+| 2 | Short reason copy | H+V | Always | — (display; e.g. no chats in folder) |
+| 3 | Primary CTA (compose / start DM / invite) | H+V | Always | Open compose / start DM / invite — same affordance family as shell list empty (§1) |
+| 4 | Secondary CTA (optional) | H+V | When product copy offers alternate | Space Catalog / Matchmaking — secondary only; not the default empty primary |
+
+### 54.2 State / Chat / Error
+
+| # | Control | Layout | Visible when | Tap action |
+|---|---------|--------|-------------|------------|
+| 1 | Error title / icon | H+V | Load/send/history failed | — (display) |
+| 2 | Short error reason | H+V | Always | — (display; avoid raw stack traces) |
+| 3 | Retry | H+V | Always | Retry last failed load / request |
+| 4 | Secondary: go home / back | H+V | Optional | Navigate away from broken surface |
+
+### 54.3 State / Network / Offline
+
+**Penpot:** `State / Network / Offline` (compact banner over shell — **not** a modal or blocking full-screen)  
+**Product decision:** **dismissible**, Telegram-like, non-blocking. Not sticky until online — user can hide the banner; reconnect may continue in background; banner may reappear on a later failure.
+
+| # | Control | Layout | Visible when | Tap action |
+|---|---------|--------|-------------|------------|
+| 1 | Offline / reconnecting banner | H+V | No network or Realtime disconnected | — (display: offline / reconnecting; non-blocking chrome) |
+| 2 | Status detail | H+V | Always | — (display: drafts kept locally / send pending — brand.md) |
+| 3 | Retry / Reconnect CTA | H+V | When manual retry is useful | Trigger reconnect + Messaging catch-up |
+| 4 | Dismiss | H+V | Always (soft banner) | Hide banner without waiting for online; may re-show on next disconnect / failure |
+
+---
+
 ## H vs V layout differences summary
 
 | Area | Horizontal (desktop/web/tablet) | Vertical (mobile) |
@@ -1759,3 +1939,5 @@ Entry: from chat info #18 for a space text chat.
 | Stories viewer | Modal overlay over content | Full-screen swipe-native overlay |
 | Stories create | Modal / panel | Full-screen push |
 | In-game overlay (§43) | H only (post-v1) | N/A |
+| Empty / error (§54) | Full or panel-sized state chrome | Same pattern; mobile twins TBD on `17_States_Mobile` |
+| Offline banner (§54.3) | Compact banner over shell | Compact banner / toast strip |

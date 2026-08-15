@@ -29,11 +29,13 @@ class EnsurePrimaryProfileRequest extends $pb.GeneratedMessage {
     $core.String? accountId,
     $core.String? profileId,
     $core.String? displayHint,
+    $core.bool? isGuestAccount,
   }) {
     final result = create();
     if (accountId != null) result.accountId = accountId;
     if (profileId != null) result.profileId = profileId;
     if (displayHint != null) result.displayHint = displayHint;
+    if (isGuestAccount != null) result.isGuestAccount = isGuestAccount;
     return result;
   }
 
@@ -53,6 +55,7 @@ class EnsurePrimaryProfileRequest extends $pb.GeneratedMessage {
     ..aOS(1, _omitFieldNames ? '' : 'accountId')
     ..aOS(2, _omitFieldNames ? '' : 'profileId')
     ..aOS(3, _omitFieldNames ? '' : 'displayHint')
+    ..aOB(4, _omitFieldNames ? '' : 'isGuestAccount')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -105,6 +108,15 @@ class EnsurePrimaryProfileRequest extends $pb.GeneratedMessage {
   $core.bool hasDisplayHint() => $_has(2);
   @$pb.TagNumber(3)
   void clearDisplayHint() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.bool get isGuestAccount => $_getBF(3);
+  @$pb.TagNumber(4)
+  set isGuestAccount($core.bool value) => $_setBool(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasIsGuestAccount() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearIsGuestAccount() => $_clearField(4);
 }
 
 class EnsurePrimaryProfileResponse extends $pb.GeneratedMessage {
@@ -165,6 +177,117 @@ class EnsurePrimaryProfileResponse extends $pb.GeneratedMessage {
   void clearProfile() => $_clearField(1);
   @$pb.TagNumber(1)
   Profile ensureProfile() => $_ensure(0);
+}
+
+class ListProfileIDsForAccountRequest extends $pb.GeneratedMessage {
+  factory ListProfileIDsForAccountRequest({
+    $core.String? accountId,
+  }) {
+    final result = create();
+    if (accountId != null) result.accountId = accountId;
+    return result;
+  }
+
+  ListProfileIDsForAccountRequest._();
+
+  factory ListProfileIDsForAccountRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ListProfileIDsForAccountRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ListProfileIDsForAccountRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'accountId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListProfileIDsForAccountRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListProfileIDsForAccountRequest copyWith(
+          void Function(ListProfileIDsForAccountRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as ListProfileIDsForAccountRequest))
+          as ListProfileIDsForAccountRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ListProfileIDsForAccountRequest create() =>
+      ListProfileIDsForAccountRequest._();
+  @$core.override
+  ListProfileIDsForAccountRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ListProfileIDsForAccountRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ListProfileIDsForAccountRequest>(
+          create);
+  static ListProfileIDsForAccountRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get accountId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set accountId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAccountId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAccountId() => $_clearField(1);
+}
+
+class ListProfileIDsForAccountResponse extends $pb.GeneratedMessage {
+  factory ListProfileIDsForAccountResponse({
+    $core.Iterable<$core.String>? profileIds,
+  }) {
+    final result = create();
+    if (profileIds != null) result.profileIds.addAll(profileIds);
+    return result;
+  }
+
+  ListProfileIDsForAccountResponse._();
+
+  factory ListProfileIDsForAccountResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ListProfileIDsForAccountResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ListProfileIDsForAccountResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..pPS(1, _omitFieldNames ? '' : 'profileIds')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListProfileIDsForAccountResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListProfileIDsForAccountResponse copyWith(
+          void Function(ListProfileIDsForAccountResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as ListProfileIDsForAccountResponse))
+          as ListProfileIDsForAccountResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ListProfileIDsForAccountResponse create() =>
+      ListProfileIDsForAccountResponse._();
+  @$core.override
+  ListProfileIDsForAccountResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ListProfileIDsForAccountResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ListProfileIDsForAccountResponse>(
+          create);
+  static ListProfileIDsForAccountResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $pb.PbList<$core.String> get profileIds => $_getList(0);
 }
 
 enum GetProfileRequest_By { profileId, username, notSet }
@@ -367,6 +490,7 @@ class Profile extends $pb.GeneratedMessage {
     $1.Timestamp? updatedAt,
     $1.Timestamp? frozenAt,
     $core.String? accentColor,
+    $core.bool? isGuestAccount,
   }) {
     final result = create();
     if (id != null) result.id = id;
@@ -387,6 +511,7 @@ class Profile extends $pb.GeneratedMessage {
     if (updatedAt != null) result.updatedAt = updatedAt;
     if (frozenAt != null) result.frozenAt = frozenAt;
     if (accentColor != null) result.accentColor = accentColor;
+    if (isGuestAccount != null) result.isGuestAccount = isGuestAccount;
     return result;
   }
 
@@ -424,6 +549,7 @@ class Profile extends $pb.GeneratedMessage {
     ..aOM<$1.Timestamp>(17, _omitFieldNames ? '' : 'frozenAt',
         subBuilder: $1.Timestamp.create)
     ..aOS(18, _omitFieldNames ? '' : 'accentColor')
+    ..aOB(19, _omitFieldNames ? '' : 'isGuestAccount')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -611,6 +737,16 @@ class Profile extends $pb.GeneratedMessage {
   $core.bool hasAccentColor() => $_has(17);
   @$pb.TagNumber(18)
   void clearAccentColor() => $_clearField(18);
+
+  /// True while account type is guest (auth accounts.type); cleared on convert-guest.
+  @$pb.TagNumber(19)
+  $core.bool get isGuestAccount => $_getBF(18);
+  @$pb.TagNumber(19)
+  set isGuestAccount($core.bool value) => $_setBool(18, value);
+  @$pb.TagNumber(19)
+  $core.bool hasIsGuestAccount() => $_has(18);
+  @$pb.TagNumber(19)
+  void clearIsGuestAccount() => $_clearField(19);
 }
 
 class UpdateProfileRequest extends $pb.GeneratedMessage {

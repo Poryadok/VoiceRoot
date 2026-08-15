@@ -8,9 +8,13 @@ import (
 // ErrScreenShareDenied is returned when role permission check denies screen share.
 var ErrScreenShareDenied = errors.New("screen share not permitted")
 
+// ErrVoiceJoinDenied is returned when role permission check denies voice room join.
+var ErrVoiceJoinDenied = errors.New("voice join not permitted")
+
 // RolePermissionChecker validates voice-room permissions via Role Service.
 type RolePermissionChecker interface {
 	EnsureScreenShare(ctx context.Context, spaceID, profileID, voiceRoomID string) error
+	EnsureVoiceJoin(ctx context.Context, spaceID, profileID, voiceRoomID string) error
 }
 
 type mapRolePermissions struct {
@@ -24,6 +28,17 @@ func (m *mapRolePermissions) EnsureScreenShare(_ context.Context, spaceID, profi
 	space, ok := m.allowed[spaceID]
 	if !ok || !space[profileID] {
 		return ErrScreenShareDenied
+	}
+	return nil
+}
+
+func (m *mapRolePermissions) EnsureVoiceJoin(_ context.Context, spaceID, profileID, _ string) error {
+	if m == nil {
+		return nil
+	}
+	space, ok := m.allowed[spaceID]
+	if !ok || !space[profileID] {
+		return ErrVoiceJoinDenied
 	}
 	return nil
 }

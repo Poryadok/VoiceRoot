@@ -16,6 +16,7 @@ import (
 type Resolver interface {
 	MessagePreview(ctx context.Context, messageID string) (string, error)
 	SenderLabel(ctx context.Context, profileID string) (string, error)
+	MessageAuthorProfileID(ctx context.Context, messageID string) (string, error)
 }
 
 // GRPCResolver uses Messaging GetMessage and User GetProfile (S2S).
@@ -64,6 +65,25 @@ func (r *GRPCResolver) MessagePreview(ctx context.Context, messageID string) (st
 	return msg.GetContent(), nil
 }
 
+func (r *GRPCResolver) MessageAuthorProfileID(ctx context.Context, messageID string) (string, error) {
+	if r == nil || r.messages == nil {
+		return "", fmt.Errorf("push enrich: messaging unavailable")
+	}
+	messageID = strings.TrimSpace(messageID)
+	if messageID == "" {
+		return "", nil
+	}
+	resp, err := r.messages.GetMessage(ctx, &messagingv1.GetMessageRequest{MessageId: messageID})
+	if err != nil {
+		return "", err
+	}
+	msg := resp.GetMessage()
+	if msg == nil {
+		return "", nil
+	}
+	return msg.GetSenderProfileId(), nil
+}
+
 func (r *GRPCResolver) SenderLabel(ctx context.Context, profileID string) (string, error) {
 	if r == nil || r.users == nil {
 		return "", fmt.Errorf("push enrich: user service unavailable")
@@ -100,6 +120,10 @@ func (r *GRPCResolver) SenderLabel(ctx context.Context, profileID string) (strin
 type NoopResolver struct{}
 
 func (NoopResolver) MessagePreview(context.Context, string) (string, error) {
+	return "", nil
+}
+
+func (NoopResolver) MessageAuthorProfileID(context.Context, string) (string, error) {
 	return "", nil
 }
 

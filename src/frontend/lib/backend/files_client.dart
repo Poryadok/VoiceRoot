@@ -49,6 +49,8 @@ class FileMetadataData {
     required this.originalName,
     this.url,
     this.previewUrl,
+    this.thumbnailR2Key,
+    this.convertedR2Key,
     this.sizeBytes,
     this.isE2e = false,
     this.expiresAt,
@@ -60,6 +62,8 @@ class FileMetadataData {
   final String originalName;
   final String? url;
   final String? previewUrl;
+  final String? thumbnailR2Key;
+  final String? convertedR2Key;
   final int? sizeBytes;
   final bool isE2e;
   final DateTime? expiresAt;

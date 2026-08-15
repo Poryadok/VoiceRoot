@@ -26,10 +26,10 @@ Schema for `auth_db` is defined in two places; apply it with **one** tool per da
 
 | Path | Mechanism | Order |
 |------|------------|-------|
-| **A — Flyway (default)** | `src/main/resources/db/migration/V1__auth_schema.sql` on Auth startup | single migration `V1` |
-| **B — golang-migrate** | [src/backend/migrations/auth_db/](../migrations/auth_db/) | `000001_init` **then** `000002_refresh_tokens_access_jti` |
+| **A — Flyway (default)** | `src/main/resources/db/migration/V*.sql` on Auth startup | `V1`–`V5` (see `db/migration/`) |
+| **B — golang-migrate** | [src/backend/migrations/auth_db/](../migrations/auth_db/) | `000001` … `000006` |
 
-**Equivalence:** Flyway `V1` ≡ golang-migrate `000001` + `000002` in sequence. Do not mix both tools on the same empty DB without baselining Flyway; default is Path A.
+**Equivalence:** keep Flyway and golang-migrate revisions aligned per [migrations README](../migrations/README.md). Do not mix both tools on the same empty DB without baselining Flyway; default is Path A.
 
 ## Env / properties (jdbc)
 

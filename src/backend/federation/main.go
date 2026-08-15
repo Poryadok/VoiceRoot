@@ -8,7 +8,10 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	"voice/backend/pkg/httpserver"
+	voiceprom "voice/backend/pkg/promhttp"
 	"voice/backend/pkg/runtimeconfig"
 )
 
@@ -19,9 +22,10 @@ func main() {
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
 		addr = v
 	}
+	metricsReg := prometheus.NewRegistry()
 	server := &http.Server{
 		Addr:    addr,
-		Handler: healthHandler(serviceName),
+		Handler: voiceprom.MountMetricsOnHealth(healthHandler(serviceName), metricsReg),
 	}
 	httpserver.ApplyHTTPServerTimeouts(server)
 	errCh := make(chan error, 1)

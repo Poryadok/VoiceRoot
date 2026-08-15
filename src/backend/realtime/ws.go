@@ -24,11 +24,11 @@ type presenceUpdater interface {
 	UpdatePresence(ctx context.Context, accountID, profileID, status, customStatus string) error
 }
 
-func newServiceHandler(service string, tv tokenValidator, lister dmChatLister, hub *wsHub, rf *redisFanout, instanceID string) http.Handler {
-	return newServiceHandlerWithPresence(service, tv, lister, hub, rf, instanceID, nil)
+func newServiceHandler(service string, tv tokenValidator, lister chatBootstrapLister, hub *wsHub, rf *redisFanout, instanceID string, ready readinessDeps) http.Handler {
+	return newServiceHandlerWithPresence(service, tv, lister, hub, rf, instanceID, nil, ready)
 }
 
-func newServiceHandlerWithPresence(service string, tv tokenValidator, lister dmChatLister, hub *wsHub, rf *redisFanout, instanceID string, presence presenceUpdater) http.Handler {
+func newServiceHandlerWithPresence(service string, tv tokenValidator, lister chatBootstrapLister, hub *wsHub, rf *redisFanout, instanceID string, presence presenceUpdater, ready readinessDeps) http.Handler {
 	if hub == nil {
 		hub = newWSHub()
 	}
@@ -37,11 +37,12 @@ func newServiceHandlerWithPresence(service string, tv tokenValidator, lister dmC
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/health", healthOnly(service))
+	mux.Handle("/ready", readinessHandler(service, ready))
 	mux.Handle("/ws", newWSHandler(tv, lister, hub, rf, instanceID, presence))
 	return mux
 }
 
-func newWSHandler(tv tokenValidator, lister dmChatLister, hub *wsHub, rf *redisFanout, instanceID string, presence presenceUpdater) http.Handler {
+func newWSHandler(tv tokenValidator, lister chatBootstrapLister, hub *wsHub, rf *redisFanout, instanceID string, presence presenceUpdater) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if tv == nil {
 			observeWSConnectFail()
@@ -176,7 +177,7 @@ type readResult struct {
 	err error
 }
 
-func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, hub *wsHub, rf *redisFanout, instanceID string, presence presenceUpdater, requestID string, upgradeAt time.Time) {
+func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLister, hub *wsHub, rf *redisFanout, instanceID string, presence presenceUpdater, requestID string, upgradeAt time.Time) {
 	connID := uuid.NewString()
 	observeWSConnectSuccess()
 	svcLogger.Info("ws connected",
@@ -244,11 +245,11 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, h
 
 	if lister != nil {
 		lctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		ids, err := lister.ListDMChatIDs(lctx, claims.UserID, claims.ProfileID)
+		ids, err := lister.ListChatIDs(lctx, claims.UserID, claims.ProfileID)
 		cancel()
 		degraded := err != nil
 		if err != nil {
-			svcLogger.Warn("ws dm chat list failed", slog.String("error", err.Error()), slog.String("conn_id", connID))
+			svcLogger.Warn("ws chat bootstrap list failed", slog.String("error", err.Error()), slog.String("conn_id", connID))
 			ids = nil
 		}
 		mu.Lock()
@@ -260,7 +261,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, h
 		idsCopy := append([]string(nil), ids...)
 		slices.Sort(idsCopy)
 		syncD, _ := json.Marshal(map[string]any{
-			"scope":    "dm",
+			"scope":    "all",
 			"chat_ids": idsCopy,
 			"source":   "chat",
 			"degraded": degraded,
@@ -276,11 +277,9 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, h
 			_ = c.SetReadDeadline(time.Now().Add(90 * time.Second))
 			var in wsInbound
 			err := c.ReadJSON(&in)
-			select {
-			case readCh <- readResult{in: in, err: err}:
-			default:
-				return
-			}
+			// Always deliver to the main loop (blocking). A non-blocking send would
+			// drop disconnect errors when the buffer is full and leave the conn hung.
+			readCh <- readResult{in: in, err: err}
 			if err != nil {
 				return
 			}
@@ -517,6 +516,13 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister dmChatLister, h
 					"recipient_profile_id": claims.ProfileID,
 				})
 				hub.broadcastToProfile(senderID, fanoutEnvelope{Op: "message_delivered", D: d}, svcLogger, "")
+				if rf != nil {
+					ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+					if err := rf.PublishDeliveryAck(ctx, senderID, cid, mid, claims.ProfileID, connID); err != nil {
+						svcLogger.Warn("ws redis publish delivery_ack failed", slog.String("error", err.Error()))
+					}
+					cancel()
+				}
 			case "presence_update":
 				var p presenceUpdateClientPayload
 				if err := json.Unmarshal(in.D, &p); err != nil {

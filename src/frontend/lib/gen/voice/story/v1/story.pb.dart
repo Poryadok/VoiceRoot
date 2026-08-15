@@ -1879,6 +1879,113 @@ class CreateLookingForPartyRequest extends $pb.GeneratedMessage {
   void clearMediaFileId() => $_clearField(2);
 }
 
+class RespondToLfpStoryRequest extends $pb.GeneratedMessage {
+  factory RespondToLfpStoryRequest({
+    $core.String? storyId,
+    $core.String? responseType,
+  }) {
+    final result = create();
+    if (storyId != null) result.storyId = storyId;
+    if (responseType != null) result.responseType = responseType;
+    return result;
+  }
+
+  RespondToLfpStoryRequest._();
+
+  factory RespondToLfpStoryRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory RespondToLfpStoryRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'RespondToLfpStoryRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.story.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'storyId')
+    ..aOS(2, _omitFieldNames ? '' : 'responseType')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RespondToLfpStoryRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RespondToLfpStoryRequest copyWith(
+          void Function(RespondToLfpStoryRequest) updates) =>
+      super.copyWith((message) => updates(message as RespondToLfpStoryRequest))
+          as RespondToLfpStoryRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static RespondToLfpStoryRequest create() => RespondToLfpStoryRequest._();
+  @$core.override
+  RespondToLfpStoryRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static RespondToLfpStoryRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<RespondToLfpStoryRequest>(create);
+  static RespondToLfpStoryRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get storyId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set storyId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasStoryId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearStoryId() => $_clearField(1);
+
+  /// JOIN — viewer wants to join author's party; INVITE — viewer invites author.
+  @$pb.TagNumber(2)
+  $core.String get responseType => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set responseType($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasResponseType() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearResponseType() => $_clearField(2);
+}
+
+class RespondToLfpStoryResponse extends $pb.GeneratedMessage {
+  factory RespondToLfpStoryResponse() => create();
+
+  RespondToLfpStoryResponse._();
+
+  factory RespondToLfpStoryResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory RespondToLfpStoryResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'RespondToLfpStoryResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.story.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RespondToLfpStoryResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RespondToLfpStoryResponse copyWith(
+          void Function(RespondToLfpStoryResponse) updates) =>
+      super.copyWith((message) => updates(message as RespondToLfpStoryResponse))
+          as RespondToLfpStoryResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static RespondToLfpStoryResponse create() => RespondToLfpStoryResponse._();
+  @$core.override
+  RespondToLfpStoryResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static RespondToLfpStoryResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<RespondToLfpStoryResponse>(create);
+  static RespondToLfpStoryResponse? _defaultInstance;
+}
+
 class CreateStoryResponse extends $pb.GeneratedMessage {
   factory CreateStoryResponse({
     Story? story,

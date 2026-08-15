@@ -7,17 +7,46 @@ import (
 	"time"
 )
 
+// QueryFilters optional narrowing for dashboard/metrics queries.
+type QueryFilters struct {
+	EventType string
+}
+
 // DashboardMetrics returns named metrics for a dashboard type in [from, to].
-func (s *CHStore) DashboardMetrics(ctx context.Context, dashboardType string, from, to time.Time) (map[string]float64, error) {
+func (s *CHStore) DashboardMetrics(ctx context.Context, dashboardType string, from, to time.Time, filters QueryFilters) (map[string]float64, error) {
 	out := map[string]float64{}
 	if s == nil || s.conn == nil {
 		return out, nil
 	}
 	switch strings.ToLower(strings.TrimSpace(dashboardType)) {
 	case "product":
+		dauDate := to.Add(-24 * time.Hour)
+		if dauDate.Before(from) {
+			dauDate = from
+		}
 		dau, err := s.scalar(ctx, `
+SELECT uniqMerge(unique_users) FROM voice.dau_mv
+WHERE date = toDate(?)`, dauDate)
+		if err != nil {
+			return nil, err
+		}
+		wauStart := to.Add(-7 * 24 * time.Hour)
+		if wauStart.Before(from) {
+			wauStart = from
+		}
+		wau, err := s.scalar(ctx, `
 SELECT uniqExact(user_id_hashed) FROM voice.events
-WHERE user_id_hashed != '' AND timestamp >= ? AND timestamp < ?`, from, to)
+WHERE user_id_hashed != '' AND timestamp >= ? AND timestamp < ?`, wauStart, to)
+		if err != nil {
+			return nil, err
+		}
+		mauStart := to.Add(-30 * 24 * time.Hour)
+		if mauStart.Before(from) {
+			mauStart = from
+		}
+		mau, err := s.scalar(ctx, `
+SELECT uniqExact(user_id_hashed) FROM voice.events
+WHERE user_id_hashed != '' AND timestamp >= ? AND timestamp < ?`, mauStart, to)
 		if err != nil {
 			return nil, err
 		}
@@ -28,6 +57,8 @@ WHERE event_type = 'user_registered' AND timestamp >= ? AND timestamp < ?`, from
 			return nil, err
 		}
 		out["dau"] = dau
+		out["wau"] = wau
+		out["mau"] = mau
 		out["registrations"] = regs
 	case "engagement":
 		msgs, err := s.scalar(ctx, `
@@ -60,9 +91,13 @@ WHERE event_type = 'payment_failed' AND timestamp >= ? AND timestamp < ?`, from,
 		out["payment_success"] = paid
 		out["payment_failed"] = failed
 	case "health":
+		eventType := strings.TrimSpace(filters.EventType)
+		if eventType == "" {
+			eventType = "api_request"
+		}
 		reqs, err := s.scalar(ctx, `
 SELECT count() FROM voice.events
-WHERE event_type = 'gateway_request' AND timestamp >= ? AND timestamp < ?`, from, to)
+WHERE event_type = ? AND timestamp >= ? AND timestamp < ?`, eventType, from, to)
 		if err != nil {
 			return nil, err
 		}
@@ -132,9 +167,9 @@ WITH cohort AS (
 ),
 activity AS (
   SELECT c.cohort_date, c.user_id_hashed,
-    maxIf(1, e.timestamp >= c.cohort_date AND e.timestamp < c.cohort_date + 1) AS d1,
-    maxIf(1, e.timestamp >= c.cohort_date AND e.timestamp < c.cohort_date + 7) AS d7,
-    maxIf(1, e.timestamp >= c.cohort_date AND e.timestamp < c.cohort_date + 30) AS d30
+    maxIf(1, toDate(e.timestamp) = c.cohort_date + 1) AS d1,
+    maxIf(1, toDate(e.timestamp) = c.cohort_date + 7) AS d7,
+    maxIf(1, toDate(e.timestamp) = c.cohort_date + 30) AS d30
   FROM cohort c
   LEFT JOIN voice.events e ON e.user_id_hashed = c.user_id_hashed
   GROUP BY c.cohort_date, c.user_id_hashed
@@ -206,4 +241,19 @@ func (s *CHStore) ExportEvents(ctx context.Context, from, to time.Time, eventTyp
 		out = append(out, r)
 	}
 	return out, rows.Err()
+}
+
+// CountEvents returns matching event count (used by live ingest tests).
+func (s *CHStore) CountEvents(ctx context.Context, eventType string, since time.Time) (uint64, error) {
+	if s == nil || s.conn == nil {
+		return 0, fmt.Errorf("clickhouse store unavailable")
+	}
+	row := s.conn.QueryRow(ctx, `
+SELECT count() FROM voice.events
+WHERE event_type = ? AND timestamp >= ?`, eventType, since)
+	var v uint64
+	if err := row.Scan(&v); err != nil {
+		return 0, err
+	}
+	return v, nil
 }

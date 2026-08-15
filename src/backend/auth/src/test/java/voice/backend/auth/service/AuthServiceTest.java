@@ -10,6 +10,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
+import voice.backend.auth.mail.NoopMailSender;
 import voice.backend.auth.events.NoopAuthEventPublisher;
 import voice.backend.auth.repository.InMemoryAccountRepository;
 import voice.backend.auth.repository.InMemoryBackupCodeRepository;
@@ -173,6 +174,8 @@ class AuthServiceTest {
         new voice.backend.auth.userdb.NoOpProfileSwitchValidator(),
         new voice.backend.auth.repository.InMemoryE2EKeyBackupRepository(),
         new NoopAuthEventPublisher(),
-        new SimpleMeterRegistry());
+        new SimpleMeterRegistry(),
+        new InMemoryAccountRestoreTokenStore(),
+        new NoopMailSender());
   }
 }

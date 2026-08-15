@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"google.golang.org/grpc/metadata"
 
 	"voice/backend/pkg/privacy"
 
@@ -14,12 +15,17 @@ type GRPCUserPrivacy struct {
 	Client userv1.UserServiceClient
 }
 
+func privacyS2SContext(ctx context.Context) context.Context {
+	// Internal caller only — forwarding end-user account MD would hit ownership denial
+	// when reading another profile's audience for enforcement.
+	return metadata.NewOutgoingContext(ctx, metadata.Pairs("x-voice-internal-caller", "messaging"))
+}
+
 func (u *GRPCUserPrivacy) AllowDMAudience(ctx context.Context, profileID uuid.UUID) (privacy.Audience, error) {
 	if u == nil || u.Client == nil {
 		return privacy.EveryoneWithGuests(), nil
 	}
-	ctx = ForwardIncomingMetadata(ctx)
-	resp, err := u.Client.GetPrivacySettings(ctx, &userv1.GetPrivacySettingsRequest{
+	resp, err := u.Client.GetPrivacySettings(privacyS2SContext(ctx), &userv1.GetPrivacySettingsRequest{
 		ProfileId: profileID.String(),
 	})
 	if err != nil {
@@ -32,8 +38,7 @@ func (u *GRPCUserPrivacy) AllowGuestDM(ctx context.Context, profileID uuid.UUID)
 	if u == nil || u.Client == nil {
 		return true, nil
 	}
-	ctx = ForwardIncomingMetadata(ctx)
-	resp, err := u.Client.GetPrivacySettings(ctx, &userv1.GetPrivacySettingsRequest{
+	resp, err := u.Client.GetPrivacySettings(privacyS2SContext(ctx), &userv1.GetPrivacySettingsRequest{
 		ProfileId: profileID.String(),
 	})
 	if err != nil {
@@ -46,8 +51,7 @@ func (u *GRPCUserPrivacy) AllowFilesAudience(ctx context.Context, profileID uuid
 	if u == nil || u.Client == nil {
 		return privacy.EveryoneWithGuests(), nil
 	}
-	ctx = ForwardIncomingMetadata(ctx)
-	resp, err := u.Client.GetPrivacySettings(ctx, &userv1.GetPrivacySettingsRequest{
+	resp, err := u.Client.GetPrivacySettings(privacyS2SContext(ctx), &userv1.GetPrivacySettingsRequest{
 		ProfileId: profileID.String(),
 	})
 	if err != nil {
@@ -60,8 +64,7 @@ func (u *GRPCUserPrivacy) AllowVoiceMessagesAudience(ctx context.Context, profil
 	if u == nil || u.Client == nil {
 		return privacy.EveryoneWithGuests(), nil
 	}
-	ctx = ForwardIncomingMetadata(ctx)
-	resp, err := u.Client.GetPrivacySettings(ctx, &userv1.GetPrivacySettingsRequest{
+	resp, err := u.Client.GetPrivacySettings(privacyS2SContext(ctx), &userv1.GetPrivacySettingsRequest{
 		ProfileId: profileID.String(),
 	})
 	if err != nil {

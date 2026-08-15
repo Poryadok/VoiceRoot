@@ -51,19 +51,23 @@ func RunMessageEventsConsumer(ctx context.Context, natsURL, instanceID string, i
 		var env eventsv1.MessageStreamEvent
 		if err := proto.Unmarshal(msg.Data, &env); err != nil {
 			natslog.LogConsume(logger, msg, slog.LevelWarn, "message event unmarshal failed")
+			jetStreamTermAck(msg)
 			return
 		}
-		if err := idx.Handle(ctx, &env); err != nil && logger != nil {
+		err := idx.Handle(ctx, &env)
+		if err != nil && logger != nil {
 			logger.Warn("search index update failed", slog.Any("error", err))
-		} else {
+		} else if err == nil {
 			natslog.LogConsume(logger, msg, slog.LevelInfo, "search message event consumed")
 		}
+		jetStreamConsumeAck(msg, err)
 	}
 
 	sub, err := js.Subscribe("msg.>", handler,
 		nats.Durable(durable),
 		nats.BindStream(jsStreamMessageEvents),
 		nats.DeliverNew(),
+		nats.ManualAck(),
 	)
 	if err != nil {
 		sub, err = js.Subscribe("", handler, nats.Bind(jsStreamMessageEvents, durable))
@@ -87,13 +91,16 @@ func RunUserEventsConsumer(ctx context.Context, natsURL, instanceID string, idx 
 		var env eventsv1.UserStreamEvent
 		if err := proto.Unmarshal(msg.Data, &env); err != nil {
 			natslog.LogConsume(logger, msg, slog.LevelWarn, "user event unmarshal failed")
+			jetStreamTermAck(msg)
 			return
 		}
-		if err := idx.Handle(ctx, &env); err != nil && logger != nil {
+		err := idx.Handle(ctx, &env)
+		if err != nil && logger != nil {
 			logger.Warn("search profile index update failed", slog.Any("error", err))
-		} else {
+		} else if err == nil {
 			natslog.LogConsume(logger, msg, slog.LevelInfo, "search user event consumed")
 		}
+		jetStreamConsumeAck(msg, err)
 	}, logger)
 }
 
@@ -103,13 +110,16 @@ func RunChatEventsConsumer(ctx context.Context, natsURL, instanceID string, idx 
 		var env eventsv1.ChatStreamEvent
 		if err := proto.Unmarshal(msg.Data, &env); err != nil {
 			natslog.LogConsume(logger, msg, slog.LevelWarn, "chat event unmarshal failed")
+			jetStreamTermAck(msg)
 			return
 		}
-		if err := idx.Handle(ctx, &env); err != nil && logger != nil {
+		err := idx.Handle(ctx, &env)
+		if err != nil && logger != nil {
 			logger.Warn("search chat/space index update failed", slog.Any("error", err))
-		} else {
+		} else if err == nil {
 			natslog.LogConsume(logger, msg, slog.LevelInfo, "search chat event consumed")
 		}
+		jetStreamConsumeAck(msg, err)
 	}, logger)
 }
 
@@ -144,6 +154,7 @@ func runJetStreamConsumer(ctx context.Context, natsURL, instanceID, namePrefix, 
 		nats.Durable(durable),
 		nats.BindStream(stream),
 		nats.DeliverNew(),
+		nats.ManualAck(),
 	)
 	if err != nil {
 		sub, err = js.Subscribe("", handler, nats.Bind(stream, durable))

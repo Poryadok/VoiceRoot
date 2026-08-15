@@ -8,7 +8,7 @@ COPY scripts/docker-go-mod-download.sh /usr/local/bin/docker-go-mod-download.sh
 COPY pkg/go.mod ./pkg/
 COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
 COPY user/pb/voice/user/go.mod ./user/pb/voice/user/
-COPY federation/go.mod ./federation/
+COPY federation/go.mod federation/go.sum ./federation/
 RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked sh /usr/local/bin/docker-go-mod-download.sh federation
 COPY pkg ./pkg
 COPY federation ./federation

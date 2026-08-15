@@ -232,9 +232,11 @@ WHERE target_profile_id = $1 AND trigger = 'report_threshold' AND action = 'shad
 	require.GreaterOrEqual(t, logCount, 1, "report threshold must write auto_mod_log")
 
 	var sanctionCount int
-	err = pool.QueryRow(ctx, `SELECT COUNT(*) FROM sanctions WHERE target_account_id = $1`, targetProfile).Scan(&sanctionCount)
+	err = pool.QueryRow(ctx, `
+SELECT COUNT(*) FROM sanctions
+WHERE target_account_id = $1 AND type = 'shadow_ban' AND revoked_at IS NULL`, targetProfile).Scan(&sanctionCount)
 	require.NoError(t, err)
-	require.Equal(t, 0, sanctionCount, "privacy/trust (docs/features/privacy.md) must not insert sanctions on report threshold")
+	require.GreaterOrEqual(t, sanctionCount, 1, "report threshold must insert shadow_ban sanction per docs/features/reports.md")
 }
 
 // TestListReports_InternalOnly documents queue listing is not a public reporter API.

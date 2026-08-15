@@ -1246,13 +1246,29 @@ class RealtimeHub {
 
     _setStatus(RealtimeLinkStatus.connecting);
     final uri = gatewayWebSocketUri(config.baseUrl);
-    // Web targets cannot set custom WS headers; Gateway generates X-Request-Id on upgrade.
+    String? wsTicket;
+    if (kIsWeb) {
+      final gatewayClient = _ref.read(voiceGatewayClientProvider);
+      final issued = await gatewayClient.requestWsTicket(
+        auth.authorizationHeader,
+      );
+      if (issued == null) {
+        _scheduleReconnect();
+        return;
+      }
+      wsTicket = issued.ticket;
+    }
+    // Native: Authorization header; web: short-lived ticket in query (no JWT in URL).
     final headers = <String, String>{
-      'Authorization': auth.authorizationHeader,
-      'X-Voice-Profile-Id': auth.activeProfileId,
+      if (!kIsWeb) 'Authorization': auth.authorizationHeader,
+      if (!kIsWeb) 'X-Voice-Profile-Id': auth.activeProfileId,
       if (!kIsWeb) 'X-Request-Id': newGatewayRequestId(),
     };
-    final connection = VoiceRealtimeConnection(uri: uri, headers: headers);
+    final connection = VoiceRealtimeConnection(
+      uri: uri,
+      headers: headers,
+      wsTicket: wsTicket,
+    );
     _connection = connection;
     _frameSub = connection.events.listen(
       _onFrame,

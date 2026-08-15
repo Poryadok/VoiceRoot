@@ -5,6 +5,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 # shellcheck source=scripts/prod/load-prod-domains.sh
 source "${ROOT}/scripts/prod/load-prod-domains.sh"
+# shellcheck source=scripts/prod/map-prod-env.sh
+source "${ROOT}/scripts/prod/map-prod-env.sh"
 
 export VOICE_STAGING_URL="https://${VOICE_GATEWAY_INGRESS_HOST}"
 bash "${ROOT}/scripts/staging/smoke-staging.sh"

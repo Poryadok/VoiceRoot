@@ -30,7 +30,10 @@ import (
 
 	callsv1 "voice.app/voice/calls/v1"
 	chatv1 "voice.app/voice/chat/v1"
+	rolev1 "voice.app/voice/role/v1"
+	subscriptionv1 "voice.app/voice/subscription/v1"
 	userv1 "voice.app/voice/user/v1"
+	spacev1 "voice.app/voice/space/v1"
 )
 
 const serviceName = "voice"
@@ -91,6 +94,9 @@ func main() {
 	var callPrivacy grpcsvc.CallPrivacyChecker
 	var callFriends grpcsvc.CallProfileFriendChecker
 	var callSpaceCoMembership grpcsvc.CallSpaceCoMembershipChecker
+	var spaceMembers grpcsvc.SpaceMembership
+	var spacePro grpcsvc.SpaceProLookup
+	var rolePerms grpcsvc.RolePermissionChecker
 	if userAddr := strings.TrimSpace(os.Getenv("USER_GRPC_ADDR")); userAddr != "" {
 		uconn, err := grpc.NewClient(grpcclient.DialTarget(userAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
@@ -113,13 +119,34 @@ func main() {
 			log.Fatalf("space grpc: %v", err)
 		}
 		defer func() { _ = spconn.Close() }()
+		spaceCli := spacev1.NewSpaceServiceClient(spconn)
 		callSpaceCoMembership = s2s.NewGRPCSpaceCoMembership(spconn)
+		spaceMembers = s2s.NewGRPCSpaceMembership(spaceCli)
+	}
+	if subAddr := strings.TrimSpace(os.Getenv("SUBSCRIPTION_GRPC_ADDR")); subAddr != "" {
+		subconn, err := grpc.NewClient(grpcclient.DialTarget(subAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			log.Fatalf("subscription grpc: %v", err)
+		}
+		defer func() { _ = subconn.Close() }()
+		spacePro = s2s.NewGRPCSpacePro(subscriptionv1.NewSubscriptionServiceClient(subconn))
+	}
+	if roleAddr := strings.TrimSpace(os.Getenv("ROLE_GRPC_ADDR")); roleAddr != "" {
+		rconn, err := grpc.NewClient(grpcclient.DialTarget(roleAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			log.Fatalf("role grpc: %v", err)
+		}
+		defer func() { _ = rconn.Close() }()
+		rolePerms = s2s.NewGRPCRolePermissions(rolev1.NewRoleServiceClient(rconn))
 	}
 
 	tokenTTL := time.Hour
 	voiceSvc := &grpcsvc.VoiceGRPC{
 		Calls:             callStore,
 		ChatMembers:       chatMembers,
+		SpaceMembers:      spaceMembers,
+		SpacePro:          spacePro,
+		Roles:             rolePerms,
 		Privacy:           callPrivacy,
 		Friends:           callFriends,
 		SpaceCoMembership: callSpaceCoMembership,

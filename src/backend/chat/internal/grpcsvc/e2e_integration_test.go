@@ -46,7 +46,14 @@ func TestEnableChatE2E_DM_Succeeds(t *testing.T) {
 
 	pool := startChatPostgresForTest(t, context.Background())
 	applyChatMigration(t, context.Background(), pool)
-	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil)
+
+	stub := &e2ePreKeyMessagingStub{bundles: map[string]string{}}
+	seedStubPreKeyBundle(stub, profA)
+	seedStubPreKeyBundle(stub, profB)
+	msgClient, cleanupMsg := startE2EPreKeyMessagingClient(t, stub)
+	t.Cleanup(cleanupMsg)
+
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil, WithMessagingE2EClient(msgClient))
 	t.Cleanup(cleanup)
 
 	chat := createDMForE2E(t, client, profiles, profA, profB)
@@ -59,6 +66,28 @@ func TestEnableChatE2E_DM_Succeeds(t *testing.T) {
 	got, err := client.GetChat(ctxFor(t, profiles, profA), &chatv1.GetChatRequest{ChatId: chat.GetId()})
 	require.NoError(t, err)
 	require.True(t, got.GetChat().GetE2EEnabled(), "DM chat should expose e2e_enabled after EnableChatE2E")
+}
+
+// TestEnableChatE2E_FailsWhenPreKeyGateUnset documents fail-closed when Messaging pre-key gate is not wired.
+func TestEnableChatE2E_FailsWhenPreKeyGateUnset(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	profA, profB := uuid.New(), uuid.New()
+	profiles := profileMap(profA, profB)
+
+	pool := startChatPostgresForTest(t, context.Background())
+	applyChatMigration(t, context.Background(), pool)
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil)
+	t.Cleanup(cleanup)
+
+	chat := createDMForE2E(t, client, profiles, profA, profB)
+
+	_, err := client.EnableChatE2E(ctxFor(t, profiles, profA), &chatv1.EnableChatE2ERequest{
+		ChatId: chat.GetId(),
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
 }
 
 // TestEnableChatE2E_Group_FailedPrecondition documents E2E is DM-only (encryption.md).
@@ -97,7 +126,14 @@ func TestDisableChatE2E_DM_Succeeds(t *testing.T) {
 
 	pool := startChatPostgresForTest(t, context.Background())
 	applyChatMigration(t, context.Background(), pool)
-	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil)
+
+	stub := &e2ePreKeyMessagingStub{bundles: map[string]string{}}
+	seedStubPreKeyBundle(stub, profA)
+	seedStubPreKeyBundle(stub, profB)
+	msgClient, cleanupMsg := startE2EPreKeyMessagingClient(t, stub)
+	t.Cleanup(cleanupMsg)
+
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil, WithMessagingE2EClient(msgClient))
 	t.Cleanup(cleanup)
 
 	chat := createDMForE2E(t, client, profiles, profA, profB)
@@ -124,7 +160,14 @@ func TestChat_E2EEnabled_ExposedOnGetDM(t *testing.T) {
 
 	pool := startChatPostgresForTest(t, context.Background())
 	applyChatMigration(t, context.Background(), pool)
-	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil)
+
+	stub := &e2ePreKeyMessagingStub{bundles: map[string]string{}}
+	seedStubPreKeyBundle(stub, profA)
+	seedStubPreKeyBundle(stub, profB)
+	msgClient, cleanupMsg := startE2EPreKeyMessagingClient(t, stub)
+	t.Cleanup(cleanupMsg)
+
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil, WithMessagingE2EClient(msgClient))
 	t.Cleanup(cleanup)
 
 	chat := createDMForE2E(t, client, profiles, profA, profB)

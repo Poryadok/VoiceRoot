@@ -103,6 +103,7 @@ message CheckLimitRequest {
   string account_id = 1;
   string limit_name = 2;
   int64 delta = 3;
+  optional voice.space.v1.SpaceRef scope_space = 4;
 }
 
 message CheckLimitResponse {

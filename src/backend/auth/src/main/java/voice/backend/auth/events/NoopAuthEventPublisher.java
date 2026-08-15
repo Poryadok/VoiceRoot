@@ -12,4 +12,14 @@ public class NoopAuthEventPublisher implements AuthEventPublisher {
   public void publishGuestConverted(UUID accountId) {
     log.debug("guest converted event skipped (no NATS): account_id={}", accountId);
   }
+
+  @Override
+  public void publishAccountDeleted(UUID accountId) {
+    log.debug("account deleted event skipped (no NATS): account_id={}", accountId);
+  }
+
+  @Override
+  public void publishAccountRestored(UUID accountId) {
+    log.debug("account restored event skipped (no NATS): account_id={}", accountId);
+  }
 }

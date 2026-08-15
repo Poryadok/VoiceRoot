@@ -7,6 +7,8 @@ global:
   - .github/workflows/**
   - .github/ci/**
   - scripts/ci/**
+  - scripts/staging/**
+  - scripts/prod/**
   - docker-compose.yml
   - docker-compose*.yml
   - .env.example

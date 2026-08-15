@@ -1353,6 +1353,310 @@ func (x *IsShadowBannedResponse) GetShadowBanned() bool {
 	return false
 }
 
+type IsMMBannedRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AccountId     string                 `protobuf:"bytes,1,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IsMMBannedRequest) Reset() {
+	*x = IsMMBannedRequest{}
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IsMMBannedRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IsMMBannedRequest) ProtoMessage() {}
+
+func (x *IsMMBannedRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IsMMBannedRequest.ProtoReflect.Descriptor instead.
+func (*IsMMBannedRequest) Descriptor() ([]byte, []int) {
+	return file_voice_moderation_v1_moderation_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *IsMMBannedRequest) GetAccountId() string {
+	if x != nil {
+		return x.AccountId
+	}
+	return ""
+}
+
+type IsMMBannedResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	MmBanned      bool                   `protobuf:"varint,1,opt,name=mm_banned,json=mmBanned,proto3" json:"mm_banned,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IsMMBannedResponse) Reset() {
+	*x = IsMMBannedResponse{}
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IsMMBannedResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IsMMBannedResponse) ProtoMessage() {}
+
+func (x *IsMMBannedResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IsMMBannedResponse.ProtoReflect.Descriptor instead.
+func (*IsMMBannedResponse) Descriptor() ([]byte, []int) {
+	return file_voice_moderation_v1_moderation_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *IsMMBannedResponse) GetMmBanned() bool {
+	if x != nil {
+		return x.MmBanned
+	}
+	return false
+}
+
+type AuditLogEntry struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Id             string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	ActorProfileId string                 `protobuf:"bytes,2,opt,name=actor_profile_id,json=actorProfileId,proto3" json:"actor_profile_id,omitempty"`
+	Action         string                 `protobuf:"bytes,3,opt,name=action,proto3" json:"action,omitempty"`
+	TargetType     string                 `protobuf:"bytes,4,opt,name=target_type,json=targetType,proto3" json:"target_type,omitempty"`
+	TargetId       string                 `protobuf:"bytes,5,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
+	Details        string                 `protobuf:"bytes,6,opt,name=details,proto3" json:"details,omitempty"`
+	CreatedAt      *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *AuditLogEntry) Reset() {
+	*x = AuditLogEntry{}
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AuditLogEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AuditLogEntry) ProtoMessage() {}
+
+func (x *AuditLogEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AuditLogEntry.ProtoReflect.Descriptor instead.
+func (*AuditLogEntry) Descriptor() ([]byte, []int) {
+	return file_voice_moderation_v1_moderation_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *AuditLogEntry) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *AuditLogEntry) GetActorProfileId() string {
+	if x != nil {
+		return x.ActorProfileId
+	}
+	return ""
+}
+
+func (x *AuditLogEntry) GetAction() string {
+	if x != nil {
+		return x.Action
+	}
+	return ""
+}
+
+func (x *AuditLogEntry) GetTargetType() string {
+	if x != nil {
+		return x.TargetType
+	}
+	return ""
+}
+
+func (x *AuditLogEntry) GetTargetId() string {
+	if x != nil {
+		return x.TargetId
+	}
+	return ""
+}
+
+func (x *AuditLogEntry) GetDetails() string {
+	if x != nil {
+		return x.Details
+	}
+	return ""
+}
+
+func (x *AuditLogEntry) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+type AuditLogExport struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Entries       []*AuditLogEntry       `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AuditLogExport) Reset() {
+	*x = AuditLogExport{}
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AuditLogExport) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AuditLogExport) ProtoMessage() {}
+
+func (x *AuditLogExport) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AuditLogExport.ProtoReflect.Descriptor instead.
+func (*AuditLogExport) Descriptor() ([]byte, []int) {
+	return file_voice_moderation_v1_moderation_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *AuditLogExport) GetEntries() []*AuditLogEntry {
+	if x != nil {
+		return x.Entries
+	}
+	return nil
+}
+
+type ExportAuditLogRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExportAuditLogRequest) Reset() {
+	*x = ExportAuditLogRequest{}
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExportAuditLogRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExportAuditLogRequest) ProtoMessage() {}
+
+func (x *ExportAuditLogRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExportAuditLogRequest.ProtoReflect.Descriptor instead.
+func (*ExportAuditLogRequest) Descriptor() ([]byte, []int) {
+	return file_voice_moderation_v1_moderation_proto_rawDescGZIP(), []int{26}
+}
+
+type ExportAuditLogResponse struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	AuditLogExport *AuditLogExport        `protobuf:"bytes,1,opt,name=audit_log_export,json=auditLogExport,proto3" json:"audit_log_export,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ExportAuditLogResponse) Reset() {
+	*x = ExportAuditLogResponse{}
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExportAuditLogResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExportAuditLogResponse) ProtoMessage() {}
+
+func (x *ExportAuditLogResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExportAuditLogResponse.ProtoReflect.Descriptor instead.
+func (*ExportAuditLogResponse) Descriptor() ([]byte, []int) {
+	return file_voice_moderation_v1_moderation_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *ExportAuditLogResponse) GetAuditLogExport() *AuditLogExport {
+	if x != nil {
+		return x.AuditLogExport
+	}
+	return nil
+}
+
 type CreateReportResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Report        *Report                `protobuf:"bytes,1,opt,name=report,proto3" json:"report,omitempty"`
@@ -1362,7 +1666,7 @@ type CreateReportResponse struct {
 
 func (x *CreateReportResponse) Reset() {
 	*x = CreateReportResponse{}
-	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[22]
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1374,7 +1678,7 @@ func (x *CreateReportResponse) String() string {
 func (*CreateReportResponse) ProtoMessage() {}
 
 func (x *CreateReportResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[22]
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1387,7 +1691,7 @@ func (x *CreateReportResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateReportResponse.ProtoReflect.Descriptor instead.
 func (*CreateReportResponse) Descriptor() ([]byte, []int) {
-	return file_voice_moderation_v1_moderation_proto_rawDescGZIP(), []int{22}
+	return file_voice_moderation_v1_moderation_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *CreateReportResponse) GetReport() *Report {
@@ -1406,7 +1710,7 @@ type GetReportResponse struct {
 
 func (x *GetReportResponse) Reset() {
 	*x = GetReportResponse{}
-	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[23]
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1418,7 +1722,7 @@ func (x *GetReportResponse) String() string {
 func (*GetReportResponse) ProtoMessage() {}
 
 func (x *GetReportResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[23]
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1431,7 +1735,7 @@ func (x *GetReportResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetReportResponse.ProtoReflect.Descriptor instead.
 func (*GetReportResponse) Descriptor() ([]byte, []int) {
-	return file_voice_moderation_v1_moderation_proto_rawDescGZIP(), []int{23}
+	return file_voice_moderation_v1_moderation_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *GetReportResponse) GetReport() *Report {
@@ -1450,7 +1754,7 @@ type ListReportsResponse struct {
 
 func (x *ListReportsResponse) Reset() {
 	*x = ListReportsResponse{}
-	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[24]
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1462,7 +1766,7 @@ func (x *ListReportsResponse) String() string {
 func (*ListReportsResponse) ProtoMessage() {}
 
 func (x *ListReportsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[24]
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1475,7 +1779,7 @@ func (x *ListReportsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListReportsResponse.ProtoReflect.Descriptor instead.
 func (*ListReportsResponse) Descriptor() ([]byte, []int) {
-	return file_voice_moderation_v1_moderation_proto_rawDescGZIP(), []int{24}
+	return file_voice_moderation_v1_moderation_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *ListReportsResponse) GetReportList() *ReportList {
@@ -1494,7 +1798,7 @@ type ResolveReportResponse struct {
 
 func (x *ResolveReportResponse) Reset() {
 	*x = ResolveReportResponse{}
-	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[25]
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1506,7 +1810,7 @@ func (x *ResolveReportResponse) String() string {
 func (*ResolveReportResponse) ProtoMessage() {}
 
 func (x *ResolveReportResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[25]
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1519,7 +1823,7 @@ func (x *ResolveReportResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveReportResponse.ProtoReflect.Descriptor instead.
 func (*ResolveReportResponse) Descriptor() ([]byte, []int) {
-	return file_voice_moderation_v1_moderation_proto_rawDescGZIP(), []int{25}
+	return file_voice_moderation_v1_moderation_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *ResolveReportResponse) GetReport() *Report {
@@ -1538,7 +1842,7 @@ type ApplySanctionResponse struct {
 
 func (x *ApplySanctionResponse) Reset() {
 	*x = ApplySanctionResponse{}
-	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[26]
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1550,7 +1854,7 @@ func (x *ApplySanctionResponse) String() string {
 func (*ApplySanctionResponse) ProtoMessage() {}
 
 func (x *ApplySanctionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[26]
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1563,7 +1867,7 @@ func (x *ApplySanctionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplySanctionResponse.ProtoReflect.Descriptor instead.
 func (*ApplySanctionResponse) Descriptor() ([]byte, []int) {
-	return file_voice_moderation_v1_moderation_proto_rawDescGZIP(), []int{26}
+	return file_voice_moderation_v1_moderation_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *ApplySanctionResponse) GetSanction() *Sanction {
@@ -1581,7 +1885,7 @@ type RevokeSanctionResponse struct {
 
 func (x *RevokeSanctionResponse) Reset() {
 	*x = RevokeSanctionResponse{}
-	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[27]
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1593,7 +1897,7 @@ func (x *RevokeSanctionResponse) String() string {
 func (*RevokeSanctionResponse) ProtoMessage() {}
 
 func (x *RevokeSanctionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[27]
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1606,7 +1910,7 @@ func (x *RevokeSanctionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeSanctionResponse.ProtoReflect.Descriptor instead.
 func (*RevokeSanctionResponse) Descriptor() ([]byte, []int) {
-	return file_voice_moderation_v1_moderation_proto_rawDescGZIP(), []int{27}
+	return file_voice_moderation_v1_moderation_proto_rawDescGZIP(), []int{33}
 }
 
 type GetAccountSanctionsResponse struct {
@@ -1618,7 +1922,7 @@ type GetAccountSanctionsResponse struct {
 
 func (x *GetAccountSanctionsResponse) Reset() {
 	*x = GetAccountSanctionsResponse{}
-	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[28]
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1630,7 +1934,7 @@ func (x *GetAccountSanctionsResponse) String() string {
 func (*GetAccountSanctionsResponse) ProtoMessage() {}
 
 func (x *GetAccountSanctionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[28]
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1643,7 +1947,7 @@ func (x *GetAccountSanctionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAccountSanctionsResponse.ProtoReflect.Descriptor instead.
 func (*GetAccountSanctionsResponse) Descriptor() ([]byte, []int) {
-	return file_voice_moderation_v1_moderation_proto_rawDescGZIP(), []int{28}
+	return file_voice_moderation_v1_moderation_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *GetAccountSanctionsResponse) GetSanctionList() *SanctionList {
@@ -1662,7 +1966,7 @@ type GetActiveSanctionResponse struct {
 
 func (x *GetActiveSanctionResponse) Reset() {
 	*x = GetActiveSanctionResponse{}
-	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[29]
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1674,7 +1978,7 @@ func (x *GetActiveSanctionResponse) String() string {
 func (*GetActiveSanctionResponse) ProtoMessage() {}
 
 func (x *GetActiveSanctionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[29]
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1687,7 +1991,7 @@ func (x *GetActiveSanctionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetActiveSanctionResponse.ProtoReflect.Descriptor instead.
 func (*GetActiveSanctionResponse) Descriptor() ([]byte, []int) {
-	return file_voice_moderation_v1_moderation_proto_rawDescGZIP(), []int{29}
+	return file_voice_moderation_v1_moderation_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *GetActiveSanctionResponse) GetSanction() *Sanction {
@@ -1706,7 +2010,7 @@ type SubmitAppealResponse struct {
 
 func (x *SubmitAppealResponse) Reset() {
 	*x = SubmitAppealResponse{}
-	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[30]
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1718,7 +2022,7 @@ func (x *SubmitAppealResponse) String() string {
 func (*SubmitAppealResponse) ProtoMessage() {}
 
 func (x *SubmitAppealResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[30]
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1731,7 +2035,7 @@ func (x *SubmitAppealResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitAppealResponse.ProtoReflect.Descriptor instead.
 func (*SubmitAppealResponse) Descriptor() ([]byte, []int) {
-	return file_voice_moderation_v1_moderation_proto_rawDescGZIP(), []int{30}
+	return file_voice_moderation_v1_moderation_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *SubmitAppealResponse) GetAppeal() *Appeal {
@@ -1750,7 +2054,7 @@ type ReviewAppealResponse struct {
 
 func (x *ReviewAppealResponse) Reset() {
 	*x = ReviewAppealResponse{}
-	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[31]
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1762,7 +2066,7 @@ func (x *ReviewAppealResponse) String() string {
 func (*ReviewAppealResponse) ProtoMessage() {}
 
 func (x *ReviewAppealResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[31]
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1775,7 +2079,7 @@ func (x *ReviewAppealResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReviewAppealResponse.ProtoReflect.Descriptor instead.
 func (*ReviewAppealResponse) Descriptor() ([]byte, []int) {
-	return file_voice_moderation_v1_moderation_proto_rawDescGZIP(), []int{31}
+	return file_voice_moderation_v1_moderation_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *ReviewAppealResponse) GetAppeal() *Appeal {
@@ -1794,7 +2098,7 @@ type GetAppealResponse struct {
 
 func (x *GetAppealResponse) Reset() {
 	*x = GetAppealResponse{}
-	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[32]
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1806,7 +2110,7 @@ func (x *GetAppealResponse) String() string {
 func (*GetAppealResponse) ProtoMessage() {}
 
 func (x *GetAppealResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[32]
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1819,7 +2123,7 @@ func (x *GetAppealResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAppealResponse.ProtoReflect.Descriptor instead.
 func (*GetAppealResponse) Descriptor() ([]byte, []int) {
-	return file_voice_moderation_v1_moderation_proto_rawDescGZIP(), []int{32}
+	return file_voice_moderation_v1_moderation_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *GetAppealResponse) GetAppeal() *Appeal {
@@ -1838,7 +2142,7 @@ type CheckMessageResponse struct {
 
 func (x *CheckMessageResponse) Reset() {
 	*x = CheckMessageResponse{}
-	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[33]
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1850,7 +2154,7 @@ func (x *CheckMessageResponse) String() string {
 func (*CheckMessageResponse) ProtoMessage() {}
 
 func (x *CheckMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[33]
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1863,7 +2167,7 @@ func (x *CheckMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckMessageResponse.ProtoReflect.Descriptor instead.
 func (*CheckMessageResponse) Descriptor() ([]byte, []int) {
-	return file_voice_moderation_v1_moderation_proto_rawDescGZIP(), []int{33}
+	return file_voice_moderation_v1_moderation_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *CheckMessageResponse) GetCheckResult() *CheckResult {
@@ -1882,7 +2186,7 @@ type GetAutoModStatsResponse struct {
 
 func (x *GetAutoModStatsResponse) Reset() {
 	*x = GetAutoModStatsResponse{}
-	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[34]
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1894,7 +2198,7 @@ func (x *GetAutoModStatsResponse) String() string {
 func (*GetAutoModStatsResponse) ProtoMessage() {}
 
 func (x *GetAutoModStatsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[34]
+	mi := &file_voice_moderation_v1_moderation_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1907,7 +2211,7 @@ func (x *GetAutoModStatsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAutoModStatsResponse.ProtoReflect.Descriptor instead.
 func (*GetAutoModStatsResponse) Descriptor() ([]byte, []int) {
-	return file_voice_moderation_v1_moderation_proto_rawDescGZIP(), []int{34}
+	return file_voice_moderation_v1_moderation_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *GetAutoModStatsResponse) GetAutoModStats() *AutoModStats {
@@ -2131,7 +2435,42 @@ var file_voice_moderation_v1_moderation_proto_rawDesc = string([]byte{
 	0x61, 0x6e, 0x6e, 0x65, 0x64, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x23, 0x0a,
 	0x0d, 0x73, 0x68, 0x61, 0x64, 0x6f, 0x77, 0x5f, 0x62, 0x61, 0x6e, 0x6e, 0x65, 0x64, 0x18, 0x01,
 	0x20, 0x01, 0x28, 0x08, 0x52, 0x0c, 0x73, 0x68, 0x61, 0x64, 0x6f, 0x77, 0x42, 0x61, 0x6e, 0x6e,
-	0x65, 0x64, 0x22, 0x4b, 0x0a, 0x14, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x52, 0x65, 0x70, 0x6f,
+	0x65, 0x64, 0x22, 0x32, 0x0a, 0x11, 0x49, 0x73, 0x4d, 0x4d, 0x42, 0x61, 0x6e, 0x6e, 0x65, 0x64,
+	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1d, 0x0a, 0x0a, 0x61, 0x63, 0x63, 0x6f, 0x75,
+	0x6e, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x61, 0x63, 0x63,
+	0x6f, 0x75, 0x6e, 0x74, 0x49, 0x64, 0x22, 0x31, 0x0a, 0x12, 0x49, 0x73, 0x4d, 0x4d, 0x42, 0x61,
+	0x6e, 0x6e, 0x65, 0x64, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x1b, 0x0a, 0x09,
+	0x6d, 0x6d, 0x5f, 0x62, 0x61, 0x6e, 0x6e, 0x65, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x08, 0x52,
+	0x08, 0x6d, 0x6d, 0x42, 0x61, 0x6e, 0x6e, 0x65, 0x64, 0x22, 0xf4, 0x01, 0x0a, 0x0d, 0x41, 0x75,
+	0x64, 0x69, 0x74, 0x4c, 0x6f, 0x67, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x12, 0x0e, 0x0a, 0x02, 0x69,
+	0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x02, 0x69, 0x64, 0x12, 0x28, 0x0a, 0x10, 0x61,
+	0x63, 0x74, 0x6f, 0x72, 0x5f, 0x70, 0x72, 0x6f, 0x66, 0x69, 0x6c, 0x65, 0x5f, 0x69, 0x64, 0x18,
+	0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0e, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x50, 0x72, 0x6f, 0x66,
+	0x69, 0x6c, 0x65, 0x49, 0x64, 0x12, 0x16, 0x0a, 0x06, 0x61, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x18,
+	0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x06, 0x61, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x12, 0x1f, 0x0a,
+	0x0b, 0x74, 0x61, 0x72, 0x67, 0x65, 0x74, 0x5f, 0x74, 0x79, 0x70, 0x65, 0x18, 0x04, 0x20, 0x01,
+	0x28, 0x09, 0x52, 0x0a, 0x74, 0x61, 0x72, 0x67, 0x65, 0x74, 0x54, 0x79, 0x70, 0x65, 0x12, 0x1b,
+	0x0a, 0x09, 0x74, 0x61, 0x72, 0x67, 0x65, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x05, 0x20, 0x01, 0x28,
+	0x09, 0x52, 0x08, 0x74, 0x61, 0x72, 0x67, 0x65, 0x74, 0x49, 0x64, 0x12, 0x18, 0x0a, 0x07, 0x64,
+	0x65, 0x74, 0x61, 0x69, 0x6c, 0x73, 0x18, 0x06, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x64, 0x65,
+	0x74, 0x61, 0x69, 0x6c, 0x73, 0x12, 0x39, 0x0a, 0x0a, 0x63, 0x72, 0x65, 0x61, 0x74, 0x65, 0x64,
+	0x5f, 0x61, 0x74, 0x18, 0x07, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67,
+	0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65,
+	0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x09, 0x63, 0x72, 0x65, 0x61, 0x74, 0x65, 0x64, 0x41, 0x74,
+	0x22, 0x4e, 0x0a, 0x0e, 0x41, 0x75, 0x64, 0x69, 0x74, 0x4c, 0x6f, 0x67, 0x45, 0x78, 0x70, 0x6f,
+	0x72, 0x74, 0x12, 0x3c, 0x0a, 0x07, 0x65, 0x6e, 0x74, 0x72, 0x69, 0x65, 0x73, 0x18, 0x01, 0x20,
+	0x03, 0x28, 0x0b, 0x32, 0x22, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x6d, 0x6f, 0x64, 0x65,
+	0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x2e, 0x76, 0x31, 0x2e, 0x41, 0x75, 0x64, 0x69, 0x74, 0x4c,
+	0x6f, 0x67, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x52, 0x07, 0x65, 0x6e, 0x74, 0x72, 0x69, 0x65, 0x73,
+	0x22, 0x17, 0x0a, 0x15, 0x45, 0x78, 0x70, 0x6f, 0x72, 0x74, 0x41, 0x75, 0x64, 0x69, 0x74, 0x4c,
+	0x6f, 0x67, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x67, 0x0a, 0x16, 0x45, 0x78, 0x70,
+	0x6f, 0x72, 0x74, 0x41, 0x75, 0x64, 0x69, 0x74, 0x4c, 0x6f, 0x67, 0x52, 0x65, 0x73, 0x70, 0x6f,
+	0x6e, 0x73, 0x65, 0x12, 0x4d, 0x0a, 0x10, 0x61, 0x75, 0x64, 0x69, 0x74, 0x5f, 0x6c, 0x6f, 0x67,
+	0x5f, 0x65, 0x78, 0x70, 0x6f, 0x72, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x23, 0x2e,
+	0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x6d, 0x6f, 0x64, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e,
+	0x2e, 0x76, 0x31, 0x2e, 0x41, 0x75, 0x64, 0x69, 0x74, 0x4c, 0x6f, 0x67, 0x45, 0x78, 0x70, 0x6f,
+	0x72, 0x74, 0x52, 0x0e, 0x61, 0x75, 0x64, 0x69, 0x74, 0x4c, 0x6f, 0x67, 0x45, 0x78, 0x70, 0x6f,
+	0x72, 0x74, 0x22, 0x4b, 0x0a, 0x14, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x52, 0x65, 0x70, 0x6f,
 	0x72, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x33, 0x0a, 0x06, 0x72, 0x65,
 	0x70, 0x6f, 0x72, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1b, 0x2e, 0x76, 0x6f, 0x69,
 	0x63, 0x65, 0x2e, 0x6d, 0x6f, 0x64, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x2e, 0x76, 0x31,
@@ -2196,7 +2535,7 @@ var file_voice_moderation_v1_moderation_proto_rawDesc = string([]byte{
 	0x0b, 0x32, 0x21, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x6d, 0x6f, 0x64, 0x65, 0x72, 0x61,
 	0x74, 0x69, 0x6f, 0x6e, 0x2e, 0x76, 0x31, 0x2e, 0x41, 0x75, 0x74, 0x6f, 0x4d, 0x6f, 0x64, 0x53,
 	0x74, 0x61, 0x74, 0x73, 0x52, 0x0c, 0x61, 0x75, 0x74, 0x6f, 0x4d, 0x6f, 0x64, 0x53, 0x74, 0x61,
-	0x74, 0x73, 0x32, 0xc3, 0x0b, 0x0a, 0x11, 0x4d, 0x6f, 0x64, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f,
+	0x74, 0x73, 0x32, 0x8d, 0x0d, 0x0a, 0x11, 0x4d, 0x6f, 0x64, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f,
 	0x6e, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x12, 0x63, 0x0a, 0x0c, 0x43, 0x72, 0x65, 0x61,
 	0x74, 0x65, 0x52, 0x65, 0x70, 0x6f, 0x72, 0x74, 0x12, 0x28, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65,
 	0x2e, 0x6d, 0x6f, 0x64, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x2e, 0x76, 0x31, 0x2e, 0x43,
@@ -2288,10 +2627,23 @@ var file_voice_moderation_v1_moderation_proto_rawDesc = string([]byte{
 	0x6e, 0x6e, 0x65, 0x64, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2b, 0x2e, 0x76, 0x6f,
 	0x69, 0x63, 0x65, 0x2e, 0x6d, 0x6f, 0x64, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x2e, 0x76,
 	0x31, 0x2e, 0x49, 0x73, 0x53, 0x68, 0x61, 0x64, 0x6f, 0x77, 0x42, 0x61, 0x6e, 0x6e, 0x65, 0x64,
-	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x42, 0x2c, 0x5a, 0x2a, 0x76, 0x6f, 0x69, 0x63,
-	0x65, 0x2e, 0x61, 0x70, 0x70, 0x2f, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2f, 0x6d, 0x6f, 0x64, 0x65,
-	0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x2f, 0x76, 0x31, 0x3b, 0x6d, 0x6f, 0x64, 0x65, 0x72, 0x61,
-	0x74, 0x69, 0x6f, 0x6e, 0x76, 0x31, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x5d, 0x0a, 0x0a, 0x49, 0x73, 0x4d, 0x4d,
+	0x42, 0x61, 0x6e, 0x6e, 0x65, 0x64, 0x12, 0x26, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x6d,
+	0x6f, 0x64, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x2e, 0x76, 0x31, 0x2e, 0x49, 0x73, 0x4d,
+	0x4d, 0x42, 0x61, 0x6e, 0x6e, 0x65, 0x64, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x27,
+	0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x6d, 0x6f, 0x64, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f,
+	0x6e, 0x2e, 0x76, 0x31, 0x2e, 0x49, 0x73, 0x4d, 0x4d, 0x42, 0x61, 0x6e, 0x6e, 0x65, 0x64, 0x52,
+	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x69, 0x0a, 0x0e, 0x45, 0x78, 0x70, 0x6f, 0x72,
+	0x74, 0x41, 0x75, 0x64, 0x69, 0x74, 0x4c, 0x6f, 0x67, 0x12, 0x2a, 0x2e, 0x76, 0x6f, 0x69, 0x63,
+	0x65, 0x2e, 0x6d, 0x6f, 0x64, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x2e, 0x76, 0x31, 0x2e,
+	0x45, 0x78, 0x70, 0x6f, 0x72, 0x74, 0x41, 0x75, 0x64, 0x69, 0x74, 0x4c, 0x6f, 0x67, 0x52, 0x65,
+	0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2b, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x6d, 0x6f,
+	0x64, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x2e, 0x76, 0x31, 0x2e, 0x45, 0x78, 0x70, 0x6f,
+	0x72, 0x74, 0x41, 0x75, 0x64, 0x69, 0x74, 0x4c, 0x6f, 0x67, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
+	0x73, 0x65, 0x42, 0x2c, 0x5a, 0x2a, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x61, 0x70, 0x70, 0x2f,
+	0x76, 0x6f, 0x69, 0x63, 0x65, 0x2f, 0x6d, 0x6f, 0x64, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e,
+	0x2f, 0x76, 0x31, 0x3b, 0x6d, 0x6f, 0x64, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x76, 0x31,
+	0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 })
 
 var (
@@ -2306,7 +2658,7 @@ func file_voice_moderation_v1_moderation_proto_rawDescGZIP() []byte {
 	return file_voice_moderation_v1_moderation_proto_rawDescData
 }
 
-var file_voice_moderation_v1_moderation_proto_msgTypes = make([]protoimpl.MessageInfo, 35)
+var file_voice_moderation_v1_moderation_proto_msgTypes = make([]protoimpl.MessageInfo, 41)
 var file_voice_moderation_v1_moderation_proto_goTypes = []any{
 	(*Report)(nil),                      // 0: voice.moderation.v1.Report
 	(*CreateReportRequest)(nil),         // 1: voice.moderation.v1.CreateReportRequest
@@ -2330,80 +2682,93 @@ var file_voice_moderation_v1_moderation_proto_goTypes = []any{
 	(*AutoModStats)(nil),                // 19: voice.moderation.v1.AutoModStats
 	(*IsShadowBannedRequest)(nil),       // 20: voice.moderation.v1.IsShadowBannedRequest
 	(*IsShadowBannedResponse)(nil),      // 21: voice.moderation.v1.IsShadowBannedResponse
-	(*CreateReportResponse)(nil),        // 22: voice.moderation.v1.CreateReportResponse
-	(*GetReportResponse)(nil),           // 23: voice.moderation.v1.GetReportResponse
-	(*ListReportsResponse)(nil),         // 24: voice.moderation.v1.ListReportsResponse
-	(*ResolveReportResponse)(nil),       // 25: voice.moderation.v1.ResolveReportResponse
-	(*ApplySanctionResponse)(nil),       // 26: voice.moderation.v1.ApplySanctionResponse
-	(*RevokeSanctionResponse)(nil),      // 27: voice.moderation.v1.RevokeSanctionResponse
-	(*GetAccountSanctionsResponse)(nil), // 28: voice.moderation.v1.GetAccountSanctionsResponse
-	(*GetActiveSanctionResponse)(nil),   // 29: voice.moderation.v1.GetActiveSanctionResponse
-	(*SubmitAppealResponse)(nil),        // 30: voice.moderation.v1.SubmitAppealResponse
-	(*ReviewAppealResponse)(nil),        // 31: voice.moderation.v1.ReviewAppealResponse
-	(*GetAppealResponse)(nil),           // 32: voice.moderation.v1.GetAppealResponse
-	(*CheckMessageResponse)(nil),        // 33: voice.moderation.v1.CheckMessageResponse
-	(*GetAutoModStatsResponse)(nil),     // 34: voice.moderation.v1.GetAutoModStatsResponse
-	(*timestamppb.Timestamp)(nil),       // 35: google.protobuf.Timestamp
-	(*v1.CursorPageRequest)(nil),        // 36: voice.common.v1.CursorPageRequest
-	(*v11.ChatRef)(nil),                 // 37: voice.chat.v1.ChatRef
+	(*IsMMBannedRequest)(nil),           // 22: voice.moderation.v1.IsMMBannedRequest
+	(*IsMMBannedResponse)(nil),          // 23: voice.moderation.v1.IsMMBannedResponse
+	(*AuditLogEntry)(nil),               // 24: voice.moderation.v1.AuditLogEntry
+	(*AuditLogExport)(nil),              // 25: voice.moderation.v1.AuditLogExport
+	(*ExportAuditLogRequest)(nil),       // 26: voice.moderation.v1.ExportAuditLogRequest
+	(*ExportAuditLogResponse)(nil),      // 27: voice.moderation.v1.ExportAuditLogResponse
+	(*CreateReportResponse)(nil),        // 28: voice.moderation.v1.CreateReportResponse
+	(*GetReportResponse)(nil),           // 29: voice.moderation.v1.GetReportResponse
+	(*ListReportsResponse)(nil),         // 30: voice.moderation.v1.ListReportsResponse
+	(*ResolveReportResponse)(nil),       // 31: voice.moderation.v1.ResolveReportResponse
+	(*ApplySanctionResponse)(nil),       // 32: voice.moderation.v1.ApplySanctionResponse
+	(*RevokeSanctionResponse)(nil),      // 33: voice.moderation.v1.RevokeSanctionResponse
+	(*GetAccountSanctionsResponse)(nil), // 34: voice.moderation.v1.GetAccountSanctionsResponse
+	(*GetActiveSanctionResponse)(nil),   // 35: voice.moderation.v1.GetActiveSanctionResponse
+	(*SubmitAppealResponse)(nil),        // 36: voice.moderation.v1.SubmitAppealResponse
+	(*ReviewAppealResponse)(nil),        // 37: voice.moderation.v1.ReviewAppealResponse
+	(*GetAppealResponse)(nil),           // 38: voice.moderation.v1.GetAppealResponse
+	(*CheckMessageResponse)(nil),        // 39: voice.moderation.v1.CheckMessageResponse
+	(*GetAutoModStatsResponse)(nil),     // 40: voice.moderation.v1.GetAutoModStatsResponse
+	(*timestamppb.Timestamp)(nil),       // 41: google.protobuf.Timestamp
+	(*v1.CursorPageRequest)(nil),        // 42: voice.common.v1.CursorPageRequest
+	(*v11.ChatRef)(nil),                 // 43: voice.chat.v1.ChatRef
 }
 var file_voice_moderation_v1_moderation_proto_depIdxs = []int32{
-	35, // 0: voice.moderation.v1.Report.resolved_at:type_name -> google.protobuf.Timestamp
-	35, // 1: voice.moderation.v1.Report.created_at:type_name -> google.protobuf.Timestamp
-	36, // 2: voice.moderation.v1.ListReportsRequest.page:type_name -> voice.common.v1.CursorPageRequest
+	41, // 0: voice.moderation.v1.Report.resolved_at:type_name -> google.protobuf.Timestamp
+	41, // 1: voice.moderation.v1.Report.created_at:type_name -> google.protobuf.Timestamp
+	42, // 2: voice.moderation.v1.ListReportsRequest.page:type_name -> voice.common.v1.CursorPageRequest
 	0,  // 3: voice.moderation.v1.ReportList.reports:type_name -> voice.moderation.v1.Report
-	35, // 4: voice.moderation.v1.Sanction.expires_at:type_name -> google.protobuf.Timestamp
-	35, // 5: voice.moderation.v1.Sanction.revoked_at:type_name -> google.protobuf.Timestamp
-	35, // 6: voice.moderation.v1.Sanction.created_at:type_name -> google.protobuf.Timestamp
-	35, // 7: voice.moderation.v1.ApplySanctionRequest.expires_at:type_name -> google.protobuf.Timestamp
+	41, // 4: voice.moderation.v1.Sanction.expires_at:type_name -> google.protobuf.Timestamp
+	41, // 5: voice.moderation.v1.Sanction.revoked_at:type_name -> google.protobuf.Timestamp
+	41, // 6: voice.moderation.v1.Sanction.created_at:type_name -> google.protobuf.Timestamp
+	41, // 7: voice.moderation.v1.ApplySanctionRequest.expires_at:type_name -> google.protobuf.Timestamp
 	6,  // 8: voice.moderation.v1.SanctionList.sanctions:type_name -> voice.moderation.v1.Sanction
-	35, // 9: voice.moderation.v1.Appeal.created_at:type_name -> google.protobuf.Timestamp
-	37, // 10: voice.moderation.v1.CheckMessageRequest.chat:type_name -> voice.chat.v1.ChatRef
-	0,  // 11: voice.moderation.v1.CreateReportResponse.report:type_name -> voice.moderation.v1.Report
-	0,  // 12: voice.moderation.v1.GetReportResponse.report:type_name -> voice.moderation.v1.Report
-	4,  // 13: voice.moderation.v1.ListReportsResponse.report_list:type_name -> voice.moderation.v1.ReportList
-	0,  // 14: voice.moderation.v1.ResolveReportResponse.report:type_name -> voice.moderation.v1.Report
-	6,  // 15: voice.moderation.v1.ApplySanctionResponse.sanction:type_name -> voice.moderation.v1.Sanction
-	10, // 16: voice.moderation.v1.GetAccountSanctionsResponse.sanction_list:type_name -> voice.moderation.v1.SanctionList
-	6,  // 17: voice.moderation.v1.GetActiveSanctionResponse.sanction:type_name -> voice.moderation.v1.Sanction
-	12, // 18: voice.moderation.v1.SubmitAppealResponse.appeal:type_name -> voice.moderation.v1.Appeal
-	12, // 19: voice.moderation.v1.ReviewAppealResponse.appeal:type_name -> voice.moderation.v1.Appeal
-	12, // 20: voice.moderation.v1.GetAppealResponse.appeal:type_name -> voice.moderation.v1.Appeal
-	17, // 21: voice.moderation.v1.CheckMessageResponse.check_result:type_name -> voice.moderation.v1.CheckResult
-	19, // 22: voice.moderation.v1.GetAutoModStatsResponse.auto_mod_stats:type_name -> voice.moderation.v1.AutoModStats
-	1,  // 23: voice.moderation.v1.ModerationService.CreateReport:input_type -> voice.moderation.v1.CreateReportRequest
-	2,  // 24: voice.moderation.v1.ModerationService.GetReport:input_type -> voice.moderation.v1.GetReportRequest
-	3,  // 25: voice.moderation.v1.ModerationService.ListReports:input_type -> voice.moderation.v1.ListReportsRequest
-	5,  // 26: voice.moderation.v1.ModerationService.ResolveReport:input_type -> voice.moderation.v1.ResolveReportRequest
-	7,  // 27: voice.moderation.v1.ModerationService.ApplySanction:input_type -> voice.moderation.v1.ApplySanctionRequest
-	8,  // 28: voice.moderation.v1.ModerationService.RevokeSanction:input_type -> voice.moderation.v1.RevokeSanctionRequest
-	9,  // 29: voice.moderation.v1.ModerationService.GetAccountSanctions:input_type -> voice.moderation.v1.GetAccountSanctionsRequest
-	11, // 30: voice.moderation.v1.ModerationService.GetActiveSanction:input_type -> voice.moderation.v1.GetActiveSanctionRequest
-	13, // 31: voice.moderation.v1.ModerationService.SubmitAppeal:input_type -> voice.moderation.v1.SubmitAppealRequest
-	14, // 32: voice.moderation.v1.ModerationService.ReviewAppeal:input_type -> voice.moderation.v1.ReviewAppealRequest
-	15, // 33: voice.moderation.v1.ModerationService.GetAppeal:input_type -> voice.moderation.v1.GetAppealRequest
-	16, // 34: voice.moderation.v1.ModerationService.CheckMessage:input_type -> voice.moderation.v1.CheckMessageRequest
-	18, // 35: voice.moderation.v1.ModerationService.GetAutoModStats:input_type -> voice.moderation.v1.GetAutoModStatsRequest
-	20, // 36: voice.moderation.v1.ModerationService.IsShadowBanned:input_type -> voice.moderation.v1.IsShadowBannedRequest
-	22, // 37: voice.moderation.v1.ModerationService.CreateReport:output_type -> voice.moderation.v1.CreateReportResponse
-	23, // 38: voice.moderation.v1.ModerationService.GetReport:output_type -> voice.moderation.v1.GetReportResponse
-	24, // 39: voice.moderation.v1.ModerationService.ListReports:output_type -> voice.moderation.v1.ListReportsResponse
-	25, // 40: voice.moderation.v1.ModerationService.ResolveReport:output_type -> voice.moderation.v1.ResolveReportResponse
-	26, // 41: voice.moderation.v1.ModerationService.ApplySanction:output_type -> voice.moderation.v1.ApplySanctionResponse
-	27, // 42: voice.moderation.v1.ModerationService.RevokeSanction:output_type -> voice.moderation.v1.RevokeSanctionResponse
-	28, // 43: voice.moderation.v1.ModerationService.GetAccountSanctions:output_type -> voice.moderation.v1.GetAccountSanctionsResponse
-	29, // 44: voice.moderation.v1.ModerationService.GetActiveSanction:output_type -> voice.moderation.v1.GetActiveSanctionResponse
-	30, // 45: voice.moderation.v1.ModerationService.SubmitAppeal:output_type -> voice.moderation.v1.SubmitAppealResponse
-	31, // 46: voice.moderation.v1.ModerationService.ReviewAppeal:output_type -> voice.moderation.v1.ReviewAppealResponse
-	32, // 47: voice.moderation.v1.ModerationService.GetAppeal:output_type -> voice.moderation.v1.GetAppealResponse
-	33, // 48: voice.moderation.v1.ModerationService.CheckMessage:output_type -> voice.moderation.v1.CheckMessageResponse
-	34, // 49: voice.moderation.v1.ModerationService.GetAutoModStats:output_type -> voice.moderation.v1.GetAutoModStatsResponse
-	21, // 50: voice.moderation.v1.ModerationService.IsShadowBanned:output_type -> voice.moderation.v1.IsShadowBannedResponse
-	37, // [37:51] is the sub-list for method output_type
-	23, // [23:37] is the sub-list for method input_type
-	23, // [23:23] is the sub-list for extension type_name
-	23, // [23:23] is the sub-list for extension extendee
-	0,  // [0:23] is the sub-list for field type_name
+	41, // 9: voice.moderation.v1.Appeal.created_at:type_name -> google.protobuf.Timestamp
+	43, // 10: voice.moderation.v1.CheckMessageRequest.chat:type_name -> voice.chat.v1.ChatRef
+	41, // 11: voice.moderation.v1.AuditLogEntry.created_at:type_name -> google.protobuf.Timestamp
+	24, // 12: voice.moderation.v1.AuditLogExport.entries:type_name -> voice.moderation.v1.AuditLogEntry
+	25, // 13: voice.moderation.v1.ExportAuditLogResponse.audit_log_export:type_name -> voice.moderation.v1.AuditLogExport
+	0,  // 14: voice.moderation.v1.CreateReportResponse.report:type_name -> voice.moderation.v1.Report
+	0,  // 15: voice.moderation.v1.GetReportResponse.report:type_name -> voice.moderation.v1.Report
+	4,  // 16: voice.moderation.v1.ListReportsResponse.report_list:type_name -> voice.moderation.v1.ReportList
+	0,  // 17: voice.moderation.v1.ResolveReportResponse.report:type_name -> voice.moderation.v1.Report
+	6,  // 18: voice.moderation.v1.ApplySanctionResponse.sanction:type_name -> voice.moderation.v1.Sanction
+	10, // 19: voice.moderation.v1.GetAccountSanctionsResponse.sanction_list:type_name -> voice.moderation.v1.SanctionList
+	6,  // 20: voice.moderation.v1.GetActiveSanctionResponse.sanction:type_name -> voice.moderation.v1.Sanction
+	12, // 21: voice.moderation.v1.SubmitAppealResponse.appeal:type_name -> voice.moderation.v1.Appeal
+	12, // 22: voice.moderation.v1.ReviewAppealResponse.appeal:type_name -> voice.moderation.v1.Appeal
+	12, // 23: voice.moderation.v1.GetAppealResponse.appeal:type_name -> voice.moderation.v1.Appeal
+	17, // 24: voice.moderation.v1.CheckMessageResponse.check_result:type_name -> voice.moderation.v1.CheckResult
+	19, // 25: voice.moderation.v1.GetAutoModStatsResponse.auto_mod_stats:type_name -> voice.moderation.v1.AutoModStats
+	1,  // 26: voice.moderation.v1.ModerationService.CreateReport:input_type -> voice.moderation.v1.CreateReportRequest
+	2,  // 27: voice.moderation.v1.ModerationService.GetReport:input_type -> voice.moderation.v1.GetReportRequest
+	3,  // 28: voice.moderation.v1.ModerationService.ListReports:input_type -> voice.moderation.v1.ListReportsRequest
+	5,  // 29: voice.moderation.v1.ModerationService.ResolveReport:input_type -> voice.moderation.v1.ResolveReportRequest
+	7,  // 30: voice.moderation.v1.ModerationService.ApplySanction:input_type -> voice.moderation.v1.ApplySanctionRequest
+	8,  // 31: voice.moderation.v1.ModerationService.RevokeSanction:input_type -> voice.moderation.v1.RevokeSanctionRequest
+	9,  // 32: voice.moderation.v1.ModerationService.GetAccountSanctions:input_type -> voice.moderation.v1.GetAccountSanctionsRequest
+	11, // 33: voice.moderation.v1.ModerationService.GetActiveSanction:input_type -> voice.moderation.v1.GetActiveSanctionRequest
+	13, // 34: voice.moderation.v1.ModerationService.SubmitAppeal:input_type -> voice.moderation.v1.SubmitAppealRequest
+	14, // 35: voice.moderation.v1.ModerationService.ReviewAppeal:input_type -> voice.moderation.v1.ReviewAppealRequest
+	15, // 36: voice.moderation.v1.ModerationService.GetAppeal:input_type -> voice.moderation.v1.GetAppealRequest
+	16, // 37: voice.moderation.v1.ModerationService.CheckMessage:input_type -> voice.moderation.v1.CheckMessageRequest
+	18, // 38: voice.moderation.v1.ModerationService.GetAutoModStats:input_type -> voice.moderation.v1.GetAutoModStatsRequest
+	20, // 39: voice.moderation.v1.ModerationService.IsShadowBanned:input_type -> voice.moderation.v1.IsShadowBannedRequest
+	22, // 40: voice.moderation.v1.ModerationService.IsMMBanned:input_type -> voice.moderation.v1.IsMMBannedRequest
+	26, // 41: voice.moderation.v1.ModerationService.ExportAuditLog:input_type -> voice.moderation.v1.ExportAuditLogRequest
+	28, // 42: voice.moderation.v1.ModerationService.CreateReport:output_type -> voice.moderation.v1.CreateReportResponse
+	29, // 43: voice.moderation.v1.ModerationService.GetReport:output_type -> voice.moderation.v1.GetReportResponse
+	30, // 44: voice.moderation.v1.ModerationService.ListReports:output_type -> voice.moderation.v1.ListReportsResponse
+	31, // 45: voice.moderation.v1.ModerationService.ResolveReport:output_type -> voice.moderation.v1.ResolveReportResponse
+	32, // 46: voice.moderation.v1.ModerationService.ApplySanction:output_type -> voice.moderation.v1.ApplySanctionResponse
+	33, // 47: voice.moderation.v1.ModerationService.RevokeSanction:output_type -> voice.moderation.v1.RevokeSanctionResponse
+	34, // 48: voice.moderation.v1.ModerationService.GetAccountSanctions:output_type -> voice.moderation.v1.GetAccountSanctionsResponse
+	35, // 49: voice.moderation.v1.ModerationService.GetActiveSanction:output_type -> voice.moderation.v1.GetActiveSanctionResponse
+	36, // 50: voice.moderation.v1.ModerationService.SubmitAppeal:output_type -> voice.moderation.v1.SubmitAppealResponse
+	37, // 51: voice.moderation.v1.ModerationService.ReviewAppeal:output_type -> voice.moderation.v1.ReviewAppealResponse
+	38, // 52: voice.moderation.v1.ModerationService.GetAppeal:output_type -> voice.moderation.v1.GetAppealResponse
+	39, // 53: voice.moderation.v1.ModerationService.CheckMessage:output_type -> voice.moderation.v1.CheckMessageResponse
+	40, // 54: voice.moderation.v1.ModerationService.GetAutoModStats:output_type -> voice.moderation.v1.GetAutoModStatsResponse
+	21, // 55: voice.moderation.v1.ModerationService.IsShadowBanned:output_type -> voice.moderation.v1.IsShadowBannedResponse
+	23, // 56: voice.moderation.v1.ModerationService.IsMMBanned:output_type -> voice.moderation.v1.IsMMBannedResponse
+	27, // 57: voice.moderation.v1.ModerationService.ExportAuditLog:output_type -> voice.moderation.v1.ExportAuditLogResponse
+	42, // [42:58] is the sub-list for method output_type
+	26, // [26:42] is the sub-list for method input_type
+	26, // [26:26] is the sub-list for extension type_name
+	26, // [26:26] is the sub-list for extension extendee
+	0,  // [0:26] is the sub-list for field type_name
 }
 
 func init() { file_voice_moderation_v1_moderation_proto_init() }
@@ -2425,7 +2790,7 @@ func file_voice_moderation_v1_moderation_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_voice_moderation_v1_moderation_proto_rawDesc), len(file_voice_moderation_v1_moderation_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   35,
+			NumMessages:   41,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

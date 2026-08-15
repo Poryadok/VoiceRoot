@@ -98,5 +98,10 @@ func (s *SpaceGRPC) KickMember(ctx context.Context, req *spacev1.KickMemberReque
 	}
 	s.revokeAllMemberRoles(ctx, spaceID, profileID)
 	_ = s.Store.RecordMemberKicked(ctx, spaceID, profileID, caller)
+	if s.SpaceEvents != nil {
+		if pubErr := s.SpaceEvents.PublishMemberLeft(ctx, spaceID.String(), profileID.String()); pubErr != nil {
+			logInviteEventFailure(pubErr)
+		}
+	}
 	return &spacev1.KickMemberResponse{}, nil
 }

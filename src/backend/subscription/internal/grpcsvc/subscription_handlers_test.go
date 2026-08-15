@@ -65,7 +65,7 @@ func TestCreateCheckoutSession_unknownPlanRejected(t *testing.T) {
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
-func TestCancelSubscription_unimplemented(t *testing.T) {
+func TestCancelSubscription_requiresAccountMetadata(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -78,7 +78,7 @@ func TestCancelSubscription_unimplemented(t *testing.T) {
 		SubscriptionId: uuid.NewString(),
 	})
 	require.Error(t, err)
-	require.Equal(t, codes.Unimplemented, status.Code(err))
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
 func TestGetSpaceSubscription_emptyWhenMissing(t *testing.T) {
@@ -132,7 +132,7 @@ func TestHandlePaddleWebhook_unknownPlanRejected(t *testing.T) {
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
-func TestResumeSubscription_unimplemented(t *testing.T) {
+func TestResumeSubscription_requiresAccountMetadata(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -145,7 +145,7 @@ func TestResumeSubscription_unimplemented(t *testing.T) {
 		SubscriptionId: uuid.NewString(),
 	})
 	require.Error(t, err)
-	require.Equal(t, codes.Unimplemented, status.Code(err))
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
 func TestCreateSpaceCheckoutSession_returnsURL(t *testing.T) {

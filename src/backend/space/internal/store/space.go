@@ -29,8 +29,10 @@ type SpaceRow struct {
 	MemberCount      int32
 	IsVerified       bool
 	VerificationType string
-	EntryRequirement string
-	CreatedAt        time.Time
+	EntryRequirement   string
+	EntryQuestionsJSON *string
+	MMConfigJSON       *string
+	CreatedAt          time.Time
 	UpdatedAt        time.Time
 }
 
@@ -39,6 +41,12 @@ type ListMySpacesPage struct {
 	Rows       []*SpaceRow
 	NextCursor string
 }
+
+const spaceSelectColumns = `id, name, description, icon_url, banner_url, visibility, owner_profile_id, member_count,
+       is_verified, verification_type, entry_requirement, entry_questions::text, mm_config::text, created_at, updated_at`
+
+const spaceListSelectColumns = `s.id, s.name, s.description, s.icon_url, s.banner_url, s.visibility, s.owner_profile_id, s.member_count,
+       s.is_verified, s.verification_type, s.entry_requirement, s.entry_questions::text, s.mm_config::text, s.created_at, s.updated_at`
 
 type listSpaceCursorPayload struct {
 	S string `json:"s"` // RFC3339Nano UTC, joined_at
@@ -100,8 +108,7 @@ func (s *SpaceStore) CreateSpace(ctx context.Context, ownerProfileID uuid.UUID, 
 	row, err := scanSpaceRow(tx.QueryRow(ctx, `
 INSERT INTO spaces (name, description, visibility, owner_profile_id, member_count)
 VALUES ($1, $2, $3, $4, 1)
-RETURNING id, name, description, icon_url, banner_url, visibility, owner_profile_id, member_count,
-          is_verified, verification_type, entry_requirement, created_at, updated_at
+RETURNING `+spaceSelectColumns+`
 `, name, description, visibility, ownerProfileID))
 	if err != nil {
 		return nil, err
@@ -124,8 +131,7 @@ func (s *SpaceStore) GetSpace(ctx context.Context, spaceID uuid.UUID) (*SpaceRow
 		return nil, errors.New("space store: pool not configured")
 	}
 	return scanSpaceRow(s.Pool.QueryRow(ctx, `
-SELECT id, name, description, icon_url, banner_url, visibility, owner_profile_id, member_count,
-       is_verified, verification_type, entry_requirement, created_at, updated_at
+SELECT `+spaceSelectColumns+`
 FROM spaces
 WHERE id = $1
 `, spaceID))
@@ -143,35 +149,56 @@ SELECT COUNT(*)::int FROM space_members WHERE space_id = $1 AND profile_id = $2
 	return n > 0, err
 }
 
-// UpdateSpace updates mutable space fields for the owner.
-func (s *SpaceStore) UpdateSpace(ctx context.Context, spaceID uuid.UUID, name, description, iconURL, bannerURL *string) (*SpaceRow, error) {
+// UpdateSpace updates mutable space fields.
+func (s *SpaceStore) UpdateSpace(ctx context.Context, spaceID uuid.UUID, in UpdateSpaceInput) (*SpaceRow, error) {
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("space store: pool not configured")
 	}
-	if name == nil && description == nil && iconURL == nil && bannerURL == nil {
+	if in.Name == nil && in.Description == nil && in.IconURL == nil && in.BannerURL == nil &&
+		in.Visibility == nil && in.EntryRequirement == nil && in.EntryQuestionsJSON == nil && in.MMConfigJSON == nil {
 		return s.GetSpace(ctx, spaceID)
 	}
-	sets := make([]string, 0, 5)
-	args := make([]any, 0, 6)
+	sets := make([]string, 0, 9)
+	args := make([]any, 0, 10)
 	argN := 1
-	if name != nil {
+	if in.Name != nil {
 		sets = append(sets, fmt.Sprintf("name = $%d", argN))
-		args = append(args, strings.TrimSpace(*name))
+		args = append(args, strings.TrimSpace(*in.Name))
 		argN++
 	}
-	if description != nil {
+	if in.Description != nil {
 		sets = append(sets, fmt.Sprintf("description = $%d", argN))
-		args = append(args, *description)
+		args = append(args, *in.Description)
 		argN++
 	}
-	if iconURL != nil {
+	if in.IconURL != nil {
 		sets = append(sets, fmt.Sprintf("icon_url = $%d", argN))
-		args = append(args, *iconURL)
+		args = append(args, *in.IconURL)
 		argN++
 	}
-	if bannerURL != nil {
+	if in.BannerURL != nil {
 		sets = append(sets, fmt.Sprintf("banner_url = $%d", argN))
-		args = append(args, *bannerURL)
+		args = append(args, *in.BannerURL)
+		argN++
+	}
+	if in.Visibility != nil {
+		sets = append(sets, fmt.Sprintf("visibility = $%d", argN))
+		args = append(args, strings.TrimSpace(*in.Visibility))
+		argN++
+	}
+	if in.EntryRequirement != nil {
+		sets = append(sets, fmt.Sprintf("entry_requirement = $%d", argN))
+		args = append(args, strings.TrimSpace(*in.EntryRequirement))
+		argN++
+	}
+	if in.EntryQuestionsJSON != nil {
+		sets = append(sets, fmt.Sprintf("entry_questions = $%d::jsonb", argN))
+		args = append(args, *in.EntryQuestionsJSON)
+		argN++
+	}
+	if in.MMConfigJSON != nil {
+		sets = append(sets, fmt.Sprintf("mm_config = $%d::jsonb", argN))
+		args = append(args, *in.MMConfigJSON)
 		argN++
 	}
 	sets = append(sets, "updated_at = now()")
@@ -180,10 +207,21 @@ func (s *SpaceStore) UpdateSpace(ctx context.Context, spaceID uuid.UUID, name, d
 UPDATE spaces
 SET %s
 WHERE id = $%d
-RETURNING id, name, description, icon_url, banner_url, visibility, owner_profile_id, member_count,
-          is_verified, verification_type, entry_requirement, created_at, updated_at
+RETURNING `+spaceSelectColumns+`
 `, strings.Join(sets, ", "), argN)
 	return scanSpaceRow(s.Pool.QueryRow(ctx, q, args...))
+}
+
+// UpdateSpaceInput holds optional mutable space fields.
+type UpdateSpaceInput struct {
+	Name               *string
+	Description        *string
+	IconURL            *string
+	BannerURL          *string
+	Visibility         *string
+	EntryRequirement   *string
+	EntryQuestionsJSON *string
+	MMConfigJSON       *string
 }
 
 // ListMySpacesPage returns spaces the profile is a member of, ordered by joined_at DESC, space id DESC.
@@ -204,8 +242,7 @@ func (s *SpaceStore) ListMySpacesPage(ctx context.Context, profileID uuid.UUID, 
 	var rows pgx.Rows
 	if joinedAt.IsZero() {
 		rows, err = s.Pool.Query(ctx, `
-SELECT s.id, s.name, s.description, s.icon_url, s.banner_url, s.visibility, s.owner_profile_id, s.member_count,
-       s.is_verified, s.verification_type, s.entry_requirement, s.created_at, s.updated_at, m.joined_at
+SELECT `+spaceListSelectColumns+`, m.joined_at
 FROM space_members m
 JOIN spaces s ON s.id = m.space_id
 WHERE m.profile_id = $1
@@ -214,8 +251,7 @@ LIMIT $2
 `, profileID, fetch)
 	} else {
 		rows, err = s.Pool.Query(ctx, `
-SELECT s.id, s.name, s.description, s.icon_url, s.banner_url, s.visibility, s.owner_profile_id, s.member_count,
-       s.is_verified, s.verification_type, s.entry_requirement, s.created_at, s.updated_at, m.joined_at
+SELECT `+spaceListSelectColumns+`, m.joined_at
 FROM space_members m
 JOIN spaces s ON s.id = m.space_id
 WHERE m.profile_id = $1
@@ -253,12 +289,12 @@ LIMIT $4
 func scanSpaceRow(row pgx.Row) (*SpaceRow, error) {
 	var id, owner uuid.UUID
 	var name, description, visibility, verificationType, entryRequirement string
-	var iconURL, bannerURL sql.NullString
+	var iconURL, bannerURL, entryQuestions, mmConfig sql.NullString
 	var memberCount int32
 	var isVerified bool
 	var createdAt, updatedAt time.Time
 	err := row.Scan(&id, &name, &description, &iconURL, &bannerURL, &visibility, &owner, &memberCount,
-		&isVerified, &verificationType, &entryRequirement, &createdAt, &updatedAt)
+		&isVerified, &verificationType, &entryRequirement, &entryQuestions, &mmConfig, &createdAt, &updatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -266,28 +302,28 @@ func scanSpaceRow(row pgx.Row) (*SpaceRow, error) {
 		return nil, err
 	}
 	return spaceRowFromScan(id, name, description, iconURL, bannerURL, visibility, owner, memberCount,
-		isVerified, verificationType, entryRequirement, createdAt, updatedAt), nil
+		isVerified, verificationType, entryRequirement, entryQuestions, mmConfig, createdAt, updatedAt), nil
 }
 
 func scanSpaceRowWithJoinedAt(row pgx.Row) (*SpaceRow, time.Time, error) {
 	var id, owner uuid.UUID
 	var name, description, visibility, verificationType, entryRequirement string
-	var iconURL, bannerURL sql.NullString
+	var iconURL, bannerURL, entryQuestions, mmConfig sql.NullString
 	var memberCount int32
 	var isVerified bool
 	var createdAt, updatedAt, joinedAt time.Time
 	err := row.Scan(&id, &name, &description, &iconURL, &bannerURL, &visibility, &owner, &memberCount,
-		&isVerified, &verificationType, &entryRequirement, &createdAt, &updatedAt, &joinedAt)
+		&isVerified, &verificationType, &entryRequirement, &entryQuestions, &mmConfig, &createdAt, &updatedAt, &joinedAt)
 	if err != nil {
 		return nil, time.Time{}, err
 	}
 	return spaceRowFromScan(id, name, description, iconURL, bannerURL, visibility, owner, memberCount,
-		isVerified, verificationType, entryRequirement, createdAt, updatedAt), joinedAt.UTC(), nil
+		isVerified, verificationType, entryRequirement, entryQuestions, mmConfig, createdAt, updatedAt), joinedAt.UTC(), nil
 }
 
 func spaceRowFromScan(id uuid.UUID, name, description string, iconURL, bannerURL sql.NullString,
 	visibility string, owner uuid.UUID, memberCount int32, isVerified bool,
-	verificationType, entryRequirement string, createdAt, updatedAt time.Time) *SpaceRow {
+	verificationType, entryRequirement string, entryQuestions, mmConfig sql.NullString, createdAt, updatedAt time.Time) *SpaceRow {
 	r := &SpaceRow{
 		ID:               id,
 		Name:             name,
@@ -308,6 +344,14 @@ func spaceRowFromScan(id uuid.UUID, name, description string, iconURL, bannerURL
 	if bannerURL.Valid {
 		v := bannerURL.String
 		r.BannerURL = &v
+	}
+	if entryQuestions.Valid {
+		v := entryQuestions.String
+		r.EntryQuestionsJSON = &v
+	}
+	if mmConfig.Valid {
+		v := mmConfig.String
+		r.MMConfigJSON = &v
 	}
 	return r
 }

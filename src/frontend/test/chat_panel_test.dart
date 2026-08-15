@@ -616,7 +616,12 @@ void main() {
     await tester.tap(find.byKey(ChatRoomPanel.sendKey));
     await tester.pumpAndSettle();
 
-    final input = tester.widget<TextField>(find.byKey(ChatRoomPanel.inputKey));
+    final input = tester.widget<TextField>(
+      find.descendant(
+        of: find.byKey(ChatRoomPanel.inputKey),
+        matching: find.byType(TextField),
+      ),
+    );
     expect(input.focusNode?.hasFocus, isTrue);
     expect(input.controller?.text, isEmpty);
   });

@@ -1,9 +1,3 @@
 # Analytics Service
 
-Go scaffold for the Voice analytics service.
-
-Current public surface:
-
-- GET /health returns {"service":"analytics","status":"ok"}.
-
-Domain behavior, gRPC handlers, database repositories, and migrations are intentionally out of scope for this initialization step.
+Go microservice: JetStream ingest → ClickHouse buffer, staff gRPC/REST queries. Requires `CLICKHOUSE_DSN` in prod paths. See `docs/microservices/analytics-service.md` and `docs/PLAN.md` (partial).

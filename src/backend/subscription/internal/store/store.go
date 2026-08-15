@@ -92,7 +92,11 @@ func (s *SubscriptionStore) ActivatePremium(ctx context.Context, accountID uuid.
 		return nil, ErrDuplicateBillingEvent
 	}
 
-	_, err = tx.Exec(ctx, `DELETE FROM subscriptions WHERE account_id = $1`, accountID)
+	// Detach history before replacing the row (billing_events.subscription_id FK).
+	_, err = tx.Exec(ctx, `
+UPDATE billing_events
+SET subscription_id = NULL
+WHERE subscription_id IN (SELECT id FROM subscriptions WHERE account_id = $1)`, accountID)
 	if err != nil {
 		return nil, err
 	}
@@ -106,6 +110,13 @@ INSERT INTO subscriptions (
 	current_period_start, current_period_end
 ) VALUES ($1, $2, 'premium', 'monthly', 'active', 'paddle', $3, $4, $5)`,
 		subID, accountID, providerSubID, now, periodEnd)
+	if err != nil {
+		return nil, err
+	}
+	_, err = tx.Exec(ctx, `
+UPDATE billing_events
+SET subscription_id = $1
+WHERE provider = 'paddle' AND provider_event_id = $2`, subID, providerEventID)
 	if err != nil {
 		return nil, err
 	}
@@ -180,6 +191,13 @@ func (s *SubscriptionStore) ActivateSpacePro(ctx context.Context, spaceID, purch
 		return nil, ErrDuplicateBillingEvent
 	}
 
+	_, err = tx.Exec(ctx, `
+UPDATE billing_events
+SET space_subscription_id = NULL
+WHERE space_subscription_id IN (SELECT id FROM space_subscriptions WHERE space_id = $1)`, spaceID)
+	if err != nil {
+		return nil, err
+	}
 	_, err = tx.Exec(ctx, `DELETE FROM space_subscriptions WHERE space_id = $1`, spaceID)
 	if err != nil {
 		return nil, err
@@ -190,6 +208,13 @@ INSERT INTO space_subscriptions (
 	current_period_start, current_period_end
 ) VALUES ($1, $2, $3, 'space_pro', 'monthly', 'active', 'paddle', $4, $5, $6)`,
 		subID, spaceID, purchaserID, providerSubID, now, periodEnd)
+	if err != nil {
+		return nil, err
+	}
+	_, err = tx.Exec(ctx, `
+UPDATE billing_events
+SET space_subscription_id = $1
+WHERE provider = 'paddle' AND provider_event_id = $2`, subID, providerEventID)
 	if err != nil {
 		return nil, err
 	}

@@ -50,6 +50,7 @@ func (p *recordingPublisher) PublishSearchTimeout(context.Context, string, strin
 	p.timeouts++
 	return nil
 }
+func (p *recordingPublisher) PublishPlayerBanned(context.Context, mmevents.PlayerBannedEvent) error { return nil }
 func (p *recordingPublisher) Close() error { return nil }
 
 func TestSweeper_RunOnce_NudgeAndExpire(t *testing.T) {

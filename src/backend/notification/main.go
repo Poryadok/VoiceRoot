@@ -19,8 +19,10 @@ import (
 	grpcsvc "voice/backend/notification/internal/grpcsvc"
 	"voice/backend/notification/internal/apns"
 	"voice/backend/notification/internal/chatmembers"
+	"voice/backend/notification/internal/delivery"
 	"voice/backend/notification/internal/dispatch"
 	"voice/backend/notification/internal/fcm"
+	"voice/backend/notification/internal/email"
 	"voice/backend/notification/internal/grouping"
 	"voice/backend/notification/internal/presence"
 	"voice/backend/notification/internal/pushenrich"
@@ -60,6 +62,8 @@ func main() {
 		defer pool.Close()
 
 		tokenStore := &store.DeviceTokenStore{Pool: pool}
+		settingsStore := &store.SettingsStore{Pool: pool}
+		policyLoader := delivery.DBPolicyLoader{Reader: store.PolicyAdapter{Store: settingsStore}}
 		fcmSender := fcm.Sender(&fcm.NoopSender{Logger: logger})
 		if cfg, ok := fcm.ConfigFromEnv(); ok {
 			httpSender, err := fcm.NewHTTPSender(cfg)
@@ -138,40 +142,61 @@ func main() {
 			Pusher:   pusher,
 			Grouping: groupingStore,
 			Presence: presenceChecker,
+			Policy:   policyLoader,
 		}
 		storyPusher := &dispatch.StoryPusher{
 			Tokens: tokenStore,
 			Pusher: pusher,
 		}
 
+		emailSender := email.Sender(&email.NoopSender{Logger: logger})
+		_ = emailSender
+
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
 			instanceID := strings.TrimSpace(os.Getenv("HOSTNAME"))
+			if instanceID == "" {
+				instanceID = "local"
+			}
 			go func() {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
-				if err := runStoryEventsConsumer(ctx, natsURL, instanceID, tokenStore, storyPusher, logger); err != nil && logger != nil {
+				if err := runStoryEventsConsumer(ctx, natsURL, tokenStore, storyPusher, logger); err != nil && logger != nil {
 					logger.Error("story.events consumer exited", slog.Any("error", err))
 				}
 			}()
 			go func() {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
-				if err := runMessageEventsConsumer(ctx, natsURL, instanceID, tokenStore, chatLister, msgPusher, pushEnrich, logger); err != nil && logger != nil {
+				if err := runMessageEventsConsumer(ctx, natsURL, tokenStore, chatLister, msgPusher, pushEnrich, logger); err != nil && logger != nil {
 					logger.Error("message.events consumer exited", slog.Any("error", err))
 				}
 			}()
 			go func() {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
-				if err := runMatchmakingEventsConsumer(ctx, natsURL, instanceID, tokenStore, pusher, logger); err != nil && logger != nil {
+				if err := runMatchmakingEventsConsumer(ctx, natsURL, tokenStore, pusher, presenceChecker, policyLoader, logger); err != nil && logger != nil {
 					logger.Error("matchmaking.events consumer exited", slog.Any("error", err))
 				}
 			}()
 			go func() {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
-				if err := runVoiceEventsConsumer(ctx, natsURL, instanceID, tokenStore, pusher, logger); err != nil && logger != nil {
+				if err := runVoiceEventsConsumer(ctx, natsURL, tokenStore, pusher, presenceChecker, policyLoader, logger); err != nil && logger != nil {
 					logger.Error("voice.events consumer exited", slog.Any("error", err))
+				}
+			}()
+			go func() {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				if err := runSocialEventsConsumer(ctx, natsURL, tokenStore, pusher, presenceChecker, policyLoader, logger); err != nil && logger != nil {
+					logger.Error("social.events consumer exited", slog.Any("error", err))
+				}
+			}()
+			go func() {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				if err := runModerationEventsConsumer(ctx, natsURL, instanceID, logger); err != nil && logger != nil {
+					logger.Error("moderation.events consumer exited", slog.Any("error", err))
 				}
 			}()
 		}
@@ -182,8 +207,9 @@ func main() {
 		}
 		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))...)
 		notifySvc := &grpcsvc.NotificationGRPC{
-			Tokens: tokenStore,
-			Pusher: pusher,
+			Tokens:    tokenStore,
+			Settings:  settingsStore,
+			Pusher:    pusher,
 		}
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
 			if pub, err := analyticsevents.NewJetStreamPublisher(natsURL); err == nil {

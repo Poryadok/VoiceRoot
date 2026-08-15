@@ -20,7 +20,7 @@ func TestWSMarkReadFanoutSameProfileTwoConnections(t *testing.T) {
 		"mobile":  {UserID: "u1", ProfileID: "prof-same"},
 		"desktop": {UserID: "u1", ProfileID: "prof-same"},
 	}
-	srv := httptest.NewServer(newServiceHandler(serviceName, v, nil, hub, nil, "test-instance"))
+	srv := httptest.NewServer(newServiceHandler(serviceName, v, nil, hub, nil, "test-instance", readinessDeps{}))
 	t.Cleanup(srv.Close)
 
 	chatID := "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
@@ -152,7 +152,7 @@ func TestWSPresenceUpdateFanoutToPeerInSharedChat(t *testing.T) {
 		"t1": {UserID: "a", ProfileID: "p1"},
 		"t2": {UserID: "b", ProfileID: "p2"},
 	}
-	srv := httptest.NewServer(newServiceHandler(serviceName, v, nil, hub, nil, "test-instance"))
+	srv := httptest.NewServer(newServiceHandler(serviceName, v, nil, hub, nil, "test-instance", readinessDeps{}))
 	t.Cleanup(srv.Close)
 
 	chatID := "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
@@ -239,6 +239,7 @@ func TestWSPresenceLifecyclePersistsViaUpdater(t *testing.T) {
 		nil,
 		"test-instance",
 		updater,
+		readinessDeps{},
 	))
 	t.Cleanup(srv.Close)
 
@@ -307,6 +308,7 @@ func TestWSPresenceDisconnectKeepsOnlineWithSecondConnection(t *testing.T) {
 		nil,
 		"test-instance",
 		updater,
+		readinessDeps{},
 	))
 	t.Cleanup(srv.Close)
 
@@ -365,6 +367,7 @@ func TestWSPresenceUpdatePersistsSubmittedStatus(t *testing.T) {
 		nil,
 		"test-instance",
 		updater,
+		readinessDeps{},
 	))
 	t.Cleanup(srv.Close)
 

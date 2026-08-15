@@ -7,6 +7,7 @@ import (
 
 	moderationv1 "voice.app/voice/moderation/v1"
 
+	"voice/backend/moderation/internal/mmclient"
 	"voice/backend/moderation/internal/store"
 )
 
@@ -20,9 +21,15 @@ type ModerationGRPC struct {
 	AutoMod              *store.AutoModStore
 	PlatformAudienceSize int64
 	Auth                 AccountStatusClient
+	Matchmaking          mmclient.PlatformMMBanClient
 	Users                ProfileAccountLookup
 	Analytics            interface {
 		Publish(ctx context.Context, subject, sourceService, eventType string, props map[string]any) error
+	}
+	DomainEvents interface {
+		PublishReportCreated(ctx context.Context, reportID, reporterProfileID string) error
+		PublishSanctionApplied(ctx context.Context, sanctionID, targetAccountID, sanctionType string) error
+		PublishAppealSubmitted(ctx context.Context, appealID, sanctionID string) error
 	}
 }
 

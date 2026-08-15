@@ -160,6 +160,106 @@ func (m Mapper) FromStory(ev *eventsv1.StoryStreamEvent) *analyticsv1.AnalyticsE
 	}
 }
 
+func (m Mapper) FromSocial(ev *eventsv1.SocialStreamEvent) *analyticsv1.AnalyticsEvent {
+	if ev == nil {
+		return nil
+	}
+	switch p := ev.GetPayload().(type) {
+	case *eventsv1.SocialStreamEvent_FriendRequest:
+		return m.event("friend_request", "social", ev.GetOccurredAt(), "", p.FriendRequest.GetTargetProfileId(), nil)
+	case *eventsv1.SocialStreamEvent_FriendAdded:
+		return m.event("friend_accepted", "social", ev.GetOccurredAt(), "", p.FriendAdded.GetTargetProfileId(), nil)
+	case *eventsv1.SocialStreamEvent_UserBlocked:
+		return m.event("user_blocked", "social", ev.GetOccurredAt(), p.UserBlocked.GetBlockerAccountId(), "", nil)
+	default:
+		return nil
+	}
+}
+
+func (m Mapper) FromModeration(ev *eventsv1.ModerationStreamEvent) *analyticsv1.AnalyticsEvent {
+	if ev == nil {
+		return nil
+	}
+	switch p := ev.GetPayload().(type) {
+	case *eventsv1.ModerationStreamEvent_ReportCreated:
+		return m.event("report_created", "moderation", ev.GetOccurredAt(), "", p.ReportCreated.GetReporterProfileId(), map[string]any{
+			"report_id": p.ReportCreated.GetReportId(),
+		})
+	case *eventsv1.ModerationStreamEvent_SanctionApplied:
+		return m.event("sanction_applied", "moderation", ev.GetOccurredAt(), p.SanctionApplied.GetTargetAccountId(), "", map[string]any{
+			"sanction_id": p.SanctionApplied.GetSanctionId(),
+			"type":        p.SanctionApplied.GetType(),
+		})
+	case *eventsv1.ModerationStreamEvent_AppealSubmitted:
+		return m.event("appeal_submitted", "moderation", ev.GetOccurredAt(), "", "", map[string]any{
+			"appeal_id": p.AppealSubmitted.GetAppealId(),
+		})
+	default:
+		return nil
+	}
+}
+
+func (m Mapper) FromSubscription(ev *eventsv1.SubscriptionStreamEvent) *analyticsv1.AnalyticsEvent {
+	if ev == nil {
+		return nil
+	}
+	switch p := ev.GetPayload().(type) {
+	case *eventsv1.SubscriptionStreamEvent_PlanStarted:
+		return m.event("plan_started", "subscription", ev.GetOccurredAt(), p.PlanStarted.GetAccountId(), "", map[string]any{
+			"plan": p.PlanStarted.GetPlan(),
+		})
+	case *eventsv1.SubscriptionStreamEvent_PaymentSuccess:
+		return m.event("payment_success", "subscription", ev.GetOccurredAt(), p.PaymentSuccess.GetAccountId(), "", map[string]any{
+			"provider": p.PaymentSuccess.GetProvider(),
+		})
+	case *eventsv1.SubscriptionStreamEvent_PaymentFailed:
+		return m.event("payment_failed", "subscription", ev.GetOccurredAt(), p.PaymentFailed.GetAccountId(), "", map[string]any{
+			"provider": p.PaymentFailed.GetProvider(),
+		})
+	default:
+		return nil
+	}
+}
+
+func (m Mapper) FromFile(ev *eventsv1.FileStreamEvent) *analyticsv1.AnalyticsEvent {
+	if ev == nil {
+		return nil
+	}
+	switch p := ev.GetPayload().(type) {
+	case *eventsv1.FileStreamEvent_FileUploaded:
+		return m.event("file_uploaded", "file", ev.GetOccurredAt(), "", p.FileUploaded.GetUploaderProfileId(), map[string]any{
+			"file_id": p.FileUploaded.GetFileId(),
+		})
+	case *eventsv1.FileStreamEvent_FileScanResult:
+		return m.event("file_scan_result", "file", ev.GetOccurredAt(), "", "", map[string]any{
+			"file_id": p.FileScanResult.GetFileId(),
+			"result":  p.FileScanResult.GetResult(),
+		})
+	default:
+		return nil
+	}
+}
+
+func (m Mapper) FromRoleSubject(subject string, data []byte) *analyticsv1.AnalyticsEvent {
+	subject = strings.TrimSpace(subject)
+	if !strings.HasPrefix(subject, "role.") {
+		return nil
+	}
+	var payload struct {
+		SpaceID   string `json:"space_id"`
+		RoleID    string `json:"role_id"`
+		ProfileID string `json:"profile_id"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return nil
+	}
+	eventType := strings.TrimPrefix(subject, "role.")
+	return m.event("role_"+strings.ReplaceAll(eventType, ".", "_"), "role", timestamppb.New(time.Now().UTC()), "", payload.ProfileID, map[string]any{
+		"space_id": payload.SpaceID,
+		"role_id":  payload.RoleID,
+	})
+}
+
 func (m Mapper) FromBot(ev *eventsv1.BotStreamEvent) *analyticsv1.AnalyticsEvent {
 	if ev == nil {
 		return nil

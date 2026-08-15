@@ -2,9 +2,12 @@ package grpcsvc
 
 import (
 	"context"
+	"encoding/json"
 
+	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"voice/backend/notification/internal/apns"
 	"voice/backend/notification/internal/authctx"
@@ -19,8 +22,9 @@ import (
 // NotificationGRPC implements NotificationService (Phase-6 stub).
 type NotificationGRPC struct {
 	notificationv1.UnimplementedNotificationServiceServer
-	Tokens    *store.DeviceTokenStore
-	Pusher    *dispatch.PushDispatcher
+	Tokens   *store.DeviceTokenStore
+	Settings *store.SettingsStore
+	Pusher   *dispatch.PushDispatcher
 	Analytics interface {
 		Publish(ctx context.Context, subject, sourceService, eventType string, props map[string]any) error
 	}
@@ -150,42 +154,78 @@ func (s *NotificationGRPC) GetNotificationSettings(ctx context.Context, req *not
 	if scope == "" {
 		scope = "global"
 	}
+	if s.Settings == nil {
+		return nil, status.Error(codes.Unavailable, "settings store unavailable")
+	}
+	var scopeID *uuid.UUID
+	if req.ScopeId != nil && req.GetScopeId() != "" {
+		parsed, err := parseUUID(req.GetScopeId())
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, "invalid scope_id")
+		}
+		scopeID = &parsed
+	}
+	row, err := s.Settings.GetSettings(ctx, profileID, scope, scopeID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "get settings: %v", err)
+	}
 	return &notificationv1.GetNotificationSettingsResponse{
-		NotificationSettings: &notificationv1.NotificationSettings{
-			ProfileId:  profileID.String(),
-			ScopeType:  scope,
-			Enabled:    true,
-			ScopeId:    req.ScopeId,
-		},
+		NotificationSettings: settingsToProto(row),
 	}, nil
 }
 
 func (s *NotificationGRPC) UpdateNotificationSettings(ctx context.Context, req *notificationv1.UpdateNotificationSettingsRequest) (*notificationv1.UpdateNotificationSettingsResponse, error) {
+	profileID, ok := authctx.ProfileID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing profile")
+	}
 	if req.GetSettings() == nil {
 		return nil, status.Error(codes.InvalidArgument, "settings required")
 	}
+	if s.Settings == nil {
+		return nil, status.Error(codes.Unavailable, "settings store unavailable")
+	}
+	row, err := settingsFromProto(profileID, req.GetSettings())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if err := s.Settings.UpsertSettings(ctx, row); err != nil {
+		return nil, status.Errorf(codes.Internal, "update settings: %v", err)
+	}
 	return &notificationv1.UpdateNotificationSettingsResponse{
-		NotificationSettings: req.GetSettings(),
+		NotificationSettings: settingsToProto(row),
 	}, nil
 }
 
 func (s *NotificationGRPC) SetQuietHours(ctx context.Context, req *notificationv1.SetQuietHoursRequest) (*notificationv1.SetQuietHoursResponse, error) {
-	_, ok := authctx.ProfileID(ctx)
+	profileID, ok := authctx.ProfileID(ctx)
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing profile")
 	}
-	_ = req
+	if s.Settings == nil {
+		return nil, status.Error(codes.Unavailable, "settings store unavailable")
+	}
+	if err := s.Settings.SetQuietHours(ctx, store.QuietHours{
+		ProfileID:        profileID,
+		Enabled:          req.GetEnabled(),
+		StartTime:        req.GetStartTime(),
+		EndTime:          req.GetEndTime(),
+		Timezone:         req.GetTimezone(),
+		OverrideMentions: req.GetOverrideMentions(),
+	}); err != nil {
+		return nil, status.Errorf(codes.Internal, "set quiet hours: %v", err)
+	}
 	return &notificationv1.SetQuietHoursResponse{}, nil
 }
 
 func (s *NotificationGRPC) SendBulkNotification(ctx context.Context, req *notificationv1.SendBulkNotificationRequest) (*notificationv1.SendBulkNotificationResponse, error) {
 	for _, pid := range req.GetProfileIds() {
 		_, err := s.SendNotification(ctx, &notificationv1.SendNotificationRequest{
-			ProfileId:        pid,
-			NotificationType: req.GetNotificationType(),
-			Title:            req.GetTitle(),
-			Body:             req.GetBody(),
-			PayloadJson:      req.GetPayloadJson(),
+			ProfileId:            pid,
+			NotificationType:     req.GetNotificationType(),
+			Title:                req.GetTitle(),
+			Body:                 req.GetBody(),
+			PayloadJson:          req.GetPayloadJson(),
 			NotificationCategory: req.NotificationCategory,
 		})
 		if err != nil {
@@ -199,4 +239,54 @@ func (s *NotificationGRPC) RelayNotification(ctx context.Context, req *notificat
 	_ = ctx
 	_ = req
 	return nil, status.Error(codes.Unimplemented, "federation relay not implemented")
+}
+
+func settingsToProto(row store.NotificationSettings) *notificationv1.NotificationSettings {
+	out := &notificationv1.NotificationSettings{
+		ProfileId: row.ProfileID.String(),
+		ScopeType: row.ScopeType,
+		Enabled:   row.Enabled,
+	}
+	if row.ScopeID != nil {
+		scopeID := row.ScopeID.String()
+		out.ScopeId = &scopeID
+	}
+	if len(row.SuppressTypes) > 0 {
+		if b, err := json.Marshal(row.SuppressTypes); err == nil {
+			out.SuppressTypesJson = string(b)
+		}
+	}
+	if row.MuteUntil != nil {
+		out.MuteUntil = timestamppb.New(row.MuteUntil.UTC())
+	}
+	return out
+}
+
+func settingsFromProto(profileID uuid.UUID, in *notificationv1.NotificationSettings) (store.NotificationSettings, error) {
+	scope := in.GetScopeType()
+	if scope == "" {
+		scope = "global"
+	}
+	row := store.NotificationSettings{
+		ProfileID: profileID,
+		ScopeType: scope,
+		Enabled:   in.GetEnabled(),
+	}
+	if in.ScopeId != nil && in.GetScopeId() != "" {
+		parsed, err := parseUUID(in.GetScopeId())
+		if err != nil {
+			return store.NotificationSettings{}, err
+		}
+		row.ScopeID = &parsed
+	}
+	if in.GetSuppressTypesJson() != "" {
+		if err := json.Unmarshal([]byte(in.GetSuppressTypesJson()), &row.SuppressTypes); err != nil {
+			return store.NotificationSettings{}, err
+		}
+	}
+	if in.MuteUntil != nil {
+		t := in.GetMuteUntil().AsTime().UTC()
+		row.MuteUntil = &t
+	}
+	return row, nil
 }

@@ -10,7 +10,7 @@ public final class InMemoryPrimaryProfileProvisioner implements PrimaryProfilePr
 
   @Override
   @SuppressWarnings("unused")
-  public String ensurePrimaryProfile(UUID accountId, String displayHint) {
+  public String ensurePrimaryProfile(UUID accountId, String displayHint, boolean guestAccount) {
     return accountToProfile
         .computeIfAbsent(accountId, id -> UUID.randomUUID())
         .toString();

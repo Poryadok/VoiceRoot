@@ -9,7 +9,6 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
@@ -47,7 +46,7 @@ func main() {
 		)
 	}
 
-	dmLister := dialDMChatLister()
+	chatLister := dialChatBootstrapLister()
 	presenceUpdater := dialPresenceUpdater()
 
 	hub := newWSHub()
@@ -61,12 +60,16 @@ func main() {
 	defer cancel()
 
 	var rf *redisFanout
+	var ready readinessDeps
+	natsURL := strings.TrimSpace(os.Getenv("NATS_URL"))
+	ready.NatsURL = natsURL
 	if redisAddr := strings.TrimSpace(os.Getenv("REALTIME_REDIS_ADDR")); redisAddr != "" {
 		rdb := redis.NewClient(&redis.Options{
 			Addr:     redisAddr,
 			Password: strings.TrimSpace(os.Getenv("REALTIME_REDIS_PASSWORD")),
 		})
 		defer func() { _ = rdb.Close() }()
+		ready.Redis = rdb
 		rf = newRedisFanout(redisFanoutConfig{
 			Client:     rdb,
 			Hub:        hub,
@@ -85,13 +88,7 @@ func main() {
 
 	if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
 		go func() {
-			nc, err := nats.Connect(natsURL,
-				nats.Name("voice-realtime-nats-lag"),
-				nats.Timeout(10*time.Second),
-				nats.RetryOnFailedConnect(true),
-				nats.MaxReconnects(-1),
-				nats.ReconnectWait(time.Second),
-			)
+			nc, err := nats.Connect(natsURL, natsConnectOptions("voice-realtime-nats-lag")...)
 			if err != nil {
 				logger.Warn("nats lag poller connect failed", slog.String("error", err.Error()))
 				return
@@ -137,7 +134,7 @@ func main() {
 	}
 
 	handler := voiceprom.MountMetricsOnHealth(
-		newServiceHandlerWithPresence(serviceName, tv, dmLister, hub, rf, instanceID, presenceUpdater),
+		newServiceHandlerWithPresence(serviceName, tv, chatLister, hub, rf, instanceID, presenceUpdater, ready),
 		metricsReg,
 	)
 	server := &http.Server{
@@ -178,7 +175,7 @@ func firstNonEmpty(a, b string) string {
 	return strings.TrimSpace(b)
 }
 
-func dialDMChatLister() dmChatLister {
+func dialChatBootstrapLister() chatBootstrapLister {
 	addr := strings.TrimSpace(os.Getenv("REALTIME_CHAT_GRPC_ADDR"))
 	if addr == "" {
 		return nil

@@ -49,8 +49,10 @@ func startSocialGRPCTestServer(t *testing.T, pool *pgxpool.Pool, opts ...socialS
 	lis := bufconn.Listen(bufSize)
 	srv := grpc.NewServer()
 	svc := &SocialGRPC{
-		Friends: &store.FriendshipStore{Pool: pool},
-		Blocks:  &store.BlockStore{Pool: pool},
+		Friends:  &store.FriendshipStore{Pool: pool},
+		Blocks:   &store.BlockStore{Pool: pool},
+		Contacts: &store.ContactStore{Pool: pool},
+		Privacy:  friendRequestPrivacyStub{}, // default: everyone (compose User S2S wired)
 	}
 	for _, o := range opts {
 		o(svc)

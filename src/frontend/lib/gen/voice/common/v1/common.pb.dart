@@ -274,6 +274,63 @@ class PageResponse extends $pb.GeneratedMessage {
   void clearTotalCount() => $_clearField(1);
 }
 
+/// Client-supplied idempotency key for mutating RPCs (docs/ARCHITECTURE_REQUIREMENTS.md).
+/// Scope is RPC-specific (e.g. SendMessage: unique per chat + sender_profile_id).
+class ClientIdempotencyKey extends $pb.GeneratedMessage {
+  factory ClientIdempotencyKey({
+    $core.String? key,
+  }) {
+    final result = create();
+    if (key != null) result.key = key;
+    return result;
+  }
+
+  ClientIdempotencyKey._();
+
+  factory ClientIdempotencyKey.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ClientIdempotencyKey.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ClientIdempotencyKey',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.common.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'key')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ClientIdempotencyKey clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ClientIdempotencyKey copyWith(void Function(ClientIdempotencyKey) updates) =>
+      super.copyWith((message) => updates(message as ClientIdempotencyKey))
+          as ClientIdempotencyKey;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ClientIdempotencyKey create() => ClientIdempotencyKey._();
+  @$core.override
+  ClientIdempotencyKey createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ClientIdempotencyKey getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ClientIdempotencyKey>(create);
+  static ClientIdempotencyKey? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get key => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set key($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasKey() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearKey() => $_clearField(1);
+}
+
 const $core.bool _omitFieldNames =
     $core.bool.fromEnvironment('protobuf.omit_field_names');
 const $core.bool _omitMessageNames =

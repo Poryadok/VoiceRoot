@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:http/http.dart' as http;
 
 import 'client_version.dart';
@@ -18,6 +20,14 @@ final class GatewayHealthOk extends GatewayHealthResult {
 final class GatewayHealthFailure extends GatewayHealthResult {
   const GatewayHealthFailure(this.message);
   final String message;
+}
+
+/// Short-lived opaque ticket for browser WebSocket upgrade (`/ws?ticket=…`).
+final class GatewayWsTicket {
+  const GatewayWsTicket({required this.ticket, required this.expiresInSeconds});
+
+  final String ticket;
+  final int expiresInSeconds;
 }
 
 /// Minimal HTTP surface for API Gateway public `GET /health` / `GET /api/v1/version`.
@@ -70,6 +80,34 @@ class VoiceGatewayClient {
       );
       if (res.statusCode == 200) return res.body;
       return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// `POST /api/v1/realtime/ws-ticket` — JWT in Authorization header only.
+  Future<GatewayWsTicket?> requestWsTicket(String authorization) async {
+    if (!_config.hasBaseUrl) return null;
+    final uri = Uri.parse(_config.baseUrl).resolve('/api/v1/realtime/ws-ticket');
+    try {
+      final res = await _http.post(
+        uri,
+        headers: {
+          'Authorization': authorization,
+          'Content-Type': 'application/json',
+          'X-Request-Id': newGatewayRequestId(),
+        },
+      );
+      if (res.statusCode != 200) return null;
+      final decoded = jsonDecode(res.body);
+      if (decoded is! Map<String, dynamic>) return null;
+      final ticket = decoded['ticket'] as String?;
+      final expires = decoded['expires_in_seconds'];
+      if (ticket == null || ticket.isEmpty) return null;
+      final expiresSec = expires is int
+          ? expires
+          : (expires is num ? expires.toInt() : 0);
+      return GatewayWsTicket(ticket: ticket, expiresInSeconds: expiresSec);
     } catch (_) {
       return null;
     }

@@ -66,6 +66,12 @@ func (s *PrivacyStore) CreateDefaultGaming(ctx context.Context, profileID uuid.U
 	return s.CreateForPreset(ctx, profileID, "gaming")
 }
 
+func (s *PrivacyStore) CreateDefaultGamingForGuest(ctx context.Context, profileID uuid.UUID) (*PrivacyRow, error) {
+	settings := privacy.SettingsForPreset("gaming")
+	settings.AllowCalls = privacy.EveryoneWithGuests()
+	return s.Upsert(ctx, PrivacyRowFromSettings(profileID, settings))
+}
+
 func (s *PrivacyStore) CreateForPreset(ctx context.Context, profileID uuid.UUID, preset string) (*PrivacyRow, error) {
 	if s == nil || s.pool == nil {
 		return nil, errPrivacyStoreNotConfigured

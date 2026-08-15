@@ -465,6 +465,30 @@ SELECT enabled FROM bot_chat_whitelist WHERE bot_id = $1 AND chat_id = $2`, botI
 	return enabled, nil
 }
 
+// ListLiveBotsForChat returns bots enabled in a chat for inbound message delivery.
+func (s *BotStore) ListLiveBotsForChat(ctx context.Context, chatID uuid.UUID) ([]BotRow, error) {
+	rows, err := s.Pool.Query(ctx, `
+SELECT b.id, b.owner_account_id, b.name, b.description, b.avatar_url, b.token_hash, b.webhook_url,
+       b.webhook_secret, b.is_polling_mode, b.scopes::text, b.status, b.actor_profile_id, b.slug,
+       b.created_at, b.updated_at
+FROM bots b
+JOIN bot_chat_whitelist w ON w.bot_id = b.id
+WHERE w.chat_id = $1 AND w.enabled = true AND b.status = 'live'`, chatID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []BotRow
+	for rows.Next() {
+		row, err := scanBot(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *row)
+	}
+	return out, rows.Err()
+}
+
 func (s *BotStore) ListSlashCommandsForChat(ctx context.Context, chatID uuid.UUID) ([]CommandRow, string, uuid.UUID, error) {
 	rows, err := s.Pool.Query(ctx, `
 SELECT c.id, c.bot_id, c.name, c.description, c.parameters::text, b.name

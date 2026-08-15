@@ -15,7 +15,7 @@ _Пока пусто._
 - [ ] **Design review v2 (pages 11–15)** — пройти все `· v2` в Penpot viewer, собрать замечания или approve. Канон (`x≈0`) не трогать; `screens.md` для draft с `·` не обновлять ([penpot-workflow.md](../design/penpot-workflow.md) §1).
 - [x] **Fix `11_Screens_Mobile` · v2 chrome** — AppBar/BottomNav высоты и порядок flex; oversized Primary с desktop clone. Токены `layout.bottomNavHeight` / `layout.searchRowHeight` (+ doc).
 - [ ] **Polish `13_Panels_Desktop` panels 1–16 · v2** — parity с panels 17–33: AccentWrap, list rows 56px, avatars `profileAccent.*`, Voice placeholders, inset ≥16.
-- [ ] **Visual fixes v2 (spot-check)** — починить баги из экспорта: Mute double-layer на `Panel / Chat / Info · v2`, clip/overflow где видно.
+- [x] **Visual fixes v2 (spot-check)** — Mute/Search/Share double-layer снят на `Panel / Chat / Info`, `Search / Global`, `Call / ScreenShare` · v2.
 
 ### Missing buttons — audit `10_Screens_Desktop`
 
@@ -178,7 +178,7 @@ Penpot = active design tool ([penpot-setup.md](../design/penpot-setup.md)); пр
 - [x] **Penpot workflow doc** — [penpot-workflow.md](../design/penpot-workflow.md): clip/контейнеры, вертикальный канон + варианты по X, placeholder content.
 - [x] **Penpot v2 spread (pages 11–15)** — эталон с `10_Screens_Desktop` (21 `· v2`) размножен на mobile screens, states, desktop/mobile panels, overlays. Итого **89** draft-фреймов `· v2` справа от канона; shipped snapshot не менялся.
 
-- [ ] **Orphan cleanup `10_Screens_Desktop`** — удалить stray top-level boards: `Board`, `BlockerCard`, `SettingsNav` @ `x≈0, y≈0` (не канон, не `· v2`).
+- [x] **Orphan cleanup (pages 10, 12, 15)** — stray root shapes удалены на `12_States` (`Title`), `15_Overlays` (`Text`); page 10 уже чист. Typographies path → `type/*`.
 - [ ] **export_shape QA (pages 11–15)** — по 2–3 фрейма с каждой страницы; viewer URLs для PR (только draft `· v2`, не канон).
 - [ ] **Missing buttons pass (`10_Screens_Desktop`)** — закрыть чеклист выше на draft `· v2` (иконки + entry points); канон не трогать.
 

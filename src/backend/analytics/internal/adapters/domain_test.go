@@ -27,6 +27,19 @@ func TestMapperFromMessageSent(t *testing.T) {
 	require.NotEmpty(t, ev.GetProfileIdHashed())
 }
 
+func TestMapperFromSubscriptionPlanStarted(t *testing.T) {
+	m := Mapper{HashKey: "test-key"}
+	ev := m.FromSubscription(&eventsv1.SubscriptionStreamEvent{
+		OccurredAt: timestamppb.Now(),
+		Payload: &eventsv1.SubscriptionStreamEvent_PlanStarted{
+			PlanStarted: &eventsv1.PlanStarted{AccountId: "acc-1", Plan: "premium"},
+		},
+	})
+	require.NotNil(t, ev)
+	require.Equal(t, "plan_started", ev.GetEventType())
+	require.NotEmpty(t, ev.GetUserIdHashed())
+}
+
 func TestMapperFromUserRegistered(t *testing.T) {
 	m := Mapper{HashKey: "test-key"}
 	ev := m.FromUser(&eventsv1.UserStreamEvent{

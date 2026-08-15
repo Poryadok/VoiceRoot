@@ -56,6 +56,9 @@ service SpaceService {
 
   // S2S: privacy audience "space members" — shared membership between two profiles.
   rpc AreCoMembers(AreCoMembersRequest) returns (AreCoMembersResponse);
+
+  // S2S: Subscription Service syncs Space Pro entitlement cache after webhook.
+  rpc SyncSpaceProSubscription(SyncSpaceProSubscriptionRequest) returns (SyncSpaceProSubscriptionResponse);
 }
 
 message Space {
@@ -454,3 +457,11 @@ message AreCoMembersRequest {
 message AreCoMembersResponse {
   bool co_members = 1;
 }
+
+message SyncSpaceProSubscriptionRequest {
+  string space_id = 1;
+  string purchaser_account_id = 2;
+  string status = 3; // active | grace_period | cancelled
+}
+
+message SyncSpaceProSubscriptionResponse {}

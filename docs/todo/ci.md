@@ -73,7 +73,7 @@ CI/CD + выкат: GitHub Actions, promote/deploy, k8s secrets, observability �
 
 ### Pipeline bugs
 
-- [ ] **`.github/ci/batch11-audit.md` устарел** — статусы 2026-07-07, не отражает selective CI 2026-07-12; обновить или удалить после сверки с этой секцией.
+- [x] **`.github/ci/batch11-audit.md` удалён** — устаревший аудит 2026-07-07; актуальные риски перенесены в эту секцию / [`branch-protection-checklist.md`](../../.github/ci/branch-protection-checklist.md).
 
 ### Tech debt
 
@@ -106,9 +106,9 @@ CI/CD + выкат: GitHub Actions, promote/deploy, k8s secrets, observability �
 
 ### Deferred / polish
 
-- [ ] **Helm/Kustomize + GitOps** — отложено; ordered rollout остаётся в bash на runner.
+- [ ] **Helm/Kustomize + GitOps** — отложено; [ADR 004](../adr/004-helm-gitops-deferred.md); ordered rollout остаётся в bash на runner.
 - [ ] **Пересмотреть цель continuous full-stack deploy** — selective deploy есть; GitOps позже.
-- [ ] **`e2e-manifest.sh` / smoke runtime** — awk-парсер YAML хрупкий; 16+ gateway + 15 flutter smoke на master — риск >15 min / flake ([`.github/ci/batch11-audit.md`](../../.github/ci/batch11-audit.md)).
+- [ ] **`e2e-manifest.sh` / smoke runtime** — awk-парсер YAML хрупкий; 16+ gateway + 15 flutter smoke на master — риск >15 min / flake ([`e2e-manifest.sh`](../../scripts/ci/e2e-manifest.sh), [`e2e-features.yml`](../../.github/ci/e2e-features.yml)).
 
 
 **Промпт-якорь:** `CI/CD + deploy from docs/todo/ci.md` + приоритет/подсекция.

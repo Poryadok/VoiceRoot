@@ -651,6 +651,41 @@ func (s *StoryGRPC) CreateLookingForParty(ctx context.Context, req *storyv1.Crea
 	return &storyv1.CreateLookingForPartyResponse{Story: rowToProtoForViewer(row, profileID)}, nil
 }
 
+func (s *StoryGRPC) RespondToLfpStory(ctx context.Context, req *storyv1.RespondToLfpStoryRequest) (*storyv1.RespondToLfpStoryResponse, error) {
+	responderID, err := authctx.ProfileID(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "profile required")
+	}
+	storyID, err := uuid.Parse(strings.TrimSpace(req.GetStoryId()))
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid story_id")
+	}
+	responseType := strings.ToUpper(strings.TrimSpace(req.GetResponseType()))
+	if responseType != "JOIN" && responseType != "INVITE" {
+		return nil, status.Error(codes.InvalidArgument, "response_type must be JOIN or INVITE")
+	}
+	row, err := s.Store.GetStory(ctx, storyID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, status.Error(codes.NotFound, "story not found")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if !row.IsLookingForParty {
+		return nil, status.Error(codes.FailedPrecondition, "story is not an LFP post")
+	}
+	if row.AuthorProfileID == responderID {
+		return nil, status.Error(codes.InvalidArgument, "cannot respond to own LFP story")
+	}
+	if !s.canViewStory(ctx, responderID, row) {
+		return nil, status.Error(codes.PermissionDenied, "story not visible")
+	}
+	if s.Events != nil {
+		_ = s.Events.PublishStoryLfpResponse(ctx, row.ID.String(), row.AuthorProfileID.String(), responderID.String(), responseType)
+	}
+	return &storyv1.RespondToLfpStoryResponse{}, nil
+}
+
 func (s *StoryGRPC) canViewStory(ctx context.Context, viewerID uuid.UUID, row *store.StoryRow) bool {
 	if row == nil {
 		return false
@@ -661,7 +696,10 @@ func (s *StoryGRPC) canViewStory(ctx context.Context, viewerID uuid.UUID, row *s
 	storyAudience := audienceFromStoryRow(row.Visibility, row.VisibilityAudienceJSON)
 	if s.Privacy != nil {
 		floor, err := s.Privacy.ShowStoriesAudience(ctx, row.AuthorProfileID)
-		if err == nil && !floor.IsNobody() {
+		if err == nil {
+			if floor.IsNobody() {
+				return false
+			}
 			matcher := s.privacyMatcher()
 			ok, matchErr := matcher.Allowed(ctx, row.AuthorProfileID, viewerID, floor, guestguard.IsGuest(ctx))
 			if matchErr != nil || !ok {

@@ -6,6 +6,7 @@ import '../../state/auth_providers.dart';
 import '../../state/social_providers.dart';
 import '../../state/subscription_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../../settings/theme_preference.dart';
 import '../../theme/voice_theme_providers.dart';
 import '../core/voice_bottom_sheet.dart';
 import '../profile/create_profile_sheet.dart';
@@ -178,9 +179,9 @@ class SettingsSheet extends ConsumerWidget {
                 ),
               ],
               selected: {themePref},
-              onSelectionChanged: (next) =>
-                  ref.read(appThemePreferenceProvider.notifier).state =
-                      next.single,
+              onSelectionChanged: (next) => ref
+                  .read(appThemePreferenceProvider.notifier)
+                  .setPreference(next.single),
             ),
             const SizedBox(height: 16),
             Text(l10n.settingsLanguage, style: TextStyle(color: voice.textSecondary)),

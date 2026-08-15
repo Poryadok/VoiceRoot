@@ -69,6 +69,26 @@ func (t *transcoder) serveSpaces(w http.ResponseWriter, r *http.Request, rest st
 
 	default:
 		if strings.Contains(rest, "/") {
+			if strings.HasSuffix(rest, "/join") && r.Method == http.MethodPost {
+				spaceID := strings.TrimSuffix(rest, "/join")
+				resp, err := t.clients.space.JoinSpace(ctx, &spacev1.JoinSpaceRequest{SpaceId: spaceID})
+				if err != nil {
+					writeGRPCError(w, err)
+					return true
+				}
+				writeProtoJSON(w, http.StatusOK, resp)
+				return true
+			}
+			if strings.HasSuffix(rest, "/leave") && r.Method == http.MethodPost {
+				spaceID := strings.TrimSuffix(rest, "/leave")
+				_, err := t.clients.space.LeaveSpace(ctx, &spacev1.LeaveSpaceRequest{SpaceId: spaceID})
+				if err != nil {
+					writeGRPCError(w, err)
+					return true
+				}
+				w.WriteHeader(http.StatusNoContent)
+				return true
+			}
 			if t.serveSpacesInvites(w, r, rest) {
 				return true
 			}

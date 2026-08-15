@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	chatv1 "voice.app/voice/chat/v1"
+	commonv1 "voice.app/voice/common/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
 )
 
@@ -194,4 +195,48 @@ func TestMessagingForwardMessage_nonMemberDenied(t *testing.T) {
 		TargetChat:      chatDMRef(targetChat),
 	})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+// TestMessagingForwardMessage_commentaryInsertsSeparateMessage documents forward-messages.md optional commentary.
+func TestMessagingForwardMessage_commentaryInsertsSeparateMessage(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	sourceChat := uuid.New()
+	targetChat := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	profC := uuid.New()
+	acctA := uuid.New()
+	seedDMChat(t, ctx, pool, sourceChat, profA, profB)
+	seedDMChat(t, ctx, pool, targetChat, profA, profC)
+
+	client, _ := startMessagingServer(t, pool)
+
+	original, err := client.SendMessage(withProfileCtx(ctx, acctA, profB), &messagingv1.SendMessageRequest{
+		Chat: chatDMRef(sourceChat), Content: "payload", AttachmentsJson: "[]", MentionsJson: "[]",
+	})
+	require.NoError(t, err)
+
+	commentary := "see this"
+	fwd, err := client.ForwardMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.ForwardMessageRequest{
+		SourceMessageId: original.GetMessage().GetId(),
+		TargetChat:      chatDMRef(targetChat),
+		Commentary:      &commentary,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "payload", fwd.GetMessage().GetContent())
+
+	history, err := client.GetMessages(withProfileCtx(ctx, acctA, profA), &messagingv1.GetMessagesRequest{
+		Chat: chatDMRef(targetChat),
+		Page: &commonv1.CursorPageRequest{PageSize: 10},
+	})
+	require.NoError(t, err)
+	msgs := history.GetMessageList().GetMessages()
+	require.Len(t, msgs, 2)
+	require.Equal(t, commentary, msgs[1].GetContent())
+	require.Equal(t, messagingv1.MessageKind_MESSAGE_KIND_FORWARD, msgs[0].GetMessageKind())
 }

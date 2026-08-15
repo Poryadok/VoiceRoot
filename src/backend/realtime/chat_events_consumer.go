@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/nats-io/nats.go"
 	"google.golang.org/protobuf/proto"
@@ -120,13 +119,7 @@ func runChatEventsConsumer(ctx context.Context, hub *wsHub, natsURL, instanceID 
 	if hub == nil || strings.TrimSpace(natsURL) == "" {
 		return fmt.Errorf("chat events consumer: missing hub or NATS URL")
 	}
-	nc, err := nats.Connect(natsURL,
-		nats.Name("voice-realtime-chat-events"),
-		nats.Timeout(10*time.Second),
-		nats.RetryOnFailedConnect(true),
-		nats.MaxReconnects(-1),
-		nats.ReconnectWait(time.Second),
-	)
+	nc, err := nats.Connect(natsURL, natsConnectOptions("voice-realtime-chat-events")...)
 	if err != nil {
 		return fmt.Errorf("nats connect: %w", err)
 	}

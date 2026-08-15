@@ -10,6 +10,9 @@ CHANGED="${CHANGED_SERVICES:-}"
 CATALOG="${ROOT}/scripts/ci/staging-image-catalog.json"
 
 if [ -z "${CHANGED}" ]; then
+  if [ "${DEPLOY_MODE:-}" = "images-only" ]; then
+    echo "WARN: images-only deploy with empty CHANGED_SERVICES is a no-op" >&2
+  fi
   echo "No CHANGED_SERVICES; skipping selective rollout"
   exit 0
 fi

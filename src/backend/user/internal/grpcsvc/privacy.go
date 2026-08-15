@@ -21,6 +21,23 @@ func (s *UserGRPC) GetPrivacySettings(ctx context.Context, req *userv1.GetPrivac
 	if err != nil {
 		return nil, err
 	}
+	// S2S peers (Social/Chat/…) read any profile for audience enforcement.
+	// End-user callers may only read profiles they own.
+	if !authctx.IsInternalService(ctx) {
+		accountID, ok := authctx.AccountID(ctx)
+		if !ok {
+			return nil, status.Error(codes.Unauthenticated, "missing credentials")
+		}
+		if s.Profiles != nil {
+			row, err := s.Profiles.GetOwnedProfile(ctx, accountID, profileID)
+			if err != nil {
+				return nil, status.Error(codes.Internal, err.Error())
+			}
+			if row == nil {
+				return nil, status.Error(codes.PermissionDenied, "cannot read another profile")
+			}
+		}
+	}
 	privacyStore := s.privacyStore()
 	if privacyStore == nil {
 		return nil, status.Error(codes.FailedPrecondition, "privacy store not configured")
@@ -31,7 +48,15 @@ func (s *UserGRPC) GetPrivacySettings(ctx context.Context, req *userv1.GetPrivac
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	if row == nil {
-		row, err = privacyStore.CreateDefaultGaming(ctx, profileID)
+		profileRow, profileErr := s.Profiles.GetByID(ctx, profileID)
+		if profileErr != nil {
+			return nil, status.Error(codes.Internal, profileErr.Error())
+		}
+		if profileRow != nil && profileRow.IsGuestAccount {
+			row, err = privacyStore.CreateDefaultGamingForGuest(ctx, profileID)
+		} else {
+			row, err = privacyStore.CreateDefaultGaming(ctx, profileID)
+		}
 		if err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}

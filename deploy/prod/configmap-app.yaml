@@ -53,6 +53,7 @@ data:
   ROLE_GRPC_ADDR: "voice-role:9090"
   SPACE_GRPC_ADDR: "voice-space:9090"
   VOICE_GRPC_ADDR: "voice-voice:9090"
+  SUBSCRIPTION_GRPC_ADDR: "voice-subscription:9090"
   CLAMAV_ADDR: "voice-clamav:3310"
   MATCHMAKING_SEARCH_NUDGE_AFTER: "15m"
   MATCHMAKING_SEARCH_TIMEOUT: "30m"

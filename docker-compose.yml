@@ -160,8 +160,8 @@ services:
   auth:
     profiles: ["app"]
     build:
-      context: ./src/backend/auth
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: src/backend/auth/Dockerfile
     environment:
       LOG_LEVEL: debug
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/auth_db
@@ -181,12 +181,17 @@ services:
       AUTH_OAUTH_DEVELOPER_PORTAL_CLIENT_SECRET: ${DEVELOPER_PORTAL_OAUTH_CLIENT_SECRET:-}
       AUTH_OAUTH_DEVELOPER_PORTAL_REDIRECT_URIS: ${DEVELOPER_PORTAL_OAUTH_REDIRECT_URIS:-http://localhost:9082/callback,http://127.0.0.1:9082/callback}
       AUTH_OAUTH_AUTHORIZATION_CODE_TTL: ${AUTH_OAUTH_AUTHORIZATION_CODE_TTL:-PT60S}
+      AUTH_NATS_URL: nats://nats:4222
+      AUTH_TOTP_ENCRYPTION_KEY: ${AUTH_TOTP_ENCRYPTION_KEY:-voice-compose-totp-key-32-bytes!!}
+      USER_GRPC_ADDR: user:9090
     volumes:
       - ./src/backend/auth/src/test/resources/jwt-test-private.pem:/run/jwt.pem:ro
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      user:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8080/health >/dev/null"]
@@ -506,6 +511,7 @@ services:
       SUBSCRIPTION_GRPC_LISTEN: :9090
       PADDLE_WEBHOOK_SECRET: ${PADDLE_WEBHOOK_SECRET:-test-webhook-secret}
       NATS_URL: nats://nats:4222
+      ANALYTICS_ID_HASH_KEY: ${ANALYTICS_ID_HASH_KEY:-compose-dev-analytics-hash-key}
     depends_on:
       postgres:
         condition: service_healthy
@@ -572,6 +578,19 @@ services:
       timeout: 3s
       retries: 10
       start_period: 15s
+
+  # Federation is S2S-only (not in GATEWAY_GRPC_UPSTREAMS_JSON); health/metrics scaffold for CI parity.
+  federation:
+    profiles: ["app"]
+    build:
+      context: ./src/backend
+      dockerfile: federation/Dockerfile
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
 
   bot:
     profiles: ["app"]
@@ -752,6 +771,8 @@ services:
       USER_GRPC_ADDR: user:9090
       SOCIAL_GRPC_ADDR: social:9090
       SPACE_GRPC_ADDR: space:9090
+      ROLE_GRPC_ADDR: role:9090
+      SUBSCRIPTION_GRPC_ADDR: subscription:9090
       NATS_URL: nats://nats:4222
       LIVEKIT_URL: ${VOICE_LIVEKIT_PUBLIC_URL:-ws://127.0.0.1:7880}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-devkey}

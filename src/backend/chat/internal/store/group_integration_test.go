@@ -159,7 +159,59 @@ func TestUpdateGroupChat_PersistsAvatar(t *testing.T) {
 	require.Equal(t, avatar, *loaded.AvatarURL)
 }
 
-// TestRemoveGroupMember_DeletesRow documents kick at persistence layer.
+// TestRemoveGroupMember_TooFewMembersAfterKick documents text-chat.md minimum 3 members invariant.
+func TestRemoveGroupMember_TooFewMembersAfterKick(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatDBForStoreTest(t, ctx)
+	applyChatMigrationsForStoreTest(t, ctx, pool)
+	store := &DMStore{Pool: pool}
+
+	owner := uuid.New()
+	target := uuid.New()
+	extra := uuid.New()
+	row, err := store.CreateGroupChat(ctx, owner, "Kick min")
+	require.NoError(t, err)
+	_, err = store.AddGroupMembers(ctx, row.ID, []uuid.UUID{target, extra})
+	require.NoError(t, err)
+
+	err = store.RemoveGroupMember(ctx, row.ID, target)
+	require.ErrorIs(t, err, ErrGroupTooFewMembers)
+
+	n, err := store.CountChatMembers(ctx, row.ID)
+	require.NoError(t, err)
+	require.Equal(t, 3, n)
+}
+
+// TestLeaveGroupChat_TooFewMembersAfterLeave documents voluntary leave cannot drop below minimum.
+func TestLeaveGroupChat_TooFewMembersAfterLeave(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatDBForStoreTest(t, ctx)
+	applyChatMigrationsForStoreTest(t, ctx, pool)
+	store := &DMStore{Pool: pool}
+
+	owner := uuid.New()
+	leaver := uuid.New()
+	extra := uuid.New()
+	row, err := store.CreateGroupChat(ctx, owner, "Leave min")
+	require.NoError(t, err)
+	_, err = store.AddGroupMembers(ctx, row.ID, []uuid.UUID{leaver, extra})
+	require.NoError(t, err)
+
+	err = store.LeaveGroupChat(ctx, row.ID, leaver)
+	require.ErrorIs(t, err, ErrGroupTooFewMembers)
+
+	n, err := store.CountChatMembers(ctx, row.ID)
+	require.NoError(t, err)
+	require.Equal(t, 3, n)
+}
+
+// TestRemoveGroupMember_DeletesRow documents kick at persistence layer when group stays >= 3 members.
 func TestRemoveGroupMember_DeletesRow(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
@@ -172,9 +224,10 @@ func TestRemoveGroupMember_DeletesRow(t *testing.T) {
 	owner := uuid.New()
 	target := uuid.New()
 	extra := uuid.New()
+	spare := uuid.New()
 	row, err := store.CreateGroupChat(ctx, owner, "Kick store")
 	require.NoError(t, err)
-	_, err = store.AddGroupMembers(ctx, row.ID, []uuid.UUID{target, extra})
+	_, err = store.AddGroupMembers(ctx, row.ID, []uuid.UUID{target, extra, spare})
 	require.NoError(t, err)
 
 	require.NoError(t, store.RemoveGroupMember(ctx, row.ID, target))

@@ -96,6 +96,9 @@ func (s *ModerationGRPC) CreateReport(ctx context.Context, req *moderationv1.Cre
 			"target_type": targetType, "category": category,
 		})
 	}
+	if s.DomainEvents != nil {
+		_ = s.DomainEvents.PublishReportCreated(ctx, row.ID.String(), reporterProfileID.String())
+	}
 
 	return &moderationv1.CreateReportResponse{
 		Report: reportRowToProto(row),
@@ -141,6 +144,22 @@ func profileIDFromMetadata(ctx context.Context) (uuid.UUID, error) {
 	id, err := uuid.Parse(strings.TrimSpace(vals[0]))
 	if err != nil {
 		return uuid.Nil, status.Error(codes.Unauthenticated, "invalid profile")
+	}
+	return id, nil
+}
+
+func accountIDFromMetadata(ctx context.Context) (uuid.UUID, error) {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return uuid.Nil, status.Error(codes.Unauthenticated, "missing credentials")
+	}
+	vals := md.Get("x-voice-user-id")
+	if len(vals) == 0 || strings.TrimSpace(vals[0]) == "" {
+		return uuid.Nil, status.Error(codes.Unauthenticated, "missing account")
+	}
+	id, err := uuid.Parse(strings.TrimSpace(vals[0]))
+	if err != nil {
+		return uuid.Nil, status.Error(codes.Unauthenticated, "invalid account")
 	}
 	return id, nil
 }
@@ -285,10 +304,34 @@ func (s *ModerationGRPC) maybeAutoShadowBan(ctx context.Context, targetProfileID
 			targetAccountID = resolved
 		}
 	}
+	if s.Sanctions != nil {
+		banned, err := s.Sanctions.IsShadowBanned(ctx, targetAccountID)
+		if err != nil {
+			return err
+		}
+		if banned {
+			return nil
+		}
+	}
 	details := `{"window":"24h","count":` + strconv.Itoa(count) + `,"threshold":` + strconv.Itoa(threshold) + `,"audience_source":"env"}`
 	if err := s.Reports.InsertAutoModLog(ctx, targetProfileID, "report_threshold", "shadow_ban", details); err != nil {
 		return err
 	}
-	_ = targetAccountID // moderation (docs/features/reports.md) applies sanctions; privacy/trust (docs/features/privacy.md) logs only (PLAN §11).
+	if s.Sanctions == nil {
+		return nil
+	}
+	reason := "auto shadow ban: report threshold exceeded"
+	row, err := s.Sanctions.InsertSanction(ctx, targetAccountID, "shadow_ban", reason, nil, autoModIssuerProfileID(), nil)
+	if err != nil {
+		return err
+	}
+	if s.DomainEvents != nil {
+		_ = s.DomainEvents.PublishSanctionApplied(ctx, row.ID.String(), targetAccountID.String(), "shadow_ban")
+	}
 	return nil
+}
+
+// autoModIssuerProfileID is the well-known automod actor for system sanctions.
+func autoModIssuerProfileID() uuid.UUID {
+	return uuid.MustParse("00000000-0000-4000-8000-000000000001")
 }

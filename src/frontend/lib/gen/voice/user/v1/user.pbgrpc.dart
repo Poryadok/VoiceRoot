@@ -42,6 +42,16 @@ class UserServiceClient extends $grpc.Client {
     return $createUnaryCall(_$ensurePrimaryProfile, request, options: options);
   }
 
+  /// S2S internal: profile ids for account-level social actions (block cascade, …).
+  $grpc.ResponseFuture<$0.ListProfileIDsForAccountResponse>
+      listProfileIDsForAccount(
+    $0.ListProfileIDsForAccountRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$listProfileIDsForAccount, request,
+        options: options);
+  }
+
   $grpc.ResponseFuture<$0.GetProfileResponse> getProfile(
     $0.GetProfileRequest request, {
     $grpc.CallOptions? options,
@@ -231,6 +241,12 @@ class UserServiceClient extends $grpc.Client {
       '/voice.user.v1.UserService/EnsurePrimaryProfile',
       ($0.EnsurePrimaryProfileRequest value) => value.writeToBuffer(),
       $0.EnsurePrimaryProfileResponse.fromBuffer);
+  static final _$listProfileIDsForAccount = $grpc.ClientMethod<
+          $0.ListProfileIDsForAccountRequest,
+          $0.ListProfileIDsForAccountResponse>(
+      '/voice.user.v1.UserService/ListProfileIDsForAccount',
+      ($0.ListProfileIDsForAccountRequest value) => value.writeToBuffer(),
+      $0.ListProfileIDsForAccountResponse.fromBuffer);
   static final _$getProfile =
       $grpc.ClientMethod<$0.GetProfileRequest, $0.GetProfileResponse>(
           '/voice.user.v1.UserService/GetProfile',
@@ -370,6 +386,15 @@ abstract class UserServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.EnsurePrimaryProfileRequest.fromBuffer(value),
         ($0.EnsurePrimaryProfileResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ListProfileIDsForAccountRequest,
+            $0.ListProfileIDsForAccountResponse>(
+        'ListProfileIDsForAccount',
+        listProfileIDsForAccount_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ListProfileIDsForAccountRequest.fromBuffer(value),
+        ($0.ListProfileIDsForAccountResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.GetProfileRequest, $0.GetProfileResponse>(
         'GetProfile',
         getProfile_Pre,
@@ -597,6 +622,15 @@ abstract class UserServiceBase extends $grpc.Service {
 
   $async.Future<$0.EnsurePrimaryProfileResponse> ensurePrimaryProfile(
       $grpc.ServiceCall call, $0.EnsurePrimaryProfileRequest request);
+
+  $async.Future<$0.ListProfileIDsForAccountResponse>
+      listProfileIDsForAccount_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.ListProfileIDsForAccountRequest> $request) async {
+    return listProfileIDsForAccount($call, await $request);
+  }
+
+  $async.Future<$0.ListProfileIDsForAccountResponse> listProfileIDsForAccount(
+      $grpc.ServiceCall call, $0.ListProfileIDsForAccountRequest request);
 
   $async.Future<$0.GetProfileResponse> getProfile_Pre($grpc.ServiceCall $call,
       $async.Future<$0.GetProfileRequest> $request) async {

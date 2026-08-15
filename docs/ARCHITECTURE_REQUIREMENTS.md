@@ -60,7 +60,7 @@
 - **Синхронизация прочитанного**: событие `mark_read(chat_id, message_id)` через WebSocket на все подключённые устройства пользователя
 - **Typing indicator**: WebSocket, throttle отправки — не чаще 1 раза в 3 сек; гасить через 5 сек без обновления
 - **UX при потере соединения**: баннер "Переподключение..." появляется через 2 сек после разрыва; исчезает через 1 сек после успешного reconnect
-- **Аутентификация WS (web)**: браузерный WebSocket API не позволяет задать заголовок `Authorization`; Flutter web передаёт JWT в query `access_token`, Gateway копирует его в upstream для Realtime. **Риск**: токен может попасть в access-логи прокси/CDN; нативные клиенты используют только заголовки. Follow-up: short-lived WS ticket endpoint.
+- **Аутентификация WS (web)**: браузерный WebSocket API не позволяет задать заголовок `Authorization`. **Web-клиент** запрашивает short-lived ticket через `POST /api/v1/realtime/ws-ticket` (JWT только в заголовке REST) и подключается к `/ws?ticket=…`. Gateway валидирует ticket (Redis, single-use, TTL ~60s), подставляет claims и upstream JWT для Realtime. **Нативные клиенты** используют `Authorization: Bearer` на upgrade без query. Legacy `access_token` query на `/ws` остаётся для совместимости, но web не использует.
 
 ### Reconnect: WebSocket-поток и история сообщений
 

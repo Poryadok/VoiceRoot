@@ -1022,3 +1022,72 @@ const DeletePlayerGameEntryResponse$json = {
 /// Descriptor for `DeletePlayerGameEntryResponse`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List deletePlayerGameEntryResponseDescriptor =
     $convert.base64Decode('Ch1EZWxldGVQbGF5ZXJHYW1lRW50cnlSZXNwb25zZQ==');
+
+@$core.Deprecated('Use applyPlatformMMBanRequestDescriptor instead')
+const ApplyPlatformMMBanRequest$json = {
+  '1': 'ApplyPlatformMMBanRequest',
+  '2': [
+    {'1': 'target_account_id', '3': 1, '4': 1, '5': 9, '10': 'targetAccountId'},
+    {'1': 'reason', '3': 2, '4': 1, '5': 9, '10': 'reason'},
+    {
+      '1': 'expires_at',
+      '3': 3,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '9': 0,
+      '10': 'expiresAt',
+      '17': true
+    },
+    {
+      '1': 'banned_by_profile_id',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '10': 'bannedByProfileId'
+    },
+  ],
+  '8': [
+    {'1': '_expires_at'},
+  ],
+};
+
+/// Descriptor for `ApplyPlatformMMBanRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List applyPlatformMMBanRequestDescriptor = $convert.base64Decode(
+    'ChlBcHBseVBsYXRmb3JtTU1CYW5SZXF1ZXN0EioKEXRhcmdldF9hY2NvdW50X2lkGAEgASgJUg'
+    '90YXJnZXRBY2NvdW50SWQSFgoGcmVhc29uGAIgASgJUgZyZWFzb24SPgoKZXhwaXJlc19hdBgD'
+    'IAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBIAFIJZXhwaXJlc0F0iAEBEi8KFGJhbm'
+    '5lZF9ieV9wcm9maWxlX2lkGAQgASgJUhFiYW5uZWRCeVByb2ZpbGVJZEINCgtfZXhwaXJlc19h'
+    'dA==');
+
+@$core.Deprecated('Use applyPlatformMMBanResponseDescriptor instead')
+const ApplyPlatformMMBanResponse$json = {
+  '1': 'ApplyPlatformMMBanResponse',
+};
+
+/// Descriptor for `ApplyPlatformMMBanResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List applyPlatformMMBanResponseDescriptor =
+    $convert.base64Decode('ChpBcHBseVBsYXRmb3JtTU1CYW5SZXNwb25zZQ==');
+
+@$core.Deprecated('Use revokePlatformMMBanRequestDescriptor instead')
+const RevokePlatformMMBanRequest$json = {
+  '1': 'RevokePlatformMMBanRequest',
+  '2': [
+    {'1': 'target_account_id', '3': 1, '4': 1, '5': 9, '10': 'targetAccountId'},
+  ],
+};
+
+/// Descriptor for `RevokePlatformMMBanRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List revokePlatformMMBanRequestDescriptor =
+    $convert.base64Decode(
+        'ChpSZXZva2VQbGF0Zm9ybU1NQmFuUmVxdWVzdBIqChF0YXJnZXRfYWNjb3VudF9pZBgBIAEoCV'
+        'IPdGFyZ2V0QWNjb3VudElk');
+
+@$core.Deprecated('Use revokePlatformMMBanResponseDescriptor instead')
+const RevokePlatformMMBanResponse$json = {
+  '1': 'RevokePlatformMMBanResponse',
+};
+
+/// Descriptor for `RevokePlatformMMBanResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List revokePlatformMMBanResponseDescriptor =
+    $convert.base64Decode('ChtSZXZva2VQbGF0Zm9ybU1NQmFuUmVzcG9uc2U=');

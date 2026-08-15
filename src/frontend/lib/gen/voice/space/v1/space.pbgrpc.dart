@@ -294,6 +294,16 @@ class SpaceServiceClient extends $grpc.Client {
     return $createUnaryCall(_$areCoMembers, request, options: options);
   }
 
+  /// S2S: Subscription Service syncs Space Pro entitlement cache after webhook.
+  $grpc.ResponseFuture<$0.SyncSpaceProSubscriptionResponse>
+      syncSpaceProSubscription(
+    $0.SyncSpaceProSubscriptionRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$syncSpaceProSubscription, request,
+        options: options);
+  }
+
   // method descriptors
 
   static final _$createSpace =
@@ -481,6 +491,12 @@ class SpaceServiceClient extends $grpc.Client {
           '/voice.space.v1.SpaceService/AreCoMembers',
           ($0.AreCoMembersRequest value) => value.writeToBuffer(),
           $0.AreCoMembersResponse.fromBuffer);
+  static final _$syncSpaceProSubscription = $grpc.ClientMethod<
+          $0.SyncSpaceProSubscriptionRequest,
+          $0.SyncSpaceProSubscriptionResponse>(
+      '/voice.space.v1.SpaceService/SyncSpaceProSubscription',
+      ($0.SyncSpaceProSubscriptionRequest value) => value.writeToBuffer(),
+      $0.SyncSpaceProSubscriptionResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.space.v1.SpaceService')
@@ -807,6 +823,15 @@ abstract class SpaceServiceBase extends $grpc.Service {
             ($core.List<$core.int> value) =>
                 $0.AreCoMembersRequest.fromBuffer(value),
             ($0.AreCoMembersResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.SyncSpaceProSubscriptionRequest,
+            $0.SyncSpaceProSubscriptionResponse>(
+        'SyncSpaceProSubscription',
+        syncSpaceProSubscription_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.SyncSpaceProSubscriptionRequest.fromBuffer(value),
+        ($0.SyncSpaceProSubscriptionResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.CreateSpaceResponse> createSpace_Pre($grpc.ServiceCall $call,
@@ -1127,4 +1152,13 @@ abstract class SpaceServiceBase extends $grpc.Service {
 
   $async.Future<$0.AreCoMembersResponse> areCoMembers(
       $grpc.ServiceCall call, $0.AreCoMembersRequest request);
+
+  $async.Future<$0.SyncSpaceProSubscriptionResponse>
+      syncSpaceProSubscription_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.SyncSpaceProSubscriptionRequest> $request) async {
+    return syncSpaceProSubscription($call, await $request);
+  }
+
+  $async.Future<$0.SyncSpaceProSubscriptionResponse> syncSpaceProSubscription(
+      $grpc.ServiceCall call, $0.SyncSpaceProSubscriptionRequest request);
 }

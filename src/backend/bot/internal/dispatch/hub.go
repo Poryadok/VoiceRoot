@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"voice/backend/bot/internal/store"
+	"voice/backend/pkg/runtimeconfig"
 )
 
 // AutocompleteChoice is one autocomplete suggestion completed by a polling bot.
@@ -15,7 +16,10 @@ type AutocompleteChoice struct {
 	Value string
 }
 
-const DefaultTimeout = 3 * time.Second
+// DefaultTimeout is the webhook delivery wait used by the dispatch hub.
+func DefaultTimeout() time.Duration {
+	return runtimeconfig.DurationFromEnv("BOT_WEBHOOK_TIMEOUT", 3*time.Second)
+}
 
 // Hub tracks in-flight slash interactions awaiting bot responses.
 type Hub struct {
@@ -148,7 +152,7 @@ func AutocompleteCacheKey(botID, chatID, command, option, focused string) string
 
 func (h *Hub) Wait(ch chan store.InteractionReply, timeout time.Duration) (store.InteractionReply, bool) {
 	if timeout <= 0 {
-		timeout = DefaultTimeout
+		timeout = DefaultTimeout()
 	}
 	select {
 	case reply := <-ch:

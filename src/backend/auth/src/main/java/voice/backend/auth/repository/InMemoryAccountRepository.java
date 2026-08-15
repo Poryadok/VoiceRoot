@@ -20,7 +20,18 @@ public class InMemoryAccountRepository implements AccountRepository {
     if (phone != null && byPhone.containsKey(phone)) {
       throw new IllegalArgumentException("duplicate phone");
     }
-    Account account = new Account(UUID.randomUUID(), email, phone, passwordHash, type, "active", null, false, Instant.now());
+    Account account =
+        new Account(
+            UUID.randomUUID(),
+            email,
+            phone,
+            passwordHash,
+            type,
+            "active",
+            null,
+            false,
+            Instant.now(),
+            null);
     byId.put(account.id(), account);
     if (email != null) {
       byEmail.put(email, account.id());
@@ -57,16 +68,9 @@ public class InMemoryAccountRepository implements AccountRepository {
       return;
     }
     byte[] secretCopy = encryptedSecret == null ? null : Arrays.copyOf(encryptedSecret, encryptedSecret.length);
-    byId.put(accountId, new Account(
-        existing.id(),
-        existing.email(),
-        existing.phone(),
-        existing.passwordHash(),
-        existing.type(),
-        existing.status(),
-        secretCopy,
-        enabled,
-        existing.createdAt()));
+    byId.put(
+        accountId,
+        copy(existing, existing.status(), secretCopy, enabled, existing.deletedAt()));
   }
 
   @Override
@@ -75,16 +79,7 @@ public class InMemoryAccountRepository implements AccountRepository {
     if (existing == null) {
       return;
     }
-    byId.put(accountId, new Account(
-        existing.id(),
-        existing.email(),
-        existing.phone(),
-        existing.passwordHash(),
-        existing.type(),
-        existing.status(),
-        existing.totpSecret(),
-        enabled,
-        existing.createdAt()));
+    byId.put(accountId, copy(existing, existing.status(), existing.totpSecret(), enabled, existing.deletedAt()));
   }
 
   @Override
@@ -93,16 +88,7 @@ public class InMemoryAccountRepository implements AccountRepository {
     if (existing == null) {
       return;
     }
-    byId.put(accountId, new Account(
-        existing.id(),
-        existing.email(),
-        existing.phone(),
-        existing.passwordHash(),
-        existing.type(),
-        status,
-        existing.totpSecret(),
-        existing.totpEnabled(),
-        existing.createdAt()));
+    byId.put(accountId, copy(existing, status, existing.totpSecret(), existing.totpEnabled(), existing.deletedAt()));
   }
 
   @Override
@@ -123,16 +109,18 @@ public class InMemoryAccountRepository implements AccountRepository {
     if (existing.phone() != null) {
       byPhone.remove(existing.phone());
     }
-    Account converted = new Account(
-        existing.id(),
-        email,
-        phone,
-        passwordHash,
-        "regular",
-        existing.status(),
-        existing.totpSecret(),
-        existing.totpEnabled(),
-        existing.createdAt());
+    Account converted =
+        new Account(
+            existing.id(),
+            email,
+            phone,
+            passwordHash,
+            "regular",
+            existing.status(),
+            existing.totpSecret(),
+            existing.totpEnabled(),
+            existing.createdAt(),
+            existing.deletedAt());
     byId.put(accountId, converted);
     if (email != null) {
       byEmail.put(email, accountId);
@@ -151,5 +139,38 @@ public class InMemoryAccountRepository implements AccountRepository {
   @Override
   public synchronized int deactivateExpiredGuests(Instant lastOnlineBefore) {
     return 0;
+  }
+
+  @Override
+  public synchronized void markDeleted(UUID accountId, Instant deletedAt) {
+    Account existing = byId.get(accountId);
+    if (existing == null) {
+      return;
+    }
+    byId.put(accountId, copy(existing, "deleted", existing.totpSecret(), existing.totpEnabled(), deletedAt));
+  }
+
+  @Override
+  public synchronized void restoreDeleted(UUID accountId) {
+    Account existing = byId.get(accountId);
+    if (existing == null) {
+      return;
+    }
+    byId.put(accountId, copy(existing, "active", existing.totpSecret(), existing.totpEnabled(), null));
+  }
+
+  private static Account copy(
+      Account existing, String status, byte[] totpSecret, boolean totpEnabled, Instant deletedAt) {
+    return new Account(
+        existing.id(),
+        existing.email(),
+        existing.phone(),
+        existing.passwordHash(),
+        existing.type(),
+        status,
+        totpSecret,
+        totpEnabled,
+        existing.createdAt(),
+        deletedAt);
   }
 }

@@ -22,6 +22,10 @@ func (failingRoleChecker) EnsureScreenShare(context.Context, string, string, str
 	return errors.New("role service unavailable")
 }
 
+func (failingRoleChecker) EnsureVoiceJoin(context.Context, string, string, string) error {
+	return nil
+}
+
 func TestVoiceGRPC_StartScreenShare_RoleUnavailableDeniesSpaceRoom(t *testing.T) {
 	t.Parallel()
 	now := time.Unix(1700000000, 0).UTC()

@@ -20,7 +20,10 @@ public class JdbcAccountRepository implements AccountRepository {
               rs.getString("status"),
               rs.getBytes("totp_secret"),
               rs.getBoolean("totp_enabled"),
-              rs.getTimestamp("created_at").toInstant());
+              rs.getTimestamp("created_at").toInstant(),
+              rs.getTimestamp("deleted_at") == null
+                  ? null
+                  : rs.getTimestamp("deleted_at").toInstant());
 
   private final NamedParameterJdbcTemplate jdbc;
 
@@ -41,7 +44,7 @@ public class JdbcAccountRepository implements AccountRepository {
           """
           INSERT INTO accounts (email, phone, password_hash, type, status)
           VALUES (:email, :phone, :passwordHash, :type, 'active')
-          RETURNING id, email, phone, password_hash, type, status, totp_secret, totp_enabled, created_at
+          RETURNING id, email, phone, password_hash, type, status, totp_secret, totp_enabled, created_at, deleted_at
           """,
           params,
           ROW_MAPPER);
@@ -57,7 +60,7 @@ public class JdbcAccountRepository implements AccountRepository {
     }
     return jdbc.query(
             """
-            SELECT id, email, phone, password_hash, type, status, totp_secret, totp_enabled, created_at
+            SELECT id, email, phone, password_hash, type, status, totp_secret, totp_enabled, created_at, deleted_at
             FROM accounts WHERE email = :email LIMIT 1
             """,
             new MapSqlParameterSource("email", email),
@@ -73,7 +76,7 @@ public class JdbcAccountRepository implements AccountRepository {
     }
     return jdbc.query(
             """
-            SELECT id, email, phone, password_hash, type, status, totp_secret, totp_enabled, created_at
+            SELECT id, email, phone, password_hash, type, status, totp_secret, totp_enabled, created_at, deleted_at
             FROM accounts WHERE phone = :phone LIMIT 1
             """,
             new MapSqlParameterSource("phone", phone),
@@ -88,7 +91,7 @@ public class JdbcAccountRepository implements AccountRepository {
       UUID uuid = UUID.fromString(id);
       return jdbc.query(
               """
-              SELECT id, email, phone, password_hash, type, status, totp_secret, totp_enabled, created_at
+              SELECT id, email, phone, password_hash, type, status, totp_secret, totp_enabled, created_at, deleted_at
               FROM accounts WHERE id = :id LIMIT 1
               """,
               new MapSqlParameterSource("id", uuid),
@@ -154,7 +157,7 @@ public class JdbcAccountRepository implements AccountRepository {
           UPDATE accounts
           SET email = :email, phone = :phone, password_hash = :passwordHash, type = 'regular', updated_at = now()
           WHERE id = :id AND type = 'guest'
-          RETURNING id, email, phone, password_hash, type, status, totp_secret, totp_enabled, created_at
+          RETURNING id, email, phone, password_hash, type, status, totp_secret, totp_enabled, created_at, deleted_at
           """,
           params,
           ROW_MAPPER);
@@ -184,8 +187,33 @@ public class JdbcAccountRepository implements AccountRepository {
         SET status = 'deleted', deleted_at = now(), updated_at = now()
         WHERE type = 'guest'
           AND status = 'active'
-          AND (last_online_at IS NULL OR last_online_at < :cutoff)
+          AND last_online_at IS NOT NULL
+          AND last_online_at < :cutoff
         """,
         new MapSqlParameterSource("cutoff", java.sql.Timestamp.from(lastOnlineBefore)));
+  }
+
+  @Override
+  public void markDeleted(UUID accountId, Instant deletedAt) {
+    jdbc.update(
+        """
+        UPDATE accounts
+        SET status = 'deleted', deleted_at = :deletedAt, updated_at = now()
+        WHERE id = :id
+        """,
+        new MapSqlParameterSource()
+            .addValue("id", accountId)
+            .addValue("deletedAt", java.sql.Timestamp.from(deletedAt)));
+  }
+
+  @Override
+  public void restoreDeleted(UUID accountId) {
+    jdbc.update(
+        """
+        UPDATE accounts
+        SET status = 'active', deleted_at = NULL, updated_at = now()
+        WHERE id = :id
+        """,
+        new MapSqlParameterSource("id", accountId));
   }
 }

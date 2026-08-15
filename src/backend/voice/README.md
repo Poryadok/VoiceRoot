@@ -1,9 +1,3 @@
 # Voice Service
 
-Go scaffold for the Voice voice service.
-
-Current public surface:
-
-- GET /health returns {"service":"voice","status":"ok"}.
-
-Domain behavior, gRPC handlers, database repositories, and migrations are intentionally out of scope for this initialization step.
+Go microservice: DM/group voice calls, LiveKit room lifecycle, gRPC `VoiceService`. Redis presence/state. Gateway `/api/v1/voice/**`. Group rooms capped at 32 participants in code. See `docs/microservices/voice-service.md`.

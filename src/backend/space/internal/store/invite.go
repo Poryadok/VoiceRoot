@@ -311,6 +311,79 @@ WHERE space_id = $1 AND profile_id = $2
 	return member, nil
 }
 
+// JoinSpace adds profile to space without an invite (public join path).
+func (s *SpaceStore) JoinSpace(ctx context.Context, spaceID, profileID, accountID uuid.UUID) (*MembershipRow, error) {
+	if s == nil || s.Pool == nil {
+		return nil, errors.New("space store: pool not configured")
+	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	banned, err := s.IsAccountBanned(ctx, spaceID, accountID)
+	if err != nil {
+		return nil, err
+	}
+	if banned {
+		return nil, ErrAccountBanned
+	}
+
+	existing, err := scanMembershipRow(tx.QueryRow(ctx, `
+SELECT space_id, profile_id, joined_at, nickname
+FROM space_members
+WHERE space_id = $1 AND profile_id = $2
+`, spaceID, profileID))
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil {
+		if err := tx.Commit(ctx); err != nil {
+			return nil, err
+		}
+		return existing, nil
+	}
+
+	cap, err := memberCapTx(ctx, tx, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	var memberCount int32
+	if err := tx.QueryRow(ctx, `SELECT member_count FROM spaces WHERE id = $1`, spaceID).Scan(&memberCount); err != nil {
+		return nil, err
+	}
+	if memberCount >= cap {
+		return nil, ErrMemberCapReached
+	}
+
+	if _, err := tx.Exec(ctx, `
+INSERT INTO space_members (space_id, profile_id)
+VALUES ($1, $2)
+`, spaceID, profileID); err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec(ctx, `
+UPDATE spaces SET member_count = member_count + 1, updated_at = now()
+WHERE id = $1
+`, spaceID); err != nil {
+		return nil, err
+	}
+
+	member, err := scanMembershipRow(tx.QueryRow(ctx, `
+SELECT space_id, profile_id, joined_at, nickname
+FROM space_members
+WHERE space_id = $1 AND profile_id = $2
+`, spaceID, profileID))
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return member, nil
+}
+
 func memberCapTx(ctx context.Context, tx pgx.Tx, spaceID uuid.UUID) (int32, error) {
 	var hasPro bool
 	err := tx.QueryRow(ctx, `

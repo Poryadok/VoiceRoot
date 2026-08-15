@@ -182,8 +182,35 @@ func (s *VoiceGRPC) JoinCall(ctx context.Context, req *callsv1.JoinCallRequest) 
 }
 
 func (s *VoiceGRPC) LeaveCall(ctx context.Context, req *callsv1.LeaveCallRequest) (*callsv1.LeaveCallResponse, error) {
-	_, err := s.EndCall(ctx, &callsv1.EndCallRequest{RoomId: req.GetRoomId()})
+	profileID, err := callerProfile(ctx)
+	if err != nil {
+		return nil, err
+	}
+	call, err := s.requireCall(ctx, req.GetRoomId(), profileID)
+	if err != nil {
+		return nil, err
+	}
+	if call.IsGroupVoice() {
+		return s.leaveOpenVoiceSession(ctx, call, profileID)
+	}
+	_, err = s.EndCall(ctx, &callsv1.EndCallRequest{RoomId: req.GetRoomId()})
 	return &callsv1.LeaveCallResponse{}, err
+}
+
+func (s *VoiceGRPC) leaveOpenVoiceSession(ctx context.Context, call voicestore.Call, profileID string) (*callsv1.LeaveCallResponse, error) {
+	s.clearScreenShareForProfile(ctx, call, profileID)
+	updated, err := s.Calls.RemoveParticipant(ctx, call.RoomID, profileID)
+	if err != nil {
+		return nil, storeErr(err)
+	}
+	if len(updated.ProfileIDs()) == 0 {
+		updated, err = s.Calls.SetStatus(ctx, call.RoomID, callsv1.CallStatus_CALL_STATUS_ENDED, s.now())
+		if err != nil {
+			return nil, storeErr(err)
+		}
+		s.publishEnded(ctx, updated, "hangup", profileID)
+	}
+	return &callsv1.LeaveCallResponse{}, nil
 }
 
 func (s *VoiceGRPC) EndCall(ctx context.Context, req *callsv1.EndCallRequest) (*callsv1.EndCallResponse, error) {
@@ -291,6 +318,8 @@ func (s *VoiceGRPC) GetVoiceStates(ctx context.Context, req *callsv1.GetVoiceSta
 			IsDeafened:      state.IsDeafened,
 			IsVideoOn:       state.IsVideoOn,
 			IsScreenSharing: state.IsScreenSharing,
+			IsCommander:     state.IsCommander,
+			HandRaised:      state.HandRaised,
 		})
 	}
 	return &callsv1.GetVoiceStatesResponse{Participants: participants}, nil
@@ -446,6 +475,7 @@ func (s *VoiceGRPC) startGroupVoice(ctx context.Context, req *callsv1.StartCallR
 		return nil, storeErr(err)
 	}
 	s.publishAccepted(ctx, call, profileID)
+	s.publishCallStarted(ctx, call)
 	return &callsv1.StartCallResponse{CallSession: callToProto(call)}, nil
 }
 
@@ -607,4 +637,42 @@ func mediaKindString(kind callsv1.CallMediaKind) string {
 		return "video"
 	}
 	return "audio"
+}
+
+func (s *VoiceGRPC) publishCallStarted(ctx context.Context, call voicestore.Call) {
+	if s.Events == nil {
+		return
+	}
+	if err := s.Events.PublishCallStarted(ctx, &eventsv1.CallStarted{
+		RoomId:             call.RoomID,
+		ProfileIds:         call.ProfileIDs(),
+		ChatId:             call.ChatID,
+		InitiatorProfileId: call.InitiatorProfileID,
+		CalleeProfileId:    call.CalleeProfileID,
+		MediaKind:          mediaKindString(call.MediaKind),
+		LivekitRoomName:    call.LivekitRoomName,
+	}); err != nil {
+		s.logPublishError(ctx, "voice.call_started", err, slog.String("room_id", call.RoomID))
+	}
+}
+
+func (s *VoiceGRPC) publishVoiceMemberJoined(ctx context.Context, call voicestore.Call, joinedProfileID string) {
+	if s.Events == nil || joinedProfileID == "" {
+		return
+	}
+	notify := make([]string, 0, len(call.ProfileIDs()))
+	for _, id := range call.ProfileIDs() {
+		if id != joinedProfileID {
+			notify = append(notify, id)
+		}
+	}
+	if err := s.Events.PublishVoiceMemberJoined(ctx, &eventsv1.VoiceMemberJoined{
+		RoomId:            call.RoomID,
+		VoiceRoomId:       call.VoiceRoomID,
+		SpaceId:           call.SpaceID,
+		JoinedProfileId:   joinedProfileID,
+		NotifyProfileIds:  notify,
+	}); err != nil {
+		s.logPublishError(ctx, "voice.member_joined", err, slog.String("room_id", call.RoomID))
+	}
 }

@@ -31,7 +31,7 @@ public final class InMemoryPhoneHashResolver implements PhoneHashResolver {
           .filter(account -> "active".equals(account.status()))
           .ifPresent(
               account -> {
-                String profileId = profiles.ensurePrimaryProfile(account.id(), hash);
+                String profileId = profiles.ensurePrimaryProfile(account.id(), hash, false);
                 if (profileId != null && !profileId.isBlank()) {
                   out.put(hash.trim(), profileId);
                 }

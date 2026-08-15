@@ -38,6 +38,9 @@ func (p *recordingPublisher) PublishStoryHighlightCreated(context.Context, strin
 func (p *recordingPublisher) PublishStoryLfpCreated(context.Context, string, string, string) error {
 	return nil
 }
+func (p *recordingPublisher) PublishStoryLfpResponse(context.Context, string, string, string, string) error {
+	return nil
+}
 func (p *recordingPublisher) Close() error { return nil }
 
 func TestMarkExpiredStoriesReturning_publishesPerStory(t *testing.T) {

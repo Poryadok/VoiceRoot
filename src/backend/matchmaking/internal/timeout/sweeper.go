@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
+
 	"voice/backend/matchmaking/internal/criteria"
 	"voice/backend/matchmaking/internal/mmevents"
 	"voice/backend/matchmaking/internal/queue"
@@ -12,9 +14,10 @@ import (
 	"voice/backend/matchmaking/internal/store"
 )
 
-// Sweeper enforces search nudge and timeout policies.
+// Sweeper enforces search nudge, search timeout, and pending_accept expiry.
 type Sweeper struct {
 	Sessions *store.SessionStore
+	Matches  *store.MatchStore
 	Queue    *queue.RedisQueue
 	Events   mmevents.Publisher
 	Timing   runtimeconfig.SearchTiming
@@ -83,6 +86,47 @@ func (s *Sweeper) RunOnce(ctx context.Context) error {
 		if s.Events != nil {
 			if err := s.Events.PublishSearchTimeout(ctx, sess.ID.String(), sess.ProfileID.String(), sess.GameID.String(), sess.Mode); err != nil && s.Logger != nil {
 				s.Logger.Warn("mm.search_timeout publish failed",
+					slog.String("session_id", sess.ID.String()),
+					slog.Any("error", err))
+			}
+		}
+	}
+	if err := s.expirePendingAccept(ctx, now, timing); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *Sweeper) expirePendingAccept(ctx context.Context, now time.Time, timing runtimeconfig.SearchTiming) error {
+	if s.Sessions == nil {
+		return nil
+	}
+	acceptTimeout := timing.AcceptTimeout
+	if acceptTimeout <= 0 {
+		acceptTimeout = runtimeconfig.LoadSearchTiming().AcceptTimeout
+	}
+	cutoff := now.Add(-acceptTimeout)
+	expired, err := s.Sessions.ListPendingAcceptExpired(ctx, cutoff, 100)
+	if err != nil {
+		return err
+	}
+	abandoned := make(map[uuid.UUID]bool)
+	for _, sess := range expired {
+		if sess.MatchID != nil && !abandoned[*sess.MatchID] && s.Matches != nil {
+			_ = s.Matches.AbandonMatch(ctx, *sess.MatchID)
+			abandoned[*sess.MatchID] = true
+		}
+		if _, err := s.Sessions.ExpirePendingAccept(ctx, sess.ID); err != nil {
+			if s.Logger != nil {
+				s.Logger.Warn("expire pending_accept failed",
+					slog.String("session_id", sess.ID.String()),
+					slog.Any("error", err))
+			}
+			continue
+		}
+		if s.Queue != nil {
+			if err := s.Queue.ReleaseLock(ctx, sess.ProfileID, sess.ID); err != nil && s.Logger != nil {
+				s.Logger.Warn("pending_accept lock release failed",
 					slog.String("session_id", sess.ID.String()),
 					slog.Any("error", err))
 			}

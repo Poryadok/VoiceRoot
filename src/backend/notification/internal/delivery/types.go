@@ -19,7 +19,8 @@ const (
 	TypeSearchNudge     NotificationType = "search_nudge"
 	TypeSearchTimeout   NotificationType = "search_timeout"
 	TypeIncomingCall    NotificationType = "incoming_call"
-	TypeSystem       NotificationType = "system"
+	TypeSystem          NotificationType = "system"
+	TypeVoiceMemberJoined NotificationType = "voice_member_joined"
 )
 
 // DeliveryInput captures routing context for a single recipient.

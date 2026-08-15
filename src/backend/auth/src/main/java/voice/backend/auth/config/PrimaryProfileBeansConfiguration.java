@@ -2,6 +2,8 @@ package voice.backend.auth.config;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -67,7 +69,9 @@ public class PrimaryProfileBeansConfiguration {
   }
 
   @Bean
-  UserVerificationSync userVerificationSync(
+  @ConditionalOnExpression("'${auth.user-grpc.addr:}'.blank")
+  @ConditionalOnMissingBean(UserVerificationSync.class)
+  UserVerificationSync jdbcUserVerificationSync(
       AuthProperties props,
       @Autowired(required = false) @Qualifier("userJdbc") NamedParameterJdbcTemplate userJdbc) {
     if (props.getPersistence() == AuthProperties.PersistenceMode.MEMORY) {

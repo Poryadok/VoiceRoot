@@ -24,6 +24,10 @@ const (
 	subjectVoiceRoomCreated = "space.voice_room_created"
 	subjectVoiceRoomDeleted = "space.voice_room_deleted"
 	subjectSpaceInviteCreated = "space.invite_created"
+	subjectSpaceMemberJoined  = "space.member_joined"
+	subjectSpaceMemberLeft    = "space.member_left"
+	subjectSpaceUpdated       = "space.updated"
+	subjectSpaceDeleted       = "space.deleted"
 )
 
 // JetStreamPublisher publishes ChatStreamEvent payloads to NATS JetStream.
@@ -65,7 +69,10 @@ func (p *JetStreamPublisher) ensureStream() error {
 	}
 	p.ensureOnce.Do(func() {
 		if info, err := p.js.StreamInfo(streamName); err == nil {
-			for _, subj := range []string{subjectSpaceCreated, subjectSpaceTreeChanged, subjectVoiceRoomCreated, subjectVoiceRoomDeleted, subjectSpaceInviteCreated} {
+			for _, subj := range []string{
+				subjectSpaceCreated, subjectSpaceTreeChanged, subjectVoiceRoomCreated, subjectVoiceRoomDeleted,
+				subjectSpaceInviteCreated, subjectSpaceMemberJoined, subjectSpaceMemberLeft, subjectSpaceUpdated, subjectSpaceDeleted,
+			} {
 				if !streamHasSubject(info, subj) {
 					cfg := info.Config
 					cfg.Subjects = append(cfg.Subjects, subj)
@@ -91,6 +98,10 @@ func (p *JetStreamPublisher) ensureStream() error {
 				subjectVoiceRoomCreated,
 				subjectVoiceRoomDeleted,
 				subjectSpaceInviteCreated,
+				subjectSpaceMemberJoined,
+				subjectSpaceMemberLeft,
+				subjectSpaceUpdated,
+				subjectSpaceDeleted,
 			},
 			Retention: nats.LimitsPolicy,
 			MaxAge:    7 * 24 * time.Hour,
@@ -129,6 +140,9 @@ func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, e
 	attrs := []slog.Attr{slog.String("event_id", env.GetEventId())}
 	if created := env.GetSpaceCreated(); created != nil {
 		attrs = append(attrs, slog.String("space_id", created.GetSpaceId()), slog.String("owner_profile_id", created.GetOwnerProfileId()))
+	}
+	if invite := env.GetSpaceInviteCreated(); invite != nil {
+		attrs = append(attrs, slog.String("space_id", invite.GetSpaceId()), slog.String("invite_code", invite.GetInviteCode()))
 	}
 	natslog.LogPublish(p.Logger, subject, requestID, "space event published", attrs...)
 	return nil
@@ -188,10 +202,10 @@ func (p *JetStreamPublisher) PublishInviteCreated(ctx context.Context, spaceID, 
 	env := &eventsv1.ChatStreamEvent{
 		EventId:    uuid.NewString(),
 		OccurredAt: timestamppb.New(time.Now().UTC()),
-		Payload: &eventsv1.ChatStreamEvent_SpaceCreated{
-			SpaceCreated: &eventsv1.SpaceCreated{
-				SpaceId:         spaceID,
-				OwnerProfileId: inviteCode,
+		Payload: &eventsv1.ChatStreamEvent_SpaceInviteCreated{
+			SpaceInviteCreated: &eventsv1.SpaceInviteCreated{
+				SpaceId:    spaceID,
+				InviteCode: inviteCode,
 			},
 		},
 	}
@@ -211,6 +225,56 @@ func (p *JetStreamPublisher) PublishSpaceCreated(ctx context.Context, spaceID, o
 		},
 	}
 	return p.publishProto(ctx, subjectSpaceCreated, env)
+}
+
+func (p *JetStreamPublisher) PublishMemberJoined(ctx context.Context, spaceID, profileID string) error {
+	env := &eventsv1.ChatStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.New(time.Now().UTC()),
+		Payload: &eventsv1.ChatStreamEvent_SpaceMemberJoined{
+			SpaceMemberJoined: &eventsv1.SpaceMemberJoined{
+				SpaceId:   spaceID,
+				ProfileId: profileID,
+			},
+		},
+	}
+	return p.publishProto(ctx, subjectSpaceMemberJoined, env)
+}
+
+func (p *JetStreamPublisher) PublishMemberLeft(ctx context.Context, spaceID, profileID string) error {
+	env := &eventsv1.ChatStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.New(time.Now().UTC()),
+		Payload: &eventsv1.ChatStreamEvent_SpaceMemberLeft{
+			SpaceMemberLeft: &eventsv1.SpaceMemberLeft{
+				SpaceId:   spaceID,
+				ProfileId: profileID,
+			},
+		},
+	}
+	return p.publishProto(ctx, subjectSpaceMemberLeft, env)
+}
+
+func (p *JetStreamPublisher) PublishSpaceUpdated(ctx context.Context, spaceID string) error {
+	env := &eventsv1.ChatStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.New(time.Now().UTC()),
+		Payload: &eventsv1.ChatStreamEvent_SpaceUpdated{
+			SpaceUpdated: &eventsv1.SpaceUpdated{SpaceId: spaceID},
+		},
+	}
+	return p.publishProto(ctx, subjectSpaceUpdated, env)
+}
+
+func (p *JetStreamPublisher) PublishSpaceDeleted(ctx context.Context, spaceID string) error {
+	env := &eventsv1.ChatStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.New(time.Now().UTC()),
+		Payload: &eventsv1.ChatStreamEvent_SpaceDeleted{
+			SpaceDeleted: &eventsv1.SpaceDeleted{SpaceId: spaceID},
+		},
+	}
+	return p.publishProto(ctx, subjectSpaceDeleted, env)
 }
 
 // Close drains the underlying NATS connection.

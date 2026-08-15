@@ -28,17 +28,35 @@ patch_image_pull_secrets() {
   done
 }
 
-if kubectl get deployment voice-auth -n "${NS}" >/dev/null 2>&1; then
+auth_pre_scale_needed() {
+  if [ "${NEEDS_FULL_ROLLOUT:-false}" = "true" ]; then
+    return 0
+  fi
+  case ",${CHANGED_SERVICES:-}," in
+    *,auth,* ) return 0 ;;
+  esac
+  return 1
+}
+
+scale_auth_down_if_needed() {
+  if ! auth_pre_scale_needed; then
+    echo "Skipping auth scale-down (selective deploy without auth change)"
+    return 0
+  fi
+  if ! kubectl get deployment voice-auth -n "${NS}" >/dev/null 2>&1; then
+    return 0
+  fi
   kubectl scale deployment/voice-auth -n "${NS}" --replicas=0
   kubectl wait --for=delete pod -l app=voice-auth -n "${NS}" --timeout=180s 2>/dev/null || true
-fi
+}
+
+scale_auth_down_if_needed
 
 render "${ROOT}/deploy/staging/services.yaml" | kubectl apply -f -
 render "${ROOT}/deploy/staging/gateway-deployment.yaml" | kubectl apply -f -
 
-if kubectl get deployment voice-auth -n "${NS}" >/dev/null 2>&1; then
-  kubectl scale deployment/voice-auth -n "${NS}" --replicas=0
-  kubectl wait --for=delete pod -l app=voice-auth -n "${NS}" --timeout=120s 2>/dev/null || true
+if auth_pre_scale_needed; then
+  scale_auth_down_if_needed
 fi
 
 patch_image_pull_secrets

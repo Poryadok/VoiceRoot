@@ -158,7 +158,7 @@
       "deployment": "voice-auth",
       "k8s_manifest": "deploy/staging/services.yaml",
       "language": "java",
-      "build_context": "./src/backend/auth",
+      "build_context": ".",
       "dockerfile": "./src/backend/auth/Dockerfile"
     },
     {

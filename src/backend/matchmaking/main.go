@@ -232,6 +232,7 @@ func main() {
 
 			sweeper := &timeout.Sweeper{
 				Sessions: sessionStore,
+				Matches:  matchStore,
 				Queue:    redisQueue,
 				Events:   events,
 				Timing:   runtimeconfig.LoadSearchTiming(),

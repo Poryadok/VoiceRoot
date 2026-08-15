@@ -44,6 +44,7 @@ import 'mention_message_content.dart';
 import 'e2e_attachment_actions.dart';
 import 'e2e_chat_settings.dart';
 import 'e2e_identity_change_banner.dart';
+import 'chat_composer_text_field.dart';
 import '../shell/side_panel.dart';
 import '../space/space_chat_slow_mode_sheet.dart';
 import '../search/in_chat_search.dart';
@@ -741,7 +742,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   icon: const Icon(Icons.emoji_emotions_outlined),
                 ),
                 Expanded(
-                  child: TextField(
+                  child: ChatComposerTextField(
                     key: ChatRoomPanel.inputKey,
                     controller: _composer,
                     focusNode: _composerFocus,
@@ -772,7 +773,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                         );
                       }
                     },
-                    onSubmitted: room.isSending || composerBlocked ? null : (_) => _send(),
+                    onSend: room.isSending || composerBlocked ? null : _send,
                     readOnly: composerBlocked,
                   ),
                 ),

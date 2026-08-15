@@ -15,6 +15,7 @@ import 'state/message_cache_providers.dart';
 import 'state/space_providers.dart';
 import 'state/voice_room_providers.dart';
 import 'theme/profile_accent_storage.dart';
+import 'settings/theme_preference.dart';
 import 'theme/voice_theme_providers.dart';
 
 Future<void> main() async {
@@ -24,6 +25,7 @@ Future<void> main() async {
   }
   await LiveKitClient.initialize();
   final prefs = await SharedPreferences.getInstance();
+  final savedTheme = readThemePreference(prefs);
   final messageCacheStore = await openDefaultMessageCacheStore();
   runApp(
     ProviderScope(
@@ -40,6 +42,9 @@ Future<void> main() async {
         ),
         profileAccentStorageProvider.overrideWithValue(
           SharedPreferencesProfileAccentStorage(prefs),
+        ),
+        appThemePreferenceProvider.overrideWith(
+          () => SeededAppThemePreferenceNotifier(savedTheme),
         ),
         spaceViewerProfileIdProvider.overrideWith(
           (ref) => ref.watch(authControllerProvider).activeProfileId,

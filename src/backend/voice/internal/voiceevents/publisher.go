@@ -15,4 +15,6 @@ type Publisher interface {
 	PublishVoiceStateChanged(context.Context, *eventsv1.VoiceStateChanged) error
 	PublishScreenShareStarted(context.Context, *eventsv1.ScreenShareStarted) error
 	PublishScreenShareStopped(context.Context, *eventsv1.ScreenShareStopped) error
+	PublishCallStarted(context.Context, *eventsv1.CallStarted) error
+	PublishVoiceMemberJoined(context.Context, *eventsv1.VoiceMemberJoined) error
 }

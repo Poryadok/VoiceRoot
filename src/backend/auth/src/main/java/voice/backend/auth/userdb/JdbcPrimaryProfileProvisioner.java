@@ -21,7 +21,7 @@ public class JdbcPrimaryProfileProvisioner implements PrimaryProfileProvisioner 
 
   @Override
   @Transactional
-  public String ensurePrimaryProfile(UUID accountId, String displayHint) {
+  public String ensurePrimaryProfile(UUID accountId, String displayHint, boolean guestAccount) {
     List<String> existing =
         jdbc.query(
             "SELECT id::text FROM profiles WHERE account_id = :accountId AND is_primary = true LIMIT 1",
@@ -40,15 +40,16 @@ public class JdbcPrimaryProfileProvisioner implements PrimaryProfileProvisioner 
       try {
         jdbc.update(
             """
-            INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
-            VALUES (:id, :accountId, :username, :discriminator, :displayName, true)
+            INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary, is_guest_account)
+            VALUES (:id, :accountId, :username, :discriminator, :displayName, true, :guestAccount)
             """,
             new MapSqlParameterSource(Map.of(
                 "id", profileId,
                 "accountId", accountId,
                 "username", baseUsername,
                 "discriminator", discriminator,
-                "displayName", displayName)));
+                "displayName", displayName,
+                "guestAccount", guestAccount)));
         jdbc.update(
             """
             INSERT INTO onboarding_state (profile_id, completed_steps, completed)
@@ -96,5 +97,12 @@ public class JdbcPrimaryProfileProvisioner implements PrimaryProfileProvisioner 
 
   private static String truncate(String s, int max) {
     return s.length() <= max ? s : s.substring(0, max);
+  }
+
+  @Override
+  public void clearGuestAccountFlag(UUID accountId) {
+    jdbc.update(
+        "UPDATE profiles SET is_guest_account = false WHERE account_id = :accountId",
+        new MapSqlParameterSource("accountId", accountId));
   }
 }

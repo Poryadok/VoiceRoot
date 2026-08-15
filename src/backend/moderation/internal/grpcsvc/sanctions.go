@@ -78,12 +78,20 @@ func (s *ModerationGRPC) ApplySanction(ctx context.Context, req *moderationv1.Ap
 			return nil, status.Error(codes.Internal, fmt.Sprintf("auth sync: %v", err))
 		}
 	}
+	if s.Matchmaking != nil && sanctionType == "mm_ban" {
+		if err := s.Matchmaking.ApplyPlatformMMBan(ctx, targetAccount, modProfile, reason, expiresAt); err != nil {
+			return nil, status.Error(codes.Internal, fmt.Sprintf("matchmaking sync: %v", err))
+		}
+	}
 	if s.Analytics != nil {
 		_ = s.Analytics.Publish(ctx, "analytics.moderation.sanction_applied", "moderation", "sanction_applied", map[string]any{
 			"sanction_id":       row.ID.String(),
 			"target_account_id": targetAccount.String(),
 			"type":              sanctionType,
 		})
+	}
+	if s.DomainEvents != nil {
+		_ = s.DomainEvents.PublishSanctionApplied(ctx, row.ID.String(), targetAccount.String(), sanctionType)
 	}
 	return &moderationv1.ApplySanctionResponse{Sanction: sanctionRowToProto(row)}, nil
 }
@@ -120,6 +128,11 @@ func (s *ModerationGRPC) RevokeSanction(ctx context.Context, req *moderationv1.R
 	if s.Auth != nil && (before.Type == "temp_ban" || before.Type == "perm_ban") {
 		if err := s.Auth.SetAccountStatus(ctx, before.TargetAccountID, "active", "sanction revoked"); err != nil {
 			return nil, status.Error(codes.Internal, fmt.Sprintf("auth sync: %v", err))
+		}
+	}
+	if s.Matchmaking != nil && before.Type == "mm_ban" {
+		if err := s.Matchmaking.RevokePlatformMMBan(ctx, before.TargetAccountID); err != nil {
+			return nil, status.Error(codes.Internal, fmt.Sprintf("matchmaking sync: %v", err))
 		}
 	}
 	return &moderationv1.RevokeSanctionResponse{}, nil
@@ -183,6 +196,21 @@ func (s *ModerationGRPC) IsShadowBanned(ctx context.Context, req *moderationv1.I
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	return &moderationv1.IsShadowBannedResponse{ShadowBanned: banned}, nil
+}
+
+func (s *ModerationGRPC) IsMMBanned(ctx context.Context, req *moderationv1.IsMMBannedRequest) (*moderationv1.IsMMBannedResponse, error) {
+	if s == nil || s.Sanctions == nil {
+		return nil, status.Error(codes.FailedPrecondition, "sanction store is not configured")
+	}
+	accountID, err := uuid.Parse(strings.TrimSpace(req.GetAccountId()))
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid account_id")
+	}
+	banned, err := s.Sanctions.IsMMBanned(ctx, accountID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	return &moderationv1.IsMMBannedResponse{MmBanned: banned}, nil
 }
 
 func requireInternalModerator(ctx context.Context) (uuid.UUID, error) {

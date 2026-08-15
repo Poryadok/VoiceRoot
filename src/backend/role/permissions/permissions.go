@@ -162,9 +162,13 @@ func SystemRoles() ([]SystemRoleSpec, error) {
 	if err != nil {
 		return nil, err
 	}
+	adminMask, err := adminDefaultMask()
+	if err != nil {
+		return nil, err
+	}
 	return []SystemRoleSpec{
 		{Name: RoleOwner, Position: 4, Mask: all},
-		{Name: RoleAdmin, Position: 3, Mask: all},
+		{Name: RoleAdmin, Position: 3, Mask: adminMask},
 		{Name: RoleModerator, Position: 2, Mask: modMask},
 		{Name: RoleMember, Position: 1, Mask: memberMask},
 		{Name: RoleGuest, Position: 0, Mask: guestMask},
@@ -212,6 +216,27 @@ func moderatorDefaultMask() (uint64, error) {
 
 func guestDefaultMask() (uint64, error) {
 	return MaskFor(SpaceView)
+}
+
+// OwnerExclusiveMask returns permission bits reserved for Owner (withheld from Admin seed).
+func OwnerExclusiveMask() (uint64, error) {
+	bit, err := MaskFor(SpaceManageRoles)
+	if err != nil {
+		return 0, err
+	}
+	return bit, nil
+}
+
+func adminDefaultMask() (uint64, error) {
+	all, err := AllMask()
+	if err != nil {
+		return 0, err
+	}
+	exclusive, err := OwnerExclusiveMask()
+	if err != nil {
+		return 0, err
+	}
+	return all & ^exclusive, nil
 }
 
 // HasPermission reports whether mask includes permission name.

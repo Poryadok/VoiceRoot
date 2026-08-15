@@ -22,7 +22,7 @@ const (
 )
 
 const profileSelectCols = `id, account_id, username, discriminator, display_name, avatar_url, banner_url, bio,
-		locale, theme, is_primary, verification_type, verification_badge, frozen_at, accent_color, created_at, updated_at`
+		locale, theme, is_primary, verification_type, verification_badge, frozen_at, accent_color, is_guest_account, created_at, updated_at`
 
 // MaxDisplayNameRunes is the maximum length of profile display_name (aligned with Discord).
 const MaxDisplayNameRunes = 32
@@ -43,6 +43,7 @@ type ProfileRow struct {
 	VerificationType  string
 	VerificationBadge *string
 	AccentColor       *string
+	IsGuestAccount    bool
 	FrozenAt          *time.Time
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
@@ -88,7 +89,8 @@ func scanProfile(row pgx.Row) (*ProfileRow, error) {
 	err := row.Scan(
 		&p.ID, &p.AccountID, &p.Username, &p.Discriminator, &p.DisplayName,
 		&p.AvatarURL, &p.BannerURL, &p.Bio, &p.Locale, &p.Theme, &p.IsPrimary,
-		&p.VerificationType, &p.VerificationBadge, &p.FrozenAt, &p.AccentColor, &p.CreatedAt, &p.UpdatedAt,
+		&p.VerificationType, &p.VerificationBadge, &p.FrozenAt, &p.AccentColor, &p.IsGuestAccount,
+		&p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -305,7 +307,7 @@ func randomDiscriminator() string {
 // CountByAccountID returns how many profiles the account owns.
 func (s *ProfileStore) CountByAccountID(ctx context.Context, accountID uuid.UUID) (int, error) {
 	var n int
-	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM profiles WHERE account_id = $1`, accountID).Scan(&n)
+	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM profiles WHERE account_id = $1 AND deleted_at IS NULL`, accountID).Scan(&n)
 	return n, err
 }
 
@@ -342,4 +344,80 @@ func (s *ProfileStore) ApplyFreeTierFreeze(ctx context.Context, accountID uuid.U
 // GetOwnedProfile returns a profile owned by the account (not soft-deleted).
 func (s *ProfileStore) GetOwnedProfile(ctx context.Context, accountID, profileID uuid.UUID) (*ProfileRow, error) {
 	return s.scanOne(ctx, `SELECT `+profileSelectCols+` FROM profiles WHERE id = $1 AND account_id = $2 AND deleted_at IS NULL`, profileID, accountID)
+}
+
+// EnsurePrimaryProfile creates or returns the primary profile for account_id (Auth bootstrap).
+func (s *ProfileStore) EnsurePrimaryProfile(ctx context.Context, accountID uuid.UUID, profileID *uuid.UUID, displayHint string) (*ProfileRow, error) {
+	existing, err := s.GetPrimaryProfileIDForAccount(ctx, accountID)
+	if err == nil && existing != uuid.Nil {
+		return s.GetByID(ctx, existing)
+	}
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return nil, err
+	}
+	id := uuid.New()
+	if profileID != nil {
+		id = *profileID
+	}
+	dn := truncate(strings.TrimSpace(displayHint), MaxDisplayNameRunes)
+	if dn == "" {
+		dn = "User"
+	}
+	base := sanitizeUsernameFromHint(&displayHint)
+	if base == "" {
+		base = "user"
+	}
+	var lastErr error
+	for attempt := 0; attempt < maxDiscriminatorAttempts; attempt++ {
+		disc := randomDiscriminator()
+		row := s.pool.QueryRow(ctx, `
+			INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary, locale, theme, verification_type)
+			VALUES ($1, $2, $3, $4, $5, true, 'ru', 'dark', 'none')
+			RETURNING `+profileSelectCols,
+			id, accountID, base, disc, dn,
+		)
+		p, err := scanProfile(row)
+		if err == nil {
+			_, _ = s.pool.Exec(ctx, `INSERT INTO onboarding_state (profile_id, completed_steps, completed) VALUES ($1, '[]'::jsonb, false) ON CONFLICT DO NOTHING`, p.ID)
+			return p, nil
+		}
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			lastErr = err
+			if retry, rerr := s.GetPrimaryProfileIDForAccount(ctx, accountID); rerr == nil && retry != uuid.Nil {
+				return s.GetByID(ctx, retry)
+			}
+			continue
+		}
+		return nil, err
+	}
+	if lastErr != nil {
+		return nil, fmt.Errorf("username/discriminator exhausted: %w", lastErr)
+	}
+	return nil, fmt.Errorf("username/discriminator exhausted")
+}
+
+// GetNotificationPrefsJSON reads notification_prefs_json for profile (defaults to {}).
+func (s *ProfileStore) GetNotificationPrefsJSON(ctx context.Context, profileID uuid.UUID) (string, error) {
+	var raw []byte
+	err := s.pool.QueryRow(ctx, `SELECT notification_prefs_json FROM profiles WHERE id = $1`, profileID).Scan(&raw)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "{}", nil
+	}
+	if err != nil {
+		return "{}", err
+	}
+	if len(raw) == 0 {
+		return "{}", nil
+	}
+	return string(raw), nil
+}
+
+// SetNotificationPrefsJSON updates notification_prefs_json for profile.
+func (s *ProfileStore) SetNotificationPrefsJSON(ctx context.Context, profileID uuid.UUID, prefsJSON string) error {
+	if strings.TrimSpace(prefsJSON) == "" {
+		prefsJSON = "{}"
+	}
+	_, err := s.pool.Exec(ctx, `UPDATE profiles SET notification_prefs_json = $2::jsonb, updated_at = now() WHERE id = $1`, profileID, prefsJSON)
+	return err
 }

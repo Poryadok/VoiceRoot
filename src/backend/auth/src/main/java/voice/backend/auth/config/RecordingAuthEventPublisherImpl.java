@@ -1,7 +1,6 @@
 package voice.backend.auth.config;
 
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.UUID;
 import voice.backend.auth.events.AuthEventPublisher;
@@ -23,11 +22,20 @@ final class RecordingAuthEventPublisherImpl implements AuthEventPublisher, Recor
   }
 
   @Override
+  public void publishAccountDeleted(UUID accountId) {
+    record(AuthEventPublisher.SUBJECT_ACCOUNT_DELETED);
+    delegate.publishAccountDeleted(accountId);
+  }
+
+  @Override
+  public void publishAccountRestored(UUID accountId) {
+    record(AuthEventPublisher.SUBJECT_ACCOUNT_RESTORED);
+    delegate.publishAccountRestored(accountId);
+  }
+
+  @Override
   public List<String> publishedSubjects() {
-    LinkedHashSet<String> all = new LinkedHashSet<>();
-    all.add(AuthEventPublisher.SUBJECT_GUEST_CONVERTED);
-    all.addAll(recorded);
-    return List.copyOf(all);
+    return List.copyOf(recorded);
   }
 
   @Override

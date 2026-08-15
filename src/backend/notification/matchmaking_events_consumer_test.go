@@ -25,8 +25,9 @@ func TestRouteMatchmakingNotification_SearchTimeout(t *testing.T) {
 		},
 	}
 	handler := &consumer.MatchmakingEventHandler{Router: delivery.DecideRouting}
-	decisions, payload, ok := routeMatchmakingNotification(handler, env)
+	decisions, payload, typ, ok := routeMatchmakingNotification(handler, env)
 	require.True(t, ok)
+	require.Equal(t, delivery.TypeSearchTimeout, typ)
 	require.Len(t, decisions, 1)
 	require.True(t, decisions[profileID].Push)
 	require.Equal(t, string(delivery.TypeSearchTimeout), payload.Data["type"])
@@ -49,8 +50,9 @@ func TestRouteMatchmakingNotification_SearchNudgeProto(t *testing.T) {
 	var env eventsv1.MatchmakingStreamEvent
 	require.NoError(t, proto.Unmarshal(b, &env))
 	handler := &consumer.MatchmakingEventHandler{Router: delivery.DecideRouting}
-	decisions, payload, ok := routeMatchmakingNotification(handler, &env)
+	decisions, payload, typ, ok := routeMatchmakingNotification(handler, &env)
 	require.True(t, ok)
+	require.Equal(t, delivery.TypeSearchNudge, typ)
 	require.Len(t, decisions, 1)
 	require.Equal(t, string(delivery.TypeSearchNudge), payload.Data["type"])
 }

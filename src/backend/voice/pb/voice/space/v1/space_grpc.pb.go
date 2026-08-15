@@ -19,43 +19,44 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	SpaceService_CreateSpace_FullMethodName         = "/voice.space.v1.SpaceService/CreateSpace"
-	SpaceService_UpdateSpace_FullMethodName         = "/voice.space.v1.SpaceService/UpdateSpace"
-	SpaceService_DeleteSpace_FullMethodName         = "/voice.space.v1.SpaceService/DeleteSpace"
-	SpaceService_GetSpace_FullMethodName            = "/voice.space.v1.SpaceService/GetSpace"
-	SpaceService_ListMySpaces_FullMethodName        = "/voice.space.v1.SpaceService/ListMySpaces"
-	SpaceService_SearchPublicSpaces_FullMethodName  = "/voice.space.v1.SpaceService/SearchPublicSpaces"
-	SpaceService_CreateVoiceRoom_FullMethodName     = "/voice.space.v1.SpaceService/CreateVoiceRoom"
-	SpaceService_UpdateVoiceRoom_FullMethodName     = "/voice.space.v1.SpaceService/UpdateVoiceRoom"
-	SpaceService_DeleteVoiceRoom_FullMethodName     = "/voice.space.v1.SpaceService/DeleteVoiceRoom"
-	SpaceService_UpsertTreeNode_FullMethodName      = "/voice.space.v1.SpaceService/UpsertTreeNode"
-	SpaceService_RemoveTreeNode_FullMethodName      = "/voice.space.v1.SpaceService/RemoveTreeNode"
-	SpaceService_CreateCategory_FullMethodName      = "/voice.space.v1.SpaceService/CreateCategory"
-	SpaceService_UpdateCategory_FullMethodName      = "/voice.space.v1.SpaceService/UpdateCategory"
-	SpaceService_DeleteCategory_FullMethodName      = "/voice.space.v1.SpaceService/DeleteCategory"
-	SpaceService_ReorderSpaceTree_FullMethodName    = "/voice.space.v1.SpaceService/ReorderSpaceTree"
-	SpaceService_ListSpaceTree_FullMethodName       = "/voice.space.v1.SpaceService/ListSpaceTree"
-	SpaceService_CreateInvite_FullMethodName        = "/voice.space.v1.SpaceService/CreateInvite"
-	SpaceService_RevokeInvite_FullMethodName        = "/voice.space.v1.SpaceService/RevokeInvite"
-	SpaceService_GetInvite_FullMethodName           = "/voice.space.v1.SpaceService/GetInvite"
-	SpaceService_ListInvites_FullMethodName         = "/voice.space.v1.SpaceService/ListInvites"
-	SpaceService_JoinByInvite_FullMethodName        = "/voice.space.v1.SpaceService/JoinByInvite"
-	SpaceService_JoinSpace_FullMethodName           = "/voice.space.v1.SpaceService/JoinSpace"
-	SpaceService_LeaveSpace_FullMethodName          = "/voice.space.v1.SpaceService/LeaveSpace"
-	SpaceService_KickMember_FullMethodName          = "/voice.space.v1.SpaceService/KickMember"
-	SpaceService_BanMember_FullMethodName           = "/voice.space.v1.SpaceService/BanMember"
-	SpaceService_UnbanMember_FullMethodName         = "/voice.space.v1.SpaceService/UnbanMember"
-	SpaceService_ListMembers_FullMethodName         = "/voice.space.v1.SpaceService/ListMembers"
-	SpaceService_ListBans_FullMethodName            = "/voice.space.v1.SpaceService/ListBans"
-	SpaceService_TimeoutMember_FullMethodName       = "/voice.space.v1.SpaceService/TimeoutMember"
-	SpaceService_RemoveMemberTimeout_FullMethodName = "/voice.space.v1.SpaceService/RemoveMemberTimeout"
-	SpaceService_TransferOwnership_FullMethodName   = "/voice.space.v1.SpaceService/TransferOwnership"
-	SpaceService_AddBotMember_FullMethodName        = "/voice.space.v1.SpaceService/AddBotMember"
-	SpaceService_RemoveBotMember_FullMethodName     = "/voice.space.v1.SpaceService/RemoveBotMember"
-	SpaceService_ListTemplates_FullMethodName       = "/voice.space.v1.SpaceService/ListTemplates"
-	SpaceService_CreateFromTemplate_FullMethodName  = "/voice.space.v1.SpaceService/CreateFromTemplate"
-	SpaceService_GetAuditLog_FullMethodName         = "/voice.space.v1.SpaceService/GetAuditLog"
-	SpaceService_AreCoMembers_FullMethodName        = "/voice.space.v1.SpaceService/AreCoMembers"
+	SpaceService_CreateSpace_FullMethodName              = "/voice.space.v1.SpaceService/CreateSpace"
+	SpaceService_UpdateSpace_FullMethodName              = "/voice.space.v1.SpaceService/UpdateSpace"
+	SpaceService_DeleteSpace_FullMethodName              = "/voice.space.v1.SpaceService/DeleteSpace"
+	SpaceService_GetSpace_FullMethodName                 = "/voice.space.v1.SpaceService/GetSpace"
+	SpaceService_ListMySpaces_FullMethodName             = "/voice.space.v1.SpaceService/ListMySpaces"
+	SpaceService_SearchPublicSpaces_FullMethodName       = "/voice.space.v1.SpaceService/SearchPublicSpaces"
+	SpaceService_CreateVoiceRoom_FullMethodName          = "/voice.space.v1.SpaceService/CreateVoiceRoom"
+	SpaceService_UpdateVoiceRoom_FullMethodName          = "/voice.space.v1.SpaceService/UpdateVoiceRoom"
+	SpaceService_DeleteVoiceRoom_FullMethodName          = "/voice.space.v1.SpaceService/DeleteVoiceRoom"
+	SpaceService_UpsertTreeNode_FullMethodName           = "/voice.space.v1.SpaceService/UpsertTreeNode"
+	SpaceService_RemoveTreeNode_FullMethodName           = "/voice.space.v1.SpaceService/RemoveTreeNode"
+	SpaceService_CreateCategory_FullMethodName           = "/voice.space.v1.SpaceService/CreateCategory"
+	SpaceService_UpdateCategory_FullMethodName           = "/voice.space.v1.SpaceService/UpdateCategory"
+	SpaceService_DeleteCategory_FullMethodName           = "/voice.space.v1.SpaceService/DeleteCategory"
+	SpaceService_ReorderSpaceTree_FullMethodName         = "/voice.space.v1.SpaceService/ReorderSpaceTree"
+	SpaceService_ListSpaceTree_FullMethodName            = "/voice.space.v1.SpaceService/ListSpaceTree"
+	SpaceService_CreateInvite_FullMethodName             = "/voice.space.v1.SpaceService/CreateInvite"
+	SpaceService_RevokeInvite_FullMethodName             = "/voice.space.v1.SpaceService/RevokeInvite"
+	SpaceService_GetInvite_FullMethodName                = "/voice.space.v1.SpaceService/GetInvite"
+	SpaceService_ListInvites_FullMethodName              = "/voice.space.v1.SpaceService/ListInvites"
+	SpaceService_JoinByInvite_FullMethodName             = "/voice.space.v1.SpaceService/JoinByInvite"
+	SpaceService_JoinSpace_FullMethodName                = "/voice.space.v1.SpaceService/JoinSpace"
+	SpaceService_LeaveSpace_FullMethodName               = "/voice.space.v1.SpaceService/LeaveSpace"
+	SpaceService_KickMember_FullMethodName               = "/voice.space.v1.SpaceService/KickMember"
+	SpaceService_BanMember_FullMethodName                = "/voice.space.v1.SpaceService/BanMember"
+	SpaceService_UnbanMember_FullMethodName              = "/voice.space.v1.SpaceService/UnbanMember"
+	SpaceService_ListMembers_FullMethodName              = "/voice.space.v1.SpaceService/ListMembers"
+	SpaceService_ListBans_FullMethodName                 = "/voice.space.v1.SpaceService/ListBans"
+	SpaceService_TimeoutMember_FullMethodName            = "/voice.space.v1.SpaceService/TimeoutMember"
+	SpaceService_RemoveMemberTimeout_FullMethodName      = "/voice.space.v1.SpaceService/RemoveMemberTimeout"
+	SpaceService_TransferOwnership_FullMethodName        = "/voice.space.v1.SpaceService/TransferOwnership"
+	SpaceService_AddBotMember_FullMethodName             = "/voice.space.v1.SpaceService/AddBotMember"
+	SpaceService_RemoveBotMember_FullMethodName          = "/voice.space.v1.SpaceService/RemoveBotMember"
+	SpaceService_ListTemplates_FullMethodName            = "/voice.space.v1.SpaceService/ListTemplates"
+	SpaceService_CreateFromTemplate_FullMethodName       = "/voice.space.v1.SpaceService/CreateFromTemplate"
+	SpaceService_GetAuditLog_FullMethodName              = "/voice.space.v1.SpaceService/GetAuditLog"
+	SpaceService_AreCoMembers_FullMethodName             = "/voice.space.v1.SpaceService/AreCoMembers"
+	SpaceService_SyncSpaceProSubscription_FullMethodName = "/voice.space.v1.SpaceService/SyncSpaceProSubscription"
 )
 
 // SpaceServiceClient is the client API for SpaceService service.
@@ -103,6 +104,8 @@ type SpaceServiceClient interface {
 	GetAuditLog(ctx context.Context, in *GetAuditLogRequest, opts ...grpc.CallOption) (*GetAuditLogResponse, error)
 	// S2S: privacy audience "space members" — shared membership between two profiles.
 	AreCoMembers(ctx context.Context, in *AreCoMembersRequest, opts ...grpc.CallOption) (*AreCoMembersResponse, error)
+	// S2S: Subscription Service syncs Space Pro entitlement cache after webhook.
+	SyncSpaceProSubscription(ctx context.Context, in *SyncSpaceProSubscriptionRequest, opts ...grpc.CallOption) (*SyncSpaceProSubscriptionResponse, error)
 }
 
 type spaceServiceClient struct {
@@ -483,6 +486,16 @@ func (c *spaceServiceClient) AreCoMembers(ctx context.Context, in *AreCoMembersR
 	return out, nil
 }
 
+func (c *spaceServiceClient) SyncSpaceProSubscription(ctx context.Context, in *SyncSpaceProSubscriptionRequest, opts ...grpc.CallOption) (*SyncSpaceProSubscriptionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SyncSpaceProSubscriptionResponse)
+	err := c.cc.Invoke(ctx, SpaceService_SyncSpaceProSubscription_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SpaceServiceServer is the server API for SpaceService service.
 // All implementations must embed UnimplementedSpaceServiceServer
 // for forward compatibility.
@@ -528,6 +541,8 @@ type SpaceServiceServer interface {
 	GetAuditLog(context.Context, *GetAuditLogRequest) (*GetAuditLogResponse, error)
 	// S2S: privacy audience "space members" — shared membership between two profiles.
 	AreCoMembers(context.Context, *AreCoMembersRequest) (*AreCoMembersResponse, error)
+	// S2S: Subscription Service syncs Space Pro entitlement cache after webhook.
+	SyncSpaceProSubscription(context.Context, *SyncSpaceProSubscriptionRequest) (*SyncSpaceProSubscriptionResponse, error)
 	mustEmbedUnimplementedSpaceServiceServer()
 }
 
@@ -648,6 +663,9 @@ func (UnimplementedSpaceServiceServer) GetAuditLog(context.Context, *GetAuditLog
 }
 func (UnimplementedSpaceServiceServer) AreCoMembers(context.Context, *AreCoMembersRequest) (*AreCoMembersResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AreCoMembers not implemented")
+}
+func (UnimplementedSpaceServiceServer) SyncSpaceProSubscription(context.Context, *SyncSpaceProSubscriptionRequest) (*SyncSpaceProSubscriptionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SyncSpaceProSubscription not implemented")
 }
 func (UnimplementedSpaceServiceServer) mustEmbedUnimplementedSpaceServiceServer() {}
 func (UnimplementedSpaceServiceServer) testEmbeddedByValue()                      {}
@@ -1336,6 +1354,24 @@ func _SpaceService_AreCoMembers_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SpaceService_SyncSpaceProSubscription_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SyncSpaceProSubscriptionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).SyncSpaceProSubscription(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_SyncSpaceProSubscription_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).SyncSpaceProSubscription(ctx, req.(*SyncSpaceProSubscriptionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SpaceService_ServiceDesc is the grpc.ServiceDesc for SpaceService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1490,6 +1526,10 @@ var SpaceService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AreCoMembers",
 			Handler:    _SpaceService_AreCoMembers_Handler,
+		},
+		{
+			MethodName: "SyncSpaceProSubscription",
+			Handler:    _SpaceService_SyncSpaceProSubscription_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

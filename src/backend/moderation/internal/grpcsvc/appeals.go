@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -16,11 +18,13 @@ import (
 	moderationv1 "voice.app/voice/moderation/v1"
 )
 
+const appealSubmissionWindow = 7 * 24 * time.Hour
+
 func (s *ModerationGRPC) SubmitAppeal(ctx context.Context, req *moderationv1.SubmitAppealRequest) (*moderationv1.SubmitAppealResponse, error) {
-	if s == nil || s.Appeals == nil {
+	if s == nil || s.Appeals == nil || s.Sanctions == nil {
 		return nil, status.Error(codes.FailedPrecondition, "appeal store is not configured")
 	}
-	accountID, err := profileIDFromMetadata(ctx)
+	accountID, err := accountIDFromMetadata(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -32,9 +36,34 @@ func (s *ModerationGRPC) SubmitAppeal(ctx context.Context, req *moderationv1.Sub
 	if reason == "" {
 		return nil, status.Error(codes.InvalidArgument, "reason is required")
 	}
+	sanction, err := s.Sanctions.GetByID(ctx, sanctionID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, status.Error(codes.NotFound, "sanction not found")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if sanction.TargetAccountID != accountID {
+		return nil, status.Error(codes.PermissionDenied, "sanction does not belong to caller")
+	}
+	if time.Since(sanction.CreatedAt.UTC()) > appealSubmissionWindow {
+		return nil, status.Error(codes.FailedPrecondition, "appeal submission window expired")
+	}
+	if existing, err := s.Appeals.GetBySanctionID(ctx, sanctionID); err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	} else if existing != nil {
+		return nil, status.Error(codes.AlreadyExists, "appeal already submitted for this sanction")
+	}
 	row, err := s.Appeals.InsertAppeal(ctx, sanctionID, accountID, reason)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return nil, status.Error(codes.AlreadyExists, "appeal already submitted for this sanction")
+		}
 		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if s.DomainEvents != nil {
+		_ = s.DomainEvents.PublishAppealSubmitted(ctx, row.ID.String(), sanctionID.String())
 	}
 	return &moderationv1.SubmitAppealResponse{Appeal: appealRowToProto(row)}, nil
 }
@@ -73,6 +102,9 @@ func (s *ModerationGRPC) ReviewAppeal(ctx context.Context, req *moderationv1.Rev
 			_ = s.Sanctions.RevokeSanction(ctx, sanction.ID, modProfile)
 			if s.Auth != nil && (sanction.Type == "temp_ban" || sanction.Type == "perm_ban") {
 				_ = s.Auth.SetAccountStatus(ctx, sanction.TargetAccountID, "active", "appeal approved")
+			}
+			if s.Matchmaking != nil && sanction.Type == "mm_ban" {
+				_ = s.Matchmaking.RevokePlatformMMBan(ctx, sanction.TargetAccountID)
 			}
 		}
 	}

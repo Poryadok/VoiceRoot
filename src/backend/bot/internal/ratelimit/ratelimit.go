@@ -126,6 +126,7 @@ func isBotRuntimeMethod(fullMethod string) bool {
 		"/voice.bot.v1.BotService/GetChatWhitelist",
 		"/voice.bot.v1.BotService/ValidateManifest",
 		"/voice.bot.v1.BotService/ApplyManifest",
+		"/voice.bot.v1.BotService/GetManifest",
 		"/voice.bot.v1.BotService/InstallBotInSpace",
 		"/voice.bot.v1.BotService/UninstallBotFromSpace",
 		"/voice.bot.v1.BotService/ListInstalledBots",

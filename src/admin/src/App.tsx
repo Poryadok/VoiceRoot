@@ -16,6 +16,7 @@ import {
   isLoggedIn,
   setAccessToken,
   setPkceVerifier,
+  setOAuthState,
 } from "./oauth/session";
 
 function LoginScreen() {
@@ -27,6 +28,7 @@ function LoginScreen() {
     const challenge = await s256Challenge(verifier);
     setPkceVerifier(verifier);
     const state = crypto.randomUUID();
+    setOAuthState(state);
     const redirectUri = callbackRedirectUri(window.location.origin);
     window.location.href = buildAuthorizeUrl({
       apiBase: apiBaseUrl(),

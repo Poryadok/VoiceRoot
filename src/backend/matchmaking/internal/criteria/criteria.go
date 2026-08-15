@@ -157,7 +157,27 @@ func rolesCompatible(a, b SearchCriteria, mode config.Mode) bool {
 	if roleA == "" || roleB == "" {
 		return false
 	}
-	return roleA == roleB
+	// Stack modes need distinct roles per slot (docs/features/matchmaking.md).
+	return roleA != roleB
+}
+
+// RolesDistinct reports whether every criteria in a proposed group has a unique role.
+func RolesDistinct(group []SearchCriteria, mode config.Mode) bool {
+	if !mode.RolesRequired {
+		return true
+	}
+	seen := make(map[string]bool, len(group))
+	for _, c := range group {
+		role := strings.TrimSpace(c.Self.Role)
+		if role == "" {
+			return false
+		}
+		if seen[role] {
+			return false
+		}
+		seen[role] = true
+	}
+	return true
 }
 
 func ranksCompatible(a, b SearchCriteria, mode config.Mode) bool {

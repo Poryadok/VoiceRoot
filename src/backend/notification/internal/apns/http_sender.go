@@ -19,6 +19,7 @@ type Config struct {
 	KeyID      string
 	TeamID     string
 	BundleID   string
+	VoIPTopic  string
 	AuthKeyPEM string
 	Production bool
 }
@@ -30,6 +31,9 @@ func ConfigFromEnv() (Config, bool) {
 	bundleID := strings.TrimSpace(os.Getenv("APNS_BUNDLE_ID"))
 	authKey := strings.TrimSpace(os.Getenv("APNS_AUTH_KEY"))
 	if authKey == "" {
+		authKey = strings.TrimSpace(os.Getenv("APNS_PRIVATE_KEY"))
+	}
+	if authKey == "" {
 		if path := strings.TrimSpace(os.Getenv("APNS_AUTH_KEY_PATH")); path != "" {
 			b, err := os.ReadFile(path)
 			if err == nil {
@@ -40,11 +44,16 @@ func ConfigFromEnv() (Config, bool) {
 	if keyID == "" || teamID == "" || bundleID == "" || authKey == "" {
 		return Config{}, false
 	}
+	voipTopic := strings.TrimSpace(os.Getenv("APNS_VOIP_TOPIC"))
+	if voipTopic == "" {
+		voipTopic = bundleID
+	}
 	production := strings.TrimSpace(os.Getenv("APNS_PRODUCTION")) != "false"
 	return Config{
 		KeyID:      keyID,
 		TeamID:     teamID,
 		BundleID:   bundleID,
+		VoIPTopic:  voipTopic,
 		AuthKeyPEM: authKey,
 		Production: production,
 	}, true

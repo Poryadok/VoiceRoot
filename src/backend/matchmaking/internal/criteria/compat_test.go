@@ -16,7 +16,7 @@ func TestCompatible_ExactRegionAndOverlappingRanks(t *testing.T) {
 	}
 	b := SearchCriteria{
 		Region: "eu",
-		Self:   SelfCriteria{Role: "Carry", Rank: "Guardian"},
+		Self:   SelfCriteria{Role: "Mid", Rank: "Guardian"},
 		Sought: SoughtCriteria{RankMin: "Herald", RankMax: "Ancient"},
 	}
 	require.True(t, Compatible(a, b, mode))
@@ -30,12 +30,20 @@ func TestCompatible_RejectsDifferentRegion(t *testing.T) {
 	require.False(t, Compatible(a, b, mode))
 }
 
-func TestCompatible_RejectsDifferentRoles(t *testing.T) {
+func TestCompatible_RejectsIdenticalRoles(t *testing.T) {
+	t.Parallel()
+	mode := testMode()
+	a := SearchCriteria{Region: "eu", Self: SelfCriteria{Role: "Carry", Rank: "Herald"}}
+	b := SearchCriteria{Region: "eu", Self: SelfCriteria{Role: "Carry", Rank: "Herald"}}
+	require.False(t, Compatible(a, b, mode))
+}
+
+func TestCompatible_AllowsDistinctRoles(t *testing.T) {
 	t.Parallel()
 	mode := testMode()
 	a := SearchCriteria{Region: "eu", Self: SelfCriteria{Role: "Carry", Rank: "Herald"}}
 	b := SearchCriteria{Region: "eu", Self: SelfCriteria{Role: "Mid", Rank: "Herald"}}
-	require.False(t, Compatible(a, b, mode))
+	require.True(t, Compatible(a, b, mode))
 }
 
 func TestCompatible_RejectsNonOverlappingRankRanges(t *testing.T) {
@@ -48,7 +56,7 @@ func TestCompatible_RejectsNonOverlappingRankRanges(t *testing.T) {
 	}
 	b := SearchCriteria{
 		Region: "eu",
-		Self:   SelfCriteria{Role: "Carry", Rank: "Ancient"},
+		Self:   SelfCriteria{Role: "Mid", Rank: "Ancient"},
 		Sought: SoughtCriteria{RankMin: "Ancient", RankMax: "Ancient"},
 	}
 	require.False(t, Compatible(a, b, mode))

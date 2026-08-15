@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../state/auth_providers.dart';
 import '../state/social_providers.dart';
+import '../settings/theme_preference.dart';
 import 'profile_accent_storage.dart';
 import 'voice_theme.dart';
 import 'voice_token_catalog.dart';
@@ -47,10 +48,6 @@ final activeProfileAccentColorProvider = Provider<AsyncValue<Color>>((ref) {
 });
 
 enum AppThemePreference { system, light, dark, highContrast }
-
-final appThemePreferenceProvider = StateProvider<AppThemePreference>(
-  (ref) => AppThemePreference.system,
-);
 
 /// When null, [MaterialApp] uses platform locale.
 final appLocalePreferenceProvider = StateProvider<Locale?>((ref) => null);

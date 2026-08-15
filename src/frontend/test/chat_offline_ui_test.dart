@@ -100,7 +100,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final input = tester.widget<TextField>(find.byKey(ChatRoomPanel.inputKey));
+    final input = tester.widget<TextField>(
+      find.descendant(
+        of: find.byKey(ChatRoomPanel.inputKey),
+        matching: find.byType(TextField),
+      ),
+    );
     expect(input.readOnly, isTrue);
 
     final attach = tester.widget<IconButton>(

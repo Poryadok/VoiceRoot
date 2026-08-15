@@ -122,5 +122,5 @@ Baseline (2026-06) закрыт; хвосты UX/E2E ниже. Спека: [auth
 
 **Промпт-якорь:** `Client from docs/todo/client.md` + приоритет/подсекцию.
 
-> Story backend-хвосты — [backend.md](../backend.md) § Low § Story.
-> Design/Penpot — [design.md](../design.md).
+> Story backend-хвосты — [backend.md](backend.md) § Low § Story.
+> Design/Penpot — [design.md](design.md).

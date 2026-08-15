@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { exchangeAuthorizationCode } from './oauth/api';
 import { callbackRedirectUri, parseCallbackSearch } from './oauth/callback';
-import { setAccessToken, takePkceVerifier } from './oauth/session';
+import { setAccessToken, takeOAuthState, takePkceVerifier } from './oauth/session';
 
 export function OAuthCallback() {
   const [error, setError] = useState('');
@@ -16,6 +16,11 @@ export function OAuthCallback() {
       setError('missing_code');
       return;
     }
+    const expectedState = takeOAuthState();
+    if (!expectedState || !params.state || expectedState !== params.state) {
+      setError('invalid_state');
+      return;
+    }
     const verifier = takePkceVerifier();
     if (!verifier) {
       setError('missing_pkce_verifier');
@@ -24,7 +29,7 @@ export function OAuthCallback() {
     const redirectUri = callbackRedirectUri(window.location.origin);
     exchangeAuthorizationCode({ code: params.code, redirectUri, codeVerifier: verifier })
       .then((token) => {
-        setAccessToken(token.access_token);
+        setAccessToken(token.access_token, token.expires_in);
         window.location.replace('/');
       })
       .catch((err: Error) => setError(err.message));

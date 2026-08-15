@@ -1,9 +1,3 @@
 # Role Service
 
-Go scaffold for the Voice role service.
-
-Current public surface:
-
-- GET /health returns {"service":"role","status":"ok"}.
-
-roles/threads (docs/features/roles.md) custom roles: full gRPC surface, 42 permission bits, per-role chat/voice overrides, default join role. See `docs/microservices/role-service.md`.
+Go microservice: space roles and permission masks. gRPC `RoleService`. PostgreSQL `role_db`. Gateway `/api/v1/roles/**`. Wired to Space/Voice/Messaging S2S checks. See `docs/microservices/role-service.md`.

@@ -88,7 +88,7 @@ func TestSetDefaultJoinRole_AssignsGuestOnJoin(t *testing.T) {
 	require.Equal(t, permissions.RoleGuest, got.Name)
 }
 
-func TestGetEffectiveMask_AdminBypass(t *testing.T) {
+func TestGetEffectiveMask_AdminNotOwnerExclusive(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -104,11 +104,11 @@ func TestGetEffectiveMask_AdminBypass(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, s.AssignMemberRole(ctx, spaceID, adminID, adminRoleID, adminID))
 
-	all, err := permissions.AllMask()
+	ownerExclusive, err := permissions.OwnerExclusiveMask()
 	require.NoError(t, err)
 	mask, err := s.GetEffectiveMask(ctx, spaceID, adminID, nil, nil)
 	require.NoError(t, err)
-	require.Equal(t, all, mask)
+	require.Equal(t, uint64(0), mask&ownerExclusive)
 }
 
 func TestRemoveVoiceRoomOverride_DeletesRow(t *testing.T) {

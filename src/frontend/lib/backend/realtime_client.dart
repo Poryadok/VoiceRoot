@@ -16,6 +16,14 @@ Uri gatewayWebSocketUri(String baseUrl) {
   return rest.replace(scheme: scheme, path: '/ws', query: null, fragment: null);
 }
 
+/// WebSocket connect URI with optional short-lived ticket (web) or empty query (native headers).
+Uri realtimeWebSocketConnectUri(Uri wsBase, {String? wsTicket}) {
+  if (wsTicket == null || wsTicket.isEmpty) return wsBase;
+  return wsBase.replace(
+    queryParameters: {...wsBase.queryParameters, 'ticket': wsTicket},
+  );
+}
+
 /// Parsed Realtime WebSocket frame (server or client).
 class RealtimeFrame {
   const RealtimeFrame({required this.op, this.data, this.sequence});
@@ -63,14 +71,17 @@ class VoiceRealtimeConnection {
   VoiceRealtimeConnection({
     required Uri uri,
     required Map<String, String> headers,
+    String? wsTicket,
     WebSocketChannel Function(Uri uri, {Map<String, String>? headers})?
     channelFactory,
   }) : _uri = uri,
        _headers = headers,
+       _wsTicket = wsTicket,
        _channelFactory = channelFactory ?? _defaultChannelFactory;
 
   final Uri _uri;
   final Map<String, String> _headers;
+  final String? _wsTicket;
   final WebSocketChannel Function(Uri uri, {Map<String, String>? headers})
   _channelFactory;
 
@@ -95,7 +106,10 @@ class VoiceRealtimeConnection {
   Future<void> connect() async {
     if (_disposed) return;
     await disconnect();
-    _channel = _channelFactory(_uri, headers: _headers);
+    _channel = _channelFactory(
+      realtimeWebSocketConnectUri(_uri, wsTicket: _wsTicket),
+      headers: _headers,
+    );
     _subscription = _channel!.stream.listen(
       _onMessage,
       onError: (Object e, StackTrace st) {

@@ -159,6 +159,13 @@ class StoryServiceClient extends $grpc.Client {
     return $createUnaryCall(_$createLookingForParty, request, options: options);
   }
 
+  $grpc.ResponseFuture<$0.RespondToLfpStoryResponse> respondToLfpStory(
+    $0.RespondToLfpStoryRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$respondToLfpStory, request, options: options);
+  }
+
   // method descriptors
 
   static final _$createStory =
@@ -251,6 +258,11 @@ class StoryServiceClient extends $grpc.Client {
       '/voice.story.v1.StoryService/CreateLookingForParty',
       ($0.CreateLookingForPartyRequest value) => value.writeToBuffer(),
       $0.CreateLookingForPartyResponse.fromBuffer);
+  static final _$respondToLfpStory = $grpc.ClientMethod<
+          $0.RespondToLfpStoryRequest, $0.RespondToLfpStoryResponse>(
+      '/voice.story.v1.StoryService/RespondToLfpStory',
+      ($0.RespondToLfpStoryRequest value) => value.writeToBuffer(),
+      $0.RespondToLfpStoryResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.story.v1.StoryService')
@@ -412,6 +424,15 @@ abstract class StoryServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.CreateLookingForPartyRequest.fromBuffer(value),
         ($0.CreateLookingForPartyResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.RespondToLfpStoryRequest,
+            $0.RespondToLfpStoryResponse>(
+        'RespondToLfpStory',
+        respondToLfpStory_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.RespondToLfpStoryRequest.fromBuffer(value),
+        ($0.RespondToLfpStoryResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.CreateStoryResponse> createStory_Pre($grpc.ServiceCall $call,
@@ -569,4 +590,13 @@ abstract class StoryServiceBase extends $grpc.Service {
 
   $async.Future<$0.CreateLookingForPartyResponse> createLookingForParty(
       $grpc.ServiceCall call, $0.CreateLookingForPartyRequest request);
+
+  $async.Future<$0.RespondToLfpStoryResponse> respondToLfpStory_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.RespondToLfpStoryRequest> $request) async {
+    return respondToLfpStory($call, await $request);
+  }
+
+  $async.Future<$0.RespondToLfpStoryResponse> respondToLfpStory(
+      $grpc.ServiceCall call, $0.RespondToLfpStoryRequest request);
 }

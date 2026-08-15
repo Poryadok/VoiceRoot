@@ -1877,3 +1877,35 @@ const AreCoMembersResponse$json = {
 /// Descriptor for `AreCoMembersResponse`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List areCoMembersResponseDescriptor = $convert.base64Decode(
     'ChRBcmVDb01lbWJlcnNSZXNwb25zZRIdCgpjb19tZW1iZXJzGAEgASgIUgljb01lbWJlcnM=');
+
+@$core.Deprecated('Use syncSpaceProSubscriptionRequestDescriptor instead')
+const SyncSpaceProSubscriptionRequest$json = {
+  '1': 'SyncSpaceProSubscriptionRequest',
+  '2': [
+    {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'purchaser_account_id',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '10': 'purchaserAccountId'
+    },
+    {'1': 'status', '3': 3, '4': 1, '5': 9, '10': 'status'},
+  ],
+};
+
+/// Descriptor for `SyncSpaceProSubscriptionRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List syncSpaceProSubscriptionRequestDescriptor =
+    $convert.base64Decode(
+        'Ch9TeW5jU3BhY2VQcm9TdWJzY3JpcHRpb25SZXF1ZXN0EhkKCHNwYWNlX2lkGAEgASgJUgdzcG'
+        'FjZUlkEjAKFHB1cmNoYXNlcl9hY2NvdW50X2lkGAIgASgJUhJwdXJjaGFzZXJBY2NvdW50SWQS'
+        'FgoGc3RhdHVzGAMgASgJUgZzdGF0dXM=');
+
+@$core.Deprecated('Use syncSpaceProSubscriptionResponseDescriptor instead')
+const SyncSpaceProSubscriptionResponse$json = {
+  '1': 'SyncSpaceProSubscriptionResponse',
+};
+
+/// Descriptor for `SyncSpaceProSubscriptionResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List syncSpaceProSubscriptionResponseDescriptor =
+    $convert.base64Decode('CiBTeW5jU3BhY2VQcm9TdWJzY3JpcHRpb25SZXNwb25zZQ==');

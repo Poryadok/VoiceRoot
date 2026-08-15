@@ -152,6 +152,21 @@ class MatchmakingServiceClient extends $grpc.Client {
     return $createUnaryCall(_$getMMBanStatus, request, options: options);
   }
 
+  /// Moderation S2S — platform MM ban (mm_ban sanction).
+  $grpc.ResponseFuture<$0.ApplyPlatformMMBanResponse> applyPlatformMMBan(
+    $0.ApplyPlatformMMBanRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$applyPlatformMMBan, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.RevokePlatformMMBanResponse> revokePlatformMMBan(
+    $0.RevokePlatformMMBanRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$revokePlatformMMBan, request, options: options);
+  }
+
   /// Player profile (per-game MM settings)
   $grpc.ResponseFuture<$0.GetMyPlayerProfileResponse> getMyPlayerProfile(
     $0.GetMyPlayerProfileRequest request, {
@@ -268,6 +283,16 @@ class MatchmakingServiceClient extends $grpc.Client {
           '/voice.matchmaking.v1.MatchmakingService/GetMMBanStatus',
           ($0.GetMMBanStatusRequest value) => value.writeToBuffer(),
           $0.GetMMBanStatusResponse.fromBuffer);
+  static final _$applyPlatformMMBan = $grpc.ClientMethod<
+          $0.ApplyPlatformMMBanRequest, $0.ApplyPlatformMMBanResponse>(
+      '/voice.matchmaking.v1.MatchmakingService/ApplyPlatformMMBan',
+      ($0.ApplyPlatformMMBanRequest value) => value.writeToBuffer(),
+      $0.ApplyPlatformMMBanResponse.fromBuffer);
+  static final _$revokePlatformMMBan = $grpc.ClientMethod<
+          $0.RevokePlatformMMBanRequest, $0.RevokePlatformMMBanResponse>(
+      '/voice.matchmaking.v1.MatchmakingService/RevokePlatformMMBan',
+      ($0.RevokePlatformMMBanRequest value) => value.writeToBuffer(),
+      $0.RevokePlatformMMBanResponse.fromBuffer);
   static final _$getMyPlayerProfile = $grpc.ClientMethod<
           $0.GetMyPlayerProfileRequest, $0.GetMyPlayerProfileResponse>(
       '/voice.matchmaking.v1.MatchmakingService/GetMyPlayerProfile',
@@ -434,6 +459,24 @@ abstract class MatchmakingServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.GetMMBanStatusRequest.fromBuffer(value),
         ($0.GetMMBanStatusResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ApplyPlatformMMBanRequest,
+            $0.ApplyPlatformMMBanResponse>(
+        'ApplyPlatformMMBan',
+        applyPlatformMMBan_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ApplyPlatformMMBanRequest.fromBuffer(value),
+        ($0.ApplyPlatformMMBanResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.RevokePlatformMMBanRequest,
+            $0.RevokePlatformMMBanResponse>(
+        'RevokePlatformMMBan',
+        revokePlatformMMBan_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.RevokePlatformMMBanRequest.fromBuffer(value),
+        ($0.RevokePlatformMMBanResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.GetMyPlayerProfileRequest,
             $0.GetMyPlayerProfileResponse>(
         'GetMyPlayerProfile',
@@ -614,6 +657,24 @@ abstract class MatchmakingServiceBase extends $grpc.Service {
 
   $async.Future<$0.GetMMBanStatusResponse> getMMBanStatus(
       $grpc.ServiceCall call, $0.GetMMBanStatusRequest request);
+
+  $async.Future<$0.ApplyPlatformMMBanResponse> applyPlatformMMBan_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.ApplyPlatformMMBanRequest> $request) async {
+    return applyPlatformMMBan($call, await $request);
+  }
+
+  $async.Future<$0.ApplyPlatformMMBanResponse> applyPlatformMMBan(
+      $grpc.ServiceCall call, $0.ApplyPlatformMMBanRequest request);
+
+  $async.Future<$0.RevokePlatformMMBanResponse> revokePlatformMMBan_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.RevokePlatformMMBanRequest> $request) async {
+    return revokePlatformMMBan($call, await $request);
+  }
+
+  $async.Future<$0.RevokePlatformMMBanResponse> revokePlatformMMBan(
+      $grpc.ServiceCall call, $0.RevokePlatformMMBanRequest request);
 
   $async.Future<$0.GetMyPlayerProfileResponse> getMyPlayerProfile_Pre(
       $grpc.ServiceCall $call,

@@ -575,6 +575,110 @@ final $typed_data.Uint8List isShadowBannedResponseDescriptor =
         'ChZJc1NoYWRvd0Jhbm5lZFJlc3BvbnNlEiMKDXNoYWRvd19iYW5uZWQYASABKAhSDHNoYWRvd0'
         'Jhbm5lZA==');
 
+@$core.Deprecated('Use isMMBannedRequestDescriptor instead')
+const IsMMBannedRequest$json = {
+  '1': 'IsMMBannedRequest',
+  '2': [
+    {'1': 'account_id', '3': 1, '4': 1, '5': 9, '10': 'accountId'},
+  ],
+};
+
+/// Descriptor for `IsMMBannedRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List isMMBannedRequestDescriptor = $convert.base64Decode(
+    'ChFJc01NQmFubmVkUmVxdWVzdBIdCgphY2NvdW50X2lkGAEgASgJUglhY2NvdW50SWQ=');
+
+@$core.Deprecated('Use isMMBannedResponseDescriptor instead')
+const IsMMBannedResponse$json = {
+  '1': 'IsMMBannedResponse',
+  '2': [
+    {'1': 'mm_banned', '3': 1, '4': 1, '5': 8, '10': 'mmBanned'},
+  ],
+};
+
+/// Descriptor for `IsMMBannedResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List isMMBannedResponseDescriptor =
+    $convert.base64Decode(
+        'ChJJc01NQmFubmVkUmVzcG9uc2USGwoJbW1fYmFubmVkGAEgASgIUghtbUJhbm5lZA==');
+
+@$core.Deprecated('Use auditLogEntryDescriptor instead')
+const AuditLogEntry$json = {
+  '1': 'AuditLogEntry',
+  '2': [
+    {'1': 'id', '3': 1, '4': 1, '5': 9, '10': 'id'},
+    {'1': 'actor_profile_id', '3': 2, '4': 1, '5': 9, '10': 'actorProfileId'},
+    {'1': 'action', '3': 3, '4': 1, '5': 9, '10': 'action'},
+    {'1': 'target_type', '3': 4, '4': 1, '5': 9, '10': 'targetType'},
+    {'1': 'target_id', '3': 5, '4': 1, '5': 9, '10': 'targetId'},
+    {'1': 'details', '3': 6, '4': 1, '5': 9, '10': 'details'},
+    {
+      '1': 'created_at',
+      '3': 7,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'createdAt'
+    },
+  ],
+};
+
+/// Descriptor for `AuditLogEntry`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List auditLogEntryDescriptor = $convert.base64Decode(
+    'Cg1BdWRpdExvZ0VudHJ5Eg4KAmlkGAEgASgJUgJpZBIoChBhY3Rvcl9wcm9maWxlX2lkGAIgAS'
+    'gJUg5hY3RvclByb2ZpbGVJZBIWCgZhY3Rpb24YAyABKAlSBmFjdGlvbhIfCgt0YXJnZXRfdHlw'
+    'ZRgEIAEoCVIKdGFyZ2V0VHlwZRIbCgl0YXJnZXRfaWQYBSABKAlSCHRhcmdldElkEhgKB2RldG'
+    'FpbHMYBiABKAlSB2RldGFpbHMSOQoKY3JlYXRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1'
+    'Zi5UaW1lc3RhbXBSCWNyZWF0ZWRBdA==');
+
+@$core.Deprecated('Use auditLogExportDescriptor instead')
+const AuditLogExport$json = {
+  '1': 'AuditLogExport',
+  '2': [
+    {
+      '1': 'entries',
+      '3': 1,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.moderation.v1.AuditLogEntry',
+      '10': 'entries'
+    },
+  ],
+};
+
+/// Descriptor for `AuditLogExport`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List auditLogExportDescriptor = $convert.base64Decode(
+    'Cg5BdWRpdExvZ0V4cG9ydBI8CgdlbnRyaWVzGAEgAygLMiIudm9pY2UubW9kZXJhdGlvbi52MS'
+    '5BdWRpdExvZ0VudHJ5UgdlbnRyaWVz');
+
+@$core.Deprecated('Use exportAuditLogRequestDescriptor instead')
+const ExportAuditLogRequest$json = {
+  '1': 'ExportAuditLogRequest',
+};
+
+/// Descriptor for `ExportAuditLogRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List exportAuditLogRequestDescriptor =
+    $convert.base64Decode('ChVFeHBvcnRBdWRpdExvZ1JlcXVlc3Q=');
+
+@$core.Deprecated('Use exportAuditLogResponseDescriptor instead')
+const ExportAuditLogResponse$json = {
+  '1': 'ExportAuditLogResponse',
+  '2': [
+    {
+      '1': 'audit_log_export',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.moderation.v1.AuditLogExport',
+      '10': 'auditLogExport'
+    },
+  ],
+};
+
+/// Descriptor for `ExportAuditLogResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List exportAuditLogResponseDescriptor =
+    $convert.base64Decode(
+        'ChZFeHBvcnRBdWRpdExvZ1Jlc3BvbnNlEk0KEGF1ZGl0X2xvZ19leHBvcnQYASABKAsyIy52b2'
+        'ljZS5tb2RlcmF0aW9uLnYxLkF1ZGl0TG9nRXhwb3J0Ug5hdWRpdExvZ0V4cG9ydA==');
+
 @$core.Deprecated('Use createReportResponseDescriptor instead')
 const CreateReportResponse$json = {
   '1': 'CreateReportResponse',

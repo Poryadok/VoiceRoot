@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -16,12 +17,34 @@ import (
 
 const defaultWebhookSecret = "test-webhook-secret"
 
-// WebhookSecret returns PADDLE_WEBHOOK_SECRET or the test default.
+var ErrWebhookSecretNotConfigured = errors.New("PADDLE_WEBHOOK_SECRET must be set in production")
+
+// WebhookSecret returns PADDLE_WEBHOOK_SECRET or the test default when allowed.
 func WebhookSecret() string {
 	if v := strings.TrimSpace(os.Getenv("PADDLE_WEBHOOK_SECRET")); v != "" {
 		return v
 	}
 	return defaultWebhookSecret
+}
+
+// ValidateWebhookSecretConfig fails when the default test secret would be used in production.
+func ValidateWebhookSecretConfig() error {
+	if !requiresProductionWebhookSecret() {
+		return nil
+	}
+	secret := strings.TrimSpace(os.Getenv("PADDLE_WEBHOOK_SECRET"))
+	if secret == "" || secret == defaultWebhookSecret {
+		return ErrWebhookSecretNotConfigured
+	}
+	return nil
+}
+
+func requiresProductionWebhookSecret() bool {
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("SUBSCRIPTION_ALLOW_TEST_WEBHOOK_SECRET")), "true") {
+		return false
+	}
+	env := strings.ToLower(strings.TrimSpace(os.Getenv("VOICE_ENV")))
+	return env == "production" || env == "prod"
 }
 
 // PaddleEvent is a minimal Paddle Billing webhook payload.
@@ -32,8 +55,9 @@ type PaddleEvent struct {
 }
 
 type PaddleEventData struct {
-	Status     string            `json:"status"`
-	CustomData map[string]string `json:"custom_data"`
+	Status           string            `json:"status"`
+	CustomData       map[string]string `json:"custom_data"`
+	CurrentPeriodEnd string            `json:"current_billing_period_ends_at"`
 }
 
 // ParseWebhook unmarshals raw webhook JSON.
@@ -53,6 +77,11 @@ func ParseWebhook(rawBody string) (*PaddleEvent, error) {
 
 // VerifySignature checks Paddle ts/h1 HMAC signature.
 func VerifySignature(rawBody, signature string) error {
+	if requiresProductionWebhookSecret() {
+		if err := ValidateWebhookSecretConfig(); err != nil {
+			return err
+		}
+	}
 	ts, h1, err := parseSignatureHeader(signature)
 	if err != nil {
 		return err
@@ -125,4 +154,20 @@ func SpaceProFromCustomData(data map[string]string) (spaceID, purchaserID uuid.U
 		return uuid.Nil, uuid.Nil, fmt.Errorf("invalid purchaser_id")
 	}
 	return spaceID, purchaserID, nil
+}
+
+// PeriodEndFromEvent parses billing period end from webhook data or falls back to one month ahead.
+func PeriodEndFromEvent(data PaddleEventData) time.Time {
+	raw := strings.TrimSpace(data.CurrentPeriodEnd)
+	if raw != "" {
+		if t, err := time.Parse(time.RFC3339, raw); err == nil {
+			return t.UTC()
+		}
+	}
+	return time.Now().UTC().AddDate(0, 1, 0)
+}
+
+// PlanFromCustomData returns plan from custom_data when present.
+func PlanFromCustomData(data map[string]string) string {
+	return strings.TrimSpace(data["plan"])
 }

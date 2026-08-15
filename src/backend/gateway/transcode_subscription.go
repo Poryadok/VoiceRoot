@@ -44,6 +44,45 @@ func (t *transcoder) serveSubscription(w http.ResponseWriter, r *http.Request, r
 		writeProtoJSON(w, http.StatusOK, resp)
 		return true
 
+	case r.Method == http.MethodPost && rest == "cancel":
+		req := &subscriptionv1.CancelSubscriptionRequest{}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.subscription.CancelSubscription(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodPost && rest == "resume":
+		req := &subscriptionv1.ResumeSubscriptionRequest{}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.subscription.ResumeSubscription(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodGet && rest == "billing/history":
+		resp, err := t.clients.subscription.GetBillingHistory(ctx, &subscriptionv1.GetBillingHistoryRequest{
+			AccountId: accountID,
+		})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
 	case r.Method == http.MethodPost && strings.HasPrefix(rest, "webhooks/"):
 		body, err := readRawBody(r)
 		if err != nil {

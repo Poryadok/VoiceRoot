@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -28,8 +29,21 @@ type SubscriptionGRPC struct {
 	Catalog *catalog.ProductCatalog
 	// UserProfiles optional; when set, downgrade delegates profile freeze to User service.
 	UserProfiles UserProfileDowngradeClient
+	// SpaceEntitlements optional; syncs space_db entitlement cache after Space Pro webhook.
+	SpaceEntitlements spacev1.SpaceServiceClient
 	Analytics    interface {
 		Publish(ctx context.Context, subject, sourceService, eventType string, props map[string]any) error
+		PublishWithAccount(ctx context.Context, subject, sourceService, eventType, accountID string, props map[string]any) error
+	}
+	DomainEvents interface {
+		PublishPlanStarted(ctx context.Context, accountID, plan string) error
+		PublishPlanCancelled(ctx context.Context, accountID, plan string) error
+		PublishPlanExpired(ctx context.Context, accountID, plan string) error
+		PublishDowngrade(ctx context.Context, accountID, plan string) error
+		PublishPaymentSuccess(ctx context.Context, accountID, provider string) error
+		PublishPaymentFailed(ctx context.Context, accountID, provider string) error
+		PublishSpaceProStarted(ctx context.Context, spaceID, purchaserAccountID string) error
+		PublishSpaceProExpired(ctx context.Context, spaceID string) error
 	}
 }
 
@@ -79,11 +93,54 @@ func (s *SubscriptionGRPC) CreateCheckoutSession(ctx context.Context, req *subsc
 }
 
 func (s *SubscriptionGRPC) CancelSubscription(ctx context.Context, req *subscriptionv1.CancelSubscriptionRequest) (*subscriptionv1.CancelSubscriptionResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "cancel subscription not implemented")
+	subID, err := parseUUIDField("subscription_id", req.GetSubscriptionId())
+	if err != nil {
+		return nil, err
+	}
+	accountID, ok := accountIDFromIncomingMetadata(ctx)
+	if !ok {
+		return nil, status.Error(codes.PermissionDenied, "account_id required")
+	}
+	row, err := s.Store.CancelSubscriptionByID(ctx, subID, accountID)
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrSubscriptionNotFound):
+			return nil, status.Error(codes.NotFound, "subscription not found")
+		case errors.Is(err, store.ErrSubscriptionOwner):
+			return nil, status.Error(codes.PermissionDenied, err.Error())
+		case errors.Is(err, store.ErrSubscriptionState):
+			return nil, status.Error(codes.FailedPrecondition, err.Error())
+		default:
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+	}
+	s.publishDomainPlanCancelled(ctx, row.AccountID.String(), row.Plan)
+	return &subscriptionv1.CancelSubscriptionResponse{Subscription: subscriptionToProto(row)}, nil
 }
 
 func (s *SubscriptionGRPC) ResumeSubscription(ctx context.Context, req *subscriptionv1.ResumeSubscriptionRequest) (*subscriptionv1.ResumeSubscriptionResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "resume subscription not implemented")
+	subID, err := parseUUIDField("subscription_id", req.GetSubscriptionId())
+	if err != nil {
+		return nil, err
+	}
+	accountID, ok := accountIDFromIncomingMetadata(ctx)
+	if !ok {
+		return nil, status.Error(codes.PermissionDenied, "account_id required")
+	}
+	row, err := s.Store.ResumeSubscriptionByID(ctx, subID, accountID)
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrSubscriptionNotFound):
+			return nil, status.Error(codes.NotFound, "subscription not found")
+		case errors.Is(err, store.ErrSubscriptionOwner):
+			return nil, status.Error(codes.PermissionDenied, err.Error())
+		case errors.Is(err, store.ErrSubscriptionState):
+			return nil, status.Error(codes.FailedPrecondition, err.Error())
+		default:
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+	}
+	return &subscriptionv1.ResumeSubscriptionResponse{Subscription: subscriptionToProto(row)}, nil
 }
 
 func (s *SubscriptionGRPC) GetSpaceSubscription(ctx context.Context, req *subscriptionv1.GetSpaceSubscriptionRequest) (*subscriptionv1.GetSpaceSubscriptionResponse, error) {
@@ -123,6 +180,20 @@ func (s *SubscriptionGRPC) GetLimits(ctx context.Context, req *subscriptionv1.Ge
 	if err != nil {
 		return nil, err
 	}
+	if req.GetScopeSpace() != nil && strings.TrimSpace(req.GetScopeSpace().GetId()) != "" {
+		spaceID, err := parseUUIDField("scope_space.id", req.GetScopeSpace().GetId())
+		if err != nil {
+			return nil, err
+		}
+		hasPro, err := s.Store.HasActiveSpaceProForSpace(ctx, spaceID)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		_ = accountID
+		return &subscriptionv1.GetLimitsResponse{
+			Limits: &subscriptionv1.Limits{LimitsJson: limits.ForSpace(hasPro)},
+		}, nil
+	}
 	tier, err := s.Store.EffectiveAccountTier(ctx, accountID)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -133,13 +204,20 @@ func (s *SubscriptionGRPC) GetLimits(ctx context.Context, req *subscriptionv1.Ge
 }
 
 func (s *SubscriptionGRPC) CheckLimit(ctx context.Context, req *subscriptionv1.CheckLimitRequest) (*subscriptionv1.CheckLimitResponse, error) {
-	accountID, err := parseAccountID(req.GetAccountId())
+	_, err := parseAccountID(req.GetAccountId())
 	if err != nil {
 		return nil, err
 	}
 	switch strings.TrimSpace(req.GetLimitName()) {
 	case "space_member_count":
-		hasPro, err := s.Store.HasActiveSpaceProForPurchaser(ctx, accountID)
+		if req.GetScopeSpace() == nil || strings.TrimSpace(req.GetScopeSpace().GetId()) == "" {
+			return nil, status.Error(codes.InvalidArgument, "scope_space is required for space_member_count")
+		}
+		spaceID, err := parseUUIDField("scope_space.id", req.GetScopeSpace().GetId())
+		if err != nil {
+			return nil, err
+		}
+		hasPro, err := s.Store.HasActiveSpaceProForSpace(ctx, spaceID)
 		if err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
@@ -180,6 +258,8 @@ func (s *SubscriptionGRPC) HandlePaddleWebhook(ctx context.Context, req *subscri
 				return nil, status.Error(codes.Internal, err.Error())
 			}
 			s.publishPaymentEvent(ctx, "analytics.subscription.payment_success", "payment_success", accountID.String(), plan, ev.EventID)
+			s.publishDomainPlanStarted(ctx, accountID.String(), plan)
+			s.publishDomainPaymentSuccess(ctx, accountID.String(), "paddle")
 		case "space_pro":
 			spaceID, purchaserID, err := billing.SpaceProFromCustomData(ev.Data.CustomData)
 			if err != nil {
@@ -192,6 +272,8 @@ func (s *SubscriptionGRPC) HandlePaddleWebhook(ctx context.Context, req *subscri
 				return nil, status.Error(codes.Internal, err.Error())
 			}
 			s.publishPaymentEvent(ctx, "analytics.subscription.payment_success", "payment_success", purchaserID.String(), plan, ev.EventID)
+			s.publishDomainSpaceProStarted(ctx, spaceID.String(), purchaserID.String())
+			s.syncSpaceProCache(ctx, spaceID.String(), purchaserID.String(), "active")
 		default:
 			return nil, status.Error(codes.InvalidArgument, "unknown plan in custom_data")
 		}
@@ -210,6 +292,85 @@ func (s *SubscriptionGRPC) HandlePaddleWebhook(ctx context.Context, req *subscri
 			return nil, status.Error(codes.Internal, err.Error())
 		}
 		s.publishPaymentEvent(ctx, "analytics.subscription.payment_failed", "payment_failed", accountID.String(), "", ev.EventID)
+		s.publishDomainPaymentFailed(ctx, accountID.String(), "paddle")
+	case "subscription.renewed":
+		if err := s.handlePremiumLifecycleWebhook(ctx, ev, details, func(accountID uuid.UUID) error {
+			_, err := s.Store.RenewPremium(ctx, accountID, ev.EventID, details, billing.PeriodEndFromEvent(ev.Data))
+			return err
+		}); err != nil {
+			return nil, err
+		}
+	case "subscription.cancelled":
+		plan := billing.PlanFromCustomData(ev.Data.CustomData)
+		if plan == "space_pro" {
+			spaceID, _, err := billing.SpaceProFromCustomData(ev.Data.CustomData)
+			if err != nil {
+				return nil, status.Error(codes.InvalidArgument, err.Error())
+			}
+			row, err := s.Store.MarkSpaceProCancelled(ctx, spaceID, ev.EventID, details)
+			if err != nil {
+				if errors.Is(err, store.ErrDuplicateBillingEvent) {
+					return &subscriptionv1.HandlePaddleWebhookResponse{}, nil
+				}
+				if errors.Is(err, pgx.ErrNoRows) {
+					return nil, status.Error(codes.NotFound, "space subscription not found")
+				}
+				return nil, status.Error(codes.Internal, err.Error())
+			}
+			if row != nil && row.Status == "cancelled" {
+				s.publishDomainSpaceProExpired(ctx, spaceID.String())
+				s.syncSpaceProCache(ctx, spaceID.String(), row.PurchaserAccountID.String(), "cancelled")
+			}
+		} else if err := s.handlePremiumLifecycleWebhook(ctx, ev, details, func(accountID uuid.UUID) error {
+			_, err := s.Store.MarkSubscriptionCancelled(ctx, accountID, ev.EventID, details)
+			return err
+		}); err != nil {
+			return nil, err
+		} else if accountID, err := billing.AccountIDFromCustomData(ev.Data.CustomData); err == nil {
+			s.publishDomainPlanCancelled(ctx, accountID.String(), "premium")
+		}
+	case "subscription.paused":
+		if err := s.handlePremiumLifecycleWebhook(ctx, ev, details, func(accountID uuid.UUID) error {
+			_, err := s.Store.PauseSubscription(ctx, accountID, ev.EventID, details)
+			return err
+		}); err != nil {
+			return nil, err
+		}
+	case "subscription.updated":
+		if strings.EqualFold(strings.TrimSpace(ev.Data.Status), "cancelled") {
+			plan := billing.PlanFromCustomData(ev.Data.CustomData)
+			if plan == "space_pro" {
+				spaceID, _, err := billing.SpaceProFromCustomData(ev.Data.CustomData)
+				if err != nil {
+					return nil, status.Error(codes.InvalidArgument, err.Error())
+				}
+				row, err := s.Store.GetSpaceSubscriptionBySpaceID(ctx, spaceID)
+				if err != nil {
+					return nil, status.Error(codes.Internal, err.Error())
+				}
+				if row != nil {
+					if _, err := s.Store.FinalizeSpaceProCancellation(ctx, row.ID); err != nil {
+						return nil, status.Error(codes.Internal, err.Error())
+					}
+					s.publishDomainSpaceProExpired(ctx, spaceID.String())
+					s.syncSpaceProCache(ctx, spaceID.String(), row.PurchaserAccountID.String(), "cancelled")
+				}
+			} else if err := s.handlePremiumLifecycleWebhook(ctx, ev, details, func(accountID uuid.UUID) error {
+				sub, err := s.Store.GetSubscriptionByAccountID(ctx, accountID)
+				if err != nil || sub == nil {
+					return err
+				}
+				_, err = s.Store.FinalizeSubscriptionCancellation(ctx, sub.ID)
+				if err != nil {
+					return err
+				}
+				s.publishDomainPlanExpired(ctx, accountID.String(), sub.Plan)
+				s.publishDomainDowngrade(ctx, accountID.String(), sub.Plan)
+				return nil
+			}); err != nil {
+				return nil, err
+			}
+		}
 	default:
 		return &subscriptionv1.HandlePaddleWebhookResponse{}, nil
 	}
@@ -221,13 +382,98 @@ func (s *SubscriptionGRPC) publishPaymentEvent(ctx context.Context, subject, eve
 		return
 	}
 	props := map[string]any{
-		"account_id":        accountID,
 		"provider_event_id": providerEventID,
 	}
 	if plan != "" {
 		props["plan"] = plan
 	}
-	_ = s.Analytics.Publish(ctx, subject, "subscription", eventType, props)
+	_ = s.Analytics.PublishWithAccount(ctx, subject, "subscription", eventType, accountID, props)
+}
+
+func (s *SubscriptionGRPC) publishDomainPlanStarted(ctx context.Context, accountID, plan string) {
+	if s == nil || s.DomainEvents == nil {
+		return
+	}
+	_ = s.DomainEvents.PublishPlanStarted(ctx, accountID, plan)
+}
+
+func (s *SubscriptionGRPC) publishDomainPaymentSuccess(ctx context.Context, accountID, provider string) {
+	if s == nil || s.DomainEvents == nil {
+		return
+	}
+	_ = s.DomainEvents.PublishPaymentSuccess(ctx, accountID, provider)
+}
+
+func (s *SubscriptionGRPC) publishDomainPaymentFailed(ctx context.Context, accountID, provider string) {
+	if s == nil || s.DomainEvents == nil {
+		return
+	}
+	_ = s.DomainEvents.PublishPaymentFailed(ctx, accountID, provider)
+}
+
+func (s *SubscriptionGRPC) publishDomainPlanCancelled(ctx context.Context, accountID, plan string) {
+	if s == nil || s.DomainEvents == nil {
+		return
+	}
+	_ = s.DomainEvents.PublishPlanCancelled(ctx, accountID, plan)
+}
+
+func (s *SubscriptionGRPC) publishDomainPlanExpired(ctx context.Context, accountID, plan string) {
+	if s == nil || s.DomainEvents == nil {
+		return
+	}
+	_ = s.DomainEvents.PublishPlanExpired(ctx, accountID, plan)
+}
+
+func (s *SubscriptionGRPC) publishDomainDowngrade(ctx context.Context, accountID, plan string) {
+	if s == nil || s.DomainEvents == nil {
+		return
+	}
+	_ = s.DomainEvents.PublishDowngrade(ctx, accountID, plan)
+}
+
+func (s *SubscriptionGRPC) publishDomainSpaceProStarted(ctx context.Context, spaceID, purchaserAccountID string) {
+	if s == nil || s.DomainEvents == nil {
+		return
+	}
+	_ = s.DomainEvents.PublishSpaceProStarted(ctx, spaceID, purchaserAccountID)
+}
+
+func (s *SubscriptionGRPC) publishDomainSpaceProExpired(ctx context.Context, spaceID string) {
+	if s == nil || s.DomainEvents == nil {
+		return
+	}
+	_ = s.DomainEvents.PublishSpaceProExpired(ctx, spaceID)
+}
+
+func (s *SubscriptionGRPC) syncSpaceProCache(ctx context.Context, spaceID, purchaserAccountID, status string) {
+	if s == nil || s.SpaceEntitlements == nil {
+		return
+	}
+	_, _ = s.SpaceEntitlements.SyncSpaceProSubscription(ctx, &spacev1.SyncSpaceProSubscriptionRequest{
+		SpaceId:            spaceID,
+		PurchaserAccountId: purchaserAccountID,
+		Status:             status,
+	})
+}
+
+func (s *SubscriptionGRPC) handlePremiumLifecycleWebhook(ctx context.Context, ev *billing.PaddleEvent, details json.RawMessage, fn func(uuid.UUID) error) error {
+	accountID, err := billing.AccountIDFromCustomData(ev.Data.CustomData)
+	if err != nil {
+		return status.Error(codes.InvalidArgument, err.Error())
+	}
+	if err := fn(accountID); err != nil {
+		if errors.Is(err, store.ErrDuplicateBillingEvent) {
+			return nil
+		}
+		if errors.Is(err, pgx.ErrNoRows) {
+			return status.Error(codes.NotFound, "subscription not found")
+		}
+		return status.Error(codes.Internal, err.Error())
+	}
+	_ = ctx
+	_ = details
+	return nil
 }
 
 func (s *SubscriptionGRPC) HandleCloudPaymentsWebhook(ctx context.Context, req *subscriptionv1.HandleCloudPaymentsWebhookRequest) (*subscriptionv1.HandleCloudPaymentsWebhookResponse, error) {
@@ -235,8 +481,45 @@ func (s *SubscriptionGRPC) HandleCloudPaymentsWebhook(ctx context.Context, req *
 }
 
 func (s *SubscriptionGRPC) GetBillingHistory(ctx context.Context, req *subscriptionv1.GetBillingHistoryRequest) (*subscriptionv1.GetBillingHistoryResponse, error) {
+	accountID, err := parseAccountID(req.GetAccountId())
+	if err != nil {
+		return nil, err
+	}
+	limit := 50
+	var after *time.Time
+	if req.GetPage() != nil && strings.TrimSpace(req.GetPage().GetCursor()) != "" {
+		parsed, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(req.GetPage().GetCursor()))
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, "invalid cursor")
+		}
+		after = &parsed
+	}
+	rows, err := s.Store.ListBillingHistory(ctx, accountID, limit, after)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	events := make([]*subscriptionv1.BillingEvent, 0, len(rows))
+	var nextCursor string
+	for i, row := range rows {
+		payload := string(row.Details)
+		if payload == "" {
+			payload = "{}"
+		}
+		events = append(events, &subscriptionv1.BillingEvent{
+			Id:          row.ID.String(),
+			Type:        row.Type,
+			OccurredAt:  timestamppb.New(row.OccurredAt),
+			PayloadJson: payload,
+		})
+		if i == len(rows)-1 && len(rows) == limit {
+			nextCursor = row.OccurredAt.UTC().Format(time.RFC3339Nano)
+		}
+	}
 	return &subscriptionv1.GetBillingHistoryResponse{
-		BillingHistoryList: &subscriptionv1.BillingHistoryList{},
+		BillingHistoryList: &subscriptionv1.BillingHistoryList{
+			Events:     events,
+			NextCursor: nextCursor,
+		},
 	}, nil
 }
 

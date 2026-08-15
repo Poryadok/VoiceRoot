@@ -60,3 +60,14 @@ func TestVoiceEventHandler_InitiatorExcluded(t *testing.T) {
 	require.False(t, decisions[profile].Push)
 	require.False(t, decisions[profile].InApp)
 }
+
+func TestVoiceEventHandler_MemberJoinedNotifiesOthers(t *testing.T) {
+	notifyID := uuid.NewString()
+	joinedID := uuid.NewString()
+	h := &consumer.VoiceEventHandler{Router: delivery.DecideRouting}
+	decisions := h.HandleVoiceMemberJoined(context.Background(), &eventsv1.VoiceMemberJoined{
+		JoinedProfileId:  joinedID,
+		NotifyProfileIds: []string{notifyID},
+	}, func(string) bool { return false })
+	require.True(t, decisions[notifyID].Push)
+}

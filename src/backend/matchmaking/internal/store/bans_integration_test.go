@@ -133,3 +133,29 @@ func TestBanStore_InsertMMPeerBanRejectsSelfBan(t *testing.T) {
 	})
 	require.Error(t, err)
 }
+
+func TestBanStore_PlatformBanBlocksAccount(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := StartMatchmakingDBForStoreTest(t, ctx)
+	ApplyMatchmakingMigrationsForStoreTest(t, ctx, pool)
+
+	accountID := uuid.New()
+	modProfile := uuid.New()
+	bans := &BanStore{Pool: pool}
+	require.NoError(t, bans.InsertPlatformMMBan(ctx, InsertPlatformMMBanParams{
+		AccountID:         accountID,
+		Reason:            "abuse",
+		BannedByProfileID: modProfile,
+	}))
+	banned, err := bans.IsPlatformBanned(ctx, accountID)
+	require.NoError(t, err)
+	require.True(t, banned)
+
+	require.NoError(t, bans.RevokePlatformMMBan(ctx, accountID))
+	banned, err = bans.IsPlatformBanned(ctx, accountID)
+	require.NoError(t, err)
+	require.False(t, banned)
+}
