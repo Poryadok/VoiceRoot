@@ -7,6 +7,7 @@ import '../backend/users_client.dart';
 import '../l10n/app_localizations.dart';
 import '../state/auth_providers.dart';
 import '../state/social_providers.dart';
+import '../settings/theme_preference.dart';
 import '../theme/voice_theme_providers.dart';
 import '../ui/auth/guest_nickname_screen.dart';
 import '../ui/core/voice_state_panel.dart';
@@ -68,10 +69,30 @@ class _VoiceAppBootstrapState extends ConsumerState<VoiceAppBootstrap> {
     }
   }
 
+  ThemeData _bootstrapTheme(WidgetRef ref) {
+    final pref = ref.read(appThemePreferenceProvider);
+    final platform =
+        WidgetsBinding.instance.platformDispatcher.platformBrightness;
+    final brightness = switch (pref) {
+      AppThemePreference.light => Brightness.light,
+      AppThemePreference.dark => Brightness.dark,
+      AppThemePreference.highContrast => Brightness.dark,
+      AppThemePreference.system => platform,
+    };
+    return ThemeData(
+      useMaterial3: true,
+      brightness: brightness,
+      colorScheme: brightness == Brightness.dark
+          ? const ColorScheme.dark(primary: Color(0xFF7EC8E3))
+          : const ColorScheme.light(primary: Color(0xFF7EC8E3)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authControllerProvider);
     final themeAsync = ref.watch(voiceMaterialThemeProvider);
+    final bootstrapTheme = _bootstrapTheme(ref);
     if (!_restoreComplete || auth.isRestoring) {
       return themeAsync.when(
         data: (theme) => MaterialApp(
@@ -95,22 +116,14 @@ class _VoiceAppBootstrapState extends ConsumerState<VoiceAppBootstrap> {
         ),
         loading: () => MaterialApp(
           locale: widget.locale,
-          theme: ThemeData(
-            useMaterial3: true,
-            brightness: Brightness.dark,
-            colorScheme: const ColorScheme.dark(primary: Color(0xFF7EC8E3)),
-          ),
+          theme: bootstrapTheme,
           home: const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           ),
         ),
         error: (_, _) => MaterialApp(
           locale: widget.locale,
-          theme: ThemeData(
-            useMaterial3: true,
-            brightness: Brightness.dark,
-            colorScheme: const ColorScheme.dark(primary: Color(0xFF7EC8E3)),
-          ),
+          theme: bootstrapTheme,
           home: const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           ),
@@ -128,22 +141,14 @@ class _VoiceAppBootstrapState extends ConsumerState<VoiceAppBootstrap> {
         ),
         loading: () => MaterialApp(
           locale: widget.locale,
-          theme: ThemeData(
-            useMaterial3: true,
-            brightness: Brightness.dark,
-            colorScheme: const ColorScheme.dark(primary: Color(0xFF7EC8E3)),
-          ),
+          theme: bootstrapTheme,
           home: const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           ),
         ),
         error: (_, _) => MaterialApp(
           locale: widget.locale,
-          theme: ThemeData(
-            useMaterial3: true,
-            brightness: Brightness.dark,
-            colorScheme: const ColorScheme.dark(primary: Color(0xFF7EC8E3)),
-          ),
+          theme: bootstrapTheme,
           home: const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           ),

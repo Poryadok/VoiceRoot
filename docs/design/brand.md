@@ -64,7 +64,7 @@ app stack: inline / side panel / bottom sheet; full-screen только где �
 ## Messaging UX
 
 - **Chat first:** открыть, прочитать, написать — основной happy path. В app stack не добавлять UI-шум будущих фич.
-- **Composer:** поле ввода всегда рядом с историей; send CTA видимый, Enter-to-send на desktop, настройки поведения позже через preferences.
+- **Composer:** поле ввода всегда рядом с историей; send CTA видимый. **Текущее поведение (desktop/web):** `Enter` отправляет сообщение; `Ctrl+Enter` и `Shift+Enter` — новая строка. **Будущее:** переключатель Enter vs Ctrl+Enter в Settings → preferences (UI toggle не в этом релизе).
 - **Message grouping:** группировать соседние сообщения одного отправителя по времени; повторять avatar/name только при смене отправителя или значительной паузе.
 - **Unread:** unread badge в списках, separator в истории, быстрый переход к первому непрочитанному.
 - **Context actions:** reply/edit/delete/reaction/forward появляются по фазам из [PLAN.md](../PLAN.md); место под них проектировать через контекстное меню, не через постоянные кнопки на каждом сообщении.

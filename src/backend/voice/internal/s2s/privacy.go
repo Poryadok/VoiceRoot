@@ -7,6 +7,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 
+	"voice/backend/pkg/guestprofile"
 	"voice/backend/pkg/privacy"
 
 	spacev1 "voice.app/voice/space/v1"
@@ -26,13 +27,37 @@ func (u *GRPCUserPrivacy) AllowCallsAudience(ctx context.Context, profileID uuid
 	if u == nil || u.Client == nil {
 		return privacy.EveryoneWithGuests(), nil
 	}
-	resp, err := u.Client.GetPrivacySettings(privacyS2SContext(ctx), &userv1.GetPrivacySettingsRequest{
+	s2sCtx := privacyS2SContext(ctx)
+	resp, err := u.Client.GetPrivacySettings(s2sCtx, &userv1.GetPrivacySettingsRequest{
 		ProfileId: profileID.String(),
 	})
 	if err != nil {
 		return privacy.Audience{}, err
 	}
-	return privacy.FromProto(resp.GetPrivacySettings().GetAllowCalls()), nil
+	settings := resp.GetPrivacySettings()
+	calls := privacy.FromProto(settings.GetAllowCalls())
+	if guestCallee, err := u.isGuestCallee(s2sCtx, profileID); err == nil && guestCallee {
+		// Guests receive calls under the same openness as DM (auth-and-contacts.md).
+		return privacy.FromProto(settings.GetAllowDm()), nil
+	}
+	return calls, nil
+}
+
+func (u *GRPCUserPrivacy) isGuestCallee(ctx context.Context, profileID uuid.UUID) (bool, error) {
+	resp, err := u.Client.GetProfile(ctx, &userv1.GetProfileRequest{
+		By: &userv1.GetProfileRequest_ProfileId{ProfileId: profileID.String()},
+	})
+	if err != nil {
+		return false, err
+	}
+	profile := resp.GetProfile()
+	if profile == nil {
+		return false, nil
+	}
+	if profile.GetIsGuestAccount() {
+		return true, nil
+	}
+	return guestprofile.IsPlaceholderDisplayName(profile.GetAccountId(), profile.GetDisplayName()), nil
 }
 
 type GRPCSocialFriends struct {

@@ -110,7 +110,43 @@ class AuthController extends StateNotifier<AuthState> {
   final GuestCredentialsStorage _guestCredentialsStorage;
   final Future<void> Function()? onAuthenticated;
   Timer? _refreshTimer;
+  Future<bool>? _refreshInFlight;
+  var _convertingGuest = false;
   static final _random = Random.secure();
+
+  bool _isDefinitiveAuthRejection(AuthSessionFailure failure) {
+    final code = failure.errorCode?.trim();
+    final status = failure.statusCode;
+    if (status == 401 || status == 403) return true;
+    const definitiveCodes = {
+      'invalid_token',
+      'token_revoked',
+      'token_expired',
+      'invalid_credentials',
+      'unauthenticated',
+    };
+    if (code != null && definitiveCodes.contains(code)) return true;
+    if (code == 'network_error' || code == 'auth_unavailable') return false;
+    if (status != null && status >= 500) return false;
+    return false;
+  }
+
+  Future<void> _finishRestoreWithSavedSession(AuthSession saved) async {
+    final isGuest = await _resolveIsGuest(saved);
+    final needsGuestNickname = isGuest &&
+        !await _guestCredentialsStorage.isNicknameCompleted(saved.accountId);
+    state = state.copyWith(
+      session: saved,
+      isRestoring: false,
+      clearError: true,
+      clearDiscoverHint: true,
+      isGuest: isGuest,
+      needsGuestNickname: needsGuestNickname,
+    );
+    if (!needsGuestNickname) {
+      await _notifyAuthenticated();
+    }
+  }
 
   Future<void> restore() async {
     final saved = await _storage.read();
@@ -141,14 +177,24 @@ class AuthController extends StateNotifier<AuthState> {
         if (!needsGuestNickname) {
           await _notifyAuthenticated();
         }
-      case AuthSessionFailure():
-        await _storage.clear();
-        state = state.copyWith(
-          clearSession: true,
-          isRestoring: false,
-          clearError: true,
-          clearGuest: true,
-        );
+      case AuthSessionFailure(:final message, :final errorCode, :final statusCode):
+        if (_isDefinitiveAuthRejection(
+          AuthSessionFailure(
+            message: message,
+            errorCode: errorCode,
+            statusCode: statusCode,
+          ),
+        )) {
+          await _storage.clear();
+          state = state.copyWith(
+            clearSession: true,
+            isRestoring: false,
+            clearError: true,
+            clearGuest: true,
+          );
+        } else {
+          await _finishRestoreWithSavedSession(saved);
+        }
     }
   }
 
@@ -210,6 +256,7 @@ class AuthController extends StateNotifier<AuthState> {
   }) async {
     final current = state.session;
     if (current == null) return 'not_authenticated';
+    _convertingGuest = true;
     final result = await _authClient.convertGuest(
       session: current,
       email: email,
@@ -218,16 +265,18 @@ class AuthController extends StateNotifier<AuthState> {
     switch (result) {
       case AuthSessionOk(:final session):
         if (session.accessToken.isEmpty || session.refreshToken.isEmpty) {
+          _convertingGuest = false;
           return AuthErrorKeys.validationFailed;
         }
-        await _guestCredentialsStorage.clear();
-        await _persist(session);
         state = state.copyWith(
           session: session,
           clearGuest: true,
           clearGuestNickname: true,
           clearError: true,
         );
+        await _persist(session);
+        await _guestCredentialsStorage.clear();
+        _convertingGuest = false;
         await _notifyAuthenticated();
         return null;
       case AuthSessionFailure(
@@ -235,6 +284,7 @@ class AuthController extends StateNotifier<AuthState> {
         :final errorCode,
         :final statusCode,
       ):
+        _convertingGuest = false;
         return resolveAuthErrorKey(
               errorCode: errorCode,
               statusCode: statusCode,
@@ -350,7 +400,19 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   /// Called by [GatewayHttpClient] on 401; returns true when session was refreshed.
-  Future<bool> refreshOn401() async {
+  Future<bool> refreshOn401() {
+    final inFlight = _refreshInFlight;
+    if (inFlight != null) return inFlight;
+    final future = _refreshOn401Once();
+    _refreshInFlight = future;
+    return future.whenComplete(() {
+      if (identical(_refreshInFlight, future)) {
+        _refreshInFlight = null;
+      }
+    });
+  }
+
+  Future<bool> _refreshOn401Once() async {
     final current = state.session;
     if (current == null) return false;
     final refreshed = await _authClient.refresh(
@@ -358,16 +420,25 @@ class AuthController extends StateNotifier<AuthState> {
     );
     switch (refreshed) {
       case AuthSessionOk(:final session):
-        await _persist(session);
         state = state.copyWith(
           session: session,
           clearError: true,
           isGuest: await _resolveIsGuest(session),
         );
+        await _persist(session);
         return true;
-      case AuthSessionFailure():
-        await _storage.clear();
-        state = state.copyWith(clearSession: true, clearError: true);
+      case AuthSessionFailure(:final message, :final errorCode, :final statusCode):
+        if (_convertingGuest) return false;
+        if (_isDefinitiveAuthRejection(
+          AuthSessionFailure(
+            message: message,
+            errorCode: errorCode,
+            statusCode: statusCode,
+          ),
+        )) {
+          await _storage.clear();
+          state = state.copyWith(clearSession: true, clearError: true);
+        }
         return false;
     }
   }

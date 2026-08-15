@@ -321,6 +321,7 @@ public class AuthService {
       throw new AuthException("registration_conflict");
     }
     tokenBlacklist.revoke(claims.jti(), jwtService.ttl(claims));
+    primaryProfileProvisioner.clearGuestAccountFlag(converted.id());
     authEventPublisher.publishGuestConverted(converted.id());
     return issueSession(converted, "{}");
   }
@@ -390,7 +391,8 @@ public class AuthService {
   }
 
   private AuthSession issueSession(Account account, String deviceInfoJson) {
-    String profileId = primaryProfileProvisioner.ensurePrimaryProfile(account.id(), displayHint(account));
+    String profileId = primaryProfileProvisioner.ensurePrimaryProfile(
+        account.id(), displayHint(account), "guest".equals(account.type()));
     return issueSessionForProfile(account, profileId, deviceInfoJson);
   }
 

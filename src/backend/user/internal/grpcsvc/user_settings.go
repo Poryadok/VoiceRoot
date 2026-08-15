@@ -46,7 +46,11 @@ func (s *UserGRPC) EnsurePrimaryProfile(ctx context.Context, req *userv1.EnsureP
 			return nil, status.Error(codes.Internal, err.Error())
 		}
 		if priv == nil {
-			if _, err := privacyStore.CreateDefaultGaming(ctx, row.ID); err != nil {
+			if req.GetIsGuestAccount() {
+				if _, err := privacyStore.CreateDefaultGamingForGuest(ctx, row.ID); err != nil {
+					return nil, status.Error(codes.Internal, err.Error())
+				}
+			} else if _, err := privacyStore.CreateDefaultGaming(ctx, row.ID); err != nil {
 				return nil, status.Error(codes.Internal, err.Error())
 			}
 		}

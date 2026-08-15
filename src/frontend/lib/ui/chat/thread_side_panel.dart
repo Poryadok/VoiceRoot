@@ -9,6 +9,7 @@ import '../../theme/voice_colors.dart';
 import '../api_error_messages.dart';
 import '../core/voice_skeleton.dart';
 import '../core/voice_state_panel.dart';
+import 'chat_composer_text_field.dart';
 import 'mention_message_content.dart';
 
 /// Thread replies for a root message (roles/threads (docs/features/roles.md)).
@@ -32,6 +33,7 @@ class ThreadSidePanel extends ConsumerStatefulWidget {
 
 class _ThreadSidePanelState extends ConsumerState<ThreadSidePanel> {
   final _composer = TextEditingController();
+  final _composerFocus = FocusNode();
   var _loading = true;
   var _sending = false;
   List<VoiceMessage> _replies = const [];
@@ -46,6 +48,7 @@ class _ThreadSidePanelState extends ConsumerState<ThreadSidePanel> {
   @override
   void dispose() {
     _composer.dispose();
+    _composerFocus.dispose();
     super.dispose();
   }
 
@@ -163,13 +166,14 @@ class _ThreadSidePanelState extends ConsumerState<ThreadSidePanel> {
               child: Row(
                 children: [
                   Expanded(
-                    child: TextField(
+                    child: ChatComposerTextField(
                       controller: _composer,
+                      focusNode: _composerFocus,
                       decoration: InputDecoration(
                         hintText: l10n.chatRoomInputHint,
                         isDense: true,
                       ),
-                      onSubmitted: _sending ? null : (_) => _send(),
+                      onSend: _sending ? null : _send,
                     ),
                   ),
                   const SizedBox(width: 8),

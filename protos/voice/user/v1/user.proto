@@ -76,6 +76,7 @@ message EnsurePrimaryProfileRequest {
   optional string profile_id = 2;
   // Hint for display_name / username base (e.g. email local part).
   string display_hint = 3;
+  bool is_guest_account = 4;
 }
 
 message EnsurePrimaryProfileResponse {
@@ -124,6 +125,8 @@ message Profile {
   google.protobuf.Timestamp updated_at = 16;
   optional google.protobuf.Timestamp frozen_at = 17;
   optional string accent_color = 18; // "#RRGGBB" from design tokens
+  // True while account type is guest (auth accounts.type); cleared on convert-guest.
+  bool is_guest_account = 19;
 }
 
 message UpdateProfileRequest {

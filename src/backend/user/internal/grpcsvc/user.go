@@ -399,6 +399,7 @@ func rowToProto(p *store.ProfileRow) *userv1.Profile {
 	if p.AccentColor != nil {
 		out.AccentColor = proto.String(*p.AccentColor)
 	}
+	out.IsGuestAccount = p.IsGuestAccount
 	return out
 }
 

@@ -48,7 +48,15 @@ func (s *UserGRPC) GetPrivacySettings(ctx context.Context, req *userv1.GetPrivac
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	if row == nil {
-		row, err = privacyStore.CreateDefaultGaming(ctx, profileID)
+		profileRow, profileErr := s.Profiles.GetByID(ctx, profileID)
+		if profileErr != nil {
+			return nil, status.Error(codes.Internal, profileErr.Error())
+		}
+		if profileRow != nil && profileRow.IsGuestAccount {
+			row, err = privacyStore.CreateDefaultGamingForGuest(ctx, profileID)
+		} else {
+			row, err = privacyStore.CreateDefaultGaming(ctx, profileID)
+		}
 		if err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
