@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -29,23 +30,29 @@ type SubscriptionGRPC struct {
 	Catalog *catalog.ProductCatalog
 	// UserProfiles optional; when set, downgrade delegates profile freeze to User service.
 	UserProfiles UserProfileDowngradeClient
-	// SpaceEntitlements optional; syncs space_db entitlement cache after Space Pro webhook.
-	SpaceEntitlements spacev1.SpaceServiceClient
-	Analytics    interface {
-		Publish(ctx context.Context, subject, sourceService, eventType string, props map[string]any) error
-		PublishWithAccount(ctx context.Context, subject, sourceService, eventType, accountID string, props map[string]any) error
+		// SpaceEntitlements optional; syncs space_db entitlement cache after Space Pro webhook.
+		SpaceEntitlements SpaceProSyncClient
+		Analytics    interface {
+			Publish(ctx context.Context, subject, sourceService, eventType string, props map[string]any) error
+			PublishWithAccount(ctx context.Context, subject, sourceService, eventType, accountID string, props map[string]any) error
+		}
+		DomainEvents interface {
+			PublishPlanStarted(ctx context.Context, accountID, plan string) error
+			PublishPlanCancelled(ctx context.Context, accountID, plan string) error
+			PublishPlanExpired(ctx context.Context, accountID, plan string) error
+			PublishDowngrade(ctx context.Context, accountID, plan string) error
+			PublishPaymentSuccess(ctx context.Context, accountID, provider string) error
+			PublishPaymentFailed(ctx context.Context, accountID, provider string) error
+			PublishSpaceProStarted(ctx context.Context, spaceID, purchaserAccountID string) error
+			PublishSpaceProExpired(ctx context.Context, spaceID string) error
+			PublishGraceReminder(ctx context.Context, accountID, plan string, day int32) error
+		}
 	}
-	DomainEvents interface {
-		PublishPlanStarted(ctx context.Context, accountID, plan string) error
-		PublishPlanCancelled(ctx context.Context, accountID, plan string) error
-		PublishPlanExpired(ctx context.Context, accountID, plan string) error
-		PublishDowngrade(ctx context.Context, accountID, plan string) error
-		PublishPaymentSuccess(ctx context.Context, accountID, provider string) error
-		PublishPaymentFailed(ctx context.Context, accountID, provider string) error
-		PublishSpaceProStarted(ctx context.Context, spaceID, purchaserAccountID string) error
-		PublishSpaceProExpired(ctx context.Context, spaceID string) error
+
+	// SpaceProSyncClient mirrors SpaceService.SyncSpaceProSubscription for entitlement cache updates.
+	type SpaceProSyncClient interface {
+		SyncSpaceProSubscription(ctx context.Context, in *spacev1.SyncSpaceProSubscriptionRequest, opts ...grpc.CallOption) (*spacev1.SyncSpaceProSubscriptionResponse, error)
 	}
-}
 
 // UserProfileDowngradeClient applies profile selection on subscription downgrade.
 type UserProfileDowngradeClient interface {

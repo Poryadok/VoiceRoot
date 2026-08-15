@@ -5476,6 +5476,7 @@ enum SubscriptionStreamEvent_Payload {
   downgrade,
   spaceProStarted,
   spaceProExpired,
+  graceReminder,
   notSet
 }
 
@@ -5491,6 +5492,7 @@ class SubscriptionStreamEvent extends $pb.GeneratedMessage {
     Downgrade? downgrade,
     SpaceProStarted? spaceProStarted,
     SpaceProExpired? spaceProExpired,
+    GraceReminder? graceReminder,
   }) {
     final result = create();
     if (eventId != null) result.eventId = eventId;
@@ -5503,6 +5505,7 @@ class SubscriptionStreamEvent extends $pb.GeneratedMessage {
     if (downgrade != null) result.downgrade = downgrade;
     if (spaceProStarted != null) result.spaceProStarted = spaceProStarted;
     if (spaceProExpired != null) result.spaceProExpired = spaceProExpired;
+    if (graceReminder != null) result.graceReminder = graceReminder;
     return result;
   }
 
@@ -5525,6 +5528,7 @@ class SubscriptionStreamEvent extends $pb.GeneratedMessage {
     15: SubscriptionStreamEvent_Payload.downgrade,
     16: SubscriptionStreamEvent_Payload.spaceProStarted,
     17: SubscriptionStreamEvent_Payload.spaceProExpired,
+    18: SubscriptionStreamEvent_Payload.graceReminder,
     0: SubscriptionStreamEvent_Payload.notSet
   };
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
@@ -5532,7 +5536,7 @@ class SubscriptionStreamEvent extends $pb.GeneratedMessage {
       package:
           const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
       createEmptyInstance: create)
-    ..oo(0, [10, 11, 12, 13, 14, 15, 16, 17])
+    ..oo(0, [10, 11, 12, 13, 14, 15, 16, 17, 18])
     ..aOS(1, _omitFieldNames ? '' : 'eventId')
     ..aOM<$0.Timestamp>(2, _omitFieldNames ? '' : 'occurredAt',
         subBuilder: $0.Timestamp.create)
@@ -5552,6 +5556,8 @@ class SubscriptionStreamEvent extends $pb.GeneratedMessage {
         subBuilder: SpaceProStarted.create)
     ..aOM<SpaceProExpired>(17, _omitFieldNames ? '' : 'spaceProExpired',
         subBuilder: SpaceProExpired.create)
+    ..aOM<GraceReminder>(18, _omitFieldNames ? '' : 'graceReminder',
+        subBuilder: GraceReminder.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -5582,6 +5588,7 @@ class SubscriptionStreamEvent extends $pb.GeneratedMessage {
   @$pb.TagNumber(15)
   @$pb.TagNumber(16)
   @$pb.TagNumber(17)
+  @$pb.TagNumber(18)
   SubscriptionStreamEvent_Payload whichPayload() =>
       _SubscriptionStreamEvent_PayloadByTag[$_whichOneof(0)]!;
   @$pb.TagNumber(10)
@@ -5592,6 +5599,7 @@ class SubscriptionStreamEvent extends $pb.GeneratedMessage {
   @$pb.TagNumber(15)
   @$pb.TagNumber(16)
   @$pb.TagNumber(17)
+  @$pb.TagNumber(18)
   void clearPayload() => $_clearField($_whichOneof(0));
 
   @$pb.TagNumber(1)
@@ -5701,6 +5709,17 @@ class SubscriptionStreamEvent extends $pb.GeneratedMessage {
   void clearSpaceProExpired() => $_clearField(17);
   @$pb.TagNumber(17)
   SpaceProExpired ensureSpaceProExpired() => $_ensure(9);
+
+  @$pb.TagNumber(18)
+  GraceReminder get graceReminder => $_getN(10);
+  @$pb.TagNumber(18)
+  set graceReminder(GraceReminder value) => $_setField(18, value);
+  @$pb.TagNumber(18)
+  $core.bool hasGraceReminder() => $_has(10);
+  @$pb.TagNumber(18)
+  void clearGraceReminder() => $_clearField(18);
+  @$pb.TagNumber(18)
+  GraceReminder ensureGraceReminder() => $_ensure(10);
 }
 
 class PlanStarted extends $pb.GeneratedMessage {
@@ -6237,6 +6256,99 @@ class SpaceProExpired extends $pb.GeneratedMessage {
   $core.bool hasSpaceId() => $_has(0);
   @$pb.TagNumber(1)
   void clearSpaceId() => $_clearField(1);
+}
+
+/// GraceReminder is emitted on days 1, 3, and 7 of a subscription grace period
+/// (docs/features/subscription.md).
+class GraceReminder extends $pb.GeneratedMessage {
+  factory GraceReminder({
+    $core.String? accountId,
+    $core.String? plan,
+    $core.int? day,
+    $core.String? spaceId,
+  }) {
+    final result = create();
+    if (accountId != null) result.accountId = accountId;
+    if (plan != null) result.plan = plan;
+    if (day != null) result.day = day;
+    if (spaceId != null) result.spaceId = spaceId;
+    return result;
+  }
+
+  GraceReminder._();
+
+  factory GraceReminder.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GraceReminder.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GraceReminder',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'accountId')
+    ..aOS(2, _omitFieldNames ? '' : 'plan')
+    ..aI(3, _omitFieldNames ? '' : 'day')
+    ..aOS(4, _omitFieldNames ? '' : 'spaceId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GraceReminder clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GraceReminder copyWith(void Function(GraceReminder) updates) =>
+      super.copyWith((message) => updates(message as GraceReminder))
+          as GraceReminder;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GraceReminder create() => GraceReminder._();
+  @$core.override
+  GraceReminder createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GraceReminder getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GraceReminder>(create);
+  static GraceReminder? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get accountId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set accountId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAccountId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAccountId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get plan => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set plan($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasPlan() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearPlan() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.int get day => $_getIZ(2);
+  @$pb.TagNumber(3)
+  set day($core.int value) => $_setSignedInt32(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasDay() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearDay() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get spaceId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set spaceId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasSpaceId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearSpaceId() => $_clearField(4);
 }
 
 enum FileStreamEvent_Payload {
