@@ -1937,6 +1937,33 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get gameCatalogAddGame => 'Добавить игру';
+
+  @override
+  String get addGameTitle => 'Добавить игру';
+
+  @override
+  String get addGameNameLabel => 'Название игры';
+
+  @override
+  String get addGameModeLabel => 'Название режима';
+
+  @override
+  String get addGameModeSlotsLabel => 'Игроков в матче';
+
+  @override
+  String get addGameSubmit => 'Отправить на модерацию';
+
+  @override
+  String get addGameSubmitted => 'Заявка отправлена на модерацию';
+
+  @override
+  String get addGameSubmitError => 'Не удалось отправить заявку';
+
+  @override
+  String get addGameSimilarHint => 'Похожие игры в каталоге';
+
+  @override
   String get playerProfileTitle => 'Профиль игрока';
 
   @override

@@ -339,10 +339,12 @@ class CreateGameRequest extends $pb.GeneratedMessage {
   factory CreateGameRequest({
     $core.String? name,
     $core.String? configJson,
+    $core.String? iconUrl,
   }) {
     final result = create();
     if (name != null) result.name = name;
     if (configJson != null) result.configJson = configJson;
+    if (iconUrl != null) result.iconUrl = iconUrl;
     return result;
   }
 
@@ -362,6 +364,7 @@ class CreateGameRequest extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'name')
     ..aOS(2, _omitFieldNames ? '' : 'configJson')
+    ..aOS(3, _omitFieldNames ? '' : 'iconUrl')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -400,6 +403,15 @@ class CreateGameRequest extends $pb.GeneratedMessage {
   $core.bool hasConfigJson() => $_has(1);
   @$pb.TagNumber(2)
   void clearConfigJson() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get iconUrl => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set iconUrl($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasIconUrl() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearIconUrl() => $_clearField(3);
 }
 
 class UpdateGameRequest extends $pb.GeneratedMessage {
@@ -546,6 +558,505 @@ class SearchGamesRequest extends $pb.GeneratedMessage {
   $core.bool hasQuery() => $_has(0);
   @$pb.TagNumber(1)
   void clearQuery() => $_clearField(1);
+}
+
+/// User submission → status pending_moderation until staff approve/reject.
+class SubmitGameRequestRequest extends $pb.GeneratedMessage {
+  factory SubmitGameRequestRequest({
+    $core.String? name,
+    $core.String? configJson,
+    $core.String? iconUrl,
+  }) {
+    final result = create();
+    if (name != null) result.name = name;
+    if (configJson != null) result.configJson = configJson;
+    if (iconUrl != null) result.iconUrl = iconUrl;
+    return result;
+  }
+
+  SubmitGameRequestRequest._();
+
+  factory SubmitGameRequestRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SubmitGameRequestRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SubmitGameRequestRequest',
+      package: const $pb.PackageName(
+          _omitMessageNames ? '' : 'voice.matchmaking.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'name')
+    ..aOS(2, _omitFieldNames ? '' : 'configJson')
+    ..aOS(3, _omitFieldNames ? '' : 'iconUrl')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SubmitGameRequestRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SubmitGameRequestRequest copyWith(
+          void Function(SubmitGameRequestRequest) updates) =>
+      super.copyWith((message) => updates(message as SubmitGameRequestRequest))
+          as SubmitGameRequestRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SubmitGameRequestRequest create() => SubmitGameRequestRequest._();
+  @$core.override
+  SubmitGameRequestRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SubmitGameRequestRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SubmitGameRequestRequest>(create);
+  static SubmitGameRequestRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get name => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set name($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasName() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearName() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get configJson => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set configJson($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasConfigJson() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearConfigJson() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get iconUrl => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set iconUrl($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasIconUrl() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearIconUrl() => $_clearField(3);
+}
+
+class SubmitGameRequestResponse extends $pb.GeneratedMessage {
+  factory SubmitGameRequestResponse({
+    Game? game,
+  }) {
+    final result = create();
+    if (game != null) result.game = game;
+    return result;
+  }
+
+  SubmitGameRequestResponse._();
+
+  factory SubmitGameRequestResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SubmitGameRequestResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SubmitGameRequestResponse',
+      package: const $pb.PackageName(
+          _omitMessageNames ? '' : 'voice.matchmaking.v1'),
+      createEmptyInstance: create)
+    ..aOM<Game>(1, _omitFieldNames ? '' : 'game', subBuilder: Game.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SubmitGameRequestResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SubmitGameRequestResponse copyWith(
+          void Function(SubmitGameRequestResponse) updates) =>
+      super.copyWith((message) => updates(message as SubmitGameRequestResponse))
+          as SubmitGameRequestResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SubmitGameRequestResponse create() => SubmitGameRequestResponse._();
+  @$core.override
+  SubmitGameRequestResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SubmitGameRequestResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SubmitGameRequestResponse>(create);
+  static SubmitGameRequestResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  Game get game => $_getN(0);
+  @$pb.TagNumber(1)
+  set game(Game value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasGame() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearGame() => $_clearField(1);
+  @$pb.TagNumber(1)
+  Game ensureGame() => $_ensure(0);
+}
+
+class ListGameRequestsRequest extends $pb.GeneratedMessage {
+  factory ListGameRequestsRequest({
+    $2.CursorPageRequest? page,
+    $core.String? status,
+  }) {
+    final result = create();
+    if (page != null) result.page = page;
+    if (status != null) result.status = status;
+    return result;
+  }
+
+  ListGameRequestsRequest._();
+
+  factory ListGameRequestsRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ListGameRequestsRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ListGameRequestsRequest',
+      package: const $pb.PackageName(
+          _omitMessageNames ? '' : 'voice.matchmaking.v1'),
+      createEmptyInstance: create)
+    ..aOM<$2.CursorPageRequest>(1, _omitFieldNames ? '' : 'page',
+        subBuilder: $2.CursorPageRequest.create)
+    ..aOS(2, _omitFieldNames ? '' : 'status')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListGameRequestsRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListGameRequestsRequest copyWith(
+          void Function(ListGameRequestsRequest) updates) =>
+      super.copyWith((message) => updates(message as ListGameRequestsRequest))
+          as ListGameRequestsRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ListGameRequestsRequest create() => ListGameRequestsRequest._();
+  @$core.override
+  ListGameRequestsRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ListGameRequestsRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ListGameRequestsRequest>(create);
+  static ListGameRequestsRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $2.CursorPageRequest get page => $_getN(0);
+  @$pb.TagNumber(1)
+  set page($2.CursorPageRequest value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasPage() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearPage() => $_clearField(1);
+  @$pb.TagNumber(1)
+  $2.CursorPageRequest ensurePage() => $_ensure(0);
+
+  /// Empty = pending_moderation only.
+  @$pb.TagNumber(2)
+  $core.String get status => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set status($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasStatus() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearStatus() => $_clearField(2);
+}
+
+class ListGameRequestsResponse extends $pb.GeneratedMessage {
+  factory ListGameRequestsResponse({
+    GameList? gameList,
+  }) {
+    final result = create();
+    if (gameList != null) result.gameList = gameList;
+    return result;
+  }
+
+  ListGameRequestsResponse._();
+
+  factory ListGameRequestsResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ListGameRequestsResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ListGameRequestsResponse',
+      package: const $pb.PackageName(
+          _omitMessageNames ? '' : 'voice.matchmaking.v1'),
+      createEmptyInstance: create)
+    ..aOM<GameList>(1, _omitFieldNames ? '' : 'gameList',
+        subBuilder: GameList.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListGameRequestsResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListGameRequestsResponse copyWith(
+          void Function(ListGameRequestsResponse) updates) =>
+      super.copyWith((message) => updates(message as ListGameRequestsResponse))
+          as ListGameRequestsResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ListGameRequestsResponse create() => ListGameRequestsResponse._();
+  @$core.override
+  ListGameRequestsResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ListGameRequestsResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ListGameRequestsResponse>(create);
+  static ListGameRequestsResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  GameList get gameList => $_getN(0);
+  @$pb.TagNumber(1)
+  set gameList(GameList value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasGameList() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearGameList() => $_clearField(1);
+  @$pb.TagNumber(1)
+  GameList ensureGameList() => $_ensure(0);
+}
+
+class ApproveGameRequestRequest extends $pb.GeneratedMessage {
+  factory ApproveGameRequestRequest({
+    $core.String? gameId,
+  }) {
+    final result = create();
+    if (gameId != null) result.gameId = gameId;
+    return result;
+  }
+
+  ApproveGameRequestRequest._();
+
+  factory ApproveGameRequestRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ApproveGameRequestRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ApproveGameRequestRequest',
+      package: const $pb.PackageName(
+          _omitMessageNames ? '' : 'voice.matchmaking.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'gameId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApproveGameRequestRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApproveGameRequestRequest copyWith(
+          void Function(ApproveGameRequestRequest) updates) =>
+      super.copyWith((message) => updates(message as ApproveGameRequestRequest))
+          as ApproveGameRequestRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ApproveGameRequestRequest create() => ApproveGameRequestRequest._();
+  @$core.override
+  ApproveGameRequestRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ApproveGameRequestRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ApproveGameRequestRequest>(create);
+  static ApproveGameRequestRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get gameId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set gameId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasGameId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearGameId() => $_clearField(1);
+}
+
+class ApproveGameRequestResponse extends $pb.GeneratedMessage {
+  factory ApproveGameRequestResponse({
+    Game? game,
+  }) {
+    final result = create();
+    if (game != null) result.game = game;
+    return result;
+  }
+
+  ApproveGameRequestResponse._();
+
+  factory ApproveGameRequestResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ApproveGameRequestResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ApproveGameRequestResponse',
+      package: const $pb.PackageName(
+          _omitMessageNames ? '' : 'voice.matchmaking.v1'),
+      createEmptyInstance: create)
+    ..aOM<Game>(1, _omitFieldNames ? '' : 'game', subBuilder: Game.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApproveGameRequestResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApproveGameRequestResponse copyWith(
+          void Function(ApproveGameRequestResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as ApproveGameRequestResponse))
+          as ApproveGameRequestResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ApproveGameRequestResponse create() => ApproveGameRequestResponse._();
+  @$core.override
+  ApproveGameRequestResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ApproveGameRequestResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ApproveGameRequestResponse>(create);
+  static ApproveGameRequestResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  Game get game => $_getN(0);
+  @$pb.TagNumber(1)
+  set game(Game value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasGame() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearGame() => $_clearField(1);
+  @$pb.TagNumber(1)
+  Game ensureGame() => $_ensure(0);
+}
+
+class RejectGameRequestRequest extends $pb.GeneratedMessage {
+  factory RejectGameRequestRequest({
+    $core.String? gameId,
+  }) {
+    final result = create();
+    if (gameId != null) result.gameId = gameId;
+    return result;
+  }
+
+  RejectGameRequestRequest._();
+
+  factory RejectGameRequestRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory RejectGameRequestRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'RejectGameRequestRequest',
+      package: const $pb.PackageName(
+          _omitMessageNames ? '' : 'voice.matchmaking.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'gameId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RejectGameRequestRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RejectGameRequestRequest copyWith(
+          void Function(RejectGameRequestRequest) updates) =>
+      super.copyWith((message) => updates(message as RejectGameRequestRequest))
+          as RejectGameRequestRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static RejectGameRequestRequest create() => RejectGameRequestRequest._();
+  @$core.override
+  RejectGameRequestRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static RejectGameRequestRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<RejectGameRequestRequest>(create);
+  static RejectGameRequestRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get gameId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set gameId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasGameId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearGameId() => $_clearField(1);
+}
+
+class RejectGameRequestResponse extends $pb.GeneratedMessage {
+  factory RejectGameRequestResponse({
+    Game? game,
+  }) {
+    final result = create();
+    if (game != null) result.game = game;
+    return result;
+  }
+
+  RejectGameRequestResponse._();
+
+  factory RejectGameRequestResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory RejectGameRequestResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'RejectGameRequestResponse',
+      package: const $pb.PackageName(
+          _omitMessageNames ? '' : 'voice.matchmaking.v1'),
+      createEmptyInstance: create)
+    ..aOM<Game>(1, _omitFieldNames ? '' : 'game', subBuilder: Game.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RejectGameRequestResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RejectGameRequestResponse copyWith(
+          void Function(RejectGameRequestResponse) updates) =>
+      super.copyWith((message) => updates(message as RejectGameRequestResponse))
+          as RejectGameRequestResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static RejectGameRequestResponse create() => RejectGameRequestResponse._();
+  @$core.override
+  RejectGameRequestResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static RejectGameRequestResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<RejectGameRequestResponse>(create);
+  static RejectGameRequestResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  Game get game => $_getN(0);
+  @$pb.TagNumber(1)
+  set game(Game value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasGame() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearGame() => $_clearField(1);
+  @$pb.TagNumber(1)
+  Game ensureGame() => $_ensure(0);
 }
 
 class StartSearchRequest extends $pb.GeneratedMessage {

@@ -886,6 +886,15 @@
       "max": { "type": "int" }
     }
   },
+  "gameCatalogAddGame": "Добавить игру",
+  "addGameTitle": "Добавить игру",
+  "addGameNameLabel": "Название игры",
+  "addGameModeLabel": "Название режима",
+  "addGameModeSlotsLabel": "Игроков в матче",
+  "addGameSubmit": "Отправить на модерацию",
+  "addGameSubmitted": "Заявка отправлена на модерацию",
+  "addGameSubmitError": "Не удалось отправить заявку",
+  "addGameSimilarHint": "Похожие игры в каталоге",
   "playerProfileTitle": "Профиль игрока",
   "playerProfileEntry": "Профиль игрока",
   "playerProfileLoadError": "Не удалось загрузить профиль игрока",

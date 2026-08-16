@@ -7,6 +7,7 @@ import '../../state/matchmaking_providers.dart';
 import '../api_error_messages.dart';
 import '../core/voice_skeleton.dart';
 import '../core/voice_state_panel.dart';
+import 'add_game_screen.dart';
 import 'game_detail_screen.dart';
 
 /// Browse matchmaking game catalog (docs/features/game-catalog.md).
@@ -19,6 +20,7 @@ class GameCatalogScreen extends ConsumerStatefulWidget {
   static const Key screenKey = Key('game_catalog_screen');
   static const Key searchFieldKey = Key('game_catalog_search');
   static const Key listKey = Key('game_catalog_list');
+  static const Key addGameButtonKey = Key('game_catalog_add_game');
 
   @override
   ConsumerState<GameCatalogScreen> createState() => _GameCatalogScreenState();
@@ -42,6 +44,21 @@ class _GameCatalogScreenState extends ConsumerState<GameCatalogScreen> {
       key: GameCatalogScreen.screenKey,
       appBar: AppBar(
         title: Text(l10n.gameCatalogTitle),
+        actions: [
+          if (!widget.selectMode)
+            IconButton(
+              key: GameCatalogScreen.addGameButtonKey,
+              tooltip: l10n.gameCatalogAddGame,
+              icon: const Icon(Icons.add),
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const AddGameScreen(),
+                  ),
+                );
+              },
+            ),
+        ],
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

@@ -11,9 +11,15 @@ option go_package = "voice.app/voice/matchmaking/v1;matchmakingv1";
 service MatchmakingService {
   rpc ListGames(ListGamesRequest) returns (ListGamesResponse);
   rpc GetGame(GetGameRequest) returns (GetGameResponse);
-  rpc CreateGame(CreateGameRequest) returns (CreateGameResponse);
+  rpc CreateGame(CreateGameRequest) returns (CreateGameResponse); // staff: publish active
   rpc UpdateGame(UpdateGameRequest) returns (UpdateGameResponse);
   rpc SearchGames(SearchGamesRequest) returns (SearchGamesResponse);
+
+  // User game-catalog requests (docs/features/game-catalog.md; roadmap П.4).
+  rpc SubmitGameRequest(SubmitGameRequestRequest) returns (SubmitGameRequestResponse);
+  rpc ListGameRequests(ListGameRequestsRequest) returns (ListGameRequestsResponse); // staff
+  rpc ApproveGameRequest(ApproveGameRequestRequest) returns (ApproveGameRequestResponse); // staff
+  rpc RejectGameRequest(RejectGameRequestRequest) returns (RejectGameRequestResponse); // staff
 
   rpc StartSearch(StartSearchRequest) returns (StartSearchResponse);
   rpc CancelSearch(CancelSearchRequest) returns (CancelSearchResponse);
@@ -69,6 +75,7 @@ message GetGameRequest {
 message CreateGameRequest {
   string name = 1;
   string config_json = 2;
+  optional string icon_url = 3;
 }
 
 message UpdateGameRequest {
@@ -80,6 +87,43 @@ message UpdateGameRequest {
 
 message SearchGamesRequest {
   string query = 1;
+}
+
+// User submission → status pending_moderation until staff approve/reject.
+message SubmitGameRequestRequest {
+  string name = 1;
+  string config_json = 2;
+  optional string icon_url = 3;
+}
+
+message SubmitGameRequestResponse {
+  Game game = 1;
+}
+
+message ListGameRequestsRequest {
+  voice.common.v1.CursorPageRequest page = 1;
+  // Empty = pending_moderation only.
+  optional string status = 2;
+}
+
+message ListGameRequestsResponse {
+  GameList game_list = 1;
+}
+
+message ApproveGameRequestRequest {
+  string game_id = 1;
+}
+
+message ApproveGameRequestResponse {
+  Game game = 1;
+}
+
+message RejectGameRequestRequest {
+  string game_id = 1;
+}
+
+message RejectGameRequestResponse {
+  Game game = 1;
 }
 
 message StartSearchRequest {
