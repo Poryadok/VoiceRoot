@@ -59,7 +59,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | TC-DM-05 | Typing indicator | `[exists]` | Gateway: `TestComposeTyping_live`; Flutter: `message_typing_e2e_live_test` |
 | TC-DM-06 | Edit / delete + WS `message_update` | `[exists]` | Gateway: `TestComposeMessageEditDelete_live`; Flutter: `message_edit_delete_e2e_live_test` |
 | TC-DM-07 | Запросы от незнакомцев (requests inbox → accept) | `[exists]` | Gateway: `TestComposeDMRequests_live`; Flutter: `dm_requests_e2e_live_test` |
-| TC-DM-08 | Архивирование / скрытие DM | `[missing]` | — (спека text-chat §Архивирование) |
+| TC-DM-08 | Архивирование / скрытие DM | `[partial]` | Chat IT: `TestArchiveChat_HidesFromListChats`, `TestMuteChat_*`; Gateway transcode; Flutter client. Compose/Flutter live still open |
 | TC-DM-09 | Черновики локально на устройстве | `[partial]` | Только клиентская логика; нет live IT (сервер не хранит) |
 
 ### Путь B — Группы
@@ -218,7 +218,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | ID | Кейс | Статус | Где |
 |----|------|--------|-----|
 | PR-01 | Presence API for peer | `[exists]` | Gateway: `TestComposePresence_live`; Flutter: `presence_e2e_live_test` |
-| PR-02 | DND / invisible / custom status | `[missing]` | — |
+| PR-02 | DND / invisible / custom status | `[exists]` | Gateway: `TestComposePresenceDNDInvisible_live`; Flutter: `presence_e2e_live_test` (PR-02) |
 | PR-03 | In-game status privacy vs guests | `[missing]` | auth-and-contacts guest audience |
 
 ---
@@ -332,7 +332,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 |----|------|--------|-----|
 | ON-01 | Onboarding steps persist on server | `[exists]` | Flutter: `onboarding_e2e_live_test` |
 | ON-02 | Guest onboarding incomplete flags | `[exists]` | Flutter: `guest_onboarding_e2e_live_test` |
-| ON-03 | Coach-marks MM/space/invite deep link | `[missing]` | roadmap П.20 |
+| ON-03 | Coach-marks MM/space/invite deep link | `[exists]` | Flutter: `onboarding_coach_e2e_live_test`; widgets: `onboarding_overlay_test` |
 
 ---
 

@@ -16,6 +16,7 @@ require (
 	voice.app/voice/chat v0.0.0
 	voice.app/voice/common v0.0.0
 	voice.app/voice/events v0.0.0
+	voice.app/voice/social v0.0.0
 	voice.app/voice/user v0.0.0
 	voice/backend/pkg v0.0.0
 )
@@ -55,5 +56,7 @@ replace voice.app/voice/chat => ../chat/pb/voice/chat
 replace voice.app/voice/common => ../user/pb/voice/common
 
 replace voice.app/voice/events => ../messaging/pb/voice/events
+
+replace voice.app/voice/social => ../user/pb/voice/social
 
 replace voice.app/voice/user => ../user/pb/voice/user

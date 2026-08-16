@@ -1,14 +1,17 @@
 package grpcsvc
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	"voice/backend/user/internal/authctx"
 	"voice/backend/user/internal/store"
 
 	userv1 "voice.app/voice/user/v1"
@@ -95,4 +98,35 @@ func TestPresenceSnapshotToProto_nilSnapshot(t *testing.T) {
 	out := presenceSnapshotToProto(pid, nil)
 	require.Equal(t, pid.String(), out.GetProfileId())
 	require.Empty(t, out.GetStatus())
+}
+
+func TestPresenceForViewer_invisibleMaskedForOthers(t *testing.T) {
+	target := uuid.MustParse("77777777-7777-7777-7777-777777777777")
+	viewer := uuid.MustParse("88888888-8888-8888-8888-888888888888")
+	s := &UserGRPC{}
+	snap := &store.PresenceSnapshot{
+		Live:         true,
+		Status:       "invisible",
+		StatusEnum:   int32(userv1.PresenceOnlineStatus_PRESENCE_ONLINE_STATUS_INVISIBLE),
+		CustomStatus: "secret",
+		GameTitle:    "Dota",
+		LastSeenUnix: 99,
+	}
+
+	otherCtx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(
+		authctx.HeaderProfileID, viewer.String(),
+	))
+	masked := s.presenceForViewer(otherCtx, target, snap)
+	require.Empty(t, masked.GetStatus())
+	require.Empty(t, masked.GetCustomStatus())
+	require.Empty(t, masked.GetGameTitle())
+	require.Equal(t, int64(99), masked.GetLastSeen().AsTime().Unix())
+
+	selfCtx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(
+		authctx.HeaderProfileID, target.String(),
+	))
+	selfView := s.presenceForViewer(selfCtx, target, snap)
+	require.Equal(t, "invisible", selfView.GetStatus())
+	require.Equal(t, "secret", selfView.GetCustomStatus())
+	require.Equal(t, "Dota", selfView.GetGameTitle())
 }

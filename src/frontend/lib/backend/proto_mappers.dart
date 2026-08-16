@@ -378,7 +378,11 @@ VoiceSubscriptionLimits voiceSubscriptionLimitsFromProto(sub_pb.Limits limits) {
 VoicePresence voicePresenceFromProto(user_pb.PresenceStatus status) {
   return VoicePresence(
     profileId: status.profileId,
-    status: status.status.isNotEmpty ? status.status : 'invisible',
+    // Empty status = offline / unknown; do not invent "invisible" (presence.md).
+    status: status.status,
+    customStatus: status.hasCustomStatus()
+        ? emptyToNull(status.customStatus)
+        : null,
     lastSeen: protoTimestampToDateTime(
       status.hasLastSeen() ? status.lastSeen : null,
     ),

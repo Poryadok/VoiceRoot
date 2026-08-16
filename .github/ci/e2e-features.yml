@@ -127,6 +127,7 @@ full_flutter:
   - test/stories_e2e_live_test.dart
   - test/deeplink_invite_e2e_live_test.dart
   - test/onboarding_e2e_live_test.dart
+  - test/onboarding_coach_e2e_live_test.dart
   - test/guest_restrictions_e2e_live_test.dart
   - test/guest_onboarding_e2e_live_test.dart
   - test/guest_reminder_e2e_live_test.dart

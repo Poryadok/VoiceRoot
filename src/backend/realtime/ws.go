@@ -535,11 +535,21 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 					}
 					continue
 				}
-				status := strings.TrimSpace(p.Status)
+				status := strings.TrimSpace(strings.ToLower(p.Status))
 				if status == "" {
 					errD, _ := json.Marshal(map[string]any{
 						"code":    "invalid_presence",
 						"message": "status is required",
+					})
+					if err := write("error", errD); err != nil {
+						return
+					}
+					continue
+				}
+				if !canonicalPresenceStatus(status) {
+					errD, _ := json.Marshal(map[string]any{
+						"code":    "invalid_presence",
+						"message": "invalid status",
 					})
 					if err := write("error", errD); err != nil {
 						return
@@ -564,6 +574,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 					}
 					cancel()
 				}
+				obsStatus, obsCustom := presenceWireForObservers(status, custom)
 				mu.Lock()
 				chatCopy := make([]string, 0, len(chatSubs))
 				for c := range chatSubs {
@@ -574,13 +585,13 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 					dChat, _ := json.Marshal(map[string]any{
 						"chat_id":       c,
 						"profile_id":    claims.ProfileID,
-						"status":        status,
-						"custom_status": custom,
+						"status":        obsStatus,
+						"custom_status": obsCustom,
 					})
 					hub.broadcastPresenceInChatExcept(c, claims.ProfileID, instanceID, connID, dChat)
 					if rf != nil {
 						ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-						if err := rf.PublishPresenceChat(ctx, c, claims.ProfileID, status, custom, connID); err != nil {
+						if err := rf.PublishPresenceChat(ctx, c, claims.ProfileID, obsStatus, obsCustom, connID); err != nil {
 							svcLogger.Warn("ws redis publish presence chat failed", slog.String("error", err.Error()))
 						}
 						cancel()
@@ -608,6 +619,15 @@ func updatePresence(ctx context.Context, presence presenceUpdater, claims voicej
 			slog.String("status", status),
 			slog.String("error", err.Error()),
 		)
+	}
+}
+
+func canonicalPresenceStatus(status string) bool {
+	switch status {
+	case "online", "idle", "dnd", "invisible":
+		return true
+	default:
+		return false
 	}
 }
 

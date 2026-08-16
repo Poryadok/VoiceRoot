@@ -45,6 +45,7 @@ data:
   REALTIME_JWT_AUDIENCE: "voice-client"
   REALTIME_CHAT_GRPC_ADDR: "voice-chat:9090"
   REALTIME_USER_GRPC_ADDR: "voice-user:9090"
+  REALTIME_SOCIAL_GRPC_ADDR: "voice-social:9090"
   SOCIAL_GRPC_ADDR: "voice-social:9090"
   USER_GRPC_ADDR: "voice-user:9090"
   CHAT_GRPC_ADDR: "voice-chat:9090"
