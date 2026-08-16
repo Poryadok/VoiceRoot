@@ -74,7 +74,7 @@
 | `chat.events`          | Chat, Space       | Analytics, Notification, Realtime |
 | `voice.events`         | Voice             | Analytics, Notification, Realtime |
 | `moderation.events`    | Moderation        | Analytics, Notification, User |
-| `subscription.events`  | Subscription      | Analytics, User, Space, File |
+| `subscription.events`  | Subscription      | Analytics, User, Space, File, Notification |
 | `file.events`          | File              | Analytics, Messaging (preview update) |
 | `matchmaking.events`   | Matchmaking       | Analytics, Notification, Voice, Chat |
 | `story.events`         | Story             | Analytics, Notification, Matchmaking |

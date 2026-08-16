@@ -77,7 +77,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 |----|------|--------|-----|
 | TC-MSG-01 | Markdown source + preview strip | `[exists]` | Gateway: `TestComposeMarkdownPreview_live`; Flutter: `markdown_e2e_live_test` |
 | TC-MSG-02 | @user mention → WS + notification | `[exists]` | Flutter: `mentions_e2e_live_test`; Messaging IT: `messaging_mentions_integration_test.go` |
-| TC-MSG-03 | @here / @everyone с правами | `[missing]` | — (спека text-chat + roles) |
+| TC-MSG-03 | @here / @everyone с правами | `[partial]` | Messaging IT: `messaging_mentions_integration_test.go` (HasChatPermission + bare `@everyone` from content); compose/Flutter → WT-INTEGRATION |
 | TC-MSG-04 | Pins list/unpin + WS | `[exists]` | Gateway: `TestComposePins_live`; Flutter: `pins_e2e_live_test` |
 | TC-MSG-05 | Reactions aggregate/remove | `[exists]` | Flutter: `reactions_e2e_live_test`; Messaging IT: `messaging_reactions_integration_test.go` |
 | TC-MSG-06 | DM reply/thread endpoints | `[exists]` | Gateway: `TestComposeThreadsDMReply_live`; Flutter: `threads_e2e_live_test` |
@@ -95,11 +95,11 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | ID | Кейс | Статус | Где |
 |----|------|--------|-----|
 | FW-01 | Forward DM → group с атрибуцией | `[exists]` | Flutter: `forward_messages_e2e_live_test` («forward DM message to group preserves attribution») |
-| FW-02 | Forward в channel | `[missing]` | todo/backend: no channel forward IT |
+| FW-02 | Forward в channel | `[partial]` | Messaging IT: `TestMessagingForwardMessage_toChannelSetsPostedAsChat` (+ send-perm deny); compose → WT-INTEGRATION |
 | FW-03 | Copy as new (без атрибуции) | `[missing]` | — |
-| FW-04 | Privacy forbid forward | `[missing]` | — |
+| FW-04 | Privacy forbid forward | `[missing]` | blocked on WT-PRIV `allow_forward` |
 | FW-05 | Multi-select forward | `[missing]` | — |
-| FW-06 | Forward E2E ciphertext policy | `[missing]` | todo/backend Messaging E2E forward gap |
+| FW-06 | Forward E2E ciphertext policy | `[partial]` | Messaging IT: `TestMessagingForwardMessage_e2eToPlainDenied` / `e2eToE2EDMPreservesFlag` |
 
 ---
 
@@ -249,7 +249,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | SP-08 | Space roles hierarchy / invite perm | `[exists]` | Gateway: `TestComposeSpaceRoles_live`; Flutter: `spaces_roles_e2e_live_test` |
 | SP-09 | Space catalog discovery | `[missing]` | — |
 | SP-10 | Tree update/delete/category/voice RPCs deep IT | `[partial]` | Space IT exists; todo notes thin coverage |
-| SP-11 | Space Pro member-cap after billing | `[partial]` | Gateway: `TestComposeSpaceProBilling_live` (seed/stub path; prod sync gap per todo) |
+| SP-11 | Space Pro member-cap after billing | `[partial]` | Sync S2S+NATS+compose `SPACE_GRPC_ADDR` (`feature/space-pro-sync-grace`); Gateway live still seed — WT-INTEGRATION |
 
 ---
 
@@ -258,7 +258,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | ID | Кейс | Статус | Где |
 |----|------|--------|-----|
 | RL-01 | Custom role create/assign + chat override check API | `[exists]` | Flutter: `custom_roles_e2e_live_test`; Role IT: `roles_custom_integration_test.go` |
-| RL-02 | `TEXT_CHAT_SEND_MESSAGES` deny enforced on SendMessage | `[missing]` | todo: Messaging never calls CheckPermission |
+| RL-02 | `TEXT_CHAT_SEND_MESSAGES` deny enforced on SendMessage | `[partial]` | Messaging IT: `TestMessagingSendMessage_chatOverrideDenySendMessages`; compose/Flutter → WT-INTEGRATION |
 | RL-03 | Voice room `VOICE_JOIN` deny E2E | `[missing]` | todo/backend Role |
 | RL-04 | Verification auto-roles | `[missing]` | unimplemented |
 | RL-05 | `MODERATION_MANAGE_REPORTS` integration | `[missing]` | unimplemented |
@@ -444,8 +444,8 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 |----|------|--------|-----|
 | SUB-01 | Personal premium webhook + upload boundaries | `[exists]` | Gateway: `TestComposeBilling_live`; Flutter: `billing_e2e_live_test` |
 | SUB-02 | Downgrade file limits | `[exists]` | Gateway: `TestComposeSubscriptionDowngradeFileLimits_live` |
-| SUB-03 | Space Pro billing compose | `[partial]` | `TestComposeSpaceProBilling_live` — seed path; todo: no true webhook→cap E2E |
-| SUB-04 | Grace-period notifications D1/D3/D7 | `[missing]` | todo |
+| SUB-03 | Space Pro billing compose | `[partial]` | webhook→`SyncSpaceProSubscription` + NATS consumer; compose join-51st live → WT-INTEGRATION |
+| SUB-04 | Grace-period notifications D1/D3/D7 | `[partial]` | `subscription.grace_reminder` + Notification stub consumer; compose live assert → WT-INTEGRATION |
 | SUB-05 | Real Paddle checkout | `[missing]` | stub URLs (todo Critical) |
 | SUB-06 | Premium cosmetics (banner/GIF/3rd profile) cross-smoke | `[missing]` | todo cross-cutting |
 

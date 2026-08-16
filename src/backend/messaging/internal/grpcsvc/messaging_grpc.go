@@ -186,8 +186,9 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 		}
 	}
 	mentionsRaw := strings.TrimSpace(req.GetMentionsJson())
-	if mentionsRaw == "" {
-		mentionsRaw = "[]"
+	if mentionsRaw == "" || mentionsRaw == "[]" {
+		// Align with text-chat.md: bare @everyone/@here/@uuid in content without mentions_json.
+		mentionsRaw = mentions.EntriesJSONFromContent(content)
 	}
 	var mentionTargets []uuid.UUID
 	mentionsJSON := mentionsRaw
@@ -1035,6 +1036,11 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 		return nil, err
 	}
 	if err := s.checkDMPrivacyForSend(ctx, targetChatID, profileID); err != nil {
+		return nil, err
+	}
+	// TODO(P1.6 FW-04): enforce author allow_forward=false via User privacy S2S after
+	// feature/privacy-allow-forward (WT-PRIV) merges — field not on origin/master yet.
+	if err := s.checkSpaceSendPermission(ctx, targetChatID, profileID); err != nil {
 		return nil, err
 	}
 	if err := s.validateE2ESend(ctx, targetChatID, source.IsE2E); err != nil {

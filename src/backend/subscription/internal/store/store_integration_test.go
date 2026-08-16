@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
 	current_period_end TIMESTAMPTZ NOT NULL,
 	grace_period_end TIMESTAMPTZ,
 	cancelled_at TIMESTAMPTZ,
+	grace_reminders_sent INT[] NOT NULL DEFAULT '{}',
 	created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -40,6 +41,7 @@ CREATE TABLE IF NOT EXISTS space_subscriptions (
 	current_period_start TIMESTAMPTZ NOT NULL,
 	current_period_end TIMESTAMPTZ NOT NULL,
 	grace_period_end TIMESTAMPTZ,
+	grace_reminders_sent INT[] NOT NULL DEFAULT '{}',
 	created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

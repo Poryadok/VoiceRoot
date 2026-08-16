@@ -514,6 +514,7 @@ services:
       PADDLE_WEBHOOK_SECRET: ${PADDLE_WEBHOOK_SECRET:-test-webhook-secret}
       NATS_URL: nats://nats:4222
       ANALYTICS_ID_HASH_KEY: ${ANALYTICS_ID_HASH_KEY:-compose-dev-analytics-hash-key}
+      SPACE_GRPC_ADDR: space:9090
     depends_on:
       postgres:
         condition: service_healthy

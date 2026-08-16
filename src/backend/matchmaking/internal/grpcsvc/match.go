@@ -135,14 +135,22 @@ func (s *MatchmakingGRPC) handleMatchDecline(ctx context.Context, match store.Ma
 		return nil, status.Errorf(codes.Internal, "list proposals: %v", err)
 	}
 
+	// Spec (matchmaking.md §флоу): declining party search is cleared; other parties continue.
 	var ownSession store.SearchSession
 	for _, p := range proposals {
+		if sameDeclineParty(proposal, p) {
+			sess, err := s.cancelDeclinedPartySession(ctx, p)
+			if err != nil {
+				continue
+			}
+			if p.ProfileID == proposal.ProfileID {
+				ownSession = sess
+			}
+			continue
+		}
 		sess, err := s.Sessions.ResetToSearching(ctx, p.SearchSessionID)
 		if err != nil {
 			continue
-		}
-		if p.ProfileID == proposal.ProfileID {
-			ownSession = sess
 		}
 		if s.Queue != nil {
 			crit, err := criteria.Parse(sess.Criteria)
@@ -159,6 +167,26 @@ func (s *MatchmakingGRPC) handleMatchDecline(ctx context.Context, match store.Ma
 		Match:         toProtoMatch(match),
 		SearchSession: toProtoSession(ownSession),
 	}, nil
+}
+
+// sameDeclineParty reports whether other belongs to the decliner's party.
+// Solo proposals (nil party_id) are their own party keyed by profile.
+func sameDeclineParty(decliner, other store.MatchProposal) bool {
+	if decliner.PartyID != nil && other.PartyID != nil {
+		return *decliner.PartyID == *other.PartyID
+	}
+	return other.ProfileID == decliner.ProfileID
+}
+
+func (s *MatchmakingGRPC) cancelDeclinedPartySession(ctx context.Context, p store.MatchProposal) (store.SearchSession, error) {
+	sess, err := s.Sessions.ExpirePendingAccept(ctx, p.SearchSessionID)
+	if err != nil {
+		return store.SearchSession{}, err
+	}
+	if s.Queue != nil {
+		_ = s.Queue.ReleaseLock(ctx, p.ProfileID, p.SearchSessionID)
+	}
+	return sess, nil
 }
 
 func matchHasProfile(match store.Match, profileID uuid.UUID) bool {

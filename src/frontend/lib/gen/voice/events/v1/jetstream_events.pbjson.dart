@@ -1707,6 +1707,15 @@ const SubscriptionStreamEvent$json = {
       '9': 0,
       '10': 'spaceProExpired'
     },
+    {
+      '1': 'grace_reminder',
+      '3': 18,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.GraceReminder',
+      '9': 0,
+      '10': 'graceReminder'
+    },
   ],
   '8': [
     {'1': 'payload'},
@@ -1727,7 +1736,8 @@ final $typed_data.Uint8List subscriptionStreamEventDescriptor = $convert.base64D
     'VudHMudjEuRG93bmdyYWRlSABSCWRvd25ncmFkZRJOChFzcGFjZV9wcm9fc3RhcnRlZBgQIAEo'
     'CzIgLnZvaWNlLmV2ZW50cy52MS5TcGFjZVByb1N0YXJ0ZWRIAFIPc3BhY2VQcm9TdGFydGVkEk'
     '4KEXNwYWNlX3Byb19leHBpcmVkGBEgASgLMiAudm9pY2UuZXZlbnRzLnYxLlNwYWNlUHJvRXhw'
-    'aXJlZEgAUg9zcGFjZVByb0V4cGlyZWRCCQoHcGF5bG9hZA==');
+    'aXJlZEgAUg9zcGFjZVByb0V4cGlyZWQSRwoOZ3JhY2VfcmVtaW5kZXIYEiABKAsyHi52b2ljZS'
+    '5ldmVudHMudjEuR3JhY2VSZW1pbmRlckgAUg1ncmFjZVJlbWluZGVyQgkKB3BheWxvYWQ=');
 
 @$core.Deprecated('Use planStartedDescriptor instead')
 const PlanStarted$json = {
@@ -1856,6 +1866,34 @@ const SpaceProExpired$json = {
 /// Descriptor for `SpaceProExpired`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List spaceProExpiredDescriptor = $convert.base64Decode(
     'Cg9TcGFjZVByb0V4cGlyZWQSGQoIc3BhY2VfaWQYASABKAlSB3NwYWNlSWQ=');
+
+@$core.Deprecated('Use graceReminderDescriptor instead')
+const GraceReminder$json = {
+  '1': 'GraceReminder',
+  '2': [
+    {'1': 'account_id', '3': 1, '4': 1, '5': 9, '10': 'accountId'},
+    {'1': 'plan', '3': 2, '4': 1, '5': 9, '10': 'plan'},
+    {'1': 'day', '3': 3, '4': 1, '5': 5, '10': 'day'},
+    {
+      '1': 'space_id',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'spaceId',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_space_id'},
+  ],
+};
+
+/// Descriptor for `GraceReminder`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List graceReminderDescriptor = $convert.base64Decode(
+    'Cg1HcmFjZVJlbWluZGVyEh0KCmFjY291bnRfaWQYASABKAlSCWFjY291bnRJZBISCgRwbGFuGA'
+    'IgASgJUgRwbGFuEhAKA2RheRgDIAEoBVIDZGF5Eh4KCHNwYWNlX2lkGAQgASgJSABSB3NwYWNl'
+    'SWSIAQFCCwoJX3NwYWNlX2lk');
 
 @$core.Deprecated('Use fileStreamEventDescriptor instead')
 const FileStreamEvent$json = {

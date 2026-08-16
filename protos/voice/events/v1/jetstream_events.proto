@@ -445,6 +445,7 @@ message SubscriptionStreamEvent {
     Downgrade downgrade = 15;
     SpaceProStarted space_pro_started = 16;
     SpaceProExpired space_pro_expired = 17;
+    GraceReminder grace_reminder = 18;
   }
 }
 
@@ -486,6 +487,15 @@ message SpaceProStarted {
 
 message SpaceProExpired {
   string space_id = 1;
+}
+
+// GraceReminder is emitted on days 1, 3, and 7 of a subscription grace period
+// (docs/features/subscription.md).
+message GraceReminder {
+  string account_id = 1;
+  string plan = 2;
+  int32 day = 3; // 1 | 3 | 7
+  optional string space_id = 4; // set for space_pro grace when applicable
 }
 
 // --- file.events ---

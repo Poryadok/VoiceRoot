@@ -199,6 +199,13 @@ func main() {
 					logger.Error("moderation.events consumer exited", slog.Any("error", err))
 				}
 			}()
+			go func() {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				if err := runSubscriptionEventsConsumer(ctx, natsURL, logger); err != nil && logger != nil {
+					logger.Error("subscription.events consumer exited", slog.Any("error", err))
+				}
+			}()
 		}
 
 		lis, err := net.Listen("tcp", grpcListen)

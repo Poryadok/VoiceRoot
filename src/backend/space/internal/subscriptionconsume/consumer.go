@@ -41,6 +41,39 @@ func (a *SpaceStoreEntitlement) FinalizeSpacePro(ctx context.Context, spaceID uu
 	return a.Store.FinalizeSpacePro(ctx, spaceID)
 }
 
+// ApplySubscriptionEvent mirrors Space Pro entitlement events into space_db.
+func ApplySubscriptionEvent(entitlements SpaceEntitlementStore, env *eventsv1.SubscriptionStreamEvent) {
+	if entitlements == nil || env == nil {
+		return
+	}
+	switch p := env.GetPayload().(type) {
+	case *eventsv1.SubscriptionStreamEvent_SpaceProStarted:
+		started := p.SpaceProStarted
+		if started == nil {
+			return
+		}
+		spaceID, err := uuid.Parse(strings.TrimSpace(started.GetSpaceId()))
+		if err != nil {
+			return
+		}
+		purchaserID, err := uuid.Parse(strings.TrimSpace(started.GetPurchaserAccountId()))
+		if err != nil {
+			return
+		}
+		_ = entitlements.UpsertSpaceSubscription(context.Background(), spaceID, purchaserID, "active")
+	case *eventsv1.SubscriptionStreamEvent_SpaceProExpired:
+		expired := p.SpaceProExpired
+		if expired == nil {
+			return
+		}
+		spaceID, err := uuid.Parse(strings.TrimSpace(expired.GetSpaceId()))
+		if err != nil {
+			return
+		}
+		_ = entitlements.FinalizeSpacePro(context.Background(), spaceID)
+	}
+}
+
 // Run starts a durable JetStream consumer that mirrors Space Pro entitlements into space_db.
 func Run(ctx context.Context, natsURL, durable string, entitlements SpaceEntitlementStore) error {
 	if entitlements == nil {
@@ -78,32 +111,7 @@ func Run(ctx context.Context, natsURL, durable string, entitlements SpaceEntitle
 		if err := proto.Unmarshal(msg.Data, &env); err != nil {
 			return
 		}
-		switch p := env.GetPayload().(type) {
-		case *eventsv1.SubscriptionStreamEvent_SpaceProStarted:
-			started := p.SpaceProStarted
-			if started == nil {
-				return
-			}
-			spaceID, err := uuid.Parse(strings.TrimSpace(started.GetSpaceId()))
-			if err != nil {
-				return
-			}
-			purchaserID, err := uuid.Parse(strings.TrimSpace(started.GetPurchaserAccountId()))
-			if err != nil {
-				return
-			}
-			_ = entitlements.UpsertSpaceSubscription(context.Background(), spaceID, purchaserID, "active")
-		case *eventsv1.SubscriptionStreamEvent_SpaceProExpired:
-			expired := p.SpaceProExpired
-			if expired == nil {
-				return
-			}
-			spaceID, err := uuid.Parse(strings.TrimSpace(expired.GetSpaceId()))
-			if err != nil {
-				return
-			}
-			_ = entitlements.FinalizeSpacePro(context.Background(), spaceID)
-		}
+		ApplySubscriptionEvent(entitlements, &env)
 	}
 
 	sub, err := js.Subscribe("subscription.space_pro_*", handler, nats.Durable(durable), nats.BindStream(streamName), nats.DeliverNew())

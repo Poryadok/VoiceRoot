@@ -113,7 +113,8 @@ func Process(
 			if roles == nil {
 				return "", nil, status.Error(codes.Unavailable, "role service not configured")
 			}
-			allowed, rerr := roles.HasSpacePermission(ctx, *meta.SpaceID, senderProfileID, perm)
+			// Prefer chat-scoped check so Role chat_overrides apply (text-chat.md / TC-MSG-03).
+			allowed, rerr := roles.HasChatPermission(ctx, *meta.SpaceID, senderProfileID, meta.ChatID, perm)
 			if rerr != nil {
 				if status.Code(rerr) == codes.Unavailable {
 					return "", nil, status.Error(codes.Unavailable, rerr.Error())

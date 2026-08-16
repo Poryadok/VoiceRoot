@@ -11,4 +11,5 @@ import (
 func TestSharedDurable_IsStableAcrossReplicas(t *testing.T) {
 	require.Equal(t, "notif_msg", consumer.SharedDurable("message"))
 	require.Equal(t, consumer.SharedDurable("message"), consumer.SharedDurable("message"))
+	require.Equal(t, "notif_subscription", consumer.SharedDurable("subscription"))
 }

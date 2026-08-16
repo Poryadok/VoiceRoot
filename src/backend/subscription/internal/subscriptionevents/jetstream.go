@@ -27,6 +27,7 @@ const (
 	subjectPaymentFailed       = "subscription.payment_failed"
 	subjectSpaceProStarted     = "subscription.space_pro_started"
 	subjectSpaceProExpired     = "subscription.space_pro_expired"
+	subjectGraceReminder       = "subscription.grace_reminder"
 )
 
 // Publisher publishes subscription.events domain payloads.
@@ -39,6 +40,7 @@ type Publisher interface {
 	PublishPaymentFailed(ctx context.Context, accountID, provider string) error
 	PublishSpaceProStarted(ctx context.Context, spaceID, purchaserAccountID string) error
 	PublishSpaceProExpired(ctx context.Context, spaceID string) error
+	PublishGraceReminder(ctx context.Context, accountID, plan string, day int32) error
 	Close() error
 }
 
@@ -85,6 +87,7 @@ func subscriptionStreamSubjects() []string {
 		subjectPaymentFailed,
 		subjectSpaceProStarted,
 		subjectSpaceProExpired,
+		subjectGraceReminder,
 	}
 }
 
@@ -215,6 +218,18 @@ func (p *JetStreamPublisher) PublishSpaceProExpired(ctx context.Context, spaceID
 		SpaceProExpired: &eventsv1.SpaceProExpired{SpaceId: spaceID},
 	}
 	return p.publishProto(ctx, subjectSpaceProExpired, env)
+}
+
+func (p *JetStreamPublisher) PublishGraceReminder(ctx context.Context, accountID, plan string, day int32) error {
+	env := newSubscriptionEvent()
+	env.Payload = &eventsv1.SubscriptionStreamEvent_GraceReminder{
+		GraceReminder: &eventsv1.GraceReminder{
+			AccountId: accountID,
+			Plan:      plan,
+			Day:       day,
+		},
+	}
+	return p.publishProto(ctx, subjectGraceReminder, env)
 }
 
 // Close drains the NATS connection.
