@@ -12,8 +12,8 @@ import voice.backend.auth.service.AuthException;
 
 /** S2S verification sync via User Service SetVerification / ClearVerification. */
 public class GrpcUserVerificationSync implements UserVerificationSync, AutoCloseable {
-  private static final Metadata.Key<String> INTERNAL_HEADER =
-      Metadata.Key.of("x-voice-internal", Metadata.ASCII_STRING_MARSHALLER);
+  private static final Metadata.Key<String> INTERNAL_CALLER_HEADER =
+      Metadata.Key.of("x-voice-internal-caller", Metadata.ASCII_STRING_MARSHALLER);
 
   private final ManagedChannel channel;
   private final UserServiceGrpc.UserServiceBlockingStub stub;
@@ -21,7 +21,7 @@ public class GrpcUserVerificationSync implements UserVerificationSync, AutoClose
   public GrpcUserVerificationSync(ManagedChannel channel) {
     this.channel = channel;
     Metadata headers = new Metadata();
-    headers.put(INTERNAL_HEADER, "true");
+    headers.put(INTERNAL_CALLER_HEADER, "auth");
     this.stub =
         UserServiceGrpc.newBlockingStub(channel)
             .withInterceptors(MetadataUtils.newAttachHeadersInterceptor(headers));

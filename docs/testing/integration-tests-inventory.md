@@ -169,8 +169,8 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | ID | Кейс | Статус | Где |
 |----|------|--------|-----|
 | VR-01 | Multi-profile + verified search boost (smoke path) | `[exists]` | Flutter: `profiles_verification_e2e_live_test`; Auth: `ProfilesVerificationIntegrationTest` |
-| VR-02 | Twitch/YouTube OAuth verify end-to-end | `[missing]` | roadmap П.6 |
-| VR-03 | Org DNS TXT verification | `[missing]` | roadmap П.6 |
+| VR-02 | Twitch/YouTube OAuth verify end-to-end | `[partial]` | Auth `ProfilesVerificationIntegrationTest` (Twitch Partner/Affiliate, YouTube YPP, cron clear); User S2S Set/ClearVerification. Compose/Flutter live still open |
+| VR-03 | Org DNS TXT verification | `[partial]` | User IT `TestOrganizationVerification_DNSTxtGrantsBadge`; Gateway org start/check routes. Compose/Flutter live still open |
 | VR-04 | Anti-spoof / badge display | `[missing]` | — |
 
 ---
@@ -389,7 +389,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | SR-02 | In-chat search | `[exists]` | Gateway: `TestComposeSearchInChat_live` |
 | SR-03 | Search unavailable → 503; messaging still works | `[exists]` | `compose_search_degradation_live_test.go` |
 | SR-04 | Shared media filters in search UI | `[missing]` | — |
-| SR-05 | Profile discovery privacy audience | `[missing]` | todo Search ignores viewer privacy |
+| SR-05 | Profile discovery privacy audience | `[exists]` | Search unit: `TestSearchUsers_FiltersByAllowFriendRequestsAudience`; Gateway: `TestComposeSearchPrivacyAudience_live` |
 | SR-06 | Timeout placeholder | `[partial]` | `search_timeout_e2e_live_test` («placeholder») |
 
 ---

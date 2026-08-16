@@ -528,7 +528,7 @@
 - [ ] **[Search] No deletion tombstones — `user_account_deleted`, chat/space delete events not consumed; stale rows remain in projections.** — `src/backend/search/internal/indexer/profile_indexer.go`, `chat_space_indexer.go`, `message_indexer.go`
 - [ ] **[Search] `ProfileSwitched` not indexed — new active profile may be missing from `profile_search_documents` until a separate create/update event.** — `src/backend/search/internal/indexer/profile_indexer.go`; `protos/voice/events/v1/jetstream_events.proto`
 - [ ] **[Search] No search query length limit — User `SearchProfiles` caps at 128 chars; Search gRPC accepts unbounded queries.** — `src/backend/search/internal/grpcsvc/search.go`
-- [ ] **[Search] Privacy audience not enforced on profile discovery — `SearchProfiles` ignores `viewer`; no `privacy_settings` integration (User Service notes same v1 gap, but Search has its own projection).** — `src/backend/search/internal/store/profile_space_search.go`
+- [x] **[Search] Privacy audience on profile discovery** — SearchUsers/SearchGlobal filter by target `allow_friend_requests` via User S2S + Social/Space matcher; bidirectional blocks (`filterProfileHits`). Remaining: User `SearchProfiles` path (`/api/v1/users/search`) still separate.
 
 ### Chat
 

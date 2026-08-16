@@ -10,9 +10,11 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	"voice/backend/pkg/grpcclient"
+	"voice/backend/pkg/privacy"
 	"voice/backend/search/internal/authctx"
 	"voice/backend/search/internal/s2s"
 
@@ -311,4 +313,84 @@ func DialGRPC(addr string) (*grpc.ClientConn, error) {
 		return nil, fmt.Errorf("empty grpc addr")
 	}
 	return grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+}
+
+// UserPrivacy loads allow_friend_requests for profile discovery filtering.
+type UserPrivacy struct {
+	Client userv1.UserServiceClient
+}
+
+func privacyS2SContext(ctx context.Context) context.Context {
+	// Do not forward end-user account metadata: User.GetPrivacySettings ownership
+	// check would deny foreign profiles. Mark as internal S2S instead.
+	return metadata.NewOutgoingContext(ctx, metadata.Pairs("x-voice-internal-caller", "search"))
+}
+
+func (u *UserPrivacy) AllowFriendRequestsAudience(ctx context.Context, profileID uuid.UUID) (privacy.Audience, error) {
+	if u == nil || u.Client == nil {
+		return privacy.EveryoneWithGuests(), nil
+	}
+	resp, err := u.Client.GetPrivacySettings(privacyS2SContext(ctx), &userv1.GetPrivacySettingsRequest{
+		ProfileId: profileID.String(),
+	})
+	if err != nil {
+		return privacy.Audience{}, err
+	}
+	return privacy.FromProto(resp.GetPrivacySettings().GetAllowFriendRequests()), nil
+}
+
+// SocialGraph adapts Social Service friendship RPCs for privacy.Matcher.
+type SocialGraph struct {
+	Client socialv1.SocialServiceClient
+}
+
+func (g *SocialGraph) AreFriends(ctx context.Context, profileA, profileB uuid.UUID) (bool, error) {
+	if g == nil || g.Client == nil {
+		return false, nil
+	}
+	ctx = s2s.ForwardIncomingMetadata(ctx)
+	resp, err := g.Client.AreFriends(ctx, &socialv1.AreFriendsRequest{
+		ProfileIdA: profileA.String(),
+		ProfileIdB: profileB.String(),
+	})
+	if err != nil {
+		return false, err
+	}
+	return resp.GetFriends(), nil
+}
+
+func (g *SocialGraph) AreFriendsOfFriends(ctx context.Context, profileA, profileB uuid.UUID) (bool, error) {
+	if g == nil || g.Client == nil {
+		return false, nil
+	}
+	ctx = s2s.ForwardIncomingMetadata(ctx)
+	resp, err := g.Client.AreFriendsOfFriends(ctx, &socialv1.AreFriendsOfFriendsRequest{
+		ProfileIdA: profileA.String(),
+		ProfileIdB: profileB.String(),
+	})
+	if err != nil {
+		return false, err
+	}
+	return resp.GetFriends(), nil
+}
+
+// SpaceCoMembership adapts Space.AreCoMembers for privacy.Matcher.
+type SpaceCoMembership struct {
+	Client spacev1.SpaceServiceClient
+}
+
+func (s *SpaceCoMembership) AreCoMembers(ctx context.Context, profileA, profileB uuid.UUID, spaceIDs []string) (bool, error) {
+	if s == nil || s.Client == nil {
+		return false, nil
+	}
+	ctx = s2s.ForwardIncomingMetadata(ctx)
+	resp, err := s.Client.AreCoMembers(ctx, &spacev1.AreCoMembersRequest{
+		ProfileIdA: profileA.String(),
+		ProfileIdB: profileB.String(),
+		SpaceIds:   spaceIDs,
+	})
+	if err != nil {
+		return false, err
+	}
+	return resp.GetCoMembers(), nil
 }

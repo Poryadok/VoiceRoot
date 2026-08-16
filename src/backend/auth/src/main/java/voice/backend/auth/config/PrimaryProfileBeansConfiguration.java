@@ -7,20 +7,24 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import voice.backend.auth.lifecycle.VerificationStatusRefresh;
 import voice.backend.auth.repository.AccountRepository;
+import voice.backend.auth.repository.InMemoryLinkedIdentityRepository;
+import voice.backend.auth.repository.JdbcLinkedIdentityRepository;
+import voice.backend.auth.repository.LinkedIdentityRepository;
+import voice.backend.auth.service.LinkedAccountsService;
 import voice.backend.auth.userdb.InMemoryPhoneHashResolver;
 import voice.backend.auth.userdb.InMemoryPrimaryProfileProvisioner;
 import voice.backend.auth.userdb.JdbcPhoneHashResolver;
 import voice.backend.auth.userdb.JdbcPrimaryProfileProvisioner;
 import voice.backend.auth.userdb.JdbcProfileSwitchValidator;
 import voice.backend.auth.userdb.JdbcUserVerificationSync;
-import voice.backend.auth.userdb.NoOpUserVerificationSync;
-import voice.backend.auth.userdb.UserVerificationSync;
 import voice.backend.auth.userdb.NoOpProfileSwitchValidator;
+import voice.backend.auth.userdb.NoOpUserVerificationSync;
 import voice.backend.auth.userdb.PhoneHashResolver;
 import voice.backend.auth.userdb.PrimaryProfileProvisioner;
 import voice.backend.auth.userdb.ProfileSwitchValidator;
-import voice.backend.auth.service.LinkedAccountsService;
+import voice.backend.auth.userdb.UserVerificationSync;
 
 @Configuration
 public class PrimaryProfileBeansConfiguration {
@@ -84,8 +88,29 @@ public class PrimaryProfileBeansConfiguration {
   }
 
   @Bean
+  LinkedIdentityRepository linkedIdentityRepository(
+      AuthProperties props,
+      @Autowired(required = false) NamedParameterJdbcTemplate authJdbc) {
+    if (props.getPersistence() == AuthProperties.PersistenceMode.MEMORY) {
+      return new InMemoryLinkedIdentityRepository();
+    }
+    if (authJdbc == null) {
+      throw new IllegalStateException("authJdbc required for linked identities");
+    }
+    return new JdbcLinkedIdentityRepository(authJdbc);
+  }
+
+  @Bean
   LinkedAccountsService linkedAccountsService(
-      UserVerificationSync verificationSync, AuthProperties properties) {
-    return new LinkedAccountsService(verificationSync, properties.getOauth().getTwitchApiBaseUrl());
+      UserVerificationSync verificationSync,
+      LinkedIdentityRepository linkedIdentityRepository,
+      AuthProperties properties) {
+    return new LinkedAccountsService(
+        verificationSync, linkedIdentityRepository, properties.getOauth());
+  }
+
+  @Bean
+  VerificationStatusRefresh verificationStatusRefresh(LinkedAccountsService linkedAccountsService) {
+    return new VerificationStatusRefresh(linkedAccountsService);
   }
 }
