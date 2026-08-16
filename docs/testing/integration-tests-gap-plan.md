@@ -40,7 +40,7 @@
 | P1.8 | **product done** | `SendMessage`/`ForwardMessage` → `HasChatPermission(TEXT_CHAT_SEND_MESSAGES)` (Messaging IT); compose/Flutter → WT-INTEGRATION |
 | P1.9 | **product done** | `@everyone`/`@here` + bare-content parse gated via `HasChatPermission` (Messaging ITs); compose → WT-INTEGRATION |
 | P1.10 | **product done** | Voice `ROLE_GRPC_ADDR` + `EnsureVoiceJoin` + room-override IT; compose/Flutter VOICE_JOIN deny → WT-INTEGRATION |
-| P1.11 | **product done** | party-aware `handleMatchDecline` + cross-party ITs; compose → WT-INTEGRATION |
+| P1.11 | **partial** | `handleMatchDecline` party-aware + grpcsvc IT (PR #4); compose live → WT-INTEGRATION |
 | P1.14 | **product done** | compose `SPACE_GRPC_ADDR` + S2S/NATS Space Pro sync; member-cap without Seed; compose live join-51st → WT-INTEGRATION |
 | P1.15 | **product done** | `subscription.grace_reminder` D1/D3/D7 + Notification consumer stub; compose assert → WT-INTEGRATION |
 | P2.* / P3.* | **deferred** | roadmap / soft-launch+ |
@@ -103,7 +103,7 @@ Effort: **S** ≤0.5d · **M** 1–2d · **L** 3–5d · **XL** >1w (инфра/
 
 | # | Кейс | Слой | IDs | Effort | Status | Notes |
 |---|------|------|-----|--------|--------|-------|
-| P1.11 | Cross-party decline: acceptors continue | B | MM-07 | M | **product done** | party-aware decline ITs; compose → WT-INTEGRATION |
+| P1.11 | Cross-party decline: acceptors continue | B | MM-07 | M | **partial** | party-aware decline ITs (PR #4); compose live → WT-INTEGRATION |
 | P1.12 | Flutter `matchmaking_rating_e2e_live_test` + skip rating | C | MM-05 | M | **done** | compose rating exists |
 | P1.13 | MM ban live compose | B | MM-06 | S | **done** | `TestComposeMatchmakingBan_live` |
 

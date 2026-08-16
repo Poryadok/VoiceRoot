@@ -275,7 +275,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | MM-04 | History list completed squad | `[exists]` | Flutter: `matchmaking_history_e2e_live_test`; store IT history |
 | MM-05 | Rate teammates (1–5) | `[exists]` | Gateway: `TestComposeMatchmakingRating_live`; Flutter: `matchmaking_rating_e2e_live_test` (rate + skip) |
 | MM-06 | MM ban from matchmaking | `[exists]` | Gateway: `TestComposeMatchmakingBan_live`; store `bans_integration_test.go` |
-| MM-07 | Cross-party decline semantics | `[missing]` | todo: decline resets all incorrectly |
+| MM-07 | Cross-party decline semantics | `[partial]` | Matchmaking IT: `TestRespondToMatch_ForeignPartyDecline_*` / `OwnPartyDecline_*`; compose live → WT-INTEGRATION |
 | MM-08 | Space-scoped matchmaking | `[missing]` | roadmap П.1 |
 | MM-09 | Role-diversity 10-stack match | `[missing]` | todo: criteria broken |
 | MM-10 | Device register for match_found FCM | `[exists]` | Flutter: `matchmaking_fcm_e2e_live_test` |

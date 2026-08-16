@@ -223,7 +223,7 @@
 ### Matchmaking
 
 
-- [ ] **[Matchmaking] Decline semantics vs spec** — `handleMatchDecline` abandons the proposal and `ResetToSearching` + re-enqueues **all** participants (`grpcsvc/match.go`). Spec (`docs/features/matchmaking.md`): own-party decline resets own party; foreign-party decline lets acceptors continue; decliner should not silently keep searching. No cross-party decline test (`grpcsvc/match_test.go` only covers solo-duo decline).
+- [x] **[Matchmaking] Decline semantics vs spec** — `handleMatchDecline` party-aware (declining party cancelled, others continue searching); cross-party IT in `grpcsvc/match_test.go` (PR #4). Compose live still WT-INTEGRATION.
 - [ ] **[Matchmaking] Peer-ban check fail-open** — Matcher logs and continues on `IsPairBanned` DB errors (`matcher/worker.go`), allowing banned pairs to match under store outage.
 - [ ] **[Matchmaking] MM rating privacy off in compose** — `main.go` wires `RatingPrivacy` only when `USER_GRPC_ADDR` / `SOCIAL_GRPC_ADDR` / `SPACE_GRPC_ADDR` are set; `docker-compose.yml` matchmaking service omits these (unlike k8s `envFrom` on `deploy/staging/configmap-app.yaml`). Local stack exposes ratings without privacy checks.
 - [ ] **[Matchmaking] Match squad not ephemeral** — Squad creates a normal group chat + group voice (`squad/grpc_clients.go`). `CompleteMatch` only updates MM DB (`grpcsvc/rating.go`); no Chat/Voice teardown. Contradicts “auto-delete when all leave” (`docs/features/matchmaking.md`).
