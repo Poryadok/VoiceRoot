@@ -55,9 +55,12 @@ service VoiceService {
   rpc StopScreenShare(StopScreenShareRequest) returns (StopScreenShareResponse);
 
   rpc SetCommanderMode(SetCommanderModeRequest) returns (SetCommanderModeResponse);
+  rpc SetBroadcasting(SetBroadcastingRequest) returns (SetBroadcastingResponse);
 
   rpc RaiseHand(RaiseHandRequest) returns (RaiseHandResponse);
   rpc LowerHand(LowerHandRequest) returns (LowerHandResponse);
+  rpc GrantFloor(GrantFloorRequest) returns (GrantFloorResponse);
+  rpc RevokeFloor(RevokeFloorRequest) returns (RevokeFloorResponse);
 }
 
 message StartCallRequest {
@@ -151,6 +154,10 @@ message VoiceParticipantState {
   bool is_screen_sharing = 5;
   bool is_commander = 6;
   bool hand_raised = 7;
+  // Organizer granted speak floor (raise-hand / raid-school mode).
+  bool has_floor = 8;
+  // Commander is holding "start broadcast" — clients duck other tracks.
+  bool is_broadcasting = 9;
 }
 
 message GetActiveCallRequest {}
@@ -173,12 +180,27 @@ message SetCommanderModeRequest {
   bool enabled = 2;
 }
 
+message SetBroadcastingRequest {
+  string room_id = 1;
+  bool enabled = 2;
+}
+
 message RaiseHandRequest {
   string room_id = 1;
 }
 
 message LowerHandRequest {
   string room_id = 1;
+}
+
+message GrantFloorRequest {
+  string room_id = 1;
+  string profile_id = 2;
+}
+
+message RevokeFloorRequest {
+  string room_id = 1;
+  string profile_id = 2;
 }
 
 message StartCallResponse {
@@ -222,5 +244,8 @@ message StartScreenShareResponse {
 }
 message StopScreenShareResponse {}
 message SetCommanderModeResponse {}
+message SetBroadcastingResponse {}
 message RaiseHandResponse {}
 message LowerHandResponse {}
+message GrantFloorResponse {}
+message RevokeFloorResponse {}

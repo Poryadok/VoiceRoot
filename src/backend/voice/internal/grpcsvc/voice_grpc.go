@@ -320,6 +320,8 @@ func (s *VoiceGRPC) GetVoiceStates(ctx context.Context, req *callsv1.GetVoiceSta
 			IsScreenSharing: state.IsScreenSharing,
 			IsCommander:     state.IsCommander,
 			HandRaised:      state.HandRaised,
+			HasFloor:        state.HasFloor,
+			IsBroadcasting:  state.IsBroadcasting,
 		})
 	}
 	return &callsv1.GetVoiceStatesResponse{Participants: participants}, nil
@@ -419,6 +421,8 @@ func storeErr(err error) error {
 		return status.Error(codes.ResourceExhausted, "screen share limit reached")
 	case errors.Is(err, voicestore.ErrNotScreenSharing):
 		return status.Error(codes.FailedPrecondition, "not screen sharing")
+	case errors.Is(err, ErrMuteOthersDenied):
+		return status.Error(codes.PermissionDenied, "organizer floor control required")
 	default:
 		return status.Error(codes.Internal, err.Error())
 	}
@@ -621,12 +625,16 @@ func (s *VoiceGRPC) publishState(ctx context.Context, call voicestore.Call, stat
 		return
 	}
 	if err := s.Events.PublishVoiceStateChanged(ctx, &eventsv1.VoiceStateChanged{
-		RoomId:     call.RoomID,
-		ProfileId:  state.ProfileID,
-		IsMuted:    &state.IsMuted,
-		IsDeafened: &state.IsDeafened,
-		IsVideoOn:  &state.IsVideoOn,
-		ProfileIds: call.ProfileIDs(),
+		RoomId:         call.RoomID,
+		ProfileId:      state.ProfileID,
+		IsMuted:        &state.IsMuted,
+		IsDeafened:     &state.IsDeafened,
+		IsVideoOn:      &state.IsVideoOn,
+		ProfileIds:     call.ProfileIDs(),
+		IsCommander:    &state.IsCommander,
+		HandRaised:     &state.HandRaised,
+		HasFloor:       &state.HasFloor,
+		IsBroadcasting: &state.IsBroadcasting,
 	}); err != nil {
 		s.logPublishError(ctx, "voice.state_changed", err, slog.String("room_id", call.RoomID))
 	}

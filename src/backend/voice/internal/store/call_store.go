@@ -40,6 +40,8 @@ type ParticipantState struct {
 	IsScreenSharing bool   `json:"is_screen_sharing"`
 	IsCommander     bool   `json:"is_commander"`
 	HandRaised      bool   `json:"hand_raised"`
+	HasFloor        bool   `json:"has_floor"`
+	IsBroadcasting  bool   `json:"is_broadcasting"`
 }
 
 type Call struct {
@@ -105,11 +107,13 @@ func (c Call) IsActiveForProfile(profileID string) bool {
 }
 
 type VoiceStatePatch struct {
-	IsMuted     *bool
-	IsDeafened  *bool
-	IsVideoOn   *bool
-	IsCommander *bool
-	HandRaised  *bool
+	IsMuted         *bool
+	IsDeafened      *bool
+	IsVideoOn       *bool
+	IsCommander     *bool
+	HandRaised      *bool
+	HasFloor        *bool
+	IsBroadcasting  *bool
 }
 
 type CallStore interface {
@@ -296,16 +300,25 @@ func (s *MemoryCallStore) UpdateVoiceState(_ context.Context, roomID, profileID 
 	if patch.IsVideoOn != nil {
 		state.IsVideoOn = *patch.IsVideoOn
 	}
-	if patch.IsCommander != nil {
-		state.IsCommander = *patch.IsCommander
+		if patch.IsCommander != nil {
+			state.IsCommander = *patch.IsCommander
+			if !*patch.IsCommander {
+				state.IsBroadcasting = false
+			}
+		}
+		if patch.HandRaised != nil {
+			state.HandRaised = *patch.HandRaised
+		}
+		if patch.HasFloor != nil {
+			state.HasFloor = *patch.HasFloor
+		}
+		if patch.IsBroadcasting != nil {
+			state.IsBroadcasting = *patch.IsBroadcasting
+		}
+		call.States[profileID] = state
+		s.calls[roomID] = call
+		return call, state, nil
 	}
-	if patch.HandRaised != nil {
-		state.HandRaised = *patch.HandRaised
-	}
-	call.States[profileID] = state
-	s.calls[roomID] = call
-	return call, state, nil
-}
 
 func (s *MemoryCallStore) ListExpiredRinging(_ context.Context, now time.Time) ([]Call, error) {
 	s.mu.Lock()

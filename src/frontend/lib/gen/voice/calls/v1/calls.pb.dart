@@ -1147,6 +1147,8 @@ class VoiceParticipantState extends $pb.GeneratedMessage {
     $core.bool? isScreenSharing,
     $core.bool? isCommander,
     $core.bool? handRaised,
+    $core.bool? hasFloor,
+    $core.bool? isBroadcasting,
   }) {
     final result = create();
     if (profileId != null) result.profileId = profileId;
@@ -1156,6 +1158,8 @@ class VoiceParticipantState extends $pb.GeneratedMessage {
     if (isScreenSharing != null) result.isScreenSharing = isScreenSharing;
     if (isCommander != null) result.isCommander = isCommander;
     if (handRaised != null) result.handRaised = handRaised;
+    if (hasFloor != null) result.hasFloor = hasFloor;
+    if (isBroadcasting != null) result.isBroadcasting = isBroadcasting;
     return result;
   }
 
@@ -1179,6 +1183,8 @@ class VoiceParticipantState extends $pb.GeneratedMessage {
     ..aOB(5, _omitFieldNames ? '' : 'isScreenSharing')
     ..aOB(6, _omitFieldNames ? '' : 'isCommander')
     ..aOB(7, _omitFieldNames ? '' : 'handRaised')
+    ..aOB(8, _omitFieldNames ? '' : 'hasFloor')
+    ..aOB(9, _omitFieldNames ? '' : 'isBroadcasting')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1263,6 +1269,26 @@ class VoiceParticipantState extends $pb.GeneratedMessage {
   $core.bool hasHandRaised() => $_has(6);
   @$pb.TagNumber(7)
   void clearHandRaised() => $_clearField(7);
+
+  /// Organizer granted speak floor (raise-hand / raid-school mode).
+  @$pb.TagNumber(8)
+  $core.bool get hasFloor => $_getBF(7);
+  @$pb.TagNumber(8)
+  set hasFloor($core.bool value) => $_setBool(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasHasFloor() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearHasFloor() => $_clearField(8);
+
+  /// Commander is holding "start broadcast" — clients duck other tracks.
+  @$pb.TagNumber(9)
+  $core.bool get isBroadcasting => $_getBF(8);
+  @$pb.TagNumber(9)
+  set isBroadcasting($core.bool value) => $_setBool(8, value);
+  @$pb.TagNumber(9)
+  $core.bool hasIsBroadcasting() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearIsBroadcasting() => $_clearField(9);
 }
 
 class GetActiveCallRequest extends $pb.GeneratedMessage {
@@ -1546,6 +1572,73 @@ class SetCommanderModeRequest extends $pb.GeneratedMessage {
   void clearEnabled() => $_clearField(2);
 }
 
+class SetBroadcastingRequest extends $pb.GeneratedMessage {
+  factory SetBroadcastingRequest({
+    $core.String? roomId,
+    $core.bool? enabled,
+  }) {
+    final result = create();
+    if (roomId != null) result.roomId = roomId;
+    if (enabled != null) result.enabled = enabled;
+    return result;
+  }
+
+  SetBroadcastingRequest._();
+
+  factory SetBroadcastingRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SetBroadcastingRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SetBroadcastingRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.calls.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'roomId')
+    ..aOB(2, _omitFieldNames ? '' : 'enabled')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetBroadcastingRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetBroadcastingRequest copyWith(
+          void Function(SetBroadcastingRequest) updates) =>
+      super.copyWith((message) => updates(message as SetBroadcastingRequest))
+          as SetBroadcastingRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SetBroadcastingRequest create() => SetBroadcastingRequest._();
+  @$core.override
+  SetBroadcastingRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SetBroadcastingRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SetBroadcastingRequest>(create);
+  static SetBroadcastingRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get roomId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set roomId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasRoomId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearRoomId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.bool get enabled => $_getBF(1);
+  @$pb.TagNumber(2)
+  set enabled($core.bool value) => $_setBool(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasEnabled() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearEnabled() => $_clearField(2);
+}
+
 class RaiseHandRequest extends $pb.GeneratedMessage {
   factory RaiseHandRequest({
     $core.String? roomId,
@@ -1652,6 +1745,138 @@ class LowerHandRequest extends $pb.GeneratedMessage {
   $core.bool hasRoomId() => $_has(0);
   @$pb.TagNumber(1)
   void clearRoomId() => $_clearField(1);
+}
+
+class GrantFloorRequest extends $pb.GeneratedMessage {
+  factory GrantFloorRequest({
+    $core.String? roomId,
+    $core.String? profileId,
+  }) {
+    final result = create();
+    if (roomId != null) result.roomId = roomId;
+    if (profileId != null) result.profileId = profileId;
+    return result;
+  }
+
+  GrantFloorRequest._();
+
+  factory GrantFloorRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GrantFloorRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GrantFloorRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.calls.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'roomId')
+    ..aOS(2, _omitFieldNames ? '' : 'profileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GrantFloorRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GrantFloorRequest copyWith(void Function(GrantFloorRequest) updates) =>
+      super.copyWith((message) => updates(message as GrantFloorRequest))
+          as GrantFloorRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GrantFloorRequest create() => GrantFloorRequest._();
+  @$core.override
+  GrantFloorRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GrantFloorRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GrantFloorRequest>(create);
+  static GrantFloorRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get roomId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set roomId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasRoomId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearRoomId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get profileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set profileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearProfileId() => $_clearField(2);
+}
+
+class RevokeFloorRequest extends $pb.GeneratedMessage {
+  factory RevokeFloorRequest({
+    $core.String? roomId,
+    $core.String? profileId,
+  }) {
+    final result = create();
+    if (roomId != null) result.roomId = roomId;
+    if (profileId != null) result.profileId = profileId;
+    return result;
+  }
+
+  RevokeFloorRequest._();
+
+  factory RevokeFloorRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory RevokeFloorRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'RevokeFloorRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.calls.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'roomId')
+    ..aOS(2, _omitFieldNames ? '' : 'profileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RevokeFloorRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RevokeFloorRequest copyWith(void Function(RevokeFloorRequest) updates) =>
+      super.copyWith((message) => updates(message as RevokeFloorRequest))
+          as RevokeFloorRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static RevokeFloorRequest create() => RevokeFloorRequest._();
+  @$core.override
+  RevokeFloorRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static RevokeFloorRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<RevokeFloorRequest>(create);
+  static RevokeFloorRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get roomId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set roomId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasRoomId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearRoomId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get profileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set profileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearProfileId() => $_clearField(2);
 }
 
 class StartCallResponse extends $pb.GeneratedMessage {
@@ -2480,6 +2705,45 @@ class SetCommanderModeResponse extends $pb.GeneratedMessage {
   static SetCommanderModeResponse? _defaultInstance;
 }
 
+class SetBroadcastingResponse extends $pb.GeneratedMessage {
+  factory SetBroadcastingResponse() => create();
+
+  SetBroadcastingResponse._();
+
+  factory SetBroadcastingResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SetBroadcastingResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SetBroadcastingResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.calls.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetBroadcastingResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetBroadcastingResponse copyWith(
+          void Function(SetBroadcastingResponse) updates) =>
+      super.copyWith((message) => updates(message as SetBroadcastingResponse))
+          as SetBroadcastingResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SetBroadcastingResponse create() => SetBroadcastingResponse._();
+  @$core.override
+  SetBroadcastingResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SetBroadcastingResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SetBroadcastingResponse>(create);
+  static SetBroadcastingResponse? _defaultInstance;
+}
+
 class RaiseHandResponse extends $pb.GeneratedMessage {
   factory RaiseHandResponse() => create();
 
@@ -2554,6 +2818,82 @@ class LowerHandResponse extends $pb.GeneratedMessage {
   static LowerHandResponse getDefault() => _defaultInstance ??=
       $pb.GeneratedMessage.$_defaultFor<LowerHandResponse>(create);
   static LowerHandResponse? _defaultInstance;
+}
+
+class GrantFloorResponse extends $pb.GeneratedMessage {
+  factory GrantFloorResponse() => create();
+
+  GrantFloorResponse._();
+
+  factory GrantFloorResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GrantFloorResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GrantFloorResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.calls.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GrantFloorResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GrantFloorResponse copyWith(void Function(GrantFloorResponse) updates) =>
+      super.copyWith((message) => updates(message as GrantFloorResponse))
+          as GrantFloorResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GrantFloorResponse create() => GrantFloorResponse._();
+  @$core.override
+  GrantFloorResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GrantFloorResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GrantFloorResponse>(create);
+  static GrantFloorResponse? _defaultInstance;
+}
+
+class RevokeFloorResponse extends $pb.GeneratedMessage {
+  factory RevokeFloorResponse() => create();
+
+  RevokeFloorResponse._();
+
+  factory RevokeFloorResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory RevokeFloorResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'RevokeFloorResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.calls.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RevokeFloorResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RevokeFloorResponse copyWith(void Function(RevokeFloorResponse) updates) =>
+      super.copyWith((message) => updates(message as RevokeFloorResponse))
+          as RevokeFloorResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static RevokeFloorResponse create() => RevokeFloorResponse._();
+  @$core.override
+  RevokeFloorResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static RevokeFloorResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<RevokeFloorResponse>(create);
+  static RevokeFloorResponse? _defaultInstance;
 }
 
 const $core.bool _omitFieldNames =

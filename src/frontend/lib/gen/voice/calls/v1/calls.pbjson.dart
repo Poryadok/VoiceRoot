@@ -497,6 +497,8 @@ const VoiceParticipantState$json = {
     {'1': 'is_screen_sharing', '3': 5, '4': 1, '5': 8, '10': 'isScreenSharing'},
     {'1': 'is_commander', '3': 6, '4': 1, '5': 8, '10': 'isCommander'},
     {'1': 'hand_raised', '3': 7, '4': 1, '5': 8, '10': 'handRaised'},
+    {'1': 'has_floor', '3': 8, '4': 1, '5': 8, '10': 'hasFloor'},
+    {'1': 'is_broadcasting', '3': 9, '4': 1, '5': 8, '10': 'isBroadcasting'},
   ],
 };
 
@@ -506,7 +508,8 @@ final $typed_data.Uint8List voiceParticipantStateDescriptor = $convert.base64Dec
     'kKCGlzX211dGVkGAIgASgIUgdpc011dGVkEh8KC2lzX2RlYWZlbmVkGAMgASgIUgppc0RlYWZl'
     'bmVkEh4KC2lzX3ZpZGVvX29uGAQgASgIUglpc1ZpZGVvT24SKgoRaXNfc2NyZWVuX3NoYXJpbm'
     'cYBSABKAhSD2lzU2NyZWVuU2hhcmluZxIhCgxpc19jb21tYW5kZXIYBiABKAhSC2lzQ29tbWFu'
-    'ZGVyEh8KC2hhbmRfcmFpc2VkGAcgASgIUgpoYW5kUmFpc2Vk');
+    'ZGVyEh8KC2hhbmRfcmFpc2VkGAcgASgIUgpoYW5kUmFpc2VkEhsKCWhhc19mbG9vchgIIAEoCF'
+    'IIaGFzRmxvb3ISJwoPaXNfYnJvYWRjYXN0aW5nGAkgASgIUg5pc0Jyb2FkY2FzdGluZw==');
 
 @$core.Deprecated('Use getActiveCallRequestDescriptor instead')
 const GetActiveCallRequest$json = {
@@ -584,6 +587,21 @@ final $typed_data.Uint8List setCommanderModeRequestDescriptor =
         'ChdTZXRDb21tYW5kZXJNb2RlUmVxdWVzdBIXCgdyb29tX2lkGAEgASgJUgZyb29tSWQSGAoHZW'
         '5hYmxlZBgCIAEoCFIHZW5hYmxlZA==');
 
+@$core.Deprecated('Use setBroadcastingRequestDescriptor instead')
+const SetBroadcastingRequest$json = {
+  '1': 'SetBroadcastingRequest',
+  '2': [
+    {'1': 'room_id', '3': 1, '4': 1, '5': 9, '10': 'roomId'},
+    {'1': 'enabled', '3': 2, '4': 1, '5': 8, '10': 'enabled'},
+  ],
+};
+
+/// Descriptor for `SetBroadcastingRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List setBroadcastingRequestDescriptor =
+    $convert.base64Decode(
+        'ChZTZXRCcm9hZGNhc3RpbmdSZXF1ZXN0EhcKB3Jvb21faWQYASABKAlSBnJvb21JZBIYCgdlbm'
+        'FibGVkGAIgASgIUgdlbmFibGVk');
+
 @$core.Deprecated('Use raiseHandRequestDescriptor instead')
 const RaiseHandRequest$json = {
   '1': 'RaiseHandRequest',
@@ -607,6 +625,34 @@ const LowerHandRequest$json = {
 /// Descriptor for `LowerHandRequest`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List lowerHandRequestDescriptor = $convert.base64Decode(
     'ChBMb3dlckhhbmRSZXF1ZXN0EhcKB3Jvb21faWQYASABKAlSBnJvb21JZA==');
+
+@$core.Deprecated('Use grantFloorRequestDescriptor instead')
+const GrantFloorRequest$json = {
+  '1': 'GrantFloorRequest',
+  '2': [
+    {'1': 'room_id', '3': 1, '4': 1, '5': 9, '10': 'roomId'},
+    {'1': 'profile_id', '3': 2, '4': 1, '5': 9, '10': 'profileId'},
+  ],
+};
+
+/// Descriptor for `GrantFloorRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List grantFloorRequestDescriptor = $convert.base64Decode(
+    'ChFHcmFudEZsb29yUmVxdWVzdBIXCgdyb29tX2lkGAEgASgJUgZyb29tSWQSHQoKcHJvZmlsZV'
+    '9pZBgCIAEoCVIJcHJvZmlsZUlk');
+
+@$core.Deprecated('Use revokeFloorRequestDescriptor instead')
+const RevokeFloorRequest$json = {
+  '1': 'RevokeFloorRequest',
+  '2': [
+    {'1': 'room_id', '3': 1, '4': 1, '5': 9, '10': 'roomId'},
+    {'1': 'profile_id', '3': 2, '4': 1, '5': 9, '10': 'profileId'},
+  ],
+};
+
+/// Descriptor for `RevokeFloorRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List revokeFloorRequestDescriptor = $convert.base64Decode(
+    'ChJSZXZva2VGbG9vclJlcXVlc3QSFwoHcm9vbV9pZBgBIAEoCVIGcm9vbUlkEh0KCnByb2ZpbG'
+    'VfaWQYAiABKAlSCXByb2ZpbGVJZA==');
 
 @$core.Deprecated('Use startCallResponseDescriptor instead')
 const StartCallResponse$json = {
@@ -868,6 +914,15 @@ const SetCommanderModeResponse$json = {
 final $typed_data.Uint8List setCommanderModeResponseDescriptor =
     $convert.base64Decode('ChhTZXRDb21tYW5kZXJNb2RlUmVzcG9uc2U=');
 
+@$core.Deprecated('Use setBroadcastingResponseDescriptor instead')
+const SetBroadcastingResponse$json = {
+  '1': 'SetBroadcastingResponse',
+};
+
+/// Descriptor for `SetBroadcastingResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List setBroadcastingResponseDescriptor =
+    $convert.base64Decode('ChdTZXRCcm9hZGNhc3RpbmdSZXNwb25zZQ==');
+
 @$core.Deprecated('Use raiseHandResponseDescriptor instead')
 const RaiseHandResponse$json = {
   '1': 'RaiseHandResponse',
@@ -885,3 +940,21 @@ const LowerHandResponse$json = {
 /// Descriptor for `LowerHandResponse`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List lowerHandResponseDescriptor =
     $convert.base64Decode('ChFMb3dlckhhbmRSZXNwb25zZQ==');
+
+@$core.Deprecated('Use grantFloorResponseDescriptor instead')
+const GrantFloorResponse$json = {
+  '1': 'GrantFloorResponse',
+};
+
+/// Descriptor for `GrantFloorResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List grantFloorResponseDescriptor =
+    $convert.base64Decode('ChJHcmFudEZsb29yUmVzcG9uc2U=');
+
+@$core.Deprecated('Use revokeFloorResponseDescriptor instead')
+const RevokeFloorResponse$json = {
+  '1': 'RevokeFloorResponse',
+};
+
+/// Descriptor for `RevokeFloorResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List revokeFloorResponseDescriptor =
+    $convert.base64Decode('ChNSZXZva2VGbG9vclJlc3BvbnNl');
