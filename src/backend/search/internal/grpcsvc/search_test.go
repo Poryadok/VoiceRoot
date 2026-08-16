@@ -15,6 +15,8 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
+	"voice/backend/pkg/privacy"
+
 	commonv1 "voice.app/voice/common/v1"
 	searchv1 "voice.app/voice/search/v1"
 
@@ -312,6 +314,127 @@ func TestSearchGlobal_ExcludesReverseBlockedUsers(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, []string{visibleProfile.String()}, resp.GetGlobalSearchResults().GetProfileIds())
+}
+
+type stubDiscoverability struct {
+	audienceByProfile map[uuid.UUID]privacy.Audience
+	friends           map[[2]uuid.UUID]bool
+}
+
+func (s *stubDiscoverability) AllowFriendRequestsAudience(_ context.Context, profileID uuid.UUID) (privacy.Audience, error) {
+	if s.audienceByProfile == nil {
+		return privacy.EveryoneWithGuests(), nil
+	}
+	if a, ok := s.audienceByProfile[profileID]; ok {
+		return a, nil
+	}
+	return privacy.EveryoneWithGuests(), nil
+}
+
+func (s *stubDiscoverability) AreFriends(_ context.Context, a, b uuid.UUID) (bool, error) {
+	if s.friends == nil {
+		return false, nil
+	}
+	if s.friends[[2]uuid.UUID{a, b}] || s.friends[[2]uuid.UUID{b, a}] {
+		return true, nil
+	}
+	return false, nil
+}
+
+func (s *stubDiscoverability) AreFriendsOfFriends(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	return false, nil
+}
+
+func (s *stubDiscoverability) AreCoMembers(context.Context, uuid.UUID, uuid.UUID, []string) (bool, error) {
+	return false, nil
+}
+
+func TestSearchUsers_FiltersByAllowFriendRequestsAudience(t *testing.T) {
+	t.Parallel()
+	viewer := uuid.New()
+	friendTarget := uuid.New()
+	strangerTarget := uuid.New()
+	nobodyTarget := uuid.New()
+	profiles := &stubProfileSearch{
+		hits: []ProfileSearchHit{
+			{ProfileID: friendTarget, AccountID: uuid.New()},
+			{ProfileID: strangerTarget, AccountID: uuid.New()},
+			{ProfileID: nobodyTarget, AccountID: uuid.New()},
+		},
+	}
+	disc := &stubDiscoverability{
+		audienceByProfile: map[uuid.UUID]privacy.Audience{
+			friendTarget:    privacy.FriendsOnly(),
+			strangerTarget:  privacy.FriendsOnly(),
+			nobodyTarget:    privacy.Nobody(),
+		},
+		friends: map[[2]uuid.UUID]bool{
+			{viewer, friendTarget}: true,
+		},
+	}
+	client := startSearchGRPCTestServer(t, &SearchGRPC{
+		Profiles:        profiles,
+		Discoverability: disc,
+		Social:          disc,
+		SpaceMembers:    disc,
+	})
+	resp, err := client.SearchUsers(ctxWithProfile(viewer), &searchv1.SearchUsersRequest{Query: "alice"})
+	require.NoError(t, err)
+	require.Equal(t, []string{friendTarget.String()}, resp.GetUserSearchResults().GetProfileIds())
+}
+
+func TestSearchGlobal_FiltersByAllowFriendRequestsAudience(t *testing.T) {
+	t.Parallel()
+	viewer := uuid.New()
+	openTarget := uuid.New()
+	closedTarget := uuid.New()
+	profiles := &stubProfileSearch{
+		hits: []ProfileSearchHit{
+			{ProfileID: openTarget, AccountID: uuid.New()},
+			{ProfileID: closedTarget, AccountID: uuid.New()},
+		},
+	}
+	disc := &stubDiscoverability{
+		audienceByProfile: map[uuid.UUID]privacy.Audience{
+			openTarget:   privacy.EveryoneWithGuests(),
+			closedTarget: privacy.Nobody(),
+		},
+	}
+	client := startSearchGRPCTestServer(t, &SearchGRPC{
+		Profiles:        profiles,
+		Discoverability: disc,
+		Social:          disc,
+		SpaceMembers:    disc,
+		Chats:           &stubChatAccess{},
+	})
+	resp, err := client.SearchGlobal(ctxWithProfile(viewer), &searchv1.SearchGlobalRequest{
+		Query: "raid",
+		Page:  &commonv1.CursorPageRequest{PageSize: 20},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{openTarget.String()}, resp.GetGlobalSearchResults().GetProfileIds())
+}
+
+func TestSearchUsers_OwnProfileAlwaysVisible(t *testing.T) {
+	t.Parallel()
+	viewer := uuid.New()
+	profiles := &stubProfileSearch{
+		hits: []ProfileSearchHit{{ProfileID: viewer, AccountID: uuid.New()}},
+	}
+	disc := &stubDiscoverability{
+		audienceByProfile: map[uuid.UUID]privacy.Audience{
+			viewer: privacy.Nobody(),
+		},
+	}
+	client := startSearchGRPCTestServer(t, &SearchGRPC{
+		Profiles:        profiles,
+		Discoverability: disc,
+		Social:          disc,
+		SpaceMembers:    disc,
+	})
+	resp, err := client.SearchUsers(ctxWithProfile(viewer), &searchv1.SearchUsersRequest{Query: "me"})
+	require.NoError(t, err)
+	require.Equal(t, []string{viewer.String()}, resp.GetUserSearchResults().GetProfileIds())
 }
 
 func TestSearchGlobal_QueryTooLong_InvalidArgument(t *testing.T) {

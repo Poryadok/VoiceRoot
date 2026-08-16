@@ -48,6 +48,7 @@
 | P2.10 | **done** | PR-02: `user.presence_changed` + Realtime friend fan-out; `TestComposePresenceDNDInvisible_live` + Flutter |
 | P2.11 | **product done** | MuteChat/ArchiveChat + Gateway + Flutter list actions (#16); compose/Flutter live IT still open |
 | P2.12 | **done** | Flutter `onboarding_coach_e2e_live_test` (spaces/MM steps + invite mid-tour); ON-03 (#20) |
+| P2.8 | **done** | SR-05: Search filters profile hits by `allow_friend_requests` + blocks; unit + `TestComposeSearchPrivacyAudience_live` |
 | P2.3 | **product done** | SubmitGameRequest → pending_moderation + Admin approve/reject (#19); compose/Flutter live IT still open |
 | P2.4 | **product done** | Twitch/YouTube OAuth + cron refresh + org DNS (#25); compose/Flutter live IT still open |
 | P2.* / P3.* (rest) | **deferred** | roadmap / soft-launch+ |
@@ -152,7 +153,7 @@ Effort: **S** ≤0.5d · **M** 1–2d · **L** 3–5d · **XL** >1w (инфра/
 | P2.5 | Quiet hours / granular notif | B+C | NT-04 | L | П.10 |
 | P2.6 | Commander / raise hand | B+C | VC-07 | L | П.11 |
 | P2.7 | Stories moderation hide + Nobody floor | B | ST-05/06 | M | **done** — HideStoryFromFeed + CreateStory floor (#21) |
-| P2.8 | Search privacy audience | D+B | SR-05 | M | Search fix |
+| P2.8 | Search privacy audience | D+B | SR-05 | M | **done** — SearchUsers/SearchGlobal filter by `allow_friend_requests` |
 | P2.9 | E2E reindex skips ciphertext | D | ENC-12 | M | **done** — Search IT + indexer skip |
 | P2.10 | Presence DND/invisible | B+C | PR-02 | M | **done** — friend NATS fan-out + compose/Flutter |
 | P2.11 | DM archive/hide | B+C | TC-DM-08 | M | **product done** (#16); live IT open |

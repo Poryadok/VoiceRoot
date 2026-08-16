@@ -389,7 +389,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | SR-02 | In-chat search | `[exists]` | Gateway: `TestComposeSearchInChat_live` |
 | SR-03 | Search unavailable → 503; messaging still works | `[exists]` | `compose_search_degradation_live_test.go` |
 | SR-04 | Shared media filters in search UI | `[missing]` | — |
-| SR-05 | Profile discovery privacy audience | `[missing]` | todo Search ignores viewer privacy |
+| SR-05 | Profile discovery privacy audience | `[exists]` | Search unit: `TestSearchUsers_FiltersByAllowFriendRequestsAudience`; Gateway: `TestComposeSearchPrivacyAudience_live` |
 | SR-06 | Timeout placeholder | `[partial]` | `search_timeout_e2e_live_test` («placeholder») |
 
 ---
