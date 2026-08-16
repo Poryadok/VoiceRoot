@@ -267,7 +267,7 @@
 - [ ] **[Messaging] `message.forwarded` NATS event missing** — spec lists it; publisher/stream only has `message.sent` on forward.
 - [ ] **[Messaging] `ForwardMessageRequest.commentary` ignored** — proto + Flutter client send it; server never creates commentary message.
 - [ ] **[Messaging] “Copy as new message” / forward without attribution** — spec feature; no proto field or server path (always `type=forward` + attribution).
-- [ ] **[Messaging] Forward-author privacy block not enforced** — spec says user can forbid forwarding their messages; no `allow_forward` in `privacy.md`, no check in `ForwardMessage`.
+- [x] **[Messaging] Forward-author privacy block not enforced** — spec says user can forbid forwarding their messages; Messaging `ForwardMessage` checks User `allow_forward` via S2S (`PermissionDenied`).
 - [ ] **[Messaging] Group/channel view counts absent** — `text-chat.md` requires per-message view counter; no model/RPC beyond DM-style `read_receipts`.
 - [ ] **[Messaging] `ForwardMessage` skips SendMessage guards** — no moderation/slow-mode, no `checkAttachmentPrivacyForSend`, no `checkDMBlocksForSend` / `checkDMPrivacyForSend` on target, no `validateAttachments`, `chat_type` defaults to `dm`.
 - [ ] **[Messaging] Read-state APIs DM-typed only** — `MarkRead` / `GetReadState` / `GetBulkReadState` / `GetChatListMetadata` use `validateChatRefDM`; explicit `group`/`channel` refs rejected while `GetMessages` accepts all types.

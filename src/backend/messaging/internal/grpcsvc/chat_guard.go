@@ -29,12 +29,16 @@ type AccountPairBlockChecker interface {
 	AccountPairBlocked(ctx context.Context, viewerAccountID, otherAccountID uuid.UUID) (bool, error)
 }
 
-// PrivacyChecker reads recipient privacy policy for DM and attachment gates.
+// PrivacyChecker reads recipient privacy policy for DM and attachment gates,
+// plus author allow_forward for ForwardMessage (privacy.md / forward-messages.md).
 type PrivacyChecker interface {
 	AllowDMAudience(ctx context.Context, profileID uuid.UUID) (privacy.Audience, error)
 	AllowGuestDM(ctx context.Context, profileID uuid.UUID) (bool, error)
 	AllowFilesAudience(ctx context.Context, profileID uuid.UUID) (privacy.Audience, error)
 	AllowVoiceMessagesAudience(ctx context.Context, profileID uuid.UUID) (privacy.Audience, error)
+	// AllowForward reports whether profileID's messages may be forwarded by others.
+	// Default when unset is true (privacy.md).
+	AllowForward(ctx context.Context, profileID uuid.UUID) (bool, error)
 }
 
 // SpaceCoMembershipChecker checks shared space membership for privacy audiences.

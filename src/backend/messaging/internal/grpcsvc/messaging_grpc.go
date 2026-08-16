@@ -1038,8 +1038,9 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 	if err := s.checkDMPrivacyForSend(ctx, targetChatID, profileID); err != nil {
 		return nil, err
 	}
-	// TODO(P1.6 FW-04): enforce author allow_forward=false via User privacy S2S after
-	// feature/privacy-allow-forward (WT-PRIV) merges — field not on origin/master yet.
+	if err := s.checkForwardAuthorPrivacy(ctx, source, profileID); err != nil {
+		return nil, err
+	}
 	if err := s.checkSpaceSendPermission(ctx, targetChatID, profileID); err != nil {
 		return nil, err
 	}
@@ -1418,6 +1419,40 @@ func forwardAttribution(source *store.MessageRow) (uuid.UUID, string) {
 		return *source.ForwardFromID, sender
 	}
 	return source.ID, source.SenderProfileID.String()
+}
+
+// checkForwardAuthorPrivacy enforces privacy.md allow_forward for FW-04.
+// Evaluates the original author (re-forward attribution), not intermediate forwarders.
+// Authors may always forward their own messages; unknown/deleted attribution fails open.
+func (s *MessagingGRPC) checkForwardAuthorPrivacy(ctx context.Context, source *store.MessageRow, forwarderProfileID uuid.UUID) error {
+	if s == nil || s.Privacy == nil || source == nil {
+		return nil
+	}
+	authorID, ok := originalForwardAuthorID(source)
+	if !ok {
+		return nil
+	}
+	if authorID == forwarderProfileID {
+		return nil
+	}
+	allowed, err := s.Privacy.AllowForward(ctx, authorID)
+	if err != nil {
+		return status.Error(codes.Internal, err.Error())
+	}
+	if !allowed {
+		return status.Error(codes.PermissionDenied, "forwarding blocked by author privacy settings")
+	}
+	return nil
+}
+
+func originalForwardAuthorID(source *store.MessageRow) (uuid.UUID, bool) {
+	if source.Type == "forward" {
+		if id, err := uuid.Parse(strings.TrimSpace(source.ForwardFromSender)); err == nil {
+			return id, true
+		}
+		return uuid.Nil, false
+	}
+	return source.SenderProfileID, true
 }
 
 func (s *MessagingGRPC) MarkRead(ctx context.Context, req *messagingv1.MarkReadRequest) (*messagingv1.MarkReadResponse, error) {

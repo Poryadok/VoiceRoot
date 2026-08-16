@@ -15,6 +15,7 @@ import (
 	commonv1 "voice.app/voice/common/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
 
+	"voice/backend/pkg/privacy"
 	"voice/backend/role/permissions"
 )
 
@@ -401,4 +402,183 @@ func TestMessagingForwardMessage_e2eToE2EDMPreservesFlag(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, fwd.GetMessage().GetIsE2E())
 	require.Equal(t, cipher, fwd.GetMessage().GetContent())
+}
+
+type allowForwardStub struct {
+	deny map[uuid.UUID]bool
+}
+
+func (s allowForwardStub) AllowDMAudience(_ context.Context, _ uuid.UUID) (privacy.Audience, error) {
+	return privacy.EveryoneWithGuests(), nil
+}
+
+func (s allowForwardStub) AllowGuestDM(_ context.Context, _ uuid.UUID) (bool, error) {
+	return true, nil
+}
+
+func (s allowForwardStub) AllowFilesAudience(_ context.Context, _ uuid.UUID) (privacy.Audience, error) {
+	return privacy.EveryoneWithGuests(), nil
+}
+
+func (s allowForwardStub) AllowVoiceMessagesAudience(_ context.Context, _ uuid.UUID) (privacy.Audience, error) {
+	return privacy.EveryoneWithGuests(), nil
+}
+
+func (s allowForwardStub) AllowForward(_ context.Context, profileID uuid.UUID) (bool, error) {
+	if s.deny[profileID] {
+		return false, nil
+	}
+	return true, nil
+}
+
+// TestMessagingForwardMessage_authorAllowForwardFalseDenied documents FW-04 / privacy.md:
+// ForwardMessage is PermissionDenied when the original author's allow_forward is false.
+func TestMessagingForwardMessage_authorAllowForwardFalseDenied(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	sourceChat := uuid.New()
+	targetChat := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	profC := uuid.New()
+	acctA := uuid.New()
+	seedDMChat(t, ctx, pool, sourceChat, profA, profB)
+	seedDMChat(t, ctx, pool, targetChat, profA, profC)
+
+	client, _ := startMessagingServerWired(t, pool, messagingWire{
+		Privacy: allowForwardStub{deny: map[uuid.UUID]bool{profB: true}},
+	})
+
+	original, err := client.SendMessage(withProfileCtx(ctx, acctA, profB), &messagingv1.SendMessageRequest{
+		Chat: chatDMRef(sourceChat), Content: "no-forward", AttachmentsJson: "[]", MentionsJson: "[]",
+	})
+	require.NoError(t, err)
+
+	_, err = client.ForwardMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.ForwardMessageRequest{
+		SourceMessageId: original.GetMessage().GetId(),
+		TargetChat:      chatDMRef(targetChat),
+	})
+	require.Equal(t, codes.PermissionDenied, status.Code(err), "allow_forward=false must deny ForwardMessage")
+}
+
+// TestMessagingForwardMessage_authorAllowForwardTrueAllowed documents FW-04 default/true path.
+func TestMessagingForwardMessage_authorAllowForwardTrueAllowed(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	sourceChat := uuid.New()
+	targetChat := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	profC := uuid.New()
+	acctA := uuid.New()
+	seedDMChat(t, ctx, pool, sourceChat, profA, profB)
+	seedDMChat(t, ctx, pool, targetChat, profA, profC)
+
+	client, _ := startMessagingServerWired(t, pool, messagingWire{
+		Privacy: allowForwardStub{},
+	})
+
+	original, err := client.SendMessage(withProfileCtx(ctx, acctA, profB), &messagingv1.SendMessageRequest{
+		Chat: chatDMRef(sourceChat), Content: "ok-forward", AttachmentsJson: "[]", MentionsJson: "[]",
+	})
+	require.NoError(t, err)
+
+	fwd, err := client.ForwardMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.ForwardMessageRequest{
+		SourceMessageId: original.GetMessage().GetId(),
+		TargetChat:      chatDMRef(targetChat),
+	})
+	require.NoError(t, err)
+	require.Equal(t, "ok-forward", fwd.GetMessage().GetContent())
+}
+
+// TestMessagingForwardMessage_reforwardRespectsOriginalAuthorPrivacy documents FW-04 on re-forward:
+// allow_forward is evaluated for the original author, not the intermediate forwarder.
+func TestMessagingForwardMessage_reforwardRespectsOriginalAuthorPrivacy(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	chatA := uuid.New()
+	chatB := uuid.New()
+	chatC := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	profC := uuid.New()
+	profD := uuid.New()
+	acctA := uuid.New()
+	seedDMChat(t, ctx, pool, chatA, profA, profB)
+	seedDMChat(t, ctx, pool, chatB, profA, profC)
+	seedDMChat(t, ctx, pool, chatC, profA, profD)
+
+	// First hop allowed (no deny yet); then author privacy flips via stub that always denies profB.
+	client, _ := startMessagingServerWired(t, pool, messagingWire{
+		Privacy: allowForwardStub{},
+	})
+
+	original, err := client.SendMessage(withProfileCtx(ctx, acctA, profB), &messagingv1.SendMessageRequest{
+		Chat: chatDMRef(chatA), Content: "root-private", AttachmentsJson: "[]", MentionsJson: "[]",
+	})
+	require.NoError(t, err)
+
+	firstHop, err := client.ForwardMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.ForwardMessageRequest{
+		SourceMessageId: original.GetMessage().GetId(),
+		TargetChat:      chatDMRef(chatB),
+	})
+	require.NoError(t, err)
+
+	clientDeny, _ := startMessagingServerWired(t, pool, messagingWire{
+		Privacy: allowForwardStub{deny: map[uuid.UUID]bool{profB: true}},
+	})
+
+	_, err = clientDeny.ForwardMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.ForwardMessageRequest{
+		SourceMessageId: firstHop.GetMessage().GetId(),
+		TargetChat:      chatDMRef(chatC),
+	})
+	require.Equal(t, codes.PermissionDenied, status.Code(err),
+		"re-forward must deny based on original author allow_forward=false")
+}
+
+// TestMessagingForwardMessage_authorCanForwardOwnWhenDisallowed documents privacy.md:
+// allow_forward forbids forwarding by others; the author may still forward their own message.
+func TestMessagingForwardMessage_authorCanForwardOwnWhenDisallowed(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	sourceChat := uuid.New()
+	targetChat := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	profC := uuid.New()
+	acctA := uuid.New()
+	seedDMChat(t, ctx, pool, sourceChat, profA, profB)
+	seedDMChat(t, ctx, pool, targetChat, profB, profC)
+
+	client, _ := startMessagingServerWired(t, pool, messagingWire{
+		Privacy: allowForwardStub{deny: map[uuid.UUID]bool{profB: true}},
+	})
+
+	original, err := client.SendMessage(withProfileCtx(ctx, acctA, profB), &messagingv1.SendMessageRequest{
+		Chat: chatDMRef(sourceChat), Content: "mine", AttachmentsJson: "[]", MentionsJson: "[]",
+	})
+	require.NoError(t, err)
+
+	fwd, err := client.ForwardMessage(withProfileCtx(ctx, acctA, profB), &messagingv1.ForwardMessageRequest{
+		SourceMessageId: original.GetMessage().GetId(),
+		TargetChat:      chatDMRef(targetChat),
+	})
+	require.NoError(t, err)
+	require.Equal(t, "mine", fwd.GetMessage().GetContent())
 }

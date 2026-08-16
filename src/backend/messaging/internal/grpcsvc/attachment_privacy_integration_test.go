@@ -51,6 +51,10 @@ func (s attachmentPrivacyStub) AllowVoiceMessagesAudience(_ context.Context, pro
 	return privacy.EveryoneWithGuests(), nil
 }
 
+func (s attachmentPrivacyStub) AllowForward(_ context.Context, _ uuid.UUID) (bool, error) {
+	return true, nil
+}
+
 // TestSendMessage_FileAttachment_FriendsOnlyPrivacy_StrangerDenied documents privacy.md: friends-only allow_files blocks stranger file attachments in DM.
 func TestSendMessage_FileAttachment_FriendsOnlyPrivacy_StrangerDenied(t *testing.T) {
 	if testing.Short() {
