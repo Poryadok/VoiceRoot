@@ -16,7 +16,7 @@
 
 ---
 
-## Progress (2026-08-15 sprint)
+## Progress (2026-08-16 Wave 1 product + sprint hygiene)
 
 | Item | Status | Notes |
 |------|--------|-------|
@@ -35,8 +35,12 @@
 | P1.1 | **done** | auth `depends_on: nats` + convert negatives + `TestComposeConvertGuestNATS_live` |
 | P1.2 | **done** | server `guest_reminder_last_shown_at` + get/mark; Flutter cadence; Flutter live → WT-INTEGRATION optional |
 | P1.3 | **done** | ListSessions/RevokeSession + `TestComposeAuthSessions_live` |
+| P1.5 | **product done** | Forward → channel `posted_as_chat` + commentary + send-perm on Forward (Messaging ITs); compose/Flutter → WT-INTEGRATION |
+| P1.7 | **product done** | E2E→plain deny + E2E→E2E preserves `is_e2e` (Messaging ITs); compose → WT-INTEGRATION |
+| P1.8 | **product done** | `SendMessage`/`ForwardMessage` → `HasChatPermission(TEXT_CHAT_SEND_MESSAGES)` (Messaging IT); compose/Flutter → WT-INTEGRATION |
+| P1.9 | **product done** | `@everyone`/`@here` + bare-content parse gated via `HasChatPermission` (Messaging ITs); compose → WT-INTEGRATION |
+| P1.10 | **product done** | Voice `ROLE_GRPC_ADDR` + `EnsureVoiceJoin` + room-override IT; compose/Flutter VOICE_JOIN deny → WT-INTEGRATION |
 | P1.11 | **partial** | `handleMatchDecline` party-aware + grpcsvc IT (PR #4); compose live → WT-INTEGRATION |
-| P1.5, P1.7–10 | **blocked** | product deps (see inventory / todo/backend) |
 | P1.14 | **product done** | compose `SPACE_GRPC_ADDR` + S2S/NATS Space Pro sync; member-cap without Seed; compose live join-51st → WT-INTEGRATION |
 | P1.15 | **product done** | `subscription.grace_reminder` D1/D3/D7 + Notification consumer stub; compose assert → WT-INTEGRATION |
 | P2.* / P3.* | **deferred** | roadmap / soft-launch+ |
@@ -60,12 +64,12 @@ Effort: **S** ≤0.5d · **M** 1–2d · **L** 3–5d · **XL** >1w (инфра/
 
 ## P0 — блокер корректности CI / soft-launch (1–3 дня)
 
-| # | Работа | Слой | Inventory IDs | Effort | Зависимости |
-|---|--------|------|---------------|--------|-------------|
-| P0.1 | Починить имена в `e2e-features.yml`: `TestComposeFriendsInvitation_live`, явный Search smoke (`SearchInChat` или `UsersSearch`) | A | (manifest note) | S | нет |
-| P0.2 | Добавить в **smoke** Tier-0 delivery: `TestComposeWSResume_live`, `TestComposeDeliveryReceipts_live`, `TestComposeInAppNotifications_live` (+ Flutter counterparts уже в full) — см. todo cross-cutting | A | TC-DM-03/04, NT-01 | S | P0.1 |
-| P0.3 | Зафиксировать в smoke хотя бы один encryption DM path (`TestComposeE2EDM_live` / `encryption_dm_e2e_live_test`) — сейчас только key backup | A | ENC-01 | S | compose-migrate-e2e |
-| P0.4 | Проверить содержимое `TestComposeModerationShadowBan_live` vs todo «smoke mentions shadow ban but…»; дописать assert если пусто | B | MD-03 | S | moderation seed |
+| # | Работа | Слой | Inventory IDs | Effort | Status | Зависимости |
+|---|--------|------|---------------|--------|--------|-------------|
+| P0.1 | Починить имена в `e2e-features.yml`: `TestComposeFriendsInvitation_live`, явный Search smoke (`SearchInChat` или `UsersSearch`) | A | (manifest note) | S | **done** | нет |
+| P0.2 | Добавить в **smoke** Tier-0 delivery: `TestComposeWSResume_live`, `TestComposeDeliveryReceipts_live`, `TestComposeInAppNotifications_live` (+ Flutter counterparts уже в full) — см. todo cross-cutting | A | TC-DM-03/04, NT-01 | S | **done** | P0.1 |
+| P0.3 | Зафиксировать в smoke хотя бы один encryption DM path (`TestComposeE2EDM_live` / `encryption_dm_e2e_live_test`) — сейчас только key backup | A | ENC-01 | S | **done** | compose-migrate-e2e |
+| P0.4 | Проверить содержимое `TestComposeModerationShadowBan_live` vs todo «smoke mentions shadow ban but…»; дописать assert если пусто | B | MD-03 | S | **done** | moderation seed |
 
 **DoD P0:** `scripts/ci/e2e-manifest.sh` резолвит все smoke_gateway имена; master push smoke ловит resume+delivery.
 
@@ -77,52 +81,52 @@ Effort: **S** ≤0.5d · **M** 1–2d · **L** 3–5d · **XL** >1w (инфра/
 
 ### 1.1 Auth / Guest / Contacts
 
-| # | Кейс | Слой | IDs | Effort | Notes |
-|---|------|------|-----|--------|-------|
-| P1.1 | Convert-guest negative + NATS event на compose | B+E | AU-05/14 | M | **done** — auth nats depends_on + Maven negatives + `TestComposeConvertGuestNATS_live` |
-| P1.2 | Guest reminder cadence (2nd login ≤1/day) | C | AU-07 | M | **done** — server timestamp + Flutter; optional Flutter live → WT-INTEGRATION |
-| P1.3 | Active sessions list/revoke | B | AU-12 | M | **done** — List/Revoke + `TestComposeAuthSessions_live` |
-| P1.4 | Friend-request denied by `allow_friend_requests` | B+C | FR-03, PV-04 | M | Social hook already exists |
+| # | Кейс | Слой | IDs | Effort | Status | Notes |
+|---|------|------|-----|--------|--------|-------|
+| P1.1 | Convert-guest negative + NATS event на compose | B+E | AU-05/14 | M | **done** | auth nats depends_on + Maven negatives + `TestComposeConvertGuestNATS_live` |
+| P1.2 | Guest reminder cadence (2nd login ≤1/day) | C | AU-07 | M | **done** | server timestamp + Flutter; optional Flutter live → WT-INTEGRATION |
+| P1.3 | Active sessions list/revoke | B | AU-12 | M | **done** | List/Revoke + `TestComposeAuthSessions_live` |
+| P1.4 | Friend-request denied by `allow_friend_requests` | B+C | FR-03, PV-04 | M | **done** | Gateway + Flutter + Social IT |
 
 ### 1.2 Messaging / Forward / Roles enforce
 
-| # | Кейс | Слой | IDs | Effort | Notes |
-|---|------|------|-----|--------|-------|
-| P1.5 | Forward to channel + commentary | B+C | FW-02 | M | Messaging IT hole |
-| P1.6 | Forward privacy forbid | B | FW-04 | S | **enforce done** (Messaging IT); compose live → WT-INTEGRATION |
-| P1.7 | E2E forward policy (no ciphertext leak) | B | FW-06 | M | **после** фикс Messaging |
-| P1.8 | SendMessage respects `TEXT_CHAT_SEND_MESSAGES` deny | B+C | RL-02 | M | **после** Messaging CheckPermission |
-| P1.9 | @here / @everyone permission gate | B | TC-MSG-03 | M | |
-| P1.10 | VOICE_JOIN deny live | B+C | RL-03 | M | Role store IT already |
+| # | Кейс | Слой | IDs | Effort | Status | Notes |
+|---|------|------|-----|--------|--------|-------|
+| P1.5 | Forward to channel + commentary | B+C | FW-02 | M | **product done** | Messaging ITs; compose/Flutter → WT-INTEGRATION |
+| P1.6 | Forward privacy forbid | B | FW-04 | S | **enforce done** | Messaging IT; compose live → WT-INTEGRATION |
+| P1.7 | E2E forward policy (no ciphertext leak) | B | FW-06 | M | **product done** | Messaging ITs; compose → WT-INTEGRATION |
+| P1.8 | SendMessage respects `TEXT_CHAT_SEND_MESSAGES` deny | B+C | RL-02 | M | **product done** | `checkSpaceSendPermission` → `HasChatPermission`; compose/Flutter → WT-INTEGRATION |
+| P1.9 | @here / @everyone permission gate | B | TC-MSG-03 | M | **product done** | Messaging ITs + bare-content parse; compose → WT-INTEGRATION |
+| P1.10 | VOICE_JOIN deny live | B+C | RL-03 | M | **product done** | Voice Role wire + room-override IT; compose/Flutter → WT-INTEGRATION |
 
 ### 1.3 Matchmaking semantics
 
-| # | Кейс | Слой | IDs | Effort | Notes |
-|---|------|------|-----|--------|-------|
-| P1.11 | Cross-party decline: acceptors continue | B | MM-07 | M | product fix merged; compose assert → WT-INTEGRATION |
-| P1.12 | Flutter `matchmaking_rating_e2e_live_test` + skip rating | C | MM-05 | M | compose rating exists |
-| P1.13 | MM ban live compose | B | MM-06 | S | store IT exists |
+| # | Кейс | Слой | IDs | Effort | Status | Notes |
+|---|------|------|-----|--------|--------|-------|
+| P1.11 | Cross-party decline: acceptors continue | B | MM-07 | M | **partial** | party-aware decline ITs (PR #4); compose live → WT-INTEGRATION |
+| P1.12 | Flutter `matchmaking_rating_e2e_live_test` + skip rating | C | MM-05 | M | **done** | compose rating exists |
+| P1.13 | MM ban live compose | B | MM-06 | S | **done** | `TestComposeMatchmakingBan_live` |
 
 ### 1.4 Subscription / Space Pro
 
-| # | Кейс | Слой | IDs | Effort | Notes |
-|---|------|------|-----|--------|-------|
-| P1.14 | Space Pro webhook → invite/member-cap | B | SP-11, SUB-03 | L | **product done** (sync+compose addr); compose join live → WT-INTEGRATION |
-| P1.15 | Grace notifications stubs (event emitted) | B | SUB-04 | M | **product done** (event+notif stub); compose live → WT-INTEGRATION |
+| # | Кейс | Слой | IDs | Effort | Status | Notes |
+|---|------|------|-----|--------|--------|-------|
+| P1.14 | Space Pro webhook → invite/member-cap | B | SP-11, SUB-03 | L | **product done** | S2S/NATS sync + compose addr; compose join live → WT-INTEGRATION |
+| P1.15 | Grace notifications stubs (event emitted) | B | SUB-04 | M | **product done** | event+notif stub; compose live → WT-INTEGRATION |
 
 ### 1.5 Analytics DoD
 
-| # | Кейс | Слой | IDs | Effort | Notes |
-|---|------|------|-----|--------|-------|
-| P1.16 | Assert CH row <60s after `message.sent` | B | AN-03 | M | harden `TestComposeAnalyticsIngest_live` |
-| P1.17 | Export audit log assertion | B | AN-04 | S | Gateway audit store |
+| # | Кейс | Слой | IDs | Effort | Status | Notes |
+|---|------|------|-----|--------|--------|-------|
+| P1.16 | Assert CH row <60s after `message.sent` | B | AN-03 | M | **done** | ingest asserts CH row <60s |
+| P1.17 | Export audit log assertion | B | AN-04 | S | **done** | Redis/memory audit store + live Redis assert |
 
 ### 1.6 File reliability
 
-| # | Кейс | Слой | IDs | Effort | Notes |
-|---|------|------|-----|--------|-------|
-| P1.18 | Fix thumb mapper **или** test expectation | C | FL-02 | S | конфликт todo |
-| P1.19 | ClamAV test uses scannable MIME/ext | C | FL-03 | S | |
+| # | Кейс | Слой | IDs | Effort | Status | Notes |
+|---|------|------|-----|--------|--------|-------|
+| P1.18 | Fix thumb mapper **или** test expectation | C | FL-02 | S | **done** | map `thumbnailR2Key`/`convertedR2Key` |
+| P1.19 | ClamAV test uses scannable MIME/ext | C | FL-03 | S | **done** | `.exe` + `application/x-msdownload` |
 
 **Порядок P1:** P1.4 → P1.8/10 (после product fix) → P1.11 → P1.14 → P1.16/17 → file S-fixes. Параллельно P1.5–6 если Messaging свободен.
 
@@ -172,7 +176,7 @@ Effort: **S** ≤0.5d · **M** 1–2d · **L** 3–5d · **XL** >1w (инфра/
 ```text
 Sprint 0 (2–3d):  P0.1–P0.4  — CI truth + smoke Tier-0
 Sprint 1 (1w):    P1.4, P1.18–19, P1.16–17, P1.12–13  — privacy + analytics DoD + MM rating/ban + file test honesty
-Sprint 2 (1w):    product fixes then P1.5–11, P1.8, P1.14  — messaging/roles/MM decline/Space Pro
+Sprint 2 (1w):    product fixes then P1.5–11, P1.8, P1.14  — messaging/roles/MM decline/Space Pro **(product done; compose/Flutter lives → WT-INTEGRATION)**
 Sprint 3+ :       P2 as roadmap features land; P3 device suite parallel track
 ```
 
