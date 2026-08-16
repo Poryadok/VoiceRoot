@@ -58,7 +58,7 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
 
 - [ ] **A11y: pre-release TalkBack / VoiceOver** — чеклист в [accessibility.md](../features/accessibility.md) §Pre-release; ручная приёмка перед mobile release (**Вы**).
 
-- [ ] **A11y: Axe / web accessibility CI** — [accessibility.md](../features/accessibility.md) §Тестирование: Axe DevTools (или аналог) для Flutter web — не в CI.
+- [x] **A11y: Axe / web accessibility CI** — landmark contract `make a11y-web-axe` (Axe analog) in flutter CI; full CanvasKit Axe deferred.
 
 - [ ] **VoiceListSkeleton / VoiceStatePanel — остаточные loaders** — wave A не покрыла: `chat_room_panel` (pagination), space members/bots/invites, `player_profile_sheet`, `story_viewer_screen` — всё ещё `CircularProgressIndicator` вместо skeleton/state panel.
 

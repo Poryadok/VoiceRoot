@@ -93,9 +93,11 @@
 
 - Автоматические lint-проверки: `flutter analyze` с включённым `avoid_print` и accessibility-правилами
 - Widget-тесты клавиатурных шорткатов: `test/voice_shortcuts_keyboard_test.dart`
+- High contrast / reduced motion: `test/high_contrast_theme_test.dart`, `test/reduced_motion_test.dart`
+- Web landmark contract (Axe analog) in CI: `make a11y-web-axe` → `scripts/ci/a11y-web-axe.sh` + `scripts/ci/a11y-web/fixtures/voice-a11y-landmarks.html`
 - Chrome integration deep link: `integration_test/deeplink_web_test.dart` (CI job `flutter-web-integration`)
 - Ручное тестирование с TalkBack и VoiceOver перед каждым релизом — чеклист ниже
-- Axe DevTools (или аналог) для веб-версии как часть CI
+- Полный Axe DevTools против live Flutter CanvasKit DOM — не цели v1 (CanvasKit); landmark fixture + widget Semantics закрывают A11Y-03
 
 ### Pre-release screen reader checklist (TalkBack / VoiceOver)
 

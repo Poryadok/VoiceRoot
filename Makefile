@@ -37,7 +37,7 @@ GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
 	build-all build-all-breaking check-toolchain compose-config-ci buf-ci backend-test-ci backend-test-ci-short backend-image-ci \
 	gateway-test-ci gateway-image-ci go-test-pkg go-mod-tidy-all auth-test-ci auth-image-ci buf-breaking-ci \
 	golangci-ci gateway-test-race-ci design-tokens-check penpot-tokens-export penpot-tokens-export-check flutter-ui-color-gate flutter-ci flutter-windows-prefetch-sqlite3 flutter-linux-prefetch-sqlite3 prekey-golden-check coverage-report testcontainers-prune buf-generate-ci-local-template-check \
-	staging-matrix-test generate-staging-services
+	staging-matrix-test generate-staging-services a11y-web-axe contrast-tokens-check
 
 buf-lint:
 	buf lint
@@ -202,6 +202,10 @@ penpot-tokens-export-check: penpot-tokens-export
 contrast-tokens-check:
 	$(BASH) "$(ROOT)/scripts/design/contrast-tokens-check.sh"
 
+# Axe WCAG A/AA on web landmark fixture (docs/features/accessibility.md; A11Y-03).
+a11y-web-axe:
+	$(BASH) "$(ROOT)/scripts/ci/a11y-web-axe.sh"
+
 flutter-ui-color-gate:
 	$(BASH) "$(ROOT)/scripts/design/flutter-ui-color-gate.sh"
 
@@ -223,7 +227,7 @@ endif
 prekey-golden-check: $(FLUTTER_SQLITE_PREFETCH)
 	cd $(ROOT)/src/frontend && flutter test test/tools/prekey_golden_drift_test.dart
 
-flutter-ci: design-tokens-check contrast-tokens-check flutter-ui-color-gate buf-dart-check prekey-golden-check
+flutter-ci: design-tokens-check contrast-tokens-check flutter-ui-color-gate buf-dart-check prekey-golden-check a11y-web-axe
 	cd $(ROOT)/src/frontend && flutter pub get && flutter analyze --no-fatal-infos && flutter test
 
 # Go (-coverprofile), Auth (JaCoCo), Flutter (lcov). Writes .local/coverage/summary.txt

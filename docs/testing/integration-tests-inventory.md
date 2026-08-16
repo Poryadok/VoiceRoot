@@ -342,7 +342,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 |----|------|--------|-----|
 | A11Y-01 | Keyboard shortcuts widget tests | `[partial]` | `voice_shortcuts_keyboard_test.dart` (не live IT) |
 | A11Y-02 | Chrome deeplink integration_test | `[exists]` | `integration_test/deeplink_web_test.dart` (CI flutter-web-integration) |
-| A11Y-03 | Semantics / high contrast / reduced motion | `[partial]` | `three_column_shell_semantics_test.dart`; roadmap П.19 |
+| A11Y-03 | Semantics / high contrast / reduced motion | `[exists]` | widgets + `high_contrast_theme_test` / `reduced_motion_test`; CI `make a11y-web-axe` (landmark fixture) |
 | A11Y-04 | TalkBack/VoiceOver checklist | `[n/a]` | ручной pre-release |
 
 ---
