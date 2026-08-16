@@ -463,6 +463,147 @@ class NotificationSettings extends $pb.GeneratedMessage {
   void clearScopeTypeEnum() => $_clearField(8);
 }
 
+class GetQuietHoursRequest extends $pb.GeneratedMessage {
+  factory GetQuietHoursRequest() => create();
+
+  GetQuietHoursRequest._();
+
+  factory GetQuietHoursRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetQuietHoursRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetQuietHoursRequest',
+      package: const $pb.PackageName(
+          _omitMessageNames ? '' : 'voice.notification.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetQuietHoursRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetQuietHoursRequest copyWith(void Function(GetQuietHoursRequest) updates) =>
+      super.copyWith((message) => updates(message as GetQuietHoursRequest))
+          as GetQuietHoursRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetQuietHoursRequest create() => GetQuietHoursRequest._();
+  @$core.override
+  GetQuietHoursRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetQuietHoursRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetQuietHoursRequest>(create);
+  static GetQuietHoursRequest? _defaultInstance;
+}
+
+class QuietHours extends $pb.GeneratedMessage {
+  factory QuietHours({
+    $core.bool? enabled,
+    $core.String? startTime,
+    $core.String? endTime,
+    $core.String? timezone,
+    $core.bool? overrideMentions,
+  }) {
+    final result = create();
+    if (enabled != null) result.enabled = enabled;
+    if (startTime != null) result.startTime = startTime;
+    if (endTime != null) result.endTime = endTime;
+    if (timezone != null) result.timezone = timezone;
+    if (overrideMentions != null) result.overrideMentions = overrideMentions;
+    return result;
+  }
+
+  QuietHours._();
+
+  factory QuietHours.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory QuietHours.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'QuietHours',
+      package: const $pb.PackageName(
+          _omitMessageNames ? '' : 'voice.notification.v1'),
+      createEmptyInstance: create)
+    ..aOB(1, _omitFieldNames ? '' : 'enabled')
+    ..aOS(2, _omitFieldNames ? '' : 'startTime')
+    ..aOS(3, _omitFieldNames ? '' : 'endTime')
+    ..aOS(4, _omitFieldNames ? '' : 'timezone')
+    ..aOB(5, _omitFieldNames ? '' : 'overrideMentions')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  QuietHours clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  QuietHours copyWith(void Function(QuietHours) updates) =>
+      super.copyWith((message) => updates(message as QuietHours)) as QuietHours;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static QuietHours create() => QuietHours._();
+  @$core.override
+  QuietHours createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static QuietHours getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<QuietHours>(create);
+  static QuietHours? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.bool get enabled => $_getBF(0);
+  @$pb.TagNumber(1)
+  set enabled($core.bool value) => $_setBool(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasEnabled() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearEnabled() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get startTime => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set startTime($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasStartTime() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearStartTime() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get endTime => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set endTime($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasEndTime() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearEndTime() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get timezone => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set timezone($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasTimezone() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearTimezone() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.bool get overrideMentions => $_getBF(4);
+  @$pb.TagNumber(5)
+  set overrideMentions($core.bool value) => $_setBool(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasOverrideMentions() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearOverrideMentions() => $_clearField(5);
+}
+
 class SetQuietHoursRequest extends $pb.GeneratedMessage {
   factory SetQuietHoursRequest({
     $core.bool? enabled,
@@ -1094,6 +1235,65 @@ class UpdateNotificationSettingsResponse extends $pb.GeneratedMessage {
   void clearNotificationSettings() => $_clearField(1);
   @$pb.TagNumber(1)
   NotificationSettings ensureNotificationSettings() => $_ensure(0);
+}
+
+class GetQuietHoursResponse extends $pb.GeneratedMessage {
+  factory GetQuietHoursResponse({
+    QuietHours? quietHours,
+  }) {
+    final result = create();
+    if (quietHours != null) result.quietHours = quietHours;
+    return result;
+  }
+
+  GetQuietHoursResponse._();
+
+  factory GetQuietHoursResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetQuietHoursResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetQuietHoursResponse',
+      package: const $pb.PackageName(
+          _omitMessageNames ? '' : 'voice.notification.v1'),
+      createEmptyInstance: create)
+    ..aOM<QuietHours>(1, _omitFieldNames ? '' : 'quietHours',
+        subBuilder: QuietHours.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetQuietHoursResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetQuietHoursResponse copyWith(
+          void Function(GetQuietHoursResponse) updates) =>
+      super.copyWith((message) => updates(message as GetQuietHoursResponse))
+          as GetQuietHoursResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetQuietHoursResponse create() => GetQuietHoursResponse._();
+  @$core.override
+  GetQuietHoursResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetQuietHoursResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetQuietHoursResponse>(create);
+  static GetQuietHoursResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  QuietHours get quietHours => $_getN(0);
+  @$pb.TagNumber(1)
+  set quietHours(QuietHours value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasQuietHours() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearQuietHours() => $_clearField(1);
+  @$pb.TagNumber(1)
+  QuietHours ensureQuietHours() => $_ensure(0);
 }
 
 class SetQuietHoursResponse extends $pb.GeneratedMessage {

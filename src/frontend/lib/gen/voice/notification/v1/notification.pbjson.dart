@@ -286,6 +286,40 @@ final $typed_data.Uint8List notificationSettingsDescriptor = $convert.base64Deco
     'ZVR5cGVFbnVtiAEBQgsKCV9zY29wZV9pZEINCgtfbXV0ZV91bnRpbEISChBfc2NvcGVfdHlwZV'
     '9lbnVtSgQIBRAGUhJtdXRlX3VudGlsX3JmYzMzMzk=');
 
+@$core.Deprecated('Use getQuietHoursRequestDescriptor instead')
+const GetQuietHoursRequest$json = {
+  '1': 'GetQuietHoursRequest',
+};
+
+/// Descriptor for `GetQuietHoursRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getQuietHoursRequestDescriptor =
+    $convert.base64Decode('ChRHZXRRdWlldEhvdXJzUmVxdWVzdA==');
+
+@$core.Deprecated('Use quietHoursDescriptor instead')
+const QuietHours$json = {
+  '1': 'QuietHours',
+  '2': [
+    {'1': 'enabled', '3': 1, '4': 1, '5': 8, '10': 'enabled'},
+    {'1': 'start_time', '3': 2, '4': 1, '5': 9, '10': 'startTime'},
+    {'1': 'end_time', '3': 3, '4': 1, '5': 9, '10': 'endTime'},
+    {'1': 'timezone', '3': 4, '4': 1, '5': 9, '10': 'timezone'},
+    {
+      '1': 'override_mentions',
+      '3': 5,
+      '4': 1,
+      '5': 8,
+      '10': 'overrideMentions'
+    },
+  ],
+};
+
+/// Descriptor for `QuietHours`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List quietHoursDescriptor = $convert.base64Decode(
+    'CgpRdWlldEhvdXJzEhgKB2VuYWJsZWQYASABKAhSB2VuYWJsZWQSHQoKc3RhcnRfdGltZRgCIA'
+    'EoCVIJc3RhcnRUaW1lEhkKCGVuZF90aW1lGAMgASgJUgdlbmRUaW1lEhoKCHRpbWV6b25lGAQg'
+    'ASgJUgh0aW1lem9uZRIrChFvdmVycmlkZV9tZW50aW9ucxgFIAEoCFIQb3ZlcnJpZGVNZW50aW'
+    '9ucw==');
+
 @$core.Deprecated('Use setQuietHoursRequestDescriptor instead')
 const SetQuietHoursRequest$json = {
   '1': 'SetQuietHoursRequest',
@@ -472,6 +506,26 @@ final $typed_data.Uint8List updateNotificationSettingsResponseDescriptor =
         'CiJVcGRhdGVOb3RpZmljYXRpb25TZXR0aW5nc1Jlc3BvbnNlEmAKFW5vdGlmaWNhdGlvbl9zZX'
         'R0aW5ncxgBIAEoCzIrLnZvaWNlLm5vdGlmaWNhdGlvbi52MS5Ob3RpZmljYXRpb25TZXR0aW5n'
         'c1IUbm90aWZpY2F0aW9uU2V0dGluZ3M=');
+
+@$core.Deprecated('Use getQuietHoursResponseDescriptor instead')
+const GetQuietHoursResponse$json = {
+  '1': 'GetQuietHoursResponse',
+  '2': [
+    {
+      '1': 'quiet_hours',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.notification.v1.QuietHours',
+      '10': 'quietHours'
+    },
+  ],
+};
+
+/// Descriptor for `GetQuietHoursResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getQuietHoursResponseDescriptor = $convert.base64Decode(
+    'ChVHZXRRdWlldEhvdXJzUmVzcG9uc2USQgoLcXVpZXRfaG91cnMYASABKAsyIS52b2ljZS5ub3'
+    'RpZmljYXRpb24udjEuUXVpZXRIb3Vyc1IKcXVpZXRIb3Vycw==');
 
 @$core.Deprecated('Use setQuietHoursResponseDescriptor instead')
 const SetQuietHoursResponse$json = {

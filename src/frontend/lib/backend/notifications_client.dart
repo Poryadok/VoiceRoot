@@ -157,6 +157,27 @@ class VoiceNotificationsClient {
     };
   }
 
+  Future<NotificationsApiResult<VoiceQuietHours>> getQuietHours({
+    required String authorization,
+  }) async {
+    final result = await _gateway.getProto(
+      _gateway.resolve('/api/v1/notifications/quiet-hours'),
+      authorization: authorization,
+      createEmpty: notif_pb.GetQuietHoursResponse.create,
+    );
+    return switch (result) {
+      GatewayHttpOk(:final data) => NotificationsApiOk(
+        _quietHoursFromProto(
+          data.hasQuietHours() ? data.quietHours : notif_pb.QuietHours(),
+        ),
+      ),
+      GatewayHttpFailure(:final error) => NotificationsApiFailure(
+        message: error.message,
+        statusCode: error.statusCode,
+      ),
+    };
+  }
+
   VoiceNotificationSettings _settingsFromResponseMap(
     Map<String, dynamic> data, {
     required VoiceNotificationSettings fallback,
@@ -203,6 +224,22 @@ class VoiceNotificationsClient {
       proto.muteUntil = dateTimeToProtoTimestamp(settings.muteUntil!);
     }
     return proto;
+  }
+
+  VoiceQuietHours _quietHoursFromProto(notif_pb.QuietHours proto) {
+    return VoiceQuietHours(
+      enabled: proto.enabled,
+      startTime: proto.startTime.isEmpty
+          ? VoiceQuietHours.defaults.startTime
+          : proto.startTime,
+      endTime: proto.endTime.isEmpty
+          ? VoiceQuietHours.defaults.endTime
+          : proto.endTime,
+      timezone: proto.timezone.isEmpty
+          ? VoiceQuietHours.defaults.timezone
+          : proto.timezone,
+      overrideMentions: proto.overrideMentions,
+    );
   }
 
   /// Removes a registered device token for the active profile.
