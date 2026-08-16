@@ -1522,6 +1522,7 @@ class PrivacySettings extends $pb.GeneratedMessage {
     PrivacyAudience? allowChatSpaceInvites,
     PrivacyAudience? allowFiles,
     PrivacyAudience? allowVoiceMessages,
+    $core.bool? allowForward,
   }) {
     final result = create();
     if (profileId != null) result.profileId = profileId;
@@ -1544,6 +1545,7 @@ class PrivacySettings extends $pb.GeneratedMessage {
     if (allowFiles != null) result.allowFiles = allowFiles;
     if (allowVoiceMessages != null)
       result.allowVoiceMessages = allowVoiceMessages;
+    if (allowForward != null) result.allowForward = allowForward;
     return result;
   }
 
@@ -1591,6 +1593,7 @@ class PrivacySettings extends $pb.GeneratedMessage {
         subBuilder: PrivacyAudience.create)
     ..aOM<PrivacyAudience>(18, _omitFieldNames ? '' : 'allowVoiceMessages',
         subBuilder: PrivacyAudience.create)
+    ..aOB(19, _omitFieldNames ? '' : 'allowForward')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1790,6 +1793,17 @@ class PrivacySettings extends $pb.GeneratedMessage {
   void clearAllowVoiceMessages() => $_clearField(18);
   @$pb.TagNumber(18)
   PrivacyAudience ensureAllowVoiceMessages() => $_ensure(16);
+
+  /// Binary: allow others to forward this profile's messages (privacy.md; default true).
+  /// optional so omit on Update preserves existing / defaults to true.
+  @$pb.TagNumber(19)
+  $core.bool get allowForward => $_getBF(17);
+  @$pb.TagNumber(19)
+  set allowForward($core.bool value) => $_setBool(17, value);
+  @$pb.TagNumber(19)
+  $core.bool hasAllowForward() => $_has(17);
+  @$pb.TagNumber(19)
+  void clearAllowForward() => $_clearField(19);
 }
 
 class UpdatePresenceRequest extends $pb.GeneratedMessage {

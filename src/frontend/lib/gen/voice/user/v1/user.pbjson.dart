@@ -683,9 +683,19 @@ const PrivacySettings$json = {
       '6': '.voice.user.v1.PrivacyAudience',
       '10': 'allowVoiceMessages'
     },
+    {
+      '1': 'allow_forward',
+      '3': 19,
+      '4': 1,
+      '5': 8,
+      '9': 1,
+      '10': 'allowForward',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_preset_enum'},
+    {'1': '_allow_forward'},
   ],
 };
 
@@ -710,8 +720,9 @@ final $typed_data.Uint8List privacySettingsDescriptor = $convert.base64Decode(
     'ZXMYECABKAsyHi52b2ljZS51c2VyLnYxLlByaXZhY3lBdWRpZW5jZVIVYWxsb3dDaGF0U3BhY2'
     'VJbnZpdGVzEj8KC2FsbG93X2ZpbGVzGBEgASgLMh4udm9pY2UudXNlci52MS5Qcml2YWN5QXVk'
     'aWVuY2VSCmFsbG93RmlsZXMSUAoUYWxsb3dfdm9pY2VfbWVzc2FnZXMYEiABKAsyHi52b2ljZS'
-    '51c2VyLnYxLlByaXZhY3lBdWRpZW5jZVISYWxsb3dWb2ljZU1lc3NhZ2VzQg4KDF9wcmVzZXRf'
-    'ZW51bQ==');
+    '51c2VyLnYxLlByaXZhY3lBdWRpZW5jZVISYWxsb3dWb2ljZU1lc3NhZ2VzEigKDWFsbG93X2Zv'
+    'cndhcmQYEyABKAhIAVIMYWxsb3dGb3J3YXJkiAEBQg4KDF9wcmVzZXRfZW51bUIQCg5fYWxsb3'
+    'dfZm9yd2FyZA==');
 
 @$core.Deprecated('Use updatePresenceRequestDescriptor instead')
 const UpdatePresenceRequest$json = {

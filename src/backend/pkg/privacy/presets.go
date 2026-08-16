@@ -30,27 +30,29 @@ type Settings struct {
 	AllowChatSpaceInvites Audience
 	AllowFiles           Audience
 	AllowVoiceMessages   Audience
-	AllowFriendRequests  Audience
-	AllowGuestDM         bool
-}
-
-func SettingsForPreset(preset string) Settings {
-	showOnline, showGameStatus, showMmRating, showPhone, showStories,
-		allowPhoneSearch, allowDM, allowCalls, allowInvites, allowFiles, allowVoice, allowFriendRequests := PresetSettings(preset)
-	return Settings{
-		Preset:               preset,
-		ShowOnline:           showOnline,
-		ShowGameStatus:       showGameStatus,
-		ShowMmRating:         showMmRating,
-		ShowPhone:            showPhone,
-		ShowStories:          showStories,
-		AllowPhoneSearch:     allowPhoneSearch,
-		AllowDM:              allowDM,
-		AllowCalls:           allowCalls,
-		AllowChatSpaceInvites: allowInvites,
-		AllowFiles:           allowFiles,
-		AllowVoiceMessages:   allowVoice,
-		AllowFriendRequests:  allowFriendRequests,
-		AllowGuestDM:         preset == "gaming",
+		AllowFriendRequests  Audience
+		AllowGuestDM         bool
+		AllowForward         bool // binary; default true (privacy.md / forward-messages.md)
 	}
-}
+
+	func SettingsForPreset(preset string) Settings {
+		showOnline, showGameStatus, showMmRating, showPhone, showStories,
+			allowPhoneSearch, allowDM, allowCalls, allowInvites, allowFiles, allowVoice, allowFriendRequests := PresetSettings(preset)
+		return Settings{
+			Preset:               preset,
+			ShowOnline:           showOnline,
+			ShowGameStatus:       showGameStatus,
+			ShowMmRating:         showMmRating,
+			ShowPhone:            showPhone,
+			ShowStories:          showStories,
+			AllowPhoneSearch:     allowPhoneSearch,
+			AllowDM:              allowDM,
+			AllowCalls:           allowCalls,
+			AllowChatSpaceInvites: allowInvites,
+			AllowFiles:           allowFiles,
+			AllowVoiceMessages:   allowVoice,
+			AllowFriendRequests:  allowFriendRequests,
+			AllowGuestDM:         preset == "gaming",
+			AllowForward:         true,
+		}
+	}

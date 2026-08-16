@@ -816,6 +816,7 @@
   "privacyPresetWork": "Work",
   "privacyAllowDm": "Who can message you",
   "privacyAllowGuestDm": "Allow guest accounts in DMs",
+  "privacyAllowForward": "Allow others to forward my messages",
   "privacyVisibilityTitle": "Visibility",
   "privacyShowOnline": "Online status",
   "privacyShowGameStatus": "In-game status",

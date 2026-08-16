@@ -1638,6 +1638,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get privacyAllowGuestDm => 'Allow guest accounts in DMs';
 
   @override
+  String get privacyAllowForward => 'Allow others to forward my messages';
+
+  @override
   String get privacyVisibilityTitle => 'Visibility';
 
   @override

@@ -17,6 +17,7 @@ class PrivacySettingsScreen extends ConsumerStatefulWidget {
   static const Key screenKey = Key('privacy_settings_screen');
   static const Key presetKey = Key('privacy_preset');
   static const Key allowDmKey = Key('privacy_allow_dm');
+  static const Key allowForwardKey = Key('privacy_allow_forward');
   static const Key saveButtonKey = Key('privacy_save');
 
   @override
@@ -175,6 +176,14 @@ class _PrivacySettingsScreenState extends ConsumerState<PrivacySettingsScreen> {
                       value: settings.allowGuestDm,
                       onChanged: (v) => setState(
                         () => _settings = settings.copyWith(allowGuestDm: v),
+                      ),
+                    ),
+                    SwitchListTile(
+                      key: PrivacySettingsScreen.allowForwardKey,
+                      title: Text(l10n.privacyAllowForward),
+                      value: settings.allowForward,
+                      onChanged: (v) => setState(
+                        () => _settings = settings.copyWith(allowForward: v),
                       ),
                     ),
                     if (_error != null) ...[

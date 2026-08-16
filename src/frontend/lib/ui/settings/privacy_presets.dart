@@ -24,6 +24,7 @@ class PrivacyPresetDefaults {
         allowVoiceMessages: VoicePrivacyAudience.friendsOnly,
         allowFriendRequests: VoicePrivacyAudience.everyoneWithGuests,
         allowGuestDm: false,
+        allowForward: true,
       ),
       'work' => VoicePrivacySettings(
         profileId: profileId,
@@ -41,6 +42,7 @@ class PrivacyPresetDefaults {
         allowVoiceMessages: VoicePrivacyAudience.spaceMembersAndFriends,
         allowFriendRequests: VoicePrivacyAudience.spaceMembersOnly,
         allowGuestDm: false,
+        allowForward: true,
       ),
       _ => VoicePrivacySettings(
         profileId: profileId,
@@ -58,6 +60,7 @@ class PrivacyPresetDefaults {
         allowVoiceMessages: VoicePrivacyAudience.friendsAndFoF,
         allowFriendRequests: VoicePrivacyAudience.everyoneWithGuests,
         allowGuestDm: true,
+        allowForward: true,
       ),
     };
   }

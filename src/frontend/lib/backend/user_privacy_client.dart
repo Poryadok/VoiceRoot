@@ -173,6 +173,7 @@ class VoicePrivacySettings {
     required this.allowChatSpaceInvites,
     required this.allowFiles,
     required this.allowVoiceMessages,
+    this.allowForward = true,
   });
 
   final String profileId;
@@ -190,6 +191,7 @@ class VoicePrivacySettings {
   final VoicePrivacyAudience allowChatSpaceInvites;
   final VoicePrivacyAudience allowFiles;
   final VoicePrivacyAudience allowVoiceMessages;
+  final bool allowForward;
 
   user_pb.PrivacySettings toProto() {
     return user_pb.PrivacySettings(
@@ -208,6 +210,7 @@ class VoicePrivacySettings {
       allowChatSpaceInvites: allowChatSpaceInvites.toProto(),
       allowFiles: allowFiles.toProto(),
       allowVoiceMessages: allowVoiceMessages.toProto(),
+      allowForward: allowForward,
     );
   }
 
@@ -226,6 +229,7 @@ class VoicePrivacySettings {
     VoicePrivacyAudience? allowChatSpaceInvites,
     VoicePrivacyAudience? allowFiles,
     VoicePrivacyAudience? allowVoiceMessages,
+    bool? allowForward,
   }) {
     return VoicePrivacySettings(
       profileId: profileId,
@@ -244,6 +248,7 @@ class VoicePrivacySettings {
           allowChatSpaceInvites ?? this.allowChatSpaceInvites,
       allowFiles: allowFiles ?? this.allowFiles,
       allowVoiceMessages: allowVoiceMessages ?? this.allowVoiceMessages,
+      allowForward: allowForward ?? this.allowForward,
     );
   }
 }
@@ -289,6 +294,7 @@ VoicePrivacySettings voicePrivacyFromProto(user_pb.PrivacySettings proto) {
     allowVoiceMessages: proto.hasAllowVoiceMessages()
         ? voicePrivacyAudienceFromProto(proto.allowVoiceMessages)
         : VoicePrivacyAudience.nobody,
+    allowForward: proto.hasAllowForward() ? proto.allowForward : true,
   );
 }
 

@@ -204,6 +204,9 @@ message PrivacySettings {
   PrivacyAudience allow_chat_space_invites = 16;
   PrivacyAudience allow_files = 17;
   PrivacyAudience allow_voice_messages = 18;
+  // Binary: allow others to forward this profile's messages (privacy.md; default true).
+  // optional so omit on Update preserves existing / defaults to true.
+  optional bool allow_forward = 19;
 }
 
 message UpdatePresenceRequest {
