@@ -822,6 +822,15 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatListStrangerBadge => 'Незнакомец';
 
   @override
+  String get chatListMute => 'Без звука';
+
+  @override
+  String get chatListUnmute => 'Включить звук';
+
+  @override
+  String get chatListArchive => 'В архив';
+
+  @override
   String get chatCreateGroupTooltip => 'Создать группу';
 
   @override

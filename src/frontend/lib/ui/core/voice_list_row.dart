@@ -14,6 +14,7 @@ class VoiceListRow extends StatelessWidget {
     this.trailing,
     this.selected = false,
     this.onTap,
+    this.onLongPress,
   });
 
   final Widget? leading;
@@ -23,6 +24,7 @@ class VoiceListRow extends StatelessWidget {
   final Widget? trailing;
   final bool selected;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -34,6 +36,7 @@ class VoiceListRow extends StatelessWidget {
       color: selected ? voice.elevated : Colors.transparent,
       child: InkWell(
         onTap: onTap,
+        onLongPress: onLongPress,
         child: Row(
           children: [
             if (selected)
