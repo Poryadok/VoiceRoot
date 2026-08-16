@@ -3,14 +3,10 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"net"
 	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	matchmakingv1 "voice.app/voice/matchmaking/v1"
@@ -57,24 +53,6 @@ func (s *recordingSpaceMmConfig) UpdateSpaceMmConfig(_ context.Context, req *spa
 			UpdatedAt:      now,
 		},
 	}, nil
-}
-
-func startBufconnMatchmakingConn(t *testing.T, impl matchmakingv1.MatchmakingServiceServer) (grpc.ClientConnInterface, func()) {
-	t.Helper()
-	lis := bufconn.Listen(1 << 20)
-	srv := grpc.NewServer()
-	matchmakingv1.RegisterMatchmakingServiceServer(srv, impl)
-	go func() { _ = srv.Serve(lis) }()
-	conn, err := grpc.NewClient("passthrough:///bufnet",
-		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return lis.Dial() }),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	require.NoError(t, err)
-	return conn, func() {
-		_ = conn.Close()
-		srv.Stop()
-		_ = lis.Close()
-	}
 }
 
 func TestTranscodeSpacesMatchmakingQueue(t *testing.T) {
