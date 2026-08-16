@@ -44,6 +44,7 @@
 | P1.14 | **done** | `TestComposeSpaceProMemberCap_live` (seed filler + webhook join) |
 | P1.15 | **done** | `TestComposeSubscriptionGraceReminder_live` (D1 sweeper assert) |
 | P2.9 | **done** | ENC-12: `TestReindexChat_SkipsE2EBodies_postgres` (reindex skips `IsE2E`) |
+| P2.10 | **done** | PR-02: `user.presence_changed` + Realtime friend fan-out; `TestComposePresenceDNDInvisible_live` + Flutter |
 | P2.* / P3.* (rest) | **deferred** | roadmap / soft-launch+ |
 
 ---
@@ -148,7 +149,7 @@ Effort: **S** ≤0.5d · **M** 1–2d · **L** 3–5d · **XL** >1w (инфра/
 | P2.7 | Stories moderation hide + Nobody floor | B | ST-05/06 | M | Story fixes |
 | P2.8 | Search privacy audience | D+B | SR-05 | M | Search fix |
 | P2.9 | E2E reindex skips ciphertext | D | ENC-12 | M | **done** — Search IT + indexer skip |
-| P2.10 | Presence DND/invisible | B+C | PR-02 | M | |
+| P2.10 | Presence DND/invisible | B+C | PR-02 | M | **done** — friend NATS fan-out + compose/Flutter |
 | P2.11 | DM archive/hide | B+C | TC-DM-08 | M | |
 | P2.12 | Onboarding coach-marks MM/space | C | ON-03 | M | П.20 |
 | P2.13 | Premium cosmetics cross-smoke | B+C | SUB-06 | M | entitlements |
