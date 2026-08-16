@@ -18,9 +18,11 @@ const (
 	TypeMatchFound      NotificationType = "match_found"
 	TypeSearchNudge     NotificationType = "search_nudge"
 	TypeSearchTimeout   NotificationType = "search_timeout"
-	TypeIncomingCall    NotificationType = "incoming_call"
-	TypeSystem          NotificationType = "system"
+	TypeIncomingCall      NotificationType = "incoming_call"
+	TypeSystem            NotificationType = "system"
 	TypeVoiceMemberJoined NotificationType = "voice_member_joined"
+	TypeLfpJoinRequest    NotificationType = "lfp_join_request"
+	TypeLfpInviteRequest  NotificationType = "lfp_invite_request"
 )
 
 // DeliveryInput captures routing context for a single recipient.

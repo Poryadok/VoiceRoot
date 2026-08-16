@@ -116,7 +116,44 @@ func routeStoryNotification(
 			},
 		}
 		return pusher.SendPush(context.Background(), decisions, payload)
+	case *eventsv1.StoryStreamEvent_StoryLfpResponse:
+		ev := p.StoryLfpResponse
+		if ev == nil {
+			return nil
+		}
+		decisions := handler.HandleStoryLfpResponse(context.Background(), ev)
+		if len(decisions) == 0 {
+			return nil
+		}
+		title, body, data := lfpPushCopy(ev)
+		payload := push.Payload{
+			Title: title,
+			Body:  body,
+			Data:  data,
+		}
+		return pusher.SendPush(context.Background(), decisions, payload)
 	default:
 		return nil
 	}
+}
+
+func lfpPushCopy(ev *eventsv1.StoryLfpResponse) (title, body string, data map[string]string) {
+	title = "LFP join request"
+	body = "Someone wants to join your party"
+	typ := delivery.TypeLfpJoinRequest
+	if strings.EqualFold(ev.GetResponseType(), "INVITE") {
+		title = "LFP party invite"
+		body = "Someone invites you to their party"
+		typ = delivery.TypeLfpInviteRequest
+	}
+	data = map[string]string{
+		"type":              string(typ),
+		"story_id":          ev.GetStoryId(),
+		"sender_profile_id": ev.GetResponderProfileId(),
+		"author_profile_id": ev.GetAuthorProfileId(),
+		"response_type":     ev.GetResponseType(),
+		"action_accept":     "lfp_accept",
+		"action_decline":    "lfp_decline",
+	}
+	return title, body, data
 }

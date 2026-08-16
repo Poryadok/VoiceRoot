@@ -47,6 +47,7 @@ const (
 	MatchmakingService_GetPlayerProfile_FullMethodName      = "/voice.matchmaking.v1.MatchmakingService/GetPlayerProfile"
 	MatchmakingService_UpsertPlayerGameEntry_FullMethodName = "/voice.matchmaking.v1.MatchmakingService/UpsertPlayerGameEntry"
 	MatchmakingService_DeletePlayerGameEntry_FullMethodName = "/voice.matchmaking.v1.MatchmakingService/DeletePlayerGameEntry"
+	MatchmakingService_DecideLfpRequest_FullMethodName      = "/voice.matchmaking.v1.MatchmakingService/DecideLfpRequest"
 )
 
 // MatchmakingServiceClient is the client API for MatchmakingService service.
@@ -87,6 +88,9 @@ type MatchmakingServiceClient interface {
 	GetPlayerProfile(ctx context.Context, in *GetPlayerProfileRequest, opts ...grpc.CallOption) (*GetPlayerProfileResponse, error)
 	UpsertPlayerGameEntry(ctx context.Context, in *UpsertPlayerGameEntryRequest, opts ...grpc.CallOption) (*UpsertPlayerGameEntryResponse, error)
 	DeletePlayerGameEntry(ctx context.Context, in *DeletePlayerGameEntryRequest, opts ...grpc.CallOption) (*DeletePlayerGameEntryResponse, error)
+	// LFP Social Discovery decision (docs/features/matchmaking.md; roadmap П.3).
+	// Author Accept/Decline on JOIN|INVITE from story.lfp_response.
+	DecideLfpRequest(ctx context.Context, in *DecideLfpRequestRequest, opts ...grpc.CallOption) (*DecideLfpRequestResponse, error)
 }
 
 type matchmakingServiceClient struct {
@@ -377,6 +381,16 @@ func (c *matchmakingServiceClient) DeletePlayerGameEntry(ctx context.Context, in
 	return out, nil
 }
 
+func (c *matchmakingServiceClient) DecideLfpRequest(ctx context.Context, in *DecideLfpRequestRequest, opts ...grpc.CallOption) (*DecideLfpRequestResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DecideLfpRequestResponse)
+	err := c.cc.Invoke(ctx, MatchmakingService_DecideLfpRequest_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MatchmakingServiceServer is the server API for MatchmakingService service.
 // All implementations must embed UnimplementedMatchmakingServiceServer
 // for forward compatibility.
@@ -415,6 +429,9 @@ type MatchmakingServiceServer interface {
 	GetPlayerProfile(context.Context, *GetPlayerProfileRequest) (*GetPlayerProfileResponse, error)
 	UpsertPlayerGameEntry(context.Context, *UpsertPlayerGameEntryRequest) (*UpsertPlayerGameEntryResponse, error)
 	DeletePlayerGameEntry(context.Context, *DeletePlayerGameEntryRequest) (*DeletePlayerGameEntryResponse, error)
+	// LFP Social Discovery decision (docs/features/matchmaking.md; roadmap П.3).
+	// Author Accept/Decline on JOIN|INVITE from story.lfp_response.
+	DecideLfpRequest(context.Context, *DecideLfpRequestRequest) (*DecideLfpRequestResponse, error)
 	mustEmbedUnimplementedMatchmakingServiceServer()
 }
 
@@ -508,6 +525,9 @@ func (UnimplementedMatchmakingServiceServer) UpsertPlayerGameEntry(context.Conte
 }
 func (UnimplementedMatchmakingServiceServer) DeletePlayerGameEntry(context.Context, *DeletePlayerGameEntryRequest) (*DeletePlayerGameEntryResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeletePlayerGameEntry not implemented")
+}
+func (UnimplementedMatchmakingServiceServer) DecideLfpRequest(context.Context, *DecideLfpRequestRequest) (*DecideLfpRequestResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DecideLfpRequest not implemented")
 }
 func (UnimplementedMatchmakingServiceServer) mustEmbedUnimplementedMatchmakingServiceServer() {}
 func (UnimplementedMatchmakingServiceServer) testEmbeddedByValue()                            {}
@@ -1034,6 +1054,24 @@ func _MatchmakingService_DeletePlayerGameEntry_Handler(srv interface{}, ctx cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MatchmakingService_DecideLfpRequest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DecideLfpRequestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchmakingServiceServer).DecideLfpRequest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchmakingService_DecideLfpRequest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchmakingServiceServer).DecideLfpRequest(ctx, req.(*DecideLfpRequestRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MatchmakingService_ServiceDesc is the grpc.ServiceDesc for MatchmakingService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1152,6 +1190,10 @@ var MatchmakingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeletePlayerGameEntry",
 			Handler:    _MatchmakingService_DeletePlayerGameEntry_Handler,
+		},
+		{
+			MethodName: "DecideLfpRequest",
+			Handler:    _MatchmakingService_DecideLfpRequest_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

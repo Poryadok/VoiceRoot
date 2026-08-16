@@ -592,4 +592,22 @@ class VoiceStoriesClient {
       GatewayHttpFailure(:final error) => _failure(error),
     };
   }
+
+  /// POST /api/v1/stories/{id}/lfp-response — JOIN | INVITE (matchmaking.md Social Discovery).
+  Future<StoriesApiResult<void>> respondToLfpStory({
+    required String authorization,
+    required String storyId,
+    required String responseType,
+  }) async {
+    final result = await _gateway.postJson(
+      uri: _gateway.resolve('/api/v1/stories/$storyId/lfp-response'),
+      authorization: authorization,
+      body: {'responseType': responseType, 'response_type': responseType},
+      allowNoContent: true,
+    );
+    return switch (result) {
+      GatewayHttpOk() => const StoriesApiOk(null),
+      GatewayHttpFailure(:final error) => _failure(error),
+    };
+  }
 }

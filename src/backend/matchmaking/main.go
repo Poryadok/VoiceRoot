@@ -28,6 +28,7 @@ import (
 	"voice/backend/matchmaking/internal/s2s"
 	"voice/backend/matchmaking/internal/squad"
 	"voice/backend/matchmaking/internal/store"
+	"voice/backend/matchmaking/internal/storyconsume"
 	"voice/backend/matchmaking/internal/timeout"
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
@@ -210,8 +211,20 @@ func main() {
 			RatingFriends:           ratingFriends,
 			RatingSpaceCoMembership: ratingSpaceCoMembership,
 			SpaceQueue:              spaceQueueGate,
+			Parties:                 &store.PartyStore{Pool: pool},
+			Lfp:                     &store.LfpStore{Pool: pool},
 		}
 		matchmakingv1.RegisterMatchmakingServiceServer(grpcSrv, mmSvc)
+
+		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
+			lfpCtx, lfpCancel := context.WithCancel(context.Background())
+			defer lfpCancel()
+			go func() {
+				if err := storyconsume.Run(lfpCtx, natsURL, "matchmaking_story_lfp", &store.LfpStore{Pool: pool}); err != nil && logger != nil {
+					logger.Warn("story LFP consumer stopped", slog.Any("error", err))
+				}
+			}()
+		}
 
 		if redisQueue != nil {
 			worker := &matcher.Worker{

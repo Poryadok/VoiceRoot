@@ -37,6 +37,8 @@ type MatchmakingGRPC struct {
 	RatingFriends         MmRatingProfileFriendChecker
 	RatingSpaceCoMembership MmRatingSpaceCoMembershipChecker
 	SpaceQueue            SpaceQueueGate
+	Parties               *store.PartyStore
+	Lfp                   *store.LfpStore
 }
 
 func (s *MatchmakingGRPC) ListGames(ctx context.Context, req *matchmakingv1.ListGamesRequest) (*matchmakingv1.ListGamesResponse, error) {

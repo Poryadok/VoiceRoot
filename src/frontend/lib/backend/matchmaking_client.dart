@@ -376,6 +376,23 @@ class RespondToMatchData {
   }
 }
 
+class DecideLfpRequestData {
+  const DecideLfpRequestData({
+    required this.status,
+    this.partyId,
+  });
+
+  final String status;
+  final String? partyId;
+
+  static DecideLfpRequestData fromGatewayJson(Map<String, dynamic> json) {
+    return DecideLfpRequestData(
+      status: json['status'] as String? ?? '',
+      partyId: json['partyId'] as String? ?? json['party_id'] as String?,
+    );
+  }
+}
+
 /// Gateway client for /api/v1/matchmaking/games/** (matchmaking (docs/features/matchmaking.md) catalog).
 class VoiceMatchmakingClient {
   VoiceMatchmakingClient({required GatewayHttpClient gateway}) : _gateway = gateway;
@@ -649,6 +666,30 @@ class VoiceMatchmakingClient {
       body: {'accept': accept},
     );
     return _map(result, RespondToMatchData.fromGatewayJson);
+  }
+
+  /// POST /api/v1/matchmaking/lfp-requests/decide — author Accept/Decline (matchmaking.md Social Discovery).
+  Future<MatchmakingApiResult<DecideLfpRequestData>> decideLfpRequest({
+    required String authorization,
+    required String storyId,
+    required String responderProfileId,
+    required String responseType,
+    required String decision,
+  }) async {
+    final result = await _gateway.postJson(
+      uri: _gateway.resolve('/api/v1/matchmaking/lfp-requests/decide'),
+      authorization: authorization,
+      body: {
+        'storyId': storyId,
+        'story_id': storyId,
+        'responderProfileId': responderProfileId,
+        'responder_profile_id': responderProfileId,
+        'responseType': responseType,
+        'response_type': responseType,
+        'decision': decision,
+      },
+    );
+    return _map(result, DecideLfpRequestData.fromGatewayJson);
   }
 
   Future<MatchmakingApiResult<void>> cancelSearch({

@@ -1046,6 +1046,7 @@
     }
   },
   "storyLfpJoin": "Присоединиться",
+  "storyLfpInvite": "Пригласить",
   "storyLfpWrite": "Написать",
   "socialStoryCreate": "Новая сторис",
   "storyArchiveTitle": "Архив сторис",

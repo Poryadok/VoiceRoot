@@ -4267,6 +4267,175 @@ class RevokePlatformMMBanResponse extends $pb.GeneratedMessage {
   static RevokePlatformMMBanResponse? _defaultInstance;
 }
 
+/// Author decision on an LFP JOIN/INVITE (notification Accept/Decline).
+class DecideLfpRequestRequest extends $pb.GeneratedMessage {
+  factory DecideLfpRequestRequest({
+    $core.String? storyId,
+    $core.String? responderProfileId,
+    $core.String? responseType,
+    $core.String? decision,
+  }) {
+    final result = create();
+    if (storyId != null) result.storyId = storyId;
+    if (responderProfileId != null)
+      result.responderProfileId = responderProfileId;
+    if (responseType != null) result.responseType = responseType;
+    if (decision != null) result.decision = decision;
+    return result;
+  }
+
+  DecideLfpRequestRequest._();
+
+  factory DecideLfpRequestRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory DecideLfpRequestRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'DecideLfpRequestRequest',
+      package: const $pb.PackageName(
+          _omitMessageNames ? '' : 'voice.matchmaking.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'storyId')
+    ..aOS(2, _omitFieldNames ? '' : 'responderProfileId')
+    ..aOS(3, _omitFieldNames ? '' : 'responseType')
+    ..aOS(4, _omitFieldNames ? '' : 'decision')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DecideLfpRequestRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DecideLfpRequestRequest copyWith(
+          void Function(DecideLfpRequestRequest) updates) =>
+      super.copyWith((message) => updates(message as DecideLfpRequestRequest))
+          as DecideLfpRequestRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static DecideLfpRequestRequest create() => DecideLfpRequestRequest._();
+  @$core.override
+  DecideLfpRequestRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static DecideLfpRequestRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<DecideLfpRequestRequest>(create);
+  static DecideLfpRequestRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get storyId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set storyId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasStoryId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearStoryId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get responderProfileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set responderProfileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasResponderProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearResponderProfileId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get responseType => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set responseType($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasResponseType() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearResponseType() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get decision => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set decision($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasDecision() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearDecision() => $_clearField(4);
+}
+
+class DecideLfpRequestResponse extends $pb.GeneratedMessage {
+  factory DecideLfpRequestResponse({
+    $core.String? status,
+    $core.String? partyId,
+    $core.Iterable<SearchSession>? searchSessions,
+  }) {
+    final result = create();
+    if (status != null) result.status = status;
+    if (partyId != null) result.partyId = partyId;
+    if (searchSessions != null) result.searchSessions.addAll(searchSessions);
+    return result;
+  }
+
+  DecideLfpRequestResponse._();
+
+  factory DecideLfpRequestResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory DecideLfpRequestResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'DecideLfpRequestResponse',
+      package: const $pb.PackageName(
+          _omitMessageNames ? '' : 'voice.matchmaking.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'status')
+    ..aOS(2, _omitFieldNames ? '' : 'partyId')
+    ..pPM<SearchSession>(3, _omitFieldNames ? '' : 'searchSessions',
+        subBuilder: SearchSession.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DecideLfpRequestResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DecideLfpRequestResponse copyWith(
+          void Function(DecideLfpRequestResponse) updates) =>
+      super.copyWith((message) => updates(message as DecideLfpRequestResponse))
+          as DecideLfpRequestResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static DecideLfpRequestResponse create() => DecideLfpRequestResponse._();
+  @$core.override
+  DecideLfpRequestResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static DecideLfpRequestResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<DecideLfpRequestResponse>(create);
+  static DecideLfpRequestResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get status => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set status($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasStatus() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearStatus() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get partyId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set partyId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasPartyId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearPartyId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $pb.PbList<SearchSession> get searchSessions => $_getList(2);
+}
+
 const $core.bool _omitFieldNames =
     $core.bool.fromEnvironment('protobuf.omit_field_names');
 const $core.bool _omitMessageNames =

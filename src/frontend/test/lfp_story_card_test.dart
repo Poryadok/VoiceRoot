@@ -33,5 +33,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('lfp_story_join')), findsOneWidget);
+    expect(find.byKey(const Key('lfp_story_invite')), findsOneWidget);
   });
 }
