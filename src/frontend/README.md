@@ -32,6 +32,7 @@ CI: [.github/workflows/ci.yml](../../.github/workflows/ci.yml) — tier 1 job `f
 
 - Build uses `auto_updater` (WinSparkle) for signed delta updates; publish `appcast.xml` from [`scripts/release/appcast-template.xml`](../../scripts/release/appcast-template.xml) to CDN/R2.
 - Gateway serves `/api/v1/version?platform=windows` and returns `426` when `X-Voice-Client-Version` is below `min_supported_version` ([docs/features/updates.md](../../docs/features/updates.md)).
+- Unit smoke for shipped Windows gates/stub: [`test/windows_desktop_smoke_test.dart`](test/windows_desktop_smoke_test.dart) (tray/global PTT product still roadmap П.17).
 
 ## Docker (full app stack)
 

@@ -21,6 +21,7 @@ API-level live tests run on the VM with `flutter test` (not a browser driver).
 | [`test/file_attachment_e2e_live_test.dart`](../test/file_attachment_e2e_live_test.dart) | File upload + attachment message (skips without MinIO/R2) |
 | [`test/mobile_layout_e2e_live_test.dart`](../test/mobile_layout_e2e_live_test.dart) | platforms (docs/features/platforms.md) mobile layout: gateway health + narrow breakpoint contract |
 | [`test/windows_version_e2e_live_test.dart`](../test/windows_version_e2e_live_test.dart) | Windows desktop `/version` policy + dynamic 426 for outdated client |
+| [`test/windows_desktop_smoke_test.dart`](../test/windows_desktop_smoke_test.dart) | Unit smoke: Windows platform headers, PTT capability gate, auto-update stub wiring (tray/global hotkey product still П.17) |
 | [`test/trust_e2e_live_test.dart`](../test/trust_e2e_live_test.dart) | privacy/trust (docs/features/privacy.md): privacy DM block, report 202, 2FA enroll/verify/login gate |
 | [`test/bots_slash_e2e_live_test.dart`](../test/bots_slash_e2e_live_test.dart) | bots (docs/features/bots.md): install polling bot, `/ping` → pong in history |
 | [`test/bots_ephemeral_live_test.dart`](../test/bots_ephemeral_live_test.dart) | bots (docs/features/bots.md): ephemeral slash response (invoker-only) |

@@ -59,6 +59,7 @@
 | P2.2 | **product done** | RespondToLfpStory → NATS → DecideLfpRequest party queue + Notification Accept/Decline + Flutter LFP card (#35); compose/Flutter live IT still open |
 | P2.1 | **product done** | StartSpaceQueue + `mm:space:{id}` isolation + UpdateSpaceMmConfig + Gateway/Flutter (#32); compose/Flutter live IT still open |
 | P3.4 | **done** | `scripts/staging/smoke-request-id.sh` (DM → Loki chain); OBS-02 |
+| P3.2 | **partial** | `windows_desktop_smoke_test` + existing version/auto-update unit paths (UPD-03); tray/global PTT/overlay product still П.17–18 (PL-03) |
 | P3.6 | **done** | ResendMailSender when `AUTH_RESEND_API_KEY` set; `/password/reset` E2E + AU-13 |
 | P2.* / P3.* (rest) | **deferred** | roadmap / soft-launch+ |
 
@@ -178,7 +179,7 @@ Effort: **S** ≤0.5d · **M** 1–2d · **L** 3–5d · **XL** >1w (инфра/
 | # | Работа | Слой | IDs | Effort |
 |---|--------|------|-----|--------|
 | P3.1 | Реальный `integration_test` driver suite (push, deeplink, VoIP) | F | PL-04, DL-04, NT-05 | XL |
-| P3.2 | Windows tray/PTT/auto-update smoke | C/CI | PL-03, UPD-02/03 | L |
+| P3.2 | Windows tray/PTT/auto-update smoke | C/CI | PL-03, UPD-02/03 | L | **partial** — auto-update stub smoke; tray/PTT blocked on П.17 |
 | P3.3 | A11y automation beyond widgets | C | A11Y-03 | M |
 | P3.4 | Staging observability request_id scripted smoke | ops | OBS-02 | M | **done** — `scripts/staging/smoke-request-id.sh` |
 | P3.5 | Sticker/GIF/voice-message/recording lives | B+C | TC-MSG-09/10, VC-10 | L | нужен product scope |
