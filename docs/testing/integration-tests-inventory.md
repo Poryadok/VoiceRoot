@@ -218,7 +218,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | ID | Кейс | Статус | Где |
 |----|------|--------|-----|
 | PR-01 | Presence API for peer | `[exists]` | Gateway: `TestComposePresence_live`; Flutter: `presence_e2e_live_test` |
-| PR-02 | DND / invisible / custom status | `[missing]` | — |
+| PR-02 | DND / invisible / custom status | `[exists]` | Gateway: `TestComposePresenceDNDInvisible_live`; Flutter: `presence_e2e_live_test` (PR-02) |
 | PR-03 | In-game status privacy vs guests | `[missing]` | auth-and-contacts guest audience |
 
 ---
