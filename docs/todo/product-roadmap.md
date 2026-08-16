@@ -11,7 +11,7 @@ _Нет открытых пунктов._
 
 ## High
 
-- [ ] **П.1 — Матчмейкинг внутри спейса** — `StartSpaceQueue`, Redis `mm:space:{space_id}`, `UpdateSpaceMmConfig`, Gateway `POST /spaces/{id}/matchmaking/queue`, Flutter вкладка ММ в спейсе. Критерий: два участника спейса матчатся; посторонний из глобальной очереди — нет. Спека: [matchmaking.md](../features/matchmaking.md) §«Внутри спейса». Связано: [Space] `mm_config_json` unused (Batch 14).
+- [x] **П.1 — Матчмейкинг внутри спейса** — `StartSpaceQueue`, Redis `mm:space:{space_id}`, `UpdateSpaceMmConfig`, Gateway `POST /spaces/{id}/matchmaking/queue`, Flutter вкладка ММ в спейсе (#32). Compose/Flutter live IT still open. Спека: [matchmaking.md](../features/matchmaking.md) §«Внутри спейса».
 - [ ] **П.2 — Постматчевый цикл** — `RateTeammates`, `BanFromMatchmaking`, `ListMatchHistory`; таблицы `match_history`, `mm_ratings`, `mm_bans`; modal при выходе из match-squad; экран истории в профиле. Спека: [matchmaking.md](../features/matchmaking.md) §Оценка/Бан/История. Тесты: `matchmaking_rating_e2e_live_test.dart`, compose.
 - [ ] **П.3 — Stories «Ищу пати» → матчмейкинг** — `RespondToLfpStory` (JOIN|INVITE), NATS `story.lfp_response`, Notification inline Accept/Decline, Flutter LFP card. Критерий: JOIN → accept → пати в очереди. Спека: [stories.md](../features/stories.md). → также Batch 7 (`story.lfp_created` subscriber).
 - [ ] **П.4 — Каталог игр + заявки пользователей** — seed Dota 2/CS2/Valorant/PUBG; `SubmitGameRequest` → `pending_moderation`; Admin модерация; Flutter wizard «Добавить игру». Спека: [game-catalog.md](../features/game-catalog.md).
