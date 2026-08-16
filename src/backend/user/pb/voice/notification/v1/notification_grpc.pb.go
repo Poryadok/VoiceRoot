@@ -23,6 +23,7 @@ const (
 	NotificationService_UnregisterDevice_FullMethodName           = "/voice.notification.v1.NotificationService/UnregisterDevice"
 	NotificationService_GetNotificationSettings_FullMethodName    = "/voice.notification.v1.NotificationService/GetNotificationSettings"
 	NotificationService_UpdateNotificationSettings_FullMethodName = "/voice.notification.v1.NotificationService/UpdateNotificationSettings"
+	NotificationService_GetQuietHours_FullMethodName              = "/voice.notification.v1.NotificationService/GetQuietHours"
 	NotificationService_SetQuietHours_FullMethodName              = "/voice.notification.v1.NotificationService/SetQuietHours"
 	NotificationService_SendNotification_FullMethodName           = "/voice.notification.v1.NotificationService/SendNotification"
 	NotificationService_SendBulkNotification_FullMethodName       = "/voice.notification.v1.NotificationService/SendBulkNotification"
@@ -39,6 +40,7 @@ type NotificationServiceClient interface {
 	UnregisterDevice(ctx context.Context, in *UnregisterDeviceRequest, opts ...grpc.CallOption) (*UnregisterDeviceResponse, error)
 	GetNotificationSettings(ctx context.Context, in *GetNotificationSettingsRequest, opts ...grpc.CallOption) (*GetNotificationSettingsResponse, error)
 	UpdateNotificationSettings(ctx context.Context, in *UpdateNotificationSettingsRequest, opts ...grpc.CallOption) (*UpdateNotificationSettingsResponse, error)
+	GetQuietHours(ctx context.Context, in *GetQuietHoursRequest, opts ...grpc.CallOption) (*GetQuietHoursResponse, error)
 	SetQuietHours(ctx context.Context, in *SetQuietHoursRequest, opts ...grpc.CallOption) (*SetQuietHoursResponse, error)
 	SendNotification(ctx context.Context, in *SendNotificationRequest, opts ...grpc.CallOption) (*SendNotificationResponse, error)
 	SendBulkNotification(ctx context.Context, in *SendBulkNotificationRequest, opts ...grpc.CallOption) (*SendBulkNotificationResponse, error)
@@ -87,6 +89,16 @@ func (c *notificationServiceClient) UpdateNotificationSettings(ctx context.Conte
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(UpdateNotificationSettingsResponse)
 	err := c.cc.Invoke(ctx, NotificationService_UpdateNotificationSettings_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *notificationServiceClient) GetQuietHours(ctx context.Context, in *GetQuietHoursRequest, opts ...grpc.CallOption) (*GetQuietHoursResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetQuietHoursResponse)
+	err := c.cc.Invoke(ctx, NotificationService_GetQuietHours_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -143,6 +155,7 @@ type NotificationServiceServer interface {
 	UnregisterDevice(context.Context, *UnregisterDeviceRequest) (*UnregisterDeviceResponse, error)
 	GetNotificationSettings(context.Context, *GetNotificationSettingsRequest) (*GetNotificationSettingsResponse, error)
 	UpdateNotificationSettings(context.Context, *UpdateNotificationSettingsRequest) (*UpdateNotificationSettingsResponse, error)
+	GetQuietHours(context.Context, *GetQuietHoursRequest) (*GetQuietHoursResponse, error)
 	SetQuietHours(context.Context, *SetQuietHoursRequest) (*SetQuietHoursResponse, error)
 	SendNotification(context.Context, *SendNotificationRequest) (*SendNotificationResponse, error)
 	SendBulkNotification(context.Context, *SendBulkNotificationRequest) (*SendBulkNotificationResponse, error)
@@ -168,6 +181,9 @@ func (UnimplementedNotificationServiceServer) GetNotificationSettings(context.Co
 }
 func (UnimplementedNotificationServiceServer) UpdateNotificationSettings(context.Context, *UpdateNotificationSettingsRequest) (*UpdateNotificationSettingsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateNotificationSettings not implemented")
+}
+func (UnimplementedNotificationServiceServer) GetQuietHours(context.Context, *GetQuietHoursRequest) (*GetQuietHoursResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetQuietHours not implemented")
 }
 func (UnimplementedNotificationServiceServer) SetQuietHours(context.Context, *SetQuietHoursRequest) (*SetQuietHoursResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetQuietHours not implemented")
@@ -274,6 +290,24 @@ func _NotificationService_UpdateNotificationSettings_Handler(srv interface{}, ct
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NotificationService_GetQuietHours_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetQuietHoursRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NotificationServiceServer).GetQuietHours(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NotificationService_GetQuietHours_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NotificationServiceServer).GetQuietHours(ctx, req.(*GetQuietHoursRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _NotificationService_SetQuietHours_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SetQuietHoursRequest)
 	if err := dec(in); err != nil {
@@ -368,6 +402,10 @@ var NotificationService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UpdateNotificationSettings",
 			Handler:    _NotificationService_UpdateNotificationSettings_Handler,
+		},
+		{
+			MethodName: "GetQuietHours",
+			Handler:    _NotificationService_GetQuietHours_Handler,
 		},
 		{
 			MethodName: "SetQuietHours",

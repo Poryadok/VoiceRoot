@@ -582,3 +582,90 @@ func TestMessagingForwardMessage_authorCanForwardOwnWhenDisallowed(t *testing.T)
 	require.NoError(t, err)
 	require.Equal(t, "mine", fwd.GetMessage().GetContent())
 }
+
+// TestMessagingForwardMessage_withoutAttributionCopyAsNew documents FW-03 / forward-messages.md:
+// without_attribution copies content as a regular message with no Forwarded-from metadata.
+func TestMessagingForwardMessage_withoutAttributionCopyAsNew(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	sourceChat := uuid.New()
+	targetChat := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	profC := uuid.New()
+	acctA := uuid.New()
+	seedDMChat(t, ctx, pool, sourceChat, profA, profB)
+	seedDMChat(t, ctx, pool, targetChat, profA, profC)
+
+	client, _ := startMessagingServer(t, pool)
+
+	original, err := client.SendMessage(withProfileCtx(ctx, acctA, profB), &messagingv1.SendMessageRequest{
+		Chat:            chatDMRef(sourceChat),
+		Content:         "copy me plain",
+		AttachmentsJson: "[]",
+		MentionsJson:    "[]",
+	})
+	require.NoError(t, err)
+
+	withoutAttr := true
+	copied, err := client.ForwardMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.ForwardMessageRequest{
+		SourceMessageId:     original.GetMessage().GetId(),
+		TargetChat:          chatDMRef(targetChat),
+		WithoutAttribution:  &withoutAttr,
+	})
+	require.NoError(t, err)
+
+	msg := copied.GetMessage()
+	require.Equal(t, messagingv1.MessageKind_MESSAGE_KIND_REGULAR, msg.GetMessageKind())
+	require.Equal(t, "regular", msg.GetType())
+	require.Empty(t, msg.GetForwardFromId())
+	require.Empty(t, msg.GetForwardFromSender())
+	require.Equal(t, "copy me plain", msg.GetContent())
+	require.Equal(t, targetChat.String(), msg.GetChat().GetId())
+	require.Equal(t, profA.String(), msg.GetSenderProfileId())
+}
+
+// TestMessagingForwardMessage_withoutAttributionIgnoresAllowForward documents design screen-controls:
+// Copy as new stays available even when the author disabled Forward (allow_forward=false).
+func TestMessagingForwardMessage_withoutAttributionIgnoresAllowForward(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	sourceChat := uuid.New()
+	targetChat := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	profC := uuid.New()
+	acctA := uuid.New()
+	seedDMChat(t, ctx, pool, sourceChat, profA, profB)
+	seedDMChat(t, ctx, pool, targetChat, profA, profC)
+
+	client, _ := startMessagingServerWired(t, pool, messagingWire{
+		Privacy: allowForwardStub{deny: map[uuid.UUID]bool{profB: true}},
+	})
+
+	original, err := client.SendMessage(withProfileCtx(ctx, acctA, profB), &messagingv1.SendMessageRequest{
+		Chat:            chatDMRef(sourceChat),
+		Content:         "still copyable",
+		AttachmentsJson: "[]",
+		MentionsJson:    "[]",
+	})
+	require.NoError(t, err)
+
+	withoutAttr := true
+	copied, err := client.ForwardMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.ForwardMessageRequest{
+		SourceMessageId:    original.GetMessage().GetId(),
+		TargetChat:         chatDMRef(targetChat),
+		WithoutAttribution: &withoutAttr,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "regular", copied.GetMessage().GetType())
+	require.Empty(t, copied.GetMessage().GetForwardFromId())
+}

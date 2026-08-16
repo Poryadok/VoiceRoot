@@ -197,6 +197,23 @@ func (s *NotificationGRPC) UpdateNotificationSettings(ctx context.Context, req *
 	}, nil
 }
 
+func (s *NotificationGRPC) GetQuietHours(ctx context.Context, _ *notificationv1.GetQuietHoursRequest) (*notificationv1.GetQuietHoursResponse, error) {
+	profileID, ok := authctx.ProfileID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing profile")
+	}
+	if s.Settings == nil {
+		return nil, status.Error(codes.Unavailable, "settings store unavailable")
+	}
+	row, err := s.Settings.GetQuietHours(ctx, profileID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "get quiet hours: %v", err)
+	}
+	return &notificationv1.GetQuietHoursResponse{
+		QuietHours: quietHoursToProto(row),
+	}, nil
+}
+
 func (s *NotificationGRPC) SetQuietHours(ctx context.Context, req *notificationv1.SetQuietHoursRequest) (*notificationv1.SetQuietHoursResponse, error) {
 	profileID, ok := authctx.ProfileID(ctx)
 	if !ok {
@@ -260,6 +277,20 @@ func settingsToProto(row store.NotificationSettings) *notificationv1.Notificatio
 		out.MuteUntil = timestamppb.New(row.MuteUntil.UTC())
 	}
 	return out
+}
+
+func quietHoursToProto(row store.QuietHours) *notificationv1.QuietHours {
+	tz := row.Timezone
+	if tz == "" {
+		tz = "UTC"
+	}
+	return &notificationv1.QuietHours{
+		Enabled:          row.Enabled,
+		StartTime:        row.StartTime,
+		EndTime:          row.EndTime,
+		Timezone:         tz,
+		OverrideMentions: row.OverrideMentions,
+	}
 }
 
 func settingsFromProto(profileID uuid.UUID, in *notificationv1.NotificationSettings) (store.NotificationSettings, error) {

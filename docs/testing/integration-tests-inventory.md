@@ -96,7 +96,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 |----|------|--------|-----|
 | FW-01 | Forward DM → group с атрибуцией | `[exists]` | Flutter: `forward_messages_e2e_live_test` («forward DM message to group preserves attribution») |
 | FW-02 | Forward в channel | `[exists]` | Messaging IT + Gateway: `TestComposeForwardChannelCommentary_live`; Flutter channel+commentary |
-| FW-03 | Copy as new (без атрибуции) | `[missing]` | — |
+| FW-03 | Copy as new (без атрибуции) | `[partial]` | Messaging IT `withoutAttributionCopyAsNew` + Gateway transcode + Flutter client/UI; compose/Flutter live open |
 | FW-04 | Privacy forbid forward | `[exists]` | Messaging IT + Gateway: `TestComposeForwardPrivacyDeny_live`; Flutter FW-04 |
 | FW-05 | Multi-select forward | `[missing]` | — |
 | FW-06 | Forward E2E ciphertext policy | `[exists]` | Messaging IT: `TestMessagingForwardMessage_e2eToPlainDenied` / `e2eToE2EDMPreservesFlag` |
@@ -433,7 +433,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | NT-01 | In-app unread + WS notification | `[exists]` | Gateway: `TestComposeInAppNotifications_live`; Flutter: `in_app_notifications_e2e_live_test` |
 | NT-02 | FCM register + offline DM push payload | `[exists]` | Flutter: `fcm_e2e_live_test`, `fcm_delivery_e2e_live_test`, `fcm_android_e2e_live_test`; Gateway: `TestComposeNotificationRegisterDevice_live` |
 | NT-03 | APNs register | `[exists]` | Flutter: `apns_e2e_live_test` |
-| NT-04 | Quiet hours / per-chat granularity / voice join push | `[missing]` | roadmap П.10 |
+| NT-04 | Quiet hours / per-chat granularity / voice join push | `[partial]` | GetQuietHours + Flutter sync + delivery assert; compose/Flutter live IT open |
 | NT-05 | Real device alert delivery | `[n/a]` | staging secrets (DEPLOYMENT.md) |
 
 ---

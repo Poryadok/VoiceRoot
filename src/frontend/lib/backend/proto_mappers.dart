@@ -630,11 +630,13 @@ messaging_pb.ForwardMessageRequest forwardMessageRequestToProto({
   required String sourceMessageId,
   required String targetChatId,
   String? commentary,
+  bool withoutAttribution = false,
 }) {
   return messaging_pb.ForwardMessageRequest(
     sourceMessageId: sourceMessageId,
     targetChat: chatRefToProto(targetChatId),
     commentary: commentary,
+    withoutAttribution: withoutAttribution ? true : null,
   );
 }
 

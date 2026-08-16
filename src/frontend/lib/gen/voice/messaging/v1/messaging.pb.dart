@@ -1506,11 +1506,14 @@ class ForwardMessageRequest extends $pb.GeneratedMessage {
     $core.String? sourceMessageId,
     $1.ChatRef? targetChat,
     $core.String? commentary,
+    $core.bool? withoutAttribution,
   }) {
     final result = create();
     if (sourceMessageId != null) result.sourceMessageId = sourceMessageId;
     if (targetChat != null) result.targetChat = targetChat;
     if (commentary != null) result.commentary = commentary;
+    if (withoutAttribution != null)
+      result.withoutAttribution = withoutAttribution;
     return result;
   }
 
@@ -1532,6 +1535,7 @@ class ForwardMessageRequest extends $pb.GeneratedMessage {
     ..aOM<$1.ChatRef>(2, _omitFieldNames ? '' : 'targetChat',
         subBuilder: $1.ChatRef.create)
     ..aOS(3, _omitFieldNames ? '' : 'commentary')
+    ..aOB(4, _omitFieldNames ? '' : 'withoutAttribution')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1582,6 +1586,17 @@ class ForwardMessageRequest extends $pb.GeneratedMessage {
   $core.bool hasCommentary() => $_has(2);
   @$pb.TagNumber(3)
   void clearCommentary() => $_clearField(3);
+
+  /// FW-03 / forward-messages.md «Copy as new message»: copy content (and media)
+  /// as a regular message with no "Forwarded from" attribution.
+  @$pb.TagNumber(4)
+  $core.bool get withoutAttribution => $_getBF(3);
+  @$pb.TagNumber(4)
+  set withoutAttribution($core.bool value) => $_setBool(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasWithoutAttribution() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearWithoutAttribution() => $_clearField(4);
 }
 
 class MarkReadRequest extends $pb.GeneratedMessage {

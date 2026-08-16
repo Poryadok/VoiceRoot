@@ -179,3 +179,25 @@ func TestApplyQuietHours_OverrideMentionsAllowsMention(t *testing.T) {
 	out := delivery.ApplyQuietHours(base, in, quiet)
 	require.True(t, out.Push, "override_mentions allows mention push during DND")
 }
+
+func TestApplyQuietHours_SuppressesVoiceMemberJoined(t *testing.T) {
+	in := delivery.DeliveryInput{
+		RecipientProfileID: uuid.New(),
+		SenderProfileID:    uuid.New(),
+		ChatID:             uuid.NewString(),
+		Type:               delivery.TypeVoiceMemberJoined,
+		IsOnline:           false,
+		At:                 time.Date(2026, 6, 11, 23, 30, 0, 0, time.UTC),
+	}
+	quiet := delivery.QuietHoursSnapshot{
+		Enabled:          true,
+		StartTime:        "23:00",
+		EndTime:          "08:00",
+		Timezone:         "UTC",
+		OverrideMentions: true,
+		At:               in.At,
+	}
+	base := delivery.DeliveryDecision{InApp: true, Push: true}
+	out := delivery.ApplyQuietHours(base, in, quiet)
+	require.False(t, out.Push, "voice_member_joined must not bypass quiet hours")
+}
