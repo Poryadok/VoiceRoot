@@ -3584,6 +3584,60 @@ abstract class AppLocalizations {
   /// **'{slots} players · party {min}–{max}'**
   String gameCatalogModeSlots(int slots, int min, int max);
 
+  /// No description provided for @gameCatalogAddGame.
+  ///
+  /// In en, this message translates to:
+  /// **'Add game'**
+  String get gameCatalogAddGame;
+
+  /// No description provided for @addGameTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add game'**
+  String get addGameTitle;
+
+  /// No description provided for @addGameNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Game name'**
+  String get addGameNameLabel;
+
+  /// No description provided for @addGameModeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Mode name'**
+  String get addGameModeLabel;
+
+  /// No description provided for @addGameModeSlotsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Players in match'**
+  String get addGameModeSlotsLabel;
+
+  /// No description provided for @addGameSubmit.
+  ///
+  /// In en, this message translates to:
+  /// **'Submit for moderation'**
+  String get addGameSubmit;
+
+  /// No description provided for @addGameSubmitted.
+  ///
+  /// In en, this message translates to:
+  /// **'Submitted for moderation'**
+  String get addGameSubmitted;
+
+  /// No description provided for @addGameSubmitError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not submit game request'**
+  String get addGameSubmitError;
+
+  /// No description provided for @addGameSimilarHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Similar games in catalog'**
+  String get addGameSimilarHint;
+
   /// No description provided for @playerProfileTitle.
   ///
   /// In en, this message translates to:

@@ -20,8 +20,12 @@ func TestProfileID_FromMetadata(t *testing.T) {
 	require.Equal(t, id, got)
 }
 
-func TestProfileID_Missing(t *testing.T) {
+func TestIsStaff_FromRolesMetadata(t *testing.T) {
 	t.Parallel()
-	_, ok := ProfileID(context.Background())
-	require.False(t, ok)
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(
+		HeaderRoles, "member,staff",
+	))
+	require.True(t, IsStaff(ctx))
+	require.False(t, IsStaff(context.Background()))
 }
+

@@ -931,6 +931,15 @@
       "max": { "type": "int" }
     }
   },
+  "gameCatalogAddGame": "Add game",
+  "addGameTitle": "Add game",
+  "addGameNameLabel": "Game name",
+  "addGameModeLabel": "Mode name",
+  "addGameModeSlotsLabel": "Players in match",
+  "addGameSubmit": "Submit for moderation",
+  "addGameSubmitted": "Submitted for moderation",
+  "addGameSubmitError": "Could not submit game request",
+  "addGameSimilarHint": "Similar games in catalog",
   "playerProfileTitle": "Matchmaking profile",
   "playerProfileEntry": "Matchmaking profile",
   "playerProfileLoadError": "Could not load matchmaking profile",

@@ -421,6 +421,29 @@ class VoiceMatchmakingClient {
     return _mapList(result);
   }
 
+  /// User catalog submission → pending_moderation (GC-02 / game-catalog.md).
+  Future<MatchmakingApiResult<CatalogGame>> submitGameRequest({
+    required String authorization,
+    required String name,
+    required String configJson,
+    String? iconUrl,
+  }) async {
+    final body = <String, dynamic>{
+      'name': name,
+      'config_json': configJson,
+      if (iconUrl != null && iconUrl.isNotEmpty) 'icon_url': iconUrl,
+    };
+    final result = await _gateway.postJson(
+      uri: _gateway.resolve('/api/v1/matchmaking/game-requests'),
+      authorization: authorization,
+      body: body,
+    );
+    return _map(result, (data) {
+      final game = data['game'] as Map<String, dynamic>? ?? data;
+      return CatalogGame.fromGatewayJson(game);
+    });
+  }
+
   Future<MatchmakingApiResult<MatchListData>> listMatchHistory({
     required String authorization,
     String? cursor,

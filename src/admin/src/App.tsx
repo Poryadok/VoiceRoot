@@ -6,6 +6,7 @@ import { AnalyticsExportPage } from "./pages/AnalyticsExportPage";
 import { FunnelsPage } from "./pages/FunnelsPage";
 import { ProductAnalyticsPage } from "./pages/ProductAnalyticsPage";
 import { QueuePage } from "./pages/QueuePage";
+import { GameRequestsPage } from "./pages/GameRequestsPage";
 import { OAuthCallback } from "./oauth/OAuthCallback";
 import { apiBaseUrl, isOauthDisabled, oauthClientIdValue } from "./oauth/api";
 import { callbackRedirectUri } from "./oauth/callback";
@@ -94,6 +95,7 @@ function AdminShell() {
       <Routes>
         <Route path="/" element={<Navigate to="/queue" replace />} />
         <Route path="/queue" element={<QueuePage />} />
+        <Route path="/game-requests" element={<GameRequestsPage />} />
         <Route path="/audit" element={<AuditPage />} />
         <Route path="/analytics/product" element={<ProductAnalyticsPage />} />
         <Route path="/analytics/funnels" element={<FunnelsPage />} />
