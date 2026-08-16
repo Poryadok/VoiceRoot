@@ -83,8 +83,8 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | TC-MSG-06 | DM reply/thread endpoints | `[exists]` | Gateway: `TestComposeThreadsDMReply_live`; Flutter: `threads_e2e_live_test` |
 | TC-MSG-07 | Shared media list after attachment | `[exists]` | Gateway: `TestComposeSharedMedia_live`; Flutter: `shared_media_e2e_live_test` |
 | TC-MSG-08 | Slow mode в space channel | `[exists]` | Flutter: `spaces_slow_mode_e2e_live_test` |
-| TC-MSG-09 | Стикеры / GIF как продуктовый путь | `[missing]` | — (упомянуты в text-chat; отдельного live нет) |
-| TC-MSG-10 | Голосовые сообщения (audio attachment + player) | `[missing]` | — |
+| TC-MSG-09 | Стикеры / GIF как продуктовый путь | `[missing]` | deferred — [ADR 005](../adr/005-rich-media-live-tests-deferred.md); text-chat one-liners only |
+| TC-MSG-10 | Голосовые сообщения (audio attachment + player) | `[missing]` | deferred — [ADR 005](../adr/005-rich-media-live-tests-deferred.md); no live until product path |
 | TC-MSG-11 | View counters в группах/каналах | `[missing]` | — |
 | TC-MSG-12 | Runtime toggle `threads_enabled` / `allow_user_main_feed` | `[partial]` | Defaults: `thread_settings_integration_test.go`; runtime UpdateChat ignores (todo/backend) |
 
@@ -116,7 +116,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | VC-07 | Commander mode / raise hand / GrantFloor | `[partial]` | product: SetCommanderMode/RaiseHand/GrantFloor/SetBroadcasting + Flutter organizer + client ducking; compose/Flutter live IT open |
 | VC-08 | Video layers by subscription | `[missing]` | roadmap П.12 |
 | VC-09 | iOS VoIP push registration | `[exists]` | Flutter: `voip_e2e_live_test` (token register; device delivery = staging) |
-| VC-10 | Recording | `[missing]` | спека «Запись» — нет live |
+| VC-10 | Recording | `[missing]` | deferred — [ADR 005](../adr/005-rich-media-live-tests-deferred.md); local-only (no server compose) |
 
 ---
 
