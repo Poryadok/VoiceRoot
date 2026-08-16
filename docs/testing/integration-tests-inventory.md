@@ -113,7 +113,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | VC-04 | Group voice start/join tokens | `[exists]` | Flutter: `group_voice_e2e_live_test` |
 | VC-05 | Space voice room join/leave | `[exists]` | Flutter: `spaces_voice_e2e_live_test`; Voice IT: `voice_room_integration_test.go` |
 | VC-06 | Call privacy (stranger blocked) | `[partial]` | `call_privacy_integration_test.go` + privacy live (VC covered via privacy_actions) |
-| VC-07 | Commander mode / raise hand / GrantFloor | `[missing]` | roadmap П.11; unimplemented RPCs |
+| VC-07 | Commander mode / raise hand / GrantFloor | `[partial]` | product: SetCommanderMode/RaiseHand/GrantFloor/SetBroadcasting + Flutter organizer + client ducking; compose/Flutter live IT open |
 | VC-08 | Video layers by subscription | `[missing]` | roadmap П.12 |
 | VC-09 | iOS VoIP push registration | `[exists]` | Flutter: `voip_e2e_live_test` (token register; device delivery = staging) |
 | VC-10 | Recording | `[missing]` | спека «Запись» — нет live |

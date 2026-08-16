@@ -95,6 +95,13 @@ class _FakeLiveKitRoom implements VoiceLiveKitRoom {
   Future<void> setSpeakerMuted(bool muted) async {}
 
   @override
+  Future<void> setCommanderDucking({
+    required bool enabled,
+    String? commanderIdentity,
+    double duckedVolume = 0.2,
+  }) async {}
+
+  @override
   Future<void> setVideoEnabled(bool enabled) async {}
 
   @override

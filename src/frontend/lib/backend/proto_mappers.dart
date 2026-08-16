@@ -921,6 +921,10 @@ List<VoiceRoomParticipantState> voiceRoomParticipantStatesFromJson(
           isDeafened: item['is_deafened'] as bool? ?? false,
           isVideoOn: item['is_video_on'] as bool? ?? false,
           isScreenSharing: item['is_screen_sharing'] as bool? ?? false,
+          isCommander: item['is_commander'] as bool? ?? false,
+          handRaised: item['hand_raised'] as bool? ?? false,
+          hasFloor: item['has_floor'] as bool? ?? false,
+          isBroadcasting: item['is_broadcasting'] as bool? ?? false,
         ),
   ];
 }

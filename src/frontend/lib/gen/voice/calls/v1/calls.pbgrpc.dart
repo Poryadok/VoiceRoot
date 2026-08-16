@@ -146,6 +146,13 @@ class VoiceServiceClient extends $grpc.Client {
     return $createUnaryCall(_$setCommanderMode, request, options: options);
   }
 
+  $grpc.ResponseFuture<$0.SetBroadcastingResponse> setBroadcasting(
+    $0.SetBroadcastingRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$setBroadcasting, request, options: options);
+  }
+
   $grpc.ResponseFuture<$0.RaiseHandResponse> raiseHand(
     $0.RaiseHandRequest request, {
     $grpc.CallOptions? options,
@@ -158,6 +165,20 @@ class VoiceServiceClient extends $grpc.Client {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$lowerHand, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.GrantFloorResponse> grantFloor(
+    $0.GrantFloorRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$grantFloor, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.RevokeFloorResponse> revokeFloor(
+    $0.RevokeFloorRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$revokeFloor, request, options: options);
   }
 
   // method descriptors
@@ -242,6 +263,11 @@ class VoiceServiceClient extends $grpc.Client {
       '/voice.calls.v1.VoiceService/SetCommanderMode',
       ($0.SetCommanderModeRequest value) => value.writeToBuffer(),
       $0.SetCommanderModeResponse.fromBuffer);
+  static final _$setBroadcasting =
+      $grpc.ClientMethod<$0.SetBroadcastingRequest, $0.SetBroadcastingResponse>(
+          '/voice.calls.v1.VoiceService/SetBroadcasting',
+          ($0.SetBroadcastingRequest value) => value.writeToBuffer(),
+          $0.SetBroadcastingResponse.fromBuffer);
   static final _$raiseHand =
       $grpc.ClientMethod<$0.RaiseHandRequest, $0.RaiseHandResponse>(
           '/voice.calls.v1.VoiceService/RaiseHand',
@@ -252,6 +278,16 @@ class VoiceServiceClient extends $grpc.Client {
           '/voice.calls.v1.VoiceService/LowerHand',
           ($0.LowerHandRequest value) => value.writeToBuffer(),
           $0.LowerHandResponse.fromBuffer);
+  static final _$grantFloor =
+      $grpc.ClientMethod<$0.GrantFloorRequest, $0.GrantFloorResponse>(
+          '/voice.calls.v1.VoiceService/GrantFloor',
+          ($0.GrantFloorRequest value) => value.writeToBuffer(),
+          $0.GrantFloorResponse.fromBuffer);
+  static final _$revokeFloor =
+      $grpc.ClientMethod<$0.RevokeFloorRequest, $0.RevokeFloorResponse>(
+          '/voice.calls.v1.VoiceService/RevokeFloor',
+          ($0.RevokeFloorRequest value) => value.writeToBuffer(),
+          $0.RevokeFloorResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.calls.v1.VoiceService')
@@ -393,6 +429,15 @@ abstract class VoiceServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.SetCommanderModeRequest.fromBuffer(value),
         ($0.SetCommanderModeResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.SetBroadcastingRequest,
+            $0.SetBroadcastingResponse>(
+        'SetBroadcasting',
+        setBroadcasting_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.SetBroadcastingRequest.fromBuffer(value),
+        ($0.SetBroadcastingResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.RaiseHandRequest, $0.RaiseHandResponse>(
         'RaiseHand',
         raiseHand_Pre,
@@ -407,6 +452,22 @@ abstract class VoiceServiceBase extends $grpc.Service {
         false,
         ($core.List<$core.int> value) => $0.LowerHandRequest.fromBuffer(value),
         ($0.LowerHandResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.GrantFloorRequest, $0.GrantFloorResponse>(
+        'GrantFloor',
+        grantFloor_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) => $0.GrantFloorRequest.fromBuffer(value),
+        ($0.GrantFloorResponse value) => value.writeToBuffer()));
+    $addMethod(
+        $grpc.ServiceMethod<$0.RevokeFloorRequest, $0.RevokeFloorResponse>(
+            'RevokeFloor',
+            revokeFloor_Pre,
+            false,
+            false,
+            ($core.List<$core.int> value) =>
+                $0.RevokeFloorRequest.fromBuffer(value),
+            ($0.RevokeFloorResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.StartCallResponse> startCall_Pre($grpc.ServiceCall $call,
@@ -547,6 +608,15 @@ abstract class VoiceServiceBase extends $grpc.Service {
   $async.Future<$0.SetCommanderModeResponse> setCommanderMode(
       $grpc.ServiceCall call, $0.SetCommanderModeRequest request);
 
+  $async.Future<$0.SetBroadcastingResponse> setBroadcasting_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.SetBroadcastingRequest> $request) async {
+    return setBroadcasting($call, await $request);
+  }
+
+  $async.Future<$0.SetBroadcastingResponse> setBroadcasting(
+      $grpc.ServiceCall call, $0.SetBroadcastingRequest request);
+
   $async.Future<$0.RaiseHandResponse> raiseHand_Pre($grpc.ServiceCall $call,
       $async.Future<$0.RaiseHandRequest> $request) async {
     return raiseHand($call, await $request);
@@ -562,4 +632,20 @@ abstract class VoiceServiceBase extends $grpc.Service {
 
   $async.Future<$0.LowerHandResponse> lowerHand(
       $grpc.ServiceCall call, $0.LowerHandRequest request);
+
+  $async.Future<$0.GrantFloorResponse> grantFloor_Pre($grpc.ServiceCall $call,
+      $async.Future<$0.GrantFloorRequest> $request) async {
+    return grantFloor($call, await $request);
+  }
+
+  $async.Future<$0.GrantFloorResponse> grantFloor(
+      $grpc.ServiceCall call, $0.GrantFloorRequest request);
+
+  $async.Future<$0.RevokeFloorResponse> revokeFloor_Pre($grpc.ServiceCall $call,
+      $async.Future<$0.RevokeFloorRequest> $request) async {
+    return revokeFloor($call, await $request);
+  }
+
+  $async.Future<$0.RevokeFloorResponse> revokeFloor(
+      $grpc.ServiceCall call, $0.RevokeFloorRequest request);
 }

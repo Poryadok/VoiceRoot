@@ -5012,6 +5012,10 @@ class VoiceStateChanged extends $pb.GeneratedMessage {
     $core.bool? isDeafened,
     $core.bool? isVideoOn,
     $core.Iterable<$core.String>? profileIds,
+    $core.bool? isCommander,
+    $core.bool? handRaised,
+    $core.bool? hasFloor,
+    $core.bool? isBroadcasting,
   }) {
     final result = create();
     if (roomId != null) result.roomId = roomId;
@@ -5020,6 +5024,10 @@ class VoiceStateChanged extends $pb.GeneratedMessage {
     if (isDeafened != null) result.isDeafened = isDeafened;
     if (isVideoOn != null) result.isVideoOn = isVideoOn;
     if (profileIds != null) result.profileIds.addAll(profileIds);
+    if (isCommander != null) result.isCommander = isCommander;
+    if (handRaised != null) result.handRaised = handRaised;
+    if (hasFloor != null) result.hasFloor = hasFloor;
+    if (isBroadcasting != null) result.isBroadcasting = isBroadcasting;
     return result;
   }
 
@@ -5043,6 +5051,10 @@ class VoiceStateChanged extends $pb.GeneratedMessage {
     ..aOB(4, _omitFieldNames ? '' : 'isDeafened')
     ..aOB(5, _omitFieldNames ? '' : 'isVideoOn')
     ..pPS(6, _omitFieldNames ? '' : 'profileIds')
+    ..aOB(7, _omitFieldNames ? '' : 'isCommander')
+    ..aOB(8, _omitFieldNames ? '' : 'handRaised')
+    ..aOB(9, _omitFieldNames ? '' : 'hasFloor')
+    ..aOB(10, _omitFieldNames ? '' : 'isBroadcasting')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -5111,6 +5123,42 @@ class VoiceStateChanged extends $pb.GeneratedMessage {
 
   @$pb.TagNumber(6)
   $pb.PbList<$core.String> get profileIds => $_getList(5);
+
+  @$pb.TagNumber(7)
+  $core.bool get isCommander => $_getBF(6);
+  @$pb.TagNumber(7)
+  set isCommander($core.bool value) => $_setBool(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasIsCommander() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearIsCommander() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $core.bool get handRaised => $_getBF(7);
+  @$pb.TagNumber(8)
+  set handRaised($core.bool value) => $_setBool(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasHandRaised() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearHandRaised() => $_clearField(8);
+
+  @$pb.TagNumber(9)
+  $core.bool get hasFloor => $_getBF(8);
+  @$pb.TagNumber(9)
+  set hasFloor($core.bool value) => $_setBool(8, value);
+  @$pb.TagNumber(9)
+  $core.bool hasHasFloor() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearHasFloor() => $_clearField(9);
+
+  @$pb.TagNumber(10)
+  $core.bool get isBroadcasting => $_getBF(9);
+  @$pb.TagNumber(10)
+  set isBroadcasting($core.bool value) => $_setBool(9, value);
+  @$pb.TagNumber(10)
+  $core.bool hasIsBroadcasting() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearIsBroadcasting() => $_clearField(10);
 }
 
 enum ModerationStreamEvent_Payload {

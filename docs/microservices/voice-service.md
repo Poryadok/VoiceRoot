@@ -44,8 +44,11 @@ service VoiceService {
   rpc StartScreenShare(StartScreenShareRequest) returns (StartScreenShareResponse);
   rpc StopScreenShare(StopScreenShareRequest) returns (StopScreenShareResponse);
   rpc SetCommanderMode(SetCommanderModeRequest) returns (SetCommanderModeResponse);
+  rpc SetBroadcasting(SetBroadcastingRequest) returns (SetBroadcastingResponse);
   rpc RaiseHand(RaiseHandRequest) returns (RaiseHandResponse);
   rpc LowerHand(LowerHandRequest) returns (LowerHandResponse);
+  rpc GrantFloor(GrantFloorRequest) returns (GrantFloorResponse);
+  rpc RevokeFloor(RevokeFloorRequest) returns (RevokeFloorResponse);
 }
 ```
 
@@ -57,7 +60,7 @@ voice:session:{profile_id} → {
   chat_id, voice_room_id, space_id,
   is_muted, is_deafened, is_video_on,
   is_screen_sharing, is_commander,
-  hand_raised, joined_at
+  hand_raised, has_floor, is_broadcasting, joined_at
 }
 
 voice:room:{room_id} → {
