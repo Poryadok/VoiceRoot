@@ -35,7 +35,8 @@
 | P1.1 | **done** | auth `depends_on: nats` + convert negatives + `TestComposeConvertGuestNATS_live` |
 | P1.2 | **done** | server `guest_reminder_last_shown_at` + get/mark; Flutter cadence; Flutter live → WT-INTEGRATION optional |
 | P1.3 | **done** | ListSessions/RevokeSession + `TestComposeAuthSessions_live` |
-| P1.5, P1.7–11 | **blocked** | product deps (see inventory / todo/backend) |
+| P1.11 | **partial** | `handleMatchDecline` party-aware + grpcsvc IT (PR #4); compose live → WT-INTEGRATION |
+| P1.5, P1.7–10 | **blocked** | product deps (see inventory / todo/backend) |
 | P1.14 | **product done** | compose `SPACE_GRPC_ADDR` + S2S/NATS Space Pro sync; member-cap without Seed; compose live join-51st → WT-INTEGRATION |
 | P1.15 | **product done** | `subscription.grace_reminder` D1/D3/D7 + Notification consumer stub; compose assert → WT-INTEGRATION |
 | P2.* / P3.* | **deferred** | roadmap / soft-launch+ |
@@ -98,7 +99,7 @@ Effort: **S** ≤0.5d · **M** 1–2d · **L** 3–5d · **XL** >1w (инфра/
 
 | # | Кейс | Слой | IDs | Effort | Notes |
 |---|------|------|-----|--------|-------|
-| P1.11 | Cross-party decline: acceptors continue | B | MM-07 | M | **после** fix handleMatchDecline |
+| P1.11 | Cross-party decline: acceptors continue | B | MM-07 | M | product fix merged; compose assert → WT-INTEGRATION |
 | P1.12 | Flutter `matchmaking_rating_e2e_live_test` + skip rating | C | MM-05 | M | compose rating exists |
 | P1.13 | MM ban live compose | B | MM-06 | S | store IT exists |
 
