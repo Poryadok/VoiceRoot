@@ -95,6 +95,42 @@ func TestSetQuietHours_Success(t *testing.T) {
 	require.True(t, got.Enabled)
 }
 
+func TestGetQuietHours_RoundTrip(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startNotificationPostgresForTest(t, ctx)
+	applyNotificationMigration(t, ctx, pool)
+
+	profileID := uuid.New()
+	svc := &NotificationGRPC{Settings: &store.SettingsStore{Pool: pool}}
+	_, err := svc.SetQuietHours(incomingProfileCtx(profileID), &notificationv1.SetQuietHoursRequest{
+		Enabled:          true,
+		StartTime:        "22:30",
+		EndTime:          "06:15",
+		Timezone:         "Europe/Moscow",
+		OverrideMentions: false,
+	})
+	require.NoError(t, err)
+
+	resp, err := svc.GetQuietHours(incomingProfileCtx(profileID), &notificationv1.GetQuietHoursRequest{})
+	require.NoError(t, err)
+	require.NotNil(t, resp.GetQuietHours())
+	require.True(t, resp.GetQuietHours().GetEnabled())
+	require.Equal(t, "22:30", resp.GetQuietHours().GetStartTime())
+	require.Equal(t, "06:15", resp.GetQuietHours().GetEndTime())
+	require.Equal(t, "Europe/Moscow", resp.GetQuietHours().GetTimezone())
+	require.False(t, resp.GetQuietHours().GetOverrideMentions())
+}
+
+func TestGetQuietHours_Unauthenticated(t *testing.T) {
+	svc := &NotificationGRPC{Settings: &store.SettingsStore{}}
+	_, err := svc.GetQuietHours(context.Background(), &notificationv1.GetQuietHoursRequest{})
+	require.Error(t, err)
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+}
+
 func TestSetQuietHours_Unauthenticated(t *testing.T) {
 	svc := &NotificationGRPC{Settings: &store.SettingsStore{}}
 	_, err := svc.SetQuietHours(context.Background(), &notificationv1.SetQuietHoursRequest{})

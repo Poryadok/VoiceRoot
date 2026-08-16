@@ -44,6 +44,31 @@ func TestTranscodeMessagesForward(t *testing.T) {
 	require.Equal(t, "chat-target-1", grpcRec.last.GetTargetChat().GetId())
 }
 
+// TestTranscodeMessagesForwardWithoutAttribution documents FW-03:
+// without_attribution is passed through to MessagingService.ForwardMessage.
+func TestTranscodeMessagesForwardWithoutAttribution(t *testing.T) {
+	t.Parallel()
+
+	grpcRec := &recordingMessagesForward{}
+	conn, cleanup := startBufconnMessagingConn(t, grpcRec)
+	t.Cleanup(cleanup)
+
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+		},
+		transcoder: &transcoder{clients: grpcClients{messaging: messagingv1.NewMessagingServiceClient(conn)}},
+	})
+
+	body := `{"source_message_id":"msg-src-2","target_chat":{"id":"chat-target-2"},"without_attribution":true}`
+	resp := performRequest(h, http.MethodPost, "/api/v1/messages/forward", body, map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	require.Equal(t, http.StatusOK, resp.Code, "body=%s", resp.Body.String())
+	require.NotNil(t, grpcRec.last)
+	require.True(t, grpcRec.last.GetWithoutAttribution())
+}
+
 type recordingMessagesForward struct {
 	messagingv1.UnimplementedMessagingServiceServer
 	last *messagingv1.ForwardMessageRequest
