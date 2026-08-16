@@ -101,6 +101,26 @@ Default staging hostnames live in [`deploy/staging/domains.defaults`](../../../d
 
 See `docs/TESTING.md` and the `flutter-web-client-testing` skill.
 
+## Device driver scaffold (P3.1 / PL-04)
+
+Host `flutter_tester` suite under `IntegrationTestWidgetsFlutterBinding` (not a physical device):
+
+| Test | Scope |
+|------|--------|
+| [`integration_test/device_driver_smoke_test.dart`](device_driver_smoke_test.dart) | Deep-link → conversation; FCM/VoIP `register-device` contracts; FCM→WS notification mapping |
+
+**CI:** job `flutter-device-driver` in [`.github/workflows/ci.yml`](../../../.github/workflows/ci.yml) (Tier 1, path-filtered with frontend).
+
+**Local (PowerShell):**
+
+```powershell
+cd src/frontend
+flutter test integration_test/device_driver_smoke_test.dart -d flutter-tester `
+  --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080
+```
+
+**Honest gaps (still XL / out of CI):** real-device alert delivery (NT-05), mobile App Links / AASA (DL-04 remainder), CallKit / PushKit / LiveKit media.
+
 ## Chrome integration_test (deep-links/platforms (docs/features/deep-links.md) deep links)
 
 UI-driven navigation in Chrome (no live API required — ProviderScope overrides):
@@ -109,7 +129,7 @@ UI-driven navigation in Chrome (no live API required — ProviderScope overrides
 |------|--------|
 | [`integration_test/deeplink_web_test.dart`](deeplink_web_test.dart) | `applyDeepLinkNavigation` → selected chat + conversation semantics |
 
-**CI:** job `flutter-web-integration` in [`.github/workflows/ci.yml`](../../../.github/workflows/ci.yml).
+**CI:** job `flutter-web-integration` in [`.github/workflows/ci.yml`](../../../.github/workflows/ci.yml) (Tier 2 / master). Web CI also runs [`test/deeplink_web_chrome_test.dart`](../test/deeplink_web_chrome_test.dart) with `-d chrome` (`flutter test` + `integration_test` package cannot target web).
 
 **Local (PowerShell):**
 

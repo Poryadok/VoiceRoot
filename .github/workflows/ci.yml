@@ -914,6 +914,35 @@ jobs:
           flutter test test/deeplink_web_chrome_test.dart -d chrome \
             --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080
 
+  # P3.1 host integration_test driver (not physical device / emulator).
+  flutter-device-driver:
+    needs: changes
+    if: >-
+      always() &&
+      needs.changes.result == 'success' &&
+      needs.changes.outputs.code == 'true' &&
+      (needs.changes.outputs.frontend == 'true' ||
+       needs.changes.outputs.protos == 'true' ||
+       needs.changes.outputs.global == 'true' ||
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Prefetch sqlite3mc native assets
+        run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
+      - name: Flutter device-driver integration_test
+        working-directory: src/frontend
+        run: |
+          flutter pub get
+          flutter test integration_test/device_driver_smoke_test.dart \
+            -d flutter-tester \
+            --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080
+
   flutter-ios:
     needs: changes
     if: >-
@@ -978,6 +1007,7 @@ jobs:
       - protobuf
       - compose-config
       - flutter
+      - flutter-device-driver
       - web
       - golangci
       - backend-go-pkg
@@ -1011,6 +1041,7 @@ jobs:
           JOB_PROTOBUF: ${{ needs.protobuf.result }}
           JOB_COMPOSE_CONFIG: ${{ needs.compose-config.result }}
           JOB_FLUTTER: ${{ needs.flutter.result }}
+          JOB_FLUTTER_DEVICE_DRIVER: ${{ needs.flutter-device-driver.result }}
           JOB_WEB: ${{ needs.web.result }}
           JOB_GOLANGCI: ${{ needs.golangci.result }}
           JOB_BACKEND_GO_PKG: ${{ needs.backend-go-pkg.result }}

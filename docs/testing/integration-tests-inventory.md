@@ -20,7 +20,7 @@
 2. **Flutter live** — `src/frontend/test/*_e2e_live_test.dart` (`VOICE_RUN_LIVE_INTEGRATION=true`)
 3. **Go service IT** — `*_integration_test.go` + testcontainers (nightly / `backend-go-integration`)
 4. **Auth Java IT** — `*IntegrationTest.java` + Testcontainers
-5. **Flutter `integration_test/`** — device/browser driver (сейчас почти пусто; см. README)
+5. **Flutter `integration_test/`** — host device-driver scaffold + Chrome deeplink; physical device suite still open (см. README)
 
 Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инвентаре «существует» = тест есть в репо, **не** обязательно в smoke.
 
@@ -401,7 +401,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | DL-01 | Invite HTML redirect + resolve | `[exists]` | Gateway: `TestComposeDeepLinks_live`; Flutter: `deeplink_invite_e2e_live_test` |
 | DL-02 | Resolve when Search down | `[exists]` | `TestComposeDeepLinksResolveWhenSearchDown_live` |
 | DL-03 | Message/profile/channel deep link kinds | `[partial]` | invite covered; full matrix unclear |
-| DL-04 | Mobile universal links / app links | `[missing]` | device `integration_test` aspirational (todo) |
+| DL-04 | Mobile universal links / app links | `[partial]` | host `device_driver_smoke_test` deeplink; on-device App Links / AASA still open |
 
 ---
 
@@ -412,7 +412,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | PL-01 | Mobile narrow layout | `[exists]` | `mobile_layout_e2e_live_test` |
 | PL-02 | Windows version policy 426 | `[exists]` | Gateway: `TestComposeWindowsVersionPolicy_live`; Flutter: `windows_version_e2e_live_test` |
 | PL-03 | Windows tray / PTT / overlay | `[partial]` | capability `canUseGlobalPushToTalkHotkey` + `windows_desktop_smoke_test`; tray/hotkey/overlay product still roadmap П.17–18 |
-| PL-04 | Device driver integration_test suite | `[missing]` | todo; `integration_test/` mostly empty |
+| PL-04 | Device driver integration_test suite | `[partial]` | `integration_test/device_driver_smoke_test.dart` + CI `flutter-device-driver`; physical push/VoIP media still open |
 
 ---
 
@@ -434,7 +434,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | NT-02 | FCM register + offline DM push payload | `[exists]` | Flutter: `fcm_e2e_live_test`, `fcm_delivery_e2e_live_test`, `fcm_android_e2e_live_test`; Gateway: `TestComposeNotificationRegisterDevice_live` |
 | NT-03 | APNs register | `[exists]` | Flutter: `apns_e2e_live_test` |
 | NT-04 | Quiet hours / per-chat granularity / voice join push | `[partial]` | GetQuietHours + Flutter sync + delivery assert; compose/Flutter live IT open |
-| NT-05 | Real device alert delivery | `[n/a]` | staging secrets (DEPLOYMENT.md) |
+| NT-05 | Real device alert delivery | `[n/a]` | staging secrets (DEPLOYMENT.md); host driver covers register contract only |
 
 ---
 
@@ -519,4 +519,4 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 3. Часть спек (стикеры, запись войса, view counters) без явных acceptance tests в CI docs.
 4. Federation deferred — исключена из обязательств.
 5. Observability/analytics DoD частично staging-only (`[n/a]`).
-6. «Integration» на Flutter = live host tests; `integration_test/` device suite не реализована (зафиксировано в todo и README).
+6. «Integration» на Flutter = live host tests + host `integration_test/` driver scaffold (`device_driver_smoke_test`, CI `flutter-device-driver`); physical-device push/VoIP/App Links still open (NT-05 / DL-04 remainder).

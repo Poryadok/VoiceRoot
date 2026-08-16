@@ -191,7 +191,7 @@ Promtail ставит label **`namespace`** из pod metadata; **`request_id`** 
 | Изменения в | Локально                                                          |
 |-------------|-------------------------------------------------------------------|
 | Репозиторий целиком (sign-off / tier 3) | **`make build-all`** + **`make flutter-ci`** — как nightly **`local-ci-parity`**; на каждый коммит не обязательно |
-| Flutter (как в CI, на хосте с SDK) | из корня: **`make flutter-ci`** — `flutter pub get`, `flutter analyze`, `flutter test` в `src/frontend/` (в т.ч. якорный `test/e2e_readiness_test.dart`). Каталог [`integration_test/`](../src/frontend/integration_test/README.md) — под будущие device/e2e сценарии, см. README там и скилл `flutter-web-client-testing` |
+| Flutter (как в CI, на хосте с SDK) | из корня: **`make flutter-ci`** — `flutter pub get`, `flutter analyze`, `flutter test` в `src/frontend/` (в т.ч. якорный `test/e2e_readiness_test.dart`). Device-driver scaffold: `flutter test integration_test/device_driver_smoke_test.dart -d flutter-tester` (CI job **`flutter-device-driver`**). См. [`integration_test/README.md`](../src/frontend/integration_test/README.md) и скилл `flutter-web-client-testing` |
 | Go-сервис   | `cd src/backend/<service> && CGO_ENABLED=0 go test ./...`; общий прогон — **`make golangci-ci`** из корня или `golangci-lint run ./...` в каталоге модуля; для Gateway дополнительно `CGO_ENABLED=1 go test -race ./...` (цель **`gateway-test-race-ci`**, входит в `build-all`) |
 | Auth (Java) | `cd src/backend/auth && mvn -B test` (как **`make auth-test-ci`** / CI); образ и smoke — Docker, см. CI ниже |
 | Developer Portal | `cd src/developer-portal && npm ci && npm test && npm run build` (как job **`developer-portal`** в CI) |
