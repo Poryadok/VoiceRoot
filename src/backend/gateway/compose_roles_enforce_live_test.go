@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	permBitTextChatSendMessages    = uint64(1) << 15
-	permBitVoiceJoin               = uint64(1) << 17
+	permBitTextChatSendMessages     = uint64(1) << 15
+	permBitVoiceJoin                = uint64(1) << 17
 	permBitTextChatMentionAllInChat = uint64(1) << 24
 )
 
