@@ -109,6 +109,55 @@ func TestGetChatMessagesForBot_returnsMessageBodies(t *testing.T) {
 	require.NotEmpty(t, resp.GetMessages()[0].GetContent(), "messages[] must include content bodies (bots (docs/features/bots.md))")
 }
 
+func TestAutocompleteSlashOption_offlineReturnsEmpty(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	client, st, cleanup := startBotGRPC(t)
+	defer cleanup()
+	ctx := withAccount(context.Background(), uuid.New(), uuid.New())
+	profile, _ := authProfile(ctx)
+
+	reg, err := client.RegisterBot(ctx, &botv1.RegisterBotRequest{
+		Name: "OfflineAC", ScopesJson: `["TEXT_CHAT_SEND_MESSAGES"]`,
+	})
+	require.NoError(t, err)
+	botID := reg.GetBot().GetId()
+	botUUID, err := uuid.Parse(botID)
+	require.NoError(t, err)
+
+	manifestYAML := `name: OfflineAC
+scopes: [TEXT_CHAT_SEND_MESSAGES]
+commands:
+  - name: stats
+    description: Stats
+    options:
+      - name: game
+        type: string
+        required: true
+        autocomplete: true
+`
+	_, err = client.ApplyManifest(ctx, &botv1.ApplyManifestRequest{BotId: botID, ManifestYaml: manifestYAML})
+	require.NoError(t, err)
+
+	chatID := uuid.New()
+	_, err = st.InstallInSpace(ctx, botUUID, uuid.New(), profile, []uuid.UUID{chatID})
+	require.NoError(t, err)
+	// Intentionally no TouchPresence — bot is offline.
+
+	chatType := chatv1.ChatType_CHAT_TYPE_CHANNEL
+	resp, err := client.AutocompleteSlashOption(ctx, &botv1.AutocompleteSlashOptionRequest{
+		Chat:         &chatv1.ChatRef{Id: chatID.String(), Type: &chatType},
+		BotId:        botID,
+		CommandName:  "stats",
+		OptionName:   "game",
+		FocusedValue: "cs",
+	})
+	require.NoError(t, err)
+	require.Empty(t, resp.GetChoices())
+	require.False(t, resp.GetPending(), "offline bot must not enqueue pending autocomplete")
+}
+
 func TestAutocompleteSlashOption_pollingBotReturnsPending(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
@@ -142,6 +191,7 @@ commands:
 	require.NoError(t, err)
 	require.True(t, resp.GetPending(), "polling bot autocomplete must return pending=true until CompleteAutocomplete")
 }
+
 
 func TestGetChatMessagesForBot_deniedWhenChatNotWhitelisted(t *testing.T) {
 	if testing.Short() {

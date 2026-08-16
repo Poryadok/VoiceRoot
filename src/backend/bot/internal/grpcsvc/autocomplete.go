@@ -39,6 +39,10 @@ func (s *BotGRPC) AutocompleteSlashOption(ctx context.Context, req *botv1.Autoco
 	if err != nil {
 		return nil, mapStoreErr(err)
 	}
+	if !s.isBotOnline(ctx, botID) {
+		// Mirror ExecuteSlashInteraction: offline bots cannot serve autocomplete (bots.md status).
+		return &botv1.AutocompleteSlashOptionResponse{}, nil
+	}
 	cmdName := strings.TrimPrefix(strings.TrimSpace(req.GetCommandName()), "/")
 	optionName := strings.TrimSpace(req.GetOptionName())
 	if cmdName == "" || optionName == "" {

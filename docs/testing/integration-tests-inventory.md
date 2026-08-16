@@ -366,7 +366,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | BT-04 | Webhook delivery | `[exists]` | Gateway: `TestComposeBotsWebhook_live` |
 | BT-05 | Timeout / deferred / offline greyout / per-chat / privileged / daily limit / uninstall | `[exists]` | Gateway suite in `compose_bots_slash_live_test.go`, `compose_bots_uninstall_live_test.go` |
 | BT-06 | Degradation Search/Bot down | `[exists]` | `compose_bots_degradation_live_test.go` |
-| BT-07 | Autocomplete / subcommands / portal catalog UX | `[missing]` | roadmap П.15 |
+| BT-07 | Autocomplete / subcommands / portal catalog UX | `[exists]` | Gateway: `TestComposeBotsAutocomplete_live`; Flutter: `bots_autocomplete_e2e_live_test`; portal catalog UX (#30) |
 | BT-08 | Slash → in-app notification cross-cut | `[missing]` | todo cross-cutting |
 
 ---
