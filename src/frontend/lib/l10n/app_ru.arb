@@ -777,6 +777,7 @@
   "privacyPresetWork": "Рабочий",
   "privacyAllowDm": "Кто может писать в ЛС",
   "privacyAllowGuestDm": "Разрешить гостевые аккаунты в ЛС",
+  "privacyAllowForward": "Разрешить пересылку моих сообщений",
   "privacyVisibilityTitle": "Видимость",
   "privacyShowOnline": "Онлайн-статус",
   "privacyShowGameStatus": "Статус «в игре»",

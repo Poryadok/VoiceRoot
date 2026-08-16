@@ -7,10 +7,11 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"voice/backend/user/internal/authctx"
 	"voice/backend/pkg/privacy"
+	"voice/backend/user/internal/authctx"
 	"voice/backend/user/internal/store"
 
 	userv1 "voice.app/voice/user/v1"
@@ -103,6 +104,14 @@ func (s *UserGRPC) UpdatePrivacySettings(ctx context.Context, req *userv1.Update
 	if privacyStore == nil {
 		return nil, status.Error(codes.FailedPrecondition, "privacy store not configured")
 	}
+	allowForward := true
+	if in.AllowForward != nil {
+		allowForward = in.GetAllowForward()
+	} else if existing, err := privacyStore.GetByProfileID(ctx, profileID); err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	} else if existing != nil {
+		allowForward = existing.AllowForward
+	}
 	saved, err := privacyStore.Upsert(ctx, store.PrivacyRow{
 		ProfileID:             profileID,
 		Preset:                strings.TrimSpace(in.GetPreset()),
@@ -119,6 +128,7 @@ func (s *UserGRPC) UpdatePrivacySettings(ctx context.Context, req *userv1.Update
 		AllowVoiceMessages:    privacy.FromProto(in.GetAllowVoiceMessages()),
 		AllowFriendRequests:   privacy.FromProto(in.GetAllowFriendRequests()),
 		AllowGuestDM:          in.GetAllowGuestDm(),
+		AllowForward:          allowForward,
 	})
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -182,22 +192,23 @@ func privacyRowToProto(row *store.PrivacyRow) *userv1.PrivacySettings {
 		return nil
 	}
 	return &userv1.PrivacySettings{
-		ProfileId:              row.ProfileID.String(),
-		Preset:                 row.Preset,
-		ShowOnline:             privacy.ToProto(row.ShowOnline),
-		ShowGameStatus:         privacy.ToProto(row.ShowGameStatus),
-		ShowMmRating:           privacy.ToProto(row.ShowMmRating),
-		ShowPhone:              privacy.ToProto(row.ShowPhone),
-		ShowStories:            privacy.ToProto(row.ShowStories),
-		AllowPhoneSearch:       privacy.ToProto(row.AllowPhoneSearch),
-		AllowDm:                privacy.ToProto(row.AllowDM),
-		AllowCalls:             privacy.ToProto(row.AllowCalls),
-		AllowChatSpaceInvites:  privacy.ToProto(row.AllowChatSpaceInvites),
-		AllowFiles:             privacy.ToProto(row.AllowFiles),
-		AllowVoiceMessages:     privacy.ToProto(row.AllowVoiceMessages),
-		AllowFriendRequests:    privacy.ToProto(row.AllowFriendRequests),
-		AllowGuestDm:           row.AllowGuestDM,
-		UpdatedAt:              timestamppb.New(row.UpdatedAt.UTC()),
+		ProfileId:             row.ProfileID.String(),
+		Preset:                row.Preset,
+		ShowOnline:            privacy.ToProto(row.ShowOnline),
+		ShowGameStatus:        privacy.ToProto(row.ShowGameStatus),
+		ShowMmRating:          privacy.ToProto(row.ShowMmRating),
+		ShowPhone:             privacy.ToProto(row.ShowPhone),
+		ShowStories:           privacy.ToProto(row.ShowStories),
+		AllowPhoneSearch:      privacy.ToProto(row.AllowPhoneSearch),
+		AllowDm:               privacy.ToProto(row.AllowDM),
+		AllowCalls:            privacy.ToProto(row.AllowCalls),
+		AllowChatSpaceInvites: privacy.ToProto(row.AllowChatSpaceInvites),
+		AllowFiles:            privacy.ToProto(row.AllowFiles),
+		AllowVoiceMessages:    privacy.ToProto(row.AllowVoiceMessages),
+		AllowFriendRequests:   privacy.ToProto(row.AllowFriendRequests),
+		AllowGuestDm:          row.AllowGuestDM,
+		AllowForward:          proto.Bool(row.AllowForward),
+		UpdatedAt:             timestamppb.New(row.UpdatedAt.UTC()),
 	}
 }
 

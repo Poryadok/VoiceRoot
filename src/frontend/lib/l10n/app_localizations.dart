@@ -3008,6 +3008,12 @@ abstract class AppLocalizations {
   /// **'Allow guest accounts in DMs'**
   String get privacyAllowGuestDm;
 
+  /// No description provided for @privacyAllowForward.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow others to forward my messages'**
+  String get privacyAllowForward;
+
   /// No description provided for @privacyVisibilityTitle.
   ///
   /// In en, this message translates to:

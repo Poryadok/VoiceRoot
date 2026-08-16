@@ -161,6 +161,78 @@ VALUES ($1, $2, 'gamer', '4242', 'Gamer', true)`,
 	require.True(t, ps.GetShowOnline().GetFriends())
 	require.True(t, ps.GetAllowDm().GetIncludeGuests())
 	require.False(t, ps.GetShowPhone().GetFriends())
+	require.True(t, ps.GetAllowForward(), "allow_forward defaults to true (privacy.md)")
+}
+
+// TestUpdatePrivacySettings_AllowForwardRoundTrip documents privacy.md binary allow_forward
+// (forward-messages.md): default true, Update false persists, Get + S2S read see false.
+func TestUpdatePrivacySettings_AllowForwardRoundTrip(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "userdb", "")
+	applyUserPrivacyMigrations(t, ctx, pool)
+
+	accountID := uuid.New()
+	profileID := uuid.New()
+	_, err := pool.Exec(ctx, `
+INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+VALUES ($1, $2, 'nofwd', '5555', 'NoFwd', true)`,
+		profileID, accountID)
+	require.NoError(t, err)
+	seedPrivacyPreset(ctx, t, store.NewPrivacyStore(pool), profileID, "gaming")
+
+	mr := miniredis.RunT(t)
+	t.Cleanup(func() { mr.Close() })
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb)
+
+	before, err := cli.GetPrivacySettings(withUserAuthCtx(ctx, accountID, profileID), &userv1.GetPrivacySettingsRequest{
+		ProfileId: profileID.String(),
+	})
+	require.NoError(t, err)
+	require.True(t, before.GetPrivacySettings().GetAllowForward())
+
+	allowForward := false
+	_, err = cli.UpdatePrivacySettings(withUserAuthCtx(ctx, accountID, profileID), &userv1.UpdatePrivacySettingsRequest{
+		ProfileId: profileID.String(),
+		Settings: &userv1.PrivacySettings{
+			ProfileId:           profileID.String(),
+			Preset:              "gaming",
+			ShowOnline:          privacy.ToProto(privacy.EveryoneWithGuests()),
+			ShowGameStatus:      privacy.ToProto(privacy.EveryoneWithGuests()),
+			ShowMmRating:        privacy.ToProto(privacy.EveryoneWithGuests()),
+			ShowPhone:           privacy.ToProto(privacy.Nobody()),
+			ShowStories:         privacy.ToProto(privacy.EveryoneWithGuests()),
+			AllowDm:             privacy.ToProto(privacy.EveryoneWithGuests()),
+			AllowFriendRequests: privacy.ToProto(privacy.EveryoneWithGuests()),
+			AllowGuestDm:        true,
+			AllowForward:        &allowForward,
+		},
+	})
+	require.NoError(t, err)
+
+	var stored bool
+	err = pool.QueryRow(ctx, `SELECT allow_forward FROM privacy_settings WHERE profile_id = $1`, profileID).Scan(&stored)
+	require.NoError(t, err)
+	require.False(t, stored)
+
+	after, err := cli.GetPrivacySettings(withUserAuthCtx(ctx, accountID, profileID), &userv1.GetPrivacySettingsRequest{
+		ProfileId: profileID.String(),
+	})
+	require.NoError(t, err)
+	require.False(t, after.GetPrivacySettings().GetAllowForward())
+
+	s2sCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderInternalCaller, "messaging")
+	s2s, err := cli.GetPrivacySettings(s2sCtx, &userv1.GetPrivacySettingsRequest{
+		ProfileId: profileID.String(),
+	})
+	require.NoError(t, err)
+	require.False(t, s2s.GetPrivacySettings().GetAllowForward(),
+		"Messaging S2S GetPrivacySettings must expose allow_forward for FW-04 enforce")
 }
 
 // TestGetPrivacySettings_PersonalPresetDefaults documents personal preset DM audience defaults.
@@ -507,6 +579,8 @@ VALUES ($1, $2, 'newbie', '3333', 'Newbie', true)`,
 	})
 	require.NoError(t, err)
 	require.NotEmpty(t, resp.GetPrivacySettings().GetPreset())
+	require.True(t, resp.GetPrivacySettings().GetAllowForward(),
+		"bootstrap privacy row defaults allow_forward=true")
 }
 
 // TestGetPresence_FriendsOnly_HiddenFromStranger documents show_online=friends hides live status from non-friends.

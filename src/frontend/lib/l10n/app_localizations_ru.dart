@@ -1646,6 +1646,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get privacyAllowGuestDm => 'Разрешить гостевые аккаунты в ЛС';
 
   @override
+  String get privacyAllowForward => 'Разрешить пересылку моих сообщений';
+
+  @override
   String get privacyVisibilityTitle => 'Видимость';
 
   @override
