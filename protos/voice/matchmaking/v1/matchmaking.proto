@@ -349,7 +349,7 @@ message DecideLfpRequestRequest {
   string story_id = 1;
   string responder_profile_id = 2;
   string response_type = 3; // JOIN | INVITE
-  string decision = 4;      // ACCEPT | DECLINE
+  string decision = 4; // ACCEPT | DECLINE
 }
 
 message DecideLfpRequestResponse {
