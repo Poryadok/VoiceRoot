@@ -737,6 +737,28 @@ const RespondToLfpStoryResponse$json = {
 final $typed_data.Uint8List respondToLfpStoryResponseDescriptor =
     $convert.base64Decode('ChlSZXNwb25kVG9MZnBTdG9yeVJlc3BvbnNl');
 
+@$core.Deprecated('Use hideStoryFromFeedRequestDescriptor instead')
+const HideStoryFromFeedRequest$json = {
+  '1': 'HideStoryFromFeedRequest',
+  '2': [
+    {'1': 'story_id', '3': 1, '4': 1, '5': 9, '10': 'storyId'},
+  ],
+};
+
+/// Descriptor for `HideStoryFromFeedRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List hideStoryFromFeedRequestDescriptor =
+    $convert.base64Decode(
+        'ChhIaWRlU3RvcnlGcm9tRmVlZFJlcXVlc3QSGQoIc3RvcnlfaWQYASABKAlSB3N0b3J5SWQ=');
+
+@$core.Deprecated('Use hideStoryFromFeedResponseDescriptor instead')
+const HideStoryFromFeedResponse$json = {
+  '1': 'HideStoryFromFeedResponse',
+};
+
+/// Descriptor for `HideStoryFromFeedResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List hideStoryFromFeedResponseDescriptor =
+    $convert.base64Decode('ChlIaWRlU3RvcnlGcm9tRmVlZFJlc3BvbnNl');
+
 @$core.Deprecated('Use createStoryResponseDescriptor instead')
 const CreateStoryResponse$json = {
   '1': 'CreateStoryResponse',

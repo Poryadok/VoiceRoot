@@ -51,6 +51,9 @@ service StoryService {
 
   rpc CreateLookingForParty(CreateLookingForPartyRequest) returns (CreateLookingForPartyResponse);
   rpc RespondToLfpStory(RespondToLfpStoryRequest) returns (RespondToLfpStoryResponse);
+
+  // Staff/internal: soft-hide story from feeds and non-author GetStory (author retains access).
+  rpc HideStoryFromFeed(HideStoryFromFeedRequest) returns (HideStoryFromFeedResponse);
 }
 
 message Story {
@@ -202,6 +205,12 @@ message RespondToLfpStoryRequest {
 }
 
 message RespondToLfpStoryResponse {}
+
+message HideStoryFromFeedRequest {
+  string story_id = 1;
+}
+
+message HideStoryFromFeedResponse {}
 
 message CreateStoryResponse {
   Story story = 1;
