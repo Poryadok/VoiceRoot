@@ -2,6 +2,7 @@ package authctx
 
 import (
 	"context"
+	"strings"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/metadata"
@@ -9,6 +10,7 @@ import (
 
 const HeaderProfileID = "x-voice-profile-id"
 const HeaderAccountID = "x-voice-user-id"
+const HeaderRoles = "x-voice-roles"
 
 func ProfileID(ctx context.Context) (uuid.UUID, bool) {
 	md, ok := metadata.FromIncomingContext(ctx)
@@ -41,4 +43,31 @@ func AccountID(ctx context.Context) (uuid.UUID, bool) {
 		return uuid.Nil, false
 	}
 	return id, true
+}
+
+// HasRole reports whether the gateway-forwarded roles claim includes role.
+func HasRole(ctx context.Context, role string) bool {
+	role = strings.TrimSpace(strings.ToLower(role))
+	if role == "" {
+		return false
+	}
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return false
+	}
+	vals := md.Get(HeaderRoles)
+	if len(vals) == 0 || vals[0] == "" {
+		return false
+	}
+	for _, part := range strings.Split(vals[0], ",") {
+		if strings.EqualFold(strings.TrimSpace(part), role) {
+			return true
+		}
+	}
+	return false
+}
+
+// IsStaff is true when JWT roles include platform staff (admin panel).
+func IsStaff(ctx context.Context) bool {
+	return HasRole(ctx, "staff")
 }

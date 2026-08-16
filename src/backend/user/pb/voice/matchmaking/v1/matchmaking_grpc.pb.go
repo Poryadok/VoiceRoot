@@ -24,6 +24,10 @@ const (
 	MatchmakingService_CreateGame_FullMethodName            = "/voice.matchmaking.v1.MatchmakingService/CreateGame"
 	MatchmakingService_UpdateGame_FullMethodName            = "/voice.matchmaking.v1.MatchmakingService/UpdateGame"
 	MatchmakingService_SearchGames_FullMethodName           = "/voice.matchmaking.v1.MatchmakingService/SearchGames"
+	MatchmakingService_SubmitGameRequest_FullMethodName     = "/voice.matchmaking.v1.MatchmakingService/SubmitGameRequest"
+	MatchmakingService_ListGameRequests_FullMethodName      = "/voice.matchmaking.v1.MatchmakingService/ListGameRequests"
+	MatchmakingService_ApproveGameRequest_FullMethodName    = "/voice.matchmaking.v1.MatchmakingService/ApproveGameRequest"
+	MatchmakingService_RejectGameRequest_FullMethodName     = "/voice.matchmaking.v1.MatchmakingService/RejectGameRequest"
 	MatchmakingService_StartSearch_FullMethodName           = "/voice.matchmaking.v1.MatchmakingService/StartSearch"
 	MatchmakingService_CancelSearch_FullMethodName          = "/voice.matchmaking.v1.MatchmakingService/CancelSearch"
 	MatchmakingService_GetSearchStatus_FullMethodName       = "/voice.matchmaking.v1.MatchmakingService/GetSearchStatus"
@@ -55,6 +59,11 @@ type MatchmakingServiceClient interface {
 	CreateGame(ctx context.Context, in *CreateGameRequest, opts ...grpc.CallOption) (*CreateGameResponse, error)
 	UpdateGame(ctx context.Context, in *UpdateGameRequest, opts ...grpc.CallOption) (*UpdateGameResponse, error)
 	SearchGames(ctx context.Context, in *SearchGamesRequest, opts ...grpc.CallOption) (*SearchGamesResponse, error)
+	// User game-catalog requests (docs/features/game-catalog.md; roadmap П.4).
+	SubmitGameRequest(ctx context.Context, in *SubmitGameRequestRequest, opts ...grpc.CallOption) (*SubmitGameRequestResponse, error)
+	ListGameRequests(ctx context.Context, in *ListGameRequestsRequest, opts ...grpc.CallOption) (*ListGameRequestsResponse, error)
+	ApproveGameRequest(ctx context.Context, in *ApproveGameRequestRequest, opts ...grpc.CallOption) (*ApproveGameRequestResponse, error)
+	RejectGameRequest(ctx context.Context, in *RejectGameRequestRequest, opts ...grpc.CallOption) (*RejectGameRequestResponse, error)
 	StartSearch(ctx context.Context, in *StartSearchRequest, opts ...grpc.CallOption) (*StartSearchResponse, error)
 	CancelSearch(ctx context.Context, in *CancelSearchRequest, opts ...grpc.CallOption) (*CancelSearchResponse, error)
 	GetSearchStatus(ctx context.Context, in *GetSearchStatusRequest, opts ...grpc.CallOption) (*GetSearchStatusResponse, error)
@@ -129,6 +138,46 @@ func (c *matchmakingServiceClient) SearchGames(ctx context.Context, in *SearchGa
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SearchGamesResponse)
 	err := c.cc.Invoke(ctx, MatchmakingService_SearchGames_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchmakingServiceClient) SubmitGameRequest(ctx context.Context, in *SubmitGameRequestRequest, opts ...grpc.CallOption) (*SubmitGameRequestResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SubmitGameRequestResponse)
+	err := c.cc.Invoke(ctx, MatchmakingService_SubmitGameRequest_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchmakingServiceClient) ListGameRequests(ctx context.Context, in *ListGameRequestsRequest, opts ...grpc.CallOption) (*ListGameRequestsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListGameRequestsResponse)
+	err := c.cc.Invoke(ctx, MatchmakingService_ListGameRequests_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchmakingServiceClient) ApproveGameRequest(ctx context.Context, in *ApproveGameRequestRequest, opts ...grpc.CallOption) (*ApproveGameRequestResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApproveGameRequestResponse)
+	err := c.cc.Invoke(ctx, MatchmakingService_ApproveGameRequest_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchmakingServiceClient) RejectGameRequest(ctx context.Context, in *RejectGameRequestRequest, opts ...grpc.CallOption) (*RejectGameRequestResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RejectGameRequestResponse)
+	err := c.cc.Invoke(ctx, MatchmakingService_RejectGameRequest_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -326,6 +375,11 @@ type MatchmakingServiceServer interface {
 	CreateGame(context.Context, *CreateGameRequest) (*CreateGameResponse, error)
 	UpdateGame(context.Context, *UpdateGameRequest) (*UpdateGameResponse, error)
 	SearchGames(context.Context, *SearchGamesRequest) (*SearchGamesResponse, error)
+	// User game-catalog requests (docs/features/game-catalog.md; roadmap П.4).
+	SubmitGameRequest(context.Context, *SubmitGameRequestRequest) (*SubmitGameRequestResponse, error)
+	ListGameRequests(context.Context, *ListGameRequestsRequest) (*ListGameRequestsResponse, error)
+	ApproveGameRequest(context.Context, *ApproveGameRequestRequest) (*ApproveGameRequestResponse, error)
+	RejectGameRequest(context.Context, *RejectGameRequestRequest) (*RejectGameRequestResponse, error)
 	StartSearch(context.Context, *StartSearchRequest) (*StartSearchResponse, error)
 	CancelSearch(context.Context, *CancelSearchRequest) (*CancelSearchResponse, error)
 	GetSearchStatus(context.Context, *GetSearchStatusRequest) (*GetSearchStatusResponse, error)
@@ -370,6 +424,18 @@ func (UnimplementedMatchmakingServiceServer) UpdateGame(context.Context, *Update
 }
 func (UnimplementedMatchmakingServiceServer) SearchGames(context.Context, *SearchGamesRequest) (*SearchGamesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SearchGames not implemented")
+}
+func (UnimplementedMatchmakingServiceServer) SubmitGameRequest(context.Context, *SubmitGameRequestRequest) (*SubmitGameRequestResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SubmitGameRequest not implemented")
+}
+func (UnimplementedMatchmakingServiceServer) ListGameRequests(context.Context, *ListGameRequestsRequest) (*ListGameRequestsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListGameRequests not implemented")
+}
+func (UnimplementedMatchmakingServiceServer) ApproveGameRequest(context.Context, *ApproveGameRequestRequest) (*ApproveGameRequestResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ApproveGameRequest not implemented")
+}
+func (UnimplementedMatchmakingServiceServer) RejectGameRequest(context.Context, *RejectGameRequestRequest) (*RejectGameRequestResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RejectGameRequest not implemented")
 }
 func (UnimplementedMatchmakingServiceServer) StartSearch(context.Context, *StartSearchRequest) (*StartSearchResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method StartSearch not implemented")
@@ -532,6 +598,78 @@ func _MatchmakingService_SearchGames_Handler(srv interface{}, ctx context.Contex
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MatchmakingServiceServer).SearchGames(ctx, req.(*SearchGamesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchmakingService_SubmitGameRequest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SubmitGameRequestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchmakingServiceServer).SubmitGameRequest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchmakingService_SubmitGameRequest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchmakingServiceServer).SubmitGameRequest(ctx, req.(*SubmitGameRequestRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchmakingService_ListGameRequests_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListGameRequestsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchmakingServiceServer).ListGameRequests(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchmakingService_ListGameRequests_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchmakingServiceServer).ListGameRequests(ctx, req.(*ListGameRequestsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchmakingService_ApproveGameRequest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApproveGameRequestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchmakingServiceServer).ApproveGameRequest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchmakingService_ApproveGameRequest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchmakingServiceServer).ApproveGameRequest(ctx, req.(*ApproveGameRequestRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchmakingService_RejectGameRequest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RejectGameRequestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchmakingServiceServer).RejectGameRequest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchmakingService_RejectGameRequest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchmakingServiceServer).RejectGameRequest(ctx, req.(*RejectGameRequestRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -886,6 +1024,22 @@ var MatchmakingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SearchGames",
 			Handler:    _MatchmakingService_SearchGames_Handler,
+		},
+		{
+			MethodName: "SubmitGameRequest",
+			Handler:    _MatchmakingService_SubmitGameRequest_Handler,
+		},
+		{
+			MethodName: "ListGameRequests",
+			Handler:    _MatchmakingService_ListGameRequests_Handler,
+		},
+		{
+			MethodName: "ApproveGameRequest",
+			Handler:    _MatchmakingService_ApproveGameRequest_Handler,
+		},
+		{
+			MethodName: "RejectGameRequest",
+			Handler:    _MatchmakingService_RejectGameRequest_Handler,
 		},
 		{
 			MethodName: "StartSearch",

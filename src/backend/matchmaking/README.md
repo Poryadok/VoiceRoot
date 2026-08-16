@@ -30,7 +30,7 @@ matchmaking (docs/features/matchmaking.md): game catalog, player profile, solo s
 
 - Solo queue (`party_size=1`), matcher worker, timeout sweeper, ratings, and history are implemented.
 - Match squad provisions ephemeral group chat + group voice when Chat/Voice gRPC are configured.
-- Game catalog: seeded games + browse UI; user game constructor and moderation queue are not implemented.
+- Game catalog: seeded games + browse UI; user `SubmitGameRequest` → `pending_moderation`; staff List/Approve/Reject via Admin.
 
 ## Database
 

@@ -89,6 +89,9 @@ func (s *MatchmakingGRPC) CreateGame(ctx context.Context, req *matchmakingv1.Cre
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing profile")
 	}
+	if !authctx.IsStaff(ctx) {
+		return nil, status.Error(codes.PermissionDenied, "staff required to publish games")
+	}
 	if strings.TrimSpace(req.GetName()) == "" {
 		return nil, status.Error(codes.InvalidArgument, "name required")
 	}
@@ -99,8 +102,17 @@ func (s *MatchmakingGRPC) CreateGame(ctx context.Context, req *matchmakingv1.Cre
 	if s.Games == nil {
 		return nil, status.Error(codes.Unavailable, "game store unavailable")
 	}
-	// v1: any authenticated caller may create; platform moderator check deferred to Moderation Service.
-	g, err := s.Games.Create(ctx, req.GetName(), cfg, profileID)
+	var iconURL *string
+	if req.IconUrl != nil {
+		v := strings.TrimSpace(req.GetIconUrl())
+		if v != "" {
+			iconURL = &v
+		}
+	}
+	g, err := s.Games.CreateWithStatus(ctx, req.GetName(), cfg, profileID, store.StatusActive, iconURL)
+	if errors.Is(err, store.ErrGameNameConflict) {
+		return nil, status.Error(codes.AlreadyExists, "game name already exists")
+	}
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "create game: %v", err)
 	}
@@ -110,6 +122,9 @@ func (s *MatchmakingGRPC) CreateGame(ctx context.Context, req *matchmakingv1.Cre
 func (s *MatchmakingGRPC) UpdateGame(ctx context.Context, req *matchmakingv1.UpdateGameRequest) (*matchmakingv1.UpdateGameResponse, error) {
 	if _, ok := authctx.ProfileID(ctx); !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing profile")
+	}
+	if !authctx.IsStaff(ctx) {
+		return nil, status.Error(codes.PermissionDenied, "staff required to update catalog")
 	}
 	id, err := uuid.Parse(req.GetGameId())
 	if err != nil {
@@ -138,6 +153,9 @@ func (s *MatchmakingGRPC) UpdateGame(ctx context.Context, req *matchmakingv1.Upd
 	if errors.Is(err, store.ErrGameNotFound) {
 		return nil, status.Error(codes.NotFound, "game not found")
 	}
+	if errors.Is(err, store.ErrGameNameConflict) {
+		return nil, status.Error(codes.AlreadyExists, "game name already exists")
+	}
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "update game: %v", err)
 	}
@@ -155,6 +173,134 @@ func (s *MatchmakingGRPC) SearchGames(ctx context.Context, req *matchmakingv1.Se
 	return &matchmakingv1.SearchGamesResponse{
 		GameList: &matchmakingv1.GameList{Games: toProtoGames(games)},
 	}, nil
+}
+
+// SubmitGameRequest stores a user catalog request as pending_moderation (GC-02 / П.4).
+func (s *MatchmakingGRPC) SubmitGameRequest(ctx context.Context, req *matchmakingv1.SubmitGameRequestRequest) (*matchmakingv1.SubmitGameRequestResponse, error) {
+	profileID, ok := authctx.ProfileID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing profile")
+	}
+	if strings.TrimSpace(req.GetName()) == "" {
+		return nil, status.Error(codes.InvalidArgument, "name required")
+	}
+	cfg, err := config.Parse(req.GetConfigJson())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid config_json: %v", err)
+	}
+	if len(cfg.Modes) < 1 {
+		return nil, status.Error(codes.InvalidArgument, "at least one mode required")
+	}
+	if s.Games == nil {
+		return nil, status.Error(codes.Unavailable, "game store unavailable")
+	}
+	var iconURL *string
+	if req.IconUrl != nil {
+		v := strings.TrimSpace(req.GetIconUrl())
+		if v != "" {
+			iconURL = &v
+		}
+	}
+	g, err := s.Games.CreateWithStatus(ctx, req.GetName(), cfg, profileID, store.StatusPendingModeration, iconURL)
+	if errors.Is(err, store.ErrGameNameConflict) {
+		return nil, status.Error(codes.AlreadyExists, "game name already exists")
+	}
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "submit game request: %v", err)
+	}
+	return &matchmakingv1.SubmitGameRequestResponse{Game: toProtoGame(g)}, nil
+}
+
+// ListGameRequests lists pending (or filtered) user submissions for staff (GC-03).
+func (s *MatchmakingGRPC) ListGameRequests(ctx context.Context, req *matchmakingv1.ListGameRequestsRequest) (*matchmakingv1.ListGameRequestsResponse, error) {
+	if _, ok := authctx.ProfileID(ctx); !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing profile")
+	}
+	if !authctx.IsStaff(ctx) {
+		return nil, status.Error(codes.PermissionDenied, "staff required")
+	}
+	if s.Games == nil {
+		return nil, status.Error(codes.Unavailable, "game store unavailable")
+	}
+	statusFilter := store.StatusPendingModeration
+	if req.Status != nil && strings.TrimSpace(req.GetStatus()) != "" {
+		statusFilter = strings.TrimSpace(req.GetStatus())
+	}
+	pageSize := int32(50)
+	cursor := ""
+	if req.GetPage() != nil {
+		if req.GetPage().GetPageSize() > 0 {
+			pageSize = req.GetPage().GetPageSize()
+		}
+		cursor = req.GetPage().GetCursor()
+	}
+	res, err := s.Games.List(ctx, store.ListGamesParams{
+		Cursor:   cursor,
+		PageSize: pageSize,
+		Status:   statusFilter,
+	})
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "list game requests: %v", err)
+	}
+	return &matchmakingv1.ListGameRequestsResponse{
+		GameList: &matchmakingv1.GameList{
+			Games:      toProtoGames(res.Games),
+			NextCursor: res.NextCursor,
+		},
+	}, nil
+}
+
+// ApproveGameRequest promotes pending_moderation → active (GC-03).
+func (s *MatchmakingGRPC) ApproveGameRequest(ctx context.Context, req *matchmakingv1.ApproveGameRequestRequest) (*matchmakingv1.ApproveGameRequestResponse, error) {
+	if _, ok := authctx.ProfileID(ctx); !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing profile")
+	}
+	if !authctx.IsStaff(ctx) {
+		return nil, status.Error(codes.PermissionDenied, "staff required")
+	}
+	id, err := uuid.Parse(req.GetGameId())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid game_id")
+	}
+	if s.Games == nil {
+		return nil, status.Error(codes.Unavailable, "game store unavailable")
+	}
+	g, err := s.Games.TransitionStatus(ctx, id, store.StatusPendingModeration, store.StatusActive)
+	if errors.Is(err, store.ErrGameNotFound) {
+		return nil, status.Error(codes.NotFound, "pending game request not found")
+	}
+	if errors.Is(err, store.ErrGameNameConflict) {
+		return nil, status.Error(codes.AlreadyExists, "game name already exists")
+	}
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "approve game request: %v", err)
+	}
+	return &matchmakingv1.ApproveGameRequestResponse{Game: toProtoGame(g)}, nil
+}
+
+// RejectGameRequest sets pending_moderation → rejected (GC-03).
+func (s *MatchmakingGRPC) RejectGameRequest(ctx context.Context, req *matchmakingv1.RejectGameRequestRequest) (*matchmakingv1.RejectGameRequestResponse, error) {
+	if _, ok := authctx.ProfileID(ctx); !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing profile")
+	}
+	if !authctx.IsStaff(ctx) {
+		return nil, status.Error(codes.PermissionDenied, "staff required")
+	}
+	id, err := uuid.Parse(req.GetGameId())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid game_id")
+	}
+	if s.Games == nil {
+		return nil, status.Error(codes.Unavailable, "game store unavailable")
+	}
+	g, err := s.Games.TransitionStatus(ctx, id, store.StatusPendingModeration, store.StatusRejected)
+	if errors.Is(err, store.ErrGameNotFound) {
+		return nil, status.Error(codes.NotFound, "pending game request not found")
+	}
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "reject game request: %v", err)
+	}
+	return &matchmakingv1.RejectGameRequestResponse{Game: toProtoGame(g)}, nil
 }
 
 func toProtoGames(games []store.Game) []*matchmakingv1.Game {
