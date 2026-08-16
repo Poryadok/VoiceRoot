@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { OAuthCallback } from './OAuthCallback';
 import { apiBase, apiFetch, oauthClientId, oauthDisabled } from './oauth/api';
-import { buildAuthorizeUrl, callbackRedirectUri, randomCodeVerifier, s256Challenge } from './oauth/pkce';
+import { callbackRedirectUri } from './oauth/callback';
+import { buildAuthorizeUrl, randomCodeVerifier, s256Challenge } from './oauth/pkce';
 import { clearSession, getAccessToken, isLoggedIn, setAccessToken, setPkceVerifier, setOAuthState } from './oauth/session';
 import { defaultManifest } from './manifestDefaults';
 import {
