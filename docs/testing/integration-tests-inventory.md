@@ -153,14 +153,14 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | AU-04 | Guest DM reply gated by `allow_guest_dm` | `[exists]` | Flutter: `guest_restrictions_e2e_live_test` (2nd test) |
 | AU-05 | Convert guest → regular | `[exists]` | Gateway: `TestComposeConvertGuest_live`; Auth: `ConvertGuestIntegrationTest`, `GuestAccountLifecycleIntegrationTest` |
 | AU-06 | Phone contacts sync / resolve hashes | `[exists]` | Gateway: `TestComposePhoneSync_live`; Auth: `ResolvePhoneHashesIntegrationTest`; Social IT: `phone_search_privacy_integration_test.go` |
-| AU-07 | Guest reminder (2nd login, ≤1/day) | `[missing]` | roadmap П.9 |
+| AU-07 | Guest reminder (2nd login, ≤1/day) | `[exists]` | Auth: `GuestReminderIntegrationTest`; Flutter: `guest_save_account_reminder` + cadence unit test; server `guest_reminder_last_shown_at` |
 | AU-08 | Guest nickname first-entry screen | `[partial]` | Flutter UI; live: `guest_onboarding_e2e_live_test` (account_type only) |
 | AU-09 | 2FA enroll/verify/login gate | `[exists]` | Flutter: `trust_e2e_live_test`; Gateway: `TestComposeTrust_live` |
 | AU-10 | Delete account / restore GDPR | `[partial]` | Auth: `DeleteAccountRestoreIntegrationTest` (нет compose live) |
 | AU-11 | OTP rate limits | `[partial]` | Auth: `OtpRestIntegrationTest` |
-| AU-12 | Active sessions list / revoke device | `[missing]` | — |
+| AU-12 | Active sessions list / revoke device | `[exists]` | Auth: `ActiveSessionsIntegrationTest`; Gateway: `TestComposeAuthSessions_live` |
 | AU-13 | Password reset via email (Resend) | `[missing]` | todo: Resend absent |
-| AU-14 | NATS `user.guest_converted` on convert | `[partial]` | Auth: `GuestConvertNatsEventIntegrationTest`; compose/staging wiring gap (todo) |
+| AU-14 | NATS `user.guest_converted` on convert | `[exists]` | Auth: `GuestConvertNatsEventIntegrationTest`; Gateway: `TestComposeConvertGuestNATS_live`; compose auth `depends_on: nats` + `AUTH_NATS_URL` |
 
 ---
 
