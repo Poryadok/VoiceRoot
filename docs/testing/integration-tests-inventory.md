@@ -332,7 +332,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 |----|------|--------|-----|
 | ON-01 | Onboarding steps persist on server | `[exists]` | Flutter: `onboarding_e2e_live_test` |
 | ON-02 | Guest onboarding incomplete flags | `[exists]` | Flutter: `guest_onboarding_e2e_live_test` |
-| ON-03 | Coach-marks MM/space/invite deep link | `[missing]` | roadmap П.20 |
+| ON-03 | Coach-marks MM/space/invite deep link | `[exists]` | Flutter: `onboarding_coach_e2e_live_test`; widgets: `onboarding_overlay_test` |
 
 ---
 

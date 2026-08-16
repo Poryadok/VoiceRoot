@@ -22,7 +22,7 @@ _Пока пусто — критичные клиентские блокеры 
 
 ### Guest & onboarding live
 
-- [ ] **Onboarding coach-marks E2E** — полный tour step-through + `guest_onboarding_e2e_live_test` (compose); widget-якоря покрыты `guest_onboarding_anchor_keys_test.dart`.
+- [x] **Onboarding coach-marks E2E** — `onboarding_coach_e2e_live_test` (spaces/MM + invite deep link); guest: `guest_onboarding_e2e_live_test`; widget-якоря: `guest_onboarding_anchor_keys_test` / `onboarding_overlay_test`.
 
 ### Flutter delivery
 
