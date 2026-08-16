@@ -47,9 +47,7 @@ void main() {
         expect(
           premiumGif,
           isA<UsersApiOk<AvatarPresignedUpload>>(),
-          reason: premiumGif is UsersApiFailure
-              ? (premiumGif as UsersApiFailure).message
-              : null,
+          reason: '$premiumGif',
         );
       }
 
