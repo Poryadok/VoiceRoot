@@ -687,11 +687,13 @@ class VoiceMessagesClient {
   }
 
   /// forward with attribution — docs/features/forward-messages.md.
+  /// Set [withoutAttribution] for FW-03 copy-as-new (no Forwarded-from).
   Future<MessagesApiResult<VoiceMessage>> forwardMessage({
     required String authorization,
     required String sourceMessageId,
     required String targetChatId,
     String? commentary,
+    bool withoutAttribution = false,
   }) async {
     final result = await _gateway.postProto(
       uri: _gateway.resolve('/api/v1/messages/forward'),
@@ -700,6 +702,7 @@ class VoiceMessagesClient {
         sourceMessageId: sourceMessageId,
         targetChatId: targetChatId,
         commentary: commentary,
+        withoutAttribution: withoutAttribution,
       ),
       createEmpty: messaging_pb.ForwardMessageResponse.create,
     );

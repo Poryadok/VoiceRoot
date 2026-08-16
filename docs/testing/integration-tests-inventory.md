@@ -96,7 +96,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 |----|------|--------|-----|
 | FW-01 | Forward DM → group с атрибуцией | `[exists]` | Flutter: `forward_messages_e2e_live_test` («forward DM message to group preserves attribution») |
 | FW-02 | Forward в channel | `[exists]` | Messaging IT + Gateway: `TestComposeForwardChannelCommentary_live`; Flutter channel+commentary |
-| FW-03 | Copy as new (без атрибуции) | `[missing]` | — |
+| FW-03 | Copy as new (без атрибуции) | `[partial]` | Messaging IT `withoutAttributionCopyAsNew` + Gateway transcode + Flutter client/UI; compose/Flutter live open |
 | FW-04 | Privacy forbid forward | `[exists]` | Messaging IT + Gateway: `TestComposeForwardPrivacyDeny_live`; Flutter FW-04 |
 | FW-05 | Multi-select forward | `[missing]` | — |
 | FW-06 | Forward E2E ciphertext policy | `[exists]` | Messaging IT: `TestMessagingForwardMessage_e2eToPlainDenied` / `e2eToE2EDMPreservesFlag` |
@@ -180,7 +180,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | ID | Кейс | Статус | Где |
 |----|------|--------|-----|
 | UP-01 | Avatar presigned upload round-trip | `[exists]` | Flutter: `avatar_e2e_live_test` |
-| UP-02 | Premium animated GIF avatar | `[missing]` | todo: GIF rejected in validate |
+| UP-02 | Premium animated GIF avatar | `[exists]` | User validate+IT; Gateway live tier; Flutter GIF whitelist |
 | UP-03 | Public profile fields / bio / status | `[partial]` | User IT / client; no dedicated compose profile live |
 | UP-04 | Player (MM) profile upsert/list | `[exists]` | Gateway: `TestComposeMatchmakingPlayerProfile_live`; Flutter: `player_profile_e2e_live_test` |
 
@@ -447,7 +447,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | SUB-03 | Space Pro billing compose | `[exists]` | `TestComposeSpaceProBilling_live` + `TestComposeSpaceProMemberCap_live` |
 | SUB-04 | Grace-period notifications D1/D3/D7 | `[exists]` | Gateway: `TestComposeSubscriptionGraceReminder_live` (D1 sweeper) |
 | SUB-05 | Real Paddle checkout | `[missing]` | stub URLs (todo Critical) |
-| SUB-06 | Premium cosmetics (banner/GIF/3rd profile) cross-smoke | `[missing]` | todo cross-cutting |
+| SUB-06 | Premium cosmetics (banner/GIF/3rd profile) cross-smoke | `[exists]` | `TestComposePremiumCosmetics_live` + `premium_cosmetics_e2e_live_test` |
 
 ---
 

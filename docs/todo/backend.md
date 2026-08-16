@@ -266,7 +266,7 @@
 
 - [ ] **[Messaging] `message.forwarded` NATS event missing** — spec lists it; publisher/stream only has `message.sent` on forward.
 - [x] **[Messaging] `ForwardMessageRequest.commentary` ignored** — **done:** commentary inserts a separate message via `insertForwardCommentary` (`messaging_grpc.go`; Messaging forward ITs).
-- [ ] **[Messaging] “Copy as new message” / forward without attribution** — spec feature; no proto field or server path (always `type=forward` + attribution).
+- [x] **[Messaging] “Copy as new message” / forward without attribution** — **done:** `ForwardMessageRequest.without_attribution` → regular message, no Forwarded-from; skips `allow_forward` deny (FW-03).
 - [x] **[Messaging] Forward-author privacy block not enforced** — spec says user can forbid forwarding their messages; Messaging `ForwardMessage` checks User `allow_forward` via S2S (`PermissionDenied`).
 - [ ] **[Messaging] Group/channel view counts absent** — `text-chat.md` requires per-message view counter; no model/RPC beyond DM-style `read_receipts`.
 - [ ] **[Messaging] `ForwardMessage` skips SendMessage guards** — **partial:** now runs DM block/privacy, send-perm, E2E, and channel policy; still skips moderation/slow-mode, attachment privacy/validate, and some SendMessage-only guards (`messaging_grpc.go` `ForwardMessage`).

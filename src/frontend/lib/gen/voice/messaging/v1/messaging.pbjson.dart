@@ -672,9 +672,19 @@ const ForwardMessageRequest$json = {
       '10': 'commentary',
       '17': true
     },
+    {
+      '1': 'without_attribution',
+      '3': 4,
+      '4': 1,
+      '5': 8,
+      '9': 1,
+      '10': 'withoutAttribution',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_commentary'},
+    {'1': '_without_attribution'},
   ],
 };
 
@@ -682,8 +692,9 @@ const ForwardMessageRequest$json = {
 final $typed_data.Uint8List forwardMessageRequestDescriptor = $convert.base64Decode(
     'ChVGb3J3YXJkTWVzc2FnZVJlcXVlc3QSKgoRc291cmNlX21lc3NhZ2VfaWQYASABKAlSD3NvdX'
     'JjZU1lc3NhZ2VJZBI3Cgt0YXJnZXRfY2hhdBgCIAEoCzIWLnZvaWNlLmNoYXQudjEuQ2hhdFJl'
-    'ZlIKdGFyZ2V0Q2hhdBIjCgpjb21tZW50YXJ5GAMgASgJSABSCmNvbW1lbnRhcnmIAQFCDQoLX2'
-    'NvbW1lbnRhcnk=');
+    'ZlIKdGFyZ2V0Q2hhdBIjCgpjb21tZW50YXJ5GAMgASgJSABSCmNvbW1lbnRhcnmIAQESNAoTd2'
+    'l0aG91dF9hdHRyaWJ1dGlvbhgEIAEoCEgBUhJ3aXRob3V0QXR0cmlidXRpb26IAQFCDQoLX2Nv'
+    'bW1lbnRhcnlCFgoUX3dpdGhvdXRfYXR0cmlidXRpb24=');
 
 @$core.Deprecated('Use markReadRequestDescriptor instead')
 const MarkReadRequest$json = {

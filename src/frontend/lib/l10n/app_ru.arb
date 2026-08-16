@@ -372,6 +372,7 @@
   "chatAttachFile": "Прикрепить файл",
   "chatMessageEdit": "Изменить",
   "chatMessageForward": "Переслать",
+  "chatMessageCopyAsNew": "Копировать как новое",
   "chatMessageReply": "Ответить",
   "chatReplyingTo": "Ответ на {preview}",
   "@chatReplyingTo": {
@@ -397,6 +398,7 @@
     }
   },
   "chatForwardTitle": "Переслать в",
+  "chatCopyAsNewTitle": "Копировать как новое в",
   "chatForwardSearchHint": "Поиск чатов",
   "chatForwardFrom": "Переслано от {sender}",
   "@chatForwardFrom": {
@@ -410,6 +412,7 @@
   "chatForwardCommentaryHint": "Необязательное сообщение перед пересылкой",
   "chatForwardEmpty": "Нет чатов для пересылки",
   "chatForwardSuccess": "Сообщение переслано",
+  "chatCopyAsNewSuccess": "Сообщение скопировано",
   "chatForwardError": "Не удалось переслать сообщение: {message}",
   "@chatForwardError": {
     "placeholders": {

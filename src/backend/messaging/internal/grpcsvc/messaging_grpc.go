@@ -19,8 +19,8 @@ import (
 	"voice/backend/messaging/internal/messageid"
 	"voice/backend/messaging/internal/store"
 	"voice/backend/pkg/guestguard"
-	"voice/backend/role/permissions"
 	"voice/backend/pkg/privacy"
+	"voice/backend/role/permissions"
 
 	chatv1 "voice.app/voice/chat/v1"
 	commonv1 "voice.app/voice/common/v1"
@@ -43,10 +43,10 @@ type MessagingGRPC struct {
 	SharedMedia *store.SharedMediaStore
 	ChatGuard   ChatGuard
 	// Blocks and UserProfiles are optional S2S gates for SendMessage (Social + User); both must be set to enforce.
-	Blocks       AccountPairBlockChecker
-	UserProfiles ProfileAccountLookup
-	Privacy      PrivacyChecker
-	Friends      ProfileFriendChecker
+	Blocks            AccountPairBlockChecker
+	UserProfiles      ProfileAccountLookup
+	Privacy           PrivacyChecker
+	Friends           ProfileFriendChecker
 	SpaceCoMembership SpaceCoMembershipChecker
 	// Files is optional for text-only messages and required for non-empty attachments_json.
 	Files FileMetadataLookup
@@ -1032,14 +1032,19 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 		}
 	}
 
+	withoutAttribution := req.GetWithoutAttribution()
+
 	if err := s.checkDMBlocksForSend(ctx, targetChatID, profileID); err != nil {
 		return nil, err
 	}
 	if err := s.checkDMPrivacyForSend(ctx, targetChatID, profileID); err != nil {
 		return nil, err
 	}
-	if err := s.checkForwardAuthorPrivacy(ctx, source, profileID); err != nil {
-		return nil, err
+	// FW-03 copy-as-new stays available when allow_forward=false (screen-controls: Always).
+	if !withoutAttribution {
+		if err := s.checkForwardAuthorPrivacy(ctx, source, profileID); err != nil {
+			return nil, err
+		}
 	}
 	if err := s.checkSpaceSendPermission(ctx, targetChatID, profileID); err != nil {
 		return nil, err
@@ -1111,7 +1116,6 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 		}
 	}
 
-	originID, originSender := forwardAttribution(source)
 	msgID, err := messageid.NewMessageID()
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -1121,21 +1125,32 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 		cid := targetChatID
 		displayChatID = &cid
 	}
-	saved, err := s.Messages.InsertMessage(ctx, store.MessageRow{
-		ID:                msgID,
-		ChatID:            targetChatID,
-		ChatType:          chatType,
-		SenderProfileID:   profileID,
-		PostedAsChat:      postedAsChat,
-		DisplayChatID:     displayChatID,
-		Content:           source.Content,
-		Type:              "forward",
-		ForwardFromID:     &originID,
-		ForwardFromSender: originSender,
-		AttachmentsJSON:   attachments,
-		MentionsJSON:      "[]",
-		IsE2E:             source.IsE2E,
-	})
+
+	row := store.MessageRow{
+		ID:              msgID,
+		ChatID:          targetChatID,
+		ChatType:        chatType,
+		SenderProfileID: profileID,
+		PostedAsChat:    postedAsChat,
+		DisplayChatID:   displayChatID,
+		Content:         source.Content,
+		AttachmentsJSON: attachments,
+		MentionsJSON:    "[]",
+		IsE2E:           source.IsE2E,
+	}
+	kind := messagingv1.MessageKind_MESSAGE_KIND_FORWARD
+	if withoutAttribution {
+		// FW-03: copy as new regular message — no Forwarded-from attribution.
+		row.Type = "regular"
+		kind = messagingv1.MessageKind_MESSAGE_KIND_REGULAR
+	} else {
+		originID, originSender := forwardAttribution(source)
+		row.Type = "forward"
+		row.ForwardFromID = &originID
+		row.ForwardFromSender = originSender
+	}
+
+	saved, err := s.Messages.InsertMessage(ctx, row)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -1143,11 +1158,12 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), false, "", saved.IsE2E); err != nil {
 			s.logPublishError(ctx, "message.sent", err, slog.String("message_id", saved.ID.String()), slog.String("chat_id", saved.ChatID.String()))
 		}
-		if err := s.MessageEvents.PublishMessageForwarded(ctx, saved.ID.String(), source.ChatID.String(), saved.ChatID.String(), profileID.String()); err != nil {
-			s.logPublishError(ctx, "message.forwarded", err, slog.String("message_id", saved.ID.String()), slog.String("chat_id", saved.ChatID.String()))
+		if !withoutAttribution {
+			if err := s.MessageEvents.PublishMessageForwarded(ctx, saved.ID.String(), source.ChatID.String(), saved.ChatID.String(), profileID.String()); err != nil {
+				s.logPublishError(ctx, "message.forwarded", err, slog.String("message_id", saved.ID.String()), slog.String("chat_id", saved.ChatID.String()))
+			}
 		}
 	}
-	kind := messagingv1.MessageKind_MESSAGE_KIND_FORWARD
 	return &messagingv1.ForwardMessageResponse{Message: messageRowToProto(saved, kind, "", false)}, nil
 }
 
