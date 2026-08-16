@@ -59,7 +59,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | TC-DM-05 | Typing indicator | `[exists]` | Gateway: `TestComposeTyping_live`; Flutter: `message_typing_e2e_live_test` |
 | TC-DM-06 | Edit / delete + WS `message_update` | `[exists]` | Gateway: `TestComposeMessageEditDelete_live`; Flutter: `message_edit_delete_e2e_live_test` |
 | TC-DM-07 | Запросы от незнакомцев (requests inbox → accept) | `[exists]` | Gateway: `TestComposeDMRequests_live`; Flutter: `dm_requests_e2e_live_test` |
-| TC-DM-08 | Архивирование / скрытие DM | `[missing]` | — (спека text-chat §Архивирование) |
+| TC-DM-08 | Архивирование / скрытие DM | `[partial]` | Chat IT: `TestArchiveChat_HidesFromListChats`, `TestMuteChat_*`; Gateway transcode; Flutter client. Compose/Flutter live still open |
 | TC-DM-09 | Черновики локально на устройстве | `[partial]` | Только клиентская логика; нет live IT (сервер не хранит) |
 
 ### Путь B — Группы
