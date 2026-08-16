@@ -10,11 +10,12 @@ import (
 // MaxAvatarBytes is the app stack upper bound from PLAN.md § R2 / аватар (ориентир 2–5 MB).
 const MaxAvatarBytes = 5 * 1024 * 1024
 
-var allowedExtByMIME = map[string]string{
-	"image/jpeg": ".jpg",
-	"image/png":  ".png",
-	"image/webp": ".webp",
-}
+	var allowedExtByMIME = map[string]string{
+		"image/jpeg": ".jpg",
+		"image/png":  ".png",
+		"image/webp": ".webp",
+		"image/gif":  ".gif", // animated avatars — premium-gated in CreateAvatarPresignedUpload
+	}
 
 // ValidateUploadParams enforces PLAN app stack avatar presign limits (whitelist MIME, max size).
 func ValidateUploadParams(contentType string, contentLength int64) error {
@@ -37,9 +38,9 @@ func FileExtForContentType(contentType string) string {
 	return allowedExtByMIME[ct]
 }
 
-var allowedAvatarFileExt = map[string]struct{}{
-	".png": {}, ".jpg": {}, ".webp": {},
-}
+	var allowedAvatarFileExt = map[string]struct{}{
+		".png": {}, ".jpg": {}, ".webp": {}, ".gif": {},
+	}
 
 func validateAvatarLeafFile(name string) error {
 	i := strings.LastIndex(name, ".")

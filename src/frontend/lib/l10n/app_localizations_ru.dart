@@ -629,7 +629,11 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get profileErrorAvatarType =>
-      'Используйте статичное изображение JPEG, PNG или WebP.';
+      'Используйте JPEG, PNG, WebP или GIF (Премиум).';
+
+  @override
+  String get profileErrorAvatarGifRequiresPremium =>
+      'Анимированный GIF-аватар доступен с Премиум.';
 
   @override
   String get profileErrorAvatarTooLarge =>

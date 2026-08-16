@@ -12,7 +12,7 @@ func (t *transcoder) serveUsers(w http.ResponseWriter, r *http.Request, rest str
 	if t.serveUsersProfilesVerification(w, r, rest) {
 		return true
 	}
-	ctx := withGRPCMetadata(r.Context(), r)
+	ctx := t.withLiveSubscriptionTierMetadata(r.Context(), r)
 	profileID := strings.TrimSpace(r.Header.Get("X-Voice-Profile-Id"))
 
 	switch {

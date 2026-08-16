@@ -626,7 +626,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get profileErrorBioTooLong => 'About must be 500 characters or fewer.';
 
   @override
-  String get profileErrorAvatarType => 'Use a static JPEG, PNG, or WebP image.';
+  String get profileErrorAvatarType => 'Use JPEG, PNG, WebP, or GIF (Premium).';
+
+  @override
+  String get profileErrorAvatarGifRequiresPremium =>
+      'Animated GIF avatars require Premium.';
 
   @override
   String get profileErrorAvatarTooLarge =>
