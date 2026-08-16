@@ -16,7 +16,7 @@ CI/CD + выкат: GitHub Actions, promote/deploy, k8s secrets, observability �
 Проверки на живом кластере после `apply-observability.sh`; спека — [observability.md](../features/observability.md).
 
 - [ ] **Loki: все поды** — приложение + infra пишут в Loki (`kubectl get pods -n voice-observability` — Running).
-- [ ] **Трассировка `request_id`** — E2E: отправка DM на staging → цепочка Gateway → gRPC → NATS → `ws_fanout` в Loki ([`TESTING.md`](../TESTING.md) § Debug by request_id).
+- [ ] **Трассировка `request_id`** — E2E: `scripts/staging/smoke-request-id.sh` (DM → Loki chain Gateway → gRPC → NATS → `ws_fanout`); runbook [`TESTING.md`](../TESTING.md) § Debug by request_id.
 - [ ] **Grafana smoke** — Overview: targets UP; дашборды Overview / Tier-0 / Infra / Logs открываются.
 - [ ] **Prometheus scrape** — `gateway_http_requests_total` растёт при трафике на staging. 
 - [ ] **P1 алерты** — правила активны; тестовый firing → сообщение в канал (не null receiver).

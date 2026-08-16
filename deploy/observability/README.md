@@ -168,6 +168,15 @@ kubectl port-forward -n voice-observability svc/grafana 3000:80
 
 ### 3. E2E logs — DM и `request_id`
 
+Scripted smoke (preferred):
+
+```bash
+# Requires kubectl + curl + python3 + websocat; Loki port-forward is handled by the script.
+scripts/staging/smoke-request-id.sh
+```
+
+Manual:
+
 1. На staging: login → WS к Realtime → отправить DM (два аккаунта).
 2. Скопировать **`X-Request-Id`** из ответа Gateway.
 3. **Explore → Loki**:
