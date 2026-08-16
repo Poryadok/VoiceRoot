@@ -288,8 +288,8 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | ID | Кейс | Статус | Где |
 |----|------|--------|-----|
 | GC-01 | Seeded Dota 2 roles/ranks | `[exists]` | Flutter: `game_catalog_e2e_live_test` |
-| GC-02 | User SubmitGameRequest → moderation | `[missing]` | roadmap П.4 |
-| GC-03 | Admin approve game request | `[missing]` | roadmap П.4 |
+| GC-02 | User SubmitGameRequest → moderation | `[partial]` | Matchmaking IT `TestSubmitGameRequest_*`; Gateway transcode; Flutter `add_game_screen` + widget test. Compose/Flutter live still open |
+| GC-03 | Admin approve game request | `[partial]` | Matchmaking IT `TestApproveGameRequest_*` / Reject; Admin `GameRequestsPage`; Gateway admin routes. Compose live still open |
 
 ---
 
