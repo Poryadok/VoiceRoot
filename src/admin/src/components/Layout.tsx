@@ -19,6 +19,12 @@ export function Layout({ children, onSignOut }: LayoutProps) {
             Moderation
           </NavLink>
           <NavLink
+            to="/game-requests"
+            className={({ isActive }) => (isActive ? "active" : "")}
+          >
+            Game requests
+          </NavLink>
+          <NavLink
             to="/analytics/product"
             className={({ isActive }) => (isActive ? "active" : "")}
           >

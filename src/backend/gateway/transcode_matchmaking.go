@@ -15,6 +15,10 @@ func (t *transcoder) serveMatchmaking(w http.ResponseWriter, r *http.Request, re
 		sub := strings.TrimPrefix(rest, "profile")
 		sub = strings.TrimPrefix(sub, "/")
 		return t.serveMatchmakingProfile(w, r, sub)
+	case strings.HasPrefix(rest, "game-requests"):
+		sub := strings.TrimPrefix(rest, "game-requests")
+		sub = strings.TrimPrefix(sub, "/")
+		return t.serveMatchmakingGameRequests(w, r, sub)
 	case strings.HasPrefix(rest, "games"):
 		sub := strings.TrimPrefix(rest, "games")
 		sub = strings.TrimPrefix(sub, "/")
@@ -286,6 +290,29 @@ func (t *transcoder) serveMatchmakingGames(w http.ResponseWriter, r *http.Reques
 	default:
 		return false
 	}
+}
+
+// serveMatchmakingGameRequests: POST /api/v1/matchmaking/game-requests (user submit).
+func (t *transcoder) serveMatchmakingGameRequests(w http.ResponseWriter, r *http.Request, rest string) bool {
+	ctx := withGRPCMetadata(r.Context(), r)
+	if rest != "" {
+		return false
+	}
+	if r.Method != http.MethodPost {
+		return false
+	}
+	req := &matchmakingv1.SubmitGameRequestRequest{}
+	if err := readProtoJSON(r, req); err != nil {
+		writeGRPCError(w, err)
+		return true
+	}
+	resp, err := t.clients.matchmaking.SubmitGameRequest(ctx, req)
+	if err != nil {
+		writeGRPCError(w, err)
+		return true
+	}
+	writeProtoJSON(w, http.StatusOK, resp)
+	return true
 }
 
 func (t *transcoder) serveMatchmakingProfile(w http.ResponseWriter, r *http.Request, rest string) bool {

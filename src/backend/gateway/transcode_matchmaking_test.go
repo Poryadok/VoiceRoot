@@ -16,10 +16,14 @@ import (
 
 type recordingMatchmakingGRPC struct {
 	matchmakingv1.UnimplementedMatchmakingServiceServer
-	lastList   *matchmakingv1.ListGamesRequest
-	lastGet    *matchmakingv1.GetGameRequest
-	lastSearch *matchmakingv1.SearchGamesRequest
-	lastCreate *matchmakingv1.CreateGameRequest
+	lastList     *matchmakingv1.ListGamesRequest
+	lastGet      *matchmakingv1.GetGameRequest
+	lastSearch   *matchmakingv1.SearchGamesRequest
+	lastCreate   *matchmakingv1.CreateGameRequest
+	lastSubmit   *matchmakingv1.SubmitGameRequestRequest
+	lastListReq  *matchmakingv1.ListGameRequestsRequest
+	lastApprove  *matchmakingv1.ApproveGameRequestRequest
+	lastReject   *matchmakingv1.RejectGameRequestRequest
 }
 
 func (s *recordingMatchmakingGRPC) ListGames(_ context.Context, req *matchmakingv1.ListGamesRequest) (*matchmakingv1.ListGamesResponse, error) {
@@ -56,6 +60,41 @@ func (s *recordingMatchmakingGRPC) CreateGame(_ context.Context, req *matchmakin
 	s.lastCreate = req
 	return &matchmakingv1.CreateGameResponse{
 		Game: &matchmakingv1.Game{Id: "new-game", Name: req.GetName(), ConfigJson: req.GetConfigJson()},
+	}, nil
+}
+
+func (s *recordingMatchmakingGRPC) SubmitGameRequest(_ context.Context, req *matchmakingv1.SubmitGameRequestRequest) (*matchmakingv1.SubmitGameRequestResponse, error) {
+	s.lastSubmit = req
+	return &matchmakingv1.SubmitGameRequestResponse{
+		Game: &matchmakingv1.Game{
+			Id:         "pending-1",
+			Name:       req.GetName(),
+			ConfigJson: req.GetConfigJson(),
+			Status:     "pending_moderation",
+		},
+	}, nil
+}
+
+func (s *recordingMatchmakingGRPC) ListGameRequests(_ context.Context, req *matchmakingv1.ListGameRequestsRequest) (*matchmakingv1.ListGameRequestsResponse, error) {
+	s.lastListReq = req
+	return &matchmakingv1.ListGameRequestsResponse{
+		GameList: &matchmakingv1.GameList{
+			Games: []*matchmakingv1.Game{{Id: "pending-1", Name: "Pending Game", Status: "pending_moderation"}},
+		},
+	}, nil
+}
+
+func (s *recordingMatchmakingGRPC) ApproveGameRequest(_ context.Context, req *matchmakingv1.ApproveGameRequestRequest) (*matchmakingv1.ApproveGameRequestResponse, error) {
+	s.lastApprove = req
+	return &matchmakingv1.ApproveGameRequestResponse{
+		Game: &matchmakingv1.Game{Id: req.GetGameId(), Name: "Approved", Status: "active"},
+	}, nil
+}
+
+func (s *recordingMatchmakingGRPC) RejectGameRequest(_ context.Context, req *matchmakingv1.RejectGameRequestRequest) (*matchmakingv1.RejectGameRequestResponse, error) {
+	s.lastReject = req
+	return &matchmakingv1.RejectGameRequestResponse{
+		Game: &matchmakingv1.Game{Id: req.GetGameId(), Name: "Rejected", Status: "rejected"},
 	}, nil
 }
 
@@ -263,3 +302,58 @@ func TestTranscodeMatchmakingUnavailableWhenClientNil(t *testing.T) {
 	})
 	require.Equal(t, http.StatusNotFound, rec.Code)
 }
+
+func TestTranscodeMatchmakingSubmitGameRequest(t *testing.T) {
+	t.Parallel()
+	grpcRec := &recordingMatchmakingGRPC{}
+	conn, cleanup := startBufconnMatchmakingConn(t, grpcRec)
+	t.Cleanup(cleanup)
+
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+		},
+		transcoder: &transcoder{clients: grpcClients{matchmaking: matchmakingv1.NewMatchmakingServiceClient(conn)}},
+	})
+	body := `{"name":"Apex","config_json":"{\"regions\":[\"eu\"],\"modes\":[{\"name\":\"Duos\",\"slots\":2,\"party_size_min\":1,\"party_size_max\":2}]}"}`
+	rec := performRequest(h, http.MethodPost, "/api/v1/matchmaking/game-requests", body, map[string]string{
+		"Authorization": "Bearer valid-user-token",
+		"Content-Type":  "application/json",
+	})
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.NotNil(t, grpcRec.lastSubmit)
+	require.Equal(t, "Apex", grpcRec.lastSubmit.GetName())
+}
+
+func TestTranscodeAdminMatchmaking_ApproveStaffOnly(t *testing.T) {
+	t.Parallel()
+	grpcRec := &recordingMatchmakingGRPC{}
+	conn, cleanup := startBufconnMatchmakingConn(t, grpcRec)
+	t.Cleanup(cleanup)
+
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"staff-token":  {UserID: "staff-account", ProfileID: "staff-profile", Roles: []string{"staff"}},
+			"member-token": {UserID: "account-1", ProfileID: "profile-1", Roles: []string{"member"}},
+		},
+		transcoder: &transcoder{clients: grpcClients{matchmaking: matchmakingv1.NewMatchmakingServiceClient(conn)}},
+	})
+
+	list := performRequest(h, http.MethodGet, "/api/v1/admin/matchmaking/game-requests", "", map[string]string{
+		"Authorization": "Bearer staff-token",
+	})
+	require.Equal(t, http.StatusOK, list.Code)
+	require.NotNil(t, grpcRec.lastListReq)
+
+	approve := performRequest(h, http.MethodPost, "/api/v1/admin/matchmaking/game-requests/pending-1/approve", "", map[string]string{
+		"Authorization": "Bearer staff-token",
+	})
+	require.Equal(t, http.StatusOK, approve.Code)
+	require.Equal(t, "pending-1", grpcRec.lastApprove.GetGameId())
+
+	denied := performRequest(h, http.MethodPost, "/api/v1/admin/matchmaking/game-requests/pending-1/approve", "", map[string]string{
+		"Authorization": "Bearer member-token",
+	})
+	require.Equal(t, http.StatusForbidden, denied.Code)
+}
+
