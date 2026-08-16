@@ -144,6 +144,35 @@ func TestCreateAvatarPresignedUpload_FreeGifRejected(t *testing.T) {
 	require.Equal(t, codes.FailedPrecondition, status.Code(err))
 }
 
+// TestCreateAvatarPresignedUpload_PremiumGifAccepted documents animated GIF avatars for Premium.
+func TestCreateAvatarPresignedUpload_PremiumGifAccepted(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startUserPostgresForSubscriptionTests(t, ctx)
+	profiles := store.NewProfileStore(pool)
+	cli, _ := startUserGRPCForSubscriptionTests(t, profiles)
+
+	accountID := uuid.New()
+	pid := uuid.New()
+	_, err := pool.Exec(ctx, `
+		INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+		VALUES ($1, $2, 'gifprem', '0001', 'Gif Premium', true)`,
+		pid, accountID)
+	require.NoError(t, err)
+
+	authed := withAccountTier(ctx, accountID, "premium")
+	resp, err := cli.CreateAvatarPresignedUpload(authed, &userv1.CreateAvatarPresignedUploadRequest{
+		ProfileId:     pid.String(),
+		ContentType:   "image/gif",
+		ContentLength: 4096,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, resp.GetUploadUrl())
+	require.Contains(t, resp.GetObjectKey(), ".gif")
+}
+
 // TestUpdateProfile_FreeBannerRejected documents profile banners require Premium.
 func TestUpdateProfile_FreeBannerRejected(t *testing.T) {
 	if testing.Short() {

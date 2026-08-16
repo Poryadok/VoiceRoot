@@ -69,10 +69,9 @@ func ApplySubscriptionEvent(cache *TierCache, env *eventsv1.SubscriptionStreamEv
 			cache.SetTier(cancelled.GetAccountId(), "free")
 		}
 	case *eventsv1.SubscriptionStreamEvent_PaymentFailed:
-		if failed := p.PaymentFailed; failed != nil {
-			cache.SetTier(failed.GetAccountId(), "free")
-		}
-	case *eventsv1.SubscriptionStreamEvent_PlanExpired:
+			// payment_failed → grace_period: entitlements stay active (docs/features/subscription.md).
+			_ = p
+		case *eventsv1.SubscriptionStreamEvent_PlanExpired:
 		if expired := p.PlanExpired; expired != nil {
 			cache.SetTier(expired.GetAccountId(), "free")
 		}

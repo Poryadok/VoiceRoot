@@ -221,24 +221,34 @@ void main() {
       expect(presign.publicUrl, 'https://cdn.example/avatars/p-1/a.png');
     });
 
-    test('rejects gif before calling gateway in app stack', () async {
-      var called = false;
-      final client = VoiceUsersClient(
-        gateway: gatewayHttpForTest(
-          MockClient((_) async {
-            called = true;
-            return http.Response('{}', 200);
+    test('allows gif content type (premium enforced by gateway)', () async {
+      final mock = MockClient((req) async {
+        expect(req.method, 'POST');
+        expect(req.url.path, '/api/v1/users/me/avatar/presigned-upload');
+        final body = jsonDecode(req.body) as Map<String, dynamic>;
+        expect(body['content_type'], 'image/gif');
+        return http.Response(
+          jsonEncode({
+            'http_method': 'PUT',
+            'upload_url': 'https://r2.example/presigned-gif',
+            'required_headers': {'Content-Type': 'image/gif'},
+            'max_bytes': '5242880',
+            'public_url': 'https://cdn.example/avatars/p-1/a.gif',
+            'object_key': 'avatars/p-1/a.gif',
           }),
-          config: config,
-        ),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      });
+      final client = VoiceUsersClient(
+        gateway: gatewayHttpForTest(mock, config: config),
       );
       final r = await client.createAvatarPresignedUpload(
         authorization: auth,
         contentType: 'image/gif',
         contentLength: 2048,
       );
-      expect(r, isA<UsersApiFailure>());
-      expect(called, isFalse);
+      expect(r, isA<UsersApiOk<AvatarPresignedUpload>>());
     });
   });
 

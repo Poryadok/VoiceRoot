@@ -336,7 +336,8 @@
   "profileErrorDisplayNameRequired": "Enter a display name.",
   "profileErrorDisplayNameTooLong": "Display name must be 32 characters or fewer.",
   "profileErrorBioTooLong": "About must be 500 characters or fewer.",
-  "profileErrorAvatarType": "Use a static JPEG, PNG, or WebP image.",
+  "profileErrorAvatarType": "Use JPEG, PNG, WebP, or GIF (Premium).",
+  "profileErrorAvatarGifRequiresPremium": "Animated GIF avatars require Premium.",
   "profileErrorAvatarTooLarge": "Avatar must be a non-empty image up to 5 MB.",
   "profileEditSaveError": "Could not save profile: {message}",
   "@profileEditSaveError": {

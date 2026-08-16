@@ -8,6 +8,7 @@ import '../../backend/users_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/social_providers.dart';
+import '../../state/subscription_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../matchmaking/player_profile_sheet.dart';
 
@@ -201,6 +202,10 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
     final contentType = picked.contentType.trim().toLowerCase();
     if (!kProfileAvatarContentTypes.contains(contentType)) {
       setState(() => _error = l10n.profileErrorAvatarType);
+      return;
+    }
+    if (contentType == 'image/gif' && !ref.read(accountIsPremiumProvider)) {
+      setState(() => _error = l10n.profileErrorAvatarGifRequiresPremium);
       return;
     }
     if (picked.bytes.isEmpty || picked.bytes.length > kProfileAvatarMaxBytes) {

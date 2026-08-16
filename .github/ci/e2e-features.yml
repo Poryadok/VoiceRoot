@@ -14,6 +14,7 @@ smoke_gateway:
   - TestComposeModeration_live
   - TestComposeModerationShadowBan_live
   - TestComposeBilling_live
+  - TestComposePremiumCosmetics_live
   - TestComposeSpaceProBilling_live
   - TestComposeStories_live
   - TestComposeBotsSlash_live
@@ -44,6 +45,7 @@ smoke_flutter:
   - test/search_e2e_live_test.dart
   - test/moderation_e2e_live_test.dart
   - test/billing_e2e_live_test.dart
+  - test/premium_cosmetics_e2e_live_test.dart
   - test/stories_e2e_live_test.dart
   - test/bots_slash_e2e_live_test.dart
   - test/deeplink_invite_e2e_live_test.dart
@@ -113,6 +115,7 @@ full_flutter:
   - test/trust_e2e_live_test.dart
   - test/privacy_actions_e2e_live_test.dart
   - test/billing_e2e_live_test.dart
+  - test/premium_cosmetics_e2e_live_test.dart
   - test/profiles_verification_e2e_live_test.dart
   - test/moderation_e2e_live_test.dart
   - test/encryption_dm_e2e_live_test.dart

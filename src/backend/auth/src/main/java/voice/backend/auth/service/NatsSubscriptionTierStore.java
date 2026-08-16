@@ -95,15 +95,23 @@ public final class NatsSubscriptionTierStore implements SubscriptionTierResolver
   }
 
   void onMessage(io.nats.client.Message msg) {
-    SubscriptionEventParser.parseTierUpdate(msg.getData())
-        .ifPresent(
-            update -> {
-              delegate.setTier(update.accountId(), update.tier());
-              log.debug(
-                  "subscription tier updated account={} tier={}",
-                  update.accountId(),
-                  update.tier());
-            });
+    try {
+      SubscriptionEventParser.parseTierUpdate(msg.getData())
+          .ifPresent(
+              update -> {
+                delegate.setTier(update.accountId(), update.tier());
+                log.debug(
+                    "subscription tier updated account={} tier={}",
+                    update.accountId(),
+                    update.tier());
+              });
+    } finally {
+      try {
+        msg.ack();
+      } catch (Exception ex) {
+        log.warn("ack subscription.events: {}", ex.getMessage());
+      }
+    }
   }
 
   @Override

@@ -1199,8 +1199,14 @@ abstract class AppLocalizations {
   /// No description provided for @profileErrorAvatarType.
   ///
   /// In en, this message translates to:
-  /// **'Use a static JPEG, PNG, or WebP image.'**
+  /// **'Use JPEG, PNG, WebP, or GIF (Premium).'**
   String get profileErrorAvatarType;
+
+  /// No description provided for @profileErrorAvatarGifRequiresPremium.
+  ///
+  /// In en, this message translates to:
+  /// **'Animated GIF avatars require Premium.'**
+  String get profileErrorAvatarGifRequiresPremium;
 
   /// No description provided for @profileErrorAvatarTooLarge.
   ///
