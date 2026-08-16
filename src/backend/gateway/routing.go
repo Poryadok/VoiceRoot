@@ -111,6 +111,9 @@ func isPublicRESTRoute(method, path string) bool {
 	if method == http.MethodPost && strings.HasPrefix(path, "/api/v1/auth/otp/") {
 		return true
 	}
+	if method == http.MethodPost && path == "/api/v1/auth/password/reset" {
+		return true
+	}
 	if method == http.MethodPost && strings.HasPrefix(path, "/api/v1/subscription/webhooks/") {
 		return true
 	}

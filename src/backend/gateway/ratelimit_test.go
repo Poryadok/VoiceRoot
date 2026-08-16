@@ -23,6 +23,7 @@ func TestRateLimitGroups(t *testing.T) {
 		{name: "auth login", method: http.MethodPost, target: "/api/v1/auth/login", body: `{}`, group: "AuthLogin"},
 		{name: "auth register", method: http.MethodPost, target: "/api/v1/auth/register", body: `{}`, group: "AuthRegister"},
 		{name: "otp", method: http.MethodPost, target: "/api/v1/auth/otp/send", body: `{}`, group: "OTP"},
+		{name: "password reset", method: http.MethodPost, target: "/api/v1/auth/password/reset", body: `{}`, group: "OTP"},
 		{name: "messages send", method: http.MethodPost, target: "/api/v1/messages/send", body: `{"text":"hi"}`, group: "MessagesSend", authHeader: "Bearer valid-user-token"},
 		{name: "file upload", method: http.MethodPost, target: "/api/v1/files/upload", body: `file`, group: "FileUpload", authHeader: "Bearer valid-user-token"},
 		{name: "avatar presigned upload", method: http.MethodPost, target: "/api/v1/users/me/avatar/presigned-upload", body: `{"content_type":"image/png","content_length":1024}`, group: "FileUpload", authHeader: "Bearer valid-user-token"},

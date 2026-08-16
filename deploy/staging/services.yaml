@@ -47,6 +47,8 @@ spec:
             - {name: AUTH_OAUTH_ADMIN_REDIRECT_URIS, valueFrom: {configMapKeyRef: {name: voice-app-config, key: AUTH_OAUTH_ADMIN_REDIRECT_URIS}}}
             - {name: AUTH_NATS_URL, value: "nats://voice-nats:4222"}
             - {name: USER_GRPC_ADDR, value: "voice-user:9090"}
+            - {name: AUTH_RESEND_API_KEY, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: AUTH_RESEND_API_KEY, optional: true}}}
+            - {name: AUTH_RESEND_FROM, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: AUTH_RESEND_FROM, optional: true}}}
             - {name: AUTH_TOTP_ENCRYPTION_KEY, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: AUTH_TOTP_ENCRYPTION_KEY}}}
           volumeMounts:
             - {name: jwt-key, mountPath: /run/jwt.pem, subPath: jwt.pem, readOnly: true}
