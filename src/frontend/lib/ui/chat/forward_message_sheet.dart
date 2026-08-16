@@ -14,25 +14,30 @@ import '../core/voice_list_row.dart';
 import '../core/voice_state_panel.dart';
 
 /// Picks a target chat and optionally adds commentary before forwarding.
+/// When [withoutAttribution] is true (FW-03), copies as a regular message.
 class ForwardMessageSheet extends ConsumerStatefulWidget {
   const ForwardMessageSheet({
     super.key,
     required this.sourceMessage,
     required this.sourceChatId,
+    this.withoutAttribution = false,
   });
 
   static const Key sheetKey = Key('forward_message_sheet');
   static const Key searchFieldKey = Key('forward_message_search');
+  static const Key copyAsNewSheetKey = Key('copy_as_new_message_sheet');
 
   static Key chatTileKey(String chatId) => Key('forward_chat_$chatId');
 
   final VoiceMessage sourceMessage;
   final String sourceChatId;
+  final bool withoutAttribution;
 
   static Future<void> show(
     BuildContext context, {
     required VoiceMessage sourceMessage,
     required String sourceChatId,
+    bool withoutAttribution = false,
   }) {
     final container = ProviderScope.containerOf(context);
     return showVoiceBottomSheet<void>(
@@ -43,6 +48,7 @@ class ForwardMessageSheet extends ConsumerStatefulWidget {
         child: ForwardMessageSheet(
           sourceMessage: sourceMessage,
           sourceChatId: sourceChatId,
+          withoutAttribution: withoutAttribution,
         ),
       ),
     );
@@ -100,6 +106,7 @@ class _ForwardMessageSheetState extends ConsumerState<ForwardMessageSheet> {
       sourceMessageId: widget.sourceMessage.id,
       targetChatId: item.chatId,
       commentary: commentary.isEmpty ? null : commentary,
+      withoutAttribution: widget.withoutAttribution,
     );
     if (!mounted) return;
     setState(() => _forwarding = false);
@@ -112,7 +119,13 @@ class _ForwardMessageSheetState extends ConsumerState<ForwardMessageSheet> {
     if (!mounted) return;
     Navigator.of(context).pop();
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(l10n.chatForwardSuccess)),
+      SnackBar(
+        content: Text(
+          widget.withoutAttribution
+              ? l10n.chatCopyAsNewSuccess
+              : l10n.chatForwardSuccess,
+        ),
+      ),
     );
     ref.read(chatActionsProvider).selectChat(item.chatId);
   }
@@ -120,7 +133,9 @@ class _ForwardMessageSheetState extends ConsumerState<ForwardMessageSheet> {
   Future<String?> _promptCommentary() {
     return showDialog<String?>(
       context: context,
-      builder: (context) => const _ForwardCommentaryDialog(),
+      builder: (context) => _ForwardCommentaryDialog(
+        withoutAttribution: widget.withoutAttribution,
+      ),
     );
   }
 
@@ -134,13 +149,20 @@ class _ForwardMessageSheetState extends ConsumerState<ForwardMessageSheet> {
     final chats = _filteredChats(listState.items, l10n);
 
     return SafeArea(
-      key: ForwardMessageSheet.sheetKey,
+      key: widget.withoutAttribution
+          ? ForwardMessageSheet.copyAsNewSheetKey
+          : ForwardMessageSheet.sheetKey,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(l10n.chatForwardTitle, style: theme.textTheme.titleLarge),
+            Text(
+              widget.withoutAttribution
+                  ? l10n.chatCopyAsNewTitle
+                  : l10n.chatForwardTitle,
+              style: theme.textTheme.titleLarge,
+            ),
             const SizedBox(height: 12),
             TextField(
               key: ForwardMessageSheet.searchFieldKey,
@@ -206,7 +228,9 @@ class _ForwardMessageSheetState extends ConsumerState<ForwardMessageSheet> {
 }
 
 class _ForwardCommentaryDialog extends StatefulWidget {
-  const _ForwardCommentaryDialog();
+  const _ForwardCommentaryDialog({required this.withoutAttribution});
+
+  final bool withoutAttribution;
 
   @override
   State<_ForwardCommentaryDialog> createState() =>
@@ -241,7 +265,11 @@ class _ForwardCommentaryDialogState extends State<_ForwardCommentaryDialog> {
         ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(_controller.text),
-          child: Text(l10n.chatMessageForward),
+          child: Text(
+            widget.withoutAttribution
+                ? l10n.chatMessageCopyAsNew
+                : l10n.chatMessageForward,
+          ),
         ),
       ],
     );

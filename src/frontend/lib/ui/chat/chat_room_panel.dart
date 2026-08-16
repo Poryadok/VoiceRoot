@@ -1085,6 +1085,12 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   onTap: () => Navigator.of(context).pop('forward'),
                 ),
                 ListTile(
+                  key: const Key('message_action_copy_as_new'),
+                  leading: const Icon(Icons.content_copy_outlined),
+                  title: Text(sheetL10n.chatMessageCopyAsNew),
+                  onTap: () => Navigator.of(context).pop('copy_as_new'),
+                ),
+                ListTile(
                   leading: const Icon(Icons.link),
                   title: Text(sheetL10n.shareLinkAction),
                   onTap: () => Navigator.of(context).pop('share'),
@@ -1157,6 +1163,13 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         context,
         sourceMessage: message,
         sourceChatId: widget.chatId,
+      );
+    } else if (action == 'copy_as_new') {
+      await ForwardMessageSheet.show(
+        context,
+        sourceMessage: message,
+        sourceChatId: widget.chatId,
+        withoutAttribution: true,
       );
     } else if (action == 'share') {
       final link = shareUrlForChat(

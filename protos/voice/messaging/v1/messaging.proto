@@ -186,6 +186,9 @@ message ForwardMessageRequest {
   string source_message_id = 1;
   voice.chat.v1.ChatRef target_chat = 2;
   optional string commentary = 3;
+  // FW-03 / forward-messages.md «Copy as new message»: copy content (and media)
+  // as a regular message with no "Forwarded from" attribution.
+  optional bool without_attribution = 4;
 }
 
 message MarkReadRequest {
