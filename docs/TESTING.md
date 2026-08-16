@@ -128,6 +128,8 @@ rg "chat_id.*<uuid>" .local/dev.ndjson
 
 ### E2E сценарий: отправка DM
 
+Автоматизация: `scripts/staging/smoke-request-id.sh` (register ×2 → WS → DM → Loki chain assert).
+
 1. **Войти** (REST login через Gateway) и сохранить access token.
 2. **Открыть WS** к Realtime (`/ws` через Gateway) с тем же JWT — иначе `ws_fanout` не появится у получателя.
 3. **Отправить DM** — `POST /api/v1/messages` (или эквивалентный маршрут send message) с телом `chat_id` + текст.
