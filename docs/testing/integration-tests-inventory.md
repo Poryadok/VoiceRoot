@@ -32,8 +32,8 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 |--|------:|
 | **Всего кейсов** | 208 |
 | `[exists]` | ~116 |
-| `[partial]` | ~33 |
-| `[missing]` | ~52 |
+| `[partial]` | ~34 |
+| `[missing]` | ~51 |
 | `[deferred]` | 1 |
 | `[n/a]` | 4 |
 
