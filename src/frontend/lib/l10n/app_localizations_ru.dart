@@ -2407,6 +2407,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get storyLfpJoin => 'Присоединиться';
 
   @override
+  String get storyLfpInvite => 'Пригласить';
+
+  @override
   String get storyLfpWrite => 'Написать';
 
   @override

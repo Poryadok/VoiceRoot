@@ -48,6 +48,10 @@ service MatchmakingService {
   rpc GetPlayerProfile(GetPlayerProfileRequest) returns (GetPlayerProfileResponse);
   rpc UpsertPlayerGameEntry(UpsertPlayerGameEntryRequest) returns (UpsertPlayerGameEntryResponse);
   rpc DeletePlayerGameEntry(DeletePlayerGameEntryRequest) returns (DeletePlayerGameEntryResponse);
+
+  // LFP Social Discovery decision (docs/features/matchmaking.md; roadmap П.3).
+  // Author Accept/Decline on JOIN|INVITE from story.lfp_response.
+  rpc DecideLfpRequest(DecideLfpRequestRequest) returns (DecideLfpRequestResponse);
 }
 
 message Game {
@@ -339,3 +343,17 @@ message RevokePlatformMMBanRequest {
 }
 
 message RevokePlatformMMBanResponse {}
+
+// Author decision on an LFP JOIN/INVITE (notification Accept/Decline).
+message DecideLfpRequestRequest {
+  string story_id = 1;
+  string responder_profile_id = 2;
+  string response_type = 3; // JOIN | INVITE
+  string decision = 4;      // ACCEPT | DECLINE
+}
+
+message DecideLfpRequestResponse {
+  string status = 1; // accepted | declined
+  optional string party_id = 2;
+  repeated SearchSession search_sessions = 3;
+}

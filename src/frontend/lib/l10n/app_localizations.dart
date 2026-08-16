@@ -4412,6 +4412,12 @@ abstract class AppLocalizations {
   /// **'Join'**
   String get storyLfpJoin;
 
+  /// No description provided for @storyLfpInvite.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite'**
+  String get storyLfpInvite;
+
   /// No description provided for @storyLfpWrite.
   ///
   /// In en, this message translates to:

@@ -1109,6 +1109,7 @@
     }
   },
   "storyLfpJoin": "Join",
+  "storyLfpInvite": "Invite",
   "storyLfpWrite": "Write",
   "socialStoryCreate": "New story",
   "storyArchiveTitle": "Story archive",

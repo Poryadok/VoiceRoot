@@ -16,15 +16,18 @@ class LfpStoryCard extends StatelessWidget {
     super.key,
     required this.story,
     this.onJoin,
+    this.onInvite,
     this.onWrite,
   });
 
   static const Key cardKey = Key('lfp_story_card');
   static const Key joinKey = Key('lfp_story_join');
+  static const Key inviteKey = Key('lfp_story_invite');
   static const Key writeKey = Key('lfp_story_write');
 
   final StoryData story;
   final VoidCallback? onJoin;
+  final VoidCallback? onInvite;
   final VoidCallback? onWrite;
 
   @override
@@ -84,6 +87,14 @@ class LfpStoryCard extends StatelessWidget {
                     key: LfpStoryCard.joinKey,
                     onPressed: onJoin ?? () => LfpStoryActions.join(context, story),
                     child: Text(l10n.storyLfpJoin),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FilledButton.tonal(
+                    key: LfpStoryCard.inviteKey,
+                    onPressed: onInvite ?? () => LfpStoryActions.invite(context, story),
+                    child: Text(l10n.storyLfpInvite),
                   ),
                 ),
                 const SizedBox(width: 8),

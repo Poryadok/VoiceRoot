@@ -2394,6 +2394,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get storyLfpJoin => 'Join';
 
   @override
+  String get storyLfpInvite => 'Invite';
+
+  @override
   String get storyLfpWrite => 'Write';
 
   @override

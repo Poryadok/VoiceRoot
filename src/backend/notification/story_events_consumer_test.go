@@ -41,10 +41,10 @@ func TestRouteStoryNotification_StoryLfpResponseJoin(t *testing.T) {
 	env := &eventsv1.StoryStreamEvent{
 		Payload: &eventsv1.StoryStreamEvent_StoryLfpResponse{
 			StoryLfpResponse: &eventsv1.StoryLfpResponse{
-				StoryId:             storyID,
-				AuthorProfileId:     authorID,
-				ResponderProfileId:  responderID,
-				ResponseType:        "JOIN",
+				StoryId:            storyID,
+				AuthorProfileId:    authorID,
+				ResponderProfileId: responderID,
+				ResponseType:       "JOIN",
 			},
 		},
 	}
@@ -55,6 +55,13 @@ func TestRouteStoryNotification_StoryLfpResponseJoin(t *testing.T) {
 	decisions := handler.HandleStoryLfpResponse(context.Background(), env.GetStoryLfpResponse())
 	require.Contains(t, decisions, authorID)
 	require.NotContains(t, decisions, responderID)
+
+	title, body, data := lfpPushCopy(env.GetStoryLfpResponse())
+	require.Equal(t, "LFP join request", title)
+	require.NotEmpty(t, body)
+	require.Equal(t, "lfp_accept", data["action_accept"])
+	require.Equal(t, "lfp_decline", data["action_decline"])
+	require.Equal(t, storyID, data["story_id"])
 }
 
 func TestRouteStoryNotification_unknownPayload(t *testing.T) {
