@@ -53,6 +53,7 @@
 | P2.4 | **product done** | Twitch/YouTube OAuth + cron refresh + org DNS (#25); compose/Flutter live IT still open |
 | P2.5 | **product done** | GetQuietHours + Flutter server sync; voice_member_joined quiet-hours assert; compose live IT still open |
 | P2.15 | **product done** | `without_attribution` ForwardMessage + Flutter Copy as new; Messaging/Gateway ITs; compose live still open |
+| P2.13 | **done** | live entitlements for User cosmetics + GIF avatar; `TestComposePremiumCosmetics_live` + Flutter SUB-06 (#26) |
 | P2.* / P3.* (rest) | **deferred** | roadmap / soft-launch+ |
 
 ---
@@ -160,7 +161,7 @@ Effort: **S** ≤0.5d · **M** 1–2d · **L** 3–5d · **XL** >1w (инфра/
 | P2.10 | Presence DND/invisible | B+C | PR-02 | M | **done** — friend NATS fan-out + compose/Flutter |
 | P2.11 | DM archive/hide | B+C | TC-DM-08 | M | **product done** (#16); live IT open |
 | P2.12 | Onboarding coach-marks MM/space | C | ON-03 | M | **done** — `onboarding_coach_e2e_live_test` (#20) |
-| P2.13 | Premium cosmetics cross-smoke | B+C | SUB-06 | M | entitlements |
+| P2.13 | Premium cosmetics cross-smoke | B+C | SUB-06 | M | **done** — live tier + GIF + compose/Flutter (#26) |
 | P2.14 | Bot autocomplete / portal catalog | B+C | BT-07 | L | П.15 |
 | P2.15 | Copy-forward without attribution | C | FW-03 | S | **product done** — Messaging/Gateway/Flutter; live IT open |
 | P2.16 | Multi-forward | C | FW-05 | M | UI backlog? |

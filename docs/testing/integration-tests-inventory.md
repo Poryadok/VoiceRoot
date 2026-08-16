@@ -180,7 +180,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | ID | Кейс | Статус | Где |
 |----|------|--------|-----|
 | UP-01 | Avatar presigned upload round-trip | `[exists]` | Flutter: `avatar_e2e_live_test` |
-| UP-02 | Premium animated GIF avatar | `[missing]` | todo: GIF rejected in validate |
+| UP-02 | Premium animated GIF avatar | `[exists]` | User validate+IT; Gateway live tier; Flutter GIF whitelist |
 | UP-03 | Public profile fields / bio / status | `[partial]` | User IT / client; no dedicated compose profile live |
 | UP-04 | Player (MM) profile upsert/list | `[exists]` | Gateway: `TestComposeMatchmakingPlayerProfile_live`; Flutter: `player_profile_e2e_live_test` |
 
@@ -447,7 +447,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | SUB-03 | Space Pro billing compose | `[exists]` | `TestComposeSpaceProBilling_live` + `TestComposeSpaceProMemberCap_live` |
 | SUB-04 | Grace-period notifications D1/D3/D7 | `[exists]` | Gateway: `TestComposeSubscriptionGraceReminder_live` (D1 sweeper) |
 | SUB-05 | Real Paddle checkout | `[missing]` | stub URLs (todo Critical) |
-| SUB-06 | Premium cosmetics (banner/GIF/3rd profile) cross-smoke | `[missing]` | todo cross-cutting |
+| SUB-06 | Premium cosmetics (banner/GIF/3rd profile) cross-smoke | `[exists]` | `TestComposePremiumCosmetics_live` + `premium_cosmetics_e2e_live_test` |
 
 ---
 
