@@ -92,6 +92,7 @@ func realtimeJetStreamConsumers(instanceID string) []jetStreamConsumerRef {
 		{stream: jsStreamChatEvents, consumer: chatConsumerDurableName(instanceID)},
 		{stream: jsStreamMatchmakingEvents, consumer: matchmakingConsumerDurableName(instanceID)},
 		{stream: jsStreamRoleEvents, consumer: roleConsumerDurableName(instanceID)},
+		{stream: jsStreamUserEvents, consumer: userConsumerDurableName(instanceID)},
 	}
 }
 

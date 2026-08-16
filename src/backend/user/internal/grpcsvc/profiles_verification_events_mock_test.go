@@ -35,3 +35,7 @@ func (r *profilesVerificationEventsRecorder) PublishProfileSwitched(_ context.Co
 func (r *profilesVerificationEventsRecorder) PublishVerified(_ context.Context, _, _, _ string) error {
 	return nil
 }
+
+func (r *profilesVerificationEventsRecorder) PublishPresenceChanged(_ context.Context, _, _ string) error {
+	return nil
+}
