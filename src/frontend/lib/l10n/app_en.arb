@@ -537,6 +537,7 @@
     }
   },
   "spaceMembersTooltip": "Space members",
+  "spaceMatchmakingTooltip": "Space matchmaking",
   "spaceMembersTitle": "Members",
   "spaceMembersSubtitle": "Owners and admins can assign roles and remove members.",
   "spaceMembersLoadError": "Could not load members",

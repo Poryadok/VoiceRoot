@@ -8,13 +8,14 @@ import 'queue_search_screen.dart';
 
 /// Game page with modes, in-game roles and ranks from catalog config.
 class GameDetailScreen extends StatelessWidget {
-  const GameDetailScreen({super.key, required this.game});
+  const GameDetailScreen({super.key, required this.game, this.spaceId});
 
   static const Key screenKey = Key('game_detail_screen');
   static const Key rolesSectionKey = Key('game_detail_roles');
   static const Key ranksSectionKey = Key('game_detail_ranks');
 
   final CatalogGame game;
+  final String? spaceId;
 
   @override
   Widget build(BuildContext context) {
@@ -86,7 +87,11 @@ class GameDetailScreen extends StatelessWidget {
               onPressed: () {
                 Navigator.of(context).push(
                   MaterialPageRoute<void>(
-                    builder: (_) => QueueSearchScreen(game: game, mode: mode),
+                    builder: (_) => QueueSearchScreen(
+                      game: game,
+                      mode: mode,
+                      spaceId: spaceId,
+                    ),
                   ),
                 );
               },

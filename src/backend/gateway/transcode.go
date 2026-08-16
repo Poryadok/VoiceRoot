@@ -221,7 +221,11 @@ func (t *transcoder) serveNamespace(w http.ResponseWriter, r *http.Request, name
 		return t.serveFiles(w, r, rest)
 	case "spaces":
 		if t.clients.space == nil {
-			return false
+			// Space-scoped MM queue only needs the matchmaking client.
+			if t.clients.matchmaking == nil {
+				return false
+			}
+			return t.serveSpacesMatchmaking(w, r, rest)
 		}
 		return t.serveSpaces(w, r, rest)
 	case "invites":

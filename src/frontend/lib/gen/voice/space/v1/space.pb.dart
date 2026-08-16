@@ -478,6 +478,133 @@ class UpdateSpaceRequest extends $pb.GeneratedMessage {
   void clearMmConfigJson() => $_clearField(9);
 }
 
+class UpdateSpaceMmConfigRequest extends $pb.GeneratedMessage {
+  factory UpdateSpaceMmConfigRequest({
+    $core.String? spaceId,
+    $core.String? mmConfigJson,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (mmConfigJson != null) result.mmConfigJson = mmConfigJson;
+    return result;
+  }
+
+  UpdateSpaceMmConfigRequest._();
+
+  factory UpdateSpaceMmConfigRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory UpdateSpaceMmConfigRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'UpdateSpaceMmConfigRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'mmConfigJson')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UpdateSpaceMmConfigRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UpdateSpaceMmConfigRequest copyWith(
+          void Function(UpdateSpaceMmConfigRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as UpdateSpaceMmConfigRequest))
+          as UpdateSpaceMmConfigRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static UpdateSpaceMmConfigRequest create() => UpdateSpaceMmConfigRequest._();
+  @$core.override
+  UpdateSpaceMmConfigRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static UpdateSpaceMmConfigRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<UpdateSpaceMmConfigRequest>(create);
+  static UpdateSpaceMmConfigRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get mmConfigJson => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set mmConfigJson($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasMmConfigJson() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearMmConfigJson() => $_clearField(2);
+}
+
+class UpdateSpaceMmConfigResponse extends $pb.GeneratedMessage {
+  factory UpdateSpaceMmConfigResponse({
+    Space? space,
+  }) {
+    final result = create();
+    if (space != null) result.space = space;
+    return result;
+  }
+
+  UpdateSpaceMmConfigResponse._();
+
+  factory UpdateSpaceMmConfigResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory UpdateSpaceMmConfigResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'UpdateSpaceMmConfigResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOM<Space>(1, _omitFieldNames ? '' : 'space', subBuilder: Space.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UpdateSpaceMmConfigResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UpdateSpaceMmConfigResponse copyWith(
+          void Function(UpdateSpaceMmConfigResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as UpdateSpaceMmConfigResponse))
+          as UpdateSpaceMmConfigResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static UpdateSpaceMmConfigResponse create() =>
+      UpdateSpaceMmConfigResponse._();
+  @$core.override
+  UpdateSpaceMmConfigResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static UpdateSpaceMmConfigResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<UpdateSpaceMmConfigResponse>(create);
+  static UpdateSpaceMmConfigResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  Space get space => $_getN(0);
+  @$pb.TagNumber(1)
+  set space(Space value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpace() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpace() => $_clearField(1);
+  @$pb.TagNumber(1)
+  Space ensureSpace() => $_ensure(0);
+}
+
 class DeleteSpaceRequest extends $pb.GeneratedMessage {
   factory DeleteSpaceRequest({
     $core.String? spaceId,

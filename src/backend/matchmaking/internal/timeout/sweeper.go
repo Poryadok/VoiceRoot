@@ -143,7 +143,7 @@ func (s *Sweeper) cleanupQueue(ctx context.Context, sess store.SearchSession) er
 	if err != nil {
 		return err
 	}
-	if err := s.Queue.Dequeue(ctx, sess.GameID, sess.Mode, crit.Region, sess.ID); err != nil {
+	if err := s.Queue.DequeueScoped(ctx, sess.SpaceID, sess.GameID, sess.Mode, crit.Region, sess.ID); err != nil {
 		return err
 	}
 	return s.Queue.ReleaseLock(ctx, sess.ProfileID, sess.ID)

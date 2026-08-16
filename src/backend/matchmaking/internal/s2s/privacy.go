@@ -2,10 +2,14 @@ package s2s
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 
 	"voice/backend/pkg/privacy"
 
@@ -98,4 +102,48 @@ func (s *GRPCSpaceCoMembership) AreCoMembers(ctx context.Context, profileA, prof
 		return false, err
 	}
 	return resp.GetCoMembers(), nil
+}
+
+// GRPCSpaceQueueGate verifies space membership and mm_config.enabled for StartSpaceQueue.
+type GRPCSpaceQueueGate struct {
+	Client spacev1.SpaceServiceClient
+}
+
+func NewGRPCSpaceQueueGate(cc grpc.ClientConnInterface) *GRPCSpaceQueueGate {
+	if cc == nil {
+		return nil
+	}
+	return &GRPCSpaceQueueGate{Client: spacev1.NewSpaceServiceClient(cc)}
+}
+
+func (g *GRPCSpaceQueueGate) EnsureMemberAndMMEnabled(ctx context.Context, spaceID uuid.UUID) error {
+	if g == nil || g.Client == nil {
+		return status.Error(codes.Unavailable, "space matchmaking unavailable")
+	}
+	ctx = ForwardIncomingMetadata(ctx)
+	resp, err := g.Client.GetSpace(ctx, &spacev1.GetSpaceRequest{SpaceId: spaceID.String()})
+	if err != nil {
+		return err
+	}
+	if !grpcsvcParseEnabled(resp.GetSpace().GetMmConfigJson()) {
+		return status.Error(codes.FailedPrecondition, "space matchmaking disabled")
+	}
+	return nil
+}
+
+func grpcsvcParseEnabled(mmConfigJSON string) bool {
+	raw := strings.TrimSpace(mmConfigJSON)
+	if raw == "" || raw == "{}" || raw == "null" {
+		return true
+	}
+	var cfg struct {
+		Enabled *bool `json:"enabled"`
+	}
+	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+		return true
+	}
+	if cfg.Enabled == nil {
+		return true
+	}
+	return *cfg.Enabled
 }

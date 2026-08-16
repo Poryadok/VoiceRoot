@@ -12,10 +12,13 @@ import 'game_detail_screen.dart';
 
 /// Browse matchmaking game catalog (docs/features/game-catalog.md).
 class GameCatalogScreen extends ConsumerStatefulWidget {
-  const GameCatalogScreen({super.key, this.selectMode = false});
+  const GameCatalogScreen({super.key, this.selectMode = false, this.spaceId});
 
   /// When true, tapping a game returns it to the previous route.
   final bool selectMode;
+
+  /// When set, queue starts are space-scoped (MM tab inside a space).
+  final String? spaceId;
 
   static const Key screenKey = Key('game_catalog_screen');
   static const Key searchFieldKey = Key('game_catalog_search');
@@ -90,7 +93,10 @@ class _GameCatalogScreenState extends ConsumerState<GameCatalogScreen> {
                   }
                   Navigator.of(context).push(
                     MaterialPageRoute<void>(
-                      builder: (_) => GameDetailScreen(game: game),
+                      builder: (_) => GameDetailScreen(
+                        game: game,
+                        spaceId: widget.spaceId,
+                      ),
                     ),
                   );
                 },

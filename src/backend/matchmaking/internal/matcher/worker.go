@@ -43,12 +43,16 @@ type Worker struct {
 	Logger   *slog.Logger
 }
 
-// RunOnce attempts to form matches for all active games.
+// RunOnce attempts to form matches for all active games (global + space-scoped queues).
 func (w *Worker) RunOnce(ctx context.Context) error {
 	if w == nil || w.Games == nil || w.Queue == nil || w.Sessions == nil || w.Matches == nil {
 		return nil
 	}
 	res, err := w.Games.List(ctx, store.ListGamesParams{PageSize: 100, Status: store.StatusActive})
+	if err != nil {
+		return err
+	}
+	spaceIDs, err := w.Sessions.ListDistinctSearchingSpaceIDs(ctx)
 	if err != nil {
 		return err
 	}
@@ -59,12 +63,23 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 		}
 		for _, mode := range cfg.Modes {
 			for _, region := range cfg.Regions {
-				if err := w.tryMatchQueue(ctx, game.ID, mode, region, cfg); err != nil && w.Logger != nil {
+				if err := w.tryMatchQueue(ctx, nil, game.ID, mode, region, cfg); err != nil && w.Logger != nil {
 					w.Logger.Warn("matcher queue pass failed",
 						slog.String("game_id", game.ID.String()),
 						slog.String("mode", mode.Name),
 						slog.String("region", region),
 						slog.Any("error", err))
+				}
+				for i := range spaceIDs {
+					spaceID := spaceIDs[i]
+					if err := w.tryMatchQueue(ctx, &spaceID, game.ID, mode, region, cfg); err != nil && w.Logger != nil {
+						w.Logger.Warn("matcher space queue pass failed",
+							slog.String("space_id", spaceID.String()),
+							slog.String("game_id", game.ID.String()),
+							slog.String("mode", mode.Name),
+							slog.String("region", region),
+							slog.Any("error", err))
+					}
 				}
 			}
 		}
@@ -72,13 +87,13 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 	return nil
 }
 
-func (w *Worker) tryMatchQueue(ctx context.Context, gameID uuid.UUID, mode config.Mode, region string, cfg config.GameConfig) error {
-	depth, err := w.Queue.QueueDepth(ctx, gameID, mode.Name, region)
+func (w *Worker) tryMatchQueue(ctx context.Context, spaceID *uuid.UUID, gameID uuid.UUID, mode config.Mode, region string, cfg config.GameConfig) error {
+	depth, err := w.Queue.QueueDepthScoped(ctx, spaceID, gameID, mode.Name, region)
 	if err != nil || depth < int64(mode.Slots) {
 		return err
 	}
 
-	ids, err := w.Queue.ListSessionIDs(ctx, gameID, mode.Name, region, 0)
+	ids, err := w.Queue.ListSessionIDsScoped(ctx, spaceID, gameID, mode.Name, region, 0)
 	if err != nil {
 		return err
 	}
@@ -92,6 +107,13 @@ func (w *Worker) tryMatchQueue(ctx context.Context, gameID uuid.UUID, mode confi
 
 	byID := make(map[uuid.UUID]store.SearchSession, len(sessions))
 	for _, sess := range sessions {
+		if spaceID == nil {
+			if sess.SpaceID != nil {
+				continue
+			}
+		} else if sess.SpaceID == nil || *sess.SpaceID != *spaceID {
+			continue
+		}
 		byID[sess.ID] = sess
 	}
 
@@ -198,7 +220,7 @@ func (w *Worker) tryMatchQueue(ctx context.Context, gameID uuid.UUID, mode confi
 		}
 
 		for _, sess := range group {
-			_ = w.Queue.Dequeue(ctx, gameID, mode.Name, region, sess.ID)
+			_ = w.Queue.DequeueScoped(ctx, spaceID, gameID, mode.Name, region, sess.ID)
 		}
 
 		if w.Events != nil {

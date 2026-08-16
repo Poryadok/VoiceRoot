@@ -104,6 +104,14 @@ class MatchmakingServiceClient extends $grpc.Client {
     return $createUnaryCall(_$startSearch, request, options: options);
   }
 
+  /// Space-scoped queue (docs/features/matchmaking.md §внутри спейса; roadmap П.1).
+  $grpc.ResponseFuture<$0.StartSpaceQueueResponse> startSpaceQueue(
+    $0.StartSpaceQueueRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$startSpaceQueue, request, options: options);
+  }
+
   $grpc.ResponseFuture<$0.CancelSearchResponse> cancelSearch(
     $0.CancelSearchRequest request, {
     $grpc.CallOptions? options,
@@ -277,6 +285,11 @@ class MatchmakingServiceClient extends $grpc.Client {
           '/voice.matchmaking.v1.MatchmakingService/StartSearch',
           ($0.StartSearchRequest value) => value.writeToBuffer(),
           $0.StartSearchResponse.fromBuffer);
+  static final _$startSpaceQueue =
+      $grpc.ClientMethod<$0.StartSpaceQueueRequest, $0.StartSpaceQueueResponse>(
+          '/voice.matchmaking.v1.MatchmakingService/StartSpaceQueue',
+          ($0.StartSpaceQueueRequest value) => value.writeToBuffer(),
+          $0.StartSpaceQueueResponse.fromBuffer);
   static final _$cancelSearch =
       $grpc.ClientMethod<$0.CancelSearchRequest, $0.CancelSearchResponse>(
           '/voice.matchmaking.v1.MatchmakingService/CancelSearch',
@@ -451,6 +464,15 @@ abstract class MatchmakingServiceBase extends $grpc.Service {
             ($core.List<$core.int> value) =>
                 $0.StartSearchRequest.fromBuffer(value),
             ($0.StartSearchResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.StartSpaceQueueRequest,
+            $0.StartSpaceQueueResponse>(
+        'StartSpaceQueue',
+        startSpaceQueue_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.StartSpaceQueueRequest.fromBuffer(value),
+        ($0.StartSpaceQueueResponse value) => value.writeToBuffer()));
     $addMethod(
         $grpc.ServiceMethod<$0.CancelSearchRequest, $0.CancelSearchResponse>(
             'CancelSearch',
@@ -683,6 +705,15 @@ abstract class MatchmakingServiceBase extends $grpc.Service {
 
   $async.Future<$0.StartSearchResponse> startSearch(
       $grpc.ServiceCall call, $0.StartSearchRequest request);
+
+  $async.Future<$0.StartSpaceQueueResponse> startSpaceQueue_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.StartSpaceQueueRequest> $request) async {
+    return startSpaceQueue($call, await $request);
+  }
+
+  $async.Future<$0.StartSpaceQueueResponse> startSpaceQueue(
+      $grpc.ServiceCall call, $0.StartSpaceQueueRequest request);
 
   $async.Future<$0.CancelSearchResponse> cancelSearch_Pre(
       $grpc.ServiceCall $call,

@@ -1898,6 +1898,12 @@ abstract class AppLocalizations {
   /// **'Space members'**
   String get spaceMembersTooltip;
 
+  /// No description provided for @spaceMatchmakingTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Space matchmaking'**
+  String get spaceMatchmakingTooltip;
+
   /// No description provided for @spaceMembersTitle.
   ///
   /// In en, this message translates to:

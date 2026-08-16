@@ -14,6 +14,7 @@ import 'space_roles_sheet.dart';
 import 'space_tree_panel.dart';
 import '../../routing/deep_link_urls.dart';
 import '../core/voice_share_link.dart';
+import '../matchmaking/game_catalog_screen.dart';
 import '../report/report_sheet.dart';
 
 /// Middle column: space tree with header actions (members, invites).
@@ -73,6 +74,18 @@ class SpaceTreeColumn extends ConsumerWidget {
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                   ),
+                ),
+                IconButton(
+                  key: const Key('space_matchmaking_action'),
+                  icon: const Icon(Icons.sports_esports_outlined),
+                  tooltip: l10n.spaceMatchmakingTooltip,
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => GameCatalogScreen(spaceId: spaceId),
+                      ),
+                    );
+                  },
                 ),
                 IconButton(
                   key: const Key('space_members_action'),

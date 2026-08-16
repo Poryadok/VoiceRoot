@@ -22,6 +22,8 @@ service MatchmakingService {
   rpc RejectGameRequest(RejectGameRequestRequest) returns (RejectGameRequestResponse); // staff
 
   rpc StartSearch(StartSearchRequest) returns (StartSearchResponse);
+  // Space-scoped queue (docs/features/matchmaking.md §внутри спейса; roadmap П.1).
+  rpc StartSpaceQueue(StartSpaceQueueRequest) returns (StartSpaceQueueResponse);
   rpc CancelSearch(CancelSearchRequest) returns (CancelSearchResponse);
   rpc GetSearchStatus(GetSearchStatusRequest) returns (GetSearchStatusResponse);
 
@@ -133,6 +135,14 @@ message StartSearchRequest {
   optional string party_id = 4;
 }
 
+message StartSpaceQueueRequest {
+  string space_id = 1;
+  string game_id = 2;
+  string mode = 3;
+  string criteria_json = 4;
+  optional string party_id = 5;
+}
+
 message SearchSession {
   string id = 1;
   string profile_id = 2;
@@ -144,6 +154,7 @@ message SearchSession {
   optional google.protobuf.Timestamp timeout_at = 8;
   optional google.protobuf.Timestamp matched_at = 9;
   optional string match_id = 10;
+  optional string space_id = 11;
 }
 
 message CancelSearchRequest {
@@ -250,6 +261,9 @@ message SearchGamesResponse {
   GameList game_list = 1;
 }
 message StartSearchResponse {
+  SearchSession search_session = 1;
+}
+message StartSpaceQueueResponse {
   SearchSession search_session = 1;
 }
 message CancelSearchResponse {}

@@ -21,6 +21,7 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	SpaceService_CreateSpace_FullMethodName              = "/voice.space.v1.SpaceService/CreateSpace"
 	SpaceService_UpdateSpace_FullMethodName              = "/voice.space.v1.SpaceService/UpdateSpace"
+	SpaceService_UpdateSpaceMmConfig_FullMethodName      = "/voice.space.v1.SpaceService/UpdateSpaceMmConfig"
 	SpaceService_DeleteSpace_FullMethodName              = "/voice.space.v1.SpaceService/DeleteSpace"
 	SpaceService_GetSpace_FullMethodName                 = "/voice.space.v1.SpaceService/GetSpace"
 	SpaceService_ListMySpaces_FullMethodName             = "/voice.space.v1.SpaceService/ListMySpaces"
@@ -67,6 +68,8 @@ const (
 type SpaceServiceClient interface {
 	CreateSpace(ctx context.Context, in *CreateSpaceRequest, opts ...grpc.CallOption) (*CreateSpaceResponse, error)
 	UpdateSpace(ctx context.Context, in *UpdateSpaceRequest, opts ...grpc.CallOption) (*UpdateSpaceResponse, error)
+	// Space-level matchmaking settings (mm_config jsonb; roadmap П.1).
+	UpdateSpaceMmConfig(ctx context.Context, in *UpdateSpaceMmConfigRequest, opts ...grpc.CallOption) (*UpdateSpaceMmConfigResponse, error)
 	DeleteSpace(ctx context.Context, in *DeleteSpaceRequest, opts ...grpc.CallOption) (*DeleteSpaceResponse, error)
 	GetSpace(ctx context.Context, in *GetSpaceRequest, opts ...grpc.CallOption) (*GetSpaceResponse, error)
 	ListMySpaces(ctx context.Context, in *ListMySpacesRequest, opts ...grpc.CallOption) (*ListMySpacesResponse, error)
@@ -130,6 +133,16 @@ func (c *spaceServiceClient) UpdateSpace(ctx context.Context, in *UpdateSpaceReq
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(UpdateSpaceResponse)
 	err := c.cc.Invoke(ctx, SpaceService_UpdateSpace_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *spaceServiceClient) UpdateSpaceMmConfig(ctx context.Context, in *UpdateSpaceMmConfigRequest, opts ...grpc.CallOption) (*UpdateSpaceMmConfigResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateSpaceMmConfigResponse)
+	err := c.cc.Invoke(ctx, SpaceService_UpdateSpaceMmConfig_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -504,6 +517,8 @@ func (c *spaceServiceClient) SyncSpaceProSubscription(ctx context.Context, in *S
 type SpaceServiceServer interface {
 	CreateSpace(context.Context, *CreateSpaceRequest) (*CreateSpaceResponse, error)
 	UpdateSpace(context.Context, *UpdateSpaceRequest) (*UpdateSpaceResponse, error)
+	// Space-level matchmaking settings (mm_config jsonb; roadmap П.1).
+	UpdateSpaceMmConfig(context.Context, *UpdateSpaceMmConfigRequest) (*UpdateSpaceMmConfigResponse, error)
 	DeleteSpace(context.Context, *DeleteSpaceRequest) (*DeleteSpaceResponse, error)
 	GetSpace(context.Context, *GetSpaceRequest) (*GetSpaceResponse, error)
 	ListMySpaces(context.Context, *ListMySpacesRequest) (*ListMySpacesResponse, error)
@@ -558,6 +573,9 @@ func (UnimplementedSpaceServiceServer) CreateSpace(context.Context, *CreateSpace
 }
 func (UnimplementedSpaceServiceServer) UpdateSpace(context.Context, *UpdateSpaceRequest) (*UpdateSpaceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateSpace not implemented")
+}
+func (UnimplementedSpaceServiceServer) UpdateSpaceMmConfig(context.Context, *UpdateSpaceMmConfigRequest) (*UpdateSpaceMmConfigResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateSpaceMmConfig not implemented")
 }
 func (UnimplementedSpaceServiceServer) DeleteSpace(context.Context, *DeleteSpaceRequest) (*DeleteSpaceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteSpace not implemented")
@@ -720,6 +738,24 @@ func _SpaceService_UpdateSpace_Handler(srv interface{}, ctx context.Context, dec
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(SpaceServiceServer).UpdateSpace(ctx, req.(*UpdateSpaceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SpaceService_UpdateSpaceMmConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateSpaceMmConfigRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).UpdateSpaceMmConfig(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_UpdateSpaceMmConfig_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).UpdateSpaceMmConfig(ctx, req.(*UpdateSpaceMmConfigRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1386,6 +1422,10 @@ var SpaceService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UpdateSpace",
 			Handler:    _SpaceService_UpdateSpace_Handler,
+		},
+		{
+			MethodName: "UpdateSpaceMmConfig",
+			Handler:    _SpaceService_UpdateSpaceMmConfig_Handler,
 		},
 		{
 			MethodName: "DeleteSpace",

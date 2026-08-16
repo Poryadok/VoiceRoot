@@ -1150,6 +1150,110 @@ class StartSearchRequest extends $pb.GeneratedMessage {
   void clearPartyId() => $_clearField(4);
 }
 
+class StartSpaceQueueRequest extends $pb.GeneratedMessage {
+  factory StartSpaceQueueRequest({
+    $core.String? spaceId,
+    $core.String? gameId,
+    $core.String? mode,
+    $core.String? criteriaJson,
+    $core.String? partyId,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (gameId != null) result.gameId = gameId;
+    if (mode != null) result.mode = mode;
+    if (criteriaJson != null) result.criteriaJson = criteriaJson;
+    if (partyId != null) result.partyId = partyId;
+    return result;
+  }
+
+  StartSpaceQueueRequest._();
+
+  factory StartSpaceQueueRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory StartSpaceQueueRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'StartSpaceQueueRequest',
+      package: const $pb.PackageName(
+          _omitMessageNames ? '' : 'voice.matchmaking.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'gameId')
+    ..aOS(3, _omitFieldNames ? '' : 'mode')
+    ..aOS(4, _omitFieldNames ? '' : 'criteriaJson')
+    ..aOS(5, _omitFieldNames ? '' : 'partyId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  StartSpaceQueueRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  StartSpaceQueueRequest copyWith(
+          void Function(StartSpaceQueueRequest) updates) =>
+      super.copyWith((message) => updates(message as StartSpaceQueueRequest))
+          as StartSpaceQueueRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static StartSpaceQueueRequest create() => StartSpaceQueueRequest._();
+  @$core.override
+  StartSpaceQueueRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static StartSpaceQueueRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<StartSpaceQueueRequest>(create);
+  static StartSpaceQueueRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get gameId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set gameId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasGameId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearGameId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get mode => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set mode($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasMode() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearMode() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get criteriaJson => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set criteriaJson($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasCriteriaJson() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearCriteriaJson() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get partyId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set partyId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasPartyId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearPartyId() => $_clearField(5);
+}
+
 class SearchSession extends $pb.GeneratedMessage {
   factory SearchSession({
     $core.String? id,
@@ -1162,6 +1266,7 @@ class SearchSession extends $pb.GeneratedMessage {
     $1.Timestamp? timeoutAt,
     $1.Timestamp? matchedAt,
     $core.String? matchId,
+    $core.String? spaceId,
   }) {
     final result = create();
     if (id != null) result.id = id;
@@ -1174,6 +1279,7 @@ class SearchSession extends $pb.GeneratedMessage {
     if (timeoutAt != null) result.timeoutAt = timeoutAt;
     if (matchedAt != null) result.matchedAt = matchedAt;
     if (matchId != null) result.matchId = matchId;
+    if (spaceId != null) result.spaceId = spaceId;
     return result;
   }
 
@@ -1203,6 +1309,7 @@ class SearchSession extends $pb.GeneratedMessage {
     ..aOM<$1.Timestamp>(9, _omitFieldNames ? '' : 'matchedAt',
         subBuilder: $1.Timestamp.create)
     ..aOS(10, _omitFieldNames ? '' : 'matchId')
+    ..aOS(11, _omitFieldNames ? '' : 'spaceId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1317,6 +1424,15 @@ class SearchSession extends $pb.GeneratedMessage {
   $core.bool hasMatchId() => $_has(9);
   @$pb.TagNumber(10)
   void clearMatchId() => $_clearField(10);
+
+  @$pb.TagNumber(11)
+  $core.String get spaceId => $_getSZ(10);
+  @$pb.TagNumber(11)
+  set spaceId($core.String value) => $_setString(10, value);
+  @$pb.TagNumber(11)
+  $core.bool hasSpaceId() => $_has(10);
+  @$pb.TagNumber(11)
+  void clearSpaceId() => $_clearField(11);
 }
 
 class CancelSearchRequest extends $pb.GeneratedMessage {
@@ -2835,6 +2951,65 @@ class StartSearchResponse extends $pb.GeneratedMessage {
   static StartSearchResponse getDefault() => _defaultInstance ??=
       $pb.GeneratedMessage.$_defaultFor<StartSearchResponse>(create);
   static StartSearchResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  SearchSession get searchSession => $_getN(0);
+  @$pb.TagNumber(1)
+  set searchSession(SearchSession value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSearchSession() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSearchSession() => $_clearField(1);
+  @$pb.TagNumber(1)
+  SearchSession ensureSearchSession() => $_ensure(0);
+}
+
+class StartSpaceQueueResponse extends $pb.GeneratedMessage {
+  factory StartSpaceQueueResponse({
+    SearchSession? searchSession,
+  }) {
+    final result = create();
+    if (searchSession != null) result.searchSession = searchSession;
+    return result;
+  }
+
+  StartSpaceQueueResponse._();
+
+  factory StartSpaceQueueResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory StartSpaceQueueResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'StartSpaceQueueResponse',
+      package: const $pb.PackageName(
+          _omitMessageNames ? '' : 'voice.matchmaking.v1'),
+      createEmptyInstance: create)
+    ..aOM<SearchSession>(1, _omitFieldNames ? '' : 'searchSession',
+        subBuilder: SearchSession.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  StartSpaceQueueResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  StartSpaceQueueResponse copyWith(
+          void Function(StartSpaceQueueResponse) updates) =>
+      super.copyWith((message) => updates(message as StartSpaceQueueResponse))
+          as StartSpaceQueueResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static StartSpaceQueueResponse create() => StartSpaceQueueResponse._();
+  @$core.override
+  StartSpaceQueueResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static StartSpaceQueueResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<StartSpaceQueueResponse>(create);
+  static StartSpaceQueueResponse? _defaultInstance;
 
   @$pb.TagNumber(1)
   SearchSession get searchSession => $_getN(0);

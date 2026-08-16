@@ -12,6 +12,8 @@ option go_package = "voice.app/voice/space/v1;spacev1";
 service SpaceService {
   rpc CreateSpace(CreateSpaceRequest) returns (CreateSpaceResponse);
   rpc UpdateSpace(UpdateSpaceRequest) returns (UpdateSpaceResponse);
+  // Space-level matchmaking settings (mm_config jsonb; roadmap П.1).
+  rpc UpdateSpaceMmConfig(UpdateSpaceMmConfigRequest) returns (UpdateSpaceMmConfigResponse);
   rpc DeleteSpace(DeleteSpaceRequest) returns (DeleteSpaceResponse);
   rpc GetSpace(GetSpaceRequest) returns (GetSpaceResponse);
   rpc ListMySpaces(ListMySpacesRequest) returns (ListMySpacesResponse);
@@ -95,6 +97,15 @@ message UpdateSpaceRequest {
   optional string entry_requirement = 7;
   optional string entry_questions_json = 8;
   optional string mm_config_json = 9;
+}
+
+message UpdateSpaceMmConfigRequest {
+  string space_id = 1;
+  string mm_config_json = 2;
+}
+
+message UpdateSpaceMmConfigResponse {
+  Space space = 1;
 }
 
 message DeleteSpaceRequest {

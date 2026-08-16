@@ -29,6 +29,7 @@ const (
 	MatchmakingService_ApproveGameRequest_FullMethodName    = "/voice.matchmaking.v1.MatchmakingService/ApproveGameRequest"
 	MatchmakingService_RejectGameRequest_FullMethodName     = "/voice.matchmaking.v1.MatchmakingService/RejectGameRequest"
 	MatchmakingService_StartSearch_FullMethodName           = "/voice.matchmaking.v1.MatchmakingService/StartSearch"
+	MatchmakingService_StartSpaceQueue_FullMethodName       = "/voice.matchmaking.v1.MatchmakingService/StartSpaceQueue"
 	MatchmakingService_CancelSearch_FullMethodName          = "/voice.matchmaking.v1.MatchmakingService/CancelSearch"
 	MatchmakingService_GetSearchStatus_FullMethodName       = "/voice.matchmaking.v1.MatchmakingService/GetSearchStatus"
 	MatchmakingService_GetMatch_FullMethodName              = "/voice.matchmaking.v1.MatchmakingService/GetMatch"
@@ -65,6 +66,8 @@ type MatchmakingServiceClient interface {
 	ApproveGameRequest(ctx context.Context, in *ApproveGameRequestRequest, opts ...grpc.CallOption) (*ApproveGameRequestResponse, error)
 	RejectGameRequest(ctx context.Context, in *RejectGameRequestRequest, opts ...grpc.CallOption) (*RejectGameRequestResponse, error)
 	StartSearch(ctx context.Context, in *StartSearchRequest, opts ...grpc.CallOption) (*StartSearchResponse, error)
+	// Space-scoped queue (docs/features/matchmaking.md §внутри спейса; roadmap П.1).
+	StartSpaceQueue(ctx context.Context, in *StartSpaceQueueRequest, opts ...grpc.CallOption) (*StartSpaceQueueResponse, error)
 	CancelSearch(ctx context.Context, in *CancelSearchRequest, opts ...grpc.CallOption) (*CancelSearchResponse, error)
 	GetSearchStatus(ctx context.Context, in *GetSearchStatusRequest, opts ...grpc.CallOption) (*GetSearchStatusResponse, error)
 	GetMatch(ctx context.Context, in *GetMatchRequest, opts ...grpc.CallOption) (*GetMatchResponse, error)
@@ -188,6 +191,16 @@ func (c *matchmakingServiceClient) StartSearch(ctx context.Context, in *StartSea
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(StartSearchResponse)
 	err := c.cc.Invoke(ctx, MatchmakingService_StartSearch_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchmakingServiceClient) StartSpaceQueue(ctx context.Context, in *StartSpaceQueueRequest, opts ...grpc.CallOption) (*StartSpaceQueueResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StartSpaceQueueResponse)
+	err := c.cc.Invoke(ctx, MatchmakingService_StartSpaceQueue_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -381,6 +394,8 @@ type MatchmakingServiceServer interface {
 	ApproveGameRequest(context.Context, *ApproveGameRequestRequest) (*ApproveGameRequestResponse, error)
 	RejectGameRequest(context.Context, *RejectGameRequestRequest) (*RejectGameRequestResponse, error)
 	StartSearch(context.Context, *StartSearchRequest) (*StartSearchResponse, error)
+	// Space-scoped queue (docs/features/matchmaking.md §внутри спейса; roadmap П.1).
+	StartSpaceQueue(context.Context, *StartSpaceQueueRequest) (*StartSpaceQueueResponse, error)
 	CancelSearch(context.Context, *CancelSearchRequest) (*CancelSearchResponse, error)
 	GetSearchStatus(context.Context, *GetSearchStatusRequest) (*GetSearchStatusResponse, error)
 	GetMatch(context.Context, *GetMatchRequest) (*GetMatchResponse, error)
@@ -439,6 +454,9 @@ func (UnimplementedMatchmakingServiceServer) RejectGameRequest(context.Context, 
 }
 func (UnimplementedMatchmakingServiceServer) StartSearch(context.Context, *StartSearchRequest) (*StartSearchResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method StartSearch not implemented")
+}
+func (UnimplementedMatchmakingServiceServer) StartSpaceQueue(context.Context, *StartSpaceQueueRequest) (*StartSpaceQueueResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method StartSpaceQueue not implemented")
 }
 func (UnimplementedMatchmakingServiceServer) CancelSearch(context.Context, *CancelSearchRequest) (*CancelSearchResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CancelSearch not implemented")
@@ -688,6 +706,24 @@ func _MatchmakingService_StartSearch_Handler(srv interface{}, ctx context.Contex
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MatchmakingServiceServer).StartSearch(ctx, req.(*StartSearchRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchmakingService_StartSpaceQueue_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StartSpaceQueueRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchmakingServiceServer).StartSpaceQueue(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchmakingService_StartSpaceQueue_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchmakingServiceServer).StartSpaceQueue(ctx, req.(*StartSpaceQueueRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1044,6 +1080,10 @@ var MatchmakingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "StartSearch",
 			Handler:    _MatchmakingService_StartSearch_Handler,
+		},
+		{
+			MethodName: "StartSpaceQueue",
+			Handler:    _MatchmakingService_StartSpaceQueue_Handler,
 		},
 		{
 			MethodName: "CancelSearch",

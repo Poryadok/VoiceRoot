@@ -1023,6 +1023,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get spaceMembersTooltip => 'Участники спейса';
 
   @override
+  String get spaceMatchmakingTooltip => 'Матчмейкинг спейса';
+
+  @override
   String get spaceMembersTitle => 'Участники';
 
   @override
