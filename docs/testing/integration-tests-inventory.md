@@ -169,8 +169,8 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | ID | Кейс | Статус | Где |
 |----|------|--------|-----|
 | VR-01 | Multi-profile + verified search boost (smoke path) | `[exists]` | Flutter: `profiles_verification_e2e_live_test`; Auth: `ProfilesVerificationIntegrationTest` |
-| VR-02 | Twitch/YouTube OAuth verify end-to-end | `[missing]` | roadmap П.6 |
-| VR-03 | Org DNS TXT verification | `[missing]` | roadmap П.6 |
+| VR-02 | Twitch/YouTube OAuth verify end-to-end | `[partial]` | Auth `ProfilesVerificationIntegrationTest` (Twitch Partner/Affiliate, YouTube YPP, cron clear); User S2S Set/ClearVerification. Compose/Flutter live still open |
+| VR-03 | Org DNS TXT verification | `[partial]` | User IT `TestOrganizationVerification_DNSTxtGrantsBadge`; Gateway org start/check routes. Compose/Flutter live still open |
 | VR-04 | Anti-spoof / badge display | `[missing]` | — |
 
 ---

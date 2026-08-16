@@ -244,7 +244,7 @@ func TestSetVerification_S2S_PersonalBadge(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "personal", resp.GetVerificationStatus().GetVerificationType())
 	require.Equal(t, "twitch", resp.GetVerificationStatus().GetBadge())
-	require.Len(t, events.verified, 1)
+	require.Equal(t, 1, events.verified)
 }
 
 // TestClearVerification_S2S_RemovesBadge documents Auth unlink clears verification via User S2S.
