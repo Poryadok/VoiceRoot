@@ -72,3 +72,22 @@ func (u *GRPCUserPrivacy) AllowVoiceMessagesAudience(ctx context.Context, profil
 	}
 	return privacy.FromProto(resp.GetPrivacySettings().GetAllowVoiceMessages()), nil
 }
+
+// AllowForward returns whether profileID allows others to forward their messages (privacy.md).
+// Missing / unset field defaults to true. Nil client fails open (same as other gates).
+func (u *GRPCUserPrivacy) AllowForward(ctx context.Context, profileID uuid.UUID) (bool, error) {
+	if u == nil || u.Client == nil {
+		return true, nil
+	}
+	resp, err := u.Client.GetPrivacySettings(privacyS2SContext(ctx), &userv1.GetPrivacySettingsRequest{
+		ProfileId: profileID.String(),
+	})
+	if err != nil {
+		return false, err
+	}
+	ps := resp.GetPrivacySettings()
+	if ps == nil || ps.AllowForward == nil {
+		return true, nil
+	}
+	return *ps.AllowForward, nil
+}

@@ -42,6 +42,10 @@ func (s dmPrivacyStub) AllowVoiceMessagesAudience(_ context.Context, _ uuid.UUID
 	return privacy.EveryoneWithGuests(), nil
 }
 
+func (s dmPrivacyStub) AllowForward(_ context.Context, _ uuid.UUID) (bool, error) {
+	return true, nil
+}
+
 type noFriendsStub struct{}
 
 func (noFriendsStub) AreFriends(context.Context, uuid.UUID, uuid.UUID) (bool, error) {

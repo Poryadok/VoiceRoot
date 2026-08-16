@@ -139,3 +139,7 @@ func (failingAttachmentPrivacy) AllowFilesAudience(context.Context, uuid.UUID) (
 func (failingAttachmentPrivacy) AllowVoiceMessagesAudience(context.Context, uuid.UUID) (privacy.Audience, error) {
 	return privacy.Audience{}, errors.New("user grpc unavailable")
 }
+
+func (failingAttachmentPrivacy) AllowForward(context.Context, uuid.UUID) (bool, error) {
+	return true, nil
+}
