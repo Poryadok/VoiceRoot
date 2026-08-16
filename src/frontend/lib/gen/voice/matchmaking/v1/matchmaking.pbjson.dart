@@ -1328,3 +1328,62 @@ const RevokePlatformMMBanResponse$json = {
 /// Descriptor for `RevokePlatformMMBanResponse`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List revokePlatformMMBanResponseDescriptor =
     $convert.base64Decode('ChtSZXZva2VQbGF0Zm9ybU1NQmFuUmVzcG9uc2U=');
+
+@$core.Deprecated('Use decideLfpRequestRequestDescriptor instead')
+const DecideLfpRequestRequest$json = {
+  '1': 'DecideLfpRequestRequest',
+  '2': [
+    {'1': 'story_id', '3': 1, '4': 1, '5': 9, '10': 'storyId'},
+    {
+      '1': 'responder_profile_id',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '10': 'responderProfileId'
+    },
+    {'1': 'response_type', '3': 3, '4': 1, '5': 9, '10': 'responseType'},
+    {'1': 'decision', '3': 4, '4': 1, '5': 9, '10': 'decision'},
+  ],
+};
+
+/// Descriptor for `DecideLfpRequestRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List decideLfpRequestRequestDescriptor = $convert.base64Decode(
+    'ChdEZWNpZGVMZnBSZXF1ZXN0UmVxdWVzdBIZCghzdG9yeV9pZBgBIAEoCVIHc3RvcnlJZBIwCh'
+    'RyZXNwb25kZXJfcHJvZmlsZV9pZBgCIAEoCVIScmVzcG9uZGVyUHJvZmlsZUlkEiMKDXJlc3Bv'
+    'bnNlX3R5cGUYAyABKAlSDHJlc3BvbnNlVHlwZRIaCghkZWNpc2lvbhgEIAEoCVIIZGVjaXNpb2'
+    '4=');
+
+@$core.Deprecated('Use decideLfpRequestResponseDescriptor instead')
+const DecideLfpRequestResponse$json = {
+  '1': 'DecideLfpRequestResponse',
+  '2': [
+    {'1': 'status', '3': 1, '4': 1, '5': 9, '10': 'status'},
+    {
+      '1': 'party_id',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'partyId',
+      '17': true
+    },
+    {
+      '1': 'search_sessions',
+      '3': 3,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.matchmaking.v1.SearchSession',
+      '10': 'searchSessions'
+    },
+  ],
+  '8': [
+    {'1': '_party_id'},
+  ],
+};
+
+/// Descriptor for `DecideLfpRequestResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List decideLfpRequestResponseDescriptor = $convert.base64Decode(
+    'ChhEZWNpZGVMZnBSZXF1ZXN0UmVzcG9uc2USFgoGc3RhdHVzGAEgASgJUgZzdGF0dXMSHgoIcG'
+    'FydHlfaWQYAiABKAlIAFIHcGFydHlJZIgBARJMCg9zZWFyY2hfc2Vzc2lvbnMYAyADKAsyIy52'
+    'b2ljZS5tYXRjaG1ha2luZy52MS5TZWFyY2hTZXNzaW9uUg5zZWFyY2hTZXNzaW9uc0ILCglfcG'
+    'FydHlfaWQ=');

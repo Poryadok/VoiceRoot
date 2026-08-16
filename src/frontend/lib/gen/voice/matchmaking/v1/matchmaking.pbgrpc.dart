@@ -233,6 +233,15 @@ class MatchmakingServiceClient extends $grpc.Client {
     return $createUnaryCall(_$deletePlayerGameEntry, request, options: options);
   }
 
+  /// LFP Social Discovery decision (docs/features/matchmaking.md; roadmap П.3).
+  /// Author Accept/Decline on JOIN|INVITE from story.lfp_response.
+  $grpc.ResponseFuture<$0.DecideLfpRequestResponse> decideLfpRequest(
+    $0.DecideLfpRequestRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$decideLfpRequest, request, options: options);
+  }
+
   // method descriptors
 
   static final _$listGames =
@@ -375,6 +384,11 @@ class MatchmakingServiceClient extends $grpc.Client {
       '/voice.matchmaking.v1.MatchmakingService/DeletePlayerGameEntry',
       ($0.DeletePlayerGameEntryRequest value) => value.writeToBuffer(),
       $0.DeletePlayerGameEntryResponse.fromBuffer);
+  static final _$decideLfpRequest = $grpc.ClientMethod<
+          $0.DecideLfpRequestRequest, $0.DecideLfpRequestResponse>(
+      '/voice.matchmaking.v1.MatchmakingService/DecideLfpRequest',
+      ($0.DecideLfpRequestRequest value) => value.writeToBuffer(),
+      $0.DecideLfpRequestResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.matchmaking.v1.MatchmakingService')
@@ -620,6 +634,15 @@ abstract class MatchmakingServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.DeletePlayerGameEntryRequest.fromBuffer(value),
         ($0.DeletePlayerGameEntryResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.DecideLfpRequestRequest,
+            $0.DecideLfpRequestResponse>(
+        'DecideLfpRequest',
+        decideLfpRequest_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.DecideLfpRequestRequest.fromBuffer(value),
+        ($0.DecideLfpRequestResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.ListGamesResponse> listGames_Pre($grpc.ServiceCall $call,
@@ -863,4 +886,13 @@ abstract class MatchmakingServiceBase extends $grpc.Service {
 
   $async.Future<$0.DeletePlayerGameEntryResponse> deletePlayerGameEntry(
       $grpc.ServiceCall call, $0.DeletePlayerGameEntryRequest request);
+
+  $async.Future<$0.DecideLfpRequestResponse> decideLfpRequest_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.DecideLfpRequestRequest> $request) async {
+    return decideLfpRequest($call, await $request);
+  }
+
+  $async.Future<$0.DecideLfpRequestResponse> decideLfpRequest(
+      $grpc.ServiceCall call, $0.DecideLfpRequestRequest request);
 }
