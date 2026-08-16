@@ -256,6 +256,36 @@ class VoiceChatsClient {
     return _postEmpty('/api/v1/chats/$chatId/leave', authorization);
   }
 
+  /// Archive or unarchive a chat for the caller (text-chat.md §Архивирование).
+  Future<ChatsApiResult<void>> archiveChat({
+    required String authorization,
+    required String chatId,
+    required bool archived,
+  }) {
+    return _postEmpty(
+      '/api/v1/chats/$chatId/archive',
+      authorization,
+      jsonBody: {'archived': archived},
+    );
+  }
+
+  /// Mute until [mutedUntil], or unmute when [mutedUntil] is null.
+  Future<ChatsApiResult<void>> muteChat({
+    required String authorization,
+    required String chatId,
+    DateTime? mutedUntil,
+  }) {
+    return _postEmpty(
+      '/api/v1/chats/$chatId/mute',
+      authorization,
+      jsonBody: mutedUntil == null
+          ? const <String, dynamic>{}
+          : {
+              'muted_until': mutedUntil.toUtc().toIso8601String(),
+            },
+    );
+  }
+
   Future<ChatsApiResult<void>> transferGroupOwnership({
     required String authorization,
     required String chatId,

@@ -322,7 +322,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | ENC-09 | Shared media e2e_key_wire | `[exists]` | Flutter: `encryption_shared_media_e2e_live_test` |
 | ENC-10 | Verification code / key-change banner multi-device | `[partial]` | Unit: `e2e_verification_code_test`, `e2e_identity_*`; roadmap П.13 for full UX |
 | ENC-11 | Offline SQLCipher cache | `[partial]` | Flutter: `offline_cache_e2e_live_test` (REST page cache; not full SQLCipher E2E path) |
-| ENC-12 | Search reindex must skip E2E bodies | `[missing]` | todo Search reindex gap |
+| ENC-12 | Search reindex must skip E2E bodies | `[exists]` | Search: `TestReindexChat_SkipsE2EBodies_postgres` (+ unit `TestReindexChat_SkipsE2EMessages`) |
 
 ---
 

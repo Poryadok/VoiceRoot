@@ -30,6 +30,10 @@ final voiceChatsClientProvider = Provider<VoiceChatsClient>((ref) {
   return VoiceChatsClient(gateway: ref.watch(gatewayHttpClientProvider));
 });
 
+/// Optimistic mute deadlines keyed by chat id (server source of truth via MuteChat).
+final chatMutedUntilProvider =
+    StateProvider<Map<String, DateTime>>((ref) => <String, DateTime>{});
+
 final voiceMessagesClientProvider = Provider<VoiceMessagesClient>((ref) {
   return VoiceMessagesClient(gateway: ref.watch(gatewayHttpClientProvider));
 });
@@ -384,6 +388,34 @@ class ChatListController extends StateNotifier<ChatListState> {
         .declineDmRequest(authorization: auth, chatId: chatId);
     return switch (result) {
       ChatsApiOk<void>() => await _afterRequestAction(),
+      ChatsApiFailure(:final message) => message,
+    };
+  }
+
+  Future<String?> archiveChat(String chatId, {required bool archived}) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+    final result = await _ref
+        .read(voiceChatsClientProvider)
+        .archiveChat(authorization: auth, chatId: chatId, archived: archived);
+    return switch (result) {
+      ChatsApiOk<void>() => await _afterRequestAction(),
+      ChatsApiFailure(:final message) => message,
+    };
+  }
+
+  Future<String?> muteChat(String chatId, {DateTime? mutedUntil}) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+    final result = await _ref
+        .read(voiceChatsClientProvider)
+        .muteChat(
+          authorization: auth,
+          chatId: chatId,
+          mutedUntil: mutedUntil,
+        );
+    return switch (result) {
+      ChatsApiOk<void>() => null,
       ChatsApiFailure(:final message) => message,
     };
   }

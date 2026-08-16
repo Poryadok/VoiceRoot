@@ -125,4 +125,50 @@ void main() {
       ]);
     });
   });
+
+  group('VoiceChatsClient.archiveAndMute', () {
+    test('POST archive and mute routes', () async {
+      final paths = <String>[];
+      final bodies = <String>[];
+      final client = VoiceChatsClient(
+        gateway: gatewayHttpForTest(
+          MockClient((req) async {
+            paths.add(req.url.path);
+            bodies.add(req.body);
+            return http.Response('', 204);
+          }),
+          config: config,
+        ),
+      );
+
+      expect(
+        await client.archiveChat(
+          authorization: auth,
+          chatId: 'chat-1',
+          archived: true,
+        ),
+        isA<ChatsApiOk<void>>(),
+      );
+      expect(
+        await client.muteChat(
+          authorization: auth,
+          chatId: 'chat-1',
+          mutedUntil: DateTime.utc(2030, 1, 2, 3, 4, 5),
+        ),
+        isA<ChatsApiOk<void>>(),
+      );
+      expect(
+        await client.muteChat(authorization: auth, chatId: 'chat-1'),
+        isA<ChatsApiOk<void>>(),
+      );
+      expect(paths, [
+        '/api/v1/chats/chat-1/archive',
+        '/api/v1/chats/chat-1/mute',
+        '/api/v1/chats/chat-1/mute',
+      ]);
+      expect(jsonDecode(bodies[0])['archived'], isTrue);
+      expect(jsonDecode(bodies[1])['muted_until'], '2030-01-02T03:04:05.000Z');
+      expect(jsonDecode(bodies[2]), isEmpty);
+    });
+  });
 }
