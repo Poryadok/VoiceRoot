@@ -47,6 +47,9 @@ func (s *UserGRPC) UpdatePresence(ctx context.Context, req *userv1.UpdatePresenc
 	if err := s.Presence.Upsert(ctx, profileID, in); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+	if s.Events != nil {
+		_ = s.Events.PublishPresenceChanged(ctx, profileID.String(), st)
+	}
 	return &userv1.UpdatePresenceResponse{}, nil
 }
 
@@ -115,11 +118,27 @@ func (s *UserGRPC) mayViewGameStatus(ctx context.Context, targetProfile uuid.UUI
 }
 
 func (s *UserGRPC) presenceForViewer(ctx context.Context, profileID uuid.UUID, snap *store.PresenceSnapshot) *userv1.PresenceStatus {
+	if snap != nil && snap.Live && isInvisiblePresence(snap.Status) && !isSelfViewer(ctx, profileID) {
+		// presence.md: invisible displays as offline for others.
+		return presenceSnapshotToProto(profileID, &store.PresenceSnapshot{
+			Live:         false,
+			LastSeenUnix: snap.LastSeenUnix,
+		})
+	}
 	out := presenceSnapshotToProto(profileID, snap)
 	if snap != nil && snap.Live && snap.GameTitle != "" && !s.mayViewGameStatus(ctx, profileID) {
 		out.GameTitle = nil
 	}
 	return out
+}
+
+func isSelfViewer(ctx context.Context, profileID uuid.UUID) bool {
+	viewer, ok := authctx.ProfileID(ctx)
+	return ok && viewer == profileID
+}
+
+func isInvisiblePresence(status string) bool {
+	return strings.EqualFold(strings.TrimSpace(status), "invisible")
 }
 
 func (s *UserGRPC) GetBulkPresence(ctx context.Context, req *userv1.GetBulkPresenceRequest) (*userv1.GetBulkPresenceResponse, error) {

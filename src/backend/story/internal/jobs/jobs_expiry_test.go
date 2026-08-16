@@ -33,7 +33,9 @@ func migrationSQL(t *testing.T) string {
 	require.NoError(t, err)
 	b2, err := os.ReadFile(filepath.Join(dir, "000002_visibility_audience.up.sql"))
 	require.NoError(t, err)
-	return string(b1) + "\n" + string(b2)
+	b3, err := os.ReadFile(filepath.Join(dir, "000003_hidden_from_feed.up.sql"))
+	require.NoError(t, err)
+	return string(b1) + "\n" + string(b2) + "\n" + string(b3)
 }
 
 // TestArchivePurgeWorker_invokesFileDeleter documents stories (docs/features/stories.md) archive cleanup:

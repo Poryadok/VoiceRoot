@@ -166,6 +166,14 @@ class StoryServiceClient extends $grpc.Client {
     return $createUnaryCall(_$respondToLfpStory, request, options: options);
   }
 
+  /// Staff/internal: soft-hide story from feeds and non-author GetStory (author retains access).
+  $grpc.ResponseFuture<$0.HideStoryFromFeedResponse> hideStoryFromFeed(
+    $0.HideStoryFromFeedRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$hideStoryFromFeed, request, options: options);
+  }
+
   // method descriptors
 
   static final _$createStory =
@@ -263,6 +271,11 @@ class StoryServiceClient extends $grpc.Client {
       '/voice.story.v1.StoryService/RespondToLfpStory',
       ($0.RespondToLfpStoryRequest value) => value.writeToBuffer(),
       $0.RespondToLfpStoryResponse.fromBuffer);
+  static final _$hideStoryFromFeed = $grpc.ClientMethod<
+          $0.HideStoryFromFeedRequest, $0.HideStoryFromFeedResponse>(
+      '/voice.story.v1.StoryService/HideStoryFromFeed',
+      ($0.HideStoryFromFeedRequest value) => value.writeToBuffer(),
+      $0.HideStoryFromFeedResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.story.v1.StoryService')
@@ -433,6 +446,15 @@ abstract class StoryServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.RespondToLfpStoryRequest.fromBuffer(value),
         ($0.RespondToLfpStoryResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.HideStoryFromFeedRequest,
+            $0.HideStoryFromFeedResponse>(
+        'HideStoryFromFeed',
+        hideStoryFromFeed_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.HideStoryFromFeedRequest.fromBuffer(value),
+        ($0.HideStoryFromFeedResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.CreateStoryResponse> createStory_Pre($grpc.ServiceCall $call,
@@ -599,4 +621,13 @@ abstract class StoryServiceBase extends $grpc.Service {
 
   $async.Future<$0.RespondToLfpStoryResponse> respondToLfpStory(
       $grpc.ServiceCall call, $0.RespondToLfpStoryRequest request);
+
+  $async.Future<$0.HideStoryFromFeedResponse> hideStoryFromFeed_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.HideStoryFromFeedRequest> $request) async {
+    return hideStoryFromFeed($call, await $request);
+  }
+
+  $async.Future<$0.HideStoryFromFeedResponse> hideStoryFromFeed(
+      $grpc.ServiceCall call, $0.HideStoryFromFeedRequest request);
 }

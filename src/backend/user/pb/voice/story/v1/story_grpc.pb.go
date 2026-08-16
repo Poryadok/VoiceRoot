@@ -38,6 +38,7 @@ const (
 	StoryService_GetHighlights_FullMethodName         = "/voice.story.v1.StoryService/GetHighlights"
 	StoryService_CreateLookingForParty_FullMethodName = "/voice.story.v1.StoryService/CreateLookingForParty"
 	StoryService_RespondToLfpStory_FullMethodName     = "/voice.story.v1.StoryService/RespondToLfpStory"
+	StoryService_HideStoryFromFeed_FullMethodName     = "/voice.story.v1.StoryService/HideStoryFromFeed"
 )
 
 // StoryServiceClient is the client API for StoryService service.
@@ -65,6 +66,8 @@ type StoryServiceClient interface {
 	GetHighlights(ctx context.Context, in *GetHighlightsRequest, opts ...grpc.CallOption) (*GetHighlightsResponse, error)
 	CreateLookingForParty(ctx context.Context, in *CreateLookingForPartyRequest, opts ...grpc.CallOption) (*CreateLookingForPartyResponse, error)
 	RespondToLfpStory(ctx context.Context, in *RespondToLfpStoryRequest, opts ...grpc.CallOption) (*RespondToLfpStoryResponse, error)
+	// Staff/internal: soft-hide story from feeds and non-author GetStory (author retains access).
+	HideStoryFromFeed(ctx context.Context, in *HideStoryFromFeedRequest, opts ...grpc.CallOption) (*HideStoryFromFeedResponse, error)
 }
 
 type storyServiceClient struct {
@@ -265,6 +268,16 @@ func (c *storyServiceClient) RespondToLfpStory(ctx context.Context, in *RespondT
 	return out, nil
 }
 
+func (c *storyServiceClient) HideStoryFromFeed(ctx context.Context, in *HideStoryFromFeedRequest, opts ...grpc.CallOption) (*HideStoryFromFeedResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(HideStoryFromFeedResponse)
+	err := c.cc.Invoke(ctx, StoryService_HideStoryFromFeed_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // StoryServiceServer is the server API for StoryService service.
 // All implementations must embed UnimplementedStoryServiceServer
 // for forward compatibility.
@@ -290,6 +303,8 @@ type StoryServiceServer interface {
 	GetHighlights(context.Context, *GetHighlightsRequest) (*GetHighlightsResponse, error)
 	CreateLookingForParty(context.Context, *CreateLookingForPartyRequest) (*CreateLookingForPartyResponse, error)
 	RespondToLfpStory(context.Context, *RespondToLfpStoryRequest) (*RespondToLfpStoryResponse, error)
+	// Staff/internal: soft-hide story from feeds and non-author GetStory (author retains access).
+	HideStoryFromFeed(context.Context, *HideStoryFromFeedRequest) (*HideStoryFromFeedResponse, error)
 	mustEmbedUnimplementedStoryServiceServer()
 }
 
@@ -356,6 +371,9 @@ func (UnimplementedStoryServiceServer) CreateLookingForParty(context.Context, *C
 }
 func (UnimplementedStoryServiceServer) RespondToLfpStory(context.Context, *RespondToLfpStoryRequest) (*RespondToLfpStoryResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RespondToLfpStory not implemented")
+}
+func (UnimplementedStoryServiceServer) HideStoryFromFeed(context.Context, *HideStoryFromFeedRequest) (*HideStoryFromFeedResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method HideStoryFromFeed not implemented")
 }
 func (UnimplementedStoryServiceServer) mustEmbedUnimplementedStoryServiceServer() {}
 func (UnimplementedStoryServiceServer) testEmbeddedByValue()                      {}
@@ -720,6 +738,24 @@ func _StoryService_RespondToLfpStory_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _StoryService_HideStoryFromFeed_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HideStoryFromFeedRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(StoryServiceServer).HideStoryFromFeed(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: StoryService_HideStoryFromFeed_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(StoryServiceServer).HideStoryFromFeed(ctx, req.(*HideStoryFromFeedRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // StoryService_ServiceDesc is the grpc.ServiceDesc for StoryService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -802,6 +838,10 @@ var StoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RespondToLfpStory",
 			Handler:    _StoryService_RespondToLfpStory_Handler,
+		},
+		{
+			MethodName: "HideStoryFromFeed",
+			Handler:    _StoryService_HideStoryFromFeed_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

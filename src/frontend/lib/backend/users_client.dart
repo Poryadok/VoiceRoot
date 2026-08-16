@@ -84,11 +84,13 @@ class VoicePresence {
   const VoicePresence({
     required this.profileId,
     required this.status,
+    this.customStatus,
     this.lastSeen,
   });
 
   final String profileId;
   final String status;
+  final String? customStatus;
   final DateTime? lastSeen;
 
   bool get isOnline => status == 'online';
@@ -96,6 +98,10 @@ class VoicePresence {
   bool get isIdle => status == 'idle';
 
   bool get isDnd => status == 'dnd';
+
+  bool get isInvisible => status == 'invisible';
+
+  bool get appearsOffline => status.isEmpty || status == 'offline';
 }
 
 class SearchProfilesData {
@@ -341,6 +347,24 @@ class VoiceUsersClient {
             : user_pb.PresenceStatus(),
       ),
     );
+  }
+
+  Future<UsersApiResult<void>> updatePresence({
+    required String authorization,
+    required String status,
+    String? customStatus,
+  }) async {
+    final body = user_pb.UpdatePresenceRequest(status: status);
+    if (customStatus != null) {
+      body.customStatus = customStatus;
+    }
+    final result = await _gateway.patchProto(
+      uri: _gateway.resolve('/api/v1/users/me/presence'),
+      authorization: authorization,
+      body: body,
+      createEmpty: user_pb.UpdatePresenceResponse.create,
+    );
+    return _mapEmpty(result);
   }
 
   Future<UsersApiResult<Map<String, VoicePresence>>> getBulkPresence({

@@ -95,6 +95,8 @@ Headers:
 - **`NATS_URL`** — URL NATS Server с JetStream (порт **4222**). В Compose: `nats://nats:4222`; с хоста: `nats://127.0.0.1:${NATS_PORT:-4222}` (см. [`docker-compose.yml`](../../docker-compose.yml)).
 - Подписки на доменные потоки для fan-out в WebSocket — в первую очередь **`message.events`**, **`chat.events`** и с Фазы 2 **`voice.events`** ([CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)); детали subject/consumer — в реализации сервиса.
 - **`REALTIME_CHAT_GRPC_ADDR`** (опционально) — gRPC адрес **Chat Service** для bootstrap списка DM при открытии WebSocket (например `chat:50051` в compose). Если не задан, сервер **не** вызывает Chat и **не** шлёт `subscription_sync`; клиент может подписываться через `subscribe` (lazy). TLS/insecure — как принято в окружении (локально часто plaintext внутри mesh).
+- **`REALTIME_USER_GRPC_ADDR`** (опционально) — User Service для записи presence при WS `presence_update`.
+- **`REALTIME_SOCIAL_GRPC_ADDR`** (опционально) — Social Service `ListFriends` для fan-out `user.presence_changed` друзьям по WebSocket (без общей chat-подписки).
 
 ## Архитектура fan-out
 
