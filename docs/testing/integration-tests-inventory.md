@@ -276,7 +276,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | MM-05 | Rate teammates (1–5) | `[exists]` | Gateway: `TestComposeMatchmakingRating_live`; Flutter: `matchmaking_rating_e2e_live_test` (rate + skip) |
 | MM-06 | MM ban from matchmaking | `[exists]` | Gateway: `TestComposeMatchmakingBan_live`; store `bans_integration_test.go` |
 | MM-07 | Cross-party decline semantics | `[exists]` | Matchmaking IT + Gateway: `TestComposeMatchmakingCrossPartyDecline_live` |
-| MM-08 | Space-scoped matchmaking | `[missing]` | roadmap П.1 |
+| MM-08 | Space-scoped matchmaking | `[partial]` | StartSpaceQueue + space Redis queue + matcher isolation + Gateway/Flutter (#32); compose live IT open |
 | MM-09 | Role-diversity 10-stack match | `[missing]` | todo: criteria broken |
 | MM-10 | Device register for match_found FCM | `[exists]` | Flutter: `matchmaking_fcm_e2e_live_test` |
 | MM-11 | List games catalog via Gateway | `[exists]` | Gateway: `TestComposeMatchmakingListGames_live` |
