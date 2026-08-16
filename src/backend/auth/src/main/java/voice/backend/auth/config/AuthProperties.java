@@ -78,17 +78,44 @@ public class AuthProperties {
   }
 
   public static class OAuth {
+    /** @deprecated prefer {@link #twitch}.apiBaseUrl */
     private String twitchApiBaseUrl = "https://api.twitch.tv";
+
     private String publicApiBaseUrl = "http://127.0.0.1:18080";
+    private final PlatformOAuth twitch = new PlatformOAuth();
+    private final PlatformOAuth youtube = new PlatformOAuth();
     private final DeveloperPortalOAuth developerPortal = new DeveloperPortalOAuth();
     private final AdminOAuth admin = new AdminOAuth();
 
+    public OAuth() {
+      twitch.setApiBaseUrl("https://api.twitch.tv");
+      twitch.setTokenUrl("https://id.twitch.tv/oauth2/token");
+      twitch.setAuthorizeUrl("https://id.twitch.tv/oauth2/authorize");
+      youtube.setApiBaseUrl("https://www.googleapis.com");
+      youtube.setTokenUrl("https://oauth2.googleapis.com/token");
+      youtube.setAuthorizeUrl("https://accounts.google.com/o/oauth2/v2/auth");
+    }
+
     public String getTwitchApiBaseUrl() {
+      if (twitch.getApiBaseUrl() != null && !twitch.getApiBaseUrl().isBlank()) {
+        return twitch.getApiBaseUrl();
+      }
       return twitchApiBaseUrl;
     }
 
     public void setTwitchApiBaseUrl(String twitchApiBaseUrl) {
       this.twitchApiBaseUrl = twitchApiBaseUrl;
+      if (twitchApiBaseUrl != null && !twitchApiBaseUrl.isBlank()) {
+        twitch.setApiBaseUrl(twitchApiBaseUrl);
+      }
+    }
+
+    public PlatformOAuth getTwitch() {
+      return twitch;
+    }
+
+    public PlatformOAuth getYoutube() {
+      return youtube;
     }
 
     public String getPublicApiBaseUrl() {
@@ -105,6 +132,62 @@ public class AuthProperties {
 
     public AdminOAuth getAdmin() {
       return admin;
+    }
+  }
+
+  /** Twitch / YouTube OAuth client settings for linked-account verification. */
+  public static class PlatformOAuth {
+    private String clientId = "";
+    private String clientSecret = "";
+    private String apiBaseUrl = "";
+    private String tokenUrl = "";
+    private String authorizeUrl = "";
+
+    public boolean isConfigured() {
+      return clientId != null
+          && !clientId.isBlank()
+          && clientSecret != null
+          && !clientSecret.isBlank();
+    }
+
+    public String getClientId() {
+      return clientId;
+    }
+
+    public void setClientId(String clientId) {
+      this.clientId = clientId;
+    }
+
+    public String getClientSecret() {
+      return clientSecret;
+    }
+
+    public void setClientSecret(String clientSecret) {
+      this.clientSecret = clientSecret;
+    }
+
+    public String getApiBaseUrl() {
+      return apiBaseUrl;
+    }
+
+    public void setApiBaseUrl(String apiBaseUrl) {
+      this.apiBaseUrl = apiBaseUrl;
+    }
+
+    public String getTokenUrl() {
+      return tokenUrl;
+    }
+
+    public void setTokenUrl(String tokenUrl) {
+      this.tokenUrl = tokenUrl;
+    }
+
+    public String getAuthorizeUrl() {
+      return authorizeUrl;
+    }
+
+    public void setAuthorizeUrl(String authorizeUrl) {
+      this.authorizeUrl = authorizeUrl;
     }
   }
 

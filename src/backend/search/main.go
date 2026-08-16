@@ -143,9 +143,20 @@ func main() {
 			chatClient = chatv1.NewChatServiceClient(conn)
 			svc.Roles = &deps.ChatReadAccess{Client: chatClient}
 		}
+		var socialClient socialv1.SocialServiceClient
 		if conn, err := dialOptional(os.Getenv("SOCIAL_GRPC_ADDR")); err == nil && conn != nil {
 			defer func() { _ = conn.Close() }()
-			svc.Blocks = &deps.SocialBlocks{Client: socialv1.NewSocialServiceClient(conn)}
+			socialClient = socialv1.NewSocialServiceClient(conn)
+			svc.Blocks = &deps.SocialBlocks{Client: socialClient}
+			svc.Social = &deps.SocialGraph{Client: socialClient}
+		}
+		if conn, err := dialOptional(os.Getenv("USER_GRPC_ADDR")); err == nil && conn != nil {
+			defer func() { _ = conn.Close() }()
+			svc.Discoverability = &deps.UserPrivacy{Client: userv1.NewUserServiceClient(conn)}
+		}
+		if conn, err := dialOptional(os.Getenv("SPACE_GRPC_ADDR")); err == nil && conn != nil {
+			defer func() { _ = conn.Close() }()
+			svc.SpaceMembers = &deps.SpaceCoMembership{Client: spacev1.NewSpaceServiceClient(conn)}
 		}
 		chatAccess := &grpcsvc.ProjectionChatAccess{Store: profileSpaceStore}
 		if chatClient != nil {

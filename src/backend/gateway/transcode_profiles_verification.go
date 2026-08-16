@@ -17,13 +17,11 @@ func (t *transcoder) serveAuthREST(w http.ResponseWriter, r *http.Request, rest 
 	ctx := withGRPCMetadata(r.Context(), r)
 
 	switch {
+	// linked-accounts* fall through to Auth REST upstream (GATEWAY_REST_UPSTREAMS_JSON auth).
 	case r.Method == http.MethodGet && rest == "linked-accounts":
-		writeJSON(w, http.StatusOK, map[string]any{"linked_accounts": []any{}})
-		return true
-
-	case r.Method == http.MethodPost && strings.HasSuffix(rest, "/link"):
-		writeJSON(w, http.StatusOK, map[string]any{"authorization_url": "https://id.twitch.tv/oauth2/authorize"})
-		return true
+		return false
+	case r.Method == http.MethodPost && strings.HasPrefix(rest, "linked-accounts/"):
+		return false
 
 	case r.Method == http.MethodPut && rest == "e2e-key-backup":
 		if t.clients.auth == nil {
@@ -214,6 +212,25 @@ func (t *transcoder) serveUsersProfilesVerification(w http.ResponseWriter, r *ht
 			req.ProfileId = profileID
 		}
 		resp, err := t.clients.user.StartOrganizationVerification(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodPost && rest == "me/verification/organization/check":
+		req := &userv1.CheckOrganizationVerificationRequest{ProfileId: profileID}
+		if r.Body != nil && r.ContentLength != 0 {
+			if err := readProtoJSON(r, req); err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+		}
+		if req.ProfileId == "" {
+			req.ProfileId = profileID
+		}
+		resp, err := t.clients.user.CheckOrganizationVerification(ctx, req)
 		if err != nil {
 			writeGRPCError(w, err)
 			return true

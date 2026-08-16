@@ -8,6 +8,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"voice/backend/pkg/guestguard"
+	"voice/backend/pkg/privacy"
 	"voice/backend/search/internal/authctx"
 
 	commonv1 "voice.app/voice/common/v1"
@@ -63,6 +65,11 @@ type BlockList interface {
 	AccountPairBlocked(ctx context.Context, viewerAccount, otherAccount uuid.UUID) (bool, error)
 }
 
+// ProfileDiscoverability reads allow_friend_requests for profile discovery (privacy.md).
+type ProfileDiscoverability interface {
+	AllowFriendRequestsAudience(ctx context.Context, profileID uuid.UUID) (privacy.Audience, error)
+}
+
 // ChatAccess lists and searches chats visible to the viewer.
 type ChatAccess interface {
 	AccessibleChatIDs(ctx context.Context, viewer uuid.UUID) ([]uuid.UUID, error)
@@ -77,14 +84,17 @@ type ChatReindexer interface {
 // SearchGRPC implements voice.search.v1.SearchService.
 type SearchGRPC struct {
 	searchv1.UnimplementedSearchServiceServer
-	Messages MessageSearcher
-	Profiles ProfileSearcher
-	Spaces   SpaceSearcher
-	Chats    ChatAccess
-	Roles    RoleChecker
-	Blocks   BlockList
-	Reindex  ChatReindexer
-	Analytics interface {
+	Messages        MessageSearcher
+	Profiles        ProfileSearcher
+	Spaces          SpaceSearcher
+	Chats           ChatAccess
+	Roles           RoleChecker
+	Blocks          BlockList
+	Discoverability ProfileDiscoverability
+	Social          privacy.SocialGraph
+	SpaceMembers    privacy.SpaceCoMembership
+	Reindex         ChatReindexer
+	Analytics       interface {
 		Publish(ctx context.Context, subject, sourceService, eventType string, props map[string]any) error
 	}
 }
@@ -129,8 +139,13 @@ func requireQuery(q string) (string, error) {
 	return q, nil
 }
 
-func filterProfileHits(ctx context.Context, blocks BlockList, hits []ProfileSearchHit) ([]string, error) {
-	out := make([]string, 0, len(hits))
+func filterProfileHits(ctx context.Context, viewer uuid.UUID, blocks BlockList, disc ProfileDiscoverability, social privacy.SocialGraph, spaces privacy.SpaceCoMembership, hits []ProfileSearchHit, limit int) ([]string, error) {
+	if limit <= 0 {
+		limit = defaultPageSize
+	}
+	out := make([]string, 0, limit)
+	matcher := privacy.Matcher{Social: social, Space: spaces}
+	viewerIsGuest := guestguard.IsGuest(ctx)
 	for _, hit := range hits {
 		if blocks != nil {
 			viewerAccount, ok := authctx.AccountID(ctx)
@@ -144,9 +159,40 @@ func filterProfileHits(ctx context.Context, blocks BlockList, hits []ProfileSear
 				}
 			}
 		}
+		if disc != nil {
+			audience, err := disc.AllowFriendRequestsAudience(ctx, hit.ProfileID)
+			if err != nil {
+				return nil, err
+			}
+			ok, err := matcher.Allowed(ctx, hit.ProfileID, viewer, audience, viewerIsGuest)
+			if err != nil {
+				return nil, err
+			}
+			if !ok {
+				continue
+			}
+		}
 		out = append(out, hit.ProfileID.String())
+		if len(out) >= limit {
+			break
+		}
 	}
 	return out, nil
+}
+
+// profileSearchFetchLimit over-fetches so block/privacy filtering can still fill the page.
+func profileSearchFetchLimit(limit int) int {
+	if limit <= 0 {
+		limit = defaultPageSize
+	}
+	n := limit * 4
+	if n < limit {
+		return limit
+	}
+	if n > maxPageSize*4 {
+		return maxPageSize * 4
+	}
+	return n
 }
 
 func intersectAccessibleChats(accessible, candidates []uuid.UUID) []*chatv1.ChatRef {
@@ -242,11 +288,11 @@ func (s *SearchGRPC) SearchGlobal(ctx context.Context, req *searchv1.SearchGloba
 
 	var profileIDs []string
 	if s.Profiles != nil {
-		hits, err := s.Profiles.SearchProfiles(ctx, viewer, q, blockedAccounts, limit)
+		hits, err := s.Profiles.SearchProfiles(ctx, viewer, q, blockedAccounts, profileSearchFetchLimit(limit))
 		if err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
-		profileIDs, err = filterProfileHits(ctx, s.Blocks, hits)
+		profileIDs, err = filterProfileHits(ctx, viewer, s.Blocks, s.Discoverability, s.Social, s.SpaceMembers, hits, limit)
 		if err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
@@ -329,11 +375,11 @@ func (s *SearchGRPC) SearchUsers(ctx context.Context, req *searchv1.SearchUsersR
 			return nil, status.Error(codes.Internal, err.Error())
 		}
 	}
-	ids, err := s.Profiles.SearchProfiles(ctx, viewer, q, blockedAccounts, limit)
+	ids, err := s.Profiles.SearchProfiles(ctx, viewer, q, blockedAccounts, profileSearchFetchLimit(limit))
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	out, err := filterProfileHits(ctx, s.Blocks, ids)
+	out, err := filterProfileHits(ctx, viewer, s.Blocks, s.Discoverability, s.Social, s.SpaceMembers, ids, limit)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}

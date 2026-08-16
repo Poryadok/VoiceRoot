@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,6 +29,16 @@ import (
 
 func startUserGRPCForPhase13(t *testing.T, profiles *store.ProfileStore, events *profilesVerificationEventsRecorder) (userv1.UserServiceClient, func()) {
 	t.Helper()
+	return startUserGRPCForPhase13WithDNS(t, profiles, events, nil)
+}
+
+func startUserGRPCForPhase13WithDNS(
+	t *testing.T,
+	profiles *store.ProfileStore,
+	events *profilesVerificationEventsRecorder,
+	dns DNSResolver,
+) (userv1.UserServiceClient, func()) {
+	t.Helper()
 	mr := miniredis.RunT(t)
 	t.Cleanup(mr.Close)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
@@ -44,6 +55,7 @@ func startUserGRPCForPhase13(t *testing.T, profiles *store.ProfileStore, events 
 		Profiles:            profiles,
 		Presence:            store.NewPresenceStore(rdb),
 		Events:              eventsPub,
+		DNSResolver:         dns,
 		AvatarPresigner:     stubAvatarPresigner{},
 		AvatarPublicBaseURL: "https://cdn-test.example",
 	})
@@ -206,15 +218,106 @@ func TestGetVerificationStatus_ReturnsBadgeState(t *testing.T) {
 
 // TestSetVerification_S2S_PersonalBadge documents trusted S2S badge grant from Auth OAuth flow.
 func TestSetVerification_S2S_PersonalBadge(t *testing.T) {
-	t.Parallel()
-	// Contract gate: RPC must exist before integration wiring (see profiles_verification_proto_contract_test.go).
-	requireContainsGRPCMethod(t, "SetVerification")
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startUserPostgresForSubscriptionTests(t, ctx)
+	profiles := store.NewProfileStore(pool)
+	events := &profilesVerificationEventsRecorder{}
+	cli, _ := startUserGRPCForPhase13(t, profiles, events)
+
+	accountID := uuid.New()
+	pid := uuid.New()
+	_, err := pool.Exec(ctx, `
+		INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+		VALUES ($1, $2, 'oauthbadge', '0001', 'OAuth', true)`,
+		pid, accountID)
+	require.NoError(t, err)
+
+	s2s := metadata.AppendToOutgoingContext(ctx, authctx.HeaderInternalCaller, "auth")
+	resp, err := cli.SetVerification(s2s, &userv1.SetVerificationRequest{
+		ProfileId:        pid.String(),
+		VerificationType: "personal",
+		Badge:            proto.String("twitch"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, "personal", resp.GetVerificationStatus().GetVerificationType())
+	require.Equal(t, "twitch", resp.GetVerificationStatus().GetBadge())
+	require.Equal(t, 1, events.verified)
 }
 
 // TestClearVerification_S2S_RemovesBadge documents Auth unlink clears verification via User S2S.
 func TestClearVerification_S2S_RemovesBadge(t *testing.T) {
-	t.Parallel()
-	requireContainsGRPCMethod(t, "ClearVerification")
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startUserPostgresForSubscriptionTests(t, ctx)
+	profiles := store.NewProfileStore(pool)
+	cli, _ := startUserGRPCForPhase13(t, profiles, nil)
+
+	accountID := uuid.New()
+	pid := uuid.New()
+	_, err := pool.Exec(ctx, `
+		INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary,
+			verification_type, verification_badge)
+		VALUES ($1, $2, 'clearbadge', '0001', 'Clear', true, 'personal', 'twitch')`,
+		pid, accountID)
+	require.NoError(t, err)
+
+	s2s := metadata.AppendToOutgoingContext(ctx, authctx.HeaderInternalCaller, "auth")
+	resp, err := cli.ClearVerification(s2s, &userv1.ClearVerificationRequest{ProfileId: pid.String()})
+	require.NoError(t, err)
+	require.Equal(t, "none", resp.GetVerificationStatus().GetVerificationType())
+}
+
+// TestOrganizationVerification_DNSTxtGrantsBadge documents org DNS TXT flow (verification.md VR-03).
+func TestOrganizationVerification_DNSTxtGrantsBadge(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startUserPostgresForSubscriptionTests(t, ctx)
+	profiles := store.NewProfileStore(pool)
+
+	var wantTXT string
+	dns := dnsResolverFunc(func(_ context.Context, domain string) ([]string, error) {
+		require.Equal(t, "riotgames.com", domain)
+		return []string{wantTXT, "unrelated=1"}, nil
+	})
+	cli, _ := startUserGRPCForPhase13WithDNS(t, profiles, nil, dns)
+
+	accountID := uuid.New()
+	pid := uuid.New()
+	_, err := pool.Exec(ctx, `
+		INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+		VALUES ($1, $2, 'riotorg', '0001', 'Riot', true)`,
+		pid, accountID)
+	require.NoError(t, err)
+
+	authed := withAccountTier(ctx, accountID, "free")
+	start, err := cli.StartOrganizationVerification(authed, &userv1.StartOrganizationVerificationRequest{
+		ProfileId: pid.String(),
+		Domain:    "RiotGames.com",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "riotgames.com", start.GetDomain())
+	require.True(t, strings.HasPrefix(start.GetTxtRecord(), "voice-verify="))
+	wantTXT = start.GetTxtRecord()
+
+	check, err := cli.CheckOrganizationVerification(authed, &userv1.CheckOrganizationVerificationRequest{
+		ProfileId: pid.String(),
+	})
+	require.NoError(t, err)
+	require.Equal(t, "organization", check.GetVerificationStatus().GetVerificationType())
+	require.Equal(t, "dns", check.GetVerificationStatus().GetBadge())
+}
+
+type dnsResolverFunc func(ctx context.Context, domain string) ([]string, error)
+
+func (f dnsResolverFunc) LookupTXT(ctx context.Context, domain string) ([]string, error) {
+	return f(ctx, domain)
 }
 
 // TestSearchProfiles_OrdersVerifiedBeforeAlphabetical documents verified profiles rank above unverified matches.
