@@ -159,7 +159,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | AU-10 | Delete account / restore GDPR | `[partial]` | Auth: `DeleteAccountRestoreIntegrationTest` (нет compose live) |
 | AU-11 | OTP rate limits | `[partial]` | Auth: `OtpRestIntegrationTest` |
 | AU-12 | Active sessions list / revoke device | `[exists]` | Auth: `ActiveSessionsIntegrationTest`; Gateway: `TestComposeAuthSessions_live` |
-| AU-13 | Password reset via email (Resend) | `[missing]` | todo: Resend absent |
+| AU-13 | Password reset via email (Resend) | `[exists]` | Auth: `ResendMailSender` + `OtpRestIntegrationTest.passwordResetE2EAllowsLoginWithNewPassword`; Gateway public `/api/v1/auth/password/reset` (OTP RL); deploy `AUTH_RESEND_*` |
 | AU-14 | NATS `user.guest_converted` on convert | `[exists]` | Auth: `GuestConvertNatsEventIntegrationTest`; Gateway: `TestComposeConvertGuestNATS_live`; compose auth `depends_on: nats` + `AUTH_NATS_URL` |
 
 ---
