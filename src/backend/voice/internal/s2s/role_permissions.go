@@ -16,6 +16,7 @@ import (
 const (
 	permVoiceJoin        = "VOICE_JOIN"
 	permVoiceScreenShare = "VOICE_SCREEN_SHARE"
+	permVoiceMuteOthers  = "VOICE_MUTE_OTHERS"
 )
 
 // GRPCRolePermissions validates voice-room permissions via RoleService.
@@ -33,6 +34,10 @@ func (g *GRPCRolePermissions) EnsureScreenShare(ctx context.Context, spaceID, pr
 
 func (g *GRPCRolePermissions) EnsureVoiceJoin(ctx context.Context, spaceID, profileID, voiceRoomID string) error {
 	return g.ensureVoicePermission(ctx, spaceID, profileID, voiceRoomID, permVoiceJoin, grpcsvc.ErrVoiceJoinDenied)
+}
+
+func (g *GRPCRolePermissions) EnsureMuteOthers(ctx context.Context, spaceID, profileID, voiceRoomID string) error {
+	return g.ensureVoicePermission(ctx, spaceID, profileID, voiceRoomID, permVoiceMuteOthers, grpcsvc.ErrMuteOthersDenied)
 }
 
 func (g *GRPCRolePermissions) ensureVoicePermission(ctx context.Context, spaceID, profileID, voiceRoomID, permission string, denied error) error {

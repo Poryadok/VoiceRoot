@@ -52,6 +52,7 @@
 | P2.3 | **product done** | SubmitGameRequest → pending_moderation + Admin approve/reject (#19); compose/Flutter live IT still open |
 | P2.4 | **product done** | Twitch/YouTube OAuth + cron refresh + org DNS (#25); compose/Flutter live IT still open |
 | P2.5 | **product done** | GetQuietHours + Flutter server sync; voice_member_joined quiet-hours assert; compose live IT still open |
+| P2.6 | **product done** | GrantFloor/RevokeFloor + SetBroadcasting + LiveKit client ducking + Flutter organizer panel; VC-07 compose/Flutter live IT still open |
 | P2.15 | **product done** | `without_attribution` ForwardMessage + Flutter Copy as new; Messaging/Gateway ITs; compose live still open |
 | P2.13 | **done** | live entitlements for User cosmetics + GIF avatar; `TestComposePremiumCosmetics_live` + Flutter SUB-06 (#26) |
 | P2.14 | **done** | BT-07: `TestComposeBotsAutocomplete_live` + Flutter `bots_autocomplete_e2e_live_test`; portal command catalog (#30) |
@@ -155,7 +156,7 @@ Effort: **S** ≤0.5d · **M** 1–2d · **L** 3–5d · **XL** >1w (инфра/
 | P2.3 | Game request + admin approve | B + Admin | GC-02/03 | L | **product done** (#19); compose/Flutter live IT open |
 | P2.4 | Twitch/YouTube/DNS verification live | B+C | VR-02/03 | XL | **product done** (#25); compose/Flutter live IT open |
 | P2.5 | Quiet hours / granular notif | B+C | NT-04 | L | **product done** — GetQuietHours + Flutter sync; voice join push assert; live IT open |
-| P2.6 | Commander / raise hand | B+C | VC-07 | L | П.11 |
+| P2.6 | Commander / raise hand | B+C | VC-07 | L | **product done** — GrantFloor + broadcast ducking + organizer panel; compose/Flutter live IT open |
 | P2.7 | Stories moderation hide + Nobody floor | B | ST-05/06 | M | **done** — HideStoryFromFeed + CreateStory floor (#21) |
 | P2.8 | Search privacy audience | D+B | SR-05 | M | **done** — SearchUsers/SearchGlobal filter by `allow_friend_requests` |
 | P2.9 | E2E reindex skips ciphertext | D | ENC-12 | M | **done** — Search IT + indexer skip |

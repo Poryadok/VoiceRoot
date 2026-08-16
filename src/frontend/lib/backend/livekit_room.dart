@@ -18,6 +18,12 @@ abstract interface class VoiceLiveKitRoom {
   Future<void> ensureAudioPlayback();
   Future<void> setMuted(bool muted);
   Future<void> setSpeakerMuted(bool muted);
+  /// Client-side commander ducking (voice-chat.md): lower non-commander remote audio.
+  Future<void> setCommanderDucking({
+    required bool enabled,
+    String? commanderIdentity,
+    double duckedVolume,
+  });
   Future<void> setVideoEnabled(bool enabled);
   Future<void> startScreenShare({
     double maxFrameRate,
@@ -178,6 +184,28 @@ class LiveKitVoiceRoom implements VoiceLiveKitRoom {
     await _applyRemoteSpeakerMuted(muted);
     if (!muted) {
       await ensureAudioPlayback();
+    }
+  }
+
+  @override
+  Future<void> setCommanderDucking({
+    required bool enabled,
+    String? commanderIdentity,
+    double duckedVolume = 0.2,
+  }) async {
+    if (_speakerMuted) return;
+    // livekit_client 2.8 has no RemoteAudioTrack.setVolume; approximate ducking
+    // by muting non-commander remotes while broadcast is active (spec: client ducking).
+    final muteOthers = enabled && duckedVolume < 1.0;
+    for (final participant in _room.remoteParticipants.values) {
+      final isCommander = commanderIdentity != null &&
+          participant.identity == commanderIdentity;
+      final audible = !(muteOthers && !isCommander);
+      for (final publication in participant.audioTrackPublications) {
+        final track = publication.track;
+        if (track == null) continue;
+        await _setRemoteAudioTrackAudible(track, audible: audible);
+      }
     }
   }
 

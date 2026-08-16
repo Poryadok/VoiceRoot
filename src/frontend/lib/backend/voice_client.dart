@@ -91,6 +91,10 @@ class VoiceRoomParticipantState {
     this.isDeafened = false,
     this.isVideoOn = false,
     this.isScreenSharing = false,
+    this.isCommander = false,
+    this.handRaised = false,
+    this.hasFloor = false,
+    this.isBroadcasting = false,
   });
 
   final String profileId;
@@ -98,6 +102,10 @@ class VoiceRoomParticipantState {
   final bool isDeafened;
   final bool isVideoOn;
   final bool isScreenSharing;
+  final bool isCommander;
+  final bool handRaised;
+  final bool hasFloor;
+  final bool isBroadcasting;
 }
 
 class VoiceCallsClient {
@@ -334,6 +342,95 @@ class VoiceCallsClient {
       allowNoContent: true,
     );
     return _mapEmpty(result);
+  }
+
+  Future<VoiceApiResult<void>> setCommanderMode({
+    required String authorization,
+    required String roomId,
+    required bool enabled,
+  }) async {
+    final result = await _gateway.postJson(
+      uri: _gateway.resolve('/api/v1/voice/calls/$roomId/commander'),
+      authorization: authorization,
+      body: {'enabled': enabled},
+      allowNoContent: true,
+    );
+    return _mapEmpty(result);
+  }
+
+  Future<VoiceApiResult<void>> setBroadcasting({
+    required String authorization,
+    required String roomId,
+    required bool enabled,
+  }) async {
+    final result = await _gateway.postJson(
+      uri: _gateway.resolve('/api/v1/voice/calls/$roomId/broadcast'),
+      authorization: authorization,
+      body: {'enabled': enabled},
+      allowNoContent: true,
+    );
+    return _mapEmpty(result);
+  }
+
+  Future<VoiceApiResult<void>> raiseHand({
+    required String authorization,
+    required String roomId,
+  }) async {
+    final result = await _gateway.postEmpty(
+      uri: _gateway.resolve('/api/v1/voice/calls/$roomId/raise-hand'),
+      authorization: authorization,
+    );
+    return _mapEmpty(result);
+  }
+
+  Future<VoiceApiResult<void>> lowerHand({
+    required String authorization,
+    required String roomId,
+  }) async {
+    final result = await _gateway.postEmpty(
+      uri: _gateway.resolve('/api/v1/voice/calls/$roomId/lower-hand'),
+      authorization: authorization,
+    );
+    return _mapEmpty(result);
+  }
+
+  Future<VoiceApiResult<void>> grantFloor({
+    required String authorization,
+    required String roomId,
+    required String profileId,
+  }) async {
+    final result = await _gateway.postJson(
+      uri: _gateway.resolve('/api/v1/voice/calls/$roomId/grant-floor'),
+      authorization: authorization,
+      body: {'profile_id': profileId},
+      allowNoContent: true,
+    );
+    return _mapEmpty(result);
+  }
+
+  Future<VoiceApiResult<void>> revokeFloor({
+    required String authorization,
+    required String roomId,
+    required String profileId,
+  }) async {
+    final result = await _gateway.postJson(
+      uri: _gateway.resolve('/api/v1/voice/calls/$roomId/revoke-floor'),
+      authorization: authorization,
+      body: {'profile_id': profileId},
+      allowNoContent: true,
+    );
+    return _mapEmpty(result);
+  }
+
+  Future<VoiceApiResult<List<VoiceRoomParticipantState>>> getCallVoiceStates({
+    required String authorization,
+    required String roomId,
+  }) async {
+    final result = await _gateway.getJson(
+      _gateway.resolve('/api/v1/voice/calls/$roomId/states'),
+      authorization: authorization,
+    );
+    return _mapJson(result, voiceRoomParticipantStatesFromJson);
   }
 
   Future<VoiceApiResult<VoiceCallSession>> _postSession<T extends GeneratedMessage>(

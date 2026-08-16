@@ -35,8 +35,11 @@ const (
 	VoiceService_StartScreenShare_FullMethodName = "/voice.calls.v1.VoiceService/StartScreenShare"
 	VoiceService_StopScreenShare_FullMethodName  = "/voice.calls.v1.VoiceService/StopScreenShare"
 	VoiceService_SetCommanderMode_FullMethodName = "/voice.calls.v1.VoiceService/SetCommanderMode"
+	VoiceService_SetBroadcasting_FullMethodName  = "/voice.calls.v1.VoiceService/SetBroadcasting"
 	VoiceService_RaiseHand_FullMethodName        = "/voice.calls.v1.VoiceService/RaiseHand"
 	VoiceService_LowerHand_FullMethodName        = "/voice.calls.v1.VoiceService/LowerHand"
+	VoiceService_GrantFloor_FullMethodName       = "/voice.calls.v1.VoiceService/GrantFloor"
+	VoiceService_RevokeFloor_FullMethodName      = "/voice.calls.v1.VoiceService/RevokeFloor"
 )
 
 // VoiceServiceClient is the client API for VoiceService service.
@@ -62,8 +65,11 @@ type VoiceServiceClient interface {
 	StartScreenShare(ctx context.Context, in *StartScreenShareRequest, opts ...grpc.CallOption) (*StartScreenShareResponse, error)
 	StopScreenShare(ctx context.Context, in *StopScreenShareRequest, opts ...grpc.CallOption) (*StopScreenShareResponse, error)
 	SetCommanderMode(ctx context.Context, in *SetCommanderModeRequest, opts ...grpc.CallOption) (*SetCommanderModeResponse, error)
+	SetBroadcasting(ctx context.Context, in *SetBroadcastingRequest, opts ...grpc.CallOption) (*SetBroadcastingResponse, error)
 	RaiseHand(ctx context.Context, in *RaiseHandRequest, opts ...grpc.CallOption) (*RaiseHandResponse, error)
 	LowerHand(ctx context.Context, in *LowerHandRequest, opts ...grpc.CallOption) (*LowerHandResponse, error)
+	GrantFloor(ctx context.Context, in *GrantFloorRequest, opts ...grpc.CallOption) (*GrantFloorResponse, error)
+	RevokeFloor(ctx context.Context, in *RevokeFloorRequest, opts ...grpc.CallOption) (*RevokeFloorResponse, error)
 }
 
 type voiceServiceClient struct {
@@ -234,6 +240,16 @@ func (c *voiceServiceClient) SetCommanderMode(ctx context.Context, in *SetComman
 	return out, nil
 }
 
+func (c *voiceServiceClient) SetBroadcasting(ctx context.Context, in *SetBroadcastingRequest, opts ...grpc.CallOption) (*SetBroadcastingResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetBroadcastingResponse)
+	err := c.cc.Invoke(ctx, VoiceService_SetBroadcasting_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *voiceServiceClient) RaiseHand(ctx context.Context, in *RaiseHandRequest, opts ...grpc.CallOption) (*RaiseHandResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(RaiseHandResponse)
@@ -248,6 +264,26 @@ func (c *voiceServiceClient) LowerHand(ctx context.Context, in *LowerHandRequest
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(LowerHandResponse)
 	err := c.cc.Invoke(ctx, VoiceService_LowerHand_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *voiceServiceClient) GrantFloor(ctx context.Context, in *GrantFloorRequest, opts ...grpc.CallOption) (*GrantFloorResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GrantFloorResponse)
+	err := c.cc.Invoke(ctx, VoiceService_GrantFloor_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *voiceServiceClient) RevokeFloor(ctx context.Context, in *RevokeFloorRequest, opts ...grpc.CallOption) (*RevokeFloorResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RevokeFloorResponse)
+	err := c.cc.Invoke(ctx, VoiceService_RevokeFloor_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -277,8 +313,11 @@ type VoiceServiceServer interface {
 	StartScreenShare(context.Context, *StartScreenShareRequest) (*StartScreenShareResponse, error)
 	StopScreenShare(context.Context, *StopScreenShareRequest) (*StopScreenShareResponse, error)
 	SetCommanderMode(context.Context, *SetCommanderModeRequest) (*SetCommanderModeResponse, error)
+	SetBroadcasting(context.Context, *SetBroadcastingRequest) (*SetBroadcastingResponse, error)
 	RaiseHand(context.Context, *RaiseHandRequest) (*RaiseHandResponse, error)
 	LowerHand(context.Context, *LowerHandRequest) (*LowerHandResponse, error)
+	GrantFloor(context.Context, *GrantFloorRequest) (*GrantFloorResponse, error)
+	RevokeFloor(context.Context, *RevokeFloorRequest) (*RevokeFloorResponse, error)
 	mustEmbedUnimplementedVoiceServiceServer()
 }
 
@@ -337,11 +376,20 @@ func (UnimplementedVoiceServiceServer) StopScreenShare(context.Context, *StopScr
 func (UnimplementedVoiceServiceServer) SetCommanderMode(context.Context, *SetCommanderModeRequest) (*SetCommanderModeResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetCommanderMode not implemented")
 }
+func (UnimplementedVoiceServiceServer) SetBroadcasting(context.Context, *SetBroadcastingRequest) (*SetBroadcastingResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetBroadcasting not implemented")
+}
 func (UnimplementedVoiceServiceServer) RaiseHand(context.Context, *RaiseHandRequest) (*RaiseHandResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RaiseHand not implemented")
 }
 func (UnimplementedVoiceServiceServer) LowerHand(context.Context, *LowerHandRequest) (*LowerHandResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method LowerHand not implemented")
+}
+func (UnimplementedVoiceServiceServer) GrantFloor(context.Context, *GrantFloorRequest) (*GrantFloorResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GrantFloor not implemented")
+}
+func (UnimplementedVoiceServiceServer) RevokeFloor(context.Context, *RevokeFloorRequest) (*RevokeFloorResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RevokeFloor not implemented")
 }
 func (UnimplementedVoiceServiceServer) mustEmbedUnimplementedVoiceServiceServer() {}
 func (UnimplementedVoiceServiceServer) testEmbeddedByValue()                      {}
@@ -652,6 +700,24 @@ func _VoiceService_SetCommanderMode_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _VoiceService_SetBroadcasting_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetBroadcastingRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VoiceServiceServer).SetBroadcasting(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VoiceService_SetBroadcasting_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VoiceServiceServer).SetBroadcasting(ctx, req.(*SetBroadcastingRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _VoiceService_RaiseHand_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(RaiseHandRequest)
 	if err := dec(in); err != nil {
@@ -684,6 +750,42 @@ func _VoiceService_LowerHand_Handler(srv interface{}, ctx context.Context, dec f
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(VoiceServiceServer).LowerHand(ctx, req.(*LowerHandRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _VoiceService_GrantFloor_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GrantFloorRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VoiceServiceServer).GrantFloor(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VoiceService_GrantFloor_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VoiceServiceServer).GrantFloor(ctx, req.(*GrantFloorRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _VoiceService_RevokeFloor_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RevokeFloorRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VoiceServiceServer).RevokeFloor(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VoiceService_RevokeFloor_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VoiceServiceServer).RevokeFloor(ctx, req.(*RevokeFloorRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -760,12 +862,24 @@ var VoiceService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _VoiceService_SetCommanderMode_Handler,
 		},
 		{
+			MethodName: "SetBroadcasting",
+			Handler:    _VoiceService_SetBroadcasting_Handler,
+		},
+		{
 			MethodName: "RaiseHand",
 			Handler:    _VoiceService_RaiseHand_Handler,
 		},
 		{
 			MethodName: "LowerHand",
 			Handler:    _VoiceService_LowerHand_Handler,
+		},
+		{
+			MethodName: "GrantFloor",
+			Handler:    _VoiceService_GrantFloor_Handler,
+		},
+		{
+			MethodName: "RevokeFloor",
+			Handler:    _VoiceService_RevokeFloor_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

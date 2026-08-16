@@ -401,6 +401,10 @@ message VoiceStateChanged {
   optional bool is_deafened = 4;
   optional bool is_video_on = 5;
   repeated string profile_ids = 6;
+  optional bool is_commander = 7;
+  optional bool hand_raised = 8;
+  optional bool has_floor = 9;
+  optional bool is_broadcasting = 10;
 }
 
 // --- moderation.events ---

@@ -211,9 +211,18 @@ func (s *RedisCallStore) UpdateVoiceState(ctx context.Context, roomID, profileID
 	}
 	if patch.IsCommander != nil {
 		state.IsCommander = *patch.IsCommander
+		if !*patch.IsCommander {
+			state.IsBroadcasting = false
+		}
 	}
 	if patch.HandRaised != nil {
 		state.HandRaised = *patch.HandRaised
+	}
+	if patch.HasFloor != nil {
+		state.HasFloor = *patch.HasFloor
+	}
+	if patch.IsBroadcasting != nil {
+		state.IsBroadcasting = *patch.IsBroadcasting
 	}
 	call.States[profileID] = state
 	if err := s.save(ctx, call); err != nil {

@@ -327,7 +327,7 @@
 ### Voice
 
 
-- [ ] **[Voice] Unimplemented gRPC (proto + gateway exposed, server returns `Unimplemented`)** — `SetCommanderMode`, `RaiseHand`, `LowerHand`, `MoveToVoiceRoom`. Required by `voice-chat.md` (commander, raise hand, room moves).
+- [ ] **[Voice] Unimplemented gRPC (proto + gateway exposed, server returns `Unimplemented`)** — `MoveToVoiceRoom`. Required by `voice-chat.md` (room moves). Commander / raise-hand / GrantFloor shipped (П.11 / VC-07 product).
 - [x] **[Voice] S2S deps declared in spec but not wired in `main.go`** — **done (wire):** `voice/main.go` sets `Roles` (`ROLE_GRPC_ADDR`), `SpacePro` (`SUBSCRIPTION_GRPC_ADDR`), `SpaceMembers` (`SPACE_GRPC_ADDR`) when env present; compose sets all three. Remaining gaps: speak/mute role bits, roster NATS events (sibling Voice bullets).
 - [ ] **[Voice] Missing NATS events vs `voice-service.md` / Analytics** — never published: `voice.call_started`, `voice.participant_joined`, `voice.participant_left`. Publisher surface stops at incoming/accepted/declined/missed/ended/state/screen-share. Analytics adapter expects `call_started`.
 - [ ] **[Voice] Space voice join/leave publishes no roster events** — no `participant_joined` / `participant_left` / `voice.state_changed` on `JoinVoiceRoom` / `LeaveVoiceRoom`; Realtime consumer has no handlers for those subjects anyway.
@@ -575,7 +575,7 @@
 ### Voice
 
 
-- [ ] **[Voice] `GetVoiceStates` omits proto fields** — never populates `is_commander`, `hand_raised` (fields exist in proto; state store has no fields for them).
+- [x] **[Voice] `GetVoiceStates` populates commander/floor fields** — `is_commander`, `hand_raised`, `has_floor`, `is_broadcasting` in store + GetVoiceStates + state events (П.11 / VC-07).
 - [ ] **[Voice] DM `StartCall` skips chat membership check** — `ensureChatMember` used for group/space paths only; DM only checks privacy + callee. Wrong `chat_id` can be attached.
 - [ ] **[Voice] `RedisCallStore` has zero unit/integration tests** — staging/prod use Redis (`VOICE_REDIS_ADDR`); all store tests hit `MemoryCallStore`.
 - [ ] **[Voice] Group voice cap mismatch in microservice doc** — `voice-service.md` mentions groups up to **500**; code hard-caps room at **32** (`MaxGroupVoiceParticipants`). Tests document 32 as intentional (`voice_grpc_group_test.go`); doc is stale.

@@ -1500,11 +1500,51 @@ const VoiceStateChanged$json = {
       '17': true
     },
     {'1': 'profile_ids', '3': 6, '4': 3, '5': 9, '10': 'profileIds'},
+    {
+      '1': 'is_commander',
+      '3': 7,
+      '4': 1,
+      '5': 8,
+      '9': 3,
+      '10': 'isCommander',
+      '17': true
+    },
+    {
+      '1': 'hand_raised',
+      '3': 8,
+      '4': 1,
+      '5': 8,
+      '9': 4,
+      '10': 'handRaised',
+      '17': true
+    },
+    {
+      '1': 'has_floor',
+      '3': 9,
+      '4': 1,
+      '5': 8,
+      '9': 5,
+      '10': 'hasFloor',
+      '17': true
+    },
+    {
+      '1': 'is_broadcasting',
+      '3': 10,
+      '4': 1,
+      '5': 8,
+      '9': 6,
+      '10': 'isBroadcasting',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_is_muted'},
     {'1': '_is_deafened'},
     {'1': '_is_video_on'},
+    {'1': '_is_commander'},
+    {'1': '_hand_raised'},
+    {'1': '_has_floor'},
+    {'1': '_is_broadcasting'},
   ],
 };
 
@@ -1513,8 +1553,12 @@ final $typed_data.Uint8List voiceStateChangedDescriptor = $convert.base64Decode(
     'ChFWb2ljZVN0YXRlQ2hhbmdlZBIXCgdyb29tX2lkGAEgASgJUgZyb29tSWQSHQoKcHJvZmlsZV'
     '9pZBgCIAEoCVIJcHJvZmlsZUlkEh4KCGlzX211dGVkGAMgASgISABSB2lzTXV0ZWSIAQESJAoL'
     'aXNfZGVhZmVuZWQYBCABKAhIAVIKaXNEZWFmZW5lZIgBARIjCgtpc192aWRlb19vbhgFIAEoCE'
-    'gCUglpc1ZpZGVvT26IAQESHwoLcHJvZmlsZV9pZHMYBiADKAlSCnByb2ZpbGVJZHNCCwoJX2lz'
-    'X211dGVkQg4KDF9pc19kZWFmZW5lZEIOCgxfaXNfdmlkZW9fb24=');
+    'gCUglpc1ZpZGVvT26IAQESHwoLcHJvZmlsZV9pZHMYBiADKAlSCnByb2ZpbGVJZHMSJgoMaXNf'
+    'Y29tbWFuZGVyGAcgASgISANSC2lzQ29tbWFuZGVyiAEBEiQKC2hhbmRfcmFpc2VkGAggASgISA'
+    'RSCmhhbmRSYWlzZWSIAQESIAoJaGFzX2Zsb29yGAkgASgISAVSCGhhc0Zsb29yiAEBEiwKD2lz'
+    'X2Jyb2FkY2FzdGluZxgKIAEoCEgGUg5pc0Jyb2FkY2FzdGluZ4gBAUILCglfaXNfbXV0ZWRCDg'
+    'oMX2lzX2RlYWZlbmVkQg4KDF9pc192aWRlb19vbkIPCg1faXNfY29tbWFuZGVyQg4KDF9oYW5k'
+    'X3JhaXNlZEIMCgpfaGFzX2Zsb29yQhIKEF9pc19icm9hZGNhc3Rpbmc=');
 
 @$core.Deprecated('Use moderationStreamEventDescriptor instead')
 const ModerationStreamEvent$json = {

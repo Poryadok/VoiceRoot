@@ -12,6 +12,7 @@ import '../../state/social_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../core/platform_capability_hints.dart';
 import 'screen_share_panel.dart';
+import 'voice_organizer_panel.dart';
 
 class ActiveCallPanel extends ConsumerStatefulWidget {
   const ActiveCallPanel({super.key});
@@ -149,15 +150,23 @@ class _ActiveCallPanelState extends ConsumerState<ActiveCallPanel> {
                   key: ActiveCallPanel.minimizeBarKey,
                   color: voice.elevated,
                   elevation: 4,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      border: Border(top: BorderSide(color: voice.borderDefault)),
-                    ),
-                    child: controls,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const VoiceOrganizerPanel(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          border: Border(
+                            top: BorderSide(color: voice.borderDefault),
+                          ),
+                        ),
+                        child: controls,
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -195,6 +204,7 @@ class _ActiveCallPanelState extends ConsumerState<ActiveCallPanel> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const ScreenSharePanel(),
+            const VoiceOrganizerPanel(),
             if (call.needsAudioPlaybackUnlock)
               Material(
                 key: ActiveCallPanel.unlockAudioKey,

@@ -163,6 +163,78 @@ func (t *transcoder) serveVoiceCalls(w http.ResponseWriter, r *http.Request, res
 			}
 			writeProtoJSON(w, http.StatusOK, resp)
 			return true
+		case r.Method == http.MethodPost && action == "commander":
+			req := &callsv1.SetCommanderModeRequest{RoomId: roomID}
+			if err := readProtoJSON(r, req); err != nil && r.ContentLength != 0 {
+				writeGRPCError(w, err)
+				return true
+			}
+			req.RoomId = roomID
+			resp, err := t.clients.voice.SetCommanderMode(ctx, req)
+			if err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			writeProtoJSON(w, http.StatusOK, resp)
+			return true
+		case r.Method == http.MethodPost && action == "broadcast":
+			req := &callsv1.SetBroadcastingRequest{RoomId: roomID}
+			if err := readProtoJSON(r, req); err != nil && r.ContentLength != 0 {
+				writeGRPCError(w, err)
+				return true
+			}
+			req.RoomId = roomID
+			resp, err := t.clients.voice.SetBroadcasting(ctx, req)
+			if err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			writeProtoJSON(w, http.StatusOK, resp)
+			return true
+		case r.Method == http.MethodPost && action == "raise-hand":
+			_, err := t.clients.voice.RaiseHand(ctx, &callsv1.RaiseHandRequest{RoomId: roomID})
+			if err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return true
+		case r.Method == http.MethodPost && action == "lower-hand":
+			_, err := t.clients.voice.LowerHand(ctx, &callsv1.LowerHandRequest{RoomId: roomID})
+			if err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return true
+		case r.Method == http.MethodPost && action == "grant-floor":
+			req := &callsv1.GrantFloorRequest{RoomId: roomID}
+			if err := readProtoJSON(r, req); err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			req.RoomId = roomID
+			resp, err := t.clients.voice.GrantFloor(ctx, req)
+			if err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			writeProtoJSON(w, http.StatusOK, resp)
+			return true
+		case r.Method == http.MethodPost && action == "revoke-floor":
+			req := &callsv1.RevokeFloorRequest{RoomId: roomID}
+			if err := readProtoJSON(r, req); err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			req.RoomId = roomID
+			resp, err := t.clients.voice.RevokeFloor(ctx, req)
+			if err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			writeProtoJSON(w, http.StatusOK, resp)
+			return true
 		}
 
 	}
