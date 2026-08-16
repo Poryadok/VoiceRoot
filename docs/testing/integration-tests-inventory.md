@@ -411,7 +411,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 |----|------|--------|-----|
 | PL-01 | Mobile narrow layout | `[exists]` | `mobile_layout_e2e_live_test` |
 | PL-02 | Windows version policy 426 | `[exists]` | Gateway: `TestComposeWindowsVersionPolicy_live`; Flutter: `windows_version_e2e_live_test` |
-| PL-03 | Windows tray / PTT / overlay | `[missing]` | roadmap П.17–18 |
+| PL-03 | Windows tray / PTT / overlay | `[partial]` | capability `canUseGlobalPushToTalkHotkey` + `windows_desktop_smoke_test`; tray/hotkey/overlay product still roadmap П.17–18 |
 | PL-04 | Device driver integration_test suite | `[missing]` | todo; `integration_test/` mostly empty |
 
 ---
@@ -421,8 +421,8 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | ID | Кейс | Статус | Где |
 |----|------|--------|-----|
 | UPD-01 | `/api/v1/version` Windows policy | `[exists]` | see PL-02 |
-| UPD-02 | Force-update / Shorebird OTA | `[missing]` | — |
-| UPD-03 | Desktop auto-update | `[missing]` | roadmap П.17 |
+| UPD-02 | Force-update / Shorebird OTA | `[partial]` | force-update overlay/controller unit + PL-02 live; Shorebird OTA still missing |
+| UPD-03 | Desktop auto-update | `[partial]` | `DesktopUpdaterService` + `windows_desktop_smoke_test` / version_policy unit; signed CDN/WinSparkle live not in CI (П.17) |
 
 ---
 
