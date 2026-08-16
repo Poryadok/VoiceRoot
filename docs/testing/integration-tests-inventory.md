@@ -137,8 +137,8 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | ST-02 | Expiry → archive | `[exists]` | Gateway: `TestComposeStoriesExpiryArchive_live` |
 | ST-03 | Degradation when Social down | `[exists]` | Gateway: `TestComposeStoriesWhenSocialDown_live` (liveness only — todo notes thin) |
 | ST-04 | LFP story → JOIN/INVITE → MM party | `[missing]` | roadmap П.3 |
-| ST-05 | Moderation hide story from feed | `[missing]` | todo/backend Story |
-| ST-06 | `show_stories=Nobody` privacy floor | `[missing]` | todo/backend |
+| ST-05 | Moderation hide story from feed | `[exists]` | Story `HideStoryFromFeed` + `hidden_from_feed_at`; grpcsvc IT |
+| ST-06 | `show_stories=Nobody` privacy floor | `[exists]` | CreateStory caps to floor; grpcsvc ITs |
 | ST-07 | Anonymous view via Premium | `[missing]` | cross-cut premium→story |
 
 ---
