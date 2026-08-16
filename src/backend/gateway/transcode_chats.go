@@ -271,6 +271,44 @@ func (t *transcoder) serveChats(w http.ResponseWriter, r *http.Request, rest str
 		w.WriteHeader(http.StatusNoContent)
 		return true
 
+	case r.Method == http.MethodPost && strings.HasSuffix(rest, "/archive"):
+		chatID := strings.TrimSuffix(rest, "/archive")
+		chatID = strings.Trim(chatID, "/")
+		req := &chatv1.ArchiveChatRequest{ChatId: chatID}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		if req.ChatId == "" {
+			req.ChatId = chatID
+		}
+		_, err := t.clients.chat.ArchiveChat(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return true
+
+	case r.Method == http.MethodPost && strings.HasSuffix(rest, "/mute"):
+		chatID := strings.TrimSuffix(rest, "/mute")
+		chatID = strings.Trim(chatID, "/")
+		req := &chatv1.MuteChatRequest{ChatId: chatID}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		if req.ChatId == "" {
+			req.ChatId = chatID
+		}
+		_, err := t.clients.chat.MuteChat(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return true
+
 	default:
 		return false
 	}

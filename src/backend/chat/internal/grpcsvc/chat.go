@@ -3,6 +3,7 @@ package grpcsvc
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	chatv1 "voice.app/voice/chat/v1"
@@ -62,6 +63,8 @@ type DMStore interface {
 	IsChatMember(ctx context.Context, chatID, profileID uuid.UUID) (bool, error)
 	ListChatMembers(ctx context.Context, chatID uuid.UUID) ([]store.ChatMemberRow, error)
 	SetInboxBucket(ctx context.Context, chatID, profileID uuid.UUID, bucket string) error
+	SetMemberArchived(ctx context.Context, chatID, profileID uuid.UUID, archived bool) error
+	SetMemberMutedUntil(ctx context.Context, chatID, profileID uuid.UUID, until *time.Time) error
 	CreateGroupChat(ctx context.Context, creatorProfileID uuid.UUID, name string) (*store.ChatRow, error)
 	CreateSpaceGroupChat(ctx context.Context, creatorProfileID, spaceID uuid.UUID, name string) (*store.ChatRow, error)
 	CreateSpaceChannelChat(ctx context.Context, creatorProfileID, spaceID uuid.UUID, name string) (*store.ChatRow, error)

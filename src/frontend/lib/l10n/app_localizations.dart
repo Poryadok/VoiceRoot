@@ -1532,6 +1532,24 @@ abstract class AppLocalizations {
   /// **'Stranger'**
   String get chatListStrangerBadge;
 
+  /// No description provided for @chatListMute.
+  ///
+  /// In en, this message translates to:
+  /// **'Mute'**
+  String get chatListMute;
+
+  /// No description provided for @chatListUnmute.
+  ///
+  /// In en, this message translates to:
+  /// **'Unmute'**
+  String get chatListUnmute;
+
+  /// No description provided for @chatListArchive.
+  ///
+  /// In en, this message translates to:
+  /// **'Archive'**
+  String get chatListArchive;
+
   /// No description provided for @chatCreateGroupTooltip.
   ///
   /// In en, this message translates to:
