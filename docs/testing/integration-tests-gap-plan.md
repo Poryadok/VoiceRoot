@@ -63,6 +63,7 @@
 | P3.1 | **partial** | `integration_test/device_driver_smoke_test.dart` + CI `flutter-device-driver` (host tester: deeplink + FCM/VoIP register contracts); NT-05 / on-device App Links / CallKit still open |
 | P3.6 | **done** | ResendMailSender when `AUTH_RESEND_API_KEY` set; `/password/reset` E2E + AU-13 |
 | P3.3 | **done** | Axe-analog landmark CI (`make a11y-web-axe`) + high contrast / reduced-motion automation; A11Y-03 |
+| P3.5 | **deferred** | blocked on product scope — [ADR 005](../adr/005-rich-media-live-tests-deferred.md); no compose/Flutter lives until features expand |
 | P2.* / P3.* (rest) | **deferred** | roadmap / soft-launch+ |
 
 ---
@@ -184,7 +185,7 @@ Effort: **S** ≤0.5d · **M** 1–2d · **L** 3–5d · **XL** >1w (инфра/
 | P3.2 | Windows tray/PTT/auto-update smoke | C/CI | PL-03, UPD-02/03 | L | **partial** — auto-update stub smoke; tray/PTT blocked on П.17 |
 | P3.3 | A11y automation beyond widgets | C | A11Y-03 | M | **done** — `make a11y-web-axe` + HC/reduced-motion tests |
 | P3.4 | Staging observability request_id scripted smoke | ops | OBS-02 | M | **done** — `scripts/staging/smoke-request-id.sh` |
-| P3.5 | Sticker/GIF/voice-message/recording lives | B+C | TC-MSG-09/10, VC-10 | L | нужен product scope |
+| P3.5 | Sticker/GIF/voice-message/recording lives | B+C | TC-MSG-09/10, VC-10 | L | **deferred** — [ADR 005](../adr/005-rich-media-live-tests-deferred.md); product scope insufficient (text-chat one-liners; recording local-only) |
 | P3.6 | Password reset / Resend | E+B | AU-13 | L | **done** — ResendMailSender + password reset E2E |
 | P3.7 | Federation suite | — | FED-01 | — | deferred |
 
