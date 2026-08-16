@@ -117,6 +117,8 @@ func (s *StoryGRPC) CreateStory(ctx context.Context, req *storyv1.CreateStoryReq
 		if visibility == "" {
 			visibility = "friends"
 		}
+	} else {
+		visibility, visAudienceJSON = s.capCreateStoryVisibility(ctx, profileID, visibility, visAudienceJSON)
 	}
 	if storyType == "video" && mediaID != nil && s.Files != nil {
 		secs, durErr := s.Files.GetFileDurationSeconds(ctx, *mediaID)
@@ -149,6 +151,26 @@ func (s *StoryGRPC) CreateStory(ctx context.Context, req *storyv1.CreateStoryReq
 		_ = s.Events.PublishStoryCreated(ctx, row.ID.String(), profileID.String(), storyType, gameTag, req.GetMentionProfileIds())
 	}
 	return &storyv1.CreateStoryResponse{Story: rowToProtoForViewer(row, profileID)}, nil
+}
+
+func (s *StoryGRPC) HideStoryFromFeed(ctx context.Context, req *storyv1.HideStoryFromFeedRequest) (*storyv1.HideStoryFromFeedResponse, error) {
+	if !isInternalRequest(ctx) {
+		return nil, status.Error(codes.PermissionDenied, "internal access required")
+	}
+	if _, err := authctx.ProfileID(ctx); err != nil {
+		return nil, status.Error(codes.Unauthenticated, "profile required")
+	}
+	storyID, err := uuid.Parse(strings.TrimSpace(req.GetStoryId()))
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid story_id")
+	}
+	if err := s.Store.HideFromFeed(ctx, storyID); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, status.Error(codes.NotFound, "story not found")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	return &storyv1.HideStoryFromFeedResponse{}, nil
 }
 
 func (s *StoryGRPC) DeleteStory(ctx context.Context, req *storyv1.DeleteStoryRequest) (*storyv1.DeleteStoryResponse, error) {
@@ -693,6 +715,9 @@ func (s *StoryGRPC) canViewStory(ctx context.Context, viewerID uuid.UUID, row *s
 	if viewerID == row.AuthorProfileID {
 		return true
 	}
+	if row.HiddenFromFeedAt != nil {
+		return false
+	}
 	storyAudience := audienceFromStoryRow(row.Visibility, row.VisibilityAudienceJSON)
 	if s.Privacy != nil {
 		floor, err := s.Privacy.ShowStoriesAudience(ctx, row.AuthorProfileID)
@@ -710,6 +735,36 @@ func (s *StoryGRPC) canViewStory(ctx context.Context, viewerID uuid.UUID, row *s
 	matcher := s.privacyMatcher()
 	ok, err := matcher.Allowed(ctx, row.AuthorProfileID, viewerID, storyAudience, guestguard.IsGuest(ctx))
 	return err == nil && ok
+}
+
+// capCreateStoryVisibility restricts an explicit CreateStory visibility to the author's show_stories floor.
+func (s *StoryGRPC) capCreateStoryVisibility(ctx context.Context, profileID uuid.UUID, visibility string, audienceJSON *string) (string, *string) {
+	if s.Privacy == nil {
+		return visibility, audienceJSON
+	}
+	floorAud, err := s.Privacy.ShowStoriesAudience(ctx, profileID)
+	if err != nil {
+		return visibility, audienceJSON
+	}
+	floorVis, floorJSON := audienceToStoryVisibility(floorAud)
+	if floorAud.IsNobody() || visibilityRestrictiveness(visibility) < visibilityRestrictiveness(floorVis) {
+		return floorVis, floorJSON
+	}
+	return visibility, audienceJSON
+}
+
+func isInternalRequest(ctx context.Context) bool {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return false
+	}
+	for _, v := range md.Get("x-voice-internal") {
+		switch strings.ToLower(strings.TrimSpace(v)) {
+		case "1", "true", "yes":
+			return true
+		}
+	}
+	return false
 }
 
 func (s *StoryGRPC) privacyMatcher() privacy.Matcher {
@@ -768,20 +823,20 @@ func rowToProto(row *store.StoryRow) *storyv1.Story {
 		return nil
 	}
 	out := &storyv1.Story{
-		Id:                row.ID.String(),
-		AuthorProfileId:   row.AuthorProfileID.String(),
-		Type:              row.Type,
-		TextContent:       row.TextContent,
-		TextStyleJson:     row.TextStyleJSON,
-		GameTag:           row.GameTag,
-		IsLookingForParty: row.IsLookingForParty,
-		LfpCriteriaJson:   row.LFPCriteriaJSON,
+		Id:                    row.ID.String(),
+		AuthorProfileId:       row.AuthorProfileID.String(),
+		Type:                  row.Type,
+		TextContent:           row.TextContent,
+		TextStyleJson:         row.TextStyleJSON,
+		GameTag:               row.GameTag,
+		IsLookingForParty:     row.IsLookingForParty,
+		LfpCriteriaJson:       row.LFPCriteriaJSON,
 		MentionProfileIdsJson: row.MentionProfileIDs,
-		ViewCount:         int32(row.ViewCount),
-		Visibility:        row.Visibility,
-		ExpiresAt:         timestamppb.New(row.ExpiresAt),
-		ArchivedUntil:     timestamppb.New(row.ArchivedUntil),
-		CreatedAt:         timestamppb.New(row.CreatedAt),
+		ViewCount:             int32(row.ViewCount),
+		Visibility:            row.Visibility,
+		ExpiresAt:             timestamppb.New(row.ExpiresAt),
+		ArchivedUntil:         timestamppb.New(row.ArchivedUntil),
+		CreatedAt:             timestamppb.New(row.CreatedAt),
 	}
 	if row.MediaFileID != nil {
 		s := row.MediaFileID.String()
