@@ -9,6 +9,7 @@ COPY realtime/go.mod ./realtime/
 COPY chat/pb/voice/chat/go.mod ./chat/pb/voice/chat/
 COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
 COPY user/pb/voice/user/go.mod ./user/pb/voice/user/
+COPY user/pb/voice/social/go.mod ./user/pb/voice/social/
 COPY messaging/pb/voice/events/go.mod ./messaging/pb/voice/events/
 RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked sh /usr/local/bin/docker-go-mod-download.sh realtime
 COPY pkg ./pkg
@@ -17,6 +18,7 @@ COPY realtime ./realtime
 COPY chat/pb/voice/chat ./chat/pb/voice/chat
 COPY user/pb/voice/common ./user/pb/voice/common
 COPY user/pb/voice/user ./user/pb/voice/user
+COPY user/pb/voice/social ./user/pb/voice/social
 WORKDIR /src/realtime
 RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked --mount=type=cache,target=/root/.cache/go-build,id=voice-gobuild,sharing=locked CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/service .
 
