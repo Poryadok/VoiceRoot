@@ -91,5 +91,44 @@ void main() {
       final body = jsonDecode(capturedBody!) as Map<String, dynamic>;
       expect(body['commentary'], 'see this');
     });
+
+    test('POST forward with without_attribution for FW-03 copy-as-new', () async {
+      String? capturedBody;
+      final mock = MockClient((req) async {
+        capturedBody = req.body;
+        return http.Response(
+          jsonEncode({
+            'message': {
+              'id': 'msg-copy-1',
+              'chat': {'id': 'chat-target'},
+              'sender_profile_id': 'profile-a',
+              'content': 'copied text',
+              'type': 'regular',
+              'message_kind': 'MESSAGE_KIND_REGULAR',
+            },
+          }),
+          200,
+        );
+      });
+      final client = VoiceMessagesClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
+
+      final result = await client.forwardMessage(
+        authorization: auth,
+        sourceMessageId: 'msg-src-3',
+        targetChatId: 'chat-target',
+        withoutAttribution: true,
+      );
+
+      expect(result, isA<MessagesApiOk<VoiceMessage>>());
+      final body = jsonDecode(capturedBody!) as Map<String, dynamic>;
+      expect(body['without_attribution'], true);
+
+      final msg = (result as MessagesApiOk<VoiceMessage>).data;
+      expect(msg.messageKind, VoiceMessageKind.regular);
+      expect(msg.forwardFromId, isNull);
+      expect(msg.content, 'copied text');
+    });
   });
 }

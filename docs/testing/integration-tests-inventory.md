@@ -96,7 +96,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 |----|------|--------|-----|
 | FW-01 | Forward DM → group с атрибуцией | `[exists]` | Flutter: `forward_messages_e2e_live_test` («forward DM message to group preserves attribution») |
 | FW-02 | Forward в channel | `[exists]` | Messaging IT + Gateway: `TestComposeForwardChannelCommentary_live`; Flutter channel+commentary |
-| FW-03 | Copy as new (без атрибуции) | `[missing]` | — |
+| FW-03 | Copy as new (без атрибуции) | `[partial]` | Messaging IT `withoutAttributionCopyAsNew` + Gateway transcode + Flutter client/UI; compose/Flutter live open |
 | FW-04 | Privacy forbid forward | `[exists]` | Messaging IT + Gateway: `TestComposeForwardPrivacyDeny_live`; Flutter FW-04 |
 | FW-05 | Multi-select forward | `[missing]` | — |
 | FW-06 | Forward E2E ciphertext policy | `[exists]` | Messaging IT: `TestMessagingForwardMessage_e2eToPlainDenied` / `e2eToE2EDMPreservesFlag` |

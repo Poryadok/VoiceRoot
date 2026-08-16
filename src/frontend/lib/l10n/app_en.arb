@@ -384,6 +384,7 @@
   "chatAttachFile": "Attach file",
   "chatMessageEdit": "Edit",
   "chatMessageForward": "Forward",
+  "chatMessageCopyAsNew": "Copy as new",
   "chatMessageReply": "Reply",
   "chatReplyingTo": "Replying to {preview}",
   "@chatReplyingTo": {
@@ -409,6 +410,7 @@
     }
   },
   "chatForwardTitle": "Forward to",
+  "chatCopyAsNewTitle": "Copy as new to",
   "chatForwardSearchHint": "Search chats",
   "chatForwardFrom": "Forwarded from {sender}",
   "@chatForwardFrom": {
@@ -422,6 +424,7 @@
   "chatForwardCommentaryHint": "Optional message before the forward",
   "chatForwardEmpty": "No chats to forward to",
   "chatForwardSuccess": "Message forwarded",
+  "chatCopyAsNewSuccess": "Message copied",
   "chatForwardError": "Could not forward message: {message}",
   "@chatForwardError": {
     "placeholders": {

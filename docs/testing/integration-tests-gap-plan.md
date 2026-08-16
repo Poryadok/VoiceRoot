@@ -47,6 +47,7 @@
 | P2.10 | **done** | PR-02: `user.presence_changed` + Realtime friend fan-out; `TestComposePresenceDNDInvisible_live` + Flutter |
 | P2.11 | **product done** | MuteChat/ArchiveChat + Gateway + Flutter list actions (#16); compose/Flutter live IT still open |
 | P2.12 | **done** | Flutter `onboarding_coach_e2e_live_test` (spaces/MM steps + invite mid-tour); ON-03 (#20) |
+| P2.15 | **product done** | `without_attribution` ForwardMessage + Flutter Copy as new; Messaging/Gateway ITs; compose live still open |
 | P2.* / P3.* (rest) | **deferred** | roadmap / soft-launch+ |
 
 ---
@@ -156,7 +157,7 @@ Effort: **S** ≤0.5d · **M** 1–2d · **L** 3–5d · **XL** >1w (инфра/
 | P2.12 | Onboarding coach-marks MM/space | C | ON-03 | M | **done** — `onboarding_coach_e2e_live_test` (#20) |
 | P2.13 | Premium cosmetics cross-smoke | B+C | SUB-06 | M | entitlements |
 | P2.14 | Bot autocomplete / portal catalog | B+C | BT-07 | L | П.15 |
-| P2.15 | Copy-forward without attribution | C | FW-03 | S | UI |
+| P2.15 | Copy-forward without attribution | C | FW-03 | S | **product done** — Messaging/Gateway/Flutter; live IT open |
 | P2.16 | Multi-forward | C | FW-05 | M | UI backlog? |
 
 ---

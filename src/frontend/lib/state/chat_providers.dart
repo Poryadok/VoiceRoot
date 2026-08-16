@@ -1637,11 +1637,13 @@ class ChatActions {
     }
   }
 
-  /// Forwards a message with attribution into another chat the user belongs to.
+  /// Forwards a message into another chat. Set [withoutAttribution] for FW-03
+  /// copy-as-new (regular message, no Forwarded-from).
   Future<String?> forwardMessage({
     required String sourceMessageId,
     required String targetChatId,
     String? commentary,
+    bool withoutAttribution = false,
   }) async {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return 'not_authenticated';
@@ -1653,6 +1655,7 @@ class ChatActions {
       commentary: trimmedCommentary == null || trimmedCommentary.isEmpty
           ? null
           : trimmedCommentary,
+      withoutAttribution: withoutAttribution,
     );
     return switch (result) {
       MessagesApiOk(:final data) => () {

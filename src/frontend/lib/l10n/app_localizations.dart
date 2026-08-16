@@ -1358,6 +1358,12 @@ abstract class AppLocalizations {
   /// **'Forward'**
   String get chatMessageForward;
 
+  /// No description provided for @chatMessageCopyAsNew.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy as new'**
+  String get chatMessageCopyAsNew;
+
   /// No description provided for @chatMessageReply.
   ///
   /// In en, this message translates to:
@@ -1424,6 +1430,12 @@ abstract class AppLocalizations {
   /// **'Forward to'**
   String get chatForwardTitle;
 
+  /// No description provided for @chatCopyAsNewTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy as new to'**
+  String get chatCopyAsNewTitle;
+
   /// No description provided for @chatForwardSearchHint.
   ///
   /// In en, this message translates to:
@@ -1459,6 +1471,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Message forwarded'**
   String get chatForwardSuccess;
+
+  /// No description provided for @chatCopyAsNewSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Message copied'**
+  String get chatCopyAsNewSuccess;
 
   /// No description provided for @chatForwardError.
   ///
