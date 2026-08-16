@@ -84,7 +84,7 @@ Effort: **S** ≤0.5d · **M** 1–2d · **L** 3–5d · **XL** >1w (инфра/
 | # | Кейс | Слой | IDs | Effort | Notes |
 |---|------|------|-----|--------|-------|
 | P1.5 | Forward to channel + commentary | B+C | FW-02 | M | Messaging IT hole |
-| P1.6 | Forward privacy forbid | B | FW-04 | S | |
+| P1.6 | Forward privacy forbid | B | FW-04 | S | **product done** (`allow_forward`); enforce + compose IT remaining |
 | P1.7 | E2E forward policy (no ciphertext leak) | B | FW-06 | M | **после** фикс Messaging |
 | P1.8 | SendMessage respects `TEXT_CHAT_SEND_MESSAGES` deny | B+C | RL-02 | M | **после** Messaging CheckPermission |
 | P1.9 | @here / @everyone permission gate | B | TC-MSG-03 | M | |
