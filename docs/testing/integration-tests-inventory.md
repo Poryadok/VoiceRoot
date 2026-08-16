@@ -136,7 +136,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | ST-01 | Create / feed / reply→DM / highlight privacy | `[exists]` | Gateway: `TestComposeStories_live`; Flutter: `stories_e2e_live_test` |
 | ST-02 | Expiry → archive | `[exists]` | Gateway: `TestComposeStoriesExpiryArchive_live` |
 | ST-03 | Degradation when Social down | `[exists]` | Gateway: `TestComposeStoriesWhenSocialDown_live` (liveness only — todo notes thin) |
-| ST-04 | LFP story → JOIN/INVITE → MM party | `[missing]` | roadmap П.3 |
+| ST-04 | LFP story → JOIN/INVITE → MM party | `[partial]` | Story `RespondToLfpStory` IT; MM `storyconsume` + `DecideLfpRequest` IT; Gateway decide LFP transcode; Notification LFP Accept/Decline; Flutter LFP card/decision sheet (#35). Compose/Flutter live still open |
 | ST-05 | Moderation hide story from feed | `[exists]` | Story `HideStoryFromFeed` + `hidden_from_feed_at`; grpcsvc IT |
 | ST-06 | `show_stories=Nobody` privacy floor | `[exists]` | CreateStory caps to floor; grpcsvc ITs |
 | ST-07 | Anonymous view via Premium | `[missing]` | cross-cut premium→story |

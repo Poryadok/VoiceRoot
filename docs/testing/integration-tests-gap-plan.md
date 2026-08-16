@@ -56,6 +56,7 @@
 | P2.15 | **product done** | `without_attribution` ForwardMessage + Flutter Copy as new; Messaging/Gateway ITs; compose live still open |
 | P2.13 | **done** | live entitlements for User cosmetics + GIF avatar; `TestComposePremiumCosmetics_live` + Flutter SUB-06 (#26) |
 | P2.14 | **done** | BT-07: `TestComposeBotsAutocomplete_live` + Flutter `bots_autocomplete_e2e_live_test`; portal command catalog (#30) |
+| P2.2 | **product done** | RespondToLfpStory → NATS → DecideLfpRequest party queue + Notification Accept/Decline + Flutter LFP card (#35); compose/Flutter live IT still open |
 | P2.* / P3.* (rest) | **deferred** | roadmap / soft-launch+ |
 
 ---
@@ -152,7 +153,7 @@ Effort: **S** ≤0.5d · **M** 1–2d · **L** 3–5d · **XL** >1w (инфра/
 | # | Фича / путь | Слой | IDs | Effort | Product dep |
 |---|-------------|------|-----|--------|-------------|
 | P2.1 | Space MM queue isolation | B+C | MM-08 | L | roadmap П.1 |
-| P2.2 | LFP story → party | B+C | ST-04 | L | П.3 |
+| P2.2 | LFP story → party | B+C | ST-04 | L | **product done** (#35); compose/Flutter live IT open |
 | P2.3 | Game request + admin approve | B + Admin | GC-02/03 | L | **product done** (#19); compose/Flutter live IT open |
 | P2.4 | Twitch/YouTube/DNS verification live | B+C | VR-02/03 | XL | **product done** (#25); compose/Flutter live IT open |
 | P2.5 | Quiet hours / granular notif | B+C | NT-04 | L | **product done** — GetQuietHours + Flutter sync; voice join push assert; live IT open |
