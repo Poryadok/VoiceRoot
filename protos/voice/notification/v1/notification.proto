@@ -14,6 +14,7 @@ service NotificationService {
   rpc GetNotificationSettings(GetNotificationSettingsRequest) returns (GetNotificationSettingsResponse);
   rpc UpdateNotificationSettings(UpdateNotificationSettingsRequest) returns (UpdateNotificationSettingsResponse);
 
+  rpc GetQuietHours(GetQuietHoursRequest) returns (GetQuietHoursResponse);
   rpc SetQuietHours(SetQuietHoursRequest) returns (SetQuietHoursResponse);
 
   rpc SendNotification(SendNotificationRequest) returns (SendNotificationResponse);
@@ -96,6 +97,16 @@ message NotificationSettings {
   optional NotificationScopeType scope_type_enum = 8;
 }
 
+message GetQuietHoursRequest {}
+
+message QuietHours {
+  bool enabled = 1;
+  string start_time = 2;
+  string end_time = 3;
+  string timezone = 4;
+  bool override_mentions = 5;
+}
+
 message SetQuietHoursRequest {
   bool enabled = 1;
   string start_time = 2;
@@ -137,6 +148,9 @@ message GetNotificationSettingsResponse {
 }
 message UpdateNotificationSettingsResponse {
   NotificationSettings notification_settings = 1;
+}
+message GetQuietHoursResponse {
+  QuietHours quiet_hours = 1;
 }
 message SetQuietHoursResponse {}
 message SendNotificationResponse {}

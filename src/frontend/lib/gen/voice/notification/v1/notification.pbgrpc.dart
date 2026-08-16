@@ -65,6 +65,13 @@ class NotificationServiceClient extends $grpc.Client {
         options: options);
   }
 
+  $grpc.ResponseFuture<$0.GetQuietHoursResponse> getQuietHours(
+    $0.GetQuietHoursRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getQuietHours, request, options: options);
+  }
+
   $grpc.ResponseFuture<$0.SetQuietHoursResponse> setQuietHours(
     $0.SetQuietHoursRequest request, {
     $grpc.CallOptions? options,
@@ -117,6 +124,11 @@ class NotificationServiceClient extends $grpc.Client {
       '/voice.notification.v1.NotificationService/UpdateNotificationSettings',
       ($0.UpdateNotificationSettingsRequest value) => value.writeToBuffer(),
       $0.UpdateNotificationSettingsResponse.fromBuffer);
+  static final _$getQuietHours =
+      $grpc.ClientMethod<$0.GetQuietHoursRequest, $0.GetQuietHoursResponse>(
+          '/voice.notification.v1.NotificationService/GetQuietHours',
+          ($0.GetQuietHoursRequest value) => value.writeToBuffer(),
+          $0.GetQuietHoursResponse.fromBuffer);
   static final _$setQuietHours =
       $grpc.ClientMethod<$0.SetQuietHoursRequest, $0.SetQuietHoursResponse>(
           '/voice.notification.v1.NotificationService/SetQuietHours',
@@ -181,6 +193,15 @@ abstract class NotificationServiceBase extends $grpc.Service {
             $0.UpdateNotificationSettingsRequest.fromBuffer(value),
         ($0.UpdateNotificationSettingsResponse value) =>
             value.writeToBuffer()));
+    $addMethod(
+        $grpc.ServiceMethod<$0.GetQuietHoursRequest, $0.GetQuietHoursResponse>(
+            'GetQuietHours',
+            getQuietHours_Pre,
+            false,
+            false,
+            ($core.List<$core.int> value) =>
+                $0.GetQuietHoursRequest.fromBuffer(value),
+            ($0.GetQuietHoursResponse value) => value.writeToBuffer()));
     $addMethod(
         $grpc.ServiceMethod<$0.SetQuietHoursRequest, $0.SetQuietHoursResponse>(
             'SetQuietHours',
@@ -255,6 +276,15 @@ abstract class NotificationServiceBase extends $grpc.Service {
   $async.Future<$0.UpdateNotificationSettingsResponse>
       updateNotificationSettings(
           $grpc.ServiceCall call, $0.UpdateNotificationSettingsRequest request);
+
+  $async.Future<$0.GetQuietHoursResponse> getQuietHours_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.GetQuietHoursRequest> $request) async {
+    return getQuietHours($call, await $request);
+  }
+
+  $async.Future<$0.GetQuietHoursResponse> getQuietHours(
+      $grpc.ServiceCall call, $0.GetQuietHoursRequest request);
 
   $async.Future<$0.SetQuietHoursResponse> setQuietHours_Pre(
       $grpc.ServiceCall $call,

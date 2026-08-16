@@ -722,6 +722,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatMessageForward => 'Переслать';
 
   @override
+  String get chatMessageCopyAsNew => 'Копировать как новое';
+
+  @override
   String get chatMessageReply => 'Ответить';
 
   @override
@@ -767,6 +770,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatForwardTitle => 'Переслать в';
 
   @override
+  String get chatCopyAsNewTitle => 'Копировать как новое в';
+
+  @override
   String get chatForwardSearchHint => 'Поиск чатов';
 
   @override
@@ -786,6 +792,9 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get chatForwardSuccess => 'Сообщение переслано';
+
+  @override
+  String get chatCopyAsNewSuccess => 'Сообщение скопировано';
 
   @override
   String chatForwardError(String message) {

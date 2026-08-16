@@ -719,6 +719,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatMessageForward => 'Forward';
 
   @override
+  String get chatMessageCopyAsNew => 'Copy as new';
+
+  @override
   String get chatMessageReply => 'Reply';
 
   @override
@@ -762,6 +765,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatForwardTitle => 'Forward to';
 
   @override
+  String get chatCopyAsNewTitle => 'Copy as new to';
+
+  @override
   String get chatForwardSearchHint => 'Search chats';
 
   @override
@@ -780,6 +786,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get chatForwardSuccess => 'Message forwarded';
+
+  @override
+  String get chatCopyAsNewSuccess => 'Message copied';
 
   @override
   String chatForwardError(String message) {
