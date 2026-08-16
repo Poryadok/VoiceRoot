@@ -131,13 +131,26 @@ const CreateGameRequest$json = {
   '2': [
     {'1': 'name', '3': 1, '4': 1, '5': 9, '10': 'name'},
     {'1': 'config_json', '3': 2, '4': 1, '5': 9, '10': 'configJson'},
+    {
+      '1': 'icon_url',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'iconUrl',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_icon_url'},
   ],
 };
 
 /// Descriptor for `CreateGameRequest`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List createGameRequestDescriptor = $convert.base64Decode(
     'ChFDcmVhdGVHYW1lUmVxdWVzdBISCgRuYW1lGAEgASgJUgRuYW1lEh8KC2NvbmZpZ19qc29uGA'
-    'IgASgJUgpjb25maWdKc29u');
+    'IgASgJUgpjb25maWdKc29uEh4KCGljb25fdXJsGAMgASgJSABSB2ljb25VcmyIAQFCCwoJX2lj'
+    'b25fdXJs');
 
 @$core.Deprecated('Use updateGameRequestDescriptor instead')
 const UpdateGameRequest$json = {
@@ -181,6 +194,168 @@ const SearchGamesRequest$json = {
 /// Descriptor for `SearchGamesRequest`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List searchGamesRequestDescriptor = $convert
     .base64Decode('ChJTZWFyY2hHYW1lc1JlcXVlc3QSFAoFcXVlcnkYASABKAlSBXF1ZXJ5');
+
+@$core.Deprecated('Use submitGameRequestRequestDescriptor instead')
+const SubmitGameRequestRequest$json = {
+  '1': 'SubmitGameRequestRequest',
+  '2': [
+    {'1': 'name', '3': 1, '4': 1, '5': 9, '10': 'name'},
+    {'1': 'config_json', '3': 2, '4': 1, '5': 9, '10': 'configJson'},
+    {
+      '1': 'icon_url',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'iconUrl',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_icon_url'},
+  ],
+};
+
+/// Descriptor for `SubmitGameRequestRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List submitGameRequestRequestDescriptor = $convert.base64Decode(
+    'ChhTdWJtaXRHYW1lUmVxdWVzdFJlcXVlc3QSEgoEbmFtZRgBIAEoCVIEbmFtZRIfCgtjb25maW'
+    'dfanNvbhgCIAEoCVIKY29uZmlnSnNvbhIeCghpY29uX3VybBgDIAEoCUgAUgdpY29uVXJsiAEB'
+    'QgsKCV9pY29uX3VybA==');
+
+@$core.Deprecated('Use submitGameRequestResponseDescriptor instead')
+const SubmitGameRequestResponse$json = {
+  '1': 'SubmitGameRequestResponse',
+  '2': [
+    {
+      '1': 'game',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.matchmaking.v1.Game',
+      '10': 'game'
+    },
+  ],
+};
+
+/// Descriptor for `SubmitGameRequestResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List submitGameRequestResponseDescriptor =
+    $convert.base64Decode(
+        'ChlTdWJtaXRHYW1lUmVxdWVzdFJlc3BvbnNlEi4KBGdhbWUYASABKAsyGi52b2ljZS5tYXRjaG'
+        '1ha2luZy52MS5HYW1lUgRnYW1l');
+
+@$core.Deprecated('Use listGameRequestsRequestDescriptor instead')
+const ListGameRequestsRequest$json = {
+  '1': 'ListGameRequestsRequest',
+  '2': [
+    {
+      '1': 'page',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.CursorPageRequest',
+      '10': 'page'
+    },
+    {'1': 'status', '3': 2, '4': 1, '5': 9, '9': 0, '10': 'status', '17': true},
+  ],
+  '8': [
+    {'1': '_status'},
+  ],
+};
+
+/// Descriptor for `ListGameRequestsRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List listGameRequestsRequestDescriptor = $convert.base64Decode(
+    'ChdMaXN0R2FtZVJlcXVlc3RzUmVxdWVzdBI2CgRwYWdlGAEgASgLMiIudm9pY2UuY29tbW9uLn'
+    'YxLkN1cnNvclBhZ2VSZXF1ZXN0UgRwYWdlEhsKBnN0YXR1cxgCIAEoCUgAUgZzdGF0dXOIAQFC'
+    'CQoHX3N0YXR1cw==');
+
+@$core.Deprecated('Use listGameRequestsResponseDescriptor instead')
+const ListGameRequestsResponse$json = {
+  '1': 'ListGameRequestsResponse',
+  '2': [
+    {
+      '1': 'game_list',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.matchmaking.v1.GameList',
+      '10': 'gameList'
+    },
+  ],
+};
+
+/// Descriptor for `ListGameRequestsResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List listGameRequestsResponseDescriptor =
+    $convert.base64Decode(
+        'ChhMaXN0R2FtZVJlcXVlc3RzUmVzcG9uc2USOwoJZ2FtZV9saXN0GAEgASgLMh4udm9pY2UubW'
+        'F0Y2htYWtpbmcudjEuR2FtZUxpc3RSCGdhbWVMaXN0');
+
+@$core.Deprecated('Use approveGameRequestRequestDescriptor instead')
+const ApproveGameRequestRequest$json = {
+  '1': 'ApproveGameRequestRequest',
+  '2': [
+    {'1': 'game_id', '3': 1, '4': 1, '5': 9, '10': 'gameId'},
+  ],
+};
+
+/// Descriptor for `ApproveGameRequestRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List approveGameRequestRequestDescriptor =
+    $convert.base64Decode(
+        'ChlBcHByb3ZlR2FtZVJlcXVlc3RSZXF1ZXN0EhcKB2dhbWVfaWQYASABKAlSBmdhbWVJZA==');
+
+@$core.Deprecated('Use approveGameRequestResponseDescriptor instead')
+const ApproveGameRequestResponse$json = {
+  '1': 'ApproveGameRequestResponse',
+  '2': [
+    {
+      '1': 'game',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.matchmaking.v1.Game',
+      '10': 'game'
+    },
+  ],
+};
+
+/// Descriptor for `ApproveGameRequestResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List approveGameRequestResponseDescriptor =
+    $convert.base64Decode(
+        'ChpBcHByb3ZlR2FtZVJlcXVlc3RSZXNwb25zZRIuCgRnYW1lGAEgASgLMhoudm9pY2UubWF0Y2'
+        'htYWtpbmcudjEuR2FtZVIEZ2FtZQ==');
+
+@$core.Deprecated('Use rejectGameRequestRequestDescriptor instead')
+const RejectGameRequestRequest$json = {
+  '1': 'RejectGameRequestRequest',
+  '2': [
+    {'1': 'game_id', '3': 1, '4': 1, '5': 9, '10': 'gameId'},
+  ],
+};
+
+/// Descriptor for `RejectGameRequestRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List rejectGameRequestRequestDescriptor =
+    $convert.base64Decode(
+        'ChhSZWplY3RHYW1lUmVxdWVzdFJlcXVlc3QSFwoHZ2FtZV9pZBgBIAEoCVIGZ2FtZUlk');
+
+@$core.Deprecated('Use rejectGameRequestResponseDescriptor instead')
+const RejectGameRequestResponse$json = {
+  '1': 'RejectGameRequestResponse',
+  '2': [
+    {
+      '1': 'game',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.matchmaking.v1.Game',
+      '10': 'game'
+    },
+  ],
+};
+
+/// Descriptor for `RejectGameRequestResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List rejectGameRequestResponseDescriptor =
+    $convert.base64Decode(
+        'ChlSZWplY3RHYW1lUmVxdWVzdFJlc3BvbnNlEi4KBGdhbWUYASABKAsyGi52b2ljZS5tYXRjaG'
+        '1ha2luZy52MS5HYW1lUgRnYW1l');
 
 @$core.Deprecated('Use startSearchRequestDescriptor instead')
 const StartSearchRequest$json = {

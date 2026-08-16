@@ -1936,6 +1936,33 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get gameCatalogAddGame => 'Add game';
+
+  @override
+  String get addGameTitle => 'Add game';
+
+  @override
+  String get addGameNameLabel => 'Game name';
+
+  @override
+  String get addGameModeLabel => 'Mode name';
+
+  @override
+  String get addGameModeSlotsLabel => 'Players in match';
+
+  @override
+  String get addGameSubmit => 'Submit for moderation';
+
+  @override
+  String get addGameSubmitted => 'Submitted for moderation';
+
+  @override
+  String get addGameSubmitError => 'Could not submit game request';
+
+  @override
+  String get addGameSimilarHint => 'Similar games in catalog';
+
+  @override
   String get playerProfileTitle => 'Matchmaking profile';
 
   @override

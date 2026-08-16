@@ -68,6 +68,35 @@ class MatchmakingServiceClient extends $grpc.Client {
     return $createUnaryCall(_$searchGames, request, options: options);
   }
 
+  /// User game-catalog requests (docs/features/game-catalog.md; roadmap П.4).
+  $grpc.ResponseFuture<$0.SubmitGameRequestResponse> submitGameRequest(
+    $0.SubmitGameRequestRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$submitGameRequest, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.ListGameRequestsResponse> listGameRequests(
+    $0.ListGameRequestsRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$listGameRequests, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.ApproveGameRequestResponse> approveGameRequest(
+    $0.ApproveGameRequestRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$approveGameRequest, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.RejectGameRequestResponse> rejectGameRequest(
+    $0.RejectGameRequestRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$rejectGameRequest, request, options: options);
+  }
+
   $grpc.ResponseFuture<$0.StartSearchResponse> startSearch(
     $0.StartSearchRequest request, {
     $grpc.CallOptions? options,
@@ -223,6 +252,26 @@ class MatchmakingServiceClient extends $grpc.Client {
           '/voice.matchmaking.v1.MatchmakingService/SearchGames',
           ($0.SearchGamesRequest value) => value.writeToBuffer(),
           $0.SearchGamesResponse.fromBuffer);
+  static final _$submitGameRequest = $grpc.ClientMethod<
+          $0.SubmitGameRequestRequest, $0.SubmitGameRequestResponse>(
+      '/voice.matchmaking.v1.MatchmakingService/SubmitGameRequest',
+      ($0.SubmitGameRequestRequest value) => value.writeToBuffer(),
+      $0.SubmitGameRequestResponse.fromBuffer);
+  static final _$listGameRequests = $grpc.ClientMethod<
+          $0.ListGameRequestsRequest, $0.ListGameRequestsResponse>(
+      '/voice.matchmaking.v1.MatchmakingService/ListGameRequests',
+      ($0.ListGameRequestsRequest value) => value.writeToBuffer(),
+      $0.ListGameRequestsResponse.fromBuffer);
+  static final _$approveGameRequest = $grpc.ClientMethod<
+          $0.ApproveGameRequestRequest, $0.ApproveGameRequestResponse>(
+      '/voice.matchmaking.v1.MatchmakingService/ApproveGameRequest',
+      ($0.ApproveGameRequestRequest value) => value.writeToBuffer(),
+      $0.ApproveGameRequestResponse.fromBuffer);
+  static final _$rejectGameRequest = $grpc.ClientMethod<
+          $0.RejectGameRequestRequest, $0.RejectGameRequestResponse>(
+      '/voice.matchmaking.v1.MatchmakingService/RejectGameRequest',
+      ($0.RejectGameRequestRequest value) => value.writeToBuffer(),
+      $0.RejectGameRequestResponse.fromBuffer);
   static final _$startSearch =
       $grpc.ClientMethod<$0.StartSearchRequest, $0.StartSearchResponse>(
           '/voice.matchmaking.v1.MatchmakingService/StartSearch',
@@ -357,6 +406,42 @@ abstract class MatchmakingServiceBase extends $grpc.Service {
             ($core.List<$core.int> value) =>
                 $0.SearchGamesRequest.fromBuffer(value),
             ($0.SearchGamesResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.SubmitGameRequestRequest,
+            $0.SubmitGameRequestResponse>(
+        'SubmitGameRequest',
+        submitGameRequest_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.SubmitGameRequestRequest.fromBuffer(value),
+        ($0.SubmitGameRequestResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ListGameRequestsRequest,
+            $0.ListGameRequestsResponse>(
+        'ListGameRequests',
+        listGameRequests_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ListGameRequestsRequest.fromBuffer(value),
+        ($0.ListGameRequestsResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ApproveGameRequestRequest,
+            $0.ApproveGameRequestResponse>(
+        'ApproveGameRequest',
+        approveGameRequest_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ApproveGameRequestRequest.fromBuffer(value),
+        ($0.ApproveGameRequestResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.RejectGameRequestRequest,
+            $0.RejectGameRequestResponse>(
+        'RejectGameRequest',
+        rejectGameRequest_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.RejectGameRequestRequest.fromBuffer(value),
+        ($0.RejectGameRequestResponse value) => value.writeToBuffer()));
     $addMethod(
         $grpc.ServiceMethod<$0.StartSearchRequest, $0.StartSearchResponse>(
             'StartSearch',
@@ -554,6 +639,42 @@ abstract class MatchmakingServiceBase extends $grpc.Service {
 
   $async.Future<$0.SearchGamesResponse> searchGames(
       $grpc.ServiceCall call, $0.SearchGamesRequest request);
+
+  $async.Future<$0.SubmitGameRequestResponse> submitGameRequest_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.SubmitGameRequestRequest> $request) async {
+    return submitGameRequest($call, await $request);
+  }
+
+  $async.Future<$0.SubmitGameRequestResponse> submitGameRequest(
+      $grpc.ServiceCall call, $0.SubmitGameRequestRequest request);
+
+  $async.Future<$0.ListGameRequestsResponse> listGameRequests_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.ListGameRequestsRequest> $request) async {
+    return listGameRequests($call, await $request);
+  }
+
+  $async.Future<$0.ListGameRequestsResponse> listGameRequests(
+      $grpc.ServiceCall call, $0.ListGameRequestsRequest request);
+
+  $async.Future<$0.ApproveGameRequestResponse> approveGameRequest_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.ApproveGameRequestRequest> $request) async {
+    return approveGameRequest($call, await $request);
+  }
+
+  $async.Future<$0.ApproveGameRequestResponse> approveGameRequest(
+      $grpc.ServiceCall call, $0.ApproveGameRequestRequest request);
+
+  $async.Future<$0.RejectGameRequestResponse> rejectGameRequest_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.RejectGameRequestRequest> $request) async {
+    return rejectGameRequest($call, await $request);
+  }
+
+  $async.Future<$0.RejectGameRequestResponse> rejectGameRequest(
+      $grpc.ServiceCall call, $0.RejectGameRequestRequest request);
 
   $async.Future<$0.StartSearchResponse> startSearch_Pre($grpc.ServiceCall $call,
       $async.Future<$0.StartSearchRequest> $request) async {

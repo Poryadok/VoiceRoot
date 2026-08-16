@@ -29,6 +29,13 @@ func ctxWithProfile(profileID uuid.UUID) context.Context {
 	return metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-voice-profile-id", profileID.String()))
 }
 
+func ctxWithStaff(profileID uuid.UUID) context.Context {
+	return metadata.NewIncomingContext(context.Background(), metadata.Pairs(
+		"x-voice-profile-id", profileID.String(),
+		"x-voice-roles", "staff",
+	))
+}
+
 func validConfigJSON() string {
 	return config.MustMarshal(config.GameConfig{
 		Regions: []string{"eu"},
@@ -57,7 +64,7 @@ func TestSearchGames_StoreUnavailable(t *testing.T) {
 func TestCreateGame_EmptyNameRejected(t *testing.T) {
 	t.Parallel()
 	srv := &MatchmakingGRPC{Games: &store.GameStore{}}
-	_, err := srv.CreateGame(ctxWithProfile(uuid.New()), &matchmakingv1.CreateGameRequest{
+	_, err := srv.CreateGame(ctxWithStaff(uuid.New()), &matchmakingv1.CreateGameRequest{
 		Name:       "  ",
 		ConfigJson: validConfigJSON(),
 	})
@@ -90,7 +97,7 @@ func TestUpdateGame_NotFound(t *testing.T) {
 	pool := startDB(t, ctx)
 	srv := &MatchmakingGRPC{Games: &store.GameStore{Pool: pool}}
 	name := "missing"
-	_, err := srv.UpdateGame(ctxWithProfile(uuid.New()), &matchmakingv1.UpdateGameRequest{
+	_, err := srv.UpdateGame(ctxWithStaff(uuid.New()), &matchmakingv1.UpdateGameRequest{
 		GameId: uuid.New().String(),
 		Name:   &name,
 	})
@@ -104,13 +111,13 @@ func TestUpdateGame_InvalidConfigRejected(t *testing.T) {
 	ctx := context.Background()
 	pool := startDB(t, ctx)
 	srv := &MatchmakingGRPC{Games: &store.GameStore{Pool: pool}}
-	created, err := srv.CreateGame(ctxWithProfile(uuid.New()), &matchmakingv1.CreateGameRequest{
+	created, err := srv.CreateGame(ctxWithStaff(uuid.New()), &matchmakingv1.CreateGameRequest{
 		Name:       "Cfg Test",
 		ConfigJson: validConfigJSON(),
 	})
 	require.NoError(t, err)
 	bad := `{"regions":[],"modes":[]}`
-	_, err = srv.UpdateGame(ctxWithProfile(uuid.New()), &matchmakingv1.UpdateGameRequest{
+	_, err = srv.UpdateGame(ctxWithStaff(uuid.New()), &matchmakingv1.UpdateGameRequest{
 		GameId:     created.GetGame().GetId(),
 		ConfigJson: &bad,
 	})
@@ -168,7 +175,7 @@ func TestCreateGame_InvalidConfigRejected(t *testing.T) {
 	pool := startDB(t, ctx)
 	srv := &MatchmakingGRPC{Games: &store.GameStore{Pool: pool}}
 
-	_, err := srv.CreateGame(ctxWithProfile(uuid.New()), &matchmakingv1.CreateGameRequest{
+	_, err := srv.CreateGame(ctxWithStaff(uuid.New()), &matchmakingv1.CreateGameRequest{
 		Name:       "Bad",
 		ConfigJson: `{"regions":[],"modes":[]}`,
 	})
@@ -183,7 +190,7 @@ func TestCreateGame_PersistsRolesAndRanks(t *testing.T) {
 	pool := startDB(t, ctx)
 	srv := &MatchmakingGRPC{Games: &store.GameStore{Pool: pool}}
 
-	resp, err := srv.CreateGame(ctxWithProfile(uuid.New()), &matchmakingv1.CreateGameRequest{
+	resp, err := srv.CreateGame(ctxWithStaff(uuid.New()), &matchmakingv1.CreateGameRequest{
 		Name:       "Custom Arena",
 		ConfigJson: validConfigJSON(),
 	})
@@ -201,19 +208,29 @@ func TestUpdateGame_ChangesName(t *testing.T) {
 	srv := &MatchmakingGRPC{Games: &store.GameStore{Pool: pool}}
 	profile := uuid.New()
 
-	created, err := srv.CreateGame(ctxWithProfile(profile), &matchmakingv1.CreateGameRequest{
+	created, err := srv.CreateGame(ctxWithStaff(profile), &matchmakingv1.CreateGameRequest{
 		Name:       "Rename Me",
 		ConfigJson: validConfigJSON(),
 	})
 	require.NoError(t, err)
 
 	newName := "Renamed Arena"
-	resp, err := srv.UpdateGame(ctxWithProfile(profile), &matchmakingv1.UpdateGameRequest{
+	resp, err := srv.UpdateGame(ctxWithStaff(profile), &matchmakingv1.UpdateGameRequest{
 		GameId: created.GetGame().GetId(),
 		Name:   &newName,
 	})
 	require.NoError(t, err)
 	require.Equal(t, "Renamed Arena", resp.GetGame().GetName())
+}
+
+func TestCreateGame_NonStaffDenied(t *testing.T) {
+	t.Parallel()
+	srv := &MatchmakingGRPC{Games: &store.GameStore{}}
+	_, err := srv.CreateGame(ctxWithProfile(uuid.New()), &matchmakingv1.CreateGameRequest{
+		Name:       "X",
+		ConfigJson: validConfigJSON(),
+	})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
 func TestSearchGames_FindsDota(t *testing.T) {

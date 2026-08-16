@@ -155,14 +155,15 @@ func TestUpsertPlayerGameEntry_ArchivedGameNotFound(t *testing.T) {
 	ctx := context.Background()
 	srv, profileID := newProfileTestServer(t, ctx)
 
-	created, err := srv.CreateGame(ctxWithProfile(profileID), &matchmakingv1.CreateGameRequest{
+	staff := ctxWithStaff(profileID)
+	created, err := srv.CreateGame(staff, &matchmakingv1.CreateGameRequest{
 		Name:       "Archive Test",
 		ConfigJson: validConfigJSON(),
 	})
 	require.NoError(t, err)
 
 	archived := store.StatusArchived
-	_, err = srv.UpdateGame(ctxWithProfile(profileID), &matchmakingv1.UpdateGameRequest{
+	_, err = srv.UpdateGame(staff, &matchmakingv1.UpdateGameRequest{
 		GameId: created.GetGame().GetId(),
 		Status: &archived,
 	})

@@ -16,10 +16,13 @@ import (
 )
 
 var ErrGameNotFound = errors.New("game not found")
+var ErrGameNameConflict = errors.New("game name already exists")
 
 const (
-	StatusActive   = "active"
-	StatusArchived = "archived"
+	StatusActive            = "active"
+	StatusArchived          = "archived"
+	StatusPendingModeration = "pending_moderation"
+	StatusRejected          = "rejected"
 )
 
 type Game struct {
@@ -51,13 +54,21 @@ type ListGamesResult struct {
 }
 
 func (s *GameStore) Create(ctx context.Context, name string, cfg config.GameConfig, createdBy uuid.UUID) (Game, error) {
+	return s.CreateWithStatus(ctx, name, cfg, createdBy, StatusActive, nil)
+}
+
+func (s *GameStore) CreateWithStatus(ctx context.Context, name string, cfg config.GameConfig, createdBy uuid.UUID, status string, iconURL *string) (Game, error) {
 	cfgRaw := config.MustMarshal(cfg)
 	row := s.Pool.QueryRow(ctx, `
-		INSERT INTO games (name, config, status, created_by)
-		VALUES ($1, $2::jsonb, $3, $4)
+		INSERT INTO games (name, config, status, created_by, icon_url)
+		VALUES ($1, $2::jsonb, $3, $4, $5)
 		RETURNING id, name, icon_url, external_id, config, status, created_by, created_at, updated_at
-	`, strings.TrimSpace(name), cfgRaw, StatusActive, createdBy)
-	return scanGame(row)
+	`, strings.TrimSpace(name), cfgRaw, status, createdBy, iconURL)
+	g, err := scanGame(row)
+	if err != nil && isUniqueViolation(err) {
+		return Game{}, ErrGameNameConflict
+	}
+	return g, err
 }
 
 func (s *GameStore) Get(ctx context.Context, id uuid.UUID) (Game, error) {
@@ -189,6 +200,26 @@ func (s *GameStore) Update(ctx context.Context, id uuid.UUID, p UpdateGameParams
 	g, err := scanGame(row)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Game{}, ErrGameNotFound
+	}
+	if err != nil && isUniqueViolation(err) {
+		return Game{}, ErrGameNameConflict
+	}
+	return g, err
+}
+
+// TransitionStatus updates status only when current status matches fromStatus.
+func (s *GameStore) TransitionStatus(ctx context.Context, id uuid.UUID, fromStatus, toStatus string) (Game, error) {
+	row := s.Pool.QueryRow(ctx, `
+		UPDATE games SET status = $2, updated_at = now()
+		WHERE id = $1 AND status = $3
+		RETURNING id, name, icon_url, external_id, config, status, created_by, created_at, updated_at
+	`, id, toStatus, fromStatus)
+	g, err := scanGame(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Game{}, ErrGameNotFound
+	}
+	if err != nil && isUniqueViolation(err) {
+		return Game{}, ErrGameNameConflict
 	}
 	return g, err
 }
