@@ -127,6 +127,7 @@ full_flutter:
   - test/bots_slash_e2e_live_test.dart
   - test/bots_ephemeral_live_test.dart
   - test/bots_botc_live_test.dart
+  - test/bots_autocomplete_e2e_live_test.dart
   - test/stories_e2e_live_test.dart
   - test/deeplink_invite_e2e_live_test.dart
   - test/onboarding_e2e_live_test.dart

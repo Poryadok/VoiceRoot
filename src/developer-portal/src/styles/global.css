@@ -74,3 +74,20 @@ button {
 code {
   word-break: break-all;
 }
+
+.catalog {
+  border: 1px solid #3a3f4b;
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.command-catalog-list {
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.command-catalog-list ul {
+  margin: 0.25rem 0 0.75rem;
+  padding-left: 1.25rem;
+  color: #9aa0a6;
+}
