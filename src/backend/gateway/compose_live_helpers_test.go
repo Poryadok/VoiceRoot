@@ -1807,3 +1807,182 @@ func createComposeSpaceChatStatus(t *testing.T, client *http.Client, base, acces
 	defer resp.Body.Close()
 	return resp.StatusCode
 }
+
+// createComposeSpaceChannel creates a CHAT_TYPE_CHANNEL and returns its linked chat id (FW-02 / RL / mentions).
+func createComposeSpaceChannel(t *testing.T, client *http.Client, base, accessToken, spaceID, name string) string {
+	t.Helper()
+	payload, err := json.Marshal(map[string]string{
+		"type": "CHAT_TYPE_CHANNEL",
+		"name": name,
+	})
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/spaces/"+spaceID+"/chats", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "POST channel body=%s", string(body))
+
+	var parsed struct {
+		SpaceTreeNode struct {
+			ID           string `json:"id"`
+			LinkedChatID string `json:"linked_chat_id"`
+		} `json:"space_tree_node"`
+	}
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	if parsed.SpaceTreeNode.LinkedChatID != "" {
+		return parsed.SpaceTreeNode.LinkedChatID
+	}
+	tree := getComposeSpaceTree(t, client, base, accessToken, spaceID)
+	for _, node := range tree.Nodes {
+		if node.ID == parsed.SpaceTreeNode.ID && node.LinkedChatID != "" {
+			return node.LinkedChatID
+		}
+	}
+	t.Fatalf("channel node missing linked_chat_id: %s", string(body))
+	return ""
+}
+
+func composeRoleIDByName(t *testing.T, client *http.Client, base, accessToken, spaceID, name string) string {
+	t.Helper()
+	for _, r := range listComposeSpaceRoles(t, client, base, accessToken, spaceID) {
+		if r.Name == name {
+			require.NotEmpty(t, r.ID)
+			return r.ID
+		}
+	}
+	t.Fatalf("role %q not found in space %s", name, spaceID)
+	return ""
+}
+
+func setComposeChatOverride(t *testing.T, client *http.Client, base, accessToken, spaceID, chatID, roleID string, denyMask uint64) {
+	t.Helper()
+	payload, err := json.Marshal(map[string]any{
+		"space_id":  spaceID,
+		"chat":      map[string]string{"id": chatID},
+		"role_id":   roleID,
+		"deny_mask": denyMask,
+	})
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/roles/chat-overrides", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "POST chat-overrides body=%s", string(body))
+}
+
+func setComposeVoiceOverride(t *testing.T, client *http.Client, base, accessToken, spaceID, voiceRoomID, roleID string, denyMask uint64) {
+	t.Helper()
+	payload, err := json.Marshal(map[string]any{
+		"space_id":      spaceID,
+		"voice_room_id": voiceRoomID,
+		"role_id":       roleID,
+		"deny_mask":     denyMask,
+	})
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/roles/voice-overrides", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "POST voice-overrides body=%s", string(body))
+}
+
+func sendComposeMessageStatus(t *testing.T, client *http.Client, base, accessToken, chatID, content, mentionsJSON string) int {
+	t.Helper()
+	if mentionsJSON == "" {
+		mentionsJSON = "[]"
+	}
+	payload, err := json.Marshal(map[string]any{
+		"chat":              map[string]string{"id": chatID},
+		"content":           content,
+		"mentions_json":     mentionsJSON,
+		"client_message_id": composeClientMessageID(),
+	})
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/messages/send", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	return resp.StatusCode
+}
+
+func forwardComposeMessageStatus(t *testing.T, client *http.Client, base, accessToken, sourceMessageID, targetChatID, commentary string) (int, []byte) {
+	t.Helper()
+	bodyMap := map[string]any{
+		"source_message_id": sourceMessageID,
+		"target_chat":       map[string]string{"id": targetChatID},
+	}
+	if commentary != "" {
+		bodyMap["commentary"] = commentary
+	}
+	payload, err := json.Marshal(bodyMap)
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/messages/forward", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, raw
+}
+
+func joinComposeVoiceRoomStatus(t *testing.T, client *http.Client, base, accessToken, voiceRoomID, spaceID string) int {
+	t.Helper()
+	payload, err := json.Marshal(map[string]string{"space_id": spaceID})
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/voice/rooms/"+voiceRoomID+"/join", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	return resp.StatusCode
+}
+
+func composeExecPostgres(t *testing.T, database, query string) {
+	t.Helper()
+	root := repoRootFromTest(t)
+	cmd := exec.Command(
+		"docker", "compose", "exec", "-T", "postgres",
+		"psql", "-U", "voice", "-d", database, "-v", "ON_ERROR_STOP=1", "-c", query,
+	)
+	cmd.Dir = root
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("postgres exec failed (database=%s): %v\n%s", database, err, string(out))
+	}
+}
+
+// seedComposeSpaceMembersNearCap inserts filler members so free-tier cap (50) is reached (owner already counted).
+func seedComposeSpaceMembersNearCap(t *testing.T, spaceID string, totalMembers int) {
+	t.Helper()
+	if totalMembers < 1 {
+		t.Fatalf("totalMembers must be >= 1")
+	}
+	// Owner is already a member; add (totalMembers-1) filler profile UUIDs.
+	var b strings.Builder
+	b.WriteString("BEGIN;\n")
+	for i := 0; i < totalMembers-1; i++ {
+		fmt.Fprintf(&b, `INSERT INTO space_members (space_id, profile_id) VALUES ('%s', gen_random_uuid()) ON CONFLICT DO NOTHING;`+"\n", spaceID)
+	}
+	fmt.Fprintf(&b, `UPDATE spaces SET member_count = %d, updated_at = now() WHERE id = '%s';`+"\n", totalMembers, spaceID)
+	b.WriteString("COMMIT;\n")
+	composeExecPostgres(t, "space_db", b.String())
+}

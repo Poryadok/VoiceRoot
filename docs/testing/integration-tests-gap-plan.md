@@ -16,7 +16,7 @@
 
 ---
 
-## Progress (2026-08-16 Wave 1 product + sprint hygiene)
+## Progress (2026-08-16 Wave 1b WT-INTEGRATION)
 
 | Item | Status | Notes |
 |------|--------|-------|
@@ -31,18 +31,18 @@
 | P1.17 | **done** | Redis/memory analytics audit store + live Redis assert |
 | P1.18 | **done** | map `thumbnailR2Key`/`convertedR2Key`; live asserts key not HTTP previewUrl |
 | P1.19 | **done** | ClamAV live uses `.exe` + `application/x-msdownload` |
-| P1.6 | **enforce done** | Messaging `ForwardMessage` denies `allow_forward=false` (ITs); compose FW-04 live → WT-INTEGRATION |
 | P1.1 | **done** | auth `depends_on: nats` + convert negatives + `TestComposeConvertGuestNATS_live` |
-| P1.2 | **done** | server `guest_reminder_last_shown_at` + get/mark; Flutter cadence; Flutter live → WT-INTEGRATION optional |
+| P1.2 | **done** | server reminder + `TestComposeGuestReminder_live` + Flutter `guest_reminder_e2e_live_test` |
 | P1.3 | **done** | ListSessions/RevokeSession + `TestComposeAuthSessions_live` |
-| P1.5 | **product done** | Forward → channel `posted_as_chat` + commentary + send-perm on Forward (Messaging ITs); compose/Flutter → WT-INTEGRATION |
-| P1.7 | **product done** | E2E→plain deny + E2E→E2E preserves `is_e2e` (Messaging ITs); compose → WT-INTEGRATION |
-| P1.8 | **product done** | `SendMessage`/`ForwardMessage` → `HasChatPermission(TEXT_CHAT_SEND_MESSAGES)` (Messaging IT); compose/Flutter → WT-INTEGRATION |
-| P1.9 | **product done** | `@everyone`/`@here` + bare-content parse gated via `HasChatPermission` (Messaging ITs); compose → WT-INTEGRATION |
-| P1.10 | **product done** | Voice `ROLE_GRPC_ADDR` + `EnsureVoiceJoin` + room-override IT; compose/Flutter VOICE_JOIN deny → WT-INTEGRATION |
-| P1.11 | **partial** | `handleMatchDecline` party-aware + grpcsvc IT (PR #4); compose live → WT-INTEGRATION |
-| P1.14 | **product done** | compose `SPACE_GRPC_ADDR` + S2S/NATS Space Pro sync; member-cap without Seed; compose live join-51st → WT-INTEGRATION |
-| P1.15 | **product done** | `subscription.grace_reminder` D1/D3/D7 + Notification consumer stub; compose assert → WT-INTEGRATION |
+| P1.5 | **done** | `TestComposeForwardChannelCommentary_live` + Flutter channel+commentary |
+| P1.6 | **done** | `TestComposeForwardPrivacyDeny_live` + Flutter FW-04 deny |
+| P1.7 | **done** | Messaging ITs (E2E forward policy); compose not required |
+| P1.8 | **done** | `TestComposeRolesSendDeny_live` + Flutter SendMessage 403 |
+| P1.9 | **done** | `TestComposeMentionsEveryoneDeny_live` |
+| P1.10 | **done** | `TestComposeVoiceJoinDeny_live` + Flutter VOICE_JOIN deny |
+| P1.11 | **done** | `TestComposeMatchmakingCrossPartyDecline_live` |
+| P1.14 | **done** | `TestComposeSpaceProMemberCap_live` (seed filler + webhook join) |
+| P1.15 | **done** | `TestComposeSubscriptionGraceReminder_live` (D1 sweeper assert) |
 | P2.* / P3.* | **deferred** | roadmap / soft-launch+ |
 
 ---
@@ -84,7 +84,7 @@ Effort: **S** ≤0.5d · **M** 1–2d · **L** 3–5d · **XL** >1w (инфра/
 | # | Кейс | Слой | IDs | Effort | Status | Notes |
 |---|------|------|-----|--------|--------|-------|
 | P1.1 | Convert-guest negative + NATS event на compose | B+E | AU-05/14 | M | **done** | auth nats depends_on + Maven negatives + `TestComposeConvertGuestNATS_live` |
-| P1.2 | Guest reminder cadence (2nd login ≤1/day) | C | AU-07 | M | **done** | server timestamp + Flutter; optional Flutter live → WT-INTEGRATION |
+| P1.2 | Guest reminder cadence (2nd login ≤1/day) | C | AU-07 | M | **done** | `TestComposeGuestReminder_live` + `guest_reminder_e2e_live_test` |
 | P1.3 | Active sessions list/revoke | B | AU-12 | M | **done** | List/Revoke + `TestComposeAuthSessions_live` |
 | P1.4 | Friend-request denied by `allow_friend_requests` | B+C | FR-03, PV-04 | M | **done** | Gateway + Flutter + Social IT |
 
@@ -92,18 +92,18 @@ Effort: **S** ≤0.5d · **M** 1–2d · **L** 3–5d · **XL** >1w (инфра/
 
 | # | Кейс | Слой | IDs | Effort | Status | Notes |
 |---|------|------|-----|--------|--------|-------|
-| P1.5 | Forward to channel + commentary | B+C | FW-02 | M | **product done** | Messaging ITs; compose/Flutter → WT-INTEGRATION |
-| P1.6 | Forward privacy forbid | B | FW-04 | S | **enforce done** | Messaging IT; compose live → WT-INTEGRATION |
-| P1.7 | E2E forward policy (no ciphertext leak) | B | FW-06 | M | **product done** | Messaging ITs; compose → WT-INTEGRATION |
-| P1.8 | SendMessage respects `TEXT_CHAT_SEND_MESSAGES` deny | B+C | RL-02 | M | **product done** | `checkSpaceSendPermission` → `HasChatPermission`; compose/Flutter → WT-INTEGRATION |
-| P1.9 | @here / @everyone permission gate | B | TC-MSG-03 | M | **product done** | Messaging ITs + bare-content parse; compose → WT-INTEGRATION |
-| P1.10 | VOICE_JOIN deny live | B+C | RL-03 | M | **product done** | Voice Role wire + room-override IT; compose/Flutter → WT-INTEGRATION |
+| P1.5 | Forward to channel + commentary | B+C | FW-02 | M | **done** | `TestComposeForwardChannelCommentary_live` + Flutter channel+commentary |
+| P1.6 | Forward privacy forbid | B | FW-04 | S | **done** | `TestComposeForwardPrivacyDeny_live` + Flutter FW-04 |
+| P1.7 | E2E forward policy (no ciphertext leak) | B | FW-06 | M | **done** | Messaging ITs |
+| P1.8 | SendMessage respects `TEXT_CHAT_SEND_MESSAGES` deny | B+C | RL-02 | M | **done** | `TestComposeRolesSendDeny_live` + Flutter SendMessage 403 |
+| P1.9 | @here / @everyone permission gate | B | TC-MSG-03 | M | **done** | `TestComposeMentionsEveryoneDeny_live` |
+| P1.10 | VOICE_JOIN deny live | B+C | RL-03 | M | **done** | `TestComposeVoiceJoinDeny_live` + Flutter |
 
 ### 1.3 Matchmaking semantics
 
 | # | Кейс | Слой | IDs | Effort | Status | Notes |
 |---|------|------|-----|--------|--------|-------|
-| P1.11 | Cross-party decline: acceptors continue | B | MM-07 | M | **partial** | party-aware decline ITs (PR #4); compose live → WT-INTEGRATION |
+| P1.11 | Cross-party decline: acceptors continue | B | MM-07 | M | **done** | `TestComposeMatchmakingCrossPartyDecline_live` |
 | P1.12 | Flutter `matchmaking_rating_e2e_live_test` + skip rating | C | MM-05 | M | **done** | compose rating exists |
 | P1.13 | MM ban live compose | B | MM-06 | S | **done** | `TestComposeMatchmakingBan_live` |
 
@@ -111,8 +111,8 @@ Effort: **S** ≤0.5d · **M** 1–2d · **L** 3–5d · **XL** >1w (инфра/
 
 | # | Кейс | Слой | IDs | Effort | Status | Notes |
 |---|------|------|-----|--------|--------|-------|
-| P1.14 | Space Pro webhook → invite/member-cap | B | SP-11, SUB-03 | L | **product done** | S2S/NATS sync + compose addr; compose join live → WT-INTEGRATION |
-| P1.15 | Grace notifications stubs (event emitted) | B | SUB-04 | M | **product done** | event+notif stub; compose live → WT-INTEGRATION |
+| P1.14 | Space Pro webhook → invite/member-cap | B | SP-11, SUB-03 | L | **done** | `TestComposeSpaceProMemberCap_live` |
+| P1.15 | Grace notifications stubs (event emitted) | B | SUB-04 | M | **done** | `TestComposeSubscriptionGraceReminder_live` |
 
 ### 1.5 Analytics DoD
 
@@ -176,7 +176,7 @@ Effort: **S** ≤0.5d · **M** 1–2d · **L** 3–5d · **XL** >1w (инфра/
 ```text
 Sprint 0 (2–3d):  P0.1–P0.4  — CI truth + smoke Tier-0
 Sprint 1 (1w):    P1.4, P1.18–19, P1.16–17, P1.12–13  — privacy + analytics DoD + MM rating/ban + file test honesty
-Sprint 2 (1w):    product fixes then P1.5–11, P1.8, P1.14  — messaging/roles/MM decline/Space Pro **(product done; compose/Flutter lives → WT-INTEGRATION)**
+Sprint 2 (1w):    P1.5–11, P1.8, P1.14–15 compose/Flutter lives **done** (WT-INTEGRATION)
 Sprint 3+ :       P2 as roadmap features land; P3 device suite parallel track
 ```
 

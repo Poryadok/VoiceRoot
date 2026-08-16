@@ -77,7 +77,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 |----|------|--------|-----|
 | TC-MSG-01 | Markdown source + preview strip | `[exists]` | Gateway: `TestComposeMarkdownPreview_live`; Flutter: `markdown_e2e_live_test` |
 | TC-MSG-02 | @user mention → WS + notification | `[exists]` | Flutter: `mentions_e2e_live_test`; Messaging IT: `messaging_mentions_integration_test.go` |
-| TC-MSG-03 | @here / @everyone с правами | `[partial]` | Messaging IT: `messaging_mentions_integration_test.go` (HasChatPermission + bare `@everyone` from content); compose/Flutter → WT-INTEGRATION |
+| TC-MSG-03 | @here / @everyone с правами | `[exists]` | Messaging IT + Gateway: `TestComposeMentionsEveryoneDeny_live` |
 | TC-MSG-04 | Pins list/unpin + WS | `[exists]` | Gateway: `TestComposePins_live`; Flutter: `pins_e2e_live_test` |
 | TC-MSG-05 | Reactions aggregate/remove | `[exists]` | Flutter: `reactions_e2e_live_test`; Messaging IT: `messaging_reactions_integration_test.go` |
 | TC-MSG-06 | DM reply/thread endpoints | `[exists]` | Gateway: `TestComposeThreadsDMReply_live`; Flutter: `threads_e2e_live_test` |
@@ -95,11 +95,11 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | ID | Кейс | Статус | Где |
 |----|------|--------|-----|
 | FW-01 | Forward DM → group с атрибуцией | `[exists]` | Flutter: `forward_messages_e2e_live_test` («forward DM message to group preserves attribution») |
-| FW-02 | Forward в channel | `[partial]` | Messaging IT: `TestMessagingForwardMessage_toChannelSetsPostedAsChat` (+ send-perm deny); compose → WT-INTEGRATION |
+| FW-02 | Forward в channel | `[exists]` | Messaging IT + Gateway: `TestComposeForwardChannelCommentary_live`; Flutter channel+commentary |
 | FW-03 | Copy as new (без атрибуции) | `[missing]` | — |
-| FW-04 | Privacy forbid forward | `[partial]` | Messaging IT: `TestMessagingForwardMessage_authorAllowForwardFalseDenied` (+ reforward/own); compose → WT-INTEGRATION |
+| FW-04 | Privacy forbid forward | `[exists]` | Messaging IT + Gateway: `TestComposeForwardPrivacyDeny_live`; Flutter FW-04 |
 | FW-05 | Multi-select forward | `[missing]` | — |
-| FW-06 | Forward E2E ciphertext policy | `[partial]` | Messaging IT: `TestMessagingForwardMessage_e2eToPlainDenied` / `e2eToE2EDMPreservesFlag` |
+| FW-06 | Forward E2E ciphertext policy | `[exists]` | Messaging IT: `TestMessagingForwardMessage_e2eToPlainDenied` / `e2eToE2EDMPreservesFlag` |
 
 ---
 
@@ -153,7 +153,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | AU-04 | Guest DM reply gated by `allow_guest_dm` | `[exists]` | Flutter: `guest_restrictions_e2e_live_test` (2nd test) |
 | AU-05 | Convert guest → regular | `[exists]` | Gateway: `TestComposeConvertGuest_live`; Auth: `ConvertGuestIntegrationTest`, `GuestAccountLifecycleIntegrationTest` |
 | AU-06 | Phone contacts sync / resolve hashes | `[exists]` | Gateway: `TestComposePhoneSync_live`; Auth: `ResolvePhoneHashesIntegrationTest`; Social IT: `phone_search_privacy_integration_test.go` |
-| AU-07 | Guest reminder (2nd login, ≤1/day) | `[exists]` | Auth: `GuestReminderIntegrationTest`; Flutter: `guest_save_account_reminder` + cadence unit test; server `guest_reminder_last_shown_at` |
+| AU-07 | Guest reminder (2nd login, ≤1/day) | `[exists]` | Auth IT + Gateway: `TestComposeGuestReminder_live`; Flutter: `guest_reminder_e2e_live_test` |
 | AU-08 | Guest nickname first-entry screen | `[partial]` | Flutter UI; live: `guest_onboarding_e2e_live_test` (account_type only) |
 | AU-09 | 2FA enroll/verify/login gate | `[exists]` | Flutter: `trust_e2e_live_test`; Gateway: `TestComposeTrust_live` |
 | AU-10 | Delete account / restore GDPR | `[partial]` | Auth: `DeleteAccountRestoreIntegrationTest` (нет compose live) |
@@ -249,7 +249,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | SP-08 | Space roles hierarchy / invite perm | `[exists]` | Gateway: `TestComposeSpaceRoles_live`; Flutter: `spaces_roles_e2e_live_test` |
 | SP-09 | Space catalog discovery | `[missing]` | — |
 | SP-10 | Tree update/delete/category/voice RPCs deep IT | `[partial]` | Space IT exists; todo notes thin coverage |
-| SP-11 | Space Pro member-cap after billing | `[partial]` | Sync S2S+NATS+compose `SPACE_GRPC_ADDR` (`feature/space-pro-sync-grace`); Gateway live still seed — WT-INTEGRATION |
+| SP-11 | Space Pro member-cap after billing | `[exists]` | Gateway: `TestComposeSpaceProMemberCap_live` (filler seed + webhook join) |
 
 ---
 
@@ -258,8 +258,8 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | ID | Кейс | Статус | Где |
 |----|------|--------|-----|
 | RL-01 | Custom role create/assign + chat override check API | `[exists]` | Flutter: `custom_roles_e2e_live_test`; Role IT: `roles_custom_integration_test.go` |
-| RL-02 | `TEXT_CHAT_SEND_MESSAGES` deny enforced on SendMessage | `[partial]` | Messaging IT: `TestMessagingSendMessage_chatOverrideDenySendMessages`; compose/Flutter → WT-INTEGRATION |
-| RL-03 | Voice room `VOICE_JOIN` deny E2E | `[partial]` | Voice IT: `voice_room_integration_test` JoinVoiceRoom role/room-override deny; compose `voice.depends_on.role`; live compose/Flutter → WT-INTEGRATION |
+| RL-02 | `TEXT_CHAT_SEND_MESSAGES` deny enforced on SendMessage | `[exists]` | Messaging IT + Gateway: `TestComposeRolesSendDeny_live`; Flutter SendMessage 403 |
+| RL-03 | Voice room `VOICE_JOIN` deny E2E | `[exists]` | Voice IT + Gateway: `TestComposeVoiceJoinDeny_live`; Flutter VOICE_JOIN deny |
 | RL-04 | Verification auto-roles | `[missing]` | unimplemented |
 | RL-05 | `MODERATION_MANAGE_REPORTS` integration | `[missing]` | unimplemented |
 
@@ -275,7 +275,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | MM-04 | History list completed squad | `[exists]` | Flutter: `matchmaking_history_e2e_live_test`; store IT history |
 | MM-05 | Rate teammates (1–5) | `[exists]` | Gateway: `TestComposeMatchmakingRating_live`; Flutter: `matchmaking_rating_e2e_live_test` (rate + skip) |
 | MM-06 | MM ban from matchmaking | `[exists]` | Gateway: `TestComposeMatchmakingBan_live`; store `bans_integration_test.go` |
-| MM-07 | Cross-party decline semantics | `[partial]` | Matchmaking IT: `TestRespondToMatch_ForeignPartyDecline_*` / `OwnPartyDecline_*`; compose live → WT-INTEGRATION |
+| MM-07 | Cross-party decline semantics | `[exists]` | Matchmaking IT + Gateway: `TestComposeMatchmakingCrossPartyDecline_live` |
 | MM-08 | Space-scoped matchmaking | `[missing]` | roadmap П.1 |
 | MM-09 | Role-diversity 10-stack match | `[missing]` | todo: criteria broken |
 | MM-10 | Device register for match_found FCM | `[exists]` | Flutter: `matchmaking_fcm_e2e_live_test` |
@@ -444,8 +444,8 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 |----|------|--------|-----|
 | SUB-01 | Personal premium webhook + upload boundaries | `[exists]` | Gateway: `TestComposeBilling_live`; Flutter: `billing_e2e_live_test` |
 | SUB-02 | Downgrade file limits | `[exists]` | Gateway: `TestComposeSubscriptionDowngradeFileLimits_live` |
-| SUB-03 | Space Pro billing compose | `[partial]` | webhook→`SyncSpaceProSubscription` + NATS consumer; compose join-51st live → WT-INTEGRATION |
-| SUB-04 | Grace-period notifications D1/D3/D7 | `[partial]` | `subscription.grace_reminder` + Notification stub consumer; compose live assert → WT-INTEGRATION |
+| SUB-03 | Space Pro billing compose | `[exists]` | `TestComposeSpaceProBilling_live` + `TestComposeSpaceProMemberCap_live` |
+| SUB-04 | Grace-period notifications D1/D3/D7 | `[exists]` | Gateway: `TestComposeSubscriptionGraceReminder_live` (D1 sweeper) |
 | SUB-05 | Real Paddle checkout | `[missing]` | stub URLs (todo Critical) |
 | SUB-06 | Premium cosmetics (banner/GIF/3rd profile) cross-smoke | `[missing]` | todo cross-cutting |
 

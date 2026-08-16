@@ -1,6 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
 import 'package:voice_frontend/backend/messages_client.dart';
+import 'package:voice_frontend/backend/spaces_client.dart';
+import 'package:voice_frontend/backend/user_privacy_client.dart';
+import 'package:voice_frontend/gen/voice/chat/v1/chat.pbenum.dart';
 
 import 'support/live_gateway_harness.dart';
 
@@ -93,6 +96,144 @@ void main() {
       expect(stored.forwardFromId, sourceId);
       expect(stored.forwardFromSender, forwarded.forwardFromSender);
       expect(stored.content, originalText);
+    },
+    skip: runLiveIntegration
+        ? null
+        : 'Opt in with --dart-define=VOICE_RUN_LIVE_INTEGRATION=true',
+  );
+
+  test(
+    'forward DM to space channel with commentary (FW-02)',
+    () async {
+      final probe = await probeLiveGateway();
+      expect(
+        probe,
+        isA<LiveGatewayReady>(),
+        reason: probe is LiveGatewayUnavailable ? probe.reason : null,
+      );
+      final ctx = (probe as LiveGatewayReady).context;
+
+      final owner = await ctx.registerUser('fwd-ch-owner');
+      final peer = await ctx.registerUser('fwd-ch-peer');
+
+      final chats = ctx.chatsClient();
+      final dm = await chats.createDm(
+        authorization: owner.authorizationHeader,
+        otherProfileId: peer.activeProfileId,
+      );
+      final dmChatId = (dm as ChatsApiOk<VoiceChat>).data.id;
+
+      final messages = ctx.messagesClient();
+      const originalText = 'fwd-channel-src';
+      final sent = await messages.sendMessage(
+        authorization: peer.authorizationHeader,
+        chatId: dmChatId,
+        content: originalText,
+        clientMessageId: qaClientMessageId(),
+      );
+      expect(sent, isA<MessagesApiOk<VoiceMessage>>());
+      final sourceId = (sent as MessagesApiOk<VoiceMessage>).data.id;
+
+      final spaces = ctx.spacesClient();
+      final space = await spaces.createSpace(
+        authorization: owner.authorizationHeader,
+        name: 'Fwd Channel Flutter',
+      );
+      expect(space, isA<SpacesApiOk<VoiceSpace>>());
+      final spaceId = (space as SpacesApiOk<VoiceSpace>).data.id;
+
+      final channel = await spaces.createSpaceChat(
+        authorization: owner.authorizationHeader,
+        spaceId: spaceId,
+        name: 'announcements',
+        chatType: ChatType.CHAT_TYPE_CHANNEL,
+      );
+      expect(channel, isA<SpacesApiOk<SpaceTreeNodeData>>());
+      final channelChatId =
+          (channel as SpacesApiOk<SpaceTreeNodeData>).data.linkedChatId!;
+
+      final fwd = await messages.forwardMessage(
+        authorization: owner.authorizationHeader,
+        sourceMessageId: sourceId,
+        targetChatId: channelChatId,
+        commentary: 'heads up',
+      );
+      expect(fwd, isA<MessagesApiOk<VoiceMessage>>());
+      final forwarded = (fwd as MessagesApiOk<VoiceMessage>).data;
+      expect(forwarded.messageKind, VoiceMessageKind.forward);
+      expect(forwarded.content, originalText);
+      expect(forwarded.chatId, channelChatId);
+
+      final history = await messages.getMessages(
+        authorization: owner.authorizationHeader,
+        chatId: channelChatId,
+      );
+      final listed = (history as MessagesApiOk<MessageListData>).data.messages;
+      expect(listed.any((m) => m.content == originalText), isTrue);
+      expect(listed.any((m) => m.content == 'heads up'), isTrue);
+    },
+    skip: runLiveIntegration
+        ? null
+        : 'Opt in with --dart-define=VOICE_RUN_LIVE_INTEGRATION=true',
+  );
+
+  test(
+    'forward denied when author allow_forward is false (FW-04)',
+    () async {
+      final probe = await probeLiveGateway();
+      expect(
+        probe,
+        isA<LiveGatewayReady>(),
+        reason: probe is LiveGatewayUnavailable ? probe.reason : null,
+      );
+      final ctx = (probe as LiveGatewayReady).context;
+
+      final forwarder = await ctx.registerUser('fwd-deny-a');
+      final author = await ctx.registerUser('fwd-deny-b');
+
+      final privacy = VoiceUserPrivacyClient(gateway: ctx.gatewayHttp());
+      final current = await privacy.getPrivacy(
+        authorization: author.authorizationHeader,
+      );
+      expect(current, isA<UserPrivacyApiOk<VoicePrivacySettings>>());
+      final base = (current as UserPrivacyApiOk<VoicePrivacySettings>).data;
+      final updated = await privacy.updatePrivacy(
+        authorization: author.authorizationHeader,
+        settings: base.copyWith(allowForward: false),
+      );
+      expect(updated, isA<UserPrivacyApiOk<VoicePrivacySettings>>());
+
+      final chats = ctx.chatsClient();
+      final dm = await chats.createDm(
+        authorization: forwarder.authorizationHeader,
+        otherProfileId: author.activeProfileId,
+      );
+      final dmChatId = (dm as ChatsApiOk<VoiceChat>).data.id;
+
+      final messages = ctx.messagesClient();
+      final sent = await messages.sendMessage(
+        authorization: author.authorizationHeader,
+        chatId: dmChatId,
+        content: 'do-not-forward',
+        clientMessageId: qaClientMessageId(),
+      );
+      expect(sent, isA<MessagesApiOk<VoiceMessage>>());
+      final sourceId = (sent as MessagesApiOk<VoiceMessage>).data.id;
+
+      final group = await chats.createGroup(
+        authorization: forwarder.authorizationHeader,
+        name: 'Fwd deny target',
+      );
+      expect(group, isA<ChatsApiOk<VoiceChat>>());
+      final groupId = (group as ChatsApiOk<VoiceChat>).data.id;
+
+      final fwd = await messages.forwardMessage(
+        authorization: forwarder.authorizationHeader,
+        sourceMessageId: sourceId,
+        targetChatId: groupId,
+      );
+      expect(fwd, isA<MessagesApiFailure>());
+      expect((fwd as MessagesApiFailure).statusCode, 403);
     },
     skip: runLiveIntegration
         ? null
