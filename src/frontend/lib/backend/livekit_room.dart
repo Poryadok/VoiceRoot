@@ -194,17 +194,17 @@ class LiveKitVoiceRoom implements VoiceLiveKitRoom {
     double duckedVolume = 0.2,
   }) async {
     if (_speakerMuted) return;
+    // livekit_client 2.8 has no RemoteAudioTrack.setVolume; approximate ducking
+    // by muting non-commander remotes while broadcast is active (spec: client ducking).
+    final muteOthers = enabled && duckedVolume < 1.0;
     for (final participant in _room.remoteParticipants.values) {
       final isCommander = commanderIdentity != null &&
           participant.identity == commanderIdentity;
-      final volume = enabled && !isCommander ? duckedVolume : 1.0;
+      final audible = !(muteOthers && !isCommander);
       for (final publication in participant.audioTrackPublications) {
         final track = publication.track;
-        if (track is livekit.RemoteAudioTrack) {
-          try {
-            await track.setVolume(volume);
-          } catch (_) {}
-        }
+        if (track == null) continue;
+        await _setRemoteAudioTrackAudible(track, audible: audible);
       }
     }
   }

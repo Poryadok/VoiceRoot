@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../backend/voice_client.dart';
 import '../../state/auth_providers.dart';
 import '../../state/call_providers.dart';
-import '../../state/gateway_providers.dart';
 import '../../theme/voice_colors.dart';
 
 /// Organizer controls: raised hands, grant/revoke floor, commander broadcast.
@@ -37,14 +36,13 @@ class _VoiceOrganizerPanelState extends ConsumerState<VoiceOrganizerPanel> {
   Future<void> _refresh() async {
     final call = ref.read(callControllerProvider);
     final session = call.session;
-    final auth = ref.read(authControllerProvider);
-    final token = auth.accessToken;
-    final selfId = auth.activeProfileId;
-    if (session == null || token == null || token.isEmpty) return;
+    final authHeader = ref.read(authorizationHeaderProvider);
+    final selfId = ref.read(authControllerProvider).activeProfileId;
+    if (session == null || authHeader == null || authHeader.isEmpty) return;
 
     setState(() => _loading = true);
     final result = await ref.read(voiceCallsClientProvider).getCallVoiceStates(
-          authorization: 'Bearer $token',
+          authorization: authHeader,
           roomId: session.roomId,
         );
     if (!mounted) return;
@@ -78,12 +76,14 @@ class _VoiceOrganizerPanelState extends ConsumerState<VoiceOrganizerPanel> {
     );
   }
 
-  Future<void> _run(Future<VoiceApiResult<void>> Function(String token, String roomId) action) async {
+  Future<void> _run(
+    Future<VoiceApiResult<void>> Function(String auth, String roomId) action,
+  ) async {
     final call = ref.read(callControllerProvider);
     final session = call.session;
-    final token = ref.read(authControllerProvider).accessToken;
-    if (session == null || token == null || token.isEmpty) return;
-    await action(token, session.roomId);
+    final authHeader = ref.read(authorizationHeaderProvider);
+    if (session == null || authHeader == null || authHeader.isEmpty) return;
+    await action(authHeader, session.roomId);
     await _refresh();
   }
 
@@ -114,15 +114,15 @@ class _VoiceOrganizerPanelState extends ConsumerState<VoiceOrganizerPanel> {
                   key: VoiceOrganizerPanel.raiseHandKey,
                   label: Text(_handRaised ? 'Lower hand' : 'Raise hand'),
                   selected: _handRaised,
-                  onSelected: (_) => _run((token, roomId) {
+                  onSelected: (_) => _run((auth, roomId) {
                     final client = ref.read(voiceCallsClientProvider);
                     return _handRaised
                         ? client.lowerHand(
-                            authorization: 'Bearer $token',
+                            authorization: auth,
                             roomId: roomId,
                           )
                         : client.raiseHand(
-                            authorization: 'Bearer $token',
+                            authorization: auth,
                             roomId: roomId,
                           );
                   }),
@@ -131,9 +131,9 @@ class _VoiceOrganizerPanelState extends ConsumerState<VoiceOrganizerPanel> {
                   key: VoiceOrganizerPanel.commanderKey,
                   label: Text(_isCommander ? 'Commander on' : 'Commander'),
                   selected: _isCommander,
-                  onSelected: (v) => _run((token, roomId) {
+                  onSelected: (v) => _run((auth, roomId) {
                     return ref.read(voiceCallsClientProvider).setCommanderMode(
-                          authorization: 'Bearer $token',
+                          authorization: auth,
                           roomId: roomId,
                           enabled: v,
                         );
@@ -146,9 +146,9 @@ class _VoiceOrganizerPanelState extends ConsumerState<VoiceOrganizerPanel> {
                       _isBroadcasting ? 'Stop broadcast' : 'Start broadcast',
                     ),
                     selected: _isBroadcasting,
-                    onSelected: (v) => _run((token, roomId) {
+                    onSelected: (v) => _run((auth, roomId) {
                       return ref.read(voiceCallsClientProvider).setBroadcasting(
-                            authorization: 'Bearer $token',
+                            authorization: auth,
                             roomId: roomId,
                             enabled: v,
                           );
@@ -180,9 +180,9 @@ class _VoiceOrganizerPanelState extends ConsumerState<VoiceOrganizerPanel> {
                   title: Text(p.profileId),
                   trailing: TextButton(
                     key: Key('voice_organizer_grant_${p.profileId}'),
-                    onPressed: () => _run((token, roomId) {
+                    onPressed: () => _run((auth, roomId) {
                       return ref.read(voiceCallsClientProvider).grantFloor(
-                            authorization: 'Bearer $token',
+                            authorization: auth,
                             roomId: roomId,
                             profileId: p.profileId,
                           );
@@ -204,9 +204,9 @@ class _VoiceOrganizerPanelState extends ConsumerState<VoiceOrganizerPanel> {
                   title: Text(p.profileId),
                   trailing: TextButton(
                     key: Key('voice_organizer_revoke_${p.profileId}'),
-                    onPressed: () => _run((token, roomId) {
+                    onPressed: () => _run((auth, roomId) {
                       return ref.read(voiceCallsClientProvider).revokeFloor(
-                            authorization: 'Bearer $token',
+                            authorization: auth,
                             roomId: roomId,
                             profileId: p.profileId,
                           );
