@@ -28,6 +28,7 @@ import voice.backend.auth.service.ProfileSwitchException;
 import voice.backend.auth.service.RefreshCommand;
 import voice.backend.auth.service.RegisterCommand;
 import voice.backend.auth.service.OtpService;
+import voice.backend.auth.service.ResetPasswordCommand;
 import voice.backend.auth.service.SendOtpCommand;
 import voice.backend.auth.service.VerifyOtpCommand;
 import voice.backend.auth.service.TokenClaims;
@@ -119,6 +120,13 @@ public class AuthRestController {
         new VerifyOtpCommand(
             request.email(), request.phone(), request.code(), request.otpType(), authorization),
         authService);
+    return ResponseEntity.noContent().build();
+  }
+
+  @PostMapping("/password/reset")
+  public ResponseEntity<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+    otpService.resetPassword(
+        new ResetPasswordCommand(request.email(), request.code(), request.newPassword()));
     return ResponseEntity.noContent().build();
   }
 
@@ -324,6 +332,11 @@ public class AuthRestController {
       String phone,
       @NotBlank String code,
       @JsonProperty("otp_type") @NotBlank String otpType) {}
+
+  public record ResetPasswordRequest(
+      @NotBlank String email,
+      @NotBlank String code,
+      @JsonProperty("new_password") @NotBlank String newPassword) {}
 
   public record DeleteAccountRequest(@NotBlank String password) {}
 

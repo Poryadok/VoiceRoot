@@ -133,6 +133,27 @@ public class InMemoryAccountRepository implements AccountRepository {
   }
 
   @Override
+  public synchronized void updatePasswordHash(UUID accountId, String passwordHash) {
+    Account existing = byId.get(accountId);
+    if (existing == null) {
+      throw new IllegalArgumentException("account not found");
+    }
+    byId.put(
+        accountId,
+        new Account(
+            existing.id(),
+            existing.email(),
+            existing.phone(),
+            passwordHash,
+            existing.type(),
+            existing.status(),
+            existing.totpSecret(),
+            existing.totpEnabled(),
+            existing.createdAt(),
+            existing.deletedAt()));
+  }
+
+  @Override
   public synchronized void touchLastOnlineAt(UUID accountId, Instant at) {
     // In-memory tests do not model last_online_at column.
   }

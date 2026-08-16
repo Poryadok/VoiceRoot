@@ -53,6 +53,50 @@ class OtpRestIntegrationTest {
   }
 
   @Test
+  void passwordResetE2EAllowsLoginWithNewPassword() throws Exception {
+    session(
+        postJson(
+            "/api/v1/auth/register",
+            "{\"email\":\"reset-e2e@example.com\",\"password\":\"OldPassword99!\",\"device_info_json\":\"{}\"}"));
+
+    mailSender.clear();
+    mockMvc
+        .perform(
+            post("/api/v1/auth/otp/send")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"reset-e2e@example.com\",\"otp_type\":\"password_reset\"}"))
+        .andExpect(status().isNoContent());
+    String code = mailSender.lastCode();
+    org.assertj.core.api.Assertions.assertThat(code).matches("\\d{6}");
+
+    mockMvc
+        .perform(
+            post("/api/v1/auth/password/reset")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"email\":\"reset-e2e@example.com\",\"code\":\""
+                        + code
+                        + "\",\"new_password\":\"NewPassword99!\"}"))
+        .andExpect(status().isNoContent());
+
+    mockMvc
+        .perform(
+            post("/api/v1/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"email\":\"reset-e2e@example.com\",\"password\":\"OldPassword99!\",\"device_info_json\":\"{}\"}"))
+        .andExpect(status().isUnauthorized());
+
+    mockMvc
+        .perform(
+            post("/api/v1/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"email\":\"reset-e2e@example.com\",\"password\":\"NewPassword99!\",\"device_info_json\":\"{}\"}"))
+        .andExpect(status().isOk());
+  }
+
+  @Test
   void otpSendIsRateLimited() throws Exception {
     mockMvc
         .perform(

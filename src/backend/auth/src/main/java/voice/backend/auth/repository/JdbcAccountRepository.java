@@ -169,6 +169,23 @@ public class JdbcAccountRepository implements AccountRepository {
   }
 
   @Override
+  public void updatePasswordHash(UUID accountId, String passwordHash) {
+    int updated =
+        jdbc.update(
+            """
+            UPDATE accounts
+            SET password_hash = :passwordHash, updated_at = now()
+            WHERE id = :id
+            """,
+            new MapSqlParameterSource()
+                .addValue("id", accountId)
+                .addValue("passwordHash", passwordHash));
+    if (updated == 0) {
+      throw new IllegalArgumentException("account not found");
+    }
+  }
+
+  @Override
   public void touchLastOnlineAt(UUID accountId, Instant at) {
     jdbc.update(
         """

@@ -67,6 +67,9 @@ auth:
     encryption-key: "${AUTH_TOTP_ENCRYPTION_KEY:}"
   nats:
     url: "${AUTH_NATS_URL:}"
+  resend:
+    api-key: "${AUTH_RESEND_API_KEY:}"
+    from: "${AUTH_RESEND_FROM:Voice <onboarding@resend.dev>}"
 
 server:
   port: ${SERVER_PORT:8080}
