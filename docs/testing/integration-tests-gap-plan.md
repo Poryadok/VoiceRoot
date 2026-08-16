@@ -62,6 +62,7 @@
 | P3.2 | **partial** | `windows_desktop_smoke_test` + existing version/auto-update unit paths (UPD-03); tray/global PTT/overlay product still П.17–18 (PL-03) |
 | P3.1 | **partial** | `integration_test/device_driver_smoke_test.dart` + CI `flutter-device-driver` (host tester: deeplink + FCM/VoIP register contracts); NT-05 / on-device App Links / CallKit still open |
 | P3.6 | **done** | ResendMailSender when `AUTH_RESEND_API_KEY` set; `/password/reset` E2E + AU-13 |
+| P3.3 | **done** | Axe-analog landmark CI (`make a11y-web-axe`) + high contrast / reduced-motion automation; A11Y-03 |
 | P2.* / P3.* (rest) | **deferred** | roadmap / soft-launch+ |
 
 ---
@@ -181,7 +182,7 @@ Effort: **S** ≤0.5d · **M** 1–2d · **L** 3–5d · **XL** >1w (инфра/
 |---|--------|------|-----|--------|
 | P3.1 | Реальный `integration_test` driver suite (push, deeplink, VoIP) | F | PL-04, DL-04, NT-05 | XL | **partial** — host driver + CI; device push/App Links/CallKit still open |
 | P3.2 | Windows tray/PTT/auto-update smoke | C/CI | PL-03, UPD-02/03 | L | **partial** — auto-update stub smoke; tray/PTT blocked on П.17 |
-| P3.3 | A11y automation beyond widgets | C | A11Y-03 | M |
+| P3.3 | A11y automation beyond widgets | C | A11Y-03 | M | **done** — `make a11y-web-axe` + HC/reduced-motion tests |
 | P3.4 | Staging observability request_id scripted smoke | ops | OBS-02 | M | **done** — `scripts/staging/smoke-request-id.sh` |
 | P3.5 | Sticker/GIF/voice-message/recording lives | B+C | TC-MSG-09/10, VC-10 | L | нужен product scope |
 | P3.6 | Password reset / Resend | E+B | AU-13 | L | **done** — ResendMailSender + password reset E2E |
