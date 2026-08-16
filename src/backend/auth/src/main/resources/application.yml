@@ -38,6 +38,18 @@ auth:
     addr: "${USER_GRPC_ADDR:}"
   oauth:
     public-api-base-url: "${AUTH_OAUTH_PUBLIC_API_BASE_URL:http://127.0.0.1:18080}"
+    twitch:
+      client-id: "${AUTH_OAUTH_TWITCH_CLIENT_ID:}"
+      client-secret: "${AUTH_OAUTH_TWITCH_CLIENT_SECRET:}"
+      api-base-url: "${AUTH_OAUTH_TWITCH_API_BASE_URL:https://api.twitch.tv}"
+      token-url: "${AUTH_OAUTH_TWITCH_TOKEN_URL:https://id.twitch.tv/oauth2/token}"
+      authorize-url: "${AUTH_OAUTH_TWITCH_AUTHORIZE_URL:https://id.twitch.tv/oauth2/authorize}"
+    youtube:
+      client-id: "${AUTH_OAUTH_YOUTUBE_CLIENT_ID:}"
+      client-secret: "${AUTH_OAUTH_YOUTUBE_CLIENT_SECRET:}"
+      api-base-url: "${AUTH_OAUTH_YOUTUBE_API_BASE_URL:https://www.googleapis.com}"
+      token-url: "${AUTH_OAUTH_YOUTUBE_TOKEN_URL:https://oauth2.googleapis.com/token}"
+      authorize-url: "${AUTH_OAUTH_YOUTUBE_AUTHORIZE_URL:https://accounts.google.com/o/oauth2/v2/auth}"
     developer-portal:
       enabled: ${AUTH_OAUTH_DEVELOPER_PORTAL_ENABLED:true}
       client-id: "${AUTH_OAUTH_DEVELOPER_PORTAL_CLIENT_ID:}"

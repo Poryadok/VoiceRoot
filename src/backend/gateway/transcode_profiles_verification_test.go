@@ -145,6 +145,16 @@ func (recordingPhase13UserVerificationGRPC) StartOrganizationVerification(_ cont
 	}, nil
 }
 
+func (recordingPhase13UserVerificationGRPC) CheckOrganizationVerification(context.Context, *userv1.CheckOrganizationVerificationRequest) (*userv1.CheckOrganizationVerificationResponse, error) {
+	badge := "dns"
+	return &userv1.CheckOrganizationVerificationResponse{
+		VerificationStatus: &userv1.VerificationStatus{
+			VerificationType: "organization",
+			Badge:            &badge,
+		},
+	}, nil
+}
+
 func newPhase13UsersGateway(t *testing.T, user userv1.UserServiceClient) http.Handler {
 	t.Helper()
 	return newGatewayForContract(t, gatewayTestOptions{
@@ -333,32 +343,63 @@ func TestTranscodePhase13_OrgDNSVerificationStart(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.Code, "body=%s", resp.Body.String())
 }
 
-// TestTranscodePhase13_LinkedAccountsList documents GET /api/v1/auth/linked-accounts.
+// TestTranscodePhase13_OrgDNSVerificationCheck documents org DNS check route wiring.
+func TestTranscodePhase13_OrgDNSVerificationCheck(t *testing.T) {
+	t.Parallel()
+
+	rec := &recordingPhase13UserVerificationGRPC{}
+	conn, cleanup := startBufconnUserConn(t, rec)
+	t.Cleanup(cleanup)
+	h := newPhase13UsersGateway(t, userv1.NewUserServiceClient(conn))
+
+	resp := performRequest(h, http.MethodPost, "/api/v1/users/me/verification/organization/check",
+		`{}`, map[string]string{
+			"Authorization": "Bearer valid-user-token",
+		})
+	require.Equal(t, http.StatusOK, resp.Code, "body=%s", resp.Body.String())
+}
+
+// TestTranscodePhase13_LinkedAccountsList documents GET /api/v1/auth/linked-accounts → Auth REST upstream.
 func TestTranscodePhase13_LinkedAccountsList(t *testing.T) {
 	t.Parallel()
 
+	authUpstream := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/api/v1/auth/linked-accounts", r.URL.Path)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"linked_accounts": []any{map[string]any{"platform": "twitch"}},
+		})
+	})
 	h := newGatewayForContract(t, gatewayTestOptions{
 		tokenClaims: map[string]tokenClaims{
 			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
 		},
-		transcoder: &transcoder{clients: grpcClients{}},
+		transcoder:    &transcoder{clients: grpcClients{}},
+		restUpstreams: map[string]http.Handler{"auth": authUpstream},
 	})
 
 	resp := performRequest(h, http.MethodGet, "/api/v1/auth/linked-accounts", "", map[string]string{
 		"Authorization": "Bearer valid-user-token",
 	})
 	require.Equal(t, http.StatusOK, resp.Code, "body=%s", resp.Body.String())
+	require.Contains(t, resp.Body.String(), "twitch")
 }
 
-// TestTranscodePhase13_LinkedAccountOAuthStart documents Twitch OAuth link initiation route.
+// TestTranscodePhase13_LinkedAccountOAuthStart documents Twitch OAuth link initiation via Auth REST.
 func TestTranscodePhase13_LinkedAccountOAuthStart(t *testing.T) {
 	t.Parallel()
 
+	authUpstream := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/api/v1/auth/linked-accounts/twitch/link", r.URL.Path)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"authorization_url": "https://id.twitch.tv/oauth2/authorize?client_id=test",
+		})
+	})
 	h := newGatewayForContract(t, gatewayTestOptions{
 		tokenClaims: map[string]tokenClaims{
 			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
 		},
-		transcoder: &transcoder{clients: grpcClients{}},
+		transcoder:    &transcoder{clients: grpcClients{}},
+		restUpstreams: map[string]http.Handler{"auth": authUpstream},
 	})
 
 	resp := performRequest(h, http.MethodPost, "/api/v1/auth/linked-accounts/twitch/link",
@@ -366,4 +407,5 @@ func TestTranscodePhase13_LinkedAccountOAuthStart(t *testing.T) {
 			"Authorization": "Bearer valid-user-token",
 		})
 	require.Equal(t, http.StatusOK, resp.Code, "body=%s", resp.Body.String())
+	require.Contains(t, resp.Body.String(), "id.twitch.tv")
 }

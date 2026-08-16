@@ -6,12 +6,13 @@ import "context"
 type profilesVerificationEventsRecorder struct {
 	profileCreated  int
 	profileSwitched []profileSwitchedEvent
+	verified        int
 }
 
 type profileSwitchedEvent struct {
-	accountID     string
-	oldProfileID  string
-	newProfileID  string
+	accountID    string
+	oldProfileID string
+	newProfileID string
 }
 
 func (r *profilesVerificationEventsRecorder) PublishProfileCreated(_ context.Context, _, _ string) error {
@@ -33,6 +34,7 @@ func (r *profilesVerificationEventsRecorder) PublishProfileSwitched(_ context.Co
 }
 
 func (r *profilesVerificationEventsRecorder) PublishVerified(_ context.Context, _, _, _ string) error {
+	r.verified++
 	return nil
 }
 
