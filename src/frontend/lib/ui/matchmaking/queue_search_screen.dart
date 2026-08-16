@@ -16,6 +16,7 @@ class QueueSearchScreen extends ConsumerStatefulWidget {
     super.key,
     required this.game,
     required this.mode,
+    this.spaceId,
   });
 
   static const Key screenKey = Key('queue_search_screen');
@@ -28,6 +29,8 @@ class QueueSearchScreen extends ConsumerStatefulWidget {
 
   final CatalogGame game;
   final GameMode mode;
+  /// When set, uses space-scoped queue (StartSpaceQueue).
+  final String? spaceId;
 
   @override
   ConsumerState<QueueSearchScreen> createState() => _QueueSearchScreenState();
@@ -280,12 +283,24 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
       _error = null;
     });
     final client = ref.read(voiceMatchmakingClientProvider);
-    final result = await client.startSearch(
-      authorization: 'Bearer $token',
-      gameId: widget.game.id,
-      mode: widget.mode.name,
-      criteria: _buildCriteria(),
-    );
+    final spaceId = widget.spaceId;
+    final MatchmakingApiResult<SearchSessionData> result;
+    if (spaceId != null && spaceId.isNotEmpty) {
+      result = await client.startSpaceQueue(
+        authorization: 'Bearer $token',
+        spaceId: spaceId,
+        gameId: widget.game.id,
+        mode: widget.mode.name,
+        criteria: _buildCriteria(),
+      );
+    } else {
+      result = await client.startSearch(
+        authorization: 'Bearer $token',
+        gameId: widget.game.id,
+        mode: widget.mode.name,
+        criteria: _buildCriteria(),
+      );
+    }
     if (!mounted) return;
     switch (result) {
       case MatchmakingApiOk(:final data):

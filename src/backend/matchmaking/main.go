@@ -149,6 +149,7 @@ func main() {
 		var ratingPrivacy grpcsvc.MmRatingPrivacyChecker
 		var ratingFriends grpcsvc.MmRatingProfileFriendChecker
 		var ratingSpaceCoMembership grpcsvc.MmRatingSpaceCoMembershipChecker
+		var spaceQueueGate grpcsvc.SpaceQueueGate
 		if userAddr := strings.TrimSpace(os.Getenv("USER_GRPC_ADDR")); userAddr != "" {
 			uconn, err := grpc.NewClient(grpcclient.DialTarget(userAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
@@ -190,6 +191,7 @@ func main() {
 			}
 			waitCancel()
 			ratingSpaceCoMembership = s2s.NewGRPCSpaceCoMembership(spconn)
+			spaceQueueGate = s2s.NewGRPCSpaceQueueGate(spconn)
 		}
 
 		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))...)
@@ -207,6 +209,7 @@ func main() {
 			RatingPrivacy:           ratingPrivacy,
 			RatingFriends:           ratingFriends,
 			RatingSpaceCoMembership: ratingSpaceCoMembership,
+			SpaceQueue:              spaceQueueGate,
 		}
 		matchmakingv1.RegisterMatchmakingServiceServer(grpcSrv, mmSvc)
 

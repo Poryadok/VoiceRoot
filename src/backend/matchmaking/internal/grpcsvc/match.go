@@ -155,7 +155,7 @@ func (s *MatchmakingGRPC) handleMatchDecline(ctx context.Context, match store.Ma
 		if s.Queue != nil {
 			crit, err := criteria.Parse(sess.Criteria)
 			if err == nil {
-				_ = s.Queue.Enqueue(ctx, sess.GameID, sess.Mode, crit.Region, sess.ID, sess.CreatedAt)
+				_ = s.Queue.EnqueueScoped(ctx, sess.SpaceID, sess.GameID, sess.Mode, crit.Region, sess.ID, sess.CreatedAt)
 			}
 		}
 	}

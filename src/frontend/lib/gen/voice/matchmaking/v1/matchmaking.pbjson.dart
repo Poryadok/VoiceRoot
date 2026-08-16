@@ -385,6 +385,36 @@ final $typed_data.Uint8List startSearchRequestDescriptor = $convert.base64Decode
     'ABKAlSBG1vZGUSIwoNY3JpdGVyaWFfanNvbhgDIAEoCVIMY3JpdGVyaWFKc29uEh4KCHBhcnR5'
     'X2lkGAQgASgJSABSB3BhcnR5SWSIAQFCCwoJX3BhcnR5X2lk');
 
+@$core.Deprecated('Use startSpaceQueueRequestDescriptor instead')
+const StartSpaceQueueRequest$json = {
+  '1': 'StartSpaceQueueRequest',
+  '2': [
+    {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'game_id', '3': 2, '4': 1, '5': 9, '10': 'gameId'},
+    {'1': 'mode', '3': 3, '4': 1, '5': 9, '10': 'mode'},
+    {'1': 'criteria_json', '3': 4, '4': 1, '5': 9, '10': 'criteriaJson'},
+    {
+      '1': 'party_id',
+      '3': 5,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'partyId',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_party_id'},
+  ],
+};
+
+/// Descriptor for `StartSpaceQueueRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List startSpaceQueueRequestDescriptor = $convert.base64Decode(
+    'ChZTdGFydFNwYWNlUXVldWVSZXF1ZXN0EhkKCHNwYWNlX2lkGAEgASgJUgdzcGFjZUlkEhcKB2'
+    'dhbWVfaWQYAiABKAlSBmdhbWVJZBISCgRtb2RlGAMgASgJUgRtb2RlEiMKDWNyaXRlcmlhX2pz'
+    'b24YBCABKAlSDGNyaXRlcmlhSnNvbhIeCghwYXJ0eV9pZBgFIAEoCUgAUgdwYXJ0eUlkiAEBQg'
+    'sKCV9wYXJ0eV9pZA==');
+
 @$core.Deprecated('Use searchSessionDescriptor instead')
 const SearchSession$json = {
   '1': 'SearchSession',
@@ -433,12 +463,22 @@ const SearchSession$json = {
       '10': 'matchId',
       '17': true
     },
+    {
+      '1': 'space_id',
+      '3': 11,
+      '4': 1,
+      '5': 9,
+      '9': 4,
+      '10': 'spaceId',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_party_id'},
     {'1': '_timeout_at'},
     {'1': '_matched_at'},
     {'1': '_match_id'},
+    {'1': '_space_id'},
   ],
 };
 
@@ -450,8 +490,9 @@ final $typed_data.Uint8List searchSessionDescriptor = $convert.base64Decode(
     'l0ZXJpYUpzb24SFgoGc3RhdHVzGAcgASgJUgZzdGF0dXMSPgoKdGltZW91dF9hdBgIIAEoCzIa'
     'Lmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBIAVIJdGltZW91dEF0iAEBEj4KCm1hdGNoZWRfYX'
     'QYCSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wSAJSCW1hdGNoZWRBdIgBARIeCght'
-    'YXRjaF9pZBgKIAEoCUgDUgdtYXRjaElkiAEBQgsKCV9wYXJ0eV9pZEINCgtfdGltZW91dF9hdE'
-    'INCgtfbWF0Y2hlZF9hdEILCglfbWF0Y2hfaWQ=');
+    'YXRjaF9pZBgKIAEoCUgDUgdtYXRjaElkiAEBEh4KCHNwYWNlX2lkGAsgASgJSARSB3NwYWNlSW'
+    'SIAQFCCwoJX3BhcnR5X2lkQg0KC190aW1lb3V0X2F0Qg0KC19tYXRjaGVkX2F0QgsKCV9tYXRj'
+    'aF9pZEILCglfc3BhY2VfaWQ=');
 
 @$core.Deprecated('Use cancelSearchRequestDescriptor instead')
 const CancelSearchRequest$json = {
@@ -896,6 +937,27 @@ const StartSearchResponse$json = {
 final $typed_data.Uint8List startSearchResponseDescriptor = $convert.base64Decode(
     'ChNTdGFydFNlYXJjaFJlc3BvbnNlEkoKDnNlYXJjaF9zZXNzaW9uGAEgASgLMiMudm9pY2UubW'
     'F0Y2htYWtpbmcudjEuU2VhcmNoU2Vzc2lvblINc2VhcmNoU2Vzc2lvbg==');
+
+@$core.Deprecated('Use startSpaceQueueResponseDescriptor instead')
+const StartSpaceQueueResponse$json = {
+  '1': 'StartSpaceQueueResponse',
+  '2': [
+    {
+      '1': 'search_session',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.matchmaking.v1.SearchSession',
+      '10': 'searchSession'
+    },
+  ],
+};
+
+/// Descriptor for `StartSpaceQueueResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List startSpaceQueueResponseDescriptor =
+    $convert.base64Decode(
+        'ChdTdGFydFNwYWNlUXVldWVSZXNwb25zZRJKCg5zZWFyY2hfc2Vzc2lvbhgBIAEoCzIjLnZvaW'
+        'NlLm1hdGNobWFraW5nLnYxLlNlYXJjaFNlc3Npb25SDXNlYXJjaFNlc3Npb24=');
 
 @$core.Deprecated('Use cancelSearchResponseDescriptor instead')
 const CancelSearchResponse$json = {

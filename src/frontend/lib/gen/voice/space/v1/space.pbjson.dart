@@ -213,6 +213,42 @@ final $typed_data.Uint8List updateSpaceRequestDescriptor = $convert.base64Decode
     '5CCwoJX2ljb25fdXJsQg0KC19iYW5uZXJfdXJsQg0KC192aXNpYmlsaXR5QhQKEl9lbnRyeV9y'
     'ZXF1aXJlbWVudEIXChVfZW50cnlfcXVlc3Rpb25zX2pzb25CEQoPX21tX2NvbmZpZ19qc29u');
 
+@$core.Deprecated('Use updateSpaceMmConfigRequestDescriptor instead')
+const UpdateSpaceMmConfigRequest$json = {
+  '1': 'UpdateSpaceMmConfigRequest',
+  '2': [
+    {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'mm_config_json', '3': 2, '4': 1, '5': 9, '10': 'mmConfigJson'},
+  ],
+};
+
+/// Descriptor for `UpdateSpaceMmConfigRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List updateSpaceMmConfigRequestDescriptor =
+    $convert.base64Decode(
+        'ChpVcGRhdGVTcGFjZU1tQ29uZmlnUmVxdWVzdBIZCghzcGFjZV9pZBgBIAEoCVIHc3BhY2VJZB'
+        'IkCg5tbV9jb25maWdfanNvbhgCIAEoCVIMbW1Db25maWdKc29u');
+
+@$core.Deprecated('Use updateSpaceMmConfigResponseDescriptor instead')
+const UpdateSpaceMmConfigResponse$json = {
+  '1': 'UpdateSpaceMmConfigResponse',
+  '2': [
+    {
+      '1': 'space',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.space.v1.Space',
+      '10': 'space'
+    },
+  ],
+};
+
+/// Descriptor for `UpdateSpaceMmConfigResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List updateSpaceMmConfigResponseDescriptor =
+    $convert.base64Decode(
+        'ChtVcGRhdGVTcGFjZU1tQ29uZmlnUmVzcG9uc2USKwoFc3BhY2UYASABKAsyFS52b2ljZS5zcG'
+        'FjZS52MS5TcGFjZVIFc3BhY2U=');
+
 @$core.Deprecated('Use deleteSpaceRequestDescriptor instead')
 const DeleteSpaceRequest$json = {
   '1': 'DeleteSpaceRequest',

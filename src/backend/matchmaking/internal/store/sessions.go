@@ -25,21 +25,25 @@ var (
 	ErrSessionNotSearchable = errors.New("session is not searchable")
 )
 
+const sessionSelectCols = `id, profile_id, party_id, game_id, mode, criteria::text, status,
+		          timeout_at, nudged_at, matched_at, match_id, space_id, created_at, updated_at`
+
 // SearchSession is a row in search_sessions.
 type SearchSession struct {
-	ID         uuid.UUID
-	ProfileID  uuid.UUID
-	PartyID    *uuid.UUID
-	GameID     uuid.UUID
-	Mode       string
-	Criteria   string
-	Status     string
-	TimeoutAt  *time.Time
-	NudgedAt   *time.Time
-	MatchedAt  *time.Time
-	MatchID    *uuid.UUID
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	ID        uuid.UUID
+	ProfileID uuid.UUID
+	PartyID   *uuid.UUID
+	GameID    uuid.UUID
+	Mode      string
+	Criteria  string
+	Status    string
+	TimeoutAt *time.Time
+	NudgedAt  *time.Time
+	MatchedAt *time.Time
+	MatchID   *uuid.UUID
+	SpaceID   *uuid.UUID
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // SessionStore persists search sessions.
@@ -54,6 +58,7 @@ type CreateSessionParams struct {
 	Mode      string
 	Criteria  string
 	TimeoutAt time.Time
+	SpaceID   *uuid.UUID
 }
 
 // Create inserts a new searching session.
@@ -65,11 +70,10 @@ func (s *SessionStore) Create(ctx context.Context, p CreateSessionParams) (Searc
 	now := time.Now().UTC()
 	row := s.Pool.QueryRow(ctx, `
 		INSERT INTO search_sessions (
-			id, profile_id, party_id, game_id, mode, criteria, status, timeout_at, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $9)
-		RETURNING id, profile_id, party_id, game_id, mode, criteria::text, status,
-		          timeout_at, nudged_at, matched_at, match_id, created_at, updated_at
-	`, id, p.ProfileID, p.PartyID, p.GameID, p.Mode, p.Criteria, SessionStatusSearching, p.TimeoutAt, now)
+			id, profile_id, party_id, game_id, mode, criteria, status, timeout_at, space_id, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $10)
+		RETURNING `+sessionSelectCols+`
+	`, id, p.ProfileID, p.PartyID, p.GameID, p.Mode, p.Criteria, SessionStatusSearching, p.TimeoutAt, p.SpaceID, now)
 	sess, err := scanSession(row)
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -86,8 +90,7 @@ func (s *SessionStore) Get(ctx context.Context, id uuid.UUID) (SearchSession, er
 		return SearchSession{}, errors.New("session store unavailable")
 	}
 	row := s.Pool.QueryRow(ctx, `
-		SELECT id, profile_id, party_id, game_id, mode, criteria::text, status,
-		       timeout_at, nudged_at, matched_at, match_id, created_at, updated_at
+		SELECT `+sessionSelectCols+`
 		FROM search_sessions WHERE id = $1
 	`, id)
 	sess, err := scanSession(row)
@@ -103,8 +106,7 @@ func (s *SessionStore) GetActiveSearching(ctx context.Context, profileID uuid.UU
 		return SearchSession{}, errors.New("session store unavailable")
 	}
 	row := s.Pool.QueryRow(ctx, `
-		SELECT id, profile_id, party_id, game_id, mode, criteria::text, status,
-		       timeout_at, nudged_at, matched_at, match_id, created_at, updated_at
+		SELECT `+sessionSelectCols+`
 		FROM search_sessions
 		WHERE profile_id = $1 AND status IN ($2, $3)
 		ORDER BY created_at DESC
@@ -127,8 +129,7 @@ func (s *SessionStore) Cancel(ctx context.Context, id uuid.UUID) (SearchSession,
 		UPDATE search_sessions
 		SET status = $2, updated_at = $3
 		WHERE id = $1 AND status = $4
-		RETURNING id, profile_id, party_id, game_id, mode, criteria::text, status,
-		          timeout_at, nudged_at, matched_at, match_id, created_at, updated_at
+		RETURNING `+sessionSelectCols+`
 	`, id, SessionStatusCancelled, now, SessionStatusSearching)
 	sess, err := scanSession(row)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -147,8 +148,7 @@ func (s *SessionStore) ResetToSearching(ctx context.Context, id uuid.UUID) (Sear
 		UPDATE search_sessions
 		SET status = $2, match_id = NULL, matched_at = NULL, updated_at = $3
 		WHERE id = $1 AND status IN ($4, $5)
-		RETURNING id, profile_id, party_id, game_id, mode, criteria::text, status,
-		          timeout_at, nudged_at, matched_at, match_id, created_at, updated_at
+		RETURNING `+sessionSelectCols+`
 	`, id, SessionStatusSearching, now, SessionStatusPendingAccept, SessionStatusMatched)
 	sess, err := scanSession(row)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -166,8 +166,7 @@ func (s *SessionStore) ListSearchingByIDs(ctx context.Context, ids []uuid.UUID) 
 		return nil, nil
 	}
 	rows, err := s.Pool.Query(ctx, `
-		SELECT id, profile_id, party_id, game_id, mode, criteria::text, status,
-		       timeout_at, nudged_at, matched_at, match_id, created_at, updated_at
+		SELECT `+sessionSelectCols+`
 		FROM search_sessions
 		WHERE id = ANY($1) AND status = $2
 	`, ids, SessionStatusSearching)
@@ -186,6 +185,31 @@ func (s *SessionStore) ListSearchingByIDs(ctx context.Context, ids []uuid.UUID) 
 	return out, rows.Err()
 }
 
+// ListDistinctSearchingSpaceIDs returns space IDs with at least one searching session.
+func (s *SessionStore) ListDistinctSearchingSpaceIDs(ctx context.Context) ([]uuid.UUID, error) {
+	if s == nil || s.Pool == nil {
+		return nil, errors.New("session store unavailable")
+	}
+	rows, err := s.Pool.Query(ctx, `
+		SELECT DISTINCT space_id
+		FROM search_sessions
+		WHERE status = $1 AND space_id IS NOT NULL
+	`, SessionStatusSearching)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
 // ListSearchingNeedingNudge returns searching sessions created before cutoff without a nudge.
 func (s *SessionStore) ListSearchingNeedingNudge(ctx context.Context, createdBefore time.Time, limit int) ([]SearchSession, error) {
 	if s == nil || s.Pool == nil {
@@ -195,8 +219,7 @@ func (s *SessionStore) ListSearchingNeedingNudge(ctx context.Context, createdBef
 		limit = 100
 	}
 	rows, err := s.Pool.Query(ctx, `
-		SELECT id, profile_id, party_id, game_id, mode, criteria::text, status,
-		       timeout_at, nudged_at, matched_at, match_id, created_at, updated_at
+		SELECT `+sessionSelectCols+`
 		FROM search_sessions
 		WHERE status = $1 AND nudged_at IS NULL AND created_at <= $2
 		ORDER BY created_at ASC
@@ -219,8 +242,7 @@ func (s *SessionStore) MarkNudged(ctx context.Context, id uuid.UUID) (SearchSess
 		UPDATE search_sessions
 		SET nudged_at = $2, updated_at = $2
 		WHERE id = $1 AND status = $3 AND nudged_at IS NULL
-		RETURNING id, profile_id, party_id, game_id, mode, criteria::text, status,
-		          timeout_at, nudged_at, matched_at, match_id, created_at, updated_at
+		RETURNING `+sessionSelectCols+`
 	`, id, now, SessionStatusSearching)
 	sess, err := scanSession(row)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -238,8 +260,7 @@ func (s *SessionStore) ListSearchingExpired(ctx context.Context, now time.Time, 
 		limit = 100
 	}
 	rows, err := s.Pool.Query(ctx, `
-		SELECT id, profile_id, party_id, game_id, mode, criteria::text, status,
-		       timeout_at, nudged_at, matched_at, match_id, created_at, updated_at
+		SELECT `+sessionSelectCols+`
 		FROM search_sessions
 		WHERE status = $1 AND timeout_at IS NOT NULL AND timeout_at <= $2
 		ORDER BY timeout_at ASC
@@ -261,8 +282,7 @@ func (s *SessionStore) ListPendingAcceptExpired(ctx context.Context, matchedBefo
 		limit = 100
 	}
 	rows, err := s.Pool.Query(ctx, `
-		SELECT id, profile_id, party_id, game_id, mode, criteria::text, status,
-		       timeout_at, nudged_at, matched_at, match_id, created_at, updated_at
+		SELECT `+sessionSelectCols+`
 		FROM search_sessions
 		WHERE status = $1 AND matched_at IS NOT NULL AND matched_at <= $2
 		ORDER BY matched_at ASC
@@ -285,8 +305,7 @@ func (s *SessionStore) ExpirePendingAccept(ctx context.Context, id uuid.UUID) (S
 		UPDATE search_sessions
 		SET status = $2, updated_at = $3
 		WHERE id = $1 AND status = $4
-		RETURNING id, profile_id, party_id, game_id, mode, criteria::text, status,
-		          timeout_at, nudged_at, matched_at, match_id, created_at, updated_at
+		RETURNING `+sessionSelectCols+`
 	`, id, SessionStatusCancelled, now, SessionStatusPendingAccept)
 	sess, err := scanSession(row)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -305,8 +324,7 @@ func (s *SessionStore) ExpireSearching(ctx context.Context, id uuid.UUID) (Searc
 		UPDATE search_sessions
 		SET status = $2, updated_at = $3
 		WHERE id = $1 AND status = $4
-		RETURNING id, profile_id, party_id, game_id, mode, criteria::text, status,
-		          timeout_at, nudged_at, matched_at, match_id, created_at, updated_at
+		RETURNING `+sessionSelectCols+`
 	`, id, SessionStatusTimeout, now, SessionStatusSearching)
 	sess, err := scanSession(row)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -331,7 +349,8 @@ func scanSession(row pgx.Row) (SearchSession, error) {
 	var sess SearchSession
 	err := row.Scan(
 		&sess.ID, &sess.ProfileID, &sess.PartyID, &sess.GameID, &sess.Mode, &sess.Criteria,
-		&sess.Status, &sess.TimeoutAt, &sess.NudgedAt, &sess.MatchedAt, &sess.MatchID, &sess.CreatedAt, &sess.UpdatedAt,
+		&sess.Status, &sess.TimeoutAt, &sess.NudgedAt, &sess.MatchedAt, &sess.MatchID, &sess.SpaceID,
+		&sess.CreatedAt, &sess.UpdatedAt,
 	)
 	return sess, err
 }

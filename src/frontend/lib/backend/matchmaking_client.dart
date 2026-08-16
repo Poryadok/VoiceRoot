@@ -224,6 +224,7 @@ class SearchSessionData {
     required this.criteriaJson,
     required this.status,
     this.matchId,
+    this.spaceId,
     this.timeoutAt,
     this.createdAt,
   });
@@ -235,6 +236,7 @@ class SearchSessionData {
   final String criteriaJson;
   final String status;
   final String? matchId;
+  final String? spaceId;
   final DateTime? timeoutAt;
   final DateTime? createdAt;
 
@@ -250,6 +252,7 @@ class SearchSessionData {
       criteriaJson: session['criteriaJson'] as String? ?? session['criteria_json'] as String? ?? '',
       status: session['status'] as String? ?? '',
       matchId: session['matchId'] as String? ?? session['match_id'] as String?,
+      spaceId: session['spaceId'] as String? ?? session['space_id'] as String?,
       timeoutAt: _parseGatewayTimestamp(session['timeoutAt'] ?? session['timeout_at']),
       createdAt: _parseGatewayTimestamp(session['createdAt'] ?? session['created_at']),
     );
@@ -512,6 +515,25 @@ class VoiceMatchmakingClient {
   }) async {
     final result = await _gateway.postJson(
       uri: _gateway.resolve('/api/v1/matchmaking/search'),
+      authorization: authorization,
+      body: {
+        'gameId': gameId,
+        'mode': mode,
+        'criteriaJson': jsonEncode(criteria),
+      },
+    );
+    return _map(result, SearchSessionData.fromGatewayJson);
+  }
+
+  Future<MatchmakingApiResult<SearchSessionData>> startSpaceQueue({
+    required String authorization,
+    required String spaceId,
+    required String gameId,
+    required String mode,
+    required Map<String, dynamic> criteria,
+  }) async {
+    final result = await _gateway.postJson(
+      uri: _gateway.resolve('/api/v1/spaces/$spaceId/matchmaking/queue'),
       authorization: authorization,
       body: {
         'gameId': gameId,

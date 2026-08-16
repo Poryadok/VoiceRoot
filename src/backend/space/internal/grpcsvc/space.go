@@ -111,6 +111,33 @@ func (s *SpaceGRPC) UpdateSpace(ctx context.Context, req *spacev1.UpdateSpaceReq
 	return &spacev1.UpdateSpaceResponse{Space: spaceRowToProto(updated)}, nil
 }
 
+func (s *SpaceGRPC) UpdateSpaceMmConfig(ctx context.Context, req *spacev1.UpdateSpaceMmConfigRequest) (*spacev1.UpdateSpaceMmConfigResponse, error) {
+	if s == nil || s.Store == nil {
+		return nil, status.Error(codes.FailedPrecondition, "space persistence not configured")
+	}
+	spaceID, err := parseUUIDField("space_id", req.GetSpaceId())
+	if err != nil {
+		return nil, err
+	}
+	if err := s.requireSpacePermission(ctx, spaceID, permissions.SpaceManageSettings); err != nil {
+		return nil, err
+	}
+	cfg := req.GetMmConfigJson()
+	updated, err := s.Store.UpdateSpace(ctx, spaceID, store.UpdateSpaceInput{MMConfigJSON: &cfg})
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if updated == nil {
+		return nil, status.Error(codes.NotFound, "space not found")
+	}
+	if s.SpaceEvents != nil {
+		if pubErr := s.SpaceEvents.PublishSpaceUpdated(ctx, spaceID.String()); pubErr != nil {
+			s.logPublishError(ctx, "space.updated", pubErr, slog.String("space_id", spaceID.String()))
+		}
+	}
+	return &spacev1.UpdateSpaceMmConfigResponse{Space: spaceRowToProto(updated)}, nil
+}
+
 func (s *SpaceGRPC) GetSpace(ctx context.Context, req *spacev1.GetSpaceRequest) (*spacev1.GetSpaceResponse, error) {
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "space persistence not configured")

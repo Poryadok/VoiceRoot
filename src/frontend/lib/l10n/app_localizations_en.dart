@@ -1008,6 +1008,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get spaceMembersTooltip => 'Space members';
 
   @override
+  String get spaceMatchmakingTooltip => 'Space matchmaking';
+
+  @override
   String get spaceMembersTitle => 'Members';
 
   @override

@@ -23,6 +23,11 @@ import (
 	matchmakingv1 "voice.app/voice/matchmaking/v1"
 )
 
+// SpaceQueueGate checks space membership / mm_config for StartSpaceQueue.
+type SpaceQueueGate interface {
+	EnsureMemberAndMMEnabled(ctx context.Context, spaceID uuid.UUID) error
+}
+
 // SearchDeps wires queue search RPC dependencies.
 type SearchDeps struct {
 	Sessions *store.SessionStore
@@ -43,100 +48,155 @@ func (s *MatchmakingGRPC) searchDeps() SearchDeps {
 }
 
 func (s *MatchmakingGRPC) StartSearch(ctx context.Context, req *matchmakingv1.StartSearchRequest) (*matchmakingv1.StartSearchResponse, error) {
+	sess, err := s.startSearch(ctx, startSearchParams{
+		GameID:       req.GetGameId(),
+		Mode:         req.GetMode(),
+		CriteriaJSON: req.GetCriteriaJson(),
+		PartyID:      req.PartyId,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &matchmakingv1.StartSearchResponse{SearchSession: toProtoSession(sess)}, nil
+}
+
+func (s *MatchmakingGRPC) StartSpaceQueue(ctx context.Context, req *matchmakingv1.StartSpaceQueueRequest) (*matchmakingv1.StartSpaceQueueResponse, error) {
+	spaceID, err := uuid.Parse(strings.TrimSpace(req.GetSpaceId()))
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid space_id")
+	}
+	if s.SpaceQueue == nil {
+		return nil, status.Error(codes.Unavailable, "space matchmaking unavailable")
+	}
+	if err := s.SpaceQueue.EnsureMemberAndMMEnabled(ctx, spaceID); err != nil {
+		return nil, err
+	}
+	sess, err := s.startSearch(ctx, startSearchParams{
+		GameID:       req.GetGameId(),
+		Mode:         req.GetMode(),
+		CriteriaJSON: req.GetCriteriaJson(),
+		PartyID:      req.PartyId,
+		SpaceID:      &spaceID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &matchmakingv1.StartSpaceQueueResponse{SearchSession: toProtoSession(sess)}, nil
+}
+
+type startSearchParams struct {
+	GameID       string
+	Mode         string
+	CriteriaJSON string
+	PartyID      *string
+	SpaceID      *uuid.UUID
+}
+
+func (s *MatchmakingGRPC) startSearch(ctx context.Context, req startSearchParams) (store.SearchSession, error) {
 	profileID, ok := authctx.ProfileID(ctx)
 	if !ok {
-		return nil, status.Error(codes.Unauthenticated, "missing profile")
+		return store.SearchSession{}, status.Error(codes.Unauthenticated, "missing profile")
 	}
 	deps := s.searchDeps()
 	if deps.Sessions == nil || deps.Games == nil {
-		return nil, status.Error(codes.Unavailable, "search unavailable")
+		return store.SearchSession{}, status.Error(codes.Unavailable, "search unavailable")
 	}
 	if deps.Queue == nil {
-		return nil, status.Error(codes.Unavailable, "queue unavailable")
+		return store.SearchSession{}, status.Error(codes.Unavailable, "queue unavailable")
 	}
 	if err := deps.Queue.Ping(ctx); err != nil {
-		return nil, status.Error(codes.Unavailable, "queue unavailable")
+		return store.SearchSession{}, status.Error(codes.Unavailable, "queue unavailable")
 	}
 	if s.Bans != nil {
 		if accountID, ok := authctx.AccountID(ctx); ok {
 			banned, err := s.Bans.IsPlatformBanned(ctx, accountID)
 			if err != nil {
-				return nil, status.Errorf(codes.Internal, "mm ban check: %v", err)
+				return store.SearchSession{}, status.Errorf(codes.Internal, "mm ban check: %v", err)
 			}
 			if banned {
-				return nil, status.Error(codes.PermissionDenied, "matchmaking banned")
+				return store.SearchSession{}, status.Error(codes.PermissionDenied, "matchmaking banned")
 			}
 		}
 	}
 
-	gameID, err := uuid.Parse(strings.TrimSpace(req.GetGameId()))
+	gameID, err := uuid.Parse(strings.TrimSpace(req.GameID))
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid game_id")
+		return store.SearchSession{}, status.Error(codes.InvalidArgument, "invalid game_id")
 	}
-	modeName := strings.TrimSpace(req.GetMode())
+	modeName := strings.TrimSpace(req.Mode)
 	if modeName == "" {
-		return nil, status.Error(codes.InvalidArgument, "mode required")
+		return store.SearchSession{}, status.Error(codes.InvalidArgument, "mode required")
 	}
 
-	crit, err := criteria.Parse(req.GetCriteriaJson())
+	crit, err := criteria.Parse(req.CriteriaJSON)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid criteria_json: %v", err)
+		return store.SearchSession{}, status.Errorf(codes.InvalidArgument, "invalid criteria_json: %v", err)
 	}
 
 	game, err := deps.Games.Get(ctx, gameID)
 	if errors.Is(err, store.ErrGameNotFound) {
-		return nil, status.Error(codes.NotFound, "game not found")
+		return store.SearchSession{}, status.Error(codes.NotFound, "game not found")
 	}
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "get game: %v", err)
+		return store.SearchSession{}, status.Errorf(codes.Internal, "get game: %v", err)
 	}
 	if game.Status != store.StatusActive {
-		return nil, status.Error(codes.FailedPrecondition, "game not active")
+		return store.SearchSession{}, status.Error(codes.FailedPrecondition, "game not active")
 	}
 
 	gameCfg, err := config.Parse(game.ConfigRaw)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "invalid game config: %v", err)
+		return store.SearchSession{}, status.Errorf(codes.Internal, "invalid game config: %v", err)
 	}
 	if _, err := criteria.Validate(crit, gameCfg, modeName, 1); err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid criteria: %v", err)
+		return store.SearchSession{}, status.Errorf(codes.InvalidArgument, "invalid criteria: %v", err)
 	}
 
 	if _, err := deps.Sessions.GetActiveSearching(ctx, profileID); err == nil {
-		return nil, status.Error(codes.FailedPrecondition, "active search already exists")
+		return store.SearchSession{}, status.Error(codes.FailedPrecondition, "active search already exists")
 	} else if !errors.Is(err, store.ErrSessionNotFound) {
-		return nil, status.Errorf(codes.Internal, "check active search: %v", err)
+		return store.SearchSession{}, status.Errorf(codes.Internal, "check active search: %v", err)
 	}
 
 	canonical := criteria.MustMarshal(crit)
 	searchTiming := runtimeconfig.LoadSearchTiming()
 	timeoutAt := time.Now().UTC().Add(searchTiming.Timeout)
+	var partyID *uuid.UUID
+	if req.PartyID != nil && strings.TrimSpace(*req.PartyID) != "" {
+		pid, err := uuid.Parse(strings.TrimSpace(*req.PartyID))
+		if err != nil {
+			return store.SearchSession{}, status.Error(codes.InvalidArgument, "invalid party_id")
+		}
+		partyID = &pid
+	}
 	sess, err := deps.Sessions.Create(ctx, store.CreateSessionParams{
 		ProfileID: profileID,
+		PartyID:   partyID,
 		GameID:    gameID,
 		Mode:      modeName,
 		Criteria:  canonical,
 		TimeoutAt: timeoutAt,
+		SpaceID:   req.SpaceID,
 	})
 	if errors.Is(err, store.ErrActiveSearchExists) {
-		return nil, status.Error(codes.FailedPrecondition, "active search already exists")
+		return store.SearchSession{}, status.Error(codes.FailedPrecondition, "active search already exists")
 	}
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "create session: %v", err)
+		return store.SearchSession{}, status.Errorf(codes.Internal, "create session: %v", err)
 	}
 
 	if err := deps.Queue.AcquireLock(ctx, profileID, sess.ID); err != nil {
 		_, _ = deps.Sessions.Cancel(ctx, sess.ID)
 		if errors.Is(err, queue.ErrLockHeld) {
-			return nil, status.Error(codes.FailedPrecondition, "active search already exists")
+			return store.SearchSession{}, status.Error(codes.FailedPrecondition, "active search already exists")
 		}
-		return nil, status.Error(codes.Unavailable, "queue unavailable")
+		return store.SearchSession{}, status.Error(codes.Unavailable, "queue unavailable")
 	}
 
-	if err := deps.Queue.Enqueue(ctx, gameID, modeName, crit.Region, sess.ID, sess.CreatedAt); err != nil {
+	if err := deps.Queue.EnqueueScoped(ctx, req.SpaceID, gameID, modeName, crit.Region, sess.ID, sess.CreatedAt); err != nil {
 		_ = deps.Queue.ReleaseLock(ctx, profileID, sess.ID)
 		_, _ = deps.Sessions.Cancel(ctx, sess.ID)
-		return nil, status.Error(codes.Unavailable, "queue unavailable")
+		return store.SearchSession{}, status.Error(codes.Unavailable, "queue unavailable")
 	}
 
 	if deps.Events != nil {
@@ -147,7 +207,7 @@ func (s *MatchmakingGRPC) StartSearch(ctx context.Context, req *matchmakingv1.St
 		}
 	}
 
-	return &matchmakingv1.StartSearchResponse{SearchSession: toProtoSession(sess)}, nil
+	return sess, nil
 }
 
 func (s *MatchmakingGRPC) CancelSearch(ctx context.Context, req *matchmakingv1.CancelSearchRequest) (*matchmakingv1.CancelSearchResponse, error) {
@@ -185,7 +245,7 @@ func (s *MatchmakingGRPC) CancelSearch(ctx context.Context, req *matchmakingv1.C
 	}
 
 	if deps.Queue != nil {
-		_ = deps.Queue.Dequeue(ctx, sess.GameID, sess.Mode, crit.Region, sess.ID)
+		_ = deps.Queue.DequeueScoped(ctx, sess.SpaceID, sess.GameID, sess.Mode, crit.Region, sess.ID)
 		_ = deps.Queue.ReleaseLock(ctx, profileID, sess.ID)
 	}
 
@@ -254,6 +314,10 @@ func toProtoSession(sess store.SearchSession) *matchmakingv1.SearchSession {
 	if sess.MatchID != nil {
 		matchID := sess.MatchID.String()
 		out.MatchId = &matchID
+	}
+	if sess.SpaceID != nil {
+		spaceID := sess.SpaceID.String()
+		out.SpaceId = &spaceID
 	}
 	return out
 }

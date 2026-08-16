@@ -505,6 +505,7 @@
     }
   },
   "spaceMembersTooltip": "Участники спейса",
+  "spaceMatchmakingTooltip": "Матчмейкинг спейса",
   "spaceMembersTitle": "Участники",
   "spaceMembersSubtitle": "Владелец и администраторы могут назначать роли и удалять участников.",
   "spaceMembersLoadError": "Не удалось загрузить участников",

@@ -47,6 +47,14 @@ class SpaceServiceClient extends $grpc.Client {
     return $createUnaryCall(_$updateSpace, request, options: options);
   }
 
+  /// Space-level matchmaking settings (mm_config jsonb; roadmap П.1).
+  $grpc.ResponseFuture<$0.UpdateSpaceMmConfigResponse> updateSpaceMmConfig(
+    $0.UpdateSpaceMmConfigRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$updateSpaceMmConfig, request, options: options);
+  }
+
   $grpc.ResponseFuture<$0.DeleteSpaceResponse> deleteSpace(
     $0.DeleteSpaceRequest request, {
     $grpc.CallOptions? options,
@@ -316,6 +324,11 @@ class SpaceServiceClient extends $grpc.Client {
           '/voice.space.v1.SpaceService/UpdateSpace',
           ($0.UpdateSpaceRequest value) => value.writeToBuffer(),
           $0.UpdateSpaceResponse.fromBuffer);
+  static final _$updateSpaceMmConfig = $grpc.ClientMethod<
+          $0.UpdateSpaceMmConfigRequest, $0.UpdateSpaceMmConfigResponse>(
+      '/voice.space.v1.SpaceService/UpdateSpaceMmConfig',
+      ($0.UpdateSpaceMmConfigRequest value) => value.writeToBuffer(),
+      $0.UpdateSpaceMmConfigResponse.fromBuffer);
   static final _$deleteSpace =
       $grpc.ClientMethod<$0.DeleteSpaceRequest, $0.DeleteSpaceResponse>(
           '/voice.space.v1.SpaceService/DeleteSpace',
@@ -522,6 +535,15 @@ abstract class SpaceServiceBase extends $grpc.Service {
             ($core.List<$core.int> value) =>
                 $0.UpdateSpaceRequest.fromBuffer(value),
             ($0.UpdateSpaceResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.UpdateSpaceMmConfigRequest,
+            $0.UpdateSpaceMmConfigResponse>(
+        'UpdateSpaceMmConfig',
+        updateSpaceMmConfig_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.UpdateSpaceMmConfigRequest.fromBuffer(value),
+        ($0.UpdateSpaceMmConfigResponse value) => value.writeToBuffer()));
     $addMethod(
         $grpc.ServiceMethod<$0.DeleteSpaceRequest, $0.DeleteSpaceResponse>(
             'DeleteSpace',
@@ -849,6 +871,15 @@ abstract class SpaceServiceBase extends $grpc.Service {
 
   $async.Future<$0.UpdateSpaceResponse> updateSpace(
       $grpc.ServiceCall call, $0.UpdateSpaceRequest request);
+
+  $async.Future<$0.UpdateSpaceMmConfigResponse> updateSpaceMmConfig_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.UpdateSpaceMmConfigRequest> $request) async {
+    return updateSpaceMmConfig($call, await $request);
+  }
+
+  $async.Future<$0.UpdateSpaceMmConfigResponse> updateSpaceMmConfig(
+      $grpc.ServiceCall call, $0.UpdateSpaceMmConfigRequest request);
 
   $async.Future<$0.DeleteSpaceResponse> deleteSpace_Pre($grpc.ServiceCall $call,
       $async.Future<$0.DeleteSpaceRequest> $request) async {

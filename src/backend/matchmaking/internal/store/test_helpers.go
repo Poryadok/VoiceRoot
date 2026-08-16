@@ -38,6 +38,7 @@ func applyMatchmakingMigrationsUpTo(t *testing.T, ctx context.Context, pool *pgx
 		"000007_match_history_index.up.sql",
 		"000008_mm_platform_bans.up.sql",
 		"000009_game_request_statuses.up.sql",
+		"000010_search_session_space.up.sql",
 	} {
 		migrationPath := filepath.Join(root, "src", "backend", "migrations", "matchmaking_db", name)
 		sqlBytes, err := os.ReadFile(migrationPath)
@@ -53,10 +54,11 @@ func applyMatchmakingMigrationsUpTo(t *testing.T, ctx context.Context, pool *pgx
 
 func ApplyMatchmakingMigrationsForStoreTest(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
-	applyMatchmakingMigrationsUpTo(t, ctx, pool, "000009_game_request_statuses.up.sql")
+	applyMatchmakingMigrationsUpTo(t, ctx, pool, "000010_search_session_space.up.sql")
 }
 
 func ApplyMatchmakingMigrationsThrough005ForStoreTest(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
-	applyMatchmakingMigrationsUpTo(t, ctx, pool, "000006_search_nudge.up.sql")
+	// Includes space_id column so SessionStore.Create stays compatible.
+	applyMatchmakingMigrationsUpTo(t, ctx, pool, "000010_search_session_space.up.sql")
 }
