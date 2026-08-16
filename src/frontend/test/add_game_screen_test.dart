@@ -9,7 +9,6 @@ import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/gateway_http.dart';
 import 'package:voice_frontend/backend/matchmaking_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
-import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/state/matchmaking_providers.dart';
 import 'package:voice_frontend/ui/matchmaking/add_game_screen.dart';
 import 'package:voice_frontend/ui/matchmaking/game_catalog_screen.dart';
