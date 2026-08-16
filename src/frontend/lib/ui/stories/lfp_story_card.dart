@@ -5,11 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../backend/stories_client.dart';
 import '../../l10n/app_localizations.dart';
+import '../../state/auth_providers.dart';
 import '../../state/chat_providers.dart';
-import '../../state/matchmaking_providers.dart';
+import '../../state/stories_providers.dart';
 import '../../theme/voice_colors.dart';
-import '../matchmaking/game_catalog_screen.dart';
-import '../matchmaking/queue_search_screen.dart';
 
 /// Looking-for-party story card with join/write actions.
 class LfpStoryCard extends StatelessWidget {
@@ -123,37 +122,51 @@ abstract final class LfpStoryActions {
       return;
     }
     final ref = _RefReader(container);
-    final gameId = story.gameTag;
-    if (gameId == null || gameId.isEmpty) {
-      await Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => const GameCatalogScreen(selectMode: true),
-        ),
-      );
-      return;
-    }
+    final auth = ref.read(authorizationHeaderProvider);
+    if (auth == null || story.id.isEmpty) return;
 
-    final catalog = await ref.read(gameCatalogProvider.future);
-    final game = catalog.games.where((g) => g.id == gameId).firstOrNull;
-    final modes = game?.config.modes ?? const [];
-    if (game == null || modes.isEmpty) {
-      if (!context.mounted) return;
-      await Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => const GameCatalogScreen(selectMode: true),
-        ),
-      );
-      return;
-    }
-
+    final result = await ref.read(voiceStoriesClientProvider).respondToLfpStory(
+          authorization: auth,
+          storyId: story.id,
+          responseType: 'JOIN',
+        );
     if (!context.mounted) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => QueueSearchScreen(
-          game: game,
-          mode: modes.first,
-        ),
-      ),
+    if (result is StoriesApiFailure) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.message)),
+      );
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Join request sent')),
+    );
+  }
+
+  static Future<void> invite(BuildContext context, StoryData story) async {
+    ProviderContainer? container;
+    try {
+      container = ProviderScope.containerOf(context, listen: false);
+    } catch (_) {
+      return;
+    }
+    final ref = _RefReader(container);
+    final auth = ref.read(authorizationHeaderProvider);
+    if (auth == null || story.id.isEmpty) return;
+
+    final result = await ref.read(voiceStoriesClientProvider).respondToLfpStory(
+          authorization: auth,
+          storyId: story.id,
+          responseType: 'INVITE',
+        );
+    if (!context.mounted) return;
+    if (result is StoriesApiFailure) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.message)),
+      );
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Invite sent')),
     );
   }
 

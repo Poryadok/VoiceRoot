@@ -34,6 +34,29 @@ func TestRouteStoryNotification_StoryCreatedMention(t *testing.T) {
 	require.Contains(t, decisions, mentionedID)
 }
 
+func TestRouteStoryNotification_StoryLfpResponseJoin(t *testing.T) {
+	authorID := uuid.NewString()
+	responderID := uuid.NewString()
+	storyID := uuid.NewString()
+	env := &eventsv1.StoryStreamEvent{
+		Payload: &eventsv1.StoryStreamEvent_StoryLfpResponse{
+			StoryLfpResponse: &eventsv1.StoryLfpResponse{
+				StoryId:             storyID,
+				AuthorProfileId:     authorID,
+				ResponderProfileId:  responderID,
+				ResponseType:        "JOIN",
+			},
+		},
+	}
+	handler := &consumer.StoryEventHandler{Router: delivery.DecideRouting}
+	pusher := &dispatch.StoryPusher{}
+	err := routeStoryNotification(handler, pusher, env)
+	require.NoError(t, err)
+	decisions := handler.HandleStoryLfpResponse(context.Background(), env.GetStoryLfpResponse())
+	require.Contains(t, decisions, authorID)
+	require.NotContains(t, decisions, responderID)
+}
+
 func TestRouteStoryNotification_unknownPayload(t *testing.T) {
 	err := routeStoryNotification(nil, nil, &eventsv1.StoryStreamEvent{})
 	require.NoError(t, err)

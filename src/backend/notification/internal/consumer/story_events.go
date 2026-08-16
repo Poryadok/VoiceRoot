@@ -2,6 +2,7 @@ package consumer
 
 import (
 	"context"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -47,4 +48,24 @@ func (h *StoryEventHandler) HandleStoryCreated(ctx context.Context, ev *eventsv1
 		out[profileID] = h.route(ev.GetAuthorProfileId(), profileID, delivery.TypeMention)
 	}
 	return out
+}
+
+// HandleStoryLfpResponse notifies the LFP author about JOIN/INVITE (matchmaking.md Social Discovery).
+func (h *StoryEventHandler) HandleStoryLfpResponse(ctx context.Context, ev *eventsv1.StoryLfpResponse) map[string]delivery.DeliveryDecision {
+	_ = ctx
+	if ev == nil {
+		return nil
+	}
+	authorID := ev.GetAuthorProfileId()
+	responderID := ev.GetResponderProfileId()
+	if authorID == "" || responderID == "" || authorID == responderID {
+		return nil
+	}
+	typ := delivery.TypeLfpJoinRequest
+	if strings.EqualFold(ev.GetResponseType(), "INVITE") {
+		typ = delivery.TypeLfpInviteRequest
+	}
+	return map[string]delivery.DeliveryDecision{
+		authorID: h.route(responderID, authorID, typ),
+	}
 }
