@@ -277,6 +277,121 @@ commands:
     return (botId: botId, botToken: botToken);
   }
 
+  Future<({String botId, String botToken})> registerAutocompleteBot(String name) async {
+    final base = ctx.config.baseUrl;
+    final auth = owner.authorizationHeader;
+
+    final regResp = await httpClient.post(
+      Uri.parse('$base/api/v1/bots'),
+      headers: {
+        'Authorization': auth,
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'name': name,
+        'description': 'autocomplete bot',
+        'scopes_json': '["TEXT_CHAT_SEND_MESSAGES"]',
+      }),
+    );
+    expect(regResp.statusCode, 200, reason: regResp.body);
+    final regJson = jsonDecode(regResp.body) as Map<String, dynamic>;
+    final botId = (regJson['bot'] as Map<String, dynamic>)['id'] as String;
+
+    const manifest = '''
+name: StatsBot
+description: autocomplete
+scopes: [TEXT_CHAT_SEND_MESSAGES]
+commands:
+  - name: stats
+    description: Show player stats
+    options:
+      - name: game
+        type: string
+        required: true
+        autocomplete: true
+  - name: queue
+    description: Queue
+    subcommands:
+      - name: join
+        description: Join
+''';
+    final manifestResp = await httpClient.post(
+      Uri.parse('$base/api/v1/bots/$botId/manifest'),
+      headers: {
+        'Authorization': auth,
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'manifest_yaml': manifest}),
+    );
+    expect(manifestResp.statusCode, 200, reason: manifestResp.body);
+
+    var botToken = (regJson['tokenResponse'] as Map<String, dynamic>?)?['token'] as String?;
+    if (botToken == null || botToken.trim().isEmpty) {
+      final tokenResp = await httpClient.post(
+        Uri.parse('$base/api/v1/bots/$botId/token/regenerate'),
+        headers: {'Authorization': auth},
+      );
+      expect(tokenResp.statusCode, 200, reason: tokenResp.body);
+      final tokenJson = jsonDecode(tokenResp.body) as Map<String, dynamic>;
+      botToken = (tokenJson['token_response'] as Map<String, dynamic>)['token'] as String;
+    }
+
+    return (botId: botId, botToken: botToken);
+  }
+
+  Future<List<Map<String, dynamic>>> fetchOwnerCommandCatalog(String botId) async {
+    final resp = await httpClient.get(
+      Uri.parse('${ctx.config.baseUrl}/api/v1/bots/$botId/commands'),
+      headers: {'Authorization': owner.authorizationHeader},
+    );
+    expect(resp.statusCode, 200, reason: resp.body);
+    final parsed = jsonDecode(resp.body) as Map<String, dynamic>;
+    final commandList = parsed['command_list'] as Map<String, dynamic>?;
+    final commandsJson = commandList?['commands_json'] as String? ?? '[]';
+    return (jsonDecode(commandsJson) as List<dynamic>).cast<Map<String, dynamic>>();
+  }
+
+  Future<BotAutocompleteResult> waitAutocompleteChoices({
+    required String botId,
+    required String commandName,
+    required String optionName,
+    required String focusedValue,
+    Duration timeout = const Duration(seconds: 10),
+  }) async {
+    final deadline = DateTime.now().add(timeout);
+    BotAutocompleteResult? last;
+    while (DateTime.now().isBefore(deadline)) {
+      final result = await bots.autocompleteOption(
+        authorization: owner.authorizationHeader,
+        chatId: chatId,
+        chatType: 'CHAT_TYPE_GROUP',
+        botId: botId,
+        commandName: commandName,
+        optionName: optionName,
+        focusedValue: focusedValue,
+      );
+      expect(result, isA<BotsApiOk<BotAutocompleteResult>>(), reason: '$result');
+      last = (result as BotsApiOk<BotAutocompleteResult>).data;
+      if (last.choices.isNotEmpty) {
+        return last;
+      }
+      if (!last.pending) {
+        fail('autocomplete returned no choices and pending=false');
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    }
+    fail('timed out waiting for autocomplete choices (last=$last)');
+  }
+
+  PollingBotSession startAutocompletePollingBot(String botToken) {
+    return PollingBotSession(
+      httpClient: httpClient,
+      baseUrl: ctx.config.baseUrl,
+      botToken: botToken,
+      handleAutocomplete: true,
+    )..start();
+  }
+
   Future<void> installBot(String botId) async {
     await _installBotRaw(botId);
   }
@@ -379,12 +494,14 @@ class PollingBotSession {
     required this.baseUrl,
     required this.botToken,
     this.ephemeral = false,
+    this.handleAutocomplete = false,
   });
 
   final http.Client httpClient;
   final String baseUrl;
   final String botToken;
   final bool ephemeral;
+  final bool handleAutocomplete;
 
   Timer? _timer;
   bool _running = false;
@@ -413,7 +530,28 @@ class PollingBotSession {
       final events = (parsed['events'] as List<dynamic>?) ?? const [];
       for (final raw in events) {
         final evt = raw as Map<String, dynamic>;
+        final eventType = evt['event_type'] as String? ?? '';
         final payload = jsonDecode(evt['payload_json'] as String) as Map<String, dynamic>;
+        final type = payload['type'] as String? ?? '';
+        if (handleAutocomplete && (type == 'autocomplete' || eventType == 'autocomplete')) {
+          final requestId = payload['request_id'] as String?;
+          if (requestId == null || requestId.isEmpty) continue;
+          await httpClient.post(
+            Uri.parse('$baseUrl/api/v1/bots/me/autocomplete/complete'),
+            headers: {
+              'Authorization': auth,
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'request_id': requestId,
+              'choices': [
+                {'name': 'CS2', 'value': 'cs2'},
+                {'name': 'CS:GO', 'value': 'csgo'},
+              ],
+            }),
+          );
+          continue;
+        }
         final token = payload['interaction_token'] as String?;
         if (token == null || token.isEmpty) continue;
         await httpClient.post(
