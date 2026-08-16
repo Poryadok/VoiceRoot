@@ -207,6 +207,8 @@ jobs:
         run: make buf-dart-check
       - name: Prefetch sqlite3mc native assets (host)
         run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
+      - name: Axe web a11y landmark smoke
+        run: make a11y-web-axe
       - name: Flutter analyze and test
         working-directory: src/frontend
         run: |

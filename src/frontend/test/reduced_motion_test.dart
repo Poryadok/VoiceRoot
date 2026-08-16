@@ -58,4 +58,32 @@ void main() {
     expect(find.textContaining('duration:'), findsOneWidget);
     expect(find.text('duration:0'), findsNothing);
   });
+
+  testWidgets('MediaQuery.disableAnimations forces instant transitions', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          reducedMotionEnabledProvider.overrideWith(
+            () => _FixedReducedMotionNotifier(false),
+          ),
+        ],
+        child: MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: MaterialApp(
+            home: Builder(
+              builder: (context) {
+                final duration = panelAnimationDurationOf(context);
+                return Text('duration:${duration.inMilliseconds}');
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('duration:0'), findsOneWidget);
+  });
 }
