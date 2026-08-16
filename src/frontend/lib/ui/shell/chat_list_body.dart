@@ -44,6 +44,9 @@ class ChatListBody extends ConsumerStatefulWidget {
   static const Key createSpaceKey = Key('chat_list_create_space');
   static const Key joinSpaceInviteKey = Key('chat_list_join_space_invite');
   static Key spaceTileKey(String spaceId) => Key('chat_list_space_$spaceId');
+  static Key muteActionKey(String chatId) => Key('chat_list_mute_$chatId');
+  static Key archiveActionKey(String chatId) =>
+      Key('chat_list_archive_$chatId');
 
   final bool showHeader;
   final void Function(String chatId)? onChatSelected;
@@ -297,6 +300,8 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
                           l10n: l10n,
                           inbox: inbox,
                           item: item,
+                          muted: ref.watch(chatMutedUntilProvider)[item.chatId] !=
+                              null,
                           onAccept: () => ref
                               .read(chatListControllerProvider.notifier)
                               .acceptRequest(item.chatId),
@@ -305,6 +310,14 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
                               .declineRequest(item.chatId),
                         ),
                         onTap: () => selectChat(item.chatId),
+                        onLongPress: inbox == 'requests'
+                            ? null
+                            : () => _showChatRowActions(
+                                  context,
+                                  ref,
+                                  l10n,
+                                  item,
+                                ),
                       ),
                       if (item.isStranger && inbox == 'main')
                         Padding(
@@ -348,11 +361,71 @@ class _StrangerChip extends StatelessWidget {
   }
 }
 
+Future<void> _showChatRowActions(
+  BuildContext context,
+  WidgetRef ref,
+  AppLocalizations l10n,
+  ChatListItem item,
+) async {
+  final muted = ref.read(chatMutedUntilProvider)[item.chatId] != null;
+  final action = await showModalBottomSheet<String>(
+    context: context,
+    builder: (ctx) {
+      return SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              key: ChatListBody.muteActionKey(item.chatId),
+              leading: Icon(muted ? Icons.notifications_active : Icons.notifications_off),
+              title: Text(muted ? l10n.chatListUnmute : l10n.chatListMute),
+              onTap: () => Navigator.pop(ctx, muted ? 'unmute' : 'mute'),
+            ),
+            if (item.chat.isDm)
+              ListTile(
+                key: ChatListBody.archiveActionKey(item.chatId),
+                leading: const Icon(Icons.archive_outlined),
+                title: Text(l10n.chatListArchive),
+                onTap: () => Navigator.pop(ctx, 'archive'),
+              ),
+          ],
+        ),
+      );
+    },
+  );
+  if (action == null || !context.mounted) return;
+  final controller = ref.read(chatListControllerProvider.notifier);
+  switch (action) {
+    case 'mute':
+      final until = DateTime.utc(9999, 12, 31);
+      final err = await controller.muteChat(item.chatId, mutedUntil: until);
+      if (err == null) {
+        ref.read(chatMutedUntilProvider.notifier).update((m) {
+          final next = Map<String, DateTime>.from(m);
+          next[item.chatId] = until;
+          return next;
+        });
+      }
+    case 'unmute':
+      final err = await controller.muteChat(item.chatId);
+      if (err == null) {
+        ref.read(chatMutedUntilProvider.notifier).update((m) {
+          final next = Map<String, DateTime>.from(m);
+          next.remove(item.chatId);
+          return next;
+        });
+      }
+    case 'archive':
+      await controller.archiveChat(item.chatId, archived: true);
+  }
+}
+
 class _ChatListTrailing extends StatelessWidget {
   const _ChatListTrailing({
     required this.l10n,
     required this.inbox,
     required this.item,
+    required this.muted,
     required this.onAccept,
     required this.onDecline,
   });
@@ -360,6 +433,7 @@ class _ChatListTrailing extends StatelessWidget {
   final AppLocalizations l10n;
   final String inbox;
   final ChatListItem item;
+  final bool muted;
   final VoidCallback onAccept;
   final VoidCallback onDecline;
 
@@ -377,13 +451,27 @@ class _ChatListTrailing extends StatelessWidget {
         ],
       );
     }
-    if (item.unreadCount > 0) {
-      return VoiceBadge(
-        count: item.unreadCount,
-        semanticLabel: l10n.chatListUnreadCount(item.unreadCount),
-      );
-    }
-    return const SizedBox.shrink();
+    final voice = VoiceColors.of(context);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (muted)
+          Padding(
+            padding: const EdgeInsets.only(right: 4),
+            child: Icon(
+              Icons.notifications_off_outlined,
+              size: 16,
+              color: voice.textSecondary,
+              semanticLabel: l10n.chatListMute,
+            ),
+          ),
+        if (item.unreadCount > 0)
+          VoiceBadge(
+            count: item.unreadCount,
+            semanticLabel: l10n.chatListUnreadCount(item.unreadCount),
+          ),
+      ],
+    );
   }
 }
 

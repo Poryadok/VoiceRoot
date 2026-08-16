@@ -816,6 +816,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatListStrangerBadge => 'Stranger';
 
   @override
+  String get chatListMute => 'Mute';
+
+  @override
+  String get chatListUnmute => 'Unmute';
+
+  @override
+  String get chatListArchive => 'Archive';
+
+  @override
   String get chatCreateGroupTooltip => 'Create group';
 
   @override
