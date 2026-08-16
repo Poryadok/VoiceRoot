@@ -18,7 +18,8 @@ type RolePermissionChecker interface {
 }
 
 type mapRolePermissions struct {
-	allowed map[string]map[string]bool // spaceID -> profileID
+	allowed     map[string]map[string]bool // spaceID -> profileID
+	deniedRooms map[string]map[string]bool // voiceRoomID -> profileID (room override deny)
 }
 
 func (m *mapRolePermissions) EnsureScreenShare(_ context.Context, spaceID, profileID, _ string) error {
@@ -32,9 +33,14 @@ func (m *mapRolePermissions) EnsureScreenShare(_ context.Context, spaceID, profi
 	return nil
 }
 
-func (m *mapRolePermissions) EnsureVoiceJoin(_ context.Context, spaceID, profileID, _ string) error {
+func (m *mapRolePermissions) EnsureVoiceJoin(_ context.Context, spaceID, profileID, voiceRoomID string) error {
 	if m == nil {
 		return nil
+	}
+	if voiceRoomID != "" {
+		if room, ok := m.deniedRooms[voiceRoomID]; ok && room[profileID] {
+			return ErrVoiceJoinDenied
+		}
 	}
 	space, ok := m.allowed[spaceID]
 	if !ok || !space[profileID] {

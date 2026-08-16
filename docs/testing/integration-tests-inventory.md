@@ -259,7 +259,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 |----|------|--------|-----|
 | RL-01 | Custom role create/assign + chat override check API | `[exists]` | Flutter: `custom_roles_e2e_live_test`; Role IT: `roles_custom_integration_test.go` |
 | RL-02 | `TEXT_CHAT_SEND_MESSAGES` deny enforced on SendMessage | `[partial]` | Messaging IT: `TestMessagingSendMessage_chatOverrideDenySendMessages`; compose/Flutter → WT-INTEGRATION |
-| RL-03 | Voice room `VOICE_JOIN` deny E2E | `[missing]` | todo/backend Role |
+| RL-03 | Voice room `VOICE_JOIN` deny E2E | `[partial]` | Voice IT: `voice_room_integration_test` JoinVoiceRoom role/room-override deny; compose `voice.depends_on.role`; live compose/Flutter → WT-INTEGRATION |
 | RL-04 | Verification auto-roles | `[missing]` | unimplemented |
 | RL-05 | `MODERATION_MANAGE_REPORTS` integration | `[missing]` | unimplemented |
 

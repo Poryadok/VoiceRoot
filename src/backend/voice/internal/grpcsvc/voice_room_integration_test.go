@@ -76,6 +76,48 @@ func TestVoiceGRPCVoiceRoom_nonMemberDenied(t *testing.T) {
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
+// TestVoiceGRPCJoinVoiceRoom_roleDenyPermissionDenied documents roles.md VOICE_JOIN:
+// Role Service deny → JoinVoiceRoom PermissionDenied before session create.
+func TestVoiceGRPCJoinVoiceRoom_roleDenyPermissionDenied(t *testing.T) {
+	t.Parallel()
+	f := startVoiceRoomFixture(t)
+	f.svc.Roles = &mapRolePermissions{allowed: map[string]map[string]bool{
+		f.spaceID: {"profile-owner": true},
+	}}
+
+	_, err := f.svc.JoinVoiceRoom(voiceTestCtx("profile-member"), f.joinReq("profile-member"))
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	require.Contains(t, status.Convert(err).Message(), "voice join not permitted")
+
+	_, err = f.svc.JoinVoiceRoom(voiceTestCtx("profile-owner"), f.joinReq("profile-owner"))
+	require.NoError(t, err)
+}
+
+// TestVoiceGRPCJoinVoiceRoom_voiceRoomOverrideDeny documents roles.md room overrides:
+// space-level VOICE_JOIN allow + voice_room_overrides deny → PermissionDenied.
+func TestVoiceGRPCJoinVoiceRoom_voiceRoomOverrideDeny(t *testing.T) {
+	t.Parallel()
+	f := startVoiceRoomFixture(t)
+	f.svc.Roles = &mapRolePermissions{
+		allowed: map[string]map[string]bool{
+			f.spaceID: {
+				"profile-owner":  true,
+				"profile-member": true,
+			},
+		},
+		deniedRooms: map[string]map[string]bool{
+			f.voiceRoomID: {"profile-member": true},
+		},
+	}
+
+	_, err := f.svc.JoinVoiceRoom(voiceTestCtx("profile-owner"), f.joinReq("profile-owner"))
+	require.NoError(t, err)
+
+	_, err = f.svc.JoinVoiceRoom(voiceTestCtx("profile-member"), f.joinReq("profile-member"))
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	require.Contains(t, status.Convert(err).Message(), "voice join not permitted")
+}
+
 func TestVoiceGRPCVoiceRoom_spaceMemberViewsRosterWithoutJoining(t *testing.T) {
 	f := startVoiceRoomFixture(t)
 
