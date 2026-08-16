@@ -16,13 +16,19 @@ import 'support/auth_test_overrides.dart';
 import 'support/voice_test_theme.dart';
 
 class _InMemoryQuietHoursStorage extends NotificationQuietHoursStorage {
+  VoiceQuietHours value = VoiceQuietHours.defaults;
+  var writeCount = 0;
+
   @override
   Future<VoiceQuietHours> read(String profileId) async {
-    return VoiceQuietHours.defaults;
+    return value;
   }
 
   @override
-  Future<void> write(String profileId, VoiceQuietHours quietHours) async {}
+  Future<void> write(String profileId, VoiceQuietHours quietHours) async {
+    writeCount++;
+    value = quietHours;
+  }
 }
 
 class _FakePushNotificationsController extends PushNotificationsController {
@@ -43,6 +49,7 @@ void main() {
   testWidgets('settings notifications tile opens notification settings screen', (
     tester,
   ) async {
+    final quietStorage = _InMemoryQuietHoursStorage();
     final client = MockClient((req) async {
       if (req.url.path == '/api/v1/notifications/settings' && req.method == 'GET') {
         return http.Response(
@@ -52,6 +59,21 @@ void main() {
               'scope_type': 'global',
               'enabled': true,
               'suppress_types_json': '[]',
+            },
+          }),
+          200,
+        );
+      }
+      if (req.url.path == '/api/v1/notifications/quiet-hours' &&
+          req.method == 'GET') {
+        return http.Response(
+          jsonEncode({
+            'quiet_hours': {
+              'enabled': true,
+              'start_time': '22:00',
+              'end_time': '07:00',
+              'timezone': 'UTC',
+              'override_mentions': true,
             },
           }),
           200,
@@ -76,9 +98,7 @@ void main() {
       ProviderScope(
         overrides: [
           ...voiceAppTestOverrides(client: client),
-          notificationQuietHoursStorageProvider.overrideWithValue(
-            _InMemoryQuietHoursStorage(),
-          ),
+          notificationQuietHoursStorageProvider.overrideWithValue(quietStorage),
           pushNotificationsControllerProvider.overrideWith(
             (ref) => _FakePushNotificationsController(ref),
           ),
@@ -108,5 +128,8 @@ void main() {
     expect(find.byKey(NotificationSettingsScreen.screenKey), findsOneWidget);
     expect(find.text('Device notifications'), findsOneWidget);
     expect(find.text('Quiet hours'), findsOneWidget);
+    expect(quietStorage.writeCount, greaterThan(0));
+    expect(quietStorage.value.enabled, isTrue);
+    expect(quietStorage.value.startTime, '22:00');
   });
 }

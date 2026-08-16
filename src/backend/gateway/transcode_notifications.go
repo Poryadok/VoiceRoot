@@ -69,6 +69,15 @@ func (t *transcoder) serveNotifications(w http.ResponseWriter, r *http.Request, 
 		writeProtoJSON(w, http.StatusOK, resp)
 		return true
 
+	case r.Method == http.MethodGet && rest == "quiet-hours":
+		resp, err := t.clients.notification.GetQuietHours(ctx, &notificationv1.GetQuietHoursRequest{})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
 	case r.Method == http.MethodPut && rest == "quiet-hours":
 		req := &notificationv1.SetQuietHoursRequest{}
 		if err := readProtoJSON(r, req); err != nil {

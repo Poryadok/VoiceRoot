@@ -20,6 +20,7 @@ type recordingNotificationGRPC struct {
 	lastUnregister     *notificationv1.UnregisterDeviceRequest
 	lastGetSettings    *notificationv1.GetNotificationSettingsRequest
 	lastUpdateSettings *notificationv1.UpdateNotificationSettingsRequest
+	lastGetQuietHours  bool
 	lastSetQuietHours  *notificationv1.SetQuietHoursRequest
 }
 
@@ -43,6 +44,19 @@ func (s *recordingNotificationGRPC) GetNotificationSettings(_ context.Context, r
 func (s *recordingNotificationGRPC) UpdateNotificationSettings(_ context.Context, req *notificationv1.UpdateNotificationSettingsRequest) (*notificationv1.UpdateNotificationSettingsResponse, error) {
 	s.lastUpdateSettings = req
 	return &notificationv1.UpdateNotificationSettingsResponse{NotificationSettings: req.GetSettings()}, nil
+}
+
+func (s *recordingNotificationGRPC) GetQuietHours(_ context.Context, _ *notificationv1.GetQuietHoursRequest) (*notificationv1.GetQuietHoursResponse, error) {
+	s.lastGetQuietHours = true
+	return &notificationv1.GetQuietHoursResponse{
+		QuietHours: &notificationv1.QuietHours{
+			Enabled:          true,
+			StartTime:        "22:00",
+			EndTime:          "07:00",
+			Timezone:         "UTC",
+			OverrideMentions: true,
+		},
+	}, nil
 }
 
 func (s *recordingNotificationGRPC) SetQuietHours(_ context.Context, req *notificationv1.SetQuietHoursRequest) (*notificationv1.SetQuietHoursResponse, error) {
@@ -160,6 +174,28 @@ func TestTranscodeNotificationsGetSettings(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.Code, "body=%s", resp.Body.String())
 	require.NotNil(t, grpcRec.lastGetSettings)
 	require.Equal(t, "chat", grpcRec.lastGetSettings.GetScopeType())
+}
+
+func TestTranscodeNotificationsGetQuietHours(t *testing.T) {
+	t.Parallel()
+
+	grpcRec := &recordingNotificationGRPC{}
+	conn, cleanup := startBufconnNotificationConn(t, grpcRec)
+	t.Cleanup(cleanup)
+
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+		},
+		transcoder: &transcoder{clients: grpcClients{notification: notificationv1.NewNotificationServiceClient(conn)}},
+	})
+
+	resp := performRequest(h, http.MethodGet, "/api/v1/notifications/quiet-hours", "", map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	require.Equal(t, http.StatusOK, resp.Code, "body=%s", resp.Body.String())
+	require.True(t, grpcRec.lastGetQuietHours)
+	require.Contains(t, resp.Body.String(), "22:00")
 }
 
 func TestTranscodeNotificationsSetQuietHours(t *testing.T) {
