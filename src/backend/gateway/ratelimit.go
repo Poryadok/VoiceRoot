@@ -150,6 +150,8 @@ func rateLimitGroup(method, path string) string {
 		return "AuthOAuth"
 	case method == http.MethodPost && strings.HasPrefix(path, "/api/v1/auth/otp/"):
 		return "OTP"
+	case method == http.MethodPost && path == "/api/v1/auth/password/reset":
+		return "OTP"
 	case method == http.MethodPost && path == "/api/v1/messages/send":
 		return "MessagesSend"
 	case method == http.MethodPost && path == "/api/v1/files/upload":
