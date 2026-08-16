@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	subscriptionv1 "voice.app/voice/subscription/v1"
@@ -59,4 +60,29 @@ func TestEffectiveSubscriptionTierForFiles_premiumFromSubscriptionService(t *tes
 	req.Header.Set("X-Voice-Subscription-Tier", "free")
 
 	require.Equal(t, "premium", tr.effectiveSubscriptionTierForFiles(req.Context(), req))
+}
+
+func TestEffectiveSubscriptionTier_userCosmeticsUsesLiveSubscription(t *testing.T) {
+	accountID := "33333333-3333-4333-8333-333333333333"
+	client, cleanup := startBufconnSubscriptionClient(t, &stubSubscriptionTierBackend{
+		resp: &subscriptionv1.GetSubscriptionResponse{
+			Subscription: &subscriptionv1.Subscription{
+				AccountId: accountID,
+				Plan:      "premium",
+				Status:    "grace_period",
+			},
+		},
+	})
+	t.Cleanup(cleanup)
+
+	tr := newTranscoderWithSubscription(client)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/me/avatar/presigned-upload", nil)
+	req.Header.Set("X-Voice-User-Id", accountID)
+	req.Header.Set("X-Voice-Subscription-Tier", "free")
+
+	require.Equal(t, "premium", tr.effectiveSubscriptionTier(req.Context(), req))
+	mdCtx := tr.withLiveSubscriptionTierMetadata(req.Context(), req)
+	md, ok := metadata.FromOutgoingContext(mdCtx)
+	require.True(t, ok)
+	require.Equal(t, []string{"premium"}, md.Get("x-voice-subscription-tier"))
 }

@@ -14,6 +14,7 @@ const Set<String> kProfileAvatarContentTypes = {
   'image/jpeg',
   'image/png',
   'image/webp',
+  'image/gif',
 };
 
 sealed class UsersApiResult<T> {

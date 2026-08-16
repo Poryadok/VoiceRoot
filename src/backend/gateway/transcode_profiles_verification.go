@@ -173,7 +173,7 @@ func authGRPCContext(ctx context.Context, r *http.Request) context.Context {
 }
 
 func (t *transcoder) serveUsersProfilesVerification(w http.ResponseWriter, r *http.Request, rest string) bool {
-	ctx := withGRPCMetadata(r.Context(), r)
+	ctx := t.withLiveSubscriptionTierMetadata(r.Context(), r)
 	profileID := strings.TrimSpace(r.Header.Get("X-Voice-Profile-Id"))
 
 	switch {
