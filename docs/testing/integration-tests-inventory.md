@@ -97,7 +97,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | FW-01 | Forward DM → group с атрибуцией | `[exists]` | Flutter: `forward_messages_e2e_live_test` («forward DM message to group preserves attribution») |
 | FW-02 | Forward в channel | `[partial]` | Messaging IT: `TestMessagingForwardMessage_toChannelSetsPostedAsChat` (+ send-perm deny); compose → WT-INTEGRATION |
 | FW-03 | Copy as new (без атрибуции) | `[missing]` | — |
-| FW-04 | Privacy forbid forward | `[missing]` | blocked on WT-PRIV `allow_forward` |
+| FW-04 | Privacy forbid forward | `[partial]` | product: User `allow_forward`; enforce ForwardMessage + compose → WT-MSG / WT-INTEGRATION |
 | FW-05 | Multi-select forward | `[missing]` | — |
 | FW-06 | Forward E2E ciphertext policy | `[partial]` | Messaging IT: `TestMessagingForwardMessage_e2eToPlainDenied` / `e2eToE2EDMPreservesFlag` |
 

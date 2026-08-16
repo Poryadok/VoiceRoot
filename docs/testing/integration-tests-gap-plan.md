@@ -31,7 +31,8 @@
 | P1.17 | **done** | Redis/memory analytics audit store + live Redis assert |
 | P1.18 | **done** | map `thumbnailR2Key`/`convertedR2Key`; live asserts key not HTTP previewUrl |
 | P1.19 | **done** | ClamAV live uses `.exe` + `application/x-msdownload` |
-| P1.1–3, P1.5–11 | **blocked** | product deps (see inventory / todo/backend) |
+| P1.6 | **product done** | `allow_forward` in privacy.md + User Get/UpdatePrivacy + Flutter toggle; S2S readable; ForwardMessage enforce → WT-MSG; compose FW-04 → WT-INTEGRATION |
+| P1.1–3, P1.5, P1.7–11 | **blocked** | product deps (see inventory / todo/backend) |
 | P1.14 | **product done** | compose `SPACE_GRPC_ADDR` + S2S/NATS Space Pro sync; member-cap without Seed; compose live join-51st → WT-INTEGRATION |
 | P1.15 | **product done** | `subscription.grace_reminder` D1/D3/D7 + Notification consumer stub; compose assert → WT-INTEGRATION |
 | P2.* / P3.* | **deferred** | roadmap / soft-launch+ |
@@ -84,7 +85,7 @@ Effort: **S** ≤0.5d · **M** 1–2d · **L** 3–5d · **XL** >1w (инфра/
 | # | Кейс | Слой | IDs | Effort | Notes |
 |---|------|------|-----|--------|-------|
 | P1.5 | Forward to channel + commentary | B+C | FW-02 | M | Messaging IT hole |
-| P1.6 | Forward privacy forbid | B | FW-04 | S | |
+| P1.6 | Forward privacy forbid | B | FW-04 | S | **product done** (`allow_forward`); enforce + compose IT remaining |
 | P1.7 | E2E forward policy (no ciphertext leak) | B | FW-06 | M | **после** фикс Messaging |
 | P1.8 | SendMessage respects `TEXT_CHAT_SEND_MESSAGES` deny | B+C | RL-02 | M | **после** Messaging CheckPermission |
 | P1.9 | @here / @everyone permission gate | B | TC-MSG-03 | M | |
