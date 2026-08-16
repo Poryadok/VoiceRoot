@@ -1986,6 +1986,100 @@ class RespondToLfpStoryResponse extends $pb.GeneratedMessage {
   static RespondToLfpStoryResponse? _defaultInstance;
 }
 
+class HideStoryFromFeedRequest extends $pb.GeneratedMessage {
+  factory HideStoryFromFeedRequest({
+    $core.String? storyId,
+  }) {
+    final result = create();
+    if (storyId != null) result.storyId = storyId;
+    return result;
+  }
+
+  HideStoryFromFeedRequest._();
+
+  factory HideStoryFromFeedRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory HideStoryFromFeedRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'HideStoryFromFeedRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.story.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'storyId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  HideStoryFromFeedRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  HideStoryFromFeedRequest copyWith(
+          void Function(HideStoryFromFeedRequest) updates) =>
+      super.copyWith((message) => updates(message as HideStoryFromFeedRequest))
+          as HideStoryFromFeedRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static HideStoryFromFeedRequest create() => HideStoryFromFeedRequest._();
+  @$core.override
+  HideStoryFromFeedRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static HideStoryFromFeedRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<HideStoryFromFeedRequest>(create);
+  static HideStoryFromFeedRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get storyId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set storyId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasStoryId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearStoryId() => $_clearField(1);
+}
+
+class HideStoryFromFeedResponse extends $pb.GeneratedMessage {
+  factory HideStoryFromFeedResponse() => create();
+
+  HideStoryFromFeedResponse._();
+
+  factory HideStoryFromFeedResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory HideStoryFromFeedResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'HideStoryFromFeedResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.story.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  HideStoryFromFeedResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  HideStoryFromFeedResponse copyWith(
+          void Function(HideStoryFromFeedResponse) updates) =>
+      super.copyWith((message) => updates(message as HideStoryFromFeedResponse))
+          as HideStoryFromFeedResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static HideStoryFromFeedResponse create() => HideStoryFromFeedResponse._();
+  @$core.override
+  HideStoryFromFeedResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static HideStoryFromFeedResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<HideStoryFromFeedResponse>(create);
+  static HideStoryFromFeedResponse? _defaultInstance;
+}
+
 class CreateStoryResponse extends $pb.GeneratedMessage {
   factory CreateStoryResponse({
     Story? story,

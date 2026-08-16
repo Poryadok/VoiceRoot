@@ -17,7 +17,7 @@ const storySelectCols = `
 id, author_profile_id, type, media_file_id, text_content,
 text_style::text, game_tag, is_looking_for_party, lfp_criteria::text,
 mention_profile_ids::text, view_count, visibility, visibility_audience::text,
-expires_at, archived_until, created_at, deleted_at, expired_at`
+expires_at, archived_until, created_at, deleted_at, expired_at, hidden_from_feed_at`
 
 var (
 	ErrNotFound       = errors.New("not found")
@@ -46,10 +46,11 @@ type StoryRow struct {
 	Visibility             string
 	VisibilityAudienceJSON *string
 	ExpiresAt              time.Time
-	ArchivedUntil     time.Time
-	CreatedAt         time.Time
-	DeletedAt         *time.Time
-	ExpiredAt         *time.Time
+	ArchivedUntil          time.Time
+	CreatedAt              time.Time
+	DeletedAt              *time.Time
+	ExpiredAt              *time.Time
+	HiddenFromFeedAt       *time.Time
 }
 
 // HighlightRow is a profile highlight collection.
@@ -177,7 +178,7 @@ func scanStory(row pgx.Row) (*StoryRow, error) {
 		&textStyle, &out.GameTag, &out.IsLookingForParty, &lfp,
 		&mentions, &out.ViewCount, &out.Visibility, &visAudience,
 		&out.ExpiresAt, &out.ArchivedUntil,
-		&out.CreatedAt, &out.DeletedAt, &out.ExpiredAt,
+		&out.CreatedAt, &out.DeletedAt, &out.ExpiredAt, &out.HiddenFromFeedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -192,6 +193,31 @@ func scanStory(row pgx.Row) (*StoryRow, error) {
 		out.MentionProfileIDs = "[]"
 	}
 	return &out, nil
+}
+
+// HideFromFeed marks a story hidden from feeds / non-author viewers (stories.md §Модерация).
+func (s *StoryStore) HideFromFeed(ctx context.Context, storyID uuid.UUID) error {
+	if s == nil || s.Pool == nil {
+		return ErrNotImplemented
+	}
+	tag, err := s.Pool.Exec(ctx, `
+UPDATE stories SET hidden_from_feed_at = now()
+WHERE id = $1 AND deleted_at IS NULL AND hidden_from_feed_at IS NULL`, storyID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		// Idempotent: already hidden or missing — distinguish via GetStory.
+		row, getErr := s.GetStory(ctx, storyID)
+		if getErr != nil {
+			return getErr
+		}
+		if row.HiddenFromFeedAt != nil {
+			return nil
+		}
+		return ErrNotFound
+	}
+	return nil
 }
 
 // DeleteStory soft-deletes a story owned by authorProfileID.
@@ -463,7 +489,7 @@ func scanStoryRows(rows pgx.Rows) ([]StoryRow, error) {
 			&textStyle, &row.GameTag, &row.IsLookingForParty, &lfp,
 			&mentions, &row.ViewCount, &row.Visibility, &visAudience,
 			&row.ExpiresAt, &row.ArchivedUntil,
-			&row.CreatedAt, &row.DeletedAt, &row.ExpiredAt,
+			&row.CreatedAt, &row.DeletedAt, &row.ExpiredAt, &row.HiddenFromFeedAt,
 		); err != nil {
 			return nil, err
 		}
