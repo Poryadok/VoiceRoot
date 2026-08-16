@@ -24,6 +24,9 @@ func (t *transcoder) serveSpacesMatchmaking(w http.ResponseWriter, r *http.Reque
 
 	switch {
 	case len(parts) == 3 && parts[2] == "queue" && r.Method == http.MethodPost:
+		if t.clients.matchmaking == nil {
+			return false
+		}
 		req := &matchmakingv1.StartSpaceQueueRequest{}
 		if err := readProtoJSON(r, req); err != nil {
 			writeGRPCError(w, err)
@@ -39,6 +42,9 @@ func (t *transcoder) serveSpacesMatchmaking(w http.ResponseWriter, r *http.Reque
 		return true
 
 	case len(parts) == 3 && parts[2] == "config" && r.Method == http.MethodPatch:
+		if t.clients.space == nil {
+			return false
+		}
 		req := &spacev1.UpdateSpaceMmConfigRequest{}
 		if err := readProtoJSON(r, req); err != nil {
 			writeGRPCError(w, err)
