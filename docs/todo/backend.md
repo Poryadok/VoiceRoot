@@ -14,8 +14,8 @@
 - [ ] **[Subscription] Checkout is a stub — no Paddle Billing API; returns `checkout.paddle.test` URLs; no real purchase path** — `src/backend/subscription/internal/grpcsvc/subscription.go` (`CreateCheckoutSession`, `CreateSpaceCheckoutSession`)
 - [ ] **[Subscription] CloudPayments not implemented — СНГ provider entirely missing** — `src/backend/subscription/internal/grpcsvc/subscription.go` (`HandleCloudPaymentsWebhook` → `Unimplemented`); no `internal/billing/cloudpayments.go`
 - [ ] **[Subscription] JWT `subscription_tier` stuck at `free` — Auth uses in-memory resolver; gateway forwards JWT tier to User (not Subscription Service). Premium webhook updates DB but profile/GIF/banner limits still see `free`. File upload works only because gateway overrides tier for File** — `src/backend/auth/src/main/java/voice/backend/auth/config/AuthBeans.java`; `src/backend/auth/src/main/java/voice/backend/auth/service/InMemorySubscriptionTierStore.java`; `src/backend/gateway/auth.go`; `src/backend/gateway/subscription_tier.go` (File-only override); `src/backend/user/internal/grpcsvc/user.go`, `user_avatar.go`
-- [ ] **[Subscription] Space Pro purchase does not affect Space/Voice — webhook writes `subscription_db.space_subscriptions`; Space reads `space_db.space_subscriptions`; no sync/NATS consumer in prod (tests use `SeedSpaceProActive`)** — `src/backend/subscription/internal/store/store.go` (`ActivateSpacePro`); `src/backend/migrations/space_db/000005_space_subscriptions.up.sql`; `src/backend/space/internal/store/invite.go` (`memberCapTx`); `src/backend/space/internal/grpcsvc/space.go` (`SeedSpaceProActive`)
-- [ ] **[Subscription] Voice Space Pro cap never applied in prod — `SpacePro` lookup not wired in `main.go`; room cap stays 32** — `src/backend/voice/main.go`; `src/backend/voice/internal/grpcsvc/voice_room.go`; `src/backend/voice/internal/grpcsvc/subscription_voice_limits_test.go` (mock only)
+- [x] **[Subscription] Space Pro purchase does not affect Space/Voice — webhook writes `subscription_db.space_subscriptions`; Space reads `space_db.space_subscriptions`; no sync/NATS consumer in prod (tests use `SeedSpaceProActive`)** — **done:** Subscription S2S `SyncSpaceProSubscription` + Space NATS `subscriptionconsume` upsert `space_db.space_subscriptions` (`subscription/internal/grpcsvc/subscription.go`, `space/internal/subscriptionconsume/`, compose `SPACE_GRPC_ADDR`). Remaining: compose live join-51st / E2E billing path (gap P1.14 → WT-INTEGRATION; Critical E2E bullet below).
+- [x] **[Subscription] Voice Space Pro cap never applied in prod — `SpacePro` lookup not wired in `main.go`; room cap stays 32** — **done:** `voice/main.go` wires `SpacePro` via `SUBSCRIPTION_GRPC_ADDR`; `voice_room.go` raises cap to 128 when `HasSpacePro`. Compose sets `SUBSCRIPTION_GRPC_ADDR` on voice.
 
 ### File
 
@@ -37,7 +37,7 @@
 
 - [ ] **[Space] 8 proto RPCs have no handlers — runtime `Unimplemented`: `DeleteSpace`, `SearchPublicSpaces`, `JoinSpace`, `LeaveSpace`, `TransferOwnership`, `ListTemplates`, `CreateFromTemplate`, `GetAuditLog`** — `protos/voice/space/v1/space.proto`; handlers only in `src/backend/space/internal/grpcsvc/{space,invites,members,moderation,tree,bot_member,co_members}.go`
 - [ ] **[Space] Public-space join impossible — `spaces.md` requires free join for `public`; only `JoinByInvite` exists** — `src/backend/space/internal/grpcsvc/invites.go` (no `JoinSpace`)
-- [ ] **[Space] Space Pro cache never synced — `space_db.space_subscriptions` comment says “synced from Subscription”; only test seed `UpsertSpaceSubscription` writes; Subscription writes `subscription_db` only** — `src/backend/migrations/space_db/000005_space_subscriptions.up.sql`, `src/backend/space/internal/store/entitlement.go`, `src/backend/subscription/internal/store/store.go`
+- [x] **[Space] Space Pro cache never synced — `space_db.space_subscriptions` comment says “synced from Subscription”; only test seed `UpsertSpaceSubscription` writes; Subscription writes `subscription_db` only** — **done:** NATS consumer `space/internal/subscriptionconsume` + S2S `SyncSpaceProSubscription` write entitlement cache; `SeedSpaceProActive` remains test helper only.
 - [ ] **[Space] `entry_requirement` never enforced — DB column + proto field exist; join path ignores phone/captcha/questions/manual** — `src/backend/migrations/space_db/000001_init.up.sql`, `src/backend/space/internal/store/invite.go`, `src/backend/space/internal/grpcsvc/invites.go`
 - [ ] **[Space] Social block check on join missing — spec dependency “Social — проверка блокировок при join” not called** — `docs/microservices/space-service.md`; `src/backend/space/internal/grpcsvc/invites.go`, `src/backend/space/main.go` (Social wired only for invite privacy friends)
 
@@ -78,14 +78,14 @@
 ### Role
 
 
-- [ ] **[Role] Voice Service never wires Role Service — `Roles` is nil in prod; `VOICE_JOIN`, `VOICE_SPEAK`, `VOICE_MUTE_OTHERS`, etc. are not enforced on join/speak/mute. Only `EnsureScreenShare` exists and is unused without a Role client.** — `src/backend/voice/main.go`, `src/backend/voice/internal/grpcsvc/role_guard.go`, `src/backend/voice/internal/grpcsvc/voice_grpc.go` (`JoinCall`)
-- [ ] **[Role] Chat send overrides are API-only — `TEXT_CHAT_SEND_MESSAGES` deny via `chat_overrides` is computed in Role Service but Messaging `SendMessage` never calls `CheckPermission` / `HasChatPermission` for send; E2E only probes `/api/v1/roles/check`.** — `src/backend/messaging/internal/grpcsvc/messaging_grpc.go`, `src/frontend/test/custom_roles_e2e_live_test.dart`
+- [x] **[Role] Voice Service never wires Role Service — `Roles` is nil in prod; `VOICE_JOIN`, `VOICE_SPEAK`, `VOICE_MUTE_OTHERS`, etc. are not enforced on join/speak/mute. Only `EnsureScreenShare` exists and is unused without a Role client.** — **partial:** `voice/main.go` wires `Roles` via `ROLE_GRPC_ADDR`; `EnsureVoiceJoin` + `EnsureScreenShare` enforced on join/share (`role_guard.go`, `voice_room.go`). Still open: `VOICE_SPEAK` / `VOICE_MUTE_OTHERS` (and related) not enforced on speak/mute paths; compose/Flutter VOICE_JOIN deny live → WT-INTEGRATION.
+- [x] **[Role] Chat send overrides are API-only — `TEXT_CHAT_SEND_MESSAGES` deny via `chat_overrides` is computed in Role Service but Messaging `SendMessage` never calls `CheckPermission` / `HasChatPermission` for send; E2E only probes `/api/v1/roles/check`.** — **done (send path):** `SendMessage` / `ForwardMessage` call `checkSpaceSendPermission` → `HasChatPermission(..., TEXT_CHAT_SEND_MESSAGES)` (`messaging_grpc.go`); Messaging IT `messaging_send_permission_integration_test.go`. Remaining: compose/Flutter deny live → WT-INTEGRATION; other TEXT_CHAT_* bits still partial (see High Role bullets).
 
 ### Cross-cutting
 
 
 - [ ] **[Cross-cutting] JWT `subscription_tier` never syncs from billing — production Auth bean is `InMemorySubscriptionTierStore` (comment: “optional NATS-backed sync” but no consumer). After Paddle webhook, `/subscription/me` and Gateway file path see premium, but JWT still `free` until re-login — and re-login still won’t update tier. Breaks `DATA_MODEL.md` (“source of truth — Subscription”).** — `src/backend/auth/src/main/java/voice/backend/auth/config/AuthBeans.java`, `.../InMemorySubscriptionTierStore.java`, `.../AuthService.java`; consumers: `src/backend/user/internal/grpcsvc/user.go`, `src/backend/gateway/auth.go`
-- [ ] **[Cross-cutting] Space Pro entitlement duplicated, not synced — webhook writes `subscription_db.space_subscriptions` (`subscription/internal/grpcsvc/subscription.go`); Space enforces caps from `space_db.space_subscriptions` (`space/internal/store/entitlement.go`). No S2S/event sync on `subscription.activated` / `space_pro`. Live Space Pro billing does not raise member cap.** — `src/backend/migrations/subscription_db/000001_init.up.sql`, `src/backend/migrations/space_db/000005_space_subscriptions.up.sql`, `src/backend/space/internal/store/entitlement.go`
+- [x] **[Cross-cutting] Space Pro entitlement duplicated, not synced — webhook writes `subscription_db.space_subscriptions` (`subscription/internal/grpcsvc/subscription.go`); Space enforces caps from `space_db.space_subscriptions` (`space/internal/store/entitlement.go`). No S2S/event sync on `subscription.activated` / `space_pro`. Live Space Pro billing does not raise member cap.** — **done (sync):** webhook → S2S `SyncSpaceProSubscription` and/or NATS `subscription.space_pro_*` → Space entitlement cache. Remaining: compose live member-cap / billing E2E (Critical E2E bullet; gap P1.14).
 - [ ] **[Cross-cutting] `subscription.events` bus missing — `docs/CONTRACT_MATRIX.md` / `docs/MICROSERVICES.md` list stream with subscribers Analytics, User, Space, File; code only publishes `analytics.subscription.*` from Subscription. Blocks cross-service tier/limit propagation.** — `src/backend/subscription/internal/grpcsvc/subscription.go` (`publishPaymentEvent`), `docs/CONTRACT_MATRIX.md`
 - [x] **[Cross-cutting] Web JWT in WS query string** — web uses `POST /api/v1/realtime/ws-ticket` + `/ws?ticket=`; legacy `access_token` query retained for compat. — `docs/ARCHITECTURE_REQUIREMENTS.md`, Gateway, Flutter `RealtimeHub`
 
@@ -93,8 +93,8 @@
 
 
 - [ ] **[Messaging] `GetMessage` RPC not implemented** — proto + S2S callers exist, handler missing (`UnimplementedMessagingServiceServer` only). Breaks Search reindex body fetch and Notification push preview.
-- [ ] **[Messaging] `ForwardMessage` bypasses channel/thread send policy** — does not call `threadPolicyDeps().validateSend`; forwards land in main feed without `posted_as_chat` even when channel requires it.
-- [ ] **[Messaging] E2E forward policy gap** — forwards copy `content` + attachments but never set `is_e2e`, never run `validateE2ESend` on target chat; E2E ciphertext can appear as plaintext forward in non-E2E chats.
+- [x] **[Messaging] `ForwardMessage` bypasses channel/thread send policy** — **done:** `ForwardMessage` calls `checkSpaceSendPermission`, `threadPolicyDeps().validateSend`, and sets `posted_as_chat` when channel forbids main-feed (`messaging_grpc.go`; `messaging_forward_integration_test.go`).
+- [x] **[Messaging] E2E forward policy gap** — **done:** `validateE2ESend` on forward target; E2E→plain `FailedPrecondition`, E2E→E2E preserves `is_e2e` (Messaging ITs).
 
 ### Search
 
@@ -118,7 +118,7 @@
 ### Voice
 
 
-- [ ] **[Voice] Space voice rooms: no membership enforcement in runtime** — `ensureSpaceMember` is a no-op when `SpaceMembers == nil`; `main.go` never wires `SpaceMembers` despite `SPACE_GRPC_ADDR` in configmap/compose. Any profile with `voice_room_id` + `space_id` can join.
+- [ ] **[Voice] Space voice rooms: no membership enforcement in runtime** — **partial:** `SpaceMembers` wired when `SPACE_GRPC_ADDR` set (`voice/main.go`; compose has addr); `ensureSpaceMember` still no-op if client nil. Not a “never wired” gap anymore.
 - [ ] **[Voice] `LeaveCall` ends the whole session for group voice** — aliases to `EndCall` (sets `CALL_STATUS_ENDED` + `call_ended` for all). One leaver kills the group call for everyone; should use `RemoveParticipant` like space rooms.
 
 ### Auth
@@ -265,11 +265,11 @@
 
 
 - [ ] **[Messaging] `message.forwarded` NATS event missing** — spec lists it; publisher/stream only has `message.sent` on forward.
-- [ ] **[Messaging] `ForwardMessageRequest.commentary` ignored** — proto + Flutter client send it; server never creates commentary message.
+- [x] **[Messaging] `ForwardMessageRequest.commentary` ignored** — **done:** commentary inserts a separate message via `insertForwardCommentary` (`messaging_grpc.go`; Messaging forward ITs).
 - [ ] **[Messaging] “Copy as new message” / forward without attribution** — spec feature; no proto field or server path (always `type=forward` + attribution).
 - [x] **[Messaging] Forward-author privacy block not enforced** — spec says user can forbid forwarding their messages; Messaging `ForwardMessage` checks User `allow_forward` via S2S (`PermissionDenied`).
 - [ ] **[Messaging] Group/channel view counts absent** — `text-chat.md` requires per-message view counter; no model/RPC beyond DM-style `read_receipts`.
-- [ ] **[Messaging] `ForwardMessage` skips SendMessage guards** — no moderation/slow-mode, no `checkAttachmentPrivacyForSend`, no `checkDMBlocksForSend` / `checkDMPrivacyForSend` on target, no `validateAttachments`, `chat_type` defaults to `dm`.
+- [ ] **[Messaging] `ForwardMessage` skips SendMessage guards** — **partial:** now runs DM block/privacy, send-perm, E2E, and channel policy; still skips moderation/slow-mode, attachment privacy/validate, and some SendMessage-only guards (`messaging_grpc.go` `ForwardMessage`).
 - [ ] **[Messaging] Read-state APIs DM-typed only** — `MarkRead` / `GetReadState` / `GetBulkReadState` / `GetChatListMetadata` use `validateChatRefDM`; explicit `group`/`channel` refs rejected while `GetMessages` accepts all types.
 
 ### Search
@@ -328,7 +328,7 @@
 
 
 - [ ] **[Voice] Unimplemented gRPC (proto + gateway exposed, server returns `Unimplemented`)** — `SetCommanderMode`, `RaiseHand`, `LowerHand`, `MoveToVoiceRoom`. Required by `voice-chat.md` (commander, raise hand, room moves).
-- [ ] **[Voice] S2S deps declared in spec but not wired in `main.go`** — no `Roles` (Role Service), `SpacePro` (Subscription), or `SpaceMembers` (Space Service). Effects:
+- [x] **[Voice] S2S deps declared in spec but not wired in `main.go`** — **done (wire):** `voice/main.go` sets `Roles` (`ROLE_GRPC_ADDR`), `SpacePro` (`SUBSCRIPTION_GRPC_ADDR`), `SpaceMembers` (`SPACE_GRPC_ADDR`) when env present; compose sets all three. Remaining gaps: speak/mute role bits, roster NATS events (sibling Voice bullets).
 - [ ] **[Voice] Missing NATS events vs `voice-service.md` / Analytics** — never published: `voice.call_started`, `voice.participant_joined`, `voice.participant_left`. Publisher surface stops at incoming/accepted/declined/missed/ended/state/screen-share. Analytics adapter expects `call_started`.
 - [ ] **[Voice] Space voice join/leave publishes no roster events** — no `participant_joined` / `participant_left` / `voice.state_changed` on `JoinVoiceRoom` / `LeaveVoiceRoom`; Realtime consumer has no handlers for those subjects anyway.
 - [ ] **[Voice] Staging LiveKit WebRTC likely broken without ops beyond WS smoke** — `deploy/staging/infra.yaml` sets `use_external_ip: true` but no `node_ip` (compose uses explicit `node_ip: 127.0.0.1` in `deploy/livekit/livekit.yaml`). Signaling is `wss://` via Ingress; RTC is NodePort **30881/TCP + 30882/UDP** on the node — not validated by `scripts/staging/smoke-staging.sh` (WS probe only).
@@ -340,7 +340,7 @@
 - [ ] **[Auth] OTP / password-reset flow missing end-to-end** — `otp_codes` DDL exists (`V1__auth_schema.sql`, `000001_init.up.sql`) but no send/verify service, no `/api/v1/auth/otp/*` in Auth; Gateway treats OTP routes as **public** and rate-limits them (`routing.go`, `ratelimit.go`) → 404 upstream. Files: `src/backend/auth/src/main/resources/db/migration/V1__auth_schema.sql`, `src/backend/gateway/routing.go`, `src/backend/gateway/ratelimit.go`.
 - [ ] **[Auth] OTP Redis throttling not implemented in Auth** — `docs/ARCHITECTURE_REQUIREMENTS.md` assigns OTP attempt throttling to Auth Redis; only JWT blacklist is wired. Files: `src/backend/auth/src/main/java/voice/backend/auth/security/RedisTokenBlacklist.java`, `docs/ARCHITECTURE_REQUIREMENTS.md`.
 - [ ] **[Auth] Resend email integration absent** — Documented dependency in `docs/microservices/auth-service.md` (verification, password reset); no Resend client or mail sender in `src/backend/auth/`.
-- [ ] **[Auth] NATS `user.guest_converted` not wired in compose/staging** — Publisher only when `auth.nats.url` set (`AuthEventsConfiguration.java`); absent from `docker-compose.yml` auth env and `deploy/staging/services.yaml` → `NoopAuthEventPublisher` in default stacks. Files: `src/backend/auth/src/main/java/voice/backend/auth/config/AuthEventsConfiguration.java`, `docker-compose.yml`, `deploy/staging/services.yaml`. *(Related to TODO.md Batch 6 NATS test item, but env wiring is a separate gap.)*
+- [x] **[Auth] NATS `user.guest_converted` not wired in compose/staging** — **done (compose):** `AUTH_NATS_URL` + `depends_on: nats` in `docker-compose.yml`; convert publishes + `TestComposeConvertGuestNATS_live`. Staging env still worth verifying separately.
 - [ ] **[Auth] Linked-accounts list is a stub** — `GET /api/v1/auth/linked-accounts` returns `[]` in both Auth REST and Gateway transcoding; `linked_identities` table unused by Java. Files: `src/backend/auth/src/main/java/voice/backend/auth/rest/AuthRestController.java`, `src/backend/gateway/transcode_profiles_verification.go`, `src/backend/auth/src/main/resources/db/migration/V3__linked_identities.sql`.
 - [ ] **[Auth] Twitch verification OAuth is mock-only** — `LinkedAccountsService.completeTwitchCallback()` accepts only `mock-code`, uses hardcoded token; link start returns static URL without client_id/state. Files: `src/backend/auth/src/main/java/voice/backend/auth/service/LinkedAccountsService.java`, `src/backend/auth/src/main/java/voice/backend/auth/rest/AuthRestController.java`.
 - [ ] **[Auth] Password reset cannot work for convert-guest recovery** — Spec/TODO calls for self-service reset; no password-change or reset API exists. *(TODO.md Batch 6 “convert-guest recovery” covers product need; Auth implementation gap is new detail.)* Files: `src/backend/auth/src/main/java/voice/backend/auth/rest/AuthRestController.java`, `docs/features/auth-and-contacts.md`.
