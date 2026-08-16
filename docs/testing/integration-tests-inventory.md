@@ -468,7 +468,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | ID | Кейс | Статус | Где |
 |----|------|--------|-----|
 | OBS-01 | Compose logs collect local | `[partial]` | tooling `make compose-logs-collect`; не автотест |
-| OBS-02 | Staging request_id → ws_fanout E2E | `[n/a]` | ручной runbook TESTING.md §Debug by request_id |
+| OBS-02 | Staging request_id → ws_fanout E2E | `[exists]` | `scripts/staging/smoke-request-id.sh`; runbook TESTING.md §Debug by request_id |
 | OBS-03 | Alertmanager P1 firing | `[n/a]` | staging secrets |
 
 ---
