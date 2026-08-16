@@ -10,11 +10,20 @@ import app.voice.auth.v1.ConvertGuestRequest;
 import app.voice.auth.v1.ConvertGuestResponse;
 import app.voice.auth.v1.GetE2EKeyBackupRequest;
 import app.voice.auth.v1.GetE2EKeyBackupResponse;
+import app.voice.auth.v1.GetGuestReminderRequest;
+import app.voice.auth.v1.GetGuestReminderResponse;
+import app.voice.auth.v1.ListSessionsRequest;
+import app.voice.auth.v1.ListSessionsResponse;
+import app.voice.auth.v1.MarkGuestReminderShownRequest;
+import app.voice.auth.v1.MarkGuestReminderShownResponse;
 import app.voice.auth.v1.ResolvePhoneHashesRequest;
 import app.voice.auth.v1.ResolvePhoneHashesResponse;
 import app.voice.auth.v1.PhoneHashProfileMatch;
 import app.voice.auth.v1.PutE2EKeyBackupRequest;
 import app.voice.auth.v1.PutE2EKeyBackupResponse;
+import app.voice.auth.v1.RevokeSessionRequest;
+import app.voice.auth.v1.RevokeSessionResponse;
+import app.voice.auth.v1.SessionInfo;
 import app.voice.auth.v1.SetAccountStatusRequest;
 import app.voice.auth.v1.SetAccountStatusResponse;
 import app.voice.auth.v1.SwitchActiveProfileRequest;
@@ -41,11 +50,13 @@ import app.voice.auth.v1.Verify2FAResponse;
 import com.google.protobuf.Timestamp;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
+import java.time.Instant;
 import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.stereotype.Component;
 import voice.backend.auth.service.AuthException;
 import voice.backend.auth.service.AuthService;
 import voice.backend.auth.service.ConvertGuestCommand;
+import voice.backend.auth.service.GuestReminderState;
 import voice.backend.auth.service.LoginCommand;
 import voice.backend.auth.service.LogoutCommand;
 import voice.backend.auth.service.RefreshCommand;
@@ -247,6 +258,61 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
     });
   }
 
+  @Override
+  public void getGuestReminder(
+      GetGuestReminderRequest request, StreamObserver<GetGuestReminderResponse> responseObserver) {
+    run(responseObserver, () -> {
+      GuestReminderState state = authService.getGuestReminder(resolveAccessToken());
+      GetGuestReminderResponse.Builder builder =
+          GetGuestReminderResponse.newBuilder().setShouldShow(state.shouldShow());
+      if (state.lastShownAt() != null) {
+        builder.setLastShownAt(toTimestamp(state.lastShownAt()));
+      }
+      return builder.build();
+    });
+  }
+
+  @Override
+  public void markGuestReminderShown(
+      MarkGuestReminderShownRequest request,
+      StreamObserver<MarkGuestReminderShownResponse> responseObserver) {
+    run(responseObserver, () -> {
+      GuestReminderState state = authService.markGuestReminderShown(resolveAccessToken());
+      return MarkGuestReminderShownResponse.newBuilder()
+          .setLastShownAt(toTimestamp(state.lastShownAt()))
+          .build();
+    });
+  }
+
+  @Override
+  public void listSessions(
+      ListSessionsRequest request, StreamObserver<ListSessionsResponse> responseObserver) {
+    run(responseObserver, () -> {
+      ListSessionsResponse.Builder builder = ListSessionsResponse.newBuilder();
+      for (voice.backend.auth.service.ActiveSession session :
+          authService.listSessions(resolveAccessToken())) {
+        builder.addSessions(
+            SessionInfo.newBuilder()
+                .setId(session.id())
+                .setDeviceInfoJson(session.deviceInfoJson() == null ? "{}" : session.deviceInfoJson())
+                .setCreatedAt(toTimestamp(session.createdAt()))
+                .setExpiresAt(toTimestamp(session.expiresAt()))
+                .setCurrent(session.current())
+                .build());
+      }
+      return builder.build();
+    });
+  }
+
+  @Override
+  public void revokeSession(
+      RevokeSessionRequest request, StreamObserver<RevokeSessionResponse> responseObserver) {
+    run(responseObserver, () -> {
+      authService.revokeSession(resolveAccessToken(), request.getSessionId());
+      return RevokeSessionResponse.getDefaultInstance();
+    });
+  }
+
   private <T> void run(StreamObserver<T> observer, GrpcCall<T> call) {
     try {
       observer.onNext(call.execute());
@@ -285,6 +351,13 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
         .setSubscriptionTier(claims.subscriptionTier())
         .setExpiresAt(Timestamp.newBuilder().setSeconds(claims.expiresAt().getEpochSecond()).setNanos(claims.expiresAt().getNano()))
         .setAccountType(claims.normalizedAccountType())
+        .build();
+  }
+
+  private static Timestamp toTimestamp(Instant instant) {
+    return Timestamp.newBuilder()
+        .setSeconds(instant.getEpochSecond())
+        .setNanos(instant.getNano())
         .build();
   }
 

@@ -104,6 +104,64 @@ func (t *transcoder) serveAuthREST(w http.ResponseWriter, r *http.Request, rest 
 		writeProtoJSON(w, http.StatusOK, resp)
 		return true
 
+	case r.Method == http.MethodGet && rest == "guest-reminder":
+		if t.clients.auth == nil {
+			return false
+		}
+		callCtx := authGRPCContext(ctx, r)
+		resp, err := t.clients.auth.GetGuestReminder(callCtx, &authv1.GetGuestReminderRequest{})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodPost && rest == "guest-reminder/mark":
+		if t.clients.auth == nil {
+			return false
+		}
+		callCtx := authGRPCContext(ctx, r)
+		resp, err := t.clients.auth.MarkGuestReminderShown(callCtx, &authv1.MarkGuestReminderShownRequest{})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodGet && rest == "sessions":
+		if t.clients.auth == nil {
+			return false
+		}
+		callCtx := authGRPCContext(ctx, r)
+		resp, err := t.clients.auth.ListSessions(callCtx, &authv1.ListSessionsRequest{})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodPost && strings.HasPrefix(rest, "sessions/") && strings.HasSuffix(rest, "/revoke"):
+		if t.clients.auth == nil {
+			return false
+		}
+		sessionID := strings.TrimSuffix(strings.TrimPrefix(rest, "sessions/"), "/revoke")
+		sessionID = strings.Trim(sessionID, "/")
+		if sessionID == "" || strings.Contains(sessionID, "/") {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "validation_failed"})
+			return true
+		}
+		callCtx := authGRPCContext(ctx, r)
+		_, err := t.clients.auth.RevokeSession(callCtx, &authv1.RevokeSessionRequest{SessionId: sessionID})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return true
+
 	default:
 		return false
 	}

@@ -28,4 +28,8 @@ public interface AccountRepository {
   void markDeleted(UUID accountId, Instant deletedAt);
 
   void restoreDeleted(UUID accountId);
+
+  Optional<Instant> getGuestReminderLastShownAt(UUID accountId);
+
+  void markGuestReminderShown(UUID accountId, Instant shownAt);
 }

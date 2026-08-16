@@ -390,6 +390,64 @@ public class AuthService {
         .orElseThrow(() -> new AuthException("not_found"));
   }
 
+  public GuestReminderState getGuestReminder(String accessToken) {
+    TokenClaims claims = validate(accessToken);
+    Account account = accounts.findById(claims.userId()).orElseThrow(() -> new AuthException("invalid_token"));
+    if (!"guest".equals(account.type())) {
+      throw new AuthException("validation_failed");
+    }
+    Instant lastShown = accounts.getGuestReminderLastShownAt(account.id()).orElse(null);
+    boolean shouldShow = lastShown == null || lastShown.isBefore(Instant.now(clock).minus(Duration.ofHours(24)));
+    return new GuestReminderState(lastShown, shouldShow);
+  }
+
+  public GuestReminderState markGuestReminderShown(String accessToken) {
+    TokenClaims claims = validate(accessToken);
+    Account account = accounts.findById(claims.userId()).orElseThrow(() -> new AuthException("invalid_token"));
+    if (!"guest".equals(account.type())) {
+      throw new AuthException("validation_failed");
+    }
+    Instant now = Instant.now(clock);
+    accounts.markGuestReminderShown(account.id(), now);
+    return new GuestReminderState(now, false);
+  }
+
+  public List<ActiveSession> listSessions(String accessToken) {
+    TokenClaims claims = validate(accessToken);
+    UUID accountId = UUID.fromString(claims.userId());
+    return refreshTokens.listActiveByAccount(accountId).stream()
+        .map(
+            record ->
+                new ActiveSession(
+                    record.id().toString(),
+                    record.deviceInfoJson(),
+                    record.createdAt(),
+                    record.expiresAt(),
+                    claims.jti() != null && claims.jti().equals(record.accessJti())))
+        .toList();
+  }
+
+  public void revokeSession(String accessToken, String sessionId) {
+    TokenClaims claims = validate(accessToken);
+    UUID accountId = UUID.fromString(claims.userId());
+    UUID id;
+    try {
+      id = UUID.fromString(sessionId);
+    } catch (IllegalArgumentException ex) {
+      throw new AuthException("validation_failed");
+    }
+    RefreshTokenRecord record =
+        refreshTokens.findById(id).orElseThrow(() -> new AuthException("not_found"));
+    if (!record.accountId().equals(accountId)) {
+      throw new AuthException("not_found");
+    }
+    Instant now = Instant.now(clock);
+    refreshTokens.revokeById(id, now);
+    if (record.accessJti() != null && !record.accessJti().isBlank()) {
+      tokenBlacklist.revoke(record.accessJti(), jwtService.accessTtl());
+    }
+  }
+
   private AuthSession issueSession(Account account, String deviceInfoJson) {
     String profileId = primaryProfileProvisioner.ensurePrimaryProfile(
         account.id(), displayHint(account), "guest".equals(account.type()));

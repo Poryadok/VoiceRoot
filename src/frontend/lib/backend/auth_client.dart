@@ -311,6 +311,26 @@ class VoiceAuthClient {
     );
   }
 
+  /// Server cadence for guest save-account reminder; null when unavailable.
+  Future<bool?> getGuestReminderShouldShow({required String authorization}) async {
+    final result = await _gateway.getJson(
+      _gateway.resolve('/api/v1/auth/guest-reminder'),
+      authorization: authorization,
+    );
+    return switch (result) {
+      GatewayHttpOk(:final data) => data['should_show'] as bool?,
+      GatewayHttpFailure() => null,
+    };
+  }
+
+  Future<void> markGuestReminderShown({required String authorization}) async {
+    await _gateway.postJson(
+      uri: _gateway.resolve('/api/v1/auth/guest-reminder/mark'),
+      authorization: authorization,
+      body: const {},
+    );
+  }
+
   /// Returns an error message on failure; null on success (204).
   Future<String?> logout({required AuthSession session}) async {
     final result = await _gateway.postEmpty(

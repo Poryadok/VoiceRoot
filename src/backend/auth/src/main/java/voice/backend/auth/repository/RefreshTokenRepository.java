@@ -9,7 +9,13 @@ public interface RefreshTokenRepository {
 
   Optional<RefreshTokenRecord> findByHash(String tokenHash);
 
+  Optional<RefreshTokenRecord> findById(UUID id);
+
+  java.util.List<RefreshTokenRecord> listActiveByAccount(UUID accountId);
+
   RefreshTokenRecord revoke(String tokenHash, Instant now);
+
+  RefreshTokenRecord revokeById(UUID id, Instant now);
 
   void revokeAllForAccount(UUID accountId, Instant now);
 }

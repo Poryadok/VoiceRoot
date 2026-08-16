@@ -158,6 +158,38 @@ class AuthServiceClient extends $grpc.Client {
     return $createUnaryCall(_$resolvePhoneHashes, request, options: options);
   }
 
+  /// Guest save-account reminder cadence (docs/features/auth-and-contacts.md).
+  $grpc.ResponseFuture<$0.GetGuestReminderResponse> getGuestReminder(
+    $0.GetGuestReminderRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getGuestReminder, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.MarkGuestReminderShownResponse>
+      markGuestReminderShown(
+    $0.MarkGuestReminderShownRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$markGuestReminderShown, request,
+        options: options);
+  }
+
+  /// Active devices / sessions (docs/features/auth-and-contacts.md).
+  $grpc.ResponseFuture<$0.ListSessionsResponse> listSessions(
+    $0.ListSessionsRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$listSessions, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.RevokeSessionResponse> revokeSession(
+    $0.RevokeSessionRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$revokeSession, request, options: options);
+  }
+
   // method descriptors
 
   static final _$register =
@@ -244,6 +276,26 @@ class AuthServiceClient extends $grpc.Client {
       '/voice.auth.v1.AuthService/ResolvePhoneHashes',
       ($0.ResolvePhoneHashesRequest value) => value.writeToBuffer(),
       $0.ResolvePhoneHashesResponse.fromBuffer);
+  static final _$getGuestReminder = $grpc.ClientMethod<
+          $0.GetGuestReminderRequest, $0.GetGuestReminderResponse>(
+      '/voice.auth.v1.AuthService/GetGuestReminder',
+      ($0.GetGuestReminderRequest value) => value.writeToBuffer(),
+      $0.GetGuestReminderResponse.fromBuffer);
+  static final _$markGuestReminderShown = $grpc.ClientMethod<
+          $0.MarkGuestReminderShownRequest, $0.MarkGuestReminderShownResponse>(
+      '/voice.auth.v1.AuthService/MarkGuestReminderShown',
+      ($0.MarkGuestReminderShownRequest value) => value.writeToBuffer(),
+      $0.MarkGuestReminderShownResponse.fromBuffer);
+  static final _$listSessions =
+      $grpc.ClientMethod<$0.ListSessionsRequest, $0.ListSessionsResponse>(
+          '/voice.auth.v1.AuthService/ListSessions',
+          ($0.ListSessionsRequest value) => value.writeToBuffer(),
+          $0.ListSessionsResponse.fromBuffer);
+  static final _$revokeSession =
+      $grpc.ClientMethod<$0.RevokeSessionRequest, $0.RevokeSessionResponse>(
+          '/voice.auth.v1.AuthService/RevokeSession',
+          ($0.RevokeSessionRequest value) => value.writeToBuffer(),
+          $0.RevokeSessionResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.auth.v1.AuthService')
@@ -390,6 +442,42 @@ abstract class AuthServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.ResolvePhoneHashesRequest.fromBuffer(value),
         ($0.ResolvePhoneHashesResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.GetGuestReminderRequest,
+            $0.GetGuestReminderResponse>(
+        'GetGuestReminder',
+        getGuestReminder_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.GetGuestReminderRequest.fromBuffer(value),
+        ($0.GetGuestReminderResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.MarkGuestReminderShownRequest,
+            $0.MarkGuestReminderShownResponse>(
+        'MarkGuestReminderShown',
+        markGuestReminderShown_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.MarkGuestReminderShownRequest.fromBuffer(value),
+        ($0.MarkGuestReminderShownResponse value) => value.writeToBuffer()));
+    $addMethod(
+        $grpc.ServiceMethod<$0.ListSessionsRequest, $0.ListSessionsResponse>(
+            'ListSessions',
+            listSessions_Pre,
+            false,
+            false,
+            ($core.List<$core.int> value) =>
+                $0.ListSessionsRequest.fromBuffer(value),
+            ($0.ListSessionsResponse value) => value.writeToBuffer()));
+    $addMethod(
+        $grpc.ServiceMethod<$0.RevokeSessionRequest, $0.RevokeSessionResponse>(
+            'RevokeSession',
+            revokeSession_Pre,
+            false,
+            false,
+            ($core.List<$core.int> value) =>
+                $0.RevokeSessionRequest.fromBuffer(value),
+            ($0.RevokeSessionResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.RegisterResponse> register_Pre($grpc.ServiceCall $call,
@@ -537,4 +625,40 @@ abstract class AuthServiceBase extends $grpc.Service {
 
   $async.Future<$0.ResolvePhoneHashesResponse> resolvePhoneHashes(
       $grpc.ServiceCall call, $0.ResolvePhoneHashesRequest request);
+
+  $async.Future<$0.GetGuestReminderResponse> getGuestReminder_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.GetGuestReminderRequest> $request) async {
+    return getGuestReminder($call, await $request);
+  }
+
+  $async.Future<$0.GetGuestReminderResponse> getGuestReminder(
+      $grpc.ServiceCall call, $0.GetGuestReminderRequest request);
+
+  $async.Future<$0.MarkGuestReminderShownResponse> markGuestReminderShown_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.MarkGuestReminderShownRequest> $request) async {
+    return markGuestReminderShown($call, await $request);
+  }
+
+  $async.Future<$0.MarkGuestReminderShownResponse> markGuestReminderShown(
+      $grpc.ServiceCall call, $0.MarkGuestReminderShownRequest request);
+
+  $async.Future<$0.ListSessionsResponse> listSessions_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.ListSessionsRequest> $request) async {
+    return listSessions($call, await $request);
+  }
+
+  $async.Future<$0.ListSessionsResponse> listSessions(
+      $grpc.ServiceCall call, $0.ListSessionsRequest request);
+
+  $async.Future<$0.RevokeSessionResponse> revokeSession_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.RevokeSessionRequest> $request) async {
+    return revokeSession($call, await $request);
+  }
+
+  $async.Future<$0.RevokeSessionResponse> revokeSession(
+      $grpc.ServiceCall call, $0.RevokeSessionRequest request);
 }

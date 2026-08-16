@@ -39,6 +39,61 @@ class ConvertGuestIntegrationTest {
   }
 
   @Test
+  void convertGuestRejectsPasswordShorterThanEight() throws Exception {
+    JsonNode guest =
+        session(
+            postJson(
+                "/api/v1/auth/register",
+                "{\"password\":\"Correct horse battery staple\",\"guest\":true,\"device_info_json\":\"{}\"}"));
+
+    mockMvc
+        .perform(
+            post("/api/v1/auth/convert-guest")
+                .header("Authorization", "Bearer " + guest.get("access_token").asText())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"short-pass@example.com\",\"password\":\"short\"}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.error", is("validation_failed")));
+  }
+
+  @Test
+  void convertGuestRejectsNonGuestAccount() throws Exception {
+    JsonNode regular =
+        session(
+            postJson(
+                "/api/v1/auth/register",
+                "{\"email\":\"already-regular@example.com\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"{}\"}"));
+
+    mockMvc
+        .perform(
+            post("/api/v1/auth/convert-guest")
+                .header("Authorization", "Bearer " + regular.get("access_token").asText())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"email\":\"already-regular2@example.com\",\"password\":\"New account password 1\"}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.error", is("validation_failed")));
+  }
+
+  @Test
+  void convertGuestRejectsMissingEmailAndPhone() throws Exception {
+    JsonNode guest =
+        session(
+            postJson(
+                "/api/v1/auth/register",
+                "{\"password\":\"Correct horse battery staple\",\"guest\":true,\"device_info_json\":\"{}\"}"));
+
+    mockMvc
+        .perform(
+            post("/api/v1/auth/convert-guest")
+                .header("Authorization", "Bearer " + guest.get("access_token").asText())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"password\":\"New account password 1\"}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.error", is("validation_failed")));
+  }
+
+  @Test
   void convertGuestRejectsDuplicateEmail() throws Exception {
     JsonNode existing =
         session(
