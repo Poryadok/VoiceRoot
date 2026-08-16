@@ -67,7 +67,7 @@
 
 | Stream                 | Publishers        | Subscribers |
 |------------------------|-------------------|-------------|
-| `user.events`          | Auth, User        | Analytics, Social, Notification, Federation |
+| `user.events`          | Auth, User        | Analytics, Social, Notification, Federation, Realtime (presence_changed → friend WS fan-out) |
 | `social.events`        | Social            | Analytics, Notification, Chat, Federation |
 | `role.events`          | Role              | Analytics, Notification, Federation, Realtime |
 | `message.events`       | Messaging         | Analytics, Notification, Search, Moderation, Realtime |

@@ -48,6 +48,7 @@ func main() {
 
 	chatLister := dialChatBootstrapLister()
 	presenceUpdater := dialPresenceUpdater()
+	friendLister := dialFriendLister()
 
 	hub := newWSHub()
 	instanceID := strings.TrimSpace(os.Getenv("REALTIME_INSTANCE_ID"))
@@ -131,6 +132,12 @@ func main() {
 				logger.Error("role.events consumer exited", slog.String("error", err.Error()))
 			}
 		}()
+		go func() {
+			err := runUserEventsConsumer(ctx, hub, friendLister, natsURL, instanceID, logger)
+			if err != nil && err != context.Canceled {
+				logger.Error("user.events consumer exited", slog.String("error", err.Error()))
+			}
+		}()
 	}
 
 	handler := voiceprom.MountMetricsOnHealth(
@@ -199,4 +206,17 @@ func dialPresenceUpdater() presenceUpdater {
 		return nil
 	}
 	return newGRPCPresenceUpdater(conn)
+}
+
+func dialFriendLister() friendLister {
+	addr := strings.TrimSpace(os.Getenv("REALTIME_SOCIAL_GRPC_ADDR"))
+	if addr == "" {
+		return nil
+	}
+	conn, err := grpc.NewClient(grpcclient.DialTarget(addr), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		svcLogger.Warn("social grpc client unavailable", slog.String("addr", addr), slog.String("error", err.Error()))
+		return nil
+	}
+	return newGRPCFriendLister(conn)
 }
