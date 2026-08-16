@@ -32,7 +32,10 @@
 | P1.18 | **done** | map `thumbnailR2Key`/`convertedR2Key`; live asserts key not HTTP previewUrl |
 | P1.19 | **done** | ClamAV live uses `.exe` + `application/x-msdownload` |
 | P1.6 | **product done** | `allow_forward` in privacy.md + User Get/UpdatePrivacy + Flutter toggle; S2S readable; ForwardMessage enforce → WT-MSG; compose FW-04 → WT-INTEGRATION |
-| P1.1–3, P1.5, P1.7–11 | **blocked** | product deps (see inventory / todo/backend) |
+| P1.1 | **done** | auth `depends_on: nats` + convert negatives + `TestComposeConvertGuestNATS_live` |
+| P1.2 | **done** | server `guest_reminder_last_shown_at` + get/mark; Flutter cadence; Flutter live → WT-INTEGRATION optional |
+| P1.3 | **done** | ListSessions/RevokeSession + `TestComposeAuthSessions_live` |
+| P1.5, P1.7–11 | **blocked** | product deps (see inventory / todo/backend) |
 | P1.14 | **product done** | compose `SPACE_GRPC_ADDR` + S2S/NATS Space Pro sync; member-cap without Seed; compose live join-51st → WT-INTEGRATION |
 | P1.15 | **product done** | `subscription.grace_reminder` D1/D3/D7 + Notification consumer stub; compose assert → WT-INTEGRATION |
 | P2.* / P3.* | **deferred** | roadmap / soft-launch+ |
@@ -75,9 +78,9 @@ Effort: **S** ≤0.5d · **M** 1–2d · **L** 3–5d · **XL** >1w (инфра/
 
 | # | Кейс | Слой | IDs | Effort | Notes |
 |---|------|------|-----|--------|-------|
-| P1.1 | Convert-guest negative + NATS event на compose | B+E | AU-05/14 | M | wiring `auth.nats` в compose (todo) |
-| P1.2 | Guest reminder cadence (2nd login ≤1/day) | C | AU-07 | M | нужен серверный timestamp — продукт П.9 |
-| P1.3 | Active sessions list/revoke | B | AU-12 | M | после API surface |
+| P1.1 | Convert-guest negative + NATS event на compose | B+E | AU-05/14 | M | **done** — auth nats depends_on + Maven negatives + `TestComposeConvertGuestNATS_live` |
+| P1.2 | Guest reminder cadence (2nd login ≤1/day) | C | AU-07 | M | **done** — server timestamp + Flutter; optional Flutter live → WT-INTEGRATION |
+| P1.3 | Active sessions list/revoke | B | AU-12 | M | **done** — List/Revoke + `TestComposeAuthSessions_live` |
 | P1.4 | Friend-request denied by `allow_friend_requests` | B+C | FR-03, PV-04 | M | Social hook already exists |
 
 ### 1.2 Messaging / Forward / Roles enforce
