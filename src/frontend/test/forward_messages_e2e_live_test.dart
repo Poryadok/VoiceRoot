@@ -296,4 +296,100 @@ void main() {
         ? null
         : 'Opt in with --dart-define=VOICE_RUN_LIVE_INTEGRATION=true',
   );
+
+  test(
+    'multi-select forward two DM messages into group (FW-05)',
+    () async {
+      final probe = await probeLiveGateway();
+      expect(
+        probe,
+        isA<LiveGatewayReady>(),
+        reason: probe is LiveGatewayUnavailable ? probe.reason : null,
+      );
+      final ctx = (probe as LiveGatewayReady).context;
+
+      final sender = await ctx.registerUser('fw05-sender');
+      final peer = await ctx.registerUser('fw05-peer');
+      final member = await ctx.registerUser('fw05-member');
+
+      final chats = ctx.chatsClient();
+      final dm = await chats.createDm(
+        authorization: sender.authorizationHeader,
+        otherProfileId: peer.activeProfileId,
+      );
+      final dmChatId = (dm as ChatsApiOk<VoiceChat>).data.id;
+
+      final groupCreated = await chats.createGroup(
+        authorization: sender.authorizationHeader,
+        name: 'Forward multi target',
+      );
+      expect(groupCreated, isA<ChatsApiOk<VoiceChat>>());
+      final group = (groupCreated as ChatsApiOk<VoiceChat>).data;
+
+      final invite = await chats.addGroupMembers(
+        authorization: sender.authorizationHeader,
+        chatId: group.id,
+        profileIds: [peer.activeProfileId, member.activeProfileId],
+      );
+      expect(invite, isA<ChatsApiOk<void>>());
+
+      final messages = ctx.messagesClient();
+      final sentA = await messages.sendMessage(
+        authorization: peer.authorizationHeader,
+        chatId: dmChatId,
+        content: 'fw-05-a',
+        clientMessageId: qaClientMessageId(),
+      );
+      expect(sentA, isA<MessagesApiOk<VoiceMessage>>());
+      final srcA = (sentA as MessagesApiOk<VoiceMessage>).data.id;
+
+      final sentB = await messages.sendMessage(
+        authorization: peer.authorizationHeader,
+        chatId: dmChatId,
+        content: 'fw-05-b',
+        clientMessageId: qaClientMessageId(),
+      );
+      expect(sentB, isA<MessagesApiOk<VoiceMessage>>());
+      final srcB = (sentB as MessagesApiOk<VoiceMessage>).data.id;
+
+      final fwdA = await messages.forwardMessage(
+        authorization: sender.authorizationHeader,
+        sourceMessageId: srcA,
+        targetChatId: group.id,
+        commentary: 'batch note',
+      );
+      expect(fwdA, isA<MessagesApiOk<VoiceMessage>>());
+      final forwardedA = (fwdA as MessagesApiOk<VoiceMessage>).data;
+      expect(forwardedA.messageKind, VoiceMessageKind.forward);
+      expect(forwardedA.forwardFromId, srcA);
+      expect(forwardedA.content, 'fw-05-a');
+
+      final fwdB = await messages.forwardMessage(
+        authorization: sender.authorizationHeader,
+        sourceMessageId: srcB,
+        targetChatId: group.id,
+      );
+      expect(fwdB, isA<MessagesApiOk<VoiceMessage>>());
+      final forwardedB = (fwdB as MessagesApiOk<VoiceMessage>).data;
+      expect(forwardedB.messageKind, VoiceMessageKind.forward);
+      expect(forwardedB.forwardFromId, srcB);
+      expect(forwardedB.content, 'fw-05-b');
+
+      final history = await messages.getMessages(
+        authorization: member.authorizationHeader,
+        chatId: group.id,
+      );
+      final listed = (history as MessagesApiOk<MessageListData>).data.messages;
+      expect(
+        listed.where((m) => m.messageKind == VoiceMessageKind.forward),
+        hasLength(2),
+      );
+      expect(listed.where((m) => m.content == 'batch note'), hasLength(1));
+      expect(listed.any((m) => m.content == 'fw-05-a'), isTrue);
+      expect(listed.any((m) => m.content == 'fw-05-b'), isTrue);
+    },
+    skip: runLiveIntegration
+        ? null
+        : 'Opt in with --dart-define=VOICE_RUN_LIVE_INTEGRATION=true',
+  );
 }

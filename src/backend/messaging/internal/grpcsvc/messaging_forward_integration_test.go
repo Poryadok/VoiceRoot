@@ -613,9 +613,9 @@ func TestMessagingForwardMessage_withoutAttributionCopyAsNew(t *testing.T) {
 
 	withoutAttr := true
 	copied, err := client.ForwardMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.ForwardMessageRequest{
-		SourceMessageId:     original.GetMessage().GetId(),
-		TargetChat:          chatDMRef(targetChat),
-		WithoutAttribution:  &withoutAttr,
+		SourceMessageId:    original.GetMessage().GetId(),
+		TargetChat:         chatDMRef(targetChat),
+		WithoutAttribution: &withoutAttr,
 	})
 	require.NoError(t, err)
 
@@ -668,4 +668,80 @@ func TestMessagingForwardMessage_withoutAttributionIgnoresAllowForward(t *testin
 	require.NoError(t, err)
 	require.Equal(t, "regular", copied.GetMessage().GetType())
 	require.Empty(t, copied.GetMessage().GetForwardFromId())
+}
+
+// TestMessagingForwardMessage_multiSelectBatch documents FW-05 / forward-messages.md:
+// several messages forwarded into one target; optional commentary is inserted once
+// before the batch (client sends it only on the first ForwardMessage).
+func TestMessagingForwardMessage_multiSelectBatch(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+
+	sourceChat := uuid.New()
+	targetChat := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	profC := uuid.New()
+	acctA := uuid.New()
+	seedDMChat(t, ctx, pool, sourceChat, profA, profB)
+	seedDMChat(t, ctx, pool, targetChat, profA, profC)
+
+	client, _ := startMessagingServer(t, pool)
+
+	first, err := client.SendMessage(withProfileCtx(ctx, acctA, profB), &messagingv1.SendMessageRequest{
+		Chat: chatDMRef(sourceChat), Content: "fw-05-a", AttachmentsJson: "[]", MentionsJson: "[]",
+	})
+	require.NoError(t, err)
+	second, err := client.SendMessage(withProfileCtx(ctx, acctA, profB), &messagingv1.SendMessageRequest{
+		Chat: chatDMRef(sourceChat), Content: "fw-05-b", AttachmentsJson: "[]", MentionsJson: "[]",
+	})
+	require.NoError(t, err)
+
+	commentary := "batch note"
+	fwd1, err := client.ForwardMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.ForwardMessageRequest{
+		SourceMessageId: first.GetMessage().GetId(),
+		TargetChat:      chatDMRef(targetChat),
+		Commentary:      &commentary,
+	})
+	require.NoError(t, err)
+	fwd2, err := client.ForwardMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.ForwardMessageRequest{
+		SourceMessageId: second.GetMessage().GetId(),
+		TargetChat:      chatDMRef(targetChat),
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, messagingv1.MessageKind_MESSAGE_KIND_FORWARD, fwd1.GetMessage().GetMessageKind())
+	require.Equal(t, messagingv1.MessageKind_MESSAGE_KIND_FORWARD, fwd2.GetMessage().GetMessageKind())
+	require.Equal(t, first.GetMessage().GetId(), fwd1.GetMessage().GetForwardFromId())
+	require.Equal(t, second.GetMessage().GetId(), fwd2.GetMessage().GetForwardFromId())
+
+	history, err := client.GetMessages(withProfileCtx(ctx, acctA, profA), &messagingv1.GetMessagesRequest{
+		Chat: chatDMRef(targetChat),
+		Page: &commonv1.CursorPageRequest{PageSize: 10},
+	})
+	require.NoError(t, err)
+	msgs := history.GetMessageList().GetMessages()
+	require.Len(t, msgs, 3)
+
+	contents := make([]string, 0, len(msgs))
+	forwards := 0
+	commentaryCount := 0
+	for _, m := range msgs {
+		contents = append(contents, m.GetContent())
+		if m.GetMessageKind() == messagingv1.MessageKind_MESSAGE_KIND_FORWARD {
+			forwards++
+			require.NotEmpty(t, m.GetForwardFromId())
+		}
+		if m.GetContent() == commentary {
+			commentaryCount++
+		}
+	}
+	require.Equal(t, 2, forwards)
+	require.Equal(t, 1, commentaryCount)
+	require.Contains(t, contents, "fw-05-a")
+	require.Contains(t, contents, "fw-05-b")
+	require.Contains(t, contents, commentary)
 }

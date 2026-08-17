@@ -31,8 +31,9 @@ final voiceChatsClientProvider = Provider<VoiceChatsClient>((ref) {
 });
 
 /// Optimistic mute deadlines keyed by chat id (server source of truth via MuteChat).
-final chatMutedUntilProvider =
-    StateProvider<Map<String, DateTime>>((ref) => <String, DateTime>{});
+final chatMutedUntilProvider = StateProvider<Map<String, DateTime>>(
+  (ref) => <String, DateTime>{},
+);
 
 final voiceMessagesClientProvider = Provider<VoiceMessagesClient>((ref) {
   return VoiceMessagesClient(gateway: ref.watch(gatewayHttpClientProvider));
@@ -89,49 +90,50 @@ class E2eAttachmentDecryptRequest {
 /// Downloads and decrypts E2E ciphertext blobs for attachment preview.
 final e2eDecryptedAttachmentBytesProvider =
     FutureProvider.family<Uint8List?, E2eAttachmentDecryptRequest>((
-  ref,
-  request,
-) async {
-  if (request.fileId.isEmpty || request.e2eKeyWire.isEmpty) return null;
-  final auth = ref.watch(authorizationHeaderProvider);
-  final localProfileId = ref.watch(authControllerProvider).activeProfileId;
-  if (auth == null || localProfileId == null || localProfileId.isEmpty) {
-    return null;
-  }
-  final files = ref.read(voiceFilesClientProvider);
-  final downloaded = await files.fetchFileBytes(
-    authorization: auth,
-    fileId: request.fileId,
-  );
-  if (downloaded is! FilesApiOk<Uint8List>) return null;
-  final crypto = const E2eFileCrypto();
-  final messageService = ref.read(e2eMessageServiceProvider);
-  try {
-    return await crypto.decryptBytes(
-      ciphertext: downloaded.data,
-      keyWire: request.e2eKeyWire,
-      messageService: messageService,
-      localProfileId: localProfileId,
-      peerProfileId: request.senderProfileId,
-      authorization: auth,
-    );
-  } on Object {
-    return null;
-  }
-});
+      ref,
+      request,
+    ) async {
+      if (request.fileId.isEmpty || request.e2eKeyWire.isEmpty) return null;
+      final auth = ref.watch(authorizationHeaderProvider);
+      final localProfileId = ref.watch(authControllerProvider).activeProfileId;
+      if (auth == null || localProfileId == null || localProfileId.isEmpty) {
+        return null;
+      }
+      final files = ref.read(voiceFilesClientProvider);
+      final downloaded = await files.fetchFileBytes(
+        authorization: auth,
+        fileId: request.fileId,
+      );
+      if (downloaded is! FilesApiOk<Uint8List>) return null;
+      final crypto = const E2eFileCrypto();
+      final messageService = ref.read(e2eMessageServiceProvider);
+      try {
+        return await crypto.decryptBytes(
+          ciphertext: downloaded.data,
+          keyWire: request.e2eKeyWire,
+          messageService: messageService,
+          localProfileId: localProfileId,
+          peerProfileId: request.senderProfileId,
+          authorization: auth,
+        );
+      } on Object {
+        return null;
+      }
+    });
 
 /// Client-side thumbnail for decrypted E2E image attachments (cached per [fileId]).
 final e2eDecryptedAttachmentThumbProvider =
     FutureProvider.family<Uint8List?, E2eAttachmentDecryptRequest>((
-  ref,
-  request,
-) async {
-  if (request.fileId.isEmpty) return null;
-  final fullBytes =
-      await ref.watch(e2eDecryptedAttachmentBytesProvider(request).future);
-  if (fullBytes == null) return null;
-  return resizeImageBytesForThumb(fullBytes);
-});
+      ref,
+      request,
+    ) async {
+      if (request.fileId.isEmpty) return null;
+      final fullBytes = await ref.watch(
+        e2eDecryptedAttachmentBytesProvider(request).future,
+      );
+      if (fullBytes == null) return null;
+      return resizeImageBytesForThumb(fullBytes);
+    });
 
 /// Active DM chat id in the main column, or null.
 final selectedChatIdProvider = StateProvider<String?>((ref) => null);
@@ -193,12 +195,14 @@ String? resolveDmPeerForChatId({
 }
 
 /// Active reply target per chat (thread parent message id for composer).
-final chatReplyTargetProvider =
-    StateProvider.family<VoiceMessage?, String>((ref, chatId) => null);
+final chatReplyTargetProvider = StateProvider.family<VoiceMessage?, String>(
+  (ref, chatId) => null,
+);
 
 /// Open thread panel parent message id per chat.
-final chatActiveThreadProvider =
-    StateProvider.family<String?, String>((ref, chatId) => null);
+final chatActiveThreadProvider = StateProvider.family<String?, String>(
+  (ref, chatId) => null,
+);
 
 final _chatListRefreshTokenProvider = StateProvider<int>((ref) => 0);
 final chatInboxProvider = StateProvider<String>((ref) => 'main');
@@ -409,11 +413,7 @@ class ChatListController extends StateNotifier<ChatListState> {
     if (auth == null) return 'not_authenticated';
     final result = await _ref
         .read(voiceChatsClientProvider)
-        .muteChat(
-          authorization: auth,
-          chatId: chatId,
-          mutedUntil: mutedUntil,
-        );
+        .muteChat(authorization: auth, chatId: chatId, mutedUntil: mutedUntil);
     return switch (result) {
       ChatsApiOk<void>() => null,
       ChatsApiFailure(:final message) => message,
@@ -476,8 +476,7 @@ final chatListProvider = FutureProvider<ChatListData>((ref) async {
       .listChats(authorization: auth);
   return switch (result) {
     ChatsApiOk(:final data) => data,
-    ChatsApiFailure(:final statusCode)
-        when isBackendUnavailable(statusCode) =>
+    ChatsApiFailure(:final statusCode) when isBackendUnavailable(statusCode) =>
       throw const BackendUnavailableException(),
     ChatsApiFailure(:final errorCode, :final statusCode, :final message)
         when isNotFoundError(errorCode, statusCode) =>
@@ -577,8 +576,11 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
         if (frame.op == 'message_create') {
           final chatId = frame.data?['chat_id'] as String?;
           if (chatId == this.chatId) {
-            if (_ref.read(deferredBotInteractionProvider(this.chatId)) != null) {
-              _ref.read(deferredBotInteractionProvider(this.chatId).notifier).clear();
+            if (_ref.read(deferredBotInteractionProvider(this.chatId)) !=
+                null) {
+              _ref
+                  .read(deferredBotInteractionProvider(this.chatId).notifier)
+                  .clear();
             }
             final senderProfileId = frame.data?['sender_profile_id'] as String?;
             final messageId = frame.data?['message_id'] as String?;
@@ -649,11 +651,14 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           if (chatId == this.chatId) {
             unawaited(_catchUpAfterEvent());
           }
-        } else if (frame.op == 'reaction_add' || frame.op == 'reaction_remove') {
+        } else if (frame.op == 'reaction_add' ||
+            frame.op == 'reaction_remove') {
           final chatId = frame.data?['chat_id'] as String?;
           if (chatId != this.chatId) return;
           final profileId = frame.data?['profile_id'] as String?;
-          final activeProfile = _ref.read(authControllerProvider).activeProfileId;
+          final activeProfile = _ref
+              .read(authControllerProvider)
+              .activeProfileId;
           if (profileId == activeProfile) return;
           final messageId = frame.data?['message_id'] as String?;
           final emoji = frame.data?['emoji'] as String?;
@@ -673,7 +678,9 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           final pinnedBy = frame.data?['pinned_by'] as String?;
           final unpinnedBy = frame.data?['unpinned_by'] as String?;
           final actor = pinnedBy ?? unpinnedBy;
-          final activeProfile = _ref.read(authControllerProvider).activeProfileId;
+          final activeProfile = _ref
+              .read(authControllerProvider)
+              .activeProfileId;
           if (actor == activeProfile) return;
           _applyPinDelta(
             messageId: messageId,
@@ -704,18 +711,22 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     );
   }
 
-  Future<List<VoiceMessage>> _finalizeMessages(List<VoiceMessage> messages) async {
+  Future<List<VoiceMessage>> _finalizeMessages(
+    List<VoiceMessage> messages,
+  ) async {
     if (!_isE2eChat()) return messages;
     final localId = _activeProfileId();
     final peerId = _dmPeerProfileId();
     if (localId == null || peerId == null) return messages;
     final auth = _ref.read(authorizationHeaderProvider);
-    return _ref.read(e2eMessageServiceProvider).decryptAllForDisplay(
-      messages: messages,
-      localProfileId: localId,
-      peerProfileId: peerId,
-      authorization: auth,
-    );
+    return _ref
+        .read(e2eMessageServiceProvider)
+        .decryptAllForDisplay(
+          messages: messages,
+          localProfileId: localId,
+          peerProfileId: peerId,
+          authorization: auth,
+        );
   }
 
   @override
@@ -728,7 +739,11 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
   Future<void> loadInitial() async {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return;
-    state = state.copyWith(isLoading: true, clearError: true, isOfflineCache: false);
+    state = state.copyWith(
+      isLoading: true,
+      clearError: true,
+      isOfflineCache: false,
+    );
     if (_isDeviceOffline()) {
       final served = await _serveCachedMessages();
       if (served) return;
@@ -884,20 +899,19 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       final localId = _activeProfileId();
       if (peerId != null && localId != null && outbound.isNotEmpty) {
         try {
-          outbound = await _ref.read(e2eMessageServiceProvider).encryptOutgoing(
-            localProfileId: localId,
-            peerProfileId: peerId,
-            plaintext: outbound,
-            authorization: auth,
-            chatId: chatId,
-          );
+          outbound = await _ref
+              .read(e2eMessageServiceProvider)
+              .encryptOutgoing(
+                localProfileId: localId,
+                peerProfileId: peerId,
+                plaintext: outbound,
+                authorization: auth,
+                chatId: chatId,
+              );
           isE2e = true;
         } on E2eEncryptException catch (e) {
           if (!mounted) return e.message;
-          state = state.copyWith(
-            isSending: false,
-            errorMessage: e.message,
-          );
+          state = state.copyWith(isSending: false, errorMessage: e.message);
           return e.message;
         }
       }
@@ -967,11 +981,13 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
   Future<void> _writeCache(List<VoiceMessage> messages) async {
     final profileId = _activeProfileId();
     if (profileId == null || messages.isEmpty) return;
-    await _ref.read(messageCacheStoreProvider).replaceChatMessages(
-      profileId: profileId,
-      chatId: chatId,
-      messages: messages,
-    );
+    await _ref
+        .read(messageCacheStoreProvider)
+        .replaceChatMessages(
+          profileId: profileId,
+          chatId: chatId,
+          messages: messages,
+        );
   }
 
   Future<void> _markLatestRead() async {
@@ -1012,13 +1028,15 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       final localId = _activeProfileId();
       if (peerId != null && localId != null) {
         try {
-          outbound = await _ref.read(e2eMessageServiceProvider).encryptOutgoing(
-            localProfileId: localId,
-            peerProfileId: peerId,
-            plaintext: outbound,
-            authorization: auth,
-            chatId: chatId,
-          );
+          outbound = await _ref
+              .read(e2eMessageServiceProvider)
+              .encryptOutgoing(
+                localProfileId: localId,
+                peerProfileId: peerId,
+                plaintext: outbound,
+                authorization: auth,
+                chatId: chatId,
+              );
         } on E2eEncryptException catch (e) {
           return e.message;
         }
@@ -1087,7 +1105,10 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     );
   }
 
-  Future<String?> togglePin(String messageId, {required bool currentlyPinned}) async {
+  Future<String?> togglePin(
+    String messageId, {
+    required bool currentlyPinned,
+  }) async {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return 'not_authenticated';
     _applyPinDelta(messageId: messageId, pinned: !currentlyPinned);
@@ -1117,9 +1138,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
 
   void _applyPinDelta({required String messageId, required bool pinned}) {
     final updatedMessages = state.messages
-        .map(
-          (m) => m.id == messageId ? m.copyWith(isPinned: pinned) : m,
-        )
+        .map((m) => m.id == messageId ? m.copyWith(isPinned: pinned) : m)
         .toList(growable: false);
     final pinnedList = [...state.pinnedMessages];
     if (pinned) {
@@ -1157,11 +1176,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
             );
           } else {
             reactions.add(
-              MessageReaction(
-                emoji: emoji,
-                count: 1,
-                reactedByMe: reactedByMe,
-              ),
+              MessageReaction(emoji: emoji, count: 1, reactedByMe: reactedByMe),
             );
           }
         } else if (index >= 0) {
@@ -1195,8 +1210,9 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     if (!mounted) return null;
     switch (result) {
       case MessagesApiOk<void>():
-        final messages =
-            state.messages.where((m) => m.id != messageId).toList();
+        final messages = state.messages
+            .where((m) => m.id != messageId)
+            .toList();
         state = state.copyWith(messages: messages, clearError: true);
         unawaited(_writeCache(messages));
         _invalidateChatLists(_ref);
@@ -1525,7 +1541,8 @@ class ReconnectBannerController extends Notifier<bool> {
     }
 
     final lostConnection = prev == RealtimeLinkStatus.connected;
-    if (_isUnhealthy(next) && (lostConnection || (!state && _showTimer == null))) {
+    if (_isUnhealthy(next) &&
+        (lostConnection || (!state && _showTimer == null))) {
       _hideTimer?.cancel();
       _hideTimer = null;
       _scheduleShow();
@@ -1535,8 +1552,8 @@ class ReconnectBannerController extends Notifier<bool> {
 
 final reconnectBannerVisibleProvider =
     NotifierProvider<ReconnectBannerController, bool>(
-  ReconnectBannerController.new,
-);
+      ReconnectBannerController.new,
+    );
 
 final realtimeEventProvider = StreamProvider<RealtimeFrame>((ref) {
   final hub = ref.watch(realtimeHubProvider);
@@ -1585,11 +1602,13 @@ class ChatActions {
     required String chatId,
     required List<String> memberProfileIds,
   }) async {
-    final inviteResult = await _ref.read(voiceChatsClientProvider).addGroupMembers(
-      authorization: auth,
-      chatId: chatId,
-      profileIds: memberProfileIds,
-    );
+    final inviteResult = await _ref
+        .read(voiceChatsClientProvider)
+        .addGroupMembers(
+          authorization: auth,
+          chatId: chatId,
+          profileIds: memberProfileIds,
+        );
     return switch (inviteResult) {
       ChatsApiFailure(:final message) => message,
       ChatsApiOk() => _selectGroupChat(chatId),
@@ -1648,15 +1667,17 @@ class ChatActions {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return 'not_authenticated';
     final trimmedCommentary = commentary?.trim();
-    final result = await _ref.read(voiceMessagesClientProvider).forwardMessage(
-      authorization: auth,
-      sourceMessageId: sourceMessageId,
-      targetChatId: targetChatId,
-      commentary: trimmedCommentary == null || trimmedCommentary.isEmpty
-          ? null
-          : trimmedCommentary,
-      withoutAttribution: withoutAttribution,
-    );
+    final result = await _ref
+        .read(voiceMessagesClientProvider)
+        .forwardMessage(
+          authorization: auth,
+          sourceMessageId: sourceMessageId,
+          targetChatId: targetChatId,
+          commentary: trimmedCommentary == null || trimmedCommentary.isEmpty
+              ? null
+              : trimmedCommentary,
+          withoutAttribution: withoutAttribution,
+        );
     return switch (result) {
       MessagesApiOk(:final data) => () {
         _invalidateChatLists(_ref);
@@ -1671,17 +1692,40 @@ class ChatActions {
     };
   }
 
+  /// FW-05: forward several messages into one target. Commentary is attached
+  /// only to the first RPC (optional note before the batch).
+  Future<String?> forwardMessages({
+    required List<String> sourceMessageIds,
+    required String targetChatId,
+    String? commentary,
+    bool withoutAttribution = false,
+  }) async {
+    if (sourceMessageIds.isEmpty) return null;
+    for (var i = 0; i < sourceMessageIds.length; i++) {
+      final err = await forwardMessage(
+        sourceMessageId: sourceMessageIds[i],
+        targetChatId: targetChatId,
+        commentary: i == 0 ? commentary : null,
+        withoutAttribution: withoutAttribution,
+      );
+      if (err != null) return err;
+    }
+    return null;
+  }
+
   Future<String?> removeGroupMember({
     required String chatId,
     required String profileId,
   }) async {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return 'not_authenticated';
-    final result = await _ref.read(voiceChatsClientProvider).removeGroupMember(
-      authorization: auth,
-      chatId: chatId,
-      profileId: profileId,
-    );
+    final result = await _ref
+        .read(voiceChatsClientProvider)
+        .removeGroupMember(
+          authorization: auth,
+          chatId: chatId,
+          profileId: profileId,
+        );
     return switch (result) {
       ChatsApiFailure(:final message) => message,
       ChatsApiOk() => () {
@@ -1718,10 +1762,9 @@ class ChatActions {
   Future<String?> leaveGroup(String chatId) async {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return 'not_authenticated';
-    final result = await _ref.read(voiceChatsClientProvider).leaveGroup(
-      authorization: auth,
-      chatId: chatId,
-    );
+    final result = await _ref
+        .read(voiceChatsClientProvider)
+        .leaveGroup(authorization: auth, chatId: chatId);
     return switch (result) {
       ChatsApiFailure(:final message) => message,
       ChatsApiOk() => () {

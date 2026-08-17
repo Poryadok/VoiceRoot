@@ -131,10 +131,18 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(ForwardMessageSheet.sheetKey), findsOneWidget);
-    expect(find.byKey(ForwardMessageSheet.chatTileKey('chat-target')), findsOneWidget);
-    expect(find.byKey(ForwardMessageSheet.chatTileKey('chat-source')), findsNothing);
+    expect(
+      find.byKey(ForwardMessageSheet.chatTileKey('chat-target')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(ForwardMessageSheet.chatTileKey('chat-source')),
+      findsNothing,
+    );
 
-    await tester.tap(find.byKey(ForwardMessageSheet.chatTileKey('chat-target')));
+    await tester.tap(
+      find.byKey(ForwardMessageSheet.chatTileKey('chat-target')),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Add a comment'), findsOneWidget);
@@ -142,6 +150,114 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(forwardCalled, isTrue);
+    expect(find.byKey(ForwardMessageSheet.sheetKey), findsNothing);
+  });
+
+  testWidgets('ForwardMessageSheet forwards a multi-select batch (FW-05)', (
+    tester,
+  ) async {
+    final forwardedIds = <String>[];
+    final commentaries = <String?>[];
+    await tester.pumpWidget(
+      testApp(
+        home: Builder(
+          builder: (context) => FilledButton(
+            onPressed: () => ForwardMessageSheet.show(
+              context,
+              sourceMessages: const [
+                VoiceMessage(
+                  id: 'msg-src-a',
+                  chatId: 'chat-source',
+                  senderProfileId: 'profile-b',
+                  content: 'fw-05-a',
+                ),
+                VoiceMessage(
+                  id: 'msg-src-b',
+                  chatId: 'chat-source',
+                  senderProfileId: 'profile-b',
+                  content: 'fw-05-b',
+                ),
+              ],
+              sourceChatId: 'chat-source',
+            ),
+            child: const Text('Open forward'),
+          ),
+        ),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/chats') {
+            return http.Response(
+              jsonEncode({
+                'chat_list': {
+                  'items': [
+                    {
+                      'chat': {
+                        'id': 'chat-source',
+                        'type': 'CHAT_TYPE_DM',
+                        'creator_profile_id': 'profile-test',
+                      },
+                    },
+                    {
+                      'chat': {
+                        'id': 'chat-target',
+                        'type': 'CHAT_TYPE_GROUP',
+                        'creator_profile_id': 'profile-test',
+                        'name': 'Friday squad',
+                      },
+                    },
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          if (req.url.path == '/api/v1/messages/forward') {
+            final body = jsonDecode(req.body) as Map<String, dynamic>;
+            forwardedIds.add(body['source_message_id'] as String);
+            commentaries.add(body['commentary'] as String?);
+            final srcId = body['source_message_id'] as String;
+            return http.Response(
+              jsonEncode({
+                'message': {
+                  'id': 'msg-fwd-$srcId',
+                  'chat': {'id': 'chat-target'},
+                  'sender_profile_id': 'profile-test',
+                  'content': srcId == 'msg-src-a' ? 'fw-05-a' : 'fw-05-b',
+                  'type': 'forward',
+                  'message_kind': 'MESSAGE_KIND_FORWARD',
+                  'forward_from_id': srcId,
+                  'forward_from_sender': 'Alice',
+                },
+              }),
+              200,
+            );
+          }
+          return http.Response('{}', 404);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Open forward'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(ForwardMessageSheet.chatTileKey('chat-target')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Add a comment'), findsOneWidget);
+    await tester.enterText(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(TextField),
+      ),
+      'batch note',
+    );
+    await tester.tap(find.text('Forward'));
+    await tester.pumpAndSettle();
+
+    expect(forwardedIds, ['msg-src-a', 'msg-src-b']);
+    expect(commentaries, ['batch note', isNull]);
     expect(find.byKey(ForwardMessageSheet.sheetKey), findsNothing);
   });
 
@@ -193,14 +309,26 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byKey(ForwardMessageSheet.chatTileKey('chat-a')), findsOneWidget);
-    expect(find.byKey(ForwardMessageSheet.chatTileKey('chat-b')), findsOneWidget);
+    expect(
+      find.byKey(ForwardMessageSheet.chatTileKey('chat-a')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(ForwardMessageSheet.chatTileKey('chat-b')),
+      findsOneWidget,
+    );
 
-    await tester.enterText(find.byKey(ForwardMessageSheet.searchFieldKey), 'beta');
+    await tester.enterText(
+      find.byKey(ForwardMessageSheet.searchFieldKey),
+      'beta',
+    );
     await tester.pumpAndSettle();
 
     expect(find.byKey(ForwardMessageSheet.chatTileKey('chat-a')), findsNothing);
-    expect(find.byKey(ForwardMessageSheet.chatTileKey('chat-b')), findsOneWidget);
+    expect(
+      find.byKey(ForwardMessageSheet.chatTileKey('chat-b')),
+      findsOneWidget,
+    );
   });
 }
 

@@ -31,13 +31,13 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | | Count |
 |--|------:|
 | **Всего кейсов** | 208 |
-| `[exists]` | 151 |
-| `[partial]` | 31 |
-| `[missing]` | 22 |
+| `[exists]` | 153 |
+| `[partial]` | 30 |
+| `[missing]` | 21 |
 | `[deferred]` | 1 |
 | `[n/a]` | 3 |
 
-> Подсчёт по строкам кейсов (колонка статуса). При добавлении тестов обновлять таблицу и gap-plan. Counts after 2026-08-17 Wave 2 (P0–P2 lives in master; P3.1/P3.2 still partial, P3.5 deferred).
+> Подсчёт по строкам кейсов (колонка статуса). При добавлении тестов обновлять таблицу и gap-plan. Counts after 2026-08-17 (P2.16 FW-05 closed; P3.1/P3.2 still partial, P3.5 deferred).
 
 ### Замечания по манифесту CI
 
@@ -98,7 +98,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | FW-02 | Forward в channel | `[exists]` | Messaging IT + Gateway: `TestComposeForwardChannelCommentary_live`; Flutter channel+commentary |
 | FW-03 | Copy as new (без атрибуции) | `[exists]` | Gateway: `TestComposeForwardWithoutAttribution_live`; Flutter FW-03 in `forward_messages_e2e_live_test`; Messaging IT |
 | FW-04 | Privacy forbid forward | `[exists]` | Messaging IT + Gateway: `TestComposeForwardPrivacyDeny_live`; Flutter FW-04 |
-| FW-05 | Multi-select forward | `[missing]` | — |
+| FW-05 | Multi-select forward | `[exists]` | Messaging IT `TestMessagingForwardMessage_multiSelectBatch`; Gateway: `TestComposeForwardMulti_live`; Flutter: `forward_messages_e2e_live_test` FW-05 + sheet batch |
 | FW-06 | Forward E2E ciphertext policy | `[exists]` | Messaging IT: `TestMessagingForwardMessage_e2eToPlainDenied` / `e2eToE2EDMPreservesFlag` |
 
 ---
@@ -400,7 +400,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 |----|------|--------|-----|
 | DL-01 | Invite HTML redirect + resolve | `[exists]` | Gateway: `TestComposeDeepLinks_live`; Flutter: `deeplink_invite_e2e_live_test` |
 | DL-02 | Resolve when Search down | `[exists]` | `TestComposeDeepLinksResolveWhenSearchDown_live` |
-| DL-03 | Message/profile/channel deep link kinds | `[partial]` | invite covered; full matrix unclear |
+| DL-03 | Message/profile/channel deep link kinds | `[exists]` | host `device_driver_smoke_test` matrix (invite/space/profile/DM/`voice://`/pending-after-login); Android emulator URL shape |
 | DL-04 | Mobile universal links / app links | `[partial]` | host matrix + Android emulator driver (skips without device); prod AASA/App Links / Play SHA still human A4 |
 
 

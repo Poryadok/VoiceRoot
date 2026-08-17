@@ -54,6 +54,7 @@
 | P2.5 | **done** | `TestComposeQuietHours_live` + Flutter `quiet_hours_e2e_live_test` (Set/Get); voice_member_joined push suppression remains unit delivery |
 | P2.6 | **done** | `TestComposeVoiceCommanderFloor_live` + Flutter `voice_commander_e2e_live_test` (commander/hand/GrantFloor/broadcast) |
 | P2.15 | **done** | `TestComposeForwardWithoutAttribution_live` + Flutter FW-03 in `forward_messages_e2e_live_test` |
+| P2.16 | **done** | `TestComposeForwardMulti_live` + Flutter FW-05 + Messaging IT; sheet batch commentary-on-first |
 | P2.13 | **done** | live entitlements for User cosmetics + GIF avatar; `TestComposePremiumCosmetics_live` + Flutter SUB-06 (#26) |
 | P2.14 | **done** | BT-07: `TestComposeBotsAutocomplete_live` + Flutter `bots_autocomplete_e2e_live_test`; portal command catalog (#30) |
 | P2.2 | **done** | `TestComposeStoryLfpParty_live` + Flutter `story_lfp_e2e_live_test` (LFP → JOIN → Decide ACCEPT) |
@@ -174,7 +175,7 @@ Effort: **S** ≤0.5d · **M** 1–2d · **L** 3–5d · **XL** >1w (инфра/
 | P2.13 | Premium cosmetics cross-smoke | B+C | SUB-06 | M | **done** — live tier + GIF + compose/Flutter (#26) |
 | P2.14 | Bot autocomplete / portal catalog | B+C | BT-07 | L | **done** — compose/Flutter autocomplete live + portal catalog (#30) |
 | P2.15 | Copy-forward without attribution | C | FW-03 | S | **done** — compose + Flutter live |
-| P2.16 | Multi-forward | C | FW-05 | M | UI backlog? |
+| P2.16 | Multi-forward | C | FW-05 | M | **done** — compose + Flutter live + Messaging IT; sheet batch |
 
 ---
 
@@ -218,11 +219,11 @@ Sprint 3+ :       P2 as roadmap features land; P3 device suite parallel track
 
 Обновлять сводку в inventory после каждого спринта:
 
-| Метрика | Сейчас (2026-08-17 post-Wave 2) | Цель soft-launch |
+| Метрика | Сейчас (2026-08-17 P2.16) | Цель soft-launch |
 |---------|---------------------:|------------------:|
 | Total cases | 208 | ≥ same scope |
-| `[exists]` | 151 | ≥ 130 |
-| `[missing]` | 22 | ≤ 35 (остальное — roadmap/deferred) |
+| `[exists]` | 153 | ≥ 130 |
+| `[missing]` | 21 | ≤ 35 (остальное — roadmap/deferred) |
 | `[missing]` Tier-0 related | ~0 (smoke paths) | 0 |
 | Smoke manifest name mismatches | 0 | 0 |
 | Analytics DoD assert | AN-03/04 covered | AN-03/04 green |

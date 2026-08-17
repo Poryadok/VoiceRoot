@@ -15,10 +15,13 @@ import '../core/voice_state_panel.dart';
 
 /// Picks a target chat and optionally adds commentary before forwarding.
 /// When [withoutAttribution] is true (FW-03), copies as a regular message.
+/// [sourceMessages] is the FW-05 multi-select batch; [sourceMessage] is the
+/// single-message path.
 class ForwardMessageSheet extends ConsumerStatefulWidget {
   const ForwardMessageSheet({
     super.key,
-    required this.sourceMessage,
+    this.sourceMessage,
+    this.sourceMessages = const [],
     required this.sourceChatId,
     this.withoutAttribution = false,
   });
@@ -29,13 +32,21 @@ class ForwardMessageSheet extends ConsumerStatefulWidget {
 
   static Key chatTileKey(String chatId) => Key('forward_chat_$chatId');
 
-  final VoiceMessage sourceMessage;
+  final VoiceMessage? sourceMessage;
+  final List<VoiceMessage> sourceMessages;
   final String sourceChatId;
   final bool withoutAttribution;
 
+  List<VoiceMessage> get messagesToForward {
+    if (sourceMessages.isNotEmpty) return sourceMessages;
+    final single = sourceMessage;
+    return single == null ? const [] : [single];
+  }
+
   static Future<void> show(
     BuildContext context, {
-    required VoiceMessage sourceMessage,
+    VoiceMessage? sourceMessage,
+    List<VoiceMessage>? sourceMessages,
     required String sourceChatId,
     bool withoutAttribution = false,
   }) {
@@ -47,6 +58,7 @@ class ForwardMessageSheet extends ConsumerStatefulWidget {
         container: container,
         child: ForwardMessageSheet(
           sourceMessage: sourceMessage,
+          sourceMessages: sourceMessages ?? const [],
           sourceChatId: sourceChatId,
           withoutAttribution: withoutAttribution,
         ),
@@ -97,17 +109,21 @@ class _ForwardMessageSheetState extends ConsumerState<ForwardMessageSheet> {
 
   Future<void> _onChatSelected(ChatListItem item) async {
     if (_forwarding) return;
+    final messages = widget.messagesToForward;
+    if (messages.isEmpty) return;
     final commentary = await _promptCommentary();
     if (!mounted || commentary == null) return;
 
     setState(() => _forwarding = true);
     final l10n = AppLocalizations.of(context)!;
-    final err = await ref.read(chatActionsProvider).forwardMessage(
-      sourceMessageId: widget.sourceMessage.id,
-      targetChatId: item.chatId,
-      commentary: commentary.isEmpty ? null : commentary,
-      withoutAttribution: widget.withoutAttribution,
-    );
+    final err = await ref
+        .read(chatActionsProvider)
+        .forwardMessages(
+          sourceMessageIds: widget.messagesToForward.map((m) => m.id).toList(),
+          targetChatId: item.chatId,
+          commentary: commentary.isEmpty ? null : commentary,
+          withoutAttribution: widget.withoutAttribution,
+        );
     if (!mounted) return;
     setState(() => _forwarding = false);
     if (err != null) {
@@ -174,8 +190,7 @@ class _ForwardMessageSheetState extends ConsumerState<ForwardMessageSheet> {
               onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 8),
-            if (_forwarding)
-              const LinearProgressIndicator(minHeight: 2),
+            if (_forwarding) const LinearProgressIndicator(minHeight: 2),
             Expanded(
               child: listState.isLoading && listState.items.isEmpty
                   ? Center(child: Text(l10n.commonLoading))

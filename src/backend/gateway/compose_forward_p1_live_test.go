@@ -126,6 +126,47 @@ func TestComposeForwardWithoutAttribution_live(t *testing.T) {
 	require.Contains(t, contents, "copy-me-plain")
 }
 
+// TestComposeForwardMulti_live documents FW-05: multi-select forward of two
+// messages into one target with a single commentary before the batch.
+func TestComposeForwardMulti_live(t *testing.T) {
+	if !liveComposeEnabled() {
+		t.Skip("set VOICE_RUN_LIVE_COMPOSE=true to run against local compose")
+	}
+	clearLiveComposeAuthRateLimit(t)
+
+	client := &http.Client{Timeout: 45 * time.Second}
+	base := liveGatewayBaseURL()
+	n := time.Now().UnixNano()
+
+	sender := registerComposeUser(t, client, base, formatComposeEmail("fw05-a", n), "VoiceQaTest1!")
+	peer := registerComposeUser(t, client, base, formatComposeEmail("fw05-b", n), "VoiceQaTest1!")
+	member := registerComposeUser(t, client, base, formatComposeEmail("fw05-c", n), "VoiceQaTest1!")
+
+	dmID := createComposeDMBetween(t, client, base, sender, peer)
+	srcA := sendComposeMessage(t, client, base, peer.AccessToken, dmID, "fw-05-a")
+	srcB := sendComposeMessage(t, client, base, peer.AccessToken, dmID, "fw-05-b")
+
+	groupID := createComposeGroup(t, client, base, sender.AccessToken, "Fwd multi target")
+	addComposeGroupMembersForInvitees(t, client, base, sender.AccessToken, groupID, peer, member)
+
+	status, raw := forwardComposeMessageStatus(t, client, base, sender.AccessToken, srcA, groupID, "batch note")
+	require.Equal(t, http.StatusOK, status, "body=%s", string(raw))
+	status, raw = forwardComposeMessageStatus(t, client, base, sender.AccessToken, srcB, groupID, "")
+	require.Equal(t, http.StatusOK, status, "body=%s", string(raw))
+
+	contents := composeMessageContentsInChat(t, client, base, member.AccessToken, groupID)
+	require.Contains(t, contents, "fw-05-a")
+	require.Contains(t, contents, "fw-05-b")
+	require.Contains(t, contents, "batch note")
+	noteCount := 0
+	for _, c := range contents {
+		if c == "batch note" {
+			noteCount++
+		}
+	}
+	require.Equal(t, 1, noteCount)
+}
+
 func forwardComposeMessageWithoutAttributionStatus(
 	t *testing.T, client *http.Client, base, accessToken, sourceMessageID, targetChatID string,
 ) (int, []byte) {
