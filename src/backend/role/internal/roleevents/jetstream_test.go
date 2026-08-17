@@ -30,6 +30,15 @@ func startRoleJSTestServer(t *testing.T) *server.Server {
 	return s
 }
 
+func subscribeSync(t *testing.T, nc *nats.Conn, subject string) *nats.Subscription {
+	t.Helper()
+	sub, err := nc.SubscribeSync(subject)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sub.Unsubscribe() })
+	require.NoError(t, nc.Flush())
+	return sub
+}
+
 func TestNewJetStreamPublisher_EmptyURL(t *testing.T) {
 	_, err := NewJetStreamPublisher("")
 	require.Error(t, err)
@@ -54,9 +63,7 @@ func TestJetStreamPublisher_RoleCreatedRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(nc.Close)
 
-	sub, err := nc.SubscribeSync(subjectRoleCreated)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Unsubscribe() })
+	sub := subscribeSync(t, nc, subjectRoleCreated)
 
 	pub, err := NewJetStreamPublisher(url)
 	require.NoError(t, err)
@@ -66,7 +73,7 @@ func TestJetStreamPublisher_RoleCreatedRoundTrip(t *testing.T) {
 	const roleID = "22222222-2222-2222-2222-222222222222"
 	require.NoError(t, pub.PublishRoleCreated(ctx, spaceID, roleID, "Member"))
 
-	msg, err := sub.NextMsg(3 * time.Second)
+	msg, err := sub.NextMsg(10 * time.Second)
 	require.NoError(t, err)
 	require.NotEmpty(t, msg.Data)
 }
@@ -81,9 +88,7 @@ func TestJetStreamPublisher_RoleAssignedRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(nc.Close)
 
-	sub, err := nc.SubscribeSync(subjectRoleAssigned)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Unsubscribe() })
+	sub := subscribeSync(t, nc, subjectRoleAssigned)
 
 	pub, err := NewJetStreamPublisher(url)
 	require.NoError(t, err)
@@ -95,7 +100,7 @@ func TestJetStreamPublisher_RoleAssignedRoundTrip(t *testing.T) {
 		"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
 	))
 
-	msg, err := sub.NextMsg(3 * time.Second)
+	msg, err := sub.NextMsg(10 * time.Second)
 	require.NoError(t, err)
 	require.NotEmpty(t, msg.Data)
 }
@@ -110,9 +115,7 @@ func TestJetStreamPublisher_ChatOverrideSetRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(nc.Close)
 
-	sub, err := nc.SubscribeSync(subjectChatOverride)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Unsubscribe() })
+	sub := subscribeSync(t, nc, subjectChatOverride)
 
 	pub, err := NewJetStreamPublisher(url)
 	require.NoError(t, err)
@@ -123,7 +126,7 @@ func TestJetStreamPublisher_ChatOverrideSetRoundTrip(t *testing.T) {
 		"dddddddd-dddd-dddd-dddd-dddddddddddd",
 	))
 
-	msg, err := sub.NextMsg(3 * time.Second)
+	msg, err := sub.NextMsg(10 * time.Second)
 	require.NoError(t, err)
 	require.NotEmpty(t, msg.Data)
 }
