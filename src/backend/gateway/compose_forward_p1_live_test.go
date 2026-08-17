@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"testing"
 	"time"
@@ -75,4 +77,73 @@ func TestComposeForwardPrivacyDeny_live(t *testing.T) {
 	groupID := createComposeGroup(t, client, base, forwarder.AccessToken, "Fwd deny target")
 	status, raw := forwardComposeMessageStatus(t, client, base, forwarder.AccessToken, srcID, groupID, "")
 	require.Equal(t, http.StatusForbidden, status, "body=%s", string(raw))
+}
+
+// TestComposeForwardWithoutAttribution_live documents FW-03:
+// without_attribution copies content as a regular message (no Forwarded-from).
+func TestComposeForwardWithoutAttribution_live(t *testing.T) {
+	if !liveComposeEnabled() {
+		t.Skip("set VOICE_RUN_LIVE_COMPOSE=true to run against local compose")
+	}
+	clearLiveComposeAuthRateLimit(t)
+
+	client := &http.Client{Timeout: 45 * time.Second}
+	base := liveGatewayBaseURL()
+	n := time.Now().UnixNano()
+
+	sender := registerComposeUser(t, client, base, formatComposeEmail("fw03-a", n), "VoiceQaTest1!")
+	peer := registerComposeUser(t, client, base, formatComposeEmail("fw03-b", n), "VoiceQaTest1!")
+	other := registerComposeUser(t, client, base, formatComposeEmail("fw03-c", n), "VoiceQaTest1!")
+
+	srcDM := createComposeDMBetween(t, client, base, sender, peer)
+	srcID := sendComposeMessage(t, client, base, peer.AccessToken, srcDM, "copy-me-plain")
+
+	targetDM := createComposeDMBetween(t, client, base, sender, other)
+	status, raw := forwardComposeMessageWithoutAttributionStatus(t, client, base, sender.AccessToken, srcID, targetDM)
+	require.Equal(t, http.StatusOK, status, "body=%s", string(raw))
+
+	var parsed struct {
+		Message struct {
+			ID                string `json:"id"`
+			Content           string `json:"content"`
+			MessageKind       string `json:"message_kind"`
+			Type              string `json:"type"`
+			ForwardFromID     string `json:"forward_from_id"`
+			ForwardFromSender string `json:"forward_from_sender"`
+		} `json:"message"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &parsed))
+	require.Equal(t, "copy-me-plain", parsed.Message.Content)
+	require.Empty(t, parsed.Message.ForwardFromID)
+	require.Empty(t, parsed.Message.ForwardFromSender)
+	kind := parsed.Message.MessageKind
+	if kind == "" {
+		kind = parsed.Message.Type
+	}
+	require.Contains(t, []string{"MESSAGE_KIND_REGULAR", "regular", "REGULAR"}, kind)
+
+	contents := composeMessageContentsInChat(t, client, base, sender.AccessToken, targetDM)
+	require.Contains(t, contents, "copy-me-plain")
+}
+
+func forwardComposeMessageWithoutAttributionStatus(
+	t *testing.T, client *http.Client, base, accessToken, sourceMessageID, targetChatID string,
+) (int, []byte) {
+	t.Helper()
+	bodyMap := map[string]any{
+		"source_message_id":   sourceMessageID,
+		"target_chat":         map[string]string{"id": targetChatID},
+		"without_attribution": true,
+	}
+	payload, err := json.Marshal(bodyMap)
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/messages/forward", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, raw
 }

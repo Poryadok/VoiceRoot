@@ -59,7 +59,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | TC-DM-05 | Typing indicator | `[exists]` | Gateway: `TestComposeTyping_live`; Flutter: `message_typing_e2e_live_test` |
 | TC-DM-06 | Edit / delete + WS `message_update` | `[exists]` | Gateway: `TestComposeMessageEditDelete_live`; Flutter: `message_edit_delete_e2e_live_test` |
 | TC-DM-07 | Запросы от незнакомцев (requests inbox → accept) | `[exists]` | Gateway: `TestComposeDMRequests_live`; Flutter: `dm_requests_e2e_live_test` |
-| TC-DM-08 | Архивирование / скрытие DM | `[partial]` | Chat IT: `TestArchiveChat_HidesFromListChats`, `TestMuteChat_*`; Gateway transcode; Flutter client. Compose/Flutter live still open |
+| TC-DM-08 | Архивирование / скрытие DM | `[exists]` | Gateway: `TestComposeDMArchiveMute_live`; Flutter: `dm_archive_mute_e2e_live_test`; Chat IT archive/mute |
 | TC-DM-09 | Черновики локально на устройстве | `[partial]` | Только клиентская логика; нет live IT (сервер не хранит) |
 
 ### Путь B — Группы
@@ -96,7 +96,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 |----|------|--------|-----|
 | FW-01 | Forward DM → group с атрибуцией | `[exists]` | Flutter: `forward_messages_e2e_live_test` («forward DM message to group preserves attribution») |
 | FW-02 | Forward в channel | `[exists]` | Messaging IT + Gateway: `TestComposeForwardChannelCommentary_live`; Flutter channel+commentary |
-| FW-03 | Copy as new (без атрибуции) | `[partial]` | Messaging IT `withoutAttributionCopyAsNew` + Gateway transcode + Flutter client/UI; compose/Flutter live open |
+| FW-03 | Copy as new (без атрибуции) | `[exists]` | Gateway: `TestComposeForwardWithoutAttribution_live`; Flutter FW-03 in `forward_messages_e2e_live_test`; Messaging IT |
 | FW-04 | Privacy forbid forward | `[exists]` | Messaging IT + Gateway: `TestComposeForwardPrivacyDeny_live`; Flutter FW-04 |
 | FW-05 | Multi-select forward | `[missing]` | — |
 | FW-06 | Forward E2E ciphertext policy | `[exists]` | Messaging IT: `TestMessagingForwardMessage_e2eToPlainDenied` / `e2eToE2EDMPreservesFlag` |
@@ -113,7 +113,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | VC-04 | Group voice start/join tokens | `[exists]` | Flutter: `group_voice_e2e_live_test` |
 | VC-05 | Space voice room join/leave | `[exists]` | Flutter: `spaces_voice_e2e_live_test`; Voice IT: `voice_room_integration_test.go` |
 | VC-06 | Call privacy (stranger blocked) | `[partial]` | `call_privacy_integration_test.go` + privacy live (VC covered via privacy_actions) |
-| VC-07 | Commander mode / raise hand / GrantFloor | `[partial]` | product: SetCommanderMode/RaiseHand/GrantFloor/SetBroadcasting + Flutter organizer + client ducking; compose/Flutter live IT open |
+| VC-07 | Commander mode / raise hand / GrantFloor | `[exists]` | Gateway: `TestComposeVoiceCommanderFloor_live`; Flutter: `voice_commander_e2e_live_test` |
 | VC-08 | Video layers by subscription | `[missing]` | roadmap П.12 |
 | VC-09 | iOS VoIP push registration | `[exists]` | Flutter: `voip_e2e_live_test` (token register; device delivery = staging) |
 | VC-10 | Recording | `[missing]` | deferred — [ADR 005](../adr/005-rich-media-live-tests-deferred.md); local-only (no server compose) |
@@ -136,7 +136,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | ST-01 | Create / feed / reply→DM / highlight privacy | `[exists]` | Gateway: `TestComposeStories_live`; Flutter: `stories_e2e_live_test` |
 | ST-02 | Expiry → archive | `[exists]` | Gateway: `TestComposeStoriesExpiryArchive_live` |
 | ST-03 | Degradation when Social down | `[exists]` | Gateway: `TestComposeStoriesWhenSocialDown_live` (liveness only — todo notes thin) |
-| ST-04 | LFP story → JOIN/INVITE → MM party | `[partial]` | Story `RespondToLfpStory` IT; MM `storyconsume` + `DecideLfpRequest` IT; Gateway decide LFP transcode; Notification LFP Accept/Decline; Flutter LFP card/decision sheet (#35). Compose/Flutter live still open |
+| ST-04 | LFP story → JOIN/INVITE → MM party | `[exists]` | Gateway: `TestComposeStoryLfpParty_live`; Flutter: `story_lfp_e2e_live_test`; Story/MM ITs |
 | ST-05 | Moderation hide story from feed | `[exists]` | Story `HideStoryFromFeed` + `hidden_from_feed_at`; grpcsvc IT |
 | ST-06 | `show_stories=Nobody` privacy floor | `[exists]` | CreateStory caps to floor; grpcsvc ITs |
 | ST-07 | Anonymous view via Premium | `[missing]` | cross-cut premium→story |
@@ -169,8 +169,8 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | ID | Кейс | Статус | Где |
 |----|------|--------|-----|
 | VR-01 | Multi-profile + verified search boost (smoke path) | `[exists]` | Flutter: `profiles_verification_e2e_live_test`; Auth: `ProfilesVerificationIntegrationTest` |
-| VR-02 | Twitch/YouTube OAuth verify end-to-end | `[partial]` | Auth `ProfilesVerificationIntegrationTest` (Twitch Partner/Affiliate, YouTube YPP, cron clear); User S2S Set/ClearVerification. Compose/Flutter live still open |
-| VR-03 | Org DNS TXT verification | `[partial]` | User IT `TestOrganizationVerification_DNSTxtGrantsBadge`; Gateway org start/check routes. Compose/Flutter live still open |
+| VR-02 | Twitch/YouTube OAuth verify end-to-end | `[partial]` | Compose/Flutter: OAuth link start (`TestComposeVerificationOAuthStart_live`, `verification_oauth_dns_e2e_live_test`); full Partner/YPP badge needs real provider OAuth fixtures |
+| VR-03 | Org DNS TXT verification | `[partial]` | Compose/Flutter: StartOrganizationVerification TXT (`TestComposeOrganizationDNSVerification_live`); badge grant needs DNS stub / published TXT |
 | VR-04 | Anti-spoof / badge display | `[missing]` | — |
 
 ---
@@ -276,7 +276,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | MM-05 | Rate teammates (1–5) | `[exists]` | Gateway: `TestComposeMatchmakingRating_live`; Flutter: `matchmaking_rating_e2e_live_test` (rate + skip) |
 | MM-06 | MM ban from matchmaking | `[exists]` | Gateway: `TestComposeMatchmakingBan_live`; store `bans_integration_test.go` |
 | MM-07 | Cross-party decline semantics | `[exists]` | Matchmaking IT + Gateway: `TestComposeMatchmakingCrossPartyDecline_live` |
-| MM-08 | Space-scoped matchmaking | `[partial]` | StartSpaceQueue + space Redis queue + matcher isolation + Gateway/Flutter (#32); compose live IT open |
+| MM-08 | Space-scoped matchmaking | `[exists]` | Gateway: `TestComposeSpaceMatchmakingQueue_live`; Flutter: `space_mm_e2e_live_test` |
 | MM-09 | Role-diversity 10-stack match | `[missing]` | todo: criteria broken |
 | MM-10 | Device register for match_found FCM | `[exists]` | Flutter: `matchmaking_fcm_e2e_live_test` |
 | MM-11 | List games catalog via Gateway | `[exists]` | Gateway: `TestComposeMatchmakingListGames_live` |
@@ -288,8 +288,8 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | ID | Кейс | Статус | Где |
 |----|------|--------|-----|
 | GC-01 | Seeded Dota 2 roles/ranks | `[exists]` | Flutter: `game_catalog_e2e_live_test` |
-| GC-02 | User SubmitGameRequest → moderation | `[partial]` | Matchmaking IT `TestSubmitGameRequest_*`; Gateway transcode; Flutter `add_game_screen` + widget test. Compose/Flutter live still open |
-| GC-03 | Admin approve game request | `[partial]` | Matchmaking IT `TestApproveGameRequest_*` / Reject; Admin `GameRequestsPage`; Gateway admin routes. Compose live still open |
+| GC-02 | User SubmitGameRequest → moderation | `[exists]` | Gateway: `TestComposeGameRequestModeration_live`; Flutter: `game_request_e2e_live_test` |
+| GC-03 | Admin approve game request | `[exists]` | Same compose live (staff approve when token present); Matchmaking IT Approve/Reject |
 
 ---
 
@@ -433,7 +433,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | NT-01 | In-app unread + WS notification | `[exists]` | Gateway: `TestComposeInAppNotifications_live`; Flutter: `in_app_notifications_e2e_live_test` |
 | NT-02 | FCM register + offline DM push payload | `[exists]` | Flutter: `fcm_e2e_live_test`, `fcm_delivery_e2e_live_test`, `fcm_android_e2e_live_test`; Gateway: `TestComposeNotificationRegisterDevice_live` |
 | NT-03 | APNs register | `[exists]` | Flutter: `apns_e2e_live_test` |
-| NT-04 | Quiet hours / per-chat granularity / voice join push | `[partial]` | GetQuietHours + Flutter sync + delivery assert; compose/Flutter live IT open |
+| NT-04 | Quiet hours / per-chat granularity / voice join push | `[exists]` | Gateway: `TestComposeQuietHours_live`; Flutter: `quiet_hours_e2e_live_test`; voice_member_joined quiet-hours push policy unit |
 | NT-05 | Real device alert delivery | `[n/a]` | staging secrets (DEPLOYMENT.md); host driver covers register contract only |
 
 ---
