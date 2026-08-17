@@ -16,7 +16,7 @@
 
 ---
 
-## Progress (2026-08-16 Wave 1b WT-INTEGRATION)
+## Progress (2026-08-17 Wave 2 WT-INTEGRATION compose/Flutter lives)
 
 | Item | Status | Notes |
 |------|--------|-------|
@@ -46,18 +46,18 @@
 | P2.9 | **done** | ENC-12: `TestReindexChat_SkipsE2EBodies_postgres` (reindex skips `IsE2E`) |
 | P2.7 | **done** | product: `HideStoryFromFeed` + CreateStory `show_stories` floor (ST-05/06 ITs); #21 |
 | P2.10 | **done** | PR-02: `user.presence_changed` + Realtime friend fan-out; `TestComposePresenceDNDInvisible_live` + Flutter |
-| P2.11 | **product done** | MuteChat/ArchiveChat + Gateway + Flutter list actions (#16); compose/Flutter live IT still open |
+| P2.11 | **done** | MuteChat/ArchiveChat + Gateway + Flutter list actions; `TestComposeDMArchiveMute_live` + `dm_archive_mute_e2e_live_test` |
 | P2.12 | **done** | Flutter `onboarding_coach_e2e_live_test` (spaces/MM steps + invite mid-tour); ON-03 (#20) |
 | P2.8 | **done** | SR-05: Search filters profile hits by `allow_friend_requests` + blocks; unit + `TestComposeSearchPrivacyAudience_live` |
-| P2.3 | **product done** | SubmitGameRequest → pending_moderation + Admin approve/reject (#19); compose/Flutter live IT still open |
-| P2.4 | **product done** | Twitch/YouTube OAuth + cron refresh + org DNS (#25); compose/Flutter live IT still open |
-| P2.5 | **product done** | GetQuietHours + Flutter server sync; voice_member_joined quiet-hours assert; compose live IT still open |
-| P2.6 | **product done** | GrantFloor/RevokeFloor + SetBroadcasting + LiveKit client ducking + Flutter organizer panel; VC-07 compose/Flutter live IT still open |
-| P2.15 | **product done** | `without_attribution` ForwardMessage + Flutter Copy as new; Messaging/Gateway ITs; compose live still open |
+| P2.3 | **done** | `TestComposeGameRequestModeration_live` + Flutter `game_request_e2e_live_test` (GC-02; GC-03 approve when staff token) |
+| P2.4 | **partial** | OAuth link start + org DNS TXT start compose/Flutter lives; full Twitch/YPP badge + DNS TXT grant still need provider/DNS fixtures |
+| P2.5 | **done** | `TestComposeQuietHours_live` + Flutter `quiet_hours_e2e_live_test` (Set/Get); voice_member_joined push suppression remains unit delivery |
+| P2.6 | **done** | `TestComposeVoiceCommanderFloor_live` + Flutter `voice_commander_e2e_live_test` (commander/hand/GrantFloor/broadcast) |
+| P2.15 | **done** | `TestComposeForwardWithoutAttribution_live` + Flutter FW-03 in `forward_messages_e2e_live_test` |
 | P2.13 | **done** | live entitlements for User cosmetics + GIF avatar; `TestComposePremiumCosmetics_live` + Flutter SUB-06 (#26) |
 | P2.14 | **done** | BT-07: `TestComposeBotsAutocomplete_live` + Flutter `bots_autocomplete_e2e_live_test`; portal command catalog (#30) |
-| P2.2 | **product done** | RespondToLfpStory → NATS → DecideLfpRequest party queue + Notification Accept/Decline + Flutter LFP card (#35); compose/Flutter live IT still open |
-| P2.1 | **product done** | StartSpaceQueue + `mm:space:{id}` isolation + UpdateSpaceMmConfig + Gateway/Flutter (#32); compose/Flutter live IT still open |
+| P2.2 | **done** | `TestComposeStoryLfpParty_live` + Flutter `story_lfp_e2e_live_test` (LFP → JOIN → Decide ACCEPT) |
+| P2.1 | **done** | `TestComposeSpaceMatchmakingQueue_live` + Flutter `space_mm_e2e_live_test` (space_id + non-member deny + isolation) |
 | P3.4 | **done** | `scripts/staging/smoke-request-id.sh` (DM → Loki chain); OBS-02 |
 | P3.2 | **partial** | `windows_desktop_smoke_test` + existing version/auto-update unit paths (UPD-03); tray/global PTT/overlay product still П.17–18 (PL-03) |
 | P3.1 | **partial** | `integration_test/device_driver_smoke_test.dart` + CI `flutter-device-driver` (host tester: deeplink + FCM/VoIP register contracts); NT-05 / on-device App Links / CallKit still open |
@@ -159,20 +159,21 @@ Effort: **S** ≤0.5d · **M** 1–2d · **L** 3–5d · **XL** >1w (инфра/
 
 | # | Фича / путь | Слой | IDs | Effort | Product dep |
 |---|-------------|------|-----|--------|-------------|
-| P2.1 | Space MM queue isolation | B+C | MM-08 | L | **product done** (#32); compose/Flutter live IT open |
-| P2.2 | LFP story → party | B+C | ST-04 | L | **product done** (#35); compose/Flutter live IT open || P2.3 | Game request + admin approve | B + Admin | GC-02/03 | L | **product done** (#19); compose/Flutter live IT open |
-| P2.4 | Twitch/YouTube/DNS verification live | B+C | VR-02/03 | XL | **product done** (#25); compose/Flutter live IT open |
-| P2.5 | Quiet hours / granular notif | B+C | NT-04 | L | **product done** — GetQuietHours + Flutter sync; voice join push assert; live IT open |
-| P2.6 | Commander / raise hand | B+C | VC-07 | L | **product done** — GrantFloor + broadcast ducking + organizer panel; compose/Flutter live IT open |
+| P2.1 | Space MM queue isolation | B+C | MM-08 | L | **done** — compose + Flutter live |
+| P2.2 | LFP story → party | B+C | ST-04 | L | **done** — compose + Flutter live |
+| P2.3 | Game request + admin approve | B + Admin | GC-02/03 | L | **done** — compose (approve needs staff token) + Flutter GC-02 |
+| P2.4 | Twitch/YouTube/DNS verification live | B+C | VR-02/03 | XL | **partial** — OAuth/DNS start lives; full badge grant needs provider/DNS fixtures |
+| P2.5 | Quiet hours / granular notif | B+C | NT-04 | L | **done** — Set/Get compose+Flutter; push suppression unit-covered |
+| P2.6 | Commander / raise hand | B+C | VC-07 | L | **done** — compose + Flutter GrantFloor live |
 | P2.7 | Stories moderation hide + Nobody floor | B | ST-05/06 | M | **done** — HideStoryFromFeed + CreateStory floor (#21) |
 | P2.8 | Search privacy audience | D+B | SR-05 | M | **done** — SearchUsers/SearchGlobal filter by `allow_friend_requests` |
 | P2.9 | E2E reindex skips ciphertext | D | ENC-12 | M | **done** — Search IT + indexer skip |
 | P2.10 | Presence DND/invisible | B+C | PR-02 | M | **done** — friend NATS fan-out + compose/Flutter |
-| P2.11 | DM archive/hide | B+C | TC-DM-08 | M | **product done** (#16); live IT open |
+| P2.11 | DM archive/hide | B+C | TC-DM-08 | M | **done** — compose + Flutter live |
 | P2.12 | Onboarding coach-marks MM/space | C | ON-03 | M | **done** — `onboarding_coach_e2e_live_test` (#20) |
 | P2.13 | Premium cosmetics cross-smoke | B+C | SUB-06 | M | **done** — live tier + GIF + compose/Flutter (#26) |
 | P2.14 | Bot autocomplete / portal catalog | B+C | BT-07 | L | **done** — compose/Flutter autocomplete live + portal catalog (#30) |
-| P2.15 | Copy-forward without attribution | C | FW-03 | S | **product done** — Messaging/Gateway/Flutter; live IT open |
+| P2.15 | Copy-forward without attribution | C | FW-03 | S | **done** — compose + Flutter live |
 | P2.16 | Multi-forward | C | FW-05 | M | UI backlog? |
 
 ---

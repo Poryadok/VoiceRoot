@@ -239,4 +239,61 @@ void main() {
         ? null
         : 'Opt in with --dart-define=VOICE_RUN_LIVE_INTEGRATION=true',
   );
+
+  test(
+    'copy-forward without attribution (FW-03)',
+    () async {
+      final probe = await probeLiveGateway();
+      expect(
+        probe,
+        isA<LiveGatewayReady>(),
+        reason: probe is LiveGatewayUnavailable ? probe.reason : null,
+      );
+      final ctx = (probe as LiveGatewayReady).context;
+
+      final sender = await ctx.registerUser('fw03-a');
+      final peer = await ctx.registerUser('fw03-b');
+      final other = await ctx.registerUser('fw03-c');
+
+      final chats = ctx.chatsClient();
+      final srcDm = await chats.createDm(
+        authorization: sender.authorizationHeader,
+        otherProfileId: peer.activeProfileId,
+      );
+      final srcDmId = (srcDm as ChatsApiOk<VoiceChat>).data.id;
+
+      final messages = ctx.messagesClient();
+      const originalText = 'copy-me-plain';
+      final sent = await messages.sendMessage(
+        authorization: peer.authorizationHeader,
+        chatId: srcDmId,
+        content: originalText,
+        clientMessageId: qaClientMessageId(),
+      );
+      expect(sent, isA<MessagesApiOk<VoiceMessage>>());
+      final sourceId = (sent as MessagesApiOk<VoiceMessage>).data.id;
+
+      final targetDm = await chats.createDm(
+        authorization: sender.authorizationHeader,
+        otherProfileId: other.activeProfileId,
+      );
+      final targetId = (targetDm as ChatsApiOk<VoiceChat>).data.id;
+
+      final fwd = await messages.forwardMessage(
+        authorization: sender.authorizationHeader,
+        sourceMessageId: sourceId,
+        targetChatId: targetId,
+        withoutAttribution: true,
+      );
+      expect(fwd, isA<MessagesApiOk<VoiceMessage>>());
+      final copied = (fwd as MessagesApiOk<VoiceMessage>).data;
+      expect(copied.messageKind, VoiceMessageKind.regular);
+      expect(copied.forwardFromId, isNull);
+      expect(copied.content, originalText);
+      expect(copied.chatId, targetId);
+    },
+    skip: runLiveIntegration
+        ? null
+        : 'Opt in with --dart-define=VOICE_RUN_LIVE_INTEGRATION=true',
+  );
 }

@@ -135,3 +135,10 @@ full_flutter:
   - test/guest_restrictions_e2e_live_test.dart
   - test/guest_onboarding_e2e_live_test.dart
   - test/guest_reminder_e2e_live_test.dart
+  - test/space_mm_e2e_live_test.dart
+  - test/story_lfp_e2e_live_test.dart
+  - test/game_request_e2e_live_test.dart
+  - test/verification_oauth_dns_e2e_live_test.dart
+  - test/quiet_hours_e2e_live_test.dart
+  - test/voice_commander_e2e_live_test.dart
+  - test/dm_archive_mute_e2e_live_test.dart
