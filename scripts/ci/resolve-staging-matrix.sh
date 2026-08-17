@@ -104,8 +104,12 @@ find_promote_base_sha() {
     depth=$((depth + 1))
   done
 
+  # Empty GHCR / squash-merge / force-push: keep BASE_SHA and let
+  # adjust_promote_for_missing_manifests schedule rebuilds instead of aborting
+  # the changes job under `set -e`.
+  echo "resolve-staging-matrix: no complete promote base within ${max_depth} commits of ${sha}; rebuilding missing images" >&2
   echo "${sha}"
-  return 1
+  return 0
 }
 
 # Promote only works when BASE_TAG already exists in GHCR; otherwise schedule a build.

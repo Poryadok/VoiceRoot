@@ -173,6 +173,8 @@ jobs:
         run: docker compose config --quiet
       - name: Require NATS JetStream service in compose
         run: bash scripts/ci/compose-nats-jetstream-check.sh
+      - name: Staging image matrix unit tests
+        run: bash scripts/ci/resolve-staging-matrix_test.sh
 
   flutter:
     needs: changes
