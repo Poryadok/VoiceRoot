@@ -42,7 +42,7 @@ func TestComposeGameRequestModeration_live(t *testing.T) {
 
 	staffToken := composeStaffToken(t, client, base)
 	if staffToken == "" {
-		staffToken = "compose-staff-token"
+		t.Skip("no staff token; GC-02 submit asserted; GC-03 approve needs GATEWAY_STATIC_TOKENS_JSON / ADMIN_STAFF_TOKEN")
 	}
 
 	approved := composeApproveGameRequest(t, client, base, staffToken, gameID)
