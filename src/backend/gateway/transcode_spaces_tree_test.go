@@ -70,6 +70,17 @@ type recordingChatsForSpaceTree struct {
 	lastCreate *chatv1.CreateChatRequest
 }
 
+func (c *recordingChatsForSpaceTree) GetChat(_ context.Context, req *chatv1.GetChatRequest) (*chatv1.GetChatResponse, error) {
+	name := "general"
+	return &chatv1.GetChatResponse{
+		Chat: &chatv1.Chat{
+			Id:   req.GetChatId(),
+			Type: chatv1.ChatType_CHAT_TYPE_GROUP,
+			Name: &name,
+		},
+	}, nil
+}
+
 func (c *recordingChatsForSpaceTree) CreateChat(_ context.Context, req *chatv1.CreateChatRequest) (*chatv1.CreateChatResponse, error) {
 	c.lastCreate = req
 	now := timestamppb.Now()
@@ -192,6 +203,43 @@ func TestTranscodeSpacesOrchestrateChat(t *testing.T) {
 	require.Equal(t, "space-1", chatRec.lastCreate.GetSpaceId())
 	require.Equal(t, "text_chat", rec.lastUpsert.GetKind())
 	require.Equal(t, "chat-99", rec.lastUpsert.GetLinkedChat().GetId())
+	require.Contains(t, resp.Body.String(), `"display_name":"general"`)
+	require.Contains(t, resp.Body.String(), `"CHAT_TYPE_GROUP"`)
+}
+
+type listTreeWithLinkedChat struct {
+	spacev1.UnimplementedSpaceServiceServer
+}
+
+func (s *listTreeWithLinkedChat) ListSpaceTree(_ context.Context, req *spacev1.ListSpaceTreeRequest) (*spacev1.ListSpaceTreeResponse, error) {
+	return &spacev1.ListSpaceTreeResponse{
+		Nodes: []*spacev1.SpaceTreeNode{{
+			Id:      "node-1",
+			SpaceId: req.GetSpaceId(),
+			Kind:    "text_chat",
+			LinkedChat: &chatv1.ChatRef{
+				Id: "chat-99",
+			},
+		}},
+	}, nil
+}
+
+func TestTranscodeSpacesListTree_copiesNameAndTypeFromGetChat(t *testing.T) {
+	t.Parallel()
+	spaceClient, chatClient, cleanup := startBufconnSpaceTreeClients(t, &listTreeWithLinkedChat{}, &recordingChatsForSpaceTree{})
+	t.Cleanup(cleanup)
+
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+		},
+		transcoder: &transcoder{clients: grpcClients{space: spaceClient, chat: chatClient}},
+	})
+
+	resp := performRequest(h, http.MethodGet, "/api/v1/spaces/space-1/tree", "", map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	require.Equal(t, http.StatusOK, resp.Code, "body=%s", resp.Body.String())
 	require.Contains(t, resp.Body.String(), `"display_name":"general"`)
 	require.Contains(t, resp.Body.String(), `"CHAT_TYPE_GROUP"`)
 }
