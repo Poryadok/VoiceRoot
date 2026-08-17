@@ -19,15 +19,15 @@ import (
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 
-	grpcsvc "voice/backend/user/internal/grpcsvc"
-	"voice/backend/user/internal/userevents"
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
-	"voice/backend/pkg/runtimeconfig"
 	voiceprom "voice/backend/pkg/promhttp"
+	"voice/backend/pkg/runtimeconfig"
+	grpcsvc "voice/backend/user/internal/grpcsvc"
 	"voice/backend/user/internal/r2avatar"
 	"voice/backend/user/internal/store"
+	"voice/backend/user/internal/userevents"
 
 	userv1 "voice.app/voice/user/v1"
 )
@@ -164,6 +164,11 @@ func main() {
 			events = pub
 		}
 
+		dnsResolver := grpcsvc.DNSResolverFromEnv()
+		if dnsResolver != nil {
+			logger.Info("USER_DNS_STUB_URL set; org verification uses HTTP TXT fixture")
+		}
+
 		srv := grpc.NewServer(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))...)
 		userv1.RegisterUserServiceServer(srv, &grpcsvc.UserGRPC{
 			Profiles:            store.NewProfileStore(pool),
@@ -175,6 +180,7 @@ func main() {
 			AvatarPresigner:     avatarPresigner,
 			AvatarPublicBaseURL: avatarPublicBase,
 			Events:              events,
+			DNSResolver:         dnsResolver,
 		})
 		go func() {
 			logger.Info("gRPC listening", slog.String("addr", grpcAddr))

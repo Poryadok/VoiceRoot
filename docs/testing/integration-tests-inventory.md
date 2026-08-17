@@ -169,8 +169,8 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | ID | Кейс | Статус | Где |
 |----|------|--------|-----|
 | VR-01 | Multi-profile + verified search boost (smoke path) | `[exists]` | Flutter: `profiles_verification_e2e_live_test`; Auth: `ProfilesVerificationIntegrationTest` |
-| VR-02 | Twitch/YouTube OAuth verify end-to-end | `[partial]` | Compose/Flutter: OAuth link start (`TestComposeVerificationOAuthStart_live`, `verification_oauth_dns_e2e_live_test`); full Partner/YPP badge needs real provider OAuth fixtures |
-| VR-03 | Org DNS TXT verification | `[partial]` | Compose/Flutter: StartOrganizationVerification TXT (`TestComposeOrganizationDNSVerification_live`); badge grant needs DNS stub / published TXT |
+| VR-02 | Twitch/YouTube OAuth verify end-to-end | `[exists]` | Compose stub IdP (token + Helix/YPP partner fixtures), not real Twitch/YouTube; `TestComposeVerificationOAuthStart_live` + `verification_oauth_dns_e2e_live_test` assert personal badge. Auth IT: Partner/Affiliate deny/YPP/cron |
+| VR-03 | Org DNS TXT verification | `[exists]` | Compose HTTP DNS TXT fixture (`USER_DNS_STUB_URL`) grants `organization`/`dns`; `TestComposeOrganizationDNSVerification_live` + Flutter live. User IT `TestOrganizationVerification_DNSTxtGrantsBadge` |
 | VR-04 | Anti-spoof / badge display | `[missing]` | — |
 
 ---
@@ -289,7 +289,7 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 |----|------|--------|-----|
 | GC-01 | Seeded Dota 2 roles/ranks | `[exists]` | Flutter: `game_catalog_e2e_live_test` |
 | GC-02 | User SubmitGameRequest → moderation | `[exists]` | Gateway: `TestComposeGameRequestModeration_live`; Flutter: `game_request_e2e_live_test` |
-| GC-03 | Admin approve game request | `[exists]` | Same compose live (staff approve when token present); Matchmaking IT Approve/Reject |
+| GC-03 | Admin approve game request | `[exists]` | Gateway: `TestComposeGameRequestModeration_live` (compose-staff-token); Matchmaking IT Approve/Reject; Admin `GameRequestsPage` |
 
 ---
 

@@ -156,6 +156,28 @@ services:
       minio:
         condition: service_started
 
+  # Compose live fixtures for verification.md VR-02/03 (Twitch/YouTube Helix+YPP + DNS TXT).
+  verification-stub:
+    profiles: ["app"]
+    image: node:24-alpine
+    command: ["node", "/stub/server.mjs"]
+    volumes:
+      - ./docker/verification-stub/server.mjs:/stub/server.mjs:ro
+    ports:
+      - "${VERIFICATION_STUB_PORT:-14180}:4180"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4180/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 8
+      start_period: 5s
+
   # Phase-0 app stack (Auth + API Gateway + static Flutter web). Opt-in: docker compose --profile app up -d --build
   auth:
     profiles: ["app"]
@@ -184,6 +206,15 @@ services:
       AUTH_NATS_URL: nats://nats:4222
       AUTH_TOTP_ENCRYPTION_KEY: ${AUTH_TOTP_ENCRYPTION_KEY:-voice-compose-totp-key-32-bytes!!}
       USER_GRPC_ADDR: user:9090
+      # Compose live: Helix/YPP + token exchange via verification-stub (not real Twitch/YouTube).
+      AUTH_OAUTH_TWITCH_CLIENT_ID: voice-twitch-compose
+      AUTH_OAUTH_TWITCH_CLIENT_SECRET: voice-twitch-compose-secret
+      AUTH_OAUTH_TWITCH_API_BASE_URL: http://verification-stub:4180
+      AUTH_OAUTH_TWITCH_TOKEN_URL: http://verification-stub:4180/oauth2/token
+      AUTH_OAUTH_YOUTUBE_CLIENT_ID: voice-youtube-compose
+      AUTH_OAUTH_YOUTUBE_CLIENT_SECRET: voice-youtube-compose-secret
+      AUTH_OAUTH_YOUTUBE_API_BASE_URL: http://verification-stub:4180
+      AUTH_OAUTH_YOUTUBE_TOKEN_URL: http://verification-stub:4180/oauth2/token
     volumes:
       - ./src/backend/auth/src/test/resources/jwt-test-private.pem:/run/jwt.pem:ro
     depends_on:
@@ -195,6 +226,8 @@ services:
         condition: service_healthy
       nats:
         condition: service_started
+      verification-stub:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8080/health >/dev/null"]
       interval: 5s
@@ -244,6 +277,7 @@ services:
       USER_R2_SECRET_ACCESS_KEY: ${USER_R2_SECRET_ACCESS_KEY:-}
       USER_R2_BUCKET: ${USER_R2_BUCKET:-}
       USER_R2_PUBLIC_BASE_URL: ${USER_R2_PUBLIC_BASE_URL:-}
+      USER_DNS_STUB_URL: http://verification-stub:4180/dns-txt
     depends_on:
       postgres:
         condition: service_healthy
@@ -255,6 +289,8 @@ services:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
+      verification-stub:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
       interval: 5s
