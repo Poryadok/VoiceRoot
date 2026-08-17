@@ -292,8 +292,8 @@ class LiveGatewayContext {
         allowPhoneSearch: VoicePrivacyAudience.friendsOnly,
         allowCalls: VoicePrivacyAudience.everyoneWithGuests,
         allowChatSpaceInvites: VoicePrivacyAudience.everyoneWithGuests,
-        allowFiles: VoicePrivacyAudience.friendsAndFoF,
-        allowVoiceMessages: VoicePrivacyAudience.friendsAndFoF,
+        allowFiles: VoicePrivacyAudience.everyoneWithGuests,
+        allowVoiceMessages: VoicePrivacyAudience.everyoneWithGuests,
       );
 
   Future<void> allowOpenGamingPrivacy(AuthSession session) async {

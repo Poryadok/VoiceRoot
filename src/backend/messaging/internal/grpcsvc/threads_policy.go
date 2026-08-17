@@ -62,6 +62,12 @@ func (d threadPolicyDeps) validateMainFeedSend(ctx context.Context, chatID, prof
 		if postedAsChat {
 			return nil
 		}
+		if d.RolePerms != nil && pol.SpaceID != nil {
+			allowed, err := d.RolePerms.HasChatPermission(ctx, *pol.SpaceID, profileID, chatID, permissions.TextChatSendMessages)
+			if err == nil && allowed {
+				return nil
+			}
+		}
 		return status.Error(codes.PermissionDenied, "channel main-feed posts require posted_as_chat")
 	default:
 		return status.Error(codes.InvalidArgument, "unsupported chat type")

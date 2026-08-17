@@ -262,9 +262,10 @@ func main() {
 			Files:         files,
 			MessageEvents: msgEvents,
 			Moderation: &store.SQLModerationGuard{
-				Pool:     pool,
-				ChatPool: chatMetaPool,
-				MsgPool:  pool,
+				Pool:      pool,
+				ChatPool:  chatMetaPool,
+				MsgPool:   pool,
+				SpacePool: spaceMetaPool,
 			},
 			ChatMentionsMeta: func() *store.SQLChatMentionsMeta {
 				metaPool := pool
