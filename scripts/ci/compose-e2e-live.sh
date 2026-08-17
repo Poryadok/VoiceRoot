@@ -28,6 +28,10 @@ ARGS=()
 for f in "${FLUTTER_TESTS[@]}"; do
   ARGS+=("${f}")
 done
+if [ "${#ARGS[@]}" -eq 0 ]; then
+  echo "no full_flutter tests in ${MANIFEST}" >&2
+  exit 1
+fi
 flutter test --concurrency=1 "${ARGS[@]}" \
   --dart-define=VOICE_RUN_LIVE_INTEGRATION=true \
   --dart-define=VOICE_API_BASE_URL="${VOICE_API_BASE_URL}"
