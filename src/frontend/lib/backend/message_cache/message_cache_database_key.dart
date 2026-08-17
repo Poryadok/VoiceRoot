@@ -45,8 +45,7 @@ class MessageCacheDatabaseKey {
   }
 
   static String _liveIntegrationFallbackKey() {
-    return base64Encode(
-      utf8.encode('voice-live-integration-cache-key-v1').padRight(32).substring(0, 32),
-    );
+    final padded = 'voice-live-integration-cache-key-v1'.padRight(32).substring(0, 32);
+    return base64Encode(utf8.encode(padded));
   }
 }
