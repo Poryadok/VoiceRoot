@@ -61,10 +61,14 @@ void main() {
         reason: 'archived DM must leave caller list',
       );
 
-      final peerList = await chats.listChats(authorization: b.authorizationHeader);
+      final peerList = await chats.listChats(
+        authorization: b.authorizationHeader,
+        inbox: 'requests',
+      );
       expect(
         (peerList as ChatsApiOk<ChatListData>).data.items.any((i) => i.chatId == dmId),
         isTrue,
+        reason: 'stranger DM stays in peer requests inbox after caller archives',
       );
 
       expect(

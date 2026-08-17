@@ -41,10 +41,13 @@ void main() {
       );
       expect(ticketResult, isA<FilesApiOk<FileUploadTicket>>());
       final ticket = (ticketResult as FilesApiOk<FileUploadTicket>).data;
-      await files.putBytes(
-        uploadUrl: ticket.presignedPutUrl,
-        bytes: eicar,
-        mimeType: 'application/x-msdownload',
+      expect(
+        await files.putBytes(
+          uploadUrl: ticket.presignedPutUrl,
+          bytes: eicar,
+          mimeType: 'application/x-msdownload',
+        ),
+        isA<FilesApiOk<void>>(),
       );
       final confirm = await files.confirmUpload(
         authorization: a.authorizationHeader,
