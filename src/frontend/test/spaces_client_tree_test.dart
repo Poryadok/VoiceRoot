@@ -159,9 +159,8 @@ void main() {
     );
 
     expect(result, isA<SpacesApiOk<SpaceTreeNodeData>>());
-    expect(
-      (result as SpacesApiOk<SpaceTreeNodeData>).data.displayName,
-      'announcements',
-    );
+    final node = (result as SpacesApiOk<SpaceTreeNodeData>).data;
+    expect(node.displayName, 'announcements');
+    expect(node.isChannelChat, isTrue);
   });
 }

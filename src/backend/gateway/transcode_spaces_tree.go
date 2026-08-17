@@ -138,6 +138,11 @@ func (t *transcoder) serveSpacesTree(w http.ResponseWriter, r *http.Request, res
 			if name := strings.TrimSpace(chat.GetName()); name != "" {
 				node.DisplayName = &name
 			}
+			if node.LinkedChat == nil {
+				node.LinkedChat = &chatv1.ChatRef{Id: chat.GetId()}
+			}
+			ct := chat.GetType()
+			node.LinkedChat.Type = &ct
 		}
 		writeProtoJSON(w, http.StatusOK, nodeResp)
 		return true
