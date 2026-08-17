@@ -55,7 +55,7 @@ func (r *httpTXTResolver) LookupTXT(ctx context.Context, domain string) ([]strin
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		return nil, err
