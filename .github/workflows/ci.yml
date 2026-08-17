@@ -169,6 +169,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
       - name: Validate docker compose file
         run: docker compose config --quiet
       - name: Require NATS JetStream service in compose

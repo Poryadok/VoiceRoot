@@ -78,10 +78,14 @@ FILTER_JSON='{"code":"true","staging_infra":"true"}' GO_SERVICES_JSON='[]' run_m
 [[ "${needs_full_rollout}" == "true" ]] || fail "expected needs_full_rollout for staging_infra"
 
 echo "== BASE_SHA zero uses HEAD^ not HEAD_SHA =="
-FILTER_JSON='{"code":"true","svc_chat":"true"}' GO_SERVICES_JSON='["chat","messaging"]' \
-  BASE_SHA=0000000000000000000000000000000000000000 HEAD_SHA=deadbeefcafebabe run_matrix
-parent="$(git -C "${ROOT}" rev-parse HEAD^)"
-[[ "${promote_from_sha}" == "${parent}" ]] || fail "expected promote_from_sha=${parent}, got ${promote_from_sha}"
+if git -C "${ROOT}" rev-parse --verify HEAD^ >/dev/null 2>&1; then
+  FILTER_JSON='{"code":"true","svc_chat":"true"}' GO_SERVICES_JSON='["chat","messaging"]' \
+    BASE_SHA=0000000000000000000000000000000000000000 HEAD_SHA=deadbeefcafebabe run_matrix
+  parent="$(git -C "${ROOT}" rev-parse HEAD^)"
+  [[ "${promote_from_sha}" == "${parent}" ]] || fail "expected promote_from_sha=${parent}, got ${promote_from_sha}"
+else
+  echo "skip (shallow clone has no HEAD^)"
+fi
 
 echo "== compose only (no global) sets needs_full_rollout, empty build =="
 FILTER_JSON='{"code":"true","compose":"true"}' GO_SERVICES_JSON='[]' run_matrix
