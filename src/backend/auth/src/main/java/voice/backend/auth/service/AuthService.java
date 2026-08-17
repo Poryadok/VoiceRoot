@@ -455,6 +455,9 @@ public class AuthService {
   }
 
   private AuthSession issueSessionForProfile(Account account, String profileId, String deviceInfoJson) {
+    if (deviceInfoJson == null || deviceInfoJson.isBlank()) {
+      deviceInfoJson = "{}";
+    }
     String tier = subscriptionTierResolver.resolveTier(account.id());
     String accessToken = jwtService.issue(account.id().toString(), profileId, List.of("user"), tier, account.type());
     TokenClaims claims = jwtService.validate(accessToken);

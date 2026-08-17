@@ -84,6 +84,19 @@ Future<void> migrateUnencryptedMessageCacheIfNeeded({
 /// Opens the encrypted offline message cache executor (native platforms only).
 Future<QueryExecutor> openEncryptedMessageCacheExecutor() async {
   final encryptionKey = await MessageCacheDatabaseKey.loadOrCreate();
+  return _openEncryptedMessageCacheExecutorWithKey(encryptionKey);
+}
+
+/// Opens encrypted cache for opt-in live integration tests (secure-storage fallback).
+Future<QueryExecutor> openEncryptedMessageCacheExecutorForLiveIntegration() async {
+  final encryptionKey =
+      await MessageCacheDatabaseKey.loadOrCreateForLiveIntegration();
+  return _openEncryptedMessageCacheExecutorWithKey(encryptionKey);
+}
+
+Future<QueryExecutor> _openEncryptedMessageCacheExecutorWithKey(
+  String encryptionKey,
+) async {
   final dbPath = await messageCacheDatabasePath();
   await migrateUnencryptedMessageCacheIfNeeded(
     dbPath: dbPath,
