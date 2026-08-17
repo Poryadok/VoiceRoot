@@ -37,6 +37,7 @@ void main() {
       final sessionB = await ctx.registerUser('e2e-file-b');
       if (!await ctx.probeFileStorageAvailable(sessionA)) {
         markTestSkipped('object storage not configured');
+        return;
       }
 
       final gateway = GatewayHttpClient(
@@ -145,8 +146,9 @@ void main() {
       expect(metadata.status, 'ready');
       expect(metadata.previewUrl, isNull);
 
-      final attachmentType =
-          metadata.fileType.trim().isEmpty ? 'file' : metadata.fileType.trim();
+      final attachmentType = metadata.fileType.trim().isEmpty
+          ? 'file'
+          : metadata.fileType.trim();
       final send = await messages.sendMessage(
         authorization: sessionA.authorizationHeader,
         chatId: chatId,

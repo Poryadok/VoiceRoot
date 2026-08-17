@@ -37,7 +37,16 @@ void main() {
 
       if (await ctx.probeFileStorageAvailable(session)) {
         final gifBytes = Uint8List.fromList([
-          0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00,
+          0x47,
+          0x49,
+          0x46,
+          0x38,
+          0x39,
+          0x61,
+          0x01,
+          0x00,
+          0x01,
+          0x00,
         ]);
         final premiumGif = await users.createAvatarPresignedUpload(
           authorization: session.authorizationHeader,
@@ -78,10 +87,7 @@ Future<void> _activatePremiumWebhook(
     'event_id': eventId,
     'event_type': 'subscription.activated',
     'data': {
-      'custom_data': {
-        'account_id': accountId,
-        'plan': 'premium',
-      },
+      'custom_data': {'account_id': accountId, 'plan': 'premium'},
       'status': 'active',
     },
   });
@@ -122,16 +128,19 @@ Future<void> _waitForPremiumPlan(
   fail('subscription did not become premium after webhook');
 }
 
-String _signPaddleWebhook(String body) {
+String _paddleWebhookSecret() {
   const secret = String.fromEnvironment(
     'PADDLE_WEBHOOK_SECRET',
-    defaultValue: 'test_paddle_webhook_secret',
+    defaultValue: '',
   );
-  final ts = (DateTime.now().millisecondsSinceEpoch ~/ 1000).toString();
-  final payload = '$ts:$body';
+  return secret.isEmpty ? 'test-webhook-secret' : secret;
+}
+
+String _signPaddleWebhook(String body) {
+  const ts = '1700000000';
   final digest = crypto.Hmac(
     crypto.sha256,
-    utf8.encode(secret),
-  ).convert(utf8.encode(payload));
-  return 'ts=$ts;h1=${digest.toString()}';
+    utf8.encode(_paddleWebhookSecret()),
+  ).convert(utf8.encode('$ts:$body')).toString();
+  return 'ts=$ts,h1=$digest';
 }

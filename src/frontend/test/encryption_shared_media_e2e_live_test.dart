@@ -37,6 +37,7 @@ void main() {
       final sessionB = await ctx.registerUser('e2e-shared-media-b');
       if (!await ctx.probeFileStorageAvailable(sessionA)) {
         markTestSkipped('object storage not configured');
+        return;
       }
 
       final gateway = GatewayHttpClient(
@@ -140,8 +141,9 @@ void main() {
       expect(confirm, isA<FilesApiOk<FileMetadataData>>());
       final metadata = (confirm as FilesApiOk<FileMetadataData>).data;
 
-      final attachmentType =
-          metadata.fileType.trim().isEmpty ? 'file' : metadata.fileType.trim();
+      final attachmentType = metadata.fileType.trim().isEmpty
+          ? 'file'
+          : metadata.fileType.trim();
       final send = await messages.sendMessage(
         authorization: sessionA.authorizationHeader,
         chatId: chatId,
@@ -168,7 +170,8 @@ void main() {
         kind: SharedMediaTabKind.media,
       );
       expect(mediaList, isA<MessagesApiOk<SharedMediaListData>>());
-      final items = (mediaList as MessagesApiOk<SharedMediaListData>).data.items;
+      final items =
+          (mediaList as MessagesApiOk<SharedMediaListData>).data.items;
       expect(items, isNotEmpty);
 
       final match = items.firstWhere(

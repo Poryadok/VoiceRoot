@@ -80,10 +80,16 @@ VoiceMessage voiceMessageFromProto(messaging_pb.Message msg) {
     forwardFromId: emptyToNull(msg.forwardFromId),
     forwardFromSender: emptyToNull(msg.forwardFromSender),
     editedAt: protoTimestampToDateTime(msg.hasEditedAt() ? msg.editedAt : null),
-    deletedAt: protoTimestampToDateTime(msg.hasDeletedAt() ? msg.deletedAt : null),
-    createdAt: protoTimestampToDateTime(msg.hasCreatedAt() ? msg.createdAt : null),
+    deletedAt: protoTimestampToDateTime(
+      msg.hasDeletedAt() ? msg.deletedAt : null,
+    ),
+    createdAt: protoTimestampToDateTime(
+      msg.hasCreatedAt() ? msg.createdAt : null,
+    ),
     isPinned: msg.hasIsPinned() && msg.isPinned,
-    threadParentId: msg.hasThreadParentId() ? emptyToNull(msg.threadParentId) : null,
+    threadParentId: msg.hasThreadParentId()
+        ? emptyToNull(msg.threadParentId)
+        : null,
     isE2e: _protoBoolField(msg, () => msg.isE2e),
   );
 }
@@ -106,7 +112,9 @@ MessageListData messageListFromProto(messaging_pb.MessageList list) {
   );
 }
 
-SharedMediaListData sharedMediaListFromProto(messaging_pb.SharedMediaList list) {
+SharedMediaListData sharedMediaListFromProto(
+  messaging_pb.SharedMediaList list,
+) {
   return SharedMediaListData(
     items: list.items.map(sharedMediaItemFromProto).toList(growable: false),
     nextCursor: emptyToNull(list.nextCursor),
@@ -114,19 +122,23 @@ SharedMediaListData sharedMediaListFromProto(messaging_pb.SharedMediaList list) 
   );
 }
 
-SharedMediaItemData sharedMediaItemFromProto(messaging_pb.SharedMediaItem item) {
+SharedMediaItemData sharedMediaItemFromProto(
+  messaging_pb.SharedMediaItem item,
+) {
   return SharedMediaItemData(
     messageId: item.messageId,
     senderProfileId: item.senderProfileId,
     createdAt: item.hasCreatedAt() ? item.createdAt.toDateTime() : null,
     fileId: item.hasFileId() ? emptyToNull(item.fileId) : null,
-    attachmentType:
-        item.hasAttachmentType() ? emptyToNull(item.attachmentType) : null,
+    attachmentType: item.hasAttachmentType()
+        ? emptyToNull(item.attachmentType)
+        : null,
     externalUrl: item.hasExternalUrl() ? emptyToNull(item.externalUrl) : null,
     title: item.hasTitle() ? emptyToNull(item.title) : null,
     sortOrder: item.sortOrder,
-    originalName:
-        item.hasOriginalName() ? emptyToNull(item.originalName) : null,
+    originalName: item.hasOriginalName()
+        ? emptyToNull(item.originalName)
+        : null,
     sizeBytes: item.hasSizeBytes() ? item.sizeBytes.toInt() : null,
     e2eKeyWire: item.hasE2eKeyWire() ? emptyToNull(item.e2eKeyWire) : null,
   );
@@ -222,8 +234,7 @@ VoiceChat voiceChatFromProto(chat_pb.Chat chat) {
     spaceId: chat.hasSpaceId() ? emptyToNull(chat.spaceId) : null,
     slowModeSeconds: chat.slowModeSeconds,
     threadsEnabled: chat.hasThreadsEnabled() && chat.threadsEnabled,
-    allowUserMainFeed:
-        !chat.hasAllowUserMainFeed() || chat.allowUserMainFeed,
+    allowUserMainFeed: !chat.hasAllowUserMainFeed() || chat.allowUserMainFeed,
     e2eEnabled: _protoChatE2eEnabled(chat),
   );
 }
@@ -273,10 +284,7 @@ chat_pb.CreateDMRequest createDmRequestToProto(String otherProfileId) {
 }
 
 chat_pb.CreateChatRequest createGroupRequestToProto({required String name}) {
-  return chat_pb.CreateChatRequest(
-    type: ChatType.CHAT_TYPE_GROUP,
-    name: name,
-  );
+  return chat_pb.CreateChatRequest(type: ChatType.CHAT_TYPE_GROUP, name: name);
 }
 
 chat_pb.AddMembersRequest addMembersRequestToProto({
@@ -322,8 +330,9 @@ VoiceProfile voiceProfileFromProto(user_pb.Profile profile) {
     verificationBadge: profile.hasVerificationBadge()
         ? emptyToNull(profile.verificationBadge)
         : null,
-    accentColor:
-        profile.hasAccentColor() ? emptyToNull(profile.accentColor) : null,
+    accentColor: profile.hasAccentColor()
+        ? emptyToNull(profile.accentColor)
+        : null,
   );
 }
 
@@ -364,7 +373,9 @@ sub_pb.CreateCheckoutSessionRequest createCheckoutSessionRequestToProto({
   );
 }
 
-VoiceCheckoutSession voiceCheckoutSessionFromProto(sub_pb.CheckoutResponse resp) {
+VoiceCheckoutSession voiceCheckoutSessionFromProto(
+  sub_pb.CheckoutResponse resp,
+) {
   return VoiceCheckoutSession(
     checkoutUrl: resp.checkoutUrl,
     sessionId: resp.sessionId,
@@ -389,7 +400,9 @@ VoicePresence voicePresenceFromProto(user_pb.PresenceStatus status) {
   );
 }
 
-SearchProfilesData searchProfilesFromProto(user_pb.SearchProfilesResponse resp) {
+SearchProfilesData searchProfilesFromProto(
+  user_pb.SearchProfilesResponse resp,
+) {
   final list = resp.hasProfileList() ? resp.profileList : user_pb.ProfileList();
   final page = resp.hasPage() ? resp.page : null;
   return SearchProfilesData(
@@ -464,14 +477,12 @@ FileMetadataData fileMetadataFromProto(file_pb.FileMetadata meta) {
     status: meta.status,
     originalName: meta.originalName,
     // HTTP URLs come from GET /files/{id}/url, not R2 keys in metadata.
-    thumbnailR2Key:
-        meta.hasThumbnailR2Key() && meta.thumbnailR2Key.isNotEmpty
-            ? meta.thumbnailR2Key
-            : null,
-    convertedR2Key:
-        meta.hasConvertedR2Key() && meta.convertedR2Key.isNotEmpty
-            ? meta.convertedR2Key
-            : null,
+    thumbnailR2Key: meta.hasThumbnailR2Key() && meta.thumbnailR2Key.isNotEmpty
+        ? meta.thumbnailR2Key
+        : null,
+    convertedR2Key: meta.hasConvertedR2Key() && meta.convertedR2Key.isNotEmpty
+        ? meta.convertedR2Key
+        : null,
     sizeBytes: meta.hasSizeBytes() ? meta.sizeBytes.toInt() : null,
     isE2e: meta.isE2e,
     expiresAt: meta.hasExpiresAt() ? meta.expiresAt.toDateTime() : null,
@@ -512,16 +523,12 @@ file_pb.ConfirmUploadRequest confirmUploadRequestToProto({
   required String fileId,
   required String sha256Hash,
 }) {
-  return file_pb.ConfirmUploadRequest(
-    fileId: fileId,
-    sha256Hash: sha256Hash,
-  );
+  return file_pb.ConfirmUploadRequest(fileId: fileId, sha256Hash: sha256Hash);
 }
 
 VoiceCallMediaKind voiceCallMediaKindFromProto(calls_enum.CallMediaKind kind) {
   return switch (kind) {
-    calls_enum.CallMediaKind.CALL_MEDIA_KIND_VIDEO =>
-      VoiceCallMediaKind.video,
+    calls_enum.CallMediaKind.CALL_MEDIA_KIND_VIDEO => VoiceCallMediaKind.video,
     calls_enum.CallMediaKind.CALL_MEDIA_KIND_AUDIO ||
     calls_enum.CallMediaKind.CALL_MEDIA_KIND_UNSPECIFIED =>
       VoiceCallMediaKind.audio,
@@ -616,12 +623,8 @@ calls_pb.StartCallRequest startGroupVoiceRequestToProto({
   required VoiceCallMediaKind mediaKind,
 }) {
   return calls_pb.StartCallRequest(
-    roomTypeEnum:
-        calls_enum.VoiceSessionKind.VOICE_SESSION_KIND_GROUP_VOICE,
-    linkedChat: chatRefToProto(
-      groupChatId,
-      type: ChatType.CHAT_TYPE_GROUP,
-    ),
+    roomTypeEnum: calls_enum.VoiceSessionKind.VOICE_SESSION_KIND_GROUP_VOICE,
+    linkedChat: chatRefToProto(groupChatId, type: ChatType.CHAT_TYPE_GROUP),
     mediaKind: callMediaKindToProto(mediaKind),
   );
 }
@@ -725,7 +728,9 @@ SpaceTreeData spaceTreeFromProto(space_pb.ListSpaceTreeResponse resp) {
         .map((n) => spaceTreeNodeFromProto(n, voiceById))
         .toList(growable: false),
     voiceRooms: resp.voiceRooms
-        .map((vr) => VoiceRoomData(id: vr.id, spaceId: vr.spaceId, name: vr.name))
+        .map(
+          (vr) => VoiceRoomData(id: vr.id, spaceId: vr.spaceId, name: vr.name),
+        )
         .toList(growable: false),
   );
 }
@@ -799,7 +804,9 @@ SpaceInvite spaceInviteFromProto(space_pb.Invite invite) {
       invite.hasExpiresAt() ? invite.expiresAt : null,
     ),
     createdAt:
-        protoTimestampToDateTime(invite.hasCreatedAt() ? invite.createdAt : null) ??
+        protoTimestampToDateTime(
+          invite.hasCreatedAt() ? invite.createdAt : null,
+        ) ??
         DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
     revokedAt: protoTimestampToDateTime(
       invite.hasRevokedAt() ? invite.revokedAt : null,
@@ -807,7 +814,9 @@ SpaceInvite spaceInviteFromProto(space_pb.Invite invite) {
   );
 }
 
-SpaceMembershipData spaceMembershipFromProto(space_pb.SpaceMembership membership) {
+SpaceMembershipData spaceMembershipFromProto(
+  space_pb.SpaceMembership membership,
+) {
   return SpaceMembershipData(
     spaceId: membership.spaceId,
     profileId: membership.profileId,
@@ -816,7 +825,9 @@ SpaceMembershipData spaceMembershipFromProto(space_pb.SpaceMembership membership
           membership.hasJoinedAt() ? membership.joinedAt : null,
         ) ??
         DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
-    nickname: membership.hasNickname() ? emptyToNull(membership.nickname) : null,
+    nickname: membership.hasNickname()
+        ? emptyToNull(membership.nickname)
+        : null,
   );
 }
 
@@ -840,9 +851,13 @@ SpaceTreeNodeData spaceTreeNodeFromProto(
   Map<String, VoiceRoomData> voiceById,
 ) {
   final voiceRoomId = node.hasVoiceRoomId() ? node.voiceRoomId : null;
-  final linkedChatId =
-      node.hasLinkedChat() && node.linkedChat.hasId() ? node.linkedChat.id : null;
+  final linkedChatId = node.hasLinkedChat() && node.linkedChat.hasId()
+      ? node.linkedChat.id
+      : null;
   final voiceName = voiceRoomId != null ? voiceById[voiceRoomId]?.name : null;
+  final protoName = node.hasDisplayName() && node.displayName.isNotEmpty
+      ? node.displayName
+      : null;
   final chatType = node.hasLinkedChat() && node.linkedChat.hasType()
       ? node.linkedChat.type.name
       : null;
@@ -855,7 +870,7 @@ SpaceTreeNodeData spaceTreeNodeFromProto(
     voiceRoomId: voiceRoomId,
     sortOrder: node.sortOrder,
     isSystem: node.isSystem,
-    displayName: voiceName ?? linkedChatId ?? node.id,
+    displayName: voiceName ?? protoName ?? linkedChatId ?? node.id,
     chatType: chatType,
   );
 }
@@ -886,7 +901,12 @@ SpaceTreeNodeData spaceTreeNodeFromJson(
     voiceRoomId: voiceRoomId,
     sortOrder: (node['sort_order'] as num?)?.toInt() ?? 0,
     isSystem: node['is_system'] as bool? ?? false,
-    displayName: enrichedName ?? voiceName ?? linkedChatId ?? node['id'] as String? ?? '',
+    displayName:
+        enrichedName ??
+        voiceName ??
+        linkedChatId ??
+        node['id'] as String? ??
+        '',
     chatType: chatType,
   );
 }

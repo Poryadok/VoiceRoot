@@ -134,6 +134,11 @@ func (t *transcoder) serveSpacesTree(w http.ResponseWriter, r *http.Request, res
 			writeGRPCError(w, err)
 			return true
 		}
+		if node := nodeResp.GetSpaceTreeNode(); node != nil {
+			if name := strings.TrimSpace(chat.GetName()); name != "" {
+				node.DisplayName = &name
+			}
+		}
 		writeProtoJSON(w, http.StatusOK, nodeResp)
 		return true
 

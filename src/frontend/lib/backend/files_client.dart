@@ -170,7 +170,11 @@ class VoiceFilesClient {
       authorization: authorization,
       createEmpty: file_pb.GetFileURLResponse.create,
     );
-    return _map(result, (data) => data.presignedGetUrl);
+    return _map(result, (data) {
+      final raw = data.presignedGetUrl;
+      if (raw.isEmpty) return raw;
+      return rewritePresignedUrlForHost(Uri.parse(raw)).toString();
+    });
   }
 
   Future<FilesApiResult<void>> putBytes({

@@ -6,6 +6,7 @@ import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/gateway_http.dart';
 import 'package:voice_frontend/backend/spaces_client.dart';
+import 'package:voice_frontend/gen/voice/chat/v1/chat.pbenum.dart';
 
 void main() {
   test('listSpaceTree parses categories and mixed nodes', () async {
@@ -16,7 +17,12 @@ void main() {
           return http.Response(
             jsonEncode({
               'categories': [
-                {'id': 'cat-1', 'space_id': 'space-1', 'name': 'General', 'sort_order': 0},
+                {
+                  'id': 'cat-1',
+                  'space_id': 'space-1',
+                  'name': 'General',
+                  'sort_order': 0,
+                },
               ],
               'nodes': [
                 {
@@ -62,7 +68,7 @@ void main() {
   });
 
   test('createCategory posts to space categories route', () async {
-  String? path;
+    String? path;
     final client = VoiceSpacesClient(
       gateway: GatewayHttpClient(
         httpClient: MockClient((request) async {
@@ -121,5 +127,41 @@ void main() {
 
     expect(result, isA<SpacesApiOk<VoiceRoomData>>());
     expect((result as SpacesApiOk<VoiceRoomData>).data.name, 'Lobby');
+  });
+
+  test('createSpaceChat maps proto display_name onto tree node', () async {
+    final client = VoiceSpacesClient(
+      gateway: GatewayHttpClient(
+        httpClient: MockClient((request) async {
+          expect(request.url.path, '/api/v1/spaces/space-1/chats');
+          return http.Response(
+            jsonEncode({
+              'space_tree_node': {
+                'id': 'node-new',
+                'space_id': 'space-1',
+                'kind': 'text_chat',
+                'linked_chat': {'id': 'chat-99', 'type': 'CHAT_TYPE_CHANNEL'},
+                'display_name': 'announcements',
+              },
+            }),
+            200,
+          );
+        }),
+        config: const GatewayConfig(baseUrl: 'http://api.test'),
+      ),
+    );
+
+    final result = await client.createSpaceChat(
+      authorization: 'Bearer t',
+      spaceId: 'space-1',
+      name: 'announcements',
+      chatType: ChatType.CHAT_TYPE_CHANNEL,
+    );
+
+    expect(result, isA<SpacesApiOk<SpaceTreeNodeData>>());
+    expect(
+      (result as SpacesApiOk<SpaceTreeNodeData>).data.displayName,
+      'announcements',
+    );
   });
 }
