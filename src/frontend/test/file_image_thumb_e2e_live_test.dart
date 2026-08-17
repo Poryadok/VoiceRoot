@@ -57,5 +57,7 @@ void main() {
         reason: 'confirm must return thumbnail_r2_key after image processing');
     // previewUrl stays null: clients fetch HTTP URLs via GET /files/{id}/url.
     expect(meta.previewUrl, isNull);
-  }, skip: runLiveIntegration ? null : 'opt-in live');
+  },
+    timeout: const Timeout(Duration(minutes: 2)),
+    skip: runLiveIntegration ? null : 'opt-in live');
 }

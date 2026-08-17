@@ -31,5 +31,7 @@ void main() {
       bytes: png,
     );
     expect(put, isA<UsersApiOk<void>>());
-  }, skip: runLiveIntegration ? null : 'opt-in live');
+  },
+    timeout: const Timeout(Duration(minutes: 2)),
+    skip: runLiveIntegration ? null : 'opt-in live');
 }

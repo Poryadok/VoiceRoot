@@ -25,7 +25,7 @@ void main() {
       final owner = await ctx.registerUser('group-owner');
       final memberB = await ctx.registerUser('group-b');
       final memberC = await ctx.registerUser('group-c');
-      await ctx.allowOpenGamingPrivacyMany([memberB, memberC]);
+      final memberD = await ctx.registerUser('group-d');
 
       final chats = ctx.chatsClient();
       final created = await chats.createGroup(
@@ -40,7 +40,11 @@ void main() {
       final invite = await chats.addGroupMembers(
         authorization: owner.authorizationHeader,
         chatId: group.id,
-        profileIds: [memberB.activeProfileId, memberC.activeProfileId],
+        profileIds: [
+          memberB.activeProfileId,
+          memberC.activeProfileId,
+          memberD.activeProfileId,
+        ],
       );
       expect(invite, isA<ChatsApiOk<void>>());
 

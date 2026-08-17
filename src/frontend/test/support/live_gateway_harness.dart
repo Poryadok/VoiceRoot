@@ -236,7 +236,12 @@ class LiveGatewayContext {
       password: qaPassword,
     );
     expect(result, isA<AuthSessionOk>(), reason: 'register $prefix');
-    return (result as AuthSessionOk).session;
+    final session = (result as AuthSessionOk).session;
+    // Default gaming preset blocks chat/space invites from non-friends
+    // (docs/TESTING.md). Live E2E users are strangers unless a test tightens
+    // privacy afterwards (e.g. privacy_actions).
+    await allowOpenGamingPrivacy(session);
+    return session;
   }
 
   Future<AuthSession> refreshSession(AuthSession session) async {

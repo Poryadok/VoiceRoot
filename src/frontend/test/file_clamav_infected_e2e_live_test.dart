@@ -47,5 +47,7 @@ void main() {
       bytes: eicar,
     );
     expect(confirm, isA<FilesApiFailure>());
-  }, skip: runLiveIntegration ? null : 'opt-in live');
+  },
+    timeout: const Timeout(Duration(minutes: 2)),
+    skip: runLiveIntegration ? null : 'opt-in live');
 }

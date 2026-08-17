@@ -86,6 +86,7 @@ void main() {
       expect(frame.data?['sender_profile_id'], sessionA.activeProfileId);
       expect(frame.sequence, isNotNull);
     },
+    timeout: const Timeout(Duration(minutes: 2)),
     skip: runLiveIntegration
         ? null
         : 'Opt in with --dart-define=VOICE_RUN_LIVE_INTEGRATION=true',
