@@ -12,7 +12,7 @@ Admin panel (`src/admin/`) и Developer Portal (`src/developer-portal/`).
 
 
 - [ ] **[Admin] Assign-to-me broken under OAuth (staging default)** — `staffProfileIdFromToken()` reads only `VITE_STAFF_TOKEN`, not the session OAuth JWT; staging builds use `VITE_OAUTH_DISABLED=false`. Paths: `src/admin/src/lib/jwt.ts`, `src/admin/src/pages/QueuePage.tsx`
-- [ ] **[Admin] Audit log always empty** — Gateway returns hardcoded `{"entries":[]}`; Admin UI cannot show real audit data. Paths: `src/backend/gateway/transcode_moderation_admin.go`, `src/admin/src/pages/AuditPage.tsx`
+- [ ] **[Admin] Audit log UI пуст, если store пуст** — Gateway **мапит** `ExportAuditLog` (`transcode_moderation_admin.go`), не hardcoded `[]`. Пустой список ≠ stub Gateway. Paths: `src/backend/gateway/transcode_moderation_admin.go`, `src/admin/src/pages/AuditPage.tsx`
 - [ ] **[Admin] No resolve / dismiss report workflow** — only `new_status: "reviewing"` (assign); moderators cannot close reports as resolved/dismissed per `docs/features/reports.md`. Paths: `src/admin/src/pages/QueuePage.tsx`, `src/admin/src/components/ReportDetail.tsx`, `src/admin/src/api/moderation.ts`
 
 
@@ -26,6 +26,7 @@ Admin panel (`src/admin/`) и Developer Portal (`src/developer-portal/`).
 - [ ] **[Admin] Sanctions on non-`user` targets** — message/space/story reports: account resolution fails or misuses `target_id` as account. Paths: `src/admin/src/pages/QueuePage.tsx`, `src/admin/src/components/SanctionActions.tsx`
 - [ ] **[Admin] No queue pagination** — `next_cursor` in types; `ListReports` never passes cursor. Paths: `src/admin/src/api/moderation.ts`, `src/admin/src/api/types.ts`, `src/admin/src/pages/QueuePage.tsx`, `protos/voice/moderation/v1/moderation.proto`
 - [ ] **[Admin] Analytics UI far below spec** — only `product` dashboard + hardcoded `registration` funnel; no retention page (`fetchRetention` unused), no engagement/revenue/health/moderation/search/voice dashboards. Paths: `src/admin/src/api/analytics.ts`, `src/admin/src/pages/ProductAnalyticsPage.tsx`, `src/admin/src/pages/FunnelsPage.tsx`, `docs/features/analytics.md`
+- [ ] **[Admin] Game catalog: staff Add game / moderation queue тонкие** — `SubmitGameRequest` live есть; Admin форма CreateGame и дедуп заявок — [game-catalog.md](../features/game-catalog.md).
 - [ ] **[Admin] No revoke-sanction UI** — `RevokeSanction` RPC exists server-side, not exposed in Admin. Paths: `docs/microservices/moderation-service.md`, `src/admin/src/api/moderation.ts`
 - [ ] **[Admin] PLAN / README stale** — PLAN still «зарезервировано»; README covers moderation only (no analytics/OAuth). Paths: `docs/PLAN.md`, `src/admin/README.md`
 

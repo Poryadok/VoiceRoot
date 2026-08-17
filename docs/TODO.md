@@ -56,6 +56,19 @@ TODO разбит **по домену** (где менять код), не по 
 
 Критерии фич: [encryption.md](features/encryption.md), [bots.md](features/bots.md), [stories.md](features/stories.md). Observability на staging — [observability.md](features/observability.md) §Definition of Done.
 
+Сверка спека↔код (2026-08-17): федерация вне scope. Решения и снятые stale-пункты — `tmp/feature-audit/synthesis.md`. **PLAN.md не трогать** — часть «shipped» завышена (spaces без delete/transfer, checkout-заглушка, стикеры отсутствуют).
+
+### Топ дыр (после аудита)
+
+| Куда | Что |
+|------|-----|
+| [backend.md](todo/backend.md) § Critical Subscription | Checkout = `checkout.paddle.test`; CloudPayments `Unimplemented`; JWT `subscription_tier` без `AUTH_NATS_URL` |
+| [backend.md](todo/backend.md) § Critical Space | Нет `DeleteSpace` / `TransferOwnership` / `GetAuditLog` / каталога / шаблонов |
+| [backend.md](todo/backend.md) § High Chat | Стикеры/GIF-паки; folders RPC; view-count; `DeleteChat` |
+| [ci.md](todo/ci.md) § Critical | FCM/APNs, Alertmanager, staging DoD, TOTP/Resend/Paddle secrets |
+| [admin.md](todo/admin.md) § Critical | Resolve/dismiss репортов; OAuth assign-to-me |
+| [client.md](todo/client.md) § High | Телефон/OTP/sessions/delete-account UI; quiet hours с сервера; черновики |
+
 ---
 
 ## Навигация по доменам

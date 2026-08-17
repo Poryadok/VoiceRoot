@@ -29,10 +29,15 @@ _Пока пусто — критичные клиентские блокеры 
 - [ ] **Commit waves A–J (Flutter client)** — один PR: state/ui/l10n/tests из аудита 2026-07-15; после merge — `make flutter-ci` на CI.
 ### Multi-profile
 
-- [ ] **[Multi-Profile] DeleteProfile has no Gateway REST** — gRPC + `SoftDeleteProfile` implemented (`user_verification.go`); no `DELETE /api/v1/users/profiles/{id}` in `src/backend/gateway/transcode_users.go`; Flutter `users_client.dart` has no `deleteProfile`.
-- [ ] **[Multi-Profile] No delete-profile UI** — settings exposes create only (`settings_sheet.dart` → `CreateProfileSheet`); no manage-profiles screen to remove secondary profiles.
+- [ ] **[Multi-Profile] No delete-profile UI** — REST `DELETE /api/v1/users/profiles/{id}` + `VoiceUsersClient.deleteProfile` **есть**; settings exposes create only (`settings_sheet.dart` → `CreateProfileSheet`); no manage-profiles screen to remove secondary profiles.
 - [ ] **[Multi-Profile] Frozen profiles invisible in switcher UI** — backend blocks switch (`frozen_at`, `JdbcProfileSwitchValidator`); `VoiceProfile` / `proto_mappers.dart` omit `frozenAt`; `ProfileSwitcher` / `ProfileAvatarSwitcher` list all profiles with no disabled state or copy.
 - [ ] **[Multi-Profile] `ProfileDowngradePickerScreen` unreachable** — screen + `submitDowngradeProfiles` exist; never routed from subscription expiry/cancel (см. [Subscription] Downgrade lifecycle).
+
+
+### Auth UI (REST есть, экранов нет)
+
+- [ ] **AuthScreen: телефон + OTP** — спека [auth-and-contacts.md](../features/auth-and-contacts.md): телефон default; `auth_screen.dart` только email.
+- [ ] **Auth UI: sessions / revoke, delete-account, password-reset** — REST есть (`GET /api/v1/auth/sessions`, delete/restore, `POST /api/v1/auth/password/reset`); экранов нет.
 
 
 ## Common
@@ -46,9 +51,7 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
 **Flutter UX waves A–J (2026-07-15):** закрыто в рабочей копии; остаток — commit PR + серверные хвосты ниже.
 
 
-- [ ] **Notification settings: серверная персистентность** — Flutter UI готов (`NotificationSettingsScreen`, per-chat override, quiet hours в `SharedPreferences`); backend `GetNotificationSettings` / `UpdateNotificationSettings` / `SetQuietHours` не пишут в БД → mute/DND не влияют на push. См. Batch 14 §Notification — Critical/High.
-
-- [ ] **Quiet hours: sync client ↔ Notification service** — после backend persist: читать/писать `SetQuietHours` вместо только `notification_quiet_hours_storage.dart`; иначе DND на втором устройстве не синхронизируется.
+- [ ] **Quiet hours: client dual-write** — backend `Get/SetQuietHours` **пишут в БД** (`notification/internal/store/settings.go`, live `TestComposeQuietHours_live`). Flutter всё ещё `notification_quiet_hours_storage.dart` (SharedPreferences) как source of truth — второе устройство не синхронизируется. Читать/писать API, local только cache.
 
 - [ ] **A11y: message list keyboard nav** — [accessibility.md](../features/accessibility.md) §«Навигация по списку сообщений»: `↑`/`↓`, `R`, `E` в `chat_room_panel` — не реализовано.
 
@@ -73,6 +76,25 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
 - [ ] **chat_info_panel notification tile — narrow E2E** — compact layout; overflow поправлен в widget-тестах; live/compose E2E на узкой ширине (связано с Critical Batch 2 при наличии стека).
 
 
+### Chat UX (спека text-chat / navigation)
+
+- [ ] **Локальные черновики** — Hive/SQLite, один на chat; multi-device sync отказано в спеке.
+- [ ] **OG link preview** — unfurl на клиенте; сервер не обязан.
+- [ ] **Stickers / GIF / voice-note composer** — нет UI (и нет backend packs). См. [backend.md](backend.md) § High Chat; решение спеки — [product-roadmap.md](product-roadmap.md).
+- [ ] **Кастомные папки чатов** — All/DMs/Groups + custom; RPC Unimplemented. MobileChatStrip на MM/settings — пункт выше.
+- [ ] **In-chat search: next/prev highlight** — [search.md](../features/search.md).
+- [ ] **Favorites / QR add friend / phone-book sync UI** — gRPC contacts есть, REST list нет; QR в продукте отсутствует. [friends.md](../features/friends.md).
+- [ ] **Idle 5 мин → `UpdatePresence idle`** — сейчас idle только если клиент сам пришлёт. [presence.md](../features/presence.md).
+- [ ] **Windows: автоопределение игры** — process list → `game_title` + toggle; 0 кода. Post-MVP рядом с П.17.
+- [ ] **E2E fingerprint + key-change banner** — [encryption.md](../features/encryption.md); П.13.
+- [ ] **Shorebird OTA или явный defer** — [updates.md](../features/updates.md).
+- [ ] **Expired file «bones» placeholder + refresh URL** — [file-storage.md](../features/file-storage.md).
+- [ ] **Voice: local MP3 recording; ducking via `setVolume`; in-voice overlay без кражи фокуса** — [voice-chat.md](../features/voice-chat.md).
+- [ ] **Screen share: desktop source picker + system audio (Windows); явный simulcast 720/360/180** — [screen-share.md](../features/screen-share.md).
+- [ ] **Settings language sync** — profile.locale vs OS pref; API error codes локализация. [i18n.md](../features/i18n.md).
+- [ ] **Help FAQ vs реальный UI** — онбординг ядро complete; FAQ не совпадает со спейсами/ММ.
+
+
 **Промпт-якорь:** `Growth/A11y from docs/todo/client.md Common Batch 5`.
 
 
@@ -83,11 +105,11 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
 
 Baseline (2026-06) закрыт; хвосты UX/E2E ниже. Спека: [auth-and-contacts.md](../features/auth-and-contacts.md).
 
-- [ ] **Convert-guest: recovery для аккаунтов после бага transport-пароля** — аккаунты, сконвертированные до фикса (2026-07), остались с неизвестным паролем; нужен self-service reset password или support-runbook.
+- [ ] **Convert-guest: recovery для аккаунтов после бага transport-пароля** — аккаунты, сконвертированные до фикса (2026-07), остались с неизвестным паролем; нужен self-service reset password или support-runbook. Backend `POST /api/v1/auth/password/reset` **есть**; Flutter UI нет.
 - [ ] **Convert-guest: док auth-service.md** — явно описать, что `password` в `ConvertGuest` = новый пароль regular-аккаунта (JWT гостя достаточен), не проверка transport-пароля.
 - [ ] **Convert-guest live в compose-e2e** — `TestComposeConvertGuest_live` (новый пароль + login) в CI workflow; сейчас только opt-in локально.
 - [ ] **Convert-guest: negative Auth integration tests** — duplicate email, password <8, non-guest token, missing email/phone; дополнить `ConvertGuestIntegrationTest`.
-- [ ] **Convert-guest: NATS `user.guest_converted`** — довести `GuestConvertNatsEventIntegrationTest`: REST convert + assert publish (сейчас stub).
+- [x] **Convert-guest: NATS `user.guest_converted`** — `TestComposeConvertGuestNATS_live` shipped (P1.1).
 - [ ] **Guest save-account reminder: server last-shown** — в спеке «локальный или серверный timestamp»; сейчас только `SharedPreferences` (кросс-устройство не синхронизируется).
 
 

@@ -9,6 +9,9 @@ CI/CD + выкат: GitHub Actions, promote/deploy, k8s secrets, observability �
 ### Secrets & alerts (**Вы**)
 
 - [ ] **Секреты staging k8s** — `voice-app-secrets` по [`deploy/staging/secret.example.yaml`](../../deploy/staging/secret.example.yaml): JWT, Postgres URLs, R2 (`FILE_R2_*`, `USER_R2_*`), FCM/APNs для Notification, **Analytics** (`CLICKHOUSE_DSN`, `ANALYTICS_ID_HASH_KEY`) ([`DEPLOYMENT.md`](../DEPLOYMENT.md)).
+- [ ] **Auth secrets** — `AUTH_TOTP_ENCRYPTION_KEY` (без `DEFAULT_DEV_KEY`); `AUTH_NATS_URL` → `NatsSubscriptionTierStore` иначе JWT `subscription_tier=free`; `RESEND_API_KEY` иначе `NoopMailSender`.
+- [ ] **Billing secrets** — Paddle live (не `checkout.paddle.test`); CloudPayments когда RPC появится. Не шипить test checkout URL.
+- [ ] **APNs env names** — secret `APNS_PRIVATE_KEY` vs code `APNS_AUTH_KEY`; смонтировать `APNS_*` в `deploy/*/services.yaml`. FCM: code `FCM_CREDENTIALS_JSON` vs deploy `FCM_SERVICE_ACCOUNT_JSON`.
 - [ ] **Observability: канал алертов** — Secret уведомлений (Telegram bot или email) для Alertmanager; без него P1-алерты уходят в null receiver ([`deploy/observability/README.md`](../../deploy/observability/README.md)).
 
 ### Observability staging
@@ -35,6 +38,7 @@ CI/CD + выкат: GitHub Actions, promote/deploy, k8s secrets, observability �
 ### Prod ingress & universal links
 
 - [ ] **Prod universal links** — реальные AASA + `assetlinks.json` на `voice.gg` (сейчас Gateway — dev placeholders).
+- [ ] **Matchmaking compose: `USER_GRPC_ADDR` / `SOCIAL_GRPC_ADDR` / `SPACE_GRPC_ADDR`** — без них MM rating privacy fail-open локально (`docker-compose.yml` omits; k8s `envFrom` есть).
 - [ ] **Well-known на prod** — Gateway отдаёт валидные `/.well-known/apple-app-site-association` и `assetlinks.json` для целевого домена.
 
 ### Deploy workflow
