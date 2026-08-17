@@ -57,6 +57,7 @@ void main() {
 
       final chats = await ctx.chatsClient().listChats(
         authorization: sessionB.authorizationHeader,
+        inbox: 'requests',
       );
       final items = (chats as ChatsApiOk<ChatListData>).data.items;
       final row = items.firstWhere((i) => i.chat.id == chatId);

@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voice_frontend/backend/chats_client.dart';
 import 'package:voice_frontend/backend/messages_client.dart';
 import 'package:voice_frontend/backend/spaces_client.dart';
 
@@ -19,13 +20,13 @@ void main() {
       name: 'Slow mode E2E',
     );
     final spaceId = (created as SpacesApiOk<VoiceSpace>).data.id;
-    final tree = await spaces.listSpaceTree(
+    final chatNode = await spaces.createSpaceChat(
       authorization: owner.authorizationHeader,
       spaceId: spaceId,
+      name: 'slow-general',
     );
-    final channel = (tree as SpacesApiOk<SpaceTreeData>).data.nodes
-        .firstWhere((n) => n.isTextChat);
-    final chatId = channel.linkedChatId!;
+    expect(chatNode, isA<SpacesApiOk<SpaceTreeNodeData>>());
+    final chatId = (chatNode as SpacesApiOk<SpaceTreeNodeData>).data.linkedChatId!;
     expect(chatId, isNotEmpty);
 
     await chats.updateGroup(

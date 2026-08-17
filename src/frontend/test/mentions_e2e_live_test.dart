@@ -47,7 +47,11 @@ void main() {
     addTearDown(wsTarget.dispose);
 
     final mentionFuture = waitForOp(wsTarget.events, 'mention');
-    final notificationFuture = waitForOp(wsTarget.events, 'notification');
+    final notificationFuture = waitForOp(
+      wsTarget.events,
+      'notification',
+      where: (f) => f.data?['type'] == 'mention',
+    );
 
     const body = 'please see this';
     final sent = await messages.sendMessage(
