@@ -32,6 +32,7 @@ void main() {
 
       await harness.assertMessageInHistory('pong');
     },
+    timeout: const Timeout(Duration(minutes: 2)),
     skip: runLiveIntegration
         ? null
         : 'Opt in with --dart-define=VOICE_RUN_LIVE_INTEGRATION=true',

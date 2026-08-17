@@ -86,6 +86,7 @@ void main() {
       final frame = await frameFuture;
       expect(frame.data?['message_id'], msgId);
     },
+    timeout: const Timeout(Duration(minutes: 2)),
     skip: runLiveIntegration
         ? null
         : 'Opt in with --dart-define=VOICE_RUN_LIVE_INTEGRATION=true',
