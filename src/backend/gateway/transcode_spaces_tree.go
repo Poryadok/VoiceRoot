@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -27,6 +28,7 @@ func (t *transcoder) serveSpacesTree(w http.ResponseWriter, r *http.Request, res
 			writeGRPCError(w, err)
 			return true
 		}
+		t.enrichSpaceTreeFromChat(ctx, resp)
 		writeProtoJSON(w, http.StatusOK, resp)
 		return true
 
@@ -149,5 +151,36 @@ func (t *transcoder) serveSpacesTree(w http.ResponseWriter, r *http.Request, res
 
 	default:
 		return false
+	}
+}
+
+func (t *transcoder) enrichSpaceTreeFromChat(ctx context.Context, resp *spacev1.ListSpaceTreeResponse) {
+	if t == nil || t.clients.chat == nil || resp == nil {
+		return
+	}
+	for _, node := range resp.GetNodes() {
+		if node == nil || node.GetKind() != "text_chat" {
+			continue
+		}
+		chatID := ""
+		if node.GetLinkedChat() != nil {
+			chatID = strings.TrimSpace(node.GetLinkedChat().GetId())
+		}
+		if chatID == "" {
+			continue
+		}
+		chatResp, err := t.clients.chat.GetChat(ctx, &chatv1.GetChatRequest{ChatId: chatID})
+		if err != nil || chatResp.GetChat() == nil {
+			continue
+		}
+		chat := chatResp.GetChat()
+		if name := strings.TrimSpace(chat.GetName()); name != "" {
+			node.DisplayName = &name
+		}
+		if node.LinkedChat == nil {
+			node.LinkedChat = &chatv1.ChatRef{Id: chat.GetId()}
+		}
+		ct := chat.GetType()
+		node.LinkedChat.Type = &ct
 	}
 }
