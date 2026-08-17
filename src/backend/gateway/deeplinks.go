@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -10,10 +11,23 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	chatv1 "voice.app/voice/chat/v1"
 	botv1 "voice.app/voice/bot/v1"
+	chatv1 "voice.app/voice/chat/v1"
 	spacev1 "voice.app/voice/space/v1"
 	userv1 "voice.app/voice/user/v1"
+)
+
+// Well-known AASA / assetlinks defaults match today's Gateway placeholders.
+// Ops set env for real Team ID / SHA / package later — do not treat these as
+// a chosen production bundle id. Current Flutter IDs (for ops wiring):
+//   Android applicationId: voice.app.voice_frontend
+//   iOS PRODUCT_BUNDLE_IDENTIFIER: voice.app.voiceFrontend
+//   Firebase iosBundleId: com.voice.app
+const (
+	defaultIOSTeamID                     = "TEAMID"
+	defaultIOSBundleID                   = "gg.voice.app"
+	defaultAndroidPackageName            = "gg.voice.app"
+	defaultAndroidSHA256CertFingerprints = "PLACEHOLDER"
 )
 
 type resolveDeepLinkResponse struct {
@@ -31,10 +45,7 @@ type resolveDeepLinkResponse struct {
 }
 
 func publicWebOrigin() string {
-	if v := strings.TrimSpace(os.Getenv("GATEWAY_PUBLIC_WEB_ORIGIN")); v != "" {
-		return strings.TrimRight(v, "/")
-	}
-	return "https://voice.gg"
+	return strings.TrimRight(envOrDefault("GATEWAY_PUBLIC_WEB_ORIGIN", "https://voice.gg"), "/")
 }
 
 func (g *gateway) handleDeepLinkPublic(w http.ResponseWriter, r *http.Request) bool {
@@ -143,18 +154,87 @@ func (g *gateway) handleWellKnown(w http.ResponseWriter, r *http.Request) bool {
 	}
 	switch r.URL.Path {
 	case "/.well-known/apple-app-site-association":
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"applinks":{"apps":[],"details":[{"appID":"TEAMID.gg.voice.app","paths":["/invite/*","/s/*","/ch/*","/u/*","/dm/*"]}]}}`))
+		writeWellKnownJSON(w, appleAppSiteAssociationJSON())
 		return true
 	case "/.well-known/assetlinks.json":
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`[{"relation":["delegate_permission/common.handle_all_urls"],"target":{"namespace":"android_app","package_name":"gg.voice.app","sha256_cert_fingerprints":["PLACEHOLDER"]}}]`))
+		writeWellKnownJSON(w, androidAssetLinksJSON())
 		return true
 	default:
 		return false
 	}
+}
+
+func writeWellKnownJSON(w http.ResponseWriter, payload any) {
+	w.Header().Set("Content-Type", "application/json")
+	body, err := json.Marshal(payload)
+	if err != nil {
+		http.Error(w, "well-known encode failed", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(body)
+}
+
+func appleAppSiteAssociationJSON() map[string]any {
+	appID := wellKnownIOSTeamID() + "." + wellKnownIOSBundleID()
+	return map[string]any{
+		"applinks": map[string]any{
+			"apps": []string{},
+			"details": []map[string]any{
+				{
+					"appID": appID,
+					"paths": []string{"/invite/*", "/s/*", "/ch/*", "/u/*", "/dm/*"},
+				},
+			},
+		},
+	}
+}
+
+func androidAssetLinksJSON() []map[string]any {
+	return []map[string]any{
+		{
+			"relation": []string{"delegate_permission/common.handle_all_urls"},
+			"target": map[string]any{
+				"namespace":                "android_app",
+				"package_name":             wellKnownAndroidPackageName(),
+				"sha256_cert_fingerprints": wellKnownAndroidSHA256Fingerprints(),
+			},
+		},
+	}
+}
+
+func wellKnownIOSTeamID() string {
+	return envOrDefault("GATEWAY_IOS_TEAM_ID", defaultIOSTeamID)
+}
+
+func wellKnownIOSBundleID() string {
+	return envOrDefault("GATEWAY_IOS_BUNDLE_ID", defaultIOSBundleID)
+}
+
+func wellKnownAndroidPackageName() string {
+	return envOrDefault("GATEWAY_ANDROID_PACKAGE_NAME", defaultAndroidPackageName)
+}
+
+func wellKnownAndroidSHA256Fingerprints() []string {
+	raw := envOrDefault("GATEWAY_ANDROID_SHA256_CERT_FINGERPRINTS", defaultAndroidSHA256CertFingerprints)
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if v := strings.TrimSpace(p); v != "" {
+			out = append(out, v)
+		}
+	}
+	if len(out) == 0 {
+		return []string{defaultAndroidSHA256CertFingerprints}
+	}
+	return out
+}
+
+func envOrDefault(key, fallback string) string {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		return v
+	}
+	return fallback
 }
 
 func (t *transcoder) serveLinks(w http.ResponseWriter, r *http.Request, rest string) bool {

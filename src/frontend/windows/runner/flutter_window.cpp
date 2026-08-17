@@ -26,6 +26,8 @@ bool FlutterWindow::OnCreate() {
   }
   RegisterPlugins(flutter_controller_->engine());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
+  desktop_host_ = std::make_unique<DesktopHost>(
+      flutter_controller_->engine()->messenger(), this);
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
     this->Show();
@@ -40,6 +42,7 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  desktop_host_.reset();
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
@@ -65,6 +68,10 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
       break;
+  }
+
+  if (desktop_host_) {
+    desktop_host_->HandleMessage(hwnd, message, wparam, lparam);
   }
 
   return Win32Window::MessageHandler(hwnd, message, wparam, lparam);

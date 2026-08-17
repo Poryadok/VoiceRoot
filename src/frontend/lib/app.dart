@@ -15,6 +15,7 @@ import 'state/message_cache_providers.dart';
 import 'state/e2e_providers.dart';
 import 'state/push_notifications_controller.dart';
 import 'state/voip_push_controller.dart';
+import 'state/windows_desktop_lifecycle.dart';
 import 'state/profile_context_controller.dart';
 import 'state/shell_providers.dart';
 import 'state/social_providers.dart';
@@ -76,6 +77,7 @@ class VoiceApp extends ConsumerWidget {
     ref.watch(messageCacheLifecycleProvider);
     ref.watch(e2eBootstrapLifecycleProvider);
     ref.watch(profileContextCoordinatorProvider);
+    ref.watch(windowsDesktopLifecycleProvider);
     final themeAsync = ref.watch(voiceMaterialThemeProvider);
     final auth = ref.watch(authControllerProvider);
     final localePref = ref.watch(appLocalePreferenceProvider);
@@ -93,10 +95,7 @@ class VoiceApp extends ConsumerWidget {
             home: const AuthScreen(),
           );
         }
-        return _AuthenticatedRouterApp(
-          locale: effectiveLocale,
-          theme: theme,
-        );
+        return _AuthenticatedRouterApp(locale: effectiveLocale, theme: theme);
       },
       loading: () => MaterialApp(
         locale: effectiveLocale,
@@ -128,16 +127,14 @@ class VoiceApp extends ConsumerWidget {
 }
 
 class _AuthenticatedRouterApp extends StatefulWidget {
-  const _AuthenticatedRouterApp({
-    required this.locale,
-    required this.theme,
-  });
+  const _AuthenticatedRouterApp({required this.locale, required this.theme});
 
   final Locale? locale;
   final ThemeData theme;
 
   @override
-  State<_AuthenticatedRouterApp> createState() => _AuthenticatedRouterAppState();
+  State<_AuthenticatedRouterApp> createState() =>
+      _AuthenticatedRouterAppState();
 }
 
 class _AuthenticatedRouterAppState extends State<_AuthenticatedRouterApp> {
@@ -195,7 +192,9 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
     if (state.uri.path == '/' || state.uri.path.isEmpty) return;
     try {
       final target = parseDeepLinkUrl(uri.toString());
-      await ref.read(deepLinkControllerProvider.notifier).onIncomingLink(target);
+      await ref
+          .read(deepLinkControllerProvider.notifier)
+          .onIncomingLink(target);
       await resolveAndNavigateDeepLink(ref, target);
     } catch (_) {}
   }
@@ -269,10 +268,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
   }
 
   void _openSettingsSheet() {
-    showVoiceBottomSheet<void>(
-      context: context,
-      child: const SettingsSheet(),
-    );
+    showVoiceBottomSheet<void>(context: context, child: const SettingsSheet());
   }
 
   void _onEmojiSelected(String emoji) {
@@ -316,91 +312,96 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
     return VoiceShortcuts(
       child: OnboardingOverlay(
         child: VersionPolicyOverlay(
-      child: CallErrorListener(
-        child: Scaffold(
-          backgroundColor: voice.canvas,
-          body: Stack(
-            children: [
-              SafeArea(
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final narrow = VoiceLayout.isNarrow(constraints.maxWidth);
-                    final onBackToChats = selectedChatId == null
-                        ? null
-                        : shellNav.backToChatList;
+          child: CallErrorListener(
+            child: Scaffold(
+              backgroundColor: voice.canvas,
+              body: Stack(
+                children: [
+                  SafeArea(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final narrow = VoiceLayout.isNarrow(
+                          constraints.maxWidth,
+                        );
+                        final onBackToChats = selectedChatId == null
+                            ? null
+                            : shellNav.backToChatList;
 
-                    final sidePanelChild = sidePanel != ShellSidePanel.none &&
-                            !narrow
-                        ? SidePanelHost(onEmojiSelected: _onEmojiSelected)
-                        : null;
+                        final sidePanelChild =
+                            sidePanel != ShellSidePanel.none && !narrow
+                            ? SidePanelHost(onEmojiSelected: _onEmojiSelected)
+                            : null;
 
-                    return ThreeColumnShell(
-                      navigationChild: NavigationPanel(collapsed: inSpace),
-                      navigationCollapsed: inSpace,
-                      middleChild: inSpace
-                          ? SpaceTreeColumn(
-                              spaceId: selectedSpaceId,
-                              selectedChatId: selectedChatId,
-                              onTextChatSelected: shellNav.selectChatInSpace,
-                            )
-                          : null,
-                      mainChild: selectedChatId == null
-                          ? Center(child: Text(l10n.chatRoomSelectPrompt))
-                          : ChatRoomPanel(
-                              chatId: selectedChatId,
-                              onBack: narrow ? onBackToChats : null,
-                            ),
-                      sidePanelChild: sidePanelChild,
-                      showMainOnlyOnNarrow: narrow && selectedChatId != null,
-                      mobileRailChild: narrow && selectedChatId != null
-                          ? const MobileChatStrip()
-                          : null,
-                      header: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const GuestSaveAccountReminderBanner(),
-                          const GuestRestrictedActions(),
-                          if (reconnectBannerVisible && selectedChatId == null)
-                            VoiceCompactBanner(
-                              key: const Key('global_reconnect_banner'),
-                              message: l10n.chatRealtimeReconnecting,
-                              icon: Icons.sync_problem,
-                              tone: VoiceBannerTone.warning,
-                            ),
-                          _SessionBar(
-                            useProfileSwitcher: !narrow,
-                            onLogout: () => ref
-                                .read(authControllerProvider.notifier)
-                                .logout(),
-                            onEditProfile: profileAsync.valueOrNull == null
-                                ? null
-                                : () => _openProfileEditSheet(
-                                    profileAsync.valueOrNull!,
-                                  ),
-                            onOpenSettings: _openSettingsSheet,
-                            sessionLabel: sessionLabel,
-                            logoutLabel: l10n.authLogout,
-                            editProfileTooltip: l10n.profileEditTooltip,
-                            settingsTooltip: l10n.settingsTooltip,
+                        return ThreeColumnShell(
+                          navigationChild: NavigationPanel(collapsed: inSpace),
+                          navigationCollapsed: inSpace,
+                          middleChild: inSpace
+                              ? SpaceTreeColumn(
+                                  spaceId: selectedSpaceId,
+                                  selectedChatId: selectedChatId,
+                                  onTextChatSelected:
+                                      shellNav.selectChatInSpace,
+                                )
+                              : null,
+                          mainChild: selectedChatId == null
+                              ? Center(child: Text(l10n.chatRoomSelectPrompt))
+                              : ChatRoomPanel(
+                                  chatId: selectedChatId,
+                                  onBack: narrow ? onBackToChats : null,
+                                ),
+                          sidePanelChild: sidePanelChild,
+                          showMainOnlyOnNarrow:
+                              narrow && selectedChatId != null,
+                          mobileRailChild: narrow && selectedChatId != null
+                              ? const MobileChatStrip()
+                              : null,
+                          header: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const GuestSaveAccountReminderBanner(),
+                              const GuestRestrictedActions(),
+                              if (reconnectBannerVisible &&
+                                  selectedChatId == null)
+                                VoiceCompactBanner(
+                                  key: const Key('global_reconnect_banner'),
+                                  message: l10n.chatRealtimeReconnecting,
+                                  icon: Icons.sync_problem,
+                                  tone: VoiceBannerTone.warning,
+                                ),
+                              _SessionBar(
+                                useProfileSwitcher: !narrow,
+                                onLogout: () => ref
+                                    .read(authControllerProvider.notifier)
+                                    .logout(),
+                                onEditProfile: profileAsync.valueOrNull == null
+                                    ? null
+                                    : () => _openProfileEditSheet(
+                                        profileAsync.valueOrNull!,
+                                      ),
+                                onOpenSettings: _openSettingsSheet,
+                                sessionLabel: sessionLabel,
+                                logoutLabel: l10n.authLogout,
+                                editProfileTooltip: l10n.profileEditTooltip,
+                                settingsTooltip: l10n.settingsTooltip,
+                              ),
+                              if (_GatewayStatusBar.shouldShow(health))
+                                _GatewayStatusBar(asyncHealth: health),
+                            ],
                           ),
-                          if (_GatewayStatusBar.shouldShow(health))
-                            _GatewayStatusBar(asyncHealth: health),
-                        ],
-                      ),
-                    );
-                  },
-                ),
+                        );
+                      },
+                    ),
+                  ),
+                  const IncomingCallOverlay(),
+                  const MatchmakingMatchOverlayHost(),
+                  const MatchRatingOverlayHost(),
+                  const OutgoingCallOverlay(),
+                  const SafeArea(child: ActiveCallPanel()),
+                ],
               ),
-              const IncomingCallOverlay(),
-              const MatchmakingMatchOverlayHost(),
-              const MatchRatingOverlayHost(),
-              const OutgoingCallOverlay(),
-              const SafeArea(child: ActiveCallPanel()),
-            ],
+            ),
           ),
         ),
-      ),
-      ),
       ),
     );
   }

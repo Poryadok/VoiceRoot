@@ -107,7 +107,8 @@ Host `flutter_tester` suite under `IntegrationTestWidgetsFlutterBinding` (not a 
 
 | Test | Scope |
 |------|--------|
-| [`integration_test/device_driver_smoke_test.dart`](device_driver_smoke_test.dart) | Deep-link → conversation; FCM/VoIP `register-device` contracts; FCM→WS notification mapping |
+| [`integration_test/device_driver_smoke_test.dart`](device_driver_smoke_test.dart) | Host tester: deeplink matrix (invite/space/profile/DM/`voice://`/pending-after-login); FCM/VoIP `register-device`; FCM→WS mapping. Does not close DL-04. |
+| [`integration_test/android_emulator_deeplink_test.dart`](android_emulator_deeplink_test.dart) | Android emulator only (skips on flutter-tester): `voice://` + https App Link URL shape |
 
 **CI:** job `flutter-device-driver` in [`.github/workflows/ci.yml`](../../../.github/workflows/ci.yml) (Tier 1, path-filtered with frontend).
 
@@ -119,7 +120,48 @@ flutter test integration_test/device_driver_smoke_test.dart -d flutter-tester `
   --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080
 ```
 
-**Honest gaps (still XL / out of CI):** real-device alert delivery (NT-05), mobile App Links / AASA (DL-04 remainder), CallKit / PushKit / LiveKit media.
+**Honest gaps (still XL / out of CI):** real-device alert delivery (NT-05), prod App Links / AASA on `voice.gg` (DL-04 remainder — Play SHA, Team ID), CallKit / PushKit / LiveKit media.
+
+## Android emulator driver (P3.1 A3)
+
+Custom-scheme + https App Link URL handling on a **real Android emulator** (not `flutter-tester`). Skips cleanly when no Android device is attached.
+
+Does **not** require Play SHA or prod `voice.gg` well-known.
+
+**Local (PowerShell), emulator already booted:**
+
+```powershell
+cd src/frontend
+flutter devices
+flutter test integration_test/android_emulator_deeplink_test.dart -d emulator-5554
+```
+
+Replace `emulator-5554` with the id from `flutter devices`. Without an emulator/device the same file **skips** (host `flutter-tester` CI stays green).
+
+**Custom scheme via adb** (app already installed; package `voice.app.voice_frontend`):
+
+```powershell
+adb shell am start -W -a android.intent.action.VIEW `
+  -c android.intent.category.BROWSABLE `
+  -d "voice://ch/emu-chat/m/emu-msg" `
+  voice.app.voice_frontend
+```
+
+**Debug SHA App Links** (optional local Gateway, **not** prod `voice.gg`):
+
+```powershell
+keytool -list -v -keystore "$env:USERPROFILE\.android\debug.keystore" `
+  -alias androiddebugkey -storepass android -keypass android
+# Copy SHA-256 into Gateway:
+#   GATEWAY_ANDROID_PACKAGE_NAME=voice.app.voice_frontend
+#   GATEWAY_ANDROID_SHA256_CERT_FINGERPRINTS=<debug SHA-256>
+adb shell pm set-app-links --package voice.app.voice_frontend 1 voice.gg
+adb shell am start -W -a android.intent.action.VIEW `
+  -d "https://voice.gg/ch/emu-chat" `
+  voice.app.voice_frontend
+```
+
+Prod universal links still need human A4 (Team ID, Play SHA, physical device).
 
 ## Chrome integration_test (deep-links/platforms (docs/features/deep-links.md) deep links)
 

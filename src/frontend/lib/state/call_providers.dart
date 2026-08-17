@@ -7,6 +7,7 @@ import '../backend/screen_share_capabilities.dart';
 import '../backend/livekit_url.dart';
 import '../backend/realtime_client.dart';
 import '../backend/voice_client.dart';
+import '../settings/voice_input_settings.dart';
 import 'auth_providers.dart';
 import 'chat_providers.dart';
 import 'gateway_providers.dart';
@@ -30,21 +31,19 @@ final liveKitRoomFactoryProvider = Provider<VoiceLiveKitRoom Function()>((ref) {
 /// Bumped when group voice sessions start/end so [groupActiveCallProvider] refreshes.
 final groupActiveCallRefreshTickProvider = StateProvider<int>((ref) => 0);
 
-final groupActiveCallProvider = FutureProvider.family<VoiceCallSession?, String>((
-  ref,
-  chatId,
-) async {
-  ref.watch(groupActiveCallRefreshTickProvider);
-  final auth = ref.watch(authorizationHeaderProvider);
-  if (auth == null) return null;
-  final result = await ref
-      .read(voiceCallsClientProvider)
-      .getActiveGroupCallForChat(authorization: auth, groupChatId: chatId);
-  return switch (result) {
-    VoiceApiOk(:final data) => data,
-    VoiceApiFailure() => null,
-  };
-});
+final groupActiveCallProvider =
+    FutureProvider.family<VoiceCallSession?, String>((ref, chatId) async {
+      ref.watch(groupActiveCallRefreshTickProvider);
+      final auth = ref.watch(authorizationHeaderProvider);
+      if (auth == null) return null;
+      final result = await ref
+          .read(voiceCallsClientProvider)
+          .getActiveGroupCallForChat(authorization: auth, groupChatId: chatId);
+      return switch (result) {
+        VoiceApiOk(:final data) => data,
+        VoiceApiFailure() => null,
+      };
+    });
 
 enum CallPhase { idle, outgoing, incoming, connecting, active, ended, failed }
 
@@ -56,6 +55,7 @@ class CallState {
     this.outgoingChatId,
     this.outgoingCalleeProfileId,
     this.isMuted = false,
+    this.isPttHeld = false,
     this.isSpeakerMuted = false,
     this.isVideoEnabled = false,
     this.needsAudioPlaybackUnlock = false,
@@ -69,6 +69,7 @@ class CallState {
   final String? outgoingChatId;
   final String? outgoingCalleeProfileId;
   final bool isMuted;
+  final bool isPttHeld;
   final bool isSpeakerMuted;
   final bool isVideoEnabled;
   final bool needsAudioPlaybackUnlock;
@@ -109,6 +110,7 @@ class CallState {
     String? outgoingCalleeProfileId,
     bool clearOutgoingTarget = false,
     bool? isMuted,
+    bool? isPttHeld,
     bool? isSpeakerMuted,
     bool? isVideoEnabled,
     bool? needsAudioPlaybackUnlock,
@@ -129,6 +131,7 @@ class CallState {
           ? null
           : (outgoingCalleeProfileId ?? this.outgoingCalleeProfileId),
       isMuted: isMuted ?? this.isMuted,
+      isPttHeld: isPttHeld ?? this.isPttHeld,
       isSpeakerMuted: isSpeakerMuted ?? this.isSpeakerMuted,
       isVideoEnabled: isVideoEnabled ?? this.isVideoEnabled,
       needsAudioPlaybackUnlock:
@@ -141,37 +144,47 @@ class CallState {
 
 class CallController extends StateNotifier<CallState> {
   CallController(this._ref) : super(const CallState()) {
-    _eventsSub = _ref.read(callSignalingStreamProvider).listen(_onRealtimeFrame);
-    _linkSub = _ref.listen<RealtimeLinkStatus>(
-      realtimeLinkStatusProvider,
-      (prev, next) {
-        if (next == RealtimeLinkStatus.connected) {
-          unawaited(_syncActiveCallIfIdle());
-        }
-      },
-      fireImmediately: true,
-    );
+    _eventsSub = _ref
+        .read(callSignalingStreamProvider)
+        .listen(_onRealtimeFrame);
+    _linkSub = _ref.listen<RealtimeLinkStatus>(realtimeLinkStatusProvider, (
+      prev,
+      next,
+    ) {
+      if (next == RealtimeLinkStatus.connected) {
+        unawaited(_syncActiveCallIfIdle());
+      }
+    }, fireImmediately: true);
+    _inputSub = _ref.listen<VoiceInputSettings>(voiceInputSettingsProvider, (
+      prev,
+      next,
+    ) {
+      unawaited(_applyEffectiveMicMute());
+    });
   }
 
   final Ref _ref;
   StreamSubscription<RealtimeFrame>? _eventsSub;
   ProviderSubscription<RealtimeLinkStatus>? _linkSub;
+  ProviderSubscription<VoiceInputSettings>? _inputSub;
   VoiceLiveKitRoom? _room;
   Future<void> Function()? _pendingVoiceRetry;
 
   @override
   set state(CallState value) {
-    final prevActive = super.state.phase == CallPhase.active ||
+    final prevActive =
+        super.state.phase == CallPhase.active ||
         super.state.phase == CallPhase.connecting;
     super.state = value;
-    final nextActive = value.phase == CallPhase.active ||
-        value.phase == CallPhase.connecting;
+    final nextActive =
+        value.phase == CallPhase.active || value.phase == CallPhase.connecting;
     if (prevActive != nextActive) {
       unawaited(
         _ref.read(voiceBackgroundSessionProvider).setActive(nextActive),
       );
     }
   }
+
   bool _startCallInFlight = false;
   bool _groupVoiceInFlight = false;
   bool _voiceRoomInFlight = false;
@@ -354,11 +367,13 @@ class CallController extends StateNotifier<CallState> {
     _voiceRoomInFlight = true;
     state = state.copyWith(phase: CallPhase.connecting, clearError: true);
     try {
-      final result = await _ref.read(voiceCallsClientProvider).joinVoiceRoom(
-        authorization: auth,
-        voiceRoomId: voiceRoomId,
-        spaceId: spaceId,
-      );
+      final result = await _ref
+          .read(voiceCallsClientProvider)
+          .joinVoiceRoom(
+            authorization: auth,
+            voiceRoomId: voiceRoomId,
+            spaceId: spaceId,
+          );
       if (!mounted) return;
       switch (result) {
         case VoiceApiOk(:final data):
@@ -489,7 +504,7 @@ class CallController extends StateNotifier<CallState> {
     state = state.copyWith(isMuted: muted);
     try {
       await _room?.ensureAudioPlayback();
-      await _room?.setMuted(muted);
+      await _applyEffectiveMicMute();
       if (auth != null && current != null) {
         await _ref
             .read(voiceCallsClientProvider)
@@ -500,7 +515,30 @@ class CallController extends StateNotifier<CallState> {
             );
       }
     } catch (_) {
-      if (mounted) state = state.copyWith(isMuted: previous);
+      if (mounted) {
+        state = state.copyWith(isMuted: previous);
+        await _applyEffectiveMicMute();
+      }
+    }
+  }
+
+  Future<void> setPttHeld(bool held) async {
+    if (state.isPttHeld == held) return;
+    state = state.copyWith(isPttHeld: held);
+    await _applyEffectiveMicMute();
+  }
+
+  Future<void> _applyEffectiveMicMute() async {
+    final mode = _ref.read(voiceInputSettingsProvider).mode;
+    final muted = isMicEffectivelyMuted(
+      userMuted: state.isMuted,
+      mode: mode,
+      pttHeld: state.isPttHeld,
+    );
+    try {
+      await _room?.setMuted(muted);
+    } catch (_) {
+      // LiveKit may not be connected yet; local state still reflects hold/mute.
     }
   }
 
@@ -557,16 +595,16 @@ class CallController extends StateNotifier<CallState> {
             roomId: current.roomId,
             streamId: data,
           );
-          _ref
-              .read(screenShareControllerProvider.notifier)
-              .setError('$e');
+          _ref.read(screenShareControllerProvider.notifier).setError('$e');
         }
       case VoiceApiFailure(:final message, :final statusCode):
-        _ref.read(screenShareControllerProvider.notifier).setError(
-          statusCode == 429 || message.contains('limit')
-              ? 'screen_share_limit'
-              : message,
-        );
+        _ref
+            .read(screenShareControllerProvider.notifier)
+            .setError(
+              statusCode == 429 || message.contains('limit')
+                  ? 'screen_share_limit'
+                  : message,
+            );
     }
   }
 
@@ -576,11 +614,13 @@ class CallController extends StateNotifier<CallState> {
     final share = _ref.read(screenShareControllerProvider);
     if (auth == null || current == null) return;
     await _room?.stopScreenShare();
-    await _ref.read(voiceCallsClientProvider).stopScreenShare(
-      authorization: auth,
-      roomId: current.roomId,
-      streamId: share.localStreamId,
-    );
+    await _ref
+        .read(voiceCallsClientProvider)
+        .stopScreenShare(
+          authorization: auth,
+          roomId: current.roomId,
+          streamId: share.localStreamId,
+        );
     _ref
         .read(screenShareControllerProvider.notifier)
         .setLocalSharing(isSharing: false);
@@ -626,8 +666,9 @@ class CallController extends StateNotifier<CallState> {
       case VoiceApiOk(:final data):
         final livekitUrl = resolveLivekitConnectUrl(
           apiUrl: data.livekitUrl,
-          clientFallback:
-              _ref.read(gatewayConfigProvider).effectiveLivekitFallback,
+          clientFallback: _ref
+              .read(gatewayConfigProvider)
+              .effectiveLivekitFallback,
         );
         if (livekitUrl.isEmpty) {
           await _failLiveKitConnect(
@@ -656,7 +697,8 @@ class CallController extends StateNotifier<CallState> {
             token: data.jwt,
             video: session.mediaKind == VoiceCallMediaKind.video,
           );
-          if (!mounted || !_isConnectCurrent(connectGeneration, connectRoomId)) {
+          if (!mounted ||
+              !_isConnectCurrent(connectGeneration, connectRoomId)) {
             return;
           }
           state = state.copyWith(
@@ -667,8 +709,10 @@ class CallController extends StateNotifier<CallState> {
             isVideoEnabled: session.mediaKind == VoiceCallMediaKind.video,
             clearOutgoingTarget: true,
           );
+          await _applyEffectiveMicMute();
         } on Object {
-          if (!mounted || !_isConnectCurrent(connectGeneration, connectRoomId)) {
+          if (!mounted ||
+              !_isConnectCurrent(connectGeneration, connectRoomId)) {
             return;
           }
           await _failLiveKitConnect(
@@ -687,8 +731,7 @@ class CallController extends StateNotifier<CallState> {
   }
 
   bool _isConnectCurrent(int generation, String roomId) {
-    return _connectGeneration == generation &&
-        state.session?.roomId == roomId;
+    return _connectGeneration == generation && state.session?.roomId == roomId;
   }
 
   Future<void> _failLiveKitConnect({
@@ -737,7 +780,9 @@ class CallController extends StateNotifier<CallState> {
         }
       case 'call_accepted':
         final current = state.session;
-        final activeProfileId = _ref.read(authControllerProvider).activeProfileId;
+        final activeProfileId = _ref
+            .read(authControllerProvider)
+            .activeProfileId;
         if (current != null &&
             frame.data?['room_id'] == current.roomId &&
             activeProfileId == current.initiatorProfileId) {
@@ -822,8 +867,8 @@ class CallController extends StateNotifier<CallState> {
     if (roomId.isEmpty) return null;
     final roomType = '${data['room_type']}'.toLowerCase();
     final roomTypeEnum = '${data['room_type_enum']}'.toUpperCase();
-    final sessionKind = roomTypeEnum.contains('GROUP_VOICE') ||
-            roomType == 'group_voice'
+    final sessionKind =
+        roomTypeEnum.contains('GROUP_VOICE') || roomType == 'group_voice'
         ? VoiceSessionKind.groupVoice
         : roomTypeEnum.contains('VOICE_ROOM') || roomType == 'voice_room'
         ? VoiceSessionKind.voiceRoom
@@ -847,6 +892,7 @@ class CallController extends StateNotifier<CallState> {
   void dispose() {
     _eventsSub?.cancel();
     _linkSub?.close();
+    _inputSub?.close();
     unawaited(_room?.disconnect());
     super.dispose();
   }

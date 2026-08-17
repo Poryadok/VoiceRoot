@@ -4,6 +4,7 @@ import 'package:livekit_client/livekit_client.dart' as livekit;
 
 import '../../backend/voice_client.dart';
 import '../../l10n/app_localizations.dart';
+import '../../settings/voice_input_settings.dart';
 import '../../state/auth_providers.dart';
 import '../../state/call_providers.dart';
 import '../../state/gateway_providers.dart';
@@ -20,6 +21,8 @@ class ActiveCallPanel extends ConsumerStatefulWidget {
   static const Key panelKey = Key('active_call_panel');
   static const Key unlockAudioKey = Key('active_call_unlock_audio');
   static const Key muteKey = Key('active_call_mute');
+  static const Key pttKey = Key('active_call_ptt');
+  static const Key voiceInputModeKey = Key('active_call_voice_input_mode');
   static const Key speakerKey = Key('active_call_speaker');
   static const Key videoKey = Key('active_call_video');
   static const Key hangupKey = Key('active_call_hangup');
@@ -83,7 +86,9 @@ class _ActiveCallPanelState extends ConsumerState<ActiveCallPanel> {
             )
           : null,
       showMinimize: useExpandedMedia && !_minimized,
-      onMinimize: useExpandedMedia ? () => setState(() => _minimized = true) : null,
+      onMinimize: useExpandedMedia
+          ? () => setState(() => _minimized = true)
+          : null,
       onExpand: useExpandedMedia && _minimized
           ? () => setState(() => _minimized = false)
           : null,
@@ -129,7 +134,11 @@ class _ActiveCallPanelState extends ConsumerState<ActiveCallPanel> {
                         ),
                         child: Row(
                           children: [
-                            Icon(Icons.volume_up, color: voice.focusRing, size: 18),
+                            Icon(
+                              Icons.volume_up,
+                              color: voice.focusRing,
+                              size: 18,
+                            ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
@@ -294,9 +303,9 @@ class _CallControlsRow extends ConsumerWidget {
             ),
             child: Text(
               voiceProfileBadge!,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: voice.textSecondary,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: voice.textSecondary),
             ),
           ),
           const SizedBox(width: 8),
@@ -320,11 +329,50 @@ class _CallControlsRow extends ConsumerWidget {
         IconButton.filledTonal(
           key: ActiveCallPanel.muteKey,
           tooltip: call.isMuted ? l10n.callUnmute : l10n.callMute,
-          onPressed: () => ref
-              .read(callControllerProvider.notifier)
-              .setMuted(!call.isMuted),
+          onPressed: () =>
+              ref.read(callControllerProvider.notifier).setMuted(!call.isMuted),
           icon: Icon(call.isMuted ? Icons.mic_off : Icons.mic),
         ),
+        IconButton.filledTonal(
+          key: ActiveCallPanel.voiceInputModeKey,
+          tooltip:
+              ref.watch(voiceInputSettingsProvider).mode == VoiceInputMode.ptt
+              ? l10n.callVadMode
+              : l10n.callPttMode,
+          onPressed: () {
+            final current = ref.read(voiceInputSettingsProvider).mode;
+            ref
+                .read(voiceInputSettingsProvider.notifier)
+                .setMode(
+                  current == VoiceInputMode.ptt
+                      ? VoiceInputMode.vad
+                      : VoiceInputMode.ptt,
+                );
+          },
+          icon: Icon(
+            ref.watch(voiceInputSettingsProvider).mode == VoiceInputMode.ptt
+                ? Icons.record_voice_over
+                : Icons.graphic_eq,
+          ),
+        ),
+        if (ref.watch(voiceInputSettingsProvider).mode == VoiceInputMode.ptt)
+          Listener(
+            key: ActiveCallPanel.pttKey,
+            onPointerDown: (_) =>
+                ref.read(callControllerProvider.notifier).setPttHeld(true),
+            onPointerUp: (_) =>
+                ref.read(callControllerProvider.notifier).setPttHeld(false),
+            onPointerCancel: (_) =>
+                ref.read(callControllerProvider.notifier).setPttHeld(false),
+            child: IconButton.filledTonal(
+              tooltip: l10n.callPttHoldToTalk,
+              onPressed: () {},
+              icon: Icon(
+                Icons.keyboard_voice,
+                color: call.isPttHeld ? voice.focusRing : null,
+              ),
+            ),
+          ),
         IconButton.filledTonal(
           key: ActiveCallPanel.speakerKey,
           tooltip: call.isSpeakerMuted
@@ -333,21 +381,15 @@ class _CallControlsRow extends ConsumerWidget {
           onPressed: () => ref
               .read(callControllerProvider.notifier)
               .setSpeakerMuted(!call.isSpeakerMuted),
-          icon: Icon(
-            call.isSpeakerMuted ? Icons.volume_off : Icons.volume_up,
-          ),
+          icon: Icon(call.isSpeakerMuted ? Icons.volume_off : Icons.volume_up),
         ),
         IconButton.filledTonal(
           key: ActiveCallPanel.videoKey,
-          tooltip: call.isVideoEnabled
-              ? l10n.callVideoOff
-              : l10n.callVideoOn,
+          tooltip: call.isVideoEnabled ? l10n.callVideoOff : l10n.callVideoOn,
           onPressed: () => ref
               .read(callControllerProvider.notifier)
               .setVideoEnabled(!call.isVideoEnabled),
-          icon: Icon(
-            call.isVideoEnabled ? Icons.videocam : Icons.videocam_off,
-          ),
+          icon: Icon(call.isVideoEnabled ? Icons.videocam : Icons.videocam_off),
         ),
         const PlatformWebVoiceLimitationsButton(),
         const ScreenShareCallButton(),
@@ -405,14 +447,8 @@ class _CallVideoPreview extends ConsumerWidget {
       color: mutedColor,
       alignment: Alignment.center,
       child: track != null
-          ? livekit.VideoTrackRenderer(
-              track,
-              fit: livekit.VideoViewFit.cover,
-            )
-          : Text(
-              placeholder,
-              style: TextStyle(color: textColor),
-            ),
+          ? livekit.VideoTrackRenderer(track, fit: livekit.VideoViewFit.cover)
+          : Text(placeholder, style: TextStyle(color: textColor)),
     );
   }
 }

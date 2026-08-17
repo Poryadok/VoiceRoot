@@ -18,7 +18,7 @@ _Пока пусто — критичные клиентские блокеры 
 ### Deep links & mobile acceptance
 
 - [ ] **Приёмка invite→join** — universal link открывает приложение / web fallback ([deep-links.md](../features/deep-links.md)).
-- [ ] **Mobile device E2E** — App Links / custom scheme Android/iOS (сейчас только parser smoke в `deeplink_web_test.dart`).
+- [ ] **Mobile device E2E** — App Links / custom scheme on Android/iOS still open. Host scaffold: `integration_test/device_driver_smoke_test.dart` + CI `flutter-device-driver` (#42); Chrome parser: `deeplink_web_test.dart`. Physical App Links / AASA / NT-05 remain.
 
 ### Guest & onboarding live
 

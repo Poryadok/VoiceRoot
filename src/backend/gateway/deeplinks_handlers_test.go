@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -88,4 +89,90 @@ func TestDeepLinkResolveInvalidURLParam(t *testing.T) {
 		require.Equal(t, http.StatusBadRequest, resp.Code)
 		require.True(t, strings.Contains(resp.Body.String(), "error"))
 	})
+}
+
+func TestWellKnownAppleAppSiteAssociation_DefaultPlaceholders(t *testing.T) {
+	h := newDeepLinksContractGateway(t, &recordingSpaceInvites{})
+	resp := performRequest(h, http.MethodGet, "/.well-known/apple-app-site-association", "", nil)
+
+	require.Equal(t, http.StatusOK, resp.Code)
+	require.Contains(t, resp.Header().Get("Content-Type"), "application/json")
+
+	var payload map[string]any
+	decodeJSON(t, resp.Body, &payload)
+	details := wellKnownAASADetails(t, payload)
+	require.Equal(t, "TEAMID.gg.voice.app", details["appID"])
+	paths, ok := details["paths"].([]any)
+	require.True(t, ok)
+	require.Contains(t, paths, "/invite/*")
+	require.Contains(t, paths, "/s/*")
+	require.Contains(t, paths, "/ch/*")
+	require.Contains(t, paths, "/u/*")
+	require.Contains(t, paths, "/dm/*")
+}
+
+func TestWellKnownAppleAppSiteAssociation_EnvOverride(t *testing.T) {
+	t.Setenv("GATEWAY_IOS_TEAM_ID", "ABCD1234")
+	t.Setenv("GATEWAY_IOS_BUNDLE_ID", "voice.app.voiceFrontend")
+
+	h := newDeepLinksContractGateway(t, &recordingSpaceInvites{})
+	resp := performRequest(h, http.MethodGet, "/.well-known/apple-app-site-association", "", nil)
+
+	require.Equal(t, http.StatusOK, resp.Code)
+	var payload map[string]any
+	decodeJSON(t, resp.Body, &payload)
+	details := wellKnownAASADetails(t, payload)
+	require.Equal(t, "ABCD1234.voice.app.voiceFrontend", details["appID"])
+}
+
+func TestWellKnownAssetLinks_DefaultPlaceholders(t *testing.T) {
+	h := newDeepLinksContractGateway(t, &recordingSpaceInvites{})
+	resp := performRequest(h, http.MethodGet, "/.well-known/assetlinks.json", "", nil)
+
+	require.Equal(t, http.StatusOK, resp.Code)
+	require.Contains(t, resp.Header().Get("Content-Type"), "application/json")
+
+	target := wellKnownAssetLinksTarget(t, resp.Body)
+	require.Equal(t, "android_app", target["namespace"])
+	require.Equal(t, "gg.voice.app", target["package_name"])
+	fps, ok := target["sha256_cert_fingerprints"].([]any)
+	require.True(t, ok)
+	require.Equal(t, []any{"PLACEHOLDER"}, fps)
+}
+
+func TestWellKnownAssetLinks_EnvOverride(t *testing.T) {
+	t.Setenv("GATEWAY_ANDROID_PACKAGE_NAME", "voice.app.voice_frontend")
+	t.Setenv("GATEWAY_ANDROID_SHA256_CERT_FINGERPRINTS", "AA:BB:CC:DD,EE:FF:00:11")
+
+	h := newDeepLinksContractGateway(t, &recordingSpaceInvites{})
+	resp := performRequest(h, http.MethodGet, "/.well-known/assetlinks.json", "", nil)
+
+	require.Equal(t, http.StatusOK, resp.Code)
+	target := wellKnownAssetLinksTarget(t, resp.Body)
+	require.Equal(t, "voice.app.voice_frontend", target["package_name"])
+	fps, ok := target["sha256_cert_fingerprints"].([]any)
+	require.True(t, ok)
+	require.Equal(t, []any{"AA:BB:CC:DD", "EE:FF:00:11"}, fps)
+}
+
+func wellKnownAASADetails(t *testing.T, payload map[string]any) map[string]any {
+	t.Helper()
+	applinks, ok := payload["applinks"].(map[string]any)
+	require.True(t, ok)
+	details, ok := applinks["details"].([]any)
+	require.True(t, ok)
+	require.NotEmpty(t, details)
+	first, ok := details[0].(map[string]any)
+	require.True(t, ok)
+	return first
+}
+
+func wellKnownAssetLinksTarget(t *testing.T, body io.Reader) map[string]any {
+	t.Helper()
+	var entries []map[string]any
+	decodeJSON(t, body, &entries)
+	require.NotEmpty(t, entries)
+	target, ok := entries[0]["target"].(map[string]any)
+	require.True(t, ok)
+	return target
 }

@@ -39,6 +39,9 @@ class Win32Window {
   // Show the current window. Returns true if the window was successfully shown.
   bool Show();
 
+  // Hide the current window without destroying it (close-to-tray).
+  bool Hide();
+
   // Release OS resources associated with window.
   void Destroy();
 

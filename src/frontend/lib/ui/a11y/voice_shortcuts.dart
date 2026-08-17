@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../backend/messages_client.dart';
+import '../../settings/voice_input_settings.dart';
+import '../../state/call_providers.dart';
 import '../../state/chat_providers.dart';
 import '../../state/shared_media_providers.dart';
 import '../../state/shell_providers.dart';
@@ -17,10 +19,14 @@ class VoiceShortcuts extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return Shortcuts(
       shortcuts: const {
-        SingleActivator(LogicalKeyboardKey.keyK, control: true): _FocusSearchIntent(),
-        SingleActivator(LogicalKeyboardKey.comma, control: true): _OpenSettingsIntent(),
-        SingleActivator(LogicalKeyboardKey.arrowDown, alt: true): _NextUnreadChatIntent(),
-        SingleActivator(LogicalKeyboardKey.arrowUp, alt: true): _PrevUnreadChatIntent(),
+        SingleActivator(LogicalKeyboardKey.keyK, control: true):
+            _FocusSearchIntent(),
+        SingleActivator(LogicalKeyboardKey.comma, control: true):
+            _OpenSettingsIntent(),
+        SingleActivator(LogicalKeyboardKey.arrowDown, alt: true):
+            _NextUnreadChatIntent(),
+        SingleActivator(LogicalKeyboardKey.arrowUp, alt: true):
+            _PrevUnreadChatIntent(),
         SingleActivator(LogicalKeyboardKey.escape): _FocusComposerIntent(),
         SingleActivator(LogicalKeyboardKey.arrowDown): _NextMessageIntent(),
         SingleActivator(LogicalKeyboardKey.arrowUp): _PrevMessageIntent(),
@@ -46,13 +52,17 @@ class VoiceShortcuts extends ConsumerWidget {
           ),
           _NextUnreadChatIntent: CallbackAction<_NextUnreadChatIntent>(
             onInvoke: (_) {
-              ref.read(unreadChatNavigationProvider.notifier).selectNextUnread();
+              ref
+                  .read(unreadChatNavigationProvider.notifier)
+                  .selectNextUnread();
               return null;
             },
           ),
           _PrevUnreadChatIntent: CallbackAction<_PrevUnreadChatIntent>(
             onInvoke: (_) {
-              ref.read(unreadChatNavigationProvider.notifier).selectPrevUnread();
+              ref
+                  .read(unreadChatNavigationProvider.notifier)
+                  .selectPrevUnread();
               return null;
             },
           ),
@@ -95,7 +105,28 @@ class VoiceShortcuts extends ConsumerWidget {
             },
           ),
         },
-        child: Focus(autofocus: true, child: child),
+        child: Focus(
+          autofocus: true,
+          onKeyEvent: (node, event) {
+            final settings = ref.read(voiceInputSettingsProvider);
+            if (settings.mode != VoiceInputMode.ptt) {
+              return KeyEventResult.ignored;
+            }
+            if (event.logicalKey != settings.pttKey) {
+              return KeyEventResult.ignored;
+            }
+            if (event is KeyDownEvent) {
+              ref.read(callControllerProvider.notifier).setPttHeld(true);
+              return KeyEventResult.handled;
+            }
+            if (event is KeyUpEvent) {
+              ref.read(callControllerProvider.notifier).setPttHeld(false);
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.handled;
+          },
+          child: child,
+        ),
       ),
     );
   }

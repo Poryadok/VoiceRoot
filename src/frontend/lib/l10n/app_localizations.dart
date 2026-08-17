@@ -1046,6 +1046,24 @@ abstract class AppLocalizations {
   /// **'Unmute'**
   String get callUnmute;
 
+  /// No description provided for @callPttHoldToTalk.
+  ///
+  /// In en, this message translates to:
+  /// **'Hold to talk'**
+  String get callPttHoldToTalk;
+
+  /// No description provided for @callPttMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Push-to-talk'**
+  String get callPttMode;
+
+  /// No description provided for @callVadMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice activity'**
+  String get callVadMode;
+
   /// No description provided for @callSpeakerOff.
   ///
   /// In en, this message translates to:
@@ -2419,6 +2437,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Reduced motion'**
   String get settingsReducedMotion;
+
+  /// No description provided for @settingsPttMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Push-to-talk mode'**
+  String get settingsPttMode;
+
+  /// No description provided for @settingsPttKeybind.
+  ///
+  /// In en, this message translates to:
+  /// **'Push-to-talk key'**
+  String get settingsPttKeybind;
+
+  /// No description provided for @settingsPttKeybindHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Press a key…'**
+  String get settingsPttKeybindHint;
+
+  /// No description provided for @trayQuit.
+  ///
+  /// In en, this message translates to:
+  /// **'Quit'**
+  String get trayQuit;
 
   /// No description provided for @settingsHelp.
   ///

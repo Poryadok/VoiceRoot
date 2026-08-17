@@ -11,10 +11,10 @@ _Нет открытых пунктов._
 
 ## High
 
-- [x] **П.1 — Матчмейкинг внутри спейса** — `StartSpaceQueue`, Redis `mm:space:{space_id}`, `UpdateSpaceMmConfig`, Gateway `POST /spaces/{id}/matchmaking/queue`, Flutter вкладка ММ в спейсе (#32). Compose/Flutter live IT still open. Спека: [matchmaking.md](../features/matchmaking.md) §«Внутри спейса».
+- [x] **П.1 — Матчмейкинг внутри спейса** — `StartSpaceQueue`, Redis `mm:space:{space_id}`, `UpdateSpaceMmConfig`, Gateway `POST /spaces/{id}/matchmaking/queue`, Flutter вкладка ММ в спейсе (#32). Lives shipped: `TestComposeSpaceMatchmakingQueue_live`, `space_mm_e2e_live_test` (P2.1). Спека: [matchmaking.md](../features/matchmaking.md) §«Внутри спейса».
 - [ ] **П.2 — Постматчевый цикл** — `RateTeammates`, `BanFromMatchmaking`, `ListMatchHistory`; таблицы `match_history`, `mm_ratings`, `mm_bans`; modal при выходе из match-squad; экран истории в профиле. Спека: [matchmaking.md](../features/matchmaking.md) §Оценка/Бан/История. Тесты: `matchmaking_rating_e2e_live_test.dart`, compose.
 - [x] **П.3 — Stories «Ищу пати» → матчмейкинг** — `RespondToLfpStory` (JOIN|INVITE), NATS `story.lfp_response`, Notification inline Accept/Decline, Flutter LFP card. Критерий: JOIN → accept → пати в очереди (#35). Спека: [stories.md](../features/stories.md). → также Batch 7 (`story.lfp_created` subscriber).
-- [ ] **П.4 — Каталог игр + заявки пользователей** — seed Dota 2/CS2/Valorant/PUBG; `SubmitGameRequest` → `pending_moderation`; Admin модерация; Flutter wizard «Добавить игру». Спека: [game-catalog.md](../features/game-catalog.md).
+- [x] **П.4 — Каталог игр + заявки пользователей** — seed Dota 2/CS2/Valorant/PUBG; `SubmitGameRequest` → `pending_moderation`; Admin модерация; Flutter wizard «Добавить игру». Lives shipped: `TestComposeGameRequestModeration_live`, `game_request_e2e_live_test` (P2.3). Спека: [game-catalog.md](../features/game-catalog.md).
 
 
 ## Common
@@ -22,8 +22,8 @@ _Нет открытых пунктов._
 - [ ] **П.5 — Верификация ранга Steam/FACEIT (MVP)** — `linked_game_accounts`, OAuth/API, badge в ММ, фильтр `verified_rank_only`. Спека: [PROJECT.md](../PROJECT.md), [matchmaking.md](../features/matchmaking.md). → пересекается [User] verification gaps (Batch 14).
 - [ ] **П.6 — Верификация Twitch/YouTube/DNS** — cron `VerificationStatusRefresh`, org TXT flow, Flutter Settings → Верификация. Спека: [verification.md](../features/verification.md). → Batch 14 [User] Verification V1.
 - [ ] **П.8 — Синхронизация контактов телефонной книги** — Flutter hash + `POST /contacts/resolve`, onboarding «Найди друзей», `discoverable_by_phone`. Спека: [auth-and-contacts.md](../features/auth-and-contacts.md). → **Batch 4** `compose_phone_sync_live_test`.
-- [ ] **П.9 — Гостевой → постоянный аккаунт** — `ConvertGuest` negative tests, NATS `user.guest_converted`, server `guest_reminder_last_shown_at`, localized errors. Спека: [auth-and-contacts.md](../features/auth-and-contacts.md). → **Batch 6**.
-- [ ] **П.10 — Уведомления: тихие часы, гранулярность, voice join** — persist `notification_settings`/`quiet_hours` в БД; `VOICE_MEMBER_JOINED` push; FCM grouping. Спека: [notifications.md](../features/notifications.md). → Batch 5 (Flutter UI готов) + Batch 14 [Notification].
+- [x] **П.9 — Гостевой → постоянный аккаунт** — `ConvertGuest` negative tests, NATS `user.guest_converted`, server `guest_reminder_last_shown_at`. Lives shipped: `TestComposeConvertGuestNATS_live`, `TestComposeGuestReminder_live`, `guest_reminder_e2e_live_test` (P1.1–P1.2). UX/docs leftovers: [client.md](client.md) §Guest. Спека: [auth-and-contacts.md](../features/auth-and-contacts.md).
+- [ ] **П.10 — Уведомления: тихие часы, гранулярность, voice join** — Set/Get quiet hours lives shipped (`TestComposeQuietHours_live`, `quiet_hours_e2e_live_test`, P2.5). Still open: FCM grouping (1 push per chat; [notifications.md](../features/notifications.md) §Каналы). → Batch 5 leftovers + Batch 14 [Notification].
 - [x] **П.11 — Командирский режим и raise hand** — `SetCommanderMode`, `RaiseHand`, `GrantFloor`, LiveKit ducking, Flutter organizer panel. Спека: [voice-chat.md](../features/voice-chat.md). → Batch 14 [Voice] unimplemented RPCs.
 - [ ] **П.12 — Качество войса/видео по подписке** — `GetEntitlements` → token `video_layer`, File upload cap, Flutter upgrade banner. Спека: [subscription.md](../features/subscription.md). → Batch 14 [Subscription] JWT tier.
 - [ ] **П.13 — E2E encryption UX и multi-device** — `PutE2EKeyBackup` flow, verification code в DM, SQLCipher cache, key-change banner. Спека: [encryption.md](../features/encryption.md). → **Batch 2** encryption live tests.
@@ -31,7 +31,7 @@ _Нет открытых пунктов._
 - [x] **П.15 — Бот-платформа v2** — autocomplete, subcommands, ephemeral/deferred, Developer Portal catalog, Flutter `/` picker. Спека: [bots.md](../features/bots.md). → Batch 14 [Bot] (#30).
 - [ ] **П.16 — Подписка Premium + Space Pro end-to-end** — webhooks lifecycle, grace notifications, paywall/cosmetics/downgrade picker. Спека: [subscription.md](../features/subscription.md). → Batch 14 [Subscription] Critical/High.
 - [ ] **П.19 — Accessibility выше baseline** — High Contrast theme, desktop shortcuts (`Ctrl+K`, message list nav), reduced motion toggle, semantics audit. Спека: [accessibility.md](../features/accessibility.md). → Batch 5 a11y хвосты.
-- [ ] **П.20 — Онбординг на ММ и спейсы** — `OnboardingController` flags, coach-marks MM/space/invite deep link, guest vs regular flows. Спека: [onboarding.md](../features/onboarding.md), [deep-links.md](../features/deep-links.md). → **Batch 4** onboarding E2E.
+- [x] **П.20 — Онбординг на ММ и спейсы** — `OnboardingController` flags, coach-marks MM/space/invite deep link, guest vs regular flows. Lives shipped: `onboarding_coach_e2e_live_test` (P2.12 / #20). Спека: [onboarding.md](../features/onboarding.md), [deep-links.md](../features/deep-links.md).
 
 
 ## Low

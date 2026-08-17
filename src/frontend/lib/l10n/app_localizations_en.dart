@@ -544,6 +544,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get callUnmute => 'Unmute';
 
   @override
+  String get callPttHoldToTalk => 'Hold to talk';
+
+  @override
+  String get callPttMode => 'Push-to-talk';
+
+  @override
+  String get callVadMode => 'Voice activity';
+
+  @override
   String get callSpeakerOff => 'Mute speakers';
 
   @override
@@ -1319,6 +1328,18 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsReducedMotion => 'Reduced motion';
+
+  @override
+  String get settingsPttMode => 'Push-to-talk mode';
+
+  @override
+  String get settingsPttKeybind => 'Push-to-talk key';
+
+  @override
+  String get settingsPttKeybindHint => 'Press a key…';
+
+  @override
+  String get trayQuit => 'Quit';
 
   @override
   String get settingsHelp => 'Help';

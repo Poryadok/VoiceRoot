@@ -1,6 +1,6 @@
 # План закрытия пробелов интеграционных тестов
 
-Дата: **2026-08-15**. Опирается на [integration-tests-inventory.md](integration-tests-inventory.md).  
+Дата: **2026-08-17** (post-Wave 2). Опирается на [integration-tests-inventory.md](integration-tests-inventory.md).  
 **Реализация тестов не входит в этот документ** — только порядок работ.
 
 Источники приоритетов: [TESTING.md](../TESTING.md) (критичные пути, smoke/full), [PLAN.md](../PLAN.md), [docs/todo/backend.md](../todo/backend.md), [docs/todo/product-roadmap.md](../todo/product-roadmap.md), [docs/todo/client.md](../todo/client.md).
@@ -59,8 +59,8 @@
 | P2.2 | **done** | `TestComposeStoryLfpParty_live` + Flutter `story_lfp_e2e_live_test` (LFP → JOIN → Decide ACCEPT) |
 | P2.1 | **done** | `TestComposeSpaceMatchmakingQueue_live` + Flutter `space_mm_e2e_live_test` (space_id + non-member deny + isolation) |
 | P3.4 | **done** | `scripts/staging/smoke-request-id.sh` (DM → Loki chain); OBS-02 |
-| P3.2 | **partial** | `windows_desktop_smoke_test` + existing version/auto-update unit paths (UPD-03); tray/global PTT/overlay product still П.17–18 (PL-03) |
-| P3.1 | **partial** | `integration_test/device_driver_smoke_test.dart` + CI `flutter-device-driver` (host tester: deeplink + FCM/VoIP register contracts); NT-05 / on-device App Links / CallKit still open |
+| P3.2 | **partial** | tray + in-app/global PTT landed (PL-03); overlay П.18 out of scope; UPD-03 signed CDN still stub |
+| P3.1 | **partial** | host deeplink matrix + CI `flutter-device-driver`; Gateway well-known env-driven; Android emulator driver skips without device; NT-05 / prod App Links / CallKit still human A4 |
 | P3.6 | **done** | ResendMailSender when `AUTH_RESEND_API_KEY` set; `/password/reset` E2E + AU-13 |
 | P3.3 | **done** | Axe-analog landmark CI (`make a11y-web-axe`) + high contrast / reduced-motion automation; A11Y-03 |
 | P3.5 | **deferred** | blocked on product scope — [ADR 005](../adr/005-rich-media-live-tests-deferred.md); no compose/Flutter lives until features expand |
@@ -77,7 +77,7 @@
 | C. Flutter live | `src/frontend/test/*_e2e_live_test.dart` | `VOICE_RUN_LIVE_INTEGRATION=true flutter test …` |
 | D. Go service IT | `*_integration_test.go` + testcontainers | `go test ./...` (full) / nightly |
 | E. Auth Java IT | `*IntegrationTest.java` | `mvn -B test` |
-| F. Device `integration_test/` | `src/frontend/integration_test/` | CI job `flutter-device-driver` (host tester scaffold); physical device / emulator suite still open |
+| F. Device `integration_test/` | `src/frontend/integration_test/` | CI job `flutter-device-driver` (host tester matrix); Android emulator file skips without device; physical push/VoIP still open |
 
 Effort: **S** ≤0.5d · **M** 1–2d · **L** 3–5d · **XL** >1w (инфра/продукт + тесты).
 
@@ -182,8 +182,8 @@ Effort: **S** ≤0.5d · **M** 1–2d · **L** 3–5d · **XL** >1w (инфра/
 
 | # | Работа | Слой | IDs | Effort |
 |---|--------|------|-----|--------|
-| P3.1 | Реальный `integration_test` driver suite (push, deeplink, VoIP) | F | PL-04, DL-04, NT-05 | XL | **partial** — host driver + CI; device push/App Links/CallKit still open |
-| P3.2 | Windows tray/PTT/auto-update smoke | C/CI | PL-03, UPD-02/03 | L | **partial** — auto-update stub smoke; tray/PTT blocked on П.17 |
+| P3.1 | Реальный `integration_test` driver suite (push, deeplink, VoIP) | F | PL-04, DL-04, NT-05 | XL | **partial** — host matrix + well-known env + Android emulator skip-without-device; prod App Links / NT-05 / CallKit still human |
+| P3.2 | Windows tray/PTT/auto-update smoke | C/CI | PL-03, UPD-02/03 | L | **partial** — tray + PTT landed (PL-03); signed auto-update CDN still stub (UPD-03); overlay П.18 |
 | P3.3 | A11y automation beyond widgets | C | A11Y-03 | M | **done** — `make a11y-web-axe` + HC/reduced-motion tests |
 | P3.4 | Staging observability request_id scripted smoke | ops | OBS-02 | M | **done** — `scripts/staging/smoke-request-id.sh` |
 | P3.5 | Sticker/GIF/voice-message/recording lives | B+C | TC-MSG-09/10, VC-10 | L | **deferred** — [ADR 005](../adr/005-rich-media-live-tests-deferred.md); product scope insufficient (text-chat one-liners; recording local-only) |
@@ -218,11 +218,11 @@ Sprint 3+ :       P2 as roadmap features land; P3 device suite parallel track
 
 Обновлять сводку в inventory после каждого спринта:
 
-| Метрика | Сейчас (2026-08-15 post-sprint) | Цель soft-launch |
+| Метрика | Сейчас (2026-08-17 post-Wave 2) | Цель soft-launch |
 |---------|---------------------:|------------------:|
 | Total cases | 208 | ≥ same scope |
-| `[exists]` | ~116 | ≥ 130 |
-| `[missing]` | ~52 | ≤ 35 (остальное — roadmap/deferred) |
+| `[exists]` | 151 | ≥ 130 |
+| `[missing]` | 22 | ≤ 35 (остальное — roadmap/deferred) |
 | `[missing]` Tier-0 related | ~0 (smoke paths) | 0 |
 | Smoke manifest name mismatches | 0 | 0 |
 | Analytics DoD assert | AN-03/04 covered | AN-03/04 green |

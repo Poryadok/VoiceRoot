@@ -6,6 +6,7 @@ import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/voice_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
+import 'package:voice_frontend/settings/voice_input_settings.dart';
 import 'package:voice_frontend/state/call_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/ui/call/active_call_panel.dart';
@@ -19,7 +20,9 @@ void main() {
   ) async {
     final container = ProviderContainer(
       overrides: [
-        ...voiceAppTestOverrides(client: MockClient((_) async => http.Response('{}', 200))),
+        ...voiceAppTestOverrides(
+          client: MockClient((_) async => http.Response('{}', 200)),
+        ),
         gatewayConfigProvider.overrideWithValue(
           const GatewayConfig(baseUrl: 'http://127.0.0.1:18080'),
         ),
@@ -58,119 +61,130 @@ void main() {
     expect(find.byKey(ActiveCallPanel.hangupKey), findsOneWidget);
   });
 
-  testWidgets('ActiveCallPanel video call uses fullscreen layout with minimize bar', (
-    tester,
-  ) async {
-    final container = ProviderContainer(
-      overrides: [
-        ...voiceAppTestOverrides(client: MockClient((_) async => http.Response('{}', 200))),
-        gatewayConfigProvider.overrideWithValue(
-          const GatewayConfig(baseUrl: 'http://127.0.0.1:18080'),
+  testWidgets(
+    'ActiveCallPanel video call uses fullscreen layout with minimize bar',
+    (tester) async {
+      final container = ProviderContainer(
+        overrides: [
+          ...voiceAppTestOverrides(
+            client: MockClient((_) async => http.Response('{}', 200)),
+          ),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://127.0.0.1:18080'),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      container.read(callControllerProvider.notifier).state = const CallState(
+        phase: CallPhase.active,
+        session: VoiceCallSession(
+          roomId: 'room-1',
+          livekitRoomName: 'lk-room',
+          chatId: 'chat-1',
+          initiatorProfileId: 'me',
+          calleeProfileId: 'peer',
+          mediaKind: VoiceCallMediaKind.video,
+          status: VoiceCallStatus.active,
         ),
-      ],
-    );
-    addTearDown(container.dispose);
+        isVideoEnabled: true,
+      );
 
-    container.read(callControllerProvider.notifier).state = const CallState(
-      phase: CallPhase.active,
-      session: VoiceCallSession(
-        roomId: 'room-1',
-        livekitRoomName: 'lk-room',
-        chatId: 'chat-1',
-        initiatorProfileId: 'me',
-        calleeProfileId: 'peer',
-        mediaKind: VoiceCallMediaKind.video,
-        status: VoiceCallStatus.active,
-      ),
-      isVideoEnabled: true,
-    );
-
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: MaterialApp(
-          theme: voiceTestTheme(),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: const Scaffold(body: ActiveCallPanel()),
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const Scaffold(body: ActiveCallPanel()),
+          ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    final panelBox = tester.getSize(find.byKey(ActiveCallPanel.panelKey));
-    final screenHeight = tester.view.physicalSize.height / tester.view.devicePixelRatio;
-    expect(panelBox.height, greaterThan(screenHeight * 0.8));
+      final panelBox = tester.getSize(find.byKey(ActiveCallPanel.panelKey));
+      final screenHeight =
+          tester.view.physicalSize.height / tester.view.devicePixelRatio;
+      expect(panelBox.height, greaterThan(screenHeight * 0.8));
 
-    expect(find.byKey(const Key('active_call_minimize_bar')), findsOneWidget);
-    expect(find.byKey(const Key('active_call_minimize')), findsOneWidget);
+      expect(find.byKey(const Key('active_call_minimize_bar')), findsOneWidget);
+      expect(find.byKey(const Key('active_call_minimize')), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('active_call_minimize')));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('active_call_minimize')));
+      await tester.pumpAndSettle();
 
-    final minimizedBar = tester.getSize(find.byKey(const Key('active_call_minimize_bar')));
-    expect(minimizedBar.height, lessThan(80));
-    expect(find.byKey(ActiveCallPanel.videoPlaceholderKey), findsNothing);
-  });
+      final minimizedBar = tester.getSize(
+        find.byKey(const Key('active_call_minimize_bar')),
+      );
+      expect(minimizedBar.height, lessThan(80));
+      expect(find.byKey(ActiveCallPanel.videoPlaceholderKey), findsNothing);
+    },
+  );
 
-  testWidgets('ActiveCallPanel audio call shows unlock banner and control toggles', (
-    tester,
-  ) async {
-    final container = ProviderContainer(
-      overrides: [
-        ...voiceAppTestOverrides(client: MockClient((_) async => http.Response('{}', 200))),
-        gatewayConfigProvider.overrideWithValue(
-          const GatewayConfig(baseUrl: 'http://127.0.0.1:18080'),
+  testWidgets(
+    'ActiveCallPanel audio call shows unlock banner and control toggles',
+    (tester) async {
+      final container = ProviderContainer(
+        overrides: [
+          ...voiceAppTestOverrides(
+            client: MockClient((_) async => http.Response('{}', 200)),
+          ),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://127.0.0.1:18080'),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      container.read(callControllerProvider.notifier).state = const CallState(
+        phase: CallPhase.active,
+        session: VoiceCallSession(
+          roomId: 'room-1',
+          livekitRoomName: 'lk-room',
+          chatId: 'chat-1',
+          initiatorProfileId: 'me',
+          calleeProfileId: 'peer',
+          mediaKind: VoiceCallMediaKind.audio,
+          status: VoiceCallStatus.active,
+          sessionKind: VoiceSessionKind.groupVoice,
         ),
-      ],
-    );
-    addTearDown(container.dispose);
+        needsAudioPlaybackUnlock: true,
+        isMuted: true,
+        isSpeakerMuted: true,
+      );
 
-    container.read(callControllerProvider.notifier).state = const CallState(
-      phase: CallPhase.active,
-      session: VoiceCallSession(
-        roomId: 'room-1',
-        livekitRoomName: 'lk-room',
-        chatId: 'chat-1',
-        initiatorProfileId: 'me',
-        calleeProfileId: 'peer',
-        mediaKind: VoiceCallMediaKind.audio,
-        status: VoiceCallStatus.active,
-        sessionKind: VoiceSessionKind.groupVoice,
-      ),
-      needsAudioPlaybackUnlock: true,
-      isMuted: true,
-      isSpeakerMuted: true,
-    );
-
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: MaterialApp(
-          theme: voiceTestTheme(),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: const Scaffold(body: ActiveCallPanel()),
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const Scaffold(body: ActiveCallPanel()),
+          ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.byKey(ActiveCallPanel.unlockAudioKey), findsOneWidget);
-    expect(find.byKey(ActiveCallPanel.speakerKey), findsOneWidget);
-    expect(find.byKey(ActiveCallPanel.videoKey), findsOneWidget);
+      expect(find.byKey(ActiveCallPanel.unlockAudioKey), findsOneWidget);
+      expect(find.byKey(ActiveCallPanel.speakerKey), findsOneWidget);
+      expect(find.byKey(ActiveCallPanel.videoKey), findsOneWidget);
 
-    await tester.tap(find.byKey(ActiveCallPanel.muteKey));
-    await tester.tap(find.byKey(ActiveCallPanel.speakerKey));
-    await tester.tap(find.byKey(ActiveCallPanel.videoKey));
-    await tester.tap(find.byKey(ActiveCallPanel.unlockAudioKey));
-    await tester.pump();
-  });
+      await tester.tap(find.byKey(ActiveCallPanel.muteKey));
+      await tester.tap(find.byKey(ActiveCallPanel.speakerKey));
+      await tester.tap(find.byKey(ActiveCallPanel.videoKey));
+      await tester.tap(find.byKey(ActiveCallPanel.unlockAudioKey));
+      await tester.pump();
+    },
+  );
 
   testWidgets('ActiveCallPanel connecting shows spinner label', (tester) async {
     final container = ProviderContainer(
       overrides: [
-        ...voiceAppTestOverrides(client: MockClient((_) async => http.Response('{}', 200))),
+        ...voiceAppTestOverrides(
+          client: MockClient((_) async => http.Response('{}', 200)),
+        ),
         gatewayConfigProvider.overrideWithValue(
           const GatewayConfig(baseUrl: 'http://127.0.0.1:18080'),
         ),
@@ -207,4 +221,66 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(find.byKey(ActiveCallPanel.panelKey), findsOneWidget);
   });
+
+  testWidgets('PTT mode shows hold-to-talk; hold/release toggles isPttHeld', (
+    tester,
+  ) async {
+    final container = ProviderContainer(
+      overrides: [
+        ...voiceAppTestOverrides(
+          client: MockClient((_) async => http.Response('{}', 200)),
+        ),
+        gatewayConfigProvider.overrideWithValue(
+          const GatewayConfig(baseUrl: 'http://127.0.0.1:18080'),
+        ),
+        voiceInputSettingsProvider.overrideWith(
+          () => _FixedPttVoiceInputSettings(),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    container.read(callControllerProvider.notifier).state = const CallState(
+      phase: CallPhase.active,
+      session: VoiceCallSession(
+        roomId: 'room-1',
+        livekitRoomName: 'lk-room',
+        chatId: 'chat-1',
+        initiatorProfileId: 'me',
+        calleeProfileId: 'peer',
+        mediaKind: VoiceCallMediaKind.audio,
+        status: VoiceCallStatus.active,
+      ),
+    );
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: ActiveCallPanel()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(ActiveCallPanel.pttKey), findsOneWidget);
+    expect(find.byKey(ActiveCallPanel.voiceInputModeKey), findsOneWidget);
+
+    final gesture = await tester.press(find.byKey(ActiveCallPanel.pttKey));
+    await tester.pump();
+    expect(container.read(callControllerProvider).isPttHeld, isTrue);
+
+    await gesture.up();
+    await tester.pump();
+    expect(container.read(callControllerProvider).isPttHeld, isFalse);
+  });
+}
+
+class _FixedPttVoiceInputSettings extends VoiceInputSettingsNotifier {
+  @override
+  VoiceInputSettings build() =>
+      const VoiceInputSettings(mode: VoiceInputMode.ptt);
 }

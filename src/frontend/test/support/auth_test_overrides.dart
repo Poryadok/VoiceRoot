@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:voice_frontend/backend/auth_session.dart';
@@ -5,6 +6,8 @@ import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/discover_hint_storage.dart';
 import 'package:voice_frontend/backend/guest_credentials_storage.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
+import 'package:voice_frontend/services/windows_desktop_host.dart';
+import 'package:voice_frontend/settings/voice_input_settings.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/backend/spaces_client.dart';
 import 'package:voice_frontend/backend/message_cache/in_memory_message_cache_store.dart';
@@ -52,6 +55,8 @@ List<Override> voiceAppTestOverrides({required http.Client client}) => [
   versionPolicyProvider.overrideWith(
     (ref) => VersionPolicyController(ref, enablePolling: false),
   ),
+  voiceInputSettingsProvider.overrideWith(TestVoiceInputSettingsNotifier.new),
+  windowsDesktopHostProvider.overrideWithValue(const NoopWindowsDesktopHost()),
 ];
 
 /// Onboarding already completed — avoids overlay dialogs in shell widget tests.
@@ -62,7 +67,9 @@ class TestCompletedOnboardingController extends OnboardingController {
 
 List<Override> guestShellTestOverrides({required http.Client client}) => [
   ...voiceAppTestOverrides(client: client),
-  onboardingControllerProvider.overrideWith(TestCompletedOnboardingController.new),
+  onboardingControllerProvider.overrideWith(
+    TestCompletedOnboardingController.new,
+  ),
   guestSaveAccountReminderVisibleProvider.overrideWith((ref) async => true),
   deepLinkListenerProvider.overrideWith(_NoopDeepLinkListener.new),
   activeProfileProvider.overrideWith((ref) async => _testActiveProfile),
@@ -111,6 +118,21 @@ class _NoopRealtimeHub extends RealtimeHub {
 
   @override
   void ensureSubscribed(String chatId) {}
+}
+
+class TestVoiceInputSettingsNotifier extends VoiceInputSettingsNotifier {
+  @override
+  VoiceInputSettings build() => const VoiceInputSettings();
+
+  @override
+  Future<void> setMode(VoiceInputMode mode) async {
+    state = state.copyWith(mode: mode);
+  }
+
+  @override
+  Future<void> setPttKey(LogicalKeyboardKey key) async {
+    state = state.copyWith(pttKey: key);
+  }
 }
 
 class _UnwiredRef implements Ref {

@@ -1,6 +1,6 @@
 # Инвентарь интеграционных тестов
 
-Дата сверки: **2026-08-15**. Источники: [FEATURES.md](../FEATURES.md), `docs/features/`, [TESTING.md](../TESTING.md), [PLAN.md](../PLAN.md), [`.github/ci/e2e-features.yml`](../../.github/ci/e2e-features.yml), `docs/todo/`.
+Дата сверки: **2026-08-17** (post-Wave 2). Источники: [FEATURES.md](../FEATURES.md), `docs/features/`, [TESTING.md](../TESTING.md), [PLAN.md](../PLAN.md), [`.github/ci/e2e-features.yml`](../../.github/ci/e2e-features.yml), `docs/todo/`.
 
 План закрытия пробелов: [integration-tests-gap-plan.md](integration-tests-gap-plan.md).
 
@@ -31,13 +31,13 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | | Count |
 |--|------:|
 | **Всего кейсов** | 208 |
-| `[exists]` | ~116 |
-| `[partial]` | ~34 |
-| `[missing]` | ~51 |
+| `[exists]` | 151 |
+| `[partial]` | 31 |
+| `[missing]` | 22 |
 | `[deferred]` | 1 |
-| `[n/a]` | 4 |
+| `[n/a]` | 3 |
 
-> Подсчёт по строкам кейсов (колонка статуса). При добавлении тестов обновлять таблицу и gap-plan. Counts after 2026-08-15 gap-plan sprint (FR-03/PV-04, MM-05/06, FL-02/03, AN-03/04, P0 smoke).
+> Подсчёт по строкам кейсов (колонка статуса). При добавлении тестов обновлять таблицу и gap-plan. Counts after 2026-08-17 Wave 2 (P0–P2 lives in master; P3.1/P3.2 still partial, P3.5 deferred).
 
 ### Замечания по манифесту CI
 
@@ -401,7 +401,8 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 | DL-01 | Invite HTML redirect + resolve | `[exists]` | Gateway: `TestComposeDeepLinks_live`; Flutter: `deeplink_invite_e2e_live_test` |
 | DL-02 | Resolve when Search down | `[exists]` | `TestComposeDeepLinksResolveWhenSearchDown_live` |
 | DL-03 | Message/profile/channel deep link kinds | `[partial]` | invite covered; full matrix unclear |
-| DL-04 | Mobile universal links / app links | `[partial]` | host `device_driver_smoke_test` deeplink; on-device App Links / AASA still open |
+| DL-04 | Mobile universal links / app links | `[partial]` | host matrix + Android emulator driver (skips without device); prod AASA/App Links / Play SHA still human A4 |
+
 
 ---
 
@@ -411,8 +412,8 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 |----|------|--------|-----|
 | PL-01 | Mobile narrow layout | `[exists]` | `mobile_layout_e2e_live_test` |
 | PL-02 | Windows version policy 426 | `[exists]` | Gateway: `TestComposeWindowsVersionPolicy_live`; Flutter: `windows_version_e2e_live_test` |
-| PL-03 | Windows tray / PTT / overlay | `[partial]` | capability `canUseGlobalPushToTalkHotkey` + `windows_desktop_smoke_test`; tray/hotkey/overlay product still roadmap П.17–18 |
-| PL-04 | Device driver integration_test suite | `[partial]` | `integration_test/device_driver_smoke_test.dart` + CI `flutter-device-driver`; physical push/VoIP media still open |
+| PL-03 | Windows tray / PTT / overlay | `[exists]` | tray hide + global PTT (`windows_desktop_host_test`, `windows_desktop_smoke_test`); overlay still post-MVP П.18 |
+| PL-04 | Device driver integration_test suite | `[partial]` | host matrix `device_driver_smoke_test` + CI `flutter-device-driver`; Android emulator file skips without device; physical push/VoIP/CallKit still open |
 
 ---
 
@@ -519,4 +520,4 @@ Smoke vs full: [e2e-features.yml](../../.github/ci/e2e-features.yml). В инв�
 3. Часть спек (стикеры, запись войса, view counters) без явных acceptance tests в CI docs.
 4. Federation deferred — исключена из обязательств.
 5. Observability/analytics DoD частично staging-only (`[n/a]`).
-6. «Integration» на Flutter = live host tests + host `integration_test/` driver scaffold (`device_driver_smoke_test`, CI `flutter-device-driver`); physical-device push/VoIP/App Links still open (NT-05 / DL-04 remainder).
+6. «Integration» на Flutter = live host tests + host `integration_test/` driver (`device_driver_smoke_test` matrix, CI `flutter-device-driver`) + Android emulator driver (skips without device); physical-device push/VoIP/prod App Links still open (NT-05 / DL-04 remainder).

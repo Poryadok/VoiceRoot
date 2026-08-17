@@ -545,6 +545,15 @@ class AppLocalizationsRu extends AppLocalizations {
   String get callUnmute => 'Включить микрофон';
 
   @override
+  String get callPttHoldToTalk => 'Удерживайте, чтобы говорить';
+
+  @override
+  String get callPttMode => 'Push-to-talk';
+
+  @override
+  String get callVadMode => 'По голосу';
+
+  @override
   String get callSpeakerOff => 'Выключить звук';
 
   @override
@@ -1324,6 +1333,18 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get settingsReducedMotion => 'Уменьшить анимацию';
+
+  @override
+  String get settingsPttMode => 'Режим push-to-talk';
+
+  @override
+  String get settingsPttKeybind => 'Клавиша push-to-talk';
+
+  @override
+  String get settingsPttKeybindHint => 'Нажмите клавишу…';
+
+  @override
+  String get trayQuit => 'Выйти';
 
   @override
   String get settingsHelp => 'Помощь';

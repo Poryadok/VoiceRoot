@@ -153,6 +153,10 @@ bool Win32Window::Show() {
   return ShowWindow(window_handle_, SW_SHOWNORMAL);
 }
 
+bool Win32Window::Hide() {
+  return ShowWindow(window_handle_, SW_HIDE);
+}
+
 // static
 LRESULT CALLBACK Win32Window::WndProc(HWND const window,
                                       UINT const message,
@@ -186,6 +190,13 @@ Win32Window::MessageHandler(HWND hwnd,
         PostQuitMessage(0);
       }
       return 0;
+
+    case WM_CLOSE:
+      if (!quit_on_close_) {
+        ShowWindow(hwnd, SW_HIDE);
+        return 0;
+      }
+      break;
 
     case WM_DPICHANGED: {
       auto newRectSize = reinterpret_cast<RECT*>(lparam);

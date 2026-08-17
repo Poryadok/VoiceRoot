@@ -15,6 +15,7 @@ import 'package:voice_frontend/backend/realtime_client.dart';
 import 'package:voice_frontend/backend/voice_client.dart';
 import 'package:voice_frontend/backend/guest_credentials_storage.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
+import 'package:voice_frontend/settings/voice_input_settings.dart';
 import 'package:voice_frontend/state/call_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
@@ -56,8 +57,11 @@ class _FakeLiveKitRoom implements VoiceLiveKitRoom {
     endDisconnectCalled = true;
   }
 
+  bool? lastSetMuted;
+
   @override
   Future<void> setMuted(bool muted) async {
+    lastSetMuted = muted;
     if (throwOnSetMuted) throw Exception('mic failed');
   }
 
@@ -170,7 +174,9 @@ ProviderContainer _callTestContainer({
 }) {
   return ProviderContainer(
     overrides: [
-      authSessionStorageProvider.overrideWithValue(InMemoryAuthSessionStorage()),
+      authSessionStorageProvider.overrideWithValue(
+        InMemoryAuthSessionStorage(),
+      ),
       guestCredentialsStorageProvider.overrideWithValue(
         InMemoryGuestCredentialsStorage(),
       ),
@@ -180,14 +186,16 @@ ProviderContainer _callTestContainer({
         gatewayHttpForTest(client, config: config),
       ),
       voiceCallsClientProvider.overrideWith(
-        (ref) => VoiceCallsClient(
-          gateway: ref.watch(gatewayHttpClientProvider),
-        ),
+        (ref) =>
+            VoiceCallsClient(gateway: ref.watch(gatewayHttpClientProvider)),
       ),
       liveKitRoomFactoryProvider.overrideWithValue(() => fakeRoom),
       callSignalingStreamProvider.overrideWith((ref) => realtime.stream),
       authControllerProvider.overrideWith(
         (ref) => _authControllerForProfile(ref, activeProfileId),
+      ),
+      voiceInputSettingsProvider.overrideWith(
+        () => _FixedVadVoiceInputSettings(),
       ),
     ],
   );
@@ -287,17 +295,17 @@ void main() {
     await drainMicrotasks();
     expect(fakeRoom.connectCalls, 0);
     expect(container.read(callControllerProvider).phase, CallPhase.incoming);
-    expect(container.read(callControllerProvider).session?.roomId, session.roomId);
+    expect(
+      container.read(callControllerProvider).session?.roomId,
+      session.roomId,
+    );
   });
 
   test('call_accepted on WS connects initiator to LiveKit', () async {
     final client = MockClient((req) async {
       if (req.method == 'GET' && req.url.path.endsWith('/token')) {
         return http.Response(
-          jsonEncode({
-            'jwt': 'jwt',
-            'livekit_url': 'ws://livekit:7880',
-          }),
+          jsonEncode({'jwt': 'jwt', 'livekit_url': 'ws://livekit:7880'}),
           200,
         );
       }
@@ -329,7 +337,10 @@ void main() {
   });
 
   test('syncs ringing incoming call when realtime link connects', () async {
-    final session = _ringingSession(initiator: 'prof-caller', callee: 'prof-test');
+    final session = _ringingSession(
+      initiator: 'prof-caller',
+      callee: 'prof-test',
+    );
     final client = MockClient((req) async {
       if (req.method == 'GET' && req.url.path.endsWith('/calls/active')) {
         return http.Response(
@@ -442,115 +453,210 @@ void main() {
     addTearDown(realtime.close);
 
     final notifier = container.read(callControllerProvider.notifier);
-    notifier.state = CallState(
-      phase: CallPhase.outgoing,
-      session: session,
-    );
+    notifier.state = CallState(phase: CallPhase.outgoing, session: session);
     realtime.add(
       RealtimeFrame(op: 'call_accepted', data: {'room_id': session.roomId}),
     );
     await drainMicrotasks();
     expect(container.read(callControllerProvider).phase, CallPhase.active);
 
-    notifier.state = container.read(callControllerProvider).copyWith(
-      isSpeakerMuted: true,
-    );
+    notifier.state = container
+        .read(callControllerProvider)
+        .copyWith(isSpeakerMuted: true);
     await notifier.setSpeakerMuted(false);
 
     expect(container.read(callControllerProvider).isSpeakerMuted, isTrue);
   });
 
-  test('startGroupVoice connects LiveKit without outgoing overlay phase', () async {
+  test(
+    'startGroupVoice connects LiveKit without outgoing overlay phase',
+    () async {
+      final client = MockClient((req) async {
+        if (req.method == 'POST' && req.url.path == '/api/v1/voice/calls') {
+          return http.Response(
+            jsonEncode({
+              'call_session': {
+                'room_id': 'room-group-1',
+                'livekit_room_name': 'voice-group-room-1',
+                'room_type_enum': 'VOICE_SESSION_KIND_GROUP_VOICE',
+                'linked_chat': {'id': 'group-1'},
+                'initiator_profile_id': 'prof-test',
+                'media_kind': 'CALL_MEDIA_KIND_AUDIO',
+                'status': 'CALL_STATUS_ACTIVE',
+              },
+            }),
+            200,
+          );
+        }
+        if (req.method == 'GET' && req.url.path.endsWith('/token')) {
+          return http.Response(
+            jsonEncode({'jwt': 'jwt', 'livekit_url': 'ws://127.0.0.1:7880'}),
+            200,
+          );
+        }
+        return http.Response('{}', 404);
+      });
+      final realtime = StreamController<RealtimeFrame>.broadcast();
+      final fakeRoom = _FakeLiveKitRoom();
+      final container = _callTestContainer(
+        client: client,
+        realtime: realtime,
+        fakeRoom: fakeRoom,
+        activeProfileId: 'prof-test',
+      );
+      addTearDown(container.dispose);
+      addTearDown(realtime.close);
+
+      await container
+          .read(callControllerProvider.notifier)
+          .startGroupVoice(groupChatId: 'group-1');
+
+      expect(fakeRoom.connectCalls, 1);
+      final call = container.read(callControllerProvider);
+      expect(call.phase, CallPhase.active);
+      expect(call.session?.isGroupVoice, isTrue);
+      expect(call.isOutgoing, isFalse);
+    },
+  );
+
+  test(
+    'active call keeps voiceBindingProfileId after profile switch',
+    () async {
+      final realtime = StreamController<RealtimeFrame>.broadcast();
+      final container = _callTestContainer(
+        client: MockClient((_) async => http.Response('{}', 404)),
+        realtime: realtime,
+        fakeRoom: _FakeLiveKitRoom(),
+        activeProfileId: 'profile-a',
+      );
+      addTearDown(container.dispose);
+      addTearDown(realtime.close);
+
+      final session = VoiceCallSession(
+        roomId: 'room-1',
+        livekitRoomName: 'lk',
+        chatId: 'chat-1',
+        initiatorProfileId: 'profile-a',
+        calleeProfileId: 'profile-b',
+        mediaKind: VoiceCallMediaKind.audio,
+        status: VoiceCallStatus.active,
+      );
+
+      container.read(callControllerProvider.notifier).state = CallState(
+        phase: CallPhase.active,
+        session: session,
+        voiceBindingProfileId: 'profile-a',
+      );
+
+      final auth = container.read(authControllerProvider.notifier);
+      final prev = auth.state.session!;
+      auth.state = auth.state.copyWith(
+        session: AuthSession(
+          accessToken: prev.accessToken,
+          refreshToken: prev.refreshToken,
+          accountId: prev.accountId,
+          activeProfileId: 'profile-b',
+          expiresInSeconds: prev.expiresInSeconds,
+          accountType: prev.accountType,
+        ),
+      );
+
+      final call = container.read(callControllerProvider);
+      expect(call.phase, CallPhase.active);
+      expect(call.voiceBindingProfileId, 'profile-a');
+      expect(call.session?.roomId, 'room-1');
+    },
+  );
+
+  test('PTT hold unmutes LiveKit without flipping user mute', () async {
+    final session = _ringingSession();
     final client = MockClient((req) async {
-      if (req.method == 'POST' && req.url.path == '/api/v1/voice/calls') {
-        return http.Response(
-          jsonEncode({
-            'call_session': {
-              'room_id': 'room-group-1',
-              'livekit_room_name': 'voice-group-room-1',
-              'room_type_enum': 'VOICE_SESSION_KIND_GROUP_VOICE',
-              'linked_chat': {'id': 'group-1'},
-              'initiator_profile_id': 'prof-test',
-              'media_kind': 'CALL_MEDIA_KIND_AUDIO',
-              'status': 'CALL_STATUS_ACTIVE',
-            },
-          }),
-          200,
-        );
-      }
       if (req.method == 'GET' && req.url.path.endsWith('/token')) {
         return http.Response(
           jsonEncode({'jwt': 'jwt', 'livekit_url': 'ws://127.0.0.1:7880'}),
           200,
         );
       }
+      if (req.url.path.contains('voice-state') ||
+          req.url.path.contains('voice_state')) {
+        return http.Response('{}', 200);
+      }
       return http.Response('{}', 404);
     });
     final realtime = StreamController<RealtimeFrame>.broadcast();
     final fakeRoom = _FakeLiveKitRoom();
-    final container = _callTestContainer(
-      client: client,
-      realtime: realtime,
-      fakeRoom: fakeRoom,
-      activeProfileId: 'prof-test',
+    final container = ProviderContainer(
+      overrides: [
+        authSessionStorageProvider.overrideWithValue(
+          InMemoryAuthSessionStorage(),
+        ),
+        guestCredentialsStorageProvider.overrideWithValue(
+          InMemoryGuestCredentialsStorage(),
+        ),
+        httpClientProvider.overrideWithValue(client),
+        gatewayConfigProvider.overrideWithValue(
+          const GatewayConfig(
+            baseUrl: 'http://api.test',
+            livekitUrl: 'ws://127.0.0.1:7880',
+          ),
+        ),
+        gatewayHttpClientProvider.overrideWithValue(
+          gatewayHttpForTest(
+            client,
+            config: const GatewayConfig(
+              baseUrl: 'http://api.test',
+              livekitUrl: 'ws://127.0.0.1:7880',
+            ),
+          ),
+        ),
+        voiceCallsClientProvider.overrideWith(
+          (ref) =>
+              VoiceCallsClient(gateway: ref.watch(gatewayHttpClientProvider)),
+        ),
+        liveKitRoomFactoryProvider.overrideWithValue(() => fakeRoom),
+        callSignalingStreamProvider.overrideWith((ref) => realtime.stream),
+        authControllerProvider.overrideWith(
+          (ref) => _authControllerForProfile(ref, 'prof-caller'),
+        ),
+        voiceInputSettingsProvider.overrideWith(
+          () => _FixedPttVoiceInputSettings(),
+        ),
+      ],
     );
     addTearDown(container.dispose);
     addTearDown(realtime.close);
 
-    await container
-        .read(callControllerProvider.notifier)
-        .startGroupVoice(groupChatId: 'group-1');
+    final notifier = container.read(callControllerProvider.notifier);
+    notifier.state = CallState(phase: CallPhase.outgoing, session: session);
+    realtime.add(
+      RealtimeFrame(op: 'call_accepted', data: {'room_id': session.roomId}),
+    );
+    await drainMicrotasks();
+    expect(container.read(callControllerProvider).phase, CallPhase.active);
 
-    expect(fakeRoom.connectCalls, 1);
-    final call = container.read(callControllerProvider);
-    expect(call.phase, CallPhase.active);
-    expect(call.session?.isGroupVoice, isTrue);
-    expect(call.isOutgoing, isFalse);
+    await notifier.setPttHeld(false);
+    expect(container.read(callControllerProvider).isMuted, isFalse);
+    expect(container.read(callControllerProvider).isPttHeld, isFalse);
+    expect(fakeRoom.lastSetMuted, isTrue);
+
+    await notifier.setPttHeld(true);
+    expect(container.read(callControllerProvider).isMuted, isFalse);
+    expect(container.read(callControllerProvider).isPttHeld, isTrue);
+    expect(fakeRoom.lastSetMuted, isFalse);
+
+    await notifier.setMuted(true);
+    await notifier.setPttHeld(true);
+    expect(fakeRoom.lastSetMuted, isTrue);
   });
+}
 
-  test('active call keeps voiceBindingProfileId after profile switch', () async {
-    final realtime = StreamController<RealtimeFrame>.broadcast();
-    final container = _callTestContainer(
-      client: MockClient((_) async => http.Response('{}', 404)),
-      realtime: realtime,
-      fakeRoom: _FakeLiveKitRoom(),
-      activeProfileId: 'profile-a',
-    );
-    addTearDown(container.dispose);
-    addTearDown(realtime.close);
+class _FixedVadVoiceInputSettings extends VoiceInputSettingsNotifier {
+  @override
+  VoiceInputSettings build() => const VoiceInputSettings();
+}
 
-    final session = VoiceCallSession(
-      roomId: 'room-1',
-      livekitRoomName: 'lk',
-      chatId: 'chat-1',
-      initiatorProfileId: 'profile-a',
-      calleeProfileId: 'profile-b',
-      mediaKind: VoiceCallMediaKind.audio,
-      status: VoiceCallStatus.active,
-    );
-
-    container.read(callControllerProvider.notifier).state = CallState(
-      phase: CallPhase.active,
-      session: session,
-      voiceBindingProfileId: 'profile-a',
-    );
-
-    final auth = container.read(authControllerProvider.notifier);
-    final prev = auth.state.session!;
-    auth.state = auth.state.copyWith(
-      session: AuthSession(
-        accessToken: prev.accessToken,
-        refreshToken: prev.refreshToken,
-        accountId: prev.accountId,
-        activeProfileId: 'profile-b',
-        expiresInSeconds: prev.expiresInSeconds,
-        accountType: prev.accountType,
-      ),
-    );
-
-    final call = container.read(callControllerProvider);
-    expect(call.phase, CallPhase.active);
-    expect(call.voiceBindingProfileId, 'profile-a');
-    expect(call.session?.roomId, 'room-1');
-  });
+class _FixedPttVoiceInputSettings extends VoiceInputSettingsNotifier {
+  @override
+  VoiceInputSettings build() =>
+      const VoiceInputSettings(mode: VoiceInputMode.ptt);
 }
