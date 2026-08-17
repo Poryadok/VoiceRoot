@@ -13,6 +13,8 @@ import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/e2e/e2e_file_crypto.dart';
 import 'package:voice_frontend/e2e/e2e_image_thumb.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:voice_frontend/settings/voice_input_settings.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
@@ -39,6 +41,10 @@ void main() {
   late Uint8List imageThumbBytes;
   late Uint8List docCiphertext;
   late String docKeyWire;
+
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
 
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
@@ -110,6 +116,9 @@ void main() {
           const GatewayConfig(baseUrl: 'http://api.test'),
         ),
         httpClientProvider.overrideWithValue(client),
+        voiceInputSettingsProvider.overrideWith(
+          _FixedVadVoiceInputSettings.new,
+        ),
         realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
         selectedChatIdProvider.overrideWith((ref) => chatId),
         chatListControllerProvider.overrideWith(_E2eChatListController.new),
@@ -219,6 +228,11 @@ void main() {
 
     expect(find.text('Could not decrypt attachment'), findsNothing);
   });
+}
+
+class _FixedVadVoiceInputSettings extends VoiceInputSettingsNotifier {
+  @override
+  VoiceInputSettings build() => const VoiceInputSettings();
 }
 
 class _NoopRealtimeHub extends RealtimeHub {

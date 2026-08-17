@@ -257,7 +257,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(forwardedIds, ['msg-src-a', 'msg-src-b']);
-    expect(commentaries, ['batch note', isNull]);
+    expect(commentaries, ['batch note', null]);
     expect(find.byKey(ForwardMessageSheet.sheetKey), findsNothing);
   });
 

@@ -77,7 +77,7 @@ CI/CD + выкат: GitHub Actions, promote/deploy, k8s secrets, observability �
 
 ### Tech debt
 
-- [ ] **Promote bootstrap** — первый push в пустой GHCR, force-push, squash-merge → `BASE_TAG` без образов, CI падает на promote (нужен bootstrap full build или `STAGING_FORCE_FULL_ROLLOUT=true`).
+- [x] **Promote bootstrap** — пустой GHCR / squash-merge / force-push: `find_promote_base_sha` больше не abort'ит `changes` (`set -e`); missing manifests → rebuild. Ручной `full` / `STAGING_FORCE_FULL_ROLLOUT=true` остаётся опцией.
 - [ ] **`apply-app-manifests` всегда scale auth 0→1** — даже selective deploy; downtime Auth на каждый app apply ([`apply-app-manifests.sh`](../../scripts/staging/apply-app-manifests.sh)).
 - [ ] **Дедуп frontend Docker build** — отложено (admin/developer-portal: npm build + docker build).
 - [ ] **Prod reuse staging ops scripts** — [`render-and-apply-prod.sh`](../../scripts/prod/render-and-apply-prod.sh) → `rollout-app-tier.sh`, `deploy-changed.sh`, `apply-observability.sh`, `ensure-app-secrets.sh` (алиасы `PROD_*` → `STAGING_*`).

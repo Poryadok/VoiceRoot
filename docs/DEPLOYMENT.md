@@ -50,12 +50,14 @@ export VOICE_IMAGE_REGISTRY=ghcr.io/<owner>/<repo>
 
 ### Promote bootstrap (пустой GHCR / первый selective push)
 
-Если в registry ещё нет образов с `BASE_TAG` (первый push в `master`, squash-merge, force-push), **promote** не найдёт манифесты и CI упадёт на `staging-images-promote` / `staging-stack-lock`. Варианты:
+Если в registry нет полного набора образов для `BASE_TAG` (первый push в `master`, squash-merge, force-push, пустой GHCR), job `changes` **не падает**: `resolve-staging-matrix.sh` отходит назад по истории (до 20 коммитов) и для отсутствующих манифестов ставит **rebuild** вместо promote.
 
-1. **Actions → CI → Run workflow** → profile **`full`** (собрать все образы на `master`).
+Принудительно собрать все образы всё ещё можно так:
+
+1. **Actions → CI → Run workflow** → profile **`full`**.
 2. GitHub Variable **`STAGING_FORCE_FULL_ROLLOUT=true`** + ручной **Staging deploy** с `deploy_mode=full` после одного успешного full build.
 
-После bootstrap selective promote на `master` работает штатно.
+После появления образов в GHCR selective promote на `master` работает штатно.
 
 Версионирование образов: тег по **git SHA** `master` для непрерывного staging; для prod — тег **semver** (`v1.2.3`) или тот же SHA, зафиксированный в релизном манифесте.
 
