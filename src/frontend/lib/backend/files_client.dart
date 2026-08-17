@@ -150,7 +150,7 @@ class VoiceFilesClient {
   }
 
   Future<FilesApiResult<Uint8List>> _downloadPresigned(Uri uri) async {
-    final result = await _gateway.getBytes(uri: uri);
+    final result = await getPresignedBytes(gateway: _gateway, downloadUrl: uri);
     return switch (result) {
       GatewayHttpOk(:final data) => FilesApiOk(data),
       GatewayHttpFailure(:final error) => FilesApiFailure(
@@ -170,11 +170,7 @@ class VoiceFilesClient {
       authorization: authorization,
       createEmpty: file_pb.GetFileURLResponse.create,
     );
-    return _map(result, (data) {
-      final raw = data.presignedGetUrl;
-      if (raw.isEmpty) return raw;
-      return rewritePresignedUrlForHost(Uri.parse(raw)).toString();
-    });
+    return _map(result, (data) => data.presignedGetUrl);
   }
 
   Future<FilesApiResult<void>> putBytes({
