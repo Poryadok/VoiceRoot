@@ -106,7 +106,10 @@ func main() {
 		}
 
 		presenceChecker := presence.Checker(presence.OfflineChecker{})
-		if userAddr := strings.TrimSpace(os.Getenv("USER_GRPC_ADDR")); userAddr != "" {
+		recordPushes := strings.EqualFold(strings.TrimSpace(os.Getenv("NOTIFICATION_RECORD_PUSHES")), "true")
+		if recordPushes {
+			logger.Info("push recording mode: routing as offline (NOTIFICATION_RECORD_PUSHES)")
+		} else if userAddr := strings.TrimSpace(os.Getenv("USER_GRPC_ADDR")); userAddr != "" {
 			if pc, err := presence.NewGRPCChecker(userAddr); err != nil {
 				logger.Warn("user presence checker unavailable; offline-only routing", slog.Any("error", err))
 			} else {

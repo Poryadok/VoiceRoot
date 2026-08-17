@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"net"
 	"net/http"
 	"testing"
@@ -229,18 +230,23 @@ func TestTranscodePhase13_DeleteProfile(t *testing.T) {
 	require.Equal(t, "profile-alt-2", rec.lastDelete.GetProfileId())
 }
 
-// TestTranscodePhase13_SwitchProfile documents POST /api/v1/auth/switch-profile → Auth session with new profile_id.
+// TestTranscodePhase13_SwitchProfile documents POST /api/v1/auth/switch-profile → Auth REST upstream.
 func TestTranscodePhase13_SwitchProfile(t *testing.T) {
 	t.Parallel()
 
-	rec := &recordingPhase13AuthGRPC{}
-	conn, cleanup := startBufconnAuthConn(t, rec)
-	t.Cleanup(cleanup)
+	authUpstream := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, http.MethodPost, r.Method)
+		require.Equal(t, "/api/v1/auth/switch-profile", r.URL.Path)
+		body, _ := io.ReadAll(r.Body)
+		require.Contains(t, string(body), "profile-alt-2")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"new-access","refresh_token":"new-refresh","expires_in_seconds":3600,"account_id":"account-1","profile_id":"profile-alt-2","account_type":"regular"}`))
+	})
 	h := newGatewayForContract(t, gatewayTestOptions{
 		tokenClaims: map[string]tokenClaims{
 			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
 		},
-		transcoder: &transcoder{clients: grpcClients{auth: authv1.NewAuthServiceClient(conn)}},
+		restUpstreams: map[string]http.Handler{"auth": authUpstream},
 	})
 
 	resp := performRequest(h, http.MethodPost, "/api/v1/auth/switch-profile",
@@ -248,8 +254,7 @@ func TestTranscodePhase13_SwitchProfile(t *testing.T) {
 			"Authorization": "Bearer valid-user-token",
 		})
 	require.Equal(t, http.StatusOK, resp.Code, "body=%s", resp.Body.String())
-	require.NotNil(t, rec.lastSwitch)
-	require.Equal(t, "profile-alt-2", rec.lastSwitch.GetProfileId())
+	require.Contains(t, resp.Body.String(), "profile-alt-2")
 }
 
 // TestTranscodePhase13_ConvertGuest documents POST /api/v1/auth/convert-guest → Auth.ConvertGuest

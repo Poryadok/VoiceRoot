@@ -251,8 +251,12 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
       } else if (!token.regionMatches(true, 0, "Bearer ", 0, 7)) {
         token = "Bearer " + token.trim();
       }
+      String deviceInfo = request.getDeviceInfoJson();
+      if (deviceInfo == null || deviceInfo.isBlank()) {
+        deviceInfo = "{}";
+      }
       voice.backend.auth.service.AuthSession session =
-          authService.switchActiveProfile(token, request.getProfileId(), request.getDeviceInfoJson());
+          authService.switchActiveProfile(token, request.getProfileId(), deviceInfo);
       rememberAccess(session.accessToken());
       return SwitchActiveProfileResponse.newBuilder().setSession(toProto(session)).build();
     });

@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 import java.util.Map;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -293,6 +294,12 @@ public class AuthRestController {
       default -> HttpStatus.UNAUTHORIZED;
     };
     return ResponseEntity.status(status).body(Map.of("error", ex.getMessage()));
+  }
+
+  @ExceptionHandler(DuplicateKeyException.class)
+  public ResponseEntity<Map<String, String>> duplicateKey(DuplicateKeyException ex) {
+    return ResponseEntity.status(HttpStatus.CONFLICT)
+        .body(Map.of("error", "registration_conflict"));
   }
 
   public record RegisterRequest(

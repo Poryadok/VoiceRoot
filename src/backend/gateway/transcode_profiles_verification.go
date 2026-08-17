@@ -57,29 +57,8 @@ func (t *transcoder) serveAuthREST(w http.ResponseWriter, r *http.Request, rest 
 		return true
 
 	case r.Method == http.MethodPost && rest == "switch-profile":
-		if t.clients.auth == nil {
-			http.NotFound(w, r)
-			return true
-		}
-		req := &authv1.SwitchActiveProfileRequest{
-			AccessToken:    strings.TrimPrefix(strings.TrimSpace(r.Header.Get("Authorization")), "Bearer "),
-			DeviceInfoJson: "{}",
-		}
-		if err := readProtoJSON(r, req); err != nil {
-			writeGRPCError(w, err)
-			return true
-		}
-		if req.AccessToken == "" {
-			req.AccessToken = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(r.Header.Get("Authorization")), "Bearer "))
-		}
-		resp, err := t.clients.auth.SwitchActiveProfile(ctx, req)
-		if err != nil {
-			writeGRPCError(w, err)
-			return true
-		}
-		sess := resp.GetSession()
-		writeProtoJSON(w, http.StatusOK, sess)
-		return true
+		// Auth REST issues sessions with normalized device_info; gRPC path is for internal callers only.
+		return false
 
 	case r.Method == http.MethodPost && rest == "convert-guest":
 		if t.clients.auth == nil {

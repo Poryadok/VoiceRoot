@@ -1,6 +1,7 @@
 // Compose-only IdP/DNS fixture for verification.md VR-02/03 live tests.
 // Not used in staging/prod. Helix partner + YPP allowed + seeded TXT.
 import http from "node:http";
+import { randomUUID } from "node:crypto";
 import { URL } from "node:url";
 
 const dns = new Map();
@@ -35,11 +36,15 @@ const server = http.createServer(async (req, res) => {
     return;
   }
   if (req.method === "GET" && u.pathname === "/helix/users") {
+    // Unique external_id per OAuth code so compose live tests can link many accounts
+    // (auth_db.linked_identities UNIQUE(platform, external_id)).
+    const authHeader = req.headers.authorization || "";
+    const tokenSuffix = authHeader.slice(-12) || "default";
     send(res, 200, {
       data: [
         {
-          id: "tw-compose",
-          login: "voicepartner",
+          id: `tw-compose-${tokenSuffix}`,
+          login: `voicepartner-${tokenSuffix}`,
           broadcaster_type: "partner",
         },
       ],
@@ -64,7 +69,11 @@ const server = http.createServer(async (req, res) => {
     return;
   }
   if (req.method === "POST" && u.pathname === "/oauth2/token") {
-    send(res, 200, { access_token: "stub-access", token_type: "bearer" });
+    const suffix = randomUUID().replace(/-/g, "").slice(0, 12);
+    send(res, 200, {
+      access_token: `stub-access-${suffix}`,
+      token_type: "bearer",
+    });
     return;
   }
   if (req.method === "PUT" && u.pathname === "/dns-txt") {

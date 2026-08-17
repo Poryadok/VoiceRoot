@@ -26,6 +26,12 @@ class MessageCacheDatabase extends _$MessageCacheDatabase {
     return MessageCacheDatabase(executor);
   }
 
+  /// Encrypted cache for live integration tests (headless desktop fallback key).
+  static Future<MessageCacheDatabase> openEncryptedForLiveIntegration() async {
+    final executor = await openEncryptedMessageCacheExecutorForLiveIntegration();
+    return MessageCacheDatabase(executor);
+  }
+
   /// Unencrypted in-memory database for unit tests.
   factory MessageCacheDatabase.forTesting() {
     return MessageCacheDatabase(NativeDatabase.memory());
