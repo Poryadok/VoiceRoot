@@ -50,7 +50,7 @@
 | P2.12 | **done** | Flutter `onboarding_coach_e2e_live_test` (spaces/MM steps + invite mid-tour); ON-03 (#20) |
 | P2.8 | **done** | SR-05: Search filters profile hits by `allow_friend_requests` + blocks; unit + `TestComposeSearchPrivacyAudience_live` |
 | P2.3 | **done** | `TestComposeGameRequestModeration_live` + Flutter `game_request_e2e_live_test` (GC-02; GC-03 approve when staff token) |
-| P2.4 | **partial** | OAuth link start + org DNS TXT start compose/Flutter lives; full Twitch/YPP badge + DNS TXT grant still need provider/DNS fixtures |
+| P2.4 | **done** | Compose stub IdP (token+Helix/YPP) + HTTP DNS TXT; compose/Flutter assert personal/org badges (not real Twitch/YouTube) |
 | P2.5 | **done** | `TestComposeQuietHours_live` + Flutter `quiet_hours_e2e_live_test` (Set/Get); voice_member_joined push suppression remains unit delivery |
 | P2.6 | **done** | `TestComposeVoiceCommanderFloor_live` + Flutter `voice_commander_e2e_live_test` (commander/hand/GrantFloor/broadcast) |
 | P2.15 | **done** | `TestComposeForwardWithoutAttribution_live` + Flutter FW-03 in `forward_messages_e2e_live_test` |
@@ -162,7 +162,7 @@ Effort: **S** ≤0.5d · **M** 1–2d · **L** 3–5d · **XL** >1w (инфра/
 | P2.1 | Space MM queue isolation | B+C | MM-08 | L | **done** — compose + Flutter live |
 | P2.2 | LFP story → party | B+C | ST-04 | L | **done** — compose + Flutter live |
 | P2.3 | Game request + admin approve | B + Admin | GC-02/03 | L | **done** — compose (approve needs staff token) + Flutter GC-02 |
-| P2.4 | Twitch/YouTube/DNS verification live | B+C | VR-02/03 | XL | **partial** — OAuth/DNS start lives; full badge grant needs provider/DNS fixtures |
+| P2.4 | Twitch/YouTube/DNS verification live | B+C | VR-02/03 | XL | **done** — compose Helix/YPP/DNS stubs; badge grant asserted |
 | P2.5 | Quiet hours / granular notif | B+C | NT-04 | L | **done** — Set/Get compose+Flutter; push suppression unit-covered |
 | P2.6 | Commander / raise hand | B+C | VC-07 | L | **done** — compose + Flutter GrantFloor live |
 | P2.7 | Stories moderation hide + Nobody floor | B | ST-05/06 | M | **done** — HideStoryFromFeed + CreateStory floor (#21) |
