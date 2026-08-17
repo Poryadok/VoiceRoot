@@ -27,6 +27,7 @@ void main() {
         markTestSkipped(
           'object storage not configured (MinIO/R2); set FILE_R2_* in .env',
         );
+        return;
       }
 
       final dm = await ctx.chatsClient().createDm(
@@ -66,8 +67,7 @@ void main() {
       addTearDown(wsB.dispose);
 
       final fileType = (confirm as FilesApiOk<FileMetadataData>).data.fileType;
-      final attachmentType =
-          fileType.trim().isEmpty ? 'file' : fileType.trim();
+      final attachmentType = fileType.trim().isEmpty ? 'file' : fileType.trim();
 
       final frameFuture = waitForOp(wsB.events, 'message_create');
       final attachmentsJson = jsonEncode([

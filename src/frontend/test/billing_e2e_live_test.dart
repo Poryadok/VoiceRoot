@@ -30,6 +30,7 @@ void main() {
         markTestSkipped(
           'object storage not configured (MinIO/R2); set FILE_R2_* in .env',
         );
+        return;
       }
 
       expect(
@@ -64,10 +65,7 @@ Future<void> _activatePremiumWebhook(
     'event_id': eventId,
     'event_type': 'subscription.activated',
     'data': {
-      'custom_data': {
-        'account_id': accountId,
-        'plan': 'premium',
-      },
+      'custom_data': {'account_id': accountId, 'plan': 'premium'},
       'status': 'active',
     },
   });
@@ -155,14 +153,18 @@ Future<int> _requestUploadStatus(
 }
 
 String _paddleWebhookSecret() {
-  const secret = String.fromEnvironment('PADDLE_WEBHOOK_SECRET', defaultValue: '');
+  const secret = String.fromEnvironment(
+    'PADDLE_WEBHOOK_SECRET',
+    defaultValue: '',
+  );
   return secret.isEmpty ? 'test-webhook-secret' : secret;
 }
 
 String _signPaddleWebhook(String body) {
   const ts = '1700000000';
-  final digest = crypto.Hmac(crypto.sha256, utf8.encode(_paddleWebhookSecret()))
-      .convert(utf8.encode('$ts:$body'))
-      .toString();
+  final digest = crypto.Hmac(
+    crypto.sha256,
+    utf8.encode(_paddleWebhookSecret()),
+  ).convert(utf8.encode('$ts:$body')).toString();
   return 'ts=$ts,h1=$digest';
 }
