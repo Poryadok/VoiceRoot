@@ -10,8 +10,6 @@ import 'support/live_gateway_harness.dart';
 ///
 /// flutter test test/offline_cache_e2e_live_test.dart ^
 void main() {
-  TestWidgetsFlutterBinding.ensureInitialized();
-
   test('offline cache stores last REST page in drift and reloads it', () async {
     final probe = await probeLiveGateway();
     expect(
@@ -19,6 +17,7 @@ void main() {
       isA<LiveGatewayReady>(),
       reason: probe is LiveGatewayUnavailable ? probe.reason : null,
     );
+    TestWidgetsFlutterBinding.ensureInitialized();
     final ctx = (probe as LiveGatewayReady).context;
 
     final sessionA = await ctx.registerUser('offline-cache-a');

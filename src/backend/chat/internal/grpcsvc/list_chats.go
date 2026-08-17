@@ -65,9 +65,23 @@ func (s *ChatGRPC) ListChats(ctx context.Context, req *chatv1.ListChatsRequest) 
 		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+	rows := page.Rows
+	if cursor == "" && inbox == "main" && s.SpaceMembers != nil {
+		spaceIDs, spaceErr := s.SpaceMembers.ListMemberSpaceIDs(ctx, caller)
+		if spaceErr != nil {
+			log.Printf("chat: ListChats space membership skipped: %v", spaceErr)
+		} else if len(spaceIDs) > 0 {
+			spaceRows, spaceErr := s.DM.ListSpaceChatsForProfile(ctx, spaceIDs)
+			if spaceErr != nil {
+				log.Printf("chat: ListChats space chats skipped: %v", spaceErr)
+			} else {
+				rows = store.MergeListChatRows(rows, spaceRows, limit)
+			}
+		}
+	}
 
-	ids := make([]uuid.UUID, 0, len(page.Rows))
-	for _, row := range page.Rows {
+	ids := make([]uuid.UUID, 0, len(rows))
+	for _, row := range rows {
 		ids = append(ids, row.ID)
 	}
 
@@ -90,8 +104,8 @@ func (s *ChatGRPC) ListChats(ctx context.Context, req *chatv1.ListChatsRequest) 
 		}
 	}
 
-	items := make([]*chatv1.ChatListItem, 0, len(page.Rows))
-	for _, row := range page.Rows {
+	items := make([]*chatv1.ChatListItem, 0, len(rows))
+	for _, row := range rows {
 		item := &chatv1.ChatListItem{
 			Chat:        chatRowToProto(row),
 			UnreadCount: 0,

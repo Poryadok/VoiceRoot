@@ -4,6 +4,9 @@ import (
 	"net/http"
 	"strings"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	chatv1 "voice.app/voice/chat/v1"
 	commonv1 "voice.app/voice/common/v1"
 	filev1 "voice.app/voice/file/v1"
@@ -59,6 +62,13 @@ func (t *transcoder) serveFiles(w http.ResponseWriter, r *http.Request, rest str
 		if err != nil {
 			writeGRPCError(w, err)
 			return true
+		}
+		if meta := resp.GetFileMetadata(); meta != nil {
+			switch strings.TrimSpace(meta.GetScanResult()) {
+			case "infected", "error":
+				writeGRPCError(w, status.Error(codes.FailedPrecondition, "file upload rejected by malware scan"))
+				return true
+			}
 		}
 		writeProtoJSON(w, http.StatusOK, resp)
 		return true

@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -164,4 +165,109 @@ LIMIT $4
 	}
 
 	return &ListChatsPage{Rows: out, NextCursor: next}, nil
+}
+
+// ListSpaceChatsForProfile returns space-bound group and channel chats visible via space membership.
+func (s *DMStore) ListSpaceChatsForProfile(ctx context.Context, spaceIDs []uuid.UUID) ([]*ChatRow, error) {
+	if s == nil || s.Pool == nil {
+		return nil, errors.New("dm store: pool not configured")
+	}
+	if len(spaceIDs) == 0 {
+		return nil, nil
+	}
+	rows, err := s.Pool.Query(ctx, `
+SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at,
+       c.threads_enabled, c.allow_user_main_feed, c.e2e_enabled,
+       COALESCE(c.last_message_at, c.created_at) AS sort_at
+FROM chats c
+WHERE c.space_id = ANY($1) AND c.type IN ('group', 'channel')
+ORDER BY sort_at DESC, c.id DESC
+`, spaceIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*ChatRow
+	for rows.Next() {
+		var id, creator uuid.UUID
+		var chatType string
+		var spaceID *uuid.UUID
+		var name, avatarURL sql.NullString
+		var lastMsg sql.NullTime
+		var createdAt, updatedAt time.Time
+		var threadsEnabled, allowMainFeed, e2eEnabled bool
+		var sortAt time.Time
+		if err := rows.Scan(&id, &chatType, &spaceID, &name, &avatarURL, &creator, &lastMsg, &createdAt, &updatedAt,
+			&threadsEnabled, &allowMainFeed, &e2eEnabled, &sortAt); err != nil {
+			return nil, err
+		}
+		var lm *time.Time
+		if lastMsg.Valid {
+			t := lastMsg.Time.UTC()
+			lm = &t
+		}
+		row := &ChatRow{
+			ID:                id,
+			Type:              chatType,
+			SpaceID:           spaceID,
+			CreatorProfileID:  creator,
+			CreatedAt:         createdAt.UTC(),
+			UpdatedAt:         updatedAt.UTC(),
+			LastMessageAt:     lm,
+			InboxBucket:       "main",
+			ThreadsEnabled:    threadsEnabled,
+			AllowUserMainFeed: allowMainFeed,
+			E2EEnabled:        e2eEnabled,
+		}
+		if name.Valid {
+			n := name.String
+			row.Name = &n
+		}
+		if avatarURL.Valid {
+			a := avatarURL.String
+			row.AvatarURL = &a
+		}
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
+func MergeListChatRows(primary, extra []*ChatRow, limit int) []*ChatRow {
+	seen := make(map[uuid.UUID]struct{}, len(primary)+len(extra))
+	merged := make([]*ChatRow, 0, len(primary)+len(extra))
+	add := func(row *ChatRow) {
+		if row == nil {
+			return
+		}
+		if _, ok := seen[row.ID]; ok {
+			return
+		}
+		seen[row.ID] = struct{}{}
+		merged = append(merged, row)
+	}
+	for _, row := range primary {
+		add(row)
+	}
+	for _, row := range extra {
+		add(row)
+	}
+	sort.Slice(merged, func(i, j int) bool {
+		si := merged[i].CreatedAt
+		if merged[i].LastMessageAt != nil {
+			si = *merged[i].LastMessageAt
+		}
+		sj := merged[j].CreatedAt
+		if merged[j].LastMessageAt != nil {
+			sj = *merged[j].LastMessageAt
+		}
+		if si.Equal(sj) {
+			return merged[i].ID.String() > merged[j].ID.String()
+		}
+		return si.After(sj)
+	})
+	if limit > 0 && len(merged) > limit {
+		merged = merged[:limit]
+	}
+	return merged
 }

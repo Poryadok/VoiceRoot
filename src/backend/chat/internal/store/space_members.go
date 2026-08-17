@@ -64,6 +64,29 @@ ORDER BY joined_at ASC, profile_id ASC
 	return out, rows.Err()
 }
 
+// ListMemberSpaceIDs returns space IDs the profile belongs to.
+func (s *SpaceMembersStore) ListMemberSpaceIDs(ctx context.Context, profileID uuid.UUID) ([]uuid.UUID, error) {
+	if !s.configured() {
+		return nil, errors.New("space members store: pool not configured")
+	}
+	rows, err := s.Pool.Query(ctx, `
+SELECT space_id FROM space_members WHERE profile_id = $1 ORDER BY joined_at ASC, space_id ASC
+`, profileID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
 // IsEffectiveChatMember checks chat_members for standalone chats, or space_members when space_id is set.
 func (s *SpaceMembersStore) IsEffectiveChatMember(ctx context.Context, dm *DMStore, row *ChatRow, profileID uuid.UUID) (bool, error) {
 	if row == nil {
