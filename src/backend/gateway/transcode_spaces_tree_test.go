@@ -193,4 +193,5 @@ func TestTranscodeSpacesOrchestrateChat(t *testing.T) {
 	require.Equal(t, "text_chat", rec.lastUpsert.GetKind())
 	require.Equal(t, "chat-99", rec.lastUpsert.GetLinkedChat().GetId())
 	require.Contains(t, resp.Body.String(), `"display_name":"general"`)
+	require.Contains(t, resp.Body.String(), `"CHAT_TYPE_GROUP"`)
 }

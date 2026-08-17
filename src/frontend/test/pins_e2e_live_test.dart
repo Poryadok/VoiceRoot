@@ -23,6 +23,7 @@ void main() {
 
     final owner = await ctx.registerUser('pin-owner');
     final member = await ctx.registerUser('pin-member');
+    final filler = await ctx.registerUser('pin-filler');
 
     final chats = ctx.chatsClient();
     final groupCreated = await chats.createGroup(
@@ -35,7 +36,7 @@ void main() {
     final invite = await chats.addGroupMembers(
       authorization: owner.authorizationHeader,
       chatId: group.id,
-      profileIds: [member.activeProfileId],
+      profileIds: [member.activeProfileId, filler.activeProfileId],
     );
     expect(invite, isA<ChatsApiOk<void>>());
 
