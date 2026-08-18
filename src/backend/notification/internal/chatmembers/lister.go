@@ -9,6 +9,8 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	chatv1 "voice.app/voice/chat/v1"
+
+	"voice/backend/notification/internal/s2s"
 )
 
 // Lister resolves chat member profile IDs for push fan-out.
@@ -41,7 +43,7 @@ func (l *GRPCLister) ListMemberProfileIDs(ctx context.Context, chatID string) ([
 	if chatID == "" {
 		return nil, fmt.Errorf("chat members: chat_id required")
 	}
-	resp, err := l.client.ListMembers(ctx, &chatv1.ListMembersRequest{ChatId: chatID})
+	resp, err := l.client.ListMembers(s2s.Context(ctx), &chatv1.ListMembersRequest{ChatId: chatID})
 	if err != nil {
 		return nil, err
 	}

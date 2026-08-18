@@ -10,6 +10,8 @@ import (
 
 	messagingv1 "voice.app/voice/messaging/v1"
 	userv1 "voice.app/voice/user/v1"
+
+	"voice/backend/notification/internal/s2s"
 )
 
 // Resolver loads message preview text and sender display labels for push copy.
@@ -92,7 +94,7 @@ func (r *GRPCResolver) SenderLabel(ctx context.Context, profileID string) (strin
 	if profileID == "" {
 		return "", nil
 	}
-	resp, err := r.users.GetProfile(ctx, &userv1.GetProfileRequest{
+	resp, err := r.users.GetProfile(s2s.Context(ctx), &userv1.GetProfileRequest{
 		By: &userv1.GetProfileRequest_ProfileId{ProfileId: profileID},
 	})
 	if err != nil {

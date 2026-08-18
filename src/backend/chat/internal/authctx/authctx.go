@@ -2,6 +2,7 @@ package authctx
 
 import (
 	"context"
+	"strings"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/metadata"
@@ -10,9 +11,10 @@ import (
 
 // Metadata keys aligned with Gateway downstream headers (see gateway applyClaims).
 const (
-	HeaderUserID    = "x-voice-user-id"    // JWT claim user_id == account_id
-	HeaderProfileID = "x-voice-profile-id" // active profile_id
-	HeaderAccountType = guestguard.HeaderAccountType
+	HeaderUserID          = "x-voice-user-id"    // JWT claim user_id == account_id
+	HeaderProfileID       = "x-voice-profile-id" // active profile_id
+	HeaderInternalCaller  = "x-voice-internal-caller"
+	HeaderAccountType     = guestguard.HeaderAccountType
 )
 
 // AccountID returns the caller's account UUID from incoming gRPC metadata, if present and valid.
@@ -57,4 +59,14 @@ func AccountType(ctx context.Context) string {
 // RequireRegular returns PermissionDenied for guest callers.
 func RequireRegular(ctx context.Context) error {
 	return guestguard.RequireRegular(ctx)
+}
+
+// IsInternalService is true when a trusted peer service invokes S2S RPCs.
+func IsInternalService(ctx context.Context) bool {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return false
+	}
+	vals := md.Get(HeaderInternalCaller)
+	return len(vals) > 0 && strings.TrimSpace(vals[0]) != ""
 }
