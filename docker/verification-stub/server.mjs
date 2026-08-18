@@ -52,11 +52,13 @@ const server = http.createServer(async (req, res) => {
     return;
   }
   if (req.method === "GET" && u.pathname === "/youtube/v3/channels") {
+    const authHeader = req.headers.authorization || "";
+    const tokenSuffix = authHeader.slice(-12) || "default";
     send(res, 200, {
       items: [
         {
-          id: "yt-compose",
-          snippet: { title: "Voice YPP" },
+          id: `yt-compose-${tokenSuffix}`,
+          snippet: { title: `Voice YPP ${tokenSuffix}` },
           status: { longUploadsStatus: "allowed" },
         },
       ],

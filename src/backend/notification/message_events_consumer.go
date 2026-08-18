@@ -24,6 +24,7 @@ import (
 )
 
 const jsStreamMessageEvents = "message_events"
+const jsSubjectMessageEvents = "message.>"
 
 func runMessageEventsConsumer(
 	ctx context.Context,
@@ -73,7 +74,7 @@ func runMessageEventsConsumer(
 		consumer.JetStreamConsumeAck(msg, err)
 	}
 
-	sub, err := js.Subscribe("msg.>", msgHandler,
+	sub, err := js.Subscribe(jsSubjectMessageEvents, msgHandler,
 		nats.Durable(durable),
 		nats.BindStream(jsStreamMessageEvents),
 		nats.ManualAck(),
