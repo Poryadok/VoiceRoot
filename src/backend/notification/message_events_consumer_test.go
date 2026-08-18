@@ -70,3 +70,9 @@ func TestMessagePushDeepLink(t *testing.T) {
 	require.Equal(t, "https://voice.gg/ch/c1/m/m1", messagePushDeepLink("c1", "m1"))
 	require.Equal(t, "https://voice.gg/ch/c1", messagePushDeepLink("c1", ""))
 }
+
+func TestMessageEventsJetStreamSubjectPrefix(t *testing.T) {
+	t.Parallel()
+	// Messaging JetStreamPublisher uses message.sent, message.edited, … (not msg.*).
+	require.Equal(t, "message.>", jsSubjectMessageEvents)
+}

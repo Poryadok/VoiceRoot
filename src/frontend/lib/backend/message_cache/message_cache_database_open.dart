@@ -1,7 +1,9 @@
 import 'dart:io';
 
 import 'package:drift/drift.dart';
+import 'package:drift/native.dart';
 import 'package:drift_flutter/drift_flutter.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart' as sqlite3;
@@ -29,6 +31,25 @@ void applyDatabaseCipherKey(sqlite3.Database db, String encryptionKey) {
 
 Future<String> messageCacheDatabasePath() async {
   final dir = await getApplicationDocumentsDirectory();
+  return p.join(dir.path, '$messageCacheDatabaseName.sqlite');
+}
+
+/// Resolves DB path for opt-in live tests when path_provider is unavailable.
+Future<String> resolveMessageCacheDatabasePathForLiveIntegration() async {
+  try {
+    return await messageCacheDatabasePath();
+  } on MissingPluginException {
+    return _liveIntegrationTempDatabasePath();
+  } on PlatformException catch (e) {
+    if (e.code == 'channel-error' || e.code == 'NotImplemented') {
+      return _liveIntegrationTempDatabasePath();
+    }
+    rethrow;
+  }
+}
+
+String _liveIntegrationTempDatabasePath() {
+  final dir = Directory.systemTemp.createTempSync('voice-live-cache-');
   return p.join(dir.path, '$messageCacheDatabaseName.sqlite');
 }
 
@@ -91,7 +112,15 @@ Future<QueryExecutor> openEncryptedMessageCacheExecutor() async {
 Future<QueryExecutor> openEncryptedMessageCacheExecutorForLiveIntegration() async {
   final encryptionKey =
       await MessageCacheDatabaseKey.loadOrCreateForLiveIntegration();
-  return _openEncryptedMessageCacheExecutorWithKey(encryptionKey);
+  final dbPath = await resolveMessageCacheDatabasePathForLiveIntegration();
+  await migrateUnencryptedMessageCacheIfNeeded(
+    dbPath: dbPath,
+    encryptionKey: encryptionKey,
+  );
+  return NativeDatabase(
+    File(dbPath),
+    setup: (db) => applyDatabaseCipherKey(db, encryptionKey),
+  );
 }
 
 Future<QueryExecutor> _openEncryptedMessageCacheExecutorWithKey(
