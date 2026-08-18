@@ -408,6 +408,22 @@ class AuthJdbcRedisIntegrationTest {
     return rsaPrivateCrtKey;
   }
 
+  @Test
+  void guestReminderGetWhenNeverShownReturnsShouldShow() throws Exception {
+    JsonNode guest =
+        session(
+            postJson(
+                "/api/v1/auth/register",
+                "{\"password\":\"Correct horse battery staple\",\"guest\":true,\"device_info_json\":\"{}\"}"));
+
+    mockMvc
+        .perform(
+            get("/api/v1/auth/guest-reminder")
+                .header("Authorization", "Bearer " + guest.get("access_token").asText()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.should_show", is(true)));
+  }
+
   private JsonNode postJson(String path, String body) throws Exception {
     String response = mockMvc.perform(post(path).contentType("application/json").content(body))
         .andExpect(status().isOk())

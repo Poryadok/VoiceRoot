@@ -119,4 +119,26 @@ void main() {
       expect(result, isA<StoriesApiOk<void>>());
     });
   });
+
+  group('VoiceStoriesClient.respondToLfpStory', () {
+    test('POST lfp-response sends protojson response_type only', () async {
+      final mock = MockClient((req) async {
+        expect(req.method, 'POST');
+        expect(req.url.path, '/api/v1/stories/story-lfp/lfp-response');
+        final body = jsonDecode(req.body) as Map<String, dynamic>;
+        expect(body['response_type'], 'JOIN');
+        expect(body.containsKey('responseType'), isFalse);
+        return http.Response('', 204);
+      });
+      final client = VoiceStoriesClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
+      final result = await client.respondToLfpStory(
+        authorization: auth,
+        storyId: 'story-lfp',
+        responseType: 'JOIN',
+      );
+      expect(result, isA<StoriesApiOk<void>>());
+    });
+  });
 }

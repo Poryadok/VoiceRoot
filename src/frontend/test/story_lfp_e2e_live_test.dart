@@ -22,6 +22,7 @@ void main() {
       final author = await ctx.registerUser('st04-author');
       final responder = await ctx.registerUser('st04-resp');
       await ctx.inviteAndAcceptFriends(author, responder);
+      await ctx.allowOpenGamingPrivacy(author);
 
       final mm = VoiceMatchmakingClient(gateway: ctx.gatewayHttp());
       final games = await mm.listGames(authorization: author.authorizationHeader);
@@ -48,7 +49,7 @@ void main() {
         storyId: storyId,
         responseType: 'JOIN',
       );
-      expect(responded, isA<StoriesApiOk<void>>());
+      expect(responded, isA<StoriesApiOk<void>>(), reason: responded is StoriesApiFailure ? '${responded.message} ${responded.errorCode} ${responded.statusCode}' : '$responded');
 
       DecideLfpRequestData? decided;
       for (var i = 0; i < 40; i++) {
@@ -72,5 +73,6 @@ void main() {
     skip: runLiveIntegration
         ? null
         : 'Opt in with --dart-define=VOICE_RUN_LIVE_INTEGRATION=true',
+    timeout: const Timeout(Duration(minutes: 2)),
   );
 }

@@ -17,6 +17,25 @@ const (
 	MinGroupMembers  = 3
 )
 
+type groupMinMembersKey struct{}
+
+// WithGroupMinMembers lowers the add-members floor (match squad duo = 2).
+func WithGroupMinMembers(ctx context.Context, min int) context.Context {
+	if min < 1 {
+		return ctx
+	}
+	return context.WithValue(ctx, groupMinMembersKey{}, min)
+}
+
+func groupAddMinMembers(ctx context.Context) int {
+	if v := ctx.Value(groupMinMembersKey{}); v != nil {
+		if n, ok := v.(int); ok && n > 0 {
+			return n
+		}
+	}
+	return MinGroupMembers
+}
+
 // CreateSpaceChannelChat inserts a channel chat bound to a space; members inherit from space_members.
 func (s *DMStore) CreateSpaceChannelChat(ctx context.Context, creatorProfileID, spaceID uuid.UUID, name string) (*ChatRow, error) {
 	if s == nil || s.Pool == nil {
@@ -282,7 +301,7 @@ SELECT 1 FROM chat_members WHERE chat_id = $1 AND profile_id = $2
 	}
 
 	projected := current + len(added)
-	if projected < MinGroupMembers {
+	if projected < groupAddMinMembers(ctx) {
 		return nil, ErrGroupTooFewMembers
 	}
 	if projected > GroupMemberLimit {

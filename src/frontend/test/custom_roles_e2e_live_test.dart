@@ -87,7 +87,7 @@ void main() {
     );
     expect(sent, isA<MessagesApiFailure>());
     expect((sent as MessagesApiFailure).statusCode, 403);
-  }, skip: runLiveIntegration ? false : 'Set VOICE_RUN_LIVE_INTEGRATION=true');
+  }, skip: runLiveIntegration ? false : 'Set VOICE_RUN_LIVE_INTEGRATION=true', timeout: const Timeout(Duration(minutes: 2)));
 
   test('voice room VOICE_JOIN deny blocks join (RL-03)', () async {
     final probe = await probeLiveGateway();
@@ -154,5 +154,5 @@ void main() {
     );
     expect(join, isA<VoiceApiFailure>());
     expect((join as VoiceApiFailure).statusCode, 403);
-  }, skip: runLiveIntegration ? false : 'Set VOICE_RUN_LIVE_INTEGRATION=true');
+  }, skip: runLiveIntegration ? false : 'Set VOICE_RUN_LIVE_INTEGRATION=true', timeout: const Timeout(Duration(minutes: 2)));
 }

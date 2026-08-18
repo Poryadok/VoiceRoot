@@ -105,10 +105,10 @@ func (s *MatchmakingGRPC) RespondToMatch(ctx context.Context, req *matchmakingv1
 	profileIDs := match.ProfileIDs()
 	var voiceRoomID, chatID string
 	if s.Squad != nil {
-		voiceRoomID, chatID, err = s.Squad.Provision(ctx, matchID, profileIDs)
-		if err != nil {
-			return nil, status.Error(codes.Unavailable, "squad provisioning unavailable")
-		}
+			voiceRoomID, chatID, err = s.Squad.Provision(ctx, matchID, profileIDs)
+			if err != nil {
+				return nil, status.Errorf(codes.Unavailable, "squad provisioning unavailable: %v", err)
+			}
 	}
 	match, err = s.Matches.ActivateMatch(ctx, matchID, voiceRoomID, chatID)
 	if err != nil {

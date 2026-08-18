@@ -68,5 +68,8 @@ void main() {
       isTrue,
       reason: 'drift cache should retain REST history for offline read',
     );
-  }, skip: runLiveIntegration ? false : 'Set RUN_LIVE_INTEGRATION=1');
+  },
+    skip: runLiveIntegration ? false : 'Set RUN_LIVE_INTEGRATION=1',
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
 }

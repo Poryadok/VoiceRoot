@@ -680,11 +680,8 @@ class VoiceMatchmakingClient {
       uri: _gateway.resolve('/api/v1/matchmaking/lfp-requests/decide'),
       authorization: authorization,
       body: {
-        'storyId': storyId,
         'story_id': storyId,
-        'responderProfileId': responderProfileId,
         'responder_profile_id': responderProfileId,
-        'responseType': responseType,
         'response_type': responseType,
         'decision': decision,
       },

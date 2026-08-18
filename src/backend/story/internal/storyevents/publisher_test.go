@@ -68,3 +68,10 @@ func TestJetStreamPublisher_implementsPublisher(t *testing.T) {
 	t.Parallel()
 	var _ Publisher = (*JetStreamPublisher)(nil)
 }
+
+func TestStoryEventStreamSubjectsIncludeLfp(t *testing.T) {
+	t.Parallel()
+	subjects := storyEventStreamSubjects()
+	require.Contains(t, subjects, subjectStoryLfpCreated)
+	require.Contains(t, subjects, subjectStoryLfpResponse)
+}

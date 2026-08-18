@@ -220,7 +220,7 @@ func main() {
 			lfpCtx, lfpCancel := context.WithCancel(context.Background())
 			defer lfpCancel()
 			go func() {
-				if err := storyconsume.Run(lfpCtx, natsURL, "matchmaking_story_lfp", &store.LfpStore{Pool: pool}); err != nil && logger != nil {
+				if err := storyconsume.Run(lfpCtx, natsURL, "matchmaking_story_lfp_v2", &store.LfpStore{Pool: pool}); err != nil && logger != nil {
 					logger.Warn("story LFP consumer stopped", slog.Any("error", err))
 				}
 			}()

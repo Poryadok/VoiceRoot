@@ -55,6 +55,8 @@ func TestComposeWiring_yaml(t *testing.T) {
 	require.Contains(t, yml, "MATCHMAKING_GRPC_LISTEN: :9090")
 	require.Contains(t, yml, "CHAT_GRPC_ADDR: chat:9090")
 	require.Contains(t, yml, "VOICE_GRPC_ADDR: voice:9090")
+	// Unique to matchmaking: Chat/Voice squad + Space queue gate + rating privacy (k8s envFrom).
+	require.Contains(t, yml, "      CHAT_GRPC_ADDR: chat:9090\n      VOICE_GRPC_ADDR: voice:9090\n      USER_GRPC_ADDR: user:9090\n      SOCIAL_GRPC_ADDR: social:9090\n      SPACE_GRPC_ADDR: space:9090\n")
 	require.Contains(t, yml, "matchmaking_db")
 	require.Contains(t, yml, `"matchmaking":"matchmaking:9090"`)
 }

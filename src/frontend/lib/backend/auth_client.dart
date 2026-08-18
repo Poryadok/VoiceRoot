@@ -318,7 +318,8 @@ class VoiceAuthClient {
       authorization: authorization,
     );
     return switch (result) {
-      GatewayHttpOk(:final data) => data['should_show'] as bool?,
+      GatewayHttpOk(:final data) =>
+        data['should_show'] as bool? ?? data['shouldShow'] as bool? ?? false,
       GatewayHttpFailure() => null,
     };
   }

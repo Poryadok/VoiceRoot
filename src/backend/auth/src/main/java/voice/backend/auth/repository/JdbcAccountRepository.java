@@ -236,8 +236,8 @@ public class JdbcAccountRepository implements AccountRepository {
 
   @Override
   public Optional<Instant> getGuestReminderLastShownAt(UUID accountId) {
-    return jdbc
-        .query(
+    java.util.List<Instant> rows =
+        jdbc.query(
             """
             SELECT guest_reminder_last_shown_at
             FROM accounts WHERE id = :id LIMIT 1
@@ -246,10 +246,11 @@ public class JdbcAccountRepository implements AccountRepository {
             (rs, rowNum) -> {
               java.sql.Timestamp ts = rs.getTimestamp("guest_reminder_last_shown_at");
               return ts == null ? null : ts.toInstant();
-            })
-        .stream()
-        .findFirst()
-        .flatMap(instant -> Optional.ofNullable(instant));
+            });
+    if (rows.isEmpty()) {
+      return Optional.empty();
+    }
+    return Optional.ofNullable(rows.get(0));
   }
 
   @Override

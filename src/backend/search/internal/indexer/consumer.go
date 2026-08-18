@@ -16,8 +16,12 @@ import (
 
 const (
 	jsStreamMessageEvents = "message_events"
-	jsStreamUserEvents    = "user_events"
-	jsStreamChatEvents    = "chat_events"
+	// Messaging publishes message.sent / message.edited / … (not msg.*).
+	// v2 durable: JetStream rejects filter-subject changes on an existing consumer.
+	jsSubjectMessageEvents = "message.>"
+	jsDurableMessagePrefix = "search_msg_v2_"
+	jsStreamUserEvents     = "user_events"
+	jsStreamChatEvents     = "chat_events"
 )
 
 // RunMessageEventsConsumer subscribes to message.events and updates the search index.
@@ -42,9 +46,9 @@ func RunMessageEventsConsumer(ctx context.Context, natsURL, instanceID string, i
 		return fmt.Errorf("jetstream: %w", err)
 	}
 
-	durable := "search_" + strings.ReplaceAll(strings.TrimSpace(instanceID), "-", "")
-	if durable == "search_" {
-		durable = "search_default"
+	durable := jsDurableMessagePrefix + strings.ReplaceAll(strings.TrimSpace(instanceID), "-", "")
+	if durable == jsDurableMessagePrefix {
+		durable = jsDurableMessagePrefix + "default"
 	}
 
 	handler := func(msg *nats.Msg) {
@@ -63,7 +67,7 @@ func RunMessageEventsConsumer(ctx context.Context, natsURL, instanceID string, i
 		jetStreamConsumeAck(msg, err)
 	}
 
-	sub, err := js.Subscribe("msg.>", handler,
+	sub, err := js.Subscribe(jsSubjectMessageEvents, handler,
 		nats.Durable(durable),
 		nats.BindStream(jsStreamMessageEvents),
 		nats.DeliverNew(),

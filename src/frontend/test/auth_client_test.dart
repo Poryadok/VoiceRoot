@@ -132,4 +132,34 @@ void main() {
       expect(err, isNull);
     });
   });
+
+  group('VoiceAuthClient.guestReminder', () {
+    test('reads protojson camelCase shouldShow from gateway', () async {
+      final mock = MockClient((req) async {
+        expect(req.method, 'GET');
+        expect(req.url.path, '/api/v1/auth/guest-reminder');
+        return http.Response(jsonEncode({'shouldShow': true}), 200);
+      });
+      final client = VoiceAuthClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
+      final show = await client.getGuestReminderShouldShow(
+        authorization: 'Bearer token',
+      );
+      expect(show, isTrue);
+    });
+
+    test('treats omitted protojson should_show as false', () async {
+      final mock = MockClient((_) async {
+        return http.Response(jsonEncode(<String, dynamic>{}), 200);
+      });
+      final client = VoiceAuthClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
+      final show = await client.getGuestReminderShouldShow(
+        authorization: 'Bearer token',
+      );
+      expect(show, isFalse);
+    });
+  });
 }
