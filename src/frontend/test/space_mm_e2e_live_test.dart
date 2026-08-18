@@ -67,7 +67,7 @@ void main() {
         mode: 'Duo',
         criteria: const {'region': 'eu'},
       );
-      expect(ownerQ, isA<MatchmakingApiOk<SearchSessionData>>());
+      expect(ownerQ, isA<MatchmakingApiOk<SearchSessionData>>(), reason: ownerQ is MatchmakingApiFailure ? '${ownerQ.message} ${ownerQ.statusCode}' : '$ownerQ');
       final ownerSession = (ownerQ as MatchmakingApiOk<SearchSessionData>).data;
       expect(ownerSession.status, 'searching');
       expect(ownerSession.spaceId, spaceId);

@@ -11,6 +11,12 @@ import (
 	eventsv1 "voice.app/voice/events/v1"
 )
 
+func TestStoryLfpJetStreamSubjectMatchesPublisher(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "story.>", jsSubjectStoryLfp)
+	require.Equal(t, "matchmaking_story_lfp_v2", defaultDurable)
+}
+
 func TestApplyStoryEvent_LfpCreatedAndJoinResponse(t *testing.T) {
 	if testing.Short() {
 		t.Skip()

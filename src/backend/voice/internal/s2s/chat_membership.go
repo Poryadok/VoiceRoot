@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	"voice/backend/voice/internal/grpcsvc"
@@ -33,6 +34,7 @@ func (g *GRPCChatMembership) EnsureMember(ctx context.Context, chatID, profileID
 	}
 	pid := strings.TrimSpace(profileID)
 	ctx = ForwardIncomingMetadata(ctx)
+	ctx = metadata.AppendToOutgoingContext(ctx, "x-voice-internal-caller", "voice")
 	resp, err := g.Client.ListMembers(ctx, &chatv1.ListMembersRequest{
 		ChatId: cid.String(),
 		Page:   &commonv1.CursorPageRequest{PageSize: 500},

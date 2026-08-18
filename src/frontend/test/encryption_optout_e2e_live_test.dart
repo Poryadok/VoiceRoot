@@ -8,6 +8,14 @@ import 'package:voice_frontend/e2e/e2e_crypto_adapter.dart';
 
 import 'support/live_gateway_harness.dart';
 
+bool snippetContainsPlaintext(String snippet, String phrase) {
+  if (snippet.contains(phrase)) {
+    return true;
+  }
+  final plain = snippet.replaceAll(RegExp(r'</?b>|</?mark>'), '');
+  return plain.contains(phrase);
+}
+
 /// encryption (docs/features/encryption.md) live E2E opt-out: disable E2E → send plaintext → search includes body.
 ///
 /// Run when full compose stack is up:
@@ -121,7 +129,7 @@ void main() {
                 InChatSearchData(:final hits) => hits,
                 _ => const <SearchHit>[],
               };
-              if (hits.any((h) => h.snippet.contains(phrase))) {
+              if (hits.any((h) => snippetContainsPlaintext(h.snippet, phrase))) {
                 return;
               }
             case SearchApiErr(:final error):

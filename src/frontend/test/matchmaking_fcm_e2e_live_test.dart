@@ -18,5 +18,8 @@ void main() {
       token: 'qa-mm-fcm-${user.activeProfileId}',
     );
     expect(result, isA<NotificationsApiOk<String?>>());
-  }, skip: runLiveIntegration ? null : 'opt-in live');
+  },
+    skip: runLiveIntegration ? null : 'opt-in live',
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
 }

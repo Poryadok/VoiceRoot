@@ -25,7 +25,16 @@ type GRPCVoiceClient struct {
 }
 
 func withCreatorProfile(ctx context.Context, profileID uuid.UUID) context.Context {
-	return metadata.AppendToOutgoingContext(ctx, authctx.HeaderProfileID, profileID.String())
+	md := metadata.MD{}
+	if incoming, ok := metadata.FromIncomingContext(ctx); ok {
+		md = incoming.Copy()
+	}
+	if outgoing, ok := metadata.FromOutgoingContext(ctx); ok {
+		md = metadata.Join(md, outgoing.Copy())
+	}
+	md.Set(authctx.HeaderProfileID, profileID.String())
+	md.Set("x-voice-internal-caller", "matchmaking")
+	return metadata.NewOutgoingContext(ctx, md)
 }
 
 // CreateMatchChat creates a group chat and adds all participants.

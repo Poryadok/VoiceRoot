@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	chatv1 "voice.app/voice/chat/v1"
@@ -66,6 +67,76 @@ func TestAddMembers_FriendsOnlyInvitePrivacy_StrangerDenied(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+func TestAddMembers_InternalCaller_SkipsInvitePrivacy(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	profiles := profileMap(uuid.New(), uuid.New(), uuid.New(), uuid.New())
+	ids := make([]uuid.UUID, 0, 4)
+	for id := range profiles {
+		ids = append(ids, id)
+	}
+	owner, memberA, memberB, target := ids[0], ids[1], ids[2], ids[3]
+
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil,
+		WithPrivacyChecker(invitePrivacyStub{friendsOnly: map[uuid.UUID]bool{target: true}}),
+		WithFriendChecker(noFriendsStub{}),
+	)
+	t.Cleanup(cleanup)
+
+	chat := createStandaloneGroup(t, client, profiles, owner, "Match squad invite", memberA, memberB)
+
+	internal := metadata.AppendToOutgoingContext(
+		ctxFor(t, profiles, owner),
+		"x-voice-internal-caller", "matchmaking",
+	)
+	_, err := client.AddMembers(internal, &chatv1.AddMembersRequest{
+		ChatId:     chat.GetId(),
+		ProfileIds: []string{target.String()},
+	})
+	require.NoError(t, err)
+}
+
+func TestAddMembers_InternalCaller_AllowsDuoMatchSquad(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	profiles := profileMap(uuid.New(), uuid.New())
+	ids := make([]uuid.UUID, 0, 2)
+	for id := range profiles {
+		ids = append(ids, id)
+	}
+	owner, peer := ids[0], ids[1]
+
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil)
+	t.Cleanup(cleanup)
+
+	name := "Duo match"
+	created, err := client.CreateChat(ctxFor(t, profiles, owner), &chatv1.CreateChatRequest{
+		Type: chatv1.ChatType_CHAT_TYPE_GROUP,
+		Name: &name,
+	})
+	require.NoError(t, err)
+
+	internal := metadata.AppendToOutgoingContext(
+		ctxFor(t, profiles, owner),
+		"x-voice-internal-caller", "matchmaking",
+	)
+	_, err = client.AddMembers(internal, &chatv1.AddMembersRequest{
+		ChatId:     created.GetChat().GetId(),
+		ProfileIds: []string{peer.String()},
+	})
+	require.NoError(t, err)
 }
 
 // TestAddMembers_SameAccountInvitePrivacy_Allowed documents bot actor / alt profiles on one account.

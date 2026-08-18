@@ -111,5 +111,6 @@ void main() {
       );
     },
     skip: runLiveIntegration ? null : 'opt-in live',
+    timeout: const Timeout(Duration(minutes: 2)),
   );
 }

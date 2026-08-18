@@ -43,7 +43,7 @@ void main() {
     final value = (rating['ratingValue'] as num?)?.toDouble() ??
         (rating['rating_value'] as num?)?.toDouble();
     expect(value, 5.0);
-  });
+  }, timeout: const Timeout(Duration(minutes: 2)));
 
   test('skip rating leaves player rating unset for teammate', () async {
     if (!runLive) {
@@ -74,7 +74,7 @@ void main() {
         0;
     expect(value, 0);
     expect(games, 0);
-  });
+  }, timeout: const Timeout(Duration(minutes: 2)));
 }
 
 class _CompletedMatch {
@@ -288,7 +288,10 @@ Future<Map<String, dynamic>> _searchStatus(
     headers: {'Authorization': 'Bearer $token'},
   );
   expect(resp.statusCode, 200);
-  return jsonDecode(resp.body) as Map<String, dynamic>;
+  final body = jsonDecode(resp.body) as Map<String, dynamic>;
+  return body['searchSession'] as Map<String, dynamic>? ??
+      body['search_session'] as Map<String, dynamic>? ??
+      body;
 }
 
 Future<Map<String, dynamic>> _respond(

@@ -602,7 +602,7 @@ class VoiceStoriesClient {
     final result = await _gateway.postJson(
       uri: _gateway.resolve('/api/v1/stories/$storyId/lfp-response'),
       authorization: authorization,
-      body: {'responseType': responseType, 'response_type': responseType},
+      body: {'response_type': responseType},
       allowNoContent: true,
     );
     return switch (result) {

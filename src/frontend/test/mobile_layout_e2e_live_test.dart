@@ -26,5 +26,6 @@ void main() {
     skip: runLiveIntegration
         ? null
         : 'Opt in with --dart-define=VOICE_RUN_LIVE_INTEGRATION=true',
+    timeout: const Timeout(Duration(minutes: 2)),
   );
 }

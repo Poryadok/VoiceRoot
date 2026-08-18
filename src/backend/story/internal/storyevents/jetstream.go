@@ -64,29 +64,52 @@ func NewJetStreamPublisher(natsURL string) (*JetStreamPublisher, error) {
 	return &JetStreamPublisher{nc: nc, js: js}, nil
 }
 
+func storyEventStreamSubjects() []string {
+	return []string{
+		subjectStoryCreated,
+		subjectStoryViewed,
+		subjectStoryReacted,
+		subjectStoryExpired,
+		subjectStoryHighlightCreated,
+		subjectStoryLfpCreated,
+		subjectStoryLfpResponse,
+	}
+}
+
 func (p *JetStreamPublisher) ensureStream() error {
 	if p == nil || p.js == nil {
 		return fmt.Errorf("jetstream publisher not initialized")
 	}
 	p.ensureOnce.Do(func() {
-		if _, err := p.js.StreamInfo(streamName); err == nil {
+		desired := storyEventStreamSubjects()
+		info, err := p.js.StreamInfo(streamName)
+		if err != nil {
+			_, p.ensureErr = p.js.AddStream(&nats.StreamConfig{
+				Name:      streamName,
+				Subjects:  desired,
+				Retention: nats.LimitsPolicy,
+				MaxAge:    7 * 24 * time.Hour,
+				Storage:   nats.FileStorage,
+			})
 			return
 		}
-		_, p.ensureErr = p.js.AddStream(&nats.StreamConfig{
-			Name: streamName,
-			Subjects: []string{
-				subjectStoryCreated,
-				subjectStoryViewed,
-				subjectStoryReacted,
-				subjectStoryExpired,
-				subjectStoryHighlightCreated,
-				subjectStoryLfpCreated,
-				subjectStoryLfpResponse,
-			},
-			Retention: nats.LimitsPolicy,
-			MaxAge:    7 * 24 * time.Hour,
-			Storage:   nats.FileStorage,
-		})
+		existing := make(map[string]struct{}, len(info.Config.Subjects))
+		for _, subject := range info.Config.Subjects {
+			existing[subject] = struct{}{}
+		}
+		merged := append([]string(nil), info.Config.Subjects...)
+		for _, subject := range desired {
+			if _, ok := existing[subject]; ok {
+				continue
+			}
+			merged = append(merged, subject)
+		}
+		if len(merged) == len(info.Config.Subjects) {
+			return
+		}
+		cfg := info.Config
+		cfg.Subjects = merged
+		_, p.ensureErr = p.js.UpdateStream(&cfg)
 	})
 	return p.ensureErr
 }

@@ -163,4 +163,45 @@ void main() {
     expect(path, '/api/v1/matchmaking/games/search');
     expect((result as MatchmakingApiOk<GameListData>).data.games, hasLength(1));
   });
+
+  test('decideLfpRequest posts protojson snake_case fields once', () async {
+    String? path;
+    Map<String, dynamic>? body;
+    final client = VoiceMatchmakingClient(
+      gateway: GatewayHttpClient(
+        httpClient: MockClient((request) async {
+          path = request.url.path;
+          body = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response(
+            jsonEncode({
+              'status': 'accepted',
+              'partyId': 'party-1',
+            }),
+            200,
+          );
+        }),
+        config: const GatewayConfig(baseUrl: 'http://api.test'),
+      ),
+    );
+
+    final result = await client.decideLfpRequest(
+      authorization: 'Bearer t',
+      storyId: 'story-1',
+      responderProfileId: 'profile-2',
+      responseType: 'JOIN',
+      decision: 'ACCEPT',
+    );
+
+    expect(path, '/api/v1/matchmaking/lfp-requests/decide');
+    expect(body, {
+      'story_id': 'story-1',
+      'responder_profile_id': 'profile-2',
+      'response_type': 'JOIN',
+      'decision': 'ACCEPT',
+    });
+    expect(result, isA<MatchmakingApiOk<DecideLfpRequestData>>());
+    final data = (result as MatchmakingApiOk<DecideLfpRequestData>).data;
+    expect(data.status, 'accepted');
+    expect(data.partyId, 'party-1');
+  });
 }

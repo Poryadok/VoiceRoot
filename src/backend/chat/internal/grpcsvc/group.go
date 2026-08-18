@@ -177,12 +177,17 @@ func (s *ChatGRPC) AddMembers(ctx context.Context, req *chatv1.AddMembersRequest
 				return nil, perr
 			}
 		}
-		if err := s.ensureInvitePrivacy(ctx, caller, pid); err != nil {
-			return nil, err
+	if err := s.ensureInvitePrivacy(ctx, caller, pid); err != nil {
+			if !authctx.IsInternalService(ctx) {
+				return nil, err
+			}
 		}
 		ids = append(ids, pid)
 	}
 
+	if authctx.IsInternalService(ctx) {
+		ctx = store.WithGroupMinMembers(ctx, 2)
+	}
 	added, err := s.DM.AddGroupMembers(ctx, chatID, ids)
 	if errors.Is(err, store.ErrGroupTooFewMembers) {
 		return nil, status.Error(codes.InvalidArgument, err.Error())

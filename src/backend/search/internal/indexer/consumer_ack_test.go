@@ -44,6 +44,12 @@ func TestJetStreamConsumeAck_HandlerErrorNaks(t *testing.T) {
 	require.True(t, msg.nacked)
 }
 
+func TestMessageEventsJetStreamSubjectPrefix(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "message.>", jsSubjectMessageEvents)
+	require.Equal(t, "search_msg_v2_", jsDurableMessagePrefix)
+}
+
 func TestJetStreamTermAck_Terminates(t *testing.T) {
 	t.Parallel()
 	msg := &stubJetStreamMsg{}

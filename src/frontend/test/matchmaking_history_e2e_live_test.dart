@@ -8,7 +8,9 @@ import 'package:http/http.dart' as http;
 /// Run: `VOICE_RUN_LIVE_COMPOSE=true flutter test test/matchmaking_history_e2e_live_test.dart`
 void main() {
   const runLive = bool.fromEnvironment('VOICE_RUN_LIVE_COMPOSE') ||
-      String.fromEnvironment('VOICE_RUN_LIVE_COMPOSE') == 'true';
+      String.fromEnvironment('VOICE_RUN_LIVE_COMPOSE') == 'true' ||
+      bool.fromEnvironment('VOICE_RUN_LIVE_INTEGRATION') ||
+      String.fromEnvironment('VOICE_RUN_LIVE_INTEGRATION') == 'true';
 
   test('live compose match history lists completed squad', () async {
     if (!runLive) {
@@ -65,7 +67,7 @@ void main() {
             const [])
         .cast<String>();
     expect(profiles, hasLength(2));
-  });
+  }, timeout: const Timeout(Duration(minutes: 2)));
 }
 
 bool _historyContainsMatch(Map<String, dynamic> history, String matchId) {

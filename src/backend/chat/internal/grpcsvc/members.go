@@ -113,7 +113,8 @@ func (s *ChatGRPC) GetChat(ctx context.Context, req *chatv1.GetChatRequest) (*ch
 		return nil, status.Error(codes.FailedPrecondition, "chat persistence not configured")
 	}
 	caller, ok := authctx.ProfileID(ctx)
-	if !ok {
+	internal := authctx.IsInternalService(ctx)
+	if !internal && !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing profile")
 	}
 	chatID, err := parseUUIDField("chat_id", req.GetChatId())
@@ -127,12 +128,14 @@ func (s *ChatGRPC) GetChat(ctx context.Context, req *chatv1.GetChatRequest) (*ch
 	if row == nil {
 		return nil, status.Error(codes.NotFound, "chat not found")
 	}
-	member, err := s.isEffectiveChatMember(ctx, row, caller)
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-	if !member {
-		return nil, status.Error(codes.PermissionDenied, "not a chat member")
+	if !internal {
+		member, err := s.isEffectiveChatMember(ctx, row, caller)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		if !member {
+			return nil, status.Error(codes.PermissionDenied, "not a chat member")
+		}
 	}
 	return &chatv1.GetChatResponse{Chat: chatRowToProto(row)}, nil
 }

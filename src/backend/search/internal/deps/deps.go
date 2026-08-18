@@ -35,7 +35,7 @@ func (m *MessagingFetcher) GetMessageBody(ctx context.Context, chatID, messageID
 	if m == nil || m.Client == nil {
 		return "", time.Time{}, fmt.Errorf("messaging client unavailable")
 	}
-	ctx = s2s.ForwardIncomingMetadata(ctx)
+	ctx = privacyS2SContext(ctx)
 	resp, err := m.Client.GetMessage(ctx, &messagingv1.GetMessageRequest{
 		MessageId: messageID.String(),
 	})
@@ -270,7 +270,7 @@ func (c *ChatHydrator) LoadChatTitle(ctx context.Context, chatID uuid.UUID) (str
 	if c == nil || c.Client == nil {
 		return "", fmt.Errorf("chat client unavailable")
 	}
-	ctx = s2s.ForwardIncomingMetadata(ctx)
+	ctx = privacyS2SContext(ctx)
 	resp, err := c.Client.GetChat(ctx, &chatv1.GetChatRequest{ChatId: chatID.String()})
 	if err != nil {
 		return "", err

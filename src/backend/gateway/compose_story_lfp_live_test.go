@@ -98,7 +98,6 @@ func composeRespondToLfpStory(t *testing.T, client *http.Client, base, token, st
 	t.Helper()
 	payload, err := json.Marshal(map[string]string{
 		"response_type": responseType,
-		"responseType":  responseType,
 	})
 	require.NoError(t, err)
 	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/stories/"+storyID+"/lfp-response", bytes.NewReader(payload))

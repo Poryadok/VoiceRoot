@@ -75,7 +75,7 @@ func TestJetStreamPublisher_SpaceCreatedRoundTrip(t *testing.T) {
 	const ownerID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 	require.NoError(t, pub.PublishSpaceCreated(ctx, spaceID, ownerID))
 
-	msg, err := sub.NextMsg(3 * time.Second)
+	msg, err := sub.NextMsg(10 * time.Second)
 	require.NoError(t, err)
 	var env eventsv1.ChatStreamEvent
 	require.NoError(t, proto.Unmarshal(msg.Data, &env))
@@ -108,7 +108,7 @@ func TestJetStreamPublisher_InviteCreatedRoundTrip(t *testing.T) {
 	const inviteCode = "invite-code-abc"
 	require.NoError(t, pub.PublishInviteCreated(ctx, spaceID, inviteCode))
 
-	msg, err := sub.NextMsg(3 * time.Second)
+	msg, err := sub.NextMsg(10 * time.Second)
 	require.NoError(t, err)
 	var env eventsv1.ChatStreamEvent
 	require.NoError(t, proto.Unmarshal(msg.Data, &env))

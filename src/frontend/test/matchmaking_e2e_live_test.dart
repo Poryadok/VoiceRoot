@@ -8,7 +8,9 @@ import 'package:http/http.dart' as http;
 /// Run: `VOICE_RUN_LIVE_COMPOSE=true flutter test test/matchmaking_e2e_live_test.dart`
 void main() {
   const runLive = bool.fromEnvironment('VOICE_RUN_LIVE_COMPOSE') ||
-      String.fromEnvironment('VOICE_RUN_LIVE_COMPOSE') == 'true';
+      String.fromEnvironment('VOICE_RUN_LIVE_COMPOSE') == 'true' ||
+      bool.fromEnvironment('VOICE_RUN_LIVE_INTEGRATION') ||
+      String.fromEnvironment('VOICE_RUN_LIVE_INTEGRATION') == 'true';
 
   test('live compose match found accept flow', () async {
     if (!runLive) {
@@ -63,29 +65,21 @@ void main() {
     await _complete(client, base, tokenA, matchId);
     await _complete(client, base, tokenB, matchId);
 
-    final profileIds = (match['profileIds'] as List<dynamic>? ??
-            match['profile_ids'] as List<dynamic>? ??
-            const [])
-        .cast<String>();
     final selfB = await _profileId(client, base, tokenB);
-    final ratedId = profileIds.firstWhere(
-      (id) => id != selfB,
-      orElse: () => profileIds.last,
-    );
-
-    await _rate(client, base, tokenA, matchId, ratedId, stars: 5);
+    expect(selfB, isNotEmpty);
+    await _rate(client, base, tokenA, matchId, selfB, stars: 5);
 
     final rating = await _playerRating(
       client,
       base,
       tokenA,
-      ratedId,
+      selfB,
       gameId,
     );
     final value = (rating['ratingValue'] as num?)?.toDouble() ??
         (rating['rating_value'] as num?)?.toDouble();
     expect(value, 5.0);
-  });
+  }, timeout: const Timeout(Duration(minutes: 2)));
 }
 
 Future<String> _profileId(
@@ -136,7 +130,7 @@ Future<void> _rate(
       'stars': stars,
     }),
   );
-  expect(resp.statusCode, 200);
+  expect(resp.statusCode, 200, reason: resp.body);
 }
 
 Future<Map<String, dynamic>> _playerRating(

@@ -81,6 +81,26 @@ func TestAddGroupMembers_MinThreeMembers(t *testing.T) {
 	require.ErrorIs(t, err, ErrGroupTooFewMembers)
 }
 
+// TestAddGroupMembers_InternalMinAllowsDuo documents match squads (creator + one peer).
+func TestAddGroupMembers_InternalMinAllowsDuo(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatDBForStoreTest(t, ctx)
+	applyChatMigrationsForStoreTest(t, ctx, pool)
+	store := &DMStore{Pool: pool}
+
+	owner := uuid.New()
+	invitee := uuid.New()
+	row, err := store.CreateGroupChat(ctx, owner, "Match squad")
+	require.NoError(t, err)
+
+	added, err := store.AddGroupMembers(WithGroupMinMembers(ctx, 2), row.ID, []uuid.UUID{invitee})
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{invitee}, added)
+}
+
 // TestAddGroupMembers_MemberLimit documents chat-service.md 500 cap at store layer.
 func TestAddGroupMembers_MemberLimit(t *testing.T) {
 	if testing.Short() {

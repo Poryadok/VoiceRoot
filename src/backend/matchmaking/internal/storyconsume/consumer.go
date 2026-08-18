@@ -16,6 +16,10 @@ import (
 
 const streamName = "story_events"
 
+// story.lfp_created / story.lfp_response are two-token subjects; story.lfp_> does not match them.
+const jsSubjectStoryLfp = "story.>"
+const defaultDurable = "matchmaking_story_lfp_v2"
+
 // LfpStore applies story.lfp_* events into matchmaking_db.
 type LfpStore interface {
 	UpsertListing(ctx context.Context, storyID, authorID uuid.UUID, criteriaJSON string) (store.LfpListing, error)
@@ -84,7 +88,7 @@ func Run(ctx context.Context, natsURL, durable string, lfp LfpStore) error {
 		return fmt.Errorf("missing NATS_URL")
 	}
 	if strings.TrimSpace(durable) == "" {
-		durable = "matchmaking_story_lfp"
+		durable = defaultDurable
 	}
 	nc, err := nats.Connect(url,
 		nats.Name("voice-matchmaking-story-lfp"),
@@ -119,15 +123,25 @@ func Run(ctx context.Context, natsURL, durable string, lfp LfpStore) error {
 		_ = msg.Ack()
 	}
 
-	sub, err := js.Subscribe("story.lfp_>", msgHandler,
+	sub, err := js.Subscribe(jsSubjectStoryLfp, msgHandler,
 		nats.Durable(durable),
 		nats.BindStream(streamName),
 		nats.ManualAck(),
 	)
-	if err != nil {
+	for err != nil {
 		sub, err = js.Subscribe("", msgHandler, nats.Bind(streamName, durable), nats.ManualAck())
-		if err != nil {
+		if err == nil {
+			break
+		}
+		select {
+		case <-ctx.Done():
 			return fmt.Errorf("jetstream subscribe story.lfp_*: %w", err)
+		case <-time.After(2 * time.Second):
+			sub, err = js.Subscribe(jsSubjectStoryLfp, msgHandler,
+				nats.Durable(durable),
+				nats.BindStream(streamName),
+				nats.ManualAck(),
+			)
 		}
 	}
 	defer func() { _ = sub.Unsubscribe() }()

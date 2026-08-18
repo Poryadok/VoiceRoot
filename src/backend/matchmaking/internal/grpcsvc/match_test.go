@@ -3,6 +3,7 @@ package grpcsvc
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -54,6 +55,12 @@ func (s *stubSquadProvisioner) Provision(_ context.Context, _ uuid.UUID, _ []uui
 		s.chatID = "chat-1"
 	}
 	return s.voiceRoomID, s.chatID, nil
+}
+
+type errSquadProvisioner struct{ err error }
+
+func (s errSquadProvisioner) Provision(context.Context, uuid.UUID, []uuid.UUID) (string, string, error) {
+	return "", "", s.err
 }
 
 func matchTestServer(t *testing.T, pool *pgxpool.Pool, provisioner squadProvisioner) *MatchmakingGRPC {
@@ -145,6 +152,31 @@ func TestRespondToMatch_AcceptAllActivatesMatch(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "active", got.GetMatch().GetStatus())
 	require.Len(t, got.GetMatch().GetProfileIds(), 2)
+}
+
+func TestRespondToMatch_ProvisionErrorUnavailableIncludesCause(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startDB(t, ctx)
+	srv := matchTestServer(t, pool, errSquadProvisioner{err: errors.New("chat client unavailable")})
+	matchID, profileA, profileB := seedPendingDuoMatch(t, ctx, srv)
+
+	_, err := srv.RespondToMatch(ctxWithProfile(profileA), &matchmakingv1.RespondToMatchRequest{
+		MatchId: matchID,
+		Accept:  true,
+	})
+	require.NoError(t, err)
+
+	_, err = srv.RespondToMatch(ctxWithProfile(profileB), &matchmakingv1.RespondToMatchRequest{
+		MatchId: matchID,
+		Accept:  true,
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.Unavailable, status.Code(err))
+	require.Contains(t, err.Error(), "squad provisioning unavailable")
+	require.Contains(t, err.Error(), "chat client unavailable")
 }
 
 func TestRespondToMatch_DeclineCancelsDeclinerContinuesOtherSolo(t *testing.T) {
