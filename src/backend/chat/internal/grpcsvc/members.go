@@ -18,7 +18,8 @@ func (s *ChatGRPC) ListMembers(ctx context.Context, req *chatv1.ListMembersReque
 		return nil, status.Error(codes.FailedPrecondition, "chat persistence not configured")
 	}
 	caller, ok := authctx.ProfileID(ctx)
-	if !ok {
+	internal := authctx.IsInternalService(ctx)
+	if !internal && !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing profile")
 	}
 	chatID, err := parseUUIDField("chat_id", req.GetChatId())
@@ -32,12 +33,14 @@ func (s *ChatGRPC) ListMembers(ctx context.Context, req *chatv1.ListMembersReque
 	if row == nil {
 		return nil, status.Error(codes.NotFound, "chat not found")
 	}
-	member, err := s.isEffectiveChatMember(ctx, row, caller)
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-	if !member {
-		return nil, status.Error(codes.PermissionDenied, "not a chat member")
+	if !internal {
+		member, err := s.isEffectiveChatMember(ctx, row, caller)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		if !member {
+			return nil, status.Error(codes.PermissionDenied, "not a chat member")
+		}
 	}
 	members, err := s.listEffectiveChatMembers(ctx, row)
 	if err != nil {

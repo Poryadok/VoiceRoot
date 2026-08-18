@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	chatv1 "voice.app/voice/chat/v1"
@@ -103,6 +104,31 @@ func TestListMembers_UnknownChat_NotFound(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Equal(t, codes.NotFound, status.Code(err))
+}
+
+func TestListMembers_InternalCaller_NoProfileRequired(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	chatID := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	seedDMChatRows(t, ctx, pool, chatID, profA, profB)
+
+	client, cleanup := startChatGRPCTestServer(t, pool, nil, nil, nil)
+	t.Cleanup(cleanup)
+
+	internalCtx := metadata.AppendToOutgoingContext(ctx, "x-voice-internal-caller", "notification")
+	r, err := client.ListMembers(internalCtx, &chatv1.ListMembersRequest{
+		ChatId: chatID.String(),
+		Page:   &commonv1.CursorPageRequest{PageSize: 10},
+	})
+	require.NoError(t, err)
+	require.Len(t, r.GetMemberList().GetMembers(), 2)
 }
 
 func TestGetChat_DM_MemberSeesChat(t *testing.T) {
