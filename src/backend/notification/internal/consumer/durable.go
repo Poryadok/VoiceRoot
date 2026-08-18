@@ -3,7 +3,8 @@ package consumer
 import "strings"
 
 const (
-	durableMessage      = "notif_msg"
+	// v2: filter subject message.> (was msg.> on notif_msg — JetStream rejects filter change).
+	durableMessage = "notif_msg_v2"
 	durableMatchmaking  = "notif_mm"
 	durableVoice        = "notif_voice"
 	durableStory        = "notif_story"
