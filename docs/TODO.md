@@ -64,7 +64,7 @@ TODO разбит **по домену** (где менять код), не по 
 |------|-----|
 | [backend.md](todo/backend.md) § Critical Subscription | Checkout = `checkout.paddle.test`; CloudPayments `Unimplemented`; JWT `subscription_tier` без `AUTH_NATS_URL` |
 | [backend.md](todo/backend.md) § Critical Space | Нет `DeleteSpace` / `TransferOwnership` / `GetAuditLog` / каталога / шаблонов |
-| [backend.md](todo/backend.md) § High Chat | Стикеры/GIF-паки; folders RPC; view-count; `DeleteChat` |
+| [backend.md](todo/backend.md) § High Chat | Стикеры/GIF **в v1** (0 кода); folders RPC; view-count; `DeleteChat` |
 | [ci.md](todo/ci.md) § Critical | FCM/APNs, Alertmanager, staging DoD, TOTP/Resend/Paddle secrets |
 | [admin.md](todo/admin.md) § Critical | Resolve/dismiss репортов; OAuth assign-to-me |
 | [client.md](todo/client.md) § High | Телефон/OTP/sessions/delete-account UI; quiet hours с сервера; черновики |

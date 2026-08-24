@@ -269,7 +269,7 @@
 
 
 - [ ] **[Chat] Folders API entirely unimplemented** — `ListFolders`/`CreateFolder`/`UpdateFolder`/`DeleteFolder` fall through to embed Unimplemented. Нет миграций `folders`. Спека [navigation.md](../features/navigation.md); в `text-chat.md` нет — см. [product-roadmap.md](product-roadmap.md).
-- [ ] **[Chat] Стикер-паки / GIF / voice-note first-class — 0 кода** — `text-chat.md` требует системные + space packs; ADR 005 откладывает live. Нет сервиса/store/UI composer.
+- [ ] **[Chat] Стикер-паки / GIF / voice-note first-class — 0 кода** — scope **v1** (2026-08-24): системные + user-upload packs + composer; ADR 005 откладывает **lives** до контрактов. Нет сервиса/store/UI. PLAN фаза **2**.
 - [x] **[Chat] `MuteChat` / `ArchiveChat`** — `mute_archive.go`. `DeleteChat` всё ещё нет handler.
 - [ ] **[Chat] `DeleteChat` unimplemented** — proto + gRPC handler exist; no `ChatGRPC.DeleteChat` (`src/backend/chat/internal/grpcsvc/`).
 - [ ] **[Chat] `ListChats` omits channels** — SQL filters `c.type IN ('dm', 'group')` (`src/backend/chat/internal/store/list_chats.go:87,97`). Space channels are invisible in the main inbox despite `chat-service.md` listing Channels as a folder dimension.

@@ -38,7 +38,7 @@
 |------|--------|---------|------------------------|
 | [auth-and-contacts](features/auth-and-contacts.md) | partial | Auth (Java), Gateway | Email/guest/sessions/reset **REST есть**. Flutter: нет телефона/OTP, sessions, delete-account. Convert-guest ядро shipped. |
 | [friends](features/friends.md) | shipped | Social, User | Запросы/блок/DM-гейт живые. Нет REST list contacts/favorites, QR, phone-book UI. |
-| [text-chat](features/text-chat.md) | partial | Chat, Messaging, Realtime | DM/группы/треды/пины/markdown/@mentions live. **Нет** стикеров/GIF-паков, folders RPC, `DeleteChat`, view-count. |
+| [text-chat](features/text-chat.md) | partial | Chat, Messaging, Realtime | DM/группы/треды/пины/markdown/@mentions live. **Стикеры/GIF-паки — v1, 0 кода** (фаза 2). Нет folders RPC, `DeleteChat`, view-count. |
 | [forward-messages](features/forward-messages.md) | shipped | Messaging | Attribution / copy-as-new / commentary live. |
 | [presence](features/presence.md) | partial | User, Realtime | REST presence + WS в общем чате. Нет idle 5 мин, game detect, live presence друзьям вне чата. |
 | [user-profile](features/user-profile.md) | partial | User, File | Аватар/био/switch live. GIF-аватар отвергается; `banner_url` не в proto. |
@@ -87,7 +87,7 @@
 | JWT `subscription_tier=free` без NATS | User/Chat доверяют JWT, не Subscription S2S | Auth Java + ops `AUTH_NATS_URL` |
 | Нет `TransferOwnership` / `DeleteSpace` | Owner не может leave; спейс нельзя закрыть | Space Critical |
 | Alertmanager → null receiver | P1 алерты никто не видит | [ci.md](todo/ci.md) (**Вы**) |
-| Спека стикеров | Паки + composer | Человек: v1 или вычеркнуть из [text-chat.md](features/text-chat.md) |
+| Стикеры/GIF в чате (0 кода) | Паки + composer | Scope **v1 confirmed** ([text-chat.md](features/text-chat.md)); реализация — фаза **2** |
 
 CloudPayments — отдельный трек после Paddle (СНГ), не блокер soft-launch, если Paddle живой.
 
@@ -139,7 +139,7 @@ CloudPayments — отдельный трек после Paddle (СНГ), не �
 
 **Зависимости внутри 1:** A1 (`Transfer`) **перед** owner-leave. E **перед** любой работой «Premium включает GIF/banner/лимиты» (**2**). G после B.
 
-**Не включать в 1:** стикеры, folders, каталог спейсов, шаблоны, CloudPayments, ffmpeg, party-from-voice, Developer Portal polish.
+**Не включать в 1:** стикеры (фаза **2**, scope confirmed), folders, каталог спейсов, шаблоны, CloudPayments, ffmpeg, party-from-voice, Developer Portal polish.
 
 **DoD:** owner transfer + delete live; Admin закрывает репорт; user appeal REST+UI; checkout URL боевой (или скрыт за флагом, не test); shadow-ban не доходит до аудитории; compose/Flutter live на эти пути зелёные.
 
@@ -155,7 +155,7 @@ CloudPayments — отдельный трек после Paddle (СНГ), не �
 | **Backend User** | GIF-аватар + banner expose; Premium custom status gate; `SetPrimaryProfile` | JWT tier ≠ всегда free |
 | **Backend File** | SHA-256 dedup + `file_references`; ffmpeg GIF→MP4 / video 720p / PDF thumb; `CheckQuota` чтит premium | entitlements; не ждать стикеры |
 | **Backend Chat** | `DeleteChat`; folders RPC+миграция; `ListChats` каналы + group `last_message_at`; view-count (Messaging) | folders UI — Flutter следом |
-| **Stickers/GIF** | только после решения человека (v1 или вычеркнуть). Если v1 — store паков + composer | спека; File ffmpeg для GIF |
+| **Stickers/GIF** | системные паки + upload своих; send/receive first-class; composer picker; GIF как first-class (не только file attach). Lives TC-MSG-09 после контрактов | [text-chat.md](features/text-chat.md); File ffmpeg для GIF; ADR 005 |
 | **Backend Voice** | `MoveToVoiceRoom`; enforce `VOICE_SPEAK` / `VOICE_MUTE_OTHERS`; roster NATS join/leave | Role client уже wired |
 | **Backend Matchmaking** | Party snapshot из voice roster; leave/join сбрасывает очередь; `ApplySanction(mm_ban)` → `BanFromMM`; П.2 `RateTeammates` / history UI | Voice roster events |
 | **Backend Space catalog** | `SearchPublicSpaces` или честный Search hydrator (не member-only `GetSpace`); templates — отдельные PR | не блокер entitlements |

@@ -28,8 +28,8 @@
 - Файлы и изображения: да — лимиты и хранилище см. [file-storage.md](file-storage.md)
 - Превью ссылок: да, автоматически — запрос делает **клиент**
 - Голосовые сообщения: да (аудиофайл + встроенный плеер)
-- GIF: да
-- Стикеры: да — системные паки + пользовательские (загрузка своих паков)
+- GIF: да — first-class сообщение в чате (поиск/отправка GIF; не только generic file attach). Провайдер и wire-shape — в реализации Messaging/Chat; Premium **GIF-аватар** — отдельно в [user-profile.md](user-profile.md) / [subscription.md](subscription.md)
+- Стикеры: **да, в scope v1** (решение 2026-08-24) — системные паки + пользовательские (загрузка своих паков); отправка/приём как first-class сообщение; picker в composer. Sticker store / premium ★ packs из design — не блокер soft-launch (можно Common после ядра паков). Live TC-MSG-09 — после контрактов; до реализации lives deferred — [ADR 005](../adr/005-rich-media-live-tests-deferred.md)
 - Emoji: да
 
 ## Социальные механики
