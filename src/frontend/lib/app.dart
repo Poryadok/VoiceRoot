@@ -51,6 +51,7 @@ import 'ui/profile/profile_avatar_switcher.dart';
 import 'ui/profile/profile_switcher.dart';
 import 'ui/profile/profile_edit_sheet.dart';
 import 'ui/settings/settings_sheet.dart';
+import 'ui/shell/desktop_shell_rail.dart';
 import 'ui/shell/mobile_chat_strip.dart';
 import 'ui/shell/navigation_panel.dart';
 import 'ui/shell/side_panel.dart';
@@ -333,6 +334,11 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
                             : null;
 
                         return ThreeColumnShell(
+                          railChild: narrow
+                              ? null
+                              : DesktopShellRail(
+                                  onOpenSettings: _openSettingsSheet,
+                                ),
                           navigationChild: NavigationPanel(collapsed: inSpace),
                           navigationCollapsed: inSpace,
                           middleChild: inSpace

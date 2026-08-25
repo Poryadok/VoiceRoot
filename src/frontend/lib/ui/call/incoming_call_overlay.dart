@@ -6,7 +6,7 @@ import '../../state/call_providers.dart';
 import '../../state/gateway_providers.dart';
 import '../../state/social_providers.dart';
 import '../../theme/voice_colors.dart';
-import 'call_modal_overlay.dart';
+import '../call/call_modal_overlay.dart';
 
 class IncomingCallOverlay extends ConsumerWidget {
   const IncomingCallOverlay({super.key});
@@ -42,18 +42,20 @@ class IncomingCallOverlay extends ConsumerWidget {
       avatarLabel: title,
       avatarUrl: caller?.avatarUrl,
       actions: [
-        FilledButton.icon(
+        FilledButton(
           key: acceptKey,
           onPressed: () => ref.read(callControllerProvider.notifier).acceptCall(),
-          icon: const Icon(Icons.call),
-          label: Text(l10n.callAccept),
+          child: Text(l10n.callAccept),
         ),
-        OutlinedButton.icon(
+        OutlinedButton(
           key: declineKey,
           onPressed: () =>
               ref.read(callControllerProvider.notifier).declineCall(),
-          icon: Icon(Icons.call_end, color: voice.error),
-          label: Text(l10n.callDecline),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: voice.error,
+            side: BorderSide(color: voice.error),
+          ),
+          child: Text(l10n.callDecline),
         ),
       ],
     );

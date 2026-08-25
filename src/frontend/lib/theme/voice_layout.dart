@@ -1,5 +1,8 @@
 /// Shared responsive layout breakpoints ([docs/design/brand.md]).
 abstract final class VoiceLayout {
+  /// Penpot `layout.railWidth` — icon rail on desktop shell.
+  static const double desktopRailWidth = 56;
+
   /// Width below which the shell uses mobile navigation patterns.
   static const double narrowBreakpoint = 600;
 

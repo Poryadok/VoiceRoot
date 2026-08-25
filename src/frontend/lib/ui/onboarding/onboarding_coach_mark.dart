@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/voice_colors.dart';
+import '../../theme/voice_metrics.dart';
+import '../call/call_modal_overlay.dart';
 
 /// Non-blocking coach-mark tooltip anchored to [anchorKey] (docs/features/onboarding.md).
 class OnboardingCoachMark extends StatelessWidget {
@@ -80,19 +82,21 @@ class OnboardingCoachMark extends StatelessWidget {
     final size = box.size;
     final voice = VoiceColors.of(context);
     final screen = MediaQuery.sizeOf(context);
+    final radius = context.voiceMetrics.corner('md', fallback: 6);
 
-    const bubbleWidth = 280.0;
+    const bubbleWidth = 320.0;
+    const bubbleMinHeight = 248.0;
     var left = offset.dx + (size.width / 2) - (bubbleWidth / 2);
     left = left.clamp(8.0, screen.width - bubbleWidth - 8);
     var top = offset.dy + size.height + 12;
-    if (top + 180 > screen.height) {
-      top = offset.dy - 180;
+    if (top + bubbleMinHeight > screen.height) {
+      top = offset.dy - bubbleMinHeight;
     }
 
     return Stack(
       children: [
         ModalBarrier(
-          color: voice.canvas.withValues(alpha: 0.35),
+          color: voice.canvas.withValues(alpha: kVoiceOverlayDimOpacity),
           dismissible: false,
         ),
         Positioned(
@@ -100,37 +104,40 @@ class OnboardingCoachMark extends StatelessWidget {
           top: top,
           width: bubbleWidth,
           child: Material(
-            elevation: 8,
-            borderRadius: BorderRadius.circular(12),
-            color: voice.surface,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(title, style: Theme.of(context).textTheme.titleSmall),
-                  const SizedBox(height: 8),
-                  Text(body, style: Theme.of(context).textTheme.bodyMedium),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    alignment: WrapAlignment.end,
-                    spacing: 4,
-                    runSpacing: 4,
-                    children: [
-                      TextButton(onPressed: onSkip, child: Text(skipLabel)),
-                      if (secondaryLabel != null && onSecondary != null)
-                        TextButton(
-                          onPressed: onSecondary,
-                          child: Text(secondaryLabel!),
+            elevation: 0,
+            borderRadius: BorderRadius.circular(radius),
+            color: voice.elevated,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: bubbleMinHeight),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(title, style: Theme.of(context).textTheme.titleSmall),
+                    const SizedBox(height: 8),
+                    Text(body, style: Theme.of(context).textTheme.bodyMedium),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      alignment: WrapAlignment.end,
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: [
+                        TextButton(onPressed: onSkip, child: Text(skipLabel)),
+                        if (secondaryLabel != null && onSecondary != null)
+                          TextButton(
+                            onPressed: onSecondary,
+                            child: Text(secondaryLabel!),
+                          ),
+                        FilledButton(
+                          onPressed: onContinue,
+                          child: Text(continueLabel),
                         ),
-                      FilledButton(
-                        onPressed: onContinue,
-                        child: Text(continueLabel),
-                      ),
-                    ],
-                  ),
-                ],
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

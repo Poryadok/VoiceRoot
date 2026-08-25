@@ -5,7 +5,10 @@ import '../../theme/voice_metrics.dart';
 import '../a11y/focus_trap.dart';
 import '../core/voice_avatar.dart';
 
-/// Centered call card over dimmed backdrop.
+/// Shared Penpot v2 overlay backdrop opacity (Dim fillOpacity 0.45).
+const double kVoiceOverlayDimOpacity = 0.45;
+
+/// Centered call card over dimmed backdrop (Penpot Overlay/Call/* · v2).
 class CallModalOverlay extends StatelessWidget {
   const CallModalOverlay({
     super.key,
@@ -14,6 +17,7 @@ class CallModalOverlay extends StatelessWidget {
     required this.subtitle,
     required this.avatarLabel,
     this.avatarUrl,
+    this.hint,
     required this.actions,
   });
 
@@ -22,20 +26,22 @@ class CallModalOverlay extends StatelessWidget {
   final String subtitle;
   final String avatarLabel;
   final String? avatarUrl;
+  final String? hint;
   final List<Widget> actions;
 
   @override
   Widget build(BuildContext context) {
     final voice = VoiceColors.of(context);
-    final radius = context.voiceMetrics.corner('lg', fallback: 8);
+    final radius = context.voiceMetrics.corner('md', fallback: 6);
     return Positioned.fill(
       key: overlayKey,
       child: VoiceFocusTrap(
         child: Material(
-          color: voice.canvas.withValues(alpha: 0.88),
+          color: voice.canvas.withValues(alpha: kVoiceOverlayDimOpacity),
           child: Center(
             child: Container(
               width: 360,
+              constraints: const BoxConstraints(minHeight: 320),
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
                 color: voice.elevated,
@@ -62,6 +68,16 @@ class CallModalOverlay extends StatelessWidget {
                     textAlign: TextAlign.center,
                     style: TextStyle(color: voice.textSecondary),
                   ),
+                  if (hint != null && hint!.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      hint!,
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: voice.textSecondary,
+                          ),
+                    ),
+                  ],
                   const SizedBox(height: 20),
                   Wrap(
                     alignment: WrapAlignment.center,

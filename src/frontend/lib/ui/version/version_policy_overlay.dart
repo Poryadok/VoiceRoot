@@ -7,6 +7,8 @@ import '../../services/desktop_updater_service.dart';
 import '../../state/version_policy_providers.dart';
 import '../../state/version_update_launcher.dart';
 import '../../theme/voice_colors.dart';
+import '../../theme/voice_metrics.dart';
+import '../call/call_modal_overlay.dart';
 
 final versionUpdateLauncherProvider = Provider<VersionUpdateLauncher>((ref) {
   return createVersionUpdateLauncher();
@@ -87,26 +89,41 @@ class _ForceUpdateBarrier extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final voice = VoiceColors.of(context);
+    final radius = context.voiceMetrics.corner('md', fallback: 6);
     return Material(
       key: const Key('version_force_update_barrier'),
-      color: voice.canvas.withValues(alpha: 0.92),
+      color: voice.canvas.withValues(alpha: kVoiceOverlayDimOpacity),
       child: SafeArea(
         child: Center(
-          child: Padding(
+          child: Container(
+            width: 400,
+            constraints: const BoxConstraints(minHeight: 280),
+            margin: const EdgeInsets.all(24),
             padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: voice.elevated,
+              borderRadius: BorderRadius.circular(radius),
+              border: Border.all(color: voice.borderDefault),
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
                   l10n.versionUpdateRequired,
-                  style: Theme.of(context).textTheme.headlineSmall,
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
                 if (policy.releaseNotes != null) ...[
                   const SizedBox(height: 12),
-                  Text(policy.releaseNotes!),
+                  Text(
+                    policy.releaseNotes!,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: voice.textSecondary,
+                        ),
+                  ),
                 ],
                 if (policy.updateUrl != null) ...[
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 20),
                   FilledButton(
                     key: const Key('version_force_update_button'),
                     onPressed: onUpdate,

@@ -6,7 +6,7 @@ import '../../state/call_providers.dart';
 import '../../state/gateway_providers.dart';
 import '../../state/social_providers.dart';
 import '../../theme/voice_colors.dart';
-import 'call_modal_overlay.dart';
+import '../call/call_modal_overlay.dart';
 
 class OutgoingCallOverlay extends ConsumerWidget {
   const OutgoingCallOverlay({super.key});
@@ -44,16 +44,20 @@ class OutgoingCallOverlay extends ConsumerWidget {
       avatarLabel: title,
       avatarUrl: callee?.avatarUrl,
       actions: [
-        const SizedBox(
-          width: 20,
-          height: 20,
-          child: CircularProgressIndicator(strokeWidth: 2),
+        OutlinedButton(
+          onPressed: () => ref
+              .read(callControllerProvider.notifier)
+              .setMuted(!call.isMuted),
+          child: Text(call.isMuted ? l10n.callUnmute : l10n.callMute),
         ),
-        OutlinedButton.icon(
+        OutlinedButton(
           key: cancelKey,
           onPressed: () => ref.read(callControllerProvider.notifier).hangUp(),
-          icon: Icon(Icons.call_end, color: voice.error),
-          label: Text(l10n.callHangup),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: voice.error,
+            side: BorderSide(color: voice.error),
+          ),
+          child: Text(l10n.callHangup),
         ),
       ],
     );

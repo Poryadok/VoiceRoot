@@ -44,6 +44,7 @@ class ThreeColumnShell extends StatelessWidget {
   final double navigationCollapsedWidth;
   final double sidePanelWidth;
 
+  static const Key navDesktopRail = Key('nav_desktop_rail');
   static const Key navActiveRail = Key('nav_active_rail');
   static const Key navChatList = Key('nav_chat_list');
   static const Key navOpenChat = Key('nav_open_chat');
@@ -142,10 +143,22 @@ class ThreeColumnShell extends StatelessWidget {
 
     Widget desktopBody({required bool narrow}) {
       if (navigationChild != null) {
-        final children = <Widget>[
+        final children = <Widget>[];
+        if (railChild != null && !narrow) {
+          children.add(
+            Semantics(
+              label: 'App navigation rail',
+              container: true,
+              explicitChildNodes: true,
+              child: SizedBox(key: navDesktopRail, child: railChild),
+            ),
+          );
+          children.add(columnDivider());
+        }
+        children.addAll([
           navigationColumn(),
           columnDivider(),
-        ];
+        ]);
         if (middleChild != null) {
           children.add(middleColumn());
           children.add(columnDivider());
