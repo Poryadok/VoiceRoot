@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'package:google_fonts/google_fonts.dart';
-
 import 'voice_colors.dart';
 import 'voice_metrics.dart';
 import 'voice_token_catalog.dart';
@@ -11,6 +9,9 @@ enum VoiceThemeMode { light, dark, highContrast }
 /// Builds [ThemeData] from design tokens + [profileAccent] for the active profile.
 class VoiceTheme {
   VoiceTheme._();
+
+  /// Bundled in [pubspec.yaml] — no runtime fonts.gstatic.com fetch (web/offline).
+  static const String fontFamily = 'Noto Sans';
 
   static const _modeKey = <VoiceThemeMode, String>{
     VoiceThemeMode.light: 'light',
@@ -36,6 +37,7 @@ class VoiceTheme {
 
     return ThemeData(
       useMaterial3: true,
+      fontFamily: fontFamily,
       brightness: mode == VoiceThemeMode.light
           ? Brightness.light
           : Brightness.dark,
@@ -119,7 +121,7 @@ class VoiceTheme {
     final base = mode == VoiceThemeMode.light
         ? Typography.material2021(platform: TargetPlatform.android).black
         : Typography.material2021(platform: TargetPlatform.android).white;
-    final noto = GoogleFonts.notoSansTextTheme(base);
+    final noto = base.apply(fontFamily: fontFamily);
     return noto.copyWith(
       titleLarge: noto.titleLarge?.copyWith(
         fontSize: 18,
