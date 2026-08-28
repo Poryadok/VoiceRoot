@@ -66,6 +66,20 @@
 | `otp_codes` | email verify / password reset |
 | `e2e_key_backups` | [encryption.md](features/encryption.md) — client-encrypted key backup blob (`V4__e2e_key_backups.sql`) |
 
+### `chat_db` (Chat Service)
+
+Инвентарь ядра + backlog — [chat-service.md](microservices/chat-service.md) § «Модель данных»; scope matrix — [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md) §4.4 / §8.
+
+| Таблица | Примечание |
+|---------|------------|
+| `chats`, `chat_members` | Shipped — DM/group/channel, `is_archived`, `inbox_bucket` |
+| `folders`, `folder_chats`, `quick_access_chats` | Backlog — navigation IA; **0 DDL** |
+| `sticker_packs` | Catalog metadata (`is_system`, `is_premium`, `creator_profile_id`) — **0 code** |
+| `stickers` | Rows per asset; `file_id` → File `intent=sticker` |
+| `profile_installed_packs` | Per-profile install + composer rail `sort_order` |
+
+Sticker/GIF bytes live in **`file_db`** (`files`); send payloads in **`messaging_db`** (`messages.content_type`). Do not duplicate catalog DDL outside Chat Service docs.
+
 ---
 
 ## Клиенты и админка

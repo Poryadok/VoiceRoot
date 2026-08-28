@@ -127,6 +127,21 @@ POST /api/v1/realtime/ws-ticket → Gateway (short-lived WS ticket; JWT в за�
 
 **Rate limits (BOT-C):** `BotRoleOps` — 100/min per bot token on `roles/assign`, `roles/revoke`, `POST /me/roles`.
 
+**[text-chat.md](../features/text-chat.md) — Stickers and GIF (Chat catalog + provider search):** namespace under **`/api/v1/chats/**`** sticker/GIF routes transcoded to **Chat Service** ([chat-service.md](chat-service.md) § Sticker packs). **Not yet in Gateway code.**
+
+| Method | Route | gRPC | Query / body |
+|--------|-------|------|--------------|
+| `GET` | `/api/v1/sticker-packs` | `ListInstalledStickerPacks` | — |
+| `GET` | `/api/v1/sticker-packs/{pack_id}` | `GetStickerPack` | — |
+| `POST` | `/api/v1/sticker-packs/{pack_id}/install` | `InstallStickerPack` | — |
+| `DELETE` | `/api/v1/sticker-packs/{pack_id}` | `UninstallStickerPack` | user packs only (`is_system` → 403) |
+| `POST` | `/api/v1/sticker-packs/user` | `CreateUserStickerPack` | `title` |
+| `POST` | `/api/v1/sticker-packs/{pack_id}/stickers` | `AddStickersToUserPack` | per-sticker after File `ConfirmUpload` |
+| `GET` | `/api/v1/gifs/search` | `SearchGifs` | `q`, `limit`, **`cursor`** (opaque; Chat-owned `next_cursor`) |
+| `GET` | `/api/v1/gifs/trending` | `GetTrendingGifs` | optional `cursor` |
+
+Send after pick — **Messaging** `POST /api/v1/messages/...` (not File attach). File upload for pack assets — `/api/v1/files/**` with `intent=sticker`.
+
 ## Маршруты персонала (Admin API)
 
 `/api/v1/analytics/**` — для **React Admin Panel** и внутренних операторов. После валидации JWT Gateway проверяет, что в claims есть роль персонала (набор имён и источник истины — Auth / Role; например платформенный staff и/или доступ к модераторской панели). Без этого — **403 Forbidden**. Все вызовы с чувствительными отчётами и **export** должны писаться в audit log (subject, маршрут, время) на стороне Analytics или общего аудита.

@@ -49,31 +49,33 @@
 
 В каждом чате есть раздел **Shared Media** с вкладками — отдельный вид поиска по типу контента. Канон вкладок (согласовано с [text-chat.md](text-chat.md) / [screen-controls.md](../design/screen-controls.md)):
 
-| Вкладка   | `MessageContentType` / kind | Что показывает |
-|-----------|----------------------------|----------------|
-| **Медиа** | photo, video, video_note, gif | Фото, видео, круглые video notes, GIF |
-| **Стикеры** | sticker | Sticker messages |
-| **Файлы** | document, music | Документы, архивы, music attachments |
-| **Ссылки** | link, article | URL в тексте + article payloads |
-| **Голосовые** | voice | Voice messages |
+| Вкладка   | `SharedMediaKind` (spec) | `MessageContentType` / kind | Что показывает |
+|-----------|--------------------------|----------------------------|----------------|
+| **Медиа** | `SHARED_MEDIA_KIND_MEDIA` | photo, video, video_note, gif | Фото, видео, круглые video notes, GIF |
+| **Стикеры** | `SHARED_MEDIA_KIND_STICKERS` | sticker | Sticker messages |
+| **Файлы** | `SHARED_MEDIA_KIND_FILES` | document, music | Документы, архивы, music attachments |
+| **Ссылки** | `SHARED_MEDIA_KIND_LINKS` | link, article | URL в тексте + article payloads |
+| **Голосовые** | `SHARED_MEDIA_KIND_VOICE` | voice | Voice messages |
+
+Wire: `ListSharedMediaRequest.kind` = `SharedMediaKind` ([messaging-service.md](../microservices/messaging-service.md) § `ListSharedMedia` filters). **Shipped proto** has four values only (`MEDIA`, `FILES`, `LINKS`, `VOICE`); `STICKERS` kind and `gif`/`video_note` in `MEDIA` predicate are spec extensions — not yet in proto/code.
 
 ### Content-type mapping (wire → UI → Shared Media)
 
 Канонические идентификаторы — `MessageContentType` в [messaging-service.md](../microservices/messaging-service.md); legacy/kind aliases в `message_attachments.kind`:
 
-| Product | `MessageContentType` | Attachment `kind` | List preview label | Shared Media tab | In-chat search |
-|---------|---------------------|-------------------|-------------------|------------------|----------------|
-| Photo | `PHOTO` | `image` | Photo | **Медиа** | — (media grid) |
-| Video | `VIDEO` | `video` | Video | **Медиа** | — |
-| Video note | `VIDEO_NOTE` | `video_note` | Video message | **Медиа** | — |
-| GIF | `GIF` | `gif` | GIF | **Медиа** | — |
-| Voice | `VOICE` | `voice_message` | Voice | **Голосовые** | — |
-| Document | `DOCUMENT` | `document` | File | **Файлы** | filename |
-| Music | `MUSIC` | `music` | Music | **Файлы** | title/artist metadata |
-| Sticker | `STICKER` | `sticker` | Sticker | **Стикеры** | — |
-| Inline URL | `TEXT` + link metadata | `link` | text preview or URL snippet | **Ссылки** | URL substring in body |
-| Article | `ARTICLE` | `article` | Article | **Ссылки** | title/description in payload |
-| Plain text | `TEXT` | — | text snippet | — | full text index |
+| Product | `MessageContentType` | Attachment `kind` | List preview label | Shared Media tab | `SharedMediaKind` | In-chat search |
+|---------|---------------------|-------------------|-------------------|------------------|-------------------|----------------|
+| Photo | `PHOTO` | `image` | Photo | **Медиа** | `MEDIA` | — (media grid) |
+| Video | `VIDEO` | `video` | Video | **Медиа** | `MEDIA` | — |
+| Video note | `VIDEO_NOTE` | `video_note` | Video message | **Медиа** | `MEDIA` | — |
+| GIF | `GIF` | `gif` | GIF | **Медиа** | `MEDIA` | — |
+| Voice | `VOICE` | `voice_message` | Voice | **Голосовые** | `VOICE` | — |
+| Document | `DOCUMENT` | `document` | File | **Файлы** | `FILES` | filename |
+| Music | `MUSIC` | `music` | Music | **Файлы** | `FILES` | title/artist metadata |
+| Sticker | `STICKER` | `sticker` | Sticker | **Стикеры** | `STICKERS` | — |
+| Inline URL | `TEXT` + link metadata | `link` | text preview or URL snippet | **Ссылки** | `LINKS` | URL substring in body |
+| Article | `ARTICLE` | `article` | Article | **Ссылки** | `LINKS` | title/description in payload |
+| Plain text | `TEXT` | — | text snippet | — | — | full text index |
 
 **Inline URL vs Article:** inline URL — client OG preview on `TEXT`; Article — attach-menu payload, server metadata worker. См. [text-chat.md](text-chat.md) § «Article vs inline URL».
 

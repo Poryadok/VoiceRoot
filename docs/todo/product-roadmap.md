@@ -19,6 +19,16 @@ _Нет открытых пунктов._
 
 ## Common
 
+### Telegram-parity audit — product policy (undecided, 2026-08-28)
+
+Источник: `tmp/telegram-ux-audit/AUDIT.md` (anti-loop rule §4; round3 DEFER). В feature docs помечено DEFERRED/target-state — **решение человека** до реализации; после решения обновить [screen-controls.md](../design/screen-controls.md) / [notifications.md](../features/notifications.md) / [search.md](../features/search.md).
+
+- [ ] **R3-03-A09 — Active strip: unread retention on back** — normative сейчас: back **удаляет** чат из strip (даже с unread). Альтернатива: удерживать при unread — выбрать одно правило; убрать DEFERRED caveat из §1.6.
+- [ ] **R4-02-D1 — Pinned bar tap cycle** — v1 = jump to latest pin; target-state = cycle pins on bar tap — [text-chat.md](../features/text-chat.md) § «Закреплённые», §3.1a.
+- [ ] **R2-13-A02 — Notifications for archived chats** — push/in-app when archived chat receives message: suppress vs badge-only vs full delivery — [notifications.md](../features/notifications.md) (нет политики).
+- [ ] **R2-12-U03 — Location in Shared Media tabs** — assign `LOCATION` to Media vs Files vs Links vs отдельная вкладка — [search.md](../features/search.md) mapping table incomplete.
+- [ ] **R2-07-U01 — DM header subtitle priority** — idle vs DND vs in-call vs last-seen when multiple apply — [presence.md](../features/presence.md) § header (сейчас «или» без жёсткого порядка).
+
 - [ ] **П.5 — Верификация ранга Steam/FACEIT (MVP)** — `linked_game_accounts`, OAuth/API, badge в ММ, фильтр `verified_rank_only`. Спека: [PROJECT.md](../PROJECT.md), [matchmaking.md](../features/matchmaking.md). → пересекается [User] verification gaps (Batch 14).
 - [ ] **П.6 — Верификация Twitch/YouTube/DNS** — cron `VerificationStatusRefresh`, org TXT flow, Flutter Settings → Верификация. Спека: [verification.md](../features/verification.md). → Batch 14 [User] Verification V1.
 - [ ] **П.8 — Синхронизация контактов телефонной книги** — Flutter hash + `POST /contacts/sync` live есть; нет list/favorites REST + onboarding «Найди друзей» UI. Спека: [auth-and-contacts.md](../features/auth-and-contacts.md). → [backend.md](backend.md) Social REST; [client.md](client.md) phone-book.

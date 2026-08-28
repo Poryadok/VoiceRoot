@@ -65,14 +65,14 @@
 
 | Фича                 | Файл                                          | Scope | Описание                                                                              |
 |----------------------|-----------------------------------------------|-------|---------------------------------------------------------------------------------------|
-| Навигация            | [navigation.md](features/navigation.md)       | partial | Rail IA: folders (между nav и профилями), Quick Access (≤15 per profile), profiles, ☰ settings; archive via profile RC |
+| Навигация            | [navigation.md](features/navigation.md)       | partial | Rail IA: folders, Quick Access (≤15), ProfileStack, ☰ settings; archive via profile RC; mobile tab bar + drawer + active strip; virtual «Запросы» folder |
 | Поиск                | [search.md](features/search.md)               | current | Поиск внутри чата и глобальный поиск по контактам, спейсам, сообщениям                |
 | Deep links / Sharing | [deep-links.md](features/deep-links.md)       | current | Схема URL для ссылок на спейс, канал, сообщение, профиль                              |
 | Платформы            | [platforms.md](features/platforms.md)         | partial | Web → Windows → Mobile; Flutter, ограничения веб-версии                               |
 | Обновления клиентов  | [updates.md](features/updates.md)             | partial | Версионирование API, force-update, desktop auto-update, mobile in-app + Shorebird OTA |
-| Уведомления          | [notifications.md](features/notifications.md) | partial | Типы уведомлений, пуши, звуки, гранулярные настройки per-chat                         |
+| Уведомления          | [notifications.md](features/notifications.md) | partial | Типы (`new_message`, `message_request`, `mention`, …), presence routing (online → in-app only), `send_silent`, quiet hours (push suppressed / in-app delivered), dual-path read sync |
 | Подписка             | [subscription.md](features/subscription.md)   | partial | Премиум профиль ($5/мес) и буст спейса, косметика и расширенные лимиты                |
-| Хранение файлов      | [file-storage.md](features/file-storage.md)   | partial | Cloudflare R2, лимиты, сжатие медиа, дедупликация, retention                          |
+| Хранение файлов      | [file-storage.md](features/file-storage.md)   | partial | Cloudflare R2, лимиты, сжатие медиа, дедупликация, retention; stickers/GIF via `UploadIntent` (😊 panel, wire spec — [file-service.md](microservices/file-service.md)) |
 | Наблюдаемость        | [observability.md](features/observability.md) | partial | Логи (Loki), метрики (Prometheus), Grafana, алерты                                    |
 | Продуктовая аналитика | [analytics.md](features/analytics.md)     | partial | ClickHouse, NATS ingest, staff dashboards, воронки/retention, export с audit log      |
 | Федерация            | [federation.md](features/federation.md)       | deferred | Self-hosted ноды — **deferred** (по запросу рынка); спека и scaffold в репозитории |

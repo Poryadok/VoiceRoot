@@ -58,7 +58,8 @@
 - **Reconnection**: exponential backoff (1s → 2s → 4s, cap 30s)
 - **Между инстансами Realtime**: Redis Pub/Sub
 - **Прочитанное (dual path)**: (1) **persist** — `Messaging.MarkRead` (REST/gRPC) пишет `read_receipts`, публикует `message.read`; (2) **fan-out** — Realtime WS `mark_read` (client) и NATS `message.read` → op `message_read` на подписчиков чата и другие устройства профиля. Список чатов и тики доставки — durable metadata из Messaging, не из WS alone.
-- **Доставлено (dual path)**: WS `delivery_ack` (client) → ephemeral `message_delivered` отправителю (+ Redis cross-instance в `redis_fanout.go`); durable `last_message_delivery_state` для list preview — Messaging ([messaging-service.md](microservices/messaging-service.md)).
+- **Доставлено (dual path)**: WS `delivery_ack` (client) → ephemeral `message_delivered` отправителю (+ Redis cross-instance в `redis_fanout.go`) **и** JetStream `message.delivery_ack` (publisher: Realtime) → Messaging consumer → `read_receipts.last_delivered_message_id`; durable `last_message_delivery_state` для list preview — Messaging ([messaging-service.md](microservices/messaging-service.md) § Durable delivery derivation).
+- **Shipped vs spec (durable delivery / list ticks):** ephemeral WS path **shipped**; `last_delivered_message_id`, `message.delivery_ack` consumer, `GetChatListMetadata.last_message_delivery_state` — **not yet in proto/code** ([todo/backend.md](todo/backend.md) § Durable delivery). Не полагаться на architecture-only чтение как на готовый wire-контракт.
 - **Typing indicator**: WebSocket, throttle отправки — не чаще 1 раза в 3 сек; гасить через 5 сек без обновления
 - **UX при потере соединения**: баннер "Переподключение..." появляется через 2 сек после разрыва; исчезает через 1 сек после успешного reconnect
 - **Аутентификация WS (web)**: браузерный WebSocket API не позволяет задать заголовок `Authorization`. **Web-клиент** запрашивает short-lived ticket через `POST /api/v1/realtime/ws-ticket` (JWT только в заголовке REST) и подключается к `/ws?ticket=…`. Gateway валидирует ticket (Redis, single-use, TTL ~60s), подставляет claims и upstream JWT для Realtime. **Нативные клиенты** используют `Authorization: Bearer` на upgrade без query. Legacy `access_token` query на `/ws` остаётся для совместимости, но web не использует.
@@ -73,7 +74,24 @@
 **2. История сообщений (Messaging, REST через Gateway)**  
 Пропущенные **сообщения** догружаются **с клиента** через публичный API Messaging (`GetMessages` с курсором **per `chat_id`**: `last_message_id` / `after_message_id`). Offline queue на сервере не нужна. Если курсор не найден (сообщение удалено) — запрос последних 50 сообщений чата без курсора. Детали контракта — [microservices/messaging-service.md](microservices/messaging-service.md).
 
-**Эфемерные события** (typing, часть presence): catch-up **не гарантируется** — после reconnect состояние «с нуля» или из следующих live-событий.
+**Эфемерные события** (typing, часть presence, `delivery_ack` / `message_delivered`): catch-up **не гарантируется** — после reconnect состояние «с нуля» или из следующих live-событий.
+
+**3. Durable read / delivery (Messaging, REST — не WebSocket)**  
+Тики ✓/✓✎ в списке чатов и read cursor — **только** из Messaging (`MarkRead` REST/gRPC → `read_receipts`; `GetChatListMetadata` → `last_message_delivery_state`). После reconnect клиент **обязан** перезапросить `ListChats` / metadata — WS `mark_read` и `message_read` **не** заменяют REST persist. См. [messaging-service.md](microservices/messaging-service.md) § MarkRead, § Durable delivery derivation.
+
+**Shipped scope:** `MarkRead` / durable read cursor validation — **DM today**; group/channel read parity — backlog. List delivery ticks (`last_message_delivery_state`) — spec complete, **not yet in proto/code** (same P0 chain as durable delivery above).
+
+### WS vs REST — граница ответственности
+
+| Concern | REST / gRPC (durable) | WebSocket (ephemeral fan-out) |
+|---------|----------------------|-------------------------------|
+| История сообщений | `GetMessages` per `chat_id` | `message_create` / `message_update` / `message_delete` |
+| Read cursor | `Messaging.MarkRead` → `read_receipts` | `mark_read` op + `message_read` (same-profile tabs) |
+| Delivery ticks (list) | `GetChatListMetadata.last_message_delivery_state` | `delivery_ack` → `message_delivered` (live bubble only) |
+| Catch-up после reconnect | **Обязателен** REST для сообщений + metadata | `resume` + `last_s` — только live-поток новой сессии, не журнал |
+| In-app `notification` | Notification routing policy (presence, mute, quiet hours, `send_silent`) | WS `notification` op — fan-out only; **не** источник durable read/unread |
+
+**Client rule (read sync):** открытие чата / scroll → **REST** `MarkRead` (durable); WS `mark_read` — опционально для faster same-profile multi-tab sync. Badge на других устройствах — после REST + metadata refresh, не от WS alone.
 
 ## Конкурентные операции
 
@@ -91,7 +109,7 @@
 
 - **Провайдер**: Resend (до 3000 писем/мес бесплатно; $20/мес за 50k)
 - **Абстракция**: `EmailSender { Send(to, template, params) }` — провайдер сменяем без изменения логики
-- **Использование**: регистрация (верификация email), сброс пароля, уведомления (опционально)
+- **Использование**: регистрация (верификация email), сброс пароля — **auth-only**; product event notifications **не** через email ([notification-service.md](microservices/notification-service.md))
 
 ## Оффлайн-режим (мобильный клиент)
 
@@ -123,6 +141,11 @@
 - Собственный push-сервер не нужен
 - **Группировка**: 1 push на чат с превью последнего сообщения и счётчиком; обновлять существующий push, не плодить новые
 - **iOS звонки**: PushKit + CallKit обязательны; VoIP push требует немедленного показа CallKit UI, иначе система завершит процесс; требует отдельного APNs VoIP-сертификата
+- **Presence routing**: получатель **online** (User `GetPresence`: `online`, `idle`, `in_call` on active session) → **in-app only** (Realtime WS `notification` op), push **не** шлётся; **offline** → push + in-app; **invisible** → in-app ✓, push ✓ (treat as offline for push). **Exceptions:** `match_found`, `voice_member_joined` — presence check skipped (spec). Producer — Notification Service `DecideRouting` / `EnrichDecision`. Code gaps (ONLINE-only checker, MM/voice still enrich presence) — [notification-service.md](microservices/notification-service.md) § Presence routing.
+- **Stranger DM (`message_request`)**: wire type **`message_request`** (not `new_message`) for requests inbox; canonical **`new_message`** for accepted DM / group / channel. Block / `allow_dm` deny suppress at Messaging — Notification never sees event. Realtime in-app fan-out code gap (`new_message` hardcode) — [realtime-service.md](microservices/realtime-service.md) § In-app notification fan-out.
+- **Тихие часы (quiet hours)**: в окне DND **push suppressed** (`ApplyQuietHours` → `Push=false`); **in-app still delivered** через WebSocket. Не формулировать как «уведомления не приходят». `@mention` может пробить push block при `override_mentions=true`. Применяется **после** base presence routing.
+- **Send without sound (`send_silent`)**: wire name на `SendMessageRequest` и JetStream `message.sent` — **`send_silent`** (bool). Notification consumer: suppress push **sound** и badge increment; in-app unread/badge **как обычно**. **`send_silent` не пробивает quiet hours** — оба правила применяются. Scheduled dispatch: silent применяется в момент фактической отправки worker'ом. **Not yet in proto/code** — [todo/backend.md](todo/backend.md). См. [features/notifications.md](features/notifications.md) § Send without sound, [messaging-service.md](microservices/messaging-service.md) § `SendMessageRequest`.
+- **Send options (composer)**: `scheduled_at` (UTC instant) и `send_when_online` (DM only) — Messaging `SendMessageRequest`; lifecycle `scheduled_messages` + `UpdateScheduledMessage` / cancel / send-now — [messaging-service.md](microservices/messaging-service.md) § Scheduled messages; UX — [text-chat.md](features/text-chat.md) § Send options, [screen-controls.md](design/screen-controls.md) §3.6c / #13–17. **Not yet in proto/code** — [todo/backend.md](todo/backend.md).
 
 ---
 
@@ -184,7 +207,7 @@
 |---------------|----------------------------------------------------------------------------|
 | **gRPC**      | Сервис ↔ сервис (внутренние вызовы); S2S Federation (нода ↔ master)        |
 | **REST**      | Клиент ↔ сервер (CRUD-операции, авторизация, загрузка файлов)              |
-| **WebSocket** | Клиент ↔ сервер (real-time: сообщения, typing, presence, статусы доставки) |
+| **WebSocket** | Клиент ↔ сервер (real-time fan-out: live сообщения, typing, presence, ephemeral delivery/read sync). **Durable** read/delivery/list ticks — REST/gRPC Messaging, не WS alone |
 
 Клиент **никогда** не обращается к сервисам напрямую по gRPC — только через API Gateway (REST/WS).
 

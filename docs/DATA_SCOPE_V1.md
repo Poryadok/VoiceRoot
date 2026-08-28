@@ -21,7 +21,7 @@
 | Область                                                            | Статус / ориентир                                                                                           |
 |--------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------|
 | Групповые чаты, спейсы, каналы, роли в спейсах                     | [spaces.md](features/spaces.md), [roles.md](features/roles.md)                                              |
-| Реакции, треды, пины, пересылка, Markdown, вложения                | [text-chat.md](features/text-chat.md), [forward-messages.md](features/forward-messages.md)                  |
+| Реакции, треды, пины, пересылка, Markdown, вложения, **стикеры/GIF** (composer 😊 panel; wire spec in microservice docs; **0 code**) | [text-chat.md](features/text-chat.md), [forward-messages.md](features/forward-messages.md), [messaging-service.md](microservices/messaging-service.md) § Stickers and GIF |
 | Typing indicator                                                   | text-chat (эфемерно в Realtime)                                                                             |
 | Push, Notification Service                                         | [notifications.md](features/notifications.md)                                                               |
 | Голос/видео, полноценный File Service, вложения в чате             | [voice-chat.md](features/voice-chat.md), [file-storage.md](features/file-storage.md) (аватар — в ядре)    |
@@ -88,7 +88,7 @@ JWT: claim **`user_id`** = `accounts.id` (то же значение, что л�
 - **Presence** ([presence.md](features/presence.md)): онлайн/оффлайн и last seen — допустим **Redis** как в доке User Service; персистентный `last_seen` в PostgreSQL — current scope для «hours ago»; зафиксировать выбор в [user-service.md](microservices/user-service.md#модель-данных).
 - `onboarding_completed` (или эквивалентное состояние шагов) — минимально включаем в ядре, так как это backend-персистентный флаг продуктового поведения.
 
-Таблица **`privacy_settings`** — current scope; в ядре достаточно базовых правил доступа к DM через Social-блокировки и дефолтную политику.
+Таблица **`privacy_settings`** — current scope; в ядре достаточно базовых правил доступа к DM через Social-блокировки и дефолтную политику. Поле **`show_last_seen`** (`everyone | friends | nobody`) — independent from `show_online`; read-time filter in `GetPresence` / `GetBulkPresence` — [presence.md](features/presence.md), [user-service.md](microservices/user-service.md).
 
 ### 4.3 Social (`social_db`)
 
@@ -113,6 +113,7 @@ JWT: claim **`user_id`** = `accounts.id` (то же значение, что л�
 | `folders` | Папки per profile: system + custom, `sort_order`, `filter_config_json` |
 | `folder_chats` | Членство чата в папке: `folder_id`, `chat_id`, `sort_order`, pin-in-folder (`is_pinned`, `pin_order`) |
 | `quick_access_chats` | Shortcuts per profile (≤15 `chat_id`), отдельно от pin чата и Social favourites; `sort_order` |
+| `sticker_packs`, `stickers`, `profile_installed_packs` | Sticker catalog + per-profile install (Chat); binary via File `intent=sticker`; send — Messaging `content_type=STICKER` — [chat-service.md](microservices/chat-service.md) § Sticker packs; **0 code** |
 
 Контракты RPC — [navigation.md](features/navigation.md), [chat-service.md](microservices/chat-service.md); не смешивать Quick Access с polymorphic space-icon targets без ADR.
 
@@ -186,7 +187,7 @@ JWT: claim **`user_id`** = `accounts.id` (то же значение, что л�
 | Auth (`auth_db`) | `accounts`, `refresh_tokens`, `otp_codes` | — | — |
 | User (`user_db`) | `profiles`, `onboarding_state` | `privacy_settings`, расширенные Premium-настройки | — |
 | Social (`social_db`) | `friendships`, `blocks` | `contacts` | — |
-| Chat (`chat_db`) | `chats` (в т.ч. group/channel types в коде), `chat_members` (+ `is_archived`) | `folders`, `folder_chats`, `quick_access_chats` | folder pin/order RPC без DDL |
+| Chat (`chat_db`) | `chats` (в т.ч. group/channel types в коде), `chat_members` (+ `is_archived`) | `folders`, `folder_chats`, `quick_access_chats`, **`sticker_packs` / `stickers` / `profile_installed_packs`** | folder pin/order RPC без DDL |
 | Messaging (`messaging_db`) | `messages`, `read_receipts`; `pins` если уже в миграциях | `scheduled_messages` | `reactions`, `message_attachments`, полноценные треды/forward |
 | Federation (`federation_db`) | — | — | **deferred** — не провижинится |
 
@@ -202,8 +203,9 @@ JWT: claim **`user_id`** = `accounts.id` (то же значение, что л�
 - `folders`, `folder_chats`, `quick_access_chats` в Chat: **current** UX; DDL и RPC — backlog [todo/backend.md](todo/backend.md).
 - `scheduled_messages` в Messaging: **current** send options; DDL backlog.
 - Pin limit: **= 5** per chat; код `MaxPinsPerChat = 50` — выровнять в [todo/backend.md](todo/backend.md).
-- `last_seen`: в ядре хранится в Redis presence; персистентная колонка PostgreSQL — current scope для «hours ago» (audit C06).
+- `last_seen`: Redis interim (`voice:user:last_seen:{profile_id}`, TTL 30 d) + target **`last_seen_at`** PostgreSQL column — current scope; **`show_last_seen`** privacy filter at read — [presence.md](features/presence.md), audit C06 / R2-A13.
 - Onboarding: в ядре хранится персистентно в `user_db.onboarding_state`.
-- Federation: **deferred** — `federation_db` не провижинится до явного решения.
+- Stickers/GIF (composer 😊 panel): wire spec complete — Chat catalog DDL + File `UploadIntent` + Messaging `MessageContentType`; **0 code** — [todo/backend.md](todo/backend.md).
+- Space tree pin (`space_tree_nodes.is_pinned`, `pin_order`): spec in [space-service.md](microservices/space-service.md); migration backlog — [todo/backend.md](todo/backend.md).
 
 

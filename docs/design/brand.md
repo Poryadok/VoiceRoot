@@ -73,7 +73,7 @@ app stack: inline / side panel / bottom sheet; full-screen только где �
 - **Message grouping:** группировать соседние сообщения одного отправителя по времени; повторять avatar/name только при смене отправителя или значительной паузе.
 - **Unread:** unread badge в списках, separator в истории, быстрый переход к первому непрочитанному.
 - **Context actions:** reply/edit/delete/reaction/forward появляются по фазам из [PLAN.md](../PLAN.md); место под них проектировать через контекстное меню, не через постоянные кнопки на каждом сообщении.
-- **DM from strangers:** до отдельной папки запросов ([text-chat.md](../features/text-chat.md)) не обещать отдельный inbox в UI; когда появится, паттерн ближе к Telegram requests: заметно, но не мешает основному списку.
+- **DM from strangers:** virtual folder «Запросы» в rail/drawer (badge-gated, visible when pending ≥1) — [navigation.md](../features/navigation.md) § «Message requests», [screen-controls.md](screen-controls.md) §1.1b #5; не segmented toggle в middle column.
 
 ## Voice UX
 

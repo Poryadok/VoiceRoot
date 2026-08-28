@@ -47,11 +47,11 @@ Dedicated frame for the chat-list column (desktop middle column / mobile full li
 | 1 | Chats tab | H+V | Always | Show chat list |
 | 2 | Social / Friends tab | H+V | Always | Show social panel |
 | 3 | Matchmaking tab | H+V | Always | Open MM catalog |
-| 4 | Folders zone | H — rail; V — drawer / compact rail | Always | See §1.1b |
-| 5 | Quick Access zone | H — rail; V — drawer / compact rail | Always | See §1.1c |
+| 4 | Folders zone | H — rail; V — **drawer only** (§1.6a) | Always | See §1.1b |
+| 5 | Quick Access zone | H — rail; V — **drawer only** (§1.6a) | Always | See §1.1c |
 | 6 | Profile avatar | H — rail (ProfileStack); V — tab bar or header | Always | Open profile switcher menu (§1.1a); V: also swipe on avatar to switch profiles per multi-profile.md |
 | 7 | Stories ring | H+V | User has active story (overlay on profile avatar) | Open story viewer |
-| 8 | ☰ Settings | H — rail bottom; V — drawer or tab bar | Always | Open `Panel / Settings / Sheet` (§5.0) |
+| 8 | ☰ Settings | H — rail bottom; V — drawer only (below ProfileStack) | Always | Open `Panel / Settings / Sheet` (§5.0) |
 
 ### 1.1a Profile avatar context menu
 
@@ -76,7 +76,9 @@ Each folder in rail scroll zone (system + custom):
 | 2 | Unread badge on folder | H+V | Folder has unread chats | — (visual: aggregate unread count) |
 | 3 | Folder tooltip | H | Hover on folder | — (display folder name + unread summary) |
 | 4 | Edit folders | H — icon at bottom of folders zone; V — ctx / menu | Always | Manage / reorder / create custom folders |
-| 5 | Message requests | H+V | Feature enabled; pending requests exist | Open requests folder |
+| 5 | Message requests | H+V | ≥1 pending DM in `inbox_bucket=requests`; **hidden when count = 0** | Open requests folder — [navigation.md](../features/navigation.md) § «Message requests» |
+
+Badge aggregation (dedup, muted, @mention) — [navigation.md](../features/navigation.md) § «Badge unread на папке».
 
 ### 1.1c Quick Access slot
 
@@ -84,12 +86,12 @@ Rail slots for pinned-profile chats (≠ folder pin, ≠ Friends favourites):
 
 | # | Control | Layout | Visible when | Tap action |
 |---|---------|--------|-------------|------------|
-| 1 | Quick Access chat row | H — rail; V — drawer / strip | Chat in quick access (≤15 per profile) | Open chat |
+| 1 | Quick Access chat row | H — rail; V — drawer QA list | Chat in quick access (≤15 per profile) | Open chat |
 | 2 | Unread badge | H+V | Chat has unread | — (visual) |
-| 3 | Add to Quick Access (ctx) | H+V | ctx on chat list row | Add chat to rail quick access |
+| 3 | Add to Quick Access (ctx) | — | — | **Canonical:** §1.4 #11 (chat list row ctx) |
 | 4 | Remove from Quick Access (ctx) | H+V | ctx on quick access row | Remove from rail |
-| 5 | Drag reorder | H | Desktop | Reorder quick access slots |
-| 6 | Quick Access limit reached | H+V | Already 15 chats in quick access | — (display feedback) |
+| 5 | Drag reorder | H — desktop rail; V — drawer QA list | Quick Access has ≥2 entries | Reorder quick access slots |
+| 6 | Quick Access limit reached | H+V | Already 15 chats in quick access | Open **replace picker** — pick slot to replace; atomic remove + add ([navigation.md](../features/navigation.md) § Quick Access) |
 
 ### 1.2 Chat list header
 
@@ -116,6 +118,8 @@ Rail slots for pinned-profile chats (≠ folder pin, ≠ Friends favourites):
 | 2 | Accept | H+V | Always | Accept request → move to main chat list |
 | 3 | Decline | H+V | Always | Decline request → hide conversation |
 
+> **No Block on request row** — Block stranger via profile / report ([friends.md](../features/friends.md), [privacy.md](../features/privacy.md)); row actions only Accept/Decline — [text-chat.md](../features/text-chat.md) § «Запросы сообщений».
+
 ### 1.4 Chat list row (per chat)
 
 | # | Control | Layout | Visible when | Tap action |
@@ -125,8 +129,8 @@ Rail slots for pinned-profile chats (≠ folder pin, ≠ Friends favourites):
 | 2a | Presence / status dot on avatar | H+V | DM / friend chat; presence visible per privacy | — (visual: online / idle / DND / offline) |
 | 3 | Pin (ctx) | H+V | ctx | Toggle pin to top **within current folder** (≠ Quick Access — §1.1c) |
 | 4 | Mute / Unmute (ctx) | H+V | ctx | Toggle mute |
-| 5 | Archive (ctx) | H+V | ctx (DM) | Move to archive — **secondary**; primary entry §1.1a #6 |
-| 6 | Mark read / unread (ctx) | H+V | ctx | Toggle read state |
+| 5 | Archive (ctx) | H+V | ctx; DM, group, channel, space-attached ([text-chat.md](../features/text-chat.md) § «Архивирование») | Move to archive — **secondary**; primary entry §1.1a #6. **Saved Messages** not in product |
+| 6 | Mark read / unread (ctx) | H+V | ctx | **Read:** if `unread_count>0` → REST `MarkRead` to latest message → badge clears ([text-chat.md](../features/text-chat.md) § «Mark read / unread»). **Unread:** if read → `MarkRead` to message before cursor → badge ≥1. DM normative; GRP/CH when group read ships |
 | 7 | Delete chat (ctx) | H+V | ctx (DM) | Delete chat for self |
 | 8 | Draft indicator | H+V | Chat has unsent draft on this device | — (visual: green "Черновик:" prefix before message preview, like Telegram) |
 | 9 | Premium badge ★ | H+V | Chat counterpart / sender profile has personal subscription | — (visual indicator near display name) |
@@ -135,8 +139,8 @@ Rail slots for pinned-profile chats (≠ folder pin, ≠ Friends favourites):
 | 12 | Unread count / bold unread state | H+V | Chat has unread messages | — (visual: bold title + unread badge/count on list row) |
 | 13 | Muted indicator | H+V | Chat is muted | — (visual: mute icon on row) |
 | 14 | Pinned indicator | H+V | Chat is pinned in folder | — (visual: pin icon on row) |
-| 15 | Delivery ticks in preview | H+V | DM, last message outgoing | — (visual: ✓ delivered, ✓✓ read in subtitle) |
-| 16 | Media type label in preview | H+V | Last message is media without text preview | — (visual: Photo / Video / Voice / File / Sticker / GIF / **Article** / **Location** / **Music** / **Video message**) |
+| 15 | Delivery ticks in preview | H+V | DM, last message outgoing | — (visual: ✓ delivered, ✓✓ read in subtitle; **source:** durable `GetChatListMetadata.last_message_delivery_state` — not WS alone; refresh after reconnect — [text-chat.md](../features/text-chat.md) § «Статусы доставки») |
+| 16 | Media type label in preview | H+V | Last message is media without text preview | — (visual: Photo / Video / Voice / File / Sticker / GIF / **Article** / **Location** / **Music** / **Video message**; label canon — [text-chat.md](../features/text-chat.md) § «Preview последнего сообщения в списке») |
 | 17 | Call preview label | H+V | Last message is call system event | — (visual: Missed call / Call / Video call) |
 
 ### 1.5 Active / pinned chats column — **Removed (H)**
@@ -145,7 +149,7 @@ Rail slots for pinned-profile chats (≠ folder pin, ≠ Friends favourites):
 
 ### 1.6 Active chats strip (V only)
 
-**Normative:** chat enters strip when user **opens** it on mobile while other chats remain open; max **100** entries (LRU evict oldest when opening 101st). Strip shows **visible cap ~8** avatars; horizontal scroll for overflow. Closing chat (back to list) **removes** from strip unless unread (keep with badge until read — **target-state**; until target-state ships, may remove on back). Keyboard open: strip **collapses** under app bar; pinned bar + composer take priority (§1.6a).
+**Normative:** chat enters strip when user **opens** it on mobile while other chats remain open; max **100** entries (LRU evict oldest when opening 101st). Strip shows **visible cap ~8** avatars; horizontal scroll for overflow. **Back to list removes** chat from strip (even if unread). *Unread retention on back* — product policy **DEFERRED** (`AUDIT` R3-03-A09); do not ship divergent client rules until decided. Keyboard open: strip **collapses** under app bar; pinned bar + composer take priority (§1.6a). Mirror: [navigation.md](../features/navigation.md) § «Active strip».
 
 | # | Control | Layout | Visible when | Tap action |
 |---|---------|--------|-------------|------------|
@@ -210,9 +214,9 @@ Chrome host for right-side content (desktop). Not a product feature by itself �
 | **info** | `Panel / Chat / Info` | §3.1 #6 toggle (default first open); kebab → Info | Avatar/name tap or kebab → **bottom sheet** | Always |
 | **members** | `Panel / Chat / GroupMembers` (GRP) or `Panel / Space / Members` (space) | §3.1 #6; Chat Info members row | Chat Info / header → **bottom sheet** or **full-screen push** | Group/space with member list |
 | **thread** | `Panel / Chat / Thread` | §3.1 #8; §3.3 #6; §3.4 #9; or §3.1 #6 | Same entries → **full-screen push** (preferred on V) | Threads enabled (GRP/CH) |
-| **search** | In-chat search results (matches from §3.2; prev/next in header bar) | §3.1 #6 after §3.2 active with results | §3.2 search bar + results → **bottom sheet** | In-chat search active with ≥1 match |
+| **search** | In-chat search results (matches from §3.2; prev/next in header bar) | §3.1 #6 after §3.2 active with results | **V: no SideHost / no bottom sheet** — §3.2 bar in app header only; prev/next in bar; jump + highlight in timeline (§3.2 #5–6). H: SideHost search mode | In-chat search active with ≥1 match |
 
-**Layout:** H — right column ~300 px via §3.1 #6. V — no persistent side column; modes use bottom sheet (info / members / search) or full-screen push (thread) per H/V summary § «Panels».
+**Layout:** H — right column ~300 px via §3.1 #6. V — no persistent side column; **info / members** → bottom sheet; **thread** → full-screen push; **search** → inline §3.2 only (not a SideHost body on V).
 
 | # | Control | Layout | Visible when | Tap action |
 |---|---------|--------|-------------|------------|
@@ -221,7 +225,7 @@ Chrome host for right-side content (desktop). Not a product feature by itself �
 | 3 | Body: Group / Space members | H | Members mode | Embed `Panel / Chat / GroupMembers` or `Panel / Space / Members` |
 | 4 | Body: Chat info | H | Info mode | Embed `Panel / Chat / Info` |
 | 5 | Body: Thread | H | Thread mode | Embed `Panel / Chat / Thread` |
-| 6 | Body: Search results | H | Search mode | Scrollable match list; row tap → jump to message (§3.2) |
+| 6 | Body: Search results | H | Search mode | Scrollable match list; row tap → jump to message (§3.2). **V:** N/A — navigation via §3.2 prev/next + timeline highlight only |
 | 7 | Body: Emoji / reaction picker | H | Reaction mode (transient) | Pick emoji → apply reaction / insert; **not** a persistent SideHost mode — closes after pick |
 
 ### 1.10 Screen / Chat / Archive
@@ -238,6 +242,9 @@ Chrome host for right-side content (desktop). Not a product feature by itself �
 | 4 | Unarchive (ctx) | H+V | ctx on row | Restore to main list |
 | 5 | Unarchive (swipe) | V | Swipe on row | Restore to main list |
 | 6 | Empty archive state | H+V | No archived chats | — (display empty copy) |
+| 7 | Auto-unarchive (behavior) | — | DM: peer sends while chat archived for viewer | Chat returns to `inbox=main` on next refresh; unread per normal rules — [text-chat.md](../features/text-chat.md) § «Архивирование» |
+
+**On archive (side-effects):** row disappears from main list, folder filters, and Quick Access (`RemoveQuickAccess`); folder membership and folder pin **persist** in DB.
 
 ---
 
@@ -304,7 +311,7 @@ Entry: from guest convert reminder CTA (#1 in §2.3).
 | # | Control | Layout | Visible when | Tap action |
 |---|---------|--------|-------------|------------|
 | 1 | Back arrow | V | Always | Return to chat list |
-| 2 | Avatar + Name + Status | H+V | Always | Open Panel / Chat / Info (H) or push screen (V). Status: online → in call → custom status → **last seen** → offline per [presence.md](../features/presence.md); respect privacy |
+| 2 | Avatar + Name + Status | H+V | Always | Open Panel / Chat / Info (H) or push screen (V). Status subtitle per [presence.md](../features/presence.md) § «В header chat room»: **online ∧ in_call** → «в сети · в звонке»; else online → custom status → last seen → offline; respect privacy |
 | 3 | Voice call | H+V | DM or GRP (temporary voice, linked to group chat_id) | Start voice call (DM) / create temp voice room (GRP) → Call overlay |
 | 4 | Video call | H+V | DM only | Start video call → Call overlay |
 | 5 | Search in chat | H+V | Always | Toggle in-chat search bar |
@@ -317,26 +324,33 @@ Entry: from guest convert reminder CTA (#1 in §2.3).
 
 ### 3.1a PinnedMessageBar
 
+**Penpot:** `Panel / Chat / PinnedMessageBar` (GAP — [screens.md](screens.md); basic bar partial in Flutter)
+
 Persistent strip directly under chat header (above timeline):
 
 | # | Control | Layout | Visible when | Tap action |
 |---|---------|--------|-------------|------------|
 | 1 | Pin thumbnail + label | H+V | ≥1 pinned message | Jump to **currently shown** pin (cycle on bar tap — **target-state**; until cycle ships, jump to latest pin) |
-| 2 | Media type hint | H+V | Pinned message is media | — (visual: Photo / Video / Voice / File / text snippet) |
-| 3 | Open all pins | H+V | Always | Open full pinned list popover / panel (§3.1 #7) |
-| 4 | Hide bar (×) | H | Always | Collapse bar for session; pins remain — restore via header #7 |
-| 5 | Pinned list popover | H+V | From #3 or §3.1 #7 | List all pins (up to **5**); tap row → jump; order = pin time desc |
+| 2 | Media type hint | H+V | Pinned message is media | — (visual: Photo / Video / Voice / File / Sticker / GIF / Article / Location / Music / Video message / text snippet — same label set as §1.4 #16) |
+| 3 | Open all pins (chevron) | H+V | Always | Open full pinned list popover / panel (§3.1 #7) — **distinct from hide** |
+| 4 | Hide bar (×) | H+V | Always | Collapse bar for session; pins remain — restore via header #7 |
+| 5 | Swipe bar left (V) | V | Always | Same as #4 — hide bar for session |
+| 6 | Pinned list popover | H+V | From #3 or §3.1 #7 | List all pins (max **5** per chat); tap row → jump; unpin when permitted; order = pin time desc |
+| 7 | Pin limit reached | H+V | User tries to pin when chat already has **5** pins | — (display: «Максимум 5 закреплённых»; server `PinMessage` rejects 6th — [text-chat.md](../features/text-chat.md) § «Закреплённые сообщения») |
 
 ### 3.2 In-chat search bar (toggled by 3.1 #5)
 
+**Mobile IA (V):** search bar in app header; **no** SideHost search mode and **no** results bottom sheet — prev/next in bar; timeline scroll + highlight (§3.2 #5–6). **Desktop (H):** optional SideHost search results list (§1.9 #6) alongside §3.2 bar. Canon — [text-chat.md](../features/text-chat.md) § Side panel.
+
 | # | Control | Layout | Visible when | Tap action |
-|---|---------|--------|-------------|------------|
+|---|---|---------|--------|-------------|------------|
 | 1 | Search text field | H+V | Search active | Input search query |
 | 2 | Previous match (↑) | H+V | Results found | Scroll to previous match |
 | 3 | Next match (↓) | H+V | Results found | Scroll to next match |
 | 4 | Close search | H+V | Search active | Close search bar |
 | 5 | Match highlight in bubble | H+V | Results found | — (visual: highlighted query occurrence in matched message text) |
 | 6 | Jump highlight flash | H+V | After deep-link / search jump to message | — (visual: brief highlight flash on target bubble, then fade) |
+| 7 | Match counter | H+V | Results found | — (display: «3 из 12» in search bar) |
 
 ### 3.3 Message bubbles
 
@@ -350,13 +364,17 @@ Persistent strip directly under chat header (above timeline):
 | 4 | Reaction chips | H+V | Message has reactions | Tap chip to toggle own reaction; long-press → who reacted. **Always visible when present** (no hover-only on mobile). Multiple reactions per user: ★ only (free users see prompt to upgrade) |
 | 5 | Inline link styling | H+V | Message contains URL in text | — (visual: `color.link` blue, underline on hover; distinct from spoiler/code) |
 | 6 | Thread reply count | H+V | Message has thread replies, threads enabled | Open thread panel with this message |
-| 6a | Link preview | H+V | Message contains URL | Tap → open URL in browser |
+| 6a | Link preview | H+V | `content_type=TEXT` + URL in body | Tap → open URL in browser; card under bubble (thumb + title + domain) — [text-chat.md](../features/text-chat.md) § «Article vs inline URL» |
+| 6b | Article / instant-view bubble | H+V | `content_type=ARTICLE` | Tap card → open URL; expanded instant-view layout (distinct from §6a link preview) — [text-chat.md](../features/text-chat.md) § «Article vs inline URL» |
+| 6d | Location bubble | H+V | `content_type=LOCATION` | Static map preview + label; tap → open in maps app |
+| 6e | Music bubble | H+V | `content_type=MUSIC` | Inline audio player (title/artist/duration from metadata); play / pause / scrub |
 | 7 | Spoiler overlay | H+V | Message has `||spoiler||` | Tap to reveal |
 | 8 | Image / video thumbnail | H+V | Message has media | Tap → fullscreen viewer |
 | 9 | File attachment chip | H+V | Message has file | Tap → download / preview |
 | 10 | Voice message player | H+V | Message is voice note | Play / pause / scrub |
 | 11 | Video note player | H+V | Message is video note (round video) | Play / pause / scrub. **Penpot variant:** `Screen/Chat/Room/VideoNoteBubble` (round bubble on Room timeline — see [screens.md](screens.md) GAP) |
-| 12 | Sticker (full) | H+V | Message is sticker | Tap → open sticker pack preview (tap-to-add-to-collection is cosmetic / not in feature docs — do not invent collection CTA without spec) |
+| 12 | Sticker (full) | H+V | `content_type=STICKER` | Tap → open sticker pack preview (tap-to-add-to-collection is cosmetic / not in feature docs — do not invent collection CTA without spec) |
+| 12a | GIF (animated) | H+V | `content_type=GIF` | Autoplay loop inline when visible (no progress bar); tap → fullscreen viewer; optional provider attribution footer |
 | 13 | "Edited" label | H+V | Message was edited | — (display; tap → show edit timestamp) |
 | 14 | Expired file placeholder | H+V | File attachment expired (retention) | — (display: "bone pile" icon + "Файл удалён. Подписка сохраняет файлы навсегда" tooltip on hover/tap) |
 | 15 | Forwarded-from attribution | H+V | Message was forwarded with attribution enabled | — (display banner: "Forwarded from [Name]"; if source account deleted -> "Deleted account") |
@@ -374,15 +392,15 @@ Persistent strip directly under chat header (above timeline):
 | 1 | React | H+V | Always | Open emoji reaction picker |
 | 2 | Reply | H+V | Always | Set reply-to in composer |
 | 3 | Edit | H+V | Own message | Enter edit mode in composer |
-| 4 | Delete | H+V | Own message OR has MANAGE_MESSAGES right | Delete message (confirm) |
+| 4 | Delete | H+V | Own message OR has MANAGE_MESSAGES right | Open **delete confirm sheet** (§3.5a): scope picker «Удалить у меня» (`FOR_ME`) / «Удалить у всех» (`FOR_EVERYONE`) per context table |
 | 5 | Forward | H+V | Always (unless sender disabled forwarding) | Open Panel / Chat / ForwardMessage |
 | 6 | Copy as new | H+V | Always | Copy content to composer without attribution |
 | 7 | Copy text | H+V | Text message | Copy to clipboard |
-| 8 | Pin / Unpin | H+V | Has `TEXT_CHAT_PIN_MESSAGES` right | Toggle pin |
+| 8 | Pin / Unpin | H+V | Has `TEXT_CHAT_PIN_MESSAGES` right | Toggle pin; max **5** per chat ([text-chat.md](../features/text-chat.md) § «Закреплённые сообщения») |
 | 9 | Open thread | H+V | Threads enabled (GRP/CH) | Open / create thread → Panel / Chat / Thread |
 | 10 | Select (multi) | H+V | Always | Enter multi-select mode → shows selection bar |
 | 11 | Report message | H+V | Not own message | Open Panel / Report / Sheet |
-| 12 | Share / deep link | H+V | Always | Copy `voice.gg/…/m/{id}` to clipboard |
+| 12 | Share / deep link | H+V | Always | Copy `https://voice.gg/…/m/{messageId}` to clipboard; toast «Ссылка скопирована» — [deep-links.md](../features/deep-links.md), [text-chat.md](../features/text-chat.md) § «Share message link» |
 | 13 | Bot context menu commands | H+V | Bot installed in space, message/user ctx | Show bot-registered context menu commands |
 
 ### 3.5 Multi-select bar (shown when 3.4 #10 active)
@@ -391,8 +409,28 @@ Persistent strip directly under chat header (above timeline):
 |---|---------|--------|-------------|------------|
 | 1 | Selected count | H+V | Multi-select active | — (display) |
 | 2 | Forward selected | H+V | Multi-select active | Open Panel / Chat / ForwardMessage with selected |
-| 3 | Delete selected | H+V | Own messages or MANAGE_MESSAGES | Delete all selected |
+| 3 | Delete selected | H+V | Own messages or MANAGE_MESSAGES | Confirm sheet with same scope rules as §3.4 #4; batch — [text-chat.md](../features/text-chat.md) § «Удаление сообщений (UX)» |
 | 4 | Cancel selection | H+V | Multi-select active | Exit multi-select |
+
+### 3.5a Delete confirm sheet
+
+Opens from §3.4 #4 (single message) or §3.5 #3 (batch). Scope picker — full context table in [text-chat.md](../features/text-chat.md) § «Удаление сообщений (UX)».
+
+| # | Control | Layout | Visible when | Tap action |
+|---|---------|--------|-------------|------------|
+| 1 | «Удалить у меня» | H+V | `FOR_ME` allowed for message(s) | `DeleteMessage` with `FOR_ME` |
+| 2 | «Удалить у всех» | H+V | `FOR_EVERYONE` allowed (own msg in DM/GRP/CH, or moderator with `MANAGE_MESSAGES`) | `DeleteMessage` with `FOR_EVERYONE` |
+| 3 | Cancel | H+V | Always | Dismiss sheet |
+
+| Context | Available options |
+|---------|-------------------|
+| **DM**, own message | `FOR_ME` / `FOR_EVERYONE` |
+| **DM**, other's message | `FOR_ME` only |
+| **Group / channel**, own message | `FOR_ME` / `FOR_EVERYONE` |
+| **Group / channel**, other's + `MANAGE_MESSAGES` | `FOR_EVERYONE` |
+| **Group / channel**, other's without right | — (Delete hidden in §3.4) |
+
+**Batch (§3.5 #3):** same picker; non-owned messages without `MANAGE_MESSAGES` skipped — toast «Удалено N из M» ([text-chat.md](../features/text-chat.md) § «Удаление сообщений (UX)»).
 
 ### 3.6 Composer (Telegram parity)
 
@@ -405,7 +443,7 @@ Persistent strip directly under chat header (above timeline):
 | 3 | Reply preview | H+V | Reply-to set | Shows quoted message; X to cancel |
 | 4 | Edit preview | H+V | Editing message | Shows original; X to cancel edit |
 | 5 | Emoji 😊 | H+V | Always | **Activate on click/tap or Enter/Space** (not hover-only). Opens §3.6b panel (Emoji \| Stickers \| GIFs) |
-| 6 | Voice / Video note / Send (right button) | H+V | Empty input → mic (voice note); long-press/toggle → video note (≤**60 s**, [file-storage.md](../features/file-storage.md)); non-empty → Send | Record voice / video note / send text |
+| 6 | Voice / Video note / Send (right button) | H+V | Empty input → mic (voice note); long-press mic or toggle → video note (≤**60 s**, [file-storage.md](../features/file-storage.md)); non-empty → Send | Record voice / video note / send text — capture flow §3.6g |
 | 7 | Long-press Send | H+V | Non-empty input, long-press on Send | §3.6c send menu |
 | 8 | Send as chat toggle | H+V | CH/GRP with permission `posted_as_chat` | Toggle: send as user profile vs from chat/channel name |
 | 9 | Slash command `/` | H+V | Typing `/` at start in SP context | Show Panel / Chat / SlashCommandMenu |
@@ -425,6 +463,8 @@ Persistent strip directly under chat header (above timeline):
 | 23 | Char-limit error | H+V | Input exceeds 4000 characters | — (display near composer) |
 
 ### 3.6f Composer error state matrix
+
+**Penpot:** error variants on `Screen / Chat / Room` + composer chrome (GAP — bundle with `Panel/Chat/AttachMenu` · v3 per [screens.md](screens.md))
 
 Normative recovery UX for composer and attach/send paths. Prefer **inline / banner near composer** ([brand.md](brand.md)); toast only when non-blocking. Failed optimistic sends: bubble **failed** state + **Retry** on bubble and/or composer; remove phantom bubble on permanent failure.
 
@@ -449,6 +489,8 @@ Normative recovery UX for composer and attach/send paths. Prefer **inline / bann
 
 ### 3.6a Attach popup
 
+**Penpot:** `Panel / Chat / AttachMenu` (GAP — [screens.md](screens.md))
+
 | # | Control | Layout | Visible when | Tap action |
 |---|---------|--------|-------------|------------|
 | 1 | Photo or video | H+V | Attach open | OS picker / camera → upload |
@@ -457,9 +499,11 @@ Normative recovery UX for composer and attach/send paths. Prefer **inline / bann
 | 4 | Location | H+V | Attach open | Map picker → lat/lon + label |
 | 5 | Music | H+V | Attach open | Audio file picker → upload; metadata extracted by **File Service**, stored on message by **Messaging** ([messaging-service.md](../microservices/messaging-service.md)) |
 
-**Wallet** — not in product; do not draw.
+**Wallet** — not in product; do not draw. **Saved Messages** — not in product; do not draw. **Stickers / GIF** — composer emoji panel (§3.6b) only, not in attach popup ([text-chat.md](../features/text-chat.md) § Attach menu).
 
 ### 3.6b Emoji / Stickers / GIF panel
+
+**Penpot:** `Panel / Chat / EmojiPicker` (GAP — [screens.md](screens.md))
 
 | # | Control | Layout | Visible when | Tap action |
 |---|---------|--------|-------------|------------|
@@ -468,15 +512,34 @@ Normative recovery UX for composer and attach/send paths. Prefer **inline / bann
 | 3 | Tab: GIFs | H+V | Panel open | GIF search + recents |
 | 4 | Search field | H+V | Stickers or GIFs tab | Filter packs / GIF provider |
 | 5 | Pack rail | H+V | Stickers tab | Switch sticker pack |
-| 6 | Insert selection | H+V | Item tapped | Insert into composer or send immediately per type |
+| 6 | Select item | H+V | Item tapped | **Per tab:** Emoji → **insert** into composer (does **not** send); Stickers → **send immediately** (`content_type=STICKER`); GIFs → **send immediately** (`content_type=GIF`) |
+
+**Send semantics (#6):** only **Emoji** tab mutates composer text. **Stickers** and **GIFs** bypass composer — tap sends the message (respects §3.6c send menu on long-press Send when applicable). Wire — [messaging-service.md](../microservices/messaging-service.md) § Stickers and GIF; [text-chat.md](../features/text-chat.md) § «Медиа и вложения».
+
+### 3.6g Voice / video note capture (right button, empty input)
+
+Normative Telegram-parity capture for **voice note** and **video note** (round video). Max duration **60 s** ([file-storage.md](../features/file-storage.md)); min **1 s** (shorter → cancel + inline hint §3.6f).
+
+| Mode | Enter | Record | Lock (hands-free) | Send | Cancel |
+|------|-------|--------|-------------------|------|--------|
+| **Voice note** | Tap **mic** | **Hold** mic — waveform UI | Swipe **up** while holding → locked record; tap stop to send | Release (if not locked) | Swipe **left** off button or tap **×** / trash |
+| **Video note** | **Long-press** mic **or** toggle 📹 on mic (platform) | **Hold** — round camera preview | Swipe **up** while holding → locked; tap stop | Release (if not locked) | Swipe **left** or tap **×** |
+
+- Locked recording: timer visible; auto-send at **60 s** cap.
+- Switching voice ↔ video note before record starts: toggle 📹 / release and re-enter mode.
+- Upload/processing errors: §3.6f (network fail, async processing, too short).
 
 ### 3.6c Send long-press menu
 
+**Penpot:** `Panel / Chat / SendMenu` (GAP — [screens.md](screens.md))
+
+> **Proto gap (B05 / C05):** options map to `SendMessageRequest` fields (`send_silent`, `scheduled_at`, `send_when_online`) and `UpdateScheduledMessage` — **normative UX**, **not yet in** `messaging.proto` — [messaging-service.md](../microservices/messaging-service.md) § Send options; [text-chat.md](../features/text-chat.md) § Send options.
+
 | # | Control | Layout | Visible when | Tap action |
 |---|---------|--------|-------------|------------|
-| 1 | Send without sound | H+V | Long-press Send | Send with silent push flag |
-| 2 | Schedule message | H+V | Long-press Send | Open date/time picker → queue for future send |
-| 3 | Send when online | H+V | Long-press Send, DM | Queue until recipient presence = online |
+| 1 | Send without sound | H+V | Long-press Send (text **or** pending voice/video note / sticker / GIF / attachment) | Send with silent push flag |
+| 2 | Schedule message | H+V | Long-press Send (same scope as #1) | Open date/time picker → queue for future send |
+| 3 | Send when online | H+V | Long-press Send, **DM only** | Queue until recipient presence = online; hide or block on GRP/CH |
 
 ### 3.6d Composer text ctx / formatting
 
@@ -510,10 +573,17 @@ Attach popup (§3.6a), emoji panel (§3.6b), send menu (§3.6c), archive screen,
 
 Profile avatar menu (§1.1a) and folder drawer follow same focus/Escape contract.
 
+### 3.7 Timeline chrome
+
+Scroll affordances on `Screen / Chat / Room` timeline (above composer, below pinned bar):
+
 | # | Control | Layout | Visible when | Tap action |
 |---|---------|--------|-------------|------------|
 | 1 | Scroll to bottom (FAB) | H+V | Scrolled up from bottom | Scroll to latest message |
-| 2 | Unread separator | H+V | New messages since last visit | — (visual divider "N new messages") |
+| 2 | Unread separator | H+V | New messages since last visit | — (visual divider "N new messages"; **tap** → #3) |
+| 3 | Jump to first unread | H+V | Timeline has unread anchor (separator #2 visible, or user scrolled above first unread) | Scroll to **first** unread message; trigger: tap separator #2 or compact chip above FAB. List-level next/prev unread chat: `Alt+↓` / `Alt+↑` — [accessibility.md](../features/accessibility.md) |
+
+Cross-ref: [brand.md](brand.md) § Messaging UX (unread separator, jump to first unread).
 
 ### 3.8 E2E key change banner
 
@@ -588,7 +658,7 @@ Profile avatar menu (§1.1a) and folder drawer follow same focus/Escape contract
 ### 5.0 Panel / Settings / Sheet (settings nav hub)
 
 **Penpot:** `Panel / Settings / Sheet`  
-Entry: Shell Settings tab (§1.1 #4 / §1.8 #4). H: sidebar + detail; V: list → push detail screens.
+Entry: ☰ Settings (§1.1 #8 / §1.8 #7). H: sidebar + detail; V: drawer → push detail screens.
 
 | # | Control | Layout | Visible when | Tap action |
 |---|---------|--------|-------------|------------|
@@ -623,7 +693,7 @@ Entry: Shell Settings tab (§1.1 #4 / §1.8 #4). H: sidebar + detail; V: list �
 | 11 | Phone visibility | H+V | Always | Audience multiselect |
 | 12 | Story visibility | H+V | Always | Audience multiselect |
 | 13 | Search by phone | H+V | Always | Audience multiselect |
-| 14 | Read receipts (DM only) | H+V | Always | Toggle on/off (controls DM ✓✓ ticks; group/channel view counts are always on). **Note:** delivery ticks are in text-chat.md; this privacy toggle is not yet listed in privacy.md field table — keep UI until privacy.md is updated, or drop if product drops the setting. |
+| 14 | Read receipts (DM only) | H+V | Always | Toggle on/off — `show_read_receipts` in [privacy.md](../features/privacy.md) § «Read receipts»; controls DM ✓✓ ticks only; group/channel view counts always on |
 | 15 | Last seen | H+V | Always | Audience multiselect (hideable per presence.md; keep control — privacy.md should list this field when docs are aligned) |
 | 16 | Disallow forwarding my messages | H+V | Always | Toggle on/off |
 | 17 | Blocked users | H+V | Always | Open blocked list → unblock action per row |
@@ -662,6 +732,7 @@ Entry: Shell Settings tab (§1.1 #4 / §1.8 #4). H: sidebar + detail; V: list �
 | 10 | Reply notifications | H+V | Always | Toggle on/off |
 | 11 | DM message notifications | H+V | Always | Toggle on/off (new message in DM) |
 | 12 | System / security notifications | H+V | Always | Toggle on/off (security alerts, app updates) |
+| 13 | Message request notifications | H+V | Always | Toggle on/off (stranger DM → wire `message_request`; independent of #11 — see [notifications.md](../features/notifications.md) § `message_request`) |
 
 ### 5.4 Subscription
 
@@ -1755,7 +1826,7 @@ Entry: from settings nav #6.
 ## 37. Sticker Management (Panel / Settings / Stickers)
 
 **Penpot:** `Panel / Settings / Stickers`
-**Feature docs:** [text-chat.md](../features/text-chat.md)
+**Feature docs:** [text-chat.md](../features/text-chat.md) — core packs + user upload; **sticker store (#6–7) optional** post-core (same as text-chat § «Медиа и вложения»).
 
 Entry: from settings nav #10.
 
@@ -1764,10 +1835,10 @@ Entry: from settings nav #10.
 | 1 | Close / Back | H+V | Always | Close panel |
 | 2 | Installed sticker packs | H+V | Always | — (display: pack icon + name + count) |
 | 3 | Pack row tap | H+V | Always | Preview stickers in pack |
-| 4 | Remove pack | H+V | User-added packs | Remove sticker pack |
-| 5 | Upload own pack | H+V | Always | Upload custom sticker pack (images) |
-| 6 | Browse sticker store | H+V | Always | Open sticker catalog |
-| 7 | Premium sticker indicator ★ | H+V | Pack requires subscription | — (display: ★ badge on premium packs) |
+| 4 | Remove pack | H+V | **User-created** packs only | `UninstallStickerPack` — **system packs (`is_system`) cannot be removed**; reorder/hide in composer rail only |
+| 5 | Upload own pack | H+V | Always | Upload custom sticker pack — **static raster images only** (PNG / WebP; ≤512×512, ≤512 KB after File processing); no video/GIF uploads for pack assets |
+| 6 | Browse sticker store | H+V | **Optional** (post-core catalog UI) | Open sticker catalog — not required for MVP; pre-seeded system packs + user upload suffice |
+| 7 | Premium sticker indicator ★ | H+V | Store enabled; pack requires subscription | — (display: ★ badge on premium packs in store browse) |
 
 ---
 
@@ -2092,7 +2163,7 @@ Not full product screens — reusable state chrome used inside Shell / Chat list
 | Profile switch | Click avatar → menu (§1.1a); Archive entry | Tap avatar → menu; swipe on avatar to switch profiles |
 | Chat header | Inline in room panel; side panel toggle; last seen in status | Full-width app bar with back arrow |
 | Message actions | Hover toolbar on bubble + ctx | Long-press ctx + bottom selection bar |
-| Settings | ☰ at rail bottom → `Panel / Settings / Sheet` | Drawer or settings entry from tab bar |
+| Settings | ☰ at rail bottom → `Panel / Settings / Sheet` | Drawer only (below ProfileStack) — **not** a tab-bar item |
 | Panels | Side panel (right drawer) via header toggle | Bottom sheet or full-screen push |
 | Overlays (call, MM) | Centered modal over content | Full-screen overlay |
 | Incoming call (iOS) | App overlay | CallKit / PushKit native chrome (not Flutter inventory) |
@@ -2101,7 +2172,7 @@ Not full product screens — reusable state chrome used inside Shell / Chat list
 | Composer format toolbar | Optional above composer; ПКМ formatting primary | Hidden behind toggle (toolbar button) |
 | Search | Panel or inline in header | Full-screen search overlay |
 | Thread panel | Right sidebar alongside room | Push screen |
-| Folders | Rail scroll zone (§1.1b); **no middle-column tabs** | Drawer / compact rail |
+| Folders | Rail scroll zone (§1.1b); **no middle-column tabs** | **Drawer only** (§1.6a) — no persistent mini-rail on phone |
 | Archive | Profile avatar ctx → `Screen / Chat / Archive` | Same entry via profile menu |
 | Pinned messages | Persistent bar under header (§3.1a) | Same bar; full list in sheet |
 | Stories viewer | Modal overlay over content | Full-screen swipe-native overlay |

@@ -18,9 +18,10 @@
 | Сводка имён в коде/БД               | [Продукт → техника](#продукт--техника)              |
 | Права (bitmask, scopes бота)        | [microservices/role-service.md](microservices/role-service.md) — раздел «Идентификаторы прав» |
 | Аккаунт, профиль                    | [Идентичность](#идентичность)                       |
-| Архив чата, Quick Access, Pin чата  | [Организация чатов в UI](#организация-чатов-в-ui)   |
+| Архив чата, Quick Access, Папки чатов, Pin чата, Pin элемента дерева, Active strip | [Организация чатов в UI](#организация-чатов-в-ui)   |
 | Запросы сообщений                   | [Запросы сообщений](#запросы-сообщений)             |
 | Pin сообщения                       | [Pin сообщения](#pin-сообщения)                     |
+| Sticker pack, installed pack, GIF provider | [Стикеры и GIF](#стикеры-и-gif)              |
 | Стори                               | [Стори](#стори)                                     |
 
 ---
@@ -38,7 +39,7 @@
 | **DM** | `ArchiveChat` RPC; `ListChats` с `inbox=archive` |
 | **Group / channel / space chat** | тот же флаг `is_archived` на `chat_members`; UI row action и `inbox=archive` |
 
-**Primary entry (product decision):** ПКМ на **аватар профиля** в rail (ProfileStack) → «Архив» → `Screen/Chat/Archive`. Discoverability ниже, чем у отдельной папки в rail — принято; Saved Messages **не** в продукте. Ctx «Архивировать» на строке чата — **secondary shortcut**.
+**Primary entry (product decision):** ПКМ на **аватар профиля** в rail (ProfileStack) → «Архив» → `Screen/Chat/Archive`. Discoverability ниже, чем у отдельной папки в rail — принято; Saved Messages **не** в продукте. Ctx «Архивировать» на строке чата — **secondary shortcut** для **всех** типов чата (DM, group, channel, space-attached) — те же правила membership, что у mute/delete; не DM-only.
 
 **Unarchive (state machine):**
 
@@ -46,6 +47,7 @@
 |---------|-----------|
 | Ctx «Разархивировать» / swipe на экране архива | `is_archived=false`; чат возвращается в folder «Все» и matching system folders; **не** восстанавливается в Quick Access автоматически |
 | **Новое входящее сообщение** (DM) | Auto-unarchive: `is_archived=false`, чат появляется в main inbox с unread; push по обычным правилам |
+| **Новое входящее** (group / channel / space chat) | **Не** auto-unarchive; только ctx «Разархивировать» / swipe на экране архива |
 | Исходящее сообщение архиватором | **Не** unarchive (как Telegram) |
 | Folder membership / folder pin | Сохраняются в БД; пока archived — строка не показывается; после unarchive pin order восстанавливается |
 | Quick Access | При archive — **удаление** из `quick_access_chats`; после unarchive — **не** auto-restore |
@@ -54,15 +56,36 @@
 
 ### Quick Access (избранное чатов)
 
-**Quick Access** — до **15** записей **`chat_id`** на `profile_id` в rail; быстрый переход без смены folder filter. Target = **только `chat_id`**, не polymorphic space/tree node. Добавление: ctx «В избранное» / drag в rail. Отдельная таблица и RPC (`List/Add/Remove/ReorderQuickAccess`) — не pin в папке. Не влияет на сортировку внутри папки. См. [navigation.md](features/navigation.md), [chat-service.md](microservices/chat-service.md) § Quick Access.
+**Quick Access** — до **15** записей **`chat_id`** на `profile_id` в rail; быстрый переход без смены folder filter. Target = **только `chat_id`**, не polymorphic space/tree node. **≠ Friends → Favourites** (люди, не чаты). При лимите 15/15 — **replace picker** (список слотов → выбор замены → atomic `RemoveQuickAccess` + `AddQuickAccess`; `FAILED_PRECONDITION` на голый `AddQuickAccess` — server safety net, не UX ошибка). Добавление: ctx «В избранное» / drag. Отдельная таблица и RPC (`List/Add/Remove/ReorderQuickAccess`) — не pin в папке. Saved Messages **не** в продукте. См. [navigation.md](features/navigation.md) § Quick Access, [screen-controls.md](design/screen-controls.md) §1.1c, [chat-service.md](microservices/chat-service.md) § Quick Access.
+
+### Папки чатов
+
+**Папки чатов** — фильтр списка чатов в rail (desktop) / drawer (mobile). **System** (Все, ЛС, Группы, Каналы, Спейсы): immutable, predicate в `filter_config_json`, pin overlay без `folder_chats` membership. **Custom**: explicit `folder_chats` + pin/order. **Virtual «Запросы»** — `inbox=requests`, в rail/drawer, не segmented toggle в middle column. Archived чаты excluded из всех folder filters. См. [navigation.md](features/navigation.md) § «Папки по умолчанию», [screen-controls.md](design/screen-controls.md) §1.1b.
+
+### Active strip (mobile)
+
+**Active strip** — горизонтальная полоска **opened-chat LRU** над room на mobile; **не** inbox preview rows. Источник — client session state + unread badges. Канон контролов — [screen-controls.md](design/screen-controls.md) §1.6; stacking — §1.6a; [navigation.md](features/navigation.md) § «Active strip».
+
+| Правило | Поведение |
+|---------|-----------|
+| **Membership** | Чат попадает в strip после **open** на mobile |
+| **Limit** | Max **100** opened chats; при 101-м — evict oldest + feedback (§1.6 #4) |
+| **Visible cap** | ~**8** avatars; horizontal scroll |
+| **Unread badge** | На иконках strip |
+| **Remove** | Long-press icon → × (§1.6 #5); back to list — **remove from strip** (normative, including unread). Unread retention on back — DEFERRED (AUDIT R3-03-A09) |
+| **Keyboard** | Strip **скрывается** (§1.6a) |
 
 ### Pin чата
 
-**Pin чата** — закреп **`chat_id` внутри выбранной папки** `(profile_id, folder_id)` через `folder_chats.is_pinned` / `pin_order`, или **узла дерева спейса** (Space Service); иконка pin на row/узле. Отдельно от Quick Access: чат может быть и pinned в папке, и в Quick Access. System folders: pin overlay на отфильтрованном списке; custom folders: pin внутри explicit membership. См. [navigation.md](features/navigation.md), [spaces.md](features/spaces.md), [chat-service.md](microservices/chat-service.md) § Folders.
+**Pin чата** — закреп **`chat_id` внутри выбранной inbox-папки** `(profile_id, folder_id)` через `folder_chats.is_pinned` / `pin_order`; иконка pin на **list row**. Отдельно от Quick Access и от **pin элемента дерева спейса**. System folders: pin overlay на отфильтрованном списке; custom folders: pin внутри explicit membership. См. [navigation.md](features/navigation.md) § «Pin чатов», [chat-service.md](microservices/chat-service.md) § Folders.
+
+### Pin элемента дерева
+
+**Pin элемента дерева** — закреп **узла** `space_tree_nodes` (text chat или voice room) вверху категории/корня sidebar спейса; Space Service (`is_pinned`, `PinTreeNode`). **≠ Pin чата** (inbox folder) **≠ Quick Access** (rail `chat_id`). См. [spaces.md](features/spaces.md) § «Pin элемента дерева спейса», [navigation.md](features/navigation.md) § «Pin чатов».
 
 ### Запросы сообщений
 
-**Запросы сообщений** — DM от **незнакомца** (не friend, не contact), попадающий в `chat_members.inbox_bucket=requests` у получателя; UI — virtual folder «Запросы» (`ListChats` с `inbox=requests`). Не путать с **Friends → Pending** (заявки в друзья).
+**Запросы сообщений** — DM от **незнакомца** (не friend, не contact), попадающий в `chat_members.inbox_bucket=requests` у получателя. **UI entry:** virtual folder «Запросы» в **rail/drawer** ([screen-controls.md](design/screen-controls.md) §1.1b #5; visible when pending requests exist); `ListChats` с `inbox=requests`. **Запрещён** segmented toggle main/requests в middle column (§1.3 tombstone). Не путать с **Friends → Pending** (заявки в друзья).
 
 | Bucket | Смысл |
 |--------|-------|
@@ -71,6 +94,39 @@
 | `declined` | Скрыт после Decline; re-contact → снова `requests` при новом сообщении |
 
 RPC: `AcceptDMRequest`, `DeclineDMRequest` (Chat Service). См. [text-chat.md](features/text-chat.md) § «Запросы сообщений», [friends.md](features/friends.md) § «Незнакомец пишет».
+
+---
+
+## Стикеры и GIF
+
+Термины composer **😊 panel** (§3.6b) — не 📎 attach menu. Wire contract — [messaging-service.md](microservices/messaging-service.md) § Stickers and GIF; catalog DDL — [chat-service.md](microservices/chat-service.md) § Sticker packs.
+
+### Sticker pack (стикер-пак)
+
+**Sticker pack** — набор стикеров с метаданными (`sticker_packs` + `stickers` в **Chat** `chat_db`). Бинарники — **File Service** (`intent=sticker`); отправка — **Messaging** `content_type=STICKER`. **System pack** (`is_system=true`) — предустановленный пак приложения; **user pack** — создан пользователем через Settings §37.
+
+### Installed sticker pack (установленный пак)
+
+**Installed sticker pack** — связь `profile_installed_packs` (profile ↔ pack + `sort_order` в composer rail). **Install** — `InstallStickerPack`; **uninstall** — только для **user-created** паков; system packs **не удаляются**, только reorder в rail. Uninstall **не** удаляет уже отправленные сообщения.
+
+### GIF provider
+
+**GIF provider** — внешний каталог (Giphy **или** Tenor — один на deploy). Поиск — **Chat** `SearchGifs` / `GetTrendingGifs`; импорт байтов — **File** `RequestUpload(intent=gif, source_url=…)`; send — **Messaging** `content_type=GIF`. Pagination cursor (`next_cursor`) — **только** в `SearchGifsResponse` (Chat); File/Messaging не дублируют.
+
+### Sticker store (опционально)
+
+**Sticker store** — UI browse каталога (#6–7 в [screen-controls.md](design/screen-controls.md) §37). **Optional post-core** — MVP обходится system packs + user upload; Premium ★ install gate — [subscription.md](features/subscription.md).
+
+### GIF / emoji recents
+
+| Surface | Storage | Owner |
+|---------|---------|-------|
+| **Emoji recents** | Client-local (device) | Flutter |
+| **Sticker recents** (shortcut row) | Client-local; optional `stickers.emoji` hint | Flutter |
+| **GIF recents** | Client-local (recent `file_id` / `provider_id` after send) | Flutter |
+| **GIF trending** | Server `GetTrendingGifs` (Chat cache) | Chat Service |
+
+Server **не** синхронизирует per-profile GIF recents cross-device в MVP.
 
 ---
 
@@ -183,4 +239,6 @@ RPC: `AcceptDMRequest`, `DeclineDMRequest` (Chat Service). См. [text-chat.md](
 | [DATA_MODEL.md](DATA_MODEL.md)          | UUID, `chat_id` / текстовый канал / голос, soft delete, ссылки между БД |
 | [DATA_STORES.md](DATA_STORES.md)        | Какая БД у какого сервиса                                               |
 | [navigation.md](features/navigation.md) | Термины в UI/коде навигации                                             |
+| [screen-controls.md](design/screen-controls.md) | Shell §1 — rail, folders, Quick Access, mobile strip, Archive   |
+| [chat-service.md](microservices/chat-service.md) | Folders, Quick Access, Archive RPCs                          |
 | [FEATURES.md](FEATURES.md)              | Каталог фич                                                             |

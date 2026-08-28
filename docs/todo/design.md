@@ -15,6 +15,7 @@ Naming and placement rules: [penpot-workflow.md](../design/penpot-workflow.md) �
 - [ ] **Shell · v3** — rail order: Nav → Folders → Quick Access → spacer → ProfileStack → ☰ Settings (§1.1); reconcile Flutter `desktop_shell_rail.dart` drift.
 - [ ] **SideHost · v3** — modes info / members / thread / search per [screen-controls.md](../design/screen-controls.md) §1.9 (H drawer + V sheet/push).
 - [ ] **Composer errors · v3** — frame variants for §3.6f matrix (upload fail, processing fail, quota, schedule validation, sticker/GIF fail, optimistic retry).
+- [ ] **R4-04-L04 — Emoji/GIF panel · v3 (§3.6b)** — `Panel/Chat/Emoji` Stickers/GIF tabs + send-vs-insert states; GAP row in [screens.md](../design/screens.md) when framed (audit deferred design-track, spec normative in screen-controls).
 
 ## High
 

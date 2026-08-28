@@ -70,6 +70,22 @@ service UserService {
 
 Канон RPC и сообщений — репозиторий `protos/voice/user/v1/user.proto`.
 
+**`PrivacySettings` sketch (spec — not yet in proto/DDL):**
+
+```protobuf
+message PrivacySettings {
+  string profile_id = 1;
+  PrivacyPreset preset = 2;
+  PrivacyAudience show_online = 3;
+  PrivacyAudience show_last_seen = 4;   // «был(а) N назад» — independent from show_online
+  bool show_read_receipts = 5;          // DM ✓✓ opt-out; default true — [privacy.md](../features/privacy.md) § Read receipts
+  PrivacyAudience show_game_status = 6;
+  // … allow_dm, allow_friend_requests, allow_forward, allow_guest_dm, …
+}
+```
+
+Read-path enforcement for `show_last_seen` — § «Heartbeat» below; feature UX — [presence.md](../features/presence.md), [privacy.md](../features/privacy.md).
+
 ## Модель данных
 
 ```
@@ -106,27 +122,42 @@ privacy_settings
 └── updated_at
 
 presence (Redis Hash — ephemeral)
-├── profile_id → { status, game, custom_status, call_info }
+├── profile_id → { status, game, custom_status, call_info, ts_unix }
 └── TTL ~5 min; refreshed on heartbeat / WS activity
 
-last_seen_at (PostgreSQL)
+last_seen (Redis string — interim durable)
+├── key: voice:user:last_seen:{profile_id}
+├── value: unix timestamp (UTC)
+└── TTL 30 days; refreshed on every heartbeat (until PG lands)
+
+last_seen_at (PostgreSQL — target durable)
 ├── profile_id (UUID PK, logical ref → profiles.id)
 ├── last_seen_at (TIMESTAMPTZ, UTC)
 └── updated on session end, heartbeat boundary, explicit offline transition
 ```
 
-**`last_seen` storage:**
+**Interim vs target:**
 
 | Store | Назначение | Статус |
 |-------|------------|--------|
-| **Redis presence** | Live `status`, game, custom status, call | **Implemented** — TTL ~5 min |
-| **PostgreSQL `last_seen_at`** | Durable «был(а) N назад» для header / profile | **Not yet in proto/code** (no PG column) |
+| **Redis session hash** | Live `status`, game, custom status, call | **Implemented** — TTL 5 min |
+| **Redis `last_seen` string** | Interim «был(а) N назад» when session expired | **Implemented** — TTL 30 d; refreshed every heartbeat |
+| **PostgreSQL `last_seen_at`** | Durable last seen for header / profile | **Not yet** — no PG column |
 
-Redis-only `last_seen` в hash **недостаточен**: после TTL 5 min фактическое время последней активности теряется — header DM не может показать «был 2 часа назад». Эфемерный cache ≠ durable last seen ([presence.md](../features/presence.md)).
+Redis-only interim **недостаточен** для long-tail «был 2 недели назад» (30 d cap) и privacy enforcement at scale — target is PG + read-time filter ([presence.md](../features/presence.md) § Interim storage).
 
-При реализации: запись `last_seen_at` при transition to offline / idle boundary / graceful disconnect; `GetBulkPresence` / `GetPresence` **merge** Redis live status + PG `last_seen_at` when offline.
+При реализации PG: запись `last_seen_at` при transition to offline / idle boundary / graceful disconnect; `GetBulkPresence` / `GetPresence` **merge** Redis live status + PG `last_seen_at` when offline; apply **`show_last_seen`** filter per viewer.
 
-**`show_last_seen` enforcement:** when `show_last_seen = nobody` (or viewer not in allowed audience for `friends`), `GetPresence` / `GetBulkPresence` **omit** `last_seen_at` timestamp (live online may still respect `show_online`). Header «был(а)…» in DM — [presence.md](../features/presence.md). **Code gap:** field not in proto/DDL; no read-time filter — [todo/backend.md](../todo/backend.md).
+### Heartbeat (`UpdatePresence`)
+
+| Step | Action |
+|------|--------|
+| 1 | Upsert session hash; EXPIRE 5 min |
+| 2 | SET `last_seen` key = now unix; EXPIRE 30 d |
+| 3 | If status enum changed → publish `user.presence_changed` with `old_status`, `new_status` |
+| 4 | Realtime fan-out `presence_update` to friends/subscribers **after** privacy filter (spec) |
+
+**`show_last_seen` enforcement:** when `show_last_seen = nobody` (or viewer not in allowed audience for `friends`), `GetPresence` / `GetBulkPresence` **omit** `last_seen_at` / `last_seen` timestamp (live online may still respect `show_online`). Invisible: live status shown as offline to others; **must not** leak `last_seen` when hidden. Header «был(а)…» in DM — [presence.md](../features/presence.md). **Code gap:** field not in proto/DDL; no read-time filter — [todo/backend.md](../todo/backend.md).
 
 ### Current code vs full spec
 

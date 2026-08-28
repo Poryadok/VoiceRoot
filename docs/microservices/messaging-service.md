@@ -18,6 +18,7 @@ CRUD сообщений для всех типов чатов (DM, тексто�
 - @mentions (user, role; broadcast в чате — `@everyone` / `@here` в UX при наличии `TEXT_CHAT_MENTION_ALL_IN_CHAT` / `TEXT_CHAT_MENTION_ALL_ONLINE`)
 - Read receipts (последнее прочитанное сообщение на пользователя на чат)
 - Вложения (ссылки на File Service): photo, video, document, voice, video_note, music, article, location — см. [text-chat.md](../features/text-chat.md) § Attach menu
+- Stickers / GIF — `content_type=STICKER|GIF` + File `file_id`; composer **😊 panel only** (не 📎 attach) — § Stickers and GIF
 - Send options: `send_silent`, `scheduled_at`, `send_when_online` — контракт ниже; **not yet in proto/code** — см. [todo/backend.md](../todo/backend.md)
 - Лимит 4000 символов
 - Догрузка истории после offline / reconnect: **per `chat_id`** через `GetMessages` с курсором (`after_message_id` / `last_message_id`); правила fallback — [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md). Не путать с полем **`s`** в WebSocket Gateway (Realtime) — это нумерация live-событий, не курсор БД
@@ -53,7 +54,7 @@ service MessagingService {
   rpc GetReadState(GetReadStateRequest) returns (GetReadStateResponse);
   rpc GetBulkReadState(GetBulkReadStateRequest) returns (GetBulkReadStateResponse);
   rpc GetChatListMetadata(GetChatListMetadataRequest) returns (GetChatListMetadataResponse); // S2S: preview + unread for Chat ListChats
-  rpc ListSharedMedia(ListSharedMediaRequest) returns (ListSharedMediaResponse); // media / files / links / voice tabs in chat info
+  rpc ListSharedMedia(ListSharedMediaRequest) returns (ListSharedMediaResponse); // media / stickers / files / links / voice tabs in chat info
 
   // Signal pre-key directory for DM E2E — docs/features/encryption.md.
   rpc UploadPreKeyBundle(UploadPreKeyBundleRequest) returns (UploadPreKeyBundleResponse);
@@ -75,6 +76,8 @@ service MessagingService {
 | `UploadPreKeyBundle` / `GetPreKeyBundle` | ✓ | DM E2E pre-keys |
 | `MarkRead` / `GetReadState` / `GetBulkReadState` | ✓ | DM-typed validation today |
 | `GetChatListMetadata` | ✓ partial | preview text + unread only |
+| `ListSharedMedia` | ✓ | shared media tabs in chat info |
+| `DeleteMessage` (`DeleteScope.FOR_ME` / `FOR_EVERYONE`) | ✓ | `FOR_ME` soft-hides for caller only |
 | `SendMessage` send options (`send_silent`, `scheduled_at`, `send_when_online`) | ✗ | spec below; not in proto |
 | `UpdateScheduledMessage` | ✗ | spec below |
 
@@ -127,8 +130,10 @@ enum MessageContentType {
 | `location` | `{ "lat", "lon", "label?", "static_map_file_id?" }` | lat ∈ [-90,90], lon ∈ [-180,180]; static map via File Service |
 | `video_note` | `{ "file_id", "duration_seconds", "width", "height" }` | duration ≤ **60 s** ([file-storage.md](../features/file-storage.md)); round crop on File Service |
 | `music` | `{ "file_id", "title?", "artist?", "album?", "duration_seconds?" }` | Metadata: File Service extract on upload; Messaging stores canonical copy on message |
+| `sticker` | `{ "pack_id", "sticker_id", "file_id", "emoji?", "width", "height" }` | `pack_id`/`sticker_id` must exist in sender's installed packs (Chat catalog); `file_id` must match sticker row; no `content` body |
+| `gif` | `{ "file_id", "provider?", "provider_id?", "preview_url?", "width?", "height?", "duration_seconds?" }` | `file_id` required (File Service `intent=gif`); provider fields for dedup/attribution when from Giphy/Tenor |
 
-`attachments_json` в текущем коде — opaque; spec требует typed enum + validated payload (**not yet in proto/code**).
+`attachments_json` в текущем коде — opaque; spec требует typed enum + validated payload (**not yet in proto/code**). **`sticker` / `gif` payloads do not require generic `attachments_json`** — `content_type` + `content_payload` is canonical; legacy clients may mirror `file_id` in `attachments` for transition.
 
 ### Scheduled messages (lifecycle)
 
@@ -156,7 +161,7 @@ scheduled_messages
 | **Max horizon** | **365 days** от `now()`; beyond → `INVALID_ARGUMENT` |
 | **Invisible sender** | Отправитель `invisible` **не** блокирует dispatch scheduled; `send_when_online` ждёт **получателя** |
 
-Composer UX — [text-chat.md](../features/text-chat.md) § Send options; strip — [screen-controls.md](../design/screen-controls.md) §3.6 #13–17.
+Composer UX — [text-chat.md](../features/text-chat.md) § Send options; strip — [screen-controls.md](../design/screen-controls.md) §3.6 #13–17. Cross-service summary — [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) § Push-уведомления (send options).
 
 ### `UpdateScheduledMessage` (spec — not yet in proto)
 
@@ -201,17 +206,74 @@ S2S enrichment для Chat `ListChats`. **Код сегодня:** только 
 | **Realtime** | Ephemeral WS `delivery_ack` → `message_delivered` fan-out (incl. Redis cross-instance); **не** источник истины для list preview |
 | **Chat** | Merge Messaging metadata в `ChatListItem` при `ListChats` |
 
-**Delivery state matrix** (DM list ticks):
+**Delivery state matrix** (DM list ticks — [text-chat.md](../features/text-chat.md) § «Статусы доставки», [screen-controls.md](../design/screen-controls.md) §1.4 #15):
 
 | State | Durable (`GetChatListMetadata`) | Ephemeral (WS) |
 |-------|--------------------------------|----------------|
-| Sent | outgoing row exists; peer offline / no ack yet | — |
-| Delivered | derived from peer read cursor **or** last known delivery ack persisted (spec) | client `delivery_ack` → server `message_delivered` to sender devices |
-| Read | `read_receipts.last_read_message_id` | `MarkRead` REST → NATS → WS `message_read`; also client WS `mark_read` fan-out |
+| `none` | not outgoing last message | — |
+| `sent` | outgoing row exists; peer `last_delivered_message_id` & `last_read_message_id` both **before** this message | — |
+| `delivered` | peer `last_delivered_message_id` ≥ message id **or** peer `last_read_message_id` ≥ message id | client `delivery_ack` → `message_delivered` to sender devices (+ Redis cross-instance) |
+| `read` | peer `last_read_message_id` ≥ message id (`read_receipts`) | `MarkRead` REST → NATS `message.read` → WS `message_read`; client WS `mark_read` for same-profile tabs |
 
-**MarkRead dual path:** (1) **Persist** — `Messaging.MarkRead` gRPC/REST writes `read_receipts`, publishes `message.read` on `message.events`; (2) **Fan-out** — Realtime consumes `message.read` → WS `message_read` to chat subscribers; client may also send WS `mark_read` for same-profile multi-device sync (Realtime → Redis → other tabs). List UI **must** refresh metadata after reconnect — not infer ticks from WS alone.
+**Не смешивать:** WS `delivery_ack` / `message_delivered` — live fan-out для открытого bubble; list preview ticks — **только** из durable metadata после `ListChats` / `GetChatListMetadata`. WS alone после reconnect **недостаточен**.
 
-После reconnect клиент **перезапрашивает** `ListChats` / metadata, а не восстанавливает ticks из WS alone ([ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md)).
+### Durable delivery derivation (spec — not yet in code)
+
+**Owner:** Messaging. **Not** Realtime Redis fan-out.
+
+**Storage** — расширение `read_receipts` (preferred) или отдельная таблица `delivery_cursors`:
+
+```
+read_receipts (extended)
+├── chat_id
+├── profile_id
+├── last_read_message_id
+├── last_delivered_message_id   -- NEW: max message_id peer acked via delivery_ack
+├── updated_at
+└── UNIQUE(chat_id, profile_id)
+```
+
+| Step | Trigger | Persist |
+|------|---------|---------|
+| 1 | Recipient client sends WS `delivery_ack` | Realtime: ephemeral `message_delivered` fan-out **and** publish JetStream `message.delivery_ack` on `message.events` (Realtime duty — [realtime-service.md](realtime-service.md) § Ответственность) |
+| 2 | Messaging consumer | `UPSERT` `last_delivered_message_id = GREATEST(existing, acked_id)` for `(chat_id, recipient_profile_id)` |
+| 3 | `GetChatListMetadata` | For outgoing last message in DM: compare peer cursors → `last_message_delivery_state` enum |
+
+**Ordering:** `last_delivered_message_id` ≤ `last_read_message_id` always (read implies delivered). Client may skip explicit `delivery_ack` if it immediately `MarkRead`s — server promotes delivered cursor to read cursor.
+
+**Code gap:** no `last_delivered_message_id` column, no `message.delivery_ack` consumer, no `last_message_delivery_state` in proto — [todo/backend.md](../todo/backend.md) § Durable delivery.
+
+### MarkRead: REST persist vs WS fan-out
+
+| Path | API | Persist? | Fan-out |
+|------|-----|----------|---------|
+| **Primary** | `Messaging.MarkRead` gRPC / `POST /api/v1/messages/read` (Gateway) | ✓ `read_receipts` | publishes `message.read` → Realtime → WS `message_read` |
+| **WS-only** | Client op `mark_read` on Realtime | ✗ | `message_read` to chat subscribers + same-profile tabs via Redis |
+| **Client rule** | Open chat / scroll | **Must** call REST `MarkRead` (or gRPC) for durable read cursor; WS `mark_read` optional for faster multi-tab sync |
+
+List UI **must** refresh metadata after reconnect — not infer ticks from WS alone.
+
+**Shipped scope:** `MarkRead` / `GetReadState` handlers validate **DM** chat type today; group/channel read parity — backlog. WS `mark_read` never writes `read_receipts`.
+
+После reconnect клиент **перезапрашивает** `ListChats` / `GetChatListMetadata`, а не восстанавливает ticks из WS ([ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) § Reconnect).
+
+### Message path matrix (REST / NATS / WS)
+
+Компактная карта для implementers: что пишет durable store, что только fan-out ([realtime-service.md](realtime-service.md), [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) § WS vs REST).
+
+| Action | REST/gRPC write | NATS (`message.events`) | WS client op | WS server op | Durable store | Ephemeral only |
+|--------|-----------------|-------------------------|--------------|--------------|---------------|----------------|
+| Send | `SendMessage` | `message.sent` | — | `message_create` | `messages` | — |
+| Edit | `EditMessage` | `message.edited` | — | `message_update` | `messages` | — |
+| Delete | `DeleteMessage` | `message.deleted` | — | `message_delete` | soft-delete | — |
+| History / reconnect gap | `GetMessages` (per `chat_id`) | — | — | — | `messages` | — |
+| Mark read (persist) | `MarkRead` | `message.read` | — | `message_read` (from NATS) | `read_receipts` | — |
+| Mark read (multi-tab) | — (after REST) | — | `mark_read` | `message_read` | — | fan-out |
+| Delivery ack | — | `message.delivery_ack` (spec) | `delivery_ack` | `message_delivered` | `last_delivered_message_id` (spec) | fan-out + Redis |
+| List preview ✓/✓✓ | S2S `GetChatListMetadata` | — | — | — | read + delivery cursors | — |
+| Reactions / pins | gRPC | `message.reaction_*`, `message.pinned` | — | `reaction_*`, `message_pinned` | `reactions` / `pins` | — |
+
+**Rule:** only REST `MarkRead` mutates `read_receipts`. WS `mark_read` without REST leaves durable cursor stale. List ticks after reconnect — **never** from WS alone.
 
 ## Модель данных
 
@@ -268,49 +330,168 @@ read_receipts
 ├── chat_id
 ├── profile_id
 ├── last_read_message_id
+├── last_delivered_message_id (spec — durable ✓ ticks; not yet in migration)
 ├── updated_at
 └── UNIQUE(chat_id, profile_id)
 ```
 
-### Current code (DM-only) vs full spec
+### Shipped implementation notes (2026-08-28)
 
-**Deployed migrations** используют только `messages` и `read_receipts`.
-`reactions`, `pins`, `thread_parent_id`, `forward_*`, `message_attachments` — **not yet in proto/code**.
+**Migrations shipped:** `messages`, `read_receipts`, `reactions`, `pins`, `thread_parent_id`, `forward_*`, `ghost_only` (platform shadow-ban column — **DB only**, not yet on `SendMessageRequest` proto), E2E columns.
 
-```
-messages
-├── id UUID PRIMARY KEY -- UUIDv7 генерируется приложением Messaging
-├── chat_id UUID NOT NULL -- logical ref → chat_db.chats.id
-├── chat_type VARCHAR(16) NOT NULL CHECK (chat_type = 'dm')
-├── sender_profile_id UUID NOT NULL -- logical ref → user_db.profiles.id
-├── posted_as_chat BOOLEAN NOT NULL DEFAULT false CHECK (posted_as_chat = false)
-├── display_chat_id UUID NULL
-├── content TEXT NOT NULL CHECK (char_length(content) BETWEEN 1 AND 4000)
-├── type VARCHAR(16) NOT NULL DEFAULT 'regular' CHECK (type IN ('regular','system','forward'))
-├── thread_parent_id UUID NULL
-├── forward_from_id UUID NULL
-├── forward_from_sender TEXT NULL
-├── attachments JSONB NOT NULL DEFAULT '[]'::jsonb
-├── mentions JSONB NOT NULL DEFAULT '[]'::jsonb
-├── edited_at TIMESTAMPTZ NULL
-├── deleted_at TIMESTAMPTZ NULL
-└── created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+**Handlers shipped beyond DM-only baseline:** threads (`GetThreadMessages`, `ListThreads`), reactions, pins (limit **50** in code vs spec **5**), `MarkRead`/`GetReadState`/`GetBulkReadState`, `ListSharedMedia`, `DeleteMessage` with `DeleteScope.FOR_ME`, idempotent `client_message_id` on `SendMessage`, E2E pre-key RPCs.
 
-read_receipts
-├── chat_id UUID NOT NULL -- logical ref → chat_db.chats.id
-├── profile_id UUID NOT NULL -- logical ref → user_db.profiles.id
-├── last_read_message_id UUID NOT NULL -- logical ref → messages.id
-├── updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-└── PRIMARY KEY (chat_id, profile_id)
+**Gaps vs full spec:** `send_silent` / schedule / typed `content_type`, durable `last_delivered_message_id` + `last_message_delivery_state`, `message.delivery_ack` consumer, `message_attachments` table, `RecordMessageView`, `UpdateScheduledMessage` — см. § ниже и [todo/backend.md](../todo/backend.md).
+
+**Attachment validation (code):** `validateAttachments` today requires `file_id` on each attachment — blocks normative `location` / `article` payloads without File row until validation branches on `content_type` (**code backlog**, R3-A06).
+
+### Delete scope
+
+```protobuf
+enum DeleteScope {
+  DELETE_SCOPE_UNSPECIFIED = 0;
+  DELETE_SCOPE_FOR_EVERYONE = 1;
+  DELETE_SCOPE_FOR_ME = 2;
+}
 ```
 
-Индексы:
-- `INDEX messages_chat_id_id_desc_idx (chat_id, id DESC)` для истории и догрузки
-- `INDEX messages_sender_profile_id_idx (sender_profile_id, created_at DESC)` для модерации и профиля
-- `INDEX messages_chat_id_created_at_idx (chat_id, created_at DESC)` для fallback без курсора
-- `INDEX read_receipts_profile_id_idx (profile_id)` для bulk read-state
+| Scope | Behavior |
+|-------|----------|
+| `FOR_EVERYONE` | Soft-delete for all members; requires permission |
+| `FOR_ME` | Soft-hide for caller only; message remains for others |
 
-Правило для сообщений: в аудитном следе и правах всегда используется `sender_profile_id`; отображение «от имени чата» (группа или канал) — через `posted_as_chat=true` и `display_chat_id=<chats.id>` (обычно совпадает с `chat_id`). Разрешено ли так писать и в основную ленту — **настройки чата и роли**.
+### `ghost_only` (platform moderation)
+
+Column `messages.ghost_only` (migration `000010_ghost_only`): when true, message visible **only** to sender in history queries — shadow delivery for moderation. **Not yet** exposed on `SendMessageRequest` proto; set via internal/admin path only until productized.
+
+### View count (`RecordMessageView` — spec, not yet in proto)
+
+Group/channel view counts ([text-chat.md](../features/text-chat.md) § View count) require deduped per-`(message_id, profile_id)` storage:
+
+```protobuf
+rpc RecordMessageView(RecordMessageViewRequest) returns (Empty);
+
+message RecordMessageViewRequest {
+  string chat_id = 1;
+  string message_id = 2;
+}
+```
+
+**Rules:** idempotent first view per profile; excluded from DM; recount drops on message delete. **Not implemented** — use read cursor as interim UX until RPC lands.
+
+### Stickers and GIF (wire contract — not yet in code)
+
+Normative product scope: [text-chat.md](../features/text-chat.md) § Медиа и § Attach menu, [PLAN.md](../PLAN.md). **Zero implementation** today. Composer surface: **😊 panel** (Emoji \| Stickers \| GIFs) — **not** 📎 attach menu.
+
+#### Service ownership
+
+| Concern | Owner | Contract |
+|---------|-------|----------|
+| **Sticker pack catalog** | **Chat Service** (`chat_db`) | `sticker_packs`, `stickers`, `profile_installed_packs` — canonical DDL in [chat-service.md](chat-service.md) § Sticker packs |
+| **Sticker / GIF bytes** | **File Service** | `RequestUpload(intent=sticker \| gif)` → WebP / MP4/WebM — [file-service.md](file-service.md) § Stickers and GIF assets |
+| **GIF provider search** | **Chat Service** (HTTP adapter) | Proxies **Giphy or Tenor** (one provider at deploy); **`SearchGifsResponse.next_cursor` — single pagination owner** (File/Messaging do not paginate GIF search); rate-limit + cache trending server-side |
+| **Send message** | **Messaging** | `SendMessage` + `content_type=STICKER \| GIF` + validated `content_payload` (§ Content types) |
+| **Shared media** | **Messaging** `ListSharedMedia` | Five product tabs → `SharedMediaKind` enum — § `ListSharedMedia` filters; [search.md](../features/search.md) § Фильтры shared media |
+| **Composer picker** | Flutter §3.6b | Tabs via Gateway REST wrapping Chat catalog + GIF search |
+| **Events / preview** | Messaging → Realtime / Notification | `message.sent.content_type`; list label «Sticker» / «GIF» |
+
+Premium ★ sticker packs (store browse) — optional after core packs; entitlement via Subscription, enforced on `InstallStickerPack`.
+
+**Catalog DDL + Chat RPC sketches:** [chat-service.md](chat-service.md) § Sticker packs (single source of truth — do not fork table/column names here).
+
+**Limits:** user-created pack ≤ **120** stickers; ≤ **50** installed packs per profile; sticker asset ≤ **512×512** px, ≤ **512 KB** after File processing ([file-service.md](file-service.md)).
+
+#### Send flows
+
+**Sticker:**
+
+```
+Client (😊 Stickers tab)
+  → pick sticker_id from installed pack
+  → Messaging.SendMessage {
+       content_type: STICKER,
+       content_payload: { pack_id, sticker_id, file_id, emoji?, width, height }
+     }
+  → validate: pack installed for sender; sticker.file_id matches payload
+  → persist message; publish message.sent { content_type: STICKER }
+```
+
+**GIF:**
+
+```
+Client (😊 GIFs tab)
+  → Chat.SearchGifs(query) → GifResult[] (file_id may be async)
+  → if file_id pending: poll GetFileMetadata until status=ready
+  → Messaging.SendMessage {
+       content_type: GIF,
+       content_payload: { file_id, provider, provider_id, preview_url?, width?, height? }
+     }
+  → validate: file_id exists, type=gif, status=ready
+  → persist; publish message.sent { content_type: GIF }
+```
+
+User pack upload (Settings → Stickers): `CreateUserStickerPack` → per-sticker `RequestUpload(intent=sticker)` → `AddStickersToUserPack` → `InstallStickerPack` for self.
+
+#### Validation rules (Messaging)
+
+| Rule | STICKER | GIF |
+|------|---------|-----|
+| `content` body | Must be empty | Must be empty |
+| `file_id` | Required; must match Chat `stickers.file_id` for `sticker_id` | Required; File row `type` compatible with gif/video |
+| `pack_id` / `sticker_id` | Required; pack must be installed for sender | — |
+| `provider` / `provider_id` | — | Optional but recommended when from search (attribution + dedup) |
+| E2E DM | Allowed — sticker/GIF sent as opaque media refs same as photo | Same |
+| Rate limit | Counts toward 5 msg / 5 s global limit | Same |
+
+#### `ListSharedMedia` filters
+
+Product UI has **five** tabs ([search.md](../features/search.md) § Фильтры shared media). Wire uses `ListSharedMediaRequest.kind` (`SharedMediaKind` enum) — **not** per-type string filters.
+
+| Product tab | `SharedMediaKind` (spec) | `MessageContentType` values | Query predicate (normative) |
+|-------------|--------------------------|----------------------------|----------------------------|
+| **Медиа** | `SHARED_MEDIA_KIND_MEDIA` | `PHOTO`, `VIDEO`, `VIDEO_NOTE`, `GIF` | `messages.content_type IN (…)`; legacy transition: `message_attachments.kind IN (image, video, video_note, gif)` |
+| **Стикеры** | `SHARED_MEDIA_KIND_STICKERS` | `STICKER` | `content_type = STICKER` |
+| **Файлы** | `SHARED_MEDIA_KIND_FILES` | `DOCUMENT`, `MUSIC` | `content_type IN (DOCUMENT, MUSIC)` or attachment `kind IN (document, music)` |
+| **Ссылки** | `SHARED_MEDIA_KIND_LINKS` | `TEXT`+link metadata, `ARTICLE` | `content_type = ARTICLE` or link/article attachment kinds |
+| **Голосовые** | `SHARED_MEDIA_KIND_VOICE` | `VOICE` | `content_type = VOICE` or `kind = voice_message` |
+
+**Proto sketch** (extends shipped four-value enum — **not yet in proto/code**):
+
+```protobuf
+enum SharedMediaKind {
+  SHARED_MEDIA_KIND_UNSPECIFIED = 0;
+  SHARED_MEDIA_KIND_MEDIA = 1;      // photo, video, video_note, gif — NOT stickers
+  SHARED_MEDIA_KIND_STICKERS = 2;   // sticker tab — NEW vs shipped proto
+  SHARED_MEDIA_KIND_FILES = 3;
+  SHARED_MEDIA_KIND_LINKS = 4;
+  SHARED_MEDIA_KIND_VOICE = 5;
+}
+```
+
+**Code today:** shipped proto/handler expose four kinds only (`MEDIA`, `FILES`, `LINKS`, `VOICE`); `MEDIA` query uses `attachments[].type` `image|video` only — excludes `gif`, `video_note`, and entire **Стикеры** tab. Spec requires enum extension + `content_type`-first queries before five-tab UI is deliverable.
+
+Sort: `created_at DESC` per message; sticker/GIF grid thumbs via File presigned URL on `file_id`.
+
+#### Events and notifications
+
+| Event | Fields |
+|-------|--------|
+| `message.sent` | `content_type=STICKER \| GIF`; `has_mentions=false` typical |
+| Notification preview | Body label «Sticker» / «GIF» (no text body); push thumbnail via `preview_url` / file thumb when policy allows |
+
+Implementation checklist — [todo/backend.md](../todo/backend.md) § Stickers/GIF. Live tests deferred until proto lands — [ADR 005](../adr/005-rich-media-live-tests-deferred.md).
+
+### Deployed schema baseline (historical DM-only migration)
+
+The first migration enforced `chat_type = 'dm'` only. Later migrations widened to group/channel, reactions, pins, threads. **Do not** treat the DM-only CHECK as current product scope — see shipped handlers above.
+
+```
+messages (deployed — simplified)
+├── chat_type dm | group | channel
+├── thread_parent_id, forward_*, attachments JSONB
+├── ghost_only BOOLEAN (moderation)
+└── reactions / pins in separate tables
+```
 
 ## Конфигурация (NATS / JetStream)
 
@@ -325,7 +506,8 @@ read_receipts
 |--------------------------|----------------------------------------------|
 | `message.sent`           | message_id, chat_id, sender_id, has_mentions, **content_type**, **send_silent**, **was_scheduled** (bool), **scheduled_at** (nullable — original intent time) |
 | `message.read`           | chat_id, profile_id, last_read_message_id    |
-| `message.mention_added`  | message_id, chat_id, sender_id, mentioned_profile_ids |
+| `message.delivery_ack`   | chat_id, profile_id, message_id (spec — persist delivery cursor; publisher: Realtime on client `delivery_ack`) |
+| `message.mention_added`  | message_id, chat_id, **sender_profile_id**, mentioned_profile_ids |
 | `message.edited`         | message_id, chat_id                          |
 | `message.deleted`        | message_id, chat_id                          |
 | `message.reaction_added` | message_id, profile_id, emoji                |
@@ -343,7 +525,7 @@ When File Service finishes async processing (`file.processed` on JetStream), Mes
 
 | Step | Owner |
 |------|-------|
-| File publishes `file.processed` | `file.events` — `file_id`, `status`, derived `preview_url`, dimensions |
+| File publishes `file.processed` | `file.events` — `file_id`, `status`, `converted_url`, `thumb_url`, `width`, `height`, `duration_seconds`, `intent` (aligned with [file-service.md](file-service.md) § NATS table) |
 | Messaging consumer | Updates attachment JSON on `messages` / `message_attachments`; invalidates or recomputes `GetChatListMetadata` for affected `chat_id`s |
 | Client | On `message_update` WS (or poll) refresh bubble + list row label |
 
@@ -351,7 +533,14 @@ When File Service finishes async processing (`file.processed` on JetStream), Mes
 
 ### Timestamp ownership (`chats.last_message_at`)
 
-Chat Service writes `chats.last_message_at` on `message.sent` for sort order. **Today:** `TouchLastMessageAt` updates **DM only**; group/channel activity timestamp gap — Chat backlog. Messaging does **not** own this column; it owns preview text, unread, and durable delivery state — см. [chat-service.md](chat-service.md) § ListChats.
+| Field / concern | Owner | Notes |
+|-----------------|-------|-------|
+| `chats.last_message_at` (sort key for `ListChats`) | **Chat Service** | Updated on `message.sent` consumer (`TouchLastMessageAt`). **Today:** DM only; group/channel gap — Chat backlog |
+| `last_message_preview`, `unread_count` | **Messaging** | S2S `GetChatListMetadata` |
+| `last_message_delivery_state`, `last_message_content_type` | **Messaging** (spec) | Durable list ticks; not Realtime WS |
+| Client list sort | **Chat `ListChats`** | Uses `chats.last_message_at`; do **not** sort client-side from Messaging preview timestamps alone |
+
+Messaging does **not** own `chats.last_message_at`. Cross-ref — [chat-service.md](chat-service.md) § ListChats ownership table.
 
 ## Зависимости
 

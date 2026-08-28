@@ -297,6 +297,23 @@
 - [ ] **[Chat] Archive integration test** — archive write + `ListChats` main inbox exclusion regression; unarchive state machine when message arrives. — **P0**
 - [ ] **[Chat] Gateway REST** — transcoding for new folder/quick-access/archive-list RPCs when protos land.
 
+### Telegram-parity audit — open CODE (2026-08-28)
+
+Источник: `tmp/telegram-ux-audit/AUDIT.md` (DOC closed). ID — для трассировки с audit tracker.
+
+- [ ] **[Chat] R3-A04 — Message requests bucketing** — `EnsureDM` always sets recipient `inbox_bucket=requests`; no friend/contact lookup; `SendMessage` does not re-open `declined` → `requests`. Spec: [text-chat.md](../features/text-chat.md) § «Запросы сообщений», [friends.md](../features/friends.md). — **P0**
+- [ ] **[Messaging] R3-A05 — `PinMessage` permission gap** — when `space_id` nil, any member can pin; must enforce `TEXT_CHAT_PIN_MESSAGES` via Role Service — [messaging-service.md](../microservices/messaging-service.md).
+- [ ] **[Messaging] R3-A06 — `validateAttachments` blocks rich payloads** — requires `file_id` on all attachments; blocks normative Location/Article payloads without File row — relax validation per `MessageContentType` — [messaging-service.md](../microservices/messaging-service.md).
+- [ ] **[Chat] R3-A12 — Standalone `channel` chats** — `CreateChat` rejects channel type; breaks «Каналы» system folder — [navigation.md](../features/navigation.md) § Partial shipment. Related: ListChats SQL below.
+- [ ] **[Chat] R3-A14 — `CreateChat`/`UpdateChat` proto fields ignored** — `topic`, `threads_enabled`, `allow_user_main_feed` not persisted; channels not updatable via Chat API — `group.go`. (Partial overlap with § Chat — other `UpdateChat` bullets.)
+- [ ] **[Chat] R3-A15 — `chats.allow_guests` dead column** — migration column unused; no proto field or handler — align or drop in migration follow-up.
+- [ ] **[Chat] R3-A16 — `ListChats` space merge bugs** — space rows ignore member `is_archived`; page-1 merge breaks cursor pagination; inconsistent `Chat` hydration between DM/group vs space sources — `list_chats.go`, enrichment paths. — **P0**
+- [ ] **[Chat/Messaging/File] Stickers/GIF wire (R2-A32, R4-04)** — expand checklist: `chat_db` migrations `sticker_packs`/`stickers`/`profile_installed_packs`; Chat RPCs (`ListInstalledStickerPacks`, `InstallStickerPack`, `SearchGifs`, …); Gateway REST ([api-gateway.md](../microservices/api-gateway.md) § Stickers and GIF); Messaging proto `STICKER`/`GIF` + send validation; File `UPLOAD_INTENT_STICKER`/GIF transcode; `ListSharedMedia` `STICKERS` kind extension — **P0**
+- [ ] **[Messaging] Durable delivery consumer** — Realtime spec: client `delivery_ack` → JetStream `message.delivery_ack` on `message.events`; Messaging consumer updates durable cursor for list ✓✓ (R4-03-H06) — pairs with `last_message_delivery_state` bullet above.
+- [ ] **[Realtime] R3-A27 — @mention notification payload naming** — wire canonical `profile_id` (not `user_id`) in WS `notification` / mention fan-out — [realtime-service.md](../microservices/realtime-service.md).
+- [ ] **[User] R3-A19 — Presence WS privacy filter (code)** — Realtime `presence_update` must apply `show_online` / omit `last_seen` per viewer; publish `old_status`/`new_status` delta on `user.presence_changed` — doc in [presence.md](../features/presence.md); code gaps in User + Realtime.
+- [ ] **[Notification] R3-A23/R4-A15 — `message_request` type in code** — wire `message_request` push/in-app + settings toggle §5.3 #13; Realtime must not hardcode `new_message` for stranger DMs — [notification-service.md](../microservices/notification-service.md).
+
 ### Chat — other
 
 

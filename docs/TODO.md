@@ -56,7 +56,18 @@ TODO разбит **по домену** (где менять код), не по 
 
 Критерии фич: [encryption.md](features/encryption.md), [bots.md](features/bots.md), [stories.md](features/stories.md). Observability на staging — [observability.md](features/observability.md) §Definition of Done.
 
-Сверка спека↔код (2026-08-17): федерация вне scope. Решения и снятые stale-пункты — `tmp/feature-audit/synthesis.md`. Telegram-parity UX audit tracker — [`tmp/telegram-ux-audit/AUDIT.md`](../tmp/telegram-ux-audit/AUDIT.md). **PLAN.md не трогать** — часть «shipped» завышена (spaces без delete/transfer, checkout-заглушка, стикеры отсутствуют).
+Сверка спека↔код (2026-08-17): федерация вне scope. Решения и снятые stale-пункты — `tmp/feature-audit/synthesis.md`. Telegram-parity UX audit (2026-08-28): tracker `tmp/telegram-ux-audit/AUDIT.md` (local tmp; DOC **closed**, open CODE/product → секции ниже). **PLAN.md не трогать** — часть «shipped» завышена (spaces без delete/transfer, checkout-заглушка, стикеры отсутствуют).
+
+### Telegram-parity UX audit — open backlog (2026-08-28)
+
+DOC-аудит закрыт (0 open DOC). Невыполненное разнесено по domain-файлам (ID из `AUDIT.md` для трассировки):
+
+| Куда | Что |
+|------|-----|
+| [backend.md](todo/backend.md) § High § Telegram-parity audit | R3-A04–A06, A12, A14–A16; stickers/GIF wire; Realtime `message.delivery_ack` NATS; mention `profile_id` |
+| [client.md](todo/client.md) § High § Telegram-parity audit | R2-A03–A05 shell/mobile; R3-A08 strip test; R3-A11 composer a11y |
+| [product-roadmap.md](todo/product-roadmap.md) § Telegram-parity audit | Product policy DEFER: strip unread-on-back, pin cycle, archived notifications, Location tab, header idle/DND |
+| [design.md](todo/design.md) § Critical Penpot · v3 | R4-04-L04 §3.6b panel GAP frames (implementation track) |
 
 ### Топ дыр (после аудита)
 

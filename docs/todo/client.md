@@ -39,6 +39,18 @@ _Пока пусто — критичные клиентские блокеры 
 - [ ] **AuthScreen: телефон + OTP** — спека [auth-and-contacts.md](../features/auth-and-contacts.md): телефон default; `auth_screen.dart` только email.
 - [ ] **Auth UI: sessions / revoke, delete-account, password-reset** — REST есть (`GET /api/v1/auth/sessions`, delete/restore, `POST /api/v1/auth/password/reset`); экранов нет.
 
+### Telegram-parity UX audit — Flutter (2026-08-28)
+
+Источник: `tmp/telegram-ux-audit/AUDIT.md` (R2-A03–A05, R3-A08, R3-A11). Backend RPC-хвосты — [backend.md](backend.md) § Telegram-parity audit / § Chat navigation.
+
+- [ ] **R2-A03 — Profile switcher vs rail contract** — normative: ProfileStack §1.1a in rail + profile RC (archive, switch/create); Flutter uses combobox/menu diverging from [multi-profile.md](../features/multi-profile.md) / [screen-controls.md](../design/screen-controls.md).
+- [ ] **R2-A04 — Mobile shell IA** — bottom tab bar + hamburger drawer (folders, QA, Settings); absent in `app.dart` / mobile layout — [navigation.md](../features/navigation.md), §1.6a.
+- [ ] **R2-A05 — Active strip LRU semantics** — strip must track **opened** chats (≤100 LRU), not inbox list rows; fix `MobileChatStrip` + state — [screen-controls.md](../design/screen-controls.md) §1.6.
+- [ ] **R3-A08 — Strip widget test wrong contract** — `mobile_chat_strip_test.dart` asserts inbox rows; rewrite for opened-chat LRU §1.6.
+- [ ] **R3-A11 — Composer a11y parity** — emoji via transient §3.6b panel (not SideHost/reaction picker); attach → §3.6a popup + §3.6e focus trap/return; click-not-hover on desktop — [accessibility.md](../features/accessibility.md).
+- [ ] **Archive list screen** — `Screen / Chat / Archive` (desktop + mobile); entry via profile RC only — [navigation.md](../features/navigation.md); blocked on Chat archive list RPC ([backend.md](backend.md)).
+- [ ] **Mobile stacked chrome** — active strip + app bar + pinned bar + composer + bottom tabs overflow rules §1.6a — Penpot · v3 + Flutter layout.
+
 
 ## Common
 

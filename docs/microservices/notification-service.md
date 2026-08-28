@@ -34,6 +34,7 @@ service NotificationService {
   rpc UpdateNotificationSettings(UpdateSettingsRequest) returns (NotificationSettings);
 
   // Quiet hours
+  rpc GetQuietHours(GetQuietHoursRequest) returns (GetQuietHoursResponse);
   rpc SetQuietHours(SetQuietHoursRequest) returns (Empty);
 
   // Internal — отправка
@@ -81,26 +82,58 @@ quiet_hours
 
 ## Типы уведомлений
 
-| Тип            | Канал доставки       | Группировка / notes |
-|----------------|----------------------|---------------------|
-| new_dm         | push + in-app        | by chat             |
-| message_request| push + in-app        | by chat; stranger / requests inbox DM — label distinct from `new_dm` |
-| mention        | push + in-app        | by chat             |
-| reply          | push + in-app        | by chat             |
-| reaction       | in-app only          | —                   |
-| friend_request | push + in-app        | —                   |
-| match_found    | push + in-app        | —                   |
-| incoming_call  | push (VoIP) + in-app | —                   |
-| system         | push + in-app        | —                   |
+Канонические wire-имена — строка `notification_type` в `SendNotificationRequest` и поле `type` в in-app WS `notification`. Feature catalog — [notifications.md](../features/notifications.md).
+
+| Wire `notification_type` | Канал | Группировка / notes |
+|--------------------------|-------|---------------------|
+| **`new_message`** | push + in-app | by `chat_id` — accepted DM after requests bucket cleared |
+| **`message_request`** | push + in-app | by **sender `profile_id`** (not `chat_id` until accept); stranger label — § ниже |
+| `mention` | push + in-app | by `chat_id`; may bypass mute / quiet hours |
+| `reply` | push + in-app | by `chat_id` |
+| `reaction` | in-app only | — |
+| `friend_request` | push + in-app | — |
+| `match_found` | push + in-app | presence check **skipped** (spec) |
+| `incoming_call` | push (VoIP) + in-app | CallKit / PushKit — feature catalog [notifications.md](../features/notifications.md) |
+| `voice_member_joined` | push + in-app | presence check **skipped** (spec) |
+| `system` | push + in-app | — |
+
+**Naming:** `new_dm` — **deprecated alias**; use **`new_message`**. `SendNotificationRequest.notification_type` и in-app payload `d.type` — только канонические строки выше.
+
+### `message_request` (stranger DM)
+
+| Аспект | Контракт |
+|--------|----------|
+| **Trigger** | `message.sent` where recipient `inbox_bucket=requests` (first DM or re-contact after decline) — [text-chat.md](../features/text-chat.md) § «Запросы сообщений» |
+| **Wire type** | **`message_request`** (not `new_message`) |
+| **Push title** | «Незнакомец» / «Message request» + sender display name |
+| **Grouping** | By sender `profile_id` until accept |
+| **After accept** | Subsequent messages → `new_message` |
+
+**Code gaps:** `message_request` absent from `delivery/types.go`; Realtime `in_app_notification_fanout.go` hardcodes `type=new_message` for all DM — [todo/backend.md](../todo/backend.md).
+
+### Stickers and GIF (`new_message` variant)
+
+| Aspect | Contract |
+|--------|----------|
+| **Wire type** | **`new_message`** (not a separate enum) |
+| **Trigger** | `message.sent` with `content_type=STICKER \| GIF` |
+| **Push title** | Sender display name (same as text) |
+| **Push body** | Label **«Sticker»** / **«GIF»** when `content` empty; optional thumb from File presigned URL or `preview_url` |
+| **In-app** | Group by `chat_id`; unread badge unless mute / `send_silent` |
+| **Presence routing** | Standard `DecideRouting` |
+
+См. [messaging-service.md](messaging-service.md) § Stickers and GIF; [notifications.md](../features/notifications.md).
 
 ## Логика доставки
 
 ```
 Event (NATS) ──► Notification Service
                     │
-                    ├─► Check user settings (mute? quiet hours? suppress type?)
-                    ├─► Check presence (online → in-app only, offline → push)
-                    ├─► Check `send_silent` on `message.sent` (suppress push sound/badge; in-app policy below)
+                    ├─► Social block / privacy deny? → drop (no notification)
+                    ├─► Check user settings (mute? suppress type?)
+                    ├─► Check presence (online session → in-app only, offline → push)
+                    ├─► Check `send_silent` on `message.sent` (push sound/badge)
+                    ├─► Check quiet hours (`ApplyQuietHours` → push off; in-app on)
                     ├─► Check grouping (уже есть push для этого чата?)
                     │
                     ├─► Realtime Service (in-app, через NATS)
@@ -108,27 +141,70 @@ Event (NATS) ──► Notification Service
                     └─► Resend (email, auth only)
 ```
 
+**Policy order:** block/privacy → mute / `suppress_types` → **presence** → **`send_silent`** → **quiet hours** (mention override) → grouping → channel dispatch. `send_silent` does **not** bypass quiet hours.
+
+### Suppress before routing (block / privacy)
+
+| Condition | Owner | Notification |
+|-----------|-------|----------------|
+| **Social block** (either direction) | Messaging rejects `SendMessage` | **None** — event never reaches Notification |
+| **`allow_dm` privacy deny** | Messaging rejects send | **None** |
+| Per-chat / global **mute** | Notification `ApplySettings` | Suppresses configured types (default: `new_message` in-app + push) |
+| **`suppress_types`** on settings row | Notification | Listed types dropped for scope |
+
+См. [privacy.md](../features/privacy.md), [text-chat.md](../features/text-chat.md) § DM privacy.
+
 ### Presence routing
 
-| Recipient state | In-app | Push |
-|-----------------|--------|------|
-| Online (`GetPresence` / WS heartbeat) | ✓ | ✗ |
-| Offline | ✓ | ✓ (if settings allow) |
+Нормативное правило (`DecideRouting` + User `GetBulkPresence` enrichment):
 
-Implemented in `delivery/router.go` → `DecideRouting`; message path enriches via `EnrichDecision` / `EnrichDecisions` with User gRPC presence. Matchmaking/voice paths must use the same enrichment — [todo/backend.md](../todo/backend.md).
+| Recipient `GetPresence` | In-app | Push |
+|-------------------------|--------|------|
+| **Online session** (`online`, `idle`, `in_call` on active WS / heartbeat) | ✓ | **✗** |
+| **Offline** (`offline`, no session) | ✓ | ✓ (if settings allow) |
+| **Invisible** | ✓ | ✓ (treat as offline for push) |
+
+**Exceptions — skip presence check** (always evaluate push policy):
+
+| Type | Reason |
+|------|--------|
+| `match_found` | User may be in-app without wanting to miss match alert |
+| `voice_member_joined` | Voice room alerts while user in another voice context |
+
+**Code gap:** `GRPCChecker.IsOnline` checks only `PRESENCE_ONLINE_STATUS_ONLINE`; idle/in-call not treated as online — push may fire incorrectly. MM/voice paths still apply presence contrary to skip rule — [todo/backend.md](../todo/backend.md).
+
+Implemented in `delivery/router.go` → `DecideRouting`; message path enriches via `EnrichDecision` / `EnrichDecisions`.
 
 ### `send_silent` consumption
 
 Wire name on `SendMessage` / `message.sent`: **`send_silent`** (bool). Notification consumer on `message.sent`:
 
-- `send_silent=true` → suppress push **sound** and badge increment; may still emit in-app `notification` op (unless per-chat mute suppresses type).
-- Scheduled dispatch: silent flag applied at **actual send** time (worker), not at schedule create.
+| Channel | `send_silent=true` |
+|---------|-------------------|
+| **Push** | Deliver **without sound** and **without badge increment** (where platform supports) |
+| **In-app** | Unread badge + in-app row **as usual** (unless mute suppresses type) |
+| **Quiet hours** | `send_silent` does **not** bypass quiet hours; both apply — push still suppressed in DND window |
+| **Scheduled dispatch** | Silent flag applied at **actual send** time (worker), not at schedule create |
+
+Composer label — [text-chat.md](../features/text-chat.md) § Send options; [screen-controls.md](../design/screen-controls.md) §3.6c #1.
 
 **Code gap:** field absent from `messaging.proto` / JetStream `message.sent` proto — [todo/backend.md](../todo/backend.md).
 
 ### Quiet hours
 
-`ApplyQuietHours` sets **`Push=false`** during configured window; **`InApp` remains true**. Product copy: push suppressed; in-app notifications may still deliver. `@mention` may bypass via `override_mentions` on quiet-hours settings. Integration test should assert in-app delivery when push blocked — `quiet_hours_test.go`.
+`ApplyQuietHours` sets **`Push=false`** during configured window; **`InApp` remains true**. Product copy: **push suppressed; in-app may still deliver** — не формулировать как «уведомления не приходят». `@mention` may bypass via `override_mentions` on quiet-hours settings (push only). Integration test — `quiet_hours_test.go`.
+
+| Layer | During quiet hours |
+|-------|-------------------|
+| Push | Suppressed (except mention override) |
+| In-app WS `notification` | Delivered |
+| Unread badge | Updated |
+
+См. [notifications.md](../features/notifications.md) § «Тихие часы», [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) § Push-уведомления.
+
+### Read sync (cross-service — not Notification-owned)
+
+Durable read cursor — **Messaging** `MarkRead` REST/gRPC only. WS `mark_read` / `message_read` — Realtime fan-out for same-profile tabs; **does not** replace REST persist. List unread / badges on other devices refresh after REST + `ListChats` metadata — [messaging-service.md](messaging-service.md) § MarkRead, [realtime-service.md](realtime-service.md) § Reconnect checklist, [notifications.md](../features/notifications.md) § Каналы доставки, [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) § WS vs REST.
 
 ## Публикуемые события (→ NATS)
 

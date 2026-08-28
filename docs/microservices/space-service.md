@@ -32,10 +32,11 @@ service SpaceService {
   // Пространства
   rpc CreateSpace(CreateSpaceRequest) returns (Space);
   rpc UpdateSpace(UpdateSpaceRequest) returns (Space);
-  rpc DeleteSpace(DeleteSpaceRequest) returns (Empty);
+  rpc UpdateSpaceMmConfig(UpdateSpaceMmConfigRequest) returns (Space); // ✓ shipped
+  rpc DeleteSpace(DeleteSpaceRequest) returns (Empty);               // ✗ unimplemented
   rpc GetSpace(GetSpaceRequest) returns (Space);
   rpc ListMySpaces(ListMySpacesRequest) returns (SpaceList);
-  rpc SearchPublicSpaces(SearchRequest) returns (SpaceList);
+  rpc SearchPublicSpaces(SearchRequest) returns (SpaceList);         // ✗ unimplemented
 
   // Голосовые комнаты (сущность) + дерево sidebar (текст и голос в одном слое)
   rpc CreateVoiceRoom(CreateVoiceRoomRequest) returns (VoiceRoom);
@@ -43,12 +44,13 @@ service SpaceService {
   rpc DeleteVoiceRoom(DeleteVoiceRoomRequest) returns (Empty); // каскад на узел в space_tree_nodes
   rpc UpsertTreeNode(UpsertTreeNodeRequest) returns (SpaceTreeNode); // text_chat (chat_id) или voice_room (voice_room_id)
   rpc RemoveTreeNode(RemoveTreeNodeRequest) returns (Empty);
+  rpc ListSpaceTree(ListSpaceTreeRequest) returns (SpaceTreeList);   // ✓ shipped
   rpc CreateCategory(CreateCategoryRequest) returns (Category);
   rpc UpdateCategory(UpdateCategoryRequest) returns (Category);
   rpc DeleteCategory(DeleteCategoryRequest) returns (Empty);
   rpc ReorderSpaceTree(ReorderRequest) returns (Empty); // только space_tree_nodes: порядок и категории для текста и голоса
-  rpc PinTreeNode(PinTreeNodeRequest) returns (SpaceTreeNode);   // not yet in proto
-  rpc UnpinTreeNode(UnpinTreeNodeRequest) returns (SpaceTreeNode);
+  rpc PinTreeNode(PinTreeNodeRequest) returns (SpaceTreeNode);   // spec — not yet in proto
+  rpc UnpinTreeNode(UnpinTreeNodeRequest) returns (SpaceTreeNode); // spec — not yet in proto
 
   // Инвайты
   rpc CreateInvite(CreateInviteRequest) returns (Invite);
@@ -65,16 +67,53 @@ service SpaceService {
   rpc UnbanMember(UnbanMemberRequest) returns (Empty);
   rpc ListMembers(ListMembersRequest) returns (MemberList);
   rpc ListBans(ListBansRequest) returns (BanList);
-  rpc TransferOwnership(TransferRequest) returns (Empty);
+  rpc TimeoutMember(TimeoutMemberRequest) returns (Empty);           // ✓ shipped
+  rpc RemoveMemberTimeout(RemoveMemberTimeoutRequest) returns (Empty); // ✓ shipped
+  rpc TransferOwnership(TransferRequest) returns (Empty);            // ✗ unimplemented
+  rpc AddBotMember(AddBotMemberRequest) returns (SpaceMembership);   // ✓ shipped
+  rpc RemoveBotMember(RemoveBotMemberRequest) returns (Empty);       // ✓ shipped
 
   // Шаблоны
-  rpc ListTemplates(Empty) returns (TemplateList);
-  rpc CreateFromTemplate(CreateFromTemplateRequest) returns (Space);
+  rpc ListTemplates(Empty) returns (TemplateList);                   // ✗ unimplemented
+  rpc CreateFromTemplate(CreateFromTemplateRequest) returns (Space); // ✗ unimplemented
 
   // Аудит
-  rpc GetAuditLog(GetAuditLogRequest) returns (AuditLogList);
+  rpc GetAuditLog(GetAuditLogRequest) returns (AuditLogList);        // ✗ unimplemented
+
+  // S2S / internal
+  rpc AreCoMembers(AreCoMembersRequest) returns (AreCoMembersResponse); // ✓ shipped
+  rpc SyncSpaceProSubscription(SyncSpaceProSubscriptionRequest) returns (Empty); // ✓ shipped
 }
 ```
+
+### Implementation status (proto vs handlers)
+
+Источник истины: [protos/voice/space/v1/space.proto](../../protos/voice/space/v1/space.proto). Сводка по `src/backend/space/internal/grpcsvc/`:
+
+| RPC | Proto | Handler | Notes |
+|-----|-------|---------|-------|
+| CreateSpace, UpdateSpace, GetSpace, ListMySpaces | ✓ | ✓ | |
+| UpdateSpaceMmConfig | ✓ | ✓ | MM config on space |
+| DeleteSpace | ✓ | ✗ | Returns Unimplemented |
+| SearchPublicSpaces | ✓ | ✗ | Catalog search backlog |
+| Create/Update/Delete VoiceRoom | ✓ | ✓ | |
+| UpsertTreeNode, RemoveTreeNode, ReorderSpaceTree | ✓ | ✓ | No `is_pinned` in migration yet |
+| **ListSpaceTree** | ✓ | ✓ | **Omitted from earlier doc inventory** |
+| Create/Update/Delete Category | ✓ | ✓ | |
+| PinTreeNode, UnpinTreeNode | ✗ | ✗ | Spec sketch below; migration + proto TBD |
+| CreateInvite, GetInvite, JoinByInvite | ✓ | ✓ | |
+| **RevokeInvite, ListInvites** | ✓ | ✓ | **Owner-only** today (`requireSpaceOwner`) — normative target: role with `MANAGE_INVITES` |
+| JoinSpace, LeaveSpace | ✓ | ✓ | Entry verification may be bypassed on invite join — [todo/backend.md](../todo/backend.md) |
+| KickMember, BanMember, UnbanMember, ListMembers, ListBans | ✓ | ✓ | |
+| TimeoutMember, RemoveMemberTimeout | ✓ | ✓ | |
+| TransferOwnership | ✓ | ✗ | |
+| AddBotMember, RemoveBotMember | ✓ | ✓ | |
+| ListTemplates, CreateFromTemplate | ✓ | ✗ | |
+| GetAuditLog | ✓ | ✗ | |
+| AreCoMembers | ✓ | ✓ | S2S co-membership check |
+| SyncSpaceProSubscription | ✓ | ✓ | Subscription sync |
+
+**Invite permissions (code vs spec):** shipped handlers gate `RevokeInvite` / `ListInvites` on **space owner** only. Product spec allows admins with invite-management permission — align handlers when Role Service integration lands; until then document owner-only as **partial shipment**.
 
 ## Модель данных
 
@@ -176,7 +215,7 @@ message UnpinTreeNodeRequest {
 }
 ```
 
-**Rules:** pinned nodes render above unpinned in same `category_id`; `ReorderSpaceTree` respects pin group; audit `space.tree_node_upserted` includes `is_pinned`. ≠ Quick Access (profile rail) ≠ folder pin (Chat inbox).
+**Rules:** pinned nodes render above unpinned in same `category_id`; `ReorderSpaceTree` respects pin group; audit `space.tree_node_upserted` includes **`is_pinned`**, **`pin_order`** (R2-A15). ≠ Quick Access (profile rail) ≠ folder pin (Chat inbox). **Code gap:** migration `000002_tree` lacks `is_pinned` — [todo/backend.md](../todo/backend.md).
 
 ## Публикуемые события (→ NATS)
 

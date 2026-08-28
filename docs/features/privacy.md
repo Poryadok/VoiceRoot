@@ -13,6 +13,8 @@
 | Поле                     | Личный      | Игровой     | Рабочий     |
 |--------------------------|-------------|-------------|-------------|
 | Онлайн-статус            | Друзья      | Все         | УС          |
+| **Last seen** (`show_last_seen`) | Друзья | Все | УС |
+| **Read receipts** (`show_read_receipts`, DM only) | Вкл | Вкл | Вкл |
 | Статус «в игре»          | Друзья      | Все         | Никто       |
 | Рейтинг ММ               | Друзья + ДД | Все         | Никто       |
 | Телефон                  | Никто       | Никто       | Никто       |
@@ -69,7 +71,9 @@
 Кто видит информацию:
 
 - Аватар и bio — **всегда** для любого зрителя с доступом к профилю (см. принятое решение выше); отдельных контролов в UI нет
-- Онлайн-статус
+- Онлайн-статус (`show_online`)
+- **Last seen** (`show_last_seen`) — кто видит «был(а) N назад» в header/profile; **независимо** от live online status — [presence.md](presence.md) § «Privacy: show_last_seen»
+- **Read receipts** (`show_read_receipts`) — см. § «Read receipts» ниже
 - Статус «в игре»
 - Рейтинг ММ
 - Телефон
@@ -86,6 +90,25 @@
 - Присылать файлы
 - Присылать голосовые сообщения
 - Приглашать в друзья
+
+### Read receipts (`show_read_receipts`)
+
+Бинарный toggle в `PrivacySettings` (не audience multiselect). Контрол — [screen-controls.md](../design/screen-controls.md) §5.1 #14.
+
+| | |
+|--|--|
+| Поле | `show_read_receipts` (bool) |
+| Default | `true` (read receipts включены) |
+| Scope | **DM only** — ✓/✓✓ delivery ticks; group/channel **view counts** не затрагиваются |
+| UX label | «Read receipts» / «Квитанции о прочтении» |
+
+**When `true` (default):** профиль отправляет read state через `MarkRead`; peer видит ✓✓ на исходящих DM; профиль видит ✓✓ peer'а на входящих.
+
+**When `false`:** профиль **не публикует** read cursor peer'у (sender не получает ✓✓); профиль **не видит** ✓✓ peer'а на своих входящих (symmetric opt-out, как Telegram). Delivered ✓ (single tick) **не** скрывается — только read state.
+
+**Enforcement:** Messaging `MarkRead` / read fan-out проверяет `show_read_receipts` обоих участников DM перед публикацией `message.read` / обновлением `read_receipts` для sender; User Service — source of truth. Group/channel view count — **всегда on**, не зависит от этого toggle.
+
+Cross-ref: [text-chat.md](text-chat.md) § «Статусы доставки»; wire — [messaging-service.md](../microservices/messaging-service.md) § MarkRead.
 
 ### Пересылка сообщений (`allow_forward`)
 

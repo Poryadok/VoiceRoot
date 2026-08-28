@@ -37,6 +37,7 @@ Retention реализуется крон-задачей: находит объ�
 |-----------------------------|------------------------------------------------|----------------|
 | Изображения (JPEG/PNG/WebP) | Перекодируем в WebP, quality 80–85%            | ≤5 MB          |
 | GIF                         | Конвертируем в MP4/WebM (без звука)            | ≤5 MB          |
+| Sticker (pack asset)        | Static WebP or animated WebP/MP4; ≤512×512 px  | ≤512 KB        |
 | Видео                       | ffmpeg, 720p, умеренный битрейт                | ≤15 MB         |
 | Video note (круглое видео)  | ffmpeg, квадрат/crop, короткий клип (≤60 сек)  | ≤5 MB          |
 | Music (audio attach)        | metadata extract; хранится как audio             | ≤10 MB         |

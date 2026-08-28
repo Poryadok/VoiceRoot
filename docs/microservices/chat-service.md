@@ -334,7 +334,9 @@ message ReorderQuickAccessRequest {
 }
 ```
 
-Errors: `FAILED_PRECONDITION` when limit 15 exceeded; `NOT_FOUND` if chat not a membership of caller.
+**At-limit UX (normative):** When the profile already has 15 QA slots, the client shows a **replace picker** ([navigation.md](../features/navigation.md) § Quick Access, [screen-controls.md](../design/screen-controls.md) §1.1c #6): list current slots → user picks one to replace → atomic `RemoveQuickAccess` + `AddQuickAccess`. No dedicated `ReplaceQuickAccess` RPC.
+
+**Errors:** `AddQuickAccess` returns `FAILED_PRECONDITION` when count is already 15 **and** the client did not remove a slot first (server safety net). The product UX is **not** a hard error toast — client **must** open the replace picker instead ([navigation.md](../features/navigation.md) § Quick Access «Server at-limit error», [screen-controls.md](../design/screen-controls.md) §1.1c #6). `NOT_FOUND` if chat is not a membership of caller.
 
 ## Archive
 
@@ -346,9 +348,91 @@ Errors: `FAILED_PRECONDITION` when limit 15 exceeded; `NOT_FOUND` if chat not a 
 | Side-effect: remove Quick Access on archive | **Not implemented** — required when Quick Access lands |
 | Auto-unarchive on incoming DM message | **Not implemented** — Chat or Messaging consumer |
 
-**Spec:** DM archive/unarchive UX — **implemented**. Group/channel archive uses the same `is_archived` column; broader inbox filter for group/channel — **not yet in proto/code**.
+**Spec:** DM **archive write** (`ArchiveChat`) — **implemented**. **Archive list** (`inbox=archive`), Quick Access side-effect, auto-unarchive — **not implemented**. Group/channel use same `is_archived` column; broader inbox UX — partial ([todo/backend.md](../todo/backend.md)).
 
 Unarchive semantics: [GLOSSARY.md](../GLOSSARY.md) § «Архив чата», [text-chat.md](../features/text-chat.md) § «Архивирование».
+
+## Sticker packs
+
+Catalog + per-profile install state. Binary assets — **File Service** ([file-service.md](file-service.md) § Stickers and GIF assets); send wire — **Messaging** ([messaging-service.md](messaging-service.md) § Stickers and GIF). **Not yet in proto/code.**
+
+### Data model (spec — canonical; Messaging validates against this DDL only)
+
+```
+sticker_packs
+├── id (UUID)
+├── title
+├── thumb_file_id (nullable — File Service)
+├── is_system (bool) — shipped with app / CDN seed
+├── is_premium (bool) — ★ install gate
+├── creator_profile_id (nullable — user pack)
+├── sticker_count (int, denormalized — maintained on sticker add/remove)
+├── created_at
+└── updated_at
+
+stickers
+├── id (UUID)
+├── pack_id (FK)
+├── file_id (FK logical → file_db; File intent=sticker)
+├── emoji (string, optional shortcut / associated emoji for recents)
+├── sort_order (int)
+├── width (int — from File metadata at ingest)
+├── height (int — from File metadata at ingest)
+├── UNIQUE(pack_id, file_id)
+└── UNIQUE(pack_id, sort_order)
+
+profile_installed_packs
+├── profile_id
+├── pack_id
+├── sort_order (int) — rail order in composer picker
+├── installed_at
+└── PRIMARY KEY (profile_id, pack_id)
+```
+
+**Do not duplicate this schema in other service docs** — [messaging-service.md](messaging-service.md) § Stickers and GIF cross-refs here for validation/send only.
+
+### gRPC (sketch — not yet in proto)
+
+```protobuf
+// Sticker catalog
+rpc ListInstalledStickerPacks(ListInstalledStickerPacksRequest) returns (ListInstalledStickerPacksResponse);
+rpc GetStickerPack(GetStickerPackRequest) returns (GetStickerPackResponse);
+rpc InstallStickerPack(InstallStickerPackRequest) returns (InstallStickerPackResponse);
+rpc UninstallStickerPack(UninstallStickerPackRequest) returns (InstallStickerPackResponse);
+rpc CreateUserStickerPack(CreateUserStickerPackRequest) returns (CreateUserStickerPackResponse);
+rpc AddStickersToUserPack(AddStickersToUserPackRequest) returns (...); // after File ConfirmUpload per sticker
+
+// GIF provider search — owner: ChatService (HTTP adapter to Giphy or Tenor)
+rpc SearchGifs(SearchGifsRequest) returns (SearchGifsResponse);
+rpc GetTrendingGifs(GetTrendingGifsRequest) returns (SearchGifsResponse);
+
+message SearchGifsRequest {
+  string query = 1;
+  int32 limit = 2;   // default 20, max 50
+  string cursor = 3;
+}
+message GifResult {
+  string provider = 1;       // "giphy" | "tenor"
+  string provider_id = 2;
+  string file_id = 3;        // File row after import (may be pending briefly)
+  string preview_url = 4;
+  int32 width = 5;
+  int32 height = 6;
+  float duration_seconds = 7;
+}
+message SearchGifsResponse {
+  repeated GifResult items = 1;
+  string next_cursor = 2;   // **single owner:** Chat SearchGifs only — pass opaque cursor on next request; File/Messaging MUST NOT define parallel GIF search pagination
+}
+```
+
+**Pagination:** `SearchGifsRequest.cursor` ↔ `SearchGifsResponse.next_cursor` — opaque provider- or Chat-cache token; **only Chat Service** owns GIF search cursors. Empty cursor = first page.
+
+Gateway REST (sketch): `GET /api/v1/sticker-packs`, `POST /api/v1/sticker-packs/{id}/install`, `GET /api/v1/gifs/search?q=…&cursor=…`, `GET /api/v1/gifs/trending` — full table [api-gateway.md](api-gateway.md) § Stickers and GIF.
+
+**Send wire:** Messaging `SendMessage` + `content_type=STICKER|GIF` — full validation — [messaging-service.md](messaging-service.md) § Stickers and GIF.
+
+**Rules:** system packs pre-seeded (`is_system=true`); user `CreateUserStickerPack` uploads stickers via File `intent=sticker` (**static PNG/WebP only** — §37 #5); Premium ★ packs require Subscription check on `InstallStickerPack`; **`UninstallStickerPack` rejects `is_system` packs** (user packs only); uninstall does not delete sent messages; GIF **recents** — client-local ([GLOSSARY.md](../GLOSSARY.md) § «GIF / emoji recents»); server `GetTrendingGifs` for default GIF tab; search results cached server-side with rate limit per profile.
 
 ## Публикуемые события (→ NATS)
 
@@ -362,6 +446,9 @@ Unarchive semantics: [GLOSSARY.md](../GLOSSARY.md) § «Архив чата», [
 | `chat.member_added`   | chat_id, profile_id, added_by      |
 | `chat.member_removed` | chat_id, profile_id, removed_by    |
 | `chat.member_left`    | chat_id, profile_id                |
+| `chat.member_changed` | chat_id, profile_id, change (`added` \| `removed` \| `left` \| `owner_transferred` \| `inbox_bucket_changed` \| `role_changed`) |
+
+**Note:** JetStream payload for `chat.member_changed` may emit `removed`, `owner_transferred`, and inbox transitions beyond minimal proto comment — consumers must tolerate unknown `change` values.
 
 ## Зависимости
 

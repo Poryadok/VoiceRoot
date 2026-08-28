@@ -18,6 +18,7 @@ WebSocket-шлюз для доставки событий в реальном в
 - Нумерация событий **`s`** в рамках WebSocket-сессии, op **`resume`** с `last_s` после reconnect (см. ниже)
 - **Историю чатов не хранит**; пропущенные сообщения клиент догружает через **Messaging API** (Gateway → REST/gRPC), см. [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) (Reconnect)
 - Heartbeat / ping-pong для детекции разрыва
+- На client **`delivery_ack`**: ephemeral `message_delivered` fan-out **и** publish JetStream **`message.delivery_ack`** на `message.events` (Messaging consumer → durable cursor) — см. § `delivery_ack` op
 
 ## Протокол WebSocket
 
@@ -58,10 +59,27 @@ Headers:
 
 | Action | Persist (source of truth) | WS fan-out (Realtime) |
 |--------|---------------------------|------------------------|
-| Mark read | `Messaging.MarkRead` → `read_receipts` + `message.read` NATS | NATS → `message_read`; client `mark_read` → same-profile + chat subscribers |
-| Delivery ack | Durable state derived in Messaging (spec); not WS-only | client `delivery_ack` → `message_delivered` to sender (+ Redis cross-instance) |
+| Mark read | `Messaging.MarkRead` REST/gRPC → `read_receipts` + `message.read` NATS | NATS → `message_read`; client `mark_read` → same-profile + chat subscribers (**no persist**) |
+| Delivery ack | Messaging `last_delivered_message_id` via `message.delivery_ack` NATS (spec) | client `delivery_ack` → `message_delivered` to sender (+ Redis `redis_fanout.go`) |
+
+**Client obligations:**
+
+1. **Read** — call REST `MarkRead` when opening/scrolling chat; optional WS `mark_read` for multi-tab sync.
+2. **Delivered** — send WS `delivery_ack` when message rendered on recipient device (DM).
+3. **After reconnect** — refresh `ListChats` / `GetChatListMetadata` for list ticks; WS `message_delivered` / `message_read` from old session are **not replayed** via `resume`.
 
 См. матрицу durable vs ephemeral — [messaging-service.md](messaging-service.md) § `GetChatListMetadata`, [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) § Доставка сообщений.
+
+### In-app notification fan-out
+
+Two producers may emit WS `notification` for the same message; clients **dedupe** by `(type, chat_id, message_id, recipient profile_id)`.
+
+| Path | When | Owner |
+|------|------|-------|
+| **Fast path** | `message.sent` on NATS | Realtime emits `notification` parallel to `message_create` (type `new_message` today; `message_request` spec — code gap) |
+| **Policy path** | After Notification `DecideRouting` | Notification → NATS → Realtime fan-out (presence, mute, quiet hours, `send_silent`; push vs in-app split) |
+
+**Normative rule:** Notification Service owns **routing policy** (which channel, sound, grouping). Realtime fast path is **latency optimization** for subscribed in-app sessions — must not bypass mute/type suppress. When both paths fire, client keeps one row per dedupe key. Payload schema — § **`notification` op payload** below. Push — always Notification Service (FCM/APNs), never Realtime direct.
 
 ### Операции (Client → Server)
 | op             | Описание                                              |
@@ -71,9 +89,9 @@ Headers:
 | `unsubscribe`  | Отписка: `d.chat_id` — UUID чата                                      |
 | `typing_start` | Начал печатать                                        |
 | `typing_stop`  | Перестал печатать                                     |
-| `mark_read`    | Прочитано до `d.message_id` в `d.chat_id` — fan-out `message_read` в чат + same-profile tabs; **persist** через Messaging REST/gRPC отдельно |
-| `delivery_ack` | Получатель подтвердил доставку `d.message_id` — fan-out `message_delivered` отправителю (Redis cross-instance via `redis_fanout.go`) |
-| `resume`       | После reconnect: `d.last_s` = последний известный `s` |
+| `mark_read`    | `d.chat_id`, `d.message_id` — fan-out `message_read` в чат + same-profile tabs; **persist** только через Messaging REST/gRPC `MarkRead` |
+| `delivery_ack` | `d.chat_id`, `d.message_id` — fan-out `message_delivered` отправителю (+ Redis cross-instance); **publish** JetStream `message.delivery_ack` on `message.events` for Messaging durable cursor (spec — consumer not yet shipped) |
+| `resume`       | После reconnect: `d.last_s` = последний известный `s`. **Server:** принимает op, **не** воспроизводит пропущенные события прошлой сессии (no event journal); новый поток `s` начинается с `hello` |
 
 ### Операции (Server → Client)
 | op                   | Описание                                                            |
@@ -104,13 +122,67 @@ Headers:
 | `call_missed`        | Входящий DM-звонок истёк по таймауту: `room_id`, `chat_id`, `initiator_profile_id`, `callee_profile_id` |
 | `call_ended`         | Звонок завершён: `room_id`, `profile_ids`, `reason`, `ended_by_profile_id` |
 | `voice_state_update` | Изменение voice-состояния                                           |
-| `notification`       | In-app уведомление                                                  |
+| `notification`       | In-app уведомление (см. payload ниже)                               |
 | `match_found`        | Найден матч (matchmaking)                                           |
+
+### `notification` op payload (in-app)
+
+Canonical identity fields use **`profile_id`** (not `user_id`). Legacy code may emit `user_id` — clients should accept both during migration; new producers **must** use `profile_id`.
+
+```json
+{
+  "op": "notification",
+  "d": {
+    "type": "new_message",
+    "chat_id": "<uuid>",
+    "message_id": "<uuid>",
+    "sender_profile_id": "<uuid>",
+    "preview": "truncated body or media label",
+    "send_silent": false
+  },
+  "s": 12346
+}
+```
+
+| Field | Required | Notes |
+|-------|----------|-------|
+| `type` | ✓ | See table below |
+| `chat_id` | ✓ | |
+| `message_id` | ✓ | Dedupe key with `type` + recipient |
+| `sender_profile_id` | ✓ | Not `user_id` |
+| `preview` | optional | Truncated body or media label |
+| `send_silent` | optional | Echo from `message.sent`; in-app row still shown; push policy in Notification Service |
+
+| `d.type` | Notes |
+|----------|-------|
+| `new_message` | Ordinary DM after accept |
+| `message_request` | Stranger / requests inbox — title «Незнакомец» / «Message request» (**code gap:** fast path emits `new_message` today) |
+| `mention` | Group/channel @mention |
+| `reply` | Thread reply — **not yet in code** (interim: `new_message`) |
+
+Routing rules (presence, quiet hours, `send_silent`, mute) — [notification-service.md](notification-service.md), [features/notifications.md](../features/notifications.md). Producers — see § In-app notification fan-out above.
+
+**Code gaps (in-app type):**
+
+| Gap | Location | Spec |
+|-----|----------|------|
+| All DM in-app fan-out uses `type=new_message` | `in_app_notification_fanout.go` | Stranger / requests inbox must emit **`message_request`** — [notification-service.md](notification-service.md) § `message_request` |
+| Legacy `user_id` in mention payloads | mention fan-out paths | Producers **must** use `profile_id` (see payload note above) |
+
+### Reconnect checklist (client)
+
+| After WS reconnect | Required action |
+|--------------------|-----------------|
+| Missed messages | REST `GetMessages` per open `chat_id` |
+| List preview ticks / unread | REST `ListChats` + S2S metadata refresh |
+| Read cursor | REST `MarkRead` if chat was open; do not rely on WS-only `mark_read` |
+| Ephemeral delivery | Live `delivery_ack` only; list ✓✓ from durable metadata |
+| Live events | New `hello` + optional `resume` (new `s` stream; no event journal replay) |
 
 ## Конфигурация (NATS / JetStream)
 
 - **`NATS_URL`** — URL NATS Server с JetStream (порт **4222**). В Compose: `nats://nats:4222`; с хоста: `nats://127.0.0.1:${NATS_PORT:-4222}` (см. [`docker-compose.yml`](../../docker-compose.yml)).
-- Подписки на доменные потоки для fan-out в WebSocket — в первую очередь **`message.events`**, **`chat.events`** и с Фазы 2 **`voice.events`** ([CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)); детали subject/consumer — в реализации сервиса.
+- Подписки на доменные потоки для fan-out в WebSocket — в первую очередь **`message.events`** (consume: `message.sent`, …; **publish:** client `delivery_ack` → `message.delivery_ack`), **`chat.events`** и с Фазы 2 **`voice.events`** ([CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)); детали subject/consumer — в реализации сервиса.
 - **`REALTIME_CHAT_GRPC_ADDR`** (опционально) — gRPC адрес **Chat Service** для bootstrap списка DM при открытии WebSocket (например `chat:50051` в compose). Если не задан, сервер **не** вызывает Chat и **не** шлёт `subscription_sync`; клиент может подписываться через `subscribe` (lazy). TLS/insecure — как принято в окружении (локально часто plaintext внутри mesh).
 - **`REALTIME_USER_GRPC_ADDR`** (опционально) — User Service для записи presence при WS `presence_update`.
 - **`REALTIME_SOCIAL_GRPC_ADDR`** (опционально) — Social Service `ListFriends` для fan-out `user.presence_changed` друзьям по WebSocket (без общей chat-подписки).
@@ -132,11 +204,13 @@ Realtime Instance A ──Redis Pub/Sub──► Realtime Instance B
 
 ## Подписки
 
-При подключении клиент автоматически подписывается на:
+**Target state** при подключении клиент автоматически подписывается на:
 - Все свои активные чаты (DM, группы)
 - Все свои пространства и подписки на узлы дерева (текстовые чаты / голос)
 - Presence друзей
 - Персональные уведомления
+
+**Shipped today:** DM bootstrap via Chat `ListChats` (см. ниже); groups/spaces/friend presence — lazy `subscribe` / partial; см. [todo/backend.md](../todo/backend.md) § Realtime subscription bootstrap.
 
 ### DM ([text-chat.md](../features/text-chat.md)): список из Chat vs lazy `subscribe`
 
