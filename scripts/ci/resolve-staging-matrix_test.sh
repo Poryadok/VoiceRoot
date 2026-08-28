@@ -77,6 +77,19 @@ echo "== staging_infra sets needs_full_rollout =="
 FILTER_JSON='{"code":"true","staging_infra":"true"}' GO_SERVICES_JSON='[]' run_matrix
 [[ "${needs_full_rollout}" == "true" ]] || fail "expected needs_full_rollout for staging_infra"
 
+echo "== global (deploy scripts) sets needs_full_rollout =="
+FILTER_JSON='{"code":"true","global":"true"}' GO_SERVICES_JSON='[]' run_matrix
+[[ "${needs_full_rollout}" == "true" ]] || fail "expected needs_full_rollout for global"
+
+echo "== path-filters: scripts/staging and scripts/prod under global =="
+filters="${ROOT}/.github/ci/path-filters.yml"
+# Ensure deploy scripts widen blast radius via global (ci-gate + full_rollout), not code-only.
+global_block="$(sed -n '/^global:/,/^[^[:space:]#]/p' "${filters}" | sed '$d')"
+echo "${global_block}" | grep -Eqx -- '[[:space:]]+-[[:space:]]+scripts/staging/\*\*' \
+  || fail "path-filters.yml global missing scripts/staging/**"
+echo "${global_block}" | grep -Eqx -- '[[:space:]]+-[[:space:]]+scripts/prod/\*\*' \
+  || fail "path-filters.yml global missing scripts/prod/**"
+
 echo "== BASE_SHA zero uses HEAD^ not HEAD_SHA =="
 if git -C "${ROOT}" rev-parse --verify HEAD^ >/dev/null 2>&1; then
   FILTER_JSON='{"code":"true","svc_chat":"true"}' GO_SERVICES_JSON='["chat","messaging"]' \
