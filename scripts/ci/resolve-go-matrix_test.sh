@@ -47,4 +47,10 @@ FILTER_JSON='{"code":"true","svc_messaging":"true"}' run_matrix
 assert_contains "${go_services}" messaging
 assert_not_contains "${go_services}" story
 
+echo "== global (scripts/staging|prod) runs full Go matrix =="
+FILTER_JSON='{"code":"true","global":"true"}' run_matrix
+[[ "${run_go}" == "true" ]] || fail "expected run_go=true for global"
+count="$(echo "${go_services}" | jq 'length')"
+[[ "${count}" -eq 19 ]] || fail "expected 19 go services for global, got ${count}"
+
 echo "All resolve-go-matrix tests passed."

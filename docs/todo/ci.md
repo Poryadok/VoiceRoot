@@ -28,11 +28,6 @@ CI/CD + выкат: GitHub Actions, promote/deploy, k8s secrets, observability �
 
 - [ ] **DNS staging FQDNs** — Cloudflare **A** для `app`, `admin`, `livekit` (плюс уже `voice` / `developers`) на IP ingress-ноды; для `livekit` — **DNS only** (grey cloud). Firewall: **30881/TCP**, **30882/UDP** на ноде. GitHub Variables: `VOICE_WEB_INGRESS_HOST`, `VOICE_ADMIN_INGRESS_HOST`, `VOICE_LIVEKIT_INGRESS_HOST`, `VOICE_APPLY_OBSERVABILITY=true`, `STAGING_SMOKE_ENABLED=true`, secret `GRAFANA_ADMIN_PASSWORD`, `LIVEKIT_API_KEY`/`SECRET` в `STAGING_APP_SECRETS_YAML`.
 
-### Pipeline gates
-
-- [ ] **path-filters: `scripts/staging/**`, `scripts/prod/**`** — не в `global` / `compose` / `staging_infra` ([`path-filters.yml`](../../.github/ci/path-filters.yml)); PR только с deploy-скриптами → `code=true`, но tier-1 jobs skipped, **`ci-gate` проходит без проверок**; push в `master` → promote all + deploy с пустым `CHANGED_SERVICES` (rollout фактически no-op).
-
-
 ## High
 
 ### Prod ingress & universal links
