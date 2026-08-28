@@ -52,6 +52,7 @@ CI/CD + выкат: GitHub Actions, promote/deploy, k8s secrets, observability �
 - [ ] **Tier 2 не блокирует PR** — `compose-e2e`, platform Flutter smokes только master / `full`; регрессии после merge ([`branch-protection-checklist.md`](../../.github/ci/branch-protection-checklist.md)).
 - [ ] **Двойная сборка Flutter web на master** — tier 1 `flutter` (analyze+test) + job `web` (`flutter build web` + Docker); дедуп только для `flutter-windows` ([`ci.yml`](../../.github/workflows/ci.yml)).
 - [ ] **`compose-e2e` без Go-only триггера** — ускорение master CI; cross-service регрессии только nightly / `full` / compose-path changes (связано с Tier 2 не блокирует PR).
+- [ ] **`ci-gate` GLOBAL → required jobs без unit-теста** — #60 лочит `path-filters.yml` + `run_go` / `needs_full_rollout` при `global=true`; ветки `GLOBAL` в [`verify-required-jobs.sh`](../../.github/ci/verify-required-jobs.sh) (flutter/web/auth/portal/…) не покрыты — регресс снятия GLOBAL-check снова даст hollow `ci-gate` на script-only PR.
 
 
 ## Common

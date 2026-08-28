@@ -127,11 +127,11 @@ CloudPayments — отдельный трек после Paddle (СНГ), не �
 | **Backend Social / Voice / Space** | Fail-open → fail-closed, если User/Blocks/SpaceMembers nil; compose MM: `USER_GRPC_ADDR` / `SOCIAL_GRPC_ADDR` / `SPACE_GRPC_ADDR` | k8s addrs уже есть |
 | **Backend Analytics** | HMAC вместо plaintext `account_id`; ack NATS **после** durable CH | ключ из **Вы** |
 | **Backend Search** | `ReindexChat` не индексирует `IsE2E` | нет |
-| **CI** | path-filters на `scripts/staging/**` и `scripts/prod/**`; не пропускать `ci-gate` на deploy-only PR | нет |
+| **CI** | **done (#60)** — `scripts/staging/**` / `scripts/prod/**` в `global`; matrix tests lock; `ci-gate` требует full tier-1 при GLOBAL | — |
 | **Observability** | Loki все поды; `smoke-request-id.sh`; Grafana Overview; Prometheus scrape; тестовый P1 в канал | Alertmanager (**Вы**) |
 | **Admin** | OAuth `assign-to-me` из session JWT, не только `VITE_STAFF_TOKEN` | нет |
 
-**DoD:** секреты в кластере; JWT tier не всегда `free`; Notification читает те же имена, что в Secret; privacy/join не обходятся nil-клиентом; P1 алерт не в null; path-filter не зелёный вхолостую.
+**DoD:** секреты в кластере; JWT tier не всегда `free`; Notification читает те же имена, что в Secret; privacy/join не обходятся nil-клиентом; P1 алерт не в null; deploy-script PR не проходит `ci-gate` вхолостую (**#60**).
 
 **1** не ждать полного DoD **0**: Space/Admin/Flutter Auth не зависят от Paddle.
 
@@ -224,7 +224,7 @@ CloudPayments — отдельный трек после Paddle (СНГ), не �
 ## Параллелизация (сводка)
 
 ```
-0:  Ops(Вы) ‖ Notification env ‖ Analytics HMAC ‖ Search E2E skip ‖ CI filters ‖ Admin OAuth assign
+0:  Ops(Вы) ‖ Notification env ‖ Analytics HMAC ‖ Search E2E skip ‖ Admin OAuth assign  (CI filters — done #60)
 1:  Space A ‖ Moderation B ‖ Admin C ‖ Social D ‖ Paddle E ‖ Flutter Auth F ‖ User verification H
          G (appeals UI) ← B
          Premium GIF/limits ← E + AUTH_NATS_URL
