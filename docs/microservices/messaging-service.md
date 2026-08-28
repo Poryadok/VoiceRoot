@@ -17,7 +17,8 @@ CRUD сообщений для всех типов чатов (DM, тексто�
 - Пересылка сообщений (с атрибуцией и без)
 - @mentions (user, role; broadcast в чате — `@everyone` / `@here` в UX при наличии `TEXT_CHAT_MENTION_ALL_IN_CHAT` / `TEXT_CHAT_MENTION_ALL_ONLINE`)
 - Read receipts (последнее прочитанное сообщение на пользователя на чат)
-- Вложения (ссылки на File Service)
+- Вложения (ссылки на File Service): photo, video, document, voice, video_note, music, article, location — см. [text-chat.md](../features/text-chat.md) § Attach menu
+- Send options: `send_silent`, `scheduled_at`, `send_when_online` — контракт ниже; **not yet in proto/code** — см. [todo/backend.md](../todo/backend.md)
 - Лимит 4000 символов
 - Догрузка истории после offline / reconnect: **per `chat_id`** через `GetMessages` с курсором (`after_message_id` / `last_message_id`); правила fallback — [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md). Не путать с полем **`s`** в WebSocket Gateway (Realtime) — это нумерация live-событий, не курсор БД
 
@@ -37,19 +38,180 @@ service MessagingService {
   rpc GetMessages(GetMessagesRequest) returns (GetMessagesResponse);
   rpc GetMessage(GetMessageRequest) returns (GetMessageResponse);
   rpc GetThreadMessages(GetThreadMessagesRequest) returns (GetThreadMessagesResponse);
+  rpc ListThreads(ListThreadsRequest) returns (ListThreadsResponse);
   rpc AddReaction(AddReactionRequest) returns (AddReactionResponse);
   rpc RemoveReaction(RemoveReactionRequest) returns (RemoveReactionResponse);
   rpc PinMessage(PinMessageRequest) returns (PinMessageResponse);
   rpc UnpinMessage(UnpinMessageRequest) returns (UnpinMessageResponse);
   rpc GetPinnedMessages(GetPinnedMessagesRequest) returns (GetPinnedMessagesResponse);
+  // BOT-B: bulk unpin for bot uninstall cleanup (sender_profile_id + chat_ids).
+  rpc UnpinMessagesBySenderInChats(UnpinMessagesBySenderInChatsRequest) returns (UnpinMessagesBySenderInChatsResponse);
+
   rpc ForwardMessage(ForwardMessageRequest) returns (ForwardMessageResponse);
+
   rpc MarkRead(MarkReadRequest) returns (MarkReadResponse);
   rpc GetReadState(GetReadStateRequest) returns (GetReadStateResponse);
-  rpc GetBulkReadState(GetBulkReadStateRequest) returns (GetBulkReadStateResponse); // map chat_id -> ReadState
+  rpc GetBulkReadState(GetBulkReadStateRequest) returns (GetBulkReadStateResponse);
   rpc GetChatListMetadata(GetChatListMetadataRequest) returns (GetChatListMetadataResponse); // S2S: preview + unread for Chat ListChats
   rpc ListSharedMedia(ListSharedMediaRequest) returns (ListSharedMediaResponse); // media / files / links / voice tabs in chat info
+
+  // Signal pre-key directory for DM E2E — docs/features/encryption.md.
+  rpc UploadPreKeyBundle(UploadPreKeyBundleRequest) returns (UploadPreKeyBundleResponse);
+  rpc GetPreKeyBundle(GetPreKeyBundleRequest) returns (GetPreKeyBundleResponse);
+
+  // Scheduled messages — not yet in proto
+  // rpc ListScheduledMessages / CancelScheduledMessage / SendScheduledMessageNow / UpdateScheduledMessage
 }
 ```
+
+### Shipped RPC status
+
+| RPC | Handler | Notes |
+|-----|---------|-------|
+| `GetThreadMessages` | ✓ | thread replies |
+| `ListThreads` | ✓ | channel thread index |
+| `PinMessage` / `UnpinMessage` / `GetPinnedMessages` | ✓ | limit **5**/chat (spec); code `MaxPinsPerChat=50` — backlog |
+| `UnpinMessagesBySenderInChats` | ✓ | bot cleanup |
+| `UploadPreKeyBundle` / `GetPreKeyBundle` | ✓ | DM E2E pre-keys |
+| `MarkRead` / `GetReadState` / `GetBulkReadState` | ✓ | DM-typed validation today |
+| `GetChatListMetadata` | ✓ partial | preview text + unread only |
+| `SendMessage` send options (`send_silent`, `scheduled_at`, `send_when_online`) | ✗ | spec below; not in proto |
+| `UpdateScheduledMessage` | ✗ | spec below |
+
+### `SendMessageRequest` (spec)
+
+Поля поверх текущего proto (**not yet in proto/code** — [todo/backend.md](../todo/backend.md)):
+
+| Поле | Тип | Семантика |
+|------|-----|-----------|
+| `client_message_id` | UUID, optional | Идемпотентность — см. выше |
+| `send_silent` | bool, default false | Push без звука; Notification Service читает флаг из события `message.sent` |
+| `scheduled_at` | `google.protobuf.Timestamp`, optional | Отложенная отправка; см. § Scheduled messages |
+| `send_when_online` | bool, default false | Только **DM**: держать в очереди до `online` у получателя; игнорируется если задан `scheduled_at` |
+| `content_type` | enum, optional | Тип полезной нагрузки для preview / shared media — см. § Content types |
+| `content_payload` | `google.protobuf.Struct` или typed oneof | Структурированное тело для `article` / `location` / `video_note` / `music` |
+
+**Правила:**
+
+- `scheduled_at` и `send_when_online=true` **взаимоисключающие** (валидация `INVALID_ARGUMENT`).
+- `send_when_online` только для `chat_type = dm`; для group/channel — `INVALID_ARGUMENT`.
+- Timezone: клиент передаёт **UTC instant**; UI показывает локаль профиля отправителя.
+- Silent + scheduled: silent применяется в момент фактической отправки worker'ом.
+
+### Content types
+
+Расширение `MessageKind` **или** отдельное поле `content_type` на `Message` / `SendMessageRequest`. Канон UX — [text-chat.md](../features/text-chat.md) § Attach menu.
+
+```protobuf
+enum MessageContentType {
+  MESSAGE_CONTENT_TYPE_UNSPECIFIED = 0;
+  MESSAGE_CONTENT_TYPE_TEXT = 1;      // plain / markdown text in `content`
+  MESSAGE_CONTENT_TYPE_PHOTO = 2;
+  MESSAGE_CONTENT_TYPE_VIDEO = 3;
+  MESSAGE_CONTENT_TYPE_DOCUMENT = 4;
+  MESSAGE_CONTENT_TYPE_VOICE = 5;
+  MESSAGE_CONTENT_TYPE_STICKER = 6;
+  MESSAGE_CONTENT_TYPE_GIF = 7;
+  MESSAGE_CONTENT_TYPE_ARTICLE = 8;
+  MESSAGE_CONTENT_TYPE_LOCATION = 9;
+  MESSAGE_CONTENT_TYPE_VIDEO_NOTE = 10;
+  MESSAGE_CONTENT_TYPE_MUSIC = 11;
+}
+```
+
+**Payload sketches** (хранение: `messages.attachments` JSONB до миграции `message_attachments`; нормативная форма — `kind` + поля ниже):
+
+| `content_type` | Payload (JSON sketch) | Валидация / лимиты |
+|----------------|----------------------|---------------------|
+| `article` | `{ "url", "title", "description", "thumb_file_id?", "instant_view_html?" }` | URL https-only; OG/metadata fetch — **not yet implemented** (owner TBD: Gateway vs File vs worker) |
+| `location` | `{ "lat", "lon", "label?", "static_map_file_id?" }` | lat ∈ [-90,90], lon ∈ [-180,180]; static map via File Service |
+| `video_note` | `{ "file_id", "duration_seconds", "width", "height" }` | duration ≤ **60 s** ([file-storage.md](../features/file-storage.md)); round crop on File Service |
+| `music` | `{ "file_id", "title?", "artist?", "album?", "duration_seconds?" }` | Metadata: File Service extract on upload; Messaging stores canonical copy on message |
+
+`attachments_json` в текущем коде — opaque; spec требует typed enum + validated payload (**not yet in proto/code**).
+
+### Scheduled messages (lifecycle)
+
+**Storage:** таблица `scheduled_messages` в `messaging_db` (**not yet in proto/code**):
+
+```
+scheduled_messages
+├── id (UUID)
+├── chat_id, sender_profile_id
+├── payload (jsonb — mirror SendMessage fields minus schedule flags)
+├── scheduled_at (TIMESTAMPTZ, UTC)
+├── send_when_online (bool)
+├── status (pending | sent | cancelled)
+├── created_at, updated_at
+└── UNIQUE(chat_id, sender_profile_id, client_message_id) WHERE client_message_id IS NOT NULL
+```
+
+| Операция | Поведение |
+|----------|-----------|
+| **Create** | `SendMessage` с `scheduled_at` и/или `send_when_online` → row `pending`; **не** публикует `message.sent` до dispatch |
+| **Worker dispatch** | Cron/worker каждые ~30s: `scheduled_at <= now()` OR (`send_when_online` AND recipient `online` via User `GetPresence`) → insert `messages`, publish `message.sent`, mark `sent` |
+| **Cancel** | `CancelScheduledMessage` → `cancelled`; race с worker: first commit wins; повтор cancel → `NOT_FOUND` / idempotent OK |
+| **Send now** | `SendScheduledMessageNow` → немедленный dispatch |
+| **Edit** | `UpdateScheduledMessage` — replace `payload` / `scheduled_at` while `status=pending`; reject if worker already dispatched |
+| **Max horizon** | **365 days** от `now()`; beyond → `INVALID_ARGUMENT` |
+| **Invisible sender** | Отправитель `invisible` **не** блокирует dispatch scheduled; `send_when_online` ждёт **получателя** |
+
+Composer UX — [text-chat.md](../features/text-chat.md) § Send options; strip — [screen-controls.md](../design/screen-controls.md) §3.6 #13–17.
+
+### `UpdateScheduledMessage` (spec — not yet in proto)
+
+```protobuf
+rpc UpdateScheduledMessage(UpdateScheduledMessageRequest) returns (UpdateScheduledMessageResponse);
+
+message UpdateScheduledMessageRequest {
+  string scheduled_message_id = 1;
+  // Fields mirror SendMessage payload; only applied while status=pending.
+  optional string content = 2;
+  optional google.protobuf.Struct content_payload = 3;
+  optional google.protobuf.Timestamp scheduled_at = 4;
+}
+```
+
+**Rules:** `NOT_FOUND` if id missing or not owned by caller; `FAILED_PRECONDITION` if `status != pending` (worker race); `INVALID_ARGUMENT` for horizon / mutual exclusion with `send_when_online` (same as create). Successful edit does **not** publish `message.sent` until dispatch.
+
+### `GetChatListMetadata` / `ChatListItem` preview
+
+S2S enrichment для Chat `ListChats`. **Код сегодня:** только `last_message_preview` text + `unread_count`.
+
+**Spec fields** на `ChatListMetadata` (per `chat_id`; **not yet in proto/code**):
+
+| Поле | Тип | Назначение |
+|------|-----|------------|
+| `last_message_preview` | string | Текст или **media label** (см. ниже) |
+| `last_message_content_type` | `MessageContentType` | Для client-side label без парсинга текста |
+| `last_message_is_outgoing` | bool | Последнее сообщение от `profile_id` запроса |
+| `last_message_delivery_state` | enum | `none` \| `sent` \| `delivered` \| `read` — **durable**, DM only |
+| `unread_count` | int32 | Без изменений |
+| `last_message_at` | timestamp | Для сортировки |
+
+**Media label rules** (server-side string when no text body) — precedence как [text-chat.md](../features/text-chat.md) § Preview:
+
+`Photo` \| `Video` \| `Voice` \| `File` \| `Sticker` \| `GIF` \| `Article` \| `Location` \| `Music` \| `Video message` (video note) \| call labels.
+
+**Ownership delivery state:**
+
+| Layer | Роль |
+|-------|------|
+| **Messaging** | Durable owner: `read_receipts`, derivation of `last_message_delivery_state` for list metadata |
+| **Realtime** | Ephemeral WS `delivery_ack` → `message_delivered` fan-out (incl. Redis cross-instance); **не** источник истины для list preview |
+| **Chat** | Merge Messaging metadata в `ChatListItem` при `ListChats` |
+
+**Delivery state matrix** (DM list ticks):
+
+| State | Durable (`GetChatListMetadata`) | Ephemeral (WS) |
+|-------|--------------------------------|----------------|
+| Sent | outgoing row exists; peer offline / no ack yet | — |
+| Delivered | derived from peer read cursor **or** last known delivery ack persisted (spec) | client `delivery_ack` → server `message_delivered` to sender devices |
+| Read | `read_receipts.last_read_message_id` | `MarkRead` REST → NATS → WS `message_read`; also client WS `mark_read` fan-out |
+
+**MarkRead dual path:** (1) **Persist** — `Messaging.MarkRead` gRPC/REST writes `read_receipts`, publishes `message.read` on `message.events`; (2) **Fan-out** — Realtime consumes `message.read` → WS `message_read` to chat subscribers; client may also send WS `mark_read` for same-profile multi-device sync (Realtime → Redis → other tabs). List UI **must** refresh metadata after reconnect — not infer ticks from WS alone.
+
+После reconnect клиент **перезапрашивает** `ListChats` / metadata, а не восстанавливает ticks из WS alone ([ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md)).
 
 ## Модель данных
 
@@ -87,13 +249,15 @@ pins
 ├── pinned_at
 └── UNIQUE(chat_id, message_id)
 
-**Лимит:** не более **50** закреплённых сообщений на один `chat_id` (как Discord). Повторный pin того же сообщения идемпотентен (обновляет `pinned_at` / `pinned_by`).
+**Лимит pins:** не более **5** закреплённых сообщений на один `chat_id` (как Telegram). Повторный pin того же сообщения идемпотентен (обновляет `pinned_at` / `pinned_by`).
 
-message_attachments (Shared Media — целевая схема в этой же секции «Модель данных»)
+> **Code gap:** `MaxPinsPerChat = 50` в коде и migration `000006_pins` — bug; align to **5** ([todo/backend.md](../todo/backend.md)).
+
+message_attachments (Shared Media — spec; not yet in proto/code)
 ├── id
 ├── message_id (UUID, logical ref → messages.id)
 ├── sort_order
-├── kind (image | video | audio | voice_message | document | link | other)
+├── kind (image | video | audio | voice_message | video_note | document | article | location | link | music | other)
 ├── file_id (nullable)
 ├── external_url (nullable)
 ├── title (nullable)
@@ -108,10 +272,10 @@ read_receipts
 └── UNIQUE(chat_id, profile_id)
 ```
 
-### V1 (core DM scope) — детальный профиль для DDL
+### Current code (DM-only) vs full spec
 
-В первой волне миграций используются только `messages` и `read_receipts`.
-`reactions`, `pins`, `thread_parent_id`, `forward_*`, `message_attachments` — target-state и внедряются позже.
+**Deployed migrations** используют только `messages` и `read_receipts`.
+`reactions`, `pins`, `thread_parent_id`, `forward_*`, `message_attachments` — **not yet in proto/code**.
 
 ```
 messages
@@ -140,7 +304,7 @@ read_receipts
 └── PRIMARY KEY (chat_id, profile_id)
 ```
 
-Индексы v1:
+Индексы:
 - `INDEX messages_chat_id_id_desc_idx (chat_id, id DESC)` для истории и догрузки
 - `INDEX messages_sender_profile_id_idx (sender_profile_id, created_at DESC)` для модерации и профиля
 - `INDEX messages_chat_id_created_at_idx (chat_id, created_at DESC)` для fallback без курсора
@@ -159,7 +323,8 @@ read_receipts
 
 | Событие                  | Данные                                       |
 |--------------------------|----------------------------------------------|
-| `message.sent`           | message_id, chat_id, sender_id, has_mentions |
+| `message.sent`           | message_id, chat_id, sender_id, has_mentions, **content_type**, **send_silent**, **was_scheduled** (bool), **scheduled_at** (nullable — original intent time) |
+| `message.read`           | chat_id, profile_id, last_read_message_id    |
 | `message.mention_added`  | message_id, chat_id, sender_id, mentioned_profile_ids |
 | `message.edited`         | message_id, chat_id                          |
 | `message.deleted`        | message_id, chat_id                          |
@@ -167,6 +332,26 @@ read_receipts
 | `message.pinned`         | message_id, chat_id, pinned_by               |
 | `message.unpinned`       | message_id, chat_id, unpinned_by             |
 | `message.forwarded`      | message_id, source_chat_id, target_chat_id   |
+
+**`message.sent` notes:** `send_silent` drives Notification push policy. `was_scheduled` / `scheduled_at` — audit и client strip cleanup. **Code gap:** JetStream proto сегодня без silent/schedule/content_type — **not yet in proto** (`jetstream_events.proto`).
+
+**`message.read`:** публикуется при `MarkRead`; Realtime fan-out как WS `message_read`. **Code-ok**.
+
+### File → Messaging preview refresh (spec)
+
+When File Service finishes async processing (`file.processed` on JetStream), Messaging **must** refresh list/history metadata for messages referencing that `file_id`:
+
+| Step | Owner |
+|------|-------|
+| File publishes `file.processed` | `file.events` — `file_id`, `status`, derived `preview_url`, dimensions |
+| Messaging consumer | Updates attachment JSON on `messages` / `message_attachments`; invalidates or recomputes `GetChatListMetadata` for affected `chat_id`s |
+| Client | On `message_update` WS (or poll) refresh bubble + list row label |
+
+**Not yet implemented** — consumer + cache invalidation contract; see [todo/backend.md](../todo/backend.md). Subject matrix: [CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md).
+
+### Timestamp ownership (`chats.last_message_at`)
+
+Chat Service writes `chats.last_message_at` on `message.sent` for sort order. **Today:** `TouchLastMessageAt` updates **DM only**; group/channel activity timestamp gap — Chat backlog. Messaging does **not** own this column; it owns preview text, unread, and durable delivery state — см. [chat-service.md](chat-service.md) § ListChats.
 
 ## Зависимости
 

@@ -8,9 +8,26 @@
 
 ## Продуктовый scope
 
-**В scope v1:** фичи из [FEATURES.md](FEATURES.md), **кроме** [federation.md](features/federation.md).
+**Текущий scope:** все фичи из [FEATURES.md](FEATURES.md) — **current**, реализуются **сейчас**. Единственное исключение — [federation.md](features/federation.md) (**deferred**).
 
-**Федерация — later / out of scope.** Спека и scaffold `src/backend/federation/` не трогать, пока рынок явно не попросит. Не планировать RPC, `federation_db`, Gateway upstream, Admin UI нод.
+**Федерация — deferred.** Спека и scaffold `src/backend/federation/` не трогать, пока рынок явно не попросит. Не планировать RPC, `federation_db`, Gateway upstream, Admin UI нод. См. также federated search, federated file storage, federation analytics/moderation в соответствующих feature docs.
+
+**Спека ≠ shipped.** UX может быть в спеке и макетах, а бэкенд/Flutter — `partial`. Не писать `shipped`, если код не закрывает DoD из `docs/features/*`.
+
+### Матрица Telegram-parity (спека vs код)
+
+| Фича | Спека | Код (2026-08-28) | Пробел |
+|------|-------|------------------|--------|
+| Folders (system + custom) | current | proto CRUD only | DDL/handlers, Flutter rail |
+| Quick Access (≤15, per profile) | current | нет RPC/DDL | Chat RPC + Flutter |
+| Archive (`is_archived`) | current | write ✓ | `ListChats` исключает archived |
+| List archived / unarchive UX | current | нет list/filter RPC | Chat RPC + archive screen |
+| Pin messages (≤**5**) | current | RPC ✓, лимит **50** | выровнять — [todo/backend.md](todo/backend.md) |
+| Send silent / schedule / when online | current | нет полей/RPC/таблицы | `scheduled_messages` + composer |
+| List preview ✓/✓✓ | current | preview text only | delivery state в list metadata |
+| Стикеры/GIF | current | 0 кода | паки + composer picker |
+
+**IA (решено):** Quick Access — shortcuts `chat_id` per profile (≤15), не pin чата и не Social favourites. Folders — в left rail между nav-кнопками и аватарами профилей. Archive — вход через RC меню аватара профиля (не строка списка).
 
 ---
 
@@ -38,7 +55,7 @@
 |------|--------|---------|------------------------|
 | [auth-and-contacts](features/auth-and-contacts.md) | partial | Auth (Java), Gateway | Email/guest/sessions/reset **REST есть**. Flutter: нет телефона/OTP, sessions, delete-account. Convert-guest ядро shipped. |
 | [friends](features/friends.md) | shipped | Social, User | Запросы/блок/DM-гейт живые. Нет REST list contacts/favorites, QR, phone-book UI. |
-| [text-chat](features/text-chat.md) | partial | Chat, Messaging, Realtime | DM/группы/треды/пины/markdown/@mentions live. **Стикеры/GIF-паки — v1, 0 кода** (фаза 2). Нет folders RPC, `DeleteChat`, view-count. |
+| [text-chat](features/text-chat.md) | partial | Chat, Messaging, Realtime | DM/группы/треды/markdown/@mentions live. **Пины:** RPC есть, лимит **50** в коде vs **5** в спеке ([todo/backend.md](todo/backend.md)). **Без кода:** folders, Quick Access, list archive, send menu (silent/schedule), стикеры/GIF. Нет `DeleteChat`, view-count. |
 | [forward-messages](features/forward-messages.md) | shipped | Messaging | Attribution / copy-as-new / commentary live. |
 | [presence](features/presence.md) | partial | User, Realtime | REST presence + WS в общем чате. Нет idle 5 мин, game detect, live presence друзьям вне чата. |
 | [user-profile](features/user-profile.md) | partial | User, File | Аватар/био/switch live. GIF-аватар отвергается; `banner_url` не в proto. |
@@ -46,9 +63,10 @@
 | [file-storage](features/file-storage.md) | partial | File | Upload/R2/retention/SHA verify live. **Нет** SHA-256 dedup, ffmpeg GIF/video/PDF; «WebP» = JPEG. |
 | [spaces](features/spaces.md) | partial | Space, Role | Create/Join/Leave/tree/инвайты live. **Нет** `DeleteSpace` / `TransferOwnership` / `GetAuditLog` / каталога / шаблонов. Owner не может leave. |
 | [roles](features/roles.md) | shipped | Role | Кастомные роли, send-deny, `VOICE_JOIN` deny live. Часть TEXT_CHAT_* / verification roles — High. |
-| Групповые чаты | shipped | Chat, Role | Create/kick/min-size/mute/archive live. |
+| Групповые чаты | partial | Chat, Role | Create/kick/min-size/mute/archive live. **Read-state — DM-only** (`read_receipts` per chat); group/channel unread неполный. **Каналы** не в `ListChats` filter. |
 | Треды, shared media | shipped | Chat, Messaging | Live E2E есть. |
-| Markdown, @mentions, пины | shipped | Messaging, Chat | Live E2E есть. |
+| Markdown, @mentions | shipped | Messaging, Chat | Live E2E есть. |
+| Пины сообщений | partial | Messaging, Chat | Pin/unpin/list live. **Лимит 50** (`MaxPinsPerChat`); спека = **5** — [todo/backend.md](todo/backend.md). |
 | [notifications](features/notifications.md) | partial | Notification | Quiet hours в БД; FCM/APNs compose с mock. Прод: noop без секретов + **имена env не совпадают**. |
 | [matchmaking](features/matchmaking.md) | partial | Matchmaking | Поиск/space-queue/LFP live. `PartyStore` stub (`partySize=1`); П.2 постматч открыт; `mm_ban` не S2S в MM. |
 | [game-catalog](features/game-catalog.md) | shipped | Matchmaking | Seed + `SubmitGameRequest` + admin moderation live. Staff Add-game UI тонкий. |
@@ -67,7 +85,7 @@
 | [accessibility](features/accessibility.md) | baseline | Flutter | Semantics + Axe analog в CI. Message-list keys, TalkBack — Common. |
 | [platforms](features/platforms.md) | partial | Flutter | Web+Windows CI. Mobile push/universal links, Shorebird — High/Low. |
 | [i18n](features/i18n.md) | shipped | Flutter | EN+RU baseline. Language sync — Common. |
-| [navigation](features/navigation.md) | partial | Flutter, Chat | Shell есть; folders Unimplemented; часть entry-points только в Penpot. |
+| [navigation](features/navigation.md) | partial | Flutter, Chat | Shell есть (nav + profiles). **IA в спеке (current):** folders rail, **Quick Access (≤15 `chat_id`/profile)**, archive via profile RC — **нет в коде**; Chat RPC + Flutter backlog ([todo/backend.md](todo/backend.md)). См. матрицу Telegram-parity выше. |
 | [updates](features/updates.md) | partial | Flutter, CI | Force-update/version checks частично. Shorebird — явный defer или PR. |
 | [observability](features/observability.md) | partial | ops | Compose метрики есть. Staging DoD (Loki/Grafana/P1) открыт. |
 | [analytics](features/analytics.md) | partial | Analytics, ClickHouse | Ingest + product dashboard. PII в `properties`; ack до CH write; Admin дашборды тонкие. |
@@ -87,9 +105,9 @@
 | JWT `subscription_tier=free` без NATS | User/Chat доверяют JWT, не Subscription S2S | Auth Java + ops `AUTH_NATS_URL` |
 | Нет `TransferOwnership` / `DeleteSpace` | Owner не может leave; спейс нельзя закрыть | Space Critical |
 | Alertmanager → null receiver | P1 алерты никто не видит | [ci.md](todo/ci.md) (**Вы**) |
-| Стикеры/GIF в чате (0 кода) | Паки + composer | Scope **v1 confirmed** ([text-chat.md](features/text-chat.md)); реализация — фаза **2** |
+| Стикеры/GIF в чате (0 кода) | Паки + composer | Current scope ([text-chat.md](features/text-chat.md)); пункт **2** ниже |
 
-CloudPayments — отдельный трек после Paddle (СНГ), не блокер soft-launch, если Paddle живой.
+CloudPayments — отдельный трек после Paddle (СНГ), не блокер staging rollout, если Paddle живой.
 
 ---
 
@@ -99,7 +117,7 @@ CloudPayments — отдельный трек после Paddle (СНГ), не �
 
 ### 0 — Staging не врёт
 
-**Цель:** soft-launch на кластере без fail-open privacy, без InMemory tier, без noop push при заполненных секретах, с живыми алертами.
+**Цель:** staging/prod rollout без fail-open privacy, без InMemory tier, без noop push при заполненных секретах, с живыми алертами.
 
 | Трек | PR-шаги (параллельно) | Зависимости |
 |------|----------------------|-------------|
@@ -119,7 +137,7 @@ CloudPayments — отдельный трек после Paddle (СНГ), не �
 
 ---
 
-### 1 — Critical продукт (soft-launch)
+### 1 — Critical продукт
 
 **Цель:** владелец спейса не залочен; модерация закрывает жалобы; апелляции доходят до пользователя; checkout больше не test-URL.
 
@@ -139,7 +157,7 @@ CloudPayments — отдельный трек после Paddle (СНГ), не �
 
 **Зависимости внутри 1:** A1 (`Transfer`) **перед** owner-leave. E **перед** любой работой «Premium включает GIF/banner/лимиты» (**2**). G после B.
 
-**Не включать в 1:** стикеры (фаза **2**, scope confirmed), folders, каталог спейсов, шаблоны, CloudPayments, ffmpeg, party-from-voice, Developer Portal polish.
+**PR-порядок (scope не меняется):** пункт **1** — Critical lifecycle, модерация, billing. Folders, Quick Access (≤15), archive list, стикеры/GIF, pin limit **5** — **current scope** ([FEATURES.md](FEATURES.md)); первые треки пункта **2** (можно параллельно после DoD **0**, не ждать полного **1**). Каталог спейсов, шаблоны, CloudPayments, ffmpeg, party-from-voice, Developer Portal polish — тоже пункт **2**.
 
 **DoD:** owner transfer + delete live; Admin закрывает репорт; user appeal REST+UI; checkout URL боевой (или скрыт за флагом, не test); shadow-ban не доходит до аудитории; compose/Flutter live на эти пути зелёные.
 
@@ -154,18 +172,18 @@ CloudPayments — отдельный трек после Paddle (СНГ), не �
 | **Backend Subscription** | Cancel/Resume **в Paddle**; grace sweeper 7d; `subscription.events` (не только `analytics.*`); `CheckLimit` в Chat/User/File; `GetLimits` ближе к спеке | 1 E + JWT NATS (0) |
 | **Backend User** | GIF-аватар + banner expose; Premium custom status gate; `SetPrimaryProfile` | JWT tier ≠ всегда free |
 | **Backend File** | SHA-256 dedup + `file_references`; ffmpeg GIF→MP4 / video 720p / PDF thumb; `CheckQuota` чтит premium | entitlements; не ждать стикеры |
-| **Backend Chat** | `DeleteChat`; folders RPC+миграция; `ListChats` каналы + group `last_message_at`; view-count (Messaging) | folders UI — Flutter следом |
+| **Backend Chat** | `DeleteChat`; folders RPC+миграция (`folders`, `folder_chats`); Quick Access RPC+миграция (`quick_access_chats`); `ListArchivedChats` / archive filter; `ListChats` каналы + group `last_message_at`; view-count (Messaging) | folders + Quick Access UI — Flutter следом |
 | **Stickers/GIF** | системные паки + upload своих; send/receive first-class; composer picker; GIF как first-class (не только file attach). Lives TC-MSG-09 после контрактов | [text-chat.md](features/text-chat.md); File ffmpeg для GIF; ADR 005 |
 | **Backend Voice** | `MoveToVoiceRoom`; enforce `VOICE_SPEAK` / `VOICE_MUTE_OTHERS`; roster NATS join/leave | Role client уже wired |
 | **Backend Matchmaking** | Party snapshot из voice roster; leave/join сбрасывает очередь; `ApplySanction(mm_ban)` → `BanFromMM`; П.2 `RateTeammates` / history UI | Voice roster events |
 | **Backend Space catalog** | `SearchPublicSpaces` или честный Search hydrator (не member-only `GetSpace`); templates — отдельные PR | не блокер entitlements |
 | **Backend Bot** | inbound `message.events` → webhook/poll; `GetChatMessagesForBot`; ChatRef type | Portal (ниже) независим |
-| **Flutter** | folders; delete chat; quiet hours API (не SharedPreferences SoT); multi-profile delete + frozen switcher; downgrade picker **после** lifecycle events | Subscription downgrade event |
+| **Flutter** | folders rail; Quick Access (≤15); archive screen (profile RC entry); delete chat; quiet hours API (не SharedPreferences SoT); multi-profile delete + frozen switcher; downgrade picker **после** lifecycle events | Subscription downgrade event |
 | **Developer Portal** | OAuth `state`; JWT expiry; REST export manifest / `GetCommands` | нет |
 | **Deep links (Вы + Gateway)** | iOS Team ID, assetlinks SHA; prod AASA на `voice.gg` | **Вы** |
 | **CI High** | `staging-stack-lock` ждёт image jobs; migrate Job re-run; compose-e2e на Go-only master — решение, не молчаливый skip | нет |
 
-**DoD:** платный аккаунт проходит GIF/banner/лимит профилей в live; `DeleteChat` + folders не Unimplemented; File dedup/ffmpeg в compose; `MoveToVoiceRoom` live; MM пати >1 из войса; Portal не логинится без CSRF state.
+**DoD:** платный аккаунт проходит GIF/banner/лимит профилей в live; `DeleteChat` + folders + Quick Access не Unimplemented; pin limit = **5**; File dedup/ffmpeg в compose; `MoveToVoiceRoom` live; MM пати >1 из войса; Portal не логинится без CSRF state.
 
 ---
 
@@ -181,7 +199,7 @@ CloudPayments — отдельный трек после Paddle (СНГ), не �
 | **Stories** | anonymous NATS не светит viewer; `media_file_id` ownership; GET reactions REST; audience JSON |
 | **Analytics / Admin** | retention SQL; date range на Gateway; дашборды engagement/revenue/health; ingest DoD `message.sent` → CH <60s |
 | **Notification** | grouping 1 push/chat; presence-aware MM/voice push; `reply` type |
-| **Realtime** | bootstrap subscribe groups/spaces; friend presence WS; `delivery_ack` Redis fanout; `REALTIME_INSTANCE_ID` в k8s |
+| **Realtime** | bootstrap subscribe groups/spaces; friend presence WS; `REALTIME_INSTANCE_ID` в k8s. ~~`delivery_ack` Redis fanout~~ **shipped** (`redis_fanout.go`, compose `TestComposeDeliveryReceipts_live`) |
 | **Design** | Penpot · v2 missing buttons (composer/header) → Flutter parity после approve |
 | **Product (Вы)** | П.5/П.6 верификация ранга и Twitch/YouTube/DNS; П.13 E2E multi-device |
 
@@ -191,7 +209,7 @@ CloudPayments — отдельный трек после Paddle (СНГ), не �
 
 ### 4 — Low / post-MVP
 
-Не смешивать с soft-launch.
+Не смешивать с пунктами **0**–**2** (staging-critical path).
 
 - Windows: tray, global PTT, game detect, overlay (П.17–18); Shorebird или явный defer.
 - Stories editor v2 (stickers/doodle/trim).

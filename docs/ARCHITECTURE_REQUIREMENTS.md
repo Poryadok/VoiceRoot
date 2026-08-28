@@ -57,7 +57,8 @@
 - **Протокол**: WebSocket, persistent connection (edge-вход через API Gateway `/ws`, прокси на Realtime Service; см. [microservices/api-gateway.md](microservices/api-gateway.md) и [microservices/realtime-service.md](microservices/realtime-service.md))
 - **Reconnection**: exponential backoff (1s → 2s → 4s, cap 30s)
 - **Между инстансами Realtime**: Redis Pub/Sub
-- **Синхронизация прочитанного**: событие `mark_read(chat_id, message_id)` через WebSocket на все подключённые устройства пользователя
+- **Прочитанное (dual path)**: (1) **persist** — `Messaging.MarkRead` (REST/gRPC) пишет `read_receipts`, публикует `message.read`; (2) **fan-out** — Realtime WS `mark_read` (client) и NATS `message.read` → op `message_read` на подписчиков чата и другие устройства профиля. Список чатов и тики доставки — durable metadata из Messaging, не из WS alone.
+- **Доставлено (dual path)**: WS `delivery_ack` (client) → ephemeral `message_delivered` отправителю (+ Redis cross-instance в `redis_fanout.go`); durable `last_message_delivery_state` для list preview — Messaging ([messaging-service.md](microservices/messaging-service.md)).
 - **Typing indicator**: WebSocket, throttle отправки — не чаще 1 раза в 3 сек; гасить через 5 сек без обновления
 - **UX при потере соединения**: баннер "Переподключение..." появляется через 2 сек после разрыва; исчезает через 1 сек после успешного reconnect
 - **Аутентификация WS (web)**: браузерный WebSocket API не позволяет задать заголовок `Authorization`. **Web-клиент** запрашивает short-lived ticket через `POST /api/v1/realtime/ws-ticket` (JWT только в заголовке REST) и подключается к `/ws?ticket=…`. Gateway валидирует ticket (Redis, single-use, TTL ~60s), подставляет claims и upstream JWT для Realtime. **Нативные клиенты** используют `Authorization: Bearer` на upgrade без query. Legacy `access_token` query на `/ws` остаётся для совместимости, но web не использует.

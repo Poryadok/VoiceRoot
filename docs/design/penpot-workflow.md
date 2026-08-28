@@ -19,7 +19,7 @@
 | Позиция в строке | Что это | Кто меняет | Ссылка в `screens.md` |
 |------------------|---------|------------|------------------------|
 | **Первый** (слева, `x ≈ 0`) | **Shipped snapshot** — как **сейчас в приложении** | **Только скрипт** заливки токенов из приложения (см. ниже). **Дизайнеру вручную менять запрещено.** | Основной frame ID для PR и Flutter parity |
-| **Второй и далее** | **Варианты в работе** — черновики для сравнения с каноном | **Дизайнер** (и агент по задаче) | Суффикс `· v2` / `· draft` / `· WIP`; в inventory не подменяют канон |
+| **Второй и далее** | **Варианты в работе** — черновики для сравнения с каноном | **Дизайнер** (и агент по задаче) | Суффикс `· v2` / `· v3` / `· draft` / `· WIP`; в inventory не подменяют канон |
 
 ### Канон (первый макет) — read-only для дизайнера
 
@@ -82,16 +82,35 @@ Content (`ChatList` / `Messages` / `Body`) — `verticalSizing = fill`, сумм
 
 1. **Zoom out** — увидеть строки канон + варианты.
 2. **Новый сценарий** (ещё нет строки) → shipped snapshot создаёт/обновляет **скрипт**; дизайнер добавляет **вариант** справа, когда нужна работа.
-3. **Вариант** → **справа** от канона **этого же** сценария, та же `y`, имя с суффиксом (`· v2`, `· draft`, `· WIP`).
+3. **Вариант** → **справа** от канона **этого же** сценария, та же `y`, имя с суффиксом (`· v2`, `· v3`, `· draft`, `· WIP`).
 4. Перед сохранением: bounding boxes **не пересекаются** (gap ≥ 80 px по X, ≥ 100 px по Y).
 5. В [screens.md](screens.md) — viewer URL **канона** (без суффикса `·`); варианты — по необходимости, помечены как draft.
 
 ### Именование
 
-- Канон: `Screen/Chat/List` (без суффикса). Варианты: `Screen / Chat / List · v2`.
+- Канон: `Screen/Chat/List` (без суффикса). Варианты: `Screen / Chat / List · v2` или `Screen / Chat / List · v3`.
 - Penpot UI может показывать пробелы: `Screen / Chat / List` — тот же ID, что `Screen/Chat/List`.
 - [generate-screens-md.mjs](../../scripts/design/generate-screens-md.mjs) в inventory попадают **только** каноны (имена **без** `·`).
 - Не оставлять безымянные `Board` на верхнем уровне страницы.
+
+### Telegram-parity · v3 batch
+
+Отдельная волна макетов после Telegram-parity UX audit (2026-08-28). **Не смешивать** с общим polish `· v2` (pages 11–15).
+
+| Rule | Detail |
+|------|--------|
+| **When required** | Любая поверхность из GAP inventory в [screens.md](screens.md) (Archive, AttachMenu, EmojiPicker, SendMenu, PinnedMessageBar, ScheduledStrip, VideoNoteBubble, Navigation · v3 slices) и контроли из [screen-controls.md](screen-controls.md), помеченные GAP / audit backlog в [todo/design.md](../todo/design.md) Critical |
+| **Suffix** | Middle dot + space + `v3`: `Panel / Chat / AttachMenu · v3`. В prose/ID tables допустимо `Panel/Chat/AttachMenu` без пробелов |
+| **Placement** | Справа от канона (`x≈0`) **или** справа от существующего `· v2` на **той же Y**; gap ≥ 80 px по X |
+| **Relation to · v2** | `· v2` — общий design review / density polish. `· v3` — **normative Telegram-parity** (folders, QA, composer, pins, schedule strip, shell order). Новые audit-контроли добавлять в **v3**, не расширять v2 retroactively |
+| **Registry** | Пока frame не promoted: только строка в GAP table + чеклист [todo/design.md](../todo/design.md); **не** добавлять в shipped table [screens.md](screens.md) |
+| **Promotion** | После merge во Flutter — shipped snapshot обновляет **только** `make penpot-tokens-export`; draft `· v3` остаётся справа до закрытия audit item |
+| **Traceability** | PR / задача ссылается на Screen ID + viewer URL draft `· v3`; при закрытии GAP — viewer URL в shipped table |
+
+```text
+y=0:   [ Chat/List — shipped ]  [ Chat/List · v2 ]  [ Chat/List · v3 — folders+QA rail slice ]
+       ↑ x=0 read-only          ↑ polish batch      ↑ Telegram-parity audit batch
+```
 
 ---
 
@@ -369,7 +388,7 @@ UI widgets (library components): `Button/*`, `Avatar/40`, `List/Row`, `ChatBubbl
 
 1. **Spec** — `docs/features/`, [brand.md](brand.md).
 2. **Shipped snapshot** — только `make penpot-tokens-export` + заливка в Penpot (§1); дизайнер **не** трогает `x≈0`.
-3. **Дизайн** — duplicate канона → вариант справа (`· v2` / `· draft`); правки только там.
+3. **Дизайн** — duplicate канона → вариант справа (`· v2` / `· v3` / `· draft`); правки только там. Telegram-parity audit surfaces → **`· v3`** (§ «Telegram-parity · v3 batch»).
 4. **Размещение** — §1: канон ↓, варианты →, без overlap.
 5. **Сборка варианта** — §1.5 inset ≥ 16; §2 clip; §3 placeholder; §3.5 AccentWrap; §3.6 instances из Assets.
 6. **Инвентарь** — frame ID канона в [screens.md](screens.md) (без `·`).
@@ -381,6 +400,7 @@ UI widgets (library components): `Button/*`, `Avatar/40`, `List/Row`, `ChatBubbl
 
 - [ ] **Shipped snapshot (`x≈0`) не изменён вручную** — только скрипт заливки токенов
 - [ ] Дизайн-правки только в вариантах справа (`·` в имени); канон в `screens.md` без суффикса
+- [ ] Telegram-parity GAP surfaces framed as `· v3`, not retrofitted into `· v2` (§ «Telegram-parity · v3 batch»)
 - [ ] Канон слева; варианты справа; нет overlap; новый сценарий — строкой ниже
 - [ ] Имя `Screen/...` / `Panel/...` / `Overlay/...` по конвенции
 - [ ] Контент-контейнеры = ширина frame; нет clip с overflow > 5 px

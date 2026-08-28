@@ -56,7 +56,7 @@ TODO разбит **по домену** (где менять код), не по 
 
 Критерии фич: [encryption.md](features/encryption.md), [bots.md](features/bots.md), [stories.md](features/stories.md). Observability на staging — [observability.md](features/observability.md) §Definition of Done.
 
-Сверка спека↔код (2026-08-17): федерация вне scope. Решения и снятые stale-пункты — `tmp/feature-audit/synthesis.md`. **PLAN.md не трогать** — часть «shipped» завышена (spaces без delete/transfer, checkout-заглушка, стикеры отсутствуют).
+Сверка спека↔код (2026-08-17): федерация вне scope. Решения и снятые stale-пункты — `tmp/feature-audit/synthesis.md`. Telegram-parity UX audit tracker — [`tmp/telegram-ux-audit/AUDIT.md`](../tmp/telegram-ux-audit/AUDIT.md). **PLAN.md не трогать** — часть «shipped» завышена (spaces без delete/transfer, checkout-заглушка, стикеры отсутствуют).
 
 ### Топ дыр (после аудита)
 

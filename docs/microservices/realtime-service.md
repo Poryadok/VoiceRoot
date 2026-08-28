@@ -52,6 +52,17 @@ Headers:
 
 Если клиент не присылал `resume` или это первое подключение — достаточно обычного потока после `hello`.
 
+**`resume` semantics:** новое TCP-соединение → новый поток `s` с `hello`; `resume` с `last_s` **не** воспроизводит пропущенные события из прошлой сессии (Realtime не хранит журнал). Клиент догружает **сообщения** через Messaging API; для list ticks / read state — `ListChats` + `GetChatListMetadata`. Эфемерные `delivery_ack` / `message_delivered` после reconnect не восстанавливаются — только live + durable metadata.
+
+### Read / delivery dual path
+
+| Action | Persist (source of truth) | WS fan-out (Realtime) |
+|--------|---------------------------|------------------------|
+| Mark read | `Messaging.MarkRead` → `read_receipts` + `message.read` NATS | NATS → `message_read`; client `mark_read` → same-profile + chat subscribers |
+| Delivery ack | Durable state derived in Messaging (spec); not WS-only | client `delivery_ack` → `message_delivered` to sender (+ Redis cross-instance) |
+
+См. матрицу durable vs ephemeral — [messaging-service.md](messaging-service.md) § `GetChatListMetadata`, [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) § Доставка сообщений.
+
 ### Операции (Client → Server)
 | op             | Описание                                              |
 |----------------|-------------------------------------------------------|
@@ -60,6 +71,8 @@ Headers:
 | `unsubscribe`  | Отписка: `d.chat_id` — UUID чата                                      |
 | `typing_start` | Начал печатать                                        |
 | `typing_stop`  | Перестал печатать                                     |
+| `mark_read`    | Прочитано до `d.message_id` в `d.chat_id` — fan-out `message_read` в чат + same-profile tabs; **persist** через Messaging REST/gRPC отдельно |
+| `delivery_ack` | Получатель подтвердил доставку `d.message_id` — fan-out `message_delivered` отправителю (Redis cross-instance via `redis_fanout.go`) |
 | `resume`       | После reconnect: `d.last_s` = последний известный `s` |
 
 ### Операции (Server → Client)
@@ -74,6 +87,10 @@ Headers:
 | `message_create`     | Новое сообщение                                                     |
 | `message_update`     | Сообщение отредактировано                                           |
 | `message_delete`     | Сообщение удалено                                                   |
+| `message_read`       | Прочитано до `message_id` (`message.read` NATS или client `mark_read`) |
+| `message_delivered`  | Доставлено получателю (`delivery_ack` → sender profile fan-out)      |
+| `message_pinned`     | Сообщение закреплено (`message.pinned` NATS)                        |
+| `message_unpinned`   | Сообщение откреплено (`message.unpinned` NATS)                      |
 | `reaction_add`       | Реакция добавлена                                                   |
 | `reaction_remove`    | Реакция удалена                                                     |
 | `typing`             | Кто-то печатает                                                     |

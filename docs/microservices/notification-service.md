@@ -81,16 +81,17 @@ quiet_hours
 
 ## Типы уведомлений
 
-| Тип            | Канал доставки       | Группировка |
-|----------------|----------------------|-------------|
-| new_dm         | push + in-app        | by chat     |
-| mention        | push + in-app        | by chat     |
-| reply          | push + in-app        | by chat     |
-| reaction       | in-app only          | —           |
-| friend_request | push + in-app        | —           |
-| match_found    | push + in-app        | —           |
-| incoming_call  | push (VoIP) + in-app | —           |
-| system         | push + in-app        | —           |
+| Тип            | Канал доставки       | Группировка / notes |
+|----------------|----------------------|---------------------|
+| new_dm         | push + in-app        | by chat             |
+| message_request| push + in-app        | by chat; stranger / requests inbox DM — label distinct from `new_dm` |
+| mention        | push + in-app        | by chat             |
+| reply          | push + in-app        | by chat             |
+| reaction       | in-app only          | —                   |
+| friend_request | push + in-app        | —                   |
+| match_found    | push + in-app        | —                   |
+| incoming_call  | push (VoIP) + in-app | —                   |
+| system         | push + in-app        | —                   |
 
 ## Логика доставки
 
@@ -99,12 +100,35 @@ Event (NATS) ──► Notification Service
                     │
                     ├─► Check user settings (mute? quiet hours? suppress type?)
                     ├─► Check presence (online → in-app only, offline → push)
+                    ├─► Check `send_silent` on `message.sent` (suppress push sound/badge; in-app policy below)
                     ├─► Check grouping (уже есть push для этого чата?)
                     │
                     ├─► Realtime Service (in-app, через NATS)
                     ├─► FCM / APNs (push)
                     └─► Resend (email, auth only)
 ```
+
+### Presence routing
+
+| Recipient state | In-app | Push |
+|-----------------|--------|------|
+| Online (`GetPresence` / WS heartbeat) | ✓ | ✗ |
+| Offline | ✓ | ✓ (if settings allow) |
+
+Implemented in `delivery/router.go` → `DecideRouting`; message path enriches via `EnrichDecision` / `EnrichDecisions` with User gRPC presence. Matchmaking/voice paths must use the same enrichment — [todo/backend.md](../todo/backend.md).
+
+### `send_silent` consumption
+
+Wire name on `SendMessage` / `message.sent`: **`send_silent`** (bool). Notification consumer on `message.sent`:
+
+- `send_silent=true` → suppress push **sound** and badge increment; may still emit in-app `notification` op (unless per-chat mute suppresses type).
+- Scheduled dispatch: silent flag applied at **actual send** time (worker), not at schedule create.
+
+**Code gap:** field absent from `messaging.proto` / JetStream `message.sent` proto — [todo/backend.md](../todo/backend.md).
+
+### Quiet hours
+
+`ApplyQuietHours` sets **`Push=false`** during configured window; **`InApp` remains true**. Product copy: push suppressed; in-app notifications may still deliver. `@mention` may bypass via `override_mentions` on quiet-hours settings. Integration test should assert in-app delivery when push blocked — `quiet_hours_test.go`.
 
 ## Публикуемые события (→ NATS)
 

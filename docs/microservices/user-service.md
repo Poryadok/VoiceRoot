@@ -20,16 +20,16 @@
 - Last seen timestamp
 - Onboarding state (шаги туториала)
 - Управление настройками (язык, тема, уведомления)
-- **Поиск профилей для добавления в друзья / открытия DM** ([friends.md](../features/friends.md), v1) — запрос к `user_db` (не Search Service и не `search_db`; см. [DATA_SCOPE_V1.md](../DATA_SCOPE_V1.md), таблица фич)
+- **Поиск профилей для добавления в друзья / открытия DM** ([friends.md](../features/friends.md)) — запрос к `user_db` (не Search Service и не `search_db`; см. [DATA_SCOPE_V1.md](../DATA_SCOPE_V1.md), таблица фич)
 
 ## Поиск профилей vs Search Service
 
 | Канал | RPC | Когда |
 |-------|-----|--------|
-| **User Service** | `SearchProfiles` | [friends.md](../features/friends.md), v1: подбор по нику/отображаемому имени из канонических данных профиля; учёт приватности и блокировок (совместно с Social при необходимости). |
+| **User Service** | `SearchProfiles` | [friends.md](../features/friends.md): подбор по нику/отображаемому имени из канонических данных профиля; учёт приватности и блокировок (совместно с Social при необходимости). |
 | **Search Service** | `SearchUsers` / `SearchGlobal` | [search.md](../features/search.md): полнотекст и глобальный поиск по проекциям в `search_db` / внешнем движке — [search-service.md](search-service.md). |
 
-Клиент v1 для чеклиста «Поиск пользователей» в [PLAN.md](../PLAN.md) опирается на **`UserService.SearchProfiles`** (HTTP-префикс того же сервиса: `/api/v1/users/**` — [api-gateway.md](api-gateway.md), в т.ч. **presigned аватар:** `POST /api/v1/users/me/avatar/presigned-upload` → `CreateAvatarPresignedUpload`).
+Клиент для чеклиста «Поиск пользователей» в [PLAN.md](../PLAN.md) опирается на **`UserService.SearchProfiles`** (HTTP-префикс того же сервиса: `/api/v1/users/**` — [api-gateway.md](api-gateway.md), в т.ч. **presigned аватар:** `POST /api/v1/users/me/avatar/presigned-upload` → `CreateAvatarPresignedUpload`).
 
 ## API (gRPC)
 
@@ -95,6 +95,7 @@ privacy_settings
 ├── profile_id (UUID, logical ref → profiles.id)
 ├── preset (personal | gaming | work)
 ├── show_online (everyone | friends | nobody)
+├── show_last_seen (everyone | friends | nobody) — «был(а) N назад»; independent from live online status
 ├── show_game_status (everyone | friends | nobody)
 ├── show_mm_rating (everyone | friends | nobody)
 ├── show_phone (friends | nobody)
@@ -104,14 +105,33 @@ privacy_settings
 ├── allow_guest_dm (bool)
 └── updated_at
 
-presence (Redis Hash)
-├── profile_id → { status, game, custom_status, last_seen, call_info }
+presence (Redis Hash — ephemeral)
+├── profile_id → { status, game, custom_status, call_info }
+└── TTL ~5 min; refreshed on heartbeat / WS activity
+
+last_seen_at (PostgreSQL)
+├── profile_id (UUID PK, logical ref → profiles.id)
+├── last_seen_at (TIMESTAMPTZ, UTC)
+└── updated on session end, heartbeat boundary, explicit offline transition
 ```
 
-### V1 (core DM scope) — детальный профиль для DDL
+**`last_seen` storage:**
 
-В первой волне миграций используются только `profiles` и `onboarding_state`.
-`privacy_settings` и расширенные Premium-поля остаются target-state и добавляются отдельной волной.
+| Store | Назначение | Статус |
+|-------|------------|--------|
+| **Redis presence** | Live `status`, game, custom status, call | **Implemented** — TTL ~5 min |
+| **PostgreSQL `last_seen_at`** | Durable «был(а) N назад» для header / profile | **Not yet in proto/code** (no PG column) |
+
+Redis-only `last_seen` в hash **недостаточен**: после TTL 5 min фактическое время последней активности теряется — header DM не может показать «был 2 часа назад». Эфемерный cache ≠ durable last seen ([presence.md](../features/presence.md)).
+
+При реализации: запись `last_seen_at` при transition to offline / idle boundary / graceful disconnect; `GetBulkPresence` / `GetPresence` **merge** Redis live status + PG `last_seen_at` when offline.
+
+**`show_last_seen` enforcement:** when `show_last_seen = nobody` (or viewer not in allowed audience for `friends`), `GetPresence` / `GetBulkPresence` **omit** `last_seen_at` timestamp (live online may still respect `show_online`). Header «был(а)…» in DM — [presence.md](../features/presence.md). **Code gap:** field not in proto/DDL; no read-time filter — [todo/backend.md](../todo/backend.md).
+
+### Current code vs full spec
+
+**Deployed migrations** используют только `profiles` и `onboarding_state`.
+`privacy_settings` и расширенные Premium-поля — **not yet in proto/code**.
 
 ```
 profiles
@@ -139,14 +159,13 @@ onboarding_state
 └── updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 ```
 
-Индексы v1:
+Индексы:
 - `UNIQUE (username, discriminator)`
-- `UNIQUE (account_id) WHERE is_primary = true` (один активный профиль в v1)
+- `UNIQUE (account_id) WHERE is_primary = true` (один primary-профиль на account)
 - `INDEX profiles_account_id_idx (account_id)`
 - `INDEX profiles_created_at_idx (created_at DESC)`
 
-Решение по `last_seen` в v1:
-- `last_seen` хранится в Redis presence; отдельная персистентная колонка в PostgreSQL не вводится в первой волне.
+**`last_seen_at`:** spec — таблица в PostgreSQL (см. схема выше). **Code gap:** только Redis hash, без durable persistence — [todo/backend.md](../todo/backend.md).
 
 ## Публикуемые события (→ NATS)
 
@@ -157,16 +176,18 @@ onboarding_state
 | `user.profile_created`  | profile_id, account_id                     |
 | `user.profile_updated`  | profile_id, changed_fields                 |
 | `user.profile_switched` | account_id, old_profile_id, new_profile_id |
-| `user.presence_changed` | profile_id, old_status, new_status         |
+| `user.presence_changed` | profile_id, **old_status**, **new_status** |
 | `user.game_detected`    | profile_id, game_name                      |
 | `user.settings_changed` | profile_id, changed_keys                   |
 | `user.verified`         | profile_id, verification_type              |
+
+**`user.presence_changed`:** событие **публикуется** при `UpdatePresence` (`user/internal/userevents/jetstream.go`). **Proto gap:** JetStream payload сегодня без `old_status` / `new_status` — **not yet in proto** (`jetstream_events.proto`; docs ранее ошибочно помечали как «not published»).
 
 ## Зависимости
 
 - **Auth Service** — account_id валидация
 - **Subscription Service** — проверка лимитов (мульти-профили, кастомный статус)
 - **Redis** — presence кэш (TTL 5 мин, heartbeat)
-- **File Service** — загрузка аватара/баннера (целевой контур); **[user-profile.md](../features/user-profile.md), v1:** минимальный R2/presigned для статичного аватара может жить в User без отдельного File Service — [PLAN.md](../PLAN.md)
+- **File Service** — загрузка аватара/баннера; **not yet deployed** as standalone service — минимальный R2/presigned для статичного аватара может жить в User ([user-profile.md](../features/user-profile.md), [PLAN.md](../PLAN.md))
 
 

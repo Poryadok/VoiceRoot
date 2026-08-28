@@ -14,7 +14,7 @@ Viewer URL pattern: `https://design.penpot.app/#/viewer/{fileId}/{pageId}/{frame
 | screen-controls / prose | screens.md / Penpot Screen ID | Notes |
 |-------------------------|-------------------------------|-------|
 | `Overlay/Matchmaking/MatchRating` | `Overlay/Matchmaking/Rating` | Same surface; prefer **Rating** as Screen ID |
-| `Overlay/Call/ScreenSharePicker` | *(gap — not in table yet; still required v1 inventory)* | Start picker for what to share (§33). **Keep both** with Panel — not an alias. Product: dual-frame inventory (picker + viewer) |
+| `Overlay/Call/ScreenSharePicker` | *(gap — not in table yet; required design inventory)* | Start picker for what to share (§33). **Keep both** with Panel — not an alias. Product: dual-frame inventory (picker + viewer) |
 | `Panel/Call/ScreenShare` | `Panel/Call/ScreenShare` | In-call share viewer/manage (local preview, stream switch, pause/stop). Companion to Overlay picker, not a substitute |
 | Settings detail labels `Security`, `Notifications`, `Subscription`, `Privacy` | `Screen/Settings/Security` etc. | Abbreviated Penpot labels = same Screen IDs |
 | Shell list column | `Screen/Chat/List` | Same controls as Shell §1.2–1.4 |
@@ -25,6 +25,15 @@ Viewer URL pattern: `https://design.penpot.app/#/viewer/{fileId}/{pageId}/{frame
 | Group member list | `Panel/Chat/GroupMembers` | From Chat Info members; not Space Members |
 | Outgoing ringing UI | `Overlay/Call/Outgoing` | Distinct from Active / Incoming. Pre-connect mute required; cam required on video outgoing (§10.2a — Discord DM ringing UX) |
 | Empty / error / offline chrome | `State/Chat/Empty`, `State/Chat/Error`, `State/Network/Offline` | Desktop canons; mobile page `17_States_Mobile` reserved. Empty primary CTA = messenger compose/DM/invite (§54.1). Offline = dismissible non-blocking banner (§54.3) |
+| Chat archive list | `Screen/Chat/Archive` | **GAP** — no Penpot frame yet; §1.10 |
+| Folder rail zone | `Panel/Shell/Navigation` (folders slice) | **GAP** — system + custom folders in rail §1.1b |
+| Quick Access rail slots | `Panel/Shell/Navigation` (QA slice) | **GAP** — ≤15 slots §1.1c |
+| Attach popup | `Panel/Chat/AttachMenu` | **GAP** — §3.6a |
+| Emoji / Stickers / GIF panel | `Panel/Chat/EmojiPicker` | **GAP** — §3.6b |
+| Send long-press menu | `Panel/Chat/SendMenu` | **GAP** — §3.6c |
+| Pinned message bar | `Panel/Chat/PinnedMessageBar` | **GAP** — §3.1a (basic bar partial in Flutter) |
+| Video note bubble | `Screen/Chat/Room/VideoNoteBubble` | **GAP** — round player §3.3 #11; alias for prose «Room variant» |
+| Scheduled messages strip | `Panel/Chat/ScheduledStrip` | **GAP** — §3.6 #13–17 (composer pending schedule UI) |
 
 Controls checklist (buttons per surface): [screen-controls.md](screen-controls.md).
 
@@ -38,7 +47,7 @@ Controls checklist (buttons per surface): [screen-controls.md](screen-controls.m
 | `Overlay/Onboarding/CoachMarks` | `6d4c4410-c47e-8083-8008-5643661489ff` | [desktop](https://design.penpot.app/#/viewer/20d3f736-cc1b-8043-8008-561cb65228ef/6d4c4410-c47e-8083-8008-56422a11288b/6d4c4410-c47e-8083-8008-5643661489ff) · [mobile](https://design.penpot.app/#/viewer/20d3f736-cc1b-8043-8008-561cb65228ef/2cb6024f-0ca3-802b-8008-7c9c44b68151/2cb6024f-0ca3-802b-8008-7c9db70c7b98) | [onboarding_overlay.dart](../../src/frontend/lib/ui/onboarding/onboarding_overlay.dart) | 15_Overlays_Desktop / 16_Overlays_Mobile |
 | `Overlay/Version/ForceUpdate` | `6d4c4410-c47e-8083-8008-564366df6df0` | [desktop](https://design.penpot.app/#/viewer/20d3f736-cc1b-8043-8008-561cb65228ef/6d4c4410-c47e-8083-8008-56422a11288b/6d4c4410-c47e-8083-8008-564366df6df0) · [mobile](https://design.penpot.app/#/viewer/20d3f736-cc1b-8043-8008-561cb65228ef/2cb6024f-0ca3-802b-8008-7c9c44b68151/2cb6024f-0ca3-802b-8008-7c9ddcc690c6) | [version_policy_overlay.dart](../../src/frontend/lib/ui/version/version_policy_overlay.dart) | 15_Overlays_Desktop / 16_Overlays_Mobile |
 | `Panel/Auth/GuestConvert` | `6d4c4410-c47e-8083-8008-5643a04e1d96` | [desktop](https://design.penpot.app/#/viewer/20d3f736-cc1b-8043-8008-561cb65228ef/6d4c4410-c47e-8083-8008-564229c3b00f/6d4c4410-c47e-8083-8008-5643a04e1d96) · [mobile](https://design.penpot.app/#/viewer/20d3f736-cc1b-8043-8008-561cb65228ef/6d4c4410-c47e-8083-8008-564229f6af85/6d4c4410-c47e-8083-8008-5643d3b8fb34) | [guest_convert_sheet.dart](../../src/frontend/lib/ui/auth/guest_convert_sheet.dart) | 13_Panels_Desktop |
-| `Panel/Call/ScreenShare` | `6d4c4410-c47e-8083-8008-564390d00fb7` | [desktop](https://design.penpot.app/#/viewer/20d3f736-cc1b-8043-8008-561cb65228ef/6d4c4410-c47e-8083-8008-564229c3b00f/6d4c4410-c47e-8083-8008-564390d00fb7) · [mobile](https://design.penpot.app/#/viewer/20d3f736-cc1b-8043-8008-561cb65228ef/6d4c4410-c47e-8083-8008-564229f6af85/6d4c4410-c47e-8083-8008-5643d6d256bd) | [screen_share_panel.dart](../../src/frontend/lib/ui/call/screen_share_panel.dart) | 13_Panels_Desktop; in-call viewer — keep with Overlay/ScreenSharePicker (both v1) |
+| `Panel/Call/ScreenShare` | `6d4c4410-c47e-8083-8008-564390d00fb7` | [desktop](https://design.penpot.app/#/viewer/20d3f736-cc1b-8043-8008-561cb65228ef/6d4c4410-c47e-8083-8008-564229c3b00f/6d4c4410-c47e-8083-8008-564390d00fb7) · [mobile](https://design.penpot.app/#/viewer/20d3f736-cc1b-8043-8008-561cb65228ef/6d4c4410-c47e-8083-8008-564229f6af85/6d4c4410-c47e-8083-8008-5643d6d256bd) | [screen_share_panel.dart](../../src/frontend/lib/ui/call/screen_share_panel.dart) | 13_Panels_Desktop; in-call viewer — keep with Overlay/ScreenSharePicker (both required) |
 | `Panel/Chat/CreateGroup` | `6d4c4410-c47e-8083-8008-5643a9af141e` | [desktop](https://design.penpot.app/#/viewer/20d3f736-cc1b-8043-8008-561cb65228ef/6d4c4410-c47e-8083-8008-564229c3b00f/6d4c4410-c47e-8083-8008-5643a9af141e) · [mobile](https://design.penpot.app/#/viewer/20d3f736-cc1b-8043-8008-561cb65228ef/6d4c4410-c47e-8083-8008-564229f6af85/6d4c4410-c47e-8083-8008-5643d5bbbb91) | [create_group_sheet.dart](../../src/frontend/lib/ui/chat/create_group_sheet.dart) | 13_Panels_Desktop |
 | `Panel/Chat/ForwardMessage` | `6d4c4410-c47e-8083-8008-5643ab6a9984` | [desktop](https://design.penpot.app/#/viewer/20d3f736-cc1b-8043-8008-561cb65228ef/6d4c4410-c47e-8083-8008-564229c3b00f/6d4c4410-c47e-8083-8008-5643ab6a9984) · [mobile](https://design.penpot.app/#/viewer/20d3f736-cc1b-8043-8008-561cb65228ef/6d4c4410-c47e-8083-8008-564229f6af85/6d4c4410-c47e-8083-8008-5643d83aaf31) | [forward_message_sheet.dart](../../src/frontend/lib/ui/chat/forward_message_sheet.dart) | 13_Panels_Desktop |
 | `Panel/Chat/GroupMembers` | `6d4c4410-c47e-8083-8008-5643aa9ac55c` | [desktop](https://design.penpot.app/#/viewer/20d3f736-cc1b-8043-8008-561cb65228ef/6d4c4410-c47e-8083-8008-564229c3b00f/6d4c4410-c47e-8083-8008-5643aa9ac55c) · [mobile](https://design.penpot.app/#/viewer/20d3f736-cc1b-8043-8008-561cb65228ef/6d4c4410-c47e-8083-8008-564229f6af85/6d4c4410-c47e-8083-8008-5643db4c1976) | [group_members_sheet.dart](../../src/frontend/lib/ui/chat/group_members_sheet.dart) | 13_Panels_Desktop |
@@ -96,6 +105,22 @@ Controls checklist (buttons per surface): [screen-controls.md](screen-controls.m
 | `State/Chat/Empty` | `6d4c4410-c47e-8083-8008-56251e01bc50` | [desktop](https://design.penpot.app/#/viewer/20d3f736-cc1b-8043-8008-561cb65228ef/6d4c4410-c47e-8083-8008-561cfaa8677c/6d4c4410-c47e-8083-8008-56251e01bc50) | [voice_state_panel.dart](../../src/frontend/lib/ui/core/voice_state_panel.dart) | 12_States_Desktop; primary CTA messenger-first (§54.1) |
 | `State/Chat/Error` | `6d4c4410-c47e-8083-8008-56251f588202` | [desktop](https://design.penpot.app/#/viewer/20d3f736-cc1b-8043-8008-561cb65228ef/6d4c4410-c47e-8083-8008-561cfaa8677c/6d4c4410-c47e-8083-8008-56251f588202) | [voice_state_panel.dart](../../src/frontend/lib/ui/core/voice_state_panel.dart) | 12_States_Desktop |
 | `State/Network/Offline` | `6d4c4410-c47e-8083-8008-5625214e0649` | [desktop](https://design.penpot.app/#/viewer/20d3f736-cc1b-8043-8008-561cb65228ef/6d4c4410-c47e-8083-8008-561cfaa8677c/6d4c4410-c47e-8083-8008-5625214e0649) | [voice_compact_banner.dart](../../src/frontend/lib/ui/core/voice_compact_banner.dart) | 12_States_Desktop; dismissible non-blocking banner (§54.3) |
+
+### GAP inventory (Penpot · v3 backlog — no shipped frame yet)
+
+Draft in Penpot as `Screen/… · v3` per [todo/design.md](../todo/design.md). Do not add to shipped table until promoted.
+
+| Screen ID | screen-controls | Flutter | Notes |
+|-----------|-----------------|---------|-------|
+| `Screen/Chat/Archive` | §1.10 | — | Archive list + unarchive |
+| `Panel/Chat/AttachMenu` | §3.6a | partial attach | Photo/doc/article/location/music |
+| `Panel/Chat/EmojiPicker` | §3.6b | partial emoji | Stickers/GIF tabs |
+| `Panel/Chat/SendMenu` | §3.6c | — | Silent / schedule / when online |
+| `Panel/Chat/PinnedMessageBar` | §3.1a | partial in room | Up to 5 pins |
+| `Screen/Chat/Room/VideoNoteBubble` | §3.3 #11 | — | Round video ≤60s; canonical ID (Room timeline variant) |
+| `Panel/Chat/ScheduledStrip` | §3.6 #13–17 | — | Pending scheduled messages above composer |
+
+Rail slices (folders, Quick Access) ship inside `Panel/Shell/Navigation` **· v3** refresh — separate frame IDs optional.
 
 ## Penpot pages
 

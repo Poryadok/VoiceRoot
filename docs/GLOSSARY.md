@@ -18,7 +18,65 @@
 | Сводка имён в коде/БД               | [Продукт → техника](#продукт--техника)              |
 | Права (bitmask, scopes бота)        | [microservices/role-service.md](microservices/role-service.md) — раздел «Идентификаторы прав» |
 | Аккаунт, профиль                    | [Идентичность](#идентичность)                       |
+| Архив чата, Quick Access, Pin чата  | [Организация чатов в UI](#организация-чатов-в-ui)   |
+| Запросы сообщений                   | [Запросы сообщений](#запросы-сообщений)             |
+| Pin сообщения                       | [Pin сообщения](#pin-сообщения)                     |
 | Стори                               | [Стори](#стори)                                     |
+
+---
+
+## Организация чатов в UI
+
+Три разные сущности — не путать с **Friends → Favourites** (люди, см. [friends.md](features/friends.md)):
+
+### Архив чата
+
+**Архив чата** — per-profile флаг `is_archived` на `chat_members`; чат скрыт из основного списка, folder filters и Quick Access; история **не** удаляется.
+
+| Scope | Поведение |
+|-------|-----------|
+| **DM** | `ArchiveChat` RPC; `ListChats` с `inbox=archive` |
+| **Group / channel / space chat** | тот же флаг `is_archived` на `chat_members`; UI row action и `inbox=archive` |
+
+**Primary entry (product decision):** ПКМ на **аватар профиля** в rail (ProfileStack) → «Архив» → `Screen/Chat/Archive`. Discoverability ниже, чем у отдельной папки в rail — принято; Saved Messages **не** в продукте. Ctx «Архивировать» на строке чата — **secondary shortcut**.
+
+**Unarchive (state machine):**
+
+| Событие | Поведение |
+|---------|-----------|
+| Ctx «Разархивировать» / swipe на экране архива | `is_archived=false`; чат возвращается в folder «Все» и matching system folders; **не** восстанавливается в Quick Access автоматически |
+| **Новое входящее сообщение** (DM) | Auto-unarchive: `is_archived=false`, чат появляется в main inbox с unread; push по обычным правилам |
+| Исходящее сообщение архиватором | **Не** unarchive (как Telegram) |
+| Folder membership / folder pin | Сохраняются в БД; пока archived — строка не показывается; после unarchive pin order восстанавливается |
+| Quick Access | При archive — **удаление** из `quick_access_chats`; после unarchive — **не** auto-restore |
+
+См. [text-chat.md](features/text-chat.md) § «Архивирование», [chat-service.md](microservices/chat-service.md) § Archive.
+
+### Quick Access (избранное чатов)
+
+**Quick Access** — до **15** записей **`chat_id`** на `profile_id` в rail; быстрый переход без смены folder filter. Target = **только `chat_id`**, не polymorphic space/tree node. Добавление: ctx «В избранное» / drag в rail. Отдельная таблица и RPC (`List/Add/Remove/ReorderQuickAccess`) — не pin в папке. Не влияет на сортировку внутри папки. См. [navigation.md](features/navigation.md), [chat-service.md](microservices/chat-service.md) § Quick Access.
+
+### Pin чата
+
+**Pin чата** — закреп **`chat_id` внутри выбранной папки** `(profile_id, folder_id)` через `folder_chats.is_pinned` / `pin_order`, или **узла дерева спейса** (Space Service); иконка pin на row/узле. Отдельно от Quick Access: чат может быть и pinned в папке, и в Quick Access. System folders: pin overlay на отфильтрованном списке; custom folders: pin внутри explicit membership. См. [navigation.md](features/navigation.md), [spaces.md](features/spaces.md), [chat-service.md](microservices/chat-service.md) § Folders.
+
+### Запросы сообщений
+
+**Запросы сообщений** — DM от **незнакомца** (не friend, не contact), попадающий в `chat_members.inbox_bucket=requests` у получателя; UI — virtual folder «Запросы» (`ListChats` с `inbox=requests`). Не путать с **Friends → Pending** (заявки в друзья).
+
+| Bucket | Смысл |
+|--------|-------|
+| `main` | Обычный inbox |
+| `requests` | Ожидает Accept/Decline |
+| `declined` | Скрыт после Decline; re-contact → снова `requests` при новом сообщении |
+
+RPC: `AcceptDMRequest`, `DeclineDMRequest` (Chat Service). См. [text-chat.md](features/text-chat.md) § «Запросы сообщений», [friends.md](features/friends.md) § «Незнакомец пишет».
+
+---
+
+## Pin сообщения
+
+**Pin сообщения** — закреплённое сообщение в комнате чата; до **5** pins на чат (как Telegram). Persistent bar под header + список всех pins. Право: `TEXT_CHAT_PIN_MESSAGES`. См. [text-chat.md](features/text-chat.md) § «Закреплённые сообщения».
 
 ---
 

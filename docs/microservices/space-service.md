@@ -47,6 +47,8 @@ service SpaceService {
   rpc UpdateCategory(UpdateCategoryRequest) returns (Category);
   rpc DeleteCategory(DeleteCategoryRequest) returns (Empty);
   rpc ReorderSpaceTree(ReorderRequest) returns (Empty); // только space_tree_nodes: порядок и категории для текста и голоса
+  rpc PinTreeNode(PinTreeNodeRequest) returns (SpaceTreeNode);   // not yet in proto
+  rpc UnpinTreeNode(UnpinTreeNodeRequest) returns (SpaceTreeNode);
 
   // Инвайты
   rpc CreateInvite(CreateInviteRequest) returns (Invite);
@@ -109,6 +111,8 @@ space_tree_nodes
 ├── chat_id (nullable — Chat, group|channel)
 ├── voice_room_id (nullable — FK → voice_rooms)
 ├── sort_order (int)
+├── is_pinned (bool, default false) — pinned nodes sort above unpinned within same category
+├── pin_order (int, nullable) — ordering among pinned nodes
 ├── is_system (bool — только text_chat)
 ├── created_at
 └── updated_at
@@ -157,6 +161,23 @@ audit_log
 └── created_at
 ```
 
+### Pin tree node
+
+Закреп узла sidebar — UX [spaces.md](../features/spaces.md) § Pin элемента дерева. **Code gap:** no `is_pinned` in migration `000002_tree`.
+
+```protobuf
+message PinTreeNodeRequest {
+  string space_id = 1;
+  string node_id = 2;
+}
+message UnpinTreeNodeRequest {
+  string space_id = 1;
+  string node_id = 2;
+}
+```
+
+**Rules:** pinned nodes render above unpinned in same `category_id`; `ReorderSpaceTree` respects pin group; audit `space.tree_node_upserted` includes `is_pinned`. ≠ Quick Access (profile rail) ≠ folder pin (Chat inbox).
+
 ## Публикуемые события (→ NATS)
 
 Доменный поток JetStream: **`chat.events`** (совместно с Chat; события спейса и дерева — те же потребители; матрица: [CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)).
@@ -171,7 +192,7 @@ audit_log
 | `space.member_banned`   | space_id, account_id, banned_by |
 | `space.voice_room_created`   | space_id, voice_room_id         |
 | `space.voice_room_deleted`   | space_id, voice_room_id         |
-| `space.tree_node_upserted`   | space_id, node_id, kind, chat_id?, voice_room_id? |
+| `space.tree_node_upserted`   | space_id, node_id, kind, chat_id?, voice_room_id?, **is_pinned**, **pin_order** |
 | `space.tree_node_removed`    | space_id, node_id               |
 | `space.invite_created`  | space_id, invite_code           |
 

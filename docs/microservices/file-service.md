@@ -8,7 +8,7 @@
 **БД**: PostgreSQL `file_db`
 **Хранилище**: Cloudflare R2 (S3-совместимое)
 
-**[user-profile.md](../features/user-profile.md), v1:** документ описывает **целевой** сервис. Для MVP (личные сообщения) **не обязателен**: достаточно **аватара профиля** через R2 presigned в контуре User и поля в `user_db`, без `file_db` и без развёртывания File Service — см. [PLAN.md](../PLAN.md) и [DATA_SCOPE_V1.md](../DATA_SCOPE_V1.md).
+**Scope:** все медиа проходят через этот сервис. Аватар профиля может использовать R2 presigned в контуре User до полного развёртывания File Service — см. [user-profile.md](../features/user-profile.md), [PLAN.md](../PLAN.md).
 
 ## Ответственность
 

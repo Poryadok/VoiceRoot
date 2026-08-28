@@ -6,7 +6,15 @@ Penpot, design tokens, screen frames, parity дизайн ↔ Flutter (`docs/des
 
 ## Critical
 
-_Пока пусто._
+### Penpot · v3 traceability (P0 — Telegram-parity shell)
+
+Naming and placement rules: [penpot-workflow.md](../design/penpot-workflow.md) § «Telegram-parity · v3 batch».
+
+- [ ] **Establish `· v3` frame registry** — Telegram-parity audit surfaces (Archive, folder rail, Quick Access, composer attach/emoji/send, PinnedMessageBar, ScheduledStrip, video note). Naming: `Screen / … · v3` / `Panel / … · v3` to the **right** of `· v2` drafts on the same Y row.
+- [ ] **Update GAP table in [screens.md](../design/screens.md)** when each v3 frame is framed — viewer URL in PR.
+- [ ] **Shell · v3** — rail order: Nav → Folders → Quick Access → spacer → ProfileStack → ☰ Settings (§1.1); reconcile Flutter `desktop_shell_rail.dart` drift.
+- [ ] **SideHost · v3** — modes info / members / thread / search per [screen-controls.md](../design/screen-controls.md) §1.9 (H drawer + V sheet/push).
+- [ ] **Composer errors · v3** — frame variants for §3.6f matrix (upload fail, processing fail, quota, schedule validation, sticker/GIF fail, optimistic retry).
 
 ## High
 
@@ -21,17 +29,42 @@ _Пока пусто._
 
 Сверка UI page 10 (канон + `· v2`) с `docs/FEATURES.md` / `docs/features/*`. Панели/оверлеи на 13–15 есть, но **нет entry-point кнопок** на экранах → фича недоступна из текущего UI. Есть на Room · v2: `File` (attach) + `Send`; emoji и остальное — нет.
 
-#### `Screen / Chat / Room` (+ composer в `Shell / Desktop · v2`)
+#### `Screen / Shell / Desktop` · `Chat / List`
 
-Composer / ввод ([text-chat.md](../features/text-chat.md)):
+([navigation.md](../features/navigation.md), [search.md](../features/search.md), [text-chat.md](../features/text-chat.md), [multi-profile.md](../features/multi-profile.md), [presence.md](../features/presence.md)):
 
-- [ ] **Emoji** — открыть emoji picker (и кастомные эмодзи спейса)
-- [ ] **GIF**
-- [ ] **Stickers** — системные + свои паки
-- [ ] **Voice message** — запись голосового (hold/tap mic)
-- [ ] **Markdown / format toolbar** — bold / italic / spoiler / code (или явный affordance)
-- [ ] **Attach на Shell · v2** — `File` есть только на `Chat / Room · v2`, в shell-composer нет
-- [ ] **Иконки на File / Send** — сейчас пустые квадраты без glyph
+- [ ] **New chat / New DM**
+- [ ] **Create group** → `Panel / Chat / CreateGroup`
+- [ ] **Create / join space** → `Panel / Space / Create` / `JoinInvite`
+- [ ] **Folders in rail** — system + custom; badge unread; **no folder tabs in middle column** (§1.1b)
+- [ ] **Quick Access in rail** — до 15 чатов; drag/ctx add (§1.1c)
+- [ ] **Edit folders** / manage custom folders
+- [ ] **☰ Settings at rail bottom** — not top nav tab (§1.1 #8)
+- [ ] **Profile ctx → Archive** — primary archive entry (§1.1a #6, `Screen / Chat / Archive`)
+- [ ] **Global search** — явная лупа/фокус (поле Search есть; нет CTA в rail)
+- [ ] **Profile switcher** — меню профилей аккаунта
+- [ ] **Presence / status picker** — Online / Idle / DND / Invisible + custom status (Plus)
+- [ ] **Stories ring / Create story** — кольцо на аватаре + вход в create
+- [ ] **Matchmaking entry** — вход в каталог / правую панель ММ ([matchmaking.md](../features/matchmaking.md))
+- [ ] **Chat list row actions** — pin (folder), mute, archive (secondary), mark read, delete DM, add to Quick Access (context)
+- [ ] **List preview** — delivery ticks, Photo/Video/Voice/File/Sticker/GIF labels, call preview (§1.4 #15–17)
+- [ ] **Message requests folder** — папка «Запросы» для DM от незнакомцев
+- [ ] **Rail labels** — `Nav / 0…2` без семантики (chats / social / MM)
+
+#### `Screen / Chat / Room` (+ composer)
+
+Composer / ввод ([text-chat.md](../features/text-chat.md) § Composer Telegram parity):
+
+- [ ] **Attach popup** — Photo/Video, Document, Article, Location, Music (§3.6a); not Wallet
+- [ ] **Emoji | Stickers | GIF panel** — tabs (§3.6b)
+- [ ] **Mic / Video note / Send swap** — empty → mic; long-press → video note; text → send
+- [ ] **Long-press Send menu** — without sound, schedule, send when online (§3.6c)
+- [ ] **Composer text ctx / formatting** — ПКМ submenu (§3.6d)
+- [ ] **Optional format toolbar** — desktop duplicate of ctx formatting
+- [ ] **Scheduled messages strip** — above composer (`Panel/Chat/ScheduledStrip` · v3)
+- [ ] **Side panel toggle** in header (§3.1 #6)
+- [ ] **PinnedMessageBar** under header (§3.1a)
+- [ ] **Inline link color** + reaction chips always visible (§3.3)
 
 Header чата ([voice-chat.md](../features/voice-chat.md), [search.md](../features/search.md), [text-chat.md](../features/text-chat.md)):
 
@@ -39,7 +72,7 @@ Header чата ([voice-chat.md](../features/voice-chat.md), [search.md](../feat
 - [ ] **Video call** (DM)
 - [ ] **Search in chat** — лупа → поиск по текущему чату + prev/next
 - [ ] **Chat info / more** — вход в `Panel / Chat / Info` (пины, shared media, участники, mute, E2E…)
-- [ ] **Pinned messages** — плашка/кнопка к закреплённым
+- [ ] **Last seen in header** — per [presence.md](../features/presence.md)
 - [ ] **Thread** — вход в тред (канал/группа) → `Panel / Chat / Thread`
 
 Действия на сообщении (hover / context / selection bar):
@@ -55,25 +88,6 @@ Header чата ([voice-chat.md](../features/voice-chat.md), [search.md](../feat
 - [ ] **Select** — режим мультивыбора
 
 Метаданные (не «кнопки», но нет affordance в макете): timestamps, delivery/read ticks (DM), view count (group/channel).
-
-#### `Screen / Shell / Desktop` · `Chat / List`
-
-([navigation.md](../features/navigation.md), [search.md](../features/search.md), [text-chat.md](../features/text-chat.md), [multi-profile.md](../features/multi-profile.md), [presence.md](../features/presence.md)):
-
-- [ ] **New chat / New DM**
-- [ ] **Create group** → `Panel / Chat / CreateGroup`
-- [ ] **Create / join space** → `Panel / Space / Create` / `JoinInvite`
-- [ ] **Folder tabs** — ЛС / Группы / Каналы / Спейсы / custom (+ на v2 пропала даже «Все» из канона)
-- [ ] **Edit folders** / manage custom folders
-- [ ] **Global search** — явная лупа/фокус (поле Search есть; нет CTA в rail)
-- [ ] **Settings** — вход в settings shell / `Panel / Settings / Sheet`
-- [ ] **Profile switcher** — меню профилей аккаунта
-- [ ] **Presence / status picker** — Online / Idle / DND / Invisible + custom status (Plus)
-- [ ] **Stories ring / Create story** — кольцо на аватаре + вход в create
-- [ ] **Matchmaking entry** — вход в каталог / правую панель ММ ([matchmaking.md](../features/matchmaking.md))
-- [ ] **Chat list row actions** — pin, mute, archive, mark read, delete DM (context)
-- [ ] **Message requests folder** — папка «Запросы» для DM от незнакомцев
-- [ ] **Rail labels** — `Nav / 0…2` без семантики (chats / social / MM / settings?)
 
 #### `Screen / Social / Panel`
 

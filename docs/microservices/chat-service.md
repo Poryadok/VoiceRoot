@@ -12,43 +12,81 @@
 - Создание и управление DM-чатами
 - Создание и управление **текстовыми групповыми чатами** (`type = group` \| `channel`, до 500 участников на чат вне спейса по продукту; одна модель API); `space_id` опционален; в спейсе узел **`space_tree_nodes`** — совместно с Space
 - Участники: для чатов **без** `space_id` — `chat_members`; для чатов **в** спейсе — наследование от `space_members` + роли/оверрайды (см. [DATA_MODEL.md](../DATA_MODEL.md))
-- Папки чатов (All / DM / Groups / Channels / Spaces / пользовательские)
-- Список активных чатов (до 100)
+- Папки чатов (All / DM / Groups / Channels / Spaces / пользовательские) — [navigation.md](../features/navigation.md); **not yet in proto/code** — см. [todo/backend.md](../todo/backend.md)
+- Quick Access (до 15 чатов на профиль); отдельная таблица `quick_access_chats` — **not yet in proto/code**
+- Список активных чатов (mobile strip; desktop — quick access + pin)
 - Мьют / архивация чатов
 - Slow mode (таймер между сообщениями)
 
 ## API (gRPC)
 
+Источник истины: [protos/voice/chat/v1/chat.proto](../../protos/voice/chat/v1/chat.proto). Ниже — инвентарь с **статусом реализации** (handler в `src/backend/chat/internal/grpcsvc/`).
+
 ```protobuf
 service ChatService {
   // DM
-  rpc CreateDM(CreateDMRequest) returns (Chat);
-  rpc GetDM(GetDMRequest) returns (Chat); // find existing or create
+  rpc CreateDM(CreateDMRequest) returns (CreateDMResponse);       // ✓
+  rpc GetDM(GetDMRequest) returns (GetDMResponse);               // ✓ find or create
 
-  // Текстовые групповые чаты (group | channel) — один набор RPC; тип задаётся в запросе (`ChatType`)
-  rpc CreateChat(CreateChatRequest) returns (Chat);   // type = group | channel; space_id optional
-  rpc UpdateChat(UpdateChatRequest) returns (Chat);
-  rpc DeleteChat(DeleteChatRequest) returns (Empty);
+  // Текстовые групповые чаты (group | channel)
+  rpc CreateChat(CreateChatRequest) returns (CreateChatResponse); // ✓
+  rpc UpdateChat(UpdateChatRequest) returns (UpdateChatResponse); // ✓ partial (thread toggles gap)
+  rpc DeleteChat(DeleteChatRequest) returns (DeleteChatResponse); // proto ✓; handler Unimplemented
 
   // Участники
-  rpc AddMembers(AddMembersRequest) returns (Empty);
-  rpc RemoveMember(RemoveMemberRequest) returns (Empty);
-  rpc LeaveChat(LeaveChatRequest) returns (Empty);
-  rpc ListMembers(ListMembersRequest) returns (MemberList);
+  rpc AddMembers(AddMembersRequest) returns (AddMembersResponse);       // ✓
+  rpc RemoveMember(RemoveMemberRequest) returns (RemoveMemberResponse); // ✓
+  rpc LeaveChat(LeaveChatRequest) returns (LeaveChatResponse);           // ✓
+  rpc TransferGroupOwnership(...) returns (...);                       // ✓
+  rpc ListMembers(ListMembersRequest) returns (ListMembersResponse);     // ✓
 
-  // Список чатов (элемент: Chat + превью / unread — см. ChatListItem в protos)
-  rpc ListChats(ListChatsRequest) returns (ListChatsResponse);
-  rpc GetChat(GetChatRequest) returns (Chat);
+  // Список чатов
+  rpc ListChats(ListChatsRequest) returns (ListChatsResponse); // ✓ dm+group; space merge; inbox filter
+  rpc GetChat(GetChatRequest) returns (GetChatResponse);     // ✓
 
-  // Папки
-  rpc ListFolders(ListFoldersRequest) returns (FolderList);
-  rpc CreateFolder(CreateFolderRequest) returns (Folder);
-  rpc UpdateFolder(UpdateFolderRequest) returns (Folder);
-  rpc DeleteFolder(DeleteFolderRequest) returns (Empty);
+  // Message requests (DM inbox)
+  rpc AcceptDMRequest(AcceptDMRequestRequest) returns (...);   // ✓
+  rpc DeclineDMRequest(DeclineDMRequestRequest) returns (...); // ✓
+
+  // DM E2E toggle
+  rpc EnableChatE2E(EnableChatE2ERequest) returns (...);   // ✓ (pre-key gate when Messaging wired)
+  rpc DisableChatE2E(DisableChatE2ERequest) returns (...); // ✓
+
+  // Папки — proto ✓; handlers → Unimplemented
+  rpc ListFolders(ListFoldersRequest) returns (ListFoldersResponse);
+  rpc CreateFolder(CreateFolderRequest) returns (CreateFolderResponse);
+  rpc UpdateFolder(UpdateFolderRequest) returns (UpdateFolderResponse);
+  rpc DeleteFolder(DeleteFolderRequest) returns (DeleteFolderResponse);
+
+  // Folder membership + pin — not yet in proto
+  // rpc AddChatToFolder / RemoveChatFromFolder / ReorderFolderChats
+  // rpc PinChatInFolder / UnpinChatInFolder
+
+  // Quick Access — not yet in proto
+  // rpc ListQuickAccess / AddQuickAccess / RemoveQuickAccess / ReorderQuickAccess
 
   // Действия
-  rpc MuteChat(MuteChatRequest) returns (Empty);
-  rpc ArchiveChat(ArchiveChatRequest) returns (Empty);
+  rpc MuteChat(MuteChatRequest) returns (MuteChatResponse);       // ✓
+  rpc ArchiveChat(ArchiveChatRequest) returns (ArchiveChatResponse); // ✓ write; list archive ✗
+}
+```
+
+### `ListChatsRequest` / `ChatListItem`
+
+```protobuf
+message ListChatsRequest {
+  voice.common.v1.CursorPageRequest page = 1;
+  optional string inbox = 2; // main | requests — ✓ shipped; archive — spec only
+  optional string folder_id = 3; // not yet in proto
+}
+
+message ChatListItem {
+  Chat chat = 1;
+  optional string last_message_preview = 2; // S2S Messaging when wired
+  int64 unread_count = 3;
+  optional string inbox = 4;              // main | requests — ✓ from chat_members.inbox_bucket
+  optional bool is_stranger = 5;          // ✓ true when inbox=requests
+  optional string dm_peer_profile_id = 6; // ✓ DM peer for list title/avatar
 }
 ```
 
@@ -64,7 +102,10 @@ chats
 ├── topic (nullable, часто канал)
 ├── creator_profile_id
 ├── slow_mode_seconds (0 = off)
-├── last_message_at
+├── last_message_at (activity sort — см. § Timestamp ownership)
+├── threads_enabled (bool, default false; channels default true)
+├── allow_user_main_feed (bool, default true; channels default false)
+├── e2e_enabled (bool, default false — DM opt-in E2E)
 ├── created_at
 └── updated_at
 
@@ -75,80 +116,239 @@ chat_members
 ├── joined_at
 ├── muted_until (nullable)
 ├── is_archived (bool)
+├── inbox_bucket (main | requests | declined) — per-member DM request state
 └── UNIQUE(chat_id, profile_id)
 
 folders
 ├── id (UUID)
 ├── profile_id (UUID, logical ref → user_db.profiles.id)
 ├── name
-├── type (system | custom)
-├── filter_config (jsonb) -- правила фильтрации
+├── folder_type (system | custom)
+├── filter_config_json (jsonb) -- system: preset predicate; custom: include rules
 ├── sort_order (int)
-└── created_at
+├── created_at
+└── updated_at
 
-folder_chats (для custom folders)
+folder_chats
+├── profile_id (UUID, logical ref → user_db.profiles.id)
 ├── folder_id (UUID, logical ref → folders.id)
 ├── chat_id (UUID, logical ref → chats.id)
-└── added_at
+├── sort_order (int, NOT NULL DEFAULT 0) -- manual order within folder
+├── is_pinned (bool, NOT NULL DEFAULT false)
+├── pin_order (int, NULL) -- lower = higher; NULL when not pinned
+├── added_at (timestamptz)
+└── PRIMARY KEY (profile_id, folder_id, chat_id)
+
+quick_access_chats
+├── profile_id (UUID, logical ref → user_db.profiles.id)
+├── chat_id (UUID, logical ref → chats.id)
+├── sort_order (int, NOT NULL DEFAULT 0)
+├── added_at (timestamptz)
+└── UNIQUE(profile_id, chat_id) -- max 15 rows per profile_id (enforced in service)
 ```
 
-### V1 (core DM scope) — детальный профиль для DDL
+**Notes:**
+- **System folders** (All, DM, Groups, Channels, Spaces): membership computed from `chats` + `filter_config_json`; rows in `folder_chats` used only for **pin/order overlay** (`is_pinned`, `pin_order`, optional `sort_order` override).
+- **Custom folders**: explicit rows in `folder_chats` for every included chat; pin scoped to that folder.
+- **Quick Access**: separate table; **chat_id only** (no polymorphic space target).
 
-В первой волне миграций Chat ограничен DM-сценарием:
-- `chats` с `type = dm`
-- `chat_members`
-- пользовательские папки (`folders`, `folder_chats`) отложены и не входят в v1.
+### Migration sketches (spec — not yet applied)
 
+```sql
+-- 000008_folders.up.sql
+CREATE TABLE folders (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id UUID NOT NULL,
+  name TEXT NOT NULL,
+  folder_type VARCHAR(16) NOT NULL CHECK (folder_type IN ('system', 'custom')),
+  filter_config_json JSONB NOT NULL DEFAULT '{}',
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX folders_profile_id_idx ON folders (profile_id, sort_order);
+
+-- 000009_folder_chats.up.sql
+CREATE TABLE folder_chats (
+  profile_id UUID NOT NULL,
+  folder_id UUID NOT NULL REFERENCES folders(id) ON DELETE CASCADE,
+  chat_id UUID NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  is_pinned BOOLEAN NOT NULL DEFAULT false,
+  pin_order INTEGER NULL,
+  added_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (profile_id, folder_id, chat_id)
+);
+CREATE INDEX folder_chats_folder_pin_idx ON folder_chats (profile_id, folder_id, is_pinned DESC, pin_order NULLS LAST, sort_order);
+
+-- 000010_quick_access_chats.up.sql
+CREATE TABLE quick_access_chats (
+  profile_id UUID NOT NULL,
+  chat_id UUID NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  added_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (profile_id, chat_id)
+);
+CREATE INDEX quick_access_profile_order_idx ON quick_access_chats (profile_id, sort_order);
 ```
-chats
-├── id UUID PRIMARY KEY DEFAULT gen_random_uuid()
-├── type VARCHAR(16) NOT NULL CHECK (type = 'dm')
-├── space_id UUID NULL -- в v1 всегда NULL
-├── name TEXT NULL
-├── avatar_url TEXT NULL
-├── topic TEXT NULL
-├── creator_profile_id UUID NOT NULL -- logical ref → user_db.profiles.id
-├── slow_mode_seconds INTEGER NOT NULL DEFAULT 0 CHECK (slow_mode_seconds = 0)
-├── last_message_at TIMESTAMPTZ NULL
-├── created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-└── updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 
-chat_members
-├── chat_id UUID NOT NULL -- logical ref → chats.id
-├── profile_id UUID NOT NULL -- logical ref → user_db.profiles.id
-├── role VARCHAR(16) NOT NULL DEFAULT 'member' CHECK (role IN ('owner','admin','member'))
-├── joined_at TIMESTAMPTZ NOT NULL DEFAULT now()
-├── muted_until TIMESTAMPTZ NULL
-├── is_archived BOOLEAN NOT NULL DEFAULT false
-└── PRIMARY KEY (chat_id, profile_id)
-```
+### Deployed schema (migrations `000001`–`000007`) vs full spec
 
-Индексы v1:
-- `INDEX chat_members_profile_id_idx (profile_id, joined_at DESC)` для `ListChats`
-- `INDEX chats_last_message_at_idx (last_message_at DESC)` для сортировки диалогов
-- `INDEX chats_creator_profile_id_idx (creator_profile_id)`
+**Shipped today** (`chat_db` migrations): DM + group + channel types; `chat_members.inbox_bucket`; `threads_enabled` / `allow_user_main_feed`; `e2e_enabled`; slow mode; guest-DM flag. **Not shipped:** `folders`, `folder_chats`, `quick_access_chats` — см. [todo/backend.md](../todo/backend.md).
+
+**Full spec** (folders + quick access) — [navigation.md](../features/navigation.md); DDL-скетчи ниже в § Migration sketches.
+
+Индексы (deployed):
+- `chat_members_profile_id_idx (profile_id, joined_at DESC)` + `chat_members_profile_inbox_idx (profile_id, inbox_bucket)`
+- `chats_last_message_at_idx (last_message_at DESC)`
+- `chats_creator_profile_id_idx (creator_profile_id)`
 
 ## ListChats (список, превью, unread)
 
-**Контракт**: `ListChatsRequest` с `voice.common.v1.CursorPageRequest` (`cursor`, `page_size`); ответ `ListChatsResponse.chat_list` — `ChatList` с `items: ChatListItem[]` и `next_cursor`. Каждый `ChatListItem` содержит `chat` (как в `GetChat`) плюс `last_message_preview` и `unread_count`.
+**Контракт**: `ListChatsRequest` с `voice.common.v1.CursorPageRequest` (`cursor`, `page_size`); опционально `inbox` (`main` \| `requests`). Ответ `ListChatsResponse.chat_list` — `ChatList` с `items: ChatListItem[]` и `next_cursor`. Каждый `ChatListItem` содержит `chat`, `last_message_preview`, `unread_count`, `inbox`, `is_stranger`, `dm_peer_profile_id` (см. proto выше).
 
-**Порядок и фильтр (v1 DM)**:
-- только чаты, где вызывающий профиль есть в `chat_members` и `is_archived = false`, `chats.type = 'dm'`;
-- сортировка по активности: `COALESCE(last_message_at, created_at)` по убыванию, затем `chats.id` по убыванию (стабильный tie-break);
-- размер страницы по умолчанию 50, максимум 100 (согласовано с лимитом «до 100» активных чатов в продукте).
+**Порядок и фильтр (shipped code)**:
+- членство в `chat_members`, `is_archived = false`, `inbox_bucket` = значение `inbox` (default `main`);
+- SQL: `chats.type IN ('dm', 'group')` — **channels в membership-inbox пока не попадают** ([todo/backend.md](../todo/backend.md));
+- на **первой странице** `inbox=main` дополнительно мержатся space-чаты (`group`/`channel` по `space_id`) через S2S Space `ListMemberSpaceIDs` + `ListSpaceChatsForProfile` (`list_chats.go`);
+- сортировка: `COALESCE(last_message_at, created_at)` DESC, tie-break `chats.id` DESC;
+- page size default 50, max 100.
+
+**Full inbox spec (not yet shipped):** `folder_id`, `inbox=archive`, quick access — [navigation.md](../features/navigation.md); DDL/handlers — [todo/backend.md](../todo/backend.md).
+
+### Timestamp ownership (`chats.last_message_at`)
+
+| Writer | Что обновляет | Статус |
+|--------|---------------|--------|
+| **Chat** | `chats.last_message_at` на потоке `message.sent` (`message_activity_consumer` → `TouchLastMessageAt`) | **DM only** today; group/channel rows stale |
+| **Messaging** | `last_message_preview`, `unread_count`, durable `last_message_delivery_state` (spec) | S2S `GetChatListMetadata`; preview text only in code |
+| **Target** | Chat owns activity timestamp for **all** chat types; Messaging owns preview + delivery/read metadata | group/channel `TouchLastMessageAt` — backlog |
+
+Сортировка `ListChats` читает `chats.last_message_at` из Chat DB; превью-текст и тики доставки — из Messaging ([messaging-service.md](messaging-service.md) § `GetChatListMetadata`).
 
 **Превью и непрочитанные: денорм в `chat_db` vs S2S Messaging**
 
 | Подход | Плюсы | Минусы |
 |--------|-------|--------|
 | **Денорм в Chat** (`chats.last_message_preview`, счётчики на `chat_members` и т.п.) | Быстрый один запрос к `chat_db`; меньше зависимость от Messaging при чтении | Дублирование данных; нужны надёжные обновления из потока сообщений / триггеры / джобы; риск рассинхрона |
-| **S2S Messaging (выбрано для Фазы 1 в коде)** | Источник истины остаётся в `messaging_db` (`messages`, `read_receipts`); нет дублирования текста сообщения в Chat | Дополнительный round-trip (batch) при `ListChats`; требуется живой gRPC к Messaging |
+| **S2S Messaging (выбрано в текущем коде)** | Источник истины остаётся в `messaging_db` (`messages`, `read_receipts`); нет дублирования текста сообщения в Chat | Дополнительный round-trip (batch) при `ListChats`; требуется живой gRPC к Messaging |
 
 Реализация: опциональный интерфейс обогащения на стороне Chat (`ListChatsEnrichment`) вызывается после выборки страницы из PostgreSQL и заполняет `last_message_preview` / `unread_count`. Если клиент Messaging не сконфигурирован, список чатов всё равно возвращается, а эти поля остаются пустыми и нулём. Конкретный набор Messaging RPC (например, расширение к `GetBulkReadState` + выборка последнего видимого сообщения пачкой по `chat_id`) задаётся при внедрении Messaging; до этого момента шлюз может собирать список из Chat и догружать превью отдельными вызовами к Messaging на своей стороне.
 
 **Текущее состояние кода:** `src/backend/chat/main.go` подключает `ListChatsEnrichment` при наличии `MESSAGING_GRPC_ADDR`; Chat вызывает Messaging S2S `GetChatListMetadata` и заполняет `last_message_preview` / `unread_count`. Если Messaging не сконфигурирован, список чатов всё равно возвращается, а эти поля остаются пустыми / нулём.
 
 **Индекс** `chat_members_profile_id_idx` используется для фильтрации по `profile_id`; сортировка опирается на `chats.last_message_at` / `created_at` (см. `chats_last_message_at_idx`).
+
+## Folders
+
+**Folder CRUD** (`ListFolders`, `CreateFolder`, `UpdateFolder`, `DeleteFolder`): объявлены в `chat.proto`, handlers → **Unimplemented** (proto-only).
+
+**System folders** (seed per profile): All, DM, Groups, Channels, Spaces — `folder_type=system`, immutable name/delete; `filter_config_json` задаёт predicate (см. [navigation.md](../features/navigation.md)).
+
+**Custom folders:** user-created; membership explicit via `folder_chats`.
+
+### `ListChatsRequest.folder_id` (not yet in proto)
+
+Расширение `ListChatsRequest`:
+
+```protobuf
+message ListChatsRequest {
+  voice.common.v1.CursorPageRequest page = 1;
+  optional string inbox = 2;   // main | requests | archive
+  optional string folder_id = 3;
+}
+```
+
+| `folder_id` | Filter |
+|-------------|--------|
+| omitted + `inbox=main` | non-archived chats for profile (current default) |
+| system folder id | chats matching folder predicate ∩ `is_archived=false` |
+| custom folder id | join `folder_chats` WHERE `folder_id` ∩ `is_archived=false` |
+| `inbox=archive` | `is_archived=true` (ignores `folder_id`; **not implemented**) |
+
+Sort within folder: pinned first (`pin_order ASC`), then `sort_order`, then activity (`last_message_at`).
+
+### Folder membership + pin RPCs (not yet in proto)
+
+```protobuf
+rpc AddChatToFolder(AddChatToFolderRequest) returns (Empty);
+rpc RemoveChatFromFolder(RemoveChatFromFolderRequest) returns (Empty);
+rpc ReorderFolderChats(ReorderFolderChatsRequest) returns (Empty);
+rpc PinChatInFolder(PinChatInFolderRequest) returns (Empty);
+rpc UnpinChatInFolder(UnpinChatInFolderRequest) returns (Empty);
+
+message AddChatToFolderRequest {
+  string folder_id = 1;
+  string chat_id = 2;
+  optional int32 sort_order = 3; // append if omitted
+}
+message RemoveChatFromFolderRequest {
+  string folder_id = 1;
+  string chat_id = 2;
+}
+message ReorderFolderChatsRequest {
+  string folder_id = 1;
+  repeated string chat_ids = 2; // full ordered list for profile+folder
+}
+message PinChatInFolderRequest {
+  string folder_id = 1;
+  string chat_id = 2;
+  optional int32 pin_order = 3;
+}
+message UnpinChatInFolderRequest {
+  string folder_id = 1;
+  string chat_id = 2;
+}
+```
+
+**Pin rules:** archived chats reject pin; system folder pin creates/updates overlay row in `folder_chats` without requiring prior membership row for custom-only chats (chat must still match system predicate).
+
+## Quick Access
+
+Separate from folder pin. Target: **`chat_id` only** (not space/tree polymorphic entry). Limit **15** per `profile_id`. Archiving a chat **must** remove it from Quick Access.
+
+```protobuf
+rpc ListQuickAccess(ListQuickAccessRequest) returns (ListQuickAccessResponse);
+rpc AddQuickAccess(AddQuickAccessRequest) returns (Empty);
+rpc RemoveQuickAccess(RemoveQuickAccessRequest) returns (Empty);
+rpc ReorderQuickAccess(ReorderQuickAccessRequest) returns (Empty);
+
+message QuickAccessItem {
+  string chat_id = 1;
+  int32 sort_order = 2;
+  Chat chat = 3; // optional hydrate via GetChat
+}
+message ListQuickAccessRequest {}
+message ListQuickAccessResponse {
+  repeated QuickAccessItem items = 1;
+}
+message AddQuickAccessRequest {
+  string chat_id = 1;
+  optional int32 sort_order = 2;
+}
+message RemoveQuickAccessRequest {
+  string chat_id = 1;
+}
+message ReorderQuickAccessRequest {
+  repeated string chat_ids = 1; // full ordered list, max 15
+}
+```
+
+Errors: `FAILED_PRECONDITION` when limit 15 exceeded; `NOT_FOUND` if chat not a membership of caller.
+
+## Archive
+
+| RPC / field | Status |
+|-------------|--------|
+| `ArchiveChat(chat_id, archived)` | **Implemented** — sets `chat_members.is_archived` |
+| `ListChats` main inbox | **Implemented** — excludes `is_archived=true` |
+| `ListChats` with `inbox=archive` | **Not implemented** — contract above |
+| Side-effect: remove Quick Access on archive | **Not implemented** — required when Quick Access lands |
+| Auto-unarchive on incoming DM message | **Not implemented** — Chat or Messaging consumer |
+
+**Spec:** DM archive/unarchive UX — **implemented**. Group/channel archive uses the same `is_archived` column; broader inbox filter for group/channel — **not yet in proto/code**.
+
+Unarchive semantics: [GLOSSARY.md](../GLOSSARY.md) § «Архив чата», [text-chat.md](../features/text-chat.md) § «Архивирование».
 
 ## Публикуемые события (→ NATS)
 

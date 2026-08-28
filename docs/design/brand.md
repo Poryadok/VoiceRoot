@@ -43,8 +43,8 @@ app stack: inline / side panel / bottom sheet; full-screen только где �
 
 ## Layout Principles
 
-- **Desktop/Web:** основа — three-column shell из [navigation.md](../features/navigation.md): активные/папки, список чатов, открытый чат. Левая колонка не должна соревноваться с контентом: нейтральный фон, компактные строки, badge только где есть сигнал.
-- **Mobile:** один главный фокус на экран. Навигация сворачивается, но пользователь не должен терять unread/status в других чатах.
+- **Desktop/Web:** основа — three-column shell из [navigation.md](../features/navigation.md): **rail** (nav + folders + quick access + profiles + ☰ settings), **список чатов**, **открытый чат** (+ optional side panel). Левая колонка не должна соревноваться с контентом: нейтральный фон, компактные строки, badge только где есть сигнал.
+- **Mobile:** один главный фокус на экран. Навигация сворачивается, но пользователь не должен терять unread/status в других чатах (active strip).
 - **Density:** ближе к Telegram Desktop: много информации без ощущения тесноты. Вертикальные отступы списков держать компактными, но touch targets на mobile не меньше доступного минимума.
 - **No zero inset:** текст, заголовки и контролы не лижут край экрана или рамку колонки — минимум `space.16` (16 px). Исключения и AccentBar — [penpot-workflow.md](penpot-workflow.md) §1.5.
 - **Panels before pages:** для профиля, информации о чате, списка участников, настроек уведомлений и быстрых действий предпочтительны панели/sheets. Отдельная страница нужна, если сценарий длинный или требует своего состояния.
@@ -57,6 +57,7 @@ app stack: inline / side panel / bottom sheet; full-screen только где �
 - **Lists:** avatar/title/subtitle/meta/badge как базовый паттерн. Строки кликабельны целиком; вторичные действия через hover/menu/long press.
 - **Menus:** короткие, контекстные, с одинаковым порядком действий. Опасные пункты внизу.
 - **Toasts/snackbars:** только для transient feedback. Не использовать toast как единственный способ показать ошибку формы или блокер.
+- **Composer errors:** матрица recovery UX — [screen-controls.md](screen-controls.md) §3.6f; inline/banner у composer предпочтительнее toast; failed optimistic send — failed bubble + Retry.
 - **Empty states:** короткая причина + один следующий шаг. Не превращать empty state в маркетинговый баннер.
 - **Loading:** skeleton для списков, inline spinner для кнопки, progress для долгих операций. Не блокировать весь экран, если можно заблокировать только область.
 - **Offline/reconnect:** явная плашка или compact banner; пользователь должен понимать, что ввод сохранён локально или отправка не выполнена.
@@ -64,7 +65,11 @@ app stack: inline / side panel / bottom sheet; full-screen только где �
 ## Messaging UX
 
 - **Chat first:** открыть, прочитать, написать — основной happy path. В app stack не добавлять UI-шум будущих фич.
-- **Composer:** поле ввода всегда рядом с историей; send CTA видимый. **Текущее поведение (desktop/web):** `Enter` отправляет сообщение; `Ctrl+Enter` и `Shift+Enter` — новая строка. **Будущее:** переключатель Enter vs Ctrl+Enter в Settings → preferences (UI toggle не в этом релизе).
+- **Composer:** Telegram-parity layout — `[📎] [input] [😊] [🎤|📹|➤]`; attach popup, emoji/sticker/GIF panel, long-press send menu — см. [text-chat.md](../features/text-chat.md) § Composer и [screen-controls.md](screen-controls.md) §3.6. Ошибки отправки/загрузки — §3.6f (inline/banner, retry). **Enter:** `Enter` отправляет; `Ctrl+Enter` / `Shift+Enter` — новая строка (toggle в Settings — future).
+- **List preview:** delivery ticks, media type labels (Photo/Video/Voice/File/Sticker/GIF), call previews — как в Telegram; см. [text-chat.md](../features/text-chat.md) § Preview.
+- **Inline links:** Telegram-like **blue** (`color.link`), не primary accent; underline on hover; отличие от spoiler/code.
+- **Reactions:** compact chips под bubble; **always visible when present** (не permanent toolbar на каждом bubble); на mobile без hover.
+- **Pinned bar:** persistent strip под header; не блокирует composer.
 - **Message grouping:** группировать соседние сообщения одного отправителя по времени; повторять avatar/name только при смене отправителя или значительной паузе.
 - **Unread:** unread badge в списках, separator в истории, быстрый переход к первому непрочитанному.
 - **Context actions:** reply/edit/delete/reaction/forward появляются по фазам из [PLAN.md](../PLAN.md); место под них проектировать через контекстное меню, не через постоянные кнопки на каждом сообщении.
