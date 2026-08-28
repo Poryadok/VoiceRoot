@@ -6,6 +6,17 @@ CI/CD + выкат: GitHub Actions, promote/deploy, k8s secrets, observability �
 
 ## Critical
 
+### Blockers
+
+Стабильные ID для отложенных пунктов (агент без secrets/DNS/кластера):
+
+1. Staging k8s secrets (`voice-app-secrets`)
+2. Auth secrets (TOTP/NATS/Resend)
+3. Billing secrets (Paddle/CloudPayments)
+4. APNs/FCM env name + mount mismatches (также нужны human secret values)
+5. Observability alert channel secret (Telegram/email для Alertmanager)
+6. DNS staging FQDNs + firewall + GH variables (секция DNS & cluster prep **Вы**)
+
 ### Secrets & alerts (**Вы**)
 
 - [ ] **Секреты staging k8s** — `voice-app-secrets` по [`deploy/staging/secret.example.yaml`](../../deploy/staging/secret.example.yaml): JWT, Postgres URLs, R2 (`FILE_R2_*`, `USER_R2_*`), FCM/APNs для Notification, **Analytics** (`CLICKHOUSE_DSN`, `ANALYTICS_ID_HASH_KEY`) ([`DEPLOYMENT.md`](../DEPLOYMENT.md)).
@@ -18,11 +29,11 @@ CI/CD + выкат: GitHub Actions, promote/deploy, k8s secrets, observability �
 
 Проверки на живом кластере после `apply-observability.sh`; спека — [observability.md](../features/observability.md).
 
-- [ ] **Loki: все поды** — приложение + infra пишут в Loki (`kubectl get pods -n voice-observability` — Running).
-- [ ] **Трассировка `request_id`** — E2E: `scripts/staging/smoke-request-id.sh` (DM → Loki chain Gateway → gRPC → NATS → `ws_fanout`); runbook [`TESTING.md`](../TESTING.md) § Debug by request_id.
-- [ ] **Grafana smoke** — Overview: targets UP; дашборды Overview / Tier-0 / Infra / Logs открываются.
-- [ ] **Prometheus scrape** — `gateway_http_requests_total` растёт при трафике на staging. 
-- [ ] **P1 алерты** — правила активны; тестовый firing → сообщение в канал (не null receiver).
+- [ ] **Loki: все поды** (**Вы**) — приложение + infra пишут в Loki (`kubectl get pods -n voice-observability` — Running). — **отложено: блокер #1,#5,#6** (нужен живой staging + secrets/алерты)
+- [ ] **Трассировка `request_id`** (**Вы**) — E2E: `scripts/staging/smoke-request-id.sh` (DM → Loki chain Gateway → gRPC → NATS → `ws_fanout`); runbook [`TESTING.md`](../TESTING.md) § Debug by request_id. — **отложено: блокер #1,#5,#6** (нужен живой staging + secrets/алерты)
+- [ ] **Grafana smoke** (**Вы**) — Overview: targets UP; дашборды Overview / Tier-0 / Infra / Logs открываются. — **отложено: блокер #1,#5,#6** (нужен живой staging + secrets/алерты)
+- [ ] **Prometheus scrape** (**Вы**) — `gateway_http_requests_total` растёт при трафике на staging.  — **отложено: блокер #1,#5,#6** (нужен живой staging + secrets/алерты)
+- [ ] **P1 алерты** (**Вы**) — правила активны; тестовый firing → сообщение в канал (не null receiver). — **отложено: блокер #1,#5,#6** (нужен живой staging + secrets/алерты)
 
 ### DNS & cluster prep (**Вы**)
 
