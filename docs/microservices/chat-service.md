@@ -220,9 +220,9 @@ CREATE INDEX quick_access_profile_order_idx ON quick_access_chats (profile_id, s
 
 | Writer | Что обновляет | Статус |
 |--------|---------------|--------|
-| **Chat** | `chats.last_message_at` на потоке `message.sent` (`message_activity_consumer` → `TouchLastMessageAt`) | **DM only** today; group/channel rows stale |
+| **Chat** | `chats.last_message_at` на потоке `message.sent` (`message_activity_consumer` → `TouchLastMessageAt`) | **dm / group / channel** (`type IN (...)`) |
 | **Messaging** | `last_message_preview`, `unread_count`, durable `last_message_delivery_state` (spec) | S2S `GetChatListMetadata`; preview text only in code |
-| **Target** | Chat owns activity timestamp for **all** chat types; Messaging owns preview + delivery/read metadata | group/channel `TouchLastMessageAt` — backlog |
+| **Target** | Chat owns activity timestamp for **all** chat types; Messaging owns preview + delivery/read metadata | shipped for chat types above |
 
 Сортировка `ListChats` читает `chats.last_message_at` из Chat DB; превью-текст и тики доставки — из Messaging ([messaging-service.md](messaging-service.md) § `GetChatListMetadata`).
 

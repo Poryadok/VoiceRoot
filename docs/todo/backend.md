@@ -308,8 +308,8 @@
 - [ ] **[Chat] `DeleteChat` unimplemented** — proto + gRPC handler exist; no `ChatGRPC.DeleteChat` (`src/backend/chat/internal/grpcsvc/`).
 - [ ] **[Chat] `ListChats` omits channels** — SQL filters `c.type IN ('dm', 'group')` (`src/backend/chat/internal/store/list_chats.go:87,97`). Space channels are invisible in the main inbox despite `chat-service.md` listing Channels as a folder dimension. — **P0**
 - [ ] **[Chat] ListChats channels in inbox** — extend SQL beyond `dm|group`; wire Channels system-folder predicate — `list_chats.go:87` — **P0**
-- [ ] **[Chat] Group `last_message_at` never updated from message stream** — `message_activity_consumer.go` calls `TouchLastMessageAt`, which updates only `type = 'dm'` (`src/backend/chat/internal/store/dm.go:119`). Group rows in `ListChats` won’t reflect real activity ordering. — **P0**
-- [ ] **[Chat] Group last_message_at from message stream** — extend `TouchLastMessageAt` to `type=group` (and channel); fix list sort — `dm.go:119`, `message_activity_consumer.go` — **P0**
+- [x] **[Chat] Group `last_message_at` never updated from message stream** — **done:** `TouchLastMessageAt` updates `type IN ('dm','group','channel')` (`dm.go`); store IT `last_message_at_integration_test.go`.
+- [x] **[Chat] Group last_message_at from message stream** — **done:** same as above.
 - [ ] **[Chat] `ListChats` partial `Chat` objects** — link UI gap for `e2e_enabled`, `space_id`, thread flags in list rows — [chat-service.md](../microservices/chat-service.md)
 - [ ] **[Chat] `UpdateChat` ignores thread settings** — proto has `threads_enabled` / `allow_user_main_feed` (`chat.pb.go`); handler only passes name/avatar/slow_mode (`src/backend/chat/internal/grpcsvc/group.go`). Defaults tested (`thread_settings_integration_test.go`); runtime toggles impossible.
 - [ ] **[Chat] `UpdateChat` rejects channels** — `row.Type != "group"` guard (`src/backend/chat/internal/grpcsvc/group.go:97`). Channel topic/slow-mode changes via Chat API blocked.
