@@ -13,7 +13,7 @@ CI/CD + выкат: GitHub Actions, promote/deploy, k8s secrets, observability �
 1. Staging k8s secrets (`voice-app-secrets`)
 2. Auth secrets (TOTP/NATS/Resend)
 3. Billing secrets (Paddle/CloudPayments)
-4. APNs/FCM env name + mount mismatches (также нужны human secret values)
+4. FCM/APNs secret values (**Вы**) — env names + `services.yaml` mounts fixed (#62); нужны human values в `voice-app-secrets`
 5. Observability alert channel secret (Telegram/email для Alertmanager)
 6. DNS staging FQDNs + firewall + GH variables (секция DNS & cluster prep **Вы**)
 
