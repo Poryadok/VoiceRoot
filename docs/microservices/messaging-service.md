@@ -535,7 +535,7 @@ When File Service finishes async processing (`file.processed` on JetStream), Mes
 
 | Field / concern | Owner | Notes |
 |-----------------|-------|-------|
-| `chats.last_message_at` (sort key for `ListChats`) | **Chat Service** | Updated on `message.sent` consumer (`TouchLastMessageAt`). **Today:** DM only; group/channel gap — Chat backlog |
+| `chats.last_message_at` (sort key for `ListChats`) | **Chat Service** | Updated on `message.sent` consumer (`TouchLastMessageAt`) for `dm` / `group` / `channel` |
 | `last_message_preview`, `unread_count` | **Messaging** | S2S `GetChatListMetadata` |
 | `last_message_delivery_state`, `last_message_content_type` | **Messaging** (spec) | Durable list ticks; not Realtime WS |
 | Client list sort | **Chat `ListChats`** | Uses `chats.last_message_at`; do **not** sort client-side from Messaging preview timestamps alone |

@@ -172,7 +172,7 @@ CloudPayments — отдельный трек после Paddle (СНГ), не �
 | **Backend Subscription** | Cancel/Resume **в Paddle**; grace sweeper 7d; `subscription.events` (не только `analytics.*`); `CheckLimit` в Chat/User/File; `GetLimits` ближе к спеке | 1 E + JWT NATS (0) |
 | **Backend User** | GIF-аватар + banner expose; Premium custom status gate; `SetPrimaryProfile` | JWT tier ≠ всегда free |
 | **Backend File** | SHA-256 dedup + `file_references`; ffmpeg GIF→MP4 / video 720p / PDF thumb; `CheckQuota` чтит premium | entitlements; не ждать стикеры |
-| **Backend Chat** | `DeleteChat`; folders RPC+миграция (`folders`, `folder_chats`); Quick Access RPC+миграция (`quick_access_chats`); `ListArchivedChats` / archive filter; `ListChats` каналы + group `last_message_at`; view-count (Messaging) | folders + Quick Access UI — Flutter следом |
+| **Backend Chat** | `DeleteChat`; folders RPC+миграция (`folders`, `folder_chats`); Quick Access RPC+миграция (`quick_access_chats`); `ListArchivedChats` / archive filter; `ListChats` каналы; view-count (Messaging) | folders + Quick Access UI — Flutter следом |
 | **Stickers/GIF** | системные паки + upload своих; send/receive first-class; composer picker; GIF как first-class (не только file attach). Lives TC-MSG-09 после контрактов | [text-chat.md](features/text-chat.md); File ffmpeg для GIF; ADR 005 |
 | **Backend Voice** | `MoveToVoiceRoom`; enforce `VOICE_SPEAK` / `VOICE_MUTE_OTHERS`; roster NATS join/leave | Role client уже wired |
 | **Backend Matchmaking** | Party snapshot из voice roster; leave/join сбрасывает очередь; `ApplySanction(mm_ban)` → `BanFromMM`; П.2 `RateTeammates` / history UI | Voice roster events |

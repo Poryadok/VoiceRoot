@@ -116,7 +116,7 @@ SET last_message_at = CASE
     WHEN last_message_at IS NULL OR last_message_at < $2::timestamptz THEN now()
     ELSE updated_at
   END
-WHERE id = $1 AND type = 'dm'
+WHERE id = $1 AND type IN ('dm', 'group', 'channel')
 `, chatID, at.UTC())
 	return err
 }
