@@ -149,7 +149,7 @@ func (s *SpaceGRPC) finalizeMembership(ctx context.Context, member *store.Member
 
 func (s *SpaceGRPC) ensureJoinNotBlocked(ctx context.Context, joinerAccountID, ownerProfileID uuid.UUID) error {
 	if s == nil || s.Blocks == nil || s.ProfileAccounts == nil {
-		return nil
+		return status.Error(codes.FailedPrecondition, "social block check not configured")
 	}
 	ownerAccountID, err := s.ProfileAccounts.AccountIDByProfileID(ctx, ownerProfileID)
 	if err != nil {

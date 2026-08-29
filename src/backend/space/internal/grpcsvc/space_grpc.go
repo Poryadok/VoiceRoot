@@ -23,6 +23,9 @@ type SpaceGRPC struct {
 	SpaceCoMembership InviteSpaceCoMembershipChecker
 	Blocks          JoinAccountBlockChecker
 
+	// skipJoinBlockDefaults disables permissive join-block stubs in integration tests.
+	skipJoinBlockDefaults bool
+
 	// Logger emits structured nats_publish errors when JetStream publish fails after a successful RPC.
 	Logger *slog.Logger
 

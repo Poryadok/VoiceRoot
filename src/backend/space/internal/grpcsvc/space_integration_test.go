@@ -68,6 +68,18 @@ func (m mapProfileAccounts) AccountIDByProfileID(_ context.Context, profileID uu
 	return a, nil
 }
 
+type permissiveJoinBlocks struct{}
+
+func (permissiveJoinBlocks) AccountPairBlocked(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	return false, nil
+}
+
+type permissiveProfileAccounts struct{}
+
+func (permissiveProfileAccounts) AccountIDByProfileID(_ context.Context, profileID uuid.UUID) (uuid.UUID, error) {
+	return profileID, nil
+}
+
 type spySpaceEvents struct {
 	mu      sync.Mutex
 	created [][2]string // space_id, owner_profile_id
@@ -152,6 +164,17 @@ func withProfileAccounts(m mapProfileAccounts) spaceServerOption {
 	return func(s *SpaceGRPC) { s.ProfileAccounts = m }
 }
 
+func withPermissiveJoinBlockDeps() spaceServerOption {
+	return func(s *SpaceGRPC) {
+		s.Blocks = permissiveJoinBlocks{}
+		s.ProfileAccounts = permissiveProfileAccounts{}
+	}
+}
+
+func skipJoinBlockDefaults() spaceServerOption {
+	return func(s *SpaceGRPC) { s.skipJoinBlockDefaults = true }
+}
+
 func withSpaceChatLookup(l ChatLookup) spaceServerOption {
 	return func(s *SpaceGRPC) { s.Chats = l }
 }
@@ -172,6 +195,14 @@ func startSpaceGRPCTestServer(t *testing.T, pool *pgxpool.Pool, opts ...spaceSer
 	svc := &SpaceGRPC{Store: &store.SpaceStore{Pool: pool}}
 	for _, o := range opts {
 		o(svc)
+	}
+	if !svc.skipJoinBlockDefaults {
+		if svc.Blocks == nil {
+			svc.Blocks = permissiveJoinBlocks{}
+		}
+		if svc.ProfileAccounts == nil {
+			svc.ProfileAccounts = permissiveProfileAccounts{}
+		}
 	}
 	spacev1.RegisterSpaceServiceServer(srv, svc)
 	go func() {
