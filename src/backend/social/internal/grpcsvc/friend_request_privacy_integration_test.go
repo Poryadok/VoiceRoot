@@ -46,7 +46,7 @@ func TestSendFriendInvitation_AllowFriendRequestsNobody_PermissionDenied(t *test
 	)
 	t.Cleanup(cleanup)
 
-	_, err := client.SendFriendInvitation(withProfileCtx(ctx, caller), &socialv1.SendFriendInvitationRequest{
+	_, err := client.SendFriendInvitation(withITProfileCtx(ctx, caller), &socialv1.SendFriendInvitationRequest{
 		TargetProfileId: target.String(),
 	})
 	require.Error(t, err)

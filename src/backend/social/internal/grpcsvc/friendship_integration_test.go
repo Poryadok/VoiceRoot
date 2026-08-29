@@ -43,16 +43,29 @@ func repoRoot(t *testing.T) string {
 	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", "..", ".."))
 }
 
+// itAccountForProfile returns a stable synthetic account_id for a profile in Social ITs
+// (compose wires User S2S; unit tests use this as ProfileAccounts default).
+func itAccountForProfile(profileID uuid.UUID) uuid.UUID {
+	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("voice-social-it:"+profileID.String()))
+}
+
+type deterministicProfileAccounts struct{}
+
+func (deterministicProfileAccounts) AccountIDByProfileID(_ context.Context, profileID uuid.UUID) (uuid.UUID, error) {
+	return itAccountForProfile(profileID), nil
+}
+
 func startSocialGRPCTestServer(t *testing.T, pool *pgxpool.Pool, opts ...socialServerOption) (socialv1.SocialServiceClient, func()) {
 	t.Helper()
 	const bufSize = 1 << 20
 	lis := bufconn.Listen(bufSize)
 	srv := grpc.NewServer()
 	svc := &SocialGRPC{
-		Friends:  &store.FriendshipStore{Pool: pool},
-		Blocks:   &store.BlockStore{Pool: pool},
-		Contacts: &store.ContactStore{Pool: pool},
-		Privacy:  friendRequestPrivacyStub{}, // default: everyone (compose User S2S wired)
+		Friends:         &store.FriendshipStore{Pool: pool},
+		Blocks:          &store.BlockStore{Pool: pool},
+		Contacts:        &store.ContactStore{Pool: pool},
+		Privacy:         friendRequestPrivacyStub{}, // default: everyone (compose User S2S wired)
+		ProfileAccounts: deterministicProfileAccounts{},
 	}
 	for _, o := range opts {
 		o(svc)
@@ -81,6 +94,11 @@ func withProfileCtx(ctx context.Context, profileID uuid.UUID) context.Context {
 	return metadata.AppendToOutgoingContext(ctx, authctx.HeaderProfileID, profileID.String())
 }
 
+// withITProfileCtx sets profile + synthetic account for invite paths that enforce block checks.
+func withITProfileCtx(ctx context.Context, profileID uuid.UUID) context.Context {
+	return withProfileAndAccountCtx(ctx, profileID, itAccountForProfile(profileID))
+}
+
 func TestFriendFlow_Integration(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
@@ -101,20 +119,20 @@ func TestFriendFlow_Integration(t *testing.T) {
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
 
 	// Self invite
-	_, err = client.SendFriendInvitation(withProfileCtx(ctx, a), &socialv1.SendFriendInvitationRequest{TargetProfileId: a.String()})
+	_, err = client.SendFriendInvitation(withITProfileCtx(ctx, a), &socialv1.SendFriendInvitationRequest{TargetProfileId: a.String()})
 	require.Error(t, err)
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 
 	// A invites B
-	_, err = client.SendFriendInvitation(withProfileCtx(ctx, a), &socialv1.SendFriendInvitationRequest{TargetProfileId: b.String()})
+	_, err = client.SendFriendInvitation(withITProfileCtx(ctx, a), &socialv1.SendFriendInvitationRequest{TargetProfileId: b.String()})
 	require.NoError(t, err)
 
 	// Idempotent pending
-	_, err = client.SendFriendInvitation(withProfileCtx(ctx, a), &socialv1.SendFriendInvitationRequest{TargetProfileId: b.String()})
+	_, err = client.SendFriendInvitation(withITProfileCtx(ctx, a), &socialv1.SendFriendInvitationRequest{TargetProfileId: b.String()})
 	require.NoError(t, err)
 
 	// B cannot send invite to A while incoming pending exists
-	_, err = client.SendFriendInvitation(withProfileCtx(ctx, b), &socialv1.SendFriendInvitationRequest{TargetProfileId: a.String()})
+	_, err = client.SendFriendInvitation(withITProfileCtx(ctx, b), &socialv1.SendFriendInvitationRequest{TargetProfileId: a.String()})
 	require.Error(t, err)
 	require.Equal(t, codes.FailedPrecondition, status.Code(err))
 
@@ -133,7 +151,7 @@ func TestFriendFlow_Integration(t *testing.T) {
 	require.NoError(t, err)
 
 	// Already friends — second invite
-	_, err = client.SendFriendInvitation(withProfileCtx(ctx, a), &socialv1.SendFriendInvitationRequest{TargetProfileId: b.String()})
+	_, err = client.SendFriendInvitation(withITProfileCtx(ctx, a), &socialv1.SendFriendInvitationRequest{TargetProfileId: b.String()})
 	require.Error(t, err)
 	require.Equal(t, codes.AlreadyExists, status.Code(err))
 
@@ -186,7 +204,7 @@ func TestAreFriends_PendingFalse(t *testing.T) {
 
 	a := uuid.New()
 	b := uuid.New()
-	_, err := client.SendFriendInvitation(withProfileCtx(ctx, a), &socialv1.SendFriendInvitationRequest{TargetProfileId: b.String()})
+	_, err := client.SendFriendInvitation(withITProfileCtx(ctx, a), &socialv1.SendFriendInvitationRequest{TargetProfileId: b.String()})
 	require.NoError(t, err)
 	out, err := client.AreFriends(ctx, &socialv1.AreFriendsRequest{ProfileIdA: a.String(), ProfileIdB: b.String()})
 	require.NoError(t, err)
@@ -222,7 +240,7 @@ func TestFriendDecline_OutgoingStillVisible(t *testing.T) {
 
 	a := uuid.New()
 	b := uuid.New()
-	_, err := client.SendFriendInvitation(withProfileCtx(ctx, a), &socialv1.SendFriendInvitationRequest{TargetProfileId: b.String()})
+	_, err := client.SendFriendInvitation(withITProfileCtx(ctx, a), &socialv1.SendFriendInvitationRequest{TargetProfileId: b.String()})
 	require.NoError(t, err)
 	_, err = client.DeclineFriendInvitation(withProfileCtx(ctx, b), &socialv1.DeclineFriendInvitationRequest{RequesterProfileId: a.String()})
 	require.NoError(t, err)
@@ -246,12 +264,12 @@ func TestSendFriendInvitation_AfterDecline_ReopensPending(t *testing.T) {
 
 	a := uuid.New()
 	b := uuid.New()
-	_, err := client.SendFriendInvitation(withProfileCtx(ctx, a), &socialv1.SendFriendInvitationRequest{TargetProfileId: b.String()})
+	_, err := client.SendFriendInvitation(withITProfileCtx(ctx, a), &socialv1.SendFriendInvitationRequest{TargetProfileId: b.String()})
 	require.NoError(t, err)
 	_, err = client.DeclineFriendInvitation(withProfileCtx(ctx, b), &socialv1.DeclineFriendInvitationRequest{RequesterProfileId: a.String()})
 	require.NoError(t, err)
 
-	_, err = client.SendFriendInvitation(withProfileCtx(ctx, a), &socialv1.SendFriendInvitationRequest{TargetProfileId: b.String()})
+	_, err = client.SendFriendInvitation(withITProfileCtx(ctx, a), &socialv1.SendFriendInvitationRequest{TargetProfileId: b.String()})
 	require.NoError(t, err)
 
 	in, err := client.ListFriendRequests(withProfileCtx(ctx, b), &socialv1.ListFriendRequestsRequest{})
@@ -273,10 +291,10 @@ func TestAcceptFriendInvitation_RequesterNotCaller_NotFound(t *testing.T) {
 
 	a := uuid.New()
 	b := uuid.New()
-	_, err := client.SendFriendInvitation(withProfileCtx(ctx, a), &socialv1.SendFriendInvitationRequest{TargetProfileId: b.String()})
+	_, err := client.SendFriendInvitation(withITProfileCtx(ctx, a), &socialv1.SendFriendInvitationRequest{TargetProfileId: b.String()})
 	require.NoError(t, err)
 
-	// Pending row is A→B; caller A claims B was the requester (no matching pending B→A).
+	// Pending row is Aâ†’B; caller A claims B was the requester (no matching pending Bâ†’A).
 	_, err = client.AcceptFriendInvitation(withProfileCtx(ctx, a), &socialv1.AcceptFriendInvitationRequest{RequesterProfileId: b.String()})
 	require.Error(t, err)
 	require.Equal(t, codes.NotFound, status.Code(err))

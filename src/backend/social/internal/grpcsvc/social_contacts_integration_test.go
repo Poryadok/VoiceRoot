@@ -165,7 +165,7 @@ func TestBlockAccount_RemovesFriendshipCascade(t *testing.T) {
 	})
 	t.Cleanup(cleanup)
 
-	_, err := client.SendFriendInvitation(withProfileCtx(ctx, profA1), &socialv1.SendFriendInvitationRequest{
+	_, err := client.SendFriendInvitation(withITProfileCtx(ctx, profA1), &socialv1.SendFriendInvitationRequest{
 		TargetProfileId: profB1.String(),
 	})
 	require.NoError(t, err)
