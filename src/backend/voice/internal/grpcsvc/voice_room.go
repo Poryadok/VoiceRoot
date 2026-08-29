@@ -120,7 +120,7 @@ func (s *VoiceGRPC) LeaveVoiceRoom(ctx context.Context, req *callsv1.LeaveVoiceR
 
 func (s *VoiceGRPC) ensureSpaceMember(ctx context.Context, spaceID, profileID string) error {
 	if s.SpaceMembers == nil {
-		return nil
+		return status.Error(codes.FailedPrecondition, "space membership check not configured")
 	}
 	if err := s.SpaceMembers.EnsureMember(ctx, spaceID, profileID); err != nil {
 		if errors.Is(err, ErrNotSpaceMember) {

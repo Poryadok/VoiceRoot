@@ -144,6 +144,9 @@ func TestVoiceGRPC_LeaveVoiceRoom_ClearsScreenShare(t *testing.T) {
 		Events: events,
 		Now:    func() time.Time { return now },
 		Roles:  &mapRolePermissions{allowed: map[string]map[string]bool{"space-1": {"profile-a": true}}},
+		SpaceMembers: &mapSpaceMembers{members: map[string]map[string]bool{
+			"space-1": {"profile-a": true},
+		}},
 	}
 	store := svc.Calls.(*voicestore.MemoryCallStore)
 	_, err := store.CreateCall(context.Background(), voicestore.Call{
