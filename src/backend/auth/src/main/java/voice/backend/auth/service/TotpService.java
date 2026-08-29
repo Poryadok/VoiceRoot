@@ -15,7 +15,9 @@ import voice.backend.auth.config.AuthProperties;
 public class TotpService {
   private static final int GCM_NONCE_BYTES = 12;
   private static final int GCM_TAG_BITS = 128;
-  private static final byte[] DEFAULT_DEV_KEY = "voice-auth-dev-key-32-byte-secret!".getBytes(StandardCharsets.UTF_8);
+  /** Local/dev only — never used when JDBC persistence runs without test-bypass. */
+  private static final byte[] DEFAULT_DEV_KEY =
+      "voice-auth-dev-key-32-byte-secret!".getBytes(StandardCharsets.UTF_8);
 
   private final GoogleAuthenticator authenticator = new GoogleAuthenticator();
   private final SecureRandom secureRandom = new SecureRandom();
@@ -23,6 +25,28 @@ public class TotpService {
 
   public TotpService(AuthProperties properties) {
     this.properties = properties;
+    requireEncryptionKeyWhenProductionLike(properties);
+  }
+
+  /**
+   * Staging/prod use JDBC without TOTP test-bypass. Blank {@code AUTH_TOTP_ENCRYPTION_KEY} must
+   * fail closed — never silently encrypt with {@link #DEFAULT_DEV_KEY}.
+   */
+  static void requireEncryptionKeyWhenProductionLike(AuthProperties properties) {
+    if (allowsDevFallback(properties)) {
+      return;
+    }
+    String key = properties.getTotp().getEncryptionKey();
+    if (key == null || key.isBlank()) {
+      throw new IllegalStateException(
+          "TOTP encryption key is required when auth.persistence=jdbc and auth.totp.test-bypass=false:"
+              + " set AUTH_TOTP_ENCRYPTION_KEY");
+    }
+  }
+
+  private static boolean allowsDevFallback(AuthProperties properties) {
+    return properties.getPersistence() == AuthProperties.PersistenceMode.MEMORY
+        || properties.getTotp().isTestBypass();
   }
 
   public String generateSecret() {
@@ -87,6 +111,11 @@ public class TotpService {
   private byte[] resolveKey() {
     String key = properties.getTotp().getEncryptionKey();
     if (key == null || key.isBlank()) {
+      if (!allowsDevFallback(properties)) {
+        throw new IllegalStateException(
+            "TOTP encryption key is required when auth.persistence=jdbc and auth.totp.test-bypass=false:"
+                + " set AUTH_TOTP_ENCRYPTION_KEY");
+      }
       return Arrays.copyOf(DEFAULT_DEV_KEY, 32);
     }
     byte[] bytes = key.getBytes(StandardCharsets.UTF_8);

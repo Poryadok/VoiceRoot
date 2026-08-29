@@ -53,7 +53,7 @@ class SubscriptionTierAuthServiceTest {
         new BCryptPasswordHasher(),
         jwt,
         new InMemoryTokenBlacklist(clock),
-        new TotpService(new voice.backend.auth.config.AuthProperties()),
+        new TotpService(memoryTotpProperties()),
         new BackupCodeService(new InMemoryBackupCodeRepository()),
         clock,
         Duration.ofDays(30),
@@ -66,5 +66,11 @@ class SubscriptionTierAuthServiceTest {
         new SimpleMeterRegistry(),
         new InMemoryAccountRestoreTokenStore(),
         new NoopMailSender());
+  }
+
+  private static voice.backend.auth.config.AuthProperties memoryTotpProperties() {
+    voice.backend.auth.config.AuthProperties properties = new voice.backend.auth.config.AuthProperties();
+    properties.setPersistence(voice.backend.auth.config.AuthProperties.PersistenceMode.MEMORY);
+    return properties;
   }
 }

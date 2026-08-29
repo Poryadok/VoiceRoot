@@ -45,7 +45,6 @@
 
 
 - [ ] **[Social] REST contacts/favorites отсутствуют** — gRPC `AddContact`/`ListContacts`/`SetFavorite`/`ListFavorites` живые (`social_contacts.go`); Gateway только `POST /friends/contacts/sync`. Flutter не может list/add/favorite.
-- [ ] **[Social] Privacy fail-open when User S2S absent** — `ensureFriendRequestPrivacy` / `ensurePhoneSearchPrivacy` return `nil` if `Privacy` / `PhoneSearchPrivacy` is nil (`src/backend/social/internal/grpcsvc/social_friends.go`, `phone_contacts.go`); `main.go` only wires User client when `USER_GRPC_ADDR` is set. Misconfig bypasses `allow_friend_requests` and `allow_phone_search`.
 - [ ] **[Social] `SendFriendInvitation` ignores account blocks** — no `IsBlocked` check in `src/backend/social/internal/grpcsvc/social_friends.go`; blocked parties can still send/see pending invites while DM is gated elsewhere (`src/backend/chat/internal/grpcsvc/chat_dm.go`).
 
 ### User
@@ -89,20 +88,7 @@
 ### Search
 
 
-- [ ] **[Search] `ReindexChat` indexes E2E message bodies — live indexer skips `IsE2E` events, but reindex pages `GetMessages` and upserts all rows with no E2E filter; ciphertext becomes searchable.** — `src/backend/search/internal/indexer/reindex_chat.go`
 - [x] **[Search] `SearchGlobal` `matched_chats` ACL** — `intersectAccessibleChats` + `AccessibleChatIDs`; profile hits — `AccountPairBlocked` в `filterProfileHits`. Remaining: User `SearchProfiles` path (`/api/v1/users/search`) still separate.
-
-### Chat
-
-
-- [ ] **[Chat] E2E pre-key gate bypass when Messaging is unset** — `setChatE2E` only calls `E2EPreKeyGate` when wired (`src/backend/chat/internal/grpcsvc/chat_e2e.go`); `main.go` wires it only if `MESSAGING_GRPC_ADDR` is set. Misconfigured deploy enables E2E without bundle verification (`docs/microservices/messaging-service.md`). Min-size группы на kick/leave — **есть** (`store/group.go` `MinGroupMembers`). Mute/Archive — **есть** (`mute_archive.go`).
-
-### Notification
-
-
-- [ ] **[Notification] K8s FCM env names don’t match code — service reads `FCM_CREDENTIALS_JSON`; deploy injects `FCM_PROJECT_ID` + `FCM_SERVICE_ACCOUNT_JSON`. With secrets filled, sender still stays noop.** — `src/backend/notification/internal/fcm/config.go`, `deploy/staging/services.yaml`, `deploy/prod/services.yaml`, `deploy/staging/secret.example.yaml`
-- [ ] **[Notification] K8s deployment omits all `APNS_*` env vars — only FCM keys are mounted; APNs/VoIP always noop in cluster even if secrets exist.** — `deploy/staging/services.yaml`, `deploy/prod/services.yaml`
-- [ ] **[Notification] APNs secret key name mismatch — secrets use `APNS_PRIVATE_KEY`; code reads `APNS_AUTH_KEY` / `APNS_AUTH_KEY_PATH`.** — `deploy/staging/secret.example.yaml`, `src/backend/notification/internal/apns/http_sender.go`
 
 ### Voice
 
@@ -113,7 +99,6 @@
 ### Auth
 
 
-- [ ] **[Auth] TOTP at-rest encryption uses hardcoded dev key when unset** — `TotpService.resolveKey()` falls back to `DEFAULT_DEV_KEY` if `auth.totp.encryption-key` is blank; staging `deploy/staging/services.yaml` and `deploy/staging/secret.example.yaml` have no `AUTH_TOTP_ENCRYPTION_KEY`. Files: `src/backend/auth/src/main/java/voice/backend/auth/service/TotpService.java`, `deploy/staging/services.yaml`, `deploy/staging/secret.example.yaml`.
 - [ ] **[Auth] DeleteAccount tombstone неполный** — RPC/REST `DeleteAccount`/`RestoreAccount` **есть** (`AuthService.deleteAccount`, IT `DeleteAccountRestoreIntegrationTest`). Нет системного «Пользователь удалён» в DM и hide из `ListChats`; `email_verify` OTP не ставит verified-flag на аккаунте. UI — [client.md](client.md).
 
 
