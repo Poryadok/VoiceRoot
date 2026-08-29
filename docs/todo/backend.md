@@ -245,7 +245,6 @@
 - [ ] **[Messaging] Read-state APIs DM-typed only** — `MarkRead` / `GetReadState` / `GetBulkReadState` / `GetChatListMetadata` use `validateChatRefDM`; explicit `group`/`channel` refs rejected while `GetMessages` accepts all types.
 - [ ] **[Messaging] `content_type`: article, location, video_note, music** — **doc contract in** [messaging-service.md](../microservices/messaging-service.md) (`MessageContentType` + payloads). Not yet in proto/code. — **P0**
 - [ ] **[Messaging] `schedule_message`, `send_when_online`, `send_silent`** — **doc contract in** [messaging-service.md](../microservices/messaging-service.md) (`SendMessageRequest`, `scheduled_messages`, worker). Not yet in proto/code. — **P0**
-- [ ] **[Messaging] Pin limit align to product (5 per chat)** — doc = 5; code `MaxPinsPerChat = 50` — align enforcement + fix migration comment. — **P0**
 - [ ] **[Messaging] `GetChatListMetadata` preview DTO** — add `content_type`, `delivery_state`, `is_outgoing`; doc in messaging-service.md; code partial.
 - [ ] **[Messaging] Durable `last_message_delivery_state`** — storage/derivation for list preview (separate from WS `delivery_ack`); link Realtime ephemeral path — [messaging-service.md](../microservices/messaging-service.md) — **P0**
 - [ ] **[Messaging] `UpdateScheduledMessage` RPC + handler** — edit pending scheduled row; proto + integration test — [messaging-service.md](../microservices/messaging-service.md) — **P0**

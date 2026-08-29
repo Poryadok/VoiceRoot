@@ -66,7 +66,7 @@
 | Групповые чаты | partial | Chat, Role | Create/kick/min-size/mute/archive live. **Read-state — DM-only** (`read_receipts` per chat); group/channel unread неполный. **Каналы** не в `ListChats` filter. |
 | Треды, shared media | shipped | Chat, Messaging | Live E2E есть. |
 | Markdown, @mentions | shipped | Messaging, Chat | Live E2E есть. |
-| Пины сообщений | partial | Messaging, Chat | Pin/unpin/list live. **Лимит 50** (`MaxPinsPerChat`); спека = **5** — [todo/backend.md](todo/backend.md). |
+| Пины сообщений | shipped | Messaging, Chat | Pin/unpin/list live. Лимит **5**/chat (`MaxPinsPerChat`); 6th → `ResourceExhausted`. |
 | [notifications](features/notifications.md) | partial | Notification | Quiet hours в БД; FCM/APNs compose с mock. Прод: noop без секретов + **имена env не совпадают**. |
 | [matchmaking](features/matchmaking.md) | partial | Matchmaking | Поиск/space-queue/LFP live. `PartyStore` stub (`partySize=1`); П.2 постматч открыт; `mm_ban` не S2S в MM. |
 | [game-catalog](features/game-catalog.md) | shipped | Matchmaking | Seed + `SubmitGameRequest` + admin moderation live. Staff Add-game UI тонкий. |

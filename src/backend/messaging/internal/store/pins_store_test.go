@@ -44,7 +44,7 @@ func TestPinsStore_upsertListDelete(t *testing.T) {
 	require.Len(t, pins, 1)
 }
 
-func TestPinsStore_limit50(t *testing.T) {
+func TestPinsStore_limit5(t *testing.T) {
 	ctx := context.Background()
 	pool := integrationtest.StartPostgres(t, ctx, "db", "")
 	applyPinsMigrations(t, ctx, pool)
