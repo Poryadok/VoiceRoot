@@ -21,7 +21,6 @@
 
 
 - [ ] **[Protos/Pkg] Split NATS wire format vs `jetstream_events.proto`** — `protos/voice/events/v1/jetstream_events.proto` defines protobuf envelopes, but publishers diverge:
-- [ ] **[Protos/Pkg] Corrupt invite event payload** — `src/backend/space/internal/spaceevents/jetstream.go` `PublishInviteCreated` publishes `ChatStreamEvent_SpaceCreated` with `invite_code` written into `owner_profile_id` on subject `space.invite_created`. No matching oneof in `jetstream_events.proto`.
 - [ ] **[Protos/Pkg] Social stream proto with zero publisher** — `SocialStreamEvent` in `protos/voice/events/v1/jetstream_events.proto`, but `src/backend/social/` has no JetStream publisher. `docs/MICROSERVICES.md` lists Social as publisher of `social.events` → Analytics/Notification/Chat/Federation.
 
 ### Space
@@ -39,13 +38,11 @@
 - [ ] **[Moderation] Shadow-ban не режет fanout** — `maybeAutoShadowBan` вставляет `shadow_ban` (`InsertSanction`); Messaging/Realtime не вызывают `IsShadowBanned` на send/fanout. Audience threshold всё ещё `MODERATION_PLATFORM_AUDIENCE_SIZE`, не live object. — `src/backend/moderation/internal/grpcsvc/reports.go`; `src/backend/messaging/`
 - [ ] **[Moderation] Notification не consumит `moderation.events`** — publisher есть (`moderationevents/jetstream.go`: `report_created` / `sanction_applied` / `appeal_submitted`); push/in-app санкций нет.
 - [ ] **[Moderation] Appeals not exposed to users** — gRPC `SubmitAppeal` есть; нет Gateway HTTP `POST /api/v1/moderation/appeals`; Flutter `VoiceModerationClient` only has `createReport`; no appeal UI. Product: profile “Account” appeal (`docs/features/reports.md`).
-- [ ] **[Moderation] `SubmitAppeal` stores profile ID as account ID** — uses `profileIDFromMetadata` (`x-voice-profile-id`) for `appellant_account_id`; Gateway sends account as `x-voice-user-id`. Breaks ownership checks and Auth sync on approval.
 
 ### Social
 
 
 - [ ] **[Social] REST contacts/favorites отсутствуют** — gRPC `AddContact`/`ListContacts`/`SetFavorite`/`ListFavorites` живые (`social_contacts.go`); Gateway только `POST /friends/contacts/sync`. Flutter не может list/add/favorite.
-- [ ] **[Social] `SendFriendInvitation` ignores account blocks** — no `IsBlocked` check in `src/backend/social/internal/grpcsvc/social_friends.go`; blocked parties can still send/see pending invites while DM is gated elsewhere (`src/backend/chat/internal/grpcsvc/chat_dm.go`).
 
 ### User
 
