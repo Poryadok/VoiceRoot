@@ -46,6 +46,7 @@
 
 - [ ] **[Social] REST contacts/favorites отсутствуют** — gRPC `AddContact`/`ListContacts`/`SetFavorite`/`ListFavorites` живые (`social_contacts.go`); Gateway только `POST /friends/contacts/sync`. Flutter не может list/add/favorite.
 - [ ] **[Social] `SendFriendInvitation` ignores account blocks** — no `IsBlocked` check in `src/backend/social/internal/grpcsvc/social_friends.go`; blocked parties can still send/see pending invites while DM is gated elsewhere (`src/backend/chat/internal/grpcsvc/chat_dm.go`).
+- [ ] **[Social] Friend invite block fail-open — `ensureFriendInvitationNotBlocked` no-op if `ProfileAccounts` nil (`USER_GRPC_ADDR` unset) or caller `x-voice-user-id` missing** — same degraded pattern as Space `ensureJoinNotBlocked`; compose/k8s wire `USER_GRPC_ADDR` on social. **Audit batch3 (#65):** block gate matches DM bidirectional semantics when wired; fail-closed still roadmap (`docs/PLAN.md` § staging/prod). — `src/backend/social/internal/grpcsvc/social_friends.go`, `src/backend/social/main.go`
 
 ### User
 
