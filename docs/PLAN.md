@@ -124,7 +124,7 @@ CloudPayments — отдельный трек после Paddle (СНГ), не �
 | **Ops (Вы)** | `voice-app-secrets`; `AUTH_NATS_URL`; `AUTH_TOTP_ENCRYPTION_KEY` (не `DEFAULT_DEV_KEY`); `RESEND_API_KEY`; FCM/APNs; Paddle live **или** не отдавать test URL наружу; `CLICKHOUSE_DSN` + `ANALYTICS_ID_HASH_KEY`; Alertmanager канал; DNS `app`/`admin`/`livekit` | человек |
 | **Backend Notification** | **done (#62)** — FCM/APNs env names + `services.yaml` mounts; доставка — после **Вы** (secret values) | — |
 | **Backend Auth (Java)** | **done (#62)** TOTP fail-closed без `DEFAULT_DEV_KEY`; NATS tier store при URL | `AUTH_NATS_URL` (**Вы**) |
-| **Backend Social / Voice / Space** | Fail-open → fail-closed, если User/Blocks/SpaceMembers nil; compose MM: `USER_GRPC_ADDR` / `SOCIAL_GRPC_ADDR` / `SPACE_GRPC_ADDR` | k8s addrs уже есть |
+| **Backend Social / Voice / Space** | **done** fail-closed (Social friend-invite Blocks/ProfileAccounts; Space join block; Voice SpaceMembers); compose MM addrs | k8s addrs уже есть |
 | **Backend Analytics** | HMAC вместо plaintext `account_id`; ack NATS **после** durable CH | ключ из **Вы** |
 | **Backend Search** | **done (#62)** — `ReindexChat` пропускает `IsE2E` | — |
 | **CI** | **done (#60)** — `scripts/staging/**` / `scripts/prod/**` в `global`; matrix tests lock; `ci-gate` требует full tier-1 при GLOBAL | — |
@@ -148,7 +148,7 @@ CloudPayments — отдельный трек после Paddle (СНГ), не �
 | **A. Space lifecycle** | 1) `TransferOwnership` (+ Gateway + Flutter leave-as-owner). 2) `DeleteSpace`. 3) `GetAuditLog` (чтение уже пишущегося `audit_log`). `entry_requirement`: пока ≠ `none` — явный контракт, не молчаливый hard-fail без UX; captcha/queue — отдельные PR | Paddle, push |
 | **B. Moderation loop** | `SubmitAppeal` пишет `account_id` (не profile); Gateway `POST /appeals`; shadow-ban → Messaging/Realtime `IsShadowBanned` на send/fanout; Notification consumer `moderation.events` | Space A |
 | **C. Admin queue** | resolve / dismiss (не только `reviewing`); санкции на non-user target не через `target_id` как account | REST статусов из B, если их ещё нет |
-| **D. Social** | REST contacts/favorites (gRPC уже есть); `SendFriendInvitation` чтит block | 0 fail-closed — желательно до/вместе |
+| **D. Social** | REST contacts/favorites (gRPC уже есть); `SendFriendInvitation` чтит block | **done** friend-invite fail-closed (Blocks/ProfileAccounts/account); REST contacts still open |
 | **E. Billing Paddle** | `CreateCheckoutSession` / space checkout → реальный Paddle API; не шипить `checkout.paddle.test`; webhook renew/cancel после первого live payment | секреты Paddle (0 **Вы**). Не ждать CloudPayments |
 | **F. Flutter Auth UI** | телефон+OTP; sessions/revoke; delete-account; password-reset экраны (REST есть) | нет |
 | **G. Flutter appeals** | экран апелляции профиля | Gateway из B |
