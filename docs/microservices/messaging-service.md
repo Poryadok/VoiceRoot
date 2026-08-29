@@ -71,7 +71,7 @@ service MessagingService {
 |-----|---------|-------|
 | `GetThreadMessages` | ✓ | thread replies |
 | `ListThreads` | ✓ | channel thread index |
-| `PinMessage` / `UnpinMessage` / `GetPinnedMessages` | ✓ | limit **5**/chat (spec); code `MaxPinsPerChat=50` — backlog |
+| `PinMessage` / `UnpinMessage` / `GetPinnedMessages` | ✓ | limit **5**/chat (`MaxPinsPerChat`); 6th → `ResourceExhausted` |
 | `UnpinMessagesBySenderInChats` | ✓ | bot cleanup |
 | `UploadPreKeyBundle` / `GetPreKeyBundle` | ✓ | DM E2E pre-keys |
 | `MarkRead` / `GetReadState` / `GetBulkReadState` | ✓ | DM-typed validation today |
@@ -311,9 +311,7 @@ pins
 ├── pinned_at
 └── UNIQUE(chat_id, message_id)
 
-**Лимит pins:** не более **5** закреплённых сообщений на один `chat_id` (как Telegram). Повторный pin того же сообщения идемпотентен (обновляет `pinned_at` / `pinned_by`).
-
-> **Code gap:** `MaxPinsPerChat = 50` в коде и migration `000006_pins` — bug; align to **5** ([todo/backend.md](../todo/backend.md)).
+**Лимит pins:** не более **5** закреплённых сообщений на один `chat_id` (как Telegram). Повторный pin того же сообщения идемпотентен (обновляет `pinned_at` / `pinned_by`). Enforced in application (`MaxPinsPerChat`); migration comment documents the same limit.
 
 message_attachments (Shared Media — spec; not yet in proto/code)
 ├── id
@@ -339,7 +337,7 @@ read_receipts
 
 **Migrations shipped:** `messages`, `read_receipts`, `reactions`, `pins`, `thread_parent_id`, `forward_*`, `ghost_only` (platform shadow-ban column — **DB only**, not yet on `SendMessageRequest` proto), E2E columns.
 
-**Handlers shipped beyond DM-only baseline:** threads (`GetThreadMessages`, `ListThreads`), reactions, pins (limit **50** in code vs spec **5**), `MarkRead`/`GetReadState`/`GetBulkReadState`, `ListSharedMedia`, `DeleteMessage` with `DeleteScope.FOR_ME`, idempotent `client_message_id` on `SendMessage`, E2E pre-key RPCs.
+**Handlers shipped beyond DM-only baseline:** threads (`GetThreadMessages`, `ListThreads`), reactions, pins (limit **5**/chat), `MarkRead`/`GetReadState`/`GetBulkReadState`, `ListSharedMedia`, `DeleteMessage` with `DeleteScope.FOR_ME`, idempotent `client_message_id` on `SendMessage`, E2E pre-key RPCs.
 
 **Gaps vs full spec:** `send_silent` / schedule / typed `content_type`, durable `last_delivered_message_id` + `last_message_delivery_state`, `message.delivery_ack` consumer, `message_attachments` table, `RecordMessageView`, `UpdateScheduledMessage` — см. § ниже и [todo/backend.md](../todo/backend.md).
 

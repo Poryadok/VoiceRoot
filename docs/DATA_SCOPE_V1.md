@@ -130,7 +130,7 @@ JWT: claim **`user_id`** = `accounts.id` (то же значение, что л�
 |---------|------------|
 | `scheduled_messages` | Отложенная отправка / send-when-online: `chat_id`, `sender_profile_id`, payload, `scheduled_at`, timezone, status, idempotency key |
 
-**Pin messages:** таблица `pins` может быть в коде раньше полного соответствия спеке; лимит **= 5** per chat ([text-chat.md](features/text-chat.md)); код сейчас **50** — [todo/backend.md](todo/backend.md).
+**Pin messages:** таблица `pins`; лимит **= 5** per chat ([text-chat.md](features/text-chat.md)); enforced as `MaxPinsPerChat` in Messaging.
 
 `chat_type` в сообщениях для ядра может быть фиксирован **`dm`** до появления групп и каналов.
 
@@ -202,7 +202,7 @@ JWT: claim **`user_id`** = `accounts.id` (то же значение, что л�
 
 - `folders`, `folder_chats`, `quick_access_chats` в Chat: **current** UX; DDL и RPC — backlog [todo/backend.md](todo/backend.md).
 - `scheduled_messages` в Messaging: **current** send options; DDL backlog.
-- Pin limit: **= 5** per chat; код `MaxPinsPerChat = 50` — выровнять в [todo/backend.md](todo/backend.md).
+- Pin limit: **= 5** per chat — aligned (`MaxPinsPerChat = 5`).
 - `last_seen`: Redis interim (`voice:user:last_seen:{profile_id}`, TTL 30 d) + target **`last_seen_at`** PostgreSQL column — current scope; **`show_last_seen`** privacy filter at read — [presence.md](features/presence.md), audit C06 / R2-A13.
 - Onboarding: в ядре хранится персистентно в `user_db.onboarding_state`.
 - Stickers/GIF (composer 😊 panel): wire spec complete — Chat catalog DDL + File `UploadIntent` + Messaging `MessageContentType`; **0 code** — [todo/backend.md](todo/backend.md).

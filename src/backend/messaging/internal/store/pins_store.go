@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const MaxPinsPerChat = 50
+const MaxPinsPerChat = 5
 
 var (
 	ErrPinLimitReached = errors.New("pin limit reached for chat")
