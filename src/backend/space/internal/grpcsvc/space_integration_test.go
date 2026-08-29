@@ -164,13 +164,6 @@ func withProfileAccounts(m mapProfileAccounts) spaceServerOption {
 	return func(s *SpaceGRPC) { s.ProfileAccounts = m }
 }
 
-func withPermissiveJoinBlockDeps() spaceServerOption {
-	return func(s *SpaceGRPC) {
-		s.Blocks = permissiveJoinBlocks{}
-		s.ProfileAccounts = permissiveProfileAccounts{}
-	}
-}
-
 func skipJoinBlockDefaults() spaceServerOption {
 	return func(s *SpaceGRPC) { s.skipJoinBlockDefaults = true }
 }
