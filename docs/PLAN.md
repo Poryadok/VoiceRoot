@@ -122,11 +122,11 @@ CloudPayments — отдельный трек после Paddle (СНГ), не �
 | Трек | PR-шаги (параллельно) | Зависимости |
 |------|----------------------|-------------|
 | **Ops (Вы)** | `voice-app-secrets`; `AUTH_NATS_URL`; `AUTH_TOTP_ENCRYPTION_KEY` (не `DEFAULT_DEV_KEY`); `RESEND_API_KEY`; FCM/APNs; Paddle live **или** не отдавать test URL наружу; `CLICKHOUSE_DSN` + `ANALYTICS_ID_HASH_KEY`; Alertmanager канал; DNS `app`/`admin`/`livekit` | человек |
-| **Backend Notification** | Выровнять `FCM_CREDENTIALS_JSON` / `APNS_AUTH_KEY` с deploy; смонтировать `APNS_*` в `services.yaml` | merge до секретов; доставка — после **Вы** |
-| **Backend Auth (Java)** | Staging/prod: запрет `DEFAULT_DEV_KEY`; NATS tier store при URL | `AUTH_NATS_URL` |
+| **Backend Notification** | **done (#62)** — FCM/APNs env names + `services.yaml` mounts; доставка — после **Вы** (secret values) | — |
+| **Backend Auth (Java)** | **done (#62)** TOTP fail-closed без `DEFAULT_DEV_KEY`; NATS tier store при URL | `AUTH_NATS_URL` (**Вы**) |
 | **Backend Social / Voice / Space** | Fail-open → fail-closed, если User/Blocks/SpaceMembers nil; compose MM: `USER_GRPC_ADDR` / `SOCIAL_GRPC_ADDR` / `SPACE_GRPC_ADDR` | k8s addrs уже есть |
 | **Backend Analytics** | HMAC вместо plaintext `account_id`; ack NATS **после** durable CH | ключ из **Вы** |
-| **Backend Search** | `ReindexChat` не индексирует `IsE2E` | нет |
+| **Backend Search** | **done (#62)** — `ReindexChat` пропускает `IsE2E` | — |
 | **CI** | **done (#60)** — `scripts/staging/**` / `scripts/prod/**` в `global`; matrix tests lock; `ci-gate` требует full tier-1 при GLOBAL | — |
 | **Observability** | Loki все поды; `smoke-request-id.sh`; Grafana Overview; Prometheus scrape; тестовый P1 в канал | Alertmanager (**Вы**) |
 | **Admin** | OAuth `assign-to-me` из session JWT, не только `VITE_STAFF_TOKEN` | нет |
@@ -224,7 +224,7 @@ CloudPayments — отдельный трек после Paddle (СНГ), не �
 ## Параллелизация (сводка)
 
 ```
-0:  Ops(Вы) ‖ Notification env ‖ Analytics HMAC ‖ Search E2E skip ‖ Admin OAuth assign  (CI filters — done #60)
+0:  Ops(Вы) ‖ Analytics HMAC ‖ Admin OAuth assign  (Notification env + Search E2E + CI filters — done #60/#62)
 1:  Space A ‖ Moderation B ‖ Admin C ‖ Social D ‖ Paddle E ‖ Flutter Auth F ‖ User verification H
          G (appeals UI) ← B
          Premium GIF/limits ← E + AUTH_NATS_URL
