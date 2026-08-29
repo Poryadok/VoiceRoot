@@ -1,4 +1,4 @@
--- Phase 6 pins: per-chat pinned messages (max 50 enforced in application).
+-- Phase 6 pins: per-chat pinned messages (max 5 enforced in application).
 CREATE TABLE pins (
     chat_id UUID NOT NULL,
     message_id UUID NOT NULL REFERENCES messages (id) ON DELETE CASCADE,

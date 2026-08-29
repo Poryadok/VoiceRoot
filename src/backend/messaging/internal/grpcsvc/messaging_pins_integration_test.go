@@ -171,7 +171,7 @@ func TestMessagingPinMessage_deletedMessageNotFound(t *testing.T) {
 	require.Equal(t, codes.NotFound, status.Code(err))
 }
 
-func TestMessagingPinMessage_limit50(t *testing.T) {
+func TestMessagingPinMessage_limit5(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgresForTest(t, ctx)
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
