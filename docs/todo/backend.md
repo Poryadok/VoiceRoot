@@ -91,7 +91,7 @@
 ### Voice
 
 
-- [ ] **[Voice] Space voice rooms: fail-open если `SPACE_GRPC_ADDR` unset** — `SpaceMembers` wired when env set; `ensureSpaceMember` no-op if client nil.
+- [x] **[Voice] Space voice rooms: fail-open если `SPACE_GRPC_ADDR` unset** — **done:** `main.go` wires `SpaceMembers` only when `SPACE_GRPC_ADDR` set; `ensureSpaceMember` no-op if client nil; `voice_space_members_degradation_test.go`.
 - [x] **[Voice] `LeaveCall` group** — aliases больше не убивают сессию: group → `RemoveParticipant`, end if empty. 1:1 Leave всё ещё `EndCall`.
 
 ### Auth
@@ -144,7 +144,7 @@
 - [ ] **[Space] `ChatLookup` not wired in prod — `ListSpaceTree` text_chat `display_name` enrichment dead** — `src/backend/space/main.go`, `src/backend/space/internal/grpcsvc/chat_lookup.go`, `src/backend/space/internal/grpcsvc/tree.go`
 - [ ] **[Space] NATS events incomplete vs spec — Join/Leave публикуют member_joined/left; всё ещё дыры `space.deleted` / `member_banned` / catalog reindex** — `src/backend/space/internal/spaceevents/publisher.go`
 - [ ] **[Space] Member timeout not enforced downstream — `IsProfileTimedOut` exists, unused outside Space** — `src/backend/space/internal/store/moderation.go`
-- [ ] **[Voice] JoinVoiceRoom: `voice_room_id ∈ space_id` не проверяется; `ensureSpaceMember` fail-open если client nil** — `voice_room.go` (SpaceMembers wired when `SPACE_GRPC_ADDR` set)
+- [ ] **[Voice] JoinVoiceRoom: `voice_room_id ∈ space_id` не проверяется** — `voice_room.go`
 
 ### Moderation
 
