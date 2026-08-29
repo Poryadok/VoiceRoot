@@ -37,6 +37,7 @@ type SocialGRPC struct {
 	PhoneHashes        PhoneHashLookup
 	SpaceCoMembership SpaceCoMembershipChecker
 	AccountProfiles AccountProfilesResolver
+	ProfileAccounts ProfileAccountsResolver
 	Events interface {
 		PublishFriendRequest(ctx context.Context, requestID, requesterProfileID, targetProfileID string) error
 		PublishFriendAccepted(ctx context.Context, requesterProfileID, targetProfileID string) error
@@ -49,6 +50,11 @@ type SocialGRPC struct {
 // AccountProfilesResolver lists profile ids owned by an account (User S2S).
 type AccountProfilesResolver interface {
 	ProfileIDsForAccount(ctx context.Context, accountID uuid.UUID) ([]uuid.UUID, error)
+}
+
+// ProfileAccountsResolver resolves profile_id → account_id for block checks (User S2S).
+type ProfileAccountsResolver interface {
+	AccountIDByProfileID(ctx context.Context, profileID uuid.UUID) (uuid.UUID, error)
 }
 
 // FriendRequestPrivacyChecker reads target profile friend-request audience.
@@ -128,6 +134,9 @@ func (s *SocialGRPC) SendFriendInvitation(ctx context.Context, req *socialv1.Sen
 		return nil, status.Error(codes.FailedPrecondition, "persistence not configured")
 	}
 	if err := s.ensureFriendRequestPrivacy(ctx, caller, target); err != nil {
+		return nil, err
+	}
+	if err := s.ensureFriendInvitationNotBlocked(ctx, caller, target); err != nil {
 		return nil, err
 	}
 	err = s.Friends.SendInvitation(ctx, caller, target)
@@ -396,4 +405,82 @@ func (s *SocialGRPC) ensureFriendRequestPrivacy(ctx context.Context, caller, tar
 		return status.Error(codes.Internal, err.Error())
 	}
 	return nil
+}
+
+func (s *SocialGRPC) ensureFriendInvitationNotBlocked(ctx context.Context, callerProfile, targetProfile uuid.UUID) error {
+	if s == nil || s.Blocks == nil || s.ProfileAccounts == nil {
+		return nil
+	}
+	callerAccount, ok := authctx.AccountID(ctx)
+	if !ok {
+		return nil
+	}
+	targetAccount, err := s.ProfileAccounts.AccountIDByProfileID(ctx, targetProfile)
+	if err != nil {
+		if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound {
+			return status.Error(codes.NotFound, "profile not found")
+		}
+		return status.Error(codes.Internal, err.Error())
+	}
+	blocked, err := s.accountPairBlocked(ctx, callerAccount, targetAccount)
+	if err != nil {
+		return status.Error(codes.Internal, err.Error())
+	}
+	if blocked {
+		return status.Error(codes.PermissionDenied, "friend request blocked between accounts")
+	}
+	return nil
+}
+
+func (s *SocialGRPC) accountPairBlocked(ctx context.Context, accountA, accountB uuid.UUID) (bool, error) {
+	if s == nil || s.Blocks == nil || accountA == accountB {
+		return false, nil
+	}
+	aBlocksB, err := s.Blocks.DirectedBlockExists(ctx, accountA, accountB)
+	if err != nil {
+		return false, err
+	}
+	if aBlocksB {
+		return true, nil
+	}
+	return s.Blocks.DirectedBlockExists(ctx, accountB, accountA)
+}
+
+func (s *SocialGRPC) ensureFriendInvitationNotBlocked(ctx context.Context, callerProfile, targetProfile uuid.UUID) error {
+	if s == nil || s.Blocks == nil || s.ProfileAccounts == nil {
+		return nil
+	}
+	callerAccount, ok := authctx.AccountID(ctx)
+	if !ok {
+		return nil
+	}
+	targetAccount, err := s.ProfileAccounts.AccountIDByProfileID(ctx, targetProfile)
+	if err != nil {
+		if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound {
+			return status.Error(codes.NotFound, "profile not found")
+		}
+		return status.Error(codes.Internal, err.Error())
+	}
+	blocked, err := s.accountPairBlocked(ctx, callerAccount, targetAccount)
+	if err != nil {
+		return status.Error(codes.Internal, err.Error())
+	}
+	if blocked {
+		return status.Error(codes.PermissionDenied, "friend request blocked between accounts")
+	}
+	return nil
+}
+
+func (s *SocialGRPC) accountPairBlocked(ctx context.Context, accountA, accountB uuid.UUID) (bool, error) {
+	if s == nil || s.Blocks == nil || accountA == accountB {
+		return false, nil
+	}
+	aBlocksB, err := s.Blocks.DirectedBlockExists(ctx, accountA, accountB)
+	if err != nil {
+		return false, err
+	}
+	if aBlocksB {
+		return true, nil
+	}
+	return s.Blocks.DirectedBlockExists(ctx, accountB, accountA)
 }

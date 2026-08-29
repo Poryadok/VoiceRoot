@@ -60,6 +60,7 @@ func main() {
 		var phoneHashes grpcsvc.PhoneHashLookup
 		var spaceCoMembership grpcsvc.SpaceCoMembershipChecker
 		var accountProfiles grpcsvc.AccountProfilesResolver
+		var profileAccounts grpcsvc.ProfileAccountsResolver
 		if userAddr := strings.TrimSpace(os.Getenv("USER_GRPC_ADDR")); userAddr != "" {
 			uconn, err := grpc.NewClient(grpcclient.DialTarget(userAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
@@ -71,6 +72,7 @@ func main() {
 			privacy = userPrivacy
 			phoneSearchPrivacy = userPrivacy
 			accountProfiles = socials2s.NewGRPCAccountProfiles(uconn)
+			profileAccounts = socials2s.NewGRPCProfileAccounts(uconn)
 		}
 		if authAddr := strings.TrimSpace(os.Getenv("AUTH_GRPC_ADDR")); authAddr != "" {
 			aconn, err := grpc.NewClient(grpcclient.DialTarget(authAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -103,6 +105,7 @@ func main() {
 			PhoneHashes:        phoneHashes,
 			SpaceCoMembership:  spaceCoMembership,
 			AccountProfiles:    accountProfiles,
+			ProfileAccounts:    profileAccounts,
 		}
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
 			if pub, err := socialevents.NewJetStreamPublisher(natsURL); err == nil {
