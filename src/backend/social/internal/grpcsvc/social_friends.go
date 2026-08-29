@@ -409,11 +409,11 @@ func (s *SocialGRPC) ensureFriendRequestPrivacy(ctx context.Context, caller, tar
 
 func (s *SocialGRPC) ensureFriendInvitationNotBlocked(ctx context.Context, callerProfile, targetProfile uuid.UUID) error {
 	if s == nil || s.Blocks == nil || s.ProfileAccounts == nil {
-		return nil
+		return status.Error(codes.FailedPrecondition, "social block check not configured")
 	}
 	callerAccount, ok := authctx.AccountID(ctx)
 	if !ok {
-		return nil
+		return status.Error(codes.Unauthenticated, "missing account")
 	}
 	targetAccount, err := s.ProfileAccounts.AccountIDByProfileID(ctx, targetProfile)
 	if err != nil {

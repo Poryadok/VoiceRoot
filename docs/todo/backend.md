@@ -43,7 +43,7 @@
 
 
 - [ ] **[Social] REST contacts/favorites отсутствуют** — gRPC `AddContact`/`ListContacts`/`SetFavorite`/`ListFavorites` живые (`social_contacts.go`); Gateway только `POST /friends/contacts/sync`. Flutter не может list/add/favorite.
-- [ ] **[Social] Friend invite block fail-open — `ensureFriendInvitationNotBlocked` no-op if `ProfileAccounts` nil (`USER_GRPC_ADDR` unset) or caller `x-voice-user-id` missing** — same degraded pattern as Space `ensureJoinNotBlocked`; compose/k8s wire `USER_GRPC_ADDR` on social. Block gate matches DM bidirectional semantics when wired; fail-closed still roadmap (`docs/PLAN.md` § staging/prod). — `src/backend/social/internal/grpcsvc/social_friends.go`, `src/backend/social/main.go`
+- [x] **[Social] Friend invite block fail-open — `ensureFriendInvitationNotBlocked` no-op if `ProfileAccounts` nil (`USER_GRPC_ADDR` unset) or caller `x-voice-user-id` missing** — **done:** fail-closed `FailedPrecondition` when Blocks/ProfileAccounts nil; `Unauthenticated` when account metadata missing (`social_friends.go`); IT `friend_invite_block_degradation_test.go`. Compose already sets `USER_GRPC_ADDR` on social.
 
 ### User
 
