@@ -181,7 +181,7 @@ e2e_key_backups ([encryption.md](../features/encryption.md), Flyway V4__e2e_key_
 ## Безопасность
 
 - Пароли: bcrypt (cost 12)
-- TOTP секреты: AES-256-GCM шифрование at rest
+- TOTP секреты: AES-256-GCM шифрование at rest; `AUTH_TOTP_ENCRYPTION_KEY` обязателен при `auth.persistence=jdbc` без `auth.totp.test-bypass` (иначе Auth не стартует; `DEFAULT_DEV_KEY` только memory/dev bypass)
 - Refresh token: только хэш в БД, оригинал — только клиенту
 - Нет SMS 2FA (v1) — только TOTP
 - IP logging для аудита

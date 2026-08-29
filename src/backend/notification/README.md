@@ -17,10 +17,11 @@ Push routing for FCM (Web + Android) and APNs (iOS): device tokens, offline deli
 | `USER_GRPC_ADDR` | Presence check for online vs push routing |
 | `CHAT_GRPC_ADDR` | Chat member list for `MessageSent` offline push fan-out |
 | `FCM_CREDENTIALS_JSON` | Firebase service account; unset = noop sender (Tier-1 degraded) |
+| `FCM_PROJECT_ID` + `FCM_SERVICE_ACCOUNT_JSON` | Deploy alternate when full JSON is split across secret keys |
 | `APNS_KEY_ID` | Apple Push Notifications auth key id |
 | `APNS_TEAM_ID` | Apple Developer team id |
 | `APNS_BUNDLE_ID` | iOS app bundle id (APNs topic) |
-| `APNS_AUTH_KEY` | APNs `.p8` private key PEM (or use `APNS_AUTH_KEY_PATH`) |
+| `APNS_AUTH_KEY` | APNs `.p8` private key PEM (or `APNS_PRIVATE_KEY` / `APNS_AUTH_KEY_PATH`) |
 | `APNS_PRODUCTION` | Set to `false` for sandbox endpoint (default: production) |
 
 When APNs credentials are missing or invalid, the service uses an APNs **noop** sender (Tier-1 degraded); `GET /health` and device registration remain available.
