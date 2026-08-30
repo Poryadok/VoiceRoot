@@ -53,15 +53,12 @@
 ### Analytics
 
 
-- [ ] **[Analytics] Raw PII in ClickHouse `properties`** — Subscription direct telemetry writes plaintext `account_id` into `properties_json` instead of HMAC-hashed `user_id_hashed` (`d:\Git\Voice\src\backend\subscription\internal\grpcsvc\subscription.go`). Violates `docs/features/analytics.md` § privacy.
 - [ ] **[Analytics] Event loss on ClickHouse failure / crash** — NATS messages are consumed and acked before durable CH write; failed flushes only re-queue in process memory (`d:\Git\Voice\src\backend\analytics\internal\consumer\runner.go`, `d:\Git\Voice\src\backend\analytics\internal\buffer\accumulator.go`). Process restart after a failed flush drops data permanently.
 
 ### Matchmaking
 
 
 - [ ] **[Matchmaking] Party snapshot из voice roster отсутствует** — `PartyStore` stub; `StartSearch` валидирует `partySize=1`. Нет сброса очереди при leave/join войса (`docs/features/matchmaking.md`). Pairwise `rolesCompatible` уже требует **distinct** roles (`criteria/criteria.go`); live 10-stack matcher + `RolesDistinct` на полном лобби — тонко (нет compose на seeded 10-slot).
-- [ ] **[Matchmaking] Moderation `mm_ban` не синхронизирован S2S** — `StartSearch` зовёт `IsPlatformBanned` если `s.Bans` wired; `ApplySanction(mm_ban)` не вызывает Matchmaking `BanFromMM`. Fail-open если Bans nil.
-
 ### Role
 
 
@@ -195,7 +192,6 @@
 
 
 - [x] **[Matchmaking] Decline semantics vs spec** — `handleMatchDecline` party-aware (declining party cancelled, others continue searching); cross-party IT in `grpcsvc/match_test.go` (PR #4). Compose live: `TestComposeMatchmakingCrossPartyDecline_live` (#14).
-- [ ] **[Matchmaking] Peer-ban check fail-open** — Matcher logs and continues on `IsPairBanned` DB errors (`matcher/worker.go`), allowing banned pairs to match under store outage.
 - [ ] **[Matchmaking] MM rating privacy off in compose** — `main.go` wires `RatingPrivacy` only when `USER_GRPC_ADDR` / `SOCIAL_GRPC_ADDR` / `SPACE_GRPC_ADDR` are set; `docker-compose.yml` matchmaking service omits these (unlike k8s `envFrom` on `deploy/staging/configmap-app.yaml`). Local stack exposes ratings without privacy checks.
 - [ ] **[Matchmaking] Match squad not ephemeral** — Squad creates a normal group chat + group voice (`squad/grpc_clients.go`). `CompleteMatch` only updates MM DB (`grpcsvc/rating.go`); no Chat/Voice teardown. Contradicts “auto-delete when all leave” (`docs/features/matchmaking.md`).
 - [ ] **[Matchmaking] `UpdateGame` mutates catalog config for any caller** — Any authenticated user can change `config_json` (`grpcsvc/server.go`, `store/games.go`). Conflicts with user-game immutability (`docs/features/matchmaking.md`) and moderator-only catalog edits (`docs/features/game-catalog.md`).
