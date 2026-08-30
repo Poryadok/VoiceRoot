@@ -29,6 +29,13 @@ func ctxWithProfile(profileID uuid.UUID) context.Context {
 	return metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-voice-profile-id", profileID.String()))
 }
 
+func ctxWithProfileAccount(profileID, accountID uuid.UUID) context.Context {
+	return metadata.NewIncomingContext(context.Background(), metadata.Pairs(
+		"x-voice-profile-id", profileID.String(),
+		"x-voice-user-id", accountID.String(),
+	))
+}
+
 func ctxWithStaff(profileID uuid.UUID) context.Context {
 	return metadata.NewIncomingContext(context.Background(), metadata.Pairs(
 		"x-voice-profile-id", profileID.String(),

@@ -93,6 +93,7 @@ func TestWorker_TwoCompatibleSoloSessionsMatchFor2SlotGame(t *testing.T) {
 		Sessions: sessions,
 		Matches:  matches,
 		Games:    games,
+		Bans:     &store.BanStore{Pool: pool},
 		Events:   events,
 	}
 	require.NoError(t, worker.RunOnce(ctx))
