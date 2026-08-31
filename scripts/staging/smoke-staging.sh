@@ -99,9 +99,16 @@ if [ -n "${VOICE_DEVELOPER_PORTAL_INGRESS_HOST:-}" ]; then
   PORTAL_URL="https://${VOICE_DEVELOPER_PORTAL_INGRESS_HOST}"
   PORTAL_URL="${PORTAL_URL%/}"
   echo "Smoke: GET ${PORTAL_URL}/ (developer portal)"
-  portal_code="$(curl -sS -o /dev/null -w "%{http_code}" "${PORTAL_URL}/" || echo "000")"
+  portal_root_tmp="$(mktemp)"
+  portal_code="$(curl -sS -o "${portal_root_tmp}" -w "%{http_code}" "${PORTAL_URL}/" || echo "000")"
+  portal_root_body="$(tr -d '\r' < "${portal_root_tmp}")"
+  rm -f "${portal_root_tmp}"
   if [ "${portal_code}" != "200" ]; then
     echo "developer portal failed: HTTP ${portal_code}"
+    exit 1
+  fi
+  if ! echo "${portal_root_body}" | grep -qF '<!DOCTYPE html' && ! echo "${portal_root_body}" | grep -qF 'id="root"'; then
+    echo "developer portal root failed: body missing <!DOCTYPE html or #root mount point"
     exit 1
   fi
 
@@ -110,6 +117,31 @@ if [ -n "${VOICE_DEVELOPER_PORTAL_INGRESS_HOST:-}" ]; then
   if [ "${portal_cb_code}" != "200" ]; then
     echo "developer portal callback route failed: HTTP ${portal_cb_code}"
     exit 1
+  fi
+
+  if [ -n "${VOICE_GATEWAY_INGRESS_HOST:-}" ]; then
+    expected_api_base="https://${VOICE_GATEWAY_INGRESS_HOST}"
+    expected_api_base="${expected_api_base%/}"
+    portal_js_path="$(echo "${portal_root_body}" | grep -oE '/assets/[^"]+\.js' | head -1 || true)"
+    if [ -n "${portal_js_path}" ]; then
+      echo "Smoke: GET ${PORTAL_URL}${portal_js_path} (developer portal bundle VITE_VOICE_API_BASE)"
+      portal_js_tmp="$(mktemp)"
+      portal_js_code="$(curl -sS -o "${portal_js_tmp}" -w "%{http_code}" "${PORTAL_URL}${portal_js_path}" || echo "000")"
+      portal_js_body="$(tr -d '\r' < "${portal_js_tmp}")"
+      rm -f "${portal_js_tmp}"
+      if [ "${portal_js_code}" != "200" ]; then
+        echo "developer portal asset fetch failed: HTTP ${portal_js_code} for ${portal_js_path}"
+        exit 1
+      fi
+      if ! echo "${portal_js_body}" | grep -qF "${expected_api_base}"; then
+        echo "developer portal bundle missing baked VITE_VOICE_API_BASE=${expected_api_base}"
+        exit 1
+      fi
+    else
+      echo "Smoke: warning — could not find portal JS asset in index.html (skip VITE_VOICE_API_BASE check)"
+    fi
+  else
+    echo "Smoke: skipping developer portal VITE_VOICE_API_BASE check (VOICE_GATEWAY_INGRESS_HOST not set)"
   fi
 else
   echo "Smoke: skipping developer portal checks (VOICE_DEVELOPER_PORTAL_INGRESS_HOST not set)"
