@@ -28,10 +28,9 @@ Admin panel (`src/admin/`) и Developer Portal (`src/developer-portal/`).
 
 
 - [ ] **[Admin] No admin E2E / browser tests** — `docs/TESTING.md` lists analytics live tests as backend-only; no Playwright/Cypress for Admin. Paths: `docs/TESTING.md`, `src/admin/src/test/`
-- [ ] **[Admin] Thin unit coverage** — queue/report workflow tests added; still no OAuth callback component tests, login, audit, analytics pages. Paths: `src/admin/src/test/`
-- [ ] **[Admin] Duplicate HTTP helpers** — `apiFetch` in both `src/admin/src/oauth/api.ts` and `src/admin/src/api/client.ts`
-- [ ] **[Admin] No lint step in CI** — no ESLint/Prettier for `src/admin/`. Path: `.github/workflows/ci.yml` (job `admin`)
-- [ ] **[Admin] Staging smoke does not exercise Admin APIs** — only `GET /health`; analytics smoke uses direct Gateway + `STAGING_STAFF_TOKEN`, not Admin UI. Path: `scripts/staging/smoke-staging.sh`
+- [ ] **[Admin] Thin unit coverage (partial)** — OAuth callback, login (`AppLogin`), audit page, canonical `api/client` tests added (batch 5); analytics pages covered in batch 4. Remaining gaps: full App shell routing smoke in vitest only. Paths: `src/admin/src/test/`
+- [ ] **[Admin] No lint step in CI** — no ESLint/Prettier for `src/admin/`. Path: `.github/workflows/ci.yml` (job `admin`); deferred batch 5 (ESLint bootstrap)
+- [ ] **[Admin] Staging smoke: Admin UI routes only** — batch 5 adds SPA root + `/callback` when `VOICE_ADMIN_INGRESS_HOST` set; Gateway admin moderation/analytics still via `STAGING_STAFF_TOKEN` (not Admin UI bundle). Path: `scripts/staging/smoke-staging.sh`
 
 ### Developer Portal
 

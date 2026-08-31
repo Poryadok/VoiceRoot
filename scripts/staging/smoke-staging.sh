@@ -136,6 +136,27 @@ if [ -n "${VOICE_ADMIN_INGRESS_HOST:-}" ]; then
     echo "admin health failed: expected HTTP 200 body ok; check Ingress and DNS for ${VOICE_ADMIN_INGRESS_HOST}"
     exit 1
   fi
+
+  echo "Smoke: GET ${ADMIN_URL}/ (admin SPA root)"
+  admin_root_tmp="$(mktemp)"
+  admin_root_code="$(curl -sS -o "${admin_root_tmp}" -w "%{http_code}" "${ADMIN_URL}/" || echo "000")"
+  admin_root_body="$(tr -d '\r' < "${admin_root_tmp}")"
+  rm -f "${admin_root_tmp}"
+  if [ "${admin_root_code}" != "200" ]; then
+    echo "admin root failed: HTTP ${admin_root_code}"
+    exit 1
+  fi
+  if ! echo "${admin_root_body}" | grep -qF '<!DOCTYPE html' && ! echo "${admin_root_body}" | grep -qF 'id="root"'; then
+    echo "admin root failed: body missing <!DOCTYPE html or #root mount point"
+    exit 1
+  fi
+
+  echo "Smoke: GET ${ADMIN_URL}/callback (admin OAuth SPA route)"
+  admin_cb_code="$(curl -sS -o /dev/null -w "%{http_code}" "${ADMIN_URL}/callback" || echo "000")"
+  if [ "${admin_cb_code}" != "200" ]; then
+    echo "admin callback route failed: HTTP ${admin_cb_code}"
+    exit 1
+  fi
 else
   echo "Smoke: skipping admin checks (VOICE_ADMIN_INGRESS_HOST not set)"
 fi
