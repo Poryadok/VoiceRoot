@@ -23,6 +23,7 @@ service ModerationService {
   rpc SubmitAppeal(SubmitAppealRequest) returns (SubmitAppealResponse);
   rpc ReviewAppeal(ReviewAppealRequest) returns (ReviewAppealResponse);
   rpc GetAppeal(GetAppealRequest) returns (GetAppealResponse);
+  rpc ListAppeals(ListAppealsRequest) returns (ListAppealsResponse);
 
   rpc CheckMessage(CheckMessageRequest) returns (CheckMessageResponse);
   rpc GetAutoModStats(GetAutoModStatsRequest) returns (GetAutoModStatsResponse);
@@ -141,6 +142,16 @@ message GetAppealRequest {
   string appeal_id = 1;
 }
 
+message ListAppealsRequest {
+  string status_filter = 1;
+  voice.common.v1.CursorPageRequest page = 2;
+}
+
+message AppealList {
+  repeated Appeal appeals = 1;
+  string next_cursor = 2;
+}
+
 message CheckMessageRequest {
   voice.chat.v1.ChatRef chat = 1;
   string content = 2;
@@ -225,6 +236,9 @@ message ReviewAppealResponse {
 }
 message GetAppealResponse {
   Appeal appeal = 1;
+}
+message ListAppealsResponse {
+  AppealList appeal_list = 1;
 }
 message CheckMessageResponse {
   CheckResult check_result = 1;

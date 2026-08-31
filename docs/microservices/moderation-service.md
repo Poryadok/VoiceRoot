@@ -42,6 +42,7 @@ service ModerationService {
   rpc SubmitAppeal(SubmitAppealRequest) returns (Appeal);
   rpc ReviewAppeal(ReviewAppealRequest) returns (Appeal); // admin
   rpc GetAppeal(GetAppealRequest) returns (Appeal);
+  rpc ListAppeals(ListAppealsRequest) returns (AppealList); // admin
 
   // Auto-moderation
   rpc CheckMessage(CheckMessageRequest) returns (CheckResult); // internal, sync

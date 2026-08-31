@@ -11,7 +11,6 @@ Admin panel (`src/admin/`) и Developer Portal (`src/developer-portal/`).
 ### Admin
 
 
-- [ ] **[Admin] Appeals admin flow missing end-to-end** — `ReviewAppeal` Gateway REST exists (`POST …/appeals/{id}/review`); no `ListAppeals` RPC, no appeals queue page in Admin. Paths: `docs/microservices/moderation-service.md`, `src/backend/gateway/transcode_moderation_admin.go`, `src/admin/src/`
 - [ ] **[Admin] Analytics UI far below spec** — only `product` dashboard + hardcoded `registration` funnel; no retention page (`fetchRetention` unused), no engagement/revenue/health/moderation/search/voice dashboards. Paths: `src/admin/src/api/analytics.ts`, `src/admin/src/pages/ProductAnalyticsPage.tsx`, `src/admin/src/pages/FunnelsPage.tsx`, `docs/features/analytics.md`
 - [ ] **[Admin] Game catalog: staff Add game / moderation queue тонкие** — `SubmitGameRequest` live есть; Admin форма CreateGame и дедуп заявок — [game-catalog.md](../features/game-catalog.md).
 - [ ] **[Admin] PLAN / README stale** — PLAN still «зарезервировано»; README covers moderation only (no analytics/OAuth). Paths: `docs/PLAN.md`, `src/admin/README.md`

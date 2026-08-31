@@ -14,7 +14,15 @@ import (
 
 type recordingModerationPhase14 struct {
 	moderationv1.UnimplementedModerationServiceServer
-	listReq *moderationv1.ListReportsRequest
+	listReq   *moderationv1.ListReportsRequest
+	listAppealsReq *moderationv1.ListAppealsRequest
+}
+
+func (r *recordingModerationPhase14) ListAppeals(_ context.Context, req *moderationv1.ListAppealsRequest) (*moderationv1.ListAppealsResponse, error) {
+	r.listAppealsReq = req
+	return &moderationv1.ListAppealsResponse{
+		AppealList: &moderationv1.AppealList{Appeals: []*moderationv1.Appeal{}},
+	}, nil
 }
 
 func (r *recordingModerationPhase14) ListReports(_ context.Context, req *moderationv1.ListReportsRequest) (*moderationv1.ListReportsResponse, error) {
@@ -79,4 +87,24 @@ func TestTranscodeModerationAdmin_forwardsReportCursor(t *testing.T) {
 	require.NotNil(t, rec.listReq)
 	require.Equal(t, "abc", rec.listReq.GetPage().GetCursor())
 	require.Equal(t, int32(25), rec.listReq.GetPage().GetPageSize())
+}
+
+func TestTranscodeModerationAdmin_forwardsAppealsList(t *testing.T) {
+	rec := &recordingModerationPhase14{}
+	modClient, cleanup := startBufconnModerationClient(t, rec)
+	t.Cleanup(cleanup)
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"staff-token": {UserID: "staff-account", ProfileID: "staff-profile", Roles: []string{"staff"}},
+		},
+		transcoder: &transcoder{clients: grpcClients{moderation: modClient}},
+	})
+	resp := performRequest(h, http.MethodGet, "/api/v1/admin/moderation/appeals?status=pending&cursor=abc&page_size=25", "", map[string]string{
+		"Authorization": "Bearer staff-token",
+	})
+	require.Equal(t, http.StatusOK, resp.Code)
+	require.NotNil(t, rec.listAppealsReq)
+	require.Equal(t, "pending", rec.listAppealsReq.GetStatusFilter())
+	require.Equal(t, "abc", rec.listAppealsReq.GetPage().GetCursor())
+	require.Equal(t, int32(25), rec.listAppealsReq.GetPage().GetPageSize())
 }

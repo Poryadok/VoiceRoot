@@ -3,9 +3,11 @@ import type {
   ApplySanctionResponse,
   AuditExportResponse,
   GetAccountSanctionsResponse,
+  ListAppealsResponse,
   ListReportsResponse,
   ModerationQueue,
   ResolveReportResponse,
+  ReviewAppealResponse,
   SanctionType,
 } from "./types";
 
@@ -80,6 +82,43 @@ export function resolveReport(
 
 export function fetchAuditExport(): Promise<AuditExportResponse> {
   return apiJson("/api/v1/admin/moderation/audit/export");
+}
+
+export interface ListAppealsParams {
+  status?: string;
+  cursor?: string;
+  page_size?: number;
+}
+
+export function listAppeals(
+  params: ListAppealsParams,
+): Promise<ListAppealsResponse> {
+  const search = new URLSearchParams();
+  if (params.status) {
+    search.set("status", params.status);
+  }
+  if (params.cursor) {
+    search.set("cursor", params.cursor);
+  }
+  if (params.page_size !== undefined) {
+    search.set("page_size", String(params.page_size));
+  }
+  const query = search.toString();
+  const suffix = query ? `?${query}` : "";
+  return apiJson(`/api/v1/admin/moderation/appeals${suffix}`);
+}
+
+export function reviewAppeal(
+  appealId: string,
+  body: {
+    status: "approved" | "denied";
+    moderator_note?: string;
+  },
+): Promise<ReviewAppealResponse> {
+  return apiJson(`/api/v1/admin/moderation/appeals/${encodeURIComponent(appealId)}/review`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }
 
 export async function downloadAuditExport(): Promise<void> {
