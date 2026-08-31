@@ -478,6 +478,49 @@ const GetAppealRequest$json = {
 final $typed_data.Uint8List getAppealRequestDescriptor = $convert.base64Decode(
     'ChBHZXRBcHBlYWxSZXF1ZXN0EhsKCWFwcGVhbF9pZBgBIAEoCVIIYXBwZWFsSWQ=');
 
+@$core.Deprecated('Use listAppealsRequestDescriptor instead')
+const ListAppealsRequest$json = {
+  '1': 'ListAppealsRequest',
+  '2': [
+    {'1': 'status_filter', '3': 1, '4': 1, '5': 9, '10': 'statusFilter'},
+    {
+      '1': 'page',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.CursorPageRequest',
+      '10': 'page'
+    },
+  ],
+};
+
+/// Descriptor for `ListAppealsRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List listAppealsRequestDescriptor = $convert.base64Decode(
+    'ChJMaXN0QXBwZWFsc1JlcXVlc3QSIwoNc3RhdHVzX2ZpbHRlchgBIAEoCVIMc3RhdHVzRmlsdG'
+    'VyEjYKBHBhZ2UYAiABKAsyIi52b2ljZS5jb21tb24udjEuQ3Vyc29yUGFnZVJlcXVlc3RSBHBh'
+    'Z2U=');
+
+@$core.Deprecated('Use appealListDescriptor instead')
+const AppealList$json = {
+  '1': 'AppealList',
+  '2': [
+    {
+      '1': 'appeals',
+      '3': 1,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.moderation.v1.Appeal',
+      '10': 'appeals'
+    },
+    {'1': 'next_cursor', '3': 2, '4': 1, '5': 9, '10': 'nextCursor'},
+  ],
+};
+
+/// Descriptor for `AppealList`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List appealListDescriptor = $convert.base64Decode(
+    'CgpBcHBlYWxMaXN0EjUKB2FwcGVhbHMYASADKAsyGy52b2ljZS5tb2RlcmF0aW9uLnYxLkFwcG'
+    'VhbFIHYXBwZWFscxIfCgtuZXh0X2N1cnNvchgCIAEoCVIKbmV4dEN1cnNvcg==');
+
 @$core.Deprecated('Use checkMessageRequestDescriptor instead')
 const CheckMessageRequest$json = {
   '1': 'CheckMessageRequest',
@@ -889,6 +932,26 @@ const GetAppealResponse$json = {
 final $typed_data.Uint8List getAppealResponseDescriptor = $convert.base64Decode(
     'ChFHZXRBcHBlYWxSZXNwb25zZRIzCgZhcHBlYWwYASABKAsyGy52b2ljZS5tb2RlcmF0aW9uLn'
     'YxLkFwcGVhbFIGYXBwZWFs');
+
+@$core.Deprecated('Use listAppealsResponseDescriptor instead')
+const ListAppealsResponse$json = {
+  '1': 'ListAppealsResponse',
+  '2': [
+    {
+      '1': 'appeal_list',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.moderation.v1.AppealList',
+      '10': 'appealList'
+    },
+  ],
+};
+
+/// Descriptor for `ListAppealsResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List listAppealsResponseDescriptor = $convert.base64Decode(
+    'ChNMaXN0QXBwZWFsc1Jlc3BvbnNlEkAKC2FwcGVhbF9saXN0GAEgASgLMh8udm9pY2UubW9kZX'
+    'JhdGlvbi52MS5BcHBlYWxMaXN0UgphcHBlYWxMaXN0');
 
 @$core.Deprecated('Use checkMessageResponseDescriptor instead')
 const CheckMessageResponse$json = {

@@ -30,6 +30,7 @@ const (
 	ModerationService_SubmitAppeal_FullMethodName        = "/voice.moderation.v1.ModerationService/SubmitAppeal"
 	ModerationService_ReviewAppeal_FullMethodName        = "/voice.moderation.v1.ModerationService/ReviewAppeal"
 	ModerationService_GetAppeal_FullMethodName           = "/voice.moderation.v1.ModerationService/GetAppeal"
+	ModerationService_ListAppeals_FullMethodName         = "/voice.moderation.v1.ModerationService/ListAppeals"
 	ModerationService_CheckMessage_FullMethodName        = "/voice.moderation.v1.ModerationService/CheckMessage"
 	ModerationService_GetAutoModStats_FullMethodName     = "/voice.moderation.v1.ModerationService/GetAutoModStats"
 	ModerationService_IsShadowBanned_FullMethodName      = "/voice.moderation.v1.ModerationService/IsShadowBanned"
@@ -54,6 +55,7 @@ type ModerationServiceClient interface {
 	SubmitAppeal(ctx context.Context, in *SubmitAppealRequest, opts ...grpc.CallOption) (*SubmitAppealResponse, error)
 	ReviewAppeal(ctx context.Context, in *ReviewAppealRequest, opts ...grpc.CallOption) (*ReviewAppealResponse, error)
 	GetAppeal(ctx context.Context, in *GetAppealRequest, opts ...grpc.CallOption) (*GetAppealResponse, error)
+	ListAppeals(ctx context.Context, in *ListAppealsRequest, opts ...grpc.CallOption) (*ListAppealsResponse, error)
 	CheckMessage(ctx context.Context, in *CheckMessageRequest, opts ...grpc.CallOption) (*CheckMessageResponse, error)
 	GetAutoModStats(ctx context.Context, in *GetAutoModStatsRequest, opts ...grpc.CallOption) (*GetAutoModStatsResponse, error)
 	IsShadowBanned(ctx context.Context, in *IsShadowBannedRequest, opts ...grpc.CallOption) (*IsShadowBannedResponse, error)
@@ -180,6 +182,16 @@ func (c *moderationServiceClient) GetAppeal(ctx context.Context, in *GetAppealRe
 	return out, nil
 }
 
+func (c *moderationServiceClient) ListAppeals(ctx context.Context, in *ListAppealsRequest, opts ...grpc.CallOption) (*ListAppealsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListAppealsResponse)
+	err := c.cc.Invoke(ctx, ModerationService_ListAppeals_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *moderationServiceClient) CheckMessage(ctx context.Context, in *CheckMessageRequest, opts ...grpc.CallOption) (*CheckMessageResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CheckMessageResponse)
@@ -247,6 +259,7 @@ type ModerationServiceServer interface {
 	SubmitAppeal(context.Context, *SubmitAppealRequest) (*SubmitAppealResponse, error)
 	ReviewAppeal(context.Context, *ReviewAppealRequest) (*ReviewAppealResponse, error)
 	GetAppeal(context.Context, *GetAppealRequest) (*GetAppealResponse, error)
+	ListAppeals(context.Context, *ListAppealsRequest) (*ListAppealsResponse, error)
 	CheckMessage(context.Context, *CheckMessageRequest) (*CheckMessageResponse, error)
 	GetAutoModStats(context.Context, *GetAutoModStatsRequest) (*GetAutoModStatsResponse, error)
 	IsShadowBanned(context.Context, *IsShadowBannedRequest) (*IsShadowBannedResponse, error)
@@ -295,6 +308,9 @@ func (UnimplementedModerationServiceServer) ReviewAppeal(context.Context, *Revie
 }
 func (UnimplementedModerationServiceServer) GetAppeal(context.Context, *GetAppealRequest) (*GetAppealResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetAppeal not implemented")
+}
+func (UnimplementedModerationServiceServer) ListAppeals(context.Context, *ListAppealsRequest) (*ListAppealsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListAppeals not implemented")
 }
 func (UnimplementedModerationServiceServer) CheckMessage(context.Context, *CheckMessageRequest) (*CheckMessageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CheckMessage not implemented")
@@ -530,6 +546,24 @@ func _ModerationService_GetAppeal_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ModerationService_ListAppeals_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListAppealsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ModerationServiceServer).ListAppeals(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ModerationService_ListAppeals_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ModerationServiceServer).ListAppeals(ctx, req.(*ListAppealsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _ModerationService_CheckMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CheckMessageRequest)
 	if err := dec(in); err != nil {
@@ -670,6 +704,10 @@ var ModerationService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetAppeal",
 			Handler:    _ModerationService_GetAppeal_Handler,
+		},
+		{
+			MethodName: "ListAppeals",
+			Handler:    _ModerationService_ListAppeals_Handler,
 		},
 		{
 			MethodName: "CheckMessage",

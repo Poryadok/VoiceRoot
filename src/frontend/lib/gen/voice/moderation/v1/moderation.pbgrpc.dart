@@ -110,6 +110,13 @@ class ModerationServiceClient extends $grpc.Client {
     return $createUnaryCall(_$getAppeal, request, options: options);
   }
 
+  $grpc.ResponseFuture<$0.ListAppealsResponse> listAppeals(
+    $0.ListAppealsRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$listAppeals, request, options: options);
+  }
+
   $grpc.ResponseFuture<$0.CheckMessageResponse> checkMessage(
     $0.CheckMessageRequest request, {
     $grpc.CallOptions? options,
@@ -203,6 +210,11 @@ class ModerationServiceClient extends $grpc.Client {
           '/voice.moderation.v1.ModerationService/GetAppeal',
           ($0.GetAppealRequest value) => value.writeToBuffer(),
           $0.GetAppealResponse.fromBuffer);
+  static final _$listAppeals =
+      $grpc.ClientMethod<$0.ListAppealsRequest, $0.ListAppealsResponse>(
+          '/voice.moderation.v1.ModerationService/ListAppeals',
+          ($0.ListAppealsRequest value) => value.writeToBuffer(),
+          $0.ListAppealsResponse.fromBuffer);
   static final _$checkMessage =
       $grpc.ClientMethod<$0.CheckMessageRequest, $0.CheckMessageResponse>(
           '/voice.moderation.v1.ModerationService/CheckMessage',
@@ -330,6 +342,15 @@ abstract class ModerationServiceBase extends $grpc.Service {
         false,
         ($core.List<$core.int> value) => $0.GetAppealRequest.fromBuffer(value),
         ($0.GetAppealResponse value) => value.writeToBuffer()));
+    $addMethod(
+        $grpc.ServiceMethod<$0.ListAppealsRequest, $0.ListAppealsResponse>(
+            'ListAppeals',
+            listAppeals_Pre,
+            false,
+            false,
+            ($core.List<$core.int> value) =>
+                $0.ListAppealsRequest.fromBuffer(value),
+            ($0.ListAppealsResponse value) => value.writeToBuffer()));
     $addMethod(
         $grpc.ServiceMethod<$0.CheckMessageRequest, $0.CheckMessageResponse>(
             'CheckMessage',
@@ -470,6 +491,14 @@ abstract class ModerationServiceBase extends $grpc.Service {
 
   $async.Future<$0.GetAppealResponse> getAppeal(
       $grpc.ServiceCall call, $0.GetAppealRequest request);
+
+  $async.Future<$0.ListAppealsResponse> listAppeals_Pre($grpc.ServiceCall $call,
+      $async.Future<$0.ListAppealsRequest> $request) async {
+    return listAppeals($call, await $request);
+  }
+
+  $async.Future<$0.ListAppealsResponse> listAppeals(
+      $grpc.ServiceCall call, $0.ListAppealsRequest request);
 
   $async.Future<$0.CheckMessageResponse> checkMessage_Pre(
       $grpc.ServiceCall $call,

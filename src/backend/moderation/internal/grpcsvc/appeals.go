@@ -132,6 +132,41 @@ func (s *ModerationGRPC) GetAppeal(ctx context.Context, req *moderationv1.GetApp
 	return &moderationv1.GetAppealResponse{Appeal: appealRowToProto(row)}, nil
 }
 
+func (s *ModerationGRPC) ListAppeals(ctx context.Context, req *moderationv1.ListAppealsRequest) (*moderationv1.ListAppealsResponse, error) {
+	if s == nil || s.Appeals == nil {
+		return nil, status.Error(codes.FailedPrecondition, "appeal store is not configured")
+	}
+	if !isInternalRequest(ctx) {
+		return nil, status.Error(codes.PermissionDenied, "internal access required")
+	}
+
+	limit := int32(50)
+	cursor := ""
+	if req.GetPage() != nil {
+		if req.GetPage().GetPageSize() > 0 {
+			limit = req.GetPage().GetPageSize()
+		}
+		cursor = strings.TrimSpace(req.GetPage().GetCursor())
+	}
+	page, err := s.Appeals.ListAppealsPage(ctx, strings.TrimSpace(req.GetStatusFilter()), cursor, limit)
+	if err != nil {
+		if errors.Is(err, store.ErrInvalidAppealListCursor) {
+			return nil, status.Error(codes.InvalidArgument, "invalid cursor")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	out := make([]*moderationv1.Appeal, 0, len(page.Rows))
+	for i := range page.Rows {
+		out = append(out, appealRowToProto(&page.Rows[i]))
+	}
+	return &moderationv1.ListAppealsResponse{
+		AppealList: &moderationv1.AppealList{
+			Appeals:    out,
+			NextCursor: page.NextCursor,
+		},
+	}, nil
+}
+
 func appealRowToProto(row *store.AppealRow) *moderationv1.Appeal {
 	if row == nil {
 		return nil

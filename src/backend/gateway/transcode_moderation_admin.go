@@ -142,6 +142,25 @@ func (t *transcoder) serveAdminModeration(w http.ResponseWriter, r *http.Request
 		}
 		w.WriteHeader(http.StatusNoContent)
 		return true
+	case rest == "appeals" && r.Method == http.MethodGet:
+		req := &moderationv1.ListAppealsRequest{
+			StatusFilter: r.URL.Query().Get("status"),
+		}
+		page := &commonv1.CursorPageRequest{}
+		if c := strings.TrimSpace(r.URL.Query().Get("cursor")); c != "" {
+			page.Cursor = c
+		}
+		if ps := parseInt32Query(r.URL.Query().Get("page_size")); ps > 0 {
+			page.PageSize = ps
+		}
+		req.Page = page
+		resp, err := t.clients.moderation.ListAppeals(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
 	case strings.HasPrefix(rest, "appeals/") && strings.HasSuffix(rest, "/review") && r.Method == http.MethodPost:
 		appealID := strings.TrimSuffix(strings.TrimPrefix(rest, "appeals/"), "/review")
 		appealID = strings.Trim(appealID, "/")

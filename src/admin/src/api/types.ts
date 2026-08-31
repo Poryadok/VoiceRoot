@@ -87,6 +87,37 @@ export interface AuditExportResponse {
   entries: AuditEntry[];
 }
 
+export type AppealStatus = "pending" | "approved" | "denied";
+
+export interface Appeal {
+  id: string;
+  sanction_id: string;
+  appellant_account_id: string;
+  reason: string;
+  status: string;
+  reviewed_by_profile_id?: string;
+  created_at: string;
+}
+
+export interface AppealList {
+  appeals: Appeal[];
+  next_cursor?: string;
+}
+
+export interface ListAppealsResponse {
+  appeal_list: AppealList;
+}
+
+export interface ReviewAppealResponse {
+  appeal: Appeal;
+}
+
+export const APPEAL_STATUSES: AppealStatus[] = [
+  "pending",
+  "approved",
+  "denied",
+];
+
 export const REPORT_STATUSES: ReportStatus[] = [
   "pending",
   "reviewing",

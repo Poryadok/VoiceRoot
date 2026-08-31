@@ -1425,6 +1425,137 @@ class GetAppealRequest extends $pb.GeneratedMessage {
   void clearAppealId() => $_clearField(1);
 }
 
+class ListAppealsRequest extends $pb.GeneratedMessage {
+  factory ListAppealsRequest({
+    $core.String? statusFilter,
+    $2.CursorPageRequest? page,
+  }) {
+    final result = create();
+    if (statusFilter != null) result.statusFilter = statusFilter;
+    if (page != null) result.page = page;
+    return result;
+  }
+
+  ListAppealsRequest._();
+
+  factory ListAppealsRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ListAppealsRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ListAppealsRequest',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.moderation.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'statusFilter')
+    ..aOM<$2.CursorPageRequest>(2, _omitFieldNames ? '' : 'page',
+        subBuilder: $2.CursorPageRequest.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListAppealsRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListAppealsRequest copyWith(void Function(ListAppealsRequest) updates) =>
+      super.copyWith((message) => updates(message as ListAppealsRequest))
+          as ListAppealsRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ListAppealsRequest create() => ListAppealsRequest._();
+  @$core.override
+  ListAppealsRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ListAppealsRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ListAppealsRequest>(create);
+  static ListAppealsRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get statusFilter => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set statusFilter($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasStatusFilter() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearStatusFilter() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $2.CursorPageRequest get page => $_getN(1);
+  @$pb.TagNumber(2)
+  set page($2.CursorPageRequest value) => $_setField(2, value);
+  @$pb.TagNumber(2)
+  $core.bool hasPage() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearPage() => $_clearField(2);
+  @$pb.TagNumber(2)
+  $2.CursorPageRequest ensurePage() => $_ensure(1);
+}
+
+class AppealList extends $pb.GeneratedMessage {
+  factory AppealList({
+    $core.Iterable<Appeal>? appeals,
+    $core.String? nextCursor,
+  }) {
+    final result = create();
+    if (appeals != null) result.appeals.addAll(appeals);
+    if (nextCursor != null) result.nextCursor = nextCursor;
+    return result;
+  }
+
+  AppealList._();
+
+  factory AppealList.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory AppealList.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'AppealList',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.moderation.v1'),
+      createEmptyInstance: create)
+    ..pPM<Appeal>(1, _omitFieldNames ? '' : 'appeals',
+        subBuilder: Appeal.create)
+    ..aOS(2, _omitFieldNames ? '' : 'nextCursor')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AppealList clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AppealList copyWith(void Function(AppealList) updates) =>
+      super.copyWith((message) => updates(message as AppealList)) as AppealList;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static AppealList create() => AppealList._();
+  @$core.override
+  AppealList createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static AppealList getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<AppealList>(create);
+  static AppealList? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $pb.PbList<Appeal> get appeals => $_getList(0);
+
+  @$pb.TagNumber(2)
+  $core.String get nextCursor => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set nextCursor($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasNextCursor() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearNextCursor() => $_clearField(2);
+}
+
 class CheckMessageRequest extends $pb.GeneratedMessage {
   factory CheckMessageRequest({
     $3.ChatRef? chat,
@@ -2800,6 +2931,64 @@ class GetAppealResponse extends $pb.GeneratedMessage {
   void clearAppeal() => $_clearField(1);
   @$pb.TagNumber(1)
   Appeal ensureAppeal() => $_ensure(0);
+}
+
+class ListAppealsResponse extends $pb.GeneratedMessage {
+  factory ListAppealsResponse({
+    AppealList? appealList,
+  }) {
+    final result = create();
+    if (appealList != null) result.appealList = appealList;
+    return result;
+  }
+
+  ListAppealsResponse._();
+
+  factory ListAppealsResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ListAppealsResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ListAppealsResponse',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.moderation.v1'),
+      createEmptyInstance: create)
+    ..aOM<AppealList>(1, _omitFieldNames ? '' : 'appealList',
+        subBuilder: AppealList.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListAppealsResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListAppealsResponse copyWith(void Function(ListAppealsResponse) updates) =>
+      super.copyWith((message) => updates(message as ListAppealsResponse))
+          as ListAppealsResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ListAppealsResponse create() => ListAppealsResponse._();
+  @$core.override
+  ListAppealsResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ListAppealsResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ListAppealsResponse>(create);
+  static ListAppealsResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  AppealList get appealList => $_getN(0);
+  @$pb.TagNumber(1)
+  set appealList(AppealList value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAppealList() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAppealList() => $_clearField(1);
+  @$pb.TagNumber(1)
+  AppealList ensureAppealList() => $_ensure(0);
 }
 
 class CheckMessageResponse extends $pb.GeneratedMessage {
