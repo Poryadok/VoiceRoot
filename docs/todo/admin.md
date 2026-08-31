@@ -6,16 +6,6 @@ Moderation queue, analytics dashboards, OAuth staff; Developer Portal для б�
 
 Admin panel (`src/admin/`) и Developer Portal (`src/developer-portal/`).
 
-## Critical
-
-### Admin
-
-
-- [ ] **[Admin] Assign-to-me broken under OAuth (staging default)** — `staffProfileIdFromToken()` reads only `VITE_STAFF_TOKEN`, not the session OAuth JWT; staging builds use `VITE_OAUTH_DISABLED=false`. Paths: `src/admin/src/lib/jwt.ts`, `src/admin/src/pages/QueuePage.tsx`
-- [ ] **[Admin] Audit log UI пуст, если store пуст** — Gateway **мапит** `ExportAuditLog` (`transcode_moderation_admin.go`), не hardcoded `[]`. Пустой список ≠ stub Gateway. Paths: `src/backend/gateway/transcode_moderation_admin.go`, `src/admin/src/pages/AuditPage.tsx`
-- [ ] **[Admin] No resolve / dismiss report workflow** — only `new_status: "reviewing"` (assign); moderators cannot close reports as resolved/dismissed per `docs/features/reports.md`. Paths: `src/admin/src/pages/QueuePage.tsx`, `src/admin/src/components/ReportDetail.tsx`, `src/admin/src/api/moderation.ts`
-
-
 ## High
 
 ### Admin
@@ -33,7 +23,6 @@ Admin panel (`src/admin/`) и Developer Portal (`src/developer-portal/`).
 ### Developer Portal
 
 
-- [ ] **[Developer Portal] OAuth `state` never persisted or validated on callback — generated in `signInWithVoice()` but not stored; `OAuthCallback` ignores `params.state`. Login CSRF vector (same pattern as admin).** — `src/developer-portal/src/App.tsx`, `src/developer-portal/src/OAuthCallback.tsx`
 - [ ] **[Developer Portal] No JWT expiry handling — `isLoggedIn()` checks token presence only; `expires_in` from token exchange ignored; no refresh or re-auth on 401.** — `src/developer-portal/src/oauth/session.ts`, `src/developer-portal/src/oauth/api.ts`, `src/developer-portal/src/App.tsx`
 - [ ] **[Developer Portal] No manifest round-trip — backend stores manifest fields/commands but no REST to export YAML; `GetCommands` not transcoded in Gateway. Portal always shows `defaultManifest`, cannot load applied config.** — `src/developer-portal/src/App.tsx`, `src/developer-portal/src/manifestDefaults.ts`, `src/backend/gateway/transcode_bots.go`, `protos/voice/bot/v1/bot.proto`
 - [ ] **[Developer Portal] No E2E / live smoke for portal OAuth or bot registration — only static `GET /` in staging smoke; no compose live test, nothing in `.github/ci/e2e-features.yml`.** — `scripts/staging/smoke-staging.sh`, `.github/ci/e2e-features.yml`
@@ -45,10 +34,8 @@ Admin panel (`src/admin/`) и Developer Portal (`src/developer-portal/`).
 
 
 - [ ] **[Admin] No admin E2E / browser tests** — `docs/TESTING.md` lists analytics live tests as backend-only; no Playwright/Cypress for Admin. Paths: `docs/TESTING.md`, `src/admin/src/test/`
-- [ ] **[Admin] Thin unit coverage** — 4 tests (queue filters, sanction confirm, analytics client mocks); no OAuth callback, login, audit, analytics pages. Paths: `src/admin/src/test/analytics.test.ts`, `src/admin/src/test/QueueFilters.test.tsx`, `src/admin/src/test/SanctionConfirm.test.tsx`
-- [ ] **[Admin] OAuth callback skips `state` validation** — CSRF risk on PKCE flow. Paths: `src/admin/src/oauth/OAuthCallback.tsx`, `src/admin/src/oauth/callback.ts`, `src/admin/src/App.tsx`
+- [ ] **[Admin] Thin unit coverage** — queue/report workflow tests added; still no OAuth callback component tests, login, audit, analytics pages. Paths: `src/admin/src/test/`
 - [ ] **[Admin] Duplicate HTTP helpers** — `apiFetch` in both `src/admin/src/oauth/api.ts` and `src/admin/src/api/client.ts`
-- [ ] **[Admin] Incomplete dev env template** — `.env.example` missing `VITE_OAUTH_CLIENT_ID`, `VITE_OAUTH_DISABLED`. Path: `src/admin/.env.example`
 - [ ] **[Admin] No lint step in CI** — no ESLint/Prettier for `src/admin/`. Path: `.github/workflows/ci.yml` (job `admin`)
 - [ ] **[Admin] Staging smoke does not exercise Admin APIs** — only `GET /health`; analytics smoke uses direct Gateway + `STAGING_STAFF_TOKEN`, not Admin UI. Path: `scripts/staging/smoke-staging.sh`
 
