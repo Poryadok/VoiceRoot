@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchFunnel, type FunnelStep } from "../api/analytics";
+import { AnalyticsSubnav } from "../components/AnalyticsSubnav";
 
 export function FunnelsPage() {
   const [steps, setSteps] = useState<FunnelStep[]>([]);
@@ -12,7 +13,9 @@ export function FunnelsPage() {
   }, []);
 
   return (
-    <section>
+    <>
+      <AnalyticsSubnav />
+      <section>
       <h2>Registration funnel</h2>
       {error ? <p className="error">{error}</p> : null}
       <table className="data-table">
@@ -32,5 +35,6 @@ export function FunnelsPage() {
         </tbody>
       </table>
     </section>
+    </>
   );
 }

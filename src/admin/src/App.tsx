@@ -5,6 +5,9 @@ import { AuditPage } from "./pages/AuditPage";
 import { AnalyticsExportPage } from "./pages/AnalyticsExportPage";
 import { FunnelsPage } from "./pages/FunnelsPage";
 import { ProductAnalyticsPage } from "./pages/ProductAnalyticsPage";
+import { DashboardMetricsPage } from "./pages/DashboardMetricsPage";
+import { RetentionPage } from "./pages/RetentionPage";
+import { CreateGamePage } from "./pages/CreateGamePage";
 import { QueuePage } from "./pages/QueuePage";
 import { AppealsPage } from "./pages/AppealsPage";
 import { GameRequestsPage } from "./pages/GameRequestsPage";
@@ -98,8 +101,14 @@ function AdminShell() {
         <Route path="/queue" element={<QueuePage />} />
         <Route path="/appeals" element={<AppealsPage />} />
         <Route path="/game-requests" element={<GameRequestsPage />} />
+        <Route path="/games/new" element={<CreateGamePage />} />
         <Route path="/audit" element={<AuditPage />} />
         <Route path="/analytics/product" element={<ProductAnalyticsPage />} />
+        <Route path="/analytics/engagement" element={<DashboardMetricsPage dashboardType="engagement" />} />
+        <Route path="/analytics/revenue" element={<DashboardMetricsPage dashboardType="revenue" />} />
+        <Route path="/analytics/health" element={<DashboardMetricsPage dashboardType="health" />} />
+        <Route path="/analytics/moderation" element={<DashboardMetricsPage dashboardType="moderation" />} />
+        <Route path="/analytics/retention" element={<RetentionPage />} />
         <Route path="/analytics/funnels" element={<FunnelsPage />} />
         <Route path="/analytics/export" element={<AnalyticsExportPage />} />
       </Routes>

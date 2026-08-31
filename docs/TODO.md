@@ -77,7 +77,7 @@ DOC-аудит закрыт (0 open DOC). Невыполненное разне�
 | [backend.md](todo/backend.md) § Critical Space | Нет `DeleteSpace` / `TransferOwnership` / `GetAuditLog` / каталога / шаблонов |
 | [backend.md](todo/backend.md) § High Chat | Стикеры/GIF **в v1** (0 кода); folders RPC; view-count; `DeleteChat` |
 | [ci.md](todo/ci.md) § Critical | FCM/APNs, Alertmanager, staging DoD, TOTP/Resend/Paddle secrets |
-| [admin.md](todo/admin.md) § High | Analytics UI; game catalog / PLAN gaps |
+| [admin.md](todo/admin.md) § High | Analytics search/voice dashboards (backend first); game catalog mode editor |
 | [client.md](todo/client.md) § High | Телефон/OTP/sessions/delete-account UI; quiet hours с сервера; черновики |
 
 ---
