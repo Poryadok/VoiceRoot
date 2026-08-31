@@ -17,9 +17,7 @@ Admin panel (`src/admin/`) и Developer Portal (`src/developer-portal/`).
 ### Developer Portal
 
 
-- [ ] **[Developer Portal] No JWT expiry handling — `isLoggedIn()` checks token presence only; `expires_in` from token exchange ignored; no refresh or re-auth on 401.** — `src/developer-portal/src/oauth/session.ts`, `src/developer-portal/src/oauth/api.ts`, `src/developer-portal/src/App.tsx`
-- [ ] **[Developer Portal] No manifest round-trip — backend stores manifest fields/commands but no REST to export YAML; `GetCommands` not transcoded in Gateway. Portal always shows `defaultManifest`, cannot load applied config.** — `src/developer-portal/src/App.tsx`, `src/developer-portal/src/manifestDefaults.ts`, `src/backend/gateway/transcode_bots.go`, `protos/voice/bot/v1/bot.proto`
-- [ ] **[Developer Portal] No E2E / live smoke for portal OAuth or bot registration — only static `GET /` in staging smoke; no compose live test, nothing in `.github/ci/e2e-features.yml`.** — `scripts/staging/smoke-staging.sh`, `.github/ci/e2e-features.yml`
+- [ ] **[Developer Portal] No E2E / live smoke for portal OAuth or bot registration — only static ingress checks in staging smoke; no compose live test, nothing in `.github/ci/e2e-features.yml`.** — `scripts/staging/smoke-staging.sh`, `.github/ci/e2e-features.yml`
 
 
 ## Common
@@ -43,9 +41,6 @@ Admin panel (`src/admin/`) и Developer Portal (`src/developer-portal/`).
 - [ ] **[Developer Portal] Not in implementation map — `docs/PLAN.md` lists bots as partial but omits `src/developer-portal/` from “Размещение кода”.** — `docs/PLAN.md`
 - [ ] **[Developer Portal] DEPLOYMENT.md stale on prod — says prod portal Ingress “not in-repo yet” but manifest exists.** — `docs/DEPLOYMENT.md`, `deploy/prod/developer-portal.yaml`
 - [ ] **[Developer Portal] README points to missing local `.env.example` — refers to `src/developer-portal/.env.example`; vars live in repo root `.env.example`.** — `src/developer-portal/README.md`, `.env.example`
-- [ ] **[Developer Portal] Test coverage is helper-only — no component tests for `App` / `OAuthCallback`; `webhook_secret.test.ts` mirrors parsing inline, not real UI.** — `src/developer-portal/src/test/`
-- [ ] **[Developer Portal] Staging smoke incomplete vs TODO intent — HTTP 200 on `/` only; no `/callback` SPA route, no check that baked `VITE_VOICE_API_BASE` matches gateway FQDN.** — `scripts/staging/smoke-staging.sh`, `src/developer-portal/Dockerfile`
-- [ ] **[Developer Portal] No `vite-env.d.ts` — unlike admin, no typed `import.meta.env`.** — `src/developer-portal/` (missing; compare `src/admin/src/vite-env.d.ts`)
 
 
 ## Low
