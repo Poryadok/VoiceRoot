@@ -107,16 +107,19 @@ func (s *MatchmakingGRPC) startSearch(ctx context.Context, req startSearchParams
 	if err := deps.Queue.Ping(ctx); err != nil {
 		return store.SearchSession{}, status.Error(codes.Unavailable, "queue unavailable")
 	}
-	if s.Bans != nil {
-		if accountID, ok := authctx.AccountID(ctx); ok {
-			banned, err := s.Bans.IsPlatformBanned(ctx, accountID)
-			if err != nil {
-				return store.SearchSession{}, status.Errorf(codes.Internal, "mm ban check: %v", err)
-			}
-			if banned {
-				return store.SearchSession{}, status.Error(codes.PermissionDenied, "matchmaking banned")
-			}
-		}
+	if s.Bans == nil {
+		return store.SearchSession{}, status.Error(codes.FailedPrecondition, "ban store not configured")
+	}
+	accountID, ok := authctx.AccountID(ctx)
+	if !ok {
+		return store.SearchSession{}, status.Error(codes.Unauthenticated, "missing account")
+	}
+	banned, err := s.Bans.IsPlatformBanned(ctx, accountID)
+	if err != nil {
+		return store.SearchSession{}, status.Errorf(codes.Internal, "mm ban check: %v", err)
+	}
+	if banned {
+		return store.SearchSession{}, status.Error(codes.PermissionDenied, "matchmaking banned")
 	}
 
 	gameID, err := uuid.Parse(strings.TrimSpace(req.GameID))

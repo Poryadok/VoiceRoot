@@ -43,7 +43,6 @@ CI/CD + выкат: GitHub Actions, promote/deploy, k8s secrets, observability �
 ### Prod ingress & universal links
 
 - [ ] **Prod universal links** — реальные AASA + `assetlinks.json` на `voice.gg` (сейчас Gateway — dev placeholders).
-- [ ] **Matchmaking compose: `USER_GRPC_ADDR` / `SOCIAL_GRPC_ADDR` / `SPACE_GRPC_ADDR`** — без них MM rating privacy fail-open локально (`docker-compose.yml` omits; k8s `envFrom` есть).
 - [ ] **Well-known на prod** — Gateway отдаёт валидные `/.well-known/apple-app-site-association` и `assetlinks.json` для целевого домена.
 
 ### Deploy workflow

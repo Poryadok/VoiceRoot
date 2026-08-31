@@ -35,7 +35,7 @@ func TestStartSpaceQueue_HappyPath(t *testing.T) {
 	srv := searchTestServer(t, pool)
 	srv.SpaceQueue = allowAllSpaceQueue{}
 	profileID := uuid.New()
-	ctx := ctxWithProfile(profileID)
+	ctx := ctxWithProfileAccount(profileID, uuid.New())
 	spaceID := uuid.New().String()
 
 	gameID := dotaGameID(t, srv, ctx)
@@ -63,7 +63,7 @@ func TestStartSpaceQueue_NotMemberDenied(t *testing.T) {
 	pool := startDB(t, context.Background())
 	srv := searchTestServer(t, pool)
 	srv.SpaceQueue = denySpaceQueue{code: codes.PermissionDenied, msg: "not a space member"}
-	ctx := ctxWithProfile(uuid.New())
+	ctx := ctxWithProfileAccount(uuid.New(), uuid.New())
 	gameID := dotaGameID(t, srv, ctx)
 
 	_, err := srv.StartSpaceQueue(ctx, &matchmakingv1.StartSpaceQueueRequest{

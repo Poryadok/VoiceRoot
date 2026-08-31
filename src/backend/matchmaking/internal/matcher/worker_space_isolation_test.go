@@ -30,6 +30,7 @@ func TestWorker_SpaceQueueIsolatedFromGlobal(t *testing.T) {
 
 	sessions := &store.SessionStore{Pool: pool}
 	matches := &store.MatchStore{Pool: pool}
+	bans := &store.BanStore{Pool: pool}
 	timeout := time.Now().UTC().Add(30 * time.Minute)
 	crit := criteria.MustMarshal(criteria.SearchCriteria{Region: "eu"})
 	spaceID := uuid.New()
@@ -79,6 +80,7 @@ func TestWorker_SpaceQueueIsolatedFromGlobal(t *testing.T) {
 		Sessions: sessions,
 		Matches:  matches,
 		Games:    games,
+		Bans:     bans,
 		Events:   events,
 	}
 	require.NoError(t, worker.RunOnce(ctx))

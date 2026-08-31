@@ -88,6 +88,9 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 }
 
 func (w *Worker) tryMatchQueue(ctx context.Context, spaceID *uuid.UUID, gameID uuid.UUID, mode config.Mode, region string, cfg config.GameConfig) error {
+	if w.Bans == nil {
+		return nil
+	}
 	depth, err := w.Queue.QueueDepthScoped(ctx, spaceID, gameID, mode.Name, region)
 	if err != nil || depth < int64(mode.Slots) {
 		return err

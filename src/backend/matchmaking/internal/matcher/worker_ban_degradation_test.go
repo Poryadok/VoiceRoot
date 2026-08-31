@@ -10,37 +10,15 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
-	"voice/backend/matchmaking/internal/config"
 	"voice/backend/matchmaking/internal/criteria"
 	"voice/backend/matchmaking/internal/matcher"
 	"voice/backend/matchmaking/internal/queue"
 	"voice/backend/matchmaking/internal/store"
 )
 
-type recordingMatchEvents struct {
-	matchFound int
-}
-
-func (r *recordingMatchEvents) PublishMatchFound(context.Context, matcher.MatchFoundEvent) error {
-	r.matchFound++
-	return nil
-}
-
-func duoGameConfig() config.GameConfig {
-	return config.GameConfig{
-		Regions: []string{"eu"},
-		Modes: []config.Mode{{
-			Name:          "Duo",
-			Slots:         2,
-			PartySizeMin:  1,
-			PartySizeMax:  1,
-			RolesRequired: false,
-			RankRequired:  false,
-		}},
-	}
-}
-
-func TestWorker_TwoCompatibleSoloSessionsMatchFor2SlotGame(t *testing.T) {
+// TestWorker_BansNotConfiguredDoesNotMatch documents fail-closed matcher behavior when
+// BanStore is unwired — compatible sessions stay searching.
+func TestWorker_BansNotConfiguredDoesNotMatch(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -49,7 +27,7 @@ func TestWorker_TwoCompatibleSoloSessionsMatchFor2SlotGame(t *testing.T) {
 	store.ApplyMatchmakingMigrationsForStoreTest(t, ctx, pool)
 
 	games := &store.GameStore{Pool: pool}
-	game, err := games.Create(ctx, "MM Duo Test", duoGameConfig(), uuid.New())
+	game, err := games.Create(ctx, "MM Ban Deg Test", duoGameConfig(), uuid.New())
 	require.NoError(t, err)
 
 	sessions := &store.SessionStore{Pool: pool}
@@ -59,6 +37,7 @@ func TestWorker_TwoCompatibleSoloSessionsMatchFor2SlotGame(t *testing.T) {
 
 	profileA := uuid.New()
 	profileB := uuid.New()
+
 	sessA, err := sessions.Create(ctx, store.CreateSessionParams{
 		ProfileID: profileA,
 		GameID:    game.ID,
@@ -82,7 +61,7 @@ func TestWorker_TwoCompatibleSoloSessionsMatchFor2SlotGame(t *testing.T) {
 		_ = rdb.Close()
 		mr.Close()
 	})
-	q := &queue.RedisQueue{Client: rdb, Prefix: "matcher-test"}
+	q := &queue.RedisQueue{Client: rdb, Prefix: "matcher-ban-deg-test"}
 	now := time.Now().UTC()
 	require.NoError(t, q.Enqueue(ctx, game.ID, "Duo", "eu", sessA.ID, now))
 	require.NoError(t, q.Enqueue(ctx, game.ID, "Duo", "eu", sessB.ID, now.Add(time.Millisecond)))
@@ -93,7 +72,7 @@ func TestWorker_TwoCompatibleSoloSessionsMatchFor2SlotGame(t *testing.T) {
 		Sessions: sessions,
 		Matches:  matches,
 		Games:    games,
-		Bans:     &store.BanStore{Pool: pool},
+		Bans:     nil,
 		Events:   events,
 	}
 	require.NoError(t, worker.RunOnce(ctx))
@@ -102,16 +81,9 @@ func TestWorker_TwoCompatibleSoloSessionsMatchFor2SlotGame(t *testing.T) {
 	require.NoError(t, err)
 	updatedB, err := sessions.Get(ctx, sessB.ID)
 	require.NoError(t, err)
-	require.Equal(t, "pending_accept", updatedA.Status)
-	require.Equal(t, "pending_accept", updatedB.Status)
-	require.NotNil(t, updatedA.MatchID)
-	require.Equal(t, updatedA.MatchID, updatedB.MatchID)
-
-	match, err := matches.Get(ctx, *updatedA.MatchID)
-	require.NoError(t, err)
-	require.Equal(t, "pending_accept", match.Status)
-	require.Equal(t, "eu", match.Region)
-	require.Equal(t, 2, match.SlotCount())
-
-	require.Equal(t, 1, events.matchFound, "mm.match_found must be published once")
+	require.Equal(t, "searching", updatedA.Status)
+	require.Equal(t, "searching", updatedB.Status)
+	require.Nil(t, updatedA.MatchID)
+	require.Nil(t, updatedB.MatchID)
+	require.Equal(t, 0, events.matchFound, "matcher must not form proposals without ban store")
 }

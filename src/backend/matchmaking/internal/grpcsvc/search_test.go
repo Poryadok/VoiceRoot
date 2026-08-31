@@ -31,6 +31,7 @@ func searchTestServer(t *testing.T, pool *pgxpool.Pool) *MatchmakingGRPC {
 		Games:    &store.GameStore{Pool: pool},
 		Sessions: &store.SessionStore{Pool: pool},
 		Queue:    &queue.RedisQueue{Client: rdb, Prefix: "test"},
+		Bans:     &store.BanStore{Pool: pool},
 		Events:   mmevents.NoopPublisher{},
 	}
 }
@@ -60,7 +61,7 @@ func TestStartSearch_HappyPath(t *testing.T) {
 	pool := startDB(t, ctx)
 	srv := searchTestServer(t, pool)
 	profileID := uuid.New()
-	ctx = ctxWithProfile(profileID)
+	ctx = ctxWithProfileAccount(profileID, uuid.New())
 
 	gameID := dotaGameID(t, srv, ctx)
 	resp, err := srv.StartSearch(ctx, &matchmakingv1.StartSearchRequest{
@@ -91,7 +92,7 @@ func TestStartSearch_InvalidCriteriaRejected(t *testing.T) {
 	ctx := context.Background()
 	pool := startDB(t, ctx)
 	srv := searchTestServer(t, pool)
-	ctx = ctxWithProfile(uuid.New())
+	ctx = ctxWithProfileAccount(uuid.New(), uuid.New())
 
 	gameID := dotaGameID(t, srv, ctx)
 	_, err := srv.StartSearch(ctx, &matchmakingv1.StartSearchRequest{
@@ -110,7 +111,7 @@ func TestStartSearch_DuplicateSearchRejected(t *testing.T) {
 	pool := startDB(t, ctx)
 	srv := searchTestServer(t, pool)
 	profileID := uuid.New()
-	ctx = ctxWithProfile(profileID)
+	ctx = ctxWithProfileAccount(profileID, uuid.New())
 
 	gameID := dotaGameID(t, srv, ctx)
 	_, err := srv.StartSearch(ctx, &matchmakingv1.StartSearchRequest{
@@ -160,7 +161,7 @@ func TestGetSearchStatus_NotOwnerDenied(t *testing.T) {
 	pool := startDB(t, ctx)
 	srv := searchTestServer(t, pool)
 	owner := uuid.New()
-	ctxOwner := ctxWithProfile(owner)
+	ctxOwner := ctxWithProfileAccount(owner, uuid.New())
 	gameID := dotaGameID(t, srv, ctxOwner)
 	started, err := srv.StartSearch(ctxOwner, &matchmakingv1.StartSearchRequest{
 		GameId:       gameID,
