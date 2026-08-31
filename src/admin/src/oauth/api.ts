@@ -1,5 +1,3 @@
-import { getAccessToken } from "./session";
-
 export function apiBaseUrl(): string {
   return import.meta.env.VITE_VOICE_API_BASE ?? "http://127.0.0.1:18080";
 }
@@ -10,21 +8,6 @@ export function oauthClientIdValue(): string {
 
 export function isOauthDisabled(): boolean {
   return import.meta.env.VITE_OAUTH_DISABLED === "true";
-}
-
-export async function apiFetch(
-  path: string,
-  init: RequestInit = {},
-): Promise<Response> {
-  const headers = new Headers(init.headers);
-  const token = getAccessToken();
-  if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
-  if (init.body && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
-  }
-  return fetch(`${apiBaseUrl().replace(/\/$/, "")}${path}`, { ...init, headers });
 }
 
 export async function exchangeAuthorizationCode(params: {
