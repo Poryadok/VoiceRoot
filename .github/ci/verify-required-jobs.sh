@@ -80,10 +80,10 @@ check_if "$(or_true "${COMPOSE}" "${GLOBAL}")" compose-config
 check_if "$(or_true "${RUN_FLUTTER}" "${PROTOS}" "${GLOBAL}")" flutter
 check_if "$(or_true "${RUN_FLUTTER}" "${PROTOS}" "${GLOBAL}")" flutter-device-driver
 check_if "$(or_true "${RUN_WEB}" "${RUN_FLUTTER}" "${GLOBAL}")" web
-check_if "${RUN_GO}" golangci
-check_if "${RUN_PKG}" backend-go-pkg
-check_if "${RUN_GO}" backend-go
-check_if "${RUN_GO}" backend-go-integration-pr
+check_if "$(or_true "${RUN_GO}" "${GLOBAL}")" golangci
+check_if "$(or_true "${RUN_PKG}" "${GLOBAL}")" backend-go-pkg
+check_if "$(or_true "${RUN_GO}" "${GLOBAL}")" backend-go
+check_if "$(or_true "${RUN_GO}" "${GLOBAL}")" backend-go-integration-pr
 check_if "$(or_true "${RUN_AUTH}" "${FILTER_AUTH}" "${GLOBAL}")" backend-auth
 check_if "$(or_true "${RUN_PORTAL}" "${FILTER_PORTAL}" "${GLOBAL}")" developer-portal
 check_if "$(or_true "${RUN_ADMIN}" "${FILTER_ADMIN}" "${GLOBAL}")" admin
