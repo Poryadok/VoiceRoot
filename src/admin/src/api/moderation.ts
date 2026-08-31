@@ -2,6 +2,7 @@ import { apiJson, apiFetch } from "./client";
 import type {
   ApplySanctionResponse,
   AuditExportResponse,
+  GetAccountSanctionsResponse,
   ListReportsResponse,
   ModerationQueue,
   ResolveReportResponse,
@@ -11,6 +12,8 @@ import type {
 export interface ListReportsParams {
   status?: string;
   queue: ModerationQueue;
+  cursor?: string;
+  page_size?: number;
 }
 
 export function listReports(
@@ -21,6 +24,12 @@ export function listReports(
     search.set("status", params.status);
   }
   search.set("queue", params.queue);
+  if (params.cursor) {
+    search.set("cursor", params.cursor);
+  }
+  if (params.page_size !== undefined) {
+    search.set("page_size", String(params.page_size));
+  }
   const query = search.toString();
   return apiJson(`/api/v1/admin/moderation/reports?${query}`);
 }
@@ -30,11 +39,29 @@ export function applySanction(body: {
   type: SanctionType;
   reason: string;
   report_id?: string;
+  expires_at?: string;
 }): Promise<ApplySanctionResponse> {
   return apiJson("/api/v1/admin/moderation/sanctions", {
     method: "POST",
     body: JSON.stringify(body),
   });
+}
+
+export function fetchAccountSanctions(
+  accountId: string,
+): Promise<GetAccountSanctionsResponse> {
+  const search = new URLSearchParams({ account_id: accountId });
+  return apiJson(`/api/v1/admin/moderation/sanctions?${search.toString()}`);
+}
+
+export async function revokeSanction(sanctionId: string): Promise<void> {
+  const response = await apiFetch(
+    `/api/v1/admin/moderation/sanctions/${encodeURIComponent(sanctionId)}/revoke`,
+    { method: "POST" },
+  );
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
 }
 
 export function resolveReport(

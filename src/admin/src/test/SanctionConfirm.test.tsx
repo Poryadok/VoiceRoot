@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { applySanction } from "../api/moderation";
 import { SanctionActions } from "../components/SanctionActions";
 
@@ -23,6 +23,11 @@ const report = {
 describe("SanctionActions confirm flow", () => {
   beforeEach(() => {
     vi.mocked(applySanction).mockClear();
+    vi.setSystemTime(new Date("2026-06-14T12:00:00.000Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("requires confirmation before destructive sanctions", async () => {
@@ -43,6 +48,26 @@ describe("SanctionActions confirm flow", () => {
         reason: "Sanction from report report-42",
         report_id: "report-42",
       });
+    });
+  });
+
+  it("applies temp ban with expires_at", async () => {
+    const user = userEvent.setup();
+    render(<SanctionActions report={report} targetAccountId="acct-target" />);
+
+    await user.clear(screen.getByTestId("temp-ban-days"));
+    await user.type(screen.getByTestId("temp-ban-days"), "3");
+    await user.click(screen.getByTestId("sanction-temp_ban"));
+    await user.click(screen.getByTestId("confirm-dialog-confirm"));
+
+    await waitFor(() => {
+      expect(applySanction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          target_account_id: "acct-target",
+          type: "temp_ban",
+          expires_at: "2026-06-17T12:00:00.000Z",
+        }),
+      );
     });
   });
 

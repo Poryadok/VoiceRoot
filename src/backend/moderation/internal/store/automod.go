@@ -2,7 +2,11 @@ package store
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
+	"strconv"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -108,13 +112,89 @@ RETURNING id, reporter_profile_id, target_type, target_id, category, description
 	return row, nil
 }
 
+// ReportListPage is one page of the moderation queue (priority sort + cursor).
+type ReportListPage struct {
+	Rows       []ReportRow
+	NextCursor string
+}
+
+type reportListCursorPayload struct {
+	P int    `json:"p"` // category priority rank (1=harassment … 4=other)
+	S string `json:"s"` // created_at RFC3339Nano UTC
+	I string `json:"i"` // report id UUID
+}
+
+func reportCategoryPriority(category string) int {
+	switch category {
+	case "harassment":
+		return 1
+	case "fake":
+		return 2
+	case "spam":
+		return 3
+	default:
+		return 4
+	}
+}
+
+func encodeReportListCursor(priority int, createdAt time.Time, reportID uuid.UUID) string {
+	p := reportListCursorPayload{
+		P: priority,
+		S: createdAt.UTC().Format(time.RFC3339Nano),
+		I: reportID.String(),
+	}
+	b, _ := json.Marshal(p)
+	return base64.RawURLEncoding.EncodeToString(b)
+}
+
+func decodeReportListCursor(raw string) (priority int, createdAt time.Time, reportID uuid.UUID, err error) {
+	if raw == "" {
+		return 0, time.Time{}, uuid.Nil, nil
+	}
+	b, err := base64.RawURLEncoding.DecodeString(raw)
+	if err != nil {
+		return 0, time.Time{}, uuid.Nil, ErrInvalidReportListCursor
+	}
+	var p reportListCursorPayload
+	if err := json.Unmarshal(b, &p); err != nil {
+		return 0, time.Time{}, uuid.Nil, ErrInvalidReportListCursor
+	}
+	ts, err := time.Parse(time.RFC3339Nano, p.S)
+	if err != nil {
+		return 0, time.Time{}, uuid.Nil, ErrInvalidReportListCursor
+	}
+	id, err := uuid.Parse(p.I)
+	if err != nil {
+		return 0, time.Time{}, uuid.Nil, ErrInvalidReportListCursor
+	}
+	return p.P, ts.UTC(), id, nil
+}
+
+// ErrInvalidReportListCursor is returned when ListReportsFilteredPage receives a bad cursor.
+var ErrInvalidReportListCursor = errors.New("invalid report list cursor")
+
 func (s *ReportStore) ListReportsFiltered(ctx context.Context, statusFilter, queueFilter string, limit int32) ([]ReportRow, error) {
+	page, err := s.ListReportsFilteredPage(ctx, statusFilter, queueFilter, "", limit)
+	if err != nil {
+		return nil, err
+	}
+	return page.Rows, nil
+}
+
+func (s *ReportStore) ListReportsFilteredPage(ctx context.Context, statusFilter, queueFilter, cursor string, limit int32) (*ReportListPage, error) {
 	if s == nil || s.Pool == nil {
 		return nil, errStoreNotConfigured
 	}
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
+	fetch := limit + 1
+
+	cursorPriority, cursorCreatedAt, cursorID, err := decodeReportListCursor(cursor)
+	if err != nil {
+		return nil, err
+	}
+
 	queueSQL := ""
 	switch queueFilter {
 	case "content":
@@ -122,23 +202,41 @@ func (s *ReportStore) ListReportsFiltered(ctx context.Context, statusFilter, que
 	case "spaces":
 		queueSQL = " AND target_type = 'space'"
 	}
+
+	priorityExpr := `CASE category
+  WHEN 'harassment' THEN 1
+  WHEN 'fake' THEN 2
+  WHEN 'spam' THEN 3
+  ELSE 4 END`
+
+	cursorSQL := ""
+	args := []any{statusFilter}
+	argN := 2
+	if cursor != "" {
+		cursorSQL = ` AND (
+  (` + priorityExpr + `) > $` + strconv.Itoa(argN) + `
+  OR ((` + priorityExpr + `) = $` + strconv.Itoa(argN) + ` AND created_at < $` + strconv.Itoa(argN+1) + `)
+  OR ((` + priorityExpr + `) = $` + strconv.Itoa(argN) + ` AND created_at = $` + strconv.Itoa(argN+1) + ` AND id < $` + strconv.Itoa(argN+2) + `::uuid)
+)`
+		args = append(args, cursorPriority, cursorCreatedAt, cursorID.String())
+		argN += 3
+	}
+	args = append(args, fetch)
+
 	query := `
 SELECT id, reporter_profile_id, target_type, target_id, category, description,
        evidence::text, status, assigned_to, resolved_at, resolution::text, created_at
 FROM reports
-WHERE ($1 = '' OR status = $1)` + queueSQL + `
-ORDER BY CASE category
-  WHEN 'harassment' THEN 1
-  WHEN 'fake' THEN 2
-  WHEN 'spam' THEN 3
-  ELSE 4 END, created_at DESC
-LIMIT $2`
-	rows, err := s.Pool.Query(ctx, query, statusFilter, limit)
+WHERE ($1 = '' OR status = $1)` + queueSQL + cursorSQL + `
+ORDER BY ` + priorityExpr + `, created_at DESC, id DESC
+LIMIT $` + strconv.Itoa(argN)
+
+	rows, err := s.Pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	out := make([]ReportRow, 0, limit)
+	out := make([]ReportRow, 0, fetch)
 	for rows.Next() {
 		var r ReportRow
 		if err := rows.Scan(
@@ -150,5 +248,15 @@ LIMIT $2`
 		}
 		out = append(out, r)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	page := &ReportListPage{Rows: out}
+	if int32(len(out)) > limit {
+		page.Rows = out[:limit]
+		last := page.Rows[len(page.Rows)-1]
+		page.NextCursor = encodeReportListCursor(reportCategoryPriority(last.Category), last.CreatedAt, last.ID)
+	}
+	return page, nil
 }

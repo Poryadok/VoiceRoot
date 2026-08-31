@@ -61,3 +61,22 @@ func TestTranscodeModerationAdmin_forwardsQueueFilter(t *testing.T) {
 	require.Equal(t, "pending", rec.listReq.GetStatusFilter())
 	require.Equal(t, "spaces", rec.listReq.GetQueueFilter())
 }
+
+func TestTranscodeModerationAdmin_forwardsReportCursor(t *testing.T) {
+	rec := &recordingModerationPhase14{}
+	modClient, cleanup := startBufconnModerationClient(t, rec)
+	t.Cleanup(cleanup)
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"staff-token": {UserID: "staff-account", ProfileID: "staff-profile", Roles: []string{"staff"}},
+		},
+		transcoder: &transcoder{clients: grpcClients{moderation: modClient}},
+	})
+	resp := performRequest(h, http.MethodGet, "/api/v1/admin/moderation/reports?status=pending&queue=content&cursor=abc&page_size=25", "", map[string]string{
+		"Authorization": "Bearer staff-token",
+	})
+	require.Equal(t, http.StatusOK, resp.Code)
+	require.NotNil(t, rec.listReq)
+	require.Equal(t, "abc", rec.listReq.GetPage().GetCursor())
+	require.Equal(t, int32(25), rec.listReq.GetPage().GetPageSize())
+}
