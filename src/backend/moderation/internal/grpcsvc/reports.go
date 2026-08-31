@@ -114,20 +114,28 @@ func (s *ModerationGRPC) ListReports(ctx context.Context, req *moderationv1.List
 	}
 
 	limit := int32(50)
-	if req.GetPage() != nil && req.GetPage().GetPageSize() > 0 {
-		limit = req.GetPage().GetPageSize()
+	cursor := ""
+	if req.GetPage() != nil {
+		if req.GetPage().GetPageSize() > 0 {
+			limit = req.GetPage().GetPageSize()
+		}
+		cursor = strings.TrimSpace(req.GetPage().GetCursor())
 	}
-	rows, err := s.Reports.ListReportsFiltered(ctx, strings.TrimSpace(req.GetStatusFilter()), strings.TrimSpace(req.GetQueueFilter()), limit)
+	page, err := s.Reports.ListReportsFilteredPage(ctx, strings.TrimSpace(req.GetStatusFilter()), strings.TrimSpace(req.GetQueueFilter()), cursor, limit)
 	if err != nil {
+		if errors.Is(err, store.ErrInvalidReportListCursor) {
+			return nil, status.Error(codes.InvalidArgument, "invalid cursor")
+		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	out := make([]*moderationv1.Report, 0, len(rows))
-	for i := range rows {
-		out = append(out, reportRowToProto(&rows[i]))
+	out := make([]*moderationv1.Report, 0, len(page.Rows))
+	for i := range page.Rows {
+		out = append(out, reportRowToProto(&page.Rows[i]))
 	}
 	return &moderationv1.ListReportsResponse{
 		ReportList: &moderationv1.ReportList{
-			Reports: out,
+			Reports:    out,
+			NextCursor: page.NextCursor,
 		},
 	}, nil
 }

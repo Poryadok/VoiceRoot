@@ -2,6 +2,12 @@ import { useState } from "react";
 import { applySanction } from "../api/moderation";
 import type { Report, SanctionType } from "../api/types";
 import { DESTRUCTIVE_SANCTIONS, SANCTION_TYPES } from "../api/types";
+import {
+  TEMP_BAN_DEFAULT_DAYS,
+  TEMP_BAN_MAX_DAYS,
+  TEMP_BAN_MIN_DAYS,
+  tempBanExpiresAtIso,
+} from "../lib/tempBanExpiry";
 import { ConfirmDialog } from "./ConfirmDialog";
 
 interface SanctionActionsProps {
@@ -21,6 +27,7 @@ export function SanctionActions({
   onApplied,
 }: SanctionActionsProps) {
   const [reason, setReason] = useState("");
+  const [tempBanDays, setTempBanDays] = useState(TEMP_BAN_DEFAULT_DAYS);
   const [pending, setPending] = useState<PendingSanction | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
@@ -29,23 +36,17 @@ export function SanctionActions({
     return null;
   }
 
-  const accountId =
-    targetAccountId ??
-    (report.target_type === "user" ? undefined : report.target_id);
-
-  if (!accountId) {
+  if (!targetAccountId) {
     return (
       <section className="panel" aria-label="Sanctions" data-testid="sanction-actions">
         <p className="status-message">
-          {report.target_type === "user"
-            ? "Resolve target account before applying sanctions."
-            : "No sanction target available."}
+          Resolve the sanction target account before applying sanctions.
         </p>
       </section>
     );
   }
 
-  const resolvedAccountId = accountId;
+  const resolvedAccountId = targetAccountId;
 
   async function submitSanction(type: SanctionType) {
     if (!report) {
@@ -59,6 +60,8 @@ export function SanctionActions({
         type,
         reason: reason.trim() || `Sanction from report ${report.id}`,
         report_id: report.id,
+        expires_at:
+          type === "temp_ban" ? tempBanExpiresAtIso(tempBanDays) : undefined,
       });
       setPending(null);
       setReason("");
@@ -94,6 +97,17 @@ export function SanctionActions({
             data-testid="sanction-reason"
           />
         </label>
+        <label>
+          Temp ban duration (days)
+          <input
+            type="number"
+            min={TEMP_BAN_MIN_DAYS}
+            max={TEMP_BAN_MAX_DAYS}
+            value={tempBanDays}
+            onChange={(event) => setTempBanDays(Number(event.target.value))}
+            data-testid="temp-ban-days"
+          />
+        </label>
       </div>
 
       <div className="btn-row">
@@ -124,7 +138,9 @@ export function SanctionActions({
         title="Apply destructive sanction?"
         description={
           pending
-            ? `This will apply a ${formatSanctionLabel(pending.type)} to account ${resolvedAccountId}. This action is audited and may restrict the user immediately.`
+            ? pending.type === "temp_ban"
+              ? `This will apply a ${formatSanctionLabel(pending.type)} (${tempBanDays} days) to account ${resolvedAccountId}. This action is audited and may restrict the user immediately.`
+              : `This will apply a ${formatSanctionLabel(pending.type)} to account ${resolvedAccountId}. This action is audited and may restrict the user immediately.`
             : ""
         }
         confirmLabel="Apply sanction"

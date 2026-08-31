@@ -11,13 +11,9 @@ Admin panel (`src/admin/`) и Developer Portal (`src/developer-portal/`).
 ### Admin
 
 
-- [ ] **[Admin] Appeals admin flow missing end-to-end** — `ReviewAppeal` in moderation gRPC, no Gateway admin REST, no Admin pages. Paths: `docs/microservices/moderation-service.md`, `src/backend/gateway/` (no appeal routes), `src/admin/src/`
-- [ ] **[Admin] `temp_ban` without `expires_at`** — proto supports it; UI never sends duration. Paths: `protos/voice/moderation/v1/moderation.proto`, `src/admin/src/components/SanctionActions.tsx`, `src/admin/src/api/moderation.ts`
-- [ ] **[Admin] Sanctions on non-`user` targets** — message/space/story reports: account resolution fails or misuses `target_id` as account. Paths: `src/admin/src/pages/QueuePage.tsx`, `src/admin/src/components/SanctionActions.tsx`
-- [ ] **[Admin] No queue pagination** — `next_cursor` in types; `ListReports` never passes cursor. Paths: `src/admin/src/api/moderation.ts`, `src/admin/src/api/types.ts`, `src/admin/src/pages/QueuePage.tsx`, `protos/voice/moderation/v1/moderation.proto`
+- [ ] **[Admin] Appeals admin flow missing end-to-end** — `ReviewAppeal` Gateway REST exists (`POST …/appeals/{id}/review`); no `ListAppeals` RPC, no appeals queue page in Admin. Paths: `docs/microservices/moderation-service.md`, `src/backend/gateway/transcode_moderation_admin.go`, `src/admin/src/`
 - [ ] **[Admin] Analytics UI far below spec** — only `product` dashboard + hardcoded `registration` funnel; no retention page (`fetchRetention` unused), no engagement/revenue/health/moderation/search/voice dashboards. Paths: `src/admin/src/api/analytics.ts`, `src/admin/src/pages/ProductAnalyticsPage.tsx`, `src/admin/src/pages/FunnelsPage.tsx`, `docs/features/analytics.md`
 - [ ] **[Admin] Game catalog: staff Add game / moderation queue тонкие** — `SubmitGameRequest` live есть; Admin форма CreateGame и дедуп заявок — [game-catalog.md](../features/game-catalog.md).
-- [ ] **[Admin] No revoke-sanction UI** — `RevokeSanction` RPC exists server-side, not exposed in Admin. Paths: `docs/microservices/moderation-service.md`, `src/admin/src/api/moderation.ts`
 - [ ] **[Admin] PLAN / README stale** — PLAN still «зарезервировано»; README covers moderation only (no analytics/OAuth). Paths: `docs/PLAN.md`, `src/admin/README.md`
 
 ### Developer Portal

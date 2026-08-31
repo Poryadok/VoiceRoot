@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { listReports, resolveReport } from "../api/moderation";
-import { resolveAccountIdForProfile } from "../api/users";
 import type { ModerationQueue, Report } from "../api/types";
+import { AccountSanctions } from "../components/AccountSanctions";
 import {
   QueueFilters,
   filterReportsByCategory,
@@ -12,6 +12,7 @@ import { ReportTable } from "../components/ReportTable";
 import { SanctionActions } from "../components/SanctionActions";
 import { staffProfileIdFromToken } from "../lib/jwt";
 import { buildResolutionJson } from "../lib/resolutionJson";
+import { resolveTargetAccountId } from "../lib/resolveTargetAccount";
 
 const QUEUE_TABS: { id: ModerationQueue; label: string }[] = [
   { id: "content", label: "Content" },
@@ -25,31 +26,56 @@ export function QueuePage() {
     category: "",
   });
   const [reports, setReports] = useState<Report[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | undefined>();
   const [selected, setSelected] = useState<Report | null>(null);
   const [targetAccountId, setTargetAccountId] = useState<string | undefined>();
+  const [targetResolveError, setTargetResolveError] = useState<
+    string | undefined
+  >();
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [assignBusy, setAssignBusy] = useState(false);
   const [assignError, setAssignError] = useState<string | undefined>();
   const [closeBusy, setCloseBusy] = useState(false);
   const [closeError, setCloseError] = useState<string | undefined>();
+  const [sanctionsVersion, setSanctionsVersion] = useState(0);
 
-  const loadReports = useCallback(async () => {
-    setLoading(true);
-    setError(undefined);
-    try {
-      const response = await listReports({
-        queue,
-        status: filters.status || undefined,
-      });
-      setReports(response.report_list?.reports ?? []);
-    } catch (err) {
-      setReports([]);
-      setError(err instanceof Error ? err.message : "Failed to load reports");
-    } finally {
-      setLoading(false);
-    }
-  }, [filters.status, queue]);
+  const loadReports = useCallback(
+    async (cursor?: string) => {
+      const append = Boolean(cursor);
+      if (append) {
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+      }
+      setError(undefined);
+      try {
+        const response = await listReports({
+          queue,
+          status: filters.status || undefined,
+          cursor,
+        });
+        const pageReports = response.report_list?.reports ?? [];
+        setReports((current) =>
+          append ? [...current, ...pageReports] : pageReports,
+        );
+        setNextCursor(response.report_list?.next_cursor || undefined);
+      } catch (err) {
+        if (!append) {
+          setReports([]);
+        }
+        setError(err instanceof Error ? err.message : "Failed to load reports");
+      } finally {
+        if (append) {
+          setLoadingMore(false);
+        } else {
+          setLoading(false);
+        }
+      }
+    },
+    [filters.status, queue],
+  );
 
   useEffect(() => {
     void loadReports();
@@ -58,6 +84,7 @@ export function QueuePage() {
   useEffect(() => {
     setSelected(null);
     setTargetAccountId(undefined);
+    setTargetResolveError(undefined);
     setAssignError(undefined);
     setCloseError(undefined);
   }, [queue, filters.status, filters.category]);
@@ -65,18 +92,30 @@ export function QueuePage() {
   useEffect(() => {
     if (!selected) {
       setTargetAccountId(undefined);
-      return;
-    }
-    if (selected.target_type !== "user") {
-      setTargetAccountId(undefined);
+      setTargetResolveError(undefined);
       return;
     }
     let cancelled = false;
-    void resolveAccountIdForProfile(selected.target_id).then((accountId) => {
-      if (!cancelled) {
+    setTargetAccountId(undefined);
+    setTargetResolveError(undefined);
+    void resolveTargetAccountId(selected)
+      .then((accountId) => {
+        if (cancelled) {
+          return;
+        }
+        if (!accountId) {
+          setTargetResolveError(
+            `Could not resolve account for ${selected.target_type} target.`,
+          );
+          return;
+        }
         setTargetAccountId(accountId);
-      }
-    });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setTargetResolveError("Failed to resolve sanction target account.");
+        }
+      });
     return () => {
       cancelled = true;
     };
@@ -145,6 +184,11 @@ export function QueuePage() {
     }
   }
 
+  function handleSanctionsChanged() {
+    setSanctionsVersion((value) => value + 1);
+    void loadReports();
+  }
+
   return (
     <div>
       <div className="tabs" role="tablist" aria-label="Moderation queue">
@@ -179,6 +223,19 @@ export function QueuePage() {
             selectedId={selected?.id}
             onSelect={setSelected}
           />
+          {nextCursor ? (
+            <div className="btn-row">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => void loadReports(nextCursor)}
+                disabled={loadingMore}
+                data-testid="load-more-reports"
+              >
+                {loadingMore ? "Loading…" : "Load more"}
+              </button>
+            </div>
+          ) : null}
         </section>
 
         <div>
@@ -192,10 +249,20 @@ export function QueuePage() {
             closeBusy={closeBusy}
             closeError={closeError}
           />
+          {targetResolveError ? (
+            <p className="status-message error" role="alert">
+              {targetResolveError}
+            </p>
+          ) : null}
           <SanctionActions
             report={selected}
             targetAccountId={targetAccountId}
-            onApplied={() => void loadReports()}
+            onApplied={handleSanctionsChanged}
+          />
+          <AccountSanctions
+            key={`${targetAccountId ?? "none"}-${sanctionsVersion}`}
+            accountId={targetAccountId}
+            onChanged={handleSanctionsChanged}
           />
         </div>
       </div>

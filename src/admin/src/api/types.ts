@@ -61,6 +61,14 @@ export interface ApplySanctionResponse {
   sanction: Sanction;
 }
 
+export interface SanctionList {
+  sanctions: Sanction[];
+}
+
+export interface GetAccountSanctionsResponse {
+  sanction_list: SanctionList;
+}
+
 export interface ResolveReportResponse {
   report: Report;
 }

@@ -46,6 +46,27 @@ func (r *revokeSanctionRecorder) RevokeSanction(_ context.Context, req *moderati
 	return &moderationv1.RevokeSanctionResponse{}, nil
 }
 
+type accountSanctionsRecorder struct {
+	moderationv1.UnimplementedModerationServiceServer
+	accountID string
+}
+
+func (r *accountSanctionsRecorder) GetAccountSanctions(_ context.Context, req *moderationv1.GetAccountSanctionsRequest) (*moderationv1.GetAccountSanctionsResponse, error) {
+	r.accountID = req.GetAccountId()
+	return &moderationv1.GetAccountSanctionsResponse{
+		SanctionList: &moderationv1.SanctionList{
+			Sanctions: []*moderationv1.Sanction{{
+				Id:                "sanction-1",
+				TargetAccountId:   req.GetAccountId(),
+				Type:              "warning",
+				Reason:            "test",
+				IssuedByProfileId: "staff-profile",
+				CreatedAt:         timestamppb.Now(),
+			}},
+		},
+	}, nil
+}
+
 func TestTranscodeModerationAdmin_auditExport_returnsEntries(t *testing.T) {
 	t.Parallel()
 
@@ -93,6 +114,32 @@ func TestTranscodeModerationAdmin_revokeSanction_staffOnly(t *testing.T) {
 	require.Equal(t, "sanction-1", rec.sanctionID)
 
 	member := performRequest(h, http.MethodPost, "/api/v1/admin/moderation/sanctions/sanction-1/revoke", "", map[string]string{
+		"Authorization": "Bearer member-token",
+	})
+	require.Equal(t, http.StatusForbidden, member.Code)
+}
+
+func TestTranscodeModerationAdmin_getAccountSanctions_staffOnly(t *testing.T) {
+	t.Parallel()
+
+	rec := &accountSanctionsRecorder{}
+	modClient, cleanup := startBufconnModerationClient(t, rec)
+	t.Cleanup(cleanup)
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"staff-token":  {UserID: "staff-account", ProfileID: "staff-profile", Roles: []string{"staff"}},
+			"member-token": {UserID: "account-1", ProfileID: "profile-1", Roles: []string{"member"}},
+		},
+		transcoder: &transcoder{clients: grpcClients{moderation: modClient}},
+	})
+
+	staff := performRequest(h, http.MethodGet, "/api/v1/admin/moderation/sanctions?account_id=acct-1", "", map[string]string{
+		"Authorization": "Bearer staff-token",
+	})
+	require.Equal(t, http.StatusOK, staff.Code)
+	require.Equal(t, "acct-1", rec.accountID)
+
+	member := performRequest(h, http.MethodGet, "/api/v1/admin/moderation/sanctions?account_id=acct-1", "", map[string]string{
 		"Authorization": "Bearer member-token",
 	})
 	require.Equal(t, http.StatusForbidden, member.Code)

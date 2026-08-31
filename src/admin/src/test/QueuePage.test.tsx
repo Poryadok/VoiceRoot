@@ -8,10 +8,12 @@ vi.mock("../api/moderation", () => ({
   listReports: vi.fn(),
   resolveReport: vi.fn(),
   applySanction: vi.fn(),
+  fetchAccountSanctions: vi.fn().mockResolvedValue({ sanction_list: { sanctions: [] } }),
+  revokeSanction: vi.fn(),
 }));
 
-vi.mock("../api/users", () => ({
-  resolveAccountIdForProfile: vi.fn().mockResolvedValue("acct-target"),
+vi.mock("../lib/resolveTargetAccount", () => ({
+  resolveTargetAccountId: vi.fn().mockResolvedValue("acct-target"),
 }));
 
 const openReport = {
@@ -124,5 +126,41 @@ describe("QueuePage report close workflow", () => {
       "profile_id claim",
     );
     expect(resolveReport).not.toHaveBeenCalled();
+  });
+
+  it("loads the next queue page when Load more is clicked", async () => {
+    const user = userEvent.setup();
+    vi.mocked(listReports)
+      .mockResolvedValueOnce({
+        report_list: {
+          reports: [openReport],
+          next_cursor: "cursor-page-2",
+        },
+      })
+      .mockResolvedValueOnce({
+        report_list: {
+          reports: [
+            {
+              ...openReport,
+              id: "report-99",
+              category: "spam",
+            },
+          ],
+        },
+      });
+
+    render(<QueuePage />);
+
+    expect(await screen.findByTestId("report-row-report-42")).toBeInTheDocument();
+    await user.click(screen.getByTestId("load-more-reports"));
+
+    await waitFor(() => {
+      expect(listReports).toHaveBeenLastCalledWith({
+        queue: "content",
+        status: "pending",
+        cursor: "cursor-page-2",
+      });
+    });
+    expect(await screen.findByTestId("report-row-report-99")).toBeInTheDocument();
   });
 });

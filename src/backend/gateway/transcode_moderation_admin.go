@@ -8,6 +8,7 @@ import (
 
 	"google.golang.org/grpc/metadata"
 
+	commonv1 "voice.app/voice/common/v1"
 	moderationv1 "voice.app/voice/moderation/v1"
 )
 
@@ -55,6 +56,14 @@ func (t *transcoder) serveAdminModeration(w http.ResponseWriter, r *http.Request
 			StatusFilter: r.URL.Query().Get("status"),
 			QueueFilter:  r.URL.Query().Get("queue"),
 		}
+		page := &commonv1.CursorPageRequest{}
+		if c := strings.TrimSpace(r.URL.Query().Get("cursor")); c != "" {
+			page.Cursor = c
+		}
+		if ps := parseInt32Query(r.URL.Query().Get("page_size")); ps > 0 {
+			page.PageSize = ps
+		}
+		req.Page = page
 		resp, err := t.clients.moderation.ListReports(ctx, req)
 		if err != nil {
 			writeGRPCError(w, err)
@@ -88,6 +97,19 @@ func (t *transcoder) serveAdminModeration(w http.ResponseWriter, r *http.Request
 			return false
 		}
 		resp, err := t.clients.moderation.GetReport(ctx, &moderationv1.GetReportRequest{ReportId: parts[1]})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+	case rest == "sanctions" && r.Method == http.MethodGet:
+		accountID := strings.TrimSpace(r.URL.Query().Get("account_id"))
+		if accountID == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "account_id is required"})
+			return true
+		}
+		resp, err := t.clients.moderation.GetAccountSanctions(ctx, &moderationv1.GetAccountSanctionsRequest{AccountId: accountID})
 		if err != nil {
 			writeGRPCError(w, err)
 			return true
