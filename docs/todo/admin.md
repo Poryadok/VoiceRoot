@@ -11,9 +11,8 @@ Admin panel (`src/admin/`) и Developer Portal (`src/developer-portal/`).
 ### Admin
 
 
-- [ ] **[Admin] Analytics UI far below spec** — only `product` dashboard + hardcoded `registration` funnel; no retention page (`fetchRetention` unused), no engagement/revenue/health/moderation/search/voice dashboards. Paths: `src/admin/src/api/analytics.ts`, `src/admin/src/pages/ProductAnalyticsPage.tsx`, `src/admin/src/pages/FunnelsPage.tsx`, `docs/features/analytics.md`
-- [ ] **[Admin] Game catalog: staff Add game / moderation queue тонкие** — `SubmitGameRequest` live есть; Admin форма CreateGame и дедуп заявок — [game-catalog.md](../features/game-catalog.md).
-- [ ] **[Admin] PLAN / README stale** — PLAN still «зарезервировано»; README covers moderation only (no analytics/OAuth). Paths: `docs/PLAN.md`, `src/admin/README.md`
+- [ ] **[Admin] Analytics UI: search/voice dashboards deferred** — Gateway `GetDashboard` supports product/engagement/revenue/health/moderation + retention REST; Admin pages wired (batch 4). Search/voice dashboard types absent in `src/backend/analytics/internal/store/query.go` — needs backend before UI. Paths: `docs/features/analytics.md`, `src/backend/analytics/internal/store/query.go`
+- [ ] **[Admin] Game catalog: advanced mode/role editor deferred** — staff CreateGame form + name dedup via `SearchGames` live (batch 4); rich mode/role UX per [game-catalog.md](../features/game-catalog.md) still thin.
 
 ### Developer Portal
 

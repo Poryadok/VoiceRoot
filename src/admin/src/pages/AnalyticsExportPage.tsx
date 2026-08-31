@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { exportAnalytics } from "../api/analytics";
+import { AnalyticsSubnav } from "../components/AnalyticsSubnav";
 
 export function AnalyticsExportPage() {
   const [eventType, setEventType] = useState("");
@@ -22,7 +23,9 @@ export function AnalyticsExportPage() {
   }
 
   return (
-    <section>
+    <>
+      <AnalyticsSubnav />
+      <section>
       <h2>Export analytics</h2>
       <label>
         Event type filter (optional)
@@ -42,5 +45,6 @@ export function AnalyticsExportPage() {
       </div>
       {status ? <p>{status}</p> : null}
     </section>
+    </>
   );
 }

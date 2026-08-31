@@ -31,22 +31,16 @@ export function Layout({ children, onSignOut }: LayoutProps) {
             Game requests
           </NavLink>
           <NavLink
+            to="/games/new"
+            className={({ isActive }) => (isActive ? "active" : "")}
+          >
+            Add game
+          </NavLink>
+          <NavLink
             to="/analytics/product"
             className={({ isActive }) => (isActive ? "active" : "")}
           >
             Analytics
-          </NavLink>
-          <NavLink
-            to="/analytics/funnels"
-            className={({ isActive }) => (isActive ? "active" : "")}
-          >
-            Funnels
-          </NavLink>
-          <NavLink
-            to="/analytics/export"
-            className={({ isActive }) => (isActive ? "active" : "")}
-          >
-            Export
           </NavLink>
           <NavLink
             to="/audit"

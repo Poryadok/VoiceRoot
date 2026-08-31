@@ -69,7 +69,7 @@
 | Пины сообщений | shipped | Messaging, Chat | Pin/unpin/list live. Лимит **5**/chat (`MaxPinsPerChat`); 6th → `ResourceExhausted`. |
 | [notifications](features/notifications.md) | partial | Notification | Quiet hours в БД; FCM/APNs compose с mock. Прод: noop без секретов + **имена env не совпадают**. |
 | [matchmaking](features/matchmaking.md) | partial | Matchmaking | Поиск/space-queue/LFP live. `PartyStore` stub (`partySize=1`); П.2 постматч открыт; `mm_ban` не S2S в MM. |
-| [game-catalog](features/game-catalog.md) | shipped | Matchmaking | Seed + `SubmitGameRequest` + admin moderation live. Staff Add-game UI тонкий. |
+| [game-catalog](features/game-catalog.md) | shipped | Matchmaking | Seed + `SubmitGameRequest` + admin moderation + staff CreateGame UI live. Rich mode/role editor thin. |
 | [search](features/search.md) | shipped | Search | Global/in-chat live, ACL пересечение есть. `ReindexChat` индексирует E2E ciphertext; нет historical backfill. |
 | [screen-share](features/screen-share.md) | shipped | Voice | API/E2E есть. Desktop picker / system audio — Common. |
 | [reports](features/reports.md) | partial | Moderation, Auth | Create report + perm_ban live. Нет user appeals HTTP/UI; Admin не resolve/dismiss; shadow-ban не режет fanout. |
@@ -88,7 +88,7 @@
 | [navigation](features/navigation.md) | partial | Flutter, Chat | Shell есть (nav + profiles). **IA в спеке (current):** folders rail, **Quick Access (≤15 `chat_id`/profile)**, archive via profile RC — **нет в коде**; Chat RPC + Flutter backlog ([todo/backend.md](todo/backend.md)). См. матрицу Telegram-parity выше. |
 | [updates](features/updates.md) | partial | Flutter, CI | Force-update/version checks частично. Shorebird — явный defer или PR. |
 | [observability](features/observability.md) | partial | ops | Compose метрики есть. Staging DoD (Loki/Grafana/P1) открыт. |
-| [analytics](features/analytics.md) | partial | Analytics, ClickHouse | Ingest + product dashboard. PII в `properties`; ack до CH write; Admin дашборды тонкие. |
+| [analytics](features/analytics.md) | partial | Analytics, ClickHouse | Ingest + staff dashboards (product/engagement/revenue/health/moderation/retention) in Admin. Search/voice dashboards need backend types. |
 | [federation](features/federation.md) | **deferred** | Federation (scaffold) | Вне плана. |
 
 Группы/каналы в спейсе завязаны на Space+Chat+Role: создание дерева shipped, **каталог публичных спейсов — нет**.

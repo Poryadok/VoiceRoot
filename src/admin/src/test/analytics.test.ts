@@ -21,6 +21,21 @@ describe("analytics API client", () => {
     );
   });
 
+  it("fetchRetention calls staff retention route", async () => {
+    const mock = vi.mocked(fetch);
+    mock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ cohorts: [] }),
+    } as Response);
+
+    const { fetchRetention } = await import("../api/analytics");
+    await fetchRetention();
+    expect(mock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/v1/analytics/retention"),
+      expect.objectContaining({ headers: expect.any(Object) }),
+    );
+  });
+
   it("exportAnalytics requests blob export", async () => {
     const mock = vi.mocked(fetch);
     mock.mockResolvedValueOnce({
