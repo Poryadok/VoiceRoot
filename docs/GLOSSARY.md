@@ -77,7 +77,7 @@
 
 ### Pin чата
 
-**Pin чата** — закреп **`chat_id` внутри выбранной inbox-папки** `(profile_id, folder_id)` через `folder_chats.is_pinned` / `pin_order`; иконка pin на **list row**. Отдельно от Quick Access и от **pin элемента дерева спейса**. System folders: pin overlay на отфильтрованном списке; custom folders: pin внутри explicit membership. См. [navigation.md](features/navigation.md) § «Pin чатов», [chat-service.md](microservices/chat-service.md) § Folders.
+**Pin чата** — закреп **`chat_id` внутри выбранной inbox-папки** `(profile_id, folder_id)` через `folder_chats.is_pinned` / `pin_order`; иконка pin на **list row**. Отдельно от Quick Access и от **pin элемента дерева спейса**. System folders: pin overlay на отфильтрованном списке; custom folders: pin внутри explicit membership. В system folder **«Спейсы»** pin applies к **space aggregate row** (не к tree node — [screen-controls.md](design/screen-controls.md) §1.4 #3). См. [navigation.md](features/navigation.md) § «Pin чатов», [chat-service.md](microservices/chat-service.md) § Folders.
 
 ### Pin элемента дерева
 

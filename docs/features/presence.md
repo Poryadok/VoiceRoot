@@ -29,11 +29,21 @@
 
 | Данные | Store | TTL / durability |
 |--------|-------|------------------|
-| Live status (online / idle / DND / invisible) | Redis (User Service) | ~5 min heartbeat |
-| Game / custom status / in-call flag | Redis | Same session |
-| **Last seen timestamp** | **PostgreSQL `last_seen_at`** | **Durable** — required for «был N назад»; контракт — [user-service.md](../microservices/user-service.md) |
+| Live status (online / idle / DND / invisible) | Redis session hash `voice:user:presence:{id}` | ~**5 min** heartbeat (`PresenceSessionTTL`); each `UpdatePresence` / WS activity refreshes TTL |
+| Game / custom status / in-call flag | Same Redis hash | Same session |
+| **Interim last seen** (today) | Redis key `voice:user:last_seen:{id}` (unix ts) | **30 days** TTL — written on every heartbeat upsert; used when session hash expired |
+| **Durable last seen** (spec) | **PostgreSQL `last_seen_at`** | Required for «был N назад» beyond Redis window — [user-service.md](../microservices/user-service.md) |
+
+**Heartbeat write:** each successful presence upsert sets session hash + refreshes interim Redis `last_seen`. Transition to offline / graceful disconnect must leave interim last_seen intact (do not delete the 30d key).
 
 `send_when_online` (Messaging) consumes **live** presence from User (`GetPresence` / `GetBulkPresence`), not durable last seen alone.
+
+### Realtime / event fan-out (gaps)
+
+| Path | Contract | Gap |
+|------|----------|-----|
+| WS presence fan-out to friends | Must apply `show_online` / `show_last_seen` before emit; sparse fields only | **Partial** — privacy filter + sparse payload not fully shipped |
+| `user.presence_changed` | JetStream payload includes `old_status`, `new_status`; consumers filter by friend graph | Proto lacks delta fields today — [user-service.md](../microservices/user-service.md) |
 
 ## Interim storage (current code)
 

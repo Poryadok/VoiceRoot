@@ -127,7 +127,7 @@ Rail slots for pinned-profile chats (≠ folder pin, ≠ Friends favourites):
 | 1 | Row tap | H+V | Always | Open chat room |
 | 2 | Stories ring on avatar | H+V | Contact has active story | Open story viewer |
 | 2a | Presence / status dot on avatar | H+V | DM / friend chat; presence visible per privacy | — (visual: online / idle / DND / offline) |
-| 3 | Pin (ctx) | H+V | ctx | Toggle pin to top **within current folder** (≠ Quick Access — §1.1c) |
+| 3 | Pin (ctx) | H+V | ctx | Toggle pin to top **within current folder** (≠ Quick Access — §1.1c). **Folder «Спейсы»:** pin targets the **space aggregate row** in the list — not a tree node ([navigation.md](../features/navigation.md) § Pin rules); tree-node pin = Space Service / §10.3 |
 | 4 | Mute / Unmute (ctx) | H+V | ctx | Toggle mute |
 | 5 | Archive (ctx) | H+V | ctx; DM, group, channel, space-attached ([text-chat.md](../features/text-chat.md) § «Архивирование») | Move to archive — **secondary**; primary entry §1.1a #6. **Saved Messages** not in product |
 | 6 | Mark read / unread (ctx) | H+V | ctx | **Read:** if `unread_count>0` → REST `MarkRead` to latest message → badge clears ([text-chat.md](../features/text-chat.md) § «Mark read / unread»). **Unread:** if read → `MarkRead` to message before cursor → badge ≥1. DM normative; GRP/CH when group read ships |
@@ -138,7 +138,7 @@ Rail slots for pinned-profile chats (≠ folder pin, ≠ Friends favourites):
 | 11 | Add to Quick Access (ctx) | H+V | ctx | Add chat to rail quick access (§1.1c) |
 | 12 | Unread count / bold unread state | H+V | Chat has unread messages | — (visual: bold title + unread badge/count on list row) |
 | 13 | Muted indicator | H+V | Chat is muted | — (visual: mute icon on row) |
-| 14 | Pinned indicator | H+V | Chat is pinned in folder | — (visual: pin icon on row) |
+| 14 | Pinned indicator | H+V | Chat / space row is pinned in folder | — (visual: pin icon on row; in folder «Спейсы» = space aggregate row) |
 | 15 | Delivery ticks in preview | H+V | DM, last message outgoing | — (visual: ✓ delivered, ✓✓ read in subtitle; **source:** durable `GetChatListMetadata.last_message_delivery_state` — not WS alone; refresh after reconnect — [text-chat.md](../features/text-chat.md) § «Статусы доставки») |
 | 16 | Media type label in preview | H+V | Last message is media without text preview | — (visual: Photo / Video / Voice / File / Sticker / GIF / **Article** / **Location** / **Music** / **Video message**; label canon — [text-chat.md](../features/text-chat.md) § «Preview последнего сообщения в списке») |
 | 17 | Call preview label | H+V | Last message is call system event | — (visual: Missed call / Call / Video call) |
