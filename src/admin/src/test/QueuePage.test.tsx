@@ -29,6 +29,7 @@ const openReport = {
 describe("QueuePage report close workflow", () => {
   beforeEach(() => {
     sessionStorage.clear();
+    vi.stubEnv("VITE_STAFF_TOKEN", "");
     vi.mocked(listReports).mockClear();
     vi.mocked(resolveReport).mockClear();
     vi.mocked(listReports).mockResolvedValue({

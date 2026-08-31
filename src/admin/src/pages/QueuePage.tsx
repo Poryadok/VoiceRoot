@@ -11,16 +11,12 @@ import { ReportDetail } from "../components/ReportDetail";
 import { ReportTable } from "../components/ReportTable";
 import { SanctionActions } from "../components/SanctionActions";
 import { staffProfileIdFromToken } from "../lib/jwt";
+import { buildResolutionJson } from "../lib/resolutionJson";
 
 const QUEUE_TABS: { id: ModerationQueue; label: string }[] = [
   { id: "content", label: "Content" },
   { id: "spaces", label: "Spaces" },
 ];
-
-function resolutionJsonFromNote(note: string): string {
-  const trimmed = note.trim();
-  return trimmed.length > 0 ? JSON.stringify({ note: trimmed }) : "{}";
-}
 
 export function QueuePage() {
   const [queue, setQueue] = useState<ModerationQueue>("content");
@@ -133,7 +129,7 @@ export function QueuePage() {
     try {
       await resolveReport(selected.id, {
         new_status: newStatus,
-        resolution_json: resolutionJsonFromNote(note),
+        resolution_json: buildResolutionJson(note),
       });
       setSelected(null);
       setTargetAccountId(undefined);
