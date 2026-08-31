@@ -20,7 +20,12 @@ export function AuditLogTable({ entries, loading, error }: AuditLogTableProps) {
   }
 
   if (entries.length === 0) {
-    return <p className="status-message">No audit entries yet.</p>;
+    return (
+      <p className="status-message">
+        No moderation audit entries yet. Actions such as report resolution and
+        sanctions will appear here once recorded.
+      </p>
+    );
   }
 
   return (

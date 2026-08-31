@@ -30,4 +30,16 @@ describe("staffProfileIdFromToken", () => {
     vi.stubEnv("VITE_STAFF_TOKEN", `hdr.${envPayload}.sig`);
     expect(staffProfileIdFromToken()).toBe("session-profile");
   });
+
+  it("reads profileId camelCase claim", () => {
+    const payload = btoa(JSON.stringify({ profileId: "camel-profile" }));
+    sessionStorage.setItem("voice_admin_access_token", `hdr.${payload}.sig`);
+    expect(staffProfileIdFromToken()).toBe("camel-profile");
+  });
+
+  it("does not fall back to sub for assigned_to_profile_id", () => {
+    const payload = btoa(JSON.stringify({ sub: "account-or-subject" }));
+    sessionStorage.setItem("voice_admin_access_token", `hdr.${payload}.sig`);
+    expect(staffProfileIdFromToken()).toBeUndefined();
+  });
 });

@@ -11,6 +11,7 @@ import { ReportDetail } from "../components/ReportDetail";
 import { ReportTable } from "../components/ReportTable";
 import { SanctionActions } from "../components/SanctionActions";
 import { staffProfileIdFromToken } from "../lib/jwt";
+import { buildResolutionJson } from "../lib/resolutionJson";
 
 const QUEUE_TABS: { id: ModerationQueue; label: string }[] = [
   { id: "content", label: "Content" },
@@ -30,6 +31,8 @@ export function QueuePage() {
   const [error, setError] = useState<string | undefined>();
   const [assignBusy, setAssignBusy] = useState(false);
   const [assignError, setAssignError] = useState<string | undefined>();
+  const [closeBusy, setCloseBusy] = useState(false);
+  const [closeError, setCloseError] = useState<string | undefined>();
 
   const loadReports = useCallback(async () => {
     setLoading(true);
@@ -55,6 +58,8 @@ export function QueuePage() {
   useEffect(() => {
     setSelected(null);
     setTargetAccountId(undefined);
+    setAssignError(undefined);
+    setCloseError(undefined);
   }, [queue, filters.status, filters.category]);
 
   useEffect(() => {
@@ -86,7 +91,7 @@ export function QueuePage() {
     const profileId = staffProfileIdFromToken();
     if (!profileId) {
       setAssignError(
-        "Staff profile id not found in VITE_STAFF_TOKEN JWT (profile_id claim).",
+        "Staff profile id not found in session or VITE_STAFF_TOKEN JWT (profile_id claim).",
       );
       return;
     }
@@ -109,6 +114,34 @@ export function QueuePage() {
       );
     } finally {
       setAssignBusy(false);
+    }
+  }
+
+  async function handleCloseReport(
+    newStatus: "resolved" | "dismissed",
+    note: string,
+  ) {
+    if (!selected) {
+      return;
+    }
+    setCloseBusy(true);
+    setCloseError(undefined);
+    try {
+      await resolveReport(selected.id, {
+        new_status: newStatus,
+        resolution_json: buildResolutionJson(note),
+      });
+      setSelected(null);
+      setTargetAccountId(undefined);
+      await loadReports();
+    } catch (err) {
+      setCloseError(
+        err instanceof Error
+          ? err.message
+          : `Failed to ${newStatus === "resolved" ? "resolve" : "dismiss"} report`,
+      );
+    } finally {
+      setCloseBusy(false);
     }
   }
 
@@ -154,6 +187,10 @@ export function QueuePage() {
             onAssignToMe={() => void handleAssignToMe()}
             assignBusy={assignBusy}
             assignError={assignError}
+            onResolve={(note) => void handleCloseReport("resolved", note)}
+            onDismiss={(note) => void handleCloseReport("dismissed", note)}
+            closeBusy={closeBusy}
+            closeError={closeError}
           />
           <SanctionActions
             report={selected}
