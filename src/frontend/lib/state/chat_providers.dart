@@ -23,6 +23,7 @@ import 'message_cache_providers.dart';
 import 'e2e_providers.dart';
 import 'mobile_opened_chat_strip.dart';
 import 'space_providers.dart';
+import 'shell_providers.dart';
 
 /// Returned by [ChatRoomController.sendMessage] when offline send is blocked.
 const String kChatOfflineBlockedError = 'offline_blocked';
@@ -296,7 +297,11 @@ class ChatListController extends StateNotifier<ChatListState> {
     state = state.copyWith(isLoading: true, clearError: true);
     final result = await _ref
         .read(voiceChatsClientProvider)
-        .listChats(authorization: auth, inbox: _ref.read(chatInboxProvider));
+        .listChats(
+          authorization: auth,
+          inbox: _ref.read(chatInboxProvider),
+          folderId: _ref.read(selectedChatFolderIdProvider),
+        );
     if (!mounted) return;
     switch (result) {
       case ChatsApiOk(:final data):
@@ -324,6 +329,7 @@ class ChatListController extends StateNotifier<ChatListState> {
           authorization: auth,
           cursor: cursor,
           inbox: _ref.read(chatInboxProvider),
+          folderId: _ref.read(selectedChatFolderIdProvider),
         );
     if (!mounted) return;
     switch (result) {

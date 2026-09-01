@@ -44,7 +44,7 @@ _Пока пусто — критичные клиентские блокеры 
 Источник: `tmp/telegram-ux-audit/AUDIT.md` (R2-A03–A05, R3-A08, R3-A11). Backend RPC-хвосты — [backend.md](backend.md) § Telegram-parity audit / § Chat navigation.
 
 - [x] **R2-A03 — Profile switcher vs rail contract** — `ProfileAvatarMenuButton` §1.1a in rail (`profile_avatar_menu.dart`); desktop session bar is label-only (no combobox); mobile tap opens menu + swipe switch (`ProfileAvatarSwitcher`). Archive entry shows unavailable snackbar until Archive list screen ships (Batch 10; list RPC Batch 15).
-- [ ] **R2-A04 — Mobile shell IA** — `MobileShellTabBar` (Chats/Social/Match) on `Scaffold.bottomNavigationBar` when narrow + no open chat (Batch 10 incremental); **deferred:** hamburger drawer (folders, QA, settings), keyboard-hide tab bar, stacked chrome overflow rules.
+- [ ] **R2-A04 — Mobile shell IA** — `MobileShellTabBar` (Chats/Social/Match) on `Scaffold.bottomNavigationBar` when narrow + no open chat (Batch 10 incremental); **incremental:** `MobileShellDrawer` hamburger stub (folders, QA, settings) shipped (parallel/client); **deferred:** keyboard-hide tab bar, stacked chrome overflow rules.
 - [ ] **R2-A05 — Active strip LRU semantics** — strip tracks **opened** chats (≤100 LRU); `MobileChatStrip` + `mobile_opened_chat_strip.dart` shipped; long-press remove + 100-cap LRU eviction snackbar shipped (Batch 9).
 - [x] **R3-A08 — Strip widget test wrong contract** — `mobile_chat_strip_test.dart` asserts opened-chat LRU, not inbox rows (§1.6).
 - [x] **R3-A11 — Composer a11y parity** — transient §3.6b emoji panel + §3.6a attach popup with §3.6e focus trap/return (`composer_panels.dart`); click/tap activation on desktop (Batch 9).
@@ -93,7 +93,7 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
 - [ ] **Локальные черновики** — Hive/SQLite, один на chat; multi-device sync отказано в спеке.
 - [ ] **OG link preview** — unfurl на клиенте; сервер не обязан.
 - [ ] **Stickers / GIF / voice-note composer** — нет UI (и нет backend packs). См. [backend.md](backend.md) § High Chat; решение спеки — [product-roadmap.md](product-roadmap.md).
-- [ ] **Кастомные папки чатов** — All/DMs/Groups + custom; RPC Unimplemented. MobileChatStrip на MM/settings — пункт выше.
+- [ ] **Кастомные папки чатов** — All/DMs/Groups + custom; REST folders + rail/drawer UI shipped (parallel/client); pin/reorder UI deferred.
 - [ ] **In-chat search: next/prev highlight** — [search.md](../features/search.md).
 - [ ] **Favorites / QR add friend / phone-book sync UI** — gRPC contacts есть, REST list нет; QR в продукте отсутствует. [friends.md](../features/friends.md).
 - [ ] **Idle 5 мин → `UpdatePresence idle`** — сейчас idle только если клиент сам пришлёт. [presence.md](../features/presence.md).
@@ -130,7 +130,7 @@ Baseline (2026-06) закрыт; хвосты UX/E2E ниже. Спека: [auth
 
 ### Multi-profile
 
-- [ ] **[Multi-Profile] Create flow missing avatar** — spec §создание: «ник, аватар»; `CreateProfileSheet` only `display_name` + privacy preset; no presigned upload on create.
+- [x] **[Multi-Profile] Create flow missing avatar** — `CreateProfileSheet` optional avatar pick + presigned upload after profile switch (`parallel/client-qa-rail-profiles`).
 - [ ] **[Multi-Profile] Change primary profile API/UI missing** — `is_primary` set at bootstrap only; no way to reassign which profile phone search returns.
 - [x] **[Multi-Profile] Accent color not choosable on create** — `CreateProfileSheet` accent swatches from token catalog; sends `accent_color` on create (**Batch 17**).
 - [ ] **[Multi-Profile] `profile_accent_storage` legacy dual-write** — stale comment «until User Service exposes accent_color» (`profile_accent_storage.dart`); settings picker still writes local index while server has `profiles.accent_color`.

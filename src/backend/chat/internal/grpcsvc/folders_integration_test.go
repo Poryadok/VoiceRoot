@@ -9,6 +9,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"voice/backend/chat/internal/store"
+
 	chatv1 "voice.app/voice/chat/v1"
 )
 
@@ -68,6 +70,136 @@ func TestCreateFolder_CustomFolder(t *testing.T) {
 	_, err = client.CreateFolder(ctxProf, &chatv1.CreateFolderRequest{Name: ""})
 	require.Error(t, err)
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+// TestUpdateFolder_CustomFolder documents navigation.md § custom folder rename/reorder.
+func TestUpdateFolder_CustomFolder(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	acc := uuid.New()
+	prof := uuid.New()
+	client, cleanup := startChatGRPCTestServer(t, pool, mapProfileAccounts{prof: acc}, nil, nil)
+	t.Cleanup(cleanup)
+
+	ctxProf := withAccountProfileCtx(ctx, acc, prof)
+	created, err := client.CreateFolder(ctxProf, &chatv1.CreateFolderRequest{Name: "Work"})
+	require.NoError(t, err)
+
+	newName := "Projects"
+	sortOrder := int32(42)
+	updated, err := client.UpdateFolder(ctxProf, &chatv1.UpdateFolderRequest{
+		FolderId:  created.GetFolder().GetId(),
+		Name:      &newName,
+		SortOrder: &sortOrder,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "Projects", updated.GetFolder().GetName())
+	require.Equal(t, int32(42), updated.GetFolder().GetSortOrder())
+}
+
+// TestUpdateFolder_SystemFolderRejected documents system folders are immutable.
+func TestUpdateFolder_SystemFolderRejected(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	acc := uuid.New()
+	prof := uuid.New()
+	client, cleanup := startChatGRPCTestServer(t, pool, mapProfileAccounts{prof: acc}, nil, nil)
+	t.Cleanup(cleanup)
+
+	ctxProf := withAccountProfileCtx(ctx, acc, prof)
+	list, err := client.ListFolders(ctxProf, &chatv1.ListFoldersRequest{})
+	require.NoError(t, err)
+
+	newName := "All renamed"
+	_, err = client.UpdateFolder(ctxProf, &chatv1.UpdateFolderRequest{
+		FolderId: list.GetFolderList().GetFolders()[0].GetId(),
+		Name:     &newName,
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+}
+
+// TestDeleteFolder_CustomFolder documents custom folder delete via gRPC.
+func TestDeleteFolder_CustomFolder(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	acc := uuid.New()
+	prof := uuid.New()
+	client, cleanup := startChatGRPCTestServer(t, pool, mapProfileAccounts{prof: acc}, nil, nil)
+	t.Cleanup(cleanup)
+
+	ctxProf := withAccountProfileCtx(ctx, acc, prof)
+	created, err := client.CreateFolder(ctxProf, &chatv1.CreateFolderRequest{Name: "Temp"})
+	require.NoError(t, err)
+
+	_, err = client.DeleteFolder(ctxProf, &chatv1.DeleteFolderRequest{FolderId: created.GetFolder().GetId()})
+	require.NoError(t, err)
+
+	list, err := client.ListFolders(ctxProf, &chatv1.ListFoldersRequest{})
+	require.NoError(t, err)
+	require.Len(t, list.GetFolderList().GetFolders(), 5)
+}
+
+// TestAutoUnarchiveIncomingDM documents text-chat.md § incoming DM auto-unarchive side-effect.
+func TestAutoUnarchiveIncomingDM(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	accA := uuid.New()
+	accB := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	profiles := mapProfileAccounts{profA: accA, profB: accB}
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil)
+	t.Cleanup(cleanup)
+
+	ctxA := withAccountProfileCtx(ctx, accA, profA)
+	ctxB := withAccountProfileCtx(ctx, accB, profB)
+
+	dm, err := client.CreateDM(ctxA, &chatv1.CreateDMRequest{OtherProfileId: profB.String()})
+	require.NoError(t, err)
+	chatID := dm.GetChat().GetId()
+
+	_, err = client.AcceptDMRequest(ctxB, &chatv1.AcceptDMRequestRequest{ChatId: chatID})
+	require.NoError(t, err)
+
+	_, err = client.ArchiveChat(ctxA, &chatv1.ArchiveChatRequest{ChatId: chatID, Archived: true})
+	require.NoError(t, err)
+
+	inboxArchive := "archive"
+	archiveList, err := client.ListChats(ctxA, &chatv1.ListChatsRequest{Inbox: &inboxArchive})
+	require.NoError(t, err)
+	require.Len(t, archiveList.GetChatList().GetItems(), 1)
+
+	store := &store.DMStore{Pool: pool}
+	require.NoError(t, store.AutoUnarchiveDMRecipients(ctx, uuid.MustParse(chatID), profB))
+
+	mainList, err := client.ListChats(ctxA, &chatv1.ListChatsRequest{})
+	require.NoError(t, err)
+	require.Len(t, mainList.GetChatList().GetItems(), 1)
+
+	archiveList, err = client.ListChats(ctxA, &chatv1.ListChatsRequest{Inbox: &inboxArchive})
+	require.NoError(t, err)
+	require.Empty(t, archiveList.GetChatList().GetItems())
 }
 
 // TestArchiveChat_RemovesQuickAccess documents chat-service.md § Archive side-effect on Quick Access.

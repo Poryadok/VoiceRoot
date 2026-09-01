@@ -16,6 +16,9 @@ final navigationSectionProvider = StateProvider<NavigationSection>(
   (ref) => NavigationSection.chats,
 );
 
+/// Selected chat folder in rail/drawer; null = default (all) list.
+final selectedChatFolderIdProvider = StateProvider<String?>((ref) => null);
+
 /// Emoji picked in side panel; consumed by [ChatRoomPanel] composer.
 final pendingComposerEmojiProvider = StateProvider<String?>((ref) => null);
 

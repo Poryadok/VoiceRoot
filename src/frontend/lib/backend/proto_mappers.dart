@@ -261,6 +261,38 @@ ChatListData chatListFromProto(chat_pb.ChatList list) {
   );
 }
 
+VoiceQuickAccessItem voiceQuickAccessItemFromProto(chat_pb.QuickAccessItem item) {
+  return VoiceQuickAccessItem(
+    chatId: item.chatId,
+    sortOrder: item.sortOrder,
+    chat: item.hasChat() ? voiceChatFromProto(item.chat) : null,
+  );
+}
+
+QuickAccessListData quickAccessListFromProto(chat_pb.ListQuickAccessResponse resp) {
+  return QuickAccessListData(
+    items: resp.items
+        .map(voiceQuickAccessItemFromProto)
+        .toList(growable: false),
+  );
+}
+
+VoiceFolder voiceFolderFromProto(chat_pb.Folder folder) {
+  return VoiceFolder(
+    id: folder.id,
+    name: folder.name,
+    folderType: folder.folderType,
+    sortOrder: folder.sortOrder,
+  );
+}
+
+FolderListData folderListFromProto(chat_pb.ListFoldersResponse resp) {
+  final list = resp.hasFolderList() ? resp.folderList : chat_pb.FolderList();
+  return FolderListData(
+    folders: list.folders.map(voiceFolderFromProto).toList(growable: false),
+  );
+}
+
 ChatMember chatMemberFromProto(chat_pb.ChatMember member) {
   return ChatMember(
     profileId: member.profileId,
