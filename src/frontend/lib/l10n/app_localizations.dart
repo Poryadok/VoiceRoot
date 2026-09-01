@@ -536,6 +536,30 @@ abstract class AppLocalizations {
   /// **'Direct messages'**
   String get chatListTitle;
 
+  /// No description provided for @chatFoldersTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Folders'**
+  String get chatFoldersTitle;
+
+  /// No description provided for @chatQuickAccessTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Quick Access'**
+  String get chatQuickAccessTitle;
+
+  /// No description provided for @chatQuickAccessEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No favorites yet'**
+  String get chatQuickAccessEmpty;
+
+  /// No description provided for @chatNavigationMenu.
+  ///
+  /// In en, this message translates to:
+  /// **'Navigation menu'**
+  String get chatNavigationMenu;
+
   /// No description provided for @chatListEmpty.
   ///
   /// In en, this message translates to:

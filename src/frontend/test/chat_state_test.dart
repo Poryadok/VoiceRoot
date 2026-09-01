@@ -564,6 +564,7 @@ class _FakeChatsClient extends VoiceChatsClient {
     String? cursor,
     int? pageSize,
     String? inbox,
+    String? folderId,
   }) async {
     calls.add(_ChatListCall(cursor));
     if (_pages.isEmpty) {

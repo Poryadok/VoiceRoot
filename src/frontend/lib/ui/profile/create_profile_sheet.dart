@@ -11,15 +11,19 @@ import '../../theme/voice_theme_providers.dart';
 import '../core/voice_bottom_sheet.dart';
 import '../settings/privacy_presets.dart';
 import '../settings/subscription_settings_screen.dart';
+import 'profile_edit_sheet.dart';
 
 class CreateProfileSheet extends ConsumerStatefulWidget {
-  const CreateProfileSheet({super.key});
+  const CreateProfileSheet({super.key, this.avatarPicker});
 
   static const Key sheetKey = Key('create_profile_sheet');
   static const Key displayNameFieldKey = Key('create_profile_display_name');
   static const Key presetKey = Key('create_profile_preset');
   static const Key accentPickerKey = Key('create_profile_accent_picker');
+  static const Key avatarButtonKey = Key('create_profile_avatar');
   static const Key submitKey = Key('create_profile_submit');
+
+  final ProfileAvatarPicker? avatarPicker;
 
   @override
   ConsumerState<CreateProfileSheet> createState() => _CreateProfileSheetState();
@@ -29,6 +33,7 @@ class _CreateProfileSheetState extends ConsumerState<CreateProfileSheet> {
   final _displayNameController = TextEditingController();
   String _preset = PrivacyPresetDefaults.presets.first;
   int _selectedAccentIndex = 0;
+  ProfileAvatarFile? _avatar;
   var _submitting = false;
   String? _error;
 
@@ -72,6 +77,17 @@ class _CreateProfileSheetState extends ConsumerState<CreateProfileSheet> {
         await ref
             .read(authControllerProvider.notifier)
             .switchActiveProfile(data.id);
+        if (_avatar != null) {
+          final avatarErr = await _uploadAvatarForActiveProfile(l10n, _avatar!);
+          if (!mounted) return;
+          if (avatarErr != null) {
+            setState(() {
+              _submitting = false;
+              _error = avatarErr;
+            });
+            return;
+          }
+        }
         if (mounted) Navigator.of(context).pop(true);
       case UsersApiFailure(:final message, :final statusCode, :final errorCode):
         if (statusCode == 429 || errorCode == 'resource_exhausted') {
@@ -100,6 +116,50 @@ class _CreateProfileSheetState extends ConsumerState<CreateProfileSheet> {
       _selectedAccentIndex % catalog.profileAccentDefaults.length
     ];
     return '#${(color.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}';
+  }
+
+  Future<void> _pickAvatar() async {
+    final picker = widget.avatarPicker ?? defaultPickProfileAvatar;
+    final picked = await picker();
+    if (!mounted || picked == null) return;
+    setState(() => _avatar = picked);
+  }
+
+  Future<String?> _uploadAvatarForActiveProfile(
+    AppLocalizations l10n,
+    ProfileAvatarFile avatar,
+  ) async {
+    final auth = ref.read(authorizationHeaderProvider);
+    if (auth == null) return l10n.profileEditSaveError('not_authenticated');
+    final client = ref.read(voiceUsersClientProvider);
+    final presignResult = await client.createAvatarPresignedUpload(
+      authorization: auth,
+      contentType: avatar.contentType,
+      contentLength: avatar.bytes.length,
+    );
+    switch (presignResult) {
+      case UsersApiFailure(:final message):
+        return l10n.profileEditSaveError(message);
+      case UsersApiOk(:final data):
+        final uploadResult = await client.uploadAvatarBytes(
+          uploadUrl: Uri.parse(data.uploadUrl),
+          requiredHeaders: data.requiredHeaders,
+          bytes: avatar.bytes,
+        );
+        switch (uploadResult) {
+          case UsersApiFailure(:final message):
+            return l10n.profileEditSaveError(message);
+          case UsersApiOk():
+            final updateResult = await client.updateProfile(
+              authorization: auth,
+              avatarUrl: data.publicUrl,
+            );
+            return switch (updateResult) {
+              UsersApiOk() => null,
+              UsersApiFailure(:final message) => l10n.profileEditSaveError(message),
+            };
+        }
+    }
   }
 
   @override
@@ -156,6 +216,26 @@ class _CreateProfileSheetState extends ConsumerState<CreateProfileSheet> {
                 Text(
                   l10n.createProfileTitle,
                   style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 28,
+                      backgroundImage:
+                          _avatar != null ? MemoryImage(_avatar!.bytes) : null,
+                      child: _avatar == null
+                          ? Icon(Icons.person_outline, color: voice.textSecondary)
+                          : null,
+                    ),
+                    const SizedBox(width: 16),
+                    OutlinedButton.icon(
+                      key: CreateProfileSheet.avatarButtonKey,
+                      onPressed: _submitting ? null : _pickAvatar,
+                      icon: const Icon(Icons.photo_outlined),
+                      label: Text(l10n.profileAvatarChange),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
                 TextField(

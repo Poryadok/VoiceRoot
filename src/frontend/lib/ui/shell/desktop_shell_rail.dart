@@ -11,6 +11,7 @@ import '../../theme/voice_metrics.dart';
 import '../core/voice_shell_icons.dart';
 import '../matchmaking/game_catalog_screen.dart';
 import '../profile/profile_avatar_menu.dart';
+import 'chat_rail_sections.dart';
 
 enum ShellRailDestination { chats, friends, matchmaking, settings }
 
@@ -95,6 +96,8 @@ class DesktopShellRail extends ConsumerWidget {
               selected: false,
               onPressed: goMatchmaking,
             ),
+            const ChatRailFoldersSection(),
+            const ChatRailQuickAccessSection(),
             const Spacer(),
             _RailIconButton(
               key: const Key('shell_rail_settings'),
