@@ -52,6 +52,7 @@ class VoiceProfile {
     this.verificationType = 'none',
     this.verificationBadge,
     this.accentColor,
+    this.frozenAt,
   });
 
   final String id;
@@ -66,6 +67,9 @@ class VoiceProfile {
   final String verificationType;
   final String? verificationBadge;
   final String? accentColor;
+  final DateTime? frozenAt;
+
+  bool get isFrozen => frozenAt != null;
 
   String get handle => '@$username#$discriminator';
 }

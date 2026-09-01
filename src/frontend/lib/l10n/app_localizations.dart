@@ -2750,6 +2750,18 @@ abstract class AppLocalizations {
   /// **'Primary profile'**
   String get downgradeProfilePrimary;
 
+  /// No description provided for @profileFrozenLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Frozen'**
+  String get profileFrozenLabel;
+
+  /// No description provided for @profileFrozenHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Renew Premium to switch to this profile'**
+  String get profileFrozenHint;
+
   /// No description provided for @premiumBadgeLabel.
   ///
   /// In en, this message translates to:

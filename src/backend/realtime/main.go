@@ -140,8 +140,31 @@ func main() {
 		}()
 	}
 
+	var dap deliveryAckPublisher
+	var dapNC *nats.Conn
+	if natsURL != "" {
+		nc, err := nats.Connect(natsURL, natsConnectOptions("voice-realtime-delivery-ack")...)
+		if err != nil {
+			logger.Warn("delivery ack publisher connect failed", slog.String("error", err.Error()))
+		} else {
+			pub, err := newJetstreamDeliveryAckPublisher(nc)
+			if err != nil {
+				logger.Warn("delivery ack publisher init failed", slog.String("error", err.Error()))
+				_ = nc.Drain()
+			} else {
+				dap = pub
+				dapNC = nc
+			}
+		}
+	}
+	defer func() {
+		if dapNC != nil {
+			_ = dapNC.Drain()
+		}
+	}()
+
 	handler := voiceprom.MountMetricsOnHealth(
-		newServiceHandlerWithPresence(serviceName, tv, chatLister, hub, rf, instanceID, presenceUpdater, ready),
+		newServiceHandlerWithPresence(serviceName, tv, chatLister, hub, rf, instanceID, presenceUpdater, dap, ready),
 		metricsReg,
 	)
 	server := &http.Server{

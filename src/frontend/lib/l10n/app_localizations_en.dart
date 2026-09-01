@@ -1501,6 +1501,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get downgradeProfilePrimary => 'Primary profile';
 
   @override
+  String get profileFrozenLabel => 'Frozen';
+
+  @override
+  String get profileFrozenHint => 'Renew Premium to switch to this profile';
+
+  @override
   String get premiumBadgeLabel => 'Premium';
 
   @override

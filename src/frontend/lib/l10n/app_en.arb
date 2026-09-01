@@ -773,6 +773,8 @@
   "downgradeProfilePickerHint": "Other profiles will be frozen until you renew Premium.",
   "downgradeProfilePickerConfirm": "Keep selected profiles",
   "downgradeProfilePrimary": "Primary profile",
+  "profileFrozenLabel": "Frozen",
+  "profileFrozenHint": "Renew Premium to switch to this profile",
   "premiumBadgeLabel": "Premium",
   "settingsSecurity": "Security & trust",
   "securitySettingsTitle": "Security",

@@ -30,6 +30,7 @@ const (
 	subjectMessagePinned     = "message.pinned"
 	subjectMessageUnpinned   = "message.unpinned"
 	subjectMessageForwarded  = "message.forwarded"
+	subjectMessageDeliveryAck = "message.delivery_ack"
 	natsHeaderThreadParentID = "X-Voice-Thread-Parent-Id"
 )
 
@@ -85,6 +86,7 @@ func messageEventStreamSubjects() []string {
 		subjectMessagePinned,
 		subjectMessageUnpinned,
 		subjectMessageForwarded,
+		subjectMessageDeliveryAck,
 	}
 }
 
