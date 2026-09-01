@@ -65,7 +65,7 @@ DOC-аудит закрыт (0 open DOC). Невыполненное разне�
 | Куда | Что |
 |------|-----|
 | [backend.md](todo/backend.md) § High § Telegram-parity audit | R3-A04–A06, A12, A14–A16; stickers/GIF wire; Realtime `message.delivery_ack` NATS; mention `profile_id` |
-| [client.md](todo/client.md) § High § Telegram-parity audit | R2-A03–A05 shell/mobile; R3-A08 strip test; R3-A11 composer a11y |
+| [client.md](todo/client.md) § High § Telegram-parity audit | R2-A03–A05 shell/mobile (R2-A05 LRU core shipped; long-press/100-cap open); R3-A11 composer a11y |
 | [product-roadmap.md](todo/product-roadmap.md) § Telegram-parity audit | Product policy DEFER: strip unread-on-back, pin cycle, archived notifications, Location tab, header idle/DND |
 | [design.md](todo/design.md) § Critical Penpot · v3 | R4-04-L04 §3.6b panel GAP frames (implementation track) |
 
@@ -78,7 +78,7 @@ DOC-аудит закрыт (0 open DOC). Невыполненное разне�
 | [backend.md](todo/backend.md) § High Chat | Стикеры/GIF **в v1** (0 кода); folders RPC; view-count; `DeleteChat` |
 | [ci.md](todo/ci.md) § Critical | FCM/APNs, Alertmanager, staging DoD, TOTP/Resend/Paddle secrets |
 | [admin.md](todo/admin.md) § High | Analytics search/voice dashboards (backend first); game catalog mode editor |
-| [client.md](todo/client.md) § High | Телефон/OTP/sessions/delete-account UI; quiet hours с сервера; черновики |
+| [client.md](todo/client.md) § High | Телефон/OTP/sessions/delete-account UI; черновики |
 
 ---
 
