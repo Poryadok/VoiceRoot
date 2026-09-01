@@ -1152,10 +1152,12 @@ class ListChatsRequest extends $pb.GeneratedMessage {
   factory ListChatsRequest({
     $2.CursorPageRequest? page,
     $core.String? inbox,
+    $core.String? folderId,
   }) {
     final result = create();
     if (page != null) result.page = page;
     if (inbox != null) result.inbox = inbox;
+    if (folderId != null) result.folderId = folderId;
     return result;
   }
 
@@ -1175,6 +1177,7 @@ class ListChatsRequest extends $pb.GeneratedMessage {
     ..aOM<$2.CursorPageRequest>(1, _omitFieldNames ? '' : 'page',
         subBuilder: $2.CursorPageRequest.create)
     ..aOS(2, _omitFieldNames ? '' : 'inbox')
+    ..aOS(3, _omitFieldNames ? '' : 'folderId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1215,6 +1218,15 @@ class ListChatsRequest extends $pb.GeneratedMessage {
   $core.bool hasInbox() => $_has(1);
   @$pb.TagNumber(2)
   void clearInbox() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get folderId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set folderId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasFolderId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearFolderId() => $_clearField(3);
 }
 
 /// One row in the inbox: chat metadata plus list fields sourced from Messaging (S2S) when configured.
@@ -2187,6 +2199,361 @@ class DeleteFolderRequest extends $pb.GeneratedMessage {
   $core.bool hasFolderId() => $_has(0);
   @$pb.TagNumber(1)
   void clearFolderId() => $_clearField(1);
+}
+
+class AddChatToFolderRequest extends $pb.GeneratedMessage {
+  factory AddChatToFolderRequest({
+    $core.String? folderId,
+    $core.String? chatId,
+    $core.int? sortOrder,
+  }) {
+    final result = create();
+    if (folderId != null) result.folderId = folderId;
+    if (chatId != null) result.chatId = chatId;
+    if (sortOrder != null) result.sortOrder = sortOrder;
+    return result;
+  }
+
+  AddChatToFolderRequest._();
+
+  factory AddChatToFolderRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory AddChatToFolderRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'AddChatToFolderRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'folderId')
+    ..aOS(2, _omitFieldNames ? '' : 'chatId')
+    ..aI(3, _omitFieldNames ? '' : 'sortOrder')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AddChatToFolderRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AddChatToFolderRequest copyWith(
+          void Function(AddChatToFolderRequest) updates) =>
+      super.copyWith((message) => updates(message as AddChatToFolderRequest))
+          as AddChatToFolderRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static AddChatToFolderRequest create() => AddChatToFolderRequest._();
+  @$core.override
+  AddChatToFolderRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static AddChatToFolderRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<AddChatToFolderRequest>(create);
+  static AddChatToFolderRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get folderId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set folderId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasFolderId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearFolderId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get chatId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set chatId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasChatId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearChatId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.int get sortOrder => $_getIZ(2);
+  @$pb.TagNumber(3)
+  set sortOrder($core.int value) => $_setSignedInt32(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasSortOrder() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearSortOrder() => $_clearField(3);
+}
+
+class RemoveChatFromFolderRequest extends $pb.GeneratedMessage {
+  factory RemoveChatFromFolderRequest({
+    $core.String? folderId,
+    $core.String? chatId,
+  }) {
+    final result = create();
+    if (folderId != null) result.folderId = folderId;
+    if (chatId != null) result.chatId = chatId;
+    return result;
+  }
+
+  RemoveChatFromFolderRequest._();
+
+  factory RemoveChatFromFolderRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory RemoveChatFromFolderRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'RemoveChatFromFolderRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'folderId')
+    ..aOS(2, _omitFieldNames ? '' : 'chatId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RemoveChatFromFolderRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RemoveChatFromFolderRequest copyWith(
+          void Function(RemoveChatFromFolderRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as RemoveChatFromFolderRequest))
+          as RemoveChatFromFolderRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static RemoveChatFromFolderRequest create() =>
+      RemoveChatFromFolderRequest._();
+  @$core.override
+  RemoveChatFromFolderRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static RemoveChatFromFolderRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<RemoveChatFromFolderRequest>(create);
+  static RemoveChatFromFolderRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get folderId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set folderId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasFolderId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearFolderId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get chatId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set chatId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasChatId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearChatId() => $_clearField(2);
+}
+
+class ReorderFolderChatsRequest extends $pb.GeneratedMessage {
+  factory ReorderFolderChatsRequest({
+    $core.String? folderId,
+    $core.Iterable<$core.String>? chatIds,
+  }) {
+    final result = create();
+    if (folderId != null) result.folderId = folderId;
+    if (chatIds != null) result.chatIds.addAll(chatIds);
+    return result;
+  }
+
+  ReorderFolderChatsRequest._();
+
+  factory ReorderFolderChatsRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ReorderFolderChatsRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ReorderFolderChatsRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'folderId')
+    ..pPS(2, _omitFieldNames ? '' : 'chatIds')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ReorderFolderChatsRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ReorderFolderChatsRequest copyWith(
+          void Function(ReorderFolderChatsRequest) updates) =>
+      super.copyWith((message) => updates(message as ReorderFolderChatsRequest))
+          as ReorderFolderChatsRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ReorderFolderChatsRequest create() => ReorderFolderChatsRequest._();
+  @$core.override
+  ReorderFolderChatsRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ReorderFolderChatsRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ReorderFolderChatsRequest>(create);
+  static ReorderFolderChatsRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get folderId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set folderId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasFolderId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearFolderId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $pb.PbList<$core.String> get chatIds => $_getList(1);
+}
+
+class PinChatInFolderRequest extends $pb.GeneratedMessage {
+  factory PinChatInFolderRequest({
+    $core.String? folderId,
+    $core.String? chatId,
+    $core.int? pinOrder,
+  }) {
+    final result = create();
+    if (folderId != null) result.folderId = folderId;
+    if (chatId != null) result.chatId = chatId;
+    if (pinOrder != null) result.pinOrder = pinOrder;
+    return result;
+  }
+
+  PinChatInFolderRequest._();
+
+  factory PinChatInFolderRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory PinChatInFolderRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'PinChatInFolderRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'folderId')
+    ..aOS(2, _omitFieldNames ? '' : 'chatId')
+    ..aI(3, _omitFieldNames ? '' : 'pinOrder')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  PinChatInFolderRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  PinChatInFolderRequest copyWith(
+          void Function(PinChatInFolderRequest) updates) =>
+      super.copyWith((message) => updates(message as PinChatInFolderRequest))
+          as PinChatInFolderRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static PinChatInFolderRequest create() => PinChatInFolderRequest._();
+  @$core.override
+  PinChatInFolderRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static PinChatInFolderRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<PinChatInFolderRequest>(create);
+  static PinChatInFolderRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get folderId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set folderId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasFolderId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearFolderId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get chatId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set chatId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasChatId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearChatId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.int get pinOrder => $_getIZ(2);
+  @$pb.TagNumber(3)
+  set pinOrder($core.int value) => $_setSignedInt32(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasPinOrder() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearPinOrder() => $_clearField(3);
+}
+
+class UnpinChatInFolderRequest extends $pb.GeneratedMessage {
+  factory UnpinChatInFolderRequest({
+    $core.String? folderId,
+    $core.String? chatId,
+  }) {
+    final result = create();
+    if (folderId != null) result.folderId = folderId;
+    if (chatId != null) result.chatId = chatId;
+    return result;
+  }
+
+  UnpinChatInFolderRequest._();
+
+  factory UnpinChatInFolderRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory UnpinChatInFolderRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'UnpinChatInFolderRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'folderId')
+    ..aOS(2, _omitFieldNames ? '' : 'chatId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UnpinChatInFolderRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UnpinChatInFolderRequest copyWith(
+          void Function(UnpinChatInFolderRequest) updates) =>
+      super.copyWith((message) => updates(message as UnpinChatInFolderRequest))
+          as UnpinChatInFolderRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static UnpinChatInFolderRequest create() => UnpinChatInFolderRequest._();
+  @$core.override
+  UnpinChatInFolderRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static UnpinChatInFolderRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<UnpinChatInFolderRequest>(create);
+  static UnpinChatInFolderRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get folderId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set folderId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasFolderId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearFolderId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get chatId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set chatId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasChatId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearChatId() => $_clearField(2);
 }
 
 class AcceptDMRequestRequest extends $pb.GeneratedMessage {
@@ -3479,6 +3846,204 @@ class DeleteFolderResponse extends $pb.GeneratedMessage {
   static DeleteFolderResponse getDefault() => _defaultInstance ??=
       $pb.GeneratedMessage.$_defaultFor<DeleteFolderResponse>(create);
   static DeleteFolderResponse? _defaultInstance;
+}
+
+class AddChatToFolderResponse extends $pb.GeneratedMessage {
+  factory AddChatToFolderResponse() => create();
+
+  AddChatToFolderResponse._();
+
+  factory AddChatToFolderResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory AddChatToFolderResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'AddChatToFolderResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AddChatToFolderResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AddChatToFolderResponse copyWith(
+          void Function(AddChatToFolderResponse) updates) =>
+      super.copyWith((message) => updates(message as AddChatToFolderResponse))
+          as AddChatToFolderResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static AddChatToFolderResponse create() => AddChatToFolderResponse._();
+  @$core.override
+  AddChatToFolderResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static AddChatToFolderResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<AddChatToFolderResponse>(create);
+  static AddChatToFolderResponse? _defaultInstance;
+}
+
+class RemoveChatFromFolderResponse extends $pb.GeneratedMessage {
+  factory RemoveChatFromFolderResponse() => create();
+
+  RemoveChatFromFolderResponse._();
+
+  factory RemoveChatFromFolderResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory RemoveChatFromFolderResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'RemoveChatFromFolderResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RemoveChatFromFolderResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RemoveChatFromFolderResponse copyWith(
+          void Function(RemoveChatFromFolderResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as RemoveChatFromFolderResponse))
+          as RemoveChatFromFolderResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static RemoveChatFromFolderResponse create() =>
+      RemoveChatFromFolderResponse._();
+  @$core.override
+  RemoveChatFromFolderResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static RemoveChatFromFolderResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<RemoveChatFromFolderResponse>(create);
+  static RemoveChatFromFolderResponse? _defaultInstance;
+}
+
+class ReorderFolderChatsResponse extends $pb.GeneratedMessage {
+  factory ReorderFolderChatsResponse() => create();
+
+  ReorderFolderChatsResponse._();
+
+  factory ReorderFolderChatsResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ReorderFolderChatsResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ReorderFolderChatsResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ReorderFolderChatsResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ReorderFolderChatsResponse copyWith(
+          void Function(ReorderFolderChatsResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as ReorderFolderChatsResponse))
+          as ReorderFolderChatsResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ReorderFolderChatsResponse create() => ReorderFolderChatsResponse._();
+  @$core.override
+  ReorderFolderChatsResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ReorderFolderChatsResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ReorderFolderChatsResponse>(create);
+  static ReorderFolderChatsResponse? _defaultInstance;
+}
+
+class PinChatInFolderResponse extends $pb.GeneratedMessage {
+  factory PinChatInFolderResponse() => create();
+
+  PinChatInFolderResponse._();
+
+  factory PinChatInFolderResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory PinChatInFolderResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'PinChatInFolderResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  PinChatInFolderResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  PinChatInFolderResponse copyWith(
+          void Function(PinChatInFolderResponse) updates) =>
+      super.copyWith((message) => updates(message as PinChatInFolderResponse))
+          as PinChatInFolderResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static PinChatInFolderResponse create() => PinChatInFolderResponse._();
+  @$core.override
+  PinChatInFolderResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static PinChatInFolderResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<PinChatInFolderResponse>(create);
+  static PinChatInFolderResponse? _defaultInstance;
+}
+
+class UnpinChatInFolderResponse extends $pb.GeneratedMessage {
+  factory UnpinChatInFolderResponse() => create();
+
+  UnpinChatInFolderResponse._();
+
+  factory UnpinChatInFolderResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory UnpinChatInFolderResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'UnpinChatInFolderResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UnpinChatInFolderResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UnpinChatInFolderResponse copyWith(
+          void Function(UnpinChatInFolderResponse) updates) =>
+      super.copyWith((message) => updates(message as UnpinChatInFolderResponse))
+          as UnpinChatInFolderResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static UnpinChatInFolderResponse create() => UnpinChatInFolderResponse._();
+  @$core.override
+  UnpinChatInFolderResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static UnpinChatInFolderResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<UnpinChatInFolderResponse>(create);
+  static UnpinChatInFolderResponse? _defaultInstance;
 }
 
 class AcceptDMRequestResponse extends $pb.GeneratedMessage {

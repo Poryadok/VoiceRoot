@@ -29,6 +29,9 @@ func (t *transcoder) serveChats(w http.ResponseWriter, r *http.Request, rest str
 		if inbox := queryFirst(r, "inbox"); inbox != "" {
 			req.Inbox = &inbox
 		}
+		if folderID := queryFirst(r, "folder_id"); folderID != "" {
+			req.FolderId = &folderID
+		}
 		resp, err := t.clients.chat.ListChats(ctx, req)
 		if err != nil {
 			writeGRPCError(w, err)
@@ -84,6 +87,9 @@ func (t *transcoder) serveChats(w http.ResponseWriter, r *http.Request, rest str
 		}
 		w.WriteHeader(http.StatusNoContent)
 		return true
+
+	case strings.HasPrefix(rest, "folders"):
+		return t.serveChatFolderRoutes(w, r, ctx, rest)
 
 	case r.Method == http.MethodGet && rest != "" && !strings.Contains(rest, "/"):
 		resp, err := t.clients.chat.GetChat(ctx, &chatv1.GetChatRequest{ChatId: rest})

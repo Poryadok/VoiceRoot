@@ -59,8 +59,22 @@ func (s *ChatGRPC) ListChats(ctx context.Context, req *chatv1.ListChatsRequest) 
 		return nil, status.Error(codes.InvalidArgument, "invalid inbox")
 	}
 
+	folderRaw := strings.TrimSpace(req.GetFolderId())
+	var folderID *uuid.UUID
+	if folderRaw != "" {
+		if inbox == "archive" {
+			folderRaw = ""
+		} else {
+			id, parseErr := uuid.Parse(folderRaw)
+			if parseErr != nil {
+				return nil, status.Error(codes.InvalidArgument, "invalid folder_id")
+			}
+			folderID = &id
+		}
+	}
+
 	var spaceIDs []uuid.UUID
-	if inbox == "main" && s.SpaceMembers != nil {
+	if (inbox == "main" || folderID != nil) && s.SpaceMembers != nil {
 		var spaceErr error
 		spaceIDs, spaceErr = s.SpaceMembers.ListMemberSpaceIDs(ctx, caller)
 		if spaceErr != nil {
@@ -69,10 +83,19 @@ func (s *ChatGRPC) ListChats(ctx context.Context, req *chatv1.ListChatsRequest) 
 		}
 	}
 
-	page, err := s.DM.ListChatsPage(ctx, caller, cursor, limit, inbox, spaceIDs)
+	var page *store.ListChatsPage
+	var err error
+	if folderID != nil {
+		page, err = s.DM.ListChatsPageByFolder(ctx, caller, *folderID, cursor, limit, spaceIDs)
+	} else {
+		page, err = s.DM.ListChatsPage(ctx, caller, cursor, limit, inbox, spaceIDs)
+	}
 	if err != nil {
 		if errors.Is(err, store.ErrInvalidListCursor) {
 			return nil, status.Error(codes.InvalidArgument, "invalid page cursor")
+		}
+		if errors.Is(err, store.ErrFolderNotFound) {
+			return nil, status.Error(codes.NotFound, "folder not found")
 		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}

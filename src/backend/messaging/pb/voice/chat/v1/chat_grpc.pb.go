@@ -39,6 +39,11 @@ const (
 	ChatService_CreateFolder_FullMethodName           = "/voice.chat.v1.ChatService/CreateFolder"
 	ChatService_UpdateFolder_FullMethodName           = "/voice.chat.v1.ChatService/UpdateFolder"
 	ChatService_DeleteFolder_FullMethodName           = "/voice.chat.v1.ChatService/DeleteFolder"
+	ChatService_AddChatToFolder_FullMethodName        = "/voice.chat.v1.ChatService/AddChatToFolder"
+	ChatService_RemoveChatFromFolder_FullMethodName   = "/voice.chat.v1.ChatService/RemoveChatFromFolder"
+	ChatService_ReorderFolderChats_FullMethodName     = "/voice.chat.v1.ChatService/ReorderFolderChats"
+	ChatService_PinChatInFolder_FullMethodName        = "/voice.chat.v1.ChatService/PinChatInFolder"
+	ChatService_UnpinChatInFolder_FullMethodName      = "/voice.chat.v1.ChatService/UnpinChatInFolder"
 	ChatService_AcceptDMRequest_FullMethodName        = "/voice.chat.v1.ChatService/AcceptDMRequest"
 	ChatService_DeclineDMRequest_FullMethodName       = "/voice.chat.v1.ChatService/DeclineDMRequest"
 	ChatService_MuteChat_FullMethodName               = "/voice.chat.v1.ChatService/MuteChat"
@@ -73,6 +78,11 @@ type ChatServiceClient interface {
 	CreateFolder(ctx context.Context, in *CreateFolderRequest, opts ...grpc.CallOption) (*CreateFolderResponse, error)
 	UpdateFolder(ctx context.Context, in *UpdateFolderRequest, opts ...grpc.CallOption) (*UpdateFolderResponse, error)
 	DeleteFolder(ctx context.Context, in *DeleteFolderRequest, opts ...grpc.CallOption) (*DeleteFolderResponse, error)
+	AddChatToFolder(ctx context.Context, in *AddChatToFolderRequest, opts ...grpc.CallOption) (*AddChatToFolderResponse, error)
+	RemoveChatFromFolder(ctx context.Context, in *RemoveChatFromFolderRequest, opts ...grpc.CallOption) (*RemoveChatFromFolderResponse, error)
+	ReorderFolderChats(ctx context.Context, in *ReorderFolderChatsRequest, opts ...grpc.CallOption) (*ReorderFolderChatsResponse, error)
+	PinChatInFolder(ctx context.Context, in *PinChatInFolderRequest, opts ...grpc.CallOption) (*PinChatInFolderResponse, error)
+	UnpinChatInFolder(ctx context.Context, in *UnpinChatInFolderRequest, opts ...grpc.CallOption) (*UnpinChatInFolderResponse, error)
 	AcceptDMRequest(ctx context.Context, in *AcceptDMRequestRequest, opts ...grpc.CallOption) (*AcceptDMRequestResponse, error)
 	DeclineDMRequest(ctx context.Context, in *DeclineDMRequestRequest, opts ...grpc.CallOption) (*DeclineDMRequestResponse, error)
 	MuteChat(ctx context.Context, in *MuteChatRequest, opts ...grpc.CallOption) (*MuteChatResponse, error)
@@ -290,6 +300,56 @@ func (c *chatServiceClient) DeleteFolder(ctx context.Context, in *DeleteFolderRe
 	return out, nil
 }
 
+func (c *chatServiceClient) AddChatToFolder(ctx context.Context, in *AddChatToFolderRequest, opts ...grpc.CallOption) (*AddChatToFolderResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AddChatToFolderResponse)
+	err := c.cc.Invoke(ctx, ChatService_AddChatToFolder_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chatServiceClient) RemoveChatFromFolder(ctx context.Context, in *RemoveChatFromFolderRequest, opts ...grpc.CallOption) (*RemoveChatFromFolderResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RemoveChatFromFolderResponse)
+	err := c.cc.Invoke(ctx, ChatService_RemoveChatFromFolder_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chatServiceClient) ReorderFolderChats(ctx context.Context, in *ReorderFolderChatsRequest, opts ...grpc.CallOption) (*ReorderFolderChatsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReorderFolderChatsResponse)
+	err := c.cc.Invoke(ctx, ChatService_ReorderFolderChats_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chatServiceClient) PinChatInFolder(ctx context.Context, in *PinChatInFolderRequest, opts ...grpc.CallOption) (*PinChatInFolderResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PinChatInFolderResponse)
+	err := c.cc.Invoke(ctx, ChatService_PinChatInFolder_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chatServiceClient) UnpinChatInFolder(ctx context.Context, in *UnpinChatInFolderRequest, opts ...grpc.CallOption) (*UnpinChatInFolderResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UnpinChatInFolderResponse)
+	err := c.cc.Invoke(ctx, ChatService_UnpinChatInFolder_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *chatServiceClient) AcceptDMRequest(ctx context.Context, in *AcceptDMRequestRequest, opts ...grpc.CallOption) (*AcceptDMRequestResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AcceptDMRequestResponse)
@@ -376,6 +436,11 @@ type ChatServiceServer interface {
 	CreateFolder(context.Context, *CreateFolderRequest) (*CreateFolderResponse, error)
 	UpdateFolder(context.Context, *UpdateFolderRequest) (*UpdateFolderResponse, error)
 	DeleteFolder(context.Context, *DeleteFolderRequest) (*DeleteFolderResponse, error)
+	AddChatToFolder(context.Context, *AddChatToFolderRequest) (*AddChatToFolderResponse, error)
+	RemoveChatFromFolder(context.Context, *RemoveChatFromFolderRequest) (*RemoveChatFromFolderResponse, error)
+	ReorderFolderChats(context.Context, *ReorderFolderChatsRequest) (*ReorderFolderChatsResponse, error)
+	PinChatInFolder(context.Context, *PinChatInFolderRequest) (*PinChatInFolderResponse, error)
+	UnpinChatInFolder(context.Context, *UnpinChatInFolderRequest) (*UnpinChatInFolderResponse, error)
 	AcceptDMRequest(context.Context, *AcceptDMRequestRequest) (*AcceptDMRequestResponse, error)
 	DeclineDMRequest(context.Context, *DeclineDMRequestRequest) (*DeclineDMRequestResponse, error)
 	MuteChat(context.Context, *MuteChatRequest) (*MuteChatResponse, error)
@@ -452,6 +517,21 @@ func (UnimplementedChatServiceServer) UpdateFolder(context.Context, *UpdateFolde
 }
 func (UnimplementedChatServiceServer) DeleteFolder(context.Context, *DeleteFolderRequest) (*DeleteFolderResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteFolder not implemented")
+}
+func (UnimplementedChatServiceServer) AddChatToFolder(context.Context, *AddChatToFolderRequest) (*AddChatToFolderResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AddChatToFolder not implemented")
+}
+func (UnimplementedChatServiceServer) RemoveChatFromFolder(context.Context, *RemoveChatFromFolderRequest) (*RemoveChatFromFolderResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoveChatFromFolder not implemented")
+}
+func (UnimplementedChatServiceServer) ReorderFolderChats(context.Context, *ReorderFolderChatsRequest) (*ReorderFolderChatsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReorderFolderChats not implemented")
+}
+func (UnimplementedChatServiceServer) PinChatInFolder(context.Context, *PinChatInFolderRequest) (*PinChatInFolderResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PinChatInFolder not implemented")
+}
+func (UnimplementedChatServiceServer) UnpinChatInFolder(context.Context, *UnpinChatInFolderRequest) (*UnpinChatInFolderResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UnpinChatInFolder not implemented")
 }
 func (UnimplementedChatServiceServer) AcceptDMRequest(context.Context, *AcceptDMRequestRequest) (*AcceptDMRequestResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AcceptDMRequest not implemented")
@@ -852,6 +932,96 @@ func _ChatService_DeleteFolder_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ChatService_AddChatToFolder_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddChatToFolderRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).AddChatToFolder(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_AddChatToFolder_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).AddChatToFolder(ctx, req.(*AddChatToFolderRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChatService_RemoveChatFromFolder_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveChatFromFolderRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).RemoveChatFromFolder(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_RemoveChatFromFolder_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).RemoveChatFromFolder(ctx, req.(*RemoveChatFromFolderRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChatService_ReorderFolderChats_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReorderFolderChatsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).ReorderFolderChats(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_ReorderFolderChats_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).ReorderFolderChats(ctx, req.(*ReorderFolderChatsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChatService_PinChatInFolder_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PinChatInFolderRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).PinChatInFolder(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_PinChatInFolder_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).PinChatInFolder(ctx, req.(*PinChatInFolderRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChatService_UnpinChatInFolder_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnpinChatInFolderRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).UnpinChatInFolder(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_UnpinChatInFolder_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).UnpinChatInFolder(ctx, req.(*UnpinChatInFolderRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _ChatService_AcceptDMRequest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(AcceptDMRequestRequest)
 	if err := dec(in); err != nil {
@@ -1046,6 +1216,26 @@ var ChatService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteFolder",
 			Handler:    _ChatService_DeleteFolder_Handler,
+		},
+		{
+			MethodName: "AddChatToFolder",
+			Handler:    _ChatService_AddChatToFolder_Handler,
+		},
+		{
+			MethodName: "RemoveChatFromFolder",
+			Handler:    _ChatService_RemoveChatFromFolder_Handler,
+		},
+		{
+			MethodName: "ReorderFolderChats",
+			Handler:    _ChatService_ReorderFolderChats_Handler,
+		},
+		{
+			MethodName: "PinChatInFolder",
+			Handler:    _ChatService_PinChatInFolder_Handler,
+		},
+		{
+			MethodName: "UnpinChatInFolder",
+			Handler:    _ChatService_UnpinChatInFolder_Handler,
 		},
 		{
 			MethodName: "AcceptDMRequest",

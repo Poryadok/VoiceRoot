@@ -12,7 +12,7 @@
 - Создание и управление DM-чатами
 - Создание и управление **текстовыми групповыми чатами** (`type = group` \| `channel`, до 500 участников на чат вне спейса по продукту; одна модель API); `space_id` опционален; в спейсе узел **`space_tree_nodes`** — совместно с Space
 - Участники: для чатов **без** `space_id` — `chat_members`; для чатов **в** спейсе — наследование от `space_members` + роли/оверрайды (см. [DATA_MODEL.md](../DATA_MODEL.md))
-- Папки чатов (All / DM / Groups / Channels / Spaces / пользовательские) — [navigation.md](../features/navigation.md); **foundation slice (Batch 18):** migrations `000008`/`000009`, `ListFolders`/`CreateFolder`; membership/pin/`ListChats.folder_id` — backlog ([todo/backend.md](../todo/backend.md))
+- Папки чатов (All / DM / Groups / Channels / Spaces / пользовательские) — [navigation.md](../features/navigation.md); **foundation (Batch 18):** migrations `000008`/`000009`, `ListFolders`/`CreateFolder`; **membership/pin/`ListChats.folder_id` + Gateway REST (Batch 19)**; `UpdateFolder`/`DeleteFolder` — backlog
 - Quick Access (до 15 чатов на профиль); таблица `quick_access_chats` + RPC — **shipped (Batch 17)**; archive removes Quick Access on `ArchiveChat` — **shipped (Batch 18)**
 - Список активных чатов (mobile strip; desktop — quick access + pin)
 - Мьют / архивация чатов
@@ -64,9 +64,12 @@ service ChatService {
   rpc RemoveQuickAccess(RemoveQuickAccessRequest) returns (RemoveQuickAccessResponse);
   rpc ReorderQuickAccess(ReorderQuickAccessRequest) returns (ReorderQuickAccessResponse);
 
-  // Folder membership + pin — not yet in proto
-  // rpc AddChatToFolder / RemoveChatFromFolder / ReorderFolderChats
-  // rpc PinChatInFolder / UnpinChatInFolder
+  // Folder membership + pin — shipped (Batch 19)
+  rpc AddChatToFolder(AddChatToFolderRequest) returns (AddChatToFolderResponse);       // ✓
+  rpc RemoveChatFromFolder(RemoveChatFromFolderRequest) returns (RemoveChatFromFolderResponse); // ✓
+  rpc ReorderFolderChats(ReorderFolderChatsRequest) returns (ReorderFolderChatsResponse); // ✓
+  rpc PinChatInFolder(PinChatInFolderRequest) returns (PinChatInFolderResponse);     // ✓
+  rpc UnpinChatInFolder(UnpinChatInFolderRequest) returns (UnpinChatInFolderResponse); // ✓
 
   // Действия
   rpc MuteChat(MuteChatRequest) returns (MuteChatResponse);       // ✓
@@ -80,7 +83,7 @@ service ChatService {
 message ListChatsRequest {
   voice.common.v1.CursorPageRequest page = 1;
   optional string inbox = 2; // main | requests | archive — ✓ shipped
-  optional string folder_id = 3; // not yet in proto
+  optional string folder_id = 3; // ✓ shipped (Batch 19)
 }
 
 message ChatListItem {
@@ -197,7 +200,7 @@ CREATE INDEX quick_access_profile_order_idx ON quick_access_chats (profile_id, s
 
 ### Deployed schema (migrations `000001`–`000007`) vs full spec
 
-**Shipped today** (`chat_db` migrations): DM + group + channel types; `chat_members.inbox_bucket`; `threads_enabled` / `allow_user_main_feed`; `e2e_enabled`; slow mode; guest-DM flag; **`quick_access_chats` (Batch 17)**; **`folders` + `folder_chats` DDL (Batch 18)**. **Not shipped:** folder membership/pin handlers, `ListChats.folder_id` filter — см. [todo/backend.md](../todo/backend.md).
+**Shipped today** (`chat_db` migrations): DM + group + channel types; `chat_members.inbox_bucket`; `threads_enabled` / `allow_user_main_feed`; `e2e_enabled`; slow mode; guest-DM flag; **`quick_access_chats` (Batch 17)**; **`folders` + `folder_chats` DDL (Batch 18)**; **folder membership/pin handlers + `ListChats.folder_id` filter (Batch 19)**. **Not shipped:** `UpdateFolder`/`DeleteFolder` — см. [todo/backend.md](../todo/backend.md).
 
 **Full spec** (folders + quick access) — [navigation.md](../features/navigation.md); DDL-скетчи ниже в § Migration sketches.
 
@@ -217,7 +220,7 @@ CREATE INDEX quick_access_profile_order_idx ON quick_access_chats (profile_id, s
 - сортировка: `COALESCE(last_message_at, created_at)` DESC, tie-break `chats.id` DESC;
 - page size default 50, max 100.
 
-**Full inbox spec (not yet shipped):** `folder_id` — [navigation.md](../features/navigation.md); DDL/handlers — [todo/backend.md](../todo/backend.md). **`inbox=archive`** + **Quick Access RPC/DDL** — shipped (Batch 15/17).
+**Full inbox spec:** `folder_id` filter — **shipped (Batch 19)**; **`inbox=archive`** + **Quick Access RPC/DDL** — shipped (Batch 15/17).
 
 ### Timestamp ownership (`chats.last_message_at`)
 
@@ -250,7 +253,7 @@ CREATE INDEX quick_access_profile_order_idx ON quick_access_chats (profile_id, s
 
 **Custom folders:** user-created; membership explicit via `folder_chats`.
 
-### `ListChatsRequest.folder_id` (not yet in proto)
+### `ListChatsRequest.folder_id` (shipped Batch 19)
 
 Расширение `ListChatsRequest`:
 
@@ -271,7 +274,7 @@ message ListChatsRequest {
 
 Sort within folder: pinned first (`pin_order ASC`), then `sort_order`, then activity (`last_message_at`).
 
-### Folder membership + pin RPCs (not yet in proto)
+### Folder membership + pin RPCs (shipped Batch 19)
 
 ```protobuf
 rpc AddChatToFolder(AddChatToFolderRequest) returns (Empty);
