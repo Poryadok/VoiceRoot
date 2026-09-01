@@ -225,6 +225,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get socialPresenceOffline => 'Offline';
 
   @override
+  String get socialPresenceInvisible => 'Invisible';
+
+  @override
+  String get profileMenuPresence => 'Presence';
+
+  @override
+  String get profileMenuArchiveUnavailable =>
+      'Chat archive is not available yet.';
+
+  @override
   String socialPresenceLastSeen(String dateTime) {
     return 'Last seen $dateTime';
   }

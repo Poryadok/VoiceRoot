@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../a11y/focus_trap.dart';
+import '../a11y/voice_focus_return.dart';
 
 /// Draggable bottom sheet capped at 85% viewport height.
 ///
@@ -15,12 +16,14 @@ Future<T?> showVoiceBottomSheet<T>({
   bool scrollable = true,
   VoidCallback? onDismiss,
 }) {
+  final focusReturn = VoiceFocusReturn.capture();
   return showModalBottomSheet<T>(
     context: context,
     isScrollControlled: true,
     builder: (ctx) => VoiceFocusTrap(
       onEscape: () {
         Navigator.of(ctx).pop();
+        focusReturn.restore();
         onDismiss?.call();
       },
       child: DraggableScrollableSheet(
