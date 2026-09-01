@@ -25,6 +25,9 @@ import '../space/create_space_sheet.dart';
 import '../space/join_space_invite_sheet.dart';
 import '../chat/create_group_sheet.dart';
 import '../onboarding/onboarding_anchor_keys.dart';
+import '../../state/chat_navigation_providers.dart';
+import '../../state/folder_pin_providers.dart';
+import 'quick_access_actions.dart';
 
 /// Reusable chat list content for navigation column and legacy middle column.
 class ChatListBody extends ConsumerStatefulWidget {
@@ -45,6 +48,9 @@ class ChatListBody extends ConsumerStatefulWidget {
   static const Key joinSpaceInviteKey = Key('chat_list_join_space_invite');
   static Key spaceTileKey(String spaceId) => Key('chat_list_space_$spaceId');
   static Key muteActionKey(String chatId) => Key('chat_list_mute_$chatId');
+  static Key pinActionKey(String chatId) => Key('chat_list_pin_$chatId');
+  static Key quickAccessActionKey(String chatId) =>
+      Key('chat_list_quick_access_$chatId');
   static Key archiveActionKey(String chatId) =>
       Key('chat_list_archive_$chatId');
 
@@ -100,6 +106,11 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
     final peerMap = ref.watch(dmPeerProfileByChatIdProvider);
     final activeProfileId = ref.watch(authControllerProvider).activeProfileId;
     final shellNav = ref.read(shellNavigationProvider);
+    final selectedFolderId = ref.watch(selectedChatFolderIdProvider);
+    final foldersAsync = ref.watch(chatFoldersProvider);
+    final customFolderReorder = foldersAsync.valueOrNull?.folders
+            .any((f) => f.id == selectedFolderId && !f.isSystem) ??
+        false;
 
     void selectChat(String chatId) {
       if (widget.onChatSelected != null) {
@@ -199,6 +210,148 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
                 );
               }
               final hasFooter = chats.hasMore || chats.isLoadingMore;
+              final canReorder =
+                  customFolderReorder &&
+                  selectedFolderId != null &&
+                  inbox == 'main' &&
+                  !hasFooter;
+
+              Widget buildRow(
+                ChatListItem item, {
+                int? reorderIndex,
+              }) {
+                final peerId = resolveDmPeerProfileId(
+                  item: item,
+                  knownPeerId: peerMap[item.chatId],
+                  activeProfileId: activeProfileId,
+                );
+                final titleAsync = peerId != null
+                    ? ref.watch(profileProvider(peerId))
+                    : null;
+                final profile = titleAsync?.valueOrNull;
+                final title =
+                    profile?.displayName ??
+                    item.chat.name ??
+                    l10n.chatListDmFallback(_shortChatId(item.chatId));
+                final showPremium = peerId != null &&
+                    ref.watch(profilePremiumBadgeProvider(peerId));
+                final subtitle = item.lastMessagePreview ?? '';
+                final selected = item.chatId == selectedId;
+                final presence = peerId != null
+                    ? ref.watch(presenceProvider(peerId))
+                    : null;
+                final pinned = item.isPinned ||
+                    isChatPinnedInFolder(ref, selectedFolderId, item.chatId);
+                final displayItem = pinned ? item.copyWith(isPinned: true) : item;
+                return Column(
+                  key: ChatListBody.tileKey(item.chatId),
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    VoiceListRow(
+                      selected: selected,
+                      title: title,
+                      titleWidget: peerId != null && !item.chat.isGroup
+                          ? ChatAuthorLabel(
+                              displayName: title,
+                              isPremium: showPremium,
+                              verificationType:
+                                  profile?.verificationType ?? 'none',
+                              premiumBadgeSemanticLabel:
+                                  l10n.premiumBadgeLabel,
+                              verifiedBadgeSemanticLabel:
+                                  profile?.verificationType == 'organization'
+                                  ? l10n.verifiedBadgeOrganization
+                                  : l10n.verifiedBadgePersonal,
+                            )
+                          : null,
+                      subtitle: subtitle.isEmpty ? null : subtitle,
+                      leading: item.chat.isGroup
+                          ? VoiceAvatar(
+                              imageUrl: item.chat.avatarUrl,
+                              label: title,
+                            )
+                          : peerId != null
+                          ? VoiceAvatarWithPresence(
+                              avatar: VoiceAvatar(
+                                imageUrl: profile?.avatarUrl,
+                                label: title,
+                              ),
+                              presence: presence != null
+                                  ? PresenceIndicator(
+                                      key: ChatListBody.presenceIndicatorKey(
+                                        item.chatId,
+                                      ),
+                                      presence: presence,
+                                      semanticLabel: _presenceLabel(
+                                        l10n,
+                                        presence.status,
+                                      ),
+                                      size: 12,
+                                    )
+                                  : null,
+                            )
+                          : null,
+                      trailing: _ChatListTrailing(
+                        l10n: l10n,
+                        inbox: inbox,
+                        item: displayItem,
+                        muted: ref.watch(chatMutedUntilProvider)[item.chatId] !=
+                            null,
+                        showDragHandle: reorderIndex != null,
+                        dragIndex: reorderIndex,
+                        onAccept: () => ref
+                            .read(chatListControllerProvider.notifier)
+                            .acceptRequest(item.chatId),
+                        onDecline: () => ref
+                            .read(chatListControllerProvider.notifier)
+                            .declineRequest(item.chatId),
+                      ),
+                      onTap: () => selectChat(item.chatId),
+                      onLongPress: inbox == 'requests'
+                          ? null
+                          : () => _showChatRowActions(
+                                context,
+                                ref,
+                                l10n,
+                                displayItem,
+                                folderId: selectedFolderId,
+                              ),
+                    ),
+                    if (item.isStranger && inbox == 'main')
+                      Padding(
+                        padding: const EdgeInsets.only(left: 56, bottom: 4),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: _StrangerChip(
+                            label: l10n.chatListStrangerBadge,
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              }
+
+              if (canReorder) {
+                return ReorderableListView.builder(
+                  key: ChatListBody.listKey,
+                  scrollController: _scrollController,
+                  buildDefaultDragHandles: false,
+                  itemCount: items.length,
+                  onReorder: (oldIndex, newIndex) {
+                    if (newIndex > oldIndex) newIndex -= 1;
+                    final ids = items.map((item) => item.chatId).toList();
+                    final moved = ids.removeAt(oldIndex);
+                    ids.insert(newIndex, moved);
+                    ref
+                        .read(chatListControllerProvider.notifier)
+                        .reorderFolderChats(ids);
+                  },
+                  itemBuilder: (context, index) {
+                    return buildRow(items[index], reorderIndex: index);
+                  },
+                );
+              }
+
               return ListView.builder(
                 key: ChatListBody.listKey,
                 controller: _scrollController,
@@ -227,110 +380,7 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
                             ),
                     );
                   }
-                  final item = items[index];
-                  final peerId = resolveDmPeerProfileId(
-                    item: item,
-                    knownPeerId: peerMap[item.chatId],
-                    activeProfileId: activeProfileId,
-                  );
-                  final titleAsync = peerId != null
-                      ? ref.watch(profileProvider(peerId))
-                      : null;
-                  final profile = titleAsync?.valueOrNull;
-                  final title =
-                      profile?.displayName ??
-                      item.chat.name ??
-                      l10n.chatListDmFallback(_shortChatId(item.chatId));
-                  final showPremium = peerId != null &&
-                      ref.watch(profilePremiumBadgeProvider(peerId));
-                  final subtitle = item.lastMessagePreview ?? '';
-                  final selected = item.chatId == selectedId;
-                  final presence = peerId != null
-                      ? ref.watch(presenceProvider(peerId))
-                      : null;
-                  return Column(
-                    key: ChatListBody.tileKey(item.chatId),
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      VoiceListRow(
-                        selected: selected,
-                        title: title,
-                        titleWidget: peerId != null && !item.chat.isGroup
-                            ? ChatAuthorLabel(
-                                displayName: title,
-                                isPremium: showPremium,
-                                verificationType:
-                                    profile?.verificationType ?? 'none',
-                                premiumBadgeSemanticLabel:
-                                    l10n.premiumBadgeLabel,
-                                verifiedBadgeSemanticLabel:
-                                    profile?.verificationType == 'organization'
-                                    ? l10n.verifiedBadgeOrganization
-                                    : l10n.verifiedBadgePersonal,
-                              )
-                            : null,
-                        subtitle: subtitle.isEmpty ? null : subtitle,
-                        leading: item.chat.isGroup
-                            ? VoiceAvatar(
-                                imageUrl: item.chat.avatarUrl,
-                                label: title,
-                              )
-                            : peerId != null
-                            ? VoiceAvatarWithPresence(
-                                avatar: VoiceAvatar(
-                                  imageUrl: profile?.avatarUrl,
-                                  label: title,
-                                ),
-                                presence: presence != null
-                                    ? PresenceIndicator(
-                                        key: ChatListBody.presenceIndicatorKey(
-                                          item.chatId,
-                                        ),
-                                        presence: presence,
-                                        semanticLabel: _presenceLabel(
-                                          l10n,
-                                          presence.status,
-                                        ),
-                                        size: 12,
-                                      )
-                                    : null,
-                              )
-                            : null,
-                        trailing: _ChatListTrailing(
-                          l10n: l10n,
-                          inbox: inbox,
-                          item: item,
-                          muted: ref.watch(chatMutedUntilProvider)[item.chatId] !=
-                              null,
-                          onAccept: () => ref
-                              .read(chatListControllerProvider.notifier)
-                              .acceptRequest(item.chatId),
-                          onDecline: () => ref
-                              .read(chatListControllerProvider.notifier)
-                              .declineRequest(item.chatId),
-                        ),
-                        onTap: () => selectChat(item.chatId),
-                        onLongPress: inbox == 'requests'
-                            ? null
-                            : () => _showChatRowActions(
-                                  context,
-                                  ref,
-                                  l10n,
-                                  item,
-                                ),
-                      ),
-                      if (item.isStranger && inbox == 'main')
-                        Padding(
-                          padding: const EdgeInsets.only(left: 56, bottom: 4),
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: _StrangerChip(
-                              label: l10n.chatListStrangerBadge,
-                            ),
-                          ),
-                        ),
-                    ],
-                  );
+                  return buildRow(items[index]);
                 },
               );
             },
@@ -365,9 +415,14 @@ Future<void> _showChatRowActions(
   BuildContext context,
   WidgetRef ref,
   AppLocalizations l10n,
-  ChatListItem item,
-) async {
+  ChatListItem item, {
+  String? folderId,
+}) async {
   final muted = ref.read(chatMutedUntilProvider)[item.chatId] != null;
+  final qaAsync = ref.read(quickAccessListProvider);
+  final inQuickAccess = qaAsync.valueOrNull?.items
+          .any((entry) => entry.chatId == item.chatId) ??
+      false;
   final action = await showModalBottomSheet<String>(
     context: context,
     builder: (ctx) {
@@ -375,6 +430,22 @@ Future<void> _showChatRowActions(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (folderId != null)
+              ListTile(
+                key: ChatListBody.pinActionKey(item.chatId),
+                leading: Icon(
+                  item.isPinned ? Icons.push_pin : Icons.push_pin_outlined,
+                ),
+                title: Text(item.isPinned ? l10n.chatListUnpin : l10n.chatListPin),
+                onTap: () => Navigator.pop(ctx, item.isPinned ? 'unpin' : 'pin'),
+              ),
+            if (!inQuickAccess)
+              ListTile(
+                key: ChatListBody.quickAccessActionKey(item.chatId),
+                leading: const Icon(Icons.star_outline),
+                title: Text(l10n.chatListAddQuickAccess),
+                onTap: () => Navigator.pop(ctx, 'quick_access'),
+              ),
             ListTile(
               key: ChatListBody.muteActionKey(item.chatId),
               leading: Icon(muted ? Icons.notifications_active : Icons.notifications_off),
@@ -396,6 +467,24 @@ Future<void> _showChatRowActions(
   if (action == null || !context.mounted) return;
   final controller = ref.read(chatListControllerProvider.notifier);
   switch (action) {
+    case 'pin':
+      if (folderId != null) {
+        await controller.setChatPinnedInFolder(
+          folderId: folderId,
+          chatId: item.chatId,
+          pinned: true,
+        );
+      }
+    case 'unpin':
+      if (folderId != null) {
+        await controller.setChatPinnedInFolder(
+          folderId: folderId,
+          chatId: item.chatId,
+          pinned: false,
+        );
+      }
+    case 'quick_access':
+      await addChatToQuickAccess(context, ref, chatId: item.chatId);
     case 'mute':
       final until = DateTime.utc(9999, 12, 31);
       final err = await controller.muteChat(item.chatId, mutedUntil: until);
@@ -428,6 +517,8 @@ class _ChatListTrailing extends StatelessWidget {
     required this.muted,
     required this.onAccept,
     required this.onDecline,
+    this.showDragHandle = false,
+    this.dragIndex,
   });
 
   final AppLocalizations l10n;
@@ -436,6 +527,8 @@ class _ChatListTrailing extends StatelessWidget {
   final bool muted;
   final VoidCallback onAccept;
   final VoidCallback onDecline;
+  final bool showDragHandle;
+  final int? dragIndex;
 
   @override
   Widget build(BuildContext context) {
@@ -455,6 +548,28 @@ class _ChatListTrailing extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (showDragHandle && dragIndex != null)
+          ReorderableDragStartListener(
+            index: dragIndex!,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Icon(
+                Icons.drag_handle,
+                size: 18,
+                color: voice.textSecondary,
+              ),
+            ),
+          ),
+        if (item.isPinned)
+          Padding(
+            padding: const EdgeInsets.only(right: 4),
+            child: Icon(
+              Icons.push_pin,
+              size: 16,
+              color: voice.textSecondary,
+              semanticLabel: l10n.chatListPin,
+            ),
+          ),
         if (muted)
           Padding(
             padding: const EdgeInsets.only(right: 4),

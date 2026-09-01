@@ -300,5 +300,51 @@ void main() {
       );
       expect(result, isA<ChatsApiOk<ChatListData>>());
     });
+
+    test('pin/unpin/reorder folder chat routes', () async {
+      final paths = <String>[];
+      final methods = <String>[];
+      final client = VoiceChatsClient(
+        gateway: gatewayHttpForTest(
+          MockClient((req) async {
+            paths.add(req.url.path);
+            methods.add(req.method);
+            return http.Response('', 204);
+          }),
+          config: config,
+        ),
+      );
+
+      expect(
+        await client.pinChatInFolder(
+          authorization: auth,
+          folderId: 'f1',
+          chatId: 'c1',
+        ),
+        isA<ChatsApiOk<void>>(),
+      );
+      expect(
+        await client.unpinChatInFolder(
+          authorization: auth,
+          folderId: 'f1',
+          chatId: 'c1',
+        ),
+        isA<ChatsApiOk<void>>(),
+      );
+      expect(
+        await client.reorderFolderChats(
+          authorization: auth,
+          folderId: 'f1',
+          chatIds: ['c2', 'c1'],
+        ),
+        isA<ChatsApiOk<void>>(),
+      );
+      expect(methods, ['POST', 'DELETE', 'PUT']);
+      expect(paths, [
+        '/api/v1/chats/folders/f1/chats/c1/pin',
+        '/api/v1/chats/folders/f1/chats/c1/pin',
+        '/api/v1/chats/folders/f1/chats/order',
+      ]);
+    });
   });
 }
