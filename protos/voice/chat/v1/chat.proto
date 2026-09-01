@@ -34,6 +34,11 @@ service ChatService {
   rpc CreateFolder(CreateFolderRequest) returns (CreateFolderResponse);
   rpc UpdateFolder(UpdateFolderRequest) returns (UpdateFolderResponse);
   rpc DeleteFolder(DeleteFolderRequest) returns (DeleteFolderResponse);
+  rpc AddChatToFolder(AddChatToFolderRequest) returns (AddChatToFolderResponse);
+  rpc RemoveChatFromFolder(RemoveChatFromFolderRequest) returns (RemoveChatFromFolderResponse);
+  rpc ReorderFolderChats(ReorderFolderChatsRequest) returns (ReorderFolderChatsResponse);
+  rpc PinChatInFolder(PinChatInFolderRequest) returns (PinChatInFolderResponse);
+  rpc UnpinChatInFolder(UnpinChatInFolderRequest) returns (UnpinChatInFolderResponse);
   rpc AcceptDMRequest(AcceptDMRequestRequest) returns (AcceptDMRequestResponse);
   rpc DeclineDMRequest(DeclineDMRequestRequest) returns (DeclineDMRequestResponse);
 
@@ -140,6 +145,7 @@ message ChatMember {
 message ListChatsRequest {
   voice.common.v1.CursorPageRequest page = 1;
   optional string inbox = 2; // main | requests | archive
+  optional string folder_id = 3;
 }
 
 // One row in the inbox: chat metadata plus list fields sourced from Messaging (S2S) when configured.
@@ -219,6 +225,33 @@ message DeleteFolderRequest {
   string folder_id = 1;
 }
 
+message AddChatToFolderRequest {
+  string folder_id = 1;
+  string chat_id = 2;
+  optional int32 sort_order = 3; // append if omitted
+}
+
+message RemoveChatFromFolderRequest {
+  string folder_id = 1;
+  string chat_id = 2;
+}
+
+message ReorderFolderChatsRequest {
+  string folder_id = 1;
+  repeated string chat_ids = 2; // full ordered list for profile+folder
+}
+
+message PinChatInFolderRequest {
+  string folder_id = 1;
+  string chat_id = 2;
+  optional int32 pin_order = 3;
+}
+
+message UnpinChatInFolderRequest {
+  string folder_id = 1;
+  string chat_id = 2;
+}
+
 message AcceptDMRequestRequest {
   string chat_id = 1;
 }
@@ -289,6 +322,11 @@ message UpdateFolderResponse {
   Folder folder = 1;
 }
 message DeleteFolderResponse {}
+message AddChatToFolderResponse {}
+message RemoveChatFromFolderResponse {}
+message ReorderFolderChatsResponse {}
+message PinChatInFolderResponse {}
+message UnpinChatInFolderResponse {}
 message AcceptDMRequestResponse {}
 message DeclineDMRequestResponse {}
 message MuteChatResponse {}

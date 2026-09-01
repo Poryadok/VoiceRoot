@@ -261,11 +261,11 @@
 
 Канон: [navigation.md](../features/navigation.md), [chat-service.md](../microservices/chat-service.md), [GLOSSARY.md](../GLOSSARY.md).
 
-- [ ] **[Chat] Proto: folder membership + pin RPCs** — добавить в `chat.proto`: `AddChatToFolder`, `RemoveChatFromFolder`, `ReorderFolderChats`, `PinChatInFolder`, `UnpinChatInFolder`; расширить `ListChatsRequest` полем `folder_id`; `buf generate`. — **P0**
+- [x] **[Chat] Proto: folder membership + pin RPCs** — `AddChatToFolder`, `RemoveChatFromFolder`, `ReorderFolderChats`, `PinChatInFolder`, `UnpinChatInFolder`; `ListChatsRequest.folder_id`; `buf generate` (**Batch 19**).
 - [x] **[Chat] Migration: `folders`** — `000008_folders.up.sql` per chat-service.md sketch; seed system folders (All/DM/Groups/Channels/Spaces) lazy init on `ListFolders` (**Batch 18**).
-- [x] **[Chat] Migration: `folder_chats`** — `000009_folder_chats.up.sql` with `(profile_id, folder_id, chat_id, sort_order, is_pinned, pin_order)` (**Batch 18** DDL; membership handlers still open).
-- [ ] **[Chat] Handlers: folder membership + pin** — store + gRPC for add/remove/reorder/pin/unpin; reject archived chats; system-folder pin overlay vs custom explicit membership. — **P0**
-- [ ] **[Chat] `ListChats` folder filter** — join `folder_chats` / apply system `filter_config_json`; sort pinned → sort_order → activity. — **P0**
+- [x] **[Chat] Migration: `folder_chats`** — `000009_folder_chats.up.sql` with `(profile_id, folder_id, chat_id, sort_order, is_pinned, pin_order)` (**Batch 18** DDL; membership/pin handlers **Batch 19**).
+- [x] **[Chat] Handlers: folder membership + pin** — store + gRPC add/remove/reorder/pin/unpin; archived reject; system pin overlay vs custom explicit membership (**Batch 19**).
+- [x] **[Chat] `ListChats` folder filter** — `folder_chats` join / system `filter_config_json`; sort pinned → sort_order → activity (**Batch 19**).
 - [ ] **[Chat] Folder CRUD handlers** — `ListFolders`/`CreateFolder` **done (Batch 18)**; `UpdateFolder`/`DeleteFolder` still Unimplemented.
 - [x] **[Chat] Proto: Quick Access RPCs** — `ListQuickAccess`, `AddQuickAccess`, `RemoveQuickAccess`, `ReorderQuickAccess` in `chat.proto` (**Batch 17**).
 - [x] **[Chat] Migration: `quick_access_chats`** — `000010_quick_access_chats.up.sql` per chat-service.md sketch (**Batch 17**).
@@ -273,7 +273,7 @@
 - [x] **[Chat] Archive removes Quick Access** — `ArchiveChat(archived=true)` calls `RemoveQuickAccess` (**Batch 18**).
 - [ ] **[Chat] Archive side-effects** — auto-unarchive on incoming DM message to archived membership (consumer in Chat or Messaging — pick owner). Ref: [GLOSSARY.md](../GLOSSARY.md), [text-chat.md](../features/text-chat.md). — **P0**
 - [ ] **[Chat] Archive integration test** — auto-unarchive when incoming DM message arrives (side-effect above). Main/archive inbox list regression — **done (Batch 15):** store + gRPC + compose `inbox=archive`.
-- [ ] **[Chat] Gateway REST** — transcoding for folder RPCs when protos land; Quick Access REST — **done (Batch 17):** `GET/POST /api/v1/chats/quick-access`, `DELETE …/quick-access/{chatId}`, `PUT …/quick-access/order` (`inbox=archive` on existing `GET /chats` — **done Batch 15**).
+- [x] **[Chat] Gateway REST** — folder RPCs + `GET /chats?folder_id=` (**Batch 19**): `GET/POST /api/v1/chats/folders`, `POST/DELETE …/folders/{id}/chats`, `PUT …/chats/order`, `POST/DELETE …/chats/{chatId}/pin`; Quick Access REST — **done (Batch 17)**; `inbox=archive` on `GET /chats` — **done Batch 15**.
 
 ### Telegram-parity audit — open CODE (2026-08-28)
 
@@ -295,7 +295,7 @@
 ### Chat — other
 
 
-- [ ] **[Chat] Folders API entirely unimplemented** — superseded checklist above; foundation slice shipped (**Batch 18**): `ListFolders`/`CreateFolder` + migrations; membership/pin/`ListChats.folder_id` still open.
+- [ ] **[Chat] Folders API entirely unimplemented** — superseded checklist above; membership/pin/`ListChats.folder_id` + Gateway REST shipped (**Batch 19**); `UpdateFolder`/`DeleteFolder` still Unimplemented.
 - [ ] **[Chat] `quick_access_chats` table + RPC** — superseded checklist above.
 - [ ] **[Chat/Messaging/File] Stickers + GIF** — **P0**, 0 code: `[Chat]` pack store + provider search RPC; `[Messaging]` `STICKER`/`GIF` send payload + composer contract; `[File]` animated asset processing — superseded single-line below
 - [ ] **[Chat] Стикер-паки / GIF / voice-note first-class — 0 кода** — see `[Chat/Messaging/File] Stickers + GIF` above; voice-note via `[File]` upload category

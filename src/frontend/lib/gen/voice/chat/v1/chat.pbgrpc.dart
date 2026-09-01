@@ -175,6 +175,41 @@ class ChatServiceClient extends $grpc.Client {
     return $createUnaryCall(_$deleteFolder, request, options: options);
   }
 
+  $grpc.ResponseFuture<$0.AddChatToFolderResponse> addChatToFolder(
+    $0.AddChatToFolderRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$addChatToFolder, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.RemoveChatFromFolderResponse> removeChatFromFolder(
+    $0.RemoveChatFromFolderRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$removeChatFromFolder, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.ReorderFolderChatsResponse> reorderFolderChats(
+    $0.ReorderFolderChatsRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$reorderFolderChats, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.PinChatInFolderResponse> pinChatInFolder(
+    $0.PinChatInFolderRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$pinChatInFolder, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.UnpinChatInFolderResponse> unpinChatInFolder(
+    $0.UnpinChatInFolderRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$unpinChatInFolder, request, options: options);
+  }
+
   $grpc.ResponseFuture<$0.AcceptDMRequestResponse> acceptDMRequest(
     $0.AcceptDMRequestRequest request, {
     $grpc.CallOptions? options,
@@ -319,6 +354,31 @@ class ChatServiceClient extends $grpc.Client {
           '/voice.chat.v1.ChatService/DeleteFolder',
           ($0.DeleteFolderRequest value) => value.writeToBuffer(),
           $0.DeleteFolderResponse.fromBuffer);
+  static final _$addChatToFolder =
+      $grpc.ClientMethod<$0.AddChatToFolderRequest, $0.AddChatToFolderResponse>(
+          '/voice.chat.v1.ChatService/AddChatToFolder',
+          ($0.AddChatToFolderRequest value) => value.writeToBuffer(),
+          $0.AddChatToFolderResponse.fromBuffer);
+  static final _$removeChatFromFolder = $grpc.ClientMethod<
+          $0.RemoveChatFromFolderRequest, $0.RemoveChatFromFolderResponse>(
+      '/voice.chat.v1.ChatService/RemoveChatFromFolder',
+      ($0.RemoveChatFromFolderRequest value) => value.writeToBuffer(),
+      $0.RemoveChatFromFolderResponse.fromBuffer);
+  static final _$reorderFolderChats = $grpc.ClientMethod<
+          $0.ReorderFolderChatsRequest, $0.ReorderFolderChatsResponse>(
+      '/voice.chat.v1.ChatService/ReorderFolderChats',
+      ($0.ReorderFolderChatsRequest value) => value.writeToBuffer(),
+      $0.ReorderFolderChatsResponse.fromBuffer);
+  static final _$pinChatInFolder =
+      $grpc.ClientMethod<$0.PinChatInFolderRequest, $0.PinChatInFolderResponse>(
+          '/voice.chat.v1.ChatService/PinChatInFolder',
+          ($0.PinChatInFolderRequest value) => value.writeToBuffer(),
+          $0.PinChatInFolderResponse.fromBuffer);
+  static final _$unpinChatInFolder = $grpc.ClientMethod<
+          $0.UnpinChatInFolderRequest, $0.UnpinChatInFolderResponse>(
+      '/voice.chat.v1.ChatService/UnpinChatInFolder',
+      ($0.UnpinChatInFolderRequest value) => value.writeToBuffer(),
+      $0.UnpinChatInFolderResponse.fromBuffer);
   static final _$acceptDMRequest =
       $grpc.ClientMethod<$0.AcceptDMRequestRequest, $0.AcceptDMRequestResponse>(
           '/voice.chat.v1.ChatService/AcceptDMRequest',
@@ -518,6 +578,51 @@ abstract class ChatServiceBase extends $grpc.Service {
             ($core.List<$core.int> value) =>
                 $0.DeleteFolderRequest.fromBuffer(value),
             ($0.DeleteFolderResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.AddChatToFolderRequest,
+            $0.AddChatToFolderResponse>(
+        'AddChatToFolder',
+        addChatToFolder_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.AddChatToFolderRequest.fromBuffer(value),
+        ($0.AddChatToFolderResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.RemoveChatFromFolderRequest,
+            $0.RemoveChatFromFolderResponse>(
+        'RemoveChatFromFolder',
+        removeChatFromFolder_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.RemoveChatFromFolderRequest.fromBuffer(value),
+        ($0.RemoveChatFromFolderResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ReorderFolderChatsRequest,
+            $0.ReorderFolderChatsResponse>(
+        'ReorderFolderChats',
+        reorderFolderChats_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ReorderFolderChatsRequest.fromBuffer(value),
+        ($0.ReorderFolderChatsResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.PinChatInFolderRequest,
+            $0.PinChatInFolderResponse>(
+        'PinChatInFolder',
+        pinChatInFolder_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.PinChatInFolderRequest.fromBuffer(value),
+        ($0.PinChatInFolderResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.UnpinChatInFolderRequest,
+            $0.UnpinChatInFolderResponse>(
+        'UnpinChatInFolder',
+        unpinChatInFolder_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.UnpinChatInFolderRequest.fromBuffer(value),
+        ($0.UnpinChatInFolderResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.AcceptDMRequestRequest,
             $0.AcceptDMRequestResponse>(
         'AcceptDMRequest',
@@ -740,6 +845,51 @@ abstract class ChatServiceBase extends $grpc.Service {
 
   $async.Future<$0.DeleteFolderResponse> deleteFolder(
       $grpc.ServiceCall call, $0.DeleteFolderRequest request);
+
+  $async.Future<$0.AddChatToFolderResponse> addChatToFolder_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.AddChatToFolderRequest> $request) async {
+    return addChatToFolder($call, await $request);
+  }
+
+  $async.Future<$0.AddChatToFolderResponse> addChatToFolder(
+      $grpc.ServiceCall call, $0.AddChatToFolderRequest request);
+
+  $async.Future<$0.RemoveChatFromFolderResponse> removeChatFromFolder_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.RemoveChatFromFolderRequest> $request) async {
+    return removeChatFromFolder($call, await $request);
+  }
+
+  $async.Future<$0.RemoveChatFromFolderResponse> removeChatFromFolder(
+      $grpc.ServiceCall call, $0.RemoveChatFromFolderRequest request);
+
+  $async.Future<$0.ReorderFolderChatsResponse> reorderFolderChats_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.ReorderFolderChatsRequest> $request) async {
+    return reorderFolderChats($call, await $request);
+  }
+
+  $async.Future<$0.ReorderFolderChatsResponse> reorderFolderChats(
+      $grpc.ServiceCall call, $0.ReorderFolderChatsRequest request);
+
+  $async.Future<$0.PinChatInFolderResponse> pinChatInFolder_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.PinChatInFolderRequest> $request) async {
+    return pinChatInFolder($call, await $request);
+  }
+
+  $async.Future<$0.PinChatInFolderResponse> pinChatInFolder(
+      $grpc.ServiceCall call, $0.PinChatInFolderRequest request);
+
+  $async.Future<$0.UnpinChatInFolderResponse> unpinChatInFolder_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.UnpinChatInFolderRequest> $request) async {
+    return unpinChatInFolder($call, await $request);
+  }
+
+  $async.Future<$0.UnpinChatInFolderResponse> unpinChatInFolder(
+      $grpc.ServiceCall call, $0.UnpinChatInFolderRequest request);
 
   $async.Future<$0.AcceptDMRequestResponse> acceptDMRequest_Pre(
       $grpc.ServiceCall $call,

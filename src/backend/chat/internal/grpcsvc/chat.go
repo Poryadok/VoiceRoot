@@ -57,6 +57,7 @@ type ProfileFriendChecker interface {
 type DMStore interface {
 	EnsureDM(ctx context.Context, callerProfileID, otherProfileID uuid.UUID) (*store.ChatRow, bool, error)
 	ListChatsPage(ctx context.Context, viewerProfileID uuid.UUID, cursor string, limit int, inbox string, spaceIDs []uuid.UUID) (*store.ListChatsPage, error)
+	ListChatsPageByFolder(ctx context.Context, viewerProfileID, folderID uuid.UUID, cursor string, limit int, spaceIDs []uuid.UUID) (*store.ListChatsPage, error)
 	ListSpaceChatsForProfile(ctx context.Context, viewerProfileID uuid.UUID, spaceIDs []uuid.UUID) ([]*store.ChatRow, error)
 	DMPeerProfileIDs(ctx context.Context, viewerProfileID uuid.UUID, chatIDs []uuid.UUID) (map[uuid.UUID]uuid.UUID, error)
 	FindDMChatByID(ctx context.Context, chatID uuid.UUID) (*store.ChatRow, error)
@@ -72,6 +73,12 @@ type DMStore interface {
 	ReorderQuickAccess(ctx context.Context, profileID uuid.UUID, chatIDs []uuid.UUID) error
 	ListFolders(ctx context.Context, profileID uuid.UUID) ([]store.FolderRow, error)
 	CreateFolder(ctx context.Context, profileID uuid.UUID, name, filterConfigJSON string) (*store.FolderRow, error)
+	GetFolder(ctx context.Context, profileID, folderID uuid.UUID) (*store.FolderRow, error)
+	AddChatToFolder(ctx context.Context, profileID, folderID, chatID uuid.UUID, sortOrder *int32) error
+	RemoveChatFromFolder(ctx context.Context, profileID, folderID, chatID uuid.UUID) error
+	ReorderFolderChats(ctx context.Context, profileID, folderID uuid.UUID, chatIDs []uuid.UUID) error
+	PinChatInFolder(ctx context.Context, profileID, folderID, chatID uuid.UUID, pinOrder *int32) error
+	UnpinChatInFolder(ctx context.Context, profileID, folderID, chatID uuid.UUID) error
 	CreateGroupChat(ctx context.Context, creatorProfileID uuid.UUID, name string) (*store.ChatRow, error)
 	CreateSpaceGroupChat(ctx context.Context, creatorProfileID, spaceID uuid.UUID, name string) (*store.ChatRow, error)
 	CreateSpaceChannelChat(ctx context.Context, creatorProfileID, spaceID uuid.UUID, name string) (*store.ChatRow, error)

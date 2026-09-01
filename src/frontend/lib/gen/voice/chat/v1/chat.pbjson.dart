@@ -436,16 +436,27 @@ const ListChatsRequest$json = {
       '10': 'page'
     },
     {'1': 'inbox', '3': 2, '4': 1, '5': 9, '9': 0, '10': 'inbox', '17': true},
+    {
+      '1': 'folder_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '9': 1,
+      '10': 'folderId',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_inbox'},
+    {'1': '_folder_id'},
   ],
 };
 
 /// Descriptor for `ListChatsRequest`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List listChatsRequestDescriptor = $convert.base64Decode(
     'ChBMaXN0Q2hhdHNSZXF1ZXN0EjYKBHBhZ2UYASABKAsyIi52b2ljZS5jb21tb24udjEuQ3Vyc2'
-    '9yUGFnZVJlcXVlc3RSBHBhZ2USGQoFaW5ib3gYAiABKAlIAFIFaW5ib3iIAQFCCAoGX2luYm94');
+    '9yUGFnZVJlcXVlc3RSBHBhZ2USGQoFaW5ib3gYAiABKAlIAFIFaW5ib3iIAQESIAoJZm9sZGVy'
+    'X2lkGAMgASgJSAFSCGZvbGRlcklkiAEBQggKBl9pbmJveEIMCgpfZm9sZGVyX2lk');
 
 @$core.Deprecated('Use chatListItemDescriptor instead')
 const ChatListItem$json = {
@@ -768,6 +779,105 @@ const DeleteFolderRequest$json = {
 final $typed_data.Uint8List deleteFolderRequestDescriptor =
     $convert.base64Decode(
         'ChNEZWxldGVGb2xkZXJSZXF1ZXN0EhsKCWZvbGRlcl9pZBgBIAEoCVIIZm9sZGVySWQ=');
+
+@$core.Deprecated('Use addChatToFolderRequestDescriptor instead')
+const AddChatToFolderRequest$json = {
+  '1': 'AddChatToFolderRequest',
+  '2': [
+    {'1': 'folder_id', '3': 1, '4': 1, '5': 9, '10': 'folderId'},
+    {'1': 'chat_id', '3': 2, '4': 1, '5': 9, '10': 'chatId'},
+    {
+      '1': 'sort_order',
+      '3': 3,
+      '4': 1,
+      '5': 5,
+      '9': 0,
+      '10': 'sortOrder',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_sort_order'},
+  ],
+};
+
+/// Descriptor for `AddChatToFolderRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List addChatToFolderRequestDescriptor = $convert.base64Decode(
+    'ChZBZGRDaGF0VG9Gb2xkZXJSZXF1ZXN0EhsKCWZvbGRlcl9pZBgBIAEoCVIIZm9sZGVySWQSFw'
+    'oHY2hhdF9pZBgCIAEoCVIGY2hhdElkEiIKCnNvcnRfb3JkZXIYAyABKAVIAFIJc29ydE9yZGVy'
+    'iAEBQg0KC19zb3J0X29yZGVy');
+
+@$core.Deprecated('Use removeChatFromFolderRequestDescriptor instead')
+const RemoveChatFromFolderRequest$json = {
+  '1': 'RemoveChatFromFolderRequest',
+  '2': [
+    {'1': 'folder_id', '3': 1, '4': 1, '5': 9, '10': 'folderId'},
+    {'1': 'chat_id', '3': 2, '4': 1, '5': 9, '10': 'chatId'},
+  ],
+};
+
+/// Descriptor for `RemoveChatFromFolderRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List removeChatFromFolderRequestDescriptor =
+    $convert.base64Decode(
+        'ChtSZW1vdmVDaGF0RnJvbUZvbGRlclJlcXVlc3QSGwoJZm9sZGVyX2lkGAEgASgJUghmb2xkZX'
+        'JJZBIXCgdjaGF0X2lkGAIgASgJUgZjaGF0SWQ=');
+
+@$core.Deprecated('Use reorderFolderChatsRequestDescriptor instead')
+const ReorderFolderChatsRequest$json = {
+  '1': 'ReorderFolderChatsRequest',
+  '2': [
+    {'1': 'folder_id', '3': 1, '4': 1, '5': 9, '10': 'folderId'},
+    {'1': 'chat_ids', '3': 2, '4': 3, '5': 9, '10': 'chatIds'},
+  ],
+};
+
+/// Descriptor for `ReorderFolderChatsRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List reorderFolderChatsRequestDescriptor =
+    $convert.base64Decode(
+        'ChlSZW9yZGVyRm9sZGVyQ2hhdHNSZXF1ZXN0EhsKCWZvbGRlcl9pZBgBIAEoCVIIZm9sZGVySW'
+        'QSGQoIY2hhdF9pZHMYAiADKAlSB2NoYXRJZHM=');
+
+@$core.Deprecated('Use pinChatInFolderRequestDescriptor instead')
+const PinChatInFolderRequest$json = {
+  '1': 'PinChatInFolderRequest',
+  '2': [
+    {'1': 'folder_id', '3': 1, '4': 1, '5': 9, '10': 'folderId'},
+    {'1': 'chat_id', '3': 2, '4': 1, '5': 9, '10': 'chatId'},
+    {
+      '1': 'pin_order',
+      '3': 3,
+      '4': 1,
+      '5': 5,
+      '9': 0,
+      '10': 'pinOrder',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_pin_order'},
+  ],
+};
+
+/// Descriptor for `PinChatInFolderRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List pinChatInFolderRequestDescriptor = $convert.base64Decode(
+    'ChZQaW5DaGF0SW5Gb2xkZXJSZXF1ZXN0EhsKCWZvbGRlcl9pZBgBIAEoCVIIZm9sZGVySWQSFw'
+    'oHY2hhdF9pZBgCIAEoCVIGY2hhdElkEiAKCXBpbl9vcmRlchgDIAEoBUgAUghwaW5PcmRlcogB'
+    'AUIMCgpfcGluX29yZGVy');
+
+@$core.Deprecated('Use unpinChatInFolderRequestDescriptor instead')
+const UnpinChatInFolderRequest$json = {
+  '1': 'UnpinChatInFolderRequest',
+  '2': [
+    {'1': 'folder_id', '3': 1, '4': 1, '5': 9, '10': 'folderId'},
+    {'1': 'chat_id', '3': 2, '4': 1, '5': 9, '10': 'chatId'},
+  ],
+};
+
+/// Descriptor for `UnpinChatInFolderRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List unpinChatInFolderRequestDescriptor =
+    $convert.base64Decode(
+        'ChhVbnBpbkNoYXRJbkZvbGRlclJlcXVlc3QSGwoJZm9sZGVyX2lkGAEgASgJUghmb2xkZXJJZB'
+        'IXCgdjaGF0X2lkGAIgASgJUgZjaGF0SWQ=');
 
 @$core.Deprecated('Use acceptDMRequestRequestDescriptor instead')
 const AcceptDMRequestRequest$json = {
@@ -1159,6 +1269,51 @@ const DeleteFolderResponse$json = {
 /// Descriptor for `DeleteFolderResponse`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List deleteFolderResponseDescriptor =
     $convert.base64Decode('ChREZWxldGVGb2xkZXJSZXNwb25zZQ==');
+
+@$core.Deprecated('Use addChatToFolderResponseDescriptor instead')
+const AddChatToFolderResponse$json = {
+  '1': 'AddChatToFolderResponse',
+};
+
+/// Descriptor for `AddChatToFolderResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List addChatToFolderResponseDescriptor =
+    $convert.base64Decode('ChdBZGRDaGF0VG9Gb2xkZXJSZXNwb25zZQ==');
+
+@$core.Deprecated('Use removeChatFromFolderResponseDescriptor instead')
+const RemoveChatFromFolderResponse$json = {
+  '1': 'RemoveChatFromFolderResponse',
+};
+
+/// Descriptor for `RemoveChatFromFolderResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List removeChatFromFolderResponseDescriptor =
+    $convert.base64Decode('ChxSZW1vdmVDaGF0RnJvbUZvbGRlclJlc3BvbnNl');
+
+@$core.Deprecated('Use reorderFolderChatsResponseDescriptor instead')
+const ReorderFolderChatsResponse$json = {
+  '1': 'ReorderFolderChatsResponse',
+};
+
+/// Descriptor for `ReorderFolderChatsResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List reorderFolderChatsResponseDescriptor =
+    $convert.base64Decode('ChpSZW9yZGVyRm9sZGVyQ2hhdHNSZXNwb25zZQ==');
+
+@$core.Deprecated('Use pinChatInFolderResponseDescriptor instead')
+const PinChatInFolderResponse$json = {
+  '1': 'PinChatInFolderResponse',
+};
+
+/// Descriptor for `PinChatInFolderResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List pinChatInFolderResponseDescriptor =
+    $convert.base64Decode('ChdQaW5DaGF0SW5Gb2xkZXJSZXNwb25zZQ==');
+
+@$core.Deprecated('Use unpinChatInFolderResponseDescriptor instead')
+const UnpinChatInFolderResponse$json = {
+  '1': 'UnpinChatInFolderResponse',
+};
+
+/// Descriptor for `UnpinChatInFolderResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List unpinChatInFolderResponseDescriptor =
+    $convert.base64Decode('ChlVbnBpbkNoYXRJbkZvbGRlclJlc3BvbnNl');
 
 @$core.Deprecated('Use acceptDMRequestResponseDescriptor instead')
 const AcceptDMRequestResponse$json = {
