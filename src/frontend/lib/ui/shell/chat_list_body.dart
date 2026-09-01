@@ -6,7 +6,6 @@ import '../../backend/chats_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/chat_providers.dart';
-import '../../state/message_requests_providers.dart';
 import '../../state/in_app_notifications.dart';
 import '../../state/presence_providers.dart';
 import '../../state/shell_providers.dart';
