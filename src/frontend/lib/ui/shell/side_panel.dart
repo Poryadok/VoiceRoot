@@ -9,6 +9,7 @@ import '../../theme/voice_colors.dart';
 import '../../theme/voice_emoji_style.dart';
 import '../../theme/voice_layout.dart';
 import '../chat/chat_info_panel.dart';
+import '../chat/composer_panels.dart';
 import '../chat/group_members_sheet.dart';
 import '../space/space_members_sheet.dart';
 
@@ -200,37 +201,16 @@ void openMembersPanel(
   ref.read(shellNavigationProvider).toggleSidePanel(ShellSidePanel.members);
 }
 
-/// Opens emoji picker in side panel (desktop) or bottom sheet (narrow).
+/// Opens emoji picker as transient overlay (§3.6b) — not SideHost.
 Future<void> openEmojiPanel(
   BuildContext context,
   WidgetRef ref, {
   required void Function(String emoji) onSelected,
-}) async {
-  final narrow = VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width);
-  if (narrow) {
-    final emoji = await showModalBottomSheet<String>(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: Wrap(
-          alignment: WrapAlignment.center,
-          spacing: 8,
-          children: [
-            for (final e in _EmojiPickerBody._choices)
-              IconButton(
-                onPressed: () => Navigator.of(ctx).pop(e),
-                icon: Text(e, style: const TextStyle(fontSize: 28)),
-              ),
-          ],
-        ),
-      ),
-    );
-    if (emoji != null) onSelected(emoji);
-    return;
-  }
-  final current = ref.read(shellSidePanelProvider);
-  if (current == ShellSidePanel.emoji) {
-    ref.read(shellNavigationProvider).closeSidePanel();
-  } else {
-    ref.read(shellNavigationProvider).toggleSidePanel(ShellSidePanel.emoji);
-  }
+  VoidCallback? onDismiss,
+}) {
+  return showComposerEmojiPanel(
+    context,
+    onSelected: onSelected,
+    onDismiss: onDismiss,
+  );
 }

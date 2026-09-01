@@ -746,6 +746,8 @@ void main() {
 
     await tester.tap(find.byKey(ChatRoomPanel.attachKey));
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('composer_attach_document')));
+    await tester.pumpAndSettle();
 
     expect(sentAttachment, isTrue);
     expect(find.text('report.pdf'), findsOneWidget);

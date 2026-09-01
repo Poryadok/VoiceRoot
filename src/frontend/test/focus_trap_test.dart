@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/ui/a11y/focus_trap.dart';
@@ -68,6 +69,26 @@ void main() {
     expect(find.byType(VoiceFocusTrap), findsOneWidget);
     expect(find.text('Accept'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('VoiceFocusTrap invokes onEscape', (tester) async {
+    var escaped = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: VoiceFocusTrap(
+            onEscape: () => escaped = true,
+            child: const Text('trapped'),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+
+    expect(escaped, isTrue);
   });
 
   testWidgets('GuestConvertSheet modal content is wrapped in focus trap', (

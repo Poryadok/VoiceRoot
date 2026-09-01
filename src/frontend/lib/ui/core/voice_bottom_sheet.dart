@@ -13,11 +13,16 @@ Future<T?> showVoiceBottomSheet<T>({
   double minSize = 0.4,
   double maxSize = 0.95,
   bool scrollable = true,
+  VoidCallback? onDismiss,
 }) {
   return showModalBottomSheet<T>(
     context: context,
     isScrollControlled: true,
     builder: (ctx) => VoiceFocusTrap(
+      onEscape: () {
+        Navigator.of(ctx).pop();
+        onDismiss?.call();
+      },
       child: DraggableScrollableSheet(
         expand: false,
         initialChildSize: initialSize,
