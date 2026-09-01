@@ -144,6 +144,60 @@ func (t *transcoder) serveFriends(w http.ResponseWriter, r *http.Request, rest s
 		writeProtoJSON(w, http.StatusOK, resp)
 		return true
 
+	case r.Method == http.MethodGet && rest == "contacts":
+		page := &commonv1.CursorPageRequest{}
+		_ = decodeQueryJSON(page, queryFirst(r, "page"))
+		if page.Cursor == "" {
+			page.Cursor = queryFirst(r, "cursor")
+		}
+		if page.PageSize == 0 {
+			page.PageSize = parseInt32Query(queryFirst(r, "page_size"))
+		}
+		resp, err := t.clients.social.ListContacts(ctx, &socialv1.ListContactsRequest{Page: page})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodPost && rest == "contacts":
+		req := &socialv1.AddContactRequest{}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.social.AddContact(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodGet && rest == "favorites":
+		resp, err := t.clients.social.ListFavorites(ctx, &socialv1.ListFavoritesRequest{})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodPost && rest == "favorites":
+		req := &socialv1.SetFavoriteRequest{}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.social.SetFavorite(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
 	default:
 		return false
 	}
