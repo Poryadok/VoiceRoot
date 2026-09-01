@@ -225,6 +225,15 @@ class AppLocalizationsRu extends AppLocalizations {
   String get socialPresenceOffline => 'Не в сети';
 
   @override
+  String get socialPresenceInvisible => 'Невидимый';
+
+  @override
+  String get profileMenuPresence => 'Статус';
+
+  @override
+  String get profileMenuArchiveUnavailable => 'Архив чатов пока недоступен.';
+
+  @override
   String socialPresenceLastSeen(String dateTime) {
     return 'Был(а) $dateTime';
   }
