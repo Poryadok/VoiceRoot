@@ -139,33 +139,46 @@ func routeMessageNotification(
 				Type:            delivery.TypeReply,
 			}, payload, payload.Body)
 		}
-		memberIDs, err := listChatMembers(ctx, members, ev.GetChatId())
+		memberRows, err := listChatMembers(ctx, members, ev.GetChatId())
 		if err != nil {
 			return err
 		}
-		if len(memberIDs) == 0 {
+		if len(memberRows) == 0 {
 			return nil
 		}
-		raw := handler.HandleMessageSent(ctx, ev, memberIDs)
-		decisions := enrichDecisions(ctx, pusher, raw, senderID, ev.GetChatId(), delivery.TypeNewMessage)
+		raw := handler.HandleMessageSent(ctx, ev, memberRows)
 		preview, senderLabel := pushCopyFields(ctx, enrich, ev.GetMessageId(), ev.GetSenderProfileId())
 		deepLink := messagePushDeepLink(ev.GetChatId(), ev.GetMessageId())
-		payload := push.Payload{
-			Title: pushcopy.TitleForSender(senderLabel, "New message"),
-			Body:  pushcopy.MessageBody(preview),
-			Data: map[string]string{
-				"type":              string(delivery.TypeNewMessage),
-				"chat_id":           ev.GetChatId(),
-				"message_id":        ev.GetMessageId(),
-				"sender_profile_id": ev.GetSenderProfileId(),
-				"deep_link":         deepLink,
-			},
+		for profileID, baseDecision := range raw {
+			member := memberByProfileID(memberRows, profileID)
+			typ := notificationTypeForInbox(member.InboxBucket)
+			decisions := enrichDecisions(ctx, pusher, map[string]delivery.DeliveryDecision{
+				profileID: baseDecision,
+			}, senderID, ev.GetChatId(), typ)
+			titleFallback := "New message"
+			if typ == delivery.TypeMessageRequest {
+				titleFallback = "Message request"
+			}
+			payload := push.Payload{
+				Title: pushcopy.TitleForSender(senderLabel, titleFallback),
+				Body:  pushcopy.MessageBody(preview),
+				Data: map[string]string{
+					"type":              string(typ),
+					"chat_id":           ev.GetChatId(),
+					"message_id":        ev.GetMessageId(),
+					"sender_profile_id": ev.GetSenderProfileId(),
+					"deep_link":         deepLink,
+				},
+			}
+			if err := pusher.SendPush(ctx, decisions, delivery.DeliveryInput{
+				SenderProfileID: senderID,
+				ChatID:          ev.GetChatId(),
+				Type:            typ,
+			}, payload, payload.Body); err != nil {
+				return err
+			}
 		}
-		return pusher.SendPush(ctx, decisions, delivery.DeliveryInput{
-			SenderProfileID: senderID,
-			ChatID:          ev.GetChatId(),
-			Type:            delivery.TypeNewMessage,
-		}, payload, payload.Body)
+		return nil
 	case *eventsv1.MessageStreamEvent_MentionAdded:
 		ev := p.MentionAdded
 		if ev == nil {
@@ -197,11 +210,27 @@ func routeMessageNotification(
 	}
 }
 
-func listChatMembers(ctx context.Context, members chatmembers.Lister, chatID string) ([]string, error) {
+func listChatMembers(ctx context.Context, members chatmembers.Lister, chatID string) ([]chatmembers.Member, error) {
 	if members == nil {
 		return nil, nil
 	}
-	return members.ListMemberProfileIDs(ctx, chatID)
+	return members.ListMembers(ctx, chatID)
+}
+
+func memberByProfileID(rows []chatmembers.Member, profileID string) chatmembers.Member {
+	for _, row := range rows {
+		if row.ProfileID == profileID {
+			return row
+		}
+	}
+	return chatmembers.Member{ProfileID: profileID}
+}
+
+func notificationTypeForInbox(inboxBucket string) delivery.NotificationType {
+	if inboxBucket == "requests" {
+		return delivery.TypeMessageRequest
+	}
+	return delivery.TypeNewMessage
 }
 
 func enrichDecisions(

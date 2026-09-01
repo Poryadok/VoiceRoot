@@ -140,6 +140,7 @@ message ChatMember {
   google.protobuf.Timestamp joined_at = 3;
   optional google.protobuf.Timestamp muted_until = 4;
   bool is_archived = 5;
+  optional string inbox_bucket = 6; // main | requests | declined (S2S / notification routing)
 }
 
 message ListChatsRequest {

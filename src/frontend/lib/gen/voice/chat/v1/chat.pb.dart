@@ -1048,6 +1048,7 @@ class ChatMember extends $pb.GeneratedMessage {
     $1.Timestamp? joinedAt,
     $1.Timestamp? mutedUntil,
     $core.bool? isArchived,
+    $core.String? inboxBucket,
   }) {
     final result = create();
     if (profileId != null) result.profileId = profileId;
@@ -1055,6 +1056,7 @@ class ChatMember extends $pb.GeneratedMessage {
     if (joinedAt != null) result.joinedAt = joinedAt;
     if (mutedUntil != null) result.mutedUntil = mutedUntil;
     if (isArchived != null) result.isArchived = isArchived;
+    if (inboxBucket != null) result.inboxBucket = inboxBucket;
     return result;
   }
 
@@ -1078,6 +1080,7 @@ class ChatMember extends $pb.GeneratedMessage {
     ..aOM<$1.Timestamp>(4, _omitFieldNames ? '' : 'mutedUntil',
         subBuilder: $1.Timestamp.create)
     ..aOB(5, _omitFieldNames ? '' : 'isArchived')
+    ..aOS(6, _omitFieldNames ? '' : 'inboxBucket')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1146,6 +1149,15 @@ class ChatMember extends $pb.GeneratedMessage {
   $core.bool hasIsArchived() => $_has(4);
   @$pb.TagNumber(5)
   void clearIsArchived() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get inboxBucket => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set inboxBucket($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasInboxBucket() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearInboxBucket() => $_clearField(6);
 }
 
 class ListChatsRequest extends $pb.GeneratedMessage {

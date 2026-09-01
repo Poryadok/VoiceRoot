@@ -23,9 +23,10 @@ type connReg struct {
 }
 
 type wsHub struct {
-	mu        sync.RWMutex
-	byChat    map[string]map[*connReg]struct{}
-	byProfile map[string]map[*connReg]struct{}
+	mu                sync.RWMutex
+	byChat            map[string]map[*connReg]struct{}
+	byProfile         map[string]map[*connReg]struct{}
+	memberInboxLister chatMemberInboxLister
 }
 
 func newWSHub() *wsHub {

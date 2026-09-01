@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"voice/backend/notification/internal/chatmembers"
 	"voice/backend/notification/internal/delivery"
 	eventsv1 "voice.app/voice/events/v1"
 )
@@ -30,8 +31,15 @@ func (h *MessageEventHandler) route(senderID, recipientID, chatID string, typ de
 	})
 }
 
+func notificationTypeForInbox(inboxBucket string) delivery.NotificationType {
+	if inboxBucket == "requests" {
+		return delivery.TypeMessageRequest
+	}
+	return delivery.TypeNewMessage
+}
+
 // HandleMessageSent returns per-recipient delivery decisions for a MessageSent event.
-func (h *MessageEventHandler) HandleMessageSent(ctx context.Context, ev *eventsv1.MessageSent, memberProfileIDs []string) map[string]delivery.DeliveryDecision {
+func (h *MessageEventHandler) HandleMessageSent(ctx context.Context, ev *eventsv1.MessageSent, members []chatmembers.Member) map[string]delivery.DeliveryDecision {
 	_ = ctx
 	if ev == nil {
 		return nil
@@ -40,12 +48,13 @@ func (h *MessageEventHandler) HandleMessageSent(ctx context.Context, ev *eventsv
 		return nil
 	}
 	out := make(map[string]delivery.DeliveryDecision)
-	for _, profileID := range memberProfileIDs {
+	for _, member := range members {
+		profileID := member.ProfileID
 		if profileID == "" || profileID == ev.GetSenderProfileId() {
 			continue
 		}
-		decision := h.route(ev.GetSenderProfileId(), profileID, ev.GetChatId(), delivery.TypeNewMessage)
-		out[profileID] = decision
+		typ := notificationTypeForInbox(member.InboxBucket)
+		out[profileID] = h.route(ev.GetSenderProfileId(), profileID, ev.GetChatId(), typ)
 	}
 	return out
 }

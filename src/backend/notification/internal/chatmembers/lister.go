@@ -13,9 +13,16 @@ import (
 	"voice/backend/notification/internal/s2s"
 )
 
-// Lister resolves chat member profile IDs for push fan-out.
+// Member is one chat participant with inbox routing metadata.
+type Member struct {
+	ProfileID   string
+	InboxBucket string
+}
+
+// Lister resolves chat members for push fan-out.
 type Lister interface {
 	ListMemberProfileIDs(ctx context.Context, chatID string) ([]string, error)
+	ListMembers(ctx context.Context, chatID string) ([]Member, error)
 }
 
 // GRPCLister calls Chat Service ListMembers (S2S).
@@ -35,7 +42,7 @@ func NewGRPCLister(addr string) (*GRPCLister, error) {
 	return &GRPCLister{client: chatv1.NewChatServiceClient(conn)}, nil
 }
 
-func (l *GRPCLister) ListMemberProfileIDs(ctx context.Context, chatID string) ([]string, error) {
+func (l *GRPCLister) ListMembers(ctx context.Context, chatID string) ([]Member, error) {
 	if l == nil || l.client == nil {
 		return nil, fmt.Errorf("chat members lister unavailable")
 	}
@@ -51,14 +58,29 @@ func (l *GRPCLister) ListMemberProfileIDs(ctx context.Context, chatID string) ([
 	if list == nil {
 		return nil, nil
 	}
-	out := make([]string, 0, len(list.GetMembers()))
+	out := make([]Member, 0, len(list.GetMembers()))
 	for _, m := range list.GetMembers() {
 		if m == nil {
 			continue
 		}
 		if pid := strings.TrimSpace(m.GetProfileId()); pid != "" {
-			out = append(out, pid)
+			out = append(out, Member{
+				ProfileID:   pid,
+				InboxBucket: strings.TrimSpace(m.GetInboxBucket()),
+			})
 		}
+	}
+	return out, nil
+}
+
+func (l *GRPCLister) ListMemberProfileIDs(ctx context.Context, chatID string) ([]string, error) {
+	members, err := l.ListMembers(ctx, chatID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(members))
+	for _, m := range members {
+		out = append(out, m.ProfileID)
 	}
 	return out, nil
 }
@@ -67,5 +89,9 @@ func (l *GRPCLister) ListMemberProfileIDs(ctx context.Context, chatID string) ([
 type NoopLister struct{}
 
 func (NoopLister) ListMemberProfileIDs(context.Context, string) ([]string, error) {
+	return nil, nil
+}
+
+func (NoopLister) ListMembers(context.Context, string) ([]Member, error) {
 	return nil, nil
 }

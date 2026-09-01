@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 
@@ -16,14 +17,14 @@ type profileFanout struct {
 	Envelope  fanoutEnvelope
 }
 
-func inAppNotificationFanouts(data []byte, chatMemberProfileIDs []string, reactionMessageAuthorProfileID string) ([]profileFanout, bool) {
+func inAppNotificationFanouts(data []byte, chatMemberProfileIDs []string, reactionMessageAuthorProfileID string, recipientInboxBuckets map[string]string) ([]profileFanout, bool) {
 	var e eventsv1.MessageStreamEvent
 	if err := proto.Unmarshal(data, &e); err != nil {
 		return nil, false
 	}
 	switch p := e.GetPayload().(type) {
 	case *eventsv1.MessageStreamEvent_MessageSent:
-		return newMessageNotificationFanouts(p.MessageSent, chatMemberProfileIDs)
+		return newMessageNotificationFanouts(p.MessageSent, chatMemberProfileIDs, recipientInboxBuckets)
 	case *eventsv1.MessageStreamEvent_ReactionAdded:
 		return reactionNotificationFanouts(p.ReactionAdded, chatMemberProfileIDs, reactionMessageAuthorProfileID)
 	case *eventsv1.MessageStreamEvent_MentionAdded:
@@ -60,7 +61,7 @@ func mentionNotificationFanouts(ma *eventsv1.MentionAdded) ([]profileFanout, boo
 	return fanouts, true
 }
 
-func newMessageNotificationFanouts(ms *eventsv1.MessageSent, chatMemberProfileIDs []string) ([]profileFanout, bool) {
+func newMessageNotificationFanouts(ms *eventsv1.MessageSent, chatMemberProfileIDs []string, recipientInboxBuckets map[string]string) ([]profileFanout, bool) {
 	if ms == nil || ms.GetChatId() == "" || ms.GetMessageId() == "" {
 		return nil, false
 	}
@@ -70,8 +71,12 @@ func newMessageNotificationFanouts(ms *eventsv1.MessageSent, chatMemberProfileID
 		if profileID == "" || profileID == senderID {
 			continue
 		}
+		notifType := "new_message"
+		if recipientInboxBuckets != nil && recipientInboxBuckets[profileID] == "requests" {
+			notifType = "message_request"
+		}
 		d, err := json.Marshal(map[string]string{
-			"type":              "new_message",
+			"type":              notifType,
 			"chat_id":           ms.GetChatId(),
 			"message_id":        ms.GetMessageId(),
 			"sender_profile_id": senderID,
@@ -132,7 +137,15 @@ func dispatchMessageStreamEvent(hub *wsHub, data []byte, header nats.Header, log
 	if !ok || chatID == "" {
 		return
 	}
-	fanouts, notifyOk := inAppNotificationFanouts(data, hub.profileIDsSubscribedToChat(chatID), "")
+	var recipientInboxBuckets map[string]string
+	if hub != nil && hub.memberInboxLister != nil && isMessageSentEvent(data) {
+		if buckets, err := hub.memberInboxLister.RecipientInboxBuckets(context.Background(), chatID); err == nil {
+			recipientInboxBuckets = buckets
+		} else if logger != nil {
+			logger.Warn("chat member inbox lookup failed", slog.String("chat_id", chatID), slog.Any("error", err))
+		}
+	}
+	fanouts, notifyOk := inAppNotificationFanouts(data, hub.profileIDsSubscribedToChat(chatID), "", recipientInboxBuckets)
 	notifyFirst := isReactionAddedEvent(data)
 	if notifyFirst && notifyOk {
 		for _, f := range fanouts {
@@ -175,12 +188,21 @@ func dispatchMentionAdded(hub *wsHub, ma *eventsv1.MentionAdded, data []byte, lo
 		}
 		hub.broadcastToProfile(profileID, fanoutEnvelope{Op: "mention", D: d}, logger, requestID)
 	}
-	fanouts, ok := inAppNotificationFanouts(data, nil, "")
+	fanouts, ok := inAppNotificationFanouts(data, nil, "", nil)
 	if ok {
 		for _, f := range fanouts {
 			hub.broadcastToProfile(f.ProfileID, f.Envelope, logger, requestID)
 		}
 	}
+}
+
+func isMessageSentEvent(data []byte) bool {
+	var e eventsv1.MessageStreamEvent
+	if err := proto.Unmarshal(data, &e); err != nil {
+		return false
+	}
+	_, ok := e.GetPayload().(*eventsv1.MessageStreamEvent_MessageSent)
+	return ok
 }
 
 func isReactionAddedEvent(data []byte) bool {

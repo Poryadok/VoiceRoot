@@ -24,6 +24,14 @@ func (s stubChatMembers) ListMemberProfileIDs(context.Context, string) ([]string
 	return s.ids, nil
 }
 
+func (s stubChatMembers) ListMembers(_ context.Context, _ string) ([]chatmembers.Member, error) {
+	out := make([]chatmembers.Member, 0, len(s.ids))
+	for _, id := range s.ids {
+		out = append(out, chatmembers.Member{ProfileID: id, InboxBucket: "main"})
+	}
+	return out, nil
+}
+
 func TestRouteMessageNotification_MessageSent(t *testing.T) {
 	senderID := uuid.NewString()
 	recipientID := uuid.NewString()

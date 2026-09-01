@@ -12,11 +12,12 @@ import (
 
 // ChatMemberRow is one row from chat_members joined with chat type check.
 type ChatMemberRow struct {
-	ProfileID  uuid.UUID
-	Role       string
-	JoinedAt   time.Time
-	MutedUntil sql.NullTime
-	IsArchived bool
+	ProfileID   uuid.UUID
+	Role        string
+	JoinedAt    time.Time
+	MutedUntil  sql.NullTime
+	IsArchived  bool
+	InboxBucket string
 }
 
 // FindDMChatByID loads a DM chat row by id, or returns nil if not found or not type dm.
@@ -77,7 +78,7 @@ func (s *DMStore) ListChatMembers(ctx context.Context, chatID uuid.UUID) ([]Chat
 		return nil, errors.New("dm store: pool not configured")
 	}
 	rows, err := s.Pool.Query(ctx, `
-SELECT profile_id, role, joined_at, muted_until, is_archived
+SELECT profile_id, role, joined_at, muted_until, is_archived, inbox_bucket
 FROM chat_members
 WHERE chat_id = $1
 ORDER BY joined_at ASC, profile_id ASC
@@ -89,7 +90,7 @@ ORDER BY joined_at ASC, profile_id ASC
 	var out []ChatMemberRow
 	for rows.Next() {
 		var r ChatMemberRow
-		if err := rows.Scan(&r.ProfileID, &r.Role, &r.JoinedAt, &r.MutedUntil, &r.IsArchived); err != nil {
+		if err := rows.Scan(&r.ProfileID, &r.Role, &r.JoinedAt, &r.MutedUntil, &r.IsArchived, &r.InboxBucket); err != nil {
 			return nil, err
 		}
 		r.JoinedAt = r.JoinedAt.UTC()

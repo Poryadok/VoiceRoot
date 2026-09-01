@@ -23,6 +23,7 @@ func TestSendNotification_RoutesInScopeTypesToAPNS(t *testing.T) {
 	types := []string{
 		"new_message",
 		"mention",
+		"message_request",
 		"friend_request",
 		"match_found",
 		"system",

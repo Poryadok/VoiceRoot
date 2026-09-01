@@ -10,8 +10,9 @@ import (
 type NotificationType string
 
 const (
-	TypeNewMessage   NotificationType = "new_message"
-	TypeMention      NotificationType = "mention"
+	TypeNewMessage      NotificationType = "new_message"
+	TypeMessageRequest  NotificationType = "message_request"
+	TypeMention         NotificationType = "mention"
 	TypeReply        NotificationType = "reply"
 	TypeReaction     NotificationType = "reaction"
 	TypeFriendReq    NotificationType = "friend_request"

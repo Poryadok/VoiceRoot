@@ -47,10 +47,12 @@ func main() {
 	}
 
 	chatLister := dialChatBootstrapLister()
+	memberInboxLister := dialChatMemberInboxLister()
 	presenceUpdater := dialPresenceUpdater()
 	friendLister := dialFriendLister()
 
 	hub := newWSHub()
+	hub.memberInboxLister = memberInboxLister
 	instanceID := strings.TrimSpace(os.Getenv("REALTIME_INSTANCE_ID"))
 	if instanceID == "" {
 		instanceID = uuid.NewString()
@@ -203,6 +205,19 @@ func firstNonEmpty(a, b string) string {
 		return strings.TrimSpace(a)
 	}
 	return strings.TrimSpace(b)
+}
+
+func dialChatMemberInboxLister() chatMemberInboxLister {
+	addr := strings.TrimSpace(os.Getenv("REALTIME_CHAT_GRPC_ADDR"))
+	if addr == "" {
+		return nil
+	}
+	conn, err := grpc.NewClient(grpcclient.DialTarget(addr), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		svcLogger.Warn("chat member inbox grpc client unavailable", slog.String("addr", addr), slog.String("error", err.Error()))
+		return nil
+	}
+	return newGRPCChatMemberInboxLister(conn)
 }
 
 func dialChatBootstrapLister() chatBootstrapLister {
