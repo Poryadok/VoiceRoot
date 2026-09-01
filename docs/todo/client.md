@@ -43,12 +43,12 @@ _Пока пусто — критичные клиентские блокеры 
 
 Источник: `tmp/telegram-ux-audit/AUDIT.md` (R2-A03–A05, R3-A08, R3-A11). Backend RPC-хвосты — [backend.md](backend.md) § Telegram-parity audit / § Chat navigation.
 
-- [x] **R2-A03 — Profile switcher vs rail contract** — `ProfileAvatarMenuButton` §1.1a in rail (`profile_avatar_menu.dart`); desktop session bar is label-only (no combobox); mobile tap opens menu + swipe switch (`ProfileAvatarSwitcher`). Archive entry shows unavailable snackbar until Chat archive RPC ships (Batch 10).
+- [x] **R2-A03 — Profile switcher vs rail contract** — `ProfileAvatarMenuButton` §1.1a in rail (`profile_avatar_menu.dart`); desktop session bar is label-only (no combobox); mobile tap opens menu + swipe switch (`ProfileAvatarSwitcher`). Archive entry shows unavailable snackbar until Archive list screen ships (Batch 10; list RPC Batch 15).
 - [ ] **R2-A04 — Mobile shell IA** — `MobileShellTabBar` (Chats/Social/Match) on `Scaffold.bottomNavigationBar` when narrow + no open chat (Batch 10 incremental); **deferred:** hamburger drawer (folders, QA, settings), keyboard-hide tab bar, stacked chrome overflow rules.
 - [ ] **R2-A05 — Active strip LRU semantics** — strip tracks **opened** chats (≤100 LRU); `MobileChatStrip` + `mobile_opened_chat_strip.dart` shipped; long-press remove + 100-cap LRU eviction snackbar shipped (Batch 9).
 - [x] **R3-A08 — Strip widget test wrong contract** — `mobile_chat_strip_test.dart` asserts opened-chat LRU, not inbox rows (§1.6).
 - [x] **R3-A11 — Composer a11y parity** — transient §3.6b emoji panel + §3.6a attach popup with §3.6e focus trap/return (`composer_panels.dart`); click/tap activation on desktop (Batch 9).
-- [ ] **Archive list screen** — `Screen / Chat / Archive` (desktop + mobile); entry via profile RC only — [navigation.md](../features/navigation.md); blocked on Chat archive list RPC ([backend.md](backend.md)).
+- [ ] **Archive list screen** — `Screen / Chat / Archive` (desktop + mobile); entry via profile RC only — [navigation.md](../features/navigation.md); **`ListChats` `inbox=archive` shipped (Batch 15)** — Flutter screen still TODO.
 - [ ] **Mobile stacked chrome** — active strip + app bar + pinned bar + composer + bottom tabs overflow rules §1.6a — Penpot · v3 + Flutter layout.
 
 

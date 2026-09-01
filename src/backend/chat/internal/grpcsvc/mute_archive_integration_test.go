@@ -76,6 +76,58 @@ func TestArchiveChat_HidesFromListChats(t *testing.T) {
 	require.Len(t, listA.GetChatList().GetItems(), 1)
 }
 
+// TestListChats_ArchiveInbox documents text-chat.md: inbox=archive returns only archived chats.
+func TestListChats_ArchiveInbox(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	accA := uuid.New()
+	accB := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	profiles := mapProfileAccounts{profA: accA, profB: accB}
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil)
+	t.Cleanup(cleanup)
+
+	ctxA := withAccountProfileCtx(ctx, accA, profA)
+	ctxB := withAccountProfileCtx(ctx, accB, profB)
+
+	dm, err := client.CreateDM(ctxA, &chatv1.CreateDMRequest{OtherProfileId: profB.String()})
+	require.NoError(t, err)
+	chatID := dm.GetChat().GetId()
+
+	_, err = client.AcceptDMRequest(ctxB, &chatv1.AcceptDMRequestRequest{ChatId: chatID})
+	require.NoError(t, err)
+
+	inboxArchive := "archive"
+	emptyArchive, err := client.ListChats(ctxA, &chatv1.ListChatsRequest{Inbox: &inboxArchive})
+	require.NoError(t, err)
+	require.Empty(t, emptyArchive.GetChatList().GetItems())
+
+	_, err = client.ArchiveChat(ctxA, &chatv1.ArchiveChatRequest{ChatId: chatID, Archived: true})
+	require.NoError(t, err)
+
+	mainList, err := client.ListChats(ctxA, &chatv1.ListChatsRequest{})
+	require.NoError(t, err)
+	require.Empty(t, mainList.GetChatList().GetItems())
+
+	archiveList, err := client.ListChats(ctxA, &chatv1.ListChatsRequest{Inbox: &inboxArchive})
+	require.NoError(t, err)
+	require.Len(t, archiveList.GetChatList().GetItems(), 1)
+	require.Equal(t, chatID, archiveList.GetChatList().GetItems()[0].GetChat().GetId())
+
+	_, err = client.ArchiveChat(ctxA, &chatv1.ArchiveChatRequest{ChatId: chatID, Archived: false})
+	require.NoError(t, err)
+
+	archiveList, err = client.ListChats(ctxA, &chatv1.ListChatsRequest{Inbox: &inboxArchive})
+	require.NoError(t, err)
+	require.Empty(t, archiveList.GetChatList().GetItems())
+}
+
 // TestMuteChat_SetsAndClearsMutedUntil documents MuteChat RPC + chat_members.muted_until.
 func TestMuteChat_SetsAndClearsMutedUntil(t *testing.T) {
 	if testing.Short() {

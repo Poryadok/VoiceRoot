@@ -55,7 +55,7 @@ func (s *ChatGRPC) ListChats(ctx context.Context, req *chatv1.ListChatsRequest) 
 	if inbox == "" {
 		inbox = "main"
 	}
-	if inbox != "main" && inbox != "requests" {
+	if inbox != "main" && inbox != "requests" && inbox != "archive" {
 		return nil, status.Error(codes.InvalidArgument, "invalid inbox")
 	}
 	page, err := s.DM.ListChatsPage(ctx, caller, cursor, limit, inbox)
