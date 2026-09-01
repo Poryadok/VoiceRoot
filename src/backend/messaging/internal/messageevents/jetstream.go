@@ -399,7 +399,7 @@ func (p *JetStreamPublisher) PublishMessageDeliveryAck(ctx context.Context, mess
 		EventId:    uuid.NewString(),
 		OccurredAt: timestamppb.New(time.Now().UTC()),
 		Payload: &eventsv1.MessageStreamEvent_DeliveryAck{
-			DeliveryAck: &eventsv1.MessageDeliveryAck{
+			DeliveryAck: &eventsv1.DeliveryAck{
 				MessageId: messageID,
 				ChatId:    chatID,
 				ProfileId: profileID,

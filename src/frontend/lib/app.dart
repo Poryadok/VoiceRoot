@@ -50,7 +50,6 @@ import 'ui/core/voice_state_panel.dart';
 import 'ui/profile/profile_downgrade_picker_screen.dart';
 import 'state/subscription_providers.dart';
 import 'ui/profile/profile_avatar_switcher.dart';
-import 'ui/profile/profile_switcher.dart';
 import 'ui/profile/profile_edit_sheet.dart';
 import 'ui/settings/settings_sheet.dart';
 import 'ui/shell/desktop_shell_rail.dart';

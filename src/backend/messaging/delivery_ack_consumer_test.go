@@ -19,7 +19,7 @@ func TestDeliveryAckFromEvent(t *testing.T) {
 		EventId:    uuid.NewString(),
 		OccurredAt: timestamppb.Now(),
 		Payload: &eventsv1.MessageStreamEvent_DeliveryAck{
-			DeliveryAck: &eventsv1.MessageDeliveryAck{
+			DeliveryAck: &eventsv1.DeliveryAck{
 				ChatId:    chatID,
 				ProfileId: profileID,
 				MessageId: messageID,
