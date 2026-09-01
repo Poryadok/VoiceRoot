@@ -346,6 +346,13 @@
   "createProfileLimitReached": "Лимит профилей исчерпан. Premium — до 5 профилей.",
   "createProfileOpenSubscription": "Открыть Premium",
   "createProfileAddAction": "Добавить профиль",
+  "manageProfilesTitle": "Управление профилями",
+  "manageProfilesPrimaryBadge": "Основной",
+  "manageProfilesDeleteAction": "Удалить профиль",
+  "manageProfilesDeleteConfirmTitle": "Удалить профиль?",
+  "manageProfilesDeleteConfirmMessage": "Профиль будет удалён с аккаунта. Позже можно создать новый, если позволяет тариф.",
+  "manageProfilesDeleteActiveBlocked": "Переключитесь на другой профиль перед удалением.",
+  "manageProfilesDeletePrimaryBlocked": "Основной профиль удалить нельзя.",
   "profileSwitchVoiceBound": "Войс: {profileName}",
   "@profileSwitchVoiceBound": {
     "placeholders": {

@@ -215,6 +215,22 @@ message GetChatListMetadataRequest {
   repeated voice.chat.v1.ChatRef chats = 1;
 }
 
+// Payload type for list preview labels (docs/microservices/messaging-service.md § Content types).
+enum MessageContentType {
+  MESSAGE_CONTENT_TYPE_UNSPECIFIED = 0;
+  MESSAGE_CONTENT_TYPE_TEXT = 1;
+  MESSAGE_CONTENT_TYPE_PHOTO = 2;
+  MESSAGE_CONTENT_TYPE_VIDEO = 3;
+  MESSAGE_CONTENT_TYPE_DOCUMENT = 4;
+  MESSAGE_CONTENT_TYPE_VOICE = 5;
+  MESSAGE_CONTENT_TYPE_STICKER = 6;
+  MESSAGE_CONTENT_TYPE_GIF = 7;
+  MESSAGE_CONTENT_TYPE_ARTICLE = 8;
+  MESSAGE_CONTENT_TYPE_LOCATION = 9;
+  MESSAGE_CONTENT_TYPE_VIDEO_NOTE = 10;
+  MESSAGE_CONTENT_TYPE_MUSIC = 11;
+}
+
 // DM list preview ticks for outgoing last message (docs/microservices/messaging-service.md).
 enum LastMessageDeliveryState {
   LAST_MESSAGE_DELIVERY_STATE_UNSPECIFIED = 0;
@@ -231,6 +247,7 @@ message ChatListMetadata {
   optional google.protobuf.Timestamp last_message_at = 4;
   optional bool last_message_is_outgoing = 5;
   optional LastMessageDeliveryState last_message_delivery_state = 6;
+  optional MessageContentType last_message_content_type = 7;
 }
 
 message SendMessageResponse {

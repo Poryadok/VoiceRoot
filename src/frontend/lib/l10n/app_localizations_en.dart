@@ -680,6 +680,30 @@ class AppLocalizationsEn extends AppLocalizations {
   String get createProfileAddAction => 'Add profile';
 
   @override
+  String get manageProfilesTitle => 'Manage profiles';
+
+  @override
+  String get manageProfilesPrimaryBadge => 'Primary';
+
+  @override
+  String get manageProfilesDeleteAction => 'Remove profile';
+
+  @override
+  String get manageProfilesDeleteConfirmTitle => 'Remove profile?';
+
+  @override
+  String get manageProfilesDeleteConfirmMessage =>
+      'This profile will be removed from your account. You can create a new one later if your plan allows.';
+
+  @override
+  String get manageProfilesDeleteActiveBlocked =>
+      'Switch to another profile before removing this one.';
+
+  @override
+  String get manageProfilesDeletePrimaryBlocked =>
+      'The primary profile cannot be removed.';
+
+  @override
   String profileSwitchVoiceBound(String profileName) {
     return 'Voice: $profileName';
   }

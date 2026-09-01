@@ -49,6 +49,7 @@ type ChatListMetadataRow struct {
 	UnreadCount              int64
 	LastMessageIsOutgoing    bool
 	LastMessageDeliveryState string // none | sent | delivered | read
+	LastMessageContentType   string // text | photo | ...
 }
 
 func (s *MessagesStore) MessageExists(ctx context.Context, chatID, messageID uuid.UUID) (bool, error) {
@@ -540,11 +541,12 @@ func (s *MessagesStore) GetChatListMetadata(ctx context.Context, viewerProfileID
 		var unread int64
 		var lastMsgID uuid.UUID
 		var lastSender uuid.UUID
+		var lastAttachments sql.NullString
 		var peerRead *uuid.UUID
 		var peerDelivered *uuid.UUID
 		err := s.Pool.QueryRow(ctx, `
 WITH latest AS (
-  SELECT id, content, created_at, sender_profile_id
+  SELECT id, content, created_at, sender_profile_id, attachments
   FROM messages
   WHERE chat_id = $1 AND deleted_at IS NULL
   ORDER BY id DESC
@@ -568,13 +570,13 @@ WITH latest AS (
     AND m.sender_profile_id <> $2
     AND (rr.last_read_message_id IS NULL OR m.id > rr.last_read_message_id)
 )
-SELECT latest.content, latest.created_at, latest.id, latest.sender_profile_id,
+SELECT latest.content, latest.created_at, latest.id, latest.sender_profile_id, latest.attachments,
        peer_rr.last_read_message_id, peer_rr.last_delivered_message_id,
        unread.unread_count
 FROM unread
 LEFT JOIN latest ON true
 LEFT JOIN peer_rr ON true
-`, chatID, viewerProfileID).Scan(&preview, &lastAt, &lastMsgID, &lastSender, &peerRead, &peerDelivered, &unread)
+`, chatID, viewerProfileID).Scan(&preview, &lastAt, &lastMsgID, &lastSender, &lastAttachments, &peerRead, &peerDelivered, &unread)
 		if err != nil {
 			return nil, err
 		}
@@ -582,6 +584,15 @@ LEFT JOIN peer_rr ON true
 		if preview.Valid {
 			row.LastMessagePreview = truncatePreview(preview.String)
 		}
+		attJSON := "[]"
+		if lastAttachments.Valid {
+			attJSON = lastAttachments.String
+		}
+		content := ""
+		if preview.Valid {
+			content = preview.String
+		}
+		row.LastMessageContentType = inferLastMessageContentType(content, attJSON)
 		if lastAt.Valid {
 			t := lastAt.Time.UTC()
 			row.LastMessageAt = &t

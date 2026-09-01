@@ -455,6 +455,42 @@ func TestMessagingGetChatListMetadata_PreviewUnreadAndMarkRead(t *testing.T) {
 	require.Equal(t, int64(0), meta.GetByChatId()[chatID.String()].GetUnreadCount())
 }
 
+func TestMessagingGetChatListMetadata_ContentTypeFromAttachments(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000011_last_delivered_message_id.up.sql"))
+
+	chatID := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	acctA := uuid.New()
+	acctB := uuid.New()
+	seedDMChat(t, ctx, pool, chatID, profA, profB)
+
+	client, _ := startMessagingServer(t, pool)
+	mk := messagingv1.MessageKind_MESSAGE_KIND_REGULAR
+	_, err := client.SendMessage(withProfileCtx(ctx, acctB, profB), &messagingv1.SendMessageRequest{
+		Chat:            chatDMRef(chatID),
+		Content:         "caption",
+		AttachmentsJson: mustAttachmentJSON(t, []map[string]string{{"type": "image", "file_id": uuid.New().String()}}),
+		MentionsJson:    "[]",
+		MessageKind:     &mk,
+	})
+	require.NoError(t, err)
+
+	meta, err := client.GetChatListMetadata(withProfileCtx(ctx, acctA, profA), &messagingv1.GetChatListMetadataRequest{
+		Chats: []*chatv1.ChatRef{chatDMRef(chatID)},
+	})
+	require.NoError(t, err)
+	item := meta.GetByChatId()[chatID.String()]
+	require.NotNil(t, item)
+	require.NotNil(t, item.LastMessageContentType)
+	require.Equal(t, messagingv1.MessageContentType_MESSAGE_CONTENT_TYPE_PHOTO, item.GetLastMessageContentType())
+}
+
 func TestMessagingMarkdownPreview_stripInChatListMetadata(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgresForTest(t, ctx)

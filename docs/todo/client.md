@@ -29,7 +29,7 @@ _Пока пусто — критичные клиентские блокеры 
 - [ ] **Commit waves A–J (Flutter client)** — один PR: state/ui/l10n/tests из аудита 2026-07-15; после merge — `make flutter-ci` на CI.
 ### Multi-profile
 
-- [ ] **[Multi-Profile] No delete-profile UI** — REST `DELETE /api/v1/users/profiles/{id}` + `VoiceUsersClient.deleteProfile` **есть**; settings exposes create only (`settings_sheet.dart` → `CreateProfileSheet`); no manage-profiles screen to remove secondary profiles.
+- [x] **[Multi-Profile] No delete-profile UI** — `ManageProfilesSheet` in settings (`settings_manage_profiles`); `DELETE /api/v1/users/profiles/{id}` via `VoiceUsersClient.deleteProfile`; blocks primary/active delete (Batch 13).
 - [x] **[Multi-Profile] Frozen profiles invisible in switcher UI** — `VoiceProfile.frozenAt` + `proto_mappers.dart`; `ProfileSwitcher` disabled items + `(Frozen)` label; `ProfileAvatarSwitcher` skips frozen on swipe (Batch 11).
 - [x] **[Multi-Profile] `ProfileDowngradePickerScreen` unreachable** — **done (Batch 12):** routed when free tier + >2 profiles (`profileDowngradeRequiredProvider` in `app.dart`); screen + `submitDowngradeProfiles` existed.
 

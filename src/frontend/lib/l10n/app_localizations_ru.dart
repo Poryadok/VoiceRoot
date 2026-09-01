@@ -682,6 +682,30 @@ class AppLocalizationsRu extends AppLocalizations {
   String get createProfileAddAction => 'Добавить профиль';
 
   @override
+  String get manageProfilesTitle => 'Управление профилями';
+
+  @override
+  String get manageProfilesPrimaryBadge => 'Основной';
+
+  @override
+  String get manageProfilesDeleteAction => 'Удалить профиль';
+
+  @override
+  String get manageProfilesDeleteConfirmTitle => 'Удалить профиль?';
+
+  @override
+  String get manageProfilesDeleteConfirmMessage =>
+      'Профиль будет удалён с аккаунта. Позже можно создать новый, если позволяет тариф.';
+
+  @override
+  String get manageProfilesDeleteActiveBlocked =>
+      'Переключитесь на другой профиль перед удалением.';
+
+  @override
+  String get manageProfilesDeletePrimaryBlocked =>
+      'Основной профиль удалить нельзя.';
+
+  @override
   String profileSwitchVoiceBound(String profileName) {
     return 'Войс: $profileName';
   }

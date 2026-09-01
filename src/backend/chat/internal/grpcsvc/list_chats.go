@@ -66,16 +66,23 @@ func (s *ChatGRPC) ListChats(ctx context.Context, req *chatv1.ListChatsRequest) 
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	rows := page.Rows
+	nextCursor := page.NextCursor
 	if cursor == "" && inbox == "main" && s.SpaceMembers != nil {
 		spaceIDs, spaceErr := s.SpaceMembers.ListMemberSpaceIDs(ctx, caller)
 		if spaceErr != nil {
 			log.Printf("chat: ListChats space membership skipped: %v", spaceErr)
 		} else if len(spaceIDs) > 0 {
-			spaceRows, spaceErr := s.DM.ListSpaceChatsForProfile(ctx, spaceIDs)
+			spaceRows, spaceErr := s.DM.ListSpaceChatsForProfile(ctx, caller, spaceIDs)
 			if spaceErr != nil {
 				log.Printf("chat: ListChats space chats skipped: %v", spaceErr)
-			} else {
-				rows = store.MergeListChatRows(rows, spaceRows, limit)
+			} else if len(spaceRows) > 0 {
+				merged := store.MergeListChatRows(rows, spaceRows, 0)
+				var trimmed []*store.ChatRow
+				trimmed, nextCursor = store.ListChatsPageCursorFromRows(merged, limit)
+				if nextCursor == "" && page.NextCursor != "" {
+					nextCursor = page.NextCursor
+				}
+				rows = trimmed
 			}
 		}
 	}
@@ -127,7 +134,7 @@ func (s *ChatGRPC) ListChats(ctx context.Context, req *chatv1.ListChatsRequest) 
 	return &chatv1.ListChatsResponse{
 		ChatList: &chatv1.ChatList{
 			Items:      items,
-			NextCursor: page.NextCursor,
+			NextCursor: nextCursor,
 		},
 	}, nil
 }
