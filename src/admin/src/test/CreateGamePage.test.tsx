@@ -37,7 +37,10 @@ describe("CreateGamePage", () => {
 
     await waitFor(() => {
       expect(api.createGame).toHaveBeenCalledWith(
-        expect.objectContaining({ name: "New Game" }),
+        expect.objectContaining({
+          name: "New Game",
+          config_json: expect.stringContaining('"modes"'),
+        }),
       );
     });
     expect(await screen.findByRole("status")).toHaveTextContent("Created game");

@@ -43,6 +43,7 @@ developer-portal:
 
 admin:
   - src/admin/**
+  - docs/features/game-catalog.md
 
 compose:
   - docker-compose.yml

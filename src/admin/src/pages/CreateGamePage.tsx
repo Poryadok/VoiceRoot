@@ -5,30 +5,22 @@ import {
   searchGames,
   type CatalogGame,
 } from "../api/gameCatalog";
-
-const DEFAULT_CONFIG = JSON.stringify(
-  {
-    regions: ["global"],
-    modes: [
-      {
-        name: "Default",
-        slots: 1,
-        party_size_min: 1,
-        party_size_max: 1,
-      },
-    ],
-  },
-  null,
-  2,
-);
+import { GameConfigEditor } from "../components/GameConfigEditor";
+import {
+  defaultGameConfig,
+  serializeGameConfig,
+  validateGameConfig,
+  type GameConfig,
+} from "../lib/gameConfig";
 
 export function CreateGamePage() {
   const [name, setName] = useState("");
   const [iconUrl, setIconUrl] = useState("");
-  const [configJson, setConfigJson] = useState(DEFAULT_CONFIG);
+  const [config, setConfig] = useState<GameConfig>(() => defaultGameConfig());
   const [similar, setSimilar] = useState<CatalogGame[]>([]);
   const [duplicate, setDuplicate] = useState<CatalogGame | undefined>();
   const [status, setStatus] = useState<string | undefined>();
+  const [configError, setConfigError] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
 
   const lookupSimilar = useCallback(async (query: string) => {
@@ -56,9 +48,11 @@ export function CreateGamePage() {
     return () => window.clearTimeout(handle);
   }, [lookupSimilar, name]);
 
+  const configValidation = useMemo(() => validateGameConfig(config), [config]);
+
   const canSubmit = useMemo(
-    () => name.trim().length > 0 && !duplicate && !busy,
-    [busy, duplicate, name],
+    () => name.trim().length > 0 && !duplicate && !busy && !configValidation,
+    [busy, configValidation, duplicate, name],
   );
 
   async function onSubmit(event: React.FormEvent) {
@@ -66,25 +60,24 @@ export function CreateGamePage() {
     if (!canSubmit) {
       return;
     }
-    setBusy(true);
-    setStatus(undefined);
-    try {
-      JSON.parse(configJson);
-    } catch {
-      setStatus("Config must be valid JSON.");
-      setBusy(false);
+    const validation = validateGameConfig(config);
+    if (validation) {
+      setConfigError(validation);
       return;
     }
+    setBusy(true);
+    setStatus(undefined);
+    setConfigError(undefined);
     try {
       const response = await createGame({
         name: name.trim(),
-        config_json: configJson,
+        config_json: serializeGameConfig(config),
         icon_url: iconUrl.trim() || undefined,
       });
       setStatus(`Created game "${response.game?.name ?? name}" (${response.game?.id ?? "ok"}).`);
       setName("");
       setIconUrl("");
-      setConfigJson(DEFAULT_CONFIG);
+      setConfig(defaultGameConfig());
       setSimilar([]);
       setDuplicate(undefined);
     } catch (err) {
@@ -116,15 +109,14 @@ export function CreateGamePage() {
             autoComplete="off"
           />
         </label>
-        <label>
-          Config JSON
-          <textarea
-            value={configJson}
-            onChange={(e) => setConfigJson(e.target.value)}
-            rows={12}
-            spellCheck={false}
-          />
-        </label>
+        <GameConfigEditor
+          config={config}
+          onChange={(next) => {
+            setConfig(next);
+            setConfigError(undefined);
+          }}
+          validationError={configError ?? configValidation}
+        />
         {duplicate ? (
           <p role="alert" className="error">
             Duplicate: &quot;{duplicate.name}&quot; already exists (id {duplicate.id}).
