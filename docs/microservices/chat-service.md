@@ -209,7 +209,7 @@ CREATE INDEX quick_access_profile_order_idx ON quick_access_chats (profile_id, s
 
 **Порядок и фильтр (shipped code)**:
 - членство в `chat_members`, `is_archived = false`, `inbox_bucket` = значение `inbox` (default `main`);
-- SQL: `chats.type IN ('dm', 'group')` — **channels в membership-inbox пока не попадают** ([todo/backend.md](../todo/backend.md));
+- SQL: `chats.type IN ('dm', 'group', 'channel')` для membership-inbox (Batch 14);
 - на **первой странице** `inbox=main` дополнительно мержатся space-чаты (`group`/`channel` по `space_id`) через S2S Space `ListMemberSpaceIDs` + `ListSpaceChatsForProfile` (`list_chats.go`);
 - сортировка: `COALESCE(last_message_at, created_at)` DESC, tie-break `chats.id` DESC;
 - page size default 50, max 100.

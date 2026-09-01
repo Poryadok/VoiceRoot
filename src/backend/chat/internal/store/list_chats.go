@@ -16,7 +16,7 @@ import (
 // ErrInvalidListCursor is returned when ListChatsPage receives a non-empty cursor that cannot be decoded.
 var ErrInvalidListCursor = errors.New("invalid list chats cursor")
 
-// ListChatsPage holds one page of the caller's non-archived DM chats.
+// ListChatsPage holds one page of the caller's non-archived dm/group/channel chats.
 type ListChatsPage struct {
 	Rows       []*ChatRow
 	NextCursor string
@@ -59,7 +59,7 @@ func decodeListChatCursor(raw string) (time.Time, uuid.UUID, error) {
 	return ts.UTC(), id, nil
 }
 
-// ListChatsPage returns DM chats the profile is a member of (non-archived), ordered by recent activity.
+// ListChatsPage returns chats the profile is a member of (dm, group, channel; non-archived), ordered by recent activity.
 // sort key: COALESCE(last_message_at, created_at) DESC, id DESC. Cursor is opaque (see encodeListChatCursor).
 func (s *DMStore) ListChatsPage(ctx context.Context, viewerProfileID uuid.UUID, cursor string, limit int, inbox string) (*ListChatsPage, error) {
 	if s == nil || s.Pool == nil {
@@ -86,7 +86,7 @@ SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.creator_profile_id, c.l
        COALESCE(c.last_message_at, c.created_at) AS sort_at
 FROM chats c
 INNER JOIN chat_members m ON m.chat_id = c.id AND m.profile_id = $1
-WHERE c.type IN ('dm', 'group') AND m.is_archived = false AND m.inbox_bucket = $3
+WHERE c.type IN ('dm', 'group', 'channel') AND m.is_archived = false AND m.inbox_bucket = $3
 ORDER BY sort_at DESC, c.id DESC
 LIMIT $2
 `, viewerProfileID, fetch, inbox)
@@ -97,7 +97,7 @@ SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.creator_profile_id, c.l
        COALESCE(c.last_message_at, c.created_at) AS sort_at
 FROM chats c
 INNER JOIN chat_members m ON m.chat_id = c.id AND m.profile_id = $1
-WHERE c.type IN ('dm', 'group') AND m.is_archived = false AND m.inbox_bucket = $5
+WHERE c.type IN ('dm', 'group', 'channel') AND m.is_archived = false AND m.inbox_bucket = $5
   AND (
     COALESCE(c.last_message_at, c.created_at) < $2::timestamptz
     OR (

@@ -118,7 +118,7 @@ Rail **всегда виден**, не скрывается при открыт�
 - Спейсы
 - + кастомные (создаёт пользователь)
 
-**Partial shipment — folder «Каналы»:** Normative IA keeps the system folder with predicate `chat.type=channel`. Shipped `ListChats` SQL filters `chats.type IN ('dm', 'group')` — **standalone membership channels do not appear yet** ([chat-service.md](../microservices/chat-service.md) § ListChats; CODE C07). The folder row **stays** in rail/drawer; the list may be empty until backend ships channel inbox. Space-attached `channel` chats may still surface via first-page space merge per chat-service rules — do not remove «Каналы» from IA.
+**Partial shipment — folder «Каналы»:** Normative IA keeps the system folder with predicate `chat.type=channel`. Shipped `ListChats` membership SQL includes `channel` (Batch 14); **standalone channel create** via `CreateChat` still requires `space_id` — folder list may be empty until R3-A12 ships. Space-attached `channel` chats also surface via first-page space merge per chat-service rules — do not remove «Каналы» from IA.
 
 ### System vs custom folders
 
