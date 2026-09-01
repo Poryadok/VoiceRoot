@@ -814,7 +814,7 @@ jobs:
           node-version: "24"
           cache: npm
           cache-dependency-path: src/admin/package-lock.json
-      - name: npm ci, test, build
+      - name: npm ci, lint, test, build
         working-directory: src/admin
         env:
           VITE_VOICE_API_BASE: ${{ steps.vite.outputs.api_base }}
@@ -822,6 +822,7 @@ jobs:
           VITE_OAUTH_DISABLED: "false"
         run: |
           npm ci
+          npm run lint
           npm test
           npm run build
       - uses: docker/setup-buildx-action@v4
@@ -1082,7 +1083,8 @@ jobs:
             needs.changes.outputs.compose == 'true' ||
             needs.changes.outputs.frontend == 'true' ||
             needs.changes.outputs.global == 'true' ||
-            needs.changes.outputs.run_go == 'true'
+            needs.changes.outputs.admin == 'true' ||
+            needs.changes.outputs.developer-portal == 'true'
           )
         )
       ) &&

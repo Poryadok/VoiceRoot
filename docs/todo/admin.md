@@ -12,7 +12,7 @@ Admin panel (`src/admin/`) и Developer Portal (`src/developer-portal/`).
 
 
 - [ ] **[Admin] Analytics UI: search/voice dashboards deferred** — Gateway `GetDashboard` supports product/engagement/revenue/health/moderation + retention REST; Admin pages wired (batch 4). Search/voice dashboard types absent in `src/backend/analytics/internal/store/query.go` — needs backend before UI. Paths: `docs/features/analytics.md`, `src/backend/analytics/internal/store/query.go`
-- [ ] **[Admin] Game catalog: advanced mode/role editor deferred** — staff CreateGame form + name dedup via `SearchGames` live (batch 4); rich mode/role UX per [game-catalog.md](../features/game-catalog.md) still thin.
+- [x] **[Admin] Game catalog: advanced mode/role editor deferred** — staff CreateGame form + name dedup via `SearchGames` live (batch 4); structured mode/role/rank editor in `CreateGamePage` + `GameConfigEditor` (parallel/admin-ci-polish). Rich UX backlog: genre/platforms presets, rank ladder templates per [game-catalog.md](../features/game-catalog.md).
 
 ### Developer Portal
 
@@ -26,8 +26,8 @@ Admin panel (`src/admin/`) и Developer Portal (`src/developer-portal/`).
 
 
 - [ ] **[Admin] No admin E2E / browser tests** — `docs/TESTING.md` lists analytics live tests as backend-only; no Playwright/Cypress for Admin. Paths: `docs/TESTING.md`, `src/admin/src/test/`
-- [ ] **[Admin] Thin unit coverage (partial)** — OAuth callback, login (`AppLogin`), audit page, canonical `api/client` tests added (batch 5); analytics pages covered in batch 4. Remaining gaps: full App shell routing smoke in vitest only. Paths: `src/admin/src/test/`
-- [ ] **[Admin] No lint step in CI** — no ESLint/Prettier for `src/admin/`. Path: `.github/workflows/ci.yml` (job `admin`); deferred batch 5 (ESLint bootstrap)
+- [x] **[Admin] Thin unit coverage (partial)** — OAuth callback, login (`AppLogin`), audit page, canonical `api/client` tests added (batch 5); analytics pages covered in batch 4. App shell routing smoke in vitest (`AppRouting.test.tsx`); game config validation/editor tests (parallel/admin-ci-polish). Paths: `src/admin/src/test/`
+- [x] **[Admin] No lint step in CI** — ESLint flat config + `npm run lint` in job `admin` (parallel/admin-ci-polish). Path: `.github/workflows/ci.yml` (job `admin`).
 - [ ] **[Admin] Staging smoke: Admin UI routes only** — batch 5 adds SPA root + `/callback` when `VOICE_ADMIN_INGRESS_HOST` set; Gateway admin moderation/analytics still via `STAGING_STAFF_TOKEN` (not Admin UI bundle). Path: `scripts/staging/smoke-staging.sh`
 
 ### Developer Portal

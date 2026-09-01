@@ -11,7 +11,8 @@ filter_val() {
   if [[ -n "${FILTER_JSON:-}" ]]; then
     [[ "$(echo "${FILTER_JSON}" | jq -r --arg k "${key}" '.[$k] // "false"')" == "true" ]]
   else
-    local env_key="FILTER_${key}"
+    local env_key="FILTER_${key//-/_}"
+    env_key="${env_key^^}"
     [[ "${!env_key:-}" == "true" ]]
   fi
 }

@@ -314,3 +314,62 @@ a {
   margin: 0;
   font-size: 1rem;
 }
+
+.game-config-editor {
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--space-16);
+  margin: var(--space-16) 0;
+  display: grid;
+  gap: var(--space-12);
+}
+
+.game-mode-card {
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-16);
+  display: grid;
+  gap: var(--space-12);
+}
+
+.game-mode-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12);
+}
+
+.game-mode-card__header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.game-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-12);
+}
+
+.game-mode-subsection {
+  display: grid;
+  gap: var(--space-8);
+}
+
+.game-mode-subsection h4 {
+  margin: 0;
+  font-size: 0.9375rem;
+}
+
+.inline-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.checkbox-row {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  width: fit-content;
+}
