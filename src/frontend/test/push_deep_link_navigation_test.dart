@@ -200,6 +200,7 @@ class _FakeChatsClient extends VoiceChatsClient {
     String? cursor,
     int? pageSize,
     String? inbox,
+    String? folderId,
   }) async {
     if (_pages.isEmpty) {
       return const ChatsApiOk(ChatListData(items: []));

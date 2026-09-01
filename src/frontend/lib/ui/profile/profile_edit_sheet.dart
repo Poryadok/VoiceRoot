@@ -197,7 +197,7 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
 
   Future<void> _pickAvatar() async {
     final l10n = AppLocalizations.of(context)!;
-    final picked = await (widget.avatarPicker ?? _defaultPickAvatar).call();
+    final picked = await (widget.avatarPicker ?? defaultPickProfileAvatar).call();
     if (!mounted || picked == null) return;
     final contentType = picked.contentType.trim().toLowerCase();
     if (!kProfileAvatarContentTypes.contains(contentType)) {
@@ -307,7 +307,7 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
   }
 }
 
-Future<ProfileAvatarFile?> _defaultPickAvatar() async {
+Future<ProfileAvatarFile?> defaultPickProfileAvatar() async {
   final file = await openFile(
     acceptedTypeGroups: [
       XTypeGroup(

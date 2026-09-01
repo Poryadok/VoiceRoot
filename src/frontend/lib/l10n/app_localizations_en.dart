@@ -254,6 +254,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatListTitle => 'Direct messages';
 
   @override
+  String get chatFoldersTitle => 'Folders';
+
+  @override
+  String get chatQuickAccessTitle => 'Quick Access';
+
+  @override
+  String get chatQuickAccessEmpty => 'No favorites yet';
+
+  @override
+  String get chatNavigationMenu => 'Navigation menu';
+
+  @override
   String get chatListEmpty => 'No conversations yet';
 
   @override
