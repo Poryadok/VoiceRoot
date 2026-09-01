@@ -900,6 +900,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatListArchive => 'Archive';
 
   @override
+  String get chatArchiveTitle => 'Archived chats';
+
+  @override
+  String get chatArchiveEmpty => 'No archived chats';
+
+  @override
+  String get chatArchiveEmptyHint =>
+      'Archived chats are hidden from your main list until you restore them.';
+
+  @override
+  String get chatArchiveLoadError => 'Could not load archived chats';
+
+  @override
+  String get chatArchiveUnarchive => 'Unarchive';
+
+  @override
+  String get chatArchiveUnarchived => 'Chat restored to your main list';
+
+  @override
   String get chatCreateGroupTooltip => 'Create group';
 
   @override

@@ -58,7 +58,18 @@ func (s *ChatGRPC) ListChats(ctx context.Context, req *chatv1.ListChatsRequest) 
 	if inbox != "main" && inbox != "requests" && inbox != "archive" {
 		return nil, status.Error(codes.InvalidArgument, "invalid inbox")
 	}
-	page, err := s.DM.ListChatsPage(ctx, caller, cursor, limit, inbox)
+
+	var spaceIDs []uuid.UUID
+	if inbox == "main" && s.SpaceMembers != nil {
+		var spaceErr error
+		spaceIDs, spaceErr = s.SpaceMembers.ListMemberSpaceIDs(ctx, caller)
+		if spaceErr != nil {
+			log.Printf("chat: ListChats space membership skipped: %v", spaceErr)
+			spaceIDs = nil
+		}
+	}
+
+	page, err := s.DM.ListChatsPage(ctx, caller, cursor, limit, inbox, spaceIDs)
 	if err != nil {
 		if errors.Is(err, store.ErrInvalidListCursor) {
 			return nil, status.Error(codes.InvalidArgument, "invalid page cursor")
@@ -67,25 +78,6 @@ func (s *ChatGRPC) ListChats(ctx context.Context, req *chatv1.ListChatsRequest) 
 	}
 	rows := page.Rows
 	nextCursor := page.NextCursor
-	if cursor == "" && inbox == "main" && s.SpaceMembers != nil {
-		spaceIDs, spaceErr := s.SpaceMembers.ListMemberSpaceIDs(ctx, caller)
-		if spaceErr != nil {
-			log.Printf("chat: ListChats space membership skipped: %v", spaceErr)
-		} else if len(spaceIDs) > 0 {
-			spaceRows, spaceErr := s.DM.ListSpaceChatsForProfile(ctx, caller, spaceIDs)
-			if spaceErr != nil {
-				log.Printf("chat: ListChats space chats skipped: %v", spaceErr)
-			} else if len(spaceRows) > 0 {
-				merged := store.MergeListChatRows(rows, spaceRows, 0)
-				var trimmed []*store.ChatRow
-				trimmed, nextCursor = store.ListChatsPageCursorFromRows(merged, limit)
-				if nextCursor == "" && page.NextCursor != "" {
-					nextCursor = page.NextCursor
-				}
-				rows = trimmed
-			}
-		}
-	}
 
 	ids := make([]uuid.UUID, 0, len(rows))
 	for _, row := range rows {

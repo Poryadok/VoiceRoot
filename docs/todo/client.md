@@ -48,7 +48,7 @@ _Пока пусто — критичные клиентские блокеры 
 - [ ] **R2-A05 — Active strip LRU semantics** — strip tracks **opened** chats (≤100 LRU); `MobileChatStrip` + `mobile_opened_chat_strip.dart` shipped; long-press remove + 100-cap LRU eviction snackbar shipped (Batch 9).
 - [x] **R3-A08 — Strip widget test wrong contract** — `mobile_chat_strip_test.dart` asserts opened-chat LRU, not inbox rows (§1.6).
 - [x] **R3-A11 — Composer a11y parity** — transient §3.6b emoji panel + §3.6a attach popup with §3.6e focus trap/return (`composer_panels.dart`); click/tap activation on desktop (Batch 9).
-- [ ] **Archive list screen** — `Screen / Chat / Archive` (desktop + mobile); entry via profile RC only — [navigation.md](../features/navigation.md); **`ListChats` `inbox=archive` shipped (Batch 15)** — Flutter screen still TODO.
+- [x] **Archive list screen** — `Screen / Chat / Archive` via profile RC → `/chats/archive`; `ChatArchiveScreen` + `inbox=archive` list/unarchive (Batch 16).
 - [ ] **Mobile stacked chrome** — active strip + app bar + pinned bar + composer + bottom tabs overflow rules §1.6a — Penpot · v3 + Flutter layout.
 
 

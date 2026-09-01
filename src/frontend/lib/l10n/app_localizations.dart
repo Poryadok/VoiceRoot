@@ -1688,6 +1688,42 @@ abstract class AppLocalizations {
   /// **'Archive'**
   String get chatListArchive;
 
+  /// No description provided for @chatArchiveTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Archived chats'**
+  String get chatArchiveTitle;
+
+  /// No description provided for @chatArchiveEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No archived chats'**
+  String get chatArchiveEmpty;
+
+  /// No description provided for @chatArchiveEmptyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Archived chats are hidden from your main list until you restore them.'**
+  String get chatArchiveEmptyHint;
+
+  /// No description provided for @chatArchiveLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load archived chats'**
+  String get chatArchiveLoadError;
+
+  /// No description provided for @chatArchiveUnarchive.
+  ///
+  /// In en, this message translates to:
+  /// **'Unarchive'**
+  String get chatArchiveUnarchive;
+
+  /// No description provided for @chatArchiveUnarchived.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat restored to your main list'**
+  String get chatArchiveUnarchived;
+
   /// No description provided for @chatCreateGroupTooltip.
   ///
   /// In en, this message translates to:

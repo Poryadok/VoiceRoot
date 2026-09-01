@@ -53,7 +53,7 @@ void main() {
       expect(data.nextCursor, 'cursor-2');
     });
 
-    test('GET /api/v1/chats supports inbox filter', () async {
+    test('GET /api/v1/chats supports requests inbox filter', () async {
       final mock = MockClient((req) async {
         expect(req.url.queryParameters['inbox'], 'requests');
         return http.Response(
@@ -65,6 +65,21 @@ void main() {
       });
       final client = VoiceChatsClient(gateway: gatewayHttpForTest(mock, config: config));
       final r = await client.listChats(authorization: auth, inbox: 'requests');
+      expect(r, isA<ChatsApiOk<ChatListData>>());
+    });
+
+    test('GET /api/v1/chats supports archive inbox filter', () async {
+      final mock = MockClient((req) async {
+        expect(req.url.queryParameters['inbox'], 'archive');
+        return http.Response(
+          jsonEncode({
+            'chat_list': {'items': []},
+          }),
+          200,
+        );
+      });
+      final client = VoiceChatsClient(gateway: gatewayHttpForTest(mock, config: config));
+      final r = await client.listChats(authorization: auth, inbox: 'archive');
       expect(r, isA<ChatsApiOk<ChatListData>>());
     });
   });

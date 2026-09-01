@@ -905,6 +905,25 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatListArchive => 'В архив';
 
   @override
+  String get chatArchiveTitle => 'Архив чатов';
+
+  @override
+  String get chatArchiveEmpty => 'Нет архивных чатов';
+
+  @override
+  String get chatArchiveEmptyHint =>
+      'Архивные чаты скрыты из основного списка, пока вы их не восстановите.';
+
+  @override
+  String get chatArchiveLoadError => 'Не удалось загрузить архив чатов';
+
+  @override
+  String get chatArchiveUnarchive => 'Вернуть';
+
+  @override
+  String get chatArchiveUnarchived => 'Чат возвращён в основной список';
+
+  @override
   String get chatCreateGroupTooltip => 'Создать группу';
 
   @override

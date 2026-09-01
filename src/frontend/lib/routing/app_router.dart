@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'stories_routes.dart';
+import '../ui/chat/chat_archive_screen.dart';
 
 final rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -10,6 +11,7 @@ typedef VoiceShellBuilder = Widget Function(BuildContext context, GoRouterState 
 
 abstract final class VoiceAppRoutes {
   static const home = '/';
+  static const chatArchive = '/chats/archive';
   static const invitePrefix = '/invite/';
 }
 
@@ -62,6 +64,11 @@ GoRouter createVoiceGoRouter({
           onDeepLinkPath?.call(state);
           return shellBuilder(context, state);
         },
+      ),
+      GoRoute(
+        path: VoiceAppRoutes.chatArchive,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) => const ChatArchiveScreen(),
       ),
       ...StoriesRoutes.routes(rootKey: rootNavigatorKey),
     ],

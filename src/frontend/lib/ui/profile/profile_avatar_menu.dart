@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../backend/users_client.dart';
 import '../../l10n/app_localizations.dart';
@@ -169,7 +170,6 @@ Future<void> _handleSelection(
   WidgetRef ref,
   String value,
 ) async {
-  final l10n = AppLocalizations.of(context)!;
   if (value.startsWith('profile:')) {
     final profileId = value.substring('profile:'.length);
     await _switchProfile(ref, profileId);
@@ -199,9 +199,7 @@ Future<void> _handleSelection(
     return;
   }
   if (value == 'archive') {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(l10n.profileMenuArchiveUnavailable)),
-    );
+    context.push('/chats/archive');
   }
 }
 
