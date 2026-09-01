@@ -106,6 +106,9 @@
   "socialPresenceIdle": "Idle",
   "socialPresenceDnd": "Do not disturb",
   "socialPresenceOffline": "Offline",
+  "socialPresenceInvisible": "Invisible",
+  "profileMenuPresence": "Presence",
+  "profileMenuArchiveUnavailable": "Chat archive is not available yet.",
   "socialPresenceLastSeen": "Last seen {dateTime}",
   "@socialPresenceLastSeen": {
     "placeholders": {

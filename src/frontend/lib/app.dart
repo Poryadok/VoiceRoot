@@ -48,10 +48,10 @@ import 'ui/core/voice_bottom_sheet.dart';
 import 'ui/core/voice_compact_banner.dart';
 import 'ui/core/voice_state_panel.dart';
 import 'ui/profile/profile_avatar_switcher.dart';
-import 'ui/profile/profile_switcher.dart';
 import 'ui/profile/profile_edit_sheet.dart';
 import 'ui/settings/settings_sheet.dart';
 import 'ui/shell/desktop_shell_rail.dart';
+import 'ui/shell/mobile_shell_tab_bar.dart';
 import 'ui/shell/mobile_chat_strip.dart';
 import 'ui/shell/navigation_panel.dart';
 import 'ui/shell/side_panel.dart';
@@ -310,12 +310,18 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
       ),
     );
 
+    final narrowShell = VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width);
+    final showMobileTabs = narrowShell && selectedChatId == null;
+
     return VoiceShortcuts(
       child: OnboardingOverlay(
         child: VersionPolicyOverlay(
           child: CallErrorListener(
             child: Scaffold(
               backgroundColor: voice.canvas,
+              bottomNavigationBar: showMobileTabs
+                  ? const MobileShellTabBar()
+                  : null,
               body: Stack(
                 children: [
                   SafeArea(
@@ -375,7 +381,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
                                   tone: VoiceBannerTone.warning,
                                 ),
                               _SessionBar(
-                                useProfileSwitcher: !narrow,
+                                narrow: narrow,
                                 onLogout: () => ref
                                     .read(authControllerProvider.notifier)
                                     .logout(),
@@ -415,7 +421,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
 
 class _SessionBar extends StatelessWidget {
   const _SessionBar({
-    required this.useProfileSwitcher,
+    required this.narrow,
     required this.onLogout,
     required this.onEditProfile,
     required this.onOpenSettings,
@@ -425,7 +431,7 @@ class _SessionBar extends StatelessWidget {
     required this.settingsTooltip,
   });
 
-  final bool useProfileSwitcher;
+  final bool narrow;
   final VoidCallback onLogout;
   final VoidCallback? onEditProfile;
   final VoidCallback onOpenSettings;
@@ -450,9 +456,14 @@ class _SessionBar extends StatelessWidget {
               const ProfileAccentDot(),
               const SizedBox(width: 8),
               Expanded(
-                child: useProfileSwitcher
-                    ? const ProfileSwitcher()
-                    : ProfileAvatarSwitcher(sessionLabel: sessionLabel),
+                child: narrow
+                    ? ProfileAvatarSwitcher(sessionLabel: sessionLabel)
+                    : Text(
+                        sessionLabel,
+                        key: const Key('auth_session_profile'),
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: voice.textPrimary),
+                      ),
               ),
               IconButton(
                 key: const Key('settings_open'),

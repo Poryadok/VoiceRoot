@@ -488,6 +488,24 @@ abstract class AppLocalizations {
   /// **'Offline'**
   String get socialPresenceOffline;
 
+  /// No description provided for @socialPresenceInvisible.
+  ///
+  /// In en, this message translates to:
+  /// **'Invisible'**
+  String get socialPresenceInvisible;
+
+  /// No description provided for @profileMenuPresence.
+  ///
+  /// In en, this message translates to:
+  /// **'Presence'**
+  String get profileMenuPresence;
+
+  /// No description provided for @profileMenuArchiveUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat archive is not available yet.'**
+  String get profileMenuArchiveUnavailable;
+
   /// No description provided for @socialPresenceLastSeen.
   ///
   /// In en, this message translates to:

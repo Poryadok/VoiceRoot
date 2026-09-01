@@ -43,8 +43,8 @@ _Пока пусто — критичные клиентские блокеры 
 
 Источник: `tmp/telegram-ux-audit/AUDIT.md` (R2-A03–A05, R3-A08, R3-A11). Backend RPC-хвосты — [backend.md](backend.md) § Telegram-parity audit / § Chat navigation.
 
-- [ ] **R2-A03 — Profile switcher vs rail contract** — normative: ProfileStack §1.1a in rail + profile RC (archive, switch/create); Flutter uses combobox/menu diverging from [multi-profile.md](../features/multi-profile.md) / [screen-controls.md](../design/screen-controls.md).
-- [ ] **R2-A04 — Mobile shell IA** — bottom tab bar + hamburger drawer (folders, QA, Settings); absent in `app.dart` / mobile layout — [navigation.md](../features/navigation.md), §1.6a.
+- [x] **R2-A03 — Profile switcher vs rail contract** — `ProfileAvatarMenuButton` §1.1a in rail (`profile_avatar_menu.dart`); desktop session bar is label-only (no combobox); mobile tap opens menu + swipe switch (`ProfileAvatarSwitcher`). Archive entry shows unavailable snackbar until Chat archive RPC ships (Batch 10).
+- [ ] **R2-A04 — Mobile shell IA** — `MobileShellTabBar` (Chats/Social/Match) on `Scaffold.bottomNavigationBar` when narrow + no open chat (Batch 10 incremental); **deferred:** hamburger drawer (folders, QA, settings), keyboard-hide tab bar, stacked chrome overflow rules.
 - [ ] **R2-A05 — Active strip LRU semantics** — strip tracks **opened** chats (≤100 LRU); `MobileChatStrip` + `mobile_opened_chat_strip.dart` shipped; long-press remove + 100-cap LRU eviction snackbar shipped (Batch 9).
 - [x] **R3-A08 — Strip widget test wrong contract** — `mobile_chat_strip_test.dart` asserts opened-chat LRU, not inbox rows (§1.6).
 - [x] **R3-A11 — Composer a11y parity** — transient §3.6b emoji panel + §3.6a attach popup with §3.6e focus trap/return (`composer_panels.dart`); click/tap activation on desktop (Batch 9).
@@ -67,9 +67,9 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
 
 - [x] **A11y: message list keyboard nav** — `↑`/`↓`, `R`, `E` wired in `voice_shortcuts.dart` + `chat_room_panel`; widget tests in `voice_shortcuts_keyboard_test.dart` (Batch 9).
 
-- [ ] **A11y: text-scale ×1.5 — расширить smoke** — сейчас только chat list/room (`chat_text_scale_test.dart`); добавить settings, matchmaking, stories, notification settings.
+- [x] **A11y: text-scale ×1.5 — расширить smoke** — `shell_text_scale_test.dart`: settings sheet, notification settings, game catalog, story archive; chat list/room remain in `chat_text_scale_test.dart` (Batch 10).
 
-- [ ] **A11y: focus return после modal** — `VoiceFocusTrap` ловит фокус; проверить возврат на trigger при закрытии `showVoiceBottomSheet`, coach-marks, call overlay.
+- [x] **A11y: focus return после modal** — `VoiceFocusReturn` + coach-mark `VoiceFocusTrap`; call overlay restores on dispose; `showVoiceBottomSheet` escape restores focus (Batch 10).
 
 - [ ] **A11y: pre-release TalkBack / VoiceOver** — чеклист в [accessibility.md](../features/accessibility.md) §Pre-release; ручная приёмка перед mobile release (**Вы**).
 

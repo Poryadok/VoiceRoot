@@ -8,8 +8,9 @@ import '../../state/subscription_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../../theme/voice_theme_providers.dart';
 import '../core/profile_accent_dot.dart';
+import 'profile_avatar_menu.dart';
 
-/// Mobile profile switcher: swipe avatar left/right to cycle profiles.
+/// Mobile profile switcher: tap avatar for §1.1a menu; swipe to cycle profiles.
 class ProfileAvatarSwitcher extends ConsumerWidget {
   const ProfileAvatarSwitcher({
     super.key,
@@ -85,39 +86,50 @@ class ProfileAvatarSwitcher extends ConsumerWidget {
         final currentIndex = profiles.indexWhere((p) => p.id == activeId);
         final safeIndex = currentIndex >= 0 ? currentIndex : 0;
 
-        return GestureDetector(
-          key: switcherKey,
-          onHorizontalDragEnd: switching
-              ? null
-              : (details) {
-                  final velocity = details.primaryVelocity ?? 0;
-                  if (velocity.abs() < 80) return;
-                  final next = velocity < 0
-                      ? (safeIndex + 1) % profiles.length
-                      : (safeIndex - 1 + profiles.length) % profiles.length;
-                  _switchTo(ref, context, profiles, next);
-                },
-          child: Row(
-            children: [
-              if (switching)
-                const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              else
-                _ProfileAccentFor(profiles[safeIndex]),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  profiles[safeIndex].displayName,
-                  key: const Key('auth_session_profile'),
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: voice.textPrimary),
-                ),
+        return Builder(
+          builder: (anchorContext) {
+            return GestureDetector(
+              key: switcherKey,
+              onTap: switching
+                  ? null
+                  : () => showProfileAvatarMenu(
+                        context: context,
+                        ref: ref,
+                        anchorContext: anchorContext,
+                      ),
+              onHorizontalDragEnd: switching
+                  ? null
+                  : (details) {
+                      final velocity = details.primaryVelocity ?? 0;
+                      if (velocity.abs() < 80) return;
+                      final next = velocity < 0
+                          ? (safeIndex + 1) % profiles.length
+                          : (safeIndex - 1 + profiles.length) % profiles.length;
+                      _switchTo(ref, context, profiles, next);
+                    },
+              child: Row(
+                children: [
+                  if (switching)
+                    const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  else
+                    _ProfileAccentFor(profiles[safeIndex]),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      profiles[safeIndex].displayName,
+                      key: const Key('auth_session_profile'),
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: voice.textPrimary),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            );
+          },
         );
       },
     );
