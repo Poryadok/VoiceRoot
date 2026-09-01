@@ -215,11 +215,22 @@ message GetChatListMetadataRequest {
   repeated voice.chat.v1.ChatRef chats = 1;
 }
 
+// DM list preview ticks for outgoing last message (docs/microservices/messaging-service.md).
+enum LastMessageDeliveryState {
+  LAST_MESSAGE_DELIVERY_STATE_UNSPECIFIED = 0;
+  LAST_MESSAGE_DELIVERY_STATE_NONE = 1;
+  LAST_MESSAGE_DELIVERY_STATE_SENT = 2;
+  LAST_MESSAGE_DELIVERY_STATE_DELIVERED = 3;
+  LAST_MESSAGE_DELIVERY_STATE_READ = 4;
+}
+
 message ChatListMetadata {
   voice.chat.v1.ChatRef chat = 1;
   optional string last_message_preview = 2;
   int64 unread_count = 3;
   optional google.protobuf.Timestamp last_message_at = 4;
+  optional bool last_message_is_outgoing = 5;
+  optional LastMessageDeliveryState last_message_delivery_state = 6;
 }
 
 message SendMessageResponse {

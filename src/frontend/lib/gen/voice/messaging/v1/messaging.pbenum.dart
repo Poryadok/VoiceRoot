@@ -92,5 +92,40 @@ class SharedMediaKind extends $pb.ProtobufEnum {
   const SharedMediaKind._(super.value, super.name);
 }
 
+/// DM list preview ticks for outgoing last message (docs/microservices/messaging-service.md).
+class LastMessageDeliveryState extends $pb.ProtobufEnum {
+  static const LastMessageDeliveryState
+      LAST_MESSAGE_DELIVERY_STATE_UNSPECIFIED = LastMessageDeliveryState._(
+          0, _omitEnumNames ? '' : 'LAST_MESSAGE_DELIVERY_STATE_UNSPECIFIED');
+  static const LastMessageDeliveryState LAST_MESSAGE_DELIVERY_STATE_NONE =
+      LastMessageDeliveryState._(
+          1, _omitEnumNames ? '' : 'LAST_MESSAGE_DELIVERY_STATE_NONE');
+  static const LastMessageDeliveryState LAST_MESSAGE_DELIVERY_STATE_SENT =
+      LastMessageDeliveryState._(
+          2, _omitEnumNames ? '' : 'LAST_MESSAGE_DELIVERY_STATE_SENT');
+  static const LastMessageDeliveryState LAST_MESSAGE_DELIVERY_STATE_DELIVERED =
+      LastMessageDeliveryState._(
+          3, _omitEnumNames ? '' : 'LAST_MESSAGE_DELIVERY_STATE_DELIVERED');
+  static const LastMessageDeliveryState LAST_MESSAGE_DELIVERY_STATE_READ =
+      LastMessageDeliveryState._(
+          4, _omitEnumNames ? '' : 'LAST_MESSAGE_DELIVERY_STATE_READ');
+
+  static const $core.List<LastMessageDeliveryState> values =
+      <LastMessageDeliveryState>[
+    LAST_MESSAGE_DELIVERY_STATE_UNSPECIFIED,
+    LAST_MESSAGE_DELIVERY_STATE_NONE,
+    LAST_MESSAGE_DELIVERY_STATE_SENT,
+    LAST_MESSAGE_DELIVERY_STATE_DELIVERED,
+    LAST_MESSAGE_DELIVERY_STATE_READ,
+  ];
+
+  static final $core.List<LastMessageDeliveryState?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 4);
+  static LastMessageDeliveryState? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const LastMessageDeliveryState._(super.value, super.name);
+}
+
 const $core.bool _omitEnumNames =
     $core.bool.fromEnvironment('protobuf.omit_enum_names');

@@ -31,7 +31,7 @@ _Пока пусто — критичные клиентские блокеры 
 
 - [ ] **[Multi-Profile] No delete-profile UI** — REST `DELETE /api/v1/users/profiles/{id}` + `VoiceUsersClient.deleteProfile` **есть**; settings exposes create only (`settings_sheet.dart` → `CreateProfileSheet`); no manage-profiles screen to remove secondary profiles.
 - [x] **[Multi-Profile] Frozen profiles invisible in switcher UI** — `VoiceProfile.frozenAt` + `proto_mappers.dart`; `ProfileSwitcher` disabled items + `(Frozen)` label; `ProfileAvatarSwitcher` skips frozen on swipe (Batch 11).
-- [ ] **[Multi-Profile] `ProfileDowngradePickerScreen` unreachable** — screen + `submitDowngradeProfiles` exist; never routed from subscription expiry/cancel (см. [Subscription] Downgrade lifecycle).
+- [x] **[Multi-Profile] `ProfileDowngradePickerScreen` unreachable** — **done (Batch 12):** routed when free tier + >2 profiles (`profileDowngradeRequiredProvider` in `app.dart`); screen + `submitDowngradeProfiles` existed.
 
 
 ### Auth UI (REST есть, экранов нет)

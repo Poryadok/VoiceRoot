@@ -1932,6 +1932,8 @@ class ChatListMetadata extends $pb.GeneratedMessage {
     $core.String? lastMessagePreview,
     $fixnum.Int64? unreadCount,
     $3.Timestamp? lastMessageAt,
+    $core.bool? lastMessageIsOutgoing,
+    LastMessageDeliveryState? lastMessageDeliveryState,
   }) {
     final result = create();
     if (chat != null) result.chat = chat;
@@ -1939,6 +1941,10 @@ class ChatListMetadata extends $pb.GeneratedMessage {
       result.lastMessagePreview = lastMessagePreview;
     if (unreadCount != null) result.unreadCount = unreadCount;
     if (lastMessageAt != null) result.lastMessageAt = lastMessageAt;
+    if (lastMessageIsOutgoing != null)
+      result.lastMessageIsOutgoing = lastMessageIsOutgoing;
+    if (lastMessageDeliveryState != null)
+      result.lastMessageDeliveryState = lastMessageDeliveryState;
     return result;
   }
 
@@ -1962,6 +1968,10 @@ class ChatListMetadata extends $pb.GeneratedMessage {
     ..aInt64(3, _omitFieldNames ? '' : 'unreadCount')
     ..aOM<$3.Timestamp>(4, _omitFieldNames ? '' : 'lastMessageAt',
         subBuilder: $3.Timestamp.create)
+    ..aOB(5, _omitFieldNames ? '' : 'lastMessageIsOutgoing')
+    ..aE<LastMessageDeliveryState>(
+        6, _omitFieldNames ? '' : 'lastMessageDeliveryState',
+        enumValues: LastMessageDeliveryState.values)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2022,6 +2032,25 @@ class ChatListMetadata extends $pb.GeneratedMessage {
   void clearLastMessageAt() => $_clearField(4);
   @$pb.TagNumber(4)
   $3.Timestamp ensureLastMessageAt() => $_ensure(3);
+
+  @$pb.TagNumber(5)
+  $core.bool get lastMessageIsOutgoing => $_getBF(4);
+  @$pb.TagNumber(5)
+  set lastMessageIsOutgoing($core.bool value) => $_setBool(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasLastMessageIsOutgoing() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearLastMessageIsOutgoing() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  LastMessageDeliveryState get lastMessageDeliveryState => $_getN(5);
+  @$pb.TagNumber(6)
+  set lastMessageDeliveryState(LastMessageDeliveryState value) =>
+      $_setField(6, value);
+  @$pb.TagNumber(6)
+  $core.bool hasLastMessageDeliveryState() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearLastMessageDeliveryState() => $_clearField(6);
 }
 
 class SendMessageResponse extends $pb.GeneratedMessage {

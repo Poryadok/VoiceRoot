@@ -1625,6 +1625,12 @@ func (s *MessagingGRPC) GetChatListMetadata(ctx context.Context, req *messagingv
 		if row.LastMessageAt != nil {
 			item.LastMessageAt = timestamppb.New(*row.LastMessageAt)
 		}
+		if row.LastMessageDeliveryState != "" {
+			outgoing := row.LastMessageIsOutgoing
+			item.LastMessageIsOutgoing = &outgoing
+			state := mapLastMessageDeliveryState(row.LastMessageDeliveryState)
+			item.LastMessageDeliveryState = &state
+		}
 		out[chatID.String()] = item
 	}
 	return &messagingv1.GetChatListMetadataResponse{ByChatId: out}, nil
@@ -1918,6 +1924,21 @@ func protoSharedMediaKind(k messagingv1.SharedMediaKind) (store.SharedMediaKind,
 		return store.SharedMediaKindVoice, nil
 	default:
 		return 0, status.Error(codes.InvalidArgument, "kind is required")
+	}
+}
+
+func mapLastMessageDeliveryState(state string) messagingv1.LastMessageDeliveryState {
+	switch strings.ToLower(strings.TrimSpace(state)) {
+	case "none":
+		return messagingv1.LastMessageDeliveryState_LAST_MESSAGE_DELIVERY_STATE_NONE
+	case "sent":
+		return messagingv1.LastMessageDeliveryState_LAST_MESSAGE_DELIVERY_STATE_SENT
+	case "delivered":
+		return messagingv1.LastMessageDeliveryState_LAST_MESSAGE_DELIVERY_STATE_DELIVERED
+	case "read":
+		return messagingv1.LastMessageDeliveryState_LAST_MESSAGE_DELIVERY_STATE_READ
+	default:
+		return messagingv1.LastMessageDeliveryState_LAST_MESSAGE_DELIVERY_STATE_UNSPECIFIED
 	}
 }
 

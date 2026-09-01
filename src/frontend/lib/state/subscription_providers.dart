@@ -35,6 +35,14 @@ final accountIsPremiumProvider = Provider<bool>((ref) {
   return ref.watch(subscriptionTierProvider) == 'premium';
 });
 
+/// Free tier allows 2 profiles; route to downgrade picker when excess remain after premium lapse.
+final profileDowngradeRequiredProvider = Provider<bool>((ref) {
+  if (ref.watch(accountIsPremiumProvider)) return false;
+  final profiles = ref.watch(myProfilesProvider).valueOrNull;
+  if (profiles == null) return false;
+  return profiles.length > 2;
+});
+
 /// Whether a profile should show the premium ★ badge in chat UI.
 final profilePremiumBadgeProvider = Provider.family<bool, String?>((ref, profileId) {
   if (profileId == null || profileId.isEmpty) return false;

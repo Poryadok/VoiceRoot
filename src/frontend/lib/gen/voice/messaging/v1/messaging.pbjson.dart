@@ -66,6 +66,26 @@ final $typed_data.Uint8List sharedMediaKindDescriptor = $convert.base64Decode(
     'GwoXU0hBUkVEX01FRElBX0tJTkRfTElOS1MQAxIbChdTSEFSRURfTUVESUFfS0lORF9WT0lDRR'
     'AE');
 
+@$core.Deprecated('Use lastMessageDeliveryStateDescriptor instead')
+const LastMessageDeliveryState$json = {
+  '1': 'LastMessageDeliveryState',
+  '2': [
+    {'1': 'LAST_MESSAGE_DELIVERY_STATE_UNSPECIFIED', '2': 0},
+    {'1': 'LAST_MESSAGE_DELIVERY_STATE_NONE', '2': 1},
+    {'1': 'LAST_MESSAGE_DELIVERY_STATE_SENT', '2': 2},
+    {'1': 'LAST_MESSAGE_DELIVERY_STATE_DELIVERED', '2': 3},
+    {'1': 'LAST_MESSAGE_DELIVERY_STATE_READ', '2': 4},
+  ],
+};
+
+/// Descriptor for `LastMessageDeliveryState`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List lastMessageDeliveryStateDescriptor = $convert.base64Decode(
+    'ChhMYXN0TWVzc2FnZURlbGl2ZXJ5U3RhdGUSKwonTEFTVF9NRVNTQUdFX0RFTElWRVJZX1NUQV'
+    'RFX1VOU1BFQ0lGSUVEEAASJAogTEFTVF9NRVNTQUdFX0RFTElWRVJZX1NUQVRFX05PTkUQARIk'
+    'CiBMQVNUX01FU1NBR0VfREVMSVZFUllfU1RBVEVfU0VOVBACEikKJUxBU1RfTUVTU0FHRV9ERU'
+    'xJVkVSWV9TVEFURV9ERUxJVkVSRUQQAxIkCiBMQVNUX01FU1NBR0VfREVMSVZFUllfU1RBVEVf'
+    'UkVBRBAE');
+
 @$core.Deprecated('Use sendMessageRequestDescriptor instead')
 const SendMessageRequest$json = {
   '1': 'SendMessageRequest',
@@ -855,10 +875,31 @@ const ChatListMetadata$json = {
       '10': 'lastMessageAt',
       '17': true
     },
+    {
+      '1': 'last_message_is_outgoing',
+      '3': 5,
+      '4': 1,
+      '5': 8,
+      '9': 2,
+      '10': 'lastMessageIsOutgoing',
+      '17': true
+    },
+    {
+      '1': 'last_message_delivery_state',
+      '3': 6,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.messaging.v1.LastMessageDeliveryState',
+      '9': 3,
+      '10': 'lastMessageDeliveryState',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_last_message_preview'},
     {'1': '_last_message_at'},
+    {'1': '_last_message_is_outgoing'},
+    {'1': '_last_message_delivery_state'},
   ],
 };
 
@@ -868,7 +909,12 @@ final $typed_data.Uint8List chatListMetadataDescriptor = $convert.base64Decode(
     'ZSBGNoYXQSNQoUbGFzdF9tZXNzYWdlX3ByZXZpZXcYAiABKAlIAFISbGFzdE1lc3NhZ2VQcmV2'
     'aWV3iAEBEiEKDHVucmVhZF9jb3VudBgDIAEoA1ILdW5yZWFkQ291bnQSRwoPbGFzdF9tZXNzYW'
     'dlX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEgBUg1sYXN0TWVzc2FnZUF0'
-    'iAEBQhcKFV9sYXN0X21lc3NhZ2VfcHJldmlld0ISChBfbGFzdF9tZXNzYWdlX2F0');
+    'iAEBEjwKGGxhc3RfbWVzc2FnZV9pc19vdXRnb2luZxgFIAEoCEgCUhVsYXN0TWVzc2FnZUlzT3'
+    'V0Z29pbmeIAQEScAobbGFzdF9tZXNzYWdlX2RlbGl2ZXJ5X3N0YXRlGAYgASgOMiwudm9pY2Uu'
+    'bWVzc2FnaW5nLnYxLkxhc3RNZXNzYWdlRGVsaXZlcnlTdGF0ZUgDUhhsYXN0TWVzc2FnZURlbG'
+    'l2ZXJ5U3RhdGWIAQFCFwoVX2xhc3RfbWVzc2FnZV9wcmV2aWV3QhIKEF9sYXN0X21lc3NhZ2Vf'
+    'YXRCGwoZX2xhc3RfbWVzc2FnZV9pc19vdXRnb2luZ0IeChxfbGFzdF9tZXNzYWdlX2RlbGl2ZX'
+    'J5X3N0YXRl');
 
 @$core.Deprecated('Use sendMessageResponseDescriptor instead')
 const SendMessageResponse$json = {
