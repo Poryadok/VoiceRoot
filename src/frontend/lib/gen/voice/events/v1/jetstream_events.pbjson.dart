@@ -707,9 +707,19 @@ const MessageSent$json = {
       '17': true
     },
     {'1': 'is_e2e', '3': 6, '4': 1, '5': 8, '10': 'isE2e'},
+    {
+      '1': 'content_type',
+      '3': 7,
+      '4': 1,
+      '5': 9,
+      '9': 1,
+      '10': 'contentType',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_thread_parent_id'},
+    {'1': '_content_type'},
   ],
 };
 
@@ -718,8 +728,9 @@ final $typed_data.Uint8List messageSentDescriptor = $convert.base64Decode(
     'CgtNZXNzYWdlU2VudBIdCgptZXNzYWdlX2lkGAEgASgJUgltZXNzYWdlSWQSFwoHY2hhdF9pZB'
     'gCIAEoCVIGY2hhdElkEioKEXNlbmRlcl9wcm9maWxlX2lkGAMgASgJUg9zZW5kZXJQcm9maWxl'
     'SWQSIQoMaGFzX21lbnRpb25zGAQgASgIUgtoYXNNZW50aW9ucxItChB0aHJlYWRfcGFyZW50X2'
-    'lkGAUgASgJSABSDnRocmVhZFBhcmVudElkiAEBEhUKBmlzX2UyZRgGIAEoCFIFaXNFMmVCEwoR'
-    'X3RocmVhZF9wYXJlbnRfaWQ=');
+    'lkGAUgASgJSABSDnRocmVhZFBhcmVudElkiAEBEhUKBmlzX2UyZRgGIAEoCFIFaXNFMmUSJgoM'
+    'Y29udGVudF90eXBlGAcgASgJSAFSC2NvbnRlbnRUeXBliAEBQhMKEV90aHJlYWRfcGFyZW50X2'
+    'lkQg8KDV9jb250ZW50X3R5cGU=');
 
 @$core.Deprecated('Use mentionAddedDescriptor instead')
 const MentionAdded$json = {

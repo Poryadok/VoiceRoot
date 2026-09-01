@@ -2123,6 +2123,7 @@ class MessageSent extends $pb.GeneratedMessage {
     $core.bool? hasMentions,
     $core.String? threadParentId,
     $core.bool? isE2e,
+    $core.String? contentType,
   }) {
     final result = create();
     if (messageId != null) result.messageId = messageId;
@@ -2131,6 +2132,7 @@ class MessageSent extends $pb.GeneratedMessage {
     if (hasMentions != null) result.hasMentions = hasMentions;
     if (threadParentId != null) result.threadParentId = threadParentId;
     if (isE2e != null) result.isE2e = isE2e;
+    if (contentType != null) result.contentType = contentType;
     return result;
   }
 
@@ -2154,6 +2156,7 @@ class MessageSent extends $pb.GeneratedMessage {
     ..aOB(4, _omitFieldNames ? '' : 'hasMentions')
     ..aOS(5, _omitFieldNames ? '' : 'threadParentId')
     ..aOB(6, _omitFieldNames ? '' : 'isE2e')
+    ..aOS(7, _omitFieldNames ? '' : 'contentType')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2228,6 +2231,16 @@ class MessageSent extends $pb.GeneratedMessage {
   $core.bool hasIsE2e() => $_has(5);
   @$pb.TagNumber(6)
   void clearIsE2e() => $_clearField(6);
+
+  /// snake_case store value: text | photo | video | … (docs/microservices/messaging-service.md)
+  @$pb.TagNumber(7)
+  $core.String get contentType => $_getSZ(6);
+  @$pb.TagNumber(7)
+  set contentType($core.String value) => $_setString(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasContentType() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearContentType() => $_clearField(7);
 }
 
 class MentionAdded extends $pb.GeneratedMessage {
