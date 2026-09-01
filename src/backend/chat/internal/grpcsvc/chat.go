@@ -66,6 +66,10 @@ type DMStore interface {
 	SetInboxBucket(ctx context.Context, chatID, profileID uuid.UUID, bucket string) error
 	SetMemberArchived(ctx context.Context, chatID, profileID uuid.UUID, archived bool) error
 	SetMemberMutedUntil(ctx context.Context, chatID, profileID uuid.UUID, until *time.Time) error
+	ListQuickAccess(ctx context.Context, profileID uuid.UUID) ([]store.QuickAccessRow, error)
+	AddQuickAccess(ctx context.Context, profileID, chatID uuid.UUID, sortOrder *int32) error
+	RemoveQuickAccess(ctx context.Context, profileID, chatID uuid.UUID) error
+	ReorderQuickAccess(ctx context.Context, profileID uuid.UUID, chatIDs []uuid.UUID) error
 	CreateGroupChat(ctx context.Context, creatorProfileID uuid.UUID, name string) (*store.ChatRow, error)
 	CreateSpaceGroupChat(ctx context.Context, creatorProfileID, spaceID uuid.UUID, name string) (*store.ChatRow, error)
 	CreateSpaceChannelChat(ctx context.Context, creatorProfileID, spaceID uuid.UUID, name string) (*store.ChatRow, error)

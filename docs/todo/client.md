@@ -132,7 +132,7 @@ Baseline (2026-06) закрыт; хвосты UX/E2E ниже. Спека: [auth
 
 - [ ] **[Multi-Profile] Create flow missing avatar** — spec §создание: «ник, аватар»; `CreateProfileSheet` only `display_name` + privacy preset; no presigned upload on create.
 - [ ] **[Multi-Profile] Change primary profile API/UI missing** — `is_primary` set at bootstrap only; no way to reassign which profile phone search returns.
-- [ ] **[Multi-Profile] Accent color not choosable on create** — backend `CreateProfileRequest.accent_color` + palette default (`profileaccent`); `CreateProfileSheet` does not expose picker (only post-create in settings `_AccentPicker`).
+- [x] **[Multi-Profile] Accent color not choosable on create** — `CreateProfileSheet` accent swatches from token catalog; sends `accent_color` on create (**Batch 17**).
 - [ ] **[Multi-Profile] `profile_accent_storage` legacy dual-write** — stale comment «until User Service exposes accent_color» (`profile_accent_storage.dart`); settings picker still writes local index while server has `profiles.accent_color`.
 - [ ] **[Multi-Profile] Guest + multi-profile product rule undocumented** — no `CreateProfile` tier/guest guard; settings create action visible for guests; clarify in `multi-profile.md` or gate in UI/API.
 

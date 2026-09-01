@@ -145,6 +145,14 @@ void main() {
     );
     await tester.tap(find.text('Work'));
     await tester.pumpAndSettle();
+    final accentPicker = find.byKey(CreateProfileSheet.accentPickerKey);
+    expect(accentPicker, findsOneWidget);
+    final swatches = tester.widgetList<GestureDetector>(
+      find.descendant(of: accentPicker, matching: find.byType(GestureDetector)),
+    );
+    expect(swatches.length, greaterThan(1));
+    await tester.tap(find.descendant(of: accentPicker, matching: find.byType(GestureDetector)).at(2));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(CreateProfileSheet.submitKey));
     await tester.pumpAndSettle();
 
@@ -152,5 +160,6 @@ void main() {
     final body = jsonDecode(capturedBody!) as Map<String, dynamic>;
     expect(body['preset'], 'work');
     expect(body['display_name'], 'Work Alt');
+    expect(body['accent_color'], '#F0A8A8');
   });
 }

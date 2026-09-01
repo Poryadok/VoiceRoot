@@ -13,7 +13,7 @@
 - Создание и управление **текстовыми групповыми чатами** (`type = group` \| `channel`, до 500 участников на чат вне спейса по продукту; одна модель API); `space_id` опционален; в спейсе узел **`space_tree_nodes`** — совместно с Space
 - Участники: для чатов **без** `space_id` — `chat_members`; для чатов **в** спейсе — наследование от `space_members` + роли/оверрайды (см. [DATA_MODEL.md](../DATA_MODEL.md))
 - Папки чатов (All / DM / Groups / Channels / Spaces / пользовательские) — [navigation.md](../features/navigation.md); **not yet in proto/code** — см. [todo/backend.md](../todo/backend.md)
-- Quick Access (до 15 чатов на профиль); отдельная таблица `quick_access_chats` — **not yet in proto/code**
+- Quick Access (до 15 чатов на профиль); таблица `quick_access_chats` + RPC — **shipped (Batch 17)**; archive side-effect on `ArchiveChat` — backlog
 - Список активных чатов (mobile strip; desktop — quick access + pin)
 - Мьют / архивация чатов
 - Slow mode (таймер между сообщениями)
@@ -58,12 +58,15 @@ service ChatService {
   rpc UpdateFolder(UpdateFolderRequest) returns (UpdateFolderResponse);
   rpc DeleteFolder(DeleteFolderRequest) returns (DeleteFolderResponse);
 
+  // Quick Access — shipped (Batch 17)
+  rpc ListQuickAccess(ListQuickAccessRequest) returns (ListQuickAccessResponse);
+  rpc AddQuickAccess(AddQuickAccessRequest) returns (AddQuickAccessResponse);
+  rpc RemoveQuickAccess(RemoveQuickAccessRequest) returns (RemoveQuickAccessResponse);
+  rpc ReorderQuickAccess(ReorderQuickAccessRequest) returns (ReorderQuickAccessResponse);
+
   // Folder membership + pin — not yet in proto
   // rpc AddChatToFolder / RemoveChatFromFolder / ReorderFolderChats
   // rpc PinChatInFolder / UnpinChatInFolder
-
-  // Quick Access — not yet in proto
-  // rpc ListQuickAccess / AddQuickAccess / RemoveQuickAccess / ReorderQuickAccess
 
   // Действия
   rpc MuteChat(MuteChatRequest) returns (MuteChatResponse);       // ✓
@@ -194,7 +197,7 @@ CREATE INDEX quick_access_profile_order_idx ON quick_access_chats (profile_id, s
 
 ### Deployed schema (migrations `000001`–`000007`) vs full spec
 
-**Shipped today** (`chat_db` migrations): DM + group + channel types; `chat_members.inbox_bucket`; `threads_enabled` / `allow_user_main_feed`; `e2e_enabled`; slow mode; guest-DM flag. **Not shipped:** `folders`, `folder_chats`, `quick_access_chats` — см. [todo/backend.md](../todo/backend.md).
+**Shipped today** (`chat_db` migrations): DM + group + channel types; `chat_members.inbox_bucket`; `threads_enabled` / `allow_user_main_feed`; `e2e_enabled`; slow mode; guest-DM flag; **`quick_access_chats` (Batch 17)**. **Not shipped:** `folders`, `folder_chats` — см. [todo/backend.md](../todo/backend.md).
 
 **Full spec** (folders + quick access) — [navigation.md](../features/navigation.md); DDL-скетчи ниже в § Migration sketches.
 
@@ -214,7 +217,7 @@ CREATE INDEX quick_access_profile_order_idx ON quick_access_chats (profile_id, s
 - сортировка: `COALESCE(last_message_at, created_at)` DESC, tie-break `chats.id` DESC;
 - page size default 50, max 100.
 
-**Full inbox spec (not yet shipped):** `folder_id`, `inbox=archive`, quick access — [navigation.md](../features/navigation.md); DDL/handlers — [todo/backend.md](../todo/backend.md).
+**Full inbox spec (not yet shipped):** `folder_id` — [navigation.md](../features/navigation.md); DDL/handlers — [todo/backend.md](../todo/backend.md). **`inbox=archive`** + **Quick Access RPC/DDL** — shipped (Batch 15/17).
 
 ### Timestamp ownership (`chats.last_message_at`)
 
@@ -345,7 +348,7 @@ message ReorderQuickAccessRequest {
 | `ArchiveChat(chat_id, archived)` | **Implemented** — sets `chat_members.is_archived` |
 | `ListChats` main inbox | **Implemented** — excludes `is_archived=true` |
 | `ListChats` with `inbox=archive` | **Not implemented** — contract above |
-| Side-effect: remove Quick Access on archive | **Not implemented** — required when Quick Access lands |
+| Side-effect: remove Quick Access on archive | **Not implemented** — required now that Quick Access is shipped (Batch 17) |
 | Auto-unarchive on incoming DM message | **Not implemented** — Chat or Messaging consumer |
 
 **Spec:** DM **archive write** (`ArchiveChat`) — **implemented**. **Archive list** (`inbox=archive`), Quick Access side-effect, auto-unarchive — **not implemented**. Group/channel use same `is_archived` column; broader inbox UX — partial ([todo/backend.md](../todo/backend.md)).

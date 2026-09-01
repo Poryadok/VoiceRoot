@@ -309,6 +309,54 @@ func (t *transcoder) serveChats(w http.ResponseWriter, r *http.Request, rest str
 		w.WriteHeader(http.StatusNoContent)
 		return true
 
+	case r.Method == http.MethodGet && rest == "quick-access":
+		resp, err := t.clients.chat.ListQuickAccess(ctx, &chatv1.ListQuickAccessRequest{})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodPost && rest == "quick-access":
+		req := &chatv1.AddQuickAccessRequest{}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		_, err := t.clients.chat.AddQuickAccess(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return true
+
+	case r.Method == http.MethodPut && rest == "quick-access/order":
+		req := &chatv1.ReorderQuickAccessRequest{}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		_, err := t.clients.chat.ReorderQuickAccess(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return true
+
+	case r.Method == http.MethodDelete && strings.HasPrefix(rest, "quick-access/"):
+		chatID := strings.TrimPrefix(rest, "quick-access/")
+		chatID = strings.Trim(chatID, "/")
+		_, err := t.clients.chat.RemoveQuickAccess(ctx, &chatv1.RemoveQuickAccessRequest{ChatId: chatID})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return true
+
 	default:
 		return false
 	}

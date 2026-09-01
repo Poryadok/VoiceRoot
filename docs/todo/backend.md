@@ -267,12 +267,12 @@
 - [ ] **[Chat] Handlers: folder membership + pin** — store + gRPC for add/remove/reorder/pin/unpin; reject archived chats; system-folder pin overlay vs custom explicit membership. — **P0**
 - [ ] **[Chat] `ListChats` folder filter** — join `folder_chats` / apply system `filter_config_json`; sort pinned → sort_order → activity. — **P0**
 - [ ] **[Chat] Folder CRUD handlers** — `ListFolders`/`CreateFolder`/`UpdateFolder`/`DeleteFolder` currently **proto-only → Unimplemented**; implement after migrations (custom CRUD; system folders immutable delete/rename).
-- [ ] **[Chat] Proto: Quick Access RPCs** — `ListQuickAccess`, `AddQuickAccess`, `RemoveQuickAccess`, `ReorderQuickAccess` (**chat_id only**, max 15/profile). — **P0**
-- [ ] **[Chat] Migration: `quick_access_chats`** — `000010_quick_access_chats.up.sql` per chat-service.md sketch. — **P0**
-- [ ] **[Chat] Handlers: Quick Access** — enforce limit 15; `AddQuickAccess` idempotent; integration test reorder. — **P0**
+- [x] **[Chat] Proto: Quick Access RPCs** — `ListQuickAccess`, `AddQuickAccess`, `RemoveQuickAccess`, `ReorderQuickAccess` in `chat.proto` (**Batch 17**).
+- [x] **[Chat] Migration: `quick_access_chats`** — `000010_quick_access_chats.up.sql` per chat-service.md sketch (**Batch 17**).
+- [x] **[Chat] Handlers: Quick Access** — enforce limit 15; `AddQuickAccess` idempotent; integration test reorder (**Batch 17**: `quick_access.go`, store + gRPC tests).
 - [ ] **[Chat] Archive side-effects** — on `ArchiveChat(archived=true)`: `RemoveQuickAccess` for same `chat_id`; on incoming DM message to archived membership: auto-unarchive (consumer in Chat or Messaging — pick owner). Ref: [GLOSSARY.md](../GLOSSARY.md), [text-chat.md](../features/text-chat.md). — **P0**
 - [ ] **[Chat] Archive integration test** — auto-unarchive when incoming DM message arrives (side-effect above). Main/archive inbox list regression — **done (Batch 15):** store + gRPC + compose `inbox=archive`.
-- [ ] **[Chat] Gateway REST** — transcoding for new folder/quick-access RPCs when protos land (`inbox=archive` on existing `GET /chats` — **done Batch 15**).
+- [ ] **[Chat] Gateway REST** — transcoding for folder RPCs when protos land; Quick Access REST — **done (Batch 17):** `GET/POST /api/v1/chats/quick-access`, `DELETE …/quick-access/{chatId}`, `PUT …/quick-access/order` (`inbox=archive` on existing `GET /chats` — **done Batch 15**).
 
 ### Telegram-parity audit — open CODE (2026-08-28)
 
