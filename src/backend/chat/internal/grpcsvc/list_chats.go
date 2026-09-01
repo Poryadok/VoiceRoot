@@ -61,16 +61,12 @@ func (s *ChatGRPC) ListChats(ctx context.Context, req *chatv1.ListChatsRequest) 
 
 	folderRaw := strings.TrimSpace(req.GetFolderId())
 	var folderID *uuid.UUID
-	if folderRaw != "" {
-		if inbox == "archive" {
-			folderRaw = ""
-		} else {
-			id, parseErr := uuid.Parse(folderRaw)
-			if parseErr != nil {
-				return nil, status.Error(codes.InvalidArgument, "invalid folder_id")
-			}
-			folderID = &id
+	if folderRaw != "" && inbox != "archive" {
+		id, parseErr := uuid.Parse(folderRaw)
+		if parseErr != nil {
+			return nil, status.Error(codes.InvalidArgument, "invalid folder_id")
 		}
+		folderID = &id
 	}
 
 	var spaceIDs []uuid.UUID
