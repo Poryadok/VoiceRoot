@@ -131,6 +131,48 @@ func TestListMembers_InternalCaller_NoProfileRequired(t *testing.T) {
 	require.Len(t, r.GetMemberList().GetMembers(), 2)
 }
 
+func TestListMembers_InternalCaller_ReturnsInboxBucket(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	chatID := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	_, err := pool.Exec(ctx, `
+INSERT INTO chats (id, type, creator_profile_id, slow_mode_seconds)
+VALUES ($1, 'dm', $2, 0)
+`, chatID, profA)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `
+INSERT INTO chat_members (chat_id, profile_id, role, inbox_bucket) VALUES
+  ($1, $2, 'member', 'main'),
+  ($1, $3, 'member', 'requests')
+`, chatID, profA, profB)
+	require.NoError(t, err)
+
+	client, cleanup := startChatGRPCTestServer(t, pool, nil, nil, nil)
+	t.Cleanup(cleanup)
+
+	internalCtx := metadata.AppendToOutgoingContext(ctx, "x-voice-internal-caller", "notification")
+	r, err := client.ListMembers(internalCtx, &chatv1.ListMembersRequest{
+		ChatId: chatID.String(),
+		Page:   &commonv1.CursorPageRequest{PageSize: 10},
+	})
+	require.NoError(t, err)
+	require.Len(t, r.GetMemberList().GetMembers(), 2)
+
+	byProfile := map[string]string{}
+	for _, m := range r.GetMemberList().GetMembers() {
+		byProfile[m.GetProfileId()] = m.GetInboxBucket()
+	}
+	require.Equal(t, "main", byProfile[profA.String()])
+	require.Equal(t, "requests", byProfile[profB.String()])
+}
+
 func TestGetChat_DM_MemberSeesChat(t *testing.T) {
 	if testing.Short() {
 		t.Skip()

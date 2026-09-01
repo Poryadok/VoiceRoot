@@ -290,7 +290,7 @@
 - [x] **[Messaging] Durable delivery consumer** — **done (Batch 12):** Realtime JetStream `message.delivery_ack` publish (Batch 11) + Messaging consumer → `last_delivered_message_id`; list ✓✓ via `GetChatListMetadata.last_message_delivery_state`.
 - [x] **[Realtime] R3-A27 — @mention notification payload naming** — WS `mention` op uses `profile_id` (not `user_id`) in `dispatchMentionAdded` (Batch 11).
 - [ ] **[User] R3-A19 — Presence WS privacy filter (code)** — Realtime `presence_update` must apply `show_online` / omit `last_seen` per viewer; publish `old_status`/`new_status` delta on `user.presence_changed` — doc in [presence.md](../features/presence.md); code gaps in User + Realtime.
-- [ ] **[Notification] R3-A23/R4-A15 — `message_request` type in code** — wire `message_request` push/in-app + settings toggle §5.3 #13; Realtime must not hardcode `new_message` for stranger DMs — [notification-service.md](../microservices/notification-service.md).
+- [x] **[Notification] R3-A23/R4-A15 — `message_request` type in code** — **done (Batch 22a):** `TypeMessageRequest` in notification delivery; push/in-app route by recipient `inbox_bucket=requests` via Chat `ListMembers.inbox_bucket` S2S; Realtime WS fan-out emits `message_request` (not `new_message`) for requests inbox — [notification-service.md](../microservices/notification-service.md). **Client toggle:** [client.md](client.md) Batch 22b.
 
 ### Chat — other
 
@@ -316,7 +316,7 @@
 - [ ] **[Notification] `friend_request` delivery зависит от Social NATS** — publisher + `social_events_consumer.go` есть; проверить wiring `NATS_URL` на notification в k8s. Тихие часы/settings **пишутся в БД** (`store/settings.go`) — клиентский dual-write: [client.md](client.md).
 - [ ] **[Notification] `send_silent` consumption** — read flag from `message.sent`; suppress push sound/badge rules; in-app policy — [notification-service.md](../microservices/notification-service.md)
 - [ ] **[Notification] Quiet hours semantics test** — assert in-app still delivered when push blocked (`ApplyQuietHours`); document as intended — `quiet_hours_test.go`
-- [ ] **[Notification] `message_request` / stranger type** — new `NotificationType` + consumer mapping from Chat inbox/request events — [notification-service.md](../microservices/notification-service.md)
+- [x] **[Notification] `message_request` / stranger type** — **done (Batch 22a):** `message_request` wire type + per-recipient routing from `chat_members.inbox_bucket` — [notification-service.md](../microservices/notification-service.md)
 - [ ] **[Notification] `reply` marked ✓ but not implemented — no `reply` type in message consumer or Realtime in-app fanout; thread replies are treated as `new_message`.** — `docs/features/notifications.md`, `src/backend/notification/message_events_consumer.go`, `src/backend/realtime/in_app_notification_fanout.go`
 - [ ] **[Notification] Matchmaking/voice push ignores presence — handlers hardcode `IsOnline: false`; no `EnrichDecision` / User gRPC check → online users still get push (messages path does check).** — `src/backend/notification/internal/consumer/matchmaking_events.go`, `src/backend/notification/matchmaking_events_consumer.go`, `src/backend/notification/voice_events_consumer.go`
 - [ ] **[Notification] `system` notifications have no producer — `SendNotification` gRPC exists but no other service calls it; no NATS consumer; not exposed on Gateway REST.** — `src/backend/notification/internal/grpcsvc/server.go`, `src/backend/gateway/transcode_notifications.go`

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -47,7 +48,7 @@ func TestInAppNotificationFanouts_NewMessage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fanouts, ok := inAppNotificationFanouts(b, []string{senderID, recipientA, recipientB}, "")
+	fanouts, ok := inAppNotificationFanouts(b, []string{senderID, recipientA, recipientB}, "", nil)
 	if !ok {
 		t.Fatal("expected ok")
 	}
@@ -71,6 +72,41 @@ func TestInAppNotificationFanouts_NewMessage(t *testing.T) {
 	}
 	if _, senderNotified := byProfile[senderID]; senderNotified {
 		t.Fatal("sender must not receive new_message notification")
+	}
+}
+
+func TestInAppNotificationFanouts_MessageRequestForRequestsInbox(t *testing.T) {
+	chatID := uuid.NewString()
+	msgID := uuid.NewString()
+	senderID := uuid.NewString()
+	recipientID := uuid.NewString()
+
+	ev := &eventsv1.MessageStreamEvent{
+		EventId:    "e1",
+		OccurredAt: timestamppb.Now(),
+		Payload: &eventsv1.MessageStreamEvent_MessageSent{
+			MessageSent: &eventsv1.MessageSent{
+				MessageId:       msgID,
+				ChatId:          chatID,
+				SenderProfileId: senderID,
+			},
+		},
+	}
+	b, err := proto.Marshal(ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fanouts, ok := inAppNotificationFanouts(b, []string{senderID, recipientID}, "", map[string]string{
+		recipientID: "requests",
+	})
+	if !ok {
+		t.Fatal("expected ok")
+	}
+	require.Len(t, fanouts, 1)
+	d := notificationPayload(t, fanouts[0].Envelope)
+	if d["type"] != "message_request" {
+		t.Fatalf("type=%q want message_request", d["type"])
 	}
 }
 
@@ -98,7 +134,7 @@ func TestInAppNotificationFanouts_ReactionNotifiesAuthor(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fanouts, ok := inAppNotificationFanouts(b, nil, authorID)
+	fanouts, ok := inAppNotificationFanouts(b, nil, authorID, nil)
 	if !ok {
 		t.Fatal("expected ok")
 	}
@@ -108,7 +144,7 @@ func TestInAppNotificationFanouts_ReactionNotifiesAuthor(t *testing.T) {
 
 	d := notificationPayload(t, fanouts[0].Envelope)
 	if fanouts[0].ProfileID != authorID {
-		t.Fatalf("profile=%q want %q", fanouts[0].ProfileID, authorID)
+		t.Fatalf("profile=%q want %q", fanouts[0].ProfileID, authorID, nil)
 	}
 	if d["type"] != "reaction" || d["chat_id"] != chatID || d["message_id"] != msgID || d["reactor_profile_id"] != reactorID || d["emoji"] != "👍" {
 		t.Fatalf("payload=%v", d)
@@ -116,7 +152,7 @@ func TestInAppNotificationFanouts_ReactionNotifiesAuthor(t *testing.T) {
 }
 
 func TestInAppNotificationFanouts_InvalidProtobuf(t *testing.T) {
-	fanouts, ok := inAppNotificationFanouts([]byte{0x01, 0x02}, nil, "")
+	fanouts, ok := inAppNotificationFanouts([]byte{0x01, 0x02}, nil, "", nil)
 	if ok || fanouts != nil {
 		t.Fatalf("invalid protobuf: ok=%v fanouts=%v", ok, fanouts)
 	}
@@ -137,7 +173,7 @@ func TestInAppNotificationFanouts_UnknownPayload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fanouts, ok := inAppNotificationFanouts(b, nil, "")
+	fanouts, ok := inAppNotificationFanouts(b, nil, "", nil)
 	if ok || fanouts != nil {
 		t.Fatalf("MessageEdited: ok=%v fanouts=%v", ok, fanouts)
 	}
@@ -165,7 +201,7 @@ func TestInAppNotificationFanouts_NewMessageSkipsEmptyMemberIDs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fanouts, ok := inAppNotificationFanouts(b, []string{"", senderID, recipientID}, "")
+	fanouts, ok := inAppNotificationFanouts(b, []string{"", senderID, recipientID}, "", nil)
 	if !ok {
 		t.Fatal("expected ok")
 	}
@@ -201,7 +237,7 @@ func TestInAppNotificationFanouts_ReactionDegradesTwoMemberDM(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fanouts, ok := inAppNotificationFanouts(b, []string{authorID, reactorID}, "")
+	fanouts, ok := inAppNotificationFanouts(b, []string{authorID, reactorID}, "", nil)
 	if !ok {
 		t.Fatal("expected ok")
 	}
@@ -209,7 +245,7 @@ func TestInAppNotificationFanouts_ReactionDegradesTwoMemberDM(t *testing.T) {
 		t.Fatalf("fanouts=%d want 1", len(fanouts))
 	}
 	if fanouts[0].ProfileID != authorID {
-		t.Fatalf("profile=%q want author %q", fanouts[0].ProfileID, authorID)
+		t.Fatalf("profile=%q want author %q", fanouts[0].ProfileID, authorID, nil)
 	}
 }
 
@@ -235,7 +271,7 @@ func TestInAppNotificationFanouts_ReactionNoAuthorWhenCannotDegrade(t *testing.T
 		t.Fatal(err)
 	}
 
-	fanouts, ok := inAppNotificationFanouts(b, []string{reactorID, otherA, otherB}, "")
+	fanouts, ok := inAppNotificationFanouts(b, []string{reactorID, otherA, otherB}, "", nil)
 	if !ok {
 		t.Fatal("expected ok (graceful skip)")
 	}
@@ -267,7 +303,7 @@ func TestInAppNotificationFanouts_ReactionUsesProtoAuthorID(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fanouts, ok := inAppNotificationFanouts(b, nil, fallbackAuthor)
+	fanouts, ok := inAppNotificationFanouts(b, nil, fallbackAuthor, nil)
 	if !ok || len(fanouts) != 1 {
 		t.Fatalf("ok=%v fanouts=%v", ok, fanouts)
 	}
@@ -300,7 +336,7 @@ func TestInAppNotificationFanouts_MentionNotifiesTargets(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fanouts, ok := inAppNotificationFanouts(b, nil, "")
+	fanouts, ok := inAppNotificationFanouts(b, nil, "", nil)
 	if !ok {
 		t.Fatal("expected ok")
 	}
@@ -346,7 +382,7 @@ func TestDispatchMessageStreamEvent_MentionFansOutPersonalOp(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dispatchMessageStreamEvent(hub, payload, nil, nil, "")
+	dispatchMessageStreamEvent(hub, payload, nil, nil, "", nil)
 
 	ops := drainFanoutOps(t, targetReg, 2*time.Second)
 	if !containsOp(ops, "mention") || !containsOp(ops, "notification") {
@@ -370,7 +406,7 @@ func TestDispatchMentionAdded_WiresProfileIdNotUserId(t *testing.T) {
 		SenderProfileId:     senderID,
 		MentionedProfileIds: []string{targetID},
 	}
-	dispatchMentionAdded(hub, ma, nil, nil, "")
+	dispatchMentionAdded(hub, ma, nil, nil, "", nil)
 
 	var mentionPayload map[string]string
 	deadline := time.After(2 * time.Second)
@@ -414,7 +450,7 @@ func TestInAppNotificationFanouts_ReactionSkipsSelfReaction(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fanouts, ok := inAppNotificationFanouts(b, nil, authorID)
+	fanouts, ok := inAppNotificationFanouts(b, nil, authorID, nil)
 	if !ok {
 		t.Fatal("expected ok")
 	}
@@ -451,7 +487,7 @@ func TestDispatchMessageStreamEvent_MessageSentFansOutChatAndNotifications(t *te
 		t.Fatal(err)
 	}
 
-	dispatchMessageStreamEvent(hub, payload, nil, nil, "")
+	dispatchMessageStreamEvent(hub, payload, nil, nil, "", nil)
 
 	senderOps := drainFanoutOps(t, senderReg, 2*time.Second)
 	recipientOps := drainFanoutOps(t, recipientReg, 2*time.Second)
@@ -495,7 +531,7 @@ func TestDispatchMessageStreamEvent_MessageReadNoNotification(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dispatchMessageStreamEvent(hub, payload, nil, nil, "")
+	dispatchMessageStreamEvent(hub, payload, nil, nil, "", nil)
 
 	for _, reg := range []*connReg{readerReg, otherReg} {
 		ops := drainFanoutOps(t, reg, 2*time.Second)
@@ -538,7 +574,7 @@ func TestDispatchMessageStreamEvent_ReactionFansOutChatAndAuthorNotification(t *
 	}
 
 	// Until proto carries message_author_profile_id, hub dispatch derives author from chat state / event enrichment.
-	dispatchMessageStreamEvent(hub, payload, nil, nil, "")
+	dispatchMessageStreamEvent(hub, payload, nil, nil, "", nil)
 
 	authorOps := drainFanoutOps(t, authorReg, 2*time.Second)
 	reactorOps := drainFanoutOps(t, reactorReg, 2*time.Second)

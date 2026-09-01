@@ -38,6 +38,7 @@ const (
 	SocialService_AreFriends_FullMethodName              = "/voice.social.v1.SocialService/AreFriends"
 	SocialService_AreFriendsOfFriends_FullMethodName     = "/voice.social.v1.SocialService/AreFriendsOfFriends"
 	SocialService_GetFriendsOfFriends_FullMethodName     = "/voice.social.v1.SocialService/GetFriendsOfFriends"
+	SocialService_HasContact_FullMethodName              = "/voice.social.v1.SocialService/HasContact"
 )
 
 // SocialServiceClient is the client API for SocialService service.
@@ -65,6 +66,8 @@ type SocialServiceClient interface {
 	AreFriends(ctx context.Context, in *AreFriendsRequest, opts ...grpc.CallOption) (*AreFriendsResponse, error)
 	AreFriendsOfFriends(ctx context.Context, in *AreFriendsOfFriendsRequest, opts ...grpc.CallOption) (*AreFriendsOfFriendsResponse, error)
 	GetFriendsOfFriends(ctx context.Context, in *GetFriendsOfFriendsRequest, opts ...grpc.CallOption) (*GetFriendsOfFriendsResponse, error)
+	// Internal S2S: Chat DM inbox bucketing (recipient contact list).
+	HasContact(ctx context.Context, in *HasContactRequest, opts ...grpc.CallOption) (*HasContactResponse, error)
 }
 
 type socialServiceClient struct {
@@ -265,6 +268,16 @@ func (c *socialServiceClient) GetFriendsOfFriends(ctx context.Context, in *GetFr
 	return out, nil
 }
 
+func (c *socialServiceClient) HasContact(ctx context.Context, in *HasContactRequest, opts ...grpc.CallOption) (*HasContactResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(HasContactResponse)
+	err := c.cc.Invoke(ctx, SocialService_HasContact_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SocialServiceServer is the server API for SocialService service.
 // All implementations must embed UnimplementedSocialServiceServer
 // for forward compatibility.
@@ -290,6 +303,8 @@ type SocialServiceServer interface {
 	AreFriends(context.Context, *AreFriendsRequest) (*AreFriendsResponse, error)
 	AreFriendsOfFriends(context.Context, *AreFriendsOfFriendsRequest) (*AreFriendsOfFriendsResponse, error)
 	GetFriendsOfFriends(context.Context, *GetFriendsOfFriendsRequest) (*GetFriendsOfFriendsResponse, error)
+	// Internal S2S: Chat DM inbox bucketing (recipient contact list).
+	HasContact(context.Context, *HasContactRequest) (*HasContactResponse, error)
 	mustEmbedUnimplementedSocialServiceServer()
 }
 
@@ -356,6 +371,9 @@ func (UnimplementedSocialServiceServer) AreFriendsOfFriends(context.Context, *Ar
 }
 func (UnimplementedSocialServiceServer) GetFriendsOfFriends(context.Context, *GetFriendsOfFriendsRequest) (*GetFriendsOfFriendsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetFriendsOfFriends not implemented")
+}
+func (UnimplementedSocialServiceServer) HasContact(context.Context, *HasContactRequest) (*HasContactResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method HasContact not implemented")
 }
 func (UnimplementedSocialServiceServer) mustEmbedUnimplementedSocialServiceServer() {}
 func (UnimplementedSocialServiceServer) testEmbeddedByValue()                       {}
@@ -720,6 +738,24 @@ func _SocialService_GetFriendsOfFriends_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SocialService_HasContact_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HasContactRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SocialServiceServer).HasContact(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SocialService_HasContact_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SocialServiceServer).HasContact(ctx, req.(*HasContactRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SocialService_ServiceDesc is the grpc.ServiceDesc for SocialService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -802,6 +838,10 @@ var SocialService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetFriendsOfFriends",
 			Handler:    _SocialService_GetFriendsOfFriends_Handler,
+		},
+		{
+			MethodName: "HasContact",
+			Handler:    _SocialService_HasContact_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

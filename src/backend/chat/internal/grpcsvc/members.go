@@ -2,6 +2,7 @@ package grpcsvc
 
 import (
 	"context"
+	"strings"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
@@ -97,6 +98,9 @@ func (s *ChatGRPC) ListMembers(ctx context.Context, req *chatv1.ListMembersReque
 		}
 		if m.MutedUntil.Valid {
 			cm.MutedUntil = timestamppb.New(m.MutedUntil.Time.UTC())
+		}
+		if bucket := strings.TrimSpace(m.InboxBucket); bucket != "" {
+			cm.InboxBucket = &bucket
 		}
 		out = append(out, cm)
 	}
