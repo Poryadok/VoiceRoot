@@ -22,9 +22,9 @@ func TestFolderMembership_CustomAddListReorderPin(t *testing.T) {
 	profileID := uuid.New()
 	peerA := uuid.New()
 	peerB := uuid.New()
-	dmA, _, err := store.EnsureDM(ctx, profileID, peerA)
+	dmA, _, err := store.EnsureDM(ctx, profileID, peerA, InboxMain)
 	require.NoError(t, err)
-	dmB, _, err := store.EnsureDM(ctx, profileID, peerB)
+	dmB, _, err := store.EnsureDM(ctx, profileID, peerB, InboxMain)
 	require.NoError(t, err)
 
 	_, err = store.ListFolders(ctx, profileID)
@@ -76,7 +76,7 @@ func TestFolderMembership_SystemFolderFilterAndPinOverlay(t *testing.T) {
 
 	profileID := uuid.New()
 	peer := uuid.New()
-	dm, _, err := store.EnsureDM(ctx, profileID, peer)
+	dm, _, err := store.EnsureDM(ctx, profileID, peer, InboxMain)
 	require.NoError(t, err)
 	group, err := store.CreateGroupChat(ctx, profileID, "g")
 	require.NoError(t, err)

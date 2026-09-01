@@ -187,3 +187,39 @@ func TestBlockAccount_RemovesFriendshipCascade(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, friendsAfter.GetFriendList().GetFriends())
 }
+
+func TestHasContact_S2S(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startSocialPostgresForTest(t, ctx)
+	applySocialMigration(t, ctx, pool)
+
+	client, cleanup := startSocialGRPCTestServer(t, pool)
+	t.Cleanup(cleanup)
+
+	owner := uuid.New()
+	contact := uuid.New()
+	other := uuid.New()
+
+	missing, err := client.HasContact(ctx, &socialv1.HasContactRequest{
+		OwnerProfileId:   owner.String(),
+		ContactProfileId: other.String(),
+	})
+	require.NoError(t, err)
+	require.False(t, missing.GetContact())
+
+	_, err = client.AddContact(withProfileCtx(ctx, owner), &socialv1.AddContactRequest{
+		TargetProfileId: contact.String(),
+		Source:          "manual",
+	})
+	require.NoError(t, err)
+
+	found, err := client.HasContact(ctx, &socialv1.HasContactRequest{
+		OwnerProfileId:   owner.String(),
+		ContactProfileId: contact.String(),
+	})
+	require.NoError(t, err)
+	require.True(t, found.GetContact())
+}

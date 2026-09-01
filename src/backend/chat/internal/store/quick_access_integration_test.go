@@ -27,7 +27,7 @@ func TestQuickAccess_AddListReorderLimit(t *testing.T) {
 	chatIDs := make([]uuid.UUID, 0, 16)
 	for i := 0; i < 16; i++ {
 		peer := uuid.New()
-		row, _, err := store.EnsureDM(ctx, profileID, peer)
+		row, _, err := store.EnsureDM(ctx, profileID, peer, InboxMain)
 		require.NoError(t, err)
 		chatIDs = append(chatIDs, row.ID)
 	}

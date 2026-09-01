@@ -279,7 +279,7 @@
 
 Источник: `tmp/telegram-ux-audit/AUDIT.md` (DOC closed). ID — для трассировки с audit tracker.
 
-- [ ] **[Chat] R3-A04 — Message requests bucketing** — **deferred (Batch 20 owns `chat/**`)** — `EnsureDM` inbox_bucket + `SendMessage` declined→requests live in Chat; parallel track did not touch chat store.
+- [x] **[Chat] R3-A04 — Message requests bucketing** — **done (Batch 21a):** `EnsureDM` sets recipient `inbox_bucket` via Social friends/contacts S2S (`HasContact`); `message.sent` consumer promotes `declined` → `requests` on re-contact — `dm_inbox.go`, `dm_request_recontact.go`.
 - [x] **[Messaging] R3-A05 — `PinMessage` permission gap** — standalone `group`/`channel` without `space_id`: deny pin for `member` role (owner/admin allowed); space chats still use Role `TEXT_CHAT_PIN_MESSAGES` — [messaging-service.md](../microservices/messaging-service.md).
 - [ ] **[Messaging] R3-A06 — `validateAttachments` blocks rich payloads** — **partial (parallel track):** location/article payloads skip File `file_id` when `content_type` set; sticker/gif/music/video_note still require file row — [messaging-service.md](../microservices/messaging-service.md).
 - [ ] **[Chat] R3-A12 — Standalone `channel` chats** — `CreateChat` rejects channel type without `space_id`; breaks «Каналы» system folder until standalone create ships — [navigation.md](../features/navigation.md) § Partial shipment. **Batch 14:** membership `channel` rows now appear in `ListChats` main inbox SQL.

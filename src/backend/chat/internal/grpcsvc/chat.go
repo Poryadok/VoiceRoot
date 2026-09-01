@@ -23,6 +23,7 @@ type ChatGRPC struct {
 	Blocks     AccountBlockChecker
 	Privacy    PrivacyChecker
 	Friends    ProfileFriendChecker
+	Contacts   ProfileContactChecker
 	SpaceCoMembership SpaceCoMembershipChecker
 	ListEnrich ListChatsEnrichment // optional; Messaging S2S for preview + unread
 	E2EPreKeyGate E2EPreKeyGate     // required for EnableChatE2E; Messaging S2S pre-key check (fail-closed)
@@ -55,7 +56,7 @@ type ProfileFriendChecker interface {
 
 // DMStore persists chats and lists the caller's inbox (DM + standalone groups).
 type DMStore interface {
-	EnsureDM(ctx context.Context, callerProfileID, otherProfileID uuid.UUID) (*store.ChatRow, bool, error)
+	EnsureDM(ctx context.Context, callerProfileID, otherProfileID uuid.UUID, recipientInboxBucket string) (*store.ChatRow, bool, error)
 	ListChatsPage(ctx context.Context, viewerProfileID uuid.UUID, cursor string, limit int, inbox string, spaceIDs []uuid.UUID) (*store.ListChatsPage, error)
 	ListChatsPageByFolder(ctx context.Context, viewerProfileID, folderID uuid.UUID, cursor string, limit int, spaceIDs []uuid.UUID) (*store.ListChatsPage, error)
 	ListSpaceChatsForProfile(ctx context.Context, viewerProfileID uuid.UUID, spaceIDs []uuid.UUID) ([]*store.ChatRow, error)

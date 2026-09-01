@@ -43,10 +43,21 @@ func orderedProfileStrings(a, b uuid.UUID) (low, high string) {
 	return s2, s1
 }
 
+const (
+	// InboxMain is the default DM inbox for initiators and non-stranger recipients.
+	InboxMain = "main"
+	// InboxRequests is the stranger-DM inbox bucket for recipients.
+	InboxRequests = "requests"
+)
+
 // EnsureDM returns the existing DM between the two profiles or creates one (creator = caller).
+// recipientInboxBucket is applied to the non-caller member on create (main | requests).
 // The bool is true when a new chat row and memberships were inserted.
 // Uses a transaction-scoped advisory lock on the sorted pair to avoid duplicate chats under concurrency.
-func (s *DMStore) EnsureDM(ctx context.Context, callerProfileID, otherProfileID uuid.UUID) (*ChatRow, bool, error) {
+func (s *DMStore) EnsureDM(ctx context.Context, callerProfileID, otherProfileID uuid.UUID, recipientInboxBucket string) (*ChatRow, bool, error) {
+	if recipientInboxBucket == "" {
+		recipientInboxBucket = InboxRequests
+	}
 	if s == nil || s.Pool == nil {
 		return nil, false, errors.New("dm store: pool not configured")
 	}
@@ -84,8 +95,8 @@ RETURNING id, created_at, updated_at
 	}
 	if _, err := tx.Exec(ctx, `
 INSERT INTO chat_members (chat_id, profile_id, role, inbox_bucket)
-VALUES ($1, $2, 'member', 'main'), ($1, $3, 'member', 'requests')
-`, chatID, callerProfileID, otherProfileID); err != nil {
+VALUES ($1, $2, 'member', 'main'), ($1, $3, 'member', $4)
+`, chatID, callerProfileID, otherProfileID, recipientInboxBucket); err != nil {
 		return nil, false, err
 	}
 	if err := tx.Commit(ctx); err != nil {

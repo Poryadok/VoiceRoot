@@ -29,7 +29,7 @@ func TestTouchLastMessageAt_UpdatesDM(t *testing.T) {
 	s := &DMStore{Pool: pool}
 
 	a, b := uuid.New(), uuid.New()
-	row, _, err := s.EnsureDM(ctx, a, b)
+	row, _, err := s.EnsureDM(ctx, a, b, InboxMain)
 	require.NoError(t, err)
 	require.Nil(t, readLastMessageAt(t, ctx, s, row.ID))
 

@@ -539,6 +539,39 @@ final $typed_data.Uint8List areFriendsOfFriendsResponseDescriptor =
         'ChtBcmVGcmllbmRzT2ZGcmllbmRzUmVzcG9uc2USGAoHZnJpZW5kcxgBIAEoCFIHZnJpZW5kcw'
         '==');
 
+@$core.Deprecated('Use hasContactRequestDescriptor instead')
+const HasContactRequest$json = {
+  '1': 'HasContactRequest',
+  '2': [
+    {'1': 'owner_profile_id', '3': 1, '4': 1, '5': 9, '10': 'ownerProfileId'},
+    {
+      '1': 'contact_profile_id',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '10': 'contactProfileId'
+    },
+  ],
+};
+
+/// Descriptor for `HasContactRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List hasContactRequestDescriptor = $convert.base64Decode(
+    'ChFIYXNDb250YWN0UmVxdWVzdBIoChBvd25lcl9wcm9maWxlX2lkGAEgASgJUg5vd25lclByb2'
+    'ZpbGVJZBIsChJjb250YWN0X3Byb2ZpbGVfaWQYAiABKAlSEGNvbnRhY3RQcm9maWxlSWQ=');
+
+@$core.Deprecated('Use hasContactResponseDescriptor instead')
+const HasContactResponse$json = {
+  '1': 'HasContactResponse',
+  '2': [
+    {'1': 'contact', '3': 1, '4': 1, '5': 8, '10': 'contact'},
+  ],
+};
+
+/// Descriptor for `HasContactResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List hasContactResponseDescriptor =
+    $convert.base64Decode(
+        'ChJIYXNDb250YWN0UmVzcG9uc2USGAoHY29udGFjdBgBIAEoCFIHY29udGFjdA==');
+
 @$core.Deprecated('Use getFriendsOfFriendsRequestDescriptor instead')
 const GetFriendsOfFriendsRequest$json = {
   '1': 'GetFriendsOfFriendsRequest',

@@ -32,6 +32,9 @@ service SocialService {
   rpc AreFriends(AreFriendsRequest) returns (AreFriendsResponse);
   rpc AreFriendsOfFriends(AreFriendsOfFriendsRequest) returns (AreFriendsOfFriendsResponse);
   rpc GetFriendsOfFriends(GetFriendsOfFriendsRequest) returns (GetFriendsOfFriendsResponse);
+
+  // Internal S2S: Chat DM inbox bucketing (recipient contact list).
+  rpc HasContact(HasContactRequest) returns (HasContactResponse);
 }
 
 message SendFriendInvitationRequest {
@@ -163,6 +166,15 @@ message AreFriendsOfFriendsRequest {
 
 message AreFriendsOfFriendsResponse {
   bool friends = 1;
+}
+
+message HasContactRequest {
+  string owner_profile_id = 1;
+  string contact_profile_id = 2;
+}
+
+message HasContactResponse {
+  bool contact = 1;
 }
 
 message GetFriendsOfFriendsRequest {

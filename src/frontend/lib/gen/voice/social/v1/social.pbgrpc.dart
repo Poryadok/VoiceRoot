@@ -170,6 +170,14 @@ class SocialServiceClient extends $grpc.Client {
     return $createUnaryCall(_$getFriendsOfFriends, request, options: options);
   }
 
+  /// Internal S2S: Chat DM inbox bucketing (recipient contact list).
+  $grpc.ResponseFuture<$0.HasContactResponse> hasContact(
+    $0.HasContactRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$hasContact, request, options: options);
+  }
+
   // method descriptors
 
   static final _$sendFriendInvitation = $grpc.ClientMethod<
@@ -268,6 +276,11 @@ class SocialServiceClient extends $grpc.Client {
       '/voice.social.v1.SocialService/GetFriendsOfFriends',
       ($0.GetFriendsOfFriendsRequest value) => value.writeToBuffer(),
       $0.GetFriendsOfFriendsResponse.fromBuffer);
+  static final _$hasContact =
+      $grpc.ClientMethod<$0.HasContactRequest, $0.HasContactResponse>(
+          '/voice.social.v1.SocialService/HasContact',
+          ($0.HasContactRequest value) => value.writeToBuffer(),
+          $0.HasContactResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.social.v1.SocialService')
@@ -440,6 +453,13 @@ abstract class SocialServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.GetFriendsOfFriendsRequest.fromBuffer(value),
         ($0.GetFriendsOfFriendsResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.HasContactRequest, $0.HasContactResponse>(
+        'HasContact',
+        hasContact_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) => $0.HasContactRequest.fromBuffer(value),
+        ($0.HasContactResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.SendFriendInvitationResponse> sendFriendInvitation_Pre(
@@ -606,4 +626,12 @@ abstract class SocialServiceBase extends $grpc.Service {
 
   $async.Future<$0.GetFriendsOfFriendsResponse> getFriendsOfFriends(
       $grpc.ServiceCall call, $0.GetFriendsOfFriendsRequest request);
+
+  $async.Future<$0.HasContactResponse> hasContact_Pre($grpc.ServiceCall $call,
+      $async.Future<$0.HasContactRequest> $request) async {
+    return hasContact($call, await $request);
+  }
+
+  $async.Future<$0.HasContactResponse> hasContact(
+      $grpc.ServiceCall call, $0.HasContactRequest request);
 }

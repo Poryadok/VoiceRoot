@@ -145,7 +145,7 @@ func TestDeleteFolder_CustomRemovesRow(t *testing.T) {
 	custom, err := store.CreateFolder(ctx, profileID, "Temp", `{}`)
 	require.NoError(t, err)
 
-	dm, _, err := store.EnsureDM(ctx, profileID, uuid.New())
+	dm, _, err := store.EnsureDM(ctx, profileID, uuid.New(), InboxMain)
 	require.NoError(t, err)
 	require.NoError(t, store.AddChatToFolder(ctx, profileID, custom.ID, dm.ID, nil))
 
