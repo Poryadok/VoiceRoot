@@ -30,6 +30,7 @@ class ProfileAvatarSwitcher extends ConsumerWidget {
     final profile = profiles[nextIndex];
     final auth = ref.read(authControllerProvider);
     if (auth.activeProfileId == profile.id) return;
+    if (profile.isFrozen) return;
 
     ref.read(profileSwitchInProgressProvider.notifier).state = true;
     try {
@@ -51,6 +52,22 @@ class ProfileAvatarSwitcher extends ConsumerWidget {
     } finally {
       ref.read(profileSwitchInProgressProvider.notifier).state = false;
     }
+  }
+
+  int? _nextSwitchableIndex(
+    List<VoiceProfile> profiles,
+    int currentIndex,
+    bool forward,
+  ) {
+    if (profiles.isEmpty) return null;
+    final len = profiles.length;
+    for (var step = 1; step < len; step++) {
+      final idx = forward
+          ? (currentIndex + step) % len
+          : (currentIndex - step + len) % len;
+      if (!profiles[idx].isFrozen) return idx;
+    }
+    return null;
   }
 
   @override
@@ -102,9 +119,12 @@ class ProfileAvatarSwitcher extends ConsumerWidget {
                   : (details) {
                       final velocity = details.primaryVelocity ?? 0;
                       if (velocity.abs() < 80) return;
-                      final next = velocity < 0
-                          ? (safeIndex + 1) % profiles.length
-                          : (safeIndex - 1 + profiles.length) % profiles.length;
+                      final next = _nextSwitchableIndex(
+                        profiles,
+                        safeIndex,
+                        velocity < 0,
+                      );
+                      if (next == null || next == safeIndex) return;
                       _switchTo(ref, context, profiles, next);
                     },
               child: Row(

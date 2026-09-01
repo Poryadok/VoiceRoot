@@ -333,6 +333,9 @@ VoiceProfile voiceProfileFromProto(user_pb.Profile profile) {
     accentColor: profile.hasAccentColor()
         ? emptyToNull(profile.accentColor)
         : null,
+    frozenAt: protoTimestampToDateTime(
+      profile.hasFrozenAt() ? profile.frozenAt : null,
+    ),
   );
 }
 

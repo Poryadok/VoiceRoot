@@ -354,6 +354,47 @@ func TestDispatchMessageStreamEvent_MentionFansOutPersonalOp(t *testing.T) {
 	}
 }
 
+func TestDispatchMentionAdded_WiresProfileIdNotUserId(t *testing.T) {
+	chatID := uuid.NewString()
+	msgID := uuid.NewString()
+	senderID := uuid.NewString()
+	targetID := uuid.NewString()
+
+	hub := newWSHub()
+	targetReg := hub.attachConn("inst", "conn-target", targetID, 8)
+	hub.addChat(targetReg, chatID)
+
+	ma := &eventsv1.MentionAdded{
+		MessageId:           msgID,
+		ChatId:              chatID,
+		SenderProfileId:     senderID,
+		MentionedProfileIds: []string{targetID},
+	}
+	dispatchMentionAdded(hub, ma, nil, nil, "")
+
+	var mentionPayload map[string]string
+	deadline := time.After(2 * time.Second)
+	for mentionPayload == nil {
+		select {
+		case fe := <-targetReg.fanout:
+			if fe.Op != "mention" {
+				continue
+			}
+			if err := json.Unmarshal(fe.D, &mentionPayload); err != nil {
+				t.Fatal(err)
+			}
+		case <-deadline:
+			t.Fatal("timeout waiting for mention op")
+		}
+	}
+	if mentionPayload["profile_id"] != targetID {
+		t.Fatalf("profile_id=%q want %q payload=%v", mentionPayload["profile_id"], targetID, mentionPayload)
+	}
+	if _, ok := mentionPayload["user_id"]; ok {
+		t.Fatalf("legacy user_id must not be emitted: %v", mentionPayload)
+	}
+}
+
 func TestInAppNotificationFanouts_ReactionSkipsSelfReaction(t *testing.T) {
 	authorID := uuid.NewString()
 	ev := &eventsv1.MessageStreamEvent{

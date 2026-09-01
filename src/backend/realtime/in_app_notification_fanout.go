@@ -168,7 +168,7 @@ func dispatchMentionAdded(hub *wsHub, ma *eventsv1.MentionAdded, data []byte, lo
 		d, err := json.Marshal(map[string]string{
 			"chat_id":    ma.GetChatId(),
 			"message_id": ma.GetMessageId(),
-			"user_id":    profileID,
+			"profile_id": profileID,
 		})
 		if err != nil {
 			continue

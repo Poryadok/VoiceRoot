@@ -654,6 +654,15 @@ const MessageStreamEvent$json = {
       '9': 0,
       '10': 'messageForwarded'
     },
+    {
+      '1': 'delivery_ack',
+      '3': 20,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.DeliveryAck',
+      '9': 0,
+      '10': 'deliveryAck'
+    },
   ],
   '8': [
     {'1': 'payload'},
@@ -677,7 +686,8 @@ final $typed_data.Uint8List messageStreamEventDescriptor = $convert.base64Decode
     'bmVkSABSDW1lc3NhZ2VQaW5uZWQSTQoQbWVzc2FnZV91bnBpbm5lZBgSIAEoCzIgLnZvaWNlLm'
     'V2ZW50cy52MS5NZXNzYWdlVW5waW5uZWRIAFIPbWVzc2FnZVVucGlubmVkElAKEW1lc3NhZ2Vf'
     'Zm9yd2FyZGVkGBMgASgLMiEudm9pY2UuZXZlbnRzLnYxLk1lc3NhZ2VGb3J3YXJkZWRIAFIQbW'
-    'Vzc2FnZUZvcndhcmRlZEIJCgdwYXlsb2Fk');
+    'Vzc2FnZUZvcndhcmRlZBJBCgxkZWxpdmVyeV9hY2sYFCABKAsyHC52b2ljZS5ldmVudHMudjEu'
+    'RGVsaXZlcnlBY2tIAFILZGVsaXZlcnlBY2tCCQoHcGF5bG9hZA==');
 
 @$core.Deprecated('Use messageSentDescriptor instead')
 const MessageSent$json = {
@@ -819,6 +829,21 @@ const MessageRead$json = {
 /// Descriptor for `MessageRead`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List messageReadDescriptor = $convert.base64Decode(
     'CgtNZXNzYWdlUmVhZBIdCgptZXNzYWdlX2lkGAEgASgJUgltZXNzYWdlSWQSFwoHY2hhdF9pZB'
+    'gCIAEoCVIGY2hhdElkEh0KCnByb2ZpbGVfaWQYAyABKAlSCXByb2ZpbGVJZA==');
+
+@$core.Deprecated('Use deliveryAckDescriptor instead')
+const DeliveryAck$json = {
+  '1': 'DeliveryAck',
+  '2': [
+    {'1': 'message_id', '3': 1, '4': 1, '5': 9, '10': 'messageId'},
+    {'1': 'chat_id', '3': 2, '4': 1, '5': 9, '10': 'chatId'},
+    {'1': 'profile_id', '3': 3, '4': 1, '5': 9, '10': 'profileId'},
+  ],
+};
+
+/// Descriptor for `DeliveryAck`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List deliveryAckDescriptor = $convert.base64Decode(
+    'CgtEZWxpdmVyeUFjaxIdCgptZXNzYWdlX2lkGAEgASgJUgltZXNzYWdlSWQSFwoHY2hhdF9pZB'
     'gCIAEoCVIGY2hhdElkEh0KCnByb2ZpbGVfaWQYAyABKAlSCXByb2ZpbGVJZA==');
 
 @$core.Deprecated('Use messagePinnedDescriptor instead')

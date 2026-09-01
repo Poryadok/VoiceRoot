@@ -1516,6 +1516,13 @@ class AppLocalizationsRu extends AppLocalizations {
   String get downgradeProfilePrimary => 'Основной профиль';
 
   @override
+  String get profileFrozenLabel => 'Заморожен';
+
+  @override
+  String get profileFrozenHint =>
+      'Продлите Премиум, чтобы переключиться на этот профиль';
+
+  @override
   String get premiumBadgeLabel => 'Премиум';
 
   @override

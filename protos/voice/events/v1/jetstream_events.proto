@@ -169,6 +169,7 @@ message MessageStreamEvent {
     MessagePinned message_pinned = 17;
     MessageUnpinned message_unpinned = 18;
     MessageForwarded message_forwarded = 19;
+    DeliveryAck delivery_ack = 20;
   }
 }
 
@@ -215,6 +216,13 @@ message ReactionRemoved {
 }
 
 message MessageRead {
+  string message_id = 1;
+  string chat_id = 2;
+  string profile_id = 3;
+}
+
+// Published by Realtime when a client sends WS delivery_ack (recipient profile).
+message DeliveryAck {
   string message_id = 1;
   string chat_id = 2;
   string profile_id = 3;

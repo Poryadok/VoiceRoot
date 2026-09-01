@@ -737,6 +737,8 @@
   "downgradeProfilePickerHint": "Остальные профили будут заморожены до продления Премиума.",
   "downgradeProfilePickerConfirm": "Сохранить выбранные профили",
   "downgradeProfilePrimary": "Основной профиль",
+  "profileFrozenLabel": "Заморожен",
+  "profileFrozenHint": "Продлите Премиум, чтобы переключиться на этот профиль",
   "premiumBadgeLabel": "Премиум",
   "settingsSecurity": "Безопасность и доверие",
   "securitySettingsTitle": "Безопасность",
