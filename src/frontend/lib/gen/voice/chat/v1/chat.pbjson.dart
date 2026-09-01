@@ -409,9 +409,19 @@ const ChatMember$json = {
       '17': true
     },
     {'1': 'is_archived', '3': 5, '4': 1, '5': 8, '10': 'isArchived'},
+    {
+      '1': 'inbox_bucket',
+      '3': 6,
+      '4': 1,
+      '5': 9,
+      '9': 1,
+      '10': 'inboxBucket',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_muted_until'},
+    {'1': '_inbox_bucket'},
   ],
 };
 
@@ -420,8 +430,9 @@ final $typed_data.Uint8List chatMemberDescriptor = $convert.base64Decode(
     'CgpDaGF0TWVtYmVyEh0KCnByb2ZpbGVfaWQYASABKAlSCXByb2ZpbGVJZBISCgRyb2xlGAIgAS'
     'gJUgRyb2xlEjcKCWpvaW5lZF9hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBS'
     'CGpvaW5lZEF0EkAKC211dGVkX3VudGlsGAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdG'
-    'FtcEgAUgptdXRlZFVudGlsiAEBEh8KC2lzX2FyY2hpdmVkGAUgASgIUgppc0FyY2hpdmVkQg4K'
-    'DF9tdXRlZF91bnRpbA==');
+    'FtcEgAUgptdXRlZFVudGlsiAEBEh8KC2lzX2FyY2hpdmVkGAUgASgIUgppc0FyY2hpdmVkEiYK'
+    'DGluYm94X2J1Y2tldBgGIAEoCUgBUgtpbmJveEJ1Y2tldIgBAUIOCgxfbXV0ZWRfdW50aWxCDw'
+    'oNX2luYm94X2J1Y2tldA==');
 
 @$core.Deprecated('Use listChatsRequestDescriptor instead')
 const ListChatsRequest$json = {
