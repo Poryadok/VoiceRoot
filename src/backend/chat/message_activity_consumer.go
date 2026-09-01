@@ -20,6 +20,7 @@ const messageEventsStreamName = "message_events"
 type messageActivityStore interface {
 	TouchLastMessageAt(ctx context.Context, chatID uuid.UUID, at time.Time) error
 	AutoUnarchiveDMRecipients(ctx context.Context, chatID, senderProfileID uuid.UUID) error
+	PromoteDeclinedDMRecipients(ctx context.Context, chatID, senderProfileID uuid.UUID) error
 }
 
 func chatActivityDurableName(instanceID string) string {
@@ -73,6 +74,11 @@ func subscribeMessageActivity(ctx context.Context, js nats.JetStreamContext, sto
 		if err := store.AutoUnarchiveDMRecipients(ctx, chatID, senderID); err != nil {
 			attrs = append(attrs, slog.String("error", err.Error()))
 			natslog.LogConsume(logger, msg, slog.LevelWarn, "message activity unarchive failed", attrs...)
+			return
+		}
+		if err := store.PromoteDeclinedDMRecipients(ctx, chatID, senderID); err != nil {
+			attrs = append(attrs, slog.String("error", err.Error()))
+			natslog.LogConsume(logger, msg, slog.LevelWarn, "message activity recontact failed", attrs...)
 			return
 		}
 		natslog.LogConsume(logger, msg, slog.LevelInfo, "message activity touched", attrs...)

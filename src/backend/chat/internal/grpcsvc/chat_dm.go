@@ -77,7 +77,12 @@ func (s *ChatGRPC) ensureDM(ctx context.Context, otherProfileRaw string) (*store
 		return nil, err
 	}
 
-	row, created, err := s.DM.EnsureDM(ctx, callerProfile, otherProfile)
+	recipientInbox, err := recipientInboxBucket(ctx, callerProfile, otherProfile, s.Friends, s.Contacts)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	row, created, err := s.DM.EnsureDM(ctx, callerProfile, otherProfile, recipientInbox)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}

@@ -39,7 +39,7 @@ func TestListChatsPage_includesMembershipChannel(t *testing.T) {
 
 	owner := uuid.New()
 	channelID := seedMembershipChannel(t, ctx, s, owner, "Announcements")
-	_, _, err := s.EnsureDM(ctx, owner, uuid.New())
+	_, _, err := s.EnsureDM(ctx, owner, uuid.New(), InboxMain)
 	require.NoError(t, err)
 
 	at := time.Now().UTC().Add(-time.Minute)
@@ -127,7 +127,7 @@ func TestListChatsPage_mainWithSpacesPagination(t *testing.T) {
 	spaceID := uuid.New()
 	other := uuid.New()
 
-	dmNewer, _, err := s.EnsureDM(ctx, viewer, other)
+	dmNewer, _, err := s.EnsureDM(ctx, viewer, other, InboxMain)
 	require.NoError(t, err)
 
 	var spaceChannelID uuid.UUID

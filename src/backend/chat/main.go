@@ -62,6 +62,7 @@ func main() {
 
 		var blocks grpcsvc.AccountBlockChecker
 		var friends grpcsvc.ProfileFriendChecker
+		var contacts grpcsvc.ProfileContactChecker
 		if socialAddr := strings.TrimSpace(os.Getenv("SOCIAL_GRPC_ADDR")); socialAddr != "" {
 			sconn, err := grpc.NewClient(grpcclient.DialTarget(socialAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
@@ -89,6 +90,7 @@ func main() {
 			defer func() { _ = sconn.Close() }()
 			blocks = grpcsvc.NewSocialGRPCBlocks(sconn)
 			friends = grpcsvc.NewSocialGRPCFriends(sconn)
+			contacts = grpcsvc.NewSocialGRPCContacts(sconn)
 		}
 
 		var profiles grpcsvc.UserProfileLookup
@@ -195,6 +197,7 @@ func main() {
 			Blocks:        blocks,
 			Privacy:           privacy,
 			Friends:           friends,
+			Contacts:          contacts,
 			SpaceCoMembership: spaceCoMembership,
 			ListEnrich:    listEnrich,
 			E2EPreKeyGate: e2ePreKeyGate,

@@ -363,6 +363,26 @@ func (s *SocialGRPC) AreFriendsOfFriends(ctx context.Context, req *socialv1.AreF
 	return &socialv1.AreFriendsOfFriendsResponse{Friends: ok}, nil
 }
 
+// HasContact implements voice.social.v1.SocialService (internal S2S: Chat DM inbox bucketing).
+func (s *SocialGRPC) HasContact(ctx context.Context, req *socialv1.HasContactRequest) (*socialv1.HasContactResponse, error) {
+	owner, err := parseUUIDField("owner_profile_id", req.GetOwnerProfileId())
+	if err != nil {
+		return nil, err
+	}
+	contact, err := parseUUIDField("contact_profile_id", req.GetContactProfileId())
+	if err != nil {
+		return nil, err
+	}
+	if s.Contacts == nil {
+		return nil, status.Error(codes.FailedPrecondition, "persistence not configured")
+	}
+	row, err := s.Contacts.GetContact(ctx, owner, contact)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	return &socialv1.HasContactResponse{Contact: row != nil}, nil
+}
+
 // GetFriendsOfFriends implements voice.social.v1.SocialService.
 func (s *SocialGRPC) GetFriendsOfFriends(ctx context.Context, req *socialv1.GetFriendsOfFriendsRequest) (*socialv1.GetFriendsOfFriendsResponse, error) {
 	profileID, err := parseUUIDField("profile_id", req.GetProfileId())

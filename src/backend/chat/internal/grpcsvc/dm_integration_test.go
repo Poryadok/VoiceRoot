@@ -102,6 +102,10 @@ func WithFriendChecker(f ProfileFriendChecker) chatServerOption {
 	return func(c *ChatGRPC) { c.Friends = f }
 }
 
+func WithContactChecker(c ProfileContactChecker) chatServerOption {
+	return func(s *ChatGRPC) { s.Contacts = c }
+}
+
 func WithLogger(l *slog.Logger) chatServerOption {
 	return func(c *ChatGRPC) { c.Logger = l }
 }
@@ -226,6 +230,58 @@ func TestDMRequestsInboxAcceptDecline(t *testing.T) {
 	for _, item := range requestList.GetChatList().GetItems() {
 		require.NotEqual(t, dm2.GetChat().GetId(), item.GetChat().GetId())
 	}
+}
+
+func TestCreateDM_FriendRecipientMainInbox(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	accA := uuid.New()
+	accB := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	profiles := mapProfileAccounts{profA: accA, profB: accB}
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil, WithFriendChecker(stubFriendChecker{ok: true}))
+	t.Cleanup(cleanup)
+
+	ctxA := withAccountProfileCtx(ctx, accA, profA)
+	ctxB := withAccountProfileCtx(ctx, accB, profB)
+	_, err := client.CreateDM(ctxA, &chatv1.CreateDMRequest{OtherProfileId: profB.String()})
+	require.NoError(t, err)
+
+	mainList, err := client.ListChats(ctxB, &chatv1.ListChatsRequest{})
+	require.NoError(t, err)
+	require.Len(t, mainList.GetChatList().GetItems(), 1)
+}
+
+func TestCreateDM_ContactRecipientMainInbox(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	accA := uuid.New()
+	accB := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	profiles := mapProfileAccounts{profA: accA, profB: accB}
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil, WithContactChecker(stubContactChecker{ok: true}))
+	t.Cleanup(cleanup)
+
+	ctxA := withAccountProfileCtx(ctx, accA, profA)
+	ctxB := withAccountProfileCtx(ctx, accB, profB)
+	_, err := client.CreateDM(ctxA, &chatv1.CreateDMRequest{OtherProfileId: profB.String()})
+	require.NoError(t, err)
+
+	mainList, err := client.ListChats(ctxB, &chatv1.ListChatsRequest{})
+	require.NoError(t, err)
+	require.Len(t, mainList.GetChatList().GetItems(), 1)
 }
 
 func TestCreateDM_BlockedPair_PermissionDenied(t *testing.T) {

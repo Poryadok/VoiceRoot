@@ -20,7 +20,7 @@ func TestAutoUnarchiveDMRecipients_IncomingPeer(t *testing.T) {
 
 	profA := uuid.New()
 	profB := uuid.New()
-	dm, _, err := s.EnsureDM(ctx, profA, profB)
+	dm, _, err := s.EnsureDM(ctx, profA, profB, InboxMain)
 	require.NoError(t, err)
 
 	require.NoError(t, s.SetMemberArchived(ctx, dm.ID, profA, true))
@@ -49,7 +49,7 @@ func TestAutoUnarchiveDMRecipients_OutgoingDoesNotUnarchive(t *testing.T) {
 
 	profA := uuid.New()
 	profB := uuid.New()
-	dm, _, err := s.EnsureDM(ctx, profA, profB)
+	dm, _, err := s.EnsureDM(ctx, profA, profB, InboxMain)
 	require.NoError(t, err)
 
 	require.NoError(t, s.SetMemberArchived(ctx, dm.ID, profA, true))
